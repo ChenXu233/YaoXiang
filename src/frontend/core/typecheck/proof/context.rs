@@ -16,3 +16,10 @@ pub struct ProofContext<'a> {
     /// 类型环境
     pub env: &'a TypeEnvironment,
 }
+
+impl<'a> ProofContext<'a> {
+    /// 获取类型环境引用
+    pub fn env_ref(&self) -> &TypeEnvironment {
+        self.env
+    }
+}

@@ -249,7 +249,7 @@ impl TypeComputer {
         let eval_result = evaluator.eval(ty);
 
         match eval_result {
-            super::evaluator::EvalResult::Value(result_ty) => {
+            Ok(result_ty) => {
                 // 进一步归一化结果
                 let normalized = self.normalizer.normalize(&result_ty);
                 if matches!(normalized, NormalForm::Normalized) {
@@ -259,8 +259,7 @@ impl TypeComputer {
                     ComputeResult::Pending(vec![result_ty])
                 }
             }
-            super::evaluator::EvalResult::Pending => ComputeResult::Pending(vec![ty.clone()]),
-            super::evaluator::EvalResult::Error(msg) => ComputeResult::Error(msg),
+            Err(_) => ComputeResult::Pending(vec![ty.clone()]),
         }
     }
 

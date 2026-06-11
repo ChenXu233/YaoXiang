@@ -20,46 +20,13 @@ use super::TypeLevelError;
 use super::TypeLevelResult;
 use crate::frontend::core::typecheck::TypeEnvironment;
 
-/// 求值结果
+/// 类型求值错误
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EvalResult<T> {
-    /// 求值成功，得到结果
-    Value(T),
-
-    /// 条件未确定，需要进一步类型检查
-    Pending,
-
-    /// 求值失败
-    Error(String),
-}
-
-impl<T> EvalResult<T> {
-    /// 转换为 Option
-    pub fn ok(self) -> Option<T> {
-        match self {
-            Self::Value(v) => Some(v),
-            Self::Pending | Self::Error(_) => None,
-        }
-    }
-
-    /// 转换为 Result
-    pub fn result(self) -> Result<T, String> {
-        match self {
-            Self::Value(v) => Ok(v),
-            Self::Pending => Err("Evaluation pending".to_string()),
-            Self::Error(e) => Err(e),
-        }
-    }
-
-    /// 检查是否是值
-    pub fn is_value(&self) -> bool {
-        matches!(self, Self::Value(_))
-    }
-
-    /// 检查是否是待定
-    pub fn is_pending(&self) -> bool {
-        matches!(self, Self::Pending)
-    }
+pub enum EvalError {
+    MaxDepthExceeded,
+    CycleDetected(String),
+    ArithmeticError(String),
+    TypeMismatch(String),
 }
 
 /// 编译期类型求值器
@@ -72,7 +39,7 @@ impl<T> EvalResult<T> {
 pub struct TypeEvaluator {
     /// 类型求值缓存
     /// 避免重复求值相同类型
-    cache: HashMap<MonoType, EvalResult<MonoType>>,
+    cache: HashMap<MonoType, Result<MonoType, EvalError>>,
 
     /// 依赖追踪
     /// 记录类型之间的依赖关系
@@ -145,7 +112,7 @@ impl TypeEvaluator {
     pub fn eval(
         &mut self,
         ty: &MonoType,
-    ) -> EvalResult<MonoType> {
+    ) -> Result<MonoType, EvalError> {
         self.eval_with_depth(ty, 0)
     }
 
@@ -154,10 +121,10 @@ impl TypeEvaluator {
         &mut self,
         ty: &MonoType,
         depth: usize,
-    ) -> EvalResult<MonoType> {
+    ) -> Result<MonoType, EvalError> {
         // 检查深度限制
         if depth > self.config.max_depth {
-            return EvalResult::Error("Maximum evaluation depth exceeded".to_string());
+            return Err(EvalError::MaxDepthExceeded);
         }
 
         // 检查缓存
@@ -169,7 +136,10 @@ impl TypeEvaluator {
 
         // 循环检测
         if self.config.cycle_detection && self.visiting.contains(ty) {
-            return EvalResult::Error(format!("Cycle detected in type: {}", ty));
+            return Err(EvalError::CycleDetected(format!(
+                "Cycle detected in type: {}",
+                ty
+            )));
         }
         self.visiting.insert(ty.clone());
 
@@ -191,7 +161,7 @@ impl TypeEvaluator {
         &mut self,
         ty: &MonoType,
         depth: usize,
-    ) -> EvalResult<MonoType> {
+    ) -> Result<MonoType, EvalError> {
         match ty {
             // 处理 If 条件类型
             MonoType::TypeRef(name) if name == "If" => self.eval_if_type(ty, depth),
@@ -206,7 +176,7 @@ impl TypeEvaluator {
             MonoType::TypeRef(name) => self.eval_type_ref(name, depth),
 
             // 其他类型直接返回
-            _ => EvalResult::Value(ty.clone()),
+            _ => Ok(ty.clone()),
         }
     }
 
@@ -219,30 +189,26 @@ impl TypeEvaluator {
         &mut self,
         ty: &MonoType,
         depth: usize,
-    ) -> EvalResult<MonoType> {
+    ) -> Result<MonoType, EvalError> {
         // 尝试从类型引用中提取参数
         let (condition, true_branch, false_branch) = match self.extract_if_args(ty) {
             Some(args) => args,
-            None => return EvalResult::Value(ty.clone()),
+            None => return Ok(ty.clone()),
         };
 
         // 递归求值条件
         let cond_result = self.eval_condition(&condition, depth);
 
         match cond_result {
-            EvalResult::Value(true) => {
+            Ok(true) => {
                 // 条件为 true，求值 true 分支
                 self.eval_with_depth(&true_branch, depth + 1)
             }
-            EvalResult::Value(false) => {
+            Ok(false) => {
                 // 条件为 false，求值 false 分支
                 self.eval_with_depth(&false_branch, depth + 1)
             }
-            EvalResult::Pending => {
-                // 条件无法确定，返回待定
-                EvalResult::Pending
-            }
-            EvalResult::Error(msg) => EvalResult::Error(msg),
+            Err(e) => Err(e),
         }
     }
 
@@ -329,11 +295,11 @@ impl TypeEvaluator {
         &mut self,
         condition: &MonoType,
         depth: usize,
-    ) -> EvalResult<bool> {
+    ) -> Result<bool, EvalError> {
         match condition {
             // 布尔字面量
-            MonoType::TypeRef(name) if name == "True" => EvalResult::Value(true),
-            MonoType::TypeRef(name) if name == "False" => EvalResult::Value(false),
+            MonoType::TypeRef(name) if name == "True" => Ok(true),
+            MonoType::TypeRef(name) if name == "False" => Ok(false),
 
             // 等式条件: L == R
             MonoType::TypeRef(name) if name.starts_with("Eq(") => {
@@ -342,10 +308,7 @@ impl TypeEvaluator {
 
             // 不等条件: L != R
             MonoType::TypeRef(name) if name.starts_with("Neq(") => {
-                match self.eval_eq_condition(name, depth) {
-                    EvalResult::Value(b) => EvalResult::Value(!b),
-                    other => other,
-                }
+                self.eval_eq_condition(name, depth).map(|b| !b)
             }
 
             // 组合条件: And
@@ -359,18 +322,15 @@ impl TypeEvaluator {
             }
 
             // 否定条件: Not
-            MonoType::TypeRef(name) if name.starts_with("Not(") => {
-                match self.eval_condition(&self.extract_inner_type(name), depth) {
-                    EvalResult::Value(b) => EvalResult::Value(!b),
-                    other => other,
-                }
-            }
+            MonoType::TypeRef(name) if name.starts_with("Not(") => self
+                .eval_condition(&self.extract_inner_type(name), depth)
+                .map(|b| !b),
 
             // 类型变量无法确定
-            MonoType::TypeVar(_) => EvalResult::Pending,
+            MonoType::TypeVar(_) => Ok(true),
 
             // 其他情况需要进一步检查
-            _ => EvalResult::Pending,
+            _ => Ok(true),
         }
     }
 
@@ -379,7 +339,7 @@ impl TypeEvaluator {
         &mut self,
         name: &str,
         depth: usize,
-    ) -> EvalResult<bool> {
+    ) -> Result<bool, EvalError> {
         if let Some(args) = Self::parse_generic_args(name) {
             if args.len() == 2 {
                 let left = self
@@ -394,12 +354,12 @@ impl TypeEvaluator {
                 let right_eval = self.eval_with_depth(&right, depth + 1);
 
                 // 如果两边都已确定值
-                if let (EvalResult::Value(l), EvalResult::Value(r)) = (left_eval, right_eval) {
-                    return EvalResult::Value(l == r);
+                if let (Ok(l), Ok(r)) = (left_eval, right_eval) {
+                    return Ok(l == r);
                 }
             }
         }
-        EvalResult::Pending
+        Ok(true)
     }
 
     /// 求值 And 条件
@@ -407,7 +367,7 @@ impl TypeEvaluator {
         &mut self,
         name: &str,
         depth: usize,
-    ) -> EvalResult<bool> {
+    ) -> Result<bool, EvalError> {
         if let Some(args) = Self::parse_generic_args(name) {
             if args.len() == 2 {
                 let left = self
@@ -421,17 +381,15 @@ impl TypeEvaluator {
                 let right_eval = self.eval_condition(&right, depth + 1);
 
                 match (left_eval, right_eval) {
-                    (EvalResult::Value(false), _) | (_, EvalResult::Value(false)) => {
-                        EvalResult::Value(false)
-                    }
-                    (EvalResult::Value(true), EvalResult::Value(true)) => EvalResult::Value(true),
-                    _ => EvalResult::Pending,
+                    (Ok(false), _) | (_, Ok(false)) => Ok(false),
+                    (Ok(true), Ok(true)) => Ok(true),
+                    (Err(e), _) | (_, Err(e)) => Err(e),
                 }
             } else {
-                EvalResult::Pending
+                Ok(true)
             }
         } else {
-            EvalResult::Pending
+            Ok(true)
         }
     }
 
@@ -440,7 +398,7 @@ impl TypeEvaluator {
         &mut self,
         name: &str,
         depth: usize,
-    ) -> EvalResult<bool> {
+    ) -> Result<bool, EvalError> {
         if let Some(args) = Self::parse_generic_args(name) {
             if args.len() == 2 {
                 let left = self
@@ -454,19 +412,15 @@ impl TypeEvaluator {
                 let right_eval = self.eval_condition(&right, depth + 1);
 
                 match (left_eval, right_eval) {
-                    (EvalResult::Value(true), _) | (_, EvalResult::Value(true)) => {
-                        EvalResult::Value(true)
-                    }
-                    (EvalResult::Value(false), EvalResult::Value(false)) => {
-                        EvalResult::Value(false)
-                    }
-                    _ => EvalResult::Pending,
+                    (Ok(true), _) | (_, Ok(true)) => Ok(true),
+                    (Ok(false), Ok(false)) => Ok(false),
+                    (Err(e), _) | (_, Err(e)) => Err(e),
                 }
             } else {
-                EvalResult::Pending
+                Ok(true)
             }
         } else {
-            EvalResult::Pending
+            Ok(true)
         }
     }
 
@@ -495,18 +449,18 @@ impl TypeEvaluator {
         &mut self,
         ty: &MonoType,
         depth: usize,
-    ) -> EvalResult<MonoType> {
+    ) -> Result<MonoType, EvalError> {
         // 尝试从类型引用中提取参数
         let (target, arms) = match self.extract_match_args(ty) {
             Some(args) => args,
-            None => return EvalResult::Value(ty.clone()),
+            None => return Ok(ty.clone()),
         };
 
         // 递归求值目标类型
         let target_eval = self.eval_with_depth(&target, depth + 1);
 
         match target_eval {
-            EvalResult::Value(target_ty) => {
+            Ok(target_ty) => {
                 // 查找匹配的分支
                 for (pattern, result) in arms {
                     if self.pattern_matches(&target_ty, &pattern) {
@@ -514,10 +468,11 @@ impl TypeEvaluator {
                     }
                 }
                 // 没有匹配分支
-                EvalResult::Error("No matching arm in MatchType".to_string())
+                Err(EvalError::TypeMismatch(
+                    "No matching arm in MatchType".to_string(),
+                ))
             }
-            EvalResult::Pending => EvalResult::Pending,
-            EvalResult::Error(msg) => EvalResult::Error(msg),
+            Err(e) => Err(e),
         }
     }
 
@@ -591,13 +546,13 @@ impl TypeEvaluator {
         &mut self,
         ty: &MonoType,
         depth: usize,
-    ) -> EvalResult<MonoType> {
+    ) -> Result<MonoType, EvalError> {
         if let MonoType::TypeRef(name) = ty {
             if let Some((op, args)) = self.extract_nat_args(name) {
                 return self.eval_nat_op(&op, &args, depth);
             }
         }
-        EvalResult::Value(ty.clone())
+        Ok(ty.clone())
     }
 
     /// 提取 Nat 运算参数
@@ -634,14 +589,13 @@ impl TypeEvaluator {
         op: &str,
         args: &[MonoType],
         depth: usize,
-    ) -> EvalResult<MonoType> {
+    ) -> Result<MonoType, EvalError> {
         // 递归求值参数
         let mut eval_args = Vec::new();
         for arg in args {
             match self.eval_with_depth(arg, depth + 1) {
-                EvalResult::Value(v) => eval_args.push(v),
-                EvalResult::Pending => return EvalResult::Pending,
-                EvalResult::Error(msg) => return EvalResult::Error(msg),
+                Ok(v) => eval_args.push(v),
+                Err(e) => return Err(e),
             }
         }
 
@@ -662,28 +616,27 @@ impl TypeEvaluator {
             "Mod" if eval_args.len() == 2 => self.nat_mod(&eval_args[0], &eval_args[1]),
 
             // 比较: Nat<Eq, a, b> -> Bool
-            "Eq" if eval_args.len() == 2 => match self.nat_eq(&eval_args[0], &eval_args[1]) {
-                EvalResult::Value(b) => EvalResult::Value(MonoType::TypeRef(if b {
+            "Eq" if eval_args.len() == 2 => self.nat_eq(&eval_args[0], &eval_args[1]).map(|b| {
+                MonoType::TypeRef(if b {
                     "True".to_string()
                 } else {
                     "False".to_string()
-                })),
-                EvalResult::Pending => EvalResult::Pending,
-                EvalResult::Error(msg) => EvalResult::Error(msg),
-            },
+                })
+            }),
 
             // 小于: Nat<Lt, a, b> -> Bool
-            "Lt" if eval_args.len() == 2 => match self.nat_lt(&eval_args[0], &eval_args[1]) {
-                EvalResult::Value(b) => EvalResult::Value(MonoType::TypeRef(if b {
+            "Lt" if eval_args.len() == 2 => self.nat_lt(&eval_args[0], &eval_args[1]).map(|b| {
+                MonoType::TypeRef(if b {
                     "True".to_string()
                 } else {
                     "False".to_string()
-                })),
-                EvalResult::Pending => EvalResult::Pending,
-                EvalResult::Error(msg) => EvalResult::Error(msg),
-            },
+                })
+            }),
 
-            _ => EvalResult::Error(format!("Unknown Nat operation: {}", op)),
+            _ => Err(EvalError::ArithmeticError(format!(
+                "Unknown Nat operation: {}",
+                op
+            ))),
         }
     }
 
@@ -692,13 +645,13 @@ impl TypeEvaluator {
         &self,
         a: &MonoType,
         b: &MonoType,
-    ) -> EvalResult<MonoType> {
+    ) -> Result<MonoType, EvalError> {
         match (self.extract_nat_value(a), self.extract_nat_value(b)) {
             (Some(na), Some(nb)) => {
                 let result = na + nb;
                 self.nat_literal(result)
             }
-            _ => EvalResult::Pending,
+            _ => Ok(MonoType::TypeRef(format!("Nat(Add, {:?}, {:?})", a, b))),
         }
     }
 
@@ -707,17 +660,17 @@ impl TypeEvaluator {
         &self,
         a: &MonoType,
         b: &MonoType,
-    ) -> EvalResult<MonoType> {
+    ) -> Result<MonoType, EvalError> {
         match (self.extract_nat_value(a), self.extract_nat_value(b)) {
             (Some(na), Some(nb)) => {
                 if nb > na {
-                    EvalResult::Error("Nat underflow".to_string())
+                    Err(EvalError::ArithmeticError("Nat underflow".to_string()))
                 } else {
                     let result = na - nb;
                     self.nat_literal(result)
                 }
             }
-            _ => EvalResult::Pending,
+            _ => Ok(MonoType::TypeRef(format!("Nat(Sub, {:?}, {:?})", a, b))),
         }
     }
 
@@ -726,13 +679,13 @@ impl TypeEvaluator {
         &self,
         a: &MonoType,
         b: &MonoType,
-    ) -> EvalResult<MonoType> {
+    ) -> Result<MonoType, EvalError> {
         match (self.extract_nat_value(a), self.extract_nat_value(b)) {
             (Some(na), Some(nb)) => {
                 let result = na * nb;
                 self.nat_literal(result)
             }
-            _ => EvalResult::Pending,
+            _ => Ok(MonoType::TypeRef(format!("Nat(Mul, {:?}, {:?})", a, b))),
         }
     }
 
@@ -741,17 +694,19 @@ impl TypeEvaluator {
         &self,
         a: &MonoType,
         b: &MonoType,
-    ) -> EvalResult<MonoType> {
+    ) -> Result<MonoType, EvalError> {
         match (self.extract_nat_value(a), self.extract_nat_value(b)) {
             (Some(na), Some(nb)) => {
                 if nb == 0 {
-                    EvalResult::Error("Nat division by zero".to_string())
+                    Err(EvalError::ArithmeticError(
+                        "Nat division by zero".to_string(),
+                    ))
                 } else {
                     let result = na / nb;
                     self.nat_literal(result)
                 }
             }
-            _ => EvalResult::Pending,
+            _ => Ok(MonoType::TypeRef(format!("Nat(Div, {:?}, {:?})", a, b))),
         }
     }
 
@@ -760,17 +715,17 @@ impl TypeEvaluator {
         &self,
         a: &MonoType,
         b: &MonoType,
-    ) -> EvalResult<MonoType> {
+    ) -> Result<MonoType, EvalError> {
         match (self.extract_nat_value(a), self.extract_nat_value(b)) {
             (Some(na), Some(nb)) => {
                 if nb == 0 {
-                    EvalResult::Error("Nat modulo by zero".to_string())
+                    Err(EvalError::ArithmeticError("Nat modulo by zero".to_string()))
                 } else {
                     let result = na % nb;
                     self.nat_literal(result)
                 }
             }
-            _ => EvalResult::Pending,
+            _ => Ok(MonoType::TypeRef(format!("Nat(Mod, {:?}, {:?})", a, b))),
         }
     }
 
@@ -779,10 +734,10 @@ impl TypeEvaluator {
         &self,
         a: &MonoType,
         b: &MonoType,
-    ) -> EvalResult<bool> {
+    ) -> Result<bool, EvalError> {
         match (self.extract_nat_value(a), self.extract_nat_value(b)) {
-            (Some(na), Some(nb)) => EvalResult::Value(na == nb),
-            _ => EvalResult::Pending,
+            (Some(na), Some(nb)) => Ok(na == nb),
+            _ => Ok(true),
         }
     }
 
@@ -791,10 +746,10 @@ impl TypeEvaluator {
         &self,
         a: &MonoType,
         b: &MonoType,
-    ) -> EvalResult<bool> {
+    ) -> Result<bool, EvalError> {
         match (self.extract_nat_value(a), self.extract_nat_value(b)) {
-            (Some(na), Some(nb)) => EvalResult::Value(na < nb),
-            _ => EvalResult::Pending,
+            (Some(na), Some(nb)) => Ok(na < nb),
+            _ => Ok(true),
         }
     }
 
@@ -837,8 +792,8 @@ impl TypeEvaluator {
     fn nat_literal(
         &self,
         n: i128,
-    ) -> EvalResult<MonoType> {
-        EvalResult::Value(MonoType::TypeRef(format!("Nat({})", n)))
+    ) -> Result<MonoType, EvalError> {
+        Ok(MonoType::TypeRef(format!("Nat({})", n)))
     }
 
     // ============ 类型引用求值 ============
@@ -848,7 +803,7 @@ impl TypeEvaluator {
         &mut self,
         name: &str,
         depth: usize,
-    ) -> EvalResult<MonoType> {
+    ) -> Result<MonoType, EvalError> {
         // 检查是否是预定义的类型别名
         if let Some(env_ptr) = self.env {
             let env = unsafe { &*env_ptr };
@@ -859,7 +814,7 @@ impl TypeEvaluator {
         }
 
         // 类型引用本身
-        EvalResult::Value(MonoType::TypeRef(name.to_string()))
+        Ok(MonoType::TypeRef(name.to_string()))
     }
 
     // ============ 公共 API ============
@@ -872,14 +827,13 @@ impl TypeEvaluator {
         condition: &MonoType,
         true_branch: &MonoType,
         false_branch: &MonoType,
-    ) -> EvalResult<MonoType> {
+    ) -> Result<MonoType, EvalError> {
         let cond_result = self.eval_condition(condition, 0);
 
         match cond_result {
-            EvalResult::Value(true) => self.eval(true_branch),
-            EvalResult::Value(false) => self.eval(false_branch),
-            EvalResult::Pending => EvalResult::Pending,
-            EvalResult::Error(msg) => EvalResult::Error(msg),
+            Ok(true) => self.eval(true_branch),
+            Ok(false) => self.eval(false_branch),
+            Err(e) => Err(e),
         }
     }
 
@@ -890,19 +844,21 @@ impl TypeEvaluator {
         &mut self,
         target: &MonoType,
         arms: Vec<(MonoType, MonoType)>,
-    ) -> EvalResult<MonoType> {
+    ) -> Result<MonoType, EvalError> {
         let target_eval = self.eval(target);
 
         match target_eval {
-            EvalResult::Value(target_ty) => {
+            Ok(target_ty) => {
                 for (pattern, result) in arms {
                     if self.pattern_matches(&target_ty, &pattern) {
                         return self.eval(&result);
                     }
                 }
-                EvalResult::Error("No matching arm in MatchType".to_string())
+                Err(EvalError::TypeMismatch(
+                    "No matching arm in MatchType".to_string(),
+                ))
             }
-            other => other,
+            Err(e) => Err(e),
         }
     }
 
@@ -913,7 +869,7 @@ impl TypeEvaluator {
         &mut self,
         op: &str,
         args: &[MonoType],
-    ) -> EvalResult<MonoType> {
+    ) -> Result<MonoType, EvalError> {
         self.eval_nat_op(op, args, 0)
     }
 
@@ -936,14 +892,11 @@ impl TypeEvaluator {
 // ============ 与类型归一化器集成 ============
 
 /// 类型求值结果转换
-impl From<EvalResult<MonoType>> for TypeLevelResult<MonoType> {
-    fn from(result: EvalResult<MonoType>) -> Self {
+impl From<Result<MonoType, EvalError>> for TypeLevelResult<MonoType> {
+    fn from(result: Result<MonoType, EvalError>) -> Self {
         match result {
-            EvalResult::Value(ty) => TypeLevelResult::Normalized(ty),
-            EvalResult::Pending => TypeLevelResult::Pending(MonoType::TypeRef("?".to_string())),
-            EvalResult::Error(msg) => {
-                TypeLevelResult::Error(TypeLevelError::ComputationFailed(msg))
-            }
+            Ok(ty) => TypeLevelResult::Normalized(ty),
+            Err(e) => TypeLevelResult::Error(TypeLevelError::ComputationFailed(format!("{:?}", e))),
         }
     }
 }
@@ -982,18 +935,14 @@ pub fn sync_caches(
     let cache = context.cache_mut();
 
     // 将 TypeEvaluator 的缓存同步到 NormalizationContext
-    // EvalResult<MonoType> -> NormalForm 转换
+    // Result<MonoType, EvalError> -> NormalForm 转换
     for (ty, eval_result) in &evaluator.cache {
         match eval_result {
-            EvalResult::Value(_result_ty) => {
+            Ok(_result_ty) => {
                 // 已求值的类型标记为已归一化
                 cache.insert(ty.clone(), NormalForm::Normalized);
             }
-            EvalResult::Pending => {
-                // 待求值的类型需要进一步处理
-                cache.insert(ty.clone(), NormalForm::NeedsReduction);
-            }
-            EvalResult::Error(_) => {
+            Err(_) => {
                 // 错误的类型也标记
                 cache.insert(ty.clone(), NormalForm::Normalized);
             }
@@ -1062,10 +1011,7 @@ mod tests {
         };
 
         let result = evaluator.eval_nat("Add", &[a, b]);
-        assert_eq!(
-            result,
-            EvalResult::Value(MonoType::TypeRef("Nat(8)".to_string()))
-        );
+        assert_eq!(result, Ok(MonoType::TypeRef("Nat(8)".to_string())));
 
         // 测试减法
         let a = MonoType::Literal {
@@ -1080,10 +1026,7 @@ mod tests {
         };
 
         let result = evaluator.eval_nat("Sub", &[a, b]);
-        assert_eq!(
-            result,
-            EvalResult::Value(MonoType::TypeRef("Nat(7)".to_string()))
-        );
+        assert_eq!(result, Ok(MonoType::TypeRef("Nat(7)".to_string())));
     }
 
     #[test]
@@ -1094,27 +1037,15 @@ mod tests {
         let true_cond = MonoType::TypeRef("True".to_string());
         let false_cond = MonoType::TypeRef("False".to_string());
 
-        assert_eq!(
-            evaluator.eval_condition(&true_cond, 0),
-            EvalResult::Value(true)
-        );
-        assert_eq!(
-            evaluator.eval_condition(&false_cond, 0),
-            EvalResult::Value(false)
-        );
+        assert_eq!(evaluator.eval_condition(&true_cond, 0), Ok(true));
+        assert_eq!(evaluator.eval_condition(&false_cond, 0), Ok(false));
 
         // 测试 And 条件
         let and_cond = MonoType::TypeRef("And(True, False)".to_string());
-        assert_eq!(
-            evaluator.eval_condition(&and_cond, 0),
-            EvalResult::Value(false)
-        );
+        assert_eq!(evaluator.eval_condition(&and_cond, 0), Ok(false));
 
         let and_cond = MonoType::TypeRef("And(True, True)".to_string());
-        assert_eq!(
-            evaluator.eval_condition(&and_cond, 0),
-            EvalResult::Value(true)
-        );
+        assert_eq!(evaluator.eval_condition(&and_cond, 0), Ok(true));
     }
 
     #[test]
