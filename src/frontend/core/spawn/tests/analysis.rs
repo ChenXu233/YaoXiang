@@ -37,7 +37,10 @@ fn var_expr(name: &str) -> Expr {
     Expr::Var(name.to_string(), dummy_span())
 }
 
-fn assign_stmt(target: &str, rhs: Expr) -> Stmt {
+fn assign_stmt(
+    target: &str,
+    rhs: Expr,
+) -> Stmt {
     Stmt {
         kind: StmtKind::Expr(Box::new(Expr::BinOp {
             op: BinOp::Assign,
@@ -49,7 +52,10 @@ fn assign_stmt(target: &str, rhs: Expr) -> Stmt {
     }
 }
 
-fn call_expr(func: &str, args: Vec<Expr>) -> Expr {
+fn call_expr(
+    func: &str,
+    args: Vec<Expr>,
+) -> Expr {
     Expr::Call {
         func: Box::new(var_expr(func)),
         args,
@@ -145,8 +151,7 @@ fn test_reads_writes_var_reference() {
     let expr = var_expr("x");
 
     // Act
-    let (reads, writes, _) =
-        analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
+    let (reads, writes, _) = analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
 
     // Assert
     assert!(reads.contains("x"), "变量引用应被记入 reads");
@@ -164,8 +169,7 @@ fn test_reads_writes_assignment_target_and_rhs() {
     };
 
     // Act
-    let (reads, writes, _) =
-        analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
+    let (reads, writes, _) = analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
 
     // Assert
     assert!(writes.contains("t1"), "赋值目标应被记入 writes");
@@ -179,8 +183,7 @@ fn test_reads_writes_call_args() {
     let expr = call_expr("process", vec![var_expr("x"), var_expr("y")]);
 
     // Act
-    let (reads, _, _) =
-        analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
+    let (reads, _, _) = analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
 
     // Assert
     assert!(reads.contains("process"), "函数名应被记入 reads");
@@ -201,8 +204,7 @@ fn test_reads_writes_list_elements() {
     );
 
     // Act
-    let (reads, _, _) =
-        analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
+    let (reads, _, _) = analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
 
     // Assert
     assert!(reads.contains("a"), "列表元素 a 应被记入 reads");
@@ -216,8 +218,7 @@ fn test_reads_writes_tuple_elements() {
     let expr = Expr::Tuple(vec![var_expr("x"), var_expr("y")], dummy_span());
 
     // Act
-    let (reads, _, _) =
-        analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
+    let (reads, _, _) = analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
 
     // Assert
     assert!(reads.contains("x"), "元组元素 x 应被记入 reads");
@@ -230,8 +231,7 @@ fn test_reads_writes_dict_pairs() {
     let expr = Expr::Dict(vec![(var_expr("k"), var_expr("v"))], dummy_span());
 
     // Act
-    let (reads, _, _) =
-        analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
+    let (reads, _, _) = analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
 
     // Assert
     assert!(reads.contains("k"), "字典键 k 应被记入 reads");
@@ -248,8 +248,7 @@ fn test_reads_writes_index_access() {
     };
 
     // Act
-    let (reads, _, _) =
-        analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
+    let (reads, _, _) = analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
 
     // Assert
     assert!(reads.contains("arr"), "索引目标 arr 应被记入 reads");
@@ -269,8 +268,7 @@ fn test_reads_writes_cast_expr() {
     };
 
     // Act
-    let (reads, _, _) =
-        analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
+    let (reads, _, _) = analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
 
     // Assert
     assert!(reads.contains("x"), "类型转换表达式中的变量应被记入 reads");
@@ -294,12 +292,14 @@ fn test_reads_writes_match_expr_and_arms() {
     };
 
     // Act
-    let (reads, _, _) =
-        analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
+    let (reads, _, _) = analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
 
     // Assert
     assert!(reads.contains("val"), "match scrutinee 应被记入 reads");
-    assert!(reads.contains("result"), "match arm body 中的变量应被记入 reads");
+    assert!(
+        reads.contains("result"),
+        "match arm body 中的变量应被记入 reads"
+    );
 }
 
 #[test]
@@ -322,8 +322,7 @@ fn test_reads_writes_if_expr_branches() {
     };
 
     // Act
-    let (reads, _, _) =
-        analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
+    let (reads, _, _) = analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
 
     // Assert
     assert!(reads.contains("cond"), "if 条件应被记入 reads");
@@ -343,8 +342,7 @@ fn test_reads_writes_fstring_interpolation() {
     };
 
     // Act
-    let (reads, _, _) =
-        analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
+    let (reads, _, _) = analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
 
     // Assert
     assert!(reads.contains("name"), "f-string 插值变量应被记入 reads");
@@ -369,7 +367,11 @@ fn test_plan_independent_tasks_single_group() {
 
     // Assert
     assert_eq!(plan.groups.len(), 1, "无依赖任务应在同一并行组");
-    assert_eq!(plan.groups[0].task_indices.len(), 2, "两个独立任务应都在组内");
+    assert_eq!(
+        plan.groups[0].task_indices.len(),
+        2,
+        "两个独立任务应都在组内"
+    );
 }
 
 #[test]
@@ -403,15 +405,18 @@ fn test_plan_diamond_dependency_two_groups() {
             HashSet::from(["z".into()]),
         ),
     ];
-    let resource_sets: Vec<HashSet<String>> =
-        vec![HashSet::new(), HashSet::new(), HashSet::new()];
+    let resource_sets: Vec<HashSet<String>> = vec![HashSet::new(), HashSet::new(), HashSet::new()];
 
     // Act
     let plan = build_execution_plan(&sets, &resource_sets);
 
     // Assert
     assert_eq!(plan.groups.len(), 2, "菱形依赖应产生两个组");
-    assert_eq!(plan.groups[0].task_indices.len(), 2, "独立任务应并行（第一组 2 个）");
+    assert_eq!(
+        plan.groups[0].task_indices.len(),
+        2,
+        "独立任务应并行（第一组 2 个）"
+    );
     assert_eq!(plan.groups[1].task_indices, vec![2], "依赖任务应在第二组");
 }
 
@@ -478,7 +483,11 @@ fn test_plan_non_resource_read_read_allows_parallel() {
     let plan = build_execution_plan(&sets, &resource_sets);
 
     // Assert
-    assert_eq!(plan.groups.len(), 1, "非 Resource 变量的读-读不冲突，应允许并行");
+    assert_eq!(
+        plan.groups.len(),
+        1,
+        "非 Resource 变量的读-读不冲突，应允许并行"
+    );
 }
 
 // ============================================================================
@@ -499,8 +508,16 @@ fn test_spawn_body_independent_tasks() {
 
     // Assert
     assert_eq!(analysis.tasks.len(), 2, "应识别出 2 个任务");
-    assert_eq!(analysis.tasks[0].target.as_deref(), Some("t1"), "第一个任务目标应为 t1");
-    assert_eq!(analysis.tasks[1].target.as_deref(), Some("t2"), "第二个任务目标应为 t2");
+    assert_eq!(
+        analysis.tasks[0].target.as_deref(),
+        Some("t1"),
+        "第一个任务目标应为 t1"
+    );
+    assert_eq!(
+        analysis.tasks[1].target.as_deref(),
+        Some("t2"),
+        "第二个任务目标应为 t2"
+    );
     assert_eq!(analysis.plan.groups.len(), 1, "无依赖任务应在同一并行组");
 }
 
@@ -518,8 +535,16 @@ fn test_spawn_body_with_read_after_write_dependency() {
 
     // Assert
     assert_eq!(analysis.plan.groups.len(), 2, "读写依赖应产生两个串行组");
-    assert_eq!(analysis.plan.groups[0].task_indices, vec![0], "第一个任务应在第一组");
-    assert_eq!(analysis.plan.groups[1].task_indices, vec![1], "依赖任务应在第二组");
+    assert_eq!(
+        analysis.plan.groups[0].task_indices,
+        vec![0],
+        "第一个任务应在第一组"
+    );
+    assert_eq!(
+        analysis.plan.groups[1].task_indices,
+        vec![1],
+        "依赖任务应在第二组"
+    );
 }
 
 #[test]
@@ -536,7 +561,11 @@ fn test_spawn_body_resource_conflict_serializes() {
     let analysis = analyze_spawn_body(&body, &trait_table, &local_var_types);
 
     // Assert
-    assert_eq!(analysis.plan.groups.len(), 2, "Resource 冲突应产生两个串行组");
+    assert_eq!(
+        analysis.plan.groups.len(),
+        2,
+        "Resource 冲突应产生两个串行组"
+    );
 }
 
 #[test]
@@ -570,11 +599,180 @@ fn test_spawn_for_reads_writes() {
     let iterable = var_expr("items");
 
     // Act
-    let analysis =
-        analyze_spawn_for("item", &iterable, &body, &empty_trait_table(), &empty_var_types());
+    let analysis = analyze_spawn_for(
+        "item",
+        &iterable,
+        &body,
+        &empty_trait_table(),
+        &empty_var_types(),
+    );
 
     // Assert
     assert_eq!(analysis.iter_var, "item", "迭代变量名应为 item");
-    assert!(analysis.reads.contains("process"), "循环体 reads 应包含函数名 process");
-    assert!(analysis.reads.contains("item"), "循环体 reads 应包含迭代变量 item");
+    assert!(
+        analysis.reads.contains("process"),
+        "循环体 reads 应包含函数名 process"
+    );
+    assert!(
+        analysis.reads.contains("item"),
+        "循环体 reads 应包含迭代变量 item"
+    );
+}
+
+// ============================================================================
+// 补充边界测试
+// ============================================================================
+
+#[test]
+fn test_spawn_body_mixed_children_and_non_children() {
+    // RFC-024 §2.1: spawn 块内 var 声明不是直接子表达式，应被跳过
+    // Arrange
+    let body = Block {
+        stmts: vec![
+            // 非直接子表达式：var 声明
+            Stmt {
+                kind: StmtKind::Var {
+                    name: "local_var".to_string(),
+                    name_span: dummy_span(),
+                    type_annotation: None,
+                    initializer: Some(Box::new(Expr::Lit(
+                        crate::frontend::core::lexer::tokens::Literal::Int(0),
+                        dummy_span(),
+                    ))),
+                    is_mut: false,
+                },
+                span: dummy_span(),
+            },
+            // 直接子表达式：赋值
+            assign_stmt("t1", call_expr("f", vec![])),
+        ],
+        expr: None,
+        span: dummy_span(),
+    };
+
+    // Act
+    let analysis = analyze_spawn_body(&body, &empty_trait_table(), &empty_var_types());
+
+    // Assert
+    assert_eq!(
+        analysis.tasks.len(),
+        1,
+        "var 声明应被跳过，只识别出 1 个任务"
+    );
+    assert_eq!(
+        analysis.tasks[0].target.as_deref(),
+        Some("t1"),
+        "唯一任务目标应为 t1"
+    );
+}
+
+#[test]
+fn test_spawn_body_no_direct_children() {
+    // RFC-024 §2.1: spawn 块内只有 var 声明，无直接子表达式
+    // Arrange
+    let body = Block {
+        stmts: vec![Stmt {
+            kind: StmtKind::Var {
+                name: "x".to_string(),
+                name_span: dummy_span(),
+                type_annotation: None,
+                initializer: None,
+                is_mut: false,
+            },
+            span: dummy_span(),
+        }],
+        expr: None,
+        span: dummy_span(),
+    };
+
+    // Act
+    let analysis = analyze_spawn_body(&body, &empty_trait_table(), &empty_var_types());
+
+    // Assert
+    assert_eq!(analysis.tasks.len(), 0, "无直接子表达式时应产生 0 个任务");
+    assert_eq!(analysis.plan.groups.len(), 0, "无任务时应产生空执行计划");
+}
+
+#[test]
+fn test_spawn_body_write_write_conflict_serializes() {
+    // RFC-024 §2.3: 两个任务写同一变量 → 写后写冲突 → 串行
+    // Arrange
+    let body = spawn_body(vec![
+        assign_stmt("x", call_expr("f", vec![])),
+        assign_stmt("x", call_expr("g", vec![])),
+    ]);
+
+    // Act
+    let analysis = analyze_spawn_body(&body, &empty_trait_table(), &empty_var_types());
+
+    // Assert
+    assert_eq!(analysis.plan.groups.len(), 2, "写后写冲突应产生两个串行组");
+}
+
+#[test]
+fn test_spawn_body_assignment_target_is_resource_type() {
+    // RFC-024 §2.5: 赋值目标是 Resource 类型时，writes 中应包含该变量
+    // Arrange
+    let (trait_table, mut local_var_types) = resource_trait_table();
+    local_var_types.insert("db".to_string(), MonoType::TypeRef("FilePath".to_string()));
+    let body = spawn_body(vec![
+        assign_stmt("db", call_expr("open_db", vec![])),
+        assign_stmt("result", call_expr("query", vec![var_expr("db")])),
+    ]);
+
+    // Act
+    let analysis = analyze_spawn_body(&body, &trait_table, &local_var_types);
+
+    // Assert
+    assert!(
+        analysis.tasks[0].writes.contains("db"),
+        "赋值目标 db 应被记入 writes"
+    );
+    assert!(
+        analysis.tasks[0].resource_vars.contains("db"),
+        "Resource 类型赋值目标 db 应被记入 resource_vars"
+    );
+    assert_eq!(
+        analysis.plan.groups.len(),
+        2,
+        "Resource 类型赋值目标导致的冲突应产生两个串行组"
+    );
+}
+
+#[test]
+fn test_spawn_for_reads_outer_variable() {
+    // RFC-024 §2.4: spawn for 循环体引用外部变量
+    // Arrange
+    let body = Block {
+        stmts: vec![],
+        expr: Some(Box::new(call_expr(
+            "combine",
+            vec![var_expr("item"), var_expr("prefix")],
+        ))),
+        span: dummy_span(),
+    };
+    let iterable = var_expr("items");
+
+    // Act
+    let analysis = analyze_spawn_for(
+        "item",
+        &iterable,
+        &body,
+        &empty_trait_table(),
+        &empty_var_types(),
+    );
+
+    // Assert
+    assert!(
+        analysis.reads.contains("prefix"),
+        "循环体 reads 应包含外部变量 prefix"
+    );
+    assert!(
+        analysis.reads.contains("item"),
+        "循环体 reads 应包含迭代变量 item"
+    );
+    assert!(
+        analysis.reads.contains("combine"),
+        "循环体 reads 应包含函数名 combine"
+    );
 }
