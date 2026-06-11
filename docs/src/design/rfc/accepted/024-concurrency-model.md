@@ -3,7 +3,7 @@ title: "RFC-024：基于 spawn 块的并发模型"
 status: "已接受"
 author: "晨煦"
 created: "2026-06-05"
-updated: "2026-06-05"
+updated: "2026-06-11（新增 spawn 模块组织与迁移说明）"
 ---
 
 # RFC-024：基于 spawn 块的并发模型
@@ -336,6 +336,19 @@ process(x, y, z)
 3. **并行识别**：识别 spawn 块内无依赖的子树
 4. **逃逸分析**：`ref` → Rc 还是 Arc
 5. **资源冲突检测**：检测资源类型的潜在冲突
+
+### 模块组织
+
+spawn 相关代码统一放置在 `frontend/core/spawn/`：
+
+```
+frontend/core/spawn/
+├── mod.rs           # spawn 模块入口
+├── placement.rs     # spawn 出现位置合法性检查
+└── analysis.rs      # 任务识别、依赖分析、资源冲突检测（RFC-018 阶段 4 需要）
+```
+
+> **迁移说明**（2026-06-11）：现有的 `frontend/core/typecheck/passes/spawn_placement.rs` 将迁移至 `frontend/core/spawn/placement.rs`。`typecheck/passes/` 目录下的 `spawn_placement` 模块声明需同步移除。此迁移由 RFC-018（LLVM AOT 编译器）推动——LLVM 后端需要消费 spawn 分析结果，spawn 分析作为独立的前端共享模块比嵌入 typecheck 更合理。
 
 ### 运行时执行
 

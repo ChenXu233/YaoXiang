@@ -1,9 +1,9 @@
 ---
 title: "RFC-018：LLVM AOT 编译器设计"
-status: "审核中"
+status: "已接受"
 author: "晨煦"
 created: "2026-02-15"
-updated: "2026-06-10（对齐 RFC-024 spawn 块并发模型、RFC-009 v9 所有权模型、RFC-026 FFI 机制）"
+updated: "2026-06-11（修复 §3.1 ref T 类型 {i32*→i64*}、§4.1 MakeClosure func 字段类型、§6 RFC-026 架构与规则分离、§8 编译产物结构去具体化、§9 spawn 模块目录重构、新增浮点语义一致性小节、运行时库大小估计修正；接受前补充：§4.0 栈平衡前提声明、§6 RFC-026 冻结前置条件、§9 与 RFC-008 大小估计差异说明）"
 ---
 
 # RFC-018：LLVM AOT 编译器设计
@@ -97,7 +97,7 @@ LLVM 后端位于编译流水线的最后阶段，从前端接收 IR，生成原
   → Lexer / Parser（frontend/core/）
   → TypeCheck + spawn 分析（frontend/core/typecheck/）
   → IR 生成（middle/core/ir_gen.rs）
-  → LLVM Codegen（middle/passes/codegen/llvm/）
+  → LLVM Codegen（backends/llvm/）
       ├── 类型映射：YaoXiang 类型 → LLVM IR 类型
       ├── 函数翻译：IR 指令 → LLVM IR 指令
       ├── spawn 展开：直接子表达式 → 任务函数 + 调度调用
@@ -147,7 +147,7 @@ Phase 5: 链接
 | `Void` | `{}` | 零大小空类型 |
 | `&T` | — | 零大小令牌，编译后消失，不产生任何 IR |
 | `&mut T` | — | 零大小令牌，编译后消失，不产生任何 IR |
-| `ref T` | `{ i32*, T* }` | 胖指针（引用计数指针 + 数据指针） |
+| `ref T` | `{ i64*, T* }` | 胖指针（引用计数指针 + 数据指针） |
 | `*T` | `T*` | 裸指针 |
 | `[T; N]` | `[N x T]` | 定长数组 |
 | `List(T)` | `{ T*, i64, i64 }` | 数据指针 + 长度 + 容量 |
@@ -177,28 +177,169 @@ Phase 5: 链接
 | `struct T*` | `T`（透明类型） | `T*` | 传递指针 |
 | `typedef struct T T` | `T`（不透明类型） | `{ i8* }` | 包装 C 指针 |
 
-### 4. 指令翻译
+### 4. IR 规范化与指令翻译
 
-每个 IR 指令直接映射为对应的 LLVM IR 指令，简要映射表：
+#### 4.0 IR 规范化（栈 → 寄存器）
 
-| IR 指令 | LLVM IR |
-|---------|---------|
-| `BinaryOp { add }` | `add` |
-| `BinaryOp { sub }` | `sub` |
-| `BinaryOp { mul }` | `mul` |
-| `BinaryOp { div }` | `sdiv` / `fdiv` |
-| `Compare { eq }` | `icmp eq` / `fcmp oeq` |
-| `CallStatic` | `call` |
-| `CallIndirect` | `call`（通过函数指针） |
-| `Load` | `load` |
-| `Store` | `store` |
-| `LoadElement` | `getelementptr` + `load` |
-| `Alloca` | `alloca` |
-| `Branch` | `br` |
-| `BranchCond` | `br i1` |
-| `Return` | `ret` |
+当前 IR（`src/middle/core/ir.rs`）包含栈操作指令（`Push`/`Pop`/`Dup`/`Swap`），这是为字节码 VM 设计的。LLVM IR 是 SSA 形式，不接受栈操作。
 
-详细指令翻译见 `middle/passes/codegen/llvm/` 中的具体实现。
+**处理策略**：LLVM 路径在指令翻译之前，先经过一个轻量规范化 pass：
+
+| 栈指令 | 规范化策略 |
+|--------|-----------|
+| `Push(r)` | 记录 `stack.push(r)`，不产生 IR |
+| `Pop(r)` | `r = stack.pop()`，产生 `load`（从栈槽位） |
+| `Dup` | `stack.push(stack.top())`，不产生 IR |
+| `Swap` | 交换栈顶两个元素，不产生 IR |
+
+规范化后，所有操作数变为寄存器/局部变量引用，栈操作全部消除。该 pass 作为 `translator.rs` 的第一步执行。
+
+> **为什么不在 IR 层面消除栈指令？** 因为 VM 后端需要栈语义。在 LLVM 翻译入口处规范化，保持了 IR 对两个后端的共享——每个后端按自己的需求消费同一个 IR。
+>
+> **前提**：IR 生成阶段保证栈平衡——所有控制流路径到达同一程序点时栈深度一致（VM 字节码后端依赖同一前提，否则字节码执行会出错）。规范化 pass 不检查此前提；违反时 LLVM 后端产生未定义行为。
+
+#### 4.1 指令翻译表
+
+以下逐条列出 `Instruction` 枚举中每个变体的 LLVM IR 翻译策略。指令名与 `src/middle/core/ir.rs` 完全一致。
+
+**算术指令**：
+
+| IR 指令 | LLVM IR | 说明 |
+|---------|---------|------|
+| `Add { dst, lhs, rhs }` | `add`（整数）/ `fadd`（浮点） | 按类型选择整数或浮点加法 |
+| `Sub { dst, lhs, rhs }` | `sub` / `fsub` | |
+| `Mul { dst, lhs, rhs }` | `mul` / `fmul` | |
+| `Div { dst, lhs, rhs }` | `sdiv` / `udiv` / `fdiv` | 有符号/无符号/浮点除法 |
+| `Mod { dst, lhs, rhs }` | `srem` / `urem` | 有符号/无符号取模 |
+| `Neg { dst, src }` | `sub 0, src`（整数）/ `fneg`（浮点） | |
+
+**位运算指令**：
+
+| IR 指令 | LLVM IR | 说明 |
+|---------|---------|------|
+| `And { dst, lhs, rhs }` | `and` | |
+| `Or { dst, lhs, rhs }` | `or` | |
+| `Xor { dst, lhs, rhs }` | `xor` | |
+| `Shl { dst, lhs, rhs }` | `shl` | 左移 |
+| `Shr { dst, lhs, rhs }` | `lshr` | 逻辑右移 |
+| `Sar { dst, lhs, rhs }` | `ashr` | 算术右移 |
+
+**比较指令**：
+
+| IR 指令 | LLVM IR | 说明 |
+|---------|---------|------|
+| `Eq { dst, lhs, rhs }` | `icmp eq` / `fcmp oeq` | |
+| `Ne { dst, lhs, rhs }` | `icmp ne` / `fcmp one` | |
+| `Lt { dst, lhs, rhs }` | `icmp slt` / `fcmp olt` | |
+| `Le { dst, lhs, rhs }` | `icmp sle` / `fcmp ole` | |
+| `Gt { dst, lhs, rhs }` | `icmp sgt` / `fcmp ogt` | |
+| `Ge { dst, lhs, rhs }` | `icmp sge` / `fcmp oge` | |
+
+**控制流指令**：
+
+| IR 指令 | LLVM IR | 说明 |
+|---------|---------|------|
+| `Jmp(label)` | `br label %L` | 无条件跳转 |
+| `JmpIf(cond, label)` | `br i1 %cond, label %L, label %fallthrough` | 条件跳转 |
+| `JmpIfNot(cond, label)` | `br i1 %cond, label %fallthrough, label %L` | 条件不跳转 |
+| `Ret(Some(v))` | `ret T %v` | 有返回值 |
+| `Ret(None)` | `ret void` | 无返回值 |
+
+**调用指令**：
+
+| IR 指令 | LLVM IR | 说明 |
+|---------|---------|------|
+| `Call { dst, func, args }` | `%r = call T @func(...)` | 静态调用 |
+| `CallVirt { dst, obj, method_name, args }` | vtable GEP + `call`（函数指针） | 虚方法调用，通过 vtable 查找 |
+| `CallDyn { dst, func, args }` | `%r = call T %func(...)` | 动态调用（闭包/函数指针） |
+| `TailCall { func, args }` | `musttail call` / `tail call` | 尾调用优化 |
+
+**内存指令**：
+
+| IR 指令 | LLVM IR | 说明 |
+|---------|---------|------|
+| `Move { dst, src }` | — | 规范化后变为寄存器复制，SSA 构造可消除大部分 |
+| `Load { dst, src }` | `%v = load T, T* %src` | |
+| `Store { dst, src }` | `store T %src, T* %dst` | |
+| `Alloc { dst, size }` | `%p = alloca T`（栈）/ `call @malloc`（逃逸到堆） | 逃逸分析决定分配位置 |
+| `Free(ptr)` | `call @free(%ptr)`（堆）/ —（栈，自动回收） | |
+| `AllocArray { dst, size, elem_size }` | `%p = alloca [N x T]`（栈）/ `call @malloc`（堆） | |
+
+**结构体/数组访问指令**：
+
+| IR 指令 | LLVM IR | 说明 |
+|---------|---------|------|
+| `LoadField { dst, src, field }` | `%ptr = getelementptr T, T* %src, 0, field` + `load` | |
+| `StoreField { dst, field, src }` | `%ptr = getelementptr T, T* %dst, 0, field` + `store` | |
+| `LoadIndex { dst, src, index }` | `%ptr = getelementptr T, T* %src, 0, %index` + `load` | |
+| `StoreIndex { dst, index, src }` | `%ptr = getelementptr T, T* %dst, 0, %index` + `store` | |
+| `CreateStruct { dst, type_name, fields }` | `insertvalue` 链 | 按字段顺序构造 LLVM struct |
+
+**类型转换指令**：
+
+| IR 指令 | LLVM IR | 说明 |
+|---------|---------|------|
+| `Cast { dst, src, target_type }` | `bitcast` / `trunc` / `zext` / `sext` / `fptrunc` / `fpext` / `sitofp` / `fptosi` / `inttoptr` / `ptrtoint` | 按源/目标类型组合选择合适的 cast 指令 |
+| `TypeTest(val, type)` | — | 编译期类型测试，生成 `icmp eq` 比较类型标签 |
+
+**所有权与借用指令**：
+
+| IR 指令 | LLVM IR | 说明 |
+|---------|---------|------|
+| `Borrow { dst, src, mutable }` | — | **零大小令牌，编译后完全消失**，不产生任何 IR |
+| `Release(val)` | — | **零大小令牌，编译后完全消失** |
+| `Move { dst, src }` | — | 所有权转移，规范化后变为寄存器复制 |
+| `Drop(val)` | `call void @T.drop(T* %val)` | 调用类型的析构函数（见 §7） |
+| `ShareRef { dst, src }` | `call %T* @Arc_new(%src)` / `call %T* @Rc_new(%src)` | 编译器根据跨线程与否自动选 Arc/Rc |
+| `ArcNew { dst, src }` | `call %T* @Arc_new(%src)` | 原子引用计数 = 1 |
+| `ArcClone { dst, src }` | `call %T* @Arc_clone(%src)` | 原子递增引用计数 |
+| `ArcDrop(val)` | `call void @Arc_drop(%val)` | 原子递减 + 条件释放 |
+
+**并发指令**：
+
+| IR 指令 | LLVM IR | 说明 |
+|---------|---------|------|
+| `Spawn { closures, plan, result }` | 展开为调度器调用序列 | 详见 §5，运行时 `task_spawn` + `task_wait_all` |
+| `Yield` | — | AOT 路径上 spawn 块同步等待，不需要 yield；忽略 |
+
+**unsafe 块与裸指针指令**：
+
+| IR 指令 | LLVM IR | 说明 |
+|---------|---------|------|
+| `UnsafeBlockStart` | — | **编译期标记，不产生 IR** |
+| `UnsafeBlockEnd` | — | **编译期标记，不产生 IR** |
+| `PtrFromRef { dst, src }` | `%p = ptrtoint T* %src to i64`（或直接复制指针） | |
+| `PtrDeref { dst, src }` | `%v = load T, T* %src` | |
+| `PtrStore { dst, src }` | `store T %src, T* %dst` | |
+| `PtrLoad { dst, src }` | `%v = load T, T* %src` | |
+
+**字符串指令**：
+
+| IR 指令 | LLVM IR | 说明 |
+|---------|---------|------|
+| `StringLength { dst, src }` | `%len = extractvalue { i8*, i64 } %src, 1` | String 是 `{ ptr, len }`，长度在字段 1 |
+| `StringConcat { dst, lhs, rhs }` | `call String @yx_string_concat(%lhs, %rhs)` | 运行时辅助函数 |
+| `StringGetChar { dst, src, index }` | `getelementptr` + `load i32` | 含边界检查 |
+| `StringFromInt { dst, src }` | `call String @yx_string_from_int(%src)` | 运行时辅助函数 |
+| `StringFromFloat { dst, src }` | `call String @yx_string_from_f64(%src)` | 运行时辅助函数 |
+
+**闭包指令**：
+
+| IR 指令 | LLVM IR | 说明 |
+|---------|---------|------|
+| `MakeClosure { dst, func: String, env }` | 分配闭包结构体 + 填充函数指针（按函数名查找）和环境 | `{ fn_ptr, env_fields... }` |
+| `LoadUpvalue { dst, upvalue_idx }` | `%v = extractvalue %env, upvalue_idx` | 从闭包环境读 upvalue |
+| `StoreUpvalue { src, upvalue_idx }` | `%env = insertvalue %env, %src, upvalue_idx` | 写入闭包环境 |
+| `CloseUpvalue(val)` | 将栈上 upvalue 复制到堆 | |
+
+**其他指令**：
+
+| IR 指令 | LLVM IR | 说明 |
+|---------|---------|------|
+| `HeapAlloc { dst, type_id }` | `call i8* @malloc(i64 size)` + 类型标签写入 | 堆分配 + 类型信息 |
+| `NewDict { dst, keys, values }` | `call Dict @yx_dict_new(%keys, %values)` | 运行时辅助函数 |
+
+> **注意**：`Push`/`Pop`/`Dup`/`Swap` 已在 §4.0 规范化阶段消除，不出现在翻译表中。`Borrow`/`Release` 是零大小编译期令牌，不产生任何机器码。
 
 ### 5. spawn 块代码生成
 
@@ -316,6 +457,10 @@ results = spawn for item in items {
 编译器展开为 N 个独立任务（N = items 长度），受最大并发数限制。
 
 ### 6. FFI 代码生成
+
+> ⚠️ **依赖说明**：本节定义的 FFI 代码生成**架构**（`native("x")` → `declare external @x` → marshalling 包装函数 → call）是稳定的，不随 RFC-026 语法变更而变。具体的参数 marshalling 规则表（§6.2）和不透明类型布局（§6.3）引用 RFC-026 的定义——若 RFC-026 的 `native()` 语法或 marshalling 规则发生变更，只需更新本文档中对应的映射表，架构层不受影响。RFC-026 当前状态：**审核中**，与本文档同在 `review/` 目录。
+>
+> **接受前置条件**：本 RFC 接受前，RFC-026 中与本文档 §6 相关的部分（`native()` 声明语法、参数 marshalling 规则、不透明类型 `{ i8* }` 布局、`.drop` 绑定约定）应先冻结或随 026 一同接受。否则 §6.2/§6.3/§7 的映射表可能在实现前就过时。
 
 对齐 [RFC-026](./026-ffi-core-mechanism.md)，本节定义 FFI 调用的 LLVM IR 生成策略。
 
@@ -474,53 +619,13 @@ ret void
 
 ### 8. 编译产物结构
 
-```rust
-/// 编译产物：机器码 + 元数据
-pub struct CompiledArtifact {
-    /// LLVM 编译的机器码（目标文件）
-    machine_code: Vec<u8>,
+编译产物包含以下组成部分（具体 struct 定义在实现阶段确定）：
 
-    /// spawn 块元数据：任务函数指针 + 依赖关系
-    spawn_metadata: SpawnMetadata,
-
-    /// FFI 符号表：外部符号引用
-    ffi_symbols: Vec<FfiSymbol>,
-
-    /// 入口点表
-    entries: Vec<EntryPoint>,
-
-    /// 类型信息（反射元数据，写入 .reflect 段，按需 mmap）
-    type_info: TypeInfo,
-}
-
-/// spawn 块元数据
-pub struct SpawnMetadata {
-    /// 每个 spawn 块的描述
-    blocks: Vec<SpawnBlockInfo>,
-}
-
-pub struct SpawnBlockInfo {
-    /// spawn 块内每个直接子表达式对应的任务函数
-    tasks: Vec<TaskInfo>,
-    /// 资源冲突：哪些任务对需要串行
-    serialize_pairs: Vec<(usize, usize)>,
-}
-
-pub struct TaskInfo {
-    /// 任务函数的 LLVM 函数指针
-    pub func_ptr: usize,
-    /// 依赖的任务索引（空 = 无依赖，可立即执行）
-    pub deps: Vec<usize>,
-}
-
-/// FFI 符号引用
-pub struct FfiSymbol {
-    /// C 符号名
-    pub symbol_name: String,
-    /// 是否弱引用（允许缺失）
-    pub weak: bool,
-}
-```
+- **机器码**：LLVM 编译的目标文件（`.o`），包含所有函数翻译结果
+- **spawn 元数据**：每个 spawn 块的任务函数指针、依赖关系、资源冲突串行化对
+- **FFI 符号表**：外部 C 符号引用（符号名 + 是否弱引用）
+- **入口点表**：可执行文件的入口函数列表
+- **类型信息**：反射元数据，写入 `.reflect` 段，运行时按需 mmap
 
 ### 9. 运行时库
 
@@ -536,7 +641,7 @@ pub struct FfiSymbol {
 │  ├── FFI marshalling 包装函数               │
 │  └── RAII 析构代码                          │
 ├────────────────────────────────────────────┤
-│  运行时静态库（~200-500KB）                  │
+│  运行时静态库（约 500KB-1MB，取决于平台和功能选择）  │
 │  ├── 线程池（num_workers）                  │
 │  ├── 事件循环（libuv / io_uring）           │
 │  ├── 工作窃取队列（仅 Full Runtime）         │
@@ -553,6 +658,8 @@ pub struct FfiSymbol {
 
 **关键设计**：编译期完成 spawn 块的任务识别和依赖分析，运行时只做"创建任务 → 分发到线程池 → 等待完成"——数据结构固定，行为可预测。
 
+> **与 RFC-008 大小估计的差异**：RFC-008 §4 估计调度器约 200-500KB，仅含任务调度核心。本文档的 500KB-1MB 估计额外包含内存分配器（jemalloc/mimalloc）、事件循环（libuv/io_uring）和反射元数据段。实际大小取决于平台和功能选择，实现阶段会给出精确数字。
+
 **三层运行时与 LLVM 的关系**（对齐 RFC-008 §1）：
 
 | 运行时 | LLVM AOT 行为 |
@@ -567,13 +674,18 @@ pub struct FfiSymbol {
 
 ### 模块目录结构
 
-对齐 [RFC-008](../accepted/008-runtime-concurrency-model.md) §6 的目录布局：
+对齐 [RFC-008](../accepted/008-runtime-concurrency-model.md) §6 的目录布局。`[! 规划中]` 标记表示该文件/目录尚未创建，由本 RFC 的实现阶段引入。
 
 ```
 src/
 ├── frontend/                          # 编译前端（所有后端共享）
-│   └── core/typecheck/
-│       └── spawn_placement.rs         # spawn 块分析（任务识别、依赖分析、资源冲突检测）
+│   ├── core/
+│   │   ├── spawn/                     # spawn 模块（VM 和 LLVM 后端共享的并发分析）
+│   │   │   ├── mod.rs                 # spawn 模块入口
+│   │   │   ├── placement.rs           # spawn 出现位置合法性检查
+│   │   │   └── analysis.rs            # [! 规划中] 任务识别、依赖分析、资源冲突检测
+│   │   └── typecheck/
+│   │       └── ...
 │
 ├── middle/
 │   ├── core/
@@ -581,23 +693,28 @@ src/
 │   │   └── ir_gen.rs                  # IR 生成
 │   └── passes/
 │       ├── codegen/
-│       │   ├── mod.rs
-│       │   ├── translator.rs          # IR → LLVM IR 主翻译
-│       │   └── llvm/
-│       │       ├── mod.rs             # LLVM 后端入口
-│       │       ├── context.rs         # LLVM 上下文管理
-│       │       ├── types.rs           # 类型映射（YaoXiang → LLVM IR）
-│       │       ├── values.rs          # 值映射
-│       │       ├── func.rs            # 函数翻译
-│       │       ├── spawn.rs           # spawn 块展开
-│       │       ├── ffi.rs             # FFI 调用代码生成
-│       │       └── drop.rs            # 析构函数插入
+│       │   ├── mod.rs                 # 编排层（当前输出 BytecodeFile）
+│       │   ├── translator.rs          # IR → 字节码翻译（VM 后端用）
+│       │   ├── emitter.rs             # 字节码发射 + 跳转回填（VM 后端用）
+│       │   ├── buffer.rs              # 常量池 + 字节码缓冲区（VM 后端用）
+│       │   ├── bytecode.rs            # 字节码格式定义 + 序列化（VM 后端用）
+│       │   ├── flow.rs                # 寄存器分配 + 标签生成 + 符号表（VM 后端用）
+│       │   └── operand.rs             # 操作数解析（VM 后端用）
 │       ├── lifetime/                  # 生命周期/令牌活性分析
 │       └── mono/                      # 单态化
 │
 ├── backends/
 │   ├── common/                        # 共享值/堆/操作码
 │   ├── interpreter/                   # 树遍历解释器（VM 后端）
+│   ├── llvm/                          # [! 规划中] LLVM 后端代码生成（见下方文件列表）
+│   │   ├── mod.rs                     # [! 规划中] LLVM 后端入口
+│   │   ├── context.rs                 # [! 规划中] LLVM 上下文管理
+│   │   ├── types.rs                   # [! 规划中] 类型映射（YaoXiang → LLVM IR）
+│   │   ├── values.rs                  # [! 规划中] 值映射
+│   │   ├── func.rs                    # [! 规划中] 函数翻译
+│   │   ├── spawn.rs                   # [! 规划中] spawn 块展开
+│   │   ├── ffi.rs                     # [! 规划中] FFI 调用代码生成
+│   │   └── drop.rs                    # [! 规划中] 析构函数插入
 │   └── runtime/                       # 编译型运行时（静态库链接进 exe）
 │       ├── engine.rs                  # 任务调度引擎
 │       ├── facade.rs                  # 对外接口
@@ -607,7 +724,9 @@ src/
     └── diagnostic/                    # 错误诊断（共享）
 ```
 
-> **关键变更**：spawn 块分析在 `frontend/core/typecheck/spawn_placement.rs`（前端共享），不在 LLVM 后端。LLVM 后端只消费分析结果，生成对应的调度代码。
+> **关键变更**：spawn 块分析（任务识别、依赖分析、资源冲突检测）将在 `frontend/core/spawn/`（前端共享）中实现。现有的 `frontend/core/typecheck/passes/spawn_placement.rs`（spawn 出现位置检查）将迁移至 `frontend/core/spawn/placement.rs`，详见 RFC-024。LLVM 后端只消费分析结果，生成对应的调度代码。
+>
+> **现状说明**：当前 `middle/passes/codegen/` 下的 `buffer.rs`、`emitter.rs`、`bytecode.rs`、`flow.rs`、`operand.rs` 服务于 VM 后端的字节码生成（`CodegenContext::generate()` → `BytecodeFile`）。LLVM 后端将在 `backends/llvm/` 中实现，与 interpreter 后端和 runtime 平级——两者共享同一个 `ModuleIR` 输入，输出不同的目标格式（字节码 vs 原生代码）。
 
 ### 平台 ABI 支持
 
@@ -619,6 +738,20 @@ src/
 | Windows x86_64 | `x86_64-pc-windows-msvc` | COFF | Microsoft x64 |
 
 FFI 调用默认使用平台的 C 调用约定。用户可通过 `native("symbol", cc = "stdcall")` 等选项覆盖（对齐 [RFC-026](./026-ffi-core-mechanism.md) 的未来扩展）。
+
+### 浮点语义一致性（VM ↔ LLVM）
+
+双后端架构的核心承诺是 VM（开发调试）和 LLVM（生产发布）行为一致。浮点运算在两种执行模式下存在潜在的不一致点：
+
+| 场景 | 风险 | 策略 |
+|------|------|------|
+| NaN 传播 | VM 和 LLVM 可能对 NaN 的符号位和 payload 处理不同 | 编译器在 IR 层面规范化 NaN 表示，NaN 比较统一使用 `fcmp uno` |
+| 舍入模式 | LLVM 默认 round-to-nearest-even，VM 取决于宿主 CPU | 不暴露非默认舍入模式，VM 和 LLVM 统一使用 RTNE |
+| 除零 | IEEE 754 定义 ±Inf，但某些平台可能 trap | debug 模式检查除零并报告诊断；release 模式遵循 IEEE 754 |
+| `-0.0` vs `+0.0` | 比较操作可能不等价 | 统一使用 IEEE 754 规则：`+0.0 == -0.0` |
+| 非规格化数 | 某些平台 flush-to-zero | LLVM 不启用 `denormal-fp-math` 属性，保留完整 IEEE 754 语义 |
+
+> **测试策略**：实现一套跨后端的浮点一致性测试套件——相同的 YaoXiang 源码分别在 VM 和 LLVM 后端执行，逐值比对输出。这组测试是 CI 的强制门禁。
 
 ---
 
@@ -640,6 +773,7 @@ FFI 调用默认使用平台的 C 调用约定。用户可通过 `native("symbol
 2. **编译时间**：AOT 编译比解释器慢（一次性的代价）
 3. **调试体验**：原生代码调试需要 DWARF/PDB 符号支持（编译器需生成调试信息）
 4. **增量编译**：大型项目的增量编译需要额外设计
+5. **浮点语义一致性**：VM 和 LLVM 在 NaN 传播、舍入模式、除零等边界行为上可能存在差异，需通过规范化策略保证双后端行为一致（见 §10）
 
 ### 与相关 RFC 的一致性
 
@@ -679,7 +813,7 @@ FFI 调用默认使用平台的 C 调用约定。用户可通过 `native("symbol
 
 #### 阶段 3：所有权类型翻译
 - [ ] 实现 `&T`/`&mut T` 令牌（零大小，编译后消失）
-- [ ] 实现 `ref T`（胖指针 `{ i32*, T* }`）
+- [ ] 实现 `ref T`（胖指针 `{ i64*, T* }`）
 - [ ] 实现 `?T`（`{ i1, T }` tagged union）
 - [ ] 实现 `List(T)`（`{ T*, i64, i64 }`）
 - [ ] 实现 Move 语义追踪（用于析构插入判断）
@@ -778,7 +912,7 @@ FFI 调用默认使用平台的 C 调用约定。用户可通过 `native("symbol
 | 特性 | Rust async | YaoXiang LLVM AOT |
 |------|-----------|-------------------|
 | 编译产物 | 状态机 + 机器码 | 机器码 + spawn 任务元数据 |
-| 运行时 | tokio | 静态链接调度器（~200-500KB） |
+| 运行时 | tokio | 静态链接调度器（约 500KB-1MB） |
 | 并发标记 | async/await 关键字 | `spawn { }` 块 |
 | 任务创建 | 编译期生成状态机 | 编译期识别直接子表达式 → 任务函数 |
 | 颜色函数 | async 传染 | **无函数着色** |
@@ -795,7 +929,7 @@ FFI 调用默认使用平台的 C 调用约定。用户可通过 `native("symbol
 | DAG 分析范围 | spawn 块内，不跨 spawn 块（对齐 RFC-024） | 2026-06-05 |
 | 所有权模型对齐 | 对齐 RFC-009 v9：`&T`/`&mut T` 令牌 + `ref` 关键字 | 2026-06-10 |
 | 双后端模型 | VM（开发）+ LLVM（生产），对齐 RFC-008 | 2026-05-11 |
-| 调度器形态 | 静态库链接进 exe，~200-500KB，无 GC | 2026-05-11 |
+| 调度器形态 | 静态库链接进 exe，约 500KB-1MB（取决于平台与功能），无 GC | 2026-05-11 |
 | FFI 代码生成 | 整合 RFC-026：`native()` declare + marshalling | 2026-06-10 |
 | 析构函数 | `.drop` → RAII cleanup 插入，对齐 RFC-026 §7 | 2026-06-10 |
 | 副作用处理 | 删除 `@IO`/`@Pure` 推断，改用 RFC-024 资源类型 | 2026-06-10 |
@@ -831,4 +965,4 @@ FFI 调用默认使用平台的 C 调用约定。用户可通过 `native("symbol
 | **已接受** | `docs/design/rfc/accepted/` | 成为正式设计文档 |
 | **已拒绝** | `docs/design/rfc/` | 保留在 RFC 目录 |
 
-> 当前状态：**审核中** — 已对齐 RFC-024 spawn 块并发模型、RFC-009 v9 所有权模型、RFC-026 FFI 机制
+> 当前状态：**已接受** — 已对齐 RFC-024 spawn 块并发模型、RFC-009 v9 所有权模型、RFC-026 FFI 机制
