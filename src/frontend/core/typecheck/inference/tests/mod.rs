@@ -19,6 +19,7 @@
 
 mod assignment;
 mod bounds;
+mod bounds_duck;
 mod compatibility;
 mod expressions;
 mod generics;

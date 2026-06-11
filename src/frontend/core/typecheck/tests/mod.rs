@@ -11,23 +11,14 @@
 //! - environment: TypeEnvironment 类型环境
 //! - signature: 签名解析
 //! - types: 类型定义
-//! - overload: 重载解析
-//! - type_eval: 类型求值
-//! - dead_code: 死代码分析
-//! - spawn_placement: spawn 放置检查
 //!
 //! 规范测试：
 //! - rfc010: RFC-010 统一类型语法测试
 //! - rfc011: RFC-011 泛型系统测试
 
 mod checker;
-mod dead_code;
 mod environment;
-mod overload;
 mod rfc010;
 mod rfc011;
 mod signature;
-mod spawn_placement;
-mod termination_tests;
-mod type_eval;
 mod types;

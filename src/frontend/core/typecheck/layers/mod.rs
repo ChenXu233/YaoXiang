@@ -7,3 +7,6 @@ pub mod equivalence;
 pub mod ownership;
 pub mod predicate;
 pub mod termination;
+
+#[cfg(test)]
+mod tests;
