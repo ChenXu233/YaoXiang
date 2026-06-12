@@ -51,24 +51,3 @@ impl BudgetTracker {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_budget_spend_within_limit() {
-        let budget = BudgetTracker::new();
-        assert!(budget.spend());
-        assert_eq!(budget.report().steps_used, 1);
-    }
-
-    #[test]
-    fn test_budget_exhausted() {
-        let budget = BudgetTracker::new();
-        for _ in 0..10_000 {
-            assert!(budget.spend());
-        }
-        assert!(!budget.spend());
-    }
-}

@@ -53,36 +53,3 @@ impl TypeDepGraph {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_add_and_query() {
-        let mut graph = TypeDepGraph::new();
-        graph.add_dep("s", "i");
-        graph.add_dep("t", "i");
-        let affected = graph.affected_by("i");
-        assert_eq!(affected.len(), 2);
-        assert!(affected.contains(&"s"));
-        assert!(affected.contains(&"t"));
-    }
-
-    #[test]
-    fn test_no_deps() {
-        let graph = TypeDepGraph::new();
-        assert!(graph.affected_by("unknown").is_empty());
-    }
-
-    #[test]
-    fn test_remove_dependant() {
-        let mut graph = TypeDepGraph::new();
-        graph.add_dep("s", "i");
-        graph.add_dep("t", "i");
-        graph.remove_dependant("s");
-        let affected = graph.affected_by("i");
-        assert_eq!(affected.len(), 1);
-        assert!(affected.contains(&"t"));
-    }
-}

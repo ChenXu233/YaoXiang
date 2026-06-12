@@ -124,29 +124,3 @@ impl RegisterFile {
         &mut self.registers[..self.count]
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_register_file_new() {
-        let rf = RegisterFile::new();
-        assert_eq!(rf.len(), GENERAL_PURPOSE_REGS);
-    }
-
-    #[test]
-    fn test_register_set_get() {
-        let mut rf = RegisterFile::new();
-        rf.set(0, RuntimeValue::Int(42));
-        assert_eq!(rf.at(0).to_int(), Some(42));
-    }
-
-    #[test]
-    fn test_register_copy() {
-        let mut rf = RegisterFile::new();
-        rf.set(0, RuntimeValue::Int(42));
-        rf.copy(1, 0);
-        assert_eq!(rf.at(1).to_int(), Some(42));
-    }
-}

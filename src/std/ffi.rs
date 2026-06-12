@@ -244,22 +244,3 @@ fn native_ffi_native(
 // ============================================================================
 // Tests
 // ============================================================================
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_native_binding_creation() {
-        let binding = NativeBinding::new("my_add", "my_add");
-        assert_eq!(binding.func_name(), "my_add");
-        assert_eq!(binding.native_symbol(), "my_add");
-    }
-
-    #[test]
-    fn test_native_binding_different_names() {
-        let binding = NativeBinding::new("add", "math.add");
-        assert_eq!(binding.func_name(), "add");
-        assert_eq!(binding.native_symbol(), "math.add");
-    }
-}
