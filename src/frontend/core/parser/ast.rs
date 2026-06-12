@@ -76,6 +76,14 @@ pub enum Expr {
         label: Option<String>,
         span: Span,
     },
+    /// spawn for 数据并行循环（RFC-024 §2.4）
+    SpawnFor {
+        var: String,
+        var_mut: bool,
+        iterable: Box<Expr>,
+        body: Box<Block>,
+        span: Span,
+    },
     Block(Block),
     Return(Option<Box<Expr>>, Span),
     Break(Option<String>, Span),

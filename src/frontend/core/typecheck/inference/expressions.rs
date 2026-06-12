@@ -1502,6 +1502,12 @@ impl<'a> ExpressionInferrer<'a> {
                     inner: Box::new(inner_ty),
                 })
             }
+
+            // spawn for 数据并行循环
+            // TODO: 完整的类型检查将在后续任务中实现
+            crate::frontend::core::parser::ast::Expr::SpawnFor { body, .. } => {
+                self.infer_block(body, false, None)
+            }
         }
     }
 

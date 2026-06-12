@@ -203,6 +203,10 @@ impl SpawnPlacementChecker {
 
             Expr::Error(_) => {}
             Expr::Borrow { expr, .. } => self.check_expr(expr),
+            Expr::SpawnFor { body, iterable, .. } => {
+                self.check_expr(iterable);
+                self.check_block(body);
+            }
         }
     }
 }

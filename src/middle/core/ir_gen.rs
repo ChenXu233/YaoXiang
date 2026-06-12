@@ -2111,6 +2111,7 @@ impl AstToIrGenerator {
             ast::Expr::Match { span, .. } => *span,
             ast::Expr::While { span, .. } => *span,
             ast::Expr::For { span, .. } => *span,
+            ast::Expr::SpawnFor { span, .. } => *span,
             ast::Expr::Block(block) => block.span,
             ast::Expr::Return(_, span) => *span,
             ast::Expr::Break(_, span) => *span,
