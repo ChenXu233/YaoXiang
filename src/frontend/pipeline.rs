@@ -357,6 +357,8 @@ impl Pipeline {
         if !typecheck_result.type_result.proof_calls.is_empty() {
             let proof_result = self.run_proof_execution(
                 &typecheck_result.type_result.proof_calls,
+                &parse_result.ast,
+                &typecheck_result.type_result,
                 &mut phase_durations,
             );
             if !proof_result.is_success() {
@@ -568,6 +570,8 @@ impl Pipeline {
     fn run_proof_execution(
         &mut self,
         proof_calls: &[typecheck::proof::verdict::ProofFunctionCall],
+        ast: &super::core::parser::ast::Module,
+        type_result: &typecheck::TypeCheckResult,
         phase_durations: &mut Vec<(CompilationPhase, u64)>,
     ) -> ProofExecResult {
         let start = std::time::Instant::now();
@@ -577,7 +581,7 @@ impl Pipeline {
         let mut errors = Vec::new();
 
         for call in proof_calls {
-            match execute_single_proof_fn(call) {
+            match execute_single_proof_fn(call, ast, type_result) {
                 Ok(true) => {
                     // 证明通过，继续
                 }
@@ -747,52 +751,108 @@ impl Pipeline {
     }
 }
 
-/// 执行单个证明函数
+/// 执行单个证明函数（RFC-027 Phase 2.5）
 ///
-/// 将证明函数编译为字节码并在解释器中执行。
-/// 返回 Ok(true) 表示证明通过，Ok(false) 表示证明失败。
-///
-/// 当前实现为骨架：完整的 Pipeline 集成需要 AST 中查找函数定义并编译。
-/// Phase 2.5 集成标记为 TODO。
+/// 完整的编译→执行管线：AST 查找 → IR 生成 → 字节码编译 → 解释器执行
 fn execute_single_proof_fn(
     call: &typecheck::proof::verdict::ProofFunctionCall,
+    ast: &super::core::parser::ast::Module,
+    type_result: &typecheck::TypeCheckResult,
 ) -> Result<bool, String> {
+    use crate::backends::common::value::from_const_value;
     use crate::backends::common::RuntimeValue;
     use crate::backends::interpreter::Interpreter;
-    use crate::frontend::core::types::const_data::ConstValue;
+    use crate::backends::Executor;
+    use crate::frontend::core::parser::ast::StmtKind;
+    use crate::middle;
 
-    // TODO: Phase 2.5 integration
-    // 完整实现需要：
-    // 1. 从 AST 中查找函数定义 (parse_result.ast)
-    // 2. 将单个函数编译为 BytecodeFunction
-    // 3. 将 ConstValue 参数转为 RuntimeValue
-    // 4. 在解释器中执行
-    // 5. 提取 bool 返回值
-    //
-    // 当前骨架：将参数转为 RuntimeValue，创建解释器。
-    // 函数表为空（未加载模块），execute_function 需要 BytecodeFunction 对象，
-    // 因此当前直接跳过执行并返回 true。
+    // 1. 在 AST 中查找函数定义
+    let (params, stmts, expr, type_ann) = ast
+        .items
+        .iter()
+        .find_map(|stmt| match &stmt.kind {
+            StmtKind::Binding {
+                name,
+                type_name,
+                type_annotation,
+                params,
+                body: (body_stmts, body_expr),
+                ..
+            } if *name == call.func_name && type_name.is_none() => {
+                Some((
+                    params.clone(),
+                    body_stmts.clone(),
+                    body_expr.clone(),
+                    type_annotation.clone(),
+                ))
+            }
+            _ => None,
+        })
+        .ok_or_else(|| format!("证明函数 '{}' 未在 AST 中找到", call.func_name))?;
 
-    // 转换 ConstValue -> RuntimeValue
-    let _args: Vec<RuntimeValue> = call
+    // 2. IR 生成：单个函数 → FunctionIR
+    let mut ir_gen =
+        middle::core::ir_gen::AstToIrGenerator::new_with_type_result(&type_result);
+    let mut constants: Vec<middle::core::ir::ConstValue> = Vec::new();
+    let func_ir = ir_gen
+        .generate_function_ir(
+            &call.func_name,
+            type_ann.as_ref(),
+            &params,
+            &stmts,
+            &expr,
+            &mut constants,
+        )
+        .map_err(|e| format!("证明函数 '{}' IR 生成失败: {}", call.func_name, e))?;
+
+    let func_ir = func_ir.ok_or_else(|| {
+        format!(
+            "证明函数 '{}' 是 native 函数，不能编译期执行",
+            call.func_name
+        )
+    })?;
+
+    // 3. 构造最小 ModuleIR（仅含一个函数）
+    let module_ir = middle::ModuleIR {
+        functions: vec![func_ir],
+        ..Default::default()
+    };
+
+    // 4. 字节码编译
+    let mut codegen = middle::passes::codegen::CodegenContext::new(module_ir);
+    let bytecode_file = codegen
+        .generate()
+        .map_err(|e| format!("证明函数 '{}' 字节码编译失败: {}", call.func_name, e))?;
+
+    let bytecode_module =
+        crate::middle::core::bytecode::BytecodeModule::from(bytecode_file);
+    let bytecode_fn = bytecode_module
+        .functions
+        .into_iter()
+        .find(|f| f.name == call.func_name)
+        .ok_or_else(|| format!("证明函数 '{}' 字节码中未找到", call.func_name))?;
+
+    // 5. ConstValue → RuntimeValue
+    let args: Vec<RuntimeValue> = call
         .args
         .iter()
-        .map(|cv| match cv {
-            ConstValue::Int(i) => RuntimeValue::Int(*i as i64),
-            ConstValue::Bool(b) => RuntimeValue::Bool(*b),
-            ConstValue::Float(f) => RuntimeValue::Float(*f as f64),
-        })
+        .map(|cv| from_const_value(cv))
         .collect();
 
-    // TODO: Phase 2.5 — 将函数编译为 BytecodeFunction 后用 interpreter.execute_function 执行
-    // 当前骨架：函数表为空，跳过执行
-    let _interpreter = Interpreter::new();
+    // 6. 解释器执行
+    let mut interpreter = Interpreter::new();
+    let result = interpreter
+        .execute_function(&bytecode_fn, &args)
+        .map_err(|e| format!("证明函数 '{}' 执行失败: {}", call.func_name, e))?;
 
-    tracing::warn!(
-        "证明函数 '{}' 未在解释器中注册，跳过执行（Phase 2.5 待集成）",
-        call.func_name
-    );
-    Ok(true)
+    // 7. 提取 bool
+    match result {
+        RuntimeValue::Bool(b) => Ok(b),
+        other => Err(format!(
+            "证明函数 '{}' 必须返回 Bool，实际返回: {:?}",
+            call.func_name, other
+        )),
+    }
 }
 
 /// 词法分析结果

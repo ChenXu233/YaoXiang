@@ -807,7 +807,7 @@ impl AstToIrGenerator {
     /// 生成函数 IR
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::only_used_in_recursion)]
-    fn generate_function_ir(
+    pub(crate) fn generate_function_ir(
         &mut self,
         name: &str,
         type_annotation: Option<&ast::Type>,
