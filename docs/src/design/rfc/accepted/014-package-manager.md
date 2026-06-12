@@ -380,6 +380,7 @@ token = "xxx"
 | **Phase 1** | toml 解析、本地依赖、lock 生成、基础算法 | ✅ 已完成 |
 | **Phase 2** | GitHub 支持、.yaoxiang/vendor 管理、下载工具 | ✅ 已完成 |
 | **Phase 3** | 全局缓存、semver crate 替换、CLI 完善 | 待开始 |
+| **Phase 3.5** | Source trait 改 async、async-trait 集成 | 待开始 |
 | **Phase 4** | Registry 协议、publish、auth（RFC-014a） | 待开始 |
 | **Phase 5** | 构建系统、预编译二进制（RFC-014b） | 待开始 |
 | **Phase 6** | 工作空间支持（RFC-014c） | 待开始 |
