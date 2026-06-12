@@ -1,0 +1,26 @@
+// 01-syntax/control-flow/list_comp.yx
+// 覆盖: 规范 §2.6.5 列表推导式
+// 验证: [expr for var in iterable] 基本形式
+// 状态: ✅ 可运行
+// TODO: 带条件的 [expr for var in iterable if cond] 需修复 parser
+
+use std.io
+
+main = {
+    mut items = [1, 2, 3, 4, 5]
+
+    // 基本列表推导式
+    squares = [x * x for x in items]
+    io.println(squares)
+
+    // 字符串映射
+    mut words = ["hello", "world"]
+    shouts = [s + "!!" for s in words]
+    io.println(shouts)
+
+    // 常量表达式
+    tens = [10 for x in items]
+    io.println(tens)
+
+    io.println("ALL TESTS PASSED")
+}

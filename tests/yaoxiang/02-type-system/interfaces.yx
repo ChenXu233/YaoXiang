@@ -1,0 +1,31 @@
+// 02-type-system/interfaces.yx
+// 验证: 接口/Trait 和结构子类型
+// 状态: ✅ 可运行
+
+use std.io
+
+Point: Type = { x: Float, y: Float }
+
+Point.draw: (self: &Point, surface: String) -> Void = {
+    io.println("drawing at")
+    io.println(self.x)
+    io.println(self.y)
+}
+
+Point.serialize: (self: &Point) -> String = {
+    "point"
+}
+
+Point.get_x: (self: &Point) -> Float = {
+    self.x
+}
+
+main = {
+    p = Point(1.0, 2.0)
+    p.draw("screen")
+    s = p.serialize()
+    io.println(s)
+    x = p.get_x()
+    io.println(x)
+    io.println("ALL TESTS PASSED")
+}

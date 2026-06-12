@@ -1,0 +1,18 @@
+// 99-demos/spawn_pipeline.yx
+// 验证: spawn 作为并行管道
+// 论文价值: 无需 Send/Sync/async/await
+
+use std.io
+
+main = {
+    (name, age, city) = spawn {
+        t1 = "Alice"
+        t2 = 30
+        t3 = "Beijing"
+        return (t1, t2, t3)
+    }
+    io.println(name)
+    io.println(age)
+    io.println(city)
+    io.println("ALL TESTS PASSED")
+}
