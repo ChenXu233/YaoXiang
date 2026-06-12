@@ -670,13 +670,6 @@ impl Translator {
         let dst_reg = self.operand_resolver.to_reg(result)?;
         let list_reg = self.operand_resolver.to_reg(closures_list)?;
 
-        // 编码 group_count
-        let group_count: Vec<u32> = plan
-            .groups
-            .iter()
-            .map(|g| g.task_indices.len() as u32)
-            .collect();
-
         let mut operands = Vec::new();
 
         // dst (2 bytes LE)
@@ -685,12 +678,28 @@ impl Translator {
         // closures_list (2 bytes LE)
         operands.extend_from_slice(&(list_reg as u16).to_le_bytes());
 
-        // group_count.len() as u32 (4 bytes LE)
-        operands.extend_from_slice(&(group_count.len() as u32).to_le_bytes());
+        // task_deps.len() as u32 (4 bytes LE)
+        operands.extend_from_slice(&(plan.task_deps.len() as u32).to_le_bytes());
 
-        // each group count (4 bytes LE each)
-        for count in &group_count {
-            operands.extend_from_slice(&count.to_le_bytes());
+        // for each task: deps.len(4) + deps(4*each)
+        for deps in &plan.task_deps {
+            operands.extend_from_slice(&(deps.len() as u32).to_le_bytes());
+            for &dep in deps {
+                operands.extend_from_slice(&(dep as u32).to_le_bytes());
+            }
+        }
+
+        // task_resources.len() as u32 (4 bytes LE)
+        operands.extend_from_slice(&(plan.task_resources.len() as u32).to_le_bytes());
+
+        // for each task: res_count(4) + for each res: str_len(4) + str_bytes
+        for res in &plan.task_resources {
+            operands.extend_from_slice(&(res.len() as u32).to_le_bytes());
+            for s in res {
+                let bytes = s.as_bytes();
+                operands.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+                operands.extend_from_slice(bytes);
+            }
         }
 
         Ok(BytecodeInstruction::new(Opcode::SpawnFromList, operands))

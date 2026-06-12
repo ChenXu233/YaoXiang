@@ -130,89 +130,86 @@ impl Executor for Interpreter {
                 BytecodeInstr::Spawn {
                     dst: _,
                     closures,
-                    group_count,
+                    task_deps,
+                    task_resources,
                 } => {
-                    // Spawn: 按编译期执行计划分组执行闭包
-                    // - group_count[i] 表示第 i 组有多少个闭包
-                    // - closures 按组顺序排列
-                    // - 组内并行（或串行），组间串行
+                    // Spawn: 按编译期执行计划执行闭包
+                    // - task_deps[i] = 任务 i 依赖的任务索引列表
+                    // - task_resources[i] = 任务 i 使用的资源变量名列表
                     // 注意：dst (result_reg) 已由 trailing expression 在 Spawn 之前设置，
                     // 此处不覆盖。若无 trailing expression，dst 保持默认 Unit。
                     let closures = closures.clone();
-                    let group_count = group_count.clone();
+                    let task_deps = task_deps.clone();
+                    let task_resources = task_resources.clone();
 
                     let runtime = self.runtime_config.runtime;
-                    let mut closure_idx: usize = 0;
 
-                    for &group_size in &group_count {
-                        let group_end = closure_idx + group_size as usize;
+                    if matches!(runtime, RuntimeMode::Embedded) {
+                        // Embedded 模式：无 DAG 调度器，直接顺序执行闭包
+                        for (i, func_reg) in closures.iter().enumerate() {
+                            let closure_val = self.force_register(&mut frame, *func_reg)?;
+                            let RuntimeValue::Function(func_value) = closure_val else {
+                                let stack = self.capture_stack();
+                                return Err(ExecutorError::type_error(
+                                    "spawn expects a function value".to_string(),
+                                    stack,
+                                ));
+                            };
 
-                        if matches!(runtime, RuntimeMode::Embedded) {
-                            // Embedded 模式：无 DAG 调度器，直接顺序执行闭包
-                            while closure_idx < group_end && closure_idx < closures.len() {
-                                let func_reg = closures[closure_idx];
-                                let closure_val = self.force_register(&mut frame, func_reg)?;
-                                let RuntimeValue::Function(func_value) = closure_val else {
-                                    let stack = self.capture_stack();
-                                    return Err(ExecutorError::type_error(
-                                        "spawn expects a function value".to_string(),
-                                        stack,
-                                    ));
-                                };
+                            let _result =
+                                self.call_function_by_id(func_value.func_id, &func_value.env)?;
 
-                                // 闭包无参，环境变量作为参数传入
-                                let result =
-                                    self.call_function_by_id(func_value.func_id, &func_value.env)?;
+                            // 将闭包结果存回闭包寄存器（覆盖 lambda）
+                            frame.set_register(func_reg.0 as usize, _result);
+                            let _ = (i, &task_deps, &task_resources);
+                        }
+                    } else {
+                        // Standard/Full 模式：使用 DAG 调度器并行执行
+                        let mut task_ids: Vec<(Reg, TaskId)> = Vec::new();
 
-                                // 将闭包结果存回闭包寄存器（覆盖 lambda）
-                                frame.set_register(func_reg.0 as usize, result);
+                        for (i, func_reg) in closures.iter().enumerate() {
+                            let closure_val = self.force_register(&mut frame, *func_reg)?;
+                            let RuntimeValue::Function(func_value) = closure_val else {
+                                let stack = self.capture_stack();
+                                return Err(ExecutorError::type_error(
+                                    "spawn expects a function value".to_string(),
+                                    stack,
+                                ));
+                            };
 
-                                closure_idx += 1;
-                            }
-                        } else {
-                            // Standard/Full 模式：使用 DAG 调度器并行执行
-                            let mut group_tasks: Vec<(Reg, TaskId)> = Vec::new();
+                            let call_args: Vec<RuntimeValue> = func_value.env.clone();
+                            let deps = self.deps_from_args(&call_args);
 
-                            while closure_idx < group_end && closure_idx < closures.len() {
-                                let func_reg = closures[closure_idx];
-                                let closure_val = self.force_register(&mut frame, func_reg)?;
-                                let RuntimeValue::Function(func_value) = closure_val else {
-                                    let stack = self.capture_stack();
-                                    return Err(ExecutorError::type_error(
-                                        "spawn expects a function value".to_string(),
-                                        stack,
-                                    ));
-                                };
+                            // 从 task_resources 构建资源列表
+                            let resources: Vec<ResourceKey> = task_resources
+                                .get(i)
+                                .map(|rs| rs.iter().map(|r| ResourceKey::new(r.as_str())).collect())
+                                .unwrap_or_default();
 
-                                // 闭包无参，环境变量作为参数传入
-                                let call_args: Vec<RuntimeValue> = func_value.env.clone();
-                                let deps = self.deps_from_args(&call_args);
-                                let task_id = self.schedule_task(
-                                    InterpreterTask::Dyn {
-                                        func: func_value.clone(),
-                                        args: call_args,
-                                    },
-                                    TaskMeta {
-                                        deps,
-                                        label: Some(Arc::<str>::from("spawn")),
-                                        ..TaskMeta::default()
-                                    },
-                                )?;
+                            let task_id = self.schedule_task(
+                                InterpreterTask::Dyn {
+                                    func: func_value.clone(),
+                                    args: call_args,
+                                },
+                                TaskMeta {
+                                    deps,
+                                    resources,
+                                    label: Some(Arc::<str>::from("spawn")),
+                                    ..TaskMeta::default()
+                                },
+                            )?;
 
-                                frame.record_spawned_task(task_id);
-                                group_tasks.push((func_reg, task_id));
+                            frame.record_spawned_task(task_id);
+                            task_ids.push((*func_reg, task_id));
+                        }
 
-                                closure_idx += 1;
-                            }
+                        // 等待所有任务完成，收集结果
+                        for (func_reg, task_id) in &task_ids {
+                            let mut v = self.make_async_pending(*task_id);
+                            self.force_value_in_place(&mut v)?;
 
-                            // 等待本组所有任务完成，收集结果
-                            for (func_reg, task_id) in &group_tasks {
-                                let mut v = self.make_async_pending(*task_id);
-                                self.force_value_in_place(&mut v)?;
-
-                                // 将闭包结果存回闭包寄存器（覆盖 lambda）
-                                frame.set_register(func_reg.0 as usize, v);
-                            }
+                            // 将闭包结果存回闭包寄存器（覆盖 lambda）
+                            frame.set_register(func_reg.0 as usize, v);
                         }
                     }
 
@@ -221,12 +218,14 @@ impl Executor for Interpreter {
                 BytecodeInstr::SpawnFromList {
                     dst: _,
                     closures_list,
-                    group_count,
+                    task_deps,
+                    task_resources,
                 } => {
                     // SpawnFromList: 从 List 寄存器动态读取闭包并 spawn
                     // closures_list 寄存器包含一个 List<Function>，逐个读取并 spawn
                     let closures_list = *closures_list;
-                    let group_count = group_count.clone();
+                    let task_deps = task_deps.clone();
+                    let task_resources = task_resources.clone();
 
                     // 从 closures_list 寄存器获取 List 值
                     let list_val = self.force_register(&mut frame, closures_list)?;
@@ -251,72 +250,69 @@ impl Executor for Interpreter {
                     };
 
                     let runtime = self.runtime_config.runtime;
-                    let mut closure_idx: usize = 0;
 
-                    for &group_size in &group_count {
-                        let group_end = closure_idx + group_size as usize;
+                    if matches!(runtime, RuntimeMode::Embedded) {
+                        // Embedded 模式：顺序执行
+                        for (_i, closure_val) in closures.iter().enumerate() {
+                            let RuntimeValue::Function(func_value) = closure_val
+                            else {
+                                let stack = self.capture_stack();
+                                return Err(ExecutorError::type_error(
+                                    "spawn_from_list expects function values in list"
+                                        .to_string(),
+                                    stack,
+                                ));
+                            };
 
-                        if matches!(runtime, RuntimeMode::Embedded) {
-                            // Embedded 模式：顺序执行
-                            while closure_idx < group_end && closure_idx < closures.len() {
-                                let RuntimeValue::Function(func_value) = &closures[closure_idx]
-                                else {
-                                    let stack = self.capture_stack();
-                                    return Err(ExecutorError::type_error(
-                                        "spawn_from_list expects function values in list"
-                                            .to_string(),
-                                        stack,
-                                    ));
-                                };
+                            let _result =
+                                self.call_function_by_id(func_value.func_id, &func_value.env)?;
+                            let _ = (&task_deps, &task_resources);
+                        }
+                    } else {
+                        // Standard/Full 模式：使用 DAG 调度器并行执行
+                        let mut spawned_tasks: Vec<TaskId> = Vec::new();
 
-                                let _result =
-                                    self.call_function_by_id(func_value.func_id, &func_value.env)?;
+                        for (i, closure_val) in closures.iter().enumerate() {
+                            let RuntimeValue::Function(func_value) = closure_val
+                            else {
+                                let stack = self.capture_stack();
+                                return Err(ExecutorError::type_error(
+                                    "spawn_from_list expects function values in list"
+                                        .to_string(),
+                                    stack,
+                                ));
+                            };
 
-                                // 结果存到 closures_list 寄存器的索引位置
-                                // 注意：这里使用 dst 寄存器作为基础，实际语义由后续使用决定
-                                closure_idx += 1;
-                            }
-                        } else {
-                            // Standard/Full 模式：使用 DAG 调度器并行执行
-                            let mut group_tasks: Vec<TaskId> = Vec::new();
+                            let call_args: Vec<RuntimeValue> = func_value.env.clone();
+                            let deps = self.deps_from_args(&call_args);
 
-                            while closure_idx < group_end && closure_idx < closures.len() {
-                                let RuntimeValue::Function(func_value) = &closures[closure_idx]
-                                else {
-                                    let stack = self.capture_stack();
-                                    return Err(ExecutorError::type_error(
-                                        "spawn_from_list expects function values in list"
-                                            .to_string(),
-                                        stack,
-                                    ));
-                                };
+                            // 从 task_resources 构建资源列表
+                            let resources: Vec<ResourceKey> = task_resources
+                                .get(i)
+                                .map(|rs| rs.iter().map(|r| ResourceKey::new(r.as_str())).collect())
+                                .unwrap_or_default();
 
-                                let call_args: Vec<RuntimeValue> = func_value.env.clone();
-                                let deps = self.deps_from_args(&call_args);
+                            let task_id = self.schedule_task(
+                                InterpreterTask::Dyn {
+                                    func: func_value.clone(),
+                                    args: call_args,
+                                },
+                                TaskMeta {
+                                    deps,
+                                    resources,
+                                    label: Some(Arc::<str>::from("spawn_from_list")),
+                                    ..TaskMeta::default()
+                                },
+                            )?;
 
-                                let task_id = self.schedule_task(
-                                    InterpreterTask::Dyn {
-                                        func: func_value.clone(),
-                                        args: call_args,
-                                    },
-                                    TaskMeta {
-                                        deps,
-                                        label: Some(Arc::<str>::from("spawn_from_list")),
-                                        ..TaskMeta::default()
-                                    },
-                                )?;
+                            frame.record_spawned_task(task_id);
+                            spawned_tasks.push(task_id);
+                        }
 
-                                frame.record_spawned_task(task_id);
-                                group_tasks.push(task_id);
-
-                                closure_idx += 1;
-                            }
-
-                            // 等待本组所有任务完成
-                            for task_id in &group_tasks {
-                                let mut v = self.make_async_pending(*task_id);
-                                self.force_value_in_place(&mut v)?;
-                            }
+                        // 等待所有任务完成
+                        for task_id in &spawned_tasks {
+                            let mut v = self.make_async_pending(*task_id);
+                            self.force_value_in_place(&mut v)?;
                         }
                     }
 
