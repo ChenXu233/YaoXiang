@@ -90,6 +90,9 @@ tokio = { version = "1.52.3", features = ["full"] }
 lsp-types = "0.97"
 lsp-server = "0.7"
 
+# SMT 求解器（build.rs 自动从 GitHub Releases 下载预编译 Z3）
+z3-sys = "0.8"
+
 [profile.release]
 lto = true
 opt-level = 3

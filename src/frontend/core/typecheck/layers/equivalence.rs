@@ -98,6 +98,7 @@ pub fn check_type_equivalence(
         }),
         (Err(e), _) | (_, Err(e)) => ProofResult::Unproven {
             reason: UnprovenReason::BeyondKernel(format!("{:?}", e)),
+            proof_calls: vec![],
             budget: ctx.budget.report(),
         },
     }
