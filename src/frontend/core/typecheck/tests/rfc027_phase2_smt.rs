@@ -15,7 +15,10 @@ use crate::frontend::core::typecheck::proof::verdict::ProofResult;
 use crate::frontend::core::typecheck::TypeEnvironment;
 
 /// 辅助：构造 GT 约束 (var > n)
-fn constraint_gt(var: &str, n: i128) -> ConstExpr {
+fn constraint_gt(
+    var: &str,
+    n: i128,
+) -> ConstExpr {
     ConstExpr::BinOp {
         op: BinOp::Gt,
         left: Box::new(ConstExpr::NamedVar(var.into())),
@@ -44,10 +47,7 @@ fn test_direct_eval_proved_for_true_literal_comparison() {
     let env = TypeEnvironment::new();
     let ctx = ProofContext::new(&env);
     let result = check_predicate(&ctx, &refined, &HashMap::new());
-    assert!(
-        result.is_proved(),
-        "纯字面量 5>0 应直接求值为 Proved"
-    );
+    assert!(result.is_proved(), "纯字面量 5>0 应直接求值为 Proved");
 }
 
 #[test]
@@ -61,10 +61,7 @@ fn test_direct_eval_disproved_for_false_literal_comparison() {
     let env = TypeEnvironment::new();
     let ctx = ProofContext::new(&env);
     let result = check_predicate(&ctx, &refined, &HashMap::new());
-    assert!(
-        !result.is_proved(),
-        "纯字面量 0>0 应求值为 Disproved"
-    );
+    assert!(!result.is_proved(), "纯字面量 0>0 应求值为 Disproved");
 }
 
 // =========== §3.2: 假设栈蕴含 ===========
@@ -80,10 +77,7 @@ fn test_assumption_stack_match_proves_without_evaluator_or_smt() {
 
     // 约束在假设栈中 → 直接 Proved，不经过 Evaluator 和 Z3
     let result = check_predicate(&ctx, &refined, &HashMap::new());
-    assert!(
-        result.is_proved(),
-        "约束 y>0 在假设栈中应直接 Proved"
-    );
+    assert!(result.is_proved(), "约束 y>0 在假设栈中应直接 Proved");
 }
 
 #[test]
@@ -121,10 +115,7 @@ fn test_smt_implication_from_assumptions_to_weaker_constraint() {
     ctx.assumptions.push(constraint_gt("y", 5));
 
     let result = check_predicate(&ctx, &refined, &HashMap::new());
-    assert!(
-        result.is_proved(),
-        "Z3 应证明 y>5 ⇒ y>0"
-    );
+    assert!(result.is_proved(), "Z3 应证明 y>5 ⇒ y>0");
 }
 
 #[test]
@@ -137,10 +128,7 @@ fn test_smt_symbolic_variable_without_binding_detects_counterexample() {
     let ctx = ProofContext::new(&env);
 
     let result = check_predicate(&ctx, &refined, &HashMap::new());
-    assert!(
-        !result.is_proved(),
-        "Z3 应找到 y>0 的反例 (如 y=0)"
-    );
+    assert!(!result.is_proved(), "Z3 应找到 y>0 的反例 (如 y=0)");
     match result {
         ProofResult::Disproved(model) => {
             assert!(
@@ -173,8 +161,5 @@ fn test_smt_linear_arithmetic_with_concrete_binding() {
     bindings.insert("x".into(), ConstValue::Int(5));
 
     let result = check_predicate(&ctx, &refined, &bindings);
-    assert!(
-        result.is_proved(),
-        "x=5 应满足 x>0 && x<10"
-    );
+    assert!(result.is_proved(), "x=5 应满足 x>0 && x<10");
 }

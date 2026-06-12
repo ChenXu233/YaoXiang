@@ -57,7 +57,10 @@ impl BudgetTracker {
 
     /// 记录 Z3 求解消耗的时间
     #[allow(dead_code)] // 精确计时在 Phase 3/4 实现
-    pub fn record_time_ms(&self, ms: u64) {
+    pub fn record_time_ms(
+        &self,
+        ms: u64,
+    ) {
         self.time_ms_used.set(self.time_ms_used.get() + ms);
     }
 }
