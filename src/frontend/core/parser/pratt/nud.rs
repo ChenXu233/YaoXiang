@@ -69,8 +69,8 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::KwRef) => Some((BP_HIGHEST, Self::parse_ref)),
             // unsafe 块：系统级操作
             Some(TokenKind::KwUnsafe) => Some((BP_HIGHEST, Self::parse_unsafe)),
-            // Spawn block: spawn { ... }
-            Some(TokenKind::KwSpawn) => Some((BP_HIGHEST, Self::parse_spawn_block)),
+            // Spawn expression: spawn { ... } or spawn for ... in ... { ... }
+            Some(TokenKind::KwSpawn) => Some((BP_HIGHEST, Self::parse_spawn)),
             // Control flow expressions (return, break, continue)
             Some(TokenKind::KwReturn) => Some((BP_LOWEST, Self::parse_return_expr)),
             Some(TokenKind::KwBreak) => Some((BP_LOWEST, Self::parse_break_expr)),
@@ -117,22 +117,87 @@ impl<'a> ParserState<'a> {
         })
     }
 
-    /// Parse spawn block: `spawn { ... }`
-    fn parse_spawn_block(&mut self) -> Option<Expr> {
+    /// Parse spawn expression: `spawn { ... }` or `spawn for ... in ... { ... }`
+    fn parse_spawn(&mut self) -> Option<Expr> {
         let span = self.span();
         self.bump(); // consume 'spawn'
 
-        if !self.at(&TokenKind::LBrace) {
+        match self.current().map(|t| &t.kind) {
+            // spawn for item in items { ... }
+            Some(TokenKind::KwFor) => self.parse_spawn_for(span),
+            // spawn { ... }
+            Some(TokenKind::LBrace) => self.parse_spawn_block(span),
+            _ => {
+                self.error(
+                    ErrorCodeDefinition::expected_expression("block or 'for' after spawn")
+                        .at(self.span())
+                        .build(),
+                );
+                None
+            }
+        }
+    }
+
+    /// Parse spawn block: `spawn { ... }`
+    fn parse_spawn_block(&mut self, span: Span) -> Option<Expr> {
+        let body = self.parse_block_expr()?;
+        Some(Expr::Spawn {
+            body: Box::new(body),
+            span,
+        })
+    }
+
+    /// Parse spawn for: `spawn for item in items { ... }`
+    fn parse_spawn_for(&mut self, span: Span) -> Option<Expr> {
+        self.bump(); // consume 'for'
+
+        // 解析迭代变量名
+        let var = match self.current() {
+            Some(tok) if matches!(tok.kind, TokenKind::Identifier(_)) => {
+                let name = match &tok.kind {
+                    TokenKind::Identifier(n) => n.clone(),
+                    _ => unreachable!(),
+                };
+                self.bump();
+                name
+            }
+            _ => {
+                self.error(
+                    ErrorCodeDefinition::expected_expression("variable name after 'spawn for'")
+                        .at(self.span())
+                        .build(),
+                );
+                return None;
+            }
+        };
+
+        // 可选 mut
+        let var_mut = self.at(&TokenKind::KwMut);
+        if var_mut {
+            self.bump();
+        }
+
+        // 期望 'in'
+        if !self.at(&TokenKind::KwIn) {
             self.error(
-                ErrorCodeDefinition::expected_expression("block after spawn")
+                ErrorCodeDefinition::expected_expression("'in' after variable name")
                     .at(self.span())
                     .build(),
             );
             return None;
         }
+        self.bump(); // consume 'in'
+
+        // 解析可迭代表达式
+        let iterable = self.parse_expression(BP_LOWEST)?;
+
+        // 解析循环体
         let body = self.parse_block_expr()?;
 
-        Some(Expr::Spawn {
+        Some(Expr::SpawnFor {
+            var,
+            var_mut,
+            iterable: Box::new(iterable),
             body: Box::new(body),
             span,
         })
