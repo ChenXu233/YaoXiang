@@ -21,5 +21,6 @@ mod environment;
 mod rfc010;
 mod rfc011;
 mod rfc027_phase1_integration;
+mod rfc027_phase2_smt;
 mod signature;
 mod types;
