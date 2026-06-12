@@ -7,7 +7,6 @@ on:
       - 'docs/vpi18n.config.json'
       - 'docs/glossary.json'
     branches:
-      - main
       - dev
 
 jobs:
