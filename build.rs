@@ -1,13 +1,13 @@
 //! YaoXiang 编译脚本
 //!
-//! 配置 Z3 链接。
+//! 配置 Z3 链接。Z3 header 路径由 .cargo/config.toml 或 Z3_SYS_Z3_HEADER 提供。
 
 fn main() {
     let header = match std::env::var("Z3_SYS_Z3_HEADER") {
         Ok(h) => h,
         Err(_) => {
-            println!("cargo:warning=Z3_SYS_Z3_HEADER not set — SMT solving will not be available");
-            println!("cargo:warning=Run: python tools/setup-z3.py");
+            println!("cargo:warning=Z3_SYS_Z3_HEADER not set.");
+            println!("cargo:warning=Run: cd tools/setup-z3 && cargo run");
             return;
         }
     };
