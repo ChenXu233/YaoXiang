@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue, UnOp};
-use crate::frontend::core::typecheck::proof::smt::ast::{SMTCommand, SMTExpr, SMTSort};
+use crate::frontend::core::typecheck::proof::smt::ast::{SMTCommand, SMTSort};
 use crate::frontend::core::typecheck::proof::smt::translate::{
     infer_var_sorts, translate_constraint, translate_expr,
 };
