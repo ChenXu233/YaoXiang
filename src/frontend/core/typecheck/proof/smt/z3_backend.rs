@@ -65,7 +65,11 @@ impl Z3Backend {
             let timeout_str = timeout_ms.to_string();
             if let Ok(timeout_param) = CString::new(timeout_str) {
                 let key = CString::new("timeout").unwrap();
-                super::z3_ffi::Z3_update_param_value(self.ctx, key.as_ptr(), timeout_param.as_ptr());
+                super::z3_ffi::Z3_update_param_value(
+                    self.ctx,
+                    key.as_ptr(),
+                    timeout_param.as_ptr(),
+                );
             }
 
             // 遍历命令
@@ -162,14 +166,17 @@ unsafe fn expr_to_z3(
                 super::z3_ffi::Z3_mk_false(ctx)
             } else {
                 // 变量引用：默认 Int 类型
-                let sym =
-                    super::z3_ffi::Z3_mk_string_symbol(ctx, CString::new(s.as_str()).unwrap().as_ptr());
+                let sym = super::z3_ffi::Z3_mk_string_symbol(
+                    ctx,
+                    CString::new(s.as_str()).unwrap().as_ptr(),
+                );
                 super::z3_ffi::Z3_mk_const(ctx, sym, super::z3_ffi::Z3_mk_int_sort(ctx))
             }
         }
         SMTExpr::App(op, args) => {
             // 使用 Z3 内置操作创建表达式
-            let z3_args: Vec<super::z3_ffi::Z3_ast> = args.iter().map(|a| expr_to_z3(ctx, a)).collect();
+            let z3_args: Vec<super::z3_ffi::Z3_ast> =
+                args.iter().map(|a| expr_to_z3(ctx, a)).collect();
             let int_sort = super::z3_ffi::Z3_mk_int_sort(ctx);
 
             match op.as_str() {
@@ -205,7 +212,9 @@ unsafe fn expr_to_z3(
 
                 // 等式
                 "=" => super::z3_ffi::Z3_mk_eq(ctx, z3_args[0], z3_args[1]),
-                "distinct" => super::z3_ffi::Z3_mk_distinct(ctx, z3_args.len() as u32, z3_args.as_ptr()),
+                "distinct" => {
+                    super::z3_ffi::Z3_mk_distinct(ctx, z3_args.len() as u32, z3_args.as_ptr())
+                }
 
                 // 未知操作：创建未解释函数应用
                 _ => {

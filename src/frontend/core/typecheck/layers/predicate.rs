@@ -3,7 +3,7 @@
 //! 对 Refined 类型的约束表达式进行求值。
 //! 四级分派：
 //!   1. Evaluator 直接求值（Phase 1，微秒级）——所有变量有具体值
-//!   2. 假设栈蕴含（Phase 2A，零开销）——约束正好是已知条件
+//!   2. 假设栈蕴含（Phase 2A + 3.2）——精确匹配 + SMT 蕴含推理
 //!   3. Z3 SMT 求解（Phase 2B，毫秒级）——符号变量 + 蕴含推理
 //!   4. 证明函数调用（Phase 2.5）——识别 ConstExpr::Call 让 Pipeline 编译期执行
 
@@ -53,8 +53,15 @@ pub fn check_predicate(
     }
 
     // === 第 2 级：假设栈蕴含 ===
+    // 2a：精确匹配——零开销快速路径
     if ctx.assumptions.contains(constraint) {
         return ProofResult::Proved;
+    }
+    // 2b：SMT 蕴含——假设非空但不精确匹配
+    if !ctx.assumptions.is_empty() {
+        if let Some(result) = try_implication(ctx, constraint, bindings) {
+            return result;
+        }
     }
 
     // === 第 3 级：SMT 求解 ===
@@ -97,6 +104,40 @@ fn try_direct_eval(
             budget: ctx.budget.report(),
         }),
         Err(_) => None,
+    }
+}
+
+/// 第 2b 级：SMT 假设蕴含
+///
+/// 检查当前假设栈是否蕴含目标约束。复用 `translate_constraint`
+/// 将假设作为背景断言、目标取反送 Z3。unsat 表示假设蕴含目标。
+/// sat/unknown 时不宣称 Disproved——返回 None 让后续级别继续。
+fn try_implication(
+    ctx: &ProofContext<'_>,
+    constraint: &ConstExpr,
+    bindings: &HashMap<String, ConstValue>,
+) -> Option<ProofResult> {
+    // 收集约束和假设中所有变量的 SMT 排序
+    let mut var_sorts = translate::infer_var_sorts(constraint, bindings);
+    for assumption in ctx.assumptions.current() {
+        for (k, v) in translate::infer_var_sorts(assumption, bindings) {
+            var_sorts.entry(k).or_insert(v);
+        }
+    }
+
+    let commands =
+        translate::translate_constraint(constraint, ctx.assumptions.current(), &var_sorts);
+
+    match Z3_INSTANCE
+        .lock()
+        .unwrap()
+        .solve(&commands, ctx.budget.time_ms_limit())
+    {
+        SMTResult::Unsat => Some(ProofResult::Proved),
+        // sat = 假设不蕴含，约束可能独立成立 → 升级
+        SMTResult::Sat { .. } => None,
+        // unknown = 无法判断 → 升级
+        SMTResult::Unknown { .. } => None,
     }
 }
 
@@ -291,5 +332,70 @@ mod tests {
         let ctx = ProofContext::new(&env);
         let result = check_predicate(&ctx, &refined, &HashMap::new());
         assert!(result.is_proved(), "5>0 纯字面量应直接求值为 Proved");
+    }
+
+    // =========== Phase 3.2: SMT 假设蕴含 ===========
+
+    /// RFC-027 §3.2：假设 y >= 5 蕴含约束 y > 0，SMT 判断 unsat → Proved
+    #[test]
+    fn test_implication_stronger_assumption_proves_weaker_constraint() {
+        // 约束: y > 0
+        let constraint = ConstExpr::BinOp {
+            op: BinOp::Gt,
+            left: Box::new(ConstExpr::NamedVar("y".into())),
+            right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+        };
+        let refined = MonoType::Refined {
+            base: Box::new(MonoType::Int(64)),
+            constraint: constraint.clone(),
+        };
+        // 假设: y >= 5（比 y > 0 更强）
+        let assumption = ConstExpr::BinOp {
+            op: BinOp::Ge,
+            left: Box::new(ConstExpr::NamedVar("y".into())),
+            right: Box::new(ConstExpr::Lit(ConstValue::Int(5))),
+        };
+
+        let env = TypeEnvironment::new();
+        let mut ctx = ProofContext::new(&env);
+        ctx.assumptions.push(assumption);
+
+        let result = check_predicate(&ctx, &refined, &HashMap::new());
+        assert!(
+            result.is_proved(),
+            "y >= 5 蕴含 y > 0，假设蕴含应返回 Proved，实际: {result:?}"
+        );
+    }
+
+    /// RFC-027 §3.2：假设 z > 0 不蕴含 y > 0，SMT 判断 sat → 退到 Level 3 找到反例
+    #[test]
+    fn test_implication_unrelated_assumption_falls_through_to_level3() {
+        // 约束: y > 0
+        let constraint = ConstExpr::BinOp {
+            op: BinOp::Gt,
+            left: Box::new(ConstExpr::NamedVar("y".into())),
+            right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+        };
+        let refined = MonoType::Refined {
+            base: Box::new(MonoType::Int(64)),
+            constraint,
+        };
+        // 假设: z > 0（与约束无关）
+        let assumption = ConstExpr::BinOp {
+            op: BinOp::Gt,
+            left: Box::new(ConstExpr::NamedVar("z".into())),
+            right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+        };
+
+        let env = TypeEnvironment::new();
+        let mut ctx = ProofContext::new(&env);
+        ctx.assumptions.push(assumption);
+
+        let result = check_predicate(&ctx, &refined, &HashMap::new());
+        // z > 0 不蕴含 y > 0 → Level 2b 返回 None → Level 3 找到反例 (y=0, z=1)
+        assert!(
+            matches!(result, ProofResult::Disproved(_)),
+            "z>0 不蕴含 y>0，Level 3 应找到反例返回 Disproved，实际: {result:?}"
+        );
     }
 }
