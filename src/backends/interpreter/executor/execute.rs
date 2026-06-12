@@ -10,8 +10,9 @@ use crate::middle::bytecode::{
 };
 use crate::backends::interpreter::Frame;
 use crate::backends::interpreter::frames::MAX_LOCALS;
-use crate::backends::runtime::RuntimeMode;
-use crate::backends::runtime::engine::{LocalRuntime, ResourceKey, TaskMeta};
+use crate::backends::runtime::{Runtime, RuntimeMode};
+use crate::backends::runtime::facade::RuntimeConfig;
+use crate::backends::runtime::engine::{ResourceKey, TaskMeta};
 use crate::util::i18n::MSG;
 use crate::tlog;
 use super::executor::{Interpreter, InterpreterTask};
@@ -1317,8 +1318,12 @@ impl Executor for Interpreter {
         self.call_stack.clear();
         self.state = ExecutionState::default();
         self.breakpoints.clear();
-        self.rt_dag = LocalRuntime::new();
-        self.rt_tasks.clear();
+        self.rt = Runtime::new(RuntimeConfig {
+            mode: self.runtime_config.runtime,
+            workers: self.runtime_config.workers,
+            work_stealing: self.runtime_config.work_stealing,
+        })
+        .unwrap_or_else(|_| Runtime::new(RuntimeConfig::default()).unwrap());
     }
 
     fn state(&self) -> &ExecutionState {
