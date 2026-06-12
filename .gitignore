@@ -43,4 +43,4 @@ superpowers/
 docs/.env
 .codegraph
 .crush
-.worktrees
+.worktrees.z3/
