@@ -121,3 +121,62 @@ fn test_wrong_assignment_order_still_triggers_dep_check() {
         "即使赋值顺序错误，依赖图查询仍应返回受影响变量"
     );
 }
+
+// ===================================================================
+// RFC-027 §6.1: 传递依赖链 + remove_dependant
+// ===================================================================
+
+/// 传递依赖链 a→b→c：a 变更影响 b，b 变更影响 c
+#[test]
+fn test_dep_graph_transitive_chain() {
+    let mut dep_graph = TypeDepGraph::new();
+    // a 依赖 b，b 依赖 c
+    dep_graph.add_dep("a", "b");
+    dep_graph.add_dep("b", "c");
+
+    let affected_by_c = dep_graph.affected_by("c");
+    assert!(affected_by_c.contains(&"b"), "c 变更应直接影响 b");
+    // 传递性：c 变更 → b 被重验证 → 触发的 b 赋值再影响 a
+    // 但依赖图本身只记录直接依赖，传递由 checker 的递归查询处理
+    let affected_by_b = dep_graph.affected_by("b");
+    assert!(affected_by_b.contains(&"a"), "b 变更应直接影响 a");
+}
+
+/// remove_dependant：变量离开作用域时清除依赖记录
+#[test]
+fn test_dep_graph_remove_dependant_clears_edges() {
+    let mut dep_graph = TypeDepGraph::new();
+    dep_graph.add_dep("s", "i");
+    dep_graph.add_dep("t", "i");
+
+    // s 离开作用域
+    dep_graph.remove_dependant("s");
+
+    // i 仍影响 t，但不再影响 s
+    let affected = dep_graph.affected_by("i");
+    assert!(!affected.contains(&"s"), "s 被移除后不应再受 i 影响");
+    assert!(affected.contains(&"t"), "t 仍应受 i 影响");
+}
+
+/// 菱形依赖：两端都依赖同一变量
+#[test]
+fn test_dep_graph_diamond_dependency() {
+    let mut dep_graph = TypeDepGraph::new();
+    // s 依赖 i，t 也依赖 i
+    dep_graph.add_dep("s", "i");
+    dep_graph.add_dep("t", "i");
+
+    let affected = dep_graph.affected_by("i");
+    assert_eq!(affected.len(), 2, "i 变更应影响 s 和 t，实际: {affected:?}");
+    assert!(affected.contains(&"s"), "菱形: i→s 应成立");
+    assert!(affected.contains(&"t"), "菱形: i→t 应成立");
+}
+
+/// 空图 add+remove 不崩溃
+#[test]
+fn test_dep_graph_empty_remove_does_not_panic() {
+    let mut dep_graph = TypeDepGraph::new();
+    // 移除不存在的依赖者不应 panic
+    dep_graph.remove_dependant("nonexistent");
+    assert!(dep_graph.affected_by("x").is_empty());
+}
