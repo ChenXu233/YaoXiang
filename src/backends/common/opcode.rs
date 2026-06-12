@@ -55,6 +55,9 @@ pub enum Opcode {
     /// Spawn a new concurrent task (dynamic call)
     Spawn = 0x0E,
 
+    /// 从 List 寄存器动态读取闭包并 spawn
+    SpawnFromList = 0x0F,
+
     // =====================
     // Register Operations (0x10-0x1F)
     // =====================
@@ -299,6 +302,7 @@ impl Opcode {
             Opcode::Yield => "Yield",
             Opcode::Label => "Label",
             Opcode::Spawn => "Spawn",
+            Opcode::SpawnFromList => "SpawnFromList",
             Opcode::Mov => "Mov",
             Opcode::LoadConst => "LoadConst",
             Opcode::LoadLocal => "LoadLocal",
@@ -604,7 +608,7 @@ impl Opcode {
             | Opcode::NewListWithCap => 3,
 
             // Variable operands (like calls)
-            Opcode::CreateStruct | Opcode::NewDict | Opcode::Spawn => 5,
+            Opcode::CreateStruct | Opcode::NewDict | Opcode::Spawn | Opcode::SpawnFromList => 5,
 
             // 4 operands
             Opcode::LoopStart
@@ -653,6 +657,7 @@ impl TryFrom<u8> for Opcode {
             0x0A => Ok(Opcode::Yield),
             0x0B => Ok(Opcode::Label),
             0x0E => Ok(Opcode::Spawn),
+            0x0F => Ok(Opcode::SpawnFromList),
             0x10 => Ok(Opcode::Mov),
             0x11 => Ok(Opcode::LoadConst),
             0x12 => Ok(Opcode::LoadLocal),
