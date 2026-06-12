@@ -8,9 +8,15 @@ use std::ffi::{CStr, CString};
 use super::ast::{SMTCommand, SMTExpr, SMTModel, SMTResult, SMTSort};
 
 /// Z3 后端——封装 Z3 context 和 solver 生命周期
+///
+/// 内部持有 `z3_sys::Z3_context` 裸指针，通过外部 Mutex 保证互斥访问。
 pub struct Z3Backend {
     ctx: z3_sys::Z3_context,
 }
+
+// SAFETY: Z3Backend 通过 `Mutex` 访问，确保同一时刻只有一个线程使用 Z3 context。
+// Z3 C API 的每个 context 是独立的，互斥访问下跨线程安全。
+unsafe impl Send for Z3Backend {}
 
 /// Z3 初始化/运行时错误
 #[derive(Debug)]
