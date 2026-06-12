@@ -161,11 +161,8 @@ impl TerminationChecker {
         match &stmt.kind {
             StmtKind::Expr(expr) => self.check_expr(expr),
             StmtKind::Binding { body, .. } => {
-                for s in &body.0 {
+                for s in body {
                     self.check_stmt(s);
-                }
-                if let Some(e) = &body.1 {
-                    self.check_expr(e);
                 }
             }
             StmtKind::Var {
@@ -256,9 +253,6 @@ impl TerminationChecker {
                 for s in &block.stmts {
                     self.check_stmt(s);
                 }
-                if let Some(expr) = &block.expr {
-                    self.check_expr(expr);
-                }
             }
             Expr::If {
                 condition,
@@ -271,33 +265,21 @@ impl TerminationChecker {
                 for s in &then_branch.stmts {
                     self.check_stmt(s);
                 }
-                if let Some(expr) = &then_branch.expr {
-                    self.check_expr(expr);
-                }
                 for (cond, body) in elif_branches {
                     self.check_expr(cond);
                     for s in &body.stmts {
                         self.check_stmt(s);
-                    }
-                    if let Some(expr) = &body.expr {
-                        self.check_expr(expr);
                     }
                 }
                 if let Some(else_body) = else_branch {
                     for s in &else_body.stmts {
                         self.check_stmt(s);
                     }
-                    if let Some(expr) = &else_body.expr {
-                        self.check_expr(expr);
-                    }
                 }
             }
             Expr::Lambda { body, .. } => {
                 for s in &body.stmts {
                     self.check_stmt(s);
-                }
-                if let Some(expr) = &body.expr {
-                    self.check_expr(expr);
                 }
             }
             // 叶子节点不需要检查
@@ -415,8 +397,6 @@ impl TerminationChecker {
         for stmt in &body.stmts {
             self.collect_assignments_from_stmt(stmt, &mut assignments);
         }
-        // 也检查块尾表达式
-        if let Some(_expr) = &body.expr {}
         assignments
     }
 
@@ -460,25 +440,8 @@ impl TerminationChecker {
                 }
             }
             StmtKind::Binding { body, .. } => {
-                for s in &body.0 {
+                for s in body {
                     self.collect_assignments_from_stmt(s, assignments);
-                }
-                if let Some(e) = &body.1 {
-                    if let Expr::BinOp {
-                        op: BinOp::Assign,
-                        left,
-                        right,
-                        ..
-                    } = e.as_ref()
-                    {
-                        if let Expr::Var(var_name, _) = left.as_ref() {
-                            let delta_info = self.analyze_delta(right, var_name);
-                            assignments.push(LoopAssignment {
-                                var: var_name.clone(),
-                                delta_info,
-                            });
-                        }
-                    }
                 }
             }
             StmtKind::If {
@@ -627,9 +590,6 @@ impl TerminationChecker {
     ) {
         for s in &body.stmts {
             self.check_stmt(s);
-        }
-        if let Some(expr) = &body.expr {
-            self.check_expr(expr);
         }
     }
 

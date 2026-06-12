@@ -519,13 +519,13 @@ pub fn format_block(
     let outer_indent = ctx.indent_str();
 
     // §6.3 空代码块：输出 {}
-    if block.stmts.is_empty() && block.expr.is_none() {
+    if block.stmts.is_empty() {
         return "{}".to_string();
     }
 
     // §6.2 单行代码块：检查是否可以使用单行格式
-    // 条件：只有一个语句，没有表达式，没有注释
-    if block.stmts.len() == 1 && block.expr.is_none() {
+    // 条件：只有一个语句，没有注释
+    if block.stmts.len() == 1 {
         let stmt = &block.stmts[0];
         // 检查是否有前导注释
         let leading_comments =
@@ -582,13 +582,6 @@ pub fn format_block(
         }
     }
 
-    if let Some(expr) = &block.expr {
-        let expr_str = format_expr(expr, &inner_ctx, source_map);
-        result.push_str(&inner_indent);
-        result.push_str(&expr_str);
-        result.push('\n');
-    }
-
     result.push_str(&outer_indent);
     result.push('}');
     result
@@ -600,12 +593,6 @@ fn format_block_inline(
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
-    // 如果块只有一个表达式，返回内联形式
-    if block.stmts.is_empty() {
-        if let Some(expr) = &block.expr {
-            return format_expr(expr, ctx, source_map);
-        }
-    }
     format_block(block, ctx, source_map)
 }
 
@@ -617,9 +604,13 @@ fn format_lambda(
     source_map: &SourceMap,
 ) -> String {
     let params_str = format_params(params, ctx, source_map);
-    // 如果 body 只有一个表达式，使用简洁形式
-    if body.stmts.is_empty() {
-        if let Some(expr) = &body.expr {
+    // 如果 body 只有一条 return 语句，使用简洁形式 => expr
+    if body.stmts.len() == 1 {
+        if let Stmt {
+            kind: StmtKind::Return(Some(expr)),
+            ..
+        } = &body.stmts[0]
+        {
             return format!("{} => {}", params_str, format_expr(expr, ctx, source_map));
         }
     }

@@ -300,11 +300,13 @@ impl<'a> ParserState<'a> {
         let body = if self.at(&TokenKind::LBrace) {
             self.parse_lambda_block()?
         } else {
-            // Single expression body
+            // Single expression body - use StmtKind::Return as sugar for => { return expr }
             let expr = self.parse_expression(BP_LOWEST)?;
             Block {
-                stmts: Vec::new(),
-                expr: Some(Box::new(expr)),
+                stmts: vec![Stmt {
+                    kind: StmtKind::Return(Some(Box::new(expr))),
+                    span: self.span(),
+                }],
                 span: self.span(),
             }
         };
@@ -377,22 +379,6 @@ impl<'a> ParserState<'a> {
 
         self.expect(&TokenKind::RBrace);
 
-        // Check if block ends with an expression (without semicolon)
-        let expr = if stmts
-            .last()
-            .is_some_and(|s| matches!(s.kind, StmtKind::Expr(_)))
-        {
-            stmts.pop().and_then(|stmt| {
-                if let StmtKind::Expr(expr) = stmt.kind {
-                    Some(expr)
-                } else {
-                    None
-                }
-            })
-        } else {
-            None
-        };
-
-        Some(Block { stmts, expr, span })
+        Some(Block { stmts, span })
     }
 }

@@ -12,8 +12,10 @@ use std::collections::HashSet;
 
 use crate::frontend::core::parser::ast::{BinOp, Block, Expr, Param, Stmt, StmtKind};
 use crate::frontend::core::typecheck::inference::capture::{
-    analyze_capture, analyze_closure_usage, CaptureMode, CaptureUsage, ClosureUsage, TraitSolver,
+    analyze_captures, analyze_closure_usage, determine_capture_mode, CaptureMode, CaptureUsage,
+    ClosureUsage,
 };
+use crate::frontend::core::typecheck::traits::solver::TraitSolver;
 use crate::frontend::core::types::mono::{MonoType, StructType};
 use crate::util::span::Span;
 
@@ -44,18 +46,20 @@ fn test_analyze_captures_read_only() {
     // lambda: () => x + y
     // outer scope: {x, y, z}
     let block = Block {
-        stmts: vec![],
-        expr: Some(Box::new(Expr::BinOp {
-            op: BinOp::Add,
-            left: Box::new(Expr::Var("x".to_string(), dummy_span())),
-            right: Box::new(Expr::Var("y".to_string(), dummy_span())),
+        stmts: vec![Stmt {
+            kind: StmtKind::Expr(Box::new(Expr::BinOp {
+                op: BinOp::Add,
+                left: Box::new(Expr::Var("x".to_string(), dummy_span())),
+                right: Box::new(Expr::Var("y".to_string(), dummy_span())),
+                span: dummy_span(),
+            })),
             span: dummy_span(),
-        })),
+        }],
         span: dummy_span(),
     };
 
     let outer: HashSet<String> = ["x", "y", "z"].iter().map(|s| s.to_string()).collect();
-    let captures = analyze_capture(&block, &outer);
+    let captures = analyze_captures(&block, &outer);
 
     assert_eq!(
         captures.len(),
@@ -96,12 +100,11 @@ fn test_analyze_captures_write() {
             })),
             span: dummy_span(),
         }],
-        expr: None,
         span: dummy_span(),
     };
 
     let outer: HashSet<String> = ["x"].iter().map(|s| s.to_string()).collect();
-    let captures = analyze_capture(&block, &outer);
+    let captures = analyze_captures(&block, &outer);
 
     assert_eq!(captures.len(), 1, "only x should be captured");
     assert_eq!(captures[0].name, "x", "captured variable should be x");
@@ -117,25 +120,30 @@ fn test_analyze_captures_local_var_not_captured() {
     // lambda: () => { let z = 10; z }
     // outer scope: {x}
     let block = Block {
-        stmts: vec![Stmt {
-            kind: StmtKind::Var {
-                name: "z".to_string(),
-                name_span: dummy_span(),
-                type_annotation: None,
-                initializer: Some(Box::new(Expr::Lit(
-                    crate::frontend::core::lexer::tokens::Literal::Int(10),
-                    dummy_span(),
-                ))),
-                is_mut: false,
+        stmts: vec![
+            Stmt {
+                kind: StmtKind::Var {
+                    name: "z".to_string(),
+                    name_span: dummy_span(),
+                    type_annotation: None,
+                    initializer: Some(Box::new(Expr::Lit(
+                        crate::frontend::core::lexer::tokens::Literal::Int(10),
+                        dummy_span(),
+                    ))),
+                    is_mut: false,
+                },
+                span: dummy_span(),
             },
-            span: dummy_span(),
-        }],
-        expr: Some(Box::new(Expr::Var("z".to_string(), dummy_span()))),
+            Stmt {
+                kind: StmtKind::Expr(Box::new(Expr::Var("z".to_string(), dummy_span()))),
+                span: dummy_span(),
+            },
+        ],
         span: dummy_span(),
     };
 
     let outer: HashSet<String> = ["x"].iter().map(|s| s.to_string()).collect();
-    let captures = analyze_capture(&block, &outer);
+    let captures = analyze_captures(&block, &outer);
 
     // z 是局部变量，不应被捕获
     assert_eq!(captures.len(), 0, "local variable z should not be captured");
@@ -153,26 +161,30 @@ fn test_analyze_captures_nested_lambda() {
             span: dummy_span(),
         }],
         body: Box::new(Block {
-            stmts: vec![],
-            expr: Some(Box::new(Expr::BinOp {
-                op: BinOp::Add,
-                left: Box::new(Expr::Var("x".to_string(), dummy_span())),
-                right: Box::new(Expr::Var("a".to_string(), dummy_span())),
+            stmts: vec![Stmt {
+                kind: StmtKind::Expr(Box::new(Expr::BinOp {
+                    op: BinOp::Add,
+                    left: Box::new(Expr::Var("x".to_string(), dummy_span())),
+                    right: Box::new(Expr::Var("a".to_string(), dummy_span())),
+                    span: dummy_span(),
+                })),
                 span: dummy_span(),
-            })),
+            }],
             span: dummy_span(),
         }),
         span: dummy_span(),
     };
 
     let block = Block {
-        stmts: vec![],
-        expr: Some(Box::new(inner_lambda)),
+        stmts: vec![Stmt {
+            kind: StmtKind::Expr(Box::new(inner_lambda)),
+            span: dummy_span(),
+        }],
         span: dummy_span(),
     };
 
     let outer: HashSet<String> = ["x"].iter().map(|s| s.to_string()).collect();
-    let captures = analyze_capture(&block, &outer);
+    let captures = analyze_captures(&block, &outer);
 
     assert_eq!(
         captures.len(),
@@ -273,7 +285,6 @@ fn test_closure_usage_inline() {
         params: vec![],
         body: Box::new(Block {
             stmts: vec![],
-            expr: None,
             span: dummy_span(),
         }),
         span: dummy_span(),
@@ -292,7 +303,6 @@ fn test_closure_usage_escaping_spawn() {
         params: vec![],
         body: Box::new(Block {
             stmts: vec![],
-            expr: None,
             span: dummy_span(),
         }),
         span: dummy_span(),
@@ -300,7 +310,6 @@ fn test_closure_usage_escaping_spawn() {
     let parent = Expr::Spawn {
         body: Box::new(Block {
             stmts: vec![],
-            expr: None,
             span: dummy_span(),
         }),
         span: dummy_span(),
@@ -318,16 +327,18 @@ fn test_analyze_captures_no_captures() {
     // lambda: () => 42
     // outer scope: {x, y} — body references nothing
     let block = Block {
-        stmts: vec![],
-        expr: Some(Box::new(Expr::Lit(
-            crate::frontend::core::lexer::tokens::Literal::Int(42),
-            dummy_span(),
-        ))),
+        stmts: vec![Stmt {
+            kind: StmtKind::Expr(Box::new(Expr::Lit(
+                crate::frontend::core::lexer::tokens::Literal::Int(42),
+                dummy_span(),
+            ))),
+            span: dummy_span(),
+        }],
         span: dummy_span(),
     };
 
     let outer: HashSet<String> = ["x", "y"].iter().map(|s| s.to_string()).collect();
-    let captures = analyze_capture(&block, &outer);
+    let captures = analyze_captures(&block, &outer);
 
     assert_eq!(
         captures.len(),
@@ -346,7 +357,6 @@ fn test_closure_usage_escaping_return() {
             params: vec![],
             body: Box::new(Block {
                 stmts: vec![],
-                expr: None,
                 span: dummy_span(),
             }),
             span: dummy_span(),
@@ -388,12 +398,11 @@ fn test_analyze_captures_mixed_read_write() {
             })),
             span: dummy_span(),
         }],
-        expr: None,
         span: dummy_span(),
     };
 
     let outer: HashSet<String> = ["x"].iter().map(|s| s.to_string()).collect();
-    let captures = analyze_capture(&block, &outer);
+    let captures = analyze_captures(&block, &outer);
 
     assert_eq!(captures.len(), 1, "only x should be captured");
     assert_eq!(captures[0].name, "x", "captured variable should be x");
@@ -417,8 +426,7 @@ fn test_capture_mode_for_immutable_ref() {
         mutable: false,
         inner: Box::new(MonoType::Int(64)),
     };
-    let mode =
-        determine_capture_mode(&CaptureUsage::Read, &ref_ty, &ClosureUsage::Inline, &solver);
+    let mode = determine_capture_mode(&CaptureUsage::Read, &ref_ty, &ClosureUsage::Inline, &solver);
     assert_eq!(mode, CaptureMode::Copy, "&T is Dup, should Copy");
 }
 
@@ -451,8 +459,7 @@ fn test_capture_mode_for_mutable_ref_inline_read() {
         mutable: true,
         inner: Box::new(MonoType::Int(64)),
     };
-    let mode =
-        determine_capture_mode(&CaptureUsage::Read, &ref_ty, &ClosureUsage::Inline, &solver);
+    let mode = determine_capture_mode(&CaptureUsage::Read, &ref_ty, &ClosureUsage::Inline, &solver);
     assert_eq!(mode, CaptureMode::Borrow, "&mut T inline read → Borrow");
 }
 

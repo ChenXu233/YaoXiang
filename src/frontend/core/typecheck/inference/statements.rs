@@ -500,16 +500,6 @@ impl StatementChecker {
                 }
             }
 
-            // 检查返回表达式
-            if let Some(expr) = &body.expr {
-                if let Err(e) = self.check_expr(expr) {
-                    if first_err.is_none() {
-                        first_err = Some(e.clone());
-                    }
-                    self.collect_error(*e);
-                }
-            }
-
             // 退出函数作用域前，保存所有变量（解决退出作用域后变量丢失的问题）
             for (name, poly) in self.scope.vars() {
                 self.function_local_vars.insert(name, poly);
@@ -530,15 +520,6 @@ impl StatementChecker {
                 if let Err(e) = self.check_stmt(stmt) {
                     err = Some(e);
                     break;
-                }
-            }
-
-            // 检查返回表达式
-            if err.is_none() {
-                if let Some(expr) = &body.expr {
-                    if let Err(e) = self.check_expr(expr) {
-                        err = Some(e);
-                    }
                 }
             }
 
@@ -571,15 +552,14 @@ impl StatementChecker {
                 generic_params,
                 type_annotation,
                 params,
-                body: (stmts, expr),
+                body,
                 is_pub: _,
                 method_type,
             } => {
                 // 根据是否有 type_name 来区分方法绑定和其他绑定
                 // 注意：不能根据 params 是否为空来判断，因为空参数的函数也是函数
                 let body_block = Block {
-                    stmts: stmts.to_vec(),
-                    expr: expr.clone(),
+                    stmts: body.clone(),
                     span: stmt.span,
                 };
                 if type_name.is_some() {
@@ -591,7 +571,7 @@ impl StatementChecker {
                         type_ann,
                         generic_params,
                         params,
-                        stmts,
+                        body,
                         body_block,
                         stmt.span,
                     )
@@ -639,7 +619,7 @@ impl StatementChecker {
                         } else {
                             // 情况 2：type_annotation 是 Type::Fn（类型级函数）
                             // 从 body 的语句中提取字段
-                            for stmt in stmts {
+                            for stmt in body {
                                 if let crate::frontend::core::parser::ast::StmtKind::Var {
                                     name: field_name,
                                     type_annotation: field_type,
@@ -712,7 +692,7 @@ impl StatementChecker {
                         type_annotation.as_ref(),
                         generic_params,
                         params,
-                        stmts,
+                        body,
                         body_block,
                         stmt.span,
                     )
@@ -1344,14 +1324,6 @@ impl StatementChecker {
                     self.collect_error(*e);
                 }
             }
-            if let Some(expr) = &body.expr {
-                if let Err(e) = self.check_expr(expr) {
-                    if first_err.is_none() {
-                        first_err = Some(e.clone());
-                    }
-                    self.collect_error(*e);
-                }
-            }
             self.scope.exit_scope();
             match first_err {
                 Some(e) => Err(e),
@@ -1363,13 +1335,6 @@ impl StatementChecker {
                 if let Err(e) = self.check_stmt(stmt) {
                     err = Some(e);
                     break;
-                }
-            }
-            if err.is_none() {
-                if let Some(expr) = &body.expr {
-                    if let Err(e) = self.check_expr(expr) {
-                        err = Some(e);
-                    }
                 }
             }
             self.scope.exit_scope();
@@ -1441,14 +1406,6 @@ impl StatementChecker {
                     self.collect_error(*e);
                 }
             }
-            if let Some(expr) = &block.expr {
-                if let Err(e) = self.check_expr(expr) {
-                    if first_err.is_none() {
-                        first_err = Some(e.clone());
-                    }
-                    self.collect_error(*e);
-                }
-            }
             self.scope.exit_scope();
             match first_err {
                 Some(e) => Err(e),
@@ -1460,13 +1417,6 @@ impl StatementChecker {
                 if let Err(e) = self.check_stmt(stmt) {
                     err = Some(e);
                     break;
-                }
-            }
-            if err.is_none() {
-                if let Some(expr) = &block.expr {
-                    if let Err(e) = self.check_expr(expr) {
-                        err = Some(e);
-                    }
                 }
             }
             self.scope.exit_scope();

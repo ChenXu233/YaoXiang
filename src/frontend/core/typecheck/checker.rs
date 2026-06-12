@@ -209,8 +209,7 @@ impl TypeChecker {
                     type_name.as_ref(),
                     type_annotation.as_ref(),
                     params,
-                    &body.0,
-                    body.1.as_deref(),
+                    body,
                 ) == crate::frontend::core::parser::ast::BindingSemanticKind::TypeConstructor
                 {
                     // 这是一个类型定义
@@ -1003,8 +1002,8 @@ impl TypeChecker {
                 // 方法绑定
                 let is_method = type_name.is_some();
 
-                // 函数定义：body 有 tail expression
-                let has_body = body.1.is_some() || !body.0.is_empty();
+                // 函数定义：body 有语句
+                let has_body = !body.is_empty();
                 // 类型定义：没有 body 且有 type_annotation
                 let is_type_def = !has_body && type_annotation.is_some();
 

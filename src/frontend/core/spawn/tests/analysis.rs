@@ -91,7 +91,6 @@ fn resource_trait_table() -> (TraitTable, HashMap<String, MonoType>) {
 fn spawn_body(stmts: Vec<Stmt>) -> Block {
     Block {
         stmts,
-        expr: None,
         span: dummy_span(),
     }
 }
@@ -282,8 +281,10 @@ fn test_reads_writes_match_expr_and_arms() {
         arms: vec![MatchArm {
             pattern: Pattern::Wildcard,
             body: Block {
-                stmts: vec![],
-                expr: Some(Box::new(var_expr("result"))),
+                stmts: vec![Stmt {
+                    kind: StmtKind::Expr(Box::new(var_expr("result"))),
+                    span: dummy_span(),
+                }],
                 span: dummy_span(),
             },
             span: dummy_span(),
@@ -308,14 +309,18 @@ fn test_reads_writes_if_expr_branches() {
     let expr = Expr::If {
         condition: Box::new(var_expr("cond")),
         then_branch: Box::new(Block {
-            stmts: vec![],
-            expr: Some(Box::new(var_expr("a"))),
+            stmts: vec![Stmt {
+                kind: StmtKind::Expr(Box::new(var_expr("a"))),
+                span: dummy_span(),
+            }],
             span: dummy_span(),
         }),
         elif_branches: vec![],
         else_branch: Some(Box::new(Block {
-            stmts: vec![],
-            expr: Some(Box::new(var_expr("b"))),
+            stmts: vec![Stmt {
+                kind: StmtKind::Expr(Box::new(var_expr("b"))),
+                span: dummy_span(),
+            }],
             span: dummy_span(),
         })),
         span: dummy_span(),
@@ -592,8 +597,10 @@ fn test_spawn_for_reads_writes() {
     // RFC-024 §2.4: spawn for 展开为 N 个任务
     // Arrange
     let body = Block {
-        stmts: vec![],
-        expr: Some(Box::new(call_expr("process", vec![var_expr("item")]))),
+        stmts: vec![Stmt {
+            kind: StmtKind::Expr(Box::new(call_expr("process", vec![var_expr("item")]))),
+            span: dummy_span(),
+        }],
         span: dummy_span(),
     };
     let iterable = var_expr("items");
@@ -646,7 +653,6 @@ fn test_spawn_body_mixed_children_and_non_children() {
             // 直接子表达式：赋值
             assign_stmt("t1", call_expr("f", vec![])),
         ],
-        expr: None,
         span: dummy_span(),
     };
 
@@ -681,7 +687,6 @@ fn test_spawn_body_no_direct_children() {
             },
             span: dummy_span(),
         }],
-        expr: None,
         span: dummy_span(),
     };
 
@@ -744,11 +749,13 @@ fn test_spawn_for_reads_outer_variable() {
     // RFC-024 §2.4: spawn for 循环体引用外部变量
     // Arrange
     let body = Block {
-        stmts: vec![],
-        expr: Some(Box::new(call_expr(
-            "combine",
-            vec![var_expr("item"), var_expr("prefix")],
-        ))),
+        stmts: vec![Stmt {
+            kind: StmtKind::Expr(Box::new(call_expr(
+                "combine",
+                vec![var_expr("item"), var_expr("prefix")],
+            ))),
+            span: dummy_span(),
+        }],
         span: dummy_span(),
     };
     let iterable = var_expr("items");
@@ -786,8 +793,10 @@ fn test_spawn_for_end_to_end_independent_iterations() {
     // RFC-024 §2.4: spawn for 数据并行，无依赖迭代应并行
     // Arrange
     let body = Block {
-        stmts: vec![],
-        expr: Some(Box::new(call_expr("process", vec![var_expr("item")]))),
+        stmts: vec![Stmt {
+            kind: StmtKind::Expr(Box::new(call_expr("process", vec![var_expr("item")]))),
+            span: dummy_span(),
+        }],
         span: dummy_span(),
     };
     let iterable = var_expr("items");

@@ -449,8 +449,8 @@ impl TypeChecker {
                 } => {
                     // 根据字段值区分类型：方法绑定 / 类型定义 / 函数
                     let is_method = type_name.is_some();
-                    // 函数定义：body 有 tail expression
-                    let has_body = body.1.is_some() || !body.0.is_empty();
+                    // 函数定义：body 有语句
+                    let has_body = !body.is_empty();
                     // 类型定义：没有 body 且有 type_annotation
                     let is_type_def = !has_body && type_annotation.is_some();
 
@@ -601,20 +601,10 @@ impl TypeChecker {
 
                         // 递归收集函数体中的表达式
                         let mut fn_roots = imported_module_roots.clone();
-                        for body_stmt in &body.0 {
+                        for body_stmt in body {
                             self.collect_stmt_tokens(
                                 &fp,
                                 body_stmt,
-                                scope_idx,
-                                &mut declared,
-                                &constructor_names,
-                                &mut fn_roots,
-                            );
-                        }
-                        if let Some(ret_expr) = &body.1 {
-                            self.collect_expr_tokens(
-                                &fp,
-                                ret_expr,
                                 scope_idx,
                                 &mut declared,
                                 &constructor_names,
@@ -720,16 +710,6 @@ impl TypeChecker {
                             &mut imported_module_roots,
                         );
                     }
-                    if let Some(ret_expr) = &body.expr {
-                        self.collect_expr_tokens(
-                            &fp,
-                            ret_expr,
-                            0,
-                            &mut declared,
-                            &constructor_names,
-                            &mut imported_module_roots,
-                        );
-                    }
                 }
                 StmtKind::DestructureAssign { names, rhs, .. } => {
                     for name in names {
@@ -762,6 +742,18 @@ impl TypeChecker {
                     );
                 }
                 StmtKind::If { .. } | StmtKind::Error(_) | StmtKind::ExternalBindingStmt { .. } => {
+                }
+                StmtKind::Return(expr_opt) => {
+                    if let Some(expr) = expr_opt {
+                        self.collect_expr_tokens(
+                            &fp,
+                            expr,
+                            0,
+                            &mut declared,
+                            &constructor_names,
+                            &mut imported_module_roots,
+                        );
+                    }
                 }
             }
         }
@@ -880,16 +872,6 @@ impl TypeChecker {
                         imported_module_roots,
                     );
                 }
-                if let Some(ret_expr) = &body.expr {
-                    self.collect_expr_tokens(
-                        file_path,
-                        ret_expr,
-                        scope_idx,
-                        declared,
-                        constructor_names,
-                        imported_module_roots,
-                    );
-                }
             }
             StmtKind::If {
                 condition,
@@ -918,16 +900,6 @@ impl TypeChecker {
                         &mut then_roots,
                     );
                 }
-                if let Some(r) = &then_branch.expr {
-                    self.collect_expr_tokens(
-                        file_path,
-                        r,
-                        scope_idx,
-                        declared,
-                        constructor_names,
-                        &mut then_roots,
-                    );
-                }
 
                 for (elif_cond, elif_block) in elif_branches {
                     self.collect_expr_tokens(
@@ -950,16 +922,6 @@ impl TypeChecker {
                             &mut elif_roots,
                         );
                     }
-                    if let Some(r) = &elif_block.expr {
-                        self.collect_expr_tokens(
-                            file_path,
-                            r,
-                            scope_idx,
-                            declared,
-                            constructor_names,
-                            &mut elif_roots,
-                        );
-                    }
                 }
 
                 if let Some(else_block) = else_branch {
@@ -968,16 +930,6 @@ impl TypeChecker {
                         self.collect_stmt_tokens(
                             file_path,
                             s,
-                            scope_idx,
-                            declared,
-                            constructor_names,
-                            &mut else_roots,
-                        );
-                    }
-                    if let Some(r) = &else_block.expr {
-                        self.collect_expr_tokens(
-                            file_path,
-                            r,
                             scope_idx,
                             declared,
                             constructor_names,
@@ -1024,20 +976,10 @@ impl TypeChecker {
                     self.collect_type_tokens(file_path, ty);
                 }
                 let mut fn_roots = imported_module_roots.clone();
-                for body_stmt in &body.0 {
+                for body_stmt in body {
                     self.collect_stmt_tokens(
                         file_path,
                         body_stmt,
-                        scope_idx,
-                        declared,
-                        constructor_names,
-                        &mut fn_roots,
-                    );
-                }
-                if let Some(ret_expr) = &body.1 {
-                    self.collect_expr_tokens(
-                        file_path,
-                        ret_expr,
                         scope_idx,
                         declared,
                         constructor_names,
@@ -1233,16 +1175,6 @@ impl TypeChecker {
                         &mut then_roots,
                     );
                 }
-                if let Some(r) = &then_branch.expr {
-                    self.collect_expr_tokens(
-                        file_path,
-                        r,
-                        scope_idx,
-                        declared,
-                        constructor_names,
-                        &mut then_roots,
-                    );
-                }
                 for (cond, block) in elif_branches {
                     self.collect_expr_tokens(
                         file_path,
@@ -1263,16 +1195,6 @@ impl TypeChecker {
                             &mut elif_roots,
                         );
                     }
-                    if let Some(r) = &block.expr {
-                        self.collect_expr_tokens(
-                            file_path,
-                            r,
-                            scope_idx,
-                            declared,
-                            constructor_names,
-                            &mut elif_roots,
-                        );
-                    }
                 }
                 if let Some(block) = else_branch {
                     let mut else_roots = imported_module_roots.clone();
@@ -1280,16 +1202,6 @@ impl TypeChecker {
                         self.collect_stmt_tokens(
                             file_path,
                             s,
-                            scope_idx,
-                            declared,
-                            constructor_names,
-                            &mut else_roots,
-                        );
-                    }
-                    if let Some(r) = &block.expr {
-                        self.collect_expr_tokens(
-                            file_path,
-                            r,
                             scope_idx,
                             declared,
                             constructor_names,
@@ -1315,16 +1227,6 @@ impl TypeChecker {
                     self.collect_stmt_tokens(
                         file_path,
                         s,
-                        scope_idx,
-                        declared,
-                        constructor_names,
-                        &mut while_roots,
-                    );
-                }
-                if let Some(r) = &body.expr {
-                    self.collect_expr_tokens(
-                        file_path,
-                        r,
                         scope_idx,
                         declared,
                         constructor_names,
@@ -1362,16 +1264,6 @@ impl TypeChecker {
                     self.collect_stmt_tokens(
                         file_path,
                         s,
-                        scope_idx,
-                        declared,
-                        constructor_names,
-                        &mut for_roots,
-                    );
-                }
-                if let Some(r) = &body.expr {
-                    self.collect_expr_tokens(
-                        file_path,
-                        r,
                         scope_idx,
                         declared,
                         constructor_names,
@@ -1422,16 +1314,6 @@ impl TypeChecker {
                         &mut lambda_roots,
                     );
                 }
-                if let Some(r) = &body.expr {
-                    self.collect_expr_tokens(
-                        file_path,
-                        r,
-                        lambda_scope_idx,
-                        declared,
-                        constructor_names,
-                        &mut lambda_roots,
-                    );
-                }
             }
             Expr::Block(block) => {
                 let mut block_roots = imported_module_roots.clone();
@@ -1439,16 +1321,6 @@ impl TypeChecker {
                     self.collect_stmt_tokens(
                         file_path,
                         s,
-                        scope_idx,
-                        declared,
-                        constructor_names,
-                        &mut block_roots,
-                    );
-                }
-                if let Some(r) = &block.expr {
-                    self.collect_expr_tokens(
-                        file_path,
-                        r,
                         scope_idx,
                         declared,
                         constructor_names,
@@ -1483,16 +1355,6 @@ impl TypeChecker {
                         self.collect_stmt_tokens(
                             file_path,
                             s,
-                            scope_idx,
-                            declared,
-                            constructor_names,
-                            &mut arm_roots,
-                        );
-                    }
-                    if let Some(r) = &arm.body.expr {
-                        self.collect_expr_tokens(
-                            file_path,
-                            r,
                             scope_idx,
                             declared,
                             constructor_names,
@@ -1607,16 +1469,6 @@ impl TypeChecker {
                         imported_module_roots,
                     );
                 }
-                if let Some(r) = &body.expr {
-                    self.collect_expr_tokens(
-                        file_path,
-                        r,
-                        scope_idx,
-                        declared,
-                        constructor_names,
-                        imported_module_roots,
-                    );
-                }
             }
             Expr::ListComp {
                 element,
@@ -1692,32 +1544,12 @@ impl TypeChecker {
                         imported_module_roots,
                     );
                 }
-                if let Some(r) = &body.expr {
-                    self.collect_expr_tokens(
-                        file_path,
-                        r,
-                        scope_idx,
-                        declared,
-                        constructor_names,
-                        imported_module_roots,
-                    );
-                }
             }
             Expr::Spawn { body, .. } => {
                 for s in &body.stmts {
                     self.collect_stmt_tokens(
                         file_path,
                         s,
-                        scope_idx,
-                        declared,
-                        constructor_names,
-                        imported_module_roots,
-                    );
-                }
-                if let Some(r) = &body.expr {
-                    self.collect_expr_tokens(
-                        file_path,
-                        r,
                         scope_idx,
                         declared,
                         constructor_names,
