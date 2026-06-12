@@ -865,3 +865,13 @@ impl Interpreter {
         Ok(())
     }
 }
+
+impl Drop for Interpreter {
+    fn drop(&mut self) {
+        if !self.shared.is_null() {
+            unsafe {
+                drop(Box::from_raw(self.shared as *mut SharedState));
+            }
+        }
+    }
+}
