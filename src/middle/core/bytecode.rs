@@ -159,18 +159,20 @@ pub enum BytecodeInstr {
     Yield,
 
     /// Spawn a new concurrent task (dynamic call).
-    /// 支持多闭包 + 执行计划（RFC-024）
+    /// 支持多闭包 + 每任务依赖和资源元数据（RFC-024）
     Spawn {
         dst: Reg,
         closures: Vec<Reg>,
-        group_count: Vec<u32>,
+        task_deps: Vec<Vec<u32>>,
+        task_resources: Vec<Vec<String>>,
     },
 
     /// 从 List 寄存器动态读取闭包并 spawn（RFC-024 §2.4 spawn for）
     SpawnFromList {
         dst: Reg,
         closures_list: Reg,
-        group_count: Vec<u32>,
+        task_deps: Vec<Vec<u32>>,
+        task_resources: Vec<Vec<String>>,
     },
 
     /// Unconditional jump
@@ -584,15 +586,48 @@ impl BytecodeInstr {
             BytecodeInstr::Yield => 0,
             BytecodeInstr::Spawn {
                 closures,
-                group_count,
+                task_deps,
+                task_resources,
                 ..
             } => {
-                // dst(2) + closures.len(4) + closures(2*len) + group_count.len(4) + groups(4*len)
-                4 + closures.len() * 2 + 4 + group_count.len() * 4
+                // dst(2) + closures.len(4) + closures(2*len)
+                // + task_deps.len(4) + for each task: deps.len(4) + deps(4*each)
+                // + task_resources.len(4) + for each task: res.len(4) + for each res: str.len(4) + str_bytes
+                let mut s = 4 + closures.len() * 2;
+                s += 4; // task_deps.len
+                for deps in task_deps {
+                    s += 4 + deps.len() * 4;
+                }
+                s += 4; // task_resources.len
+                for res in task_resources {
+                    s += 4; // res.len
+                    for r in res {
+                        s += 4 + r.len();
+                    }
+                }
+                s
             }
-            BytecodeInstr::SpawnFromList { group_count, .. } => {
-                // dst(2) + closures_list(2) + group_count.len(4) + groups(4*len)
-                2 + 2 + 4 + group_count.len() * 4
+            BytecodeInstr::SpawnFromList {
+                task_deps,
+                task_resources,
+                ..
+            } => {
+                // dst(2) + closures_list(2)
+                // + task_deps.len(4) + for each task: deps.len(4) + deps(4*each)
+                // + task_resources.len(4) + for each task: res.len(4) + for each res: str.len(4) + str_bytes
+                let mut s = 2 + 2;
+                s += 4; // task_deps.len
+                for deps in task_deps {
+                    s += 4 + deps.len() * 4;
+                }
+                s += 4; // task_resources.len
+                for res in task_resources {
+                    s += 4; // res.len
+                    for r in res {
+                        s += 4 + r.len();
+                    }
+                }
+                s
             }
             BytecodeInstr::Jmp { .. } => 4,
             BytecodeInstr::JmpIf { .. } => 4,
@@ -1166,7 +1201,9 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                 decoded_instructions.push(BytecodeInstr::Yield);
                             }
                             Opcode::Spawn => {
-                                // Spawn: dst(2) + closures.len(4) + closures(2*len) + group_count.len(4) + groups(4*len)
+                                // Spawn: dst(2) + closures.len(4) + closures(2*len)
+                                // + task_deps.len(4) + for each task: deps.len(4) + deps(4*each)
+                                // + task_resources.len(4) + for each task: res.len(4) + for each res: str.len(4) + str_bytes
                                 if instr.operands.len() >= 8 {
                                     let dst =
                                         u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
@@ -1188,75 +1225,195 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                             closures.push(Reg(reg));
                                         }
                                     }
-                                    let gc_offset = 6 + closures_count * 2;
-                                    if gc_offset + 3 < instr.operands.len() {
-                                        let gc_count = u32::from_le_bytes([
-                                            instr.operands[gc_offset],
-                                            instr.operands[gc_offset + 1],
-                                            instr.operands[gc_offset + 2],
-                                            instr.operands[gc_offset + 3],
-                                        ])
-                                            as usize;
-                                        let mut group_count = Vec::with_capacity(gc_count);
-                                        for i in 0..gc_count {
-                                            let offset = gc_offset + 4 + i * 4;
-                                            if offset + 3 < instr.operands.len() {
-                                                let count = u32::from_le_bytes([
-                                                    instr.operands[offset],
-                                                    instr.operands[offset + 1],
-                                                    instr.operands[offset + 2],
-                                                    instr.operands[offset + 3],
-                                                ]);
-                                                group_count.push(count);
+                                    let mut pos = 6 + closures_count * 2;
+                                    // Read task_deps
+                                    let mut task_deps: Vec<Vec<u32>> = Vec::new();
+                                    if pos + 3 < instr.operands.len() {
+                                        let deps_len = u32::from_le_bytes([
+                                            instr.operands[pos],
+                                            instr.operands[pos + 1],
+                                            instr.operands[pos + 2],
+                                            instr.operands[pos + 3],
+                                        ]) as usize;
+                                        pos += 4;
+                                        task_deps.reserve(deps_len);
+                                        for _ in 0..deps_len {
+                                            if pos + 3 < instr.operands.len() {
+                                                let dep_count = u32::from_le_bytes([
+                                                    instr.operands[pos],
+                                                    instr.operands[pos + 1],
+                                                    instr.operands[pos + 2],
+                                                    instr.operands[pos + 3],
+                                                ]) as usize;
+                                                pos += 4;
+                                                let mut deps = Vec::with_capacity(dep_count);
+                                                for _ in 0..dep_count {
+                                                    if pos + 3 < instr.operands.len() {
+                                                        let dep = u32::from_le_bytes([
+                                                            instr.operands[pos],
+                                                            instr.operands[pos + 1],
+                                                            instr.operands[pos + 2],
+                                                            instr.operands[pos + 3],
+                                                        ]);
+                                                        deps.push(dep);
+                                                        pos += 4;
+                                                    }
+                                                }
+                                                task_deps.push(deps);
                                             }
                                         }
-                                        decoded_instructions.push(BytecodeInstr::Spawn {
-                                            dst: Reg(dst),
-                                            closures,
-                                            group_count,
-                                        });
-                                    } else {
-                                        decoded_instructions.push(BytecodeInstr::Nop);
                                     }
+                                    // Read task_resources
+                                    let mut task_resources: Vec<Vec<String>> = Vec::new();
+                                    if pos + 3 < instr.operands.len() {
+                                        let res_len = u32::from_le_bytes([
+                                            instr.operands[pos],
+                                            instr.operands[pos + 1],
+                                            instr.operands[pos + 2],
+                                            instr.operands[pos + 3],
+                                        ]) as usize;
+                                        pos += 4;
+                                        task_resources.reserve(res_len);
+                                        for _ in 0..res_len {
+                                            if pos + 3 < instr.operands.len() {
+                                                let str_count = u32::from_le_bytes([
+                                                    instr.operands[pos],
+                                                    instr.operands[pos + 1],
+                                                    instr.operands[pos + 2],
+                                                    instr.operands[pos + 3],
+                                                ]) as usize;
+                                                pos += 4;
+                                                let mut resources = Vec::with_capacity(str_count);
+                                                for _ in 0..str_count {
+                                                    if pos + 3 < instr.operands.len() {
+                                                        let str_len = u32::from_le_bytes([
+                                                            instr.operands[pos],
+                                                            instr.operands[pos + 1],
+                                                            instr.operands[pos + 2],
+                                                            instr.operands[pos + 3],
+                                                        ]) as usize;
+                                                        pos += 4;
+                                                        if pos + str_len <= instr.operands.len() {
+                                                            let s = String::from_utf8_lossy(
+                                                                &instr.operands[pos..pos + str_len],
+                                                            )
+                                                            .to_string();
+                                                            resources.push(s);
+                                                            pos += str_len;
+                                                        }
+                                                    }
+                                                }
+                                                task_resources.push(resources);
+                                            }
+                                        }
+                                    }
+                                    decoded_instructions.push(BytecodeInstr::Spawn {
+                                        dst: Reg(dst),
+                                        closures,
+                                        task_deps,
+                                        task_resources,
+                                    });
                                 } else {
                                     decoded_instructions.push(BytecodeInstr::Nop);
                                 }
                             }
                             Opcode::SpawnFromList => {
-                                // SpawnFromList: dst(2) + closures_list(2) + group_count.len(4) + groups(4*len)
-                                if instr.operands.len() >= 8 {
+                                // SpawnFromList: dst(2) + closures_list(2)
+                                // + task_deps.len(4) + for each task: deps.len(4) + deps(4*each)
+                                // + task_resources.len(4) + for each task: res.len(4) + for each res: str.len(4) + str_bytes
+                                if instr.operands.len() >= 4 {
                                     let dst =
                                         u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
                                     let closures_list =
                                         u16::from_le_bytes([instr.operands[2], instr.operands[3]]);
-                                    let group_count_len = u32::from_le_bytes([
-                                        instr.operands[4],
-                                        instr.operands[5],
-                                        instr.operands[6],
-                                        instr.operands[7],
-                                    ])
-                                        as usize;
-
-                                    if instr.operands.len() >= 8 + group_count_len * 4 {
-                                        let mut group_count = Vec::with_capacity(group_count_len);
-                                        for i in 0..group_count_len {
-                                            let offset = 8 + i * 4;
-                                            let count = u32::from_le_bytes([
-                                                instr.operands[offset],
-                                                instr.operands[offset + 1],
-                                                instr.operands[offset + 2],
-                                                instr.operands[offset + 3],
-                                            ]);
-                                            group_count.push(count);
+                                    let mut pos = 4;
+                                    // Read task_deps
+                                    let mut task_deps: Vec<Vec<u32>> = Vec::new();
+                                    if pos + 3 < instr.operands.len() {
+                                        let deps_len = u32::from_le_bytes([
+                                            instr.operands[pos],
+                                            instr.operands[pos + 1],
+                                            instr.operands[pos + 2],
+                                            instr.operands[pos + 3],
+                                        ]) as usize;
+                                        pos += 4;
+                                        task_deps.reserve(deps_len);
+                                        for _ in 0..deps_len {
+                                            if pos + 3 < instr.operands.len() {
+                                                let dep_count = u32::from_le_bytes([
+                                                    instr.operands[pos],
+                                                    instr.operands[pos + 1],
+                                                    instr.operands[pos + 2],
+                                                    instr.operands[pos + 3],
+                                                ]) as usize;
+                                                pos += 4;
+                                                let mut deps = Vec::with_capacity(dep_count);
+                                                for _ in 0..dep_count {
+                                                    if pos + 3 < instr.operands.len() {
+                                                        let dep = u32::from_le_bytes([
+                                                            instr.operands[pos],
+                                                            instr.operands[pos + 1],
+                                                            instr.operands[pos + 2],
+                                                            instr.operands[pos + 3],
+                                                        ]);
+                                                        deps.push(dep);
+                                                        pos += 4;
+                                                    }
+                                                }
+                                                task_deps.push(deps);
+                                            }
                                         }
-                                        decoded_instructions.push(BytecodeInstr::SpawnFromList {
-                                            dst: Reg(dst),
-                                            closures_list: Reg(closures_list),
-                                            group_count,
-                                        });
-                                    } else {
-                                        decoded_instructions.push(BytecodeInstr::Nop);
                                     }
+                                    // Read task_resources
+                                    let mut task_resources: Vec<Vec<String>> = Vec::new();
+                                    if pos + 3 < instr.operands.len() {
+                                        let res_len = u32::from_le_bytes([
+                                            instr.operands[pos],
+                                            instr.operands[pos + 1],
+                                            instr.operands[pos + 2],
+                                            instr.operands[pos + 3],
+                                        ]) as usize;
+                                        pos += 4;
+                                        task_resources.reserve(res_len);
+                                        for _ in 0..res_len {
+                                            if pos + 3 < instr.operands.len() {
+                                                let str_count = u32::from_le_bytes([
+                                                    instr.operands[pos],
+                                                    instr.operands[pos + 1],
+                                                    instr.operands[pos + 2],
+                                                    instr.operands[pos + 3],
+                                                ]) as usize;
+                                                pos += 4;
+                                                let mut resources = Vec::with_capacity(str_count);
+                                                for _ in 0..str_count {
+                                                    if pos + 3 < instr.operands.len() {
+                                                        let str_len = u32::from_le_bytes([
+                                                            instr.operands[pos],
+                                                            instr.operands[pos + 1],
+                                                            instr.operands[pos + 2],
+                                                            instr.operands[pos + 3],
+                                                        ]) as usize;
+                                                        pos += 4;
+                                                        if pos + str_len <= instr.operands.len() {
+                                                            let s = String::from_utf8_lossy(
+                                                                &instr.operands[pos..pos + str_len],
+                                                            )
+                                                            .to_string();
+                                                            resources.push(s);
+                                                            pos += str_len;
+                                                        }
+                                                    }
+                                                }
+                                                task_resources.push(resources);
+                                            }
+                                        }
+                                    }
+                                    decoded_instructions.push(BytecodeInstr::SpawnFromList {
+                                        dst: Reg(dst),
+                                        closures_list: Reg(closures_list),
+                                        task_deps,
+                                        task_resources,
+                                    });
                                 } else {
                                     decoded_instructions.push(BytecodeInstr::Nop);
                                 }
