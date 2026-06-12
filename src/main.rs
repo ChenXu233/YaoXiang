@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use std::io::IsTerminal;
 use std::path::PathBuf;
 use tracing::info;
-use yaoxiang::backends::dev::{SessionREPL, Evaluator};
+use yaoxiang::repl::Repl;
 use yaoxiang::formatter::run_format_command;
 use yaoxiang::{dump_bytecode, run, NAME, VERSION};
 use yaoxiang::util::diagnostic::{
@@ -460,8 +460,7 @@ fn main() -> Result<()> {
                 );
                 std::process::exit(1);
             }
-            let evaluator = Evaluator::new();
-            let mut repl = SessionREPL::new(evaluator).context("Failed to initialize REPL")?;
+            let mut repl = Repl::new().context("Failed to initialize REPL")?;
             repl.run().context("REPL exited with error")?;
         }
         Commands::Init { name } => {

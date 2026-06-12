@@ -200,6 +200,9 @@ pub struct AstToIrGenerator {
     constraint_var_concrete_types: HashMap<String, String>,
     /// RFC-004: 匿名函数绑定生成的独立 FunctionIR 列表
     anon_function_irs: Vec<FunctionIR>,
+    /// 函数参数类型记录（函数名 -> 参数类型列表）
+    /// 用于在调用点决定是否需要发出 Borrow 指令（RFC-009 §2.8 自动借用）
+    function_param_types: HashMap<String, Vec<MonoType>>,
 }
 
 /// 绑定信息（用于 IR 生成阶段的方法调用转发）
@@ -249,30 +252,84 @@ impl AstToIrGenerator {
             global_vars: Vec::new(),
             constraint_var_concrete_types: HashMap::new(),
             anon_function_irs: Vec::new(),
+            function_param_types: HashMap::new(),
         }
     }
 
     /// 创建新的 IR 生成器（带类型信息）
     pub fn new_with_type_result(type_result: &TypeCheckResult) -> Self {
         Self {
-            symbols: vec![HashMap::new()], // 全局作用域
             type_result: Some(Box::new(type_result.clone())),
-            next_temp: 0,
-            current_mut_locals: std::collections::HashSet::new(),
-            module_mut_locals: HashMap::new(),
-            current_loop_binding_locals: std::collections::HashSet::new(),
-            module_loop_binding_locals: HashMap::new(),
-            current_local_names: Vec::new(),
-            module_local_names: HashMap::new(),
-            local_var_types: HashMap::new(),
-            native_bindings: Vec::new(),
-            struct_definitions: HashMap::new(),
-            type_bindings: HashMap::new(),
-            nested_functions: Vec::new(),
-            closure_counter: 0,
-            global_vars: Vec::new(),
-            constraint_var_concrete_types: HashMap::new(),
-            anon_function_irs: Vec::new(),
+            ..Self::new()
+        }
+    }
+
+    /// 为函数调用的参数发出 Borrow 指令（RFC-009 §2.8 自动借用）
+    ///
+    /// 当函数参数期望 `&T`/`&mut T` 而实际参数是值类型时，自动创建借用令牌。
+    ///
+    /// `func_name` 用于查找函数参数类型。
+    /// `args_with_originals` 是 `(arg_reg, original_var)` 对，
+    /// 其中 `original_var` 是 Borrow 指令的 src（用于 BorrowChecker 追踪冲突）。
+    ///
+    /// 返回 `(修改后的参数列表, 需要释放的 borrow token 列表)`。
+    fn emit_borrow_for_args(
+        &mut self,
+        func_name: &str,
+        args_with_originals: Vec<(Operand, Operand)>,
+        instructions: &mut Vec<Instruction>,
+    ) -> (Vec<Operand>, Vec<Operand>) {
+        let param_types: Option<Vec<MonoType>> = self.function_param_types.get(func_name).cloned();
+
+        let mut result_args = Vec::with_capacity(args_with_originals.len());
+        let mut borrow_tokens = Vec::new();
+
+        for (i, (arg_reg, original_var)) in args_with_originals.into_iter().enumerate() {
+            let is_ref_param = param_types
+                .as_ref()
+                .and_then(|types| types.get(i))
+                .is_some_and(|ty| matches!(ty, MonoType::Ref { .. }));
+
+            if is_ref_param {
+                let mutable = param_types
+                    .as_ref()
+                    .and_then(|types| types.get(i))
+                    .and_then(|ty| match ty {
+                        MonoType::Ref { mutable, .. } => Some(*mutable),
+                        _ => None,
+                    })
+                    .unwrap_or(false);
+
+                let token_reg = self.next_temp_reg();
+                instructions.push(Instruction::Borrow {
+                    dst: Operand::Local(token_reg),
+                    src: original_var,
+                    mutable,
+                });
+                result_args.push(Operand::Local(token_reg));
+                borrow_tokens.push(Operand::Local(token_reg));
+            } else {
+                result_args.push(arg_reg);
+            }
+        }
+
+        (result_args, borrow_tokens)
+    }
+
+    /// 尝试将表达式解析为原始局部变量操作数
+    ///
+    /// 返回 `Some(Operand::Local(idx))` 如果表达式是简单变量引用，
+    /// 否则返回 `None`（此时应回退到临时寄存器作为 Borrow 源）。
+    fn resolve_var_operand(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<Operand> {
+        match expr {
+            ast::Expr::Var(name, _) => {
+                let idx = self.lookup_local(name)?;
+                Some(Operand::Local(idx))
+            }
+            _ => None,
         }
     }
 
@@ -573,14 +630,11 @@ impl AstToIrGenerator {
                         expr,
                         constants,
                     )
-                } else if params.is_empty()
-                    && stmts.is_empty()
-                    && expr.is_none()
-                    && type_annotation.as_ref().is_some_and(|t| {
-                        crate::frontend::core::parser::ast::type_annotation_returns_meta_type(t)
-                    })
-                {
-                    // TypeDef: 没有参数和 body，且类型标注返回 Type
+                } else if type_annotation.as_ref().is_some_and(|t| {
+                    crate::frontend::core::parser::ast::type_annotation_returns_meta_type(t)
+                        || matches!(t, ast::Type::Struct { .. })
+                }) {
+                    // TypeDef: 类型标注返回 Type 或者是 Struct 类型
                     self.generate_constructor_ir(name, type_annotation.as_ref().unwrap())
                 } else {
                     // Fn: 普通函数
@@ -683,6 +737,14 @@ impl AstToIrGenerator {
             // 注册参数到符号表
             self.register_local(&param.name, i);
         }
+
+        // 记录函数参数类型（用于调用点发出 Borrow 指令）
+        self.function_param_types
+            .insert(func_name.clone(), param_types.clone());
+
+        // 记录局部变量起始位置（在参数之后）
+        let local_var_start = params.len();
+        self.next_temp = local_var_start;
 
         // 生成指令序列
         let mut instructions = Vec::new();
@@ -892,6 +954,15 @@ impl AstToIrGenerator {
             }],
             entry: 0,
         };
+
+        // 记录函数参数类型（用于调用点发出 Borrow 指令）
+        let func_params: Vec<MonoType> = params
+            .iter()
+            .filter_map(|p| p.ty.clone())
+            .map(|t| t.into())
+            .collect();
+        self.function_param_types
+            .insert(name.to_string(), func_params);
 
         // 保存当前函数的可变局部变量信息到模块级别映射
         if !self.current_mut_locals.is_empty() {
@@ -1349,7 +1420,21 @@ impl AstToIrGenerator {
                 };
 
                 if let Some(expr) = initializer {
-                    self.generate_expr_ir(expr, var_idx, instructions, constants)?;
+                    // 变量到变量的赋值生成 Move（RFC-009 所有权转移）
+                    if let ast::Expr::Var(src_name, _) = expr.as_ref() {
+                        // 直接使用源变量的寄存器
+                        if let Some(src_idx) = self.lookup_local(src_name) {
+                            instructions.push(Instruction::Move {
+                                dst: Operand::Local(var_idx),
+                                src: Operand::Local(src_idx),
+                            });
+                        } else {
+                            // 源变量不存在，回退到普通赋值
+                            self.generate_expr_ir(expr, var_idx, instructions, constants)?;
+                        }
+                    } else {
+                        self.generate_expr_ir(expr, var_idx, instructions, constants)?;
+                    }
                 } else {
                     // 默认初始化为 0
                     instructions.push(Instruction::Load {
@@ -1357,12 +1442,19 @@ impl AstToIrGenerator {
                         src: Operand::Const(ConstValue::Int(0)),
                     });
                 }
-                // 生成 Store 指令将值存储到局部变量
-                instructions.push(Instruction::Store {
-                    dst: Operand::Local(var_idx),
-                    src: Operand::Local(var_idx),
-                    span: stmt.span,
-                });
+                // 变量到变量的 Move 已经在上面处理，不需要额外的 Store
+                // 只有非 Move 的情况才需要 Store
+                if !matches!(
+                    initializer.as_ref().map(|e| e.as_ref()),
+                    Some(ast::Expr::Var(_, _))
+                ) {
+                    // 生成 Store 指令将值存储到局部变量
+                    instructions.push(Instruction::Store {
+                        dst: Operand::Local(var_idx),
+                        src: Operand::Local(var_idx),
+                        span: stmt.span,
+                    });
+                }
             }
             ast::StmtKind::Binding {
                 name,
@@ -2003,6 +2095,169 @@ impl AstToIrGenerator {
         Ok(())
     }
 
+    /// 生成 spawn for 数据并行循环的 IR
+    ///
+    /// 将 `spawn for item in items { process(item) }` 展开为：
+    /// ```text
+    /// closures = []          // AllocArray
+    /// iterator = iter(items) // Call
+    /// while has_next(iterator) {
+    ///     item = next(iterator)
+    ///     closure = () => { body }  // Lambda
+    ///     push(closures, closure)   // Call std.list.push
+    /// }
+    /// Spawn { closures, plan, result }
+    /// ```
+    #[allow(clippy::too_many_arguments)]
+    fn generate_spawn_for_ir(
+        &mut self,
+        var_name: &str,
+        var_mut: bool,
+        iterable: &ast::Expr,
+        body: &ast::Block,
+        result_reg: usize,
+        span: Span,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        use crate::frontend::core::spawn::analysis::analyze_spawn_for;
+
+        // 1. 分析循环体读写集
+        let (trait_table, local_var_types) = if let Some(ref type_result) = self.type_result {
+            (&type_result.trait_table, &type_result.local_var_types)
+        } else {
+            static EMPTY_TRAIT_TABLE: once_cell::sync::Lazy<
+                crate::frontend::core::types::TraitTable,
+            > = once_cell::sync::Lazy::new(crate::frontend::core::types::TraitTable::default);
+            static EMPTY_VAR_TYPES: once_cell::sync::Lazy<
+                std::collections::HashMap<String, crate::frontend::core::types::MonoType>,
+            > = once_cell::sync::Lazy::new(std::collections::HashMap::new);
+            (&*EMPTY_TRAIT_TABLE, &*EMPTY_VAR_TYPES)
+        };
+
+        let spawn_for_analysis =
+            analyze_spawn_for(var_name, iterable, body, trait_table, local_var_types);
+
+        // 2. 进入 spawn 作用域
+        self.enter_scope();
+
+        // 3. 创建空列表寄存器，用于收集闭包
+        let closures_list_reg = self.next_temp_reg();
+        instructions.push(Instruction::AllocArray {
+            dst: Operand::Local(closures_list_reg),
+            size: Operand::Const(ConstValue::Int(0)),
+            elem_size: Operand::Const(ConstValue::Int(1)),
+        });
+        self.current_mut_locals.insert(closures_list_reg);
+
+        // 4. 计算可迭代对象
+        let iterable_reg = self.next_temp_reg();
+        self.generate_expr_ir(iterable, iterable_reg, instructions, constants)?;
+
+        // 5. 创建迭代器: iterator = iter(iterable)
+        let iterator_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(iterator_reg)),
+            func: Operand::Const(ConstValue::String("std.list.iter".to_string())),
+            args: vec![Operand::Local(iterable_reg)],
+            span,
+        });
+
+        // 6. 注册循环变量
+        let var_reg = self.next_temp_reg();
+        self.register_local(var_name, var_reg);
+        self.current_loop_binding_locals.insert(var_reg);
+        if var_mut {
+            self.current_mut_locals.insert(var_reg);
+        }
+
+        // 7. 循环开始
+        let loop_start_idx = instructions.len();
+
+        // 8. has_next?
+        let has_more_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(has_more_reg)),
+            func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
+            args: vec![Operand::Local(iterator_reg)],
+            span,
+        });
+
+        // 9. 如果没有更多元素，跳转到结束
+        let jump_end_idx = instructions.len();
+        instructions.push(Instruction::JmpIfNot(Operand::Local(has_more_reg), 0));
+
+        // 10. 获取下一个元素: var = next(iterator)
+        let element_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(element_reg)),
+            func: Operand::Const(ConstValue::String("std.list.next".to_string())),
+            args: vec![Operand::Local(iterator_reg)],
+            span,
+        });
+        instructions.push(Instruction::Store {
+            dst: Operand::Local(var_reg),
+            src: Operand::Local(element_reg),
+            span,
+        });
+
+        // 11. 在循环体内创建闭包：() => { body }
+        //     将循环体包装为无参 Lambda
+        let closure_reg = self.next_temp_reg();
+        let lambda = ast::Expr::Lambda {
+            params: Vec::new(),
+            body: Box::new(body.clone()),
+            span,
+        };
+        self.generate_expr_ir(&lambda, closure_reg, instructions, constants)?;
+
+        // 12. 将闭包推入列表: push(closures, closure)
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(closures_list_reg)),
+            func: Operand::Const(ConstValue::String("std.list.push".to_string())),
+            args: vec![
+                Operand::Local(closures_list_reg),
+                Operand::Local(closure_reg),
+            ],
+            span,
+        });
+
+        // 13. 跳转回循环开始
+        instructions.push(Instruction::Jmp(loop_start_idx));
+
+        // 14. 修复跳出循环的跳转目标
+        let end_idx = instructions.len();
+        if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_end_idx] {
+            *target = end_idx;
+        }
+
+        // 15. 构建执行计划
+        //     所有迭代共享同一个读写集（编译期分析的循环体特征）
+        let read_write_sets = vec![(
+            spawn_for_analysis.reads.clone(),
+            spawn_for_analysis.writes.clone(),
+        )];
+        let resource_var_sets = vec![spawn_for_analysis.resource_vars.clone()];
+        let plan = crate::frontend::core::spawn::analysis::build_execution_plan(
+            &read_write_sets,
+            &resource_var_sets,
+        );
+
+        // 16. 生成 Spawn 指令
+        //     closures 参数是闭包列表（运行时动态收集）
+        //     这里将列表寄存器作为单个 Operand 传给 Spawn
+        instructions.push(Instruction::Spawn {
+            closures: vec![Operand::Local(closures_list_reg)],
+            plan,
+            result: Operand::Local(result_reg),
+        });
+
+        // 17. 退出 spawn 作用域
+        self.exit_scope();
+
+        Ok(())
+    }
+
     // 迭代器协议已通过 Call 指令实现，不再需要独立的 IR 指令
     // 保留指令定义以供将来使用
 
@@ -2019,6 +2274,7 @@ impl AstToIrGenerator {
             ast::Expr::Match { span, .. } => *span,
             ast::Expr::While { span, .. } => *span,
             ast::Expr::For { span, .. } => *span,
+            ast::Expr::SpawnFor { span, .. } => *span,
             ast::Expr::Block(block) => block.span,
             ast::Expr::Return(_, span) => *span,
             ast::Expr::Break(_, span) => *span,
@@ -2068,7 +2324,16 @@ impl AstToIrGenerator {
             }
         }
 
-        // 对于非变量表达式，不做 AST 猜测，避免掩盖类型系统问题
+        // 构造器调用：Point(1.0, 2.0) → 类型名为 "Point"
+        if let ast::Expr::Call { func, .. } = expr {
+            if let ast::Expr::Var(name, _) = func.as_ref() {
+                if self.struct_definitions.contains_key(name) {
+                    return name.clone();
+                }
+            }
+        }
+
+        // 对于其他表达式，不做 AST 猜测
         "<unknown>".to_string()
     }
 
@@ -2297,11 +2562,19 @@ impl AstToIrGenerator {
                                 self.local_var_types.insert(var_name.clone(), inferred);
                             }
 
-                            instructions.push(Instruction::Store {
-                                dst: Operand::Local(local_idx),
-                                src: Operand::Local(val_reg),
-                                span: *span,
-                            });
+                            // 变量到变量的赋值生成 Move，值表达式生成 Store
+                            if let Expr::Var(_, _) = right.as_ref() {
+                                instructions.push(Instruction::Move {
+                                    dst: Operand::Local(local_idx),
+                                    src: Operand::Local(val_reg),
+                                });
+                            } else {
+                                instructions.push(Instruction::Store {
+                                    dst: Operand::Local(local_idx),
+                                    src: Operand::Local(val_reg),
+                                    span: *span,
+                                });
+                            }
                             instructions.push(Instruction::Load {
                                 dst: Operand::Local(result_reg),
                                 src: Operand::Local(local_idx),
@@ -2443,31 +2716,36 @@ impl AstToIrGenerator {
                                 method_arg_regs.push(Operand::Local(arg_reg));
                             }
 
-                            // 按绑定位置重排参数
-                            // 总参数数 = 绑定位置数(obj填充) + 方法参数数
+                            // 收集方法参数的原始变量（用于 Borrow 指令的 src）
+                            let method_originals: Vec<Operand> = args
+                                .iter()
+                                .zip(method_arg_regs.iter())
+                                .map(|(arg, reg)| {
+                                    self.resolve_var_operand(arg).unwrap_or_else(|| reg.clone())
+                                })
+                                .collect();
+
+                            // 按绑定位置重排参数并记录原始变量
                             let total_params = binding.positions.len() + method_arg_regs.len();
-                            let mut final_args: Vec<Option<Operand>> = vec![None; total_params];
-
-                            // 将 obj 放入绑定位置
-                            for &pos in &binding.positions {
-                                if (pos as usize) < total_params {
-                                    final_args[pos as usize] = Some(Operand::Local(obj_reg));
-                                }
-                            }
-
-                            // 将方法参数填充到剩余位置
+                            let mut args_with_originals: Vec<(Operand, Operand)> =
+                                Vec::with_capacity(total_params);
                             let mut method_arg_iter = method_arg_regs.into_iter();
-                            for slot in final_args.iter_mut() {
-                                if slot.is_none() {
-                                    if let Some(arg) = method_arg_iter.next() {
-                                        *slot = Some(arg);
-                                    }
+                            let mut method_original_iter = method_originals.into_iter();
+                            let obj_original = self
+                                .resolve_var_operand(expr)
+                                .unwrap_or(Operand::Local(obj_reg));
+
+                            for pos in 0..total_params {
+                                if binding.positions.contains(&(pos as i64)) {
+                                    args_with_originals
+                                        .push((Operand::Local(obj_reg), obj_original.clone()));
+                                } else if let Some(arg_reg) = method_arg_iter.next() {
+                                    let original = method_original_iter
+                                        .next()
+                                        .unwrap_or_else(|| arg_reg.clone());
+                                    args_with_originals.push((arg_reg, original));
                                 }
                             }
-
-                            // 收集最终参数列表
-                            let final_arg_regs: Vec<Operand> =
-                                final_args.into_iter().flatten().collect();
 
                             // 解析函数名
                             let func_name = if let Some(qualified) =
@@ -2478,12 +2756,24 @@ impl AstToIrGenerator {
                                 binding.function.clone()
                             };
 
+                            // 发出 Borrow 指令（RFC-009 §2.8 自动借用）
+                            let (final_args, borrow_tokens) = self.emit_borrow_for_args(
+                                &func_name,
+                                args_with_originals,
+                                instructions,
+                            );
+
                             instructions.push(Instruction::Call {
                                 dst: Some(Operand::Local(result_reg)),
                                 func: Operand::Const(ConstValue::String(func_name)),
-                                args: final_arg_regs,
+                                args: final_args,
                                 span: *span,
                             });
+
+                            // 借用令牌在此调用结束后失效
+                            for token in borrow_tokens {
+                                instructions.push(Instruction::Release(token));
+                            }
                         } else {
                             // 常规方法调用（无绑定）：obj.method(args) → method(obj, args)
                             // 接口直接赋值优化：检查对象是否是约束变量
@@ -2516,12 +2806,39 @@ impl AstToIrGenerator {
                                 // 编译期可确定具体类型 → 直接调用（零开销）
                                 // d.draw(screen) → ConcreteType.draw(d, screen)
                                 let qualified_name = format!("{}.{}", concrete_type_name, field);
+
+                                // 收集所有参数的原始变量
+                                let obj_original = var_name
+                                    .as_ref()
+                                    .and_then(|n| self.lookup_local(n))
+                                    .map(Operand::Local)
+                                    .unwrap_or_else(|| arg_regs[0].clone());
+                                let args_with_originals: Vec<(Operand, Operand)> =
+                                    std::iter::once((arg_regs[0].clone(), obj_original))
+                                        .chain(arg_regs[1..].iter().zip(args.iter()).map(
+                                            |(reg, arg)| {
+                                                let original = self
+                                                    .resolve_var_operand(arg)
+                                                    .unwrap_or_else(|| reg.clone());
+                                                (reg.clone(), original)
+                                            },
+                                        ))
+                                        .collect();
+
+                                let (final_args, borrow_tokens) = self.emit_borrow_for_args(
+                                    &qualified_name,
+                                    args_with_originals,
+                                    instructions,
+                                );
                                 instructions.push(Instruction::Call {
                                     dst: Some(Operand::Local(result_reg)),
                                     func: Operand::Const(ConstValue::String(qualified_name)),
-                                    args: arg_regs,
+                                    args: final_args,
                                     span: *span,
                                 });
+                                for token in borrow_tokens {
+                                    instructions.push(Instruction::Release(token));
+                                }
                             } else if var_name.as_ref().is_some_and(|name| {
                                 // 检查变量的类型标注是否是约束类型（但具体类型未知）
                                 self.local_var_types
@@ -2552,15 +2869,49 @@ impl AstToIrGenerator {
                                 });
                             } else {
                                 // 普通方法调用
-                                let method_function_name = extract_namespace_path(expr, field);
+                                // 优先使用类型名（而非变量名）构建函数名
+                                // 例如：a.is_greater(b) 中 a 的类型是 Node
+                                // → 函数名应为 "Node.is_greater" 而非 "a.is_greater"
+                                let func_name = if let Expr::Var(name, _) = expr.as_ref() {
+                                    if let Some(type_name) = self.local_var_types.get(name) {
+                                        format!("{}.{}", type_name, field)
+                                    } else {
+                                        extract_namespace_path(expr, field)
+                                    }
+                                } else {
+                                    extract_namespace_path(expr, field)
+                                };
+
+                                // 收集所有参数的原始变量
+                                let obj_original = self
+                                    .resolve_var_operand(expr)
+                                    .unwrap_or_else(|| arg_regs[0].clone());
+                                let args_with_originals: Vec<(Operand, Operand)> =
+                                    std::iter::once((arg_regs[0].clone(), obj_original))
+                                        .chain(arg_regs[1..].iter().zip(args.iter()).map(
+                                            |(reg, arg)| {
+                                                let original = self
+                                                    .resolve_var_operand(arg)
+                                                    .unwrap_or_else(|| reg.clone());
+                                                (reg.clone(), original)
+                                            },
+                                        ))
+                                        .collect();
+
+                                let (final_args, borrow_tokens) = self.emit_borrow_for_args(
+                                    &func_name,
+                                    args_with_originals,
+                                    instructions,
+                                );
                                 instructions.push(Instruction::Call {
                                     dst: Some(Operand::Local(result_reg)),
-                                    func: Operand::Const(ConstValue::String(
-                                        method_function_name.to_string(),
-                                    )),
-                                    args: arg_regs,
+                                    func: Operand::Const(ConstValue::String(func_name)),
+                                    args: final_args,
                                     span: *span,
                                 });
+                                for token in borrow_tokens {
+                                    instructions.push(Instruction::Release(token));
+                                }
                             }
                         }
                     }
@@ -2813,13 +3164,43 @@ impl AstToIrGenerator {
                         } else {
                             // 非 print 调用或无参数，使用默认处理
                             // ========== 默认函数调用处理 ==========
+                            // 提取函数名字符串（用于查找参数类型）
+                            let func_name_str = match func.as_ref() {
+                                Expr::Var(name, _) => SHORT_TO_QUALIFIED
+                                    .get(name)
+                                    .cloned()
+                                    .unwrap_or_else(|| name.clone()),
+                                _ => String::new(),
+                            };
+
+                            // 收集参数的原始变量
+                            let args_with_originals: Vec<(Operand, Operand)> = arg_regs
+                                .iter()
+                                .zip(args.iter())
+                                .map(|(reg, arg)| {
+                                    let original = self
+                                        .resolve_var_operand(arg)
+                                        .unwrap_or_else(|| reg.clone());
+                                    (reg.clone(), original)
+                                })
+                                .collect();
+
+                            let (final_args, borrow_tokens) = self.emit_borrow_for_args(
+                                &func_name_str,
+                                args_with_originals,
+                                instructions,
+                            );
+
                             let func_operand = self.resolve_function_name(func);
                             instructions.push(Instruction::Call {
                                 dst: Some(Operand::Local(result_reg)),
                                 func: func_operand,
-                                args: arg_regs,
+                                args: final_args,
                                 span: *span,
                             });
+                            for token in borrow_tokens {
+                                instructions.push(Instruction::Release(token));
+                            }
                         }
                     }
                 }
@@ -3035,6 +3416,24 @@ impl AstToIrGenerator {
                     });
                 }
             }
+            Expr::Dict(pairs, _span) => {
+                // 字典字面量：使用 NewDict 指令一次性创建
+                let mut keys = Vec::new();
+                let mut values = Vec::new();
+                for (key_expr, val_expr) in pairs {
+                    let key_reg = self.next_temp_reg();
+                    self.generate_expr_ir(key_expr, key_reg, instructions, constants)?;
+                    keys.push(Operand::Local(key_reg));
+                    let val_reg = self.next_temp_reg();
+                    self.generate_expr_ir(val_expr, val_reg, instructions, constants)?;
+                    values.push(Operand::Local(val_reg));
+                }
+                instructions.push(Instruction::NewDict {
+                    dst: Operand::Local(result_reg),
+                    keys,
+                    values,
+                });
+            }
             Expr::Index { expr, index, span } => {
                 let src_reg = self.next_temp_reg();
                 self.generate_expr_ir(expr, src_reg, instructions, constants)?;
@@ -3137,6 +3536,25 @@ impl AstToIrGenerator {
                     src: Operand::Const(ConstValue::Int(0)),
                 });
             }
+            // spawn for 数据并行循环（RFC-024 §2.4）
+            Expr::SpawnFor {
+                var,
+                var_mut,
+                iterable,
+                body,
+                span,
+            } => {
+                self.generate_spawn_for_ir(
+                    var,
+                    *var_mut,
+                    iterable,
+                    body,
+                    result_reg,
+                    *span,
+                    instructions,
+                    constants,
+                )?;
+            }
             Expr::Spawn { body, span } => {
                 // Spawn block: spawn { ... }
                 // RFC-024: DAG 分析识别直接子表达式，为每个生成独立闭包
@@ -3148,19 +3566,16 @@ impl AstToIrGenerator {
                 } else {
                     // 无类型信息时使用空表（向后兼容）
                     static EMPTY_TRAIT_TABLE: once_cell::sync::Lazy<
-                        crate::frontend::core::types::base::TraitTable,
+                        crate::frontend::core::types::TraitTable,
                     > = once_cell::sync::Lazy::new(
-                        crate::frontend::core::types::base::TraitTable::default,
+                        crate::frontend::core::types::TraitTable::default,
                     );
                     static EMPTY_VAR_TYPES: once_cell::sync::Lazy<
-                        std::collections::HashMap<
-                            String,
-                            crate::frontend::core::types::base::MonoType,
-                        >,
+                        std::collections::HashMap<String, crate::frontend::core::types::MonoType>,
                     > = once_cell::sync::Lazy::new(std::collections::HashMap::new);
                     (&*EMPTY_TRAIT_TABLE, &*EMPTY_VAR_TYPES)
                 };
-                let analysis = crate::middle::passes::dag_analysis::analyze_spawn_body(
+                let analysis = crate::frontend::core::spawn::analysis::analyze_spawn_body(
                     body,
                     trait_table,
                     local_var_types,
@@ -3171,9 +3586,9 @@ impl AstToIrGenerator {
 
                 // 3. 为每个直接子表达式生成闭包
                 let mut closure_regs = Vec::new();
-                for (i, task_expr) in analysis.task_exprs.iter().enumerate() {
+                for task in &analysis.tasks {
                     // 如果是赋值，注册目标变量到 spawn 作用域
-                    if let Some(target) = &analysis.task_targets[i] {
+                    if let Some(target) = &task.target {
                         if self.lookup_local(target).is_none() {
                             let reg = self.next_temp_reg();
                             self.register_local(target, reg);
@@ -3186,7 +3601,7 @@ impl AstToIrGenerator {
                         params: Vec::new(),
                         body: Box::new(ast::Block {
                             stmts: Vec::new(),
-                            expr: Some(Box::new(task_expr.clone())),
+                            expr: Some(Box::new(task.expr.clone())),
                             span: *span,
                         }),
                         span: *span,
@@ -3197,7 +3612,7 @@ impl AstToIrGenerator {
 
                 // 4. 生成 spawn 块剩余语句（非直接子表达式，如 var 声明等）
                 for stmt in &body.stmts {
-                    if !crate::middle::passes::dag_analysis::is_direct_child(stmt) {
+                    if !crate::frontend::core::spawn::analysis::is_direct_child(stmt) {
                         self.generate_local_stmt_ir(stmt, instructions, constants)?;
                     }
                 }
@@ -3377,11 +3792,14 @@ impl AstToIrGenerator {
                 self.generate_expr_ir(expr, inner_reg, instructions, constants)?;
 
                 // 2. 创建借用令牌指令
-                // 借用令牌是零大小类型，运行时等价于 Mov。
-                // 此指令的存在让借用检查器可以进行流敏感分析。
+                // 使用原始变量作为 src 以确保 BorrowChecker 正确追踪冲突
+                // (不同 borrow 使用不同 temp 会导致 source 不一致)
+                let source_var = self
+                    .resolve_var_operand(expr)
+                    .unwrap_or(Operand::Local(inner_reg));
                 instructions.push(Instruction::Borrow {
                     dst: Operand::Local(result_reg),
-                    src: Operand::Local(inner_reg),
+                    src: source_var,
                     mutable: *mutable,
                 });
             }
@@ -3579,219 +3997,4 @@ pub fn generate_ir(
 ) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
     let mut generator = AstToIrGenerator::new_with_type_result(result);
     generator.generate_module_ir(ast)
-}
-
-#[cfg(test)]
-mod tests {
-    //! IR 生成器借用表达式测试
-    //!
-    //! 验证 `Expr::Borrow` AST 节点到 IR 的正确转换。
-    //! 对应 RFC-009 v9 借用令牌系统：Borrow 指令是零大小类型，
-    //! 运行时等价于 Mov，其存在让借用检查器可以进行流敏感分析。
-    //!
-    //! - `Borrow { mutable: false }` 表示不可变借用 `&expr`
-    //! - `Borrow { mutable: true }` 表示可变借用 `&mut expr`
-
-    use super::*;
-
-    /// Helper: build `&expr` AST node (immutable borrow)
-    fn make_borrow_imm(inner: ast::Expr) -> ast::Expr {
-        ast::Expr::Borrow {
-            mutable: false,
-            expr: Box::new(inner),
-            span: Span::dummy(),
-        }
-    }
-
-    /// Helper: build `&mut expr` AST node (mutable borrow)
-    fn make_borrow_mut(inner: ast::Expr) -> ast::Expr {
-        ast::Expr::Borrow {
-            mutable: true,
-            expr: Box::new(inner),
-            span: Span::dummy(),
-        }
-    }
-
-    /// Helper: build an int literal expression
-    fn make_int_lit(n: i128) -> ast::Expr {
-        ast::Expr::Lit(Literal::Int(n), Span::dummy())
-    }
-
-    /// Helper (Rule 5.1): set up generator, create expr, and run `generate_expr_ir`.
-    /// Returns (instructions, constants) for downstream assertions.
-    fn generate_borrow_ir(
-        expr: &ast::Expr,
-        result_reg: usize,
-    ) -> (Vec<Instruction>, Vec<ConstValue>) {
-        let mut gen = AstToIrGenerator::new();
-        let mut instructions = Vec::new();
-        let mut constants = Vec::new();
-        gen.generate_expr_ir(expr, result_reg, &mut instructions, &mut constants)
-            .expect("generate_expr_ir should succeed for Borrow expression");
-        (instructions, constants)
-    }
-
-    /// 验证 `&42` 生成 `Borrow { mutable: false }` 指令
-    ///
-    /// 规格: RFC-009 v9 不可变借用令牌
-    #[test]
-    fn borrow_immutable_literal_produces_borrow_instruction_with_mutable_false() {
-        // Arrange
-        let expr = make_borrow_imm(make_int_lit(42));
-        let result_reg = 5; // 使用非零 result_reg 以便区分 dst 和 src
-
-        // Act
-        let (instructions, _constants) = generate_borrow_ir(&expr, result_reg);
-
-        // Assert: 内部表达式 (Lit) 生成一条 Load，然后 Borrow 生成一条 Borrow 指令
-        assert!(
-            instructions.len() >= 2,
-            "expected at least 2 instructions (Load + Borrow) for immutable borrow, got {}",
-            instructions.len()
-        );
-
-        // 最后一条指令必须是 Borrow
-        let last = instructions.last().unwrap();
-        match last {
-            Instruction::Borrow { dst, src, mutable } => {
-                assert_eq!(
-                    *dst,
-                    Operand::Local(result_reg),
-                    "Borrow dst should be result_reg={}, got {:?}",
-                    result_reg,
-                    dst
-                );
-                // src 是内部表达式的寄存器（next_temp_reg 从 0 开始分配）
-                assert_eq!(
-                    *src,
-                    Operand::Local(0),
-                    "Borrow src should be inner expression register (0), got {:?}",
-                    src
-                );
-                assert!(
-                    !mutable,
-                    "immutable borrow should have mutable=false, got true"
-                );
-            }
-            other => panic!(
-                "expected Instruction::Borrow as last instruction, got {:?}",
-                other
-            ),
-        }
-    }
-
-    /// 验证 `&mut 42` 生成 `Borrow { mutable: true }` 指令
-    ///
-    /// 规格: RFC-009 v9 可变借用令牌
-    #[test]
-    fn borrow_mutable_literal_produces_borrow_instruction_with_mutable_true() {
-        // Arrange
-        let expr = make_borrow_mut(make_int_lit(42));
-        let result_reg = 5;
-
-        // Act
-        let (instructions, _constants) = generate_borrow_ir(&expr, result_reg);
-
-        // Assert
-        assert!(
-            instructions.len() >= 2,
-            "expected at least 2 instructions (Load + Borrow) for mutable borrow, got {}",
-            instructions.len()
-        );
-
-        let last = instructions.last().unwrap();
-        match last {
-            Instruction::Borrow { dst, src, mutable } => {
-                assert_eq!(
-                    *dst,
-                    Operand::Local(result_reg),
-                    "Borrow dst should be result_reg={}, got {:?}",
-                    result_reg,
-                    dst
-                );
-                assert_eq!(
-                    *src,
-                    Operand::Local(0),
-                    "Borrow src should be inner expression register (0), got {:?}",
-                    src
-                );
-                assert!(
-                    *mutable,
-                    "mutable borrow should have mutable=true, got false"
-                );
-            }
-            other => panic!(
-                "expected Instruction::Borrow as last instruction, got {:?}",
-                other
-            ),
-        }
-    }
-
-    /// 验证内部表达式先被求值（Borrow 的 src 使用 inner_reg）
-    ///
-    /// 规格: RFC-009 v9 借用令牌的内部表达式求值顺序
-    #[test]
-    fn borrow_inner_expression_is_evaluated_before_borrow_token_is_created() {
-        // Arrange: 使用变量引用作为内部表达式，先注册局部变量 "x" 到 local 1
-        let mut gen = AstToIrGenerator::new();
-        gen.register_local("x", 1);
-        let inner = ast::Expr::Var("x".to_string(), Span::dummy());
-        let expr = make_borrow_imm(inner);
-        let result_reg = 5;
-        let mut instructions = Vec::new();
-        let mut constants = Vec::new();
-
-        // Act
-        gen.generate_expr_ir(&expr, result_reg, &mut instructions, &mut constants)
-            .expect("generate_expr_ir should succeed for Borrow with variable inner expression");
-
-        // Assert: 内部表达式 Var("x") 生成 Load { dst: inner_reg, src: Local(1) }
-        //         然后 Borrow { dst: result_reg, src: inner_reg }
-        assert!(
-            instructions.len() >= 2,
-            "expected at least 2 instructions for borrow with variable, got {}",
-            instructions.len()
-        );
-
-        // 第一条指令：加载变量 x 到 inner_reg (0)
-        match &instructions[0] {
-            Instruction::Load { dst, src } => {
-                assert_eq!(
-                    *dst,
-                    Operand::Local(0),
-                    "inner expr result should go to reg 0, got {:?}",
-                    dst
-                );
-                assert_eq!(
-                    *src,
-                    Operand::Local(1),
-                    "should load from local 1 (x), got {:?}",
-                    src
-                );
-            }
-            other => panic!(
-                "expected Load as first instruction for inner variable, got {:?}",
-                other
-            ),
-        }
-
-        // 最后一条指令：Borrow，src 指向 inner_reg
-        match instructions.last().unwrap() {
-            Instruction::Borrow { dst, src, .. } => {
-                assert_eq!(
-                    *dst,
-                    Operand::Local(result_reg),
-                    "Borrow dst should be result_reg={}",
-                    result_reg
-                );
-                assert_eq!(
-                    *src,
-                    Operand::Local(0),
-                    "Borrow src should reference the inner expression's register (0), got {:?}",
-                    src
-                );
-            }
-            other => panic!("expected Borrow as last instruction, got {:?}", other),
-        }
-    }
 }

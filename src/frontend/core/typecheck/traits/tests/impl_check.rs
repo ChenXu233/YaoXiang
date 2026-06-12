@@ -7,10 +7,8 @@
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{Expr, Param, StmtKind, Type};
 use crate::frontend::core::typecheck::traits::impl_check::{TraitImplChecker, TraitImplError};
-use crate::frontend::core::types::base::trait_data::{
-    TraitDefinition, TraitMethodSignature, TraitTable,
-};
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::trait_data::{TraitDefinition, TraitMethodSignature, TraitTable};
+use crate::frontend::core::types::MonoType;
 use crate::util::span::{Position, Span};
 
 // ===================================================================

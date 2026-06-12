@@ -5,7 +5,7 @@
 //! 实现泛型特化的核心算法
 
 use crate::util::diagnostic::Result;
-use crate::frontend::core::types::base::{MonoType, PolyType, StructType, EnumType, TypeVar};
+use crate::frontend::core::types::{MonoType, PolyType, StructType, EnumType, TypeVar};
 use std::collections::HashMap;
 
 /// 特化算法

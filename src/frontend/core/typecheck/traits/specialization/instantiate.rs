@@ -5,8 +5,8 @@
 //! 实现泛型实例化，复用 core/type_system/substitute.rs 中的公共实现
 
 use crate::util::diagnostic::Result;
-use crate::frontend::core::types::base::{MonoType, Substituter};
-use crate::frontend::core::types::base::substitute::contains_type_vars;
+use crate::frontend::core::types::{MonoType, Substituter};
+use crate::frontend::core::types::substitute::contains_type_vars;
 
 /// 实例化结果
 #[derive(Debug, Clone)]

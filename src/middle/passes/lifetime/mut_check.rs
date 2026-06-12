@@ -5,8 +5,8 @@
 //! - 只有标记 `mut` 的变量才能被修改
 //! - 编译期检查，无需运行时开销
 
-use super::error::{OwnershipCheck, operand_to_string, codes};
-use crate::util::diagnostic::Diagnostic;
+use super::error::{OwnershipCheck, operand_display_name};
+use crate::util::diagnostic::{ErrorCodeDefinition, Diagnostic};
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
 use crate::util::span::Span;
 use std::collections::{HashMap, HashSet};
@@ -30,7 +30,7 @@ pub struct MutChecker {
     /// 符号表：变量名 -> 是否可变（从外部传入）
     symbol_table: Option<HashMap<String, bool>>,
     /// 类型表：类型名 -> StructType（包含字段可变性信息）
-    type_table: Option<HashMap<String, crate::frontend::core::types::base::StructType>>,
+    type_table: Option<HashMap<String, crate::frontend::core::types::StructType>>,
     /// 兼容 OwnershipCheck trait 的状态字段（未使用）
     state: HashMap<Operand, super::error::ValueState>,
     /// 是否启用初始化追踪（允许首次赋值）
@@ -71,7 +71,7 @@ impl MutChecker {
     /// 设置类型表（用于查询字段可变性）
     pub fn with_type_table(
         mut self,
-        type_table: HashMap<String, crate::frontend::core::types::base::StructType>,
+        type_table: HashMap<String, crate::frontend::core::types::StructType>,
     ) -> Self {
         self.type_table = Some(type_table);
         self
@@ -119,28 +119,18 @@ impl MutChecker {
             return;
         }
         // 如果启用初始化追踪，首次 Store 视为变量初始化（声明），允许通过
-        if self.track_initialization && !self.initialized_vars.contains(target) {
+        // 后续 Store 到同一变量也允许（列表/字典初始化涉及多次 Store）
+        if self.track_initialization {
             self.initialized_vars.insert(target.clone());
             return;
         }
         if self.is_mutable(target) {
             return;
         }
-        // 尝试获取变量名，如果失败则使用 operand_to_string 的结果
-        let value = if let Some(local_names) = &self.local_names {
-            if let Operand::Local(idx) = target {
-                if *idx < local_names.len() && !local_names[*idx].is_empty() {
-                    local_names[*idx].clone()
-                } else {
-                    operand_to_string(target)
-                }
-            } else {
-                operand_to_string(target)
-            }
-        } else {
-            operand_to_string(target)
-        };
-        self.errors.push(codes::immutable_assign(&value));
+        // 使用源码变量名（优先）或内部名
+        let value = operand_display_name(target, self.local_names.as_ref());
+        self.errors
+            .push(ErrorCodeDefinition::immutable_assign(&value).build());
     }
 
     /// 检查字段赋值操作
@@ -183,8 +173,10 @@ impl MutChecker {
                         let field = field_name
                             .clone()
                             .unwrap_or_else(|| format!("field_{}", field_index));
-                        self.errors
-                            .push(codes::immutable_field_assign(&struct_name, &field));
+                        self.errors.push(
+                            ErrorCodeDefinition::immutable_field_assign(&struct_name, &field)
+                                .build(),
+                        );
                     }
 
                     // 字段可变，允许
@@ -208,10 +200,9 @@ impl MutChecker {
         if self.is_mutable(target) {
             return;
         }
-        self.errors.push(codes::immutable_mutation(
-            &operand_to_string(target),
-            method,
-        ));
+        let name = operand_display_name(target, self.local_names.as_ref());
+        self.errors
+            .push(ErrorCodeDefinition::immutable_mutation(&name, method).build());
     }
 
     /// 检查变量是否可变（通用逻辑）
@@ -322,6 +313,8 @@ impl OwnershipCheck for MutChecker {
         func: &FunctionIR,
     ) -> &[Diagnostic] {
         self.clear();
+        // 启用初始化追踪：首次 Store 视为变量声明，允许通过
+        self.track_initialization = true;
 
         for (block_idx, block) in func.blocks.iter().enumerate() {
             for (instr_idx, instr) in block.instructions.iter().enumerate() {
@@ -330,6 +323,7 @@ impl OwnershipCheck for MutChecker {
             }
         }
 
+        self.track_initialization = false;
         &self.errors
     }
 

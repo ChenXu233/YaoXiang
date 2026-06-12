@@ -22,8 +22,8 @@
 //! ```
 
 use std::collections::HashMap;
-use crate::frontend::core::types::base::MonoType;
-use crate::frontend::core::types::base::{TraitDefinition, TraitTable, TraitImplementation};
+use crate::frontend::core::types::MonoType;
+use crate::frontend::core::types::{TraitDefinition, TraitTable, TraitImplementation};
 
 /// RFC-011 定义的标准库 trait 列表
 pub const STD_TRAITS: &[&str] = &[
@@ -64,7 +64,7 @@ fn add_clone_trait(trait_table: &mut TraitTable) {
     let mut methods = HashMap::new();
 
     // Clone 方法签名: clone: (self: Self) -> Self
-    let clone_sig = crate::frontend::core::types::base::TraitMethodSignature {
+    let clone_sig = crate::frontend::core::types::TraitMethodSignature {
         name: "clone".to_string(),
         params: vec![MonoType::TypeRef("Self".to_string())],
         return_type: MonoType::TypeRef("Self".to_string()),
@@ -89,7 +89,7 @@ fn add_equal_trait(trait_table: &mut TraitTable) {
     let mut methods = HashMap::new();
 
     // Equal 方法签名: equal: (self: Self, other: Self) -> Bool
-    let equal_sig = crate::frontend::core::types::base::TraitMethodSignature {
+    let equal_sig = crate::frontend::core::types::TraitMethodSignature {
         name: "equal".to_string(),
         params: vec![
             MonoType::TypeRef("Self".to_string()),
@@ -156,7 +156,7 @@ fn add_debug_trait(trait_table: &mut TraitTable) {
     let mut methods = HashMap::new();
 
     // Debug 方法签名: debug: (self: Self, f: Formatter) -> Void
-    let debug_sig = crate::frontend::core::types::base::TraitMethodSignature {
+    let debug_sig = crate::frontend::core::types::TraitMethodSignature {
         name: "debug".to_string(),
         params: vec![
             MonoType::TypeRef("Self".to_string()),
@@ -294,7 +294,7 @@ fn add_iterator_trait(trait_table: &mut TraitTable) {
     let mut methods = HashMap::new();
 
     // Iterator::next 方法: next: (&mut self) -> Option<T>
-    let next_sig = crate::frontend::core::types::base::TraitMethodSignature {
+    let next_sig = crate::frontend::core::types::TraitMethodSignature {
         name: "next".to_string(),
         params: vec![MonoType::TypeRef("Self".to_string())],
         // 返回 Option<T>，Option 是内置类型

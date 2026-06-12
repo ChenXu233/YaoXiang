@@ -1,0 +1,27 @@
+// 12-paper-demos/resource_raii.yx
+// 验证: 资源管理 RAII 模式
+// 论文价值: 令牌天然保证资源生命周期
+
+use std.io
+
+File: Type = {
+    name: String,
+    closed: Bool
+}
+
+File.open: (self: &mut File) -> Void = {
+    self.closed = false
+    io.println("opening file")
+}
+
+File.close: (self: &mut File) -> Void = {
+    self.closed = true
+    io.println("closing file")
+}
+
+main = {
+    f = File("test.txt", true)
+    f.open()
+    f.close()
+    io.println("ALL TESTS PASSED")
+}

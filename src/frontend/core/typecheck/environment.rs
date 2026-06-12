@@ -4,10 +4,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::frontend::core::types::base::{MonoType, PolyType, TypeConstraintSolver};
-use crate::frontend::core::types::computation::const_generics::ConstFunction;
+use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
+use crate::frontend::core::types::eval::const_eval::ConstFunction;
 
-use super::overload;
+use super::passes::overload;
 use super::types::ImportInfo;
 
 /// 类型错误收集器
@@ -58,7 +58,7 @@ pub struct TypeEnvironment {
     /// 用于支持函数重载解析
     pub overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>>,
     /// Trait 表：存储所有已解析的 Trait 定义和实现
-    pub trait_table: crate::frontend::core::types::base::TraitTable,
+    pub trait_table: crate::frontend::core::types::TraitTable,
     /// Native 函数签名表：存储已注册的 native 函数类型签名
     /// Key: 函数名（如 "std.io.println"），Value: 函数类型
     pub native_signatures: HashMap<String, MonoType>,
@@ -70,6 +70,10 @@ pub struct TypeEnvironment {
     /// 泛型类型定义模板表
     /// 存储泛型类型构造器的模板，用于 List(Int) → { data: Array(Int), length: Int } 的展开
     pub generic_type_defs: HashMap<String, GenericTypeDef>,
+    /// 编译期谓词定义表
+    /// 存储已注册的编译期谓词模板，供 PredicateResolver 使用
+    pub predicate_defs:
+        HashMap<String, crate::frontend::core::typecheck::predicate_resolver::PredicateDef>,
 }
 
 impl TypeEnvironment {
@@ -82,7 +86,7 @@ impl TypeEnvironment {
     pub fn new_with_module(module_name: String) -> Self {
         Self {
             module_name,
-            trait_table: crate::frontend::core::types::base::TraitTable::default(),
+            trait_table: crate::frontend::core::types::TraitTable::default(),
             module_registry: crate::frontend::module::registry::ModuleRegistry::with_std(),
             ..Self::default()
         }
@@ -256,7 +260,7 @@ impl TypeEnvironment {
                         )
                     })
                     .collect();
-                MonoType::Struct(crate::frontend::core::types::base::mono::StructType {
+                MonoType::Struct(crate::frontend::core::types::mono::StructType {
                     name: s.name.clone(),
                     fields: new_fields,
                     methods: s.methods.clone(),
@@ -357,7 +361,7 @@ impl TypeEnvironment {
                     .iter()
                     .map(|(name, field_ty)| (name.clone(), Self::resolve_type_refs(field_ty)))
                     .collect();
-                MonoType::Struct(crate::frontend::core::types::base::mono::StructType {
+                MonoType::Struct(crate::frontend::core::types::mono::StructType {
                     name: s.name.clone(),
                     fields: new_fields,
                     methods: s.methods.clone(),
@@ -468,7 +472,7 @@ impl TypeEnvironment {
     /// 添加 Trait 定义
     pub fn add_trait(
         &mut self,
-        definition: crate::frontend::core::types::base::TraitDefinition,
+        definition: crate::frontend::core::types::TraitDefinition,
     ) {
         self.trait_table.add_trait(definition);
     }
@@ -477,7 +481,7 @@ impl TypeEnvironment {
     pub fn get_trait(
         &self,
         name: &str,
-    ) -> Option<&crate::frontend::core::types::base::TraitDefinition> {
+    ) -> Option<&crate::frontend::core::types::TraitDefinition> {
         self.trait_table.get_trait(name)
     }
 
@@ -492,7 +496,7 @@ impl TypeEnvironment {
     /// 添加 Trait 实现
     pub fn add_trait_impl(
         &mut self,
-        impl_: crate::frontend::core::types::base::TraitImplementation,
+        impl_: crate::frontend::core::types::TraitImplementation,
     ) {
         self.trait_table.add_impl(impl_);
     }
@@ -511,7 +515,7 @@ impl TypeEnvironment {
         &self,
         trait_name: &str,
         for_type: &str,
-    ) -> Option<&crate::frontend::core::types::base::TraitImplementation> {
+    ) -> Option<&crate::frontend::core::types::TraitImplementation> {
         self.trait_table.get_impl(trait_name, for_type)
     }
 

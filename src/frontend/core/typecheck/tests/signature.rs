@@ -5,7 +5,7 @@
 
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::signature::parse_signature;
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 
 // ===================================================================
 // Happy path 测试

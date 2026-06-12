@@ -235,6 +235,9 @@ pub enum Opcode {
     /// Native function call (FFI)
     CallNative = 0x87,
 
+    /// Create dict instance
+    NewDict = 0x88,
+
     // =====================
     // String Operations (0x90-0x9F)
     // =====================
@@ -385,6 +388,7 @@ impl Opcode {
             Opcode::StoreUpvalue => "StoreUpvalue",
             Opcode::CloseUpvalue => "CloseUpvalue",
             Opcode::CallNative => "CallNative",
+            Opcode::NewDict => "NewDict",
             Opcode::StringLength => "StringLength",
             Opcode::StringConcat => "StringConcat",
             Opcode::StringEqual => "StringEqual",
@@ -600,7 +604,7 @@ impl Opcode {
             | Opcode::NewListWithCap => 3,
 
             // Variable operands (like calls)
-            Opcode::CreateStruct | Opcode::Spawn => 5,
+            Opcode::CreateStruct | Opcode::NewDict | Opcode::Spawn => 5,
 
             // 4 operands
             Opcode::LoopStart
@@ -683,6 +687,7 @@ impl TryFrom<u8> for Opcode {
             0x85 => Ok(Opcode::StoreUpvalue),
             0x86 => Ok(Opcode::CloseUpvalue),
             0x87 => Ok(Opcode::CallNative),
+            0x88 => Ok(Opcode::NewDict),
             0x90 => Ok(Opcode::StringLength),
             0x91 => Ok(Opcode::StringConcat),
             0x92 => Ok(Opcode::StringEqual),

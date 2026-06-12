@@ -3,10 +3,16 @@ title: "RFC-014: 包管理系统设计"
 status: "已接受"
 author: "晨煦"
 created: "2026-02-12"
-updated: "2026-02-14"
+updated: "2026-06-11"
+group: "rfc-014"  # 本 RFC 是包管理系统的总纲，子 RFC：014a/014b/014c
 ---
 
-# RFC-014: 包管理系统设计
+# RFC-014: 包管理系统设计（总纲）
+
+> **子 RFC：**
+> - [RFC-014a: Registry 协议规范](../draft/014a-registry-protocol.md)
+> - [RFC-014b: 构建系统与二进制分发](../draft/014b-build-system.md)
+> - [RFC-014c: 工作空间支持](../draft/014c-workspace.md)
 
 ## 摘要
 
@@ -45,11 +51,21 @@ my-project/
                   │
                   ▼
 ┌─────────────────────────────────────────────┐
-│              Source Trait                   │ ← 可扩展源
-├─────────────┬─────────────┬─────────────────┤
-│   Local     │    Git      │   Registry     │
-│   (本地)    │  (GitHub)   │   (预留)        │
-└─────────────┴─────────────┴─────────────────┘
+│            Global Cache                      │ ← ~/.yaoxiang/cache/
+└─────────────────┬───────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────┐
+│              Source Trait                    │ ← 可扩展源
+├──────────┬──────────┬──────────┬────────────┤
+│  Local   │   Git    │ Registry │   GitHub   │
+│  (本地)  │  (VCS)   │  (开放)  │ (Release)  │
+└──────────┴──────────┴──────────┴────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────┐
+│           Vendor Directory                   │ ← .yaoxiang/vendor/
+└─────────────────────────────────────────────┘
 ```
 
 **扩展机制**：新增 Source 类型只需实现 trait，无需修改解析引擎。
@@ -97,6 +113,10 @@ my-project/
 name = "my-package"
 version = "0.1.0"
 description = "A short description"
+license = "MIT"
+authors = ["Your Name <you@example.com>"]
+repository = "https://github.com/you/my-package"
+keywords = ["cli", "utility"]
 
 [dependencies]
 foo = "1.2.3"           # 精确版本
@@ -107,6 +127,15 @@ local_pkg = { path = "./local-module" }
 
 [dev-dependencies]
 test-utils = "0.1.0"
+
+[build]
+strategy = "none"       # none | cargo | cmake | custom
+
+[binaries]
+"linux-x86_64" = { url = "...", sha256 = "..." }
+
+[workspace.members]     # 仅工作空间根
+core = "packages/core/yaoxiang.toml"
 ```
 
 **yaoxiang.lock**：
@@ -128,9 +157,10 @@ use foo.bar.baz;
 
 查找顺序:
 1. ./.yaoxiang/vendor/*/src/foo/bar/baz.yx  (vendor/)
-2. ./src/foo/bar/baz.yx           (本地模块)
-3. $YXPATH/foo/bar/baz.yx         (全局路径，预留)
-4. $YXLIB/std/foo/bar/baz.yx      (标准库)
+2. ./src/foo/bar/baz.yx                     (本地模块)
+3. ~/.yaoxiang/cache/foo/<ver>/src/foo/bar/baz.yx  (全局缓存)
+4. $YXPATH/foo/bar/baz.yx                   (全局路径，预留)
+5. $YXLIB/std/foo/bar/baz.yx                (标准库)
 ```
 
 ### 核心数据结构
@@ -140,7 +170,15 @@ use foo.bar.baz;
 enum Source {
     Local { path: PathBuf },
     Git { url: Url, version: Option<VersionConstraint> },
-    Registry { registry: String, namespace: Option<String> }, // 预留
+    Registry { registry: String, namespace: Option<String> },
+    GitHub { owner: String, repo: String, ref_: GitRef },  // GitHub 原生
+}
+
+enum GitRef {
+    Tag(String),
+    Branch(String),
+    Rev(String),
+    DefaultBranch,
 }
 
 // 依赖声明
@@ -148,6 +186,7 @@ enum DependencySpec {
     Version(VersionConstraint),
     Git { url: Url, version: Option<VersionConstraint> },
     Local { path: PathBuf },
+    Workspace { member: String },  // 工作空间成员引用
 }
 
 // 解析后的依赖
@@ -156,6 +195,16 @@ struct ResolvedDependency {
     version: Version,
     source: Source,
     integrity: Option<String>,
+    checksum: Option<String>,  // SHA-256
+}
+
+// 构建策略
+enum BuildStrategy {
+    None,          // 纯 .yx 包
+    Cargo,         // 调用 cargo build
+    Cmake,         // 调用 cmake
+    Custom,        // 执行 build.yx 脚本
+    Precompiled,   // 直接用预编译产物
 }
 ```
 
@@ -198,6 +247,14 @@ struct ResolvedDependency {
 | `yaoxiang check` | 类型检查 | `yaoxiang check` |
 | `yaoxiang clean` | 清理构建产物 | `yaoxiang clean` |
 | `yaoxiang task <name>` | 运行自定义任务 | `yaoxiang task lint` |
+| `yaoxiang publish` | 发布包到 Registry | `yaoxiang publish` |
+| `yaoxiang publish --github` | 发布并创建 GitHub Release | `yaoxiang publish --github` |
+| `yaoxiang yank <pkg>@<ver>` | 删除已发布版本（不可恢复） | `yaoxiang yank foo@1.2.3` |
+| `yaoxiang login --registry <url>` | Registry 认证 | `yaoxiang login --registry https://reg.example.com` |
+| `yaoxiang login --github` | GitHub 认证 | `yaoxiang login --github` |
+| `yaoxiang logout --registry <url>` | 登出 | `yaoxiang logout --registry https://reg.example.com` |
+| `yaoxiang cache clean` | 清理全局缓存 | `yaoxiang cache clean` |
+| `yaoxiang workspace <cmd>` | 工作空间操作 | `yaoxiang workspace list` |
 
 #### 命令约束说明
 
@@ -218,6 +275,79 @@ yaoxiang add foo        # ✅ 添加依赖
 - ✅ 现有 `use` 语法完全保留
 - ✅ 现有模块解析逻辑不变
 - ✅ 新增 .yaoxiang/vendor 目录不影响现有项目
+
+### 全局缓存
+
+所有下载的依赖缓存到 `~/.yaoxiang/cache/`，项目 vendor 目录从缓存复制。
+
+```
+~/.yaoxiang/
+├── cache/
+│   ├── registry/
+│   │   └── foo-1.2.3/
+│   ├── git/
+│   │   └── github.com-user-bar-abc123/
+│   └── binaries/
+│       └── foo-1.2.3-linux-x86_64.tar.gz
+├── credentials.toml
+└── config.toml
+```
+
+```toml
+# ~/.yaoxiang/config.toml
+[cache]
+dir = "~/.yaoxiang/cache"
+max_size = "2GB"
+ttl = "30d"
+```
+
+缓存失效规则：
+- Registry 包：版本号不可变，永不失效
+- Git 依赖：按 tag/rev 缓存，tag 不变则不失效
+- `yaoxiang cache clean` 手动清理
+
+### 认证
+
+```toml
+# ~/.yaoxiang/credentials.toml
+[github]
+token = "ghp_xxxx"
+
+[registries.my-company]
+url = "https://yxreg.my-company.com"
+token = "xxx"
+```
+
+- 环境变量优先：`$YX_GITHUB_TOKEN`、`$YX_REGISTRY_TOKEN`
+- Token 永远不写入 `yaoxiang.toml` 或 `yaoxiang.lock`
+- 文件权限 600
+
+### yank 语义
+
+`yaoxiang yank foo@1.2.3` 执行**删除 + 版本号锁死**：
+
+- 包被彻底删除，不可恢复
+- 版本号永久占用，不能重新发布同版本号
+- 已有 lockfile 引用该版本的项目会报错，需要升级
+- **安全目的**：防止 npm 式供应链攻击（攻击者抢注被删除的版本号注入恶意代码）
+
+### Registry 协议
+
+详见 [RFC-014a: Registry 协议规范](../draft/014a-registry-protocol.md)。
+
+核心设计：开放协议 + 适配层。官方 Registry 为主，GitHub Release/main 分支为辅，支持自定义 Registry。
+
+### 构建系统
+
+详见 [RFC-014b: 构建系统与二进制分发](../draft/014b-build-system.md)。
+
+核心设计：声明式 `[build]` 配置，预编译优先/源码兜底，支持 cargo/cmake/custom 策略。
+
+### 工作空间
+
+详见 [RFC-014c: 工作空间支持](../draft/014c-workspace.md)。
+
+核心设计：字典形式 members 声明，共享 lockfile，路径依赖，Cargo workspace 集成。
 
 ## 权衡
 
@@ -245,11 +375,15 @@ yaoxiang add foo        # ✅ 添加依赖
 
 ### 阶段划分
 
-| 阶段 | 内容 |
-|------|------|
-| **Phase 1** | toml 解析、本地依赖、lock 生成、基础算法 |
-| **Phase 2** | GitHub 支持、.yaoxiang/vendor 管理、下载工具 |
-| **未来扩展** | Registry 源、工作空间、完整性校验、依赖覆盖 |
+| 阶段 | 内容 | 状态 |
+|------|------|------|
+| **Phase 1** | toml 解析、本地依赖、lock 生成、基础算法 | ✅ 已完成 |
+| **Phase 2** | GitHub 支持、.yaoxiang/vendor 管理、下载工具 | ✅ 已完成 |
+| **Phase 3** | 全局缓存、semver crate 替换、CLI 完善 | 待开始 |
+| **Phase 3.5** | Source trait 改 async、async-trait 集成 | 待开始 |
+| **Phase 4** | Registry 协议、publish、auth（RFC-014a） | 待开始 |
+| **Phase 5** | 构建系统、预编译二进制（RFC-014b） | 待开始 |
+| **Phase 6** | 工作空间支持（RFC-014c） | 待开始 |
 
 ### 依赖关系
 
@@ -266,9 +400,22 @@ yaoxiang add foo        # ✅ 添加依赖
 
 ## 开放问题
 
-- [ ] `dev-dependencies` 条件编译语法？
-- [ ] 完整性校验算法（SHA-256 / BLAKE3）？
+- [x] `dev-dependencies` 条件编译语法？→ 由 RFC-014b 构建系统统一处理
+- [x] 完整性校验算法（SHA-256 / BLAKE3）？→ SHA-256
 - [ ] `excludes` 排除特定文件不下载？
+- [ ] 包命名规范（是否支持 namespace，如 `@org/pkg`）？
+- [ ] Registry API 版本化策略？
+
+---
+
+## 依赖项（Cargo.toml 需新增）
+
+| 用途 | crate | 说明 |
+|------|-------|------|
+| 语义化版本 | `semver` | 替换手写解析器 |
+| HTTP 客户端 | `reqwest` | Registry 通信 |
+| SHA-256 | `sha2` | 完整性校验 |
+| 压缩 | `flate2` + `tar` | 包格式处理 |
 
 ---
 

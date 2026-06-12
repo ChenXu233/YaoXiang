@@ -22,7 +22,6 @@
 //! ```
 
 pub mod common;
-pub mod dev;
 pub mod interpreter;
 pub mod runtime;
 

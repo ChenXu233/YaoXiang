@@ -7,8 +7,8 @@
 
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::frontend::core::parser::ast::{BinOp, UnOp};
-use crate::frontend::core::types::base::{MonoType, PolyType, TypeConstraintSolver};
-use crate::frontend::core::typecheck::overload;
+use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
+use crate::frontend::core::typecheck::passes::overload;
 use crate::frontend::core::typecheck::traits::solver::TraitSolver;
 use std::collections::{HashMap, HashSet};
 
@@ -190,7 +190,8 @@ impl<'a> ExpressionInferrer<'a> {
         poly: PolyType,
         is_mut: bool,
     ) {
-        self.scope.add_var(name, poly, is_mut);
+        self.scope
+            .add_var(name, poly, is_mut, crate::util::span::Span::default());
     }
 
     /// 检查变量是否存在于任何作用域中
@@ -210,7 +211,8 @@ impl<'a> ExpressionInferrer<'a> {
         is_mut: bool,
     ) -> Result<()> {
         let _ = span;
-        self.scope.add_var(name, poly, is_mut);
+        self.scope
+            .add_var(name, poly, is_mut, crate::util::span::Span::default());
         Ok(())
     }
 
@@ -244,14 +246,12 @@ impl<'a> ExpressionInferrer<'a> {
     pub fn assign_var(
         &mut self,
         name: &str,
-        new_ty: crate::frontend::core::types::base::MonoType,
+        new_ty: crate::frontend::core::types::MonoType,
     ) {
         // 直接使用右侧表达式的类型更新变量
         // 注意：new_ty 已经是解析后的正确类型（如 List<Int>），不需要额外 resolve
-        self.scope.update_var(
-            name,
-            crate::frontend::core::types::base::PolyType::mono(new_ty),
-        );
+        self.scope
+            .update_var(name, crate::frontend::core::types::PolyType::mono(new_ty));
     }
 
     /// 退出循环作用域时，将内部声明的变量提升到外层作用域
@@ -265,7 +265,12 @@ impl<'a> ExpressionInferrer<'a> {
 
         // 将循环内声明的变量添加到外层 scope，保留可变性
         for (name, info) in current_scope_vars {
-            self.scope.add_var(name, info.poly, info.is_mut);
+            self.scope.add_var(
+                name,
+                info.poly,
+                info.is_mut,
+                crate::util::span::Span::default(),
+            );
         }
     }
 
@@ -507,7 +512,7 @@ impl<'a> ExpressionInferrer<'a> {
                     .iter()
                     .map(|(n, t)| (n.clone(), Self::replace_type_refs_with_vars(t, subst)))
                     .collect();
-                MonoType::Struct(crate::frontend::core::types::base::StructType {
+                MonoType::Struct(crate::frontend::core::types::StructType {
                     name: s.name.clone(),
                     fields: new_fields,
                     methods: s.methods.clone(),
@@ -560,7 +565,7 @@ impl<'a> ExpressionInferrer<'a> {
         ty: &MonoType,
         subst: &HashMap<usize, MonoType>,
     ) -> MonoType {
-        use crate::frontend::core::types::base::substitute::{Substituter, Substitution};
+        use crate::frontend::core::types::substitute::{Substituter, Substitution};
         let mut sub = Substitution::new();
         for (idx, replacement) in subst {
             sub.insert(*idx, replacement.clone());
@@ -1026,9 +1031,22 @@ impl<'a> ExpressionInferrer<'a> {
                         // 值级函数调用
                         if arg_types.len() == params.len() {
                             for (arg_ty, param_ty) in arg_types.iter().zip(params.iter()) {
+                                // 自动借用：当参数签名要求 &T 且实参是值类型时，
+                                // 编译器自动创建令牌（RFC-009 §2.8）
+                                let actual_arg = match (param_ty, arg_ty) {
+                                    (MonoType::Ref { mutable, .. }, a)
+                                        if !matches!(a, MonoType::Ref { .. }) =>
+                                    {
+                                        MonoType::Ref {
+                                            mutable: *mutable,
+                                            inner: Box::new(a.clone()),
+                                        }
+                                    }
+                                    _ => arg_ty.clone(),
+                                };
                                 // Int -> Float 扩展转换是允许的
                                 if matches!(
-                                    (arg_ty, param_ty),
+                                    (&actual_arg, param_ty),
                                     (MonoType::Int(_), MonoType::Float(_))
                                 ) {
                                     continue;
@@ -1038,7 +1056,7 @@ impl<'a> ExpressionInferrer<'a> {
                                     continue;
                                 }
                                 // TypeVar 是泛型类型参数 —— 必须 unify 以推断具体类型
-                                if self.solver.unify(arg_ty, param_ty).is_err() {
+                                if self.solver.unify(&actual_arg, param_ty).is_err() {
                                     return Err(ErrorCodeDefinition::type_mismatch(
                                         &format!("{}", param_ty),
                                         &format!("{}", arg_ty),
@@ -1244,6 +1262,7 @@ impl<'a> ExpressionInferrer<'a> {
                             param.name.clone(),
                             PolyType::mono(param_ty),
                             param.is_mut,
+                            crate::util::span::Span::default(),
                         );
                     }
 
@@ -1293,8 +1312,12 @@ impl<'a> ExpressionInferrer<'a> {
                     params: param_types,
                     return_type: return_type_box,
                 };
-                self.scope
-                    .add_var(name.clone(), PolyType::mono(fn_type.clone()), false);
+                self.scope.add_var(
+                    name.clone(),
+                    PolyType::mono(fn_type.clone()),
+                    false,
+                    crate::util::span::Span::default(),
+                );
 
                 Ok(fn_type)
             }
@@ -1310,8 +1333,12 @@ impl<'a> ExpressionInferrer<'a> {
                 self.scope.enter_scope();
                 for param in params {
                     let param_ty = self.solver.new_var();
-                    self.scope
-                        .add_var(param.name.clone(), PolyType::mono(param_ty), param.is_mut);
+                    self.scope.add_var(
+                        param.name.clone(),
+                        PolyType::mono(param_ty),
+                        param.is_mut,
+                        crate::util::span::Span::default(),
+                    );
                 }
 
                 // Lambda is a function boundary: it must not inherit outer `Result` context.
@@ -1419,8 +1446,12 @@ impl<'a> ExpressionInferrer<'a> {
                 let _iter_ty = self.infer_expr(iterable)?;
 
                 self.scope.enter_scope();
-                self.scope
-                    .add_var(var.clone(), PolyType::mono(MonoType::Char), false);
+                self.scope.add_var(
+                    var.clone(),
+                    PolyType::mono(MonoType::Char),
+                    false,
+                    crate::util::span::Span::default(),
+                );
 
                 let elem_ty = if let Some(cond) = condition {
                     let _cond_ty = self.infer_expr(cond)?;
@@ -1470,6 +1501,51 @@ impl<'a> ExpressionInferrer<'a> {
                     mutable: *mutable,
                     inner: Box::new(inner_ty),
                 })
+            }
+
+            // spawn for 数据并行循环（RFC-024 §2.4）
+            crate::frontend::core::parser::ast::Expr::SpawnFor {
+                var,
+                var_mut,
+                iterable,
+                body,
+                span,
+                ..
+            } => {
+                // 1. 检查 iterable 类型，推导元素类型
+                let iter_ty = self.infer_expr(iterable)?;
+
+                let element_type = match &iter_ty {
+                    MonoType::List(elem_ty) => *elem_ty.clone(),
+                    MonoType::Range { elem_type } => *elem_type.clone(),
+                    MonoType::String => MonoType::Char,
+                    MonoType::Tuple(_elems) => self.solver.new_var(),
+                    MonoType::Dict(key_ty, value_ty) => {
+                        MonoType::Tuple(vec![*key_ty.clone(), *value_ty.clone()])
+                    }
+                    _ => self.solver.new_var(),
+                };
+
+                // 2. 进入循环作用域，注册迭代变量
+                self.enter_loop(None);
+                self.scope.enter_scope();
+                let body_ty = self
+                    .try_add_var(var.clone(), PolyType::mono(element_type), *span, *var_mut)
+                    .and_then(|_| self.infer_block(body, true, None));
+
+                self.promote_loop_vars_to_parent_scope();
+
+                match body_ty {
+                    Ok(ty) => {
+                        // spawn for 返回 List(T)，T 是循环体返回类型
+                        if matches!(ty, MonoType::Void) {
+                            Ok(MonoType::List(Box::new(MonoType::Void)))
+                        } else {
+                            Ok(MonoType::List(Box::new(ty)))
+                        }
+                    }
+                    Err(e) => Err(e),
+                }
             }
         }
     }
@@ -1597,8 +1673,12 @@ impl<'a> ExpressionInferrer<'a> {
                     return_type: Box::new(return_type.clone()),
                 };
 
-                self.scope
-                    .add_var(name.clone(), PolyType::mono(fn_type), false);
+                self.scope.add_var(
+                    name.clone(),
+                    PolyType::mono(fn_type),
+                    false,
+                    crate::util::span::Span::default(),
+                );
 
                 self.scope.enter_scope();
                 let result: Result<()> = (|| {
@@ -1607,6 +1687,7 @@ impl<'a> ExpressionInferrer<'a> {
                             param.name.clone(),
                             PolyType::mono(param_ty.clone()),
                             param.is_mut,
+                            crate::util::span::Span::default(),
                         );
                     }
 

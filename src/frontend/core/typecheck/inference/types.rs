@@ -2,7 +2,7 @@
 //!
 //! 提供类型统一、推导等工具函数
 
-use crate::frontend::core::types::base::{MonoType, TypeConstraintSolver};
+use crate::frontend::core::types::{MonoType, TypeConstraintSolver};
 
 /// 类型系统工具
 pub struct TypeSystem;

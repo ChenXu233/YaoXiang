@@ -4,6 +4,7 @@ status: "草案"
 author: "[作者名]"
 created: "YYYY-MM-DD"
 updated: "YYYY-MM-DD"
+group: ""  # 可选：父 RFC 编号（如 "rfc-014"），用于子 RFC 归属
 ---
 
 # RFC [编号]: [提案标题]

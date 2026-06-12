@@ -8,7 +8,7 @@ use crate::frontend::core::typecheck::traits::auto_derive::{
     is_builtin_derive, is_primitive_type, can_auto_derive, generate_auto_derive,
     field_type_satisfies, BUILTIN_DERIVES,
 };
-use crate::frontend::core::types::base::{TraitTable, TraitImplementation, MonoType};
+use crate::frontend::core::types::{TraitTable, TraitImplementation, MonoType};
 use crate::frontend::core::parser::ast::{Type, StructField};
 use crate::util::span::Span;
 
@@ -566,7 +566,7 @@ fn test_generate_auto_derive_preserves_type_name_in_implementation() {
 #[test]
 fn test_can_auto_derive_with_primitive_fields_registered() {
     // Arrange
-    let trait_table = crate::frontend::core::types::base::TraitTable::default();
+    let trait_table = crate::frontend::core::types::TraitTable::default();
     let trait_name = "Clone";
     let fields = vec![];
 

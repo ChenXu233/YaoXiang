@@ -38,7 +38,7 @@ pub use generics::GenericInferrer;
 // 向后兼容别名
 pub use expressions::ExprInferrer;
 
-pub use crate::frontend::core::types::base::{MonoType, PolyType, TypeConstraintSolver};
+pub use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 pub use crate::util::diagnostic::{Diagnostic, Result};
 
 // ============ 测试模块 ============

@@ -13,23 +13,38 @@
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::util::diagnostic::ErrorCodeDefinition;
 
 /// 辅助函数：解析源代码并类型检查
 ///
 /// 解析失败也视为错误（返回 Err），不会 panic。
-fn check_source(
-    source: &str
-) -> Result<
-    crate::frontend::core::typecheck::types::TypeCheckResult,
-    Vec<crate::util::diagnostic::Diagnostic>,
-> {
-    let tokens = tokenize(source).expect("tokenize failed");
+fn check_source(source: &str) -> crate::frontend::core::typecheck::types::TypeCheckResult {
+    use crate::util::diagnostic::Diagnostic;
+    let tokens = match tokenize(source) {
+        Ok(t) => t,
+        Err(e) => {
+            return crate::frontend::core::typecheck::types::TypeCheckResult {
+                diagnostics: vec![Diagnostic::error(
+                    "E0001".to_string(),
+                    format!("词法错误: {}", e),
+                    String::new(),
+                    None,
+                )],
+                ..Default::default()
+            };
+        }
+    };
     let module = match parse(&tokens) {
         Ok(m) => m,
-        Err(_) => {
-            // 解析错误也视为编译失败
-            return Err(vec![ErrorCodeDefinition::invalid_syntax("解析错误").build()]);
+        Err(e) => {
+            let diag = crate::util::diagnostic::ErrorCodeDefinition::invalid_syntax(&format!(
+                "解析错误: {:?}",
+                e
+            ))
+            .build();
+            return crate::frontend::core::typecheck::types::TypeCheckResult {
+                diagnostics: vec![diag],
+                ..Default::default()
+            };
         }
     };
     let mut checker = TypeChecker::new("test");
@@ -55,7 +70,10 @@ fn test_rfc010_variable_declaration_int() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "x: Int = 42 should pass type check");
+    assert!(
+        result.diagnostics.is_empty(),
+        "x: Int = 42 should pass type check"
+    );
 }
 
 /// 规范：`name: String = "Alice"` 应该类型检查通过
@@ -73,7 +91,7 @@ fn test_rfc010_variable_declaration_string() {
 
     // Assert
     assert!(
-        result.is_ok(),
+        result.diagnostics.is_empty(),
         "name: String = \"Alice\" should pass type check"
     );
 }
@@ -91,7 +109,10 @@ fn test_rfc010_variable_declaration_bool() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "flag: Bool = true should pass type check");
+    assert!(
+        result.diagnostics.is_empty(),
+        "flag: Bool = true should pass type check"
+    );
 }
 
 /// 规范：类型推导 `y = 100` 应该推断为 Int
@@ -108,7 +129,10 @@ fn test_rfc010_type_inference_int() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "y = 100 should pass type check");
+    assert!(
+        result.diagnostics.is_empty(),
+        "y = 100 should pass type check"
+    );
 }
 
 // ===================================================================
@@ -134,7 +158,10 @@ fn test_rfc010_function_definition() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "add function should pass type check");
+    assert!(
+        result.diagnostics.is_empty(),
+        "add function should pass type check"
+    );
 }
 
 /// 规范：单行函数 `inc: (x: Int) -> Int = x + 1`
@@ -151,7 +178,7 @@ fn test_rfc010_single_line_function() {
 
     // Assert
     assert!(
-        result.is_ok(),
+        result.diagnostics.is_empty(),
         "single line function should pass type check"
     );
 }
@@ -176,7 +203,7 @@ fn test_rfc010_function_return_type() {
 
     // Assert
     assert!(
-        result.is_ok(),
+        result.diagnostics.is_empty(),
         "function with matching return type should pass"
     );
 }
@@ -204,7 +231,10 @@ fn test_rfc010_record_type_definition() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "Point type definition should pass");
+    assert!(
+        result.diagnostics.is_empty(),
+        "Point type definition should pass"
+    );
 }
 
 /// 规范：记录类型构造 `p: Point = Point(1.0, 2.0)`
@@ -227,7 +257,10 @@ fn test_rfc010_record_type_construction() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "Point construction should pass");
+    assert!(
+        result.diagnostics.is_empty(),
+        "Point construction should pass"
+    );
 }
 
 /// 规范：带默认值的字段 `Point: Type = { x: Float = 0, y: Float = 0 }`
@@ -252,7 +285,7 @@ fn test_rfc010_record_type_default_values() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "default values should pass");
+    assert!(result.diagnostics.is_empty(), "default values should pass");
 }
 
 // ===================================================================
@@ -279,7 +312,10 @@ fn test_rfc010_interface_definition() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "Drawable interface definition should pass");
+    assert!(
+        result.diagnostics.is_empty(),
+        "Drawable interface definition should pass"
+    );
 }
 
 /// 规范：类型实现接口
@@ -311,7 +347,10 @@ fn test_rfc010_interface_implementation() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "interface implementation should pass");
+    assert!(
+        result.diagnostics.is_empty(),
+        "interface implementation should pass"
+    );
 }
 
 /// 规范：接口赋值（结构化子类型）
@@ -344,7 +383,10 @@ fn test_rfc010_interface_assignment() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "interface assignment should pass");
+    assert!(
+        result.diagnostics.is_empty(),
+        "interface assignment should pass"
+    );
 }
 
 // ===================================================================
@@ -372,7 +414,10 @@ fn test_rfc010_generic_type_definition() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "List generic type definition should pass");
+    assert!(
+        result.diagnostics.is_empty(),
+        "List generic type definition should pass"
+    );
 }
 
 /// 规范：泛型类型实例化
@@ -397,7 +442,10 @@ fn test_rfc010_generic_type_instantiation() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "List(Int) instantiation should pass");
+    assert!(
+        result.diagnostics.is_empty(),
+        "List(Int) instantiation should pass"
+    );
 }
 
 // ===================================================================
@@ -430,7 +478,10 @@ fn test_rfc010_method_definition() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "method definition should pass");
+    assert!(
+        result.diagnostics.is_empty(),
+        "method definition should pass"
+    );
 }
 
 /// 规范：方法调用语法糖
@@ -459,7 +510,10 @@ fn test_rfc010_method_call_syntax_sugar() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "method call syntax sugar should pass");
+    assert!(
+        result.diagnostics.is_empty(),
+        "method call syntax sugar should pass"
+    );
 }
 
 // ===================================================================
@@ -485,7 +539,7 @@ fn test_rfc010_type_meta_keyword() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "Type keyword should work");
+    assert!(result.diagnostics.is_empty(), "Type keyword should work");
 }
 
 /// 规范：有 `: Type` 强制为类型构造器
@@ -506,7 +560,7 @@ fn test_rfc010_type_annotation_forces_type_constructor() {
 
     // Assert
     assert!(
-        result.is_ok(),
+        result.diagnostics.is_empty(),
         "Type annotation should force type constructor"
     );
 }
@@ -532,7 +586,7 @@ fn test_rfc010_generic_type_instantiation_expansion() {
 
     // Assert
     assert!(
-        result.is_ok(),
+        result.diagnostics.is_empty(),
         "Wrapper(Int) should expand to struct with value: Int"
     );
 }
@@ -563,7 +617,10 @@ fn test_rfc010_external_method_binding() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "external method binding should work");
+    assert!(
+        result.diagnostics.is_empty(),
+        "external method binding should work"
+    );
 }
 
 /// 规范：多位置绑定
@@ -592,7 +649,10 @@ fn test_rfc010_multi_position_binding() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "multi-position binding should work");
+    assert!(
+        result.diagnostics.is_empty(),
+        "multi-position binding should work"
+    );
 }
 
 /// 规范：结构化子类型 — 接口赋值应失败（未实现接口）
@@ -613,7 +673,7 @@ fn test_rfc010_interface_assignment_rejected_when_not_implemented() {
 
     // Assert
     assert!(
-        result.is_err(),
+        !result.diagnostics.is_empty(),
         "interface assignment should be rejected when not implemented"
     );
 }
@@ -643,7 +703,7 @@ fn test_rfc010_function_return_type_mismatch() {
 
     // Assert - 规范 §6.3.2: 返回类型必须与声明一致
     assert!(
-        result.is_err(),
+        !result.diagnostics.is_empty(),
         "function returning Int when declared String should report type mismatch"
     );
 }
@@ -668,7 +728,7 @@ fn test_rfc010_without_type_annotation_not_type_constructor() {
 
     // Assert - 规范 §3.17: 无 `: Type` 不是类型构造器，应报错
     assert!(
-        result.is_err(),
+        !result.diagnostics.is_empty(),
         "record syntax without `: Type` annotation should not be a type definition"
     );
 }

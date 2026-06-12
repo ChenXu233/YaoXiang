@@ -25,7 +25,6 @@ use lsp_types::{
 use tracing::{debug, warn};
 
 use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::parser_state::ParseError;
 use crate::frontend::core::parser::parse_with_recovery;
 use crate::frontend::core::typecheck::check_module_collect_all;
 use crate::util::diagnostic::{Diagnostic, Severity};
@@ -86,25 +85,7 @@ pub fn to_lsp_diagnostics(diagnostics: &[Diagnostic]) -> Vec<LspDiagnostic> {
 }
 
 /// 将 ParseError 转换为 YaoXiang Diagnostic
-fn parse_error_to_diagnostic(err: &ParseError) -> Diagnostic {
-    let (message, span) = match err {
-        ParseError::ExpectedToken {
-            expected,
-            found,
-            span,
-        } => (
-            format!("期望 {:?}，实际为 {:?}", expected, found),
-            Some(*span),
-        ),
-        ParseError::UnexpectedToken { found, span } => {
-            (format!("意外的 token: {:?}", found), Some(*span))
-        }
-        ParseError::Message(msg) => (msg.clone(), None),
-    };
-
-    Diagnostic::error("E0100".to_string(), message, String::new(), span)
-}
-
+///
 /// 对文档内容运行完整诊断管线
 ///
 /// 流程：tokenize → parse_with_recovery → check_module_collect_all
@@ -144,23 +125,17 @@ pub fn run_diagnostics(
 
     if parse_result.has_errors {
         debug!("解析错误 ({} 个): {}", parse_result.errors.len(), uri);
-        let parse_diags: Vec<Diagnostic> = parse_result
-            .errors
-            .iter()
-            .map(parse_error_to_diagnostic)
-            .collect();
+        let parse_diags: Vec<Diagnostic> = parse_result.errors.to_vec();
         all_diagnostics.extend(to_lsp_diagnostics(&parse_diags));
     }
 
     // 3. 类型检查（收集所有错误模式）
-    match check_module_collect_all(&parse_result.module, &mut None) {
-        Ok(_) => {
-            debug!("类型检查通过: {}", uri);
-        }
-        Err(type_errors) => {
-            debug!("类型错误 ({} 个): {}", type_errors.len(), uri);
-            all_diagnostics.extend(to_lsp_diagnostics(&type_errors));
-        }
+    let type_result = check_module_collect_all(&parse_result.module, &mut None);
+    if !type_result.diagnostics.is_empty() {
+        debug!("类型错误 ({} 个): {}", type_result.diagnostics.len(), uri);
+        all_diagnostics.extend(to_lsp_diagnostics(&type_result.diagnostics));
+    } else {
+        debug!("类型检查通过: {}", uri);
     }
 
     debug!("诊断完成: {} ({} 条诊断)", uri, all_diagnostics.len());
@@ -185,151 +160,5 @@ fn make_publish_params(
         }),
         diagnostics,
         version: None,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::util::span::Position as YxPosition;
-
-    fn make_diag(
-        severity: Severity,
-        code: &str,
-        message: &str,
-        span: Option<Span>,
-    ) -> Diagnostic {
-        Diagnostic {
-            severity,
-            code: code.to_string(),
-            message: message.to_string(),
-            help: String::new(),
-            span,
-            related: vec![],
-        }
-    }
-
-    #[test]
-    fn test_severity_conversion() {
-        let diag = make_diag(Severity::Error, "E0001", "type error", None);
-
-        let lsp_diag = to_lsp_diagnostic(&diag);
-        assert_eq!(lsp_diag.severity, Some(DiagnosticSeverity::ERROR));
-        assert_eq!(lsp_diag.source, Some("yaoxiang".to_string()));
-        assert_eq!(lsp_diag.message, "type error");
-    }
-
-    #[test]
-    fn test_span_to_range_zero_indexed() {
-        let span = Span {
-            start: YxPosition {
-                line: 1,
-                column: 1,
-                offset: 0,
-            },
-            end: YxPosition {
-                line: 1,
-                column: 10,
-                offset: 9,
-            },
-        };
-
-        let range = span_to_range(&span);
-        // LSP is 0-indexed
-        assert_eq!(range.start.line, 0);
-        assert_eq!(range.start.character, 0);
-        assert_eq!(range.end.line, 0);
-        assert_eq!(range.end.character, 9);
-    }
-
-    #[test]
-    fn test_batch_conversion() {
-        let diagnostics = vec![
-            make_diag(Severity::Error, "", "err1", None),
-            make_diag(Severity::Warning, "", "warn1", None),
-        ];
-
-        let lsp_diags = to_lsp_diagnostics(&diagnostics);
-        assert_eq!(lsp_diags.len(), 2);
-        assert_eq!(lsp_diags[0].severity, Some(DiagnosticSeverity::ERROR));
-        assert_eq!(lsp_diags[1].severity, Some(DiagnosticSeverity::WARNING));
-    }
-
-    #[test]
-    fn test_empty_code_is_none() {
-        let diag = make_diag(Severity::Error, "", "msg", None);
-        let lsp_diag = to_lsp_diagnostic(&diag);
-        assert!(lsp_diag.code.is_none());
-    }
-
-    #[test]
-    fn test_no_span_uses_default_range() {
-        let diag = make_diag(Severity::Error, "E0001", "msg", None);
-        let lsp_diag = to_lsp_diagnostic(&diag);
-        assert_eq!(lsp_diag.range, Range::default());
-    }
-
-    // --- 阶段 2 新增测试 ---
-
-    #[test]
-    fn test_parse_error_to_diagnostic() {
-        let err = ParseError::UnexpectedToken {
-            found: crate::frontend::core::lexer::tokens::TokenKind::Plus,
-            span: Span {
-                start: YxPosition {
-                    line: 1,
-                    column: 5,
-                    offset: 4,
-                },
-                end: YxPosition {
-                    line: 1,
-                    column: 6,
-                    offset: 5,
-                },
-            },
-        };
-
-        let diag = parse_error_to_diagnostic(&err);
-        assert_eq!(diag.severity, Severity::Error);
-        assert_eq!(diag.code, "E0100");
-        assert!(diag.message.contains("意外的 token"));
-        assert!(diag.span.is_some());
-    }
-
-    #[test]
-    fn test_run_diagnostics_valid_code() {
-        // 合法的 YaoXiang 代码应产生零诊断
-        let result = run_diagnostics("file:///test.yx", "x = 42\n");
-        assert!(
-            result.diagnostics.is_empty(),
-            "合法代码不应有诊断，但得到: {:?}",
-            result.diagnostics
-        );
-    }
-
-    #[test]
-    fn test_run_diagnostics_parse_error() {
-        // 语法错误
-        let result = run_diagnostics("file:///test.yx", "@ @ @\n");
-        assert!(!result.diagnostics.is_empty(), "语法错误应产生诊断");
-        // 所有诊断应来自 yaoxiang
-        for d in &result.diagnostics {
-            assert_eq!(d.source, Some("yaoxiang".to_string()));
-        }
-    }
-
-    #[test]
-    fn test_clear_diagnostics() {
-        let result = clear_diagnostics("file:///test.yx");
-        assert!(result.diagnostics.is_empty());
-        assert_eq!(result.uri.as_str(), "file:///test.yx");
-    }
-
-    #[test]
-    fn test_make_publish_params() {
-        let params = make_publish_params("file:///hello.yx", vec![]);
-        assert_eq!(params.uri.as_str(), "file:///hello.yx");
-        assert!(params.diagnostics.is_empty());
-        assert!(params.version.is_none());
     }
 }

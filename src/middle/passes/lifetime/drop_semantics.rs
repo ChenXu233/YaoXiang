@@ -2,9 +2,9 @@
 //!
 //! 检查 Drop 相关错误：UseAfterDrop、DropMovedValue、DoubleDrop。
 
-use super::error::{OwnershipCheck, ValueState, codes, operand_to_string};
+use super::error::{OwnershipCheck, ValueState, operand_display_name};
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
-use crate::util::diagnostic::Diagnostic;
+use crate::util::diagnostic::{ErrorCodeDefinition, Diagnostic};
 use std::collections::HashMap;
 
 /// Drop 检查器
@@ -18,6 +18,8 @@ pub struct DropChecker {
     pub state: HashMap<Operand, ValueState>,
     pub errors: Vec<Diagnostic>,
     pub location: (usize, usize),
+    /// 局部变量名列表（用于错误报告中显示源码变量名）
+    local_names: Option<Vec<String>>,
 }
 
 impl DropChecker {
@@ -26,7 +28,16 @@ impl DropChecker {
             state: HashMap::new(),
             errors: Vec::new(),
             location: (0, 0),
+            local_names: None,
         }
+    }
+
+    /// 设置局部变量名列表
+    pub fn set_local_names(
+        &mut self,
+        local_names: Option<Vec<String>>,
+    ) {
+        self.local_names = local_names;
     }
 
     fn check_instruction(
@@ -58,15 +69,20 @@ impl DropChecker {
     ) {
         match self.state.get(value) {
             Some(ValueState::Moved) => {
+                let name = operand_display_name(value, self.local_names.as_ref());
                 self.errors
-                    .push(codes::drop_moved_value(&operand_to_string(value)));
+                    .push(ErrorCodeDefinition::drop_moved_value(&name).build());
             }
             Some(ValueState::Dropped) => {
+                let name = operand_display_name(value, self.local_names.as_ref());
                 self.errors
-                    .push(codes::double_drop(&operand_to_string(value)));
+                    .push(ErrorCodeDefinition::double_drop(&name).build());
             }
             Some(ValueState::Owned(_)) => {
                 self.state.insert(value.clone(), ValueState::Dropped);
+            }
+            Some(ValueState::Dup) => {
+                // Dup 类型（如 &T）不会被 Drop，保持 Dup 状态
             }
             Some(ValueState::Empty) => {
                 // Empty 状态的值也可以被 Drop，保持 Empty
@@ -95,8 +111,9 @@ impl DropChecker {
         operand: &Operand,
     ) {
         if let Some(ValueState::Dropped) = self.state.get(operand) {
+            let name = operand_display_name(operand, self.local_names.as_ref());
             self.errors
-                .push(codes::use_after_drop(&operand_to_string(operand)));
+                .push(ErrorCodeDefinition::use_after_drop(&name).build());
         }
     }
 }

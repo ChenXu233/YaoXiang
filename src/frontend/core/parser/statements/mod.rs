@@ -29,6 +29,8 @@ pub trait StatementParser {
 use crate::frontend::core::parser::ParserState;
 use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::lexer::tokens::*;
+use crate::util::diagnostic::ErrorCodeDefinition;
+use crate::frontend::core::parser::parse_msg;
 
 impl StatementParser for ParserState<'_> {
     fn parse_statement(&mut self) -> Option<Stmt> {
@@ -65,11 +67,34 @@ impl StatementParser for ParserState<'_> {
             Some(TokenKind::Eof) | None => None,
             // Phase 1: @ 不再是有效的语句起始（eval block 已移除）
             Some(TokenKind::At) => {
-                self.error(crate::frontend::core::parser::ParseError::UnexpectedToken {
-                    found: TokenKind::At,
-                    span: start_span,
-                });
-                // 不 bump — 由主循环负责跳过
+                self.error(
+                    ErrorCodeDefinition::unexpected_token("@")
+                        .at(start_span)
+                        .build(),
+                );
+                None
+            }
+            // 关键字不能用作变量名或表达式的语句开头
+            Some(kw @ TokenKind::KwRef)
+            | Some(kw @ TokenKind::KwUnsafe)
+            | Some(kw @ TokenKind::KwElif)
+            | Some(kw @ TokenKind::KwElse)
+            | Some(kw @ TokenKind::KwIn)
+            | Some(kw @ TokenKind::KwAs) => {
+                let keyword = match kw {
+                    TokenKind::KwRef => "ref",
+                    TokenKind::KwUnsafe => "unsafe",
+                    TokenKind::KwElif => "elif",
+                    TokenKind::KwElse => "else",
+                    TokenKind::KwIn => "in",
+                    TokenKind::KwAs => "as",
+                    _ => "keyword",
+                };
+                self.error(parse_msg(format!(
+                    "'{}' 是关键字，不能用作变量名或表达式",
+                    keyword
+                )));
+                self.bump();
                 None
             }
             // expression statement

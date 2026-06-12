@@ -16,7 +16,8 @@
 use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::parser::ast::StructField;
-use crate::frontend::core::parser::{ParserState, ParseError, BP_LOWEST};
+use crate::frontend::core::parser::{ParserState, BP_LOWEST};
+use crate::frontend::core::parser::parse_msg;
 use crate::util::span::Span;
 
 /// Extension trait providing `.parse_type_annotation()` on ParserState.
@@ -102,7 +103,7 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             if name == "Type" {
                 // Reject old Type[T] or Type<T> syntax
                 if state.at(&TokenKind::LBracket) || state.at(&TokenKind::Lt) {
-                    state.error(ParseError::Message(
+                    state.error(parse_msg(
                         "Old 'Type[...]' or 'Type<...>' syntax is no longer supported. \
                          Use 'Type' alone for the meta-type, or '(T: Type, ...) -> Type' for type constructors."
                             .to_string(),
@@ -119,7 +120,7 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             // This is OLD SYNTAX and should be rejected!
             // RFC-010 requires: (param: Type) -> ReturnType
             if state.at(&TokenKind::Arrow) {
-                state.error(ParseError::Message(format!(
+                state.error(parse_msg(format!(
                     "Old curried function syntax '{} -> ...' is no longer supported. \
                      Use RFC-010 syntax with named parameters: '(param: {}) -> ReturnType'. \
                      Example: 'inc: (x: Int) -> Int = x => x + 1' instead of 'inc: Int -> Int = ...'",
@@ -156,7 +157,7 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
 
             // Check for old angle bracket generic syntax: Name<Args>
             if state.at(&TokenKind::Lt) {
-                state.error(ParseError::Message(
+                state.error(parse_msg(
                     "Old 'Name<...>' angle bracket syntax is no longer supported. \
                      Use '()' application syntax: 'Name(Type1, Type2)'"
                         .to_string(),
@@ -171,7 +172,7 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
         }
         Some(TokenKind::Lt) => {
             // RFC-010: angle bracket syntax `Type<Args>` is rejected
-            state.error(ParseError::Message(
+            state.error(parse_msg(
                 "Old 'Type<...>' angle bracket syntax is no longer supported. \
                  Use '()' application syntax: 'Name(Type1, Type2)'"
                     .to_string(),
@@ -267,7 +268,7 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
         Some(TokenKind::LBrace) => parse_struct_type(state),
         Some(TokenKind::LBracket) => {
             // RFC-010: `[T, U](params) -> Ret` syntax is removed.
-            state.error(ParseError::Message(
+            state.error(parse_msg(
                 "Old generic function type syntax '[T, U](params) -> Ret' is no longer supported. \
                  Use RFC-010 syntax: '(T: Type, U: Type) -> ((params) -> Ret)'"
                     .to_string(),
@@ -540,7 +541,7 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                 let func_name = match state.current().map(|t| &t.kind) {
                     Some(TokenKind::Identifier(n)) => n.clone(),
                     _ => {
-                        state.error(ParseError::Message(format!(
+                        state.error(parse_msg(format!(
                             "Expected function name after '=' in binding '{}'",
                             name
                         )));
@@ -570,7 +571,7 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                 }
             } else if is_mut {
                 // mut 后面没有冒号是语法错误
-                state.error(ParseError::Message(format!(
+                state.error(parse_msg(format!(
                     "Expected ':' after 'mut' in field '{}'",
                     name
                 )));
@@ -635,7 +636,7 @@ fn parse_enum_variants_in_braces(state: &mut ParserState<'_>) -> Option<Type> {
             }
         }
         _ => {
-            state.error(ParseError::Message("Expected variant name".to_string()));
+            state.error(parse_msg("Expected variant name".to_string()));
             return None;
         }
     };
@@ -675,9 +676,7 @@ fn parse_enum_variants_in_braces(state: &mut ParserState<'_>) -> Option<Type> {
                 });
             }
             _ => {
-                state.error(ParseError::Message(
-                    "Expected variant name after '|'".to_string(),
-                ));
+                state.error(parse_msg("Expected variant name after '|'".to_string()));
                 break;
             }
         }
@@ -715,9 +714,7 @@ fn parse_optional_binding_positions(state: &mut ParserState<'_>) -> Option<Vec<i
 /// 解析位置绑定: `[0]` 或 `[0, 1]` 或 `[-1]`（必须存在）
 pub(crate) fn parse_binding_positions(state: &mut ParserState<'_>) -> Result<Vec<i64>, ()> {
     if !state.at(&TokenKind::LBracket) {
-        state.error(ParseError::Message(
-            "Expected '[' for binding position".to_string(),
-        ));
+        state.error(parse_msg("Expected '[' for binding position".to_string()));
         return Err(());
     }
     state.bump(); // consume '['
@@ -738,7 +735,7 @@ pub(crate) fn parse_binding_positions(state: &mut ParserState<'_>) -> Result<Vec
                 state.skip(&TokenKind::Comma);
             }
             _ => {
-                state.error(ParseError::Message(
+                state.error(parse_msg(
                     "Expected integer position in binding".to_string(),
                 ));
                 return Err(());
@@ -747,7 +744,7 @@ pub(crate) fn parse_binding_positions(state: &mut ParserState<'_>) -> Result<Vec
     }
 
     if !state.at(&TokenKind::RBracket) {
-        state.error(ParseError::Message(
+        state.error(parse_msg(
             "Expected ']' after binding positions".to_string(),
         ));
         return Err(());

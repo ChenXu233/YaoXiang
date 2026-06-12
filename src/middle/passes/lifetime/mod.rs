@@ -34,6 +34,9 @@ pub mod ownership_flow;
 pub mod ref_semantics;
 pub mod unsafe_check;
 
+#[cfg(test)]
+mod tests;
+
 pub use borrow_checker::*;
 pub use chain_calls::*;
 pub use clone::*;
@@ -150,8 +153,7 @@ impl OwnershipChecker {
         let cycle_errors = self.cycle_checker.check_function(func);
 
         // 借用检查
-        let _borrow_errors = self.borrow_checker.check_function(func);
-        let borrow_diagnostics = self.borrow_checker.to_diagnostics();
+        let borrow_diagnostics = self.borrow_checker.check_function(func);
 
         // 任务内循环追踪（警告模式，不计入错误）
         let _intra_task_warnings = self.intra_task_tracker.track_function(func);
@@ -165,7 +167,7 @@ impl OwnershipChecker {
             .chain(clone_errors)
             .chain(cycle_errors)
             .cloned()
-            .chain(borrow_diagnostics)
+            .chain(borrow_diagnostics.iter().cloned())
             .collect()
     }
 
@@ -208,6 +210,19 @@ impl OwnershipChecker {
     pub fn unsafe_bypasses(&self) -> &[Diagnostic] {
         self.cycle_checker.unsafe_bypasses()
     }
+
+    /// 设置局部变量名列表（传递给所有子 checker，用于友好错误信息）
+    pub fn set_local_names(
+        &mut self,
+        local_names: Option<Vec<String>>,
+    ) {
+        self.move_checker.set_local_names(local_names.clone());
+        self.borrow_checker.set_local_names(local_names.clone());
+        self.drop_checker.set_local_names(local_names.clone());
+        self.clone_checker.set_local_names(local_names.clone());
+        self.cycle_checker.set_local_names(local_names.clone());
+        self.intra_task_tracker.set_local_names(local_names);
+    }
 }
 
 impl Default for OwnershipChecker {
@@ -245,17 +260,15 @@ impl OwnershipPass {
             // OwnershipChecker（Move/Drop/Ref/Clone/Borrow）
             // 过滤掉 MutChecker 已覆盖的错误类别，避免重复报告
             let mut ownership_checker = OwnershipChecker::new();
+            ownership_checker.set_local_names(local_names.cloned());
             let ownership_errors: Vec<Diagnostic> = ownership_checker
                 .check_function(func)
                 .into_iter()
                 .filter(|err| {
                     // E2016=不可变赋值, E2022=不可变变异, E2023=不可变字段赋值
-                    // E2025=重赋值非空, E2014=使用已移动的值
-                    // 这些已由 MutChecker 处理
-                    !matches!(
-                        err.code.as_str(),
-                        "E2014" | "E2016" | "E2022" | "E2023" | "E2025"
-                    )
+                    // E2025=重赋值非空
+                    // E2014(UseAfterMove) 保留 — 由 MoveChecker 处理
+                    !matches!(err.code.as_str(), "E2016" | "E2022" | "E2023" | "E2025")
                 })
                 .collect();
             all_errors.extend(ownership_errors);
@@ -386,6 +399,12 @@ fn extract_operands(instr: &Instruction) -> Vec<Operand> {
             ops.extend(closures.iter().cloned());
             ops
         }
+        // spawn for: result = spawn_from_list closures_list
+        Instruction::SpawnFromList {
+            closures_list,
+            result,
+            ..
+        } => vec![result.clone(), closures_list.clone()],
 
         // MakeClosure：dst = closure(func, env...)
         Instruction::MakeClosure { dst, env, .. } => {
@@ -448,6 +467,14 @@ fn extract_operands(instr: &Instruction) -> Vec<Operand> {
         Instruction::CreateStruct { dst, fields, .. } => {
             let mut ops = vec![dst.clone()];
             ops.extend(fields.iter().cloned());
+            ops
+        }
+
+        // 字典创建
+        Instruction::NewDict { dst, keys, values } => {
+            let mut ops = vec![dst.clone()];
+            ops.extend(keys.iter().cloned());
+            ops.extend(values.iter().cloned());
             ops
         }
 

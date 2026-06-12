@@ -6,7 +6,7 @@
 //! RFC-010: 统一类型语法
 
 use crate::frontend::core::typecheck::inference::compatibility::CompatibilityChecker;
-use crate::frontend::core::types::base::{MonoType, StructType};
+use crate::frontend::core::types::{MonoType, StructType};
 use std::collections::HashMap;
 
 // ===================================================================

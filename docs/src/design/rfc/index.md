@@ -31,7 +31,7 @@ title: "RFC 索引"
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
 | RFC-019 | [RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型](./draft/019-typed-homoiconicity.md) | 晨煦 | 2026-02-20 | 草案 |
-| RFC-025 | [RFC-025: 可扩展原语类型机制](./draft/025-primitive-extension.md) | 晨煦 | 2026-06-05 | 草案 |
+| RFC-028 | [RFC-028：JIT 编译器 — VM 内多级执行引擎](./draft/028-jit-compiler.md) | 晨煦 | 2026-06-11 | 草案 |
 
 ---
 
@@ -39,9 +39,8 @@ title: "RFC 索引"
 
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
-| RFC-018 | [RFC-018：LLVM AOT 编译器设计](./review/018-llvm-aot-compiler.md) | 晨煦 | 2026-02-15 | 审核中 |
+| RFC-025 | [RFC-025: 可扩展原语类型机制](./review/025-primitive-extension.md) | 晨煦 | 2026-06-05 | 审核中 |
 | RFC-026 | [RFC-026：FFI 核心机制](./review/026-ffi-core-mechanism.md) | 晨煦 | 2026-06-05 | 审核中 |
-| RFC-027 | [RFC-027：编译期求值类型与统一静态验证](./review/027-compile-time-evaluation-types.md) | 晨煦 | 2026-06-07 | 审核中 |
 
 ---
 
@@ -59,10 +58,15 @@ title: "RFC 索引"
 | RFC-012 | [RFC 012: F-String 模板字符串](./accepted/012-f-string-template-strings.md) | Chen Xu | 2025-01-27 | 已接受 |
 | RFC-013 | [RFC 013: 错误代码规范](./accepted/013-error-code-specification.md) | 晨煦 | 2026-02-02 | 已接受 |
 | RFC-014 | [RFC-014: 包管理系统设计](./accepted/014-package-manager.md) | 晨煦 | 2026-02-12 | 已接受 |
+| ↳ RFC-014a | [RFC-014a: Registry 协议规范](./draft/014a-registry-protocol.md) | 晨煦 | 2026-06-11 | 草案RFC |
+| ↳ RFC-014b | [RFC-014b: 构建系统与二进制分发](./draft/014b-build-system.md) | 晨煦 | 2026-06-11 | 草案RFC |
+| ↳ RFC-014c | [RFC-014c: 工作空间支持](./draft/014c-workspace.md) | 晨煦 | 2026-06-11 | 草案RFC |
 | RFC-015 | [RFC-015: YaoXiang 配置系统设计](./accepted/015-configuration-system.md) | 晨煦 | 2026-02-12 | 已接受 |
 | RFC-017 | [RFC-017: 语言服务器协议（LSP）支持设计](./accepted/017-lsp-support.md) | 晨煦 | 2026-02-15 | 审核中 |
+| RFC-018 | [RFC-018：LLVM AOT 编译器设计](./accepted/018-llvm-aot-compiler.md) | 晨煦 | 2026-02-15 | 已接受 |
 | RFC-023 | [RFC-023: 闭包捕获模型](./accepted/023-closure-capture-model.md) | 晨煦 | 2026-05-29 | 已接受 |
 | RFC-024 | [RFC-024：基于 spawn 块的并发模型](./accepted/024-concurrency-model.md) | 晨煦 | 2026-06-05 | 已接受 |
+| RFC-027 | [RFC-027：编译期谓词与统一静态验证](./accepted/027-compile-time-evaluation-types.md) | 晨煦 | 2026-06-07 | 已接受 |
 
 ---
 
@@ -73,7 +77,7 @@ title: "RFC 索引"
 | RFC-001 | [RFC-001：并作模型与错误处理系统](./deprecated/001-concurrent-model-error-handling.md) | 晨煦 | 2025-01-05 | 已废弃（被 RFC-024 取代） |
 | RFC-020 | [RFC-020：动态模块与 FFI 集成](./deprecated/020-dynamic-modules-ffi.md) | 晨煦 (基于与社区讨论的整理) | 2026-03-14 | 已废弃 |
 | RFC-021 | [RFC-021: 库驱动 FFI 扩展与跨语言调用支持](./deprecated/021-library-driven-ffi-extension.md) | 晨煦 | 2026-03-14 | 已废弃 |
-| RFC-022 | [RFC-022: 霍尔逻辑静态验证支持（规约注释与规约类型）](./deprecated/022-hoare-logic-static-verification.md) | 晨煦 | 2026-03-16 | 已废弃（被 RFC-027 取代） |
+| RFC-022 | [RFC 022: 霍尔逻辑静态验证支持（规约注释与规约类型）](./deprecated/022-hoare-logic-static-verification.md) | 晨煦 | 2026-03-16 | 已废弃（被 RFC-027 取代） |
 
 ---
 

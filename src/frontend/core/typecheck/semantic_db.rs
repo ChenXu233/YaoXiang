@@ -12,6 +12,19 @@ use crate::util::span::Span;
 
 // ============ 核心数据结构 ============
 
+/// 将 SemanticTokenType 映射为 DefinitionKind
+fn token_type_to_def_kind(token_type: SemanticTokenType) -> DefinitionKind {
+    match token_type {
+        SemanticTokenType::Function => DefinitionKind::Function,
+        SemanticTokenType::Type => DefinitionKind::Type,
+        SemanticTokenType::Variable => DefinitionKind::Variable,
+        SemanticTokenType::Parameter => DefinitionKind::Parameter,
+        SemanticTokenType::Method => DefinitionKind::Method,
+        SemanticTokenType::TypeParameter => DefinitionKind::GenericParameter,
+        _ => DefinitionKind::Variable,
+    }
+}
+
 /// 语义信息数据库
 ///
 /// 由 typecheck 阶段产出，LSP 和增量编译直接查询复用。
@@ -34,6 +47,12 @@ pub struct FileSemanticInfo {
     pub tokens: Vec<SemanticToken>,
     /// 作用域信息
     pub scopes: Vec<ScopeInfo>,
+    /// 该文件中的定义条目
+    pub definitions: Vec<DefinitionInfo>,
+    /// 该文件中的引用条目
+    pub references: Vec<ReferenceInfo>,
+    /// 模块导入信息
+    pub imports: Vec<ImportInfo>,
 }
 
 /// 语义 Token
@@ -57,6 +76,63 @@ pub struct SymbolLocation {
     /// 文件路径
     pub file_path: String,
     /// 源码位置
+    pub span: Span,
+}
+
+// ============ 定义与引用条目（LSP 重构）============
+/// 后续任务（5-8）会把所有写入迁移到这些字段，Task 9 时统一清理旧字段。
+/// 全局唯一定义标识符
+///
+/// 由 (文件路径, 定义 span) 共同确定。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DefId {
+    pub file_path: String,
+    pub span: Span,
+}
+
+/// 定义种类
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DefinitionKind {
+    Variable,
+    Function,
+    Type,
+    Parameter,
+    GenericParameter,
+    Interface,
+    Method,
+}
+
+/// 定义条目 — 包含完整类型信息
+#[derive(Debug, Clone)]
+pub struct DefinitionInfo {
+    pub def_id: DefId,
+    pub name: String,
+    pub kind: DefinitionKind,
+    pub span: Span,
+    pub file_path: String,
+    /// 推断类型，如 `"Int"`, `"(Int, Int) -> Int"`
+    pub type_info: Option<String>,
+    /// 函数签名，如 `"(a: Int, b: Int) -> Int"`
+    pub signature: Option<String>,
+}
+
+/// 引用条目 — 每个标识符出现，指向它的定义
+#[derive(Debug, Clone)]
+pub struct ReferenceInfo {
+    pub name: String,
+    pub span: Span,
+    pub file_path: String,
+    /// 指向的定义
+    pub resolves_to: DefId,
+}
+
+/// 模块导入信息
+#[derive(Debug, Clone)]
+pub struct ImportInfo {
+    /// 例如 `"std.io"`
+    pub module_path: String,
+    /// 例如 `["print", "println"]`
+    pub imported_names: Vec<String>,
     pub span: Span,
 }
 
@@ -311,11 +387,51 @@ impl SemanticDB {
                     .entry(token.name.clone())
                     .or_default()
                     .push(location);
+
+                // 同时填充新的 definitions 结构
+                let file_info =
+                    self.by_file
+                        .entry(file_path.clone())
+                        .or_insert_with(|| FileSemanticInfo {
+                            file_path: file_path.clone(),
+                            ..Default::default()
+                        });
+                // 暂存：实际类型信息将在后续从 TypeChecker 同步
+                file_info.definitions.push(DefinitionInfo {
+                    def_id: DefId {
+                        file_path: file_path.clone(),
+                        span: token.span,
+                    },
+                    name: token.name.clone(),
+                    kind: token_type_to_def_kind(token.token_type),
+                    span: token.span,
+                    file_path: file_path.clone(),
+                    type_info: None,
+                    signature: None,
+                });
             } else {
                 self.symbol_refs
                     .entry(token.name.clone())
                     .or_default()
                     .push(location);
+
+                // 同时填充新的 references 结构
+                let file_info =
+                    self.by_file
+                        .entry(file_path.clone())
+                        .or_insert_with(|| FileSemanticInfo {
+                            file_path: file_path.clone(),
+                            ..Default::default()
+                        });
+                file_info.references.push(ReferenceInfo {
+                    name: token.name.clone(),
+                    span: token.span,
+                    file_path: file_path.clone(),
+                    resolves_to: DefId {
+                        file_path: String::new(),
+                        span: crate::util::span::Span::default(),
+                    },
+                });
             }
         }
 
@@ -383,6 +499,172 @@ impl SemanticDB {
             .push(scope);
     }
 
+    /// 添加一条定义条目，同时维护旧的 `symbol_defs` 索引。
+    ///
+    /// 在 Task 5-8 完成迁移后，所有调用方应改为直接写入 `definitions`，
+    /// `symbol_defs` 将在 Task 9 统一删除。
+    pub fn add_definition(
+        &mut self,
+        file_path: &str,
+        def: DefinitionInfo,
+    ) {
+        // 维护旧索引：以声明位置为符号定义点
+        self.symbol_defs
+            .entry(def.name.clone())
+            .or_default()
+            .push(SymbolLocation {
+                file_path: file_path.to_string(),
+                span: def.span,
+            });
+
+        self.by_file
+            .entry(file_path.to_string())
+            .or_insert_with(|| FileSemanticInfo {
+                file_path: file_path.to_string(),
+                ..Default::default()
+            })
+            .definitions
+            .push(def);
+    }
+
+    /// 添加一条引用条目，同时维护旧的 `symbol_refs` 索引。
+    pub fn add_reference(
+        &mut self,
+        file_path: &str,
+        r#ref: ReferenceInfo,
+    ) {
+        self.symbol_refs
+            .entry(r#ref.name.clone())
+            .or_default()
+            .push(SymbolLocation {
+                file_path: file_path.to_string(),
+                span: r#ref.span,
+            });
+
+        self.by_file
+            .entry(file_path.to_string())
+            .or_insert_with(|| FileSemanticInfo {
+                file_path: file_path.to_string(),
+                ..Default::default()
+            })
+            .references
+            .push(r#ref);
+    }
+
+    /// 添加一条模块导入信息
+    pub fn add_import(
+        &mut self,
+        file_path: &str,
+        import: ImportInfo,
+    ) {
+        self.by_file
+            .entry(file_path.to_string())
+            .or_insert_with(|| FileSemanticInfo {
+                file_path: file_path.to_string(),
+                ..Default::default()
+            })
+            .imports
+            .push(import);
+    }
+
+    /// 获取该文件中所有定义条目
+    pub fn get_definitions(
+        &self,
+        file_path: &str,
+    ) -> &[DefinitionInfo] {
+        self.by_file
+            .get(file_path)
+            .map(|info| info.definitions.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// 获取该文件中所有引用条目
+    pub fn get_references(
+        &self,
+        file_path: &str,
+    ) -> &[ReferenceInfo] {
+        self.by_file
+            .get(file_path)
+            .map(|info| info.references.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// 获取该文件中的模块导入信息
+    pub fn get_imports(
+        &self,
+        file_path: &str,
+    ) -> &[ImportInfo] {
+        self.by_file
+            .get(file_path)
+            .map(|info| info.imports.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// 根据位置精确解析引用（用于跳转定义）。
+    ///
+    /// 1. 在 `by_file[file].references` 中查找 `(line, col)` 处的引用；
+    /// 2. 通过 `resolves_to` 在所有文件中找到对应定义。
+    pub fn resolve_reference(
+        &self,
+        file: &str,
+        line: usize,
+        col: usize,
+    ) -> Option<&DefinitionInfo> {
+        let file_info = self.by_file.get(file)?;
+        let target_def_id = file_info
+            .references
+            .iter()
+            .find(|r| {
+                r.file_path == file && r.span.start.line == line && r.span.start.column == col
+            })
+            .map(|r| r.resolves_to.clone())?;
+
+        for info in self.by_file.values() {
+            if let Some(def) = info.definitions.iter().find(|d| d.def_id == target_def_id) {
+                return Some(def);
+            }
+        }
+        None
+    }
+
+    /// 查找指向某个定义的所有引用（用于 find references / rename）。
+    ///
+    /// 先通过 `(file, span)` 匹配到 `DefId`，再遍历所有文件收集
+    /// `resolves_to` 等于该 `DefId` 的引用。
+    pub fn find_all_references_to(
+        &self,
+        file: &str,
+        span: &Span,
+    ) -> Vec<&ReferenceInfo> {
+        let target = DefId {
+            file_path: file.to_string(),
+            span: *span,
+        };
+
+        let mut out = Vec::new();
+        for info in self.by_file.values() {
+            for r in &info.references {
+                if r.resolves_to == target {
+                    out.push(r);
+                }
+            }
+        }
+        out
+    }
+
+    /// 获取文件（位置）处可见的所有符号（用于补全）。
+    ///
+    /// 完整实现需要沿作用域链向外查找并合并 `imports`。
+    /// 当前为占位实现，返回空列表，后续任务会补充。
+    pub fn visible_definitions(
+        &self,
+        _file: &str,
+        _line: usize,
+        _col: usize,
+    ) -> Vec<&DefinitionInfo> {
+        Vec::new()
+    }
+
     /// 查找包含给定位置的最内层作用域
     pub fn find_innermost_scope(
         &self,
@@ -431,388 +713,3 @@ impl SemanticDB {
 }
 
 // ============ 测试 ============
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::util::span::Position;
-
-    fn make_span(
-        line: usize,
-        col_start: usize,
-        col_end: usize,
-    ) -> Span {
-        Span {
-            start: Position::with_offset(line, col_start, 0),
-            end: Position::with_offset(line, col_end, 0),
-        }
-    }
-
-    fn make_token(
-        name: &str,
-        ty: SemanticTokenType,
-        is_decl: bool,
-        span: Span,
-    ) -> SemanticToken {
-        let mut modifiers = Vec::new();
-        if is_decl {
-            modifiers.push(SemanticTokenModifier::Declaration);
-        }
-        SemanticToken {
-            name: name.to_string(),
-            token_type: ty,
-            modifiers,
-            span,
-        }
-    }
-
-    // ---- 构造与空数据库测试 ----
-
-    #[test]
-    fn test_new_semantic_db_is_empty() {
-        let db = SemanticDB::new();
-        assert!(db.is_empty());
-        assert_eq!(db.token_count(), 0);
-        assert!(db.file_paths().is_empty());
-        assert!(db.defined_symbols().is_empty());
-    }
-
-    // ---- 按文件查询测试 ----
-
-    #[test]
-    fn test_get_file_info() {
-        let mut db = SemanticDB::new();
-
-        let info = FileSemanticInfo {
-            file_path: "test.yx".to_string(),
-            tokens: vec![make_token(
-                "foo",
-                SemanticTokenType::Function,
-                true,
-                make_span(1, 1, 4),
-            )],
-            scopes: vec![],
-        };
-
-        db.set_file_info("test.yx".to_string(), info);
-
-        assert!(!db.is_empty());
-        assert_eq!(db.token_count(), 1);
-
-        let file_info = db.get_file_info("test.yx").unwrap();
-        assert_eq!(file_info.tokens.len(), 1);
-        assert_eq!(file_info.tokens[0].name, "foo");
-
-        // 不存在的文件返回 None
-        assert!(db.get_file_info("nonexistent.yx").is_none());
-    }
-
-    #[test]
-    fn test_get_tokens_and_scopes() {
-        let mut db = SemanticDB::new();
-
-        let info = FileSemanticInfo {
-            file_path: "test.yx".to_string(),
-            tokens: vec![
-                make_token("x", SemanticTokenType::Variable, true, make_span(1, 1, 2)),
-                make_token("y", SemanticTokenType::Variable, true, make_span(2, 1, 2)),
-            ],
-            scopes: vec![ScopeInfo {
-                span: make_span(1, 1, 20),
-                parent: None,
-                symbols: vec!["x".to_string(), "y".to_string()],
-                kind: ScopeKind::Global,
-            }],
-        };
-
-        db.set_file_info("test.yx".to_string(), info);
-
-        let tokens = db.get_tokens("test.yx").unwrap();
-        assert_eq!(tokens.len(), 2);
-
-        let scopes = db.get_scopes("test.yx").unwrap();
-        assert_eq!(scopes.len(), 1);
-        assert_eq!(scopes[0].kind, ScopeKind::Global);
-    }
-
-    // ---- 按符号名查询测试 ----
-
-    #[test]
-    fn test_symbol_defs_and_refs() {
-        let mut db = SemanticDB::new();
-
-        let info = FileSemanticInfo {
-            file_path: "main.yx".to_string(),
-            tokens: vec![
-                // 函数定义
-                make_token("add", SemanticTokenType::Function, true, make_span(1, 1, 4)),
-                // 函数引用
-                make_token(
-                    "add",
-                    SemanticTokenType::Function,
-                    false,
-                    make_span(5, 1, 4),
-                ),
-            ],
-            scopes: vec![],
-        };
-
-        db.set_file_info("main.yx".to_string(), info);
-
-        // 定义
-        let defs = db.get_symbol_defs("add").unwrap();
-        assert_eq!(defs.len(), 1);
-        assert_eq!(defs[0].file_path, "main.yx");
-
-        // 引用
-        let refs = db.get_symbol_refs("add").unwrap();
-        assert_eq!(refs.len(), 1);
-        assert_eq!(refs[0].span.start.line, 5);
-
-        // 不存在的符号
-        assert!(db.get_symbol_defs("nonexistent").is_none());
-        assert!(db.get_symbol_refs("nonexistent").is_none());
-    }
-
-    // ---- 多文件管理测试 ----
-
-    #[test]
-    fn test_multi_file() {
-        let mut db = SemanticDB::new();
-
-        db.set_file_info(
-            "a.yx".to_string(),
-            FileSemanticInfo {
-                file_path: "a.yx".to_string(),
-                tokens: vec![make_token(
-                    "foo",
-                    SemanticTokenType::Function,
-                    true,
-                    make_span(1, 1, 4),
-                )],
-                scopes: vec![],
-            },
-        );
-        db.set_file_info(
-            "b.yx".to_string(),
-            FileSemanticInfo {
-                file_path: "b.yx".to_string(),
-                tokens: vec![make_token(
-                    "bar",
-                    SemanticTokenType::Function,
-                    true,
-                    make_span(1, 1, 4),
-                )],
-                scopes: vec![],
-            },
-        );
-
-        assert_eq!(db.file_paths().len(), 2);
-        assert_eq!(db.token_count(), 2);
-
-        assert!(db.get_file_info("a.yx").is_some());
-        assert!(db.get_file_info("b.yx").is_some());
-
-        // 跨文件符号引用
-        assert!(db.get_symbol_defs("foo").is_some());
-        assert!(db.get_symbol_defs("bar").is_some());
-    }
-
-    // ---- 文件覆盖更新测试 ----
-
-    #[test]
-    fn test_file_override_update() {
-        let mut db = SemanticDB::new();
-
-        // 第一版
-        db.set_file_info(
-            "test.yx".to_string(),
-            FileSemanticInfo {
-                file_path: "test.yx".to_string(),
-                tokens: vec![make_token(
-                    "old_fn",
-                    SemanticTokenType::Function,
-                    true,
-                    make_span(1, 1, 7),
-                )],
-                scopes: vec![],
-            },
-        );
-        assert!(db.get_symbol_defs("old_fn").is_some());
-
-        // 覆盖更新
-        db.set_file_info(
-            "test.yx".to_string(),
-            FileSemanticInfo {
-                file_path: "test.yx".to_string(),
-                tokens: vec![make_token(
-                    "new_fn",
-                    SemanticTokenType::Function,
-                    true,
-                    make_span(1, 1, 7),
-                )],
-                scopes: vec![],
-            },
-        );
-
-        // 旧符号已移除
-        assert!(db.get_symbol_defs("old_fn").is_none());
-        // 新符号已存在
-        assert!(db.get_symbol_defs("new_fn").is_some());
-        assert_eq!(db.token_count(), 1);
-    }
-
-    // ---- 文件移除测试 ----
-
-    #[test]
-    fn test_remove_file() {
-        let mut db = SemanticDB::new();
-
-        db.set_file_info(
-            "test.yx".to_string(),
-            FileSemanticInfo {
-                file_path: "test.yx".to_string(),
-                tokens: vec![make_token(
-                    "x",
-                    SemanticTokenType::Variable,
-                    true,
-                    make_span(1, 1, 2),
-                )],
-                scopes: vec![],
-            },
-        );
-
-        assert!(!db.is_empty());
-        db.remove_file("test.yx");
-        assert!(db.is_empty());
-        assert!(db.get_symbol_defs("x").is_none());
-    }
-
-    // ---- add_token 增量添加测试 ----
-
-    #[test]
-    fn test_add_token_incrementally() {
-        let mut db = SemanticDB::new();
-
-        db.add_token(
-            "test.yx",
-            make_token("a", SemanticTokenType::Variable, true, make_span(1, 1, 2)),
-        );
-        db.add_token(
-            "test.yx",
-            make_token("b", SemanticTokenType::Variable, true, make_span(2, 1, 2)),
-        );
-
-        assert_eq!(db.token_count(), 2);
-        assert!(db.get_symbol_defs("a").is_some());
-        assert!(db.get_symbol_defs("b").is_some());
-    }
-
-    // ---- 作用域查找测试 ----
-
-    #[test]
-    fn test_scope_basic() {
-        let mut db = SemanticDB::new();
-
-        db.add_scope(
-            "test.yx",
-            ScopeInfo {
-                span: Span::new(
-                    Position::with_offset(1, 1, 0),
-                    Position::with_offset(10, 1, 100),
-                ),
-                parent: None,
-                symbols: vec!["x".to_string()],
-                kind: ScopeKind::Global,
-            },
-        );
-
-        let scopes = db.get_scopes("test.yx").unwrap();
-        assert_eq!(scopes.len(), 1);
-        assert_eq!(scopes[0].kind, ScopeKind::Global);
-    }
-
-    #[test]
-    fn test_find_innermost_scope() {
-        let mut db = SemanticDB::new();
-
-        // 全局作用域 1:1 - 20:1
-        db.add_scope(
-            "test.yx",
-            ScopeInfo {
-                span: Span::new(
-                    Position::with_offset(1, 1, 0),
-                    Position::with_offset(20, 1, 200),
-                ),
-                parent: None,
-                symbols: vec!["x".to_string()],
-                kind: ScopeKind::Global,
-            },
-        );
-
-        // 函数作用域 5:1 - 10:1
-        db.add_scope(
-            "test.yx",
-            ScopeInfo {
-                span: Span::new(
-                    Position::with_offset(5, 1, 50),
-                    Position::with_offset(10, 1, 100),
-                ),
-                parent: Some(0),
-                symbols: vec!["y".to_string()],
-                kind: ScopeKind::Function,
-            },
-        );
-
-        // 第 7 行应该在函数作用域内
-        let scope = db.find_innermost_scope("test.yx", 7, 1).unwrap();
-        assert_eq!(scope.kind, ScopeKind::Function);
-
-        // 第 15 行在全局作用域
-        let scope = db.find_innermost_scope("test.yx", 15, 1).unwrap();
-        assert_eq!(scope.kind, ScopeKind::Global);
-
-        // 不存在的文件
-        assert!(db.find_innermost_scope("nonexistent.yx", 1, 1).is_none());
-    }
-
-    // ---- Token 类型索引测试 ----
-
-    #[test]
-    fn test_token_type_index() {
-        assert_eq!(SemanticTokenType::Function.index(), 0);
-        assert_eq!(SemanticTokenType::Type.index(), 1);
-        assert_eq!(SemanticTokenType::Variable.index(), 2);
-        assert_eq!(SemanticTokenType::LocalVariable.index(), 2); // 映射到 Variable
-        assert_eq!(SemanticTokenType::Property.index(), 3);
-        assert_eq!(SemanticTokenType::Method.index(), 4);
-        assert_eq!(SemanticTokenType::Namespace.index(), 5);
-        assert_eq!(SemanticTokenType::Parameter.index(), 6);
-        assert_eq!(SemanticTokenType::TypeParameter.index(), 7);
-        assert_eq!(SemanticTokenType::EnumMember.index(), 11);
-    }
-
-    #[test]
-    fn test_token_type_legend() {
-        let legend = SemanticTokenType::legend();
-        assert_eq!(legend.len(), 12);
-        assert_eq!(legend[0], "function");
-        assert_eq!(legend[1], "type");
-        assert_eq!(legend[11], "enumMember");
-    }
-
-    #[test]
-    fn test_modifier_bit_flags() {
-        assert_eq!(SemanticTokenModifier::Declaration.bit_flag(), 1);
-        assert_eq!(SemanticTokenModifier::Readonly.bit_flag(), 2);
-        assert_eq!(SemanticTokenModifier::Mutable.bit_flag(), 4);
-        assert_eq!(SemanticTokenModifier::Public.bit_flag(), 8);
-        assert_eq!(SemanticTokenModifier::Generic.bit_flag(), 16);
-    }
-
-    #[test]
-    fn test_modifier_legend() {
-        let legend = SemanticTokenModifier::legend();
-        assert_eq!(legend.len(), 5);
-    }
-}

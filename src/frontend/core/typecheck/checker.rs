@@ -5,13 +5,17 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::parser::ast::Module;
-use crate::frontend::core::types::base::{MonoType, PolyType};
+use crate::frontend::core::types::{MonoType, PolyType};
 use crate::frontend::core::typecheck::traits::auto_derive;
-use crate::frontend::core::types::computation::const_generics::{ConstFunction, ConstExpr};
+use crate::frontend::core::types::eval::const_eval::{ConstFunction, ConstExpr};
+use crate::frontend::core::typecheck::predicate_resolver::PredicateResolver;
+use crate::frontend::core::typecheck::proof::context::ProofContext;
+use crate::frontend::core::typecheck::proof::verdict::ProofResult;
+use crate::frontend::core::typecheck::layers::predicate::check_predicate;
 
 use super::inference;
 use super::semantic_db;
-use super::spawn_placement;
+use crate::frontend::core::spawn;
 use super::types::TypeCheckResult;
 use super::environment::TypeEnvironment;
 use super::{add_builtin_types, add_std_traits, add_native_function_types};
@@ -52,7 +56,7 @@ impl TypeChecker {
     /// 注册预定义的 const 函数
     /// 这些函数用于值依赖类型的编译期求值
     fn register_predefined_const_functions(env: &mut TypeEnvironment) {
-        use crate::frontend::core::types::computation::const_generics::ConstBinOp;
+        use crate::frontend::core::types::eval::const_eval::ConstBinOp;
 
         // 注册 factorial 函数
         let factorial = ConstFunction::new(
@@ -126,11 +130,6 @@ impl TypeChecker {
         &self.env.module_name
     }
 
-    /// 提取收集到的语义信息
-    pub fn take_semantic_db(&mut self) -> semantic_db::SemanticDB {
-        std::mem::take(&mut self.semantic_db)
-    }
-
     /// 添加错误
     fn add_error(
         &mut self,
@@ -172,7 +171,7 @@ impl TypeChecker {
     pub fn check_module(
         &mut self,
         module: &Module,
-    ) -> Result<TypeCheckResult, Vec<Diagnostic>> {
+    ) -> TypeCheckResult {
         self.check_module_impl(module, false)
     }
 
@@ -183,7 +182,7 @@ impl TypeChecker {
     pub fn check_module_collect_all(
         &mut self,
         module: &Module,
-    ) -> Result<TypeCheckResult, Vec<Diagnostic>> {
+    ) -> TypeCheckResult {
         self.check_module_impl(module, true)
     }
 
@@ -192,7 +191,7 @@ impl TypeChecker {
         &mut self,
         module: &Module,
         collect_all: bool,
-    ) -> Result<TypeCheckResult, Vec<Diagnostic>> {
+    ) -> TypeCheckResult {
         // 第一遍：收集所有类型定义
         for stmt in &module.items {
             if let crate::frontend::core::parser::ast::StmtKind::Binding {
@@ -233,8 +232,8 @@ impl TypeChecker {
         // 收集所有导出项
         self.collect_exports(module);
 
-        // RFC-001/008: `spawn` 仅允许在 `@block` 作用域内使用（编译期约束）
-        for err in spawn_placement::check_spawn_placement(module) {
+        // RFC-024: spawn 位置检查
+        for err in spawn::placement::check_spawn_placement(module) {
             self.add_error(err);
         }
 
@@ -264,7 +263,8 @@ impl TypeChecker {
 
         // 将环境中的变量同步到 body_checker
         for (name, poly) in self.env.vars.clone() {
-            self.body_checker_mut().add_var(name, poly, false);
+            self.body_checker_mut()
+                .add_var(name, poly, false, crate::util::span::Span::default());
         }
 
         // 第三遍：检查所有语句（包括函数体）
@@ -278,6 +278,19 @@ impl TypeChecker {
         if let Some(ref mut bc) = self.body_checker {
             for err in bc.drain_collected_errors() {
                 self.env.errors.add_error(err);
+            }
+        }
+
+        // RFC-027: 终止检查 — 在类型检查之后、约束求解之前运行
+        // 分析循环和递归函数，自动证明终止性
+        let term_results = {
+            let mut term_checker = super::layers::termination::TerminationChecker::new();
+            term_checker.check_module(module, self.env())
+        };
+        for result in term_results {
+            match result.into_result() {
+                Ok(()) => {} // 证明通过，无需诊断
+                Err(diag) => self.add_error(diag),
             }
         }
 
@@ -295,10 +308,8 @@ impl TypeChecker {
         // 即便类型检查存在错误（如语法或类型错误），我们也要尽可能收集当前的语义 token，保证代码染色等功能
         self.collect_semantic_tokens(module);
 
-        // 如果有错误，返回所有错误
-        if self.has_errors() {
-            return Err(self.errors().to_vec());
-        }
+        // 收集错误（无论有无错误都收进 result.diagnostics）
+        let diagnostics = self.errors().to_vec();
 
         // 构建类型检查结果
         // 合并 StatementChecker 中的局部变量类型到 bindings
@@ -320,10 +331,8 @@ impl TypeChecker {
         // 同时从 env.vars 收集非全局绑定（函数）的局部变量
         for (name, poly) in &self.env.vars {
             // 排除函数（函数名首字母小写或者是已知的函数）
-            let is_function = matches!(
-                poly.body,
-                crate::frontend::core::types::base::MonoType::Fn { .. }
-            );
+            let is_function =
+                matches!(poly.body, crate::frontend::core::types::MonoType::Fn { .. });
             if !is_function && !local_var_types.contains_key(name) {
                 local_var_types.insert(name.clone(), poly.body.clone());
             }
@@ -334,15 +343,14 @@ impl TypeChecker {
         // 所以这里直接使用 scope 中的类型即可，不需要额外 resolve。
         // （注：如果后续需要支持更复杂的泛型推导，可能需要重新设计 solver 的共享机制）
 
-        let result = TypeCheckResult {
+        TypeCheckResult {
             module_name: self.env.module_name.clone(),
+            diagnostics,
             bindings,
             local_var_types,
             semantic_db: std::mem::take(&mut self.semantic_db),
             trait_table: self.env.trait_table.clone(),
-        };
-
-        Ok(result)
+        }
     }
 
     /// 获取 body_checker 的可变引用
@@ -389,6 +397,22 @@ impl TypeChecker {
                                 .unwrap_or_else(|| self.env.solver().new_var()),
                         ),
                     };
+
+                    // RFC-027: 解析类型标注中的编译期谓词
+                    let fn_ty = match fn_ty {
+                        MonoType::Fn {
+                            params,
+                            return_type,
+                        } => MonoType::Fn {
+                            params: params
+                                .into_iter()
+                                .map(|p| self.resolve_type_annotation(&p))
+                                .collect(),
+                            return_type: Box::new(self.resolve_type_annotation(&return_type)),
+                        },
+                        other => other,
+                    };
+
                     self.env.add_var(name.clone(), PolyType::mono(fn_ty));
                 }
                 // 处理 Lambda 赋值 (name = (params) => body)
@@ -414,6 +438,24 @@ impl TypeChecker {
                                     .collect(),
                                 return_type: Box::new(self.env.solver().new_var()),
                             };
+
+                            // RFC-027: 解析类型标注中的编译期谓词
+                            let fn_ty = match fn_ty {
+                                MonoType::Fn {
+                                    params,
+                                    return_type,
+                                } => MonoType::Fn {
+                                    params: params
+                                        .into_iter()
+                                        .map(|p| self.resolve_type_annotation(&p))
+                                        .collect(),
+                                    return_type: Box::new(
+                                        self.resolve_type_annotation(&return_type),
+                                    ),
+                                },
+                                other => other,
+                            };
+
                             self.env.add_var(name.clone(), PolyType::mono(fn_ty));
                         }
                     }
@@ -556,6 +598,21 @@ impl TypeChecker {
                 let fn_ty = MonoType::Fn {
                     params: final_param_types.clone(),
                     return_type: Box::new(final_return_type),
+                };
+
+                // RFC-027: 解析类型标注中的编译期谓词（如 Positive(5) -> Refined）
+                let fn_ty = match fn_ty {
+                    MonoType::Fn {
+                        params,
+                        return_type,
+                    } => MonoType::Fn {
+                        params: params
+                            .into_iter()
+                            .map(|p| self.resolve_type_annotation(&p))
+                            .collect(),
+                        return_type: Box::new(self.resolve_type_annotation(&return_type)),
+                    },
+                    other => other,
                 };
 
                 // 如果有 type_name（显式方法绑定），使用 add_fn_binding
@@ -709,7 +766,7 @@ impl TypeChecker {
             };
             fields.push((field_name.clone(), field_ty));
         }
-        let module_ty = MonoType::Struct(crate::frontend::core::types::base::mono::StructType {
+        let module_ty = MonoType::Struct(crate::frontend::core::types::mono::StructType {
             name: module_alias.to_string(),
             fields,
             methods: HashMap::new(),
@@ -749,15 +806,14 @@ impl TypeChecker {
                         fields.push((field_name.clone(), field_ty));
                     }
                 }
-                let module_ty =
-                    MonoType::Struct(crate::frontend::core::types::base::mono::StructType {
-                        name: export.name.clone(),
-                        fields,
-                        methods: HashMap::new(),
-                        field_mutability: Vec::new(),
-                        field_has_default: Vec::new(),
-                        interfaces: vec![],
-                    });
+                let module_ty = MonoType::Struct(crate::frontend::core::types::mono::StructType {
+                    name: export.name.clone(),
+                    fields,
+                    methods: HashMap::new(),
+                    field_mutability: Vec::new(),
+                    field_has_default: Vec::new(),
+                    interfaces: vec![],
+                });
                 self.env.add_var(register_name, PolyType::mono(module_ty));
             }
             _ => {
@@ -830,7 +886,7 @@ impl TypeChecker {
         // Inject the type name into StructType if it's missing (plain Type::Struct has no name)
         let poly = PolyType::mono(match &poly.body {
             MonoType::Struct(s) if s.name.is_empty() => {
-                MonoType::Struct(crate::frontend::core::types::base::mono::StructType {
+                MonoType::Struct(crate::frontend::core::types::mono::StructType {
                     name: name.to_string(),
                     fields: s.fields.clone(),
                     methods: s.methods.clone(),
@@ -1098,5 +1154,48 @@ impl TypeChecker {
             other => other,
         }
     }
+
+    // ============ RFC-027 阶段 1：编译期谓词集成 ============
+
+    /// 解析类型标注：如果是编译期谓词调用，正格化为 Refined
+    ///
+    /// Generic("Positive", [arg]) -> 尝试 PredicateResolver::try_resolve
+    /// 如果不是已知的编译期谓词，返回原类型
+    fn resolve_type_annotation(
+        &self,
+        ty: &MonoType,
+    ) -> MonoType {
+        match ty {
+            MonoType::Generic { name, args } if !args.is_empty() => {
+                if let Some(refined) = PredicateResolver::try_resolve(&self.env, name, args) {
+                    return refined;
+                }
+                ty.clone()
+            }
+            _ => ty.clone(),
+        }
+    }
+
+    /// 对绑定点的精化类型执行谓词检查
+    ///
+    /// 仅处理 Refined 类型，非 Refined 直接返回 Proved。
+    /// 构造 ProofContext 后调用 Layer 3 的 check_predicate。
+    #[allow(dead_code)] // 阶段 1：方法已就绪，变量绑定验证在后续阶段接入
+    fn check_refined_binding(
+        &self,
+        ty: &MonoType,
+        bindings: &std::collections::HashMap<String, crate::frontend::core::types::ConstValue>,
+    ) -> ProofResult {
+        // 只处理 Refined 类型
+        if !matches!(ty, MonoType::Refined { .. }) {
+            return ProofResult::Proved;
+        }
+
+        // 构造 ProofContext
+        let ctx = ProofContext::new(&self.env);
+
+        // 调用 Layer 3
+        check_predicate(&ctx, ty, bindings)
+    }
 }
-include!("semantic_tokens_impl.rs");
+include!("checker/semantic_tokens.rs");

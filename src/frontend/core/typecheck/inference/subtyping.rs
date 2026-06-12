@@ -12,7 +12,7 @@
 //! 2. 通过 Type.method 绑定的方法（从 TypeEnvironment 查询）
 
 use crate::util::diagnostic::Result;
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 
 /// 子类型检查器

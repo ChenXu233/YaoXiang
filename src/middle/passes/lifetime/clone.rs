@@ -4,9 +4,9 @@
 //! - clone() 只能用于有效状态的值（Owned，不能是 Moved 或 Dropped）
 //! - clone() 后原值仍保持 Owned 状态
 
-use super::error::{OwnershipCheck, ValueState, codes, operand_to_string};
+use super::error::{OwnershipCheck, ValueState, operand_display_name};
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
-use crate::util::diagnostic::Diagnostic;
+use crate::util::diagnostic::{ErrorCodeDefinition, Diagnostic};
 use std::collections::HashMap;
 
 /// Clone 检查器
@@ -19,9 +19,19 @@ pub struct CloneChecker {
     state: HashMap<Operand, ValueState>,
     errors: Vec<Diagnostic>,
     location: (usize, usize),
+    /// 局部变量名列表（用于错误报告中显示源码变量名）
+    local_names: Option<Vec<String>>,
 }
 
 impl CloneChecker {
+    /// 设置局部变量名列表
+    pub fn set_local_names(
+        &mut self,
+        local_names: Option<Vec<String>>,
+    ) {
+        self.local_names = local_names;
+    }
+
     /// 检查 clone() 调用（核心逻辑）
     fn check_clone(
         &mut self,
@@ -33,6 +43,14 @@ impl CloneChecker {
                 ValueState::Moved => self.error_clone_moved(receiver),
                 ValueState::Dropped => self.error_clone_dropped(receiver),
                 ValueState::Owned(_) => {}
+                ValueState::Dup => {
+                    // Dup 类型（如 &T）clone 后保持 Dup 状态
+                    // dst 也变为 Dup 状态
+                    if let Some(d) = dst {
+                        self.state.insert(d.clone(), ValueState::Dup);
+                    }
+                    return;
+                }
                 ValueState::Empty => self.error_clone_moved(receiver), // 空状态不能 clone
             }
             self.state.insert(receiver.clone(), ValueState::Owned(None));
@@ -46,16 +64,18 @@ impl CloneChecker {
         &mut self,
         operand: &Operand,
     ) {
+        let name = operand_display_name(operand, self.local_names.as_ref());
         self.errors
-            .push(codes::clone_moved_value(&operand_to_string(operand)));
+            .push(ErrorCodeDefinition::clone_moved_value(&name).build());
     }
 
     fn error_clone_dropped(
         &mut self,
         operand: &Operand,
     ) {
+        let name = operand_display_name(operand, self.local_names.as_ref());
         self.errors
-            .push(codes::use_after_drop(&operand_to_string(operand)));
+            .push(ErrorCodeDefinition::use_after_drop(&name).build());
     }
 
     fn set_owned(

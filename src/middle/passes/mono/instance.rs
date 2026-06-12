@@ -250,13 +250,13 @@ fn type_name_hash<H: Hasher>(
             type_name_hash(base_type, state);
             // 哈希常量值
             match value {
-                crate::frontend::core::types::base::ConstValue::Int(n) => {
+                crate::frontend::core::types::ConstValue::Int(n) => {
                     format!("int:{}", n).hash(state);
                 }
-                crate::frontend::core::types::base::ConstValue::Bool(b) => {
+                crate::frontend::core::types::ConstValue::Bool(b) => {
                     format!("bool:{}", b).hash(state);
                 }
-                crate::frontend::core::types::base::ConstValue::Float(f) => {
+                crate::frontend::core::types::ConstValue::Float(f) => {
                     format!("float:{}", f.to_bits()).hash(state);
                 }
             }
@@ -277,6 +277,22 @@ fn type_name_hash<H: Hasher>(
             for arg in args {
                 type_name_hash(arg, state);
             }
+        }
+        MonoType::Refined { base, constraint } => {
+            "refined".hash(state);
+            type_name_hash(base, state);
+            constraint.hash(state);
+        }
+        MonoType::DepFn {
+            params,
+            return_type,
+        } => {
+            "depfn".hash(state);
+            for p in params {
+                p.name.hash(state);
+                type_name_hash(&p.ty, state);
+            }
+            type_name_hash(return_type, state);
         }
     }
 }

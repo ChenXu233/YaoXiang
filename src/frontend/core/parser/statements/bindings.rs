@@ -2,6 +2,7 @@
 //! Handles binding declarations: `Type.method = value`
 
 use crate::frontend::core::lexer::tokens::*;
+use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::parser::ParserState;
 use crate::frontend::core::parser::statements::types::parse_type_annotation;
@@ -90,7 +91,7 @@ impl BindingParser {
         &self,
         tokens: &[Token],
         _start_pos: usize,
-    ) -> Result<Stmt, crate::frontend::core::parser::ParseError> {
+    ) -> Result<Stmt, crate::util::diagnostic::Diagnostic> {
         // RFC-004 Binding syntax parser:
         // Format: Type.method = value
         let mut state = ParserState::new(tokens);
@@ -99,54 +100,62 @@ impl BindingParser {
         let _type_name = match state.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
-                return Err(crate::frontend::core::parser::ParseError::UnexpectedToken {
-                    found: state
-                        .current()
-                        .map(|t| t.kind.clone())
-                        .unwrap_or(TokenKind::Eof),
-                    span: state.span(),
-                });
+                let found = state
+                    .current()
+                    .map(|t| t.kind.clone())
+                    .unwrap_or(TokenKind::Eof);
+                return Err(
+                    ErrorCodeDefinition::unexpected_token(&format!("{:?}", found))
+                        .at(state.span())
+                        .build(),
+                );
             }
         };
         state.bump();
 
         // Expect dot
         if !state.skip(&TokenKind::Dot) {
-            return Err(crate::frontend::core::parser::ParseError::ExpectedToken {
-                expected: TokenKind::Dot,
-                found: state
-                    .current()
-                    .map(|t| t.kind.clone())
-                    .unwrap_or(TokenKind::Eof),
-                span: state.span(),
-            });
+            let found = state
+                .current()
+                .map(|t| t.kind.clone())
+                .unwrap_or(TokenKind::Eof);
+            return Err(ErrorCodeDefinition::expected_token(
+                &format!("{:?}", TokenKind::Dot),
+                &format!("{:?}", found),
+            )
+            .at(state.span())
+            .build());
         }
 
         // Parse method name
         let _method_name = match state.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
-                return Err(crate::frontend::core::parser::ParseError::UnexpectedToken {
-                    found: state
-                        .current()
-                        .map(|t| t.kind.clone())
-                        .unwrap_or(TokenKind::Eof),
-                    span: state.span(),
-                });
+                let found = state
+                    .current()
+                    .map(|t| t.kind.clone())
+                    .unwrap_or(TokenKind::Eof);
+                return Err(
+                    ErrorCodeDefinition::unexpected_token(&format!("{:?}", found))
+                        .at(state.span())
+                        .build(),
+                );
             }
         };
         state.bump();
 
         // Expect equals
         if !state.skip(&TokenKind::Eq) {
-            return Err(crate::frontend::core::parser::ParseError::ExpectedToken {
-                expected: TokenKind::Eq,
-                found: state
-                    .current()
-                    .map(|t| t.kind.clone())
-                    .unwrap_or(TokenKind::Eof),
-                span: state.span(),
-            });
+            let found = state
+                .current()
+                .map(|t| t.kind.clone())
+                .unwrap_or(TokenKind::Eof);
+            return Err(ErrorCodeDefinition::expected_token(
+                &format!("{:?}", TokenKind::Eq),
+                &format!("{:?}", found),
+            )
+            .at(state.span())
+            .build());
         }
 
         // Parse value expression

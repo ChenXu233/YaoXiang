@@ -1,0 +1,8 @@
+// dict_literal: Dict 字面量 IR 支持
+use std.io
+main = {
+    d = {"a": 1, "b": 2}
+    io.println("dict created")
+    io.println(d)
+    io.println("ALL TESTS PASSED")
+}

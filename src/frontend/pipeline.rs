@@ -473,60 +473,45 @@ impl Pipeline {
         let _source_file = SourceFile::new(source_name.to_string(), source.to_string());
         let _ = _source_file;
 
-        match typecheck::check_module(ast, &mut None) {
-            Ok(type_result) => {
-                let duration = start.elapsed().as_millis() as u64;
-                phase_durations.push((CompilationPhase::TypeChecking, duration));
+        let mut type_result = typecheck::check_module(ast, &mut None);
+        let duration = start.elapsed().as_millis() as u64;
+        phase_durations.push((CompilationPhase::TypeChecking, duration));
 
-                // 执行死代码分析（根据配置决定是否启用）
-                let warnings = if self.config.dead_code.enabled {
-                    self.run_dead_code_analysis(source_name, ast, &type_result.semantic_db)
-                } else {
-                    Vec::new()
-                };
+        let error_count = type_result.diagnostics.len();
+        let has_errors = error_count > 0;
+        let errors = std::mem::take(&mut type_result.diagnostics);
+        let error_messages: Vec<String> = errors.iter().map(|e| e.message.clone()).collect();
 
-                let warning_count = warnings.len();
+        // 执行死代码分析（根据配置决定是否启用）
+        let warnings = if self.config.dead_code.enabled && !has_errors {
+            self.run_dead_code_analysis(source_name, ast, &type_result.semantic_db)
+        } else {
+            Vec::new()
+        };
 
-                self.event_bus.emit(TypeCheckingComplete::new(
-                    type_result.bindings.len(),
-                    0, // errors
-                    warning_count,
-                    duration,
-                ));
+        let warning_count = warnings.len();
 
-                // 发送警告事件
-                for warning in &warnings {
-                    self.event_bus
-                        .emit(WarningOccurred::new(warning.clone(), "W1000"));
-                }
+        self.event_bus.emit(TypeCheckingComplete::new(
+            type_result.bindings.len(),
+            error_count,
+            warning_count,
+            duration,
+        ));
 
-                TypecheckResult::success(type_result, warnings)
-            }
-            Err(errors) => {
-                let duration = start.elapsed().as_millis() as u64;
-                phase_durations.push((CompilationPhase::TypeChecking, duration));
+        for warning in &warnings {
+            self.event_bus
+                .emit(WarningOccurred::new(warning.clone(), "W1000"));
+        }
 
-                // 保留原始 Diagnostic，同时发送字符串消息给事件总线
-                let error_messages: Vec<String> =
-                    errors.iter().map(|e| e.message.clone()).collect();
+        for err in &error_messages {
+            self.event_bus
+                .emit(ErrorOccurred::new(err.clone(), "E0300", ErrorLevel::Error));
+        }
 
-                self.event_bus.emit(TypeCheckingComplete::new(
-                    0,
-                    error_messages.len(),
-                    0,
-                    duration,
-                ));
-
-                for err in &error_messages {
-                    self.event_bus.emit(ErrorOccurred::new(
-                        err.clone(),
-                        "E0300",
-                        ErrorLevel::Error,
-                    ));
-                }
-
-                TypecheckResult::failed(errors)
-            }
+        TypecheckResult {
+            type_result,
+            errors,
+            warnings,
         }
     }
 
@@ -537,7 +522,7 @@ impl Pipeline {
         ast: &super::core::parser::Module,
         semantic_db: &typecheck::semantic_db::SemanticDB,
     ) -> Vec<String> {
-        use crate::frontend::core::typecheck::dead_code::DeadCodeAnalyzer;
+        use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
 
         let mut analyzer = DeadCodeAnalyzer::new();
         let warnings = analyzer.analyze(ast, semantic_db);
@@ -739,6 +724,7 @@ struct TypecheckResult {
     warnings: Vec<String>,
 }
 
+#[allow(dead_code)]
 impl TypecheckResult {
     fn success(
         type_result: typecheck::TypeCheckResult,
@@ -759,6 +745,7 @@ impl TypecheckResult {
         }
     }
 
+    #[allow(dead_code)]
     fn is_success(&self) -> bool {
         self.errors.is_empty()
     }
