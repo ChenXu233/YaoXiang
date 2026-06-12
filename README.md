@@ -162,17 +162,24 @@ vec: Vec(factorial(3)) = Vec(6)()
 ## 安装与构建
 
 ```bash
-# 克隆并构建（开发版本）
+# 克隆项目
 git clone https://github.com/yaoxiang-lang/yaoxiang.git
 cd yaoxiang
+
+# 一键安装 Z3 依赖（纯 Rust，自动下载预编译包）
+cd tools/setup-z3 && cargo run && cd ../..
+
+# 构建
 cargo build
 
-# 运行测试查看当前状态
+# 运行测试
 cargo test
 
 # 尝试示例
 cargo run --example hello
 ```
+
+> Z3 是编译器的 SMT 求解模块，用于编译期谓词证明（RFC-027）。`tools/setup-z3` 自动从 GitHub Releases 下载对应平台的预编译包到 `.z3/`，写入 `.cargo/config.toml`。首次运行后 `cargo build` 即可直接构建。详见 [RFC-027](docs/src/design/rfc/accepted/027-compile-time-evaluation-types.md)。
 
 ### 开发环境配置
 
