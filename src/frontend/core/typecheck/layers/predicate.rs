@@ -7,7 +7,7 @@
 //!   3. Z3 SMT 求解（Phase 2B，毫秒级）——符号变量 + 蕴含推理
 
 use std::collections::HashMap;
-use std::sync::LazyLock;
+use std::sync::{LazyLock, Mutex};
 
 use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
 use crate::frontend::core::types::eval::evaluator::Evaluator;
@@ -19,8 +19,8 @@ use super::super::proof::smt::z3_backend::Z3Backend;
 use super::super::proof::verdict::{DisproofModel, ProofResult, UnprovenReason};
 
 /// Z3 实例——整个编译过程只初始化一次
-static Z3_INSTANCE: LazyLock<Z3Backend> = LazyLock::new(|| {
-    Z3Backend::new().expect("Z3 solver initialization failed — is libz3 installed?")
+static Z3_INSTANCE: LazyLock<Mutex<Z3Backend>> = LazyLock::new(|| {
+    Mutex::new(Z3Backend::new().expect("Z3 solver initialization failed — is libz3 installed?"))
 });
 
 /// 检查精化谓词是否成立
@@ -97,7 +97,7 @@ fn try_smt_solve(
         &var_sorts,
     );
 
-    match Z3_INSTANCE.solve(&commands, ctx.budget.time_ms_limit()) {
+    match Z3_INSTANCE.lock().unwrap().solve(&commands, ctx.budget.time_ms_limit()) {
         SMTResult::Unsat => ProofResult::Proved,
         SMTResult::Sat { model } => ProofResult::Disproved(DisproofModel {
             assignments: model.assignments,
