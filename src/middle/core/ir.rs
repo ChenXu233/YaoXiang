@@ -246,6 +246,15 @@ pub enum Instruction {
         /// spawn 块返回值寄存器
         result: Operand,
     },
+    /// 从 List 寄存器动态读取闭包并 spawn（RFC-024 §2.4 spawn for）
+    SpawnFromList {
+        /// 闭包列表寄存器（运行时动态填充）
+        closures_list: Operand,
+        /// 编译期生成的执行计划
+        plan: ExecutionPlan,
+        /// spawn 块返回值寄存器
+        result: Operand,
+    },
     Yield,
     // Phase 5 additions
     HeapAlloc {

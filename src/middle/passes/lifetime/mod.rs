@@ -399,6 +399,12 @@ fn extract_operands(instr: &Instruction) -> Vec<Operand> {
             ops.extend(closures.iter().cloned());
             ops
         }
+        // spawn for: result = spawn_from_list closures_list
+        Instruction::SpawnFromList {
+            closures_list,
+            result,
+            ..
+        } => vec![result.clone(), closures_list.clone()],
 
         // MakeClosure：dst = closure(func, env...)
         Instruction::MakeClosure { dst, env, .. } => {

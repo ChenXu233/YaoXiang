@@ -384,6 +384,10 @@ impl Translator {
             }
 
             CloseUpvalue(operand) => self.translate_close_upvalue(operand),
+
+            // spawn for: 从 List 寄存器动态读取闭包并 spawn
+            // 暂时生成 Nop，后续需要实现 SpawnFromList 的字节码翻译
+            Instruction::SpawnFromList { .. } => Ok(BytecodeInstruction::new(Opcode::Nop, vec![])),
         }
     }
 

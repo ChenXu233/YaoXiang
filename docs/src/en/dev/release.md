@@ -27,34 +27,34 @@ Summarize the core content and significance of this release in 2-3 sentences.
 
 ## ✨ New Features
 
-### <Feature Area Title>
+### `<Feature Area Title>`
 
-<A paragraph explaining what this feature does, what problem it solves, and what it means for users>
+`<A paragraph explaining what this feature does, what problem it solves, and what it means for users>`
 
 - Specific change 1
 - Specific change 2
 - Specific change 3
 
-### <Another Feature Area>
+### `<Another Feature Area>`
 
-<Description>
+`<Description>`
 
 - Specific change
 
 ## 🐛 Bug Fixes
 
-### <Fix Area>
+### `<Fix Area>`
 
-<Describe what problem was fixed and the scope of impact>
+`<Describe what problem was fixed and the scope of impact>`
 
 - Specific fix 1
 - Specific fix 2
 
 ## ♻️ Refactoring & Optimization
 
-### <Refactoring Direction>
+### `<Refactoring Direction>`
 
-<Explain why the refactoring was done and what benefits it brings>
+`<Explain why the refactoring was done and what benefits it brings>`
 
 - Specific change
 
