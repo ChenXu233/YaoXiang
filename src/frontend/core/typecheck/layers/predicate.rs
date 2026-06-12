@@ -56,9 +56,15 @@ pub fn check_predicate(
     }
 
     // === 第 3 级：SMT 求解 ===
-    let smt_result = try_smt_solve(ctx, constraint, bindings);
-    if smt_result.is_proved() || matches!(smt_result, ProofResult::Disproved(_)) {
-        return smt_result;
+    // SMT 翻译不支持 Call/If/Range 形式——跳过，直接进入第 4 级
+    if !matches!(
+        constraint,
+        ConstExpr::Call { .. } | ConstExpr::If { .. } | ConstExpr::Range { .. }
+    ) {
+        let smt_result = try_smt_solve(ctx, constraint, bindings);
+        if smt_result.is_proved() || matches!(smt_result, ProofResult::Disproved(_)) {
+            return smt_result;
+        }
     }
 
     // === 第 4 级：识别证明函数调用 ===
