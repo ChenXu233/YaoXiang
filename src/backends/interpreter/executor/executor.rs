@@ -200,13 +200,29 @@ impl Interpreter {
     pub(super) fn from_shared(shared: *const SharedState) -> Self {
         let rt = Runtime::new(RuntimeConfig::default()).unwrap();
 
+        // SAFETY: 共享状态由主解释器管理生命周期（通过 execute_module 中的 Box::into_raw）。
+        // 主解释器通过 drive_until 阻塞直到所有任务完成，保证数据在任务期间有效。
+        // 数据在创建后只读，无数据竞争。
+        // 如果 shared 为空（例如 execute_module 未调用），使用空数据。
+        let (constants, functions, functions_by_id, type_table) = if shared.is_null() {
+            (Vec::new(), HashMap::new(), Vec::new(), Vec::new())
+        } else {
+            let shared_ref = unsafe { &*shared };
+            (
+                shared_ref.constants.clone(),
+                shared_ref.functions.clone(),
+                shared_ref.functions_by_id.clone(),
+                shared_ref.type_table.clone(),
+            )
+        };
+
         Self {
             heap: Heap::new(),
             call_stack: Vec::with_capacity(DEFAULT_MAX_STACK_DEPTH),
-            constants: Vec::new(),
-            functions: HashMap::new(),
-            functions_by_id: Vec::new(),
-            type_table: Vec::new(),
+            constants,
+            functions,
+            functions_by_id,
+            type_table,
             state: ExecutionState::default(),
             config: ExecutorConfig::default(),
             breakpoints: HashMap::new(),
@@ -214,7 +230,9 @@ impl Interpreter {
             stdout: None,
             runtime_config: InterpreterRuntimeConfig::default(),
             rt,
-            shared,
+            // 不设置 shared 字段，避免 Drop 时双重释放。
+            // 共享数据已拷贝到上方的字段中。
+            shared: std::ptr::null(),
         }
     }
 
