@@ -50,7 +50,7 @@ pub fn translate_constraint(
 }
 
 /// ConstExpr → SMTExpr 翻译
-fn translate_expr(expr: &ConstExpr) -> SMTExpr {
+pub(crate) fn translate_expr(expr: &ConstExpr) -> SMTExpr {
     match expr {
         // 字面量
         ConstExpr::Lit(value) => match value {
@@ -150,99 +150,5 @@ fn infer_sorts_in_expr(expr: &ConstExpr, sorts: &mut HashMap<String, SMTSort>) {
             infer_sorts_in_expr(inner, sorts);
         }
         _ => {}
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
-
-    fn make_gt(var: &str, n: i128) -> ConstExpr {
-        ConstExpr::BinOp {
-            op: BinOp::Gt,
-            left: Box::new(ConstExpr::NamedVar(var.into())),
-            right: Box::new(ConstExpr::Lit(ConstValue::Int(n))),
-        }
-    }
-
-    #[test]
-    fn test_translate_simple_constraint() {
-        let constraint = make_gt("x", 0);
-        let assumptions = vec![];
-        let mut var_sorts = HashMap::new();
-        var_sorts.insert("x".into(), SMTSort::Int);
-
-        let commands = translate_constraint(&constraint, &assumptions, &var_sorts);
-
-        // declare-const + assert(not goal) + check-sat + get-model
-        assert!(commands.len() >= 3);
-        match &commands[0] {
-            SMTCommand::DeclareConst(name, sort) => {
-                assert_eq!(name, "x");
-                assert_eq!(*sort, SMTSort::Int);
-            }
-            _ => panic!("Expected DeclareConst"),
-        }
-    }
-
-    #[test]
-    fn test_translate_with_assumptions() {
-        let constraint = make_gt("y", 0);
-        let assumptions = vec![make_gt("y", 5)];
-        let mut var_sorts = HashMap::new();
-        var_sorts.insert("y".into(), SMTSort::Int);
-
-        let commands = translate_constraint(&constraint, &assumptions, &var_sorts);
-
-        // declare-const + 1 assert(assumption) + 1 assert(not goal) + check-sat + get-model
-        assert_eq!(commands.len(), 5);
-    }
-
-    #[test]
-    fn test_translate_expr_gt() {
-        let expr = make_gt("x", 10);
-        let result = translate_expr(&expr);
-        assert_eq!(result.to_string(), "(> x 10)");
-    }
-
-    #[test]
-    fn test_translate_expr_and() {
-        let expr = ConstExpr::BinOp {
-            op: BinOp::And,
-            left: Box::new(make_gt("x", 0)),
-            right: Box::new(ConstExpr::BinOp {
-                op: BinOp::Lt,
-                left: Box::new(ConstExpr::NamedVar("x".into())),
-                right: Box::new(ConstExpr::Lit(ConstValue::Int(10))),
-            }),
-        };
-        let result = translate_expr(&expr);
-        assert!(result.to_string().contains("and"));
-        assert!(result.to_string().contains("(> x 0)"));
-        assert!(result.to_string().contains("(< x 10)"));
-    }
-
-    #[test]
-    fn test_infer_var_sorts() {
-        let constraint = ConstExpr::BinOp {
-            op: BinOp::And,
-            left: Box::new(make_gt("x", 0)),
-            right: Box::new(make_gt("y", 100)),
-        };
-        let bindings = HashMap::new();
-        let sorts = infer_var_sorts(&constraint, &bindings);
-        assert!(sorts.contains_key("x"));
-        assert!(sorts.contains_key("y"));
-    }
-
-    #[test]
-    fn test_translate_expr_not() {
-        let expr = ConstExpr::UnOp {
-            op: UnOp::Not,
-            expr: Box::new(make_gt("z", 0)),
-        };
-        let result = translate_expr(&expr);
-        assert_eq!(result.to_string(), "(not (> z 0))");
     }
 }

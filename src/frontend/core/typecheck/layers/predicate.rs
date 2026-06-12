@@ -1,4 +1,4 @@
-//! Layer 3：精化谓词证明（RFC-027 Section 3）
+//! Layer 3：精化谓词证明 — 基于 RFC-027 §4
 //!
 //! 对 Refined 类型的约束表达式进行求值。
 //! 三级分派：
@@ -7,32 +7,20 @@
 //!   3. Z3 SMT 求解（Phase 2B，毫秒级）——符号变量 + 蕴含推理
 
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
 use crate::frontend::core::types::eval::evaluator::Evaluator;
 use crate::frontend::core::types::mono::MonoType;
 use super::super::proof::context::ProofContext;
+use super::super::proof::smt::ast::SMTResult;
+use super::super::proof::smt::translate;
+use super::super::proof::smt::z3_backend::Z3Backend;
 use super::super::proof::verdict::{DisproofModel, ProofResult, UnprovenReason};
 
-#[cfg(feature = "z3")]
-use super::super::proof::smt::translate;
-#[cfg(feature = "z3")]
-use super::super::proof::smt::ast::SMTResult;
-#[cfg(feature = "z3")]
-use super::super::proof::smt::z3_backend::Z3Backend;
-#[cfg(feature = "z3")]
-use std::sync::LazyLock;
-
 /// Z3 实例——整个编译过程只初始化一次
-#[cfg(feature = "z3")]
-static Z3_INSTANCE: LazyLock<Option<Z3Backend>> = LazyLock::new(|| {
-    match Z3Backend::new() {
-        Ok(z3) => Some(z3),
-        Err(e) => {
-            eprintln!("[yaoxiang] Z3 init failed: {} — falling back to evaluator-only mode", e);
-            None
-        }
-    }
+static Z3_INSTANCE: LazyLock<Z3Backend> = LazyLock::new(|| {
+    Z3Backend::new().expect("Z3 solver initialization failed — is libz3 installed?")
 });
 
 /// 检查精化谓词是否成立
@@ -51,7 +39,6 @@ pub fn check_predicate(
     refined: &MonoType,
     bindings: &HashMap<String, ConstValue>,
 ) -> ProofResult {
-    // 提取约束表达式
     let constraint = match refined {
         MonoType::Refined { constraint, .. } => constraint,
         _ => return ProofResult::Proved,
@@ -93,59 +80,32 @@ fn try_direct_eval(
             reason: UnprovenReason::BeyondKernel("约束表达式未求值为 Bool".into()),
             budget: ctx.budget.report(),
         }),
-        Err(_) => {
-            // 求值失败（如未绑定变量）→ 不是 Proved/Disproved，
-            // 返回 None 让上层继续尝试后续级别
-            None
-        }
+        Err(_) => None,
     }
 }
 
 /// 第 3 级：SMT 求解
-#[allow(unused_variables)]
 fn try_smt_solve(
     ctx: &ProofContext<'_>,
     constraint: &ConstExpr,
     bindings: &HashMap<String, ConstValue>,
 ) -> ProofResult {
-    #[cfg(feature = "z3")]
-    {
-        if let Some(z3) = Z3_INSTANCE.as_ref() {
-            let var_sorts = translate::infer_var_sorts(constraint, bindings);
-            let commands = translate::translate_constraint(
-                constraint,
-                ctx.assumptions.current(),
-                &var_sorts,
-            );
+    let var_sorts = translate::infer_var_sorts(constraint, bindings);
+    let commands = translate::translate_constraint(
+        constraint,
+        ctx.assumptions.current(),
+        &var_sorts,
+    );
 
-            match z3.solve(&commands, ctx.budget.time_ms_limit()) {
-                SMTResult::Unsat => ProofResult::Proved,
-                SMTResult::Sat { model } => ProofResult::Disproved(DisproofModel {
-                    assignments: model.assignments,
-                }),
-                SMTResult::Unknown { reason } => ProofResult::Unproven {
-                    reason: UnprovenReason::BeyondKernel(reason),
-                    budget: ctx.budget.report(),
-                },
-            }
-        } else {
-            ProofResult::Unproven {
-                reason: UnprovenReason::BeyondKernel(
-                    "Z3 solver unavailable — install Z3 or enable the 'z3' feature".into(),
-                ),
-                budget: ctx.budget.report(),
-            }
-        }
-    }
-
-    #[cfg(not(feature = "z3"))]
-    {
-        ProofResult::Unproven {
-            reason: UnprovenReason::BeyondKernel(
-                "SMT solver not compiled in — rebuild with --features z3".into(),
-            ),
+    match Z3_INSTANCE.solve(&commands, ctx.budget.time_ms_limit()) {
+        SMTResult::Unsat => ProofResult::Proved,
+        SMTResult::Sat { model } => ProofResult::Disproved(DisproofModel {
+            assignments: model.assignments,
+        }),
+        SMTResult::Unknown { reason } => ProofResult::Unproven {
+            reason: UnprovenReason::BeyondKernel(reason),
             budget: ctx.budget.report(),
-        }
+        },
     }
 }
 
@@ -153,14 +113,18 @@ fn try_smt_solve(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::frontend::core::types::const_data::{BinOp, ConstExpr};
+    use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
+    use crate::frontend::core::typecheck::layers::predicate::check_predicate;
+    use crate::frontend::core::typecheck::proof::context::ProofContext;
+    use crate::frontend::core::typecheck::proof::verdict::ProofResult;
     use crate::frontend::core::typecheck::TypeEnvironment;
+    use crate::frontend::core::types::mono::MonoType;
+    use std::collections::HashMap;
 
-    // --- Phase 1 tests (keep existing) ---
+    // =========== Phase 1: Evaluator 直接求值 ===========
 
     #[test]
-    fn test_check_predicate_true() {
+    fn test_direct_eval_with_bound_variable_proved() {
         let refined = MonoType::Refined {
             base: Box::new(MonoType::Int(64)),
             constraint: ConstExpr::BinOp {
@@ -175,11 +139,14 @@ mod tests {
         let env = TypeEnvironment::new();
         let ctx = ProofContext::new(&env);
         let result = check_predicate(&ctx, &refined, &bindings);
-        assert!(result.is_proved());
+        assert!(
+            result.is_proved(),
+            "b=5 时 b>0 应直接求值为 Proved"
+        );
     }
 
     #[test]
-    fn test_check_predicate_false() {
+    fn test_direct_eval_with_bound_variable_disproved() {
         let refined = MonoType::Refined {
             base: Box::new(MonoType::Int(64)),
             constraint: ConstExpr::BinOp {
@@ -194,29 +161,36 @@ mod tests {
         let env = TypeEnvironment::new();
         let ctx = ProofContext::new(&env);
         let result = check_predicate(&ctx, &refined, &bindings);
-        assert!(!result.is_proved());
+        assert!(
+            !result.is_proved(),
+            "b=0 时 b>0 应直接求值为 Disproved"
+        );
         match result {
             ProofResult::Disproved(model) => {
-                assert!(model.assignments.iter().any(|(k, _)| k == "b"));
+                assert!(
+                    model.assignments.iter().any(|(k, _)| k == "b"),
+                    "反例模型应包含变量 b"
+                );
             }
-            _ => panic!("Expected Disproved"),
+            other => panic!("期望 Disproved，实际: {other:?}"),
         }
     }
 
     #[test]
-    fn test_check_predicate_non_refined_passes() {
-        let non_refined = MonoType::Int(64);
-        let bindings = HashMap::new();
+    fn test_non_refined_type_passes_immediately() {
         let env = TypeEnvironment::new();
         let ctx = ProofContext::new(&env);
-        let result = check_predicate(&ctx, &non_refined, &bindings);
-        assert!(result.is_proved());
+        let result = check_predicate(&ctx, &MonoType::Int(64), &HashMap::new());
+        assert!(
+            result.is_proved(),
+            "非 Refined 类型应直接返回 Proved"
+        );
     }
 
-    // --- Phase 2A tests (assumption stack) ---
+    // =========== Phase 2A: 假设栈蕴含 ===========
 
     #[test]
-    fn test_assumption_stack_contains_constraint() {
+    fn test_assumption_stack_direct_match_proves_immediately() {
         let constraint = ConstExpr::BinOp {
             op: BinOp::Gt,
             left: Box::new(ConstExpr::NamedVar("y".into())),
@@ -233,11 +207,14 @@ mod tests {
         ctx.assumptions.push(constraint);
 
         let result = check_predicate(&ctx, &refined, &HashMap::new());
-        assert!(result.is_proved());
+        assert!(
+            result.is_proved(),
+            "约束正好在假设栈中应直接返回 Proved"
+        );
     }
 
     #[test]
-    fn test_direct_eval_with_literals() {
+    fn test_direct_eval_with_concrete_literals() {
         let refined = MonoType::Refined {
             base: Box::new(MonoType::Int(64)),
             constraint: ConstExpr::BinOp {
@@ -250,6 +227,9 @@ mod tests {
         let env = TypeEnvironment::new();
         let ctx = ProofContext::new(&env);
         let result = check_predicate(&ctx, &refined, &HashMap::new());
-        assert!(result.is_proved());
+        assert!(
+            result.is_proved(),
+            "5>0 纯字面量应直接求值为 Proved"
+        );
     }
 }
