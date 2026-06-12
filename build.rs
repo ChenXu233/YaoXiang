@@ -44,7 +44,10 @@ fn main() {
 
     if !z3_dir.join("include").join("z3.h").exists() {
         if !archive.exists() {
-            println!("cargo:warning=Downloading Z3 {} for {}...", Z3_VERSION, target);
+            println!(
+                "cargo:warning=Downloading Z3 {} for {}...",
+                Z3_VERSION, target
+            );
             download(&url, &archive);
         }
         println!("cargo:warning=Extracting Z3...");
@@ -84,9 +87,12 @@ fn copy_dll(z3_dir: &Path) {
     }
     let out = env::var("OUT_DIR").unwrap();
     let profile = Path::new(&out)
-        .parent().unwrap()
-        .parent().unwrap()
-        .parent().unwrap();
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
     let deps = profile.join("deps");
     let _ = fs::create_dir_all(&deps);
     let _ = fs::copy(&dll, profile.join("libz3.dll"));
@@ -118,13 +124,26 @@ fn detect_target() -> &'static str {
     }
 }
 
-fn download(url: &str, dest: &Path) {
+fn download(
+    url: &str,
+    dest: &Path,
+) {
     let status = if cfg!(target_os = "windows") {
         Command::new("powershell")
-            .args(["-Command", &format!("Invoke-WebRequest -Uri '{}' -OutFile '{}'", url, dest.display())])
+            .args([
+                "-Command",
+                &format!(
+                    "Invoke-WebRequest -Uri '{}' -OutFile '{}'",
+                    url,
+                    dest.display()
+                ),
+            ])
             .status()
     } else {
-        Command::new("curl").args(["-sL", url, "-o"]).arg(dest).status()
+        Command::new("curl")
+            .args(["-sL", url, "-o"])
+            .arg(dest)
+            .status()
     };
     match status {
         Ok(s) if s.success() => {}
@@ -133,13 +152,28 @@ fn download(url: &str, dest: &Path) {
     }
 }
 
-fn extract(archive: &Path, dest: &Path) {
+fn extract(
+    archive: &Path,
+    dest: &Path,
+) {
     let status = if cfg!(target_os = "windows") {
         Command::new("powershell")
-            .args(["-Command", &format!("Expand-Archive -Path '{}' -DestinationPath '{}' -Force", archive.display(), dest.display())])
+            .args([
+                "-Command",
+                &format!(
+                    "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
+                    archive.display(),
+                    dest.display()
+                ),
+            ])
             .status()
     } else {
-        Command::new("unzip").args(["-q", "-o"]).arg(archive).arg("-d").arg(dest).status()
+        Command::new("unzip")
+            .args(["-q", "-o"])
+            .arg(archive)
+            .arg("-d")
+            .arg(dest)
+            .status()
     };
     match status {
         Ok(s) if s.success() => {}
