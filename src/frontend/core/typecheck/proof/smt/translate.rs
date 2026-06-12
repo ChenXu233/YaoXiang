@@ -137,7 +137,10 @@ pub fn infer_var_sorts(
     sorts
 }
 
-fn infer_sorts_in_expr(expr: &ConstExpr, sorts: &mut HashMap<String, SMTSort>) {
+fn infer_sorts_in_expr(
+    expr: &ConstExpr,
+    sorts: &mut HashMap<String, SMTSort>,
+) {
     match expr {
         ConstExpr::NamedVar(name) => {
             sorts.entry(name.clone()).or_insert(SMTSort::Int);

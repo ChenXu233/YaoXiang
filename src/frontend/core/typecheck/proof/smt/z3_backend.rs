@@ -25,7 +25,10 @@ pub enum Z3Error {
 }
 
 impl std::fmt::Display for Z3Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
         match self {
             Z3Error::InitFailed(msg) => write!(f, "Z3 init failed: {}", msg),
         }
@@ -49,7 +52,11 @@ impl Z3Backend {
     }
 
     /// 发送 SMT 命令序列，返回求解结果
-    pub fn solve(&self, commands: &[SMTCommand], timeout_ms: u64) -> SMTResult {
+    pub fn solve(
+        &self,
+        commands: &[SMTCommand],
+        timeout_ms: u64,
+    ) -> SMTResult {
         unsafe {
             let solver = z3_sys::Z3_mk_solver(self.ctx);
             z3_sys::Z3_solver_inc_ref(self.ctx, solver);
@@ -107,9 +114,7 @@ impl Z3Backend {
                     } else {
                         "timeout or incomplete theory".into()
                     };
-                    SMTResult::Unknown {
-                        reason: reason_str,
-                    }
+                    SMTResult::Unknown { reason: reason_str }
                 }
                 _ => SMTResult::Unknown {
                     reason: "unexpected Z3 result code".into(),
@@ -131,7 +136,10 @@ impl Drop for Z3Backend {
 }
 
 /// SMTSort → Z3_sort
-unsafe fn sort_to_z3(ctx: z3_sys::Z3_context, sort: &SMTSort) -> z3_sys::Z3_sort {
+unsafe fn sort_to_z3(
+    ctx: z3_sys::Z3_context,
+    sort: &SMTSort,
+) -> z3_sys::Z3_sort {
     match sort {
         SMTSort::Bool => z3_sys::Z3_mk_bool_sort(ctx),
         SMTSort::Int => z3_sys::Z3_mk_int_sort(ctx),
@@ -140,7 +148,10 @@ unsafe fn sort_to_z3(ctx: z3_sys::Z3_context, sort: &SMTSort) -> z3_sys::Z3_sort
 }
 
 /// SMTExpr → Z3_ast
-unsafe fn expr_to_z3(ctx: z3_sys::Z3_context, expr: &SMTExpr) -> z3_sys::Z3_ast {
+unsafe fn expr_to_z3(
+    ctx: z3_sys::Z3_context,
+    expr: &SMTExpr,
+) -> z3_sys::Z3_ast {
     match expr {
         SMTExpr::Atom(s) => {
             if let Ok(n) = s.parse::<i64>() {
@@ -151,7 +162,8 @@ unsafe fn expr_to_z3(ctx: z3_sys::Z3_context, expr: &SMTExpr) -> z3_sys::Z3_ast 
                 z3_sys::Z3_mk_false(ctx)
             } else {
                 // 变量引用：默认 Int 类型
-                let sym = z3_sys::Z3_mk_string_symbol(ctx, CString::new(s.as_str()).unwrap().as_ptr());
+                let sym =
+                    z3_sys::Z3_mk_string_symbol(ctx, CString::new(s.as_str()).unwrap().as_ptr());
                 z3_sys::Z3_mk_const(ctx, sym, z3_sys::Z3_mk_int_sort(ctx))
             }
         }
@@ -197,7 +209,10 @@ unsafe fn expr_to_z3(ctx: z3_sys::Z3_context, expr: &SMTExpr) -> z3_sys::Z3_ast 
 
                 // 未知操作：创建未解释函数应用
                 _ => {
-                    let fn_sym = z3_sys::Z3_mk_string_symbol(ctx, CString::new(op.as_str()).unwrap().as_ptr());
+                    let fn_sym = z3_sys::Z3_mk_string_symbol(
+                        ctx,
+                        CString::new(op.as_str()).unwrap().as_ptr(),
+                    );
                     let mut domain = vec![];
                     for _ in 0..z3_args.len() {
                         domain.push(int_sort);
@@ -218,7 +233,10 @@ unsafe fn expr_to_z3(ctx: z3_sys::Z3_context, expr: &SMTExpr) -> z3_sys::Z3_ast 
             let bound: Vec<z3_sys::Z3_app> = vars
                 .iter()
                 .map(|(name, sort)| {
-                    let sym = z3_sys::Z3_mk_string_symbol(ctx, CString::new(name.as_str()).unwrap().as_ptr());
+                    let sym = z3_sys::Z3_mk_string_symbol(
+                        ctx,
+                        CString::new(name.as_str()).unwrap().as_ptr(),
+                    );
                     let z3_sort = sort_to_z3(ctx, sort);
                     let ast = z3_sys::Z3_mk_const(ctx, sym, z3_sort);
                     z3_sys::Z3_to_app(ctx, ast)
@@ -239,7 +257,10 @@ unsafe fn expr_to_z3(ctx: z3_sys::Z3_context, expr: &SMTExpr) -> z3_sys::Z3_ast 
             let bound: Vec<z3_sys::Z3_app> = vars
                 .iter()
                 .map(|(name, sort)| {
-                    let sym = z3_sys::Z3_mk_string_symbol(ctx, CString::new(name.as_str()).unwrap().as_ptr());
+                    let sym = z3_sys::Z3_mk_string_symbol(
+                        ctx,
+                        CString::new(name.as_str()).unwrap().as_ptr(),
+                    );
                     let z3_sort = sort_to_z3(ctx, sort);
                     let ast = z3_sys::Z3_mk_const(ctx, sym, z3_sort);
                     z3_sys::Z3_to_app(ctx, ast)
@@ -285,7 +306,10 @@ unsafe fn parse_model(
 // --- 辅助函数 ---
 
 /// Z3_symbol → String
-unsafe fn z3_symbol_to_string(ctx: z3_sys::Z3_context, sym: z3_sys::Z3_symbol) -> String {
+unsafe fn z3_symbol_to_string(
+    ctx: z3_sys::Z3_context,
+    sym: z3_sys::Z3_symbol,
+) -> String {
     let ptr = z3_sys::Z3_get_symbol_string(ctx, sym);
     c_str_to_string(ptr)
 }

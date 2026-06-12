@@ -31,9 +31,12 @@ fn main() {
         if dll.exists() {
             let out = std::env::var("OUT_DIR").unwrap();
             let profile = std::path::Path::new(&out)
-                .parent().unwrap()  // <pkg>
-                .parent().unwrap()  // build
-                .parent().unwrap(); // target/debug 或 target/release
+                .parent()
+                .unwrap() // <pkg>
+                .parent()
+                .unwrap() // build
+                .parent()
+                .unwrap(); // target/debug 或 target/release
             let deps = profile.join("deps");
             let _ = std::fs::create_dir_all(&deps);
             let _ = std::fs::copy(&dll, profile.join("libz3.dll"));

@@ -78,6 +78,7 @@ fn try_direct_eval(
         })),
         Ok(_) => Some(ProofResult::Unproven {
             reason: UnprovenReason::BeyondKernel("约束表达式未求值为 Bool".into()),
+            proof_calls: vec![],
             budget: ctx.budget.report(),
         }),
         Err(_) => None,
@@ -91,19 +92,21 @@ fn try_smt_solve(
     bindings: &HashMap<String, ConstValue>,
 ) -> ProofResult {
     let var_sorts = translate::infer_var_sorts(constraint, bindings);
-    let commands = translate::translate_constraint(
-        constraint,
-        ctx.assumptions.current(),
-        &var_sorts,
-    );
+    let commands =
+        translate::translate_constraint(constraint, ctx.assumptions.current(), &var_sorts);
 
-    match Z3_INSTANCE.lock().unwrap().solve(&commands, ctx.budget.time_ms_limit()) {
+    match Z3_INSTANCE
+        .lock()
+        .unwrap()
+        .solve(&commands, ctx.budget.time_ms_limit())
+    {
         SMTResult::Unsat => ProofResult::Proved,
         SMTResult::Sat { model } => ProofResult::Disproved(DisproofModel {
             assignments: model.assignments,
         }),
         SMTResult::Unknown { reason } => ProofResult::Unproven {
             reason: UnprovenReason::BeyondKernel(reason),
+            proof_calls: vec![],
             budget: ctx.budget.report(),
         },
     }
@@ -139,10 +142,7 @@ mod tests {
         let env = TypeEnvironment::new();
         let ctx = ProofContext::new(&env);
         let result = check_predicate(&ctx, &refined, &bindings);
-        assert!(
-            result.is_proved(),
-            "b=5 时 b>0 应直接求值为 Proved"
-        );
+        assert!(result.is_proved(), "b=5 时 b>0 应直接求值为 Proved");
     }
 
     #[test]
@@ -161,10 +161,7 @@ mod tests {
         let env = TypeEnvironment::new();
         let ctx = ProofContext::new(&env);
         let result = check_predicate(&ctx, &refined, &bindings);
-        assert!(
-            !result.is_proved(),
-            "b=0 时 b>0 应直接求值为 Disproved"
-        );
+        assert!(!result.is_proved(), "b=0 时 b>0 应直接求值为 Disproved");
         match result {
             ProofResult::Disproved(model) => {
                 assert!(
@@ -181,10 +178,7 @@ mod tests {
         let env = TypeEnvironment::new();
         let ctx = ProofContext::new(&env);
         let result = check_predicate(&ctx, &MonoType::Int(64), &HashMap::new());
-        assert!(
-            result.is_proved(),
-            "非 Refined 类型应直接返回 Proved"
-        );
+        assert!(result.is_proved(), "非 Refined 类型应直接返回 Proved");
     }
 
     // =========== Phase 2A: 假设栈蕴含 ===========
@@ -207,10 +201,7 @@ mod tests {
         ctx.assumptions.push(constraint);
 
         let result = check_predicate(&ctx, &refined, &HashMap::new());
-        assert!(
-            result.is_proved(),
-            "约束正好在假设栈中应直接返回 Proved"
-        );
+        assert!(result.is_proved(), "约束正好在假设栈中应直接返回 Proved");
     }
 
     #[test]
@@ -227,9 +218,6 @@ mod tests {
         let env = TypeEnvironment::new();
         let ctx = ProofContext::new(&env);
         let result = check_predicate(&ctx, &refined, &HashMap::new());
-        assert!(
-            result.is_proved(),
-            "5>0 纯字面量应直接求值为 Proved"
-        );
+        assert!(result.is_proved(), "5>0 纯字面量应直接求值为 Proved");
     }
 }

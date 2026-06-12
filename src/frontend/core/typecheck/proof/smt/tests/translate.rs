@@ -11,7 +11,10 @@ use crate::frontend::core::typecheck::proof::smt::translate::{
     infer_var_sorts, translate_constraint, translate_expr,
 };
 
-fn make_gt(var: &str, n: i128) -> ConstExpr {
+fn make_gt(
+    var: &str,
+    n: i128,
+) -> ConstExpr {
     ConstExpr::BinOp {
         op: BinOp::Gt,
         left: Box::new(ConstExpr::NamedVar(var.into())),
@@ -80,18 +83,9 @@ fn test_translate_expr_and_produces_nested_smt() {
     };
     let result = translate_expr(&expr);
     let s = result.to_string();
-    assert!(
-        s.contains("and"),
-        "And 表达式应包含 and 操作符: {s}"
-    );
-    assert!(
-        s.contains("(> x 0)"),
-        "And 左子树应包含 (> x 0): {s}"
-    );
-    assert!(
-        s.contains("(< x 10)"),
-        "And 右子树应包含 (< x 10): {s}"
-    );
+    assert!(s.contains("and"), "And 表达式应包含 and 操作符: {s}");
+    assert!(s.contains("(> x 0)"), "And 左子树应包含 (> x 0): {s}");
+    assert!(s.contains("(< x 10)"), "And 右子树应包含 (< x 10): {s}");
 }
 
 #[test]
