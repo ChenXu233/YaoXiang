@@ -4,11 +4,14 @@
 //! 自动检测 .z3/ 目录（由 tools/setup-z3 下载），也支持 Z3_SYS_Z3_HEADER 环境变量。
 
 fn main() {
-    let header = find_z3_header().unwrap_or_else(|| {
-        println!("cargo:warning=Z3 not found. Run: cd tools/setup-z3 && cargo run");
-        println!("cargo:warning=Or set Z3_SYS_Z3_HEADER env var to point to z3.h");
-        return;
-    });
+    let header = match find_z3_header() {
+        Some(h) => h,
+        None => {
+            println!("cargo:warning=Z3 not found. Run: cd tools/setup-z3 && cargo run");
+            println!("cargo:warning=Or set Z3_SYS_Z3_HEADER env var to point to z3.h");
+            std::process::exit(1);
+        }
+    };
 
     let include_dir = std::path::Path::new(&header).parent().unwrap();
     let prefix = include_dir.parent().unwrap();
