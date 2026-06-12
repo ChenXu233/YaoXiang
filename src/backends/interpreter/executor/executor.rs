@@ -6,7 +6,6 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
-use std::time::Instant;
 use crate::backends::{Executor, ExecutorResult, ExecutorError, ExecutionState, ExecutorConfig};
 use crate::backends::common::{RuntimeValue, Heap, HeapValue};
 use crate::backends::common::value::{
@@ -16,8 +15,10 @@ use crate::middle::bytecode::{BytecodeFunction, Reg, Label, BinaryOp, CompareOp,
 use crate::backends::interpreter::Frame;
 use crate::backends::interpreter::ffi::FfiRegistry;
 use crate::backends::interpreter::runtime::InterpreterRuntimeConfig;
+use crate::backends::runtime::Runtime;
+use crate::backends::runtime::facade::RuntimeConfig;
 use crate::backends::runtime::engine::{
-    LocalRuntime, SyncValue, TaskMeta, TaskOutcome, TaskCancelReason, TaskResult, sv,
+    SyncValue, TaskCancelReason, TaskMeta, TaskOutcome, TaskResult, sv,
 };
 use crate::util::i18n::MSG;
 use crate::tlog;
@@ -37,6 +38,31 @@ pub(super) struct SharedState {
     pub type_table: Vec<crate::middle::core::ir::Type>,
     pub ffi: FfiRegistry,
 }
+
+/// Wrapper around a raw pointer to make it `Send`.
+///
+/// # Safety
+///
+/// The pointer must remain valid for the entire duration of the task execution.
+/// `drive_until` blocks until all tasks complete, guaranteeing the data outlives all tasks.
+/// Data behind the pointer is read-only after creation, so no data races occur.
+#[derive(Clone, Copy)]
+struct SendPtr(*const SharedState);
+
+impl SendPtr {
+    /// Get the raw pointer.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure the pointer is used safely (read-only, valid lifetime).
+    unsafe fn get(self) -> *const SharedState {
+        self.0
+    }
+}
+
+// SAFETY: See Safety comment above.
+unsafe impl Send for SendPtr {}
+unsafe impl Sync for SendPtr {}
 
 #[derive(Debug)]
 pub enum InterpreterTask {
@@ -87,10 +113,8 @@ pub struct Interpreter {
     stdout: Option<std::sync::Arc<std::sync::Mutex<dyn std::io::Write + Send>>>,
     /// Interpreter-side runtime configuration (defaults to current behavior).
     pub(super) runtime_config: InterpreterRuntimeConfig,
-    /// Standard runtime DAG used for lazy/concurrent evaluation (RFC-008/001).
-    pub(super) rt_dag: LocalRuntime,
-    /// Pending tasks keyed by `TaskId` (driven by `rt_dag`).
-    pub(super) rt_tasks: HashMap<TaskId, InterpreterTask>,
+    /// Runtime facade used for task scheduling (Embedded / Standard / Full).
+    pub(super) rt: Runtime,
     /// Read-only shared state, shared across threads via raw pointer.
     /// Set in `execute_module`; null when not yet initialized.
     pub(super) shared: *const SharedState,
@@ -139,6 +163,14 @@ impl Interpreter {
 
     /// Create an interpreter with custom configuration
     pub fn with_config(config: ExecutorConfig) -> Self {
+        let runtime_config = InterpreterRuntimeConfig::default();
+        let rt = Runtime::new(RuntimeConfig {
+            mode: runtime_config.runtime,
+            workers: runtime_config.workers,
+            work_stealing: runtime_config.work_stealing,
+        })
+        .unwrap_or_else(|_| Runtime::new(RuntimeConfig::default()).unwrap());
+
         Self {
             heap: Heap::new(),
             call_stack: Vec::with_capacity(DEFAULT_MAX_STACK_DEPTH),
@@ -151,9 +183,8 @@ impl Interpreter {
             breakpoints: HashMap::new(),
             ffi: FfiRegistry::with_std(),
             stdout: None, // Default to stdout (handled by None check)
-            runtime_config: InterpreterRuntimeConfig::default(),
-            rt_dag: LocalRuntime::new(),
-            rt_tasks: HashMap::new(),
+            runtime_config,
+            rt,
             shared: std::ptr::null(),
         }
     }
@@ -167,6 +198,8 @@ impl Interpreter {
     /// The caller must ensure that the `SharedState` outlives this interpreter.
     /// Typically used when spawning per-task interpreters inside `execute_module`.
     pub(super) fn from_shared(shared: *const SharedState) -> Self {
+        let rt = Runtime::new(RuntimeConfig::default()).unwrap();
+
         Self {
             heap: Heap::new(),
             call_stack: Vec::with_capacity(DEFAULT_MAX_STACK_DEPTH),
@@ -180,8 +213,7 @@ impl Interpreter {
             ffi: FfiRegistry::new(),
             stdout: None,
             runtime_config: InterpreterRuntimeConfig::default(),
-            rt_dag: LocalRuntime::new(),
-            rt_tasks: HashMap::new(),
+            rt,
             shared,
         }
     }
@@ -370,92 +402,33 @@ impl Interpreter {
         task: InterpreterTask,
         meta: TaskMeta,
     ) -> ExecutorResult<TaskId> {
-        let id = self.rt_dag.spawn(meta).map_err(|e| {
+        let sp = SendPtr(self.shared);
+        let task_fn: crate::backends::runtime::TaskFn = Box::new(move |_spawn_handle| {
+            let mut task_interp = Interpreter::from_shared(unsafe { sp.get() });
+            task_interp.execute_scheduled_task_from_data(task)
+        });
+
+        let id = self.rt.spawn(meta, task_fn).map_err(|e| {
             let stack = self.capture_stack();
             ExecutorError::runtime(format!("{e}"), stack)
         })?;
-        if !self.rt_dag.is_complete(id) {
-            self.rt_tasks.insert(id, task);
-        }
         Ok(id)
-    }
-
-    pub(super) fn prune_finished_tasks(&mut self) {
-        let finished: Vec<TaskId> = self
-            .rt_tasks
-            .keys()
-            .copied()
-            .filter(|id| self.rt_dag.is_complete(*id))
-            .collect();
-        for id in finished {
-            self.rt_tasks.remove(&id);
-        }
     }
 
     pub(super) fn drive_dag_until(
         &mut self,
         target: Option<TaskId>,
     ) -> ExecutorResult<()> {
-        loop {
-            if let Some(t) = target {
-                if self.rt_dag.is_complete(t) {
-                    self.prune_finished_tasks();
-                    return Ok(());
-                }
-            }
-
-            let Some(next) = (match target {
-                Some(t) => self.rt_dag.next_ready_for(t),
-                None => self.rt_dag.next_ready(),
-            }) else {
-                if let Some(t) = target {
-                    if !self.rt_dag.is_complete(t) {
-                        let stack = self.capture_stack();
-                        return Err(ExecutorError::runtime(
-                            format!("Runtime deadlock or cycle: {t:?}"),
-                            stack,
-                        ));
-                    }
-                }
-                self.prune_finished_tasks();
-                return Ok(());
-            };
-
-            self.rt_dag.mark_running(next).map_err(|e| {
-                let stack = self.capture_stack();
-                ExecutorError::runtime(format!("{e}"), stack)
-            })?;
-
-            let start = Instant::now();
-            let result = self.execute_scheduled_task(next);
-            let exec_time = start.elapsed();
-
-            let outcome = match result {
-                Ok(v) => TaskOutcome::Ok(v),
-                Err(e) => TaskOutcome::Err(e),
-            };
-
-            self.rt_dag
-                .complete(next, outcome, exec_time)
-                .map_err(|e| {
-                    let stack = self.capture_stack();
-                    ExecutorError::runtime(format!("{e}"), stack)
-                })?;
-
-            self.prune_finished_tasks();
-        }
+        self.rt.drive_until(target).map_err(|e| {
+            let stack = self.capture_stack();
+            ExecutorError::runtime(format!("{e}"), stack)
+        })
     }
 
-    pub(super) fn execute_scheduled_task(
+    pub(super) fn execute_scheduled_task_from_data(
         &mut self,
-        task_id: TaskId,
+        task: InterpreterTask,
     ) -> TaskResult {
-        let Some(task) = self.rt_tasks.remove(&task_id) else {
-            return Err(sv(RuntimeValue::String(
-                format!("Missing task payload: {task_id:?}").into(),
-            )));
-        };
-
         let exec_result = match task {
             InterpreterTask::Static { func_name, args } => {
                 self.call_static_by_name(&func_name, &args)
@@ -463,16 +436,18 @@ impl Interpreter {
             InterpreterTask::Native { func_name, args } => {
                 self.call_native_by_name(&func_name, &args)
             }
-            InterpreterTask::Dyn { func, args } => (|| {
+            InterpreterTask::Dyn { func, args } => {
                 let mut resolved = Vec::with_capacity(args.len());
                 for arg in &args {
-                    resolved.push(self.force_value_clone(arg)?);
+                    match self.force_value_clone(arg) {
+                        Ok(v) => resolved.push(v),
+                        Err(e) => return Err(sv(RuntimeValue::String(format!("{e}").into()))),
+                    }
                 }
-
                 let mut final_args = func.env.clone();
                 final_args.extend(resolved);
                 self.call_function_by_id(func.func_id, &final_args)
-            })(),
+            }
         };
 
         match exec_result {
@@ -526,11 +501,6 @@ impl Interpreter {
         &self,
         task_id: TaskId,
     ) -> String {
-        if let Some(meta) = self.rt_dag.meta(task_id) {
-            if let Some(label) = &meta.label {
-                return format!("{label} ({task_id:?})");
-            }
-        }
         format!("{task_id:?}")
     }
 
@@ -539,14 +509,14 @@ impl Interpreter {
         task_id: TaskId,
     ) -> String {
         let task = self.format_task_id(task_id);
-        match self.rt_dag.outcome(task_id) {
+        match self.rt.outcome(task_id) {
             Some(TaskOutcome::Err(payload)) => {
-                format!("{task}: {}", self.format_sync_value(payload))
+                format!("{task}: {}", self.format_sync_value(&payload))
             }
             Some(TaskOutcome::Cancelled(reason)) => {
                 format!(
                     "{task}: cancelled ({})",
-                    self.format_cancel_reason_brief(reason)
+                    self.format_cancel_reason_brief(&reason)
                 )
             }
             Some(TaskOutcome::Ok(_)) => format!("{task}: ok"),
@@ -621,7 +591,7 @@ impl Interpreter {
             }
             AsyncState::Pending(task_id) => {
                 self.drive_dag_until(Some(*task_id))?;
-                let outcome = self.rt_dag.outcome(*task_id).ok_or_else(|| {
+                let outcome = self.rt.outcome(*task_id).ok_or_else(|| {
                     let stack = self.capture_stack();
                     ExecutorError::runtime(format!("Task has no outcome: {task_id:?}"), stack)
                 })?;
@@ -638,14 +608,14 @@ impl Interpreter {
                     TaskOutcome::Err(payload) => {
                         let stack = self.capture_stack();
                         Err(ExecutorError::runtime(
-                            self.format_sync_value(payload),
+                            self.format_sync_value(&payload),
                             stack,
                         ))
                     }
                     TaskOutcome::Cancelled(reason) => {
                         let stack = self.capture_stack();
                         Err(ExecutorError::runtime(
-                            self.format_cancel_reason(*task_id, reason),
+                            self.format_cancel_reason(*task_id, &reason),
                             stack,
                         ))
                     }
