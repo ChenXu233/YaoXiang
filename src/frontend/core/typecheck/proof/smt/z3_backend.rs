@@ -4,6 +4,7 @@
 //! 内部持有 Z3_context 裸指针，通过外部 Mutex 保证互斥访问。
 
 use std::ffi::{CStr, CString};
+use std::fmt;
 
 use super::ast::{SMTCommand, SMTExpr, SMTModel, SMTResult, SMTSort};
 
@@ -17,6 +18,17 @@ pub struct Z3Backend {
 // SAFETY: Z3Backend 通过 `Mutex` 访问，确保同一时刻只有一个线程使用 Z3 context。
 // Z3 C API 的每个 context 是独立的，互斥访问下跨线程安全。
 unsafe impl Send for Z3Backend {}
+
+impl fmt::Debug for Z3Backend {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        f.debug_struct("Z3Backend")
+            .field("ctx", &(self.ctx as usize))
+            .finish()
+    }
+}
 
 /// Z3 初始化/运行时错误
 #[derive(Debug)]
