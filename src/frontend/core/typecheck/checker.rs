@@ -1313,34 +1313,32 @@ impl TypeChecker {
         match &stmt.kind {
             crate::frontend::core::parser::ast::StmtKind::Var {
                 name,
-                type_annotation,
+                type_annotation: Some(type_ann),
                 initializer,
                 ..
             } => {
-                if let Some(type_ann) = type_annotation {
-                    // 将 AST 类型转换为 MonoType
-                    let mono_ty = MonoType::from(type_ann.clone());
-                    // 解析类型标注（可能包含精化类型）
-                    let resolved_ty = self.resolve_type_annotation(&mono_ty);
+                // 将 AST 类型转换为 MonoType
+                let mono_ty = MonoType::from(type_ann.clone());
+                // 解析类型标注（可能包含精化类型）
+                let resolved_ty = self.resolve_type_annotation(&mono_ty);
 
-                    // 如果解析出精化类型，检查约束
-                    if let MonoType::Refined { .. } = &resolved_ty {
-                        let mut bindings = HashMap::new();
-                        // 从初始化器获取值
-                        if let Some(init_expr) = initializer {
-                            // 尝试从表达式中提取常量值
-                            if let Some(const_val) = self.extract_const_value(init_expr) {
-                                bindings.insert(name.clone(), const_val);
-                            }
+                // 如果解析出精化类型，检查约束
+                if let MonoType::Refined { .. } = &resolved_ty {
+                    let mut bindings = HashMap::new();
+                    // 从初始化器获取值
+                    if let Some(init_expr) = initializer {
+                        // 尝试从表达式中提取常量值
+                        if let Some(const_val) = self.extract_const_value(init_expr) {
+                            bindings.insert(name.clone(), const_val);
                         }
-                        let proof_result = self.check_refined_binding(&resolved_ty, &bindings);
-                        if let ProofResult::Unproven {
-                            proof_calls: calls, ..
-                        } = &proof_result
-                        {
-                            if !calls.is_empty() {
-                                proof_calls.extend(calls.clone());
-                            }
+                    }
+                    let proof_result = self.check_refined_binding(&resolved_ty, &bindings);
+                    if let ProofResult::Unproven {
+                        proof_calls: calls, ..
+                    } = &proof_result
+                    {
+                        if !calls.is_empty() {
+                            proof_calls.extend(calls.clone());
                         }
                     }
                 }

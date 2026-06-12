@@ -204,7 +204,6 @@ impl Executor for Interpreter {
                                     deps,
                                     resources,
                                     label: Some(Arc::<str>::from("spawn")),
-                                    ..TaskMeta::default()
                                 },
                             )?;
 
@@ -315,7 +314,6 @@ impl Executor for Interpreter {
                                     deps,
                                     resources,
                                     label: Some(Arc::<str>::from("spawn_from_list")),
-                                    ..TaskMeta::default()
                                 },
                             )?;
 
