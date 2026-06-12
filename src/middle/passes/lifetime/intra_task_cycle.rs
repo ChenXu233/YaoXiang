@@ -17,11 +17,11 @@ use super::error::{operand_display_name};
 #[derive(Debug, Default)]
 pub struct IntraTaskCycleTracker {
     /// 任务内 ref 边
-    ref_edges: Vec<RefEdge>,
+    pub(crate) ref_edges: Vec<RefEdge>,
     /// 检测到的循环（警告）
     warnings: Vec<Diagnostic>,
     /// ArcNew 指令位置追踪
-    arc_new_locations: HashMap<Operand, (usize, usize)>,
+    pub(crate) arc_new_locations: HashMap<Operand, (usize, usize)>,
     /// 值定义追踪（预留，用于更复杂的数据流分析）
     #[allow(dead_code)]
     value_defs: HashMap<Operand, Operand>,

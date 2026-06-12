@@ -1,4 +1,4 @@
-﻿//! FFI (Foreign Function Interface) Registry for YaoXiang
+//! FFI (Foreign Function Interface) Registry for YaoXiang
 //!
 //! This module provides the `FfiRegistry` which manages native function bindings,
 //! allowing YaoXiang code to call Rust functions. It supports:
@@ -326,7 +326,8 @@ mod tests {
         let registry = FfiRegistry::with_std();
         let mut heap = Heap::new();
         let mut ctx = test_ctx(&mut heap);
-        let test_path = std::env::temp_dir().join("yx_ffi_test.txt");
+        let test_path =
+            std::env::temp_dir().join(format!("yx_ffi_test_{}.txt", std::process::id()));
         let path_str = test_path.to_string_lossy().to_string();
 
         // Cleanup before test
