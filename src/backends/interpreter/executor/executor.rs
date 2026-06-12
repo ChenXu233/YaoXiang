@@ -26,6 +26,18 @@ use crate::std::NativeContext;
 /// Maximum call stack depth
 const DEFAULT_MAX_STACK_DEPTH: usize = 1024;
 
+/// Read-only shared state, shared across threads via raw pointer.
+///
+/// Safety: `drive_until` blocks until all tasks complete, so the data outlives all tasks.
+/// Data is read-only after creation, so no data races.
+pub(super) struct SharedState {
+    pub functions: HashMap<String, BytecodeFunction>,
+    pub functions_by_id: Vec<BytecodeFunction>,
+    pub constants: Vec<ConstValue>,
+    pub type_table: Vec<crate::middle::core::ir::Type>,
+    pub ffi: FfiRegistry,
+}
+
 #[derive(Debug)]
 pub enum InterpreterTask {
     Static {
@@ -79,6 +91,9 @@ pub struct Interpreter {
     pub(super) rt_dag: LocalRuntime,
     /// Pending tasks keyed by `TaskId` (driven by `rt_dag`).
     pub(super) rt_tasks: HashMap<TaskId, InterpreterTask>,
+    /// Read-only shared state, shared across threads via raw pointer.
+    /// Set in `execute_module`; null when not yet initialized.
+    pub(super) shared: *const SharedState,
 }
 
 impl fmt::Debug for Interpreter {
@@ -105,6 +120,7 @@ impl fmt::Debug for Interpreter {
                     "None"
                 },
             )
+            .field("shared", &self.shared)
             .finish()
     }
 }
@@ -138,11 +154,36 @@ impl Interpreter {
             runtime_config: InterpreterRuntimeConfig::default(),
             rt_dag: LocalRuntime::new(),
             rt_tasks: HashMap::new(),
+            shared: std::ptr::null(),
         }
     }
 
     pub fn runtime_config(&self) -> &InterpreterRuntimeConfig {
         &self.runtime_config
+    }
+
+    /// Create an interpreter that shares read-only state via a raw pointer.
+    ///
+    /// The caller must ensure that the `SharedState` outlives this interpreter.
+    /// Typically used when spawning per-task interpreters inside `execute_module`.
+    pub(super) fn from_shared(shared: *const SharedState) -> Self {
+        Self {
+            heap: Heap::new(),
+            call_stack: Vec::with_capacity(DEFAULT_MAX_STACK_DEPTH),
+            constants: Vec::new(),
+            functions: HashMap::new(),
+            functions_by_id: Vec::new(),
+            type_table: Vec::new(),
+            state: ExecutionState::default(),
+            config: ExecutorConfig::default(),
+            breakpoints: HashMap::new(),
+            ffi: FfiRegistry::new(),
+            stdout: None,
+            runtime_config: InterpreterRuntimeConfig::default(),
+            rt_dag: LocalRuntime::new(),
+            rt_tasks: HashMap::new(),
+            shared,
+        }
     }
 
     pub fn set_runtime_config(
