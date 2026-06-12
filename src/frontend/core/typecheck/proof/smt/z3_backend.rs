@@ -1,7 +1,7 @@
 //! Z3 SMT 求解器后端
 //!
-//! 唯一依赖 z3-sys 的文件。通过 Z3 C API 将 SMTExpr 构造为 Z3 内部 AST，
-//! 执行求解，解析结果。
+//! 通过 z3-sys FFI 调用 Z3 C API。Z3 作为编译期必需依赖静态链接。
+//! 未安装 Z3 开发库时编译报错（硬错误，非运行时降级）。
 
 use std::ffi::{CStr, CString};
 
