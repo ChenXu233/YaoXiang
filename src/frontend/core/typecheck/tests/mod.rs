@@ -25,5 +25,6 @@ mod rfc027_phase25_proof_fn;
 mod rfc027_phase2_smt;
 mod rfc027_phase31_dep_vc;
 mod rfc027_phase33_termination;
+mod rfc027_phase3_e2e;
 mod signature;
 mod types;
