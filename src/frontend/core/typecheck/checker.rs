@@ -350,6 +350,7 @@ impl TypeChecker {
             local_var_types,
             semantic_db: std::mem::take(&mut self.semantic_db),
             trait_table: self.env.trait_table.clone(),
+            proof_calls: Vec::new(), // Phase 2.5: 由 check_refined_binding 收集
         }
     }
 
