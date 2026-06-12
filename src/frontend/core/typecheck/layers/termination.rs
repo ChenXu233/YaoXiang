@@ -668,6 +668,7 @@ impl TerminationChecker {
             UnprovenReason::BeyondKernel("循环无法证明终止：未找到有效的递减度量".to_string());
         self.results.push(ProofResult::Unproven {
             reason,
+            proof_calls: vec![],
             budget: BudgetReport {
                 steps_used: 0,
                 steps_limit: 0,
@@ -687,6 +688,7 @@ impl TerminationChecker {
         ));
         self.results.push(ProofResult::Unproven {
             reason,
+            proof_calls: vec![],
             budget: BudgetReport {
                 steps_used: 0,
                 steps_limit: 0,
@@ -703,6 +705,7 @@ impl TerminationChecker {
         let reason = UnprovenReason::BeyondKernel(format!("度量 `{}` 未严格递减", measure));
         self.results.push(ProofResult::Unproven {
             reason,
+            proof_calls: vec![],
             budget: BudgetReport {
                 steps_used: 0,
                 steps_limit: 0,

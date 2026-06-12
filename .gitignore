@@ -44,3 +44,4 @@ docs/.env
 .codegraph
 .crush
 .worktrees
+.z3/

@@ -454,7 +454,8 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::Compare { dst, lhs, rhs, cmp } => {
-                    self.exec_compare(*dst, *lhs, *rhs, *cmp, &mut frame)?;
+                    let (d, l, r, c) = (*dst, *lhs, *rhs, *cmp);
+                    self.exec_compare(d, l, r, c, &mut frame)?;
                     frame.advance();
                 }
                 BytecodeInstr::UnaryOp { dst, src, op } => {

@@ -5,6 +5,18 @@
 
 use crate::util::diagnostic::Diagnostic;
 
+/// TypeChecker 发出的信号：这个证明函数需要被编译期执行
+///
+/// RFC-027 §4.2: 编译器无法自动证明约束时，
+/// 程序员显式引用的证明函数在编译期被执行并验证。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProofFunctionCall {
+    /// 函数名（如 "Sorted"、"IsEven"）
+    pub func_name: String,
+    /// 实参——编译期已知的具体值
+    pub args: Vec<crate::frontend::core::types::const_data::ConstValue>,
+}
+
 /// 证明结果
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProofResult {
@@ -15,6 +27,8 @@ pub enum ProofResult {
     /// 在给定资源内无法证明（不等于命题为假）
     Unproven {
         reason: UnprovenReason,
+        /// Phase 2.5: 需要被执行的证明函数。非空时 Pipeline 执行它们。
+        proof_calls: Vec<ProofFunctionCall>,
         budget: BudgetReport,
     },
 }
@@ -34,6 +48,8 @@ pub enum UnprovenReason {
     BeyondKernel(String),
     /// 超出预算
     BudgetExceeded,
+    /// Phase 2.5: 需要程序员提供的证明函数
+    ProofFunctionRequired,
 }
 
 /// 求解预算报告
