@@ -1,10 +1,11 @@
 //! Layer 3：精化谓词证明 — 基于 RFC-027 §4
 //!
 //! 对 Refined 类型的约束表达式进行求值。
-//! 三级分派：
+//! 四级分派：
 //!   1. Evaluator 直接求值（Phase 1，微秒级）——所有变量有具体值
 //!   2. 假设栈蕴含（Phase 2A，零开销）——约束正好是已知条件
 //!   3. Z3 SMT 求解（Phase 2B，毫秒级）——符号变量 + 蕴含推理
+//!   4. 证明函数调用（Phase 2.5）——识别 ConstExpr::Call 让 Pipeline 编译期执行
 
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
@@ -16,7 +17,7 @@ use super::super::proof::context::ProofContext;
 use super::super::proof::smt::ast::SMTResult;
 use super::super::proof::smt::translate;
 use super::super::proof::smt::z3_backend::Z3Backend;
-use super::super::proof::verdict::{DisproofModel, ProofResult, UnprovenReason};
+use super::super::proof::verdict::{BudgetReport, DisproofModel, ProofFunctionCall, ProofResult, UnprovenReason};
 
 /// Z3 实例——整个编译过程只初始化一次
 static Z3_INSTANCE: LazyLock<Mutex<Z3Backend>> = LazyLock::new(|| {
@@ -55,7 +56,13 @@ pub fn check_predicate(
     }
 
     // === 第 3 级：SMT 求解 ===
-    try_smt_solve(ctx, constraint, bindings)
+    let smt_result = try_smt_solve(ctx, constraint, bindings);
+    if smt_result.is_proved() || matches!(smt_result, ProofResult::Disproved(_)) {
+        return smt_result;
+    }
+
+    // === 第 4 级：识别证明函数调用 ===
+    try_proof_fn_call(constraint, bindings, ctx.budget.report())
 }
 
 /// 第 1 级：Evaluator 直接求值
@@ -109,6 +116,63 @@ fn try_smt_solve(
             proof_calls: vec![],
             budget: ctx.budget.report(),
         },
+    }
+}
+
+/// 第 4 级：识别证明函数调用（Phase 2.5）
+///
+/// 当约束是函数调用形式（如 Sorted(arr)）且前三级无法证明时，
+/// 构造 ProofFunctionCall 让 Pipeline 编译期执行。
+fn try_proof_fn_call(
+    constraint: &ConstExpr,
+    bindings: &HashMap<String, ConstValue>,
+    budget_report: BudgetReport,
+) -> ProofResult {
+    if let ConstExpr::Call { func, args } = constraint {
+        // 将 ConstExpr args 转为 ConstValue
+        let mut const_args: Vec<ConstValue> = Vec::with_capacity(args.len());
+        for a in args {
+            match a {
+                ConstExpr::Lit(v) => const_args.push(v.clone()),
+                ConstExpr::NamedVar(name) => {
+                    if let Some(val) = bindings.get(name) {
+                        const_args.push(val.clone());
+                    } else {
+                        return ProofResult::Unproven {
+                            reason: UnprovenReason::BeyondKernel(
+                                "证明函数实参包含未绑定变量".into(),
+                            ),
+                            proof_calls: vec![],
+                            budget: budget_report,
+                        };
+                    }
+                }
+                _ => {
+                    return ProofResult::Unproven {
+                        reason: UnprovenReason::BeyondKernel(
+                            "证明函数实参必须是字面量或已绑定变量".into(),
+                        ),
+                        proof_calls: vec![],
+                        budget: budget_report,
+                    };
+                }
+            }
+        }
+
+        return ProofResult::Unproven {
+            reason: UnprovenReason::ProofFunctionRequired,
+            proof_calls: vec![ProofFunctionCall {
+                func_name: func.clone(),
+                args: const_args,
+            }],
+            budget: budget_report,
+        };
+    }
+
+    ProofResult::Unproven {
+        reason: UnprovenReason::BeyondKernel("无法自动证明且无证明函数".into()),
+        proof_calls: vec![],
+        budget: budget_report,
     }
 }
 
