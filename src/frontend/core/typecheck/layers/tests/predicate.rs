@@ -216,3 +216,137 @@ fn test_implication_unrelated_assumption_falls_through_to_level3() {
         "z>0 不蕴含 y>0，Level 3 应找到反例返回 Disproved，实际: {result:?}"
     );
 }
+
+/// RFC-027 §3.2 Level 2b: 多假设组合蕴含 — y >= 5 和 y < 10 共同蕴含 y > 0
+#[test]
+fn test_implication_multiple_assumptions_combined_imply() {
+    // Arrange
+    let constraint = ConstExpr::BinOp {
+        op: BinOp::Gt,
+        left: Box::new(ConstExpr::NamedVar("y".into())),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+    };
+    let refined = MonoType::Refined {
+        base: Box::new(MonoType::Int(64)),
+        constraint,
+    };
+    let env = TypeEnvironment::new();
+    let mut ctx = ProofContext::new(&env);
+    ctx.assumptions.push(ConstExpr::BinOp {
+        op: BinOp::Ge,
+        left: Box::new(ConstExpr::NamedVar("y".into())),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(5))),
+    });
+    ctx.assumptions.push(ConstExpr::BinOp {
+        op: BinOp::Lt,
+        left: Box::new(ConstExpr::NamedVar("y".into())),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(10))),
+    });
+
+    // Act
+    let result = check_predicate(&ctx, &refined, &HashMap::new());
+
+    // Assert — 多假设作为背景断言，SMT 应判蕴含
+    assert!(
+        result.is_proved(),
+        "y>=5 且 y<10 共同蕴含 y>0，应返回 Proved，实际: {result:?}"
+    );
+}
+
+/// RFC-027 §3.2: 假设栈为空时 Level 2b 被跳过
+#[test]
+fn test_implication_empty_assumptions_skips_level2b() {
+    // Arrange
+    let constraint = ConstExpr::BinOp {
+        op: BinOp::Gt,
+        left: Box::new(ConstExpr::NamedVar("y".into())),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+    };
+    let refined = MonoType::Refined {
+        base: Box::new(MonoType::Int(64)),
+        constraint,
+    };
+    let env = TypeEnvironment::new();
+    let ctx = ProofContext::new(&env); // 空假设栈
+
+    // Act — Level 2b 应跳过（assumptions.is_empty()），进入 Level 3
+    let result = check_predicate(&ctx, &refined, &HashMap::new());
+
+    // Assert — Level 3 找到反例 y=0
+    assert!(
+        matches!(result, ProofResult::Disproved(_)),
+        "空假设栈应跳过 Level 2b，进入 Level 3 找反例，实际: {result:?}"
+    );
+}
+
+/// RFC-027 §3.2: 嵌套 push/pop 后假设栈恢复，蕴含失效
+#[test]
+fn test_implication_nested_push_pop_restores_stack() {
+    // Arrange
+    let constraint = ConstExpr::BinOp {
+        op: BinOp::Gt,
+        left: Box::new(ConstExpr::NamedVar("y".into())),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+    };
+    let refined = MonoType::Refined {
+        base: Box::new(MonoType::Int(64)),
+        constraint,
+    };
+    let env = TypeEnvironment::new();
+    let mut ctx = ProofContext::new(&env);
+
+    // 外层 if：压入
+    ctx.assumptions.push(ConstExpr::BinOp {
+        op: BinOp::Ge,
+        left: Box::new(ConstExpr::NamedVar("y".into())),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(5))),
+    });
+    // 内层 block：压入后弹出
+    ctx.assumptions.push(ConstExpr::BinOp {
+        op: BinOp::Gt,
+        left: Box::new(ConstExpr::NamedVar("z".into())),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(3))),
+    });
+    ctx.assumptions.pop(); // 离开内层，z>0 消失，y>=5 仍在
+
+    // Act
+    let result = check_predicate(&ctx, &refined, &HashMap::new());
+
+    // Assert — pop 后只剩 y>=5，仍蕴含 y>0
+    assert!(
+        result.is_proved(),
+        "pop 后外层假设 y>=5 仍应蕴含 y>0，实际: {result:?}"
+    );
+}
+
+/// RFC-027 §3.2: pop 所有假设后回到空栈，Level 2b 跳过
+#[test]
+fn test_implication_all_popped_falls_through() {
+    // Arrange
+    let constraint = ConstExpr::BinOp {
+        op: BinOp::Gt,
+        left: Box::new(ConstExpr::NamedVar("y".into())),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+    };
+    let refined = MonoType::Refined {
+        base: Box::new(MonoType::Int(64)),
+        constraint,
+    };
+    let env = TypeEnvironment::new();
+    let mut ctx = ProofContext::new(&env);
+    ctx.assumptions.push(ConstExpr::BinOp {
+        op: BinOp::Ge,
+        left: Box::new(ConstExpr::NamedVar("y".into())),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(5))),
+    });
+    ctx.assumptions.pop(); // 全部弹出
+
+    // Act
+    let result = check_predicate(&ctx, &refined, &HashMap::new());
+
+    // Assert — 栈空，跳过 2b，进入 Level 3
+    assert!(
+        matches!(result, ProofResult::Disproved(_)),
+        "pop 全部后栈空，应进入 Level 3，实际: {result:?}"
+    );
+}

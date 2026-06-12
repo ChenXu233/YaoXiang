@@ -276,3 +276,136 @@ fn test_e2e_combined_dependency_multiple_triggers() {
     // j 变更不影响其他变量
     assert_eq!(affected_by_j.len(), 1, "E2E: j 变更应只影响 t");
 }
+
+// ===================================================================
+// RFC-027 §4.2: Level 4 证明函数调用 + 错误路径验证
+// ===================================================================
+
+/// E2E: Disproved 反例包含具体变量赋值
+#[test]
+fn test_e2e_disproved_counterexample_contains_variable_values() {
+    // Arrange
+    let constraint = ConstExpr::BinOp {
+        op: BinOp::Gt,
+        left: Box::new(ConstExpr::NamedVar("y".into())),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+    };
+    let refined = MonoType::Refined {
+        base: Box::new(MonoType::Int(64)),
+        constraint,
+    };
+    let env = TypeEnvironment::new();
+    let ctx = ProofContext::new(&env);
+
+    // Act
+    let result = check_predicate(&ctx, &refined, &HashMap::new());
+
+    // Assert — 反例模型应包含变量的具体值
+    match result {
+        ProofResult::Disproved(model) => {
+            assert!(
+                !model.assignments.is_empty(),
+                "反例模型应包含至少一个变量赋值"
+            );
+            assert!(
+                model.assignments.iter().any(|(k, _)| k == "y"),
+                "反例模型应包含变量 y，实际: {:?}",
+                model.assignments.iter().map(|(k, _)| k).collect::<Vec<_>>()
+            );
+        }
+        other => panic!("期望 Disproved 获取反例详情，实际: {other:?}"),
+    }
+}
+
+/// E2E: Unproven 原因可被读取
+#[test]
+fn test_e2e_unproven_reason_readable() {
+    // Arrange — 使用 Call 形式让 Level 3 跳过，Level 4 可能返回 Unproven
+    let call_constraint = ConstExpr::Call {
+        func: "NonExistentPredicate".into(),
+        args: vec![ConstExpr::NamedVar("x".into())],
+    };
+    let refined = MonoType::Refined {
+        base: Box::new(MonoType::Int(64)),
+        constraint: call_constraint,
+    };
+    let env = TypeEnvironment::new();
+    let ctx = ProofContext::new(&env);
+
+    // Act
+    let result = check_predicate(&ctx, &refined, &HashMap::new());
+
+    // Assert — 应为 Unproven（Level 4 无法解析非存在证明函数）
+    assert!(
+        !result.is_proved(),
+        "不存在的证明函数应返回 Unproven，实际: {result:?}"
+    );
+    assert!(
+        matches!(result, ProofResult::Unproven { .. }),
+        "期望 Unproven，实际: {result:?}"
+    );
+}
+
+/// E2E: 假设蕴含 + Disproved 交互 —— 有假设但不是精确约束时正确降级
+#[test]
+fn test_e2e_assumption_not_exact_still_triggers_implication_check() {
+    // Arrange
+    let constraint = ConstExpr::BinOp {
+        op: BinOp::Gt,
+        left: Box::new(ConstExpr::NamedVar("y".into())),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(10))),
+    };
+    let refined = MonoType::Refined {
+        base: Box::new(MonoType::Int(64)),
+        constraint,
+    };
+    // 假设 y > 5，约束 y > 10 —— contains() 不匹配，走 implication
+    // y=6 满足 y>5 但不满足 y>10 → 不蕴含
+    let env = TypeEnvironment::new();
+    let mut ctx = ProofContext::new(&env);
+    ctx.assumptions.push(ConstExpr::BinOp {
+        op: BinOp::Gt,
+        left: Box::new(ConstExpr::NamedVar("y".into())),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(5))),
+    });
+
+    // Act
+    let result = check_predicate(&ctx, &refined, &HashMap::new());
+
+    // Assert — y > 5 不蕴含 y > 10（如 y=6），Level 2b sat → None → Level 3
+    assert!(
+        matches!(result, ProofResult::Disproved(_)),
+        "y>5 不蕴含 y>10，应退到 Level 3 找反例，实际: {result:?}"
+    );
+}
+
+/// E2E: 等价约束通过精确匹配 —— y > 0 在栈中，约束也是 y > 0
+#[test]
+fn test_e2e_exact_equivalent_constraint_matched() {
+    // Arrange
+    let constraint = ConstExpr::BinOp {
+        op: BinOp::Gt,
+        left: Box::new(ConstExpr::NamedVar("y".into())),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+    };
+    let refined = MonoType::Refined {
+        base: Box::new(MonoType::Int(64)),
+        constraint,
+    };
+    let env = TypeEnvironment::new();
+    let mut ctx = ProofContext::new(&env);
+    ctx.assumptions.push(ConstExpr::BinOp {
+        op: BinOp::Gt,
+        left: Box::new(ConstExpr::NamedVar("y".into())),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+    });
+
+    // Act
+    let result = check_predicate(&ctx, &refined, &HashMap::new());
+
+    // Assert — contains() 精确匹配，零 SMT 开销
+    assert!(
+        result.is_proved(),
+        "精确匹配应走 Level 2a 直接 Proved，实际: {result:?}"
+    );
+}
