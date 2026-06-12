@@ -253,13 +253,11 @@ impl Executor for Interpreter {
 
                     if matches!(runtime, RuntimeMode::Embedded) {
                         // Embedded 模式：顺序执行
-                        for (_i, closure_val) in closures.iter().enumerate() {
-                            let RuntimeValue::Function(func_value) = closure_val
-                            else {
+                        for closure_val in closures.iter() {
+                            let RuntimeValue::Function(func_value) = closure_val else {
                                 let stack = self.capture_stack();
                                 return Err(ExecutorError::type_error(
-                                    "spawn_from_list expects function values in list"
-                                        .to_string(),
+                                    "spawn_from_list expects function values in list".to_string(),
                                     stack,
                                 ));
                             };
@@ -273,12 +271,10 @@ impl Executor for Interpreter {
                         let mut spawned_tasks: Vec<TaskId> = Vec::new();
 
                         for (i, closure_val) in closures.iter().enumerate() {
-                            let RuntimeValue::Function(func_value) = closure_val
-                            else {
+                            let RuntimeValue::Function(func_value) = closure_val else {
                                 let stack = self.capture_stack();
                                 return Err(ExecutorError::type_error(
-                                    "spawn_from_list expects function values in list"
-                                        .to_string(),
+                                    "spawn_from_list expects function values in list".to_string(),
                                     stack,
                                 ));
                             };

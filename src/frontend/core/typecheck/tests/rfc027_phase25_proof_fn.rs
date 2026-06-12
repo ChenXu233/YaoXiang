@@ -47,10 +47,7 @@ fn test_call_constraint_produces_proof_fn_call() {
                 !proof_calls.is_empty(),
                 "ConstExpr::Call 应产生至少一个 ProofFunctionCall，实际: {proof_calls:?}"
             );
-            assert_eq!(
-                proof_calls[0].func_name, "Sorted",
-                "函数名应为 Sorted"
-            );
+            assert_eq!(proof_calls[0].func_name, "Sorted", "函数名应为 Sorted");
             assert_eq!(proof_calls[0].args.len(), 1, "应有一个实参");
             assert!(
                 matches!(reason, UnprovenReason::ProofFunctionRequired),
@@ -159,7 +156,10 @@ use crate::util::span::Span;
 /// ```
 ///
 /// body_expr 被放在尾表达式位置，确保返回 Bool 而非 Unit。
-fn make_proof_fn_module(fn_name: &str, body_expr: Expr) -> Module {
+fn make_proof_fn_module(
+    fn_name: &str,
+    body_expr: Expr,
+) -> Module {
     let param = Param {
         name: "x".into(),
         ty: Some(AstType::Int(64)),
@@ -183,8 +183,11 @@ fn make_proof_fn_module(fn_name: &str, body_expr: Expr) -> Module {
             generic_params: vec![],
             type_annotation: Some(return_type),
             params: vec![param],
-            // 尾表达式位置：body_expr 作为函数返回值
-            body: (vec![], Some(Box::new(body_expr))),
+            // body_expr 作为 return 语句
+            body: vec![Stmt {
+                kind: StmtKind::Expr(Box::new(body_expr)),
+                span: Span::dummy(),
+            }],
             is_pub: false,
         },
         span: Span::dummy(),
@@ -220,15 +223,8 @@ fn test_execute_proof_fn_returns_true_for_valid_input() {
     };
 
     let result = execute_single_proof_fn(&call, &ast, &type_result);
-    assert!(
-        result.is_ok(),
-        "IsPositive(5) 应成功执行: {:?}",
-        result
-    );
-    assert!(
-        result.unwrap(),
-        "IsPositive(5) = 5>0 应返回 true"
-    );
+    assert!(result.is_ok(), "IsPositive(5) 应成功执行: {:?}", result);
+    assert!(result.unwrap(), "IsPositive(5) = 5>0 应返回 true");
 }
 
 #[test]
@@ -245,15 +241,8 @@ fn test_execute_proof_fn_returns_false_for_invalid_input() {
     };
 
     let result = execute_single_proof_fn(&call, &ast, &type_result);
-    assert!(
-        result.is_ok(),
-        "IsPositive(-1) 应成功执行: {:?}",
-        result
-    );
-    assert!(
-        !result.unwrap(),
-        "IsPositive(-1) = -1>0 应返回 false"
-    );
+    assert!(result.is_ok(), "IsPositive(-1) 应成功执行: {:?}", result);
+    assert!(!result.unwrap(), "IsPositive(-1) = -1>0 应返回 false");
 }
 
 #[test]
@@ -317,11 +306,7 @@ fn test_execute_proof_fn_boundary_value() {
     };
 
     let result = execute_single_proof_fn(&call, &ast, &type_result);
-    assert!(
-        result.is_ok(),
-        "IsPositive(0) 应成功执行: {:?}",
-        result
-    );
+    assert!(result.is_ok(), "IsPositive(0) 应成功执行: {:?}", result);
     assert!(
         !result.unwrap(),
         "IsPositive(0) = 0>0 应返回 false（边界值）"

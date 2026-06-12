@@ -17,7 +17,9 @@ use super::super::proof::context::ProofContext;
 use super::super::proof::smt::ast::SMTResult;
 use super::super::proof::smt::translate;
 use super::super::proof::smt::z3_backend::Z3Backend;
-use super::super::proof::verdict::{BudgetReport, DisproofModel, ProofFunctionCall, ProofResult, UnprovenReason};
+use super::super::proof::verdict::{
+    BudgetReport, DisproofModel, ProofFunctionCall, ProofResult, UnprovenReason,
+};
 
 /// Z3 实例——整个编译过程只初始化一次
 static Z3_INSTANCE: LazyLock<Mutex<Z3Backend>> = LazyLock::new(|| {
