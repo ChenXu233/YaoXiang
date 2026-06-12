@@ -58,6 +58,8 @@ TypeExpr    ::= PrimitiveType
               | TypeIntersection
 ```
 
+> **设计说明**：虽然 RFC-010 提出"一切皆赋值"的统一模型（`name: type = value`），但在语法层面，类型和值仍需区分。编译器实现中 `Type` 和 `Expr` 是两个独立的 AST 枚举（`ast.rs:406` 和 `ast.rs:25`），`TypeExpr` 作为 BNF 占位符对应实现中的 `Type` 枚举，表示"这个位置期望类型"。
+
 ---
 
 ## 第二章：基本类型
