@@ -754,7 +754,7 @@ impl Pipeline {
 /// 执行单个证明函数（RFC-027 Phase 2.5）
 ///
 /// 完整的编译→执行管线：AST 查找 → IR 生成 → 字节码编译 → 解释器执行
-fn execute_single_proof_fn(
+pub(crate) fn execute_single_proof_fn(
     call: &typecheck::proof::verdict::ProofFunctionCall,
     ast: &super::core::parser::ast::Module,
     type_result: &typecheck::TypeCheckResult,
@@ -826,11 +826,6 @@ fn execute_single_proof_fn(
 
     let bytecode_module =
         crate::middle::core::bytecode::BytecodeModule::from(bytecode_file);
-    let bytecode_fn = bytecode_module
-        .functions
-        .into_iter()
-        .find(|f| f.name == call.func_name)
-        .ok_or_else(|| format!("证明函数 '{}' 字节码中未找到", call.func_name))?;
 
     // 5. ConstValue → RuntimeValue
     let args: Vec<RuntimeValue> = call
@@ -841,8 +836,18 @@ fn execute_single_proof_fn(
 
     // 6. 解释器执行
     let mut interpreter = Interpreter::new();
+    // 先通过 execute_module 加载常量池和函数表
+    interpreter
+        .execute_module(&bytecode_module)
+        .map_err(|e| format!("证明函数 '{}' 模块加载失败: {}", call.func_name, e))?;
+    // 然后通过 call_function_by_id 执行具体函数（函数已在 execute_module 中注册）
+    let func_id = bytecode_module
+        .functions
+        .iter()
+        .position(|f| f.name == call.func_name)
+        .ok_or_else(|| format!("证明函数 '{}' 在模块中未找到", call.func_name))?;
     let result = interpreter
-        .execute_function(&bytecode_fn, &args)
+        .call_function_by_id(crate::backends::common::value::FunctionId(func_id as u32), &args)
         .map_err(|e| format!("证明函数 '{}' 执行失败: {}", call.func_name, e))?;
 
     // 7. 提取 bool
