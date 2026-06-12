@@ -218,6 +218,110 @@ impl Executor for Interpreter {
 
                     frame.advance();
                 }
+                BytecodeInstr::SpawnFromList {
+                    dst: _,
+                    closures_list,
+                    group_count,
+                } => {
+                    // SpawnFromList: 从 List 寄存器动态读取闭包并 spawn
+                    // closures_list 寄存器包含一个 List<Function>，逐个读取并 spawn
+                    let closures_list = *closures_list;
+                    let group_count = group_count.clone();
+
+                    // 从 closures_list 寄存器获取 List 值
+                    let list_val = self.force_register(&mut frame, closures_list)?;
+                    let closures: Vec<RuntimeValue> = match list_val {
+                        RuntimeValue::List(handle) => match self.heap.get(handle) {
+                            Some(HeapValue::List(items)) => items.clone(),
+                            _ => {
+                                let stack = self.capture_stack();
+                                return Err(ExecutorError::type_error(
+                                    "spawn_from_list expects a list value".to_string(),
+                                    stack,
+                                ));
+                            }
+                        },
+                        _ => {
+                            let stack = self.capture_stack();
+                            return Err(ExecutorError::type_error(
+                                "spawn_from_list expects a list value".to_string(),
+                                stack,
+                            ));
+                        }
+                    };
+
+                    let runtime = self.runtime_config.runtime;
+                    let mut closure_idx: usize = 0;
+
+                    for &group_size in &group_count {
+                        let group_end = closure_idx + group_size as usize;
+
+                        if matches!(runtime, RuntimeMode::Embedded) {
+                            // Embedded 模式：顺序执行
+                            while closure_idx < group_end && closure_idx < closures.len() {
+                                let RuntimeValue::Function(func_value) = &closures[closure_idx]
+                                else {
+                                    let stack = self.capture_stack();
+                                    return Err(ExecutorError::type_error(
+                                        "spawn_from_list expects function values in list"
+                                            .to_string(),
+                                        stack,
+                                    ));
+                                };
+
+                                let _result =
+                                    self.call_function_by_id(func_value.func_id, &func_value.env)?;
+
+                                // 结果存到 closures_list 寄存器的索引位置
+                                // 注意：这里使用 dst 寄存器作为基础，实际语义由后续使用决定
+                                closure_idx += 1;
+                            }
+                        } else {
+                            // Standard/Full 模式：使用 DAG 调度器并行执行
+                            let mut group_tasks: Vec<TaskId> = Vec::new();
+
+                            while closure_idx < group_end && closure_idx < closures.len() {
+                                let RuntimeValue::Function(func_value) = &closures[closure_idx]
+                                else {
+                                    let stack = self.capture_stack();
+                                    return Err(ExecutorError::type_error(
+                                        "spawn_from_list expects function values in list"
+                                            .to_string(),
+                                        stack,
+                                    ));
+                                };
+
+                                let call_args: Vec<RuntimeValue> = func_value.env.clone();
+                                let deps = self.deps_from_args(&call_args);
+
+                                let task_id = self.schedule_task(
+                                    InterpreterTask::Dyn {
+                                        func: func_value.clone(),
+                                        args: call_args,
+                                    },
+                                    TaskMeta {
+                                        deps,
+                                        label: Some(Arc::<str>::from("spawn_from_list")),
+                                        ..TaskMeta::default()
+                                    },
+                                )?;
+
+                                frame.record_spawned_task(task_id);
+                                group_tasks.push(task_id);
+
+                                closure_idx += 1;
+                            }
+
+                            // 等待本组所有任务完成
+                            for task_id in &group_tasks {
+                                let mut v = self.make_async_pending(*task_id);
+                                self.force_value_in_place(&mut v)?;
+                            }
+                        }
+                    }
+
+                    frame.advance();
+                }
                 BytecodeInstr::Jmp { target } => {
                     // target 是相对偏移量，直接使用
                     let offset = i32::from_le_bytes([

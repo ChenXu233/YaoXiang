@@ -166,6 +166,13 @@ pub enum BytecodeInstr {
         group_count: Vec<u32>,
     },
 
+    /// 从 List 寄存器动态读取闭包并 spawn（RFC-024 §2.4 spawn for）
+    SpawnFromList {
+        dst: Reg,
+        closures_list: Reg,
+        group_count: Vec<u32>,
+    },
+
     /// Unconditional jump
     Jmp {
         target: Label,
@@ -495,6 +502,7 @@ impl BytecodeInstr {
             BytecodeInstr::ReturnValue { .. } => Opcode::ReturnValue,
             BytecodeInstr::Yield => Opcode::Yield,
             BytecodeInstr::Spawn { .. } => Opcode::Spawn,
+            BytecodeInstr::SpawnFromList { .. } => Opcode::SpawnFromList,
             BytecodeInstr::Jmp { .. } => Opcode::Jmp,
             BytecodeInstr::JmpIf { .. } => Opcode::JmpIf,
             BytecodeInstr::JmpIfNot { .. } => Opcode::JmpIfNot,
@@ -581,6 +589,10 @@ impl BytecodeInstr {
             } => {
                 // dst(2) + closures.len(4) + closures(2*len) + group_count.len(4) + groups(4*len)
                 4 + closures.len() * 2 + 4 + group_count.len() * 4
+            }
+            BytecodeInstr::SpawnFromList { group_count, .. } => {
+                // dst(2) + closures_list(2) + group_count.len(4) + groups(4*len)
+                2 + 2 + 4 + group_count.len() * 4
             }
             BytecodeInstr::Jmp { .. } => 4,
             BytecodeInstr::JmpIf { .. } => 4,
@@ -1201,6 +1213,45 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                         decoded_instructions.push(BytecodeInstr::Spawn {
                                             dst: Reg(dst),
                                             closures,
+                                            group_count,
+                                        });
+                                    } else {
+                                        decoded_instructions.push(BytecodeInstr::Nop);
+                                    }
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::SpawnFromList => {
+                                // SpawnFromList: dst(2) + closures_list(2) + group_count.len(4) + groups(4*len)
+                                if instr.operands.len() >= 8 {
+                                    let dst =
+                                        u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
+                                    let closures_list =
+                                        u16::from_le_bytes([instr.operands[2], instr.operands[3]]);
+                                    let group_count_len = u32::from_le_bytes([
+                                        instr.operands[4],
+                                        instr.operands[5],
+                                        instr.operands[6],
+                                        instr.operands[7],
+                                    ])
+                                        as usize;
+
+                                    if instr.operands.len() >= 8 + group_count_len * 4 {
+                                        let mut group_count = Vec::with_capacity(group_count_len);
+                                        for i in 0..group_count_len {
+                                            let offset = 8 + i * 4;
+                                            let count = u32::from_le_bytes([
+                                                instr.operands[offset],
+                                                instr.operands[offset + 1],
+                                                instr.operands[offset + 2],
+                                                instr.operands[offset + 3],
+                                            ]);
+                                            group_count.push(count);
+                                        }
+                                        decoded_instructions.push(BytecodeInstr::SpawnFromList {
+                                            dst: Reg(dst),
+                                            closures_list: Reg(closures_list),
                                             group_count,
                                         });
                                     } else {
