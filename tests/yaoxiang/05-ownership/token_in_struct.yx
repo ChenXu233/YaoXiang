@@ -1,0 +1,19 @@
+// 05-ownership/token_in_struct.yx
+// 验证: 令牌可以作为结构体字段 — 证明令牌是普通类型
+// 状态: 待测试
+
+use std.io
+
+Point: Type = { x: Float, y: Float }
+
+Window: Type = {
+    target: Point,
+    view: &Point,      // 令牌字段 — 持有对 target 的只读视图
+}
+
+main = {
+    p = Point(1.0, 2.0)
+    w = Window(p, p)    // view 令牌从 p 派生
+    io.println(w.view.x)
+    io.println("ALL TESTS PASSED")
+}

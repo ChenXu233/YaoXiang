@@ -1,0 +1,30 @@
+// 02-type-system/closures.yx
+// 验证: 闭包和高阶函数
+// 状态: 待测试
+
+use std.{io, list}
+
+main = {
+    items = [1, 2, 3, 4, 5]
+
+    // map: 每个元素乘以 2
+    doubled = list.map(items, x => x * 2)
+    io.println(doubled)
+
+    // filter: 筛选偶数
+    evens = list.filter(items, x => x % 2 == 0)
+    io.println(evens)
+
+    // reduce: 求和
+    total = list.reduce(items, (acc, x) => acc + x, 0)
+    io.println(total)
+
+    // 链式操作
+    result = list.map(
+        list.filter(items, x => x > 2),
+        x => x * 10
+    )
+    io.println(result)
+
+    io.println("ALL TESTS PASSED")
+}

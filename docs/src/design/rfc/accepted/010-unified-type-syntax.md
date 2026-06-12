@@ -217,7 +217,43 @@ Point = { x: Float, y: Float }  // HM 推断为函数，不是类型！
 
 **用户从不看见这些数字**，只看见 `: Type`。
 
-> **Curry-Howard 同构**：宇宙层级的存在不是工程实现细节，而是逻辑一致性的必要条件。Curry-Howard 同构将类型等同于命题，如果允许 `Type: Type`（即"类型的类型也是类型"），就会产生类似"这句话是假的"的 Russell 悖论——在类型系统中表现为 Girard 悖论。YaoXiang 的 `Type0 / Type1 / Type2…` 分层（即 Martin-Löf 类型论中的累积宇宙），确保每个类型只属于某一层级，`Typeₙ : Typeₙ₊₁` 形成永不闭合的上升链条，从根本上避免了悖论。这意味着，YaoXiang 的类型系统在 Curry-Howard 意义上是 **逻辑一致的**。
+### Curry-Howard 同构：类型即命题，程序即证明
+
+YaoXiang 的统一语法 `name: type = value` 不是随意选择——它恰好是 Curry-Howard 同构（Curry-Howard correspondence）的直接映射。这个同构揭示了一个深刻的事实：**类型系统和逻辑系统是同一个东西的两面**。
+
+| 逻辑（命题） | 类型系统（YaoXiang） | 例子 |
+|---|---|---|
+| 命题 P | 类型 T | `Int`、`Bool` |
+| P 为真的证明 | 类型 T 的一个值 | `42: Int`、`true: Bool` |
+| P → Q（蕴含） | 函数类型 `(P) -> Q` | `(x: Int) -> Bool` |
+| P ∧ Q（合取） | 记录类型 `{ p: P, q: Q }` | `{ x: Int, y: Bool }` |
+| ∀x.P(x)（全称量化） | 泛型函数 `(T: Type) -> ...` | `map: (T: Type, R: Type) -> ...` |
+| P ⊕ Q（析取） | 枚举 / tagged union | `Maybe: (T: Type) -> Type = { ... }` |
+
+**`name: type = value` 在 Curry-Howard 下的含义**：
+
+```yaoxiang
+// "x: Int = 42" 读作："存在一个 Int 类型的证明，名为 x，其值为 42"
+x: Int = 42
+
+// "add: (a: Int, b: Int) -> Int = a + b" 读作：
+// "存在一个蕴含证明：给定 Int 的证明 a 和 b，可构造 Int 的证明"
+add: (a: Int, b: Int) -> Int = a + b
+
+// "Point: Type = { x: Float, y: Float }" 读作：
+// "Point 是一个命题，其证明需要同时提供 Float 证明 x 和 Float 证明 y"
+Point: Type = { x: Float, y: Float }
+```
+
+**为什么这很重要？**
+
+1. **逻辑一致性 = 类型安全**：如果类型系统允许构造一个类型为 `T` 的值却没有任何合法的运行时表示，那就像逻辑中允许证明一个假命题——系统崩溃了。Curry-Howard 告诉我们：**一个类型安全的语言天然就是一个一致的逻辑系统**。
+
+2. **宇宙层级是必要条件**：正如下面详述的，如果允许 `Type: Type`（即"类型的类型也是类型"），就会产生 Russell 悖论（在类型论中表现为 Girard 悖论）。YaoXiang 的 `Type₀ : Type₁ : Type₂ : ...` 分层确保每个类型只属于某一层级，形成永不闭合的上升链条，从根本上避免了悖论。这意味着 YaoXiang 的类型系统在 Curry-Howard 意义上是 **逻辑一致的**。
+
+3. **统一语法的理论基础**：`name: type = value` 之所以能用一种语法覆盖变量、函数、类型、接口、泛型所有概念，正是因为它们在 Curry-Howard 下都是同一件事——**为命题提供证明**。变量是命题的证据，函数是蕴含的证据，记录是合取的证据，泛型是全称量化的证据。统一语法不是人为设计的巧合，而是 Curry-Howard 同构的自然推论。
+
+> **进一步阅读**：Wadler, P. (2015). *"Propositions as Types."* Communications of the ACM, 58(12), 75–84. 这篇文章用通俗语言解释了 Curry-Howard 同构的历史和意义。
 
 ### 语法定义
 

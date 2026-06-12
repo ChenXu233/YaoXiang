@@ -1,0 +1,19 @@
+// 05-ownership/borrow_mutable.yx
+// 验证: &mut T 令牌线性（不可复制）— 独占可变访问
+// 状态: 待测试
+
+use std.io
+
+Point: Type = { x: Float, y: Float }
+
+Point.shift: (self: &mut Point, dx: Float, dy: Float) -> Void = {
+    self.x = self.x + dx
+    self.y = self.y + dy
+}
+
+main = {
+    p = Point(1.0, 2.0)
+    p.shift(3.0, 4.0)
+    io.println(p)
+    io.println("ALL TESTS PASSED")
+}

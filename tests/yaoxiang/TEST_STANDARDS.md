@@ -31,19 +31,21 @@ YaoXiang 采用三层测试体系：
 
 ### 2.1 目录结构
 
-按语言规范章节组织：
+按语言规范章节组织（对齐 `docs/src/reference/language-spec/`）：
 
 ```
 tests/yaoxiang/
 ├── 00-smoke/             # 冒烟测试
-├── 01-basics/            # 基本语法（规范第2/4/5章）
-├── 02-functions/         # 函数（规范第6章）
-├── 03-control-flow/      # 控制流（规范第4/5章）
-├── 04-types/             # 类型系统（规范第3章）
-├── 05-data-structures/   # 数据结构（规范第2.6节）
-├── 06-modules/           # 模块系统（规范第7章）
-├── 07-errors/            # 错误处理（规范第9章）
-├── 08-concurrency/       # 并发（RFC-001）
+├── 01-syntax/            # 语法规范（对应 syntax.md）
+│   ├── basics/           #   基本语法
+│   ├── functions/        #   函数定义与调用
+│   └── control-flow/     #   控制流
+├── 02-type-system/       # 类型系统（对应 type-system.md）
+├── 03-modules/           # 模块系统（对应 modules.md）
+├── 04-concurrency/       # 并发模型（对应 concurrency.md）
+├── 05-ownership/         # 所有权（独立章节）
+├── 06-compile-errors/    # 编译期错误检测
+├── 99-demos/             # 论文演示（非规范测试）
 └── TEST_STANDARDS.md     # 本文件
 ```
 
@@ -169,7 +171,7 @@ cargo test --lib
 cargo test -p yaoxiang --lib -- <module>::tests::
 
 # 手动运行单个 .yx 文件
-cargo run -- run tests/yaoxiang/01-basics/variables.yx
+cargo run -- run tests/yaoxiang/01-syntax/basics/variables.yx
 ```
 
 ---

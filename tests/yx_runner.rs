@@ -3,18 +3,21 @@
 //! Discovers all `*.yx` files under `tests/yaoxiang/`, runs each through the
 //! `yaoxiang run` binary, and verifies the output contains `ALL TESTS PASSED`.
 //!
-//! Directory structure:
+//! Directory structure (aligned with `docs/src/reference/language-spec/`):
 //!
 //! ```text
 //! tests/yaoxiang/
-//! ├── 00-smoke/         # 冒烟测试
-//! ├── 01-basics/        # 基本语法
-//! ├── 02-functions/     # 函数定义与调用
-//! ├── 03-control-flow/  # 控制流
-//! ├── 04-types/         # 类型系统
-//! ├── 05-data-structures/
-//! ├── 06-modules/       # 模块系统
-//! └── 07-errors/        # 错误处理
+//! ├── 00-smoke/             # 冒烟测试
+//! ├── 01-syntax/            # 语法规范（对应 syntax.md）
+//! │   ├── basics/           #   基本语法
+//! │   ├── functions/        #   函数定义与调用
+//! │   └── control-flow/     #   控制流
+//! ├── 02-type-system/       # 类型系统（对应 type-system.md）
+//! ├── 03-modules/           # 模块系统（对应 modules.md）
+//! ├── 04-concurrency/       # 并发模型（对应 concurrency.md）
+//! ├── 05-ownership/         # 所有权（独立章节）
+//! ├── 06-compile-errors/    # 编译期错误检测
+//! └── 99-demos/             # 论文演示（非规范测试）
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -116,7 +119,7 @@ fn test_all_yx_files_pass() {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         let code = output.status.code().unwrap_or(-1);
 
-        let is_error_test = relative.contains("10-errors");
+        let is_error_test = relative.contains("06-compile-errors");
 
         if is_error_test {
             // Error test files should fail compilation
