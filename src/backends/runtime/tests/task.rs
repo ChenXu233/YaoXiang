@@ -7,8 +7,8 @@
 //! - TaskSpawner 的任务管理
 
 use crate::backends::runtime::task::{
-    Task, TaskId, TaskContext, TaskPriority, TaskConfig, TaskSpawner, TaskState, Scheduler,
-    SchedulerStats, RuntimeError,
+    Task, TaskId, TaskContext, TaskPriority, TaskConfig, TaskSpawner, Scheduler, SchedulerStats,
+    RuntimeError,
 };
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
