@@ -10,7 +10,9 @@ authors = ["YaoXiang Team","ChenXu233 <Woyerpa@outlook.com>"]
 repository = "https://github.com/ChenXu233/yaoxiang"
 
 [features]
+default = ["z3"]
 debug = []
+z3 = ["dep:z3-sys"]
 
 [lib]
 path = "src/lib.rs"
@@ -107,3 +109,7 @@ default-target = "x86_64-unknown-linux-gnu"
 
 [patch.crates-io]
 time = { git = "https://github.com/time-rs/time", tag = "v0.3.47" }
+
+[dependencies.z3-sys]
+version = "0.8"
+optional = true
