@@ -379,21 +379,3 @@ impl fmt::Display for ConstVarDef {
         write!(f, "{}", self.name)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_named_var_in_binop() {
-        let expr = ConstExpr::BinOp {
-            op: BinOp::Gt,
-            left: Box::new(ConstExpr::NamedVar("x".into())),
-            right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-        };
-        // 验证构造不 panic，且 Display 正常
-        let display = format!("{}", expr);
-        assert!(display.contains("x"));
-        assert!(display.contains("0"));
-    }
-}

@@ -34,6 +34,9 @@ pub mod ownership_flow;
 pub mod ref_semantics;
 pub mod unsafe_check;
 
+#[cfg(test)]
+mod tests;
+
 pub use borrow_checker::*;
 pub use chain_calls::*;
 pub use clone::*;

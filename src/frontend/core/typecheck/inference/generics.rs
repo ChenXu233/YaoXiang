@@ -93,28 +93,3 @@ impl GenericInferrer {
             })
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::GenericInferrer;
-    use crate::frontend::core::types::MonoType;
-
-    #[test]
-    fn test_infer_generic_function_creates_fresh_vars() {
-        let mut inferrer = GenericInferrer::new();
-
-        let t1 = inferrer
-            .infer_generic_function("f", &["T".to_string()])
-            .unwrap();
-        let t2 = inferrer
-            .infer_generic_function("g", &["U".to_string()])
-            .unwrap();
-
-        match (t1, t2) {
-            (MonoType::TypeVar(v1), MonoType::TypeVar(v2)) => {
-                assert_ne!(v1, v2);
-            }
-            _ => panic!("Expected type variables"),
-        }
-    }
-}

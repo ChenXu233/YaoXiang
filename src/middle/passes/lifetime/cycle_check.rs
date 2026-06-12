@@ -26,19 +26,19 @@ const MAX_DETECTION_DEPTH: usize = 1;
 #[derive(Debug, Default)]
 pub struct CycleChecker {
     /// 跨 spawn 引用边：spawn 返回值持有外部 ref
-    spawn_ref_edges: Vec<SpawnRefEdge>,
+    pub(crate) spawn_ref_edges: Vec<SpawnRefEdge>,
     /// 跨 spawn 参数边：spawn 参数来自另一个 spawn 返回值
-    spawn_param_edges: Vec<SpawnParamEdge>,
+    pub(crate) spawn_param_edges: Vec<SpawnParamEdge>,
     /// 错误
-    errors: Vec<Diagnostic>,
+    pub(crate) errors: Vec<Diagnostic>,
     /// spawn 返回值 → 所在基本块/指令位置
-    spawn_results: HashMap<Operand, (usize, usize)>,
+    pub(crate) spawn_results: HashMap<Operand, (usize, usize)>,
     /// 值定义追踪（用于追踪 ref 的来源）
     value_defs: HashMap<Operand, (Operand, (usize, usize))>,
     /// unsafe 块范围：(block_idx, start_instr, end_instr)
     pub(crate) unsafe_ranges: Vec<(usize, usize, usize)>,
     /// unsafe 绕过记录（信息级别）
-    unsafe_bypasses: Vec<Diagnostic>,
+    pub(crate) unsafe_bypasses: Vec<Diagnostic>,
     /// 局部变量名列表（用于错误报告中显示源码变量名）
     local_names: Option<Vec<String>>,
 }
@@ -76,7 +76,7 @@ impl CycleChecker {
 
 /// spawn 返回值持有外部 ref 的边
 #[derive(Debug, Clone)]
-struct SpawnRefEdge {
+pub(crate) struct SpawnRefEdge {
     /// spawn 返回值（持有 ref 的值）
     spawn_result: Operand,
     /// 返回值持有的 ref 目标
@@ -85,7 +85,7 @@ struct SpawnRefEdge {
 
 /// spawn 参数来自另一个 spawn 返回值
 #[derive(Debug, Clone)]
-struct SpawnParamEdge {
+pub(crate) struct SpawnParamEdge {
     /// 接收参数的 spawn 返回值
     consumer_spawn: Operand,
     /// 提供参数的 spawn 返回值
@@ -399,198 +399,5 @@ impl super::error::OwnershipCheck for CycleChecker {
         self.value_defs.clear();
         self.unsafe_ranges.clear();
         self.unsafe_bypasses.clear();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::middle::core::ir::{BasicBlock, ExecutionPlan};
-    use crate::frontend::core::typecheck::MonoType;
-
-    /// 创建测试用的 FunctionIR
-    fn create_test_function(instructions: Vec<Instruction>) -> FunctionIR {
-        FunctionIR {
-            name: "test".to_string(),
-            params: vec![],
-            return_type: MonoType::Void,
-            locals: vec![],
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions,
-                successors: vec![],
-            }],
-            entry: 0,
-        }
-    }
-
-    #[test]
-    fn test_no_spawn_no_error() {
-        let mut checker = CycleChecker::new();
-        let func = create_test_function(vec![Instruction::Move {
-            dst: Operand::Local(0),
-            src: Operand::Arg(0),
-        }]);
-
-        let errors = checker.check_function(&func);
-        assert!(errors.is_empty(), "无 spawn 不应有错误");
-    }
-
-    #[test]
-    fn test_single_spawn_no_cycle() {
-        let mut checker = CycleChecker::new();
-        let func = create_test_function(vec![Instruction::Spawn {
-            closures: vec![Operand::Global(0)],
-            plan: ExecutionPlan { groups: vec![] },
-            result: Operand::Temp(0),
-        }]);
-
-        let errors = checker.check_function(&func);
-        assert!(errors.is_empty(), "单 spawn 不应有循环");
-    }
-
-    #[test]
-    fn test_independent_spawns_no_cycle() {
-        let mut checker = CycleChecker::new();
-        let func = create_test_function(vec![
-            Instruction::Spawn {
-                closures: vec![Operand::Global(0)],
-                plan: ExecutionPlan { groups: vec![] },
-                result: Operand::Temp(0),
-            },
-            Instruction::Spawn {
-                closures: vec![Operand::Global(1)],
-                plan: ExecutionPlan { groups: vec![] },
-                result: Operand::Temp(1),
-            },
-        ]);
-
-        let errors = checker.check_function(&func);
-        assert!(errors.is_empty(), "独立 spawn 不应有循环");
-    }
-
-    #[test]
-    fn test_spawn_chain_no_cycle() {
-        // spawn A -> spawn B (单向依赖，无循环)
-        let mut checker = CycleChecker::new();
-        let func = create_test_function(vec![
-            Instruction::Spawn {
-                closures: vec![Operand::Global(0)],
-                plan: ExecutionPlan { groups: vec![] },
-                result: Operand::Temp(0),
-            },
-            Instruction::Spawn {
-                closures: vec![Operand::Global(1)],
-                plan: ExecutionPlan { groups: vec![] },
-                result: Operand::Temp(1),
-            },
-        ]);
-
-        let errors = checker.check_function(&func);
-        assert!(errors.is_empty(), "单向依赖不应有循环");
-    }
-
-    #[test]
-    fn test_depth_limit_one_level() {
-        // 测试深度限制：只检测直接依赖
-        let mut checker = CycleChecker::new();
-        let func = create_test_function(vec![
-            Instruction::Spawn {
-                closures: vec![Operand::Global(0)],
-                plan: ExecutionPlan { groups: vec![] },
-                result: Operand::Temp(0),
-            },
-            Instruction::Move {
-                dst: Operand::Temp(1),
-                src: Operand::Temp(0),
-            },
-            Instruction::Move {
-                dst: Operand::Temp(2),
-                src: Operand::Temp(1), // 间接引用（深度 > 1）
-            },
-            Instruction::Spawn {
-                closures: vec![Operand::Global(1)],
-                plan: ExecutionPlan { groups: vec![] },
-                result: Operand::Temp(3),
-            },
-        ]);
-
-        let errors = checker.check_function(&func);
-        // 深度限制为 1，间接引用不应被追踪
-        assert!(errors.is_empty(), "深度 > 1 的间接引用不应被检测");
-    }
-
-    #[test]
-    fn test_clear_resets_all_state() {
-        use super::super::error::OwnershipCheck;
-
-        let mut checker = CycleChecker::new();
-        let func = create_test_function(vec![Instruction::Spawn {
-            closures: vec![Operand::Global(0)],
-            plan: ExecutionPlan { groups: vec![] },
-            result: Operand::Temp(0),
-        }]);
-
-        checker.check_function(&func);
-        OwnershipCheck::clear(&mut checker);
-
-        assert!(checker.errors.is_empty());
-        assert!(checker.spawn_results.is_empty());
-        assert!(checker.spawn_ref_edges.is_empty());
-        assert!(checker.spawn_param_edges.is_empty());
-        assert!(checker.unsafe_ranges.is_empty());
-        assert!(checker.unsafe_bypasses.is_empty());
-    }
-
-    #[test]
-    fn test_unsafe_bypass_empty_by_default() {
-        // 当前 Phase 6，unsafe 检测尚未实现，应返回空
-        let mut checker = CycleChecker::new();
-        let func = create_test_function(vec![Instruction::Spawn {
-            closures: vec![Operand::Global(0)],
-            plan: ExecutionPlan { groups: vec![] },
-            result: Operand::Temp(0),
-        }]);
-
-        checker.check_function(&func);
-        assert!(
-            checker.unsafe_bypasses().is_empty(),
-            "Phase 6 默认无 unsafe 绕过"
-        );
-    }
-
-    #[test]
-    fn test_error_message_contains_suggestion() {
-        // 确保错误消息包含建议
-        let mut checker = CycleChecker::new();
-
-        // 构造循环：spawn A 使用 spawn B 结果，spawn B 使用 spawn A 结果
-        let func = create_test_function(vec![
-            Instruction::Spawn {
-                closures: vec![Operand::Global(0)],
-                plan: ExecutionPlan { groups: vec![] },
-                result: Operand::Temp(0),
-            },
-            Instruction::Spawn {
-                closures: vec![Operand::Global(1)],
-                plan: ExecutionPlan { groups: vec![] },
-                result: Operand::Temp(1),
-            },
-            Instruction::Move {
-                dst: Operand::Temp(0),
-                src: Operand::Temp(1),
-            },
-        ]);
-
-        let errors = checker.check_function(&func);
-        // 如果检测到循环，消息应包含建议
-        for error in errors {
-            if error.code == "E2003" {
-                assert!(
-                    error.message.contains("Weak") || error.message.contains("unsafe"),
-                    "错误消息应包含解决建议"
-                );
-            }
-        }
     }
 }
