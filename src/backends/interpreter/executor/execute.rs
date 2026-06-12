@@ -178,7 +178,16 @@ impl Executor for Interpreter {
                             };
 
                             let call_args: Vec<RuntimeValue> = func_value.env.clone();
-                            let deps = self.deps_from_args(&call_args);
+                            let mut deps = self.deps_from_args(&call_args);
+
+                            // 从 task_deps 添加编译期依赖边
+                            if let Some(task_dep_indices) = task_deps.get(i) {
+                                for &dep_idx in task_dep_indices {
+                                    if let Some((_, dep_task_id)) = task_ids.get(dep_idx as usize) {
+                                        deps.push(*dep_task_id);
+                                    }
+                                }
+                            }
 
                             // 从 task_resources 构建资源列表
                             let resources: Vec<ResourceKey> = task_resources
@@ -280,7 +289,16 @@ impl Executor for Interpreter {
                             };
 
                             let call_args: Vec<RuntimeValue> = func_value.env.clone();
-                            let deps = self.deps_from_args(&call_args);
+                            let mut deps = self.deps_from_args(&call_args);
+
+                            // 从 task_deps 添加编译期依赖边
+                            if let Some(task_dep_indices) = task_deps.get(i) {
+                                for &dep_idx in task_dep_indices {
+                                    if let Some(dep_task_id) = spawned_tasks.get(dep_idx as usize) {
+                                        deps.push(*dep_task_id);
+                                    }
+                                }
+                            }
 
                             // 从 task_resources 构建资源列表
                             let resources: Vec<ResourceKey> = task_resources
