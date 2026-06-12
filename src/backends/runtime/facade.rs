@@ -175,9 +175,7 @@ impl Runtime {
                 "embedded runtime does not support cooperative tasks",
             )),
             RuntimeInner::Standard(rt) => Ok(rt.spawn_coop(meta, task)?),
-            RuntimeInner::Full(_) => Err(RuntimeFacadeError::InvalidConfig(
-                "full runtime does not support cooperative tasks yet",
-            )),
+            RuntimeInner::Full(rt) => Ok(rt.spawn_coop(meta, task)?),
         }
     }
 
@@ -645,6 +643,14 @@ impl FullRuntime {
         target: Option<TaskId>,
     ) -> Result<(), RuntimeError> {
         self.standard.drive_until(target)
+    }
+
+    fn spawn_coop(
+        &mut self,
+        meta: TaskMeta,
+        task: CoopTaskFn,
+    ) -> Result<TaskId, RuntimeError> {
+        self.standard.spawn_coop(meta, task)
     }
 }
 
