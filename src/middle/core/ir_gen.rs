@@ -2095,6 +2095,169 @@ impl AstToIrGenerator {
         Ok(())
     }
 
+    /// 生成 spawn for 数据并行循环的 IR
+    ///
+    /// 将 `spawn for item in items { process(item) }` 展开为：
+    /// ```text
+    /// closures = []          // AllocArray
+    /// iterator = iter(items) // Call
+    /// while has_next(iterator) {
+    ///     item = next(iterator)
+    ///     closure = () => { body }  // Lambda
+    ///     push(closures, closure)   // Call std.list.push
+    /// }
+    /// Spawn { closures, plan, result }
+    /// ```
+    #[allow(clippy::too_many_arguments)]
+    fn generate_spawn_for_ir(
+        &mut self,
+        var_name: &str,
+        var_mut: bool,
+        iterable: &ast::Expr,
+        body: &ast::Block,
+        result_reg: usize,
+        span: Span,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        use crate::frontend::core::spawn::analysis::analyze_spawn_for;
+
+        // 1. 分析循环体读写集
+        let (trait_table, local_var_types) = if let Some(ref type_result) = self.type_result {
+            (&type_result.trait_table, &type_result.local_var_types)
+        } else {
+            static EMPTY_TRAIT_TABLE: once_cell::sync::Lazy<
+                crate::frontend::core::types::TraitTable,
+            > = once_cell::sync::Lazy::new(crate::frontend::core::types::TraitTable::default);
+            static EMPTY_VAR_TYPES: once_cell::sync::Lazy<
+                std::collections::HashMap<String, crate::frontend::core::types::MonoType>,
+            > = once_cell::sync::Lazy::new(std::collections::HashMap::new);
+            (&*EMPTY_TRAIT_TABLE, &*EMPTY_VAR_TYPES)
+        };
+
+        let spawn_for_analysis =
+            analyze_spawn_for(var_name, iterable, body, trait_table, local_var_types);
+
+        // 2. 进入 spawn 作用域
+        self.enter_scope();
+
+        // 3. 创建空列表寄存器，用于收集闭包
+        let closures_list_reg = self.next_temp_reg();
+        instructions.push(Instruction::AllocArray {
+            dst: Operand::Local(closures_list_reg),
+            size: Operand::Const(ConstValue::Int(0)),
+            elem_size: Operand::Const(ConstValue::Int(1)),
+        });
+        self.current_mut_locals.insert(closures_list_reg);
+
+        // 4. 计算可迭代对象
+        let iterable_reg = self.next_temp_reg();
+        self.generate_expr_ir(iterable, iterable_reg, instructions, constants)?;
+
+        // 5. 创建迭代器: iterator = iter(iterable)
+        let iterator_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(iterator_reg)),
+            func: Operand::Const(ConstValue::String("std.list.iter".to_string())),
+            args: vec![Operand::Local(iterable_reg)],
+            span,
+        });
+
+        // 6. 注册循环变量
+        let var_reg = self.next_temp_reg();
+        self.register_local(var_name, var_reg);
+        self.current_loop_binding_locals.insert(var_reg);
+        if var_mut {
+            self.current_mut_locals.insert(var_reg);
+        }
+
+        // 7. 循环开始
+        let loop_start_idx = instructions.len();
+
+        // 8. has_next?
+        let has_more_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(has_more_reg)),
+            func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
+            args: vec![Operand::Local(iterator_reg)],
+            span,
+        });
+
+        // 9. 如果没有更多元素，跳转到结束
+        let jump_end_idx = instructions.len();
+        instructions.push(Instruction::JmpIfNot(Operand::Local(has_more_reg), 0));
+
+        // 10. 获取下一个元素: var = next(iterator)
+        let element_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(element_reg)),
+            func: Operand::Const(ConstValue::String("std.list.next".to_string())),
+            args: vec![Operand::Local(iterator_reg)],
+            span,
+        });
+        instructions.push(Instruction::Store {
+            dst: Operand::Local(var_reg),
+            src: Operand::Local(element_reg),
+            span,
+        });
+
+        // 11. 在循环体内创建闭包：() => { body }
+        //     将循环体包装为无参 Lambda
+        let closure_reg = self.next_temp_reg();
+        let lambda = ast::Expr::Lambda {
+            params: Vec::new(),
+            body: Box::new(body.clone()),
+            span,
+        };
+        self.generate_expr_ir(&lambda, closure_reg, instructions, constants)?;
+
+        // 12. 将闭包推入列表: push(closures, closure)
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(closures_list_reg)),
+            func: Operand::Const(ConstValue::String("std.list.push".to_string())),
+            args: vec![
+                Operand::Local(closures_list_reg),
+                Operand::Local(closure_reg),
+            ],
+            span,
+        });
+
+        // 13. 跳转回循环开始
+        instructions.push(Instruction::Jmp(loop_start_idx));
+
+        // 14. 修复跳出循环的跳转目标
+        let end_idx = instructions.len();
+        if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_end_idx] {
+            *target = end_idx;
+        }
+
+        // 15. 构建执行计划
+        //     所有迭代共享同一个读写集（编译期分析的循环体特征）
+        let read_write_sets = vec![(
+            spawn_for_analysis.reads.clone(),
+            spawn_for_analysis.writes.clone(),
+        )];
+        let resource_var_sets = vec![spawn_for_analysis.resource_vars.clone()];
+        let plan = crate::frontend::core::spawn::analysis::build_execution_plan(
+            &read_write_sets,
+            &resource_var_sets,
+        );
+
+        // 16. 生成 Spawn 指令
+        //     closures 参数是闭包列表（运行时动态收集）
+        //     这里将列表寄存器作为单个 Operand 传给 Spawn
+        instructions.push(Instruction::Spawn {
+            closures: vec![Operand::Local(closures_list_reg)],
+            plan,
+            result: Operand::Local(result_reg),
+        });
+
+        // 17. 退出 spawn 作用域
+        self.exit_scope();
+
+        Ok(())
+    }
+
     // 迭代器协议已通过 Call 指令实现，不再需要独立的 IR 指令
     // 保留指令定义以供将来使用
 
@@ -3372,6 +3535,25 @@ impl AstToIrGenerator {
                     dst: Operand::Local(result_reg),
                     src: Operand::Const(ConstValue::Int(0)),
                 });
+            }
+            // spawn for 数据并行循环（RFC-024 §2.4）
+            Expr::SpawnFor {
+                var,
+                var_mut,
+                iterable,
+                body,
+                span,
+            } => {
+                self.generate_spawn_for_ir(
+                    var,
+                    *var_mut,
+                    iterable,
+                    body,
+                    result_reg,
+                    *span,
+                    instructions,
+                    constants,
+                )?;
             }
             Expr::Spawn { body, span } => {
                 // Spawn block: spawn { ... }

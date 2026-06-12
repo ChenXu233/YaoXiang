@@ -139,7 +139,10 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse spawn block: `spawn { ... }`
-    fn parse_spawn_block(&mut self, span: Span) -> Option<Expr> {
+    fn parse_spawn_block(
+        &mut self,
+        span: Span,
+    ) -> Option<Expr> {
         let body = self.parse_block_expr()?;
         Some(Expr::Spawn {
             body: Box::new(body),
@@ -148,7 +151,10 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse spawn for: `spawn for item in items { ... }`
-    fn parse_spawn_for(&mut self, span: Span) -> Option<Expr> {
+    fn parse_spawn_for(
+        &mut self,
+        span: Span,
+    ) -> Option<Expr> {
         self.bump(); // consume 'for'
 
         // 解析迭代变量名
