@@ -538,12 +538,15 @@ impl StandardRuntime {
                 } => {
                     let id = self.graph.spawn(meta)?;
                     if self.graph.is_complete(id) {
-                        // Pre-cancelled due to failed/cancelled deps.
                         let _ = respond.send(id);
                     } else {
                         self.tasks.insert(id, task);
                         let _ = respond.send(id);
                     }
+                    // Continue loop — the new task may be ready for dispatch.
+                    // in_flight > 0 at this point (the spawning worker is still
+                    // in-flight), so the in_flight == 0 deadlock check won't
+                    // fire. The next dispatch iteration will pick up the new task.
                 }
             }
 
@@ -672,11 +675,16 @@ fn spawn_worker_threads(
                 let start = Instant::now();
                 let result = (item.task)(&item.spawn_handle);
                 let exec_time = start.elapsed();
-                let _ = msg_tx.send(WorkerMessage::Completed {
-                    id: item.id,
-                    result,
-                    exec_time,
-                });
+                if msg_tx
+                    .send(WorkerMessage::Completed {
+                        id: item.id,
+                        result,
+                        exec_time,
+                    })
+                    .is_err()
+                {
+                    break; // Main thread dropped msg_rx — exit worker.
+                }
             }
         }));
     }
