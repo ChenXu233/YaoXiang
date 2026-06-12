@@ -329,6 +329,9 @@ mod tests {
         let test_path = std::env::temp_dir().join("yx_ffi_test.txt");
         let path_str = test_path.to_string_lossy().to_string();
 
+        // Cleanup before test
+        let _ = std::fs::remove_file(&test_path);
+
         // Write file
         let write_result = registry
             .call(
