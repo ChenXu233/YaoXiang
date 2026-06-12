@@ -594,10 +594,7 @@ impl Pipeline {
                 }
                 Err(e) => {
                     failed_proofs.push(call.func_name.clone());
-                    errors.push(format!(
-                        "证明函数 '{}' 执行失败: {}",
-                        call.func_name, e,
-                    ));
+                    errors.push(format!("证明函数 '{}' 执行失败: {}", call.func_name, e,));
                 }
             }
         }
@@ -606,11 +603,8 @@ impl Pipeline {
         phase_durations.push((CompilationPhase::ProofExecution, duration));
 
         for err in &errors {
-            self.event_bus.emit(ErrorOccurred::new(
-                err.clone(),
-                "E8002",
-                ErrorLevel::Error,
-            ));
+            self.event_bus
+                .emit(ErrorOccurred::new(err.clone(), "E8002", ErrorLevel::Error));
         }
 
         if failed_proofs.is_empty() {
@@ -767,7 +761,7 @@ pub(crate) fn execute_single_proof_fn(
     use crate::middle;
 
     // 1. 在 AST 中查找函数定义
-    let (params, stmts, expr, type_ann) = ast
+    let (params, body_stmts, type_ann) = ast
         .items
         .iter()
         .find_map(|stmt| match &stmt.kind {
@@ -776,31 +770,24 @@ pub(crate) fn execute_single_proof_fn(
                 type_name,
                 type_annotation,
                 params,
-                body: (body_stmts, body_expr),
+                body,
                 ..
             } if *name == call.func_name && type_name.is_none() => {
-                Some((
-                    params.clone(),
-                    body_stmts.clone(),
-                    body_expr.clone(),
-                    type_annotation.clone(),
-                ))
+                Some((params.clone(), body.clone(), type_annotation.clone()))
             }
             _ => None,
         })
         .ok_or_else(|| format!("证明函数 '{}' 未在 AST 中找到", call.func_name))?;
 
     // 2. IR 生成：单个函数 → FunctionIR
-    let mut ir_gen =
-        middle::core::ir_gen::AstToIrGenerator::new_with_type_result(&type_result);
+    let mut ir_gen = middle::core::ir_gen::AstToIrGenerator::new_with_type_result(type_result);
     let mut constants: Vec<middle::core::ir::ConstValue> = Vec::new();
     let func_ir = ir_gen
         .generate_function_ir(
             &call.func_name,
             type_ann.as_ref(),
             &params,
-            &stmts,
-            &expr,
+            &body_stmts,
             &mut constants,
         )
         .map_err(|e| format!("证明函数 '{}' IR 生成失败: {}", call.func_name, e))?;
@@ -824,15 +811,10 @@ pub(crate) fn execute_single_proof_fn(
         .generate()
         .map_err(|e| format!("证明函数 '{}' 字节码编译失败: {}", call.func_name, e))?;
 
-    let bytecode_module =
-        crate::middle::core::bytecode::BytecodeModule::from(bytecode_file);
+    let bytecode_module = crate::middle::core::bytecode::BytecodeModule::from(bytecode_file);
 
     // 5. ConstValue → RuntimeValue
-    let args: Vec<RuntimeValue> = call
-        .args
-        .iter()
-        .map(|cv| from_const_value(cv))
-        .collect();
+    let args: Vec<RuntimeValue> = call.args.iter().map(from_const_value).collect();
 
     // 6. 解释器执行
     let mut interpreter = Interpreter::new();
@@ -847,7 +829,10 @@ pub(crate) fn execute_single_proof_fn(
         .position(|f| f.name == call.func_name)
         .ok_or_else(|| format!("证明函数 '{}' 在模块中未找到", call.func_name))?;
     let result = interpreter
-        .call_function_by_id(crate::backends::common::value::FunctionId(func_id as u32), &args)
+        .call_function_by_id(
+            crate::backends::common::value::FunctionId(func_id as u32),
+            &args,
+        )
         .map_err(|e| format!("证明函数 '{}' 执行失败: {}", call.func_name, e))?;
 
     // 7. 提取 bool
@@ -985,7 +970,10 @@ impl ProofExecResult {
         }
     }
 
-    fn failed(failed_proofs: Vec<String>, errors: Vec<String>) -> Self {
+    fn failed(
+        failed_proofs: Vec<String>,
+        errors: Vec<String>,
+    ) -> Self {
         Self {
             failed_proofs,
             errors,

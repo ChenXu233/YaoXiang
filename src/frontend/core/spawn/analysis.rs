@@ -980,7 +980,6 @@ pub fn build_execution_plan(
         });
     }
 
-<<<<<<< HEAD
     // 构建资源变量列表
     let task_resources: Vec<Vec<String>> = resource_var_sets
         .iter()
@@ -992,7 +991,4 @@ pub fn build_execution_plan(
         task_deps: deps,
         task_resources,
     }
-=======
-    ExecutionPlan { groups }
->>>>>>> worktree-rfc027-phase2
 }

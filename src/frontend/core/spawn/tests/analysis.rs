@@ -624,7 +624,6 @@ fn test_spawn_for_reads_writes() {
         analysis.reads.contains("item"),
         "循环体 reads 应包含迭代变量 item"
     );
-<<<<<<< HEAD
 }
 
 // ============================================================================
@@ -816,6 +815,4 @@ fn test_spawn_for_end_to_end_independent_iterations() {
     assert!(analysis.reads.contains("process"));
     assert!(analysis.reads.contains("item"));
     assert!(analysis.writes.is_empty(), "无写操作时应允许并行");
-=======
->>>>>>> worktree-rfc027-phase2
 }

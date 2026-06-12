@@ -1234,7 +1234,8 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                             instr.operands[pos + 1],
                                             instr.operands[pos + 2],
                                             instr.operands[pos + 3],
-                                        ]) as usize;
+                                        ])
+                                            as usize;
                                         pos += 4;
                                         task_deps.reserve(deps_len);
                                         for _ in 0..deps_len {
@@ -1244,7 +1245,8 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                                     instr.operands[pos + 1],
                                                     instr.operands[pos + 2],
                                                     instr.operands[pos + 3],
-                                                ]) as usize;
+                                                ])
+                                                    as usize;
                                                 pos += 4;
                                                 let mut deps = Vec::with_capacity(dep_count);
                                                 for _ in 0..dep_count {
@@ -1271,7 +1273,8 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                             instr.operands[pos + 1],
                                             instr.operands[pos + 2],
                                             instr.operands[pos + 3],
-                                        ]) as usize;
+                                        ])
+                                            as usize;
                                         pos += 4;
                                         task_resources.reserve(res_len);
                                         for _ in 0..res_len {
@@ -1281,7 +1284,8 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                                     instr.operands[pos + 1],
                                                     instr.operands[pos + 2],
                                                     instr.operands[pos + 3],
-                                                ]) as usize;
+                                                ])
+                                                    as usize;
                                                 pos += 4;
                                                 let mut resources = Vec::with_capacity(str_count);
                                                 for _ in 0..str_count {
@@ -1291,7 +1295,8 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                                             instr.operands[pos + 1],
                                                             instr.operands[pos + 2],
                                                             instr.operands[pos + 3],
-                                                        ]) as usize;
+                                                        ])
+                                                            as usize;
                                                         pos += 4;
                                                         if pos + str_len <= instr.operands.len() {
                                                             let s = String::from_utf8_lossy(
@@ -1335,7 +1340,8 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                             instr.operands[pos + 1],
                                             instr.operands[pos + 2],
                                             instr.operands[pos + 3],
-                                        ]) as usize;
+                                        ])
+                                            as usize;
                                         pos += 4;
                                         task_deps.reserve(deps_len);
                                         for _ in 0..deps_len {
@@ -1345,7 +1351,8 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                                     instr.operands[pos + 1],
                                                     instr.operands[pos + 2],
                                                     instr.operands[pos + 3],
-                                                ]) as usize;
+                                                ])
+                                                    as usize;
                                                 pos += 4;
                                                 let mut deps = Vec::with_capacity(dep_count);
                                                 for _ in 0..dep_count {
@@ -1372,7 +1379,8 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                             instr.operands[pos + 1],
                                             instr.operands[pos + 2],
                                             instr.operands[pos + 3],
-                                        ]) as usize;
+                                        ])
+                                            as usize;
                                         pos += 4;
                                         task_resources.reserve(res_len);
                                         for _ in 0..res_len {
@@ -1382,7 +1390,8 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                                     instr.operands[pos + 1],
                                                     instr.operands[pos + 2],
                                                     instr.operands[pos + 3],
-                                                ]) as usize;
+                                                ])
+                                                    as usize;
                                                 pos += 4;
                                                 let mut resources = Vec::with_capacity(str_count);
                                                 for _ in 0..str_count {
@@ -1392,7 +1401,8 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                                             instr.operands[pos + 1],
                                                             instr.operands[pos + 2],
                                                             instr.operands[pos + 3],
-                                                        ]) as usize;
+                                                        ])
+                                                            as usize;
                                                         pos += 4;
                                                         if pos + str_len <= instr.operands.len() {
                                                             let s = String::from_utf8_lossy(

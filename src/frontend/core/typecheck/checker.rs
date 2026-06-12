@@ -1236,7 +1236,10 @@ impl TypeChecker {
     /// 将 MonoType 转换为 ConstExpr
     ///
     /// 用于将类型参数转换为约束表达式中的常量表达式。
-    fn mono_type_to_const_expr(&self, ty: &MonoType) -> Option<ConstExpr> {
+    fn mono_type_to_const_expr(
+        &self,
+        ty: &MonoType,
+    ) -> Option<ConstExpr> {
         match ty {
             // 字面量值
             MonoType::Literal { value, .. } => Some(ConstExpr::Lit(value.clone())),
@@ -1253,7 +1256,10 @@ impl TypeChecker {
     /// 从表达式中提取常量值
     ///
     /// 用于从初始化器中提取值，以便在精化类型检查中使用。
-    fn extract_const_value(&self, expr: &Expr) -> Option<crate::frontend::core::types::ConstValue> {
+    fn extract_const_value(
+        &self,
+        expr: &Expr,
+    ) -> Option<crate::frontend::core::types::ConstValue> {
         match expr {
             Expr::Lit(literal, _) => match literal {
                 crate::frontend::core::parser::ast::Literal::Int(n) => {
@@ -1339,21 +1345,10 @@ impl TypeChecker {
                     }
                 }
             }
-            crate::frontend::core::parser::ast::StmtKind::Binding {
-                body: (stmts, expr),
-                ..
-            } => {
+            crate::frontend::core::parser::ast::StmtKind::Binding { body: stmts, .. } => {
                 // 递归处理函数体中的语句
                 for s in stmts {
                     self.collect_refined_binding_checks_from_stmt(s, proof_calls);
-                }
-                if let Some(e) = expr {
-                    // 处理尾表达式（如果是块）
-                    if let Expr::Block(block) = e.as_ref() {
-                        for s in &block.stmts {
-                            self.collect_refined_binding_checks_from_stmt(s, proof_calls);
-                        }
-                    }
                 }
             }
             crate::frontend::core::parser::ast::StmtKind::Expr(expr) => {
