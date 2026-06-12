@@ -1,6 +1,6 @@
 //! YaoXiang 编译脚本
 //!
-//! 配置 Z3 链接。Z3 header 路径由 .cargo/config.toml 或 Z3_SYS_Z3_HEADER 提供。
+//! 配置 Z3 链接并复制 DLL（Windows）。
 
 fn main() {
     let header = match std::env::var("Z3_SYS_Z3_HEADER") {
@@ -25,6 +25,20 @@ fn main() {
 
     if cfg!(target_os = "windows") {
         println!("cargo:rustc-link-lib=libz3");
+
+        // DLL 始终在 bin/ 目录
+        let dll = prefix.join("bin").join("libz3.dll");
+        if dll.exists() {
+            let out = std::env::var("OUT_DIR").unwrap();
+            let profile = std::path::Path::new(&out)
+                .parent().unwrap()  // <pkg>
+                .parent().unwrap()  // build
+                .parent().unwrap(); // target/debug 或 target/release
+            let deps = profile.join("deps");
+            let _ = std::fs::create_dir_all(&deps);
+            let _ = std::fs::copy(&dll, profile.join("libz3.dll"));
+            let _ = std::fs::copy(&dll, deps.join("libz3.dll"));
+        }
     } else {
         println!("cargo:rustc-link-lib=static=z3");
         let cxx = std::env::var("CXXSTDLIB").unwrap_or_else(|_| "stdc++".into());
