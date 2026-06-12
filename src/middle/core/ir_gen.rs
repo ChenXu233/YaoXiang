@@ -2243,11 +2243,10 @@ impl AstToIrGenerator {
             &resource_var_sets,
         );
 
-        // 16. 生成 Spawn 指令
-        //     closures 参数是闭包列表（运行时动态收集）
-        //     这里将列表寄存器作为单个 Operand 传给 Spawn
-        instructions.push(Instruction::Spawn {
-            closures: vec![Operand::Local(closures_list_reg)],
+        // 16. 生成 SpawnFromList 指令
+        //     closures_list 参数是闭包列表寄存器（运行时动态收集）
+        instructions.push(Instruction::SpawnFromList {
+            closures_list: Operand::Local(closures_list_reg),
             plan,
             result: Operand::Local(result_reg),
         });
