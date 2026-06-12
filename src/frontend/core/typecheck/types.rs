@@ -9,6 +9,7 @@ use crate::frontend::core::types::PolyType;
 use crate::frontend::core::types::TraitTable;
 
 use super::semantic_db;
+use super::proof::verdict::ProofFunctionCall;
 
 /// 类型检查结果
 #[derive(Debug, Clone, Default)]
@@ -24,6 +25,8 @@ pub struct TypeCheckResult {
     pub semantic_db: semantic_db::SemanticDB,
     /// Trait 表（用于 IR 生成阶段查询类型是否实现特定 trait）
     pub trait_table: TraitTable,
+    /// 证明函数调用（RFC-027 Phase 2.5: 需要在编译期执行的证明函数）
+    pub proof_calls: Vec<ProofFunctionCall>,
 }
 
 /// 导入信息
