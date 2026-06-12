@@ -3,13 +3,13 @@
 //! 特质求解器
 //!
 //! 实现特质约束求解，集成 RFC-011 Trait 系统：
-//! - 内置特质 (Clone, Debug, Send, Sync)
+//! - 内置特质 (Clone, Debug)
 //! - 用户定义特质
 //! - 约束传播
 
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
-use crate::frontend::core::types::base::MonoType;
-use crate::frontend::core::types::base::TraitTable;
+use crate::frontend::core::types::MonoType;
+use crate::frontend::core::types::TraitTable;
 use std::collections::{HashMap, HashSet};
 
 /// 特质约束

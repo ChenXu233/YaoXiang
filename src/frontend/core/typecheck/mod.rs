@@ -10,26 +10,17 @@ use crate::frontend::core::parser::ast::{Module, Expr};
 
 // ============ 子模块声明 ============
 
+// 编译期谓词解析器
+pub mod predicate_resolver;
+
 // 导入推断模块
 pub mod inference;
 
 // 导入特质模块
 pub mod traits;
 
-// 导入重载解析模块
-pub mod overload;
-
-// 导入类型求值器模块
-pub mod type_eval;
-
 // 语义信息数据库
 pub mod semantic_db;
-
-// 死代码分析器
-pub mod dead_code;
-
-// spawn 放置检查
-pub mod spawn_placement;
 
 // 类型环境
 pub mod environment;
@@ -42,6 +33,13 @@ pub mod signature;
 // 类型定义
 pub mod types;
 
+// 证明管道基础设施
+pub mod proof;
+// 有序证明层
+pub mod layers;
+// 独立分析遍
+pub mod passes;
+
 // ============ 测试模块 ============
 
 #[cfg(test)]
@@ -50,7 +48,7 @@ mod tests;
 // ============ 类型导出 ============
 
 // 使用 core 层的类型系统（显式导出以避免 ambiguous glob re-exports）
-pub use crate::frontend::core::types::base::{
+pub use crate::frontend::core::types::{
     MonoType, PolyType, TypeVar, TypeBinding, StructType, EnumType, TypeConstraint,
     TypeConstraintSolver, TypeConstraintError, ConstValue, ConstExpr, ConstKind, ConstVarDef,
     UniverseLevel,
@@ -59,8 +57,7 @@ pub use crate::frontend::core::types::base::{
 // 重新导出子模块
 pub use environment::*;
 pub use inference::*;
-pub use overload::*;
-pub use type_eval::*;
+pub use crate::frontend::core::types::eval::evaluator::*;
 pub use checker::*;
 pub use signature::*;
 pub use types::*;
@@ -81,7 +78,7 @@ pub type TypeErrorCollector = ErrorCollector<Diagnostic>;
 pub fn check_module(
     ast: &Module,
     env: &mut Option<environment::TypeEnvironment>,
-) -> Result<types::TypeCheckResult, Vec<Diagnostic>> {
+) -> types::TypeCheckResult {
     check_module_inner(ast, env, false)
 }
 
@@ -93,7 +90,7 @@ pub fn check_module(
 pub fn check_module_collect_all(
     ast: &Module,
     env: &mut Option<environment::TypeEnvironment>,
-) -> Result<types::TypeCheckResult, Vec<Diagnostic>> {
+) -> types::TypeCheckResult {
     check_module_inner(ast, env, true)
 }
 
@@ -103,7 +100,7 @@ fn check_module_inner(
     ast: &Module,
     env: &mut Option<environment::TypeEnvironment>,
     collect_all: bool,
-) -> Result<types::TypeCheckResult, Vec<Diagnostic>> {
+) -> types::TypeCheckResult {
     // 使用 TypeChecker 进行完整的模块检查
     let mut checker = checker::TypeChecker::new("main");
 
@@ -119,9 +116,9 @@ fn check_module_inner(
 
     // 执行模块检查
     let result = if collect_all {
-        checker.check_module_collect_all(ast)?
+        checker.check_module_collect_all(ast)
     } else {
-        checker.check_module(ast)?
+        checker.check_module(ast)
     };
 
     // 将 exports 和 method_bindings 导回传入的环境
@@ -130,7 +127,7 @@ fn check_module_inner(
         ext_env.method_bindings = checker.env().method_bindings.clone();
     }
 
-    Ok(result)
+    result
 }
 
 /// 检查单个表达式
@@ -141,7 +138,7 @@ pub fn infer_expression(
     // 创建共享 ScopeManager 并添加环境变量
     let mut scope = inference::ScopeManager::new();
     for (name, poly) in env.vars.clone() {
-        scope.add_var(name, poly, false);
+        scope.add_var(name, poly, false, crate::util::span::Span::default());
     }
     let overload_candidates_clone = env.overload_candidates.clone();
     let native_signatures_clone = env.native_signatures.clone();

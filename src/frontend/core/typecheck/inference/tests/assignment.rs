@@ -6,8 +6,8 @@
 use crate::frontend::core::typecheck::inference::assignment::{
     AssignmentChecker, ConstraintAssignmentInfo,
 };
-use crate::frontend::core::types::base::mono::StructType;
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::mono::StructType;
+use crate::frontend::core::types::MonoType;
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::util::span::Span;
 use std::collections::HashMap;

@@ -20,8 +20,8 @@
 
 use std::collections::HashMap;
 use crate::frontend::core::parser::ast::{Type, StructField};
-use crate::frontend::core::types::base::MonoType;
-use crate::frontend::core::types::base::{TraitTable, TraitImplementation};
+use crate::frontend::core::types::MonoType;
+use crate::frontend::core::types::{TraitTable, TraitImplementation};
 
 /// RFC-011 定义的标准库 traits（接口类型）
 pub const BUILTIN_DERIVES: &[&str] = &[
@@ -66,7 +66,7 @@ pub fn can_auto_derive(
 pub fn can_auto_derive_for_monotype(
     trait_table: &TraitTable,
     trait_name: &str,
-    struct_ty: &crate::frontend::core::types::base::mono::StructType,
+    struct_ty: &crate::frontend::core::types::mono::StructType,
 ) -> bool {
     for (_, field_ty) in &struct_ty.fields {
         if !mono_type_satisfies(trait_table, trait_name, field_ty) {

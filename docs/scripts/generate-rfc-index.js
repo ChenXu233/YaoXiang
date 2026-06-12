@@ -108,10 +108,27 @@ function parseFrontmatter(content) {
 
 /**
  * 从文件名提取 RFC 编号
+ *
+ * 支持格式：
+ * - `014-package-manager.md` → { number: 14, sub: null }
+ * - `014a-registry-protocol.md` → { number: 14, sub: 'a' }
  */
 function extractRfcNumber(filename) {
-  const match = filename.match(/^(\d+)-/)
-  return match ? parseInt(match[1], 10) : null
+  const match = filename.match(/^(\d+)([a-z]?)-/)
+  if (!match) return null
+  return {
+    number: parseInt(match[1], 10),
+    sub: match[2] || null
+  }
+}
+
+/**
+ * 格式化 RFC 编号为显示字符串
+ */
+function formatRfcNumber(rfcInfo) {
+  if (!rfcInfo) return ''
+  const base = `RFC-${String(rfcInfo.number).padStart(3, '0')}`
+  return rfcInfo.sub ? `${base}${rfcInfo.sub}` : base
 }
 
 /**
@@ -132,9 +149,9 @@ function scanRfcFiles(dir, category) {
     const filePath = path.join(categoryPath, entry)
     const content = fs.readFileSync(filePath, 'utf-8')
     const frontmatter = parseFrontmatter(content)
-    const rfcNumber = extractRfcNumber(entry)
+    const rfcInfo = extractRfcNumber(entry)
 
-    if (!rfcNumber) continue
+    if (!rfcInfo) continue
 
     // 从内容中提取标题（如果有 frontmatter 则使用，否则从一级标题提取）
     let title = frontmatter.title || ''
@@ -163,12 +180,16 @@ function scanRfcFiles(dir, category) {
       status = statusMap[category] || ''
     }
 
+    // 提取 group 字段
+    const group = frontmatter.group || null
+
     files.push({
-      number: rfcNumber,
+      rfcInfo,
       title,
       author,
       created,
       status,
+      group,
       filename: entry,
       category,
       relativePath: `./${category}/${entry}`
@@ -215,6 +236,21 @@ function generateIndex(allRfcs) {
   lines.push('---')
   lines.push('')
 
+  // 预计算：哪些子 RFC 属于其他分类的父 RFC（需要从原分类中移除）
+  const groupedSubIds = new Set()
+  for (const rfc of allRfcs) {
+    if (rfc.rfcInfo.sub || !rfc.group) continue
+    // 这是一个有 group 字段的父 RFC（不应该发生，但防御性编程）
+  }
+  for (const rfc of allRfcs) {
+    if (!rfc.rfcInfo.sub || !rfc.group) continue
+    // 找到这个子 RFC 的父 RFC
+    const parent = allRfcs.find(p => !p.rfcInfo.sub && `rfc-${String(p.rfcInfo.number).padStart(3, '0')}` === rfc.group)
+    if (parent && parent.category !== rfc.category) {
+      groupedSubIds.add(`${rfc.rfcInfo.number}-${rfc.rfcInfo.sub}`)
+    }
+  }
+
   // 各分类
   for (const [category, categoryName] of Object.entries(CATEGORIES)) {
     lines.push(`## ${categoryName}`)
@@ -230,14 +266,48 @@ function generateIndex(allRfcs) {
       lines.push('| 编号 | 标题 | 作者 | 创建日期 | 状态 |')
       lines.push('|------|------|------|----------|------|')
 
-      // 按编号排序
-      rfcs.sort((a, b) => a.number - b.number)
+      // 分离父 RFC 和子 RFC
+      const parents = rfcs.filter(rfc => !rfc.rfcInfo.sub)
+      const subs = rfcs.filter(rfc => rfc.rfcInfo.sub)
 
-      for (const rfc of rfcs) {
-        const number = `RFC-${String(rfc.number).padStart(3, '0')}`
+      // 按编号排序
+      parents.sort((a, b) => a.rfcInfo.number - b.rfcInfo.number)
+
+      for (const rfc of parents) {
+        const number = formatRfcNumber(rfc.rfcInfo)
         const title = `[${rfc.title}](${rfc.relativePath})`
-        const status = rfc.status.includes('已废弃') ? rfc.status : rfc.status
-        lines.push(`| ${number} | ${title} | ${rfc.author} | ${rfc.created} | ${status} |`)
+        lines.push(`| ${number} | ${title} | ${rfc.author} | ${rfc.created} | ${rfc.status} |`)
+
+        // 查找属于此父 RFC 的子 RFC（跨所有分类）
+        const parentGroup = `rfc-${String(rfc.rfcInfo.number).padStart(3, '0')}`
+        const children = allRfcs
+          .filter(s => s.rfcInfo.sub && s.group === parentGroup)
+          .sort((a, b) => a.rfcInfo.sub.localeCompare(b.rfcInfo.sub))
+
+        for (const child of children) {
+          const childNumber = formatRfcNumber(child.rfcInfo)
+          const childTitle = `[${child.title}](${child.relativePath})`
+          const childStatus = child.category !== category
+            ? CATEGORIES[child.category]
+            : child.status
+          lines.push(`| ↳ ${childNumber} | ${childTitle} | ${child.author} | ${child.created} | ${childStatus} |`)
+          groupedSubIds.add(`${child.rfcInfo.number}-${child.rfcInfo.sub}`)
+        }
+      }
+
+      // 本分类中未被归组的子 RFC
+      const orphanSubs = subs.filter(s => !groupedSubIds.has(`${s.rfcInfo.number}-${s.rfcInfo.sub}`))
+      if (orphanSubs.length > 0) {
+        orphanSubs.sort((a, b) => {
+          const numDiff = a.rfcInfo.number - b.rfcInfo.number
+          if (numDiff !== 0) return numDiff
+          return a.rfcInfo.sub.localeCompare(b.rfcInfo.sub)
+        })
+        for (const rfc of orphanSubs) {
+          const number = formatRfcNumber(rfc.rfcInfo)
+          const title = `[${rfc.title}](${rfc.relativePath})`
+          lines.push(`| ${number} | ${title} | ${rfc.author} | ${rfc.created} | ${rfc.status} |`)
+        }
       }
     }
 

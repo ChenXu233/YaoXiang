@@ -15,7 +15,9 @@
 
 use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::ast::*;
-use crate::frontend::core::parser::{ParserState, ParseError, BP_LOWEST};
+use crate::frontend::core::parser::{ParserState, BP_LOWEST};
+use crate::util::diagnostic::ErrorCodeDefinition;
+use crate::frontend::core::parser::parse_msg;
 use crate::util::span::Span;
 
 // Import from sibling modules
@@ -275,7 +277,7 @@ pub fn parse_external_binding_stmt(
     let func_name = match state.current().map(|t| &t.kind) {
         Some(TokenKind::Identifier(n)) => n.clone(),
         _ => {
-            state.error(ParseError::Message(format!(
+            state.error(parse_msg(format!(
                 "Expected function name after '=' in external binding '{}.{}'",
                 type_name, method_name
             )));
@@ -317,13 +319,17 @@ pub fn parse_method_bind_stmt(
     let type_name = match state.current().map(|t| &t.kind) {
         Some(TokenKind::Identifier(n)) => n.clone(),
         _ => {
-            state.error(ParseError::UnexpectedToken {
-                found: state
-                    .current()
-                    .map(|t| t.kind.clone())
-                    .unwrap_or(TokenKind::Eof),
-                span: state.span(),
-            });
+            state.error(
+                ErrorCodeDefinition::unexpected_token(&format!(
+                    "{:?}",
+                    state
+                        .current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof)
+                ))
+                .at(state.span())
+                .build(),
+            );
             return None;
         }
     };
@@ -338,13 +344,17 @@ pub fn parse_method_bind_stmt(
     let method_name = match state.current().map(|t| &t.kind) {
         Some(TokenKind::Identifier(n)) => n.clone(),
         _ => {
-            state.error(ParseError::UnexpectedToken {
-                found: state
-                    .current()
-                    .map(|t| t.kind.clone())
-                    .unwrap_or(TokenKind::Eof),
-                span: state.span(),
-            });
+            state.error(
+                ErrorCodeDefinition::unexpected_token(&format!(
+                    "{:?}",
+                    state
+                        .current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof)
+                ))
+                .at(state.span())
+                .build(),
+            );
             return None;
         }
     };
@@ -360,7 +370,7 @@ pub fn parse_method_bind_stmt(
     let (method_fn_params, method_return_type) = match parse_fn_type_with_names(state) {
         Some(result) => result,
         None => {
-            state.error(ParseError::Message(
+            state.error(parse_msg(
                 "Expected function type annotation after ':' in method binding, e.g. (self: Type, ...) -> Ret".to_string(),
             ));
             return None;
@@ -387,7 +397,7 @@ pub fn parse_method_bind_stmt(
     let initializer = match state.parse_expression(BP_LOWEST) {
         Some(expr) => expr,
         None => {
-            state.error(ParseError::Message(
+            state.error(parse_msg(
                 "Expected method body after '=' in method binding".to_string(),
             ));
             return None;
@@ -476,21 +486,26 @@ fn parse_var_stmt_with_pub(
         Some(t) => match &t.kind {
             TokenKind::Identifier(n) => (n.clone(), t.span),
             _ => {
-                state.error(ParseError::UnexpectedToken {
-                    found: state
-                        .current()
-                        .map(|t| t.kind.clone())
-                        .unwrap_or(TokenKind::Eof),
-                    span: state.span(),
-                });
+                state.error(
+                    ErrorCodeDefinition::unexpected_token(&format!(
+                        "{:?}",
+                        state
+                            .current()
+                            .map(|t| t.kind.clone())
+                            .unwrap_or(TokenKind::Eof)
+                    ))
+                    .at(state.span())
+                    .build(),
+                );
                 return None;
             }
         },
         None => {
-            state.error(ParseError::UnexpectedToken {
-                found: TokenKind::Eof,
-                span: state.span(),
-            });
+            state.error(
+                ErrorCodeDefinition::unexpected_token(&format!("{:?}", TokenKind::Eof))
+                    .at(state.span())
+                    .build(),
+            );
             return None;
         }
     };
@@ -520,7 +535,7 @@ fn parse_var_stmt_with_pub(
 
         if is_old_syntax {
             // 拒绝旧语法
-            state.error(ParseError::Message(
+            state.error(parse_msg(
                 "旧函数语法已不再支持，请使用新语法: name: (param: Type, ...) -> Ret = body"
                     .to_string(),
             ));
@@ -628,7 +643,7 @@ fn parse_var_stmt_with_pub(
 
                 if is_old_fn_syntax {
                     // Old function syntax detected - reject it
-                    state.error(ParseError::Message("Old function syntax '(Type, Type) -> Ret' is no longer supported. \
+                    state.error(parse_msg("Old function syntax '(Type, Type) -> Ret' is no longer supported. \
                              Use RFC-010 syntax with named parameters: '(param: Type, ...) -> Ret'. \
                              Example: 'add: (a: Int, b: Int) -> Int = a + b'".to_string()));
                     return None;
@@ -663,13 +678,17 @@ fn parse_var_stmt_with_pub(
             );
         if is_invalid && !state.at(&TokenKind::Eq) {
             let span = state.current().map(|t| t.span).unwrap_or_else(Span::dummy);
-            state.error(ParseError::UnexpectedToken {
-                found: state
-                    .current()
-                    .map(|t| t.kind.clone())
-                    .unwrap_or(TokenKind::Eof),
-                span,
-            });
+            state.error(
+                ErrorCodeDefinition::unexpected_token(&format!(
+                    "{:?}",
+                    state
+                        .current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof)
+                ))
+                .at(span)
+                .build(),
+            );
             return None;
         }
     }
@@ -745,7 +764,7 @@ fn parse_var_stmt_with_pub(
                     // since the real value params are embedded in the return type.
                     if !value_params.is_empty() {
                         if lambda_params.len() != value_params.len() {
-                            state.error(ParseError::Message(format!(
+                            state.error(parse_msg(format!(
                                 "Parameter count mismatch: signature has {} parameters, lambda has {}",
                                 value_params.len(),
                                 lambda_params.len()
@@ -757,7 +776,7 @@ fn parse_var_stmt_with_pub(
                             value_params.iter().zip(lambda_params.iter()).enumerate()
                         {
                             if sig_param.name != lambda_param.name {
-                                state.error(ParseError::Message(format!(
+                                state.error(parse_msg(format!(
                                     "Parameter name mismatch at position {}: signature has '{}', lambda has '{}'. \
                                      RFC-007 requires matching parameter names, or omit the lambda head entirely.",
                                     i + 1,
@@ -915,7 +934,7 @@ fn parse_var_stmt_with_pub(
             Some(expr) => Some(Box::new(expr)),
             None => {
                 // Failed to parse initializer expression
-                state.error(ParseError::Message(format!(
+                state.error(parse_msg(format!(
                     "Expected expression after '=' for variable '{}'",
                     name
                 )));
@@ -983,7 +1002,7 @@ fn parse_type_definition(state: &mut ParserState<'_>) -> Option<Type> {
 
     // 检查是否有 | 符号（不允许使用不带花括号的枚举语法）
     if state.at(&TokenKind::Pipe) {
-        state.error(ParseError::Message(
+        state.error(parse_msg(
             "Enum variants must use brace syntax: `{ red | green | blue }` instead of `red | green | blue`".to_string(),
         ));
         return None;
@@ -1001,7 +1020,7 @@ pub fn parse_identifier_stmt(
     if let Some(TokenKind::LParen) = state.peek().map(|t| &t.kind) {
         // 检查这是否是旧的函数定义语法
         if is_old_function_syntax(state) {
-            state.error(ParseError::Message(
+            state.error(parse_msg(
                 "旧语法已弃用。请使用新语法: `name: (Types) -> ReturnType = (params) => body`"
                     .to_string(),
             ));
@@ -1042,13 +1061,17 @@ pub fn parse_identifier_stmt(
         let name = match state.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
-                state.error(ParseError::UnexpectedToken {
-                    found: state
-                        .current()
-                        .map(|t| t.kind.clone())
-                        .unwrap_or(TokenKind::Eof),
-                    span: state.span(),
-                });
+                state.error(
+                    ErrorCodeDefinition::unexpected_token(&format!(
+                        "{:?}",
+                        state
+                            .current()
+                            .map(|t| t.kind.clone())
+                            .unwrap_or(TokenKind::Eof)
+                    ))
+                    .at(state.span())
+                    .build(),
+                );
                 return None;
             }
         };
@@ -1180,7 +1203,7 @@ pub fn parse_identifier_stmt(
         let rhs = match state.parse_expression(BP_LOWEST) {
             Some(expr) => expr,
             None => {
-                state.error(ParseError::Message(
+                state.error(parse_msg(
                     "Expected expression after '=' in tuple destructuring".to_string(),
                 ));
                 return None;
@@ -1213,13 +1236,17 @@ pub fn parse_constructor(state: &mut ParserState<'_>) -> Option<VariantDef> {
     let name = match state.current().map(|t| &t.kind) {
         Some(TokenKind::Identifier(n)) => n.clone(),
         _ => {
-            state.error(ParseError::UnexpectedToken {
-                found: state
-                    .current()
-                    .map(|t| t.kind.clone())
-                    .unwrap_or(TokenKind::Eof),
-                span: state.span(),
-            });
+            state.error(
+                ErrorCodeDefinition::unexpected_token(&format!(
+                    "{:?}",
+                    state
+                        .current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof)
+                ))
+                .at(state.span())
+                .build(),
+            );
             return None;
         }
     };
@@ -1374,7 +1401,7 @@ pub fn parse_paren_destructure_stmt(
     let rhs = match state.parse_expression(BP_LOWEST) {
         Some(expr) => expr,
         None => {
-            state.error(ParseError::Message(
+            state.error(parse_msg(
                 "Expected expression after '=' in tuple destructuring".to_string(),
             ));
             return None;

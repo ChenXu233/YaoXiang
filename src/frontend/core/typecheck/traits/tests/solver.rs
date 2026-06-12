@@ -1,18 +1,18 @@
 //! Trait 求解器测试 — 基于语言规范 §3.5.2 & §3.9 & RFC-011 §2
 //!
-//! §3.5.2: 标准库接口（Clone, Equal, Debug, Send, Sync, Iterator）
+//! §3.5.2: 标准库接口（Clone, Equal, Debug, Iterator）
 //! §3.9: 类型约束
 //! RFC-011 §2: 类型约束系统
 //!
 //! 测试范围：
-//! - 内置特质求解（Clone, Debug, Send, Sync）
+//! - 内置特质求解（Clone, Debug）
 //! - 用户定义特质求解（通过 TraitTable）
 //! - 批量求解与缓存
 //! - TraitSolverError 的 Display 输出
 
 use crate::frontend::core::typecheck::traits::solver::{TraitConstraint, TraitSolver};
-use crate::frontend::core::types::base::MonoType;
-use crate::frontend::core::types::base::trait_data::{TraitDefinition, TraitImplementation, TraitTable};
+use crate::frontend::core::types::MonoType;
+use crate::frontend::core::types::trait_data::{TraitDefinition, TraitImplementation, TraitTable};
 use std::collections::HashMap;
 
 // ===================================================================
@@ -569,7 +569,7 @@ fn test_unsatisfied_constraints_empty_after_creation() {
 fn test_solve_clone_for_struct_succeeds() {
     // Arrange - 结构体所有字段都是 Clone 类型时应满足 Clone
     let mut solver = TraitSolver::new();
-    let struct_ty = MonoType::Struct(crate::frontend::core::types::base::StructType {
+    let struct_ty = MonoType::Struct(crate::frontend::core::types::StructType {
         name: "Point".to_string(),
         fields: vec![("x".to_string(), MonoType::Int(32))],
         methods: HashMap::new(),
@@ -940,7 +940,7 @@ fn test_solve_clone_for_result_fails() {
 fn test_solve_dup_for_struct_succeeds() {
     let mut solver = TraitSolver::new();
     // 所有字段都是 Dup 类型（String + &T 令牌），结构体应满足 Dup
-    let struct_ty = MonoType::Struct(crate::frontend::core::types::base::StructType {
+    let struct_ty = MonoType::Struct(crate::frontend::core::types::StructType {
         name: "View".to_string(),
         fields: vec![
             ("name".to_string(), MonoType::String),
@@ -966,7 +966,7 @@ fn test_solve_dup_for_struct_succeeds() {
 #[test]
 fn test_solve_dup_for_struct_fails() {
     let mut solver = TraitSolver::new();
-    let struct_ty = MonoType::Struct(crate::frontend::core::types::base::StructType {
+    let struct_ty = MonoType::Struct(crate::frontend::core::types::StructType {
         name: "Container".to_string(),
         fields: vec![(
             "data".to_string(),
@@ -1046,7 +1046,7 @@ fn test_solve_dup_for_arc() {
 fn test_solve_debug_for_struct() {
     // Arrange
     let mut solver = TraitSolver::new();
-    let struct_ty = MonoType::Struct(crate::frontend::core::types::base::StructType {
+    let struct_ty = MonoType::Struct(crate::frontend::core::types::StructType {
         name: "Foo".to_string(),
         fields: vec![],
         methods: HashMap::new(),

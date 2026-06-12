@@ -11,7 +11,7 @@
 //! 支持鸭子类型：检查右值类型是否满足左值接口要求的所有方法
 
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::util::span::Span;
 use super::subtyping::SubtypeChecker;

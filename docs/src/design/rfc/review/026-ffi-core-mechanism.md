@@ -3,7 +3,7 @@ title: "RFC-026：FFI 核心机制"
 status: "审核中"
 author: "晨煦"
 created: "2026-06-05"
-updated: "2026-06-05"
+updated: "2026-06-10"
 ---
 
 # RFC-026：FFI 核心机制
@@ -25,8 +25,9 @@ updated: "2026-06-05"
 1. **FFI 类型定义**：使用 `unsafe {}` 块定义不透明类型，通过 `return` 返回给上一作用域
 2. **FFI 函数声明**：使用 `native("symbol")` 语法声明外部函数
 3. **方法绑定**：使用 `[0]` 语法指定 self 参数位置
-4. **不透明类型的处理**：编译器自动判断不透明类型和真空类型
-5. **spawn 块中的 FFI 行为**：资源类型自动串行，非资源类型可并行
+4. **不透明类型的处理**：`unsafe {}` 块显式定义不透明类型，空体 `Type = {}` 为真空类型
+5. **不透明类型的生命周期**：`.drop` 绑定析构函数，RAII 自动释放，Null 安全处理
+6. **spawn 块中的 FFI 行为**：资源类型自动串行，非资源类型可并行
 
 **核心设计——一个原则，统一语义**：
 
@@ -98,24 +99,37 @@ Point: Type = {
 p: Point = Point { x: 1, y: 2 }
 ```
 
-#### 1.3 不透明类型的判断
+#### 1.3 不透明类型、透明类型、真空类型
 
-编译器自动判断不透明类型和真空类型：
+三种类型的区分在**定义时**决定，不需要编译器跨文件推断：
 
 ```yaoxiang
-// 不透明类型（被 native 函数引用）
-SqliteDb: Type = {}
-sqlite3_open: (filename: String) -> SqliteDb = native("sqlite3_open")
-// → SqliteDb 被 native 函数引用 → 不透明类型
+// 透明类型：有字段
+Point: Type = { x: Int32, y: Int32 }
+// 用户可以创建和访问字段
+p: Point = Point { x: 1, y: 2 }
 
-// 真空类型（没有被 native 函数引用）
-MyType: Type = {}
-// → MyType 没有被 native 函数引用 → 真空类型
+// 真空类型：空体，不在 unsafe 块中
+MyMarker: Type = {}
+// 零大小类型，自由创建
+x: MyMarker = {}
+
+// 不透明类型：从 unsafe 块返回
+SqliteDb = unsafe {
+    SqliteDb: Type = {
+        handle: *Void
+    }
+    return SqliteDb
+}
+// SqliteDb 是不透明类型，不能直接创建，不能访问字段
 ```
 
-**判断规则**：
-- 如果类型被 `native` 函数引用 → 不透明类型
-- 否则 → 真空类型
+**规则**：
+- **有字段** → 透明类型
+- **空体 + 不在 unsafe 块中** → 真空类型（零大小）
+- **从 unsafe 块返回** → 不透明类型
+
+`native` 函数只能引用已明确定义的类型，不改变类型的属性。类型属性在定义时决定，不在使用时推断。
 
 ---
 
@@ -228,20 +242,26 @@ SqliteDb.exec = sqlite3_exec[0]
 
 ### 4. 不透明类型的处理
 
-#### 4.1 编译器自动处理
+#### 4.1 不透明类型的内部存储
 
-编译器自动判断不透明类型，内部处理 C 指针存储：
+类型在 `unsafe {}` 块中定义的 `handle: *Void` 由编译器自动管理：
 
 ```text
-编译器分析：
-    SqliteDb: Type = {}
-    sqlite3_open: ... -> SqliteDb = native("sqlite3_open")
+编译器处理：
+    SqliteDb = unsafe {
+        SqliteDb: Type = {
+            handle: *Void         // ← 编译器内部存储 C 指针
+        }
+        return SqliteDb
+    }
 
-推断：
-    SqliteDb 是不透明类型
-    内部自动添加 @internal handle: *Void
-    禁止用户直接创建
+结果：
+    SqliteDb 是不透明类型（由 unsafe 块显式定义）
+    字段访问需要 unsafe 权限
+    禁止用户直接创建（必须通过 native 构造函数）
 ```
+
+不需要编译器反向推断——类型是否不透明由定义方式决定，清晰且可预测。
 
 #### 4.2 用户代码
 
@@ -359,7 +379,150 @@ SqliteDb.prepare = sqlite3_prepare_v2[0]
 // SqliteStmt 的方法
 SqliteStmt.step = sqlite3_step[0]
 SqliteStmt.finalize = sqlite3_finalize[0]
+
+// ============================================================================
+// 析构函数
+// ============================================================================
+
+SqliteDb.drop = sqlite3_close[0]
+SqliteStmt.drop = sqlite3_finalize[0]
 ```
+
+---
+
+### 7. 不透明类型的生命周期管理
+
+不透明类型遵循 RFC-009 的所有权模型，零新概念。
+
+#### 7.1 核心原则
+
+- **Move 语义**：不透明类型默认 Move，赋值/传参/返回 = 所有权转移，不可复制
+- **RAII 释放**：作用域结束时自动调用析构函数
+- **消费追踪**：显式析构后变量被消费，不可再用
+
+#### 7.2 析构函数绑定
+
+使用 `.drop` 约定绑定析构函数，语法与普通方法绑定完全一致：
+
+```yaoxiang
+// 析构函数绑定（self 在位置 0）
+SqliteDb.drop = sqlite3_close[0]
+SqliteStmt.drop = sqlite3_finalize[0]
+```
+
+编译器识别 `.drop` 绑定，在作用域结束时自动调用。**不引入新关键字，不引入 trait 系统**——这就是方法绑定 + RAII，RFC-009 已经承诺的语义。
+
+#### 7.3 自动析构
+
+```yaoxiang
+{
+    db = SqliteDb.open("test.db")
+    stmt = db.prepare("SELECT * FROM users")
+    stmt.step()
+    // ← 作用域结束，逆序自动析构：
+    //   stmt.drop()  → sqlite3_finalize(stmt)
+    //   db.drop()    → sqlite3_close(db)
+}
+```
+
+**析构顺序**：定义顺序的逆序（后定义先析构），与 RAII 语义一致。
+
+#### 7.4 显式析构
+
+```yaoxiang
+db = SqliteDb.open("test.db")
+db.close()              // 显式析构。close 即 drop——绑定什么名字就用什么名字
+db.exec("...")          // ❌ 编译错误：db 已被消费（Move 后不可读）
+```
+
+没有单独的"close vs drop"概念。`SqliteDb.drop = sqlite3_close[0]` 之后，`db.close()` 和 `db.drop()` 是同一个函数。
+
+#### 7.5 析构与 Move
+
+```yaoxiang
+db = SqliteDb.open("test.db")
+db2 = db                // Move：所有权转移给 db2
+// db 在此已无效
+// ← 作用域结束，自动调用 db2.drop()
+
+// 函数消费
+process_db: (db: SqliteDb) -> Void = {
+    result = db.exec("...")
+    // ← 函数结束，db 在此析构
+}
+
+db = SqliteDb.open("test.db")
+process_db(db)          // Move 进函数，函数结束时析构
+// db 在此已无效
+```
+
+#### 7.6 Null 处理
+
+```yaoxiang
+// 可能返回 null → ? 标记可选类型，用户必须处理
+sqlite3_open: (filename: String) -> ?SqliteDb = native("sqlite3_open")
+
+db = SqliteDb.open("test.db")
+match db {
+    Some(db) => {
+        db.exec("SELECT * FROM users")
+        // ← 作用域结束，自动调用 db.drop()
+    }
+    None => print("打开失败")
+}
+
+// 不可能返回 null → 不标记，null 时 panic
+// 用于 C 函数约定永远不会返回 null 的场景
+sqlite3_get_global: () -> SqliteDb = native("sqlite3_get_global")
+```
+
+**设计原则**：C 返回 null 要么让用户处理（`?`），要么 panic 暴露。不存在第三种"默默忽略"的选项。
+
+#### 7.7 析构失败处理
+
+```yaoxiang
+// 析构函数可能返回错误码
+sqlite3_close: (db: SqliteDb) -> Int32 = native("sqlite3_close")
+SqliteDb.drop = sqlite3_close[0]
+
+// 编译器行为：
+//   debug 模式：析构返回值 != 0 → panic（暴露问题）
+//   release 模式：忽略返回值（C 标准允许 close 失败但不影响内存安全）
+```
+
+#### 7.8 spawn 块中的析构
+
+```yaoxiang
+// 资源类型在 spawn 块中自动串行，析构天然安全
+{
+    db = SqliteDb.open("test.db")
+    result = db.exec("...")
+}  // ← 串行保证：exec 完成后 drop，无并发竞争
+
+// 跨 spawn 边界 Move
+db = SqliteDb.open("test.db")
+spawn {
+    use(db)             // Move 进 spawn
+    // ← spawn 结束，自动析构
+}
+```
+
+#### 7.9 无需析构的类型
+
+不透明类型不强制绑定 `.drop`。不绑定析构函数的类型在作用域结束时什么都不做——适用于包装静态数据、全局句柄等不需要清理的场景。
+
+编译器在 debug 模式下对未绑定 `.drop` 的不透明类型给出 lint 提示（默认 warn），提醒用户确认。
+
+#### 7.10 生命周期规则总结
+
+| 场景 | 行为 | 来源 |
+|------|------|------|
+| 不透明类型赋值 | Move（不可复制） | RFC-009 |
+| `.drop` 绑定 | 方法绑定语法 `[0]` | 本文档 §3 |
+| 作用域结束 | 逆序自动调用 `.drop()` | RFC-009 RAII |
+| 显式 `.close()` | 消费变量，之后不可用 | RFC-009 Move 语义 |
+| Null 返回 | `?T` 可选 / 直接 panic | 本文档 §7.6 |
+| spawn 块中 | 自动串行，析构安全 | RFC-024 |
 
 ---
 
@@ -369,15 +532,15 @@ SqliteStmt.finalize = sqlite3_finalize[0]
 
 1. **统一语义**：所有 `{}` 块的 return 语义一致
 2. **不需要新关键字**：使用现有的 unsafe 和 return
-3. **不需要特殊标记**：编译器自动判断不透明类型
-4. **安全**：不透明类型的字段访问需要 unsafe 权限
-5. **实用**：yx-bindgen 自动生成绑定
+3. **显式定义**：类型属性在定义时决定，unsafe 块返回 → 不透明，空体 → 真空，不需要推断
+4. **零新概念生命周期**：`.drop` = 方法绑定 + RAII，无 trait 系统，无新关键字
+5. **安全**：不透明类型的字段访问需要 unsafe 权限，析构后变量不可用
+6. **实用**：yx-bindgen 自动生成绑定（含析构函数）
 
 ### 缺点
 
 1. **unsafe 块的作用域**：需要修改 `{}` 块的 return 语义
-2. **编译器复杂度**：需要自动判断不透明类型
-3. **yx-bindgen 维护**：需要持续更新以支持新的 C 库
+2. **yx-bindgen 维护**：需要持续更新以支持新的 C 库
 
 ---
 
@@ -385,14 +548,17 @@ SqliteStmt.finalize = sqlite3_finalize[0]
 
 ### 阶段 1：核心机制 (v0.8)
 
-- [ ] 实现 unsafe 块的 return 语义
+- [ ] 实现 {} 块的 return 语义
 - [ ] 实现 FFI 类型定义
 - [ ] 实现 FFI 函数声明
 - [ ] 实现方法绑定
 
-### 阶段 2：不透明类型 (v0.9)
+### 阶段 2：生命周期管理 (v0.9)
 
-- [ ] 实现编译器自动判断不透明类型
+- [ ] 实现 `.drop` 析构函数绑定
+- [ ] 实现作用域结束自动析构
+- [ ] 实现析构后变量消费检查
+- [ ] 实现 `?T` 与 FFI null 返回的集成
 - [ ] 实现内部 handle 存储
 - [ ] 实现禁止直接创建不透明类型
 
@@ -407,9 +573,9 @@ SqliteStmt.finalize = sqlite3_finalize[0]
 ## 与其他 RFC 的关系
 
 - **RFC-008**：Runtime 并发模型，FFI 调用作为独立任务
-- **RFC-009**：所有权模型，unsafe 块的语义
-- **RFC-010**：统一类型语法，{} 块的 return 语义
-- **RFC-024**：并发模型，spawn 块中的 FFI 行为
+- **RFC-009**：所有权模型——Move 语义、RAII、`?` 可选类型，不透明类型的生命周期管理完全基于此
+- **RFC-010**：统一类型语法，`{}` 块的 return 语义
+- **RFC-024**：并发模型，spawn 块中的 FFI 行为与析构安全
 
 ---
 
@@ -418,10 +584,12 @@ SqliteStmt.finalize = sqlite3_finalize[0]
 | 决策 | 决定 | 原因 | 日期 |
 |------|------|------|------|
 | FFI 类型定义 | unsafe 块 + return | 统一语义，不需要新关键字 | 2026-06-05 |
-| 不透明类型判断 | 编译器自动判断 | 不需要特殊标记 | 2026-06-05 |
+| 不透明类型判断 | unsafe 块显式定义 | 类型属性在定义时决定，不依赖外部推断 | 2026-06-05 |
 | 方法绑定 | [0] 语法 | 明确 self 位置 | 2026-06-05 |
 | 构造函数 | 普通函数绑定 | 不需要特殊语法 | 2026-06-05 |
 | spawn 块行为 | 资源类型自动串行 | 安全，符合并发模型 | 2026-06-05 |
+| 析构函数 | `.drop = native_fn[0]` | 方法绑定 + RAII，零新概念 | 2026-06-10 |
+| Null 处理 | `?T` 可选 / 直接 panic | C 的问题不隐藏 | 2026-06-10 |
 
 ---
 

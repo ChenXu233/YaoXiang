@@ -7,7 +7,8 @@
 
 use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::ast::*;
-use crate::frontend::core::parser::{ParserState, ParseError};
+use crate::frontend::core::parser::{ParserState};
+use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::span::Span;
 
 /// Parse use import statement: `use path;` or `use path.{item1, item2};`
@@ -101,13 +102,17 @@ fn parse_use_path(state: &mut ParserState<'_>) -> Option<(String, Span, Vec<Span
     }
 
     if parts.is_empty() {
-        state.error(ParseError::UnexpectedToken {
-            found: state
-                .current()
-                .map(|t| t.kind.clone())
-                .unwrap_or(TokenKind::Eof),
-            span: state.span(),
-        });
+        state.error(
+            ErrorCodeDefinition::unexpected_token(&format!(
+                "{:?}",
+                state
+                    .current()
+                    .map(|t| t.kind.clone())
+                    .unwrap_or(TokenKind::Eof)
+            ))
+            .at(state.span())
+            .build(),
+        );
         None
     } else {
         let start = start.unwrap_or_else(|| Span::dummy().start);

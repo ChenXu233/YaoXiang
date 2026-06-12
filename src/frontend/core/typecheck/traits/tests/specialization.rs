@@ -6,7 +6,7 @@
 use crate::frontend::core::typecheck::traits::specialization::{
     Specializer, SpecializationAlgorithm, Substituter, Instantiator,
 };
-use crate::frontend::core::types::base::{MonoType, PolyType, TypeVar};
+use crate::frontend::core::types::{MonoType, PolyType, TypeVar};
 
 // ===================================================================
 // 辅助函数

@@ -9,7 +9,7 @@
 //! 因此 Int 不是 Float 的子类型。
 
 use crate::frontend::core::typecheck::inference::subtyping::SubtypeChecker;
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 
 // ===================================================================
 // Happy path 测试

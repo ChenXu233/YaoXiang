@@ -5,7 +5,7 @@
 //! 检查类型之间的兼容性
 
 use crate::util::diagnostic::Result;
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 
 /// 兼容性检查器
 pub struct CompatibilityChecker;

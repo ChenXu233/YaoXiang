@@ -6,7 +6,7 @@
 
 use crate::util::diagnostic::Result;
 use crate::frontend::core::parser::ast;
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 
 /// 模式匹配推断器
 pub struct PatternInferrer {
@@ -26,7 +26,7 @@ impl PatternInferrer {
     }
 
     fn fresh_type_var(&mut self) -> MonoType {
-        let var = crate::frontend::core::types::base::var::TypeVar::new(self.next_type_var);
+        let var = crate::frontend::core::types::var::TypeVar::new(self.next_type_var);
         self.next_type_var += 1;
         MonoType::TypeVar(var)
     }
@@ -79,16 +79,14 @@ impl PatternInferrer {
                     field_types.push((field_name.clone(), field_ty));
                     field_mutability.push(*is_mut);
                 }
-                Ok(MonoType::Struct(
-                    crate::frontend::core::types::base::StructType {
-                        name: name.clone(),
-                        fields: field_types,
-                        methods: std::collections::HashMap::new(),
-                        field_mutability,
-                        field_has_default: Vec::new(),
-                        interfaces: vec![],
-                    },
-                ))
+                Ok(MonoType::Struct(crate::frontend::core::types::StructType {
+                    name: name.clone(),
+                    fields: field_types,
+                    methods: std::collections::HashMap::new(),
+                    field_mutability,
+                    field_has_default: Vec::new(),
+                    interfaces: vec![],
+                }))
             }
             ast::Pattern::Or(patterns) => {
                 // OR模式：所有分支必须有相同类型，取第一个

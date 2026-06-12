@@ -75,9 +75,11 @@ fn test_format_list_literal() {
 
 #[test]
 fn test_format_dict_literal() {
-    // NOTE: formatter currently has a known issue with dict literals
-    // It misparses `"a": 1, "b": 2` as lambda-like syntax
-    assert_format_eq("let x = {\"a\": 1, \"b\": 2}", "let\nx = () => { \"a\" }\n");
+    // Dict literals are now correctly parsed and formatted
+    assert_format_eq(
+        "let x = {\"a\": 1, \"b\": 2}",
+        "let\nx = {\"a\": 1, \"b\": 2}\n",
+    );
 }
 
 #[test]

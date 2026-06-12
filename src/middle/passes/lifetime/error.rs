@@ -4,7 +4,7 @@
 //! 统一使用 Diagnostic 错误码系统。
 
 use crate::middle::core::ir::{FunctionIR, Operand};
-use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
+use crate::util::diagnostic::Diagnostic;
 use std::collections::HashMap;
 
 /// 所有权状态（Move/Drop 检查器共用）
@@ -38,6 +38,7 @@ use std::collections::HashMap;
 /// - **Moved**: 值已被移动，所有者不可用。必须重新赋值才能使用。
 /// - **Empty**: 值处于空状态（仅在 Moved 后触发）。可以重新赋值复用变量。
 /// - **Dropped**: 值已被释放（仅 DropChecker 使用）。
+/// - **Dup**: 值是 Dup 类型（如 `&T`），可多次使用，不会被消费。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueState {
     /// 有效，所有者可用，可选携带类型信息用于重赋值检查
@@ -48,6 +49,8 @@ pub enum ValueState {
     Empty,
     /// 已被释放（仅 DropChecker 使用）
     Dropped,
+    /// Dup 类型（如 `&T`），可多次使用，不会被消费
+    Dup,
 }
 
 /// 类型标识符（用于空状态重赋值时的类型检查）
@@ -87,87 +90,20 @@ pub fn operand_to_string(operand: &Operand) -> String {
     }
 }
 
-/// OwnershipError 变体到错误码的映射辅助函数
+/// 获取操作数的用户可见名称
 ///
-/// 用于将旧的 OwnershipError 语义转换为统一的 Diagnostic 错误码。
-pub mod codes {
-    use super::*;
-
-    pub fn use_after_move(value: &str) -> Diagnostic {
-        ErrorCodeDefinition::use_after_move(value).build()
+/// 优先使用源码变量名（local_names），回退到内部名（operand_to_string）。
+/// 这确保错误信息显示 `'p' has been moved` 而不是 `'local_0' has been moved`。
+pub fn operand_display_name(
+    operand: &Operand,
+    local_names: Option<&Vec<String>>,
+) -> String {
+    if let Operand::Local(idx) = operand {
+        if let Some(names) = local_names {
+            if *idx < names.len() && !names[*idx].is_empty() {
+                return names[*idx].clone();
+            }
+        }
     }
-
-    pub fn use_after_drop(value: &str) -> Diagnostic {
-        ErrorCodeDefinition::use_after_drop(value).build()
-    }
-
-    pub fn drop_moved_value(value: &str) -> Diagnostic {
-        ErrorCodeDefinition::drop_moved_value(value).build()
-    }
-
-    pub fn double_drop(value: &str) -> Diagnostic {
-        ErrorCodeDefinition::double_drop(value).build()
-    }
-
-    pub fn immutable_assign(value: &str) -> Diagnostic {
-        ErrorCodeDefinition::immutable_assign(value).build()
-    }
-
-    pub fn immutable_mutation(
-        value: &str,
-        method: &str,
-    ) -> Diagnostic {
-        ErrorCodeDefinition::immutable_mutation(value, method).build()
-    }
-
-    pub fn immutable_field_assign(
-        struct_name: &str,
-        field: &str,
-    ) -> Diagnostic {
-        ErrorCodeDefinition::immutable_field_assign(struct_name, field).build()
-    }
-
-    pub fn ref_non_owner(target_value: &str) -> Diagnostic {
-        ErrorCodeDefinition::ref_non_owner(target_value).build()
-    }
-
-    pub fn clone_moved_value(value: &str) -> Diagnostic {
-        ErrorCodeDefinition::clone_moved_value(value).build()
-    }
-
-    pub fn cross_spawn_cycle(details: &str) -> Diagnostic {
-        ErrorCodeDefinition::ownership_violation(details).build()
-    }
-
-    pub fn reassign_non_empty(value: &str) -> Diagnostic {
-        ErrorCodeDefinition::reassign_non_empty(value).build()
-    }
-
-    pub fn consumed_not_returned(param: &str) -> Diagnostic {
-        ErrorCodeDefinition::consumed_not_returned(param).build()
-    }
-
-    pub fn intra_task_cycle(details: &str) -> Diagnostic {
-        ErrorCodeDefinition::ownership_violation(details).build()
-    }
-
-    pub fn unsafe_bypass_cycle(details: &str) -> Diagnostic {
-        ErrorCodeDefinition::ownership_violation(details).build()
-    }
-
-    pub fn unsafe_deref() -> Diagnostic {
-        ErrorCodeDefinition::unsafe_deref().build()
-    }
-
-    pub fn mutable_borrow_conflict(source: &str) -> Diagnostic {
-        ErrorCodeDefinition::mutable_borrow_conflict(source).build()
-    }
-
-    pub fn borrow_after_move(source: &str) -> Diagnostic {
-        ErrorCodeDefinition::borrow_after_move(source).build()
-    }
-
-    pub fn use_while_frozen(source: &str) -> Diagnostic {
-        ErrorCodeDefinition::mutable_immutable_borrow_conflict(source).build()
-    }
+    operand_to_string(operand)
 }

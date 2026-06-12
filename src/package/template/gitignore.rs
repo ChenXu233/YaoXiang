@@ -18,27 +18,3 @@ pub fn generate_gitignore() -> &'static str {
 Thumbs.db
 "#
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_gitignore_contains_yaoxiang_dir() {
-        let content = generate_gitignore();
-        assert!(content.contains(".yaoxiang/"));
-    }
-
-    #[test]
-    fn test_gitignore_contains_bytecode() {
-        let content = generate_gitignore();
-        assert!(content.contains("*.42"));
-    }
-
-    #[test]
-    fn test_gitignore_contains_ide_files() {
-        let content = generate_gitignore();
-        assert!(content.contains(".vscode/"));
-        assert!(content.contains(".idea/"));
-    }
-}

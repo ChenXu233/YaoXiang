@@ -11,7 +11,7 @@
 use crate::frontend::core::typecheck::traits::std_traits::{
     init_std_traits, init_primitive_impls, is_primitive_type, std_trait_names, STD_TRAITS,
 };
-use crate::frontend::core::types::base::{MonoType, TraitTable};
+use crate::frontend::core::types::{MonoType, TraitTable};
 
 // ===================================================================
 // Happy path 测试

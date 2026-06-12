@@ -842,6 +842,21 @@ impl<'a> InstantiationGraphBuilder<'a> {
                 }
                 result
             }
+            // 精化类型：委托给 base
+            MonoType::Refined { base, .. } => Self::extract_type_args_from_type(base),
+            // 依赖函数类型：从参数和返回类型中提取
+            MonoType::DepFn {
+                params,
+                return_type,
+                ..
+            } => {
+                let mut args: Vec<MonoType> = params
+                    .iter()
+                    .flat_map(|p| Self::extract_type_args_from_type(&p.ty))
+                    .collect();
+                args.extend(Self::extract_type_args_from_type(return_type));
+                args
+            }
         }
     }
 

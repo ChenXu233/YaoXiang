@@ -14,7 +14,7 @@ pub struct MethodBindingInfo {
     /// 方法名称
     pub method_name: String,
     /// 函数类型
-    pub fn_type: crate::frontend::core::types::base::MonoType,
+    pub fn_type: crate::frontend::core::types::MonoType,
 }
 
 /// 模块ID - 唯一标识一个编译模块
@@ -395,7 +395,7 @@ impl ModuleGraph {
         module_id: ModuleId,
         type_name: &str,
         method_name: &str,
-        fn_type: crate::frontend::core::types::base::MonoType,
+        fn_type: crate::frontend::core::types::MonoType,
     ) {
         let key = format!("{}.{}", type_name, method_name);
         let info = MethodBindingInfo {

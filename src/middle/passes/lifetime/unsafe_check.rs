@@ -3,11 +3,9 @@
 //! 实现以下检查：
 //! 1. unsafe 块外解引用报错
 //! 2. 裸指针类型检查
-//! 3. Send/Sync 安全 trait 检查
 
 use crate::middle::core::ir::{FunctionIR, Instruction};
-use crate::middle::passes::lifetime::error::codes;
-use crate::util::diagnostic::Diagnostic;
+use crate::util::diagnostic::{ErrorCodeDefinition, Diagnostic};
 
 /// unsafe 语义检查器
 #[derive(Debug)]
@@ -86,7 +84,8 @@ impl UnsafeChecker {
         );
 
         if is_unsafe_op && !in_unsafe {
-            self.errors.push(codes::unsafe_deref());
+            self.errors
+                .push(ErrorCodeDefinition::unsafe_deref().build());
         }
     }
 

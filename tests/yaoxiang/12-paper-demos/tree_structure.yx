@@ -1,0 +1,19 @@
+// 12-paper-demos/tree_structure.yx
+// 验证: 树遍历 — 自由函数自动借用
+// 论文价值: 不可变遍历天然安全，无需借用检查器
+
+use std.io
+
+Tree: Type = { value: Int, left: Int, right: Int }
+
+// 自由函数：&Tree 参数 — 编译器自动创建令牌
+sum_tree: (t: &Tree) -> Int = {
+    t.value + t.left + t.right
+}
+
+main = {
+    root = Tree(10, 5, 15)
+    total = sum_tree(root)  // 自动借用：root 是 Tree，函数需要 &Tree
+    io.println(total)
+    io.println("ALL TESTS PASSED")
+}

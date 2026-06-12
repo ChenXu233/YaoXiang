@@ -42,6 +42,38 @@ pub static E0XXX: &[ErrorCodeDefinition] = &[
         code: "E0014",
         category: ErrorCategory::Parser,
     },
+    ErrorCodeDefinition {
+        code: "E0015",
+        category: ErrorCategory::Parser,
+    },
+    ErrorCodeDefinition {
+        code: "E0016",
+        category: ErrorCategory::Parser,
+    },
+    ErrorCodeDefinition {
+        code: "E0017",
+        category: ErrorCategory::Parser,
+    },
+    ErrorCodeDefinition {
+        code: "E0018",
+        category: ErrorCategory::Parser,
+    },
+    ErrorCodeDefinition {
+        code: "E0019",
+        category: ErrorCategory::Parser,
+    },
+    ErrorCodeDefinition {
+        code: "E0020",
+        category: ErrorCategory::Parser,
+    },
+    ErrorCodeDefinition {
+        code: "E0021",
+        category: ErrorCategory::Parser,
+    },
+    ErrorCodeDefinition {
+        code: "E0022",
+        category: ErrorCategory::Parser,
+    },
 ];
 
 // E0xxx 快捷方法
@@ -110,5 +142,73 @@ impl ErrorCodeDefinition {
     pub fn missing_semicolon(statement: &str) -> DiagnosticBuilder {
         let def = Self::find("E0014").unwrap();
         def.builder().param("statement", statement)
+    }
+
+    /// E0015 期望标识符
+    pub fn expected_identifier(name: &str) -> DiagnosticBuilder {
+        let def = Self::find("E0015").unwrap();
+        def.builder().param("name", name)
+    }
+
+    /// E0016 期望表达式
+    pub fn expected_expression(context: &str) -> DiagnosticBuilder {
+        let def = Self::find("E0016").unwrap();
+        def.builder().param("context", context)
+    }
+
+    /// E0017 旧语法不兼容
+    pub fn old_syntax_rejected(
+        old: &str,
+        new: &str,
+    ) -> DiagnosticBuilder {
+        let def = Self::find("E0017").unwrap();
+        def.builder().param("old", old).param("new", new)
+    }
+
+    /// E0018 关键字作变量名
+    pub fn keyword_as_name(keyword: &str) -> DiagnosticBuilder {
+        let def = Self::find("E0018").unwrap();
+        def.builder().param("keyword", keyword)
+    }
+
+    /// E0019 参数数量不匹配
+    pub fn param_count_mismatch(
+        expected: usize,
+        found: usize,
+    ) -> DiagnosticBuilder {
+        let def = Self::find("E0019").unwrap();
+        def.builder()
+            .param("expected", expected.to_string())
+            .param("found", found.to_string())
+    }
+
+    /// E0020 参数名称不匹配
+    pub fn param_name_mismatch(
+        position: usize,
+        expected: &str,
+        found: &str,
+    ) -> DiagnosticBuilder {
+        let def = Self::find("E0020").unwrap();
+        def.builder()
+            .param("position", position.to_string())
+            .param("expected", expected)
+            .param("found", found)
+    }
+
+    /// E0021 期望 token 在特定上下文后
+    pub fn expected_token_after(
+        token: &str,
+        context: &str,
+    ) -> DiagnosticBuilder {
+        let def = Self::find("E0021").unwrap();
+        def.builder()
+            .param("token", token)
+            .param("context", context)
+    }
+
+    /// E0022 枚举必须使用花括号语法
+    pub fn enum_brace_syntax() -> DiagnosticBuilder {
+        let def = Self::find("E0022").unwrap();
+        def.builder()
     }
 }

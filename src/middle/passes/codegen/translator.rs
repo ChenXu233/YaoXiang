@@ -352,6 +352,7 @@ impl Translator {
                 type_name,
                 fields,
             } => self.translate_create_struct(dst, type_name, fields),
+            NewDict { dst, keys, values } => self.translate_new_dict(dst, keys, values),
             MakeClosure { dst, func, .. } => self.translate_make_closure(dst, func),
             Drop(operand) => self.translate_drop(operand),
 
@@ -383,6 +384,10 @@ impl Translator {
             }
 
             CloseUpvalue(operand) => self.translate_close_upvalue(operand),
+
+            // spawn for: 从 List 寄存器动态读取闭包并 spawn
+            // 暂时生成 Nop，后续需要实现 SpawnFromList 的字节码翻译
+            Instruction::SpawnFromList { .. } => Ok(BytecodeInstruction::new(Opcode::Nop, vec![])),
         }
     }
 
@@ -860,6 +865,34 @@ impl Translator {
         Ok(BytecodeInstruction::new(Opcode::CreateStruct, operands))
     }
 
+    /// 翻译 NewDict 指令
+    /// 格式: dst(2) + pair_count(4) + keys(2*count) + values(2*count)
+    fn translate_new_dict(
+        &mut self,
+        dst: &Operand,
+        keys: &[Operand],
+        values: &[Operand],
+    ) -> Result<BytecodeInstruction, Diagnostic> {
+        let dst_reg = self.operand_resolver.to_reg(dst)?;
+        let pair_count = keys.len() as u32;
+        let mut operands = Vec::new();
+        // dst (2 bytes LE)
+        operands.extend_from_slice(&(dst_reg as u16).to_le_bytes());
+        // pair_count (4 bytes LE)
+        operands.extend_from_slice(&pair_count.to_le_bytes());
+        // key registers (2 bytes LE each)
+        for key in keys {
+            let key_reg = self.operand_resolver.to_reg(key)?;
+            operands.extend_from_slice(&(key_reg as u16).to_le_bytes());
+        }
+        // value registers (2 bytes LE each)
+        for val in values {
+            let val_reg = self.operand_resolver.to_reg(val)?;
+            operands.extend_from_slice(&(val_reg as u16).to_le_bytes());
+        }
+        Ok(BytecodeInstruction::new(Opcode::NewDict, operands))
+    }
+
     fn translate_make_closure(
         &mut self,
         dst: &Operand,
@@ -975,7 +1008,7 @@ impl Translator {
         dst: &Operand,
         src: &Operand,
     ) -> Result<BytecodeInstruction, Diagnostic> {
-        // ShareRef: 用于线程本地共享，需要类型是 Sync
+        // ShareRef: 将值包装为 Arc 以支持跨任务共享
         // TODO: 实现完整的 ShareRef 操作码支持
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;

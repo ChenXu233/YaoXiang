@@ -5,7 +5,7 @@
 //! 提供类型替换接口，复用 core/type_system/substitute.rs 中的公共实现
 
 use crate::util::diagnostic::Result;
-use crate::frontend::core::types::base::{MonoType, TypeVar, Substituter as CoreSubstituter};
+use crate::frontend::core::types::{MonoType, TypeVar, Substituter as CoreSubstituter};
 
 /// 替换结果
 pub struct SubstitutionResult {

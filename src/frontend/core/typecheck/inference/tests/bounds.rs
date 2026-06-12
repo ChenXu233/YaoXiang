@@ -1,14 +1,14 @@
 //! 类型边界测试 — 基于语言规范 §3.9 & RFC-011 §2
 //!
 //! §3.9: 类型约束
-//! §3.5.2: 标准库接口（Clone, Equal, Debug, Send, Sync）
+//! §3.5.2: 标准库接口（Clone, Equal, Debug）
 //! RFC-011 §2: 类型约束系统
 //!
 //! 注意：规范 §B.4 明确不实现生命周期和借用检查器，因此不测试生命周期边界。
 //! 规范中没有独立的 "const bounds" 概念，因此不测试 const 边界。
 
 use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
-use crate::frontend::core::types::base::{MonoType, StructType};
+use crate::frontend::core::types::{MonoType, StructType};
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::traits::solver::TraitSolver;
 use std::collections::HashMap;

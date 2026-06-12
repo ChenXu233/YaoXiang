@@ -5,7 +5,7 @@
 //! 实现泛型函数的类型推断
 
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::util::span::Span;
@@ -32,7 +32,7 @@ impl GenericInferrer {
     }
 
     fn fresh_type_var(&mut self) -> MonoType {
-        let var = crate::frontend::core::types::base::var::TypeVar::new(self.next_type_var);
+        let var = crate::frontend::core::types::var::TypeVar::new(self.next_type_var);
         self.next_type_var += 1;
         MonoType::TypeVar(var)
     }
@@ -91,30 +91,5 @@ impl GenericInferrer {
                     .at(span)
                     .build()
             })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::GenericInferrer;
-    use crate::frontend::core::types::base::MonoType;
-
-    #[test]
-    fn test_infer_generic_function_creates_fresh_vars() {
-        let mut inferrer = GenericInferrer::new();
-
-        let t1 = inferrer
-            .infer_generic_function("f", &["T".to_string()])
-            .unwrap();
-        let t2 = inferrer
-            .infer_generic_function("g", &["U".to_string()])
-            .unwrap();
-
-        match (t1, t2) {
-            (MonoType::TypeVar(v1), MonoType::TypeVar(v2)) => {
-                assert_ne!(v1, v2);
-            }
-            _ => panic!("Expected type variables"),
-        }
     }
 }

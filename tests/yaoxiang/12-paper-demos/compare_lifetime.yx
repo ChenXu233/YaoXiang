@@ -1,0 +1,20 @@
+// 12-paper-demos/compare_lifetime.yx
+// 论文对比 1：结构体引用字段 — 消除生命周期标注
+// Rust 等效: struct Window<'a> { target: Point, view: &'a Point }
+// YaoXiang: 无 'a，令牌自动管理
+
+use std.io
+
+Point: Type = { x: Float, y: Float }
+
+Window: Type = {
+    target: Point,
+    view: &Point   // ← 在 Rust 中需要 Window<'a> 和 'a 标注
+}
+
+main = {
+    p = Point(1.0, 2.0)
+    w = Window(p, p)   // view 令牌从 p 派生
+    io.println(w.view.x)
+    io.println("ALL TESTS PASSED")
+}

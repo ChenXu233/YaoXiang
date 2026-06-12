@@ -190,15 +190,7 @@ fn test_check_display_is_not_object_safe() {
 fn test_object_safety_checker_with_complex_traits() {
     // Arrange
     let checker = ObjectSafetyChecker::new();
-    let complex_trait_names = [
-        "Clone",
-        "Debug",
-        "Send",
-        "Sync",
-        "UnknownTrait",
-        "Display",
-        "Iterator",
-    ];
+    let complex_trait_names = ["Clone", "Debug", "UnknownTrait", "Display", "Iterator"];
 
     // Act & Assert — 所有检查都不应 panic
     for name in &complex_trait_names {

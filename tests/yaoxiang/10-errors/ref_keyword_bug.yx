@@ -1,0 +1,15 @@
+// Bug 验证: ref 关键字被静默吞掉
+// ref 是 YaoXiang 的关键字（创建 Arc），不是合法的变量名
+// 但解析器对 `ref = expr` 静默跳过，不报错
+//
+// 期望行为: 解析器应该报错 "ref 是关键字，不能用作变量名"
+// 实际行为: ref = 2 被静默跳过，x 输出 1（不是 2）
+
+use std.io
+
+main = {
+    x = 1
+    ref = 2      // 这行被静默跳过！x 应该输出 2 但输出 1
+    io.println(x)
+    io.println("DONE")
+}

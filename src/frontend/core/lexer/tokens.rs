@@ -1,5 +1,6 @@
 //! Token types
 
+use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::Span;
 
 /// Lexer error
@@ -17,6 +18,38 @@ pub enum LexError {
     UnexpectedChar { ch: char },
     #[error("Unterminated f-string interpolation starting at {position}")]
     UnterminatedFStringInterpolation { position: String },
+}
+
+impl LexError {
+    /// Convert to Diagnostic for unified error system
+    pub fn to_diagnostic(&self) -> Diagnostic {
+        match self {
+            LexError::InvalidToken { message, .. } => {
+                ErrorCodeDefinition::invalid_syntax(message).build()
+            }
+            LexError::UnterminatedString { position, .. } => {
+                ErrorCodeDefinition::invalid_syntax(&format!("unterminated string at {}", position))
+                    .build()
+            }
+            LexError::InvalidEscape { sequence, .. } => {
+                ErrorCodeDefinition::invalid_syntax(&format!("invalid escape: {}", sequence))
+                    .build()
+            }
+            LexError::InvalidNumber(literal) => {
+                ErrorCodeDefinition::invalid_number_literal(literal).build()
+            }
+            LexError::UnexpectedChar { ch, .. } => {
+                ErrorCodeDefinition::invalid_character(&ch.to_string()).build()
+            }
+            LexError::UnterminatedFStringInterpolation { position, .. } => {
+                ErrorCodeDefinition::invalid_syntax(&format!(
+                    "unterminated f-string interpolation at {}",
+                    position
+                ))
+                .build()
+            }
+        }
+    }
 }
 
 /// Token kind

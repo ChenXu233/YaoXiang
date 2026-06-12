@@ -246,6 +246,15 @@ pub enum Instruction {
         /// spawn 块返回值寄存器
         result: Operand,
     },
+    /// 从 List 寄存器动态读取闭包并 spawn（RFC-024 §2.4 spawn for）
+    SpawnFromList {
+        /// 闭包列表寄存器（运行时动态填充）
+        closures_list: Operand,
+        /// 编译期生成的执行计划
+        plan: ExecutionPlan,
+        /// spawn 块返回值寄存器
+        result: Operand,
+    },
     Yield,
     // Phase 5 additions
     HeapAlloc {
@@ -259,6 +268,14 @@ pub enum Instruction {
         dst: Operand,
         type_name: String,
         fields: Vec<Operand>,
+    },
+    /// 创建字典实例
+    /// keys: 键的操作数列表
+    /// values: 值的操作数列表（与 keys 一一对应）
+    NewDict {
+        dst: Operand,
+        keys: Vec<Operand>,
+        values: Vec<Operand>,
     },
     MakeClosure {
         dst: Operand,
@@ -290,8 +307,8 @@ pub enum Instruction {
     /// 释放借用令牌，结束借用生命周期
     /// 借用检查器据此更新令牌状态。
     Release(Operand),
-    /// Share reference across threads (requires Sync)
-    /// Used for thread-local sharing, requires the type to be Sync
+    /// ShareRef: 将值包装为 Arc 以支持跨任务共享。
+    /// 由 `ref` 语法触发，运行时自动选择 Rc/Arc。
     ShareRef {
         dst: Operand,
         src: Operand,
