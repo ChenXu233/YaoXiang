@@ -9,7 +9,6 @@ use super::verdict::BudgetReport;
 
 /// 预算追踪器（内部可变性——spend() 只需要 &self）
 #[derive(Debug)]
-#[allow(dead_code)] // time_ms_* 字段阶段 2 (SMT) 启用
 pub struct BudgetTracker {
     steps_used: Cell<u32>,
     steps_limit: u32,
@@ -50,6 +49,17 @@ impl BudgetTracker {
             steps_limit: self.steps_limit,
         }
     }
+
+    /// Z3 超时毫秒数。SMT 后端在调用 Z3 前读取此值。
+    pub fn time_ms_limit(&self) -> u64 {
+        self.time_ms_limit
+    }
+
+    /// 记录 Z3 求解消耗的时间
+    #[allow(dead_code)] // 精确计时在 Phase 3/4 实现
+    pub fn record_time_ms(&self, ms: u64) {
+        self.time_ms_used.set(self.time_ms_used.get() + ms);
+    }
 }
 
 #[cfg(test)]
@@ -70,5 +80,11 @@ mod tests {
             assert!(budget.spend());
         }
         assert!(!budget.spend());
+    }
+
+    #[test]
+    fn test_time_ms_limit_default() {
+        let budget = BudgetTracker::new();
+        assert_eq!(budget.time_ms_limit(), 100);
     }
 }
