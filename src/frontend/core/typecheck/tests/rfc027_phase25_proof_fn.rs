@@ -382,7 +382,7 @@ fn test_e2e_proof_fn_compilation_succeeds() {
 }
 
 #[test]
-#[ignore = "精化类型语法（IsPositive(-1) 在类型位置）尚未被类型检查器解析为证明函数调用，需要 PredicateResolver 集成到 TypeChecker"]
+#[ignore = "解析器未正确处理 (x: Int) -> Type 语法，导致 IsPositive 函数未被识别为证明函数"]
 fn test_e2e_proof_fn_compilation_fails_on_false() {
     // 证明函数返回 false 时编译应该失败
     let source = r#"
