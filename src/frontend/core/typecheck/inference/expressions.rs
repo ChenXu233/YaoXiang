@@ -1503,10 +1503,49 @@ impl<'a> ExpressionInferrer<'a> {
                 })
             }
 
-            // spawn for 数据并行循环
-            // TODO: 完整的类型检查将在后续任务中实现
-            crate::frontend::core::parser::ast::Expr::SpawnFor { body, .. } => {
-                self.infer_block(body, false, None)
+            // spawn for 数据并行循环（RFC-024 §2.4）
+            crate::frontend::core::parser::ast::Expr::SpawnFor {
+                var,
+                var_mut,
+                iterable,
+                body,
+                span,
+                ..
+            } => {
+                // 1. 检查 iterable 类型，推导元素类型
+                let iter_ty = self.infer_expr(iterable)?;
+
+                let element_type = match &iter_ty {
+                    MonoType::List(elem_ty) => *elem_ty.clone(),
+                    MonoType::Range { elem_type } => *elem_type.clone(),
+                    MonoType::String => MonoType::Char,
+                    MonoType::Tuple(_elems) => self.solver.new_var(),
+                    MonoType::Dict(key_ty, value_ty) => {
+                        MonoType::Tuple(vec![*key_ty.clone(), *value_ty.clone()])
+                    }
+                    _ => self.solver.new_var(),
+                };
+
+                // 2. 进入循环作用域，注册迭代变量
+                self.enter_loop(None);
+                self.scope.enter_scope();
+                let body_ty = self
+                    .try_add_var(var.clone(), PolyType::mono(element_type), *span, *var_mut)
+                    .and_then(|_| self.infer_block(body, true, None));
+
+                self.promote_loop_vars_to_parent_scope();
+
+                match body_ty {
+                    Ok(ty) => {
+                        // spawn for 返回 List(T)，T 是循环体返回类型
+                        if matches!(ty, MonoType::Void) {
+                            Ok(MonoType::List(Box::new(MonoType::Void)))
+                        } else {
+                            Ok(MonoType::List(Box::new(ty)))
+                        }
+                    }
+                    Err(e) => Err(e),
+                }
             }
         }
     }
