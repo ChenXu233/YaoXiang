@@ -24,11 +24,19 @@ pub struct TaskGroup {
 }
 
 /// spawn 块的编译期执行计划
+///
+/// `groups` 定义拓扑排序顺序（组 0 先执行）。
+/// `task_deps[i]` = 任务 i 依赖的任务索引列表（硬依赖）。
+/// `task_resources[i]` = 任务 i 使用的资源变量名列表。
 #[derive(Debug, Clone)]
 pub struct ExecutionPlan {
     /// 任务组列表，按拓扑排序顺序排列
     /// 第一组无依赖可立即并行，后续组等待前置组完成
     pub groups: Vec<TaskGroup>,
+    /// 每个任务的依赖列表，task_deps[i] = 任务 i 依赖的任务索引
+    pub task_deps: Vec<Vec<usize>>,
+    /// 每个任务使用的资源变量名，task_resources[i] = 任务 i 的资源变量名
+    pub task_resources: Vec<Vec<String>>,
 }
 
 /// Instruction

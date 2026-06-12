@@ -39,7 +39,11 @@ fn test_single_spawn_no_cycle() {
     let mut checker = CycleChecker::new();
     let func = create_test_function(vec![Instruction::Spawn {
         closures: vec![Operand::Global(0)],
-        plan: ExecutionPlan { groups: vec![] },
+        plan: ExecutionPlan {
+            groups: vec![],
+            task_deps: vec![],
+            task_resources: vec![],
+        },
         result: Operand::Temp(0),
     }]);
 
@@ -53,12 +57,20 @@ fn test_independent_spawns_no_cycle() {
     let func = create_test_function(vec![
         Instruction::Spawn {
             closures: vec![Operand::Global(0)],
-            plan: ExecutionPlan { groups: vec![] },
+            plan: ExecutionPlan {
+                groups: vec![],
+                task_deps: vec![],
+                task_resources: vec![],
+            },
             result: Operand::Temp(0),
         },
         Instruction::Spawn {
             closures: vec![Operand::Global(1)],
-            plan: ExecutionPlan { groups: vec![] },
+            plan: ExecutionPlan {
+                groups: vec![],
+                task_deps: vec![],
+                task_resources: vec![],
+            },
             result: Operand::Temp(1),
         },
     ]);
@@ -74,12 +86,20 @@ fn test_spawn_chain_no_cycle() {
     let func = create_test_function(vec![
         Instruction::Spawn {
             closures: vec![Operand::Global(0)],
-            plan: ExecutionPlan { groups: vec![] },
+            plan: ExecutionPlan {
+                groups: vec![],
+                task_deps: vec![],
+                task_resources: vec![],
+            },
             result: Operand::Temp(0),
         },
         Instruction::Spawn {
             closures: vec![Operand::Global(1)],
-            plan: ExecutionPlan { groups: vec![] },
+            plan: ExecutionPlan {
+                groups: vec![],
+                task_deps: vec![],
+                task_resources: vec![],
+            },
             result: Operand::Temp(1),
         },
     ]);
@@ -95,7 +115,11 @@ fn test_depth_limit_one_level() {
     let func = create_test_function(vec![
         Instruction::Spawn {
             closures: vec![Operand::Global(0)],
-            plan: ExecutionPlan { groups: vec![] },
+            plan: ExecutionPlan {
+                groups: vec![],
+                task_deps: vec![],
+                task_resources: vec![],
+            },
             result: Operand::Temp(0),
         },
         Instruction::Move {
@@ -108,7 +132,11 @@ fn test_depth_limit_one_level() {
         },
         Instruction::Spawn {
             closures: vec![Operand::Global(1)],
-            plan: ExecutionPlan { groups: vec![] },
+            plan: ExecutionPlan {
+                groups: vec![],
+                task_deps: vec![],
+                task_resources: vec![],
+            },
             result: Operand::Temp(3),
         },
     ]);
@@ -125,7 +153,11 @@ fn test_clear_resets_all_state() {
     let mut checker = CycleChecker::new();
     let func = create_test_function(vec![Instruction::Spawn {
         closures: vec![Operand::Global(0)],
-        plan: ExecutionPlan { groups: vec![] },
+        plan: ExecutionPlan {
+            groups: vec![],
+            task_deps: vec![],
+            task_resources: vec![],
+        },
         result: Operand::Temp(0),
     }]);
 
@@ -142,7 +174,11 @@ fn test_unsafe_bypass_empty_by_default() {
     let mut checker = CycleChecker::new();
     let func = create_test_function(vec![Instruction::Spawn {
         closures: vec![Operand::Global(0)],
-        plan: ExecutionPlan { groups: vec![] },
+        plan: ExecutionPlan {
+            groups: vec![],
+            task_deps: vec![],
+            task_resources: vec![],
+        },
         result: Operand::Temp(0),
     }]);
 
@@ -162,12 +198,20 @@ fn test_error_message_contains_suggestion() {
     let func = create_test_function(vec![
         Instruction::Spawn {
             closures: vec![Operand::Global(0)],
-            plan: ExecutionPlan { groups: vec![] },
+            plan: ExecutionPlan {
+                groups: vec![],
+                task_deps: vec![],
+                task_resources: vec![],
+            },
             result: Operand::Temp(0),
         },
         Instruction::Spawn {
             closures: vec![Operand::Global(1)],
-            plan: ExecutionPlan { groups: vec![] },
+            plan: ExecutionPlan {
+                groups: vec![],
+                task_deps: vec![],
+                task_resources: vec![],
+            },
             result: Operand::Temp(1),
         },
         Instruction::Move {
