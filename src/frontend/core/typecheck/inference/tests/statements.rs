@@ -22,13 +22,9 @@ fn make_stmt(kind: StmtKind) -> Stmt {
 }
 
 /// 构造 Block
-fn make_block(
-    stmts: Vec<Stmt>,
-    expr: Option<Box<Expr>>,
-) -> Block {
+fn make_block(stmts: Vec<Stmt>) -> Block {
     Block {
         stmts,
-        expr,
         span: Span::dummy(),
     }
 }
@@ -132,7 +128,7 @@ fn test_check_if_stmt_bool_condition() {
     let mut checker = make_checker();
     let stmt = make_stmt(StmtKind::If {
         condition: Box::new(Expr::Lit(Literal::Bool(true), Span::dummy())),
-        then_branch: Box::new(make_block(vec![], None)),
+        then_branch: Box::new(make_block(vec![])),
         elif_branches: vec![],
         else_branch: None,
         span: Span::dummy(),
@@ -152,12 +148,12 @@ fn test_check_if_stmt_with_elif_and_else() {
     let mut checker = make_checker();
     let stmt = make_stmt(StmtKind::If {
         condition: Box::new(Expr::Lit(Literal::Bool(true), Span::dummy())),
-        then_branch: Box::new(make_block(vec![], None)),
+        then_branch: Box::new(make_block(vec![])),
         elif_branches: vec![(
             Box::new(Expr::Lit(Literal::Bool(false), Span::dummy())),
-            Box::new(make_block(vec![], None)),
+            Box::new(make_block(vec![])),
         )],
-        else_branch: Some(Box::new(make_block(vec![], None))),
+        else_branch: Some(Box::new(make_block(vec![]))),
         span: Span::dummy(),
     });
 
@@ -229,7 +225,7 @@ fn test_check_for_stmt_range() {
             right: Box::new(Expr::Lit(Literal::Int(10), Span::dummy())),
             span: Span::dummy(),
         }),
-        body: Box::new(make_block(vec![], None)),
+        body: Box::new(make_block(vec![])),
         label: None,
     });
 
@@ -255,7 +251,7 @@ fn test_check_if_stmt_non_bool_condition() {
     let mut checker = make_checker();
     let stmt = make_stmt(StmtKind::If {
         condition: Box::new(Expr::Lit(Literal::Int(42), Span::dummy())),
-        then_branch: Box::new(make_block(vec![], None)),
+        then_branch: Box::new(make_block(vec![])),
         elif_branches: vec![],
         else_branch: None,
         span: Span::dummy(),
@@ -275,10 +271,10 @@ fn test_check_if_stmt_non_bool_elif_condition() {
     let mut checker = make_checker();
     let stmt = make_stmt(StmtKind::If {
         condition: Box::new(Expr::Lit(Literal::Bool(true), Span::dummy())),
-        then_branch: Box::new(make_block(vec![], None)),
+        then_branch: Box::new(make_block(vec![])),
         elif_branches: vec![(
             Box::new(Expr::Lit(Literal::Int(1), Span::dummy())),
-            Box::new(make_block(vec![], None)),
+            Box::new(make_block(vec![])),
         )],
         else_branch: None,
         span: Span::dummy(),
@@ -341,7 +337,7 @@ fn test_check_for_stmt_shadowing() {
             right: Box::new(Expr::Lit(Literal::Int(5), Span::dummy())),
             span: Span::dummy(),
         }),
-        body: Box::new(make_block(vec![], None)),
+        body: Box::new(make_block(vec![])),
         label: None,
     });
 
@@ -481,7 +477,7 @@ fn test_check_statement_checker_with_many_statements() {
             is_mut: false,
         }));
     }
-    let block = make_block(stmts, None);
+    let block = make_block(stmts);
 
     // Act
     let mut solver = TypeConstraintSolver::default();
@@ -515,10 +511,10 @@ fn test_check_fn_def_with_params() {
             span: Span::dummy(),
         },
     ];
-    let body = make_block(
-        vec![],
-        Some(Box::new(Expr::Var("a".to_string(), Span::dummy()))),
-    );
+    let body = make_block(vec![Stmt {
+        kind: StmtKind::Expr(Box::new(Expr::Var("a".to_string(), Span::dummy()))),
+        span: Span::dummy(),
+    }]);
 
     // Act
     let result = checker.check_fn_def("my_fn", &params, &body);
@@ -539,15 +535,15 @@ fn test_check_fn_def_params_visible_in_body() {
         span: Span::dummy(),
     }];
     // 函数体中使用参数 x + 1
-    let body = make_block(
-        vec![],
-        Some(Box::new(Expr::BinOp {
+    let body = make_block(vec![Stmt {
+        kind: StmtKind::Expr(Box::new(Expr::BinOp {
             op: BinOp::Add,
             left: Box::new(Expr::Var("x".to_string(), Span::dummy())),
             right: Box::new(Expr::Lit(Literal::Int(1), Span::dummy())),
             span: Span::dummy(),
         })),
-    );
+        span: Span::dummy(),
+    }]);
 
     // Act
     let result = checker.check_fn_def("inc", &params, &body);

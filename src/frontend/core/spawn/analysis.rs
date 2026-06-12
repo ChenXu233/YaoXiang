@@ -251,16 +251,6 @@ fn collect_from_block(
             local_var_types,
         );
     }
-    if let Some(expr) = &block.expr {
-        collect_reads_writes(
-            expr,
-            reads,
-            writes,
-            resource_vars,
-            trait_table,
-            local_var_types,
-        );
-    }
 }
 
 /// 从 Stmt 中收集读写集
@@ -366,19 +356,9 @@ fn collect_from_stmt(
             }
         }
         StmtKind::Binding { body, .. } => {
-            for s in &body.0 {
+            for s in body {
                 collect_from_stmt(
                     s,
-                    reads,
-                    writes,
-                    resource_vars,
-                    trait_table,
-                    local_var_types,
-                );
-            }
-            if let Some(expr) = &body.1 {
-                collect_reads_writes(
-                    expr,
                     reads,
                     writes,
                     resource_vars,
@@ -398,6 +378,18 @@ fn collect_from_stmt(
             );
         }
         StmtKind::Use { .. } | StmtKind::ExternalBindingStmt { .. } | StmtKind::Error(_) => {}
+        StmtKind::Return(expr_opt) => {
+            if let Some(expr) = expr_opt {
+                collect_reads_writes(
+                    expr,
+                    reads,
+                    writes,
+                    resource_vars,
+                    trait_table,
+                    local_var_types,
+                );
+            }
+        }
     }
 }
 

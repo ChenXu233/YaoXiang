@@ -97,7 +97,6 @@ fn test_expr_if() {
         condition: Box::new(Expr::Lit(Literal::Bool(true), Span::dummy())),
         then_branch: Box::new(Block {
             stmts: vec![],
-            expr: None,
             span: Span::dummy(),
         }),
         elif_branches: vec![],
@@ -115,7 +114,6 @@ fn test_expr_match() {
             pattern: Pattern::Wildcard,
             body: Block {
                 stmts: vec![],
-                expr: None,
                 span: Span::dummy(),
             },
             span: Span::dummy(),
@@ -132,13 +130,15 @@ fn test_expr_match() {
 #[test]
 fn test_expr_block() {
     let block = Block {
-        stmts: vec![],
-        expr: Some(Box::new(Expr::Lit(Literal::Int(1), Span::dummy()))),
+        stmts: vec![Stmt {
+            kind: StmtKind::Expr(Box::new(Expr::Lit(Literal::Int(1), Span::dummy()))),
+            span: Span::dummy(),
+        }],
         span: Span::dummy(),
     };
     let expr = Expr::Block(block);
     if let Expr::Block(b) = &expr {
-        assert!(b.expr.is_some());
+        assert!(!b.stmts.is_empty());
     } else {
         panic!("Expected Expr::Block");
     }
@@ -155,7 +155,6 @@ fn test_expr_lambda() {
         }],
         body: Box::new(Block {
             stmts: vec![],
-            expr: None,
             span: Span::dummy(),
         }),
         span: Span::dummy(),
@@ -256,7 +255,6 @@ fn test_expr_unsafe() {
     let expr = Expr::Unsafe {
         body: Box::new(Block {
             stmts: vec![],
-            expr: None,
             span: Span::dummy(),
         }),
         span: Span::dummy(),
@@ -269,7 +267,6 @@ fn test_expr_spawn() {
     let expr = Expr::Spawn {
         body: Box::new(Block {
             stmts: vec![],
-            expr: None,
             span: Span::dummy(),
         }),
         span: Span::dummy(),
@@ -340,7 +337,7 @@ fn test_stmtkind_binding() {
             type_annotation: None,
 
             params: vec![],
-            body: (vec![], None),
+            body: vec![],
             is_pub: false,
         },
         span: Span::dummy(),
@@ -578,7 +575,7 @@ fn test_unop_all_variants() {
 
 #[test]
 fn test_classify_method() {
-    let kind = classify_binding_semantic_kind(Some(&"Point".to_string()), None, &[], &[], None);
+    let kind = classify_binding_semantic_kind(Some(&"Point".to_string()), None, &[], &[]);
     assert_eq!(kind, BindingSemanticKind::Method);
 }
 
@@ -592,7 +589,6 @@ fn test_classify_type_constructor() {
         }),
         &[],
         &[],
-        None,
     );
     assert_eq!(kind, BindingSemanticKind::TypeConstructor);
 }
@@ -609,7 +605,6 @@ fn test_classify_function() {
             span: Span::dummy(),
         }],
         &[],
-        None,
     );
     assert_eq!(kind, BindingSemanticKind::Function);
 }
@@ -834,7 +829,6 @@ fn test_expr_while() {
         condition: Box::new(Expr::Lit(Literal::Bool(true), Span::dummy())),
         body: Box::new(Block {
             stmts: vec![],
-            expr: None,
             span: Span::dummy(),
         }),
         label: None,
@@ -851,7 +845,6 @@ fn test_expr_for() {
         iterable: Box::new(Expr::Var("items".into(), Span::dummy())),
         body: Box::new(Block {
             stmts: vec![],
-            expr: None,
             span: Span::dummy(),
         }),
         label: None,
@@ -922,7 +915,6 @@ fn test_expr_fndef() {
         return_type: Some(Type::Int(64)),
         body: Box::new(Block {
             stmts: vec![],
-            expr: None,
             span: Span::dummy(),
         }),
         span: Span::dummy(),

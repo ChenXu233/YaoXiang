@@ -1423,11 +1423,7 @@ impl<'a> ExpressionInferrer<'a> {
 
             // Unsafe 块
             crate::frontend::core::parser::ast::Expr::Unsafe { body, .. } => {
-                if let Some(last_expr) = &body.expr {
-                    self.infer_expr(last_expr)
-                } else {
-                    Ok(MonoType::Void)
-                }
+                self.infer_block(body, false, None)
             }
 
             // spawn 块：spawn { ... }
@@ -1657,7 +1653,7 @@ impl<'a> ExpressionInferrer<'a> {
             crate::frontend::core::parser::ast::StmtKind::Binding {
                 name,
                 params,
-                body: (stmts, expr),
+                body,
                 type_annotation,
                 ..
             } => {
@@ -1692,8 +1688,7 @@ impl<'a> ExpressionInferrer<'a> {
                     }
 
                     let block = crate::frontend::core::parser::ast::Block {
-                        stmts: stmts.clone(),
-                        expr: expr.clone(),
+                        stmts: body.clone(),
                         span: stmt.span,
                     };
                     let _ = self.infer_block(&block, true, Some(&return_type))?;

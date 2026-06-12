@@ -37,9 +37,6 @@ impl SpawnPlacementChecker {
         for stmt in &block.stmts {
             self.check_stmt(stmt);
         }
-        if let Some(expr) = &block.expr {
-            self.check_expr(expr);
-        }
     }
 
     fn check_stmt(
@@ -75,17 +72,19 @@ impl SpawnPlacementChecker {
                 }
             }
             StmtKind::Binding { body, .. } => {
-                for s in &body.0 {
+                for s in body {
                     self.check_stmt(s);
-                }
-                if let Some(expr) = &body.1 {
-                    self.check_expr(expr);
                 }
             }
             StmtKind::DestructureAssign { rhs, .. } => {
                 self.check_expr(rhs);
             }
             StmtKind::Use { .. } | StmtKind::ExternalBindingStmt { .. } | StmtKind::Error(_) => {}
+            StmtKind::Return(expr_opt) => {
+                if let Some(expr) = expr_opt {
+                    self.check_expr(expr);
+                }
+            }
         }
     }
 

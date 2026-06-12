@@ -264,9 +264,6 @@ fn extract_read_vars_from_block(
     for stmt in &block.stmts {
         extract_read_vars_from_stmt(stmt, vars);
     }
-    if let Some(ref expr) = block.expr {
-        extract_read_vars_from_expr(expr, vars);
-    }
 }
 
 /// 从 Stmt 中收集所有被读取的变量名
@@ -319,19 +316,12 @@ fn extract_read_vars_from_stmt(
             body_vars.remove(var);
             vars.extend(body_vars);
         }
-        StmtKind::Binding {
-            params,
-            body: (body_stmts, body_expr),
-            ..
-        } => {
+        StmtKind::Binding { params, body, .. } => {
             // Binding 的参数是局部的，但 body 中可能读取外部变量
             let param_names: HashSet<String> = params.iter().map(|p| p.name.clone()).collect();
             let mut body_vars = HashSet::new();
-            for body_stmt in body_stmts {
+            for body_stmt in body {
                 extract_read_vars_from_stmt(body_stmt, &mut body_vars);
-            }
-            if let Some(expr) = body_expr {
-                extract_read_vars_from_expr(expr, &mut body_vars);
             }
             // 移除参数名（它们是局部的）
             for pn in &param_names {
@@ -341,6 +331,11 @@ fn extract_read_vars_from_stmt(
         }
         StmtKind::DestructureAssign { rhs, .. } => {
             extract_read_vars_from_expr(rhs, vars);
+        }
+        StmtKind::Return(expr_opt) => {
+            if let Some(expr) = expr_opt {
+                extract_read_vars_from_expr(expr, vars);
+            }
         }
         StmtKind::Use { .. } => {
             // use 语句不产生变量读取
@@ -565,10 +560,6 @@ fn extract_written_vars_from_block(
     for stmt in &block.stmts {
         extract_written_vars_from_stmt(stmt, vars);
     }
-    // 尾部表达式通常不是赋值，但为完整性仍检查
-    if let Some(ref expr) = block.expr {
-        extract_written_vars_from_expr(expr, vars);
-    }
 }
 
 /// 从 Stmt 中收集所有被写入的变量名
@@ -603,18 +594,11 @@ fn extract_written_vars_from_stmt(
             body_vars.remove(var);
             vars.extend(body_vars);
         }
-        StmtKind::Binding {
-            params,
-            body: (body_stmts, body_expr),
-            ..
-        } => {
+        StmtKind::Binding { params, body, .. } => {
             let param_names: HashSet<String> = params.iter().map(|p| p.name.clone()).collect();
             let mut body_vars = HashSet::new();
-            for body_stmt in body_stmts {
+            for body_stmt in body {
                 extract_written_vars_from_stmt(body_stmt, &mut body_vars);
-            }
-            if let Some(expr) = body_expr {
-                extract_written_vars_from_expr(expr, &mut body_vars);
             }
             for pn in &param_names {
                 body_vars.remove(pn);
@@ -623,6 +607,11 @@ fn extract_written_vars_from_stmt(
         }
         StmtKind::DestructureAssign { .. } => {
             // 解构赋值中声明的变量是局部的，不在此收集
+        }
+        StmtKind::Return(expr_opt) => {
+            if let Some(expr) = expr_opt {
+                extract_written_vars_from_expr(expr, vars);
+            }
         }
         StmtKind::Use { .. } | StmtKind::ExternalBindingStmt { .. } | StmtKind::Error(_) => {}
     }

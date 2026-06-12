@@ -132,8 +132,10 @@ pub fn parse_for_stmt(
         let expr = state.parse_expression(crate::frontend::core::parser::BP_LOWEST)?;
         let span = state.span();
         Block {
-            stmts: Vec::new(),
-            expr: Some(Box::new(expr)),
+            stmts: vec![Stmt {
+                kind: StmtKind::Expr(Box::new(expr)),
+                span,
+            }],
             span,
         }
     };
@@ -166,17 +168,7 @@ pub fn parse_if_stmt(
         return None;
     }
 
-    let (then_stmts, then_expr) = parse_block_body(state)?;
-
-    if !state.expect(&TokenKind::RBrace) {
-        return None;
-    }
-
-    let then_branch = Block {
-        stmts: then_stmts,
-        expr: then_expr,
-        span,
-    };
+    let then_branch = parse_block_after_lbrace(state, span)?;
 
     // Parse elif branches
     let mut elif_branches = Vec::new();
@@ -185,32 +177,26 @@ pub fn parse_if_stmt(
         if !state.expect(&TokenKind::LBrace) {
             return None;
         }
-        let (elif_stmts, elif_expr) = parse_block_body(state)?;
-        if !state.expect(&TokenKind::RBrace) {
-            return None;
-        }
-        let elif_body = Block {
-            stmts: elif_stmts,
-            expr: elif_expr,
-            span: state.span(),
-        };
+        let elif_body = parse_block_after_lbrace(state, state.span())?;
         elif_branches.push((Box::new(elif_condition), Box::new(elif_body)));
     }
 
     // Parse else branch
     let else_branch = if state.skip(&TokenKind::KwElse) {
-        if !state.expect(&TokenKind::LBrace) {
-            return None;
+        if state.at(&TokenKind::LBrace) {
+            state.bump(); // consume '{'
+            Some(Box::new(parse_block_after_lbrace(state, state.span())?))
+        } else {
+            let expr = state.parse_expression(crate::frontend::core::parser::BP_LOWEST)?;
+            let span = state.span();
+            Some(Box::new(Block {
+                stmts: vec![Stmt {
+                    kind: StmtKind::Expr(Box::new(expr)),
+                    span,
+                }],
+                span,
+            }))
         }
-        let (else_stmts, else_expr) = parse_block_body(state)?;
-        if !state.expect(&TokenKind::RBrace) {
-            return None;
-        }
-        Some(Box::new(Block {
-            stmts: else_stmts,
-            expr: else_expr,
-            span: state.span(),
-        }))
     } else {
         None
     };
@@ -243,8 +229,10 @@ pub fn parse_while_stmt(
         let expr = state.parse_expression(crate::frontend::core::parser::BP_LOWEST)?;
         let span = state.span();
         Block {
-            stmts: Vec::new(),
-            expr: Some(Box::new(expr)),
+            stmts: vec![Stmt {
+                kind: StmtKind::Expr(Box::new(expr)),
+                span,
+            }],
             span,
         }
     };
@@ -273,7 +261,7 @@ pub fn parse_block_stmt(
     })
 }
 
-/// Parse block expression (returns Block with optional trailing expression)
+/// Parse block expression (returns Block)
 pub fn parse_block_expression(
     state: &mut crate::frontend::core::parser::ParserState<'_>
 ) -> Option<Block> {
@@ -282,7 +270,7 @@ pub fn parse_block_expression(
         return None;
     }
 
-    let (stmts, expr) = parse_block_body(state)?;
+    let stmts = parse_block_body(state)?;
 
     if !state.expect(&TokenKind::RBrace) {
         return None;
@@ -290,15 +278,14 @@ pub fn parse_block_expression(
 
     Some(Block {
         stmts,
-        expr,
         span: block_start,
     })
 }
 
-/// Parse block body (statements and optional trailing expression)
+/// Parse block body (statements only)
 pub fn parse_block_body(
     state: &mut crate::frontend::core::parser::ParserState<'_>
-) -> Option<(Vec<Stmt>, Option<Box<Expr>>)> {
+) -> Option<Vec<Stmt>> {
     let mut stmts = Vec::new();
 
     while !state.at(&TokenKind::RBrace) && !state.at_end() {
@@ -309,11 +296,22 @@ pub fn parse_block_body(
         }
     }
 
-    let expr = if !state.at(&TokenKind::RBrace) {
-        state.parse_expression(crate::frontend::core::parser::BP_LOWEST)
-    } else {
-        None
-    };
+    Some(stmts)
+}
 
-    Some((stmts, expr.map(Box::new)))
+/// Parse block after LBrace has been consumed (expects RBrace at end)
+fn parse_block_after_lbrace(
+    state: &mut crate::frontend::core::parser::ParserState<'_>,
+    block_start: Span,
+) -> Option<Block> {
+    let stmts = parse_block_body(state)?;
+
+    if !state.expect(&TokenKind::RBrace) {
+        return None;
+    }
+
+    Some(Block {
+        stmts,
+        span: block_start,
+    })
 }
