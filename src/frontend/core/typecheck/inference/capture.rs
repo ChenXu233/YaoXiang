@@ -543,6 +543,10 @@ fn extract_read_vars_from_expr(
         Expr::Borrow { expr, .. } => {
             extract_read_vars_from_expr(expr, vars);
         }
+        Expr::SpawnFor { iterable, body, .. } => {
+            extract_read_vars_from_expr(iterable, vars);
+            extract_read_vars_from_block(body, vars);
+        }
         Expr::Error(_) => {
             // 错误恢复节点，跳过
         }

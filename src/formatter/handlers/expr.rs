@@ -184,6 +184,22 @@ pub fn format_expr(
             }
         }
         Expr::Error(_span) => "/* error */".to_string(),
+        Expr::SpawnFor {
+            var,
+            var_mut,
+            iterable,
+            body,
+            ..
+        } => {
+            let mut_str = if *var_mut { "mut " } else { "" };
+            format!(
+                "spawn for {}{} in {} {}",
+                mut_str,
+                var,
+                format_expr(iterable, ctx, source_map),
+                format_block(body, ctx, source_map)
+            )
+        }
     }
 }
 

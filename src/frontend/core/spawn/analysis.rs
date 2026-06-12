@@ -889,6 +889,26 @@ fn collect_reads_writes(
                 }
             }
         }
+
+        // spawn for 数据并行循环
+        Expr::SpawnFor { iterable, body, .. } => {
+            collect_reads_writes(
+                iterable,
+                reads,
+                writes,
+                resource_vars,
+                trait_table,
+                local_var_types,
+            );
+            collect_from_block(
+                body,
+                reads,
+                writes,
+                resource_vars,
+                trait_table,
+                local_var_types,
+            );
+        }
     }
 }
 
