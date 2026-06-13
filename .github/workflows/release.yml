@@ -149,6 +149,6 @@ jobs:
           body: ${{ github.event.head_commit.message }}
           files: |
             release-artifacts/**/*.exe
-            release-artifacts/yaoxiang-*
+            release-artifacts/**/yaoxiang
           draft: false
           prerelease: false
