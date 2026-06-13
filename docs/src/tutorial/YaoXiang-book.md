@@ -1019,123 +1019,45 @@ with_timeout: (T: Type) -> ((task: Async(T), timeout: Duration) -> Option(T)) = 
 }
 ```
 
-### 5.5 线程安全：Send/Sync 约束
+### 5.5 跨任务共享：ref 关键字
 
-YaoXiang 采用类似 Rust 的 **Send/Sync 类型约束**来保证线程安全，在编译时消除数据竞争。
+YaoXiang 不需要 `Send`/`Sync` trait、`Mutex`、`RwLock` 等手动同步原语。所有权 + `ref` 自动处理并发安全。
 
-#### 5.5.1 Send 约束
-
-**Send**：类型可以安全地跨线程**转移所有权**。
+#### 5.5.1 ref：跨作用域共享
 
 ```yaoxiang
-# 基本类型自动满足 Send
-# Int, Float, Bool, String 都是 Send
+# ref 是跨作用域共享的唯一方式
+# 编译器自动选择 Rc（单任务）或 Arc（跨任务）
 
-# 结构体自动派生 Send
-type Point = { x: Int, y: Float }
-# Point 是 Send，因为 Int 和 Float 都是 Send
+data = load_data()
+shared = ref data       # 编译器自动选择实现
 
-# 包含非 Send 字段的类型不是 Send
-type NonSend = NonSend(data: Rc(Int))
-# Rc 不是 Send（引用计数非原子），因此 NonSend 不是 Send
-```
-
-#### 5.5.2 Sync 约束
-
-**Sync**：类型可以安全地跨线程**共享引用**。
-
-```yaoxiang
-# 基本类型都是 Sync
-type Point = { x: Int, y: Float }
-# &Point 是 Sync，因为 &Int 和 &Float 都是 Sync
-
-# 包含内部可变性的类型
-type Counter = Counter(value: Int, mutex: Mutex(Int))
-# &Counter 是 Sync，因为 Mutex 提供内部可变性
-```
-
-#### 5.5.3 spawn 与线程安全
-
-```yaoxiang
-# spawn 要求参数和返回值满足 Send
-
-# 有效：Data 是 Send
-type Data = Data(value: Int)
-task = spawn(|| => Data(42))
-
-# 无效：Rc 不是 Send
-type SharedData = SharedData(rc: Rc(Int))
-# task = spawn(|| => SharedData(Rc.new(42))  # 编译错误！
-
-# 解决方案：使用 Arc（原子引用计数）
-type SafeData = SafeData(value: Arc(Int))
-task = spawn(|| => SafeData(Arc.new(42)))  # Arc 是 Send + Sync
-```
-
-#### 5.5.4 线程安全类型派生规则
-
-```yaoxiang
-# 结构体类型
-type Struct(T1, T2) = Struct(f1: T1, f2: T2)
-
-# Send 派生
-Struct(T1, T2): Send ⇐ T1: Send 且 T2: Send
-
-# Sync 派生
-Struct(T1, T2): Sync ⇐ T1: Sync 且 T2: Sync
-
-# 联合类型
-Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
-
-# Send 派生
-Result(T, E): Send ⇐ T: Send 且 E: Send
-```
-
-#### 5.5.5 标准库线程安全实现
-
-| 类型 | Send | Sync | 说明 |
-|------|:----:|:----:|------|
-| `Int`, `Float`, `Bool` | ✅ | ✅ | 原类型 |
-| `Arc(T)` | ✅ | ✅ | T: Send + Sync |
-| `Mutex(T)` | ✅ | ✅ | T: Send |
-| `RwLock(T)` | ✅ | ✅ | T: Send |
-| `Channel(T)` | ✅ | ❌ | 只发送端 Send |
-| `Rc(T)` | ❌ | ❌ | 非原子引用计数 |
-| `RefCell(T)` | ❌ | ❌ | 运行时借用检查 |
-
-
-```yaoxiang
-# 线程安全计数器示例
-type SafeCounter = SafeCounter(mutex: Mutex(Int))
-
-main: () -> Void = () => {
-    counter: Arc(SafeCounter) = Arc.new(SafeCounter(Mutex.new(0)))
-
-    # 并发更新
-    spawn(|| => {
-        guard = counter.mutex.lock()  # Mutex 提供线程安全
-        guard.value = guard.value + 1
-    })
-
-    spawn(|| => {
-        guard = counter.mutex.lock()
-        guard.value = guard.value + 1
-    })
+result = spawn {
+    process_a(shared),  # 共享引用，跨任务 → Arc
+    process_b(shared)   # 共享引用
 }
 ```
 
-### 5.6 阻塞操作
+#### 5.5.2 编译器自动优化
+
+```
+ref 的数据流分析：
+
+不逃逸到其他任务 → Rc（非原子引用计数，开销低）
+逃逸到其他任务   → Arc（原子引用计数，线程安全）
+```
+
+用户不需要关心底层是 Rc 还是 Arc——`ref` 就是共享持有，够了。
+
+#### 5.5.3 资源类型自动串行
 
 ```yaoxiang
-# 使用 @block 注解标记会阻塞 OS 线程的操作
-# 运行时会将其分配到专用阻塞线程池
+# 编译器追踪资源类型的使用，确保并发安全
+# 同一资源的操作自动串行化
 
-@block
-read_large_file: (path: String) -> String = {
-    # 此调用不会阻塞核心调度器
-    file = File.open(path)
-    content = file.read_all()
-    content
+(a, b) = spawn {
+    read_file("data.txt"),      # 先执行
+    write_file("data.txt", x)   # 等待读取完成
 }
 ```
 
@@ -2174,13 +2096,6 @@ result2 = p1.distance_scaled(2.0, p2)
 | `return/break/continue` | 控制流 |
 | `as` | 类型转换 |
 | `in` | 成员访问 |
-
-| 注解 | 作用 |
-|------|------|
-| `@block` | 标记为完全同步的代码 |
-| `@eager` | 标记需急切求值的表达式 |
-| `@Send` | 显式声明满足 Send 约束 |
-| `@Sync` | 显式声明满足 Sync 约束 |
 
 ### B. 设计灵感
 

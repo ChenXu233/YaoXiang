@@ -33,8 +33,7 @@ title: "解析器状态"
 - ✅ 控制流：`if/elif/else`, `match`, `while`, `for`
 - ✅ `ref` 关键字（创建 Arc）
 - ✅ `unsafe` 块
-- ✅ `@block/@auto/@eager` 求值策略注解
-- ✅ `spawn` 并发块
+- ✅ `spawn` 并发块（RFC-024）
 - ✅ `return`, `break`, `continue`（含可选标签）
 
 **中缀（led）**：
@@ -58,7 +57,6 @@ title: "解析器状态"
 - ✅ 外部绑定（RFC-004）：`Point.distance = distance[0]`
 - ✅ 控制流：`if/elif/else`, `while`, `for [mut] item in iter`, `return`, `break [label]`, `continue [label]`
 - ✅ 导入：`use path`, `use path.{a, b}`, `use path as alias`
-- ✅ 求值策略注解（RFC-001/008）：`@block`, `@auto`, `@eager`
 - ✅ `pub` 可见性修饰符
 
 ### 类型系统解析
@@ -137,6 +135,6 @@ title: "解析器状态"
 
 1. **补充 Dict 字面量解析测试**
 2. **补充 FString 解析端到端测试**
-3. **补充 `@block/@auto/@eager` 和 `spawn` 的解析端到端测试**
+3. **补充 `spawn` 的解析端到端测试**
 4. **实现占位符 `_` 位置绑定**（RFC-004）
 5. **实现 Platform 参数解析**（RFC-011）

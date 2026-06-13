@@ -865,15 +865,6 @@ docs(readme): update installation instructions
 
 > **注意**：`Type`、`true`、`false`、`void` 等是保留字，不是关键字。`type` 关键字已在 RFC-010 中移除，统一使用 `name: Type = value` 语法。
 
-### A.2 注解
-
-| 注解 | 作用 |
-|------|------|
-| `@block` | 标记后将会同步执行函数 |
-| `@eager` | 标记需急切求值的表达式 |
-| `@Send` | 显式声明满足 Send 约束 |
-| `@Sync` | 显式声明满足 Sync 约束 |
-
 ### A.3 原类型
 
 | 类型 | 描述 | 默认大小 |

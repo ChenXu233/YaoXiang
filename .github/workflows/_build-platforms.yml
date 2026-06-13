@@ -107,9 +107,12 @@ jobs:
           retention-days: ${{ inputs.retention-days }}
 
   build-windows:
-    name: Windows (x86_64)
+    name: Windows (${{ matrix.target }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      matrix:
+        target: [x86_64-pc-windows-gnu, aarch64-pc-windows-gnullvm]
     steps:
       - uses: actions/checkout@v4
 
@@ -117,9 +120,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ vars.RUST_TOOLCHAIN }}
-          targets: x86_64-pc-windows-gnu
+          targets: ${{ matrix.target }}
 
-      - name: Install mingw
+      - name: Install mingw (x86_64)
+        if: matrix.target == 'x86_64-pc-windows-gnu'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -127,6 +131,12 @@ jobs:
             mingw-w64-tools \
             gcc-mingw-w64-x86-64 \
             g++-mingw-w64-x86-64
+
+      - name: Install LLVM toolchain (aarch64)
+        if: matrix.target == 'aarch64-pc-windows-gnullvm'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lld llvm
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -136,18 +146,18 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
-          key: windows-x86_64-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: windows-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            windows-x86_64-cargo-
+            windows-${{ matrix.target }}-cargo-
 
       - name: Build
-        run: cargo build ${{ inputs.build-features }} --target x86_64-pc-windows-gnu ${{ inputs.build-profile == 'release' && '--release' || '' }}
+        run: cargo build ${{ inputs.build-features }} --target ${{ matrix.target }} ${{ inputs.build-profile == 'release' && '--release' || '' }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.artifact-prefix }}-windows-x86_64
-          path: target/x86_64-pc-windows-gnu/${{ inputs.build-profile }}/yaoxiang.exe
+          name: ${{ inputs.artifact-prefix }}-windows-${{ matrix.target }}
+          path: target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang.exe
           retention-days: ${{ inputs.retention-days }}
 
   build-installer:
