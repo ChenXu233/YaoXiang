@@ -18,7 +18,7 @@ use super::super::proof::smt::ast::SMTResult;
 use super::super::proof::smt::translate;
 use super::super::proof::smt::z3_backend::Z3Backend;
 use super::super::proof::verdict::{
-    BudgetReport, DisproofModel, ProofFunctionCall, ProofResult, UnprovenReason,
+    BudgetReport, DisproofKind, DisproofModel, ProofFunctionCall, ProofResult, UnprovenReason,
 };
 
 /// Z3 实例——整个编译过程只初始化一次
@@ -93,10 +93,14 @@ fn try_direct_eval(
     match evaluator.eval_expr(constraint, bindings) {
         Ok(ConstValue::Bool(true)) => Some(ProofResult::Proved),
         Ok(ConstValue::Bool(false)) => Some(ProofResult::Disproved(DisproofModel {
+            kind: DisproofKind::PredicateViolation,
             assignments: bindings
                 .iter()
                 .map(|(k, v)| (k.clone(), format!("{:?}", v)))
                 .collect(),
+            constraint: format!("{}", constraint),
+            span: None,
+            predicate_span: None,
         })),
         Ok(_) => Some(ProofResult::Unproven {
             reason: UnprovenReason::BeyondKernel("约束表达式未求值为 Bool".into()),
@@ -158,7 +162,11 @@ fn try_smt_solve(
     {
         SMTResult::Unsat => ProofResult::Proved,
         SMTResult::Sat { model } => ProofResult::Disproved(DisproofModel {
+            kind: DisproofKind::PredicateViolation,
             assignments: model.assignments,
+            constraint: format!("{}", constraint),
+            span: None,
+            predicate_span: None,
         }),
         SMTResult::Unknown { reason } => ProofResult::Unproven {
             reason: UnprovenReason::BeyondKernel(reason),
