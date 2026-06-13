@@ -111,12 +111,18 @@ impl TraitTable {
     }
 
     /// 添加 Trait 实现
+    ///
+    /// 返回 `true` 表示新插入，`false` 表示已存在（不覆盖）
     pub fn add_impl(
         &mut self,
         impl_: TraitImplementation,
-    ) {
+    ) -> bool {
         let key = (impl_.trait_name.clone(), impl_.for_type_name.clone());
+        if self.implementations.contains_key(&key) {
+            return false;
+        }
         self.implementations.insert(key, impl_);
+        true
     }
 
     /// 获取类型的方法实现
@@ -134,5 +140,12 @@ impl TraitTable {
     /// 获取所有 Trait 名称
     pub fn trait_names(&self) -> impl Iterator<Item = &String> {
         self.traits.keys()
+    }
+
+    /// 获取所有已注册的 trait 实现
+    pub fn all_implementations(
+        &self
+    ) -> impl Iterator<Item = (&(String, String), &TraitImplementation)> {
+        self.implementations.iter()
     }
 }

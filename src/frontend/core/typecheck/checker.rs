@@ -957,7 +957,8 @@ impl TypeChecker {
 
         // 批量添加实现（避免借用冲突）
         for impl_ in impls_to_add {
-            self.env.add_trait_impl(impl_);
+            // auto_derive 已有 has_trait_impl 前置检查，这里不会冲突
+            let _ = self.env.add_trait_impl(impl_);
         }
     }
 
