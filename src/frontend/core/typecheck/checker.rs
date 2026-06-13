@@ -1658,6 +1658,7 @@ impl TypeChecker {
     ///
     /// 仅处理 Refined 类型，非 Refined 直接返回 Proved。
     /// 构造 ProofContext 后调用 Layer 3 的 check_predicate。
+    #[allow(dead_code)] // Phase 2.5 预留：精化类型绑定点谓词检查
     fn check_refined_binding(
         &self,
         ty: &MonoType,
