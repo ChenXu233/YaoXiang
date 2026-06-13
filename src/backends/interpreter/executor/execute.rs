@@ -16,7 +16,6 @@ use crate::backends::runtime::engine::{ResourceKey, TaskMeta};
 use crate::util::i18n::MSG;
 use crate::tlog;
 use super::executor::{Interpreter, InterpreterTask, SharedState};
-use crate::backends::interpreter::ffi::FfiRegistry;
 
 impl Executor for Interpreter {
     fn execute_module(
@@ -48,7 +47,7 @@ impl Executor for Interpreter {
             functions_by_id: self.functions_by_id.clone(),
             constants: self.constants.clone(),
             type_table: self.type_table.clone(),
-            ffi: FfiRegistry::with_std(),
+            ffi: self.ffi.clone(),
         });
         self.shared = Box::into_raw(shared);
 
