@@ -60,6 +60,15 @@ pub static E4XXX: &[ErrorCodeDefinition] = &[
         code: "E4017",
         category: ErrorCategory::Generic,
     },
+    // === E401x: 精化谓词证明 ===
+    ErrorCodeDefinition {
+        code: "E4018",
+        category: ErrorCategory::Generic,
+    },
+    ErrorCodeDefinition {
+        code: "E4019",
+        category: ErrorCategory::Generic,
+    },
 ];
 
 // E4xxx 快捷方法
@@ -155,5 +164,24 @@ impl ErrorCodeDefinition {
     pub fn measure_not_decreasing(measure: &str) -> DiagnosticBuilder {
         let def = Self::find("E4017").unwrap();
         def.builder().param("measure", measure)
+    }
+
+    // === 精化谓词证明 ===
+
+    /// E4018 精化谓词违反
+    pub fn refinement_violated(constraint: &str) -> DiagnosticBuilder {
+        let def = Self::find("E4018").unwrap();
+        def.builder().param("constraint", constraint)
+    }
+
+    /// E4019 类型等式不成立（证明管道内）
+    pub fn type_mismatch_in_proof(
+        expected: &str,
+        found: &str,
+    ) -> DiagnosticBuilder {
+        let def = Self::find("E4019").unwrap();
+        def.builder()
+            .param("expected", expected)
+            .param("found", found)
     }
 }

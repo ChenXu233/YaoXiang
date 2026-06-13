@@ -784,6 +784,18 @@
         "template": "measure '{measure}' does not strictly decrease on all loop paths",
         "help": "Ensure the variable moves toward the termination condition in all branches of the loop body."
     },
+    "E4018": {
+        "title": "Refinement predicate violated",
+        "message": "A refinement type constraint has been disproved",
+        "template": "Refinement predicate violated: {constraint}\n\nCounterexample:\n{counterexample}",
+        "help": "The predicate has been disproved — there exists an assignment that makes the constraint false. Check variable values or relax the constraint."
+    },
+    "E4019": {
+        "title": "Type mismatch in proof",
+        "message": "Type equality disproved within the proof pipeline",
+        "template": "Type mismatch in proof: expected {expected}, found {found}",
+        "help": "Check the type computation of components or provide a proof function."
+    },
     "E5005": {
         "title": "Invalid module path",
         "template": "Invalid module path: '{path}'",
