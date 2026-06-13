@@ -87,7 +87,7 @@ fn load_translation_file(path: &std::path::Path) -> TranslationMap {
                     if let serde_json::Value::String(s) = v {
                         Some((k, s))
                     } else {
-                        None  // 跳过 _meta 等非 string 值
+                        None // 跳过 _meta 等非 string 值
                     }
                 })
                 .collect()
