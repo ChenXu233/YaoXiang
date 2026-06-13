@@ -73,28 +73,6 @@ fn test_reserved_word_items_kind() {
 }
 
 #[test]
-fn test_annotation_items_count() {
-    let items = annotation_items();
-    assert_eq!(items.len(), 2, "应有 2 个注解");
-}
-
-#[test]
-fn test_annotation_items_present() {
-    let items = annotation_items();
-    let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
-    assert!(labels.contains(&"@block"));
-    assert!(labels.contains(&"@eager"));
-}
-
-#[test]
-fn test_annotation_items_have_docs() {
-    let items = annotation_items();
-    for item in &items {
-        assert!(item.documentation.is_some(), "{} 应有文档", item.label);
-    }
-}
-
-#[test]
 fn test_document_symbol_items_valid_code() {
     let content = "x = 42\nadd = (a, b) => a + b\n";
     let items = document_symbol_items(content);

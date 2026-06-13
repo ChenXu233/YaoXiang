@@ -1,6 +1,8 @@
 # RFC-018 LLVM AOT 编译器与 L3 透明并发（DAG 延迟调度）实现计划
 
-> **任务**：实现 LLVM AOT 后端 + 运行时 DAG 调度器，落地 `@auto/@eager/@block` 三种调度策略（L3/L2/L1）  
+> **⚠️ 对齐说明**：本文档基于旧的并发模型（`@block`/`@eager`/`@auto` 注解、`Send`/`Sync` trait、L1/L2/L3 层级），已被 [RFC-024 新并发模型](/design/rfc/accepted/024-concurrency-model.md) 取代。本文档需要与 RFC-024 对齐后才能继续推进。当前并发模型以 `spawn {}` 块为唯一并行原语，无注解，无 Send/Sync。
+
+> **任务**：实现 LLVM AOT 后端 + 运行时 DAG 调度器（~~落地 `@auto/@eager/@block` 三种调度策略~~ 已废弃，需对齐 RFC-024）  
 > **基于 RFC**：RFC-018（草案）  
 > **依赖 RFC**：RFC-001（并作模型与错误处理）、RFC-008（三层运行时）、RFC-009（所有权/Arc）  
 > **日期**：2026-03-10  

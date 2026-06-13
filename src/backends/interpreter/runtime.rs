@@ -1,7 +1,6 @@
 //! Interpreter runtime configuration.
 //!
 //! This is the interpreter-side entry for selecting runtime tier.
-//! It defaults to the current behavior (global `@block`).
 
 use crate::backends::runtime::RuntimeMode;
 

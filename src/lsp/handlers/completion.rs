@@ -5,13 +5,9 @@
 //! 支持：
 //! - 关键字补全（17 个关键字）
 //! - 保留字补全（7 个保留字）
-//! - 函数注解补全（@block, @eager）
 //! - 标识符补全（基于符号索引 + 当前文档 AST）
 
-use lsp_types::{
-    CompletionItem, CompletionItemKind, CompletionParams, CompletionResponse, Documentation,
-    MarkupContent, MarkupKind,
-};
+use lsp_types::{CompletionItem, CompletionItemKind, CompletionParams, CompletionResponse};
 use tracing::debug;
 
 use crate::frontend::core::lexer::tokenize;
@@ -55,9 +51,6 @@ const RESERVED_WORDS: &[(&str, &str)] = &[
     ("err", "Result 错误变体构造 err(E)"),
 ];
 
-/// 函数注解（language-spec.md 第 6.9.1 节）
-const ANNOTATIONS: &[(&str, &str)] = &[("@block", "禁用并发优化"), ("@eager", "强制急切求值")];
-
 // ─── 补全项构建 ─────────────────────────────────────
 
 /// 构建关键字补全项
@@ -85,25 +78,6 @@ fn reserved_word_items() -> Vec<CompletionItem> {
             kind: Some(CompletionItemKind::CONSTANT),
             detail: Some(desc.to_string()),
             sort_text: Some(format!("1_{:02}", i)),
-            ..CompletionItem::default()
-        })
-        .collect()
-}
-
-/// 构建注解补全项
-fn annotation_items() -> Vec<CompletionItem> {
-    ANNOTATIONS
-        .iter()
-        .enumerate()
-        .map(|(i, (ann, desc))| CompletionItem {
-            label: ann.to_string(),
-            kind: Some(CompletionItemKind::SNIPPET),
-            detail: Some(desc.to_string()),
-            sort_text: Some(format!("2_{:02}", i)),
-            documentation: Some(Documentation::MarkupContent(MarkupContent {
-                kind: MarkupKind::Markdown,
-                value: format!("**{}**\n\n{}", ann, desc),
-            })),
             ..CompletionItem::default()
         })
         .collect()
@@ -251,10 +225,9 @@ pub fn handle_completion(
 
     let mut items = Vec::new();
 
-    // 1. 关键字 + 保留字 + 注解
+    // 1. 关键字 + 保留字
     items.extend(keyword_items());
     items.extend(reserved_word_items());
-    items.extend(annotation_items());
 
     // 2. 从 SemanticDB 获取可见符号
     let line = params.text_document_position.position.line as usize + 1;
