@@ -27,7 +27,7 @@ pub struct Frame {
     upvalues: Vec<RuntimeValue>,
     /// Entry IP (for stack unwinding)
     entry_ip: usize,
-    /// Spawn task groups (only meaningful inside `@block` scopes).
+    /// Spawn task groups (RFC-024: only meaningful inside spawn scopes).
     spawn_groups: Vec<Vec<TaskId>>,
 }
 

@@ -255,10 +255,6 @@
     "example": "break 'unknown;",
     "error_output": "error[E1070]: 标签未识\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ 标签未识 'unknown'"
   },
-  "E1080": {
-    "title": "spawn 仅可于 @block 作用域内用之",
-    "help": "请将 `spawn { ... }` 置于 `@block { ... }` 之中，或以外层函数标注 `@block`（今为 @{mode}）。"
-  },
   "E1081": {
     "title": "`?` 仅可于返回 Result 之函数内用之",
     "help": "请先改外层函数返回型为 `Result[T, E]`，再以 `expr?` 行错误传播。"

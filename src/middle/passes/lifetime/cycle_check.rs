@@ -388,7 +388,10 @@ impl super::error::OwnershipCheck for CycleChecker {
     }
 
     fn state(&self) -> &HashMap<Operand, super::error::ValueState> {
-        unimplemented!()
+        // CycleChecker 追踪 spawn 引用边，不追踪值生命周期状态
+        static EMPTY: std::sync::LazyLock<HashMap<Operand, super::error::ValueState>> =
+            std::sync::LazyLock::new(HashMap::new);
+        &EMPTY
     }
 
     fn clear(&mut self) {
