@@ -5,7 +5,7 @@
 
 use crate::frontend::core::types::eval::evaluator::Evaluator;
 use crate::frontend::core::types::mono::MonoType;
-use super::super::proof::verdict::{DisproofModel, ProofResult, UnprovenReason};
+use super::super::proof::verdict::{DisproofKind, DisproofModel, ProofResult, UnprovenReason};
 use super::super::proof::context::ProofContext;
 
 /// 结构等价快速路径：O(n) 递归比较两个类型结构
@@ -91,13 +91,18 @@ pub fn check_type_equivalence(
     match (evaluator.eval(lhs), evaluator.eval(rhs)) {
         (Ok(l), Ok(r)) if l == r => ProofResult::Proved,
         (Ok(l), Ok(r)) => ProofResult::Disproved(DisproofModel {
+            kind: DisproofKind::TypeMismatch,
             assignments: vec![
-                ("lhs".into(), format!("{:?}", l)),
-                ("rhs".into(), format!("{:?}", r)),
+                ("expected".into(), format!("{:?}", l)),
+                ("found".into(), format!("{:?}", r)),
             ],
+            constraint: format!("{} == {}", l, r),
+            span: None,
+            predicate_span: None,
         }),
         (Err(e), _) | (_, Err(e)) => ProofResult::Unproven {
             reason: UnprovenReason::BeyondKernel(format!("{:?}", e)),
+            proof_calls: vec![],
             budget: ctx.budget.report(),
         },
     }

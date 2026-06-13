@@ -739,6 +739,24 @@ impl PartialEq for RuntimeValue {
 impl Eq for RuntimeValue {}
 
 // ============================================================================
+// ConstValue → RuntimeValue 转换
+// ============================================================================
+
+use crate::frontend::core::types::const_data::ConstValue;
+
+/// 将 ConstValue（编译期字面量）转为 RuntimeValue（解释器值）
+///
+/// Phase 2.5: 证明函数的实参是 ConstValue，
+/// 用此函数转为解释器可消费的 RuntimeValue。
+pub fn from_const_value(cv: &ConstValue) -> RuntimeValue {
+    match cv {
+        ConstValue::Int(n) => RuntimeValue::Int(*n as i64),
+        ConstValue::Float(f) => RuntimeValue::Float(*f as f64),
+        ConstValue::Bool(b) => RuntimeValue::Bool(*b),
+    }
+}
+
+// ============================================================================
 // Hash Implementation
 // ============================================================================
 

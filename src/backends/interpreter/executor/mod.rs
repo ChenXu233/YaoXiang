@@ -11,4 +11,7 @@ mod debug;
 mod execute;
 mod executor;
 
+#[cfg(test)]
+mod tests;
+
 pub use executor::Interpreter;

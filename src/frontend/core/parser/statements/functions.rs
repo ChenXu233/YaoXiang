@@ -31,7 +31,7 @@ pub fn parse_fn_stmt_with_name(
         return None;
     }
 
-    let (stmts, expr) = parse_fn_body(state)?;
+    let body = parse_fn_body(state)?;
 
     Some(Stmt {
         kind: StmtKind::Binding {
@@ -41,7 +41,7 @@ pub fn parse_fn_stmt_with_name(
             generic_params: Vec::new(),
             type_annotation: None,
             params,
-            body: (stmts, expr),
+            body,
             is_pub,
         },
         span,
@@ -67,7 +67,7 @@ pub fn parse_fn_stmt_with_name_simple(
         return None;
     }
 
-    let (stmts, expr) = parse_fn_body(state)?;
+    let body = parse_fn_body(state)?;
 
     Some(Stmt {
         kind: StmtKind::Binding {
@@ -82,7 +82,7 @@ pub fn parse_fn_stmt_with_name_simple(
                 is_mut: false,
                 span: param_span,
             }],
-            body: (stmts, expr),
+            body,
             is_pub,
         },
         span,
@@ -90,7 +90,7 @@ pub fn parse_fn_stmt_with_name_simple(
 }
 
 /// Parse function body (expression or block)
-pub(crate) fn parse_fn_body(state: &mut ParserState<'_>) -> Option<(Vec<Stmt>, Option<Box<Expr>>)> {
+pub(crate) fn parse_fn_body(state: &mut ParserState<'_>) -> Option<Vec<Stmt>> {
     if state.at(&TokenKind::LBrace) {
         if !state.expect(&TokenKind::LBrace) {
             return None;
@@ -102,12 +102,15 @@ pub(crate) fn parse_fn_body(state: &mut ParserState<'_>) -> Option<(Vec<Stmt>, O
         Some(body)
     } else {
         let expr = state.parse_expression(BP_LOWEST)?;
-        Some((Vec::new(), Some(Box::new(expr))))
+        Some(vec![Stmt {
+            kind: StmtKind::Expr(Box::new(expr)),
+            span: state.span(),
+        }])
     }
 }
 
 /// Parse block body implementation (shared helper)
-fn parse_block_body_impl(state: &mut ParserState<'_>) -> Option<(Vec<Stmt>, Option<Box<Expr>>)> {
+fn parse_block_body_impl(state: &mut ParserState<'_>) -> Option<Vec<Stmt>> {
     let mut stmts = Vec::new();
 
     while !state.at(&TokenKind::RBrace) && !state.at_end() {
@@ -118,13 +121,7 @@ fn parse_block_body_impl(state: &mut ParserState<'_>) -> Option<(Vec<Stmt>, Opti
         }
     }
 
-    let expr = if !state.at(&TokenKind::RBrace) {
-        state.parse_expression(BP_LOWEST)
-    } else {
-        None
-    };
-
-    Some((stmts, expr.map(Box::new)))
+    Some(stmts)
 }
 
 /// Parse function parameters: `(param1: Type, param2: Type)`

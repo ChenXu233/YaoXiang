@@ -251,16 +251,6 @@ fn collect_from_block(
             local_var_types,
         );
     }
-    if let Some(expr) = &block.expr {
-        collect_reads_writes(
-            expr,
-            reads,
-            writes,
-            resource_vars,
-            trait_table,
-            local_var_types,
-        );
-    }
 }
 
 /// 从 Stmt 中收集读写集
@@ -366,19 +356,9 @@ fn collect_from_stmt(
             }
         }
         StmtKind::Binding { body, .. } => {
-            for s in &body.0 {
+            for s in body {
                 collect_from_stmt(
                     s,
-                    reads,
-                    writes,
-                    resource_vars,
-                    trait_table,
-                    local_var_types,
-                );
-            }
-            if let Some(expr) = &body.1 {
-                collect_reads_writes(
-                    expr,
                     reads,
                     writes,
                     resource_vars,
@@ -398,6 +378,18 @@ fn collect_from_stmt(
             );
         }
         StmtKind::Use { .. } | StmtKind::ExternalBindingStmt { .. } | StmtKind::Error(_) => {}
+        StmtKind::Return(expr_opt) => {
+            if let Some(expr) = expr_opt {
+                collect_reads_writes(
+                    expr,
+                    reads,
+                    writes,
+                    resource_vars,
+                    trait_table,
+                    local_var_types,
+                );
+            }
+        }
     }
 }
 
@@ -928,7 +920,11 @@ pub fn build_execution_plan(
 ) -> ExecutionPlan {
     let n = read_write_sets.len();
     if n == 0 {
-        return ExecutionPlan { groups: vec![] };
+        return ExecutionPlan {
+            groups: vec![],
+            task_deps: vec![],
+            task_resources: vec![],
+        };
     }
 
     // 构建依赖关系：deps[i] = 任务 i 必须等待的任务列表
@@ -984,5 +980,15 @@ pub fn build_execution_plan(
         });
     }
 
-    ExecutionPlan { groups }
+    // 构建资源变量列表
+    let task_resources: Vec<Vec<String>> = resource_var_sets
+        .iter()
+        .map(|set| set.iter().cloned().collect())
+        .collect();
+
+    ExecutionPlan {
+        groups,
+        task_deps: deps,
+        task_resources,
+    }
 }

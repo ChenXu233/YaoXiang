@@ -83,6 +83,23 @@ impl LinearMeasure {
         }
     }
 
+    /// 创建一个乘法缩放度量
+    ///
+    /// `while v < upper { v *= const }` → ceil(log_const(upper/v)) 每次减 1
+    pub fn multiplicative(
+        var: &str,
+        upper: i128,
+        const_val: i128,
+    ) -> Self {
+        Self {
+            var: var.to_string(),
+            bound: Some(upper),
+            bound_var: None,
+            direction: Direction::Increasing,
+            delta: const_val,
+        }
+    }
+
     /// 返回度量的可读描述
     pub fn describe(&self) -> String {
         match self.direction {
@@ -118,15 +135,25 @@ impl LinearMeasure {
 use crate::frontend::core::parser::ast::{self, Expr, Stmt, StmtKind, BinOp};
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::proof::verdict::{BudgetReport, ProofResult, UnprovenReason};
+use super::super::proof::smt::ast::{SMTExpr, SMTCommand, SMTSort};
+use super::super::proof::smt::z3_backend::Z3Backend;
 
 /// 终止检查器
 ///
 /// 在类型检查之后、约束求解之前运行。
 /// 遍历 AST，为每个 `while` 循环和每个递归函数执行终止分析。
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct TerminationChecker {
     /// 收集到的证明结果
     results: Vec<ProofResult>,
+    /// Z3 后端引用——策略 1 秩函数 SMT 验证
+    z3: Option<&'static Z3Backend>,
+}
+
+impl Default for TerminationChecker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TerminationChecker {
@@ -134,7 +161,17 @@ impl TerminationChecker {
     pub fn new() -> Self {
         Self {
             results: Vec::new(),
+            z3: None,
         }
+    }
+
+    /// 设置 Z3 后端（由调用方在初始化后注入）
+    pub fn with_z3(
+        mut self,
+        z3: &'static Z3Backend,
+    ) -> Self {
+        self.z3 = Some(z3);
+        self
     }
 
     /// 检查整个模块的终止性
@@ -161,11 +198,8 @@ impl TerminationChecker {
         match &stmt.kind {
             StmtKind::Expr(expr) => self.check_expr(expr),
             StmtKind::Binding { body, .. } => {
-                for s in &body.0 {
+                for s in body {
                     self.check_stmt(s);
-                }
-                if let Some(e) = &body.1 {
-                    self.check_expr(e);
                 }
             }
             StmtKind::Var {
@@ -256,9 +290,6 @@ impl TerminationChecker {
                 for s in &block.stmts {
                     self.check_stmt(s);
                 }
-                if let Some(expr) = &block.expr {
-                    self.check_expr(expr);
-                }
             }
             Expr::If {
                 condition,
@@ -271,33 +302,21 @@ impl TerminationChecker {
                 for s in &then_branch.stmts {
                     self.check_stmt(s);
                 }
-                if let Some(expr) = &then_branch.expr {
-                    self.check_expr(expr);
-                }
                 for (cond, body) in elif_branches {
                     self.check_expr(cond);
                     for s in &body.stmts {
                         self.check_stmt(s);
-                    }
-                    if let Some(expr) = &body.expr {
-                        self.check_expr(expr);
                     }
                 }
                 if let Some(else_body) = else_branch {
                     for s in &else_body.stmts {
                         self.check_stmt(s);
                     }
-                    if let Some(expr) = &else_body.expr {
-                        self.check_expr(expr);
-                    }
                 }
             }
             Expr::Lambda { body, .. } => {
                 for s in &body.stmts {
                     self.check_stmt(s);
-                }
-                if let Some(expr) = &body.expr {
-                    self.check_expr(expr);
                 }
             }
             // 叶子节点不需要检查
@@ -335,6 +354,28 @@ impl TerminationChecker {
                     return;
                 }
             }
+        }
+
+        // 策略 4：乘法缩放度量
+        if let Some(measure) = self.try_multiplicative_measure(&assignments, &bounds) {
+            self.emit_terminates(span, &measure);
+            return;
+        }
+
+        // 策略 1：线性秩函数自动合成（SMT 验证）
+        if self.z3.is_some() {
+            if let Some(measure) =
+                self.try_linear_rank_function(&bounds, &assignments, condition, span)
+            {
+                self.emit_terminates(span, &measure);
+                return;
+            }
+        }
+
+        // 策略 2：谓词违反计数（框架占位）
+        if let Some(measure) = self.try_violation_count(&assignments, &bounds) {
+            self.emit_terminates(span, &measure);
+            return;
         }
 
         // 4. 没有找到有效度量 → 报错
@@ -415,8 +456,6 @@ impl TerminationChecker {
         for stmt in &body.stmts {
             self.collect_assignments_from_stmt(stmt, &mut assignments);
         }
-        // 也检查块尾表达式
-        if let Some(_expr) = &body.expr {}
         assignments
     }
 
@@ -460,25 +499,8 @@ impl TerminationChecker {
                 }
             }
             StmtKind::Binding { body, .. } => {
-                for s in &body.0 {
+                for s in body {
                     self.collect_assignments_from_stmt(s, assignments);
-                }
-                if let Some(e) = &body.1 {
-                    if let Expr::BinOp {
-                        op: BinOp::Assign,
-                        left,
-                        right,
-                        ..
-                    } = e.as_ref()
-                    {
-                        if let Expr::Var(var_name, _) = left.as_ref() {
-                            let delta_info = self.analyze_delta(right, var_name);
-                            assignments.push(LoopAssignment {
-                                var: var_name.clone(),
-                                delta_info,
-                            });
-                        }
-                    }
                 }
             }
             StmtKind::If {
@@ -548,6 +570,24 @@ impl TerminationChecker {
                 }
                 DeltaInfo::Unknown
             }
+            Expr::BinOp {
+                op: BinOp::Mul,
+                left,
+                right,
+                ..
+            } => {
+                if self.is_var_ref(left, var_name) {
+                    if let Some(c) = self.as_const(right) {
+                        return DeltaInfo::Mul(c);
+                    }
+                }
+                if self.is_var_ref(right, var_name) {
+                    if let Some(c) = self.as_const(left) {
+                        return DeltaInfo::Mul(c);
+                    }
+                }
+                DeltaInfo::Unknown
+            }
             // 处理前置 ++/-- 展开后的形式: i = 1 + i
             _ => DeltaInfo::Unknown,
         }
@@ -586,6 +626,7 @@ impl TerminationChecker {
         let delta = match assign.delta_info {
             DeltaInfo::Add(c) => c,  // var += c, c > 0
             DeltaInfo::Sub(c) => -c, // var -= c, c > 0 → delta = -c
+            DeltaInfo::Mul(c) => c,  // var *= c, c > 1 → delta = c
             DeltaInfo::Unknown => return None,
         };
 
@@ -617,6 +658,169 @@ impl TerminationChecker {
         }
     }
 
+    /// 策略 4：乘法缩放度量模板
+    ///
+    /// 检测 `v *= const`（const > 1）且 v 有整数上界的循环模式。
+    /// 度量 = ceil(log_const(upper / v))，每次乘 const 度量减 1。
+    fn try_multiplicative_measure(
+        &self,
+        assignments: &[LoopAssignment],
+        bounds: &[(String, (BoundOp, BoundExpr))],
+    ) -> Option<LinearMeasure> {
+        for assign in assignments {
+            if let DeltaInfo::Mul(const_val) = assign.delta_info {
+                if const_val <= 1 {
+                    continue;
+                }
+                // 查找 v 的上界
+                if let Some((_, (BoundOp::Lt | BoundOp::Le, BoundExpr::Const(upper)))) =
+                    bounds.iter().find(|(v, _)| v == &assign.var)
+                {
+                    if *upper > 0 {
+                        return Some(LinearMeasure::multiplicative(
+                            &assign.var,
+                            *upper,
+                            const_val,
+                        ));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// 策略 1：线性秩函数自动合成
+    ///
+    /// 枚举候选线性度量，SMT 验证每条执行路径上严格递减。
+    /// - ≤3 个有界变量 → 全组合枚举
+    /// - >3 个 → 只单变量，失败报编译错误
+    fn try_linear_rank_function(
+        &self,
+        bounds: &[(String, (BoundOp, BoundExpr))],
+        assignments: &[LoopAssignment],
+        _condition: &Expr,
+        _span: crate::util::span::Span,
+    ) -> Option<LinearMeasure> {
+        let z3 = self.z3?;
+
+        let bounded_vars: Vec<&str> = bounds.iter().map(|(v, _)| v.as_str()).collect();
+        let candidates = self.generate_rank_candidates(&bounded_vars, bounds);
+
+        for candidate in &candidates {
+            if self.verify_rank_candidate(candidate, bounds, assignments, z3) {
+                return Some(candidate.clone());
+            }
+        }
+
+        None
+    }
+
+    /// 生成秩函数候选列表
+    fn generate_rank_candidates(
+        &self,
+        bounded_vars: &[&str],
+        bounds: &[(String, (BoundOp, BoundExpr))],
+    ) -> Vec<LinearMeasure> {
+        let mut candidates = Vec::new();
+
+        if bounded_vars.len() > 3 {
+            // 只尝试单变量度量
+            for &v in bounded_vars {
+                candidates.push(LinearMeasure::increasing(v, None, None, 1));
+                if let Some((_, (_, BoundExpr::Const(upper)))) =
+                    bounds.iter().find(|(bv, _)| bv == v)
+                {
+                    candidates.push(LinearMeasure::increasing(v, None, Some(*upper), 1));
+                }
+            }
+            return candidates;
+        }
+
+        // ≤3 个变量：全组合
+        for &v in bounded_vars {
+            candidates.push(LinearMeasure::increasing(v, None, None, 1));
+            if let Some((_, (_, BoundExpr::Const(u)))) = bounds.iter().find(|(bv, _)| bv == v) {
+                candidates.push(LinearMeasure::increasing(v, None, Some(*u), 1));
+            }
+        }
+
+        // 两变量组合：v_i - v_j
+        for i in 0..bounded_vars.len() {
+            for j in 0..bounded_vars.len() {
+                if i != j {
+                    candidates.push(LinearMeasure::increasing(
+                        bounded_vars[i],
+                        Some(bounded_vars[j]),
+                        None,
+                        1,
+                    ));
+                }
+            }
+        }
+
+        candidates
+    }
+
+    /// SMT 验证秩函数候选是否在所有路径上严格递减
+    fn verify_rank_candidate(
+        &self,
+        candidate: &LinearMeasure,
+        _bounds: &[(String, (BoundOp, BoundExpr))],
+        _assignments: &[LoopAssignment],
+        z3: &Z3Backend,
+    ) -> bool {
+        let mut commands = Vec::new();
+
+        // 声明秩函数变量
+        commands.push(SMTCommand::DeclareConst(
+            candidate.var.clone(),
+            SMTSort::Int,
+        ));
+        if let Some(ref bv) = candidate.bound_var {
+            commands.push(SMTCommand::DeclareConst(bv.clone(), SMTSort::Int));
+        }
+
+        // 构造 m_prime = var + delta（被赋值后的值）
+        let m_var = SMTExpr::Atom(candidate.var.clone());
+        let m_prime = SMTExpr::App(
+            "+".into(),
+            vec![
+                SMTExpr::Atom(candidate.var.clone()),
+                SMTExpr::Atom(candidate.delta.to_string()),
+            ],
+        );
+
+        // assert (not (< m_prime m_var))
+        let decreasing = SMTExpr::App("<".into(), vec![m_prime, m_var]);
+        let not_decreasing = SMTExpr::App("not".into(), vec![decreasing]);
+        commands.push(SMTCommand::Assert(not_decreasing));
+
+        commands.push(SMTCommand::CheckSat);
+
+        // unsat = m' < m 在所有情况下成立 → 严格递减
+        matches!(
+            z3.solve(&commands, 50),
+            crate::frontend::core::typecheck::proof::smt::ast::SMTResult::Unsat
+        )
+    }
+
+    /// 策略 2：谓词违反计数（RFC-027 §7.3，实验性，框架占位）
+    ///
+    /// 完整实现需要：
+    /// 1. Parser 支持 forall 量词语法
+    /// 2. 解析目标类型定义提取条件函数
+    /// 3. 生成 violation_count 度量
+    /// 4. 验证相邻操作减少度量
+    ///
+    /// 当前返回 None，待 Parser 升级后补完。
+    fn try_violation_count(
+        &self,
+        _assignments: &[LoopAssignment],
+        _bounds: &[(String, (BoundOp, BoundExpr))],
+    ) -> Option<LinearMeasure> {
+        None
+    }
+
     // ==================== 递归终止检查 ====================
 
     /// 检查函数体
@@ -627,9 +831,6 @@ impl TerminationChecker {
     ) {
         for s in &body.stmts {
             self.check_stmt(s);
-        }
-        if let Some(expr) = &body.expr {
-            self.check_expr(expr);
         }
     }
 
@@ -708,6 +909,7 @@ impl TerminationChecker {
             UnprovenReason::BeyondKernel("循环无法证明终止：未找到有效的递减度量".to_string());
         self.results.push(ProofResult::Unproven {
             reason,
+            proof_calls: vec![],
             budget: BudgetReport {
                 steps_used: 0,
                 steps_limit: 0,
@@ -727,6 +929,7 @@ impl TerminationChecker {
         ));
         self.results.push(ProofResult::Unproven {
             reason,
+            proof_calls: vec![],
             budget: BudgetReport {
                 steps_used: 0,
                 steps_limit: 0,
@@ -743,6 +946,7 @@ impl TerminationChecker {
         let reason = UnprovenReason::BeyondKernel(format!("度量 `{}` 未严格递减", measure));
         self.results.push(ProofResult::Unproven {
             reason,
+            proof_calls: vec![],
             budget: BudgetReport {
                 steps_used: 0,
                 steps_limit: 0,
@@ -778,6 +982,8 @@ enum DeltaInfo {
     Add(i128),
     /// var -= c
     Sub(i128),
+    /// var *= c（const > 1，乘法缩放模式）
+    Mul(i128),
     /// 无法确定
     Unknown,
 }

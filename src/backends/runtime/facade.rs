@@ -1,5 +1,4 @@
 //! High-level runtime facade (Embedded / Standard / Full).
-//! High-level runtime facade (Embedded / Standard / Full).
 //!
 //! This layer stays decoupled from interpreter/compiler internals: it schedules
 //! generic tasks and returns type-erased (`Any`) payloads.
@@ -31,7 +30,7 @@ pub enum RuntimeMode {
 #[derive(Debug, Clone)]
 pub struct RuntimeConfig {
     pub mode: RuntimeMode,
-    /// Worker count for Full runtime.
+    /// Worker count for Standard and Full runtimes.
     pub workers: usize,
     /// Enable work-stealing for Full runtime.
     pub work_stealing: bool,
@@ -48,13 +47,69 @@ impl Default for RuntimeConfig {
 }
 
 /// A generic runnable task for Standard/Full runtimes.
-pub type TaskFn = Box<dyn FnOnce() -> TaskResult + Send + 'static>;
+///
+/// The `SpawnHandle` parameter allows nested spawning from within tasks.
+pub type TaskFn = Box<dyn FnOnce(&SpawnHandle) -> TaskResult + Send + 'static>;
 
 /// A cooperative task that can yield (`Pending`) for fair time-slicing.
 ///
 /// The boolean parameter indicates whether time-slicing is enabled (i.e. there
 /// are other runnable tasks).
 pub type CoopTaskFn = Box<dyn FnMut(bool) -> TaskPoll + Send + 'static>;
+
+/// Worker thread message sent back to the main thread.
+enum WorkerMessage {
+    /// Task completed.
+    Completed {
+        id: TaskId,
+        result: TaskResult,
+        exec_time: Duration,
+    },
+    /// Task requests to spawn a child task (nested spawn).
+    SpawnRequest {
+        meta: TaskMeta,
+        task: TaskFn,
+        respond: Sender<TaskId>,
+    },
+}
+
+/// Handle passed to tasks for nested spawning.
+///
+/// Tasks can use this to spawn child tasks that become part of the runtime's DAG.
+pub struct SpawnHandle {
+    tx: Sender<WorkerMessage>,
+}
+
+impl SpawnHandle {
+    /// Spawn a child task from within a running task.
+    ///
+    /// The child task will be registered with the runtime and scheduled according
+    /// to its dependencies. Returns the `TaskId` of the newly spawned task.
+    pub fn spawn(
+        &self,
+        meta: TaskMeta,
+        task: TaskFn,
+    ) -> Result<TaskId, RuntimeError> {
+        let (respond_tx, respond_rx) = crossbeam::channel::bounded(1);
+        self.tx
+            .send(WorkerMessage::SpawnRequest {
+                meta,
+                task,
+                respond: respond_tx,
+            })
+            .map_err(|_| RuntimeError::DeadlockOrCycle(TaskId(0)))?;
+        respond_rx
+            .recv()
+            .map_err(|_| RuntimeError::DeadlockOrCycle(TaskId(0)))
+    }
+
+    /// A no-op `SpawnHandle` for use in contexts where nested spawning is not needed
+    /// (e.g., Embedded mode).
+    pub fn noop() -> Self {
+        let (tx, _rx) = crossbeam::channel::unbounded();
+        Self { tx }
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeFacadeError {
@@ -82,7 +137,12 @@ impl Runtime {
     pub fn new(config: RuntimeConfig) -> Result<Self, RuntimeFacadeError> {
         let inner = match config.mode {
             RuntimeMode::Embedded => RuntimeInner::Embedded(EmbeddedRuntime::default()),
-            RuntimeMode::Standard => RuntimeInner::Standard(StandardRuntime::default()),
+            RuntimeMode::Standard => {
+                if config.workers == 0 {
+                    return Err(RuntimeFacadeError::InvalidConfig("workers must be >= 1"));
+                }
+                RuntimeInner::Standard(StandardRuntime::new(config.workers)?)
+            }
             RuntimeMode::Full => {
                 if config.workers == 0 {
                     return Err(RuntimeFacadeError::InvalidConfig("workers must be >= 1"));
@@ -115,9 +175,7 @@ impl Runtime {
                 "embedded runtime does not support cooperative tasks",
             )),
             RuntimeInner::Standard(rt) => Ok(rt.spawn_coop(meta, task)?),
-            RuntimeInner::Full(_) => Err(RuntimeFacadeError::InvalidConfig(
-                "full runtime does not support cooperative tasks yet",
-            )),
+            RuntimeInner::Full(rt) => Ok(rt.spawn_coop(meta, task)?),
         }
     }
 
@@ -221,7 +279,7 @@ impl EmbeddedRuntime {
         }
 
         let start = Instant::now();
-        let result = task();
+        let result = task(&SpawnHandle::noop());
         let exec_time = start.elapsed();
         self.total_exec_time += exec_time;
 
@@ -279,17 +337,44 @@ impl EmbeddedRuntime {
 }
 
 // ============================================================================
-// Standard Runtime (single-thread DAG)
+// Standard Runtime (thread pool DAG)
 // ============================================================================
 
-#[derive(Default)]
+/// A work item to be processed by a worker thread.
+struct WorkItem {
+    id: TaskId,
+    task: TaskFn,
+    spawn_handle: SpawnHandle,
+}
+
 struct StandardRuntime {
     graph: LocalRuntime,
     tasks: HashMap<TaskId, TaskFn>,
     coop_tasks: HashMap<TaskId, CoopTaskFn>,
+    work_tx: Sender<WorkItem>,
+    msg_tx: Sender<WorkerMessage>,
+    msg_rx: Receiver<WorkerMessage>,
+    threads: Vec<JoinHandle<()>>,
+    workers: usize,
 }
 
 impl StandardRuntime {
+    fn new(workers: usize) -> Result<Self, RuntimeFacadeError> {
+        let (msg_tx, msg_rx) = crossbeam::channel::unbounded::<WorkerMessage>();
+        let (work_tx, threads) = spawn_worker_threads(workers, msg_tx.clone());
+
+        Ok(Self {
+            graph: LocalRuntime::new(),
+            tasks: HashMap::new(),
+            coop_tasks: HashMap::new(),
+            work_tx,
+            msg_tx,
+            msg_rx,
+            threads,
+            workers,
+        })
+    }
+
     fn spawn(
         &mut self,
         meta: TaskMeta,
@@ -351,19 +436,122 @@ impl StandardRuntime {
         &mut self,
         target: Option<TaskId>,
     ) -> Result<(), RuntimeError> {
-        self.graph
-            .drive_until_polled(target, |id, time_slice_enabled| {
-                if let Some(task) = self.tasks.remove(&id) {
-                    return TaskPoll::Ready(task());
-                }
-                let Some(task) = self.coop_tasks.get_mut(&id) else {
-                    return TaskPoll::Ready(Err(sv("task payload missing")));
-                };
-                task(time_slice_enabled)
-            })?;
+        let mut in_flight = 0usize;
 
-        self.prune_finished_tasks();
-        Ok(())
+        loop {
+            if let Some(t) = target {
+                if self.graph.is_complete(t) {
+                    self.prune_finished_tasks();
+                    return Ok(());
+                }
+            }
+
+            // Dispatch ready tasks to the thread pool.
+            while in_flight < self.workers {
+                let Some(next) = (match target {
+                    Some(t) => self
+                        .graph
+                        .next_ready_for(t)
+                        .or_else(|| self.graph.next_ready()),
+                    None => self.graph.next_ready(),
+                }) else {
+                    break;
+                };
+
+                self.graph.mark_running(next)?;
+
+                // Check if it's a cooperative task.
+                if let Some(task) = self.coop_tasks.get_mut(&next) {
+                    let time_slice_enabled = self.graph.stats().pending_count > 0;
+                    let start = Instant::now();
+                    let polled = task(time_slice_enabled);
+                    let exec_time = start.elapsed();
+
+                    match polled {
+                        TaskPoll::Ready(result) => match result {
+                            Ok(v) => self.graph.complete(next, TaskOutcome::Ok(v), exec_time)?,
+                            Err(e) => self.graph.complete(next, TaskOutcome::Err(e), exec_time)?,
+                        },
+                        TaskPoll::Pending => self.graph.yield_now(next, exec_time)?,
+                    }
+                    continue;
+                }
+
+                // Regular task: send to thread pool.
+                let task = match self.tasks.remove(&next) {
+                    Some(t) => t,
+                    None => {
+                        self.graph.complete(
+                            next,
+                            TaskOutcome::Err(sv("task payload missing")),
+                            Duration::ZERO,
+                        )?;
+                        continue;
+                    }
+                };
+
+                let spawn_handle = SpawnHandle {
+                    tx: self.msg_tx.clone(),
+                };
+                self.work_tx
+                    .send(WorkItem {
+                        id: next,
+                        task,
+                        spawn_handle,
+                    })
+                    .map_err(|_| RuntimeError::DeadlockOrCycle(next))?;
+                in_flight += 1;
+            }
+
+            if in_flight == 0 {
+                if let Some(t) = target {
+                    if !self.graph.is_complete(t) {
+                        return Err(RuntimeError::DeadlockOrCycle(t));
+                    }
+                }
+                self.prune_finished_tasks();
+                return Ok(());
+            }
+
+            // Receive messages from worker threads.
+            let msg = self
+                .msg_rx
+                .recv()
+                .map_err(|_| RuntimeError::DeadlockOrCycle(target.unwrap_or(TaskId(0))))?;
+
+            match msg {
+                WorkerMessage::Completed {
+                    id,
+                    result,
+                    exec_time,
+                } => {
+                    in_flight = in_flight.saturating_sub(1);
+                    match result {
+                        Ok(v) => self.graph.complete(id, TaskOutcome::Ok(v), exec_time)?,
+                        Err(e) => self.graph.complete(id, TaskOutcome::Err(e), exec_time)?,
+                    }
+                }
+                WorkerMessage::SpawnRequest {
+                    meta,
+                    task,
+                    respond,
+                } => {
+                    let id = self.graph.spawn(meta)?;
+                    if self.graph.is_complete(id) {
+                        let _ = respond.send(id);
+                    } else {
+                        self.tasks.insert(id, task);
+                        let _ = respond.send(id);
+                    }
+                    // Continue loop — the new task may be ready for dispatch.
+                    // in_flight > 0 at this point (the spawning worker is still
+                    // in-flight), so the in_flight == 0 deadlock check won't
+                    // fire. The next dispatch iteration will pick up the new task.
+                }
+            }
+
+            self.prune_finished_tasks();
+        }
     }
 
     fn prune_finished_tasks(&mut self) {
@@ -389,175 +577,9 @@ impl StandardRuntime {
     }
 }
 
-// ============================================================================
-// Full Runtime (multi-thread)
-// ============================================================================
-
-struct FullRuntime {
-    graph: LocalRuntime,
-    tasks: HashMap<TaskId, TaskFn>,
-    work_tx: Sender<WorkItem>,
-    done_rx: Receiver<WorkResult>,
-    threads: Vec<JoinHandle<()>>,
-    workers: usize,
-}
-
-struct WorkItem {
-    id: TaskId,
-    task: TaskFn,
-}
-
-type WorkResult = (TaskId, TaskResult, Duration);
-
-impl FullRuntime {
-    fn new(
-        workers: usize,
-        _work_stealing: bool,
-    ) -> Result<Self, RuntimeFacadeError> {
-        let (done_tx, done_rx) = crossbeam::channel::unbounded::<WorkResult>();
-        let (work_tx, work_rx) = crossbeam::channel::unbounded::<WorkItem>();
-        let threads = spawn_worker_threads(workers, work_rx, done_tx);
-
-        Ok(Self {
-            graph: LocalRuntime::new(),
-            tasks: HashMap::new(),
-            work_tx,
-            done_rx,
-            threads,
-            workers,
-        })
-    }
-
-    fn spawn(
-        &mut self,
-        meta: TaskMeta,
-        task: TaskFn,
-    ) -> Result<TaskId, RuntimeError> {
-        let id = self.graph.spawn(meta)?;
-        if self.graph.is_complete(id) {
-            return Ok(id);
-        }
-        self.tasks.insert(id, task);
-        Ok(id)
-    }
-
-    fn cancel(
-        &mut self,
-        task_id: TaskId,
-    ) -> Result<(), RuntimeError> {
-        self.graph.cancel(task_id)?;
-        self.tasks.remove(&task_id);
-        self.prune_finished_tasks();
-        Ok(())
-    }
-
-    fn outcome(
-        &self,
-        task_id: TaskId,
-    ) -> Option<&TaskOutcome> {
-        self.graph.outcome(task_id)
-    }
-
-    fn is_complete(
-        &self,
-        task_id: TaskId,
-    ) -> bool {
-        self.graph.is_complete(task_id)
-    }
-
-    fn stats(&self) -> RuntimeStats {
-        self.graph.stats()
-    }
-
-    fn drive_until(
-        &mut self,
-        target: Option<TaskId>,
-    ) -> Result<(), RuntimeFacadeError> {
-        let mut in_flight = 0usize;
-
-        loop {
-            if let Some(t) = target {
-                if self.graph.is_complete(t) {
-                    self.prune_finished_tasks();
-                    return Ok(());
-                }
-            }
-
-            while in_flight < self.workers {
-                let Some(next) = (match target {
-                    Some(t) => self
-                        .graph
-                        .next_ready_for(t)
-                        .or_else(|| self.graph.next_ready()),
-                    None => self.graph.next_ready(),
-                }) else {
-                    break;
-                };
-                self.graph.mark_running(next)?;
-                let task = match self.tasks.remove(&next) {
-                    Some(t) => t,
-                    None => {
-                        self.graph.complete(
-                            next,
-                            TaskOutcome::Err(sv("task payload missing")),
-                            Duration::ZERO,
-                        )?;
-                        continue;
-                    }
-                };
-                self.submit(next, task)?;
-                in_flight += 1;
-            }
-
-            if in_flight == 0 {
-                if let Some(t) = target {
-                    if !self.graph.is_complete(t) {
-                        return Err(RuntimeError::DeadlockOrCycle(t).into());
-                    }
-                }
-                self.prune_finished_tasks();
-                return Ok(());
-            }
-
-            let (id, result, exec_time) = self.done_rx.recv().map_err(|e| {
-                RuntimeFacadeError::WorkerPool(format!("result channel closed: {e}"))
-            })?;
-            in_flight = in_flight.saturating_sub(1);
-
-            match result {
-                Ok(v) => self.graph.complete(id, TaskOutcome::Ok(v), exec_time)?,
-                Err(e) => self.graph.complete(id, TaskOutcome::Err(e), exec_time)?,
-            }
-
-            self.prune_finished_tasks();
-        }
-    }
-
-    fn submit(
-        &self,
-        id: TaskId,
-        task: TaskFn,
-    ) -> Result<(), RuntimeFacadeError> {
-        self.work_tx
-            .send(WorkItem { id, task })
-            .map_err(|e| RuntimeFacadeError::WorkerPool(format!("{e}")))
-    }
-
-    fn prune_finished_tasks(&mut self) {
-        let finished: Vec<TaskId> = self
-            .tasks
-            .keys()
-            .copied()
-            .filter(|id| self.graph.is_complete(*id))
-            .collect();
-        for id in finished {
-            self.tasks.remove(&id);
-        }
-    }
-}
-
-impl Drop for FullRuntime {
+impl Drop for StandardRuntime {
     fn drop(&mut self) {
+        // Close the work channel to signal workers to exit.
         let (dummy_tx, _dummy_rx) = crossbeam::channel::unbounded::<WorkItem>();
         let old = std::mem::replace(&mut self.work_tx, dummy_tx);
         drop(old);
@@ -567,23 +589,104 @@ impl Drop for FullRuntime {
     }
 }
 
+// ============================================================================
+// Full Runtime (delegates to StandardRuntime)
+// ============================================================================
+
+struct FullRuntime {
+    standard: StandardRuntime,
+    // TODO: WorkStealer for load balancing
+}
+
+impl FullRuntime {
+    fn new(
+        workers: usize,
+        _work_stealing: bool,
+    ) -> Result<Self, RuntimeFacadeError> {
+        Ok(Self {
+            standard: StandardRuntime::new(workers)?,
+        })
+    }
+
+    fn spawn(
+        &mut self,
+        meta: TaskMeta,
+        task: TaskFn,
+    ) -> Result<TaskId, RuntimeError> {
+        self.standard.spawn(meta, task)
+    }
+
+    fn cancel(
+        &mut self,
+        task_id: TaskId,
+    ) -> Result<(), RuntimeError> {
+        self.standard.cancel(task_id)
+    }
+
+    fn outcome(
+        &self,
+        task_id: TaskId,
+    ) -> Option<&TaskOutcome> {
+        self.standard.outcome(task_id)
+    }
+
+    fn is_complete(
+        &self,
+        task_id: TaskId,
+    ) -> bool {
+        self.standard.is_complete(task_id)
+    }
+
+    fn stats(&self) -> RuntimeStats {
+        self.standard.stats()
+    }
+
+    fn drive_until(
+        &mut self,
+        target: Option<TaskId>,
+    ) -> Result<(), RuntimeError> {
+        self.standard.drive_until(target)
+    }
+
+    fn spawn_coop(
+        &mut self,
+        meta: TaskMeta,
+        task: CoopTaskFn,
+    ) -> Result<TaskId, RuntimeError> {
+        self.standard.spawn_coop(meta, task)
+    }
+}
+
+// ============================================================================
+// Worker thread pool
+// ============================================================================
+
 fn spawn_worker_threads(
     workers: usize,
-    work_rx: Receiver<WorkItem>,
-    done_tx: Sender<WorkResult>,
-) -> Vec<JoinHandle<()>> {
+    msg_tx: Sender<WorkerMessage>,
+) -> (Sender<WorkItem>, Vec<JoinHandle<()>>) {
+    let (work_tx, work_rx) = crossbeam::channel::unbounded::<WorkItem>();
     let mut threads = Vec::with_capacity(workers);
     for _ in 0..workers {
         let work_rx = work_rx.clone();
-        let done_tx = done_tx.clone();
+        let msg_tx = msg_tx.clone();
         threads.push(std::thread::spawn(move || {
             while let Ok(item) = work_rx.recv() {
                 let start = Instant::now();
-                let result = (item.task)();
+                let result = (item.task)(&item.spawn_handle);
                 let exec_time = start.elapsed();
-                let _ = done_tx.send((item.id, result, exec_time));
+                if msg_tx
+                    .send(WorkerMessage::Completed {
+                        id: item.id,
+                        result,
+                        exec_time,
+                    })
+                    .is_err()
+                {
+                    break; // Main thread dropped msg_rx — exit worker.
+                }
             }
         }));
     }
-    threads
+    (work_tx, threads)
 }

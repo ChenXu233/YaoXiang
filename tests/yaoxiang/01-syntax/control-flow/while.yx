@@ -1,0 +1,26 @@
+// 01-syntax/control-flow/while.yx
+// 覆盖: 规范 §5.8 while 语句
+// 验证: while 循环
+// 状态: ✅ 可运行
+
+use std.io
+
+main = {
+    // 基本 while 循环
+    mut i = 3
+    while i > 0 {
+        io.println(i)
+        i = i - 1
+    }
+
+    // while 累加
+    mut sum = 0
+    mut n = 1
+    while n <= 10 {
+        sum = sum + n
+        n = n + 1
+    }
+    io.println(sum)
+
+    io.println("ALL TESTS PASSED")
+}

@@ -105,8 +105,10 @@ impl<'a> ParserState<'a> {
             // Unsafe without braces is a single expression
             let expr = self.parse_expression(BP_UNARY)?;
             Block {
-                stmts: Vec::new(),
-                expr: Some(Box::new(expr)),
+                stmts: vec![Stmt {
+                    kind: StmtKind::Expr(Box::new(expr)),
+                    span: self.span(),
+                }],
                 span: self.span(),
             }
         };
@@ -524,7 +526,6 @@ impl<'a> ParserState<'a> {
                 params,
                 body: Box::new(Block {
                     stmts: Vec::new(),
-                    expr: None,
                     span: self.span(),
                 }),
                 span,
@@ -769,11 +770,7 @@ impl<'a> ParserState<'a> {
         // 不再自动剥离末尾表达式
         // 代码块形式必须显式使用 return 返回值
         // 否则默认返回 Void
-        Some(Expr::Block(Block {
-            stmts,
-            expr: None,
-            span,
-        }))
+        Some(Expr::Block(Block { stmts, span }))
     }
 
     /// Try to parse a dict literal: {"key": value, "key2": value2, ...}
@@ -840,8 +837,10 @@ impl<'a> ParserState<'a> {
                 // For else-if, we need to parse it as a block containing the if expression
                 let if_expr = self.parse_if()?;
                 Some(Box::new(Block {
-                    stmts: Vec::new(),
-                    expr: Some(Box::new(if_expr)),
+                    stmts: vec![Stmt {
+                        kind: StmtKind::Expr(Box::new(if_expr)),
+                        span: self.span(),
+                    }],
                     span: self.span(),
                 }))
             } else {
@@ -885,8 +884,10 @@ impl<'a> ParserState<'a> {
                 // Simple expression body - use lower precedence for the body
                 let body_expr = self.parse_expression(BP_LOWEST)?;
                 Block {
-                    stmts: Vec::new(),
-                    expr: Some(Box::new(body_expr)),
+                    stmts: vec![Stmt {
+                        kind: StmtKind::Expr(Box::new(body_expr)),
+                        span: self.span(),
+                    }],
                     span: self.span(),
                 }
             };
@@ -959,7 +960,6 @@ impl<'a> ParserState<'a> {
             // If we didn't get a block, create an empty one with the expression as the body
             Some(Block {
                 stmts: Vec::new(),
-                expr: None,
                 span: self.span(),
             })
         }
@@ -1049,19 +1049,22 @@ impl<'a> ParserState<'a> {
     ) -> Vec<(String, bool, Box<Pattern>)> {
         let mut fields = Vec::new();
 
-        // Parse the block's expression (comma-separated identifiers/patterns)
-        if let Some(expr) = &block.expr {
-            match expr.as_ref() {
-                Expr::Tuple(elements, _) => {
-                    for element in elements {
-                        if let Some((name, is_mut, pattern)) = self.parse_pattern_field(element) {
-                            fields.push((name, is_mut, Box::new(pattern)));
+        // Parse the block's last expression statement (comma-separated identifiers/patterns)
+        if let Some(last_stmt) = block.stmts.last() {
+            if let StmtKind::Expr(expr) = &last_stmt.kind {
+                match expr.as_ref() {
+                    Expr::Tuple(elements, _) => {
+                        for element in elements {
+                            if let Some((name, is_mut, pattern)) = self.parse_pattern_field(element)
+                            {
+                                fields.push((name, is_mut, Box::new(pattern)));
+                            }
                         }
                     }
-                }
-                _ => {
-                    if let Some((name, is_mut, pattern)) = self.parse_pattern_field(expr) {
-                        fields.push((name, is_mut, Box::new(pattern)));
+                    _ => {
+                        if let Some((name, is_mut, pattern)) = self.parse_pattern_field(expr) {
+                            fields.push((name, is_mut, Box::new(pattern)));
+                        }
                     }
                 }
             }

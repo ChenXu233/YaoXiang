@@ -1,0 +1,18 @@
+// 01-syntax/basics/fstrings.yx
+// 覆盖: 规范 RFC-012 F-String 模板字符串
+// 验证: f"hello {name}" 插值
+// 状态: ✅ 可运行
+
+use std.io
+
+main = {
+    name = "world"
+    msg = f"hello {name}"
+    io.println(msg)
+
+    x = 42
+    val = f"value: {x}"
+    io.println(val)
+
+    io.println("ALL TESTS PASSED")
+}

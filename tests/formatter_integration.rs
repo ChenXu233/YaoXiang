@@ -63,8 +63,8 @@ fn test_format_binop_short() {
 
 #[test]
 fn test_format_lambda_body() {
-    // NOTE: formatter currently wraps lambda body in a block expression
-    assert_format_eq("let f = (x) => x + 1", "let\nf = (x) => {\n    x + 1\n}\n");
+    // Lambda with single expression body uses => { expr } syntax
+    assert_format_eq("let f = (x) => x + 1", "let\nf = (x) => { x + 1 }\n");
 }
 
 #[test]

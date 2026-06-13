@@ -1,0 +1,18 @@
+// 03-modules/imports.yx
+// 覆盖: 规范 §7.2 模块导入
+// 验证: use 语句各种形式
+// 状态: ✅ 可运行
+
+use std.io
+use std.list
+use std.math.{sqrt, sin, cos}
+
+main = {
+    io.println("module_import_ok")
+
+    mut items = [3, 1, 4, 1, 5]
+    mut mapped = list.map(items, x => x * 2)
+    io.println(mapped)
+
+    io.println("ALL TESTS PASSED")
+}

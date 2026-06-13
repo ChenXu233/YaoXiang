@@ -8,8 +8,8 @@
 //! - 协作式时间片
 
 use crate::backends::runtime::engine::{
-    sv, LocalRuntime, RuntimeError, RuntimeStats, TaskCancelReason, TaskMeta, TaskOutcome,
-    TaskPoll, TaskResult, ResourceKey,
+    sv, LocalRuntime, RuntimeError, TaskCancelReason, TaskMeta, TaskOutcome, TaskPoll, TaskResult,
+    ResourceKey,
 };
 use crate::backends::common::value::TaskId;
 use std::collections::HashMap;
@@ -177,10 +177,9 @@ fn multiple_failed_deps_are_merged_into_cancel_reason() {
     assert!(matches!(rt.outcome(b), Some(TaskOutcome::Err(_))));
 
     let (primary, others) = match rt.outcome(c) {
-        Some(TaskOutcome::Cancelled(TaskCancelReason::DependencyFailed {
-            primary,
-            others,
-        })) => (*primary, others.clone()),
+        Some(TaskOutcome::Cancelled(TaskCancelReason::DependencyFailed { primary, others })) => {
+            (*primary, others.clone())
+        }
         other => panic!("unexpected outcome for c: {other:?}"),
     };
 

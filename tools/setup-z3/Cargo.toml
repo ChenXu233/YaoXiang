@@ -1,0 +1,5 @@
+[package]
+name = "setup-z3"
+version = "0.1.0"
+edition = "2021"
+description = "Download Z3 pre-built binary for YaoXiang compiler"

@@ -17,13 +17,9 @@ fn empty_module() -> Module {
     }
 }
 
-fn make_block(
-    stmts: Vec<Stmt>,
-    expr: Option<Box<Expr>>,
-) -> Block {
+fn make_block(stmts: Vec<Stmt>) -> Block {
     Block {
         stmts,
-        expr,
         span: Span::dummy(),
     }
 }
@@ -31,7 +27,7 @@ fn make_block(
 fn spawn_stmt(body_stmts: Vec<Stmt>) -> Stmt {
     Stmt {
         kind: StmtKind::Expr(Box::new(Expr::Spawn {
-            body: Box::new(make_block(body_stmts, None)),
+            body: Box::new(make_block(body_stmts)),
             span: Span::dummy(),
         })),
         span: Span::dummy(),
@@ -121,7 +117,7 @@ fn test_spawn_in_for_body_allowed() {
                 var_span: Span::dummy(),
                 var_mut: false,
                 iterable: Box::new(Expr::Var("items".to_string(), Span::dummy())),
-                body: Box::new(make_block(vec![spawn_stmt(vec![])], None)),
+                body: Box::new(make_block(vec![spawn_stmt(vec![])])),
                 label: None,
             },
             span: Span::dummy(),

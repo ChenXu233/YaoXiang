@@ -85,6 +85,13 @@ pub fn format_stmt(
                 format_expr(rhs, ctx, source_map)
             )
         }
+        StmtKind::Return(expr_opt) => {
+            if let Some(expr) = expr_opt {
+                format!("return {}", format_expr(expr, ctx, source_map))
+            } else {
+                "return".to_string()
+            }
+        }
     }
 }
 
@@ -127,7 +134,7 @@ fn format_binding(
     generic_params: &[GenericParam],
     type_annotation: Option<&Type>,
     params: &[Param],
-    body: &(Vec<Stmt>, Option<Box<Expr>>),
+    body: &[Stmt],
     is_pub: bool,
     ctx: &FormatContext,
     source_map: &SourceMap,
@@ -137,8 +144,7 @@ fn format_binding(
         if let Some(mt) = method_type {
             let params_str = format_params(params, ctx, source_map);
             let body_block = Block {
-                stmts: body.0.clone(),
-                expr: body.1.clone(),
+                stmts: body.to_vec(),
                 span: crate::util::span::Span::dummy(),
             };
             return format!(
@@ -186,8 +192,7 @@ fn format_binding(
     let params_str = format_params(params, ctx, source_map);
 
     let body_block = Block {
-        stmts: body.0.clone(),
-        expr: body.1.clone(),
+        stmts: body.to_vec(),
         span: crate::util::span::Span::dummy(),
     };
 

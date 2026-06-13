@@ -34,6 +34,7 @@ use crate::std::{NativeContext, NativeHandler};
 /// });
 /// let result = registry.call("my_func", &[]);
 /// ```
+#[derive(Clone)]
 pub struct FfiRegistry {
     /// Function handler table: name -> handler
     handlers: HashMap<String, NativeHandler>,

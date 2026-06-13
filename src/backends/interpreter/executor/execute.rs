@@ -10,11 +10,12 @@ use crate::middle::bytecode::{
 };
 use crate::backends::interpreter::Frame;
 use crate::backends::interpreter::frames::MAX_LOCALS;
-use crate::backends::runtime::RuntimeMode;
-use crate::backends::runtime::engine::{LocalRuntime, ResourceKey, TaskMeta};
+use crate::backends::runtime::{Runtime, RuntimeMode};
+use crate::backends::runtime::facade::RuntimeConfig;
+use crate::backends::runtime::engine::{ResourceKey, TaskMeta};
 use crate::util::i18n::MSG;
 use crate::tlog;
-use super::executor::{Interpreter, InterpreterTask};
+use super::executor::{Interpreter, InterpreterTask, SharedState};
 
 impl Executor for Interpreter {
     fn execute_module(
@@ -39,6 +40,16 @@ impl Executor for Interpreter {
 
         // Add types
         self.type_table.extend(module.type_table.clone());
+
+        // Create shared state for parallel task execution
+        let shared = Box::new(SharedState {
+            functions: self.functions.clone(),
+            functions_by_id: self.functions_by_id.clone(),
+            constants: self.constants.clone(),
+            type_table: self.type_table.clone(),
+            ffi: self.ffi.clone(),
+        });
+        self.shared = Box::into_raw(shared);
 
         // Execute entry point
         if let Some(entry_idx) = module.entry_point {
@@ -130,89 +141,201 @@ impl Executor for Interpreter {
                 BytecodeInstr::Spawn {
                     dst: _,
                     closures,
-                    group_count,
+                    task_deps,
+                    task_resources,
                 } => {
-                    // Spawn: 按编译期执行计划分组执行闭包
-                    // - group_count[i] 表示第 i 组有多少个闭包
-                    // - closures 按组顺序排列
-                    // - 组内并行（或串行），组间串行
+                    // Spawn: 按编译期执行计划执行闭包
+                    // - task_deps[i] = 任务 i 依赖的任务索引列表
+                    // - task_resources[i] = 任务 i 使用的资源变量名列表
                     // 注意：dst (result_reg) 已由 trailing expression 在 Spawn 之前设置，
                     // 此处不覆盖。若无 trailing expression，dst 保持默认 Unit。
                     let closures = closures.clone();
-                    let group_count = group_count.clone();
+                    let task_deps = task_deps.clone();
+                    let task_resources = task_resources.clone();
 
                     let runtime = self.runtime_config.runtime;
-                    let mut closure_idx: usize = 0;
 
-                    for &group_size in &group_count {
-                        let group_end = closure_idx + group_size as usize;
+                    if matches!(runtime, RuntimeMode::Embedded) {
+                        // Embedded 模式：无 DAG 调度器，直接顺序执行闭包
+                        for (i, func_reg) in closures.iter().enumerate() {
+                            let closure_val = self.force_register(&mut frame, *func_reg)?;
+                            let RuntimeValue::Function(func_value) = closure_val else {
+                                let stack = self.capture_stack();
+                                return Err(ExecutorError::type_error(
+                                    "spawn expects a function value".to_string(),
+                                    stack,
+                                ));
+                            };
 
-                        if matches!(runtime, RuntimeMode::Embedded) {
-                            // Embedded 模式：无 DAG 调度器，直接顺序执行闭包
-                            while closure_idx < group_end && closure_idx < closures.len() {
-                                let func_reg = closures[closure_idx];
-                                let closure_val = self.force_register(&mut frame, func_reg)?;
-                                let RuntimeValue::Function(func_value) = closure_val else {
-                                    let stack = self.capture_stack();
-                                    return Err(ExecutorError::type_error(
-                                        "spawn expects a function value".to_string(),
-                                        stack,
-                                    ));
-                                };
+                            let _result =
+                                self.call_function_by_id(func_value.func_id, &func_value.env)?;
 
-                                // 闭包无参，环境变量作为参数传入
-                                let result =
-                                    self.call_function_by_id(func_value.func_id, &func_value.env)?;
+                            // 将闭包结果存回闭包寄存器（覆盖 lambda）
+                            frame.set_register(func_reg.0 as usize, _result);
+                            let _ = (i, &task_deps, &task_resources);
+                        }
+                    } else {
+                        // Standard/Full 模式：使用 DAG 调度器并行执行
+                        let mut task_ids: Vec<(Reg, TaskId)> = Vec::new();
 
-                                // 将闭包结果存回闭包寄存器（覆盖 lambda）
-                                frame.set_register(func_reg.0 as usize, result);
+                        for (i, func_reg) in closures.iter().enumerate() {
+                            let closure_val = self.force_register(&mut frame, *func_reg)?;
+                            let RuntimeValue::Function(func_value) = closure_val else {
+                                let stack = self.capture_stack();
+                                return Err(ExecutorError::type_error(
+                                    "spawn expects a function value".to_string(),
+                                    stack,
+                                ));
+                            };
 
-                                closure_idx += 1;
-                            }
-                        } else {
-                            // Standard/Full 模式：使用 DAG 调度器并行执行
-                            let mut group_tasks: Vec<(Reg, TaskId)> = Vec::new();
+                            let call_args: Vec<RuntimeValue> = func_value.env.clone();
+                            let mut deps = self.deps_from_args(&call_args);
 
-                            while closure_idx < group_end && closure_idx < closures.len() {
-                                let func_reg = closures[closure_idx];
-                                let closure_val = self.force_register(&mut frame, func_reg)?;
-                                let RuntimeValue::Function(func_value) = closure_val else {
-                                    let stack = self.capture_stack();
-                                    return Err(ExecutorError::type_error(
-                                        "spawn expects a function value".to_string(),
-                                        stack,
-                                    ));
-                                };
-
-                                // 闭包无参，环境变量作为参数传入
-                                let call_args: Vec<RuntimeValue> = func_value.env.clone();
-                                let deps = self.deps_from_args(&call_args);
-                                let task_id = self.schedule_task(
-                                    InterpreterTask::Dyn {
-                                        func: func_value.clone(),
-                                        args: call_args,
-                                    },
-                                    TaskMeta {
-                                        deps,
-                                        label: Some(Arc::<str>::from("spawn")),
-                                        ..TaskMeta::default()
-                                    },
-                                )?;
-
-                                frame.record_spawned_task(task_id);
-                                group_tasks.push((func_reg, task_id));
-
-                                closure_idx += 1;
+                            // 从 task_deps 添加编译期依赖边
+                            if let Some(task_dep_indices) = task_deps.get(i) {
+                                for &dep_idx in task_dep_indices {
+                                    if let Some((_, dep_task_id)) = task_ids.get(dep_idx as usize) {
+                                        deps.push(*dep_task_id);
+                                    }
+                                }
                             }
 
-                            // 等待本组所有任务完成，收集结果
-                            for (func_reg, task_id) in &group_tasks {
-                                let mut v = self.make_async_pending(*task_id);
-                                self.force_value_in_place(&mut v)?;
+                            // 从 task_resources 构建资源列表
+                            let resources: Vec<ResourceKey> = task_resources
+                                .get(i)
+                                .map(|rs| rs.iter().map(|r| ResourceKey::new(r.as_str())).collect())
+                                .unwrap_or_default();
 
-                                // 将闭包结果存回闭包寄存器（覆盖 lambda）
-                                frame.set_register(func_reg.0 as usize, v);
+                            let task_id = self.schedule_task(
+                                InterpreterTask::Dyn {
+                                    func: func_value.clone(),
+                                    args: call_args,
+                                },
+                                TaskMeta {
+                                    deps,
+                                    resources,
+                                    label: Some(Arc::<str>::from("spawn")),
+                                },
+                            )?;
+
+                            frame.record_spawned_task(task_id);
+                            task_ids.push((*func_reg, task_id));
+                        }
+
+                        // 等待所有任务完成，收集结果
+                        for (func_reg, task_id) in &task_ids {
+                            let mut v = self.make_async_pending(*task_id);
+                            self.force_value_in_place(&mut v)?;
+
+                            // 将闭包结果存回闭包寄存器（覆盖 lambda）
+                            frame.set_register(func_reg.0 as usize, v);
+                        }
+                    }
+
+                    frame.advance();
+                }
+                BytecodeInstr::SpawnFromList {
+                    dst: _,
+                    closures_list,
+                    task_deps,
+                    task_resources,
+                } => {
+                    // SpawnFromList: 从 List 寄存器动态读取闭包并 spawn
+                    // closures_list 寄存器包含一个 List<Function>，逐个读取并 spawn
+                    let closures_list = *closures_list;
+                    let task_deps = task_deps.clone();
+                    let task_resources = task_resources.clone();
+
+                    // 从 closures_list 寄存器获取 List 值
+                    let list_val = self.force_register(&mut frame, closures_list)?;
+                    let closures: Vec<RuntimeValue> = match list_val {
+                        RuntimeValue::List(handle) => match self.heap.get(handle) {
+                            Some(HeapValue::List(items)) => items.clone(),
+                            _ => {
+                                let stack = self.capture_stack();
+                                return Err(ExecutorError::type_error(
+                                    "spawn_from_list expects a list value".to_string(),
+                                    stack,
+                                ));
                             }
+                        },
+                        _ => {
+                            let stack = self.capture_stack();
+                            return Err(ExecutorError::type_error(
+                                "spawn_from_list expects a list value".to_string(),
+                                stack,
+                            ));
+                        }
+                    };
+
+                    let runtime = self.runtime_config.runtime;
+
+                    if matches!(runtime, RuntimeMode::Embedded) {
+                        // Embedded 模式：顺序执行
+                        for closure_val in closures.iter() {
+                            let RuntimeValue::Function(func_value) = closure_val else {
+                                let stack = self.capture_stack();
+                                return Err(ExecutorError::type_error(
+                                    "spawn_from_list expects function values in list".to_string(),
+                                    stack,
+                                ));
+                            };
+
+                            let _result =
+                                self.call_function_by_id(func_value.func_id, &func_value.env)?;
+                            let _ = (&task_deps, &task_resources);
+                        }
+                    } else {
+                        // Standard/Full 模式：使用 DAG 调度器并行执行
+                        let mut spawned_tasks: Vec<TaskId> = Vec::new();
+
+                        for (i, closure_val) in closures.iter().enumerate() {
+                            let RuntimeValue::Function(func_value) = closure_val else {
+                                let stack = self.capture_stack();
+                                return Err(ExecutorError::type_error(
+                                    "spawn_from_list expects function values in list".to_string(),
+                                    stack,
+                                ));
+                            };
+
+                            let call_args: Vec<RuntimeValue> = func_value.env.clone();
+                            let mut deps = self.deps_from_args(&call_args);
+
+                            // 从 task_deps 添加编译期依赖边
+                            if let Some(task_dep_indices) = task_deps.get(i) {
+                                for &dep_idx in task_dep_indices {
+                                    if let Some(dep_task_id) = spawned_tasks.get(dep_idx as usize) {
+                                        deps.push(*dep_task_id);
+                                    }
+                                }
+                            }
+
+                            // 从 task_resources 构建资源列表
+                            let resources: Vec<ResourceKey> = task_resources
+                                .get(i)
+                                .map(|rs| rs.iter().map(|r| ResourceKey::new(r.as_str())).collect())
+                                .unwrap_or_default();
+
+                            let task_id = self.schedule_task(
+                                InterpreterTask::Dyn {
+                                    func: func_value.clone(),
+                                    args: call_args,
+                                },
+                                TaskMeta {
+                                    deps,
+                                    resources,
+                                    label: Some(Arc::<str>::from("spawn_from_list")),
+                                },
+                            )?;
+
+                            frame.record_spawned_task(task_id);
+                            spawned_tasks.push(task_id);
+                        }
+
+                        // 等待所有任务完成
+                        for task_id in &spawned_tasks {
+                            let mut v = self.make_async_pending(*task_id);
+                            self.force_value_in_place(&mut v)?;
                         }
                     }
 
@@ -350,7 +473,8 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::Compare { dst, lhs, rhs, cmp } => {
-                    self.exec_compare(*dst, *lhs, *rhs, *cmp, &mut frame)?;
+                    let (d, l, r, c) = (*dst, *lhs, *rhs, *cmp);
+                    self.exec_compare(d, l, r, c, &mut frame)?;
                     frame.advance();
                 }
                 BytecodeInstr::UnaryOp { dst, src, op } => {
@@ -1204,8 +1328,12 @@ impl Executor for Interpreter {
         self.call_stack.clear();
         self.state = ExecutionState::default();
         self.breakpoints.clear();
-        self.rt_dag = LocalRuntime::new();
-        self.rt_tasks.clear();
+        self.rt = Runtime::new(RuntimeConfig {
+            mode: self.runtime_config.runtime,
+            workers: self.runtime_config.workers,
+            work_stealing: self.runtime_config.work_stealing,
+        })
+        .unwrap_or_else(|_| Runtime::new(RuntimeConfig::default()).unwrap());
     }
 
     fn state(&self) -> &ExecutionState {

@@ -207,7 +207,6 @@ fn test_format_empty_block() {
     let ctx = default_ctx();
     let block = Block {
         stmts: vec![],
-        expr: None,
         span: Span::dummy(),
     };
     let result = format_block(&block, &ctx, &default_source_map());
@@ -224,7 +223,6 @@ fn test_format_single_stmt_block_inline() {
             kind: StmtKind::Expr(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
             span: Span::dummy(),
         }],
-        expr: None,
         span: Span::dummy(),
     };
     let result = format_block(&block, &ctx, &default_source_map());
@@ -243,7 +241,6 @@ fn test_format_single_stmt_block_multiline_when_long() {
             kind: StmtKind::Expr(Box::new(Expr::Var(long_name.to_string(), Span::dummy()))),
             span: Span::dummy(),
         }],
-        expr: None,
         span: Span::dummy(),
     };
     let result = format_block(&block, &ctx, &default_source_map());
@@ -318,11 +315,13 @@ fn test_format_match_basic() {
             MatchArm {
                 pattern: Pattern::Literal(Literal::Int(1)),
                 body: Block {
-                    stmts: vec![],
-                    expr: Some(Box::new(Expr::Lit(
-                        Literal::String("one".to_string()),
-                        Span::dummy(),
-                    ))),
+                    stmts: vec![Stmt {
+                        kind: StmtKind::Expr(Box::new(Expr::Lit(
+                            Literal::String("one".to_string()),
+                            Span::dummy(),
+                        ))),
+                        span: Span::dummy(),
+                    }],
                     span: Span::dummy(),
                 },
                 span: Span::dummy(),
@@ -330,11 +329,13 @@ fn test_format_match_basic() {
             MatchArm {
                 pattern: Pattern::Wildcard,
                 body: Block {
-                    stmts: vec![],
-                    expr: Some(Box::new(Expr::Lit(
-                        Literal::String("other".to_string()),
-                        Span::dummy(),
-                    ))),
+                    stmts: vec![Stmt {
+                        kind: StmtKind::Expr(Box::new(Expr::Lit(
+                            Literal::String("other".to_string()),
+                            Span::dummy(),
+                        ))),
+                        span: Span::dummy(),
+                    }],
                     span: Span::dummy(),
                 },
                 span: Span::dummy(),
@@ -406,8 +407,10 @@ fn test_format_try_operator() {
 fn test_format_unsafe_block() {
     let expr = Expr::Unsafe {
         body: Box::new(Block {
-            stmts: vec![],
-            expr: Some(Box::new(Expr::Var("x".to_string(), Span::dummy()))),
+            stmts: vec![Stmt {
+                kind: StmtKind::Expr(Box::new(Expr::Var("x".to_string(), Span::dummy()))),
+                span: Span::dummy(),
+            }],
             span: Span::dummy(),
         }),
         span: Span::dummy(),

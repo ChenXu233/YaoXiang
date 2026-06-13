@@ -90,7 +90,6 @@ fn make_while(
         condition,
         body: Box::new(Block {
             stmts: body_stmts,
-            expr: None,
             span: dummy_span(),
         }),
         label: None,
@@ -110,7 +109,6 @@ fn make_for(
         iterable,
         body: Box::new(Block {
             stmts: body_stmts,
-            expr: None,
             span: dummy_span(),
         }),
         label: None,
@@ -181,7 +179,6 @@ fn test_while_constant_condition_fails() {
         condition: Box::new(Expr::Lit(Literal::Bool(true), dummy_span())),
         body: Box::new(Block {
             stmts: vec![*body_stmt],
-            expr: None,
             span: dummy_span(),
         }),
         label: None,
@@ -305,7 +302,6 @@ fn test_nested_while_inner_fails() {
         condition: Box::new(Expr::Lit(Literal::Bool(true), dummy_span())),
         body: Box::new(Block {
             stmts: vec![],
-            expr: None,
             span: dummy_span(),
         }),
         label: None,

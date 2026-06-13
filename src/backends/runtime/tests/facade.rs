@@ -8,9 +8,7 @@
 //! - 协作式时间片
 
 use crate::backends::runtime::engine::{sv, TaskMeta, TaskOutcome, TaskPoll, TaskResult};
-use crate::backends::runtime::facade::{
-    Runtime, RuntimeConfig, RuntimeMode, TaskFn, CoopTaskFn,
-};
+use crate::backends::runtime::facade::{Runtime, RuntimeConfig, RuntimeMode};
 use crate::backends::common::value::TaskId;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -23,6 +21,7 @@ fn ok_i32(v: i32) -> TaskResult {
 fn standard_and_full_match_for_workers_1() {
     let mut std_rt = Runtime::new(RuntimeConfig {
         mode: RuntimeMode::Standard,
+        workers: 1,
         ..RuntimeConfig::default()
     })
     .unwrap();
@@ -34,7 +33,7 @@ fn standard_and_full_match_for_workers_1() {
     .unwrap();
 
     let a1 = std_rt
-        .spawn(TaskMeta::default(), Box::new(|| ok_i32(1)))
+        .spawn(TaskMeta::default(), Box::new(|_h| ok_i32(1)))
         .unwrap();
     let b1 = std_rt
         .spawn(
@@ -42,12 +41,12 @@ fn standard_and_full_match_for_workers_1() {
                 deps: vec![a1],
                 ..TaskMeta::default()
             },
-            Box::new(|| ok_i32(2)),
+            Box::new(|_h| ok_i32(2)),
         )
         .unwrap();
 
     let a2 = full_rt
-        .spawn(TaskMeta::default(), Box::new(|| ok_i32(1)))
+        .spawn(TaskMeta::default(), Box::new(|_h| ok_i32(1)))
         .unwrap();
     let b2 = full_rt
         .spawn(
@@ -55,7 +54,7 @@ fn standard_and_full_match_for_workers_1() {
                 deps: vec![a2],
                 ..TaskMeta::default()
             },
-            Box::new(|| ok_i32(2)),
+            Box::new(|_h| ok_i32(2)),
         )
         .unwrap();
 
@@ -84,7 +83,7 @@ fn full_runtime_runs_tasks_in_parallel_when_workers_gt_1() {
             Box::new({
                 let started_tx = started_tx.clone();
                 let cont_rx = cont_rx.clone();
-                move || {
+                move |_h| {
                     started_tx.send(std::thread::current().id()).unwrap();
                     cont_rx.recv().unwrap();
                     ok_i32(1)
@@ -98,7 +97,7 @@ fn full_runtime_runs_tasks_in_parallel_when_workers_gt_1() {
             Box::new({
                 let started_tx = started_tx.clone();
                 let cont_rx = cont_rx.clone();
-                move || {
+                move |_h| {
                     started_tx.send(std::thread::current().id()).unwrap();
                     cont_rx.recv().unwrap();
                     ok_i32(2)
@@ -162,7 +161,7 @@ fn full_runtime_serializes_tasks_with_same_resource_key() {
             Box::new({
                 let started_tx = started_tx.clone();
                 let cont_rx = cont_rx.clone();
-                move || {
+                move |_h| {
                     started_tx.send(TaskId(1)).unwrap();
                     cont_rx.recv().unwrap();
                     ok_i32(1)
@@ -179,7 +178,7 @@ fn full_runtime_serializes_tasks_with_same_resource_key() {
             Box::new({
                 let started_tx = started_tx.clone();
                 let cont_rx = cont_rx.clone();
-                move || {
+                move |_h| {
                     started_tx.send(TaskId(2)).unwrap();
                     cont_rx.recv().unwrap();
                     ok_i32(2)
@@ -238,7 +237,7 @@ fn work_stealing_toggle_does_not_change_correctness() {
         .unwrap();
 
         let a = rt
-            .spawn(TaskMeta::default(), Box::new(|| ok_i32(1)))
+            .spawn(TaskMeta::default(), Box::new(|_h| ok_i32(1)))
             .unwrap();
         let b = rt
             .spawn(
@@ -246,7 +245,7 @@ fn work_stealing_toggle_does_not_change_correctness() {
                     deps: vec![a],
                     ..TaskMeta::default()
                 },
-                Box::new(|| ok_i32(2)),
+                Box::new(|_h| ok_i32(2)),
             )
             .unwrap();
         rt.await_task(b).unwrap()
@@ -333,4 +332,33 @@ fn standard_runtime_coop_tasks_time_slice_fairly() {
     assert_eq!(*order.lock().unwrap(), vec!["a", "b", "a", "b", "a", "b"]);
     assert!(matches!(rt.outcome(a), Some(TaskOutcome::Ok(_))));
     assert!(matches!(rt.outcome(b), Some(TaskOutcome::Ok(_))));
+}
+
+#[test]
+fn standard_runtime_nested_spawn() {
+    let mut rt = Runtime::new(RuntimeConfig {
+        mode: RuntimeMode::Standard,
+        workers: 2,
+        ..RuntimeConfig::default()
+    })
+    .unwrap();
+
+    let a = rt
+        .spawn(
+            TaskMeta::default(),
+            Box::new(|handle| {
+                // Nested spawn: spawn a child task from within a task.
+                let child_id = handle
+                    .spawn(TaskMeta::default(), Box::new(|_h| ok_i32(42)))
+                    .unwrap();
+                // Note: In a real scenario, the child would be tracked and awaited.
+                // For this test, we just verify the spawn succeeds.
+                ok_i32(child_id.0 as i32)
+            }),
+        )
+        .unwrap();
+
+    rt.drive_until(Some(a)).unwrap();
+
+    assert!(matches!(rt.outcome(a), Some(TaskOutcome::Ok(_))));
 }

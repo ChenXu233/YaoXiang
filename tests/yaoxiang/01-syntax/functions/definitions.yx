@@ -1,0 +1,34 @@
+// 01-syntax/functions/definitions.yx
+// 覆盖: 规范 §6.3 函数定义
+// 验证: 带类型标注的函数定义 (RFC-010 语法)
+// 状态: ✅ 可运行
+
+use std.io
+
+// 函数定义：参数名在签名中
+add: (a: Int, b: Int) -> Int = (a, b) => {
+    return a + b
+}
+
+// 单行函数体
+inc: (x: Int) -> Int = (x) => {
+    return x + 1
+}
+
+// 无参函数
+greet: () -> String = () => {
+    return "Hello"
+}
+
+main = {
+    r1 = add(3, 4)
+    io.println(r1)
+
+    r2 = inc(41)
+    io.println(r2)
+
+    msg = greet()
+    io.println(msg)
+
+    io.println("ALL TESTS PASSED")
+}

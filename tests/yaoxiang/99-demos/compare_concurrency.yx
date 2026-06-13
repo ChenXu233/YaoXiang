@@ -1,0 +1,22 @@
+// 99-demos/compare_concurrency.yx
+// 论文对比 3：并发共享 — 无需 Send/Sync/Arc/Clone
+// Rust 等效: Arc::new(data) + clone() + tokio::spawn + async move
+// YaoXiang: ref 关键字 + spawn {} 块
+
+use std.io
+
+main = {
+    data = 100
+
+    // ref: 编译器自动选 Rc（单线程）或 Arc（跨线程）
+    shared = ref data
+
+    result = spawn {
+        a = shared    // 共享引用，自动推导跨线程 → Arc
+        b = shared    // ref 是 Dup 类型，可自由复制
+        return (a, b)
+    }
+
+    io.println(result)
+    io.println("ALL TESTS PASSED")
+}

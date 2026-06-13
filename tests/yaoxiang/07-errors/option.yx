@@ -1,9 +1,0 @@
-// 07-errors/option.yx
-// 覆盖: 规范 §9.2 Option 类型
-// 验证: Option 的基本使用
-// 状态: 🔴 未实现
-
-use std.io
-main = {
-    io.println("ALL TESTS PASSED")
-}

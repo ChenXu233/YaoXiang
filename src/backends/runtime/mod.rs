@@ -13,8 +13,13 @@ pub mod engine;
 pub mod facade;
 pub mod task;
 
+#[cfg(test)]
+mod tests;
+
 pub use engine::TaskPoll;
-pub use facade::{CoopTaskFn, Runtime, RuntimeConfig, RuntimeFacadeError, RuntimeMode, TaskFn};
+pub use facade::{
+    CoopTaskFn, Runtime, RuntimeConfig, RuntimeFacadeError, RuntimeMode, SpawnHandle, TaskFn,
+};
 
 pub use task::{
     Task, TaskId, TaskContext, TaskPriority, TaskConfig, TaskSpawner, TaskState, Scheduler,

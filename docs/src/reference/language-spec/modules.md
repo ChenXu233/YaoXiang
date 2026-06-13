@@ -14,7 +14,7 @@
 // 文件名即为模块名
 // Math.yx
 pub pi: Float = 3.14159
-pub sqrt(Float) -> Float = (x) => { ... }
+pub sqrt: (x: Float) -> Float = (x) => { ... }
 ```
 
 ### 1.2 模块命名规则

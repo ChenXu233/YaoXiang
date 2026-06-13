@@ -1,4 +1,13 @@
 {
+  "_meta": {
+    "lang": "zh-classical",
+    "name": "文言文",
+    "description": "文言文风格的翻译",
+    "prompt": "翻译成文言文风格，使用古汉语表达",
+    "source": "zh",
+    "version": 1,
+    "lastUpdated": "2026-06-13T00:00:00Z"
+  },
   "cmd_received": "善，指令已收悉",
   "run_file": "运行此文件",
   "reading_file": "正在读取文件：{0}",

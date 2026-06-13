@@ -1423,11 +1423,7 @@ impl<'a> ExpressionInferrer<'a> {
 
             // Unsafe 块
             crate::frontend::core::parser::ast::Expr::Unsafe { body, .. } => {
-                if let Some(last_expr) = &body.expr {
-                    self.infer_expr(last_expr)
-                } else {
-                    Ok(MonoType::Void)
-                }
+                self.infer_block(body, false, None)
             }
 
             // spawn 块：spawn { ... }
@@ -1566,10 +1562,17 @@ impl<'a> ExpressionInferrer<'a> {
 
         for stmt in &block.stmts {
             // 检查语句是否包含 return 表达式
-            if let crate::frontend::core::parser::ast::StmtKind::Expr(ref expr_stmt) = stmt.kind {
-                if let Some(ty) = self.collect_return_type(expr_stmt)? {
+            match &stmt.kind {
+                crate::frontend::core::parser::ast::StmtKind::Expr(ref expr_stmt) => {
+                    if let Some(ty) = self.collect_return_type(expr_stmt)? {
+                        return_type = Some(ty);
+                    }
+                }
+                crate::frontend::core::parser::ast::StmtKind::Return(Some(ref ret_expr)) => {
+                    let ty = self.infer_expr(ret_expr)?;
                     return_type = Some(ty);
                 }
+                _ => {}
             }
             self.infer_stmt(stmt)?;
         }
@@ -1657,7 +1660,7 @@ impl<'a> ExpressionInferrer<'a> {
             crate::frontend::core::parser::ast::StmtKind::Binding {
                 name,
                 params,
-                body: (stmts, expr),
+                body,
                 type_annotation,
                 ..
             } => {
@@ -1692,8 +1695,7 @@ impl<'a> ExpressionInferrer<'a> {
                     }
 
                     let block = crate::frontend::core::parser::ast::Block {
-                        stmts: stmts.clone(),
-                        expr: expr.clone(),
+                        stmts: body.clone(),
                         span: stmt.span,
                     };
                     let _ = self.infer_block(&block, true, Some(&return_type))?;

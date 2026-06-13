@@ -162,7 +162,7 @@ impl ModuleLoader {
                     is_pub,
                     ..
                 } => {
-                    let is_type_def = params.is_empty() && body.0.is_empty() && body.1.is_none();
+                    let is_type_def = params.is_empty() && body.is_empty();
                     if let Some(ty_name) = type_name {
                         // 方法绑定：pub 导出为 Type.method
                         if *is_pub {

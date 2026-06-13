@@ -304,9 +304,9 @@ read_file: (path: FilePath) -> Result(String, IoError) = {
 
 ```yaoxiang
 AppError: Type = {
-    Http: (HttpError) -> Self,
-    Io: (IoError) -> Self,
-    Parse: (ParseError) -> Self
+    Http: (http_error: HttpError) -> AppError,
+    Io: (io_error: IoError) -> AppError,
+    Parse: (parse_error: ParseError) -> AppError
 }
 
 process: (url: String, path: FilePath) -> Result(Data, AppError) = {
@@ -466,8 +466,10 @@ spawn {
 
 ### 7.3 迁移指南
 
+> **废弃说明**：以下旧代码示例仅用于展示迁移方向。`@block`、`@eager`、`@auto`、`let`、`await`、`Future` 均不是 YaoXiang 关键字，已在新设计中移除。
+
 ```yaoxiang
-// 旧代码（伪代码，展示旧模型风格；@block/let/await 不是 YaoXiang 关键字）
+// 旧代码（伪代码，展示旧模型风格）
 @block async fetch_data(): Future<Data> = {
     let data = await fetch("url")
     return data

@@ -22,6 +22,8 @@ pub enum PipelineError {
     TypeCheck(Diagnostic),
     /// IR 生成错误
     IRGeneration(String),
+    /// 证明函数执行错误（RFC-027 Phase 2.5）
+    ProofExecution(String),
 }
 
 impl fmt::Display for PipelineError {
@@ -33,6 +35,7 @@ impl fmt::Display for PipelineError {
             PipelineError::LexParse(msg) => write!(f, "{}", msg),
             PipelineError::TypeCheck(err) => write!(f, "{}", err),
             PipelineError::IRGeneration(msg) => write!(f, "{}", msg),
+            PipelineError::ProofExecution(msg) => write!(f, "{}", msg),
         }
     }
 }
@@ -59,6 +62,8 @@ pub enum PipelineState {
     Parsing,
     /// 类型检查中
     TypeChecking,
+    /// 证明函数执行中（RFC-027 Phase 2.5）
+    ProofExecuting,
     /// IR 生成中
     IRGenerating,
     /// 编译完成
@@ -79,6 +84,7 @@ impl std::fmt::Display for PipelineState {
             PipelineState::Lexing => write!(f, "lexing"),
             PipelineState::Parsing => write!(f, "parsing"),
             PipelineState::TypeChecking => write!(f, "type checking"),
+            PipelineState::ProofExecuting => write!(f, "proof executing"),
             PipelineState::IRGenerating => write!(f, "IR generating"),
             PipelineState::Completed => write!(f, "completed"),
             PipelineState::Failed => write!(f, "failed"),
@@ -346,6 +352,28 @@ impl Pipeline {
             );
         }
 
+        // RFC-027 Phase 2.5: 证明函数执行循环
+        // 在类型检查通过后、IR 生成前，执行编译期证明函数
+        if !typecheck_result.type_result.proof_calls.is_empty() {
+            let proof_result = self.run_proof_execution(
+                &typecheck_result.type_result.proof_calls,
+                &parse_result.ast,
+                &typecheck_result.type_result,
+                &mut phase_durations,
+            );
+            if !proof_result.is_success() {
+                return CompilationResult::failed(
+                    proof_result
+                        .errors
+                        .into_iter()
+                        .map(PipelineError::ProofExecution)
+                        .collect(),
+                    phase_durations,
+                    start_time.elapsed().as_millis() as u64,
+                );
+            }
+        }
+
         let ir_result = self.run_ir_generation(
             source_name,
             source,
@@ -534,6 +562,58 @@ impl Pipeline {
             .collect()
     }
 
+    /// 证明函数执行阶段（RFC-027 Phase 2.5）
+    ///
+    /// 类型检查后、IR 生成前，执行编译期证明函数。
+    /// 每个证明函数被编译为字节码并在解释器中执行，返回 bool 结果。
+    /// 任何返回 false 的证明函数都会导致编译失败。
+    fn run_proof_execution(
+        &mut self,
+        proof_calls: &[typecheck::proof::verdict::ProofFunctionCall],
+        ast: &super::core::parser::ast::Module,
+        type_result: &typecheck::TypeCheckResult,
+        phase_durations: &mut Vec<(CompilationPhase, u64)>,
+    ) -> ProofExecResult {
+        let start = std::time::Instant::now();
+        self.state = PipelineState::ProofExecuting;
+
+        let mut failed_proofs = Vec::new();
+        let mut errors = Vec::new();
+
+        for call in proof_calls {
+            match execute_single_proof_fn(call, ast, type_result) {
+                Ok(true) => {
+                    // 证明通过，继续
+                }
+                Ok(false) => {
+                    failed_proofs.push(call.func_name.clone());
+                    errors.push(format!(
+                        "证明函数 '{}' 返回 false，约束不满足（参数: {:?}）",
+                        call.func_name, call.args,
+                    ));
+                }
+                Err(e) => {
+                    failed_proofs.push(call.func_name.clone());
+                    errors.push(format!("证明函数 '{}' 执行失败: {}", call.func_name, e,));
+                }
+            }
+        }
+
+        let duration = start.elapsed().as_millis() as u64;
+        phase_durations.push((CompilationPhase::ProofExecution, duration));
+
+        for err in &errors {
+            self.event_bus
+                .emit(ErrorOccurred::new(err.clone(), "E8002", ErrorLevel::Error));
+        }
+
+        if failed_proofs.is_empty() {
+            ProofExecResult::success()
+        } else {
+            ProofExecResult::failed(failed_proofs, errors)
+        }
+    }
+
     /// IR 生成阶段
     fn run_ir_generation(
         &mut self,
@@ -665,6 +745,106 @@ impl Pipeline {
     }
 }
 
+/// 执行单个证明函数（RFC-027 Phase 2.5）
+///
+/// 完整的编译→执行管线：AST 查找 → IR 生成 → 字节码编译 → 解释器执行
+pub(crate) fn execute_single_proof_fn(
+    call: &typecheck::proof::verdict::ProofFunctionCall,
+    ast: &super::core::parser::ast::Module,
+    type_result: &typecheck::TypeCheckResult,
+) -> Result<bool, String> {
+    use crate::backends::common::value::from_const_value;
+    use crate::backends::common::RuntimeValue;
+    use crate::backends::interpreter::Interpreter;
+    use crate::backends::Executor;
+    use crate::frontend::core::parser::ast::StmtKind;
+    use crate::middle;
+
+    // 1. 在 AST 中查找函数定义
+    let (params, body_stmts, type_ann) = ast
+        .items
+        .iter()
+        .find_map(|stmt| match &stmt.kind {
+            StmtKind::Binding {
+                name,
+                type_name,
+                type_annotation,
+                params,
+                body,
+                ..
+            } if *name == call.func_name && type_name.is_none() => {
+                Some((params.clone(), body.clone(), type_annotation.clone()))
+            }
+            _ => None,
+        })
+        .ok_or_else(|| format!("证明函数 '{}' 未在 AST 中找到", call.func_name))?;
+
+    // 2. IR 生成：单个函数 → FunctionIR
+    let mut ir_gen = middle::core::ir_gen::AstToIrGenerator::new_with_type_result(type_result);
+    let mut constants: Vec<middle::core::ir::ConstValue> = Vec::new();
+    let func_ir = ir_gen
+        .generate_function_ir(
+            &call.func_name,
+            type_ann.as_ref(),
+            &params,
+            &body_stmts,
+            &mut constants,
+        )
+        .map_err(|e| format!("证明函数 '{}' IR 生成失败: {}", call.func_name, e))?;
+
+    let func_ir = func_ir.ok_or_else(|| {
+        format!(
+            "证明函数 '{}' 是 native 函数，不能编译期执行",
+            call.func_name
+        )
+    })?;
+
+    // 3. 构造最小 ModuleIR（仅含一个函数）
+    let module_ir = middle::ModuleIR {
+        functions: vec![func_ir],
+        ..Default::default()
+    };
+
+    // 4. 字节码编译
+    let mut codegen = middle::passes::codegen::CodegenContext::new(module_ir);
+    let bytecode_file = codegen
+        .generate()
+        .map_err(|e| format!("证明函数 '{}' 字节码编译失败: {}", call.func_name, e))?;
+
+    let bytecode_module = crate::middle::core::bytecode::BytecodeModule::from(bytecode_file);
+
+    // 5. ConstValue → RuntimeValue
+    let args: Vec<RuntimeValue> = call.args.iter().map(from_const_value).collect();
+
+    // 6. 解释器执行
+    let mut interpreter = Interpreter::new();
+    // 先通过 execute_module 加载常量池和函数表
+    interpreter
+        .execute_module(&bytecode_module)
+        .map_err(|e| format!("证明函数 '{}' 模块加载失败: {}", call.func_name, e))?;
+    // 然后通过 call_function_by_id 执行具体函数（函数已在 execute_module 中注册）
+    let func_id = bytecode_module
+        .functions
+        .iter()
+        .position(|f| f.name == call.func_name)
+        .ok_or_else(|| format!("证明函数 '{}' 在模块中未找到", call.func_name))?;
+    let result = interpreter
+        .call_function_by_id(
+            crate::backends::common::value::FunctionId(func_id as u32),
+            &args,
+        )
+        .map_err(|e| format!("证明函数 '{}' 执行失败: {}", call.func_name, e))?;
+
+    // 7. 提取 bool
+    match result {
+        RuntimeValue::Bool(b) => Ok(b),
+        other => Err(format!(
+            "证明函数 '{}' 必须返回 Bool，实际返回: {:?}",
+            call.func_name, other
+        )),
+    }
+}
+
 /// 词法分析结果
 struct LexResult {
     tokens: Vec<super::core::lexer::Token>,
@@ -767,6 +947,37 @@ impl IRResult {
 
     fn failed(errors: Vec<Diagnostic>) -> Self {
         Self { ir: None, errors }
+    }
+
+    fn is_success(&self) -> bool {
+        self.errors.is_empty()
+    }
+}
+
+/// 证明函数执行结果
+struct ProofExecResult {
+    /// 执行失败的证明函数名
+    #[allow(dead_code)] // Phase 2.5: 将用于更详细的错误报告
+    failed_proofs: Vec<String>,
+    errors: Vec<String>,
+}
+
+impl ProofExecResult {
+    fn success() -> Self {
+        Self {
+            failed_proofs: Vec::new(),
+            errors: Vec::new(),
+        }
+    }
+
+    fn failed(
+        failed_proofs: Vec<String>,
+        errors: Vec<String>,
+    ) -> Self {
+        Self {
+            failed_proofs,
+            errors,
+        }
     }
 
     fn is_success(&self) -> bool {
