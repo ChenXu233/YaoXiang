@@ -1291,48 +1291,74 @@ impl TypeChecker {
         }
     }
 
-    /// 递归收集精化类型绑定检查
+    /// 两阶段精化类型检查（RFC-027 Phase 3.1）
     ///
-    /// 遍历所有语句块，对变量绑定的精化类型执行证明检查。
+    /// 阶段 1：遍历模块，构建 TypeDepGraph + 检查初始化绑定
+    /// 阶段 2：遍历赋值点，查询依赖图，生成 VC
     fn collect_refined_binding_checks(
         &self,
         module: &Module,
         proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
     ) {
+        use crate::frontend::core::typecheck::proof::dep_graph::TypeDepGraph;
+
+        let mut dep_graph = TypeDepGraph::new();
+        let mut shared_ctx =
+            crate::frontend::core::typecheck::proof::context::ProofContext::new(&self.env);
+
+        // 阶段 1：构建依赖图 + 初始绑定检查
         for stmt in &module.items {
-            self.collect_refined_binding_checks_from_stmt(stmt, proof_calls);
+            self.build_dep_graph_and_check_init(stmt, &mut dep_graph, &mut shared_ctx, proof_calls);
+        }
+
+        // 阶段 2：遍历赋值点，生成 VC
+        for stmt in &module.items {
+            self.check_assignments_with_deps(stmt, &dep_graph, &mut shared_ctx, proof_calls);
         }
     }
 
-    /// 从单个语句中收集精化类型绑定检查
-    fn collect_refined_binding_checks_from_stmt(
+    /// 阶段 1：递归遍历语句树——构建依赖图 + 检查初始化绑定
+    fn build_dep_graph_and_check_init(
         &self,
         stmt: &crate::frontend::core::parser::ast::Stmt,
+        dep_graph: &mut crate::frontend::core::typecheck::proof::dep_graph::TypeDepGraph,
+        shared_ctx: &mut crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
         proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
     ) {
+        use crate::frontend::core::parser::ast::StmtKind;
+
         match &stmt.kind {
-            crate::frontend::core::parser::ast::StmtKind::Var {
+            StmtKind::Var {
                 name,
                 type_annotation: Some(type_ann),
                 initializer,
                 ..
             } => {
-                // 将 AST 类型转换为 MonoType
                 let mono_ty = MonoType::from(type_ann.clone());
-                // 解析类型标注（可能包含精化类型）
                 let resolved_ty = self.resolve_type_annotation(&mono_ty);
 
-                // 如果解析出精化类型，检查约束
-                if let MonoType::Refined { .. } = &resolved_ty {
+                if let MonoType::Refined { constraint, .. } = &resolved_ty {
+                    // 构建依赖图：提取约束中的自由变量 → 记录 dep
+                    let free_vars = Self::extract_free_vars(constraint);
+                    for fv in &free_vars {
+                        if fv != name {
+                            dep_graph.add_dep(name, fv);
+                        }
+                    }
+
+                    // 检查初始化绑定
                     let mut bindings = HashMap::new();
-                    // 从初始化器获取值
                     if let Some(init_expr) = initializer {
-                        // 尝试从表达式中提取常量值
                         if let Some(const_val) = self.extract_const_value(init_expr) {
                             bindings.insert(name.clone(), const_val);
                         }
                     }
-                    let proof_result = self.check_refined_binding(&resolved_ty, &bindings);
+                    let proof_result =
+                        crate::frontend::core::typecheck::layers::predicate::check_predicate(
+                            shared_ctx,
+                            &resolved_ty,
+                            &bindings,
+                        );
                     if let ProofResult::Unproven {
                         proof_calls: calls, ..
                     } = &proof_result
@@ -1343,20 +1369,287 @@ impl TypeChecker {
                     }
                 }
             }
-            crate::frontend::core::parser::ast::StmtKind::Binding { body: stmts, .. } => {
-                // 递归处理函数体中的语句
+            StmtKind::Binding { body: stmts, .. } => {
                 for s in stmts {
-                    self.collect_refined_binding_checks_from_stmt(s, proof_calls);
+                    self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
                 }
             }
-            crate::frontend::core::parser::ast::StmtKind::Expr(expr) => {
-                // 处理表达式语句中的块
-                if let Expr::Block(block) = expr.as_ref() {
-                    for s in &block.stmts {
-                        self.collect_refined_binding_checks_from_stmt(s, proof_calls);
+            StmtKind::Expr(expr) => {
+                self.build_dep_graph_from_expr(expr.as_ref(), dep_graph, shared_ctx, proof_calls);
+            }
+            StmtKind::If {
+                then_branch,
+                elif_branches,
+                else_branch,
+                ..
+            } => {
+                for s in &then_branch.stmts {
+                    self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                }
+                for (_, body) in elif_branches {
+                    for s in &body.stmts {
+                        self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                    }
+                }
+                if let Some(else_body) = else_branch {
+                    for s in &else_body.stmts {
+                        self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
                     }
                 }
             }
+            StmtKind::For { body, .. } => {
+                for s in &body.stmts {
+                    self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// 从表达式递归构建依赖图（处理 While/Block/For 等包含语句的表达式）
+    fn build_dep_graph_from_expr(
+        &self,
+        expr: &crate::frontend::core::parser::ast::Expr,
+        dep_graph: &mut crate::frontend::core::typecheck::proof::dep_graph::TypeDepGraph,
+        shared_ctx: &mut crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
+        proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
+    ) {
+        match expr {
+            crate::frontend::core::parser::ast::Expr::Block(block) => {
+                for s in &block.stmts {
+                    self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                }
+            }
+            crate::frontend::core::parser::ast::Expr::While { body, .. } => {
+                for s in &body.stmts {
+                    self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                }
+            }
+            crate::frontend::core::parser::ast::Expr::For { body, .. } => {
+                for s in &body.stmts {
+                    self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                }
+            }
+            crate::frontend::core::parser::ast::Expr::If {
+                then_branch,
+                elif_branches,
+                else_branch,
+                ..
+            } => {
+                for s in &then_branch.stmts {
+                    self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                }
+                for (_, body) in elif_branches {
+                    for s in &body.stmts {
+                        self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                    }
+                }
+                if let Some(else_body) = else_branch {
+                    for s in &else_body.stmts {
+                        self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// 阶段 2：遍历赋值点，查询依赖图，生成 VC
+    fn check_assignments_with_deps(
+        &self,
+        stmt: &crate::frontend::core::parser::ast::Stmt,
+        dep_graph: &crate::frontend::core::typecheck::proof::dep_graph::TypeDepGraph,
+        shared_ctx: &mut crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
+        proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
+    ) {
+        use crate::frontend::core::parser::ast::StmtKind;
+
+        match &stmt.kind {
+            // 赋值语句：x = expr（有 initializer 的 Var）
+            StmtKind::Var {
+                name,
+                initializer: Some(_),
+                ..
+            } => {
+                let affected = dep_graph.affected_by(name);
+                if !affected.is_empty() {
+                    self.generate_vc_for_dependants(name, &affected, shared_ctx, proof_calls);
+                }
+            }
+            // 表达式赋值：i += 1（BinOp::Assign in expression position）
+            StmtKind::Expr(expr) => {
+                self.check_assign_expr_with_deps(expr.as_ref(), dep_graph, shared_ctx, proof_calls);
+            }
+            // 递归处理子语句
+            StmtKind::Binding { body: stmts, .. } => {
+                for s in stmts {
+                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                }
+            }
+            StmtKind::If {
+                then_branch,
+                elif_branches,
+                else_branch,
+                ..
+            } => {
+                for s in &then_branch.stmts {
+                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                }
+                for (_, body) in elif_branches {
+                    for s in &body.stmts {
+                        self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                    }
+                }
+                if let Some(else_body) = else_branch {
+                    for s in &else_body.stmts {
+                        self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                    }
+                }
+            }
+            StmtKind::For { body, .. } => {
+                for s in &body.stmts {
+                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// 检查表达式赋值中的依赖触发（处理 i += 1 等 BinOp::Assign）
+    fn check_assign_expr_with_deps(
+        &self,
+        expr: &crate::frontend::core::parser::ast::Expr,
+        dep_graph: &crate::frontend::core::typecheck::proof::dep_graph::TypeDepGraph,
+        shared_ctx: &mut crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
+        proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
+    ) {
+        match expr {
+            crate::frontend::core::parser::ast::Expr::BinOp {
+                op: crate::frontend::core::parser::ast::BinOp::Assign,
+                left,
+                ..
+            } => {
+                if let crate::frontend::core::parser::ast::Expr::Var(var_name, _) = left.as_ref() {
+                    let affected = dep_graph.affected_by(var_name);
+                    if !affected.is_empty() {
+                        self.generate_vc_for_dependants(
+                            var_name,
+                            &affected,
+                            shared_ctx,
+                            proof_calls,
+                        );
+                    }
+                }
+            }
+            // 递归处理子表达式中的语句（While/For body 等）
+            crate::frontend::core::parser::ast::Expr::Block(block) => {
+                for s in &block.stmts {
+                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                }
+            }
+            crate::frontend::core::parser::ast::Expr::While { body, .. } => {
+                for s in &body.stmts {
+                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                }
+            }
+            crate::frontend::core::parser::ast::Expr::For { body, .. } => {
+                for s in &body.stmts {
+                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// 为依赖变量生成验证条件并送入证明管道
+    ///
+    /// 当 x 被赋值时，对每个依赖 x 的变量 v：
+    /// 1. 从 TypeEnvironment 查找 v 的类型标注
+    /// 2. 调用 check_predicate() 验证约束
+    fn generate_vc_for_dependants(
+        &self,
+        assigned_var: &str,
+        affected: &[&str],
+        shared_ctx: &crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
+        proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
+    ) {
+        for dependant in affected {
+            // 从环境中查找 dependant 的类型
+            if let Some(poly_ty) = self.env.get_var(dependant) {
+                let mono_ty = &poly_ty.body;
+
+                // 只处理 Refined 类型
+                if let MonoType::Refined { constraint, .. } = mono_ty {
+                    // 构造 bindings：变量值未知 → SMT 符号化处理
+                    let bindings = HashMap::new();
+
+                    let proof_result =
+                        crate::frontend::core::typecheck::layers::predicate::check_predicate(
+                            shared_ctx, mono_ty, &bindings,
+                        );
+
+                    match &proof_result {
+                        ProofResult::Proved => {
+                            // VC 成立
+                        }
+                        ProofResult::Disproved(model) => {
+                            tracing::warn!(
+                                "VC 失败：变量 {} 被赋值后，{} 不满足类型 {}: 反例 {:?}",
+                                assigned_var,
+                                dependant,
+                                constraint,
+                                model.assignments,
+                            );
+                        }
+                        ProofResult::Unproven {
+                            proof_calls: calls, ..
+                        } => {
+                            if !calls.is_empty() {
+                                proof_calls.extend(calls.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// 从 ConstExpr 中提取所有自由变量名
+    ///
+    /// 遍历约束表达式树，收集所有 NamedVar 引用。
+    /// 用于构建 TypeDepGraph 时判断"x 的类型标注引用了 y"。
+    fn extract_free_vars(
+        expr: &crate::frontend::core::types::const_data::ConstExpr
+    ) -> Vec<String> {
+        let mut vars = Vec::new();
+        Self::collect_free_vars(expr, &mut vars);
+        vars
+    }
+
+    fn collect_free_vars(
+        expr: &crate::frontend::core::types::const_data::ConstExpr,
+        out: &mut Vec<String>,
+    ) {
+        match expr {
+            crate::frontend::core::types::const_data::ConstExpr::NamedVar(name) => {
+                out.push(name.clone());
+            }
+            crate::frontend::core::types::const_data::ConstExpr::Var(var) => {
+                out.push(var.to_string());
+            }
+            crate::frontend::core::types::const_data::ConstExpr::BinOp { left, right, .. } => {
+                Self::collect_free_vars(left, out);
+                Self::collect_free_vars(right, out);
+            }
+            crate::frontend::core::types::const_data::ConstExpr::UnOp { expr: inner, .. } => {
+                Self::collect_free_vars(inner, out);
+            }
+            crate::frontend::core::types::const_data::ConstExpr::Call { args, .. } => {
+                for a in args {
+                    Self::collect_free_vars(a, out);
+                }
+            }
+            // Lit, If, Range 不含变量引用
             _ => {}
         }
     }

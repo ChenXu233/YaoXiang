@@ -328,13 +328,10 @@ fn spawn_concurrent_standard_mode() {
         RuntimeMode::Standard,
         "runtime_config 应为 Standard 模式"
     );
-    assert_eq!(
-        interp.runtime_config().workers,
-        1,
-        "workers 应为 1"
-    );
+    assert_eq!(interp.runtime_config().workers, 1, "workers 应为 1");
 
     // 执行模块：Spawn 应通过 DAG 调度器执行两个闭包
+    // 注意：由于 set_runtime_config 不自动重建 rt，需要调用 reset() 来同步
     let result = interp.execute_module(&module);
 
     assert!(
@@ -349,9 +346,5 @@ fn spawn_concurrent_standard_mode() {
         RuntimeMode::Standard,
         "runtime_config 应为 Standard 模式"
     );
-    assert_eq!(
-        interp.runtime_config().workers,
-        1,
-        "workers 应为 1"
-    );
+    assert_eq!(interp.runtime_config().workers, 1, "workers 应为 1");
 }
