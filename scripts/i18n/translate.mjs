@@ -8,8 +8,7 @@ import { loadConfig, loadGlossary } from './config.mjs';
 import { loadCache, saveCache, getKeysToTranslate, updateCache } from './cache.mjs';
 import { translateBatch } from './ai.mjs';
 import { resolveLanguagePrompt } from './prompt.mjs';
-import * as localesAdapter from './adapters/locales.mjs';
-import * as diagnosticAdapter from './adapters/diagnostic.mjs';
+import { getAdapter } from './adapters/index.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../..');
@@ -37,50 +36,32 @@ loadDotEnv();
 const args = process.argv.slice(2);
 const isFullTranslate = args.includes('--full');
 
-// 翻译系统定义
-const SYSTEMS = [
-  {
-    name: 'locales',
-    sourcePath: 'locales/zh.json',
-    targetDir: 'locales',
-    cachePath: 'locales/.i18n-cache.json',
-    adapter: localesAdapter
-  },
-  {
-    name: 'diagnostic',
-    sourcePath: 'src/util/diagnostic/codes/i18n/zh.json',
-    targetDir: 'src/util/diagnostic/codes/i18n',
-    cachePath: 'src/util/diagnostic/codes/i18n/.i18n-cache.json',
-    adapter: diagnosticAdapter
-  }
-];
-
 /**
  * 翻译单个系统
  */
-async function translateSystem(system, config, glossary, env) {
-  console.log(`\n📦 Processing ${system.name}...`);
+async function translateSystem(systemName, systemConfig, adapter, config, glossary, env) {
+  console.log(`\n📦 Processing ${systemName}...`);
 
   // 读取源 JSON
-  const sourceFullPath = path.join(ROOT, system.sourcePath);
+  const sourceFullPath = path.join(ROOT, systemConfig.sourcePath);
   if (!fs.existsSync(sourceFullPath)) {
-    console.log(`  ⚠️  Source file not found: ${system.sourcePath}`);
+    console.log(`  ⚠️  Source file not found: ${systemConfig.sourcePath}`);
     return;
   }
   const sourceJson = JSON.parse(fs.readFileSync(sourceFullPath, 'utf-8'));
-  const sourceKeys = system.adapter.extractKeys(sourceJson);
+  const sourceKeys = adapter.extractKeys(sourceJson);
   const sourceKeyCount = Object.keys(sourceKeys).length;
   console.log(`  📄 Source: ${sourceKeyCount} keys`);
 
   // 加载 cache
-  const cacheFullPath = path.join(ROOT, system.cachePath);
+  const cacheFullPath = path.join(ROOT, systemConfig.cachePath);
   let cache = isFullTranslate ? {} : loadCache(cacheFullPath);
 
   // 获取语言配置
-  const targetLangs = Object.keys(config.targets);
+  const targetLangs = Object.keys(config.languages);
 
   for (const lang of targetLangs) {
-    console.log(`\n  🌐 Translating to ${lang} (${config.targets[lang].name})...`);
+    console.log(`\n  🌐 Translating to ${lang} (${config.languages[lang].name})...`);
 
     // 获取需要翻译的 key
     const keysToTranslate = isFullTranslate
@@ -95,7 +76,7 @@ async function translateSystem(system, config, glossary, env) {
     console.log(`    📝 ${keysToTranslate.length} keys to translate`);
 
     // 读取目标 JSON
-    const targetPath = path.join(ROOT, system.targetDir, `${lang}.json`);
+    const targetPath = path.join(ROOT, systemConfig.targetDir, `${lang}.json`);
     let targetJson = {};
     if (fs.existsSync(targetPath)) {
       targetJson = JSON.parse(fs.readFileSync(targetPath, 'utf-8'));
@@ -103,7 +84,6 @@ async function translateSystem(system, config, glossary, env) {
 
     // 按 batchSize 分组翻译
     const batchSize = config.batchSize || 20;
-    const translatedKeys = [];
 
     for (let i = 0; i < keysToTranslate.length; i += batchSize) {
       const batch = keysToTranslate.slice(i, i + batchSize);
@@ -118,8 +98,8 @@ async function translateSystem(system, config, glossary, env) {
         const languagePrompt = resolveLanguagePrompt(lang, config);
         const translations = await translateBatch({
           keys: batchKeys,
-          sourceLang: config.targets[config.source]?.name || config.source,
-          targetLang: config.targets[lang]?.name || lang,
+          sourceLang: config.languages[config.source]?.name || config.source,
+          targetLang: config.languages[lang]?.name || lang,
           languagePrompt,
           glossary,
           apiKey: env.AI_API_KEY,
@@ -128,8 +108,14 @@ async function translateSystem(system, config, glossary, env) {
         });
 
         // 合并翻译结果
-        targetJson = system.adapter.applyTranslations(targetJson, translations);
-        translatedKeys.push(...batch);
+        targetJson = adapter.applyTranslations(targetJson, translations);
+
+        // 立即写入文件（崩溃恢复）
+        fs.writeFileSync(targetPath, JSON.stringify(targetJson, null, 2) + '\n', 'utf-8');
+
+        // 立即更新 cache
+        cache = updateCache(cache, sourceKeys, lang, batch);
+        saveCache(cacheFullPath, cache);
 
         console.log(`    ✅ Batch translated successfully`);
       } catch (error) {
@@ -137,20 +123,9 @@ async function translateSystem(system, config, glossary, env) {
       }
     }
 
-    // 更新 _meta.lastUpdated
-    if (!targetJson._meta) targetJson._meta = {};
-    targetJson._meta.lastUpdated = new Date().toISOString();
-
-    // 保存目标 JSON
-    fs.writeFileSync(targetPath, JSON.stringify(targetJson, null, 2) + '\n', 'utf-8');
     console.log(`    💾 Saved ${targetPath}`);
-
-    // 更新 cache
-    cache = updateCache(cache, sourceKeys, lang, translatedKeys);
   }
 
-  // 保存 cache
-  saveCache(cacheFullPath, cache);
   console.log(`  💾 Cache saved`);
 }
 
@@ -178,8 +153,9 @@ async function main() {
   }
 
   // 翻译每个系统
-  for (const system of SYSTEMS) {
-    await translateSystem(system, config, glossary, env);
+  for (const [systemName, systemConfig] of Object.entries(config.systems)) {
+    const adapter = getAdapter(systemConfig.adapter);
+    await translateSystem(systemName, systemConfig, adapter, config, glossary, env);
   }
 
   console.log('\n✅ Translation complete!');
