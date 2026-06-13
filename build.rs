@@ -31,7 +31,19 @@ fn main() {
     }
 
     // 3. 自动下载
-    let target = detect_target();
+    let target = match detect_target() {
+        Some(t) => t,
+        None => {
+            let os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+            let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
+            println!(
+                "cargo:warning=Z3 prebuilt binaries not available for {}/{}. \
+                 Set Z3_SYS_Z3_HEADER or place Z3 in .z3/ to provide Z3.",
+                os, arch
+            );
+            return;
+        }
+    };
     let archive_name = format!("z3-{}-{}.zip", Z3_VERSION, target);
     let url = format!(
         "https://github.com/Z3Prover/z3/releases/download/z3-{}/{}",
@@ -70,6 +82,7 @@ fn main() {
 }
 
 fn link_z3(z3_dir: &Path) {
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     let lib_dir = ["lib", "bin"]
         .iter()
         .map(|s| z3_dir.join(s))
@@ -78,7 +91,7 @@ fn link_z3(z3_dir: &Path) {
 
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
 
-    if cfg!(target_os = "windows") {
+    if target_os == "windows" {
         println!("cargo:rustc-link-lib=libz3");
     } else {
         println!("cargo:rustc-link-lib=static=z3");
@@ -88,7 +101,8 @@ fn link_z3(z3_dir: &Path) {
 }
 
 fn copy_dll(z3_dir: &Path) {
-    if !cfg!(target_os = "windows") {
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+    if target_os != "windows" {
         return;
     }
     let dll = z3_dir.join("bin").join("libz3.dll");
@@ -122,15 +136,15 @@ fn find_local_z3(z3_root: &Path) -> Option<std::path::PathBuf> {
     None
 }
 
-fn detect_target() -> &'static str {
+fn detect_target() -> Option<&'static str> {
     let os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     match (os.as_str(), arch.as_str()) {
-        ("windows", "x86_64") => "x64-win",
-        ("linux", "x86_64") => "x64-glibc-2.39",
-        ("macos", "x86_64") => "x64-osx-13.7.4",
-        ("macos", "aarch64") => "arm64-osx-13.7.4",
-        _ => panic!("Unsupported platform: {}/{}", os, arch),
+        ("windows", "x86_64") => Some("x64-win"),
+        ("linux", "x86_64") => Some("x64-glibc-2.39"),
+        ("macos", "x86_64") => Some("x64-osx-13.7.4"),
+        ("macos", "aarch64") => Some("arm64-osx-13.7.4"),
+        _ => None,
     }
 }
 
@@ -138,7 +152,8 @@ fn download(
     url: &str,
     dest: &Path,
 ) {
-    let status = if cfg!(target_os = "windows") {
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+    let status = if target_os == "windows" {
         Command::new("powershell")
             .args([
                 "-Command",
@@ -166,7 +181,8 @@ fn extract(
     archive: &Path,
     dest: &Path,
 ) {
-    let status = if cfg!(target_os = "windows") {
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+    let status = if target_os == "windows" {
         Command::new("powershell")
             .args([
                 "-Command",
