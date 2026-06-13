@@ -211,10 +211,12 @@ pub struct I18nRegistry {
 /// JSON 结构（与 i18n/*.json 对应）
 #[derive(serde::Deserialize)]
 struct ErrorInfoJson {
-    title: String,
+    #[serde(default)]
+    title: Option<String>,
     #[serde(default)]
     template: Option<String>,
-    help: String,
+    #[serde(default)]
+    help: Option<String>,
     example: Option<String>,
     error_output: Option<String>,
     #[serde(default)]
@@ -238,12 +240,16 @@ fn load_i18n_data(json: &str) -> I18nRegistry {
     let mut zen_messages = HashMap::new();
 
     for (code, info) in data {
+        // 跳过 _meta 等非错误码条目（没有 title 的条目）
+        let Some(title) = info.title else {
+            continue;
+        };
         let code_static: &'static str = to_static_string(code);
         if let Some(tmpl) = info.template {
             templates.insert(code_static, to_static_string(tmpl));
         }
-        titles.insert(code_static, to_static_string(info.title));
-        helps.insert(code_static, to_static_string(info.help));
+        titles.insert(code_static, to_static_string(title));
+        helps.insert(code_static, to_static_string(info.help.unwrap_or_default()));
 
         if let Some(ex) = info.example {
             examples.insert(code_static, to_static_string(ex));
@@ -267,26 +273,42 @@ fn load_i18n_data(json: &str) -> I18nRegistry {
 }
 
 impl I18nRegistry {
-    /// 获取英文注册表
-    pub fn en() -> &'static Self {
-        static REGISTRY: std::sync::LazyLock<I18nRegistry> =
-            std::sync::LazyLock::new(|| load_i18n_data(include_str!("i18n/en.json")));
-        &REGISTRY
-    }
-
-    /// 获取中文注册表
-    pub fn zh() -> &'static Self {
-        static REGISTRY: std::sync::LazyLock<I18nRegistry> =
-            std::sync::LazyLock::new(|| load_i18n_data(include_str!("i18n/zh.json")));
-        &REGISTRY
-    }
-
-    /// 根据语言代码获取注册表
+    /// 根据语言代码获取注册表（动态加载）
     pub fn new(lang: &str) -> &'static Self {
-        match lang {
-            "zh" => Self::zh(),
-            _ => Self::en(),
-        }
+        use std::sync::LazyLock;
+        use std::collections::HashMap;
+
+        static REGISTRIES: LazyLock<HashMap<String, I18nRegistry>> =
+            LazyLock::new(|| {
+                let mut map = HashMap::new();
+                let dir = std::path::Path::new("src/util/diagnostic/codes/i18n");
+
+                if let Ok(entries) = std::fs::read_dir(dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.extension().map(|e| e == "json").unwrap_or(false) {
+                            // 跳过隐藏文件（如 .i18n-cache.json）
+                            let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                            if file_name.starts_with('.') {
+                                continue;
+                            }
+                            if let Some(lang) = path.file_stem().and_then(|s| s.to_str()) {
+                                if let Ok(content) = std::fs::read_to_string(&path) {
+                                    let registry = load_i18n_data(&content);
+                                    map.insert(lang.to_string(), registry);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                map
+            });
+
+        REGISTRIES.get(lang)
+            .or_else(|| REGISTRIES.get("zh"))
+            .or_else(|| REGISTRIES.get("en"))
+            .expect("No i18n registry found")
     }
 
     /// 获取错误信息
