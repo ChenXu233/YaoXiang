@@ -150,6 +150,12 @@ pub struct TerminationChecker {
     z3: Option<&'static Z3Backend>,
 }
 
+impl Default for TerminationChecker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TerminationChecker {
     /// 创建新的终止检查器
     pub fn new() -> Self {
@@ -721,10 +727,10 @@ impl TerminationChecker {
             // 只尝试单变量度量
             for &v in bounded_vars {
                 candidates.push(LinearMeasure::increasing(v, None, None, 1));
-                if let Some((_, (_, bound))) = bounds.iter().find(|(bv, _)| bv == v) {
-                    if let BoundExpr::Const(upper) = bound {
-                        candidates.push(LinearMeasure::increasing(v, None, Some(*upper), 1));
-                    }
+                if let Some((_, (_, BoundExpr::Const(upper)))) =
+                    bounds.iter().find(|(bv, _)| bv == v)
+                {
+                    candidates.push(LinearMeasure::increasing(v, None, Some(*upper), 1));
                 }
             }
             return candidates;
@@ -733,10 +739,8 @@ impl TerminationChecker {
         // ≤3 个变量：全组合
         for &v in bounded_vars {
             candidates.push(LinearMeasure::increasing(v, None, None, 1));
-            if let Some((_, (_, bound))) = bounds.iter().find(|(bv, _)| bv == v) {
-                if let BoundExpr::Const(u) = bound {
-                    candidates.push(LinearMeasure::increasing(v, None, Some(*u), 1));
-                }
+            if let Some((_, (_, BoundExpr::Const(u)))) = bounds.iter().find(|(bv, _)| bv == v) {
+                candidates.push(LinearMeasure::increasing(v, None, Some(*u), 1));
             }
         }
 
