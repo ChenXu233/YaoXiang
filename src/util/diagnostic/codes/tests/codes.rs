@@ -34,7 +34,7 @@ fn test_error_code_registry_has_minimum_count() {
 
 #[test]
 fn test_i18n_registry_english_titles() {
-    let en = I18nRegistry::en();
+    let en = I18nRegistry::new("en");
     assert_eq!(en.get_title("E0001"), "Invalid Character");
     assert!(
         !en.get_help("E0001").is_empty(),
@@ -44,7 +44,7 @@ fn test_i18n_registry_english_titles() {
 
 #[test]
 fn test_i18n_registry_chinese_titles() {
-    let zh = I18nRegistry::zh();
+    let zh = I18nRegistry::new("zh");
     assert_eq!(zh.get_title("E0001"), "无效字符");
     assert!(
         !zh.get_help("E0001").is_empty(),
@@ -54,7 +54,7 @@ fn test_i18n_registry_chinese_titles() {
 
 #[test]
 fn test_template_render_substitutes_params() {
-    let en = I18nRegistry::en();
+    let en = I18nRegistry::new("en");
     let template = "Unknown variable: '{name}'";
     let params = vec![("name", "x".to_string())];
     let rendered = en.render(template, &params);
@@ -92,8 +92,8 @@ fn test_i18n_consistency() {
     }
 
     // 2. 检查 JSON 中是否有重复的错误码
-    let en = I18nRegistry::en();
-    let zh = I18nRegistry::zh();
+    let en = I18nRegistry::new("en");
+    let zh = I18nRegistry::new("zh");
 
     // 3. 检查 Rust 注册的每个码在 JSON 中都有模板
     for def in all {
