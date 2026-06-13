@@ -1,6 +1,24 @@
 {
   "source": "zh",
-  "targets": {
+  "batchSize": 20,
+  "model": "MiniMax-M2.7-highspeed",
+
+  "systems": {
+    "locales": {
+      "sourcePath": "locales/zh.json",
+      "targetDir": "locales",
+      "cachePath": "locales/.i18n-cache.json",
+      "adapter": "flat"
+    },
+    "diagnostic": {
+      "sourcePath": "src/util/diagnostic/codes/i18n/zh.json",
+      "targetDir": "src/util/diagnostic/codes/i18n",
+      "cachePath": "src/util/diagnostic/codes/i18n/.i18n-cache.json",
+      "adapter": "nested"
+    }
+  },
+
+  "languages": {
     "en": { "name": "English" },
     "ja": { "name": "日本語" },
     "ru": { "name": "Русский" },
@@ -12,7 +30,5 @@
       "name": "文言文",
       "prompt": "翻译成文言文风格，使用古汉语表达"
     }
-  },
-  "batchSize": 20,
-  "model": "MiniMax-M2.7-highspeed"
+  }
 }
