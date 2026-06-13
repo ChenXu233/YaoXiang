@@ -374,8 +374,8 @@ impl CycleChecker {
     }
 }
 
-/// 为 CycleChecker 实现 OwnershipCheck trait
-impl super::error::OwnershipCheck for CycleChecker {
+/// 为 CycleChecker 实现 Checker trait
+impl super::error::Checker for CycleChecker {
     fn check_function(
         &mut self,
         func: &FunctionIR,
@@ -385,13 +385,6 @@ impl super::error::OwnershipCheck for CycleChecker {
 
     fn errors(&self) -> &[Diagnostic] {
         &self.errors
-    }
-
-    fn state(&self) -> &HashMap<Operand, super::error::ValueState> {
-        // CycleChecker 追踪 spawn 引用边，不追踪值生命周期状态
-        static EMPTY: std::sync::LazyLock<HashMap<Operand, super::error::ValueState>> =
-            std::sync::LazyLock::new(HashMap::new);
-        &EMPTY
     }
 
     fn clear(&mut self) {

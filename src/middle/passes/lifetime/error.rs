@@ -57,11 +57,9 @@ pub enum ValueState {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TypeId(pub String);
 
-/// 所有权检查器 Trait
-///
-/// 提取公共接口，减少 MoveChecker 和 DropChecker 的重复代码。
-pub trait OwnershipCheck {
-    /// 检查函数的所有权语义
+/// 所有诊断检查器的最小公共接口
+pub trait Checker {
+    /// 检查函数的语义
     fn check_function(
         &mut self,
         func: &FunctionIR,
@@ -70,11 +68,14 @@ pub trait OwnershipCheck {
     /// 获取收集的错误
     fn errors(&self) -> &[Diagnostic];
 
-    /// 获取状态
-    fn state(&self) -> &HashMap<Operand, ValueState>;
-
     /// 清除状态
     fn clear(&mut self);
+}
+
+/// 追踪值生命周期状态的检查器（Move/Drop/Ref/Clone）
+pub trait ValueStateProvider: Checker {
+    /// 获取值状态
+    fn state(&self) -> &HashMap<Operand, ValueState>;
 }
 
 /// 将 Operand 转换为字符串标识

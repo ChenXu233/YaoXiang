@@ -5,7 +5,7 @@
 //! - 只有标记 `mut` 的变量才能被修改
 //! - 编译期检查，无需运行时开销
 
-use super::error::{OwnershipCheck, operand_display_name};
+use super::error::{Checker, operand_display_name};
 use crate::util::diagnostic::{ErrorCodeDefinition, Diagnostic};
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
 use crate::util::span::Span;
@@ -31,8 +31,6 @@ pub struct MutChecker {
     symbol_table: Option<HashMap<String, bool>>,
     /// 类型表：类型名 -> StructType（包含字段可变性信息）
     type_table: Option<HashMap<String, crate::frontend::core::types::StructType>>,
-    /// 兼容 OwnershipCheck trait 的状态字段（未使用）
-    state: HashMap<Operand, super::error::ValueState>,
     /// 是否启用初始化追踪（允许首次赋值）
     track_initialization: bool,
     /// 循环绑定变量集合：这些变量的 Store 操作是"绑定"而不是"修改"
@@ -52,7 +50,6 @@ impl MutChecker {
             location: (0, 0),
             symbol_table: None,
             type_table: None,
-            state: HashMap::new(),
             track_initialization: false,
             loop_binding_vars: HashSet::new(),
             local_names: None,
@@ -271,7 +268,6 @@ impl MutChecker {
         self.mutable_vars.clear();
         self.initialized_vars.clear();
         self.errors.clear();
-        self.state.clear();
         self.loop_binding_vars.clear();
 
         // 启用初始化追踪
@@ -307,7 +303,7 @@ impl MutChecker {
     }
 }
 
-impl OwnershipCheck for MutChecker {
+impl Checker for MutChecker {
     fn check_function(
         &mut self,
         func: &FunctionIR,
@@ -331,15 +327,10 @@ impl OwnershipCheck for MutChecker {
         &self.errors
     }
 
-    fn state(&self) -> &HashMap<Operand, super::error::ValueState> {
-        &self.state
-    }
-
     fn clear(&mut self) {
         self.mutable_vars.clear();
         self.initialized_vars.clear();
         self.errors.clear();
-        self.state.clear();
     }
 }
 

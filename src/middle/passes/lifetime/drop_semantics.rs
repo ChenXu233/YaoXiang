@@ -2,7 +2,7 @@
 //!
 //! 检查 Drop 相关错误：UseAfterDrop、DropMovedValue、DoubleDrop。
 
-use super::error::{OwnershipCheck, ValueState, operand_display_name};
+use super::error::{Checker, ValueStateProvider, ValueState, operand_display_name};
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
 use crate::util::diagnostic::{ErrorCodeDefinition, Diagnostic};
 use std::collections::HashMap;
@@ -118,7 +118,7 @@ impl DropChecker {
     }
 }
 
-impl OwnershipCheck for DropChecker {
+impl Checker for DropChecker {
     fn check_function(
         &mut self,
         func: &FunctionIR,
@@ -139,13 +139,15 @@ impl OwnershipCheck for DropChecker {
         &self.errors
     }
 
-    fn state(&self) -> &HashMap<Operand, ValueState> {
-        &self.state
-    }
-
     fn clear(&mut self) {
         self.state.clear();
         self.errors.clear();
+    }
+}
+
+impl ValueStateProvider for DropChecker {
+    fn state(&self) -> &HashMap<Operand, ValueState> {
+        &self.state
     }
 }
 

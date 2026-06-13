@@ -4,7 +4,7 @@
 
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, Operand};
-use crate::middle::passes::lifetime::error::OwnershipCheck;
+use crate::middle::passes::lifetime::error::Checker;
 use crate::middle::passes::lifetime::move_semantics::MoveChecker;
 
 fn make_test_function() -> FunctionIR {
