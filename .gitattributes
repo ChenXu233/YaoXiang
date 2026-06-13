@@ -1,4 +1,7 @@
-# Force LF line endings for markdown files to ensure consistent md5 hashes
-# across local Windows (CRLF) and CI Linux (LF) environments
+# Force LF line endings to ensure consistent format checks across
+# local Windows (CRLF) and CI Linux (LF) environments
 *.md text eol=lf
 *.json text eol=lf
+*.rs text eol=lf
+*.toml text eol=lf
+*.yml text eol=lf
