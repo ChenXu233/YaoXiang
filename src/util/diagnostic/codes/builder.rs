@@ -278,34 +278,34 @@ impl I18nRegistry {
         use std::sync::LazyLock;
         use std::collections::HashMap;
 
-        static REGISTRIES: LazyLock<HashMap<String, I18nRegistry>> =
-            LazyLock::new(|| {
-                let mut map = HashMap::new();
-                let dir = std::path::Path::new("src/util/diagnostic/codes/i18n");
+        static REGISTRIES: LazyLock<HashMap<String, I18nRegistry>> = LazyLock::new(|| {
+            let mut map = HashMap::new();
+            let dir = std::path::Path::new("src/util/diagnostic/codes/i18n");
 
-                if let Ok(entries) = std::fs::read_dir(dir) {
-                    for entry in entries.flatten() {
-                        let path = entry.path();
-                        if path.extension().map(|e| e == "json").unwrap_or(false) {
-                            // 跳过隐藏文件（如 .i18n-cache.json）
-                            let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
-                            if file_name.starts_with('.') {
-                                continue;
-                            }
-                            if let Some(lang) = path.file_stem().and_then(|s| s.to_str()) {
-                                if let Ok(content) = std::fs::read_to_string(&path) {
-                                    let registry = load_i18n_data(&content);
-                                    map.insert(lang.to_string(), registry);
-                                }
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().map(|e| e == "json").unwrap_or(false) {
+                        // 跳过隐藏文件（如 .i18n-cache.json）
+                        let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                        if file_name.starts_with('.') {
+                            continue;
+                        }
+                        if let Some(lang) = path.file_stem().and_then(|s| s.to_str()) {
+                            if let Ok(content) = std::fs::read_to_string(&path) {
+                                let registry = load_i18n_data(&content);
+                                map.insert(lang.to_string(), registry);
                             }
                         }
                     }
                 }
+            }
 
-                map
-            });
+            map
+        });
 
-        REGISTRIES.get(lang)
+        REGISTRIES
+            .get(lang)
             .or_else(|| REGISTRIES.get("zh"))
             .or_else(|| REGISTRIES.get("en"))
             .expect("No i18n registry found")
