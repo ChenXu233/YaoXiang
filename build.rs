@@ -152,8 +152,8 @@ fn download(
     url: &str,
     dest: &Path,
 ) {
-    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
-    let status = if target_os == "windows" {
+    // 使用宿主平台的工具，不是目标平台
+    let status = if cfg!(target_os = "windows") {
         Command::new("powershell")
             .args([
                 "-Command",
@@ -181,8 +181,8 @@ fn extract(
     archive: &Path,
     dest: &Path,
 ) {
-    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
-    let status = if target_os == "windows" {
+    // 使用宿主平台的工具，不是目标平台
+    let status = if cfg!(target_os = "windows") {
         Command::new("powershell")
             .args([
                 "-Command",
