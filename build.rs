@@ -127,7 +127,7 @@ fn detect_target() -> &'static str {
     let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     match (os.as_str(), arch.as_str()) {
         ("windows", "x86_64") => "x64-win",
-        ("linux", "x86_64") => "x64-glibc-2.35",
+        ("linux", "x86_64") => "x64-glibc-2.39",
         ("macos", "x86_64") => "x64-osx-13.7.4",
         ("macos", "aarch64") => "arm64-osx-13.7.4",
         _ => panic!("Unsupported platform: {}/{}", os, arch),
