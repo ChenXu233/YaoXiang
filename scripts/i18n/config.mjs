@@ -9,7 +9,14 @@ import path from 'path';
 export function loadConfig(root) {
   const configPath = path.join(root, 'i18n.config.json');
   const content = fs.readFileSync(configPath, 'utf-8');
-  return JSON.parse(content);
+  const config = JSON.parse(content);
+
+  // 验证配置结构
+  if (!config.source) throw new Error('Missing source language');
+  if (!config.systems) throw new Error('Missing systems definition');
+  if (!config.languages) throw new Error('Missing languages definition');
+
+  return config;
 }
 
 /**
