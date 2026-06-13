@@ -96,6 +96,14 @@ enum Commands {
         /// Generate debug info for runtime errors (spans/source mapping)
         #[arg(long)]
         debug_info: bool,
+
+        /// Runtime mode (embedded, standard, full)
+        #[arg(long, default_value = "embedded")]
+        runtime: String,
+
+        /// Number of worker threads (0 = auto)
+        #[arg(long, default_value = "0")]
+        workers: usize,
     },
 
     /// Evaluate YaoXiang code from command line (not supported well yet)
@@ -312,8 +320,39 @@ fn main() -> Result<()> {
     }
 
     match command {
-        Commands::Run { file, debug_info } => {
-            run_file_with_diagnostics(&file, debug_info)?;
+        Commands::Run {
+            file,
+            debug_info,
+            runtime,
+            workers,
+        } => {
+            // Load project config for runtime settings
+            let project_config = {
+                let config_path = std::path::PathBuf::from("yaoxiang.toml");
+                if config_path.exists() {
+                    let content = std::fs::read_to_string(&config_path).unwrap_or_default();
+                    toml::from_str::<yaoxiang::util::config::ProjectConfig>(&content)
+                        .unwrap_or_default()
+                } else {
+                    yaoxiang::util::config::ProjectConfig::default()
+                }
+            };
+
+            // CLI args override project config
+            let runtime_mode = if runtime != "embedded" {
+                runtime.clone()
+            } else {
+                project_config.runtime.mode.clone()
+            };
+            let workers = if workers > 0 {
+                workers
+            } else if project_config.runtime.workers > 0 {
+                project_config.runtime.workers
+            } else {
+                0 // 0 = auto-detect
+            };
+
+            run_file_with_diagnostics(&file, debug_info, &runtime_mode, workers)?;
         }
         Commands::Eval { code } => {
             run(&code).context("Failed to evaluate code")?;
