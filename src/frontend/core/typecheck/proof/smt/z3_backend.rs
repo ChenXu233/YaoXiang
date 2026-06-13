@@ -3,16 +3,21 @@
 //! 使用预生成的 FFI 绑定（z3_ffi.rs），不依赖 z3-sys crate。
 //! 内部持有 Z3_context 裸指针，通过外部 Mutex 保证互斥访问。
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::fmt;
+use std::hash::{Hash, Hasher};
 
 use super::ast::{SMTCommand, SMTExpr, SMTModel, SMTResult, SMTSort};
 
 /// Z3 后端——封装 Z3 context 和 solver 生命周期
 ///
 /// 内部持有 `super::z3_ffi::Z3_context` 裸指针，通过外部 Mutex 保证互斥访问。
+/// SMT 查询结果缓存在 `cache` 中（RefCell 实现内部可变性——solve() 保持 &self）。
 pub struct Z3Backend {
     ctx: super::z3_ffi::Z3_context,
+    cache: RefCell<HashMap<u64, SMTResult>>,
 }
 
 // SAFETY: Z3Backend 通过 `Mutex` 访问，确保同一时刻只有一个线程使用 Z3 context。
@@ -59,7 +64,10 @@ impl Z3Backend {
                 return Err(Z3Error::InitFailed("Z3_mk_context returned null".into()));
             }
 
-            Ok(Z3Backend { ctx })
+            Ok(Z3Backend {
+                ctx,
+                cache: RefCell::new(HashMap::new()),
+            })
         }
     }
 
@@ -69,7 +77,18 @@ impl Z3Backend {
         commands: &[SMTCommand],
         timeout_ms: u64,
     ) -> SMTResult {
-        unsafe {
+        // 计算缓存 key
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        format!("{:?}", commands).hash(&mut hasher);
+        timeout_ms.hash(&mut hasher);
+        let cache_key = hasher.finish();
+
+        // 缓存命中——直接返回
+        if let Some(cached) = self.cache.borrow().get(&cache_key) {
+            return cached.clone();
+        }
+
+        let result = unsafe {
             let solver = super::z3_ffi::Z3_mk_solver(self.ctx);
             super::z3_ffi::Z3_solver_inc_ref(self.ctx, solver);
 
@@ -101,9 +120,9 @@ impl Z3Backend {
             }
 
             // 执行 check-sat
-            let result = super::z3_ffi::Z3_solver_check(self.ctx, solver);
+            let z3_result = super::z3_ffi::Z3_solver_check(self.ctx, solver);
 
-            let smt_result = match result {
+            let smt_result = match z3_result {
                 super::z3_ffi::Z3_L_FALSE => {
                     // unsat → 目标在假设下成立
                     SMTResult::Unsat
@@ -139,7 +158,11 @@ impl Z3Backend {
 
             super::z3_ffi::Z3_solver_dec_ref(self.ctx, solver);
             smt_result
-        }
+        };
+
+        // 写入缓存
+        self.cache.borrow_mut().insert(cache_key, result.clone());
+        result
     }
 }
 
