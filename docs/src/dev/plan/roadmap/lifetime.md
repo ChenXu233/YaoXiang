@@ -74,7 +74,7 @@ title: "借用检查器状态"
 |-------------|---------|------|
 | Move 语义（默认） | ✅ 已实现 | MoveChecker 检测 UseAfterMove |
 | &T/&mut T 借用令牌 | ✅ 已实现 | BorrowChecker 实现令牌冲突检测 |
-| &T 可复制（Dup） | ✅ 已实现 | 多个 &T 令牌可同时存在 |
+| &T 冻结源数据（ReadToken） | ✅ 已实现 | ReadToken 存活期间禁止 WriteToken，冻结保证下可安全 Dup |
 | &mut T 线性 | ✅ 已实现 | 同一来源 &mut T 只能有一个活跃 |
 | 令牌冲突检测（流敏感活性分析） | ✅ 已实现 | 函数体内追踪令牌状态 |
 | ref 关键字（Rc/Arc 自动选择） | ⚠️ 部分实现 | ref 语义检查器存在 |
