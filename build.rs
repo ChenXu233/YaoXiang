@@ -142,8 +142,9 @@ fn detect_target() -> Option<&'static str> {
     match (os.as_str(), arch.as_str()) {
         ("windows", "x86_64") => Some("x64-win"),
         ("linux", "x86_64") => Some("x64-glibc-2.39"),
-        ("macos", "x86_64") => Some("x64-osx-13.7.4"),
-        ("macos", "aarch64") => Some("arm64-osx-13.7.4"),
+        ("linux", "aarch64") => Some("arm64-glibc-2.38"),
+        ("macos", "x86_64") => Some("x64-osx-15.7.3"),
+        ("macos", "aarch64") => Some("arm64-osx-15.7.3"),
         _ => None,
     }
 }
