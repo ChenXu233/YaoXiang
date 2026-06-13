@@ -4,6 +4,8 @@
 //! 统一返回此类型。这是 RFC-027 Section 4.1 的核心数据类型。
 
 use crate::util::diagnostic::Diagnostic;
+use crate::util::diagnostic::codes::ErrorCodeDefinition;
+use crate::util::span::Span;
 
 /// TypeChecker 发出的信号：这个证明函数需要被编译期执行
 ///
@@ -15,6 +17,17 @@ pub struct ProofFunctionCall {
     pub func_name: String,
     /// 实参——编译期已知的具体值
     pub args: Vec<crate::frontend::core::types::const_data::ConstValue>,
+}
+
+/// 反例类型 — 决定错误码和诊断模板
+///
+/// 消除调用方的 if/else——数据结构本身就区分了情况。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DisproofKind {
+    /// 精化谓词违反（直接求值 false 或 SMT 反例）→ E4018
+    PredicateViolation,
+    /// 类型等式不成立（两方归约后值不等）→ E4019
+    TypeMismatch,
 }
 
 /// 证明结果
@@ -33,10 +46,67 @@ pub enum ProofResult {
     },
 }
 
-/// 反例模型：变量名 → 使命题为假的具体值
+/// 反例模型
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DisproofModel {
+    /// 反例类型 — 决定错误码
+    pub kind: DisproofKind,
+    /// 变量名 → 使命题为假的具体值
     pub assignments: Vec<(String, String)>,
+    /// 约束/等式的文本描述（如 "x > 0"、"Int == Float"）
+    pub constraint: String,
+    /// 违反位置
+    pub span: Option<Span>,
+    /// 谓词定义位置（仅 PredicateViolation 时填入）
+    pub predicate_span: Option<Span>,
+}
+
+impl DisproofModel {
+    /// 将反例模型转换为诊断信息
+    ///
+    /// 根据 `kind` 选择错误码和 i18n 模板，
+    /// 构造带 Span 的完整 Diagnostic。
+    pub fn into_diagnostic(self) -> Diagnostic {
+        match self.kind {
+            DisproofKind::PredicateViolation => {
+                let counterexample = if self.assignments.is_empty() {
+                    "  (no variable assignments)".to_string()
+                } else {
+                    self.assignments
+                        .iter()
+                        .map(|(k, v)| format!("  {} = {}", k, v))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                };
+
+                let mut builder = ErrorCodeDefinition::refinement_violated(&self.constraint)
+                    .param("counterexample", &counterexample);
+
+                if let Some(span) = self.span {
+                    builder = builder.at(span);
+                }
+
+                builder.build()
+            }
+            DisproofKind::TypeMismatch => {
+                let (expected, found) = if self.assignments.len() >= 2 {
+                    (self.assignments[0].1.clone(), self.assignments[1].1.clone())
+                } else if self.assignments.len() == 1 {
+                    (self.constraint.clone(), self.assignments[0].1.clone())
+                } else {
+                    (String::new(), String::new())
+                };
+
+                let mut builder = ErrorCodeDefinition::type_mismatch_in_proof(&expected, &found);
+
+                if let Some(span) = self.span {
+                    builder = builder.at(span);
+                }
+
+                builder.build()
+            }
+        }
+    }
 }
 
 /// 无法证明的原因
@@ -69,12 +139,7 @@ impl ProofResult {
     pub fn into_result(self) -> Result<(), Diagnostic> {
         match self {
             Self::Proved => Ok(()),
-            Self::Disproved(model) => Err(Diagnostic::error(
-                "E8001".to_string(),
-                format!("反例: {:?}", model.assignments),
-                String::new(),
-                None,
-            )),
+            Self::Disproved(model) => Err(model.into_diagnostic()),
             Self::Unproven { reason, .. } => Err(Diagnostic::error(
                 "E8001".to_string(),
                 format!("无法证明: {:?}", reason),
