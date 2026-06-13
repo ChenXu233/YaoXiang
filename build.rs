@@ -95,7 +95,11 @@ fn link_z3(z3_dir: &Path) {
         println!("cargo:rustc-link-lib=libz3");
     } else {
         println!("cargo:rustc-link-lib=static=z3");
-        let cxx = env::var("CXXSTDLIB").unwrap_or_else(|_| "stdc++".into());
+        let cxx = if target_os == "macos" {
+            "c++".to_string()
+        } else {
+            env::var("CXXSTDLIB").unwrap_or_else(|_| "stdc++".into())
+        };
         println!("cargo:rustc-link-lib={}", cxx);
     }
 }
