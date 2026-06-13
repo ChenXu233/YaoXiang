@@ -20,7 +20,7 @@
 //! ```
 
 use super::consume_analysis::ConsumeAnalyzer;
-use super::error::{OwnershipCheck, TypeId, ValueState, operand_display_name};
+use super::error::{Checker, ValueStateProvider, TypeId, ValueState, operand_display_name};
 use super::ownership_flow::ConsumeMode;
 use crate::frontend::core::types::MonoType;
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
@@ -382,7 +382,7 @@ impl MoveChecker {
     }
 }
 
-impl OwnershipCheck for MoveChecker {
+impl Checker for MoveChecker {
     fn check_function(
         &mut self,
         func: &FunctionIR,
@@ -414,15 +414,17 @@ impl OwnershipCheck for MoveChecker {
         &self.errors
     }
 
-    fn state(&self) -> &HashMap<Operand, ValueState> {
-        &self.state
-    }
-
     fn clear(&mut self) {
         self.state.clear();
         self.errors.clear();
         self.type_map.clear();
         self.consume_analyzer.clear_cache();
+    }
+}
+
+impl ValueStateProvider for MoveChecker {
+    fn state(&self) -> &HashMap<Operand, ValueState> {
+        &self.state
     }
 }
 

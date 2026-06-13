@@ -3,7 +3,7 @@
 //! 检查 ref 表达式的所有权语义：
 //! - ref 只能应用于有效的所有者（不能是已移动或已释放的值）
 
-use super::error::{OwnershipCheck, ValueState};
+use super::error::{Checker, ValueStateProvider, ValueState};
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
 use crate::util::diagnostic::Diagnostic;
 use std::collections::HashMap;
@@ -99,7 +99,7 @@ impl RefChecker {
     }
 }
 
-impl OwnershipCheck for RefChecker {
+impl Checker for RefChecker {
     fn check_function(
         &mut self,
         func: &FunctionIR,
@@ -120,14 +120,16 @@ impl OwnershipCheck for RefChecker {
         &self.errors
     }
 
-    fn state(&self) -> &HashMap<Operand, ValueState> {
-        &self.state
-    }
-
     fn clear(&mut self) {
         self.state.clear();
         self.definitions.clear();
         self.errors.clear();
+    }
+}
+
+impl ValueStateProvider for RefChecker {
+    fn state(&self) -> &HashMap<Operand, ValueState> {
+        &self.state
     }
 }
 

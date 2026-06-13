@@ -148,7 +148,7 @@ fn test_depth_limit_one_level() {
 
 #[test]
 fn test_clear_resets_all_state() {
-    use crate::middle::passes::lifetime::error::OwnershipCheck;
+    use crate::middle::passes::lifetime::error::Checker;
 
     let mut checker = CycleChecker::new();
     let func = create_test_function(vec![Instruction::Spawn {
@@ -162,7 +162,7 @@ fn test_clear_resets_all_state() {
     }]);
 
     checker.check_function(&func);
-    OwnershipCheck::clear(&mut checker);
+    Checker::clear(&mut checker);
 
     assert!(checker.errors().is_empty());
     assert!(checker.unsafe_bypasses().is_empty());

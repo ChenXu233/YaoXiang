@@ -4,7 +4,7 @@
 //! - clone() 只能用于有效状态的值（Owned，不能是 Moved 或 Dropped）
 //! - clone() 后原值仍保持 Owned 状态
 
-use super::error::{OwnershipCheck, ValueState, operand_display_name};
+use super::error::{Checker, ValueStateProvider, ValueState, operand_display_name};
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
 use crate::util::diagnostic::{ErrorCodeDefinition, Diagnostic};
 use std::collections::HashMap;
@@ -159,7 +159,7 @@ impl CloneChecker {
     }
 }
 
-impl OwnershipCheck for CloneChecker {
+impl Checker for CloneChecker {
     fn check_function(
         &mut self,
         func: &FunctionIR,
@@ -178,12 +178,14 @@ impl OwnershipCheck for CloneChecker {
         &self.errors
     }
 
-    fn state(&self) -> &HashMap<Operand, ValueState> {
-        &self.state
-    }
-
     fn clear(&mut self) {
         self.state.clear();
         self.errors.clear();
+    }
+}
+
+impl ValueStateProvider for CloneChecker {
+    fn state(&self) -> &HashMap<Operand, ValueState> {
+        &self.state
     }
 }
