@@ -204,8 +204,14 @@ impl Interpreter {
         // 主解释器通过 drive_until 阻塞直到所有任务完成，保证数据在任务期间有效。
         // 数据在创建后只读，无数据竞争。
         // 如果 shared 为空（例如 execute_module 未调用），使用空数据。
-        let (constants, functions, functions_by_id, type_table) = if shared.is_null() {
-            (Vec::new(), HashMap::new(), Vec::new(), Vec::new())
+        let (constants, functions, functions_by_id, type_table, ffi) = if shared.is_null() {
+            (
+                Vec::new(),
+                HashMap::new(),
+                Vec::new(),
+                Vec::new(),
+                FfiRegistry::new(),
+            )
         } else {
             let shared_ref = unsafe { &*shared };
             (
@@ -213,6 +219,7 @@ impl Interpreter {
                 shared_ref.functions.clone(),
                 shared_ref.functions_by_id.clone(),
                 shared_ref.type_table.clone(),
+                shared_ref.ffi.clone(),
             )
         };
 
@@ -226,7 +233,7 @@ impl Interpreter {
             state: ExecutionState::default(),
             config: ExecutorConfig::default(),
             breakpoints: HashMap::new(),
-            ffi: FfiRegistry::new(),
+            ffi,
             stdout: None,
             runtime_config: InterpreterRuntimeConfig::default(),
             rt,
@@ -241,6 +248,13 @@ impl Interpreter {
         runtime_config: InterpreterRuntimeConfig,
     ) {
         self.runtime_config = runtime_config;
+        // Rebuild Runtime facade to match new config
+        self.rt = Runtime::new(RuntimeConfig {
+            mode: self.runtime_config.runtime,
+            workers: self.runtime_config.workers,
+            work_stealing: self.runtime_config.work_stealing,
+        })
+        .unwrap_or_else(|_| Runtime::new(RuntimeConfig::default()).unwrap());
     }
 
     /// Set standard output redirect
