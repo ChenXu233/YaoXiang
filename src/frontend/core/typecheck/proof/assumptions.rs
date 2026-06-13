@@ -40,4 +40,73 @@ impl AssumptionStack {
     pub fn is_empty(&self) -> bool {
         self.assumptions.is_empty()
     }
+
+    /// 检查假设栈是否直接包含某个约束
+    ///
+    /// 阶段 2A 快速路径：如果约束正好是当前程序点的一个已知条件，
+    /// 直接返回 Proved，零额外开销。
+    pub fn contains(
+        &self,
+        expr: &ConstExpr,
+    ) -> bool {
+        self.assumptions.iter().any(|a| a == expr)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::frontend::core::types::const_data::{BinOp, ConstValue};
+
+    fn make_gt(
+        var: &str,
+        n: i128,
+    ) -> ConstExpr {
+        ConstExpr::BinOp {
+            op: BinOp::Gt,
+            left: Box::new(ConstExpr::NamedVar(var.into())),
+            right: Box::new(ConstExpr::Lit(ConstValue::Int(n))),
+        }
+    }
+
+    #[test]
+    fn test_push_pop() {
+        let mut stack = AssumptionStack::new();
+        assert!(stack.is_empty());
+        stack.push(make_gt("y", 0));
+        assert_eq!(stack.current().len(), 1);
+        stack.pop();
+        assert!(stack.is_empty());
+    }
+
+    #[test]
+    fn test_nested_push() {
+        let mut stack = AssumptionStack::new();
+        stack.push(make_gt("y", 0));
+        stack.push(make_gt("z", 5));
+        assert_eq!(stack.current().len(), 2);
+        stack.pop();
+        assert_eq!(stack.current().len(), 1);
+    }
+
+    #[test]
+    fn test_contains_true() {
+        let mut stack = AssumptionStack::new();
+        let cond = make_gt("y", 0);
+        stack.push(cond.clone());
+        assert!(stack.contains(&cond));
+    }
+
+    #[test]
+    fn test_contains_false() {
+        let mut stack = AssumptionStack::new();
+        stack.push(make_gt("y", 0));
+        assert!(!stack.contains(&make_gt("z", 5)));
+    }
+
+    #[test]
+    fn test_contains_empty_stack() {
+        let stack = AssumptionStack::new();
+        assert!(!stack.contains(&make_gt("y", 0)));
+    }
 }

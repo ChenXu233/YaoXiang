@@ -1,0 +1,43 @@
+// 01-syntax/control-flow/if_else.yx
+// 覆盖: 规范 §4.7 条件表达式, §5.6 if 语句
+// 验证: if-elif-else 条件分支
+// 状态: ✅ 可运行
+
+use std.io
+
+main = {
+    // if-else
+    if true {
+        io.println("true_branch")
+    }
+
+    if false {
+        io.println("should_not_print")
+    } else {
+        io.println("false_branch")
+    }
+
+    // if-elif-else
+    score = 85
+    if score >= 90 {
+        io.println("A")
+    } elif score >= 80 {
+        io.println("B")
+    } elif score >= 70 {
+        io.println("C")
+    } else {
+        io.println("D")
+    }
+
+    // 嵌套 if
+    x = 42
+    if x > 0 {
+        if x > 100 {
+            io.println("large")
+        } else {
+            io.println("small")
+        }
+    }
+
+    io.println("ALL TESTS PASSED")
+}

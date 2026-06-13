@@ -1,0 +1,31 @@
+// 01-syntax/basics/variables.yx
+// 覆盖: 规范 §5.2 变量声明, §6.2 类型推导
+// 验证: 变量声明 + 类型推导 + 可变性
+// 状态: ✅ 可运行
+
+use std.io
+
+main = {
+    // 基本变量
+    x = 42
+    io.println(x)
+
+    // 类型推导
+    name = "YaoXiang"
+    io.println(name)
+
+    // 布尔
+    flag = true
+    io.println(flag)
+
+    // 浮点
+    pi = 3.14
+    io.println(pi)
+
+    // 可变变量
+    mut counter = 0
+    counter = counter + 1
+    io.println(counter)
+
+    io.println("ALL TESTS PASSED")
+}

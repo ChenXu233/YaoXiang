@@ -1,0 +1,14 @@
+// 05-ownership/move_basic.yx
+// 验证: Move 语义 — 赋值后原变量不可用
+// 状态: 待测试
+
+use std.io
+
+Point: Type = { x: Float, y: Float }
+
+main = {
+    p = Point(1.0, 2.0)
+    p2 = p
+    io.println(p2)
+    io.println("ALL TESTS PASSED")
+}

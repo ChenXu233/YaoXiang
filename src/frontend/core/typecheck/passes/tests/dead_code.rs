@@ -28,7 +28,6 @@ fn make_binding(
     is_pub: bool,
     type_name: Option<&str>,
     body_stmts: Vec<Stmt>,
-    body_expr: Option<Box<Expr>>,
 ) -> Stmt {
     Stmt {
         kind: StmtKind::Binding {
@@ -37,7 +36,7 @@ fn make_binding(
             method_type: None,
             is_pub,
             params: vec![],
-            body: (body_stmts, body_expr),
+            body: body_stmts,
             generic_params: vec![],
             type_annotation: None,
         },
@@ -55,7 +54,7 @@ fn make_type_constructor(name: &str) -> Stmt {
             method_type: None,
             is_pub: false,
             params: vec![],
-            body: (vec![], None),
+            body: vec![],
             generic_params: vec![],
             type_annotation: Some(Type::Name {
                 name: name.to_string(),
@@ -149,7 +148,7 @@ fn test_analyze_active_function_no_warning() {
     // Arrange: main 函数是入口点且被引用，不应产生警告
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
-        items: vec![make_binding("main", true, None, vec![], None)],
+        items: vec![make_binding("main", true, None, vec![])],
         span: Span::dummy(),
     };
     let mut semantic_db = SemanticDB::new();
@@ -188,7 +187,7 @@ fn test_main_function_is_entry_point_reachable() {
     // Arrange: main 函数作为入口点应始终可达（不产生死代码警告）
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
-        items: vec![make_binding("main", false, None, vec![], None)],
+        items: vec![make_binding("main", false, None, vec![])],
         span: Span::dummy(),
     };
 
@@ -207,7 +206,7 @@ fn test_pub_function_is_entry_point_reachable() {
     // Arrange: pub 函数是入口点，不应被报告为未使用导出
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
-        items: vec![make_binding("public_fn", true, None, vec![], None)],
+        items: vec![make_binding("public_fn", true, None, vec![])],
         span: Span::dummy(),
     };
 
@@ -233,8 +232,8 @@ fn test_compute_reachability_from_entry_point() {
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
         items: vec![
-            make_binding("main", false, None, vec![make_call_stmt("helper")], None),
-            make_binding("helper", false, None, vec![], None),
+            make_binding("main", false, None, vec![make_call_stmt("helper")]),
+            make_binding("helper", false, None, vec![]),
         ],
         span: Span::dummy(),
     };
@@ -257,7 +256,7 @@ fn test_detect_unused_exported_function() {
     // Arrange: pub 函数是入口点，不应产生死代码警告
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
-        items: vec![make_binding("exported_fn", true, None, vec![], None)],
+        items: vec![make_binding("exported_fn", true, None, vec![])],
         span: Span::dummy(),
     };
     let semantic_db = SemanticDB::new();
@@ -321,7 +320,7 @@ fn test_find_unused_exports_returns_correct_codes() {
     // Arrange: pub 函数是入口点，find_unused_exports 不应对其产生警告
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
-        items: vec![make_binding("exported_fn", true, None, vec![], None)],
+        items: vec![make_binding("exported_fn", true, None, vec![])],
         span: Span::dummy(),
     };
     let semantic_db = SemanticDB::new();
@@ -377,7 +376,7 @@ fn test_analyze_many_functions() {
     // Arrange: 生成大量函数，验证分析器性能和正确性
     let mut analyzer = DeadCodeAnalyzer::new();
     let items: Vec<Stmt> = (0..100)
-        .map(|i| make_binding(&format!("func_{}", i), true, None, vec![], None))
+        .map(|i| make_binding(&format!("func_{}", i), true, None, vec![]))
         .collect();
     let ast = Module {
         items,
@@ -399,11 +398,11 @@ fn test_mutual_reference_functions_reachable() {
     let ast = Module {
         items: vec![
             // main 调用 func_a
-            make_binding("main", false, None, vec![make_call_stmt("func_a")], None),
+            make_binding("main", false, None, vec![make_call_stmt("func_a")]),
             // func_a 调用 func_b
-            make_binding("func_a", false, None, vec![make_call_stmt("func_b")], None),
+            make_binding("func_a", false, None, vec![make_call_stmt("func_b")]),
             // func_b 调用 func_a
-            make_binding("func_b", false, None, vec![make_call_stmt("func_a")], None),
+            make_binding("func_b", false, None, vec![make_call_stmt("func_a")]),
         ],
         span: Span::dummy(),
     };
@@ -445,7 +444,7 @@ fn test_method_binding_no_function_warning() {
     // Arrange: 方法绑定（Type.method）不应作为普通函数被报告
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
-        items: vec![make_binding("render", true, Some("Widget"), vec![], None)],
+        items: vec![make_binding("render", true, Some("Widget"), vec![])],
         span: Span::dummy(),
     };
 

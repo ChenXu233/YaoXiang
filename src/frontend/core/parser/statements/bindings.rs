@@ -53,7 +53,7 @@ pub fn parse_method_bind(
         return None;
     }
 
-    let (stmts, expr) = parse_fn_body(state)?;
+    let body = parse_fn_body(state)?;
 
     state.skip(&TokenKind::Semicolon);
 
@@ -65,7 +65,7 @@ pub fn parse_method_bind(
             generic_params: Vec::new(),
             type_annotation: None,
             params,
-            body: (stmts, expr),
+            body,
             is_pub: false,
         },
         span,

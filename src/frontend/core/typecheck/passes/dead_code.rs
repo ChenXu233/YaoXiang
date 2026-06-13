@@ -113,7 +113,7 @@ impl DeadCodeAnalyzer {
 
                     // 判定是否为类型构造器：参数为空、body为空、有类型注解
                     let is_type_constructor =
-                        type_annotation.is_some() && params.is_empty() && body.0.is_empty();
+                        type_annotation.is_some() && params.is_empty() && body.is_empty();
 
                     let (def_name, kind) = if is_method {
                         let full_name = format!("{}.{}", type_name.as_ref().unwrap(), name);
@@ -367,9 +367,6 @@ impl DeadCodeAnalyzer {
             for stmt in &block.stmts {
                 collect_from_stmt(stmt, referenced);
             }
-            if let Some(expr) = &block.expr {
-                collect_from_expr(expr, referenced);
-            }
         }
 
         fn collect_from_stmt(
@@ -396,8 +393,7 @@ impl DeadCodeAnalyzer {
                     referenced.insert(name.clone());
                     collect_from_block(
                         &Block {
-                            stmts: body.0.clone(),
-                            expr: body.1.clone(),
+                            stmts: body.clone(),
                             span: stmt.span,
                         },
                         referenced,

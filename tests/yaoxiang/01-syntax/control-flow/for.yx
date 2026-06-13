@@ -1,0 +1,24 @@
+// 01-syntax/control-flow/for.yx
+// 覆盖: 规范 §5.9 for 语句
+// 验证: for 循环遍历
+// 状态: ✅ 可运行
+
+use std.io
+
+main = {
+    mut items = [10, 20, 30]
+
+    // 基本 for 循环
+    for item in items {
+        io.println(item)
+    }
+
+    // for 累加
+    mut sum = 0
+    for n in items {
+        sum = sum + n
+    }
+    io.println(sum)
+
+    io.println("ALL TESTS PASSED")
+}

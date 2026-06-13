@@ -1,0 +1,12 @@
+// 02-type-system/dicts.yx
+// 覆盖: 规范 §2.6.4 集合字面量
+// 验证: Dict 字面量
+// 状态: ✅ 可运行
+
+use std.io
+
+main = {
+    mut d = {"key": 42}
+    io.println(d)
+    io.println("ALL TESTS PASSED")
+}

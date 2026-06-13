@@ -207,6 +207,33 @@ pub struct ProjectConfig {
     /// Format configuration
     #[serde(default)]
     pub fmt: FmtConfig,
+    /// Runtime configuration
+    #[serde(default)]
+    pub runtime: RuntimeConfig,
+}
+
+/// Runtime configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeConfig {
+    /// Runtime mode: embedded, standard, full
+    #[serde(default = "default_runtime_mode")]
+    pub mode: String,
+    /// Number of worker threads (0 = auto-detect CPU cores)
+    #[serde(default)]
+    pub workers: usize,
+}
+
+fn default_runtime_mode() -> String {
+    "embedded".to_string()
+}
+
+impl Default for RuntimeConfig {
+    fn default() -> Self {
+        Self {
+            mode: "embedded".to_string(),
+            workers: 0,
+        }
+    }
 }
 
 /// Get the user config directory

@@ -14,6 +14,8 @@ pub enum CompilationPhase {
     TypeChecking,
     /// IR 生成
     IRGeneration,
+    /// 证明函数执行（RFC-027 Phase 2.5）
+    ProofExecution,
     /// 完整编译
     Full,
 }
@@ -28,6 +30,7 @@ impl std::fmt::Display for CompilationPhase {
             CompilationPhase::Parsing => write!(f, "parsing"),
             CompilationPhase::TypeChecking => write!(f, "type checking"),
             CompilationPhase::IRGeneration => write!(f, "IR generation"),
+            CompilationPhase::ProofExecution => write!(f, "proof execution"),
             CompilationPhase::Full => write!(f, "full compilation"),
         }
     }

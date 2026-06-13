@@ -254,8 +254,8 @@ pub enum StmtKind {
         type_annotation: Option<Type>,
         /// Parameters (for functions and methods)
         params: Vec<Param>,
-        /// Body: (prelude statements, optional tail expression)
-        body: (Vec<Stmt>, Option<Box<Expr>>),
+        /// Body statements (last expression statement is the return value)
+        body: Vec<Stmt>,
         /// Whether this binding is public
         is_pub: bool,
     },
@@ -289,6 +289,8 @@ pub enum StmtKind {
         rhs: Box<Expr>,
         span: Span,
     },
+    /// Return statement: `return expr` or `return`
+    Return(Option<Box<Expr>>),
     /// 错误恢复占位符：表示解析失败的语句
     ///
     /// 当解析器遇到无法解析的语句时，插入此占位符而非 panic。
@@ -488,10 +490,11 @@ pub enum Type {
 }
 
 /// Block
+///
+/// All blocks use `return` for return values. No trailing expression semantics.
 #[derive(Debug, Clone)]
 pub struct Block {
     pub stmts: Vec<Stmt>,
-    pub expr: Option<Box<Expr>>,
     pub span: Span,
 }
 
@@ -575,7 +578,6 @@ pub fn classify_binding_semantic_kind(
     type_annotation: Option<&Type>,
     params: &[Param],
     body_stmts: &[Stmt],
-    body_expr: Option<&Expr>,
 ) -> BindingSemanticKind {
     if type_name.is_some() {
         return BindingSemanticKind::Method;
@@ -584,11 +586,7 @@ pub fn classify_binding_semantic_kind(
     // 解析器会把类型构造器降级为"空 params + 空 body + concrete type annotation"形态。
     // 例如 `Id: (T: Type) -> Type = { x: T }` 在 AST 中 type_annotation 已是 Struct，
     // 不再保留 `-> Type` 的函数签名，因此这里必须按降级后的形状判断。
-    if type_annotation.is_some()
-        && params.is_empty()
-        && body_stmts.is_empty()
-        && body_expr.is_none()
-    {
+    if type_annotation.is_some() && params.is_empty() && body_stmts.is_empty() {
         return BindingSemanticKind::TypeConstructor;
     }
 

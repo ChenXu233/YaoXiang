@@ -202,6 +202,8 @@ fn format_runtime_stack_trace(
 pub fn run_file_with_diagnostics(
     file: &std::path::PathBuf,
     debug_info: bool,
+    runtime_mode: &str,
+    workers: usize,
 ) -> anyhow::Result<()> {
     use crate::frontend::Compiler;
     use crate::middle::passes::codegen::CodegenContext;
@@ -256,7 +258,27 @@ pub fn run_file_with_diagnostics(
             let bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);
 
             // Execute
-            let mut executor: Box<dyn Executor> = Box::new(Interpreter::new());
+            let mut interp = Interpreter::new();
+            let rt_mode = match runtime_mode {
+                "standard" => crate::backends::runtime::RuntimeMode::Standard,
+                "full" => crate::backends::runtime::RuntimeMode::Full,
+                _ => crate::backends::runtime::RuntimeMode::Embedded,
+            };
+            let effective_workers = if workers > 0 {
+                workers
+            } else {
+                std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(4)
+            };
+            interp.set_runtime_config(
+                crate::backends::interpreter::runtime::InterpreterRuntimeConfig {
+                    runtime: rt_mode,
+                    workers: effective_workers,
+                    work_stealing: false,
+                },
+            );
+            let mut executor: Box<dyn Executor> = Box::new(interp);
             if let Err(e) = executor.execute_module(&bytecode_module) {
                 eprintln!();
                 let output = render_runtime_error(&e, &bytecode_module, Some(&sources));

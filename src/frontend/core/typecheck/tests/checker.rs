@@ -174,10 +174,12 @@ fn test_type_checker_reports_fn_param_type_mismatch() {
                         is_mut: false,
                         span: Span::dummy(),
                     }],
-                    body: (
-                        vec![],
-                        Some(Box::new(Expr::Var("x".to_string(), Span::dummy()))),
-                    ),
+                    body: vec![Stmt {
+                        kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(
+                            Expr::Var("x".to_string(), Span::dummy()),
+                        )),
+                        span: Span::dummy(),
+                    }],
                     is_pub: false,
                 },
                 span: Span::dummy(),
@@ -265,10 +267,13 @@ fn test_type_checker_with_multiple_function_definitions() {
                     is_mut: false,
                     span: Span::dummy(),
                 }],
-                body: (
-                    vec![],
-                    Some(Box::new(Expr::Var("x".to_string(), Span::dummy()))),
-                ),
+                body: vec![Stmt {
+                    kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(Expr::Var(
+                        "x".to_string(),
+                        Span::dummy(),
+                    ))),
+                    span: Span::dummy(),
+                }],
                 is_pub: false,
             },
             span: Span::dummy(),
@@ -307,8 +312,13 @@ fn test_type_checker_with_nested_function_definition() {
         }],
         return_type: Some(AstType::Int(32)),
         body: Box::new(crate::frontend::core::parser::ast::Block {
-            stmts: vec![],
-            expr: Some(Box::new(Expr::Var("y".to_string(), Span::dummy()))),
+            stmts: vec![Stmt {
+                kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(Expr::Var(
+                    "y".to_string(),
+                    Span::dummy(),
+                ))),
+                span: Span::dummy(),
+            }],
             span: Span::dummy(),
         }),
         span: Span::dummy(),
@@ -331,15 +341,20 @@ fn test_type_checker_with_nested_function_definition() {
                     is_mut: false,
                     span: Span::dummy(),
                 }],
-                body: (
-                    vec![Stmt {
+                body: vec![
+                    Stmt {
                         kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(
                             inner_fn,
                         )),
                         span: Span::dummy(),
-                    }],
-                    Some(Box::new(Expr::Var("x".to_string(), Span::dummy()))),
-                ),
+                    },
+                    Stmt {
+                        kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(
+                            Expr::Var("x".to_string(), Span::dummy()),
+                        )),
+                        span: Span::dummy(),
+                    },
+                ],
                 is_pub: false,
             },
             span: Span::dummy(),
@@ -389,7 +404,7 @@ fn test_type_checker_with_generic_type_binding() {
                     }),
 
                     params: vec![],
-                    body: (vec![], None),
+                    body: vec![],
                     is_pub: false,
                 },
                 span: Span::dummy(),

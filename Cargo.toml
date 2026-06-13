@@ -1,6 +1,6 @@
 [package]
 name = "yaoxiang"
-version = "0.7.4"
+version = "0.7.5"
 edition = "2021"
 rust-version = "1.96"
 description = "YaoXiang (爻象) Programming Language - A high-performance language with type-as-everything philosophy"
@@ -104,6 +104,3 @@ debug = true
 
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"
-
-[patch.crates-io]
-time = { git = "https://github.com/time-rs/time", tag = "v0.3.47" }

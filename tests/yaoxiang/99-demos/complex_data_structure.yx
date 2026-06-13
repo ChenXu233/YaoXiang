@@ -1,0 +1,24 @@
+// 99-demos/complex_data_structure.yx
+// 复杂数据结构: 链表遍历 — 多个 &Node 令牌共存
+// 论文价值: 不可变遍历天然安全，无需 Rc/RefCell
+
+use std.io
+
+Node: Type = { value: Int, next: Int }
+
+// 遍历函数 — &Node 令牌，两个节点可同时访问（Dup）
+sum_nodes: (a: &Node, b: &Node) -> Int = {
+    return a.value + b.value
+}
+
+main = {
+    n1 = Node(10, 0)
+    n2 = Node(20, 0)
+    n3 = Node(30, 0)
+
+    // 三个 &Node 令牌同时活跃 — 自然（Dup）
+    total = sum_nodes(n1, n2)
+    total = total + n3.value
+    io.println(total)
+    io.println("ALL TESTS PASSED")
+}

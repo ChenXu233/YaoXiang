@@ -615,7 +615,7 @@ impl AstToIrGenerator {
                 generic_params: _,
                 type_annotation,
                 params,
-                body: (stmts, expr),
+                body,
                 is_pub: _,
             } => {
                 // 区分函数定义、方法绑定和类型定义
@@ -626,8 +626,7 @@ impl AstToIrGenerator {
                         name,
                         method_type.as_ref().unwrap(),
                         params,
-                        stmts,
-                        expr,
+                        body,
                         constants,
                     )
                 } else if type_annotation.as_ref().is_some_and(|t| {
@@ -642,8 +641,7 @@ impl AstToIrGenerator {
                         name,
                         type_annotation.as_ref(),
                         params,
-                        stmts,
-                        expr,
+                        body,
                         constants,
                     )
                 }
@@ -685,8 +683,7 @@ impl AstToIrGenerator {
         method_name: &str,
         method_type: &ast::Type,
         params: &[ast::Param],
-        stmts: &[ast::Stmt],
-        expr: &Option<Box<ast::Expr>>,
+        body: &[ast::Stmt],
         constants: &mut Vec<ConstValue>,
     ) -> Result<Option<FunctionIR>, Diagnostic> {
         // 重置当前函数的可变局部变量追踪
@@ -750,15 +747,19 @@ impl AstToIrGenerator {
         let mut instructions = Vec::new();
 
         // 生成语句 IR
-        for stmt in stmts {
+        for stmt in body {
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
         }
 
-        // 生成表达式 IR
-        if let Some(expr) = expr {
-            let result_reg = 0;
-            self.generate_expr_ir(expr, result_reg, &mut instructions, constants)?;
-            instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+        // 生成表达式 IR（最后一个表达式语句作为返回值）
+        if let Some(last_stmt) = body.last() {
+            if let ast::StmtKind::Expr(expr) = &last_stmt.kind {
+                let result_reg = 0;
+                self.generate_expr_ir(expr, result_reg, &mut instructions, constants)?;
+                instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+            } else {
+                instructions.push(Instruction::Ret(None));
+            }
         } else {
             instructions.push(Instruction::Ret(None));
         }
@@ -807,13 +808,12 @@ impl AstToIrGenerator {
     /// 生成函数 IR
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::only_used_in_recursion)]
-    fn generate_function_ir(
+    pub(crate) fn generate_function_ir(
         &mut self,
         name: &str,
         type_annotation: Option<&ast::Type>,
         params: &[ast::Param],
-        stmts: &[ast::Stmt],
-        expr: &Option<Box<ast::Expr>>,
+        body: &[ast::Stmt],
         constants: &mut Vec<ConstValue>,
     ) -> Result<Option<FunctionIR>, Diagnostic> {
         // 检测 native("symbol") 模式：函数体为空语句 + Native("...") 表达式
@@ -821,23 +821,8 @@ impl AstToIrGenerator {
         //
         // 通过 name resolution 检测，不再硬编码 Var("Native") 字符串匹配。
         // Native 是 std.ffi 模块中真实存在的函数，名称通过 SHORT_TO_QUALIFIED 解析。
-        if stmts.is_empty() {
-            if let Some(expr_box) = expr {
-                if let ast::Expr::Call {
-                    func,
-                    args,
-                    named_args: _,
-                    span: _,
-                } = expr_box.as_ref()
-                {
-                    if let Some(symbol) = crate::std::ffi::extract_native_binding_symbol(func, args)
-                    {
-                        self.native_bindings
-                            .push(crate::std::ffi::NativeBinding::new(name, &symbol));
-                        return Ok(None);
-                    }
-                }
-            }
+        if body.is_empty() {
+            // 空函数体，无法检测 native 模式
         }
 
         // 重置当前函数的可变局部变量追踪
@@ -881,7 +866,7 @@ impl AstToIrGenerator {
         self.next_temp = local_var_start;
 
         // 处理语句
-        for stmt in stmts {
+        for stmt in body {
             tlog!(
                 debug,
                 MSG::IrGenBeforeProcessStmt,
@@ -898,11 +883,16 @@ impl AstToIrGenerator {
         // 阶段3修复：简化返回值处理逻辑，明确表达式vs语句语义
         // 表达式形式 (a, b) => body：直接返回 body 的值
         // 代码块形式 { ... }：必须显式 return，否则默认返回 Void
-        if let Some(e) = expr {
-            let result_reg = self.next_temp_reg();
-            self.generate_expr_ir(e, result_reg, &mut instructions, constants)?;
-            // 表达式形式：直接返回表达式的值
-            instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+        if let Some(last_stmt) = body.last() {
+            if let ast::StmtKind::Expr(e) = &last_stmt.kind {
+                let result_reg = self.next_temp_reg();
+                self.generate_expr_ir(e, result_reg, &mut instructions, constants)?;
+                // 表达式形式：直接返回表达式的值
+                instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+            } else {
+                // 代码块形式：隐式返回 Void（无 return 时）
+                instructions.push(Instruction::Ret(None));
+            }
         } else {
             // 代码块形式：隐式返回 Void（无 return 时）
             instructions.push(Instruction::Ret(None));
@@ -1463,7 +1453,7 @@ impl AstToIrGenerator {
                 generic_params: _,
                 type_annotation,
                 params,
-                body: (stmts, expr),
+                body,
                 is_pub: _,
             } => {
                 // 生成嵌套函数的 IR（排除方法绑定和类型定义）
@@ -1471,8 +1461,7 @@ impl AstToIrGenerator {
                     name,
                     type_annotation.as_ref(),
                     params,
-                    stmts,
-                    expr,
+                    body,
                     constants,
                 ) {
                     Ok(Some(func_ir)) => {
@@ -1760,12 +1749,6 @@ impl AstToIrGenerator {
             self.generate_local_stmt_ir(stmt, instructions, constants)?;
         }
 
-        // 生成表达式（如果有）
-        if let Some(expr) = &block.expr {
-            let result_reg = self.next_temp_reg();
-            self.generate_expr_ir(expr, result_reg, instructions, constants)?;
-        }
-
         // 退出作用域
         self.exit_scope();
 
@@ -1776,7 +1759,7 @@ impl AstToIrGenerator {
     fn generate_block_expr_ir(
         &mut self,
         block: &ast::Block,
-        result_reg: usize,
+        _result_reg: usize,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -1788,24 +1771,7 @@ impl AstToIrGenerator {
             self.generate_local_stmt_ir(stmt, instructions, constants)?;
         }
 
-        // 生成表达式（如果有）
-        if let Some(expr) = &block.expr {
-            let temp_reg = self.next_temp_reg();
-            self.generate_expr_ir(expr, temp_reg, instructions, constants)?;
-
-            // 将表达式结果移动到目标寄存器
-            instructions.push(Instruction::Move {
-                dst: Operand::Local(result_reg),
-                src: Operand::Local(temp_reg),
-            });
-        } else {
-            // 如果块没有表达式，返回 0（Void）
-            instructions.push(Instruction::Load {
-                dst: Operand::Local(result_reg),
-                src: Operand::Const(ConstValue::Int(0)),
-            });
-        }
-
+        // 如果没有 return 语句，result_reg 保持默认值（Void）
         // 退出作用域
         self.exit_scope();
 
@@ -2243,11 +2209,10 @@ impl AstToIrGenerator {
             &resource_var_sets,
         );
 
-        // 16. 生成 Spawn 指令
-        //     closures 参数是闭包列表（运行时动态收集）
-        //     这里将列表寄存器作为单个 Operand 传给 Spawn
-        instructions.push(Instruction::Spawn {
-            closures: vec![Operand::Local(closures_list_reg)],
+        // 16. 生成 SpawnFromList 指令
+        //     closures_list 参数是闭包列表寄存器（运行时动态收集）
+        instructions.push(Instruction::SpawnFromList {
+            closures_list: Operand::Local(closures_list_reg),
             plan,
             result: Operand::Local(result_reg),
         });
@@ -2449,15 +2414,11 @@ impl AstToIrGenerator {
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
         }
 
-        // 处理返回值表达式
-        // 使用 next_temp_reg 分配独立的返回值寄存器，避免与参数寄存器冲突
-        if let Some(expr) = &body.expr {
-            let result_reg = self.next_temp_reg();
-            self.generate_expr_ir(expr, result_reg, &mut instructions, constants)?;
-            // 添加返回指令
-            instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
-        } else {
-            // 隐式返回 Void
+        // 如果没有遇到 Ret 指令，追加 Ret(None)
+        let has_ret = instructions
+            .iter()
+            .any(|inst| matches!(inst, Instruction::Ret(_)));
+        if !has_ret {
             instructions.push(Instruction::Ret(None));
         }
 
@@ -3600,8 +3561,10 @@ impl AstToIrGenerator {
                     let lambda = ast::Expr::Lambda {
                         params: Vec::new(),
                         body: Box::new(ast::Block {
-                            stmts: Vec::new(),
-                            expr: Some(Box::new(task.expr.clone())),
+                            stmts: vec![ast::Stmt {
+                                kind: ast::StmtKind::Expr(Box::new(task.expr.clone())),
+                                span: *span,
+                            }],
                             span: *span,
                         }),
                         span: *span,

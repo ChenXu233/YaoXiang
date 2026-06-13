@@ -409,27 +409,25 @@ pub fn parse_method_bind_stmt(
     // 1. 旧语法: (self, surface) => { ... }      - Lambda 表达式
     // 2. 新语法: { ... }                          - 代码块（参数已在签名中声明）
     // 3. 直接表达式: value                        - 表达式（无 return）
-    let (params, body_stmts, body_expr) = match &initializer {
+    let (params, body_stmts) = match &initializer {
         Expr::Lambda { params, body, .. } => {
             // 旧语法：提取 Lambda 的参数和体
-            (params.clone(), body.stmts.clone(), body.expr.clone())
+            (params.clone(), body.stmts.clone())
         }
         Expr::Block(block) => {
             // RFC-010 新语法：代码块体，参数已在签名中声明
             // 使用从签名中解析出的方法参数（method_fn_params），
             // 这样类型检查器可以正确地将参数添加到作用域
-            (
-                method_fn_params.clone(),
-                block.stmts.clone(),
-                block.expr.clone(),
-            )
+            (method_fn_params.clone(), block.stmts.clone())
         }
         expr => {
             // 直接表达式形式
             (
                 method_fn_params.clone(),
-                Vec::new(),
-                Some(Box::new(expr.clone())),
+                vec![Stmt {
+                    kind: StmtKind::Expr(Box::new(expr.clone())),
+                    span: state.span(),
+                }],
             )
         }
     };
@@ -445,7 +443,7 @@ pub fn parse_method_bind_stmt(
             type_annotation: None,
 
             params,
-            body: (body_stmts, body_expr),
+            body: body_stmts,
             is_pub: false,
         },
         span,
@@ -723,7 +721,7 @@ fn parse_var_stmt_with_pub(
                         type_annotation: Some(definition),
 
                         params: Vec::new(),
-                        body: (Vec::new(), None),
+                        body: Vec::new(),
                         is_pub: final_is_pub,
                     },
                     span,
@@ -811,7 +809,7 @@ fn parse_var_stmt_with_pub(
                             generic_params,
                             type_annotation: type_annotation.clone(),
                             params: merged,
-                            body: (body.stmts.clone(), body.expr.clone()),
+                            body: body.stmts.clone(),
                             is_pub: final_is_pub,
                         },
                         span,
@@ -822,11 +820,14 @@ fn parse_var_stmt_with_pub(
                     state.skip(&TokenKind::Semicolon);
 
                     // RFC-010: Check if expr is a Block expression
-                    // If so, use the block's statements and expression
+                    // If so, use the block's statements
                     let body = if let Expr::Block(block) = &expr {
-                        (block.stmts.clone(), block.expr.clone())
+                        block.stmts.clone()
                     } else {
-                        (Vec::new(), Some(Box::new(expr)))
+                        vec![Stmt {
+                            kind: StmtKind::Expr(Box::new(expr)),
+                            span: state.span(),
+                        }]
                     };
 
                     return Some(Stmt {
@@ -891,7 +892,7 @@ fn parse_var_stmt_with_pub(
                                 }),
 
                                 params: Vec::new(),
-                                body: (Vec::new(), None),
+                                body: Vec::new(),
                                 is_pub: false,
                             },
                             span,
@@ -923,7 +924,7 @@ fn parse_var_stmt_with_pub(
                     type_annotation: Some(definition),
 
                     params: Vec::new(),
-                    body: (Vec::new(), None),
+                    body: Vec::new(),
                     is_pub: false,
                 },
                 span,
@@ -958,7 +959,7 @@ fn parse_var_stmt_with_pub(
                         type_annotation: type_annotation.clone(),
 
                         params: Vec::new(),
-                        body: (block.stmts.clone(), block.expr.clone()),
+                        body: block.stmts.clone(),
                         is_pub: final_is_pub,
                     },
                     span,
@@ -1122,7 +1123,7 @@ pub fn parse_identifier_stmt(
                         type_annotation: None, // Will be inferred
 
                         params: Vec::new(),
-                        body: (block.stmts.clone(), block.expr.clone()),
+                        body: block.stmts.clone(),
                         is_pub,
                     },
                     span,

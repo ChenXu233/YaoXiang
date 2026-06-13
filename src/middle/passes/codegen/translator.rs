@@ -386,8 +386,11 @@ impl Translator {
             CloseUpvalue(operand) => self.translate_close_upvalue(operand),
 
             // spawn for: 从 List 寄存器动态读取闭包并 spawn
-            // 暂时生成 Nop，后续需要实现 SpawnFromList 的字节码翻译
-            Instruction::SpawnFromList { .. } => Ok(BytecodeInstruction::new(Opcode::Nop, vec![])),
+            Instruction::SpawnFromList {
+                closures_list,
+                plan,
+                result,
+            } => self.translate_spawn_from_list(closures_list, plan, result),
         }
     }
 
@@ -618,13 +621,6 @@ impl Translator {
             .map(|c| self.operand_resolver.to_reg(c))
             .collect::<Result<Vec<u8>, _>>()?;
 
-        // 编码 group_count
-        let group_count: Vec<u32> = plan
-            .groups
-            .iter()
-            .map(|g| g.task_indices.len() as u32)
-            .collect();
-
         let mut operands = Vec::new();
 
         // dst (2 bytes LE)
@@ -638,15 +634,75 @@ impl Translator {
             operands.extend_from_slice(&(*reg as u16).to_le_bytes());
         }
 
-        // group_count.len() as u32 (4 bytes LE)
-        operands.extend_from_slice(&(group_count.len() as u32).to_le_bytes());
+        // task_deps.len() as u32 (4 bytes LE)
+        operands.extend_from_slice(&(plan.task_deps.len() as u32).to_le_bytes());
 
-        // each group's task count (4 bytes LE each)
-        for count in &group_count {
-            operands.extend_from_slice(&count.to_le_bytes());
+        // for each task: deps.len(4) + deps(4*each)
+        for deps in &plan.task_deps {
+            operands.extend_from_slice(&(deps.len() as u32).to_le_bytes());
+            for &dep in deps {
+                operands.extend_from_slice(&(dep as u32).to_le_bytes());
+            }
+        }
+
+        // task_resources.len() as u32 (4 bytes LE)
+        operands.extend_from_slice(&(plan.task_resources.len() as u32).to_le_bytes());
+
+        // for each task: res_count(4) + for each res: str_len(4) + str_bytes
+        for res in &plan.task_resources {
+            operands.extend_from_slice(&(res.len() as u32).to_le_bytes());
+            for s in res {
+                let bytes = s.as_bytes();
+                operands.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+                operands.extend_from_slice(bytes);
+            }
         }
 
         Ok(BytecodeInstruction::new(Opcode::Spawn, operands))
+    }
+
+    fn translate_spawn_from_list(
+        &mut self,
+        closures_list: &Operand,
+        plan: &crate::middle::core::ir::ExecutionPlan,
+        result: &Operand,
+    ) -> Result<BytecodeInstruction, Diagnostic> {
+        let dst_reg = self.operand_resolver.to_reg(result)?;
+        let list_reg = self.operand_resolver.to_reg(closures_list)?;
+
+        let mut operands = Vec::new();
+
+        // dst (2 bytes LE)
+        operands.extend_from_slice(&(dst_reg as u16).to_le_bytes());
+
+        // closures_list (2 bytes LE)
+        operands.extend_from_slice(&(list_reg as u16).to_le_bytes());
+
+        // task_deps.len() as u32 (4 bytes LE)
+        operands.extend_from_slice(&(plan.task_deps.len() as u32).to_le_bytes());
+
+        // for each task: deps.len(4) + deps(4*each)
+        for deps in &plan.task_deps {
+            operands.extend_from_slice(&(deps.len() as u32).to_le_bytes());
+            for &dep in deps {
+                operands.extend_from_slice(&(dep as u32).to_le_bytes());
+            }
+        }
+
+        // task_resources.len() as u32 (4 bytes LE)
+        operands.extend_from_slice(&(plan.task_resources.len() as u32).to_le_bytes());
+
+        // for each task: res_count(4) + for each res: str_len(4) + str_bytes
+        for res in &plan.task_resources {
+            operands.extend_from_slice(&(res.len() as u32).to_le_bytes());
+            for s in res {
+                let bytes = s.as_bytes();
+                operands.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+                operands.extend_from_slice(bytes);
+            }
+        }
+
+        Ok(BytecodeInstruction::new(Opcode::SpawnFromList, operands))
     }
 
     fn translate_call_virt(

@@ -32,7 +32,6 @@ pub mod checker;
 pub mod signature;
 // 类型定义
 pub mod types;
-
 // 证明管道基础设施
 pub mod proof;
 // 有序证明层
