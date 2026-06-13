@@ -269,7 +269,7 @@ good_dup: (p: &Point) -> Void = {
 }
 ```
 
-**借用检查没有消失——它降维了。** 现有 `BorrowChecker` 变为 `BorrowPredicateEmitter`（命题生成器），生成的借用命题和其他类型命题共享同一条证明管道。这和类型检查器的概念完全平行：类型检查器生成类型等式命题，借用命题生成器生成借用命题，同一条管道验证。详细设计见 [RFC-009a](../draft/009a-borrow-proof-pipeline.md)。
+**借用检查没有消失——它降维了。** 现有 `BorrowChecker` 变为 `BorrowPredicateEmitter`（命题生成器），生成的借用命题和其他类型命题共享同一条证明管道。这和类型检查器的概念完全平行：类型检查器生成类型等式命题，借用命题生成器生成借用命题，同一条管道验证。详细设计见 [RFC-009a](../accepted/009a-borrow-proof-pipeline.md)。
 
 #### 2.7 编译器内部：品牌机制
 
@@ -667,7 +667,7 @@ unsafe {
 
 ### 令牌冲突检测：霍尔逻辑命题
 
-令牌冲突检测的完整方案见 [RFC-009a: 令牌生命期分析——基于霍尔证明管道](../draft/009a-borrow-proof-pipeline.md)。核心要点：
+令牌冲突检测的完整方案见 [RFC-009a: 令牌生命期分析——基于霍尔证明管道](../accepted/009a-borrow-proof-pipeline.md)。核心要点：
 
 **令牌活性是霍尔逻辑命题。** `{冲突的 ReadToken 全部死亡} write(data) {WriteToken 安全获取}`——和类型检查、用户谓词验证共享 RFC-027 的证明管道。编译器自动生成借用命题（`borrow_conflict`、`use_after_move`、`use_after_drop`、`mut_violation`），管道返回 Proved / Disproved / Unproven。
 

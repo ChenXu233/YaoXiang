@@ -30,7 +30,7 @@ title: "RFC 索引"
 
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
-| RFC-009a | [RFC-009a: 令牌生命期分析——基于霍尔证明管道](./draft/009a-borrow-proof-pipeline.md) | 晨煦 | 2026-06-13 | 草案 |
+| RFC-009a | [RFC-009a: 令牌生命期分析——基于霍尔证明管道](./accepted/009a-borrow-proof-pipeline.md) | 晨煦 | 2026-06-13 | 已接受 |
 | RFC-019 | [RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型](./draft/019-typed-homoiconicity.md) | 晨煦 | 2026-02-20 | 草案 |
 | RFC-028 | [RFC-028：JIT 编译器 — VM 内多级执行引擎](./draft/028-jit-compiler.md) | 晨煦 | 2026-06-11 | 草案 |
 
