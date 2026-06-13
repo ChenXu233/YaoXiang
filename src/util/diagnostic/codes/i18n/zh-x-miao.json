@@ -255,10 +255,6 @@
     "example": "break 'unknown;",
     "error_output": "error[E1070]: 未知标签喵~\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ 未知标签 'unknown'喵~"
   },
-  "E1080": {
-    "title": "spawn只能在@block作用域内使用喵~",
-    "help": "请把 `spawn { ... }` 放到 `@block { ... }` 里，或者把外层函数标记为 `@block`（当前：@{mode}）喵~"
-  },
   "E1081": {
     "title": "`?`只能在返回Result的函数里使用喵~",
     "help": "请先把外层函数返回类型改成 `Result[T, E]`，再用 `expr?` 来进行错误传播喵~"

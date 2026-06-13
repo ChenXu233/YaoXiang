@@ -49,7 +49,6 @@
 | E1060 | `Expected {expected} type argument(s), found {found}` | Несоответствие количества параметров типа |
 | E1061 | `Cannot instantiate generic type with given arguments` | Не удаётся создать экземпляр обобщённого типа |
 | E1070 | `Unknown label: '{label}'` | Неизвестная метка |
-| E1080 | `` `spawn` is only allowed inside @block scope (current: @{mode}) `` | spawn разрешён только внутри области видимости @block |
 | E1081 | `` `?` is only allowed inside functions returning Result `` | `?` разрешён только внутри функций, возвращающих Result |
 | E1082 | `` `?` requires a Result expression, found '{type}' `` | `?` может использоваться только с выражением Result |
 | E1083 | `` Result error type mismatch for `?`: expected '{expected}', found '{found}' `` | Несоответствие типа ошибки для `?` |

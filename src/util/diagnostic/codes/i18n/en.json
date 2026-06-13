@@ -255,10 +255,6 @@
     "example": "break 'unknown;",
     "error_output": "error[E1070]: unknown label\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ unknown label 'unknown'"
   },
-  "E1080": {
-    "title": "spawn can only be used within @block scope",
-    "help": "Place `spawn { ... }` inside `@block { ... }`, or mark the outer function as `@block` (currently: @{mode})."
-  },
   "E1081": {
     "title": "`?` can only be used within functions returning Result",
     "help": "Change the return type of the outer function to `Result[T, E]` first, then use `expr?` for error propagation."

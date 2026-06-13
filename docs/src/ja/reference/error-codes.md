@@ -49,7 +49,6 @@ YaoXiang コンパイラはエラーコードを使用して различные 
 | E1060 | `Expected {expected} type argument(s), found {found}` | 型引数の数が一致しません |
 | E1061 | `Cannot instantiate generic type with given arguments` | generics をインスタンス化できません |
 | E1070 | `Unknown label: '{label}'` | 不明なラベル |
-| E1080 | `` `spawn` is only allowed inside @block scope (current: @{mode}) `` | spawn は @block スコープ内でのみ許可されています |
 | E1081 | `` `?` is only allowed inside functions returning Result `` | `?` は Result を返す関数内でのみ許可されています |
 | E1082 | `` `?` requires a Result expression, found '{type}' `` | `?` は Result 式にのみ使用できます |
 | E1083 | `` Result error type mismatch for `?`: expected '{expected}', found '{found}' `` | `?` の错误型が一致しません |

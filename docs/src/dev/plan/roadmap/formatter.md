@@ -39,7 +39,6 @@ title: "格式化器状态"
 - ✅ try 操作符（?）
 - ✅ ref / borrow（& / &mut）
 - ✅ unsafe 块
-- ✅ eval 块（@block / @auto / @eager）
 - ✅ spawn 块
 - ✅ lambda 表达式（单表达式简洁形式）
 - ✅ f-string（含格式化规格）

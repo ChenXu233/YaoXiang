@@ -49,7 +49,6 @@ Errors produced during type checking, covering variable types, function calls, p
 | E1060 | `Expected {expected} type argument(s), found {found}` | Type argument count mismatch |
 | E1061 | `Cannot instantiate generic type with given arguments` | Cannot instantiate generics |
 | E1070 | `Unknown label: '{label}'` | Unknown label |
-| E1080 | `` `spawn` is only allowed inside @block scope (current: @{mode}) `` | spawn only allowed in @block scope |
 | E1081 | `` `?` is only allowed inside functions returning Result `` | `?` only allowed in functions returning Result |
 | E1082 | `` `?` requires a Result expression, found '{type}' `` | `?` can only be used with Result expressions |
 | E1083 | `` Result error type mismatch for `?`: expected '{expected}', found '{found}' `` | `?` error type mismatch |

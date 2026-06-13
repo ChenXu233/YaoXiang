@@ -255,10 +255,6 @@
     "example": "break 'unknown;",
     "error_output": "error[E1070]: 不不明なラベル\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ 不不明なラベル 'unknown'"
   },
-  "E1080": {
-    "title": "spawn は @block スコープ内でのみ使用できます",
-    "help": "`spawn { ... }` を `@block { ... }` 内に配置するか、外側の関数に `@block`（現在：@{mode}）を付けてください。"
-  },
   "E1081": {
     "title": "`?` は Result を返す関数内でのみ使用できます",
     "help": "まず外側の関数の戻り値の型を `Result[T, E]` に変更し、`expr?` で錯誤传播を行ってください。"

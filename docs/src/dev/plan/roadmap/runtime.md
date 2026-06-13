@@ -108,7 +108,7 @@ title: "运行时状态"
 2. **消除 task.rs 中的重复类型定义**
 3. **统一 Scheduler trait 与 facade.rs 的调度实现**
 4. **RFC-024 阶段 B：编译器接入**
-   - 清理旧模型（删除 `@block`/`@eager`/`@auto`、`EvalMode`、`EvalStrategy`）
+   - ~~清理旧模型~~ ✅ 已完成（`@block`/`@eager`/`@auto`、`Send`/`Sync` 已移除）
    - 新增编译期 DAG 分析 pass
    - 修改 `Instruction::Spawn` 支持多闭包 + 执行计划
    - 运行时按编译期执行计划分组并行执行

@@ -62,7 +62,7 @@ title: "类型检查器状态"
 - ✅ **类型求值器**（type_eval.rs - 1,163 行）：条件类型编译期求值（If, Match, Nat 算术）
 - ✅ **签名解析**（signature.rs - 386 行）：函数签名字符串→MonoType 解析
 - ✅ **死代码分析**（dead_code.rs - 740 行）：未使用符号检测、导入分析
-- ✅ **Spawn 放置检查**（spawn_placement.rs - 264 行）：RFC-001/008 spawn 仅允许在 @block 作用域
+- ✅ **Spawn 放置检查**（spawn_placement.rs - 264 行）：RFC-024 spawn 块合法性检查
 - ✅ **语义数据库**（semantic_db.rs - 818 行）：LSP 语义高亮、增量编译支持
 - ✅ **语义 Token 实现**（semantic_tokens_impl.rs - 1,653 行）：源码标识符的语义类型标注
 

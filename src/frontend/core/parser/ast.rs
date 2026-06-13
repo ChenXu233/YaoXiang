@@ -140,7 +140,7 @@ pub enum Expr {
     },
     /// Spawn a concurrent block: `spawn { ... }`
     ///
-    /// Only valid inside `@block` scope (enforced by type checker / compiler).
+    /// RFC-024: The only parallel primitive in YaoXiang.
     Spawn {
         body: Box<Block>,
         span: Span,

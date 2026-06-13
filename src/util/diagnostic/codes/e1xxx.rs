@@ -101,11 +101,6 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
         code: "E1070",
         category: ErrorCategory::TypeCheck,
     },
-    // === RFC-001/008: 并发语义约束 ===
-    ErrorCodeDefinition {
-        code: "E1080",
-        category: ErrorCategory::TypeCheck,
-    },
     // === RFC-001: Result/? 错误传播 ===
     ErrorCodeDefinition {
         code: "E1081",
@@ -311,12 +306,6 @@ impl ErrorCodeDefinition {
     pub fn unknown_label(label: &str) -> DiagnosticBuilder {
         let def = Self::find("E1070").unwrap();
         def.builder().param("label", label)
-    }
-
-    /// E1080 spawn 仅允许在 @block 作用域内使用
-    pub fn spawn_only_allowed_in_block(mode: &str) -> DiagnosticBuilder {
-        let def = Self::find("E1080").unwrap();
-        def.builder().param("mode", mode)
     }
 
     /// E1081 `?` 仅允许在返回 Result 的函数内使用
