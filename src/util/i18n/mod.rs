@@ -1,7 +1,7 @@
 //! Internationalization support for YaoXiang compiler
 //!
 //! Loads translations from JSON files in the `locales/` directory.
-//! Supports both hardcoded languages (en, zh, zh-miao) and dynamic loading.
+//! Auto-discovers all `.json` files in `locales/` and registers them as languages.
 //!
 //! # Configuration
 //!
@@ -73,51 +73,42 @@ pub fn get_i18n_config() -> &'static ConfigI18n {
 /// Translation table loaded from JSON
 type TranslationMap = HashMap<String, String>;
 
-/// Hardcoded language files
-const HARDCODED_LANGS: &[&str] = &["en", "zh", "zh-x-miao"];
-
 /// Load translations from a specific JSON file
-fn load_translation_file(file_name: &str) -> TranslationMap {
-    let path = format!("locales/{}.json", file_name);
-    match std::fs::read_to_string(&path) {
-        Ok(content) => serde_json::from_str(&content).unwrap_or_else(|e| {
-            eprintln!(
-                "Warning: Failed to parse {} translation file: {}",
-                file_name, e
-            );
-            HashMap::new()
-        }),
+/// 加载翻译文件（容错：跳过非 string 值）
+fn load_translation_file(path: &std::path::Path) -> TranslationMap {
+    match std::fs::read_to_string(path) {
+        Ok(content) => {
+            let raw: HashMap<String, serde_json::Value> =
+                serde_json::from_str(&content).unwrap_or_default();
+
+            // 只保留 string 类型的值
+            raw.into_iter()
+                .filter_map(|(k, v)| {
+                    if let serde_json::Value::String(s) = v {
+                        Some((k, s))
+                    } else {
+                        None // 跳过 _meta 等非 string 值
+                    }
+                })
+                .collect()
+        }
         Err(_) => HashMap::new(),
     }
 }
 
-/// Load hardcoded translations and scan for additional languages
+/// 扫描 locales/ 目录，自动注册所有语言
 static TRANSLATIONS: Lazy<HashMap<String, TranslationMap>> = Lazy::new(|| {
     let mut map = HashMap::new();
-
-    // Load hardcoded languages (en, zh, zh-miao)
-    for &lang in HARDCODED_LANGS {
-        let translations = load_translation_file(lang);
-        if !translations.is_empty() {
-            map.insert(lang.to_string(), translations);
-        }
-    }
-
-    // Dynamically scan for additional language files
     let locales_dir = std::path::Path::new("locales");
+
     if let Ok(entries) = std::fs::read_dir(locales_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().map(|e| e == "json").unwrap_or(false) {
                 if let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) {
-                    // Skip hardcoded languages (already loaded)
-                    if HARDCODED_LANGS.contains(&file_stem) {
-                        continue;
-                    }
-                    if let Ok(content) = std::fs::read_to_string(&path) {
-                        if let Ok(translations) = serde_json::from_str::<TranslationMap>(&content) {
-                            map.insert(file_stem.to_string(), translations);
-                        }
+                    let translations = load_translation_file(&path);
+                    if !translations.is_empty() {
+                        map.insert(file_stem.to_string(), translations);
                     }
                 }
             }
