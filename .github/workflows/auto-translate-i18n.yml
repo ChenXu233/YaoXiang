@@ -1,0 +1,67 @@
+name: Auto Translate I18n
+
+on:
+  push:
+    paths:
+      - 'locales/zh.json'
+      - 'src/util/diagnostic/codes/i18n/zh.json'
+      - 'i18n.config.json'
+      - 'i18n-glossary.json'
+    branches:
+      - dev
+  workflow_dispatch:
+    inputs:
+      full_translate:
+        description: '是否全量翻译（忽略 hash）'
+        type: boolean
+        default: false
+
+jobs:
+  translate:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: auto-translate-i18n-${{ github.ref }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+        working-directory: scripts/i18n
+
+      - name: Validate secrets
+        run: |
+          if [ -z "$AI_API_KEY" ]; then
+            echo "ERROR: AI_API_KEY secret is required but not set"
+            exit 1
+          fi
+          echo "Secrets validated successfully"
+        env:
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+
+      - name: Translate i18n files
+        run: node scripts/i18n/translate.mjs ${{ inputs.full_translate == true && '--full' || '' }}
+        env:
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_MODEL: ${{ secrets.AI_MODEL || 'MiniMax-M2.7-highspeed' }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL || 'http://101.132.38.216:3000/v1' }}
+
+      - name: Commit translations
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add locales/ src/util/diagnostic/codes/i18n/
+          git diff --staged --quiet || git commit -m ":globe_with_meridians: i18n: auto-translate locale files"
+          git pull --rebase origin dev
+          git push
