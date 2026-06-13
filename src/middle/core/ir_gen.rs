@@ -378,16 +378,6 @@ impl AstToIrGenerator {
         self.constraint_var_concrete_types.get(var_name)
     }
 
-    /// 阶段3修复：实例化多态类型
-    fn instantiate_poly_type(
-        &self,
-        poly_type: &PolyType,
-    ) -> MonoType {
-        // 简化实现：直接返回多态类型的主体
-        // 实际实现应该进行完整的类型实例化
-        poly_type.body.clone()
-    }
-
     /// 注册局部变量
     fn register_local(
         &mut self,
@@ -523,7 +513,7 @@ impl AstToIrGenerator {
                 }
                 // 从 bindings 查找
                 if let Some(poly_type) = self.lookup_var_type(name) {
-                    let mono_type = self.instantiate_poly_type(poly_type);
+                    let mono_type = poly_type.body.clone();
                     return Self::mono_type_to_struct_name(&mono_type);
                 }
                 // 从 IR 生成器追踪的类型查找
@@ -2280,7 +2270,7 @@ impl AstToIrGenerator {
             }
             // 2. 从 bindings 中查找全局绑定
             if let Some(poly_type) = self.lookup_var_type(name) {
-                let mono_type = self.instantiate_poly_type(poly_type);
+                let mono_type = poly_type.body.clone();
                 return mono_type.type_name();
             }
             // 3. 从 IR 生成器本地追踪的类型中查找
@@ -2352,7 +2342,7 @@ impl AstToIrGenerator {
                 }
 
                 self.lookup_var_type(name)
-                    .map(|poly_type| self.instantiate_poly_type(poly_type))
+                    .map(|poly_type| poly_type.body.clone())
             }
             ast::Expr::List(_, _) => Some(MonoType::List(Box::new(MonoType::Void))),
             ast::Expr::Tuple(items, _) => {

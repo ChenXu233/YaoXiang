@@ -4,86 +4,184 @@ title: "借用检查器状态"
 
 # 借用检查器（Lifetime）
 
-> **模块状态**：稳定（4 项待改进）
+> **模块状态**：过渡期——v8 线性扫描架构 → v9 霍尔命题管道
 > **位置**：`src/middle/passes/lifetime/`
-> **最后更新**：2026-06-01
+> **最后更新**：2026-06-13
+>
+> **相关 RFC**：
+> - [RFC-009: 所有权模型设计](../design/rfc/accepted/009-ownership-model.md) — 已接受
+> - [RFC-009a: 令牌生命期分析——基于霍尔证明管道](../design/rfc/accepted/009a-borrow-proof-pipeline.md) — 已接受
 
 ---
 
 ## 模块概述
 
-借用检查器模块是一个完整的**所有权分析与生命周期管理系统**，负责检查 Move 语义、借用冲突、可变性违规等所有权相关问题。
+借用检查器模块负责 YaoXiang 的所有权分析——Move 语义、借用令牌冲突、Drop/Clone 正确性、ref 环检测、可变性违规。
+
+**当前架构**（过渡期）：
+- ir_gen 硬编码插入 Borrow/Release 指令（词法作用域）
+- BorrowChecker 线性扫描 IR，被动验证令牌冲突
+- ControlFlowAnalyzer 存在但核心逻辑为空
+- 用户可见行为基本正确，但底层不是 RFC-009a 的霍尔命题管道
+
+**目标架构**（RFC-009 + RFC-009a）：
+- 品牌树追踪令牌派生关系
+- 消费者分析驱动 NLL 释放
+- 反向 BFS 活性分析（快速通道覆盖 95%+ 场景）
+- SMT 逻辑切断兜底（极罕见的 while + 路径条件场景）
+- Release 由作用域分析驱动，不在 ir_gen 硬编码
 
 **代码量**：约 300KB 源码（15 个子文件）
 
 ---
 
-## 功能清单
+## RFC 对齐状态
 
-### 核心检查器（已集成到 OwnershipChecker 统一入口）
+### RFC-009 五个核心概念
 
-| 子模块 | 文件 | 功能 | 状态 |
+| 概念 | 用户可见行为 | 底层实现 |
+|------|-------------|---------|
+| **Move** | ✅ 已完成 | MoveChecker，UseAfterMove 检测 |
+| **&T / &mut T** | ✅ 已完成 | BorrowChecker 线性扫描，被动响应 Borrow/Release 指令 |
+| **ref** | ⚠️ 环检测完成，逃逸分析缺失 | ref_semantics + cycle_check + intra_task_cycle |
+| **clone()** | ✅ 已完成 | CloneChecker，0 tests |
+| **unsafe + *T** | ✅ 已完成 | UnsafeChecker |
+
+### RFC-009a 六阶段
+
+| 阶段 | 内容 | 状态 | 说明 |
+|------|------|------|------|
+| 1 | 品牌树数据结构 | ❌ 未开始 | 替换 HashMap<String, BorrowToken>，品牌 ID + 父节点 + 消费者列表 |
+| 2 | 消费者分析 | ❌ 未开始 | DAG 构建时自动收集令牌消费者，NLL 基础 |
+| 3 | 反向 BFS 活性分析 | ❌ 未开始 | 品牌树 + 消费者 + break 切断 → 覆盖 95%+ 场景 |
+| 4 | 作用域驱动 Release | ❌ 未开始 | 删除 ir_gen 硬编码，作用域出口点 LIFO 插入，? 自动处理 |
+| 5 | SMT 逻辑切断 | ❌ 未开始 | 阻塞于 RFC-027 Phase 2，仅 while + 路径条件触发 |
+| 6 | 清理 | ❌ 未开始 | BorrowChecker → BorrowPredicateEmitter，删 ControlFlowAnalyzer |
+
+---
+
+## 当前模块清单
+
+### 核心检查器
+
+| 子模块 | 文件 | 功能 | 测试 |
 |--------|------|------|------|
-| **Move 语义** | `move_semantics.rs` (575行) | UseAfterMove 检测，支持空状态(Empty)重赋值 | ✅ 已完成 |
-| **Drop 语义** | `drop_semantics.rs` (143行) | UseAfterDrop、DropMovedValue、DoubleDrop 检测 | ✅ 已完成 |
-| **可变性检查** | `mut_check.rs` (395行) | 不可变变量赋值、不可变对象变异方法、不可变字段赋值 | ✅ 已完成 |
-| **Ref 语义** | `ref_semantics.rs` (145行) | RefNonOwner 检测——ref 只能应用于有效所有者 | ✅ 已完成 |
-| **Clone 语义** | `clone.rs` (173行) | CloneMovedValue、CloneDroppedValue 检测 | ✅ 已完成 |
-| **借用令牌** | `borrow_checker.rs` (503行) | 借用令牌冲突检测：MutableBorrowConflict、BorrowAfterMove、UseWhileFrozen | ✅ 已完成 |
-| **跨 spawn 循环** | `cycle_check.rs` (616行) | 跨任务循环引用检测，DFS 环检测 | ✅ 已完成 |
-| **任务内循环** | `intra_task_cycle.rs` (406行) | 任务内 ref 循环追踪（警告模式） | ✅ 已完成 |
+| **Move 语义** | `move_semantics.rs` | UseAfterMove 检测，空状态重赋值 | 6 |
+| **Drop 语义** | `drop_semantics.rs` | UseAfterDrop、DropMovedValue、DoubleDrop | 0 |
+| **可变性检查** | `mut_check.rs` | 不可变变量赋值/变异方法/字段赋值 | 0 |
+| **Ref 语义** | `ref_semantics.rs` | RefNonOwner 检测 | 0 |
+| **Clone 语义** | `clone.rs` | CloneMovedValue、CloneDroppedValue | 0 |
+| **借用令牌** | `borrow_checker.rs` | 令牌冲突检测（线性扫描架构） | 16 |
+| **跨任务环** | `cycle_check.rs` | 跨 spawn 循环引用 DFS 检测 | 8 |
+| **任务内环** | `intra_task_cycle.rs` | 任务内 ref 循环追踪（警告模式） | 7 |
 
-### 辅助分析器
+### 辅助模块
 
-| 子模块 | 文件 | 功能 | 状态 |
-|--------|------|------|------|
-| **所有权回流** | `ownership_flow.rs` (426行) | 分析函数参数是否在返回值中返回 | ✅ 已完成 |
-| **消费分析** | `consume_analysis.rs` (363行) | 跨函数消费模式查询，支持缓存 | ✅ 已完成 |
-| **链式调用** | `chain_calls.rs` (652行) | 方法链所有权流动分析 | ✅ 已完成 |
-| **生命周期追踪** | `lifecycle.rs` (1037行) | 变量完整生命周期追踪 | ✅ 已完成 |
-| **空状态** | `empty_state.rs` (513行) | Move 后变量空状态追踪 | ✅ 已完成 |
-| **控制流** | `control_flow.rs` (353行) | 分支状态合并分析 | ⚠️ 骨架完成，核心分析逻辑为空实现 |
-| **Unsafe 检查** | `unsafe_check.rs` (113行) | unsafe 块外解引用裸指针报错 | ✅ 已完成 |
-| **Send/Sync** | `send_sync.rs` (401行) | 类型级 Send/Sync 约束检查和约束传播 | ✅ 已完成（独立使用） |
+| 子模块 | 文件 | 归宿 |
+|--------|------|------|
+| **所有权回流** | `ownership_flow.rs` | 保留 |
+| **消费分析** | `consume_analysis.rs` | → Phase 2 整合进品牌树 |
+| **链式调用** | `chain_calls.rs` | 保留 |
+| **生命周期追踪** | `lifecycle.rs` | 保留——Drop 插入需要 |
+| **空状态** | `empty_state.rs` | 保留 |
+| **控制流** | `control_flow.rs` | → Phase 6 删除 |
+| **Unsafe 检查** | `unsafe_check.rs` | 保留 |
+| **Send/Sync** | `send_sync.rs` | 保留（独立使用） |
+
+---
+
+## 实现路线图
+
+### 阶段 0：补齐测试（可立即开始，阻塞重构）
+
+> 在动架构之前，先把现有行为的测试网铺好。
+
+| # | 任务 | 文件 |
+|---|------|------|
+| 0.1 | 补充 Drop 语义测试 | `tests/drop_semantics.rs` |
+| 0.2 | 补充 Clone 语义测试 | `tests/clone.rs` |
+| 0.3 | 补充可变性检查测试 | `tests/mut_check.rs` |
+| 0.4 | 补充 Ref 语义测试 | `tests/ref_semantics.rs` |
+| 0.5 | 补充 Unsafe 检查测试 | `tests/unsafe_check.rs` |
+
+### 阶段 1：品牌树数据结构（RFC-009a Phase 1）
+
+| # | 任务 | 产出 |
+|---|------|------|
+| 1.1 | 定义 `BrandTree`、`BrandNode` 结构体 | `brand_tree.rs` |
+| 1.2 | 实现前缀匹配冲突判断 | `conflicts()` |
+| 1.3 | 实现 DAG 构建时品牌节点注册 | 集成到 ir_gen |
+| 1.4 | 单元测试 | `tests/brand_tree.rs` |
+
+### 阶段 2：消费者分析（RFC-009a Phase 2）
+
+| # | 任务 | 产出 |
+|---|------|------|
+| 2.1 | DAG 构建时自动收集每个令牌的消费者列表 | `BrandNode.consumers` |
+| 2.2 | 系统谓词生成器定义（Borrow/Move/Drop/Mut → `{P} op {Q}`） | 接口定义 |
+
+### 阶段 3：反向 BFS 活性分析（RFC-009a Phase 3）
+
+| # | 任务 | 产出 |
+|---|------|------|
+| 3.1 | 实现反向 BFS 算法（break 切断回边） | 快速通道 |
+| 3.2 | 接入 RFC-027 证明管道接口（Proved/Disproved） | 管道接入 |
+| 3.3 | NLL 迭代边界规则实现 | 循环内令牌跨迭代语义 |
+| 3.4 | 替换 BorrowChecker 线性扫描 | 删除 `check_instruction` 里的 Borrow/Release match |
+
+### 阶段 4：作用域驱动 Release（RFC-009a Phase 4-5）
+
+| # | 任务 | 产出 |
+|---|------|------|
+| 4.1 | 作用域出口点收集（`}`、`?`、显式 return） | ir_gen |
+| 4.2 | LIFO Release 插入（品牌树父子关系自动级联） | ir_gen |
+| 4.3 | 删除 `ir_gen.rs` Call 后硬编码 Release | 代码清理 |
+
+### 阶段 5：SMT 逻辑切断（RFC-009a Phase 5，依赖 RFC-027 Phase 2）
+
+| # | 任务 | 产出 |
+|---|------|------|
+| 5.1 | 路径条件收集集成 | 从 RFC-027 管道获取 |
+| 5.2 | SMT fallback：`path_cond ⇒ !loop_cond` | 慢速通道 |
+| 5.3 | 激活 while 循环体内借用检查 | 当前保守拒绝的场景 |
+
+### 阶段 6：清理（RFC-009a Phase 6）
+
+| # | 任务 | 产出 |
+|---|------|------|
+| 6.1 | `BorrowChecker` → `BorrowPredicateEmitter` | 重命名，职责明确 |
+| 6.2 | 删除 `ControlFlowAnalyzer` | 管道统一处理 |
+| 6.3 | `consume_analysis.rs` 消费者信息迁移到品牌树 | 去重 |
+| 6.4 | 更新错误信息格式 | 与 RFC-009a §错误信息设计对齐 |
+
+---
+
+## 独立任务（不阻塞主线）
+
+| # | 任务 | 说明 |
+|---|------|------|
+| I.1 | ref 逃逸分析（Rc vs Arc 自动选择） | 当前编译器不区分跨任务与否，统一用 Arc |
+| I.2 | 删除 `control_flow.rs` 的 `ControlFlowAnalyzer` 之前，不要往里加新代码 | — |
 
 ---
 
 ## 测试覆盖
 
-**83 个单元测试**，分布如下：
+**当前：83 个单元测试**
 
 | 文件 | 测试数 | 覆盖情况 |
 |------|--------|----------|
-| `borrow_checker.rs` | 16 | 最充分：单元测试+端到端测试 |
-| `chain_calls.rs` | 13 | 充分：链提取、消费模式推断、长链、混合调用 |
-| `consume_analysis.rs` | 11 | 充分：Returns/Consumes 模式、缓存、多参数 |
-| `ownership_flow.rs` | 10 | 充分：直接返回、间接返回、多参数部分返回 |
-| `lifecycle.rs` | 10 | 充分：创建/消费/释放追踪、问题检测 |
-| `cycle_check.rs` | 8 | 良好：无循环/单向链/深度限制/unsafe 绕过 |
-| `intra_task_cycle.rs` | 7 | 良好：无循环/简单循环/自引用/多循环 |
-| `move_semantics.rs` | 6 | 基本：状态追踪、UseAfterMove |
-| `control_flow.rs` | 1 | 不足：仅测试状态合并函数 |
-| `empty_state.rs` | 1 | 不足：仅测试状态合并 |
-| 其他 | 0 | 无测试：drop_semantics, clone, mut_check, ref_semantics, unsafe_check, send_sync |
-
----
-
-## RFC 对比（RFC-009 所有权模型）
-
-| RFC 设计要点 | 实现状态 | 说明 |
-|-------------|---------|------|
-| Move 语义（默认） | ✅ 已实现 | MoveChecker 检测 UseAfterMove |
-| &T/&mut T 借用令牌 | ✅ 已实现 | BorrowChecker 实现令牌冲突检测 |
-| &T 冻结源数据（ReadToken） | ✅ 已实现 | ReadToken 存活期间禁止 WriteToken，冻结保证下可安全 Dup |
-| &mut T 线性 | ✅ 已实现 | 同一来源 &mut T 只能有一个活跃 |
-| 令牌冲突检测（流敏感活性分析） | ✅ 已实现 | 函数体内追踪令牌状态 |
-| ref 关键字（Rc/Arc 自动选择） | ⚠️ 部分实现 | ref 语义检查器存在 |
-| clone() 显式深拷贝 | ✅ 已实现 | CloneChecker 检测 clone 移动/释放的值 |
-| unsafe + *T | ✅ 已实现 | UnsafeChecker 检查 unsafe 块外的裸指针操作 |
-| 任务内循环：静默允许 | ✅ 已实现 | IntraTaskCycleTracker 以警告模式追踪 |
-| 跨任务循环：lint | ✅ 已实现 | CycleChecker 检测跨 spawn 循环引用 |
-| 无生命周期 'a | ✅ 符合设计 | 没有实现生命周期参数 |
-| Send/Sync 约束 | ✅ 已实现 | SendSyncChecker 独立于 OwnershipChecker |
+| `borrow_checker.rs` | 16 | 充分 |
+| `chain_calls.rs` | 13 | 充分 |
+| `consume_analysis.rs` | 11 | 充分 |
+| `ownership_flow.rs` | 10 | 充分 |
+| `lifecycle.rs` | 10 | 充分 |
+| `cycle_check.rs` | 8 | 良好 |
+| `intra_task_cycle.rs` | 7 | 良好 |
+| `move_semantics.rs` | 6 | 基本 |
+| `control_flow.rs` | 1 | 不足 |
+| `empty_state.rs` | 1 | 不足 |
+| 其他 | 0 | **缺失**：drop_semantics, clone, mut_check, ref_semantics, unsafe_check |
 
 ---
 
@@ -91,16 +189,7 @@ title: "借用检查器状态"
 
 | 维度 | 评分 | 说明 |
 |------|------|------|
-| 未完成事项 | 3 | 补充测试、control_flow 逻辑、ref 逃逸分析 |
-| 测试覆盖 | 良好 | 83 个测试，borrow_checker/chain_calls/consume_analysis 测试充分 |
+| 未完成事项 | 10 | 阶段 0 测试 (5) + 阶段 1-6 架构 (6) + ref 逃逸分析 (1) |
+| 测试覆盖 | 待补强 | 5 个子模块 0 tests，重构前必须补齐 |
 | 文档质量 | 良好 | 模块/结构体/方法级别均有文档注释 |
-| 代码架构 | 优秀 | OwnershipChecker 统一编排，职责分离清晰 |
-| RFC 合规 | 高度符合 | RFC-009 v9 设计高度符合 |
-
----
-
-## 待改进项
-
-1. **补充 5 个子模块的单元测试**：drop_semantics, clone, mut_check, ref_semantics, unsafe_check
-2. **实现 control_flow 分析器的核心逻辑**（当前为空骨架）
-3. **完善 ref 自动选择 Rc/Arc 的逃逸分析**
+| 代码架构 | 过渡期 | 当前线性扫描架构能跑但对不齐 RFC-009a |
