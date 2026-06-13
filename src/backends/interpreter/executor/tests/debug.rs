@@ -924,3 +924,90 @@ fn test_e2e_spawn_standard_mode() {
         result.unwrap_err()
     );
 }
+
+// Test: Standard mode with workers > 1 — verify multi-threaded execution.
+// Uses a thread-safe capture function to record values from worker threads.
+#[test]
+fn test_e2e_spawn_standard_multithreaded() {
+    use std::sync::{Arc, Mutex};
+    use std::time::Instant;
+
+    // Thread-safe capture: records values from any thread
+    static MT_CAPTURED: std::sync::OnceLock<Arc<Mutex<Vec<i64>>>> = std::sync::OnceLock::new();
+
+    fn mt_captured() -> Arc<Mutex<Vec<i64>>> {
+        MT_CAPTURED
+            .get_or_init(|| Arc::new(Mutex::new(Vec::new())))
+            .clone()
+    }
+
+    fn mt_capture_handler(
+        args: &[RuntimeValue],
+        _ctx: &mut crate::std::NativeContext<'_>,
+    ) -> Result<RuntimeValue, ExecutorError> {
+        let val = args.first().and_then(|v| v.to_int()).unwrap_or(0);
+        mt_captured().lock().unwrap().push(val);
+        Ok(RuntimeValue::Int(val))
+    }
+
+    mt_captured().lock().unwrap().clear();
+
+    let code = r#"
+        capture: (x: Int) -> Int = native("mt_capture")
+
+        main: () -> Int = () => {
+            spawn {
+                t1 = capture(10)
+                t2 = capture(20)
+                t3 = capture(30)
+            }
+            return 0
+        }
+    "#;
+
+    let mut compiler = crate::frontend::Compiler::new();
+    let module = compiler
+        .compile_with_source("<test>", code)
+        .unwrap_or_else(|e| panic!("Compile error: {:?}", e));
+    let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);
+    let bytecode_file = ctx
+        .generate()
+        .unwrap_or_else(|e| panic!("Codegen error: {:?}", e));
+    let bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);
+
+    let mut interp = Interpreter::new();
+    interp.set_runtime_config(InterpreterRuntimeConfig {
+        runtime: RuntimeMode::Standard,
+        workers: 4,
+        work_stealing: false,
+    });
+
+    // Register both "capture" (function name in bytecode) and "mt_capture" (native target)
+    interp
+        .ffi_registry_mut()
+        .register("capture", mt_capture_handler);
+    interp
+        .ffi_registry_mut()
+        .register("mt_capture", mt_capture_handler);
+
+    let start = Instant::now();
+    interp
+        .execute_module(&bytecode_module)
+        .unwrap_or_else(|e| panic!("Standard mode spawn failed: {:?}", e));
+    let elapsed = start.elapsed();
+
+    let captured = mt_captured();
+    let values = captured.lock().unwrap();
+    assert_eq!(
+        values.len(),
+        3,
+        "Expected 3 captured values from worker threads, got {}",
+        values.len()
+    );
+
+    let mut sorted = values.clone();
+    sorted.sort();
+    assert_eq!(sorted, vec![10, 20, 30]);
+
+    println!("Standard mode (workers=4) completed in {:?}", elapsed);
+}
