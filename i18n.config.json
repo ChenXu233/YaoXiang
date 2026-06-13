@@ -1,0 +1,18 @@
+{
+  "source": "zh",
+  "targets": {
+    "en": { "name": "English" },
+    "ja": { "name": "日本語" },
+    "ru": { "name": "Русский" },
+    "zh-x-miao": {
+      "name": "喵语",
+      "prompt": "翻译成可爱猫娘风格，加入喵~、nya~等语气词，使用日式可爱表达"
+    },
+    "zh-classical": {
+      "name": "文言文",
+      "prompt": "翻译成文言文风格，使用古汉语表达"
+    }
+  },
+  "batchSize": 20,
+  "model": "MiniMax-M2.7-highspeed"
+}
