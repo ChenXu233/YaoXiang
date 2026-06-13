@@ -889,8 +889,5 @@
     "help": "Wrap enum variants with braces and pipe separators",
     "example": "Color = red | green | blue",
     "error_output": "error[E0022]: Enums must use brace syntax\n --> example.yx:1:9\n  |\n1 | Color = red | green | blue\n  |         ^ Use brace syntax: { red | green | blue }"
-  },
-  "_meta": {
-    "lastUpdated": "2026-06-13T07:19:00.948Z"
   }
 }

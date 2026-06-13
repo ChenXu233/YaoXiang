@@ -35,7 +35,7 @@ fn test_error_code_registry_has_minimum_count() {
 #[test]
 fn test_i18n_registry_english_titles() {
     let en = I18nRegistry::en();
-    assert_eq!(en.get_title("E0001"), "Invalid character");
+    assert_eq!(en.get_title("E0001"), "Invalid Character");
     assert!(
         !en.get_help("E0001").is_empty(),
         "E0001 help text should not be empty"

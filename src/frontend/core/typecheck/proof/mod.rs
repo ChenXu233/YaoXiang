@@ -9,3 +9,6 @@ pub mod context;
 pub mod dep_graph;
 pub mod smt;
 pub mod verdict;
+
+#[cfg(test)]
+mod tests;
