@@ -48,4 +48,4 @@ docs/.env
 
 # i18n translation scripts
 scripts/i18n/.env
-locales/.i18n-cache.json
+
