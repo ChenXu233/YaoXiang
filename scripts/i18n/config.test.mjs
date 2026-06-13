@@ -10,14 +10,31 @@ describe('loadConfig', () => {
   it('should load i18n.config.json', () => {
     const config = loadConfig(ROOT);
     expect(config).toHaveProperty('source', 'zh');
-    expect(config).toHaveProperty('targets');
-    expect(config.targets).toHaveProperty('en');
-    expect(config.targets).toHaveProperty('zh-x-miao');
+    expect(config).toHaveProperty('systems');
+    expect(config).toHaveProperty('languages');
     expect(config).toHaveProperty('batchSize', 20);
   });
 
   it('should throw if config file not found', () => {
     expect(() => loadConfig('/nonexistent')).toThrow();
+  });
+});
+
+describe('loadConfig with new structure', () => {
+  it('should have systems definition', () => {
+    const config = loadConfig(ROOT);
+    expect(config).toHaveProperty('systems');
+    expect(config.systems).toHaveProperty('locales');
+    expect(config.systems).toHaveProperty('diagnostic');
+    expect(config.systems.locales).toHaveProperty('adapter', 'flat');
+    expect(config.systems.diagnostic).toHaveProperty('adapter', 'nested');
+  });
+
+  it('should have languages definition', () => {
+    const config = loadConfig(ROOT);
+    expect(config).toHaveProperty('languages');
+    expect(config.languages).toHaveProperty('en');
+    expect(config.languages).toHaveProperty('zh-x-miao');
   });
 });
 
