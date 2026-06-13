@@ -50,6 +50,16 @@ fn main() {
             );
             download(&url, &archive);
         }
+        // 验证下载的文件是否合法（至少 1MB）
+        let meta = fs::metadata(&archive).expect("Failed to read Z3 archive metadata");
+        if meta.len() < 1024 * 1024 {
+            let _ = fs::remove_file(&archive);
+            panic!(
+                "Z3 archive too small ({} bytes), download likely failed. \
+                 Set Z3_SYS_Z3_HEADER or place Z3 in .z3/ to skip download.",
+                meta.len()
+            );
+        }
         println!("cargo:warning=Extracting Z3...");
         extract(&archive, &z3_root);
         let _ = fs::remove_file(&archive);

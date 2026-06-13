@@ -34,6 +34,7 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
+            .z3
           key: check-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             check-${{ runner.os }}-cargo-
@@ -68,6 +69,7 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
+            .z3
           key: test-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             test-${{ runner.os }}-cargo-
@@ -105,6 +107,7 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
+            .z3
           key: msrv-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             msrv-${{ runner.os }}-cargo-
