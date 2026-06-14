@@ -2,105 +2,194 @@
 title: "借用チェッカー状態"
 ---
 
-# 借用チェッカー（ライフタイム）
+# 借用チェッカー（Lifetime）
 
-> **モジュール状態**：安定（4 項目要改善）
+> **モジュール状態**：過渡期——v8 リニアスキャンアーキテクチャ → v9 ホーア命题パイプ
 > **位置**：`src/middle/passes/lifetime/`
-> **最終更新**：2026-06-01
+> **最終更新**：2026-06-13
+>
+> **関連 RFC**：
+> - [RFC-009: 所有権モデル設計](../design/rfc/accepted/009-ownership-model.md) — 受理済み
+> - [RFC-009a: トークンライフタイム解析——ホーア証明パイプベース](../design/rfc/accepted/009a-borrow-proof-pipeline.md) — 受理済み
 
 ---
 
 ## モジュール概要
 
-借用チェッカーモジュールは、完全な**所有権解析とライフタイム管理システム**であり、Move セマンティクス、借用衝突、可変性違反など、所有権に関する問題を検査する。
+借用チェッカーモジュールは YaoXiang の所有権解析——Move セマンティクス、借用トークン衝突、Drop/Clone 正確性、ref 環検出、可変性違反——を担当する。
+
+**現在のアーキテクチャ**（過渡期）：
+- ir_gen がハードコードで Borrow/Release 命令を挿入（字句スコープ）
+- BorrowChecker は IR をリニアスキャンし、トークン衝突を受動的に検証
+- ControlFlowAnalyzer は存在するが、コアのロジックは空
+- ユーザーから見える動作は概ね正しいが、低層は RFC-009a のホーア命题パイプではない
+
+**目標アーキテクチャ**（RFC-009 + RFC-009a）：
+- ブランド木によるトークン派生関係の追跡
+- コンシューマー解析が NLL 解放を駆動
+- 逆方向 BFS 活性解析（高速パスで 95%+ のシナリオをカバー）
+- SMT 論理的切断によるフォールバック（極めて稀な while + パス条件のシナリオ）
+- Release はスコープ解析が駆動し、ir_gen でハードコードしない
 
 **コード量**：約 300KB ソースコード（15 サブファイル）
 
 ---
 
-## 機能一覧
+## RFC 整合状態
 
-### 中核チェッカー（OwnershipChecker 統合エントリに組み込み済み）
+### RFC-009 五つの核心概念
 
-| サブモジュール | ファイル | 機能 | 状態 |
+| 概念 | ユーザー可視動作 | 低層実装 |
+|------|-------------|---------|
+| **Move** | ✅ 完成 | MoveChecker、UseAfterMove 検出 |
+| **&T / &mut T** | ✅ 完成 | BorrowChecker リニアスキャン、Borrow/Release 命令に受動応答 |
+| **ref** | ⚠️ 環検出完成、エスケープ解析欠如 | ref_semantics + cycle_check + intra_task_cycle |
+| **clone()** | ✅ 完成 | CloneChecker、0 tests |
+| **unsafe + *T** | ✅ 完成 | UnsafeChecker |
+
+### RFC-009a 六段階
+
+| 段階 | 内容 | 状態 | 説明 |
+|------|------|------|------|
+| 1 | ブランド木データ構造 | ❌ 未着手 | HashMap<String, BorrowToken> を置換、ブランド ID + 親ノード + コンシューマーリスト |
+| 2 | コンシューマー解析 | ❌ 未着手 | DAG 構築時にトークンコンシューマーを自動収集、NLL の基礎 |
+| 3 | 逆方向 BFS 活性解析 | ❌ 未着手 | ブランド木 + コンシューマー + break 切断 → 95%+ のシナリオをカバー |
+| 4 | スコープ駆動 Release | ❌ 未着手 | ir_gen ハードコード削除、スコープ出口点で LIFO 挿入、? 自動処理 |
+| 5 | SMT 論理的切断 | ❌ 未着手 | RFC-027 Phase 2 にブロック、while + パス条件時のみトリガー |
+| 6 | クリーンアップ | ❌ 未着手 | BorrowChecker → BorrowPredicateEmitter、ControlFlowAnalyzer 削除 |
+
+---
+
+## 現在のモジュール一覧
+
+### コアチェッカー
+
+| サブモジュール | ファイル | 機能 | テスト |
 |--------|------|------|------|
-| **Move セマンティクス** | `move_semantics.rs` (575行) | UseAfterMove 検出、空状態(Empty)への再代入をサポート | ✅ 完了 |
-| **Drop セマンティクス** | `drop_semantics.rs` (143行) | UseAfterDrop、DropMovedValue、DoubleDrop 検出 | ✅ 完了 |
-| **可変性検査** | `mut_check.rs` (395行) | 不変変数への代入、不変オブジェクトの可変メソッド呼び出し、不変フィールドへの代入 | ✅ 完了 |
-| **Ref セマンティクス** | `ref_semantics.rs` (145行) | RefNonOwner 検出——ref は有効な所有者にのみ適用可能 | ✅ 完了 |
-| **Clone セマンティクス** | `clone.rs` (173行) | CloneMovedValue、CloneDroppedValue 検出 | ✅ 完了 |
-| **借用トークン** | `borrow_checker.rs` (503行) | 借用トークン衝突検出：MutableBorrowConflict、BorrowAfterMove、UseWhileFrozen | ✅ 完了 |
-| **spawn 跨ぎループ** | `cycle_check.rs` (616行) | タスク跨ぎの参照ループ検出、DFS 環検出 | ✅ 完了 |
-| **タスク内ループ** | `intra_task_cycle.rs` (406行) | タスク内 ref ループ追跡（警告モード） | ✅ 完了 |
+| **Move セマンティクス** | `move_semantics.rs` | UseAfterMove 検出、空状態再代入 | 6 |
+| **Drop セマンティクス** | `drop_semantics.rs` | UseAfterDrop、DropMovedValue、DoubleDrop | 0 |
+| **可変性検査** | `mut_check.rs` | 不変変数への代入 / 変異メソッド / フィールド代入 | 0 |
+| **Ref セマンティクス** | `ref_semantics.rs` | RefNonOwner 検出 | 0 |
+| **Clone セマンティクス** | `clone.rs` | CloneMovedValue、CloneDroppedValue | 0 |
+| **借用トークン** | `borrow_checker.rs` | トークン衝突検出（リニアスキャンアーキテクチャ） | 16 |
+| **タスク横断環** | `cycle_check.rs` | spawn を跨ぐ循環参照の DFS 検出 | 8 |
+| **タスク内環** | `intra_task_cycle.rs` | タスク内 ref 循環追跡（警告モード） | 7 |
 
-### 補助解析器
+### 補助モジュール
 
-| サブモジュール | ファイル | 機能 | 状態 |
-|--------|------|------|------|
-| **所有権の逆流** | `ownership_flow.rs` (426行) | 関数の引数が戻り値で返されるかを解析 | ✅ 完了 |
-| **消費解析** | `consume_analysis.rs` (363行) | 関数跨ぎ消費パターンクエリ、キャッシュ対応 | ✅ 完了 |
-| **チェーン呼び出し** | `chain_calls.rs` (652行) | メソッドチェーンの所有権フロー解析 | ✅ 完了 |
-| **ライフタイム追跡** | `lifecycle.rs` (1037行) | 変数の完全なライフタイム追跡 | ✅ 完了 |
-| **空状態** | `empty_state.rs` (513行) | Move 後の変数の空状態追跡 | ✅ 完了 |
-| **制御フロー** | `control_flow.rs` (353行) | 分岐状態の合流解析 | ⚠️ 骨組みのみ完了、中核解析ロジックは空実装 |
-| **Unsafe 検査** | `unsafe_check.rs` (113行) | unsafe ブロック外での生ポインタ逆参照をエラー報告 | ✅ 完了 |
-| **Send/Sync** | `send_sync.rs` (401行) | 型レベルの Send/Sync 型制約検査および制約伝播 | ✅ 完了（独立して使用） |
+| サブモジュール | ファイル | 帰属先 |
+|--------|------|------|
+| **所有権フロー** | `ownership_flow.rs` | 保持 |
+| **コンシューム解析** | `consume_analysis.rs` | → Phase 2 でブランド木に統合 |
+| **チェーン呼び出し** | `chain_calls.rs` | 保持 |
+| **ライフサイクル追跡** | `lifecycle.rs` | 保持——Drop 挿入に必要 |
+| **空状態** | `empty_state.rs` | 保持 |
+| **制御フロー** | `control_flow.rs` | → Phase 6 で削除 |
+| **Unsafe 検査** | `unsafe_check.rs` | 保持 |
+| **Send/Sync** | `send_sync.rs` | 保持（独立使用） |
+
+---
+
+## 実装ロードマップ
+
+### 段階 0：テスト補完（即時着手可能、リファクタリングをブロック）
+
+> アーキテクチャに手を入れる前に、まず既存動作のテスト網を敷く。
+
+| # | タスク | ファイル |
+|---|------|------|
+| 0.1 | Drop セマンティクステスト補完 | `tests/drop_semantics.rs` |
+| 0.2 | Clone セマンティクステスト補完 | `tests/clone.rs` |
+| 0.3 | 可変性検査テスト補完 | `tests/mut_check.rs` |
+| 0.4 | Ref セマンティクステスト補完 | `tests/ref_semantics.rs` |
+| 0.5 | Unsafe 検査テスト補完 | `tests/unsafe_check.rs` |
+
+### 段階 1：ブランド木データ構造（RFC-009a Phase 1）
+
+| # | タスク | 成果物 |
+|---|------|------|
+| 1.1 | `BrandTree`、`BrandNode` 構造体の定義 | `brand_tree.rs` |
+| 1.2 | プレフィックス一致による衝突判定実装 | `conflicts()` |
+| 1.3 | DAG 構築時のブランドノード登録実装 | ir_gen に統合 |
+| 1.4 | 単体テスト | `tests/brand_tree.rs` |
+
+### 段階 2：コンシューマー解析（RFC-009a Phase 2）
+
+| # | タスク | 成果物 |
+|---|------|------|
+| 2.1 | DAG 構築時に各トークンのコンシューマーリストを自動収集 | `BrandNode.consumers` |
+| 2.2 | システム述語生成器の定義（Borrow/Move/Drop/Mut → `{P} op {Q}`） | インターフェース定義 |
+
+### 段階 3：逆方向 BFS 活性解析（RFC-009a Phase 3）
+
+| # | タスク | 成果物 |
+|---|------|------|
+| 3.1 | 逆方向 BFS アルゴリズム実装（break で逆辺を切断） | 高速パス |
+| 3.2 | RFC-027 証明パイプインターフェース接続（Proved/Disproved） | パイプ接続 |
+| 3.3 | NLL 反復境界ルール実装 | ループ内トークンの反復横断セマンティクス |
+| 3.4 | BorrowChecker リニアスキャンの置換 | `check_instruction` 内の Borrow/Release match 削除 |
+
+### 段階 4：スコープ駆動 Release（RFC-009a Phase 4-5）
+
+| # | タスク | 成果物 |
+|---|------|------|
+| 4.1 | スコープ出口点の収集（`}`、`?`、明示的 return） | ir_gen |
+| 4.2 | LIFO Release 挿入（ブランド木の親子関係で自動カスケード） | ir_gen |
+| 4.3 | `ir_gen.rs` の Call 後ハードコード Release 削除 | コードクリーンアップ |
+
+### 段階 5：SMT 論理的切断（RFC-009a Phase 5、RFC-027 Phase 2 に依存）
+
+| # | タスク | 成果物 |
+|---|------|------|
+| 5.1 | パス条件収集の統合 | RFC-027 パイプから取得 |
+| 5.2 | SMT フォールバック：`path_cond ⇒ !loop_cond` | 低速パス |
+| 5.3 | while ループ体内借用検査の活性化 | 現在保守的に拒否しているシナリオ |
+
+### 段階 6：クリーンアップ（RFC-009a Phase 6）
+
+| # | タスク | 成果物 |
+|---|------|------|
+| 6.1 | `BorrowChecker` → `BorrowPredicateEmitter` | リネーム、責務明確化 |
+| 6.2 | `ControlFlowAnalyzer` 削除 | パイプで統一処理 |
+| 6.3 | `consume_analysis.rs` のコンシューマー情報をブランド木へ移行 | 重複排除 |
+| 6.4 | エラーメッセージフォーマットの更新 | RFC-009a §エラーメッセージ設計と整合 |
+
+---
+
+## 独立タスク（メインライン非ブロッキング）
+
+| # | タスク | 説明 |
+|---|------|------|
+| I.1 | ref エスケープ解析（Rc vs Arc 自動選択） | 現在コンパイラはタスク横断か否かを区別せず、Arc を統一使用 |
+| I.2 | `control_flow.rs` の `ControlFlowAnalyzer` 削除までは新コードを追加しないこと | — |
 
 ---
 
 ## テストカバレッジ
 
-**83 個の単体テスト**、内訳は以下の通り：
+**現在：83 単体テスト**
 
-| ファイル | テスト数 | カバレッジ |
+| ファイル | テスト数 | カバレッジ状況 |
 |------|--------|----------|
-| `borrow_checker.rs` | 16 | 最も充実：単体テスト＋エンドツーエンドテスト |
-| `chain_calls.rs` | 13 | 充実：チェーン抽出、消費パターン推論、長鎖、混合呼び出し |
-| `consume_analysis.rs` | 11 | 充実：Returns/Consumes パターン、キャッシュ、複数引数 |
-| `ownership_flow.rs` | 10 | 充実：直接返却、間接返却、複数引数の部分的返却 |
-| `lifecycle.rs` | 10 | 充実：作成／消費／解放の追跡、問題検出 |
-| `cycle_check.rs` | 8 | 良好：ループなし／単方向鎖／深さ制限／unsafe バイパス |
-| `intra_task_cycle.rs` | 7 | 良好：ループなし／単純ループ／自己参照／複数ループ |
-| `move_semantics.rs` | 6 | 基本：状態追跡、UseAfterMove |
-| `control_flow.rs` | 1 | 不十分：状態合流関数のテストのみ |
-| `empty_state.rs` | 1 | 不十分：状態合流のテストのみ |
-| その他 | 0 | テストなし：drop_semantics, clone, mut_check, ref_semantics, unsafe_check, send_sync |
-
----
-
-## RFC との対比（RFC-009 所有権モデル）
-
-| RFC 設計要点 | 実装状態 | 説明 |
-|-------------|---------|------|
-| Move セマンティクス（デフォルト） | ✅ 実装済み | MoveChecker が UseAfterMove を検出 |
-| &T/&mut T 借用トークン | ✅ 実装済み | BorrowChecker がトークン衝突検出を実装 |
-| &T によるソースデータの凍結（ReadToken） | ✅ 実装済み | ReadToken の生存期間中 WriteToken を禁止、凍結保証下で安全に Dup 可能 |
-| &mut T の線形性 | ✅ 実装済み | 同一由来の &mut T は同時に 1 つしかアクティブにできない |
-| トークン衝突検出（フロー依存生存解析） | ✅ 実装済み | 関数本体内でトークン状態を追跡 |
-| ref キーワード（Rc/Arc 自動選択） | ⚠️ 部分実装 | ref セマンティクスチェッカーが存在 |
-| clone() による明示的なディープコピー | ✅ 実装済み | CloneChecker が clone された移動／解放値の検出 |
-| unsafe + *T | ✅ 実装済み | UnsafeChecker が unsafe ブロック外の生ポインタ操作を検査 |
-| タスク内ループ：黙って許可 | ✅ 実装済み | IntraTaskCycleTracker が警告モードで追跡 |
-| タスク跨ぎループ：lint | ✅ 実装済み | CycleChecker がタスク跨ぎの spawn 参照ループを検出 |
-| ライフタイムパラメータ 'a なし | ✅ 設計準拠 | ライフタイム引数は実装されていない |
-| Send/Sync 型制約 | ✅ 実装済み | SendSyncChecker は OwnershipChecker から独立 |
+| `borrow_checker.rs` | 16 | 充分 |
+| `chain_calls.rs` | 13 | 充分 |
+| `consume_analysis.rs` | 11 | 充分 |
+| `ownership_flow.rs` | 10 | 充分 |
+| `lifecycle.rs` | 10 | 充分 |
+| `cycle_check.rs` | 8 | 良好 |
+| `intra_task_cycle.rs` | 7 | 良好 |
+| `move_semantics.rs` | 6 | 基本 |
+| `control_flow.rs` | 1 | 不足 |
+| `empty_state.rs` | 1 | 不足 |
+| その他 | 0 | **欠落**：drop_semantics, clone, mut_check, ref_semantics, unsafe_check |
 
 ---
 
 ## コード品質評価
 
-| 評価軸 | スコア | 説明 |
+| 次元 | スコア | 説明 |
 |------|------|------|
-| 未完了事項 | 3 | テスト追加、control_flow ロジック、ref エスケープ解析 |
-| テストカバレッジ | 良好 | 83 個のテスト、borrow_checker/chain_calls/consume_analysis はテスト充実 |
-| ドキュメント品質 | 良好 | モジュール／構造体／メソッドレベルすべてにドキュメントコメントあり |
-| コードアーキテクチャ | 優秀 | OwnershipChecker による統一オーケストレーション、責務分離が明確 |
-| RFC 準拠 | 高度に準拠 | RFC-009 v9 設計に高度に準拠 |
-
----
-
-## 改善項目
-
-1. **5 サブモジュールの単体テストを追加**：drop_semantics, clone, mut_check, ref_semantics, unsafe_check
-2. **control_flow 解析器の中核ロジックを実装**（現状は空の骨組み）
-3. **ref による Rc/Arc の自動選択エスケープ解析を完成させる**
+| 未完了事項 | 10 | 段階 0 テスト (5) + 段階 1-6 アーキテクチャ (6) + ref エスケープ解析 (1) |
+| テストカバレッジ | 要強化 | 5 サブモジュール 0 tests、リファクタリング前に必ず補完 |
+| ドキュメント品質 | 良好 | モジュール / 構造体 / メソッドレベルすべてにドキュメントコメントあり |
+| コードアーキテクチャ | 過渡期 | 現在のリニアスキャンアーキテクチャは動作するが、RFC-009a と整合しない |
