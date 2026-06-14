@@ -119,12 +119,9 @@ impl TraitTable {
             .get(&(trait_name.to_string(), for_type.to_string()))
     }
 
-<<<<<<< HEAD
     /// 添加 Trait 实现
     ///
     /// 返回 `true` 表示新插入，`false` 表示已存在（不覆盖）
-=======
->>>>>>> 8a44037294632ee592d966a9e666e48f0e0a0d5a
     pub fn add_impl(
         &mut self,
         impl_: TraitImplementation,
@@ -152,17 +149,12 @@ impl TraitTable {
         self.traits.keys()
     }
 
-<<<<<<< HEAD
     /// 获取所有已注册的 trait 实现
-=======
->>>>>>> 8a44037294632ee592d966a9e666e48f0e0a0d5a
     pub fn all_implementations(
         &self
     ) -> impl Iterator<Item = (&(String, String), &TraitImplementation)> {
         self.implementations.iter()
     }
-<<<<<<< HEAD
-=======
 
     // ---- trait 满足性检查 ----
 
@@ -561,5 +553,4 @@ impl TraitTable {
             methods: debug_fn(),
         });
     }
->>>>>>> 8a44037294632ee592d966a9e666e48f0e0a0d5a
 }
