@@ -677,4 +677,173 @@ impl OwnershipChecker {
         self.pending_writes.clear();
         self.current_node = self.cfg.add_node(None); // 入口节点
     }
+
+    /// 从表达式提取变量名（用于 Borrow/FieldAccess/Move 识别）
+    fn extract_var_name(expr: &Expr) -> Option<String> {
+        match expr {
+            Expr::Var(name, _) => Some(name.clone()),
+            Expr::FieldAccess { expr: inner, .. } => Self::extract_var_name(inner),
+            _ => None,
+        }
+    }
+
+    /// 为变量名对应的所有活跃令牌添加消费者
+    fn add_consumer_for_var(&mut self, var_name: &str) {
+        let token_ids: Vec<BrandId> = self
+            .brand_tree
+            .root_tokens()
+            .into_iter()
+            .filter(|id| {
+                self.brand_tree
+                    .get(id)
+                    .is_some_and(|n| n.source_var == var_name)
+            })
+            .cloned()
+            .collect();
+        for id in &token_ids {
+            self.brand_tree.add_consumer(id, self.current_node);
+        }
+    }
+
+    /// 检查变量读取的 Move/Drop 状态（前向检查）
+    fn check_var_read(&self, name: &str) -> ProofResult {
+        match self.var_state.get(name) {
+            Some(VarState::Moved) => emit_move_predicate(name, true),
+            Some(VarState::Dropped) => emit_drop_predicate(name, true),
+            _ => ProofResult::Proved,
+        }
+    }
+
+    /// 推进 CFG 节点（创建新节点并从当前节点连 Normal 边）
+    fn next_node(&mut self) -> usize {
+        let node = self.cfg.add_node(None);
+        self.cfg.add_edge(self.current_node, node, EdgeKind::Normal);
+        self.current_node = node;
+        node
+    }
+
+    fn walk_expr(&mut self, expr: &Expr) -> Vec<ProofResult> {
+        match expr {
+            Expr::Var(name, _) => {
+                let mut results = Vec::new();
+                let check = self.check_var_read(name);
+                if !check.is_proved() {
+                    results.push(check);
+                }
+                self.add_consumer_for_var(name);
+                results
+            }
+
+            // 透明递归的表达式
+            Expr::BinOp { left, right, .. } => {
+                let mut r = self.walk_expr(left);
+                r.extend(self.walk_expr(right));
+                r
+            }
+            Expr::UnOp { expr: inner, .. } => self.walk_expr(inner),
+            Expr::Cast { expr: inner, .. } => self.walk_expr(inner),
+            Expr::Index { expr, index, .. } => {
+                let mut r = self.walk_expr(expr);
+                r.extend(self.walk_expr(index));
+                r
+            }
+            Expr::Tuple(elements, _) | Expr::List(elements, _) => {
+                elements.iter().flat_map(|e| self.walk_expr(e)).collect()
+            }
+            Expr::Try { expr: inner, .. } => self.walk_expr(inner),
+            Expr::Return(Some(inner), _) => {
+                let results = self.walk_expr(inner);
+                if let Some(name) = Self::extract_var_name(inner) {
+                    self.var_state.insert(name, VarState::Moved);
+                }
+                results
+            }
+            Expr::Return(None, _) => vec![],
+
+            // Block：直接遍历内部语句
+            Expr::Block(block) => self.walk_stmts(&block.stmts),
+
+            // 控制流在后续任务实现
+            Expr::If { .. } | Expr::While { .. } | Expr::For { .. } => vec![],
+
+            // FnDef / Lambda / Spawn / Unsafe / Lit / FString 等跳过
+            _ => vec![],
+        }
+    }
+
+    fn walk_stmt(&mut self, stmt: &Stmt) -> Vec<ProofResult> {
+        match &stmt.kind {
+            StmtKind::Expr(expr) => self.walk_expr(expr),
+
+            StmtKind::Var {
+                name,
+                initializer,
+                ..
+            } => {
+                let mut results = Vec::new();
+                self.var_state.insert(name.clone(), VarState::Alive);
+
+                if let Some(init) = initializer {
+                    results.extend(self.walk_expr(init));
+                    if let Some(src_name) = Self::extract_var_name(init) {
+                        self.var_state.insert(src_name, VarState::Moved);
+                    }
+                }
+                results
+            }
+
+            StmtKind::Return(Some(expr)) => {
+                let results = self.walk_expr(expr);
+                if let Some(name) = Self::extract_var_name(expr) {
+                    self.var_state.insert(name, VarState::Moved);
+                }
+                results
+            }
+            StmtKind::Return(None) => vec![],
+
+            StmtKind::If {
+                condition,
+                then_branch,
+                elif_branches,
+                else_branch,
+                ..
+            } => {
+                let mut results = self.walk_expr(condition);
+                results.extend(self.walk_stmts(&then_branch.stmts));
+                for (cond, body) in elif_branches {
+                    results.extend(self.walk_expr(cond));
+                    results.extend(self.walk_stmts(&body.stmts));
+                }
+                if let Some(else_body) = else_branch {
+                    results.extend(self.walk_stmts(&else_body.stmts));
+                }
+                results
+            }
+
+            StmtKind::For { var, iterable, body, .. } => {
+                let mut results = self.walk_expr(iterable);
+                self.var_state.insert(var.clone(), VarState::Alive);
+                results.extend(self.walk_stmts(&body.stmts));
+                results
+            }
+
+            StmtKind::Binding { params, body, .. } => {
+                for param in params {
+                    self.var_state
+                        .insert(param.name.clone(), VarState::Alive);
+                }
+                self.walk_stmts(body)
+            }
+
+            _ => vec![],
+        }
+    }
+
+    fn walk_stmts(&mut self, stmts: &[Stmt]) -> Vec<ProofResult> {
+        let mut results = Vec::new();
+        for stmt in stmts {
+            results.extend(self.walk_stmt(stmt));
+        }
+        results
+    }
 }
