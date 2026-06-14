@@ -809,8 +809,92 @@ impl OwnershipChecker {
             // Block：直接遍历内部语句
             Expr::Block(block) => self.walk_stmts(&block.stmts),
 
-            // 控制流在后续任务实现
-            Expr::If { .. } | Expr::While { .. } | Expr::For { .. } => vec![],
+            Expr::If {
+                condition,
+                then_branch,
+                elif_branches,
+                else_branch,
+                ..
+            } => {
+                let split_node = self.current_node;
+                let mut results = self.walk_expr(condition);
+
+                let merge_node = self.cfg.add_node(None);
+
+                // then 分支
+                let then_start = self.cfg.add_node(None);
+                self.cfg.add_edge(split_node, then_start, EdgeKind::Normal);
+                self.current_node = then_start;
+                results.extend(self.walk_stmts(&then_branch.stmts));
+                self.cfg.add_edge(self.current_node, merge_node, EdgeKind::Normal);
+
+                // elif 分支
+                for (_cond, body) in elif_branches {
+                    let elif_start = self.cfg.add_node(None);
+                    self.cfg.add_edge(split_node, elif_start, EdgeKind::Normal);
+                    self.current_node = elif_start;
+                    results.extend(self.walk_stmts(&body.stmts));
+                    self.cfg.add_edge(self.current_node, merge_node, EdgeKind::Normal);
+                }
+
+                // else 分支
+                if let Some(else_body) = else_branch {
+                    let else_start = self.cfg.add_node(None);
+                    self.cfg.add_edge(split_node, else_start, EdgeKind::Normal);
+                    self.current_node = else_start;
+                    results.extend(self.walk_stmts(&else_body.stmts));
+                    self.cfg.add_edge(self.current_node, merge_node, EdgeKind::Normal);
+                } else {
+                    self.cfg.add_edge(split_node, merge_node, EdgeKind::Normal);
+                }
+
+                self.current_node = merge_node;
+                results
+            }
+
+            Expr::While {
+                condition, body, ..
+            } => {
+                let head_node = self.cfg.add_node(None);
+                self.cfg.add_edge(self.current_node, head_node, EdgeKind::Normal);
+
+                let mut results = self.walk_expr(condition);
+
+                let body_start = self.cfg.add_node(None);
+                self.cfg.add_edge(head_node, body_start, EdgeKind::Normal);
+                self.current_node = body_start;
+                results.extend(self.walk_stmts(&body.stmts));
+
+                // 回边：body_end → head
+                self.cfg.add_edge(self.current_node, head_node, EdgeKind::BackEdge);
+
+                let after_loop = self.cfg.add_node(None);
+                self.cfg.add_edge(head_node, after_loop, EdgeKind::Normal);
+                self.current_node = after_loop;
+                results
+            }
+
+            Expr::For {
+                var, iterable, body, ..
+            } => {
+                let mut results = self.walk_expr(iterable);
+                self.var_state.insert(var.clone(), VarState::Alive);
+
+                let head_node = self.cfg.add_node(None);
+                self.cfg.add_edge(self.current_node, head_node, EdgeKind::Normal);
+
+                let body_start = self.cfg.add_node(None);
+                self.cfg.add_edge(head_node, body_start, EdgeKind::Normal);
+                self.current_node = body_start;
+                results.extend(self.walk_stmts(&body.stmts));
+
+                self.cfg.add_edge(self.current_node, head_node, EdgeKind::BackEdge);
+
+                let after_loop = self.cfg.add_node(None);
+                self.cfg.add_edge(head_node, after_loop, EdgeKind::Normal);
+                self.current_node = after_loop;
+                results
+            }
 
             // FnDef / Lambda / Spawn / Unsafe / Lit / FString 等跳过
             _ => vec![],
@@ -889,6 +973,73 @@ impl OwnershipChecker {
         let mut results = Vec::new();
         for stmt in stmts {
             results.extend(self.walk_stmt(stmt));
+        }
+        results
+    }
+
+    /// 检查单个函数体：重置状态 → 一趟遍历 → 排空待定写操作
+    fn check_function(
+        &mut self,
+        _name: &str,
+        params: &[crate::frontend::core::parser::ast::Param],
+        body: &[Stmt],
+    ) -> Vec<ProofResult> {
+        self.reset();
+
+        // 标记参数为 Alive
+        for param in params {
+            self.var_state
+                .insert(param.name.clone(), VarState::Alive);
+        }
+
+        // 一趟遍历：构建 CFG + 前向检查 + 收集待定写操作
+        let mut results = self.walk_stmts(body);
+        self.cfg.exit = self.current_node;
+
+        // 排空待定写操作：反向 BFS（CFG + BrandTree + 消费者此时全部完整）
+        for pending in self.pending_writes.drain(..) {
+            results.push(emit_borrow_predicate(
+                &self.brand_tree,
+                &self.cfg,
+                &pending.token,
+                pending.node_idx,
+            ));
+        }
+
+        results
+    }
+
+    /// 遍历模块中的所有函数体，执行所有权检查
+    pub fn check_module(
+        &mut self,
+        module: &Module,
+        _env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
+    ) -> Vec<ProofResult> {
+        let mut results = Vec::new();
+        for stmt in &module.items {
+            if let StmtKind::Binding {
+                name,
+                params,
+                body,
+                type_name,
+                type_annotation,
+                ..
+            } = &stmt.kind
+            {
+                // 跳过类型构造器（type_name 存在且无 params 和 body）
+                if type_name.is_some() && params.is_empty() && body.is_empty() {
+                    continue;
+                }
+                // 跳过纯类型注解（有 type_annotation 但无 params 和 body）
+                if type_annotation.is_some() && params.is_empty() && body.is_empty() {
+                    continue;
+                }
+                // 跳过空函数体（无 params 也无 body — const 之类）
+                if params.is_empty() && body.is_empty() {
+                    continue;
+                }
+                results.extend(self.check_function(name, params, body));
+            }
         }
         results
     }
