@@ -1,5 +1,5 @@
 ---
-name: Bug 报告
+name: 错误报告
 description: 报告 YaoXiang 语言的 Bug
 labels: ["bug"]
 assignees: []
