@@ -312,7 +312,10 @@ fn make_lit(n: i64) -> Expr {
     Expr::Lit(Literal::Int(n as i128), Span::default())
 }
 
-fn make_var_stmt(name: &str, init: Expr) -> Stmt {
+fn make_var_stmt(
+    name: &str,
+    init: Expr,
+) -> Stmt {
     Stmt {
         kind: StmtKind::Var {
             name: name.into(),
@@ -332,7 +335,11 @@ fn make_expr_stmt(expr: Expr) -> Stmt {
     }
 }
 
-fn make_binding(name: &str, params: Vec<String>, body: Vec<Stmt>) -> Stmt {
+fn make_binding(
+    name: &str,
+    params: Vec<String>,
+    body: Vec<Stmt>,
+) -> Stmt {
     Stmt {
         kind: StmtKind::Binding {
             name: name.into(),
@@ -390,10 +397,7 @@ fn test_e2e_use_after_move_detected() {
         .iter()
         .filter(|r| matches!(r, ProofResult::Disproved { .. }))
         .collect();
-    assert!(
-        !errors.is_empty(),
-        "应该检测到 use after move，但结果为空"
-    );
+    assert!(!errors.is_empty(), "应该检测到 use after move，但结果为空");
 }
 
 #[test]
@@ -449,8 +453,5 @@ fn test_e2e_argument_passed_to_function_is_moved() {
         .iter()
         .filter(|r| matches!(r, ProofResult::Disproved { .. }))
         .collect();
-    assert!(
-        !errors.is_empty(),
-        "应该检测到 x 被 move 进 f 后再使用"
-    );
+    assert!(!errors.is_empty(), "应该检测到 x 被 move 进 f 后再使用");
 }

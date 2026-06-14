@@ -658,6 +658,12 @@ pub struct OwnershipChecker {
     current_node: usize,
 }
 
+impl Default for OwnershipChecker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OwnershipChecker {
     pub fn new() -> Self {
         Self {
@@ -688,7 +694,10 @@ impl OwnershipChecker {
     }
 
     /// 为变量名对应的所有活跃令牌添加消费者
-    fn add_consumer_for_var(&mut self, var_name: &str) {
+    fn add_consumer_for_var(
+        &mut self,
+        var_name: &str,
+    ) {
         let token_ids: Vec<BrandId> = self
             .brand_tree
             .root_tokens()
@@ -706,7 +715,10 @@ impl OwnershipChecker {
     }
 
     /// 检查变量读取的 Move/Drop 状态（前向检查）
-    fn check_var_read(&self, name: &str) -> ProofResult {
+    fn check_var_read(
+        &self,
+        name: &str,
+    ) -> ProofResult {
         match self.var_state.get(name) {
             Some(VarState::Moved) => emit_move_predicate(name, true),
             Some(VarState::Dropped) => emit_drop_predicate(name, true),
@@ -722,7 +734,10 @@ impl OwnershipChecker {
         node
     }
 
-    fn walk_expr(&mut self, expr: &Expr) -> Vec<ProofResult> {
+    fn walk_expr(
+        &mut self,
+        expr: &Expr,
+    ) -> Vec<ProofResult> {
         match expr {
             Expr::Var(name, _) => {
                 let mut results = Vec::new();
@@ -737,19 +752,35 @@ impl OwnershipChecker {
             Expr::Borrow { mutable, expr, .. } => {
                 let mut results = self.walk_expr(expr);
                 if let Some(var_name) = Self::extract_var_name(expr) {
+                    // 变量本身被"使用"——检查 Move/Drop 状态
+                    let check = self.check_var_read(&var_name);
+                    if !check.is_proved() {
+                        results.push(check);
+                    }
                     self.add_consumer_for_var(&var_name);
+
                     let token = if *mutable {
                         self.brand_tree.create_write_token(var_name)
                     } else {
                         self.brand_tree.create_read_token(var_name)
                     };
                     self.brand_tree.add_consumer(&token, self.current_node);
+
+                    // 检查品牌树中是否已有冲突令牌，有则送入反向 BFS 验证
+                    if !self.brand_tree.conflicting_with(&token).is_empty() {
+                        self.pending_writes.push(PendingWrite {
+                            token: token.clone(),
+                            node_idx: self.current_node,
+                        });
+                    }
                 }
                 results
             }
 
-            Expr::FieldAccess { expr: inner, field, .. } => {
-                let mut results = self.walk_expr(inner);
+            Expr::FieldAccess {
+                expr: inner, field, ..
+            } => {
+                let results = self.walk_expr(inner);
                 if let Some(var_name) = Self::extract_var_name(inner) {
                     self.add_consumer_for_var(&var_name);
                     let parent_ids: Vec<BrandId> = self
@@ -826,7 +857,8 @@ impl OwnershipChecker {
                 self.cfg.add_edge(split_node, then_start, EdgeKind::Normal);
                 self.current_node = then_start;
                 results.extend(self.walk_stmts(&then_branch.stmts));
-                self.cfg.add_edge(self.current_node, merge_node, EdgeKind::Normal);
+                self.cfg
+                    .add_edge(self.current_node, merge_node, EdgeKind::Normal);
 
                 // elif 分支
                 for (_cond, body) in elif_branches {
@@ -834,7 +866,8 @@ impl OwnershipChecker {
                     self.cfg.add_edge(split_node, elif_start, EdgeKind::Normal);
                     self.current_node = elif_start;
                     results.extend(self.walk_stmts(&body.stmts));
-                    self.cfg.add_edge(self.current_node, merge_node, EdgeKind::Normal);
+                    self.cfg
+                        .add_edge(self.current_node, merge_node, EdgeKind::Normal);
                 }
 
                 // else 分支
@@ -843,7 +876,8 @@ impl OwnershipChecker {
                     self.cfg.add_edge(split_node, else_start, EdgeKind::Normal);
                     self.current_node = else_start;
                     results.extend(self.walk_stmts(&else_body.stmts));
-                    self.cfg.add_edge(self.current_node, merge_node, EdgeKind::Normal);
+                    self.cfg
+                        .add_edge(self.current_node, merge_node, EdgeKind::Normal);
                 } else {
                     self.cfg.add_edge(split_node, merge_node, EdgeKind::Normal);
                 }
@@ -856,7 +890,8 @@ impl OwnershipChecker {
                 condition, body, ..
             } => {
                 let head_node = self.cfg.add_node(None);
-                self.cfg.add_edge(self.current_node, head_node, EdgeKind::Normal);
+                self.cfg
+                    .add_edge(self.current_node, head_node, EdgeKind::Normal);
 
                 let mut results = self.walk_expr(condition);
 
@@ -866,7 +901,8 @@ impl OwnershipChecker {
                 results.extend(self.walk_stmts(&body.stmts));
 
                 // 回边：body_end → head
-                self.cfg.add_edge(self.current_node, head_node, EdgeKind::BackEdge);
+                self.cfg
+                    .add_edge(self.current_node, head_node, EdgeKind::BackEdge);
 
                 let after_loop = self.cfg.add_node(None);
                 self.cfg.add_edge(head_node, after_loop, EdgeKind::Normal);
@@ -875,20 +911,25 @@ impl OwnershipChecker {
             }
 
             Expr::For {
-                var, iterable, body, ..
+                var,
+                iterable,
+                body,
+                ..
             } => {
                 let mut results = self.walk_expr(iterable);
                 self.var_state.insert(var.clone(), VarState::Alive);
 
                 let head_node = self.cfg.add_node(None);
-                self.cfg.add_edge(self.current_node, head_node, EdgeKind::Normal);
+                self.cfg
+                    .add_edge(self.current_node, head_node, EdgeKind::Normal);
 
                 let body_start = self.cfg.add_node(None);
                 self.cfg.add_edge(head_node, body_start, EdgeKind::Normal);
                 self.current_node = body_start;
                 results.extend(self.walk_stmts(&body.stmts));
 
-                self.cfg.add_edge(self.current_node, head_node, EdgeKind::BackEdge);
+                self.cfg
+                    .add_edge(self.current_node, head_node, EdgeKind::BackEdge);
 
                 let after_loop = self.cfg.add_node(None);
                 self.cfg.add_edge(head_node, after_loop, EdgeKind::Normal);
@@ -901,14 +942,15 @@ impl OwnershipChecker {
         }
     }
 
-    fn walk_stmt(&mut self, stmt: &Stmt) -> Vec<ProofResult> {
+    fn walk_stmt(
+        &mut self,
+        stmt: &Stmt,
+    ) -> Vec<ProofResult> {
         match &stmt.kind {
             StmtKind::Expr(expr) => self.walk_expr(expr),
 
             StmtKind::Var {
-                name,
-                initializer,
-                ..
+                name, initializer, ..
             } => {
                 let mut results = Vec::new();
                 self.var_state.insert(name.clone(), VarState::Alive);
@@ -950,7 +992,12 @@ impl OwnershipChecker {
                 results
             }
 
-            StmtKind::For { var, iterable, body, .. } => {
+            StmtKind::For {
+                var,
+                iterable,
+                body,
+                ..
+            } => {
                 let mut results = self.walk_expr(iterable);
                 self.var_state.insert(var.clone(), VarState::Alive);
                 results.extend(self.walk_stmts(&body.stmts));
@@ -959,8 +1006,7 @@ impl OwnershipChecker {
 
             StmtKind::Binding { params, body, .. } => {
                 for param in params {
-                    self.var_state
-                        .insert(param.name.clone(), VarState::Alive);
+                    self.var_state.insert(param.name.clone(), VarState::Alive);
                 }
                 self.walk_stmts(body)
             }
@@ -969,7 +1015,10 @@ impl OwnershipChecker {
         }
     }
 
-    fn walk_stmts(&mut self, stmts: &[Stmt]) -> Vec<ProofResult> {
+    fn walk_stmts(
+        &mut self,
+        stmts: &[Stmt],
+    ) -> Vec<ProofResult> {
         let mut results = Vec::new();
         for stmt in stmts {
             results.extend(self.walk_stmt(stmt));
@@ -988,8 +1037,7 @@ impl OwnershipChecker {
 
         // 标记参数为 Alive
         for param in params {
-            self.var_state
-                .insert(param.name.clone(), VarState::Alive);
+            self.var_state.insert(param.name.clone(), VarState::Alive);
         }
 
         // 一趟遍历：构建 CFG + 前向检查 + 收集待定写操作
