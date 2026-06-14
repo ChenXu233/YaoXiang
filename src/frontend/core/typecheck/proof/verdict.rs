@@ -28,6 +28,12 @@ pub enum DisproofKind {
     PredicateViolation,
     /// 类型等式不成立（两方归约后值不等）→ E4019
     TypeMismatch,
+    // 所有权相关（RFC-009a §系统谓词清单）
+    BorrowConflict,
+    UseAfterMove,
+    UseAfterDrop,
+    DoubleDrop,
+    MutViolation,
 }
 
 /// 证明结果
@@ -104,6 +110,27 @@ impl DisproofModel {
                 }
 
                 builder.build()
+            }
+            DisproofKind::BorrowConflict
+            | DisproofKind::UseAfterMove
+            | DisproofKind::UseAfterDrop
+            | DisproofKind::DoubleDrop
+            | DisproofKind::MutViolation => {
+                let details = if self.assignments.is_empty() {
+                    String::new()
+                } else {
+                    self.assignments
+                        .iter()
+                        .map(|(k, v)| format!("  {}: {}", k, v))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                };
+                Diagnostic::error(
+                    "E2000".to_string(),
+                    format!("{}\n{}", self.constraint, details),
+                    String::new(),
+                    None,
+                )
             }
         }
     }
