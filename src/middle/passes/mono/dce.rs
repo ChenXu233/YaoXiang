@@ -10,7 +10,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::time::Instant;
+use crate::util::time_compat::Instant;
 
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{FunctionIR, Instruction, ModuleIR, Operand};

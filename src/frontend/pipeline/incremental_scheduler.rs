@@ -7,7 +7,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::time::Instant;
+use crate::util::time_compat::Instant;
 
 use super::compilation_cache::CompilationCache;
 use crate::frontend::module::dep_graph::ModuleDependencyGraph;
