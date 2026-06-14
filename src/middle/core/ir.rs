@@ -304,17 +304,6 @@ pub enum Instruction {
     },
     /// Drop Arc (atomic reference count - 1, free if zero)
     ArcDrop(Operand),
-    /// 创建借用令牌：dst = &src（不可变）或 dst = &mut src（可变）
-    /// 借用令牌是零大小类型，编译后消失。
-    /// 此指令仅用于借用检查器的流敏感分析，运行时等价于 Mov。
-    Borrow {
-        dst: Operand,
-        src: Operand,
-        mutable: bool,
-    },
-    /// 释放借用令牌，结束借用生命周期
-    /// 借用检查器据此更新令牌状态。
-    Release(Operand),
     /// ShareRef: 将值包装为 Arc 以支持跨任务共享。
     /// 由 `ref` 语法触发，运行时自动选择 Rc/Arc。
     ShareRef {
