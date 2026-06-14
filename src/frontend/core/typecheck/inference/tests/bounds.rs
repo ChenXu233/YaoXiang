@@ -8,9 +8,8 @@
 //! 规范中没有独立的 "const bounds" 概念，因此不测试 const 边界。
 
 use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
-use crate::frontend::core::types::{MonoType, StructType};
+use crate::frontend::core::types::{MonoType, StructType, TraitTable};
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
-use crate::frontend::core::typecheck::traits::solver::TraitSolver;
 use std::collections::HashMap;
 
 // ===================================================================
@@ -20,7 +19,7 @@ use std::collections::HashMap;
 #[test]
 fn test_bounds_checker_creation() {
     // Arrange & Act
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
 
     // Assert - 验证创建后内部状态有效
     // 新建的 BoundsChecker 应该能处理基本的边界检查
@@ -37,7 +36,7 @@ fn test_bounds_checker_creation() {
 #[test]
 fn test_check_trait_bounds_satisfied() {
     // Arrange
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let ty = MonoType::Int(32);
     let bounds = vec!["Clone".to_string()];
 
@@ -54,7 +53,7 @@ fn test_check_trait_bounds_satisfied() {
 #[test]
 fn test_check_trait_bounds_empty() {
     // Arrange
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let ty = MonoType::Int(32);
     let bounds: Vec<String> = vec![];
 
@@ -69,7 +68,7 @@ fn test_check_trait_bounds_empty() {
 #[test]
 fn test_check_generic_bounds() {
     // Arrange
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let ty = MonoType::Int(32);
     let trait_bounds = vec!["Clone".to_string()];
     let const_bounds: Vec<MonoType> = vec![];
@@ -88,7 +87,7 @@ fn test_check_generic_bounds() {
 #[test]
 fn test_check_constraint_empty_constraint() {
     // Arrange
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let ty = MonoType::Int(32);
     let constraint = MonoType::Struct(StructType {
         name: "Empty".to_string(),
@@ -117,7 +116,7 @@ fn test_check_constraint_empty_constraint() {
 #[test]
 fn test_check_trait_bounds_not_satisfied() {
     // Arrange
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let ty = MonoType::List(Box::new(MonoType::Int(32)));
     let bounds = vec!["Clone".to_string()];
 
@@ -132,7 +131,7 @@ fn test_check_trait_bounds_not_satisfied() {
 #[test]
 fn test_check_constraint_missing_method() {
     // Arrange
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let ty = MonoType::Struct(StructType {
         name: "Point".to_string(),
         fields: vec![("x".to_string(), MonoType::Float(64))],
@@ -167,7 +166,7 @@ fn test_check_constraint_missing_method() {
 #[test]
 fn test_check_constraint_signature_mismatch() {
     // Arrange
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let ty = MonoType::Struct(StructType {
         name: "Point".to_string(),
         fields: vec![(
@@ -212,7 +211,7 @@ fn test_check_constraint_signature_mismatch() {
 #[test]
 fn test_check_constraint_with_method_binding() {
     // Arrange
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let mut env = TypeEnvironment::new();
 
     // 添加方法绑定：Point.draw
@@ -264,12 +263,11 @@ fn test_check_constraint_with_method_binding() {
 // Dup trait bound with auto-derive tests
 // ===================================================================
 
-/// 结构体所有字段均为 Dup 类型时，TraitSolver 应通过 Dup 检查
-/// （通过 check_dup_trait 递归检查结构体字段）
+/// 结构体所有字段均为 Dup 类型时，TraitTable 应通过 Dup 检查
 #[test]
 fn test_check_trait_bounds_dup_struct_auto_derive() {
     // Arrange - View { name: String, ref_field: &Int } 所有字段均为 Dup
-    let mut solver = TraitSolver::new();
+    let trait_table = TraitTable::with_std();
 
     let struct_type = MonoType::Struct(StructType {
         name: "View".to_string(),
@@ -289,19 +287,18 @@ fn test_check_trait_bounds_dup_struct_auto_derive() {
         interfaces: vec![],
     });
 
-    // Act & Assert - 无 trait_table 时走 check_dup_trait 递归路径
+    // Act & Assert
     assert!(
-        solver.check_trait(&struct_type, "Dup"),
+        trait_table.satisfies("Dup", &struct_type),
         "View with all-Dup fields (String + &T) should pass Dup check"
     );
 }
 
-/// 结构体包含非 Dup 字段（List）时，TraitSolver 应拒绝 Dup 检查
-/// List 类型在 check_dup_trait 中匹配 `_ => false` 分支
+/// 结构体包含非 Dup 字段（List）时，TraitTable 应拒绝 Dup 检查
 #[test]
 fn test_check_trait_bounds_dup_struct_auto_derive_fails() {
     // Arrange - Buffer { data: List(Int(64)), len: Int(64) } 包含非 Dup 的 List 字段
-    let mut solver = TraitSolver::new();
+    let trait_table = TraitTable::with_std();
 
     let struct_type = MonoType::Struct(StructType {
         name: "Buffer".to_string(),
@@ -318,9 +315,9 @@ fn test_check_trait_bounds_dup_struct_auto_derive_fails() {
         interfaces: vec![],
     });
 
-    // Act & Assert - List 在 check_dup_trait 中不被识别为 Dup
+    // Act & Assert
     assert!(
-        !solver.check_trait(&struct_type, "Dup"),
+        !trait_table.satisfies("Dup", &struct_type),
         "Buffer with List field should NOT pass Dup check"
     );
 }
@@ -330,7 +327,7 @@ fn test_check_trait_bounds_dup_struct_auto_derive_fails() {
 #[test]
 fn test_bounds_checker_dup_struct_passes() {
     // Arrange
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let struct_type = MonoType::Struct(StructType {
         name: "View".to_string(),
         fields: vec![
@@ -365,7 +362,7 @@ fn test_bounds_checker_dup_struct_passes() {
 #[test]
 fn test_bounds_checker_dup_struct_fails() {
     // Arrange
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let struct_type = MonoType::Struct(StructType {
         name: "Buffer".to_string(),
         fields: vec![
@@ -396,7 +393,7 @@ fn test_bounds_checker_dup_struct_fails() {
 #[test]
 fn test_bounds_checker_dup_nested_struct_passes() {
     // Arrange - Connection { from: View, to: View } 嵌套 Dup 结构体
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
 
     let view_type = MonoType::Struct(StructType {
         name: "View".to_string(),

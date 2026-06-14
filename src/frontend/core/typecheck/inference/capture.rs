@@ -12,8 +12,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::parser::ast::{Block, Expr, Stmt, StmtKind};
-use crate::frontend::core::typecheck::traits::solver::TraitSolver;
-use crate::frontend::core::types::{MonoType, PolyType};
+use crate::frontend::core::types::{MonoType, PolyType, TraitTable};
 
 // ============================================================================
 // 数据结构
@@ -187,14 +186,13 @@ pub fn determine_capture_mode(
     usage: &CaptureUsage,
     ty: &MonoType,
     closure_usage: &ClosureUsage,
-    trait_solver: &TraitSolver,
+    trait_table: &TraitTable,
 ) -> CaptureMode {
-    // 原语值类型：编译器自动值复制
-    if TraitSolver::is_primitive_value_type(ty) {
+    if TraitTable::is_primitive_value_type(ty) {
         return CaptureMode::Copy;
     }
 
-    let is_dup = check_dup_trait(ty, trait_solver);
+    let is_dup = trait_table.satisfies("Dup", ty);
 
     match (is_dup, closure_usage) {
         // Dup 类型总是拷贝（浅拷贝共享数据）
@@ -223,14 +221,14 @@ pub fn determine_capture_mode(
 /// - `lambda_body`: Lambda 体（Block）
 /// - `outer_scope`: 外部作用域中所有变量名的集合
 /// - `var_types`: 外部作用域变量的类型映射（变量名 -> PolyType）
-/// - `trait_solver`: 特质求解器，用于检查 Dup 特质
+/// - `trait_table`: 特质表，用于检查 Dup 特质
 /// - `parent`: 父表达式（Lambda 所在的上下文），用于逃逸分析
 pub fn analyze_lambda_captures(
     lambda_expr: &Expr,
     lambda_body: &Block,
     outer_scope: &HashSet<String>,
     var_types: &HashMap<String, PolyType>,
-    trait_solver: &TraitSolver,
+    trait_table: &TraitTable,
     parent: Option<&Expr>,
 ) -> CaptureInfo {
     let usage = analyze_closure_usage(lambda_expr, parent);
@@ -244,7 +242,7 @@ pub fn analyze_lambda_captures(
                 .get(&cap.name)
                 .map(|poly| poly.body.clone())
                 .unwrap_or(MonoType::Void);
-            let mode = determine_capture_mode(&cap.usage, &ty, &usage, trait_solver);
+            let mode = determine_capture_mode(&cap.usage, &ty, &usage, trait_table);
             (cap.name, mode)
         })
         .collect();
@@ -682,22 +680,6 @@ fn extract_written_vars_from_expr(
 // ============================================================================
 // 内部辅助：Dup 特质检查
 // ============================================================================
-
-/// 检查类型是否满足 Dup 特质（浅拷贝：复制句柄，共享底层数据）
-///
-/// Dup 适用于引用/令牌类型和内部引用计数的类型。
-/// 原语值类型（Int, Float, Bool, Char）不是 Dup——使用 is_primitive_value_type 检查。
-fn check_dup_trait(
-    ty: &MonoType,
-    trait_solver: &TraitSolver,
-) -> bool {
-    // 优先使用 TraitSolver 的公开 check_trait 接口
-    let mut solver = TraitSolver::new();
-    if let Some(table) = trait_solver.trait_table() {
-        solver.set_trait_table(table.clone());
-    }
-    solver.check_trait(ty, "Dup")
-}
 
 // ============================================================================
 // 测试
