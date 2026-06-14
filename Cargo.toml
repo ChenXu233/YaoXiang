@@ -118,3 +118,6 @@ debug = true
 
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false

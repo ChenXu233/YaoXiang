@@ -10,6 +10,14 @@ use std::process::Command;
 const Z3_VERSION: &str = "4.16.0";
 
 fn main() {
+    // Skip Z3 linking for wasm targets
+    let _target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+    if target_arch == "wasm32" {
+        println!("cargo:warning=Skipping Z3 for wasm target");
+        return;
+    }
+
     // 1. 尝试系统安装的 Z3（Z3_SYS_Z3_HEADER 环境变量）
     if let Ok(header) = env::var("Z3_SYS_Z3_HEADER") {
         if Path::new(&header).exists() {
