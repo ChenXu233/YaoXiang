@@ -200,15 +200,6 @@ impl BorrowChecker {
                     }
                 }
             }
-            Instruction::Borrow { dst, src, mutable } => {
-                let token_name = operand_display_name(dst, self.local_names.as_ref());
-                let source = operand_display_name(src, self.local_names.as_ref());
-                self.create_borrow(&token_name, &source, *mutable);
-            }
-            Instruction::Release(operand) => {
-                let name = operand_display_name(operand, self.local_names.as_ref());
-                self.release_token(&name);
-            }
             Instruction::Drop(operand) => {
                 let name = operand_display_name(operand, self.local_names.as_ref());
                 self.release_token(&name);
