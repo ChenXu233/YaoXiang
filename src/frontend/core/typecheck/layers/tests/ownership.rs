@@ -296,3 +296,161 @@ fn test_mut_allowed() {
     let result = emit_mut_predicate("x", true);
     assert!(matches!(result, ProofResult::Proved));
 }
+
+// ── E2E 集成测试（RFC-009a §用例分析） ──────────────────
+
+use crate::frontend::core::parser::ast::{Expr, Literal, Module, Param, Stmt, StmtKind};
+use crate::frontend::core::typecheck::environment::TypeEnvironment;
+use crate::frontend::core::typecheck::layers::ownership::OwnershipChecker;
+use crate::util::span::Span;
+
+fn make_var(name: &str) -> Expr {
+    Expr::Var(name.into(), Span::default())
+}
+
+fn make_lit(n: i64) -> Expr {
+    Expr::Lit(Literal::Int(n as i128), Span::default())
+}
+
+fn make_var_stmt(name: &str, init: Expr) -> Stmt {
+    Stmt {
+        kind: StmtKind::Var {
+            name: name.into(),
+            name_span: Span::default(),
+            type_annotation: None,
+            initializer: Some(Box::new(init)),
+            is_mut: false,
+        },
+        span: Span::default(),
+    }
+}
+
+fn make_expr_stmt(expr: Expr) -> Stmt {
+    Stmt {
+        kind: StmtKind::Expr(Box::new(expr)),
+        span: Span::default(),
+    }
+}
+
+fn make_binding(name: &str, params: Vec<String>, body: Vec<Stmt>) -> Stmt {
+    Stmt {
+        kind: StmtKind::Binding {
+            name: name.into(),
+            type_name: None,
+            method_type: None,
+            generic_params: vec![],
+            type_annotation: None,
+            params: params
+                .into_iter()
+                .map(|n| Param {
+                    name: n,
+                    ty: None,
+                    is_mut: false,
+                    span: Span::default(),
+                })
+                .collect(),
+            body,
+            is_pub: false,
+        },
+        span: Span::default(),
+    }
+}
+
+fn make_module(items: Vec<Stmt>) -> Module {
+    Module {
+        items,
+        span: Span::default(),
+    }
+}
+
+fn make_test_env() -> TypeEnvironment {
+    TypeEnvironment::new_with_module("test".into())
+}
+
+#[test]
+fn test_e2e_use_after_move_detected() {
+    // Arrange: { x = 42; y = x; use(x) }
+    // x 被 move 给 y 后再次使用 → 应报 Disproved
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_var_stmt("y", make_var("x")),
+            make_expr_stmt(make_var("x")),
+        ],
+    )]);
+
+    // Act
+    let mut checker = OwnershipChecker::new();
+    let results = checker.check_module(&module, &make_test_env());
+
+    // Assert
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .collect();
+    assert!(
+        !errors.is_empty(),
+        "应该检测到 use after move，但结果为空"
+    );
+}
+
+#[test]
+fn test_e2e_valid_move_no_error() {
+    // Arrange: { x = 42; y = x }
+    // x 被 move 给 y 后不再使用 → 不应有错误
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_var_stmt("y", make_var("x")),
+        ],
+    )]);
+
+    // Act
+    let mut checker = OwnershipChecker::new();
+    let results = checker.check_module(&module, &make_test_env());
+
+    // Assert
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .collect();
+    assert!(errors.is_empty(), "不应有错误，得: {:?}", errors);
+}
+
+#[test]
+fn test_e2e_argument_passed_to_function_is_moved() {
+    // Arrange: { x = 42; f(x); use(x) }
+    // x 作为参数传给 f 后不能再使用
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_expr_stmt(Expr::Call {
+                func: Box::new(make_var("f")),
+                args: vec![make_var("x")],
+                named_args: vec![],
+                span: Span::default(),
+            }),
+            make_expr_stmt(make_var("x")),
+        ],
+    )]);
+
+    // Act
+    let mut checker = OwnershipChecker::new();
+    let results = checker.check_module(&module, &make_test_env());
+
+    // Assert
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .collect();
+    assert!(
+        !errors.is_empty(),
+        "应该检测到 x 被 move 进 f 后再使用"
+    );
+}
