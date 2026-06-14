@@ -91,7 +91,7 @@ pub struct BrandNode {
     pub source_var: String,
     pub parent: Option<BrandId>,
     pub children: HashSet<BrandId>,
-    /// 消费该令牌的 DAG 节点索引。
+    /// 消费该令牌的 CFG 节点索引。
     pub consumers: HashSet<usize>,
     /// ReadToken 冻结期间的活跃副本数。
     pub ref_count: usize,
@@ -303,9 +303,9 @@ impl BrandTree {
     }
 }
 
-// ── 控制流图（DAG）—— RFC-009a §快速通道 ──────────────
+// ── 控制流图（CFG）—— RFC-009a §快速通道 ──────────────
 
-/// DAG 节点类型
+/// CFG 边类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EdgeKind {
     /// 普通前向边
@@ -352,7 +352,10 @@ impl ControlFlowGraph {
     }
 
     /// 添加节点，返回节点索引
-    pub fn add_node(&mut self, path_condition: Option<String>) -> usize {
+    pub fn add_node(
+        &mut self,
+        path_condition: Option<String>,
+    ) -> usize {
         let id = self.nodes.len();
         self.nodes.push(CfgNode {
             id,
@@ -364,7 +367,12 @@ impl ControlFlowGraph {
     }
 
     /// 添加边 from → to
-    pub fn add_edge(&mut self, from: usize, to: usize, kind: EdgeKind) {
+    pub fn add_edge(
+        &mut self,
+        from: usize,
+        to: usize,
+        kind: EdgeKind,
+    ) {
         self.nodes[from].successors.push((to, kind));
         if kind != EdgeKind::Break {
             // break 边不作为反向 BFS 的前驱（结构切断）
@@ -430,9 +438,10 @@ pub fn fast_path_check(
                 .any(|(succ, kind)| *succ == cur && *kind == EdgeKind::BackEdge);
 
             if is_back_edge {
-                if let (Some(ref path_cond), Some(ref loop_cond)) =
-                    (&cfg.nodes[pred].path_condition, &cfg.nodes[cur].path_condition)
-                {
+                if let (Some(ref path_cond), Some(ref loop_cond)) = (
+                    &cfg.nodes[pred].path_condition,
+                    &cfg.nodes[cur].path_condition,
+                ) {
                     if smt_cut(path_cond, loop_cond) {
                         continue; // 逻辑切断
                     }
@@ -467,7 +476,10 @@ pub fn fast_path_check(
 /// 构造约束：!(path_cond ∧ loop_cond)
 /// unsat → 蕴含成立 → 切断成功
 /// sat   → 存在反例 → 不切断
-fn smt_cut(_path_cond: &str, _loop_cond: &str) -> bool {
+fn smt_cut(
+    _path_cond: &str,
+    _loop_cond: &str,
+) -> bool {
     let constraint = ConstExpr::UnOp {
         op: UnOp::Not,
         expr: Box::new(ConstExpr::BinOp {
@@ -519,8 +531,14 @@ pub fn emit_borrow_predicate(
                 kind: super::super::proof::verdict::DisproofKind::BorrowConflict,
                 assignments: vec![
                     ("token".into(), format!("{}", token)),
-                    ("live_tokens".into(), live_tokens.iter()
-                        .map(|t| format!("{}", t)).collect::<Vec<_>>().join(", ")),
+                    (
+                        "live_tokens".into(),
+                        live_tokens
+                            .iter()
+                            .map(|t| format!("{}", t))
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    ),
                 ],
                 constraint: format!("{} 的冲突令牌仍存活", token),
                 span: None,
@@ -531,7 +549,10 @@ pub fn emit_borrow_predicate(
 }
 
 /// Move 后使用谓词：`¬moved(v)`
-pub fn emit_move_predicate(var_name: &str, is_moved: bool) -> ProofResult {
+pub fn emit_move_predicate(
+    var_name: &str,
+    is_moved: bool,
+) -> ProofResult {
     if is_moved {
         ProofResult::Disproved(super::super::proof::verdict::DisproofModel {
             kind: super::super::proof::verdict::DisproofKind::UseAfterMove,
@@ -546,7 +567,10 @@ pub fn emit_move_predicate(var_name: &str, is_moved: bool) -> ProofResult {
 }
 
 /// Drop 后使用谓词：`¬dropped(v)`
-pub fn emit_drop_predicate(var_name: &str, is_dropped: bool) -> ProofResult {
+pub fn emit_drop_predicate(
+    var_name: &str,
+    is_dropped: bool,
+) -> ProofResult {
     if is_dropped {
         ProofResult::Disproved(super::super::proof::verdict::DisproofModel {
             kind: super::super::proof::verdict::DisproofKind::UseAfterDrop,
@@ -561,7 +585,10 @@ pub fn emit_drop_predicate(var_name: &str, is_dropped: bool) -> ProofResult {
 }
 
 /// 双重 Drop 谓词
-pub fn emit_double_drop_predicate(var_name: &str, is_dropped: bool) -> ProofResult {
+pub fn emit_double_drop_predicate(
+    var_name: &str,
+    is_dropped: bool,
+) -> ProofResult {
     if is_dropped {
         ProofResult::Disproved(super::super::proof::verdict::DisproofModel {
             kind: super::super::proof::verdict::DisproofKind::DoubleDrop,
@@ -576,7 +603,10 @@ pub fn emit_double_drop_predicate(var_name: &str, is_dropped: bool) -> ProofResu
 }
 
 /// 可变性违规谓词：`is_mut(v)`
-pub fn emit_mut_predicate(var_name: &str, is_mutable: bool) -> ProofResult {
+pub fn emit_mut_predicate(
+    var_name: &str,
+    is_mutable: bool,
+) -> ProofResult {
     if !is_mutable {
         ProofResult::Disproved(super::super::proof::verdict::DisproofModel {
             kind: super::super::proof::verdict::DisproofKind::MutViolation,

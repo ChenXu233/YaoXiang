@@ -264,8 +264,6 @@ impl AstToIrGenerator {
         }
     }
 
-
-
     /// 进入新的作用域
     fn enter_scope(&mut self) {
         tlog!(debug, MSG::IrGenEnterScope, &self.symbols.len().to_string());
