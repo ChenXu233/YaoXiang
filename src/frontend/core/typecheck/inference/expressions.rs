@@ -9,7 +9,7 @@ use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::frontend::core::parser::ast::{BinOp, UnOp};
 use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::core::typecheck::passes::overload;
-use crate::frontend::core::typecheck::traits::solver::TraitSolver;
+use crate::frontend::core::types::TraitTable;
 use std::collections::{HashMap, HashSet};
 
 use super::capture::{self, CaptureInfo};
@@ -1356,13 +1356,13 @@ impl<'a> ExpressionInferrer<'a> {
 
                 // 运行闭包捕获分析
                 let lambda_expr = expr;
-                let trait_solver = TraitSolver::new();
+                let trait_table = TraitTable::with_std();
                 let capture_info = capture::analyze_lambda_captures(
                     lambda_expr,
                     body,
                     &outer_scope_names,
                     &outer_scope_vars,
-                    &trait_solver,
+                    &trait_table,
                     None, // parent 暂不可用，后续可增强
                 );
                 self.capture_infos.insert(*span, capture_info);

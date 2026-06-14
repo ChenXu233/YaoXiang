@@ -15,7 +15,7 @@ use crate::frontend::core::typecheck::inference::capture::{
     analyze_captures, analyze_closure_usage, determine_capture_mode, CaptureMode, CaptureUsage,
     ClosureUsage,
 };
-use crate::frontend::core::typecheck::traits::solver::TraitSolver;
+use crate::frontend::core::types::TraitTable;
 use crate::frontend::core::types::mono::{MonoType, StructType};
 use crate::util::span::Span;
 
@@ -201,7 +201,7 @@ fn test_analyze_captures_nested_lambda() {
 
 #[test]
 fn test_determine_capture_mode_dup_inline() {
-    let solver = TraitSolver::new();
+    let solver = TraitTable::with_std();
     let mode = determine_capture_mode(
         &CaptureUsage::Read,
         &MonoType::Int(64),
@@ -217,7 +217,7 @@ fn test_determine_capture_mode_dup_inline() {
 
 #[test]
 fn test_determine_capture_mode_dup_escaping() {
-    let solver = TraitSolver::new();
+    let solver = TraitTable::with_std();
     let mode = determine_capture_mode(
         &CaptureUsage::Read,
         &MonoType::Int(64),
@@ -234,7 +234,7 @@ fn test_determine_capture_mode_dup_escaping() {
 
 #[test]
 fn test_determine_capture_mode_non_dup_read_inline() {
-    let solver = TraitSolver::new();
+    let solver = TraitTable::with_std();
     let struct_ty = make_non_dup_struct_ty();
     let mode = determine_capture_mode(
         &CaptureUsage::Read,
@@ -251,7 +251,7 @@ fn test_determine_capture_mode_non_dup_read_inline() {
 
 #[test]
 fn test_determine_capture_mode_non_dup_write_inline() {
-    let solver = TraitSolver::new();
+    let solver = TraitTable::with_std();
     let struct_ty = make_non_dup_struct_ty();
     let mode = determine_capture_mode(
         &CaptureUsage::Write,
@@ -268,7 +268,7 @@ fn test_determine_capture_mode_non_dup_write_inline() {
 
 #[test]
 fn test_determine_capture_mode_non_dup_escaping() {
-    let solver = TraitSolver::new();
+    let solver = TraitTable::with_std();
     let struct_ty = make_non_dup_struct_ty();
     let mode = determine_capture_mode(
         &CaptureUsage::Read,
@@ -421,7 +421,7 @@ fn test_analyze_captures_mixed_read_write() {
 #[test]
 fn test_capture_mode_for_immutable_ref() {
     // &T 是 Dup → 应该 Copy
-    let solver = TraitSolver::new();
+    let solver = TraitTable::with_std();
     let ref_ty = MonoType::Ref {
         mutable: false,
         inner: Box::new(MonoType::Int(64)),
@@ -433,7 +433,7 @@ fn test_capture_mode_for_immutable_ref() {
 #[test]
 fn test_capture_mode_for_immutable_ref_escaping() {
     // &T 是 Dup → 即使逃逸也是 Copy
-    let solver = TraitSolver::new();
+    let solver = TraitTable::with_std();
     let ref_ty = MonoType::Ref {
         mutable: false,
         inner: Box::new(MonoType::Int(64)),
@@ -454,7 +454,7 @@ fn test_capture_mode_for_immutable_ref_escaping() {
 #[test]
 fn test_capture_mode_for_mutable_ref_inline_read() {
     // &mut T 不是 Dup，内联读取 → Borrow
-    let solver = TraitSolver::new();
+    let solver = TraitTable::with_std();
     let ref_ty = MonoType::Ref {
         mutable: true,
         inner: Box::new(MonoType::Int(64)),
@@ -466,7 +466,7 @@ fn test_capture_mode_for_mutable_ref_inline_read() {
 #[test]
 fn test_capture_mode_for_mutable_ref_inline_write() {
     // &mut T 不是 Dup，内联写入 → BorrowMut
-    let solver = TraitSolver::new();
+    let solver = TraitTable::with_std();
     let ref_ty = MonoType::Ref {
         mutable: true,
         inner: Box::new(MonoType::Int(64)),
@@ -487,7 +487,7 @@ fn test_capture_mode_for_mutable_ref_inline_write() {
 #[test]
 fn test_capture_mode_for_mutable_ref_escaping() {
     // &mut T 不是 Dup，逃逸 → Move
-    let solver = TraitSolver::new();
+    let solver = TraitTable::with_std();
     let ref_ty = MonoType::Ref {
         mutable: true,
         inner: Box::new(MonoType::Int(64)),
