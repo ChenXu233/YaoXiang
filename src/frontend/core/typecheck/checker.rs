@@ -299,6 +299,42 @@ impl TypeChecker {
             }
         }
 
+        // RFC-027: 所有权检查 — 在终止检查之后、约束求解之前运行
+        // 分析借用令牌冲突、Move/Drop/Clone/Mut 语义（RFC-009a §系统谓词清单）
+        {
+            let ownership_result =
+                super::layers::ownership::check_ownership(
+                    &super::proof::context::ProofContext::new(self.env())
+                );
+            match ownership_result {
+                ProofResult::Proved => {}
+                ProofResult::Disproved(model) => {
+                    let code = match model.kind {
+                        super::proof::verdict::DisproofKind::UseAfterMove => "E2014",
+                        super::proof::verdict::DisproofKind::MutViolation => "E2016",
+                        super::proof::verdict::DisproofKind::BorrowConflict => "E2017",
+                        super::proof::verdict::DisproofKind::UseAfterDrop => "E2018",
+                        super::proof::verdict::DisproofKind::DoubleDrop => "E2019",
+                        _ => "E2000",
+                    };
+                    let notes: String = model.assignments.iter()
+                        .map(|(k, v)| format!("{}: {}", k, v))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    let diag = crate::util::diagnostic::Diagnostic::error(
+                        code.to_string(),
+                        model.constraint.clone(),
+                        notes,
+                        model.span,
+                    );
+                    self.add_error(diag);
+                }
+                ProofResult::Unproven { .. } => {
+                    // 快速通道 + SMT 均无法判定，当前不阻塞编译
+                }
+            }
+        }
+
         // 求解所有约束
         let solve_result = self.env.solver().solve();
         if let Err(constraint_errors) = solve_result {
