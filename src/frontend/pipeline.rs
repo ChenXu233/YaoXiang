@@ -301,7 +301,7 @@ impl Pipeline {
         source_name: &str,
         source: &str,
     ) -> CompilationResult {
-        let start_time = std::time::Instant::now();
+        let start_time = crate::util::time_compat::Instant::now();
         let mut phase_durations = Vec::new();
 
         // 发射编译开始事件
@@ -413,7 +413,7 @@ impl Pipeline {
         source: &str,
         phase_durations: &mut Vec<(CompilationPhase, u64)>,
     ) -> LexResult {
-        let start = std::time::Instant::now();
+        let start = crate::util::time_compat::Instant::now();
         self.state = PipelineState::Lexing;
 
         self.event_bus
@@ -452,7 +452,7 @@ impl Pipeline {
         tokens: &[super::core::lexer::Token],
         phase_durations: &mut Vec<(CompilationPhase, u64)>,
     ) -> ParseResult {
-        let start = std::time::Instant::now();
+        let start = crate::util::time_compat::Instant::now();
         self.state = PipelineState::Parsing;
 
         self.event_bus.emit(ParsingStart::new(tokens.len()));
@@ -491,7 +491,7 @@ impl Pipeline {
         ast: &super::core::parser::Module,
         phase_durations: &mut Vec<(CompilationPhase, u64)>,
     ) -> TypecheckResult {
-        let start = std::time::Instant::now();
+        let start = crate::util::time_compat::Instant::now();
         self.state = PipelineState::TypeChecking;
 
         self.event_bus
@@ -574,7 +574,7 @@ impl Pipeline {
         type_result: &typecheck::TypeCheckResult,
         phase_durations: &mut Vec<(CompilationPhase, u64)>,
     ) -> ProofExecResult {
-        let start = std::time::Instant::now();
+        let start = crate::util::time_compat::Instant::now();
         self.state = PipelineState::ProofExecuting;
 
         let mut failed_proofs = Vec::new();
@@ -623,7 +623,7 @@ impl Pipeline {
         type_result: &typecheck::TypeCheckResult,
         phase_durations: &mut Vec<(CompilationPhase, u64)>,
     ) -> IRResult {
-        let start = std::time::Instant::now();
+        let start = crate::util::time_compat::Instant::now();
         self.state = PipelineState::IRGenerating;
 
         self.event_bus.emit(IRGenerationStart::new(ast.items.len()));

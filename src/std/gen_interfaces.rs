@@ -45,10 +45,13 @@ pub fn generate_all_interfaces() -> Vec<(String, String)> {
         Box::new(crate::std::io::IoModule),
         Box::new(crate::std::list::ListModule),
         Box::new(crate::std::math::MathModule),
+        #[cfg(not(feature = "wasm"))]
         Box::new(crate::std::net::NetModule),
+        #[cfg(not(feature = "wasm"))]
         Box::new(crate::std::concurrent::ConcurrentModule),
         Box::new(crate::std::string::StringModule),
         Box::new(crate::std::time::TimeModule),
+        #[cfg(not(feature = "wasm"))]
         Box::new(crate::std::os::OsModule),
     ];
 

@@ -1,0 +1,61 @@
+name: Build Wasm (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: 'Artifact name'
+        type: string
+        default: 'wasm-playground'
+      retention-days:
+        description: 'Artifact retention days'
+        type: number
+        default: 7
+    outputs:
+      artifact-name:
+        description: 'Name of the uploaded artifact'
+        value: ${{ inputs.artifact-name }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-wasm:
+    name: Build Wasm
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ vars.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: wasm-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            wasm-cargo-
+
+      - name: Build Wasm
+        run: wasm-pack build --target web --no-default-features --features wasm
+
+      - name: Upload wasm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: |
+            pkg/yaoxiang.js
+            pkg/yaoxiang_bg.wasm
+          retention-days: ${{ inputs.retention-days }}

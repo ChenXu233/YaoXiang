@@ -1,29 +1,16 @@
 //! Logger module for YaoXiang
 //!
 //! Go-style simple logging: `[LEVEL] message`
-//!
-//! # Usage
-//!
-//! ```rust
-//! use yaoxiang::util::logger;
-//!
-//! logger::init();
-//! tracing::info!("Hello, {}", "world");
-//! ```
 
 use std::sync::atomic::{AtomicU8, Ordering};
-use tracing_subscriber::{
-    fmt::writer::MakeWriterExt, layer::SubscriberExt, util::SubscriberInitExt, Layer, Registry,
-};
 
 use crate::util::i18n::current_lang;
 
 /// Global language setting for i18n (stored as atomic u8 for thread-safe access)
 static CURRENT_LANG: AtomicU8 = AtomicU8::new(0);
 
-/// Set the current language for i18n (for backward compatibility)
+/// Set the current language for i18n
 pub fn set_lang(lang_code: &str) {
-    // Map lang code to u8: en=0, zh=1, zh-x-miao=2, others=0
     let val = match lang_code {
         "zh" => 1,
         "zh-x-miao" | "zh-miao" => 2,
@@ -32,7 +19,7 @@ pub fn set_lang(lang_code: &str) {
     CURRENT_LANG.store(val, Ordering::SeqCst);
 }
 
-/// Get the current language for i18n (for backward compatibility)
+/// Get the current language for i18n
 pub fn get_lang() -> &'static str {
     let val = CURRENT_LANG.load(Ordering::SeqCst);
     match val {
@@ -63,16 +50,20 @@ impl From<LogLevel> for tracing::Level {
 }
 
 /// Initialize logger with default configuration (INFO level)
+#[cfg(feature = "cli")]
 pub fn init() {
     init_with_level(LogLevel::Info);
 }
 
 /// Initialize logger with custom level (Go style: `[LEVEL] message`)
+#[cfg(feature = "cli")]
 pub fn init_with_level(level: LogLevel) {
+    use tracing_subscriber::{
+        fmt::writer::MakeWriterExt, layer::SubscriberExt, util::SubscriberInitExt, Layer, Registry,
+    };
+
     let filter = tracing_subscriber::filter::LevelFilter::from_level(level.into());
 
-    // Go 风格：显示 [LEVEL] 前缀，不显示时间、不显示模块路径
-    // 启用 ANSI 颜色，根据日志级别显示不同颜色
     let layer = tracing_subscriber::fmt::layer()
         .without_time()
         .with_target(false)
@@ -84,17 +75,24 @@ pub fn init_with_level(level: LogLevel) {
 }
 
 /// Initialize logger for CLI use (INFO level)
+#[cfg(feature = "cli")]
 pub fn init_cli() {
     init_with_level(LogLevel::Info);
 }
 
-/// Initialize logger for LSP use (stderr only to avoid polluting JSON-RPC stdout)
+/// Initialize logger for LSP use (stderr only)
+#[cfg(feature = "cli")]
 pub fn init_lsp() {
     init_lsp_with_level(LogLevel::Info);
 }
 
-/// Initialize logger for LSP use with custom level (always stderr)
+/// Initialize logger for LSP use with custom level
+#[cfg(feature = "cli")]
 pub fn init_lsp_with_level(level: LogLevel) {
+    use tracing_subscriber::{
+        fmt::writer::MakeWriterExt, layer::SubscriberExt, util::SubscriberInitExt, Layer, Registry,
+    };
+
     let filter = tracing_subscriber::filter::LevelFilter::from_level(level.into());
 
     let layer = tracing_subscriber::fmt::layer()
@@ -109,6 +107,7 @@ pub fn init_lsp_with_level(level: LogLevel) {
 }
 
 /// Initialize logger for debug use (DEBUG level)
+#[cfg(feature = "cli")]
 pub fn init_debug() {
     init_with_level(LogLevel::Debug);
 }

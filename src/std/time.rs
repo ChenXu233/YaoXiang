@@ -41,6 +41,7 @@ impl StdModule for TimeModule {
                 "() -> Int",
                 native_timestamp_ms,
             ),
+            #[cfg(not(feature = "wasm"))]
             NativeExport::new(
                 "sleep",
                 "std.time.sleep",
@@ -278,6 +279,7 @@ fn native_timestamp_ms(
 // ============================================================================
 
 /// Native implementation: sleep
+#[cfg(not(feature = "wasm"))]
 fn native_sleep(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
