@@ -629,3 +629,52 @@ pub fn emit_mut_predicate(
 pub fn check_ownership(_ctx: &ProofContext<'_>) -> ProofResult {
     ProofResult::Proved
 }
+
+// ── OwnershipChecker：AST 遍历 ───────────────────────────
+
+use crate::frontend::core::parser::ast::{Expr, Module, Stmt, StmtKind};
+
+/// 函数内变量状态
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VarState {
+    Alive,
+    Moved,
+    Dropped,
+}
+
+/// 待验证的写操作（遍历完成后排空）
+struct PendingWrite {
+    token: BrandId,
+    node_idx: usize,
+}
+
+/// 所有权检查器——遍历 AST 构建 BrandTree + CFG，执行所有权验证
+pub struct OwnershipChecker {
+    brand_tree: BrandTree,
+    cfg: ControlFlowGraph,
+    var_state: HashMap<String, VarState>,
+    pending_writes: Vec<PendingWrite>,
+    /// 当前 CFG 节点索引（walk 过程中推进）
+    current_node: usize,
+}
+
+impl OwnershipChecker {
+    pub fn new() -> Self {
+        Self {
+            brand_tree: BrandTree::new(),
+            cfg: ControlFlowGraph::new(),
+            var_state: HashMap::new(),
+            pending_writes: Vec::new(),
+            current_node: 0,
+        }
+    }
+
+    /// 重置函数级状态
+    fn reset(&mut self) {
+        self.brand_tree = BrandTree::new();
+        self.cfg = ControlFlowGraph::new();
+        self.var_state.clear();
+        self.pending_writes.clear();
+        self.current_node = self.cfg.add_node(None); // 入口节点
+    }
+}
