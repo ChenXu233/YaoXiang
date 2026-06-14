@@ -7,7 +7,9 @@
 
 pub mod ast;
 pub mod translate;
+#[cfg(not(feature = "wasm"))]
 pub mod z3_backend;
+#[cfg(not(feature = "wasm"))]
 pub mod z3_ffi;
 
 #[cfg(test)]
