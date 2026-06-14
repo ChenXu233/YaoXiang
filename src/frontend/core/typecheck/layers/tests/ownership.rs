@@ -5,7 +5,11 @@
 //! RFC-009a §系统谓词清单: 5 种命题
 //! RFC-009a §用例分析: 线性代码 / if-else / 循环
 
-use crate::frontend::core::typecheck::layers::ownership::{BrandId, BrandTree, TokenKind};
+use crate::frontend::core::typecheck::layers::ownership::{
+    BrandId, BrandTree, ControlFlowGraph, EdgeKind, FastPathResult, emit_move_predicate,
+    emit_drop_predicate, emit_double_drop_predicate, emit_mut_predicate, fast_path_check,
+};
+use crate::frontend::core::typecheck::proof::verdict::ProofResult;
 
 // ── BrandId 前缀匹配 ──────────────────────────────────
 
@@ -150,8 +154,8 @@ fn test_consumer_unknown_token_returns_empty() {
 fn test_conflicting_with_returns_all_conflicts() {
     let mut tree = BrandTree::new();
     let r = tree.create_read_token("x".into());
-    let w1 = tree.create_write_token("x".into());
-    let w2 = tree.create_write_token("x".into());
+    let _w1 = tree.create_write_token("x".into());
+    let _w2 = tree.create_write_token("x".into());
 
     let conflicts = tree.conflicting_with(&r);
     assert_eq!(conflicts.len(), 2);
@@ -159,15 +163,9 @@ fn test_conflicting_with_returns_all_conflicts() {
 
 // ── 快速通道（RFC-009a §用例分析） ──────────────────────
 
-use crate::frontend::core::typecheck::layers::ownership::{
-    emit_borrow_predicate, emit_move_predicate, emit_drop_predicate,
-    emit_double_drop_predicate, emit_mut_predicate,
-    ControlFlowGraph, EdgeKind, FastPathResult, fast_path_check,
-};
-use crate::frontend::core::typecheck::proof::verdict::ProofResult;
-
 #[test]
 fn test_linear_code_read_then_write_no_conflict() {
+    // Arrange: data = vec![...]; view = &data; x = view.total_count; data.push(4)
     let mut tree = BrandTree::new();
     let read = tree.create_read_token("data".into());
     tree.add_consumer(&read, 2);
@@ -180,13 +178,17 @@ fn test_linear_code_read_then_write_no_conflict() {
     cfg.add_edge(1, 2, EdgeKind::Normal);
     cfg.add_edge(2, 3, EdgeKind::Normal);
 
+    // Act
     let write = tree.create_write_token("data".into());
     let result = fast_path_check(&tree, &cfg, &write, 3);
+
+    // Assert: view 已在节点 2 被消费 → 写安全
     assert!(matches!(result, FastPathResult::Safe));
 }
 
 #[test]
 fn test_read_and_write_conflict_when_consumer_not_executed() {
+    // Arrange: 读令牌有消费者在节点 3，写操作在节点 2（消费者之前）
     let mut tree = BrandTree::new();
     let read = tree.create_read_token("data".into());
     tree.add_consumer(&read, 3);
@@ -200,13 +202,17 @@ fn test_read_and_write_conflict_when_consumer_not_executed() {
     cfg.add_edge(2, 3, EdgeKind::Normal);
     cfg.add_edge(3, 4, EdgeKind::Normal);
 
+    // Act
     let write = tree.create_write_token("data".into());
     let result = fast_path_check(&tree, &cfg, &write, 2);
+
+    // Assert: 从消费者(节点3)反向 BFS 可达节点 2
     assert!(matches!(result, FastPathResult::Unsafe { .. }));
 }
 
 #[test]
 fn test_loop_with_break_cuts_back_edge() {
+    // Arrange: loop { use(view); if is_last { push; break } }
     let mut tree = BrandTree::new();
     let read = tree.create_read_token("data".into());
     tree.add_consumer(&read, 2);
@@ -222,13 +228,17 @@ fn test_loop_with_break_cuts_back_edge() {
     cfg.add_edge(4, 5, EdgeKind::Break);
     cfg.add_edge(3, 1, EdgeKind::BackEdge);
 
+    // Act
     let write = tree.create_write_token("data".into());
     let result = fast_path_check(&tree, &cfg, &write, 4);
+
+    // Assert: break 切断 → Safe
     assert!(matches!(result, FastPathResult::Safe));
 }
 
 #[test]
 fn test_loop_without_break_is_unsafe() {
+    // Arrange: loop { use(view); push } — 无 break
     let mut tree = BrandTree::new();
     let read = tree.create_read_token("data".into());
     tree.add_consumer(&read, 0);
@@ -241,8 +251,11 @@ fn test_loop_without_break_is_unsafe() {
     cfg.add_edge(1, 2, EdgeKind::Normal);
     cfg.add_edge(2, 0, EdgeKind::BackEdge);
 
+    // Act
     let write = tree.create_write_token("data".into());
     let result = fast_path_check(&tree, &cfg, &write, 1);
+
+    // Assert: 回边穿越 → write_node 在 unsafe
     assert!(matches!(result, FastPathResult::Unsafe { .. }));
 }
 
