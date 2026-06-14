@@ -53,6 +53,46 @@ jobs:
       artifact-prefix: yaoxiang
       retention-days: 30
 
+  build-wasm:
+    name: Build Wasm
+    needs: check-version
+    if: needs.check-version.outputs.should-release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ vars.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: release-wasm-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            release-wasm-cargo-
+
+      - name: Build Wasm
+        run: wasm-pack build --target web --no-default-features --features wasm
+
+      - name: Upload wasm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: yaoxiang-wasm
+          path: pkg/yaoxiang_bg.wasm
+          retention-days: 30
+
   security:
     name: Security Audit
     needs: check-version
@@ -114,8 +154,8 @@ jobs:
 
   release:
     name: Publish Release
-    needs: [check-version, build, security, test]
-    if: always() && needs.check-version.outputs.should-release == 'true' && needs.build.result == 'success' && needs.security.result == 'success' && needs.test.result == 'success'
+    needs: [check-version, build, build-wasm, security, test]
+    if: always() && needs.check-version.outputs.should-release == 'true' && needs.build.result == 'success' && needs.build-wasm.result == 'success' && needs.security.result == 'success' && needs.test.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -150,5 +190,6 @@ jobs:
           files: |
             release-artifacts/**/*.exe
             release-artifacts/**/yaoxiang
+            release-artifacts/**/*.wasm
           draft: false
           prerelease: false

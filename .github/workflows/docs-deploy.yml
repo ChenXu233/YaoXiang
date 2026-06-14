@@ -3,10 +3,57 @@ name: Deploy Docs
 on:
   push:
     branches: [main, dev]
-    paths: ['docs/**', '!.obsidian/**', '!.git/**']
+    paths: ['docs/**', 'src/**', 'Cargo.toml', 'Cargo.lock', '!.obsidian/**', '!.git/**']
 
 jobs:
-  build:
+  build-wasm:
+    name: Build Wasm Playground
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ vars.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: wasm-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            wasm-cargo-
+
+      - name: Build Wasm
+        run: wasm-pack build --target web --no-default-features --features wasm
+
+      - name: Copy wasm to docs public
+        run: |
+          mkdir -p docs/src/.vitepress/public/wasm
+          cp pkg/yaoxiang.js pkg/yaoxiang_bg.wasm docs/src/.vitepress/public/wasm/
+
+      - name: Upload wasm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-playground
+          path: |
+            docs/src/.vitepress/public/wasm/yaoxiang.js
+            docs/src/.vitepress/public/wasm/yaoxiang_bg.wasm
+          retention-days: 7
+
+  build-docs:
+    name: Build Docs
+    needs: build-wasm
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -14,6 +61,12 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download wasm artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-playground
+          path: docs/src/.vitepress/public/wasm
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -34,7 +87,7 @@ jobs:
       - name: Build Docs
         working-directory: docs
         run: pnpm run docs:build
-      
+
       - name: Verify Build Output
         working-directory: docs/src
         run: ls -la .vitepress/dist || echo "Build output not found!"
