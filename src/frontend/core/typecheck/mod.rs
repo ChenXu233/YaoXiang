@@ -16,9 +16,6 @@ pub mod predicate_resolver;
 // 导入推断模块
 pub mod inference;
 
-// 导入特质模块
-pub mod traits;
-
 // 语义信息数据库
 pub mod semantic_db;
 
@@ -217,9 +214,5 @@ pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
 
 /// 添加标准库 traits 到环境
 pub fn add_std_traits(env: &mut environment::TypeEnvironment) {
-    // 初始化标准库 trait 定义
-    traits::std_traits::init_std_traits(&mut env.trait_table);
-
-    // 初始化 primitive 类型的 trait 实现
-    traits::std_traits::init_primitive_impls(&mut env.trait_table);
+    env.trait_table = crate::frontend::core::types::TraitTable::with_std();
 }
