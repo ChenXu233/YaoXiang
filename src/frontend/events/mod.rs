@@ -21,7 +21,7 @@ mod tests;
 #[derive(Debug, Clone)]
 pub struct EventMetadata {
     /// 事件发生的时间戳
-    pub timestamp: std::time::Instant,
+    pub timestamp: crate::util::time_compat::Instant,
     /// 源文件信息
     pub source_file: Option<String>,
     /// 事件序号（用于排序）
@@ -31,7 +31,7 @@ pub struct EventMetadata {
 impl Default for EventMetadata {
     fn default() -> Self {
         Self {
-            timestamp: std::time::Instant::now(),
+            timestamp: crate::util::time_compat::Instant::now(),
             source_file: None,
             sequence: 0,
         }

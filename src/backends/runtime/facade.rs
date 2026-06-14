@@ -4,9 +4,12 @@
 //! generic tasks and returns type-erased (`Any`) payloads.
 
 use std::collections::HashMap;
+#[cfg(not(feature = "wasm"))]
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use crate::util::time_compat::Instant;
 
+#[cfg(not(feature = "wasm"))]
 use crossbeam::channel::{Receiver, Sender};
 
 use crate::backends::common::value::TaskId;
@@ -55,8 +58,25 @@ pub type TaskFn = Box<dyn FnOnce(&SpawnHandle) -> TaskResult + Send + 'static>;
 ///
 /// The boolean parameter indicates whether time-slicing is enabled (i.e. there
 /// are other runnable tasks).
+#[cfg(not(feature = "wasm"))]
 pub type CoopTaskFn = Box<dyn FnMut(bool) -> TaskPoll + Send + 'static>;
 
+// ============================================================================
+// SpawnHandle — wasm-compatible stub vs full crossbeam version
+// ============================================================================
+
+#[cfg(feature = "wasm")]
+/// Handle passed to tasks for nested spawning (no-op in wasm).
+pub struct SpawnHandle;
+
+#[cfg(feature = "wasm")]
+impl SpawnHandle {
+    pub fn noop() -> Self {
+        SpawnHandle
+    }
+}
+
+#[cfg(not(feature = "wasm"))]
 /// Worker thread message sent back to the main thread.
 enum WorkerMessage {
     /// Task completed.
@@ -73,6 +93,7 @@ enum WorkerMessage {
     },
 }
 
+#[cfg(not(feature = "wasm"))]
 /// Handle passed to tasks for nested spawning.
 ///
 /// Tasks can use this to spawn child tasks that become part of the runtime's DAG.
@@ -80,11 +101,8 @@ pub struct SpawnHandle {
     tx: Sender<WorkerMessage>,
 }
 
+#[cfg(not(feature = "wasm"))]
 impl SpawnHandle {
-    /// Spawn a child task from within a running task.
-    ///
-    /// The child task will be registered with the runtime and scheduled according
-    /// to its dependencies. Returns the `TaskId` of the newly spawned task.
     pub fn spawn(
         &self,
         meta: TaskMeta,
@@ -103,8 +121,6 @@ impl SpawnHandle {
             .map_err(|_| RuntimeError::DeadlockOrCycle(TaskId(0)))
     }
 
-    /// A no-op `SpawnHandle` for use in contexts where nested spawning is not needed
-    /// (e.g., Embedded mode).
     pub fn noop() -> Self {
         let (tx, _rx) = crossbeam::channel::unbounded();
         Self { tx }
@@ -129,7 +145,9 @@ pub struct Runtime {
 
 enum RuntimeInner {
     Embedded(EmbeddedRuntime),
+    #[cfg(not(feature = "wasm"))]
     Standard(StandardRuntime),
+    #[cfg(not(feature = "wasm"))]
     Full(FullRuntime),
 }
 
@@ -137,17 +155,25 @@ impl Runtime {
     pub fn new(config: RuntimeConfig) -> Result<Self, RuntimeFacadeError> {
         let inner = match config.mode {
             RuntimeMode::Embedded => RuntimeInner::Embedded(EmbeddedRuntime::default()),
+            #[cfg(not(feature = "wasm"))]
             RuntimeMode::Standard => {
                 if config.workers == 0 {
                     return Err(RuntimeFacadeError::InvalidConfig("workers must be >= 1"));
                 }
                 RuntimeInner::Standard(StandardRuntime::new(config.workers)?)
             }
+            #[cfg(not(feature = "wasm"))]
             RuntimeMode::Full => {
                 if config.workers == 0 {
                     return Err(RuntimeFacadeError::InvalidConfig("workers must be >= 1"));
                 }
                 RuntimeInner::Full(FullRuntime::new(config.workers, config.work_stealing)?)
+            }
+            #[cfg(feature = "wasm")]
+            _ => {
+                return Err(RuntimeFacadeError::InvalidConfig(
+                    "only Embedded runtime is supported in wasm",
+                ));
             }
         };
         Ok(Self { inner })
@@ -160,11 +186,14 @@ impl Runtime {
     ) -> Result<TaskId, RuntimeFacadeError> {
         match &mut self.inner {
             RuntimeInner::Embedded(rt) => Ok(rt.spawn(meta, task)),
+            #[cfg(not(feature = "wasm"))]
             RuntimeInner::Standard(rt) => Ok(rt.spawn(meta, task)?),
+            #[cfg(not(feature = "wasm"))]
             RuntimeInner::Full(rt) => Ok(rt.spawn(meta, task)?),
         }
     }
 
+    #[cfg(not(feature = "wasm"))]
     pub fn spawn_coop(
         &mut self,
         meta: TaskMeta,
@@ -185,7 +214,9 @@ impl Runtime {
     ) -> Result<(), RuntimeFacadeError> {
         match &mut self.inner {
             RuntimeInner::Embedded(rt) => rt.cancel(task_id),
+            #[cfg(not(feature = "wasm"))]
             RuntimeInner::Standard(rt) => rt.cancel(task_id)?,
+            #[cfg(not(feature = "wasm"))]
             RuntimeInner::Full(rt) => rt.cancel(task_id)?,
         }
         Ok(())
@@ -197,7 +228,9 @@ impl Runtime {
     ) -> Option<TaskOutcome> {
         match &self.inner {
             RuntimeInner::Embedded(rt) => rt.outcome(task_id).cloned(),
+            #[cfg(not(feature = "wasm"))]
             RuntimeInner::Standard(rt) => rt.outcome(task_id).cloned(),
+            #[cfg(not(feature = "wasm"))]
             RuntimeInner::Full(rt) => rt.outcome(task_id).cloned(),
         }
     }
@@ -208,7 +241,9 @@ impl Runtime {
     ) -> bool {
         match &self.inner {
             RuntimeInner::Embedded(rt) => rt.is_complete(task_id),
+            #[cfg(not(feature = "wasm"))]
             RuntimeInner::Standard(rt) => rt.is_complete(task_id),
+            #[cfg(not(feature = "wasm"))]
             RuntimeInner::Full(rt) => rt.is_complete(task_id),
         }
     }
@@ -216,7 +251,9 @@ impl Runtime {
     pub fn stats(&self) -> RuntimeStats {
         match &self.inner {
             RuntimeInner::Embedded(rt) => rt.stats(),
+            #[cfg(not(feature = "wasm"))]
             RuntimeInner::Standard(rt) => rt.stats(),
+            #[cfg(not(feature = "wasm"))]
             RuntimeInner::Full(rt) => rt.stats(),
         }
     }
@@ -228,7 +265,9 @@ impl Runtime {
     ) -> Result<(), RuntimeFacadeError> {
         match &mut self.inner {
             RuntimeInner::Embedded(rt) => rt.drive_until(target),
+            #[cfg(not(feature = "wasm"))]
             RuntimeInner::Standard(rt) => rt.drive_until(target)?,
+            #[cfg(not(feature = "wasm"))]
             RuntimeInner::Full(rt) => rt.drive_until(target)?,
         }
         Ok(())
@@ -278,9 +317,13 @@ impl EmbeddedRuntime {
             return task_id;
         }
 
+        #[cfg(not(feature = "wasm"))]
         let start = Instant::now();
         let result = task(&SpawnHandle::noop());
+        #[cfg(not(feature = "wasm"))]
         let exec_time = start.elapsed();
+        #[cfg(feature = "wasm")]
+        let exec_time = Duration::ZERO;
         self.total_exec_time += exec_time;
 
         let outcome = match result {
@@ -337,9 +380,10 @@ impl EmbeddedRuntime {
 }
 
 // ============================================================================
-// Standard Runtime (thread pool DAG)
+// Standard Runtime (thread pool DAG) — not available in wasm
 // ============================================================================
 
+#[cfg(not(feature = "wasm"))]
 /// A work item to be processed by a worker thread.
 struct WorkItem {
     id: TaskId,
@@ -347,6 +391,7 @@ struct WorkItem {
     spawn_handle: SpawnHandle,
 }
 
+#[cfg(not(feature = "wasm"))]
 struct StandardRuntime {
     graph: LocalRuntime,
     tasks: HashMap<TaskId, TaskFn>,
@@ -358,6 +403,7 @@ struct StandardRuntime {
     workers: usize,
 }
 
+#[cfg(not(feature = "wasm"))]
 impl StandardRuntime {
     fn new(workers: usize) -> Result<Self, RuntimeFacadeError> {
         let (msg_tx, msg_rx) = crossbeam::channel::unbounded::<WorkerMessage>();
@@ -577,6 +623,7 @@ impl StandardRuntime {
     }
 }
 
+#[cfg(not(feature = "wasm"))]
 impl Drop for StandardRuntime {
     fn drop(&mut self) {
         // Close the work channel to signal workers to exit.
@@ -590,14 +637,16 @@ impl Drop for StandardRuntime {
 }
 
 // ============================================================================
-// Full Runtime (delegates to StandardRuntime)
+// Full Runtime (delegates to StandardRuntime) — not available in wasm
 // ============================================================================
 
+#[cfg(not(feature = "wasm"))]
 struct FullRuntime {
     standard: StandardRuntime,
     // TODO: WorkStealer for load balancing
 }
 
+#[cfg(not(feature = "wasm"))]
 impl FullRuntime {
     fn new(
         workers: usize,
@@ -658,9 +707,10 @@ impl FullRuntime {
 }
 
 // ============================================================================
-// Worker thread pool
+// Worker thread pool — not available in wasm
 // ============================================================================
 
+#[cfg(not(feature = "wasm"))]
 fn spawn_worker_threads(
     workers: usize,
     msg_tx: Sender<WorkerMessage>,

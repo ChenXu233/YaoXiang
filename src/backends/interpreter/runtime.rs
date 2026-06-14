@@ -19,9 +19,12 @@ impl Default for InterpreterRuntimeConfig {
     fn default() -> Self {
         Self {
             runtime: RuntimeMode::Embedded,
+            #[cfg(not(feature = "wasm"))]
             workers: std::thread::available_parallelism()
                 .map(|n| n.get())
                 .unwrap_or(4),
+            #[cfg(feature = "wasm")]
+            workers: 1,
             work_stealing: false,
         }
     }

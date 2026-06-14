@@ -8,7 +8,8 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use crate::util::time_compat::Instant;
 
 use crate::frontend::core::parser::ast::Module as AstModule;
 use crate::frontend::core::typecheck::TypeCheckResult;

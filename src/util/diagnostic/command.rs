@@ -18,11 +18,13 @@ fn safe_canonicalize(path: &Path) -> PathBuf {
     })
 }
 
-use super::{
-    check_files_with_diagnostics, CheckResult, EmitterConfig, ErrorCodeDefinition, ErrorInfo,
-    I18nRegistry, JsonEmitter, TextEmitter,
-};
+use super::{ErrorCodeDefinition, ErrorInfo, I18nRegistry, JsonEmitter};
+#[cfg(feature = "cli")]
+use super::{CheckResult, EmitterConfig, TextEmitter};
+#[cfg(feature = "cli")]
+use super::check_files_with_diagnostics;
 
+#[cfg(feature = "cli")]
 pub fn run_check_command_once(
     paths: &[PathBuf],
     excludes: &[PathBuf],
@@ -69,6 +71,7 @@ pub fn run_check_command_once(
     Ok(result.error_count)
 }
 
+#[cfg(feature = "cli")]
 pub fn run_check_watch_command(
     paths: Vec<PathBuf>,
     excludes: Vec<PathBuf>,
@@ -275,6 +278,7 @@ fn collect_yx_files_recursive_with_excludes(
     Ok(())
 }
 
+#[cfg(feature = "cli")]
 fn default_check_path() -> Result<PathBuf> {
     let cwd = std::env::current_dir().context("Failed to get current directory")?;
 
@@ -287,6 +291,7 @@ fn default_check_path() -> Result<PathBuf> {
     Ok(cwd)
 }
 
+#[cfg(feature = "cli")]
 fn normalize_check_paths(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
     if paths.is_empty() {
         return Ok(vec![default_check_path()?]);
@@ -341,6 +346,7 @@ fn should_exclude_path(
         .any(|excluded| absolute.starts_with(excluded))
 }
 
+#[cfg(feature = "cli")]
 fn is_yx_event(
     event: &notify::Event,
     excludes: &[PathBuf],
@@ -370,6 +376,7 @@ struct CheckJsonOutput {
     diagnostics: Vec<CheckJsonDiagnostic>,
 }
 
+#[cfg(feature = "cli")]
 fn output_check_json(result: &CheckResult) -> Result<()> {
     let diagnostics = result
         .diagnostics
