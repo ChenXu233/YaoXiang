@@ -27,6 +27,8 @@ pub struct TypeCheckResult {
     pub trait_table: TraitTable,
     /// 证明函数调用（RFC-027 Phase 2.5: 需要在编译期执行的证明函数）
     pub proof_calls: Vec<ProofFunctionCall>,
+    /// NLL 精确释放计划（所有权检查阶段产出 → IR 生成阶段消费）
+    pub release_plan: crate::frontend::core::typecheck::layers::ownership::ReleasePlan,
 }
 
 /// 导入信息
