@@ -108,7 +108,7 @@ async function loadWasm() {
 
     // Dynamic import of wasm module
     // The wasm-pack output should be placed in docs/src/.vitepress/public/wasm/
-    const wasm = await import('../../public/wasm/yaoxiang_playground.js')
+    const wasm = await import(/* @vite-ignore */ '/YaoXiang/wasm/yaoxiang.js')
     await wasm.default()
     wasm.init_panic_hook()
     wasmModule = wasm
@@ -116,7 +116,7 @@ async function loadWasm() {
     statusText.value = 'Ready'
     statusType.value = 'success'
   } catch (e) {
-    statusText.value = 'Failed to load Wasm module'
+    statusText.value = 'Failed to load Wasm — run scripts/build-wasm.sh first'
     statusType.value = 'error'
     console.error('Wasm load error:', e)
   }
