@@ -9,7 +9,7 @@ use crate::frontend::core::typecheck::layers::ownership::{
     BrandId, BrandTree, ControlFlowGraph, EdgeKind, FastPathResult, emit_move_predicate,
     emit_drop_predicate, emit_double_drop_predicate, emit_mut_predicate, fast_path_check,
 };
-use crate::frontend::core::typecheck::proof::verdict::ProofResult;
+use crate::frontend::core::typecheck::proof::verdict::{DisproofKind, ProofResult};
 
 // ── BrandId 前缀匹配 ──────────────────────────────────
 
@@ -454,4 +454,142 @@ fn test_e2e_argument_passed_to_function_is_moved() {
         .filter(|r| matches!(r, ProofResult::Disproved { .. }))
         .collect();
     assert!(!errors.is_empty(), "应该检测到 x 被 move 进 f 后再使用");
+}
+
+// ── E2E 借用冲突测试 ────────────────────────────────
+
+#[test]
+fn test_e2e_borrow_conflict_detected() {
+    // Arrange: { x = 42; y = &x; z = &mut x }
+    // &x 创建 ReadToken(x)，&mut x 创建 WriteToken(x)
+    // add_consumer_for_var("x") 在 &mut x 时为 ReadToken 添加消费者 → 反向 BFS 可达
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_var_stmt(
+                "y",
+                Expr::Borrow {
+                    mutable: false,
+                    expr: Box::new(make_var("x")),
+                    span: Span::default(),
+                },
+            ),
+            make_var_stmt(
+                "z",
+                Expr::Borrow {
+                    mutable: true,
+                    expr: Box::new(make_var("x")),
+                    span: Span::default(),
+                },
+            ),
+        ],
+    )]);
+
+    // Act
+    let mut checker = OwnershipChecker::new();
+    let results = checker.check_module(&module, &make_test_env());
+
+    // Assert
+    let borrow_errors: Vec<_> = results
+        .iter()
+        .filter(|r| {
+            matches!(r, ProofResult::Disproved(model)
+                if matches!(model.kind, DisproofKind::BorrowConflict))
+        })
+        .collect();
+    assert!(
+        !borrow_errors.is_empty(),
+        "应该检测到 &x 和 &mut x 的借用冲突，但结果为空"
+    );
+}
+
+#[test]
+fn test_e2e_write_write_conflict_detected() {
+    // Arrange: { x = 42; a = &mut x; b = &mut x }
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_var_stmt(
+                "a",
+                Expr::Borrow {
+                    mutable: true,
+                    expr: Box::new(make_var("x")),
+                    span: Span::default(),
+                },
+            ),
+            make_var_stmt(
+                "b",
+                Expr::Borrow {
+                    mutable: true,
+                    expr: Box::new(make_var("x")),
+                    span: Span::default(),
+                },
+            ),
+        ],
+    )]);
+
+    // Act
+    let mut checker = OwnershipChecker::new();
+    let results = checker.check_module(&module, &make_test_env());
+
+    // Assert
+    let borrow_errors: Vec<_> = results
+        .iter()
+        .filter(|r| {
+            matches!(r, ProofResult::Disproved(model)
+                if matches!(model.kind, DisproofKind::BorrowConflict))
+        })
+        .collect();
+    assert!(
+        !borrow_errors.is_empty(),
+        "应该检测到 &mut x 和 &mut x 的借用冲突"
+    );
+}
+
+#[test]
+fn test_e2e_read_read_no_conflict() {
+    // Arrange: { x = 42; a = &x; b = &x }
+    // 两个 ReadToken 不冲突
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_var_stmt(
+                "a",
+                Expr::Borrow {
+                    mutable: false,
+                    expr: Box::new(make_var("x")),
+                    span: Span::default(),
+                },
+            ),
+            make_var_stmt(
+                "b",
+                Expr::Borrow {
+                    mutable: false,
+                    expr: Box::new(make_var("x")),
+                    span: Span::default(),
+                },
+            ),
+        ],
+    )]);
+
+    // Act
+    let mut checker = OwnershipChecker::new();
+    let results = checker.check_module(&module, &make_test_env());
+
+    // Assert
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "两个 &x 不应冲突，但检测到错误: {:?}",
+        errors
+    );
 }

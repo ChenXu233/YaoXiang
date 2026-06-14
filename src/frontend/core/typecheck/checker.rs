@@ -307,27 +307,7 @@ impl TypeChecker {
                 match result {
                     ProofResult::Proved => {}
                     ProofResult::Disproved(model) => {
-                        let code = match model.kind {
-                            super::proof::verdict::DisproofKind::UseAfterMove => "E2014",
-                            super::proof::verdict::DisproofKind::MutViolation => "E2016",
-                            super::proof::verdict::DisproofKind::BorrowConflict => "E2017",
-                            super::proof::verdict::DisproofKind::UseAfterDrop => "E2018",
-                            super::proof::verdict::DisproofKind::DoubleDrop => "E2019",
-                            _ => "E2000",
-                        };
-                        let notes: String = model
-                            .assignments
-                            .iter()
-                            .map(|(k, v)| format!("{}: {}", k, v))
-                            .collect::<Vec<_>>()
-                            .join("\n");
-                        let diag = crate::util::diagnostic::Diagnostic::error(
-                            code.to_string(),
-                            model.constraint.clone(),
-                            notes,
-                            model.span,
-                        );
-                        self.add_error(diag);
+                        self.add_error(model.into_diagnostic());
                     }
                     ProofResult::Unproven { .. } => {}
                 }
