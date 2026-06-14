@@ -1,15 +1,19 @@
 // E:/git/YaoXiang/src/util/diagnostic/session.rs
 
 use std::path::PathBuf;
+#[cfg(feature = "cli")]
 use anyhow::Result;
 
 use crate::frontend::module::dep_graph::ModuleDependencyGraph;
+#[cfg(feature = "cli")]
 use crate::frontend::module::cache::{ModuleCache, CacheMode};
+#[cfg(feature = "cli")]
 use super::CheckResult;
 
 /// 检查会话 — 管理增量检查状态
 pub struct CheckSession {
     dep_graph: ModuleDependencyGraph,
+    #[cfg(feature = "cli")]
     #[allow(dead_code)]
     cache: ModuleCache,
     all_files: Vec<PathBuf>,
@@ -25,12 +29,14 @@ impl CheckSession {
     pub fn new() -> Self {
         Self {
             dep_graph: ModuleDependencyGraph::new(),
+            #[cfg(feature = "cli")]
             cache: ModuleCache::new(CacheMode::Development),
             all_files: Vec::new(),
         }
     }
 
     /// 全量检查
+    #[cfg(feature = "cli")]
     pub fn check_all(
         &mut self,
         files: &[PathBuf],
@@ -47,6 +53,7 @@ impl CheckSession {
     }
 
     /// 增量检查 — 只检查受影响的模块
+    #[cfg(feature = "cli")]
     pub fn check_incremental(
         &mut self,
         changed_files: &[PathBuf],

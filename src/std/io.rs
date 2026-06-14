@@ -4,11 +4,42 @@
 //! All IO functions are declared as `Native("std.io.xxx")` bindings, meaning
 //! their actual implementations live in the FFI registry.
 
+#[cfg(not(feature = "wasm"))]
 use std::io::BufRead;
 
 use crate::backends::common::{RuntimeValue, HeapValue};
 use crate::backends::ExecutorError;
 use crate::std::{NativeContext, NativeExport, StdModule};
+
+// ============================================================================
+// Wasm output buffer — captures print output for browser Playground
+// ============================================================================
+
+#[cfg(feature = "wasm")]
+pub mod wasm_output {
+    use std::sync::Mutex;
+
+    static OUTPUT_BUFFER: Mutex<Vec<u8>> = Mutex::new(Vec::new());
+
+    pub fn write(data: &[u8]) {
+        if let Ok(mut buf) = OUTPUT_BUFFER.lock() {
+            buf.extend_from_slice(data);
+        }
+    }
+
+    pub fn take() -> String {
+        let mut buf = OUTPUT_BUFFER.lock().unwrap();
+        let s = String::from_utf8_lossy(&buf).to_string();
+        buf.clear();
+        s
+    }
+
+    pub fn clear() {
+        if let Ok(mut buf) = OUTPUT_BUFFER.lock() {
+            buf.clear();
+        }
+    }
+}
 
 // ============================================================================
 // IoModule - StdModule Implementation
@@ -37,24 +68,28 @@ impl StdModule for IoModule {
                 "(...args) -> ()",
                 native_println,
             ),
+            #[cfg(not(feature = "wasm"))]
             NativeExport::new(
                 "read_line",
                 "std.io.read_line",
                 "() -> String",
                 native_read_line,
             ),
+            #[cfg(not(feature = "wasm"))]
             NativeExport::new(
                 "read_file",
                 "std.io.read_file",
                 "(path: String) -> String",
                 native_read_file,
             ),
+            #[cfg(not(feature = "wasm"))]
             NativeExport::new(
                 "write_file",
                 "std.io.write_file",
                 "(path: String, content: String) -> Bool",
                 native_write_file,
             ),
+            #[cfg(not(feature = "wasm"))]
             NativeExport::new(
                 "append_file",
                 "std.io.append_file",
@@ -88,7 +123,14 @@ fn native_print(
         .map(|arg| format_runtime_value(arg, ctx.heap))
         .collect::<Vec<String>>()
         .join(" ");
-    print!("{}", output);
+    #[cfg(feature = "wasm")]
+    {
+        wasm_output::write(output.as_bytes());
+    }
+    #[cfg(not(feature = "wasm"))]
+    {
+        print!("{}", output);
+    }
     Ok(RuntimeValue::Unit)
 }
 
@@ -102,7 +144,15 @@ fn native_println(
         .map(|arg| format_runtime_value(arg, ctx.heap))
         .collect::<Vec<String>>()
         .join(" ");
-    println!("{}", output);
+    #[cfg(feature = "wasm")]
+    {
+        wasm_output::write(output.as_bytes());
+        wasm_output::write(b"\n");
+    }
+    #[cfg(not(feature = "wasm"))]
+    {
+        println!("{}", output);
+    }
     Ok(RuntimeValue::Unit)
 }
 
@@ -244,6 +294,7 @@ fn native_format_fallback(
 }
 
 /// Native implementation: read_line
+#[cfg(not(feature = "wasm"))]
 fn native_read_line(
     _args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
@@ -265,6 +316,7 @@ fn native_read_line(
 }
 
 /// Native implementation: read_file
+#[cfg(not(feature = "wasm"))]
 fn native_read_file(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
@@ -293,6 +345,7 @@ fn native_read_file(
 }
 
 /// Native implementation: write_file
+#[cfg(not(feature = "wasm"))]
 fn native_write_file(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
@@ -330,6 +383,7 @@ fn native_write_file(
 }
 
 /// Native implementation: append_file
+#[cfg(not(feature = "wasm"))]
 fn native_append_file(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,

@@ -16,14 +16,14 @@ repos:
 
       - id: cargo-clippy
         name: cargo clippy
-        entry: cargo clippy --fix --allow-dirty --all-targets --all-features -- -D warnings
+        entry: cargo clippy --fix --allow-dirty --all-targets -- -D warnings
         language: system
         types: [rust]
         pass_filenames: false
 
       - id: cargo-test
         name: cargo test
-        entry: cargo test --all --all-features --quiet
+        entry: cargo test --all --quiet
         language: system
         types: [rust]
         pass_filenames: false

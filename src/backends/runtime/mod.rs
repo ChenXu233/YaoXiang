@@ -17,9 +17,9 @@ pub mod task;
 mod tests;
 
 pub use engine::TaskPoll;
-pub use facade::{
-    CoopTaskFn, Runtime, RuntimeConfig, RuntimeFacadeError, RuntimeMode, SpawnHandle, TaskFn,
-};
+pub use facade::{Runtime, RuntimeConfig, RuntimeFacadeError, RuntimeMode, SpawnHandle, TaskFn};
+#[cfg(not(feature = "wasm"))]
+pub use facade::CoopTaskFn;
 
 pub use task::{
     Task, TaskId, TaskContext, TaskPriority, TaskConfig, TaskSpawner, TaskState, Scheduler,
