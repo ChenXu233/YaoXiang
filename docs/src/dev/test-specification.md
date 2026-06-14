@@ -271,23 +271,7 @@ src/frontend/core/typecheck/
 │       ├── statements.rs           # statements.rs 的测试
 │       └── ...
 │
-└── traits/                         # 目录模块（有 mod.rs）
-    ├── mod.rs                      # #[cfg(test)] mod tests; ——声明同级 tests/
-    ├── solver.rs
-    ├── impl_check.rs
-    ├── inheritance.rs
-    ├── coherence.rs
-    ├── auto_derive.rs
-    ├── object_safety.rs
-    ├── resolution.rs
-    ├── std_traits.rs
-    ├── gat/
-    ├── specialization/
-    └── tests/                      # ✅ traits 的测试目录
-        ├── mod.rs
-        ├── solver.rs               # solver.rs 的测试
-        ├── impl_check.rs           # impl_check.rs 的测试
-        └── ...
+└── traits/                         # 已删除（逻辑合并进 types/trait_data.rs）
 ```
 
 **为什么单文件模块的测试放在父级 `tests/`？**

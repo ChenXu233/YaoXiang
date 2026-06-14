@@ -1,112 +1,114 @@
-```yaml
 ---
 title: "RFC-009: Ownership Model Design"
 status: "Accepted"
-author: "晨煦"
+author: "Chenxu"
 created: "2025-01-08"
-updated: "2026-05-29 (Borrow token system replaces the simplified borrowing, unifying the type system)"
+updated: "2026-06-13 (Token conflict detection corrected to Hoare propositions, body synchronized with RFC-009a)"
 ---
 
 # RFC-009: Ownership Model Design
 
 ## Abstract
 
-This document defines the **Ownership Model** for the YaoXiang programming language.
+This document defines the **Ownership Model** of the YaoXiang programming language.
 
-**Core Design — Five Concepts, One Gradient**:
+**Core design—five concepts, one gradient**:
 
 ```
-Glance/Modify In-Place    Take Ownership    Shared Holding       Clone a Copy         Systems-Level
-    │                        │                  │                  │                    │
-   &T                     Move             ref                clone()              unsafe
-  &mut T                  Zero-Copy        Compiler picks      Explicit deep copy   *T
-  Zero-size token         Default          Rc/Arc automatically                    User responsible
-  Type properties                                                     
-  naturally derive                                               
-  permissions                                                     
+Peek/Modify   Take          Share            Copy              System-level
+in place
+    │              │              │              │              │
+   &T            Move           ref          clone()        unsafe
+  &mut T         Zero-copy     Auto-pick    Explicit        *T
+  Zero-size      Default       Rc/Arc       deep copy       User
+  token                                                responsible
+  Type attrs
+  naturally
+  derive
+  permissions
 ```
 
-- **Move (default)**: Assignment/parameter passing/return = ownership transfer, zero-copy, RAII auto-release
-- **`&T` / `&mut T` (borrow tokens)**: Zero-sized compile-time token types. `&T` is duplicable (shared read-only), `&mut T` is linear (exclusive mutable). Permissions are naturally derived from type properties, no special rules needed. Can be returned, stored in structs, and captured by closures.
-- **`ref` keyword**: Cross-scope sharing. Compiler automatically picks Rc (no cross-task) or Arc (cross-task)
-- **`clone()`**: Explicit deep copy
-- **`unsafe` + `*T`**: Raw pointer, systems-level escape hatch
+- **Move (default)**: assignment / parameter passing / return = ownership transfer, zero-copy, RAII auto-release
+- **`&T` / `&mut T` (Borrow Tokens)**: zero-sized compile-time token types. `&T` is Duplicable (shared read), `&mut T` is Linear (exclusive mutable). Permissions are naturally derived from type attributes, with no special rules. Returnable, storable in structs, capturable by closures.
+- **`ref` keyword**: cross-scope sharing. Compiler automatically picks Rc (no cross-task) or Arc (cross-task)
+- **`clone()`**: explicit deep copy
+- **`unsafe` + `*T`**: raw pointers, system-level escape hatch
 
-**Eliminated Complexity**:
+**Eliminated complexity**:
 - ❌ No lifetime `'a`
-- ❌ No borrow checker (token type properties — Dup/Linear — replace a dedicated borrow checker)
+- ❌ No standalone borrow checker framework (borrow conflict reduced to Hoare propositions, sharing the proof pipeline with type checking)
 - ❌ No GC
-- ❌ No "no-escape" special rules (tokens are ordinary types, scope handled uniformly by the type system)
+- ❌ No special rules like "must not escape" (tokens are ordinary types, scopes handled uniformly by the type system)
 - ❌ Users don't need to know the difference between Rc/Arc (compiler picks automatically)
 
-> **Programming burden**: `&T` is duplicable, `&mut T` is not — two type properties, zero special rules, fully automatic by compiler.
-> **Performance guarantee**: Move has zero overhead, tokens have zero overhead (zero-sized types, disappear after compilation), ref pays as needed, no GC pauses.
+> **Programming burden**: `&T` is Duplicable, `&mut T` is non-Duplicable—two type attributes, zero special rules, fully automatic compiler.
+> **Performance guarantee**: Move is zero-cost, tokens are zero-cost (zero-sized types, erased at compile time), ref is pay-as-you-go, no GC pauses.
 
 ## Motivation
 
-### Why Do We Need an Ownership Model?
+### Why an ownership model?
 
 | Language | Memory Management | Problems |
 |----------|-------------------|----------|
-| C/C++ | Manual management | Memory leaks, dangling pointers, double frees |
-| Java/Python | GC | Latency jitter, memory overhead, unpredictable pauses |
-| Rust | Ownership + Borrow Checker | Lifetime `'a` steep learning curve |
+| C/C++ | Manual | Memory leaks, dangling pointers, double free |
+| Java/Python | GC | Latency variance, memory overhead, unpredictable pauses |
+| Rust | Ownership + Borrow Checker | Steep learning curve for lifetime `'a` |
 | **YaoXiang** | **Move + Token + ref** | **Simple, deterministic, no GC** |
 
-### Design Goals
+### Design goals
 
 ```yaoxiang
-# 1. Default Move (zero-copy)
+# 1. Move by default (zero-copy)
 p = Point(1.0, 2.0)
-p2 = p                         # Move, p cannot be read again
+p2 = p                         # Move, p is no longer readable
 
-# 2. &T / &mut T borrow tokens (zero overhead, type properties naturally derive permissions)
-print_info(p2)                 # Compiler automatically creates &Point token, released after use
-shift(p2, 1.0, 1.0)            # Compiler automatically creates &mut Point token
+# 2. &T / &mut T borrow tokens (zero-cost, type attrs naturally derive permissions)
+print_info(p2)                 # Compiler auto-creates &Point token, released after use
+shift(p2, 1.0, 1.0)           # Compiler auto-creates &mut Point token
 
-# 3. ref = sharing (compiler automatically picks Rc/Arc)
-shared = ref p2                # Cross-scope holding
+# 3. ref = sharing (compiler auto-picks Rc/Arc)
+shared = ref p2                # Hold across scopes
 spawn { use(shared) }          # Compiler: cross-task → Arc
 
 # 4. clone() = explicit copy
-backup = p2.clone()             # Deep copy, unique
+backup = p2.clone()            # Deep copy, independent
 
-# 5. unsafe + *T = systems-level
+# 5. unsafe + *T = system-level
 unsafe {
     ptr: *Point = &p
     (*ptr).x = 0.0
 }
 ```
 
-### Core Differences from Rust
+### Core differences from Rust
 
 | Feature | Rust | YaoXiang |
 |---------|------|----------|
 | Default semantics | Borrow `&T` (requires explicit `.clone()`) | **Move (value passing, zero-copy)** |
-| Borrowing | `&T`/`&mut T`, can return, requires lifetimes | **`&T`/`&mut T` zero-size tokens, Dup/Linear type properties naturally derive** |
-| Sharing mechanism | `Arc::new()` + manual Weak | **`ref` keyword (compiler automatically picks Rc/Arc)** |
+| Borrowing | `&T`/`&mut T`, returnable, needs lifetime | **`&T`/`&mut T` zero-sized tokens, Dup/Linear type attrs naturally derive** |
+| Sharing | `Arc::new()` + manual Weak | **`ref` keyword (compiler auto-picks Rc/Arc)** |
 | Copying | `clone()` | `clone()` |
-| Raw pointers | `*T` | `*T` |
-| Lifetimes | `'a` | ❌ None |
-| Borrow checking | Global inference | **Type checker flow-sensitive liveness analysis (token state tracking)** |
-| Cyclic references | Manual Weak | **Unified release at task end / cross-task lint / std Weak** |
+| Raw pointer | `*T` | `*T` |
+| Lifetime | `'a` | ❌ None |
+| Borrow checking | Global inference | **Type checker auto-generates borrow propositions, unified proof pipeline verifies** |
+| Cyclic reference | Manual Weak | **Task-end unified release / cross-task lint / std lib Weak** |
 
 ---
 
 ## Proposal
 
-### 1. Move (Default Ownership Transfer)
+### 1. Move (default ownership transfer)
 
 ```yaoxiang
-# Rule: Assignment / parameter passing / return = Move, zero-copy
+# Rule: assignment / parameter passing / return = Move, zero-copy
 
 p: Point = Point(1.0, 2.0)
-p2 = p                           # Move, p cannot be read again
+p2 = p                           # Move, p is no longer readable
 
-# Variables can be reassigned (Python style, no shadowing)
-p = Point(3.0, 4.0)              # p rebinds, type must remain consistent
+# Variable can be reassigned (Python-style, no shadowing)
+p = Point(3.0, 4.0)              # p rebound, type must match
 
-# Function parameters: Move
+# Function parameter: Move
 process: (p: Point) -> Point = {
     p.transform()
     p                            # Move return
@@ -119,31 +121,33 @@ create: () -> Point = {
 }
 ```
 
-**Characteristics**:
-- Zero-copy (compiler moves pointers)
-- Original binding unreadable after move (compile error)
-- RAII: auto-release at scope end
-- Function signature `(T) -> T` is self-documenting — consumes T, returns T
+**Properties**:
+- Zero-copy (compiler moves the pointer)
+- Source binding unreadable after move (compile error)
+- RAII: automatically released at scope end
+- Function signature `(T) -> T` is self-documenting—consume T, return T
 
 ---
 
 ### 2. &T / &mut T (Borrow Tokens)
 
-**Core Principle: `&T` and `&mut T` are zero-sized compile-time token types. They are not "references" but "type-level proof of access permissions".**
+**Core principle: `&T` and `&mut T` are zero-sized compile-time token types. They are not "references"—they are "type-level proof of access permission."**
 
-#### 2.1 Two Type Properties
+#### 2.1 Two type attributes
 
 ```
-&T      →  Zero-size, duplicable (Dup), grants read-only permission
-&mut T  →  Zero-size, linear (non-Dup), grants exclusive read-write permission
+&T      →  Zero-sized, freezes source data (WriteToken forbidden while ReadToken is alive),
+          Under freezing guarantee, multiple read views are safe → Duplicable (Dup)
+&mut T  →  Zero-sized, exclusive read-write (any other token forbidden while WriteToken is alive),
+          Under exclusive access, copying is meaningless → Linear (non-Dup)
 ```
 
-**This is not a "rule" to memorize — it's a fundamental property of the type system.** Dup types can be freely copied (multiple `&T` coexisting), linear types cannot be copied (`&mut T` is inherently unique). There is no "borrow checker" — only the type checker doing what it's always done.
+**The causal relationship cannot be reversed: freezing is the cause, Dup is the result.** It's not that `&T` implements Dup so it can coexist—it's that the data is frozen (no mutation possible), making multiple read views safe, and only then can Dup be implemented. Treating Dup as the definition and conflict checking as "extra patch" is the wrong design.
 
-#### 2.2 Basic Usage
+#### 2.2 Basic usage
 
 ```yaoxiang
-# Method side: declare parameter types, determine required permissions
+# Method side: declare parameter type, decides required permission
 Point.print: (self: &Point) -> Void = {
     print(self.x)                  # &Point token grants read permission
     print(self.y)
@@ -154,26 +158,26 @@ Point.shift: (self: &mut Point, dx: Float, dy: Float) -> Void = {
     self.y = self.y + dy
 }
 
-# Call site: compiler automatically selects borrow or Move
+# Call site: compiler auto-selects borrow or Move
 p = Point(1.0, 2.0)
-p.print()                          # Compiler automatically creates &Point token
-p.shift(1.0, 1.0)                  # Compiler automatically creates &mut Point token
-p.print()                          # OK, previous token released after shift call ends
+p.print()                          # Compiler auto-creates &Point token
+p.shift(1.0, 1.0)                  # Compiler auto-creates &mut Point token
+p.print()                          # OK, previous token released when shift call ended
 
-# Free functions work the same way
+# Free function is the same
 distance: (a: &Point, b: &Point) -> Float = {
-    sqrt((a.x - b.x)**2 + (a.y - b.y)**2)  # Two &Point tokens coexisting — Dup type
+    sqrt((a.x - b.x)**2 + (a.y - b.y)**2)  # Two &Point tokens coexist—Dup type
 }
 d = distance(p, p2)
 ```
 
-#### 2.3 Why "No-Escape" Is Unnecessary
+#### 2.3 Why "must not escape" is not needed
 
-RFC-009 v8 imposed three special rules on `&T`/`&mut T` — can only be parameters, cannot be returned, cannot be stored in structs. This is patching the "borrowing" concept.
+RFC-009 v8 imposed three special rules on `&T`/`&mut T`—only as parameters, cannot return, cannot store in structs. That was patching the "borrow" concept.
 
-The token system doesn't need these rules. Tokens are **ordinary types**, following the same scoping rules as all other types.
+The token system doesn't need these rules. Tokens are **ordinary types**, following the same scope rules as all other types.
 
-**Returning references — naturally supported**:
+**Returning references—naturally supported**:
 
 ```yaoxiang
 # ✅ Tokens propagate with return value
@@ -183,150 +187,155 @@ Point.get_x: (self: &Point) -> (&Float, &Point) = {
 
 # Usage
 p = Point(1.0, 2.0)
-(px_ref, p) = p.get_x()    # Token returned to caller
+(px_ref, p) = p.get_x()    # Token returns to caller
 print(px_ref)               # OK, token still in scope
 ```
 
-**Stored in structs — naturally supported**:
+**Storing in struct—naturally supported**:
 
 ```yaoxiang
-# ✅ Struct carries token as field
+# ✅ Struct carries token as a field
 Window: Type = {
     target: Point,
-    view: &Point,      # Token field — holds read-only view of target
+    view: &Point,      # Token field—holds read-only view of target
 }
 
-# view's token derived from target, Window holds ownership of both
-# As long as Window exists, view token is valid
+# view's token is derived from target; Window owns both
+# As long as Window lives, view token is valid
 ```
 
-**Closure capture — naturally supported**:
+**Closure capture—naturally supported**:
 
 ```yaoxiang
-# ✅ Closures capture tokens, just like capturing any value
+# ✅ Closure captures tokens, just like any value
 filter_by_threshold: (items: List(Point), threshold: &Float) -> List(Point) = {
-    # Closure captures threshold's &Float token (Dup type, freely copied into closure)
+    # Closure captures threshold's &Float token (Dup type, freely copyable into closure)
     items.filter(|p| p.x > threshold)
 }
 
-# This is something RFC-009 v8 cannot do — v8 forbids closure capture of borrows
+# RFC-009 v8 could not do this—v8 forbids closures from capturing borrows
 ```
 
-**Cross-task — tokens cannot cross threads**:
+**Cross-task—tokens cannot cross threads**:
 
 ```yaoxiang
 # ❌ Tokens cannot cross task boundaries
 bad_task: (p: &Point) -> Void = {
-    spawn { print(p.x) }          # ❌ Compile error: tokens cannot cross task boundaries
+    spawn { print(p.x) }          # ❌ Compile error: tokens cannot cross tasks
 }
 
-# This is not a special rule — tokens are compile-time permission proofs,
-# use ref for cross-task sharing
-# If cross-task sharing is needed, use ref
+# This is not a special rule—tokens are compile-time permission proofs; use ref for cross-task sharing
+# Use ref if you need cross-task sharing
 ```
 
-**Tokens cannot be ref'd**:
+**Tokens cannot be `ref`**:
 
 ```yaoxiang
 # ❌ Tokens are permission proofs, not ownership
 bad_ref: (p: &Point) -> Void = {
-    shared = ref p                # ❌ Compile error: &T is not ownable
+    shared = ref p                # ❌ Compile error: &T is not an ownable type
 }
 ```
 
-#### 2.4 Token Lifetime
+#### 2.4 Token lifetime
 
-Token lifetime is governed by **ordinary scope rules**, no lifetime parameters needed:
+Token lifetime is determined by **ordinary scope rules**, no lifetime parameter required:
 
-- Tokens in function parameters: alive during call, released after call ends
+- Tokens in function parameters: live during the call, released after
 - Returned tokens: ownership transferred to caller
-- Tokens stored in structs: alive with the struct
-- Tokens captured by closures: alive with the closure
+- Tokens stored in struct: live with the struct
+- Tokens captured by closure: live with the closure
 
-Compiler doesn't need `'a` annotations because tokens are **values**, and value lifetime is uniformly managed by the ownership system (Move/RAII). **Reduces borrowing to an ownership problem.**
+The compiler needs no `'a` annotation, because tokens are **values**, and value lifetime is uniformly managed by the ownership system (Move/RAII). **Reduces the borrow problem to an ownership problem.**
 
-#### 2.5 Token Conflict Detection
+#### 2.5 Token conflict detection
 
-Replaces RFC-009 v8's "cross-borrow checking". The principle is simpler — **flow-sensitive liveness analysis** on token values:
+Token conflict detection is a **Hoare logic proposition**, not a standalone flow-sensitive analysis.
+
+```
+{All conflicting ReadTokens dead} write(data) {WriteToken safely acquired}
+```
+
+It shares the proof pipeline from RFC-027 with type checking and user predicate verification. The compiler auto-generates borrow propositions (`borrow_conflict`, `use_after_move`, `use_after_drop`, `mut_violation`), which the pipeline validates, returning Proved / Disproved / Unproven.
 
 ```yaoxiang
-# ❌ &mut token is linear, cannot be copied
+# ❌ &mut tokens are linear, cannot be copied
 bad_dup: (p: &mut Point) -> Void = {
-    p2: &mut Point = p              # Move, p cannot be read again
+    p2: &mut Point = p              # Move, p is no longer readable
     p.x = 10.0                      # ❌ Compile error: WriteToken already moved
 }
 
-# ✅ &T token is Dup type, can be freely copied
+# ✅ &T tokens are Dup, can be freely copied
 good_dup: (p: &Point) -> Void = {
     p2: &Point = p                  # OK, &T is Dup type
     print(p.x)                      # OK
-    print(p2.x)                     # OK, two read-only tokens coexisting
+    print(p2.x)                     # OK, two read tokens coexist
 }
 ```
 
-**Detection method**: This is not a dedicated "borrow checker" — it's **flow-sensitive liveness analysis** on token values. The compiler tracks each token's state (live/moved) within function bodies, exactly the same way it tracks any linear type value.
+**Borrow checking has not disappeared—it has been reduced.** The existing `BorrowChecker` becomes `BorrowPredicateEmitter` (proposition generator), generating borrow propositions that share the same proof pipeline as other type propositions. This is perfectly parallel to the type checker concept: the type checker generates type-equality propositions, the borrow proposition generator generates borrow propositions, and the same pipeline validates. See [RFC-009a](../accepted/009a-borrow-proof-pipeline.md) for detailed design.
 
-#### 2.7 Compiler Internals: Branding Mechanism
+#### 2.7 Compiler internals: brand mechanism
 
 Users never see brands. The compiler internally assigns a compile-time unique identifier to each token:
 
 ```
-What user sees         Compiler internal representation
-────────────────────────────────────────────────────────
-&Point              →  ReadToken(Point, #N)    // #N is compile-time unique integer
-&mut Point          →  WriteToken(Point, #M)   // #M is compile-time unique integer
+User-visible        Compiler internal
+────────────────────────────────────────
+&Point         →  ReadToken(Point, #N)    // #N is a compile-time unique integer
+&mut Point     →  WriteToken(Point, #M)   // #M is a compile-time unique integer
 ```
 
-Brand uses:
-- **Anti-forgery**: Tokens can only be obtained from owner capsules, cannot be conjured from thin air
-- **Provenance tracking**: When deriving `&Float` from `&Point` (field access), `&Float` carries derived brand (`#N.field_x`), allowing compiler to trace back to parent token
-- **Conflict detection**: Same-origin `WriteToken` and derived `ReadToken` cannot be alive simultaneously
+Brand purposes:
+- **Anti-counterfeiting**: tokens can only be obtained from owner capsules, not constructed out of thin air
+- **Relation tracking**: when deriving `&Float` from `&Point` (field access), `&Float` carries a derived brand (`#N.field_x`), which the compiler can trace back to the parent token
+- **Conflict detection**: same-source `WriteToken` and derived `ReadToken` cannot be simultaneously active
 
-Brands disappear completely after monomorphization and inlining; they don't exist in generated machine code. **Zero runtime overhead.**
+Brands completely disappear after monomorphization and inlining, and do not exist in the generated machine code. **Zero runtime overhead.**
 
-#### 2.8 Automatic Borrow Selection Rules
+#### 2.8 Automatic borrow selection rules
 
-Call-site compiler auto-selects by priority:
+The compiler at the call site auto-selects by the following priority:
 
 ```
-1. If actual argument is used later → prefer creating token (&T or &mut T, based on method signature)
-2. If actual argument is not used later → Move
-3. Preference order: &T < &mut T < Move
+1. If the argument is used later → prefer creating a token (&T or &mut T, per method signature)
+2. If the argument is not used later → Move
+3. Priority matching order: &T < &mut T < Move
 ```
 
 ```yaoxiang
-# Example: automatic selection
+# Example: auto-selection
 p = Point(1.0, 2.0)
 p.print()        # print declares &self → compiler creates &Point token
 p.shift(1.0, 1.0) # shift declares &mut self → compiler creates &mut Point token
-p2 = p           # Move, p no longer used
+p2 = p           # Move, p is not used again
 ```
 
-#### 2.9 Comparison with RFC-009 v8 Simplified Borrowing
+#### 2.9 Comparison with RFC-009 v8 bare-bones borrow
 
-| Feature | Simplified Borrowing (v8) | Borrow Tokens (v9) |
-|---------|---------------------------|---------------------|
-| Return references | ❌ Hard-coded prohibition | ✅ Tokens propagate with return value |
-| Store in struct | ❌ Hard-coded prohibition | ✅ Tokens as struct fields |
-| Closure capture | ❌ Hard-coded prohibition | ✅ Closures capture token values |
-| Special rules | 3 (only as params/cannot return/cannot store) | 0 — type properties naturally derive |
-| Borrow checking | Dedicated cross-borrow checking | Type checker flow-sensitive liveness analysis |
-| Lifetime annotations | Not needed | Not needed |
-| Runtime overhead | Zero | Zero (zero-sized types, disappear after compilation) |
-| Error messages | "Borrow cannot escape" | "WriteToken(#3) already moved" (regular type error) |
-| User mental model | Understand "borrowing"'s special status | `&T` is duplicable, `&mut T` is not |
+| Feature | Bare-bones borrow (v8) | Borrow Token (v9) |
+|---------|------------------------|-------------------|
+| Return reference | ❌ Hardcoded forbidden | ✅ Token propagates with return value |
+| Store in struct | ❌ Hardcoded forbidden | ✅ Token as struct field |
+| Closure capture | ❌ Hardcoded forbidden | ✅ Closure captures token values |
+| Special rules | 3 (only param / no return / no store) | 0—type attrs naturally derive |
+| Borrow checking | Dedicated cross-borrow check | Type checker flow-sensitive liveness analysis |
+| Lifetime annotation | Not needed | Not needed |
+| Runtime overhead | Zero | Zero (zero-sized type, erased at compile time) |
+| Error message | "Borrow cannot escape" | "WriteToken(#3) already moved" (regular type error) |
+| User mental model | Understand borrow's special status | `&T` is Duplicable, `&mut T` is non-Duplicable |
 
 ---
 
-### 3. ref Keyword (Compiler Auto-Optimization)
+### 3. `ref` keyword (compiler auto-optimization)
 
-`ref` is the only way to share across scopes. Whether the underlying implementation is Rc or Arc is irrelevant to users.
+`ref` is the only way to share across scopes. Whether the underlying implementation is Rc or Arc, the user does not need to care.
 
-#### 3.1 Basic Usage
+#### 3.1 Basic usage
 
 ```yaoxiang
 p: Point = Point(1.0, 2.0)
-shared = ref p                   # Shared, compiler auto-picks implementation
+shared = ref p                   # Share, compiler auto-picks implementation
 
 # Cross-task sharing
 @block
@@ -340,54 +349,53 @@ main: () -> Void = {
 @block
 main: () -> Void = {
     data = ref heavy_data
-    use(data)                     # Compiler: no cross-task → Rc
+    use(data)                     # Compiler: not cross-task → Rc
 }
 ```
 
-**User mental model**: `ref` = shared holding. That's it.
+**User mental model**: `ref` = shared holding. That's all you need to know.
 
-#### 3.2 Compiler Escape Analysis: Rc vs Arc
-
-```
-ref data flow analysis:
-
-Does not escape to other tasks → Rc (non-atomic reference count, low overhead)
-Escapes to other tasks         → Arc (atomic reference count, thread-safe)
-```
-
-#### 3.3 Cycle Detection Strategy
+#### 3.2 Compiler escape analysis: Rc vs Arc
 
 ```
-Intra-task cycles → silently allowed.
-  ├── Structured concurrency guarantees unified release of all resources when task ends.
-  ├── ref always stays alive, semantics are not diluted.
-  └── Users have the right to build bidirectional strong references within a task
-      (e.g., graph computation intermediate state).
+ref's data-flow analysis:
 
-Cross-task cycles → lint (default warn, configurable).
-  ├── Program behavior is correct, no actual leaks will occur
-      (parent task end releases all child task resources).
-  ├── But cross-task strong references imply ownership boundary ambiguity,
-      worth pausing to reconsider.
-  ├── Default warn level, compilation passes with a hint.
-  └── Teams can set deny in project config,纳入 CI quality gate.
+Does not escape to other tasks → Rc (non-atomic ref count, low overhead)
+Escapes to other tasks    → Arc (atomic ref count, thread-safe)
+```
 
-**Lint levels** (like Rust clippy):
+#### 3.3 Cycle detection strategy
+
+```
+Intra-task cycle → silently allowed.
+  ├── Each task has a clear lifecycle boundary—resources (including ref cycles) are uniformly released when the task ends.
+  ├── Long-running services should create child tasks per request/connection—child task end auto-collects, no accumulation leak.
+  ├── ref keeps things alive, semantics are pure.
+  └── Users have the right to build bidirectional strong references within a task (e.g., graph computing intermediate state).
+
+Cross-task cycle → lint (default warn, configurable).
+  ├── Program behavior is correct, no real leak (parent task end releases all child task resources).
+  ├── But cross-task strong references mean blurred ownership boundaries, worth pausing to reconsider.
+  ├── Default warn level, compile passes with hint.
+  └── Teams can set to deny in project config, integrating into CI quality gate.
+```
+
+**Lint levels** (similar to Rust clippy):
 
 | Level | Behavior | Scenario |
 |-------|----------|----------|
-| `allow` | No checking | Personal projects |
-| `warn` (default) | Compilation passes, with hint | Development phase |
-| `deny` | Compilation fails | Team CI quality gate |
-| `forbid` | Compilation fails, cannot be overridden | Organization-level mandatory rules |
+| `allow` | Don't check | Personal projects |
+| `warn` (default) | Compile passes, with hint | Development phase |
+| `deny` | Compile fails | Team CI quality gate |
+| `forbid` | Compile fails, cannot override | Organization-level mandatory rule |
 
 ```yaoxiang
-# Intra-task cycle: silently allowed, bidirectional strong references
+# Intra-task cycle: silently allowed, bidirectional strong reference
 build_graph: () -> Void = {
     a = Node("a")
     b = Node("b")
     a.next = ref b
-    b.prev = ref a                # Cycle. Unified release at task end.
+    b.prev = ref a                # Cycle. Released uniformly at task end.
 }
 
 # Cross-task cycle: lint (default warn)
@@ -406,50 +414,50 @@ parent_task: () -> Void = {
 ```toml
 # yaoxiang.toml
 [lints]
-cross-task-cycle = "deny"    # Cross-task cycles fail on CI
+cross-task-cycle = "deny"    # Cross-task cycle rejected directly in CI
 ```
 
-| Cycle Type | Behavior | Reason |
+| Cycle type | Behavior | Reason |
 |------------|----------|--------|
-| Intra-task ref cycle | No checking | User's prerogative, unified release at task end |
-| Cross-task ref cycle | lint (default warn) | Reminder to reconsider, configurable deny |
+| Intra-task ref cycle | Not checked | User's right, released uniformly at task end |
+| Cross-task ref cycle | Lint (default warn) | Reminder to reconsider, configurable to deny |
 
-#### 3.4 Weak: Provided by Standard Library
+#### 3.4 Weak: provided by the standard library
 
 ```yaoxiang
 use std.rc.Weak
 
-# Advanced users explicitly choose
+# Advanced user explicitly chooses
 a.next = ref b
 b.prev = Weak.new(a.next)        # User explicitly controls which direction is weak
 ```
 
-**`Weak` is not language-built-in, it's a standard library type.** For daily use, `ref` is sufficient. Advanced users who need fine-grained memory control manually introduce `Weak`.
+**`Weak` is not a language built-in, it's a standard library type.** Daily use of `ref` is sufficient. Advanced users who need fine-grained memory control manually introduce `Weak`.
 
-#### 3.5 Borrow Tokens vs ref
+#### 3.5 Borrow tokens vs `ref`
 
 | | `&T` / `&mut T` | `ref` |
-|------|------|------|
-| What it does | Glance / modify in place | Shared holding |
-| Scope | Follows token value's scope | Cross-scope |
-| Cost | Zero overhead (zero-sized type) | Rc or Arc (compiler picks) |
-| Escape | Can (token propagates with return value/struct/closure) | Designed for escaping |
-| Cross-task | Cannot (token is compile-time permission proof, cannot cross task boundary) | Can (compiler auto-picks Arc) |
-| Cycle formation | Not applicable | Intra-task silently allowed, cross-task lint |
+|---|----------------|-------|
+| What it does | Peek / modify in place | Share holding |
+| Range | With token value's scope | Cross-scope |
+| Cost | Zero (zero-sized type) | Rc or Arc (compiler picks) |
+| Escape | Yes (token propagates with return / struct / closure) | Meant to escape |
+| Cross-task | No (tokens are compile-time permission proofs, cannot cross tasks) | Yes (compiler auto-picks Arc) |
+| Cycle formation | Not involved | Intra-task silently allowed, cross-task lint |
 
 ---
 
-### 4. clone() — Explicit Copy
+### 4. `clone()` — explicit copy
 
 ```yaoxiang
 p: Point = Point(1.0, 2.0)
 p2 = p.clone()                   # Deep copy
-# p and p2 are independent, don't affect each other
+# p and p2 are independent, do not affect each other
 ```
 
-**When to use**: When you need to keep the original value and Move/sharing is inappropriate.
+**When to use**: scenarios where you need to keep the original value and neither Move nor sharing is appropriate.
 
-### 5. unsafe + Raw Pointers (Systems-Level Programming)
+### 5. `unsafe` + raw pointer (system-level programming)
 
 ```yaoxiang
 p: Point = Point(1.0, 2.0)
@@ -461,32 +469,33 @@ unsafe {
 }
 ```
 
-**Restrictions**:
-- Can only be used in `unsafe` blocks
+**Constraints**:
+- Only usable in `unsafe` blocks
 - User guarantees no dangling, no use-after-free
-- Used for FFI, memory operations, etc. systems-level programming
+- For FFI, memory manipulation and other system-level programming
 
 ---
 
-### 6. Ownership Gradient Overview
+### 6. Ownership gradient overview
 
 ```
-  Borrow Tokens (Zero Overhead)    Move (Zero Overhead)      Sharing (Pay As Needed)    Clone
-   │                               │                         │                        │
-  &T duplicable token           Default ownership transfer  ref Rc/Arc              clone()
-  &mut T linear token           Chained consume-return      Compiler auto-picks     Explicit deep copy
-   │                               │                         │                        │
-  Token value scope              Scope-relative             Cross-scope              Anytime
-  Can return/store in struct     T -> T return              ref cross-task → Arc     Independent copy
-  Can be captured by closure    T -> Void consume          ref non-cross-task → Rc
-  Zero-size, disappears after                            Intra-task cycles silent
-  compilation                                           Cross-task cycles lint
-                                                         std Weak escape
+  Borrow token (zero-cost)  Move (zero-cost)   Share (pay-as-you-go)  Copy
+   │                        │                  │                      │
+  &T Duplicable token   Default ownership   ref Rc/Arc           clone()
+  &mut T Linear token   transfer chain     Compiler auto-pick    Explicit
+                         consume-and-return  │                    deep copy
+   │                        │                  │                      │
+  Token value scope     Within scope       Cross-scope          Anytime
+  Returnable / in struct  T -> T round-trip  ref cross-task → Arc Independent copy
+  Capturable by closure  T -> Void consume  ref not cross-task → Rc
+  Zero-sized, erased                           Intra-task cycle silent
+                                               Cross-task cycle lint
+                                               Std lib Weak escape
 ```
 
 ---
 
-## Comprehensive Example
+## Comprehensive example
 
 ```yaoxiang
 Point: Type = {
@@ -505,11 +514,11 @@ Point: Type = {
         self.y = self.y + dy
     }
 
-    # Move → Move: consume-return
+    # Move → Move: consume and return
     scale: (self: Point, f: Float) -> Point = {
         self.x = self.x * f
         self.y = self.y * f
-        self                            # Take, modify, return to you
+        self                            # Take it, modify, give it back
     }
 
     # Return reference: token propagates with return value
@@ -518,7 +527,7 @@ Point: Type = {
     }
 }
 
-# Closure captures tokens (capability v8 cannot have)
+# Closure captures token (v8 couldn't do this)
 filter_by_threshold: (items: List(Point), threshold: &Float) -> List(Point) = {
     items.filter(|p| p.x > threshold)
 }
@@ -527,20 +536,20 @@ filter_by_threshold: (items: List(Point), threshold: &Float) -> List(Point) = {
 p = Point(1.0, 2.0)
 p.print()                           # &Point token
 p.shift(1.0, 1.0)                   # &mut Point token
-p = p.scale(2.0)                    # Move → return
-shared = ref p                      # ref shared
+p = p.scale(2.0)                    # Move → round-trip
+shared = ref p                      # ref share
 spawn { use(shared) }
 
 # clone independent copy
 backup = p.clone()
 
-# Intra-task cycles: silently allowed
+# Intra-task cycle: silently allowed
 a = Node("a")
 b = Node("b")
 a.next = ref b
-b.prev = ref a                      # Cycle, unified release at task end
+b.prev = ref a                      # Cycle, released uniformly at task end
 
-# unsafe systems-level
+# unsafe system-level
 unsafe {
     ptr: *Point = &p
     (*ptr).x = 0.0
@@ -551,22 +560,22 @@ unsafe {
 
 ## Type System Constraints
 
-### Dup Type Property
+### Dup type attribute
 
-`Dup` (Duplicable) is a compiler-managed type property meaning **shallow copy**: assignment/parameter passing copies the handle/token, with underlying data shared. This forms a three-level gradient with Move (ownership transfer) and Clone (explicit deep copy, creates independent copy).
+`Dup` (Duplicable) is a compiler-auto-managed type attribute, meaning **shallow copy**: when assigning / passing parameters, the handle/token is copied and the underlying data is shared. This forms a three-level gradient with Move (ownership transfer) and Clone (explicit deep copy, creating independent copies).
 
-**Dup and Clone are orthogonal concepts** — Dup copies handles to share data, Clone creates independent copies. A type can support both Dup and Clone, or only one.
+**Dup and Clone are orthogonal concepts**—Dup copies the handle to share data, Clone creates an independent copy. A type can support both Dup and Clone, or only one of them.
 
 | Type | Dup | Clone | Description |
 |------|-----|-------|-------------|
-| `&T` | ✅ (copy token, multiple views point to same data) | ✅ | Read-only token |
-| `ref T` | ✅ (ref count +1, shared heap data) | ✅ | Shared holding (compiler auto-picks Rc/Arc) |
-| String, Bytes | ✅ (internal ref count, copy handle shares underlying buffer) | ✅ | String/bytes |
-| `&mut T` | ❌ (linear, exclusive) | ❌ | Mutable token |
+| `&T` | ✅ (Copy token, multiple views to same data) | ✅ | Read-only token |
+| `ref T` | ✅ (Ref count +1, share heap data) | ✅ | Shared holding (compiler auto-picks Rc/Arc) |
+| String, Bytes | ✅ (Internal ref count, copy handle shares underlying buffer) | ✅ | String/bytes |
+| `&mut T` | ❌ (Linear, exclusive) | ❌ | Mutable token |
 | `*T` | ❌ | ❌ | Raw pointer |
-| struct | derived (auto-derived when all fields are Dup) | ✅ | Struct |
+| struct | Derived (auto-derived when all fields are Dup) | ✅ | Struct |
 
-**Primitive value types** (Int, Float, Bool, Char) have compiler-built-in value copy semantics on assignment — two values are completely independent, not shallow copy. They are not part of the Dup type property but native compiler handling.
+**Primitive value types** (Int, Float, Bool, Char) have assignment behavior that is the compiler's built-in value copy—the two values are fully independent, not shallow copy. They are not Dup type attributes; they are the compiler's native handling.
 
 ---
 
@@ -575,133 +584,121 @@ unsafe {
 | Operation | Cost | Description |
 |-----------|------|-------------|
 | Move | Zero | Pointer move |
-| `&T` / `&mut T` | Zero | Zero-sized type, disappears after compilation, zero runtime overhead |
-| `ref` (non-cross-task) | Low | Compiles to Rc, non-atomic operation |
-| `ref` (cross-task) | Medium | Compiles to Arc, atomic operation |
-| `clone()` | Type-dependent | Fast for small objects, slow for large objects |
+| `&T` / `&mut T` | Zero | Zero-sized type, erased at compile time, zero runtime overhead |
+| `ref` (not cross-task) | Low | Compiled to Rc, non-atomic operation |
+| `ref` (cross-task) | Medium | Compiled to Arc, atomic operation |
+| `clone()` | Depends on type | Fast for small objects, slow for large objects |
 | `unsafe + *T` | Zero | Direct memory operation |
 
 ### Comparison
 
 | Language | Sharing Mechanism | Memory Management | Cycle Handling | Complexity |
-|----------|------------------|-------------------|----------------|------------|
-| Rust | Arc / Mutex + Borrow Checker | Compile-time checking | Manual Weak | High |
+|----------|-------------------|-------------------|----------------|------------|
+| Rust | Arc / Mutex + borrow checker | Compile-time check | Manual Weak | High |
 | Go | chan / pointer | GC | GC | Low |
 | C++ | shared_ptr | RAII | weak_ptr | Medium |
-| **YaoXiang** | **ref + Borrow Tokens** | **RAII** | **Task boundary release / cross-task lint / std Weak** | **Low** |
+| **YaoXiang** | **ref + borrow tokens** | **RAII** | **Task boundary release / cross-task lint / std lib Weak** | **Low** |
 
 ---
 
 ## Trade-offs
 
-### Advantages
+### Pros
 
-1. **Uniform**: `&T`/`&mut T` are ordinary types, not special language features. Completely consistent with RFC-010's `name: type = value`
-2. **Simple**: No lifetimes, no global borrow checker. `&T` is duplicable, `&mut T` is not — two type properties
-3. **Powerful**: Can return references, store in structs, capture in closures — same expressiveness as Rust
-4. **Compiler intelligent**: ref auto-picks Rc/Arc, call site auto-selects borrowing
-5. **Deterministic**: ref keeps alive, won't silently become weak reference
-6. **High performance**: Move zero-copy, tokens zero overhead (zero-sized types, disappear after compilation)
-7. **Flexible**: `unsafe + *T` supports systems-level programming
+1. **Unified**: `&T`/`&mut T` are ordinary types, not special language features. Fully consistent with RFC-010's `name: type = value`
+2. **Simple**: No lifetime, borrow checking reduced to type system propositions. `&T` is Duplicable, `&mut T` is non-Duplicable—two type attributes
+3. **Powerful**: Returnable references, storable in structs, capturable by closures—expressive power on par with Rust
+4. **Compiler intelligence**: `ref` auto-picks Rc/Arc, call site auto-selects borrow
+5. **Deterministic**: `ref` keeps things alive, won't quietly become weak
+6. **High performance**: Move zero-copy, token zero-cost (zero-sized type, erased at compile time)
+7. **Flexible**: `unsafe + *T` supports system-level programming
 
-### Disadvantages
+### Cons
 
-1. **Generic brand parameter contagion**: Tokens carry brand identifiers, function signatures returning references will reflect additional generic parameters
-2. **ref runtime overhead**: Atomic operations have cost (but this is the unavoidable cost of sharing)
-3. **unsafe risk**: User must guarantee correctness
-4. **Cross-task cycles are lint not compile error**: Unlike Rust's compile error, default is warn, team must configure deny to use as quality gate
+1. **Generic brand parameter contamination**: Tokens carry brand identifiers, function signatures returning references will reflect additional generic parameters
+2. **`ref` runtime overhead**: Atomic operations have cost (but this is the inevitable price of sharing)
+3. **`unsafe` risk**: User must guarantee correctness
+4. **Cross-task cycle is lint, not compile error**: Not like Rust's compile error, default warn, requires team config deny to serve as quality gate
 
 ---
 
-## Alternative Approaches
+## Alternatives
 
-| Approach | Why Not Chosen |
+| Approach | Why not chosen |
 |----------|----------------|
 | GC | Runtime overhead, unpredictable pauses |
-| Rust Borrow Checker | Requires lifetime `'a`, steep learning curve |
+| Rust borrow checker | Needs lifetime `'a`, steep learning curve |
 | Pure Move | Cannot handle concurrent sharing |
-| No raw pointers | Cannot do systems-level programming |
-| Expose Rc/Arc to users | Leaking implementation details to users, increased cognitive load |
-| Simplified borrowing (v8) | "No-escape" strategy sacrifices key expressiveness like closure capture, returning references |
+| No raw pointer | Cannot do system-level programming |
+| Expose Rc/Arc to users | Dumps implementation details on user, increases cognitive burden |
+| Bare-bones borrow (v8) | "Must not escape" policy sacrifices key expressive powers like closure capture, return reference |
 
 ---
 
-## Design Decision Log
+## Design Decision Record
 
 | Decision | Choice | Reason | Date |
 |----------|--------|--------|------|
-| **Default value** | Move (zero-copy) | High performance, zero overhead | 2025-01-15 |
-| **Sharing mechanism** | `ref` keyword, compiler auto-optimization | User simplicity, compiler responsibility | 2025-01-15 |
-| **Borrowing** | `&T`/`&mut T` as zero-sized token types | Type properties (Dup/Linear) naturally derive permissions, unified type system | 2025-01-15 |
-| **Borrow tokens** | Replace simplified borrowing, `&T` Dup, `&mut T` Linear | Eliminate "no-escape" special rules, support closure capture / return references / store in structs | 2026-05-29 |
+| **Default** | Move (zero-copy) | High performance, zero-cost | 2025-01-15 |
+| **Sharing mechanism** | `ref` keyword, compiler auto-optimizes | User simple, compiler responsible | 2025-01-15 |
+| **Borrowing** | `&T`/`&mut T` as zero-sized token types | Type attributes (Dup/Linear) naturally derive permissions, unified type system | 2025-01-15 |
+| **Borrow token** | Replaces bare-bones borrow, `&T` Dup, `&mut T` Linear | Eliminates special rules like "must not escape", supports closure capture / return reference / store in struct | 2026-05-29 |
 | **Copying** | `clone()` | Explicit semantics | 2025-01-15 |
-| **Systems-level** | `*T` + `unsafe` | Supports systems programming | 2025-01-15 |
-| **Lifetimes** | Not implemented | Tokens are values, lifetime managed uniformly by Move/RAII, reduces borrowing to ownership problem | 2025-01-15 |
-| **Rc/Arc** | Compiler auto-selects, not visible to users | Reduced cognitive load | 2025-01-15 |
-| **Cyclic references** | No checking intra-task, cross-task lint (default warn) | Structured concurrency naturally guarantees, lint can be configured deny | 2025-01-16 |
-| **Weak** | Provided by standard library | Advanced users explicitly choose | 2025-01-16 |
+| **System-level** | `*T` + `unsafe` | Supports systems programming | 2025-01-15 |
+| **Lifetime** | Not implemented | Tokens are values, lifetime uniformly managed by Move/RAII, reduces borrow to ownership problem | 2025-01-15 |
+| **Rc/Arc** | Compiler auto-selects, invisible to user | Lower cognitive burden | 2025-01-15 |
+| **Cyclic reference** | Intra-task not checked, cross-task lint (default warn) | Structured concurrency naturally guarantees, lint configurable to deny | 2025-01-16 |
+| **Weak** | Standard library provides | Advanced user explicit choice | 2025-01-16 |
 | **Consume analysis** | Removed | Mini borrow checker, not needed | 2026-05-11 |
-| **Ownership return** | Removed | `(T) -> T` signature is self-documenting | 2026-05-11 |
+| **Ownership round-trip** | Removed | `(T) -> T` signature is self-documenting | 2026-05-11 |
 | **Empty state reuse** | Removed (as feature) | Reassignment after Move is natural behavior | 2026-05-11 |
-| **Inverse function / partial consume / field three-level mutability** | Removed | Over-engineering | 2026-05-11 |
+| **Inverse function / partial consume / field three-level mutability** | Removed | Over-engineered | 2026-05-11 |
 
-### Version History
+### Version history
 
-| Version | Major Changes | Date |
+| Version | Major changes | Date |
 |---------|---------------|------|
 | v1 | Initial draft: based on Rust ownership model | 2025-01-08 |
-| v4 | Default Move + explicit ref | 2025-01-15 |
-| v5 | Structured concurrency + cyclic reference handling | 2025-01-16 |
-| v6 | Added empty state reuse, ownership return | 2025-02-04 |
-| v7 | Added consume analysis, inverse functions, field-level mutability | 2025-02-05 |
-| **v8** | **Removed over-engineering, added simplified borrowing &T/&mut T** | **2026-05-11** |
-| **v9** | **Borrow token system replaces simplified borrowing, unifying type system** | **2026-05-29** |
+| **v8** | **Removed over-engineering (inverse function / partial consume / field three-level mutability / consume analysis / ownership round-trip / empty state reuse), added bare-bones borrow &T/&mut T** | **2026-05-11** |
+| **v9** | **Borrow token system replaces bare-bones borrow, unifies type system; token conflict detection corrected to Hoare propositions, see RFC-009a** | **2026-06-13** |
 
-### Open Issues
+### Pending topics
 
-| Issue | Description | Status |
+| Topic | Description | Status |
 |-------|-------------|--------|
-| Drop syntax | Whether explicit `drop()` function is needed | Pending discussion |
-| Escape analysis algorithm | ref cross-task detection implementation | Pending discussion |
-| Token conflict detection | Flow-sensitive liveness analysis, see below | ✅ Resolved |
+| Drop syntax | Whether explicit `drop()` function is needed | Pending |
+| Escape analysis algorithm | ref's cross-task detection implementation | Pending |
+| Token conflict detection | Hoare logic propositions, see below | ✅ Resolved (see RFC-009a for details) |
 
-### Token Conflict Detection: Flow-Sensitive Liveness Analysis
+### Token conflict detection: Hoare logic propositions
 
-**Analysis scope**: Function body only. Flow-sensitive liveness analysis on token values, tracking each token's state (live/moved).
+The complete scheme for token conflict detection is in [RFC-009a: Token Lifetime Analysis—Based on Hoare Proof Pipeline](../accepted/009a-borrow-proof-pipeline.md). Key points:
 
-**Layer 1: Call site checking** — same actual argument cannot simultaneously create `&mut` token and other tokens:
+**Token liveness is a Hoare logic proposition.** `{All conflicting ReadTokens dead} write(data) {WriteToken safely acquired}`—it shares the proof pipeline from RFC-027 with type checking and user predicate verification. The compiler auto-generates borrow propositions (`borrow_conflict`, `use_after_move`, `use_after_drop`, `mut_violation`), and the pipeline returns Proved / Disproved / Unproven.
 
-```yaoxiang
-alias_bad: (a: &mut Point, b: &Point) -> Void = { ... }
-p = Point(1.0, 2.0)
-alias_bad(p, p)    # ❌ p simultaneously derives &mut and & tokens, compiler rejects
-```
+**Borrow checking has not disappeared—it has been reduced.** `BorrowChecker` becomes `BorrowPredicateEmitter`, generating propositions rather than executing checks. This is perfectly parallel to the "type checker" concept: the type checker generates type-equality propositions, the borrow proposition generator generates borrow propositions, and the same pipeline validates.
 
-**Layer 2: Function body flow-sensitivity** — after `&mut` token passed to call, token released on call return, can create new token subsequently:
+**Brand ID (`#42`) is `'a`.** Same information, different encoding. `'a` is visible in type signatures, `#42` is inside the compiler. No new analysis invented—lifetime has been reduced from the type layer to the proof layer.
 
-```yaoxiang
-process_twice: (p: &mut Point) -> Void = {
-    shift(p, 1.0, 1.0)    # &mut token passed to shift, token released after shift returns
-    print_info(p)          # Recreate &Point token, no conflict
-}
-```
-
-**What is not needed**: Cross-function lifetime tracking, global alias analysis, borrow graph constraint solving, NLL, `'a` annotations. Because tokens are values, value liveness analysis is handled uniformly by the type checker — exactly the same as tracking any linear type value.
+**Algorithm summary** (see RFC-009a for details):
+- Brand tree prefix matching → determine conflicting tokens (O(depth), depth ≤ 3)
+- Reverse BFS → start from consumer, break cuts back edges, structural analysis covers 95%+ scenarios (fast path)
+- SMT logic cut → only called for `while` + path conditions (slow path, very rare)
 
 ---
 
 ## References
 
-### YaoXiang Official Documentation
+### YaoXiang official documentation
 
-- [Language Specification](../language-spec.md)
+- [Language Spec](../language-spec.md)
 - [Design Manifesto](../manifesto.md)
-- [RFC-001 Concurrent Model and Error Handling](./001-concurrent-model-error-handling.md)
+- [RFC-001 Concurrent Model & Error Handling](./001-concurrent-model-error-handling.md)
 - [RFC-010 Unified Type Syntax](./010-unified-type-syntax.md)
 - [RFC-011 Generic Type System Design](./011-generic-type-system.md)
 - [YaoXiang Guide](../guides/YaoXiang-book.md)
 
-### External References
+### External references
 
 - [Rust Ownership Model](https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html)
 - [C++ RAII](https://en.wikipedia.org/wiki/Resource_acquisition_is_initialization)
@@ -709,12 +706,11 @@ process_twice: (p: &mut Point) -> Void = {
 
 ---
 
-## Lifecycle and Disposition
+## Lifecycle and Destination
 
 | Status | Location | Description |
 |--------|----------|-------------|
-| **Draft** | `docs/design/rfc/` | Author draft, awaiting review submission |
-| **Under Review** | `docs/design/rfc/` | Open for community discussion and feedback |
+| **Draft** | `docs/design/rfc/` | Author's draft, awaiting submission for review |
+| **Under review** | `docs/design/rfc/` | Open community discussion and feedback |
 | **Accepted** | `docs/design/accepted/` | Becomes formal design document |
-| **Rejected** | `docs/design/rfc/` | Preserved in RFC directory |
-```
+| **Rejected** | `docs/design/rfc/` | Retained in RFC directory |
