@@ -231,24 +231,6 @@ pub fn run_file_with_diagnostics(
     let mut compiler = Compiler::new();
     match compiler.compile(&source_file.name, &source_file.content) {
         Ok(module) => {
-            // 统一所有权检查：MutChecker + OwnershipChecker
-            {
-                use crate::middle::passes::lifetime::OwnershipPass;
-                let errors = OwnershipPass::check_module(&module);
-                if !errors.is_empty() {
-                    eprintln!();
-                    for diagnostic in &errors {
-                        let output = render_compile_error(
-                            &diagnostic.message,
-                            source_file,
-                            Some(diagnostic),
-                        );
-                        eprintln!("{}", output);
-                    }
-                    return Err(anyhow::anyhow!("Ownership check failed"));
-                }
-            }
-
             // Generate bytecode
             let mut ctx = CodegenContext::new(module);
             ctx.set_generate_debug_info(debug_info);
