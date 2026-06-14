@@ -12,6 +12,29 @@ pub fn init_panic_hook() {
     console_error_panic_hook::set_once();
 }
 
+/// Simple test function to verify wasm module loads
+#[wasm_bindgen]
+pub fn ping() -> String {
+    "pong".to_string()
+}
+
+/// Test: just create a compiler
+#[wasm_bindgen]
+pub fn test_compiler() -> String {
+    let _compiler = crate::frontend::Compiler::new();
+    "compiler created".to_string()
+}
+
+/// Test: compile only
+#[wasm_bindgen]
+pub fn test_compile(source: &str) -> String {
+    let mut compiler = crate::frontend::Compiler::new();
+    match compiler.compile_with_source("<test>", source) {
+        Ok(_) => "compiled ok".to_string(),
+        Err(e) => format!("error: {}", e),
+    }
+}
+
 /// Compile and execute YaoXiang source code.
 ///
 /// Returns the captured output (from `print`/`println`) or error messages.

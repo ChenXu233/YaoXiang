@@ -15,8 +15,9 @@ debug = []
 cli = [
     "tokio", "rustyline", "notify", "lsp-server",
     "walkdir", "tempfile", "clap", "crossbeam", "rayon",
+    "tracing-subscriber",
 ]
-wasm = ["wasm-bindgen", "console_error_panic_hook", "getrandom/wasm_js", "getrandom-04"]
+wasm = ["wasm-bindgen", "console_error_panic_hook", "web-time", "getrandom/wasm_js", "getrandom-04"]
 
 [lib]
 path = "src/lib.rs"
@@ -45,8 +46,8 @@ harness = false
 
 [dependencies]
 # 日志 - tracing
-tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+tracing-subscriber = { version = "0.3", optional = true }
 
 # 并发和线程安全
 parking_lot = "0.12"
@@ -101,6 +102,7 @@ lsp-server = { version = "0.7", optional = true }
 # Wasm support
 wasm-bindgen = { version = "0.2", optional = true }
 console_error_panic_hook = { version = "0.1", optional = true }
+web-time = { version = "1", optional = true }
 getrandom = { version = "0.3", features = ["wasm_js"], optional = true }
 getrandom-04 = { package = "getrandom", version = "0.4", features = ["wasm_js"], optional = true }
 

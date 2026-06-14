@@ -6,7 +6,8 @@
 use std::collections::HashMap;
 #[cfg(not(feature = "wasm"))]
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use crate::util::time_compat::Instant;
 
 #[cfg(not(feature = "wasm"))]
 use crossbeam::channel::{Receiver, Sender};
@@ -316,9 +317,13 @@ impl EmbeddedRuntime {
             return task_id;
         }
 
+        #[cfg(not(feature = "wasm"))]
         let start = Instant::now();
         let result = task(&SpawnHandle::noop());
+        #[cfg(not(feature = "wasm"))]
         let exec_time = start.elapsed();
+        #[cfg(feature = "wasm")]
+        let exec_time = Duration::ZERO;
         self.total_exec_time += exec_time;
 
         let outcome = match result {
