@@ -636,6 +636,7 @@ use crate::frontend::core::parser::ast::{Expr, Module, Stmt, StmtKind};
 
 /// 函数内变量状态
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)] // Dropped 将在 Phase C/D Drop 语义中激活
 enum VarState {
     Alive,
     Moved,
@@ -727,11 +728,126 @@ impl OwnershipChecker {
     }
 
     /// 推进 CFG 节点（创建新节点并从当前节点连 Normal 边）
+    #[allow(dead_code)] // 控制流方法提取后暂未使用，保留供后续使用
     fn next_node(&mut self) -> usize {
         let node = self.cfg.add_node(None);
         self.cfg.add_edge(self.current_node, node, EdgeKind::Normal);
         self.current_node = node;
         node
+    }
+
+    // ── 控制流方法（walk_expr 和 walk_stmt 共用） ──────────
+
+    /// walk_if：If 表达式/语句的控制流构建
+    ///
+    /// 负责 CFG 分叉（split → then/elif/else → merge）、
+    /// 路径条件收集、各分支子图遍历。
+    fn walk_if(
+        &mut self,
+        condition: &Expr,
+        then_body: &[Stmt],
+        elifs: &[(&Expr, &[Stmt])],
+        else_body: Option<&[Stmt]>,
+    ) -> Vec<ProofResult> {
+        let split_node = self.current_node;
+        let mut results = self.walk_expr(condition);
+
+        let merge_node = self.cfg.add_node(None);
+
+        // then 分支 —— 路径条件 = condition
+        let then_start = self.cfg.add_node(Some(format!("{:?}", condition)));
+        self.cfg.add_edge(split_node, then_start, EdgeKind::Normal);
+        self.current_node = then_start;
+        results.extend(self.walk_stmts(then_body));
+        self.cfg
+            .add_edge(self.current_node, merge_node, EdgeKind::Normal);
+
+        // elif 分支 —— 路径条件 = elif_cond
+        for (elif_cond, elif_body) in elifs {
+            results.extend(self.walk_expr(elif_cond));
+            let elif_start = self.cfg.add_node(Some(format!("{:?}", elif_cond)));
+            self.cfg.add_edge(split_node, elif_start, EdgeKind::Normal);
+            self.current_node = elif_start;
+            results.extend(self.walk_stmts(elif_body));
+            self.cfg
+                .add_edge(self.current_node, merge_node, EdgeKind::Normal);
+        }
+
+        // else 分支 —— 路径条件 = !condition
+        if let Some(else_body) = else_body {
+            let else_start = self.cfg.add_node(Some(format!("!({:?})", condition)));
+            self.cfg.add_edge(split_node, else_start, EdgeKind::Normal);
+            self.current_node = else_start;
+            results.extend(self.walk_stmts(else_body));
+            self.cfg
+                .add_edge(self.current_node, merge_node, EdgeKind::Normal);
+        } else {
+            self.cfg.add_edge(split_node, merge_node, EdgeKind::Normal);
+        }
+
+        self.current_node = merge_node;
+        results
+    }
+
+    /// walk_while：While 循环的控制流构建
+    ///
+    /// 负责 CFG 循环结构（head → body → back_edge → after_loop）、
+    /// 路径条件收集。
+    fn walk_while(
+        &mut self,
+        condition: &Expr,
+        body: &[Stmt],
+    ) -> Vec<ProofResult> {
+        let head_node = self.cfg.add_node(Some(format!("{:?}", condition)));
+        self.cfg
+            .add_edge(self.current_node, head_node, EdgeKind::Normal);
+
+        let mut results = self.walk_expr(condition);
+
+        let body_start = self.cfg.add_node(None);
+        self.cfg.add_edge(head_node, body_start, EdgeKind::Normal);
+        self.current_node = body_start;
+        results.extend(self.walk_stmts(body));
+
+        // 回边：body_end → head
+        self.cfg
+            .add_edge(self.current_node, head_node, EdgeKind::BackEdge);
+
+        let after_loop = self.cfg.add_node(None);
+        self.cfg.add_edge(head_node, after_loop, EdgeKind::Normal);
+        self.current_node = after_loop;
+        results
+    }
+
+    /// walk_for：For 循环的控制流构建
+    ///
+    /// 迭代变量每次迭代新绑定（语言设计保证），
+    /// CFG 循环结构（head → body → back_edge → after_loop）。
+    fn walk_for(
+        &mut self,
+        var: &str,
+        iterable: &Expr,
+        body: &[Stmt],
+    ) -> Vec<ProofResult> {
+        let mut results = self.walk_expr(iterable);
+        self.var_state.insert(var.to_string(), VarState::Alive);
+
+        let head_node = self.cfg.add_node(None);
+        self.cfg
+            .add_edge(self.current_node, head_node, EdgeKind::Normal);
+
+        let body_start = self.cfg.add_node(None);
+        self.cfg.add_edge(head_node, body_start, EdgeKind::Normal);
+        self.current_node = body_start;
+        results.extend(self.walk_stmts(body));
+
+        self.cfg
+            .add_edge(self.current_node, head_node, EdgeKind::BackEdge);
+
+        let after_loop = self.cfg.add_node(None);
+        self.cfg.add_edge(head_node, after_loop, EdgeKind::Normal);
+        self.current_node = after_loop;
+        results
     }
 
     fn walk_expr(
@@ -822,16 +938,17 @@ impl OwnershipChecker {
                 let mut results = self.walk_expr(func);
                 for arg in args {
                     results.extend(self.walk_expr(arg));
-                    if let Some(var_name) = Self::extract_var_name(arg) {
-                        self.var_state.insert(var_name, VarState::Moved);
+                    // 只有直接传变量才标记 Move（字段访问 self.x 或借用 &x 不 move）
+                    if let Expr::Var(name, _) = arg {
+                        self.var_state.insert(name.clone(), VarState::Moved);
                     }
                 }
                 results
             }
             Expr::Return(Some(inner), _) => {
                 let results = self.walk_expr(inner);
-                if let Some(name) = Self::extract_var_name(inner) {
-                    self.var_state.insert(name, VarState::Moved);
+                if let Expr::Var(name, _) = inner.as_ref() {
+                    self.var_state.insert(name.clone(), VarState::Moved);
                 }
                 results
             }
@@ -847,95 +964,24 @@ impl OwnershipChecker {
                 else_branch,
                 ..
             } => {
-                let split_node = self.current_node;
-                let mut results = self.walk_expr(condition);
-
-                let merge_node = self.cfg.add_node(None);
-
-                // then 分支
-                let then_start = self.cfg.add_node(None);
-                self.cfg.add_edge(split_node, then_start, EdgeKind::Normal);
-                self.current_node = then_start;
-                results.extend(self.walk_stmts(&then_branch.stmts));
-                self.cfg
-                    .add_edge(self.current_node, merge_node, EdgeKind::Normal);
-
-                // elif 分支
-                for (_cond, body) in elif_branches {
-                    let elif_start = self.cfg.add_node(None);
-                    self.cfg.add_edge(split_node, elif_start, EdgeKind::Normal);
-                    self.current_node = elif_start;
-                    results.extend(self.walk_stmts(&body.stmts));
-                    self.cfg
-                        .add_edge(self.current_node, merge_node, EdgeKind::Normal);
-                }
-
-                // else 分支
-                if let Some(else_body) = else_branch {
-                    let else_start = self.cfg.add_node(None);
-                    self.cfg.add_edge(split_node, else_start, EdgeKind::Normal);
-                    self.current_node = else_start;
-                    results.extend(self.walk_stmts(&else_body.stmts));
-                    self.cfg
-                        .add_edge(self.current_node, merge_node, EdgeKind::Normal);
-                } else {
-                    self.cfg.add_edge(split_node, merge_node, EdgeKind::Normal);
-                }
-
-                self.current_node = merge_node;
-                results
+                let elifs: Vec<(&Expr, &[Stmt])> = elif_branches
+                    .iter()
+                    .map(|(cond, body)| (cond.as_ref(), body.stmts.as_slice()))
+                    .collect();
+                let else_body = else_branch.as_ref().map(|b| b.stmts.as_slice());
+                self.walk_if(condition, &then_branch.stmts, &elifs, else_body)
             }
 
             Expr::While {
                 condition, body, ..
-            } => {
-                let head_node = self.cfg.add_node(None);
-                self.cfg
-                    .add_edge(self.current_node, head_node, EdgeKind::Normal);
-
-                let mut results = self.walk_expr(condition);
-
-                let body_start = self.cfg.add_node(None);
-                self.cfg.add_edge(head_node, body_start, EdgeKind::Normal);
-                self.current_node = body_start;
-                results.extend(self.walk_stmts(&body.stmts));
-
-                // 回边：body_end → head
-                self.cfg
-                    .add_edge(self.current_node, head_node, EdgeKind::BackEdge);
-
-                let after_loop = self.cfg.add_node(None);
-                self.cfg.add_edge(head_node, after_loop, EdgeKind::Normal);
-                self.current_node = after_loop;
-                results
-            }
+            } => self.walk_while(condition, &body.stmts),
 
             Expr::For {
                 var,
                 iterable,
                 body,
                 ..
-            } => {
-                let mut results = self.walk_expr(iterable);
-                self.var_state.insert(var.clone(), VarState::Alive);
-
-                let head_node = self.cfg.add_node(None);
-                self.cfg
-                    .add_edge(self.current_node, head_node, EdgeKind::Normal);
-
-                let body_start = self.cfg.add_node(None);
-                self.cfg.add_edge(head_node, body_start, EdgeKind::Normal);
-                self.current_node = body_start;
-                results.extend(self.walk_stmts(&body.stmts));
-
-                self.cfg
-                    .add_edge(self.current_node, head_node, EdgeKind::BackEdge);
-
-                let after_loop = self.cfg.add_node(None);
-                self.cfg.add_edge(head_node, after_loop, EdgeKind::Normal);
-                self.current_node = after_loop;
-                results
-            }
+            } => self.walk_for(var, iterable, &body.stmts),
 
             // FnDef / Lambda / Spawn / Unsafe / Lit / FString 等跳过
             _ => vec![],
@@ -957,8 +1003,9 @@ impl OwnershipChecker {
 
                 if let Some(init) = initializer {
                     results.extend(self.walk_expr(init));
-                    if let Some(src_name) = Self::extract_var_name(init) {
-                        self.var_state.insert(src_name, VarState::Moved);
+                    // 只有直接传变量才标记 Move（字段访问或借用不转移所有权）
+                    if let Expr::Var(src_name, _) = init.as_ref() {
+                        self.var_state.insert(src_name.clone(), VarState::Moved);
                     }
                 }
                 results
@@ -966,8 +1013,8 @@ impl OwnershipChecker {
 
             StmtKind::Return(Some(expr)) => {
                 let results = self.walk_expr(expr);
-                if let Some(name) = Self::extract_var_name(expr) {
-                    self.var_state.insert(name, VarState::Moved);
+                if let Expr::Var(name, _) = expr.as_ref() {
+                    self.var_state.insert(name.clone(), VarState::Moved);
                 }
                 results
             }
@@ -980,16 +1027,12 @@ impl OwnershipChecker {
                 else_branch,
                 ..
             } => {
-                let mut results = self.walk_expr(condition);
-                results.extend(self.walk_stmts(&then_branch.stmts));
-                for (cond, body) in elif_branches {
-                    results.extend(self.walk_expr(cond));
-                    results.extend(self.walk_stmts(&body.stmts));
-                }
-                if let Some(else_body) = else_branch {
-                    results.extend(self.walk_stmts(&else_body.stmts));
-                }
-                results
+                let elifs: Vec<(&Expr, &[Stmt])> = elif_branches
+                    .iter()
+                    .map(|(cond, body)| (cond.as_ref(), body.stmts.as_slice()))
+                    .collect();
+                let else_body = else_branch.as_ref().map(|b| b.stmts.as_slice());
+                self.walk_if(condition, &then_branch.stmts, &elifs, else_body)
             }
 
             StmtKind::For {
@@ -997,18 +1040,12 @@ impl OwnershipChecker {
                 iterable,
                 body,
                 ..
-            } => {
-                let mut results = self.walk_expr(iterable);
-                self.var_state.insert(var.clone(), VarState::Alive);
-                results.extend(self.walk_stmts(&body.stmts));
-                results
-            }
+            } => self.walk_for(var, iterable, &body.stmts),
 
-            StmtKind::Binding { params, body, .. } => {
-                for param in params {
-                    self.var_state.insert(param.name.clone(), VarState::Alive);
-                }
-                self.walk_stmts(body)
+            StmtKind::Binding { .. } => {
+                // 嵌套函数：独立作用域，跳过（由 check_module 递归检查每层）
+                // 不在当前函数内联遍历，避免污染 var_state 和 brand_tree
+                vec![]
             }
 
             _ => vec![],

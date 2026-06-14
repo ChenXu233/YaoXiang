@@ -100,10 +100,12 @@ fn test_list_operations() {
         r#"
         use std.{io, list}
         main = {
-            mut xs = [1, 2, 3, 4, 5]
+            xs = [1, 2, 3, 4, 5]
             ys = list.map(xs, x => x * 10)
-            zs = list.filter(xs, x => x > 2)
-            s = list.reduce(xs, (a, x) => a + x, 0)
+            xs2 = [1, 2, 3, 4, 5]
+            zs = list.filter(xs2, x => x > 2)
+            xs3 = [1, 2, 3, 4, 5]
+            s = list.reduce(xs3, (a, x) => a + x, 0)
             io.println(ys)
             io.println(zs)
             io.println(s)

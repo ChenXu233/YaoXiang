@@ -13,16 +13,19 @@ main = {
     io.println(doubled)
 
     // filter
-    mut evens = list.filter(items, x => x % 2 == 0)
+    items2 = [1, 2, 3, 4, 5]
+    mut evens = list.filter(items2, x => x % 2 == 0)
     io.println(evens)
 
     // reduce
-    total = list.reduce(items, (acc, x) => acc + x, 0)
+    items3 = [1, 2, 3, 4, 5]
+    total = list.reduce(items3, (acc, x) => acc + x, 0)
     io.println(total)
 
     // 链式操作 (filter + map)
+    items4 = [1, 2, 3, 4, 5]
     mut result = list.map(
-        list.filter(items, x => x > 2),
+        list.filter(items4, x => x > 2),
         x => x * 10
     )
     io.println(result)
