@@ -11,6 +11,7 @@
 //! § 慢速通道: SMT 逻辑切断
 
 use std::collections::{HashMap, HashSet};
+use crate::util::span::Span;
 use super::super::proof::context::ProofContext;
 use super::super::proof::verdict::ProofResult;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
@@ -523,6 +524,7 @@ pub fn emit_borrow_predicate(
     cfg: &ControlFlowGraph,
     token: &BrandId,
     node_idx: usize,
+    span: Span,
 ) -> ProofResult {
     match fast_path_check(tree, cfg, token, node_idx) {
         FastPathResult::Safe => ProofResult::Proved,
@@ -541,7 +543,7 @@ pub fn emit_borrow_predicate(
                     ),
                 ],
                 constraint: format!("{} 的冲突令牌仍存活", token),
-                span: None,
+                span: Some(span),
                 predicate_span: None,
             })
         }
@@ -552,13 +554,14 @@ pub fn emit_borrow_predicate(
 pub fn emit_move_predicate(
     var_name: &str,
     is_moved: bool,
+    span: Span,
 ) -> ProofResult {
     if is_moved {
         ProofResult::Disproved(super::super::proof::verdict::DisproofModel {
             kind: super::super::proof::verdict::DisproofKind::UseAfterMove,
             assignments: vec![("variable".into(), var_name.into())],
             constraint: format!("{} 已被移动，不可再使用", var_name),
-            span: None,
+            span: Some(span),
             predicate_span: None,
         })
     } else {
@@ -570,13 +573,14 @@ pub fn emit_move_predicate(
 pub fn emit_drop_predicate(
     var_name: &str,
     is_dropped: bool,
+    span: Span,
 ) -> ProofResult {
     if is_dropped {
         ProofResult::Disproved(super::super::proof::verdict::DisproofModel {
             kind: super::super::proof::verdict::DisproofKind::UseAfterDrop,
             assignments: vec![("variable".into(), var_name.into())],
             constraint: format!("{} 已被释放，不可再使用", var_name),
-            span: None,
+            span: Some(span),
             predicate_span: None,
         })
     } else {
@@ -588,13 +592,14 @@ pub fn emit_drop_predicate(
 pub fn emit_double_drop_predicate(
     var_name: &str,
     is_dropped: bool,
+    span: Span,
 ) -> ProofResult {
     if is_dropped {
         ProofResult::Disproved(super::super::proof::verdict::DisproofModel {
             kind: super::super::proof::verdict::DisproofKind::DoubleDrop,
             assignments: vec![("variable".into(), var_name.into())],
             constraint: format!("{} 已被释放，不可重复释放", var_name),
-            span: None,
+            span: Some(span),
             predicate_span: None,
         })
     } else {
@@ -606,13 +611,14 @@ pub fn emit_double_drop_predicate(
 pub fn emit_mut_predicate(
     var_name: &str,
     is_mutable: bool,
+    span: Span,
 ) -> ProofResult {
     if !is_mutable {
         ProofResult::Disproved(super::super::proof::verdict::DisproofModel {
             kind: super::super::proof::verdict::DisproofKind::MutViolation,
             assignments: vec![("variable".into(), var_name.into())],
             constraint: format!("{} 不可变，不能赋值", var_name),
-            span: None,
+            span: Some(span),
             predicate_span: None,
         })
     } else {
@@ -647,6 +653,7 @@ enum VarState {
 struct PendingWrite {
     token: BrandId,
     node_idx: usize,
+    span: Span,
 }
 
 /// 所有权检查器——遍历 AST 构建 BrandTree + CFG，执行所有权验证
@@ -657,6 +664,8 @@ pub struct OwnershipChecker {
     pending_writes: Vec<PendingWrite>,
     /// 当前 CFG 节点索引（walk 过程中推进）
     current_node: usize,
+    /// 当前 AST 片段的源码位置（walk 过程中更新）
+    current_span: Span,
 }
 
 impl Default for OwnershipChecker {
@@ -673,6 +682,7 @@ impl OwnershipChecker {
             var_state: HashMap::new(),
             pending_writes: Vec::new(),
             current_node: 0,
+            current_span: Span::dummy(),
         }
     }
 
@@ -683,6 +693,7 @@ impl OwnershipChecker {
         self.var_state.clear();
         self.pending_writes.clear();
         self.current_node = self.cfg.add_node(None); // 入口节点
+        self.current_span = Span::dummy();
     }
 
     /// 从表达式提取变量名（用于 Borrow/FieldAccess/Move 识别）
@@ -691,6 +702,35 @@ impl OwnershipChecker {
             Expr::Var(name, _) => Some(name.clone()),
             Expr::FieldAccess { expr: inner, .. } => Self::extract_var_name(inner),
             _ => None,
+        }
+    }
+
+    /// 从表达式提取源码 span
+    fn expr_span(expr: &Expr) -> Span {
+        match expr {
+            Expr::Lit(_, s)
+            | Expr::Var(_, s)
+            | Expr::Return(_, s)
+            | Expr::Break(_, s)
+            | Expr::Continue(_, s) => *s,
+            Expr::BinOp { span, .. }
+            | Expr::UnOp { span, .. }
+            | Expr::Call { span, .. }
+            | Expr::FnDef { span, .. }
+            | Expr::If { span, .. }
+            | Expr::Match { span, .. }
+            | Expr::While { span, .. }
+            | Expr::For { span, .. }
+            | Expr::SpawnFor { span, .. }
+            | Expr::Borrow { span, .. }
+            | Expr::FieldAccess { span, .. }
+            | Expr::Index { span, .. }
+            | Expr::Tuple(_, span)
+            | Expr::List(_, span)
+            | Expr::Cast { span, .. }
+            | Expr::Try { span, .. } => *span,
+            Expr::Block(block) => block.span,
+            _ => Span::dummy(),
         }
     }
 
@@ -719,10 +759,11 @@ impl OwnershipChecker {
     fn check_var_read(
         &self,
         name: &str,
+        span: Span,
     ) -> ProofResult {
         match self.var_state.get(name) {
-            Some(VarState::Moved) => emit_move_predicate(name, true),
-            Some(VarState::Dropped) => emit_drop_predicate(name, true),
+            Some(VarState::Moved) => emit_move_predicate(name, true, span),
+            Some(VarState::Dropped) => emit_drop_predicate(name, true, span),
             _ => ProofResult::Proved,
         }
     }
@@ -854,10 +895,11 @@ impl OwnershipChecker {
         &mut self,
         expr: &Expr,
     ) -> Vec<ProofResult> {
+        self.current_span = Self::expr_span(expr);
         match expr {
             Expr::Var(name, _) => {
                 let mut results = Vec::new();
-                let check = self.check_var_read(name);
+                let check = self.check_var_read(name, self.current_span);
                 if !check.is_proved() {
                     results.push(check);
                 }
@@ -869,7 +911,7 @@ impl OwnershipChecker {
                 let mut results = self.walk_expr(expr);
                 if let Some(var_name) = Self::extract_var_name(expr) {
                     // 变量本身被"使用"——检查 Move/Drop 状态
-                    let check = self.check_var_read(&var_name);
+                    let check = self.check_var_read(&var_name, self.current_span);
                     if !check.is_proved() {
                         results.push(check);
                     }
@@ -887,6 +929,7 @@ impl OwnershipChecker {
                         self.pending_writes.push(PendingWrite {
                             token: token.clone(),
                             node_idx: self.current_node,
+                            span: self.current_span,
                         });
                     }
                 }
@@ -992,6 +1035,7 @@ impl OwnershipChecker {
         &mut self,
         stmt: &Stmt,
     ) -> Vec<ProofResult> {
+        self.current_span = stmt.span;
         match &stmt.kind {
             StmtKind::Expr(expr) => self.walk_expr(expr),
 
@@ -1088,6 +1132,7 @@ impl OwnershipChecker {
                 &self.cfg,
                 &pending.token,
                 pending.node_idx,
+                pending.span,
             ));
         }
 
