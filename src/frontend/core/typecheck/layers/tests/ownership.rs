@@ -10,6 +10,7 @@ use crate::frontend::core::typecheck::layers::ownership::{
     emit_drop_predicate, emit_double_drop_predicate, emit_mut_predicate, fast_path_check,
 };
 use crate::frontend::core::typecheck::proof::verdict::{DisproofKind, ProofResult};
+use crate::util::span::Span;
 
 // ── BrandId 前缀匹配 ──────────────────────────────────
 
@@ -263,37 +264,37 @@ fn test_loop_without_break_is_unsafe() {
 
 #[test]
 fn test_use_after_move_rejected() {
-    let result = emit_move_predicate("x", true);
+    let result = emit_move_predicate("x", true, Span::dummy());
     assert!(matches!(result, ProofResult::Disproved { .. }));
 }
 
 #[test]
 fn test_use_before_move_allowed() {
-    let result = emit_move_predicate("x", false);
+    let result = emit_move_predicate("x", false, Span::dummy());
     assert!(matches!(result, ProofResult::Proved));
 }
 
 #[test]
 fn test_use_after_drop_rejected() {
-    let result = emit_drop_predicate("x", true);
+    let result = emit_drop_predicate("x", true, Span::dummy());
     assert!(matches!(result, ProofResult::Disproved { .. }));
 }
 
 #[test]
 fn test_double_drop_rejected() {
-    let result = emit_double_drop_predicate("x", true);
+    let result = emit_double_drop_predicate("x", true, Span::dummy());
     assert!(matches!(result, ProofResult::Disproved { .. }));
 }
 
 #[test]
 fn test_mut_violation_rejected() {
-    let result = emit_mut_predicate("x", false);
+    let result = emit_mut_predicate("x", false, Span::dummy());
     assert!(matches!(result, ProofResult::Disproved { .. }));
 }
 
 #[test]
 fn test_mut_allowed() {
-    let result = emit_mut_predicate("x", true);
+    let result = emit_mut_predicate("x", true, Span::dummy());
     assert!(matches!(result, ProofResult::Proved));
 }
 
@@ -302,7 +303,6 @@ fn test_mut_allowed() {
 use crate::frontend::core::parser::ast::{Expr, Literal, Module, Param, Stmt, StmtKind};
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::layers::ownership::OwnershipChecker;
-use crate::util::span::Span;
 
 fn make_var(name: &str) -> Expr {
     Expr::Var(name.into(), Span::default())
