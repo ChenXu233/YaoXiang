@@ -1,12 +1,8 @@
-//! Capture 模块测试
+//! Capture 模块测试 — 基于 RFC-023 闭包捕获模型
 //!
-//! 测试闭包捕获模式推断，包括：
-//! - 只读捕获分析
-//! - 写入捕获分析
-//! - 局部变量不被捕获
-//! - 嵌套 lambda 捕获
-//! - 捕获模式决策（Copy/Borrow/BorrowMut/Move）
-//! - Ref 类型捕获模式
+//! RFC-023 §2: 捕获模式决策（Copy/Borrow/BorrowMut/Move）
+//! RFC-023 §2.4: Dup 类型捕获为 Copy，非 Dup 根据逃逸分析决定
+//! RFC-011 §2.4: Dup/Clone 内置 marker trait
 
 use std::collections::HashSet;
 
