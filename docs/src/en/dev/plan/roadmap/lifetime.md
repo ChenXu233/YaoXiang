@@ -4,103 +4,192 @@ title: "Borrow Checker Status"
 
 # Borrow Checker (Lifetime)
 
-> **Module Status**: Stable (4 items pending)
+> **Module Status**: Transition Period — v8 Linear Scan Architecture → v9 Hoare Proposition Pipeline
 > **Location**: `src/middle/passes/lifetime/`
-> **Last Updated**: 2026-06-01
+> **Last Updated**: 2026-06-13
+>
+> **Related RFCs**:
+> - [RFC-009: Ownership Model Design](../design/rfc/accepted/009-ownership-model.md) — Accepted
+> - [RFC-009a: Token Lifetime Analysis — Hoare Proof Pipeline Based](../design/rfc/accepted/009a-borrow-proof-pipeline.md) — Accepted
 
 ---
 
 ## Module Overview
 
-The borrow checker module is a complete **ownership analysis and lifetime management system**, responsible for checking ownership-related issues such as Move semantics, borrow conflicts, and mutability violations.
+The Borrow Checker module is responsible for YaoXiang's ownership analysis — Move semantics, borrow token conflict detection, Drop/Clone correctness, ref cycle detection, and mutability violation checks.
 
-**Code Volume**: ~300KB source code (15 subfiles)
+**Current Architecture** (Transition Period):
+- ir_gen hardcodes the insertion of Borrow/Release instructions (lexical scope)
+- BorrowChecker linearly scans IR, passively validating token conflicts
+- ControlFlowAnalyzer exists but its core logic is empty
+- User-visible behavior is largely correct, but the underlying implementation is not the Hoare proposition pipeline from RFC-009a
+
+**Target Architecture** (RFC-009 + RFC-009a):
+- Brand tree tracks token derivation relationships
+- Consumer analysis drives NLL (Non-Lexical Lifetimes) release
+- Reverse BFS liveness analysis (fast path covers 95%+ of scenarios)
+- SMT logic cutoff as fallback (for the extremely rare while + path condition scenarios)
+- Release is driven by scope analysis, not hardcoded in ir_gen
+
+**Code Volume**: approximately 300KB of source code (15 sub-files)
 
 ---
 
-## Feature List
+## RFC Alignment Status
 
-### Core Checkers (Integrated into the OwnershipChecker unified entry point)
+### RFC-009 Five Core Concepts
 
-| Submodule | File | Function | Status |
-|--------|------|----------|--------|
-| **Move Semantics** | `move_semantics.rs` (575 lines) | UseAfterMove detection, supports empty state (Empty) reassignment | ✅ Completed |
-| **Drop Semantics** | `drop_semantics.rs` (143 lines) | UseAfterDrop, DropMovedValue, DoubleDrop detection | ✅ Completed |
-| **Mutability Check** | `mut_check.rs` (395 lines) | Immutable variable assignment, immutable object mutation method, immutable field assignment | ✅ Completed |
-| **Ref Semantics** | `ref_semantics.rs` (145 lines) | RefNonOwner detection — ref can only be applied to valid owners | ✅ Completed |
-| **Clone Semantics** | `clone.rs` (173 lines) | CloneMovedValue, CloneDroppedValue detection | ✅ Completed |
-| **Borrow Token** | `borrow_checker.rs` (503 lines) | Borrow token conflict detection: MutableBorrowConflict, BorrowAfterMove, UseWhileFrozen | ✅ Completed |
-| **Cross-spawn Loop** | `cycle_check.rs` (616 lines) | Cross-task circular reference detection, DFS cycle detection | ✅ Completed |
-| **Intra-task Cycle** | `intra_task_cycle.rs` (406 lines) | Intra-task ref cycle tracking (warning mode) | ✅ Completed |
+| Concept | User-Visible Behavior | Underlying Implementation |
+|---------|----------------------|---------------------------|
+| **Move** | ✅ Completed | MoveChecker, UseAfterMove detection |
+| **&T / &mut T** | ✅ Completed | BorrowChecker linear scan, passively responds to Borrow/Release instructions |
+| **ref** | ⚠️ Cycle detection done, escape analysis missing | ref_semantics + cycle_check + intra_task_cycle |
+| **clone()** | ✅ Completed | CloneChecker, 0 tests |
+| **unsafe + *T** | ✅ Completed | UnsafeChecker |
 
-### Auxiliary Analyzers
+### RFC-009a Six Phases
 
-| Submodule | File | Function | Status |
-|--------|------|----------|--------|
-| **Ownership Flow** | `ownership_flow.rs` (426 lines) | Analyzes whether function parameters are returned in return values | ✅ Completed |
-| **Consume Analysis** | `consume_analysis.rs` (363 lines) | Cross-function consume pattern queries, supports caching | ✅ Completed |
-| **Chain Calls** | `chain_calls.rs` (652 lines) | Method chain ownership flow analysis | ✅ Completed |
-| **Lifetime Tracking** | `lifecycle.rs` (1037 lines) | Complete variable lifetime tracking | ✅ Completed |
-| **Empty State** | `empty_state.rs` (513 lines) | Variable empty state tracking after Move | ✅ Completed |
-| **Control Flow** | `control_flow.rs` (353 lines) | Branch state merging analysis | ⚠️ Skeleton complete, core analysis logic is an empty implementation |
-| **Unsafe Check** | `unsafe_check.rs` (113 lines) | Report error for dereferencing raw pointer outside unsafe block | ✅ Completed |
-| **Send/Sync** | `send_sync.rs` (401 lines) | Type-level Send/Sync constraint check and constraint propagation | ✅ Completed (used independently) |
+| Phase | Content | Status | Description |
+|-------|---------|--------|-------------|
+| 1 | Brand tree data structure | ❌ Not started | Replaces HashMap<String, BorrowToken>, brand ID + parent node + consumer list |
+| 2 | Consumer analysis | ❌ Not started | Consumers automatically collected during DAG construction, NLL foundation |
+| 3 | Reverse BFS liveness analysis | ❌ Not started | Brand tree + consumers + break cutoff → covers 95%+ of scenarios |
+| 4 | Scope-driven Release | ❌ Not started | Remove ir_gen hardcoding, LIFO insertion at scope exit points, automatic `?` handling |
+| 5 | SMT logic cutoff | ❌ Not started | Blocked on RFC-027 Phase 2, only triggered by while + path conditions |
+| 6 | Cleanup | ❌ Not started | BorrowChecker → BorrowPredicateEmitter, delete ControlFlowAnalyzer |
+
+---
+
+## Current Module Inventory
+
+### Core Checkers
+
+| Sub-module | File | Function | Tests |
+|------------|------|----------|-------|
+| **Move Semantics** | `move_semantics.rs` | UseAfterMove detection, empty-state reassignment | 6 |
+| **Drop Semantics** | `drop_semantics.rs` | UseAfterDrop, DropMovedValue, DoubleDrop | 0 |
+| **Mutability Check** | `mut_check.rs` | Immutable variable assignment / mutating methods / field assignment | 0 |
+| **Ref Semantics** | `ref_semantics.rs` | RefNonOwner detection | 0 |
+| **Clone Semantics** | `clone.rs` | CloneMovedValue, CloneDroppedValue | 0 |
+| **Borrow Tokens** | `borrow_checker.rs` | Token conflict detection (linear scan architecture) | 16 |
+| **Cross-Task Cycles** | `cycle_check.rs` | Cross-spawn loop reference DFS detection | 8 |
+| **Intra-Task Cycles** | `intra_task_cycle.rs` | Intra-task ref cycle tracking (warning mode) | 7 |
+
+### Auxiliary Modules
+
+| Sub-module | File | Destination |
+|------------|------|-------------|
+| **Ownership Reflow** | `ownership_flow.rs` | Keep |
+| **Consume Analysis** | `consume_analysis.rs` | → Phase 2, integrated into brand tree |
+| **Chained Calls** | `chain_calls.rs` | Keep |
+| **Lifecycle Tracking** | `lifecycle.rs` | Keep — Drop insertion requires it |
+| **Empty State** | `empty_state.rs` | Keep |
+| **Control Flow** | `control_flow.rs` | → Phase 6, delete |
+| **Unsafe Check** | `unsafe_check.rs` | Keep |
+| **Send/Sync** | `send_sync.rs` | Keep (used independently) |
+
+---
+
+## Implementation Roadmap
+
+### Phase 0: Fill in Tests (Can start immediately, blocks refactoring)
+
+> Before touching the architecture, lay down the test net for existing behavior.
+
+| # | Task | File |
+|---|------|------|
+| 0.1 | Add Drop semantics tests | `tests/drop_semantics.rs` |
+| 0.2 | Add Clone semantics tests | `tests/clone.rs` |
+| 0.3 | Add mutability check tests | `tests/mut_check.rs` |
+| 0.4 | Add Ref semantics tests | `tests/ref_semantics.rs` |
+| 0.5 | Add Unsafe check tests | `tests/unsafe_check.rs` |
+
+### Phase 1: Brand Tree Data Structure (RFC-009a Phase 1)
+
+| # | Task | Output |
+|---|------|--------|
+| 1.1 | Define `BrandTree`, `BrandNode` structs | `brand_tree.rs` |
+| 1.2 | Implement prefix matching conflict judgment | `conflicts()` |
+| 1.3 | Implement brand node registration during DAG construction | Integrate into ir_gen |
+| 1.4 | Unit tests | `tests/brand_tree.rs` |
+
+### Phase 2: Consumer Analysis (RFC-009a Phase 2)
+
+| # | Task | Output |
+|---|------|--------|
+| 2.1 | Automatically collect consumer list for each token during DAG construction | `BrandNode.consumers` |
+| 2.2 | System predicate generator definition (Borrow/Move/Drop/Mut → `{P} op {Q}`) | Interface definition |
+
+### Phase 3: Reverse BFS Liveness Analysis (RFC-009a Phase 3)
+
+| # | Task | Output |
+|---|------|--------|
+| 3.1 | Implement reverse BFS algorithm (break cuts back-edges) | Fast path |
+| 3.2 | Hook into RFC-027 proof pipeline interface (Proved/Disproved) | Pipeline integration |
+| 3.3 | NLL iteration boundary rule implementation | Cross-iteration token semantics inside loops |
+| 3.4 | Replace BorrowChecker linear scan | Remove the Borrow/Release match in `check_instruction` |
+
+### Phase 4: Scope-Driven Release (RFC-009a Phases 4-5)
+
+| # | Task | Output |
+|---|------|--------|
+| 4.1 | Scope exit point collection (`}`, `?`, explicit return) | ir_gen |
+| 4.2 | LIFO Release insertion (parent-child relationships in brand tree auto-cascade) | ir_gen |
+| 4.3 | Remove hardcoded Release after Call in `ir_gen.rs` | Code cleanup |
+
+### Phase 5: SMT Logic Cutoff (RFC-009a Phase 5, depends on RFC-027 Phase 2)
+
+| # | Task | Output |
+|---|------|--------|
+| 5.1 | Path condition collection integration | Get from RFC-027 pipeline |
+| 5.2 | SMT fallback: `path_cond ⇒ !loop_cond` | Slow path |
+| 5.3 | Activate borrow checking inside while loop bodies | Currently conservatively rejected scenarios |
+
+### Phase 6: Cleanup (RFC-009a Phase 6)
+
+| # | Task | Output |
+|---|------|--------|
+| 6.1 | `BorrowChecker` → `BorrowPredicateEmitter` | Rename, clarify responsibilities |
+| 6.2 | Delete `ControlFlowAnalyzer` | Unified handling by the pipeline |
+| 6.3 | Migrate `consume_analysis.rs` consumer information into brand tree | De-duplication |
+| 6.4 | Update error message format | Align with RFC-009a §Error Message Design |
+
+---
+
+## Independent Tasks (Do not block the main track)
+
+| # | Task | Description |
+|---|------|-------------|
+| I.1 | ref escape analysis (automatic Rc vs Arc selection) | The current compiler does not distinguish between cross-task and intra-task, uses Arc uniformly |
+| I.2 | Before deleting `ControlFlowAnalyzer` in `control_flow.rs`, do not add new code to it | — |
 
 ---
 
 ## Test Coverage
 
-**83 unit tests**, distributed as follows:
+**Currently: 83 unit tests**
 
-| File | Test Count | Coverage Status |
-|------|-----------|-----------------|
-| `borrow_checker.rs` | 16 | Most thorough: unit tests + end-to-end tests |
-| `chain_calls.rs` | 13 | Thorough: chain extraction, consume pattern inference, long chains, mixed calls |
-| `consume_analysis.rs` | 11 | Thorough: Returns/Consumes patterns, caching, multiple parameters |
-| `ownership_flow.rs` | 10 | Thorough: direct return, indirect return, multiple parameters partial return |
-| `lifecycle.rs` | 10 | Thorough: creation/consumption/release tracking, issue detection |
-| `cycle_check.rs` | 8 | Good: no cycle / unidirectional chain / depth limit / unsafe bypass |
-| `intra_task_cycle.rs` | 7 | Good: no cycle / simple cycle / self-reference / multiple cycles |
-| `move_semantics.rs` | 6 | Basic: state tracking, UseAfterMove |
-| `control_flow.rs` | 1 | Insufficient: only tests the state merging function |
-| `empty_state.rs` | 1 | Insufficient: only tests state merging |
-| Others | 0 | No tests: drop_semantics, clone, mut_check, ref_semantics, unsafe_check, send_sync |
-
----
-
-## RFC Comparison (RFC-009 Ownership Model)
-
-| RFC Design Point | Implementation Status | Notes |
-|------------------|----------------------|-------|
-| Move Semantics (default) | ✅ Implemented | MoveChecker detects UseAfterMove |
-| &T/&mut T Borrow Token | ✅ Implemented | BorrowChecker implements token conflict detection |
-| &T freezes source data (ReadToken) | ✅ Implemented | WriteToken is prohibited while ReadToken is alive; safe to Dup under the freeze guarantee |
-| &mut T linear | ✅ Implemented | Only one &mut T from the same source can be active |
-| Token conflict detection (flow-sensitive liveness analysis) | ✅ Implemented | Track token state within function body |
-| ref keyword (Rc/Arc auto-selection) | ⚠️ Partially implemented | ref semantic checker exists |
-| clone() explicit deep copy | ✅ Implemented | CloneChecker detects clone of moved/dropped values |
-| unsafe + *T | ✅ Implemented | UnsafeChecker checks raw pointer operations outside unsafe block |
-| Intra-task cycle: silently allowed | ✅ Implemented | IntraTaskCycleTracker tracks in warning mode |
-| Cross-task cycle: lint | ✅ Implemented | CycleChecker detects circular references across spawn loops |
-| No lifetime 'a | ✅ Complies with design | Lifetime parameters are not implemented |
-| Send/Sync constraint | ✅ Implemented | SendSyncChecker is independent of OwnershipChecker |
+| File | Test Count | Coverage |
+|------|------------|----------|
+| `borrow_checker.rs` | 16 | Sufficient |
+| `chain_calls.rs` | 13 | Sufficient |
+| `consume_analysis.rs` | 11 | Sufficient |
+| `ownership_flow.rs` | 10 | Sufficient |
+| `lifecycle.rs` | 10 | Sufficient |
+| `cycle_check.rs` | 8 | Good |
+| `intra_task_cycle.rs` | 7 | Good |
+| `move_semantics.rs` | 6 | Basic |
+| `control_flow.rs` | 1 | Insufficient |
+| `empty_state.rs` | 1 | Insufficient |
+| Others | 0 | **Missing**: drop_semantics, clone, mut_check, ref_semantics, unsafe_check |
 
 ---
 
 ## Code Quality Assessment
 
-| Dimension | Rating | Notes |
-|-----------|--------|-------|
-| Pending items | 3 | Add tests, control_flow logic, ref escape analysis |
-| Test coverage | Good | 83 tests, borrow_checker/chain_calls/consume_analysis are thoroughly tested |
-| Documentation quality | Good | Documentation comments present at module/struct/method level |
-| Code architecture | Excellent | OwnershipChecker unified orchestration, clear separation of concerns |
-| RFC compliance | Highly compliant | RFC-009 v9 design is highly compliant |
-
----
-
-## Items to Improve
-
-1. **Add unit tests for 5 submodules**: drop_semantics, clone, mut_check, ref_semantics, unsafe_check
-2. **Implement the core logic of the control_flow analyzer** (currently an empty skeleton)
-3. **Improve ref escape analysis for automatic Rc/Arc selection**
+| Dimension | Score | Description |
+|-----------|-------|-------------|
+| Outstanding Items | 10 | Phase 0 tests (5) + Phases 1-6 architecture (6) + ref escape analysis (1) |
+| Test Coverage | To be strengthened | 5 sub-modules with 0 tests, must be filled in before refactoring |
+| Documentation Quality | Good | Module/struct/method-level documentation comments are all present |
+| Code Architecture | Transition Period | The current linear scan architecture works but does not align with RFC-009a |
