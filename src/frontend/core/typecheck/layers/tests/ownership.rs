@@ -390,7 +390,7 @@ fn test_e2e_use_after_move_detected() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let results = checker.check_module(&module, &make_test_env());
+    let (results, _plan) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results
@@ -415,7 +415,7 @@ fn test_e2e_valid_move_no_error() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let results = checker.check_module(&module, &make_test_env());
+    let (results, _plan) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results
@@ -446,7 +446,7 @@ fn test_e2e_argument_passed_to_function_is_moved() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let results = checker.check_module(&module, &make_test_env());
+    let (results, _plan) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results
@@ -489,7 +489,7 @@ fn test_e2e_borrow_conflict_detected() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let results = checker.check_module(&module, &make_test_env());
+    let (results, _plan) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let borrow_errors: Vec<_> = results
@@ -534,7 +534,7 @@ fn test_e2e_write_write_conflict_detected() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let results = checker.check_module(&module, &make_test_env());
+    let (results, _plan) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let borrow_errors: Vec<_> = results
@@ -580,7 +580,7 @@ fn test_e2e_read_read_no_conflict() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let results = checker.check_module(&module, &make_test_env());
+    let (results, _plan) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results

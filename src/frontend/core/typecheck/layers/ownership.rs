@@ -20,6 +20,16 @@ use crate::frontend::core::typecheck::proof::smt::ast::{SMTSort, SMTResult};
 use crate::frontend::core::typecheck::proof::smt::translate::translate_constraint;
 use crate::frontend::core::typecheck::proof::smt::z3_backend::Z3Backend;
 
+// ── ReleasePlan ───────────────────────────────────────────
+
+/// NLL 精确释放计划
+///
+/// key = 最后使用位置的 Span，value = 在该位置需要 Drop 的变量名列表（LIFO 顺序）
+#[derive(Debug, Clone, Default)]
+pub struct ReleasePlan {
+    pub drops: HashMap<Span, Vec<String>>,
+}
+
 // ── BrandId ───────────────────────────────────────────────
 
 /// 编译期唯一的令牌品牌标识。
@@ -666,6 +676,8 @@ pub struct OwnershipChecker {
     current_node: usize,
     /// 当前 AST 片段的源码位置（walk 过程中更新）
     current_span: Span,
+    /// CFG 节点 → 源码 Span（build_release_plan 用）
+    node_spans: HashMap<usize, Span>,
 }
 
 impl Default for OwnershipChecker {
@@ -683,6 +695,7 @@ impl OwnershipChecker {
             pending_writes: Vec::new(),
             current_node: 0,
             current_span: Span::dummy(),
+            node_spans: HashMap::new(),
         }
     }
 
@@ -692,6 +705,7 @@ impl OwnershipChecker {
         self.cfg = ControlFlowGraph::new();
         self.var_state.clear();
         self.pending_writes.clear();
+        self.node_spans.clear();
         self.current_node = self.cfg.add_node(None); // 入口节点
         self.current_span = Span::dummy();
     }
@@ -896,7 +910,7 @@ impl OwnershipChecker {
         expr: &Expr,
     ) -> Vec<ProofResult> {
         self.current_span = Self::expr_span(expr);
-        match expr {
+        let result = match expr {
             Expr::Var(name, _) => {
                 let mut results = Vec::new();
                 let check = self.check_var_read(name, self.current_span);
@@ -1028,7 +1042,9 @@ impl OwnershipChecker {
 
             // FnDef / Lambda / Spawn / Unsafe / Lit / FString 等跳过
             _ => vec![],
-        }
+        };
+        self.node_spans.insert(self.current_node, self.current_span);
+        result
     }
 
     fn walk_stmt(
@@ -1036,7 +1052,7 @@ impl OwnershipChecker {
         stmt: &Stmt,
     ) -> Vec<ProofResult> {
         self.current_span = stmt.span;
-        match &stmt.kind {
+        let result = match &stmt.kind {
             StmtKind::Expr(expr) => self.walk_expr(expr),
 
             StmtKind::Var {
@@ -1093,7 +1109,9 @@ impl OwnershipChecker {
             }
 
             _ => vec![],
-        }
+        };
+        self.node_spans.insert(self.current_node, self.current_span);
+        result
     }
 
     fn walk_stmts(
@@ -1107,13 +1125,67 @@ impl OwnershipChecker {
         results
     }
 
-    /// 检查单个函数体：重置状态 → 一趟遍历 → 排空待定写操作
+    /// 生成 NLL 精确释放计划
+    ///
+    /// 遍历 brand_tree 中所有令牌，取 max(consumers) → 最后使用节点 →
+    /// 对应 Span → 按 Span 分组，组内 LIFO 排序（子先父后）。
+    fn build_release_plan(
+        &self,
+        params: &[crate::frontend::core::parser::ast::Param],
+    ) -> ReleasePlan {
+        let param_names: HashSet<&str> = params.iter().map(|p| p.name.as_str()).collect();
+        let mut span_groups: HashMap<Span, Vec<&str>> = HashMap::new();
+
+        for node in self.brand_tree.nodes.values() {
+            if param_names.contains(node.source_var.as_str()) {
+                continue; // 参数由调用方负责释放
+            }
+            if let Some(&max_consumer) = node.consumers.iter().max() {
+                if let Some(&span) = self.node_spans.get(&max_consumer) {
+                    span_groups.entry(span).or_default().push(&node.source_var);
+                }
+            }
+        }
+
+        // 每组内去重 + LIFO 排序（子先父后）
+        let mut drops: HashMap<Span, Vec<String>> = HashMap::new();
+        for (span, vars) in span_groups {
+            let mut unique: Vec<String> = vars
+                .iter()
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .map(|s| s.to_string())
+                .collect();
+            // 按前缀关系排序：持有子令牌的变量先释放
+            unique.sort_by(|a, b| {
+                let a_is_child_of_b = self.brand_tree.nodes.values().any(|n| {
+                    n.source_var == *a
+                        && n.parent.as_ref().is_some_and(|p| {
+                            self.brand_tree
+                                .nodes
+                                .get(p)
+                                .is_some_and(|pn| pn.source_var == *b)
+                        })
+                });
+                if a_is_child_of_b {
+                    std::cmp::Ordering::Greater // a 是子 → 先释放（后排序）
+                } else {
+                    std::cmp::Ordering::Less
+                }
+            });
+            drops.insert(span, unique);
+        }
+
+        ReleasePlan { drops }
+    }
+
+    /// 检查单个函数体：重置状态 → 一趟遍历 → 排空待定写操作 → ReleasePlan
     fn check_function(
         &mut self,
         _name: &str,
         params: &[crate::frontend::core::parser::ast::Param],
         body: &[Stmt],
-    ) -> Vec<ProofResult> {
+    ) -> (Vec<ProofResult>, ReleasePlan) {
         self.reset();
 
         // 标记参数为 Alive
@@ -1136,7 +1208,8 @@ impl OwnershipChecker {
             ));
         }
 
-        results
+        let release_plan = self.build_release_plan(params);
+        (results, release_plan)
     }
 
     /// 遍历模块中的所有函数体，执行所有权检查
@@ -1144,8 +1217,9 @@ impl OwnershipChecker {
         &mut self,
         module: &Module,
         _env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
-    ) -> Vec<ProofResult> {
+    ) -> (Vec<ProofResult>, ReleasePlan) {
         let mut results = Vec::new();
+        let mut merged_drops: HashMap<Span, Vec<String>> = HashMap::new();
         for stmt in &module.items {
             if let StmtKind::Binding {
                 name,
@@ -1168,9 +1242,16 @@ impl OwnershipChecker {
                 if params.is_empty() && body.is_empty() {
                     continue;
                 }
-                results.extend(self.check_function(name, params, body));
+                let (func_results, func_plan) = self.check_function(name, params, body);
+                results.extend(func_results);
+                merged_drops.extend(func_plan.drops);
             }
         }
-        results
+        (
+            results,
+            ReleasePlan {
+                drops: merged_drops,
+            },
+        )
     }
 }

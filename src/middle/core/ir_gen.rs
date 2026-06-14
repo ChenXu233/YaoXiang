@@ -203,6 +203,8 @@ pub struct AstToIrGenerator {
     /// 函数参数类型记录（函数名 -> 参数类型列表）
     /// 用于在调用点决定是否需要发出 Borrow 指令（RFC-009 §2.8 自动借用）
     function_param_types: HashMap<String, Vec<MonoType>>,
+    /// NLL 精确释放计划（所有权检查器产出）
+    release_plan: HashMap<Span, Vec<String>>,
 }
 
 /// 绑定信息（用于 IR 生成阶段的方法调用转发）
@@ -253,6 +255,7 @@ impl AstToIrGenerator {
             constraint_var_concrete_types: HashMap::new(),
             anon_function_irs: Vec::new(),
             function_param_types: HashMap::new(),
+            release_plan: HashMap::new(),
         }
     }
 
@@ -260,6 +263,7 @@ impl AstToIrGenerator {
     pub fn new_with_type_result(type_result: &TypeCheckResult) -> Self {
         Self {
             type_result: Some(Box::new(type_result.clone())),
+            release_plan: type_result.release_plan.drops.clone(),
             ..Self::new()
         }
     }
@@ -794,6 +798,14 @@ impl AstToIrGenerator {
                 &self.symbols.len().to_string()
             );
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            // NLL Release: 在语句边界插入 Drop 指令
+            if let Some(vars) = self.release_plan.get(&stmt.span) {
+                for var in vars {
+                    if let Some(local_idx) = self.lookup_local(var) {
+                        instructions.push(Instruction::Drop(Operand::Local(local_idx)));
+                    }
+                }
+            }
             tlog!(
                 debug,
                 MSG::IrGenAfterProcessStmt,
