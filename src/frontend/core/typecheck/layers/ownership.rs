@@ -734,6 +734,42 @@ impl OwnershipChecker {
                 results
             }
 
+            Expr::Borrow { mutable, expr, .. } => {
+                let mut results = self.walk_expr(expr);
+                if let Some(var_name) = Self::extract_var_name(expr) {
+                    self.add_consumer_for_var(&var_name);
+                    let token = if *mutable {
+                        self.brand_tree.create_write_token(var_name)
+                    } else {
+                        self.brand_tree.create_read_token(var_name)
+                    };
+                    self.brand_tree.add_consumer(&token, self.current_node);
+                }
+                results
+            }
+
+            Expr::FieldAccess { expr: inner, field, .. } => {
+                let mut results = self.walk_expr(inner);
+                if let Some(var_name) = Self::extract_var_name(inner) {
+                    self.add_consumer_for_var(&var_name);
+                    let parent_ids: Vec<BrandId> = self
+                        .brand_tree
+                        .root_tokens()
+                        .iter()
+                        .filter(|id| {
+                            self.brand_tree
+                                .get(id)
+                                .is_some_and(|n| n.source_var == var_name)
+                        })
+                        .map(|id| (*id).clone())
+                        .collect();
+                    for parent_id in &parent_ids {
+                        self.brand_tree.derive_field(parent_id, field);
+                    }
+                }
+                results
+            }
+
             // 透明递归的表达式
             Expr::BinOp { left, right, .. } => {
                 let mut r = self.walk_expr(left);
@@ -751,6 +787,16 @@ impl OwnershipChecker {
                 elements.iter().flat_map(|e| self.walk_expr(e)).collect()
             }
             Expr::Try { expr: inner, .. } => self.walk_expr(inner),
+            Expr::Call { func, args, .. } => {
+                let mut results = self.walk_expr(func);
+                for arg in args {
+                    results.extend(self.walk_expr(arg));
+                    if let Some(var_name) = Self::extract_var_name(arg) {
+                        self.var_state.insert(var_name, VarState::Moved);
+                    }
+                }
+                results
+            }
             Expr::Return(Some(inner), _) => {
                 let results = self.walk_expr(inner);
                 if let Some(name) = Self::extract_var_name(inner) {
