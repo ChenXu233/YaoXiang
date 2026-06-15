@@ -56,7 +56,7 @@
         "text": "Tutorial",
         "items": [
           {
-            "text": "Tutorial Home",
+            "text": "Tutorial Index",
             "link": "/en/tutorial/"
           },
           {
@@ -70,7 +70,7 @@
         ]
       },
       {
-        "text": "Beginner Basics",
+        "text": "Getting Started",
         "collapsed": true,
         "items": []
       },
@@ -93,11 +93,11 @@
             "link": "/en/design/manifesto"
           },
           {
-            "text": "YaoXiang Manifesto WTF Version",
+            "text": "YaoXiang Manifesto WTF Edition",
             "link": "/en/design/manifesto-wtf"
           },
           {
-            "text": "Language Design View of a 2006-born Person",
+            "text": "A 2006-born Developer's Language Design Philosophy",
             "link": "/en/design/2006-born-language-design"
           }
         ]
@@ -278,11 +278,11 @@
         "text": "Errors and Warnings",
         "items": [
           {
-            "text": "Error Codes Overview",
+            "text": "Error Code Overview",
             "link": "/en/reference/error-code/"
           },
           {
-            "text": "Error Codes Classification",
+            "text": "Error Code Categories",
             "collapsed": true,
             "items": []
           },
@@ -338,14 +338,14 @@
         ]
       },
       {
-        "text": "Planning",
+        "text": "Plans",
         "items": [
           {
-            "text": "Planning Index",
+            "text": "Plans Index",
             "link": "/en/dev/plan"
           },
           {
-            "text": "Ongoing",
+            "text": "In Progress",
             "collapsed": true,
             "items": []
           },
@@ -360,7 +360,7 @@
         "text": "Roadmap",
         "items": [
           {
-            "text": "Roadmap Home",
+            "text": "Roadmap Index",
             "link": "/en/dev/plan/roadmap"
           },
           {
@@ -396,7 +396,7 @@
     ],
     "/": [
       {
-        "text": "Chinese Documentation",
+        "text": "Documentation",
         "items": [
           {
             "text": "Quick Start",
