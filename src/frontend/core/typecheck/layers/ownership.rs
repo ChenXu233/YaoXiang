@@ -652,10 +652,10 @@ use crate::frontend::core::parser::ast::{Expr, Module, Stmt, StmtKind};
 
 /// 函数内变量状态
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)] // Dropped 将在 Phase C/D Drop 语义中激活
 enum VarState {
     Alive,
     Moved,
+    /// 值已被释放（作用域退出时自动标记）
     Dropped,
 }
 
@@ -671,6 +671,8 @@ pub struct OwnershipChecker {
     brand_tree: BrandTree,
     cfg: ControlFlowGraph,
     var_state: HashMap<String, VarState>,
+    /// 变量是否声明为 mut（用于可变性违规检测）
+    var_mutability: HashMap<String, bool>,
     pending_writes: Vec<PendingWrite>,
     /// 当前 CFG 节点索引（walk 过程中推进）
     current_node: usize,
@@ -678,6 +680,12 @@ pub struct OwnershipChecker {
     current_span: Span,
     /// CFG 节点 → 源码 Span（build_release_plan 用）
     node_spans: HashMap<usize, Span>,
+    /// 作用域栈：每个元素是当前作用域内声明的变量名列表
+    /// walk_stmts 进入时 push，退出时 pop 并标记 Alive→Dropped
+    scope_vars: Vec<Vec<String>>,
+    /// 作用域退出时收集的 Drop 记录（Span, 变量名）
+    /// build_release_plan 会将这些与 BrandTree 消费者分析合并
+    scope_drops: Vec<(Span, String)>,
 }
 
 impl Default for OwnershipChecker {
@@ -692,10 +700,13 @@ impl OwnershipChecker {
             brand_tree: BrandTree::new(),
             cfg: ControlFlowGraph::new(),
             var_state: HashMap::new(),
+            var_mutability: HashMap::new(),
             pending_writes: Vec::new(),
             current_node: 0,
             current_span: Span::dummy(),
             node_spans: HashMap::new(),
+            scope_vars: Vec::new(),
+            scope_drops: Vec::new(),
         }
     }
 
@@ -704,8 +715,11 @@ impl OwnershipChecker {
         self.brand_tree = BrandTree::new();
         self.cfg = ControlFlowGraph::new();
         self.var_state.clear();
+        self.var_mutability.clear();
         self.pending_writes.clear();
         self.node_spans.clear();
+        self.scope_vars.clear();
+        self.scope_drops.clear();
         self.current_node = self.cfg.add_node(None); // 入口节点
         self.current_span = Span::dummy();
     }
@@ -881,11 +895,13 @@ impl OwnershipChecker {
     fn walk_for(
         &mut self,
         var: &str,
+        var_mut: bool,
         iterable: &Expr,
         body: &[Stmt],
     ) -> Vec<ProofResult> {
         let mut results = self.walk_expr(iterable);
         self.var_state.insert(var.to_string(), VarState::Alive);
+        self.var_mutability.insert(var.to_string(), var_mut);
 
         let head_node = self.cfg.add_node(None);
         self.cfg
@@ -931,6 +947,15 @@ impl OwnershipChecker {
                     }
                     self.add_consumer_for_var(&var_name);
 
+                    // 可变性检查：&mut 要求变量声明为 mut
+                    if *mutable {
+                        let is_mut = self.var_mutability.get(&var_name).copied().unwrap_or(true);
+                        if !is_mut {
+                            results.push(emit_mut_predicate(&var_name, false, self.current_span));
+                            return results; // 不创建 WriteToken，避免级联误报
+                        }
+                    }
+
                     let token = if *mutable {
                         self.brand_tree.create_write_token(var_name)
                     } else {
@@ -974,11 +999,45 @@ impl OwnershipChecker {
                 results
             }
 
-            // 透明递归的表达式
-            Expr::BinOp { left, right, .. } => {
-                let mut r = self.walk_expr(left);
-                r.extend(self.walk_expr(right));
-                r
+            // Assign 需检查目标变量可变性（仅对已声明变量的重赋值）
+            // 注：保持 walk left→right 顺序以兼容现有 var_state 时序
+            // Assign 需检查目标变量可变性（仅对已声明变量的重赋值）
+            // 注：保持 walk left→right 顺序以兼容现有 var_state 时序
+            Expr::BinOp {
+                op, left, right, ..
+            } => {
+                if *op == crate::frontend::core::parser::ast::BinOp::Assign {
+                    if let Expr::Var(name, _) = left.as_ref() {
+                        // 仅在变量已存在且已记录可变性时检查（重赋值场景）
+                        if let Some(&is_mut) = self.var_mutability.get(name) {
+                            let mut r = self.walk_expr(left);
+                            r.extend(self.walk_expr(right));
+                            if !is_mut {
+                                r.push(emit_mut_predicate(name, false, self.current_span));
+                            }
+                            self.add_consumer_for_var(name);
+                            r
+                        } else {
+                            // 变量未在 var_mutability 中 → 首次声明（非 StmtKind::Var 路径）
+                            let mut r = self.walk_expr(right);
+                            r.extend(self.walk_expr(left));
+                            self.var_state.insert(name.clone(), VarState::Alive);
+                            self.var_mutability.insert(name.clone(), false);
+                            if let Some(scope) = self.scope_vars.last_mut() {
+                                scope.push(name.clone());
+                            }
+                            r
+                        }
+                    } else {
+                        let mut r = self.walk_expr(left);
+                        r.extend(self.walk_expr(right));
+                        r
+                    }
+                } else {
+                    let mut r = self.walk_expr(left);
+                    r.extend(self.walk_expr(right));
+                    r
+                }
             }
             Expr::UnOp { expr: inner, .. } => self.walk_expr(inner),
             Expr::Cast { expr: inner, .. } => self.walk_expr(inner),
@@ -1035,10 +1094,11 @@ impl OwnershipChecker {
 
             Expr::For {
                 var,
+                var_mut,
                 iterable,
                 body,
                 ..
-            } => self.walk_for(var, iterable, &body.stmts),
+            } => self.walk_for(var, *var_mut, iterable, &body.stmts),
 
             // FnDef / Lambda / Spawn / Unsafe / Lit / FString 等跳过
             _ => vec![],
@@ -1056,12 +1116,39 @@ impl OwnershipChecker {
             StmtKind::Expr(expr) => self.walk_expr(expr),
 
             StmtKind::Var {
-                name, initializer, ..
+                name,
+                initializer,
+                is_mut,
+                ..
             } => {
                 let mut results = Vec::new();
+                let is_new = !self.var_state.contains_key(name);
                 self.var_state.insert(name.clone(), VarState::Alive);
+                self.var_mutability.insert(name.clone(), *is_mut);
+                // 仅新声明的变量加入作用域（重赋值不重复注册，避免内层作用域错误 Drop）
+                if is_new {
+                    if let Some(scope) = self.scope_vars.last_mut() {
+                        scope.push(name.clone());
+                    }
+                }
 
                 if let Some(init) = initializer {
+                    // 检测解析器回退 artifact：init 是 BinOp::Assign(Var(name), rhs)
+                    // 此时只 walk rhs（真正的值），避免把声明误判为重赋值
+                    if let Expr::BinOp {
+                        op: crate::frontend::core::parser::ast::BinOp::Assign,
+                        left,
+                        right,
+                        ..
+                    } = init.as_ref()
+                    {
+                        if let Expr::Var(assigned_name, _) = left.as_ref() {
+                            if assigned_name == name {
+                                results.extend(self.walk_expr(right));
+                                return results;
+                            }
+                        }
+                    }
                     results.extend(self.walk_expr(init));
                     // 只有直接传变量才标记 Move（字段访问或借用不转移所有权）
                     if let Expr::Var(src_name, _) = init.as_ref() {
@@ -1097,10 +1184,11 @@ impl OwnershipChecker {
 
             StmtKind::For {
                 var,
+                var_mut,
                 iterable,
                 body,
                 ..
-            } => self.walk_for(var, iterable, &body.stmts),
+            } => self.walk_for(var, *var_mut, iterable, &body.stmts),
 
             StmtKind::Binding { .. } => {
                 // 嵌套函数：独立作用域，跳过（由 check_module 递归检查每层）
@@ -1118,17 +1206,29 @@ impl OwnershipChecker {
         &mut self,
         stmts: &[Stmt],
     ) -> Vec<ProofResult> {
+        self.scope_vars.push(Vec::new());
         let mut results = Vec::new();
         for stmt in stmts {
             results.extend(self.walk_stmt(stmt));
+        }
+        // 作用域退出：将本作用域内声明且仍 Alive 的变量标记为 Dropped
+        if let Some(scope) = self.scope_vars.pop() {
+            for var in &scope {
+                if self.var_state.get(var) == Some(&VarState::Alive) {
+                    self.var_state.insert(var.clone(), VarState::Dropped);
+                    self.scope_drops.push((self.current_span, var.clone()));
+                }
+            }
         }
         results
     }
 
     /// 生成 NLL 精确释放计划
     ///
-    /// 遍历 brand_tree 中所有令牌，取 max(consumers) → 最后使用节点 →
-    /// 对应 Span → 按 Span 分组，组内 LIFO 排序（子先父后）。
+    /// 两源合并：
+    /// 1. BrandTree 令牌消费者分析（借用变量的最后使用点）
+    /// 2. 作用域退出收集的 Drop 记录（非借用变量的作用域结束点）
+    /// 结果按 Span 分组，组内 LIFO 排序（子先父后）。
     fn build_release_plan(
         &self,
         params: &[crate::frontend::core::parser::ast::Param],
@@ -1136,6 +1236,7 @@ impl OwnershipChecker {
         let param_names: HashSet<&str> = params.iter().map(|p| p.name.as_str()).collect();
         let mut span_groups: HashMap<Span, Vec<&str>> = HashMap::new();
 
+        // 源 1：BrandTree 令牌消费者
         for node in self.brand_tree.nodes.values() {
             if param_names.contains(node.source_var.as_str()) {
                 continue; // 参数由调用方负责释放
@@ -1144,6 +1245,13 @@ impl OwnershipChecker {
                 if let Some(&span) = self.node_spans.get(&max_consumer) {
                     span_groups.entry(span).or_default().push(&node.source_var);
                 }
+            }
+        }
+
+        // 源 2：作用域退出 Drop 记录（覆盖非借用变量）
+        for (span, var) in &self.scope_drops {
+            if !param_names.contains(var.as_str()) {
+                span_groups.entry(*span).or_default().push(var);
             }
         }
 
@@ -1188,9 +1296,10 @@ impl OwnershipChecker {
     ) -> (Vec<ProofResult>, ReleasePlan) {
         self.reset();
 
-        // 标记参数为 Alive
+        // 标记参数为 Alive，记录可变性
         for param in params {
             self.var_state.insert(param.name.clone(), VarState::Alive);
+            self.var_mutability.insert(param.name.clone(), param.is_mut);
         }
 
         // 一趟遍历：构建 CFG + 前向检查 + 收集待定写操作
