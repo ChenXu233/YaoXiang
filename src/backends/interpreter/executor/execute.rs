@@ -58,9 +58,9 @@ impl Executor for Interpreter {
                 let result = self.execute_function(entry_func, &[])?;
                 // Print result if not unit
                 if !matches!(result, RuntimeValue::Unit) {
-                    #[cfg(not(feature = "wasm"))]
+                    #[cfg(not(target_arch = "wasm32"))]
                     tracing::info!("{}", result);
-                    #[cfg(feature = "wasm")]
+                    #[cfg(target_arch = "wasm32")]
                     {
                         let output = format!("{}", result);
                         crate::std::io::wasm_output::write(output.as_bytes());

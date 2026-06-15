@@ -14,7 +14,16 @@ fn main() {
     let _target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
     if target_arch == "wasm32" {
-        println!("cargo:warning=Skipping Z3 for wasm target");
+        // wasm 不自动下载（没有预编译 wasm 二进制），但查找本地预编译的 libz3.a
+        let manifest = env::var("CARGO_MANIFEST_DIR").unwrap();
+        let z3_root = Path::new(&manifest).join(".z3");
+        let local = find_local_z3_wasm(&z3_root);
+        if let Some(ref dir) = local {
+            println!("cargo:warning=Linking Z3 wasm from {:?}", dir);
+            link_z3_wasm(dir);
+            return;
+        }
+        println!("cargo:warning=No precompiled Z3 wasm found in .z3/, Z3 features disabled");
         return;
     }
 
@@ -218,4 +227,27 @@ fn extract(
         Ok(s) if s.success() => {}
         _ => panic!("Failed to extract Z3 archive"),
     }
+}
+
+/// 查找 .z3/ 目录下的 wasm 预编译 Z3
+fn find_local_z3_wasm(z3_root: &Path) -> Option<std::path::PathBuf> {
+    if !z3_root.exists() {
+        return None;
+    }
+    for entry in fs::read_dir(z3_root).ok()? {
+        let entry = entry.ok()?;
+        let path = entry.path();
+        // 检查 lib/libz3.a 是否存在
+        if path.join("lib").join("libz3.a").exists() {
+            return Some(path);
+        }
+    }
+    None
+}
+
+/// 链接 wasm 预编译的 Z3（Emscripten 产出的 .a 文件）
+fn link_z3_wasm(z3_dir: &Path) {
+    let lib_dir = z3_dir.join("lib");
+    println!("cargo:rustc-link-search=native={}", lib_dir.display());
+    println!("cargo:rustc-link-lib=static=z3");
 }
