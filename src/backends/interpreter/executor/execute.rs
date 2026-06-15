@@ -871,6 +871,15 @@ impl Executor for Interpreter {
                     frame.set_register(dst.0 as usize, val.into_arc());
                     frame.advance();
                 }
+                BytecodeInstr::RcNew { dst, src } => {
+                    let val = frame
+                        .registers
+                        .get(src.0 as usize)
+                        .cloned()
+                        .unwrap_or(RuntimeValue::Unit);
+                    frame.set_register(dst.0 as usize, val.into_arc());
+                    frame.advance();
+                }
                 BytecodeInstr::ArcClone { dst, src } => {
                     let val = frame
                         .registers
