@@ -734,6 +734,12 @@ pub struct OwnershipChecker {
     captures_store: CapturesStore,
     /// 类型环境引用（用裸指针避免生命周期重写；env 生命周期 > checker）
     env: Option<*const crate::frontend::core::typecheck::environment::TypeEnvironment>,
+    /// ref 创建的变量（Expr::Ref 的赋值目标）
+    ref_vars: HashSet<String>,
+    /// spawn 体内使用的 ref 变量（逃逸 → 选 Arc）
+    escaped_refs: HashSet<String>,
+    /// 当前是否在 spawn 体内
+    inside_spawn: bool,
 }
 
 impl Default for OwnershipChecker {
@@ -757,6 +763,9 @@ impl OwnershipChecker {
             scope_drops: Vec::new(),
             captures_store: CapturesStore::new(),
             env: None,
+            ref_vars: HashSet::new(),
+            escaped_refs: HashSet::new(),
+            inside_spawn: false,
         }
     }
 
@@ -771,6 +780,9 @@ impl OwnershipChecker {
         self.scope_vars.clear();
         self.scope_drops.clear();
         self.captures_store.clear();
+        self.ref_vars.clear();
+        self.escaped_refs.clear();
+        self.inside_spawn = false;
         self.current_node = self.cfg.add_node(None); // 入口节点
         self.current_span = Span::dummy();
     }
@@ -1154,6 +1166,10 @@ impl OwnershipChecker {
                 if !check.is_proved() {
                     results.push(check);
                 }
+                // spawn 体内使用 ref 变量 → 标记逃逸
+                if self.inside_spawn && self.ref_vars.contains(name) {
+                    self.escaped_refs.insert(name.clone());
+                }
                 self.add_consumer_for_var(name);
                 results
             }
@@ -1342,7 +1358,28 @@ impl OwnershipChecker {
                 ..
             } => self.walk_for(var, *var_mut, iterable, &body.stmts),
 
-            // FnDef / Lambda / Spawn / Unsafe / Lit / FString 等跳过
+            Expr::Spawn { body, .. } => {
+                let was_spawn = self.inside_spawn;
+                self.inside_spawn = true;
+                // spawn 体不立即执行——save/restore 防止影响外层状态
+                let snapshot = self.save_state();
+                let results = self.walk_stmts(&body.stmts);
+                self.restore_state(snapshot);
+                self.inside_spawn = was_spawn;
+                results
+            }
+
+            Expr::SpawnFor { body, .. } => {
+                let was_spawn = self.inside_spawn;
+                self.inside_spawn = true;
+                let snapshot = self.save_state();
+                let results = self.walk_stmts(&body.stmts);
+                self.restore_state(snapshot);
+                self.inside_spawn = was_spawn;
+                results
+            }
+
+            // FnDef / Lambda / Unsafe / Lit / FString 等跳过
             _ => vec![],
         };
         self.node_spans.insert(self.current_node, self.current_span);
@@ -1371,6 +1408,13 @@ impl OwnershipChecker {
                 if is_new {
                     if let Some(scope) = self.scope_vars.last_mut() {
                         scope.push(name.clone());
+                    }
+                }
+
+                // 检测 ref x 声明
+                if let Some(init) = initializer {
+                    if matches!(init.as_ref(), Expr::Ref { .. }) {
+                        self.ref_vars.insert(name.clone());
                     }
                 }
 
@@ -1550,7 +1594,7 @@ impl OwnershipChecker {
         params: &[crate::frontend::core::parser::ast::Param],
         body: &[Stmt],
         env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
-    ) -> (Vec<ProofResult>, ReleasePlan) {
+    ) -> (Vec<ProofResult>, ReleasePlan, HashSet<String>) {
         self.reset();
 
         // 设置类型环境引用（供 walk_expr 使用）
@@ -1578,7 +1622,8 @@ impl OwnershipChecker {
         }
 
         let release_plan = self.build_release_plan(params);
-        (results, release_plan)
+        let escaped = std::mem::take(&mut self.escaped_refs);
+        (results, release_plan, escaped)
     }
 
     /// 遍历模块中的所有函数体，执行所有权检查
@@ -1586,9 +1631,10 @@ impl OwnershipChecker {
         &mut self,
         module: &Module,
         _env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
-    ) -> (Vec<ProofResult>, ReleasePlan) {
+    ) -> (Vec<ProofResult>, ReleasePlan, HashSet<String>) {
         let mut results = Vec::new();
         let mut merged_drops: HashMap<Span, Vec<String>> = HashMap::new();
+        let mut merged_escaped: HashSet<String> = HashSet::new();
         for stmt in &module.items {
             if let StmtKind::Binding {
                 name,
@@ -1611,9 +1657,10 @@ impl OwnershipChecker {
                 if params.is_empty() && body.is_empty() {
                     continue;
                 }
-                let (func_results, func_plan) = self.check_function(name, params, body, _env);
+                let (func_results, func_plan, escaped) = self.check_function(name, params, body, _env);
                 results.extend(func_results);
                 merged_drops.extend(func_plan.drops);
+                merged_escaped.extend(escaped);
             }
         }
         (
@@ -1621,6 +1668,7 @@ impl OwnershipChecker {
             ReleasePlan {
                 drops: merged_drops,
             },
+            merged_escaped,
         )
     }
 }
