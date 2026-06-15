@@ -21,10 +21,10 @@
       "link": "/ja/reference/"
     },
     {
-      "text": "その他",
+      "text": "更多",
       "items": [
         {
-          "text": "デザイン",
+          "text": "設計",
           "link": "/ja/design/"
         },
         {
@@ -48,6 +48,9 @@
           "link": "/ja/blog/"
         }
       ]
+    },
+    {
+      "component": "VersionSwitcher"
     }
   ],
   "sidebar": {
@@ -56,7 +59,7 @@
         "text": "チュートリアル",
         "items": [
           {
-            "text": "チュートリアルトップ",
+            "text": "チュートリアルTOP",
             "link": "/ja/tutorial/"
           },
           {
@@ -70,7 +73,7 @@
         ]
       },
       {
-        "text": "初心者向け入門",
+        "text": "零基礎入門",
         "collapsed": true,
         "items": []
       },
@@ -82,10 +85,10 @@
     ],
     "/ja/design/": [
       {
-        "text": "デザインドキュメント",
+        "text": "設計ドキュメント",
         "items": [
           {
-            "text": "デザインインデックス",
+            "text": "設計ディレクトリ",
             "link": "/ja/design"
           },
           {
@@ -106,7 +109,7 @@
         "text": "RFCドキュメント",
         "items": [
           {
-            "text": "RFCインデックス",
+            "text": "RFCディレクトリ",
             "link": "/ja/design/rfc"
           },
           {
@@ -145,7 +148,7 @@
         ]
       },
       {
-        "text": "ツールデザイン",
+        "text": "ツール設計",
         "collapsed": true,
         "items": [
           {
@@ -157,7 +160,7 @@
             "link": "/ja/design/check/diagnostic-system"
           },
           {
-            "text": "ファイル間分析",
+            "text": "クロスファイル分析",
             "link": "/ja/design/check/cross-file-analysis"
           },
           {
@@ -167,11 +170,11 @@
         ]
       },
       {
-        "text": "フォーマット仕様",
+        "text": "フォーマットの仕様",
         "collapsed": true,
         "items": [
           {
-            "text": "仕様概要",
+            "text": "仕様総覧",
             "link": "/ja/design/formatter/"
           },
           {
@@ -179,7 +182,7 @@
             "collapsed": true,
             "items": [
               {
-                "text": "ルール概要",
+                "text": "ルール総覧",
                 "link": "/ja/design/formatter/formatting-rules/"
               },
               {
@@ -232,11 +235,11 @@
         "text": "言語仕様",
         "items": [
           {
-            "text": "リファレンスインデックス",
+            "text": "リファレンスディレクトリ",
             "link": "/ja/reference"
           },
           {
-            "text": "言語仕様概要",
+            "text": "言語仕様総覧",
             "link": "/ja/reference/language-spec/"
           },
           {
@@ -269,7 +272,7 @@
         "text": "標準ライブラリ",
         "items": [
           {
-            "text": "標準ライブラリ概要",
+            "text": "標準ライブラリ総覧",
             "link": "/ja/reference/stdlib/"
           }
         ]
@@ -278,7 +281,7 @@
         "text": "エラーと警告",
         "items": [
           {
-            "text": "エラーコード概要",
+            "text": "エラーコード総覧",
             "link": "/ja/reference/error-code/"
           },
           {
@@ -312,7 +315,7 @@
         "text": "開発ドキュメント",
         "items": [
           {
-            "text": "開発インデックス",
+            "text": "開発ディレクトリ",
             "link": "/ja/dev/"
           },
           {
@@ -328,7 +331,7 @@
             "link": "/ja/dev/branch-maintenance-guide"
           },
           {
-            "text": "リリースプロセス",
+            "text": "リリースフロー",
             "link": "/ja/dev/release"
           },
           {
@@ -341,7 +344,7 @@
         "text": "計画",
         "items": [
           {
-            "text": "計画インデックス",
+            "text": "計画ディレクトリ",
             "link": "/ja/dev/plan"
           },
           {
@@ -360,7 +363,7 @@
         "text": "ロードマップ",
         "items": [
           {
-            "text": "ロードマップトップ",
+            "text": "ロードマップTOP",
             "link": "/ja/dev/plan/roadmap"
           },
           {
@@ -376,7 +379,7 @@
         "text": "ガイド",
         "items": [
           {
-            "text": "ガイドインデックス",
+            "text": "ガイドディレクトリ",
             "link": "/ja/guide/"
           },
           {
