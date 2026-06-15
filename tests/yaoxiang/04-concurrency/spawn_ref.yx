@@ -9,9 +9,8 @@ main = {
     shared = ref data       // 编译器自动选 Rc 或 Arc
 
     result = spawn {
-        a = shared          // 共享引用
-        b = shared          // 共享引用（ref 是 Dup）
-        return (a, b)
+        a = shared          // shared move → a
+        return a            // a move → return
     }
     io.println(result)
     io.println("ALL TESTS PASSED")
