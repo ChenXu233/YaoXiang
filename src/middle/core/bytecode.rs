@@ -333,6 +333,10 @@ pub enum BytecodeInstr {
         dst: Reg,
         src: Reg,
     },
+    RcNew {
+        dst: Reg,
+        src: Reg,
+    },
     ArcClone {
         dst: Reg,
         src: Reg,
@@ -547,6 +551,7 @@ impl BytecodeInstr {
             BytecodeInstr::CreateStruct { .. } => Opcode::CreateStruct,
             BytecodeInstr::NewDict { .. } => Opcode::NewDict,
             BytecodeInstr::ArcNew { .. } => Opcode::ArcNew,
+            BytecodeInstr::RcNew { .. } => Opcode::RcNew,
             BytecodeInstr::ArcClone { .. } => Opcode::ArcClone,
             BytecodeInstr::ArcDrop { .. } => Opcode::ArcDrop,
             BytecodeInstr::WeakNew { .. } => Opcode::WeakNew,
@@ -657,6 +662,7 @@ impl BytecodeInstr {
                 6 + keys.len() * 4
             }
             BytecodeInstr::ArcNew { .. } => 4,
+            BytecodeInstr::RcNew { .. } => 4,
             BytecodeInstr::ArcClone { .. } => 4,
             BytecodeInstr::ArcDrop { .. } => 2,
             BytecodeInstr::WeakNew { .. } => 4,

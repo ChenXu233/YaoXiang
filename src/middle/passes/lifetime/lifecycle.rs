@@ -378,6 +378,11 @@ impl LifecycleTracker {
                 self.record_read(src, location);
                 self.record_creation(dst, location);
             }
+            // RcNew: 同 ArcNew 语义，dst 被创建，src 被读取
+            Instruction::RcNew { dst, src } => {
+                self.record_read(src, location);
+                self.record_creation(dst, location);
+            }
             // Dup/Swap/Yield: 无生命周期影响
             Instruction::Dup | Instruction::Swap | Instruction::Yield => {}
             // Jump: 无生命周期影响

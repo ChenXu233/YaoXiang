@@ -428,6 +428,11 @@ impl InstantiationGraph {
                 self.extract_type_from_operand(dst, params, locals, deps);
                 self.extract_type_from_operand(src, params, locals, deps);
             }
+            // Rc new
+            Instruction::RcNew { dst, src } => {
+                self.extract_type_from_operand(dst, params, locals, deps);
+                self.extract_type_from_operand(src, params, locals, deps);
+            }
             // Arc clone
             Instruction::ArcClone { dst, src } => {
                 self.extract_type_from_operand(dst, params, locals, deps);

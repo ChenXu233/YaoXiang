@@ -297,6 +297,11 @@ pub enum Instruction {
         dst: Operand,
         src: Operand,
     },
+    /// Create Rc (non-atomic reference count = 1)
+    RcNew {
+        dst: Operand,
+        src: Operand,
+    },
     /// Clone Arc (atomic reference count + 1)
     ArcClone {
         dst: Operand,

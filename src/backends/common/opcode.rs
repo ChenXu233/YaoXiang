@@ -241,6 +241,9 @@ pub enum Opcode {
     /// Create dict instance
     NewDict = 0x88,
 
+    /// Create Rc (non-atomic reference count)
+    RcNew = 0x89,
+
     // =====================
     // String Operations (0x90-0x9F)
     // =====================
@@ -380,6 +383,7 @@ impl Opcode {
             Opcode::NewListWithCap => "NewListWithCap",
             Opcode::CreateStruct => "CreateStruct",
             Opcode::ArcNew => "ArcNew",
+            Opcode::RcNew => "RcNew",
             Opcode::ArcClone => "ArcClone",
             Opcode::ArcDrop => "ArcDrop",
             Opcode::WeakNew => "WeakNew",
@@ -693,6 +697,7 @@ impl TryFrom<u8> for Opcode {
             0x86 => Ok(Opcode::CloseUpvalue),
             0x87 => Ok(Opcode::CallNative),
             0x88 => Ok(Opcode::NewDict),
+            0x89 => Ok(Opcode::RcNew),
             0x90 => Ok(Opcode::StringLength),
             0x91 => Ok(Opcode::StringConcat),
             0x92 => Ok(Opcode::StringEqual),

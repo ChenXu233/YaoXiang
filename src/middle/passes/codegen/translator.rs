@@ -362,6 +362,7 @@ impl Translator {
             Swap => Ok(BytecodeInstruction::new(Opcode::Nop, vec![])),
 
             ArcNew { dst, src } => self.translate_arc_new(dst, src),
+            RcNew { dst, src } => self.translate_rc_new(dst, src),
             ArcClone { dst, src } => self.translate_arc_clone(dst, src),
             ArcDrop(operand) => self.translate_arc_drop(operand),
             ShareRef { dst, src } => self.translate_share_ref(dst, src),
@@ -1001,6 +1002,19 @@ impl Translator {
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
             Opcode::ArcNew,
+            vec![dst_reg, src_reg],
+        ))
+    }
+
+    fn translate_rc_new(
+        &mut self,
+        dst: &Operand,
+        src: &Operand,
+    ) -> Result<BytecodeInstruction, Diagnostic> {
+        let dst_reg = self.operand_resolver.to_reg(dst)?;
+        let src_reg = self.operand_resolver.to_reg(src)?;
+        Ok(BytecodeInstruction::new(
+            Opcode::RcNew,
             vec![dst_reg, src_reg],
         ))
     }
