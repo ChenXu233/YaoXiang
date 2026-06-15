@@ -63,6 +63,7 @@ struct StateSnapshot {
     var_state: HashMap<String, VarState>,
     brand_nodes_count: usize,
     scope_vars_len: usize,
+    scope_drops_len: usize,
 }
 
 // ── BrandId ───────────────────────────────────────────────
@@ -785,6 +786,7 @@ impl OwnershipChecker {
             var_state: self.var_state.clone(),
             brand_nodes_count: self.brand_tree.nodes.len(),
             scope_vars_len: self.scope_vars.len(),
+            scope_drops_len: self.scope_drops.len(),
         }
     }
 
@@ -803,6 +805,10 @@ impl OwnershipChecker {
         while self.scope_vars.len() > snapshot.scope_vars_len {
             self.scope_vars.pop();
         }
+        // 回退 scope_drops：截断闭包体 walk 产生的 Drop 记录
+        self.scope_drops.truncate(snapshot.scope_drops_len);
+        // 清除闭包体 walk 产生的待定写操作（令牌已被 restore 删除）
+        self.pending_writes.clear();
     }
 
     /// 对比当前状态和快照，提取闭包的捕获变量
