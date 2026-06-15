@@ -11,6 +11,10 @@ on:
         description: 'Artifact retention days'
         type: number
         default: 7
+      z3-version:
+        description: 'Z3 version for wasm linking'
+        type: string
+        default: '4.16.0'
     outputs:
       artifact-name:
         description: 'Name of the uploaded artifact'
@@ -36,6 +40,21 @@ jobs:
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
+      - name: Download Z3 wasm
+        uses: actions/download-artifact@v4
+        with:
+          name: z3-wasm-${{ inputs.z3-version }}
+          path: .z3/z3-${{ inputs.z3-version }}-wasm
+        continue-on-error: true
+
+      - name: Verify Z3 wasm
+        run: |
+          if [ -f ".z3/z3-${{ inputs.z3-version }}-wasm/lib/libz3.a" ]; then
+            echo "Z3 wasm found, linking enabled"
+          else
+            echo "Z3 wasm not found, Z3 features disabled"
+          fi
+
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -49,7 +68,7 @@ jobs:
             wasm-cargo-
 
       - name: Build Wasm
-        run: wasm-pack build --target web --no-default-features --features wasm
+        run: wasm-pack build --target web --no-default-features
 
       - name: Upload wasm artifact
         uses: actions/upload-artifact@v4

@@ -302,7 +302,8 @@ impl TypeChecker {
         // 分析借用令牌冲突、Move/Drop/Clone/Mut 语义（RFC-009a §系统谓词清单）
         let (release_plan, escaped_refs) = {
             let mut ownership_checker = super::layers::ownership::OwnershipChecker::new();
-            let (ownership_results, plan, escaped_refs) = ownership_checker.check_module(module, self.env());
+            let (ownership_results, plan, escaped_refs) =
+                ownership_checker.check_module(module, self.env());
             for result in ownership_results {
                 match result {
                     ProofResult::Proved => {}

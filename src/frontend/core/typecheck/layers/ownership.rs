@@ -18,7 +18,7 @@ use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
 use crate::frontend::core::types::const_data::ConstValue;
 use crate::frontend::core::typecheck::proof::smt::ast::{SMTSort, SMTResult};
 use crate::frontend::core::typecheck::proof::smt::translate::translate_constraint;
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 use crate::frontend::core::typecheck::proof::smt::z3_backend::Z3Backend;
 
 // ── ReleasePlan ───────────────────────────────────────────
@@ -529,10 +529,10 @@ fn smt_cut(
     _loop_cond: &str,
 ) -> bool {
     // wasm 模式下 Z3 不可用，保守不切断
-    #[cfg(feature = "wasm")]
+    #[cfg(target_arch = "wasm32")]
     return false;
 
-    #[cfg(not(feature = "wasm"))]
+    #[cfg(not(target_arch = "wasm32"))]
     {
         let constraint = ConstExpr::UnOp {
             op: UnOp::Not,
@@ -567,7 +567,7 @@ fn smt_cut(
         };
 
         matches!(backend.solve(&commands, 100), SMTResult::Unsat)
-    } // cfg(not(feature = "wasm"))
+    } // cfg(not(target_arch = "wasm32"))
 }
 
 // ── 系统谓词生成器（RFC-009a §系统谓词清单） ────────────
