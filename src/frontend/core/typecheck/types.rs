@@ -2,7 +2,7 @@
 //!
 //! 包含类型检查的返回值和相关类型定义
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::PolyType;
@@ -29,6 +29,8 @@ pub struct TypeCheckResult {
     pub proof_calls: Vec<ProofFunctionCall>,
     /// NLL 精确释放计划（所有权检查阶段产出 → IR 生成阶段消费）
     pub release_plan: crate::frontend::core::typecheck::layers::ownership::ReleasePlan,
+    /// ref 逃逸分析结果（跨 spawn 使用的 ref 变量 → 选 Arc）
+    pub escaped_refs: HashSet<String>,
 }
 
 /// 导入信息

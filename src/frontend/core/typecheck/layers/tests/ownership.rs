@@ -429,7 +429,7 @@ fn test_e2e_use_after_move_detected() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results
@@ -454,7 +454,7 @@ fn test_e2e_valid_move_no_error() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results
@@ -485,7 +485,7 @@ fn test_e2e_argument_passed_to_function_is_moved() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results
@@ -528,7 +528,7 @@ fn test_e2e_borrow_conflict_detected() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let borrow_errors: Vec<_> = results
@@ -573,7 +573,7 @@ fn test_e2e_write_write_conflict_detected() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let borrow_errors: Vec<_> = results
@@ -619,7 +619,7 @@ fn test_e2e_read_read_no_conflict() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results
@@ -657,7 +657,7 @@ fn test_e2e_mut_borrow_on_non_mut_var() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let mut_errors: Vec<_> = results
@@ -695,7 +695,7 @@ fn test_e2e_mut_borrow_on_mut_var() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results
@@ -729,7 +729,7 @@ fn test_e2e_assign_to_non_mut_var() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let mut_errors: Vec<_> = results
@@ -765,7 +765,7 @@ fn test_e2e_assign_to_mut_var() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results
@@ -798,7 +798,7 @@ fn test_e2e_non_mut_param_borrow_mut() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let mut_errors: Vec<_> = results
@@ -831,7 +831,7 @@ fn test_drop_at_scope_exit_via_release_plan() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, plan) = checker.check_module(&module, &make_test_env());
+    let (results, plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results
@@ -870,7 +870,7 @@ fn test_drop_in_nested_block() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, plan) = checker.check_module(&module, &make_test_env());
+    let (results, plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results
@@ -916,7 +916,7 @@ fn test_e2e_move_then_borrow_rejected() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert: x 已被 move，再借用应报 use after move
     let errors: Vec<_> = results
@@ -968,7 +968,7 @@ fn test_e2e_borrow_in_if_both_branches() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert: 保守检测到冲突（已知限制）
     let borrow_errors: Vec<_> = results
@@ -1031,7 +1031,7 @@ fn test_e2e_borrow_in_while_body() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert: 每次迭代新作用域，借用不应冲突
     let errors: Vec<_> = results
@@ -1064,7 +1064,7 @@ fn test_e2e_drop_release_plan_multiple_vars() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, plan) = checker.check_module(&module, &make_test_env());
+    let (results, plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results
@@ -1103,7 +1103,7 @@ fn test_e2e_return_moved_value() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results
@@ -1136,7 +1136,7 @@ fn test_e2e_use_after_return_rejected() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results
@@ -1189,7 +1189,7 @@ fn test_e2e_three_read_borrows_no_conflict() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results
@@ -1233,7 +1233,7 @@ fn test_e2e_read_then_write_conflict() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let borrow_errors: Vec<_> = results
@@ -1270,7 +1270,7 @@ fn test_e2e_block_expression_variable_scope() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, plan) = checker.check_module(&module, &make_test_env());
+    let (results, plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results
@@ -1301,7 +1301,7 @@ fn test_e2e_sequential_moves() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert: 无错误（x→y→z，每次都是正常 Move）
     let errors: Vec<_> = results
@@ -1331,7 +1331,7 @@ fn test_e2e_double_move_rejected() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results
@@ -1364,7 +1364,7 @@ fn test_e2e_param_move_and_use_rejected() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results
@@ -1389,7 +1389,7 @@ fn test_e2e_param_not_in_release_plan() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, plan) = checker.check_module(&module, &make_test_env());
+    let (results, plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // Assert
     let errors: Vec<_> = results
@@ -1423,7 +1423,7 @@ fn test_e2e_closure_move_capture_use_after_call() {
     )]);
 
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     let errors: Vec<_> = results
         .iter()
@@ -1451,7 +1451,7 @@ fn test_e2e_closure_move_capture_before_call() {
     )]);
 
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     let errors: Vec<_> = results
         .iter()
@@ -1480,7 +1480,7 @@ fn test_e2e_closure_read_capture() {
     )]);
 
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     let errors: Vec<_> = results
         .iter()
@@ -1514,7 +1514,7 @@ fn test_e2e_closure_no_capture() {
     )]);
 
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     let errors: Vec<_> = results
         .iter()
@@ -1543,7 +1543,7 @@ fn test_e2e_closure_move_second_call_rejected() {
     )]);
 
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     let errors: Vec<_> = results
         .iter()
@@ -1572,7 +1572,7 @@ fn test_e2e_call_unknown_function_moves_args() {
     )]);
 
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     let errors: Vec<_> = results
         .iter()
@@ -1602,7 +1602,7 @@ fn test_e2e_call_ref_param_does_not_move() {
     )]);
 
     let mut checker = OwnershipChecker::new();
-    let (results, _plan) = checker.check_module(&module, &make_test_env());
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
     // 当前：print 未在 test TypeEnvironment 中注册 → 回退 Move → use after move
     // 当 TypeEnvironment 配备函数签名后更新此断言
@@ -1614,4 +1614,138 @@ fn test_e2e_call_ref_param_does_not_move() {
         })
         .collect();
     assert!(!errors.is_empty(), "未注册的 print 应回退 Move 语义");
+}
+
+// ── E2E ref 逃逸分析测试 ──────────────────────────────────
+
+#[test]
+fn test_e2e_ref_no_spawn_no_escape() {
+    // { x = 42; shared = ref x; use(shared) }
+    // ref 不在 spawn 内使用 → escaped_refs 为空
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_var_stmt(
+                "shared",
+                Expr::Ref {
+                    expr: Box::new(make_var("x")),
+                    span: Span::default(),
+                },
+            ),
+            make_expr_stmt(make_var("shared")),
+        ],
+    )]);
+
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan, escaped) = checker.check_module(&module, &make_test_env());
+
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .collect();
+    assert!(errors.is_empty(), "不应有错误，得: {:?}", errors);
+    assert!(
+        !escaped.contains("shared"),
+        "shared 未在 spawn 内使用，不应标记逃逸，得: {:?}",
+        escaped
+    );
+}
+
+#[test]
+fn test_e2e_ref_in_spawn_escapes() {
+    // { x = 42; shared = ref x; spawn { use(shared) } }
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_var_stmt(
+                "shared",
+                Expr::Ref {
+                    expr: Box::new(make_var("x")),
+                    span: Span::default(),
+                },
+            ),
+            make_expr_stmt(Expr::Spawn {
+                body: Box::new(make_block(vec![make_expr_stmt(make_var("shared"))])),
+                span: Span::default(),
+            }),
+        ],
+    )]);
+
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan, escaped) = checker.check_module(&module, &make_test_env());
+
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .collect();
+    assert!(errors.is_empty(), "不应有错误，得: {:?}", errors);
+    assert!(
+        escaped.contains("shared"),
+        "shared 在 spawn 内使用，应标记逃逸，但 escaped_refs: {:?}",
+        escaped
+    );
+}
+
+#[test]
+fn test_e2e_non_ref_in_spawn_not_escaped() {
+    // { x = 42; spawn { use(x) } }
+    // x 不是 ref——不标记逃逸
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_expr_stmt(Expr::Spawn {
+                body: Box::new(make_block(vec![make_expr_stmt(make_var("x"))])),
+                span: Span::default(),
+            }),
+        ],
+    )]);
+
+    let mut checker = OwnershipChecker::new();
+    let (_results, _plan, escaped) = checker.check_module(&module, &make_test_env());
+
+    assert!(
+        !escaped.contains("x"),
+        "x 不是 ref，不应标记逃逸，得: {:?}",
+        escaped
+    );
+}
+
+#[test]
+fn test_e2e_ref_in_nested_spawn_escapes() {
+    // { x = 42; shared = ref x; spawn { spawn { use(shared) } } }
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_var_stmt(
+                "shared",
+                Expr::Ref {
+                    expr: Box::new(make_var("x")),
+                    span: Span::default(),
+                },
+            ),
+            make_expr_stmt(Expr::Spawn {
+                body: Box::new(make_block(vec![make_expr_stmt(Expr::Spawn {
+                    body: Box::new(make_block(vec![make_expr_stmt(make_var("shared"))])),
+                    span: Span::default(),
+                })])),
+                span: Span::default(),
+            }),
+        ],
+    )]);
+
+    let mut checker = OwnershipChecker::new();
+    let (_results, _plan, escaped) = checker.check_module(&module, &make_test_env());
+
+    assert!(
+        escaped.contains("shared"),
+        "嵌套 spawn 内使用 shared，应标记逃逸"
+    );
 }
