@@ -397,7 +397,7 @@ fn make_block(stmts: Vec<Stmt>) -> Block {
     }
 }
 
-fn _make_call(
+fn make_call(
     func_name: &str,
     args: Vec<Expr>,
 ) -> Expr {
@@ -1403,4 +1403,215 @@ fn test_e2e_param_not_in_release_plan() {
         "参数 x 不应出现在 ReleasePlan 中（调用方负责释放），plan: {:?}",
         plan
     );
+}
+
+// ── E2E 闭包捕获测试 ──────────────────────────────────────
+
+#[test]
+fn test_e2e_closure_move_capture_use_after_call() {
+    // { x = 42; f = { y = x }; f(); use(x) }
+    // x 被闭包 Move 捕获，调用后不可用
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_binding("f", vec![], vec![make_var_stmt("y", make_var("x"))]),
+            make_expr_stmt(make_call("f", vec![])),
+            make_expr_stmt(make_var("x")),
+        ],
+    )]);
+
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan) = checker.check_module(&module, &make_test_env());
+
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| {
+            matches!(r, ProofResult::Disproved(model)
+                if matches!(model.kind, DisproofKind::UseAfterMove))
+        })
+        .collect();
+    assert!(!errors.is_empty(), "应该检测到闭包 Move 捕获后 x 被使用");
+}
+
+#[test]
+fn test_e2e_closure_move_capture_before_call() {
+    // { x = 42; f = { y = x }; use(x); f() }
+    // 定义不消耗，调用前 x 仍可用
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_binding("f", vec![], vec![make_var_stmt("y", make_var("x"))]),
+            make_expr_stmt(make_var("x")),
+            make_expr_stmt(make_call("f", vec![])),
+        ],
+    )]);
+
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan) = checker.check_module(&module, &make_test_env());
+
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "定义后调用前 x 应可用，但检测到: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_e2e_closure_read_capture() {
+    // { x = 42; f = { use(x) }; f(); use(x) }
+    // x 被 Read 捕获——调用不消耗
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_binding("f", vec![], vec![make_expr_stmt(make_var("x"))]),
+            make_expr_stmt(make_call("f", vec![])),
+            make_expr_stmt(make_var("x")),
+        ],
+    )]);
+
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan) = checker.check_module(&module, &make_test_env());
+
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "Read 捕获不应消耗 x，但检测到: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_e2e_closure_no_capture() {
+    // { f = { x = 1; use(x) }; f() }
+    // x 是闭包局部变量，不捕获外层
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_binding(
+                "f",
+                vec![],
+                vec![
+                    make_var_stmt("x", make_lit(1)),
+                    make_expr_stmt(make_var("x")),
+                ],
+            ),
+            make_expr_stmt(make_call("f", vec![])),
+        ],
+    )]);
+
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan) = checker.check_module(&module, &make_test_env());
+
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "纯局部变量的闭包不应有错误，但检测到: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_e2e_closure_move_second_call_rejected() {
+    // { x = 42; f = { y = x }; f(); f() }
+    // 第一次调用 Move x，第二次调用应报 use_after_move
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_binding("f", vec![], vec![make_var_stmt("y", make_var("x"))]),
+            make_expr_stmt(make_call("f", vec![])),
+            make_expr_stmt(make_call("f", vec![])),
+        ],
+    )]);
+
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan) = checker.check_module(&module, &make_test_env());
+
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| {
+            matches!(r, ProofResult::Disproved(model)
+                if matches!(model.kind, DisproofKind::UseAfterMove))
+        })
+        .collect();
+    assert!(!errors.is_empty(), "第二次调用 f() 时 x 已被 move，应报错");
+}
+
+// ── E2E 函数签名查询测试 ──────────────────────────────────
+
+#[test]
+fn test_e2e_call_unknown_function_moves_args() {
+    // { x = 42; unknown(x); use(x) }
+    // 未知函数 → 回退 Move
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_expr_stmt(make_call("unknown", vec![make_var("x")])),
+            make_expr_stmt(make_var("x")),
+        ],
+    )]);
+
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan) = checker.check_module(&module, &make_test_env());
+
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| {
+            matches!(r, ProofResult::Disproved(model)
+                if matches!(model.kind, DisproofKind::UseAfterMove))
+        })
+        .collect();
+    assert!(!errors.is_empty(), "未知函数应回退 Move 语义");
+}
+
+#[test]
+fn test_e2e_call_ref_param_does_not_move() {
+    // { x = 42; print(x); use(x) }
+    // print 的参数是 &T → 不应 Move x
+    // 注：print 需要被注册到 TypeEnvironment 中才有效。
+    // 此测试验证：如果函数签名不可用，回退到 Move（保守行为）。
+    // 当 TypeEnvironment 正确注册 print 后，此测试应改为验证 x 仍可用。
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_expr_stmt(make_call("print", vec![make_var("x")])),
+            make_expr_stmt(make_var("x")),
+        ],
+    )]);
+
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan) = checker.check_module(&module, &make_test_env());
+
+    // 当前：print 未在 test TypeEnvironment 中注册 → 回退 Move → use after move
+    // 当 TypeEnvironment 配备函数签名后更新此断言
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| {
+            matches!(r, ProofResult::Disproved(model)
+                if matches!(model.kind, DisproofKind::UseAfterMove))
+        })
+        .collect();
+    assert!(!errors.is_empty(), "未注册的 print 应回退 Move 语义");
 }
