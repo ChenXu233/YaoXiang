@@ -2,7 +2,7 @@
 //!
 //! This module contains built-in functions and types.
 
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod concurrent;
 pub mod convert;
 pub mod dict;
@@ -11,13 +11,13 @@ pub mod gen_interfaces;
 pub mod io;
 pub mod list;
 pub mod math;
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod net;
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod os;
 pub mod string;
 pub mod time;
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod weak;
 
 use crate::backends::interpreter::ffi::FfiRegistry;
@@ -242,7 +242,7 @@ fn builtin_dict_keys(
 /// This is the single entry point that ffi.rs should call.
 /// New std modules only need to be added to this function.
 pub fn register_all(registry: &mut FfiRegistry) {
-    #[cfg(not(feature = "wasm"))]
+    #[cfg(not(target_arch = "wasm32"))]
     concurrent::ConcurrentModule.register_ffi(registry);
     convert::ConvertModule.register_ffi(registry);
     dict::DictModule.register_ffi(registry);
@@ -250,11 +250,11 @@ pub fn register_all(registry: &mut FfiRegistry) {
     io::IoModule.register_ffi(registry);
     list::ListModule.register_ffi(registry);
     math::MathModule.register_ffi(registry);
-    #[cfg(not(feature = "wasm"))]
+    #[cfg(not(target_arch = "wasm32"))]
     net::NetModule.register_ffi(registry);
     string::StringModule.register_ffi(registry);
     time::TimeModule.register_ffi(registry);
-    #[cfg(not(feature = "wasm"))]
+    #[cfg(not(target_arch = "wasm32"))]
     os::OsModule.register_ffi(registry);
 
     // Register built-in generic functions (replacing hardcoded interpreter special cases)
@@ -267,7 +267,7 @@ pub fn register_all(registry: &mut FfiRegistry) {
 /// This is used by the frontend module system.
 pub fn all_module_infos() -> Vec<ModuleInfo> {
     vec![
-        #[cfg(not(feature = "wasm"))]
+        #[cfg(not(target_arch = "wasm32"))]
         concurrent::ConcurrentModule.to_module_info(),
         convert::ConvertModule.to_module_info(),
         dict::DictModule.to_module_info(),
@@ -275,11 +275,11 @@ pub fn all_module_infos() -> Vec<ModuleInfo> {
         io::IoModule.to_module_info(),
         list::ListModule.to_module_info(),
         math::MathModule.to_module_info(),
-        #[cfg(not(feature = "wasm"))]
+        #[cfg(not(target_arch = "wasm32"))]
         net::NetModule.to_module_info(),
         string::StringModule.to_module_info(),
         time::TimeModule.to_module_info(),
-        #[cfg(not(feature = "wasm"))]
+        #[cfg(not(target_arch = "wasm32"))]
         os::OsModule.to_module_info(),
     ]
 }

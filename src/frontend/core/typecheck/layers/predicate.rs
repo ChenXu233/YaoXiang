@@ -8,25 +8,25 @@
 //!   4. 证明函数调用（Phase 2.5）——识别 ConstExpr::Call 让 Pipeline 编译期执行
 
 use std::collections::HashMap;
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::{LazyLock, Mutex};
 
 use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
 use crate::frontend::core::types::eval::evaluator::Evaluator;
 use crate::frontend::core::types::mono::MonoType;
 use super::super::proof::context::ProofContext;
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 use super::super::proof::smt::ast::SMTResult;
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 use super::super::proof::smt::translate;
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 use super::super::proof::smt::z3_backend::Z3Backend;
 use super::super::proof::verdict::{
     BudgetReport, DisproofKind, DisproofModel, ProofFunctionCall, ProofResult, UnprovenReason,
 };
 
 /// Z3 实例——整个编译过程只初始化一次
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 static Z3_INSTANCE: LazyLock<Mutex<Z3Backend>> = LazyLock::new(|| {
     Mutex::new(Z3Backend::new().expect("Z3 solver initialization failed — is libz3 installed?"))
 });
@@ -63,7 +63,7 @@ pub fn check_predicate(
         return ProofResult::Proved;
     }
     // 2b：SMT 蕴含——假设非空但不精确匹配
-    #[cfg(not(feature = "wasm"))]
+    #[cfg(not(target_arch = "wasm32"))]
     if !ctx.assumptions.is_empty() {
         if let Some(result) = try_implication(ctx, constraint, bindings) {
             return result;
@@ -72,7 +72,7 @@ pub fn check_predicate(
 
     // === 第 3 级：SMT 求解 ===
     // SMT 翻译不支持 Call/If/Range 形式——跳过，直接进入第 4 级
-    #[cfg(not(feature = "wasm"))]
+    #[cfg(not(target_arch = "wasm32"))]
     if !matches!(
         constraint,
         ConstExpr::Call { .. } | ConstExpr::If { .. } | ConstExpr::Range { .. }
@@ -123,7 +123,7 @@ fn try_direct_eval(
 /// 检查当前假设栈是否蕴含目标约束。复用 `translate_constraint`
 /// 将假设作为背景断言、目标取反送 Z3。unsat 表示假设蕴含目标。
 /// sat/unknown 时不宣称 Disproved——返回 None 让后续级别继续。
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 fn try_implication(
     ctx: &ProofContext<'_>,
     constraint: &ConstExpr,
@@ -154,7 +154,7 @@ fn try_implication(
 }
 
 /// 第 3 级：SMT 求解
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 fn try_smt_solve(
     ctx: &ProofContext<'_>,
     constraint: &ConstExpr,
