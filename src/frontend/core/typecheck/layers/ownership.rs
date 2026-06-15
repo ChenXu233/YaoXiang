@@ -48,6 +48,7 @@ struct Captures {
 type CapturesStore = HashMap<String, Captures>;
 
 /// 参数的所有权语义（从函数签名推导）
+#[derive(Clone, Copy)]
 #[allow(dead_code)]
 enum ParamOwnership {
     /// T → 所有权转移
@@ -731,6 +732,8 @@ pub struct OwnershipChecker {
     scope_drops: Vec<(Span, String)>,
     /// 闭包捕获存储（定义时分析产出，调用时消费）
     captures_store: CapturesStore,
+    /// 类型环境引用（用裸指针避免生命周期重写；env 生命周期 > checker）
+    env: Option<*const crate::frontend::core::typecheck::environment::TypeEnvironment>,
 }
 
 impl Default for OwnershipChecker {
@@ -753,6 +756,7 @@ impl OwnershipChecker {
             scope_vars: Vec::new(),
             scope_drops: Vec::new(),
             captures_store: CapturesStore::new(),
+            env: None,
         }
     }
 
@@ -849,6 +853,105 @@ impl OwnershipChecker {
             captures.reads.remove(wr);
         }
         captures
+    }
+
+    /// 从 TypeEnvironment 查询函数参数的所有权语义
+    fn lookup_param_types(
+        &self,
+        func_name: &str,
+        arg_count: usize,
+        env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
+    ) -> Vec<ParamOwnership> {
+        let fn_type = env.get_var(func_name);
+        match fn_type {
+            Some(poly) => {
+                if let crate::frontend::core::types::MonoType::Fn { params, .. } = &poly.body {
+                    params
+                        .iter()
+                        .take(arg_count)
+                        .map(|p| match p {
+                            crate::frontend::core::types::MonoType::Ref {
+                                mutable: true, ..
+                            } => ParamOwnership::WriteBorrow,
+                            crate::frontend::core::types::MonoType::Ref {
+                                mutable: false, ..
+                            } => ParamOwnership::ReadBorrow,
+                            _ => ParamOwnership::Move,
+                        })
+                        .collect()
+                } else {
+                    vec![ParamOwnership::Move; arg_count]
+                }
+            }
+            None => vec![ParamOwnership::Move; arg_count],
+        }
+    }
+
+    /// 对单个变量参数执行所有权操作（按 ParamOwnership 语义）
+    fn apply_param_ownership(
+        &mut self,
+        var_name: &str,
+        ownership: &ParamOwnership,
+    ) {
+        match ownership {
+            ParamOwnership::Move => {
+                self.var_state.insert(var_name.to_string(), VarState::Moved);
+            }
+            ParamOwnership::ReadBorrow => {
+                let token = self.brand_tree.create_read_token(var_name.to_string());
+                self.brand_tree.add_consumer(&token, self.current_node);
+                if !self.brand_tree.conflicting_with(&token).is_empty() {
+                    self.pending_writes.push(PendingWrite {
+                        token: token.clone(),
+                        node_idx: self.current_node,
+                        span: self.current_span,
+                    });
+                }
+            }
+            ParamOwnership::WriteBorrow => {
+                let token = self.brand_tree.create_write_token(var_name.to_string());
+                self.brand_tree.add_consumer(&token, self.current_node);
+                // WriteBorrow 总是进 pending_writes 检查冲突
+                self.pending_writes.push(PendingWrite {
+                    token: token.clone(),
+                    node_idx: self.current_node,
+                    span: self.current_span,
+                });
+            }
+        }
+    }
+
+    /// 处理调用捕获参数（闭包的隐式参数）
+    fn apply_captures_at_call(
+        &mut self,
+        captures: &Captures,
+    ) -> Vec<ProofResult> {
+        let mut results = Vec::new();
+        for var in &captures.reads {
+            let check = self.check_var_read(var, self.current_span);
+            if !check.is_proved() {
+                results.push(check);
+            }
+            self.add_consumer_for_var(var);
+            self.apply_param_ownership(var, &ParamOwnership::ReadBorrow);
+        }
+        for var in &captures.writes {
+            let check = self.check_var_read(var, self.current_span);
+            if !check.is_proved() {
+                results.push(check);
+            }
+            self.add_consumer_for_var(var);
+            self.apply_param_ownership(var, &ParamOwnership::WriteBorrow);
+        }
+        for var in &captures.moves {
+            let check = self.check_var_read(var, self.current_span);
+            if !check.is_proved() {
+                results.push(check);
+            }
+            self.add_consumer_for_var(var);
+            self.apply_param_ownership(var, &ParamOwnership::Move);
+        }
+        results
     }
 
     /// 从表达式提取源码 span
@@ -1170,11 +1273,32 @@ impl OwnershipChecker {
             Expr::Try { expr: inner, .. } => self.walk_expr(inner),
             Expr::Call { func, args, .. } => {
                 let mut results = self.walk_expr(func);
-                for arg in args {
+                // 确定调用目标名（用于查签名和捕获）
+                let func_name = Self::extract_var_name(func);
+                // 查询函数的参数签名（未知函数回退为全 Move）
+                let env: &crate::frontend::core::typecheck::environment::TypeEnvironment =
+                    unsafe { &*self.env.unwrap() };
+                let param_types = func_name
+                    .as_ref()
+                    .map(|n| self.lookup_param_types(n, args.len(), env))
+                    .unwrap_or_else(|| vec![ParamOwnership::Move; args.len()]);
+                // 处理显式参数
+                for (i, arg) in args.iter().enumerate() {
                     results.extend(self.walk_expr(arg));
-                    // 只有直接传变量才标记 Move（字段访问 self.x 或借用 &x 不 move）
                     if let Expr::Var(name, _) = arg {
-                        self.var_state.insert(name.clone(), VarState::Moved);
+                        let check = self.check_var_read(name, self.current_span);
+                        if !check.is_proved() {
+                            results.push(check);
+                        }
+                        self.add_consumer_for_var(name);
+                        let ownership = param_types.get(i).unwrap_or(&ParamOwnership::Move);
+                        self.apply_param_ownership(name, ownership);
+                    }
+                }
+                // 处理闭包的隐式捕获参数
+                if let Some(fn_name) = &func_name {
+                    if let Some(captures) = self.captures_store.get(fn_name).cloned() {
+                        results.extend(self.apply_captures_at_call(&captures));
                     }
                 }
                 results
@@ -1425,8 +1549,12 @@ impl OwnershipChecker {
         _name: &str,
         params: &[crate::frontend::core::parser::ast::Param],
         body: &[Stmt],
+        env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
     ) -> (Vec<ProofResult>, ReleasePlan) {
         self.reset();
+
+        // 设置类型环境引用（供 walk_expr 使用）
+        self.env = Some(env as *const _);
 
         // 标记参数为 Alive，记录可变性
         for param in params {
@@ -1483,7 +1611,7 @@ impl OwnershipChecker {
                 if params.is_empty() && body.is_empty() {
                     continue;
                 }
-                let (func_results, func_plan) = self.check_function(name, params, body);
+                let (func_results, func_plan) = self.check_function(name, params, body, _env);
                 results.extend(func_results);
                 merged_drops.extend(func_plan.drops);
             }
