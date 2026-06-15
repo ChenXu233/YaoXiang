@@ -53,7 +53,7 @@
   "sidebar": {
     "/tutorial/": [
       {
-        "text": "Tutorial Documentation",
+        "text": "Tutorial",
         "items": [
           {
             "text": "Tutorial Home",
@@ -66,43 +66,44 @@
           {
             "text": "YaoXiang Manual",
             "link": "/en/tutorial/YaoXiang-book"
-          },
-          {
-            "text": "Beginner's Guide",
-            "collapsed": true,
-            "items": []
           }
         ]
+      },
+      {
+        "text": "Beginner Basics",
+        "collapsed": true,
+        "items": []
+      },
+      {
+        "text": "Example Projects",
+        "collapsed": true,
+        "items": []
       }
     ],
     "/design/": [
       {
-        "text": "Design Documentation",
+        "text": "Design Documents",
         "items": [
           {
             "text": "Design Index",
             "link": "/en/design"
           },
           {
-            "text": "Language Specification",
-            "link": "/en/reference/language-spec/"
-          },
-          {
             "text": "YaoXiang Manifesto",
             "link": "/en/design/manifesto"
           },
           {
-            "text": "YaoXiang Manifesto WTF Edition",
+            "text": "YaoXiang Manifesto WTF Version",
             "link": "/en/design/manifesto-wtf"
           },
           {
-            "text": "Language Design Perspective from Someone Born in 2006",
+            "text": "Language Design View of a 2006-born Person",
             "link": "/en/design/2006-born-language-design"
           }
         ]
       },
       {
-        "text": "RFC Documentation",
+        "text": "RFC Documents",
         "items": [
           {
             "text": "RFC Index",
@@ -135,20 +136,107 @@
             "text": "Rejected",
             "collapsed": true,
             "items": []
+          },
+          {
+            "text": "Deprecated",
+            "collapsed": true,
+            "items": []
+          }
+        ]
+      },
+      {
+        "text": "Tool Design",
+        "collapsed": true,
+        "items": [
+          {
+            "text": "check Command",
+            "link": "/en/design/check/"
+          },
+          {
+            "text": "Diagnostic System",
+            "link": "/en/design/check/diagnostic-system"
+          },
+          {
+            "text": "Cross-file Analysis",
+            "link": "/en/design/check/cross-file-analysis"
+          },
+          {
+            "text": "Incremental Checking",
+            "link": "/en/design/check/incremental-checking"
+          }
+        ]
+      },
+      {
+        "text": "Formatting Specification",
+        "collapsed": true,
+        "items": [
+          {
+            "text": "Specification Overview",
+            "link": "/en/design/formatter/"
+          },
+          {
+            "text": "Formatting Rules",
+            "collapsed": true,
+            "items": [
+              {
+                "text": "Rules Overview",
+                "link": "/en/design/formatter/formatting-rules/"
+              },
+              {
+                "text": "Basic Formatting",
+                "link": "/en/design/formatter/formatting-rules/basic"
+              },
+              {
+                "text": "Functions and Calls",
+                "link": "/en/design/formatter/formatting-rules/functions"
+              },
+              {
+                "text": "Type System",
+                "link": "/en/design/formatter/formatting-rules/types"
+              },
+              {
+                "text": "Data Structures",
+                "link": "/en/design/formatter/formatting-rules/data-structures"
+              },
+              {
+                "text": "Control Flow",
+                "link": "/en/design/formatter/formatting-rules/control-flow"
+              },
+              {
+                "text": "Special Syntax",
+                "link": "/en/design/formatter/formatting-rules/special-syntax"
+              }
+            ]
+          },
+          {
+            "text": "Configuration Specification",
+            "link": "/en/design/formatter/configuration"
+          },
+          {
+            "text": "Comment Specification",
+            "link": "/en/design/formatter/comments"
+          },
+          {
+            "text": "Error Handling",
+            "link": "/en/design/formatter/error-handling"
+          },
+          {
+            "text": "CLI Specification",
+            "link": "/en/design/formatter/cli"
           }
         ]
       }
     ],
     "/reference/": [
       {
-        "text": "Reference Documentation",
+        "text": "Language Specification",
         "items": [
           {
             "text": "Reference Index",
             "link": "/en/reference"
           },
           {
-            "text": "Language Specification",
+            "text": "Language Specification Overview",
             "link": "/en/reference/language-spec/"
           },
           {
@@ -164,6 +252,10 @@
             "link": "/en/reference/language-spec/modules"
           },
           {
+            "text": "FFI",
+            "link": "/en/reference/language-spec/ffi"
+          },
+          {
             "text": "Concurrency Model",
             "link": "/en/reference/language-spec/concurrency"
           },
@@ -174,50 +266,105 @@
         ]
       },
       {
-        "text": "Error Codes",
-        "items": []
+        "text": "Standard Library",
+        "items": [
+          {
+            "text": "Standard Library Overview",
+            "link": "/en/reference/stdlib/"
+          }
+        ]
       },
       {
-        "text": "Warning Codes",
-        "items": []
+        "text": "Errors and Warnings",
+        "items": [
+          {
+            "text": "Error Codes Overview",
+            "link": "/en/reference/error-code/"
+          },
+          {
+            "text": "Error Codes Classification",
+            "collapsed": true,
+            "items": []
+          },
+          {
+            "text": "Warning Codes",
+            "link": "/en/reference/warning-code/warning-codes"
+          }
+        ]
       },
       {
-        "text": "Package Management System",
+        "text": "Package Management",
         "collapsed": true,
         "items": []
+      },
+      {
+        "text": "Tool Commands",
+        "items": [
+          {
+            "text": "check Command",
+            "link": "/en/reference/check-command"
+          }
+        ]
       }
     ],
     "/dev/": [
       {
-        "text": "Development Documentation",
+        "text": "Development Documents",
         "items": [
           {
             "text": "Development Index",
             "link": "/en/dev/"
           },
           {
-            "text": "Contribution Guide",
+            "text": "Contributing Guide",
             "link": "/en/dev/contributing"
           },
           {
-            "text": "Commit Guide",
+            "text": "Commit Convention",
             "link": "/en/dev/commit-convention"
           },
           {
-            "text": "Branch Guide",
+            "text": "Branch Maintenance Guide",
             "link": "/en/dev/branch-maintenance-guide"
+          },
+          {
+            "text": "Release Process",
+            "link": "/en/dev/release"
+          },
+          {
+            "text": "Test Specification",
+            "link": "/en/dev/test-specification"
           }
         ]
       },
       {
-        "text": "Plans",
+        "text": "Planning",
         "items": [
           {
-            "text": "Plan Index",
+            "text": "Planning Index",
             "link": "/en/dev/plan"
           },
           {
-            "text": "In Progress",
+            "text": "Ongoing",
+            "collapsed": true,
+            "items": []
+          },
+          {
+            "text": "Tasks",
+            "collapsed": true,
+            "items": []
+          }
+        ]
+      },
+      {
+        "text": "Roadmap",
+        "items": [
+          {
+            "text": "Roadmap Home",
+            "link": "/en/dev/plan/roadmap"
+          },
+          {
+            "text": "Module Status",
             "collapsed": true,
             "items": []
           }
@@ -226,7 +373,7 @@
     ],
     "/guide/": [
       {
-        "text": "Guide Documentation",
+        "text": "Guide",
         "items": [
           {
             "text": "Guide Index",
@@ -235,6 +382,14 @@
           {
             "text": "Package Management System",
             "link": "/en/guide/packaging"
+          },
+          {
+            "text": "CI Integration",
+            "link": "/en/guide/ci-integration"
+          },
+          {
+            "text": "REPL Interactive Environment",
+            "link": "/en/guide/repl"
           }
         ]
       }
@@ -250,6 +405,14 @@
           {
             "text": "Tutorial",
             "link": "/en/tutorial/"
+          },
+          {
+            "text": "Guide",
+            "link": "/en/guide/"
+          },
+          {
+            "text": "Reference",
+            "link": "/en/reference/"
           }
         ]
       }
