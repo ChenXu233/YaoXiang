@@ -4,6 +4,10 @@
 //! RFC-009a §品牌树: 令牌派生关系与冲突检测
 //! RFC-009a §系统谓词清单: 5 种命题
 //! RFC-009a §用例分析: 线性代码 / if-else / 循环
+//!
+//! 扩展规范:
+//! - 闭包捕获分析: docs/superpowers/specs/2026-06-15-nested-fn-and-call-sig-design.md
+//! - ref 逃逸分析:  docs/superpowers/specs/2026-06-15-ref-escape-analysis-design.md
 
 use crate::frontend::core::typecheck::layers::ownership::{
     BrandId, BrandTree, ControlFlowGraph, EdgeKind, FastPathResult, emit_move_predicate,
@@ -22,18 +26,18 @@ fn test_prefix_matching() {
     let deep = field.derive_field("y");
 
     // Act & Assert
-    assert!(root.is_prefix_of(&field));
-    assert!(root.is_prefix_of(&deep));
-    assert!(field.is_prefix_of(&deep));
-    assert!(!field.is_prefix_of(&root));
+    assert!(root.is_prefix_of(&field), "root 应是 field 的前缀");
+    assert!(root.is_prefix_of(&deep), "root 应是 deep 的前缀");
+    assert!(field.is_prefix_of(&deep), "field 应是 deep 的前缀");
+    assert!(!field.is_prefix_of(&root), "field 不应是 root 的前缀");
 }
 
 #[test]
 fn test_different_roots_no_prefix_relation() {
     let a = BrandId::root(0);
     let b = BrandId::root(1);
-    assert!(!a.is_prefix_of(&b));
-    assert!(!b.is_prefix_of(&a));
+    assert!(!a.is_prefix_of(&b), "不同 root 不应有前缀关系");
+    assert!(!b.is_prefix_of(&a), "不同 root 不应有前缀关系（反方向）");
 }
 
 #[test]
@@ -56,7 +60,7 @@ fn test_read_vs_read_no_conflict() {
     let mut tree = BrandTree::new();
     let r1 = tree.create_read_token("x".into());
     let r2 = tree.create_read_token("x".into());
-    assert!(!tree.conflicts(&r1, &r2));
+    assert!(!tree.conflicts(&r1, &r2), "两个 ReadToken 不应冲突");
 }
 
 #[test]
@@ -64,7 +68,7 @@ fn test_read_vs_write_conflict() {
     let mut tree = BrandTree::new();
     let r = tree.create_read_token("x".into());
     let w = tree.create_write_token("x".into());
-    assert!(tree.conflicts(&r, &w));
+    assert!(tree.conflicts(&r, &w), "ReadToken 和 WriteToken 同源应冲突");
 }
 
 #[test]
@@ -72,7 +76,7 @@ fn test_write_vs_write_conflict() {
     let mut tree = BrandTree::new();
     let w1 = tree.create_write_token("x".into());
     let w2 = tree.create_write_token("x".into());
-    assert!(tree.conflicts(&w1, &w2));
+    assert!(tree.conflicts(&w1, &w2), "两个 WriteToken 同源应冲突");
 }
 
 #[test]
@@ -80,7 +84,7 @@ fn test_different_source_no_conflict() {
     let mut tree = BrandTree::new();
     let r = tree.create_read_token("x".into());
     let w = tree.create_write_token("y".into());
-    assert!(!tree.conflicts(&r, &w));
+    assert!(!tree.conflicts(&r, &w), "不同 source_var 的令牌不应冲突");
 }
 
 #[test]
@@ -90,7 +94,7 @@ fn test_derived_read_vs_write_root_conflict() {
     let r_field = tree.derive_field(&r, "field").unwrap();
     let w = tree.create_write_token("x".into());
     // 同源 + 有写 = 冲突，与派生关系无关
-    assert!(tree.conflicts(&r_field, &w));
+    assert!(tree.conflicts(&r_field, &w), "派生 ReadToken 和 WriteToken 同源应冲突");
 }
 
 #[test]
@@ -100,7 +104,7 @@ fn test_derived_read_vs_derived_read_no_conflict() {
     let rx = tree.derive_field(&r, "a").unwrap();
     let ry = tree.derive_field(&r, "b").unwrap();
     // 同源但都读 → 不冲突
-    assert!(!tree.conflicts(&rx, &ry));
+    assert!(!tree.conflicts(&rx, &ry), "两个派生 ReadToken 同源但都不写，不应冲突");
 }
 
 // ── 级联删除 ──────────────────────────────────────────
@@ -110,11 +114,11 @@ fn test_remove_cascades_to_children() {
     let mut tree = BrandTree::new();
     let r = tree.create_read_token("x".into());
     let r_field = tree.derive_field(&r, "field").unwrap();
-    assert!(tree.get(&r_field).is_some());
+    assert!(tree.get(&r_field).is_some(), "remove 前 r_field 应存在");
 
     tree.remove(&r);
-    assert!(tree.get(&r).is_none());
-    assert!(tree.get(&r_field).is_none());
+    assert!(tree.get(&r).is_none(), "remove 后 r 应不存在");
+    assert!(tree.get(&r_field).is_none(), "remove 后子令牌 r_field 应级联删除");
 }
 
 #[test]
@@ -122,10 +126,10 @@ fn test_remove_cleans_up_parent_children_set() {
     let mut tree = BrandTree::new();
     let r = tree.create_read_token("x".into());
     let child = tree.derive_field(&r, "field").unwrap();
-    assert!(tree.get(&r).unwrap().children.contains(&child));
+    assert!(tree.get(&r).unwrap().children.contains(&child), "child 应在 r 的 children 中");
 
     tree.remove(&child);
-    assert!(!tree.get(&r).unwrap().children.contains(&child));
+    assert!(!tree.get(&r).unwrap().children.contains(&child), "remove child 后 r.children 不应再包含 child");
 }
 
 // ── 消费者追踪 ────────────────────────────────────────
@@ -138,15 +142,15 @@ fn test_consumer_tracking() {
     tree.add_consumer(&r, 5);
 
     let c = tree.consumers(&r);
-    assert!(c.contains(&3));
-    assert!(c.contains(&5));
+    assert!(c.contains(&3), "消费者应包含节点 3");
+    assert!(c.contains(&5), "消费者应包含节点 5");
     assert_eq!(c.len(), 2);
 }
 
 #[test]
 fn test_consumer_unknown_token_returns_empty() {
     let tree = BrandTree::new();
-    assert!(tree.consumers(&BrandId::root(999)).is_empty());
+    assert!(tree.consumers(&BrandId::root(999)).is_empty(), "未知令牌应返回空消费者集");
 }
 
 // ── conflicting_with ──────────────────────────────────
@@ -184,7 +188,7 @@ fn test_linear_code_read_then_write_no_conflict() {
     let result = fast_path_check(&tree, &cfg, &write, 3);
 
     // Assert: view 已在节点 2 被消费 → 写安全
-    assert!(matches!(result, FastPathResult::Safe));
+    assert!(matches!(result, FastPathResult::Safe), "消费者在写之前执行，应返回 Safe");
 }
 
 #[test]
@@ -208,7 +212,7 @@ fn test_read_and_write_conflict_when_consumer_not_executed() {
     let result = fast_path_check(&tree, &cfg, &write, 2);
 
     // Assert: 从消费者(节点3)反向 BFS 可达节点 2
-    assert!(matches!(result, FastPathResult::Unsafe { .. }));
+    assert!(matches!(result, FastPathResult::Unsafe { .. }), "消费者在写之后，应返回 Unsafe");
 }
 
 #[test]
@@ -234,7 +238,7 @@ fn test_loop_with_break_cuts_back_edge() {
     let result = fast_path_check(&tree, &cfg, &write, 4);
 
     // Assert: break 切断 → Safe
-    assert!(matches!(result, FastPathResult::Safe));
+    assert!(matches!(result, FastPathResult::Safe), "break 切断回边，应返回 Safe");
 }
 
 #[test]
@@ -257,7 +261,7 @@ fn test_loop_without_break_is_unsafe() {
     let result = fast_path_check(&tree, &cfg, &write, 1);
 
     // Assert: 回边穿越 → write_node 在 unsafe
-    assert!(matches!(result, FastPathResult::Unsafe { .. }));
+    assert!(matches!(result, FastPathResult::Unsafe { .. }), "无 break 时回边可达，应返回 Unsafe");
 }
 
 // ── 系统谓词（RFC-009a §系统谓词清单） ──────────────────
@@ -265,37 +269,37 @@ fn test_loop_without_break_is_unsafe() {
 #[test]
 fn test_use_after_move_rejected() {
     let result = emit_move_predicate("x", true, Span::dummy());
-    assert!(matches!(result, ProofResult::Disproved { .. }));
+    assert!(matches!(result, ProofResult::Disproved { .. }), "move 后使用应返回 Disproved");
 }
 
 #[test]
 fn test_use_before_move_allowed() {
     let result = emit_move_predicate("x", false, Span::dummy());
-    assert!(matches!(result, ProofResult::Proved));
+    assert!(matches!(result, ProofResult::Proved), "move 前使用应返回 Proved");
 }
 
 #[test]
 fn test_use_after_drop_rejected() {
     let result = emit_drop_predicate("x", true, Span::dummy());
-    assert!(matches!(result, ProofResult::Disproved { .. }));
+    assert!(matches!(result, ProofResult::Disproved { .. }), "drop 后使用应返回 Disproved");
 }
 
 #[test]
 fn test_double_drop_rejected() {
     let result = emit_double_drop_predicate("x", true, Span::dummy());
-    assert!(matches!(result, ProofResult::Disproved { .. }));
+    assert!(matches!(result, ProofResult::Disproved { .. }), "double drop 应返回 Disproved");
 }
 
 #[test]
 fn test_mut_violation_rejected() {
     let result = emit_mut_predicate("x", false, Span::dummy());
-    assert!(matches!(result, ProofResult::Disproved { .. }));
+    assert!(matches!(result, ProofResult::Disproved { .. }), "非 mut 变量赋值应返回 Disproved");
 }
 
 #[test]
 fn test_mut_allowed() {
     let result = emit_mut_predicate("x", true, Span::dummy());
-    assert!(matches!(result, ProofResult::Proved));
+    assert!(matches!(result, ProofResult::Proved), "mut 变量赋值应返回 Proved");
 }
 
 // ── E2E 集成测试（RFC-009a §用例分析） ──────────────────
