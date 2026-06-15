@@ -1253,6 +1253,12 @@ impl OwnershipChecker {
                                 r.push(emit_mut_predicate(name, false, self.current_span));
                             }
                             self.add_consumer_for_var(name);
+                            // ref 属性传播：x = ref_var → x 也是 ref 变量
+                            if let Expr::Var(src_name, _) = right.as_ref() {
+                                if self.ref_vars.contains(src_name) {
+                                    self.ref_vars.insert(name.clone());
+                                }
+                            }
                             r
                         } else {
                             // 变量未在 var_mutability 中 → 首次声明（非 StmtKind::Var 路径）
@@ -1262,6 +1268,12 @@ impl OwnershipChecker {
                             self.var_mutability.insert(name.clone(), false);
                             if let Some(scope) = self.scope_vars.last_mut() {
                                 scope.push(name.clone());
+                            }
+                            // ref 属性传播
+                            if let Expr::Var(src_name, _) = right.as_ref() {
+                                if self.ref_vars.contains(src_name) {
+                                    self.ref_vars.insert(name.clone());
+                                }
                             }
                             r
                         }
@@ -1439,6 +1451,10 @@ impl OwnershipChecker {
                     // 只有直接传变量才标记 Move（字段访问或借用不转移所有权）
                     if let Expr::Var(src_name, _) = init.as_ref() {
                         self.var_state.insert(src_name.clone(), VarState::Moved);
+                        // ref 属性传播：alias = shared → alias 也是 ref 变量
+                        if self.ref_vars.contains(src_name) {
+                            self.ref_vars.insert(name.clone());
+                        }
                     }
                 }
                 results
