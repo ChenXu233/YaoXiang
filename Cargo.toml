@@ -17,7 +17,6 @@ cli = [
     "walkdir", "tempfile", "clap", "crossbeam", "rayon",
     "tracing-subscriber",
 ]
-wasm = ["wasm-bindgen", "console_error_panic_hook", "web-time", "getrandom/wasm_js", "getrandom-04"]
 
 [lib]
 path = "src/lib.rs"
@@ -99,12 +98,7 @@ tokio = { version = "1.52.3", features = ["full"], optional = true }
 lsp-types = "0.97"
 lsp-server = { version = "0.7", optional = true }
 
-# Wasm support
-wasm-bindgen = { version = "0.2", optional = true }
-console_error_panic_hook = { version = "0.1", optional = true }
-web-time = { version = "1", optional = true }
-getrandom = { version = "0.3", features = ["wasm_js"], optional = true }
-getrandom-04 = { package = "getrandom", version = "0.4", features = ["wasm_js"], optional = true }
+# Wasm support - now handled via target-gated dependencies below
 
 [profile.release]
 lto = true
@@ -123,3 +117,11 @@ default-target = "x86_64-unknown-linux-gnu"
 
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = false
+
+# wasm 特有依赖 —— cfg(target_arch = "wasm32") 时自动激活
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+console_error_panic_hook = "0.1"
+web-time = "1"
+getrandom = { version = "0.3", features = ["wasm_js"] }
+getrandom-04 = { package = "getrandom", version = "0.4", features = ["wasm_js"] }

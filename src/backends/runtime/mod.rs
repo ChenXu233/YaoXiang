@@ -18,7 +18,7 @@ mod tests;
 
 pub use engine::TaskPoll;
 pub use facade::{Runtime, RuntimeConfig, RuntimeFacadeError, RuntimeMode, SpawnHandle, TaskFn};
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 pub use facade::CoopTaskFn;
 
 pub use task::{

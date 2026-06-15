@@ -4,4 +4,5 @@
 //! RFC-027 Phase 2 设计: smt/ast, smt/translate, smt/z3_backend
 
 mod ast;
+mod feature_gate;
 mod translate;

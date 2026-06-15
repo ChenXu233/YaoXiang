@@ -15,15 +15,15 @@
 //! 2. 支持模块搜索路径和缓存
 //! 3. 支持循环依赖检测
 
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod cache;
 pub mod dep_graph;
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod hot_reload;
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod loader;
 pub mod registry;
-#[cfg(not(feature = "wasm"))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod resolver;
 #[cfg(feature = "cli")]
 pub mod vendor;

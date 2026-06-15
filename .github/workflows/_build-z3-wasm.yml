@@ -1,0 +1,80 @@
+name: Build Z3 Wasm (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      z3-version:
+        description: 'Z3 version to compile'
+        type: string
+        default: '4.16.0'
+    outputs:
+      artifact-name:
+        description: 'Name of the z3-wasm artifact'
+        value: 'z3-wasm-${{ inputs.z3-version }}'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-z3-wasm:
+    name: Build Z3 ${{ inputs.z3-version }} for wasm
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Z3 source
+        uses: actions/checkout@v4
+        with:
+          repository: Z3Prover/z3
+          ref: z3-${{ inputs.z3-version }}
+          path: z3-src
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+
+      - name: Verify emsdk
+        run: emcc --version
+
+      - name: Configure Z3 with Emscripten
+        run: |
+          mkdir -p z3-build
+          cd z3-build
+          emcmake cmake ../z3-src \
+            -G Ninja \
+            -DZ3_BUILD_LIBZ3_SHARED=OFF \
+            -DZ3_BUILD_EXECUTABLE=OFF \
+            -DZ3_BUILD_TEST_EXECUTABLES=OFF \
+            -DZ3_SAVE_PARSER=OFF \
+            -DZ3_ENABLE_EXAMPLE_TARGETS=OFF \
+            -DZ3_ENABLE_TRACING=OFF \
+            -DZ3_USE_LIB_GMP=OFF \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build Z3
+        run: |
+          cd z3-build
+          ninja z3
+          echo "=== Build artifacts ==="
+          ls -la lib/libz3.a || ls -la libz3.a || find . -name "libz3.a"
+
+      - name: Prepare artifact
+        run: |
+          mkdir -p dist/lib dist/include
+          # 尝试多个可能的路径
+          cp z3-build/lib/libz3.a dist/lib/ 2>/dev/null || \
+            cp z3-build/libz3.a dist/lib/ 2>/dev/null || \
+            find z3-build -name "libz3.a" -exec cp {} dist/lib/ \;
+          # 复制头文件
+          cp z3-src/src/api/z3.h dist/include/
+          cp z3-src/src/api/z3_api.h dist/include/ 2>/dev/null || true
+          cp z3-src/src/api/z3_ast_containers.h dist/include/ 2>/dev/null || true
+          echo "=== dist contents ==="
+          ls -la dist/lib/ dist/include/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: z3-wasm-${{ inputs.z3-version }}
+          path: dist/
+          retention-days: 90
