@@ -1657,7 +1657,8 @@ impl OwnershipChecker {
                 if params.is_empty() && body.is_empty() {
                     continue;
                 }
-                let (func_results, func_plan, escaped) = self.check_function(name, params, body, _env);
+                let (func_results, func_plan, escaped) =
+                    self.check_function(name, params, body, _env);
                 results.extend(func_results);
                 merged_drops.extend(func_plan.drops);
                 merged_escaped.extend(escaped);
