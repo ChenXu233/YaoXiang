@@ -3298,16 +3298,32 @@ impl AstToIrGenerator {
                 )?;
             }
             Expr::Ref { expr, span: _ } => {
-                // ref 表达式：创建 Arc
                 // 生成内部表达式的 IR
                 let src_reg = self.next_temp_reg();
                 self.generate_expr_ir(expr, src_reg, instructions, constants)?;
 
-                // 生成 ArcNew 指令
-                instructions.push(Instruction::ArcNew {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Local(src_reg),
+                // 逃逸分析：跨 spawn 使用 → Arc，否则 → Rc
+                let var_name = match expr.as_ref() {
+                    ast::Expr::Var(name, _) => Some(name.clone()),
+                    _ => None,
+                };
+                let use_arc = var_name.as_ref().is_some_and(|n| {
+                    self.type_result
+                        .as_ref()
+                        .is_some_and(|tr| tr.escaped_refs.contains(n))
                 });
+
+                if use_arc {
+                    instructions.push(Instruction::ArcNew {
+                        dst: Operand::Local(result_reg),
+                        src: Operand::Local(src_reg),
+                    });
+                } else {
+                    instructions.push(Instruction::RcNew {
+                        dst: Operand::Local(result_reg),
+                        src: Operand::Local(src_reg),
+                    });
+                }
             }
             Expr::Unsafe { body, span: _ } => {
                 // unsafe 块：生成 UnsafeBlockStart/End 标记
