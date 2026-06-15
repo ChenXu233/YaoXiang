@@ -18,6 +18,7 @@ use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
 use crate::frontend::core::types::const_data::ConstValue;
 use crate::frontend::core::typecheck::proof::smt::ast::{SMTSort, SMTResult};
 use crate::frontend::core::typecheck::proof::smt::translate::translate_constraint;
+#[cfg(not(feature = "wasm"))]
 use crate::frontend::core::typecheck::proof::smt::z3_backend::Z3Backend;
 
 // ── ReleasePlan ───────────────────────────────────────────
@@ -28,6 +29,40 @@ use crate::frontend::core::typecheck::proof::smt::z3_backend::Z3Backend;
 #[derive(Debug, Clone, Default)]
 pub struct ReleasePlan {
     pub drops: HashMap<Span, Vec<String>>,
+}
+
+// ── Captures ──────────────────────────────────────────────
+
+/// 闭包的捕获变量集合（定义时分析产出，调用时消费）
+#[derive(Debug, Clone, Default)]
+struct Captures {
+    /// 只读捕获 → 调用时创建 ReadToken
+    reads: HashSet<String>,
+    /// 写入捕获 → 调用时创建 WriteToken
+    writes: HashSet<String>,
+    /// 移动捕获 → 调用时标记 Moved
+    moves: HashSet<String>,
+}
+
+/// Key = 闭包变量名 → 捕获信息
+type CapturesStore = HashMap<String, Captures>;
+
+/// 参数的所有权语义（从函数签名推导）
+#[allow(dead_code)]
+enum ParamOwnership {
+    /// T → 所有权转移
+    Move,
+    /// &T → 创建 ReadToken
+    ReadBorrow,
+    /// &mut T → 创建 WriteToken + 待定冲突检查
+    WriteBorrow,
+}
+
+/// 状态快照（定义闭包时保存/恢复）
+struct StateSnapshot {
+    var_state: HashMap<String, VarState>,
+    brand_nodes_count: usize,
+    scope_vars_len: usize,
 }
 
 // ── BrandId ───────────────────────────────────────────────
@@ -491,39 +526,46 @@ fn smt_cut(
     _path_cond: &str,
     _loop_cond: &str,
 ) -> bool {
-    let constraint = ConstExpr::UnOp {
-        op: UnOp::Not,
-        expr: Box::new(ConstExpr::BinOp {
-            op: BinOp::And,
+    // wasm 模式下 Z3 不可用，保守不切断
+    #[cfg(feature = "wasm")]
+    return false;
+
+    #[cfg(not(feature = "wasm"))]
+    {
+        let constraint = ConstExpr::UnOp {
+            op: UnOp::Not,
+            expr: Box::new(ConstExpr::BinOp {
+                op: BinOp::And,
+                left: Box::new(ConstExpr::NamedVar("path_cond".into())),
+                right: Box::new(ConstExpr::NamedVar("loop_cond".into())),
+            }),
+        };
+
+        let path_assumption = ConstExpr::BinOp {
+            op: BinOp::Eq,
             left: Box::new(ConstExpr::NamedVar("path_cond".into())),
-            right: Box::new(ConstExpr::NamedVar("loop_cond".into())),
-        }),
-    };
+            right: Box::new(ConstExpr::Lit(ConstValue::Bool(true))),
+        };
+        let loop_assumption = ConstExpr::BinOp {
+            op: BinOp::Eq,
+            left: Box::new(ConstExpr::NamedVar("loop_cond".into())),
+            right: Box::new(ConstExpr::Lit(ConstValue::Bool(true))),
+        };
 
-    let path_assumption = ConstExpr::BinOp {
-        op: BinOp::Eq,
-        left: Box::new(ConstExpr::NamedVar("path_cond".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Bool(true))),
-    };
-    let loop_assumption = ConstExpr::BinOp {
-        op: BinOp::Eq,
-        left: Box::new(ConstExpr::NamedVar("loop_cond".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Bool(true))),
-    };
+        let assumptions = vec![path_assumption, loop_assumption];
+        let mut var_sorts = HashMap::new();
+        var_sorts.insert("path_cond".into(), SMTSort::Bool);
+        var_sorts.insert("loop_cond".into(), SMTSort::Bool);
 
-    let assumptions = vec![path_assumption, loop_assumption];
-    let mut var_sorts = HashMap::new();
-    var_sorts.insert("path_cond".into(), SMTSort::Bool);
-    var_sorts.insert("loop_cond".into(), SMTSort::Bool);
+        let commands = translate_constraint(&constraint, &assumptions, &var_sorts);
 
-    let commands = translate_constraint(&constraint, &assumptions, &var_sorts);
+        let backend = match Z3Backend::new() {
+            Ok(b) => b,
+            Err(_) => return false, // Z3 不可用 → 保守不切断
+        };
 
-    let backend = match Z3Backend::new() {
-        Ok(b) => b,
-        Err(_) => return false, // Z3 不可用 → 保守不切断
-    };
-
-    matches!(backend.solve(&commands, 100), SMTResult::Unsat)
+        matches!(backend.solve(&commands, 100), SMTResult::Unsat)
+    } // cfg(not(feature = "wasm"))
 }
 
 // ── 系统谓词生成器（RFC-009a §系统谓词清单） ────────────
@@ -686,6 +728,8 @@ pub struct OwnershipChecker {
     /// 作用域退出时收集的 Drop 记录（Span, 变量名）
     /// build_release_plan 会将这些与 BrandTree 消费者分析合并
     scope_drops: Vec<(Span, String)>,
+    /// 闭包捕获存储（定义时分析产出，调用时消费）
+    captures_store: CapturesStore,
 }
 
 impl Default for OwnershipChecker {
@@ -707,6 +751,7 @@ impl OwnershipChecker {
             node_spans: HashMap::new(),
             scope_vars: Vec::new(),
             scope_drops: Vec::new(),
+            captures_store: CapturesStore::new(),
         }
     }
 
@@ -720,6 +765,7 @@ impl OwnershipChecker {
         self.node_spans.clear();
         self.scope_vars.clear();
         self.scope_drops.clear();
+        self.captures_store.clear();
         self.current_node = self.cfg.add_node(None); // 入口节点
         self.current_span = Span::dummy();
     }
@@ -731,6 +777,72 @@ impl OwnershipChecker {
             Expr::FieldAccess { expr: inner, .. } => Self::extract_var_name(inner),
             _ => None,
         }
+    }
+
+    /// 保存当前状态快照（闭包定义前调用）
+    fn save_state(&self) -> StateSnapshot {
+        StateSnapshot {
+            var_state: self.var_state.clone(),
+            brand_nodes_count: self.brand_tree.nodes.len(),
+            scope_vars_len: self.scope_vars.len(),
+        }
+    }
+
+    /// 恢复到快照状态（闭包定义后调用，消除定义产生的副作用）
+    fn restore_state(
+        &mut self,
+        snapshot: StateSnapshot,
+    ) {
+        self.var_state = snapshot.var_state;
+        // 回退 brand_tree：删除闭包体内新增的令牌
+        let keys: Vec<BrandId> = self.brand_tree.nodes.keys().cloned().collect();
+        for key in keys.iter().skip(snapshot.brand_nodes_count) {
+            self.brand_tree.remove(key);
+        }
+        // 回退 scope_vars
+        while self.scope_vars.len() > snapshot.scope_vars_len {
+            self.scope_vars.pop();
+        }
+    }
+
+    /// 对比当前状态和快照，提取闭包的捕获变量
+    fn diff_captures(
+        &self,
+        snapshot: &StateSnapshot,
+    ) -> Captures {
+        let mut captures = Captures::default();
+        // 检查新增的品牌树令牌（闭包体创建的）
+        let brand_keys: Vec<BrandId> = self.brand_tree.nodes.keys().cloned().collect();
+        for key in brand_keys.iter().skip(snapshot.brand_nodes_count) {
+            if let Some(node) = self.brand_tree.get(key) {
+                let var = &node.source_var;
+                // 检查该变量在外层是否存在（外层变量 → 捕获；否则 → 局部变量）
+                if snapshot.var_state.contains_key(var) {
+                    if node.kind.is_write() {
+                        captures.writes.insert(var.clone());
+                    } else {
+                        captures.reads.insert(var.clone());
+                    }
+                }
+            }
+        }
+        // 检查 var_state 变化：Alive → Moved 的是 Move 捕获
+        for (var, &current_state) in &self.var_state {
+            if let Some(&saved_state) = snapshot.var_state.get(var) {
+                if saved_state == VarState::Alive && current_state == VarState::Moved {
+                    captures.moves.insert(var.clone());
+                }
+            }
+        }
+        // 去重：Move 优先于 Write，Write 优先于 Read
+        for mv in &captures.moves.clone() {
+            captures.writes.remove(mv);
+            captures.reads.remove(mv);
+        }
+        for wr in &captures.writes.clone() {
+            captures.reads.remove(wr);
+        }
+        captures
     }
 
     /// 从表达式提取源码 span
@@ -1190,10 +1302,24 @@ impl OwnershipChecker {
                 ..
             } => self.walk_for(var, *var_mut, iterable, &body.stmts),
 
-            StmtKind::Binding { .. } => {
-                // 嵌套函数：独立作用域，跳过（由 check_module 递归检查每层）
-                // 不在当前函数内联遍历，避免污染 var_state 和 brand_tree
-                vec![]
+            StmtKind::Binding {
+                name, body, params, ..
+            } => {
+                let mut results = Vec::new();
+                // 只处理无参闭包（{ body } 语法，非 fn 语法）
+                if params.is_empty() && !body.is_empty() {
+                    let snapshot = self.save_state();
+                    results.extend(self.walk_stmts(body));
+                    let captures = self.diff_captures(&snapshot);
+                    if !captures.reads.is_empty()
+                        || !captures.writes.is_empty()
+                        || !captures.moves.is_empty()
+                    {
+                        self.captures_store.insert(name.clone(), captures);
+                    }
+                    self.restore_state(snapshot);
+                }
+                results
             }
 
             _ => vec![],

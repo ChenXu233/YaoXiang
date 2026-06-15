@@ -72,6 +72,12 @@ export default {
       })
     }
 
+    if (frontmatter.value.is_playground) {
+      return h(DefaultTheme.Layout, null, {
+        'page-top': () => h(Playground)
+      })
+    }
+
     return h(DefaultTheme.Layout)
   },
 

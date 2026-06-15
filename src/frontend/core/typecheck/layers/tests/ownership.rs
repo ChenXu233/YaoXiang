@@ -397,7 +397,7 @@ fn make_block(stmts: Vec<Stmt>) -> Block {
     }
 }
 
-fn make_call(
+fn _make_call(
     func_name: &str,
     args: Vec<Expr>,
 ) -> Expr {

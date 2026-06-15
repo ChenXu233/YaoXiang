@@ -58,9 +58,7 @@ pub fn init() {
 /// Initialize logger with custom level (Go style: `[LEVEL] message`)
 #[cfg(feature = "cli")]
 pub fn init_with_level(level: LogLevel) {
-    use tracing_subscriber::{
-        fmt::writer::MakeWriterExt, layer::SubscriberExt, util::SubscriberInitExt, Layer, Registry,
-    };
+    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer, Registry};
 
     let filter = tracing_subscriber::filter::LevelFilter::from_level(level.into());
 
