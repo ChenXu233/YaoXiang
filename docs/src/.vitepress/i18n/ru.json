@@ -9,11 +9,11 @@
       "link": "/ru/download"
     },
     {
-      "text": "Уроки",
+      "text": "Руководство",
       "link": "/ru/tutorial/"
     },
     {
-      "text": "Руководство",
+      "text": "Гайд",
       "link": "/ru/guide/"
     },
     {
@@ -48,18 +48,15 @@
           "link": "/ru/blog/"
         }
       ]
-    },
-    {
-      "component": "VersionSwitcher"
     }
   ],
   "sidebar": {
     "/tutorial/": [
       {
-        "text": "Документация уроков",
+        "text": "Руководство",
         "items": [
           {
-            "text": "Главная уроков",
+            "text": "Главная руководства",
             "link": "/ru/tutorial/"
           },
           {
@@ -67,48 +64,49 @@
             "link": "/ru/tutorial/getting-started"
           },
           {
-            "text": "Руководство по YaoXiang",
+            "text": "Справочник YaoXiang",
             "link": "/ru/tutorial/YaoXiang-book"
-          },
-          {
-            "text": "Начало с нуля",
-            "collapsed": true,
-            "items": []
           }
         ]
+      },
+      {
+        "text": "Основы для начинающих",
+        "collapsed": true,
+        "items": []
+      },
+      {
+        "text": "Примеры проектов",
+        "collapsed": true,
+        "items": []
       }
     ],
     "/design/": [
       {
-        "text": "Документация дизайна",
+        "text": "Документация по дизайну",
         "items": [
           {
-            "text": "Каталог дизайна",
+            "text": "Содержание дизайна",
             "link": "/ru/design"
-          },
-          {
-            "text": "Спецификация языка",
-            "link": "/ru/reference/language-spec/"
           },
           {
             "text": "Манифест YaoXiang",
             "link": "/ru/design/manifesto"
           },
           {
-            "text": "Манифест YaoXiang WTF",
+            "text": "Манифест YaoXiang WTF версия",
             "link": "/ru/design/manifesto-wtf"
           },
           {
-            "text": "Взгляд на дизайн языка от человека 2006 г.р.",
+            "text": "Взгляд на дизайн языка от человека 2006 года рождения",
             "link": "/ru/design/2006-born-language-design"
           }
         ]
       },
       {
-        "text": "Документация RFC",
+        "text": "RFC документация",
         "items": [
           {
-            "text": "Каталог RFC",
+            "text": "Содержание RFC",
             "link": "/ru/design/rfc"
           },
           {
@@ -125,7 +123,7 @@
             "items": []
           },
           {
-            "text": "На рассмотрении",
+            "text": "В процессе",
             "collapsed": true,
             "items": []
           },
@@ -138,24 +136,111 @@
             "text": "Отклонённые",
             "collapsed": true,
             "items": []
+          },
+          {
+            "text": "Устаревшие",
+            "collapsed": true,
+            "items": []
+          }
+        ]
+      },
+      {
+        "text": "Дизайн инструментов",
+        "collapsed": true,
+        "items": [
+          {
+            "text": "Команда check",
+            "link": "/ru/design/check/"
+          },
+          {
+            "text": "Диагностическая система",
+            "link": "/ru/design/check/diagnostic-system"
+          },
+          {
+            "text": "Кроссфайловый анализ",
+            "link": "/ru/design/check/cross-file-analysis"
+          },
+          {
+            "text": "Инкрементная проверка",
+            "link": "/ru/design/check/incremental-checking"
+          }
+        ]
+      },
+      {
+        "text": "Правила форматирования",
+        "collapsed": true,
+        "items": [
+          {
+            "text": "Обзор правил",
+            "link": "/ru/design/formatter/"
+          },
+          {
+            "text": "Правила форматирования",
+            "collapsed": true,
+            "items": [
+              {
+                "text": "Обзор правил",
+                "link": "/ru/design/formatter/formatting-rules/"
+              },
+              {
+                "text": "Базовое форматирование",
+                "link": "/ru/design/formatter/formatting-rules/basic"
+              },
+              {
+                "text": "Функции и вызовы",
+                "link": "/ru/design/formatter/formatting-rules/functions"
+              },
+              {
+                "text": "Система типов",
+                "link": "/ru/design/formatter/formatting-rules/types"
+              },
+              {
+                "text": "Структуры данных",
+                "link": "/ru/design/formatter/formatting-rules/data-structures"
+              },
+              {
+                "text": "Управление потоком",
+                "link": "/ru/design/formatter/formatting-rules/control-flow"
+              },
+              {
+                "text": "Специальный синтаксис",
+                "link": "/ru/design/formatter/formatting-rules/special-syntax"
+              }
+            ]
+          },
+          {
+            "text": "Конфигурация",
+            "link": "/ru/design/formatter/configuration"
+          },
+          {
+            "text": "Правила комментариев",
+            "link": "/ru/design/formatter/comments"
+          },
+          {
+            "text": "Обработка ошибок",
+            "link": "/ru/design/formatter/error-handling"
+          },
+          {
+            "text": "CLI спецификация",
+            "link": "/ru/design/formatter/cli"
           }
         ]
       }
     ],
     "/reference/": [
       {
-        "text": "Справочная документация",
+        "text": "Спецификация языка",
         "items": [
           {
-            "text": "Каталог справочника",
+            "text": "Содержание справочника",
             "link": "/ru/reference"
           },
           {
-            "text": "Спецификация языка",
+            "text": "Обзор спецификации языка",
             "link": "/ru/reference/language-spec/"
           },
           {
-            "text": "Спецификация синтаксиса",
+            "text": "Синтаксическая спецификация",
             "link": "/ru/reference/language-spec/syntax"
           },
           {
@@ -167,7 +252,11 @@
             "link": "/ru/reference/language-spec/modules"
           },
           {
-            "text": "Модель параллелизма",
+            "text": "FFI",
+            "link": "/ru/reference/language-spec/ffi"
+          },
+          {
+            "text": "Модель конкурентности",
             "link": "/ru/reference/language-spec/concurrency"
           },
           {
@@ -177,25 +266,53 @@
         ]
       },
       {
-        "text": "Коды ошибок",
-        "items": []
+        "text": "Стандартная библиотека",
+        "items": [
+          {
+            "text": "Обзор стандартной библиотеки",
+            "link": "/ru/reference/stdlib/"
+          }
+        ]
       },
       {
-        "text": "Коды предупреждений",
-        "items": []
+        "text": "Ошибки и предупреждения",
+        "items": [
+          {
+            "text": "Обзор кодов ошибок",
+            "link": "/ru/reference/error-code/"
+          },
+          {
+            "text": "Категории кодов ошибок",
+            "collapsed": true,
+            "items": []
+          },
+          {
+            "text": "Коды предупреждений",
+            "link": "/ru/reference/warning-code/warning-codes"
+          }
+        ]
       },
       {
-        "text": "Система управления пакетами",
+        "text": "Управление пакетами",
         "collapsed": true,
         "items": []
+      },
+      {
+        "text": "Команды инструментов",
+        "items": [
+          {
+            "text": "Команда check",
+            "link": "/ru/reference/check-command"
+          }
+        ]
       }
     ],
     "/dev/": [
       {
-        "text": "Документация разработки",
+        "text": "Документация для разработчиков",
         "items": [
           {
-            "text": "Каталог разработки",
+            "text": "Содержание разработки",
             "link": "/ru/dev/"
           },
           {
@@ -203,12 +320,20 @@
             "link": "/ru/dev/contributing"
           },
           {
-            "text": "Руководство по коммитам",
+            "text": "Соглашение о коммитах",
             "link": "/ru/dev/commit-convention"
           },
           {
-            "text": "Руководство по ветвлению",
+            "text": "Руководство по веткам",
             "link": "/ru/dev/branch-maintenance-guide"
+          },
+          {
+            "text": "Процесс релиза",
+            "link": "/ru/dev/release"
+          },
+          {
+            "text": "Спецификация тестирования",
+            "link": "/ru/dev/test-specification"
           }
         ]
       },
@@ -216,11 +341,30 @@
         "text": "Планы",
         "items": [
           {
-            "text": "Каталог планов",
+            "text": "Содержание планов",
             "link": "/ru/dev/plan"
           },
           {
-            "text": "В процессе",
+            "text": "В обработке",
+            "collapsed": true,
+            "items": []
+          },
+          {
+            "text": "Задачи",
+            "collapsed": true,
+            "items": []
+          }
+        ]
+      },
+      {
+        "text": "Дорожная карта",
+        "items": [
+          {
+            "text": "Главная дорожной карты",
+            "link": "/ru/dev/plan/roadmap"
+          },
+          {
+            "text": "Статус модулей",
             "collapsed": true,
             "items": []
           }
@@ -229,30 +373,46 @@
     ],
     "/guide/": [
       {
-        "text": "Документация руководства",
+        "text": "Гайд",
         "items": [
           {
-            "text": "Каталог руководства",
+            "text": "Содержание гайда",
             "link": "/ru/guide/"
           },
           {
             "text": "Система управления пакетами",
             "link": "/ru/guide/packaging"
+          },
+          {
+            "text": "CI интеграция",
+            "link": "/ru/guide/ci-integration"
+          },
+          {
+            "text": "REPL интерактивная среда",
+            "link": "/ru/guide/repl"
           }
         ]
       }
     ],
     "/": [
       {
-        "text": "Китайская документация",
+        "text": "Русская документация",
         "items": [
           {
             "text": "Быстрый старт",
             "link": "/ru/getting-started"
           },
           {
-            "text": "Уроки",
+            "text": "Руководство",
             "link": "/ru/tutorial/"
+          },
+          {
+            "text": "Гайд",
+            "link": "/ru/guide/"
+          },
+          {
+            "text": "Справочник",
+            "link": "/ru/reference/"
           }
         ]
       }

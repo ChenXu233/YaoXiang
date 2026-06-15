@@ -1,10 +1,34 @@
 import { defineConfig } from 'vitepress'
 import { generateSidebar as _generateSidebar } from 'vitepress-sidebar'
 import yaoxiangGrammar from './syntaxes/yaoxiang.tmLanguage.json'
+import enI18n from './i18n/en.json'
+import jaI18n from './i18n/ja.json'
+import ruI18n from './i18n/ru.json'
 
 // VitePress 源文件在 src/ 目录下，vitepress-sidebar 从 process.cwd() 解析路径
 // 需要 documentRootPath: '/src' 让插件从 docs/src/ 开始扫描
 const generateSidebar = (opts) => _generateSidebar({ documentRootPath: '/src', ...opts })
+
+// 将 i18n JSON 的 sidebar key 加上 locale 前缀（/tutorial/ → /en/tutorial/）
+function prefixSidebarKeys(sidebar, prefix) {
+  const result = {}
+  for (const [key, value] of Object.entries(sidebar)) {
+    result[prefix + key.slice(1)] = value
+  }
+  return result
+}
+
+function makeLocale(i18n, prefix, lang, label) {
+  return {
+    lang,
+    label,
+    link: `/${prefix}/`,
+    themeConfig: {
+      nav: i18n.nav,
+      sidebar: prefixSidebarKeys(i18n.sidebar, `/${prefix}/`),
+    },
+  }
+}
 
 export default defineConfig({
   base: '/YaoXiang/',
@@ -85,21 +109,31 @@ export default defineConfig({
         sidebar: {
           '/tutorial/': [
             {
-              text: '教程文档',
+              text: '教程',
               items: [
                 { text: '教程首页', link: '/tutorial/' },
                 { text: '快速开始', link: '/tutorial/getting-started' },
                 { text: '爻象手册', link: '/tutorial/YaoXiang-book' },
-                {
-                  text: '零基础入门',
-                  collapsed: true,
-                  items: generateSidebar({
-                    scanStartPath: '/tutorial/basics',
-                    useTitleFromFrontmatter: true,
-                    collapsed: true,
-                  }),
-                 },
               ],
+            },
+            {
+              text: '零基础入门',
+              collapsed: true,
+              items: generateSidebar({
+                scanStartPath: '/tutorial/basics',
+                useTitleFromFrontmatter: true,
+                collapsed: true,
+              }),
+            },
+            {
+              text: '示例项目',
+              collapsed: true,
+              items: generateSidebar({
+                scanStartPath: '/tutorial/examples',
+                useTitleFromFrontmatter: true,
+                collapsed: true,
+                hyphenToSpace: true,
+              }),
             },
           ],
 
@@ -108,12 +142,11 @@ export default defineConfig({
               text: '设计文档',
               items: [
                 { text: '设计目录', link: '/design' },
-                { text: '语言规范', link: '/reference/language-spec/' },
                 { text: '爻象宣言', link: '/design/manifesto' },
                 { text: '爻象宣言 WTF 版', link: '/design/manifesto-wtf' },
                 { text: '一个 2006 年出生者的语言设计观', link: '/design/2006-born-language-design' },
               ],
-             },
+            },
             {
               text: 'RFC 文档',
               items: [
@@ -160,10 +193,21 @@ export default defineConfig({
                     hyphenToSpace: true,
                   }),
                 },
-              ]
+                {
+                  text: '已废弃',
+                  collapsed: true,
+                  items: generateSidebar({
+                    scanStartPath: '/design/rfc/deprecated',
+                    useTitleFromFrontmatter: true,
+                    collapsed: true,
+                    hyphenToSpace: true,
+                  }),
+                },
+              ],
             },
             {
               text: '工具设计',
+              collapsed: true,
               items: [
                 { text: 'check 命令', link: '/design/check/' },
                 { text: '诊断系统', link: '/design/check/diagnostic-system' },
@@ -173,6 +217,7 @@ export default defineConfig({
             },
             {
               text: '格式化规范',
+              collapsed: true,
               items: [
                 { text: '规范总览', link: '/design/formatter/' },
                 {
@@ -198,46 +243,56 @@ export default defineConfig({
 
           '/reference/': [
             {
-              text: '参考文档',
+              text: '语言规范',
               items: [
                 { text: '参考目录', link: '/reference' },
-                { text: '语言规范', link: '/reference/language-spec/' },
+                { text: '语言规范总览', link: '/reference/language-spec/' },
                 { text: '语法规范', link: '/reference/language-spec/syntax' },
                 { text: '类型系统', link: '/reference/language-spec/type-system' },
                 { text: '模块系统', link: '/reference/language-spec/modules' },
+                { text: 'FFI', link: '/reference/language-spec/ffi' },
                 { text: '并发模型', link: '/reference/language-spec/concurrency' },
                 { text: '标准库', link: '/reference/language-spec/stdlib' },
               ],
             },
             {
-              text: '错误码',
-              items: generateSidebar({
-                scanStartPath: '/reference/error-code',
-                useTitleFromFrontmatter: true,
-                collapsed: true,
-                hyphenToSpace: true,
-              })
+              text: '标准库',
+              items: [
+                { text: '标准库总览', link: '/reference/stdlib/' },
+              ],
             },
             {
-              text: '警告码',
+              text: '错误与警告',
+              items: [
+                { text: '错误码总览', link: '/reference/error-code/' },
+                {
+                  text: '错误码分类',
+                  collapsed: true,
+                  items: generateSidebar({
+                    scanStartPath: '/reference/error-code',
+                    useTitleFromFrontmatter: true,
+                    collapsed: true,
+                    hyphenToSpace: true,
+                  }),
+                },
+                { text: '警告码', link: '/reference/warning-code/warning-codes' },
+              ],
+            },
+            {
+              text: '包管理',
+              collapsed: true,
               items: generateSidebar({
-                scanStartPath: '/reference/warning-code',
+                scanStartPath: '/reference/package',
                 useTitleFromFrontmatter: true,
                 collapsed: true,
                 hyphenToSpace: true,
               }),
             },
             {
-              text: '包管理系统',
-              collapsed: true,
+              text: '工具命令',
               items: [
-                generateSidebar({
-                scanStartPath: '/reference/package',
-                useTitleFromFrontmatter: true,
-                collapsed: true,
-                hyphenToSpace: true,
-                })
-              ]
+                { text: 'check 命令', link: '/reference/check-command' },
+              ],
             },
           ],
 
@@ -249,6 +304,8 @@ export default defineConfig({
                 { text: '贡献指南', link: '/dev/contributing' },
                 { text: '提交指南', link: '/dev/commit-convention' },
                 { text: '分支指南', link: '/dev/branch-maintenance-guide' },
+                { text: '发布流程', link: '/dev/release' },
+                { text: '测试规范', link: '/dev/test-specification' },
               ],
             },
             {
@@ -260,6 +317,16 @@ export default defineConfig({
                   collapsed: true,
                   items: generateSidebar({
                     scanStartPath: '/dev/plan/ongoing',
+                    useTitleFromFrontmatter: true,
+                    collapsed: true,
+                    hyphenToSpace: true,
+                  }),
+                },
+                {
+                  text: '任务',
+                  collapsed: true,
+                  items: generateSidebar({
+                    scanStartPath: '/dev/plan/task',
                     useTitleFromFrontmatter: true,
                     collapsed: true,
                     hyphenToSpace: true,
@@ -287,10 +354,12 @@ export default defineConfig({
 
           '/guide/': [
             {
-              text: '指南文档',
+              text: '指南',
               items: [
                 { text: '指南目录', link: '/guide/' },
                 { text: '包管理系统', link: '/guide/packaging' },
+                { text: 'CI 集成', link: '/guide/ci-integration' },
+                { text: 'REPL 交互环境', link: '/guide/repl' },
               ],
             },
           ],
@@ -301,11 +370,17 @@ export default defineConfig({
               items: [
                 { text: '快速开始', link: '/getting-started' },
                 { text: '教程', link: '/tutorial/' },
+                { text: '指南', link: '/guide/' },
+                { text: '参考', link: '/reference/' },
               ],
             },
           ],
         },
       },
     },
+
+    en: makeLocale(enI18n, 'en', 'en', 'English'),
+    ja: makeLocale(jaI18n, 'ja', 'ja', '日本語'),
+    ru: makeLocale(ruI18n, 'ru', 'ru', 'Русский'),
   },
 })
