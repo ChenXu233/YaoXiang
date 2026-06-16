@@ -11,7 +11,7 @@
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
 use crate::util::diagnostic::{ErrorCodeDefinition, Diagnostic};
 use std::collections::{HashMap, HashSet};
-use super::error::{operand_display_name};
+use super::state_utils::{operand_display_name};
 
 /// 任务内循环追踪器
 #[derive(Debug, Default)]

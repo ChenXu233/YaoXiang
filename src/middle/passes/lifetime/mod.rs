@@ -8,21 +8,21 @@
 //!
 //! # 模块结构
 //!
-//! - `error.rs`: 所有权错误类型定义
 //! - `chain_calls.rs`: 链式调用分析
 //! - `cycle_check.rs`: 跨 spawn 循环检测
 //! - `intra_task_cycle.rs`: 任务内循环追踪
 //! - `lifecycle.rs`: 生命周期管理
 //! - `ownership_flow.rs`: 所有权流分析
+//! - `state_utils.rs`: 状态追踪辅助类型
 //! - `unsafe_check.rs`: unsafe 块绕过检查
 
 // 子模块
 pub mod chain_calls;
 pub mod cycle_check;
-pub mod error;
 pub mod intra_task_cycle;
 pub mod lifecycle;
 pub mod ownership_flow;
+pub mod state_utils;
 pub mod unsafe_check;
 
 #[cfg(test)]
@@ -30,8 +30,8 @@ mod tests;
 
 pub use chain_calls::*;
 pub use cycle_check::*;
-pub use error::*;
 pub use intra_task_cycle::*;
 pub use lifecycle::*;
 pub use ownership_flow::*;
+pub use state_utils::*;
 pub use unsafe_check::*;

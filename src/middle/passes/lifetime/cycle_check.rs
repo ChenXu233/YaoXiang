@@ -15,7 +15,7 @@
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
 use crate::util::diagnostic::{ErrorCodeDefinition, Diagnostic};
 use std::collections::{HashMap, HashSet};
-use super::error::{operand_display_name};
+use super::state_utils::{operand_display_name};
 
 /// 检测深度限制：只检测直接边界，不递归进入嵌套 spawn
 /// 用于文档说明，实际通过 `find_spawn_result_direct` 实现深度限制
@@ -375,7 +375,7 @@ impl CycleChecker {
 }
 
 /// 为 CycleChecker 实现 Checker trait
-impl super::error::Checker for CycleChecker {
+impl super::state_utils::Checker for CycleChecker {
     fn check_function(
         &mut self,
         func: &FunctionIR,
