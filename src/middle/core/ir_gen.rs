@@ -1460,18 +1460,16 @@ impl AstToIrGenerator {
                     }
                 }
             }
-            ast::StmtKind::Return(expr) => {
-                match expr {
-                    Some(e) => {
-                        let result_reg = self.next_temp_reg();
-                        self.generate_expr_ir(e, result_reg, instructions, constants)?;
-                        instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
-                    }
-                    None => {
-                        instructions.push(Instruction::Ret(None));
-                    }
+            ast::StmtKind::Return(expr) => match expr {
+                Some(e) => {
+                    let result_reg = self.next_temp_reg();
+                    self.generate_expr_ir(e, result_reg, instructions, constants)?;
+                    instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
                 }
-            }
+                None => {
+                    instructions.push(Instruction::Ret(None));
+                }
+            },
             // 处理其他语句类型
             _ => {}
         }

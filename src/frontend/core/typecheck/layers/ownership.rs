@@ -1422,13 +1422,11 @@ impl OwnershipChecker {
                 let spawn_refs = std::mem::take(&mut self.current_spawn_refs);
                 for ref_a in &spawn_refs {
                     for ref_b in &spawn_refs {
-                        if ref_a != ref_b {
-                            if self.ref_holds_ref(ref_a, ref_b) {
-                                self.spawn_ref_graph
-                                    .entry(ref_a.clone())
-                                    .or_default()
-                                    .insert(ref_b.clone());
-                            }
+                        if ref_a != ref_b && self.ref_holds_ref(ref_a, ref_b) {
+                            self.spawn_ref_graph
+                                .entry(ref_a.clone())
+                                .or_default()
+                                .insert(ref_b.clone());
                         }
                     }
                 }
@@ -1663,10 +1661,10 @@ impl OwnershipChecker {
         let mut path = Vec::new();
 
         for node in self.spawn_ref_graph.keys() {
-            if !visited.contains(node) {
-                if self.detect_cycle_dfs(node, &mut visited, &mut recursion_stack, &mut path) {
-                    return Some(path.join(" -> "));
-                }
+            if !visited.contains(node)
+                && self.detect_cycle_dfs(node, &mut visited, &mut recursion_stack, &mut path)
+            {
+                return Some(path.join(" -> "));
             }
         }
         None
