@@ -533,6 +533,7 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             locals: new_locals,
             blocks: new_blocks,
             entry: generic_func.entry,
+            generic_params: None,
         }
     }
 

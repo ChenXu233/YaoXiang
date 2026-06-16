@@ -175,6 +175,7 @@ impl ClosureMonomorphizer for super::Monomorphizer {
             locals: new_locals,
             blocks: new_blocks,
             entry: generic_body.entry,
+            generic_params: None,
         }
     }
 

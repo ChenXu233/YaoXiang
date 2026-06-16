@@ -695,6 +695,7 @@ impl AstToIrGenerator {
                 successors: Vec::new(),
             }],
             entry: 0,
+            generic_params: None,
         };
 
         // 保存当前函数的可变局部变量信息到模块级别映射
@@ -847,6 +848,7 @@ impl AstToIrGenerator {
                 successors: Vec::new(),
             }],
             entry: 0,
+            generic_params: None,
         };
 
         // 记录函数参数类型（用于调用点发出 Borrow 指令）
@@ -974,6 +976,7 @@ impl AstToIrGenerator {
                 successors: Vec::new(),
             }],
             entry: 0,
+            generic_params: None,
         };
 
         Ok(Some(func_ir))
@@ -1125,6 +1128,7 @@ impl AstToIrGenerator {
                 successors: Vec::new(),
             }],
             entry: 0,
+            generic_params: None,
         };
 
         Ok(Some(func_ir))
@@ -1245,6 +1249,7 @@ impl AstToIrGenerator {
                 successors: Vec::new(),
             }],
             entry: 0,
+            generic_params: None,
         };
 
         Ok(Some(func_ir))
@@ -3523,6 +3528,7 @@ impl AstToIrGenerator {
                         successors: Vec::new(),
                     }],
                     entry: 0,
+                    generic_params: None,
                 };
 
                 // 7. 将闭包函数添加到嵌套函数列表

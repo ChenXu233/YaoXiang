@@ -398,6 +398,10 @@ pub struct FunctionIR {
     pub locals: Vec<MonoType>,
     pub blocks: Vec<BasicBlock>,
     pub entry: usize,
+    /// 泛型参数列表
+    /// Some(["T", "U"]) 表示泛型函数定义
+    /// None 表示普通函数或已特化函数
+    pub generic_params: Option<Vec<String>>,
 }
 
 impl FunctionIR {
