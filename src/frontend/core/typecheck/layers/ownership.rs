@@ -740,6 +740,8 @@ pub struct OwnershipChecker {
     escaped_refs: HashSet<String>,
     /// 当前是否在 spawn 体内
     inside_spawn: bool,
+    /// 当前是否在 unsafe 块内
+    inside_unsafe: bool,
 }
 
 impl Default for OwnershipChecker {
@@ -766,6 +768,7 @@ impl OwnershipChecker {
             ref_vars: HashSet::new(),
             escaped_refs: HashSet::new(),
             inside_spawn: false,
+            inside_unsafe: false,
         }
     }
 
@@ -783,6 +786,7 @@ impl OwnershipChecker {
         self.ref_vars.clear();
         self.escaped_refs.clear();
         self.inside_spawn = false;
+        self.inside_unsafe = false;
         self.current_node = self.cfg.add_node(None); // 入口节点
         self.current_span = Span::dummy();
     }
@@ -1288,6 +1292,26 @@ impl OwnershipChecker {
                     r
                 }
             }
+            Expr::UnOp {
+                op: crate::frontend::core::parser::ast::UnOp::Deref,
+                expr,
+                span,
+            } => {
+                let mut results = Vec::new();
+                if !self.inside_unsafe {
+                    results.push(ProofResult::Disproved(
+                        super::super::proof::verdict::DisproofModel {
+                            kind: super::super::proof::verdict::DisproofKind::UnsafeViolation,
+                            assignments: vec![],
+                            constraint: "deref outside unsafe block".to_string(),
+                            span: Some(*span),
+                            predicate_span: None,
+                        },
+                    ));
+                }
+                results.extend(self.walk_expr(expr));
+                results
+            }
             Expr::UnOp { expr: inner, .. } => self.walk_expr(inner),
             Expr::Cast { expr: inner, .. } => self.walk_expr(inner),
             Expr::Index { expr, index, .. } => {
@@ -1391,7 +1415,15 @@ impl OwnershipChecker {
                 results
             }
 
-            // FnDef / Lambda / Unsafe / Lit / FString 等跳过
+            Expr::Unsafe { body, .. } => {
+                let was_unsafe = self.inside_unsafe;
+                self.inside_unsafe = true;
+                let results = self.walk_stmts(&body.stmts);
+                self.inside_unsafe = was_unsafe;
+                results
+            }
+
+            // FnDef / Lambda / Lit / FString 等跳过
             _ => vec![],
         };
         self.node_spans.insert(self.current_node, self.current_span);

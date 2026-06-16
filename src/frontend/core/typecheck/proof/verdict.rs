@@ -34,6 +34,8 @@ pub enum DisproofKind {
     UseAfterDrop,
     DoubleDrop,
     MutViolation,
+    /// unsafe 解引用违规（在 unsafe 块外解引用裸指针）→ E2027
+    UnsafeViolation,
 }
 
 /// 证明结果
@@ -164,6 +166,13 @@ impl DisproofModel {
                     .unwrap_or(&String::new())
                     .clone();
                 let mut builder = ErrorCodeDefinition::immutable_assign(&name);
+                if let Some(span) = self.span {
+                    builder = builder.at(span);
+                }
+                builder.build()
+            }
+            DisproofKind::UnsafeViolation => {
+                let mut builder = ErrorCodeDefinition::unsafe_deref();
                 if let Some(span) = self.span {
                     builder = builder.at(span);
                 }
