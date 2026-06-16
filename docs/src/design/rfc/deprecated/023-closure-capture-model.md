@@ -6,7 +6,7 @@ created: "2026-05-29"
 updated: "2026-06-16"
 ---
 
-> **废弃理由**：2026-06-16 语言设计决策——Lambda/函数值不隐式捕获外层变量，改用显式参数传参。`spawn { }` 同帧执行，不涉及闭包捕获。本 RFC 的捕获分析系统已被完整删除（~850 行代码）。详见 [RFC-009 设计决策](../accepted/009-ownership-model.md#设计决策记录) 和 [移除隐式捕获 spec](../../../superpowers/specs/2026-06-16-remove-implicit-closure-capture.md)。
+> **废弃理由**：2026-06-16 语言设计决策——Lambda/函数值不隐式捕获外层变量，改用显式参数传参。`spawn { }` 同帧执行，不涉及闭包捕获。本 RFC 的捕获分析系统已被完整删除（~850 行代码）。详见 [RFC-009 设计决策](../accepted/009-ownership-model.md#设计决策记录) 。
 
 # RFC-023: 闭包捕获模型
 
