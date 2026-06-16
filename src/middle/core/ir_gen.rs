@@ -3497,37 +3497,8 @@ impl AstToIrGenerator {
                 // 3. 为闭包参数分配寄存器索引
                 let _param_regs: Vec<usize> = (0..params.len()).collect();
 
-                // 4. 收集被捕获的外部变量（在进入闭包作用域之前）
-                // 构建当前作用域中所有变量名的集合
-                let outer_scope: std::collections::HashSet<String> = self
-                    .symbols
-                    .iter()
-                    .flat_map(|scope| scope.keys().cloned())
-                    .collect();
-
-                // 使用捕获分析模块扫描闭包体，找出引用的外部变量
-                let captured_vars =
-                    crate::frontend::core::typecheck::inference::capture::analyze_captures(
-                        body.as_ref(),
-                        &outer_scope,
-                    );
-
-                // 为每个被捕获的变量查找其在当前作用域中的 Operand
-                let mut env_vars = Vec::new();
-                for captured in &captured_vars {
-                    if let Some(local_idx) = self.lookup_local(&captured.name) {
-                        // ZST 优化：借用令牌是零大小类型，跳过 env
-                        if let Some(type_result) = &self.type_result {
-                            if let Some(mono_type) = type_result.local_var_types.get(&captured.name)
-                            {
-                                if matches!(mono_type, MonoType::Ref { .. }) {
-                                    continue;
-                                }
-                            }
-                        }
-                        env_vars.push(Operand::Local(local_idx));
-                    }
-                }
+                // Lambda 无隐式捕获：env 始终为空
+                let env_vars = Vec::new();
 
                 // 5. 生成闭包函数体 IR
                 // 类似于 generate_function_ir 的逻辑，但针对 Lambda
