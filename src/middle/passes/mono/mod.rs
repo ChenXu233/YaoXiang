@@ -303,6 +303,12 @@ impl Monomorphizer {
         let mut map = HashMap::new();
         for req in requests {
             let generic_name = req.generic_id().name().to_string();
+
+            // 只处理已知的泛型函数
+            if !self.generic_functions.contains_key(&generic_name) {
+                continue;
+            }
+
             let type_args_str = req
                 .type_args()
                 .iter()
@@ -775,7 +781,11 @@ mod tests {
 
     #[test]
     fn test_replace_call_sites_basic() {
-        let mono = Monomorphizer::new();
+        let mut mono = Monomorphizer::new();
+
+        // 注册泛型函数 identity
+        mono.generic_functions
+            .insert("identity".to_string(), make_identity_ir());
 
         // 创建一个非泛型函数 main，其中调用泛型函数 identity
         let main_func = FunctionIR {
@@ -881,7 +891,11 @@ mod tests {
 
     #[test]
     fn test_replace_call_sites_multiple_functions() {
-        let mono = Monomorphizer::new();
+        let mut mono = Monomorphizer::new();
+
+        // 注册泛型函数 identity
+        mono.generic_functions
+            .insert("identity".to_string(), make_identity_ir());
 
         // 两个非泛型函数都调用 identity
         let func_a = FunctionIR {

@@ -633,7 +633,13 @@ impl Pipeline {
         let _ = _source_file;
 
         match middle::generate_ir(ast, type_result) {
-            Ok(ir) => {
+            Ok(mut ir) => {
+                // 单态化（如果有实例化请求）
+                if !type_result.instantiation_requests.is_empty() {
+                    let mut mono = middle::passes::mono::Monomorphizer::new();
+                    ir = mono.monomorphize(&ir, &type_result.instantiation_requests);
+                }
+
                 let duration = start.elapsed().as_millis() as u64;
                 phase_durations.push((CompilationPhase::IRGeneration, duration));
 
