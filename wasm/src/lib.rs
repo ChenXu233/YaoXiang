@@ -1,4 +1,4 @@
-//! Wasm Playground entry point.
+//! YaoXiang Wasm Playground
 //!
 //! Exposes `run_code()` to JavaScript via wasm-bindgen,
 //! allowing the YaoXiang compiler + interpreter to run in the browser.

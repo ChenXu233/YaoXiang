@@ -27,13 +27,6 @@ crate-type = ["rlib"]
 name = "yaoxiang"
 path = "src/main.rs"
 
-[[example]]
-name = "yaoxiang_wasm"
-crate-type = ["cdylib"]
-path = "src/playground.rs"
-test = false
-required-features = ["wasm"]
-
 [dev-dependencies]
 criterion = "0.8.1"
 quickcheck = "1.1.0"
@@ -121,13 +114,9 @@ debug = true
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"
 
-[package.metadata.wasm-pack.profile.release]
-wasm-opt = false
-
-# wasm 特有依赖 —— cfg(target_arch = "wasm32") 时自动激活
+# rand → getrandom 在 wasm32 target 上需要 wasm_js feature
+# web-time 用于 wasm32 上替代 std::time::Instant
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = "0.2"
-console_error_panic_hook = "0.1"
-web-time = "1"
 getrandom = { version = "0.3", features = ["wasm_js"] }
 getrandom-04 = { package = "getrandom", version = "0.4", features = ["wasm_js"] }
+web-time = "1"
