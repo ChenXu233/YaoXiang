@@ -36,6 +36,8 @@ pub enum DisproofKind {
     MutViolation,
     /// unsafe 解引用违规（在 unsafe 块外解引用裸指针）→ E2027
     UnsafeViolation,
+    /// spawn 内 ref 循环（ref 变量间形成环形引用）→ E2029
+    SpawnCycleViolation,
 }
 
 /// 证明结果
@@ -173,6 +175,14 @@ impl DisproofModel {
             }
             DisproofKind::UnsafeViolation => {
                 let mut builder = ErrorCodeDefinition::unsafe_deref();
+                if let Some(span) = self.span {
+                    builder = builder.at(span);
+                }
+                builder.build()
+            }
+            DisproofKind::SpawnCycleViolation => {
+                let cycle_info = self.constraint.clone();
+                let mut builder = ErrorCodeDefinition::spawn_ref_cycle(&cycle_info);
                 if let Some(span) = self.span {
                     builder = builder.at(span);
                 }

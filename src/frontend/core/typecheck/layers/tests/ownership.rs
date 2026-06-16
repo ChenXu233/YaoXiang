@@ -1878,3 +1878,101 @@ fn test_e2e_ref_holds_ref_through_field_assignment() {
         escaped
     );
 }
+
+// ── 辅助函数：解析模块 ──────────────────────────────────
+
+/// 辅助函数：解析源码为 AST Module
+fn parse_module(source: &str) -> crate::frontend::core::parser::ast::Module {
+    use crate::frontend::core::lexer::tokenize;
+    use crate::frontend::core::parser::parse;
+
+    let tokens = tokenize(source).unwrap();
+    parse(&tokens).unwrap()
+}
+
+// ── unsafe_check 测试 ──────────────────────────────────
+
+#[test]
+fn test_deref_in_unsafe_allowed() {
+    // unsafe { *ptr } → 应该通过（deref 在 unsafe 内允许）
+    // 注：unsafe 不能作为语句开头，需赋值给变量
+    let module = parse_module("test = () => { x = 42; ptr = ref x; result = unsafe { *ptr } }");
+    let mut checker = OwnershipChecker::new();
+    let (results, _, _) = checker.check_module(&module, &make_test_env());
+    // unsafe 内的 deref 不应产生 UnsafeViolation
+    assert!(
+        !results.iter().any(|r| {
+            matches!(
+                r,
+                ProofResult::Disproved(m) if m.kind == DisproofKind::UnsafeViolation
+            )
+        }),
+        "unsafe 内的 deref 不应报 UnsafeViolation，但检测到: {:?}",
+        results
+    );
+}
+
+#[test]
+fn test_deref_outside_unsafe_error() {
+    // *ptr → 应该报错（deref 在 unsafe 外不允许）
+    let module = parse_module("test = () => { x = 42; ptr = ref x; *ptr }");
+    let mut checker = OwnershipChecker::new();
+    let (results, _, _) = checker.check_module(&module, &make_test_env());
+    // 应该检测到 UnsafeViolation
+    assert!(
+        results.iter().any(|r| {
+            matches!(
+                r,
+                ProofResult::Disproved(m) if m.kind == DisproofKind::UnsafeViolation
+            )
+        }),
+        "应该检测到 deref outside unsafe 的 UnsafeViolation，但结果为空: {:?}",
+        results
+    );
+}
+
+// ── spawn_cycles 测试 ──────────────────────────────────
+
+#[test]
+fn test_spawn_ref_cycle_detected() {
+    // spawn 内形成 ref 循环 → 应该报错
+    // ra.field = rb; rb.field = ra → 循环
+    let module = parse_module(
+        "test = () => { a = 42; b = 43; ra = ref a; rb = ref b; spawn { temp1 = ra.field = rb; temp2 = rb.field = ra } }",
+    );
+    let mut checker = OwnershipChecker::new();
+    let (results, _, _) = checker.check_module(&module, &make_test_env());
+    // 应该检测到 SpawnCycleViolation
+    assert!(
+        results.iter().any(|r| {
+            matches!(
+                r,
+                ProofResult::Disproved(m) if m.kind == DisproofKind::SpawnCycleViolation
+            )
+        }),
+        "应该检测到 spawn ref 循环的 SpawnCycleViolation，但结果为空: {:?}",
+        results
+    );
+}
+
+#[test]
+fn test_spawn_no_cycle_allowed() {
+    // spawn 内无 ref 循环 → 应该通过
+    // 只有 ra.field = rb，没有 rb.field = ra → 无循环
+    let module = parse_module(
+        "test = () => { a = 42; b = 43; ra = ref a; rb = ref b; spawn { temp = ra.field = rb } }",
+    );
+    let mut checker = OwnershipChecker::new();
+    let (results, _, _) = checker.check_module(&module, &make_test_env());
+    // 不应检测到 SpawnCycleViolation
+    assert!(
+        !results.iter().any(|r| {
+            matches!(
+                r,
+                ProofResult::Disproved(m) if m.kind == DisproofKind::SpawnCycleViolation
+            )
+        }),
+        "spawn 内无循环不应报 SpawnCycleViolation，但检测到: {:?}",
+        results
+    );
+}
