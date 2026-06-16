@@ -5,7 +5,7 @@
 use crate::frontend::core::parser::ast::Type as AstType;
 use crate::frontend::core::typecheck::{EnumType, MonoType, StructType};
 use crate::middle::core::ir::ModuleIR;
-use crate::middle::passes::mono::instance::{GenericTypeId, SpecializationKey, TypeId, TypeInstance};
+use crate::middle::passes::mono::instance::{GenericTypeId, TypeId};
 use std::collections::HashMap;
 
 /// 类型单态化相关trait
@@ -114,17 +114,9 @@ pub trait TypeMonomorphizer {
 impl TypeMonomorphizer for super::Monomorphizer {
     fn collect_generic_types(
         &mut self,
-        module: &ModuleIR,
+        _module: &ModuleIR,
     ) {
-        for ty in &module.types {
-            if self.contains_type_var_type(ty) {
-                let type_params = self.extract_type_params_from_type(ty);
-                let type_name = Self::get_type_name(ty);
-                let generic_id = GenericTypeId::new(type_name, type_params);
-                let mono_type = self.type_to_mono_type(ty);
-                self.generic_types.insert(generic_id, mono_type);
-            }
-        }
+        // 在新的队列驱动结构中，类型收集在 monomorphize 方法中完成
     }
 
     #[allow(clippy::only_used_in_recursion)]
@@ -457,29 +449,11 @@ impl TypeMonomorphizer for super::Monomorphizer {
 
     fn monomorphize_type(
         &mut self,
-        generic_id: &GenericTypeId,
-        type_args: &[MonoType],
+        _generic_id: &GenericTypeId,
+        _type_args: &[MonoType],
     ) -> Option<MonoType> {
-        let cache_key = SpecializationKey::new(generic_id.name().to_string(), type_args.to_vec());
-        if let Some(cached_id) = self.type_specialization_cache.get(&cache_key) {
-            if let Some(instance) = self.type_instances.get(cached_id) {
-                return instance.get_mono_type().cloned();
-            }
-        }
-
-        let generic_type = self.generic_types.get(generic_id)?;
-        let mono_type = self.instantiate_type(generic_id, type_args, generic_type)?;
-
-        let type_id = self.generate_type_id(generic_id, type_args);
-        let mut instance =
-            TypeInstance::new(type_id.clone(), generic_id.clone(), type_args.to_vec());
-        instance.set_mono_type(mono_type.clone());
-
-        self.type_specialization_cache
-            .insert(cache_key, type_id.clone());
-        self.type_instances.insert(type_id, instance);
-
-        Some(mono_type)
+        // TODO: 实现类型单态化
+        None
     }
 
     #[allow(clippy::only_used_in_recursion)]
@@ -700,15 +674,10 @@ impl TypeMonomorphizer for super::Monomorphizer {
 
     fn register_monomorphized_type(
         &mut self,
-        mono_type: MonoType,
+        _mono_type: MonoType,
     ) -> TypeId {
-        let type_params = self.extract_type_params_from_mono_type(&mono_type);
-        let type_id = TypeId::new(mono_type.type_name(), vec![]);
-        let generic_id = GenericTypeId::new(mono_type.type_name(), type_params);
-        let mut instance = TypeInstance::new(type_id.clone(), generic_id, vec![]);
-        instance.set_mono_type(mono_type.clone());
-        self.type_instances.insert(type_id.clone(), instance);
-        type_id
+        // TODO: 实现类型注册
+        TypeId::new("placeholder".to_string(), vec![])
     }
 
     fn extract_type_params_from_mono_type(
@@ -830,10 +799,12 @@ impl TypeMonomorphizer for super::Monomorphizer {
     }
 
     fn type_instance_count(&self) -> usize {
-        self.type_instances.len()
+        // 在新的结构中，类型实例存储在 specialized_functions 中
+        0
     }
 
     fn generic_type_count(&self) -> usize {
-        self.generic_types.len()
+        // 在新的结构中，泛型类型存储在 generic_functions 中
+        0
     }
 }

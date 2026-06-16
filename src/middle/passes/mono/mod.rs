@@ -3,434 +3,144 @@
 //! 将泛型函数和泛型类型特化为具体类型的代码。
 //! 核心策略：
 //! 1. 按需特化：只对实际使用的类型组合生成代码
-//! 2. 代码共享：相同类型组合共享一份代码
-//! 3. 类型单态化：支持泛型结构和枚举的类型实例化
+//! 2. 队列驱动：BFS 处理实例化请求，自动处理嵌套泛型调用
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 
-// 导出子模块
-pub mod closure;
-pub mod cross_module;
-pub mod dce; // 死代码消除
 pub mod function;
-pub mod global;
 pub mod instance;
-pub mod instantiation_graph; // 实例化图
-pub mod module_state;
-pub mod platform_info; // 平台信息获取
-pub mod platform_specializer; // 平台特化器
-pub mod reachability; // 可达性分析
 pub mod type_mono;
 
-use self::instance::{
-    ClosureId, ClosureInstance, ClosureSpecializationKey, FunctionId, GenericClosureId,
-    GenericFunctionId, GenericTypeId, InstantiationRequest, SpecializationKey, TypeId,
-    TypeInstance,
-};
-
-use crate::frontend::core::typecheck::MonoType;
+use instance::{InstantiationRequest, SpecializationKey};
 use crate::middle::core::ir::{FunctionIR, ModuleIR};
 
-use self::function::FunctionMonomorphizer;
-use self::type_mono::TypeMonomorphizer;
-
-use self::dce::{DceConfig, DcePass};
-use self::platform_info::{PlatformDetector, PlatformInfo};
-use self::platform_specializer::{PlatformConstraint, SpecializationDecider};
-
 /// 单态化器
-#[derive(Debug)]
 pub struct Monomorphizer {
-    /// 已实例化的函数
-    instantiated_functions: HashMap<FunctionId, FunctionIR>,
-
-    /// 待实例化的泛型函数队列
-    instantiation_queue: Vec<InstantiationRequest>,
-
-    /// 特化缓存：避免重复实例化
-    specialization_cache: HashMap<SpecializationKey, FunctionId>,
-
-    /// 泛型函数集合
-    generic_functions: HashMap<GenericFunctionId, FunctionIR>,
-
-    /// ==================== 类型单态化相关 ====================
-
-    /// 已实例化的类型
-    type_instances: HashMap<TypeId, TypeInstance>,
-
-    /// 类型特化缓存：避免重复实例化类型
-    type_specialization_cache: HashMap<SpecializationKey, TypeId>,
-
-    /// 泛型类型集合（存储原始类型定义）
-    generic_types: HashMap<GenericTypeId, MonoType>,
-
-    /// ==================== 闭包单态化相关 ====================
-
-    /// 已实例化的闭包
-    instantiated_closures: HashMap<ClosureId, ClosureInstance>,
-
-    /// 闭包特化缓存：避免重复实例化闭包
-    closure_specialization_cache: HashMap<ClosureSpecializationKey, ClosureId>,
-
-    /// 泛型闭包集合
-    generic_closures: HashMap<GenericClosureId, ClosureInstance>,
-
-    /// 下一个闭包ID计数器
-    next_closure_id: usize,
-
-    /// ==================== DCE 相关 ====================
-
-    /// DCE 配置
-    dce_config: DceConfig,
-
-    /// DCE 统计信息（可访问）
-    dce_stats: Option<dce::DceStats>,
-
-    /// ==================== 平台特化相关 ====================
-
-    /// 当前目标平台信息
-    platform_info: PlatformInfo,
-
-    /// 平台特化决策器
-    specialization_decider: SpecializationDecider,
-
-    /// 函数平台约束映射（函数名 -> 平台约束）
-    /// 用于在实例化时检查是否应该实例化特定平台的版本
-    function_platform_constraints: HashMap<String, Option<PlatformConstraint>>,
+    /// 泛型函数定义（从 IR 收集）
+    generic_functions: HashMap<String, FunctionIR>,
+    /// 已生成的特化函数
+    specialized_functions: HashMap<String, FunctionIR>,
+    /// 待处理的实例化队列
+    pending_queue: VecDeque<InstantiationRequest>,
+    /// 已处理的请求（去重）
+    processed: HashSet<SpecializationKey>,
+    /// 最大递归深度
+    max_depth: usize,
 }
 
 impl Monomorphizer {
-    /// 创建新的单态化器（使用检测到的平台）
     pub fn new() -> Self {
-        Self::with_platform(PlatformDetector::detect_from_env())
-    }
-
-    /// 创建指定平台的单态化器
-    pub fn with_platform(platform_info: PlatformInfo) -> Self {
-        Monomorphizer {
-            instantiated_functions: HashMap::new(),
-            instantiation_queue: Vec::new(),
-            specialization_cache: HashMap::new(),
+        Self {
             generic_functions: HashMap::new(),
-            // 类型单态化相关字段
-            type_instances: HashMap::new(),
-            type_specialization_cache: HashMap::new(),
-            generic_types: HashMap::new(),
-            // 闭包单态化相关字段
-            instantiated_closures: HashMap::new(),
-            closure_specialization_cache: HashMap::new(),
-            generic_closures: HashMap::new(),
-            next_closure_id: 0,
-            // DCE 相关字段
-            dce_config: DceConfig::default(),
-            dce_stats: None,
-            // 平台特化相关字段
-            platform_info: platform_info.clone(),
-            specialization_decider: SpecializationDecider::new(&platform_info),
-            function_platform_constraints: HashMap::new(),
+            specialized_functions: HashMap::new(),
+            pending_queue: VecDeque::new(),
+            processed: HashSet::new(),
+            max_depth: 100,
         }
     }
 
-    /// 获取当前平台信息
-    pub fn platform_info(&self) -> &PlatformInfo {
-        &self.platform_info
-    }
-
-    /// 设置目标平台
-    pub fn set_target_platform(
-        &mut self,
-        platform_info: PlatformInfo,
-    ) {
-        self.platform_info = platform_info.clone();
-        self.specialization_decider = SpecializationDecider::new(&platform_info);
-    }
-
-    /// 创建带配置的单态化器
-    pub fn with_dce_config(config: DceConfig) -> Self {
-        let platform_info = PlatformDetector::detect_from_env();
-        Monomorphizer {
-            instantiated_functions: HashMap::new(),
-            instantiation_queue: Vec::new(),
-            specialization_cache: HashMap::new(),
-            generic_functions: HashMap::new(),
-            // 类型单态化相关字段
-            type_instances: HashMap::new(),
-            type_specialization_cache: HashMap::new(),
-            generic_types: HashMap::new(),
-            // 闭包单态化相关字段
-            instantiated_closures: HashMap::new(),
-            closure_specialization_cache: HashMap::new(),
-            generic_closures: HashMap::new(),
-            next_closure_id: 0,
-            // DCE 相关字段
-            dce_config: config,
-            dce_stats: None,
-            // 平台特化相关字段
-            platform_info: platform_info.clone(),
-            specialization_decider: SpecializationDecider::new(&platform_info),
-            function_platform_constraints: HashMap::new(),
+    pub fn with_max_depth(max_depth: usize) -> Self {
+        Self {
+            max_depth,
+            ..Self::new()
         }
     }
 
-    /// 单态化模块中的所有泛型函数和泛型类型
-    pub fn monomorphize_module(
+    /// 核心入口：单态化 ModuleIR
+    pub fn monomorphize(
         &mut self,
         module: &ModuleIR,
+        requests: &[InstantiationRequest],
     ) -> ModuleIR {
+        // 1. 收集泛型函数定义
         self.collect_generic_functions(module);
-        self.collect_generic_types(module);
-        self.collect_instantiation_requests(module);
-        self.process_instantiation_queue();
 
-        // 执行 DCE（死代码消除）
-        self.run_dce(module)
-    }
-
-    /// 运行 DCE（死代码消除）
-    ///
-    /// 在单态化完成后，消除未使用的泛型实例
-    fn run_dce(
-        &mut self,
-        module: &ModuleIR,
-    ) -> ModuleIR {
-        if !self.dce_config.enabled {
-            return self.build_output_module(module);
+        // 2. 初始化队列
+        for req in requests {
+            self.pending_queue.push_back(req.clone());
         }
 
-        // 确定入口点
-        let entry_points = self.find_entry_points();
+        // 3. 队列循环（BFS）
+        self.process_queue();
 
-        // 创建 DCE Pass
-        let mut dce_pass = DcePass::new(self.dce_config.clone());
-
-        // 运行 DCE，获取保留的实例
-        let kept_functions = self.instantiated_functions.clone();
-        let kept_types: HashMap<TypeId, MonoType> = self
-            .type_instances
-            .iter()
-            .filter_map(|(id, inst)| inst.get_mono_type().map(|ty| (id.clone(), ty.clone())))
-            .collect();
-
-        let result = dce_pass.run_on_module(
-            module,
-            &kept_functions,
-            &kept_types,
-            &entry_points,
-            &self.generic_functions,
-        );
-
-        // 保存统计信息
-        self.dce_stats = Some(result.stats);
-
-        // 使用 DCE 过滤后的结果构建输出模块
-        self.build_output_module_with_filtered_instances(
-            module,
-            result.kept_functions,
-            result.kept_types,
-        )
+        // 4. 构建输出
+        self.build_output(module)
     }
 
-    /// 查找入口点函数
-    fn find_entry_points(&self) -> Vec<FunctionId> {
-        let mut entries = Vec::new();
-
-        // 查找 main 函数
-        if let Some((id, _)) = self
-            .instantiated_functions
-            .iter()
-            .find(|(id, _)| id.name() == "main")
-        {
-            entries.push(id.clone());
-        }
-
-        // 查找其他入口点（导出的函数）
-        // TODO: 实现更完整的入口点检测
-
-        entries
-    }
-
-    /// 使用过滤后的实例构建输出模块
-    fn build_output_module_with_filtered_instances(
-        &self,
-        original_module: &ModuleIR,
-        kept_functions: HashMap<FunctionId, FunctionIR>,
-        _kept_types: HashMap<TypeId, MonoType>,
-    ) -> ModuleIR {
-        let mut output_funcs: Vec<FunctionIR> = original_module
-            .functions
-            .iter()
-            .filter(|f| !self.is_generic_function(f))
-            .cloned()
-            .collect();
-
-        // 添加保留下来的实例化函数
-        for func in kept_functions.values() {
-            output_funcs.push(func.clone());
-        }
-
-        ModuleIR {
-            types: original_module.types.clone(),
-            globals: original_module.globals.clone(),
-            functions: output_funcs,
-            mut_locals: original_module.mut_locals.clone(),
-            loop_binding_locals: original_module.loop_binding_locals.clone(),
-            local_names: original_module.local_names.clone(),
-            native_bindings: original_module.native_bindings.clone(),
-        }
-    }
-
-    /// 收集所有泛型函数
     fn collect_generic_functions(
         &mut self,
         module: &ModuleIR,
     ) {
         for func in &module.functions {
-            if self.is_generic_function(func) {
-                let generic_id =
-                    GenericFunctionId::new(func.name.clone(), self.extract_type_params(func));
-                self.generic_functions.insert(generic_id, func.clone());
+            if func.generic_params.is_some() {
+                self.generic_functions
+                    .insert(func.name.clone(), func.clone());
             }
         }
     }
 
-    /// 获取已实例化的函数数量
-    pub fn instantiated_count(&self) -> usize {
-        self.instantiated_functions.len()
+    fn process_queue(&mut self) {
+        while let Some(req) = self.pending_queue.pop_front() {
+            let key = req.specialization_key();
+
+            if self.processed.contains(&key) {
+                continue;
+            }
+            self.processed.insert(key);
+
+            if let Some(specialized) = self.specialize_function(&req) {
+                self.scan_for_new_calls(&specialized);
+                self.specialized_functions
+                    .insert(specialized.name.clone(), specialized);
+            }
+        }
     }
 
-    /// 获取泛型函数数量
-    pub fn generic_count(&self) -> usize {
-        self.generic_functions.len()
-    }
-
-    // ==================== 函数单态化公开 API ====================
-
-    /// 单态化泛型函数
-    pub fn monomorphize_function(
-        &mut self,
-        generic_id: &GenericFunctionId,
-        type_args: &[MonoType],
-    ) -> Option<FunctionId> {
-        let cache_key = SpecializationKey::new(generic_id.name().to_string(), type_args.to_vec());
-
-        if let Some(id) = self.specialization_cache.get(&cache_key) {
-            return Some(id.clone());
-        }
-
-        if !self.generic_functions.contains_key(generic_id) {
-            return None;
-        }
-
-        if !self.should_specialize(generic_id) {
-            return None;
-        }
-
-        let request = InstantiationRequest::new(
-            generic_id.clone(),
-            type_args.to_vec(),
-            crate::util::span::Span::default(),
-        );
-
-        self.instantiate_function(&request)
-    }
-
-    /// 检查泛型函数是否已单态化
-    pub fn is_function_monomorphized(
+    fn build_output(
         &self,
-        generic_id: &GenericFunctionId,
-        type_args: &[MonoType],
-    ) -> bool {
-        let cache_key = SpecializationKey::new(generic_id.name().to_string(), type_args.to_vec());
-        self.specialization_cache.contains_key(&cache_key)
+        module: &ModuleIR,
+    ) -> ModuleIR {
+        let mut functions: Vec<FunctionIR> = module
+            .functions
+            .iter()
+            .filter(|f| f.generic_params.is_none())
+            .cloned()
+            .collect();
+
+        for func in self.specialized_functions.values() {
+            functions.push(func.clone());
+        }
+
+        ModuleIR {
+            functions,
+            ..module.clone()
+        }
     }
 
-    /// 获取函数实例（如果已实例化）
-    pub fn get_instantiated_function(
+    /// 特化单个函数（placeholder，Task 6 实现）
+    fn specialize_function(
         &self,
-        func_id: &FunctionId,
-    ) -> Option<&FunctionIR> {
-        self.instantiated_functions.get(func_id)
+        _req: &InstantiationRequest,
+    ) -> Option<FunctionIR> {
+        // TODO: Task 6 实现
+        None
     }
 
-    /// 获取已单态化的函数数量
-    pub fn instantiated_function_count(&self) -> usize {
-        self.instantiated_functions.len()
-    }
-
-    // ==================== DCE 相关 API ====================
-
-    /// 获取 DCE 统计信息
-    pub fn dce_stats(&self) -> Option<&dce::DceStats> {
-        self.dce_stats.as_ref()
-    }
-
-    /// 设置 DCE 配置
-    pub fn set_dce_config(
+    /// 扫描特化函数中的新泛型调用（placeholder，Task 6 实现）
+    fn scan_for_new_calls(
         &mut self,
-        config: DceConfig,
+        _func: &FunctionIR,
     ) {
-        self.dce_config = config;
+        // TODO: Task 6 实现
     }
 
-    /// 获取当前 DCE 配置
-    pub fn dce_config(&self) -> &DceConfig {
-        &self.dce_config
-    }
-
-    /// 启用 DCE
-    pub fn enable_dce(&mut self) {
-        self.dce_config.enabled = true;
-    }
-
-    /// 禁用 DCE
-    pub fn disable_dce(&mut self) {
-        self.dce_config.enabled = false;
-    }
-}
-
-#[cfg(test)]
-impl Monomorphizer {
-    /// 测试辅助：插入泛型函数
-    pub fn test_insert_generic_function(
-        &mut self,
-        id: GenericFunctionId,
-        ir: FunctionIR,
+    /// 替换调用点（placeholder，Task 7 实现）
+    fn replace_call_sites(
+        &self,
+        _module: &mut ModuleIR,
+        _requests: &[InstantiationRequest],
     ) {
-        self.generic_functions.insert(id, ir);
-    }
-
-    /// 测试辅助：插入泛型类型
-    pub fn test_insert_generic_type(
-        &mut self,
-        id: GenericTypeId,
-        ty: MonoType,
-    ) {
-        self.generic_types.insert(id, ty);
-    }
-
-    /// 测试辅助：获取泛型函数映射（用于断言）
-    pub fn test_get_generic_functions(&self) -> &HashMap<GenericFunctionId, FunctionIR> {
-        &self.generic_functions
-    }
-
-    /// 测试辅助：获取泛型类型映射（用于断言）
-    pub fn test_get_generic_types(&self) -> &HashMap<GenericTypeId, MonoType> {
-        &self.generic_types
-    }
-
-    /// 测试辅助：清空队列（用于测试）
-    pub fn test_clear_queue(&mut self) {
-        self.instantiation_queue.clear();
-    }
-
-    /// 测试辅助：获取特化缓存大小
-    pub fn test_specialization_cache_len(&self) -> usize {
-        self.specialization_cache.len()
-    }
-
-    /// 测试辅助：访问type_instances
-    pub fn test_type_instances(&self) -> &HashMap<TypeId, TypeInstance> {
-        &self.type_instances
+        // TODO: Task 7 实现
     }
 }
 
