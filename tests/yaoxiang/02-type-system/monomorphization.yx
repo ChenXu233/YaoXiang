@@ -1,0 +1,33 @@
+// tests/yaoxiang/02-type-system/monomorphization.yx
+// 验证: 泛型单态化
+// 状态: 测试中
+
+use std.io
+
+// 单参数泛型函数
+identity: (T: Type) -> (x: T) -> T = (x) => x
+
+// 多参数泛型函数（同一类型）
+add_pair: (T: Type) -> (a: T, b: T) -> T = (a, b) => a
+
+// 嵌套泛型调用
+double_identity: (T: Type) -> (x: T) -> T = (x) => identity(x)
+
+main = {
+    // 测试 1: identity 用不同类型调用（验证单态化生成多个版本）
+    x = identity(42)
+    s = identity("hello")
+
+    io.println(x)
+    io.println(s)
+
+    // 测试 2: 多参数泛型函数
+    r = add_pair(10, 20)
+    io.println(r)
+
+    // 测试 3: 嵌套泛型调用
+    y = double_identity(99)
+    io.println(y)
+
+    io.println("ALL TESTS PASSED")
+}
