@@ -118,6 +118,14 @@ pub struct Interpreter {
     /// Read-only shared state, shared across threads via raw pointer.
     /// Set in `execute_module`; null when not yet initialized.
     pub(super) shared: *const SharedState,
+    /// Cached stack-trace info for the frame currently being executed.
+    /// Populated in `step_one` before popping the frame, so `capture_stack()`
+    /// can include it even though the frame is temporarily off `call_stack`.
+    pub(super) current_frame_info: Option<(String, usize)>,
+    /// Whether `step_one` executed a function call (used by `step_over`).
+    pub(super) called_func: bool,
+    /// Return value from the last Return/ReturnValue instruction.
+    pub(super) last_return_value: RuntimeValue,
 }
 
 impl fmt::Debug for Interpreter {
@@ -145,6 +153,9 @@ impl fmt::Debug for Interpreter {
                 },
             )
             .field("shared", &self.shared)
+            .field("current_frame_info", &self.current_frame_info)
+            .field("called_func", &self.called_func)
+            .field("last_return_value", &self.last_return_value)
             .finish()
     }
 }
@@ -186,6 +197,9 @@ impl Interpreter {
             runtime_config,
             rt,
             shared: std::ptr::null(),
+            current_frame_info: None,
+            called_func: false,
+            last_return_value: RuntimeValue::Unit,
         }
     }
 
@@ -240,6 +254,9 @@ impl Interpreter {
             // 不设置 shared 字段，避免 Drop 时双重释放。
             // 共享数据已拷贝到上方的字段中。
             shared: std::ptr::null(),
+            current_frame_info: None,
+            called_func: false,
+            last_return_value: RuntimeValue::Unit,
         }
     }
 
@@ -365,14 +382,23 @@ impl Interpreter {
 
     /// Capture the current call stack as a vector of StackFrame
     pub fn capture_stack(&self) -> Vec<crate::backends::StackFrame> {
-        self.call_stack
+        let mut stack: Vec<crate::backends::StackFrame> = self
+            .call_stack
             .iter()
             .rev()
             .map(|frame| crate::backends::StackFrame {
                 function_name: frame.function.name.clone(),
                 ip: frame.ip,
             })
-            .collect()
+            .collect();
+        // Include the frame currently being executed (popped during step_one)
+        if let Some((ref name, ip)) = self.current_frame_info {
+            stack.push(crate::backends::StackFrame {
+                function_name: name.clone(),
+                ip,
+            });
+        }
+        stack
     }
 
     /// Resolve a label to an instruction offset
