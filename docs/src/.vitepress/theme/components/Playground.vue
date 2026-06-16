@@ -106,14 +106,21 @@ async function loadWasm() {
     statusText.value = 'Loading YaoXiang runtime...'
     statusType.value = 'info'
 
-    // Use fetch + eval to load wasm-pack JS glue at runtime
-    // This avoids Rollup trying to resolve the import at build time
+    // Use fetch + blob to load wasm-pack JS glue at runtime.
+    // This avoids Rollup trying to resolve the import at build time.
     const baseUrl = import.meta.env.BASE_URL || '/'
-    const jsUrl = `${baseUrl}wasm/yaoxiang.js`
-    const response = await fetch(jsUrl)
-    const jsCode = await response.text()
+    const wasmJsUrl = `${baseUrl}wasm/yaoxiang.js`
+    const response = await fetch(wasmJsUrl)
+    let jsCode = await response.text()
 
-    // Create a module from the fetched code
+    // wasm-pack glue uses `new URL('yaoxiang_bg.wasm', import.meta.url)` to find .wasm.
+    // In a blob URL context, import.meta.url points to the blob, so we patch it to an absolute URL.
+    const wasmBgUrl = `${baseUrl}wasm/yaoxiang_bg.wasm`
+    jsCode = jsCode.replace(
+      /new URL\(['"]yaoxiang_bg\.wasm['"],\s*import\.meta\.url\)/g,
+      `new URL('${wasmBgUrl}', window.location.origin)`
+    )
+
     const blob = new Blob([jsCode], { type: 'application/javascript' })
     const blobUrl = URL.createObjectURL(blob)
     const wasm = await import(/* @vite-ignore */ blobUrl)
