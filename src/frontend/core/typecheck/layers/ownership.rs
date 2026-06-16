@@ -746,6 +746,8 @@ pub struct OwnershipChecker {
     spawn_ref_graph: HashMap<String, HashSet<String>>,
     /// 当前 spawn 块内使用的 ref 变量集合
     current_spawn_refs: HashSet<String>,
+    /// 字段赋值记录：(变量名, 字段名, 被赋值的变量名)
+    field_assignments: Vec<(String, String, String)>,
 }
 
 impl Default for OwnershipChecker {
@@ -775,6 +777,7 @@ impl OwnershipChecker {
             inside_unsafe: false,
             spawn_ref_graph: HashMap::new(),
             current_spawn_refs: HashSet::new(),
+            field_assignments: Vec::new(),
         }
     }
 
@@ -795,6 +798,7 @@ impl OwnershipChecker {
         self.inside_unsafe = false;
         self.spawn_ref_graph.clear();
         self.current_spawn_refs.clear();
+        self.field_assignments.clear();
         self.current_node = self.cfg.add_node(None); // 入口节点
         self.current_span = Span::dummy();
     }
@@ -1498,6 +1502,32 @@ impl OwnershipChecker {
                     }
                 }
 
+                // 记录字段赋值: a.field = b
+                if let Some(init) = initializer {
+                    if let Expr::BinOp {
+                        op: crate::frontend::core::parser::ast::BinOp::Assign,
+                        left,
+                        right,
+                        ..
+                    } = init.as_ref()
+                    {
+                        if let Expr::FieldAccess {
+                            expr: inner, field, ..
+                        } = left.as_ref()
+                        {
+                            if let Some(var_name) = Self::extract_var_name(inner) {
+                                if let Expr::Var(assigned_name, _) = right.as_ref() {
+                                    self.field_assignments.push((
+                                        var_name,
+                                        field.clone(),
+                                        assigned_name.clone(),
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // 检测 ref x 声明
                 if let Some(init) = initializer {
                     if matches!(init.as_ref(), Expr::Ref { .. }) {
@@ -1615,9 +1645,15 @@ impl OwnershipChecker {
     }
 
     /// 检查 ref_a 是否持有 ref_b 的引用（通过检查字段赋值）
-    fn ref_holds_ref(&self, _ref_a: &str, _ref_b: &str) -> bool {
-        // 简化实现：暂时返回 false，后续在 Task 3 中完善
-        false
+    fn ref_holds_ref(
+        &self,
+        ref_a: &str,
+        ref_b: &str,
+    ) -> bool {
+        // 检查是否有 ref_a.field = ref_b 的赋值
+        self.field_assignments
+            .iter()
+            .any(|(var, _, assigned)| var == ref_a && assigned == ref_b)
     }
 
     /// 检测 spawn ref 循环（DFS）
