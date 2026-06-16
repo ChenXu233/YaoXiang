@@ -2030,9 +2030,7 @@ fn test_e2e_spawn_move_capture_consumes_outer() {
         vec![
             make_var_stmt("data", make_lit(42)),
             make_expr_stmt(Expr::Spawn {
-                body: Box::new(make_block(vec![
-                    make_var_stmt("a", make_var("data")),
-                ])),
+                body: Box::new(make_block(vec![make_var_stmt("a", make_var("data"))])),
                 span: Span::default(),
             }),
             make_expr_stmt(make_var("data")),
@@ -2102,11 +2100,7 @@ fn test_e2e_param_closure_captures_outer() {
         vec![],
         vec![
             make_var_stmt("x", make_lit(42)),
-            make_binding(
-                "f",
-                vec!["p".into()],
-                vec![make_expr_stmt(make_var("x"))],
-            ),
+            make_binding("f", vec!["p".into()], vec![make_expr_stmt(make_var("x"))]),
             make_expr_stmt(make_call("f", vec![make_lit(1)])),
             make_expr_stmt(make_var("x")),
         ],
