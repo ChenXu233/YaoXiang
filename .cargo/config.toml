@@ -14,6 +14,12 @@ linker = "aarch64-linux-gnu-gcc"
 # Windows x86_64 - 使用 MSVC（与 CI 一致，推荐）
 # 注意：Windows 交叉编译需要安装 mingw 工具链
 # apt install gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
+# wasm32 构建时追加 cdylib crate-type，使得 wasm-pack / cargo build --target wasm32 能产出 .wasm。
+# 不在 Cargo.toml 的 [lib].crate-type 里默认声明 cdylib，是因为 bin 和 lib 同名时
+# Windows MSVC 会产生产生 yaoxiang.pdb 冲突警告。
+[target.wasm32-unknown-unknown]
+rustflags = ["--crate-type=cdylib"]
+
 [target.x86_64-pc-windows-gnu]
 linker = "x86_64-w64-mingw32-gcc"
 ar = "x86_64-w64-mingw32-ar"
