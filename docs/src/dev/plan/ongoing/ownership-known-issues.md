@@ -56,7 +56,7 @@ if cond {
 
 **修复方向**：需要 CFG 的 SMT 慢速通道介入（当前 `smt_cut` 已实现但仅在 `while + path_condition` 场景触发）。扩展到 if/else 分支需要 path_condition 传播到 Borrow handler。
 
-- [ ] ### 4. ref 类型不识别 Dup（P1）
+- [x] ### 4. ref 类型不识别 Dup（P1）— 已修复 (2026-06-16)
 
 **场景**：
 ```yaoxiang
