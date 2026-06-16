@@ -1,6 +1,6 @@
 // 99-demos/closure_concurrency.yx
-// 验证: 闭包 + 并发混合模式
-// 论文价值: spawn + 闭包捕获，无需 Send/Sync
+// 验证: spawn + 数据共享混合模式
+// 论文价值: spawn 内直接访问外层变量，无需 Send/Sync
 
 use std.io
 
@@ -8,7 +8,7 @@ main = {
     data = 100
 
     result = spawn {
-        // 闭包捕获 data
+        // spawn 内直接访问外层 data
         double = data * 2
         triple = data * 3
         return (double, triple)
