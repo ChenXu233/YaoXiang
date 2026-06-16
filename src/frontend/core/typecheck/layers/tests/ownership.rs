@@ -6,10 +6,10 @@
 //! RFC-009a §用例分析: 线性代码 / if-else / 循环
 //!
 //! 扩展规范:
-//! - 闭包捕获分析: docs/superpowers/specs/2026-06-15-nested-fn-and-call-sig-design.md
-//! - ref 逃逸分析:  docs/superpowers/specs/2026-06-15-ref-escape-analysis-design.md
-//! - unsafe 检查:   docs/superpowers/specs/2026-06-15-lifetime-migration-design.md §新增 1
-//! - spawn 循环检测: docs/superpowers/specs/2026-06-15-lifetime-migration-design.md §新增 2
+//! - Lambda 显式参数: docs/superpowers/specs/2026-06-16-remove-implicit-closure-capture.md
+//! - ref 逃逸分析:    docs/superpowers/specs/2026-06-15-ref-escape-analysis-design.md
+//! - unsafe 检查:     docs/superpowers/specs/2026-06-15-lifetime-migration-design.md §新增 1
+//! - spawn 循环检测:  docs/superpowers/specs/2026-06-15-lifetime-migration-design.md §新增 2
 
 use crate::frontend::core::typecheck::layers::ownership::{
     BrandId, BrandTree, ControlFlowGraph, EdgeKind, FastPathResult, emit_move_predicate,
@@ -1913,6 +1913,8 @@ fn test_e2e_ref_dup_copyable() {
 fn test_e2e_lambda_explicit_param_no_capture() {
     // { x = 42; f = (x) => { x + 1 }; f(x) }
     // Lambda 接收显式参数，不捕获外层
+
+    // Arrange
     let module = make_module(vec![make_binding(
         "main",
         vec![],
@@ -1932,9 +1934,11 @@ fn test_e2e_lambda_explicit_param_no_capture() {
         ],
     )]);
 
+    // Act
     let mut checker = OwnershipChecker::new();
     let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
+    // Assert
     let errors: Vec<_> = results
         .iter()
         .filter(|r| matches!(r, ProofResult::Disproved { .. }))
@@ -1950,6 +1954,8 @@ fn test_e2e_lambda_explicit_param_no_capture() {
 fn test_e2e_lambda_cannot_access_outer() {
     // { x = 42; f = () => { x + 1 } }
     // Lambda 无参数，x 不在作用域内——是类型错误，所有权层不应报错
+
+    // Arrange
     let module = make_module(vec![make_binding(
         "main",
         vec![],
@@ -1968,8 +1974,11 @@ fn test_e2e_lambda_cannot_access_outer() {
         ],
     )]);
 
+    // Act
     let mut checker = OwnershipChecker::new();
     let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
+
+    // Assert
     let errors: Vec<_> = results
         .iter()
         .filter(|r| matches!(r, ProofResult::Disproved { .. }))
@@ -1985,6 +1994,8 @@ fn test_e2e_lambda_cannot_access_outer() {
 fn test_e2e_spawn_accesses_outer() {
     // { x = 42; spawn { use(x) } }
     // spawn 同帧，可访问外层 x
+
+    // Arrange
     let module = make_module(vec![make_binding(
         "main",
         vec![],
@@ -1997,9 +2008,11 @@ fn test_e2e_spawn_accesses_outer() {
         ],
     )]);
 
+    // Act
     let mut checker = OwnershipChecker::new();
     let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
+    // Assert
     let errors: Vec<_> = results
         .iter()
         .filter(|r| matches!(r, ProofResult::Disproved { .. }))
