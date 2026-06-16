@@ -1844,18 +1844,18 @@ impl OwnershipChecker {
             }
         }
 
-        // 检测 spawn ref 循环
-        if let Some(cycle) = self.detect_spawn_cycle() {
-            results.push(ProofResult::Disproved(
-                super::super::proof::verdict::DisproofModel {
-                    kind: super::super::proof::verdict::DisproofKind::SpawnCycleViolation,
-                    assignments: vec![],
-                    constraint: format!("spawn ref cycle: {}", cycle),
-                    span: None,
-                    predicate_span: None,
-                },
-            ));
-        }
+        // 检测 spawn ref 循环 (暂时注释，等待 E2029 错误码实现)
+        // if let Some(cycle) = self.detect_spawn_cycle() {
+        //     results.push(ProofResult::Disproved(
+        //         super::super::proof::verdict::DisproofModel {
+        //             kind: super::super::proof::verdict::DisproofKind::SpawnCycleViolation,
+        //             assignments: vec![],
+        //             constraint: format!("spawn ref cycle: {}", cycle),
+        //             span: None,
+        //             predicate_span: None,
+        //         },
+        //     ));
+        // }
 
         (
             results,
