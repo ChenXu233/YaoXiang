@@ -742,6 +742,10 @@ pub struct OwnershipChecker {
     inside_spawn: bool,
     /// 当前是否在 unsafe 块内
     inside_unsafe: bool,
+    /// spawn 块内 ref 变量的依赖图（ref_a → ref_b 表示 a 持有 b 的引用）
+    spawn_ref_graph: HashMap<String, HashSet<String>>,
+    /// 当前 spawn 块内使用的 ref 变量集合
+    current_spawn_refs: HashSet<String>,
 }
 
 impl Default for OwnershipChecker {
@@ -769,6 +773,8 @@ impl OwnershipChecker {
             escaped_refs: HashSet::new(),
             inside_spawn: false,
             inside_unsafe: false,
+            spawn_ref_graph: HashMap::new(),
+            current_spawn_refs: HashSet::new(),
         }
     }
 
@@ -787,6 +793,8 @@ impl OwnershipChecker {
         self.escaped_refs.clear();
         self.inside_spawn = false;
         self.inside_unsafe = false;
+        self.spawn_ref_graph.clear();
+        self.current_spawn_refs.clear();
         self.current_node = self.cfg.add_node(None); // 入口节点
         self.current_span = Span::dummy();
     }
@@ -1397,11 +1405,34 @@ impl OwnershipChecker {
             Expr::Spawn { body, .. } => {
                 let was_spawn = self.inside_spawn;
                 self.inside_spawn = true;
-                // spawn 体不立即执行——save/restore 防止影响外层状态
+
+                // 保存当前 spawn 的 ref 集合
+                let prev_spawn_refs = std::mem::take(&mut self.current_spawn_refs);
+
                 let snapshot = self.save_state();
-                let results = self.walk_stmts(&body.stmts);
+                let mut results = self.walk_stmts(&body.stmts);
+                let captures = self.diff_captures(&snapshot);
                 self.restore_state(snapshot);
+
+                // 构建 ref 依赖图
+                let spawn_refs = std::mem::take(&mut self.current_spawn_refs);
+                for ref_a in &spawn_refs {
+                    for ref_b in &spawn_refs {
+                        if ref_a != ref_b {
+                            if self.ref_holds_ref(ref_a, ref_b) {
+                                self.spawn_ref_graph
+                                    .entry(ref_a.clone())
+                                    .or_default()
+                                    .insert(ref_b.clone());
+                            }
+                        }
+                    }
+                }
+
+                self.current_spawn_refs = prev_spawn_refs;
                 self.inside_spawn = was_spawn;
+                // spawn 定义即调用——捕获变量在调用点消耗
+                results.extend(self.apply_captures_at_call(&captures));
                 results
             }
 
@@ -1409,9 +1440,11 @@ impl OwnershipChecker {
                 let was_spawn = self.inside_spawn;
                 self.inside_spawn = true;
                 let snapshot = self.save_state();
-                let results = self.walk_stmts(&body.stmts);
+                let mut results = self.walk_stmts(&body.stmts);
+                let captures = self.diff_captures(&snapshot);
                 self.restore_state(snapshot);
                 self.inside_spawn = was_spawn;
+                results.extend(self.apply_captures_at_call(&captures));
                 results
             }
 
@@ -1421,6 +1454,16 @@ impl OwnershipChecker {
                 let results = self.walk_stmts(&body.stmts);
                 self.inside_unsafe = was_unsafe;
                 results
+            }
+
+            Expr::Ref { expr, .. } => {
+                if self.inside_spawn {
+                    if let Some(name) = Self::extract_var_name(expr) {
+                        self.current_spawn_refs.insert(name);
+                    }
+                }
+                // 继续处理子表达式
+                self.walk_expr(expr)
             }
 
             // FnDef / Lambda / Lit / FString 等跳过
@@ -1571,6 +1614,58 @@ impl OwnershipChecker {
         results
     }
 
+    /// 检查 ref_a 是否持有 ref_b 的引用（通过检查字段赋值）
+    fn ref_holds_ref(&self, _ref_a: &str, _ref_b: &str) -> bool {
+        // 简化实现：暂时返回 false，后续在 Task 3 中完善
+        false
+    }
+
+    /// 检测 spawn ref 循环（DFS）
+    fn detect_spawn_cycle(&self) -> Option<String> {
+        let mut visited = HashSet::new();
+        let mut recursion_stack = HashSet::new();
+        let mut path = Vec::new();
+
+        for node in self.spawn_ref_graph.keys() {
+            if !visited.contains(node) {
+                if self.detect_cycle_dfs(node, &mut visited, &mut recursion_stack, &mut path) {
+                    return Some(path.join(" -> "));
+                }
+            }
+        }
+        None
+    }
+
+    /// DFS 检测循环
+    fn detect_cycle_dfs(
+        &self,
+        node: &str,
+        visited: &mut HashSet<String>,
+        recursion_stack: &mut HashSet<String>,
+        path: &mut Vec<String>,
+    ) -> bool {
+        visited.insert(node.to_string());
+        recursion_stack.insert(node.to_string());
+        path.push(node.to_string());
+
+        if let Some(neighbors) = self.spawn_ref_graph.get(node) {
+            for neighbor in neighbors {
+                if !visited.contains(neighbor) {
+                    if self.detect_cycle_dfs(neighbor, visited, recursion_stack, path) {
+                        return true;
+                    }
+                } else if recursion_stack.contains(neighbor) {
+                    // 找到循环
+                    return true;
+                }
+            }
+        }
+
+        path.pop();
+        recursion_stack.remove(node);
+        false
+    }
+
     /// 生成 NLL 精确释放计划
     ///
     /// 两源合并：
@@ -1712,6 +1807,20 @@ impl OwnershipChecker {
                 merged_escaped.extend(escaped);
             }
         }
+
+        // 检测 spawn ref 循环
+        if let Some(cycle) = self.detect_spawn_cycle() {
+            results.push(ProofResult::Disproved(
+                super::super::proof::verdict::DisproofModel {
+                    kind: super::super::proof::verdict::DisproofKind::SpawnCycleViolation,
+                    assignments: vec![],
+                    constraint: format!("spawn ref cycle: {}", cycle),
+                    span: None,
+                    predicate_span: None,
+                },
+            ));
+        }
+
         (
             results,
             ReleasePlan {
