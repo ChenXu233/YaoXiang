@@ -634,9 +634,11 @@ impl Pipeline {
 
         match middle::generate_ir(ast, type_result) {
             Ok(mut ir) => {
-                // 单态化（如果有实例化请求）
-                if !type_result.instantiation_requests.is_empty() {
-                    let mut mono = middle::passes::mono::Monomorphizer::new();
+                // 单态化（根据配置决定是否启用）
+                if self.config.mono.enabled && !type_result.instantiation_requests.is_empty() {
+                    let mut mono = middle::passes::mono::Monomorphizer::with_max_depth(
+                        self.config.mono.max_depth,
+                    );
                     ir = mono.monomorphize(&ir, &type_result.instantiation_requests);
                 }
 
