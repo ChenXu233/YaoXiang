@@ -8,6 +8,8 @@
 //! 扩展规范:
 //! - 闭包捕获分析: docs/superpowers/specs/2026-06-15-nested-fn-and-call-sig-design.md
 //! - ref 逃逸分析:  docs/superpowers/specs/2026-06-15-ref-escape-analysis-design.md
+//! - unsafe 检查:   docs/superpowers/specs/2026-06-15-lifetime-migration-design.md §新增 1
+//! - spawn 循环检测: docs/superpowers/specs/2026-06-15-lifetime-migration-design.md §新增 2
 
 use crate::frontend::core::typecheck::layers::ownership::{
     BrandId, BrandTree, ControlFlowGraph, EdgeKind, FastPathResult, emit_move_predicate,
