@@ -1459,99 +1459,6 @@ fn test_e2e_param_not_in_release_plan() {
     );
 }
 
-// ── E2E 闭包捕获测试 ──────────────────────────────────────
-
-#[test]
-fn test_e2e_closure_move_capture_use_after_call() {
-    // { x = 42; f = { y = x }; f(); use(x) }
-    // x 被闭包 Move 捕获，调用后不可用
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_binding("f", vec![], vec![make_var_stmt("y", make_var("x"))]),
-            make_expr_stmt(make_call("f", vec![])),
-            make_expr_stmt(make_var("x")),
-        ],
-    )]);
-
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
-
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
-                if matches!(model.kind, DisproofKind::UseAfterMove))
-        })
-        .collect();
-    assert!(!errors.is_empty(), "应该检测到闭包 Move 捕获后 x 被使用");
-}
-
-#[test]
-fn test_e2e_closure_read_capture() {
-    // { x = 42; f = { use(x) }; f(); use(x) }
-    // x 被 Read 捕获——调用不消耗
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_binding("f", vec![], vec![make_expr_stmt(make_var("x"))]),
-            make_expr_stmt(make_call("f", vec![])),
-            make_expr_stmt(make_var("x")),
-        ],
-    )]);
-
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
-
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
-        .collect();
-    assert!(
-        errors.is_empty(),
-        "Read 捕获不应消耗 x，但检测到: {:?}",
-        errors
-    );
-}
-
-#[test]
-fn test_e2e_closure_no_capture() {
-    // { f = { x = 1; use(x) }; f() }
-    // x 是闭包局部变量，不捕获外层
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_binding(
-                "f",
-                vec![],
-                vec![
-                    make_var_stmt("x", make_lit(1)),
-                    make_expr_stmt(make_var("x")),
-                ],
-            ),
-            make_expr_stmt(make_call("f", vec![])),
-        ],
-    )]);
-
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
-
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
-        .collect();
-    assert!(
-        errors.is_empty(),
-        "纯局部变量的闭包不应有错误，但检测到: {:?}",
-        errors
-    );
-}
-
 // ── E2E 函数签名查询测试 ──────────────────────────────────
 
 #[test]
@@ -1965,38 +1872,6 @@ fn test_e2e_ref_alias_propagates_to_spawn() {
 }
 
 #[test]
-fn test_e2e_spawn_move_capture_consumes_outer() {
-    // spawn 定义即调用：spawn 体内 Move 捕获 → 外层变量消耗
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("data", make_lit(42)),
-            make_expr_stmt(Expr::Spawn {
-                body: Box::new(make_block(vec![make_var_stmt("a", make_var("data"))])),
-                span: Span::default(),
-            }),
-            make_expr_stmt(make_var("data")),
-        ],
-    )]);
-
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
-
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
-                if matches!(model.kind, DisproofKind::UseAfterMove))
-        })
-        .collect();
-    assert!(
-        !errors.is_empty(),
-        "spawn Move 捕获后外层 data 应不可用，但未检测到"
-    );
-}
-
-#[test]
 fn test_e2e_ref_dup_copyable() {
     // ref 是 Dup 类型，可多次复制使用
     // 规范: RFC-009 §ref
@@ -2035,31 +1910,103 @@ fn test_e2e_ref_dup_copyable() {
 }
 
 #[test]
-fn test_e2e_param_closure_captures_outer() {
-    // 有参嵌套函数也做捕获分析
-    // f = (p) => { use(x) }  → x 被 Read 捕获
+fn test_e2e_lambda_explicit_param_no_capture() {
+    // { x = 42; f = (x) => { x + 1 }; f(x) }
+    // Lambda 接收显式参数，不捕获外层
     let module = make_module(vec![make_binding(
         "main",
         vec![],
         vec![
             make_var_stmt("x", make_lit(42)),
-            make_binding("f", vec!["p".into()], vec![make_expr_stmt(make_var("x"))]),
-            make_expr_stmt(make_call("f", vec![make_lit(1)])),
-            make_expr_stmt(make_var("x")),
+            make_binding(
+                "f",
+                vec!["x".into()],
+                vec![make_expr_stmt(Expr::BinOp {
+                    op: BinOp::Add,
+                    left: Box::new(make_var("x")),
+                    right: Box::new(make_lit(1)),
+                    span: Span::default(),
+                })],
+            ),
+            make_expr_stmt(make_call("f", vec![make_var("x")])),
         ],
     )]);
 
     let mut checker = OwnershipChecker::new();
     let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
 
-    // f 捕获 x 为 Read → 调用后 x 仍可用
     let errors: Vec<_> = results
         .iter()
         .filter(|r| matches!(r, ProofResult::Disproved { .. }))
         .collect();
     assert!(
         errors.is_empty(),
-        "f 的 Read 捕获不应消耗 x，但检测到: {:?}",
+        "Lambda 显式参数不应有捕获错误，但检测到: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_e2e_lambda_cannot_access_outer() {
+    // { x = 42; f = () => { x + 1 } }
+    // Lambda 无参数，x 不在作用域内——是类型错误，所有权层不应报错
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_binding(
+                "f",
+                vec![],
+                vec![make_expr_stmt(Expr::BinOp {
+                    op: BinOp::Add,
+                    left: Box::new(make_var("x")),
+                    right: Box::new(make_lit(1)),
+                    span: Span::default(),
+                })],
+            ),
+        ],
+    )]);
+
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "所有权检查不应报错（x 不存在是类型错误），但检测到: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_e2e_spawn_accesses_outer() {
+    // { x = 42; spawn { use(x) } }
+    // spawn 同帧，可访问外层 x
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_expr_stmt(Expr::Spawn {
+                body: Box::new(make_block(vec![make_expr_stmt(make_var("x"))])),
+                span: Span::default(),
+            }),
+        ],
+    )]);
+
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
+
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "spawn 应能访问外层 x，但检测到: {:?}",
         errors
     );
 }
