@@ -148,7 +148,7 @@ fn test_depth_limit_one_level() {
 
 #[test]
 fn test_clear_resets_all_state() {
-    use crate::middle::passes::lifetime::error::Checker;
+    use crate::middle::passes::lifetime::state_utils::Checker;
 
     let mut checker = CycleChecker::new();
     let func = create_test_function(vec![Instruction::Spawn {

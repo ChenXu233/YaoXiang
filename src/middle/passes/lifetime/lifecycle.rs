@@ -14,7 +14,7 @@
 //! - 变量在消费后继续使用（UseAfterMove）
 //! - 变量从未使用（死代码）
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
-use crate::middle::passes::lifetime::error::operand_display_name;
+use crate::middle::passes::lifetime::state_utils::operand_display_name;
 use std::collections::HashMap;
 use std::fmt;
 /// 变量生命周期事件

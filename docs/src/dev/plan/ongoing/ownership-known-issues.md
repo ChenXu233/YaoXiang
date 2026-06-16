@@ -73,11 +73,9 @@ b = shared    // use after move——实际上应允许
 
 ## 基础设施
 
-- [ ] ### 5. 错误码格式未统一（P2）
+- [x] ### 5. 错误码格式未统一（P2）— 已修复 (2026-06-16)
 
-**说明**：前端所有权检查器使用 `DisproofModel.into_diagnostic()` → 错误码 E2014-E2020。Middle 层遗留的 `lifetime/error.rs` 使用独立的 `ValueState` + `Checker` trait。两套系统目前并存。
-
-**修复方向**：删除 middle 层 `error.rs` 的 `ValueState` 和 `Checker` trait（仅剩 2 个引用：`lifecycle.rs` 和 `cycle_check` 测试），统一到前端错误码系统。
+**说明**：`error.rs` 的 `ValueState` 枚举、`TypeId` 结构体、`ValueStateProvider` trait 均为死代码（零使用），已删除。文件重命名为 `state_utils.rs`，保留 `Checker` trait + `operand_display_name` 工具函数。
 
 - [ ] ### 6. 嵌套函数有参形式不分析（P2）
 
