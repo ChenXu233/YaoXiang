@@ -68,7 +68,7 @@ jobs:
             wasm-cargo-
 
       - name: Build Wasm
-        run: wasm-pack build --target web --no-default-features
+        run: wasm-pack build --target web --no-default-features --example yaoxiang_wasm
 
       - name: Upload wasm artifact
         uses: actions/upload-artifact@v4

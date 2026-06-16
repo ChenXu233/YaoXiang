@@ -20,11 +20,17 @@ cli = [
 
 [lib]
 path = "src/lib.rs"
-crate-type = ["cdylib", "rlib"]
+crate-type = ["rlib"]
 
 [[bin]]
 name = "yaoxiang"
 path = "src/main.rs"
+
+[[example]]
+name = "yaoxiang_wasm"
+crate-type = ["cdylib"]
+path = "src/playground.rs"
+test = false
 
 [dev-dependencies]
 criterion = "0.8.1"
