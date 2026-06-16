@@ -1978,3 +1978,151 @@ fn test_spawn_no_cycle_allowed() {
         results
     );
 }
+
+// ── E2E 已修复缺陷回归测试 ──────────────────────────────────
+
+#[test]
+fn test_e2e_ref_alias_propagates_to_spawn() {
+    // ref 别名传播：alias = shared，shared 是 ref → alias 也是 ref
+    // spawn 内使用 alias → 逃逸检测
+    // 规范: docs/superpowers/specs/2026-06-15-ref-escape-analysis-design.md
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_var_stmt(
+                "shared",
+                Expr::Ref {
+                    expr: Box::new(make_var("x")),
+                    span: Span::default(),
+                },
+            ),
+            make_var_stmt("alias", make_var("shared")),
+            make_expr_stmt(Expr::Spawn {
+                body: Box::new(make_block(vec![make_expr_stmt(make_var("alias"))])),
+                span: Span::default(),
+            }),
+        ],
+    )]);
+
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan, escaped) = checker.check_module(&module, &make_test_env());
+
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .collect();
+    assert!(errors.is_empty(), "不应有错误，得: {:?}", errors);
+    assert!(
+        escaped.contains("alias") || escaped.contains("shared"),
+        "ref 别名应触发逃逸检测，escaped: {:?}",
+        escaped
+    );
+}
+
+#[test]
+fn test_e2e_spawn_move_capture_consumes_outer() {
+    // spawn 定义即调用：spawn 体内 Move 捕获 → 外层变量消耗
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("data", make_lit(42)),
+            make_expr_stmt(Expr::Spawn {
+                body: Box::new(make_block(vec![
+                    make_var_stmt("a", make_var("data")),
+                ])),
+                span: Span::default(),
+            }),
+            make_expr_stmt(make_var("data")),
+        ],
+    )]);
+
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
+
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| {
+            matches!(r, ProofResult::Disproved(model)
+                if matches!(model.kind, DisproofKind::UseAfterMove))
+        })
+        .collect();
+    assert!(
+        !errors.is_empty(),
+        "spawn Move 捕获后外层 data 应不可用，但未检测到"
+    );
+}
+
+#[test]
+fn test_e2e_ref_dup_copyable() {
+    // ref 是 Dup 类型，可多次复制使用
+    // 规范: RFC-009 §ref
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_var_stmt(
+                "shared",
+                Expr::Ref {
+                    expr: Box::new(make_var("x")),
+                    span: Span::default(),
+                },
+            ),
+            make_var_stmt("a", make_var("shared")),
+            make_var_stmt("b", make_var("shared")),
+        ],
+    )]);
+
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
+
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| {
+            matches!(r, ProofResult::Disproved(model)
+                if matches!(model.kind, DisproofKind::UseAfterMove))
+        })
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "ref 是 Dup，可多次使用，不应报 use after move: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_e2e_param_closure_captures_outer() {
+    // 有参嵌套函数也做捕获分析
+    // f = (p) => { use(x) }  → x 被 Read 捕获
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("x", make_lit(42)),
+            make_binding(
+                "f",
+                vec!["p".into()],
+                vec![make_expr_stmt(make_var("x"))],
+            ),
+            make_expr_stmt(make_call("f", vec![make_lit(1)])),
+            make_expr_stmt(make_var("x")),
+        ],
+    )]);
+
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
+
+    // f 捕获 x 为 Read → 调用后 x 仍可用
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "f 的 Read 捕获不应消耗 x，但检测到: {:?}",
+        errors
+    );
+}
