@@ -7,7 +7,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 echo "Building Wasm module..."
 cd "$ROOT_DIR"
-wasm-pack build --target web --no-default-features --features wasm
+wasm-pack build --target web --no-default-features --example yaoxiang_wasm -- --out-name yaoxiang
 
 echo "Copying artifacts to docs..."
 mkdir -p docs/src/.vitepress/public/wasm

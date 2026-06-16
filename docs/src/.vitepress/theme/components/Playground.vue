@@ -106,9 +106,19 @@ async function loadWasm() {
     statusText.value = 'Loading YaoXiang runtime...'
     statusType.value = 'info'
 
-    // Dynamic import of wasm module
-    // The wasm-pack output should be placed in docs/src/.vitepress/public/wasm/
-    const wasm = await import(/* @vite-ignore */ '/YaoXiang/wasm/yaoxiang.js')
+    // Use fetch + eval to load wasm-pack JS glue at runtime
+    // This avoids Rollup trying to resolve the import at build time
+    const baseUrl = import.meta.env.BASE_URL || '/'
+    const jsUrl = `${baseUrl}wasm/yaoxiang.js`
+    const response = await fetch(jsUrl)
+    const jsCode = await response.text()
+
+    // Create a module from the fetched code
+    const blob = new Blob([jsCode], { type: 'application/javascript' })
+    const blobUrl = URL.createObjectURL(blob)
+    const wasm = await import(/* @vite-ignore */ blobUrl)
+    URL.revokeObjectURL(blobUrl)
+
     await wasm.default()
     wasm.init_panic_hook()
     wasmModule = wasm
