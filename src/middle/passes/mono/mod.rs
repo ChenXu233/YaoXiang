@@ -14,7 +14,7 @@ pub mod type_mono;
 use function::FunctionMonomorphizer;
 use instance::{GenericFunctionId, InstantiationRequest, SpecializationKey};
 use crate::frontend::core::typecheck::MonoType;
-use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, ModuleIR, Operand};
+use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 
 /// 单态化器
 pub struct Monomorphizer {
@@ -66,7 +66,12 @@ impl Monomorphizer {
         self.process_queue();
 
         // 4. 构建输出
-        self.build_output(module)
+        let mut output = self.build_output(module);
+
+        // 5. 替换调用点
+        self.replace_call_sites(&mut output, requests);
+
+        output
     }
 
     fn collect_generic_functions(
@@ -273,13 +278,64 @@ impl Monomorphizer {
         }
     }
 
-    /// 替换调用点（placeholder，Task 7 实现）
-    fn replace_call_sites(
+    /// 替换非泛型函数中对泛型函数的调用为特化函数名
+    pub fn replace_call_sites(
         &self,
-        _module: &mut ModuleIR,
-        _requests: &[InstantiationRequest],
+        module: &mut ModuleIR,
+        requests: &[InstantiationRequest],
     ) {
-        // TODO: Task 7 实现
+        // 构建调用点映射：generic_name -> specialized_name
+        let call_site_map = self.build_call_site_map(requests);
+
+        // 遍历所有非泛型函数，替换调用点
+        for func in &mut module.functions {
+            if func.generic_params.is_none() {
+                self.replace_calls_in_function(func, &call_site_map);
+            }
+        }
+    }
+
+    /// 构建泛型函数名到特化函数名的映射
+    fn build_call_site_map(
+        &self,
+        requests: &[InstantiationRequest],
+    ) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        for req in requests {
+            let generic_name = req.generic_id().name().to_string();
+            let type_args_str = req
+                .type_args()
+                .iter()
+                .map(|t| t.type_name())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let specialized_name = format!("{}({})", generic_name, type_args_str);
+            map.insert(generic_name, specialized_name);
+        }
+        map
+    }
+
+    /// 替换单个函数中所有 Call 指令的泛型函数名为特化函数名
+    fn replace_calls_in_function(
+        &self,
+        func: &mut FunctionIR,
+        call_site_map: &HashMap<String, String>,
+    ) {
+        for block in &mut func.blocks {
+            for instr in &mut block.instructions {
+                if let Instruction::Call {
+                    func: ref mut callee,
+                    ..
+                } = instr
+                {
+                    if let Operand::Const(ConstValue::String(name)) = callee {
+                        if let Some(specialized_name) = call_site_map.get(name) {
+                            *callee = Operand::Const(ConstValue::String(specialized_name.clone()));
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -715,5 +771,294 @@ mod tests {
             &func,
         );
         assert_eq!(const_ty, Some(MonoType::String));
+    }
+
+    #[test]
+    fn test_replace_call_sites_basic() {
+        let mono = Monomorphizer::new();
+
+        // 创建一个非泛型函数 main，其中调用泛型函数 identity
+        let main_func = FunctionIR {
+            name: "main".to_string(),
+            params: vec![],
+            return_type: MonoType::Void,
+            locals: vec![MonoType::Int(64)],
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions: vec![
+                    Instruction::Call {
+                        dst: Some(Operand::Local(0)),
+                        func: Operand::Const(ConstValue::String("identity".to_string())),
+                        args: vec![Operand::Const(ConstValue::Int(42))],
+                        span: crate::util::span::Span::default(),
+                    },
+                    Instruction::Ret(Some(Operand::Local(0))),
+                ],
+                successors: Vec::new(),
+            }],
+            entry: 0,
+            generic_params: None,
+        };
+
+        let mut module = ModuleIR {
+            functions: vec![main_func],
+            ..Default::default()
+        };
+
+        let requests = vec![InstantiationRequest::new(
+            GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
+            vec![MonoType::Int(64)],
+            crate::util::span::Span::default(),
+        )];
+
+        mono.replace_call_sites(&mut module, &requests);
+
+        // 验证调用点已替换
+        let main_func = &module.functions[0];
+        if let Instruction::Call { func: callee, .. } = &main_func.blocks[0].instructions[0] {
+            assert_eq!(
+                *callee,
+                Operand::Const(ConstValue::String("identity(int64)".to_string())),
+                "Call 指令的 func 应该被替换为特化函数名"
+            );
+        } else {
+            panic!("第一条指令应该是 Call");
+        }
+    }
+
+    #[test]
+    fn test_replace_call_sites_skips_generic_functions() {
+        let mono = Monomorphizer::new();
+
+        // 创建一个泛型函数 wrapper，其中调用 identity
+        let wrapper_func = FunctionIR {
+            name: "wrapper".to_string(),
+            params: vec![MonoType::TypeVar(TypeVar::new(0))],
+            return_type: MonoType::TypeVar(TypeVar::new(0)),
+            locals: vec![MonoType::TypeVar(TypeVar::new(0))],
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions: vec![
+                    Instruction::Call {
+                        dst: Some(Operand::Local(0)),
+                        func: Operand::Const(ConstValue::String("identity".to_string())),
+                        args: vec![Operand::Arg(0)],
+                        span: crate::util::span::Span::default(),
+                    },
+                    Instruction::Ret(Some(Operand::Local(0))),
+                ],
+                successors: Vec::new(),
+            }],
+            entry: 0,
+            generic_params: Some(vec!["T".to_string()]),
+        };
+
+        let mut module = ModuleIR {
+            functions: vec![wrapper_func],
+            ..Default::default()
+        };
+
+        let requests = vec![InstantiationRequest::new(
+            GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
+            vec![MonoType::Int(64)],
+            crate::util::span::Span::default(),
+        )];
+
+        mono.replace_call_sites(&mut module, &requests);
+
+        // 泛型函数内的调用不应被替换
+        let wrapper = &module.functions[0];
+        if let Instruction::Call { func: callee, .. } = &wrapper.blocks[0].instructions[0] {
+            assert_eq!(
+                *callee,
+                Operand::Const(ConstValue::String("identity".to_string())),
+                "泛型函数内的调用不应被替换"
+            );
+        } else {
+            panic!("第一条指令应该是 Call");
+        }
+    }
+
+    #[test]
+    fn test_replace_call_sites_multiple_functions() {
+        let mono = Monomorphizer::new();
+
+        // 两个非泛型函数都调用 identity
+        let func_a = FunctionIR {
+            name: "a".to_string(),
+            params: vec![],
+            return_type: MonoType::Void,
+            locals: vec![MonoType::Int(64)],
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions: vec![Instruction::Call {
+                    dst: Some(Operand::Local(0)),
+                    func: Operand::Const(ConstValue::String("identity".to_string())),
+                    args: vec![Operand::Const(ConstValue::Int(1))],
+                    span: crate::util::span::Span::default(),
+                }],
+                successors: Vec::new(),
+            }],
+            entry: 0,
+            generic_params: None,
+        };
+
+        let func_b = FunctionIR {
+            name: "b".to_string(),
+            params: vec![],
+            return_type: MonoType::Void,
+            locals: vec![MonoType::String],
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions: vec![Instruction::Call {
+                    dst: Some(Operand::Local(0)),
+                    func: Operand::Const(ConstValue::String("identity".to_string())),
+                    args: vec![Operand::Const(ConstValue::String("hi".to_string()))],
+                    span: crate::util::span::Span::default(),
+                }],
+                successors: Vec::new(),
+            }],
+            entry: 0,
+            generic_params: None,
+        };
+
+        let mut module = ModuleIR {
+            functions: vec![func_a, func_b],
+            ..Default::default()
+        };
+
+        let requests = vec![InstantiationRequest::new(
+            GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
+            vec![MonoType::Int(64)],
+            crate::util::span::Span::default(),
+        )];
+
+        mono.replace_call_sites(&mut module, &requests);
+
+        // 两个函数中的调用都应被替换
+        for func in &module.functions {
+            if let Instruction::Call { func: callee, .. } = &func.blocks[0].instructions[0] {
+                assert_eq!(
+                    *callee,
+                    Operand::Const(ConstValue::String("identity(int64)".to_string())),
+                    "函数 {} 的 Call 应该被替换",
+                    func.name
+                );
+            } else {
+                panic!("第一条指令应该是 Call");
+            }
+        }
+    }
+
+    #[test]
+    fn test_replace_call_sites_no_matching_request() {
+        let mono = Monomorphizer::new();
+
+        let main_func = FunctionIR {
+            name: "main".to_string(),
+            params: vec![],
+            return_type: MonoType::Void,
+            locals: vec![],
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions: vec![Instruction::Call {
+                    dst: None,
+                    func: Operand::Const(ConstValue::String("foo".to_string())),
+                    args: vec![],
+                    span: crate::util::span::Span::default(),
+                }],
+                successors: Vec::new(),
+            }],
+            entry: 0,
+            generic_params: None,
+        };
+
+        let mut module = ModuleIR {
+            functions: vec![main_func],
+            ..Default::default()
+        };
+
+        // 没有 foo 的请求，不应替换
+        let requests = vec![InstantiationRequest::new(
+            GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
+            vec![MonoType::Int(64)],
+            crate::util::span::Span::default(),
+        )];
+
+        mono.replace_call_sites(&mut module, &requests);
+
+        let main_func = &module.functions[0];
+        if let Instruction::Call { func: callee, .. } = &main_func.blocks[0].instructions[0] {
+            assert_eq!(
+                *callee,
+                Operand::Const(ConstValue::String("foo".to_string())),
+                "不匹配的调用不应被替换"
+            );
+        }
+    }
+
+    #[test]
+    fn test_monomorphize_end_to_end_with_call_replacement() {
+        // 端到端测试：泛型 identity 被特化，main 中的调用被替换
+        let identity = make_identity_ir();
+
+        let main_func = FunctionIR {
+            name: "main".to_string(),
+            params: vec![],
+            return_type: MonoType::Int(64),
+            locals: vec![MonoType::Int(64)],
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions: vec![
+                    Instruction::Call {
+                        dst: Some(Operand::Local(0)),
+                        func: Operand::Const(ConstValue::String("identity".to_string())),
+                        args: vec![Operand::Const(ConstValue::Int(42))],
+                        span: crate::util::span::Span::default(),
+                    },
+                    Instruction::Ret(Some(Operand::Local(0))),
+                ],
+                successors: Vec::new(),
+            }],
+            entry: 0,
+            generic_params: None,
+        };
+
+        let module = ModuleIR {
+            functions: vec![identity, main_func],
+            ..Default::default()
+        };
+
+        let mut mono = Monomorphizer::new();
+        let requests = vec![InstantiationRequest::new(
+            GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
+            vec![MonoType::Int(64)],
+            crate::util::span::Span::default(),
+        )];
+
+        let result = mono.monomorphize(&module, &requests);
+
+        // 应有 2 个函数：main（调用已替换）+ identity(int64)
+        assert_eq!(result.functions.len(), 2);
+
+        // 找到 main 函数
+        let main_out = result.functions.iter().find(|f| f.name == "main").unwrap();
+        if let Instruction::Call { func: callee, .. } = &main_out.blocks[0].instructions[0] {
+            assert_eq!(
+                *callee,
+                Operand::Const(ConstValue::String("identity(int64)".to_string())),
+                "main 中的调用应被替换为 identity(int64)"
+            );
+        } else {
+            panic!("第一条指令应该是 Call");
+        }
+
+        // 找到特化函数
+        let specialized = result
+            .functions
+            .iter()
+            .find(|f| f.name == "identity(int64)")
+            .expect("应该存在 identity(int64) 特化函数");
+        assert!(specialized.generic_params.is_none());
     }
 }
