@@ -32,9 +32,6 @@ pub mod std;
 
 pub mod util;
 
-#[cfg(target_arch = "wasm32")]
-pub mod playground;
-
 // Re-exports
 pub use anyhow::{Context, Result};
 pub use thiserror::Error;
