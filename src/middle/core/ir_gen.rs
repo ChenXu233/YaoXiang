@@ -537,7 +537,7 @@ impl AstToIrGenerator {
                 name,
                 type_name,
                 method_type,
-                generic_params: _,
+                generic_params,
                 type_annotation,
                 params,
                 body,
@@ -562,12 +562,19 @@ impl AstToIrGenerator {
                     self.generate_constructor_ir(name, type_annotation.as_ref().unwrap())
                 } else {
                     // Fn: 普通函数
+                    // 从 GenericParam 提取参数名字符串
+                    let generic_param_names = if generic_params.is_empty() {
+                        None
+                    } else {
+                        Some(generic_params.iter().map(|p| p.name.clone()).collect())
+                    };
                     self.generate_function_ir(
                         name,
                         type_annotation.as_ref(),
                         params,
                         body,
                         constants,
+                        generic_param_names,
                     )
                 }
             }
@@ -729,6 +736,7 @@ impl AstToIrGenerator {
         params: &[ast::Param],
         body: &[ast::Stmt],
         constants: &mut Vec<ConstValue>,
+        generic_params: Option<Vec<String>>,
     ) -> Result<Option<FunctionIR>, Diagnostic> {
         // 检测 native("symbol") 模式：函数体为空语句 + Native("...") 表达式
         // 形如: my_add: (a: Int, b: Int) -> Int = Native("my_add")
@@ -848,7 +856,7 @@ impl AstToIrGenerator {
                 successors: Vec::new(),
             }],
             entry: 0,
-            generic_params: None,
+            generic_params,
         };
 
         // 记录函数参数类型（用于调用点发出 Borrow 指令）
@@ -1359,19 +1367,26 @@ impl AstToIrGenerator {
                 name,
                 type_name: None,
                 method_type: _,
-                generic_params: _,
+                generic_params,
                 type_annotation,
                 params,
                 body,
                 is_pub: _,
             } => {
                 // 生成嵌套函数的 IR（排除方法绑定和类型定义）
+                // 从 GenericParam 提取参数名字符串
+                let generic_param_names = if generic_params.is_empty() {
+                    None
+                } else {
+                    Some(generic_params.iter().map(|p| p.name.clone()).collect())
+                };
                 match self.generate_function_ir(
                     name,
                     type_annotation.as_ref(),
                     params,
                     body,
                     constants,
+                    generic_param_names,
                 ) {
                     Ok(Some(func_ir)) => {
                         // 将嵌套函数添加到列表（会被提升到模块级别）
