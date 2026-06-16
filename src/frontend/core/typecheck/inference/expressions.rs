@@ -9,6 +9,7 @@ use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::frontend::core::parser::ast::{BinOp, UnOp};
 use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::core::typecheck::passes::overload;
+use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use std::collections::{HashMap, HashSet};
 
 use super::scope::ScopeManager;
@@ -50,6 +51,8 @@ pub struct ExpressionInferrer<'a> {
     /// 用于 List(1, 2, 3) 等泛型类型构造调用的实例化
     generic_type_defs:
         &'a HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
+    /// 实例化请求（收集遇到的所有泛型函数实例化需求）
+    pub instantiation_requests: Vec<InstantiationRequest>,
 }
 
 impl<'a> ExpressionInferrer<'a> {
@@ -70,6 +73,7 @@ impl<'a> ExpressionInferrer<'a> {
             method_bindings: &EMPTY_SIGNATURES,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
+            instantiation_requests: Vec::new(),
         }
     }
 
@@ -91,6 +95,7 @@ impl<'a> ExpressionInferrer<'a> {
             method_bindings: &EMPTY_SIGNATURES,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
+            instantiation_requests: Vec::new(),
         }
     }
 
@@ -113,6 +118,7 @@ impl<'a> ExpressionInferrer<'a> {
             method_bindings: &EMPTY_SIGNATURES,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
+            instantiation_requests: Vec::new(),
         }
     }
 
@@ -137,6 +143,7 @@ impl<'a> ExpressionInferrer<'a> {
             method_bindings,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
+            instantiation_requests: Vec::new(),
         }
     }
 
@@ -665,6 +672,128 @@ impl<'a> ExpressionInferrer<'a> {
         }
     }
 
+    /// 收集泛型函数实例化请求
+    ///
+    /// 检测函数调用是否是泛型函数调用，如果是则构造 InstantiationRequest
+    /// 并添加到实例化请求列表中。
+    fn collect_instantiation_request(
+        &mut self,
+        func_ty: &MonoType,
+        func_expr: &crate::frontend::core::parser::ast::Expr,
+        arg_types: &[MonoType],
+        mono_func_ty: &MonoType,
+        call_span: crate::util::span::Span,
+    ) {
+        // 只处理 Fn 类型
+        let MonoType::Fn {
+            params: original_params,
+            ..
+        } = func_ty
+        else {
+            return;
+        };
+
+        // 检查原函数类型是否包含 TypeVar（即是否为泛型函数）
+        let mut var_indices = HashSet::new();
+        Self::collect_type_var_indices(func_ty, &mut var_indices);
+        if var_indices.is_empty() {
+            // 也检查 MetaType 参数（泛型类型构造器）
+            let has_meta = original_params
+                .iter()
+                .any(|p| matches!(p, MonoType::MetaType { .. }));
+            if !has_meta {
+                return;
+            }
+        }
+
+        // 获取函数名称（从 AST）
+        let fn_name = match func_expr {
+            crate::frontend::core::parser::ast::Expr::Var(ref name, _) => name.clone(),
+            _ => return, // 对于非命名函数调用（如 lambda 调用），暂不收集
+        };
+
+        // 获取泛型参数名称列表
+        let type_params: Vec<String> = self.lookup_type_params(&fn_name);
+
+        // 从单态化后的函数类型中提取具体的类型参数
+        if let MonoType::Fn {
+            params: resolved_params,
+            ..
+        } = mono_func_ty
+        {
+            // 收集所有的具体类型（从已解析的参数中提取去重后的类型）
+            let type_args: Vec<MonoType> =
+                self.extract_concrete_type_args(resolved_params, arg_types);
+
+            if !type_args.is_empty() {
+                let generic_id = if type_params.is_empty() {
+                    GenericFunctionId::new(fn_name, vec![])
+                } else {
+                    GenericFunctionId::new(fn_name, type_params)
+                };
+                let request = InstantiationRequest::new(generic_id, type_args, call_span);
+                self.instantiation_requests.push(request);
+            }
+        }
+    }
+
+    /// 查找函数的泛型类型参数名称
+    fn lookup_type_params(
+        &self,
+        fn_name: &str,
+    ) -> Vec<String> {
+        // 1. 优先从重载候选中查找（OverloadCandidate 包含 type_params）
+        if let Some(candidates) = self.overload_candidates.get(fn_name) {
+            for candidate in candidates {
+                if candidate.is_generic {
+                    return candidate.type_params.clone();
+                }
+            }
+        }
+
+        // 2. 从作用域中查找 PolyType
+        if let Some(poly) = self.scope.get_var(fn_name) {
+            // type_binders 是 TypeVar 列表，按索引顺序对应类型参数
+            // 由于当前系统不存储类型参数名称，返回空列表
+            // Monomorphizer 可以通过函数名匹配（name 唯一时）
+            if !poly.type_binders.is_empty() {
+                // 如果有 type_binders，说明是泛型函数
+                // 生成占位名称（如 "T0", "T1"）以便单态化器识别
+                return poly
+                    .type_binders
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| format!("T{}", i))
+                    .collect();
+            }
+        }
+
+        vec![]
+    }
+
+    /// 从已解析的参数类型和实参类型中提取具体的类型参数
+    fn extract_concrete_type_args(
+        &self,
+        resolved_params: &[MonoType],
+        _arg_types: &[MonoType],
+    ) -> Vec<MonoType> {
+        let mut type_args = Vec::new();
+        let mut seen = HashSet::new();
+
+        // 收集 params 中的具体类型（已解析的 TypeVar）
+        for param in resolved_params {
+            let resolved = self.solver.resolve_type(param);
+            if !matches!(resolved, MonoType::TypeVar(_)) {
+                let key = format!("{}", resolved);
+                if seen.insert(key) {
+                    type_args.push(resolved);
+                }
+            }
+        }
+
+        type_args
+    }
+
     /// 推断表达式的类型
     pub fn infer_expr(
         &mut self,
@@ -954,6 +1083,15 @@ impl<'a> ExpressionInferrer<'a> {
 
                 // 单态化：处理编译期泛型参数
                 let mono_func_ty = self.monomorphize(func_ty.clone(), &arg_types);
+
+                // 收集实例化请求：检测泛型函数调用并记录
+                self.collect_instantiation_request(
+                    &func_ty,
+                    func.as_ref(),
+                    &arg_types,
+                    &mono_func_ty,
+                    *span,
+                );
 
                 // 泛型类型构造：当函数名在 generic_type_defs 中且 func_ty 是 Struct 时，
                 // 通过 unify arg_types 与 struct fields 推断泛型参数，返回实例化后的结构体
