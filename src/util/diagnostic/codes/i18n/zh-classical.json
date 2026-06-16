@@ -888,5 +888,10 @@
   },
   "_meta": {
     "lastUpdated": "2026-06-13T07:57:03.576Z"
+  },
+  "E2029": {
+    "title": "spawn ref 之循环",
+    "template": "跨任务循环引用:{cycle}",
+    "help": "spawn 块内之 ref 变量，构成循环引用。可用 Weak 破其循环，亦可于 unsafe 块中规避检测。"
   }
 }
