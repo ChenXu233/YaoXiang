@@ -1,0 +1,26 @@
+// 基本算术和控制流测试
+main: () -> Int = {
+    // 算术运算
+    mut a = 10
+    mut b = 20
+    mut c = a + b
+    print(c)
+
+    // 条件分支
+    if c > 25 {
+        print("sum is greater than 25")
+    } else {
+        print("sum is not greater than 25")
+    }
+
+    // 循环
+    mut total = 0
+    mut i = 1
+    while i <= 5 {
+        total = total + i
+        i = i + 1
+    }
+    print(total)
+
+    return 0
+}
