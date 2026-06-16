@@ -670,6 +670,11 @@
     "template": "不可克隆 '{name}'：值已移动",
     "help": "值已移动，若需多次使用，当于移动前先克隆之。"
   },
+  "E2029": {
+    "title": "spawn ref 循环",
+    "template": "跨任务循环引用: {cycle}",
+    "help": "spawn 块内之 ref 变量形成引用循环。以 Weak 打破循环，或于 unsafe 块中绕过检测。"
+  },
   "E3001": {
     "title": "未实行之表达式（IR）",
     "template": "未实行之表达式类型：{expr_type}",
