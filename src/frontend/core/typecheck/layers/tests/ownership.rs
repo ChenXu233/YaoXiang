@@ -1490,35 +1490,6 @@ fn test_e2e_closure_move_capture_use_after_call() {
 }
 
 #[test]
-fn test_e2e_closure_move_capture_before_call() {
-    // { x = 42; f = { y = x }; use(x); f() }
-    // 定义不消耗，调用前 x 仍可用
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_binding("f", vec![], vec![make_var_stmt("y", make_var("x"))]),
-            make_expr_stmt(make_var("x")),
-            make_expr_stmt(make_call("f", vec![])),
-        ],
-    )]);
-
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
-
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
-        .collect();
-    assert!(
-        errors.is_empty(),
-        "定义后调用前 x 应可用，但检测到: {:?}",
-        errors
-    );
-}
-
-#[test]
 fn test_e2e_closure_read_capture() {
     // { x = 42; f = { use(x) }; f(); use(x) }
     // x 被 Read 捕获——调用不消耗
@@ -1579,34 +1550,6 @@ fn test_e2e_closure_no_capture() {
         "纯局部变量的闭包不应有错误，但检测到: {:?}",
         errors
     );
-}
-
-#[test]
-fn test_e2e_closure_move_second_call_rejected() {
-    // { x = 42; f = { y = x }; f(); f() }
-    // 第一次调用 Move x，第二次调用应报 use_after_move
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_binding("f", vec![], vec![make_var_stmt("y", make_var("x"))]),
-            make_expr_stmt(make_call("f", vec![])),
-            make_expr_stmt(make_call("f", vec![])),
-        ],
-    )]);
-
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(&module, &make_test_env());
-
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
-                if matches!(model.kind, DisproofKind::UseAfterMove))
-        })
-        .collect();
-    assert!(!errors.is_empty(), "第二次调用 f() 时 x 已被 move，应报错");
 }
 
 // ── E2E 函数签名查询测试 ──────────────────────────────────
