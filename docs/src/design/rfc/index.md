@@ -33,6 +33,7 @@ title: "RFC 索引"
 | RFC-019 | [RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型](./draft/019-typed-homoiconicity.md) | 晨煦 | 2026-02-20 | 草案 |
 | RFC-028 | [RFC-028：JIT 编译器 — VM 内多级执行引擎](./draft/028-jit-compiler.md) | 晨煦 | 2026-06-11 | 草案 |
 | RFC-029 | [RFC-029：模块语义系统](./draft/029-module-semantics.md) | 晨煦 | 2026-06-13 | 草案 |
+| RFC-030 | [RFC-030：assert 断言机制](./draft/030-assert-mechanism.md) | 晨煦 | 2026-06-15 | 草案 |
 
 ---
 
