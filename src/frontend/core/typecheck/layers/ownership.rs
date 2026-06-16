@@ -1613,10 +1613,8 @@ impl OwnershipChecker {
                     let snapshot = self.save_state();
                     // 注册参数为局部变量（不会被 diff 误判为捕获）
                     for param in params {
-                        self.var_state
-                            .insert(param.name.clone(), VarState::Alive);
-                        self.var_mutability
-                            .insert(param.name.clone(), param.is_mut);
+                        self.var_state.insert(param.name.clone(), VarState::Alive);
+                        self.var_mutability.insert(param.name.clone(), param.is_mut);
                     }
                     results.extend(self.walk_stmts(body));
                     let captures = self.diff_captures(&snapshot);
