@@ -21,7 +21,7 @@ cli = [
 
 [lib]
 path = "src/lib.rs"
-crate-type = ["cdylib", "rlib"]
+crate-type = ["rlib"]
 
 [[bin]]
 name = "yaoxiang"
