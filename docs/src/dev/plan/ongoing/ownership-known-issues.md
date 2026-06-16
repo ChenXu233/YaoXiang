@@ -77,7 +77,9 @@ b = shared    // use after move——实际上应允许
 
 **说明**：`error.rs` 的 `ValueState` 枚举、`TypeId` 结构体、`ValueStateProvider` trait 均为死代码（零使用），已删除。文件重命名为 `state_utils.rs`，保留 `Checker` trait + `operand_display_name` 工具函数。
 
-- [ ] ### 6. 嵌套函数有参形式不分析（P2）
+- [x] ### 6. 嵌套函数有参形式不分析（P2）— 已修复 (2026-06-16)
+
+**说明**：`StmtKind::Binding` 移除了 `params.is_empty()` 条件。有参嵌套函数同样做 save→walk→diff→restore 捕获分析，walk 前注册参数为局部变量。
 
 **说明**：`StmtKind::Binding` 只对 `params.is_empty() && !body.is_empty()` 的闭包做捕获分析。带参嵌套函数返回 `vec![]`（由 `check_module` 独立检查 body，但不分析捕获语义）。
 
