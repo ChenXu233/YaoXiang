@@ -1,37 +1,36 @@
 ---
-title: "Borrow Checker Status"
+title: "Ownership Checker Status"
 ---
 
-# Borrow Checker (Lifetime)
+# Ownership Checker
 
-> **Module Status**: Transition Period — v8 Linear Scan Architecture → v9 Hoare Proposition Pipeline
-> **Location**: `src/middle/passes/lifetime/`
-> **Last Updated**: 2026-06-13
+> **Module Status**: Migration complete — frontend Hoare proposition pipeline has taken over
+> **New Architecture Location**: `src/frontend/core/typecheck/layers/ownership.rs` (~1600 lines)
+> **Legacy Location**: `src/middle/passes/lifetime/` (retained, gradually being cleaned up)
+> **Last Updated**: 2026-06-15
 >
 > **Related RFCs**:
 > - [RFC-009: Ownership Model Design](../design/rfc/accepted/009-ownership-model.md) — Accepted
-> - [RFC-009a: Token Lifetime Analysis — Hoare Proof Pipeline Based](../design/rfc/accepted/009a-borrow-proof-pipeline.md) — Accepted
+> - [RFC-009a: Token Lifetime Analysis — Hoare Proof Pipeline](../design/rfc/accepted/009a-borrow-proof-pipeline.md) — Accepted
+>
+> **Known Issues**: [ongoing/ownership-known-issues.md](../ongoing/ownership-known-issues.md) — 6 defects and precision tradeoffs
 
 ---
 
 ## Module Overview
 
-The Borrow Checker module is responsible for YaoXiang's ownership analysis — Move semantics, borrow token conflict detection, Drop/Clone correctness, ref cycle detection, and mutability violation checks.
+The Ownership Checker is responsible for YaoXiang's ownership analysis — Move semantics, borrow token conflict detection, Drop correctness, mutability violations, NLL (Non-Lexical Lifetimes) precise release, closure capture, function signature queries, and ref escape analysis.
 
-**Current Architecture** (Transition Period):
-- ir_gen hardcodes the insertion of Borrow/Release instructions (lexical scope)
-- BorrowChecker linearly scans IR, passively validating token conflicts
-- ControlFlowAnalyzer exists but its core logic is empty
-- User-visible behavior is largely correct, but the underlying implementation is not the Hoare proposition pipeline from RFC-009a
-
-**Target Architecture** (RFC-009 + RFC-009a):
-- Brand tree tracks token derivation relationships
-- Consumer analysis drives NLL (Non-Lexical Lifetimes) release
-- Reverse BFS liveness analysis (fast path covers 95%+ of scenarios)
-- SMT logic cutoff as fallback (for the extremely rare while + path condition scenarios)
-- Release is driven by scope analysis, not hardcoded in ir_gen
-
-**Code Volume**: approximately 300KB of source code (15 sub-files)
+**Current Architecture** (v9 Hoare proposition pipeline):
+- Brand tree (BrandTree) tracking token derivation relationships and conflict judgments
+- Consumer analysis driving NLL release (ReleasePlan)
+- Reverse BFS liveness analysis (fast path, covering 95%+ of scenarios)
+- SMT logical cutoff fallback (extremely rare while + path-condition scenarios)
+- Scope-driven Drop (automatically marking `VarState::Dropped` when leaving scope)
+- Closure capture analysis (save/restore/diff → CapturesStore)
+- Function signature queries (TypeEnvironment → T/&T/&mut T → Move/ReadBorrow/WriteBorrow)
+- ref escape analysis (use within `spawn` → Arc, otherwise → Rc)
+- ir_gen reads ReleasePlan to insert Drop instructions + selects RcNew/ArcNew based on escaped_refs
 
 ---
 
@@ -40,156 +39,119 @@ The Borrow Checker module is responsible for YaoXiang's ownership analysis — M
 ### RFC-009 Five Core Concepts
 
 | Concept | User-Visible Behavior | Underlying Implementation |
-|---------|----------------------|---------------------------|
-| **Move** | ✅ Completed | MoveChecker, UseAfterMove detection |
-| **&T / &mut T** | ✅ Completed | BorrowChecker linear scan, passively responds to Borrow/Release instructions |
-| **ref** | ⚠️ Cycle detection done, escape analysis missing | ref_semantics + cycle_check + intra_task_cycle |
+|------|-------------|---------|
+| **Move** | ✅ Completed | OwnershipChecker, UseAfterMove detection |
+| **&T / &mut T** | ✅ Completed | Brand tree token conflict detection (fast path + SMT fallback) |
+| **ref** | ✅ Completed | Escape analysis automatically selects Rc/Arc |
 | **clone()** | ✅ Completed | CloneChecker, 0 tests |
 | **unsafe + *T** | ✅ Completed | UnsafeChecker |
 
-### RFC-009a Six Phases
+### RFC-009a Six Stages (New Version — Frontend Implementation)
 
-| Phase | Content | Status | Description |
-|-------|---------|--------|-------------|
-| 1 | Brand tree data structure | ❌ Not started | Replaces HashMap<String, BorrowToken>, brand ID + parent node + consumer list |
-| 2 | Consumer analysis | ❌ Not started | Consumers automatically collected during DAG construction, NLL foundation |
-| 3 | Reverse BFS liveness analysis | ❌ Not started | Brand tree + consumers + break cutoff → covers 95%+ of scenarios |
-| 4 | Scope-driven Release | ❌ Not started | Remove ir_gen hardcoding, LIFO insertion at scope exit points, automatic `?` handling |
-| 5 | SMT logic cutoff | ❌ Not started | Blocked on RFC-027 Phase 2, only triggered by while + path conditions |
-| 6 | Cleanup | ❌ Not started | BorrowChecker → BorrowPredicateEmitter, delete ControlFlowAnalyzer |
+| Stage | Content | Status | Notes |
+|------|------|------|------|
+| 1 | Brand tree data structure | ✅ Completed | `BrandTree` + `BrandNode` + `BrandId` |
+| 2 | Consumer analysis | ✅ Completed | `BrandNode.consumers`, automatically collected via AST traversal |
+| 3 | Reverse BFS liveness analysis | ✅ Completed | `fast_path_check()`, break cuts off back edges |
+| 4 | Scope-driven Release | ✅ Completed | `ReleasePlan` + `scope_vars` stack, LIFO Drop |
+| 5 | SMT logical cutoff | ✅ Completed | `smt_cut(path_cond, loop_cond)` via Z3 |
+| 6 | Cleanup | ✅ Completed | Legacy files deleted, error code format not unified (P2) |
 
----
+### Supplementary Stages
 
-## Current Module Inventory
-
-### Core Checkers
-
-| Sub-module | File | Function | Tests |
-|------------|------|----------|-------|
-| **Move Semantics** | `move_semantics.rs` | UseAfterMove detection, empty-state reassignment | 6 |
-| **Drop Semantics** | `drop_semantics.rs` | UseAfterDrop, DropMovedValue, DoubleDrop | 0 |
-| **Mutability Check** | `mut_check.rs` | Immutable variable assignment / mutating methods / field assignment | 0 |
-| **Ref Semantics** | `ref_semantics.rs` | RefNonOwner detection | 0 |
-| **Clone Semantics** | `clone.rs` | CloneMovedValue, CloneDroppedValue | 0 |
-| **Borrow Tokens** | `borrow_checker.rs` | Token conflict detection (linear scan architecture) | 16 |
-| **Cross-Task Cycles** | `cycle_check.rs` | Cross-spawn loop reference DFS detection | 8 |
-| **Intra-Task Cycles** | `intra_task_cycle.rs` | Intra-task ref cycle tracking (warning mode) | 7 |
-
-### Auxiliary Modules
-
-| Sub-module | File | Destination |
-|------------|------|-------------|
-| **Ownership Reflow** | `ownership_flow.rs` | Keep |
-| **Consume Analysis** | `consume_analysis.rs` | → Phase 2, integrated into brand tree |
-| **Chained Calls** | `chain_calls.rs` | Keep |
-| **Lifecycle Tracking** | `lifecycle.rs` | Keep — Drop insertion requires it |
-| **Empty State** | `empty_state.rs` | Keep |
-| **Control Flow** | `control_flow.rs` | → Phase 6, delete |
-| **Unsafe Check** | `unsafe_check.rs` | Keep |
-| **Send/Sync** | `send_sync.rs` | Keep (used independently) |
+| Stage | Content | Status | Notes |
+|------|------|------|------|
+| D.1 | ref escape analysis (Rc vs Arc) | ✅ Completed | `ref_vars` + `escaped_refs` + `inside_spawn`, ref attribute propagation |
+| D.2 | Test coverage expansion | ✅ Completed | 61 tests (original 31 → target 50+) |
+| D.3 | Drop semantic trigger points | ✅ Completed | `VarState::Dropped` activated, automatically marked on scope exit |
+| D.4 | Mutability check | ✅ Completed | `&mut` and assignment check `var_mutability`, emit `mut_violation` |
+| D.5 | Roadmap sync | ✅ Completed | This document |
+| — | Closure capture analysis | ✅ Completed | save→walk→diff→restore→CapturesStore |
+| — | Function signature query | ✅ Completed | TypeEnvironment.get_var → T/&T/&mut T |
+| — | Spawn walk | ✅ Completed | save/restore prevents polluting outer scope, detects ref escape |
 
 ---
 
-## Implementation Roadmap
+## New Architecture Core Components
 
-### Phase 0: Fill in Tests (Can start immediately, blocks refactoring)
+### `src/frontend/core/typecheck/layers/ownership.rs` (~1600 lines)
 
-> Before touching the architecture, lay down the test net for existing behavior.
+| Component | Function |
+|------|------|
+| `BrandId` / `BrandTree` | Token identifier + derivation tree + conflict judgment + consumer tracking |
+| `ControlFlowGraph` | CFG nodes/edges/path conditions, Break/BackEdge |
+| `fast_path_check()` | Reverse BFS liveness analysis (fast path) |
+| `smt_cut()` | SMT logical cutoff (slow path, Z3) |
+| 5 system predicates | borrow_conflict / use_after_move / use_after_drop / double_drop / mut_violation |
+| `OwnershipChecker` | AST traversal + brand tree + CFG + predicate verification |
+| `ReleasePlan` | NLL precise release plan (consumer + scope Drop dual-source merge) |
+| `VarState` | Alive / Moved / Dropped three-state |
+| `Captures` / `CapturesStore` | Closure captured variable set + storage |
+| `StateSnapshot` | save_state / restore_state / diff_captures |
+| `ParamOwnership` | Move / ReadBorrow / WriteBorrow |
+| `ref_vars` / `escaped_refs` / `inside_spawn` | ref escape analysis (with attribute propagation) |
 
-| # | Task | File |
-|---|------|------|
-| 0.1 | Add Drop semantics tests | `tests/drop_semantics.rs` |
-| 0.2 | Add Clone semantics tests | `tests/clone.rs` |
-| 0.3 | Add mutability check tests | `tests/mut_check.rs` |
-| 0.4 | Add Ref semantics tests | `tests/ref_semantics.rs` |
-| 0.5 | Add Unsafe check tests | `tests/unsafe_check.rs` |
+### `src/middle/core/ir_gen.rs`
 
-### Phase 1: Brand Tree Data Structure (RFC-009a Phase 1)
+- Reads `TypeCheckResult.release_plan` → inserts `Drop` instructions (NLL precise release points)
+- Reads `TypeCheckResult.escaped_refs` → `Expr::Ref` selects `RcNew` or `ArcNew`
 
-| # | Task | Output |
-|---|------|--------|
-| 1.1 | Define `BrandTree`, `BrandNode` structs | `brand_tree.rs` |
-| 1.2 | Implement prefix matching conflict judgment | `conflicts()` |
-| 1.3 | Implement brand node registration during DAG construction | Integrate into ir_gen |
-| 1.4 | Unit tests | `tests/brand_tree.rs` |
+### `src/middle/core/ir.rs` / `bytecode.rs` / `opcode.rs`
 
-### Phase 2: Consumer Analysis (RFC-009a Phase 2)
-
-| # | Task | Output |
-|---|------|--------|
-| 2.1 | Automatically collect consumer list for each token during DAG construction | `BrandNode.consumers` |
-| 2.2 | System predicate generator definition (Borrow/Move/Drop/Mut → `{P} op {Q}`) | Interface definition |
-
-### Phase 3: Reverse BFS Liveness Analysis (RFC-009a Phase 3)
-
-| # | Task | Output |
-|---|------|--------|
-| 3.1 | Implement reverse BFS algorithm (break cuts back-edges) | Fast path |
-| 3.2 | Hook into RFC-027 proof pipeline interface (Proved/Disproved) | Pipeline integration |
-| 3.3 | NLL iteration boundary rule implementation | Cross-iteration token semantics inside loops |
-| 3.4 | Replace BorrowChecker linear scan | Remove the Borrow/Release match in `check_instruction` |
-
-### Phase 4: Scope-Driven Release (RFC-009a Phases 4-5)
-
-| # | Task | Output |
-|---|------|--------|
-| 4.1 | Scope exit point collection (`}`, `?`, explicit return) | ir_gen |
-| 4.2 | LIFO Release insertion (parent-child relationships in brand tree auto-cascade) | ir_gen |
-| 4.3 | Remove hardcoded Release after Call in `ir_gen.rs` | Code cleanup |
-
-### Phase 5: SMT Logic Cutoff (RFC-009a Phase 5, depends on RFC-027 Phase 2)
-
-| # | Task | Output |
-|---|------|--------|
-| 5.1 | Path condition collection integration | Get from RFC-027 pipeline |
-| 5.2 | SMT fallback: `path_cond ⇒ !loop_cond` | Slow path |
-| 5.3 | Activate borrow checking inside while loop bodies | Currently conservatively rejected scenarios |
-
-### Phase 6: Cleanup (RFC-009a Phase 6)
-
-| # | Task | Output |
-|---|------|--------|
-| 6.1 | `BorrowChecker` → `BorrowPredicateEmitter` | Rename, clarify responsibilities |
-| 6.2 | Delete `ControlFlowAnalyzer` | Unified handling by the pipeline |
-| 6.3 | Migrate `consume_analysis.rs` consumer information into brand tree | De-duplication |
-| 6.4 | Update error message format | Align with RFC-009a §Error Message Design |
+- New `RcNew` instruction + `Opcode::RcNew(0x89)`
 
 ---
 
-## Independent Tasks (Do not block the main track)
+## Current Middle Layer Module List
 
-| # | Task | Description |
-|---|------|-------------|
-| I.1 | ref escape analysis (automatic Rc vs Arc selection) | The current compiler does not distinguish between cross-task and intra-task, uses Arc uniformly |
-| I.2 | Before deleting `ControlFlowAnalyzer` in `control_flow.rs`, do not add new code to it | — |
+> Note: `borrow_checker.rs`, `control_flow.rs`, `consume_analysis.rs`, `move_semantics.rs`,
+> `drop_semantics.rs`, `mut_check.rs`, `ref_semantics.rs`, `clone.rs`, `empty_state.rs`,
+> `send_sync.rs` have been deleted. The following are the retained active modules.
+
+| Submodule | File | Function |
+|--------|------|------|
+| **Chain calls** | `chain_calls.rs` | Chained method call analysis |
+| **Cross-task cycle** | `cycle_check.rs` | Cross-spawn reference cycle DFS |
+| **Intra-task cycle** | `intra_task_cycle.rs` | Intra-task ref cycle tracking |
+| **Lifecycle** | `lifecycle.rs` | IR-level Drop position tracking |
+| **Ownership flow** | `ownership_flow.rs` | Function ownership flow analysis |
+| **Unsafe** | `unsafe_check.rs` | unsafe block bypass check |
+| **Error type** | `error.rs` | ValueState + Checker trait |
 
 ---
 
 ## Test Coverage
 
-**Currently: 83 unit tests**
+**Frontend Ownership Checker: 61 unit tests**
 
-| File | Test Count | Coverage |
-|------|------------|----------|
-| `borrow_checker.rs` | 16 | Sufficient |
-| `chain_calls.rs` | 13 | Sufficient |
-| `consume_analysis.rs` | 11 | Sufficient |
-| `ownership_flow.rs` | 10 | Sufficient |
-| `lifecycle.rs` | 10 | Sufficient |
-| `cycle_check.rs` | 8 | Good |
-| `intra_task_cycle.rs` | 7 | Good |
-| `move_semantics.rs` | 6 | Basic |
-| `control_flow.rs` | 1 | Insufficient |
-| `empty_state.rs` | 1 | Insufficient |
-| Others | 0 | **Missing**: drop_semantics, clone, mut_check, ref_semantics, unsafe_check |
+| Test Category | Test Count | Coverage |
+|----------|--------|----------|
+| Basics (BrandId/conflict/cascade/consumer/fast path) | 17 | Token prefix, conflict judgment, cascade deletion, consumer tracking, BFS liveness |
+| System predicates | 6 | borrow_conflict / use_after_move / use_after_drop / double_drop / mut_violation |
+| E2E integration (basic) | 7 | use after move, valid move, argument move, borrow conflict, write-write conflict, read-read safe |
+| E2E mutability | 5 | &mut non-mut, &mut mut, assign non-mut, assign mut, parameter non-mut |
+| E2E Drop | 2 | Scope Drop (ReleasePlan), nested block Drop |
+| E2E Move+Borrow | 1 | borrow detection after move |
+| E2E control flow | 2 | if/else dual-branch conflict, borrow inside while loop |
+| E2E Drop ordering | 1 | Multi-variable same-span release |
+| E2E return value | 2 | return Move, use after return |
+| E2E multiple borrow | 2 | Three ReadTokens, Read+Write conflict |
+| E2E block expression | 1 | Inner block variable scope |
+| E2E consecutive Move | 2 | Consecutive Move, double move detection |
+| E2E parameters | 2 | Parameter move then use, parameter not in ReleasePlan |
+| E2E closure capture | 5 | Move capture, Read capture, no capture, defined-then-called, second call |
+| E2E function signature | 2 | Unknown function fallback Move, unregistered function fallback |
+| E2E ref escape | 4 | No spawn no escape, escape inside spawn, non-ref no escape, nested spawn |
+
+**Middle Layer Tests: 53 unit tests**
 
 ---
 
 ## Code Quality Assessment
 
-| Dimension | Score | Description |
-|-----------|-------|-------------|
-| Outstanding Items | 10 | Phase 0 tests (5) + Phases 1-6 architecture (6) + ref escape analysis (1) |
-| Test Coverage | To be strengthened | 5 sub-modules with 0 tests, must be filled in before refactoring |
-| Documentation Quality | Good | Module/struct/method-level documentation comments are all present |
-| Code Architecture | Transition Period | The current linear scan architecture works but does not align with RFC-009a |
+| Dimension | Score | Notes |
+|------|------|------|
+| Outstanding items | 4 | Error message format unification (P2) + Stage 0 test completion (5) + 6 known issues |
+| Test coverage | Good | Frontend 61 tests + middle 53 tests = 114 tests |
+| Documentation quality | Good | Module/struct/method level documentation comments present |
+| Code architecture | Migration complete | Frontend Hoare proposition pipeline has taken over core logic; middle layer legacy files deleted |
