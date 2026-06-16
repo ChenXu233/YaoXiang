@@ -1801,3 +1801,80 @@ fn test_e2e_ref_in_nested_spawn_escapes() {
         "嵌套 spawn 内使用 shared，应标记逃逸"
     );
 }
+
+#[test]
+fn test_e2e_ref_holds_ref_through_field_assignment() {
+    // 测试 ref_holds_ref 功能：ref_a.field = ref_b 应被记录
+    // { a = 42; b = 43; ra = ref a; rb = ref b; spawn { ra.field = rb; use(ra); use(rb) } }
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("a", make_lit(42)),
+            make_var_stmt("b", make_lit(43)),
+            make_var_stmt(
+                "ra",
+                Expr::Ref {
+                    expr: Box::new(make_var("a")),
+                    span: Span::default(),
+                },
+            ),
+            make_var_stmt(
+                "rb",
+                Expr::Ref {
+                    expr: Box::new(make_var("b")),
+                    span: Span::default(),
+                },
+            ),
+            make_expr_stmt(Expr::Spawn {
+                body: Box::new(make_block(vec![
+                    // ra.field = rb（字段赋值）
+                    Stmt {
+                        kind: StmtKind::Var {
+                            name: "temp".into(),
+                            name_span: Span::default(),
+                            type_annotation: None,
+                            initializer: Some(Box::new(Expr::BinOp {
+                                op: BinOp::Assign,
+                                left: Box::new(Expr::FieldAccess {
+                                    expr: Box::new(make_var("ra")),
+                                    field: "field".into(),
+                                    span: Span::default(),
+                                }),
+                                right: Box::new(make_var("rb")),
+                                span: Span::default(),
+                            })),
+                            is_mut: false,
+                        },
+                        span: Span::default(),
+                    },
+                    make_expr_stmt(make_var("ra")),
+                    make_expr_stmt(make_var("rb")),
+                ])),
+                span: Span::default(),
+            }),
+        ],
+    )]);
+
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan, escaped) = checker.check_module(&module, &make_test_env());
+
+    // 不应有所有权错误
+    let errors: Vec<_> = results
+        .iter()
+        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .collect();
+    assert!(errors.is_empty(), "不应有错误，得: {:?}", errors);
+
+    // ra 和 rb 都应在 spawn 内逃逸
+    assert!(
+        escaped.contains("ra"),
+        "ra 在 spawn 内使用，应标记逃逸，但 escaped_refs: {:?}",
+        escaped
+    );
+    assert!(
+        escaped.contains("rb"),
+        "rb 在 spawn 内使用，应标记逃逸，但 escaped_refs: {:?}",
+        escaped
+    );
+}
