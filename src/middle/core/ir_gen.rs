@@ -675,19 +675,7 @@ impl AstToIrGenerator {
         for stmt in body {
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
         }
-
-        // 生成表达式 IR（最后一个表达式语句作为返回值）
-        if let Some(last_stmt) = body.last() {
-            if let ast::StmtKind::Expr(expr) = &last_stmt.kind {
-                let result_reg = 0;
-                self.generate_expr_ir(expr, result_reg, &mut instructions, constants)?;
-                instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
-            } else {
-                instructions.push(Instruction::Ret(None));
-            }
-        } else {
-            instructions.push(Instruction::Ret(None));
-        }
+        instructions.push(Instruction::Ret(None));
 
         // 退出作用域
         self.exit_scope();
@@ -790,7 +778,7 @@ impl AstToIrGenerator {
         let local_var_start = params.len();
         self.next_temp = local_var_start;
 
-        // 处理语句
+        // 生成语句 IR
         for stmt in body {
             tlog!(
                 debug,
@@ -812,24 +800,7 @@ impl AstToIrGenerator {
                 &self.symbols.len().to_string()
             );
         }
-
-        // 阶段3修复：简化返回值处理逻辑，明确表达式vs语句语义
-        // 表达式形式 (a, b) => body：直接返回 body 的值
-        // 代码块形式 { ... }：必须显式 return，否则默认返回 Void
-        if let Some(last_stmt) = body.last() {
-            if let ast::StmtKind::Expr(e) = &last_stmt.kind {
-                let result_reg = self.next_temp_reg();
-                self.generate_expr_ir(e, result_reg, &mut instructions, constants)?;
-                // 表达式形式：直接返回表达式的值
-                instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
-            } else {
-                // 代码块形式：隐式返回 Void（无 return 时）
-                instructions.push(Instruction::Ret(None));
-            }
-        } else {
-            // 代码块形式：隐式返回 Void（无 return 时）
-            instructions.push(Instruction::Ret(None));
-        }
+        instructions.push(Instruction::Ret(None));
 
         // 退出函数体作用域
         tlog!(
@@ -1486,6 +1457,18 @@ impl AstToIrGenerator {
                             src: Operand::Local(var_idx),
                             span: *span,
                         });
+                    }
+                }
+            }
+            ast::StmtKind::Return(expr) => {
+                match expr {
+                    Some(e) => {
+                        let result_reg = self.next_temp_reg();
+                        self.generate_expr_ir(e, result_reg, instructions, constants)?;
+                        instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                    }
+                    None => {
+                        instructions.push(Instruction::Ret(None));
                     }
                 }
             }

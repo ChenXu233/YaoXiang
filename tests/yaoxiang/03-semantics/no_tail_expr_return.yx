@@ -1,0 +1,46 @@
+// no_tail_expr_return.yx - 测试显式 return 语句语义
+//
+// 验证：函数体中必须使用显式 return，尾表达式不再隐式返回
+use std.io
+
+explicit_return: (x: Int) -> Int = {
+    return x * 2
+}
+
+early_return: (x: Int) -> Int = {
+    if x < 0 {
+        return 0
+    }
+    return x
+}
+
+no_return_has_side_effect: () -> () = {
+    io.println("side effect ok")
+}
+
+main = {
+    val = explicit_return(21)
+    if val != 42 {
+        io.println("FAIL: explicit_return(21) should be 42, got")
+        io.println(val)
+        return
+    }
+
+    r1 = early_return(-5)
+    if r1 != 0 {
+        io.println("FAIL: early_return(-5) should be 0, got")
+        io.println(r1)
+        return
+    }
+
+    r2 = early_return(7)
+    if r2 != 7 {
+        io.println("FAIL: early_return(7) should be 7, got")
+        io.println(r2)
+        return
+    }
+
+    no_return_has_side_effect()
+
+    io.println("ALL TESTS PASSED")
+}
