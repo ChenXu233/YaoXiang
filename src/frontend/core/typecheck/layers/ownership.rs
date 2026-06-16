@@ -31,22 +31,6 @@ pub struct ReleasePlan {
     pub drops: HashMap<Span, Vec<String>>,
 }
 
-// ── Captures ──────────────────────────────────────────────
-
-/// 闭包的捕获变量集合（定义时分析产出，调用时消费）
-#[derive(Debug, Clone, Default)]
-struct Captures {
-    /// 只读捕获 → 调用时创建 ReadToken
-    reads: HashSet<String>,
-    /// 写入捕获 → 调用时创建 WriteToken
-    writes: HashSet<String>,
-    /// 移动捕获 → 调用时标记 Moved
-    moves: HashSet<String>,
-}
-
-/// Key = 闭包变量名 → 捕获信息
-type CapturesStore = HashMap<String, Captures>;
-
 /// 参数的所有权语义（从函数签名推导）
 #[derive(Clone, Copy)]
 #[allow(dead_code)]
@@ -57,14 +41,6 @@ enum ParamOwnership {
     ReadBorrow,
     /// &mut T → 创建 WriteToken + 待定冲突检查
     WriteBorrow,
-}
-
-/// 状态快照（定义闭包时保存/恢复）
-struct StateSnapshot {
-    var_state: HashMap<String, VarState>,
-    brand_nodes_count: usize,
-    scope_vars_len: usize,
-    scope_drops_len: usize,
 }
 
 // ── BrandId ───────────────────────────────────────────────
@@ -730,8 +706,6 @@ pub struct OwnershipChecker {
     /// 作用域退出时收集的 Drop 记录（Span, 变量名）
     /// build_release_plan 会将这些与 BrandTree 消费者分析合并
     scope_drops: Vec<(Span, String)>,
-    /// 闭包捕获存储（定义时分析产出，调用时消费）
-    captures_store: CapturesStore,
     /// 类型环境引用（用裸指针避免生命周期重写；env 生命周期 > checker）
     env: Option<*const crate::frontend::core::typecheck::environment::TypeEnvironment>,
     /// ref 创建的变量（Expr::Ref 的赋值目标）
@@ -769,7 +743,6 @@ impl OwnershipChecker {
             node_spans: HashMap::new(),
             scope_vars: Vec::new(),
             scope_drops: Vec::new(),
-            captures_store: CapturesStore::new(),
             env: None,
             ref_vars: HashSet::new(),
             escaped_refs: HashSet::new(),
@@ -791,7 +764,6 @@ impl OwnershipChecker {
         self.node_spans.clear();
         self.scope_vars.clear();
         self.scope_drops.clear();
-        self.captures_store.clear();
         self.ref_vars.clear();
         self.escaped_refs.clear();
         self.inside_spawn = false;
@@ -810,77 +782,6 @@ impl OwnershipChecker {
             Expr::FieldAccess { expr: inner, .. } => Self::extract_var_name(inner),
             _ => None,
         }
-    }
-
-    /// 保存当前状态快照（闭包定义前调用）
-    fn save_state(&self) -> StateSnapshot {
-        StateSnapshot {
-            var_state: self.var_state.clone(),
-            brand_nodes_count: self.brand_tree.nodes.len(),
-            scope_vars_len: self.scope_vars.len(),
-            scope_drops_len: self.scope_drops.len(),
-        }
-    }
-
-    /// 恢复到快照状态（闭包定义后调用，消除定义产生的副作用）
-    fn restore_state(
-        &mut self,
-        snapshot: StateSnapshot,
-    ) {
-        self.var_state = snapshot.var_state;
-        // 回退 brand_tree：删除闭包体内新增的令牌
-        let keys: Vec<BrandId> = self.brand_tree.nodes.keys().cloned().collect();
-        for key in keys.iter().skip(snapshot.brand_nodes_count) {
-            self.brand_tree.remove(key);
-        }
-        // 回退 scope_vars
-        while self.scope_vars.len() > snapshot.scope_vars_len {
-            self.scope_vars.pop();
-        }
-        // 回退 scope_drops：截断闭包体 walk 产生的 Drop 记录
-        self.scope_drops.truncate(snapshot.scope_drops_len);
-        // 清除闭包体 walk 产生的待定写操作（令牌已被 restore 删除）
-        self.pending_writes.clear();
-    }
-
-    /// 对比当前状态和快照，提取闭包的捕获变量
-    fn diff_captures(
-        &self,
-        snapshot: &StateSnapshot,
-    ) -> Captures {
-        let mut captures = Captures::default();
-        // 检查新增的品牌树令牌（闭包体创建的）
-        let brand_keys: Vec<BrandId> = self.brand_tree.nodes.keys().cloned().collect();
-        for key in brand_keys.iter().skip(snapshot.brand_nodes_count) {
-            if let Some(node) = self.brand_tree.get(key) {
-                let var = &node.source_var;
-                // 检查该变量在外层是否存在（外层变量 → 捕获；否则 → 局部变量）
-                if snapshot.var_state.contains_key(var) {
-                    if node.kind.is_write() {
-                        captures.writes.insert(var.clone());
-                    } else {
-                        captures.reads.insert(var.clone());
-                    }
-                }
-            }
-        }
-        // 检查 var_state 变化：Alive → Moved 的是 Move 捕获
-        for (var, &current_state) in &self.var_state {
-            if let Some(&saved_state) = snapshot.var_state.get(var) {
-                if saved_state == VarState::Alive && current_state == VarState::Moved {
-                    captures.moves.insert(var.clone());
-                }
-            }
-        }
-        // 去重：Move 优先于 Write，Write 优先于 Read
-        for mv in &captures.moves.clone() {
-            captures.writes.remove(mv);
-            captures.reads.remove(mv);
-        }
-        for wr in &captures.writes.clone() {
-            captures.reads.remove(wr);
-        }
-        captures
     }
 
     /// 从 TypeEnvironment 查询函数参数的所有权语义
@@ -949,39 +850,6 @@ impl OwnershipChecker {
                 });
             }
         }
-    }
-
-    /// 处理调用捕获参数（闭包的隐式参数）
-    fn apply_captures_at_call(
-        &mut self,
-        captures: &Captures,
-    ) -> Vec<ProofResult> {
-        let mut results = Vec::new();
-        for var in &captures.reads {
-            let check = self.check_var_read(var, self.current_span);
-            if !check.is_proved() {
-                results.push(check);
-            }
-            self.add_consumer_for_var(var);
-            self.apply_param_ownership(var, &ParamOwnership::ReadBorrow);
-        }
-        for var in &captures.writes {
-            let check = self.check_var_read(var, self.current_span);
-            if !check.is_proved() {
-                results.push(check);
-            }
-            self.add_consumer_for_var(var);
-            self.apply_param_ownership(var, &ParamOwnership::WriteBorrow);
-        }
-        for var in &captures.moves {
-            let check = self.check_var_read(var, self.current_span);
-            if !check.is_proved() {
-                results.push(check);
-            }
-            self.add_consumer_for_var(var);
-            self.apply_param_ownership(var, &ParamOwnership::Move);
-        }
-        results
     }
 
     /// 从表达式提取源码 span
@@ -1362,12 +1230,6 @@ impl OwnershipChecker {
                         self.apply_param_ownership(name, ownership);
                     }
                 }
-                // 处理闭包的隐式捕获参数
-                if let Some(fn_name) = &func_name {
-                    if let Some(captures) = self.captures_store.get(fn_name).cloned() {
-                        results.extend(self.apply_captures_at_call(&captures));
-                    }
-                }
                 results
             }
             Expr::Return(Some(inner), _) => {
@@ -1415,13 +1277,9 @@ impl OwnershipChecker {
                 let was_spawn = self.inside_spawn;
                 self.inside_spawn = true;
 
-                // 保存当前 spawn 的 ref 集合
                 let prev_spawn_refs = std::mem::take(&mut self.current_spawn_refs);
 
-                let snapshot = self.save_state();
-                let mut results = self.walk_stmts(&body.stmts);
-                let captures = self.diff_captures(&snapshot);
-                self.restore_state(snapshot);
+                let results = self.walk_stmts(&body.stmts);
 
                 // 构建 ref 依赖图
                 let spawn_refs = std::mem::take(&mut self.current_spawn_refs);
@@ -1438,20 +1296,14 @@ impl OwnershipChecker {
 
                 self.current_spawn_refs = prev_spawn_refs;
                 self.inside_spawn = was_spawn;
-                // spawn 定义即调用——捕获变量在调用点消耗
-                results.extend(self.apply_captures_at_call(&captures));
                 results
             }
 
             Expr::SpawnFor { body, .. } => {
                 let was_spawn = self.inside_spawn;
                 self.inside_spawn = true;
-                let snapshot = self.save_state();
-                let mut results = self.walk_stmts(&body.stmts);
-                let captures = self.diff_captures(&snapshot);
-                self.restore_state(snapshot);
+                let results = self.walk_stmts(&body.stmts);
                 self.inside_spawn = was_spawn;
-                results.extend(self.apply_captures_at_call(&captures));
                 results
             }
 
@@ -1605,26 +1457,14 @@ impl OwnershipChecker {
                 ..
             } => self.walk_for(var, *var_mut, iterable, &body.stmts),
 
-            StmtKind::Binding {
-                name, body, params, ..
-            } => {
+            StmtKind::Binding { body, params, .. } => {
                 let mut results = Vec::new();
                 if !body.is_empty() {
-                    let snapshot = self.save_state();
-                    // 注册参数为局部变量（不会被 diff 误判为捕获）
                     for param in params {
                         self.var_state.insert(param.name.clone(), VarState::Alive);
                         self.var_mutability.insert(param.name.clone(), param.is_mut);
                     }
                     results.extend(self.walk_stmts(body));
-                    let captures = self.diff_captures(&snapshot);
-                    if !captures.reads.is_empty()
-                        || !captures.writes.is_empty()
-                        || !captures.moves.is_empty()
-                    {
-                        self.captures_store.insert(name.clone(), captures);
-                    }
-                    self.restore_state(snapshot);
                 }
                 results
             }
