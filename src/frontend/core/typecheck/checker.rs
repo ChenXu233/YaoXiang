@@ -375,6 +375,7 @@ impl TypeChecker {
             proof_calls, // Phase 2.5: 由 check_refined_binding 收集
             release_plan,
             escaped_refs,
+            instantiation_requests: Vec::new(),
         }
     }
 
