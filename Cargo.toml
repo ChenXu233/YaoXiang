@@ -12,6 +12,7 @@ repository = "https://github.com/ChenXu233/yaoxiang"
 [features]
 default = ["cli"]
 debug = []
+wasm = []
 cli = [
     "tokio", "rustyline", "notify", "lsp-server",
     "walkdir", "tempfile", "clap", "crossbeam", "rayon",
@@ -31,6 +32,7 @@ name = "yaoxiang_wasm"
 crate-type = ["cdylib"]
 path = "src/playground.rs"
 test = false
+required-features = ["wasm"]
 
 [dev-dependencies]
 criterion = "0.8.1"
