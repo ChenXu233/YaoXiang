@@ -885,5 +885,10 @@
   },
   "_meta": {
     "lastUpdated": "2026-06-13T07:47:17.389Z"
+  },
+  "E2029": {
+    "title": "spawn ref 喵循环",
+    "template": "跨任务喵循环喵引用: {cycle}",
+    "help": "spawn 喵块内的 ref 喵变量喵形成了喵引用喵循环。喵使用 Weak 喵打破喵循环，或在 unsafe 喵块中喵绕过喵检测。"
   }
 }
