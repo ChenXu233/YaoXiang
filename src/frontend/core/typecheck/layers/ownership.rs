@@ -1706,6 +1706,7 @@ impl OwnershipChecker {
     /// 两源合并：
     /// 1. BrandTree 令牌消费者分析（借用变量的最后使用点）
     /// 2. 作用域退出收集的 Drop 记录（非借用变量的作用域结束点）
+    ///
     /// 结果按 Span 分组，组内 LIFO 排序（子先父后）。
     fn build_release_plan(
         &self,
