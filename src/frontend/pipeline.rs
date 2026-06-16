@@ -789,6 +789,7 @@ pub(crate) fn execute_single_proof_fn(
             &params,
             &body_stmts,
             &mut constants,
+            None,
         )
         .map_err(|e| format!("证明函数 '{}' IR 生成失败: {}", call.func_name, e))?;
 
