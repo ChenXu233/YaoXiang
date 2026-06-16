@@ -1609,9 +1609,15 @@ impl OwnershipChecker {
                 name, body, params, ..
             } => {
                 let mut results = Vec::new();
-                // 只处理无参闭包（{ body } 语法，非 fn 语法）
-                if params.is_empty() && !body.is_empty() {
+                if !body.is_empty() {
                     let snapshot = self.save_state();
+                    // 注册参数为局部变量（不会被 diff 误判为捕获）
+                    for param in params {
+                        self.var_state
+                            .insert(param.name.clone(), VarState::Alive);
+                        self.var_mutability
+                            .insert(param.name.clone(), param.is_mut);
+                    }
                     results.extend(self.walk_stmts(body));
                     let captures = self.diff_captures(&snapshot);
                     if !captures.reads.is_empty()
