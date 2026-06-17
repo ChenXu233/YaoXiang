@@ -66,7 +66,9 @@ helper: (x: Int) -> Int = (x) => {
 }
 "#;
     let tokens = tokenize(source).unwrap();
-    let ast = parse(&tokens).unwrap();
+    let result = parse(&tokens);
+    assert!(!result.has_errors, "parse failed: {:?}", result.errors);
+    let ast = result.module;
     let module = ModuleLoader::extract_exports("my_module", &ast, &ModuleSource::User);
 
     // pub 函数应该被导出
@@ -87,7 +89,9 @@ Point: Type = {
 }
 "#;
     let tokens = tokenize(source).unwrap();
-    let ast = parse(&tokens).unwrap();
+    let result = parse(&tokens);
+    assert!(!result.has_errors, "parse failed: {:?}", result.errors);
+    let ast = result.module;
     let module = ModuleLoader::extract_exports("shapes", &ast, &ModuleSource::User);
 
     // 类型定义始终导出
@@ -102,7 +106,9 @@ MAX_SIZE = 100
 mut counter = 0
 "#;
     let tokens = tokenize(source).unwrap();
-    let ast = parse(&tokens).unwrap();
+    let result = parse(&tokens);
+    assert!(!result.has_errors, "parse failed: {:?}", result.errors);
+    let ast = result.module;
     let module = ModuleLoader::extract_exports("config", &ast, &ModuleSource::User);
 
     // 不可变绑定导出为常量

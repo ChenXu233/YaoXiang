@@ -16,7 +16,9 @@ use crate::frontend::core::parser::parse;
 /// 辅助函数：解析源代码并类型检查
 fn check_source(source: &str) -> crate::frontend::core::typecheck::types::TypeCheckResult {
     let tokens = tokenize(source).expect("tokenize failed");
-    let module = parse(&tokens).expect("parse failed");
+    let result = parse(&tokens);
+    assert!(!result.has_errors, "parse failed: {:?}", result.errors);
+    let module = result.module;
     let mut checker = TypeChecker::new("test");
     checker.check_module(&module)
 }
