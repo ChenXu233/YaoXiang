@@ -1,10 +1,10 @@
 ---
-title: Language Overview
+title: Syntax Cheatsheet
 ---
 
-# Language Overview
+# Syntax Cheatsheet
 
-Understand YaoXiang's core syntax in 5 minutes. For in-depth learning, visit the [Tutorial](/en/tutorial/).
+Learn YaoXiang core syntax in 5 minutes. For in-depth learning, visit the [Tutorial](/tutorial/).
 
 ## Variables
 
@@ -19,7 +19,7 @@ count: Int = 100          # Type annotation
 ## Functions
 
 ```yaoxiang
-# Expression form (returns directly)
+# Expression form (returns the value directly)
 add: (a: Int, b: Int) -> Int = a + b
 
 # Block form (explicit return)
@@ -43,7 +43,7 @@ type Color = red | green | blue
 # Interface
 type Drawable = { draw: (Surface) -> Void }
 
-# Generic
+# Generics
 List: (T: Type) -> Type = { data: Array(T), length: Int }
 ```
 
@@ -73,7 +73,7 @@ while n < 5 { println(n); n = n + 1 }
 nums = [1, 2, 3, 4, 5]
 first = nums[0]           # 1
 
-# Dict
+# Dictionary
 scores = {"Alice": 90, "Bob": 85}
 a = scores["Alice"]       # 90
 
@@ -136,12 +136,12 @@ result = math.sqrt(16)    # 4.0
 ## Ownership
 
 ```yaoxiang
-# Move: default ownership transfer
+# Move: ownership transfer by default
 p1 = Point(1.0, 2.0)
 p2 = p1                   # p1 is moved
 
-# ref: shared ownership
-shared = ref data         # Compiler auto-picks Rc/Arc
+# ref: shared hold
+shared = ref data         # Compiler auto-selects Rc/Arc
 
 # clone: explicit deep copy
 backup = data.clone()
@@ -150,12 +150,12 @@ backup = data.clone()
 ## Concurrency
 
 ```yaoxiang
-# spawn-marked functions are auto-async
+# Functions marked with spawn are async automatically
 fetch_data: (url: String) -> JSON spawn = {
     HTTP.get(url).json()
 }
 
-# Auto-parallel, no await needed
+# Automatic parallelism, no await needed
 user = fetch_user(1)
 posts = fetch_posts()
 ```

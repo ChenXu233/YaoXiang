@@ -6,12 +6,12 @@ sidebar: false
 
 hero:
   name: YaoXiang // 爻象
-  text: 未来指向のプログラミング言語
-  tagline: 万物が并作し，吾れ以って復を觀る
+  text: 未来志向のプログラミング言語
+  tagline: 万物並び作す、吾以て復を観る
   actions:
     - theme: brand
       text: 🚀 クイックスタート
-      link: /getting-started
+      link: /tutorial/getting-started
     - theme: alt
       text: チュートリアル
       link: /tutorial/
@@ -20,42 +20,44 @@ hero:
       link: /download
     - theme: alt
       text: GitHub ⇗
-      link: https://github.com/yaoxiang-lang/yaoxiang
+      link: https://github.com/ChenXu233/yaoxiang
 
 tracks:
   track01:
     trackLabel: TRACK 01
     rfc: RFC-010
-    title: 統一された構文
-    description: "ミニマリズムの哲学。変数から関数まで、すべての宣言は name: type = value パターンに従い、学習コストが低く、コードの一貫性が高い。"
+    title: 統一構文
+    description: "ミニマリズムの哲学。変数から関数まで、すべての宣言は name: type = value パターンに従い、学習コストが低く、コードが一貫します。"
     features:
-      - 構文宣言の極端な統一
+      - 構文宣言の究極的な統一
       - 型は第一級市民
   track02:
     rfc: RFC-011
-    title: ゼロコストなジェネリクス
-    description: "ジェネリクスの特殊化はコンパイル時に完了し、型の抽象化は実行時のオーバーヘッドを一切もたらさない。コンパイル時単相化 デッドコード消除。型システムはマクロである。"
+    title: ゼロコストジェネリックス
+    description: "ジェネリックスの特殊化はコンパイル時に完了し、型の抽象化はランタイムのオーバーヘッドを伴いません。コンパイル時の単相化。デッドコードの削除。型システムこそマクロ。"
   track03:
     rfc: RFC-009
     title: 所有権モデル
-    description: "GCの停止に別れを告げる。爻象はスコープベースの所有権モデルを採用しており、メモリの安全性がコンパイル時に保証され、予期せぬ動作がない。"
+    description: "GCのストールにさよなら。YaoXiangはスコープベースの所有権モデルを採用し、メモリ安全性はコンパイル時に保証され、想定外はありません。"
     features:
       - 共有参照
       - 予測可能
-      - GC停止なし
+      - GCストールなし
       - ライフタイムなし
   track04:
     trackLabel: TRACK 04
-    title: ディスパッチ分離
-    description: "マイコンから高性能サーバーまで、実行時環境が自ら適応する。シナリオに応じて異なるディスパッチ戦略を選択でき、パフォーマンスとリソースの両方を手にできる。"
+    title: 疎結合スケジューラ
+    description: "マイコンから高性能サーバーまで、ランタイムが環境に自動適応します。異なるシナリオで異なるスケジューリング戦略を選択し、性能とリソースを両立します。"
     steps:
       - label: Embedded
-        sub: "完全同期（Sync）
+        sub: "完全同期(Sync)"
       - label: Standard
-        sub: "有向非巡回グラフ（DAG）と遅延評価に基づく自動化された並行管理
+        sub: "有向非巡回グラフ(DAG)と遅延評価に基づく自動並行管理"
       - label: Full
-        sub: "ワークスティーリング機構（WorkSteal）
+        sub: "ワークスティーリング機構(WorkSteal)"
   track05:
     title: 言語仕様 v1.8
-    description: "糖衣構文の氾濫を拒む。17個の基本語で全機能をカバーし、複雑な糖衣構文はなく、純粋な表現力だけがある。"
----```
+    description: "シンタックスシュガーの氾濫を拒否。17個のキーワードで全機能を網羅し、複雑なシンタックスシュガーは不要、純粋な表現力だけが残ります。"
+
+---
+```

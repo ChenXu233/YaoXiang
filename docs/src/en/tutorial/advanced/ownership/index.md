@@ -4,60 +4,59 @@ title: Ownership Model
 
 # Ownership Model
 
-YaoXiang uses neither garbage collection nor lifetime annotations. Its memory safety is built on **five concepts on one gradient**.
+YaoXiang does not use garbage collection (GC), nor does it use lifetime annotations. Its memory safety is built upon **five concepts, one gradient**.
 
 ## Five Concepts, One Gradient
 
 ```
-Read/Mutate       Take           Share          Copy           System
-    │               │              │              │              │
-   &T            Move           ref          clone()        unsafe
-  &mut T        Zero-copy      Compiler       Explicit      *T
-  Zero-size      Default       picks Rc/Arc   Deep copy     Your problem
-  tokens
+Look/In-place modify   Take away    Shared hold      Copy one      System-level
+        │                │              │              │              │
+       &T              Move           ref          clone()        unsafe
+      &mut T          zero-copy      compiler-auto  explicit deep   *T
+    zero-size token   default      picks Rc/Arc    copy           user responsible
 ```
 
 ## Move: Default Ownership Transfer
 
-In YaoXiang, **assignment = ownership transfer**. This is the default, with zero copying:
+In YaoXiang, **assignment = ownership transfer**. This is the default behavior, zero-copy:
 
 ```yaoxiang
 p = Point(1.0, 2.0)
-p2 = p              # Move! p's ownership transferred to p2
-                    # p can no longer be read
+p2 = p              # Move! p's ownership transfers to p2
+                    # p can no longer be read after this
 
 # Want to modify p2? Use mut
 mut p3 = Point(3.0, 4.0)
-shift(p3, 1.0, 1.0)    # Modify in place
+shift(p3, 1.0, 1.0)    # In-place modification
 ```
 
-Function parameters and returns are also Move:
+Function arguments and returns are also Move:
 
 ```yaoxiang
 # Parameter: Move in
 process: (p: Point) -> Point = {
     p.transform()
-    p                  # Move return — zero copy
+    p                  # Move return — zero-copy
 }
 
-# Call
+# Invocation
 p = Point(1.0, 2.0)
-result = process(p)    # p was moved away
+result = process(p)    # p is moved away
 ```
 
-## &T / &mut T: Borrow Tokens
+## &T / &mut T: Borrowing Tokens
 
-If you don't want to take ownership — just "take a look" (`&T`) or "modify in place" (`&mut T`) — the compiler auto-generates **zero-size borrow tokens**:
+If you don't want to take away ownership, just temporarily "take a look" (`&T`) or "modify in place" (`&mut T`), the compiler automatically generates a **zero-size borrowing token**:
 
 ```yaoxiang
 data = [1, 2, 3, 4, 5]
 
-# Compiler auto-passes &List(Int) token — doesn't take ownership
+# Compiler automatically passes a &List(Int) token — does not take ownership
 println(data.len())    # 5
-println(data)          # ✅ data is still here, you just looked
+println(data)          # ✅ data is still here, just took a look
 ```
 
-`&T` and `&mut T` are **zero-size types** — they exist at compile time and vanish at runtime. You don't manually write `&`; the compiler decides based on usage:
+`&T` and `&mut T` are **zero-size types** — they exist at compile time and disappear at runtime. You don't need to write `&` manually; the compiler decides automatically based on usage context:
 
 ```yaoxiang
 # Read-only access → auto &T
@@ -72,15 +71,15 @@ shift: (point: &mut Point, dx: Float, dy: Float) -> Void = {
 }
 
 mut p = Point(1.0, 2.0)
-print(p)                # Passes &Point
-shift(p, 1.0, 1.0)      # Passes &mut Point
+print(p)                # Pass in &Point
+shift(p, 1.0, 1.0)      # Pass in &mut Point
 ```
 
-**Key difference**: `&T` is copyable (shared, read-only), `&mut T` is not copyable (exclusive, mutable). These aren't special rules — they're two type properties.
+**Key distinction**: `&T` is copyable (shared read-only), `&mut T` is not copyable (exclusive mutable). This is not a special rule — it follows from two type properties.
 
 ## ref: Cross-Scope Sharing
 
-When you need to hold a value in **multiple places simultaneously**, use `ref`:
+When you need to **hold a value simultaneously** in multiple places, use `ref`:
 
 ```yaoxiang
 data = [1, 2, 3, 4, 5]
@@ -88,11 +87,11 @@ data = [1, 2, 3, 4, 5]
 # ref creates shared ownership
 shared = ref data
 
-# Compiler auto-selects the reference counter:
-# - Same task → Rc (single-threaded reference count)
-# - Cross-task → Arc (atomic reference count)
+# Compiler automatically selects the reference counter:
+# - Not crossing tasks → Rc (single-threaded reference counting)
+# - Crossing tasks → Arc (atomic reference counting)
 spawn {
-    use(shared)    # Cross-task! Compiler auto-uses Arc
+    use(shared)    # Crossing tasks! Compiler automatically uses Arc
 }
 
 # You don't need to know the difference between Rc and Arc
@@ -105,42 +104,42 @@ When you need an independent copy, explicitly call `clone()`:
 
 ```yaoxiang
 original = [1, 2, 3]
-backup = original.clone()   # Deep copy — independent copy
+backup = original.clone()   # Deep copy — owns an independent copy
 
 # Each is independent
 original[0] = 10
 println(backup[0])    # 1 — unaffected
 ```
 
-`clone()` is explicit — you're asking for a copy, unlike languages that copy by default.
+`clone()` is explicit — you clearly ask for a copy, unlike some languages that copy by default.
 
 ## No Lifetimes
 
-YaoXiang has no lifetime `'a`. This design choice comes from a key insight:
+YaoXiang has no lifetimes `'a`. This design choice comes from a key observation:
 
-> Borrow conflict problems are equivalent to Hoare triple verification. Hand them to the type checker's proof pipeline for unified resolution — no separate borrow checker needed.
+> The borrow conflict problem is essentially equivalent to Hoare proposition verification. Handing it to the type checker's proof pipeline for a unified solution eliminates the need for an additional borrow checking framework.
 
-You don't annotate `'a`, you don't need to understand lifetimes — the compiler verifies ownership safety during type checking.
+You don't need to annotate `'a`, you don't need to understand lifetimes — the compiler automatically verifies ownership safety during the type checking phase.
 
 ## No GC
 
-The entire ownership model has no garbage collection. All memory release timing is determined at compile time:
+The entire ownership model has no garbage collection. The release timing of all memory is determined at compile time:
 
-- **After Move** → original variable unusable, RAII auto-releases
-- **After ref** → released when reference count reaches zero
-- **End of scope** → stack variables auto-released
+- **After Move** → the original variable is unusable, RAII automatically releases
+- **After ref** → released when reference count drops to zero
+- **Scope ends** → stack variables are automatically released
 
 Zero GC pauses, zero runtime overhead.
 
 ## Summary
 
-| Operation | Keyword/Syntax | Copy? | When to Use |
-|-----------|---------------|-------|-------------|
-| Take ownership | Default | Zero-copy | Function args, assignment |
+| Operation | Keyword/Syntax | Copy? | When to use |
+|------|------------|--------|--------|
+| Take ownership | Default behavior | Zero-copy | Function parameters, assignment |
 | Take a look | Auto `&T` | Zero-size token | Read-only access |
 | Modify in place | Auto `&mut T` | Zero-size token | Mutable modification |
-| Share ownership | `ref` | Reference counting | Cross-scope / cross-task |
+| Shared hold | `ref` | Reference counting | Cross-scope / cross-task |
 | Explicit copy | `.clone()` | Deep copy | Need independent copy |
-| Raw pointer | `unsafe` + `*T` | Manual | System-level ops |
+| Raw pointer | `unsafe` + `*T` | Manual | System-level operations |
 
-**Remember**: Move is default, ref is share, clone is exception. Three rules, goodbye GC forever.
+**Remember**: Move is the default, ref is for sharing, clone is the exception. Three rules, goodbye GC forever.

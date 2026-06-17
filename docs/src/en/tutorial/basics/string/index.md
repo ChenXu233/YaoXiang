@@ -4,11 +4,11 @@ title: F-string
 
 # F-string
 
-F-strings are YaoXiang's **template strings** — you can embed variables and expressions directly inside strings, with the compiler handling type conversion and concatenation automatically.
+f-string is the **template string** in YaoXiang—you can embed variables and expressions directly in a string, and the compiler automatically handles type conversion and concatenation.
 
 ## Basic Usage
 
-Prefix a string with `f` and use `{expression}` to insert values:
+Add the `f` prefix before a string and use `{expression}` to insert a value:
 
 ```yaoxiang
 name = "Alice"
@@ -18,19 +18,19 @@ greeting = f"Hello {name}, you are {age} years old"
 println(greeting)  # Hello Alice, you are 25 years old
 ```
 
-Compare with traditional concatenation — the difference is clear:
+Compared with traditional concatenation, the advantages of f-string are immediately obvious:
 
 ```yaoxiang
-# ❌ Traditional: verbose and error-prone
+# ❌ Traditional concatenation: verbose and error-prone
 message = "Hello ".concat(name).concat(", age: ").concat(age.to_string())
 
-# ✅ F-string: clean, concise
+# ✅ f-string: intuitive and concise
 message = f"Hello {name}, age: {age}"
 ```
 
 ## Expression Interpolation
 
-`{}` accepts more than variables — any expression works:
+`{}` is not limited to variables—you can put any expression inside:
 
 ```yaoxiang
 x = 10
@@ -43,7 +43,7 @@ println(f"Is positive? {x > 0}") # Is positive? true
 
 ## Format Specifiers
 
-Add `:` followed by a format specifier after the expression to control output formatting:
+Add `:` and a format specifier after an expression to control the output format:
 
 ```yaoxiang
 pi = 3.14159265
@@ -57,7 +57,7 @@ Common format specifiers:
 
 | Specifier | Meaning | Example | Output |
 |-----------|---------|---------|--------|
-| `:.2f` | Float, 2 decimals | `f"{3.14159:.2f}"` | `3.14` |
+| `:.2f` | Float, 2 decimal places | `f"{3.14159:.2f}"` | `3.14` |
 | `:d` | Decimal integer | `f"{42:d}"` | `42` |
 | `:x` | Hexadecimal | `f"{255:x}"` | `ff` |
 | `:e` | Scientific notation | `f"{1000:e}"` | `1.000000e+03` |
@@ -76,20 +76,20 @@ println(f"Length: {name.len()}")        # Length: 5
 
 ## Escaping Braces
 
-To output literal `{` or `}`, **double** them:
+If you need to output a literal `{` or `}`, simply **double it**:
 
 ```yaoxiang
 println(f"{{literal braces}}")     # {literal braces}
 println(f"Set: {{1, 2, 3}}")       # Set: {1, 2, 3}
 
-# Mixed: doubled = literal, single = interpolation
+# Mixed: doubled outputs a literal {, single is interpolation
 name = "YaoXiang"
 println(f"{{name}} is {name}")     # {name} is YaoXiang
 ```
 
-## Multi-line F-strings
+## Multi-line f-string
 
-F-strings can span multiple lines:
+f-strings can span multiple lines:
 
 ```yaoxiang
 name = "Alice"
@@ -108,28 +108,29 @@ println(info)
 # City: Beijing
 ```
 
-## How F-strings Work
+## How f-string Works
 
-The compiler transforms f-strings into efficient string concatenation at compile time:
+When the compiler sees an f-string, it transforms it into efficient string concatenation:
 
 ```yaoxiang
 # What you write
 f"Hello {name}, age: {age}"
 
-# What the compiler generates
+# Compiler's transformed result
 "Hello ".concat(name.to_string()).concat(", age: ").concat(age.to_string())
 ```
 
-This means f-strings are not only more concise to write — they perform equally well at runtime. **Zero overhead.**
+This means f-string is not only more concise to write, but its runtime performance is comparable to hand-written concatenation—**zero overhead**.
 
 ## Summary
 
 ::: v-pre
-| Feature | Syntax |
-|---------|--------|
+| Key Point | Syntax |
+|-----------|--------|
 | Basic interpolation | `f"text {var}"` |
-| Expressions | `f"result: {x + y}"` |
+| Expression | `f"result: {x + y}"` |
 | Formatting | `f"value: {pi:.2f}"` |
 | Escaping braces | `f"{{not interpolation}}"` |
 | Multi-line | `f"""..."""` |
 :::
+```
