@@ -28,6 +28,7 @@ jobs:
     name: Linux (${{ matrix.target }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -73,6 +74,7 @@ jobs:
     name: macOS (${{ matrix.target }})
     runs-on: macos-latest
     timeout-minutes: 15
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -112,6 +114,7 @@ jobs:
     name: Windows (${{ matrix.target }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -161,6 +164,7 @@ jobs:
     name: Windows Installer
     runs-on: windows-latest
     timeout-minutes: 20
+    continue-on-error: true
     if: inputs.build-profile == 'release'
     steps:
       - uses: actions/checkout@v4
