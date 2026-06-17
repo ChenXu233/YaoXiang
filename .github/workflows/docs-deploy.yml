@@ -10,7 +10,7 @@ jobs:
     name: Build Wasm
     uses: ./.github/workflows/_build-wasm.yml
     with:
-      artifact-name: wasm-playground
+      artifact-name: wasm-playground-wasm
       retention-days: 7
 
   build-docs:
@@ -27,8 +27,13 @@ jobs:
       - name: Download wasm artifact
         uses: actions/download-artifact@v4
         with:
-          name: wasm-playground
-          path: docs/src/.vitepress/public/wasm
+          name: wasm-playground-wasm
+          path: wasm-temp
+
+      - name: Unpack wasm
+        run: |
+          mkdir -p docs/src/.vitepress/public/wasm
+          unzip -o wasm-temp/yaoxiang-wasm.zip -d docs/src/.vitepress/public/wasm
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

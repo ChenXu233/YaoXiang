@@ -16,6 +16,13 @@ jobs:
       artifact-prefix: yaoxiang-nightly
       retention-days: 14
 
+  build-wasm:
+    name: Build Wasm
+    uses: ./.github/workflows/_build-wasm.yml
+    with:
+      artifact-name: yaoxiang-nightly-wasm
+      retention-days: 14
+
   security:
     name: Security Audit
     runs-on: ubuntu-latest
@@ -107,3 +114,52 @@ jobs:
           name: coverage-report
           path: target/llvm-cov/html/
           retention-days: 30
+
+  publish:
+    name: Publish Nightly Pre-release
+    needs: [build, build-wasm]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get short SHA
+        id: sha
+        run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Delete old nightly tag
+        continue-on-error: true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -d nightly || true
+          git push origin --delete nightly || true
+
+      - name: Create nightly tag
+        run: |
+          git tag nightly
+          git push origin nightly
+
+      - name: Download all artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Create GitHub Pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: "Nightly Pre-release"
+          body: |
+            > ⚠️ **这是自动构建的 nightly 版本，仅供测试使用，可能不稳定。**
+
+            Automated nightly build from commit ${{ steps.sha.outputs.short }}
+          prerelease: true
+          files: |
+            release-artifacts/**/yaoxiang-*
+            release-artifacts/**/YaoXiang-Setup-*.exe
+          fail_on_unmatched_files: false
