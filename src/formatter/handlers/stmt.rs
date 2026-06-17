@@ -159,19 +159,24 @@ fn format_binding(
     }
 
     // 类型定义: name: Type = { ... }
+    // 但排除函数类型 (Type::Fn)，函数类型应该格式化为函数定义
     if params.is_empty() {
         if let Some(ty) = type_annotation {
-            let generics = if generic_params.is_empty() {
-                String::new()
-            } else {
-                super::common::format_generic_params(generic_params, source_map)
-            };
-            return format!(
-                "{}{}: Type = {}",
-                name,
-                generics,
-                format_type(ty, source_map)
-            );
+            // 检查是否是函数类型
+            let is_fn_type = matches!(ty, Type::Fn { .. });
+            if !is_fn_type {
+                let generics = if generic_params.is_empty() {
+                    String::new()
+                } else {
+                    super::common::format_generic_params(generic_params, source_map)
+                };
+                return format!(
+                    "{}{}: Type = {}",
+                    name,
+                    generics,
+                    format_type(ty, source_map)
+                );
+            }
         }
     }
 
@@ -189,22 +194,33 @@ fn format_binding(
         String::new()
     };
 
-    let params_str = format_params(params, ctx, source_map);
-
     let body_block = Block {
         stmts: body.to_vec(),
         span: crate::util::span::Span::dummy(),
     };
 
-    format!(
-        "{}{}{}{} = {} => {}",
-        pub_str,
-        name,
-        generics,
-        type_str,
-        params_str,
-        format_block(&body_block, ctx, source_map)
-    )
+    // 如果参数为空，直接输出 = { ... }，不输出 () =>
+    if params.is_empty() {
+        format!(
+            "{}{}{}{} = {}",
+            pub_str,
+            name,
+            generics,
+            type_str,
+            format_block(&body_block, ctx, source_map)
+        )
+    } else {
+        let params_str = format_params(params, ctx, source_map);
+        format!(
+            "{}{}{}{} = {} => {}",
+            pub_str,
+            name,
+            generics,
+            type_str,
+            params_str,
+            format_block(&body_block, ctx, source_map)
+        )
+    }
 }
 
 /// 格式化 use 语句
