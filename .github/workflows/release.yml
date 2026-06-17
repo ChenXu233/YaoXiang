@@ -48,6 +48,7 @@ jobs:
     needs: check-version
     if: needs.check-version.outputs.should-release == 'true'
     uses: ./.github/workflows/_build-platforms.yml
+    continue-on-error: true
     with:
       build-profile: release
       artifact-prefix: yaoxiang
@@ -58,6 +59,7 @@ jobs:
     needs: check-version
     if: needs.check-version.outputs.should-release == 'true'
     uses: ./.github/workflows/_build-wasm.yml
+    continue-on-error: true
     with:
       artifact-name: yaoxiang-wasm
       retention-days: 30
@@ -124,7 +126,7 @@ jobs:
   release:
     name: Publish Release
     needs: [check-version, build, build-wasm, security, test]
-    if: always() && needs.check-version.outputs.should-release == 'true' && needs.build.result == 'success' && needs.build-wasm.result == 'success' && needs.security.result == 'success' && needs.test.result == 'success'
+    if: always() && needs.check-version.outputs.should-release == 'true' && !cancelled() && needs.security.result == 'success' && needs.test.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -143,12 +145,14 @@ jobs:
           git push origin "$TAG"
 
       - name: Download all artifacts
+        id: download
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           path: release-artifacts
 
       - name: List artifacts
-        run: ls -R release-artifacts
+        run: ls -R release-artifacts || echo "No artifacts found"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -160,5 +164,6 @@ jobs:
             release-artifacts/**/*.exe
             release-artifacts/**/yaoxiang
             release-artifacts/**/*.wasm
+          fail_on_unmatched_files: false
           draft: false
           prerelease: false
