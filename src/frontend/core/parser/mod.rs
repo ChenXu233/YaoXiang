@@ -91,3 +91,16 @@ pub fn parse_expression(tokens: &[Token]) -> Result<Expr, Diagnostic> {
         })),
     }
 }
+
+/// 检查解析错误，如果有错误返回所有错误信息
+pub fn check_parse_errors(parse_result: &ParseResult) -> anyhow::Result<()> {
+    if parse_result.has_errors {
+        let messages: Vec<String> = parse_result
+            .errors
+            .iter()
+            .map(|e| format!("{}", e))
+            .collect();
+        return Err(anyhow::anyhow!("Parse errors:\n{}", messages.join("\n")));
+    }
+    Ok(())
+}
