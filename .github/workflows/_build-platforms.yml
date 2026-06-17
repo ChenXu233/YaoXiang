@@ -155,10 +155,13 @@ jobs:
         if: matrix.target == 'aarch64-pc-windows-gnullvm'
         run: |
           # 下载 LLVM MinGW 预构建工具链（含完整 aarch64 Windows 系统库）
-          curl -sL https://github.com/mstorsjo/llvm-mingw/releases/download/20250603/llvm-mingw-20250603-ucrt-ubuntu-22.04-x86_64.tar.xz \
+          LLVM_MINGW_VER=20260602
+          curl -sL "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VER}/llvm-mingw-${LLVM_MINGW_VER}-ucrt-ubuntu-22.04-x86_64.tar.xz" \
             -o llvm-mingw.tar.xz
           tar -xf llvm-mingw.tar.xz
-          echo "LLVM_MINGW=$(pwd)/llvm-mingw" >> $GITHUB_ENV
+          # 解压后的目录名包含版本号，找到它
+          LLVM_MINGW_DIR=$(echo llvm-mingw-*/)
+          echo "LLVM_MINGW=$(pwd)/${LLVM_MINGW_DIR::-1}" >> $GITHUB_ENV
 
       - name: Configure linker (aarch64)
         if: matrix.target == 'aarch64-pc-windows-gnullvm'
