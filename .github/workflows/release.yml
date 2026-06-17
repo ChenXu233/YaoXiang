@@ -54,15 +54,6 @@ jobs:
       artifact-prefix: yaoxiang
       retention-days: 30
 
-  build-wasm:
-    name: Build Wasm
-    needs: check-version
-    if: needs.check-version.outputs.should-release == 'true'
-    uses: ./.github/workflows/_build-wasm.yml
-    with:
-      artifact-name: yaoxiang-wasm
-      retention-days: 30
-
   security:
     name: Security Audit
     needs: check-version
@@ -124,7 +115,7 @@ jobs:
 
   release:
     name: Publish Release
-    needs: [check-version, build, build-wasm, security, test]
+    needs: [check-version, build, security, test]
     if: always() && needs.check-version.outputs.should-release == 'true' && !cancelled() && needs.security.result == 'success' && needs.test.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -160,9 +151,8 @@ jobs:
           name: v${{ needs.check-version.outputs.version }}
           body: ${{ github.event.head_commit.message }}
           files: |
-            release-artifacts/**/*.exe
-            release-artifacts/**/yaoxiang
-            release-artifacts/**/*.wasm
+            release-artifacts/**/yaoxiang-*
+            release-artifacts/**/YaoXiang-Setup-*.exe
           fail_on_unmatched_files: false
           draft: false
           prerelease: false

@@ -24,6 +24,58 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # ── Z3 wasm 预构件 ──────────────────────────────────────────────
+  build-z3-wasm:
+    name: Build Z3 (wasm)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Z3 source
+        uses: actions/checkout@v4
+        with:
+          repository: Z3Prover/z3
+          ref: z3-4.16.0
+          path: z3-src
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+
+      - name: Configure Z3 with Emscripten
+        run: |
+          mkdir -p z3-build
+          cd z3-build
+          emcmake cmake ../z3-src \
+            -G Ninja \
+            -DZ3_BUILD_LIBZ3_SHARED=OFF \
+            -DZ3_BUILD_EXECUTABLE=OFF \
+            -DZ3_BUILD_TEST_EXECUTABLES=OFF \
+            -DZ3_SAVE_PARSER=OFF \
+            -DZ3_ENABLE_EXAMPLE_TARGETS=OFF \
+            -DZ3_ENABLE_TRACING=OFF \
+            -DZ3_USE_LIB_GMP=OFF \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build Z3
+        run: cd z3-build && ninja z3
+
+      - name: Prepare artifact
+        run: |
+          mkdir -p dist/lib dist/include
+          cp z3-build/lib/libz3.a dist/lib/ 2>/dev/null || \
+            find z3-build -name "libz3.a" -exec cp {} dist/lib/ \;
+          cp z3-src/src/api/z3.h dist/include/
+          cp z3-src/src/api/z3_api.h dist/include/ 2>/dev/null || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: z3-wasm-4.16.0
+          path: dist/
+          retention-days: 90
+
+  # ── Linux ───────────────────────────────────────────────────────
   build-linux:
     name: Linux (${{ matrix.target }})
     runs-on: ubuntu-latest
@@ -63,13 +115,19 @@ jobs:
       - name: Build
         run: cargo build ${{ inputs.build-features }} --target ${{ matrix.target }} ${{ inputs.build-profile == 'release' && '--release' || '' }}
 
+      - name: Rename binary
+        run: |
+          cp target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang \
+             target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang-${{ matrix.target }}
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.artifact-prefix }}-${{ matrix.target }}
-          path: target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang
+          path: target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang-${{ matrix.target }}
           retention-days: ${{ inputs.retention-days }}
 
+  # ── macOS ───────────────────────────────────────────────────────
   build-macos:
     name: macOS (${{ matrix.target }})
     runs-on: macos-latest
@@ -103,13 +161,19 @@ jobs:
       - name: Build
         run: cargo build ${{ inputs.build-features }} --target ${{ matrix.target }} ${{ inputs.build-profile == 'release' && '--release' || '' }}
 
+      - name: Rename binary
+        run: |
+          cp target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang \
+             target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang-${{ matrix.target }}
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.artifact-prefix }}-${{ matrix.target }}
-          path: target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang
+          path: target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang-${{ matrix.target }}
           retention-days: ${{ inputs.retention-days }}
 
+  # ── Windows ─────────────────────────────────────────────────────
   build-windows:
     name: Windows (${{ matrix.target }})
     runs-on: ubuntu-latest
@@ -118,7 +182,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [x86_64-pc-windows-gnu]
+        target: [x86_64-pc-windows-gnu, aarch64-pc-windows-gnullvm]
     steps:
       - uses: actions/checkout@v4
 
@@ -138,6 +202,22 @@ jobs:
             gcc-mingw-w64-x86-64 \
             g++-mingw-w64-x86-64
 
+      - name: Install LLVM toolchain (aarch64)
+        if: matrix.target == 'aarch64-pc-windows-gnullvm'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld llvm
+
+      - name: Configure linker (aarch64)
+        if: matrix.target == 'aarch64-pc-windows-gnullvm'
+        run: |
+          mkdir -p .cargo
+          cat >> .cargo/config.toml << 'TOML'
+          [target.aarch64-pc-windows-gnullvm]
+          linker = "clang"
+          rustflags = ["-C", "link-arg=--target=aarch64-w64-mingw32", "-C", "link-arg=-fuse-ld=lld"]
+          TOML
+
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -153,13 +233,19 @@ jobs:
       - name: Build
         run: cargo build ${{ inputs.build-features }} --target ${{ matrix.target }} ${{ inputs.build-profile == 'release' && '--release' || '' }}
 
+      - name: Rename binary
+        run: |
+          cp target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang.exe \
+             target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang-${{ matrix.target }}.exe
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.artifact-prefix }}-windows-${{ matrix.target }}
-          path: target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang.exe
+          name: ${{ inputs.artifact-prefix }}-${{ matrix.target }}
+          path: target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang-${{ matrix.target }}.exe
           retention-days: ${{ inputs.retention-days }}
 
+  # ── Windows Installer ───────────────────────────────────────────
   build-installer:
     name: Windows Installer
     runs-on: windows-latest
@@ -210,4 +296,62 @@ jobs:
         with:
           name: ${{ inputs.artifact-prefix }}-windows-installer
           path: dist/YaoXiang-Setup-*.exe
+          retention-days: ${{ inputs.retention-days }}
+
+  # ── Wasm ────────────────────────────────────────────────────────
+  build-wasm:
+    name: Build Wasm
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build-z3-wasm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ vars.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Download Z3 wasm
+        uses: actions/download-artifact@v4
+        with:
+          name: z3-wasm-4.16.0
+          path: .z3/z3-4.16.0-wasm
+        continue-on-error: true
+
+      - name: Verify Z3 wasm
+        run: |
+          if [ -f ".z3/z3-4.16.0-wasm/lib/libz3.a" ]; then
+            echo "Z3 wasm found"
+          else
+            echo "Z3 wasm not found, Z3 features disabled"
+          fi
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: wasm-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            wasm-cargo-
+
+      - name: Build Wasm
+        run: cd wasm && wasm-pack build --target web --out-name yaoxiang --out-dir ../pkg
+
+      - name: Package wasm
+        run: cd pkg && zip -r ../yaoxiang-wasm.zip .
+
+      - name: Upload wasm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact-prefix }}-wasm
+          path: yaoxiang-wasm.zip
           retention-days: ${{ inputs.retention-days }}
