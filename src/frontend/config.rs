@@ -210,6 +210,30 @@ impl Default for IncrementalConfig {
     }
 }
 
+/// 单态化配置
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MonoConfig {
+    /// 是否启用单态化
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// 最大递归深度
+    #[serde(default = "default_max_mono_depth")]
+    pub max_depth: usize,
+}
+
+fn default_max_mono_depth() -> usize {
+    100
+}
+
+impl Default for MonoConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_depth: 100,
+        }
+    }
+}
+
 /// 死代码分析配置
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeadCodeConfig {
@@ -250,6 +274,10 @@ pub struct CompileConfig {
     /// 死代码分析配置
     #[serde(default)]
     pub dead_code: DeadCodeConfig,
+
+    /// 单态化配置
+    #[serde(default)]
+    pub mono: MonoConfig,
 
     /// 是否启用详细日志
     #[serde(default)]
@@ -440,6 +468,7 @@ impl ConfigAdapter for JsonConfig {
             error_recovery: self.error_recovery,
             incremental: self.incremental.clone(),
             dead_code: DeadCodeConfig::default(),
+            mono: MonoConfig::default(),
             verbose: false,
             source_root: None,
             import_paths: self.import_paths.clone(),

@@ -12,6 +12,7 @@ use crate::frontend::module::{Export, ExportKind, ModuleInfo};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::core::parser::ast::{Block, Expr, Param, Stmt};
+use crate::middle::passes::mono::instance::InstantiationRequest;
 
 use super::scope::ScopeManager;
 
@@ -63,6 +64,8 @@ pub struct StatementChecker {
     /// 类型定义表: type_name -> MonoType(Struct)
     /// 用于 TypeRef → Struct 解析
     type_defs: HashMap<String, MonoType>,
+    /// 实例化请求（收集所有泛型函数实例化需求）
+    pub instantiation_requests: Vec<InstantiationRequest>,
 }
 
 impl StatementChecker {
@@ -84,6 +87,7 @@ impl StatementChecker {
             generic_type_defs: std::collections::HashMap::new(),
             method_bindings: HashMap::new(),
             type_defs: HashMap::new(),
+            instantiation_requests: Vec::new(),
         }
     }
 
@@ -1532,7 +1536,10 @@ impl StatementChecker {
                         inferrer.set_method_bindings(&self.method_bindings);
                         inferrer.set_type_defs(&self.type_defs);
                         inferrer.set_generic_type_defs(&self.generic_type_defs);
-                        inferrer.infer_expr(expr).map_err(Box::new)
+                        let result = inferrer.infer_expr(expr).map_err(Box::new);
+                        self.instantiation_requests
+                            .extend(inferrer.instantiation_requests);
+                        result
                     }
                 }
             }
@@ -1550,7 +1557,10 @@ impl StatementChecker {
                 );
                 inferrer.set_type_defs(&self.type_defs);
                 inferrer.set_generic_type_defs(&self.generic_type_defs);
-                inferrer.infer_expr(expr).map_err(Box::new)
+                let result = inferrer.infer_expr(expr).map_err(Box::new);
+                self.instantiation_requests
+                    .extend(inferrer.instantiation_requests);
+                result
             }
         }
     }
