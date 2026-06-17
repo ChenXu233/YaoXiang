@@ -67,7 +67,15 @@ pub fn format_source(
     crate::frontend::core::parser::check_parse_errors(&parse_result)?;
 
     let formatter = Formatter::new(options.clone(), source_map);
-    Ok(formatter.format_module(&parse_result.module))
+    let formatted = formatter.format_module(&parse_result.module);
+
+    // 验证格式化后的输出是否是有效的语法
+    let formatted_tokens = crate::frontend::core::lexer::tokenize(&formatted)
+        .map_err(|e| anyhow::anyhow!("Formatted output has lex error: {}", e))?;
+    let formatted_parse_result = crate::frontend::core::parser::parse(&formatted_tokens);
+    crate::frontend::core::parser::check_parse_errors(&formatted_parse_result)?;
+
+    Ok(formatted)
 }
 
 /// 检查源代码是否已格式化
