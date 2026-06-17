@@ -75,6 +75,11 @@
         "items": []
       },
       {
+        "text": "Advanced",
+        "collapsed": true,
+        "items": []
+      },
+      {
         "text": "Example Projects",
         "collapsed": true,
         "items": []
@@ -380,6 +385,10 @@
             "link": "/en/guide/"
           },
           {
+            "text": "Language Overview",
+            "link": "/en/guide/language-overview"
+          },
+          {
             "text": "Package Management System",
             "link": "/en/guide/packaging"
           },
@@ -400,7 +409,7 @@
         "items": [
           {
             "text": "Quick Start",
-            "link": "/en/getting-started"
+            "link": "/en/tutorial/getting-started"
           },
           {
             "text": "Tutorial",
