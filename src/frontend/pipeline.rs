@@ -639,7 +639,10 @@ impl Pipeline {
                     let mut mono = middle::passes::mono::Monomorphizer::with_max_depth(
                         self.config.mono.max_depth,
                     );
-                    ir = mono.monomorphize(&ir, &type_result.instantiation_requests);
+                    match mono.monomorphize(&ir, &type_result.instantiation_requests) {
+                        Ok(mono_ir) => ir = mono_ir,
+                        Err(diag) => return IRResult::failed(vec![diag]),
+                    }
                 }
 
                 let duration = start.elapsed().as_millis() as u64;

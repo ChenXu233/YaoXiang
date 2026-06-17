@@ -6,6 +6,7 @@ use crate::frontend::core::parser::ast::Type as AstType;
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::middle::passes::mono::instance::{FunctionId, GenericFunctionId, InstantiationRequest};
+use crate::util::diagnostic::Diagnostic;
 use std::collections::{HashMap, HashSet};
 
 /// 函数单态化相关trait
@@ -72,7 +73,7 @@ pub trait FunctionMonomorphizer {
     );
 
     /// 处理实例化队列
-    fn process_instantiation_queue(&mut self);
+    fn process_instantiation_queue(&mut self) -> Result<(), Diagnostic>;
 
     /// 实例化单个函数
     fn instantiate_function(
@@ -341,8 +342,8 @@ impl FunctionMonomorphizer for super::Monomorphizer {
         self.pending_queue.push_back(request);
     }
 
-    fn process_instantiation_queue(&mut self) {
-        self.process_queue();
+    fn process_instantiation_queue(&mut self) -> Result<(), Diagnostic> {
+        self.process_queue()
     }
 
     fn instantiate_function(

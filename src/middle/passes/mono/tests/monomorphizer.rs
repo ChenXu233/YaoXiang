@@ -636,7 +636,7 @@ fn test_monomorphize_end_to_end_specializes_and_replaces_calls() {
     )];
 
     // Act
-    let result = mono.monomorphize(&module, &requests);
+    let result = mono.monomorphize(&module, &requests).unwrap();
 
     // Assert: 应有 2 个函数：main（调用已替换）+ identity(int64)
     assert_eq!(result.functions.len(), 2);

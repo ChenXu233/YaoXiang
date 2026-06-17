@@ -6,6 +6,7 @@
 //! 2. 队列驱动：BFS 处理实例化请求，自动处理嵌套泛型调用
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use crate::util::diagnostic::Diagnostic;
 
 pub mod function;
 pub mod instance;
@@ -49,11 +50,15 @@ impl Monomorphizer {
     }
 
     /// 核心入口：单态化 ModuleIR
+    ///
+    /// # Errors
+    /// 当单态化实例化深度超过 `max_depth` 时返回 `Diagnostic` 错误，
+    /// 表明可能存在无限泛型递归（例如泛型函数无限递归调用自身）。
     pub fn monomorphize(
         &mut self,
         module: &ModuleIR,
         requests: &[InstantiationRequest],
-    ) -> ModuleIR {
+    ) -> Result<ModuleIR, Diagnostic> {
         // 1. 收集泛型函数定义
         self.collect_generic_functions(module);
 
@@ -63,7 +68,7 @@ impl Monomorphizer {
         }
 
         // 3. 队列循环（BFS）
-        self.process_queue();
+        self.process_queue()?;
 
         // 4. 构建输出
         let mut output = self.build_output(module);
@@ -71,7 +76,7 @@ impl Monomorphizer {
         // 5. 替换调用点
         self.replace_call_sites(&mut output, requests);
 
-        output
+        Ok(output)
     }
 
     fn collect_generic_functions(
@@ -86,14 +91,28 @@ impl Monomorphizer {
         }
     }
 
-    fn process_queue(&mut self) {
+    fn process_queue(&mut self) -> Result<(), Diagnostic> {
+        let mut depth: usize = 0;
         while let Some(req) = self.pending_queue.pop_front() {
+            if depth >= self.max_depth {
+                return Err(Diagnostic::error(
+                    "E3005".to_string(),
+                    format!(
+                        "单态化实例化深度超过最大限制 ({})，可能存在无限泛型递归",
+                        self.max_depth
+                    ),
+                    "检查泛型函数是否存在无限递归调用链".to_string(),
+                    None,
+                ));
+            }
+
             let key = req.specialization_key();
 
             if self.processed.contains(&key) {
                 continue;
             }
             self.processed.insert(key);
+            depth += 1;
 
             if let Some(specialized) = self.specialize_function(&req) {
                 self.scan_for_new_calls(&specialized);
@@ -101,6 +120,7 @@ impl Monomorphizer {
                     .insert(specialized.name.clone(), specialized);
             }
         }
+        Ok(())
     }
 
     fn build_output(
