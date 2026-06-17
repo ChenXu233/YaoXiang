@@ -6,28 +6,20 @@ on:
       artifact-name:
         description: 'Artifact name'
         type: string
-        default: 'wasm-playground'
+        default: 'yaoxiang-wasm'
       retention-days:
         description: 'Artifact retention days'
         type: number
-        default: 7
-      z3-version:
-        description: 'Z3 version for wasm linking'
-        type: string
-        default: '4.16.0'
-    outputs:
-      artifact-name:
-        description: 'Name of the uploaded artifact'
-        value: ${{ inputs.artifact-name }}
+        default: 30
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-wasm:
+  build:
     name: Build Wasm
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -40,17 +32,18 @@ jobs:
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
-      - name: Download Z3 wasm
-        uses: actions/download-artifact@v4
+      - name: Download Z3 wasm (cross-run)
+        uses: dawidd6/action-download-artifact@v4
         with:
-          name: z3-wasm-${{ inputs.z3-version }}
-          path: .z3/z3-${{ inputs.z3-version }}-wasm
+          workflow: _build-z3-wasm.yml
+          name: z3-wasm-4.16.0
+          path: .z3/z3-4.16.0-wasm
         continue-on-error: true
 
       - name: Verify Z3 wasm
         run: |
-          if [ -f ".z3/z3-${{ inputs.z3-version }}-wasm/lib/libz3.a" ]; then
-            echo "Z3 wasm found, linking enabled"
+          if [ -f ".z3/z3-4.16.0-wasm/lib/libz3.a" ]; then
+            echo "Z3 wasm found"
           else
             echo "Z3 wasm not found, Z3 features disabled"
           fi
@@ -70,11 +63,12 @@ jobs:
       - name: Build Wasm
         run: cd wasm && wasm-pack build --target web --out-name yaoxiang --out-dir ../pkg
 
+      - name: Package wasm
+        run: cd pkg && zip -r ../yaoxiang-wasm.zip .
+
       - name: Upload wasm artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.artifact-name }}
-          path: |
-            pkg/yaoxiang.js
-            pkg/yaoxiang_bg.wasm
+          path: yaoxiang-wasm.zip
           retention-days: ${{ inputs.retention-days }}
