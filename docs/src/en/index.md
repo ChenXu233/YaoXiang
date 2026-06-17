@@ -1,3 +1,4 @@
+```yaml
 ---
 layout: page
 is_home: true
@@ -6,11 +7,11 @@ sidebar: false
 hero:
   name: YaoXiang
   text: A Programming Language for the Future
-  tagline: All things grow together, I observe their return
+  tagline: All things flourish, I observe their return
   actions:
     - theme: brand
-      text: 🚀 Get Started
-      link: /getting-started
+      text: 🚀 Quick Start
+      link: /tutorial/getting-started
     - theme: alt
       text: Tutorial
       link: /tutorial/
@@ -19,29 +20,29 @@ hero:
       link: /download
     - theme: alt
       text: GitHub ⇗
-      link: https://github.com/yaoxiang-lang/yaoxiang
+      link: https://github.com/ChenXu233/yaoxiang
 
 tracks:
   track01:
     trackLabel: TRACK 01
     rfc: RFC-010
     title: Unified Syntax
-    description: "Philosophy of minimalism. From variables to functions, all declarations follow the name: type = value pattern, lower learning curve, more consistent code."
+    description: "Minimalist philosophy. From variables to functions, all declarations follow the `name: type = value` pattern — lower learning cost, more consistent code."
     features:
-      - Unifying syntax declarations
-      - Types as first-class citizens
+      - Extremely unified syntax declarations
+      - Types are first-class citizens
   track02:
     rfc: RFC-011
     title: Zero-Cost Generics
-    description: "Generic specialization is completed at compile time, type abstraction brings no runtime overhead. Compile-time monomorphization. Dead code elimination. Type system as macro."
+    description: "Generic specialization happens at compile-time, type abstraction brings no runtime overhead. Compile-time monomorphization. Dead code elimination. The type system is the macro."
   track03:
     rfc: RFC-009
     title: Ownership Model
-    description: "Say goodbye to GC stutters. YaoXiang uses a scope-based ownership model, memory safety is determined at compile time, no surprises."
+    description: "Say goodbye to GC pauses. YaoXiang uses a scope-based ownership model — memory safety is determined at compile-time, no surprises."
     features:
       - Shared references
       - Predictable
-      - No GC stutters
+      - No GC pauses
       - No lifetimes
   track04:
     trackLabel: TRACK 04
@@ -51,11 +52,12 @@ tracks:
       - label: Embedded
         sub: "Fully synchronous (Sync)"
       - label: Standard
-        sub: "Automated concurrency management based on DAG and lazy evaluation"
+        sub: "Automated concurrency management based on Directed Acyclic Graph (DAG) and lazy evaluation"
       - label: Full
-        sub: "Work Stealing mechanism"
+        sub: "Work stealing mechanism (WorkSteal)"
   track05:
     title: Language Specification v1.8
-    description: "Reject syntax sugar bombardment. 17 keywords cover all features, no complex syntax sugar, just pure expressiveness."
+    description: "Reject syntax sugar bombing. 17 keywords cover all features — no complex syntax sugar, only pure expressiveness."
 
 ---
+```

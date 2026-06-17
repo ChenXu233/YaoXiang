@@ -4,42 +4,42 @@ title: Type System
 
 # Type System
 
-In the basics tutorial you learned to use built-in types like `Int`, `String`, and `Bool`. This chapter dives into YaoXiang's type system, teaching you to **define your own types**.
+In the basic tutorial you learned to use built-in types like `Int`, `String`, `Bool`. This chapter goes deep into YaoXiang's type system, learning to **define your own types**.
 
-## The Unified Syntax Model
+## Unified Syntax Model
 
-YaoXiang's type system is built on the unified syntax defined in RFC-010: **everything is `name: type = value`**.
+YaoXiang's type system is built on the unified syntax defined by RFC-010: **everything is `name: type = value`**.
 
 | Concept | Syntax |
-|---------|--------|
+|------|------|
 | Variable | `x: Int = 42` |
 | Function | `add: (a: Int, b: Int) -> Int = a + b` |
 | Record type | `Point: Type = { x: Float, y: Float }` |
 | Interface | `Drawable: Type = { draw: (Surface) -> Void }` |
 | Generic type | `List: (T: Type) -> Type = { ... }` |
 
-Notice: **type definitions themselves are also `name: Type = value`**.
+Note: **type definitions themselves are also `name: Type = value`**.
 
 ## Record Types
 
-Record types (called "structs" in other languages) are the fundamental way to organize data in YaoXiang:
+Record types (called "structs" in other languages) are the most basic way of organizing data in YaoXiang:
 
 ```yaoxiang
 # Define a record type
 Point: Type = { x: Float, y: Float }
 
-# Create instances
+# Create an instance
 origin = Point(x: 0.0, y: 0.0)
 p = Point(x: 3.0, y: 4.0)
 
-# Access fields
+# Access a field
 println(p.x)  # 3.0
 println(p.y)  # 4.0
 ```
 
-### Field Defaults
+### Field Default Values
 
-Fields can specify default values, making them optional at construction time:
+Fields can have default values; they are optional when constructing:
 
 ```yaoxiang
 User: Type = {
@@ -48,38 +48,38 @@ User: Type = {
     active: Bool = true,
 }
 
-alice = User(name: "Alice", age: 25)        # active defaults to true
+alice = User(name: "Alice", age: 25)        # active takes the default value true
 bob = User(name: "Bob")                      # age=0, active=true
 anonymous = User(name: "guest", active: false)  # age=0
 ```
 
-### Methods
+### Method Definition
 
-Define methods using the `Type.method` syntax:
+Use the `Type.method` syntax to define methods for a type:
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
 
-# Define method: Point.method syntax
+# Define a method: the Point.method syntax
 Point.length: (self: Point) -> Float = {
     return (self.x * self.x + self.y * self.y).sqrt()
 }
 
 p = Point(x: 3.0, y: 4.0)
 
-# Both calling styles are equivalent
-println(Point.length(p))  # 5.0 — function-style call
-println(p.length())       # 5.0 — dot-call syntax
+# The two calling styles are equivalent
+println(Point.length(p))  # 5.0 — functional call
+println(p.length())       # 5.0 — . call syntax
 ```
 
 ### `pub` Auto-binding
 
-Within the same file, `pub`-declared functions auto-bind to types defined in that file:
+Within the same file, functions declared with `pub` are automatically bound to types defined in the same file:
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
 
-# pub function auto-binds to Point
+# The pub function is auto-bound to Point
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
@@ -89,13 +89,13 @@ pub distance: (p1: Point, p2: Point) -> Float = {
 p1 = Point(x: 0.0, y: 0.0)
 p2 = Point(x: 3.0, y: 4.0)
 
-# Auto-bound method called with dot syntax
+# Auto-bound methods use the . call
 println(p1.distance(p2))  # 5.0
 ```
 
 ## Enum Types
 
-Enums define a set of mutually exclusive variants. Data-less variants use lowercase, data-carrying variants use function syntax:
+Enums define a set of mutually exclusive variants. Variants without data use lowercase, while variants with data use function-call syntax:
 
 ```yaoxiang
 # Simple enum
@@ -104,11 +104,11 @@ type Color = red | green | blue
 # Enum with data
 type Result(T, E) = ok(T) | err(E)
 
-# Nested enums
+# Nested enum
 type Shape = circle(Float) | rect(Float, Float) | point
 ```
 
-Core concept: **each variant is itself a type**.
+The core idea of enums: **each variant is itself a type**.
 
 ```yaoxiang
 area: (s: Shape) -> Float = match s {
@@ -123,7 +123,7 @@ println(area(rect(3.0, 4.0))) # 12.0
 
 ## Interfaces
 
-An interface is a **record type where all fields are function types**. Implementing an interface means including the interface name in the record:
+An interface is **a record type whose fields are all function types**. Implementing an interface means including the interface name in a record:
 
 ```yaoxiang
 # Define an interface
@@ -132,15 +132,15 @@ Drawable: Type = {
     bounding_box: () -> Rect,
 }
 
-# Implement the interface: include the interface name in the record
+# Implement the interface: include the interface name in the record type
 Circle: Type = {
     x: Float,
     y: Float,
     radius: Float,
-    Drawable,       # implements Drawable
+    Drawable,       # Implement the Drawable interface
 }
 
-# Provide the required methods
+# Provide the methods required by the interface
 Circle.draw: (self: Circle, surface: Surface) -> Void = {
     surface.draw_circle(self.x, self.y, self.radius)
 }
@@ -155,11 +155,11 @@ Circle.bounding_box: (self: Circle) -> Rect = {
 }
 ```
 
-Interfaces enable polymorphism — any type implementing `Drawable` can be passed to functions accepting `Drawable`.
+Interfaces achieve polymorphism — any type that implements `Drawable` can be passed to a function that accepts `Drawable`.
 
 ## Generic Types
 
-Generics let you write type definitions **without committing to concrete types**:
+Generics let you write type definitions that are **not tied to specific types**:
 
 ```yaoxiang
 # Generic Pair
@@ -190,9 +190,9 @@ println(doubled)  # [2, 4, 6, 8]
 ## Summary
 
 | Concept | Syntax | Purpose |
-|---------|--------|---------|
+|------|------|------|
 | Record type | `Point: Type = { x: Float, y: Float }` | Organize related data |
-| Enum | `type Color = red \| green \| blue` | One-of-many |
+| Enum | `type Color = red \| green \| blue` | Choose one of many |
 | Interface | `Drawable: Type = { draw: ... }` | Polymorphic abstraction |
 | Generic | `List: (T: Type) -> Type = { ... }` | Type parameterization |
 | Method | `Type.method: (self: Type, ...) -> ...` | Attach behavior |
