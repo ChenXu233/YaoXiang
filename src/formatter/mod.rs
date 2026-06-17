@@ -61,17 +61,10 @@ pub fn format_source(
     let source_map = SourceMap::build(source);
     let tokens = crate::frontend::core::lexer::tokenize(source)
         .map_err(|e| anyhow::anyhow!("Lex error: {}", e))?;
-    let parse_result = crate::frontend::core::parser::parse_with_recovery(&tokens);
+    let parse_result = crate::frontend::core::parser::parse(&tokens);
 
-    // 如果解析有错误，收集所有错误并返回
-    if parse_result.has_errors {
-        let messages: Vec<String> = parse_result
-            .errors
-            .iter()
-            .map(|e| format!("{}", e))
-            .collect();
-        return Err(anyhow::anyhow!("Parse errors:\n{}", messages.join("\n")));
-    }
+    // 检查解析错误
+    crate::frontend::core::parser::check_parse_errors(&parse_result)?;
 
     let formatter = Formatter::new(options.clone(), source_map);
     Ok(formatter.format_module(&parse_result.module))

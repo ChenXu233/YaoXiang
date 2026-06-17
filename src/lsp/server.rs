@@ -468,7 +468,7 @@ fn update_semantic_db(
             }
         };
 
-        let parse_result = crate::frontend::core::parser::parse_with_recovery(&tokens);
+        let parse_result = crate::frontend::core::parser::parse(&tokens);
 
         // 运行 typecheck 收集语义 tokens（使用 collect_all 模式以收集更多信息）
         let mut tc = crate::frontend::core::typecheck::TypeChecker::new(uri);
