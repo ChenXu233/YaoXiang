@@ -78,6 +78,11 @@
         "items": []
       },
       {
+        "text": "上級",
+        "collapsed": true,
+        "items": []
+      },
+      {
         "text": "サンプルプロジェクト",
         "collapsed": true,
         "items": []
@@ -383,6 +388,10 @@
             "link": "/ja/guide/"
           },
           {
+            "text": "言語概要",
+            "link": "/ja/guide/language-overview"
+          },
+          {
             "text": "パッケージ管理システム",
             "link": "/ja/guide/packaging"
           },
@@ -403,7 +412,7 @@
         "items": [
           {
             "text": "クイックスタート",
-            "link": "/ja/getting-started"
+            "link": "/ja/tutorial/getting-started"
           },
           {
             "text": "チュートリアル",
