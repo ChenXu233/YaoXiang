@@ -151,11 +151,11 @@ jobs:
             gcc-mingw-w64-x86-64 \
             g++-mingw-w64-x86-64
 
-      - name: Install LLVM toolchain (aarch64)
+      - name: Install aarch64 cross-compile toolchain
         if: matrix.target == 'aarch64-pc-windows-gnullvm'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang lld llvm gcc-mingw-w64-aarch64 g++-mingw-w64-aarch64
+          sudo apt-get install -y gcc-mingw-w64-aarch64 g++-mingw-w64-aarch64
 
       - name: Configure linker (aarch64)
         if: matrix.target == 'aarch64-pc-windows-gnullvm'
@@ -163,8 +163,7 @@ jobs:
           mkdir -p .cargo
           cat >> .cargo/config.toml << 'TOML'
           [target.aarch64-pc-windows-gnullvm]
-          linker = "clang"
-          rustflags = ["-C", "link-arg=--target=aarch64-w64-mingw32", "-C", "link-arg=-fuse-ld=lld"]
+          linker = "aarch64-w64-mingw32-gcc"
           TOML
 
       - name: Cache cargo
