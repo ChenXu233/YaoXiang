@@ -154,20 +154,20 @@ jobs:
       - name: Install aarch64 cross-compile toolchain
         if: matrix.target == 'aarch64-pc-windows-gnullvm'
         run: |
-          sudo apt-get update
-          # mingw-w64 元包包含所有架构的交叉编译工具
-          sudo apt-get install -y mingw-w64
+          # 下载 LLVM MinGW 预构建工具链（含完整 aarch64 Windows 系统库）
+          curl -sL https://github.com/mstorsjo/llvm-mingw/releases/download/20250603/llvm-mingw-20250603-ucrt-ubuntu-22.04-x86_64.tar.xz \
+            -o llvm-mingw.tar.xz
+          tar -xf llvm-mingw.tar.xz
+          echo "LLVM_MINGW=$(pwd)/llvm-mingw" >> $GITHUB_ENV
 
       - name: Configure linker (aarch64)
         if: matrix.target == 'aarch64-pc-windows-gnullvm'
         run: |
-          # 列出可用的 aarch64 mingw 工具
-          ls /usr/bin/*aarch64*mingw* 2>/dev/null || echo "No aarch64 mingw binaries found"
-          ls /usr/aarch64-w64-mingw32/lib/ 2>/dev/null | head -5 || echo "No aarch64 mingw libs found"
           mkdir -p .cargo
-          cat >> .cargo/config.toml << 'TOML'
+          cat >> .cargo/config.toml << TOML
           [target.aarch64-pc-windows-gnullvm]
-          linker = "rust-lld"
+          linker = "${LLVM_MINGW}/bin/aarch64-w64-mingw32-clang"
+          rustflags = ["-C", "link-arg=-fuse-ld=lld", "-C", "link-arg=--sysroot=${LLVM_MINGW}/aarch64-w64-mingw32"]
           TOML
 
       - name: Cache cargo
