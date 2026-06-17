@@ -362,10 +362,9 @@ impl Translator {
             Swap => Ok(BytecodeInstruction::new(Opcode::Nop, vec![])),
 
             ArcNew { dst, src } => self.translate_arc_new(dst, src),
+            RcNew { dst, src } => self.translate_rc_new(dst, src),
             ArcClone { dst, src } => self.translate_arc_clone(dst, src),
             ArcDrop(operand) => self.translate_arc_drop(operand),
-            Borrow { dst, src, mutable } => self.translate_borrow(dst, src, *mutable),
-            Release(operand) => self.translate_release(operand),
             ShareRef { dst, src } => self.translate_share_ref(dst, src),
 
             StringLength { dst, src } => self.translate_string_length(dst, src),
@@ -1007,6 +1006,19 @@ impl Translator {
         ))
     }
 
+    fn translate_rc_new(
+        &mut self,
+        dst: &Operand,
+        src: &Operand,
+    ) -> Result<BytecodeInstruction, Diagnostic> {
+        let dst_reg = self.operand_resolver.to_reg(dst)?;
+        let src_reg = self.operand_resolver.to_reg(src)?;
+        Ok(BytecodeInstruction::new(
+            Opcode::RcNew,
+            vec![dst_reg, src_reg],
+        ))
+    }
+
     fn translate_arc_clone(
         &mut self,
         dst: &Operand,
@@ -1026,37 +1038,6 @@ impl Translator {
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let reg = self.operand_resolver.to_reg(operand)?;
         Ok(BytecodeInstruction::new(Opcode::ArcDrop, vec![reg]))
-    }
-
-    fn translate_borrow(
-        &mut self,
-        dst: &Operand,
-        src: &Operand,
-        mutable: bool,
-    ) -> Result<BytecodeInstruction, Diagnostic> {
-        let dst_reg = self.operand_resolver.to_reg(dst)?;
-        let src_reg = self.operand_resolver.to_reg(src)?;
-        Ok(BytecodeInstruction::new(
-            Opcode::Borrow,
-            vec![
-                (dst_reg as u16) as u8,
-                ((dst_reg as u16) >> 8) as u8,
-                (src_reg as u16) as u8,
-                ((src_reg as u16) >> 8) as u8,
-                mutable as u8,
-            ],
-        ))
-    }
-
-    fn translate_release(
-        &mut self,
-        operand: &Operand,
-    ) -> Result<BytecodeInstruction, Diagnostic> {
-        let reg = self.operand_resolver.to_reg(operand)?;
-        Ok(BytecodeInstruction::new(
-            Opcode::Release,
-            vec![(reg as u16) as u8, ((reg as u16) >> 8) as u8],
-        ))
     }
 
     fn translate_share_ref(

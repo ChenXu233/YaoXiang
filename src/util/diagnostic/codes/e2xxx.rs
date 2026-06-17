@@ -278,6 +278,12 @@ impl ErrorCodeDefinition {
         def.builder().param("name", name)
     }
 
+    /// E2029 spawn 内 ref 循环
+    pub fn spawn_ref_cycle(cycle: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2029").unwrap();
+        def.builder().param("cycle", cycle)
+    }
+
     /// E2090 签名解析失败（通用）
     pub fn invalid_signature(reason: &str) -> DiagnosticBuilder {
         let def = Self::find("E2090").unwrap();

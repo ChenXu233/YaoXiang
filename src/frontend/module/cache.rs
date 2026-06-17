@@ -16,7 +16,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use crate::util::time_compat::Instant;
 
 use parking_lot::RwLock;
 

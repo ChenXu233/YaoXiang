@@ -237,7 +237,7 @@ fn test_format_doc_comment_preserved() {
 #[test]
 fn test_format_sort_imports_preserves_comments() {
     // 规范 §14.1 + §C2.2: 导入排序后注释必须跟随语句移动
-    let source = "// std\nuse std::io\n// external\nuse serde\n";
+    let source = "// std\nuse std.io\n// external\nuse serde\n";
     let result = format_source(source, &default_options()).unwrap();
     assert!(
         result.contains("// std"),

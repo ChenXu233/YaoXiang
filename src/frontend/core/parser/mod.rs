@@ -104,6 +104,15 @@ pub fn parse_with_recovery(tokens: &[Token]) -> ParseResult {
             items.push(stmt);
         } else {
             let esp = state.span();
+            let found = state
+                .current()
+                .map(|t| t.kind.clone())
+                .unwrap_or(TokenKind::Eof);
+            state.error(
+                ErrorCodeDefinition::unexpected_token(&format!("{:?}", found))
+                    .at(esp)
+                    .build(),
+            );
             items.push(Stmt {
                 kind: StmtKind::Error(esp),
                 span: esp,

@@ -136,6 +136,7 @@ use crate::frontend::core::parser::ast::{self, Expr, Stmt, StmtKind, BinOp};
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::proof::verdict::{BudgetReport, ProofResult, UnprovenReason};
 use super::super::proof::smt::ast::{SMTExpr, SMTCommand, SMTSort};
+#[cfg(not(target_arch = "wasm32"))]
 use super::super::proof::smt::z3_backend::Z3Backend;
 
 /// 终止检查器
@@ -147,6 +148,7 @@ pub struct TerminationChecker {
     /// 收集到的证明结果
     results: Vec<ProofResult>,
     /// Z3 后端引用——策略 1 秩函数 SMT 验证
+    #[cfg(not(target_arch = "wasm32"))]
     z3: Option<&'static Z3Backend>,
 }
 
@@ -161,11 +163,13 @@ impl TerminationChecker {
     pub fn new() -> Self {
         Self {
             results: Vec::new(),
+            #[cfg(not(target_arch = "wasm32"))]
             z3: None,
         }
     }
 
     /// 设置 Z3 后端（由调用方在初始化后注入）
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn with_z3(
         mut self,
         z3: &'static Z3Backend,
@@ -363,6 +367,7 @@ impl TerminationChecker {
         }
 
         // 策略 1：线性秩函数自动合成（SMT 验证）
+        #[cfg(not(target_arch = "wasm32"))]
         if self.z3.is_some() {
             if let Some(measure) =
                 self.try_linear_rank_function(&bounds, &assignments, condition, span)
@@ -694,6 +699,7 @@ impl TerminationChecker {
     /// 枚举候选线性度量，SMT 验证每条执行路径上严格递减。
     /// - ≤3 个有界变量 → 全组合枚举
     /// - >3 个 → 只单变量，失败报编译错误
+    #[cfg(not(target_arch = "wasm32"))]
     fn try_linear_rank_function(
         &self,
         bounds: &[(String, (BoundOp, BoundExpr))],
@@ -762,6 +768,7 @@ impl TerminationChecker {
     }
 
     /// SMT 验证秩函数候选是否在所有路径上严格递减
+    #[cfg(not(target_arch = "wasm32"))]
     fn verify_rank_candidate(
         &self,
         candidate: &LinearMeasure,

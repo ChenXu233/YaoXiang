@@ -7,7 +7,9 @@
 
 pub mod ast;
 pub mod translate;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod z3_backend;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod z3_ffi;
 
 #[cfg(test)]

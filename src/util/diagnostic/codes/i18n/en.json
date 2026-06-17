@@ -670,6 +670,11 @@
     "template": "Cannot clone '{name}': value has been moved",
     "help": "Value has been moved, clone before moving if multiple uses needed."
   },
+  "E2029": {
+    "title": "spawn ref cycle",
+    "template": "cross-task circular reference: {cycle}",
+    "help": "ref variables within the spawn block form a reference cycle. Use Weak to break the cycle, or bypass detection in an unsafe block."
+  },
   "E3001": {
     "title": "Unimplemented expression (IR)",
     "template": "Unimplemented expression type: {expr_type}",

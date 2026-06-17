@@ -14,7 +14,8 @@ Window: Type = {
 
 main = {
     p = Point(1.0, 2.0)
-    w = Window(p, p)   // view 令牌从 p 派生
+    ref_p = &p                // 显式借用
+    w = Window(p, ref_p)      // view 令牌从 p 派生
     io.println(w.view.x)
     io.println("ALL TESTS PASSED")
 }

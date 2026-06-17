@@ -1,0 +1,21 @@
+[package]
+name = "yaoxiang-wasm"
+version = "0.7.5"
+edition = "2021"
+rust-version = "1.96"
+description = "YaoXiang WebAssembly Playground"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[dependencies]
+yaoxiang = { path = "..", default-features = false }
+wasm-bindgen = "0.2"
+console_error_panic_hook = "0.1"
+web-time = "1"
+getrandom = { version = "0.3", features = ["wasm_js"] }

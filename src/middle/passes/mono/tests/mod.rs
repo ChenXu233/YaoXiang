@@ -1,6 +1,8 @@
-//! 单态化器测试模块
+//! 单态化器测试 — 基于 RFC-011: 泛型系统设计
 //!
-//! 包含 platform_info、platform_specializer 等模块的单元测试。
+//! RFC-011 §3: 零成本抽象与单态化
+//! RFC-011 §4: 泛型函数特化
+//! RFC-031: 优化级别与 Pass 管理器
 
-pub mod platform_info;
-pub mod platform_specializer;
+mod instance;
+mod monomorphizer;

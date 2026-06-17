@@ -19,9 +19,6 @@ pub mod subtyping;
 pub mod generics;
 pub mod patterns;
 
-// ✅ 闭包捕获分析模块
-pub mod capture;
-
 // 重新导出核心类型
 pub use scope::ScopeManager;
 pub use types::TypeSystem;

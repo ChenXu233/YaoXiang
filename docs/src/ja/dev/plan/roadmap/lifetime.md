@@ -1,106 +1,157 @@
 ---
-title: "借用检查器的状态"
+title: "所有権チェッカー状態"
 ---
 
-# 借用検査器（Lifetime）
+# 所有権チェッカー（Ownership）
 
-> **モジュール状態**：安定（4 項目が改善待ち）
-> **位置**：`src/middle/passes/lifetime/`
-> **最終更新**：2026-06-01
+> **モジュール状態**：移行完了——フロントエンドホーア命题（命题）パイプラインが引き継ぎ済み
+> **新アーキテクチャ位置**：`src/frontend/core/typecheck/layers/ownership.rs`（約 1600 行）
+> **レガシー位置**：`src/middle/passes/lifetime/`（保持、徐々にクリーンアップ）
+> **最終更新**：2026-06-15
+>
+> **関連 RFC**：
+> - [RFC-009: 所有権モデル設計](../design/rfc/accepted/009-ownership-model.md) — 承認済み
+> - [RFC-009a: トークンライフタイム分析——ホーア証明パイプライン基盤](../design/rfc/accepted/009a-borrow-proof-pipeline.md) — 承認済み
+>
+> **既知の問題**：[ongoing/ownership-known-issues.md](../ongoing/ownership-known-issues.md) — 6 件のバグと精度のトレードオフ
 
 ---
 
-## モジュールの概要
+## モジュール概要
 
-借用検査器モジュールは、完全な**所有権分析とライフサイクル管理システム**であり、Move セマンティクス、借用の競合、可変性違反などの所有権関連問題を検査する責務を担っています。
+所有権チェッカーは YaoXiang の所有権解析を担当する——Move セマンティクス、借用トークンの競合、Drop 正確性、可変性違反、NLL 精密解放、クロージャキャプチャ、関数シグネチャクエリ、ref エスケープ解析。
 
-**コード量**：約 300KB のソースコード（15 のサブファイル）
+**現在のアーキテクチャ**（v9 ホーア命题（命题）パイプライン）：
+- ブランドツリー（BrandTree）がトークン派生関係と競合判定を追跡
+- コンシューマ分析が NLL 解放（ReleasePlan）を駆動
+- 逆方向 BFS 活性解析（ファストパス、95% 以上のシナリオをカバー）
+- SMT 論理切断フォールバック（極めて稀な while + パス条件シナリオ）
+- スコープ駆動 Drop（スコープ退出時に自動的に `VarState::Dropped` をマーク）
+- クロージャキャプチャ分析（save/restore/diff → CapturesStore）
+- 関数シグネチャクエリ（TypeEnvironment → T/&T/&mut T → Move/ReadBorrow/WriteBorrow）
+- ref エスケープ解析（spawn 内で使用 → Arc、それ以外 → Rc）
+- ir_gen が ReleasePlan を読み取り Drop 命令を挿入 + `escaped_refs` に従って RcNew/ArcNew を選択
 
 ---
 
-## 機能一覧
+## RFC 整合状態
 
-### コア検査器（OwnershipChecker 統一エントリポイントに統合済み）
+### RFC-009 五つのコアコンセプト
 
-| サブモジュール | ファイル | 機能 | 状態 |
-|--------|------|------|------|
-| **Move セマンティクス** | `move_semantics.rs` (575行) | UseAfterMove 検出、空状態(Empty)再代入をサポート | ✅ 完了 |
-| **Drop セマンティクス** | `drop_semantics.rs` (143行) | UseAfterDrop、DropMovedValue、DoubleDrop 検出 | ✅ 完了 |
-| **可変性検査** | `mut_check.rs` (395行) | 不変変数の代入、不変オブジェクトの变异メソッド、不変フィールドの代入 | ✅ 完了 |
-| **Ref セマンティクス** | `ref_semantics.rs` (145行) | RefNonOwner 検出——ref は有効な所有者にのみ適用可能 | ✅ 完了 |
-| **Clone セマンティクス** | `clone.rs` (173行) | CloneMovedValue、CloneDroppedValue 検出 | ✅ 完了 |
-| **借用トークン** | `borrow_checker.rs` (503行) | 借用トークン競合検出：MutableBorrowConflict、BorrowAfterMove、UseWhileFrozen | ✅ 完了 |
-| **spawn 間サイクル** | `cycle_check.rs` (616行) | タスク間循環参照検出、DFS 環検出 | ✅ 完了 |
-| **タスク内サイクル** | `intra_task_cycle.rs` (406行) | タスク内 ref 循環追跡（警告モード） | ✅ 完了 |
+| コンセプト | ユーザ可視動作 | 内部実装 |
+|------|-------------|---------|
+| **Move** | ✅ 完了 | OwnershipChecker、UseAfterMove 検出 |
+| **&T / &mut T** | ✅ 完了 | ブランドツリートークン競合検出（ファストパス + SMT フォールバック） |
+| **ref** | ✅ 完了 | エスケープ解析による Rc/Arc 自動選択 |
+| **clone()** | ✅ 完了 | CloneChecker、0 tests |
+| **unsafe + *T** | ✅ 完了 | UnsafeChecker |
 
-### 補助アナライザー
+### RFC-009a 六段階（新バージョン——フロントエンド実装）
 
-| サブモジュール | ファイル | 機能 | 状態 |
-|--------|------|------|------|
-| **所有権フロー** | `ownership_flow.rs` (426行) | 関数パラメータが戻り値として返されるかを分析 | ✅ 完了 |
-| **消費分析** | `consume_analysis.rs` (363行) | 関数間消費パターンクエリ、キャッシュをサポート | ✅ 完了 |
-| **チェーン呼び出し** | `chain_calls.rs` (652行) | メソッドチェーンの所有権フロー分析 | ✅ 完了 |
-| **ライフサイクル追跡** | `lifecycle.rs` (1037行) | 変数の完全なライフサイクル追跡 | ✅ 完了 |
-| **空状態** | `empty_state.rs` (513行) | Move 後の変数空状態追跡 | ✅ 完了 |
-| **制御フロー** | `control_flow.rs` (353行) | 分岐状態マージ分析 | ⚠️ 骨格は完了、コア分析ロジックは空実装 |
-| **Unsafe 検査** | `unsafe_check.rs` (113行) | unsafe ブロック外での生ポインタ間接参照をエラー報告 | ✅ 完了 |
-| **Send/Sync** | `send_sync.rs` (401行) | 型レベルの Send/Sync 制約検査と制約伝播 | ✅ 完了（独立使用） |
+| 段階 | 内容 | 状態 | 説明 |
+|------|------|------|------|
+| 1 | ブランドツリーデータ構造 | ✅ 完了 | `BrandTree` + `BrandNode` + `BrandId` |
+| 2 | コンシューマ分析 | ✅ 完了 | `BrandNode.consumers`、AST 走査による自動収集 |
+| 3 | 逆方向 BFS 活性解析 | ✅ 完了 | `fast_path_check()`、break によるバックエッジ切断 |
+| 4 | スコープ駆動 Release | ✅ 完了 | `ReleasePlan` + `scope_vars` スタック、LIFO Drop |
+| 5 | SMT 論理切断 | ✅ 完了 | `smt_cut(path_cond, loop_cond)` via Z3 |
+| 6 | クリーンアップ | ✅ 完了 | レガシーファイル削除済み、エラーコード形式未統一（P2） |
+
+### 補足段階
+
+| 段階 | 内容 | 状態 | 説明 |
+|------|------|------|------|
+| D.1 | ref エスケープ解析（Rc vs Arc） | ✅ 完了 | `ref_vars` + `escaped_refs` + `inside_spawn`、ref 属性伝播 |
+| D.2 | テストカバレッジ拡張 | ✅ 完了 | 61 tests（元 31 → 目標 50+） |
+| D.3 | Drop セマンティクストリガーポイント | ✅ 完了 | `VarState::Dropped` 有効化、スコープ退出で自動マーク |
+| D.4 | 可変性チェック | ✅ 完了 | `&mut` と代入が `var_mutability` をチェック、`mut_violation` を emit |
+| D.5 | ロードマップ同期 | ✅ 完了 | 本ドキュメント |
+| — | クロージャキャプチャ分析 | ✅ 完了 | save→walk→diff→restore→CapturesStore |
+| — | 関数シグネチャクエリ | ✅ 完了 | TypeEnvironment.get_var → T/&T/&mut T |
+| — | Spawn walk | ✅ 完了 | save/restore で外層汚染防止、ref エスケープ検出 |
+
+---
+
+## 新アーキテクチャのコアコンポーネント
+
+### `src/frontend/core/typecheck/layers/ownership.rs`（約 1600 行）
+
+| コンポーネント | 機能 |
+|------|------|
+| `BrandId` / `BrandTree` | トークン識別 + 派生ツリー + 競合判定 + コンシューマ追跡 |
+| `ControlFlowGraph` | CFG ノード/エッジ/パス条件、Break/BackEdge |
+| `fast_path_check()` | 逆方向 BFS 活性解析（ファストパス） |
+| `smt_cut()` | SMT 論理切断（スローパス、Z3） |
+| 5 種類のシステム述語 | borrow_conflict / use_after_move / use_after_drop / double_drop / mut_violation |
+| `OwnershipChecker` | AST 走査 + ブランドツリー + CFG + 述語検証 |
+| `ReleasePlan` | NLL 精密解放プラン（コンシューマ + スコープ Drop の二源マージ） |
+| `VarState` | Alive / Moved / Dropped の三状態 |
+| `Captures` / `CapturesStore` | クロージャキャプチャ変数集合 + ストレージ |
+| `StateSnapshot` | save_state / restore_state / diff_captures |
+| `ParamOwnership` | Move / ReadBorrow / WriteBorrow |
+| `ref_vars` / `escaped_refs` / `inside_spawn` | ref エスケープ解析（属性伝播を含む） |
+
+### `src/middle/core/ir_gen.rs`
+
+- `TypeCheckResult.release_plan` を読み取り → `Drop` 命令を挿入（NLL 精密解放ポイント）
+- `TypeCheckResult.escaped_refs` を読み取り → `Expr::Ref` は `RcNew` または `ArcNew` を選択
+
+### `src/middle/core/ir.rs` / `bytecode.rs` / `opcode.rs`
+
+- 新規 `RcNew` 命令 + `Opcode::RcNew(0x89)`
+
+---
+
+## 現在の middle 層モジュール一覧
+
+> 注：`borrow_checker.rs`、`control_flow.rs`、`consume_analysis.rs`、`move_semantics.rs`、
+> `drop_semantics.rs`、`mut_check.rs`、`ref_semantics.rs`、`clone.rs`、`empty_state.rs`、
+> `send_sync.rs` は削除済み。以下は保持されているアクティブモジュール。
+
+| サブモジュール | ファイル | 機能 |
+|--------|------|------|
+| **チェーン呼び出し** | `chain_calls.rs` | チェーンメソッド呼び出し分析 |
+| **クロスタスク環** | `cycle_check.rs` | クロス spawn 循環参照 DFS |
+| **タスク内環** | `intra_task_cycle.rs` | タスク内 ref 循環追跡 |
+| **ライフサイクル** | `lifecycle.rs` | IR レベル Drop 位置追跡 |
+| **所有権フロー** | `ownership_flow.rs` | 関数所有権フロー分析 |
+| **Unsafe** | `unsafe_check.rs` | unsafe ブロックバイパスチェック |
+| **エラー型** | `error.rs` | ValueState + Checker trait |
 
 ---
 
 ## テストカバレッジ
 
-**83 のユニットテスト**、分布は以下の通りです：
+**フロントエンド所有権チェッカー：61 個のユニットテスト**
 
-| ファイル | テスト数 | カバレッジ状況 |
-|------|--------|----------|
-| `borrow_checker.rs` | 16 | 最も充実：ユニットテスト+エンドツーエンドテスト |
-| `chain_calls.rs` | 13 | 充実：チェーン抽出、消費パターン推定、長チェーン、ミックス呼び出し |
-| `consume_analysis.rs` | 11 | 充実：Returns/Consumes パターン、キャッシュ、複数パラメータ |
-| `ownership_flow.rs` | 10 | 充実：直接返り値、間接返り値、複数パラメータの部分返り値 |
-| `lifecycle.rs` | 10 | 充実：作成/消費/解放追跡、問題検出 |
-| `cycle_check.rs` | 8 | 良好：無循環/一方向チェーン/深度制限/unsafe バイパス |
-| `intra_task_cycle.rs` | 7 | 良好：無循環/単純循環/自己参照/複数循環 |
-| `move_semantics.rs` | 6 | 基本：状態追跡、UseAfterMove |
-| `control_flow.rs` | 1 | 不十分：状態マージ関数のみテスト |
-| `empty_state.rs` | 1 | 不十分：状態マージのみテスト |
-| その他 | 0 | テストなし：drop_semantics, clone, mut_check, ref_semantics, unsafe_check, send_sync |
+| テストカテゴリ | テスト数 | カバレッジ内容 |
+|----------|--------|----------|
+| 基本（BrandId/競合/カスケード/コンシューマ/ファストパス） | 17 | トークンプレフィックス、競合判定、カスケード削除、コンシューマ追跡、BFS 活性 |
+| システム述語 | 6 | borrow_conflict / use_after_move / use_after_drop / double_drop / mut_violation |
+| E2E 統合（基本） | 7 | use after move、valid move、argument move、借用競合、書き込み書き込み競合、読み取り読み取り安全 |
+| E2E 可変性 | 5 | &mut 非 mut、&mut mut、代入非 mut、代入 mut、パラメータ非 mut |
+| E2E Drop | 2 | スコープ Drop（ReleasePlan）、ネストブロック Drop |
+| E2E Move+Borrow | 1 | move 後の borrow 検出 |
+| E2E 制御フロー | 2 | if/else 双分岐競合、while ループ内借用 |
+| E2E Drop 順序 | 1 | 複数変数同 span 解放 |
+| E2E 戻り値 | 2 | return Move、return 後 use |
+| E2E 多重借用 | 2 | 三つの ReadToken、Read+Write 競合 |
+| E2E ブロック式 | 1 | 内側ブロック変数スコープ |
+| E2E 連続 Move | 2 | 連続 Move、double move 検出 |
+| E2E パラメータ | 2 | パラメータ move 後 use、パラメータが ReleasePlan に無い |
+| E2E クロージャキャプチャ | 5 | Move キャプチャ、Read キャプチャ、無キャプチャ、定義後呼び出し前、二次呼び出し |
+| E2E 関数シグネチャ | 2 | 未知関数フォールバック Move、未登録関数フォールバック |
+| E2E ref エスケープ | 4 | spawn なしエスケープなし、spawn 内エスケープ、非 ref エスケープなし、ネスト spawn |
 
----
-
-## RFC 比較（RFC-009 所有権モデル）
-
-| RFC 設計要点 | 実装状態 | 説明 |
-|-------------|---------|------|
-| Move セマンティクス（デフォルト） | ✅ 実装済み | MoveChecker が UseAfterMove を検出 |
-| &T/&mut T 借用トークン | ✅ 実装済み | BorrowChecker がトークン競合検出を実装 |
-| &T はコピー可能（Dup） | ✅ 実装済み | 複数の &T トークンを同時に保持可能 |
-| &mut T は線形 | ✅ 実装済み | 同一ソースの &mut T は1つのみ有効 |
-| トークン競合検出（フロースensitive 活性分析） | ✅ 実装済み | 関数本体でトークン状態を追跡 |
-| ref キーワード（Rc/Arc 自動選択） | ⚠️ 部分実装 | ref セマンティクス検査器は存在 |
-| clone() 明示的ディープコピー | ✅ 実装済み | CloneChecker が移動/解放された値の clone を検出 |
-| unsafe + *T | ✅ 実装済み | UnsafeChecker が unsafe ブロック外の生ポインタ操作を検査 |
-| タスク内サイクル：silent 許可 | ✅ 実装済み | IntraTaskCycleTracker が警告モードで追跡 |
-| タスク間サイクル：lint | ✅ 実装済み | CycleChecker が spawn 間循環参照を検出 |
-| ライフサイクル 'a なし | ✅ 設計符合 | ライフサイクルパラメータは実装なし |
-| Send/Sync 制約 | ✅ 実装済み | SendSyncChecker は OwnershipChecker から独立 |
+**middle 層テスト：53 個のユニットテスト**
 
 ---
 
 ## コード品質評価
 
-| 次元 | 評価 | 説明 |
+| ディメンション | 評価 | 説明 |
 |------|------|------|
-| 未完了事項 | 3 | テスト補足、control_flow ロジック、ref エスケープ分析 |
-| テストカバレッジ | 良好 | 83 のテスト、borrow_checker/chain_calls/consume_analysis のテストが充実 |
-| ドキュメント品質 | 良好 | モジュール/構造体/メソッドレベルでドキュメントコメントあり |
-| コードアーキテクチャ | 優秀 | OwnershipChecker が統一構成、責務分離が明確 |
-| RFC 適合性 | 高度に符合 | RFC-009 v9 設計に高度に符合 |
-
----
-
-## 改善待ち項目
-
-1. **5 つのサブモジュールのユニットテスト補足**：drop_semantics, clone, mut_check, ref_semantics, unsafe_check
-2. **control_flow 分析器のコアロジック実装**（現在は空の骨格）
-3. **ref が Rc/Arc を自動選択するエスケープ分析の改善**
+| 未完了事項 | 4 | エラーメッセージ形式統一 (P2) + 段階 0 テスト補完 (5) + 既知の問題 6 件 |
+| テストカバレッジ | 良好 | フロントエンド 61 tests + middle 53 tests = 114 tests |
+| ドキュメント品質 | 良好 | モジュール/構造体/メソッドレベルのドキュメントコメントあり |
+| コードアーキテクチャ | 移行完了 | フロントエンドホーア命题（命题）パイプラインがコアルジックを引き継ぎ済み；middle 層のレガシーファイルは削除済み |

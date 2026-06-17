@@ -1,0 +1,46 @@
+// return_stmt_semantics.yx - 测试 return 语句语义
+//
+// 验证：显式 return 语句正确返回值，无 return 时返回 Unit
+use std.io
+
+fn_no_return: (x: Int) -> () = {
+    io.println(x)
+}
+
+fn_early_return: (x: Int) -> Int = {
+    if x > 0 {
+        return x
+    }
+    io.println("should print for negative")
+    return 0
+}
+
+fn_return_skips_rest: () -> Int = {
+    return 42
+    io.println("FAIL: this should never print")
+    return 0
+}
+
+main = {
+    fn_no_return(99)
+
+    r = fn_early_return(-1)
+    if r != 0 {
+        io.println("FAIL: early_return(-1) should be 0")
+        return
+    }
+
+    r2 = fn_early_return(5)
+    if r2 != 5 {
+        io.println("FAIL: early_return(5) should be 5")
+        return
+    }
+
+    r3 = fn_return_skips_rest()
+    if r3 != 42 {
+        io.println("FAIL: return_skips_rest should be 42")
+        return
+    }
+
+    io.println("ALL TESTS PASSED")
+}

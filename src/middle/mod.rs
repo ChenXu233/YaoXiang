@@ -31,7 +31,6 @@ pub mod passes;
 pub use core::ir::*;
 pub use core::bytecode;
 pub use core::ir_gen::*;
-pub use passes::lifetime::*;
 pub use passes::mono::*;
 pub use passes::module::*;
 pub use passes::codegen;

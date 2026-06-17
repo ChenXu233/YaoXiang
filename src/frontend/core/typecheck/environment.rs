@@ -494,11 +494,13 @@ impl TypeEnvironment {
     }
 
     /// 添加 Trait 实现
+    ///
+    /// 返回 `true` 表示新插入，`false` 表示已存在（冲突）
     pub fn add_trait_impl(
         &mut self,
         impl_: crate::frontend::core::types::TraitImplementation,
-    ) {
-        self.trait_table.add_impl(impl_);
+    ) -> bool {
+        self.trait_table.add_impl(impl_)
     }
 
     /// 检查类型是否实现了 Trait

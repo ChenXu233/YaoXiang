@@ -13,8 +13,7 @@ main = {
 
     result = spawn {
         a = shared    // 共享引用，自动推导跨线程 → Arc
-        b = shared    // ref 是 Dup 类型，可自由复制
-        return (a, b)
+        return a
     }
 
     io.println(result)

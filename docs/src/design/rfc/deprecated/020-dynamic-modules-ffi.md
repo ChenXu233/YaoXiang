@@ -1,7 +1,7 @@
 ---
 title: "RFC-020：动态模块与 FFI 集成"
 status: "已废弃"
-author: "晨煦 (基于与社区讨论的整理)"
+author: "晨煦"
 created: "2026-03-14"
 updated: "2026-06-05（废弃）"
 ---
