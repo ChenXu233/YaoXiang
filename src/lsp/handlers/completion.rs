@@ -11,7 +11,7 @@ use lsp_types::{CompletionItem, CompletionItemKind, CompletionParams, Completion
 use tracing::debug;
 
 use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::parse_with_recovery;
+use crate::frontend::core::parser::parse;
 use crate::frontend::core::parser::ast::{Module, StmtKind};
 use crate::frontend::core::typecheck::semantic_db::DefinitionKind;
 use crate::lsp::session::Session;
@@ -133,7 +133,7 @@ fn document_symbol_items(content: &str) -> Vec<CompletionItem> {
         Err(_) => return Vec::new(),
     };
 
-    let parse_result = parse_with_recovery(&tokens);
+    let parse_result = parse(&tokens);
     extract_symbols_from_module(&parse_result.module)
 }
 

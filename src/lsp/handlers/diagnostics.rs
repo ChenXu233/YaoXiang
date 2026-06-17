@@ -25,7 +25,7 @@ use lsp_types::{
 use tracing::{debug, warn};
 
 use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::parse_with_recovery;
+use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::check_module_collect_all;
 use crate::util::diagnostic::{Diagnostic, Severity};
 use crate::util::span::Span;
@@ -121,7 +121,7 @@ pub fn run_diagnostics(
     };
 
     // 2. 语法分析（含错误恢复）
-    let parse_result = parse_with_recovery(&tokens);
+    let parse_result = parse(&tokens);
 
     if parse_result.has_errors {
         debug!("解析错误 ({} 个): {}", parse_result.errors.len(), uri);

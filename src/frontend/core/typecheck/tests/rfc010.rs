@@ -34,11 +34,10 @@ fn check_source(source: &str) -> crate::frontend::core::typecheck::types::TypeCh
         }
     };
     let module = match parse(&tokens) {
-        Ok(m) => m,
-        Err(e) => {
+        result if result.has_errors => {
             let diag = crate::util::diagnostic::ErrorCodeDefinition::invalid_syntax(&format!(
                 "解析错误: {:?}",
-                e
+                result.errors
             ))
             .build();
             return crate::frontend::core::typecheck::types::TypeCheckResult {
@@ -46,6 +45,7 @@ fn check_source(source: &str) -> crate::frontend::core::typecheck::types::TypeCh
                 ..Default::default()
             };
         }
+        result => result.module,
     };
     let mut checker = TypeChecker::new("test");
     checker.check_module(&module)
