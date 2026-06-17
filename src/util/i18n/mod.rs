@@ -41,6 +41,7 @@ fn load_merged_config() -> ConfigI18n {
 
     // 2. Try to merge project-level config if in a project
     if let Ok(project_dir) = std::env::current_dir() {
+        #[cfg(feature = "cli")]
         if let Ok(manifest) = crate::package::manifest::PackageManifest::load(&project_dir) {
             if let Some(project_i18n) = manifest.i18n {
                 // Project-level overrides user-level

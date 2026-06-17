@@ -104,7 +104,7 @@ fn test_duck_type_basic() {
     );
 
     // 检查 Point 是否满足 Drawable
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let result = checker.check_constraint(&point, &drawable, Some(&env));
     assert!(
         result.is_ok(),
@@ -150,7 +150,7 @@ fn test_duck_type_missing_method() {
     );
 
     // 检查 Point 是否满足 Drawable（应该失败）
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let result = checker.check_constraint(&point, &drawable, Some(&env));
     assert!(
         result.is_err(),
@@ -189,7 +189,7 @@ fn test_duck_type_signature_mismatch() {
     );
 
     // 检查 Point 是否满足 Drawable（应该失败）
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let result = checker.check_constraint(&point, &drawable, Some(&env));
     assert!(
         result.is_err(),
@@ -210,7 +210,7 @@ fn test_duck_type_empty_interface() {
     );
 
     // 空接口应该被任何类型满足
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let result = checker.check_constraint(&point, &empty, Some(&env));
     assert!(
         result.is_ok(),
@@ -256,7 +256,7 @@ fn test_duck_type_multiple_methods() {
     );
 
     // 检查 Data 是否满足 Serializable
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let result = checker.check_constraint(&data, &serializable, Some(&env));
     assert!(
         result.is_ok(),
@@ -292,7 +292,7 @@ fn test_duck_type_field_methods() {
     });
 
     // 检查 Handler 是否满足 Callable
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let result = checker.check_constraint(&handler, &callable, None);
     assert!(
         result.is_ok(),
@@ -331,7 +331,7 @@ fn test_duck_type_no_env() {
     });
 
     // 不提供环境，应该失败（因为 draw 不在字段中）
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let result = checker.check_constraint(&point, &drawable, None);
     assert!(
         result.is_err(),
@@ -389,7 +389,7 @@ fn test_interface_intersection_satisfied() {
         ],
     );
 
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let result = checker.check_constraint(&point, &intersection, Some(&env));
     assert!(
         result.is_ok(),
@@ -435,7 +435,7 @@ fn test_interface_intersection_missing_one() {
         )],
     );
 
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let result = checker.check_constraint(&point, &intersection, Some(&env));
     // Note: Intersection check behavior depends on BoundsChecker implementation
     // If it checks each constraint independently, missing one should fail
@@ -477,7 +477,7 @@ fn test_duck_typing_with_multiple_matching_methods() {
         ],
     );
 
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let result = checker.check_constraint(&data, &display, Some(&env));
     assert!(
         result.is_ok(),
@@ -520,7 +520,7 @@ fn test_duck_typing_with_partial_match() {
         ],
     );
 
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let result = checker.check_constraint(&partial, &trait3, Some(&env));
     assert!(
         result.is_err(),
@@ -540,7 +540,7 @@ fn test_interface_intersection_empty() {
 
     let (point, env) = create_struct("Point", vec![("x", MonoType::Float(64))], vec![]);
 
-    let mut checker = BoundsChecker::new();
+    let checker = BoundsChecker::new();
     let result = checker.check_constraint(&point, &intersection, Some(&env));
     assert!(
         result.is_ok(),

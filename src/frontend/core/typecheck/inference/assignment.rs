@@ -82,7 +82,7 @@ impl AssignmentChecker {
 
         // 如果目标是约束类型，执行约束满足检查（鸭子类型）
         if lhs.is_constraint() {
-            let mut bounds_checker = BoundsChecker::new();
+            let bounds_checker = BoundsChecker::new();
             match bounds_checker.check_constraint(rhs, lhs, env) {
                 Ok(()) => {
                     // 约束满足：判断具体类型是否可在编译期确定

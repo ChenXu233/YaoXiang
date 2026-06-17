@@ -489,16 +489,6 @@ fn test_poly_type_display_and_name() {
 }
 
 #[test]
-fn test_poly_type_instantiate_generalize() {
-    let tv = TypeVar::new(0);
-    let poly = PolyType::new(vec![tv], MonoType::List(Box::new(MonoType::TypeVar(tv))));
-    assert!(poly.instantiate(vec![MonoType::Int(32)], vec![]).is_ok());
-    assert!(poly.instantiate(vec![], vec![]).is_err());
-    let generalized = PolyType::generalize(&MonoType::Bool);
-    assert!(generalized.is_mono());
-}
-
-#[test]
 fn test_type_name_result() {
     let r = MonoType::Result(Box::new(MonoType::Int(32)), Box::new(MonoType::String));
     assert!(r.type_name().contains("Result"));

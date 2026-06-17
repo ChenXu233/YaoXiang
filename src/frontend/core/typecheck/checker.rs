@@ -5,8 +5,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::parser::ast::Module;
-use crate::frontend::core::types::{MonoType, PolyType};
-use crate::frontend::core::typecheck::traits::auto_derive;
+use crate::frontend::core::types::{MonoType, PolyType, TraitTable};
 use crate::frontend::core::types::eval::const_eval::{ConstFunction, ConstExpr as ConstEvalExpr};
 use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
 use crate::frontend::core::typecheck::predicate_resolver::PredicateResolver;
@@ -299,6 +298,24 @@ impl TypeChecker {
             }
         }
 
+        // RFC-027: 所有权检查 — 在终止检查之后、约束求解之前运行
+        // 分析借用令牌冲突、Move/Drop/Clone/Mut 语义（RFC-009a §系统谓词清单）
+        let (release_plan, escaped_refs) = {
+            let mut ownership_checker = super::layers::ownership::OwnershipChecker::new();
+            let (ownership_results, plan, escaped_refs) =
+                ownership_checker.check_module(module, self.env());
+            for result in ownership_results {
+                match result {
+                    ProofResult::Proved => {}
+                    ProofResult::Disproved(model) => {
+                        self.add_error(model.into_diagnostic());
+                    }
+                    ProofResult::Unproven { .. } => {}
+                }
+            }
+            (plan, escaped_refs)
+        };
+
         // 求解所有约束
         let solve_result = self.env.solver().solve();
         if let Err(constraint_errors) = solve_result {
@@ -348,6 +365,13 @@ impl TypeChecker {
         // 所以这里直接使用 scope 中的类型即可，不需要额外 resolve。
         // （注：如果后续需要支持更复杂的泛型推导，可能需要重新设计 solver 的共享机制）
 
+        // 从 body_checker 收集实例化请求
+        let instantiation_requests = if let Some(ref bc) = self.body_checker {
+            bc.instantiation_requests.clone()
+        } else {
+            Vec::new()
+        };
+
         TypeCheckResult {
             module_name: self.env.module_name.clone(),
             diagnostics,
@@ -356,6 +380,9 @@ impl TypeChecker {
             semantic_db: std::mem::take(&mut self.semantic_db),
             trait_table: self.env.trait_table.clone(),
             proof_calls, // Phase 2.5: 由 check_refined_binding 收集
+            release_plan,
+            escaped_refs,
+            instantiation_requests,
         }
     }
 
@@ -940,15 +967,15 @@ impl TypeChecker {
         // 为每个内置可派生 trait 尝试自动派生
         let mut impls_to_add = Vec::new();
 
-        for trait_name in auto_derive::BUILTIN_DERIVES {
+        for trait_name in TraitTable::BUILTIN_DERIVES {
             // 检查是否可以自动派生
-            let can_derive = auto_derive::can_auto_derive(trait_table, trait_name, fields);
+            let can_derive = trait_table.can_auto_derive(trait_name, fields);
 
             if can_derive {
                 // 检查是否已有显式实现
                 if !self.env.has_trait_impl(trait_name, type_name) {
                     // 生成自动派生实现
-                    if let Some(impl_) = auto_derive::generate_auto_derive(type_name, trait_name) {
+                    if let Some(impl_) = TraitTable::generate_auto_derive(type_name, trait_name) {
                         impls_to_add.push(impl_);
                     }
                 }
@@ -957,7 +984,8 @@ impl TypeChecker {
 
         // 批量添加实现（避免借用冲突）
         for impl_ in impls_to_add {
-            self.env.add_trait_impl(impl_);
+            // auto_derive 已有 has_trait_impl 前置检查，这里不会冲突
+            let _ = self.env.add_trait_impl(impl_);
         }
     }
 

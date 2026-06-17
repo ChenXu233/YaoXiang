@@ -45,7 +45,14 @@ docs/.env
 .crush
 .worktrees
 .z3/
+pkg/
+
+# Wasm playground build artifacts
+docs/src/.vitepress/public/wasm/*.wasm
+docs/src/.vitepress/public/wasm/*.js
 
 # i18n translation scripts
 scripts/i18n/.env
 
+# Ignore all files in the wasm directory, but not the directory itself
+docs/public/wasm/*

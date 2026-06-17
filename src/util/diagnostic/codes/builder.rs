@@ -280,21 +280,38 @@ impl I18nRegistry {
 
         static REGISTRIES: LazyLock<HashMap<String, I18nRegistry>> = LazyLock::new(|| {
             let mut map = HashMap::new();
-            let dir = std::path::Path::new("src/util/diagnostic/codes/i18n");
 
-            if let Ok(entries) = std::fs::read_dir(dir) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.extension().map(|e| e == "json").unwrap_or(false) {
-                        // 跳过隐藏文件（如 .i18n-cache.json）
-                        let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
-                        if file_name.starts_with('.') {
-                            continue;
-                        }
-                        if let Some(lang) = path.file_stem().and_then(|s| s.to_str()) {
-                            if let Ok(content) = std::fs::read_to_string(&path) {
-                                let registry = load_i18n_data(&content);
-                                map.insert(lang.to_string(), registry);
+            // Use include_str! for wasm builds (no filesystem), fs for native
+            #[cfg(target_arch = "wasm32")]
+            {
+                let entries: &[(&str, &str)] = &[
+                    ("en", include_str!("i18n/en.json")),
+                    ("zh", include_str!("i18n/zh.json")),
+                    ("ja", include_str!("i18n/ja.json")),
+                    ("ru", include_str!("i18n/ru.json")),
+                ];
+                for (lang, content) in entries {
+                    let registry = load_i18n_data(content);
+                    map.insert(lang.to_string(), registry);
+                }
+            }
+
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let dir = std::path::Path::new("src/util/diagnostic/codes/i18n");
+                if let Ok(entries) = std::fs::read_dir(dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.extension().map(|e| e == "json").unwrap_or(false) {
+                            let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                            if file_name.starts_with('.') {
+                                continue;
+                            }
+                            if let Some(lang) = path.file_stem().and_then(|s| s.to_str()) {
+                                if let Ok(content) = std::fs::read_to_string(&path) {
+                                    let registry = load_i18n_data(&content);
+                                    map.insert(lang.to_string(), registry);
+                                }
                             }
                         }
                     }

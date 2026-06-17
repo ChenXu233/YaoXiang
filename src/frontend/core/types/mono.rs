@@ -794,40 +794,6 @@ impl PolyType {
     pub fn is_mono(&self) -> bool {
         self.type_binders.is_empty() && self.const_binders.is_empty()
     }
-
-    /// 实例化泛型类型
-    pub fn instantiate(
-        &self,
-        type_args: Vec<MonoType>,
-        const_args: Vec<ConstValue>,
-    ) -> Result<MonoType, String> {
-        if type_args.len() != self.type_binders.len() {
-            return Err(format!(
-                "Expected {} type arguments, got {}",
-                self.type_binders.len(),
-                type_args.len()
-            ));
-        }
-
-        if const_args.len() != self.const_binders.len() {
-            return Err(format!(
-                "Expected {} const arguments, got {}",
-                self.const_binders.len(),
-                const_args.len()
-            ));
-        }
-
-        // TODO: 实现类型替换逻辑
-        // 这里应该用 type_args 和 const_args 替换 body 中的对应变量
-        Ok(self.body.clone())
-    }
-
-    /// 泛型化具体类型
-    pub fn generalize(mono_type: &MonoType) -> Self {
-        // TODO: 实现类型泛化逻辑
-        // 找出 mono_type 中不在环境中的类型变量，添加到泛型变量列表中
-        PolyType::mono(mono_type.clone())
-    }
 }
 
 impl fmt::Display for PolyType {

@@ -670,6 +670,11 @@
     "template": "不能克隆 '{name}' 喵~ 值已经被移动走了呢~",
     "help": "值已经被移动走了喵~ 如果想多次使用，要在移动前先克隆喵~"
   },
+  "E2029": {
+    "title": "spawn ref 循环了喵~",
+    "template": "跨任务循环引用喵~ {cycle}",
+    "help": "spawn 块里的 ref 变量形成了引用循环喵~ 用 Weak 打破循环，或者在 unsafe 块里绕过检测喵~"
+  },
   "E3001": {
     "title": "表达式还没实现喵~（IR）",
     "template": "这个表达式类型还没实现喵~ {expr_type}",
@@ -880,5 +885,10 @@
   },
   "_meta": {
     "lastUpdated": "2026-06-13T07:47:17.389Z"
+  },
+  "E2029": {
+    "title": "spawn ref 喵循环",
+    "template": "跨任务喵循环喵引用: {cycle}",
+    "help": "spawn 喵块内的 ref 喵变量喵形成了喵引用喵循环。喵使用 Weak 喵打破喵循环，或在 unsafe 喵块中喵绕过喵检测。"
   }
 }

@@ -12,7 +12,7 @@
 //!
 //! # Crate Features
 //!
-//! - `wasm`: Enable WebAssembly support
+//! - `cli`: CLI-only dependencies (REPL, LSP, hot-reload)
 
 #![doc(html_root_url = "https://docs.rs/yaoxiang")]
 #![warn(rust_2018_idioms)]
@@ -21,9 +21,12 @@
 pub mod backends;
 pub mod formatter;
 pub mod frontend;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod lsp;
 pub mod middle;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod package;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod repl;
 pub mod std;
 
@@ -37,6 +40,7 @@ pub use thiserror::Error;
 pub use backends::{Executor, DebuggableExecutor, ExecutorError, ExecutorResult, ExecutorConfig};
 pub use backends::common::{RuntimeValue, Opcode, Heap, Handle, BumpAllocator};
 pub use backends::interpreter::Interpreter;
+#[cfg(not(target_arch = "wasm32"))]
 pub use repl::Repl;
 
 // Logging
@@ -95,10 +99,13 @@ fn run_with_source_name(
     Ok(())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 use ::std::fs;
+#[cfg(not(target_arch = "wasm32"))]
 use ::std::path::Path;
 
 /// Run the interpreter on a file
+#[cfg(not(target_arch = "wasm32"))]
 pub fn run_file(path: &Path) -> Result<()> {
     let path_str = path.display().to_string();
     debug!("{}", t_cur(MSG::RunFile, Some(&[&path_str])));
@@ -109,6 +116,7 @@ pub fn run_file(path: &Path) -> Result<()> {
 }
 
 /// Build bytecode file (.42)
+#[cfg(not(target_arch = "wasm32"))]
 pub fn build_bytecode(
     source_path: &Path,
     output_path: &Path,
@@ -117,6 +125,7 @@ pub fn build_bytecode(
 }
 
 /// Build bytecode file (.42) with options
+#[cfg(not(target_arch = "wasm32"))]
 pub fn build_bytecode_with_options(
     source_path: &Path,
     output_path: &Path,
@@ -166,6 +175,7 @@ pub fn build_bytecode_with_options(
 }
 
 /// Dump bytecode for debugging
+#[cfg(not(target_arch = "wasm32"))]
 pub fn dump_bytecode(path: &Path) -> Result<()> {
     use crate::middle::passes::codegen::CodegenContext;
 
@@ -516,3 +526,6 @@ fn dump_instructions(
 // =============================================================================
 // FFI End-to-End Tests
 // =============================================================================
+
+#[cfg(test)]
+mod tests;

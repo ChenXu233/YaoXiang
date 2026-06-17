@@ -6,6 +6,8 @@ mod codegen;
 mod codegen_extended;
 #[path = "integration/execution.rs"]
 mod execution;
+#[path = "integration/feature_flags.rs"]
+mod feature_flags;
 #[path = "integration/fstring.rs"]
 mod fstring;
 #[path = "integration/interpreter.rs"]

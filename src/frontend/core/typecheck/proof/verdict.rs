@@ -28,6 +28,16 @@ pub enum DisproofKind {
     PredicateViolation,
     /// 类型等式不成立（两方归约后值不等）→ E4019
     TypeMismatch,
+    // 所有权相关（RFC-009a §系统谓词清单）
+    BorrowConflict,
+    UseAfterMove,
+    UseAfterDrop,
+    DoubleDrop,
+    MutViolation,
+    /// unsafe 解引用违规（在 unsafe 块外解引用裸指针）→ E2027
+    UnsafeViolation,
+    /// spawn 内 ref 循环（ref 变量间形成环形引用）→ E2029
+    SpawnCycleViolation,
 }
 
 /// 证明结果
@@ -62,6 +72,14 @@ pub struct DisproofModel {
 }
 
 impl DisproofModel {
+    /// 从 assignments 中提取指定 key 的值
+    fn extract_var<'a>(
+        assignments: &'a [(String, String)],
+        key: &str,
+    ) -> Option<&'a String> {
+        assignments.iter().find(|(k, _)| k == key).map(|(_, v)| v)
+    }
+
     /// 将反例模型转换为诊断信息
     ///
     /// 根据 `kind` 选择错误码和 i18n 模板，
@@ -103,6 +121,71 @@ impl DisproofModel {
                     builder = builder.at(span);
                 }
 
+                builder.build()
+            }
+            DisproofKind::BorrowConflict => {
+                let name = Self::extract_var(&self.assignments, "token")
+                    .unwrap_or(&String::new())
+                    .clone();
+                let mut builder = ErrorCodeDefinition::mutable_immutable_borrow_conflict(&name);
+                if let Some(span) = self.span {
+                    builder = builder.at(span);
+                }
+                builder.build()
+            }
+            DisproofKind::UseAfterMove => {
+                let name = Self::extract_var(&self.assignments, "variable")
+                    .unwrap_or(&String::new())
+                    .clone();
+                let mut builder = ErrorCodeDefinition::use_after_move(&name);
+                if let Some(span) = self.span {
+                    builder = builder.at(span);
+                }
+                builder.build()
+            }
+            DisproofKind::UseAfterDrop => {
+                let name = Self::extract_var(&self.assignments, "variable")
+                    .unwrap_or(&String::new())
+                    .clone();
+                let mut builder = ErrorCodeDefinition::use_after_drop(&name);
+                if let Some(span) = self.span {
+                    builder = builder.at(span);
+                }
+                builder.build()
+            }
+            DisproofKind::DoubleDrop => {
+                let name = Self::extract_var(&self.assignments, "variable")
+                    .unwrap_or(&String::new())
+                    .clone();
+                let mut builder = ErrorCodeDefinition::double_drop(&name);
+                if let Some(span) = self.span {
+                    builder = builder.at(span);
+                }
+                builder.build()
+            }
+            DisproofKind::MutViolation => {
+                let name = Self::extract_var(&self.assignments, "variable")
+                    .unwrap_or(&String::new())
+                    .clone();
+                let mut builder = ErrorCodeDefinition::immutable_assign(&name);
+                if let Some(span) = self.span {
+                    builder = builder.at(span);
+                }
+                builder.build()
+            }
+            DisproofKind::UnsafeViolation => {
+                let mut builder = ErrorCodeDefinition::unsafe_deref();
+                if let Some(span) = self.span {
+                    builder = builder.at(span);
+                }
+                builder.build()
+            }
+            DisproofKind::SpawnCycleViolation => {
+                let cycle_info = self.constraint.clone();
+                let mut builder = ErrorCodeDefinition::spawn_ref_cycle(&cycle_info);
+                if let Some(span) = self.span {
+                    builder = builder.at(span);
+                }
                 builder.build()
             }
         }

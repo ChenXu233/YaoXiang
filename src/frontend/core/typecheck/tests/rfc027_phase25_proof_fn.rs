@@ -151,11 +151,11 @@ use crate::util::span::Span;
 /// 生成的 AST 结构：
 /// ```text
 /// fn_name: (x: Int) -> Type = {
-///     body_expr
+///     return body_expr
 /// }
 /// ```
 ///
-/// body_expr 被放在尾表达式位置，确保返回 Bool 而非 Unit。
+/// body_expr 通过 return 语句返回 Bool。
 fn make_proof_fn_module(
     fn_name: &str,
     body_expr: Expr,
@@ -183,9 +183,9 @@ fn make_proof_fn_module(
             generic_params: vec![],
             type_annotation: Some(return_type),
             params: vec![param],
-            // body_expr 作为 return 语句
+            // body_expr 通过 return 语句返回
             body: vec![Stmt {
-                kind: StmtKind::Expr(Box::new(body_expr)),
+                kind: StmtKind::Return(Some(Box::new(body_expr))),
                 span: Span::dummy(),
             }],
             is_pub: false,

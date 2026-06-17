@@ -6,7 +6,7 @@ use crate::frontend::core::parser::ast::Type as AstType;
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::middle::passes::mono::instance::{FunctionId, GenericFunctionId, InstantiationRequest};
-use crate::middle::passes::mono::platform_specializer::PlatformConstraint;
+use crate::util::diagnostic::Diagnostic;
 use std::collections::{HashMap, HashSet};
 
 /// 函数单态化相关trait
@@ -73,19 +73,7 @@ pub trait FunctionMonomorphizer {
     );
 
     /// 处理实例化队列
-    fn process_instantiation_queue(&mut self);
-
-    /// 检查是否应该特化
-    fn should_specialize(
-        &self,
-        generic_id: &GenericFunctionId,
-    ) -> bool;
-
-    /// 获取函数的平台约束
-    fn get_function_platform_constraint(
-        &self,
-        func_name: &str,
-    ) -> Option<&PlatformConstraint>;
+    fn process_instantiation_queue(&mut self) -> Result<(), Diagnostic>;
 
     /// 实例化单个函数
     fn instantiate_function(
@@ -149,20 +137,7 @@ impl FunctionMonomorphizer for super::Monomorphizer {
         &self,
         func: &FunctionIR,
     ) -> bool {
-        for param_ty in &func.params {
-            if matches!(param_ty, MonoType::TypeVar(_)) {
-                return true;
-            }
-        }
-        if matches!(func.return_type, MonoType::TypeVar(_)) {
-            return true;
-        }
-        for local_ty in &func.locals {
-            if self.contains_type_var(local_ty) {
-                return true;
-            }
-        }
-        false
+        func.generic_params.is_some()
     }
 
     fn contains_type_var(
@@ -193,26 +168,7 @@ impl FunctionMonomorphizer for super::Monomorphizer {
         &self,
         func: &FunctionIR,
     ) -> Vec<String> {
-        let mut type_params = Vec::new();
-        let mut seen = HashSet::new();
-
-        for param_ty in &func.params {
-            if let MonoType::TypeVar(tv) = param_ty {
-                let name = format!("T{}", tv.index());
-                if seen.insert(name.clone()) {
-                    type_params.push(name);
-                }
-            }
-        }
-
-        if let MonoType::TypeVar(tv) = &func.return_type {
-            let name = format!("T{}", tv.index());
-            if seen.insert(name.clone()) {
-                type_params.push(name);
-            }
-        }
-
-        type_params
+        func.generic_params.clone().unwrap_or_default()
     }
 
     fn collect_instantiation_requests(
@@ -369,23 +325,11 @@ impl FunctionMonomorphizer for super::Monomorphizer {
 
     fn queue_instantiations_for_types(
         &mut self,
-        type_args: &[MonoType],
+        _type_args: &[MonoType],
         _generic_calls: &[(String, Vec<MonoType>)],
     ) {
-        for generic_id in self.generic_functions.keys() {
-            let type_param_count = generic_id.type_params().len();
-            if type_param_count > 0 && type_args.len() >= type_param_count {
-                let matching_args: Vec<MonoType> = type_args[..type_param_count].to_vec();
-                if self.should_specialize(generic_id) {
-                    let request = InstantiationRequest::new(
-                        generic_id.clone(),
-                        matching_args,
-                        crate::util::span::Span::default(),
-                    );
-                    self.instantiation_queue.push(request);
-                }
-            }
-        }
+        // 在新的队列驱动结构中，这个方法主要用于兼容旧接口
+        // 实际的队列操作在 monomorphize 方法中完成
     }
 
     fn add_instantiation_request(
@@ -395,46 +339,11 @@ impl FunctionMonomorphizer for super::Monomorphizer {
     ) {
         let request =
             InstantiationRequest::new(generic_id, type_args, crate::util::span::Span::default());
-        self.instantiation_queue.push(request);
+        self.pending_queue.push_back(request);
     }
 
-    fn process_instantiation_queue(&mut self) {
-        while let Some(request) = self.instantiation_queue.pop() {
-            if !self.should_specialize(&request.generic_id) {
-                continue;
-            }
-            self.instantiate_function(&request);
-        }
-    }
-
-    fn should_specialize(
-        &self,
-        generic_id: &GenericFunctionId,
-    ) -> bool {
-        // 检查函数是否有平台约束
-        let constraint = self.get_function_platform_constraint(generic_id.name());
-
-        match constraint {
-            Some(platform_constraint) => {
-                // 有平台约束，使用决策器判断
-                let decision = self.specialization_decider.decide(platform_constraint);
-                decision.should_specialize()
-            }
-            None => {
-                // 没有平台约束，始终实例化（通用版本）
-                true
-            }
-        }
-    }
-
-    /// 获取函数的平台约束
-    fn get_function_platform_constraint(
-        &self,
-        func_name: &str,
-    ) -> Option<&PlatformConstraint> {
-        self.function_platform_constraints
-            .get(func_name)
-            .and_then(|c| c.as_ref())
+    fn process_instantiation_queue(&mut self) -> Result<(), Diagnostic> {
+        self.process_queue()
     }
 
     fn instantiate_function(
@@ -443,26 +352,22 @@ impl FunctionMonomorphizer for super::Monomorphizer {
     ) -> Option<FunctionId> {
         let key = request.specialization_key();
 
-        if let Some(id) = self.specialization_cache.get(&key) {
-            return Some(id.clone());
+        if self.processed.contains(&key) {
+            return None;
         }
 
         let generic_id = request.generic_id();
-        let generic_func = self.generic_functions.get(generic_id)?;
+        let generic_func = self.generic_functions.get(generic_id.name())?;
 
         let type_args = request.type_args.clone();
         let specialized_name = Self::generate_specialized_name(generic_id.name(), &type_args);
         let func_id = FunctionId::new(specialized_name.clone(), type_args);
 
-        if !self.should_specialize(generic_id) {
-            return None;
-        }
-
         let specialized_func = self.substitute_types(generic_func, &func_id, &request.type_args);
 
-        self.specialization_cache.insert(key, func_id.clone());
-        self.instantiated_functions
-            .insert(func_id.clone(), specialized_func);
+        self.processed.insert(key);
+        self.specialized_functions
+            .insert(specialized_name, specialized_func);
 
         Some(func_id)
     }
@@ -533,6 +438,7 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             locals: new_locals,
             blocks: new_blocks,
             entry: generic_func.entry,
+            generic_params: None,
         }
     }
 
@@ -815,7 +721,7 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             .filter(|f| !self.is_generic_function(f))
             .cloned()
             .collect();
-        for func in self.instantiated_functions.values() {
+        for func in self.specialized_functions.values() {
             output_funcs.push(func.clone());
         }
         ModuleIR {

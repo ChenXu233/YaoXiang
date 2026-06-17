@@ -35,7 +35,9 @@ pub mod suggest;
 // 重新导出
 pub use codes::{ErrorCategory, ErrorCodeDefinition, I18nRegistry, DiagnosticBuilder, ErrorInfo};
 pub use collect::{ErrorCollector, Warning, ErrorFormatter};
-pub use command::{render_explain_output, run_check_command_once, run_check_watch_command};
+pub use command::render_explain_output;
+#[cfg(feature = "cli")]
+pub use command::{run_check_command_once, run_check_watch_command};
 pub use emitter::{TextEmitter, JsonEmitter, EmitterConfig};
 pub use error::{Diagnostic, Severity};
 pub use result::{Result, ResultExt};
@@ -199,6 +201,7 @@ fn format_runtime_stack_trace(
 ///
 /// # 返回
 /// 成功返回 `()`，失败返回错误
+#[cfg(feature = "cli")]
 pub fn run_file_with_diagnostics(
     file: &std::path::PathBuf,
     debug_info: bool,
@@ -231,24 +234,6 @@ pub fn run_file_with_diagnostics(
     let mut compiler = Compiler::new();
     match compiler.compile(&source_file.name, &source_file.content) {
         Ok(module) => {
-            // 统一所有权检查：MutChecker + OwnershipChecker
-            {
-                use crate::middle::passes::lifetime::OwnershipPass;
-                let errors = OwnershipPass::check_module(&module);
-                if !errors.is_empty() {
-                    eprintln!();
-                    for diagnostic in &errors {
-                        let output = render_compile_error(
-                            &diagnostic.message,
-                            source_file,
-                            Some(diagnostic),
-                        );
-                        eprintln!("{}", output);
-                    }
-                    return Err(anyhow::anyhow!("Ownership check failed"));
-                }
-            }
-
             // Generate bytecode
             let mut ctx = CodegenContext::new(module);
             ctx.set_generate_debug_info(debug_info);
@@ -305,6 +290,7 @@ pub fn run_file_with_diagnostics(
 ///
 /// # 返回
 /// 检查成功返回 `()`，失败返回错误
+#[cfg(feature = "cli")]
 pub fn check_file_with_diagnostics(file: &std::path::PathBuf) -> anyhow::Result<()> {
     let result = check_files_with_diagnostics(std::slice::from_ref(file))?;
     if result.error_count > 0 {
@@ -319,6 +305,7 @@ pub fn check_file_with_diagnostics(file: &std::path::PathBuf) -> anyhow::Result<
 ///
 /// 使用 rayon 对文件列表进行并行词法分析和语法分析，返回每个文件的
 /// 路径、模块 ID 和 AST。用于多文件编译场景下的前置解析阶段。
+#[cfg(feature = "cli")]
 pub fn parse_files_parallel(
     files: &[std::path::PathBuf]
 ) -> anyhow::Result<
@@ -436,6 +423,7 @@ fn check_single_module(
 /// 3. 检测循环依赖
 /// 4. 拓扑排序确定编译顺序
 /// 5. 按依赖顺序逐模块检查
+#[cfg(feature = "cli")]
 fn check_modules_with_shared_env(files: &[std::path::PathBuf]) -> anyhow::Result<CheckResult> {
     use crate::frontend::module::dep_graph::ModuleDependencyGraph;
 
@@ -496,6 +484,7 @@ fn check_modules_with_shared_env(files: &[std::path::PathBuf]) -> anyhow::Result
 /// 对多个文件进行静态检查并聚合诊断信息
 ///
 /// 使用依赖图进行拓扑排序，按依赖顺序检查，支持循环依赖检测。
+#[cfg(feature = "cli")]
 pub fn check_files_with_diagnostics(files: &[std::path::PathBuf]) -> anyhow::Result<CheckResult> {
     check_modules_with_shared_env(files)
 }

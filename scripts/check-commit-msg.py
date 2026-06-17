@@ -87,8 +87,6 @@ GUIDANCE = """
            build ci test release meta
   subject  中文，不超过 50 字符
 
-发版格式:  :bookmark: V<版本号>: <发版标题>
-
 常用 emoji 示例:
   :sparkles: feat(parser): 添加闭包语法解析支持
   :bug: fix(repl): 修复多行输入时补全器失效
