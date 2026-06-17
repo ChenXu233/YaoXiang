@@ -31,6 +31,8 @@ pub struct TypeCheckResult {
     pub release_plan: crate::frontend::core::typecheck::layers::ownership::ReleasePlan,
     /// ref 逃逸分析结果（跨 spawn 使用的 ref 变量 → 选 Arc）
     pub escaped_refs: HashSet<String>,
+    /// 实例化请求列表（单态化器使用）
+    pub instantiation_requests: Vec<crate::middle::passes::mono::instance::InstantiationRequest>,
 }
 
 /// 导入信息

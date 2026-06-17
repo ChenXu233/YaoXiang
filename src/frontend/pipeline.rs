@@ -633,7 +633,15 @@ impl Pipeline {
         let _ = _source_file;
 
         match middle::generate_ir(ast, type_result) {
-            Ok(ir) => {
+            Ok(mut ir) => {
+                // 单态化（根据配置决定是否启用）
+                if self.config.mono.enabled && !type_result.instantiation_requests.is_empty() {
+                    let mut mono = middle::passes::mono::Monomorphizer::with_max_depth(
+                        self.config.mono.max_depth,
+                    );
+                    ir = mono.monomorphize(&ir, &type_result.instantiation_requests);
+                }
+
                 let duration = start.elapsed().as_millis() as u64;
                 phase_durations.push((CompilationPhase::IRGeneration, duration));
 
@@ -789,6 +797,7 @@ pub(crate) fn execute_single_proof_fn(
             &params,
             &body_stmts,
             &mut constants,
+            None,
         )
         .map_err(|e| format!("证明函数 '{}' IR 生成失败: {}", call.func_name, e))?;
 
