@@ -13,8 +13,9 @@ fn assert_format_eq(
     input: &str,
     expected: &str,
 ) {
-    let result = format_source(input, &default_options()).unwrap();
-    assert_eq!(result, expected);
+    let result = format_source(input, &default_options())
+        .unwrap_or_else(|e| panic!("Failed to format input {:?}: {}", input, e));
+    assert_eq!(result, expected, "Format mismatch for input: {:?}", input);
 }
 
 #[test]
