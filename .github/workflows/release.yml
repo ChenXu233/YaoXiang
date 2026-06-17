@@ -54,6 +54,15 @@ jobs:
       artifact-prefix: yaoxiang
       retention-days: 30
 
+  build-wasm:
+    name: Build Wasm
+    needs: check-version
+    if: needs.check-version.outputs.should-release == 'true'
+    uses: ./.github/workflows/_build-wasm.yml
+    with:
+      artifact-name: yaoxiang-wasm
+      retention-days: 30
+
   security:
     name: Security Audit
     needs: check-version
@@ -115,7 +124,7 @@ jobs:
 
   release:
     name: Publish Release
-    needs: [check-version, build, security, test]
+    needs: [check-version, build, build-wasm, security, test]
     if: always() && needs.check-version.outputs.should-release == 'true' && !cancelled() && needs.security.result == 'success' && needs.test.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
