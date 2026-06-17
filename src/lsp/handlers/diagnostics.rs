@@ -6,13 +6,13 @@
 //!
 //! 诊断管线：
 //! ```text
-//! 源代码 → tokenize → parse_with_recovery → check_module_collect_all
-//!                          ↓                         ↓
-//!                     ParseError[]              Diagnostic[]
-//!                          ↓                         ↓
+//! 源代码 → tokenize → parse → check_module_collect_all
+//!                          ↓                ↓
+//!                    ParseError[]      Diagnostic[]
+//!                          ↓                ↓
 //!                    parse_error_to_diagnostic   to_lsp_diagnostics
-//!                          ↓                         ↓
-//!                          └─────── 合并 ────────────┘
+//!                          ↓                ↓
+//!                          └──── 合并 ────┘
 //!                                    ↓
 //!                          PublishDiagnosticsParams
 //! ```
@@ -88,7 +88,7 @@ pub fn to_lsp_diagnostics(diagnostics: &[Diagnostic]) -> Vec<LspDiagnostic> {
 ///
 /// 对文档内容运行完整诊断管线
 ///
-/// 流程：tokenize → parse_with_recovery → check_module_collect_all
+/// 流程：tokenize → parse → check_module_collect_all
 ///
 /// 任何阶段的错误都会收集为 LSP 诊断返回。
 /// Lex 错误会短路（无法继续解析），但 parse 错误不影响 typecheck。
@@ -120,7 +120,7 @@ pub fn run_diagnostics(
         }
     };
 
-    // 2. 语法分析（含错误恢复）
+    // 2. 语法分析
     let parse_result = parse(&tokens);
 
     if parse_result.has_errors {
