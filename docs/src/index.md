@@ -10,7 +10,7 @@ hero:
   actions:
     - theme: brand
       text: 🚀 快速开始
-      link: /getting-started
+      link: /tutorial/getting-started
     - theme: alt
       text: 教程
       link: /tutorial/
@@ -19,7 +19,7 @@ hero:
       link: /download
     - theme: alt
       text: GitHub ⇗
-      link: https://github.com/yaoxiang-lang/yaoxiang
+      link: https://github.com/ChenXu233/yaoxiang
 
 tracks:
   track01:
