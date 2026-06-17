@@ -36,6 +36,7 @@ title: "RFC 索引"
 | RFC-030 | [RFC-030: assert 断言机制](./draft/030-assert-mechanism.md) | 晨煦 | 2026-06-15 | 草案 |
 | RFC-031 | [RFC-031：优化级别与 Pass 管理器](./draft/031-optimization-levels.md) | 晨煦 | 2026-06-16 | 草案 |
 | RFC-032 | [RFC-032: spawn 统一表达式修饰 — 消除 spawn for 特殊情况](./draft/032-spawn-unified-expression.md) | 晨煦 | 2026-06-16 | 草案 |
+| RFC-002 | [RFC-002：基于 libuv 的资源类型 IO 实现层](./draft/002-cross-platform-io-libuv.md) | 晨煦 | 2025-01-05 | 草案（重新审核） |
 
 ---
 
@@ -91,7 +92,6 @@ title: "RFC 索引"
 
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
-| RFC-002 | [RFC-002：跨平台I/O与libuv集成](./rejected/002-cross-platform-io-libuv.md) | 晨煦 | 2025-01-05 | 已拒绝 |
 | RFC-003 | [RFC-003：版本规划](./rejected/003-version-planning.md) | 晨煦 | 2025-01-05 | 已拒绝 |
 | RFC-005 | [RFC-005: 自动化CVE安全检查系统](./rejected/005-automated-cve-scanning.md) | 晨煦 | 2025-01-05 | 已拒绝 |
 | RFC-016 | [RFC 016: 量子原生支持与多重后端集成](./rejected/016-quantum-native-support.md) | 晨煦 | 2026-02-13 | 已拒绝 |
