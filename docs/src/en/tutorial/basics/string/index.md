@@ -61,7 +61,7 @@ Common format specifiers:
 | `:d` | Decimal integer | `f"{42:d}"` | `42` |
 | `:x` | Hexadecimal | `f"{255:x}"` | `ff` |
 | `:e` | Scientific notation | `f"{1000:e}"` | `1.000000e+03` |
-| `:s` | String | `f"{"hello":s}"` | `hello` |
+| `:s` | String | `f"{name:s}"` | `hello` |
 
 ## Calling Methods
 
@@ -124,6 +124,7 @@ This means f-strings are not only more concise to write — they perform equally
 
 ## Summary
 
+::: v-pre
 | Feature | Syntax |
 |---------|--------|
 | Basic interpolation | `f"text {var}"` |
@@ -131,3 +132,4 @@ This means f-strings are not only more concise to write — they perform equally
 | Formatting | `f"value: {pi:.2f}"` |
 | Escaping braces | `f"{{not interpolation}}"` |
 | Multi-line | `f"""..."""` |
+:::
