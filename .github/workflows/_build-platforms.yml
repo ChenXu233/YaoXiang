@@ -155,15 +155,19 @@ jobs:
         if: matrix.target == 'aarch64-pc-windows-gnullvm'
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-mingw-w64-aarch64 g++-mingw-w64-aarch64
+          # mingw-w64 元包包含所有架构的交叉编译工具
+          sudo apt-get install -y mingw-w64
 
       - name: Configure linker (aarch64)
         if: matrix.target == 'aarch64-pc-windows-gnullvm'
         run: |
+          # 列出可用的 aarch64 mingw 工具
+          ls /usr/bin/*aarch64*mingw* 2>/dev/null || echo "No aarch64 mingw binaries found"
+          ls /usr/aarch64-w64-mingw32/lib/ 2>/dev/null | head -5 || echo "No aarch64 mingw libs found"
           mkdir -p .cargo
           cat >> .cargo/config.toml << 'TOML'
           [target.aarch64-pc-windows-gnullvm]
-          linker = "aarch64-w64-mingw32-gcc"
+          linker = "rust-lld"
           TOML
 
       - name: Cache cargo
