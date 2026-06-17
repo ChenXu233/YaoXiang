@@ -162,6 +162,7 @@ fn detect_target() -> Option<&'static str> {
     let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     match (os.as_str(), arch.as_str()) {
         ("windows", "x86_64") => Some("x64-win"),
+        ("windows", "aarch64") => Some("arm64-win"),
         ("linux", "x86_64") => Some("x64-glibc-2.39"),
         ("linux", "aarch64") => Some("arm64-glibc-2.38"),
         ("macos", "x86_64") => Some("x64-osx-15.7.3"),
