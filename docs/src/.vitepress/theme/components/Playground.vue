@@ -24,19 +24,19 @@ let wasmModule = null
 const EXAMPLES = {
   hello: {
     label: 'Hello World',
-    code: `main() -> () = () => {\n  print("Hello, YaoXiang!")\n}\n`,
+    code: `main = {\n  println("Hello, YaoXiang!")\n}\n`,
   },
   fibonacci: {
     label: 'Fibonacci',
-    code: `fib(n: Int) -> Int = () => {\n  if n <= 1 {\n    return n\n  }\n  return fib(n - 1) + fib(n - 2)\n}\n\nmain() -> () = () => {\n  let result = fib(10)\n  print("fib(10) = ", result)\n}\n`,
+    code: `fib: (n: Int) -> Int = {\n  if n <= 1 {\n    return n\n  }\n  return fib(n - 1) + fib(n - 2)\n}\n\nmain = {\n  result = fib(10)\n  println("fib(10) = ", result)\n}\n`,
   },
   variables: {
     label: 'Variables',
-    code: `main() -> () = () => {\n  let name = "YaoXiang"\n  let version = 1\n  let pi = 3.14\n  \n  print("Language: ", name)\n  print("Version: ", version)\n  print("Pi: ", pi)\n}\n`,
+    code: `main = {\n  name = "YaoXiang"\n  version = 1\n  pi = 3.14\n\n  println("Language: ", name)\n  println("Version: ", version)\n  println("Pi: ", pi)\n}\n`,
   },
   list_ops: {
     label: 'List Operations',
-    code: `main() -> () = () => {\n  let numbers = [1, 2, 3, 4, 5]\n  print("List: ", numbers)\n  print("Length: ", len(numbers))\n}\n`,
+    code: `main = {\n  numbers = [1, 2, 3, 4, 5]\n  println("List: ", numbers)\n  println("Length: ", numbers.length)\n}\n`,
   },
 }
 
