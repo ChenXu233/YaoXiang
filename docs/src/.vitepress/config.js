@@ -4,6 +4,9 @@ import yaoxiangGrammar from './syntaxes/yaoxiang.tmLanguage.json'
 import enI18n from './i18n/en.json'
 import jaI18n from './i18n/ja.json'
 import ruI18n from './i18n/ru.json'
+import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
+import { groupIconMdPlugin, groupIconVitePlugin } from 'vitepress-plugin-group-icons'
+import { GitChangelog, GitChangelogMarkdownSection } from '@nolebase/vitepress-plugin-git-changelog'
 
 // VitePress 源文件在 src/ 目录下，vitepress-sidebar 从 process.cwd() 解析路径
 // 需要 documentRootPath: '/src' 让插件从 docs/src/ 开始扫描
@@ -55,6 +58,18 @@ export default defineConfig({
         name: "yaoxiang",
         aliases: ["yx"],
       },
+    ],
+    config(md) {
+      md.use(tabsMarkdownPlugin)
+      md.use(groupIconMdPlugin)
+      md.use(GitChangelogMarkdownSection)
+    },
+  },
+
+  vite: {
+    plugins: [
+      groupIconVitePlugin(),
+      GitChangelog({ maxGitLogCount: 5 }),
     ],
   },
 

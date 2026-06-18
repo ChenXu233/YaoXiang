@@ -19,6 +19,7 @@
     "@codemirror/state": "^6.5.0",
     "@codemirror/theme-one-dark": "^6.1.3",
     "@codemirror/view": "^6.36.0",
+    "@nolebase/vitepress-plugin-git-changelog": "^2.18.2",
     "@tailwindcss/postcss": "^4.2.0",
     "@vueuse/core": "^14.2.1",
     "autoprefixer": "^10.4.24",
@@ -30,6 +31,10 @@
     "tailwindcss": "^4.2.0",
     "vitepress": "^1.6.4",
     "vitepress-mermaid-renderer": "^1.1.11",
+    "vitepress-plugin-back-to-top": "^1.0.1",
+    "vitepress-plugin-group-icons": "^1.7.5",
+    "vitepress-plugin-nprogress": "^0.1.1",
+    "vitepress-plugin-tabs": "^0.9.0",
     "vitepress-sidebar": "^1.33.1",
     "vue": "^3.5.28"
   },
