@@ -1,8 +1,6 @@
 # YaoXiang（爻象）编程语言
 
-> 一门实验性的通用编程语言，融合类型论、所有权模型和自然语法的力量。
->
-> 基于《并作模型：万物并作，吾以观复》
+> AI辅助的编译器开发探索。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-v0.7.0--experimental-blue.svg)]()
@@ -91,34 +89,6 @@ main: () -> Void = {
     print("Hello, YaoXiang!")
 }
 ```
-
-## 所有权模型
-
-YaoXiang 采用五级所有权梯度——无 GC，无生命周期标注：
-
-```
-&T / &mut T       Move            ref            clone()         unsafe
-    |                |               |               |               |
-借用令牌          默认            共享持有         深拷贝          裸指针
-零成本            零拷贝          自动Rc/Arc      显式调用        系统级
-```
-
-| 操作 | 成本 | 使用场景 |
-|------|------|----------|
-| `&T` / `&mut T` | 零（编译期令牌，编译后消失） | 只读访问 / 独占可变访问 |
-| Move | 零（指针移动） | 默认——赋值、传参、返回 |
-| `ref` | 低（Rc）/ 中（Arc） | 跨作用域共享持有 |
-| `clone()` | 视类型而定 | 需要独立副本 |
-| `unsafe` + `*T` | 零（直接内存操作） | FFI、系统级编程 |
-
-**核心设计决策：**
-- **无生命周期标注**（`'a`）——令牌是值，由 RAII 统一管理生命周期
-- **无借用检查器**——类型属性（Dup/Linear）自然推导权限
-- **无 GC**——确定性资源管理
-- **编译器自动选择 Rc/Arc**——`ref` 不跨任务用 Rc，跨任务用 Arc
-
-详见 [RFC-009：所有权模型设计](docs/src/design/rfc/accepted/009-ownership-model.md)。
-
 
 ## 类型系统
 
@@ -238,19 +208,6 @@ yaoxiang/
 ```
 
 
-## 设计理念
-
-YaoXiang 的设计哲学可以用五句话概括：
-
-```
-一切皆类型 → 统一抽象 → 类型即数据 → 运行时可用
-所有权模型 → 零成本抽象 → 无GC → 高性能
-Python语法 → 自然语言感 → 可读性 → 新手友好
-并作模型 → 惰性求值 → 自动并行 → 无感并发
-类型安全 → 编译时检查 → 数据竞争 → 线程安全
-```
-
-
 ## 与现有语言的对比
 
 | 特性 | YaoXiang | Rust | Python | TypeScript | Go |
@@ -277,11 +234,6 @@ Python语法 → 自然语言感 → 可读性 → 新手友好
 | [RFC-011](docs/src/design/rfc/accepted/011-generic-type-system.md) | 泛型系统 | 值依赖类型，零成本抽象 |
 
 ---
-
-## 路线图
-
-详细实现状态和未来计划，请查看 [实现路线图](docs/plan/IMPLEMENTATION-ROADMAP.md)。
-
 
 ## 贡献
 
@@ -329,8 +281,3 @@ YaoXiang 的设计灵感来自以下项目和语言：
 [![Star History Chart](https://api.star-history.com/svg?repos=ChenXu233/YaoXiang&type=Date)](https://star-history.com/#ChenXu233/YaoXiang&Date)
 
 </div>
-
----
-
-
-> 🌐 **English version**: [README.en.md](docs/gh/README.en.md)
