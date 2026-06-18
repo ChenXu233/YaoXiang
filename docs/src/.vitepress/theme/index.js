@@ -6,7 +6,7 @@ import { h, nextTick, watch } from 'vue'
 import { useData } from 'vitepress'
 import { createMermaidRenderer } from 'vitepress-mermaid-renderer'
 import VersionSwitcher from './components/VersionSwitcher.vue'
-import Playground from "./layout/Playground.vue";
+import Playground from "./components/Playground.vue";
 import Home from "./layout/Home.vue";
 import Download from "./layout/Download.vue";
 import Community from "./layout/Community.vue";
