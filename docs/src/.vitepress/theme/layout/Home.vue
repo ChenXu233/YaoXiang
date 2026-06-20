@@ -14,23 +14,6 @@ let isDeleting = false
 let isFirstRun = true
 let hasStarted = false
 
-// Code Showcase Copy
-const copySuccess = ref(false)
-const codeContent = `yaoxiang new universe
-Creating project...
-type Universe = {
-    matter: Amount,
-    energy: Amount,
-    expand: (self) -> Void = ...
-}
-Done in 0.04s ✨`
-
-const copyCode = async () => {
-  await navigator.clipboard.writeText(codeContent)
-  copySuccess.value = true
-  setTimeout(() => copySuccess.value = false, 2000)
-}
-
 const targetText = computed(() => frontmatter.value?.hero?.text || '')
 
 const typeWriter = () => {
@@ -115,7 +98,7 @@ const codeTransform = computed(() => {
 </script>
 
 <template>
-  <div class="retro-home min-h-screen bg-base-100 font-monoselection:bg-primary selection:text-primary-content">
+  <div class="retro-home min-h-screen bg-base-100 font-mono selection:bg-primary/30 selection:text-base-content">
     
     <!-- Hero Section -->
     <div class="hero min-h-[80vh] border-b-4 border-primary/20 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-base-200 via-base-100 to-base-100">
@@ -124,25 +107,18 @@ const codeTransform = computed(() => {
         <!-- Retro Code Showcase (Right Side) -->
         <div
           :style="codeTransform"
-          class="code-showcase border-2 border-primary shadow-[8px_8px_0px_rgba(255,62,0,0.4)] w-full max-w-lg rounded-lg overflow-hidden [transform-style:preserve-3d]"
+          class="code-showcase border-2 border-primary shadow-[8px_8px_0px_var(--color-primary)] w-full max-w-lg rounded-lg overflow-hidden [transform-style:preserve-3d]"
         >
           <!-- Window Title Bar -->
-          <div class="window-header flex items-center justify-between px-4 py-2 bg-base-200 dark:bg-[#2a2a2a] border-b border-base-300 dark:border-base-content/20">
+          <div class="window-header flex items-center px-4 py-2 bg-base-200 dark:bg-[#2a2a2a] border-b border-base-300 dark:border-base-content/20">
             <div class="flex gap-2">
               <span class="window-btn w-3 h-3 rounded-full bg-[#ff5f56]"></span>
               <span class="window-btn w-3 h-3 rounded-full bg-[#ffbd2e]"></span>
               <span class="window-btn w-3 h-3 rounded-full bg-[#27ca40]"></span>
             </div>
-            <button
-              @click="copyCode"
-              class="copy-btn text-xs font-mono px-3 py-1 rounded transition-all"
-              :class="copySuccess ? 'bg-success text-success-content' : 'bg-base-300 hover:bg-primary hover:text-primary-content'"
-            >
-              {{ copySuccess ? 'COPIED!' : 'COPY' }}
-            </button>
           </div>
           <!-- Code Content -->
-          <div class="mockup-code bg-transparent text-sm p-4 overflow-x-auto">
+          <div class="code-content bg-transparent text-sm p-4 overflow-x-auto text-base-content">
             <pre data-prefix="$"><code>yaoxiang new universe</code></pre>
             <pre data-prefix=">" class="text-success"><code>Creating project...</code></pre>
             <pre data-prefix=">"><code><span class="text-warning">Universe: Type</span> = {</code></pre>
@@ -186,8 +162,7 @@ const codeTransform = computed(() => {
               v-for="(action, index) in frontmatter.hero.actions"
               :key="action.text"
               :href="withBase(action.link)"
-              class="btn btn-lg h-14 text-lg rounded-none border-2 shadow-[4px_4px_0px_currentColor] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_currentColor] transition-all font-black uppercase w-full"
-              :class="action.theme === 'brand' ? 'btn-primary border-primary' : 'btn-outline border-base-content hover:bg-base-content hover:text-base-100'"
+              class="btn btn-lg h-14 text-lg rounded-none border-2 shadow-[4px_4px_0px_currentColor] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_currentColor] transition-all font-black uppercase w-full btn-outline border-base-content"
             >
               {{ action.text }}
             </a>
@@ -421,7 +396,7 @@ const codeTransform = computed(() => {
   display: inline-block;
   width: 4em;
   height: 1.2em;
-  background: hsl(var(--bc));
+  background: oklch(var(--bc));
   animation: cursor-blink 1s step-end infinite;
   margin-left: 2px;
   vertical-align: middle;
@@ -432,14 +407,14 @@ const codeTransform = computed(() => {
 }
 
 .install-box {
-  border-left: 3px solid hsl(var(--p));
+  border-left: 3px solid oklch(var(--p));
   transition: all 0.2s ease;
 }
 
 .install-box:hover {
-  border-left-color: hsl(var(--su));
+  border-left-color: oklch(var(--su));
   transform: translateX(4px);
-  box-shadow: 6px 6px 0px hsl(var(--su) / 0.3) !important;
+  box-shadow: 6px 6px 0px oklch(var(--su) / 0.3) !important;
 }
 
 @keyframes cursor-blink {
@@ -450,7 +425,7 @@ const codeTransform = computed(() => {
 .glitch-text {
   position: relative;
   display: inline-block;
-  color: hsl(var(--bc));
+  color: oklch(var(--bc));
 }
 
 .glitch-text::before,
@@ -461,6 +436,20 @@ const codeTransform = computed(() => {
   left: 0;
   width: 100%;
   height: 100%;
+}
+
+/* Code block prefix styling (replaces mockup-code) */
+.code-content {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.code-content pre[data-prefix]::before {
+  content: attr(data-prefix);
+  display: inline-block;
+  text-align: right;
+  width: 1.5rem;
+  opacity: 0.5;
+  margin-right: 0.75rem;
 }
 
 </style>

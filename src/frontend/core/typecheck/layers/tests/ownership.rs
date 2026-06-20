@@ -1739,7 +1739,9 @@ fn parse_module(source: &str) -> crate::frontend::core::parser::ast::Module {
     use crate::frontend::core::parser::parse;
 
     let tokens = tokenize(source).unwrap();
-    parse(&tokens).unwrap()
+    let result = parse(&tokens);
+    assert!(!result.has_errors, "parse failed: {:?}", result.errors);
+    result.module
 }
 
 // ── unsafe_check 测试 ──────────────────────────────────
