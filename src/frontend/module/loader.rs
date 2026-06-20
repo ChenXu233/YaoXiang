@@ -126,9 +126,22 @@ impl ModuleLoader {
         })?;
 
         // 语法分析
-        let ast = parse(&tokens).map_err(|e| ModuleError::InvalidPath {
-            path: format!("{}: {}", file_path.display(), e),
-        })?;
+        let parse_result = parse(&tokens);
+        if parse_result.has_errors {
+            return Err(ModuleError::InvalidPath {
+                path: format!(
+                    "{}: {}",
+                    file_path.display(),
+                    parse_result
+                        .errors
+                        .into_iter()
+                        .next()
+                        .map(|e| e.to_string())
+                        .unwrap_or_else(|| "Unknown parse error".to_string())
+                ),
+            });
+        }
+        let ast = parse_result.module;
 
         // 提取导出项
         let module = Self::extract_exports(module_path, &ast, &ModuleSource::User);

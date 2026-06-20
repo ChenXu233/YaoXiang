@@ -1,7 +1,10 @@
 # ガイド
 
-YaoXiang 言語の使用ガイドで、素早く始める方法和 YaoXiang 言語の中核となる機能を身に付けるのに役立ちます。
+YaoXiang言語の使用ガイド。YaoXiang言語を素早く習得し、その中核機能をマスターするのに役立ちます。
 
 ## 目次
 
-- [パッケージングガイド](./packaging.md) - YaoXiang プロジェクトの梱包と配布の方法を学びます
+- [構文クイックリファレンス](./language-overview.md) - 5分でわかるYaoXiangの構文
+- [パッケージングガイド](./packaging.md) - YaoXiangプロジェクトのパッケージングと配布方法を学ぶ
+- [CI統合](./ci-integration.md) - CI/CDでYaoXiangを使用する
+- [REPLインタラクティブ環境](./repl.md) - REPLを使ったインタラクティブプログラミング

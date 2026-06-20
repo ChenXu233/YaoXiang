@@ -6,9 +6,10 @@ use crate::frontend::core::parser::ast::StmtKind;
 
 fn parse_use(source: &str) -> StmtKind {
     let tokens = tokenize(source).unwrap();
-    let module = parse(&tokens).unwrap();
-    assert_eq!(module.items.len(), 1);
-    module.items.into_iter().next().unwrap().kind
+    let result = parse(&tokens);
+    assert!(!result.has_errors);
+    assert_eq!(result.module.items.len(), 1);
+    result.module.items.into_iter().next().unwrap().kind
 }
 
 // ============================================================================

@@ -1,6 +1,6 @@
 ---
 name: Task
-description: 创建开发任务或追踪项
+description: Create a development task or tracking item
 labels: ["task"]
 assignees: []
 
@@ -8,88 +8,88 @@ body:
   - type: dropdown
     id: task_type
     attributes:
-      label: 任务类型 (Task Type)
-      description: 选择任务类型
+      label: Task Type
+      description: Select the task type
       options:
-        - Implementation（功能实现）
-        - Research（调研）
-        - Documentation（文档）
-        - Testing（测试）
-        - Refactoring（重构）
-        - CI/CD（持续集成）
-        - Other（其他）
+        - Implementation
+        - Research
+        - Documentation
+        - Testing
+        - Refactoring
+        - CI/CD
+        - Other
     validations:
       required: true
 
   - type: dropdown
     id: component
     attributes:
-      label: 相关组件 (Affected Component)
-      description: 这个任务影响到哪个组件
+      label: Affected Component
+      description: Which component does this task affect
       options:
-        - Lexer（词法分析器）
-        - Parser（解析器）
-        - Type Checker（类型检查器）
-        - IR（中间表示）
-        - Codegen（代码生成）
-        - Runtime（运行时）
-        - CLI/Tools（命令行工具）
-        - Docs（文档）
-        - Infrastructure（基础设施）
-        - Other（其他）
+        - Lexer
+        - Parser
+        - Type Checker
+        - IR
+        - Codegen
+        - Runtime
+        - CLI/Tools
+        - Docs
+        - Infrastructure
+        - Other
 
   - type: dropdown
     id: priority
     attributes:
-      label: 优先级 (Priority)
-      description: 任务的重要程度
+      label: Priority
+      description: How important is this task
       options:
-        - P0 - Critical（紧急）
-        - P1 - High（高）
-        - P2 - Medium（中）
-        - P3 - Low（低）
+        - P0 - Critical
+        - P1 - High
+        - P2 - Medium
+        - P3 - Low
     validations:
       required: true
 
   - type: dropdown
     id: status
     attributes:
-      label: 初始状态 (Initial Status)
-      description: 任务的当前状态
+      label: Initial Status
+      description: Current status of the task
       options:
-        - todo - To Do（待处理）
-        - in_progress - In Progress（进行中）
-        - blocked - Blocked（阻塞）
+        - todo - To Do
+        - in_progress - In Progress
+        - blocked - Blocked
     validations:
       required: true
 
   - type: textarea
     id: description
     attributes:
-      label: 任务描述 (Description)
-      description: 详细描述这个任务的内容和目标
+      label: Description
+      description: Describe the task content and objectives in detail
       placeholder: |
-        描述这个任务要做什么...
+        Describe what this task should accomplish...
 
   - type: textarea
     id: deliverables
     attributes:
-      label: 交付物 (Deliverables)
-      description: 任务完成后的预期产出
+      label: Deliverables
+      description: Expected outputs when the task is complete
       placeholder: |
-        - [ ] 新增功能 X
-        - [ ] 修改文件 Y
-        - [ ] 添加测试 Z
+        - [ ] Add feature X
+        - [ ] Modify file Y
+        - [ ] Add tests Z
 
   - type: input
     id: dependencies
     attributes:
-      label: 依赖任务 (Dependencies)
-      description: 此任务依赖的其他 Issue 编号（用逗号分隔）
+      label: Dependencies
+      description: Other issue numbers this task depends on (comma separated)
       placeholder: e.g. #123, #456
 
   - type: textarea
     id: additional
     attributes:
-      label: 额外上下文 (Additional Context)
-      description: 任何其他有助于理解这个任务的信息
+      label: Additional Context
+      description: Any other information that helps understand this task

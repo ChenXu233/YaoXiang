@@ -4,6 +4,9 @@ import yaoxiangGrammar from './syntaxes/yaoxiang.tmLanguage.json'
 import enI18n from './i18n/en.json'
 import jaI18n from './i18n/ja.json'
 import ruI18n from './i18n/ru.json'
+import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
+import { groupIconMdPlugin, groupIconVitePlugin } from 'vitepress-plugin-group-icons'
+import { GitChangelog, GitChangelogMarkdownSection } from '@nolebase/vitepress-plugin-git-changelog'
 
 // VitePress 源文件在 src/ 目录下，vitepress-sidebar 从 process.cwd() 解析路径
 // 需要 documentRootPath: '/src' 让插件从 docs/src/ 开始扫描
@@ -55,6 +58,18 @@ export default defineConfig({
         name: "yaoxiang",
         aliases: ["yx"],
       },
+    ],
+    config(md) {
+      md.use(tabsMarkdownPlugin)
+      md.use(groupIconMdPlugin)
+      md.use(GitChangelogMarkdownSection)
+    },
+  },
+
+  vite: {
+    plugins: [
+      groupIconVitePlugin(),
+      GitChangelog({ maxGitLogCount: 5 }),
     ],
   },
 
@@ -119,6 +134,16 @@ export default defineConfig({
                 scanStartPath: "/tutorial/basics",
                 useTitleFromFrontmatter: true,
                 collapsed: true,
+              }),
+            },
+            {
+              text: "进阶",
+              collapsed: true,
+              items: generateSidebar({
+                scanStartPath: "/tutorial/advanced",
+                useTitleFromFrontmatter: true,
+                collapsed: true,
+                hyphenToSpace: true,
               }),
             },
             {
@@ -391,6 +416,7 @@ export default defineConfig({
               text: "指南",
               items: [
                 { text: "指南目录", link: "/guide/" },
+                { text: "语法速查", link: "/guide/language-overview" },
                 { text: "包管理系统", link: "/guide/packaging" },
                 { text: "CI 集成", link: "/guide/ci-integration" },
                 { text: "REPL 交互环境", link: "/guide/repl" },
@@ -402,7 +428,7 @@ export default defineConfig({
             {
               text: "中文文档",
               items: [
-                { text: "快速开始", link: "/getting-started" },
+                { text: "快速开始", link: "/tutorial/getting-started" },
                 { text: "教程", link: "/tutorial/" },
                 { text: "指南", link: "/guide/" },
                 { text: "参考", link: "/reference/" },

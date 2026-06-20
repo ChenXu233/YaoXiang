@@ -16,7 +16,7 @@ use lsp_types::{
 };
 
 use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::parse_with_recovery;
+use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::check_module_collect_all;
 use crate::lsp::handlers::diagnostics::{
     to_lsp_diagnostic, to_lsp_diagnostics, run_diagnostics, clear_diagnostics,
