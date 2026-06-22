@@ -14,7 +14,7 @@ use lsp_types::{
 };
 
 use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::parse_with_recovery;
+use crate::frontend::core::parser::parse;
 use crate::frontend::core::parser::ast::{Module, StmtKind};
 use crate::frontend::core::typecheck::semantic_db::DefinitionKind;
 use crate::lsp::handlers::completion::{

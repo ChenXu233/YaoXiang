@@ -327,8 +327,20 @@ pub fn parse_files_parallel(
                 .map_err(|e| anyhow::anyhow!("Failed to read {}: {}", file.display(), e))?;
             let tokens = tokenize(&source)
                 .map_err(|e| anyhow::anyhow!("Lexer error in {}: {}", file.display(), e))?;
-            let ast = parse(&tokens)
-                .map_err(|e| anyhow::anyhow!("Parser error in {}: {}", file.display(), e))?;
+            let parse_result = parse(&tokens);
+            if parse_result.has_errors {
+                return Err(anyhow::anyhow!(
+                    "Parser error in {}: {}",
+                    file.display(),
+                    parse_result
+                        .errors
+                        .into_iter()
+                        .next()
+                        .map(|e| e.to_string())
+                        .unwrap_or_else(|| "Unknown parse error".to_string())
+                ));
+            }
+            let ast = parse_result.module;
             let module_name = file
                 .file_stem()
                 .unwrap_or_default()

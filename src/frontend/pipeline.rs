@@ -458,20 +458,26 @@ impl Pipeline {
         self.event_bus.emit(ParsingStart::new(tokens.len()));
 
         let ast = match super::core::parser::parse(tokens) {
-            Ok(ast) => ast,
-            Err(e) => {
+            result if result.has_errors => {
                 let duration = start.elapsed().as_millis() as u64;
                 phase_durations.push((CompilationPhase::Parsing, duration));
 
                 self.event_bus.emit(ParsingComplete::new(0, duration));
+                let error_msg = result
+                    .errors
+                    .into_iter()
+                    .next()
+                    .map(|e| e.to_string())
+                    .unwrap_or_else(|| "Unknown parse error".to_string());
                 self.event_bus.emit(ErrorOccurred::new(
-                    e.to_string(),
+                    error_msg.clone(),
                     "E0200",
                     ErrorLevel::Error,
                 ));
 
-                return ParseResult::failed(vec![e.to_string()]);
+                return ParseResult::failed(vec![error_msg]);
             }
+            result => result.module,
         };
 
         let duration = start.elapsed().as_millis() as u64;

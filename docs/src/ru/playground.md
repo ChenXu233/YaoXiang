@@ -1,12 +1,8 @@
 ---
 layout: page
 sidebar: false
-title: "Песочница"
+title: "Площадка"
 permalink: /playground/
 ---
-
-<script setup>
-import Playground from '../.vitepress/theme/components/Playground.vue'
-</script>
 
 <Playground />

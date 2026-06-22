@@ -38,6 +38,7 @@ cache/
 dist/
 
 superpowers/
+.superpowers
 
 .env
 docs/.env
