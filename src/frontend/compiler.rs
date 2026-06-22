@@ -146,7 +146,18 @@ impl Compiler {
         &mut self,
         tokens: &[super::core::lexer::Token],
     ) -> Result<super::core::parser::Module, CompileError> {
-        super::core::parser::parse(tokens).map_err(CompileError::Parse)
+        let result = super::core::parser::parse(tokens);
+        if result.has_errors {
+            Err(CompileError::Parse(
+                result.errors.into_iter().next().unwrap_or_else(|| {
+                    crate::util::diagnostic::ErrorCodeDefinition::unexpected_token("unknown")
+                        .at(crate::util::span::Span::dummy())
+                        .build()
+                }),
+            ))
+        } else {
+            Ok(result.module)
+        }
     }
 
     /// 只进行类型检查

@@ -1,36 +1,185 @@
 @import "tailwindcss";
 
+/* ===== 自定义主题：yaoxiang-latte（亮色/宣纸朱印） ===== */
+@plugin "daisyui/theme" {
+  name: "yaoxiang-latte";
+  default: true;
+  prefersdark: false;
+  color-scheme: "light";
+  --color-base-100: oklch(98% 0.008 85);
+  --color-base-200: oklch(93% 0.016 85);
+  --color-base-300: oklch(88% 0.03 85);
+  --color-base-content: oklch(18% 0.02 85);
+  --color-primary: oklch(55% 0.24 28);
+  --color-primary-content: oklch(98% 0.005 85);
+  --color-secondary: oklch(45% 0.05 85);
+  --color-secondary-content: oklch(98% 0.005 85);
+  --color-accent: oklch(60% 0.12 180);
+  --color-accent-content: oklch(15% 0.02 180);
+  --color-neutral: oklch(28% 0.02 85);
+  --color-neutral-content: oklch(90% 0.01 85);
+  --color-info: oklch(55% 0.15 250);
+  --color-info-content: oklch(95% 0.01 250);
+  --color-success: oklch(55% 0.18 155);
+  --color-success-content: oklch(95% 0.01 155);
+  --color-warning: oklch(65% 0.18 75);
+  --color-warning-content: oklch(97% 0.01 75);
+  --color-error: oklch(50% 0.20 25);
+  --color-error-content: oklch(97% 0.01 25);
+  --radius-box: 0rem;
+  --radius-selector: 0rem;
+  --radius-field: 0rem;
+  --radius-toggle: 0rem;
+  --radius-btn: 0px;
+}
+
+/* ===== 自定义主题：yaoxiang-coal（暗色/碑石拓本） ===== */
+@plugin "daisyui/theme" {
+  name: "yaoxiang-coal";
+  default: false;
+  prefersdark: true;
+  color-scheme: "dark";
+  --color-base-100: oklch(14% 0.008 250);
+  --color-base-200: oklch(20% 0.01 250);
+  --color-base-300: oklch(26% 0.015 250);
+  --color-base-content: oklch(82% 0.01 250);
+  --color-primary: oklch(58% 0.20 18);
+  --color-primary-content: oklch(98% 0.005 85);
+  --color-secondary: oklch(48% 0.04 245);
+  --color-secondary-content: oklch(98% 0.01 250);
+  --color-accent: oklch(60% 0.10 185);
+  --color-accent-content: oklch(15% 0.02 185);
+  --color-neutral: oklch(10% 0.008 250);
+  --color-neutral-content: oklch(80% 0.01 250);
+  --color-info: oklch(55% 0.12 250);
+  --color-info-content: oklch(95% 0.01 250);
+  --color-success: oklch(55% 0.15 155);
+  --color-success-content: oklch(95% 0.01 155);
+  --color-warning: oklch(60% 0.15 75);
+  --color-warning-content: oklch(97% 0.01 75);
+  --color-error: oklch(50% 0.18 25);
+  --color-error-content: oklch(97% 0.01 25);
+  --radius-box: 0rem;
+  --radius-selector: 0rem;
+  --radius-field: 0rem;
+  --radius-toggle: 0rem;
+  --radius-btn: 0px;
+}
+
+/* ===== daisyUI 主配置 ===== */
 @plugin "daisyui" {
-  themes: yaoxiang --default, dark, light;
+  themes: yaoxiang-latte --default, yaoxiang-coal;
+    exclude: rootscrollgutter;
 }
 
+/* ===== 暗色模式适配（VitePress .dark class） ===== */
 @variant dark (&:where(.dark, .dark *));
-/* 自定义样式 */
+/* ===== VitePress 全量变量映射到 daisyUI ===== */
 :root {
-  --vp-c-brand: #6366f1;
-  --vp-c-brand-light: #818cf8;
-  --vp-c-brand-dark: #4f46e5;
+  /* 品牌色 */
+  --vp-c-brand-1: var(--color-primary);
+  --vp-c-brand-2: var(--color-secondary);
+  --vp-c-brand-3: var(--color-accent);
+  --vp-c-brand-soft: oklch(from var(--color-primary) l c h / 14%);
+  /* 页面背景 */
+  --vp-c-bg: var(--color-base-100);
+  --vp-c-bg-soft: var(--color-base-200);
+  --vp-c-bg-soft-up: var(--color-base-200);
+  --vp-c-bg-soft-down: var(--color-base-300);
+  --vp-c-bg-soft-mute: var(--color-base-200);
+  --vp-c-bg-alt: var(--color-base-200);
+  --vp-c-bg-elv: var(--color-base-200);
+  --vp-c-bg-mute: var(--color-base-200);
+  /* 文字 */
+  --vp-c-text-1: var(--color-base-content);
+  --vp-c-text-2: oklch(from var(--color-base-content) l c h / 60%);
+  --vp-c-text-3: oklch(from var(--color-base-content) l c h / 38%);
+  /* 边框/分割线 */
+  --vp-c-border: var(--color-base-300);
+  --vp-c-divider: var(--color-base-300);
+  --vp-c-gutter: var(--color-base-100);
+  /* 导航栏 */
+  --vp-nav-bg-color: var(--color-base-100);
+  --vp-nav-screen-bg-color: var(--color-base-100);
+  --vp-local-nav-bg-color: var(--color-base-200);
+  /* 侧边栏 */
+  --vp-sidebar-bg-color: var(--color-base-100);
+  /* 代码块 */
+  --vp-code-block-bg: var(--color-base-200);
+  --vp-code-tab-bg: var(--color-base-300);
+  --vp-code-line-highlight-color: oklch(from var(--color-primary) l c h / 10%);
+  /* 自定义区块 */
+  --vp-custom-block-tip-bg: oklch(from var(--color-success) l c h / 10%);
+  --vp-custom-block-tip-border: var(--color-success);
+  --vp-custom-block-info-bg: oklch(from var(--color-info) l c h / 10%);
+  --vp-custom-block-info-border: var(--color-info);
+  --vp-custom-block-warning-bg: oklch(from var(--color-warning) l c h / 10%);
+  --vp-custom-block-warning-border: var(--color-warning);
+  --vp-custom-block-danger-bg: oklch(from var(--color-error) l c h / 10%);
+  --vp-custom-block-danger-border: var(--color-error);
+  /* 阴影 */
+  --vp-shadow-1: 0 1px 2px rgba(0,0,0,0.04);
+  --vp-shadow-2: 0 3px 6px rgba(0,0,0,0.06);
+  --vp-shadow-3: 0 8px 16px rgba(0,0,0,0.08);
 }
 
-/* 暗色模式下的自定义颜色适配 */
 .dark {
-  --bg-primary: #1a1a1a;
-  --text-primary: #e5e7eb;
+  --vp-c-brand-1: var(--color-primary);
+  --vp-c-brand-2: var(--color-secondary);
+  --vp-c-brand-3: var(--color-accent);
+  --vp-c-brand-soft: oklch(from var(--color-primary) l c h / 14%);
+  --vp-c-bg: var(--color-base-100);
+  --vp-c-bg-soft: var(--color-base-200);
+  --vp-c-bg-soft-up: var(--color-base-200);
+  --vp-c-bg-soft-down: var(--color-base-300);
+  --vp-c-bg-soft-mute: var(--color-base-200);
+  --vp-c-bg-alt: var(--color-base-200);
+  --vp-c-bg-elv: var(--color-base-200);
+  --vp-c-bg-mute: var(--color-base-200);
+  --vp-c-text-1: var(--color-base-content);
+  --vp-c-text-2: oklch(from var(--color-base-content) l c h / 60%);
+  --vp-c-text-3: oklch(from var(--color-base-content) l c h / 38%);
+  --vp-c-border: var(--color-base-300);
+  --vp-c-divider: var(--color-base-300);
+  --vp-c-gutter: var(--color-base-100);
+  --vp-nav-bg-color: var(--color-base-100);
+  --vp-nav-screen-bg-color: var(--color-base-100);
+  --vp-local-nav-bg-color: var(--color-base-200);
+  --vp-sidebar-bg-color: var(--color-base-100);
+  --vp-code-block-bg: var(--color-base-200);
+  --vp-code-tab-bg: var(--color-base-300);
+  --vp-code-line-highlight-color: oklch(from var(--color-primary) l c h / 10%);
+  --vp-custom-block-tip-bg: oklch(from var(--color-success) l c h / 10%);
+  --vp-custom-block-tip-border: var(--color-success);
+  --vp-custom-block-info-bg: oklch(from var(--color-info) l c h / 10%);
+  --vp-custom-block-info-border: var(--color-info);
+  --vp-custom-block-warning-bg: oklch(from var(--color-warning) l c h / 10%);
+  --vp-custom-block-warning-border: var(--color-warning);
+  --vp-custom-block-danger-bg: oklch(from var(--color-error) l c h / 10%);
+  --vp-custom-block-danger-border: var(--color-error);
+  --vp-shadow-1: 0 1px 2px rgba(0,0,0,0.14);
+  --vp-shadow-2: 0 3px 6px rgba(0,0,0,0.18);
+  --vp-shadow-3: 0 8px 16px rgba(0,0,0,0.24);
 }
-/* 修复 VPNavBarMenu 导航栏横排 */
+
+/* ===== 全局文字选中反色 ===== */
+::selection {
+  background-color: oklch(var(--p) / 30%);
+  color: oklch(var(--bc));
+}
+/* ===== 导航栏修复 ===== */
 .VPNavBarMenu {
   display: flex !important;
   flex-direction: row !important;
   gap: 0 !important;
 }
 
-/* 小屏幕下隐藏导航栏菜单，强制显示汉堡菜单 */
 @media (max-width: 768px) {
   .VPNavBarMenu {
     display: none !important;
   }
 }
-/* 自定义滚动条 */
+/* ===== 滚动条 ===== */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -41,6 +190,11 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #6366f1;
+  background: oklch(55% 0.24 28);
   border-radius: 4px;
+}
+
+/* ===== nprogress 颜色 ===== */
+#nprogress .bar {
+  background: oklch(55% 0.24 28) !important;
 }
