@@ -145,6 +145,12 @@ jobs:
           git tag nightly
           git push origin nightly
 
+      - name: Delete old nightly release
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release delete nightly --yes || true
+
       - name: Download all artifacts
         continue-on-error: true
         uses: actions/download-artifact@v4
