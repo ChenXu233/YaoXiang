@@ -52,7 +52,7 @@ pub fn exec() -> PackageResult<()> {
     exec_in(&std::env::current_dir()?)
 }
 
-fn format_extra(spec: &DependencySpec) -> String {
+pub(crate) fn format_extra(spec: &DependencySpec) -> String {
     let mut parts = Vec::new();
     if let Some(ref git) = spec.git {
         parts.push(format!("git: {}", git));

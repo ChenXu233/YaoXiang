@@ -75,6 +75,7 @@ pub fn get_i18n_config() -> &'static ConfigI18n {
 type TranslationMap = HashMap<String, String>;
 
 /// Load translations from a specific JSON file
+#[allow(dead_code)]
 /// 加载翻译文件（容错：跳过非 string 值）
 fn load_translation_file(path: &std::path::Path) -> TranslationMap {
     match std::fs::read_to_string(path) {
@@ -97,25 +98,48 @@ fn load_translation_file(path: &std::path::Path) -> TranslationMap {
     }
 }
 
-/// 扫描 locales/ 目录，自动注册所有语言
+/// Load translations from a JSON string (used for compile-time embedded locales)
+/// 从 JSON 字符串加载翻译（用于编译期嵌入的 locale）
+fn load_translation_file_from_str(content: &str) -> TranslationMap {
+    if let Ok(raw) = serde_json::from_str::<serde_json::Value>(content) {
+        if let serde_json::Value::Object(map) = raw {
+            map.into_iter()
+                .filter_map(|(k, v)| {
+                    if let serde_json::Value::String(s) = v {
+                        Some((k, s))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        } else {
+            HashMap::new()
+        }
+    } else {
+        HashMap::new()
+    }
+}
+
+/// 编译期嵌入所有 locale 文件，避免运行时相对路径依赖
 static TRANSLATIONS: Lazy<HashMap<String, TranslationMap>> = Lazy::new(|| {
     let mut map = HashMap::new();
-    let locales_dir = std::path::Path::new("locales");
-
-    if let Ok(entries) = std::fs::read_dir(locales_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().map(|e| e == "json").unwrap_or(false) {
-                if let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) {
-                    let translations = load_translation_file(&path);
-                    if !translations.is_empty() {
-                        map.insert(file_stem.to_string(), translations);
-                    }
-                }
-            }
+    let entries: &[(&str, &str)] = &[
+        ("en", include_str!("../../../locales/en.json")),
+        ("zh", include_str!("../../../locales/zh.json")),
+        ("ja", include_str!("../../../locales/ja.json")),
+        ("ru", include_str!("../../../locales/ru.json")),
+        (
+            "zh-classical",
+            include_str!("../../../locales/zh-classical.json"),
+        ),
+        ("zh-x-miao", include_str!("../../../locales/zh-x-miao.json")),
+    ];
+    for (lang, content) in entries {
+        let translations = load_translation_file_from_str(content);
+        if !translations.is_empty() {
+            map.insert(lang.to_string(), translations);
         }
     }
-
     map
 });
 
