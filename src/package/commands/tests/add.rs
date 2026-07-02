@@ -16,7 +16,7 @@ use tempfile::TempDir;
 
 fn setup_project() -> (TempDir, std::path::PathBuf) {
     let tmp = TempDir::new().unwrap();
-    init::exec_in(tmp.path(), "test-proj").unwrap();
+    init::exec_in(tmp.path(), &init::InitOptions { lib: false }, "test-proj").unwrap();
     let project_dir = tmp.path().join("test-proj");
     (tmp, project_dir)
 }

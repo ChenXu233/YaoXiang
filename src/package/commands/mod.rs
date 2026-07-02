@@ -6,3 +6,6 @@ pub mod install;
 pub mod list;
 pub mod rm;
 pub mod update;
+
+#[cfg(test)]
+mod tests;
