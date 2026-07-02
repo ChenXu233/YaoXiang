@@ -205,9 +205,9 @@
   "package_dev_dep_removed": "✓ Удалена зависимость для разработки '{0}'",
   "package_dep_removed": "✓ Удалена зависимость '{0}'",
   "package_project_created": "✓ Создан проект '{0}'",
-  "package_project_created_lib": "Created library project '{0}'",
-  "package_init_here": "Initialized project '{0}' in current directory",
-  "package_file_skipped": "Skipped existing file '{0}'",
+  "package_project_created_lib": "✓ Создан проект библиотеки '{0}'",
+  "package_init_here": "✓ Проект '{0}' инициализирован в текущем каталоге",
+  "package_file_skipped": "  Пропущен существующий файл '{0}'",
   "package_lock_generated": "# Этот файл автоматически сгенерирован yaoxiang, не редактируйте вручную.",
   "package_invalid_version": "Неверный номер версии",
   "package_invalid_major_version": "Неверный основной номер версии",
@@ -215,8 +215,5 @@
   "package_already_up_to_date": "✓ {0} ({1}) уже является последней версией",
   "_meta": {
     "lastUpdated": "2026-06-13T07:04:08.733Z"
-  },
-  "package_project_created_lib": "✓ Создан проект библиотеки '{0}'",
-  "package_init_here": "✓ Проект '{0}' инициализирован в текущей директории",
-  "package_file_skipped": "  Пропущен существующий файл '{0}'"
+  }
 }
