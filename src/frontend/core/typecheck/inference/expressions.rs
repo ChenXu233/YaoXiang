@@ -1759,6 +1759,7 @@ impl<'a> ExpressionInferrer<'a> {
                                     .at(stmt.span)
                                     .build());
                             }
+                            self.assign_var(name, init_ty);
                             return Ok(());
                         }
                         // mut 声明允许遮蔽外层变量（与 StatementChecker.check_var_stmt 行为一致）

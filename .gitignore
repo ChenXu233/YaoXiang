@@ -57,3 +57,7 @@ scripts/i18n/.env
 
 # Ignore all files in the wasm directory, but not the directory itself
 docs/public/wasm/*
+
+# Reasonix AI assistant
+.reasonix/
+reasonix.toml
