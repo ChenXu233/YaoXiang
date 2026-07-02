@@ -215,5 +215,8 @@
   "package_already_up_to_date": "✓ {0} ({1}) は最新です",
   "_meta": {
     "lastUpdated": "2026-06-13T07:01:44.869Z"
-  }
+  },
+  "package_project_created_lib": "✓ ライブラリプロジェクト '{0}' を作成しました",
+  "package_init_here": "✓ 現在のディレクトリにプロジェクト '{0}' を初期化しました",
+  "package_file_skipped": "  既存ファイル '{0}' をスキップしました"
 }

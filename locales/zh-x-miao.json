@@ -107,7 +107,6 @@
   "help_did_you_mean": "喵~您是想说 {0} 吗？ (｡･ω･｡)",
   "help_similar_variables": "喵~相似的变量：{0} 喵~ (*^▽^*)",
   "help_in_scope": "喵~作用域里：{0} 喵~ nyan~",
-
   "bytecode_dump_header": "喵~{0} 的字节码转储来啦喵~ ฅ(๑>◡<๑)ฅ",
   "bytecode_dump_type_table": "喵~类型表喵~ 共 {0} 个类型呢 (*^▽^*)",
   "bytecode_dump_constants": "喵~常量表喵~ 共 {0} 个常量ฅ(>ω<ฅ)",
@@ -130,28 +129,22 @@
   "bytecode_func_code": "  喵~代码段喵~ (,,>︿<,,)",
   "bytecode_instr_index": "    喵~[{0:04}] {1} 喵~ (≧▽≦)",
   "bytecode_unknown_opcode": "    喵~[{0:04}] 未知操作码：0x{1:02x} 喵~ 喵呜~ (>^ω^<)",
-
   "repl_welcome": "喵~YaoXiang REPL v0.3.0 闪亮登场喵~ ฅ(๑>◡<๑)ฅ",
   "repl_help": "喵~输入 :help 查看命令喵~ 输入 :quit 退出喵~ (｡･ω･｡)",
   "repl_error": "喵~错误啦：{0} 喵~ 呜~ (´；ω；`)",
   "repl_unknown_command": "喵~不认识的命令：{0} 喵~ (,,>︿<,,)",
-
   "shell_welcome": "喵~YaoXiang 开发 Shell v0.3.0 喵~ (≧▽≦)",
   "shell_help": "喵~输入 :help 查看可用命令喵~ (｡･ω･｡)",
   "shell_exec_time": "喵~执行耗时：{0:?} 喵~ (*^▽^*)",
   "shell_loaded": "喵~加载完成：{0} 喵~ 锵锵！ (๑>◡<๑)",
   "shell_debug_start": "喵~开始调试会话：{0} 喵~ ฅ(๑>◡<๑)ฅ",
   "shell_debug_cmd": "喵~可用命令喵：\n  (r)un    - 运行到下个断点喵\n  (s)tep   - 单步执行喵\n  (n)ext   - 步过函数调用喵\n  (o)ut    - 跳出当前函数喵\n  (b)reak  - 列出断点喵\n  (b)reak <n> - 在第 n 行设置断点喵\n  (c)ont   - 继续执行喵\n  (q)uit   - 退出调试器喵~ 喵呜~ (>^ω^<)",
-
   "debug_binary_op": "喵~调试：左值={0:?}, 右值={1:?} 喵~ (๑>◡<๑)",
   "debug_registers": "喵~调试：寄存器.len={0}, 左索引={1}, 右索引={2} 喵~ nyan~",
   "debug_match": "喵~调试：匹配二元操作啦！喵~ (*^▽^*)",
-
   "formatter_not_implemented": "喵~格式化器还没实现呢喵~ 呜~ (´；ω；`)",
-
   "bytecode_decode_i64add": "喵~调试解码：I64Add 操作数.len = {0} 喵~",
   "bytecode_decode_i64add_too_short": "喵~调试解码：I64Add 操作数太短，跳过啦喵~",
-
   "ir_gen_enter_scope": "喵~调试 IR 生成：进入作用域，符号栈深度之前：{0} 喵~",
   "ir_gen_exit_scope": "喵~调试 IR 生成：退出作用域，符号栈深度：{0} 喵~",
   "ir_gen_register_local": "喵~调试 IR 生成：注册局部变量 '{0}'，local_idx={1} 喵~",
@@ -161,13 +154,11 @@
   "ir_gen_after_process_stmt": "喵~调试 IR 生成：处理语句后，符号深度={0} 喵~",
   "ir_gen_about_to_exit_scope": "喵~调试 IR 生成：即将退出作用域，符号深度={0} 喵~",
   "ir_gen_after_exit_scope": "喵~调试 IR 生成：退出作用域后，符号深度={0} 喵~",
-
   "repl_available_commands": "喵~可用命令：喵~",
   "repl_exit_command": "喵~  :quit, :q   - 退出 REPL 喵~",
   "repl_help_command": "喵~  :help, :h   - 显示帮助消息 喵~",
   "repl_history_command": "喵~  :history    - 显示输入历史 喵~",
   "repl_clear_command": "喵~  :clear      - 清空输入缓冲区 喵~",
-
   "shell_exiting": "喵~\\n正在退出啦喵~",
   "shell_available_commands": "喵~Shell 命令：喵~",
   "shell_exit_command": "喵~  :quit, :q, exit   - 退出 shell 喵~",
@@ -182,18 +173,18 @@
   "shell_break_command": "喵~  :break <fn> <n>   - 设置断点 喵~",
   "shell_repl_command": "喵~  :repl             - 切换到 REPL 模式 喵~",
   "shell_other_input": "喵~任何其他输入都将作为 YaoXiang 代码进行求值啦喵~ (・ω・)ノ",
-
   "debugger_at_location": "喵~ 位置 {0}:{1} 喵~",
   "debugger_locals": "喵~ 局部变量：喵~",
   "debugger_call_stack": "喵~ 调用栈：喵~",
-
   "parser_test_parsed_params": "喵~解析参数：{0:?} 喵~",
   "parser_test_parsed_return_type": "喵~解析返回类型：{0:?} 喵~",
   "parser_test_parsed_as_var": "喵~解析为变量而不是函数啦喵~",
   "parser_test_name": "喵~名称：{0} 喵~",
   "parser_test_annotation": "喵~注解：{0:?} 喵~",
-
   "repl_value": "喵~{0} 喵~",
   "repl_prompt": "喵~{0} 喵~",
-  "repl_history_entry": "喵~[{0}] {1} 喵~"
+  "repl_history_entry": "喵~[{0}] {1} 喵~",
+  "package_project_created_lib": "✓ 喵~已创建库项目 '{0}'",
+  "package_init_here": "✓ 喵~已在当前目录初始化项目 '{0}'",
+  "package_file_skipped": "  喵~跳过已存在文件 '{0}'"
 }
