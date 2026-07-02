@@ -588,6 +588,9 @@ pub enum MSG {
     PackageDevDepRemoved,
     PackageDepRemoved,
     PackageProjectCreated,
+    PackageProjectCreatedLib,
+    PackageInitHere,
+    PackageFileSkipped,
 
     // Package manager - lock file
     PackageLockGenerated,
@@ -817,6 +820,9 @@ impl MSG {
             MSG::PackageDevDepRemoved => "package_dev_dep_removed",
             MSG::PackageDepRemoved => "package_dep_removed",
             MSG::PackageProjectCreated => "package_project_created",
+            MSG::PackageProjectCreatedLib => "package_project_created_lib",
+            MSG::PackageInitHere => "package_init_here",
+            MSG::PackageFileSkipped => "package_file_skipped",
 
             // Package manager - lock file
             MSG::PackageLockGenerated => "package_lock_generated",
