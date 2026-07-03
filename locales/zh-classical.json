@@ -74,6 +74,6 @@
   "debug_match": "调试：匹配二元操作！",
   "formatter_not_implemented": "格式化器尚未实现",
   "package_project_created_lib": "✓ 庫項目 '{0}' 已建畢",
-  "package_init_here": "✓ 於當前目錄初始項目 '{0}'",
+  "package_init_here": "✓ 已於當前目錄初始化項目 '{0}'",
   "package_file_skipped": "  略過既存文件 '{0}'"
 }

@@ -185,6 +185,6 @@
   "repl_prompt": "喵~{0} 喵~",
   "repl_history_entry": "喵~[{0}] {1} 喵~",
   "package_project_created_lib": "✓ 喵~已创建库项目 '{0}'",
-  "package_init_here": "✓ 喵~已在当前目录初始化项目 '{0}'",
+  "package_init_here": "✓ 已经在当前目录初始化好项目 '{0}' 喵~",
   "package_file_skipped": "  喵~跳过已存在文件 '{0}'"
 }
