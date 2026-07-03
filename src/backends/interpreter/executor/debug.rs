@@ -182,6 +182,9 @@ impl Interpreter {
                         let matches = match &val {
                             RuntimeValue::Int(n) => *n == case_offset as i64,
                             RuntimeValue::Bool(b) => *b == (case_offset != 0),
+                            RuntimeValue::Enum { variant_id, .. } => {
+                                *variant_id == case_offset as u32
+                            }
                             _ => false,
                         };
                         if matches {
