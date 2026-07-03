@@ -387,8 +387,10 @@ impl Interpreter {
             BytecodeInstr::CallNative {
                 dst,
                 func_name,
+                mechanism,
+                lib,
+                symbol,
                 args: arg_regs,
-                ..
             } => {
                 let call_args: Vec<RuntimeValue> = arg_regs
                     .iter()
@@ -404,7 +406,9 @@ impl Interpreter {
                 let runtime = self.runtime_config.runtime;
 
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
-                    let result = self.call_native_by_name(func_name, &call_args)?;
+                    let result = self.call_native_with_ffi_meta(
+                        func_name, mechanism, lib, symbol, &call_args
+                    )?;
                     if let Some(dst_reg) = dst {
                         frame.set_register(dst_reg.index() as usize, result);
                     }
