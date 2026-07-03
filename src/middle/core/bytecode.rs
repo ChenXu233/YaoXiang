@@ -383,6 +383,9 @@ pub enum BytecodeInstr {
     CallNative {
         dst: Option<Reg>,
         func_name: String,
+        mechanism: String, // "c" or "rs" — FFI mechanism
+        lib: String,       // "libsqlite3" — library name
+        symbol: String,    // "sqlite3_open" — C symbol
         args: Vec<Reg>,
     },
 
@@ -671,8 +674,18 @@ impl BytecodeInstr {
             BytecodeInstr::Release { .. } => 2, // src(2)
             BytecodeInstr::CallStatic { args, .. } => 4 + args.len() * 2,
             BytecodeInstr::CallNative {
-                args, func_name, ..
-            } => 4 + func_name.len() + args.len() * 2,
+                args,
+                func_name,
+                mechanism,
+                ..
+            } => {
+                let base = 4 + func_name.len() + args.len() * 2;
+                if mechanism.is_empty() {
+                    base
+                } else {
+                    base + 12
+                }
+            }
             BytecodeInstr::CallVirt { args, .. } => 4 + args.len() * 2,
             BytecodeInstr::CallDyn { args, .. } => 4 + args.len() * 2,
             BytecodeInstr::MakeClosure { env, .. } => 4 + env.len() * 2,
@@ -1157,7 +1170,9 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                 }
                             }
                             Opcode::CallNative => {
-                                // CallNative: dst(1) + func_name_idx(4) + base_arg_reg(1) + arg_count(1) + args(2*count)
+                                // CallNative decode: supports old and FFI format
+                                // Old:  dst(1) + func_name_idx(4) + base(1) + count(1) + args(2*count)
+                                // FFI:  dst(1) + func_name_idx(4) + mech(4) + lib(4) + sym(4) + base(1) + count(1) + args(2*count)
                                 if instr.operands.len() >= 7 {
                                     let dst = instr.operands[0] as u16;
                                     let func_name_idx = u32::from_le_bytes([
@@ -1166,8 +1181,6 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                         instr.operands[3],
                                         instr.operands[4],
                                     ]);
-                                    let _base_arg_reg = instr.operands[5];
-                                    let arg_count = instr.operands[6] as usize;
 
                                     // Resolve function name from constant pool
                                     let func_name = if let Some(ConstValue::String(s)) =
@@ -1178,13 +1191,73 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                         format!("native_{}", func_name_idx)
                                     };
 
+                                    // 检查是否有 FFI 元数据（mechanism/lib/symbol 索引）
+                                    // 如果 operands[6] 作为 arg_count 算出的总量不匹配，说明有额外字段
+                                    let arg_count_try = instr.operands[6] as usize;
+                                    let has_ffi_meta =
+                                        7 + 2 * arg_count_try != instr.operands.len();
+
+                                    let (
+                                        mechanism,
+                                        lib,
+                                        symbol,
+                                        _base_arg_reg,
+                                        arg_count,
+                                        args_start,
+                                    ) = if has_ffi_meta {
+                                        let mech_idx = u32::from_le_bytes([
+                                            instr.operands[5],
+                                            instr.operands[6],
+                                            instr.operands[7],
+                                            instr.operands[8],
+                                        ]);
+                                        let lib_idx = u32::from_le_bytes([
+                                            instr.operands[9],
+                                            instr.operands[10],
+                                            instr.operands[11],
+                                            instr.operands[12],
+                                        ]);
+                                        let sym_idx = u32::from_le_bytes([
+                                            instr.operands[13],
+                                            instr.operands[14],
+                                            instr.operands[15],
+                                            instr.operands[16],
+                                        ]);
+                                        let mechanism = resolve_const_string(
+                                            &file.const_pool,
+                                            mech_idx as usize,
+                                        );
+                                        let lib = resolve_const_string(
+                                            &file.const_pool,
+                                            lib_idx as usize,
+                                        );
+                                        let symbol = resolve_const_string(
+                                            &file.const_pool,
+                                            sym_idx as usize,
+                                        );
+                                        let _base_arg_reg = instr.operands[17];
+                                        let arg_count = instr.operands[18] as usize;
+                                        (mechanism, lib, symbol, _base_arg_reg, arg_count, 19)
+                                    } else {
+                                        let _base_arg_reg = instr.operands[5];
+                                        let arg_count = arg_count_try;
+                                        (
+                                            String::new(),
+                                            String::new(),
+                                            func_name.clone(),
+                                            _base_arg_reg,
+                                            arg_count,
+                                            7,
+                                        )
+                                    };
+
                                     // Parse arguments
                                     let mut args = Vec::new();
                                     for i in 0..arg_count {
-                                        if 7 + i * 2 + 1 < instr.operands.len() {
+                                        if args_start + i * 2 + 1 < instr.operands.len() {
                                             let arg_reg = u16::from_le_bytes([
-                                                instr.operands[7 + i * 2],
-                                                instr.operands[7 + i * 2 + 1],
+                                                instr.operands[args_start + i * 2],
+                                                instr.operands[args_start + i * 2 + 1],
                                             ]);
                                             args.push(Reg(arg_reg));
                                         }
@@ -1194,6 +1267,9 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     decoded_instructions.push(BytecodeInstr::CallNative {
                                         dst: dst_reg,
                                         func_name,
+                                        mechanism,
+                                        lib,
+                                        symbol,
                                         args,
                                     });
                                 } else {
@@ -1845,5 +1921,16 @@ impl std::fmt::Display for BinaryOp {
             BinaryOp::Sar => write!(f, "Sar"),
             BinaryOp::Shr => write!(f, "Shr"),
         }
+    }
+}
+/// 从常量池解析字符串
+fn resolve_const_string(
+    pool: &[ConstValue],
+    idx: usize,
+) -> String {
+    if let Some(ConstValue::String(s)) = pool.get(idx) {
+        s.clone()
+    } else {
+        String::new()
     }
 }

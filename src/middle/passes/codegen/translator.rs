@@ -12,6 +12,14 @@ use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::{DebugSpan, FileId, Span};
 use std::collections::{HashMap, HashSet};
 
+/// FFI 函数元数据 — 机制/库/符号
+#[derive(Debug, Clone)]
+struct FfiFuncMeta {
+    mechanism: String,
+    lib: String,
+    symbol: String,
+}
+
 /// IR 到字节码翻译器
 ///
 /// 职责：
@@ -32,6 +40,8 @@ pub struct Translator {
     closure_function_offset: Option<usize>,
     /// 函数名到索引的映射
     function_name_to_idx: Option<HashMap<String, usize>>,
+    /// FFI 函数元数据缓存: func_name → mechanism/lib/symbol
+    ffi_func_meta: HashMap<String, FfiFuncMeta>,
 
     /// 是否生成运行时调试信息（IP -> Span）
     generate_debug_info: bool,
@@ -56,6 +66,7 @@ impl Translator {
             operand_resolver: OperandResolver::new(),
             current_function: None,
             native_functions,
+            ffi_func_meta: HashMap::new(),
             closure_function_offset: None,
             function_name_to_idx: None,
             generate_debug_info: false,
@@ -106,12 +117,25 @@ impl Translator {
         &mut self,
         module: &ModuleIR,
     ) -> Result<TranslatorOutput, Diagnostic> {
-        // 注册用户声明的 native 函数绑定
-        // FFI 函数绑定将在 Task 5 中被消费
-        // 现在仅从 FuncBinding 条目注册函数名
+        // 消费 FFI 函数绑定 — 注册 native 函数名并存储元数据
         for binding in &module.ffi_bindings {
-            if let crate::middle::core::ir::FfiBinding::FuncBinding { func_name, .. } = binding {
+            if let crate::middle::core::ir::FfiBinding::FuncBinding {
+                func_name,
+                lib_id,
+                symbol,
+            } = binding
+            {
                 self.register_native(func_name);
+                if let Some(lib) = module.ffi_libs.get(*lib_id) {
+                    self.ffi_func_meta.insert(
+                        func_name.clone(),
+                        FfiFuncMeta {
+                            mechanism: lib.mechanism.clone(),
+                            lib: lib.lib_name.clone(),
+                            symbol: symbol.clone(),
+                        },
+                    );
+                }
             }
         }
 
@@ -588,6 +612,21 @@ impl Translator {
         let mut operands = vec![dst_reg];
         operands.extend_from_slice(&func_id.to_le_bytes());
         operands.push(base_arg_reg);
+        // 对 FFI 函数，在 func_name_idx 后追加 mechanism/lib/symbol 的常量池索引
+        if let Some(meta) = func_name.as_ref().and_then(|n| self.ffi_func_meta.get(n)) {
+            let mech_idx = self
+                .emitter
+                .add_constant(ConstValue::String(meta.mechanism.clone()));
+            let lib_idx = self
+                .emitter
+                .add_constant(ConstValue::String(meta.lib.clone()));
+            let sym_idx = self
+                .emitter
+                .add_constant(ConstValue::String(meta.symbol.clone()));
+            operands.extend_from_slice(&mech_idx.to_le_bytes()); // 4 bytes
+            operands.extend_from_slice(&lib_idx.to_le_bytes()); // 4 bytes
+            operands.extend_from_slice(&sym_idx.to_le_bytes()); // 4 bytes
+        }
         operands.push(args.len() as u8);
         for arg in args {
             let arg_reg = self.operand_resolver.to_reg(arg)?;
