@@ -4,12 +4,12 @@ title: "RFC Example: Enhanced Pattern Matching Syntax"
 
 # RFC Example: Enhanced Pattern Matching Syntax
 
-> **Note**: This is an RFC template example, demonstrating the writing of a complete RFC proposal.
+> **Note**: This is an example RFC template, demonstrating how to write a complete RFC proposal.
 > Please refer to this template when writing your own RFC.
 >
 > **Status**: Example (for reference only)
 
-> **Author**: Chen Xu (example author)
+> **Author**: Chenxu (Example Author)
 > **Created**: 2025-01-05
 > **Last Updated**: 2026-02-12
 
@@ -21,7 +21,7 @@ Add more powerful pattern matching capabilities to YaoXiang, including nested pa
 
 ### Why is this feature needed?
 
-Current `match` expressions have limited functionality and cannot handle the following common scenarios:
+The current `match` expression has limited functionality and cannot handle the following common scenarios:
 
 ```yaoxiang
 # Cannot destructure nested structures
@@ -33,13 +33,13 @@ match person {
 
 # Cannot bind variables in patterns
 match result {
-    ok(value) => print(value)          # ❌ Explicit destructuring required
+    ok(value) => print(value)          # ❌ Requires explicit destructuring
 }
 ```
 
 ### Current Problems
 
-1. Nested pattern destructuring not supported
+1. Nested pattern destructuring is not supported
 2. Guard expressions cannot be used in patterns
 3. `let` statements do not support pattern matching
 
@@ -47,11 +47,11 @@ match result {
 
 ### Core Design
 
-Extend `match` expression syntax to support:
+Extend the `match` expression syntax to support:
 
-1. **Nested pattern destructuring**: Destructuring of structs at any depth
-2. **Guard expressions**: Add `if` conditions after patterns
-3. **Pattern variable binding**: Bind variables directly from patterns
+1. **Nested pattern destructuring**: destructuring of structs at any depth
+2. **Guard expressions**: adding `if` conditions after a pattern
+3. **Pattern variable binding**: binding variables directly from patterns
 
 ### Examples
 
@@ -89,10 +89,10 @@ match data {
 ```yaoxiang
 # New syntax
 let Point(x: 0, y: _) = point  # Bind only when x == 0
-let Ok(value) = result         # Destructure Result
+let Ok(value) = result         # Destructuring Result
 
-# Multiple binding
-let (a, b, c) = tuple          # Destructure tuple
+# Multiple bindings
+let (a, b, c) = tuple          # Tuple destructuring
 ```
 
 ## Detailed Design
@@ -118,69 +118,63 @@ OrPattern     ::= Pattern '|' Pattern
 RestPattern   ::= '...'
 ```
 
-### Type System Impact
+### Impact on the Type System
 
 - Type checking for pattern matching needs to be extended
-- Pattern variables receive the correct type upon successful match
+- Pattern variables receive the correct type upon a successful match
 
 ### Compiler Changes
 
-| Component | Changes |
-|-----------|---------|
-| lexer | New tokens for patterns |
-| parser | New pattern parsing logic |
+| Component | Change |
+|------|------|
+| lexer | Add pattern-related tokens |
+| parser | Add pattern parsing logic |
 | typecheck | Pattern type inference and binding |
 | codegen | Pattern matching code generation |
 
 ### Backward Compatibility
 
 - ✅ Fully backward compatible
-- Only new syntax is added, original `match` syntax remains unchanged
+- Only new syntax is added; the existing `match` syntax remains unchanged
 
 ## Trade-offs
 
-### Pros
+### Advantages
 
 - More expressive syntax, more concise code
-- Consistent with mainstream language pattern matching (Rust, Scala, Elixir)
-- Reduces runtime errors, catches non-matches early
+- Consistency with pattern matching in mainstream languages (Rust, Scala, Elixir)
+- Fewer runtime errors; mismatches are caught early
 
-### Cons
+### Disadvantages
 
 - Increased compiler implementation complexity
-- Slightly steeper learning curve
+- A slightly steeper learning curve
 
-## Alternative Solutions
+## Alternatives
 
-| Solution | Why Not Chosen |
-|----------|----------------|
-| Top-level destructuring only | Cannot handle common nested scenarios |
-| Use functional style | Not natural when mixed with imperative code |
+| Alternative | Why not chosen |
+|------|--------------|
+| Support only top-level destructuring | Cannot handle common nested scenarios |
+| Use a functional style | Mixes awkwardly with imperative code |
 | Defer to v2.0 | Users already have strong demand |
 
 ## Implementation Strategy
 
-### Phases
-
-1. **Phase 1 (v0.6)**: Nested destructuring and guard expressions
-2. **Phase 2 (v0.7)**: Pattern variable binding
-3. **Phase 3 (v0.8)**: `let` pattern matching
-
 ### Dependencies
 
 - No external dependencies
-- Requires completion of the basic type system first
+- Requires the basic type system to be completed first
 
 ### Risks
 
-- Pattern compilation complexity may cause performance issues
-- Deep nesting may cause stack overflow
+- Pattern compilation complexity may lead to performance issues
+- Excessively deep nesting may cause stack overflow
 
 ## Open Questions
 
-1. [ ] What is the syntax for binding patterns (`@` binding)?
-2. [ ] Should compile-time pattern exhaustiveness checking be supported?
-3. [ ] What are the performance optimization strategies?
+1. [ ] Syntax for cycle patterns (`@` binding)?
+2. [ ] Support for compile-time exhaustiveness checking?
+3. [ ] Performance optimization strategies?
 
 ## References
 
