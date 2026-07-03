@@ -113,7 +113,7 @@ enum Commands {
         code: String,
     },
 
-    /// Check source file for errors (type checking) (unsupported yet)
+    /// Check source file for errors (type checking)
     Check {
         /// Source file(s) or directory path(s) to check
         #[arg(value_name = "PATH", num_args = 0..)]
