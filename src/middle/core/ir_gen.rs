@@ -563,6 +563,28 @@ impl AstToIrGenerator {
                     )
                 } else if type_annotation.as_ref().is_some_and(|t| {
                     crate::frontend::core::parser::ast::type_annotation_returns_meta_type(t)
+                }) && body.len() == 1
+                {
+                    // TypeDef with ExternRef: 检查 RHS body 是否为 ExternRef（不透明句柄类型）
+                    if let Some(ConstValue::ExternRef {
+                        mechanism,
+                        lib,
+                        symbol,
+                    }) = self.eval_body_for_type_decl(body)
+                    {
+                        let lib_id = self.get_or_create_lib_id(&mechanism, &lib);
+                        self.ffi_bindings
+                            .push(crate::middle::core::ir::FfiBinding::TypeBinding {
+                                type_name: name.clone(),
+                                lib_id,
+                                symbol: symbol.clone(),
+                            });
+                        return Ok(None);
+                    }
+                    // 普通 MetaType 构造器（如自定义类型别名）
+                    self.generate_constructor_ir(name, type_annotation.as_ref().unwrap())
+                } else if type_annotation.as_ref().is_some_and(|t| {
+                    crate::frontend::core::parser::ast::type_annotation_returns_meta_type(t)
                         || matches!(t, ast::Type::Struct { .. })
                 }) {
                     // TypeDef: 类型标注返回 Type 或者是 Struct 类型
@@ -794,6 +816,23 @@ impl AstToIrGenerator {
         let local_var_start = params.len();
         self.next_temp = local_var_start;
 
+        // 检查函数体是否为 FFI ExternRef 绑定
+        if let Some(ConstValue::ExternRef {
+            mechanism,
+            lib,
+            symbol,
+        }) = self.try_eval_body_as_extern_ref(body)
+        {
+            let lib_id = self.get_or_create_lib_id(&mechanism, &lib);
+            self.ffi_bindings
+                .push(crate::middle::core::ir::FfiBinding::FuncBinding {
+                    func_name: name.to_string(),
+                    lib_id,
+                    symbol: symbol.clone(),
+                });
+            return Ok(None);
+        }
+
         // 生成语句 IR
         for stmt in body {
             tlog!(
@@ -927,7 +966,8 @@ impl AstToIrGenerator {
                                 ConstValue::Void => String::new(),
                                 ConstValue::Bytes(b) => format!("{:?}", b),
                                 ConstValue::LibraryRef { .. } | ConstValue::ExternRef { .. } => {
-                                    todo!()
+                                    // FFI types cannot be formatted at compile time
+                                    return None;
                                 }
                             };
                             // 格式化说明符在常量求值中不处理，遇到则退回运行时
@@ -940,9 +980,103 @@ impl AstToIrGenerator {
                 }
                 Some(ConstValue::String(result))
             }
+            // 编译期 FFI 求值：Native.c("lib") → ConstValue::LibraryRef
+            // lib("sym") → ConstValue::ExternRef
+            ast::Expr::Call { func: _, args, .. } => {
+                // 通过 type_result 检查调用表达式的推断类型
+                if let Some(expr_type) = self.get_expr_mono_type(expr) {
+                    match expr_type {
+                        MonoType::LibraryRef { mechanism, .. } => {
+                            // Native.c("lib") — 需要提取 lib 名字符串
+                            if args.len() == 1 {
+                                if let Some(lib_str) = Self::extract_string_arg(args) {
+                                    return Some(ConstValue::LibraryRef {
+                                        mechanism,
+                                        lib: lib_str,
+                                    });
+                                }
+                            }
+                        }
+                        MonoType::ExternRef { mechanism, lib, .. }
+                            // lib("sym") — 需要提取 symbol 名字符串
+                            if args.len() == 1 => {
+                                if let Some(sym_str) = Self::extract_string_arg(args) {
+                                    return Some(ConstValue::ExternRef {
+                                        mechanism,
+                                        lib,
+                                        symbol: sym_str,
+                                    });
+                                }
+                            }
+                        _ => {}
+                    }
+                }
+                None
+            }
             // TODO: 支持更复杂的常量表达式
             _ => None,
         }
+    }
+
+    /// 从函数调用的参数列表中提取第一个字符串字面量
+    fn extract_string_arg(args: &[ast::Expr]) -> Option<String> {
+        args.first().and_then(|arg| match arg {
+            ast::Expr::Lit(ast::Literal::String(s), _) => Some(s.clone()),
+            _ => None,
+        })
+    }
+
+    /// 获取或创建 FFI 库绑定 ID
+    fn get_or_create_lib_id(
+        &mut self,
+        mechanism: &str,
+        lib_name: &str,
+    ) -> usize {
+        if let Some(existing) = self
+            .ffi_libs
+            .iter()
+            .find(|l| l.mechanism == mechanism && l.lib_name == lib_name)
+        {
+            return existing.id;
+        }
+        let id = self.next_lib_id;
+        self.next_lib_id += 1;
+        self.ffi_libs.push(crate::middle::core::ir::FfiLibBinding {
+            id,
+            mechanism: mechanism.to_string(),
+            lib_name: lib_name.to_string(),
+        });
+        id
+    }
+
+    /// 从声明 body 中提取单个表达式并求值
+    fn eval_body_for_type_decl(
+        &self,
+        body: &[ast::Stmt],
+    ) -> Option<ConstValue> {
+        if body.len() == 1 {
+            if let ast::StmtKind::Expr(expr) = &body[0].kind {
+                return self.eval_const_expr(expr);
+            }
+        }
+        None
+    }
+
+    /// 检查函数体（Stmt 列表）是否是对 ExternRef 的求值
+    fn try_eval_body_as_extern_ref(
+        &self,
+        body: &[ast::Stmt],
+    ) -> Option<ConstValue> {
+        if body.len() == 1 {
+            match &body[0].kind {
+                ast::StmtKind::Expr(expr) | ast::StmtKind::Return(Some(expr)) => {
+                    // 直接 eval 表达式（内部会走 eval_const_expr 的 Call 分支检查类型）
+                    return self.eval_const_expr(expr);
+                }
+                _ => {}
+            }
+        }
+        None
     }
 
     /// 生成全局变量 IR
