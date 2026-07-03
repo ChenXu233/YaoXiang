@@ -45,8 +45,7 @@ title: "RFC 索引"
 
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
-| RFC-025 | [RFC-025: 可扩展原语类型机制](./review/025-primitive-extension.md) | 晨煦 | 2026-06-05 | 审核中 |
-| ↳ RFC-026a | [RFC-026a: 可扩展 FFI 机制体系](./review/026a-extensible-ffi-system.md) | 晨煦 | 2026-07-03 | 审核中 |
+| RFC-026a | [RFC-026a: 可扩展 FFI 机制体系](./review/026a-extensible-ffi-system.md) | 晨煦 | 2026-07-03 | 审核中 |
 
 ---
 
@@ -97,6 +96,7 @@ title: "RFC 索引"
 | RFC-003 | [RFC-003：版本规划](./rejected/003-version-planning.md) | 晨煦 | 2025-01-05 | 已拒绝 |
 | RFC-005 | [RFC-005: 自动化CVE安全检查系统](./rejected/005-automated-cve-scanning.md) | 晨煦 | 2025-01-05 | 已拒绝 |
 | RFC-016 | [RFC 016: 量子原生支持与多重后端集成](./rejected/016-quantum-native-support.md) | 晨煦 | 2026-02-13 | 已拒绝 |
+| RFC-025 | [RFC-025: 可扩展原语类型机制](./rejected/025-primitive-extension.md) | 晨煦 | 2026-06-05 | 已拒绝（被 RFC-026 不透明句柄覆盖） |
 
 ---
 
