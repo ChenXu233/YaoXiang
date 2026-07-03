@@ -6,6 +6,7 @@ use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
 use crate::std::io::format_value_with_prefix;
 use crate::std::{NativeContext, NativeExport, StdModule, NativeHandler};
+use crate::std::result::{error_new, result_err, result_ok};
 
 // ============================================================================
 // StringModule - StdModule Implementation
@@ -128,6 +129,18 @@ impl StdModule for StringModule {
                 "std.string.format",
                 "(format: String, ...args) -> String",
                 native_format as NativeHandler,
+            ),
+            NativeExport::new(
+                "parse_int",
+                "std.string.parse_int",
+                "(s: String) -> Result(Int, Error)",
+                native_parse_int as NativeHandler,
+            ),
+            NativeExport::new(
+                "parse_float",
+                "std.string.parse_float",
+                "(s: String) -> Result(Float, Error)",
+                native_parse_float as NativeHandler,
             ),
         ]
     }
@@ -519,5 +532,54 @@ fn apply_format_spec(
             )
         }
         _ => format!("{}{}", padding, value), // Right align (default)
+    }
+}
+
+// ============================================================================
+// Native implementations: parse_int / parse_float
+// ============================================================================
+
+/// Native implementation: parse_int - parse string to Int
+pub(crate) fn native_parse_int(
+    args: &[RuntimeValue],
+    ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    let s = args
+        .first()
+        .map(|v| match v {
+            RuntimeValue::String(s) => s.as_ref().to_string(),
+            _ => String::new(),
+        })
+        .unwrap_or_default();
+    match s.trim().parse::<i64>() {
+        Ok(n) => Ok(result_ok(RuntimeValue::Int(n))),
+        Err(e) => Ok(result_err(error_new(&format!("parse_int: {}", e), ctx))),
+    }
+}
+
+/// Native implementation: parse_float - parse string to Float
+pub(crate) fn native_parse_float(
+    args: &[RuntimeValue],
+    ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    let s = args
+        .first()
+        .map(|v| match v {
+            RuntimeValue::String(s) => s.as_ref().to_string(),
+            _ => String::new(),
+        })
+        .unwrap_or_default();
+    match s.trim().parse::<f64>() {
+        Ok(f) => {
+            if f.is_finite() {
+                Ok(result_ok(RuntimeValue::Float(f)))
+            } else {
+                Ok(result_err(error_new(
+                    "parse_float: result is not finite",
+                    ctx,
+                )))
+            }
+        }
+        Err(e) => Ok(result_err(error_new(&format!("parse_float: {}", e), ctx))),
     }
 }

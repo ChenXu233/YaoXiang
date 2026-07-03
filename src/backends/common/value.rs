@@ -92,6 +92,13 @@ pub enum ValueType {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TypeId(pub u32);
 
+impl TypeId {
+    /// Enum/sum type (includes Result, Option). Matches MonoTypeExt::to_type_id().
+    pub const ENUM: TypeId = TypeId(21);
+    /// Struct/record type (includes Error). Matches MonoTypeExt::to_type_id().
+    pub const STRUCT: TypeId = TypeId(20);
+}
+
 /// Function ID for runtime function identification
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FunctionId(pub u32);
