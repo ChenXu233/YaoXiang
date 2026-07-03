@@ -760,6 +760,7 @@ pub fn from_const_value(cv: &ConstValue) -> RuntimeValue {
         ConstValue::Int(n) => RuntimeValue::Int(*n as i64),
         ConstValue::Float(f) => RuntimeValue::Float(*f as f64),
         ConstValue::Bool(b) => RuntimeValue::Bool(*b),
+        ConstValue::LibraryRef { .. } | ConstValue::ExternRef { .. } => todo!(),
     }
 }
 

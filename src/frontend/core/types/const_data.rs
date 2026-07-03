@@ -18,6 +18,15 @@ pub enum ConstValue {
     Bool(bool),
     /// 浮点常量
     Float(f32),
+    /// LibraryRef 编译期常量值
+    LibraryRef { mechanism: String, lib: String },
+
+    /// ExternRef 编译期常量值
+    ExternRef {
+        mechanism: String,
+        lib: String,
+        symbol: String,
+    },
 }
 
 impl ConstValue {
@@ -32,6 +41,7 @@ impl ConstValue {
             ConstValue::Int(_) => ConstKind::Int(None),
             ConstValue::Bool(_) => ConstKind::Bool,
             ConstValue::Float(_) => ConstKind::Float(None),
+            ConstValue::LibraryRef { .. } | ConstValue::ExternRef { .. } => todo!(),
         }
     }
 
@@ -73,6 +83,25 @@ impl PartialEq for ConstValue {
             (ConstValue::Int(a), ConstValue::Int(b)) => a == b,
             (ConstValue::Bool(a), ConstValue::Bool(b)) => a == b,
             (ConstValue::Float(a), ConstValue::Float(b)) => a.to_bits() == b.to_bits(),
+            (
+                ConstValue::LibraryRef {
+                    mechanism: a,
+                    lib: b,
+                },
+                ConstValue::LibraryRef { mechanism, lib },
+            ) => a == mechanism && b == lib,
+            (
+                ConstValue::ExternRef {
+                    mechanism: a,
+                    lib: b,
+                    symbol: c,
+                },
+                ConstValue::ExternRef {
+                    mechanism,
+                    lib,
+                    symbol,
+                },
+            ) => a == mechanism && b == lib && c == symbol,
             _ => false,
         }
     }
@@ -87,21 +116,30 @@ impl Hash for ConstValue {
     ) {
         match self {
             ConstValue::Int(n) => {
-                // 使用整数哈希
                 n.hash(state);
             }
             ConstValue::Bool(b) => {
-                // 使用布尔哈希
                 b.hash(state);
             }
             ConstValue::Float(f) => {
-                // 使用浮点数的位模式哈希
                 f.to_bits().hash(state);
+            }
+            ConstValue::LibraryRef { mechanism, lib } => {
+                mechanism.hash(state);
+                lib.hash(state);
+            }
+            ConstValue::ExternRef {
+                mechanism,
+                lib,
+                symbol,
+            } => {
+                mechanism.hash(state);
+                lib.hash(state);
+                symbol.hash(state);
             }
         }
     }
 }
-
 impl fmt::Display for ConstValue {
     fn fmt(
         &self,
@@ -111,6 +149,14 @@ impl fmt::Display for ConstValue {
             ConstValue::Int(n) => write!(f, "{}", n),
             ConstValue::Bool(b) => write!(f, "{}", b),
             ConstValue::Float(v) => write!(f, "{}", v),
+            ConstValue::LibraryRef { mechanism, lib } => {
+                write!(f, "LibraryRef({mechanism}, \"{lib}\")")
+            }
+            ConstValue::ExternRef {
+                mechanism,
+                lib,
+                symbol,
+            } => write!(f, "ExternRef({mechanism}, \"{lib}\", \"{symbol}\")"),
         }
     }
 }

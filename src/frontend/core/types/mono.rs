@@ -257,6 +257,21 @@ pub enum MonoType {
         params: Vec<DepParam>,
         return_type: Box<MonoType>,
     },
+
+    /// LibraryRef 是 Native.c("lib") 返回值的编译期类型。
+    /// 运行时不存在——仅用于类型推断和编译期求值触发。
+    /// 编译器知道它可调用：(sym: String) -> ExternRef
+    LibraryRef { mechanism: String, lib: String },
+
+    /// ExternRef 是 lib("sym") 求值后得到的 FFI 绑定描述类型。
+    /// 当它出现在绑定 RHS 时，代码生成器按 LHS 类型决定语义：
+    ///   LHS: Type        → 不透明句柄类型
+    ///   LHS: 函数签名    → FFI 函数绑定
+    ExternRef {
+        mechanism: String,
+        lib: String,
+        symbol: String,
+    },
 }
 
 impl MonoType {
@@ -443,6 +458,16 @@ impl MonoType {
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("({}) -> {}", params_str, return_type.type_name())
+            }
+            MonoType::LibraryRef { mechanism, lib } => {
+                format!("LibraryRef({mechanism}, \"{lib}\")")
+            }
+            MonoType::ExternRef {
+                mechanism,
+                lib,
+                symbol,
+            } => {
+                format!("ExternRef({mechanism}, \"{lib}\", \"{symbol}\")")
             }
         }
     }

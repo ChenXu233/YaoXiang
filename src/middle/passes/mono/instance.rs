@@ -259,6 +259,16 @@ fn type_name_hash<H: Hasher>(
                 crate::frontend::core::types::ConstValue::Float(f) => {
                     format!("float:{}", f.to_bits()).hash(state);
                 }
+                crate::frontend::core::types::ConstValue::LibraryRef { mechanism, lib } => {
+                    format!("library_ref:{mechanism}:{lib}").hash(state);
+                }
+                crate::frontend::core::types::ConstValue::ExternRef {
+                    mechanism,
+                    lib,
+                    symbol,
+                } => {
+                    format!("extern_ref:{mechanism}:{lib}:{symbol}").hash(state);
+                }
             }
         }
         MonoType::MetaType {
@@ -293,6 +303,21 @@ fn type_name_hash<H: Hasher>(
                 type_name_hash(&p.ty, state);
             }
             type_name_hash(return_type, state);
+        }
+        MonoType::LibraryRef { mechanism, lib } => {
+            "library_ref".hash(state);
+            mechanism.hash(state);
+            lib.hash(state);
+        }
+        MonoType::ExternRef {
+            mechanism,
+            lib,
+            symbol,
+        } => {
+            "extern_ref".hash(state);
+            mechanism.hash(state);
+            lib.hash(state);
+            symbol.hash(state);
         }
     }
 }

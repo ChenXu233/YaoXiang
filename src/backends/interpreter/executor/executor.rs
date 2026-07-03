@@ -425,6 +425,7 @@ impl Interpreter {
                 ConstValue::Char(c) => RuntimeValue::Char((*c) as u32),
                 ConstValue::String(s) => RuntimeValue::String(s.as_str().into()),
                 ConstValue::Bytes(b) => RuntimeValue::Bytes(b.as_slice().into()),
+                ConstValue::LibraryRef { .. } | ConstValue::ExternRef { .. } => todo!(),
             })
             .unwrap_or(RuntimeValue::Unit)
     }

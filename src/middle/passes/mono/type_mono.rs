@@ -795,6 +795,9 @@ impl TypeMonomorphizer for super::Monomorphizer {
                 });
                 self.collect_type_vars_from_mono_type(return_type, type_params, seen);
             }
+            MonoType::LibraryRef { .. } | MonoType::ExternRef { .. } => {
+                // FFI 类型不包含类型变量
+            }
         }
     }
 
