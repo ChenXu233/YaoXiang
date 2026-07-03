@@ -1,11 +1,17 @@
 //! FFI 注册表测试
 //!
+//! 对应规范章节：
+//! - `docs/src/reference/language-spec/stdlib.md` §1.3: Result 标准库模块
+//! - `docs/src/reference/language-spec/stdlib.md` §4.2: parse_int / parse_float
+//!
 //! 测试覆盖内容：
 //! - FfiRegistry 的创建和配置
 //! - 标准库函数的注册
 //! - 自定义函数的注册和调用
 //! - 文件读写操作
 //! - 错误处理
+//! - std.result 模块（is_ok, is_err, unwrap, unwrap_or）
+//! - std.string.parse_int / parse_float
 
 use crate::backends::common::RuntimeValue;
 use crate::backends::common::Heap;
@@ -265,4 +271,190 @@ fn test_write_file_missing_args() {
         &mut ctx,
     );
     assert!(result.is_err());
+}
+
+// =============================================================================
+// std.result 和 std.string.parse_int/parse_float 测试
+// =============================================================================
+
+use crate::std::result::{
+    error_new, native_result_is_err, native_result_is_ok, native_result_unwrap,
+    native_result_unwrap_or, result_err, result_ok,
+};
+use crate::std::string::{native_parse_float, native_parse_int};
+
+/// 规范 §1.3：Result.ok(value) → unwrap → value
+#[test]
+fn test_result_ok_unwrap() {
+    // Arrange
+    let ok = result_ok(RuntimeValue::Int(42));
+    let mut heap = Heap::new();
+    let mut ctx = test_ctx(&mut heap);
+
+    // Act
+    let result = native_result_unwrap(&[ok], &mut ctx).unwrap();
+
+    // Assert
+    assert_eq!(
+        result,
+        RuntimeValue::Int(42),
+        "unwrap on an Ok(42) should return 42"
+    );
+}
+
+/// 规范 §1.3：Result.err(e) → unwrap → runtime error
+#[test]
+fn test_result_err_unwrap_returns_error() {
+    // Arrange
+    let mut heap = Heap::new();
+    let mut ctx = test_ctx(&mut heap);
+    let err = result_err(error_new("fail", &mut ctx));
+
+    // Act
+    let result = native_result_unwrap(&[err], &mut ctx);
+
+    // Assert
+    assert!(
+        result.is_err(),
+        "unwrap on an Err value should return ExecutorError"
+    );
+}
+
+/// 规范 §1.3：Result.ok → is_ok === true
+#[test]
+fn test_result_is_ok_on_ok_returns_true() {
+    // Arrange
+    let ok = result_ok(RuntimeValue::Int(1));
+    let mut heap = Heap::new();
+    let mut ctx = test_ctx(&mut heap);
+
+    // Act
+    let result = native_result_is_ok(&[ok], &mut ctx).unwrap();
+
+    // Assert
+    assert_eq!(
+        result,
+        RuntimeValue::Bool(true),
+        "is_ok on an Ok value should be true"
+    );
+}
+
+/// 规范 §1.3：Result.err → is_ok === false
+#[test]
+fn test_result_is_ok_on_err_returns_false() {
+    // Arrange
+    let mut heap = Heap::new();
+    let mut ctx = test_ctx(&mut heap);
+    let err = result_err(error_new("x", &mut ctx));
+
+    // Act
+    let result = native_result_is_ok(&[err], &mut ctx).unwrap();
+
+    // Assert
+    assert_eq!(
+        result,
+        RuntimeValue::Bool(false),
+        "is_ok on an Err value should be false"
+    );
+}
+
+/// 规范 §1.3：Result.err(e) → unwrap_or(default) === default
+#[test]
+fn test_result_unwrap_or_with_err_returns_default() {
+    // Arrange
+    let mut heap = Heap::new();
+    let mut ctx = test_ctx(&mut heap);
+    let err = result_err(error_new("x", &mut ctx));
+
+    // Act
+    let result = native_result_unwrap_or(&[err, RuntimeValue::Int(0)], &mut ctx).unwrap();
+
+    // Assert
+    assert_eq!(
+        result,
+        RuntimeValue::Int(0),
+        "unwrap_or on an Err should return the default value"
+    );
+}
+
+/// 规范 §4.2：parse_int("42") → Result.ok(42)
+#[test]
+fn test_parse_int_returns_ok_for_valid_integer() {
+    let mut heap = Heap::new();
+    let mut ctx = test_ctx(&mut heap);
+    let result = native_parse_int(&[RuntimeValue::String("42".into())], &mut ctx).unwrap();
+    let val = native_result_unwrap(&[result], &mut ctx).unwrap();
+    assert_eq!(
+        val,
+        RuntimeValue::Int(42),
+        "parse_int('42') should return Ok(42)"
+    );
+}
+
+/// 规范 §4.2：parse_int("abc") → Result.err(Error)
+#[test]
+fn test_parse_int_returns_err_for_invalid_input() {
+    let mut heap = Heap::new();
+    let mut ctx = test_ctx(&mut heap);
+    let result = native_parse_int(&[RuntimeValue::String("abc".into())], &mut ctx).unwrap();
+    assert_eq!(
+        native_result_is_err(&[result], &mut ctx).unwrap(),
+        RuntimeValue::Bool(true),
+        "parse_int('abc') should return an Err"
+    );
+}
+
+/// 规范 §4.2：parse_int("") → Result.err(Error)
+#[test]
+fn test_parse_int_returns_err_for_empty_string() {
+    let mut heap = Heap::new();
+    let mut ctx = test_ctx(&mut heap);
+    let result = native_parse_int(&[RuntimeValue::String("".into())], &mut ctx).unwrap();
+    assert_eq!(
+        native_result_is_err(&[result], &mut ctx).unwrap(),
+        RuntimeValue::Bool(true),
+        "parse_int('') should return an Err"
+    );
+}
+
+/// 规范 §4.2：parse_int(" -7 ") → Result.ok(-7)（自动 trim + 负数）
+#[test]
+fn test_parse_int_parses_negative_number_with_whitespace() {
+    let mut heap = Heap::new();
+    let mut ctx = test_ctx(&mut heap);
+    let result = native_parse_int(&[RuntimeValue::String(" -7 ".into())], &mut ctx).unwrap();
+    let val = native_result_unwrap(&[result], &mut ctx).unwrap();
+    assert_eq!(
+        val,
+        RuntimeValue::Int(-7),
+        "parse_int(' -7 ') should return Ok(-7) despite whitespace"
+    );
+}
+
+/// 规范 §4.2：parse_float("3.14") → Result.ok(3.14)
+#[test]
+fn test_parse_float_returns_ok_for_valid_float() {
+    let mut heap = Heap::new();
+    let mut ctx = test_ctx(&mut heap);
+    let result = native_parse_float(&[RuntimeValue::String("3.14".into())], &mut ctx).unwrap();
+    let val = native_result_unwrap(&[result], &mut ctx).unwrap();
+    assert_eq!(
+        val,
+        RuntimeValue::Float(3.14),
+        "parse_float('3.14') should return Ok(3.14)"
+    );
+}
+
+/// 规范 §4.2：parse_float("not_a_number") → Result.err(Error)
+#[test]
+fn test_parse_float_returns_err_for_invalid_input() {
+    let mut heap = Heap::new();
+    let mut ctx = test_ctx(&mut heap);
+    let result =
+        native_parse_float(&[RuntimeValue::String("not_a_number".into())], &mut ctx).unwrap();
+    assert_eq!(
+        native_result_is_err(&[result], &mut ctx).unwrap(),
+        RuntimeValue::Bool(true),
+        "parse_float('not_a_number') should return an Err"
+    );
 }
