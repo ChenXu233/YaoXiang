@@ -37,6 +37,7 @@ title: "RFC 索引"
 | RFC-031 | [RFC-031：优化级别与 Pass 管理器](./draft/031-optimization-levels.md) | 晨煦 | 2026-06-16 | 草案 |
 | RFC-032 | [RFC-032: spawn 统一表达式修饰 — 消除 spawn for 特殊情况](./draft/032-spawn-unified-expression.md) | 晨煦 | 2026-06-16 | 草案 |
 | RFC-002 | [RFC-002：基于 libuv 的资源类型 IO 实现层](./draft/002-cross-platform-io-libuv.md) | 晨煦 | 2025-01-05 | 草案（重新审核） |
+| RFC-026b | [RFC-026b: yx-bindgen 工具链](./draft/026b-yx-bindgen.md) | 晨煦 | 2026-07-03 | 草案 |
 
 ---
 
@@ -45,7 +46,7 @@ title: "RFC 索引"
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
 | RFC-025 | [RFC-025: 可扩展原语类型机制](./review/025-primitive-extension.md) | 晨煦 | 2026-06-05 | 审核中 |
-| RFC-026 | [RFC-026：FFI 核心机制](./review/026-ffi-core-mechanism.md) | 晨煦 | 2026-06-05 | 审核中 |
+| ↳ RFC-026a | [RFC-026a: 可扩展 FFI 机制体系](./review/026a-extensible-ffi-system.md) | 晨煦 | 2026-07-03 | 审核中 |
 
 ---
 
@@ -72,6 +73,7 @@ title: "RFC 索引"
 | RFC-017 | [RFC-017: 语言服务器协议（LSP）支持设计](./accepted/017-lsp-support.md) | 晨煦 | 2026-02-15 | 审核中 |
 | RFC-018 | [RFC-018：LLVM AOT 编译器设计](./accepted/018-llvm-aot-compiler.md) | 晨煦 | 2026-02-15 | 已接受 |
 | RFC-024 | [RFC-024：基于 spawn 块的并发模型](./accepted/024-concurrency-model.md) | 晨煦 | 2026-06-05 | 已接受 |
+| RFC-026 | [RFC-026: FFI 核心机制](./accepted/026-ffi-core-mechanism.md) | 晨煦 | 2026-06-05 | 已接受 |
 | RFC-027 | [RFC-027：编译期谓词与统一静态验证](./accepted/027-compile-time-evaluation-types.md) | 晨煦 | 2026-06-07 | 已接受 |
 
 ---
