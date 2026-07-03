@@ -1,9 +1,9 @@
 ---
 title: "RFC-032: spawn 统一表达式修饰 — 消除 spawn for 特殊情况"
-status: "草案"
+status: "审核中"
 author: "晨煦"
 created: "2026-06-16"
-updated: "2026-06-16"
+updated: "2026-07-03"
 ---
 
 # RFC-032: spawn 统一表达式修饰
@@ -298,6 +298,114 @@ spawn if use_cache {
 | `spawn` 仅修饰 `{}`，数据并行走标准库 `par_iter` | 语言原始能力下沉到库，失去编译器层面的 DAG 分析和资源冲突检测 |
 | 只删除 `SpawnFor` 但不在类型系统引入计算结构类型 | 类型系统失去反射能力，spawn 在类型层面不可见 |
 
+
+## 与 RFC-019 的关系
+
+本 RFC 引入的 6 个 `MonoType` 变体（Block/ForExpr/WhileExpr/IfExpr/Call/Spawn）是 [RFC-019: 类型级同像性](./019-typed-homoiconicity.md) 的**编译器内置子集**。RFC-019 的核心理念"语法结构进入类型系统"在这里实现为：6 种编译器原生理解的计算结构拥有对应的类型表示。用户不能通过 `SyntaxRule` 自定义新的计算结构类型，但编译器内置的这 6 种已覆盖所有关键控制流。
+
+## 证明管道集成
+
+6 个 `MonoType` 变体存在的原因：它们告诉 [RFC-027 编译期证明管道](../accepted/027-compile-time-evaluation-types.md) **要验证的命题是什么形状**。管道本身负责实际证明工作（自由变量分析、效果分类、别名分析、冲突检测），MonoType 只做一件事——提供结构化的输入接口。
+
+### 变体 → 命题映射
+
+| 类型 | 命题形状 | 证明策略 |
+|------|---------|---------|
+| `Spawn(ForExpr { body_ty })` | 数据并行：N 个迭代任务无跨迭代冲突 | 提取 body 自由变量 → 效果分类 → 检查无 Write(Shared) / `&mut`(Shared) |
+| `Spawn(WhileExpr { body_ty })` | 条件并行：每轮迭代独立 + 无跨迭代因果依赖 | 同上 + 检查迭代条件是否有跨迭代副作用 |
+| `Spawn(Block(T))` | 显式任务组：任务间依赖关系由 DAG 给出 | 验证 DAG 分析的依赖图——每个任务所需的输入在其开始时已就绪 |
+| `Spawn(IfExpr { then_ty, else_ty })` | 分支 spawn：选中分支整体为一个 spawn 域 | 分支选择无冲突，body 内递归检查 |
+| `Spawn(Call { fn_ty, result_ty })` | 调用 spawn：被调用函数作为一个独立任务 | 验证函数的纯性或隔离性 |
+| `Spawn(T)`（值，如 `spawn 42`） | 单值 spawn：无并发 | 平凡通过 |
+
+### 证明场景
+
+**场景 1 — 纯数据并行（通过）：**
+
+```yaoxiang
+items = [1, 2, 3, 4, 5]
+results = spawn for item in items { item * 2 }
+// 类型：Spawn(ForExpr { body_ty: List(Int) })
+```
+
+1. 自由变量：`item`（循环局部，每次迭代独立副本）、`items`（外部，body 内只读）
+2. 效果分类：全部 Read(Local) 或 Read(Shared)，无写入
+3. Proved ✓
+
+**场景 2 — 只读共享（通过）：**
+
+```yaoxiang
+config = load_config()
+results = spawn for item in items { process(item, config) }
+// 类型：Spawn(ForExpr { body_ty: List(Result) })
+```
+
+1. 自由变量：`item`（Read(Local)）、`config`（外部，body 内无写入路径 → Read(Shared)）
+2. 效果分类：全部只读
+3. Proved ✓
+
+**场景 3 — 写冲突（拒绝）：**
+
+```yaoxiang
+mut counter = 0
+spawn for item in items { counter += 1 }
+```
+
+1. 自由变量：`item`（Read(Local)）、`counter`（外部，`+=` 脱糖为写入）
+2. 效果分类：`counter` 为 Write(Shared)，跨迭代写入同一内存
+3. 实例化冲突：`Write(task_0, counter) ∧ Write(task_1, counter) = True`
+4. Disproved ✗ → 编译错误：`错误：spawn for body 中存在跨迭代写冲突。变量 counter 被多个并发任务写入。`
+
+**场景 4 — while + 有状态迭代器（警告/拒绝）：**
+
+```yaoxiang
+spawn while iter.has_next() {
+    item = iter.next()
+    process(item)
+}
+// 类型：Spawn(WhileExpr { body_ty: List(Processed) })
+```
+
+1. 自由变量：`iter`（外部，`next()` → `&mut self` → `&mut`(Shared)）
+2. `next()` 修改迭代器状态，迭代 N+1 依赖迭代 N 的副作用
+3. 这不是独立任务 → 违反 `Spawn(WhileExpr)` 的独立性约束
+4. 编译器报告跨迭代因果依赖，建议改用 `spawn for`
+
+**场景 5 — spawn if（通过）：**
+
+```yaoxiang
+result = spawn if use_cache { load(key) } else { fetch(key) }
+// 类型：Spawn(IfExpr { then_ty: T, else_ty: Option(T) })
+```
+
+1. 只执行一个分支，不存在跨任务冲突
+2. body 内有子 spawn 则递归检查
+3. Proved ✓
+
+**场景 6 — spawn 块任务间依赖（DAG + 管道验证）：**
+
+```yaoxiang
+spawn {
+    a = fetch_user(id)
+    b = fetch_orders(a.user_id)  // 依赖 a
+    c = compute_stats()           // 独立
+}
+// 类型：Spawn(Block(Tuple(User, Orders, Stats)))
+```
+
+1. DAG 分析：`a` 和 `c` 独立（可并行），`b` 依赖 `a`（在 a 之后调度）
+2. 管道验证：`b` 的输入（`a.user_id`）在 b 启动时已计算完成
+3. Proved ✓
+
+### MonoType 不做什么
+
+| 做什么 | 不做什么 |
+|--------|---------|
+| 标识命题形状 | 不执行证明 |
+| 在类型层面记录计算结构 | 不替代 DAG 分析 |
+| 给 RFC-027 管道提供类型输入 | 不替代自由变量分析、别名分析、冲突检测 |
+
+实际的证明工作由编译器标准分析 pass 完成。MonoType 的价值是让这些 pass 在一个统一的类型框架下被调度——证明管道不需要针对每种 AST 节点写特殊分支。
 ## 实现策略
 
 ### 阶段划分
@@ -327,6 +435,8 @@ spawn if use_cache {
 
 - RFC-024（spawn 块并发模型）— 本 RFC 是其正交性扩展
 - RFC-010（统一类型语法）— 类型系统变更的基础
+- RFC-027（编译期证明管道）— MonoType 变体为管道提供命题形状输入
+- RFC-019（类型级同像性）— MonoType 变体是其编译器内置子集
 
 ## 设计决策记录
 
@@ -339,14 +449,19 @@ spawn if use_cache {
 | spawn 类型擦除 | 类型检查后擦除 | 运行时不需要并发结构信息 | 2026-06-16 |
 | spawn 绑定优先级 | 最低（等同 return） | 吃掉后面整个表达式 | 2026-06-16 |
 | DAG 对 for 内部 | 不展开 for 内部子表达式 | 直接子表达式规则不变，for 整体为一个任务来源 | 2026-06-16 |
+| 证明管道集成 | MonoType 变体映射到 RFC-027 证明命题 | 管道需要知道验证的命题形状，MonoType 提供结构化输入 | 2026-07-03 |
+| RFC-019 关系 | 编译器内置子集 | 用户不能自定义，但共享"语法即类型"理念 | 2026-07-03 |
+| 证明边界 | 6 个场景覆盖：纯并行/只读共享/写冲突/while 依赖/spawn if/spawn block | 明确每个 MonoType 变体的证明义务和失败条件 | 2026-07-03 |
 
 ---
 
 ## 参考文献
 
 - [RFC-024: 基于 spawn 块的并发模型](./024-concurrency-model.md)
-- [并发模型规范](../../reference/language-spec/concurrency.md)
 - [RFC-010: 统一类型语法](./010-unified-type-syntax.md)
+- [RFC-027: 编译期谓词与统一静态验证](../accepted/027-compile-time-evaluation-types.md)
+- [RFC-019: 类型级同像性](./019-typed-homoiconicity.md)
+- [并发模型规范](../../reference/language-spec/concurrency.md)
 - [spawn for 正交性悬置（讨论稿）](../../dev/plan/ongoing/spawn-for-orthogonality.md)
 
 ---
@@ -355,4 +470,4 @@ spawn if use_cache {
 
 | 状态 | 位置 | 说明 |
 |------|------|------|
-| **草案** | `docs/design/rfc/draft/` | 作者草稿 |
+| **审核中** | `docs/design/rfc/review/` | 开放社区讨论 |
