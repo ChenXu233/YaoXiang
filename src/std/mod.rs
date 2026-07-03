@@ -6,7 +6,6 @@
 pub mod concurrent;
 pub mod convert;
 pub mod dict;
-pub mod ffi;
 pub mod gen_interfaces;
 pub mod io;
 pub mod list;
@@ -246,8 +245,6 @@ pub fn register_all(registry: &mut FfiRegistry) {
     #[cfg(not(target_arch = "wasm32"))]
     concurrent::ConcurrentModule.register_ffi(registry);
     convert::ConvertModule.register_ffi(registry);
-    dict::DictModule.register_ffi(registry);
-    ffi::FFI_MODULE.register_ffi(registry);
     io::IoModule.register_ffi(registry);
     list::ListModule.register_ffi(registry);
     math::MathModule.register_ffi(registry);
@@ -283,9 +280,7 @@ pub fn all_module_infos() -> Vec<ModuleInfo> {
     vec![
         #[cfg(not(target_arch = "wasm32"))]
         concurrent::ConcurrentModule.to_module_info(),
-        convert::ConvertModule.to_module_info(),
         dict::DictModule.to_module_info(),
-        ffi::FFI_MODULE.to_module_info(),
         io::IoModule.to_module_info(),
         list::ListModule.to_module_info(),
         math::MathModule.to_module_info(),
