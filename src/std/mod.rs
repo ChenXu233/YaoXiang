@@ -258,10 +258,22 @@ pub fn register_all(registry: &mut FfiRegistry) {
     time::TimeModule.register_ffi(registry);
     #[cfg(not(target_arch = "wasm32"))]
     os::OsModule.register_ffi(registry);
-
     // Register built-in generic functions (replacing hardcoded interpreter special cases)
     registry.register("len", builtin_len as NativeHandler);
     registry.register("dict_keys", builtin_dict_keys as NativeHandler);
+
+    // Safety-net handlers for Native.c/rs (should never execute at runtime —
+    // real dispatch happens via CallNative with mechanism dispatch)
+    registry.register("Native.c", |_args, _ctx| {
+        Err(ExecutorError::runtime_only(
+            "Native.c was not resolved at compile time. This is a compiler bug.".to_string()
+        ))
+    });
+    registry.register("Native.rs", |_args, _ctx| {
+        Err(ExecutorError::runtime_only(
+            "Native.rs was not resolved at compile time. This is a compiler bug.".to_string()
+        ))
+    });
 }
 
 /// Get ModuleInfo for all std modules.

@@ -267,6 +267,9 @@ pub(crate) fn format_value_with_prefix(
         RuntimeValue::Ptr { kind, address, .. } => {
             prefix_fn(&format!("ptr({:?}, {:#x})", kind, address))
         }
+        RuntimeValue::OpaqueHandle { type_name, .. } => {
+            prefix_fn(&format!("opaque<{}>", type_name))
+        }
     }
 }
 
