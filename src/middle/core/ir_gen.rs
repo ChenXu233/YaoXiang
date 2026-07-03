@@ -180,8 +180,12 @@ pub struct AstToIrGenerator {
     module_local_names: HashMap<String, Vec<String>>,
     /// 局部变量类型追踪（用于错误消息中显示实际类型）
     local_var_types: HashMap<String, String>,
-    /// 用户声明的 native 函数绑定
-    native_bindings: Vec<crate::std::ffi::NativeBinding>,
+    /// FFI 库绑定
+    ffi_libs: Vec<crate::middle::core::ir::FfiLibBinding>,
+    /// FFI 绑定 — 不透明类型或外部函数
+    ffi_bindings: Vec<crate::middle::core::ir::FfiBinding>,
+    /// 下一个库 ID
+    next_lib_id: usize,
     /// 结构体定义映射（类型名 -> 字段列表）
     /// 用于构造器调用时填充默认值
     struct_definitions: HashMap<String, Vec<crate::frontend::core::parser::ast::StructField>>,
@@ -246,7 +250,9 @@ impl AstToIrGenerator {
             current_local_names: Vec::new(),
             module_local_names: HashMap::new(),
             local_var_types: HashMap::new(),
-            native_bindings: Vec::new(),
+            ffi_libs: Vec::new(),
+            ffi_bindings: Vec::new(),
+            next_lib_id: 0,
             struct_definitions: HashMap::new(),
             type_bindings: HashMap::new(),
             nested_functions: Vec::new(),
@@ -522,7 +528,8 @@ impl AstToIrGenerator {
             mut_locals: std::mem::take(&mut self.module_mut_locals),
             loop_binding_locals: std::mem::take(&mut self.module_loop_binding_locals),
             local_names: std::mem::take(&mut self.module_local_names),
-            native_bindings: std::mem::take(&mut self.native_bindings),
+            ffi_libs: std::mem::take(&mut self.ffi_libs),
+            ffi_bindings: std::mem::take(&mut self.ffi_bindings),
         })
     }
 
