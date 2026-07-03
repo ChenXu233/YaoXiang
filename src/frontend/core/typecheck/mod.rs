@@ -233,6 +233,41 @@ pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
         },
     );
 
+
+    // 显式注册 Native 模块变量，使 Native.c / Native.rs 在 FieldAccess 中可解析
+    // 注意：add_var 循环（line 280-282）只注册"Native.c"和"Native.rs"这样的点分全名，
+    // 不注册"Native"本身。而 FieldAccess（expressions.rs:961）通过 extract_namespace_path
+    // 从 Var("Native") 开始构建路径，因此"Native"必须在作用域中且类型为 Struct（有字段）。
+    env.add_var(
+        "Native".to_string(),
+        PolyType::mono(MonoType::Struct(
+            crate::frontend::core::types::StructType {
+                name: "Native".to_string(),
+                fields: vec![
+                    ("c".to_string(), MonoType::Fn {
+                        params: vec![MonoType::String],
+                        return_type: Box::new(MonoType::LibraryRef {
+                            mechanism: "c".to_string(),
+                            lib: String::new(),
+                        }),
+                    }),
+                    ("rs".to_string(), MonoType::Fn {
+                        params: vec![MonoType::String],
+                        return_type: Box::new(MonoType::ExternRef {
+                            mechanism: "rs".to_string(),
+                            lib: String::new(),
+                            symbol: String::new(),
+                        }),
+                    }),
+                ],
+                methods: std::collections::HashMap::new(),
+                field_mutability: vec![false, false],
+                field_has_default: vec![false, false],
+                interfaces: Vec::new(),
+            },
+        )),
+    );
+
     // 同时将这些 native 函数注册为变量，使其可在类型推断时查找
     for (name, sig) in &env.native_signatures.clone() {
         env.add_var(name.clone(), PolyType::mono(sig.clone()));
