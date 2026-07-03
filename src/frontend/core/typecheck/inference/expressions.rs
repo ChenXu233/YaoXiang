@@ -1035,17 +1035,40 @@ impl<'a> ExpressionInferrer<'a> {
             crate::frontend::core::parser::ast::Expr::Call {
                 func, args, span, ..
             } => {
-                // 检查 native("...") 表达式 — 通过 name resolution
-                if let Some(native_name) =
-                    crate::std::ffi::extract_native_binding_symbol(func, args)
-                {
-                    if let Some(sig) = self.native_signatures.get(&native_name).cloned() {
-                        return Ok(sig);
-                    }
-                    return Ok(self.solver.new_var());
-                }
-
                 let func_ty = self.infer_expr(func)?;
+
+                // LibraryRef callable rule: when calling a LibraryRef with a string literal
+                // e.g. sqlite3("sqlite3_open") where sqlite3: LibraryRef
+                // Returns ExternRef at compile time
+                let func_ty_resolved = self.solver.resolve_type(&func_ty);
+                if let MonoType::LibraryRef { mechanism, .. } = &func_ty_resolved {
+                    if args.len() == 1 {
+                        if let Some(sym) = extract_string_literal_from_expr(&args[0]) {
+                            return Ok(MonoType::ExternRef {
+                                mechanism: mechanism.clone(),
+                                lib: String::new(), // filled at IR gen
+                                symbol: sym,
+                            });
+                        }
+                        return Err(ErrorCodeDefinition::type_mismatch(
+                            "String",
+                            &format!(
+                                "{}",
+                                self.infer_expr(&args[0])
+                                    .unwrap_or_else(|_| self.solver.new_var())
+                            ),
+                        )
+                        .at(*span)
+                        .build());
+                    }
+                    return Err(ErrorCodeDefinition::argument_count_mismatch(
+                        "LibraryRef callable",
+                        1,
+                        args.len(),
+                    )
+                    .at(*span)
+                    .build());
+                }
 
                 let arg_types: Vec<MonoType> = args
                     .iter()
@@ -1823,3 +1846,16 @@ impl<'a> ExpressionInferrer<'a> {
 
 /// 向后兼容：ExprInferrer 是 ExpressionInferrer 的类型别名
 pub type ExprInferrer<'a> = ExpressionInferrer<'a>;
+
+/// Extract a string literal from an AST expression (compile-time evaluation helper)
+fn extract_string_literal_from_expr(
+    expr: &crate::frontend::core::parser::ast::Expr
+) -> Option<String> {
+    match expr {
+        crate::frontend::core::parser::ast::Expr::Lit(
+            crate::frontend::core::lexer::tokens::Literal::String(s),
+            _,
+        ) => Some(s.clone()),
+        _ => None,
+    }
+}

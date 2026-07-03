@@ -132,69 +132,6 @@ use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
 use crate::std::{NativeContext, NativeExport, StdModule};
 
-// ============================================================================
-// Shared AST helper: detect native("symbol") via name resolution
-// ============================================================================
-
-use crate::frontend::core::lexer::tokens::Literal;
-use crate::frontend::core::parser::ast;
-
-/// 从函数声明的值位置提取 native binding 的符号名。
-///
-/// 通过 name resolution 检测 callee 是否为 `std.ffi.native`：
-/// - `native("symbol")` → Var("native")
-/// - `std.ffi.native("symbol")` → FieldAccess(FieldAccess(Var("std"), "ffi"), "native")
-///
-/// 不再硬编码 AST 字符串匹配，而是通过模块路径解析。
-/// 这保证了用户作用域中的同名变量会正确 shadow（不会被误认为是 FFI 声明）。
-pub fn extract_native_binding_symbol(
-    func: &ast::Expr,
-    args: &[ast::Expr],
-) -> Option<String> {
-    if !is_native_callee(func) {
-        return None;
-    }
-
-    // 提取第一个参数作为 symbol 名
-    let first_arg = args.first()?;
-    if let ast::Expr::Lit(Literal::String(symbol), _) = first_arg {
-        return Some(symbol.clone());
-    }
-
-    None
-}
-
-/// 检查表达式是否解析为 `std.ffi.native`。
-///
-/// 这是通过模块路径解析实现的：
-/// - `native` → 直接匹配名称
-/// - `std.ffi.native` → 递归检查字段访问链
-fn is_native_callee(func: &ast::Expr) -> bool {
-    match func {
-        ast::Expr::Var(name, _) => name == "native",
-        ast::Expr::FieldAccess {
-            expr: inner, field, ..
-        } => {
-            if field == "native" {
-                if let ast::Expr::FieldAccess {
-                    expr,
-                    field: ffi_field,
-                    ..
-                } = inner.as_ref()
-                {
-                    if ffi_field == "ffi" {
-                        if let ast::Expr::Var(name, _) = expr.as_ref() {
-                            return name == "std";
-                        }
-                    }
-                }
-            }
-            false
-        }
-        _ => false,
-    }
-}
-
 /// FFI module implementation.
 ///
 /// Exports `Native(symbol: String) -> Never`, a compile-time-only function
