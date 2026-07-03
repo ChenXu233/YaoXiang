@@ -295,6 +295,7 @@ impl BytecodeFile {
                     writer.write_all(&(bytes.len() as u32).to_le_bytes())?;
                     writer.write_all(bytes)?;
                 }
+                ConstValue::LibraryRef { .. } | ConstValue::ExternRef { .. } => todo!(),
             }
         }
 
@@ -417,6 +418,7 @@ impl MonoTypeExt for MonoType {
             MonoType::Generic { .. } => 47,   // 泛型实例化，使用结构体类型ID
             MonoType::Refined { base, .. } => base.to_type_id(),
             MonoType::DepFn { .. } => 30, // 依赖函数类型，与普通函数同ID
+            MonoType::LibraryRef { .. } | MonoType::ExternRef { .. } => todo!(),
         }
     }
 }

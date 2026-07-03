@@ -1021,7 +1021,9 @@ impl TypeConstraintSolver {
             | MonoType::Float(_)
             | MonoType::Char
             | MonoType::String
-            | MonoType::Bytes => {}
+            | MonoType::Bytes
+            | MonoType::LibraryRef { .. }
+            | MonoType::ExternRef { .. } => {}
             MonoType::Generic { args, .. } => {
                 for a in args {
                     self.collect_generalizable_vars(a, seen, out);

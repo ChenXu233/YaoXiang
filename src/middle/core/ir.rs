@@ -423,6 +423,15 @@ pub enum ConstValue {
     Char(char),
     String(String),
     Bytes(Vec<u8>),
+    LibraryRef {
+        mechanism: String,
+        lib: String,
+    },
+    ExternRef {
+        mechanism: String,
+        lib: String,
+        symbol: String,
+    },
 }
 
 impl PartialEq for ConstValue {
@@ -438,6 +447,28 @@ impl PartialEq for ConstValue {
             (Self::Char(l0), Self::Char(r0)) => l0 == r0,
             (Self::String(l0), Self::String(r0)) => l0 == r0,
             (Self::Bytes(l0), Self::Bytes(r0)) => l0 == r0,
+            (
+                Self::LibraryRef {
+                    mechanism: l0,
+                    lib: l1,
+                },
+                Self::LibraryRef {
+                    mechanism: r0,
+                    lib: r1,
+                },
+            ) => l0 == r0 && l1 == r1,
+            (
+                Self::ExternRef {
+                    mechanism: l0,
+                    lib: l1,
+                    symbol: l2,
+                },
+                Self::ExternRef {
+                    mechanism: r0,
+                    lib: r1,
+                    symbol: r2,
+                },
+            ) => l0 == r0 && l1 == r1 && l2 == r2,
             _ => false,
         }
     }
@@ -459,6 +490,19 @@ impl std::hash::Hash for ConstValue {
             Self::Char(c) => c.hash(state),
             Self::String(s) => s.hash(state),
             Self::Bytes(b) => b.hash(state),
+            Self::LibraryRef { mechanism, lib } => {
+                mechanism.hash(state);
+                lib.hash(state);
+            }
+            Self::ExternRef {
+                mechanism,
+                lib,
+                symbol,
+            } => {
+                mechanism.hash(state);
+                lib.hash(state);
+                symbol.hash(state);
+            }
         }
     }
 }

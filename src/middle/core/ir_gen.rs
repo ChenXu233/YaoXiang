@@ -919,6 +919,9 @@ impl AstToIrGenerator {
                                 ConstValue::Char(c) => c.to_string(),
                                 ConstValue::Void => String::new(),
                                 ConstValue::Bytes(b) => format!("{:?}", b),
+                                ConstValue::LibraryRef { .. } | ConstValue::ExternRef { .. } => {
+                                    todo!()
+                                }
                             };
                             // 格式化说明符在常量求值中不处理，遇到则退回运行时
                             if format_spec.is_some() {
