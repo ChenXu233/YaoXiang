@@ -53,13 +53,7 @@ pub struct Translator {
 impl Translator {
     /// 创建新的翻译器
     pub fn new() -> Self {
-        let mut native_functions = HashSet::new();
-
-        // 从 std 模块自动发现 native 函数
-        for (short_name, native_name) in crate::std::all_native_names() {
-            native_functions.insert(native_name.to_string());
-            native_functions.insert(short_name.to_string());
-        }
+        let native_functions = HashSet::new();
 
         Translator {
             emitter: Emitter::new(),

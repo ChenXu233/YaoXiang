@@ -293,18 +293,3 @@ pub fn all_module_infos() -> Vec<ModuleInfo> {
         os::OsModule.to_module_info(),
     ]
 }
-
-/// Get all native function names (short name, native name pairs) from all std modules.
-///
-/// This is used by the code generator to discover native functions.
-pub fn all_native_names() -> Vec<(String, String)> {
-    let mut names = Vec::new();
-    for module_info in all_module_infos() {
-        for export in module_info.exports.values() {
-            if export.kind == ExportKind::Function {
-                names.push((export.name.clone(), export.full_path.clone()));
-            }
-        }
-    }
-    names
-}

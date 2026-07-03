@@ -19,25 +19,13 @@ use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::i18n::MSG;
 use crate::util::span::Span;
 use std::collections::HashMap;
-use std::sync::LazyLock;
-
-/// 缓存所有 native 函数/常量名（通过 ModuleRegistry 自动发现）
-static NATIVE_NAMES: LazyLock<Vec<String>> =
-    LazyLock::new(|| ModuleRegistry::with_std().native_names());
-
-/// 缓存短名称到完整名称的映射（通过 ModuleRegistry 自动发现）
-/// 例如：print -> std.io.print, abs -> std.math.abs
-static SHORT_TO_QUALIFIED: LazyLock<HashMap<String, String>> =
-    LazyLock::new(|| ModuleRegistry::with_std().short_to_qualified_map());
-
-/// 缓存 std 子模块名称列表（通过 ModuleRegistry 自动发现）
-static STD_SUBMODULES: LazyLock<Vec<String>> =
-    LazyLock::new(|| ModuleRegistry::with_std().std_submodule_names());
 
 /// 检查是否是命名空间调用（如 std.io.println 或 io.println）
 fn is_namespace_call(expr: &ast::Expr) -> bool {
     match expr {
-        ast::Expr::Var(name, _) => name == "std" || is_std_module(name),
+        ast::Expr::Var(name, _) => {
+            name == "std" || ModuleRegistry::with_std().is_std_submodule(name)
+        }
         ast::Expr::FieldAccess { expr, .. } => is_namespace_call(expr),
         _ => false,
     }
@@ -52,7 +40,7 @@ fn extract_namespace_path(
         ast::Expr::Var(name, _) => {
             if name == "std" {
                 format!("std.{}", field)
-            } else if is_std_module(name) {
+            } else if ModuleRegistry::with_std().is_std_submodule(name) {
                 format!("std.{}.{}", name, field)
             } else {
                 format!("{}.{}", name, field)
@@ -70,30 +58,6 @@ fn extract_namespace_path(
     }
 }
 
-/// 检查完整的命名空间路径是否是 native 函数/常量
-fn is_native_name(full_path: &str) -> bool {
-    NATIVE_NAMES.iter().any(|n| n == full_path)
-}
-
-/// 检查变量名是否是 std 模块的子模块
-/// 通过 ModuleRegistry 动态查询，不再硬编码模块名称
-fn is_std_module(name: &str) -> bool {
-    STD_SUBMODULES.iter().any(|m| m == name)
-}
-
-/// 将模块变量和字段组合成完整路径（如 io.println -> std.io.println）
-fn resolve_module_access(
-    module_name: &str,
-    field: &str,
-) -> Option<String> {
-    if is_std_module(module_name) {
-        let full_path = format!("std.{}", field);
-        if is_native_name(&full_path) {
-            return Some(full_path);
-        }
-    }
-    None
-}
 
 /// 检查类型是否实现了 Stringable 接口（即有 to_string 方法）
 /// 用于 print/println 的零开销分发
@@ -771,7 +735,7 @@ impl AstToIrGenerator {
         // 形如: my_add: (a: Int, b: Int) -> Int = Native("my_add")
         //
         // 通过 name resolution 检测，不再硬编码 Var("Native") 字符串匹配。
-        // Native 是 std.ffi 模块中真实存在的函数，名称通过 SHORT_TO_QUALIFIED 解析。
+        // Native 是 std.ffi 模块中真实存在的函数，名称通过 ModuleRegistry 解析。
         if body.is_empty() {
             // 空函数体，无法检测 native 模式
         }
@@ -2386,9 +2350,9 @@ impl AstToIrGenerator {
         func: &ast::Expr,
     ) -> Operand {
         if let Expr::Var(name, _) = func {
-            let resolved_name = if is_native_name(name) {
+            let resolved_name = if ModuleRegistry::with_std().is_native_name(name) {
                 name.clone()
-            } else if let Some(qualified) = SHORT_TO_QUALIFIED.get(name) {
+            } else if let Some(qualified) = ModuleRegistry::with_std().short_to_qualified_map().get(name) {
                 qualified.clone()
             } else {
                 name.clone()
@@ -2770,7 +2734,7 @@ impl AstToIrGenerator {
 
                             // 解析函数名
                             let func_name = if let Some(qualified) =
-                                SHORT_TO_QUALIFIED.get(&binding.function)
+                                ModuleRegistry::with_std().short_to_qualified_map().get(&binding.function)
                             {
                                 qualified.clone()
                             } else {
@@ -3045,7 +3009,7 @@ impl AstToIrGenerator {
                                     let print_func_name = if let Expr::Var(name, _) = func.as_ref()
                                     {
                                         if name == "print" || name == "println" {
-                                            if let Some(qualified) = SHORT_TO_QUALIFIED.get(name) {
+                                            if let Some(qualified) = ModuleRegistry::with_std().short_to_qualified_map().get(name) {
                                                 qualified.clone()
                                             } else {
                                                 format!("std.io.{}", name)
@@ -3095,7 +3059,7 @@ impl AstToIrGenerator {
                                     let print_func_name = if let Expr::Var(name, _) = func.as_ref()
                                     {
                                         if name == "print" || name == "println" {
-                                            if let Some(qualified) = SHORT_TO_QUALIFIED.get(name) {
+                                            if let Some(qualified) = ModuleRegistry::with_std().short_to_qualified_map().get(name) {
                                                 qualified.clone()
                                             } else {
                                                 format!("std.io.{}", name)
@@ -3144,7 +3108,19 @@ impl AstToIrGenerator {
                 // 首先检查是否是模块变量的字段访问（如 io.println）
                 // io 是通过 use std.{io} 导入的模块变量
                 if let Expr::Var(module_name, _) = expr.as_ref() {
-                    if let Some(full_path) = resolve_module_access(module_name, field) {
+                    if let Some(full_path) = {
+                        let reg = ModuleRegistry::with_std();
+                        if reg.is_std_submodule(module_name) {
+                            let path = format!("std.{}", field);
+                            if reg.is_native_name(&path) {
+                                Some(path)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } {
                         // 模块变量方法调用：生成函数调用
                         // 例如：io.println -> Call("std.io.println", [args])
                         // 这里我们处理的是非调用场景的字段访问（如 io.println 作为值）
@@ -3172,9 +3148,7 @@ impl AstToIrGenerator {
                     let full_path = extract_namespace_path(expr, field);
 
                     // 检查是否是命名空间常量访问
-                    let is_native_constant = is_native_name(&full_path);
-
-                    if is_native_constant {
+                    if ModuleRegistry::with_std().is_native_name(&full_path) {
                         // 命名空间常量访问：生成零参数函数调用
                         instructions.push(Instruction::Call {
                             dst: Some(Operand::Local(result_reg)),
