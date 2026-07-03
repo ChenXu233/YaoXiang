@@ -388,6 +388,7 @@ impl Interpreter {
                 dst,
                 func_name,
                 args: arg_regs,
+                ..
             } => {
                 let call_args: Vec<RuntimeValue> = arg_regs
                     .iter()
