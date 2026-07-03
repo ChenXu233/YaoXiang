@@ -64,6 +64,7 @@ smallvec = "1.15.1"
 
 # 字符串处理
 regex = "1"
+libloading = "0.8"
 unicode-ident = "1.0.24"
 urlencoding = "2"
 

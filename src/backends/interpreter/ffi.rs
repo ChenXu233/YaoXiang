@@ -1,27 +1,38 @@
 //! FFI (Foreign Function Interface) Registry for YaoXiang
 //!
 //! This module provides the `FfiRegistry` which manages native function bindings,
-//! allowing YaoXiang code to call Rust functions. It supports:
-//! - Pre-registered standard library functions (std.io, etc.)
-//! - User-defined native function registration
+//! allowing YaoXiang code to call Rust functions directly ("rs" mechanism) and
+//! C functions via dynamically loaded libraries ("c" mechanism).
 //!
 //! # Architecture
 //!
 //! ```text
-//! CallNative { "std.io.println" }
+//! CallNative { mechanism="c", lib="libc.so.6", symbol="getpid" }
 //!       │
-//!       ▼
-//! FfiRegistry.call() → direct handler lookup
+//!       ├── "rs" → FfiRegistry.call() → direct handler lookup
+//!       └── "c"  → FfiRegistry.call_c() → libloading → transmute → call
 //! ```
+//!
+//! # Safety
+//!
+//! C ABI calls involve transmuting function pointer addresses obtained from
+//! `dlsym`/`GetProcAddress`. This is inherently unsafe but encapsulated within
+//! the registry. The `OpaqueHandle` type stores a `NonNull<c_void>` pointer
+//! without ever dereferencing it.
+//!
+//! Phase 1 only supports `() -> i32` C functions. String/struct marshalling
+//! is not yet implemented.
 
+use libloading::Library;
 use std::collections::HashMap;
+use std::collections::HashSet;
+use std::sync::Arc;
 
 use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
 use crate::std::{NativeContext, NativeHandler};
 
 /// FFI Registry that manages native function bindings.
-///
 /// The registry holds a mapping from function names (e.g., `"std.io.println"`)
 /// to their native Rust implementations.
 ///
@@ -35,9 +46,14 @@ use crate::std::{NativeContext, NativeHandler};
 /// let result = registry.call("my_func", &[]);
 /// ```
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct FfiRegistry {
     /// Function handler table: name -> handler
     handlers: HashMap<String, NativeHandler>,
+    /// Cached loaded libraries (lib_name -> Library)
+    loaded_libs: HashMap<String, Arc<Library>>,
+    /// Registered opaque type names
+    opaque_types: HashSet<String>,
 }
 
 impl std::fmt::Debug for FfiRegistry {
@@ -66,6 +82,8 @@ impl FfiRegistry {
     pub fn new() -> Self {
         Self {
             handlers: HashMap::new(),
+            loaded_libs: HashMap::new(),
+            opaque_types: HashSet::new(),
         }
     }
 
@@ -142,6 +160,82 @@ impl FfiRegistry {
     /// Get a list of all registered function names.
     pub fn registered_functions(&self) -> Vec<&str> {
         self.handlers.keys().map(|s| s.as_str()).collect()
+    }
+
+    /// Call a native function by mechanism and name.
+    ///
+    /// Dispatches to either:
+    /// - `"rs"` — calls a registered Rust handler via `call()`
+    /// - `"c"` — calls a C function from a dynamically loaded library via `call_c()`
+    pub fn call_with_mechanism(
+        &self,
+        mechanism: &str,
+        lib: &str,
+        symbol: &str,
+        func_name: &str,
+        args: &[RuntimeValue],
+        ctx: &mut NativeContext<'_>,
+    ) -> Result<RuntimeValue, ExecutorError> {
+        match mechanism {
+            "rs" => self.call(func_name, args, ctx),
+            "c" => self.call_c(lib, symbol, args, ctx),
+            _ => Err(ExecutorError::runtime_only(format!(
+                "unknown FFI mechanism: {mechanism}"
+            ))),
+        }
+    }
+
+    /// Call a C function from a dynamically loaded library.
+    ///
+    /// Phase 1 only supports `() -> i32` (void → int32) C functions.
+    /// The library must be pre-loaded via [`load_library`].
+    ///
+    /// # Safety
+    ///
+    /// Transmutes function pointers from `dlsym`/`GetProcAddress` addresses.
+    /// This is inherently unsafe but encapsulated in this method.
+    fn call_c(
+        &self,
+        lib_name: &str,
+        symbol: &str,
+        args: &[RuntimeValue],
+        _ctx: &mut NativeContext<'_>,
+    ) -> Result<RuntimeValue, ExecutorError> {
+        // Get or load the library
+        let lib = self.loaded_libs.get(lib_name)
+            .ok_or_else(|| ExecutorError::runtime_only(
+                format!("C library not found: {lib_name}. Libraries must be pre-loaded.")
+            ))?;
+
+        // Simple case: () -> Int32 (e.g., getpid, rand)
+        if args.is_empty() {
+            type CIntFn = unsafe extern "C" fn() -> i32;
+            let func: libloading::Symbol<'_, CIntFn> = unsafe {
+                lib.get(symbol.as_bytes())
+                    .map_err(|e| ExecutorError::runtime_only(
+                        format!("symbol not found in {lib_name}: {symbol}: {e}")
+                    ))?
+            };
+            let result = unsafe { func() };
+            return Ok(RuntimeValue::Int(result as i64));
+        }
+        Err(ExecutorError::runtime_only(
+            "C ABI calls with arguments not yet implemented".to_string()
+        ))
+    }
+
+    /// Pre-load a dynamic library by name for C ABI calls.
+    ///
+    /// Example libraries: `"libc.so.6"`, `"libsqlite3.so"`, `"sqlite3.dll"` (Windows).
+    pub fn load_library(&mut self, name: &str) -> Result<(), ExecutorError> {
+        if !self.loaded_libs.contains_key(name) {
+            let lib = Arc::new(unsafe { Library::new(name) }
+                .map_err(|e| ExecutorError::runtime_only(
+                    format!("failed to load library {name}: {e}")
+                ))?);
+            self.loaded_libs.insert(name.to_string(), lib);
+        }
+        Ok(())
     }
 }
 

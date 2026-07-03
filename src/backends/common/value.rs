@@ -9,6 +9,37 @@ use std::fmt;
 use std::alloc;
 use std::hash::{Hash, Hasher};
 
+/// Wrapper for `*mut c_void` that implements Send + Sync.
+///
+/// # Safety
+/// OpaqueHandle pointers are never dereferenced by YaoXiang — they are only
+/// passed to C functions or stored as tokens. This makes them safe to send
+/// between threads, as no data race on the pointed-to memory is possible
+/// through YaoXiang's use of the pointer.
+#[derive(Clone, Copy)]
+pub struct OpaquePtr(pub *mut std::ffi::c_void);
+unsafe impl Send for OpaquePtr {}
+unsafe impl Sync for OpaquePtr {}
+
+impl std::fmt::Debug for OpaquePtr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("OpaquePtr").field(&self.0).finish()
+    }
+}
+
+impl PartialEq for OpaquePtr {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+impl Eq for OpaquePtr {}
+
+impl Hash for OpaquePtr {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
 /// Integer width variants
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IntWidth {
@@ -86,6 +117,8 @@ pub enum ValueType {
     Async(Box<ValueType>),
     /// Raw pointer (only in unsafe blocks)
     Ptr(PtrKind),
+    /// FFI opaque handle type
+    OpaqueHandle,
 }
 
 /// Type ID for runtime type identification
@@ -219,6 +252,13 @@ pub enum RuntimeValue {
         /// Pointed type ID
         type_id: TypeId,
     },
+
+    /// FFI opaque handle — pointer-sized value owned by external library
+    /// YaoXiang only holds the pointer without dereferencing
+    OpaqueHandle {
+        type_name: String,
+        ptr: OpaquePtr,
+    },
 }
 
 // ============================================================================
@@ -275,7 +315,8 @@ impl RuntimeValue {
             RuntimeValue::Weak(_) => ValueType::Weak(Box::new(ValueType::Unit)),
             RuntimeValue::Async(v) => ValueType::Async(Box::new(v.value_type.clone())),
             RuntimeValue::Ptr { kind, .. } => ValueType::Ptr(*kind),
-        }
+            RuntimeValue::OpaqueHandle { .. } => ValueType::OpaqueHandle,
+}
     }
 
     /// Get the static type of this value (convenience method without heap)
@@ -441,6 +482,10 @@ impl RuntimeValue {
                 address: *address,
                 type_id: *type_id,
             },
+            RuntimeValue::OpaqueHandle { type_name, ptr } => RuntimeValue::OpaqueHandle {
+                type_name: type_name.clone(),
+                ptr: *ptr,
+            },
         }
     }
 
@@ -557,6 +602,10 @@ impl RuntimeValue {
                 address: *address,
                 type_id: *type_id,
             },
+            RuntimeValue::OpaqueHandle { type_name, ptr } => RuntimeValue::OpaqueHandle {
+                type_name: type_name.clone(),
+                ptr: *ptr,
+            },
         }
     }
 
@@ -614,7 +663,8 @@ impl RuntimeValue {
             RuntimeValue::Async(_) => alloc::Layout::new::<AsyncState>(),
             RuntimeValue::Ptr { .. } => alloc::Layout::new::<usize>(),
             RuntimeValue::Function(_) => alloc::Layout::new::<FunctionValue>(),
-        }
+            RuntimeValue::OpaqueHandle { .. } => alloc::Layout::new::<(*const std::ffi::c_void, String)>(),
+}
     }
 }
 
@@ -672,7 +722,8 @@ impl fmt::Display for RuntimeValue {
             RuntimeValue::Weak(_) => write!(f, "weak(...)"),
             RuntimeValue::Async(_) => write!(f, "async"),
             RuntimeValue::Ptr { kind, address, .. } => write!(f, "ptr({:?}, {:#x})", kind, address),
-        }
+            RuntimeValue::OpaqueHandle { type_name, .. } => write!(f, "opaque<{}>", type_name),
+}
     }
 }
 
@@ -738,6 +789,7 @@ impl PartialEq for RuntimeValue {
                     type_id: t2,
                 },
             ) => k1 == k2 && a1 == a2 && t1 == t2,
+            (RuntimeValue::OpaqueHandle { ptr: p1, .. }, RuntimeValue::OpaqueHandle { ptr: p2, .. }) => p1 == p2,
             _ => false,
         }
     }
@@ -821,6 +873,10 @@ impl Hash for RuntimeValue {
                 kind.hash(state);
                 address.hash(state);
                 type_id.hash(state);
+            }
+            RuntimeValue::OpaqueHandle { type_name, ptr } => {
+                type_name.hash(state);
+                ptr.hash(state);
             }
         }
     }

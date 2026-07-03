@@ -1140,6 +1140,7 @@ impl Interpreter {
                     RuntimeValue::Weak(_) => "Weak",
                     RuntimeValue::Async(_) => "Async",
                     RuntimeValue::Ptr { .. } => "Ptr",
+                    RuntimeValue::OpaqueHandle { .. } => "OpaqueHandle",
                 };
                 frame.set_register(
                     dst.0 as usize,
