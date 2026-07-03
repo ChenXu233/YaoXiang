@@ -206,6 +206,33 @@ pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
         }
     }
 
+    // Register Native.c — the C ABI FFI entry point
+    // Native.c: (lib: String) -> LibraryRef
+    env.native_signatures.insert(
+        "Native.c".to_string(),
+        MonoType::Fn {
+            params: vec![MonoType::String],
+            return_type: Box::new(MonoType::LibraryRef {
+                mechanism: "c".to_string(),
+                lib: String::new(), // placeholder, filled at IR gen compile-time
+            }),
+        },
+    );
+
+    // Register Native.rs — the Rust ABI std function dispatch
+    // Native.rs: (sym: String) -> ExternRef
+    env.native_signatures.insert(
+        "Native.rs".to_string(),
+        MonoType::Fn {
+            params: vec![MonoType::String],
+            return_type: Box::new(MonoType::ExternRef {
+                mechanism: "rs".to_string(),
+                lib: String::new(),    // placeholder
+                symbol: String::new(), // placeholder
+            }),
+        },
+    );
+
     // 同时将这些 native 函数注册为变量，使其可在类型推断时查找
     for (name, sig) in &env.native_signatures.clone() {
         env.add_var(name.clone(), PolyType::mono(sig.clone()));
