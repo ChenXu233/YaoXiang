@@ -507,6 +507,31 @@ impl std::hash::Hash for ConstValue {
     }
 }
 
+/// FFI 库绑定 — 编译期链接的外部库
+#[derive(Debug, Clone)]
+pub struct FfiLibBinding {
+    pub id: usize,
+    pub mechanism: String,
+    pub lib_name: String,
+}
+
+/// FFI 绑定 — 不透明类型或外部函数
+#[derive(Debug, Clone)]
+pub enum FfiBinding {
+    /// 不透明类型绑定: SqliteDb: Type = lib("sym")
+    TypeBinding {
+        type_name: String,
+        lib_id: usize,
+        symbol: String,
+    },
+    /// 函数绑定: open: sig = lib("sym")
+    FuncBinding {
+        func_name: String,
+        lib_id: usize,
+        symbol: String,
+    },
+}
+
 /// Module IR
 #[derive(Debug, Clone, Default)]
 pub struct ModuleIR {
@@ -520,10 +545,8 @@ pub struct ModuleIR {
     pub loop_binding_locals: std::collections::HashMap<String, std::collections::HashSet<usize>>,
     /// 每个函数的局部变量名列表 (function_name -> 变量名列表，按索引顺序)
     pub local_names: std::collections::HashMap<String, Vec<String>>,
-    /// 用户声明的 native 函数绑定 (func_name -> native_symbol)
-    ///
-    /// 当源码中出现 `my_func: (a: Int) -> Int = Native("symbol")` 时，
-    /// IR 生成器会在此记录映射 `"my_func" -> "symbol"`，
-    /// 代码生成器会将这些函数名注册为 native，使调用点生成 `CallNative` 指令。
-    pub native_bindings: Vec<crate::std::ffi::NativeBinding>,
+    /// FFI 库绑定 — 编译期链接的外部库
+    pub ffi_libs: Vec<FfiLibBinding>,
+    /// FFI 绑定 — 不透明类型或外部函数
+    pub ffi_bindings: Vec<FfiBinding>,
 }

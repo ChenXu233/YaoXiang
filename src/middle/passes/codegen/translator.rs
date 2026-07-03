@@ -107,13 +107,11 @@ impl Translator {
         module: &ModuleIR,
     ) -> Result<TranslatorOutput, Diagnostic> {
         // 注册用户声明的 native 函数绑定
-        // 这些来自 `my_func: Type = Native("symbol")` 声明
-        for binding in &module.native_bindings {
-            // 注册函数名（使调用点生成 CallNative）
-            self.register_native(binding.func_name());
-            // 也注册 native symbol（若与函数名不同）
-            if binding.func_name() != binding.native_symbol() {
-                self.register_native(binding.native_symbol());
+        // FFI 函数绑定将在 Task 5 中被消费
+        // 现在仅从 FuncBinding 条目注册函数名
+        for binding in &module.ffi_bindings {
+            if let crate::middle::core::ir::FfiBinding::FuncBinding { func_name, .. } = binding {
+                self.register_native(func_name);
             }
         }
 

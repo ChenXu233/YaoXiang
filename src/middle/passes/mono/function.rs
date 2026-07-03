@@ -731,7 +731,8 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             mut_locals: original_module.mut_locals.clone(),
             loop_binding_locals: original_module.loop_binding_locals.clone(),
             local_names: original_module.local_names.clone(),
-            native_bindings: original_module.native_bindings.clone(),
+            ffi_libs: original_module.ffi_libs.clone(),
+            ffi_bindings: original_module.ffi_bindings.clone(),
         }
     }
 }
