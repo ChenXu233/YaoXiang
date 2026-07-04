@@ -266,7 +266,7 @@ impl Interpreter {
                     .registers
                     .get(src.0 as usize)
                     .cloned()
-                    .unwrap_or(RuntimeValue::Unit);
+                    .expect("register index out of bounds");
                 frame.set_upvalue(*upvalue_idx as usize, val);
                 frame.advance();
                 Ok(StepOutcome::Continue)
@@ -298,7 +298,13 @@ impl Interpreter {
                     (crate::middle::bytecode::UnaryOp::Not, RuntimeValue::Bool(b)) => {
                         RuntimeValue::Bool(!b)
                     }
-                    _ => RuntimeValue::Unit,
+                    _ => {
+                        let stack = self.capture_stack();
+                        return Err(ExecutorError::type_error(
+                            format!("type mismatch in unary operation {:?}", op),
+                            stack,
+                        ));
+                    }
                 };
                 frame.set_register(dst.0 as usize, result);
                 frame.advance();

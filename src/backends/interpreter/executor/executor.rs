@@ -427,7 +427,7 @@ impl Interpreter {
                 ConstValue::Bytes(b) => RuntimeValue::Bytes(b.as_slice().into()),
                 ConstValue::LibraryRef { .. } | ConstValue::ExternRef { .. } => todo!(),
             })
-            .unwrap_or(RuntimeValue::Unit)
+            .expect("constant index out of bounds")
     }
 
     pub(super) fn make_async_pending(
@@ -899,7 +899,13 @@ impl Interpreter {
                 let handle = self.heap.allocate(HeapValue::List(merged));
                 RuntimeValue::List(handle)
             }
-            _ => RuntimeValue::Unit,
+            _ => {
+                let stack = self.capture_stack();
+                return Err(ExecutorError::type_error(
+                    format!("type mismatch in binary operation {:?}", op),
+                    stack,
+                ));
+            }
         };
 
         frame.set_register(dst.0 as usize, result);
