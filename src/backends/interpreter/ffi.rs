@@ -23,9 +23,11 @@
 //! Phase 1 only supports `() -> i32` C functions. String/struct marshalling
 //! is not yet implemented.
 
+#[cfg(not(target_arch = "wasm32"))]
 use libloading::Library;
 use std::collections::HashMap;
 use std::collections::HashSet;
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
 
 use crate::backends::common::RuntimeValue;
@@ -51,6 +53,7 @@ pub struct FfiRegistry {
     /// Function handler table: name -> handler
     handlers: HashMap<String, NativeHandler>,
     /// Cached loaded libraries (lib_name -> Library)
+    #[cfg(not(target_arch = "wasm32"))]
     loaded_libs: HashMap<String, Arc<Library>>,
     /// Registered opaque type names
     opaque_types: HashSet<String>,
@@ -82,6 +85,7 @@ impl FfiRegistry {
     pub fn new() -> Self {
         Self {
             handlers: HashMap::new(),
+            #[cfg(not(target_arch = "wasm32"))]
             loaded_libs: HashMap::new(),
             opaque_types: HashSet::new(),
         }
@@ -170,15 +174,20 @@ impl FfiRegistry {
     pub fn call_with_mechanism(
         &self,
         mechanism: &str,
-        lib: &str,
-        symbol: &str,
+        #[cfg_attr(target_arch = "wasm32", allow(unused_variables))] lib: &str,
+        #[cfg_attr(target_arch = "wasm32", allow(unused_variables))] symbol: &str,
         func_name: &str,
         args: &[RuntimeValue],
         ctx: &mut NativeContext<'_>,
     ) -> Result<RuntimeValue, ExecutorError> {
         match mechanism {
             "rs" => self.call(func_name, args, ctx),
+            #[cfg(not(target_arch = "wasm32"))]
             "c" => self.call_c(lib, symbol, args, ctx),
+            #[cfg(target_arch = "wasm32")]
+            "c" => Err(ExecutorError::runtime_only(
+                "C ABI (dynamic library loading) is not supported on wasm32".to_string(),
+            )),
             _ => Err(ExecutorError::runtime_only(format!(
                 "unknown FFI mechanism: {mechanism}"
             ))),
@@ -194,6 +203,7 @@ impl FfiRegistry {
     ///
     /// Transmutes function pointers from `dlsym`/`GetProcAddress` addresses.
     /// This is inherently unsafe but encapsulated in this method.
+    #[cfg(not(target_arch = "wasm32"))]
     fn call_c(
         &self,
         lib_name: &str,
@@ -229,6 +239,7 @@ impl FfiRegistry {
     /// Pre-load a dynamic library by name for C ABI calls.
     ///
     /// Example libraries: `"libc.so.6"`, `"libsqlite3.so"`, `"sqlite3.dll"` (Windows).
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn load_library(
         &mut self,
         name: &str,
