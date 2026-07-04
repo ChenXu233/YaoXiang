@@ -267,4 +267,4 @@ pub use bytecode::FunctionCode;
 
 /// 常量定义
 pub const YAOXIANG_MAGIC: u32 = 0x59584243;
-pub const BYTECODE_VERSION: u32 = 2;
+pub const BYTECODE_VERSION: u32 = 3;
