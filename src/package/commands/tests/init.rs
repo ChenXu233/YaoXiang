@@ -14,6 +14,21 @@ use crate::package::commands::init::{exec_in, exec_here, InitOptions};
 use crate::package::error::PackageError;
 use crate::package::manifest::PackageManifest;
 use tempfile::TempDir;
+use std::sync::Mutex;
+
+/// `std::env::set_current_dir` 改的是**进程级 cwd**，进程内所有线程共享。
+/// 三个 `exec_here` 测试如果并行跑，A 的 `_guard` drop 时会把 cwd 切回 original，
+/// 此时正在跑 B 的 `current_dir()` 会看到错的目录，`yaoxiang.toml` 检查失效，
+/// 后续 IO 返回 `Io(NotFound)`。本地 Windows 行为宽容 + 调度运气好常常能过；
+/// Linux + Rust 1.96 下 race 暴露，CI MSRV 必炸。
+/// 用全局锁串行化这三个测试，零依赖。
+static CWD_LOCK: Mutex<()> = Mutex::new(());
+
+/// 拿锁；处理 poisoned（前一个测试 panic 留下的），
+/// 否则 cargo test --no-fail-fast 跑后续测试时直接卡死。
+fn lock_cwd() -> std::sync::MutexGuard<'static, ()> {
+    CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
 
 fn default_opts() -> InitOptions {
     InitOptions { lib: false }
@@ -176,6 +191,8 @@ fn test_init_lib_yx_contains_no_main_entry_point() {
 #[test]
 fn test_init_here_creates_project_in_current_directory() {
     // Arrange
+    // 必须最先声明，最后才 drop，确保整个测试期间持有 cwd 锁
+    let _serial = lock_cwd();
     let tmp = TempDir::new().unwrap();
     let project_dir = tmp.path().join("my-here");
     fs::create_dir(&project_dir).unwrap();
@@ -202,6 +219,8 @@ fn test_init_here_creates_project_in_current_directory() {
 #[test]
 fn test_init_here_fails_when_project_already_exists() {
     // Arrange
+    // 必须最先声明，最后才 drop，确保整个测试期间持有 cwd 锁
+    let _serial = lock_cwd();
     let tmp = TempDir::new().unwrap();
     let project_dir = tmp.path().join("my-here");
     fs::create_dir(&project_dir).unwrap();
@@ -224,6 +243,8 @@ fn test_init_here_fails_when_project_already_exists() {
 #[test]
 fn test_init_here_preserves_preexisting_files() {
     // Arrange
+    // 必须最先声明，最后才 drop，确保整个测试期间持有 cwd 锁
+    let _serial = lock_cwd();
     let tmp = TempDir::new().unwrap();
     let project_dir = tmp.path().join("my-here");
     fs::create_dir(&project_dir).unwrap();
