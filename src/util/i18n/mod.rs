@@ -100,6 +100,7 @@ fn load_translation_file(path: &std::path::Path) -> TranslationMap {
 
 /// Load translations from a JSON string (used for compile-time embedded locales)
 /// 从 JSON 字符串加载翻译（用于编译期嵌入的 locale）
+#[allow(clippy::collapsible_match)]
 fn load_translation_file_from_str(content: &str) -> TranslationMap {
     if let Ok(raw) = serde_json::from_str::<serde_json::Value>(content) {
         if let serde_json::Value::Object(map) = raw {
