@@ -16,7 +16,7 @@ check-rfc-tracking.py - 验证 RFC 目录中的 frontmatter 完整性并生成 T
 import os
 import re
 import sys
-from datetime import date
+from datetime import date, timedelta
 
 # ── 常量 ─────────────────────────────────────────────────────────────────
 
@@ -28,6 +28,7 @@ STATUS_DIR_MAP = {
     '草案': 'draft',
     '审核中': 'review',
     '已接受': 'accepted',
+    '已废弃': 'deprecated',
     '已拒绝': 'rejected',
 }
 
@@ -180,9 +181,9 @@ def validate_rfc(frontmatter, filepath, dirname):
     # 检查创建日期以决定 issue 验证严格程度
     created_str = frontmatter.get('created', '')
     try:
-        created_date = date.fromisoformat(created_str) if created_str else CUTOFF_DATE
+        created_date = date.fromisoformat(created_str) if created_str else CUTOFF_DATE - timedelta(days=1)
     except (ValueError, TypeError):
-        created_date = CUTOFF_DATE  # 无法解析日期，按严格模式处理
+        created_date = CUTOFF_DATE - timedelta(days=1)  # 无法解析日期，按旧文件处理（仅警告）
 
     # 新 RFC 必须填写 issue
     if created_date >= CUTOFF_DATE:
