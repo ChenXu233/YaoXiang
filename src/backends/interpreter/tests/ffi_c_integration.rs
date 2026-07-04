@@ -42,22 +42,21 @@ fn test_c_ffi_call_getpid() {
     registry.load_library(lib_name).unwrap();
 
     // Act: 调用 C 函数 — RFC-026 §3.1 无参签名直接寄存器传递
-    let result = registry.call_with_mechanism(
-        "c",
-        lib_name,
-        sym_name,
-        "",
-        &[],
-        &mut ctx,
-    );
+    let result = registry.call_with_mechanism("c", lib_name, sym_name, "", &[], &mut ctx);
 
     // Assert: 返回值是正数 PID
-    assert!(result.is_ok(), "C ABI call to {lib_name}::{sym_name} should succeed");
+    assert!(
+        result.is_ok(),
+        "C ABI call to {lib_name}::{sym_name} should succeed"
+    );
     let pid = match result.unwrap() {
         RuntimeValue::Int(pid) => pid,
         other => panic!("Expected RuntimeValue::Int, got {other:?} for PID call"),
     };
-    assert!(pid > 0, "PID from {lib_name}::{sym_name} should be positive, got {pid}");
+    assert!(
+        pid > 0,
+        "PID from {lib_name}::{sym_name} should be positive, got {pid}"
+    );
 }
 
 #[test]
@@ -78,7 +77,10 @@ fn test_c_ffi_call_nonexistent_library_returns_error() {
     );
 
     // Assert: 应该返回错误，不是 panic
-    assert!(result.is_err(), "Calling nonexistent library should return error");
+    assert!(
+        result.is_err(),
+        "Calling nonexistent library should return error"
+    );
 }
 
 #[test]
@@ -111,5 +113,8 @@ fn test_c_ffi_call_nonexistent_symbol_returns_error() {
     );
 
     // Assert: 符号不存在返回错误
-    assert!(result.is_err(), "Calling nonexistent symbol on {lib_name} should return error");
+    assert!(
+        result.is_err(),
+        "Calling nonexistent symbol on {lib_name} should return error"
+    );
 }
