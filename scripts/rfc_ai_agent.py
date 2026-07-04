@@ -23,8 +23,8 @@ import httpx
 # ── Constants ────────────────────────────────────────────────────────────────
 
 RFC_ROOT = os.path.join("docs", "src", "design", "rfc")
-OPENAI_BASE_URL = "https://api.openai.com/v1/chat/completions"
-MODEL = "gpt-4o-mini"
+AI_BASE_URL = os.environ.get("AI_BASE_URL", "https://api.openai.com/v1/chat/completions")
+MODEL = os.environ.get("AI_MODEL", "gpt-4o-mini")
 TEMPERATURE = 0.1
 TIMEOUT = 30
 
@@ -190,7 +190,7 @@ def call_llm(prompt, api_key):
 
     with httpx.Client(timeout=TIMEOUT) as client:
         response = client.post(
-            OPENAI_BASE_URL,
+            AI_BASE_URL,
             headers=headers,
             json=payload,
         )
@@ -275,14 +275,14 @@ def main():
     4. Post the result as a comment (or to GITHUB_STEP_SUMMARY for workflow_dispatch).
     """
     event_path = os.environ.get("GITHUB_EVENT_PATH", "")
-    api_key = os.environ.get("OPENAI_API_KEY", "")
+    api_key = os.environ.get("AI_API_KEY", "")
 
     if not event_path:
         print("Error: GITHUB_EVENT_PATH environment variable not set.")
         sys.exit(1)
 
     if not api_key:
-        print("Error: OPENAI_API_KEY environment variable not set.")
+        print("Error: AI_API_KEY environment variable not set.")
         sys.exit(1)
 
     task_type = determine_task_type(event_path)
