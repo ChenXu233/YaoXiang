@@ -14,7 +14,7 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 /// 文件格式采用混合端序：魔数大端序（方便调试），其他数据小端序（性能优化）
 const MAGIC: u32 = 0x59584243;
 /// 版本号
-const VERSION: u32 = 2;
+const VERSION: u32 = 3;
 
 const FLAG_DEBUG_INFO: u32 = 0x02;
 
@@ -217,13 +217,14 @@ impl BytecodeInstruction {
     /// 编码为字节序列
     pub fn encode(&self) -> Vec<u8> {
         let mut bytes = vec![self.opcode];
+        bytes.extend(&(self.operands.len() as u16).to_le_bytes());
         bytes.extend(&self.operands);
         bytes
     }
 
     /// 获取编码后的大小
     pub fn encoded_size(&self) -> usize {
-        1 + self.operands.len()
+        3 + self.operands.len()
     }
 }
 
@@ -310,6 +311,7 @@ impl BytecodeFile {
             writer.write_all(&(func.instructions.len() as u32).to_le_bytes())?;
             for instr in &func.instructions {
                 writer.write_all(&[instr.opcode])?;
+                writer.write_all(&(instr.operands.len() as u16).to_le_bytes())?;
                 writer.write_all(&instr.operands)?;
             }
         }
@@ -338,6 +340,197 @@ impl BytecodeFile {
         }
 
         Ok(())
+    }
+}
+
+impl BytecodeFile {
+    ///
+    /// 格式与 `write_to` 对称。支持通过文件尾的 YXDB 魔数检测可选的调试段。
+    pub fn read_from<R: Read + Seek>(reader: &mut R) -> io::Result<Self> {
+        // 读取文件头
+        let mut buf32 = [0u8; 4];
+        reader.read_exact(&mut buf32)?;
+        let magic = u32::from_be_bytes(buf32);
+        if magic != MAGIC {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("invalid magic: expected YXBC (0x{MAGIC:08X}), got 0x{magic:08X}"),
+            ));
+        }
+
+        let version = read_u32(reader)?;
+        if version != VERSION {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("unsupported bytecode version {version}, expected {VERSION}"),
+            ));
+        }
+
+        let flags = read_u32(reader)?;
+        let entry_point = read_u32(reader)?;
+
+        let mut buf16 = [0u8; 2];
+        reader.read_exact(&mut buf16)?;
+        let section_count = u16::from_le_bytes(buf16);
+
+        let _file_size = read_u32(reader)?;
+        let _checksum = read_u32(reader)?;
+
+        let header = FileHeader {
+            magic,
+            version,
+            flags,
+            entry_point,
+            section_count,
+            file_size: _file_size,
+            checksum: _checksum,
+        };
+
+        // 读取类型表
+        let type_count = read_u32(reader)? as usize;
+        let mut type_table = Vec::with_capacity(type_count);
+        for _ in 0..type_count {
+            let type_id = read_u32(reader)?;
+            type_table.push(type_id_to_monotype(type_id));
+        }
+
+        // 读取常量池
+        let const_count = read_u32(reader)? as usize;
+        let mut const_pool = Vec::with_capacity(const_count);
+        for _ in 0..const_count {
+            let mut tag_buf = [0u8; 1];
+            reader.read_exact(&mut tag_buf)?;
+            let tag = tag_buf[0];
+
+            let const_val = match tag {
+                0 => ConstValue::Void,
+                1 => {
+                    let mut b = [0u8; 1];
+                    reader.read_exact(&mut b)?;
+                    ConstValue::Bool(b[0] != 0)
+                }
+                2 => {
+                    let mut n = [0u8; 16];
+                    reader.read_exact(&mut n)?;
+                    ConstValue::Int(i128::from_le_bytes(n))
+                }
+                3 => {
+                    let mut f = [0u8; 8];
+                    reader.read_exact(&mut f)?;
+                    ConstValue::Float(f64::from_le_bytes(f))
+                }
+                4 => {
+                    let mut c = [0u8; 4];
+                    reader.read_exact(&mut c)?;
+                    let code = u32::from_le_bytes(c);
+                    ConstValue::Char(char::from_u32(code).unwrap_or('\u{FFFD}'))
+                }
+                5 => {
+                    let s = read_string(reader)?;
+                    ConstValue::String(s)
+                }
+                6 => {
+                    let len = read_u32(reader)? as usize;
+                    let mut bytes = vec![0u8; len];
+                    reader.read_exact(&mut bytes)?;
+                    ConstValue::Bytes(bytes)
+                }
+                _ => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("unknown const tag: {tag}"),
+                    ));
+                }
+            };
+            const_pool.push(const_val);
+        }
+
+        // 读取代码段
+        let func_count = read_u32(reader)? as usize;
+        let mut functions = Vec::with_capacity(func_count);
+        for _ in 0..func_count {
+            let name = read_string(reader)?;
+
+            let param_count = read_u32(reader)? as usize;
+            let mut params = Vec::with_capacity(param_count);
+            for _ in 0..param_count {
+                let type_id = read_u32(reader)?;
+                params.push(type_id_to_monotype(type_id));
+            }
+
+            let return_type_id = read_u32(reader)?;
+            let return_type = type_id_to_monotype(return_type_id);
+
+            let local_count = read_u32(reader)? as usize;
+            let instr_count = read_u32(reader)? as usize;
+
+            let mut instructions = Vec::with_capacity(instr_count);
+            for _ in 0..instr_count {
+                let mut opcode_buf = [0u8; 1];
+                reader.read_exact(&mut opcode_buf)?;
+                let opcode = opcode_buf[0];
+
+                let mut len_buf = [0u8; 2];
+                reader.read_exact(&mut len_buf)?;
+                let operand_len = u16::from_le_bytes(len_buf) as usize;
+
+                let mut operands = vec![0u8; operand_len];
+                if operand_len > 0 {
+                    reader.read_exact(&mut operands)?;
+                }
+
+                instructions.push(BytecodeInstruction { opcode, operands });
+            }
+
+            functions.push(FunctionCode {
+                name,
+                params,
+                return_type,
+                instructions,
+                local_count,
+                debug_map: HashMap::new(),
+            });
+        }
+
+        // 跳转表（4 字节填充）
+        let mut jump_table = [0u8; 4];
+        reader.read_exact(&mut jump_table)?;
+
+        // 可选的调试段（从文件尾向后读取）
+        let debug_section = DebugSection::read_from_end(reader)?;
+
+        Ok(Self {
+            header,
+            type_table,
+            const_pool,
+            code_section: CodeSection { functions },
+            debug_section,
+        })
+    }
+
+    /// 从文件路径加载字节码文件
+    pub fn load<P: AsRef<std::path::Path>>(path: P) -> io::Result<Self> {
+        let file = std::fs::File::open(path.as_ref())?;
+        let mut reader = std::io::BufReader::new(file);
+        Self::read_from(&mut reader)
+    }
+}
+
+/// 将 type_id (u32) 转换为相应的 MonoType。
+///
+/// 序列化是 lossy 的（复杂类型如 Struct/Enum 只存储一个 id），
+/// 因此复杂类型会 fallback 到 `TypeRef("_")`。
+/// 简单类型（Void/Bool/Int/Float/Char/String/Bytes）可以精确重建。
+fn type_id_to_monotype(id: u32) -> MonoType {
+    match id {
+        0 => MonoType::Void,
+        1 => MonoType::Bool,
+        2..=5 => MonoType::Int(((id - 2) * 8 + 8) as usize),
+        6..=9 => MonoType::Float(((id - 6) * 8 + 8) as usize),
+        10 => MonoType::Char,
+        11 => MonoType::String,
+        12 => MonoType::Bytes,
+        _ => MonoType::TypeRef("_".to_string()),
     }
 }
 
