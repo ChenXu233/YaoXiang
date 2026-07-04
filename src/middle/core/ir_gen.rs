@@ -58,7 +58,6 @@ fn extract_namespace_path(
     }
 }
 
-
 /// 检查类型是否实现了 Stringable 接口（即有 to_string 方法）
 /// 用于 print/println 的零开销分发
 fn type_implements_stringable(mono_type: &MonoType) -> bool {
@@ -2352,7 +2351,10 @@ impl AstToIrGenerator {
         if let Expr::Var(name, _) = func {
             let resolved_name = if ModuleRegistry::with_std().is_native_name(name) {
                 name.clone()
-            } else if let Some(qualified) = ModuleRegistry::with_std().short_to_qualified_map().get(name) {
+            } else if let Some(qualified) = ModuleRegistry::with_std()
+                .short_to_qualified_map()
+                .get(name)
+            {
                 qualified.clone()
             } else {
                 name.clone()
@@ -2733,8 +2735,9 @@ impl AstToIrGenerator {
                             }
 
                             // 解析函数名
-                            let func_name = if let Some(qualified) =
-                                ModuleRegistry::with_std().short_to_qualified_map().get(&binding.function)
+                            let func_name = if let Some(qualified) = ModuleRegistry::with_std()
+                                .short_to_qualified_map()
+                                .get(&binding.function)
                             {
                                 qualified.clone()
                             } else {
@@ -3009,7 +3012,10 @@ impl AstToIrGenerator {
                                     let print_func_name = if let Expr::Var(name, _) = func.as_ref()
                                     {
                                         if name == "print" || name == "println" {
-                                            if let Some(qualified) = ModuleRegistry::with_std().short_to_qualified_map().get(name) {
+                                            if let Some(qualified) = ModuleRegistry::with_std()
+                                                .short_to_qualified_map()
+                                                .get(name)
+                                            {
                                                 qualified.clone()
                                             } else {
                                                 format!("std.io.{}", name)
@@ -3059,7 +3065,10 @@ impl AstToIrGenerator {
                                     let print_func_name = if let Expr::Var(name, _) = func.as_ref()
                                     {
                                         if name == "print" || name == "println" {
-                                            if let Some(qualified) = ModuleRegistry::with_std().short_to_qualified_map().get(name) {
+                                            if let Some(qualified) = ModuleRegistry::with_std()
+                                                .short_to_qualified_map()
+                                                .get(name)
+                                            {
                                                 qualified.clone()
                                             } else {
                                                 format!("std.io.{}", name)
