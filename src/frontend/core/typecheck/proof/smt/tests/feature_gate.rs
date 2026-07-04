@@ -12,10 +12,7 @@ fn test_z3_backend_always_available() {
     let backend = Z3Backend::new();
 
     // Assert — Z3 可能未安装导致初始化失败，但类型必须存在且可构造
-    assert!(
-        backend.is_ok() || true,
-        "Z3Backend 类型应该在非 wasm32 target 下可用"
-    );
+    assert!(true, "Z3Backend 类型应该在非 wasm32 target 下可用");
 }
 
 /// z3_ffi 模块的 FFI 类型应该在非 wasm32 target 下可用
