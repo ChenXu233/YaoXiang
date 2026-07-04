@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC-032: spawn 統一式修飾 — spawn for 特殊ケースの除去"
 status: "レビュー中"

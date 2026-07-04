@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC-031：最適化レベルと Pass マネージャー"
 status: "ドラフト"

@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "YaoXiang Code Formatting Specification"
 description: YaoXiang 代码格式化工具（yaoxiang fmt）的行为规范总则，定义格式化原则和适用范围

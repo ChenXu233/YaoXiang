@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC-014a: Registry 协议规范"
 status: "审核中"

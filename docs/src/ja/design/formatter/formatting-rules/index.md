@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "フォーマット規則の概要"
 description: YaoXiang コードフォーマット規則の分類とインデックス

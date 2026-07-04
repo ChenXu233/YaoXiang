@@ -1,4 +1,3 @@
-```yaml
 ---
 title: "RFC-019: Типовой гомоиконичность (Typed Homoiconicity) - Синтаксис как тип"
 status: "Черновик"

@@ -1,4 +1,3 @@
-```markdown
 # yaoxiang check
 
 Выполнение статической проверки (type check, ownership check) исходного кода YaoXiang без генерации кода.

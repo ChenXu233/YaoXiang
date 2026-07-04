@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC-008：Runtime 並行モデルとスケジューラ分離設計"
 status: "承認済み"

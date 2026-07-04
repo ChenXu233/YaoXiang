@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "パッケージマネージャー"
 description: YaoXiang パッケージマネージャー リファレンスドキュメント

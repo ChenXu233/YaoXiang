@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "YaoXiang コードフォーマット仕様"
 description: YaoXiang コードフォーマットツール（yaoxiang fmt）の動作仕様总則、フォーマット原則と適用範囲を定義

@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC-014a: Спецификация протокола Registry"
 status: "На рассмотрении"

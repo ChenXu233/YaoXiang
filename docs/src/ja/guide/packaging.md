@@ -1,4 +1,3 @@
-```yaml
 ---
 title: "パッケージマネージャー"
 description: YaoXiang 公式パッケージマネージャーの使い方教程

@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC-024:spawnベースの並行ランタイムセマンティクス"
 status: "承認済み（改訂版）"

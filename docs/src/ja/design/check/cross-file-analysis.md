@@ -1,4 +1,3 @@
-```markdown
 ---
 title: ファイル間分析
 description: YaoXiang check ファイル間型チェックの設計

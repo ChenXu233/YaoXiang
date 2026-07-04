@@ -1,4 +1,3 @@
-```yaml
 ---
 title: "RFC-026a: 拡張可能な FFI 機構体系"
 status: "レビュー中"

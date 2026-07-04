@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC 実装状況"
 ---
