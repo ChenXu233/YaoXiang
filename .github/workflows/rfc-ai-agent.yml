@@ -1,0 +1,33 @@
+name: RFC AI Agent (Transition)
+
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      task_type:
+        description: "AI 任务类型"
+        required: true
+        default: "progress_report"
+        type: choice
+        options:
+          - progress_report
+
+jobs:
+  ai-agent:
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'enhancement')) ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.body, 'RFC-')) ||
+      (github.event_name == 'workflow_dispatch')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Python dependencies
+        run: pip install httpx
+      - name: Run RFC AI Agent
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/rfc_ai_agent.py
