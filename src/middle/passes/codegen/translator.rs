@@ -369,7 +369,7 @@ impl Translator {
                 fields,
             } => self.translate_create_struct(dst, type_name, fields),
             NewDict { dst, keys, values } => self.translate_new_dict(dst, keys, values),
-            MakeClosure { dst, func, .. } => self.translate_make_closure(dst, func),
+            MakeClosure { dst, func, env } => self.translate_make_closure(dst, func, env),
             Drop(operand) => self.translate_drop(operand),
 
             Push(operand) => self.translate_push(operand),
@@ -983,20 +983,21 @@ impl Translator {
         &mut self,
         dst: &Operand,
         func_name: &str,
+        env: &[Operand],
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
-
-        // 通过函数名查找索引
         let func_id = if let Some(ref name_to_idx) = self.function_name_to_idx {
             name_to_idx.get(func_name).copied().unwrap_or(0) as u32
         } else {
-            // 如果没有映射，使用 0（回退）
             0
         };
-
         let mut operands = vec![dst_reg];
         operands.extend_from_slice(&func_id.to_le_bytes());
-        operands.push(0);
+        operands.push(env.len() as u8);
+        for op in env {
+            let reg = self.operand_resolver.to_reg(op)?;
+            operands.extend_from_slice(&(reg as u16).to_le_bytes());
+        }
         Ok(BytecodeInstruction::new(Opcode::MakeClosure, operands))
     }
 

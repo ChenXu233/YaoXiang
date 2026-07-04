@@ -829,7 +829,9 @@ pub(crate) fn execute_single_proof_fn(
         .generate()
         .map_err(|e| format!("证明函数 '{}' 字节码编译失败: {}", call.func_name, e))?;
 
-    let bytecode_module = crate::middle::core::bytecode::BytecodeModule::from(bytecode_file);
+    let mut bytecode_module = crate::middle::core::bytecode::BytecodeModule::from(bytecode_file);
+    // 证明函数没有 main 入口，不应自动执行 entry_point（会把参数为空的函数执行一遍）
+    bytecode_module.entry_point = None;
 
     // 5. ConstValue → RuntimeValue
     let args: Vec<RuntimeValue> = call.args.iter().map(from_const_value).collect();
