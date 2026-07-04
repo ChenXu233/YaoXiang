@@ -13,6 +13,7 @@ title: "RFC 索引"
 - [审核中RFC](#审核中rfc)
 - [已接受RFC](#已接受rfc)
 - [已废弃RFC](#已废弃rfc)
+
 - [已拒绝RFC](#已拒绝rfc)
 
 ---
@@ -88,6 +89,7 @@ title: "RFC 索引"
 
 ---
 
+
 ## 已拒绝RFC
 
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
@@ -113,7 +115,7 @@ title: "RFC 索引"
 |------|------|------|
 | **草案** | `rfc/draft/` | 作者草稿，等待提交审核 |
 | **审核中** | `rfc/review/` | 开放社区讨论和反馈 |
-| **已接受** | `rfc/accepted/` | 成为正式设计文档，进入实现阶段 |
+
 | **已废弃** | `rfc/deprecated/` | 曾被接受，被新设计取代 |
 | **已拒绝** | `rfc/rejected/` | 被拒绝的RFC文档 |
 
@@ -124,7 +126,7 @@ title: "RFC 索引"
 1. 阅读 [RFC_TEMPLATE.md](RFC_TEMPLATE.md) 了解格式要求
 2. 参考 [EXAMPLE_full_feature_proposal.md](EXAMPLE_full_feature_proposal.md) 学习写法
 3. 创建新文件，命名为 `序号-描述性标题.md`
-4. 将文件放入 `docs/reference/rfc/draft/` 目录
+4. 将文件放入 `docs/src/design/rfc/draft/` 目录
 5. 更新本索引文件，添加新RFC条目
 6. 提交PR进入审核流程
 

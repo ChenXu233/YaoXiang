@@ -433,6 +433,7 @@ fn test_parse_int_parses_negative_number_with_whitespace() {
 
 /// 规范 §4.2：parse_float("3.14") → Result.ok(3.14)
 #[test]
+#[allow(clippy::approx_constant)]
 fn test_parse_float_returns_ok_for_valid_float() {
     let mut heap = Heap::new();
     let mut ctx = test_ctx(&mut heap);
