@@ -22,20 +22,29 @@ unsafe impl Send for OpaquePtr {}
 unsafe impl Sync for OpaquePtr {}
 
 impl std::fmt::Debug for OpaquePtr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
         f.debug_tuple("OpaquePtr").field(&self.0).finish()
     }
 }
 
 impl PartialEq for OpaquePtr {
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
         self.0 == other.0
     }
 }
 impl Eq for OpaquePtr {}
 
 impl Hash for OpaquePtr {
-    fn hash<H: Hasher>(&self, state: &mut H) {
+    fn hash<H: Hasher>(
+        &self,
+        state: &mut H,
+    ) {
         self.0.hash(state);
     }
 }
@@ -255,10 +264,7 @@ pub enum RuntimeValue {
 
     /// FFI opaque handle — pointer-sized value owned by external library
     /// YaoXiang only holds the pointer without dereferencing
-    OpaqueHandle {
-        type_name: String,
-        ptr: OpaquePtr,
-    },
+    OpaqueHandle { type_name: String, ptr: OpaquePtr },
 }
 
 // ============================================================================
@@ -316,7 +322,7 @@ impl RuntimeValue {
             RuntimeValue::Async(v) => ValueType::Async(Box::new(v.value_type.clone())),
             RuntimeValue::Ptr { kind, .. } => ValueType::Ptr(*kind),
             RuntimeValue::OpaqueHandle { .. } => ValueType::OpaqueHandle,
-}
+        }
     }
 
     /// Get the static type of this value (convenience method without heap)
@@ -663,8 +669,10 @@ impl RuntimeValue {
             RuntimeValue::Async(_) => alloc::Layout::new::<AsyncState>(),
             RuntimeValue::Ptr { .. } => alloc::Layout::new::<usize>(),
             RuntimeValue::Function(_) => alloc::Layout::new::<FunctionValue>(),
-            RuntimeValue::OpaqueHandle { .. } => alloc::Layout::new::<(*const std::ffi::c_void, String)>(),
-}
+            RuntimeValue::OpaqueHandle { .. } => {
+                alloc::Layout::new::<(*const std::ffi::c_void, String)>()
+            }
+        }
     }
 }
 
@@ -723,7 +731,7 @@ impl fmt::Display for RuntimeValue {
             RuntimeValue::Async(_) => write!(f, "async"),
             RuntimeValue::Ptr { kind, address, .. } => write!(f, "ptr({:?}, {:#x})", kind, address),
             RuntimeValue::OpaqueHandle { type_name, .. } => write!(f, "opaque<{}>", type_name),
-}
+        }
     }
 }
 
@@ -789,7 +797,10 @@ impl PartialEq for RuntimeValue {
                     type_id: t2,
                 },
             ) => k1 == k2 && a1 == a2 && t1 == t2,
-            (RuntimeValue::OpaqueHandle { ptr: p1, .. }, RuntimeValue::OpaqueHandle { ptr: p2, .. }) => p1 == p2,
+            (
+                RuntimeValue::OpaqueHandle { ptr: p1, .. },
+                RuntimeValue::OpaqueHandle { ptr: p2, .. },
+            ) => p1 == p2,
             _ => false,
         }
     }

@@ -406,9 +406,8 @@ impl Interpreter {
                 let runtime = self.runtime_config.runtime;
 
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
-                    let result = self.call_native_with_ffi_meta(
-                        func_name, mechanism, lib, symbol, &call_args
-                    )?;
+                    let result = self
+                        .call_native_with_ffi_meta(func_name, mechanism, lib, symbol, &call_args)?;
                     if let Some(dst_reg) = dst {
                         frame.set_register(dst_reg.index() as usize, result);
                     }
