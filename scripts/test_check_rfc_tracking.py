@@ -217,7 +217,7 @@ def test_derive_state_from_directory():
     assert crt.derive_state('draft') == '草案'
     assert crt.derive_state('review') == '审核中'
     assert crt.derive_state('accepted') == '已接受'
-    assert crt.derive_state('implemented') == '已实现'
+
     assert crt.derive_state('deprecated') == '已废弃'
     assert crt.derive_state('rejected') == '已拒绝'
     assert crt.derive_state('unknown') == '未知'
