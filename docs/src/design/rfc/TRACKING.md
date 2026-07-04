@@ -19,11 +19,6 @@
 | 024-concurrency-model.md | RFC-024：基于 spawn 块的并发模型 | 已接受 | accepted\024-concurrency-model.md | -- | -- | -- |
 | 026-ffi-core-mechanism.md | RFC-026：FFI 核心机制 | 已接受 | accepted\026-ffi-core-mechanism.md | -- | -- | -- |
 | 027-compile-time-evaluation-types.md | RFC-027：编译期谓词与统一静态验证 | 已接受 | accepted\027-compile-time-evaluation-types.md | -- | -- | -- |
-| 001-concurrent-model-error-handling.md | RFC-001：并作模型与错误处理系统 | 已废弃 | deprecated\001-concurrent-model-error-handling.md | -- | -- | -- |
-| 020-dynamic-modules-ffi.md | RFC-020：动态模块与 FFI 集成 | 已废弃 | deprecated\020-dynamic-modules-ffi.md | -- | -- | -- |
-| 021-library-driven-ffi-extension.md | RFC-021: 库驱动 FFI 扩展与跨语言调用支持 | 已废弃 | deprecated\021-library-driven-ffi-extension.md | -- | -- | -- |
-| 022-hoare-logic-static-verification.md | RFC 022: 霍尔逻辑静态验证支持（规约注释与规约类型） | 已废弃 | deprecated\022-hoare-logic-static-verification.md | -- | -- | -- |
-| 023-closure-capture-model.md | RFC-023: 闭包捕获模型 | 已废弃 | deprecated\023-closure-capture-model.md | -- | -- | -- |
 | 002-cross-platform-io-libuv.md | RFC-002：基于 libuv 的资源类型 IO 实现层 | 草案 | draft\002-cross-platform-io-libuv.md | -- | -- | -- |
 | 011a-interface-implementation.md | RFC-011a: 接口实现与动态分发 | 草案 | draft\011a-interface-implementation.md | -- | -- | -- |
 | 019-typed-homoiconicity.md | RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型 | 草案 | draft\019-typed-homoiconicity.md | -- | -- | -- |

@@ -28,8 +28,6 @@ STATUS_DIR_MAP = {
     '草案': 'draft',
     '审核中': 'review',
     '已接受': 'accepted',
-    '已实现': 'implemented',
-    '已废弃': 'deprecated',
     '已拒绝': 'rejected',
 }
 
