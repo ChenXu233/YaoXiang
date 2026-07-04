@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC-014: パッケージ管理システム設計"
 status: "承認済み"

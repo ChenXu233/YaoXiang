@@ -1,4 +1,3 @@
-```yaml
 title: "RFC-007: 関数定義構文統一方案"
 status: "承認済み"
 author: "沫郁酱"

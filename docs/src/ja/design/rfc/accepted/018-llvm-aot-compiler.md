@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC-018: LLVM AOT コンパイラ設計"
 status: "承認済み"

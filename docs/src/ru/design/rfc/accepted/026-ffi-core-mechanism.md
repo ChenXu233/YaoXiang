@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC-026: Основной механизм FFI"
 status: "Принято"

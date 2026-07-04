@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC-030: assert アサーション機構"
 status: "審査中"

@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC [番号]: [提案タイトル]"
 author: "[著者名]"

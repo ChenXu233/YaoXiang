@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC-026b: Инструментарий yx-bindgen"
 status: "Черновик"

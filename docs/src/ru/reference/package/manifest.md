@@ -1,4 +1,3 @@
-```yaml
 ---
 title: "Формат yaoxiang.toml"
 description: Описание формата файла конфигурации проекта

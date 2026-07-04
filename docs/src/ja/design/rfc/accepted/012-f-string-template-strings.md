@@ -1,4 +1,3 @@
-```yaml
 ---
 title: "RFC 012: F-String テンプレート文字列"
 status: "受入済み"

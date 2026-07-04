@@ -1,4 +1,3 @@
-```markdown
 ---
 title: 所有権モデル
 ---

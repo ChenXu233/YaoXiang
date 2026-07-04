@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC-026：FFIコア機構"
 status: "承認済み"

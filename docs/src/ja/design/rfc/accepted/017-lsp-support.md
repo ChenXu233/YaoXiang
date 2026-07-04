@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC-017: 言語サーバプロトコル（LSP）サポート設計"
 status: "レビュー中"

@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC-030: Механизм утверждений assert"
 status: "На рассмотрении"
