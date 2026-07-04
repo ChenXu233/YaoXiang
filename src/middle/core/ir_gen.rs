@@ -172,6 +172,9 @@ pub struct AstToIrGenerator {
     function_param_types: HashMap<String, Vec<MonoType>>,
     /// NLL 精确释放计划（所有权检查器产出）
     release_plan: HashMap<Span, Vec<String>>,
+    /// 待捕获的环境变量（由 spawn for 等设置，供下一个 Expr::Lambda 使用）
+    /// 在生成闭包函数体时，这些变量的当前寄存器值会被捕获到闭包环境中。
+    pending_env_vars: Vec<Operand>,
 }
 
 /// 绑定信息（用于 IR 生成阶段的方法调用转发）
@@ -203,7 +206,7 @@ impl AstToIrGenerator {
     /// 创建新的 IR 生成器
     pub fn new() -> Self {
         Self {
-            symbols: vec![HashMap::new()], // 全局作用域
+            symbols: vec![HashMap::new()],
             type_result: None,
             next_temp: 0,
             current_mut_locals: std::collections::HashSet::new(),
@@ -225,6 +228,7 @@ impl AstToIrGenerator {
             anon_function_irs: Vec::new(),
             function_param_types: HashMap::new(),
             release_plan: HashMap::new(),
+            pending_env_vars: Vec::new(),
         }
     }
 
@@ -2208,11 +2212,18 @@ impl AstToIrGenerator {
             span,
         });
 
-        // 11. 在循环体内创建闭包：() => { body }
-        //     将循环体包装为无参 Lambda
+        // 11. 在循环体内创建闭包：(item) => { body }
+        //     迭代变量作为参数传入，当前值通过 env 捕获
         let closure_reg = self.next_temp_reg();
+        // 捕获迭代变量的当前值（element_reg 在 next() 返回后被设置）
+        self.pending_env_vars = vec![Operand::Local(element_reg)];
         let lambda = ast::Expr::Lambda {
-            params: Vec::new(),
+            params: vec![ast::Param {
+                name: var_name.to_string(),
+                ty: None,
+                is_mut: false,
+                span,
+            }],
             body: Box::new(body.clone()),
             span,
         };
@@ -3644,8 +3655,7 @@ impl AstToIrGenerator {
                 // 3. 为闭包参数分配寄存器索引
                 let _param_regs: Vec<usize> = (0..params.len()).collect();
 
-                // Lambda 无隐式捕获：env 始终为空
-                let env_vars = Vec::new();
+                let env_vars = std::mem::take(&mut self.pending_env_vars);
 
                 // 5. 生成闭包函数体 IR
                 // 类似于 generate_function_ir 的逻辑，但针对 Lambda

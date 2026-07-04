@@ -427,7 +427,7 @@ impl Interpreter {
                 ConstValue::Bytes(b) => RuntimeValue::Bytes(b.as_slice().into()),
                 ConstValue::LibraryRef { .. } | ConstValue::ExternRef { .. } => todo!(),
             })
-            .unwrap_or(RuntimeValue::Unit)
+            .expect("constant index out of bounds")
     }
 
     pub(super) fn make_async_pending(
@@ -886,6 +886,11 @@ impl Interpreter {
             (BinaryOp::Rem, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
                 RuntimeValue::Float(l % r)
             }
+            (BinaryOp::Add, RuntimeValue::String(l), RuntimeValue::String(r)) => {
+                let mut result = (*l).to_string();
+                result.push_str(&r);
+                RuntimeValue::String(result.into())
+            }
             (BinaryOp::Add, RuntimeValue::List(lhs_handle), RuntimeValue::List(rhs_handle)) => {
                 let mut merged = Vec::new();
 
@@ -899,7 +904,13 @@ impl Interpreter {
                 let handle = self.heap.allocate(HeapValue::List(merged));
                 RuntimeValue::List(handle)
             }
-            _ => RuntimeValue::Unit,
+            _ => {
+                let stack = self.capture_stack();
+                return Err(ExecutorError::type_error(
+                    format!("type mismatch in binary operation {:?}", op),
+                    stack,
+                ));
+            }
         };
 
         frame.set_register(dst.0 as usize, result);

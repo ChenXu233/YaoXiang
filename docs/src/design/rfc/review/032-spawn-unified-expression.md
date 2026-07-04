@@ -8,11 +8,17 @@ updated: "2026-07-03"
 
 # RFC-032: spawn 统一表达式修饰
 
+> **本文档定义 `spawn` 的语法、AST/IR 重构、类型系统扩展**。
+> 运行时行为语义（任务拆解粒度、所有权、作用域、错误传播、资源类型、嵌套）见 [RFC-024: 基于 spawn 的并发运行时语义](./024-concurrency-model.md)。
+>
+> 两个 RFC 协同定义 `spawn` —— 024 回答"做什么"，032 回答"怎么表示"。
+
 > **核心洞察**：`spawn` 不应该只修饰 `{}` 块。它可以修饰**任意表达式**。`spawn for` 不是特殊语法——它就是 `spawn` + `for` 表达式的自然组合。
 
 ## 摘要
 
 将 `spawn` 从 `spawn { }`（仅修饰块）扩展为 `spawn <expr>`（修饰任意表达式）。`Expr::SpawnFor` 从 AST 中删除，由 `Expr::Spawn { body: Expr::For { .. } }` 自然替代。表达式结构的类型（Block、For、While、If 等）作为新 `MonoType` 变体进入类型系统，`Spawn<T>` 包装并发执行的计算结构，编译期标记，检查后擦除。
+
 
 ## 动机
 
