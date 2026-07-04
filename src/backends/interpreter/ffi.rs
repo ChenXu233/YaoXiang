@@ -202,37 +202,41 @@ impl FfiRegistry {
         _ctx: &mut NativeContext<'_>,
     ) -> Result<RuntimeValue, ExecutorError> {
         // Get or load the library
-        let lib = self.loaded_libs.get(lib_name)
-            .ok_or_else(|| ExecutorError::runtime_only(
-                format!("C library not found: {lib_name}. Libraries must be pre-loaded.")
-            ))?;
+        let lib = self.loaded_libs.get(lib_name).ok_or_else(|| {
+            ExecutorError::runtime_only(format!(
+                "C library not found: {lib_name}. Libraries must be pre-loaded."
+            ))
+        })?;
 
         // Simple case: () -> Int32 (e.g., getpid, rand)
         if args.is_empty() {
             type CIntFn = unsafe extern "C" fn() -> i32;
             let func: libloading::Symbol<'_, CIntFn> = unsafe {
-                lib.get(symbol.as_bytes())
-                    .map_err(|e| ExecutorError::runtime_only(
-                        format!("symbol not found in {lib_name}: {symbol}: {e}")
-                    ))?
+                lib.get(symbol.as_bytes()).map_err(|e| {
+                    ExecutorError::runtime_only(format!(
+                        "symbol not found in {lib_name}: {symbol}: {e}"
+                    ))
+                })?
             };
             let result = unsafe { func() };
             return Ok(RuntimeValue::Int(result as i64));
         }
         Err(ExecutorError::runtime_only(
-            "C ABI calls with arguments not yet implemented".to_string()
+            "C ABI calls with arguments not yet implemented".to_string(),
         ))
     }
 
     /// Pre-load a dynamic library by name for C ABI calls.
     ///
     /// Example libraries: `"libc.so.6"`, `"libsqlite3.so"`, `"sqlite3.dll"` (Windows).
-    pub fn load_library(&mut self, name: &str) -> Result<(), ExecutorError> {
+    pub fn load_library(
+        &mut self,
+        name: &str,
+    ) -> Result<(), ExecutorError> {
         if !self.loaded_libs.contains_key(name) {
-            let lib = Arc::new(unsafe { Library::new(name) }
-                .map_err(|e| ExecutorError::runtime_only(
-                    format!("failed to load library {name}: {e}")
-                ))?);
+            let lib = Arc::new(unsafe { Library::new(name) }.map_err(|e| {
+                ExecutorError::runtime_only(format!("failed to load library {name}: {e}"))
+            })?);
             self.loaded_libs.insert(name.to_string(), lib);
         }
         Ok(())

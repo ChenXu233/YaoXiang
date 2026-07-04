@@ -263,12 +263,12 @@ pub fn register_all(registry: &mut FfiRegistry) {
     // real dispatch happens via CallNative with mechanism dispatch)
     registry.register("Native.c", |_args, _ctx| {
         Err(ExecutorError::runtime_only(
-            "Native.c was not resolved at compile time. This is a compiler bug.".to_string()
+            "Native.c was not resolved at compile time. This is a compiler bug.".to_string(),
         ))
     });
     registry.register("Native.rs", |_args, _ctx| {
         Err(ExecutorError::runtime_only(
-            "Native.rs was not resolved at compile time. This is a compiler bug.".to_string()
+            "Native.rs was not resolved at compile time. This is a compiler bug.".to_string(),
         ))
     });
 }
