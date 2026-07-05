@@ -3,7 +3,7 @@ title: "RFC-011a: 接口实现与动态分发"
 status: "审核中"
 author: "晨煦"
 created: "2026-06-14"
-updated: "2026-07-03"
+updated: "2026-07-05"
 group: "rfc-011"
 ---
 

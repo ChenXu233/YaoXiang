@@ -4,6 +4,7 @@ status: "审核中"
 author: "晨煦"
 created: "2026-06-16"
 updated: "2026-07-03"
+issue: "#98"
 ---
 
 # RFC-032: spawn 统一表达式修饰

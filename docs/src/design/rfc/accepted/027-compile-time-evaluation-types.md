@@ -3,7 +3,14 @@ title: "RFC-027：编译期谓词与统一静态验证"
 status: "已接受"
 author: "晨煦"
 created: "2026-06-07"
-updated: "2026-06-10"
+updated: "2026-07-05"
+impl_status: "in_progress"
+impl_detail: "Phase 1-2 完成，Phase 3 部分完成，Phase 4 部分完成"
+impl_percent: 70
+issue_number: 90
+issue_url: "https://github.com/ChenXu233/YaoXiang/issues/90"
+
+issue: "#90"
 ---
 
 # RFC-027：编译期谓词与统一静态验证

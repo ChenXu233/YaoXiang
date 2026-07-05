@@ -5,8 +5,11 @@ author: "晨煦"
 created: "2026-06-13"
 updated: "2026-06-13"
 group: "rfc-009"
----
 
+issue: "#129"
+
+impl: "partial"
+---
 # RFC-009a: 令牌生命期分析——基于霍尔证明管道
 
 > **父 RFC**: [RFC-009: 所有权模型设计](../accepted/009-ownership-model.md)

@@ -4,6 +4,14 @@ status: "已接受"
 author: "晨煦"
 created: "2026-02-02"
 updated: "2026-02-12"
+issue: "#125"
+issues_impl:
+  - "#125"
+pr_impl:
+  - "#7"
+  - "#9"
+  - "#29"
+  - "#66"
 ---
 
 # RFC 013: 错误代码规范
