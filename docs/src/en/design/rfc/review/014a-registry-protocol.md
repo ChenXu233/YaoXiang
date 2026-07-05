@@ -1,30 +1,30 @@
 ---
 title: "RFC-014a: Registry Protocol Specification"
 status: "Under Review"
-author: "Chenxu"
+author: "晨煦"
 created: "2026-06-11"
-updated: "2026-06-11"
+updated: "2026-07-05"
 group: "rfc-014"
 ---
 
 # RFC-014a: Registry Protocol Specification
 
-> This RFC is a sub-RFC of [RFC-014: Package Management System Design](../accepted/014-package-manager.md).
+> This RFC is a sub-RFC of [RFC-014: Package Manager System Design](../accepted/014-package-manager.md).
 
 ## Summary
 
-Defines the Registry protocol for the YaoXiang package management system: the open interface design, the official Registry specification, the GitHub adapter layer, the package publish/withdraw flow, and the authentication model.
+Define the Registry protocol for the YaoXiang package management system: open interface design, official Registry specification, GitHub adapter layer, package publish/withdraw flows, and authentication model.
 
 ## Motivation
 
-The RFC-014 overview defines the overall architecture of the package management system, but the Registry portion is only marked as "reserved". Without a Registry protocol, packages cannot be distributed — this is like designing a shopping cart without a store.
+RFC-014's main document defines the overall architecture of the package management system, but the Registry section is only marked as "reserved." Without a Registry protocol, packages cannot be distributed—this is like designing a shopping cart without a store.
 
 ### Current Problems
 
-- `RegistrySource` is stub code (`source/mod.rs:150-203`); `resolve` directly returns the declared version, and `download` returns an empty path
-- There is no HTTP client (no `reqwest` dependency)
-- There is no package publishing mechanism
-- There is no authentication/authorization
+- `RegistrySource` is stub code (`source/mod.rs:150-203`), where `resolve` directly returns the declared version and `download` returns an empty path
+- No HTTP client (no `reqwest` dependency)
+- No package publishing mechanism
+- No authentication/authorization
 
 ## Proposal
 
@@ -52,12 +52,12 @@ The RFC-014 overview defines the overall architecture of the package management 
    └─────────┘ └────────┘ └────────┘
 ```
 
-### Async Architecture Decision
+### Asynchronous Architecture Decision
 
 The `Source` trait is uniformly changed to async, fully embracing tokio:
 
 ```rust
-// Existing (sync) → Changed to (async)
+// Current (synchronous) → Changed to (asynchronous)
 #[async_trait]
 pub trait Source: Send + Sync {
     fn name(&self) -> &str;
@@ -68,13 +68,13 @@ pub trait Source: Send + Sync {
 }
 ```
 
-All implementations (`LocalSource`, `GitSource`, `RegistrySource`) are uniformly changed to async. The CLI entrypoint is driven via `#[tokio::main]` or `Runtime::block_on`.
+All implementations (`LocalSource`, `GitSource`, `RegistrySource`) are uniformly converted to async. The CLI entry point is driven by `#[tokio::main]` or `Runtime::block_on`.
 
 **Rationale:**
-- The Registry requires HTTP requests; blocking would stall the entire install flow
-- Parallel downloading of multiple dependencies (`join_all`) significantly improves install speed
-- Git clone is also an I/O operation; async is more natural
-- tokio is already a project dependency
+- The Registry requires HTTP requests; blocking would freeze the entire installation flow
+- Parallel multi-dependency download (`join_all`) significantly improves installation speed
+- Git clone is also an I/O operation, for which async is more natural
+- tokio is already in the project's dependencies
 
 ### Registry Trait
 
@@ -84,19 +84,19 @@ trait Registry: Send + Sync {
     /// Publish a package
     async fn publish(&self, package: &PackageManifest, artifact: &Path) -> PackageResult<()>;
 
-    /// Delete a published version (irrecoverable, version number is locked)
+    /// Delete a published version (irreversible, version number locked)
     async fn yank(&self, name: &str, version: &Version) -> PackageResult<()>;
 
     /// Query package information
     async fn info(&self, name: &str) -> PackageResult<PackageInfo>;
 
-    /// Query the list of available versions
+    /// Query available version list
     async fn versions(&self, name: &str) -> PackageResult<Vec<Version>>;
 
     /// Search packages
     async fn search(&self, query: &str) -> PackageResult<Vec<PackageSummary>>;
 
-    /// Download a specified version
+    /// Download specified version
     async fn download(&self, name: &str, version: &Version) -> PackageResult<PathBuf>;
 
     /// Authenticate
@@ -112,19 +112,19 @@ Default lookup order for `yaoxiang add foo` (without flags):
 |----------|--------|-------------|
 | 1 | Global cache | `~/.yaoxiang/cache/registry/foo-<ver>/` |
 | 2 | Official Registry | Query version → download |
-| 3 | Failure | Report an error and prompt the user to check the package name or network |
+| 3 | Failure | Report error, prompt user to check package name or network |
 
-**Explicit Override (bypasses the default chain):**
+**Explicit override (bypass default chain):**
 
-| Flag | Behavior |
+| flag | Behavior |
 |------|----------|
-| `--git <url>` | Skip Registry, git clone directly (prefer Release assets → fallback to tag/branch) |
-| `--path <dir>` | Skip Registry, use the local path directly |
-| `--registry <url>` | Skip the official Registry, use the specified Registry |
+| `--git <url>` | Skip Registry, directly Git clone (prefer Release assets → fallback to tag/branch) |
+| `--path <dir>` | Skip Registry, directly use local path |
+| `--registry <url>` | Skip official Registry, use specified Registry |
 
 ### Official Registry
 
-The official Registry is similar to crates.io and is the primary channel for package distribution.
+The official Registry is similar to crates.io and serves as the main channel for package distribution.
 
 **API Endpoints:**
 
@@ -142,15 +142,15 @@ The official Registry is similar to crates.io and is the primary channel for pac
 
 When GitHub is used as a package source, a Go modules-style strategy is adopted:
 
-1. **Prefer Release assets**: Check the GitHub Release page for platform-matched prebuilt artifacts
-2. **Fallback to the main branch**: If no Release exists, git clone
+1. **Prefer Release assets**: Check the GitHub Release page for matching pre-built artifacts for the platform
+2. **Fallback to main branch**: If no Release, git clone
 
 ```toml
 [dependencies]
 # Basic git dependency
 foo = { git = "https://github.com/user/foo" }
 
-# Specify version (matches tag)
+# Specify version (match tag)
 bar = { git = "https://github.com/user/bar", version = "^1.0.0" }
 
 # Specify branch
@@ -159,7 +159,7 @@ baz = { git = "https://github.com/user/baz", branch = "main" }
 # Specify commit
 qux = { git = "https://github.com/user/qux", rev = "abc123" }
 
-# Private repository (uses the GitHub token in credentials.toml)
+# Private repository (use GitHub token from credentials.toml)
 private = { git = "https://github.com/my-org/private-lib" }
 ```
 
@@ -180,13 +180,13 @@ foo-1.2.3.yxpkg (tar.gz)
 ### publish Flow
 
 ```bash
-# Publish to the official Registry
+# Publish to official Registry
 yaoxiang publish
 
-# Publish to a specified Registry
+# Publish to specified Registry
 yaoxiang publish --registry my-company
 
-# Also create a GitHub Release
+# Also create GitHub Release
 yaoxiang publish --github
 
 # Dry run
@@ -194,12 +194,12 @@ yaoxiang publish --dry-run
 ```
 
 Pre-publish validation:
-1. `yaoxiang.toml` must contain `name`, `version`, and `description`
-2. The version number must not already exist
+1. `yaoxiang.toml` must contain `name`, `version`, `description`
+2. Version number must not already exist
 3. Run tests (optional, skip with `--no-test`)
 4. Compute SHA-256 of all files
 5. Pack into `.yxpkg` (tar.gz)
-6. Upload to the Registry
+6. Upload to Registry
 
 ### yank Semantics
 
@@ -207,12 +207,12 @@ Pre-publish validation:
 yaoxiang yank foo@1.2.3
 ```
 
-**Delete + version number lock:**
+**Deletion + version number lock:**
 
-- The package is completely deleted and cannot be recovered
-- The version number is permanently occupied and cannot be republished with the same version number
-- Projects whose existing lockfile references this version will error and need to upgrade to a different version
-- **Security purpose**: Prevent npm-style supply chain attacks. Attackers have previously snatched the version numbers of deleted packages to inject malicious code; yank locks the version number to completely close off this path.
+- The package is completely deleted, irreversible
+- The version number is permanently occupied and cannot be republished
+- Projects whose lockfile references this version will error and need to upgrade to another version
+- **Security purpose**: Prevent npm-style supply chain attacks. Attackers have previously seized deleted package version numbers to inject malicious code; yank's version number lock completely closes off this attack vector.
 
 ### Authentication Model
 
@@ -226,14 +226,14 @@ url = "https://yxreg.my-company.com"
 token = "xxx"
 ```
 
-**Mapping rule:** `yaoxiang login --registry <url>` matches the `url` field in `[registries.*]` by URL. If there is no match, a new entry is created (with an auto-generated name, such as `reg-1`).
+**Mapping rule:** `yaoxiang login --registry <url>` matches the `url` field in `[registries.*]` by URL. If no match is found, create a new entry (auto-generate name, e.g., `reg-1`).
 
-**Priority:** Environment variable > configuration file
+**Priority:** Environment variables > Config file
 
 | Environment Variable | Purpose |
 |----------------------|---------|
 | `$YX_GITHUB_TOKEN` | GitHub authentication |
-| `$YX_REGISTRY_TOKEN` | Registry authentication (used for the default Registry) |
+| `$YX_REGISTRY_TOKEN` | Registry authentication (for default Registry) |
 | `$YX_REGISTRY_URL` | Default Registry address |
 
 **CLI Commands:**
@@ -241,19 +241,19 @@ token = "xxx"
 ```bash
 yaoxiang login --registry https://yxreg.example.com   # Match by URL or create new
 yaoxiang login --github                                # GitHub OAuth or token
-yaoxiang logout --registry https://yxreg.example.com   # Remove the matching entry
+yaoxiang logout --registry https://yxreg.example.com   # Delete matching entry
 ```
 
 **Security Constraints:**
-- Tokens are never written into `yaoxiang.toml` or `yaoxiang.lock`
-- `credentials.toml` has file permission 600
-- Use environment variables in CI scenarios; use the file in development scenarios
+- Tokens are never written to `yaoxiang.toml` or `yaoxiang.lock`
+- `credentials.toml` file permissions 600
+- Use environment variables in CI scenarios, use files in development scenarios
 
 ## Detailed Design
 
 ### RegistrySource Implementation
 
-Replaces the existing stub code (`source/mod.rs:150-203`):
+Replace the existing stub code (`source/mod.rs:150-203`):
 
 ```rust
 pub struct RegistrySource {
@@ -282,7 +282,7 @@ impl Source for RegistrySource {
 
         // SHA-256 verification
         let actual_hash = sha256_hex(&bytes);
-        // ... Extract to dest ...
+        // ... extract to dest ...
 
         Ok(ResolvedPackage {
             name: spec.name.clone(),
@@ -298,7 +298,7 @@ impl Source for RegistrySource {
 
 ### Dependencies
 
-| Crate | Purpose |
+| crate | Purpose |
 |-------|---------|
 | `reqwest` | HTTP client |
 | `sha2` | SHA-256 verification |
@@ -338,31 +338,31 @@ pub enum RegistryError {
 ### Advantages
 
 - Open protocol, not tied to a specific server
-- GitHub serves as a lightweight distribution channel, lowering the entry barrier
-- Version number lock security model
-- Precompiled-first install strategy
+- GitHub as a lightweight distribution channel lowers the barrier to entry
+- Version-number-locked security model
+- Pre-built-first installation strategy
 
 ### Disadvantages
 
-- The official Registry requires independent operations
+- Official Registry requires independent operations and maintenance
 - GitHub API has rate limits
-- Version number locking may cause version number waste
+- Version number locking may lead to version number waste
 
 ## Alternatives
 
-| Approach | Why Not Chosen |
-|----------|----------------|
-| GitHub-only support | Limited to the GitHub ecosystem, cannot self-host a Registry |
-| Cargo-style crates.io | Too complex; not needed in the early YaoXiang ecosystem |
-| npm-style yank (mark only) | Security risk; known supply chain attack cases |
+| Alternative | Why Not Chosen |
+|-------------|----------------|
+| GitHub only | Constrained to the GitHub ecosystem, cannot self-host a Registry |
+| Cargo-style crates.io | Too complex, not needed in the early YaoXiang ecosystem |
+| npm-style yank (mark only) | Security risks, known supply chain attack cases |
 
 ## Implementation Strategy
 
-### Phased Breakdown
+### Phase Division
 
 | Phase | Content |
 |-------|---------|
-| Phase 3.5 | Migrate the Source trait to async + async-trait + migrate all implementations |
+| Phase 3.5 | Source trait converted to async + async-trait + migrate all implementations |
 | Phase 4a | Registry trait + reqwest integration + local Registry mock |
 | Phase 4b | GitHub Release adapter |
 | Phase 4c | publish command + package format packaging |
@@ -371,12 +371,12 @@ pub enum RegistryError {
 ### Dependencies
 
 - Depends on RFC-014 Phase 3 (global cache, semver replacement)
-- Depends on RFC-014b (build system, for handling the `build/` directory)
+- Depends on RFC-014b (build system, for `build/` directory handling)
 
 ## Open Questions
 
 - [ ] Does the Registry API need versioning (`/api/v1/` vs `/api/v2/`)?
-- [ ] Should package names support namespaces (e.g., `@org/pkg`)?
+- [ ] Does the package name support namespaces (e.g., `@org/pkg`)?
 - [ ] Rate limiting strategy?
 - [ ] Package size limit?
 
