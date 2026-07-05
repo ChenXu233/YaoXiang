@@ -1,4 +1,3 @@
-```yaml
 ---
 title: CI 統合ガイド
 description: yaoxiang check と yaoxiang fmt を CI/CD パイプラインに統合する

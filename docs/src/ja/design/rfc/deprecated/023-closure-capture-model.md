@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC-023: クロージャキャプチャモデル"
 status: "廃止"

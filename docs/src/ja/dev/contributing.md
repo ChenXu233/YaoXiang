@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "貢献ガイド"
 description: YaoXiang プロジェクトへのコード貢献方法を学ぶ

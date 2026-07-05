@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC-019: 型レベル同像性 (Typed Homoiconicity) - 構文即型"
 status: "草案"

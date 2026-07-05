@@ -33,9 +33,9 @@ pub struct ExecutionPlan {
     /// 任务组列表，按拓扑排序顺序排列
     /// 第一组无依赖可立即并行，后续组等待前置组完成
     pub groups: Vec<TaskGroup>,
-    /// 每个任务的依赖列表，task_deps[i] = 任务 i 依赖的任务索引
+    /// 每个任务的依赖列表，task_deps\[i\] = 任务 i 依赖的任务索引
     pub task_deps: Vec<Vec<usize>>,
-    /// 每个任务使用的资源变量名，task_resources[i] = 任务 i 的资源变量名
+    /// 每个任务使用的资源变量名，task_resources\[i\] = 任务 i 的资源变量名
     pub task_resources: Vec<Vec<String>>,
 }
 
@@ -423,6 +423,15 @@ pub enum ConstValue {
     Char(char),
     String(String),
     Bytes(Vec<u8>),
+    LibraryRef {
+        mechanism: String,
+        lib: String,
+    },
+    ExternRef {
+        mechanism: String,
+        lib: String,
+        symbol: String,
+    },
 }
 
 impl PartialEq for ConstValue {
@@ -438,6 +447,28 @@ impl PartialEq for ConstValue {
             (Self::Char(l0), Self::Char(r0)) => l0 == r0,
             (Self::String(l0), Self::String(r0)) => l0 == r0,
             (Self::Bytes(l0), Self::Bytes(r0)) => l0 == r0,
+            (
+                Self::LibraryRef {
+                    mechanism: l0,
+                    lib: l1,
+                },
+                Self::LibraryRef {
+                    mechanism: r0,
+                    lib: r1,
+                },
+            ) => l0 == r0 && l1 == r1,
+            (
+                Self::ExternRef {
+                    mechanism: l0,
+                    lib: l1,
+                    symbol: l2,
+                },
+                Self::ExternRef {
+                    mechanism: r0,
+                    lib: r1,
+                    symbol: r2,
+                },
+            ) => l0 == r0 && l1 == r1 && l2 == r2,
             _ => false,
         }
     }
@@ -459,8 +490,46 @@ impl std::hash::Hash for ConstValue {
             Self::Char(c) => c.hash(state),
             Self::String(s) => s.hash(state),
             Self::Bytes(b) => b.hash(state),
+            Self::LibraryRef { mechanism, lib } => {
+                mechanism.hash(state);
+                lib.hash(state);
+            }
+            Self::ExternRef {
+                mechanism,
+                lib,
+                symbol,
+            } => {
+                mechanism.hash(state);
+                lib.hash(state);
+                symbol.hash(state);
+            }
         }
     }
+}
+
+/// FFI 库绑定 — 编译期链接的外部库
+#[derive(Debug, Clone)]
+pub struct FfiLibBinding {
+    pub id: usize,
+    pub mechanism: String,
+    pub lib_name: String,
+}
+
+/// FFI 绑定 — 不透明类型或外部函数
+#[derive(Debug, Clone)]
+pub enum FfiBinding {
+    /// 不透明类型绑定: SqliteDb: Type = lib("sym")
+    TypeBinding {
+        type_name: String,
+        lib_id: usize,
+        symbol: String,
+    },
+    /// 函数绑定: open: sig = lib("sym")
+    FuncBinding {
+        func_name: String,
+        lib_id: usize,
+        symbol: String,
+    },
 }
 
 /// Module IR
@@ -476,10 +545,8 @@ pub struct ModuleIR {
     pub loop_binding_locals: std::collections::HashMap<String, std::collections::HashSet<usize>>,
     /// 每个函数的局部变量名列表 (function_name -> 变量名列表，按索引顺序)
     pub local_names: std::collections::HashMap<String, Vec<String>>,
-    /// 用户声明的 native 函数绑定 (func_name -> native_symbol)
-    ///
-    /// 当源码中出现 `my_func: (a: Int) -> Int = Native("symbol")` 时，
-    /// IR 生成器会在此记录映射 `"my_func" -> "symbol"`，
-    /// 代码生成器会将这些函数名注册为 native，使调用点生成 `CallNative` 指令。
-    pub native_bindings: Vec<crate::std::ffi::NativeBinding>,
+    /// FFI 库绑定 — 编译期链接的外部库
+    pub ffi_libs: Vec<FfiLibBinding>,
+    /// FFI 绑定 — 不透明类型或外部函数
+    pub ffi_bindings: Vec<FfiBinding>,
 }

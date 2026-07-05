@@ -113,7 +113,7 @@ enum Commands {
         code: String,
     },
 
-    /// Check source file for errors (type checking) (unsupported yet)
+    /// Check source file for errors (type checking)
     Check {
         /// Source file(s) or directory path(s) to check
         #[arg(value_name = "PATH", num_args = 0..)]
@@ -223,9 +223,24 @@ enum Commands {
 
     /// Initialize a new YaoXiang project
     Init {
+        /// Project name (optional; uses current directory name if omitted)
+        #[arg(value_name = "NAME")]
+        name: Option<String>,
+
+        /// Create a library project instead of a binary project
+        #[arg(long)]
+        lib: bool,
+    },
+
+    /// Create a new YaoXiang project directory
+    New {
         /// Project name
         #[arg(value_name = "NAME")]
         name: String,
+
+        /// Create a library project instead of a binary project
+        #[arg(long)]
+        lib: bool,
     },
 
     /// Add a dependency to the current project
@@ -502,8 +517,22 @@ fn main() -> Result<()> {
             let mut repl = Repl::new().context("Failed to initialize REPL")?;
             repl.run().context("REPL exited with error")?;
         }
-        Commands::Init { name } => {
-            package::commands::init::exec(&name).context("Failed to initialize project")?;
+        Commands::Init { name, lib } => {
+            let options = package::commands::init::InitOptions { lib };
+            match name {
+                Some(name) => {
+                    package::commands::init::exec(&options, &name)
+                        .context("Failed to initialize project")?;
+                }
+                None => {
+                    package::commands::init::exec_here(&options)
+                        .context("Failed to initialize project")?;
+                }
+            }
+        }
+        Commands::New { name, lib } => {
+            let options = package::commands::init::InitOptions { lib };
+            package::commands::init::exec(&options, &name).context("Failed to create project")?;
         }
         Commands::Add { dep, version, dev } => {
             package::commands::add::exec(&dep, version.as_deref(), dev)

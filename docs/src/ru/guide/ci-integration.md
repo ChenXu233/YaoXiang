@@ -1,4 +1,3 @@
-```yaml
 ---
 title: Руководство по интеграции с CI
 description: Интеграция yaoxiang check и yaoxiang fmt в конвейеры CI/CD

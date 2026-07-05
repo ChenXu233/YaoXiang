@@ -1,4 +1,3 @@
-```markdown
 ---
 layout: page
 sidebar: false

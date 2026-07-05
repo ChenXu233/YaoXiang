@@ -1,4 +1,3 @@
-```yaml
 ---
 title: "RFC 012: Строки шаблонов F-String"
 status: "Принято"

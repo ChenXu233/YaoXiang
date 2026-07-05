@@ -1,4 +1,3 @@
-```yaml
 ---
 title: "制御フローのフォーマット規則"
 description: if/elif/else、forループ、whileループ、ループラベルのフォーマット規則

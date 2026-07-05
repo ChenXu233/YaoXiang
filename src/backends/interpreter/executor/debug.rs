@@ -182,6 +182,9 @@ impl Interpreter {
                         let matches = match &val {
                             RuntimeValue::Int(n) => *n == case_offset as i64,
                             RuntimeValue::Bool(b) => *b == (case_offset != 0),
+                            RuntimeValue::Enum { variant_id, .. } => {
+                                *variant_id == case_offset as u32
+                            }
                             _ => false,
                         };
                         if matches {
@@ -263,7 +266,7 @@ impl Interpreter {
                     .registers
                     .get(src.0 as usize)
                     .cloned()
-                    .unwrap_or(RuntimeValue::Unit);
+                    .expect("register index out of bounds");
                 frame.set_upvalue(*upvalue_idx as usize, val);
                 frame.advance();
                 Ok(StepOutcome::Continue)
@@ -295,7 +298,13 @@ impl Interpreter {
                     (crate::middle::bytecode::UnaryOp::Not, RuntimeValue::Bool(b)) => {
                         RuntimeValue::Bool(!b)
                     }
-                    _ => RuntimeValue::Unit,
+                    _ => {
+                        let stack = self.capture_stack();
+                        return Err(ExecutorError::type_error(
+                            format!("type mismatch in unary operation {:?}", op),
+                            stack,
+                        ));
+                    }
                 };
                 frame.set_register(dst.0 as usize, result);
                 frame.advance();
@@ -384,6 +393,9 @@ impl Interpreter {
             BytecodeInstr::CallNative {
                 dst,
                 func_name,
+                mechanism,
+                lib,
+                symbol,
                 args: arg_regs,
             } => {
                 let call_args: Vec<RuntimeValue> = arg_regs
@@ -400,7 +412,8 @@ impl Interpreter {
                 let runtime = self.runtime_config.runtime;
 
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
-                    let result = self.call_native_by_name(func_name, &call_args)?;
+                    let result = self
+                        .call_native_with_ffi_meta(func_name, mechanism, lib, symbol, &call_args)?;
                     if let Some(dst_reg) = dst {
                         frame.set_register(dst_reg.index() as usize, result);
                     }
@@ -1136,6 +1149,7 @@ impl Interpreter {
                     RuntimeValue::Weak(_) => "Weak",
                     RuntimeValue::Async(_) => "Async",
                     RuntimeValue::Ptr { .. } => "Ptr",
+                    RuntimeValue::OpaqueHandle { .. } => "OpaqueHandle",
                 };
                 frame.set_register(
                     dst.0 as usize,

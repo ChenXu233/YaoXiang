@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC-002: libuv ベースのリソース型 IO 実装層"
 status: "ドラフト"

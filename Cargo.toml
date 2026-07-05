@@ -1,6 +1,6 @@
 [package]
 name = "yaoxiang"
-version = "0.7.6-patch1"
+version = "0.7.7"
 edition = "2021"
 rust-version = "1.96"
 description = "YaoXiang (爻象) Programming Language - A high-performance language with type-as-everything philosophy"
@@ -64,6 +64,7 @@ smallvec = "1.15.1"
 
 # 字符串处理
 regex = "1"
+libloading = "0.9"
 unicode-ident = "1.0.24"
 urlencoding = "2"
 
@@ -95,7 +96,7 @@ tokio = { version = "1.52.3", features = ["full"], optional = true }
 
 # LSP - 语言服务器协议
 lsp-types = "0.97"
-lsp-server = { version = "0.7", optional = true }
+lsp-server = { version = "0.8", optional = true }
 
 # Wasm support - now handled via target-gated dependencies below
 

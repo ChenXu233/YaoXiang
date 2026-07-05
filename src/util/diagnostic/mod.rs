@@ -213,6 +213,43 @@ pub fn run_file_with_diagnostics(
     use crate::Executor;
     use crate::Interpreter;
 
+    // 检测 .42 字节码文件，跳过编译直接执行
+    if file.extension().map(|e| e == "42").unwrap_or(false) {
+        let bytecode_file = crate::middle::passes::codegen::BytecodeFile::load(file)
+            .map_err(|e| anyhow::anyhow!("Failed to load bytecode file: {}", e))?;
+        let bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);
+
+        let mut interp = crate::backends::interpreter::Interpreter::new();
+        let rt_mode = match runtime_mode {
+            "standard" => crate::backends::runtime::RuntimeMode::Standard,
+            "full" => crate::backends::runtime::RuntimeMode::Full,
+            _ => crate::backends::runtime::RuntimeMode::Embedded,
+        };
+        let effective_workers = if workers > 0 {
+            workers
+        } else {
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(4)
+        };
+        interp.set_runtime_config(
+            crate::backends::interpreter::runtime::InterpreterRuntimeConfig {
+                runtime: rt_mode,
+                workers: effective_workers,
+                work_stealing: false,
+            },
+        );
+        let mut executor: Box<dyn crate::backends::Executor> = Box::new(interp);
+        if let Err(e) = executor.execute_module(&bytecode_module) {
+            eprintln!();
+            // 字节码加载模式下无 SourceMap，传入 None
+            let output = render_runtime_error(&e, &bytecode_module, None);
+            eprintln!("{}", output);
+            return Err(anyhow::anyhow!("Runtime error"));
+        }
+        return Ok(());
+    }
+
     let source = match std::fs::read_to_string(file) {
         Ok(s) => s,
         Err(e) => {

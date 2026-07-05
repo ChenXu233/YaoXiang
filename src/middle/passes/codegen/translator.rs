@@ -12,6 +12,14 @@ use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::{DebugSpan, FileId, Span};
 use std::collections::{HashMap, HashSet};
 
+/// FFI 函数元数据 — 机制/库/符号
+#[derive(Debug, Clone)]
+struct FfiFuncMeta {
+    mechanism: String,
+    lib: String,
+    symbol: String,
+}
+
 /// IR 到字节码翻译器
 ///
 /// 职责：
@@ -32,6 +40,8 @@ pub struct Translator {
     closure_function_offset: Option<usize>,
     /// 函数名到索引的映射
     function_name_to_idx: Option<HashMap<String, usize>>,
+    /// FFI 函数元数据缓存: func_name → mechanism/lib/symbol
+    ffi_func_meta: HashMap<String, FfiFuncMeta>,
 
     /// 是否生成运行时调试信息（IP -> Span）
     generate_debug_info: bool,
@@ -43,19 +53,14 @@ pub struct Translator {
 impl Translator {
     /// 创建新的翻译器
     pub fn new() -> Self {
-        let mut native_functions = HashSet::new();
-
-        // 从 std 模块自动发现 native 函数
-        for (short_name, native_name) in crate::std::all_native_names() {
-            native_functions.insert(native_name.to_string());
-            native_functions.insert(short_name.to_string());
-        }
+        let native_functions = HashSet::new();
 
         Translator {
             emitter: Emitter::new(),
             operand_resolver: OperandResolver::new(),
             current_function: None,
             native_functions,
+            ffi_func_meta: HashMap::new(),
             closure_function_offset: None,
             function_name_to_idx: None,
             generate_debug_info: false,
@@ -106,14 +111,25 @@ impl Translator {
         &mut self,
         module: &ModuleIR,
     ) -> Result<TranslatorOutput, Diagnostic> {
-        // 注册用户声明的 native 函数绑定
-        // 这些来自 `my_func: Type = Native("symbol")` 声明
-        for binding in &module.native_bindings {
-            // 注册函数名（使调用点生成 CallNative）
-            self.register_native(binding.func_name());
-            // 也注册 native symbol（若与函数名不同）
-            if binding.func_name() != binding.native_symbol() {
-                self.register_native(binding.native_symbol());
+        // 消费 FFI 函数绑定 — 注册 native 函数名并存储元数据
+        for binding in &module.ffi_bindings {
+            if let crate::middle::core::ir::FfiBinding::FuncBinding {
+                func_name,
+                lib_id,
+                symbol,
+            } = binding
+            {
+                self.register_native(func_name);
+                if let Some(lib) = module.ffi_libs.get(*lib_id) {
+                    self.ffi_func_meta.insert(
+                        func_name.clone(),
+                        FfiFuncMeta {
+                            mechanism: lib.mechanism.clone(),
+                            lib: lib.lib_name.clone(),
+                            symbol: symbol.clone(),
+                        },
+                    );
+                }
             }
         }
 
@@ -353,7 +369,7 @@ impl Translator {
                 fields,
             } => self.translate_create_struct(dst, type_name, fields),
             NewDict { dst, keys, values } => self.translate_new_dict(dst, keys, values),
-            MakeClosure { dst, func, .. } => self.translate_make_closure(dst, func),
+            MakeClosure { dst, func, env } => self.translate_make_closure(dst, func, env),
             Drop(operand) => self.translate_drop(operand),
 
             Push(operand) => self.translate_push(operand),
@@ -590,6 +606,21 @@ impl Translator {
         let mut operands = vec![dst_reg];
         operands.extend_from_slice(&func_id.to_le_bytes());
         operands.push(base_arg_reg);
+        // 对 FFI 函数，在 func_name_idx 后追加 mechanism/lib/symbol 的常量池索引
+        if let Some(meta) = func_name.as_ref().and_then(|n| self.ffi_func_meta.get(n)) {
+            let mech_idx = self
+                .emitter
+                .add_constant(ConstValue::String(meta.mechanism.clone()));
+            let lib_idx = self
+                .emitter
+                .add_constant(ConstValue::String(meta.lib.clone()));
+            let sym_idx = self
+                .emitter
+                .add_constant(ConstValue::String(meta.symbol.clone()));
+            operands.extend_from_slice(&mech_idx.to_le_bytes()); // 4 bytes
+            operands.extend_from_slice(&lib_idx.to_le_bytes()); // 4 bytes
+            operands.extend_from_slice(&sym_idx.to_le_bytes()); // 4 bytes
+        }
         operands.push(args.len() as u8);
         for arg in args {
             let arg_reg = self.operand_resolver.to_reg(arg)?;
@@ -952,20 +983,21 @@ impl Translator {
         &mut self,
         dst: &Operand,
         func_name: &str,
+        env: &[Operand],
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
-
-        // 通过函数名查找索引
         let func_id = if let Some(ref name_to_idx) = self.function_name_to_idx {
             name_to_idx.get(func_name).copied().unwrap_or(0) as u32
         } else {
-            // 如果没有映射，使用 0（回退）
             0
         };
-
         let mut operands = vec![dst_reg];
         operands.extend_from_slice(&func_id.to_le_bytes());
-        operands.push(0);
+        operands.push(env.len() as u8);
+        for op in env {
+            let reg = self.operand_resolver.to_reg(op)?;
+            operands.extend_from_slice(&(reg as u16).to_le_bytes());
+        }
         Ok(BytecodeInstruction::new(Opcode::MakeClosure, operands))
     }
 

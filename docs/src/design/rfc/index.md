@@ -13,6 +13,7 @@ title: "RFC 索引"
 - [审核中RFC](#审核中rfc)
 - [已接受RFC](#已接受rfc)
 - [已废弃RFC](#已废弃rfc)
+
 - [已拒绝RFC](#已拒绝rfc)
 
 ---
@@ -33,10 +34,9 @@ title: "RFC 索引"
 | RFC-019 | [RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型](./draft/019-typed-homoiconicity.md) | 晨煦 | 2026-02-20 | 草案 |
 | RFC-028 | [RFC-028：JIT 编译器 — VM 内多级执行引擎](./draft/028-jit-compiler.md) | 晨煦 | 2026-06-11 | 草案 |
 | RFC-029 | [RFC-029: 模块语义系统](./draft/029-module-semantics.md) | 晨煦 | 2026-06-13 | 草案 |
-| RFC-030 | [RFC-030: assert 断言机制](./draft/030-assert-mechanism.md) | 晨煦 | 2026-06-15 | 草案 |
 | RFC-031 | [RFC-031：优化级别与 Pass 管理器](./draft/031-optimization-levels.md) | 晨煦 | 2026-06-16 | 草案 |
-| RFC-032 | [RFC-032: spawn 统一表达式修饰 — 消除 spawn for 特殊情况](./draft/032-spawn-unified-expression.md) | 晨煦 | 2026-06-16 | 草案 |
 | RFC-002 | [RFC-002：基于 libuv 的资源类型 IO 实现层](./draft/002-cross-platform-io-libuv.md) | 晨煦 | 2025-01-05 | 草案（重新审核） |
+| RFC-026b | [RFC-026b: yx-bindgen 工具链](./draft/026b-yx-bindgen.md) | 晨煦 | 2026-07-03 | 草案 |
 
 ---
 
@@ -44,9 +44,9 @@ title: "RFC 索引"
 
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
-| RFC-025 | [RFC-025: 可扩展原语类型机制](./review/025-primitive-extension.md) | 晨煦 | 2026-06-05 | 审核中 |
-| RFC-026 | [RFC-026：FFI 核心机制](./review/026-ffi-core-mechanism.md) | 晨煦 | 2026-06-05 | 审核中 |
-
+| RFC-026a | [RFC-026a: 可扩展 FFI 机制体系](./review/026a-extensible-ffi-system.md) | 晨煦 | 2026-07-03 | 审核中 |
+| RFC-030 | [RFC-030: assert 断言机制](./review/030-assert-mechanism.md) | 晨煦 | 2026-06-15 | 审核中 |
+| RFC-032 | [RFC-032: spawn 统一表达式修饰 — 消除 spawn for 特殊情况](./review/032-spawn-unified-expression.md) | 晨煦 | 2026-06-16 | 审核中 |
 ---
 
 ## 已接受RFC
@@ -61,7 +61,7 @@ title: "RFC 索引"
 | ↳ RFC-009a | [RFC-009a: 令牌生命期分析——基于霍尔证明管道](./accepted/009a-borrow-proof-pipeline.md) | 晨煦 | 2026-06-13 | 已接受 |
 | RFC-010 | [RFC-010: 统一类型语法 - name: type = value 模型](./accepted/010-unified-type-syntax.md) | 晨煦 | 2025-01-20 | 已接受 |
 | RFC-011 | [RFC-011: 泛型系统设计 - 零成本抽象与宏替代](./accepted/011-generic-type-system.md) | 晨煦 | 2025-01-25 | 已接受 |
-| ↳ RFC-011a | [RFC-011a: 接口实现与动态分发](./draft/011a-interface-implementation.md) | 晨煦 | 2026-06-14 | 草案RFC |
+| ↳ RFC-011a | [RFC-011a: 接口实现与动态分发](./review/011a-interface-implementation.md) | 晨煦 | 2026-06-14 | 审核中 |
 | RFC-012 | [RFC 012: F-String 模板字符串](./accepted/012-f-string-template-strings.md) | Chen Xu | 2025-01-27 | 已接受 |
 | RFC-013 | [RFC 013: 错误代码规范](./accepted/013-error-code-specification.md) | 晨煦 | 2026-02-02 | 已接受 |
 | RFC-014 | [RFC-014: 包管理系统设计](./accepted/014-package-manager.md) | 晨煦 | 2026-02-12 | 已接受 |
@@ -72,6 +72,7 @@ title: "RFC 索引"
 | RFC-017 | [RFC-017: 语言服务器协议（LSP）支持设计](./accepted/017-lsp-support.md) | 晨煦 | 2026-02-15 | 审核中 |
 | RFC-018 | [RFC-018：LLVM AOT 编译器设计](./accepted/018-llvm-aot-compiler.md) | 晨煦 | 2026-02-15 | 已接受 |
 | RFC-024 | [RFC-024：基于 spawn 块的并发模型](./accepted/024-concurrency-model.md) | 晨煦 | 2026-06-05 | 已接受 |
+| RFC-026 | [RFC-026: FFI 核心机制](./accepted/026-ffi-core-mechanism.md) | 晨煦 | 2026-06-05 | 已接受 |
 | RFC-027 | [RFC-027：编译期谓词与统一静态验证](./accepted/027-compile-time-evaluation-types.md) | 晨煦 | 2026-06-07 | 已接受 |
 
 ---
@@ -88,6 +89,7 @@ title: "RFC 索引"
 
 ---
 
+
 ## 已拒绝RFC
 
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
@@ -95,6 +97,7 @@ title: "RFC 索引"
 | RFC-003 | [RFC-003：版本规划](./rejected/003-version-planning.md) | 晨煦 | 2025-01-05 | 已拒绝 |
 | RFC-005 | [RFC-005: 自动化CVE安全检查系统](./rejected/005-automated-cve-scanning.md) | 晨煦 | 2025-01-05 | 已拒绝 |
 | RFC-016 | [RFC 016: 量子原生支持与多重后端集成](./rejected/016-quantum-native-support.md) | 晨煦 | 2026-02-13 | 已拒绝 |
+| RFC-025 | [RFC-025: 可扩展原语类型机制](./rejected/025-primitive-extension.md) | 晨煦 | 2026-06-05 | 已拒绝（被 RFC-026 不透明句柄覆盖） |
 
 ---
 
@@ -112,7 +115,7 @@ title: "RFC 索引"
 |------|------|------|
 | **草案** | `rfc/draft/` | 作者草稿，等待提交审核 |
 | **审核中** | `rfc/review/` | 开放社区讨论和反馈 |
-| **已接受** | `rfc/accepted/` | 成为正式设计文档，进入实现阶段 |
+
 | **已废弃** | `rfc/deprecated/` | 曾被接受，被新设计取代 |
 | **已拒绝** | `rfc/rejected/` | 被拒绝的RFC文档 |
 
@@ -123,7 +126,7 @@ title: "RFC 索引"
 1. 阅读 [RFC_TEMPLATE.md](RFC_TEMPLATE.md) 了解格式要求
 2. 参考 [EXAMPLE_full_feature_proposal.md](EXAMPLE_full_feature_proposal.md) 学习写法
 3. 创建新文件，命名为 `序号-描述性标题.md`
-4. 将文件放入 `docs/reference/rfc/draft/` 目录
+4. 将文件放入 `docs/src/design/rfc/draft/` 目录
 5. 更新本索引文件，添加新RFC条目
 6. 提交PR进入审核流程
 

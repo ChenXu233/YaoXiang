@@ -6,7 +6,6 @@
 pub mod concurrent;
 pub mod convert;
 pub mod dict;
-pub mod ffi;
 pub mod gen_interfaces;
 pub mod io;
 pub mod list;
@@ -15,6 +14,7 @@ pub mod math;
 pub mod net;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod os;
+pub mod result;
 pub mod string;
 pub mod time;
 #[cfg(not(target_arch = "wasm32"))]
@@ -245,21 +245,32 @@ pub fn register_all(registry: &mut FfiRegistry) {
     #[cfg(not(target_arch = "wasm32"))]
     concurrent::ConcurrentModule.register_ffi(registry);
     convert::ConvertModule.register_ffi(registry);
-    dict::DictModule.register_ffi(registry);
-    ffi::FFI_MODULE.register_ffi(registry);
     io::IoModule.register_ffi(registry);
     list::ListModule.register_ffi(registry);
     math::MathModule.register_ffi(registry);
     #[cfg(not(target_arch = "wasm32"))]
     net::NetModule.register_ffi(registry);
+    result::RESULT_MODULE.register_ffi(registry);
     string::StringModule.register_ffi(registry);
     time::TimeModule.register_ffi(registry);
     #[cfg(not(target_arch = "wasm32"))]
     os::OsModule.register_ffi(registry);
-
     // Register built-in generic functions (replacing hardcoded interpreter special cases)
     registry.register("len", builtin_len as NativeHandler);
     registry.register("dict_keys", builtin_dict_keys as NativeHandler);
+
+    // Safety-net handlers for Native.c/rs (should never execute at runtime —
+    // real dispatch happens via CallNative with mechanism dispatch)
+    registry.register("Native.c", |_args, _ctx| {
+        Err(ExecutorError::runtime_only(
+            "Native.c was not resolved at compile time. This is a compiler bug.".to_string(),
+        ))
+    });
+    registry.register("Native.rs", |_args, _ctx| {
+        Err(ExecutorError::runtime_only(
+            "Native.rs was not resolved at compile time. This is a compiler bug.".to_string(),
+        ))
+    });
 }
 
 /// Get ModuleInfo for all std modules.
@@ -269,32 +280,16 @@ pub fn all_module_infos() -> Vec<ModuleInfo> {
     vec![
         #[cfg(not(target_arch = "wasm32"))]
         concurrent::ConcurrentModule.to_module_info(),
-        convert::ConvertModule.to_module_info(),
         dict::DictModule.to_module_info(),
-        ffi::FFI_MODULE.to_module_info(),
         io::IoModule.to_module_info(),
         list::ListModule.to_module_info(),
         math::MathModule.to_module_info(),
         #[cfg(not(target_arch = "wasm32"))]
         net::NetModule.to_module_info(),
         string::StringModule.to_module_info(),
+        result::ResultModule.to_module_info(),
         time::TimeModule.to_module_info(),
         #[cfg(not(target_arch = "wasm32"))]
         os::OsModule.to_module_info(),
     ]
-}
-
-/// Get all native function names (short name, native name pairs) from all std modules.
-///
-/// This is used by the code generator to discover native functions.
-pub fn all_native_names() -> Vec<(String, String)> {
-    let mut names = Vec::new();
-    for module_info in all_module_infos() {
-        for export in module_info.exports.values() {
-            if export.kind == ExportKind::Function {
-                names.push((export.name.clone(), export.full_path.clone()));
-            }
-        }
-    }
-    names
 }

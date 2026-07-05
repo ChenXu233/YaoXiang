@@ -1,64 +1,306 @@
-//! 测试 `yaoxiang init` 命令
+//! 项目初始化命令测试 — 基于 RFC-014 包管理系统设计 & 设计文档
 //!
-//! 覆盖:
-//! - 项目目录结构创建
-//! - manifest 内容正确性
-//! - main.yx 模板内容
-//! - 已存在项目目录时返回错误
+//! 设计文档: docs/superpowers/specs/2026-07-02-yaoxiang-new-init-design.md
+//! RFC-014: 包管理系统（manifest 格式对齐）
+//!
+//! 测试覆盖:
+//! - `exec_in`: 在指定目录创建项目子目录（binary / --lib）
+//! - `exec_here`: 在当前目录初始化项目
+//! - 错误处理: 目录已存在、项目已存在、文件跳过
 
 use std::fs;
 
-use crate::package::commands::init::exec_in;
+use crate::package::commands::init::{exec_in, exec_here, InitOptions};
 use crate::package::error::PackageError;
 use crate::package::manifest::PackageManifest;
 use tempfile::TempDir;
+use std::sync::Mutex;
+
+/// `std::env::set_current_dir` 改的是**进程级 cwd**，进程内所有线程共享。
+/// 三个 `exec_here` 测试如果并行跑，A 的 `_guard` drop 时会把 cwd 切回 original，
+/// 此时正在跑 B 的 `current_dir()` 会看到错的目录，`yaoxiang.toml` 检查失效，
+/// 后续 IO 返回 `Io(NotFound)`。本地 Windows 行为宽容 + 调度运气好常常能过；
+/// Linux + Rust 1.96 下 race 暴露，CI MSRV 必炸。
+/// 用全局锁串行化这三个测试，零依赖。
+static CWD_LOCK: Mutex<()> = Mutex::new(());
+
+/// 拿锁；处理 poisoned（前一个测试 panic 留下的），
+/// 否则 cargo test --no-fail-fast 跑后续测试时直接卡死。
+fn lock_cwd() -> std::sync::MutexGuard<'static, ()> {
+    CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+fn default_opts() -> InitOptions {
+    InitOptions { lib: false }
+}
+
+fn lib_opts() -> InitOptions {
+    InitOptions { lib: true }
+}
+
+// ===================================================================
+// exec_in 基础测试
+// ===================================================================
 
 #[test]
-fn test_init_creates_project() {
+fn test_init_creates_project_directory_and_files() {
+    // Arrange & Act
     let tmp = TempDir::new().unwrap();
-    exec_in(tmp.path(), "test-project").unwrap();
+    exec_in(tmp.path(), &default_opts(), "test-project").unwrap();
 
+    // Assert
     let project_path = tmp.path().join("test-project");
-    assert!(project_path.join("yaoxiang.toml").exists());
-    assert!(project_path.join("yaoxiang.lock").exists());
-    assert!(project_path.join("src/main.yx").exists());
-    assert!(project_path.join(".gitignore").exists());
-    // 标准库接口文件
-    assert!(project_path.join(".yaoxiang/std/io.yx").exists());
-    assert!(project_path.join(".yaoxiang/std/list.yx").exists());
-    assert!(project_path.join(".yaoxiang/std/math.yx").exists());
+    assert!(
+        project_path.join("yaoxiang.toml").exists(),
+        "yaoxiang.toml should be created"
+    );
+    assert!(
+        project_path.join("yaoxiang.lock").exists(),
+        "yaoxiang.lock should be created"
+    );
+    assert!(
+        project_path.join("src/main.yx").exists(),
+        "src/main.yx should be created for binary project"
+    );
+    assert!(
+        project_path.join(".gitignore").exists(),
+        ".gitignore should be created"
+    );
+    assert!(
+        project_path.join("tests").is_dir(),
+        "tests/ directory should be created"
+    );
+    assert!(
+        project_path.join(".yaoxiang/std/io.yx").exists(),
+        ".yaoxiang/std/ should contain interface files"
+    );
 }
 
 #[test]
-fn test_init_manifest_content() {
+fn test_init_manifest_has_correct_metadata() {
+    // Arrange
     let tmp = TempDir::new().unwrap();
-    exec_in(tmp.path(), "my-app").unwrap();
+    exec_in(tmp.path(), &default_opts(), "my-app").unwrap();
 
+    // Act
     let manifest = PackageManifest::load(&tmp.path().join("my-app")).unwrap();
-    assert_eq!(manifest.package.name, "my-app");
-    assert_eq!(manifest.package.version, "0.1.0");
+
+    // Assert
+    assert_eq!(
+        manifest.package.name, "my-app",
+        "package name should match project name"
+    );
+    assert_eq!(
+        manifest.package.version, "0.1.0",
+        "default version should be 0.1.0"
+    );
 }
 
 #[test]
-fn test_init_main_yx_content() {
+fn test_init_main_yx_contains_entry_point() {
+    // Arrange
     let tmp = TempDir::new().unwrap();
-    exec_in(tmp.path(), "my-app").unwrap();
+    exec_in(tmp.path(), &default_opts(), "my-app").unwrap();
 
+    // Act
     let content = fs::read_to_string(tmp.path().join("my-app/src/main.yx")).unwrap();
-    assert!(content.contains("my-app"));
-    // YaoXiang 使用 `main = {...}` 语法而非 `fn main() {}`
-    assert!(content.contains("main ="));
+
+    // Assert
+    assert!(
+        content.contains("my-app"),
+        "main.yx should contain project name 'my-app', got: {content}"
+    );
+    assert!(
+        content.contains("main ="),
+        "main.yx should define entry point with 'main =', got: {content}"
+    );
 }
 
 #[test]
-fn test_init_existing_project_fails() {
+fn test_init_existing_directory_returns_project_exists_error() {
+    // Arrange
     let tmp = TempDir::new().unwrap();
-    exec_in(tmp.path(), "existing").unwrap();
+    exec_in(tmp.path(), &default_opts(), "existing").unwrap();
 
-    let result = exec_in(tmp.path(), "existing");
-    assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        PackageError::ProjectExists(_)
-    ));
+    // Act
+    let result = exec_in(tmp.path(), &default_opts(), "existing");
+
+    // Assert
+    assert!(
+        result.is_err(),
+        "should return error when directory already exists"
+    );
+    let err = result.unwrap_err();
+    assert!(
+        matches!(err, PackageError::ProjectExists(_)),
+        "expected ProjectExists error, got: {err:?}"
+    );
+}
+
+// ===================================================================
+// --lib 库项目测试
+// ===================================================================
+
+#[test]
+fn test_init_lib_creates_lib_yx_not_main_yx() {
+    // Arrange & Act
+    let tmp = TempDir::new().unwrap();
+    exec_in(tmp.path(), &lib_opts(), "my-lib").unwrap();
+
+    let project_path = tmp.path().join("my-lib");
+
+    // Assert
+    assert!(
+        project_path.join("src/lib.yx").exists(),
+        "src/lib.yx should be created for library project"
+    );
+    assert!(
+        !project_path.join("src/main.yx").exists(),
+        "src/main.yx should NOT exist for library project"
+    );
+}
+
+#[test]
+fn test_init_lib_yx_contains_no_main_entry_point() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    exec_in(tmp.path(), &lib_opts(), "my-lib").unwrap();
+
+    // Act
+    let content = fs::read_to_string(tmp.path().join("my-lib/src/lib.yx")).unwrap();
+
+    // Assert
+    assert!(
+        content.contains("my-lib"),
+        "lib.yx should contain project name 'my-lib', got: {content}"
+    );
+    assert!(
+        content.contains("库项目"),
+        "lib.yx should indicate library project type, got: {content}"
+    );
+    assert!(
+        !content.contains("main ="),
+        "lib.yx should NOT contain main entry point, got: {content}"
+    );
+}
+
+// ===================================================================
+// exec_here 当前目录初始化测试
+// ===================================================================
+
+#[test]
+fn test_init_here_creates_project_in_current_directory() {
+    // Arrange
+    // 必须最先声明，最后才 drop，确保整个测试期间持有 cwd 锁
+    let _serial = lock_cwd();
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("my-here");
+    fs::create_dir(&project_dir).unwrap();
+
+    // Act
+    let _guard = std::env::set_current_dir(&project_dir);
+    exec_here(&default_opts()).unwrap();
+
+    // Assert
+    assert!(
+        project_dir.join("yaoxiang.toml").exists(),
+        "yaoxiang.toml should be created in current directory"
+    );
+    assert!(
+        project_dir.join("src/main.yx").exists(),
+        "src/main.yx should be created in current directory"
+    );
+    assert!(
+        project_dir.join("tests").is_dir(),
+        "tests/ directory should be created in current directory"
+    );
+}
+
+#[test]
+fn test_init_here_fails_when_project_already_exists() {
+    // Arrange
+    // 必须最先声明，最后才 drop，确保整个测试期间持有 cwd 锁
+    let _serial = lock_cwd();
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("my-here");
+    fs::create_dir(&project_dir).unwrap();
+
+    let _guard = std::env::set_current_dir(&project_dir);
+    exec_here(&default_opts()).unwrap();
+
+    // Act
+    let result = exec_here(&default_opts());
+
+    // Assert
+    assert!(result.is_err(), "second init in same directory should fail");
+    let err = result.unwrap_err();
+    assert!(
+        matches!(err, PackageError::ProjectExists(_)),
+        "expected ProjectExists error for already-initialized project, got: {err:?}"
+    );
+}
+
+#[test]
+fn test_init_here_preserves_preexisting_files() {
+    // Arrange
+    // 必须最先声明，最后才 drop，确保整个测试期间持有 cwd 锁
+    let _serial = lock_cwd();
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("my-here");
+    fs::create_dir(&project_dir).unwrap();
+    fs::create_dir_all(project_dir.join("src")).unwrap();
+
+    let main_path = project_dir.join("src").join("main.yx");
+    let preexisting_content = "// existing content";
+    fs::write(&main_path, preexisting_content).unwrap();
+
+    // Act
+    let _guard = std::env::set_current_dir(&project_dir);
+    exec_here(&default_opts()).unwrap();
+
+    // Assert
+    let content = fs::read_to_string(&main_path).unwrap();
+    assert_eq!(
+        content, preexisting_content,
+        "preexisting src/main.yx should NOT be overwritten by init here"
+    );
+    assert!(
+        project_dir.join("yaoxiang.toml").exists(),
+        "yaoxiang.toml should still be created even when some files are skipped"
+    );
+}
+
+// ===================================================================
+// new 和 init <name> 等价性测试
+// ===================================================================
+
+#[test]
+fn test_new_and_init_name_produce_identical_output() {
+    // Arrange
+    let tmp_new = TempDir::new().unwrap();
+    let tmp_init = TempDir::new().unwrap();
+    let opts = default_opts();
+
+    // Act
+    exec_in(tmp_new.path(), &opts, "eq-test").unwrap();
+    exec_in(tmp_init.path(), &opts, "eq-test").unwrap();
+
+    // Assert
+    let new_toml_path = tmp_new.path().join("eq-test/yaoxiang.toml");
+    let init_toml_path = tmp_init.path().join("eq-test/yaoxiang.toml");
+    let new_toml = fs::read_to_string(&new_toml_path).expect("should read new yaoxiang.toml");
+    let init_toml = fs::read_to_string(&init_toml_path).expect("should read init yaoxiang.toml");
+    assert_eq!(
+        new_toml, init_toml,
+        "yaoxiang.toml from 'new' and 'init <name>' should be identical"
+    );
+
+    let new_main_path = tmp_new.path().join("eq-test/src/main.yx");
+    let init_main_path = tmp_init.path().join("eq-test/src/main.yx");
+    let new_main = fs::read_to_string(&new_main_path).expect("should read new main.yx");
+    let init_main = fs::read_to_string(&init_main_path).expect("should read init main.yx");
+    assert_eq!(
+        new_main, init_main,
+        "src/main.yx from 'new' and 'init <name>' should be identical"
+    );
 }

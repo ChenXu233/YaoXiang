@@ -425,8 +425,9 @@ impl Interpreter {
                 ConstValue::Char(c) => RuntimeValue::Char((*c) as u32),
                 ConstValue::String(s) => RuntimeValue::String(s.as_str().into()),
                 ConstValue::Bytes(b) => RuntimeValue::Bytes(b.as_slice().into()),
+                ConstValue::LibraryRef { .. } | ConstValue::ExternRef { .. } => todo!(),
             })
-            .unwrap_or(RuntimeValue::Unit)
+            .expect("constant index out of bounds")
     }
 
     pub(super) fn make_async_pending(
@@ -736,6 +737,46 @@ impl Interpreter {
             .map_err(|e| e.with_stack(stack))
     }
 
+    pub(super) fn call_native_with_ffi_meta(
+        &mut self,
+        func_name: &str,
+        mechanism: &str,
+        lib: &str,
+        symbol: &str,
+        call_args: &[RuntimeValue],
+    ) -> ExecutorResult<RuntimeValue> {
+        let mut resolved = Vec::with_capacity(call_args.len());
+        for arg in call_args {
+            resolved.push(self.force_value_clone(arg)?);
+        }
+
+        // If no mechanism is specified (old format), fall back to direct name lookup
+        if mechanism.is_empty() {
+            return self.call_native_by_name(func_name, &resolved);
+        }
+
+        let stack = self.capture_stack();
+        let interp_ptr = std::ptr::addr_of_mut!(*self);
+        let mut call_fn = move |func: &RuntimeValue,
+                                args: &[RuntimeValue]|
+              -> Result<RuntimeValue, ExecutorError> {
+            if let RuntimeValue::Function(fv) = func {
+                // SAFETY: The interpreter lives as long as the callback.
+                let interpreter = unsafe { &mut *interp_ptr };
+                interpreter.call_function_by_id(fv.func_id, args)
+            } else {
+                Err(ExecutorError::type_error(
+                    "Expected function value".to_string(),
+                    vec![],
+                ))
+            }
+        };
+        let mut ctx = NativeContext::with_call_fn(&mut self.heap, &mut call_fn);
+        self.ffi
+            .call_with_mechanism(mechanism, lib, symbol, func_name, &resolved, &mut ctx)
+            .map_err(|e| e.with_stack(stack))
+    }
+
     pub(super) fn call_static_by_name(
         &mut self,
         func_name: &str,
@@ -845,6 +886,11 @@ impl Interpreter {
             (BinaryOp::Rem, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
                 RuntimeValue::Float(l % r)
             }
+            (BinaryOp::Add, RuntimeValue::String(l), RuntimeValue::String(r)) => {
+                let mut result = (*l).to_string();
+                result.push_str(&r);
+                RuntimeValue::String(result.into())
+            }
             (BinaryOp::Add, RuntimeValue::List(lhs_handle), RuntimeValue::List(rhs_handle)) => {
                 let mut merged = Vec::new();
 
@@ -858,7 +904,13 @@ impl Interpreter {
                 let handle = self.heap.allocate(HeapValue::List(merged));
                 RuntimeValue::List(handle)
             }
-            _ => RuntimeValue::Unit,
+            _ => {
+                let stack = self.capture_stack();
+                return Err(ExecutorError::type_error(
+                    format!("type mismatch in binary operation {:?}", op),
+                    stack,
+                ));
+            }
         };
 
         frame.set_register(dst.0 as usize, result);

@@ -16,7 +16,7 @@ use tempfile::TempDir;
 
 fn setup_project_with_deps() -> (TempDir, std::path::PathBuf) {
     let tmp = TempDir::new().unwrap();
-    init::exec_in(tmp.path(), "test-proj").unwrap();
+    init::exec_in(tmp.path(), &init::InitOptions { lib: false }, "test-proj").unwrap();
     let project_dir = tmp.path().join("test-proj");
     add::exec_in(&project_dir, "foo", Some("1.0.0"), false).unwrap();
     add::exec_in(&project_dir, "bar", Some("2.0.0"), true).unwrap();

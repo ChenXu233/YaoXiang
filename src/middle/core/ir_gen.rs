@@ -19,25 +19,13 @@ use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::i18n::MSG;
 use crate::util::span::Span;
 use std::collections::HashMap;
-use std::sync::LazyLock;
-
-/// 缓存所有 native 函数/常量名（通过 ModuleRegistry 自动发现）
-static NATIVE_NAMES: LazyLock<Vec<String>> =
-    LazyLock::new(|| ModuleRegistry::with_std().native_names());
-
-/// 缓存短名称到完整名称的映射（通过 ModuleRegistry 自动发现）
-/// 例如：print -> std.io.print, abs -> std.math.abs
-static SHORT_TO_QUALIFIED: LazyLock<HashMap<String, String>> =
-    LazyLock::new(|| ModuleRegistry::with_std().short_to_qualified_map());
-
-/// 缓存 std 子模块名称列表（通过 ModuleRegistry 自动发现）
-static STD_SUBMODULES: LazyLock<Vec<String>> =
-    LazyLock::new(|| ModuleRegistry::with_std().std_submodule_names());
 
 /// 检查是否是命名空间调用（如 std.io.println 或 io.println）
 fn is_namespace_call(expr: &ast::Expr) -> bool {
     match expr {
-        ast::Expr::Var(name, _) => name == "std" || is_std_module(name),
+        ast::Expr::Var(name, _) => {
+            name == "std" || ModuleRegistry::with_std().is_std_submodule(name)
+        }
         ast::Expr::FieldAccess { expr, .. } => is_namespace_call(expr),
         _ => false,
     }
@@ -52,7 +40,7 @@ fn extract_namespace_path(
         ast::Expr::Var(name, _) => {
             if name == "std" {
                 format!("std.{}", field)
-            } else if is_std_module(name) {
+            } else if ModuleRegistry::with_std().is_std_submodule(name) {
                 format!("std.{}.{}", name, field)
             } else {
                 format!("{}.{}", name, field)
@@ -68,31 +56,6 @@ fn extract_namespace_path(
         }
         _ => field.to_string(),
     }
-}
-
-/// 检查完整的命名空间路径是否是 native 函数/常量
-fn is_native_name(full_path: &str) -> bool {
-    NATIVE_NAMES.iter().any(|n| n == full_path)
-}
-
-/// 检查变量名是否是 std 模块的子模块
-/// 通过 ModuleRegistry 动态查询，不再硬编码模块名称
-fn is_std_module(name: &str) -> bool {
-    STD_SUBMODULES.iter().any(|m| m == name)
-}
-
-/// 将模块变量和字段组合成完整路径（如 io.println -> std.io.println）
-fn resolve_module_access(
-    module_name: &str,
-    field: &str,
-) -> Option<String> {
-    if is_std_module(module_name) {
-        let full_path = format!("std.{}", field);
-        if is_native_name(&full_path) {
-            return Some(full_path);
-        }
-    }
-    None
 }
 
 /// 检查类型是否实现了 Stringable 接口（即有 to_string 方法）
@@ -180,8 +143,12 @@ pub struct AstToIrGenerator {
     module_local_names: HashMap<String, Vec<String>>,
     /// 局部变量类型追踪（用于错误消息中显示实际类型）
     local_var_types: HashMap<String, String>,
-    /// 用户声明的 native 函数绑定
-    native_bindings: Vec<crate::std::ffi::NativeBinding>,
+    /// FFI 库绑定
+    ffi_libs: Vec<crate::middle::core::ir::FfiLibBinding>,
+    /// FFI 绑定 — 不透明类型或外部函数
+    ffi_bindings: Vec<crate::middle::core::ir::FfiBinding>,
+    /// 下一个库 ID
+    next_lib_id: usize,
     /// 结构体定义映射（类型名 -> 字段列表）
     /// 用于构造器调用时填充默认值
     struct_definitions: HashMap<String, Vec<crate::frontend::core::parser::ast::StructField>>,
@@ -205,6 +172,9 @@ pub struct AstToIrGenerator {
     function_param_types: HashMap<String, Vec<MonoType>>,
     /// NLL 精确释放计划（所有权检查器产出）
     release_plan: HashMap<Span, Vec<String>>,
+    /// 待捕获的环境变量（由 spawn for 等设置，供下一个 Expr::Lambda 使用）
+    /// 在生成闭包函数体时，这些变量的当前寄存器值会被捕获到闭包环境中。
+    pending_env_vars: Vec<Operand>,
 }
 
 /// 绑定信息（用于 IR 生成阶段的方法调用转发）
@@ -236,7 +206,7 @@ impl AstToIrGenerator {
     /// 创建新的 IR 生成器
     pub fn new() -> Self {
         Self {
-            symbols: vec![HashMap::new()], // 全局作用域
+            symbols: vec![HashMap::new()],
             type_result: None,
             next_temp: 0,
             current_mut_locals: std::collections::HashSet::new(),
@@ -246,7 +216,9 @@ impl AstToIrGenerator {
             current_local_names: Vec::new(),
             module_local_names: HashMap::new(),
             local_var_types: HashMap::new(),
-            native_bindings: Vec::new(),
+            ffi_libs: Vec::new(),
+            ffi_bindings: Vec::new(),
+            next_lib_id: 0,
             struct_definitions: HashMap::new(),
             type_bindings: HashMap::new(),
             nested_functions: Vec::new(),
@@ -256,6 +228,7 @@ impl AstToIrGenerator {
             anon_function_irs: Vec::new(),
             function_param_types: HashMap::new(),
             release_plan: HashMap::new(),
+            pending_env_vars: Vec::new(),
         }
     }
 
@@ -522,7 +495,8 @@ impl AstToIrGenerator {
             mut_locals: std::mem::take(&mut self.module_mut_locals),
             loop_binding_locals: std::mem::take(&mut self.module_loop_binding_locals),
             local_names: std::mem::take(&mut self.module_local_names),
-            native_bindings: std::mem::take(&mut self.native_bindings),
+            ffi_libs: std::mem::take(&mut self.ffi_libs),
+            ffi_bindings: std::mem::take(&mut self.ffi_bindings),
         })
     }
 
@@ -554,6 +528,28 @@ impl AstToIrGenerator {
                         body,
                         constants,
                     )
+                } else if type_annotation.as_ref().is_some_and(|t| {
+                    crate::frontend::core::parser::ast::type_annotation_returns_meta_type(t)
+                }) && body.len() == 1
+                {
+                    // TypeDef with ExternRef: 检查 RHS body 是否为 ExternRef（不透明句柄类型）
+                    if let Some(ConstValue::ExternRef {
+                        mechanism,
+                        lib,
+                        symbol,
+                    }) = self.eval_body_for_type_decl(body)
+                    {
+                        let lib_id = self.get_or_create_lib_id(&mechanism, &lib);
+                        self.ffi_bindings
+                            .push(crate::middle::core::ir::FfiBinding::TypeBinding {
+                                type_name: name.clone(),
+                                lib_id,
+                                symbol: symbol.clone(),
+                            });
+                        return Ok(None);
+                    }
+                    // 普通 MetaType 构造器（如自定义类型别名）
+                    self.generate_constructor_ir(name, type_annotation.as_ref().unwrap())
                 } else if type_annotation.as_ref().is_some_and(|t| {
                     crate::frontend::core::parser::ast::type_annotation_returns_meta_type(t)
                         || matches!(t, ast::Type::Struct { .. })
@@ -742,7 +738,7 @@ impl AstToIrGenerator {
         // 形如: my_add: (a: Int, b: Int) -> Int = Native("my_add")
         //
         // 通过 name resolution 检测，不再硬编码 Var("Native") 字符串匹配。
-        // Native 是 std.ffi 模块中真实存在的函数，名称通过 SHORT_TO_QUALIFIED 解析。
+        // Native 是 std.ffi 模块中真实存在的函数，名称通过 ModuleRegistry 解析。
         if body.is_empty() {
             // 空函数体，无法检测 native 模式
         }
@@ -786,6 +782,23 @@ impl AstToIrGenerator {
         // 记录局部变量起始位置（在参数之后）
         let local_var_start = params.len();
         self.next_temp = local_var_start;
+
+        // 检查函数体是否为 FFI ExternRef 绑定
+        if let Some(ConstValue::ExternRef {
+            mechanism,
+            lib,
+            symbol,
+        }) = self.try_eval_body_as_extern_ref(body)
+        {
+            let lib_id = self.get_or_create_lib_id(&mechanism, &lib);
+            self.ffi_bindings
+                .push(crate::middle::core::ir::FfiBinding::FuncBinding {
+                    func_name: name.to_string(),
+                    lib_id,
+                    symbol: symbol.clone(),
+                });
+            return Ok(None);
+        }
 
         // 生成语句 IR
         for stmt in body {
@@ -919,6 +932,10 @@ impl AstToIrGenerator {
                                 ConstValue::Char(c) => c.to_string(),
                                 ConstValue::Void => String::new(),
                                 ConstValue::Bytes(b) => format!("{:?}", b),
+                                ConstValue::LibraryRef { .. } | ConstValue::ExternRef { .. } => {
+                                    // FFI types cannot be formatted at compile time
+                                    return None;
+                                }
                             };
                             // 格式化说明符在常量求值中不处理，遇到则退回运行时
                             if format_spec.is_some() {
@@ -930,9 +947,103 @@ impl AstToIrGenerator {
                 }
                 Some(ConstValue::String(result))
             }
+            // 编译期 FFI 求值：Native.c("lib") → ConstValue::LibraryRef
+            // lib("sym") → ConstValue::ExternRef
+            ast::Expr::Call { func: _, args, .. } => {
+                // 通过 type_result 检查调用表达式的推断类型
+                if let Some(expr_type) = self.get_expr_mono_type(expr) {
+                    match expr_type {
+                        MonoType::LibraryRef { mechanism, .. } => {
+                            // Native.c("lib") — 需要提取 lib 名字符串
+                            if args.len() == 1 {
+                                if let Some(lib_str) = Self::extract_string_arg(args) {
+                                    return Some(ConstValue::LibraryRef {
+                                        mechanism,
+                                        lib: lib_str,
+                                    });
+                                }
+                            }
+                        }
+                        MonoType::ExternRef { mechanism, lib, .. }
+                            // lib("sym") — 需要提取 symbol 名字符串
+                            if args.len() == 1 => {
+                                if let Some(sym_str) = Self::extract_string_arg(args) {
+                                    return Some(ConstValue::ExternRef {
+                                        mechanism,
+                                        lib,
+                                        symbol: sym_str,
+                                    });
+                                }
+                            }
+                        _ => {}
+                    }
+                }
+                None
+            }
             // TODO: 支持更复杂的常量表达式
             _ => None,
         }
+    }
+
+    /// 从函数调用的参数列表中提取第一个字符串字面量
+    fn extract_string_arg(args: &[ast::Expr]) -> Option<String> {
+        args.first().and_then(|arg| match arg {
+            ast::Expr::Lit(ast::Literal::String(s), _) => Some(s.clone()),
+            _ => None,
+        })
+    }
+
+    /// 获取或创建 FFI 库绑定 ID
+    fn get_or_create_lib_id(
+        &mut self,
+        mechanism: &str,
+        lib_name: &str,
+    ) -> usize {
+        if let Some(existing) = self
+            .ffi_libs
+            .iter()
+            .find(|l| l.mechanism == mechanism && l.lib_name == lib_name)
+        {
+            return existing.id;
+        }
+        let id = self.next_lib_id;
+        self.next_lib_id += 1;
+        self.ffi_libs.push(crate::middle::core::ir::FfiLibBinding {
+            id,
+            mechanism: mechanism.to_string(),
+            lib_name: lib_name.to_string(),
+        });
+        id
+    }
+
+    /// 从声明 body 中提取单个表达式并求值
+    fn eval_body_for_type_decl(
+        &self,
+        body: &[ast::Stmt],
+    ) -> Option<ConstValue> {
+        if body.len() == 1 {
+            if let ast::StmtKind::Expr(expr) = &body[0].kind {
+                return self.eval_const_expr(expr);
+            }
+        }
+        None
+    }
+
+    /// 检查函数体（Stmt 列表）是否是对 ExternRef 的求值
+    fn try_eval_body_as_extern_ref(
+        &self,
+        body: &[ast::Stmt],
+    ) -> Option<ConstValue> {
+        if body.len() == 1 {
+            match &body[0].kind {
+                ast::StmtKind::Expr(expr) | ast::StmtKind::Return(Some(expr)) => {
+                    // 直接 eval 表达式（内部会走 eval_const_expr 的 Call 分支检查类型）
+                    return self.eval_const_expr(expr);
+                }
+                _ => {}
+            }
+        }
+        None
     }
 
     /// 生成全局变量 IR
@@ -2101,11 +2212,18 @@ impl AstToIrGenerator {
             span,
         });
 
-        // 11. 在循环体内创建闭包：() => { body }
-        //     将循环体包装为无参 Lambda
+        // 11. 在循环体内创建闭包：(item) => { body }
+        //     迭代变量作为参数传入，当前值通过 env 捕获
         let closure_reg = self.next_temp_reg();
+        // 捕获迭代变量的当前值（element_reg 在 next() 返回后被设置）
+        self.pending_env_vars = vec![Operand::Local(element_reg)];
         let lambda = ast::Expr::Lambda {
-            params: Vec::new(),
+            params: vec![ast::Param {
+                name: var_name.to_string(),
+                ty: None,
+                is_mut: false,
+                span,
+            }],
             body: Box::new(body.clone()),
             span,
         };
@@ -2242,9 +2360,12 @@ impl AstToIrGenerator {
         func: &ast::Expr,
     ) -> Operand {
         if let Expr::Var(name, _) = func {
-            let resolved_name = if is_native_name(name) {
+            let resolved_name = if ModuleRegistry::with_std().is_native_name(name) {
                 name.clone()
-            } else if let Some(qualified) = SHORT_TO_QUALIFIED.get(name) {
+            } else if let Some(qualified) = ModuleRegistry::with_std()
+                .short_to_qualified_map()
+                .get(name)
+            {
                 qualified.clone()
             } else {
                 name.clone()
@@ -2625,8 +2746,9 @@ impl AstToIrGenerator {
                             }
 
                             // 解析函数名
-                            let func_name = if let Some(qualified) =
-                                SHORT_TO_QUALIFIED.get(&binding.function)
+                            let func_name = if let Some(qualified) = ModuleRegistry::with_std()
+                                .short_to_qualified_map()
+                                .get(&binding.function)
                             {
                                 qualified.clone()
                             } else {
@@ -2901,7 +3023,10 @@ impl AstToIrGenerator {
                                     let print_func_name = if let Expr::Var(name, _) = func.as_ref()
                                     {
                                         if name == "print" || name == "println" {
-                                            if let Some(qualified) = SHORT_TO_QUALIFIED.get(name) {
+                                            if let Some(qualified) = ModuleRegistry::with_std()
+                                                .short_to_qualified_map()
+                                                .get(name)
+                                            {
                                                 qualified.clone()
                                             } else {
                                                 format!("std.io.{}", name)
@@ -2951,7 +3076,10 @@ impl AstToIrGenerator {
                                     let print_func_name = if let Expr::Var(name, _) = func.as_ref()
                                     {
                                         if name == "print" || name == "println" {
-                                            if let Some(qualified) = SHORT_TO_QUALIFIED.get(name) {
+                                            if let Some(qualified) = ModuleRegistry::with_std()
+                                                .short_to_qualified_map()
+                                                .get(name)
+                                            {
                                                 qualified.clone()
                                             } else {
                                                 format!("std.io.{}", name)
@@ -3000,7 +3128,19 @@ impl AstToIrGenerator {
                 // 首先检查是否是模块变量的字段访问（如 io.println）
                 // io 是通过 use std.{io} 导入的模块变量
                 if let Expr::Var(module_name, _) = expr.as_ref() {
-                    if let Some(full_path) = resolve_module_access(module_name, field) {
+                    if let Some(full_path) = {
+                        let reg = ModuleRegistry::with_std();
+                        if reg.is_std_submodule(module_name) {
+                            let path = format!("std.{}", field);
+                            if reg.is_native_name(&path) {
+                                Some(path)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } {
                         // 模块变量方法调用：生成函数调用
                         // 例如：io.println -> Call("std.io.println", [args])
                         // 这里我们处理的是非调用场景的字段访问（如 io.println 作为值）
@@ -3028,9 +3168,7 @@ impl AstToIrGenerator {
                     let full_path = extract_namespace_path(expr, field);
 
                     // 检查是否是命名空间常量访问
-                    let is_native_constant = is_native_name(&full_path);
-
-                    if is_native_constant {
+                    if ModuleRegistry::with_std().is_native_name(&full_path) {
                         // 命名空间常量访问：生成零参数函数调用
                         instructions.push(Instruction::Call {
                             dst: Some(Operand::Local(result_reg)),
@@ -3517,8 +3655,7 @@ impl AstToIrGenerator {
                 // 3. 为闭包参数分配寄存器索引
                 let _param_regs: Vec<usize> = (0..params.len()).collect();
 
-                // Lambda 无隐式捕获：env 始终为空
-                let env_vars = Vec::new();
+                let env_vars = std::mem::take(&mut self.pending_env_vars);
 
                 // 5. 生成闭包函数体 IR
                 // 类似于 generate_function_ir 的逻辑，但针对 Lambda

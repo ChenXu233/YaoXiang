@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC 013: エラーコード仕様"
 status: "受領"

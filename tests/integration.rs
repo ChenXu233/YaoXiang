@@ -1,5 +1,7 @@
 #[path = "integration/backends.rs"]
 mod backends;
+#[path = "integration/check.rs"]
+mod check;
 #[path = "integration/codegen.rs"]
 mod codegen;
 #[path = "integration/codegen_extended.rs"]

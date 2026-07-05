@@ -13,3 +13,15 @@ main = {{
         project_name = project_name
     )
 }
+
+/// Generate the default `lib.yx` file content for a library project.
+pub fn generate_lib_yx(project_name: &str) -> String {
+    format!(
+        r#"// {project_name} - YaoXiang 库项目
+// 由 yaoxiang init --lib 自动生成
+
+// 在此定义导出的类型和函数
+"#,
+        project_name = project_name
+    )
+}
