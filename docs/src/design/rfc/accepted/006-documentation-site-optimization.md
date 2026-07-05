@@ -3,7 +3,9 @@ title: "RFC-006: 文档站点建设"
 status: "已接受"
 author: "晨煦"
 created: "2025-01-05"
-updated: "2026-02-12"
+updated: "2026-07-05"
+
+issue: "#130"
 ---
 
 # RFC-006: 文档站点建设

@@ -3,7 +3,7 @@ title: "RFC-014a: Registry 协议规范"
 status: "审核中"
 author: "晨煦"
 created: "2026-06-11"
-updated: "2026-06-11"
+updated: "2026-07-05"
 group: "rfc-014"
 ---
 

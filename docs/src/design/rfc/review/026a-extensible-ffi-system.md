@@ -1,9 +1,10 @@
 ---
 title: "RFC-026a: 可扩展 FFI 机制体系"
 status: "审核中"
+issue: "#135"
 author: "晨煦"
 created: "2026-06-05"
-updated: "2026-07-03"
+updated: "2026-07-05"
 group: "rfc-026"
 ---
 

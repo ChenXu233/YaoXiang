@@ -3,8 +3,9 @@ title: "RFC-002：基于 libuv 的资源类型 IO 实现层"
 status: "草案"
 author: "晨煦"
 created: "2025-01-05"
-updated: "2026-06-16（修订：定位为资源类型 IO 实现层，删除透明异步，与 RFC-024 对齐；共享事件循环架构）"
----
+updated: "2026-07-05"
+issue: "#102"
+
 
 # RFC-002：基于 libuv 的资源类型 IO 实现层
 

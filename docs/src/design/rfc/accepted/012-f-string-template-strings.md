@@ -3,7 +3,8 @@ title: "RFC 012: F-String 模板字符串"
 status: "已接受"
 author: "Chen Xu"
 created: "2025-01-27"
-updated: "2026-02-12"
+updated: "2026-07-05"
+issue: "#124"
 ---
 
 # RFC 012: F-String 模板字符串

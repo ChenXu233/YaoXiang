@@ -3,6 +3,8 @@ title: "RFC-028：JIT 编译器 — VM 内多级执行引擎"
 status: "草案"
 author: "晨煦"
 created: "2026-06-11"
+updated: "2026-07-05"
+issue: "#101"
 ---
 
 # RFC-028：JIT 编译器 — VM 内多级执行引擎
