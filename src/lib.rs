@@ -73,6 +73,30 @@ pub const NAME: &str = "YaoXiang (爻象)";
 pub fn run(source: &str) -> Result<()> {
     run_with_source_name("<input>", source)
 }
+/// Evaluate YaoXiang code (eval mode: auto-wrap if no main function)
+///
+/// Unlike `run()`, this function:
+/// - Checks if the code has a top-level `main =` binding
+/// - If yes: compiles and executes as-is
+/// - If no: wraps the code in `main = { ... }` automatically
+pub fn eval_code(source: &str) -> Result<()> {
+    let tokens = crate::frontend::core::tokenize(source)
+        .map_err(|e| anyhow::anyhow!("Lexer error: {:?}", e))?;
+    let parse_result = crate::frontend::core::parser::parse(&tokens);
+    let has_main = parse_result.module.items.iter().any(|stmt| {
+        matches!(
+            &stmt.kind,
+            crate::frontend::core::parser::ast::StmtKind::Binding { name, .. }
+            if name == "main"
+        )
+    });
+    let compile_source: String = if has_main {
+        source.to_string()
+    } else {
+        format!("main = {{\n{}}}", source)
+    };
+    run_with_source_name("<eval>", &compile_source)
+}
 
 fn run_with_source_name(
     source_name: &str,
