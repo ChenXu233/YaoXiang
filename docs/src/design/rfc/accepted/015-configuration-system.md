@@ -5,6 +5,7 @@ author: "晨煦"
 created: "2026-02-12"
 updated: "2026-02-15"
 issue: "#133"
+---
 
 # RFC-015: YaoXiang 配置系统设计
 
