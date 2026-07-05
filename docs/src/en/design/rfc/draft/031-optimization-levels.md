@@ -1,11 +1,12 @@
 ---
-title: "RFC-031: Optimization Level and Pass Manager"
+title: "RFC-031: Optimization Levels and Pass Manager"
 status: "Draft"
-author: "晨煦"
+author: "Chenxu"
 created: "2026-06-16"
+updated: "2026-07-05"
 ---
 
-# RFC-031: Optimization Level and Pass Manager
+# RFC-031: Optimization Levels and Pass Manager
 
 > **References**:
 > - [RFC-011: Generic Type System Design](../accepted/011-generic-type-system.md)
@@ -14,9 +15,9 @@ created: "2026-06-16"
 
 ## Summary
 
-This document proposes introducing an **optimization level system** and a **Pass manager** to YaoXiang, transforming compilation optimization from an "all-or-nothing" approach into a configurable optimization package. Optimization levels (O0–O3) define different combinations of optimization strategies, and the Pass manager is responsible for executing optimization passes in dependency order. This document also defines a standard interface for optimization passes, providing an architectural foundation for future extensions (monomorphization, inlining, constant folding, etc.).
+This document proposes introducing an **optimization level system** and a **Pass Manager** for YaoXiang, transforming compilation optimization from an "all-or-nothing" approach into configurable optimization packages. Optimization levels (O0–O3) define different combinations of optimization strategies, and the Pass Manager is responsible for executing optimization Passes in dependency order. This document also defines a standard interface for optimization Passes, providing an architectural foundation for future extensions (monomorphization, inlining, constant folding, etc.).
 
-**Core goal: enable users to make explicit trade-offs between compilation speed, binary size, and runtime performance.**
+**Core Goal: Enable users to make explicit trade-offs between compilation speed, binary size, and runtime performance.**
 
 ## Motivation
 
@@ -24,40 +25,40 @@ This document proposes introducing an **optimization level system** and a **Pass
 
 The current compiler has no optimization configuration; all code goes through the same processing pipeline. This causes:
 
-1. **Poor debugging experience**: Debugging does not require optimization, but it cannot be turned off
-2. **No control over binary size**: Generic monomorphization bloats the binary, but cannot be disabled
-3. **Uncontrollable compilation speed**: Cannot choose "fast compile" or "deep optimization" based on the scenario
-4. **Disordered optimization passes**: Future optimization passes have dependencies on each other and need unified management
+1. **Poor debugging experience**: Optimization is not needed during debugging, but cannot be disabled
+2. **No control over binary size**: Generic monomorphization can bloat the binary, but cannot be disabled
+3. **Uncontrollable compilation speed**: Cannot choose "fast compilation" or "deep optimization" based on the scenario
+4. **Unordered optimization Passes**: Future optimization Passes have dependencies among each other and require unified management
 
-### Current problems
+### Current Problems
 
 ```yaoxiang
-# Currently: all code goes through the same processing
-# - During debugging: optimization is not needed, but cannot be turned off
-# - In production: optimization is needed, but depth cannot be configured
-# - Generic functions: multiple copies of code are generated, but cannot be controlled
+# Current: all code goes through the same processing
+# - During debugging: optimization is not needed, but cannot be disabled
+# - During production: optimization is needed, but depth cannot be configured
+# - Generic functions: generate multiple code versions, but cannot be controlled
 
 identity: (T: Type) -> (x: T) -> T = (x) => x
-x = identity(42)        # generates identity_Int
-s = identity("hello")   # generates identity_String
+x = identity(42)        # will generate identity_Int
+s = identity("hello")   # will generate identity_String
 # Users cannot choose "do not monomorphize" (type erasure mode)
 ```
 
-### The value of optimization levels
+### The Value of Optimization Levels
 
-| Scenario | Requirement | Optimization Level |
-|----------|-------------|--------------------|
-| Development & debugging | Fast compile, preserve debug info | O0 |
-| Daily development | Basic optimization, balanced compile speed | O1 |
-| Testing / CI | Standard optimization, validate production behavior | O2 |
+| Scenario | Need | Optimization Level |
+|------|------|----------|
+| Development debugging | Fast compilation, preserve debug info | O0 |
+| Daily development | Basic optimization, balance compilation speed | O1 |
+| Testing/CI | Standard optimization, verify production behavior | O2 |
 | Production release | Deep optimization, peak performance | O3 |
-| Scripts / rapid prototyping | Automatic selection (based on target platform) | Auto |
+| Scripts/quick prototypes | Auto-select (based on target platform) | Auto |
 
 ## Proposal
 
-### Core design
+### Core Design
 
-#### 1. Optimization level definition
+#### 1. Optimization Level Definition
 
 ```rust
 /// Optimization level
@@ -65,13 +66,13 @@ s = identity("hello")   # generates identity_String
 pub enum OptLevel {
     /// O0: No optimization (debug mode)
     /// - Preserve all debug info
-    /// - Perform no optimization transforms
-    /// - Fastest compile speed
-    /// - Use case: development debugging, rapid iteration
+    /// - Perform no optimization transformations
+    /// - Fastest compilation speed
+    /// - Use case: development debugging, fast iteration
     O0,
 
     /// O1: Basic optimization (default)
-    /// - On-demand monomorphization (do not generate unused specialized versions)
+    /// - On-demand monomorphization (do not generate unused specializations)
     /// - Basic constant folding
     /// - Basic dead code elimination
     /// - Use case: daily development
@@ -90,35 +91,35 @@ pub enum OptLevel {
     /// O3: Aggressive optimization
     /// - Full monomorphization (pre-generate all possible type combinations)
     /// - Aggressive inlining
-    /// - All optimization passes
-    /// - May increase compile time and binary size
-    /// - Use case: peak performance requirements
+    /// - All optimization Passes
+    /// - May increase compilation time and binary size
+    /// - Use case: extreme performance requirements
     O3,
 
     /// Auto: Automatic selection
-    /// - Automatically choose optimization strategy based on target platform and available resources
-    /// - Use case: scripts, rapid prototyping
+    /// - Automatically select optimization strategy based on target platform and available resources
+    /// - Use case: scripts, quick prototypes
     Auto,
 }
 ```
 
-#### 2. Optimization pass interface
+#### 2. Optimization Pass Interface
 
 ```rust
-/// Optimization pass interface
+/// Optimization Pass interface
 pub trait OptimizationPass {
-    /// Pass name (used for logging and dependency declaration)
+    /// Pass name (for logging and dependency declaration)
     fn name(&self) -> &str;
 
-    /// Run the pass
+    /// Run the Pass
     fn run(&self, module: &mut ModuleIR, config: &PassConfig) -> PassResult;
 
-    /// Which other passes must run before this one
+    /// Which other Passes must run before this Pass
     fn dependencies(&self) -> Vec<&str> {
         vec![]
     }
 
-    /// Whether this pass should run under the current configuration
+    /// Whether this Pass should run under the current configuration
     fn should_run(&self, config: &PassConfig) -> bool {
         true
     }
@@ -129,7 +130,7 @@ pub trait OptimizationPass {
 pub struct PassConfig {
     /// Optimization level
     pub opt_level: OptLevel,
-    /// Whether to enable debug info
+    /// Whether debug info is enabled
     pub debug_info: bool,
     /// Target platform
     pub target_platform: TargetPlatform,
@@ -147,23 +148,23 @@ pub struct PassResult {
 /// Pass statistics
 #[derive(Debug, Default)]
 pub struct PassStats {
-    /// Number of functions inlined
+    /// Number of inlined functions
     pub functions_inlined: usize,
-    /// Number of functions monomorphized
+    /// Number of monomorphized functions
     pub functions_monomorphized: usize,
-    /// Number of dead code blocks removed
+    /// Number of removed dead code items
     pub dead_code_removed: usize,
-    /// Number of constants folded
+    /// Number of folded constants
     pub constants_folded: usize,
 }
 ```
 
-#### 3. Pass manager
+#### 3. Pass Manager
 
 ```rust
 /// Optimizer
 pub struct Optimizer {
-    /// Registered pass list (sorted by dependency order)
+    /// Registered Pass list (sorted by dependency order)
     passes: Vec<Box<dyn OptimizationPass>>,
 }
 
@@ -174,7 +175,7 @@ impl Optimizer {
         Self { passes }
     }
 
-    /// Create the pass list for a given level
+    /// Create the Pass list for a given level
     fn create_passes_for_level(level: OptLevel) -> Vec<Box<dyn OptimizationPass>> {
         match level {
             OptLevel::O0 => {
@@ -213,13 +214,13 @@ impl Optimizer {
                 ]
             }
             OptLevel::Auto => {
-                // Automatic selection: decide based on target platform
+                // Auto-select: decide based on target platform
                 Self::create_passes_for_level(OptLevel::O1)
             }
         }
     }
 
-    /// Run all optimization passes
+    /// Run all optimization Passes
     pub fn run(&self, module: &mut ModuleIR, config: &PassConfig) -> OptimizerResult {
         let mut total_stats = OptimizerStats::default();
 
@@ -242,7 +243,7 @@ impl Optimizer {
 
 ### Examples
 
-#### Command-line usage
+#### Command Line Usage
 
 ```bash
 # Debug mode: no optimization
@@ -257,11 +258,11 @@ yaoxiang build --opt-level O2
 # Peak performance: aggressive optimization
 yaoxiang build --opt-level O3
 
-# Automatic selection
+# Auto-select
 yaoxiang build --opt-level Auto
 ```
 
-#### Configuration file
+#### Configuration File
 
 ```json
 {
@@ -274,7 +275,7 @@ yaoxiang build --opt-level Auto
 }
 ```
 
-#### API usage
+#### API Usage
 
 ```rust
 use yaoxiang::frontend::{Compiler, CompileConfig, OptLevel};
@@ -290,51 +291,51 @@ let config = CompileConfig::new()
 let mut compiler = Compiler::with_config(config);
 ```
 
-### Syntax changes
+### Syntax Changes
 
-No syntax changes. The optimization level is a compiler configuration and does not affect language syntax.
+No syntax changes. Optimization levels are compiler configuration and do not affect language syntax.
 
-## Detailed design
+## Detailed Design
 
-### Optimization level to pass mapping
+### Optimization Level to Pass Mapping
 
 | Pass | O0 | O1 | O2 | O3 | Description |
-|------|----|----|----|----|-------------|
-| **Constant folding** | Minimal | Basic | Full | Full | Evaluate constant expressions at compile time |
+|------|----|----|----|----|------|
+| **Constant Folding** | Minimal | Basic | Full | Full | Compute constant expressions at compile-time |
 | **Monomorphization** | ❌ | On-demand | On-demand | Full | Generic function specialization |
-| **Dead code elimination** | ❌ | Basic | Full | Full | Remove unused code |
-| **Function inlining** | ❌ | ❌ | Small functions | Aggressive | Insert function body at call site |
-| **Tail call optimization** | ❌ | ❌ | ✅ | ✅ | Convert tail recursion to loops |
-| **Escape analysis** | ❌ | ❌ | ❌ | ✅ | Decide stack/heap allocation |
-| **Loop optimization** | ❌ | ❌ | ❌ | ✅ | Loop unrolling, hoisting invariants |
+| **Dead Code Elimination** | ❌ | Basic | Full | Full | Remove unused code |
+| **Function Inlining** | ❌ | ❌ | Small functions | Aggressive | Insert function body at call site |
+| **Tail Call Optimization** | ❌ | ❌ | ✅ | ✅ | Convert tail recursion to loop |
+| **Escape Analysis** | ❌ | ❌ | ❌ | ✅ | Decide stack/heap allocation |
+| **Loop Optimization** | ❌ | ❌ | ❌ | ✅ | Loop unrolling, hoisting invariants |
 
-### Monomorphization strategy
+### Monomorphization Strategy
 
 ```rust
 /// Monomorphization strategy
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum MonoStrategy {
-    /// No monomorphization — type erasure; generic functions have only one copy of code
-    /// Pros: small binary, fast compile
+    /// No monomorphization — type erasure; generic functions have only one copy
+    /// Pros: small binary, fast compilation
     /// Cons: runtime dynamic dispatch overhead
     Erased,
 
-    /// On-demand monomorphization — generate code only for actually used type combinations
+    /// On-demand monomorphization — only generate code for actually used type combinations
     /// Pros: zero-cost abstraction, no runtime overhead
     /// Cons: binary may bloat
     #[default]
     OnDemand,
 
     /// Full monomorphization — pre-generate all possible type combinations
-    /// Pros: all calls determined at compile time
-    /// Cons: slow compile, large binary
+    /// Pros: all calls resolved at compile-time
+    /// Cons: slow compilation, large binary
     Full,
 }
 
 /// Monomorphization configuration
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MonoConfig {
-    /// Whether to enable monomorphization
+    /// Whether monomorphization is enabled
     #[serde(default = "default_true")]
     pub enabled: bool,
 
@@ -342,11 +343,11 @@ pub struct MonoConfig {
     #[serde(default)]
     pub strategy: MonoStrategy,
 
-    /// Whether to enable DCE (dead code elimination)
+    /// Whether DCE (dead code elimination) is enabled
     #[serde(default = "default_true")]
     pub dce_enabled: bool,
 
-    /// Maximum specialization depth (prevent infinite recursive generics)
+    /// Maximum specialization depth (prevents infinite recursive generics)
     #[serde(default = "default_max_mono_depth")]
     pub max_depth: usize,
 }
@@ -363,7 +364,7 @@ impl Default for MonoConfig {
 }
 ```
 
-### Compilation pipeline integration
+### Compilation Pipeline Integration
 
 ```rust
 // src/frontend/pipeline.rs
@@ -382,7 +383,7 @@ impl Pipeline {
         // 1. Generate base IR
         let mut ir = middle::generate_ir(ast, type_result)?;
 
-        // 2. Run optimization passes based on optimization level
+        // 2. Run optimization Passes based on optimization level
         let optimizer = Optimizer::for_opt_level(self.config.optimization_level);
         let pass_config = PassConfig {
             opt_level: self.config.optimization_level,
@@ -400,128 +401,128 @@ impl Pipeline {
 }
 ```
 
-### Impact on the type system
+### Type System Impact
 
-No direct impact. Optimization passes run at the IR layer and do not affect the type system.
+No direct impact. Optimization Passes operate at the IR layer and do not affect the type system.
 
-### Runtime behavior
+### Runtime Behavior
 
-| Optimization level | Runtime behavior |
-|--------------------|------------------|
+| Optimization Level | Runtime Behavior |
+|----------|-----------|
 | O0 | No optimization, preserve all debug info |
 | O1 | Basic optimization, preserve basic debug info |
 | O2 | Standard optimization, no debug info |
 | O3 | Aggressive optimization, no debug info |
 
-**Key point: the runtime does not need to be modified.** Optimization passes only affect the IR layer and code generation layer; the runtime looks up execution by function name/ID and is unaware of the optimization process.
+**Key point: no runtime changes required**. Optimization Passes only affect the IR layer and code generation layer; the runtime looks up execution by function name/ID and is unaware of the optimization process.
 
-### Compiler changes
+### Compiler Changes
 
 | Component | Change |
-|-----------|--------|
+|------|------|
 | `frontend/config.rs` | Add `OptLevel` enum and `MonoConfig` |
-| `frontend/pipeline.rs` | Integrate pass manager |
-| `middle/passes/optimizer/` | Add optimization pass module |
-| `middle/passes/mono/` | Refactor to standard pass interface |
+| `frontend/pipeline.rs` | Integrate the Pass Manager |
+| `middle/passes/optimizer/` | Add optimization Pass module |
+| `middle/passes/mono/` | Refactor into the standard Pass interface |
 | CLI | Add `--opt-level` parameter |
 
-### Backward compatibility
+### Backward Compatibility
 
 - ✅ Fully backward compatible
-- Default optimization level is O1, behavior matches current
-- Users can explicitly specify an optimization level to override the default
+- Default optimization level is O1, behavior consistent with the current state
+- Users can explicitly specify an optimization level to override the default behavior
 
 ## Trade-offs
 
-### Advantages
+### Pros
 
-- **Flexibility**: users can choose optimization strategy based on the scenario
-- **Extensibility**: standard pass interface, easy to add new optimizations
-- **Predictability**: clear behavior for each optimization level
-- **Debug-friendly**: O0 mode preserves complete debug info
+- **Flexibility**: Users can choose optimization strategies based on the scenario
+- **Extensibility**: Standard Pass interface makes it easy to add new optimizations
+- **Predictability**: Behavior of each optimization level is clearly defined
+- **Debug-friendly**: O0 mode preserves full debug info
 
-### Disadvantages
+### Cons
 
-- **Increased complexity**: multiple optimization levels to maintain
-- **Larger test matrix**: behavior at each optimization level needs testing
-- **Documentation burden**: the meaning of each optimization level must be explained
+- **Increased complexity**: Multiple optimization levels need to be maintained
+- **Larger test matrix**: Behavior of each optimization level needs testing
+- **Documentation burden**: Need to explain the meaning of each optimization level
 
 ## Alternatives
 
-| Option | Why not chosen |
-|--------|----------------|
-| Only on/off states | Cannot finely control optimization depth |
-| Use GCC/LLVM-style `-O` numbers | Inconsistent with YaoXiang's configuration system |
-| Independent toggle per optimization pass | Users need to understand the details of each pass, complex to use |
-| Defer to v2.0 | Monomorphization is implemented but not integrated; the architectural problem must be solved first |
+| Approach | Why Not Chosen |
+|------|--------------|
+| Only an on/off toggle | Cannot finely control optimization depth |
+| Using GCC/LLVM-style `-O` numbers | Inconsistent with YaoXiang's configuration system |
+| Independent on/off switch for each Pass | Users need to understand the details of each Pass, which is complex to use |
+| Defer to v2.0 | Monomorphization is already implemented but not integrated; the architecture must be resolved first |
 
-## Implementation strategy
+## Implementation Strategy
 
-### Phases
+### Phased Rollout
 
-1. **Phase 1 (current)**: Define optimization levels and pass interface
-2. **Phase 2**: Implement monomorphization pass (based on existing `mono/` module)
-3. **Phase 3**: Implement constant folding and dead code elimination passes
-4. **Phase 4**: Implement function inlining and tail call optimization passes
-5. **Phase 5**: Implement aggressive optimization passes (escape analysis, loop optimization)
+1. **Phase 1 (current)**: Define optimization levels and Pass interface
+2. **Phase 2**: Implement monomorphization Pass (based on the existing `mono/` module)
+3. **Phase 3**: Implement constant folding and dead code elimination Passes
+4. **Phase 4**: Implement function inlining and tail call optimization Passes
+5. **Phase 5**: Implement aggressive optimization Passes (escape analysis, loop optimization)
 
 ### Dependencies
 
-- Depends on RFC-011 (Generic Type System)'s monomorphization module
-- Depends on RFC-028 (JIT Compiler)'s optimization pass interface
-- Shares optimization pass design with RFC-018 (LLVM AOT)
+- Depends on the monomorphization module from RFC-011 (Generic System)
+- Depends on the optimization Pass interface from RFC-028 (JIT Compiler)
+- Shares the optimization Pass design with RFC-018 (LLVM AOT)
 
 ### Risks
 
-- **Performance regression**: optimization passes may introduce bugs that degrade performance
-- **Increased compile time**: optimization passes add to compile time
-- **Binary bloat**: monomorphization may significantly increase binary size
+- **Performance regression**: Optimization Passes may introduce bugs that cause performance degradation
+- **Increased compilation time**: Optimization Passes add to compilation time
+- **Binary bloat**: Monomorphization may cause significant increase in binary size
 
-## Open questions
+## Open Questions
 
-- [ ] Should O3 enable escape analysis by default? (@晨煦: needs performance test data)
-- [ ] Do we need `Os` (optimize for size) and `Oz` (extreme size optimization) levels?
-- [ ] Should optimization level affect the verbosity of debug info?
-- [ ] How to handle circular dependencies between optimization passes?
+- [ ] Should O3 enable escape analysis by default? (@Chenxu: performance test data needed)
+- [ ] Do we need `Os` (optimize for size) and `Oz` (aggressively optimize for size) levels?
+- [ ] Should optimization levels affect the verbosity of debug info?
+- [ ] How to handle circular dependencies between optimization Passes?
 
 ---
 
-## Appendix A: Design decision records
+## Appendix A: Design Decision Record
 
 | Decision | Resolution | Date | Recorder |
-|----------|------------|------|----------|
-| Optimization level naming | Use O0–O3 + Auto | 2026-06-16 | 晨煦 |
-| Default optimization level | O1 (basic optimization) | 2026-06-16 | 晨煦 |
-| Monomorphization strategy | Support Erased / OnDemand / Full | 2026-06-16 | 晨煦 |
-| Pass interface design | trait + dependency declaration | 2026-06-16 | 晨煦 |
+|------|------|------|--------|
+| Optimization level naming | Use O0–O3 + Auto | 2026-06-16 | Chenxu |
+| Default optimization level | O1 (basic optimization) | 2026-06-16 | Chenxu |
+| Monomorphization strategy | Support Erased/OnDemand/Full | 2026-06-16 | Chenxu |
+| Pass interface design | trait + dependency declaration | 2026-06-16 | Chenxu |
 
 ---
 
 ## Appendix B: Glossary
 
 | Term | Definition |
-|------|------------|
-| **Optimization pass** | An independent module that performs one transformation on the IR |
-| **Monomorphization** | A code generation strategy that specializes generic functions into concrete types |
-| **Constant folding** | Evaluating constant expressions at compile time |
-| **Dead code elimination** | Removing unreachable or unused code from the program |
-| **Function inlining** | Inserting a function body at the call site to avoid call overhead |
-| **Tail call optimization** | Converting tail recursion to a loop to avoid stack overflow |
-| **Escape analysis** | Analyzing whether a variable escapes its scope to decide stack/heap allocation |
+|------|------|
+| **Optimization Pass** | An independent module that performs one transformation on the IR |
+| **Monomorphization** | A code generation strategy that specializes generic functions into concrete-type versions |
+| **Constant Folding** | Computing constant expressions at compile-time |
+| **Dead Code Elimination** | Removing unreachable or unused code from a program |
+| **Function Inlining** | Inserting a function body at its call site to avoid function call overhead |
+| **Tail Call Optimization** | Converting tail recursion into a loop to avoid stack overflow |
+| **Escape Analysis** | Analyzing whether a variable escapes its scope to decide stack/heap allocation |
 
 ---
 
 ## References
 
 - [Rust Compiler Optimizations](https://rustc-dev-guide.rust-lang.org/optimizations.html)
-- [GCC Optimization Options](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html)
+- [GCC Optimization Levels](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html)
 - [LLVM Pass Manager](https://llvm.org/docs/WritingAnLLVMNewPMPass.html)
 - [V8 TurboFan Optimization Pipeline](https://v8.dev/docs/turbofan)
 
 ---
 
-## Lifecycle and destination
+## Lifecycle and Destination
 
-This RFC defines the architectural design of optimization levels and provides a unified framework for subsequent optimization passes.
+This RFC defines the architectural design of optimization levels, providing a unified framework for future optimization Passes.
 
-**Relationship to monomorphization**: monomorphization is one of the optimization passes and will be the first implemented pass once this RFC is accepted.
+**Relationship with monomorphization**: Monomorphization is one of the optimization Passes and will be implemented as the first Pass after this RFC is accepted.

@@ -1,10 +1,13 @@
 ---
-title: "RFC-026: FFI Core Mechanism"
+title: "RFC-026: FFI Core Mechanisms"
 status: "Accepted"
-updated: "2026-07-03"
+author: "Chenxu"
+created: "2026-07-03"
+updated: "2026-07-05"
+issue: "#93"
 ---
 
-# RFC-026: FFI Core Mechanism
+# RFC-026: FFI Core Mechanisms
 
 > **References**:
 > - [RFC-007: Unified Function Definition Syntax](./007-function-syntax-unification.md)
@@ -13,93 +16,93 @@ updated: "2026-07-03"
 > - [RFC-024: Concurrency Model Based on spawn Blocks](./024-concurrency-model.md)
 
 > **Deprecated**:
-> - [RFC-020: Dynamic Module and FFI Integration](../deprecated/020-dynamic-modules-ffi.md) — Content merged into this document
+> - [RFC-020: Dynamic Modules and FFI Integration](../deprecated/020-dynamic-modules-ffi.md) — Content merged into this document
 > - [RFC-021: Library-Driven FFI Extension and Cross-Language Call Support](../deprecated/021-library-driven-ffi-extension.md) — Content merged into this document
 
 > **Sub-RFCs**:
 > - [RFC-026a: Extensible FFI Mechanism System](../review/026a-extensible-ffi-system.md) — Multi-ABI mechanism plugins, `FfiMechanism` abstraction, dynamic loading
-> - [RFC-026b: yx-bindgen Toolchain](../draft/026b-yx-bindgen.md) — C header file → `.yx` binding code generation
+> - [RFC-026b: yx-bindgen Toolchain](../draft/026b-yx-bindgen.md) — C header → `.yx` binding code generation
 
 ## Summary
 
-This document defines the FFI (Foreign Function Interface) core mechanism of YaoXiang. The core idea: **external libraries are first-class values linked at compile-time, the memory layout ownership of cross-boundary data is nailed down at type definition time, and YaoXiang's heap objects are structurally isolated from external code.**
+This document defines the core FFI (Foreign Function Interface) mechanisms of YaoXiang. The core idea: **External libraries are first-class values linked at compile-time, the memory layout ownership of cross-boundary data is pinned at type definition, and YaoXiang's heap objects are structurally isolated from external code.**
 
-1. **External libraries are values**: `Native.c("libsqlite3")` links the library at compile-time and returns a parser, carrying library information through currying
-2. **External symbols are values**: applying a symbol name to the parser yields an external reference, bound as a type or function through `name: type = value` (RFC-007/010)
-3. **Type dichotomy**: opaque handle (layout owned by external) / transparent type (layout owned by YaoXiang) — no third option
-4. **Marshalling isolation**: cross-boundary data is by default copied to a call scratch area; YaoXiang heap objects are isolated from external code
-5. **Ownership safety**: unique ownership of handles (Move) + RAII, structurally preventing double-free and use-after-free
-6. **Escape hatch**: `*T` raw pointer + `unsafe {}`, where the user explicitly accepts the risk of zero-copy direct memory access
+1. **External library as value**: `Native.c("libsqlite3")` links the library at compile-time and returns a resolver, carrying library information via currying
+2. **External symbol as value**: Applying a symbol name to the resolver yields an external reference, bound as a type or function via `name: type = value` (RFC-007/010)
+3. **Type dichotomy**: Opaque handle (layout owned by external) / Transparent type (layout owned by YaoXiang), no third category
+4. **Marshalling isolation**: Cross-boundary data is copied to a call temporary region by default; YaoXiang heap objects are isolated from external code
+5. **Ownership safety**: Unique ownership of handles (Move) + RAII, structurally preventing double-free and use-after-free
+6. **Escape hatch**: `*T` raw pointer + `unsafe {}`, where users explicitly accept the risk of zero-copy direct memory access
 
-**Core boundary — five inviolable contracts**:
+**Core boundaries — five inviolable contracts**:
 
 ```
 1. Libraries are linked at compile-time, symbol existence is verified at compile-time
-2. Type layout ownership is determined at definition time: opaque handle belongs to external, transparent type belongs to YaoXiang
-3. By default, marshalling goes through scratch area copying; YaoXiang heap objects are isolated from external code
-4. Unique handle ownership + Move, structurally preventing double-free/dangling
-5. External code always reads/writes memory with "clear layout and clear ownership" — no gray area
+2. Type layout ownership is determined at definition: opaque handles belong to external, transparent types belong to YaoXiang
+3. Default marshalling uses temporary region copying; YaoXiang heap objects are isolated from external code
+4. Unique ownership of handles + Move, structurally preventing double-free/dangling pointers
+5. External code always reads/writes memory with "explicit layout, explicit ownership"; no ambiguous zone exists
 ```
 
 ---
 
 ## Motivation
 
-### Current State and Goals
+### Current Status and Goals
 
-The current codebase's `native("symbol")` is merely a dispatch mechanism for YaoXiang bytecode to call Rust std functions (`FfiRegistry` = `HashMap<String, RustFnPtr>`), **with no real cross-ABI boundary** — no dlopen, no C ABI marshalling, no memory ownership crossing.
+The codebase's current `native("symbol")` is merely a dispatch mechanism for YaoXiang bytecode calling Rust std functions (`FfiRegistry` = `HashMap<String, RustFnPtr>`), **with no real cross-ABI boundary** — no dlopen, no C ABI marshalling, no memory ownership crossing boundaries.
 
-True FFI must solve four problems:
+A real FFI must solve four problems:
 
-| Problem | Answer in this RFC |
+| Problem | This RFC's Answer |
 |------|--------------|
-| **Symbol resolution** | Libraries are first-class values linked at compile-time (`Native.c("lib")`), symbol verified at compile-time |
-| **Value marshalling** | Signature-driven, compile-time determines conversion rules for each parameter position |
-| **Memory ownership** | Type dichotomy determines ownership; default copying provides isolation |
-| **Lifecycle safety** | Move + RAII + borrow restricted to single call |
+| **Symbol resolution** | Library is a first-class value linked at compile-time (`Native.c("lib")`), symbol verified at compile-time |
+| **Value marshalling** | Signature-driven, conversion rules determined at compile-time for each parameter position |
+| **Memory ownership** | Type dichotomy determines ownership; default copy isolation |
+| **Lifecycle safety** | Move + RAII + borrowing limited to single call |
 
-RFC-020 and RFC-021 define different aspects of FFI with some overlap; this document consolidates them into a unified specification.
+RFC-020 and RFC-021 each define different aspects of FFI, with overlap. This document unifies them into a single specification.
 
 ### Design Goals
 
-1. **Zero raw pointer leakage to user code**: in normal FFI usage, no raw pointers appear in `.yx` source code
-2. **Explicit layout ownership**: when users define a type, they decide who owns this memory — not inferred at runtime
-3. **Structural safety**: no leak, no double-free, no use-after-free guaranteed by the type system, not by convention
-4. **Honest trust boundary**: C cannot provide compile-time verifiable type contracts, so trust is localized at the binding declaration
-5. **Self-hosting compatible**: no host-language-specific over-abstraction
+1. **Zero raw pointer leakage into user code**: In routine FFI usage, no raw pointers appear in `.yx` source code
+2. **Explicit layout ownership**: When users define a type, they decide who owns that memory, not inferred at runtime
+3. **Structural safety**: No leaks, no double-free, no use-after-free guaranteed by the type system, not by convention
+4. **Honest trust boundary**: C cannot provide compile-time verifiable type contracts; trust is localized at the binding declaration
+5. **Self-hosting compatible**: No excessive abstraction unique to the host language
 
 ### Out of Scope
 
 - **Multi-ABI mechanism plugin system** (Wasm/Python/custom ABI): see RFC-026a
 - **yx-bindgen toolchain**: see RFC-026b
-- **YaoXiang exporting functions for C to call (reverse FFI)**: follow-up RFC, this document only declares principles
-- **Inline assembly, SIMD intrinsics**: not within the scope of this RFC
+- **YaoXiang exporting functions for C to call (reverse FFI)**: follow-up RFC; this document only states principles
+- **Inline assembly, SIMD intrinsics**: not in this RFC's scope
 
 ---
 
 ## Proposal
 
-### 1. External Libraries and Symbols: Curried First-Class Values
+### 1. External Libraries and Symbols: First-Class Values via Currying
 
-The FFI information gap — "which library to link, which symbol" — is filled by making libraries first-class values, without introducing any new keywords.
+The information gap in FFI — "which library, which symbol to link" — is filled by making the library a first-class value, introducing no new keywords.
 
-#### 1.1 Libraries are Values
+#### 1.1 Library as Value
 
 ```yaoxiang
-// Native.c applies library name → links the library at compile-time, returns a symbol parser
+// Native.c applies library name → links library at compile-time, returns a symbol resolver
 sqlite3 = Native.c("libsqlite3")
 ```
 
 `Native.c("libsqlite3")` is a **compile-time action + runtime value**:
 
-- **Compile-time**: linker `-lsqlite3`, the library enters the symbol table, symbol existence is verifiable
-- **Value**: `sqlite3` is a parser; applying a symbol name yields an external reference of that library
+- **Compile-time**: Linker `-lsqlite3`, library enters the symbol table, symbol existence can be verified
+- **Value**: `sqlite3` is a resolver; applying a symbol name yields that library's external reference
 
-`.c` is the ABI mechanism tag (C ABI). The core only has `.c` built-in; other mechanisms (`.wasm` etc.) are in RFC-026a.
+`.c` is the ABI mechanism tag (C ABI). The core only built-in supports `.c`; other mechanisms (`.wasm` etc.) are covered in RFC-026a.
 
-#### 1.2 Symbols are Values, Bindings are `name: type = value`
+#### 1.2 Symbol as Value, Binding as `name: type = value`
 
-Applying a symbol name to the parser yields an external reference, which is bound through RFC-007/010's unified syntax. **The type annotation on the LHS determines whether this reference is a type or a function**:
+Applying a symbol name to the resolver yields an external reference, bound via the unified syntax from RFC-007/010. **The type annotation on the LHS determines whether this reference is a type or a function**:
 
 ```yaoxiang
 sqlite3 = Native.c("libsqlite3")
@@ -116,53 +119,53 @@ SqliteDb.close: () -> Int32 = sqlite3("sqlite3_close")
 SqliteDb.drop = SqliteDb.close
 ```
 
-Compile-time verification: `sqlite3_open` in `sqlite3("sqlite3_open")` must exist in the `libsqlite3` symbol table, otherwise a compile error.
+Compile-time verification: `sqlite3` in `sqlite3("sqlite3_open")` must exist in the `libsqlite3` symbol table, otherwise a compile error occurs.
 
 #### 1.3 Method Binding and self Position
 
-In the form `Type.method: (...) -> ...`, `self` is implicitly in the first position — when `db.exec("SELECT")` is called, `db` is passed as the 0th parameter of the C function `sqlite3_exec`.
+In the `Type.method: (...) -> ...` syntax, `self` is implicitly at the first position — when `db.exec("SELECT")` is called, `db` is passed as the 0th parameter to C function `sqlite3_exec`.
 
-If you need to bind a declared standalone function as a method, use the `[N]` syntax to specify the self position (RFC-004 curried multi-position binding):
+When you need to bind a declared standalone function as a method, use `[N]` syntax to specify the self position (RFC-004 currying multi-position binding):
 
 ```yaoxiang
 // Standalone function
 sqlite3_close_v2: (db: SqliteDb) -> Int32 = sqlite3("sqlite3_close_v2")
 
-// Bound as a method, [0] means db is self
+// Bind as method, [0] means db is self
 SqliteDb.soft_close = sqlite3_close_v2[0]
 ```
 
-Direct method binding via `Native.c(...)` and manual binding via `[N]` are both `name: type = value`, both putting a function value on the right side of `=` — no two mechanisms.
+`Native.c(...)` direct method binding and `[N]` manual binding are both `name: type = value`, both place a function value on the right side of `=`, with no two sets of mechanisms.
 
-#### 1.4 User Experience: Zero unsafe, Zero Raw Pointer
+#### 1.4 User Experience: Zero unsafe, Zero Raw Pointers
 
 ```yaoxiang
 import sqlite3_bindings
 
 db = SqliteDb.open("test.db")
 db.exec("SELECT * FROM users")
-// ← Scope ends, RAII automatically calls SqliteDb.drop → sqlite3_close(db)
+// ← End of scope, RAII automatically calls SqliteDb.drop → sqlite3_close(db)
 ```
 
 ---
 
-### 2. Type Dichotomy: Layout Ownership Nailed Down at Definition Time
+### 2. Type Dichotomy: Layout Ownership Pinned at Definition
 
-When external data enters YaoXiang, only one question is asked: **who decides the layout of this memory?**
+When external data enters YaoXiang, only one question is asked: **Whose definition governs this memory's layout?**
 
 ```
 ├─ Layout is an external black box (sqlite3, FILE*, socket fd)
 │   → Opaque handle  =  lib("symbol")
 │   → YaoXiang only holds a pointer, never dereferences, only passes between library functions
-│   → External code reads its own memory; YaoXiang doesn't touch it
+│   → External code reads its own memory; YaoXiang does not touch
 │
-└─ Layout is defined by YaoXiang (timespec, point, struct whose fields need reading)
+└─ Layout is defined by YaoXiang (timespec, point, struct with readable fields)
     → Transparent type  =  { field: Type, ... }
     → YaoXiang owns the memory, defines the layout, reads/writes fields
-    → External code fills/reads into memory whose layout is defined by YaoXiang
+    → External code fills/reads memory whose layout YaoXiang has defined
 ```
 
-**There is no third option.** The "three-layer memory model (copy/take-over/system-level)" in the previous design is patch-thinking — the truth is the dichotomy of layout ownership.
+**There is no third category.** The "three-tier memory mode (copy/takeover/system-level)" in previous designs is patch-thinking — the truth is the dichotomy of layout ownership.
 
 #### 2.1 Opaque Handle: Layout Owned by External
 
@@ -170,57 +173,57 @@ When external data enters YaoXiang, only one question is asked: **who decides th
 SqliteDb: Type = sqlite3("sqlite3")
 ```
 
-- YaoXiang internally only holds a pointer-sized handle
-- Users cannot construct ( `SqliteDb {}` → compile error), cannot access fields (no fields to access)
-- The only source: external functions that return `SqliteDb`
-- When calling a method, the handle is borrowed back to the library, which reads **its own** memory (the `sqlite3` struct lives on the library's heap)
+- Internally, YaoXiang only holds a pointer-sized handle
+- Users cannot construct (`SqliteDb {}` → compile error), cannot access fields (no fields to access)
+- The only source: external functions returning `SqliteDb`
+- When calling a method, the handle is borrowed back to the library, which reads **its own** memory (the `sqlite3` struct on the library's heap)
 
-External code "reading inside" reads structures it allocated; YaoXiang only carries the handle. No memory conflict.
+When external code "reads inside", it reads the structure it allocated; YaoXiang just shuttles the handle. No memory conflicts.
 
 #### 2.2 Transparent Type: Layout Owned by YaoXiang
 
 ```yaoxiang
-// Fields are meaningful, need read/write → transparent type, layout declared by YaoXiang
+// Fields are meaningful and need to be read/written → transparent type, layout declared by YaoXiang
 Timespec: Type = {
     tv_sec: Int64,
     tv_nsec: Int64
 }
 clock_gettime: (clk: Int32, ts: *Timespec) -> Int32 = Native.c("librt")("clock_gettime")
 
-ts = clock_gettime(CLOCK_REALTIME)   // See §3, marshalling through scratch area
-print(ts.tv_sec)                      // YaoXiang reads by its own field definition
+ts = clock_gettime(CLOCK_REALTIME)   // See §3, marshalling uses temporary region
+print(ts.tv_sec)                      // YaoXiang reads according to its own field definition
 ```
 
-External code reads/writes into memory whose **layout is defined and owned by YaoXiang**. The layout is a YaoXiang contract, not an external one.
+External code reads/writes memory that **YaoXiang defined the layout for and YaoXiang owns**. The layout is YaoXiang's contract, not external's.
 
 #### 2.3 Decision Rule
 
-Users only need to decide one thing: **do I need to read the fields of this type?**
+Users only need to judge one thing: **Do I need to read this type's fields?**
 
-| Decision | Type | Layout Ownership |
+| Judgment | Type | Layout Owner |
 |------|------|---------|
-| Don't read fields, just pass the handle between library functions | Opaque handle `= lib("sym")` | External |
+| Don't read fields, only pass handle between library functions | Opaque handle `= lib("sym")` | External |
 | Need to read/write fields | Transparent type `{ ... }` | YaoXiang |
 
 ---
 
-### 3. Marshalling: Signature-Driven, Scratch Area Isolation
+### 3. Marshalling: Signature-Driven, Temporary Region Isolation
 
-Cross-boundary data conversion is **signature-driven**; the compile-time determines conversion rules for each parameter position. **Core safety guarantee: external code reads/writes the marshalling scratch area, not YaoXiang's heap objects.**
+Cross-boundary data conversion is **signature-driven**, with conversion rules determined at compile-time for each parameter position. **Core safety guarantee: external code reads/writes the marshalling temporary region, not YaoXiang's heap objects.**
 
-#### 3.1 Default Goes Through Scratch Area Copy
+#### 3.1 Default Goes Through Temporary Region Copy
 
 ```
-YaoXiang → C (input parameters):
-    Copy data to call scratch area → pass scratch area pointer to C
-    → C out-of-bounds/overwrite only damages scratch area, YaoXiang heap objects isolated
+YaoXiang → C (input):
+    Copy data to call temporary region → pass temporary region pointer to C
+    → C out-of-bounds/writes wrong only damage the temporary region; YaoXiang heap objects isolated
 
 C → YaoXiang (return/output parameters):
-    C writes to scratch area → YaoXiang memcpy back to its own object
-    → C never touches YaoXiang's final object
+    C writes temporary region → YaoXiang memcpy back to its own object
+    → C cannot touch YaoXiang's final object
 ```
 
-**External code always reads/writes the marshalling scratch area, completely isolated from YaoXiang heap objects.** Wrong layout declaration, C storing dangling pointer, C out-of-bounds — all only damage the scratch area, YaoXiang's objects remain intact. The cost is one memcpy.
+**External code always reads/writes the marshalling temporary region, completely isolated from YaoXiang's heap objects.** Layout misdeclaration, C storing dangling pointers, C out-of-bounds — all only damage the temporary region, YaoXiang objects are intact. The cost is one memcpy.
 
 #### 3.2 Marshalling Rules Table
 
@@ -229,38 +232,38 @@ C → YaoXiang (return/output parameters):
 | YaoXiang Type | C Representation | Marshalling Action | Ownership |
 |--------------|--------|---------|--------|
 | `Int32/Int64/Float` | `int/long/double` | Direct register placement, zero conversion | Value semantics |
-| `String` | `const char*` | Lend out read-only view (temporary, valid during call) | YaoXiang retains, C read-only |
-| Transparent type | `struct T*` | Copy to scratch area, pass scratch area pointer | YaoXiang owns object, C reads copy |
+| `String` | `const char*` | Lend read-only view (temporary, valid during call) | YaoXiang retains, C reads only |
+| Transparent type | `struct T*` | Copy to temporary region, pass temporary region pointer | YaoXiang owns object, C reads copy |
 | Opaque handle | `void*` | Extract internal handle pointer | YaoXiang holds, lends to C |
-| `*T` | `T*` | Direct raw pointer passing (unsafe) | User responsibility |
+| `*T` | `T*` | Pass raw pointer directly (unsafe) | User responsible |
 
 **Return direction (C → YaoXiang)**:
 
 | C Returns | YaoXiang Type | Marshalling Action | Ownership |
 |--------|--------------|---------|--------|
-| `int/double` | `Int32/Float` | Direct register read | Value semantics |
+| `int/double` | `Int32/Float` | Read register directly | Value semantics |
 | `char*` | `String` | strlen + memcpy to YaoXiang String | YaoXiang owns copy, original memory untouched |
-| `struct T*` (new handle) | Opaque handle | Handle stored in YaoXiang object | YaoXiang takes over |
-| `struct T` (value/output parameter) | Transparent type | C writes to scratch area → memcpy to YaoXiang | YaoXiang owns |
-| `char*` (static area) | `*const U8` | Store raw pointer, no copy (unsafe read) | No take-over, user responsibility |
+| `struct T*` (new handle) | Opaque handle | Store handle into YaoXiang object | YaoXiang takes over |
+| `struct T` (value/output parameter) | Transparent type | C writes temporary region → memcpy back to YaoXiang | YaoXiang owns |
+| `char*` (static region) | `*const U8` | Store raw pointer, no copy (unsafe read) | No takeover, user responsible |
 
-#### 3.3 Borrow Lifecycle: Strictly Limited to Single Call
+#### 3.3 Borrowing Lifecycle: Strictly Limited to Single Call
 
-Pointers that YaoXiang lends to external code (String read-only view, transparent type scratch area, handle) have **lifecycle strictly limited to a single call**:
+Pointers YaoXiang lends to external code (String read-only view, transparent type temporary region, handles) have a **lifecycle strictly limited to within a single call**:
 
-- During call: pointer valid, external code can read/write
-- After call returns: borrow immediately invalidated
+- During call: Pointer valid, external code can read/write
+- After call returns: Borrow immediately invalid
 
-If external code stores the pointer for use after the call, it is external code violating the FFI standard contract (equivalent to a library bug); YaoXiang is not responsible for this. This is consistent with C FFI contracts in all languages (Rust's `&T` passed to C has the same constraint).
+If external code stores the pointer and uses it after the call returns, external code has violated the FFI standard contract (equivalent to a library bug); YaoXiang is not responsible for this. This is consistent with the C FFI contract in all languages (Rust's `&T` passed to C has the same constraint).
 
-#### 3.4 String Never Gives Up Persistent Pointer
+#### 3.4 String Never Gives Out Persistent Pointers
 
 `String` is the key to "C doesn't touch YaoXiang memory":
 
-- Into C: lend out a **temporary read-only view**, valid during the call
-- Out of C: strlen + memcpy into a **copy** owned by YaoXiang
+- Going into C: Lend a **temporary read-only view**, valid during call
+- Coming out of C: strlen + memcpy into a **copy** owned by YaoXiang
 
-C never gets a persistent pointer to YaoXiang String; YaoXiang never holds a long-term reference to a C `char*`. Structurally isolated.
+C can never obtain a persistent pointer to a YaoXiang String, and YaoXiang never holds a long-term reference to a C `char*`. Structurally isolated.
 
 ---
 
@@ -270,23 +273,23 @@ Opaque handles follow RFC-009's ownership model, with zero new concepts.
 
 #### 4.1 Core Principles
 
-- **Move semantics**: opaque handles default to Move; assignment/parameter passing/return = ownership transfer, non-copyable
-- **Unique handle ownership**: a handle has only one owner at any time → structurally prevents double-free
-- **RAII release**: when scope ends, if `.drop` is bound, automatically called
-- **Consumption tracking**: after explicit destruction or Move, the variable is consumed and cannot be used again → prevents use-after-free
+- **Move semantics**: Opaque handles are Move by default; assignment/parameter passing/return = ownership transfer, not copyable
+- **Unique handle ownership**: At any moment, a handle has only one owner → structurally prevents double-free
+- **RAII release**: When scope ends, if `.drop` is bound, automatically called
+- **Consumption tracking**: After explicit destruction or Move, variable is consumed and cannot be used again → prevents use-after-free
 
 #### 4.2 `.drop` is an Optional External Side Effect
 
 ```yaoxiang
-SqliteDb.drop = SqliteDb.close     // Call sqlite3_close when scope ends
+SqliteDb.drop = SqliteDb.close     // Calls sqlite3_close at end of scope
 ```
 
-**`.drop` is not a mechanism to prevent YaoXiang leaks** — the handle storage on the YaoXiang side (a pointer-sized value) is automatically reclaimed, unrelated to `.drop`. `.drop` is an optional side effect of **calling an external function at the end of the scope**:
+**`.drop` is not a mechanism to prevent YaoXiang leaks** — YaoXiang-side handle storage (a pointer-sized value) is automatically reclaimed, independent of `.drop`. `.drop` is an **optional side effect of calling an external function at the end of scope**:
 
-- `.drop` bound → call it at scope end (clean up external resources)
-- `.drop` not bound → do nothing, **no error, no warning**
+- Bound `.drop` → Called at scope end (cleaning up external resources)
+- No `.drop` bound → Does nothing, **no error, no warning**
 
-Whether external resources need cleanup is a matter of external library specification (`getenv` returns a static area that shouldn't be freed, global singletons shouldn't be freed); YaoXiang doesn't overreach to enforce. Leak prevention relies on Move + unique ownership (unconditional, structural), not on `.drop`.
+Whether external resources need cleanup is a matter of the external library's specification (`getenv` returns static region that shouldn't be freed, global singletons shouldn't be freed); YaoXiang does not overstep to enforce. Leak prevention relies on Move + unique ownership (unconditional, structural), not `.drop`.
 
 #### 4.3 Automatic Destruction and Order
 
@@ -294,7 +297,7 @@ Whether external resources need cleanup is a matter of external library specific
 {
     db = SqliteDb.open("test.db")
     stmt = db.prepare("SELECT * FROM users")
-    // ← Scope ends, reverse-order automatic destruction (only calls if .drop is bound):
+    // ← End of scope, automatic destruction in reverse order (only if .drop is bound):
     //   stmt.drop()  → sqlite3_finalize(stmt)
     //   db.drop()    → sqlite3_close(db)
 }
@@ -311,7 +314,7 @@ db.exec("...")          // ❌ Compile error: db has been Moved, cannot read aft
 
 process_db: (db: SqliteDb) -> Void = {
     db.exec("...")
-    // ← Function ends, db destructed here
+    // ← End of function, db destructed here
 }
 process_db(some_db)     // Move into function
 // some_db is invalid here
@@ -326,40 +329,40 @@ SqliteDb.open: (file: String) -> ?SqliteDb = sqlite3("sqlite3_open")
 db = SqliteDb.open("test.db")
 match db {
     Some(db) => db.exec("SELECT 1"),
-    None => print("open failed")
+    None => print("Failed to open")
 }
 
-// Convention does not return null → not marked, panic to expose when null
+// Convention: won't return null → not marked, panic on null to expose issue
 ```
 
-C returning null: either the user handles it (`?T`), or it panics to expose. There is no third "silently ignore" option.
+C returning null is either handled by the user (`?T`), or panics to expose the issue. There is no third "silently ignore" option.
 
 #### 4.6 Destruction Failure Handling
 
-The return value type of the function bound to `.drop` determines behavior:
+The return value of the function bound to `.drop` determines behavior:
 
 | `.drop` Return Type | Behavior |
 |----------------|------|
 | `Void` | No failure |
-| `Int32` (error code) | Non-zero panics — destruction failure means abnormal state, expose is better than silent |
-| `?Error` | Non-None panics — same as above |
+| `Int32` (error code) | Non-zero causes panic — destruction failure means state is abnormal, expose is better than silent |
+| `?Error` | Non-None causes panic — same as above |
 
-Destruction failure cannot be silent. To ignore specific errors, explicitly handle in the wrapper function bound to `.drop`.
+Destruction failure cannot be silent. To ignore specific errors, handle explicitly in the wrapper function bound to `.drop`.
 
 ---
 
 ### 5. FFI Behavior in spawn Blocks
 
-Resource type determination is decided by the `.drop` binding (RFC-024), with zero additional markers:
+Resource type determination is based on whether `.drop` is bound (RFC-024), with zero additional markers:
 
 | Determination | Behavior |
 |------|------|
-| Opaque handle with `.drop` bound | Resource type — same instance operations in spawn block automatically serialized |
-| Opaque handle without `.drop` bound | Non-resource type — can run in parallel (pure data handle, no release side effect) |
-| Transparent type / value type | Non-resource type — can run in parallel |
+| Opaque handle with `.drop` bound | Resource type — operations on same instance in spawn blocks automatically serialized |
+| Opaque handle without `.drop` bound | Non-resource type — can be parallel (pure data handle, no release side effect) |
+| Transparent type / value type | Non-resource type — can be parallel |
 
 ```yaoxiang
-SqliteDb.drop = SqliteDb.close   // → resource type
+SqliteDb.drop = SqliteDb.close   // → Resource type
 
 (a, b) = spawn {
     r1 = db.exec("SELECT ..."),   // Same instance, automatically serialized
@@ -367,18 +370,18 @@ SqliteDb.drop = SqliteDb.close   // → resource type
 }
 
 (x, y) = spawn {
-    db1 = SqliteDb.open("a.db"),   // Different instances, can run in parallel
+    db1 = SqliteDb.open("a.db"),   // Different instances, can be parallel
     db2 = SqliteDb.open("b.db")
 }
 ```
 
-Types with `.drop` automatically serialize same-instance operations in spawn, ensuring destruction has no concurrent contention.
+Types with `.drop` automatically serialize same-instance operations in spawn, ensuring destruction has no concurrent races.
 
 ---
 
 ### 6. Escape Hatch: Raw Pointer + unsafe
 
-Default marshalling goes through scratch area copying — safe but with memcpy overhead. For performance-sensitive scenarios (large structures, high-frequency calls) requiring zero-copy, users explicitly use the raw pointer escape hatch:
+Default marshalling goes through temporary region copy, safe but with memcpy overhead. For performance-sensitive scenarios (large structures, high-frequency calls) where zero-copy is needed, users explicitly use the raw pointer escape hatch:
 
 ```yaoxiang
 // C directly reads YaoXiang memory, zero-copy — user explicitly accepts risk
@@ -388,9 +391,9 @@ unsafe {
 }
 ```
 
-**`unsafe` is only used for raw pointer operations, completely orthogonal to opaque handles and transparent types.** Normal FFI (handles + transparent types) doesn't need unsafe. Writing `unsafe {}` = user explicitly signs off on the risk of direct memory access.
+**`unsafe` is only used for raw pointer operations, completely orthogonal to opaque handles and transparent types.** Routine FFI (handles + transparent types) does not require unsafe. Writing `unsafe {}` = user explicitly signs off accepting the risk of direct memory access.
 
-**Trust boundary**: C cannot provide compile-time verifiable type contracts (`.h` is not an ABI contract; the symbol table has names but no signatures). So the correctness of C signatures cannot be automatically verified — it is guaranteed by the binding author when writing `Native.c(...)` + signatures. **Trust is localized at the binding declaration**: the binding author guarantees it, package users get a safe API. This is consistent with Rust's `extern "C"` (writing extern is a trust act, and a safe wrapper wraps it for safe calls).
+**Trust boundary**: C cannot provide compile-time verifiable type contracts (`.h` is not an ABI contract, symbol tables only have names, no signatures). Therefore, the correctness of C signatures cannot be automatically verified — the binding author guarantees it when writing `Native.c(...)` + signature. **Trust is localized at the binding declaration**: the binding author guarantees, package users get a safe API. This is consistent with Rust's `extern "C"` (writing extern is a trust act; after wrapping in a safe wrapper, calls are safe).
 
 ---
 
@@ -398,35 +401,35 @@ unsafe {
 
 ### Advantages
 
-1. **Complete information**: libraries linked at compile-time, symbols verified at compile-time, no runtime "library not found" ambiguity
-2. **Explicit layout ownership**: type dichotomy, nailed down at definition time, no runtime inference
-3. **Structural safety**: scratch area isolation + Move + RAII, external code cannot touch YaoXiang heap objects
-4. **Zero new keywords**: `Native.c` currying + `name: type = value`, all reusing existing syntax
-5. **Honest boundary**: doesn't pretend to verify C signatures, localizes trust at the declaration
+1. **Complete information**: Library linked at compile-time, symbol verified at compile-time, no runtime "library not found" ambiguity
+2. **Explicit layout ownership**: Type dichotomy, pinned at definition, no runtime inference
+3. **Structural safety**: Temporary region isolation + Move + RAII, external code cannot touch YaoXiang heap objects
+4. **Zero new keywords**: `Native.c` currying + `name: type = value`, fully reuses existing syntax
+5. **Honest boundary**: Doesn't pretend to verify C signatures, localizes trust at the declaration
 
 ### Disadvantages
 
-1. **memcpy overhead**: default marshalling copies, large structures with high-frequency calls need to explicitly use the escape hatch
-2. **Layout guarantee is manual**: transparent type layout matching C struct is guaranteed by binding author/yx-bindgen
-3. **C signatures cannot be verified at compile-time**: fundamental limitation of FFI, YaoXiang cannot eliminate this
+1. **memcpy overhead**: Default marshalling copies, large structures with high-frequency calls require explicit escape hatch
+2. **Layout guarantee is manual**: Transparent type layout matching C struct is guaranteed by binding author/yx-bindgen
+3. **C signature cannot be compile-time verified**: Fundamental limitation of FFI, YaoXiang cannot eliminate
 
 ---
 
 ## Implementation Strategy
 
-### Phase 1: External Libraries and Symbols (v0.8)
+### Phase 1: External Library and Symbol (v0.8)
 
-- [ ] Implement `Native.c("lib")` compile-time link + return parser value
-- [ ] Implement symbol parser application (`lib("symbol")`) + compile-time symbol table verification
+- [ ] Implement `Native.c("lib")` compile-time link + return resolver value
+- [ ] Implement symbol resolver application (`lib("symbol")`) + compile-time symbol table verification
 - [ ] Implement type dichotomy (opaque handle / transparent type)
 - [ ] Implement method binding (direct binding + `[N]` position binding)
 
 ### Phase 2: Marshalling and Safety (v0.8)
 
 - [ ] Implement signature-driven marshalling code generation
-- [ ] Implement scratch area copy isolation (input copy, return memcpy)
+- [ ] Implement temporary region copy isolation (input copy, return memcpy)
 - [ ] Implement String temporary read-only view + return copy
-- [ ] Implement borrow lifecycle limited to single call
+- [ ] Implement borrowing lifecycle limited to single call
 
 ### Phase 3: Ownership and Lifecycle (v0.9)
 
@@ -436,21 +439,21 @@ unsafe {
 - [ ] Implement `?T` and null return integration
 - [ ] Implement spawn resource type serialization
 
-### Follow-up Work
+### Future Work
 
 - **Extensible FFI Mechanism** (RFC-026a): `FfiMechanism` abstraction, `.wasm`/`.python` etc. plugins, dynamic loading
-- **yx-bindgen** (RFC-026b): C header file → `.yx` binding + platform-correct layout generation
+- **yx-bindgen** (RFC-026b): C header → `.yx` bindings + platform-correct layout generation
 
 ---
 
-## Relationship with Other RFCs
+## Relationship to Other RFCs
 
-- **RFC-004**: Curried multi-position binding — source of the `[N]` method binding syntax
+- **RFC-004**: Currying multi-position binding — source of `[N]` method binding syntax
 - **RFC-007**: Unified function definition syntax — `Native.c(...)` binding is `name: type = value`
-- **RFC-009**: Ownership model — Move, RAII, `?T`, handle lifecycle entirely based on this
-- **RFC-010**: Unified type syntax — LHS type annotation determines whether binding is a type or function
-- **RFC-024**: Concurrency model — resource type determination in spawn is based on `.drop`
-- **RFC-020/021** (deprecated): content merged into this document
+- **RFC-009**: Ownership model — Move, RAII, `?T`, handle lifecycle is entirely based on this
+- **RFC-010**: Unified type syntax — LHS type annotation determines whether binding is type or function
+- **RFC-024**: Concurrency model — resource type determination in spawn based on `.drop`
+- **RFC-020/021** (deprecated): Content merged into this document
 - **RFC-026a**: Extensible FFI mechanism system
 - **RFC-026b**: yx-bindgen toolchain
 
@@ -458,17 +461,17 @@ unsafe {
 
 ## Design Decision Record
 
-| Decision | Decision | Reason | Date |
+| Decision | Determination | Reason | Date |
 |------|------|------|------|
-| **Libraries are values** | `Native.c("lib")` curried returns parser | Library information becomes a compile-time visible first-class value, fills the "which library to link" gap, zero new keywords | 2026-07-03 |
-| **Compile-time link** | `Native.c("lib")` triggers `-llib` | Symbol table readable at compile-time, symbol existence verifiable, types are real | 2026-07-03 |
-| **Type dichotomy** | Opaque handle / transparent type | Layout ownership dichotomy covers everything; remove "three-layer memory model" patch | 2026-07-03 |
-| **Scratch area marshalling isolation** | Default copy, heap objects isolated from external | External out-of-bounds/dangling only damages scratch area, YaoXiang objects intact; zero-copy needs explicit escape hatch | 2026-07-03 |
-| **`.drop` is optional** | Missing does nothing, no error | YaoXiang handle storage automatically reclaimed; external resource cleanup is external spec, no overreach | 2026-07-03 |
-| **Leak prevention mechanism** | Move + unique handle ownership (unconditional) | Structural guarantee, unrelated to `.drop` | 2026-07-03 |
-| **Trust boundary** | At `Native.c(...)` declaration | C signatures cannot be verified at compile-time, trust localized, unsafe only for raw pointers | 2026-07-03 |
-| **Null handling** | `?T` or panic | C's problem not hidden, no "silently ignore" option | 2026-07-03 |
-| **Destruction failure** | `.drop` return type determines, uniform panic | Destruction failure cannot be silent | 2026-07-03 |
+| **Library as value** | `Native.c("lib")` currying returns resolver | Library information becomes a compile-time visible first-class value, filling the "which library to link" gap, zero new keywords | 2026-07-03 |
+| **Compile-time link** | `Native.c("lib")` triggers `-llib` | Symbol table readable at compile-time, symbol existence verifiable, type is real | 2026-07-03 |
+| **Type dichotomy** | Opaque handle / transparent type | Layout ownership dichotomy covers everything; deleted "three-tier memory mode" patch | 2026-07-03 |
+| **Marshalling temporary region isolation** | Default copy, heap object isolated from external | External out-of-bounds/dangling only damage temporary region, YaoXiang object intact; zero-copy requires explicit escape hatch | 2026-07-03 |
+| **`.drop` optional** | Missing means does nothing, no error | YaoXiang handle storage auto-reclaimed; external resource cleanup is external specification, not overstepping to enforce | 2026-07-03 |
+| **Leak prevention mechanism** | Move + handle unique ownership (unconditional) | Structural guarantee, independent of `.drop` | 2026-07-03 |
+| **Trust boundary** | At `Native.c(...)` declaration | C signature cannot be compile-time verified, trust localized, unsafe only for raw pointers | 2026-07-03 |
+| **Null handling** | `?T` or panic | C's problems are not hidden, no "silently ignore" option | 2026-07-03 |
+| **Destruction failure** | `.drop` return type determines, unified panic | Destruction failure cannot be silent | 2026-07-03 |
 
 ---
 
@@ -476,7 +479,7 @@ unsafe {
 
 ### YaoXiang Official Documentation
 
-- [RFC-004 Curried Multi-Position Binding](./004-curry-multi-position-binding.md)
+- [RFC-004 Currying Multi-Position Binding](./004-curry-multi-position-binding.md)
 - [RFC-007 Unified Function Definition Syntax](./007-function-syntax-unification.md)
 - [RFC-009 Ownership Model](./009-ownership-model.md)
 - [RFC-010 Unified Type Syntax](./010-unified-type-syntax.md)
