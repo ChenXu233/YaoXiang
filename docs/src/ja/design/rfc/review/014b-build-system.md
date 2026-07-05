@@ -3,8 +3,11 @@ title: "RFC-014b: ビルドシステムとバイナリ配布"
 status: "レビュー中"
 author: "晨煦"
 created: "2026-06-11"
-updated: "2026-06-11"
+updated: "2026-07-05"
 group: "rfc-014"
+issue: "#91"
+impl: "0%"
+impl_status: "not-started"
 ---
 
 # RFC-014b: ビルドシステムとバイナリ配布

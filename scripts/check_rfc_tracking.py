@@ -185,6 +185,10 @@ def validate_rfc(frontmatter, filepath, dirname):
     except (ValueError, TypeError):
         created_date = CUTOFF_DATE - timedelta(days=1)  # 无法解析日期，按旧文件处理（仅警告）
 
+    # rejected/deprecated 不需要 issue 字段
+    if dirname in ("rejected", "deprecated"):
+        return errors
+
     # 新 RFC 必须填写 issue
     if created_date >= CUTOFF_DATE:
         if 'issue' not in frontmatter or not frontmatter['issue']:
@@ -194,9 +198,7 @@ def validate_rfc(frontmatter, filepath, dirname):
         if 'issue' not in frontmatter or not frontmatter['issue']:
             msg = f"{filepath}: 旧 RFC（创建于 {created_str}）缺少 'issue' 字段"
             errors.append(('WARNING', msg))
-
     return errors
-
 
 # ── 扫描 ─────────────────────────────────────────────────────────────────
 
