@@ -18,3 +18,7 @@ mod fstring;
 mod interpreter;
 #[path = "integration/token_system.rs"]
 mod token_system;
+
+/// `yaoxiang` CLI 子命令集成测试
+#[path = "integration/cli.rs"]
+mod cli;
