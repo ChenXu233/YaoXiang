@@ -56,8 +56,15 @@ pub fn format_module(
     }
 
     // Phase 2: 非导入语句 — prev_end_line 从 import 区域末尾开始
-    let import_region_end = source_map.import_line_range.map(|(_, end)| end).unwrap_or(0);
-    let mut prev_end_line = if import_count > 0 { import_region_end } else { 0 };
+    let import_region_end = source_map
+        .import_line_range
+        .map(|(_, end)| end)
+        .unwrap_or(0);
+    let mut prev_end_line = if import_count > 0 {
+        import_region_end
+    } else {
+        0
+    };
 
     for stmt in module.items.iter().skip(import_count) {
         let stmt_start_line = stmt.span.start.line;
