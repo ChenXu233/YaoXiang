@@ -1,7 +1,13 @@
 //! Formatter 集成测试
 //!
 //! 基于 formatter 规范，验证格式化器的端到端行为。
-//! 参见: docs/src/design/formatter/
+//!
+//! 规范引用:
+//!   §C1  注释类型 — 单行/多行/文档注释必须保留
+//!   §C2  注释位置 — 文件头(§C2.1)/语句间(§C2.2)/行末(§C2.3)
+//!   §C3  空行保留 — 原始空行用于分隔逻辑块
+//!   §14  导入语句 — 排序(§14.1)/组内排序(§14.2)/注释跟随
+//!   §6   代码块  — 空块(§6.1)/单行(§6.2)/多行(§6.3)
 
 use yaoxiang::formatter::{format_source, FormatOptions};
 
@@ -260,6 +266,99 @@ fn test_format_sort_imports_preserves_comments() {
     );
 }
 
+#[test]
+fn test_format_sort_imports_complex_comment_grouping() {
+    // 规范 §14 导入排序 + §C2 注释位置
+    //
+    // Arrange: 头部注释 + 三个 import (包含 intra-import comment) + function binding
+    let source = "\
+// This header should stay
+// Project-wide constants
+
+use std.collections.list
+use std.collections.map
+// These two go with collections
+use std.io
+
+main = {
+    io.println(\"test\")
+}
+";
+    // Act
+    let result = format_source(source, &default_options()).unwrap();
+    // Assert: 头部注释只能出现一次
+    assert_eq!(
+        1,
+        result.matches("// This header should stay").count(),
+        "Header comment should appear exactly once, got: {}",
+        result
+    );
+    // Assert: intra-import 注释只能出现一次
+    assert_eq!(
+        1,
+        result.matches("// These two go with collections").count(),
+        "Import-associated comment should appear exactly once, got: {}",
+        result
+    );
+    // Assert: 按字母序 collections < io
+    let pos_list = result
+        .find("use std.collections.list")
+        .expect("std.collections.list should be in output");
+    let pos_io = result.find("use std.io").expect("std.io should be in output");
+    assert!(
+        pos_list < pos_io,
+        "std.collections should come before std.io"
+    );
+}
+#[test]
+fn test_format_sort_imports_header_only_no_duplication() {
+    // 规范 §C2.1 文件头注释 + §14 导入排序
+    //
+    // Arrange: 纯头部注释 + 单 import + function binding
+    let source = "\
+// Comment 1
+// Comment 2
+use std.io
+
+main = {
+    io.println(\"test\")
+}
+";
+    // Act
+    let result = format_source(source, &default_options()).unwrap();
+    // Assert: 头部注释恰好出现两次 (原始 issue #140 场景)
+    let comment_count = result.matches("// Comment").count();
+    assert_eq!(
+        2, comment_count,
+        "Header comments should appear exactly twice total, got {}: {}",
+        comment_count, result
+    );
+}
+
+#[test]
+fn test_format_sort_imports_intra_import_comment_at_end() {
+    // 规范 §C2.2 语句间注释 + §14 导入排序
+    //
+    // Arrange: header + two imports with intra-import comment
+    let source = "\
+// header
+use std.io
+// collection helpers
+use std.collections.list
+
+main = {}
+";
+    // Act
+    let result = format_source(source, &default_options()).unwrap();
+    // Assert: intra-import comment 恰好出现一次 (不泄漏到 function body 后)
+    assert_eq!(
+        1,
+        result.matches("// collection helpers").count(),
+        "Intra-import comment should appear exactly once: {}",
+        result
+    );
+}
+
 // === §1 缩进规则 ===
 
 #[test]
@@ -401,5 +500,78 @@ fn test_config_single_quote() {
     assert!(
         result.is_ok(),
         "single_quote option should not cause errors"
+    );
+}
+
+
+#[test]
+fn test_format_idempotent_no_imports() {
+    // 规范 §C2 注释保留 — 幂等性: format(format(x)) == format(x)
+    //
+    // Arrange: 纯头部注释 + 无 import
+    let source = "// header\nx: Int = 1\ny: Int = 2\n";
+    // Act
+    let result = format_source(source, &default_options()).unwrap();
+    let re_result = format_source(&result, &default_options()).unwrap();
+    // Assert: 两次格式化结果一致
+    assert_eq!(
+        result, re_result,
+        "Format should be idempotent for source with no imports"
+    );
+}
+#[test]
+fn test_format_idempotent_with_imports() {
+    // 规范 §14 导入排序 + §C2 注释位置 — 幂等性
+    //
+    // Arrange: 头部注释 + 三个 import (含 intra-import comment) + function binding
+    let source = "\
+// This header should stay
+// Project-wide constants
+
+use std.collections.list
+use std.collections.map
+// These two go with collections
+use std.io
+
+main = {
+    io.println(\"test\")
+}
+";
+    // Act
+    let result = format_source(source, &default_options()).unwrap();
+    let re_result = format_source(&result, &default_options()).unwrap();
+    // Assert: 两次格式化结果一致
+    assert_eq!(
+        result, re_result,
+        "Format should be idempotent for source with multi-import comments"
+    );
+}
+
+#[test]
+fn test_format_idempotent_function_body_comments() {
+    // 规范 §C2.2 语句间注释 + §14 导入排序 — 幂等性
+    //
+    // Arrange: header + import + two function bindings (each with body comments)
+    let source = "\
+// global header
+use std.io
+
+main = {
+    // main logic
+    io.println(\"hello\")
+}
+
+helper: () -> Int = {
+    // helper
+    42
+}
+";
+    // Act
+    let result = format_source(source, &default_options()).unwrap();
+    let re_result = format_source(&result, &default_options()).unwrap();
+    // Assert: 两次格式化结果一致 (body 内注释不泄漏到 body 外)
+    assert_eq!(
+        result, re_result,
+        "Format should be idempotent for source with function body comments"
     );
 }

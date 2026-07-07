@@ -41,6 +41,12 @@ pub struct SourceMap {
     pub line_offsets: Vec<usize>,
     /// 空白行号列表（1-indexed）
     pub blank_lines: Vec<usize>,
+    /// 导入排序后，按新顺序关联到每个 import 的注释组
+    /// format_module 直接用此分组，不再通过 stale 的 AST span 行号重新查找
+    pub import_comment_groups: Vec<Vec<Comment>>,
+    /// 导入排序后记录的原始导入行范围 (first_start_line, last_end_line)
+    /// format_module 用此边界确定真正的头部注释，而非排序后语句的 stale span
+    pub import_line_range: Option<(usize, usize)>,
 }
 
 impl SourceMap {
@@ -55,6 +61,8 @@ impl SourceMap {
             comments,
             line_offsets,
             blank_lines,
+            import_comment_groups: Vec::new(),
+            import_line_range: None,
         }
     }
 
@@ -333,7 +341,8 @@ impl SourceMap {
             let comment_start = if i > 0 {
                 import_stmts[old_order[i - 1]].span.end.line + 1
             } else {
-                1
+                // 第一个导入前的注释不归入"导入关联注释"，由 final_comments 单独处理
+                import_stmts[old_order[0]].span.start.line
             };
             let comment_end = stmt.span.start.line;
 
@@ -351,11 +360,17 @@ impl SourceMap {
         for &new_idx in new_order {
             new_comments.extend(comments_per_import[new_idx].iter().cloned());
         }
-
+        // 2.5 按新顺序存储每组注释（format_module 直接用，不再从 stale span 反推）
+        self.import_comment_groups = new_order
+            .iter()
+            .map(|&new_idx| comments_per_import[new_idx].clone())
+            .collect();
+        // 记录导入行范围，format_module 用此判断真正的头部注释范围
         // 3. 添加非导入区域的注释
         if !old_order.is_empty() {
             let first_import_line = import_stmts[old_order[0]].span.start.line;
             let last_import_line = import_stmts[old_order[old_order.len() - 1]].span.end.line;
+            self.import_line_range = Some((first_import_line, last_import_line));
 
             let non_import_comments: Vec<Comment> = self
                 .comments
