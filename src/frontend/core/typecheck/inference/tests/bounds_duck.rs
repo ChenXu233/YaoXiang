@@ -1,10 +1,9 @@
-//! 鸭子类型测试
+//! 鸭子类型测试 — 基于语言规范 §3.5 & RFC-010
 //!
-//! 测试 RFC-010 鸭子类型支持：
-//! - 结构子类型检查（只要有相同方法，就可以赋值给接口类型）
-//! - 方法签名兼容性检查
-//! - 缺失方法错误报告
-//! - 方法绑定支持
+//! §3.5: 约束类型（接口）
+//! §3.5.1: 结构子类型（鸭子类型）
+//! §3.5.2: 标准接口（Clone、Equal）
+//! RFC-010 §3: 接口交集满足性
 
 use crate::frontend::core::types::{MonoType, StructType};
 use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
@@ -27,18 +26,21 @@ fn create_interface(
     name: &str,
     methods: Vec<(&str, MonoType)>,
 ) -> MonoType {
-    let fields: Vec<(String, MonoType)> = methods
-        .into_iter()
-        .map(|(n, ty)| (n.to_string(), ty))
-        .collect();
-
+    let mut fields = Vec::new();
+    let mut field_mutability = Vec::new();
+    let mut field_has_default = Vec::new();
+    for (method_name, method_type) in methods {
+        fields.push((method_name.to_string(), method_type));
+        field_mutability.push(false);
+        field_has_default.push(false);
+    }
     MonoType::Struct(StructType {
         name: name.to_string(),
         fields,
         methods: HashMap::new(),
-        field_mutability: Vec::new(),
-        field_has_default: Vec::new(),
-        interfaces: Vec::new(),
+        field_mutability,
+        field_has_default,
+        interfaces: vec![],
     })
 }
 
@@ -48,34 +50,37 @@ fn create_struct(
     fields: Vec<(&str, MonoType)>,
     method_bindings: Vec<(&str, MonoType)>,
 ) -> (MonoType, TypeEnvironment) {
-    let struct_fields: Vec<(String, MonoType)> = fields
-        .into_iter()
-        .map(|(n, ty)| (n.to_string(), ty))
-        .collect();
-
-    let struct_type = MonoType::Struct(StructType {
-        name: name.to_string(),
-        fields: struct_fields,
-        methods: HashMap::new(),
-        field_mutability: Vec::new(),
-        field_has_default: Vec::new(),
-        interfaces: Vec::new(),
-    });
-
     let mut env = TypeEnvironment::new();
-
-    // 注册方法绑定
-    for (method_name, method_ty) in method_bindings {
-        let key = format!("{}.{}", name, method_name);
-        env.method_bindings.insert(key, method_ty);
+    let struct_fields: Vec<_> = fields
+        .into_iter()
+        .map(|(n, t)| (n.to_string(), t))
+        .collect();
+    let field_mutability = vec![false; struct_fields.len()];
+    let field_has_default = vec![false; struct_fields.len()];
+    for (method_name, method_type) in method_bindings {
+        env.add_method_binding(name, method_name, method_type);
     }
-
-    (struct_type, env)
+    (
+        MonoType::Struct(StructType {
+            name: name.to_string(),
+            fields: struct_fields,
+            methods: HashMap::new(),
+            field_mutability,
+            field_has_default,
+            interfaces: vec![],
+        }),
+        env,
+    )
 }
 
+// ===================================================================
+// Happy path 测试
+// ===================================================================
+
+/// §3.5.1: 结构子类型 — 类型满足接口约束应通过
 #[test]
 fn test_duck_type_basic() {
-    // 定义接口：Drawable
+    // Arrange
     let drawable = create_interface(
         "Drawable",
         vec![(
@@ -86,8 +91,6 @@ fn test_duck_type_basic() {
             ),
         )],
     );
-
-    // 定义类型：Point（有 draw 方法）
     let (point, env) = create_struct(
         "Point",
         vec![("x", MonoType::Float(64)), ("y", MonoType::Float(64))],
@@ -103,9 +106,11 @@ fn test_duck_type_basic() {
         )],
     );
 
-    // 检查 Point 是否满足 Drawable
+    // Act
     let checker = BoundsChecker::new();
     let result = checker.check_constraint(&point, &drawable, Some(&env));
+
+    // Assert
     assert!(
         result.is_ok(),
         "Point should satisfy Drawable: {:?}",
@@ -113,9 +118,10 @@ fn test_duck_type_basic() {
     );
 }
 
+/// §3.5.1: 类型缺少接口要求的方法应失败
 #[test]
 fn test_duck_type_missing_method() {
-    // 定义接口：Drawable
+    // Arrange
     let drawable = create_interface(
         "Drawable",
         vec![
@@ -132,8 +138,6 @@ fn test_duck_type_missing_method() {
             ),
         ],
     );
-
-    // 定义类型：Point（只有 draw 方法，缺少 bounding_box）
     let (point, env) = create_struct(
         "Point",
         vec![("x", MonoType::Float(64)), ("y", MonoType::Float(64))],
@@ -149,18 +153,21 @@ fn test_duck_type_missing_method() {
         )],
     );
 
-    // 检查 Point 是否满足 Drawable（应该失败）
+    // Act
     let checker = BoundsChecker::new();
     let result = checker.check_constraint(&point, &drawable, Some(&env));
+
+    // Assert
     assert!(
         result.is_err(),
         "Point should NOT satisfy Drawable (missing bounding_box)"
     );
 }
 
+/// §3.5.1: 方法签名不兼容应失败
 #[test]
 fn test_duck_type_signature_mismatch() {
-    // 定义接口：Drawable
+    // Arrange
     let drawable = create_interface(
         "Drawable",
         vec![(
@@ -171,8 +178,6 @@ fn test_duck_type_signature_mismatch() {
             ),
         )],
     );
-
-    // 定义类型：Point（draw 方法返回类型不同）
     let (point, env) = create_struct(
         "Point",
         vec![("x", MonoType::Float(64)), ("y", MonoType::Float(64))],
@@ -183,35 +188,38 @@ fn test_duck_type_signature_mismatch() {
                     MonoType::TypeRef("Point".to_string()),
                     MonoType::TypeRef("Surface".to_string()),
                 ],
-                MonoType::Bool, // 返回类型不匹配
+                MonoType::Bool,
             ),
         )],
     );
 
-    // 检查 Point 是否满足 Drawable（应该失败）
+    // Act
     let checker = BoundsChecker::new();
     let result = checker.check_constraint(&point, &drawable, Some(&env));
+
+    // Assert
     assert!(
         result.is_err(),
         "Point should NOT satisfy Drawable (signature mismatch)"
     );
 }
 
+/// §3.5: 空接口应被任何类型满足
 #[test]
 fn test_duck_type_empty_interface() {
-    // 定义空接口
+    // Arrange
     let empty = create_interface("Empty", vec![]);
-
-    // 定义任意类型
     let (point, env) = create_struct(
         "Point",
         vec![("x", MonoType::Float(64)), ("y", MonoType::Float(64))],
         vec![],
     );
 
-    // 空接口应该被任何类型满足
+    // Act
     let checker = BoundsChecker::new();
     let result = checker.check_constraint(&point, &empty, Some(&env));
+
+    // Assert
     assert!(
         result.is_ok(),
         "Any type should satisfy empty interface: {:?}",
@@ -219,9 +227,10 @@ fn test_duck_type_empty_interface() {
     );
 }
 
+/// §3.5.1: 多方法接口 — 类型实现所有方法应通过
 #[test]
 fn test_duck_type_multiple_methods() {
-    // 定义接口：Serializable
+    // Arrange
     let serializable = create_interface(
         "Serializable",
         vec![
@@ -232,8 +241,6 @@ fn test_duck_type_multiple_methods() {
             ),
         ],
     );
-
-    // 定义类型：Data（有两个方法）
     let (data, env) = create_struct(
         "Data",
         vec![("value", MonoType::Int(64))],
@@ -255,9 +262,11 @@ fn test_duck_type_multiple_methods() {
         ],
     );
 
-    // 检查 Data 是否满足 Serializable
+    // Act
     let checker = BoundsChecker::new();
     let result = checker.check_constraint(&data, &serializable, Some(&env));
+
+    // Assert
     assert!(
         result.is_ok(),
         "Data should satisfy Serializable: {:?}",
@@ -265,17 +274,14 @@ fn test_duck_type_multiple_methods() {
     );
 }
 
+/// §3.5.1: 结构体字段中的函数字段应满足接口约束
 #[test]
 fn test_duck_type_field_methods() {
-    // 测试结构体字段中的函数字段（不是方法绑定）
-
-    // 定义接口：Callable
+    // Arrange
     let callable = create_interface(
         "Callable",
         vec![("call", fn_type(vec![MonoType::Int(64)], MonoType::Bool))],
     );
-
-    // 定义类型：Handler（call 作为字段）
     let handler = MonoType::Struct(StructType {
         name: "Handler".to_string(),
         fields: vec![
@@ -291,9 +297,11 @@ fn test_duck_type_field_methods() {
         interfaces: vec![],
     });
 
-    // 检查 Handler 是否满足 Callable
+    // Act
     let checker = BoundsChecker::new();
     let result = checker.check_constraint(&handler, &callable, None);
+
+    // Assert
     assert!(
         result.is_ok(),
         "Handler should satisfy Callable: {:?}",
@@ -301,11 +309,10 @@ fn test_duck_type_field_methods() {
     );
 }
 
+/// §3.5.1: 无方法绑定环境时，字段方法不满足接口约束
 #[test]
 fn test_duck_type_no_env() {
-    // 测试不提供环境时的行为
-
-    // 定义接口
+    // Arrange
     let drawable = create_interface(
         "Drawable",
         vec![(
@@ -316,8 +323,6 @@ fn test_duck_type_no_env() {
             ),
         )],
     );
-
-    // 定义类型（没有方法绑定）
     let point = MonoType::Struct(StructType {
         name: "Point".to_string(),
         fields: vec![
@@ -330,9 +335,11 @@ fn test_duck_type_no_env() {
         interfaces: vec![],
     });
 
-    // 不提供环境，应该失败（因为 draw 不在字段中）
+    // Act
     let checker = BoundsChecker::new();
     let result = checker.check_constraint(&point, &drawable, None);
+
+    // Assert
     assert!(
         result.is_err(),
         "Point should NOT satisfy Drawable without env"
@@ -343,9 +350,10 @@ fn test_duck_type_no_env() {
 // RFC-010 §3: 接口交集满足性
 // ===================================================================
 
+/// RFC-010 §3: 类型同时满足所有交集接口应通过
 #[test]
 fn test_interface_intersection_satisfied() {
-    // 定义两个接口
+    // Arrange
     let drawable = create_interface(
         "Drawable",
         vec![(
@@ -360,11 +368,7 @@ fn test_interface_intersection_satisfied() {
         "Serializable",
         vec![("serialize", fn_type(vec![], MonoType::String))],
     );
-
-    // 创建交集类型
     let intersection = MonoType::Intersection(vec![drawable, serializable]);
-
-    // 定义类型：Point 同时实现两个接口
     let (point, env) = create_struct(
         "Point",
         vec![("x", MonoType::Float(64)), ("y", MonoType::Float(64))],
@@ -389,8 +393,11 @@ fn test_interface_intersection_satisfied() {
         ],
     );
 
+    // Act
     let checker = BoundsChecker::new();
     let result = checker.check_constraint(&point, &intersection, Some(&env));
+
+    // Assert
     assert!(
         result.is_ok(),
         "Point should satisfy Drawable & Serializable: {:?}",
@@ -398,9 +405,10 @@ fn test_interface_intersection_satisfied() {
     );
 }
 
+/// RFC-010 §3: 类型缺少交集接口中任一方法应失败
 #[test]
 fn test_interface_intersection_missing_one() {
-    // 定义两个接口
+    // Arrange
     let drawable = create_interface(
         "Drawable",
         vec![(
@@ -415,11 +423,7 @@ fn test_interface_intersection_missing_one() {
         "Serializable",
         vec![("serialize", fn_type(vec![], MonoType::String))],
     );
-
-    // 创建交集类型
     let intersection = MonoType::Intersection(vec![drawable, serializable]);
-
-    // 定义类型：Point 只实现 Drawable，缺少 Serializable
     let (point, env) = create_struct(
         "Point",
         vec![("x", MonoType::Float(64)), ("y", MonoType::Float(64))],
@@ -435,18 +439,20 @@ fn test_interface_intersection_missing_one() {
         )],
     );
 
+    // Act
     let checker = BoundsChecker::new();
     let result = checker.check_constraint(&point, &intersection, Some(&env));
-    // Note: Intersection check behavior depends on BoundsChecker implementation
-    // If it checks each constraint independently, missing one should fail
-    // If it only checks the first match, it might pass
-    // This test documents the actual behavior
-    let _ = result; // Don't assert - document current behavior
+
+    // TODO(behavior): 规范要求交集类型检查应检测缺失成员，
+    // 当前 BoundsChecker 对 Intersection 只匹配第一个接口（此处 Drawable），
+    // 因此即使缺少 Serializable 也返回 Ok。修复 BoundsChecker 后此测试应断言 is_err()。
+    let _ = result;
 }
 
+/// RFC-010 §3: 类型实现所有接口方法应通过
 #[test]
 fn test_duck_typing_with_multiple_matching_methods() {
-    // 定义接口：多个方法
+    // Arrange
     let display = create_interface(
         "Display",
         vec![
@@ -454,8 +460,6 @@ fn test_duck_typing_with_multiple_matching_methods() {
             ("debug", fn_type(vec![], MonoType::String)),
         ],
     );
-
-    // 定义类型：实现所有方法
     let (data, env) = create_struct(
         "Data",
         vec![("value", MonoType::Int(64))],
@@ -477,8 +481,11 @@ fn test_duck_typing_with_multiple_matching_methods() {
         ],
     );
 
+    // Act
     let checker = BoundsChecker::new();
     let result = checker.check_constraint(&data, &display, Some(&env));
+
+    // Assert
     assert!(
         result.is_ok(),
         "Data should satisfy Display: {:?}",
@@ -486,9 +493,10 @@ fn test_duck_typing_with_multiple_matching_methods() {
     );
 }
 
+/// RFC-010 §3: 类型只实现部分接口方法应失败
 #[test]
 fn test_duck_typing_with_partial_match() {
-    // 定义接口：3 个方法
+    // Arrange
     let trait3 = create_interface(
         "ThreeMethods",
         vec![
@@ -497,8 +505,6 @@ fn test_duck_typing_with_partial_match() {
             ("c", fn_type(vec![], MonoType::Void)),
         ],
     );
-
-    // 定义类型：只实现 2 个方法
     let (partial, env) = create_struct(
         "Partial",
         vec![],
@@ -520,8 +526,11 @@ fn test_duck_typing_with_partial_match() {
         ],
     );
 
+    // Act
     let checker = BoundsChecker::new();
     let result = checker.check_constraint(&partial, &trait3, Some(&env));
+
+    // Assert
     assert!(
         result.is_err(),
         "Partial should NOT satisfy ThreeMethods (missing c)"
@@ -532,16 +541,20 @@ fn test_duck_typing_with_partial_match() {
 // RFC-010 §3: 鸭子类型 - 空接口交集
 // ===================================================================
 
+/// RFC-010 §3: 空接口交集应被任何类型满足
 #[test]
 fn test_interface_intersection_empty() {
+    // Arrange
     let empty1 = create_interface("Empty1", vec![]);
     let empty2 = create_interface("Empty2", vec![]);
     let intersection = MonoType::Intersection(vec![empty1, empty2]);
-
     let (point, env) = create_struct("Point", vec![("x", MonoType::Float(64))], vec![]);
 
+    // Act
     let checker = BoundsChecker::new();
     let result = checker.check_constraint(&point, &intersection, Some(&env));
+
+    // Assert
     assert!(
         result.is_ok(),
         "Any type should satisfy empty intersection: {:?}",
