@@ -204,10 +204,9 @@ fn format_binding(
 
     let stmt_start = body.first().map(|s| s.span.start);
     let block_span = match stmt_start {
-        Some(pos) if pos.line > 1 => crate::util::span::Span::new(
-            crate::util::span::Position::new(pos.line - 1, 0),
-            pos,
-        ),
+        Some(pos) if pos.line > 1 => {
+            crate::util::span::Span::new(crate::util::span::Position::new(pos.line - 1, 0), pos)
+        }
         _ => crate::util::span::Span::dummy(),
     };
     let body_block = Block {

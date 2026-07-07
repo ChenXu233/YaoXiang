@@ -304,7 +304,9 @@ main = {
     let pos_list = result
         .find("use std.collections.list")
         .expect("std.collections.list should be in output");
-    let pos_io = result.find("use std.io").expect("std.io should be in output");
+    let pos_io = result
+        .find("use std.io")
+        .expect("std.io should be in output");
     assert!(
         pos_list < pos_io,
         "std.collections should come before std.io"
@@ -502,7 +504,6 @@ fn test_config_single_quote() {
         "single_quote option should not cause errors"
     );
 }
-
 
 #[test]
 fn test_format_idempotent_no_imports() {
