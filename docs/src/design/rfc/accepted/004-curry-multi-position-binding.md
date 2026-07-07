@@ -272,7 +272,6 @@ List.range: (T:Type)->((self: List(T)) -> (T, T)) = min_max[1]
 ## 详细设计
 
 ### 编译器实现
-
 ### 类型检查规则
 
 ```rust
