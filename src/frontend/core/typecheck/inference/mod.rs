@@ -15,8 +15,6 @@ pub mod bounds;
 pub mod compatibility;
 pub mod subtyping;
 
-// ✅ 保留的独立模块
-pub mod generics;
 pub mod patterns;
 
 // 重新导出核心类型
@@ -30,7 +28,6 @@ pub use subtyping::SubtypeChecker;
 pub use compatibility::CompatibilityChecker;
 pub use bounds::BoundsChecker;
 pub use patterns::PatternInferrer;
-pub use generics::GenericInferrer;
 
 // 向后兼容别名
 pub use expressions::ExprInferrer;

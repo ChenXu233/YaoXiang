@@ -11,6 +11,11 @@
 use crate::frontend::core::typecheck::inference::subtyping::SubtypeChecker;
 use crate::frontend::core::types::MonoType;
 
+/// Helper: 创建一个新的 SubtypeChecker 实例
+fn new_checker() -> SubtypeChecker {
+    SubtypeChecker::new()
+}
+
 // ===================================================================
 // Happy path 测试
 // ===================================================================
@@ -18,9 +23,7 @@ use crate::frontend::core::types::MonoType;
 #[test]
 fn test_subtype_checker_creation() {
     // Arrange & Act
-    let checker = SubtypeChecker::new();
-
-    // Assert - 验证创建后能正常工作
+    let checker = new_checker();
     let result = checker.is_subtype(&MonoType::Int(32), &MonoType::Int(32));
     assert!(result, "newly created SubtypeChecker should work correctly");
 }
@@ -29,7 +32,7 @@ fn test_subtype_checker_creation() {
 #[test]
 fn test_subtype_int_is_subtype_of_int() {
     // Arrange
-    let checker = SubtypeChecker::new();
+    let checker = new_checker();
 
     // Act
     let result = checker.is_subtype(&MonoType::Int(32), &MonoType::Int(32));
@@ -47,9 +50,7 @@ fn test_subtype_int_is_subtype_of_int() {
 #[test]
 fn test_subtype_int_is_not_subtype_of_float() {
     // Arrange
-    let checker = SubtypeChecker::new();
-
-    // Act
+    let checker = new_checker();
     let result = checker.is_subtype(&MonoType::Int(32), &MonoType::Float(64));
 
     // Assert - 规范 §3.2.1：禁止隐式拓宽，Int 不是 Float 的子类型
@@ -68,9 +69,7 @@ fn test_subtype_int_is_not_subtype_of_float() {
 #[test]
 fn test_subtype_float_is_not_subtype_of_int() {
     // Arrange
-    let checker = SubtypeChecker::new();
-
-    // Act
+    let checker = new_checker();
     let result = checker.is_subtype(&MonoType::Float(64), &MonoType::Int(32));
 
     // Assert
@@ -84,11 +83,11 @@ fn test_subtype_float_is_not_subtype_of_int() {
 // Boundary 测试
 // ===================================================================
 
-/// §3.1: 函数类型应满足自反性子类型关系
+/// §3.2: 函数类型应满足自反性子类型关系
 #[test]
 fn test_subtype_with_complex_types() {
     // Arrange
-    let checker = SubtypeChecker::new();
+    let checker = new_checker();
     let fn_type = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::String),
