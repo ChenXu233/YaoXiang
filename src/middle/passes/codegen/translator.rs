@@ -1071,7 +1071,6 @@ impl Translator {
         Ok(BytecodeInstruction::new(Opcode::ArcDrop, vec![reg]))
     }
 
-
     fn translate_string_length(
         &mut self,
         dst: &Operand,
