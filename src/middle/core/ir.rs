@@ -309,12 +309,6 @@ pub enum Instruction {
     },
     /// Drop Arc (atomic reference count - 1, free if zero)
     ArcDrop(Operand),
-    /// ShareRef: 将值包装为 Arc 以支持跨任务共享。
-    /// 由 `ref` 语法触发，运行时自动选择 Rc/Arc。
-    ShareRef {
-        dst: Operand,
-        src: Operand,
-    },
     // =====================
     // unsafe 块和裸指针指令
     // =====================
