@@ -32,6 +32,7 @@ pub struct Monomorphizer {
     /// 泛型类型定义：type_name -> MonoType（含 TypeVar）
     generic_types: HashMap<String, MonoType>,
     /// 已单态化的类型：TypeId -> MonoType
+    #[allow(dead_code)]
     monomorphized_types: HashMap<TypeId, MonoType>,
 }
 
