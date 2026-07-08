@@ -133,15 +133,4 @@ impl AssignmentChecker {
         // 使用子类型检查
         self.subtype_checker.is_subtype(rhs, lhs)
     }
-
-    /// 检查解构赋值
-    pub fn check_destructuring(
-        &self,
-        _lhs_patterns: &[String],
-        _rhs: &MonoType,
-        _span: Span,
-    ) -> Result<()> {
-        // 简化的实现：总是返回成功
-        Ok(())
-    }
 }
