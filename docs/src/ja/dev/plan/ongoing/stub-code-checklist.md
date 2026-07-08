@@ -1,6 +1,6 @@
-# 空壳コードチェックリスト
+# 空殻コード一覧
 
-> 生成日付：2026-06-13
+> 生成日：2026-06-13
 > 検査範囲：プロジェクト全体 (`src/`)
 > 検査タイプ：`todo!()`、空関数本体、ハードコードされた戻り値、デッドコード
 
@@ -17,15 +17,15 @@
 
 ---
 
-## P0 - 高優先度（コア機能欠如）
+## P0 - 高優先度（核心機能の欠如）
 
 ### 1. デバッガステップメソッド（4 箇所の `todo!()`）
 
 **ファイル**：`src/backends/interpreter/executor/debug.rs`
 
-| 行番号 | 関数シグネチャ | 期待される機能 | 状態 |
+| 行番号 | 関数シグネチャ | 想定機能 | 状態 |
 |------|----------|----------|------|
-| 32-34 | `fn step(&mut self) -> ExecutorResult<()>` | 単一命令をステップ実行 | `todo!()` |
+| 32-34 | `fn step(&mut self) -> ExecutorResult<()>` | 命令を1つずつステップ実行 | `todo!()` |
 | 36-38 | `fn step_over(&mut self) -> ExecutorResult<()>` | ステップオーバー（関数内に入らない） | `todo!()` |
 | 40-42 | `fn step_out(&mut self) -> ExecutorResult<()>` | ステップアウト（現在の関数を実行完了） | `todo!()` |
 | 44-46 | `fn run(&mut self) -> ExecutorResult<()>` | 次のブレークポイントまで実行継続 | `todo!()` |
@@ -33,9 +33,9 @@
 **コンテキスト**：`DebuggableExecutor` trait の他のメソッド（`set_breakpoint`、`has_breakpoint`、`current_ip`、`current_function`、`breakpoints`）は実装済みで、ステップ制御のみ未実装。
 
 **実装提案**：
-- `step()`：現在の IP 命令を実行、IP++
-- `step_over()`：現在の命令が関数呼び出しの場合、次の命令に一時ブレークポイントを設定してから run
-- `step_out()`：現在の呼び出しスタックの深さを記録、スタック深度が減少するまで run
+- `step()`：現在の IP の命令を実行し、IP をインクリメント
+- `step_over()`：現在の命令が関数呼び出しの場合、次の命令に一時ブレークポイントを設定し、その後 `run`
+- `step_out()`：現在の呼び出しスタックの深さを記録し、深さが減少するまで `run`
 - `run()`：ブレークポイントまたはプログラム終了に遭遇するまでループ実行
 
 ---
@@ -46,15 +46,15 @@
 
 **ファイル**：`src/frontend/events/subscribe.rs`
 
-| 行番号 | 関数シグネチャ | 期待される機能 | 状態 |
+| 行番号 | 関数シグネチャ | 想定機能 | 状態 |
 |------|----------|----------|------|
 | 357-364 | `fn on_event(&self, _event: &dyn Any, _metadata: &EventMetadata)` | イベントを LSP 通知に変換 | 空実装 |
 
-**コンテキスト**：コメント「ここで LSP 通知ロジックを追加できる。例えば進捗イベントを `$/progress` 通知に変換する」。
+**コンテキスト**：コメント「ここでは LSP 通知ロジックを追加できます。例えば進捗イベントを `$/progress` 通知に変換します」。
 
 **実装提案**：
-- イベントタイプを確認（Progress、Diagnostic など）
-- Progress イベントの場合、`window/workDoneProgress/create` と `$/progress` 通知を送信
+- イベントタイプをチェック（Progress、Diagnostic など）
+- Progress イベントの場合、`window/workDoneProgress/create` および `$/progress` 通知を送信
 - Diagnostic イベントの場合、`textDocument/publishDiagnostics` 通知を送信
 
 ---
@@ -63,7 +63,7 @@
 
 **ファイル**：`src/frontend/core/parser/statements/declarations.rs`
 
-| 行番号 | 関数シグネチャ | 期待される機能 | 状態 |
+| 行番号 | 関数シグネチャ | 想定機能 | 状態 |
 |------|----------|----------|------|
 | 171-174 | `fn skip_old_function_syntax(_state: &mut ParserState<'_>)` | 旧関数構文の宣言全体をスキップ | 空実装 |
 
@@ -75,44 +75,44 @@
 
 **ファイル**：`src/frontend/core/typecheck/inference/bounds.rs`
 
-| 行番号 | 関数シグネチャ | 期待される機能 | 状態 |
+| 行番号 | 関数シグネチャ | 想定機能 | 状態 |
 |------|----------|----------|------|
-| 70-79 | `pub fn check_const_bounds(&self, _ty: &MonoType, _bounds: &[ConstBound]) -> Result<()>` | const 境界をチェック | `Ok(())` をハードコード |
-| 81-90 | `pub fn check_lifetime_bounds(&self, _ty: &MonoType, _bounds: &[LifetimeBound]) -> Result<()>` | ライフタイム境界をチェック | `Ok(())` をハードコード |
+| 70-79 | `pub fn check_const_bounds(&self, _ty: &MonoType, _bounds: &[ConstBound]) -> Result<()>` | const 境界をチェック | ハードコードされた `Ok(())` |
+| 81-90 | `pub fn check_lifetime_bounds(&self, _ty: &MonoType, _bounds: &[LifetimeBound]) -> Result<()>` | ライフタイム境界をチェック | ハードコードされた `Ok(())` |
 
 **実装提案**：
 - `check_const_bounds`：
-  - const パラメータが境界制約を満たしているかチェック
+  - const パラメータが境界制約を満たすかチェック
   - const 式が評価可能かチェック
 - `check_lifetime_bounds`：
-  - ライフタイムパラメータが境界制約を満たしているかチェック
+  - ライフタイムパラメータが境界制約を満たすかチェック
   - ライフタイムが制約より長いかチェック
 
 ---
 
-### 13. ジェネリック制約の解析（1 箇所のハードコードされた戻り値）
+### 13. ジェネリック制約解析（1 箇所のハードコードされた戻り値）
 
 **ファイル**：`src/frontend/core/typecheck/inference/generics.rs`
 
-| 行番号 | 関数シグネチャ | 期待される機能 | 状態 |
+| 行番号 | 関数シグネチャ | 想定機能 | 状態 |
 |------|----------|----------|------|
-| 53-59 | `pub fn infer_generic_constraints(&mut self, _constraints: &[String]) -> Result<()>` | 制約文字列を内部表現に解析 | `Ok(())` をハードコード |
+| 53-59 | `pub fn infer_generic_constraints(&mut self, _constraints: &[String]) -> Result<()>` | 制約文字列から内部表現へ解析 | ハードコードされた `Ok(())` |
 
 **実装提案**：
 - 制約文字列を解析（例：`T: Clone + Debug`）
 - 型パラメータと制約を抽出
-- 制約を内部表現（TraitConstraint）に変換
+- 制約を内部表現に変換（TraitConstraint）
 - 型環境に追加
 
 ---
 
 ## P2 - 低優先度（安全に削除可能なデッドコード）
 
-### 28-31. 重複する `substitute_type` 実装
+### 28-31. 重複した `substitute_type` 実装
 
 | # | ファイル | 行番号 | シグネチャ | 差異 | 提案 |
 |---|------|------|------|------|------|
-| 28 | `types/eval/evaluator.rs` | 1040 | `fn substitute_type(body, param_name, replacement)` | TypeRef のみ置換 | 削除（呼び出し元なし） |
+| 28 | `types/eval/evaluator.rs` | 1040 | `fn substitute_type(body, param_name, replacement)` | TypeRef 置換のみ | 削除（呼び出し元なし） |
 | 29 | `types/solver.rs` | 685 | `fn substitute_type(&self, ty, substitution)` | 完全な子ノード置換 | 保持 |
 | 31 | `middle/passes/mono/cross_module.rs` | 609 | `fn substitute_type(generic_type, type_args, type_params)` | パラメータリストによる置換 | 保持 |
 
@@ -122,7 +122,7 @@
 
 | ファイル | 関数 | 理由 |
 |------|------|------|
-| `frontend/events/mod.rs:131` | `NullEmitter::emit/emit_with` | Null Object Pattern |
+| `frontend/events/mod.rs:131` | `NullEmitter::emit/emit_with` | Null Object パターン |
 | `backends/runtime/facade.rs:306,331` | `EmbeddedRuntime::cancel/drive_until` | 埋め込みランタイムセマンティクス |
 | `backends/common/allocator.rs:195` | `BumpAllocator::dealloc` | Bump アロケータ特性 |
 | `frontend/core/typecheck/passes/dead_code.rs:190` | `collect_definitions` | 既に deprecated、合理的なスタブ |
@@ -134,6 +134,6 @@
 ---
 
 ## 備考
-- P0/P1 は慎重な設計が必要、一つずつ実装してテストを追加することを推奨
-- 一部の関数には隠れた呼び出し元がある可能性（trait object やマクロ経由）、削除前に再確認を推奨
-- 重複する `substitute_type` は単一実装への統一を推奨
+- P0/P1 は慎重に設計が必要で、個別に実装しテストを追加することを推奨
+- 一部の関数には隠れた呼び出し元がある可能性があり（trait object またはマクロ経由）、削除前に再確認することを推奨
+- 重複した `substitute_type` は単一実装に統一することを推奨
