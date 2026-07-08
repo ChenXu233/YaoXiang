@@ -4,8 +4,8 @@
 //! §3.5.2: 标准库接口（Clone, Equal, Debug）
 //! RFC-011 §2: 类型约束系统
 //!
-//! 注意：规范 §B.4 明确不实现生命周期和借用检查器，因此不测试生命周期边界。
-//! 规范中没有独立的 "const bounds" 概念，因此不测试 const 边界。
+//! RFC-011 §4: 编译期泛型 — const 泛型参数类型验证
+//! RFC-027 §4: 编译期证明管道 — const 参数通过证明管道验证
 
 use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
 use crate::frontend::core::types::{MonoType, StructType, TraitTable};
@@ -434,4 +434,83 @@ fn test_bounds_checker_dup_nested_struct_passes() {
         result.is_ok(),
         "BoundsChecker should accept nested Dup structs"
     );
+}
+
+// ===================================================================
+// validate_const_args 测试
+// ===================================================================
+
+#[test]
+fn test_validate_const_args_int_matches() {
+    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
+    use crate::frontend::core::types::MonoType;
+    use crate::frontend::core::typecheck::inference::bounds::validate_const_args;
+
+    let binders = vec![ConstVarDef::new("N".to_string(), ConstKind::Int(None), 0)];
+    let args = vec![MonoType::Literal {
+        name: "5".to_string(),
+        base_type: Box::new(MonoType::Int(64)),
+        value: ConstValue::Int(5),
+    }];
+    let result = validate_const_args(&binders, &args);
+    assert!(result.is_ok(), "Int const arg should match Int binder");
+}
+
+#[test]
+fn test_validate_const_args_type_mismatch() {
+    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
+    use crate::frontend::core::types::MonoType;
+    use crate::frontend::core::typecheck::inference::bounds::validate_const_args;
+
+    let binders = vec![ConstVarDef::new("N".to_string(), ConstKind::Int(None), 0)];
+    let args = vec![MonoType::Literal {
+        name: "true".to_string(),
+        base_type: Box::new(MonoType::Bool),
+        value: ConstValue::Bool(true),
+    }];
+    let result = validate_const_args(&binders, &args);
+    assert!(
+        result.is_err(),
+        "Bool const arg should NOT match Int binder"
+    );
+}
+
+#[test]
+fn test_validate_const_args_not_literal() {
+    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef};
+    use crate::frontend::core::types::MonoType;
+    use crate::frontend::core::typecheck::inference::bounds::validate_const_args;
+
+    let binders = vec![ConstVarDef::new("N".to_string(), ConstKind::Int(None), 0)];
+    let args = vec![MonoType::Int(64)];
+    let result = validate_const_args(&binders, &args);
+    assert!(result.is_err(), "Non-literal type should fail validation");
+}
+
+#[test]
+fn test_validate_const_args_empty() {
+    use crate::frontend::core::types::ConstVarDef;
+    use crate::frontend::core::types::MonoType;
+    use crate::frontend::core::typecheck::inference::bounds::validate_const_args;
+
+    let binders: Vec<ConstVarDef> = vec![];
+    let args: Vec<MonoType> = vec![];
+    let result = validate_const_args(&binders, &args);
+    assert!(result.is_ok(), "Empty const args should pass");
+}
+
+#[test]
+fn test_validate_const_args_bool_matches() {
+    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
+    use crate::frontend::core::types::MonoType;
+    use crate::frontend::core::typecheck::inference::bounds::validate_const_args;
+
+    let binders = vec![ConstVarDef::new("FLAG".to_string(), ConstKind::Bool, 0)];
+    let args = vec![MonoType::Literal {
+        name: "true".to_string(),
+        base_type: Box::new(MonoType::Bool),
+        value: ConstValue::Bool(true),
+    }];
+    let result = validate_const_args(&binders, &args);
+    assert!(result.is_ok(), "Bool const arg should match Bool binder");
 }
