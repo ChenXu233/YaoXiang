@@ -1121,7 +1121,7 @@ impl<'a> ExpressionInferrer<'a> {
                 if let crate::frontend::core::parser::ast::Expr::Var(ref fn_name, _) = **func {
                     if let Some(generic_def) = self.generic_type_defs.get(fn_name).cloned() {
                         if let MonoType::Struct(ref s) = func_ty {
-                            if !generic_def.param_names.is_empty() && !s.fields.is_empty() {
+                            if !generic_def.type_param_names.is_empty() && !s.fields.is_empty() {
                                 // 使用 struct fields 的类型作为参数类型，
                                 // 与 arg_types unify 以推断泛型参数的具体类型
                                 let field_types: Vec<MonoType> =
@@ -1129,7 +1129,7 @@ impl<'a> ExpressionInferrer<'a> {
                                 if arg_types.len() == field_types.len() {
                                     // 创建新的 TypeVar 用于每个泛型参数
                                     let mut param_subst: HashMap<String, MonoType> = HashMap::new();
-                                    for param_name in &generic_def.param_names {
+                                    for param_name in &generic_def.type_param_names {
                                         param_subst
                                             .insert(param_name.clone(), self.solver.new_var());
                                     }
@@ -1148,7 +1148,7 @@ impl<'a> ExpressionInferrer<'a> {
                                     }
                                     // 解析泛型参数的具体类型
                                     let concrete_args: Vec<MonoType> = generic_def
-                                        .param_names
+                                        .type_param_names
                                         .iter()
                                         .map(|name| {
                                             let var = param_subst.get(name).unwrap();
@@ -1157,8 +1157,8 @@ impl<'a> ExpressionInferrer<'a> {
                                         .collect();
                                     // 实例化模板
                                     let result = crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type_static(
-                                        &generic_def.template,
-                                        &generic_def.param_names,
+                                        &generic_def.poly.body,
+                                        &generic_def.type_param_names,
                                         &concrete_args,
                                     );
                                     return Ok(result);
