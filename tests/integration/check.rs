@@ -25,10 +25,11 @@ fn temp_dir() -> TempDir {
     TempDir::new().expect("Failed to create temp dir")
 }
 
+#[allow(clippy::ptr_arg)]
 /// 辅助：对单个文件运行 check，返回 Ok(error_count) 或 Err
 fn check_file(path: &PathBuf) -> Result<usize, anyhow::Error> {
     run_check_command_once(
-        &[path.clone()],
+        std::slice::from_ref(path),
         &[],
         false, // json
         false, // use_colors

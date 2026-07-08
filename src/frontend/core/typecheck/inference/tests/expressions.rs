@@ -29,11 +29,10 @@ impl TestContext {
         }
     }
 
-    fn inferrer(&mut self) -> ExpressionInferrer {
+    fn inferrer(&mut self) -> ExpressionInferrer<'_> {
         ExpressionInferrer::new(&mut self.scope, &mut self.solver, &self.overload_candidates)
     }
 }
-
 
 // ===================================================================
 // Happy path 测试
