@@ -90,21 +90,6 @@
 
 ---
 
-### 12. Destructuring Assignment Check (1 hardcoded return value)
-
-**File**: `src/frontend/core/typecheck/inference/assignment.rs`
-
-| Line | Function Signature | Expected Functionality | Status |
-|------|----------|----------|------|
-| 137-146 | `pub fn check_destructuring(&self, _lhs_patterns: &[Pattern], _rhs: &MonoType, _span: Span) -> Result<()>` | Check whether the shape of destructuring assignment matches | Hardcoded `Ok(())` |
-
-**Implementation Suggestions**:
-- Check whether the number of left-side patterns matches the right-side type
-- Check whether each pattern's type matches the type at the corresponding position on the right side
-- Report the specific location of any mismatch
-
----
-
 ### 13. Generic Constraint Parsing (1 hardcoded return value)
 
 **File**: `src/frontend/core/typecheck/inference/generics.rs`

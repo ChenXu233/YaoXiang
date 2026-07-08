@@ -90,21 +90,6 @@
 
 ---
 
-### 12. 分割代入チェック（1 箇所のハードコードされた戻り値）
-
-**ファイル**：`src/frontend/core/typecheck/inference/assignment.rs`
-
-| 行番号 | 関数シグネチャ | 期待される機能 | 状態 |
-|------|----------|----------|------|
-| 137-146 | `pub fn check_destructuring(&self, _lhs_patterns: &[Pattern], _rhs: &MonoType, _span: Span) -> Result<()>` | 分割代入の形状が一致するかチェック | `Ok(())` をハードコード |
-
-**実装提案**：
-- 左側パターンの数が右側の型と一致するかチェック
-- 各パターンの型が右側の対応する位置の型と一致するかチェック
-- 不一致の具体的な位置を報告
-
----
-
 ### 13. ジェネリック制約の解析（1 箇所のハードコードされた戻り値）
 
 **ファイル**：`src/frontend/core/typecheck/inference/generics.rs`

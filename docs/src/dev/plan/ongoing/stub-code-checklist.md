@@ -90,21 +90,6 @@
 
 ---
 
-### 12. 解构赋值检查（1 处硬编码返回值）
-
-**文件**：`src/frontend/core/typecheck/inference/assignment.rs`
-
-| 行号 | 函数签名 | 预期功能 | 状态 |
-|------|----------|----------|------|
-| 137-146 | `pub fn check_destructuring(&self, _lhs_patterns: &[Pattern], _rhs: &MonoType, _span: Span) -> Result<()>` | 检查解构赋值的形状是否匹配 | 硬编码 `Ok(())` |
-
-**实现建议**：
-- 检查左侧模式的数量是否与右侧类型匹配
-- 检查每个模式的类型是否与右侧对应位置的类型匹配
-- 报告不匹配的具体位置
-
----
-
 ### 13. 泛型约束解析（1 处硬编码返回值）
 
 **文件**：`src/frontend/core/typecheck/inference/generics.rs`
