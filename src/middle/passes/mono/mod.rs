@@ -68,18 +68,21 @@ impl Monomorphizer {
         // 1. 收集泛型函数定义
         self.collect_generic_functions(module);
 
-        // 2. 初始化队列
+        // 2. 收集泛型类型定义
+        self.collect_generic_types(module);
+
+        // 3. 初始化队列
         for req in requests {
             self.pending_queue.push_back(req.clone());
         }
 
-        // 3. 队列循环（BFS）
+        // 4. 队列循环（BFS）
         self.process_queue()?;
 
-        // 4. 构建输出
+        // 5. 构建输出
         let mut output = self.build_output(module);
 
-        // 5. 替换调用点
+        // 6. 替换调用点
         self.replace_call_sites(&mut output, requests);
 
         Ok(output)
