@@ -13,7 +13,7 @@ pub mod instance;
 pub mod type_mono;
 
 use function::FunctionMonomorphizer;
-use instance::{GenericFunctionId, InstantiationRequest, SpecializationKey};
+use instance::{GenericFunctionId, InstantiationRequest, SpecializationKey, TypeId};
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 
@@ -29,6 +29,10 @@ pub struct Monomorphizer {
     processed: HashSet<SpecializationKey>,
     /// 最大递归深度
     max_depth: usize,
+    /// 泛型类型定义：type_name -> MonoType（含 TypeVar）
+    generic_types: HashMap<String, MonoType>,
+    /// 已单态化的类型：TypeId -> MonoType
+    monomorphized_types: HashMap<TypeId, MonoType>,
 }
 
 impl Monomorphizer {
@@ -39,6 +43,8 @@ impl Monomorphizer {
             pending_queue: VecDeque::new(),
             processed: HashSet::new(),
             max_depth: 100,
+            generic_types: HashMap::new(),
+            monomorphized_types: HashMap::new(),
         }
     }
 
