@@ -5,7 +5,8 @@
 //! 检查泛型类型边界和约束
 //! 支持鸭子类型：检查类型是否满足接口要求的所有方法（包括方法绑定）
 
-use crate::util::diagnostic::{ErrorCodeDefinition, Result};
+use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition, Result};
+use crate::frontend::core::types::const_data::ConstVarDef;
 use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::TraitTable;
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
@@ -243,4 +244,38 @@ impl BoundsChecker {
             _ => false,
         }
     }
+}
+
+/// 验证 const 泛型参数
+///
+/// 遍历 const_binders 和 const_args，验证：
+/// 1. 每个 const arg 必须是 MonoType::Literal（编译期已知值）
+/// 2. 字面量的 ConstValue 类型匹配 ConstKind（如 Int 参数不能传 true）
+pub fn validate_const_args(
+    const_binders: &[ConstVarDef],
+    const_args: &[MonoType],
+) -> Result<(), Diagnostic> {
+    use crate::util::diagnostic::ErrorCodeDefinition;
+
+    for (binder, arg) in const_binders.iter().zip(const_args.iter()) {
+        match arg {
+            MonoType::Literal { value, .. } => {
+                if !binder.kind.matches(value) {
+                    return Err(ErrorCodeDefinition::type_mismatch(
+                        binder.kind.type_name(),
+                        &value.to_string(),
+                    )
+                    .build());
+                }
+            }
+            _ => {
+                return Err(ErrorCodeDefinition::type_mismatch(
+                    "编译期字面量",
+                    &format!("{:?}", arg),
+                )
+                .build());
+            }
+        }
+    }
+    Ok(())
 }
