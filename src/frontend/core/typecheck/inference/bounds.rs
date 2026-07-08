@@ -85,15 +85,6 @@ impl BoundsChecker {
         Ok(())
     }
 
-    /// 检查生命周期边界
-    pub fn check_lifetime_bounds(
-        &self,
-        _ty: &MonoType,
-        _bounds: &[String],
-    ) -> Result<()> {
-        Ok(())
-    }
-
     /// 检查泛型参数边界
     pub fn check_generic_bounds(
         &self,
