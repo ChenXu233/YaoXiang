@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use super::Monomorphizer;
 
 /// 类型单态化器的默认实现
+#[allow(dead_code, clippy::only_used_in_recursion)]
 impl Monomorphizer {
     pub(super) fn collect_generic_types(
         &mut self,
