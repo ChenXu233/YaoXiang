@@ -45,7 +45,7 @@ VALID_SCOPES = {
     # 后端子模块
     "repl", "shell", "runtime",
     # 文档作用域
-    "docs", "design", "plan",
+    "docs", "design", "plan", "rfc",
     # 其他作用域
     "build", "ci", "test", "release", "meta",
 }
