@@ -283,7 +283,8 @@ impl TypeChecker {
             | Type::Bytes
             | Type::Bool
             | Type::Void
-            | Type::Enum(_) => {}
+            | Type::Enum(_)
+            | Type::ConstExpr(_) => {}
             Type::Ref { inner, .. } => self.collect_type_tokens(file_path, inner),
         }
     }

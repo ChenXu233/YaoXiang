@@ -614,3 +614,134 @@ fn test_check_const_bounds_layer2_constraint_violated() {
         "Bool(false) constraint should be violated and return Disproved"
     );
 }
+
+// ===================================================================
+// Const 约束 Layer 2 端到端测试
+// 基于 docs/superpowers/specs/2026-07-11-const-expr-constraint-design.md
+// ===================================================================
+
+#[test]
+fn test_check_const_bounds_layer2_real_constraint_satisfied() {
+    use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
+    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
+    use crate::frontend::core::types::eval::const_eval::{ConstExpr, ConstBinOp};
+    use crate::frontend::core::types::MonoType;
+
+    // Arrange
+    let checker = BoundsChecker::new();
+    let mut binders = vec![ConstVarDef::new("N".to_string(), ConstKind::Int(None), 0)];
+    binders[0].constraints.push(ConstExpr::BinOp {
+        op: ConstBinOp::Gt,
+        lhs: Box::new(ConstExpr::Var("N".to_string())),
+        rhs: Box::new(ConstExpr::Int(0)),
+    });
+    let args = vec![MonoType::Literal {
+        name: "5".to_string(),
+        base_type: Box::new(MonoType::Int(64)),
+        value: ConstValue::Int(5),
+    }];
+    // Act
+    let result = checker.check_const_bounds(&binders, &args);
+    // Assert
+    assert!(
+        result.is_proved(),
+        "N=5 with constraint N > 0 should be Proved"
+    );
+}
+
+#[test]
+fn test_check_const_bounds_layer2_real_constraint_violated() {
+    use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
+    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
+    use crate::frontend::core::types::eval::const_eval::{ConstExpr, ConstBinOp};
+    use crate::frontend::core::types::MonoType;
+
+    // Arrange
+    let checker = BoundsChecker::new();
+    let mut binders = vec![ConstVarDef::new("N".to_string(), ConstKind::Int(None), 0)];
+    binders[0].constraints.push(ConstExpr::BinOp {
+        op: ConstBinOp::Gt,
+        lhs: Box::new(ConstExpr::Var("N".to_string())),
+        rhs: Box::new(ConstExpr::Int(0)),
+    });
+    let args = vec![MonoType::Literal {
+        name: "0".to_string(),
+        base_type: Box::new(MonoType::Int(64)),
+        value: ConstValue::Int(0),
+    }];
+    // Act
+    let result = checker.check_const_bounds(&binders, &args);
+    // Assert
+    assert!(
+        !result.is_proved(),
+        "N=0 with constraint N > 0 should be Disproved"
+    );
+}
+
+#[test]
+fn test_check_const_bounds_layer2_chain_expr_negative_violated() {
+    use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
+    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
+    use crate::frontend::core::types::eval::const_eval::{ConstExpr, ConstBinOp};
+    use crate::frontend::core::types::MonoType;
+
+    // Arrange
+    let checker = BoundsChecker::new();
+    let mut binders = vec![ConstVarDef::new("N".to_string(), ConstKind::Int(None), 0)];
+    binders[0].constraints.push(ConstExpr::BinOp {
+        op: ConstBinOp::Gt,
+        lhs: Box::new(ConstExpr::BinOp {
+            op: ConstBinOp::Add,
+            lhs: Box::new(ConstExpr::Var("N".to_string())),
+            rhs: Box::new(ConstExpr::Int(1)),
+        }),
+        rhs: Box::new(ConstExpr::Int(0)),
+    });
+    // N = -1: -1 + 1 > 0 → 0 > 0 → false → Disproved
+    let args = vec![MonoType::Literal {
+        name: "-1".to_string(),
+        base_type: Box::new(MonoType::Int(64)),
+        value: ConstValue::Int(-1),
+    }];
+    // Act
+    let result = checker.check_const_bounds(&binders, &args);
+    // Assert
+    assert!(
+        !result.is_proved(),
+        "N=-1 with constraint N + 1 > 0 should be Disproved"
+    );
+}
+
+#[test]
+fn test_check_const_bounds_layer2_chain_expr_positive_satisfied() {
+    use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
+    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
+    use crate::frontend::core::types::eval::const_eval::{ConstExpr, ConstBinOp};
+    use crate::frontend::core::types::MonoType;
+
+    // Arrange
+    let checker = BoundsChecker::new();
+    let mut binders = vec![ConstVarDef::new("N".to_string(), ConstKind::Int(None), 0)];
+    binders[0].constraints.push(ConstExpr::BinOp {
+        op: ConstBinOp::Gt,
+        lhs: Box::new(ConstExpr::BinOp {
+            op: ConstBinOp::Add,
+            lhs: Box::new(ConstExpr::Var("N".to_string())),
+            rhs: Box::new(ConstExpr::Int(1)),
+        }),
+        rhs: Box::new(ConstExpr::Int(0)),
+    });
+    // N = 0: 0 + 1 > 0 → 1 > 0 → true → Proved
+    let args = vec![MonoType::Literal {
+        name: "0".to_string(),
+        base_type: Box::new(MonoType::Int(64)),
+        value: ConstValue::Int(0),
+    }];
+    // Act
+    let result = checker.check_const_bounds(&binders, &args);
+    // Assert
+    assert!(
+        result.is_proved(),
+        "N=0 with constraint N + 1 > 0 should be Proved"
+    );
+}

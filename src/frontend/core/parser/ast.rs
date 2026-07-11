@@ -487,6 +487,8 @@ pub enum Type {
         /// e.g., `Type[Type[T]]` has args = `MetaType { args: T }`
         args: Vec<Type>,
     },
+    /// 编译期表达式（泛型参数位置的值表达式，如 Assert(N > 0) 中的 N > 0）
+    ConstExpr(Box<Expr>),
 }
 
 /// Block

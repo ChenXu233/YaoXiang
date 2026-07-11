@@ -1,0 +1,16 @@
+// 02-type-system/const_generic_assert.yx
+// 覆盖: RFC-011 §4.3 编译期验证 — Assert(N > 0) 约束语法
+// 验证: const 泛型参数值约束在类型定义中的解析和编译，Assert 约束作为字段类型
+// 状态: ✅ 可运行
+
+use std.io
+
+Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
+    _assert_rows: Assert(Rows > 0),
+    _assert_cols: Assert(Cols > 0),
+    data: Array(Array(T, Cols), Rows),
+}
+
+main = {
+    io.println("ALL TESTS PASSED")
+}

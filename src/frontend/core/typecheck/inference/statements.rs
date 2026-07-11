@@ -1614,32 +1614,37 @@ impl StatementChecker {
             } = &stmt.kind
             {
                 if name == "Assert" && !args.is_empty() {
-                    // 尝试从 args[0] 提取约束表达式
-                    // 完整 AST → ConstExpr 转换留待后续
-                    if let Some(const_var) = Self::find_const_var_in_args(&args[0], const_binders) {
-                        use crate::frontend::core::types::eval::const_eval::ConstExpr;
-                        const_binders[const_var.index()]
-                            .constraints
-                            .push(ConstExpr::Bool(true));
+                    // 从 args[0] 提取约束表达式
+                    if let crate::frontend::core::parser::ast::Type::ConstExpr(expr) = &args[0] {
+                        if let Some(const_expr) =
+                            crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)
+                        {
+                            if let Some(const_var) = Self::find_const_var_in_expr(expr, const_binders) {
+                                const_binders[const_var.index()]
+                                    .constraints
+                                    .push(const_expr);
+                            }
+                        }
                     }
                 }
             }
         }
     }
 
-    /// 在 AST Type 中查找引用的 const 变量名，返回对应的 ConstVarDef index
-    fn find_const_var_in_args(
-        ast_type: &crate::frontend::core::parser::ast::Type,
+    /// 在 Expr 树中查找引用的 const 变量名，返回对应的 ConstVarDef index
+    fn find_const_var_in_expr(
+        expr: &crate::frontend::core::parser::ast::Expr,
         const_binders: &[crate::frontend::core::types::const_data::ConstVarDef],
     ) -> Option<crate::frontend::core::types::var::ConstVar> {
-        // 递归查找 AST Type 树中的 Name 引用
-        match ast_type {
-            crate::frontend::core::parser::ast::Type::Name { name, .. } => const_binders
+        use crate::frontend::core::parser::ast::Expr;
+        match expr {
+            Expr::Var(name, _) => const_binders
                 .iter()
                 .position(|b| b.name == *name)
                 .map(crate::frontend::core::types::var::ConstVar::new),
-            // 注意：AST 中不存在 Type::BinOp 变体
-            // 二元比较表达式（如 N > 0）的解析留待后续实现
+            Expr::BinOp { left, right, .. } => Self::find_const_var_in_expr(left, const_binders)
+                .or_else(|| Self::find_const_var_in_expr(right, const_binders)),
+            Expr::UnOp { expr, .. } => Self::find_const_var_in_expr(expr, const_binders),
             _ => None,
         }
     }

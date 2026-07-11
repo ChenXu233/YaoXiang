@@ -163,6 +163,8 @@ impl Monomorphizer {
                 mutable: *mutable,
                 inner: Box::new(self.type_to_mono_type(inner)),
             },
+            // ConstExpr 只在 Assert 参数中出现，不应到这里
+            AstType::ConstExpr(_) => MonoType::TypeRef("<const-expr>".to_string()),
         }
     }
 
@@ -213,6 +215,7 @@ impl Monomorphizer {
             AstType::Ptr(inner) => format!("*{}", Self::get_type_name(inner)),
             AstType::MetaType { .. } => "MetaType".to_string(),
             AstType::Ref { inner, .. } => format!("&{}", Self::get_type_name(inner)),
+            AstType::ConstExpr(_) => "<const-expr>".to_string(),
         }
     }
 
@@ -267,6 +270,7 @@ impl Monomorphizer {
             AstType::Ptr(inner) => self.contains_type_var_type(inner),
             AstType::Ref { inner, .. } => self.contains_type_var_type(inner),
             AstType::MetaType { .. } => false,
+            AstType::ConstExpr(_) => false,
         }
     }
 
@@ -353,7 +357,8 @@ impl Monomorphizer {
             | AstType::String
             | AstType::Bytes
             | AstType::Bool
-            | AstType::Void => {}
+            | AstType::Void
+            | AstType::ConstExpr(_) => {}
         }
     }
 

@@ -655,6 +655,10 @@ impl From<ast::Type> for MonoType {
                     type_params: args.into_iter().map(MonoType::from).collect(),
                 }
             }
+            ast::Type::ConstExpr(_expr) => {
+                // ConstExpr 只在 Assert 参数位置出现，不应出现在类型转换中
+                MonoType::TypeRef("<const-expr>".to_string())
+            }
         }
     }
 }
