@@ -708,6 +708,7 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                 inner: Box::new(self.substitute_type_ast(inner, type_map)),
                 span: crate::util::span::Span::default(),
             },
+            AstType::ConstExpr(_) => ty.clone(),
         }
     }
 

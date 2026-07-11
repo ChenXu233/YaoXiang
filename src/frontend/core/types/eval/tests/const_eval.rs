@@ -1153,3 +1153,84 @@ fn test_const_un_op_debug() {
     let debug = format!("{:?}", op);
     assert!(debug.contains("Neg"));
 }
+
+// ===================================================================
+// AST Expr -> ConstExpr 转换测试
+// 基于 docs/superpowers/specs/2026-07-11-const-expr-constraint-design.md
+// ===================================================================
+
+#[test]
+fn test_convert_expr_to_const_expr_int_literal() {
+    use crate::frontend::core::parser::ast::Expr;
+    use crate::frontend::core::lexer::tokens::Literal;
+    use crate::util::span::Span;
+    use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
+
+    // Act
+    let result = convert_expr_to_const_expr(&Expr::Lit(Literal::Int(42), Span::dummy()));
+    // Assert
+    assert_eq!(
+        result,
+        Some(ConstExpr::Int(42)),
+        "Int literal 42 should convert to ConstExpr::Int(42)"
+    );
+}
+
+#[test]
+fn test_convert_expr_to_const_expr_var() {
+    use crate::frontend::core::parser::ast::Expr;
+    use crate::util::span::Span;
+    use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
+
+    // Act
+    let result = convert_expr_to_const_expr(&Expr::Var("N".to_string(), Span::dummy()));
+    // Assert
+    assert_eq!(
+        result,
+        Some(ConstExpr::Var("N".to_string())),
+        "Variable reference N should convert to ConstExpr::Var(\"N\")"
+    );
+}
+
+#[test]
+fn test_convert_expr_to_const_expr_binop_gt() {
+    use crate::frontend::core::parser::ast::{Expr, BinOp};
+    use crate::frontend::core::lexer::tokens::Literal;
+    use crate::util::span::Span;
+    use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
+
+    // Arrange
+    let expr = Expr::BinOp {
+        op: BinOp::Gt,
+        left: Box::new(Expr::Var("N".to_string(), Span::dummy())),
+        right: Box::new(Expr::Lit(Literal::Int(0), Span::dummy())),
+        span: Span::dummy(),
+    };
+    // Act
+    let result = convert_expr_to_const_expr(&expr);
+    // Assert
+    assert_eq!(
+        result,
+        Some(ConstExpr::BinOp {
+            op: ConstBinOp::Gt,
+            lhs: Box::new(ConstExpr::Var("N".to_string())),
+            rhs: Box::new(ConstExpr::Int(0)),
+        }),
+        "AST BinOp(Gt, Var(N), Lit(0)) should convert to ConstExpr::BinOp(Gt, Var(N), Int(0))"
+    );
+}
+
+#[test]
+fn test_convert_expr_to_const_expr_unsupported_returns_none() {
+    use crate::frontend::core::parser::ast::Expr;
+    use crate::util::span::Span;
+    use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
+
+    // Act
+    let result = convert_expr_to_const_expr(&Expr::List(vec![], Span::dummy()));
+    // Assert
+    assert_eq!(
+        result, None,
+        "List expression (not a constant expression) should return None"
+    );
+}

@@ -133,6 +133,7 @@ pub fn format_type(
                 format!("Type({})", args_str.join(", "))
             }
         }
+        Type::ConstExpr(_) => "<const-expr>".to_string(),
     }
 }
 
