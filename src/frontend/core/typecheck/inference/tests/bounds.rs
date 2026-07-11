@@ -516,3 +516,55 @@ fn test_validate_const_args_bool_matches() {
     let result = validate_const_args(&binders, &args);
     assert!(result.is_ok(), "Bool const arg should match Bool binder");
 }
+#[test]
+fn test_check_const_bounds_fast_path_proved() {
+    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
+    use crate::frontend::core::types::MonoType;
+
+    let checker = BoundsChecker::new();
+    let binders = vec![ConstVarDef::new("N".to_string(), ConstKind::Int(None), 0)];
+    let args = vec![MonoType::Literal {
+        name: "5".to_string(),
+        base_type: Box::new(MonoType::Int(64)),
+        value: ConstValue::Int(5),
+    }];
+    let result = checker.check_const_bounds(&binders, &args, None);
+    assert!(
+        result.is_proved(),
+        "Int const arg should pass fast path and return Proved"
+    );
+}
+
+#[test]
+fn test_check_const_bounds_fast_path_disproved() {
+    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
+    use crate::frontend::core::types::MonoType;
+
+    let checker = BoundsChecker::new();
+    let binders = vec![ConstVarDef::new("N".to_string(), ConstKind::Int(None), 0)];
+    let args = vec![MonoType::Literal {
+        name: "true".to_string(),
+        base_type: Box::new(MonoType::Bool),
+        value: ConstValue::Bool(true),
+    }];
+    let result = checker.check_const_bounds(&binders, &args, None);
+    assert!(
+        !result.is_proved(),
+        "Bool arg should fail Int binder and return Disproved"
+    );
+}
+
+#[test]
+fn test_check_const_bounds_empty_proved() {
+    use crate::frontend::core::types::ConstVarDef;
+    use crate::frontend::core::types::MonoType;
+
+    let checker = BoundsChecker::new();
+    let binders: Vec<ConstVarDef> = vec![];
+    let args: Vec<MonoType> = vec![];
+    let result = checker.check_const_bounds(&binders, &args, None);
+    assert!(
+        result.is_proved(),
+        "Empty const args should pass and return Proved"
+    );
+}
