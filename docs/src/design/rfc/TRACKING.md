@@ -9,7 +9,7 @@
 | 009-ownership-model.md | RFC-009: 所有权模型设计 | 已接受 | accepted\009-ownership-model.md | #126 | -- | -- |
 | 009a-borrow-proof-pipeline.md | RFC-009a: 令牌生命期分析——基于霍尔证明管道 | 已接受 | accepted\009a-borrow-proof-pipeline.md | #129 | -- | -- |
 | 010-unified-type-syntax.md | RFC-010: 统一类型语法 - name: type = value 模型 | 已接受 | accepted\010-unified-type-syntax.md | #127 | -- | -- |
-| 011-generic-type-system.md | RFC-011: 泛型系统设计 - 零成本抽象与宏替代 | 已接受 | accepted\011-generic-type-system.md | #128 | #45, #46, #73, #90, #96, #40 | #122 |
+| 011-generic-type-system.md | RFC-011: 泛型系统设计 - 零成本抽象与宏替代 | 已接受 | accepted\011-generic-type-system.md | #128 | #45, #46, #73, #90, #96, #40, #151 | #122 |
 | 012-f-string-template-strings.md | RFC 012: F-String 模板字符串 | 已接受 | accepted\012-f-string-template-strings.md | #124 | -- | -- |
 | 013-error-code-specification.md | RFC 013: 错误代码规范 | 已接受 | accepted\013-error-code-specification.md | #125 | #125 | #7, #9, #29, #66 |
 | 014-package-manager.md | RFC-014: 包管理系统设计 | 已接受 | accepted\014-package-manager.md | #88 | -- | -- |
@@ -31,6 +31,8 @@
 | 029-module-semantics.md | RFC-029: 模块语义系统 | 草案 | draft\029-module-semantics.md | -- | -- | -- |
 | 031-optimization-levels.md | RFC-031：优化级别与 Pass 管理器 | 草案 | draft\031-optimization-levels.md | -- | -- | -- |
 | 033-reflection-operator.md | RFC-033: `^^` 反射运算符 | 草案 | draft\033-reflection-operator.md | #136 | -- | -- |
+| 034-debug-toolchain.md | RFC-034: 统一调试工具链 | 草案 | draft\034-debug-toolchain.md | -- | -- | -- |
+| 035-mcp-server.md | RFC-035: MCP Server 支持（AI Agent 集成） | 草案 | draft\035-mcp-server.md | #154 | -- | -- |
 | 003-version-planning.md | RFC-003：版本规划 | 已拒绝 | rejected\003-version-planning.md | -- | -- | -- |
 | 005-automated-cve-scanning.md | RFC-005: 自动化CVE安全检查系统 | 已拒绝 | rejected\005-automated-cve-scanning.md | -- | -- | -- |
 | 016-quantum-native-support.md | RFC 016: 量子原生支持与多重后端集成 | 已拒绝 | rejected\016-quantum-native-support.md | -- | -- | -- |
