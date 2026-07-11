@@ -528,7 +528,7 @@ fn test_check_const_bounds_fast_path_proved() {
         base_type: Box::new(MonoType::Int(64)),
         value: ConstValue::Int(5),
     }];
-    let result = checker.check_const_bounds(&binders, &args, None);
+    let result = checker.check_const_bounds(&binders, &args);
     assert!(
         result.is_proved(),
         "Int const arg should pass fast path and return Proved"
@@ -547,7 +547,7 @@ fn test_check_const_bounds_fast_path_disproved() {
         base_type: Box::new(MonoType::Bool),
         value: ConstValue::Bool(true),
     }];
-    let result = checker.check_const_bounds(&binders, &args, None);
+    let result = checker.check_const_bounds(&binders, &args);
     assert!(
         !result.is_proved(),
         "Bool arg should fail Int binder and return Disproved"
@@ -562,9 +562,55 @@ fn test_check_const_bounds_empty_proved() {
     let checker = BoundsChecker::new();
     let binders: Vec<ConstVarDef> = vec![];
     let args: Vec<MonoType> = vec![];
-    let result = checker.check_const_bounds(&binders, &args, None);
+    let result = checker.check_const_bounds(&binders, &args);
     assert!(
         result.is_proved(),
         "Empty const args should pass and return Proved"
+    );
+}
+
+#[test]
+fn test_check_const_bounds_layer2_constraint_satisfied() {
+    use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
+    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
+    use crate::frontend::core::types::eval::const_eval::ConstExpr;
+    use crate::frontend::core::types::MonoType;
+
+    let checker = BoundsChecker::new();
+    let mut binders = vec![ConstVarDef::new("N".to_string(), ConstKind::Int(None), 0)];
+    // 添加真实约束: Bool(true) — 总是满足
+    binders[0].constraints.push(ConstExpr::Bool(true));
+    let args = vec![MonoType::Literal {
+        name: "5".to_string(),
+        base_type: Box::new(MonoType::Int(64)),
+        value: ConstValue::Int(5),
+    }];
+    let result = checker.check_const_bounds(&binders, &args);
+    assert!(
+        result.is_proved(),
+        "Bool(true) constraint should be satisfied and return Proved"
+    );
+}
+
+#[test]
+fn test_check_const_bounds_layer2_constraint_violated() {
+    use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
+    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
+    use crate::frontend::core::types::eval::const_eval::ConstExpr;
+    use crate::frontend::core::types::MonoType;
+
+    let checker = BoundsChecker::new();
+    let mut binders = vec![ConstVarDef::new("N".to_string(), ConstKind::Int(None), 0)];
+    // Bool(false) — 约束违反
+    binders[0].constraints.push(ConstExpr::Bool(false));
+    let args = vec![MonoType::Literal {
+        name: "5".to_string(),
+        base_type: Box::new(MonoType::Int(64)),
+        value: ConstValue::Int(5),
+    }];
+    let result = checker.check_const_bounds(&binders, &args);
+    assert!(
+        !result.is_proved(),
+        "Bool(false) constraint should be violated and return Disproved"
     );
 }
