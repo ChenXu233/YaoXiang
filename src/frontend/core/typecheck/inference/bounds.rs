@@ -263,7 +263,7 @@ impl BoundsChecker {
 
         Ok(())
     }
-
+    /// 检查两个函数签名是否兼容（支持方法签名带 self 参数：长度差 1 也视为兼容）
     fn fn_signatures_compatible(
         found_fn: &MonoType,
         constraint_fn: &MonoType,

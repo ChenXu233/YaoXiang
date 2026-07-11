@@ -12,8 +12,6 @@ pub mod types;
 // ✅ 从 checking/ 移入的模块
 pub mod assignment;
 pub mod bounds;
-pub mod compatibility;
-pub mod subtyping;
 
 pub mod patterns;
 
@@ -24,8 +22,6 @@ pub use statements::StatementChecker;
 pub use expressions::ExpressionInferrer;
 pub use assignment::AssignmentChecker;
 pub use assignment::ConstraintAssignmentInfo;
-pub use subtyping::SubtypeChecker;
-pub use compatibility::CompatibilityChecker;
 pub use bounds::BoundsChecker;
 pub use patterns::PatternInferrer;
 

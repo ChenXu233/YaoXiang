@@ -1,8 +1,18 @@
 //! Layer 0：类型等式证明
 //!
+//! ## 内部组织
+//!
+//! ### 纯助手（无 ProofContext）
+//! - `structurally_equal`
+//! - `is_subtype`            ← 新增
+//!
+//! ### 证明入口（需要 ProofContext）
+//! - `check_type_equivalence`
+//!
 //! 检查两个类型是否等价。先做结构等价快速路径，
 //! 再调用 types/eval/ 做确定性归约，将归约结果包装为 ProofResult。
 
+use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::types::eval::evaluator::Evaluator;
 use crate::frontend::core::types::mono::MonoType;
 use super::super::proof::verdict::{DisproofKind, DisproofModel, ProofResult, UnprovenReason};
@@ -75,6 +85,118 @@ pub fn structurally_equal(
     }
 }
 
+/// 检查 A 是否为 B 的子类型（纯函数）
+///
+/// Layer 0 的纯助手。不需要 ProofContext。
+/// env=None 时不查鸭子类型；env=Some(...) 时支持方法绑定查询。
+pub fn is_subtype(
+    sub: &MonoType,
+    sup: &MonoType,
+    env: Option<&TypeEnvironment>,
+) -> bool {
+    match (sub, sup) {
+        (a, b) if a == b => true,
+        // List 协变
+        (MonoType::List(a), MonoType::List(b)) => is_subtype(a, b, env),
+        // 函数：参数逆变 + 返回值协变
+        (
+            MonoType::Fn {
+                params: a_params,
+                return_type: a_ret,
+            },
+            MonoType::Fn {
+                params: b_params,
+                return_type: b_ret,
+            },
+        ) => {
+            let params_ok = a_params.len() == b_params.len()
+                && a_params
+                    .iter()
+                    .zip(b_params.iter())
+                    .all(|(a, b)| is_subtype(b, a, env));
+            let ret_ok = is_subtype(a_ret, b_ret, env);
+            params_ok && ret_ok
+        }
+        // 结构体：若 sup 是约束类型，走鸭子类型
+        (MonoType::Struct(_), MonoType::Struct(_)) if sup.is_constraint() => {
+            satisfies_constraint(sub, sup, env)
+        }
+        (MonoType::Struct(a), MonoType::Struct(b)) => {
+            if a.name != b.name || a.fields.len() != b.fields.len() {
+                return false;
+            }
+            a.fields
+                .iter()
+                .zip(b.fields.iter())
+                .all(|(af, bf)| af.0 == bf.0 && is_subtype(&af.1, &bf.1, env))
+        }
+        // 非结构体对约束类型：尝试鸭子类型
+        (_, MonoType::Struct(_)) if sup.is_constraint() => satisfies_constraint(sub, sup, env),
+        _ => false,
+    }
+}
+
+/// 检查具体类型是否满足约束类型（接口）的方法要求
+///
+/// 鸭子类型：约束类型的每个函数字段都必须在 sub 中存在且签名兼容。
+fn satisfies_constraint(
+    sub: &MonoType,
+    constraint: &MonoType,
+    _env: Option<&TypeEnvironment>,
+) -> bool {
+    let constraint_fields = match constraint {
+        MonoType::Struct(s) => &s.fields,
+        _ => return false,
+    };
+    let sub_fn_fields: Vec<&(String, MonoType)> = match sub {
+        MonoType::Struct(s) => s
+            .fields
+            .iter()
+            .filter(|(_, t)| matches!(t, MonoType::Fn { .. }))
+            .collect(),
+        _ => return false,
+    };
+    for (field_name, constraint_fn) in constraint_fields {
+        let found = sub_fn_fields
+            .iter()
+            .find(|(name, _)| name == field_name)
+            .map(|(_, t)| t);
+        match (found, None::<&MonoType>) {
+            (Some(found_fn), _) => {
+                if !fn_signatures_match(found_fn, constraint_fn) {
+                    return false;
+                }
+            }
+            (None, _) => return false,
+        }
+    }
+    true
+}
+
+/// 检查两个函数签名是否精确匹配（私有助手，仅满足约束用）
+fn fn_signatures_match(
+    a: &MonoType,
+    b: &MonoType,
+) -> bool {
+    match (a, b) {
+        (
+            MonoType::Fn {
+                params: a_params,
+                return_type: a_ret,
+            },
+            MonoType::Fn {
+                params: b_params,
+                return_type: b_ret,
+            },
+        ) => {
+            a_params.len() == b_params.len()
+                && a_params.iter().zip(b_params.iter()).all(|(x, y)| x == y)
+                && a_ret == b_ret
+        }
+        _ => false,
+    }
+}
+
 /// 检查类型等式
 pub fn check_type_equivalence(
     ctx: &ProofContext<'_>,
@@ -86,7 +208,12 @@ pub fn check_type_equivalence(
         return ProofResult::Proved;
     }
 
-    // 2. 确定性归约后比较
+    // 2. 子类型快速路径：双向子类型 ⇒ 等价
+    if is_subtype(lhs, rhs, Some(ctx.env)) && is_subtype(rhs, lhs, Some(ctx.env)) {
+        return ProofResult::Proved;
+    }
+
+    // 3. 确定性归约后比较
     let mut evaluator = Evaluator::new(ctx.env, &ctx.budget);
     match (evaluator.eval(lhs), evaluator.eval(rhs)) {
         (Ok(l), Ok(r)) if l == r => ProofResult::Proved,

@@ -14,7 +14,7 @@ use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::frontend::core::types::MonoType;
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::util::span::Span;
-use super::subtyping::SubtypeChecker;
+use crate::frontend::core::typecheck::layers::equivalence::is_subtype;
 use super::bounds::BoundsChecker;
 
 /// 接口赋值的类型推断信息
@@ -38,7 +38,6 @@ pub enum ConstraintAssignmentInfo {
 
 /// 赋值检查器
 pub struct AssignmentChecker {
-    subtype_checker: SubtypeChecker,
     /// 最近一次接口赋值的推断信息
     last_constraint_info: Option<ConstraintAssignmentInfo>,
 }
@@ -53,7 +52,6 @@ impl AssignmentChecker {
     /// 创建新的赋值检查器
     pub fn new() -> Self {
         Self {
-            subtype_checker: SubtypeChecker::new(),
             last_constraint_info: None,
         }
     }
@@ -130,7 +128,7 @@ impl AssignmentChecker {
         lhs: &MonoType,
         rhs: &MonoType,
     ) -> bool {
-        // 使用子类型检查
-        self.subtype_checker.is_subtype(rhs, lhs)
+        // 使用 Layer 0 的纯子类型判断
+        is_subtype(rhs, lhs, None)
     }
 }
