@@ -665,7 +665,7 @@ impl StatementChecker {
                                 .map(|p| p.name.clone())
                                 .collect();
 
-                            let const_binders: Vec<ConstVarDef> = generic_params
+                            let mut const_binders: Vec<ConstVarDef> = generic_params
                                 .iter()
                                 .filter_map(|p| {
                                     if let GenericParamKind::Const { const_type } = &p.kind {
@@ -699,16 +699,17 @@ impl StatementChecker {
                                 })
                                 .collect();
 
+                            // 从 struct body 提取 const 参数的值约束（如 Assert(N > 0)）
+                            Self::extract_const_constraints(body, &mut const_binders);
+
                             if !type_param_names.is_empty() || !const_binders.is_empty() {
                                 let type_binders: Vec<TypeVar> =
                                     (0..type_param_names.len()).map(TypeVar::new).collect();
-
                                 let poly = PolyType {
                                     type_binders,
                                     const_binders,
                                     body: struct_ty.clone(),
                                 };
-
                                 self.generic_type_defs.insert(
                                     name.to_string(),
                                     GenericTypeDef {
@@ -717,7 +718,6 @@ impl StatementChecker {
                                     },
                                 );
                             }
-
                             return Ok(());
                         }
 
@@ -1597,6 +1597,51 @@ impl StatementChecker {
                     .extend(inferrer.instantiation_requests);
                 result
             }
+        }
+    }
+
+    /// 从 struct body 提取 const 参数的值约束
+    /// 识别 `length: Assert(N > 0)` 模式的字段
+    fn extract_const_constraints(
+        body_stmts: &[Stmt],
+        const_binders: &mut [crate::frontend::core::types::const_data::ConstVarDef],
+    ) {
+        for stmt in body_stmts {
+            if let crate::frontend::core::parser::ast::StmtKind::Var {
+                type_annotation:
+                    Some(crate::frontend::core::parser::ast::Type::Generic { name, args, .. }),
+                ..
+            } = &stmt.kind
+            {
+                if name == "Assert" && !args.is_empty() {
+                    // 尝试从 args[0] 提取约束表达式
+                    // 完整 AST → ConstExpr 转换留待后续
+                    if let Some(const_var) = Self::find_const_var_in_args(&args[0], const_binders) {
+                        use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
+                        // 暂用 Lit(true) 占位，表示约束存在
+                        const_binders[const_var.index()]
+                            .constraints
+                            .push(ConstExpr::Lit(ConstValue::Bool(true)));
+                    }
+                }
+            }
+        }
+    }
+
+    /// 在 AST Type 中查找引用的 const 变量名，返回对应的 ConstVarDef index
+    fn find_const_var_in_args(
+        ast_type: &crate::frontend::core::parser::ast::Type,
+        const_binders: &[crate::frontend::core::types::const_data::ConstVarDef],
+    ) -> Option<crate::frontend::core::types::var::ConstVar> {
+        // 递归查找 AST Type 树中的 Name 引用
+        match ast_type {
+            crate::frontend::core::parser::ast::Type::Name { name, .. } => const_binders
+                .iter()
+                .position(|b| b.name == *name)
+                .map(crate::frontend::core::types::var::ConstVar::new),
+            // 注意：AST 中不存在 Type::BinOp 变体
+            // 二元比较表达式（如 N > 0）的解析留待后续实现
+            _ => None,
         }
     }
 }
