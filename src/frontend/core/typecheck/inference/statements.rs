@@ -1617,11 +1617,10 @@ impl StatementChecker {
                     // 尝试从 args[0] 提取约束表达式
                     // 完整 AST → ConstExpr 转换留待后续
                     if let Some(const_var) = Self::find_const_var_in_args(&args[0], const_binders) {
-                        use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
-                        // 暂用 Lit(true) 占位，表示约束存在
+                        use crate::frontend::core::types::eval::const_eval::ConstExpr;
                         const_binders[const_var.index()]
                             .constraints
-                            .push(ConstExpr::Lit(ConstValue::Bool(true)));
+                            .push(ConstExpr::Bool(true));
                     }
                 }
             }

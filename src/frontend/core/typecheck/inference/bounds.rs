@@ -6,13 +6,14 @@
 //! 支持鸭子类型：检查类型是否满足接口要求的所有方法（包括方法绑定）
 
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition, Result};
-use crate::frontend::core::typecheck::proof::context::ProofContext;
 use crate::frontend::core::typecheck::proof::verdict::DisproofKind;
 use crate::frontend::core::typecheck::proof::verdict::DisproofModel;
 use crate::frontend::core::typecheck::proof::verdict::ProofResult;
 use crate::frontend::core::types::const_data::ConstVarDef;
 use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::TraitTable;
+use crate::frontend::core::types::eval::const_eval::ConstGenericEval;
+use crate::frontend::core::types::ConstValue;
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::util::span::Span;
 
@@ -84,12 +85,11 @@ impl BoundsChecker {
     /// 检查 Const 边界（快慢路径模型）
     ///
     /// Layer 1: 类型匹配 fast path — 直接验证 ConstKind::matches
-    /// Layer 2: 值约束 — proof_ctx 可用时走证明管道（建设中）
+    /// Layer 2: 值约束求值 — ConstGenericEval 求值约束表达式
     pub fn check_const_bounds(
         &self,
         const_binders: &[ConstVarDef],
         const_args: &[MonoType],
-        proof_ctx: Option<&ProofContext<'_>>,
     ) -> ProofResult {
         // Layer 1: 类型匹配（fast path）
         if let Err(diag) = validate_const_args(const_binders, const_args) {
@@ -102,12 +102,33 @@ impl BoundsChecker {
             });
         }
 
-        // Layer 2: 值约束（proof_ctx 可用时）
-        if proof_ctx.is_some() {
-            for (_binder, _arg) in const_binders.iter().zip(const_args.iter()) {
-                for _constraint in &_binder.constraints {
-                    // TODO: proof pipeline integration
-                    // When ready, call ctx's verification method with constraint and binding
+        // Layer 2: 值约束求值
+        for (binder, arg) in const_binders.iter().zip(const_args.iter()) {
+            for constraint in &binder.constraints {
+                let mut eval = ConstGenericEval::new();
+                if let MonoType::Literal { value, .. } = arg {
+                    eval.bind_var(binder.name.clone(), value.clone());
+                }
+                match eval.eval(constraint) {
+                    Ok(ConstValue::Bool(true)) => continue,
+                    Ok(ConstValue::Bool(false)) => {
+                        return ProofResult::Disproved(DisproofModel {
+                            kind: DisproofKind::PredicateViolation,
+                            assignments: Vec::new(),
+                            constraint: format!("const 参数 `{}` 不满足约束", binder.name),
+                            span: None,
+                            predicate_span: None,
+                        });
+                    }
+                    Ok(_) | Err(_) => {
+                        return ProofResult::Disproved(DisproofModel {
+                            kind: DisproofKind::PredicateViolation,
+                            assignments: Vec::new(),
+                            constraint: format!("无法验证 const 参数 `{}` 的约束", binder.name),
+                            span: None,
+                            predicate_span: None,
+                        });
+                    }
                 }
             }
         }
@@ -124,7 +145,7 @@ impl BoundsChecker {
         const_args: &[MonoType],
     ) -> Result<()> {
         self.check_trait_bounds(ty, trait_bounds)?;
-        let result = self.check_const_bounds(const_binders, const_args, None);
+        let result = self.check_const_bounds(const_binders, const_args);
         result.into_result()
     }
 
