@@ -5,6 +5,9 @@ author: "晨煦"
 created: "2026-06-15"
 updated: "2026-07-05"
 decision: "方案 A — native 函数。20 行实现，一等公民，零语法变更。方案 B 的编译期优势在当前阶段是理论性的。"
+issue: "#97"
+issues_impl:
+  - "#155"
 ---
 
 # RFC-030: assert 断言机制
