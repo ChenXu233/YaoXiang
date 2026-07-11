@@ -417,6 +417,8 @@ pub struct ConstVarDef {
     pub kind: ConstKind,
     /// 变量索引
     pub index: usize,
+    /// 值约束表达式（如 N > 0），空 vec = 无约束
+    pub constraints: Vec<ConstExpr>,
 }
 
 impl ConstVarDef {
@@ -426,7 +428,12 @@ impl ConstVarDef {
         kind: ConstKind,
         index: usize,
     ) -> Self {
-        ConstVarDef { name, kind, index }
+        ConstVarDef {
+            name,
+            kind,
+            index,
+            constraints: vec![],
+        }
     }
 }
 
