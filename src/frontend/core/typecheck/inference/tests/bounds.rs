@@ -9,6 +9,7 @@
 
 use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
 use crate::frontend::core::types::{MonoType, StructType, TraitTable};
+use crate::frontend::core::types::const_data::ConstVarDef;
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use std::collections::HashMap;
 
@@ -72,9 +73,10 @@ fn test_check_generic_bounds() {
     let ty = MonoType::Int(32);
     let trait_bounds = vec!["Clone".to_string()];
     let const_bounds: Vec<MonoType> = vec![];
+    let const_binders: Vec<ConstVarDef> = vec![];
 
     // Act
-    let result = checker.check_generic_bounds(&ty, &trait_bounds, &const_bounds);
+    let result = checker.check_generic_bounds(&ty, &trait_bounds, &const_binders, &const_bounds);
 
     // Assert
     assert!(
