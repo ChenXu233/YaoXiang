@@ -589,14 +589,14 @@ fn test_format_rejects_semantic_error() {
 #[test]
 fn test_format_valid_code() {
     let result = format_source("x = 1", &default_options()).unwrap();
-    assert_eq!(result, "x = 1\n");
+    assert_eq!(result, "x = 1\n", "合法代码格式化后应保持规范输出");
 }
 
 #[test]
 fn test_format_idempotent_valid() {
     let formatted = format_source("x=1", &default_options()).unwrap();
     let formatted2 = format_source(&formatted, &default_options()).unwrap();
-    assert_eq!(formatted, formatted2);
+    assert_eq!(formatted, formatted2, "两次格式化结果应一致");
 }
 
 #[test]
@@ -604,5 +604,5 @@ fn test_format_no_verify() {
     let mut opts = default_options();
     opts.verify = false;
     let result = format_source("x = 1", &opts);
-    assert!(result.is_ok());
+    assert!(result.is_ok(), "no-verify 模式下合法代码应正常通过");
 }

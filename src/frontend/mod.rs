@@ -90,3 +90,6 @@ pub use compiler::CompileError;
 // 事件类型
 pub use events::*;
 pub use validate::{validate_source, ValidateResult};
+
+#[cfg(test)]
+mod tests;
