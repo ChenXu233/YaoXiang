@@ -152,12 +152,12 @@ fn test_format_cast() {
 
 #[test]
 fn test_format_syntax_error_returns_error() {
-    let source = "let x = ;";
+    let source = "let x = 1";
     let result = crate::formatter::format_source(source, &FormatOptions::default());
-    // 注：解析器可能将 "let x = ;" 解析为有效语句（let 不是关键字）
-    // 如果解析器没有产生错误，这个测试可能需要调整
-    // assert!(result.is_err(), "Should return error on syntax error");
-    let _ = result;
+    assert!(matches!(
+        result,
+        Err(crate::formatter::FormatError::Semantic(_))
+    ));
 }
 
 #[test]
