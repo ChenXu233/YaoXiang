@@ -873,6 +873,7 @@ impl TypeConstraintSolver {
             "String" | "string" | "str" => Some(MonoType::String),
             "Bytes" | "bytes" => Some(MonoType::Bytes),
             "Void" | "void" | "()" => Some(MonoType::Void),
+            "Never" | "never" => Some(MonoType::Never),
             _ => None,
         }
     }

@@ -121,6 +121,7 @@ impl StatementChecker {
                     "Char" | "char" => return MonoType::Char,
                     "String" | "string" => return MonoType::String,
                     "Void" | "void" | "()" => return MonoType::Void,
+                    "Never" | "never" => return MonoType::Never,
                     _ => {}
                 }
                 // Check type_defs for user-defined types
