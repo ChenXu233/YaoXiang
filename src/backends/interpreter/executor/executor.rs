@@ -834,7 +834,7 @@ impl Interpreter {
         tlog!(
             debug,
             MSG::DebugExecBinaryOp,
-            &format!("{:?}, {:?}, {:?}", &a, &b, &op)
+            &format!("{:?}, {:?}, {:?}", a, b, op)
         );
 
         let result = match (op, a, b) {
