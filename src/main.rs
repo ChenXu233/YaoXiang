@@ -146,15 +146,19 @@ enum Commands {
         #[arg(value_name = "PATH")]
         file: PathBuf,
 
-        /// Check if files are formatted without modifying them
-        #[arg(short, long)]
-        check: bool,
+        /// Dry-run mode: show formatting diff without writing
+        #[arg(short = 'n', long)]
+        dry_run: bool,
 
         /// Write formatted output back to file(s) in place
-        #[arg(short, long)]
+        #[arg(short = 'w', long)]
         write: bool,
 
-        /// Output to stdout (default when neither --write nor --check)
+        /// Skip post-format verification (performance optimization)
+        #[arg(long)]
+        no_verify: bool,
+
+        /// Output to stdout (default when neither --dry-run nor --write)
         #[arg(long)]
         stdout: bool,
 
@@ -416,8 +420,9 @@ fn main() -> Result<()> {
         }
         Commands::Format {
             file,
-            check,
+            dry_run,
             write,
+            no_verify,
             stdout: _,
             indent,
             line_width,
@@ -474,7 +479,12 @@ fn main() -> Result<()> {
                 options.single_quote = true;
             }
 
-            let result = match run_format_command(&file, &options, check, write) {
+            // 6. Apply CLI overrides
+            if no_verify {
+                options.verify = false;
+            }
+
+            let result = match run_format_command(&file, &options, dry_run, write) {
                 Ok(result) => result,
                 Err(e) => {
                     eprintln!("{}", e);
@@ -484,8 +494,8 @@ fn main() -> Result<()> {
                     return Err(e);
                 }
             };
-            if check && result.needs_formatting {
-                ::std::process::exit(1);
+            if dry_run && result.needs_formatting {
+                ::std::process::exit(2);
             }
         }
         Commands::Dump { file } => {

@@ -9,7 +9,7 @@
 //!   §14  导入语句 — 排序(§14.1)/组内排序(§14.2)/注释跟随
 //!   §6   代码块  — 空块(§6.1)/单行(§6.2)/多行(§6.3)
 
-use yaoxiang::formatter::{format_source, FormatOptions};
+use yaoxiang::formatter::{format_source, FormatError, FormatOptions};
 
 fn default_options() -> FormatOptions {
     FormatOptions::default()
@@ -90,7 +90,7 @@ fn test_format_dict_literal() {
 #[test]
 fn test_format_long_line_wraps() {
     let source =
-        "x = very_long_variable_name + another_long_name + yet_another_long_name + and_one_more;";
+        "x: i64 = 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10 + 11 + 12 + 13 + 14 + 15 + 16 + 17 + 18 + 19 + 20 + 21 + 22 + 23 + 24 + 25 + 26 + 27 + 28 + 29 + 30";
     let result = format_source(source, &default_options()).unwrap();
     assert!(result.contains('\n'), "Long line should be wrapped");
 }
@@ -192,14 +192,14 @@ fn test_format_for_loop_body_comment_preserved() {
 }
 
 #[test]
-fn test_format_while_loop_body_comment_preserved() {
-    // 规范 §C2.2: while 循环体内的注释必须保留
+fn test_format_block_comment_in_if_body() {
+    // 规范 §C2.2: if 体内的注释必须保留
     // RFC-010: x: Int = 1 语法
-    let source = "while true {\n    // while comment\n    x: Int = 1\n}\n";
+    let source = "if true {\n    // block comment\n    x: Int = 1\n}\n";
     let result = format_source(source, &default_options()).unwrap();
     assert!(
-        result.contains("// while comment"),
-        "Comment in while loop body should be preserved: {}",
+        result.contains("// block comment"),
+        "Comment in if body should be preserved: {}",
         result
     );
 }
@@ -575,4 +575,34 @@ helper: () -> Int = {
         result, re_result,
         "Format should be idempotent for source with function body comments"
     );
+}
+
+#[test]
+fn test_format_rejects_semantic_error() {
+    let result = format_source("let x = 1", &default_options());
+    assert!(
+        matches!(result, Err(FormatError::Semantic(_))),
+        "should reject semantic error"
+    );
+}
+
+#[test]
+fn test_format_valid_code() {
+    let result = format_source("x = 1", &default_options()).unwrap();
+    assert_eq!(result, "x = 1\n", "合法代码格式化后应保持规范输出");
+}
+
+#[test]
+fn test_format_idempotent_valid() {
+    let formatted = format_source("x=1", &default_options()).unwrap();
+    let formatted2 = format_source(&formatted, &default_options()).unwrap();
+    assert_eq!(formatted, formatted2, "两次格式化结果应一致");
+}
+
+#[test]
+fn test_format_no_verify() {
+    let mut opts = default_options();
+    opts.verify = false;
+    let result = format_source("x = 1", &opts);
+    assert!(result.is_ok(), "no-verify 模式下合法代码应正常通过");
 }
