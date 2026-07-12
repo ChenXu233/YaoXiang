@@ -18,25 +18,26 @@ Curry-Howard 同构（Curry-Howard correspondence）是 YaoXiang 类型系统的
 | 合取 \(P \wedge Q\) | 积类型 `{ a: P, b: Q }` |
 | 析取 \(P \vee Q\) | 和类型 `{ a(P) \| b(Q) }` |
 | 全称量化 \(\forall x:T. P(x)\) | 泛型 `(T: Type) -> ...` |
-| 真 \(\top\) | 空类型 `{}` |
-| 假 \(\bot\) | `Void` / `Never` |
+| 真 \(\top\) | `Void`（Unit，有默认值） |
+| 假 \(\bot\) | `Never`（零构造子，无任何值可居留） |
 | 类型宇宙 \(Type_n : Type_{n+1}\) | 宇宙分层（防 Russell 悖论） |
-| 数学归纳法 | 类型级 `match` |
+| case 分析 | 类型级 `match` |
+
+> **注意**：类型级 `match` 是分类讨论（case analysis），不是数学归纳法。归纳法需要类型级递归函数 + 编译器终止性检查。
 
 ### 0.2 类型即命题，程序即证明
 
 在 YaoXiang 中，这一对应关系是设计的一等原则：
 
-- **一个类型就是一个逻辑命题**。`Int` 是"整数存在"的命题，`fn(a: Int, b: Int) -> Int` 是"给定两个整数，存在一个整数"的命题。
+- **终止的类型级计算对应正确的构造性证明**。YaoXiang 的类型族（如 `Add` 在 `Nat` 上的 case 分析 + 递归调用）本质上是数学归纳法的类型级编码——前提是编译器能做终止性检查。
 - **类型检查就是验证证明**。当一个程序通过类型检查，相当于一个逻辑命题被构造性证明。
-- **终止的类型级计算对应正确的归纳推理**。YaoXiang 的类型族（如 `Add` 在 `Nat` 上的模式匹配）本质上是数学归纳法的类型级编码。
 
 ### 0.3 对语言设计的影响
 
 Curry-Howard 同构在 YaoXiang 中的具体体现：
 
 1. **宇宙分层**（RFC-010）：`Type₀ : Type₁ : Type₂ …` 避免 `Type: Type` 导致的逻辑悖论（Girard 悖论）
-2. **类型族**（RFC-011）：自然数 `Nat(Zero/Succ)` 的类型级模式匹配对应 Peano 公理下的归纳证明
+2. **类型族**（RFC-011）：自然数 `Nat(Zero/Succ)` 的类型级 case 分析 + 递归调用对应 Peano 公理——前提是编译器做终止性检查
 3. **条件类型**（RFC-011）：`If: (C: Bool, T: Type, E: Type) -> Type` 对应逻辑中的 case 析取
 4. **值依赖类型**（RFC-011）：`Vec: (n: Int) -> Type` 对应"对每个整数 n 存在一个类型"的有穷量化
 
@@ -65,21 +66,36 @@ TypeExpr    ::= PrimitiveType
 ## 第二章：基本类型
 
 ### 2.1 原类型
-
-| 类型 | 描述 | 默认大小 |
-|------|------|----------|
-| `Type` | 元类型 | 0 字节 |
-| `Void` | 空值 | 0 字节 |
-| `Bool` | 布尔值 | 1 字节 |
-| `Int` | 有符号整数 | 8 字节 |
-| `Uint` | 无符号整数 | 8 字节 |
-| `Float` | 浮点数 | 8 字节 |
-| `String` | UTF-8 字符串 | 可变 |
-| `Char` | Unicode 字符 | 4 字节 |
-| `Bytes` | 原始字节 | 可变 |
+| 类型 | 逻辑对应 | 描述 | 默认大小 |
+|------|---------|------|----------|
+| `Type` | — | 元类型 | 0 字节 |
+| `Never` | ⊥（假/空类型） | 零构造子，无任何值。发散/panic 返回类型。`Never <: T` 对任意 T 成立。 | 0 字节 |
+| `Void` | ⊤（真/Unit） | 有默认 void 值，零字段积类型。`x: Void = <默认>` 合法。 | 0 字节 |
+| `Bool` | — | 布尔值：`true` / `false` | 1 字节 |
+| `Int` | — | 有符号整数 | 8 字节 |
+| `Uint` | — | 无符号整数 | 8 字节 |
+| `Float` | — | 浮点数 | 8 字节 |
+| `String` | — | UTF-8 字符串 | 可变 |
+| `Char` | — | Unicode 字符 | 4 字节 |
+| `Bytes` | — | 原始字节 | 可变 |
 
 带位宽的整数：`Int8`, `Int16`, `Int32`, `Int64`, `Int128`
 带位宽的浮点：`Float32`, `Float64`
+
+### 2.2 Never 与 Void：⊥ 与 ⊤
+
+`Never` 和 `Void` 是类型系统的逻辑基元——分别对应假（⊥）和真（⊤）。
+
+**Never（⊥，假/空类型）** — 三条不可协商的性质：
+
+1. **零构造子**：无任何字面量或表达式能产生 `Never` 类型的值。`x: Never = ...` 无右边可写。
+2. **爆炸原理**：`Never <: T` 对任意类型 `T` 成立。`assert(false)` 返回 `Never`，之后代码可通过类型检查（虽然永不执行到）。
+3. **发散标记**：`f: (...) -> Never` 表示 `f` 保证不返回。编译器据此做 dead code 分析和 `match` 分支合流。
+
+`Never` 是内建类型名（与 `Int`/`Bool` 相同注册路径），不是关键字。
+
+**Void（⊤，真/Unit）** — 恰好一个居留者（默认 void 值）。`Void` 是零字段积类型的幺元。`x: Void = <默认>` 合法，函数默认无 `return` 时返回 `Void`。
+
 
 ---
 
@@ -466,14 +482,13 @@ If: (C: Bool, T: Type, E: Type) -> Type = match C {
 
 // 示例：编译期分支
 NonEmpty: (T: Type) -> Type = If(T != Void, T, Never)
-
-// 编译期验证
-Assert: (C: Bool) -> Type = match C {
-    True => Void,
-    False => compile_error("Assertion failed")
+# IsTrue 桥接与 Assert 精化类型（详见 §8.3）
+IsTrue: (b: Bool) -> Type = match b {
+    true => Void,      # ⊤，程序继续
+    false => Never,    # ⊥，发散/编译错误
 }
+Assert: (cond: Bool) -> Type = IsTrue(cond)
 ```
-
 ### 8.2 类型族
 
 ```yaoxiang
@@ -485,6 +500,32 @@ AsString: (T: Type) -> Type = match T {
     _ => String
 }
 ```
+
+
+### 8.3 Assert 精化类型与 assert 断言
+
+`assert` 和 `Assert` 是同一精化原语的两面——由 dispatch 分派管道按"谓词自由变量编译期是否可及"自动选择。
+
+**核心签名**：`assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))`
+
+**dispatch 分派规则**：
+
+| 判据 | 模式 | 行为 |
+|------|------|------|
+| 所有自由变量编译期已知（泛型参数、编译期常量） | CompileTime | 进证明管道：true → 擦除为 Void，false → 编译错误（Never 不可居留） |
+| 存在运行时自由变量（函数参数、外部输入） | Runtime | 插入运行时 Bool 检查，向流敏感假设集 Γ 注入精化事实 |
+
+**流敏感假设集 Γ**：
+
+编译器维护每个控制流点的已知命题集合：
+
+```yaoxiang
+assert(x > 0)       # Γ = {x > 0}
+y = x + 1           # Γ = {x > 0, y > 1}  ← SP 传播
+mut x = x - 5       # Γ = {}  ← mut kill set：旧假设失效
+```
+
+`mut` 变量赋值后，涉及该变量的所有假设被移除（kill set）。分支合流时 Γ 取各分支交集。
 
 ---
 
