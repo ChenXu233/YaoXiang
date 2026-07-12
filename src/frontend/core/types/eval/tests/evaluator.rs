@@ -254,3 +254,69 @@ fn test_type_evaluator_eval_void_type() {
         "eval Void type should return Value(Void)"
     );
 }
+
+// ===================================================================
+// IsTrue/Assert 类型族测试
+// ===================================================================
+
+#[test]
+fn test_istrue_true_evaluates_to_void() {
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut evaluator = Evaluator::new(&env, &budget);
+
+    let ty = MonoType::TypeRef("IsTrue(true)".to_string());
+    let result = evaluator.eval(&ty);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), MonoType::Void);
+}
+
+#[test]
+fn test_istrue_false_evaluates_to_never() {
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut evaluator = Evaluator::new(&env, &budget);
+
+    let ty = MonoType::TypeRef("IsTrue(false)".to_string());
+    let result = evaluator.eval(&ty);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), MonoType::Never);
+}
+
+#[test]
+fn test_istrue_unknown_preserves_expression() {
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut evaluator = Evaluator::new(&env, &budget);
+
+    let ty = MonoType::TypeRef("IsTrue(x)".to_string());
+    let result = evaluator.eval(&ty);
+    assert!(result.is_ok());
+    // x 不可归约，所以保持不变
+    assert_eq!(result.unwrap(), ty);
+}
+
+#[test]
+fn test_assert_true_evaluates_to_void() {
+    // Assert(true) 内部委托给 IsTrue(true)，应归约为 Void
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut evaluator = Evaluator::new(&env, &budget);
+
+    let ty = MonoType::TypeRef("Assert(true)".to_string());
+    let result = evaluator.eval(&ty);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), MonoType::Void);
+}
+
+#[test]
+fn test_assert_false_evaluates_to_never() {
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut evaluator = Evaluator::new(&env, &budget);
+
+    let ty = MonoType::TypeRef("Assert(false)".to_string());
+    let result = evaluator.eval(&ty);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), MonoType::Never);
+}
