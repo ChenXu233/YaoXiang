@@ -4,6 +4,7 @@ status: "草案"
 author: "晨煦"
 created: "2026-07-06"
 updated: "2026-07-06"
+issue: "#164"
 ---
 
 # RFC-034: 统一调试工具链
