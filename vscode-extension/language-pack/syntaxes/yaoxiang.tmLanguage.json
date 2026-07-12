@@ -44,12 +44,24 @@
     "builtins": {
       "patterns": [
         {
-          "name": "support.function.yaoxiang",
-          "match": "\\b(Type|true|false|void)\\b"
+          "name": "support.type.yaoxiang",
+          "match": "\\bType\\b"
+        },
+        {
+          "name": "constant.language.boolean.yaoxiang",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.yaoxiang",
+          "match": "\\bvoid\\b"
+        },
+        {
+          "name": "support.type.yaoxiang",
+          "match": "\\b(Maybe|Result)\\."
         },
         {
           "name": "support.function.yaoxiang",
-          "match": "\\b(Maybe\\.|Result\\.|Some\\(|Ok\\(|Err\\()"
+          "match": "\\b(Some|Ok|Err)\\("
         }
       ]
     },

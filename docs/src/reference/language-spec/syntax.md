@@ -40,10 +40,12 @@ break  continue as     in     unsafe
 | `Type` | Type | 元类型 |
 | `true` | Bool | 布尔真值 |
 | `false` | Bool | 布尔假值 |
-| `void` | Void | 空值 |
+| `void` | Void | Unit / 真 ⊤，有默认值 |
 | `some(T)` | Option | Option 值变体 |
 | `ok(T)` | Result | Result 成功变体 |
 | `err(E)` | Result | Result 错误变体 |
+
+> **注意**：`Never`（⊥，假/空类型）是内建类型名，无对应字面量——无任何表达式能产生 `Never` 类型的值。
 
 ### 1.5 标识符
 
