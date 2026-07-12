@@ -758,6 +758,21 @@ identity_matrix: (T: Add + Zero + One, N: Int)(size: N) -> Matrix(T, N, N) = {
 identity_3x3: Matrix(Float, 3, 3) = identity_matrix(Float, 3)(3)
 ```
 
+
+### Never 与 Void：类型系统的 ⊥ 与 ⊤
+
+YaoXiang 的类型系统在 Curry-Howard 同构中同时具备 ⊥（假/空类型）和 ⊤（真/Unit），以 `Never` 和 `Void` 两个内建类型名承载：
+
+**Never（⊥）** — 三条不可协商的内核性质：
+
+1. **零构造子**：无任何字面量或表达式能产生 `Never` 类型的值。这是元级性质，必须内建。
+2. **爆炸原理**：`Never <: T` 对任意类型 `T` 成立。一个 `Never` 值可被当作任何类型使用——这正是 `assert(false)` 之后代码仍通过类型检查的原因（虽然永不执行到）。
+3. **发散标记**：`f: (...) -> Never` 表示 `f` 保证不返回。编译器据此做 dead code 分析。
+
+`Never` 是内建类型名，不是关键字，parser 无感。不开放空和类型字面量语法。
+
+**Void（⊤，即 Unit）** — 恰好一个居留者（默认 void 值），是真命题"恒真"的载体。`Void` 是零字段积类型的幺元，`Never` 是零变体和类型的幺元——二者对偶。`x: Void = <默认>` 合法，`x: Never = ...` 无右边可写。
+
 #### 4.3 编译期验证（标准库实现）
 
 ```yaoxiang
@@ -765,13 +780,21 @@ identity_3x3: Matrix(Float, 3, 3) = identity_matrix(Float, 3)(3)
 # 标准库实现：利用条件类型
 # ════════════════════════════════════════════════════════
 
-# 标准库定义：Assert[C] 是一个类型
-# - C 为 True 时，推导为 Void
-# - C 为 False 时，推导为 compile_error("Assertion failed")
-Assert: (C: Type) -> Type = match C {
-    True => Void,
-    False => compile_error("Assertion failed"),
+# 标准库定义
+# IsTrue：值宇宙到类型宇宙的桥——Bool 真值映射为类型
+IsTrue: (b: Bool) -> Type = match b {
+    true => Void,      # ⊤，有值，程序继续
+    false => Never,    # ⊥，无值，发散
 }
+
+# Assert：编译期精化类型原语——对 Bool 命题的类型级表述
+Assert: (cond: Bool) -> Type = IsTrue(cond)
+#
+# cond 为 true  → Assert(true)  = Void    （恒真，擦除）
+# cond 为 false → Assert(false) = Never   （恒假，编译错误/发散）
+# cond 判不了   → 由证明管道按 dispatch 模式决定：
+#                  CompileTime → Unknown，要求 prove
+#                  Runtime     → 插入 check，注入 Γ 假设
 
 # 使用方式1：在类型定义中作为约束
 Array: (T: Type, N: Int) -> Type = {
@@ -831,11 +854,8 @@ NonEmpty: (T: Type) -> Type = If(T != Void, T, Never)
 
 Optional: (T: Type) -> Type = If(T != Void, T, Void)
 
-# 编译期验证
-Assert: (C: Bool) -> Type = match C {
-    True => Void,
-    False => compile_error("Assertion failed"),
-}
+# 编译期验证（统一到 §4.3 的 Assert 定义）
+# Assert: (cond: Bool) -> Type = IsTrue(cond)
 
 # 使用
 # 类型计算：If(True, Int, String) => Int
@@ -863,7 +883,7 @@ Length: (T: Type) -> Type = match T.length {
     _ => TooLong,
 }
 
-# 类型级加法（Curry-Howard：这也是自然数加法的归纳定义）
+# 类型级加法（Curry-Howard：case analysis + 递归调用，需要终止性检查才是完整归纳）
 Add: (A: Type, B: Type) -> Type = match (A, B) {
     (Zero, B) => B,
     (Succ(A'), B) => Succ(Add(A', B)),

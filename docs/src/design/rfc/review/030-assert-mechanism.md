@@ -14,7 +14,7 @@ issues_impl:
 
 ## 摘要
 
-为 YaoXiang 引入 `assert` 断言机制，用于测试和前置条件检查。`assert` 是 YaoXiang 唯一的运行时 panic 机制——不需要单独的 `raise`/`throw` 关键字。编译期条件类型 `Assert(C)` 是另一个独立功能（见 RFC-011 §4.3），放在 `std.assert` 同一模块下，但语义和实现完全分开。
+为 YaoXiang 引入 `assert` 断言机制，用于测试、前置条件检查和运行时 panic。`assert` 和编译期精化类型 `Assert(C)`（见 RFC-011 §4.3）是**同一个精化原语的两面**——由 dispatch 按"谓词自由变量编译期是否可及"自动分派为编译期证明或运行时检查。`assert(false, "msg")` 等同于 `raise`，不需要单独的 `throw`/`raise` 关键字。
 
 ## 动机
 
@@ -67,12 +67,21 @@ main = {
 `assert` 有两个重载：
 
 ```
-// 重载 1：条件断言
-assert(cond: Bool, ?msg: String | Error)
-
-// 重载 2：Result 断言
-assert(cond: Result)
+// 核心签名：assert 是 Assert 的值宇宙引入子
+assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))
+//                                       ^^^^^^^^^^^^^^^^^^^^^^^^
+//                                       返回精化类型，不是 ()
+//
+// IsTrue: Bool -> Type 是真值到类型的桥：
+//   IsTrue(true)  = Void   (⊤，程序继续)
+//   IsTrue(false) = Never  (⊥，发散/编译错误)
 ```
+
+`assert` 的实际行为由 dispatch 分派决定：
+- 所有自由变量编译期已知 → **CompileTime**：编译器求值 cond，true → 擦除为 Void，false → 编译错误（Never 不可居留）
+- 存在运行时自由变量 → **Runtime**：插入 check，向流敏感假设集 Γ 注入精化事实
+
+可选消息 `?msg` 和 Result 重载（见下方）作为运行时 raise 载荷保留。
 
 #### 重载 1：条件断言 `(Bool, ?String | Error)`
 
@@ -121,24 +130,28 @@ assert(x > 0, my_error)                // 直接抛 Error 值
 
 ### 与编译期 Assert 的关系
 
-`std.assert` 模块包含两个完全独立的功能：
+`assert` 和 `Assert` 是**同一个精化原语的两面**——由 dispatch 分派管道按"谓词自由变量编译期是否可及"自动选择：
 
-| 功能 | 类型 | 命名 | 时机 | 失败行为 | 运行时开销 |
-|------|------|------|------|----------|-----------|
-| 运行时断言 | 函数 | `assert()` | 运行时 | panic + 调用栈 | 始终存在 |
-| 编译期条件类型 | 类型 | `Assert(C)` | 编译期 | 编译报错 | 零 |
+| 条件 | 分派 | 行为 |
+|------|------|------|
+| 所有自由变量编译期已知 | CompileTime → 证明管道 | Proved → 擦除，Disproved → 编译错误，Unknown → 要求证明 |
+| 存在运行时自由变量 | Runtime → 插入 check | Bool 检查 + 向流敏感假设集 Γ 注入精化事实 |
 
 ```yaoxiang
 use std.assert
 
-// 运行时 assert：测试用，检查运行时的值
-assert.assert(result == 42, "expected 42")
+# 编译期已知（泛型参数）—— 走 CompileTime，零运行时开销
+Array: (T: Type, N: Int) -> Type = {
+    data: Array(T, N),
+    length: assert.Assert(N > 0),   # N 是泛型参数，编译期求值
+}
 
-// 编译期 Assert：精化类型，验证泛型参数
-length: assert.Assert(N > 0)
+# 运行时值 —— 走 Runtime，插入 Bool 检查
+x = read_int()
+assert.assert(x > 0, "expected positive")  # 运行时 check
 ```
 
-两者放在同一模块是因为都是"断言"概念的不同表现，但实现完全独立。`assert()` 不需要 `Assert(C)`，反之亦然。
+> **2026-07-12 统一方案**：此前的"完全独立"结论已被取代。`assert()` 是 `Assert` 的值引入子，dispatch 自动分派。
 
 ### 编译器改动
 
@@ -159,14 +172,12 @@ length: assert.Assert(N > 0)
 
 ### 缺点
 
-- 编译期不可知：与方案 B（关键字）不同，无法在编译期做死代码消除
+- ~~编译期不可知：与方案 B（关键字）不同，无法在编译期做死代码消除~~ → **在统一方案下已不成立**。CompileTime 模式的 assert 走证明管道，编译期已知的 cond → 擦除或编译错误（`assert(false)` → Never → 死代码）。
 - debug 模式下才能获取调用栈
 
-## 方案 B：内置关键字
+## 方案 B：内置关键字（已被统一方案取代）
 
-> 已弃用，仅作历史记录。
-
-以 `assert` 关键字实现，编译期可获取源码位置和常量折叠。
+> 已弃用。方案 A 和 B 的对立被 dispatch 分派管道消解——assert 是 Assert 的值引入子，编译期已知走证明管道（零运行时开销），运行时走 check。不需要在"函数"和"关键字"之间二选一。以下为历史记录。
 
 ```yaoxiang
 assert(1 + 1 == 2, "math is broken")
@@ -224,18 +235,24 @@ YaoXiang 当前没有常量折叠 pass。即使采用方案 B，`assert(x > 0)` 
 
 ## 开放问题
 
-- [x] ~~选择方案 A 还是方案 B？~~ → **方案 A：native 函数**
+- [x] ~~选择方案 A 还是方案 B？~~ → **统一方案：assert 是 Assert 的值引入子**。方案 A 和 B 的对立被 dispatch 分派管道消解——编译期已知走证明管道，运行时走 check。不需要"二选一"。
 - [x] ~~`assert` 是否需要支持不带 `message` 的简化形式 `assert(cond)` ？~~ → **支持。`assert(cond, ?msg)`，message 可选。**
 - [x] ~~是否需要 `assert_eq`、`assert_ne` 等变体？~~ → **不需要。YAGNI。等测试框架成型再说。**
 - [x] ~~panic 输出是否包含源码位置？~~ → 方案 A 依赖 debug info（调用栈）。
-- [ ] ~~assert / Assert 统一问题~~ → **已拆出为独立讨论 #156**。理想状态是 `assert: (cond: Bool) -> Assert(cond)` 让两者统一，但 `Assert(C)` 作为精化类型要求 `C` 编译期可知，与运行时断言冲突。详见 [#156](https://github.com/ChenXu233/YaoXiang/issues/156)。
----
+- [x] ~~assert / Assert 统一问题~~ → **已确定**。统一方案：`assert: (Bool) -> Assert(IsTrue(cond))`，一体两面，dispatch 自动分派。详见 [#156](https://github.com/ChenXu233/YaoXiang/issues/156)（已关闭）。`Never` 类型（⊥）作为 `assert(false)` 的返回类型内建。
 
-## 附录 A：设计讨论记录
+### 2026-07-05：选择方案 A（已被统一方案取代）
 
-### 2026-07-05：选择方案 A
+方案 A 的 20 行实现在价值和成本上胜出。2026-07-12 统一方案确定后，方案 A/B 的对立被 dispatch 分派管道消解——assert 是 Assert 的值引入子，不再在"函数"和"关键字"之间二选一。
 
-方案 A 的 20 行实现在价值和成本上胜出。方案 B 的编译期优势在无常量折叠 pass 的当下是理论性的。
+### 2026-07-12：统一方案确定（取代 2026-07-11 的"完全独立"结论）
+
+**结论**：`assert` 和 `Assert` 不是两个独立机制。`assert: (Bool) -> Assert(IsTrue(cond))` ——由 dispatch 自动分派：
+
+- 编译期已知 → 进证明管道（Proved 擦除 / Disproved 错误 / Unknown 要证明）
+- 运行时输入 → 插入 check + 注入 Γ 假设
+
+**模块结构**：`std.assert` 统一承载运行时断言（`assert`）和编译期精化类型（`Assert`、`IsTrue`）。不再"分开实现"，而是同一原语的两面。
 
 ### 2026-07-11：assert 重载设计
 
@@ -250,24 +267,15 @@ YaoXiang 当前没有常量折叠 pass。即使采用方案 B，`assert(x > 0)` 
 
 Result 重载的合理性在于：这是错误传播最短的路径——"Result 应当为 Ok，否则死"。不需要先 `.is_ok()` 再单独处理错误。
 
-### 2026-07-11：std.assert 模块结构
-
-`std.assert` 包含两个功能：
-
-- `assert()`：运行时断言函数（本 RFC）
-- `Assert(C)`：编译期条件类型（RFC-011 §4.3，#155）
-
-两者放在同一模块，因为都是"断言"概念的不同表现。作为命名空间，`std.assert` 自文档——开发者看到 `use std.assert` 就知道这里引入了断言相关功能。
-
 ## 附录 B：设计决策记录
 
 | 决策 | 决定 | 日期 | 记录人 |
 |------|------|------|--------|
-| 选择方案 A 还是方案 B | **方案 A：native 函数** — 20 行实现，一等公民，零语法变更。方案 B 编译期优势在当前阶段是理论性的 | 2026-07-03 | 晨煦 |
+| 选择方案 A 还是方案 B | **统一方案**：dispatch 分派管道消解 A/B 对立，assert 是 Assert 的值引入子 | 2026-07-12 | 晨煦 |
 | message 是否可选 | **是**：`assert(cond, ?msg)`，String 或 Error | 2026-07-11 | 晨煦 |
 | 是否需要 assert_eq 等变体 | **不需要**。YAGNI，等测试框架再说 | 2026-07-11 | 晨煦 |
 | 是否需要单独的 raise/throw 关键字 | **不需要**。`assert(false, msg)` 等价于 raise | 2026-07-11 | 晨煦 |
-| assert 和 Assert 的关系 | **完全独立**。运行时函数 vs 编译期条件类型，同一模块不同概念 | 2026-07-11 | 晨煦 |
+| assert 和 Assert 的关系 | **一体两面**。`assert: (Bool) -> Assert(IsTrue(cond))`，dispatch 自动分派 | 2026-07-12 | 晨煦 |
 
 ## 参考文献
 
