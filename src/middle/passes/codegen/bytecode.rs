@@ -612,6 +612,7 @@ impl MonoTypeExt for MonoType {
             MonoType::Refined { base, .. } => base.to_type_id(),
             MonoType::DepFn { .. } => 30, // 依赖函数类型，与普通函数同ID
             MonoType::LibraryRef { .. } | MonoType::ExternRef { .. } => todo!(),
+            MonoType::Never => 0, // Never 无运行时表示
         }
     }
 }

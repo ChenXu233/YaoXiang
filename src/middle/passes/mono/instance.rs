@@ -159,6 +159,7 @@ fn type_name_hash<H: Hasher>(
 ) {
     match ty {
         MonoType::Void => "void".hash(state),
+        MonoType::Never => "never".hash(state),
         MonoType::Bool => "bool".hash(state),
         MonoType::Int(n) => format!("int{}", n).hash(state),
         MonoType::Float(n) => format!("float{}", n).hash(state),
