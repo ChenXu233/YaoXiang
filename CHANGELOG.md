@@ -1,154 +1,149 @@
-## 📦 版本信息
+# 📦 v0.7.8
 
 | 项目 | 值 |
-| -------- | ----------------------- |
-| 发布日期 | 2026-07-04              |
-| 版本变更 | `0.7.6-patch1` → `0.7.7` |
-| 提交数   | 56 个 commit            |
+| ---- | ----- |
+| 发布日期 | 2026-07-12 |
+| 版本变更 | `v0.7.7` → `v0.7.8` |
+| 提交数 | 42 个 commit |
 
 ## 📋 本次更新概要
 
-本次发版完成 C ABI FFI 全链路实现，从类型系统到代码生成到运行时，形成了完整的 Native C 调用能力。同时新增 `yaoxiang new` 项目脚手架命令、`parse_int`/`parse_float` 标准库函数，以及 RFC 工作流的自动化管理和 CI 校验。
+本次发版以 ConstExpr 约束表达式系统为核心，完成了 `Assert(N > 0)` 泛型约束从解析到求值再到单态化的全链路实现，并将断言机制（assert/Assert）统一为一个精化原语的两面。配套完成了类型检查器 Layer 0/2 重构、Formatter validate_source 统一入口、以及 Monomorphizer 泛型单态化重构。大量文档同步更新了 RFC 与语言规范中 Never/Void 语义与断言设计的修订。
 
 ## ✨ 新功能
 
-### C ABI FFI 全链路
+### ConstExpr 约束表达式系统（Assert 泛型约束）
 
-完整的 Native C 函数调用能力，从类型定义到字节码生成到运行时加载，打通整个调用链。
+`Assert(N > 0)` 泛型约束全链路实现：解析器扩展 Assert 语法、类型检查器 Layer 2 约束求值、单态化层处理 ConstExpr 传递，并配套端到端集成测试。
 
-- `LibraryRef` / `ExternRef` MonoType 变体，类型系统层面支持外部库引用
-- `typecheck` 注册 Native.c/rs 签名，添加 LibraryRef 调用规则
-- IR 生成编译期求值产生 ExternRef 并注册绑定
-- `native_bindings` 重构为 `ffi_libs` + `ffi_bindings`
-- 字节码 `CallNative` 扩展，携带 mechanism/lib/symbol 元数据
-- 执行器解码 CallNative 的 mechanism/lib/symbol
-- C ABI libloading 运行时 + `OpaqueHandle` 类型
-- `Native` 模块变量注册，使 Native.c 在类型系统中可解析
-- 清理旧 native 机制死代码（`NativeBinding` / `FfiModule`）
-- 配套 C ABI 集成测试（AAA 分段 + RFC 引用 + 错误场景）
+- AST 新增 `Type::ConstExpr(Box<Expr>)` 变体
+- `convert_expr_to_const_expr` 转换函数支持字面量与运算
+- Layer 2 constraint evaluation（`ConstGenericEval`）
+- `validate_const_args` 泛型参数约束验证
+- `constraints` 字段加入 `ConstVarDef`
+- `check_const_bounds` fast-slow path 重构
+- 单态化层 `ConstExpr` 传递处理
+- `tests/yaoxiang/02-type-system/const_generic_assert.yx` 集成测试
 
-### 项目脚手架（`new` / `init`）
+### Formatter 增强
 
-新增 `yaoxiang new` 命令创建新项目，增强 `init` 命令支持 `--lib` 和当前目录初始化。
+- 新增 `--dry-run` / `--no-verify` 参数
+- 统一验证入口 `validate_source`，替代分散的格式验证逻辑
+- `FormatError` 结构化错误类型，`verify` 字段标记验证失败
+- 导入排序后注释与空行处理修复
+- 链式调用换行格式统一
 
-- `yaoxiang new` 创建完整项目结构
-- `init` 命令支持 `--lib` 参数，在当前目录初始化
-- 库项目模板生成函数
-- 配套 i18n 消息和全面测试
+### CLI 与工具
 
-### `parse_int` / `parse_float` 标准库
+- 完善 `yaoxiang eval` 命令
+- RFC 元数据同步工具与多语言翻译支持
 
-标准库新增类型转换函数，返回 Result 类型处理转换失败。
+### 测试
 
-- `std::parse_int` 整数转换
-- `std::parse_float` 浮点数转换
-- 完整单元测试覆盖
-
-### RFC 工作流自动化
-
-RFC 管理流程实现自动化校验和 AI 代理辅助，提升设计文档管理效率。
-
-- 添加 RFC 校验 GitHub Action，自动检查 RFC 格式
-- 添加 RFC AI Agent 过渡 Action，辅助 RFC 审核流程
-- RFC 工作流 AI 代理过渡脚本
-- RFC 模板简化并添加 Issue 关联字段
-
-### 字节码文件加载
-
-解释器新增从文件加载并执行字节码的能力，支持独立编译产物执行。
-
-### RFC 文档管理升级
-
-RFC-026 被接受并拆分为两个子 RFC。多个 RFC 从草案升级为审核中。已实现 RFC 归档到独立目录并更新索引。
+- validate 测试迁移至独立文件，补充断言消息
+- CLI 子命令集成测试套件
 
 ## 🐛 Bug 修复
 
-### 类型系统
+### LSP
 
-- 非 mut 变量遮蔽外层可变变量时补上类型赋值，避免类型丢失
-- 解释器类型不匹配错误诊断改进，提供更准确的错误信息
-- debug.rs `StoreUpvalue` 处理缺失分号导致的问题
+- 适配 lsp-server 0.9.0 Response API 变更（`response_kind` 替代 `result`/`error` 字段）
 
-### 工具和 CI
+### Formatter
 
-- 编译期嵌入 i18n registry 数据，消除运行时 panic
-- i18n 多语言文件键缺失和语法问题修复
-- 无 created 日期的 RFC 默认警告而非报错，更宽容
-- 创建 nightly release 前先删除旧的同名 release，避免 API 限流
-- 关闭已修复的 Issue #121
+- 修复导入排序后注释丢失与空行错乱
 
 ## ♻️ 重构优化
 
-### RFC 状态管理
+### 类型检查器
 
-移除已实现 Rfc 的 derive_state 测试断言。已接受即终态，进度由 TRACKING.md 追踪，消除不必要的状态变更路径。
+- `is_subtype` 提取至 Layer 0，删除死代码 subtyping 与 compatibility
+- 泛型推断模块移除，统一测试辅助函数
+- `check_single_module` 统一为 `validate_source`
+
+### 单态化
+
+- 泛型类型单态化重构，`generic_types` / `monomorphized_types` 字段拆分
+
+### 代码清理
+
+- 删除废弃 ShareRef IR 指令及相关空行
+- 删除未完成解构赋值 stub
+- crossbeam-epoch 安全漏洞升级
+
+## 📝 文档
+
+### 语言规范
+
+- `std.assert` 模块文档（运行时 assert + 编译期 Assert）
+- 类型系统新增 §8.3 Assert 精化类型章节，Never/Void Curry-Howard 对应
+- 语法规范补充标识符三层体系（关键字 / 字面量保留字 / 内建类型名）
+- README 特性对比表更新
+
+### RFC
+
+- RFC-030 全面重构：assert 定位为 Assert 的值引入子，dispatch 分派管道
+- RFC-010 新增内建类型名表
+- RFC-011 新增 Never/Void 语义，移除重复 Assert 定义
+- RFC-027 新增 dispatch 分派管道，编译期谓词擦除改为分派
+- RFC 跟踪表新增 RFC-034/035 条目
+- 新增 `assert-unification-discussion.md` blog 记录六小时设计讨论
 
 ## 🔧 其他变更
 
-- 依赖自动更新（production-dependencies group，4 个包）
-- 移除废弃测试文件 `test_basic.yx`
-- rustdoc 注释方括号转义，消除编译警告
-- clippy 修复（collapsible_match、approx_constant、bool expr）
-- cargo fmt 格式修复
-- CI 格式检查、触发重新运行等维护性提交
+- commit-msg 校验器新增 `rfc` scope
+- dead-code clippy 告警抑制
+- pycache 历史文件清理
 
-## 📝 提交记录
+## 📋 提交记录
 
-|   Hash    | 描述 |
-| :-------: | ----- |
-| `6a309b9` | fix(backends): 解释器类型不匹配错误诊断改进 |
-| `a3709de` | fix: add missing semicolon in debug.rs StoreUpvalue handling |
-| `e785775` | chore(deps): bump the production-dependencies group across 1 directory with 2 updates |
-| `5431625` | docs: auto-translate documentation |
-| `1297cb0` | fix(meta): 无created日期的RFC默认警告而非错误 |
-| `a1caa8c` | style(util): 修复 clippy collapsible_match lint |
-| `305e895` | style(meta): 修复 CI clippy 错误（approx_constant + bool expr） |
-| `b013c39` | ci: 触发 CI |
-| `fd17d4a` | ci: 触发 CI 重新运行 |
-| `28eae5f` | style(meta): cargo fmt 修复 CI 格式检查 |
-| `1873cde` | docs: auto-translate documentation |
-| `5aef3b9` | test(meta): 移除已实现Rfc的derive_state测试断言 |
-| `fb3134a` | refactor(design): 移除已实现Rfc状态—accepted即终态，进度由TRACKING.md追踪 |
-| `08cf07c` | ci(ci): 添加 RFC AI Agent 过渡 Action |
-| `b1e7119` | feat(meta): 添加 RFC 工作流的 AI 代理过渡脚本 |
-| `9576275` | ci(ci): 添加 RFC 校验 GitHub Action |
-| `7c21f04` | docs(design): 添加已实现RFC状态到索引页 |
-| `091035c` | docs(design): 添加已实现 RFC 归档目录 |
-| `a910194` | fix(#121): 关闭已修复的 Issue#121 |
-| `a624688` | feat(codegen): 实现字节码文件加载与执行 |
-| `ee529d1` | docs(design): 简化 RFC 模板并添加 Issue 关联字段 |
-| `137d4e3` | docs: auto-translate documentation |
-| `df27a4f` | docs(design): 3 个 RFC 从草案升级为审核中 |
-| `4fe9566` | docs: auto-translate documentation |
-| `8d57ea9` | feat(typecheck): 注册 Native 模块变量使 Native.c 可解析 |
-| `d30d442` | test(ffi): 合规重写 C ABI 集成测试（AAA 分段 + RFC 引用 + 错误场景） |
-| `c651a0a` | test(ffi): C ABI 集成测试验证 Native.c 调用系统库 |
-| `0945f5d` | feat(middle): 清理旧 native 机制死代码 |
-| `4e35a30` | feat(std): 移除 NativeBinding 和 FfiModule（旧 native() 机制） |
-| `ddff500` | feat(runtime): 执行器解码 CallNative 的 mechanism/lib/symbol |
-| `ca7ca00` | feat(runtime): 添加 C ABI libloading 运行时和 OpaqueHandle 类型 |
-| `b858f65` | feat(codegen): 扩展 CallNative 字节码携带 FFI 元数据 |
-| `f3d0b79` | feat(middle): IR gen 编译期求值产生 ExternRef 并注册绑定 |
-| `c2ff217` | feat(middle): 替换 native_bindings 为 ffi_libs 和 ffi_bindings |
-| `a61cf35` | feat(typecheck): 注册 Native.c/rs 签名并添加 LibraryRef 调用规则 |
-| `a2e2a9f` | feat(types): 添加 LibraryRef 和 ExternRef MonoType 变体 |
-| `a24672a` | docs: auto-translate documentation |
-| `0af83ef` | docs(design): RFC-026 接受并拆分两个子 RFC |
-| `76d79c4` | docs(meta): update README |
-| `b30ce80` | test(std): add unit tests for parse_int/parse_float and Result |
-| `311ebcf` | feat(std): implement parse_int/parse_float with Result type |
-| `f27031a` | feat(util): 移除 check 命令 unsupported yet 标注 |
-| `ef37aec` | i18n: auto-translate locale files |
-| `5c6110c` | fix(util): 编译期嵌入 i18n registry 数据，消除 panic |
-| `236f96f` | test(package): 添加 new/init 命令的全面测试 |
-| `8bebc1b` | feat(meta): 添加 yaoxiang new 命令，增强 init 命令 |
-| `390b522` | feat: add InitOptions, exec_here for init in current dir, --lib support |
-| `8c3f7da` | feat(package): 添加库项目模板生成函数 |
-| `bc93b00` | fix(meta): 修复 i18n 多语言文件键缺失和语法问题 |
-| `bb24cd4` | i18n: auto-translate locale files |
-| `aaac021` | feat(util): 添加 new/init 脚手架相关 i18n 消息 |
-| `accf878` | chore(test): 移除废弃的测试文件 test_basic.yx |
-| `2e65c1a` | docs(middle): 转义 doc 注释中的方括号避免 rustdoc 警告 |
-| `1579860` | fix(typecheck): 非 mut 变量遮蔽外层可变变量时补上类型赋值 |
-| `bba3bde` | chore(deps): bump the production-dependencies group with 4 updates |
-| `cf1d5fe` | fix(ci): 创建 nightly release 前先删除旧的同名 release，避免 Too many retries |
+| Hash | 描述 |
+| :---: | ----- |
+| `c05c38b` | :memo: docs(design): 补充标识符三层体系说明 |
+| `59efa7c` | :memo: docs(docs): 记录 assert/Assert 统一方案的六小时讨论过程 |
+| `0765296` | :memo: docs(rfc): 更新 RFC-010/011/027 与 RFC-030 的 assert/Assert 统一设计 |
+| `ff80cb9` | :memo: docs(design): 补充 Never/Void 类型定义与 assert/Assert 统一文档 |
+| `0e8ec14` | :pencil: docs: auto-translate documentation |
+| `62df06d` | :memo: docs(rfc): 重构 assert 机制设计方案 |
+| `0dce985` | :white_check_mark: test(frontend): 迁移 validate 测试到独立文件，补充断言消息 |
+| `ce18620` | :bug: fix(lsp): 适配 lsp-server 0.9.0 Response API 变更 |
+| `8f16b56` | :white_check_mark: test(formatter): 添加语义验证集成测试 |
+| `2ad85c7` | :sparkles: feat(formatter): dry-run / no-verify 参数 |
+| `93caac7` | :recycle: refactor(util): check_single_module 使用 validate_source |
+| `3590023` | :recycle: refactor(formatter): integrate validate_source, add FormatError, verify field |
+| `89418b1` | :pencil: docs: auto-translate documentation |
+| `90ceaf3` | :sparkles: feat(frontend): 添加 validate_source 前端验证统一入口 |
+| `584cc76` | :arrow_up: chore(deps): Bump the production-dependencies group |
+| `b0c05c2` | :wrench: chore(build): 将 rfc 加入合法 scope 列表 |
+| `6cfda7b` | :memo: docs(docs): 更新 RFC 跟踪表，新增 RFC-034/035 |
+| `6987f8f` | :sparkles: feat(types): 支持 ConstExpr 约束表达式系统 |
+| `eeb5745` | :recycle: refactor(typecheck): extract is_subtype to Layer 0 |
+| `c6dd7d9` | :sparkles: feat(typecheck): implement Layer 2 constraint evaluation |
+| `9a47c2b` | :white_check_mark: test(typecheck): add check_const_bounds fast-path tests |
+| `92c9b33` | :recycle: refactor(typecheck): rewrite check_const_bounds with fast-slow path |
+| `0437c9b` | :sparkles: feat(typecheck): extract const constraints from struct body |
+| `21386b9` | :sparkles: feat(types): add constraints field to ConstVarDef |
+| `76023a7` | :recycle: refactor(typecheck): integrate const params via PolyType |
+| `bf65539` | :sparkles: feat(typecheck): add validate_const_args |
+| `6f104fd` | :wrench: chore(monomorphize): suppress dead-code clippy warnings |
+| `6c8623e` | :sparkles: feat(types): add ConstKind::from_ast_type_name |
+| `2b36c8d` | :pencil: docs: auto-translate documentation |
+| `d1d7119` | :memo: docs(design): RFC 011 注册关联 issue #151 |
+| `563388a` | :recycle: refactor(monomorphize): 重构泛型类型单态化 |
+| `6adc299` | :sparkles: feat(monomorphize): 添加 generic_types 和 monomorphized_types |
+| `bdf2020` | :fire: chore(typecheck): 删除未完成的解构赋值 stub |
+| `639320d` | :wrench: chore(build): 升级 crossbeam-epoch 修复安全漏洞 |
+| `866c4b6` | :recycle: refactor(typecheck): 移除泛型推断模块 |
+| `8d359ac` | :art: style(formatter): 链式调用换行格式统一 |
+| `35fc47e` | :wrench: chore(codegen): 清理 ShareRef 删除后的多余空行 |
+| `0ea3d06` | :sparkles: feat(formatter): 修复导入排序后注释与空行处理 |
+| `8d57dc6` | :fire: chore(middle): 删除废弃的 ShareRef IR 指令 |
+| `6c31f4a` | :white_check_mark: test(package): 新增 CLI 子命令集成测试套件 |
+| `ff2b42f` | :pencil: docs: auto-translate documentation |
+| `d91f58f` | :memo: docs(design): 新增 RFC-034 统一调试工具链规范 |
+| `48bf6e2` | :pencil: docs: auto-translate documentation |
+| `cf8dff0` | :sparkles: feat(backends): 完善 yaoxiang eval 命令 |
+| `1d402a0` | :pencil: docs: auto-translate documentation |
+| `de1a26c` | :fire: chore(meta): 移除历史 pycache 文件 |
+| `092a845` | :sparkles: feat(build): 新增 RFC 元数据同步工具与多语言翻译 |
+| `aa07d5d` | :memo: docs(design): 同步 RFC 元数据与 GitHub Issue 引用 |
