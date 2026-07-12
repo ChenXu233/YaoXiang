@@ -74,6 +74,7 @@ impl TraitTable {
             MonoType::String => "String".to_string(),
             MonoType::Bytes => "Bytes".to_string(),
             MonoType::Void => "Void".to_string(),
+            MonoType::Never => "Never".to_string(),
             _ => ty.type_name(),
         }
     }

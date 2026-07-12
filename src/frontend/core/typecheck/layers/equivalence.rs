@@ -28,6 +28,7 @@ pub fn structurally_equal(
 ) -> bool {
     match (lhs, rhs) {
         // 基础类型
+        (MonoType::Never, MonoType::Never) => true,
         (MonoType::Void, MonoType::Void) => true,
         (MonoType::Bool, MonoType::Bool) => true,
         (MonoType::Int(a), MonoType::Int(b)) => a == b,
