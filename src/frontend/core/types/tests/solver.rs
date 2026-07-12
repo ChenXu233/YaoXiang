@@ -1225,3 +1225,12 @@ fn test_generalize_with_nested_containers() {
     assert!(!poly.is_mono());
     assert_eq!(poly.type_binders.len(), 1);
 }
+
+#[test]
+fn test_resolve_never_builtin() {
+    let solver = s();
+    assert_eq!(
+        solver.resolve_type(&MonoType::TypeRef("Never".to_string())),
+        MonoType::Never
+    );
+}
