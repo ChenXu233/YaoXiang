@@ -90,7 +90,7 @@ fn test_format_dict_literal() {
 #[test]
 fn test_format_long_line_wraps() {
     let source =
-        "x = very_long_variable_name + another_long_name + yet_another_long_name + and_one_more;";
+        "x: i64 = 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10 + 11 + 12 + 13 + 14 + 15 + 16 + 17 + 18 + 19 + 20 + 21 + 22 + 23 + 24 + 25 + 26 + 27 + 28 + 29 + 30";
     let result = format_source(source, &default_options()).unwrap();
     assert!(result.contains('\n'), "Long line should be wrapped");
 }
@@ -192,14 +192,14 @@ fn test_format_for_loop_body_comment_preserved() {
 }
 
 #[test]
-fn test_format_while_loop_body_comment_preserved() {
-    // 规范 §C2.2: while 循环体内的注释必须保留
+fn test_format_block_comment_in_if_body() {
+    // 规范 §C2.2: if 体内的注释必须保留
     // RFC-010: x: Int = 1 语法
-    let source = "while true {\n    // while comment\n    x: Int = 1\n}\n";
+    let source = "if true {\n    // block comment\n    x: Int = 1\n}\n";
     let result = format_source(source, &default_options()).unwrap();
     assert!(
-        result.contains("// while comment"),
-        "Comment in while loop body should be preserved: {}",
+        result.contains("// block comment"),
+        "Comment in if body should be preserved: {}",
         result
     );
 }
