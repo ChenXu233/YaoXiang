@@ -351,7 +351,7 @@ impl<'a> Evaluator<'a> {
             "Float" => Some(MonoType::Float(64)),
             "Char" => Some(MonoType::Char),
             "String" => Some(MonoType::String),
-            "Never" => Some(MonoType::TypeRef("Never".to_string())),
+            "Never" => Some(MonoType::Never),
             "True" => Some(MonoType::TypeRef("True".to_string())),
             "False" => Some(MonoType::TypeRef("False".to_string())),
             s if s.starts_with("If(") => Some(MonoType::TypeRef(s.to_string())),
