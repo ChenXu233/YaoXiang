@@ -606,6 +606,7 @@ impl ConstGenericEval {
                 // 基础类型大小表
                 let size = match type_name {
                     "Void" => 0,
+                    "Never" => 0,
                     "Bool" => 1,
                     "Char" => 4,
                     "Int" | "Uint" | "Float" | "String" => 8,
@@ -792,6 +793,7 @@ impl GenericSize {
         base_sizes.insert("Float", 8);
         base_sizes.insert("String", 8); // 指针
         base_sizes.insert("Void", 0);
+        base_sizes.insert("Never", 0);
 
         Self { base_sizes }
     }
@@ -827,6 +829,7 @@ impl GenericSize {
                 .get("Void")
                 .cloned()
                 .ok_or("Void not found".to_string()),
+            MonoType::Never => Ok(0),
             MonoType::TypeRef(name) => {
                 // 检查是否是 Array<T, N> 类型
                 if let Some((elem_type, count)) = self.parse_array_type(name) {

@@ -96,6 +96,8 @@ pub fn is_subtype(
 ) -> bool {
     match (sub, sup) {
         (a, b) if a == b => true,
+        // Never <: T 对所有 T 成立（爆炸原理）
+        (MonoType::Never, _) => true,
         // List 协变
         (MonoType::List(a), MonoType::List(b)) => is_subtype(a, b, env),
         // 函数：参数逆变 + 返回值协变

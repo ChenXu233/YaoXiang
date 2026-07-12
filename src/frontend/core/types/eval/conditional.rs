@@ -98,12 +98,7 @@ impl TypeCondition {
         &self,
         ty: &MonoType,
     ) -> bool {
-        // Never 类型通过 TypeRef 表示
-        if let MonoType::TypeRef(name) = ty {
-            name == "Never"
-        } else {
-            false
-        }
+        matches!(ty, MonoType::Never)
     }
 
     /// 检查条件是否已完全确定
@@ -113,13 +108,7 @@ impl TypeCondition {
             TypeCondition::Eq(_, _) => false, // 需要类型检查
             TypeCondition::Neq(_, _) => false,
             TypeCondition::IsVoid(ty) => matches!(**ty, MonoType::Void),
-            TypeCondition::IsNever(ty) => {
-                if let MonoType::TypeRef(name) = &**ty {
-                    name == "Never"
-                } else {
-                    false
-                }
-            }
+            TypeCondition::IsNever(ty) => matches!(**ty, MonoType::Never),
             TypeCondition::IsType(ty, _) => !matches!(**ty, MonoType::TypeVar(_)),
             TypeCondition::And(lhs, rhs) => lhs.is_determined() && rhs.is_determined(),
             TypeCondition::Or(lhs, rhs) => lhs.is_determined() && rhs.is_determined(),

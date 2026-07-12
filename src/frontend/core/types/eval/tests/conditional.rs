@@ -50,10 +50,7 @@ fn test_condition_is_void() {
 #[test]
 fn test_condition_is_never() {
     let inn = |t| TypeCondition::IsNever(Box::new(t));
-    assert_eq!(
-        inn(MonoType::TypeRef("Never".to_string())).eval(),
-        Some(true)
-    );
+    assert_eq!(inn(MonoType::Never).eval(), Some(true));
     // Non-"Never" TypeRef returns false
     assert_eq!(
         inn(MonoType::TypeRef("Int".to_string())).eval(),
@@ -188,7 +185,7 @@ fn test_conditions_helper_eq_and_neq() {
 #[test]
 fn test_conditions_helper_type_checks() {
     assert!(conditions::is_void(MonoType::Void).eval() == Some(true));
-    assert!(conditions::is_never(MonoType::TypeRef("Never".to_string())).eval() == Some(true));
+    assert!(conditions::is_never(MonoType::Never).eval() == Some(true));
 }
 
 #[test]
