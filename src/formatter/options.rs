@@ -17,6 +17,8 @@ pub struct FormatOptions {
     pub single_quote: bool,
     /// 是否排序导入语句
     pub sort_imports: bool,
+    /// 格式化后验证输出是否有效
+    pub verify: bool,
 }
 
 impl Default for FormatOptions {
@@ -27,6 +29,7 @@ impl Default for FormatOptions {
             use_tabs: false,
             single_quote: false,
             sort_imports: true,
+            verify: true,
         }
     }
 }
@@ -40,6 +43,7 @@ impl From<&FmtConfig> for FormatOptions {
             use_tabs: config.use_tabs.unwrap_or(default.use_tabs),
             single_quote: config.single_quote.unwrap_or(default.single_quote),
             sort_imports: config.sort_imports.unwrap_or(default.sort_imports),
+            verify: true,
         }
     }
 }

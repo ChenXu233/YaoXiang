@@ -67,6 +67,7 @@ pub use crate::util::diagnostic;
 
 // 事件系统
 pub mod events;
+pub mod validate;
 
 // 编译器核心（事件驱动）
 pub mod compiler;
@@ -88,3 +89,7 @@ pub use compiler::CompileError;
 
 // 事件类型
 pub use events::*;
+pub use validate::{validate_source, ValidateResult};
+
+#[cfg(test)]
+mod tests;
