@@ -11,7 +11,7 @@ This document defines the standard library specification for the YaoXiang progra
 The standard library provides implementations for the following basic types:
 
 | Type | Module | Description |
-|------|--------|-------------|
+|------|------|------|
 | `Option(T)` | `std.option` | Optional value type |
 | `Result(T, E)` | `std.result` | Error handling type |
 | `List(T)` | `std.collection` | Dynamic array |
@@ -25,17 +25,17 @@ The standard library provides implementations for the following basic types:
 Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 ```
 
-**Variant constructors**:
+**Variant Constructors**:
 
 | Variant | Syntax | Description |
-|---------|--------|-------------|
-| `Option.some` | `Option.some(value)` | Has value |
+|------|------|------|
+| `Option.some` | `Option.some(value)` | Has a value |
 | `Option.none` | `Option.none()` | No value |
 
-**Common methods**:
+**Common Methods**:
 
 ```yaoxiang
-// Check if has value
+// Check whether there is a value
 is_some: (self: Option(T)) -> Bool
 is_none: (self: Option(T)) -> Bool
 
@@ -55,17 +55,17 @@ map: (R: Type) -> ((self: Option(T), f: (T) -> R) -> Option(R))
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 ```
 
-**Variant constructors**:
+**Variant Constructors**:
 
 | Variant | Syntax | Description |
-|---------|--------|-------------|
+|------|------|------|
 | `Result.ok` | `Result.ok(value)` | Success value |
 | `Result.err` | `Result.err(error)` | Error value |
 
-**Common methods**:
+**Common Methods**:
 
 ```yaoxiang
-// Check if successful
+// Check whether successful
 is_ok: (self: Result(T, E)) -> Bool
 is_err: (self: Result(T, E)) -> Bool
 
@@ -75,10 +75,10 @@ unwrap: (self: Result(T, E)) -> T
 // Get value or default
 unwrap_or: (self: Result(T, E), default: T) -> T
 
-// Map success value
+// Map the success value
 map: (R: Type) -> ((self: Result(T, E), f: (T) -> R) -> Result(R, E))
 
-// Map error value
+// Map the error value
 map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ```
 
@@ -88,10 +88,10 @@ map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ErrorPropagate ::= Expr '?'
 ```
 
-The `?` operator automatically propagates errors of Result type:
+The `?` operator automatically propagates errors from the Result type:
 
 ```
-// Returns value on success, propagates err upward on failure
+// Returns the value on success, returns err upward on failure
 data = fetch_data()?
 
 // Equivalent to
@@ -100,6 +100,37 @@ data = match fetch_data() {
     err(e) => return err(e)
 }
 ```
+
+
+### 1.5 Assertions (std.assert)
+
+The `std.assert` module provides a unified assertion mechanism—the runtime `assert` and the compile-time refinement type `Assert` are two sides of the same primitive.
+
+```yaoxiang
+# IsTrue: bridging function from value to type
+IsTrue: (b: Bool) -> Type = match b {
+    true => Void,      # ⊤, program continues
+    false => Never,    # ⊥, diverges
+}
+
+# Assert: compile-time refinement type primitive
+Assert: (cond: Bool) -> Type = IsTrue(cond)
+
+# assert: runtime assertion (value introduction form of Assert)
+assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))
+
+# Result overload
+assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
+```
+
+**Dispatch**:
+
+| Condition | Behavior |
+|------|------|
+| All free variables of cond are known at compile time | Compiler evaluates; true → erased, false → compile error |
+| Runtime free variables exist | Insert runtime check, inject flow-sensitive assumption set Γ |
+
+`assert(false, "msg")` is equivalent to raise—no separate throw/raise keyword is needed.
 
 ---
 
@@ -169,11 +200,11 @@ min: (a: Int, b: Int) -> Int
 max: (a: Float, b: Float) -> Float
 min: (a: Float, b: Float) -> Float
 
-// Power operations
+// Power
 pow: (base: Float, exp: Float) -> Float
 sqrt: (x: Float) -> Float
 
-// Logarithms
+// Logarithm
 log: (x: Float) -> Float
 log2: (x: Float) -> Float
 log10: (x: Float) -> Float
@@ -218,7 +249,7 @@ concat: (a: String, b: String) -> String
 // String splitting
 split: (s: String, delimiter: String) -> List(String)
 
-// String searching
+// String search
 find: (s: String, pattern: String) -> Option(Int)
 contains: (s: String, pattern: String) -> Bool
 
@@ -292,7 +323,7 @@ Map: (K: Type, V: Type) -> Type = {
 
 ## Chapter 6: Iterator Library
 
-### 6.1 Iterator Trait
+### 6.1 Iterator trait
 
 ```yaoxiang
 // Iterator trait
@@ -336,18 +367,18 @@ for i in 0..10 step 2 {
 ### A.1 Core Modules
 
 | Module | Description |
-|--------|-------------|
+|------|------|
+| `std.assert` | Assertion mechanism—runtime assert + compile-time Assert refinement type |
 | `std.option` | Option type |
 | `std.result` | Result type |
 | `std.collection` | Collection types such as List and Map |
 | `std.string` | String operations |
 | `std.array` | Array operations |
 | `std.iterator` | Iterator |
-
 ### A.2 IO Modules
 
 | Module | Description |
-|--------|-------------|
+|------|------|
 | `std.io` | Standard input/output |
 | `std.file` | File operations |
 | `std.dir` | Directory operations |
@@ -355,7 +386,7 @@ for i in 0..10 step 2 {
 ### A.3 Math Modules
 
 | Module | Description |
-|--------|-------------|
+|------|------|
 | `std.math` | Math functions |
 | `std.math.trig` | Trigonometric functions |
 | `std.math.log` | Logarithmic functions |
@@ -363,7 +394,7 @@ for i in 0..10 step 2 {
 ### A.4 Utility Modules
 
 | Module | Description |
-|--------|-------------|
+|------|------|
 | `std.random` | Random number generation |
 | `std.time` | Date and time |
 | `std.regex` | Regular expressions |
