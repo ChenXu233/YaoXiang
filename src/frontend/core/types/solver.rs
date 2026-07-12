@@ -1016,6 +1016,7 @@ impl TypeConstraintSolver {
             MonoType::Enum(_)
             | MonoType::TypeRef(_)
             | MonoType::Void
+            | MonoType::Never
             | MonoType::Bool
             | MonoType::Int(_)
             | MonoType::Float(_)

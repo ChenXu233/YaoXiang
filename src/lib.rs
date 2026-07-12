@@ -344,6 +344,7 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
 fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
     match ty {
         crate::frontend::core::typecheck::MonoType::Void => "void".to_string(),
+        crate::frontend::core::typecheck::MonoType::Never => "never".to_string(),
         crate::frontend::core::typecheck::MonoType::Bool => "bool".to_string(),
         crate::frontend::core::typecheck::MonoType::Int(n) => format!("i{}", n),
         crate::frontend::core::typecheck::MonoType::Float(n) => format!("f{}", n),

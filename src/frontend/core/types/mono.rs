@@ -141,6 +141,8 @@ pub struct DepParam {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MonoType {
     /// 空类型
+    /// 底部类型（爆炸原理：Never <: T 对所有 T 成立）
+    Never,
     Void,
     /// 布尔类型
     Bool,
@@ -261,7 +263,10 @@ pub enum MonoType {
     /// LibraryRef 是 Native.c("lib") 返回值的编译期类型。
     /// 运行时不存在——仅用于类型推断和编译期求值触发。
     /// 编译器知道它可调用：(sym: String) -> ExternRef
-    LibraryRef { mechanism: String, lib: String },
+    LibraryRef {
+        mechanism: String,
+        lib: String,
+    },
 
     /// ExternRef 是 lib("sym") 求值后得到的 FFI 绑定描述类型。
     /// 当它出现在绑定 RHS 时，代码生成器按 LHS 类型决定语义：
@@ -333,6 +338,7 @@ impl MonoType {
     /// 获取类型的字符串描述
     pub fn type_name(&self) -> String {
         match self {
+            MonoType::Never => "never".to_string(),
             MonoType::Void => "void".to_string(),
             MonoType::Bool => "bool".to_string(),
             MonoType::Int(n) => format!("int{}", n),

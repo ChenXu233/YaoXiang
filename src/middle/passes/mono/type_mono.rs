@@ -659,6 +659,7 @@ impl Monomorphizer {
                 self.collect_type_vars_from_mono_type(err, type_params, seen);
             }
             MonoType::TypeRef(_)
+            | MonoType::Never
             | MonoType::Void
             | MonoType::Bool
             | MonoType::Int(_)
