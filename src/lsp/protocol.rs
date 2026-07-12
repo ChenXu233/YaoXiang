@@ -2,7 +2,7 @@
 //!
 //! JSON-RPC 消息构建、错误码定义和协议类型转换。
 
-use lsp_server::{ErrorCode, Response, ResponseError};
+use lsp_server::{ErrorCode, Response};
 use lsp_types::notification::Notification;
 use serde::Serialize;
 
@@ -15,11 +15,7 @@ pub fn ok_response<T: Serialize>(
     id: lsp_server::RequestId,
     result: T,
 ) -> Response {
-    Response {
-        id,
-        result: Some(serde_json::to_value(result).unwrap()),
-        error: None,
-    }
+    Response::new_ok(id, result)
 }
 
 /// 构建错误响应
@@ -28,17 +24,8 @@ pub fn error_response(
     code: ErrorCode,
     message: String,
 ) -> Response {
-    Response {
-        id,
-        result: None,
-        error: Some(ResponseError {
-            code: code as i32,
-            message,
-            data: None,
-        }),
-    }
+    Response::new_err(id, code as i32, message)
 }
-
 /// 构建方法未找到的错误响应
 pub fn method_not_found(
     id: lsp_server::RequestId,
