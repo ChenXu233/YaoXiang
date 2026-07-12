@@ -452,6 +452,7 @@ impl TypeConstraintSolver {
 
             // 具体类型 unify
             (MonoType::Void, MonoType::Void) => Ok(()),
+            (MonoType::Never, MonoType::Never) => Ok(()),
             (MonoType::Bool, MonoType::Bool) => Ok(()),
             (MonoType::Int(n1), MonoType::Int(n2)) if n1 == n2 => Ok(()),
             (MonoType::Float(n1), MonoType::Float(n2)) if n1 == n2 => Ok(()),
