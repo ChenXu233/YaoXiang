@@ -101,6 +101,37 @@ data = match fetch_data() {
 }
 ```
 
+
+### 1.5 断言（std.assert）
+
+`std.assert` 模块提供统一的断言机制——运行时 `assert` 和编译期精化类型 `Assert` 是同一原语的两面。
+
+```yaoxiang
+# IsTrue：值到类型的桥接函数
+IsTrue: (b: Bool) -> Type = match b {
+    true => Void,      # ⊤，程序继续
+    false => Never,    # ⊥，发散
+}
+
+# Assert：编译期精化类型原语
+Assert: (cond: Bool) -> Type = IsTrue(cond)
+
+# assert：运行时断言（Assert 的值引入子）
+assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))
+
+# Result 重载
+assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
+```
+
+**dispatch 分派**：
+
+| 条件 | 行为 |
+|------|------|
+| cond 的所有自由变量编译期已知 | 编译器求值，true → 擦除，false → 编译错误 |
+| 存在运行时自由变量 | 插入运行时 check，注入流敏感假设集 Γ |
+
+`assert(false, "msg")` 等价于 raise——不需要单独的 throw/raise 关键字。
+
 ---
 
 ## 第二章：IO 库
@@ -337,13 +368,13 @@ for i in 0..10 step 2 {
 
 | 模块 | 说明 |
 |------|------|
+| `std.assert` | 断言机制——运行时 assert + 编译期 Assert 精化类型 |
 | `std.option` | Option 类型 |
 | `std.result` | Result 类型 |
 | `std.collection` | List、Map 等集合类型 |
 | `std.string` | 字符串操作 |
 | `std.array` | 数组操作 |
 | `std.iterator` | 迭代器 |
-
 ### A.2 IO 模块
 
 | 模块 | 说明 |

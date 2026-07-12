@@ -9,6 +9,10 @@ use crate::frontend::core::parser::ast::Pattern;
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::types::{MonoType, StructType};
 
+fn new_inferrer() -> PatternInferrer {
+    PatternInferrer::new()
+}
+
 // ===================================================================
 // Happy path 测试
 // ===================================================================
@@ -16,7 +20,7 @@ use crate::frontend::core::types::{MonoType, StructType};
 #[test]
 fn test_pattern_infer_wildcard() {
     // Arrange
-    let mut inferrer = PatternInferrer::new();
+    let mut inferrer = new_inferrer();
 
     // Act
     let result = inferrer.infer_pattern(&Pattern::Wildcard).unwrap();
@@ -32,7 +36,7 @@ fn test_pattern_infer_wildcard() {
 #[test]
 fn test_pattern_infer_int_literal() {
     // Arrange
-    let mut inferrer = PatternInferrer::new();
+    let mut inferrer = new_inferrer();
 
     // Act
     let result = inferrer
@@ -46,7 +50,7 @@ fn test_pattern_infer_int_literal() {
 #[test]
 fn test_pattern_infer_float_literal() {
     // Arrange
-    let mut inferrer = PatternInferrer::new();
+    let mut inferrer = new_inferrer();
 
     // Act
     let result = inferrer
@@ -64,7 +68,7 @@ fn test_pattern_infer_float_literal() {
 #[test]
 fn test_pattern_infer_bool_literal() {
     // Arrange
-    let mut inferrer = PatternInferrer::new();
+    let mut inferrer = new_inferrer();
 
     // Act
     let result = inferrer
@@ -78,7 +82,7 @@ fn test_pattern_infer_bool_literal() {
 #[test]
 fn test_pattern_infer_string_literal() {
     // Arrange
-    let mut inferrer = PatternInferrer::new();
+    let mut inferrer = new_inferrer();
 
     // Act
     let result = inferrer
@@ -92,7 +96,7 @@ fn test_pattern_infer_string_literal() {
 #[test]
 fn test_pattern_infer_char_literal() {
     // Arrange
-    let mut inferrer = PatternInferrer::new();
+    let mut inferrer = new_inferrer();
 
     // Act
     let result = inferrer
@@ -106,7 +110,7 @@ fn test_pattern_infer_char_literal() {
 #[test]
 fn test_pattern_infer_identifier() {
     // Arrange
-    let mut inferrer = PatternInferrer::new();
+    let mut inferrer = new_inferrer();
 
     // Act
     let result = inferrer
@@ -124,7 +128,7 @@ fn test_pattern_infer_identifier() {
 #[test]
 fn test_pattern_infer_tuple() {
     // Arrange
-    let mut inferrer = PatternInferrer::new();
+    let mut inferrer = new_inferrer();
     let tuple_pattern = Pattern::Tuple(vec![
         Pattern::Literal(Literal::Int(1)),
         Pattern::Literal(Literal::String("hello".to_string())),
@@ -144,7 +148,7 @@ fn test_pattern_infer_tuple() {
 #[test]
 fn test_pattern_infer_struct() {
     // Arrange
-    let mut inferrer = PatternInferrer::new();
+    let mut inferrer = new_inferrer();
     let struct_pattern = Pattern::Struct {
         name: "Point".to_string(),
         fields: vec![
@@ -182,7 +186,7 @@ fn test_pattern_infer_struct() {
 #[test]
 fn test_pattern_infer_or() {
     // Arrange
-    let mut inferrer = PatternInferrer::new();
+    let mut inferrer = new_inferrer();
     let or_pattern = Pattern::Or(vec![
         Pattern::Literal(Literal::Int(1)),
         Pattern::Literal(Literal::Int(2)),
@@ -206,7 +210,7 @@ fn test_pattern_infer_or() {
 #[test]
 fn test_pattern_infer_empty_or() {
     // Arrange
-    let mut inferrer = PatternInferrer::new();
+    let mut inferrer = new_inferrer();
     let empty_or = Pattern::Or(vec![]);
 
     // Act
@@ -219,7 +223,7 @@ fn test_pattern_infer_empty_or() {
 #[test]
 fn test_pattern_infer_nested_tuple() {
     // Arrange
-    let mut inferrer = PatternInferrer::new();
+    let mut inferrer = new_inferrer();
     let nested = Pattern::Tuple(vec![Pattern::Tuple(vec![Pattern::Literal(Literal::Int(
         1,
     ))])]);

@@ -7,119 +7,28 @@ use crate::frontend::core::typecheck::{EnumType, MonoType, StructType};
 use crate::middle::core::ir::ModuleIR;
 use crate::middle::passes::mono::instance::{GenericTypeId, TypeId};
 use std::collections::HashMap;
-
-/// 类型单态化相关trait
-pub trait TypeMonomorphizer {
-    /// 收集所有泛型类型定义
-    fn collect_generic_types(
-        &mut self,
-        module: &ModuleIR,
-    );
-
-    /// 将AST Type转换为MonoType
-    fn type_to_mono_type(
-        &self,
-        ty: &AstType,
-    ) -> MonoType;
-
-    /// 获取类型的名称
-    fn get_type_name(ty: &AstType) -> String;
-
-    /// 检查类型是否包含类型变量（AST Type版本）
-    fn contains_type_var_type(
-        &self,
-        ty: &AstType,
-    ) -> bool;
-
-    /// 从类型中提取类型参数
-    fn extract_type_params_from_type(
-        &self,
-        ty: &AstType,
-    ) -> Vec<String>;
-
-    /// 递归收集类型变量
-    fn collect_type_vars_from_type(
-        &self,
-        ty: &AstType,
-        type_params: &mut Vec<String>,
-        seen: &mut std::collections::HashSet<String>,
-    );
-
-    /// 单态化泛型类型
-    fn monomorphize_type(
-        &mut self,
-        generic_id: &GenericTypeId,
-        type_args: &[MonoType],
-    ) -> Option<MonoType>;
-
-    /// 实例化具体类型
-    fn instantiate_type(
-        &self,
-        generic_id: &GenericTypeId,
-        type_args: &[MonoType],
-        generic_type: &MonoType,
-    ) -> Option<MonoType>;
-
-    /// 递归替换类型中的泛型参数
-    fn substitute_type_args(
-        &self,
-        ty: &MonoType,
-        type_args: &[MonoType],
-        type_params: &[String],
-    ) -> MonoType;
-
-    /// 生成类型ID
-    fn generate_type_id(
-        &self,
-        generic_id: &GenericTypeId,
-        type_args: &[MonoType],
-    ) -> TypeId;
-
-    /// 生成单态化类型名称
-    fn generate_type_name(
-        &self,
-        generic_id: &GenericTypeId,
-        type_args: &[MonoType],
-    ) -> String;
-
-    /// 注册单态化后的类型
-    fn register_monomorphized_type(
-        &mut self,
-        mono_type: MonoType,
-    ) -> TypeId;
-
-    /// 从MonoType提取类型参数
-    fn extract_type_params_from_mono_type(
-        &self,
-        ty: &MonoType,
-    ) -> Vec<String>;
-
-    /// 递归收集MonoType中的类型变量
-    fn collect_type_vars_from_mono_type(
-        &self,
-        ty: &MonoType,
-        type_params: &mut Vec<String>,
-        seen: &mut std::collections::HashSet<String>,
-    );
-
-    /// 获取已实例化的类型数量
-    fn type_instance_count(&self) -> usize;
-
-    /// 获取泛型类型数量
-    fn generic_type_count(&self) -> usize;
-}
+use super::Monomorphizer;
 
 /// 类型单态化器的默认实现
-#[allow(clippy::only_used_in_recursion)]
-impl TypeMonomorphizer for super::Monomorphizer {
-    fn collect_generic_types(
+#[allow(dead_code, clippy::only_used_in_recursion)]
+impl Monomorphizer {
+    pub(super) fn collect_generic_types(
         &mut self,
-        _module: &ModuleIR,
+        module: &ModuleIR,
     ) {
-        // 在新的队列驱动结构中，类型收集在 monomorphize 方法中完成
+        for ty in &module.types {
+            // 只处理包含类型变量的泛型类型定义
+            if self.contains_type_var_type(ty) {
+                let mono_ty = self.type_to_mono_type(ty);
+                let name = match ty {
+                    AstType::NamedStruct { name, .. } => name.clone(),
+                    _ => mono_ty.type_name(),
+                };
+                self.generic_types.insert(name, mono_ty);
+            }
+        }
     }
 
-    #[allow(clippy::only_used_in_recursion)]
     fn type_to_mono_type(
         &self,
         ty: &AstType,
@@ -254,6 +163,8 @@ impl TypeMonomorphizer for super::Monomorphizer {
                 mutable: *mutable,
                 inner: Box::new(self.type_to_mono_type(inner)),
             },
+            // ConstExpr 只在 Assert 参数中出现，不应到这里
+            AstType::ConstExpr(_) => MonoType::TypeRef("<const-expr>".to_string()),
         }
     }
 
@@ -304,16 +215,19 @@ impl TypeMonomorphizer for super::Monomorphizer {
             AstType::Ptr(inner) => format!("*{}", Self::get_type_name(inner)),
             AstType::MetaType { .. } => "MetaType".to_string(),
             AstType::Ref { inner, .. } => format!("&{}", Self::get_type_name(inner)),
+            AstType::ConstExpr(_) => "<const-expr>".to_string(),
         }
     }
 
-    #[allow(clippy::only_used_in_recursion)]
     fn contains_type_var_type(
         &self,
         ty: &AstType,
     ) -> bool {
         match ty {
-            AstType::Name { .. } => false,
+            AstType::Name { name, .. } => {
+                // 大写开头的 Name 是类型参数引用（如 T、Item）
+                name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+            }
             AstType::Int(_)
             | AstType::Float(_)
             | AstType::Char
@@ -356,6 +270,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
             AstType::Ptr(inner) => self.contains_type_var_type(inner),
             AstType::Ref { inner, .. } => self.contains_type_var_type(inner),
             AstType::MetaType { .. } => false,
+            AstType::ConstExpr(_) => false,
         }
     }
 
@@ -369,7 +284,6 @@ impl TypeMonomorphizer for super::Monomorphizer {
         type_params
     }
 
-    #[allow(clippy::only_used_in_recursion)]
     fn collect_type_vars_from_type(
         &self,
         ty: &AstType,
@@ -443,20 +357,22 @@ impl TypeMonomorphizer for super::Monomorphizer {
             | AstType::String
             | AstType::Bytes
             | AstType::Bool
-            | AstType::Void => {}
+            | AstType::Void
+            | AstType::ConstExpr(_) => {}
         }
     }
 
-    fn monomorphize_type(
+    pub(super) fn monomorphize_type(
         &mut self,
-        _generic_id: &GenericTypeId,
-        _type_args: &[MonoType],
+        generic_id: &GenericTypeId,
+        type_args: &[MonoType],
     ) -> Option<MonoType> {
-        // TODO: 实现类型单态化
-        None
+        let generic_def = self.generic_types.get(generic_id.name())?;
+        let mono_type = self.instantiate_type(generic_id, type_args, generic_def)?;
+        self.register_monomorphized_type(mono_type.clone(), generic_id, type_args);
+        Some(mono_type)
     }
 
-    #[allow(clippy::only_used_in_recursion)]
     fn instantiate_type(
         &self,
         generic_id: &GenericTypeId,
@@ -547,7 +463,6 @@ impl TypeMonomorphizer for super::Monomorphizer {
         }
     }
 
-    #[allow(clippy::only_used_in_recursion)]
     fn substitute_type_args(
         &self,
         ty: &MonoType,
@@ -674,10 +589,15 @@ impl TypeMonomorphizer for super::Monomorphizer {
 
     fn register_monomorphized_type(
         &mut self,
-        _mono_type: MonoType,
+        mono_type: MonoType,
+        generic_id: &GenericTypeId,
+        type_args: &[MonoType],
     ) -> TypeId {
-        // TODO: 实现类型注册
-        TypeId::new("placeholder".to_string(), vec![])
+        let type_id = self.generate_type_id(generic_id, type_args);
+        self.monomorphized_types
+            .entry(type_id.clone())
+            .or_insert(mono_type);
+        type_id
     }
 
     fn extract_type_params_from_mono_type(
@@ -690,7 +610,6 @@ impl TypeMonomorphizer for super::Monomorphizer {
         type_params
     }
 
-    #[allow(clippy::only_used_in_recursion)]
     fn collect_type_vars_from_mono_type(
         &self,
         ty: &MonoType,
@@ -799,15 +718,5 @@ impl TypeMonomorphizer for super::Monomorphizer {
                 // FFI 类型不包含类型变量
             }
         }
-    }
-
-    fn type_instance_count(&self) -> usize {
-        // 在新的结构中，类型实例存储在 specialized_functions 中
-        0
-    }
-
-    fn generic_type_count(&self) -> usize {
-        // 在新的结构中，泛型类型存储在 generic_functions 中
-        0
     }
 }

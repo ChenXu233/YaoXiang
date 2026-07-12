@@ -30,12 +30,14 @@ title: "RFC Index"
 
 | Number | Title | Author | Creation Date | Status |
 |------|------|------|----------|------|
-| RFC-019 | [RFC-019: Typed Homoiconicity - Syntax as Type](./draft/019-typed-homoiconicity.md) | Chen Xu | 2026-02-20 | Draft |
+| RFC-019 | [RFC-019: Type-level Homoiconicity - Syntax as Types](./draft/019-typed-homoiconicity.md) | Chen Xu | 2026-02-20 | Draft |
 | RFC-028 | [RFC-028: JIT Compiler — Multi-level Execution Engine in VM](./draft/028-jit-compiler.md) | Chen Xu | 2026-06-11 | Draft |
 | RFC-029 | [RFC-029: Module Semantics System](./draft/029-module-semantics.md) | Chen Xu | 2026-06-13 | Draft |
 | RFC-031 | [RFC-031: Optimization Levels and Pass Manager](./draft/031-optimization-levels.md) | Chen Xu | 2026-06-16 | Draft |
 | RFC-002 | [RFC-002: libuv-based Resource Type IO Implementation Layer](./draft/002-cross-platform-io-libuv.md) | Chen Xu | 2025-01-05 | Draft (Re-review) |
 | RFC-026b | [RFC-026b: yx-bindgen Toolchain](./draft/026b-yx-bindgen.md) | Chen Xu | 2026-07-03 | Draft |
+| RFC-034 | [RFC-034: Unified Debugging Toolchain](./draft/034-debug-toolchain.md) | Chen Xu | 2026-07-06 | Draft |
+| RFC-035 | [RFC-035: MCP Server Support (AI Agent Integration)](./draft/035-mcp-server.md) | Chen Xu | 2026-07-11 | Draft |
 
 ---
 
@@ -45,7 +47,8 @@ title: "RFC Index"
 |------|------|------|----------|------|
 | RFC-026a | [RFC-026a: Extensible FFI Mechanism System](./review/026a-extensible-ffi-system.md) | Chen Xu | 2026-07-03 | Under Review |
 | RFC-030 | [RFC-030: assert Assertion Mechanism](./review/030-assert-mechanism.md) | Chen Xu | 2026-06-15 | Under Review |
-| RFC-032 | [RFC-032: spawn Unified Expression Modifier — Eliminating spawn for Special Case](./review/032-spawn-unified-expression.md) | Chen Xu | 2026-06-16 | Under Review |
+| RFC-032 | [RFC-032: spawn Unified Expression Modifier — Eliminating the spawn for Special Case](./review/032-spawn-unified-expression.md) | Chen Xu | 2026-06-16 | Under Review |
+
 ---
 
 ## Accepted RFCs
@@ -54,12 +57,12 @@ title: "RFC Index"
 |------|------|------|----------|------|
 | RFC-004 | [RFC-004: Multi-position Union Binding Design for Curried Methods](./accepted/004-curry-multi-position-binding.md) | Chen Xu | 2025-01-05 | Accepted |
 | RFC-006 | [RFC-006: Documentation Site Construction](./accepted/006-documentation-site-optimization.md) | Chen Xu | 2025-01-05 | Accepted |
-| RFC-007 | [RFC-007: Unified Function Definition Syntax Scheme](./accepted/007-function-syntax-unification.md) | Mo Yu Jiang | 2025-01-05 | Accepted |
-| RFC-008 | [RFC-008: Decoupling Design of Runtime Concurrency Model and Scheduler](./accepted/008-runtime-concurrency-model.md) | Chen Xu | 2025-01-05 | Accepted |
+| RFC-007 | [RFC-007: Unified Function Definition Syntax](./accepted/007-function-syntax-unification.md) | Mo Yu Jiang | 2025-01-05 | Accepted |
+| RFC-008 | [RFC-008: Runtime Concurrency Model and Scheduler Decoupling Design](./accepted/008-runtime-concurrency-model.md) | Chen Xu | 2025-01-05 | Accepted |
 | RFC-009 | [RFC-009: Ownership Model Design](./accepted/009-ownership-model.md) | Chen Xu | 2025-01-08 | Accepted |
-| ↳ RFC-009a | [RFC-009a: Token Lifetime Analysis — Based on Hoare Proof Pipeline](./accepted/009a-borrow-proof-pipeline.md) | Chen Xu | 2026-06-13 | Accepted |
+| ↳ RFC-009a | [RFC-009a: Token Lifetime Analysis — Hoare Proof Pipeline](./accepted/009a-borrow-proof-pipeline.md) | Chen Xu | 2026-06-13 | Accepted |
 | RFC-010 | [RFC-010: Unified Type Syntax - name: type = value Model](./accepted/010-unified-type-syntax.md) | Chen Xu | 2025-01-20 | Accepted |
-| RFC-011 | [RFC-011: Generic System Design - Zero-cost Abstraction and Macro Replacement](./accepted/011-generic-type-system.md) | Chen Xu | 2025-01-25 | Accepted |
+| RFC-011 | [RFC-011: Generic System Design - Zero-cost Abstractions and Macro Replacement](./accepted/011-generic-type-system.md) | Chen Xu | 2025-01-25 | Accepted |
 | ↳ RFC-011a | [RFC-011a: Interface Implementation and Dynamic Dispatch](./review/011a-interface-implementation.md) | Chen Xu | 2026-06-14 | Under Review |
 | RFC-012 | [RFC 012: F-String Template Strings](./accepted/012-f-string-template-strings.md) | Chen Xu | 2025-01-27 | Accepted |
 | RFC-013 | [RFC 013: Error Code Specification](./accepted/013-error-code-specification.md) | Chen Xu | 2026-02-02 | Accepted |
@@ -80,14 +83,13 @@ title: "RFC Index"
 
 | Number | Title | Author | Creation Date | Status |
 |------|------|------|----------|------|
-| RFC-001 | [RFC-001: spawn Model and Error Handling System](./deprecated/001-concurrent-model-error-handling.md) | Chen Xu | 2025-01-05 | Deprecated (Replaced by RFC-024) |
+| RFC-001 | [RFC-001: Concurrency Model and Error Handling System](./deprecated/001-concurrent-model-error-handling.md) | Chen Xu | 2025-01-05 | Deprecated (Superseded by RFC-024) |
 | RFC-020 | [RFC-020: Dynamic Modules and FFI Integration](./deprecated/020-dynamic-modules-ffi.md) | Chen Xu | 2026-03-14 | Deprecated |
-| RFC-021 | [RFC-021: Library-driven FFI Extension and Cross-language Calling Support](./deprecated/021-library-driven-ffi-extension.md) | Chen Xu | 2026-03-14 | Deprecated |
-| RFC-022 | [RFC 022: Hoare Logic Static Verification Support (Specification Annotations and Specification Types)](./deprecated/022-hoare-logic-static-verification.md) | Chen Xu | 2026-03-16 | Deprecated (Replaced by RFC-027) |
+| RFC-021 | [RFC-021: Library-driven FFI Extension and Cross-language Call Support](./deprecated/021-library-driven-ffi-extension.md) | Chen Xu | 2026-03-14 | Deprecated |
+| RFC-022 | [RFC 022: Hoare Logic Static Verification Support (Specification Annotations and Specification Types)](./deprecated/022-hoare-logic-static-verification.md) | Chen Xu | 2026-03-16 | Deprecated (Superseded by RFC-027) |
 | RFC-023 | [RFC-023: Closure Capture Model](./deprecated/023-closure-capture-model.md) | Chen Xu | 2026-05-29 | Deprecated |
 
 ---
-
 
 ## Rejected RFCs
 
@@ -103,9 +105,9 @@ title: "RFC Index"
 ## RFC Lifecycle
 
 ```
-Draft → Under Review → Accepted → Deprecated (Replaced)
-                            ↓
-                       Rejected (Not Approved)
+Draft → Under Review → Accepted → Deprecated (Superseded)
+                          ↓
+                      Rejected (Not Approved)
 ```
 
 ### Status Description
@@ -114,7 +116,8 @@ Draft → Under Review → Accepted → Deprecated (Replaced)
 |------|------|------|
 | **Draft** | `rfc/draft/` | Author's draft, awaiting submission for review |
 | **Under Review** | `rfc/review/` | Open for community discussion and feedback |
-| **Deprecated** | `rfc/deprecated/` | Previously accepted, replaced by new design |
+| **Accepted** | `rfc/accepted/` | Approved, to be implemented |
+| **Deprecated** | `rfc/deprecated/` | Previously accepted, superseded by new design |
 | **Rejected** | `rfc/rejected/` | Rejected RFC documents |
 
 ---
@@ -122,14 +125,14 @@ Draft → Under Review → Accepted → Deprecated (Replaced)
 ## Submitting an RFC
 
 1. Read [RFC_TEMPLATE.md](RFC_TEMPLATE.md) to understand the format requirements
-2. Refer to [EXAMPLE_full_feature_proposal.md](EXAMPLE_full_feature_proposal.md) to learn the writing style
-3. Create a new file, named `number-descriptive-title.md`
+2. Refer to [EXAMPLE_full_feature_proposal.md](EXAMPLE_full_feature_proposal.md) to learn how to write
+3. Create a new file named `number-descriptive-title.md`
 4. Place the file in the `docs/src/design/rfc/draft/` directory
-5. Update this index file by adding the new RFC entry
+5. Update this index file to add the new RFC entry
 6. Submit a PR to enter the review process
 
 ---
 
-## Contributing Guidelines
+## Contribution Guidelines
 
-Please refer to [CONTRIBUTING.md](../../../../CONTRIBUTING.md) for the contribution guidelines.
+Please refer to [CONTRIBUTING.md](../../../../CONTRIBUTING.md) for contribution guidelines.

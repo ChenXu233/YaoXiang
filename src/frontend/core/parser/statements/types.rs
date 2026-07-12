@@ -97,8 +97,6 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             let name = name.clone();
             let name_span = state.span();
             state.bump();
-
-            // RFC-010: `Type` is the meta-type keyword. Only () syntax is allowed.
             // `Type[T]` and `Type<T>` are rejected.
             if name == "Type" {
                 // Reject old Type[T] or Type<T> syntax
@@ -154,7 +152,18 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
                     return parse_constructor_type(name, name_span, state);
                 }
             }
-
+            // 后视检查：如果下一个 token 是比较/相等运算符，继续作为表达式解析
+            if matches!(
+                state.current().map(|t| &t.kind),
+                Some(TokenKind::EqEq | TokenKind::Neq | TokenKind::Gt | TokenKind::Ge)
+            ) {
+                let left_expr = Expr::Var(name.clone(), name_span);
+                // 使用 infix 处理器继续解析右侧
+                if let Some((_bp_left, bp_right, parser_fn)) = state.infix_info() {
+                    let full_expr = parser_fn(state, left_expr, bp_right)?;
+                    return Some(Type::ConstExpr(Box::new(full_expr)));
+                }
+            }
             // Check for old angle bracket generic syntax: Name<Args>
             if state.at(&TokenKind::Lt) {
                 state.error(parse_msg(
@@ -164,20 +173,10 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
                 ));
                 return None;
             }
-
             Some(Type::Name {
                 name,
                 span: name_span,
             })
-        }
-        Some(TokenKind::Lt) => {
-            // RFC-010: angle bracket syntax `Type<Args>` is rejected
-            state.error(parse_msg(
-                "Old 'Type<...>' angle bracket syntax is no longer supported. \
-                 Use '()' application syntax: 'Name(Type1, Type2)'"
-                    .to_string(),
-            ));
-            None
         }
         Some(TokenKind::LParen) => {
             // This could be either:

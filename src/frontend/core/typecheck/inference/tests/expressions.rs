@@ -10,6 +10,30 @@ use crate::frontend::core::types::{MonoType, TypeConstraintSolver};
 use crate::frontend::core::parser::ast::Expr;
 use crate::util::span::Span;
 
+use std::collections::HashMap;
+
+/// Test context that owns the dependencies borrowed by ExpressionInferrer.
+struct TestContext {
+    scope: ScopeManager,
+    solver: TypeConstraintSolver,
+    overload_candidates:
+        HashMap<String, Vec<crate::frontend::core::typecheck::passes::overload::OverloadCandidate>>,
+}
+
+impl TestContext {
+    fn new() -> Self {
+        Self {
+            scope: ScopeManager::new(),
+            solver: TypeConstraintSolver::default(),
+            overload_candidates: HashMap::new(),
+        }
+    }
+
+    fn inferrer(&mut self) -> ExpressionInferrer<'_> {
+        ExpressionInferrer::new(&mut self.scope, &mut self.solver, &self.overload_candidates)
+    }
+}
+
 // ===================================================================
 // Happy path 测试
 // ===================================================================
@@ -17,12 +41,8 @@ use crate::util::span::Span;
 #[test]
 fn test_expression_inferrer_creation() {
     // Arrange
-    let mut scope = ScopeManager::new();
-    let mut solver = TypeConstraintSolver::default();
-    let overload_candidates = std::collections::HashMap::new();
-
-    // Act
-    let mut inferrer = ExpressionInferrer::new(&mut scope, &mut solver, &overload_candidates);
+    let mut ctx = TestContext::new();
+    let mut inferrer = ctx.inferrer();
 
     // Assert - 验证创建后能正常推断
     let expr = Expr::Lit(
@@ -40,10 +60,8 @@ fn test_expression_inferrer_creation() {
 #[test]
 fn test_infer_integer_literal() {
     // Arrange
-    let mut scope = ScopeManager::new();
-    let mut solver = TypeConstraintSolver::default();
-    let overload_candidates = std::collections::HashMap::new();
-    let mut inferrer = ExpressionInferrer::new(&mut scope, &mut solver, &overload_candidates);
+    let mut ctx = TestContext::new();
+    let mut inferrer = ctx.inferrer();
     let expr = Expr::Lit(
         crate::frontend::core::lexer::tokens::Literal::Int(42),
         Span::dummy(),
@@ -65,10 +83,8 @@ fn test_infer_integer_literal() {
 #[test]
 fn test_infer_string_literal() {
     // Arrange
-    let mut scope = ScopeManager::new();
-    let mut solver = TypeConstraintSolver::default();
-    let overload_candidates = std::collections::HashMap::new();
-    let mut inferrer = ExpressionInferrer::new(&mut scope, &mut solver, &overload_candidates);
+    let mut ctx = TestContext::new();
+    let mut inferrer = ctx.inferrer();
     let expr = Expr::Lit(
         crate::frontend::core::lexer::tokens::Literal::String("hello".to_string()),
         Span::dummy(),
@@ -90,10 +106,8 @@ fn test_infer_string_literal() {
 #[test]
 fn test_infer_bool_literal() {
     // Arrange
-    let mut scope = ScopeManager::new();
-    let mut solver = TypeConstraintSolver::default();
-    let overload_candidates = std::collections::HashMap::new();
-    let mut inferrer = ExpressionInferrer::new(&mut scope, &mut solver, &overload_candidates);
+    let mut ctx = TestContext::new();
+    let mut inferrer = ctx.inferrer();
     let expr = Expr::Lit(
         crate::frontend::core::lexer::tokens::Literal::Bool(true),
         Span::dummy(),
@@ -119,10 +133,8 @@ fn test_infer_bool_literal() {
 #[test]
 fn test_infer_undefined_variable() {
     // Arrange
-    let mut scope = ScopeManager::new();
-    let mut solver = TypeConstraintSolver::default();
-    let overload_candidates = std::collections::HashMap::new();
-    let mut inferrer = ExpressionInferrer::new(&mut scope, &mut solver, &overload_candidates);
+    let mut ctx = TestContext::new();
+    let mut inferrer = ctx.inferrer();
     let expr = Expr::Var("undefined_var".to_string(), Span::dummy());
 
     // Act
@@ -140,10 +152,8 @@ fn test_infer_undefined_variable() {
 #[test]
 fn test_infer_nested_expressions() {
     // Arrange
-    let mut scope = ScopeManager::new();
-    let mut solver = TypeConstraintSolver::default();
-    let overload_candidates = std::collections::HashMap::new();
-    let mut inferrer = ExpressionInferrer::new(&mut scope, &mut solver, &overload_candidates);
+    let mut ctx = TestContext::new();
+    let mut inferrer = ctx.inferrer();
     // 嵌套表达式：(1 + 2) * 3
     let expr = Expr::BinOp {
         op: crate::frontend::core::parser::ast::BinOp::Mul,

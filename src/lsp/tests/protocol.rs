@@ -7,7 +7,7 @@
 //! - 内部错误响应
 //! - 服务器信息常量
 
-use lsp_server::{ErrorCode, Response, ResponseError};
+use lsp_server::{ResponseKind, ErrorCode, Response};
 use lsp_types::notification::Notification;
 use serde::Serialize;
 
@@ -16,32 +16,44 @@ use crate::lsp::protocol::{ok_response, error_response, method_not_found, intern
 #[test]
 fn test_ok_response() {
     let resp = ok_response(1.into(), "hello");
-    assert!(resp.error.is_none());
-    assert!(resp.result.is_some());
+    match &resp.response_kind {
+        ResponseKind::Ok { .. } => {} // expected
+        _ => panic!("expected Ok response"),
+    }
 }
 
 #[test]
 fn test_error_response() {
     let resp = error_response(1.into(), ErrorCode::MethodNotFound, "not found".to_string());
-    assert!(resp.result.is_none());
-    let err = resp.error.unwrap();
-    assert_eq!(err.code, ErrorCode::MethodNotFound as i32);
-    assert_eq!(err.message, "not found");
+    match &resp.response_kind {
+        ResponseKind::Err { error } => {
+            assert_eq!(error.code, ErrorCode::MethodNotFound as i32);
+            assert_eq!(error.message, "not found");
+        }
+        _ => panic!("expected Err response"),
+    }
 }
 
 #[test]
 fn test_method_not_found() {
     let resp = method_not_found(1.into(), "textDocument/foobar");
-    let err = resp.error.unwrap();
-    assert_eq!(err.code, ErrorCode::MethodNotFound as i32);
-    assert!(err.message.contains("textDocument/foobar"));
+    match &resp.response_kind {
+        ResponseKind::Err { error } => {
+            assert_eq!(error.code, ErrorCode::MethodNotFound as i32);
+            assert!(error.message.contains("textDocument/foobar"));
+        }
+        _ => panic!("expected Err response"),
+    }
 }
-
 #[test]
 fn test_internal_error() {
     let resp = internal_error(1.into(), "boom".to_string());
-    let err = resp.error.unwrap();
-    assert_eq!(err.code, ErrorCode::InternalError as i32);
+    match &resp.response_kind {
+        ResponseKind::Err { error } => {
+            assert_eq!(error.code, ErrorCode::InternalError as i32);
+        }
+        _ => panic!("expected Err response"),
+    }
 }
 
 #[test]

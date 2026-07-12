@@ -309,21 +309,6 @@ fn test_assignment_fn_type_compatibility() {
 }
 
 #[test]
-fn test_assignment_destructuring() {
-    // Arrange
-    let checker = AssignmentChecker::new();
-    let patterns = vec!["x".to_string(), "y".to_string()];
-    let rhs = MonoType::Tuple(vec![MonoType::Int(32), MonoType::Bool]);
-    let span = dummy_span();
-
-    // Act
-    let result = checker.check_destructuring(&patterns, &rhs, span);
-
-    // Assert
-    assert!(result.is_ok(), "解构赋值检查应成功（简化实现始终返回 Ok）");
-}
-
-#[test]
 fn test_assignment_new_checker_has_no_constraint_info() {
     // Arrange & Act
     let checker = AssignmentChecker::new();

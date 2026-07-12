@@ -8,6 +8,7 @@
 
 use std::fmt;
 use std::hash::Hash;
+use crate::frontend::core::types::eval::const_eval::ConstExpr as EvalConstExpr;
 
 /// Const值（编译期常量）
 #[derive(Debug, Clone)]
@@ -393,6 +394,19 @@ impl ConstKind {
             ConstKind::Float(_) => "Float",
         }
     }
+
+    /// 从 AST 类型名创建 ConstKind
+    ///
+    /// 解析器遇到 `N: Int` 时，const_type 为 `Type::Name("Int")` 或 `Type::Int(64)`。
+    /// 不管是哪种形式，都能通过类型名字符串转化为 ConstKind。
+    pub fn from_ast_type_name(name: &str) -> Option<Self> {
+        match name {
+            "Int" | "Int64" | "Int32" | "Int16" | "Int8" => Some(ConstKind::Int(None)),
+            "Bool" => Some(ConstKind::Bool),
+            "Float" | "Float64" | "Float32" => Some(ConstKind::Float(None)),
+            _ => None,
+        }
+    }
 }
 
 /// Const泛型变量（包含名称、类型约束和索引）
@@ -404,6 +418,8 @@ pub struct ConstVarDef {
     pub kind: ConstKind,
     /// 变量索引
     pub index: usize,
+    /// 值约束表达式（如 N > 0），空 vec = 无约束
+    pub constraints: Vec<EvalConstExpr>,
 }
 
 impl ConstVarDef {
@@ -413,7 +429,12 @@ impl ConstVarDef {
         kind: ConstKind,
         index: usize,
     ) -> Self {
-        ConstVarDef { name, kind, index }
+        ConstVarDef {
+            name,
+            kind,
+            index,
+            constraints: vec![],
+        }
     }
 }
 

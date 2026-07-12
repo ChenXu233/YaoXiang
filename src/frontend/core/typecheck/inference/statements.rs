@@ -160,21 +160,13 @@ impl StatementChecker {
         &self,
         type_ann: &crate::frontend::core::parser::ast::Type,
     ) -> Option<MonoType> {
+        use crate::frontend::core::typecheck::TypeEnvironment;
         match type_ann {
             crate::frontend::core::parser::ast::Type::Generic { name, args, .. } => {
                 let def = self.generic_type_defs.get(name)?;
-                if def.param_names.len() != args.len() {
-                    return None;
-                }
                 let arg_types: Vec<MonoType> =
                     args.iter().map(|a| MonoType::from(a.clone())).collect();
-                Some(
-                    crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type_static(
-                        &def.template,
-                        &def.param_names,
-                        &arg_types,
-                    ),
-                )
+                TypeEnvironment::instantiate_generic_type(def, &arg_types)
             }
             _ => None,
         }
@@ -661,29 +653,72 @@ impl StatementChecker {
                         // parser 已将 type_annotation 从 Type::Fn 改为 Type::Struct，
                         // 所以检查 generic_params 而不是 type_annotation
                         if !generic_params.is_empty() {
-                            let param_names: Vec<String> = generic_params
+                            use crate::frontend::core::parser::ast::GenericParamKind;
+                            use crate::frontend::core::typecheck::environment::GenericTypeDef;
+                            use crate::frontend::core::types::const_data::ConstKind;
+                            use crate::frontend::core::types::const_data::ConstVarDef;
+                            use crate::frontend::core::types::var::TypeVar;
+
+                            let type_param_names: Vec<String> = generic_params
+                                .iter()
+                                .filter(|p| matches!(p.kind, GenericParamKind::Type))
+                                .map(|p| p.name.clone())
+                                .collect();
+
+                            let mut const_binders: Vec<ConstVarDef> = generic_params
                                 .iter()
                                 .filter_map(|p| {
-                                    if matches!(
-                                        p.kind,
-                                        crate::frontend::core::parser::ast::GenericParamKind::Type
-                                    ) {
-                                        Some(p.name.clone())
+                                    if let GenericParamKind::Const { const_type } = &p.kind {
+                                        let type_name = match const_type.as_ref() {
+                                            crate::frontend::core::parser::ast::Type::Name {
+                                                name,
+                                                ..
+                                            } => name.clone(),
+                                            crate::frontend::core::parser::ast::Type::Int(_) => {
+                                                "Int".to_string()
+                                            }
+                                            crate::frontend::core::parser::ast::Type::Float(_) => {
+                                                "Float".to_string()
+                                            }
+                                            crate::frontend::core::parser::ast::Type::Bool => {
+                                                "Bool".to_string()
+                                            }
+                                            _ => "Int".to_string(),
+                                        };
+                                        let kind = ConstKind::from_ast_type_name(&type_name)
+                                            .unwrap_or(ConstKind::Int(None));
+                                        Some((p, kind))
                                     } else {
                                         None
                                     }
                                 })
+                                .enumerate()
+                                .map(|(i, (p, kind))| {
+                                    let idx = type_param_names.len() + i;
+                                    ConstVarDef::new(p.name.clone(), kind, idx)
+                                })
                                 .collect();
-                            if !param_names.is_empty() {
-                                use crate::frontend::core::typecheck::environment::GenericTypeDef;
+
+                            // 从 struct body 提取 const 参数的值约束（如 Assert(N > 0)）
+                            Self::extract_const_constraints(body, &mut const_binders);
+
+                            if !type_param_names.is_empty() || !const_binders.is_empty() {
+                                let type_binders: Vec<TypeVar> =
+                                    (0..type_param_names.len()).map(TypeVar::new).collect();
+                                let poly = PolyType {
+                                    type_binders,
+                                    const_binders,
+                                    body: struct_ty.clone(),
+                                };
                                 self.generic_type_defs.insert(
                                     name.to_string(),
                                     GenericTypeDef {
-                                        param_names,
-                                        template: struct_ty,
+                                        poly,
+                                        type_param_names,
                                     },
                                 );
                             }
+                            return Ok(());
                         }
 
                         return Ok(());
@@ -1562,6 +1597,55 @@ impl StatementChecker {
                     .extend(inferrer.instantiation_requests);
                 result
             }
+        }
+    }
+
+    /// 从 struct body 提取 const 参数的值约束
+    /// 识别 `length: Assert(N > 0)` 模式的字段
+    fn extract_const_constraints(
+        body_stmts: &[Stmt],
+        const_binders: &mut [crate::frontend::core::types::const_data::ConstVarDef],
+    ) {
+        for stmt in body_stmts {
+            if let crate::frontend::core::parser::ast::StmtKind::Var {
+                type_annotation:
+                    Some(crate::frontend::core::parser::ast::Type::Generic { name, args, .. }),
+                ..
+            } = &stmt.kind
+            {
+                if name == "Assert" && !args.is_empty() {
+                    // 从 args[0] 提取约束表达式
+                    if let crate::frontend::core::parser::ast::Type::ConstExpr(expr) = &args[0] {
+                        if let Some(const_expr) =
+                            crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)
+                        {
+                            if let Some(const_var) = Self::find_const_var_in_expr(expr, const_binders) {
+                                const_binders[const_var.index()]
+                                    .constraints
+                                    .push(const_expr);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// 在 Expr 树中查找引用的 const 变量名，返回对应的 ConstVarDef index
+    fn find_const_var_in_expr(
+        expr: &crate::frontend::core::parser::ast::Expr,
+        const_binders: &[crate::frontend::core::types::const_data::ConstVarDef],
+    ) -> Option<crate::frontend::core::types::var::ConstVar> {
+        use crate::frontend::core::parser::ast::Expr;
+        match expr {
+            Expr::Var(name, _) => const_binders
+                .iter()
+                .position(|b| b.name == *name)
+                .map(crate::frontend::core::types::var::ConstVar::new),
+            Expr::BinOp { left, right, .. } => Self::find_const_var_in_expr(left, const_binders)
+                .or_else(|| Self::find_const_var_in_expr(right, const_binders)),
+            Expr::UnOp { expr, .. } => Self::find_const_var_in_expr(expr, const_binders),
+            _ => None,
         }
     }
 }

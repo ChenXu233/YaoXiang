@@ -3,7 +3,13 @@ title: "RFC-008：Runtime 并发模型与调度器脱耦设计"
 status: "已接受"
 author: "晨煦"
 created: "2025-01-05"
-updated: "2026-06-05（与 RFC-024 新并发模型对齐：DAG 分析范围缩小至 spawn 块内、移除旧 L1/L2/L3 引用）"
+updated: "2026-07-05（与 RFC-024 对齐，添加 Issue 关联）"
+issue: "#89"
+issues_impl:
+  - "#50"
+  - "#89"
+pr_impl:
+  - "#7"
 ---
 
 # RFC-008：Runtime 并发模型与调度器脱耦设计

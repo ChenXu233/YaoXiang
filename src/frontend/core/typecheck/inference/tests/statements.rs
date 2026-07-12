@@ -54,6 +54,7 @@ fn make_checker_with_var(
 // Happy path 测试
 // ===================================================================
 
+/// §5.1: 基础创建 → Ok，StatementChecker::new 不 panic
 #[test]
 fn test_statement_checker_creation() {
     // Arrange
@@ -210,7 +211,7 @@ fn test_check_expr_stmt_reassignment_updates_type() {
     assert!(result.is_ok(), "重新赋值应成功: {:?}", result.err());
 }
 
-/// for 循环遍历 Range → Ok
+/// §5.9.2: for 循环遍历 Range → Ok
 #[test]
 fn test_check_for_stmt_range() {
     // Arrange
@@ -287,7 +288,7 @@ fn test_check_if_stmt_non_bool_elif_condition() {
     assert!(result.is_err(), "elif 条件为 Int 时应返回 Err");
 }
 
-/// 使用未定义变量 → Err
+/// §5.3: 使用未定义变量 → Err
 #[test]
 fn test_check_undefined_variable() {
     // Arrange
@@ -301,7 +302,7 @@ fn test_check_undefined_variable() {
     assert!(result.is_err(), "使用未定义变量应返回 Err");
 }
 
-/// 变量声明类型注解与初始化器不匹配 → Err
+/// §5.3.1: 变量声明类型注解与初始化器不匹配 → Err
 #[test]
 fn test_check_var_stmt_type_mismatch() {
     // Arrange
@@ -355,7 +356,7 @@ fn test_check_for_stmt_shadowing() {
 // Boundary 测试
 // ===================================================================
 
-/// 嵌套作用域：内层变量对外层不可见
+/// §5.2: 嵌套作用域：内层变量对外层不可见
 #[test]
 fn test_check_nested_scopes() {
     // Arrange
@@ -386,7 +387,7 @@ fn test_check_nested_scopes() {
     );
 }
 
-/// 嵌套作用域：外层变量对内层可见
+/// §5.2: 嵌套作用域：外层变量对内层可见
 #[test]
 fn test_check_nested_scopes_outer_visible_in_inner() {
     // Arrange
@@ -417,7 +418,7 @@ fn test_check_nested_scopes_outer_visible_in_inner() {
     );
 }
 
-/// var_exists_in_any_scope 和 var_exists_in_current_scope 区分
+/// §5.2: var_exists_in_any_scope 和 var_exists_in_current_scope 区分
 #[test]
 fn test_check_scope_level_queries() {
     // Arrange
@@ -460,12 +461,10 @@ fn test_check_scope_level_queries() {
     checker.exit_scope();
 }
 
-/// 大量语句不 panic
+/// §5.1: 大量语句不 panic
 #[test]
 fn test_check_statement_checker_with_many_statements() {
     // Arrange
-    let mut checker = make_checker();
-    checker.set_collect_all_errors(true);
 
     let mut stmts = Vec::new();
     for i in 0..100 {
@@ -492,7 +491,7 @@ fn test_check_statement_checker_with_many_statements() {
     );
 }
 
-/// check_fn_def 处理带参数的函数
+/// §5.8: check_fn_def 处理带参数的函数
 #[test]
 fn test_check_fn_def_with_params() {
     // Arrange
@@ -523,7 +522,7 @@ fn test_check_fn_def_with_params() {
     assert!(result.is_ok(), "带参数的函数定义应成功: {:?}", result.err());
 }
 
-/// check_fn_def 参数在函数体内可见
+/// §5.8: check_fn_def 参数在函数体内可见
 #[test]
 fn test_check_fn_def_params_visible_in_body() {
     // Arrange
@@ -552,7 +551,7 @@ fn test_check_fn_def_params_visible_in_body() {
     assert!(result.is_ok(), "函数体内使用参数应成功: {:?}", result.err());
 }
 
-/// 变量声明：只有类型注解，无初始化器
+/// §5.3: 变量声明：只有类型注解，无初始化器
 #[test]
 fn test_check_var_stmt_only_annotation() {
     // Arrange
@@ -580,7 +579,7 @@ fn test_check_var_stmt_only_annotation() {
     );
 }
 
-/// 表达式语句（非赋值）→ Ok
+/// §5.3: 表达式语句（非赋值）→ Ok
 #[test]
 fn test_check_expr_stmt_non_assignment() {
     // Arrange

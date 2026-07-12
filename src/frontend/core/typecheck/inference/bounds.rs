@@ -5,9 +5,15 @@
 //! 检查泛型类型边界和约束
 //! 支持鸭子类型：检查类型是否满足接口要求的所有方法（包括方法绑定）
 
-use crate::util::diagnostic::{ErrorCodeDefinition, Result};
+use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition, Result};
+use crate::frontend::core::typecheck::proof::verdict::DisproofKind;
+use crate::frontend::core::typecheck::proof::verdict::DisproofModel;
+use crate::frontend::core::typecheck::proof::verdict::ProofResult;
+use crate::frontend::core::types::const_data::ConstVarDef;
 use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::TraitTable;
+use crate::frontend::core::types::eval::const_eval::ConstGenericEval;
+use crate::frontend::core::types::ConstValue;
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::util::span::Span;
 
@@ -76,22 +82,58 @@ impl BoundsChecker {
         Ok(())
     }
 
-    /// 检查 Const 边界
+    /// 检查 Const 边界（快慢路径模型）
+    ///
+    /// Layer 1: 类型匹配 fast path — 直接验证 ConstKind::matches
+    /// Layer 2: 值约束求值 — ConstGenericEval 求值约束表达式
     pub fn check_const_bounds(
         &self,
-        _ty: &MonoType,
-        _bounds: &[MonoType],
-    ) -> Result<()> {
-        Ok(())
-    }
+        const_binders: &[ConstVarDef],
+        const_args: &[MonoType],
+    ) -> ProofResult {
+        // Layer 1: 类型匹配（fast path）
+        if let Err(diag) = validate_const_args(const_binders, const_args) {
+            return ProofResult::Disproved(DisproofModel {
+                kind: DisproofKind::TypeMismatch,
+                assignments: Vec::new(),
+                constraint: diag.message,
+                span: diag.span,
+                predicate_span: None,
+            });
+        }
 
-    /// 检查生命周期边界
-    pub fn check_lifetime_bounds(
-        &self,
-        _ty: &MonoType,
-        _bounds: &[String],
-    ) -> Result<()> {
-        Ok(())
+        // Layer 2: 值约束求值
+        for (binder, arg) in const_binders.iter().zip(const_args.iter()) {
+            for constraint in &binder.constraints {
+                let mut eval = ConstGenericEval::new();
+                if let MonoType::Literal { value, .. } = arg {
+                    eval.bind_var(binder.name.clone(), value.clone());
+                }
+                match eval.eval(constraint) {
+                    Ok(ConstValue::Bool(true)) => continue,
+                    Ok(ConstValue::Bool(false)) => {
+                        return ProofResult::Disproved(DisproofModel {
+                            kind: DisproofKind::PredicateViolation,
+                            assignments: Vec::new(),
+                            constraint: format!("const 参数 `{}` 不满足约束", binder.name),
+                            span: None,
+                            predicate_span: None,
+                        });
+                    }
+                    Ok(_) | Err(_) => {
+                        return ProofResult::Disproved(DisproofModel {
+                            kind: DisproofKind::PredicateViolation,
+                            assignments: Vec::new(),
+                            constraint: format!("无法验证 const 参数 `{}` 的约束", binder.name),
+                            span: None,
+                            predicate_span: None,
+                        });
+                    }
+                }
+            }
+        }
+
+        ProofResult::Proved
     }
 
     /// 检查泛型参数边界
@@ -99,11 +141,12 @@ impl BoundsChecker {
         &self,
         ty: &MonoType,
         trait_bounds: &[String],
-        const_bounds: &[MonoType],
+        const_binders: &[ConstVarDef],
+        const_args: &[MonoType],
     ) -> Result<()> {
         self.check_trait_bounds(ty, trait_bounds)?;
-        self.check_const_bounds(ty, const_bounds)?;
-        Ok(())
+        let result = self.check_const_bounds(const_binders, const_args);
+        result.into_result()
     }
 
     /// 检查类型是否满足约束（结构化匹配 - 鸭子类型）
@@ -220,7 +263,7 @@ impl BoundsChecker {
 
         Ok(())
     }
-
+    /// 检查两个函数签名是否兼容（支持方法签名带 self 参数：长度差 1 也视为兼容）
     fn fn_signatures_compatible(
         found_fn: &MonoType,
         constraint_fn: &MonoType,
@@ -252,4 +295,38 @@ impl BoundsChecker {
             _ => false,
         }
     }
+}
+
+/// 验证 const 泛型参数
+///
+/// 遍历 const_binders 和 const_args，验证：
+/// 1. 每个 const arg 必须是 MonoType::Literal（编译期已知值）
+/// 2. 字面量的 ConstValue 类型匹配 ConstKind（如 Int 参数不能传 true）
+pub fn validate_const_args(
+    const_binders: &[ConstVarDef],
+    const_args: &[MonoType],
+) -> Result<(), Diagnostic> {
+    use crate::util::diagnostic::ErrorCodeDefinition;
+
+    for (binder, arg) in const_binders.iter().zip(const_args.iter()) {
+        match arg {
+            MonoType::Literal { value, .. } => {
+                if !binder.kind.matches(value) {
+                    return Err(ErrorCodeDefinition::type_mismatch(
+                        binder.kind.type_name(),
+                        &value.to_string(),
+                    )
+                    .build());
+                }
+            }
+            _ => {
+                return Err(ErrorCodeDefinition::type_mismatch(
+                    "编译期字面量",
+                    &format!("{:?}", arg),
+                )
+                .build());
+            }
+        }
+    }
+    Ok(())
 }

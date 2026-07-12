@@ -1,163 +1,174 @@
 ---
-title: "RFC-011: 泛型システム設計 - ゼロコスト抽象とマクロ代替"
-status: "受け入れ済み"
+title: "RFC-011: 泛型系统设计 - 零成本抽象与宏替代"
+status: "已接受"
 author: "晨煦"
 created: "2025-01-25"
-updated: "2026-04-22（Type自己記述機構に更新、泛型呼び出し構文を統一）"
+updated: "2026-04-22（更新为 Type 自描述机制，统一泛型调用语法）"
+issue: "#128"
+issues_impl:
+  - "#45"
+  - "#46"
+  - "#73"
+  - "#90"
+  - "#96"
+  - "#40"
+  - "#151"
+pr_impl:
+  - "#122"
 ---
 
-# RFC-011: 泛型システム設計 - ゼロコスト抽象とマクロ代替
+# RFC-011: 泛型系统设计 - 零成本抽象与宏替代
 
-## 要約
+## 摘要
 
-本文書はYaoXiang言語の**泛型システム設計**を定義する。強力な泛型能力によってゼロコスト抽象を実現し、コンパイル時最適化によってマクロへの依存を削減し、デッドコード除去機構を提供する。
+本文档定义YaoXiang语言的**泛型系统设计**，通过强大的泛型能力实现零成本抽象，利用编译期优化减少对宏的依赖，并提供死代码消除机制。
 
-**核心設計**：
-- **統一シグネチャ構文**：`(T: Type, R: Type) -> ...` 泛型パラメータと通常のパラメータを統一
-- **Type自己記述機構**：`Type` は言語レベルの特殊存在であり、シグネチャ中の `Type` の位置は自動推論で埋められる
-- **型制約**：`T: Dup + Add` のような多重制約、関数型制約
-- **関連型**：`Iterator: (Item: Type) -> Type = { next: () -> Option(Item), has_next: () -> Bool }`
-- **コンパイル時泛型**：`N: Int` 泛型値パラメータ、コンパイル時定数インスタンス化
-- **条件型**：`If: (C: Bool, T: Type, E: Type) -> Type` 型レベル計算、型族
+**核心设计**：
+- **统一签名语法**：`(T: Type, R: Type) -> ...` 泛型参数与普通参数统一
+- **Type 自描述机制**：`Type` 是语言级特殊存在，签名中的 `Type` 位置可自动推断填充
+- **类型约束**：`T: Dup + Add` 多重约束，函数类型约束
+- **关联类型**：`Iterator: (Item: Type) -> Type = { next: () -> Option(Item), has_next: () -> Bool }`
+- **编译期泛型**：`N: Int` 泛型值参数，编译期常量实例化
+- **条件类型**：`If: (C: Bool, T: Type, E: Type) -> Type` 类型级计算，类型族
 
-**価値**：
-- ゼロコスト抽象：コンパイル時単態化、ランタイムオーバーヘッドなし
-- デッドコード除去：インスタンス化グラフ解析 + LLVM最適化
-- マクロ代替：泛型がマクロ使用シーンの90%を代替
-- 型安全性：コンパイル時検査、IDEフレンドリー
-- **明示は暗黙に優る**：`Type` 自己記述、コンパイラが自動推論
+**价值**：
+- 零成本抽象：编译期单态化，无运行时开销
+- 死代码消除：实例化图分析 + LLVM优化
+- 宏替代：泛型替代90%的宏使用场景
+- 类型安全：编译期检查，IDE友好
+- **显式优于隐式**：`Type` 自描述，编译器自动推断
 
-## 参考文書
+## 参考文档
 
-本文書の設計は以下の文書に基づいている：
+本文档的设计基于以下文档：
 
-| 文書 | 関係 | 説明 |
+| 文档 | 关系 | 说明 |
 |------|------|------|
-| [RFC-010: 統一型構文](./010-unified-type-syntax.md) | **構文の基礎** | 泛型構文と統一された `name: type = value` モデルの統合 |
-| [RFC-010: 統一型構文](./010-unified-type-syntax.md) | **呼び出し構文** | 第6節：泛型呼び出し構文 — 統一された `()` 適用、`[]` は完全削除 |
-| [RFC-009: 所有权モデル](./accepted/009-ownership-model.md) | **型システム** | Moveセマンティクスと泛型の自然な結合 |
-| [RFC-001: 並行モデル](./accepted/001-concurrent-model-error-handling.md) | **実行モデル** | DAG解析と泛型型検査 |
-| [RFC-008: ランタイムモデル](./accepted/008-runtime-concurrency-model.md) | **コンパイラアーキテクチャ** | 泛型単態化とコンパイル時最適化戦略 |
-| [型宇宙思想](../reference/plan/ongoing/类型宇宙思想.md) | **理論的核** | 型宇宙階層モデルと値依存型設計 |
-| [RFC-022: ホーア論理静的検証](./draft/022-hol-logic-verification.md) | **停止検査** | decreases仕様とコンパイル時評価の安全保証 |
+| [RFC-010: 统一类型语法](./010-unified-type-syntax.md) | **语法基础** | 泛型语法与统一 `name: type = value` 模型集成 |
+| [RFC-010: 统一类型语法](./010-unified-type-syntax.md) | **调用语法** | 第6节：泛型调用语法——统一 `()` 应用，`[]` 彻底移除 |
+| [RFC-009: 所有权模型](./accepted/009-ownership-model.md) | **类型系统** | Move语义与泛型的自然结合 |
+| [RFC-001: 并作模型](./accepted/001-concurrent-model-error-handling.md) | **执行模型** | DAG分析与泛型类型检查 |
+| [RFC-008: 运行时模型](./accepted/008-runtime-concurrency-model.md) | **编译器架构** | 泛型单态化与编译期优化策略 |
+| [类型宇宙思想](../reference/plan/ongoing/类型宇宙思想.md) | **理论核心** | 类型宇宙层级模型与值依赖类型设计 |
+| [RFC-022: 霍尔逻辑静态验证](./draft/022-hol-logic-verification.md) | **终止检查** | decreases规约与编译期求值安全保障 |
 
-## 型宇宙思想と値依存型
+## 类型宇宙思想与值依赖类型
 
-YaoXiang の泛型システムは**型宇宙思想**の上に構築されている。このメンタルモデルは言語のすべての概念を階層構造として統一し、中核的革新は**値依存型**をType2層の第一級市民に引き上げたことにある。
+YaoXiang 的泛型系统建立在**类型宇宙思想**之上，这一心智模型将语言中的所有概念统一为分层结构，核心创新在于将**值依赖类型**提升为 Type2 层的一等公民。
 
-### 値依存型とは何か？
+### 什么是值依赖类型？
 
-**値依存型**は、一つ以上の**値**（他の型だけでなく）に依存する型である。これらの値はコンパイル時に評価され、コンパイル段階で型安全保証を提供できる。
+**值依赖类型**是一种类型，它依赖于一个或多个**值**（而非仅依赖于其他类型）。这些值可以在编译期求值，从而在编译阶段就提供类型安全保证。
 
 ```yaoxiang
-# 伝統的な泛型：型パラメータ
+# 传统泛型：类型参数
 List: (T: Type) -> Type
 
-# 値依存型：値パラメータ
-Vec: (n: Int) -> Type  # ベクトル型は長さの値 n に依存する
-Matrix: (T: Type, Rows: Int, Cols: Int) -> Type  # 行列型は行数と列数に依存する
+# 值依赖类型：值参数
+Vec: (n: Int) -> Type  # 向量类型依赖于长度值 n
+Matrix: (T: Type, Rows: Int, Cols: Int) -> Type  # 矩阵类型依赖于行数和列数
 ```
 
-### 値依存型の核心的優位性
+### 值依赖类型的核心优势
 
-伝統的な泛型と比較して、YaoXiang の値依存型には以下の核心的優位性がある：
+相比传统泛型，YaoXiang 的值依赖类型具有以下核心优势：
 
-| 特性 | 伝統的な泛型 (C++/Rust) | YaoXiang 値依存型 |
+| 特性 | 传统泛型 (C++/Rust) | YaoXiang 值依赖类型 |
 |------|-------------------|---------------------|
-| 型が依存する値 | 型パラメータのみ | 関数の呼び出し結果を含む任意の値に依存可能 |
-| コンパイル時評価 | C++テンプレートの手動特殊化、Rust は不可 | 自動コンパイル時評価、停止を保証 |
-| 型レベル計算 | テンプレートメタプログラミング（複雑/危険） | 統一された型レベル計算エンジン |
-| 型安全性 | C++はなし、Rustは限定的 | 完全な型安全性、コンパイル時検査 |
-| 次元検証 | ランタイム検査または手動特殊化 | コンパイル時次元検証、ランタイムオーバーヘッドなし |
+| 类型依赖的值 | 仅依赖类型参数 | 可依赖任何值，包括函数调用结果 |
+| 编译期求值 | C++模板手动特化，Rust无 | 自动编译期求值，保证终止 |
+| 类型级计算 | 模板元编程（复杂/危险） | 统一的类型级计算引擎 |
+| 类型安全 | C++无，Rust受限 | 完整类型安全，编译期检查 |
+| 维度验证 | 运行时检查或手动特化 | 编译期维度验证，无运行时开销 |
 
-### 型宇宙階層と値依存型
+### 类型宇宙层级与值依赖类型
 
-型宇宙思想は言語の概念を意味的役割によって異なる階層に分割し、値依存型は **Type2層** に位置する：
+类型宇宙思想将语言概念按语义角色划分为不同层级，值依赖类型位于 **Type2 层**：
 
-| 階層 | 役割 | 例 |
+| 层级 | 角色 | 示例 |
 |------|------|------|
-| Type-1 | 値 | `42`, `factorial(5)`, 関数そのもの |
-| Type0 | メタ型キーワード | `Type` |
-| Type1 | 具体型 | `Int`, `String`, `Vec(3)` |
-| **Type2** | **関数/型コンストラクタ/値依存型** | `add: (Int, Int) -> Int`, `Vec: (n: Int) -> Type`, `Matrix: (T: Type, Rows: Int, Cols: Int) -> Type` |
+| Type-1 | 值 | `42`, `factorial(5)`, 函数本身 |
+| Type0 | 元类型关键字 | `Type` |
+| Type1 | 具体类型 | `Int`, `String`, `Vec(3)` |
+| **Type2** | **函数/类型构造器/值依赖类型** | `add: (Int, Int) -> Int`, `Vec: (n: Int) -> Type`, `Matrix: (T: Type, Rows: Int, Cols: Int) -> Type` |
 
-**重要な設計**：Type2層の関数、型コンストラクタ、値依存型は**統一構文**であり、すべて `(params) -> result` の形式である：
-- 通常関数：`(Int, Int) -> Int` → 戻り値は値
-- 型コンストラクタ：`(T: Type) -> Type` → 戻り値は型
-- 値依存型：`(n: Int) -> Type` → 戻り値は型だが、値パラメータに依存する
+**关键设计**：Type2 层的函数、类型构造器和值依赖类型**统一语法**，都是 `(params) -> result` 的形式：
+- 普通函数：`(Int, Int) -> Int` → 返回值是值
+- 类型构造器：`(T: Type) -> Type` → 返回值是类型
+- 值依赖类型：`(n: Int) -> Type` → 返回值是类型，但依赖于值参数
 
-> **Curry-Howard同型**：この統一は偶然ではない。Curry-Howard同型は「型は命题、プログラムは証明」であることを示す — 関数型 `A → B` は論理的含意「A ならば B」に対応し、泛型 `(T: Type) -> Type` は全称量化「すべての型Tに対して」に対応し、値依存型 `(n: Int) -> Type` は「各整数nに対して型が存在する」に対応する。YaoXiang は関数、型コンストラクタ、値依存型をType2層に統一することで、本質的に「証明」と「計算」を同一の概念 — **構成的証明** — として統合している。これがまさに、Curry-Howard同型を言語設計に直接反映したものである：一つの形式 `(params) -> result` が論理的命题と計算過程を同時に担う。
+> **Curry-Howard 同构**：这种统一不是巧合。Curry-Howard 同构指出"类型即命题，程序即证明"——函数类型 `A → B` 对应逻辑蕴含"若 A 则 B"，泛型 `(T: Type) -> Type` 对应全称量化"对所有类型 T"，值依赖类型 `(n: Int) -> Type` 对应"对每个整数 n 存在一个类型"。YaoXiang 将函数、类型构造器和值依赖类型统一到 Type2 层，本质上是将"证明"和"计算"统一为同一概念——**构造性证明**。这正是 Curry-Howard 同构在语言设计中的直接体现：一种形式（`(params) -> result`）同时承载逻辑命题和计算过程。
 
-### コンパイル時決定性の保証
+### 编译期确定性保证
 
-YaoXiang の型宇宙思想は以下を要求する：**Type階層のすべてはコンパイル時に決定される**。
+YaoXiang 的类型宇宙思想要求：**Type 层级的一切都是编译期确定的**。
 
 ```yaoxiang
-# コンパイル時次元検証の例
+# 编译期维度验证示例
 Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
     data: Array(Array(T, Cols), Rows),
-    # コンパイル時検査：次元は正でなければならない
+    # 编译期检查：维度必须为正
     _assert: Assert[Rows > 0],
     _assert: Assert[Cols > 0],
 }
 
-# 3x3単位行列を作成 — コンパイル時に完了
+# 创建 3x3 单位矩阵 - 编译期完成
 identity: (T: Add + Zero + One, N: Int) -> ((size: N) -> Matrix(T, N, N)) = {
     matrix = Matrix(T, N, N)()
     # ...
 }
 
-# コンパイル時計算：factorial(3) = 6、ベクトルサイズはコンパイル時に決定
+# 编译期计算：factorial(3) = 6，向量大小在编译期确定
 vec: Vec(factorial(3)) = Vec(6)()
 ```
 
-コンパイラは自動的に以下を行う：
-1. 型位置での関数呼び出しを検出
-2. 関数が `decreases` 仕様でマークされているかを検証（後述の停止検査機構を参照）
-3. コンパイル時に評価を実行
-4. 結果を生成された型に埋め込む
+编译器会自动：
+1. 检测类型位置上的函数调用
+2. 验证函数是否标记了 `decreases` 规约（见下方终止检查机制）
+3. 在编译期执行求值
+4. 将结果嵌入生成的类型
 
-### 値依存型の応用シーン
+### 值依赖类型的应用场景
 
-#### コンパイル時次元検証
+#### 编译期维度验证
 ```yaoxiang
-# 行列乗算：コンパイル時に次元一致を検証
+# 矩阵乘法：编译期验证维度匹配
 multiply: (T: Add + Multiply + Zero,
            Rows: Int, Cols: Int, M: Int) -> ((
     a: Matrix(T, Rows, Cols),
     b: Matrix(T, Cols, M)
 ) -> Matrix(T, Rows, M)) = {
-    # コンパイル時検査：a.Cols == b.Rows、そうでなければコンパイルエラー
+    # 编译期检查：a.Cols == b.Rows，否则编译错误
     result = Matrix(T, Rows, M)()
     # ...
 }
 
-# エラーはコンパイル時に捕捉される：
-# multiply(matrix_2x3, matrix_4x2)  # コンパイルエラー：2 != 4
+# 错误在编译期捕获：
+# multiply(matrix_2x3, matrix_4x2)  # 编译错误：2 != 4
 ```
 
-#### 型安全な配列サイズ
+#### 类型安全的数组大小
 ```yaoxiang
-# 配列サイズはコンパイル時定数
+# 数组大小是编译期常量
 Array: (T: Type, N: Int) -> Type = {
     data: Array(T, N),
     length: N,
 }
 
-# N はコンパイル時定数であり、型レベル計算に使用可能
+# N 是编译期常量，可以用于类型级计算
 first_three: Array(Int, 3) = Array(Int, 3)(1, 2, 3)
-# first_three.length == 3（コンパイル時に既知）
+# first_three.length == 3（编译期已知）
 ```
 
-#### 条件型
+#### 条件类型
 ```yaoxiang
-# 型レベル If
+# 类型级If
 If: (C: Bool, T: Type, E: Type) -> Type = match C {
     True => T,
     False => E,
 }
 
-# 型族
+# 类型族
 AsString: (T: Type) -> Type = match T {
     Int => String,
     Float => String,
@@ -166,9 +177,9 @@ AsString: (T: Type) -> Type = match T {
 }
 ```
 
-#### 泛型関数
+#### 泛型函数
 ```yaoxiang
-# map: 泛型関数、型パラメータ T, R はコンパイル時に決定
+# map: 泛型函数，类型参数 T, R 在编译期确定
 map: (T: Type, R: Type) -> (
     (list: List(T), f: (x: T) -> R) -> List(R)
 ) = (list, f) => {
@@ -179,44 +190,44 @@ map: (T: Type, R: Type) -> (
     return result
 }
 
-# 使用時は完全に透明、型は自動推論される
+# 使用时完全透明，类型自动推导
 numbers = List(1, 2, 3)
-doubled = map(numbers, (x) => x * 2)  # map[Int, Int] と推論される
+doubled = map(numbers, (x) => x * 2)  # 推导为 map[Int, Int]
 ```
 
-### 他言語との比較
+### 与其他语言的对比
 
-| 特性 | C++テンプレート | Rust泛型 | Haskell GADT | **YaoXiang** |
+| 特性 | C++模板 | Rust泛型 | Haskell GADT | **YaoXiang** |
 |------|---------|----------|--------------|--------------|
-| 型パラメータ | ✅ | ✅ | ✅ | ✅ |
-| 値依存型 | ❌ | ❌ | ✅ | ✅ |
-| コンパイル時評価 | テンプレートインスタンス化 | ❌ | ✅ | ✅ |
-| 停止保証 | ❌ | ❌ | ❌（危険） | ✅（decreases仕様） |
-| 型安全性 | ❌（マクロ展開） | ✅ | ✅ | ✅ |
-| 統一構文 | ❌ | ❌ | ❌ | ✅ |
-| コンパイル時次元検証 | 手動特殊化 | ランタイム検査 | 型族 | コンパイル時自動検証 |
-| decreases仕様 | ❌ | ❌ | ❌ | ✅ |
+| 类型参数 | ✅ | ✅ | ✅ | ✅ |
+| 值依赖类型 | ❌ | ❌ | ✅ | ✅ |
+| 编译期求值 | 模板实例化 | ❌ | ✅ | ✅ |
+| 终止保证 | ❌ | ❌ | ❌（危险） | ✅（decreases规约） |
+| 类型安全 | ❌（宏展开） | ✅ | ✅ | ✅ |
+| 统一语法 | ❌ | ❌ | ❌ | ✅ |
+| 编译期维度验证 | 手动特化 | 运行时检查 | 类型族 | 编译期自动验证 |
+| decreases规约 | ❌ | ❌ | ❌ | ✅ |
 
-### 停止検査機構（RFC-022との統合）
+### 终止检查机制（与RFC-022集成）
 
-値依存型のコンパイル時評価は**停止を保証**しなければならない。さもないと型システムが無限ループに陥る。YaoXiang は **decreases仕様** によってこれを保証し、RFC-022 とシームレスに統合する。
+值依赖类型的编译期求值必须**保证终止**，否则类型系统将陷入无限循环。YaoXiang 通过 **decreases 规约** 确保这一点，与 RFC-022 无缝集成。
 
-#### 再帰関数の停止仕様
+#### 递归函数的终止规约
 ```yaoxiang
-# コンパイル時階乗：停止を証明しなければならない
+# 编译期阶乘：必须证明终止
 factorial: (n: Int) -> Int = {
     //! requires: n >= 0
     //! ensures: result == n!
-    //! decreases: n    # 再帰ごとに n は厳密に減少する
+    //! decreases: n    # 每次递归 n 严格递减
     if n <= 1 { return 1 }
     return n * factorial(n - 1)
 }
 
-# 使用例：型位置で呼び出し
-vec: Vec(factorial(5)) = Vec(120)()  # コンパイル時に factorial(5) = 120 と評価
+# 使用：在类型位置调用
+vec: Vec(factorial(5)) = Vec(120)()  # 编译期求值 factorial(5) = 120
 ```
 
-#### ループの停止仕様
+#### 循环的终止规约
 ```yaoxiang
 sum: (arr: Array(Int, n)) -> Int = {
     s = 0; i = 0
@@ -229,97 +240,97 @@ sum: (arr: Array(Int, n)) -> Int = {
 }
 ```
 
-#### 停止検査のワークフロー
+#### 终止检查的工作流程
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  型検査段階                                                  │
-│  型位置での関数呼び出しに遭遇（例：Vec(factorial(5))）       │
+│  类型检查阶段                                                │
+│  遇到类型位置上的函数调用（如 Vec(factorial(5))）            │
 └─────────────────────────┬───────────────────────────────────┘
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  1. decreases仕様を検査                                       │
-│     - decreases あり：すべての再帰パスで減少条件を検証         │
-│     - decreases なしだが明らかに停止する：直接評価              │
-│     - decreases なし、かつ停止しない可能性：コンパイルエラー     │
+│  1. 检查 decreases 规约                                      │
+│     - 有 decreases: 验证递减条件在所有递归路径上成立           │
+│     - 无 decreases 但明显可终止: 直接求值                      │
+│     - 无 decreases 且可能不终止: 编译错误                     │
 └─────────────────────────┬───────────────────────────────────┘
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  2. コンパイル時評価（組み込みインタプリタが実行）             │
-│     - 純関数：直接評価                                        │
-│     - 副作用：コンパイルエラー（型位置は副作用なしでなければ）  │
+│  2. 编译期求值（由内置解释器执行）                           │
+│     - 纯函数：直接求值                                       │
+│     - 副作用：编译错误（类型位置必须无副作用）                │
 └─────────────────────────┬───────────────────────────────────┘
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  3. 結果を型に埋め込み                                        │
+│  3. 结果嵌入类型                                            │
 │     - Vec(factorial(5)) → Vec(120)                          │
-│     - Matrix(Float, 3, 3) → 具体型                            │
+│     - Matrix(Float, 3, 3) → 具体类型                        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-#### 優位性
+#### 优势
 
-- **安全性**：コンパイル時評価の必然的な停止を保証し、型システムの無限ループを回避
-- **統一性**：停止検査と部分正当性検証が同じ仕様機構を共有
-- **段階的強化**：ランタイム検査から完全静的証明へと段階的に移行可能
+- **安全性**：确保编译期求值必然终止，避免类型系统陷入无限循环
+- **统一性**：终止检查与部分正确性验证共享同一套规约机制
+- **渐进增强**：可从运行时检查逐步过渡到完全静态证明
 
-## 動機
+## 动机
 
-### なぜ強い泛型システムが必要なのか？
+### 为什么需要强泛型系统？
 
-現在の主流言語の泛型には限界がある：
+当前主流语言的泛型存在局限：
 
-| 言語 | 泛型能力 | 問題 |
+| 语言 | 泛型能力 | 问题 |
 |------|----------|------|
-| Java | 境界型 | コンパイル時単態化、泛型特殊化なし |
-| C# | 泛型制約 | ランタイム型検査、性能オーバーヘッドあり |
-| Rust | 泛型 + Trait | Traitシステムが複雑、学習曲線が急峻 |
-| C++ | テンプレート | テンプレート特殊化が複雑、コンパイルエラー情報が悪い |
-| **YaoXiang** | **値依存型** | **型が値に依存可能、コンパイル時次元検証、停止保証** |
+| Java | 边界类型 | 编译期单态化，无泛型特化 |
+| C# | 泛型约束 | 运行时类型检查，有性能开销 |
+| Rust | 泛型 + Trait | Trait系统复杂，学习曲线陡峭 |
+| C++ | 模板 | 模板特化复杂，编译错误信息差 |
+| **YaoXiang** | **值依赖类型** | **类型可依赖值，编译期维度验证，终止保证** |
 
-### 核心的矛盾
+### 核心矛盾
 
-1. **性能 vs 柔軟性**：ランタイム柔軟性 vs コンパイル時最適化
-2. **複雑 vs 簡潔**：強力な型システム vs 使いやすさ
-3. **マクロ vs 泛型**：マクロコード生成 vs 泛型型安全性
-4. **値依存 vs 型安全性**：伝統的な泛型ではコンパイル時に次元を検証できない
+1. **性能 vs 灵活性**：运行时灵活性 vs 编译期优化
+2. **复杂 vs 简洁**：强大的类型系统 vs 易用性
+3. **宏 vs 泛型**：宏代码生成 vs 泛型类型安全
+4. **值依赖 vs 类型安全**：传统泛型无法在编译期验证维度
 
-### 値依存型の核心的優位性
+### 值依赖类型的核心优势
 
-YaoXiang の**値依存型**は伝統的な泛型に対する核心的優位性である：
+YaoXiang 的**值依赖类型**是相对于传统泛型的核心优势：
 
-| 優位性 | 説明 |
+| 优势 | 说明 |
 |------|------|
-| **型が値に依存** | `Vec: (n: Int) -> Type` により型が具体的な値に依存 |
-| **コンパイル時評価** | 型位置での関数呼び出しはコンパイル時に評価され、結果が直接型に埋め込まれる |
-| **次元検証** | `Matrix(Float, 3, 3)` でコンパイル時に行列次元を検証 |
-| **型レベル計算** | `If`, `Match` などの条件型が型レベル計算をサポート |
-| **停止保証** | decreases仕様がコンパイル時評価の必然的な停止を保証 |
+| **类型依赖值** | `Vec: (n: Int) -> Type` 让类型依赖于具体的值 |
+| **编译期求值** | 类型位置的函数调用在编译期求值，结果直接嵌入类型 |
+| **维度验证** | `Matrix(Float, 3, 3)` 在编译期验证矩阵维度 |
+| **类型级计算** | `If`, `Match` 等条件类型支持类型级计算 |
+| **终止保证** | decreases 规约确保编译期求值必然终止 |
 
 ```yaoxiang
-# C++/Rust にはできないコンパイル時検証
+# C++/Rust 无法做到的编译期验证
 matrix: Matrix(Float, factorial(3), factorial(2)) = ...
-# コンパイル時計算：factorial(3) = 6, factorial(2) = 2
-# 型は Matrix(Float, 6, 2)
+# 编译期计算：factorial(3) = 6, factorial(2) = 2
+# 类型为 Matrix(Float, 6, 2)
 
-# 次元不一致はコンパイル時に捕捉される
+# 维度不匹配在编译期捕获
 identity: Matrix(Float, 3, 3) = ...
-# multiply(matrix_2x3, identity_3x3)  # コンパイルエラー：2 != 3
+# multiply(matrix_2x3, identity_3x3)  # 编译错误：2 != 3
 ```
 
-### 泛型システムの価値
+### 泛型系统的价值
 
 ```yaoxiang
-# 例：統一API設計
-# 異なるコンテナ型のmap操作
+# 示例：统一API设计
+# 不同容器类型的map操作
 
-# 従来方案：型ごとに個別実装
+# 传统方案：每个类型单独实现
 map_int_array: (array: Array(Int), f: Fn(Int) -> Int) -> Array(Int) = ...
 map_string_array: (array: Array(String), f: Fn(String) -> String) -> Array(String) = ...
 map_int_list: (list: List(Int), f: Fn(Int) -> Int) -> List(Int) = ...
 map_string_list: (list: List(String), f: Fn(String) -> String) -> List(String) = ...
 
-# 泛型方案：一つの泛型関数がすべての型をカバー
+# 泛型方案：一个泛型函数覆盖所有类型
 map: (T: Type, R: Type)(container: Container(T), f: Fn(T) -> R) -> Container(R) = {
     for item in container {
         result.push(f(item))
@@ -328,42 +339,42 @@ map: (T: Type, R: Type)(container: Container(T), f: Fn(T) -> R) -> Container(R) 
 }
 ```
 
-## 設計目標
+## 设计目标
 
-### 核心的目標
+### 核心目标
 
-1. **ゼロコスト抽象** - 泛型呼び出しは具体型呼び出しと等価
-2. **デッドコード除去** - コンパイル時分析、使用される泛型のみをインスタンス化
-3. **マクロ代替** - 泛型がマクロ使用シーンの90%を代替
-4. **型安全性** - コンパイル時検査、ランタイム型オーバーヘッドなし
-5. **IDEフレンドリー** - スマートヒント、明確なエラー情報
-6. **値依存型** - 型が値に依存可能、コンパイル時次元検証をサポート
-7. **コンパイル時評価の安全性** - decreases仕様によってコンパイル時評価の停止を保証
+1. **零成本抽象** - 泛型调用等价于具体类型调用
+2. **死代码消除** - 编译期分析，只实例化被使用的泛型
+3. **宏替代** - 泛型替代90%的宏使用场景
+4. **类型安全** - 编译期检查，无运行时类型开销
+5. **IDE友好** - 智能提示，清晰错误信息
+6. **值依赖类型** - 类型可依赖值，支持编译期维度验证
+7. **编译期求值安全** - 通过 decreases 规约保证编译期求值终止
 
-### 設計原則
+### 设计原则
 
-- **コンパイル時決定**：泛型パラメータはコンパイル時に決定
-- **単態化優先**：具体コードを生成、虚関数呼び出しを回避
-- **制約駆動**：型制約がインスタンス化をガイド
-- **プラットフォーム最適化**：特殊化でプラットフォーム固有の最適化をサポート
-- **型宇宙統一**：関数/型コンストラクタ/値依存型をType2層に統一
-- **停止保証**：型位置での関数呼び出しは停止を証明しなければならない
+- **编译期确定**：泛型参数在编译期确定
+- **单态化优先**：生成具体代码，避免虚函数调用
+- **约束驱动**：类型约束指导实例化
+- **平台优化**：特化支持平台特定优化
+- **类型宇宙统一**：函数/类型构造器/值依赖类型统一为 Type2 层
+- **终止保证**：类型位置的函数调用必须证明终止
 
 ## 提案
 
-### 1. 基礎泛型
+### 1. 基础泛型
 
-#### 1.1 泛型型パラメータ
+#### 1.1 泛型类型参数
 
-> **重要なルール**：泛型型定義は**明示的に `: Type` を标注しなければならない**。さもないとHMによって関数として推論される。
+> **关键规则**：泛型类型定义**必须显式标注 `: Type`**，否则会被 HM 推断为函数。
 >
-> | 書き方 | 意味 |
+> | 写法 | 含义 |
 > |------|------|
-> | `List: (T: Type) -> Type = {...}` | ✅ 型コンストラクタ |
-> | `List = {...}` | ❌ HMが関数として推論、型ではない |
+> | `List: (T: Type) -> Type = {...}` | ✅ 类型构造器 |
+> | `List = {...}` | ❌ HM 推断为函数，不是类型 |
 
 ```yaoxiang
-# 泛型型定義（: Type 必須）
+# 泛型类型定义（必须有 : Type）
 Option: (T: Type) -> Type = {
     some: (T) -> Self,
     none: () -> Self
@@ -377,11 +388,11 @@ Result: (T: Type, E: Type) -> Type = {
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
-    push: (self: List(T), item: T) -> Void,   # self は単なる慣習名であり、キーワードではない
+    push: (self: List(T), item: T) -> Void,   # self 只是约定名，不是关键字
     get: (self: List(T), index: Int) -> Option(T),
 }
 
-# 泛型関数（: Type なし、HMが関数として推論）
+# 泛型函数（无 : Type，HM 推断为函数）
 map: (T: Type, R: Type) -> ((opt: Option(T), f: Fn(T) -> R) -> Option(R)) = {
     return match opt {
         some => Option.some(f(some)),
@@ -389,46 +400,46 @@ map: (T: Type, R: Type) -> ((opt: Option(T), f: Fn(T) -> R) -> Option(R)) = {
     }
 }
 
-# 泛型制約（直接表現式、単一行なら return 省略可）
+# 泛型约束（直接表达式，单行可省略 return）
 clone: (T: Clone)(value: T) -> T = value.clone()
 
-# 複数型パラメータ
+# 多类型参数
 combine: (T: Type, U: Type) -> ((a: T, b: U) -> (T, U)) = (a, b)
 ```
 
-### 泛型関数の呼び出し構文
+### 泛型函数调用语法
 
-#### 1.1 統一シグネチャ構文
+#### 1.1 统一签名语法
 
 ```yaoxiang
-# 泛型関数は統一された (T: Type, R: Type) シグネチャ構文を使用
+# 泛型函数使用统一的 (T: Type, R: Type) 签名语法
 map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R)) = ...
 
-# 複数型パラメータ
+# 多类型参数
 combine: (T: Type, U: Type) -> ((a: T, b: U) -> (T, U)) = (a, b)
 ```
 
-#### 1.2 Type自己記述機構
+#### 1.2 Type 自描述机制
 
-`Type` は言語レベルの特殊存在であり、コンパイラはシグネチャ中の `Type` の位置を自然に認識し、実際のパラメータ型から自動推論して埋める。
+`Type` 是语言级特殊存在，编译器天然能识别签名中的 `Type` 位置，并自动从实际参数类型推断填充。
 
 ```yaoxiang
-# コンパイラが泛型パラメータを自動推論
+# 编译器自动推断泛型参数
 numbers: List(Int) = List(Int)
 #         ^^^^^^^^   ^^^^^^
-#         型宣言     コンストラクタ呼び出し：Int が T を埋める
+#         类型声明   构造调用：Int 填充 T
 
-# 関数呼び出し推論
+# 函数调用推断
 numbers: List(Int) = List(Int)
 f: (x: Int) -> String = (x) => x.to_string()
 strings: List(String) = map(numbers, f)
-# コンパイラ推論：T=Int, R=String
+# 编译器推断：T=Int, R=String
 ```
 
-#### 1.3 単態化
+#### 1.3 单态化
 
 ```yaoxiang
-# ソースコード
+# 源代码
 map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R)) = {
     result: List(R) = List(R)()
     for x in list {
@@ -437,14 +448,14 @@ map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R)) = {
     return result
 }
 
-# 使用箇所
+# 使用点
 int_list: List(Int) = List(Int)
-doubled: List(Int) = map(int_list, (x: Int) => x * 2)  # map[Int, Int] をインスタンス化
+doubled: List(Int) = map(int_list, (x: Int) => x * 2)  # 实例化 map[Int, Int]
 
 string_list: List(String) = List(String)
-uppercased: List(String) = map(string_list, (s: String) => s.to_uppercase())  # map[String, String] をインスタンス化
+uppercased: List(String) = map(string_list, (s: String) => s.to_uppercase())  # 实例化 map[String, String]
 
-# コンパイル後（等価コード）
+# 编译后（等价代码）
 map_Int_Int: (list: List(Int), f: (Int) -> Int) -> List(Int) = {
     result: List(Int) = List(Int)
     for x in list {
@@ -462,23 +473,22 @@ map_String_String: (list: List(String), f: (String) -> String) -> List(String) =
 }
 ```
 
-#### 1.4 明示的指定（推論失敗時）
+#### 1.4 显式填充（当推断失败时）
 
 ```yaoxiang
-# 推論可能な場合は Type パラメータを省略
+# 可推断时省略 Type 参数
 numbers: List(Int) = List(Int)
 strings: List(String) = map(numbers, (x: Int) => x.to_string())
 
-# 推論不可能な場合は明示的指定が必須
+# 无法推断时必须显式填充
 # map(numbers, (x) => x)  # ❌ Error: Cannot infer R
-```
 
-### 2. 型制約システム
+### 2. 类型约束系统
 
-#### 2.1 単一制約
+#### 2.1 单一约束
 
 ```yaoxiang
-# 基本的な trait 定義（インターフェース型）
+# 基本trait定义（接口类型）
 Clone: Type = {
     clone: (Self) -> Self,
 }
@@ -491,7 +501,7 @@ Debug: Type = {
     fmt: (Self, Formatter) -> Result,
 }
 
-# 制約の使用：シグネチャ内で型制約を直接宣言
+# 使用约束：在签名中直接声明类型约束
 clone: (T: Clone) -> (value: T) -> T = value.clone()
 
 debug_print: (T: Debug)(value: T) -> Void = {
@@ -501,23 +511,23 @@ debug_print: (T: Debug)(value: T) -> Void = {
 }
 ```
 
-#### 2.2 多重制約
+#### 2.2 多重约束
 
 ```yaoxiang
-# 多重制約構文
+# 多重约束语法
 combine: (T: Clone + Add)(a: T, b: T) -> T = {
     a.clone() + b
 }
 
-# 泛型コンテナのソート
+# 泛型容器的排序
 sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T) = {
-    # ソートアルゴリズムの実装
+    # 实现排序算法
     result: List(T) = list.clone()
     quicksort(&mut result)
     return result
 }
 
-# 関数型制約
+# 函数类型约束
 map: (T: Type, R: FnMut(T))(array: Array(T), f: R) -> Array(R) = {
     result: Array(R) = Array()
     for item in array {
@@ -527,20 +537,20 @@ map: (T: Type, R: FnMut(T))(array: Array(T), f: R) -> Array(R) = {
 }
 
 # 使用
-doubled: Array(Int) = map(Array(1, 2, 3), (x: Int) => x * 2)  # コンパイラが推論
+doubled: Array(Int) = map(Array(1, 2, 3), (x: Int) => x * 2)  # 编译器推断
 ```
 
-#### 2.3 関数型制約
+#### 2.3 函数类型约束
 
 ```yaoxiang
-# 高階関数制約
+# 高阶函数约束
 call_twice: (T: Type, F: Fn() -> T)(f: F) -> (T, T) = (f(), f())
 
 call_with_arg: (T: Type, U: Type, F: Fn(T) -> U)(arg: T, f: F) -> U = f(arg)
 
 compose: (A: Type, B: Type, C: Type, F: Fn(A) -> B, G: Fn(B) -> C)(a: A, f: F, g: G) -> C = g(f(a))
 
-# 使用例
+# 使用示例
 result: Int = call_with_arg(42, (x: Int) => x * 2)  # result = 84
 composed: String = compose(
     "hello",
@@ -549,77 +559,77 @@ composed: String = compose(
 )  # composed = "HELLO WORLD"
 ```
 
-#### 2.4 組み込みマーカートレイト：Dup と Clone
+#### 2.4 内置 marker trait：Dup 与 Clone
 
-**三種類のコピーセマンティクス**：
+**三类复制语义**：
 
-| 型 | 意味 | トリガー方式 | 適用シーン |
+| 类型 | 含义 | 触发方式 | 适用场景 |
 |------|------|----------|----------|
-| **原語値コピー** | 代入時に自動値コピー、二つの値は完全に独立 | 代入/引数渡しで自動 | Int, Float, Bool, Char |
-| **Dup** | シャローコピー：ハンドル/トークンをコピー、基礎データを共有 | 代入/引数渡しで自動 | `&T` トークン、`ref T`、String/Bytes |
-| **Clone** | ディープコピー：完全独立な副本を作成 | `value.clone()` | Clone を実装する任意の型 |
+| **原语值复制** | 赋值时自动值复制，两个值完全独立 | 赋值/传参自动 | Int, Float, Bool, Char |
+| **Dup** | 浅拷贝：复制句柄/令牌，底层数据共享 | 赋值/传参自动 | `&T` 令牌、`ref T`、String/Bytes |
+| **Clone** | 深拷贝：创建完整独立副本 | `value.clone()` | 任何实现 Clone 的类型 |
 
-**Dup のセマンティクス**：Dup を実装した型は、代入/引数渡し時に所有権を移転しない — コンパイラがハンドル/トークンをコピーし、複数の所有者が同じ基礎データを指す。これは RFC-009 所有権モデルにおける Move デフォルトセマンティクスの補完である。
+**Dup 的语义**：实现了 Dup 的类型在赋值/传参时不转移所有权——编译器复制句柄/令牌，多个持有者指向同一底层数据。这是 RFC-009 所有权模型中 Move 默认语义的互补。
 
-**Dup と Clone は直交的な概念である**：
-
-```
-Dup = ハンドルをコピー、データを共有（変更は相互に影響する）
-Clone = データをコピー、副本は独立（変更は相互に影響しない）
-```
-
-**ルール**：
+**Dup 与 Clone 是正交的概念**：
 
 ```
-1. 原語値型（Int, Float, Bool, Char） — コンパイラ組み込みの値コピー、Dup には属さない
-2. Dup  — 参照/トークン型と内部参照カウントの型にのみ適用
-3. Clone — 明示的ディープコピー、任意の型が実装可能
-4. デフォルト Move — 他の型はデフォルトの Move セマンティクスを維持
+Dup = 复制句柄，共享数据（修改互相影响）
+Clone = 复制数据，副本独立（修改互不影响）
 ```
 
-**どの型が Dup か**：
+**规则**：
 
-| 型 | Dup | 理由 |
+```
+1. 原语值类型（Int, Float, Bool, Char） — 编译器内置值复制，不属于 Dup
+2. Dup  — 只适用于引用/令牌类型和内部引用计数的类型
+3. Clone — 显式深拷贝，任何类型可实现
+4. 默认 Move — 其他类型保持默认 Move 语义
+```
+
+**哪些类型是 Dup**：
+
+| 类型 | Dup | 原因 |
 |------|-----|------|
-| `&T`（借用トークン） | ✅ | ゼロサイズトークン、トークンコピー = 同じデータへの複数のビュー |
-| `ref T` | ✅ | Rc/Arc コピー = 参照カウント+1、ヒープデータを共有 |
-| String, Bytes | ✅ | 内部参照カウント、ハンドル共有で基礎 buffer を共有 |
-| `&mut T`（可変トークン） | ❌ | 線形独占、コピー不可 |
-| struct | 派生 | すべてのフィールドが Dup → struct は Dup |
-| enum | 派生 | すべての variant のすべてのフィールドが Dup → enum は Dup |
-| tuple | 派生 | すべての要素が Dup → tuple は Dup |
-| Fn（クロージャ） | ❌ | キャプチャ環境が Dup でない可能性 |
-| `*T`（生ポインタ） | ❌ | unsafe、所有権システムに参加しない |
+| `&T`（借用令牌） | ✅ | 零大小令牌，复制令牌 = 多个视角指向同一数据 |
+| `ref T` | ✅ | Rc/Arc 复制 = 引用计数+1，共享堆数据 |
+| String, Bytes | ✅ | 内部引用计数，复制句柄共享底层 buffer |
+| `&mut T`（可变令牌） | ❌ | 线性独占，不能复制 |
+| struct | 派生 | 所有字段 Dup → struct Dup |
+| enum | 派生 | 所有 variant 的所有字段 Dup → enum Dup |
+| tuple | 派生 | 所有元素 Dup → tuple Dup |
+| Fn（闭包） | ❌ | 捕获环境可能非 Dup |
+| `*T`（裸指针） | ❌ | unsafe，不参与所有权系统 |
 
-**Int/Float/Bool/Char は Dup ではない** — これらは値型であり、代入時にコンパイラが自動的に値コピーを行う（二つの値は完全に独立）。これは「シャローコピー」ではなく、原語に対するコンパイラ組み込み処理であり、Dup 型属性を通じて表現すべきものではない。
+**Int/Float/Bool/Char 不是 Dup**——它们是值类型，赋值时编译器自动值复制（两个值完全独立）。这不是"浅拷贝"，是编译器对原语的内置处理，不需要也不应该通过 Dup 类型属性来表达。
 
 ```yaoxiang
-# 原語値型：コンパイラが自動的に値コピー（Dup ではない）
+# 原语值类型：编译器自动值复制（不是 Dup）
 x: Int = 42
-y = x          # 値コピー、x と y は完全に独立
+y = x          # 值复制，x 和 y 完全独立
 print(x)       # ✅
 
-# Dup：シャローコピー、ハンドル共有でデータを共有
+# Dup：浅拷贝，复制句柄共享数据
 view: &Point = &point
-view2 = view    # ✅ Dup：トークンコピー、両者は同じ point を指す
+view2 = view    # ✅ Dup：复制令牌，两者指向同一个 point
 print(view.x)   # ✅
 
-# Clone：明示的ディープコピー、独立した副本を作成
-backup = big_struct.clone()  # 明示的呼び出し
+# Clone：显式深拷贝，创建独立副本
+backup = big_struct.clone()  # 显式调用
 
-# 泛型制約
-dup_use: (T: Dup) -> T = x         # T: Dup → シャローコピー可能
-clone_use: (T: Clone) -> T = x.clone()  # T: Clone → ディープコピー可能
+# 泛型约束
+dup_use: (T: Dup) -> T = x         # T: Dup → 可以浅拷贝
+clone_use: (T: Clone) -> T = x.clone()  # T: Clone → 可以深拷贝
 ```
 
-> **注意**：`Send`/`Sync` はユーザー可視のトレイトではない。タスク横断の安全保証は `ref` キーワードとコンパイラによって全自动処理される — `ref` が自動的に Rc または Arc を選択し、ユーザーは Send/Sync を理解する必要がない。
+> **注意**：`Send`/`Sync` 不作为用户可见 trait。跨任务安全保障由 `ref` 关键字和编译器全自动处理——`ref` 自动选择 Rc 或 Arc，用户不需要理解 Send/Sync。
 
-### 3. 関連型
+### 3. 关联类型
 
-#### 3.1 関連型の定義
+#### 3.1 关联类型定义
 
 ```yaoxiang
-# Iterator trait（(Item: Type) -> Type 構文を使用）
+# Iterator trait（使用 (Item: Type) -> Type 语法）
 Iterator: (Item: Type) -> Type = {
     next: (Self) -> Option(Item),
     has_next: (Self) -> Bool,
@@ -637,8 +647,8 @@ collect_all: (T: Type, I: Iterator(T))(iter: I) -> List(T) = {
     return result
 }
 
-# Array の Iterator 実装
-# メソッド構文糖を使用：Array.Item, Array.next, Array.has_next
+# Array的Iterator实现
+# 使用方法语法糖：Array.Item, Array.next, Array.has_next
 Array.has_next: (T: Type)(self: Array(T)) -> Bool = {
     return self.index < self.length
 }
@@ -658,19 +668,19 @@ Array.Item: (T: Type)(arr: Array(T)) -> T = {
 }
 ```
 
-#### 3.2 泛型関連型（GAT）
+#### 3.2 泛型关联类型（GAT）
 
 ```yaoxiang
-# より複雑な関連型
+# 更复杂的关联类型
 Producer: (Item: Type) -> Type = {
     Item: T,
     produce: (Self) -> Option(Item),
 }
 
-# 関連型は泛型にすることも可能
+# 关联类型可以是泛型的
 Container: (Item: Type) -> Type = {
     Item: T,
-    IteratorType: Iterator(Item),  # 関連型も泛型
+    IteratorType: Iterator(Item),  # 关联类型也是泛型的
     iter: (Self) -> IteratorType,
 }
 
@@ -680,18 +690,18 @@ process_container: (T: Type, C: Container(T))(container: C) -> List(T) = {
 }
 ```
 
-### 4. コンパイル時泛型
+### 4. 编译期泛型
 
-#### 4.1 コンパイル時定数パラメータ
+#### 4.1 编译期常量参数
 
-**核心設計**：泛型シグネチャ中の `Type` マーカーはコンパイル時型パラメータを示し、`Int` などの値パラメータは泛型コンテキストではデフォルトでコンパイル時に決定可能。`const` キーワードは不要。
+**核心设计**：泛型签名中的 `Type` 标记编译期类型参数，`Int` 等值参数在泛型上下文中默认编译期可确定。无需 `const` 关键字。
 
 ```yaoxiang
 # ════════════════════════════════════════════════════════
-# コンパイル時定数パラメータ：泛型中の Int はデフォルトでコンパイル時決定
+# 编译期常量参数：泛型中的 Int 默认编译期确定
 # ════════════════════════════════════════════════════════
 
-# コンパイル時階乗：N はコンパイル時に既知のリテラルでなければならない
+# 编译期阶乘：N 必须是编译期已知的字面量
 factorial: (N: Int) -> (n: N) -> Int = {
     return match n {
         0 => 1,
@@ -699,37 +709,37 @@ factorial: (N: Int) -> (n: N) -> Int = {
     }
 }
 
-# コンパイル時加算
+# 编译期加法
 add: (a: Int, b: Int) -> (a: a, b: b) -> Int = a + b
 
 # ════════════════════════════════════════════════════════
-# コンパイル時定数配列
+# 编译期常量数组
 # ════════════════════════════════════════════════════════
 StaticArray: (T: Type, N: Int) -> Type = {
-    data: Array(T, N),  # コンパイル時に既知のサイズの配列
+    data: Array(T, N),  # 编译期已知大小的数组
     length: N,
 }
 
 # 使用方式
-arr: StaticArray(Int, factorial(5))  # StaticArray(Int, 120)、コンパイラがコンパイル時に計算
+arr: StaticArray(Int, factorial(5))  # StaticArray(Int, 120)，编译器在编译期计算
 ```
 
-#### 4.2 コンパイル時計算
+#### 4.2 编译期计算
 
 ```yaoxiang
 # ════════════════════════════════════════════════════════
-# コンパイル時計算の例
+# 编译期计算示例
 # ════════════════════════════════════════════════════════
 
-# コンパイラがコンパイル時にリテラル型の関数呼び出しを計算
-SIZE: Int = factorial(5)  # コンパイル時に 120
+# 编译器在编译期计算字面量类型的函数调用
+SIZE: Int = factorial(5)  # 编译期为 120
 
-# 行列型の使用
+# 矩阵类型使用
 Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
     data: Array(Array(T, Cols), Rows),
 }
 
-# コンパイル時次元検証
+# 编译期维度验证
 identity_matrix: (T: Add + Zero + One, N: Int)(size: N) -> Matrix(T, N, N) = {
     matrix: Matrix(T, N, N) = Matrix(T, N, N)()
     for i in 0..size {
@@ -744,44 +754,67 @@ identity_matrix: (T: Add + Zero + One, N: Int)(size: N) -> Matrix(T, N, N) = {
     matrix
 }
 
-# 使用：コンパイル時計算、Matrix(Float, 3, 3) を生成
+# 使用：编译期计算，生成 Matrix(Float, 3, 3)
 identity_3x3: Matrix(Float, 3, 3) = identity_matrix(Float, 3)(3)
 ```
 
-#### 4.3 コンパイル時検証（標準ライブラリ実装）
+
+### Never 与 Void：类型系统的 ⊥ 与 ⊤
+
+YaoXiang 的类型系统在 Curry-Howard 同构中同时具备 ⊥（假/空类型）和 ⊤（真/Unit），以 `Never` 和 `Void` 两个内建类型名承载：
+
+**Never（⊥）** — 三条不可协商的内核性质：
+
+1. **零构造子**：无任何字面量或表达式能产生 `Never` 类型的值。这是元级性质，必须内建。
+2. **爆炸原理**：`Never <: T` 对任意类型 `T` 成立。一个 `Never` 值可被当作任何类型使用——这正是 `assert(false)` 之后代码仍通过类型检查的原因（虽然永不执行到）。
+3. **发散标记**：`f: (...) -> Never` 表示 `f` 保证不返回。编译器据此做 dead code 分析。
+
+`Never` 是内建类型名，不是关键字，parser 无感。不开放空和类型字面量语法。
+
+**Void（⊤，即 Unit）** — 恰好一个居留者（默认 void 值），是真命题"恒真"的载体。`Void` 是零字段积类型的幺元，`Never` 是零变体和类型的幺元——二者对偶。`x: Void = <默认>` 合法，`x: Never = ...` 无右边可写。
+
+#### 4.3 编译期验证（标准库实现）
 
 ```yaoxiang
 # ════════════════════════════════════════════════════════
-# 標準ライブラリ実装：条件型を利用
+# 标准库实现：利用条件类型
 # ════════════════════════════════════════════════════════
 
-# 標準ライブラリ定義：Assert[C] は型である
-# - C が True の時、Void に推論される
-# - C が False の時、compile_error("Assertion failed") に推論される
-Assert: (C: Type) -> Type = match C {
-    True => Void,
-    False => compile_error("Assertion failed"),
+# 标准库定义
+# IsTrue：值宇宙到类型宇宙的桥——Bool 真值映射为类型
+IsTrue: (b: Bool) -> Type = match b {
+    true => Void,      # ⊤，有值，程序继续
+    false => Never,    # ⊥，无值，发散
 }
 
-# 使用方式1：型定義中で制約として
+# Assert：编译期精化类型原语——对 Bool 命题的类型级表述
+Assert: (cond: Bool) -> Type = IsTrue(cond)
+#
+# cond 为 true  → Assert(true)  = Void    （恒真，擦除）
+# cond 为 false → Assert(false) = Never   （恒假，编译错误/发散）
+# cond 判不了   → 由证明管道按 dispatch 模式决定：
+#                  CompileTime → Unknown，要求 prove
+#                  Runtime     → 插入 check，注入 Γ 假设
+
+# 使用方式1：在类型定义中作为约束
 Array: (T: Type, N: Int) -> Type = {
     data: Array(T, N),
-    # コンパイル時検査：N は 0 より大きくなければならない（Assert は型位置）
+    # 编译期检查：N 必须大于 0（Assert 在类型位置）
     length: Assert(N > 0),
 }
 
-# 使用方式2：式中で使用
+# 使用方式2：在表达式中使用
 IntArray: (N: Int) -> Type = StaticArray(Int, N)
-# 検証：IntArray(10) のサイズは sizeof(Int) * 10 と等しい
+# 验证：IntArray(10) 的大小等于 sizeof(Int) * 10
 Assert(size_of(IntArray(10)) == sizeof(Int) * 10)
 ```
 
-#### 4.4 コンパイル時泛型特殊化
+#### 4.4 编译期泛型特化
 
 ```yaoxiang
-# 小配列最適化：関数オーバーロードでコンパイル時泛型特殊化を実現
+# 小数组优化：使用函数重载实现编译期泛型特化
 
-# 汎用実装
+# 通用实现
 sum: (T: Type, N: Int) -> ((arr: Array(T, N)) -> T) = {
     result = Zero::zero()
     for item in arr.data {
@@ -790,62 +823,59 @@ sum: (T: Type, N: Int) -> ((arr: Array(T, N)) -> T) = {
     return result
 }
 
-# N=1 特殊化
+# N=1 特化
 sum: (T: Type) -> ((arr: Array(T, 1)) -> T) = arr.data[0]
 
-# N=2 特殊化
+# N=2 特化
 sum: (T: Type) -> ((arr: Array(T, 2)) -> T) = arr.data[0] + arr.data[1]
 
-# 小配列ループ展開（N <= 4）
+# 小数组循环展开（N <= 4）
 sum: (T: Type, N: Int) -> ((arr: Array(T, N)) -> T) = {
-    # コンパイラ最適化：ループを展開
+    # 编译器优化：展开循环
     return arr.data[0] + arr.data[1] + arr.data[2] + arr.data[3]
 }
 ```
 
-### 5. 条件型
+### 5. 条件类型
 
-> **Curry-Howard同型**：条件型はCurry-Howardの視点から論理の **case分析** に対応する。`Bool` 型は二つの可能な値（True/False）を持つ命题に対応し、`If` はその命题の真偽に応じて異なる結果を選択する — これは論理における case 析取そのものである。`match C { True => T, False => E }` は実際には「命题 C が True の時結論は T、False の時結論は E」ということを表現している。
+> **Curry-Howard 同构**：条件类型从 Curry-Howard 视角看是逻辑中的 **case 分析**。`Bool` 类型对应一个有两个可能值的命题（True/False），`If` 根据该命题的真假选择不同的结果——这正是逻辑中的 case 析取。`match C { True => T, False => E }` 实际上在表达："已知命题 C 为 True 时结论是 T，C 为 False 时结论是 E"。
 
-#### 5.1 If 条件型
+#### 5.1 If条件类型
 
 ```yaoxiang
-# 型レベル If
+# 类型级If
 If: (C: Bool, T: Type, E: Type) -> Type = match C {
     True => T,
     False => E,
 }
 
-# 例：コンパイル時分岐
+# 示例：编译期分支
 NonEmpty: (T: Type) -> Type = If(T != Void, T, Never)
 
 Optional: (T: Type) -> Type = If(T != Void, T, Void)
 
-# コンパイル時検証
-Assert: (C: Bool) -> Type = match C {
-    True => Void,
-    False => compile_error("Assertion failed"),
-}
+# 编译期验证（统一到 §4.3 的 Assert 定义）
+# Assert: (cond: Bool) -> Type = IsTrue(cond)
 
 # 使用
-# 型計算：If(True, Int, String) => Int
-# 型計算：If(False, Int, String) => String
+# 类型计算：If(True, Int, String) => Int
+# 类型计算：If(False, Int, String) => String
 ```
 
-#### 5.2 型族
+#### 5.2 类型族
 
-> **Curry-Howard同型**：型族は「命题即型」の最も直接的な具現である。`Add: (A: Type, B: Type) -> Type` は「型の層に加法関数を書いた」のではなく、自然数加法に関する **命题を構成している**。`(Zero, B) => B` は「命题 Add(Zero, B) は B と等価である」と言い、`(Succ(A'), B) => Succ(Add(A', B))` は「Add(A', B) が成立するならば、Add(Succ(A'), B) も成立する」と言う。これがまさに Peano 公理における加法の定義そのものである。型検査器がこの match 式が合格することを検証することは、この定義の論理的一貫性を検証することと等価である。
+> **Curry-Howard 同构**：类型族是"命题即类型"最直接的体现。`Add: (A: Type, B: Type) -> Type` 不是"在类型层面写了一个加法函数"，而是在 **构造一个关于自然数加法的命题**。`(Zero, B) => B` 是说"命题 Add(Zero, B) 等价于 B"，`(Succ(A'), B) => Succ(Add(A', B))` 是说"若 Add(A', B) 成立，则 Add(Succ(A'), B) 也成立"。这就是 Peano 公理中的加法定义本身。类型检查器验证这段 match 表达式通过，等价于验证了这个定义的逻辑一致性。
 
 ```yaoxiang
-# コンパイル時型変換
+# 编译期类型转换
 AsString: (T: Type) -> Type = match T {
     Int => String,
     Float => String,
     Bool => String,
-    _ => String,  # デフォルト
+    _ => String,  # 默认
 }
 
-# 型レベル計算
+# 类型级计算
 Length: (T: Type) -> Type = match T.length {
     0 => Zero,
     1 => Succ(Zero),
@@ -853,35 +883,35 @@ Length: (T: Type) -> Type = match T.length {
     _ => TooLong,
 }
 
-# 型レベル加法（Curry-Howard：これは自然数加法の帰納的定義でもある）
+# 类型级加法（Curry-Howard：case analysis + 递归调用，需要终止性检查才是完整归纳）
 Add: (A: Type, B: Type) -> Type = match (A, B) {
     (Zero, B) => B,
     (Succ(A'), B) => Succ(Add(A', B)),
 }
 
-# 例：コンパイル時計算 2 + 3
+# 示例：编译期计算 2 + 3
 Two: Type = Succ(Succ(Zero))
 Three: Type = Succ(Succ(Succ(Zero)))
 Five: Type = Add[Two, Three]  # Succ(Succ(Succ(Succ(Succ(Zero)))))
 ```
 
-### 6. 関数オーバーロード特殊化
+### 6. 函数重载特化
 
-#### 6.1 基本特殊化
+#### 6.1 基本特化
 
 ```yaoxiang
-# 基本特殊化：関数オーバーロードを使用（コンパイラが自動選択）
+# 基本特化：使用函数重载（编译器自动选择）
 sum: (arr: Array(Int)) -> Int = {
-    # より効率的なコードにコンパイル
+    # 编译为更高效的代码
     return native_sum_int(arr.data, arr.length)
 }
 
 sum: (arr: Array(Float)) -> Float = {
-    # SIMD 命令を使用
+    # 使用SIMD指令
     return simd_sum_float(arr.data, arr.length)
 }
 
-# 汎用実装
+# 通用实现
 sum: (T: Type) -> ((arr: Array(T)) -> T) = {
     result = Zero::zero()
     for item in arr {
@@ -891,12 +921,12 @@ sum: (T: Type) -> ((arr: Array(T)) -> T) = {
 }
 ```
 
-#### 6.2 条件特殊化
+#### 6.2 条件特化
 
 ```yaoxiang
-# RFC-010 構文に完全準拠した特殊化方式：関数オーバーロード
+# 完全符合RFC-010语法的特化方式：函数重载
 
-# 具体型特殊化
+# 具体类型特化
 sum: (arr: Array(Int)) -> Int = {
     return native_sum_int(arr.data, arr.length)
 }
@@ -905,7 +935,7 @@ sum: (arr: Array(Float)) -> Float = {
     return simd_sum_float(arr.data, arr.length)
 }
 
-# 泛型実装（コンパイラが自動的に最適なものを選択）
+# 泛型实现（编译器自动选择最优）
 sum: (T: Type) -> ((arr: Array(T)) -> T) = {
     result = Zero::zero()
     for item in arr {
@@ -914,21 +944,21 @@ sum: (T: Type) -> ((arr: Array(T)) -> T) = {
     return result
 }
 
-# 使用時は完全に透明
+# 使用时完全透明
 int_arr = Array(Int)(1, 2, 3)
 float_arr = Array(Float)(1.0, 2.0, 3.0)
 
-# コンパイラが自動的に最適な特殊化を選択
-sum(int_arr)     # sum: (Array(Int)) -> Int を選択
-sum(float_arr)    # sum: (Array(Float)) -> Float を選択
+# 编译器自动选择最优特化
+sum(int_arr)     # 选择 sum: (Array(Int)) -> Int
+sum(float_arr)    # 选择 sum: (Array(Float)) -> Float
 ```
 
-#### 6.3 関数オーバーロードとインライン化の完璧な結合
+#### 6.3 函数重载与内联的完美结合
 
-**重要な特性**：関数オーバーロードとインライン化最適化は自然に結合し、ゼロコスト抽象を実現する。
+**关键特性**：函数重载与内联优化天然结合，实现零成本抽象。
 
 ```yaoxiang
-# ======== ソースコード ========
+# ======== 源代码 ========
 sum: (arr: Array(Int)) -> Int = {
     return native_sum_int(arr.data, arr.length)
 }
@@ -949,99 +979,99 @@ sum: (T: Type) -> ((arr: Array(T)) -> T) = {
 int_arr = Array(Int)(1, 2, 3, 4, 5)
 result = sum(int_arr)
 
-# ======== コンパイル後（等価コード）=======
-# コンパイラが自動的に最適な特殊化を選択し、インライン化
+# ======== 编译后（等价代码）=======
+# 编译器自动选择最优特化，然后内联
 result = native_sum_int(int_arr.data, int_arr.length)
 
-# 手書き最適化コードと完全に等価、関数呼び出しオーバーヘッドなし！
+# 完全等价于手写优化代码，无函数调用开销！
 ```
 
-**核心的優位性**：
+**核心优势**：
 
-1. **コンパイラのスマート選択**
+1. **编译器智能选择**
    ```yaoxiang
-   sum(int_arr)      # sum: (Array(Int)) -> Int を自動選択
-   sum(float_arr)    # sum: (Array(Float)) -> Float を自動選択
-   sum(custom_arr)  # sum: (T: Type) -> ((arr: Array(T)) -> T) を自動選択
+   sum(int_arr)      # 自动选择 sum: (Array(Int)) -> Int
+   sum(float_arr)    # 自动选择 sum: (Array(Float)) -> Float
+   sum(custom_arr)  # 自动选择 sum: (T: Type) -> ((arr: Array(T)) -> T)
    ```
 
-2. **インライン化最適化**
-   - 小さな関数は呼び出し先に自動インライン化
-   - 関数呼び出しオーバーヘッドがゼロ
-   - 手書き最適化コードと完全に等価
+2. **内联优化**
+   - 小函数自动内联到调用点
+   - 零函数调用开销
+   - 完全等价于手写优化代码
 
-3. **型安全性**
-   - コンパイル時型検査
-   - ランタイムオーバーヘッドがゼロ
-   - 虚関数テーブル不要
+3. **类型安全**
+   - 编译期类型检查
+   - 运行时零开销
+   - 无需虚函数表
 
-4. **RFC-010 と完璧に契合**
+4. **完美契合RFC-010**
    ```yaoxiang
-   # 統一構文を完全使用
+   # 完全使用统一语法
    name: type = value
-   # impl、where などの新しいキーワード不要
+   # 无需impl、where等新关键字
    ```
 
-**実際の応用例**：
+**实际应用示例**：
 
 ```yaoxiang
-# 性能敏感な数値計算
+# 性能敏感的数值计算
 fibonacci: (n: Int) -> Int = {
     if n <= 1 { return n }
     return fibonacci(n - 1) + fibonacci(n - 2)
 }
 
 fibonacci: (n: Float) -> Float = {
-    # Binet の公式を使用
+    # 使用Binet公式
     phi = (1.0 + 5.0.sqrt()) / 2.0
     return (phi.pow(n) - (-phi).pow(-n)) / 5.0.sqrt()
 }
 
-# コンパイラが自動選択してインライン化
-fibonacci(10)      # Int バージョンを選択、完全にインライン化
-fibonacci(10.5)    # Float バージョンを選択、Binet の公式を使用
+# 编译器自动选择并内联
+fibonacci(10)      # 选择 Int 版本，完全内联
+fibonacci(10.5)    # 选择 Float 版本，使用Binet公式
 ```
 
-**これは何を意味するか？**
+**这意味着什么？**
 
-- ✅ **泛型特殊化** → 関数オーバーロードで自然に解決
-- ✅ **性能最適化** → インライン化が自動完了
-- ✅ **コード再利用** → 一つの関数名、複数の実装
-- ✅ **ゼロコスト抽象** → コンパイル時多態、ランタイムオーバーヘッドゼロ
-- ✅ **新しいキーワード不要** → RFC-010 統一構文に完璧に準拠
+- ✅ **泛型特化** → 函数重载自然解决
+- ✅ **性能优化** → 内联自动完成
+- ✅ **代码复用** → 一个函数名，多种实现
+- ✅ **零成本抽象** → 编译期多态，零运行时开销
+- ✅ **无需新关键字** → 完美符合RFC-010统一语法
 ```
 
-### 7. デッドコード除去機構
+### 7. 死代码消除机制
 
-#### 7.1 インスタンス化グラフ解析
+#### 7.1 实例化图分析
 
 ```rust
-// コンパイラ内部：泛型インスタンス化依存グラフを構築
+// 编译器内部：构建泛型实例化依赖图
 struct InstantiationGraph {
-    // ノード：泛型インスタンス化
+    // 节点：泛型实例化
     nodes: HashMap<InstanceKey, InstanceNode>,
 
-    // エッジ：使用関係
+    // 边：使用关系
     edges: HashMap<InstanceKey, Vec<InstanceKey>>,
 }
 
 struct InstanceKey {
-    generic: FunctionId,  // 泛型関数 ID
-    type_args: Vec<TypeId>,  // 型パラメータ
-    const_args: Vec<ConstId>,  // Const パラメータ
+    generic: FunctionId,  // 泛型函数ID
+    type_args: Vec<TypeId>,  // 类型参数
+    const_args: Vec<ConstId>,  // Const参数
 }
 
-// アルゴリズム：到達可能性解析
+// 算法：可达性分析
 fn eliminate_dead_instantiations(graph: &InstantiationGraph) {
     let mut reachable = HashSet::new();
 
-    // エントリポイントから開始（main、エクスポート関数など）
+    // 从入口点开始（main、导出函数等）
     let entry_points = find_entry_points();
     for entry in entry_points {
         dfs_visit(entry, &graph, &mut reachable);
     }
 
-    // 訪問されていないインスタンス化はデッドコード
+    // 未访问的实例化就是死代码
     for node in &graph.nodes {
         if !reachable.contains(node.key) {
             eliminate(node);
@@ -1050,107 +1080,107 @@ fn eliminate_dead_instantiations(graph: &InstantiationGraph) {
 }
 ```
 
-#### 7.2 使用点解析
+#### 7.2 使用点分析
 
 ```yaoxiang
-# ソースコード解析
+# 源代码分析
 map: (T: Type, R: Type)(list: List(T), f: Fn(T) -> R) -> List(R) = ...
 
-# 使用点1：map(Int, Int) をインスタンス化
+# 使用点1：实例化 map(Int, Int)
 int_list = List(1, 2, 3)
-doubled = map(int_list, (x) => x * 2)  # map[Int, Int] が必要
+doubled = map(int_list, (x) => x * 2)  # 需要 map[Int, Int]
 
-# 使用点2：map(String, String) をインスタンス化
+# 使用点2：实例化 map(String, String)
 string_list = List("a", "b", "c")
-uppercased = map(string_list, (s) => s.to_uppercase())  # map[String, String] が必要
+uppercased = map(string_list, (s) => s.to_uppercase())  # 需要 map[String, String]
 
-# 未使用：map[Float, Float] など
-# これらの泛型インスタンスは生成されない
+# 未使用：map[Float, Float] 等
+# 这些泛型实例不会被生成
 
-# コンパイル後は使用されているインスタンスのみを含む
+# 编译后只包含被使用的实例
 map_Int_Int: (list: List(Int), f: Fn(Int) -> Int) -> List(Int) = ...
 map_String_String: (list: List(String), f: Fn(String) -> String) -> List(String) = ...
 ```
 
-#### 7.3 コンパイル時泛型 DCE
+#### 7.3 编译期泛型DCE
 
 ```yaoxiang
-# コンパイル時分析：コンパイル時泛型の使用状況
+# 编译期分析：编译期泛型使用情况
 Array: (T: Type, N: Int) -> Type = {
     data: Array(T, N),
 }
 
-# 実際の使用状況
+# 实际使用情况
 arr_10_int = Array(Int, 10)(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
 arr_100_int = Array(Int, 100)(...)
 
-# コンパイル後は使用されている Size のみを生成
+# 编译后只生成被使用的Size
 Array_Int_10: (Array(Int, 10)) = ...
 Array_Int_100: (Array(Int, 100)) = ...
 
-# 未使用の Size は生成されない
-# Array(Int, 50) は生成されない
+# 未使用的Size不会生成
+# Array(Int, 50) 不会生成
 ```
 
-#### 7.4 モジュール横断 DCE
+#### 7.4 跨模块DCE
 
 ```yaoxiang
-# モジュール A
+# 模块A
 # A.yx
 pub map: (T: Type, R: Type)(list: List(T), f: Fn(T) -> R) -> List(R) = ...
 
-# モジュール B
+# 模块B
 # B.yx
 use A.{map}
 int_list = List(1, 2, 3)
-doubled = map(int_list, (x) => x * 2)  # map(Int, Int) をインスタンス化
+doubled = map(int_list, (x) => x * 2)  # 实例化 map(Int, Int)
 
-# モジュール C
+# 模块C
 # C.yx
 use A.{map}
 string_list = List("a", "b", "c")
-uppercased = map(string_list, (s) => s.to_uppercase())  # map(String, String) をインスタンス化
+uppercased = map(string_list, (s) => s.to_uppercase())  # 实例化 map(String, String)
 
-# コンパイル分析：
-# - モジュール B は map[Int, Int] を使用
-# - モジュール C は map[String, String] を使用
-# - コンパイル後のバイナリにはこの二つのインスタンスのみが含まれる
+# 编译分析：
+# - 模块B使用 map[Int, Int]
+# - 模块C使用 map[String, String]
+# - 编译后二进制只包含这两个实例
 ```
 
-#### 7.5 LLVM レイヤ DCE
+#### 7.5 LLVM层面DCE
 
 ```rust
-// コンパイルパイプライン
+// 编译流水线
 fn optimize_ir(ir: &mut IR) {
-    // 1. 単態化（YaoXiang コンパイラ）
+    // 1. 单态化（YaoXiang编译器）
     ir.monomorphize();
 
-    // 2. インライン化最適化
+    // 2. 内联优化
     ir.inline_small_functions();
 
-    // 3. 定数伝播
+    // 3. 常量传播
     ir.constant_propagation();
 
-    // 4. LLVM IR を生成
+    // 4. 生成LLVM IR
     let llvm_ir = ir.to_llvm();
 
-    // 5. LLVM 最適化パス
+    // 5. LLVM优化pass
     llvm_ir.add_pass(Passes::DEAD_CODE_ELIMINATION);
     llvm_ir.add_pass(Passes::INLINE_FUNCTION);
     llvm_ir.add_pass(Passes::GLOBAL_DCE);
     llvm_ir.add_pass(Passes::MERGE_FUNC);
 
-    // 6. 最適化を実行
+    // 6. 运行优化
     llvm_ir.run_optimization_passes();
 }
 ```
 
-### 8. マクロ代替戦略
+### 8. 宏替代策略
 
-#### 8.1 コード生成の代替
+#### 8.1 代码生成替代
 
 ```yaoxiang
-# ❌ マクロ方案：コード生成
+# ❌ 宏方案：代码生成
 macro_rules! impl_debug {
     ($($t:ty),*) => {
         $(impl Debug for $t {
@@ -1161,21 +1191,21 @@ macro_rules! impl_debug {
     };
 }
 
-# ✅ 泛型方案：自動派生
-# 関数オーバーロード方式で自動派生
+# ✅ 泛型方案：自动派生
+# 使用函数重载方式自动派生
 debug_fmt: (T: fields...) -> ((self: Point(T)) -> String) = {
     return "Point { x: " + self.x.to_string() + ", y: " + self.y.to_string() + " }"
 }
 
 # 使用
 p = Point { x: 1, y: 2 }
-p.debug_fmt(&formatter)  # 呼び出しを自動生成
+p.debug_fmt(&formatter)  # 自动生成调用
 ```
 
-#### 8.2 DSL の代替
+#### 8.2 DSL替代
 
 ```yaoxiang
-# ❌ マクロ方案：HTML DSL
+# ❌ 宏方案：HTML DSL
 html! {
     <div class="container">
         <h1> { title } </h1>
@@ -1187,7 +1217,7 @@ html! {
     </div>
 }
 
-# ✅ 泛型方案：型安全ビルダー
+# ✅ 泛型方案：类型安全构建器
 Element: Type = {
     tag: String,
     attrs: HashMap(String, String),
@@ -1208,7 +1238,7 @@ with_text: [E: Element](elem: E, text: String) -> E = {
     return E { text: Some(text), ..elem }
 }
 
-# DOM を構築
+# 构建DOM
 container = create_element("div")
     |> with_class("container")
     |> with_children(List::new())
@@ -1220,17 +1250,17 @@ items_li = items.map((item) =>
 root = container |> with_children(List::new() + [title_elem, ul_elem])
 ```
 
-#### 8.3 型レベルプログラミングの代替
+#### 8.3 类型级编程替代
 
 ```yaoxiang
-# ❌ マクロ方案：型レベル計算
+# ❌ 宏方案：类型级计算
 macro_rules! add_types {
     ($a:ty, $b:ty) => {
         ($a, $b)
     };
 }
 
-# ✅ 泛型方案：条件型
+# ✅ 泛型方案：条件类型
 Add: (A: Type, B: Type) -> Type = match (A, B) {
     (Int, Int) => Int,
     (Float, Float) => Float,
@@ -1239,20 +1269,20 @@ Add: (A: Type, B: Type) -> Type = match (A, B) {
     _ => TypeError,
 }
 
-# コンパイル時検証
+# 编译期验证
 AssertAddable: (A: Type, B: Type) -> Type = If(Add(A, B) != TypeError, (A, B), compile_error("Cannot add"))
 
 # 使用
-result_type = Add[Int, Float]  # Float と推論
+result_type = Add[Int, Float]  # 推导为 Float
 ```
 
-### 9. 例
+### 9. 示例
 
-#### 9.1 完全な泛型コンテナの例
+#### 9.1 完整泛型容器示例
 
 ```yaoxiang
-# ======== 1. 泛型コンテナの定義 ========
-# (T: Type) -> Type 構文を使用
+# ======== 1. 定义泛型容器 ========
+# 使用 (T: Type) -> Type 语法
 Result: (T: Type, E: Type) -> Type = {
     ok: (T) -> Self,
     err: (E) -> Self,
@@ -1267,7 +1297,7 @@ List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
 
-    # 泛型メソッド（T は外側の List(T) から自動的にスコープに導入される）
+    # 泛型方法（T 由外层 List(T) 自动带入作用域）
     push: (self: List(T), item: T) -> Void,
     pop: (self: List(T)) -> Option(T),
     map: (R: Type) -> ((self: List(T), f: (T) -> R) -> List(R)),
@@ -1275,14 +1305,14 @@ List: (T: Type) -> Type = {
     fold: (U: Type) -> ((self: List(T), initial: U, f: (U, T) -> U) -> U),
 }
 
-# ======== 2. 泛型メソッドの実装 ========
-# 関数は List 名前空間下で定義（List. プレフィックス = 名前空間帰属）
-# list.push(item) のような . 呼び出し構文を有効にするには、明示的バインディングが必要：List.push = push[0]
-# self は単なる慣習パラメータ名であり、コンパイラは名前ではなく型を見る
+# ======== 2. 实现泛型方法 ========
+# 函数定义在 List 命名空间下（List. 前缀 = 命名空间归属）
+# 要让 list.push(item) 这种 . 调用语法生效，需要显式绑定：List.push = push[0]
+# self 只是约定参数名，编译器不看名字看类型
 
 List.push: (T: Type) -> ((self: List(T), item: T) -> Void) = {
     if self.length >= self.data.length {
-        # 拡張
+        # 扩容
         new_data = Array(T)(self.data.length * 2)
         for i in 0..self.length {
             new_data[i] = self.data[i]
@@ -1328,8 +1358,8 @@ List.fold: (T: Type, U: Type) -> ((self: List(T), initial: U, f: (U, T) -> U) ->
     return result
 }
 
-# ======== 3. 型制約の使用 ========
-# List の Clone を実装
+# ======== 3. 类型约束使用 ========
+# 实现 Clone for List
 List.clone: (T: Clone) -> ((self: List(T)) -> List(T)) = {
     result = List(T)()
     for i in 0..self.length {
@@ -1338,36 +1368,36 @@ List.clone: (T: Clone) -> ((self: List(T)) -> List(T)) = {
     return result
 }
 
-# ======== 4. 使用例 ========
-# 泛型 List を作成
+# ======== 4. 使用示例 ========
+# 创建泛型List
 numbers = List(Int)()
 numbers.push(1)
 numbers.push(2)
 numbers.push(3)
 
-# 泛型メソッドを使用
+# 使用泛型方法
 doubled = numbers.map((x) => x * 2)
 evens = numbers.filter((x) => x % 2 == 0)
 
-# fold を使用して計算
+# 使用fold计算
 sum = numbers.fold(0, (acc, x) => acc + x)  # sum = 6
 
-# 泛型組み合わせ
+# 泛型组合
 sum_of_evens = numbers
     .filter((x) => x % 2 == 0)
     .map((x) => x * 2)
     .fold(0, (acc, x) => acc + x)  # sum_of_evens = 8
 ```
 
-#### 9.2 泛型アルゴリズムの例
+#### 9.2 泛型算法示例
 
 ```yaoxiang
-# ======== 1. 泛型ソートアルゴリズム ========
+# ======== 1. 泛型排序算法 ========
 Comparator: (T: Type) -> Type = {
     compare: (T, T) -> Int,  # -1 if a < b, 0 if a == b, 1 if a > b
 }
 
-# 泛型クイックソート
+# 泛型quicksort
 quicksort: (T: Clone) -> ((array: Array(T), cmp: Comparator(T)) -> Array(T)) = {
     if array.length <= 1 {
         return array.clone()
@@ -1399,8 +1429,8 @@ quicksort: (T: Clone) -> ((array: Array(T), cmp: Comparator(T)) -> Array(T)) = {
     return result
 }
 
-# ======== 2. IntComparator の実装 ========
-# 関数オーバーロードで実装
+# ======== 2. IntComparator实现 ========
+# 使用函数重载实现
 compare: (a: Int, b: Int) -> Int = {
     if a < b {
         return -1
@@ -1411,28 +1441,28 @@ compare: (a: Int, b: Int) -> Int = {
     }
 }
 
-# ======== 3. 使用例 ========
-# Int 配列をソート
+# ======== 3. 使用示例 ========
+# 排序Int数组
 numbers = Array(Int)(3, 1, 4, 1, 5, 9, 2, 6)
 sorted = quicksort(numbers, Comparator(Int)())
 
-# String 配列をソート（StringComparator が必要）
+# 排序String数组（需要StringComparator）
 strings = Array(String)("hello", "world", "foo", "bar")
 sorted_strings = quicksort(strings, Comparator(String)())
 ```
 
-#### 9.3 コンパイル時泛型の例
+#### 9.3 编译期泛型示例
 
 ```yaoxiang
-# ======== 1. コンパイル時行列型 ========
+# ======== 1. 编译期矩阵类型 ========
 Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
     data: Array(Array(T, Cols), Rows),
 
-    # コンパイル時次元検証：Assert 標準ライブラリ型を利用
-    _assert: Assert[Rows > 0],  # Rows > 0、そうでなければコンパイルエラー
-    _assert: Assert[Cols > 0],  # Cols > 0、そうでなければコンパイルエラー
+    # 编译期维度验证：利用 Assert 标准库类型
+    _assert: Assert[Rows > 0],  # Rows > 0，否则编译错误
+    _assert: Assert[Cols > 0],  # Cols > 0，否则编译错误
 
-    # 行列演算
+    # 矩阵运算
     multiply: (M: Int) -> ((self: Matrix(T, Rows, Cols), other: Matrix(T, Cols, M)) -> Matrix(T, Rows, M)) = {
         result = Matrix(T, Rows, M)()
         for i in 0..Rows {
@@ -1448,7 +1478,7 @@ Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
     }
 }
 
-# ======== 2. コンパイル時行列の作成 ========
+# ======== 2. 编译期矩阵创建 ========
 identity: (T: Add + Multiply + One, N: Int) -> ((size: N) -> Matrix(T, N, N)) = {
     matrix = Matrix(T, N, N)()
     for i in 0..N {
@@ -1463,9 +1493,9 @@ identity: (T: Add + Multiply + One, N: Int) -> ((size: N) -> Matrix(T, N, N)) = 
     return matrix
 }
 
-# ======== 3. 使用例 ========
-# コンパイル時に既知サイズの行列を作成
-# 2x3 行列
+# ======== 3. 使用示例 ========
+# 创建编译期已知大小的矩阵
+# 2x3 矩阵
 matrix_2x3 = Matrix(Float, 2, 3)()
 matrix_2x3.data[0][0] = 1.0
 matrix_2x3.data[0][1] = 2.0
@@ -1474,7 +1504,7 @@ matrix_2x3.data[1][0] = 4.0
 matrix_2x3.data[1][1] = 5.0
 matrix_2x3.data[1][2] = 6.0
 
-# 3x2 行列
+# 3x2 矩阵
 matrix_3x2 = Matrix(Float, 3, 2)()
 matrix_3x2.data[0][0] = 7.0
 matrix_3x2.data[0][1] = 8.0
@@ -1483,164 +1513,164 @@ matrix_3x2.data[1][1] = 10.0
 matrix_3x2.data[2][0] = 11.0
 matrix_3x2.data[2][1] = 12.0
 
-# 行列乗算：2x3 * 3x2 = 2x2
+# 矩阵乘法：2x3 * 3x2 = 2x2
 result = matrix_2x3.multiply(matrix_3x2)
 
-# コンパイル時検証：result の型は Matrix(Float, 2, 2)
-# 2x2 単位行列
+# 编译期验证：result类型为 Matrix(Float, 2, 2)
+# 2x2 单位矩阵
 identity_3x3 = identity(Float, 3)()
 
-# 次元不一致：コンパイルエラー
-# bad_multiply = matrix_2x3.multiply(identity_3x3)  # コンパイルエラー：3x3 != 2x3
+# 维度不匹配：编译错误
+# bad_multiply = matrix_2x3.multiply(identity_3x3)  # 编译错误：3x3 != 2x3
 ```
 
-## トレードオフ
+## 权衡
 
-### 優位性
+### 优点
 
-1. **ゼロコスト抽象**
-   - コンパイル時単態化、ランタイムオーバーヘッドなし
-   - 虚関数不要、RTTI 不要
+1. **零成本抽象**
+   - 编译期单态化，无运行时开销
+   - 无需虚函数，无RTTI
 
-2. **デッドコード除去**
-   - コンパイル時分析、使用される泛型のみをインスタンス化
-   - コード膨張が制御可能
+2. **死代码消除**
+   - 编译期分析，只实例化被使用的泛型
+   - 代码膨胀可控
 
-3. **マクロ代替**
-   - 型安全なコード生成
-   - IDE フレンドリー、エラー情報が明確
+3. **宏替代**
+   - 类型安全的代码生成
+   - IDE友好，错误信息清晰
 
-4. **コンパイル時計算**
-   - コンパイル時泛型がコンパイル時計算をサポート
-   - 次元検証などの特性
-   - `const` キーワード不要、純粋な型制約
+4. **编译期计算**
+   - 编译期泛型支持编译期计算
+   - 维度验证等特性
+   - 无需 `const` 关键字，纯类型约束
 
-### 欠点
+### 缺点
 
-1. **コンパイル時間**
-   - 泛型インスタンス化がコンパイル時間を増加させる
-   - 制約求解が遅くなる可能性
+1. **编译时间**
+   - 泛型实例化增加编译时间
+   - 约束求解可能较慢
 
-2. **メモリ使用量**
-   - コンパイラのメモリ使用量が増加
-   - キャッシュ機構にメモリが必要
+2. **内存占用**
+   - 编译器内存占用增加
+   - 缓存机制需要内存
 
-3. **実装の複雑さ**
-   - 制約ソルバが複雑
-   - 型レベル計算エンジンが複雑
+3. **实现复杂度**
+   - 约束求解器复杂
+   - 类型级计算引擎复杂
 
-4. **エラー診断**
-   - 泛型エラーが複雑になる可能性
-   - 明確なエラーヒントが必要
+4. **错误诊断**
+   - 泛型错误可能复杂
+   - 需要清晰的错误提示
 
-### 緩和措置
+### 缓解措施
 
-1. **キャッシュ戦略**
-   - インスタンス化結果のキャッシュ
-   - LRU キャッシュでメモリ制限
+1. **缓存策略**
+   - 实例化结果缓存
+   - LRU缓存限制内存
 
-2. **インクリメンタルコンパイル**
-   - コンパイル結果のキャッシュ
-   - インクリメンタルインスタンス化
+2. **增量编译**
+   - 缓存编译结果
+   - 增量实例化
 
-3. **エラーヒント**
-   - 明確なエラー情報
-   - 泛型パラメータ推論のヒント
+3. **错误提示**
+   - 清晰的错误信息
+   - 泛型参数推导提示
 
-4. **並列コンパイル**
-   - 泛型インスタンス化の並列化
-   - マルチスレッド制約求解
+4. **并行编译**
+   - 并行实例化泛型
+   - 多线程约束求解
 
-## 代替方案
+## 替代方案
 
-| 方案 | なぜ選択しないか |
+| 方案 | 为什么不选择 |
 |------|--------------|
-| 基礎泛型のみ | 複雑なマクロを代替できない |
-| 純粋マクロシステム | 型安全性がなく、エラー情報が悪い |
-| 依存制約のみ | 柔軟性が不足 |
-| ランタイム泛型 | 性能オーバーヘッドあり |
+| 仅基础泛型 | 无法替代复杂宏 |
+| 纯宏系统 | 无类型安全，错误信息差 |
+| 仅依赖约束 | 灵活性不足 |
+| 运行时泛型 | 有性能开销 |
 
-### リスク
+### 风险
 
-| リスク | 影響 | 緩和措置 |
+| 风险 | 影响 | 缓解措施 |
 |------|------|----------|
-| 制約求解の複雑さ | コンパイル時間が長すぎる | インクリメンタル求解 + キャッシュ |
-| コード膨張 | バイナリファイルが大きすぎる | DCE + 閾値制御 |
-| 実装の複雑さ | 開発期間が延長 | 段階的実装 |
-| エラー診断 | ユーザー体験が悪い | 詳細なエラー情報 |
+| 约束求解复杂度 | 编译时间过长 | 增量求解 + 缓存 |
+| 代码膨胀 | 二进制文件过大 | DCE + 阈值控制 |
+| 实现复杂度 | 开发周期延长 | 分阶段实现 |
+| 错误诊断 | 用户体验差 | 详细错误信息 |
 
-## 未解決問題
+## 开放问题
 
-### 決議待ちの問題
+### 待决议问题
 
-| 議題 | 説明 | 状態 |
+| 议题 | 说明 | 状态 |
 |------|------|------|
-| インスタンス化戦略 | Eager vs Lazy vs Threshold | 議論待ち |
-| キャッシュサイズ | LRU キャッシュ容量設定 | 議論待ち |
-| エラー診断 | 泛型エラー情報の詳細度 | 議論待ち |
+| 实例化策略 | Eager vs Lazy vs Threshold | 待讨论 |
+| 缓存大小 | LRU缓存容量设置 | 待讨论 |
+| 错误诊断 | 泛型错误信息详细程度 | 待讨论 |
 
-### 今後の最適化
+### 后续优化
 
-| 最適化項目 | 価値 | 実装難易度 |
+| 优化项 | 价值 | 实现难度 |
 |--------|------|----------|
-| インスタンス化グラフ分析 | 高 | 中 |
-| 型レベルプログラミング DSL | 中 | 高 |
-| 泛型性能ベンチマーク | 中 | 低 |
+| 实例化图分析 | 高 | 中 |
+| 类型级编程DSL | 中 | 高 |
+| 泛型性能基准 | 中 | 低 |
 
-## 付録
+## 附录
 
-### 構文 BNF
+### 语法BNF
 
 ```bnf
-# 泛型パラメータは統一された () 構文を使用し、関数型の一部である
-# 例：map: (T: Type, R: Type) -> ((list: List(T), f: (T) -> R) -> List(R))
+# 泛型参数使用统一 () 语法，作为函数类型的一部分
+# 如 map: (T: Type, R: Type) -> ((list: List(T), f: (T) -> R) -> List(R))
 
-# 型制約（泛型パラメータ中）
+# 类型约束（在泛型参数中）
 type_bound ::= identifier
              | identifier '+' identifier ('+' identifier)*
 
-# パラメータ宣言（型 + 名前）
+# 参数声明（类型 + 名字）
 parameter ::= identifier ':' type
 
 parameters ::= parameter (',' parameter)*
 
-# 関数宣言：name: type = expression
-# 泛型パラメータは関数型の最初のパラメータ群：(T: Type) -> ((params) -> return)
+# 函数声明：name: type = expression
+# 泛型参数是函数类型中的第一个参数组：(T: Type) -> ((params) -> return)
 function ::= identifier ':' type '=' (expression | block)
 
-# メソッド宣言：Type.method: type = expression
+# 方法声明：Type.method: type = expression
 method ::= identifier '.' identifier ':' type '=' (expression | block)
 
-# 型定義（統一 Binding 構文）
-# 泛型型 例：List: (T: Type) -> Type = { ... }
+# 类型定义（统一 Binding 语法）
+# 泛型类型如 List: (T: Type) -> Type = { ... }
 generic_type ::= identifier ':' type '=' type_expression
 
-# 泛型パラメータ中の Type はコンパイラが実引数型から自動的に埋める
-# 例：map(numbers, f)、T は numbers: List(Int) から、R は f: (Int) -> String から抽出
+# 泛型参数中的 Type 由编译器自动从实参类型填充
+# 如 map(numbers, f)，T 从 numbers: List(Int) 提取，R 从 f: (Int) -> String 提取
 ```
 
-## ライフサイクルと帰属
+## 生命周期与归宿
 
 ```
 ┌─────────────┐
-│   草案      │  ← 現在の状態
+│   草案      │  ← 当前状态
 └──────┬──────┘
        │
        ▼
 ┌─────────────┐
-│  レビュー中 │  ← オープンなコミュニティ議論とフィードバック
+│  审核中     │  ← 开放社区讨论和反馈
 └──────┬──────┘
        │
        ├──────────────────┐
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
-│  受け入れ   │    │  拒否       │
+│  已接受     │    │  已拒绝     │
 └──────┬──────┘    └──────┬──────┘
        │                  │
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
 │   accepted/ │    │    rfc/     │
-│ (正式設計)  │    │ (元の場所)  │
+│ (正式设计)  │    │ (保留原位)  │
 └─────────────┘    └─────────────┘
 ```
 
@@ -1648,20 +1678,20 @@ generic_type ::= identifier ':' type '=' type_expression
 
 ## 参考文献
 
-### YaoXiang 公式ドキュメント
+### YaoXiang官方文档
 
-- [RFC-010: 統一型構文](./010-unified-type-syntax.md)
-- [RFC-009: 所有権モデル](./accepted/009-ownership-model.md)
-- [RFC-001: 並行モデル](./accepted/001-concurrent-model-error-handling.md)
-- [RFC-008: ランタイムモデル](./accepted/008-runtime-concurrency-model.md)
-- [言語仕様](../language-spec.md)
-- [YaoXiang ガイド](../guides/YaoXiang-book.md)
+- [RFC-010: 统一类型语法](./010-unified-type-syntax.md)
+- [RFC-009: 所有权模型](./accepted/009-ownership-model.md)
+- [RFC-001: 并作模型](./accepted/001-concurrent-model-error-handling.md)
+- [RFC-008: 运行时模型](./accepted/008-runtime-concurrency-model.md)
+- [语言规范](../language-spec.md)
+- [YaoXiang指南](../guides/YaoXiang-book.md)
 
 ### 外部参考
 
-- [Rust 泛型システム](https://doc.rust-lang.org/book/ch10-01-syntax.html)
-- [C++ テンプレート特殊化](https://en.cppreference.com/w/cpp/language/template_specialization)
-- [Haskell 型クラス](https://www.haskell.org/tutorial/classes.html)
-- [Swift 泛型](https://docs.swift.org/swift-book/LanguageGuide/Generics.html)
-- [単態化最適化](https://llvm.org/docs/Monomorphization.html)
-- [デッドコード除去](https://en.wikipedia.org/wiki/Dead_code_elimination)
+- [Rust泛型系统](https://doc.rust-lang.org/book/ch10-01-syntax.html)
+- [C++模板特化](https://en.cppreference.com/w/cpp/language/template_specialization)
+- [Haskell类型类](https://www.haskell.org/tutorial/classes.html)
+- [Swift泛型](https://docs.swift.org/swift-book/LanguageGuide/Generics.html)
+- [单态化优化](https://llvm.org/docs/Monomorphization.html)
+- [死代码消除](https://en.wikipedia.org/wiki/Dead_code_elimination)

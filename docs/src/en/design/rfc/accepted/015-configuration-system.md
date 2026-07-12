@@ -1,20 +1,21 @@
 ---
 title: "RFC-015: YaoXiang Configuration System Design"
 status: "Accepted"
-author: "晨煦"
+author: "Chenxu"
 created: "2026-02-12"
 updated: "2026-02-15"
+issue: "#133"
 ---
 
 # RFC-015: YaoXiang Configuration System Design
 
 > **Acceptance Date**: 2026-02-15
 
-> **Prerequisite RFC**: [RFC-014: Package Manager System Design](014-package-manager.md)
+> **Prerequisite RFC**: [RFC-014: Package Management System Design](014-package-manager.md)
 
 ## Summary
 
-Design a unified configuration system for YaoXiang language, supporting two levels: user-level and project-level, providing shared configuration infrastructure for components such as package manager, compiler, REPL, and LSP.
+Design a unified configuration system for the YaoXiang language, supporting both user-level and project-level scopes, providing shared configuration infrastructure for components such as the package manager, compiler, REPL, and LSP.
 
 ## Motivation
 
@@ -27,13 +28,13 @@ The YaoXiang toolchain consists of multiple components:
 - LSP (reads fmt/lint/test configuration)
 - Build system (reads build configuration)
 
-All components need unified configuration infrastructure.
+All components require a unified configuration infrastructure.
 
 ### Current Problems
 
-- Configuration for each component is scattered without unified standards
-- Users cannot manage their preferences uniformly
-- No clear hierarchy between project configuration and user configuration
+- Component configurations are scattered with no unified specification
+- Users cannot manage preferences in a unified way
+- No clear hierarchy between project and user configurations
 
 ## Proposal
 
@@ -41,31 +42,31 @@ All components need unified configuration infrastructure.
 
 **Layered Architecture**:
 ```
-Configuration Priority (High → Low):
+Configuration Priority (high → low):
 ┌─────────────────────────────────────────────┐
-│ 1. Project-level yaoxiang.toml              │ ← Controlled by project team
+│ 1. Project-level yaoxiang.toml               │ ← Controlled by project team
 ├─────────────────────────────────────────────┤
-│ 2. User-level ~/.config/yaoxiang/config.toml │ ← User preferences
+│ 2. User-level ~/.config/yaoxiang/config.toml│ ← User preferences
 ├─────────────────────────────────────────────┤
-│ 3. Compiler default values                  │ ← Reasonable initial values
+│ 3. Compiler defaults                        │ ← Sensible initial values
 └─────────────────────────────────────────────┘
 ```
 
-**Rule**: Upper layers override lower layers; unconfigured options fall back to lower layers.
+**Rule**: Higher layers override lower layers; unset options fall back to lower layers.
 
 ### Configuration Layer Restrictions
 
 | Configuration Section | User-level | Project-level | Consumer |
 |--------|--------|--------|--------|
-| `[package].*` | ❌ | ✅ | Package manager |
+| `[package].*` | ❌ | ✅ | Package Manager |
 | `[yaoxiang]` | ❌ | ✅ | Compiler |
-| `[dependencies]` | ❌ | ✅ | Package manager |
-| `[dev-dependencies]` | ❌ | ✅ | Package manager |
-| `[bin]` | ❌ | ✅ | Package manager |
-| `[lib]` | ❌ | ✅ | Package manager |
-| `[build]` | ✅ | ✅ | Build system |
-| `[profile.*]` | ✅ | ✅ | Build system |
-| `[install]` | ✅ | ❌ | Package manager |
+| `[dependencies]` | ❌ | ✅ | Package Manager |
+| `[dev-dependencies]` | ❌ | ✅ | Package Manager |
+| `[bin]` | ❌ | ✅ | Package Manager |
+| `[lib]` | ❌ | ✅ | Package Manager |
+| `[build]` | ✅ | ✅ | Build System |
+| `[profile.*]` | ✅ | ✅ | Build System |
+| `[install]` | ✅ | ❌ | Package Manager |
 | `[i18n]` | ✅ | ✅ | Compiler |
 | `[repl]` | ✅ | ✅ | REPL |
 | `[fmt]` | ✅ | ✅ | LSP |
@@ -75,7 +76,7 @@ Configuration Priority (High → Low):
 
 ### Examples
 
-**Project-level Configuration**:
+**Project-level configuration**:
 ```toml
 # yaoxiang.toml
 [package]
@@ -96,7 +97,7 @@ build = "yaoxiang build"
 test = "yaoxiang test"
 ```
 
-**User-level Configuration**:
+**User-level configuration**:
 ```toml
 # ~/.config/yaoxiang/config.toml
 [install]
@@ -121,7 +122,7 @@ rules = ["recommended"]
 
 ## Detailed Design
 
-### Project-level-only Configuration
+### Project-level Exclusive Configuration
 
 ```toml
 [package]
@@ -170,37 +171,37 @@ test = "yaoxiang test"
 lint = "yaoxiang fmt && yaoxiang check"
 ```
 
-### User-level-only Configuration
+### User-level Exclusive Configuration
 
 ```toml
 [install]
 dir = "~/.local/share/yaoxiang"
 ```
 
-### Shared Configuration (Both Levels)
+### Configuration Available in Both
 
 | Field | Type | Default | Description |
 |------|------|--------|------|
 | `[i18n].lang` | String | "en" | Language |
 | `[i18n].fallback` | String | "en" | Fallback language |
-| `[repl].history-size` | Number | 1000 | History entries |
+| `[repl].history-size` | Number | 1000 | History entry count |
 | `[repl].history-file` | Path | ~ | History file |
 | `[repl].prompt` | String | "yx> " | Prompt |
 | `[repl].colors` | Boolean | true | Syntax highlighting |
-| `[repl].auto-imports` | [String] | [] | Auto imports |
+| `[repl].auto-imports` | [String] | [] | Auto-imports |
 | `[fmt].line-width` | Number | 120 | Line width |
-| `[fmt].indent-width` | Number | 4 | Indentation |
+| `[fmt].indent-width` | Number | 4 | Indent |
 | `[fmt].use-tabs` | Boolean | false | Tab indentation |
 | `[fmt].single-quote` | Boolean | false | Single quotes |
-| `[lint].rules` | [String] | ["recommended"] | Rule set |
+| `[lint].rules` | [String] | ["recommended"] | Rule sets |
 | `[lint].strict` | Boolean | false | Strict mode |
 | `[test].report` | String | "console" | Test report |
 | `[build].output` | String | "dist/" | Output directory |
 
-### Command Line and Environment Variable Overrides
+### Command-line and Environment Variable Overrides
 
 ```bash
-# Command line overrides
+# Command-line override
 yaoxiang run main.yx --lang zh
 yaoxiang fmt --config-indent-width=2
 
@@ -209,44 +210,44 @@ export YAOXIANG_LANG=zh
 export YAOXIANG_FMT_INDENT_WIDTH=2
 ```
 
-**Priority**: `Command Line > Environment Variables > Configuration File`
+**Priority**: `Command-line > Environment variable > Configuration file`
 
 ### yaoxiang config Command
 
-Provides CLI commands for managing configuration:
+Provides a CLI command to manage configuration:
 
 ```bash
-# Initialize user-level configuration (generates with default options)
+# Initialize user-level configuration (generated with default options)
 yaoxiang config init
 
 # Edit user-level configuration (opens editor)
 yaoxiang config edit
 
-# Show current configuration (merged effective configuration)
+# View current configuration (merged effective configuration)
 yaoxiang config show
 
-# Show configuration sources
+# View configuration source
 yaoxiang config show --source
 
 # Reset to default configuration
 yaoxiang config reset
 ```
 
-**First Run**: When the user first runs any `yaoxiang` command, the system automatically checks if user-level configuration exists. If not, it automatically generates configuration with default options.
+**First Run**: When a user runs any `yaoxiang` command for the first time, the system automatically detects whether the user-level configuration exists. If not, it is automatically generated with default options.
 
 **Configuration File Locations**:
-- Project-level: `./yaoxiang.toml` (project root directory)
+- Project-level: `./yaoxiang.toml` (project root)
 - User-level: `~/.config/yaoxiang/config.toml`
 
 ### Configuration Merge Semantics
 
-Configurations from different layers are merged according to the following rules:
+Configurations at different layers are merged according to the following rules:
 
 | Type | Strategy | Description |
 |------|------|------|
 | Scalar (String/Number/Boolean) | Replace | Project-level overrides user-level |
 | Array | Replace | Project-level completely replaces user-level |
-| Object | Deep merge | Field-by-field merge; undefined fields inherit from lower layer |
+| Object | Deep merge | Merge field by field; undefined fields inherit from lower layer |
 
 **Example - Object Deep Merge**:
 ```toml
@@ -259,7 +260,7 @@ severity = "warn"
 [lint]
 strict = true
 
-# Merged result
+# Merge result
 [lint]
 rules = ["recommended"]    # From user-level
 severity = "warn"          # From user-level
@@ -269,65 +270,65 @@ strict = true             # From project-level
 ### Backward Compatibility
 
 - ✅ Existing no-config-file mode continues to be supported (all components use built-in defaults)
-- ✅ New configuration items all have reasonable default values
-- ✅ Configuration is automatically generated with default options on user's first command run
-- ✅ Configuration parsing failures show friendly errors with specific line numbers and error reasons
+- ✅ Newly added configuration items have sensible default values
+- ✅ Configuration is automatically generated with default options on the user's first command run
+- ✅ When configuration parsing fails, friendly errors are shown with specific line numbers and error reasons
 
 ## Trade-offs
 
 ### Advantages
 
 - Unified configuration infrastructure, reducing duplicate code
-- User preferences remain consistent across projects
-- LSP/REPL/Compiler share the same configuration
-- Gradual configuration, declared as needed
+- User preferences consistent across projects
+- LSP/REPL/compiler share the same configuration
+- Progressive configuration, declared on demand
 
 ### Disadvantages
 
-- More configuration items, slightly increased learning cost
+- Many configuration items, slightly increased learning cost
 - Requires a unified configuration parser
 
-## Alternative Solutions
+## Alternatives
 
-| Solution | Why Not Chosen |
+| Approach | Why Not Chosen |
 |------|-----------|
-| Independent configuration per component | Duplicate code, fragmented user experience |
+| Independent configuration for each component | Duplicate code, fragmented user experience |
 | Command-line arguments only | Cannot persist user preferences |
-| Environment variables only | Project configuration is difficult to version control |
+| Environment variables only | Project configuration difficult to version control |
 
 ## Implementation Strategy
 
-### Phase Division
+### Phases
 
 | Phase | Content |
 |------|------|
-| **Phase 1** | Basic configuration parser, toml support, project-level configuration, `yaoxiang config init` |
+| **Phase 1** | Basic configuration parser, TOML support, project-level configuration, `yaoxiang config init` |
 | **Phase 2** | User-level configuration, configuration merge logic, `yaoxiang config edit/show` |
-| **Phase 3** | Command-line/environment variable overrides, `platform` target constraints, `[tool.*]` extension |
+| **Phase 3** | Command-line/environment variable overrides, `platform` constraints, `[tool.*]` extensions |
 
 ### Dependencies
 
-- Depends on RFC-014 package manager system
+- Depends on RFC-014 Package Management System
 
 ### Risks
 
 | Risk | Mitigation |
 |------|----------|
-| Too many configuration items | Provide reasonable defaults, invisible to users |
-| Complex parser | Use existing toml library |
+| Too many configuration items | Provide sensible defaults, transparent to users |
+| Parser complexity | Use existing toml library |
 
 ## Open Questions
 
-- [x] `features` conditional compilation syntax? → **Moved to separate RFC**, depends on RFC-011 generics system
-- [x] `workspace` workspace design? → **Moved to separate RFC**, high complexity, requires independent design
+- [x] `features` conditional compilation syntax? → **Moved to a separate RFC**, depends on RFC-011 Generics system
+- [x] `workspace` design? → **Moved to a separate RFC**, high complexity, requires independent design
 
 ### Accepted Features (Phase 3)
 
-#### `platform` Target Constraints
+#### `platform` Platform Constraints
 
-> **Note**: The following syntax is used in `yaoxiang.toml` **configuration file**, **not** in YaoXiang source code (`.yx` files). Users do not need to write `cfg(...)` in code.
+> **Note**: The following syntax is used in the `yaoxiang.toml` **configuration file**, **not** in YaoXiang source code (`.yx` files). Users do not need to write `cfg(...)` in code.
 
-Supports platform-specific configuration based on target operating system/architecture:
+Supports platform-specific configuration based on target OS/architecture:
 
 ```toml
 # yaoxiang.toml (configuration file)
@@ -342,17 +343,17 @@ output = "dist/unix"
 rustflags = ["-C target-cpu=native"]
 ```
 
-**Syntax**: `[target.'<condition>'.<configuration-section>]`
+**Syntax**: `[target.'<condition>'.<configuration section>]`
 
-**Description**:
-- This syntax only appears in `yaoxiang.toml` configuration file
-- During build, configuration is selected based on `--target` parameter
-- Users **do not need** and **should not** write `cfg(...)` syntax in `.yx` source code
+**Notes**:
+- This syntax only appears in the `yaoxiang.toml` configuration file
+- The corresponding configuration is selected at build time based on the `--target` parameter
+- Users do **not** need to, and **should not**, write `cfg(...)` syntax in `.yx` source code
 
-**Supported conditions**:
-- `cfg(os = "windows")` - Windows systems
-- `cfg(os = "linux")` - Linux systems
-- `cfg(os = "macos")` - macOS systems
+**Supported Conditions**:
+- `cfg(os = "windows")` - Windows system
+- `cfg(os = "linux")` - Linux system
+- `cfg(os = "macos")` - macOS system
 - `cfg(target_arch = "x86_64")` - 64-bit x86 architecture
 - `cfg(target_arch = "aarch64")` - ARM 64-bit architecture
 
@@ -371,8 +372,8 @@ singleQuote = true
 ```
 
 **Behavior**:
-- YaoXiang ignores unknown `[tool.*]` sections but preserves them in the configuration file
-- Third-party tools can integrate via `yaoxiang tool run <name>` or direct access
+- YaoXiang ignores unknown `[tool.*]` sections, but preserves them in the configuration file
+- Third-party tools can be integrated via `yaoxiang tool run <name>` or accessed directly
 - Tool-specific configuration is not validated
 
 ---

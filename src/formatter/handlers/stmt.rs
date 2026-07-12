@@ -143,9 +143,17 @@ fn format_binding(
     if let Some(ty_name) = type_name {
         if let Some(mt) = method_type {
             let params_str = format_params(params, ctx, source_map);
+            let stmt_start = body.first().map(|s| s.span.start);
+            let block_span = match stmt_start {
+                Some(pos) if pos.line > 1 => crate::util::span::Span::new(
+                    crate::util::span::Position::new(pos.line - 1, 0),
+                    pos,
+                ),
+                _ => crate::util::span::Span::dummy(),
+            };
             let body_block = Block {
                 stmts: body.to_vec(),
-                span: crate::util::span::Span::dummy(),
+                span: block_span,
             };
             return format!(
                 "{}.{}: {} = {} => {}",
@@ -194,9 +202,16 @@ fn format_binding(
         String::new()
     };
 
+    let stmt_start = body.first().map(|s| s.span.start);
+    let block_span = match stmt_start {
+        Some(pos) if pos.line > 1 => {
+            crate::util::span::Span::new(crate::util::span::Position::new(pos.line - 1, 0), pos)
+        }
+        _ => crate::util::span::Span::dummy(),
+    };
     let body_block = Block {
         stmts: body.to_vec(),
-        span: crate::util::span::Span::dummy(),
+        span: block_span,
     };
 
     // 如果参数为空，直接输出 = { ... }，不输出 () =>

@@ -1,7 +1,10 @@
 ---
 title: "RFC-026：FFI 核心机制"
 status: "已接受"
-updated: "2026-07-03"
+author: "晨煦"
+created: "2026-07-03"
+updated: "2026-07-05"
+issue: "#93"
 ---
 
 # RFC-026：FFI 核心机制

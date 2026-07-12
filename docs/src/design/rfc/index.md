@@ -37,6 +37,8 @@ title: "RFC 索引"
 | RFC-031 | [RFC-031：优化级别与 Pass 管理器](./draft/031-optimization-levels.md) | 晨煦 | 2026-06-16 | 草案 |
 | RFC-002 | [RFC-002：基于 libuv 的资源类型 IO 实现层](./draft/002-cross-platform-io-libuv.md) | 晨煦 | 2025-01-05 | 草案（重新审核） |
 | RFC-026b | [RFC-026b: yx-bindgen 工具链](./draft/026b-yx-bindgen.md) | 晨煦 | 2026-07-03 | 草案 |
+| RFC-034 | [RFC-034: 统一调试工具链](./draft/034-debug-toolchain.md) | 晨煦 | 2026-07-06 | 草案 |
+| RFC-035 | [RFC-035: MCP Server 支持（AI Agent 集成）](./draft/035-mcp-server.md) | Chen Xu | 2026-07-11 | 草案 |
 
 ---
 

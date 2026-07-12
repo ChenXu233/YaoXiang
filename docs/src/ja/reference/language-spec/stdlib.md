@@ -1,18 +1,18 @@
 # 標準ライブラリ仕様
 
-本書は YaoXiang プログラミング言語の標準ライブラリ仕様を定義ものであり、コアライブラリ、IOライブラリ、数学ライブラリを含む。
+本ファイルは YaoXiang プログラミング言語の標準ライブラリ仕様を定義する。コアライブラリ、IO ライブラリ、数学ライブラリを含む。
 
 ---
 
-## 第1章：コアライブラリ
+## 第一章：コアライブラリ
 
 ### 1.1 基本型
 
-標準ライブラリは以下の基本型を提供する：
+標準ライブラリは以下の基本型の実装を提供する：
 
 | 型 | モジュール | 説明 |
 |------|------|------|
-| `Option(T)` | `std.option` | オプション値型 |
+| `Option(T)` | `std.option` | オプショナル値型 |
 | `Result(T, E)` | `std.result` | エラー処理型 |
 | `List(T)` | `std.collection` | 動的配列 |
 | `Map(K, V)` | `std.collection` | ハッシュマップ |
@@ -25,9 +25,9 @@
 Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 ```
 
-**値変体構築**：
+**バリアントコンストラクタ**：
 
-| 値変体 | 構文 | 説明 |
+| バリアント | 構文 | 説明 |
 |------|------|------|
 | `Option.some` | `Option.some(value)` | 値あり |
 | `Option.none` | `Option.none()` | 値なし |
@@ -45,7 +45,7 @@ unwrap: (self: Option(T)) -> T
 // 値またはデフォルト値を取得
 unwrap_or: (self: Option(T), default: T) -> T
 
-// 値をマップ
+// 値を写像
 map: (R: Type) -> ((self: Option(T), f: (T) -> R) -> Option(R))
 ```
 
@@ -55,9 +55,9 @@ map: (R: Type) -> ((self: Option(T), f: (T) -> R) -> Option(R))
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 ```
 
-**値変体構築**：
+**バリアントコンストラクタ**：
 
-| 値変体 | 構文 | 説明 |
+| バリアント | 構文 | 説明 |
 |------|------|------|
 | `Result.ok` | `Result.ok(value)` | 成功値 |
 | `Result.err` | `Result.err(error)` | エラー値 |
@@ -75,10 +75,10 @@ unwrap: (self: Result(T, E)) -> T
 // 値またはデフォルト値を取得
 unwrap_or: (self: Result(T, E), default: T) -> T
 
-// 成功値をマップ
+// 成功値を写像
 map: (R: Type) -> ((self: Result(T, E), f: (T) -> R) -> Result(R, E))
 
-// エラー値をマップ
+// エラー値を写像
 map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ```
 
@@ -94,16 +94,47 @@ ErrorPropagate ::= Expr '?'
 // 成功時は値を返し、失敗時は err を上位に返す
 data = fetch_data()?
 
-// 以下と同等
+// 以下と等価
 data = match fetch_data() {
     ok(v) => v
     err(e) => return err(e)
 }
 ```
 
+
+### 1.5 アサーション（std.assert）
+
+`std.assert` モジュールは統一されたアサーション機構を提供する——ランタイム `assert` とコンパイル時の精化型 `Assert` は同一プリミティブの二つの側面である。
+
+```yaoxiang
+# IsTrue：値から型への橋渡し関数
+IsTrue: (b: Bool) -> Type = match b {
+    true => Void,      # ⊤，プログラムは継続
+    false => Never,    # ⊥，発散
+}
+
+# Assert：コンパイル時の精化型プリミティブ
+Assert: (cond: Bool) -> Type = IsTrue(cond)
+
+# assert：ランタイムアサーション（Assert の値導入子）
+assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))
+
+# Result オーバーロード
+assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
+```
+
+**dispatch 分派**：
+
+| 条件 | 動作 |
+|------|------|
+| cond のすべての自由変数がコンパイル時に既知 | コンパイラが評価、true → 消去、false → コンパイルエラー |
+| ランタイム自由変数が存在する | ランタイム check を挿入し、フロー敏感的仮定集合 Γ を注入 |
+
+`assert(false, "msg")` は raise と等価である——個別の throw/raise キーワードは不要である。
+
 ---
 
-## 第2章：IO ライブラリ
+## 第二章：IO ライブラリ
 
 ### 2.1 標準入出力
 
@@ -154,7 +185,7 @@ delete_dir: (path: String) -> Result(Void, Error)
 
 ---
 
-## 第3章：数学ライブラリ
+## 第三章：数学ライブラリ
 
 ### 3.1 基本数学関数
 
@@ -169,7 +200,7 @@ min: (a: Int, b: Int) -> Int
 max: (a: Float, b: Float) -> Float
 min: (a: Float, b: Float) -> Float
 
-// べき乗演算
+// べき乗
 pow: (base: Float, exp: Float) -> Float
 sqrt: (x: Float) -> Float
 
@@ -204,7 +235,7 @@ e: Float = 2.718281828459045
 
 ---
 
-## 第4章：文字列ライブラリ
+## 第四章：文字列ライブラリ
 
 ### 4.1 文字列操作
 
@@ -225,7 +256,7 @@ contains: (s: String, pattern: String) -> Bool
 // 文字列置換
 replace: (s: String, old: String, new: String) -> String
 
-// 文字列トリム
+// 文字列トリミング
 trim: (s: String) -> String
 trim_left: (s: String) -> String
 trim_right: (s: String) -> String
@@ -239,14 +270,14 @@ to_string: (x: Int) -> String
 to_string: (x: Float) -> String
 to_string: (x: Bool) -> String
 
-// パース
+// 解析
 parse_int: (s: String) -> Result(Int, Error)
 parse_float: (s: String) -> Result(Float, Error)
 ```
 
 ---
 
-## 第5章：コレクションライブラリ
+## 第五章：コレクションライブラリ
 
 ### 5.1 List 型
 
@@ -290,7 +321,7 @@ Map: (K: Type, V: Type) -> Type = {
 
 ---
 
-## 第6章：イテレータライブラリ
+## 第六章：イテレータライブラリ
 
 ### 6.1 Iterator trait
 
@@ -319,7 +350,7 @@ Range: Type = {
     Iterator(Int)
 }
 
-// 使用例
+// 使用
 for i in 0..10 {
     print(i)
 }
@@ -331,19 +362,19 @@ for i in 0..10 step 2 {
 
 ---
 
-## 付録：標準ライブラリモジュールインデックス
+## 付録：標準ライブラリモジュール索引
 
 ### A.1 コアモジュール
 
 | モジュール | 説明 |
 |------|------|
+| `std.assert` | アサーション機構——ランタイム assert + コンパイル時 Assert 精化型 |
 | `std.option` | Option 型 |
 | `std.result` | Result 型 |
 | `std.collection` | List、Map などのコレクション型 |
 | `std.string` | 文字列操作 |
 | `std.array` | 配列操作 |
 | `std.iterator` | イテレータ |
-
 ### A.2 IO モジュール
 
 | モジュール | 説明 |

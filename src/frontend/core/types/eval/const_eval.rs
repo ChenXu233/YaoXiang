@@ -16,6 +16,8 @@
 
 // 重新导出主要类型
 use crate::frontend::core::types::ConstValue;
+use crate::frontend::core::parser::ast::{Expr, BinOp as AstBinOp, UnOp as AstUnOp};
+use crate::frontend::core::lexer::tokens::Literal;
 use crate::util::diagnostic::Diagnostic;
 use crate::util::diagnostic::codes::ErrorCodeDefinition;
 
@@ -267,9 +269,70 @@ pub enum ConstBinOp {
 pub enum ConstUnOp {
     /// 负号
     Neg,
-
     /// 逻辑非
     Not,
+}
+
+/// 将 AST Expr 转换为 ConstExpr
+///
+/// 只支持常量约束表达式：字面量、变量引用、二元运算、一元运算。
+/// 其他表达式（函数调用、if、match 等）返回 None。
+pub fn convert_expr_to_const_expr(expr: &Expr) -> Option<ConstExpr> {
+    match expr {
+        Expr::Lit(lit, _) => match lit {
+            Literal::Int(n) => Some(ConstExpr::Int(*n)),
+            Literal::Bool(b) => Some(ConstExpr::Bool(*b)),
+            Literal::Float(f) => Some(ConstExpr::Float(*f as f32)),
+            _ => None,
+        },
+        Expr::Var(name, _) => Some(ConstExpr::Var(name.clone())),
+        Expr::BinOp {
+            op, left, right, ..
+        } => {
+            let const_op = convert_binop(op)?;
+            let lhs = convert_expr_to_const_expr(left)?;
+            let rhs = convert_expr_to_const_expr(right)?;
+            Some(ConstExpr::BinOp {
+                op: const_op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            })
+        }
+        Expr::UnOp { op, expr, .. } => {
+            let const_op = convert_unop(op)?;
+            let inner = convert_expr_to_const_expr(expr)?;
+            Some(ConstExpr::UnOp {
+                op: const_op,
+                expr: Box::new(inner),
+            })
+        }
+        _ => None,
+    }
+}
+
+fn convert_binop(op: &AstBinOp) -> Option<ConstBinOp> {
+    match op {
+        AstBinOp::Add => Some(ConstBinOp::Add),
+        AstBinOp::Sub => Some(ConstBinOp::Sub),
+        AstBinOp::Mul => Some(ConstBinOp::Mul),
+        AstBinOp::Div => Some(ConstBinOp::Div),
+        AstBinOp::Mod => Some(ConstBinOp::Mod),
+        AstBinOp::Eq => Some(ConstBinOp::Eq),
+        AstBinOp::Neq => Some(ConstBinOp::Neq),
+        AstBinOp::Lt => Some(ConstBinOp::Lt),
+        AstBinOp::Le => Some(ConstBinOp::Lte),
+        AstBinOp::Gt => Some(ConstBinOp::Gt),
+        AstBinOp::Ge => Some(ConstBinOp::Gte),
+        _ => None,
+    }
+}
+
+fn convert_unop(op: &AstUnOp) -> Option<ConstUnOp> {
+    match op {
+        AstUnOp::Neg => Some(ConstUnOp::Neg),
+        AstUnOp::Not => Some(ConstUnOp::Not),
+        _ => None,
+    }
 }
 
 /// 默认最大递归深度
@@ -1045,9 +1108,7 @@ impl LiteralTypeValidator {
         ty: &'a Type,
     ) -> Option<(String, ConstValue)> {
         match ty {
-            Type::Literal {
-                name, base_type: _, ..
-            } => {
+            Type::Literal { name, .. } => {
                 // 首先检查是否是已注册的 Const 参数
                 if let Some(value) = self.const_params.get(name) {
                     return Some((name.clone(), value.clone()));

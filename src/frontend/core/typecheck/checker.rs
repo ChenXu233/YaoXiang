@@ -934,10 +934,22 @@ impl TypeChecker {
 
         // 如果是泛型类型构造器（有泛型参数），存储模板信息用于类型实例化
         if !generic_params.is_empty() {
-            // 使用已注入名称的 poly 作为模板，确保实例化后的类型名称正确
-            let template = poly.body;
-            self.env
-                .add_generic_type_def(name.to_string(), generic_params.to_vec(), template);
+            use crate::frontend::core::typecheck::environment::GenericTypeDef;
+            use crate::frontend::core::types::var::TypeVar;
+
+            let type_param_names: Vec<String> = generic_params.to_vec();
+            let type_binders: Vec<TypeVar> =
+                (0..type_param_names.len()).map(TypeVar::new).collect();
+
+            let def = GenericTypeDef {
+                poly: PolyType {
+                    type_binders,
+                    const_binders: vec![],
+                    body: poly.body.clone(),
+                },
+                type_param_names,
+            };
+            self.env.add_generic_type_def(name.to_string(), def);
         }
 
         // 自动为 Record 类型派生标准库 traits

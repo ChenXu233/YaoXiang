@@ -2,12 +2,12 @@
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Read};
 use std::path::PathBuf;
 use tracing::info;
 use yaoxiang::repl::Repl;
 use yaoxiang::formatter::run_format_command;
-use yaoxiang::{dump_bytecode, run, NAME, VERSION};
+use yaoxiang::{dump_bytecode, NAME, VERSION};
 use yaoxiang::util::diagnostic::{
     render_explain_output, run_check_command_once, run_check_watch_command,
     run_file_with_diagnostics,
@@ -106,7 +106,7 @@ enum Commands {
         workers: usize,
     },
 
-    /// Evaluate YaoXiang code from command line (not supported well yet)
+    /// Evaluate YaoXiang code (use '-' to read from stdin)
     Eval {
         /// Code to evaluate
         #[arg(value_name = "CODE")]
@@ -146,15 +146,19 @@ enum Commands {
         #[arg(value_name = "PATH")]
         file: PathBuf,
 
-        /// Check if files are formatted without modifying them
-        #[arg(short, long)]
-        check: bool,
+        /// Dry-run mode: show formatting diff without writing
+        #[arg(short = 'n', long)]
+        dry_run: bool,
 
         /// Write formatted output back to file(s) in place
-        #[arg(short, long)]
+        #[arg(short = 'w', long)]
         write: bool,
 
-        /// Output to stdout (default when neither --write nor --check)
+        /// Skip post-format verification (performance optimization)
+        #[arg(long)]
+        no_verify: bool,
+
+        /// Output to stdout (default when neither --dry-run nor --write)
         #[arg(long)]
         stdout: bool,
 
@@ -297,14 +301,7 @@ fn main() -> Result<()> {
     let lang = args.lang.map(Into::<String>::into).unwrap_or_else(|| {
         std::env::var("YAOXIANG_LANG")
             .ok()
-            .and_then(|s| {
-                // Only use if it's a valid language
-                if ["en", "zh", "zh-x-miao", "zh-miao"].contains(&s.as_str()) {
-                    Some(s)
-                } else {
-                    None
-                }
-            })
+            .filter(|s| ["en", "zh", "zh-x-miao", "zh-miao"].contains(&s.as_str()))
             .unwrap_or_else(|| "en".to_string())
     });
     set_lang_from_string(lang);
@@ -370,7 +367,16 @@ fn main() -> Result<()> {
             run_file_with_diagnostics(&file, debug_info, &runtime_mode, workers)?;
         }
         Commands::Eval { code } => {
-            run(&code).context("Failed to evaluate code")?;
+            let source = if code == "-" {
+                let mut buf = String::new();
+                std::io::stdin()
+                    .read_to_string(&mut buf)
+                    .context("Failed to read from stdin")?;
+                buf
+            } else {
+                code
+            };
+            yaoxiang::eval_code(&source).context("Failed to evaluate code")?;
         }
         Commands::Check {
             paths,
@@ -407,8 +413,9 @@ fn main() -> Result<()> {
         }
         Commands::Format {
             file,
-            check,
+            dry_run,
             write,
+            no_verify,
             stdout: _,
             indent,
             line_width,
@@ -465,7 +472,12 @@ fn main() -> Result<()> {
                 options.single_quote = true;
             }
 
-            let result = match run_format_command(&file, &options, check, write) {
+            // 6. Apply CLI overrides
+            if no_verify {
+                options.verify = false;
+            }
+
+            let result = match run_format_command(&file, &options, dry_run, write) {
                 Ok(result) => result,
                 Err(e) => {
                     eprintln!("{}", e);
@@ -475,8 +487,8 @@ fn main() -> Result<()> {
                     return Err(e);
                 }
             };
-            if check && result.needs_formatting {
-                ::std::process::exit(1);
+            if dry_run && result.needs_formatting {
+                ::std::process::exit(2);
             }
         }
         Commands::Dump { file } => {

@@ -371,7 +371,7 @@ impl Evaluator {
             }
 
             let type_str = if (global.type_id as usize) < module.type_table.len() {
-                format!("{:?}", &module.type_table[global.type_id as usize])
+                format!("{:?}", module.type_table[global.type_id as usize])
             } else {
                 "unknown".to_string()
             };

@@ -1,17 +1,17 @@
 ---
-title: "RFC-010: Unified Type Syntax - The name: type = value Model"
+title: "RFC-010: Unified Type Syntax - name: type = value Model"
 status: "Accepted"
 author: "Chenxu"
 created: "2025-01-20"
 updated: "2026-06-05 (Updated return rules and {} semantics)"
+issue: "#127"
 ---
 
-# RFC-010: Unified Type Syntax - The `name: type = value` Model
-
+# RFC-010: Unified Type Syntax - name: type = value Model
 
 ## Summary
 
-This RFC proposes an extremely minimal and unified type syntax model: **everything is `name: type = value`**.
+This RFC proposes an extremely minimal, unified type syntax model: **everything is `name: type = value`**.
 
 YaoXiang has only one declaration form:
 
@@ -19,37 +19,38 @@ YaoXiang has only one declaration form:
 identifier : type = expression
 ```
 
-Where `type` can be any type expression, and `expression` can be any value expression.
-**There is no `fn`, no `struct`, no `trait`, no `impl`, and no lowercase `type` keyword (but there is `Type` as the meta type keyword)**.
+where `type` can be any type expression, and `expression` can be any value expression.
+**No `fn`, no `struct`, no `trait`, no `impl`, no lowercase `type` keyword (but there is `Type` as the metatype keyword)**.
 
-> **Core Design**: `Type` itself is a generic type. `(T: Type) -> Type` represents "a type that accepts the type parameter T".
+> **Core design**: `Type` itself is a generic type. `(T: Type) -> Type` means "a type that accepts a type parameter T".
 
-| Concept       | Code Form                                      |
-|---------------|-----------------------------------------------|
-| Variable      | `x: Int = 42`                                |
-| Function      | `add: (a: Int, b: Int) -> Int = a + b`       |
-| Record type   | `Point: Type = { x: Float, y: Float }`       |
-| Interface     | `Drawable: Type = { draw: (Surface) -> Void }` |
-| Generic type  | `List: (T: Type) -> Type = { data: Array(T), length: Int }` |
-| Generic type  | `Map: (K: Type, V: Type) -> Type = { keys: Array(K), values: Array(V) }` |
-| Method        | `Point.draw: (p: Point, s: Surface) -> Void = ...`<br>`Point.draw = draw[0]` |
-| Generic function | `map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R))` |
+| Concept            | Code                                                                                |
+|--------------------|-------------------------------------------------------------------------------------|
+| Variable           | `x: Int = 42`                                                                       |
+| Function           | `add: (a: Int, b: Int) -> Int = a + b`                                              |
+| Record type        | `Point: Type = { x: Float, y: Float }`                                              |
+| Interface          | `Drawable: Type = { draw: (Surface) -> Void }`                                      |
+| Generic type       | `List: (T: Type) -> Type = { data: Array(T), length: Int }`                         |
+| Generic type       | `Map: (K: Type, V: Type) -> Type = { keys: Array(K), values: Array(V) }`            |
+| Method             | `Point.draw: (p: Point, s: Surface) -> Void = ...`<br>`Point.draw = draw[0]`        |
+| Generic function   | `map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R))`           |
 
-**`Type` is the only meta type keyword in the language**.
+**`Type` is the only metatype keyword in the language**.
 
-> **Namespace vs Method Binding**: The `Type.name` prefix indicates **namespace ownership**, nothing more.
-> It does not trigger any implicit binding. For the `.` call syntax like `p.draw(screen)` to work,
-> an explicit binding is required: `Point.draw = draw[0]`.
+> **Namespace vs. method binding**: The `Type.name` prefix denotes **namespace membership**, nothing more.
+> It does not trigger any implicit binding. For the `.` call syntax like `p.draw(screen)` to take effect,
+> you must explicitly bind: `Point.draw = draw[0]`.
 > See the "Namespace and Method Binding" section below for details.
-It is used to mark the type hierarchy, and the compiler automatically handles the distinction between Type0, Type1, Type2, ..., which is transparent to the user.
+
+It is used to mark the type hierarchy, and the compiler automatically handles the distinction among Type0, Type1, Type2..., which is transparent to the user.
 
 ```yaoxiang
-// Core syntax: unified + distinct
+// Core syntax: unified + distinguished
 
 // Variable
 x: Int = 42
 
-// Function (parameter names in the signature)
+// Function (parameter names appear in the signature)
 add: (a: Int, b: Int) -> Int = a + b
 
 // Record type
@@ -79,7 +80,7 @@ Point.serialize: (self: Point) -> String = {
     return "Point(${self.x}, ${self.y})"
 }
 
-// Generic type ((T: Type) -> Type = generic type that accepts a type parameter)
+// Generic type ((T: Type) -> Type = a generic type that accepts type parameters)
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int
@@ -92,8 +93,8 @@ Map: (K: Type, V: Type) -> Type = {
 
 // Usage
 p: Point = Point(1.0, 2.0)
-p.draw(screen)           // syntactic sugar → Point.draw(p, screen)
-s: Drawable = p           // structural subtyping: Point implements Drawable
+p.draw(screen)           // Syntactic sugar → Point.draw(p, screen)
+s: Drawable = p           // Structural subtyping: Point implements Drawable
 drawables: List(Drawable) = [p, r]
 process_all(drawables)
 ```
@@ -102,35 +103,35 @@ process_all(drawables)
 
 ### Why is this feature needed?
 
-The current type system has several separate concepts:
+The current type system has several disjoint concepts:
 - Variable declaration syntax
 - Function definition syntax
 - Type definition syntax (different syntax)
 - Interface definition syntax
 - Method binding syntax
 
-These concepts lack unity, leading to fragmented syntax and a high learning cost.
+These concepts lack unity, leading to fragmented syntax and high learning cost.
 
-### Design Goals
+### Design goals
 
-1. **Extreme Unity**: One syntax rule covers all cases
-2. **Concise and Elegant**: The symmetric aesthetic of `name: type = value`
-3. **No New Keywords**: Reuse existing syntactic elements
-4. **Theoretically Elegant**: Types themselves are values of type Type
-5. **Generics-Friendly**: Seamlessly integrated with the generics system (RFC-011)
+1. **Extreme unification**: one syntax rule covers all cases
+2. **Concise and elegant**: symmetric aesthetic of `name: type = value`
+3. **No new keywords**: reuse existing syntax elements
+4. **Theoretically elegant**: types themselves are values of the Type type
+5. **Generics-friendly**: seamlessly integrates with the generics system (RFC-011)
 
-### Integration with the Generics System
+### Integration with the generics system
 
-The unified syntax model of RFC-010 is **naturally compatible** with the generics system design of RFC-011, and generic parameters can seamlessly integrate into the unified model:
+The unified syntax model of RFC-010 fits **naturally** with the generics system design of RFC-011; generic parameters can be seamlessly incorporated into the unified model:
 
 ```yaoxiang
 // Basic generics (RFC-011 Phase 1)
 List: (T: Type) -> Type = { data: Array(T), length: Int }
 
-// Generic function (RFC-023 syntax: Type position in signature can be omitted, inferred at call site)
+// Generic function (RFC-023 syntax: Type positions in signature can be omitted, inferred at call site)
 map: (: Type, R: Type) -> (( list: List(T), f: (T) -> R) -> List(R)) = ...
 
-// Type constraint (RFC-011 Phase 2)
+// Type constraints (RFC-011 Phase 2)
 clone: (value: T) -> T = value.clone()  // T: Clone constraint carried by parameter type
 
 // Const generics (RFC-011 Phase 4)
@@ -138,30 +139,30 @@ Array: (T: Type, N: Int) -> Type = { data: Array(T, N), length: N }
 ```
 
 **Dependencies**:
-- RFC-011 Phase 1 (Basic Generics) is a **strong dependency** of RFC-010
+- RFC-011 Phase 1 (basic generics) is a **strong dependency** of RFC-010
 - Without basic generics, the generic examples in RFC-010 cannot compile
-- Recommendation: Implement RFC-011 Phase 1 and RFC-010 simultaneously
+- Recommendation: implement RFC-011 Phase 1 and RFC-010 in sync
 
 ## Proposal
 
-### Core Principle: Type Constructor vs Function/Variable
+### Core principle: type constructor vs. function/variable
 
-**This is a critical design choice that determines the disambiguation rules for the syntax:**
+**This is a key design choice that determines the disambiguation rules of the syntax:**
 
-| Form | Meaning | Rule |
-|------|---------|------|
-| **`x: Type = ...`** | Type constructor | `: Type` explicit declaration → forced to be a type |
-| **`f = ...`** | Function or variable | No `: Type` → HM actively infers function/variable |
+| Syntax                       | Meaning              | Rule                                                   |
+|------------------------------|----------------------|--------------------------------------------------------|
+| **`x: Type = ...`**          | Type constructor     | Explicit `: Type` declaration → forced to be a type    |
+| **`f = ...`**                | Function or variable | No `: Type` → HM actively infers it as function/variable |
 
-**Why this design?**
+**Why is it designed this way?**
 
-The `{ ... }` syntax itself is ambiguous:
+The `{ ... }` syntax is itself ambiguous:
 - `{ x: Float, y: Float }` can be a **type literal** (record type)
 - `{ a = 1 + 1 }` can be a **code block** (executed statement, returns Void)
 
 **Disambiguation rules**:
-- **With** `: Type` → forced to parse as a type constructor, `{ ... }` is a type literal
-- **Without** `: Type` → HM actively parses `{ ... }` as a code block, infers a function type
+- **Has** `: Type` → forced to be parsed as a type constructor; `{ ... }` is a type literal
+- **Has no** `: Type` → HM actively parses `{ ... }` as a code block and infers a function type
 
 ```yaoxiang
 # ✅ Type constructor: has : Type
@@ -176,14 +177,14 @@ Point = { x: Float, y: Float }  // HM infers as a function, not a type!
 
 ---
 
-**Unified Model: identifier : type = expression**
+**Unified model: identifier : type = expression**
 
 ```
 ├── Variable
 │   └── x: Int = 42
 │
 ├── Function
-│   └── add: (a: Int, b: Int) -> Int = a + b  # No : Type, HM infers as a function
+│   └── add: (a: Int, b: Int) -> Int = a + b  # No : Type, HM infers as function
 │
 ├── Record type
 │   └── Point: Type = { x: Float, y: Float }  # Must return: Type
@@ -199,65 +200,65 @@ Point = { x: Float, y: Float }  // HM infers as a function, not a type!
 │
 ├── Namespace function
 │   └── draw: (p: Point, surface: Surface) -> Void = ...
-│       Point.draw = draw[0]  # Explicit binding enables the dot call syntax
+│       Point.draw = draw[0]  # Only after explicit binding does dot call syntax work
 │
 └── Generic function
-    └── map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R))  # Does not return Type, HM infers as a function
+    └── map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R))  # Does not return Type, HM infers as function
 ```
 
-### Meta Type Hierarchy (Compiler Internal)
+### Metatype hierarchy (compiler internals)
 
-The compiler internally maintains a universe hierarchy `level: selfpointnum` (stored as a string, theoretically infinitely extensible).
+The **compiler internals** maintain a universe hierarchy `level: selfpointnum` (stored as a string, theoretically infinitely extendable).
 
-| Level | Description |
-|-------|-------------|
-| `Type0` | Everyday types (`Int`, `Float`, `Point`) |
-| `Type1` | Type constructors (`List`, `Maybe`) |
-| `Type2+` | Higher-order constructors |
+| Level     | Description                                |
+|-----------|--------------------------------------------|
+| `Type0`   | Everyday types (`Int`, `Float`, `Point`)   |
+| `Type1`   | Type constructors (`List`, `Maybe`)        |
+| `Type2+`  | Higher-order constructors                  |
 
-**Users never see these numbers**, they only see `: Type`.
+**Users never see these numbers**, only `: Type`.
 
-### Curry-Howard Isomorphism: Types as Propositions, Programs as Proofs
+### Curry-Howard correspondence: types as propositions, programs as proofs
 
-YaoXiang's unified syntax `name: type = value` is not an arbitrary choice—it is a direct mapping of the Curry-Howard correspondence. This correspondence reveals a profound fact: **the type system and the logic system are two sides of the same coin**.
+YaoXiang's unified syntax `name: type = value` is not chosen arbitrarily—it is a direct mapping of the Curry-Howard correspondence. This correspondence reveals a profound fact: **the type system and the logic system are two sides of the same coin**.
 
-| Logic (Proposition) | Type System (YaoXiang) | Example |
-|---|---|---|
-| Proposition P | Type T | `Int`, `Bool` |
-| Proof that P holds | A value of type T | `42: Int`, `true: Bool` |
-| P → Q (Implication) | Function type `(P) -> Q` | `(x: Int) -> Bool` |
-| P ∧ Q (Conjunction) | Record type `{ p: P, q: Q }` | `{ x: Int, y: Bool }` |
-| ∀x.P(x) (Universal quantification) | Generic function `(T: Type) -> ...` | `map: (T: Type, R: Type) -> ...` |
-| P ⊕ Q (Disjunction) | Enum / tagged union | `Maybe: (T: Type) -> Type = { ... }` |
+| Logic (proposition)        | Type system (YaoXiang)                | Example                              |
+|----------------------------|---------------------------------------|--------------------------------------|
+| Proposition P              | Type T                                | `Int`, `Bool`                        |
+| Proof that P holds         | A value of type T                     | `42: Int`, `true: Bool`              |
+| P → Q (implication)        | Function type `(P) -> Q`              | `(x: Int) -> Bool`                   |
+| P ∧ Q (conjunction)        | Record type `{ p: P, q: Q }`          | `{ x: Int, y: Bool }`                |
+| ∀x.P(x) (universal quant.) | Generic function `(T: Type) -> ...`   | `map: (T: Type, R: Type) -> ...`     |
+| P ⊕ Q (disjunction)        | Enum / tagged union                   | `Maybe: (T: Type) -> Type = { ... }` |
 
 **The meaning of `name: type = value` under Curry-Howard**:
 
 ```yaoxiang
-// "x: Int = 42" reads as: "There exists a proof of type Int, named x, whose value is 42"
+// "x: Int = 42" reads: "there exists a proof of Int, named x, whose value is 42"
 x: Int = 42
 
-// "add: (a: Int, b: Int) -> Int = a + b" reads as:
-// "There exists an implication proof: given proofs a and b of Int, we can construct a proof of Int"
+// "add: (a: Int, b: Int) -> Int = a + b" reads:
+// "there exists an implication proof: given proofs a and b of Int, one can construct a proof of Int"
 add: (a: Int, b: Int) -> Int = a + b
 
-// "Point: Type = { x: Float, y: Float }" reads as:
+// "Point: Type = { x: Float, y: Float }" reads:
 // "Point is a proposition whose proof requires both a Float proof x and a Float proof y"
 Point: Type = { x: Float, y: Float }
 ```
 
 **Why does this matter?**
 
-1. **Logical Consistency = Type Safety**: If the type system allows constructing a value of type `T` with no legitimate runtime representation, that is like allowing a proof of a false proposition in logic—the system collapses. Curry-Howard tells us: **a type-safe language is naturally a logically consistent system**.
+1. **Logical consistency = type safety**: if the type system allows constructing a value of type `T` with no valid runtime representation, that is like allowing a proof of a false proposition in logic—the system breaks down. Curry-Howard tells us: **a type-safe language is inherently a logically consistent system**.
 
-2. **Universe Hierarchy is a Necessary Condition**: As detailed below, allowing `Type: Type` (i.e., "the type of types is also a type") would produce the Russell paradox (which manifests as Girard's paradox in type theory). YaoXiang's `Type₀ : Type₁ : Type₂ : ...` stratification ensures that each type belongs to a single level, forming a never-closing ascending chain, fundamentally avoiding the paradox. This means YaoXiang's type system is **logically consistent** in the Curry-Howard sense.
+2. **Universe hierarchy is a necessary condition**: as detailed below, allowing `Type: Type` (i.e., "the type of types is also a type") would produce Russell's paradox (manifested as Girard's paradox in type theory). YaoXiang's stratified `Type₀ : Type₁ : Type₂ : ...` ensures each type belongs to exactly one level, forming an ever-rising chain that never closes, fundamentally avoiding paradox. This means YaoXiang's type system is **logically consistent** in the Curry-Howard sense.
 
-3. **Theoretical Foundation of Unified Syntax**: The reason `name: type = value` can use one syntax to cover all concepts of variables, functions, types, interfaces, and generics is that they are all the same thing under Curry-Howard—**providing proofs for propositions**. Variables are evidence for propositions, functions are evidence for implications, records are evidence for conjunctions, and generics are evidence for universal quantification. The unified syntax is not a human-designed coincidence, but a natural consequence of the Curry-Howard correspondence.
+3. **Theoretical foundation of the unified syntax**: the reason `name: type = value` can cover variables, functions, types, interfaces, and generics with a single syntax is precisely because, under Curry-Howard, they are all the same thing—**providing a proof for a proposition**. A variable is evidence of a proposition; a function is evidence of an implication; a record is evidence of a conjunction; generics are evidence of a universal quantification. The unified syntax is not an arbitrary design coincidence, but a natural consequence of the Curry-Howard correspondence.
 
-> **Further Reading**: Wadler, P. (2015). *"Propositions as Types."* Communications of the ACM, 58(12), 75–84. This article explains the history and significance of the Curry-Howard correspondence in accessible language.
+> **Further reading**: Wadler, P. (2015). *"Propositions as Types."* Communications of the ACM, 58(12), 75–84. This article explains the history and significance of the Curry-Howard correspondence in accessible language.
 
-### Syntax Definition
+### Syntax definition
 
-#### 1. Variable Declaration
+#### 1. Variable declaration
 
 ```yaoxiang
 // Basic syntax
@@ -266,10 +267,10 @@ name: String = "Alice"
 flag: Bool = true
 
 // Type inference (can be omitted)
-y = 100  // inferred as Int
+y = 100  // Inferred as Int
 ```
 
-#### 2. Function Definition
+#### 2. Function definition
 
 ```yaoxiang
 // Single-expression form (returns the value directly, no return needed)
@@ -292,19 +293,19 @@ calc: (x: Float, y: Float, op: String) -> Float = {
     }
 }
 
-// Void function (no return needed in the code block)
+// Void function (no return needed inside the block)
 print: (msg: String) -> Void = {
     console.write(msg)
 }
 ```
 
-#### Return Rules
+#### Return rules
 
-The return value depends on the form on the right side of `=`:
+The return value depends on the form on the right-hand side of `=`:
 
-| Form | Return Value |
-|------|--------------|
-| `= expr` (no braces) | Returns `expr` directly |
+| Syntax                    | Return value                            |
+|---------------------------|-----------------------------------------|
+| `= expr` (no braces)      | Returns `expr` directly                 |
 | `= { ... }` (with braces) | Must use `return`, otherwise returns `Void` |
 
 ```yaoxiang
@@ -324,57 +325,57 @@ print: (msg: String) -> Void = {
 }
 ```
 
-> **Design Rationale**: `{ ... }` is a dependency-driven computation unit (see below), and its return semantics differ from a single expression. Braces introduce a multi-statement context, so an explicit `return` is required to disambiguate "whether the last expression is the return value".
+> **Design rationale**: `{ ... }` is a dependency-driven computation unit (see below); its return semantics differ from a single expression. Braces introduce a multi-statement context, so an explicit `return` is required to eliminate the ambiguity of "whether the last expression is the return value".
 
-#### `{}` Semantics: Dependency-Driven Computation Unit
+#### `{}` semantics: dependency-driven computation unit
 
 In YaoXiang, `{ ... }` is not just a code block—it is a **dependency-driven computation unit**. This semantics is consistent across function bodies, variable initialization, and `spawn`:
 
-**Core Rules**:
-- Assignment statements within `{}` are automatically ordered by their dependency relationships, not by their written order
-- Execution proceeds immediately when dependencies are satisfied; otherwise, execution is blocked waiting
-- Use `return` to explicitly return a value (see Return Rules)
+**Core rules**:
+- Assignment statements inside `{}` are automatically ordered by dependency, not by written order
+- A statement executes immediately when its dependencies are ready; otherwise it blocks and waits
+- Use `return` to explicitly return a value (see return rules)
 
 ```yaoxiang
-# Dependency-driven: b depends on a, the compiler automatically orders them
+# Dependency-driven: b depends on a, compiler reorders automatically
 result: Int = {
     b = a + 1      # depends on a → automatically placed after a
-    a = 10         # no dependencies → can execute first
+    a = 10         # no dependency → can execute first
     return b       # returns 11
 }
 ```
 
-> **Difference from Single Expression**: `= expr` (no braces) is a simple binding that directly returns a value; `= { ... }` (with braces) introduces a dependency-driven computation context, allowing multiple statements and explicit `return`.
+> **Difference from a single expression**: `= expr` (no braces) is a simple binding that directly returns the value; `= { ... }` (with braces) introduces a dependency-driven computation context, allowing multiple statements and explicit `return`.
 
-#### `spawn` Block
+#### `spawn` block
 
-`spawn { ... }` is the sole parallel primitive in YaoXiang. It leverages the dependency-driven semantics of `{}` to achieve automatic parallelization:
+`spawn { ... }` is the only parallel primitive in YaoXiang. It leverages the dependency-driven semantics of `{}` to enable automatic parallelization:
 
-- Direct sub-assignments inside `spawn { ... }` automatically create parallel tasks
-- Tasks with satisfied dependencies execute concurrently immediately
-- The caller blocks until all sub-tasks complete
+- Direct child assignments inside `spawn { ... }` automatically create parallel tasks
+- Tasks execute concurrently as soon as their dependencies are ready
+- The caller blocks until all child tasks complete
 
 ```yaoxiang
 result = spawn {
-    a = fetch_data("url1")    # task 1
-    b = fetch_data("url2")    # task 2 (no dependency on a, executes in parallel)
-    c = process(a, b)         # depends on a, b → executes after both complete
+    a = fetch_data("url1")    # Task 1
+    b = fetch_data("url2")    # Task 2 (no dependency on a, runs in parallel)
+    c = process(a, b)         # depends on a, b → waits for both to complete
     return c
 }
 // The caller blocks here until all tasks inside the spawn block complete
 ```
 
-> **Detailed Definition**: See `008-runtime-concurrency-model.md` for the complete semantics of `spawn`, task creation rules, and blocking model.
+> **Detailed definition**: the full semantics of `spawn`, task creation rules, and blocking model are detailed in `008-runtime-concurrency-model.md`.
 
-#### `unsafe` Block
+#### `unsafe` block
 
-`unsafe { ... }` is used to define opaque types and operate on raw pointers. It leverages the return semantics of `{}` to pass type definitions up to the enclosing scope:
+`unsafe { ... }` is used to define opaque types and to operate on raw pointers. It leverages the return semantics of `{}` to surface type definitions to the enclosing scope:
 
-**Core Rules**:
-- Types can be defined and raw pointers operated within `unsafe {}`
-- Use `return` to pass type definitions up to the enclosing scope
+**Core rules**:
+- Types can be defined and raw pointers operated on inside `unsafe {}`
+- Use `return` to surface type definitions to the enclosing scope
 - Returned types are usable outside of `unsafe {}`
-- Access to type fields requires unsafe permissions
+- Field access on such types requires `unsafe` permission
 
 ```yaoxiang
 # Define an opaque type inside an unsafe block
@@ -388,22 +389,22 @@ SqliteDb = unsafe {
 # SqliteDb is usable outside the unsafe block
 db = sqlite3_open("test.db")
 
-# ❌ Compile error: handle field requires unsafe permission
+# ❌ Compile error: the handle field requires unsafe permission
 handle = db.handle
 
-# ✅ Access through method calls
+# ✅ Through a method call
 db.close()
 ```
 
-> **Detailed Definition**: See `ffi.md` for the complete semantics of `unsafe`, FFI type definitions, and method binding.
+> **Detailed definition**: the full semantics of `unsafe`, FFI type definition, and method binding are detailed in `ffi.md`.
 
-#### 3. Type Definition
+#### 3. Type definition
 
-Type definition is the core of YaoXiang's unified syntax, encompassing fields, default values, bound methods, and interface implementations:
+Type definition is the core of YaoXiang's unified syntax; it includes fields, default values, bound methods, and interface implementation:
 
-##### Basic Types
+##### Basic types
 
-**Record type**: a list of fields, where field types can be any type expression.
+**Record type**: a list of fields, whose types can be any type expression.
 
 ```yaoxiang
 Point: Type = {
@@ -412,7 +413,7 @@ Point: Type = {
 }
 ```
 
-**Fields with default values**: fields can have default values, optional at construction time.
+**Fields with default values**: fields may have default values and become optional at construction.
 
 ```yaoxiang
 Point: Type = {
@@ -429,7 +430,7 @@ Point(x=1) → Point(x=1, y=0)
 Point(x=1, y=2) → Point(x=1, y=2)
 ```
 
-**Fields without default values**: must be provided at construction time.
+**Fields without default values**: must be provided at construction.
 
 ```yaoxiang
 Point2: Type = {
@@ -445,21 +446,43 @@ Point2() //✗
 Point2(x=1) //✗
 ```
 
-##### Bound Methods
+##### Built-in types
 
-**Method 1: Bind external functions directly within the type definition body**
+YaoXiang's identifier system has three layers, recognized by different compiler phases in turn:
+
+1. **Keywords** (parser-specific tokens) — control structures and declaration keywords, such as `if`, `match`, `pub`, `return`
+2. **Literal reserved words** (parser-specific tokens) — `true`, `false`, `void`, `Type`; cannot be used as ordinary identifiers
+3. **Built-in type names** (pre-registered in the type checker) — the parser treats them as ordinary identifiers, and the type checker resolves them. **Not reserved words, can be shadowed (not recommended)**
+
+The difference between `void` (lowercase, literal reserved word) and `Void` (uppercase, built-in type name): `void` is a value literal (equal to the single inhabitant of Unit), `Void` is a type name (equal to the Unit type, logical ⊤). `let x: Void = void` is legal.
+
+Predefined built-in type names:
+
+| Type     | Logical counterpart | Description                                                                                                                                                                                                                                                                                                       |
+|----------|---------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Never`  | ⊥ (false/empty)     | Zero constructors; no value can inhabit this type. Represents "impossible" — divergence, panic, dead code. `Never <: T` holds for any `T` (principle of explosion). A function returning `Never` indicates it never returns normally. **Not a keyword, but a built-in type name.**                                     |
+| `Void`   | ⊤ (true/Unit)       | Exactly one inhabitant (the default `void` value). `x: Void = <default>` is legal. The unit of sum types corresponds to the unit of product types — `Void` is the zero-field product type (Unit), and `Never` is the zero-variant sum type.                                                                      |
+| `Int`    | —                   | Signed integer                                                                                                                                                                                                                                                                                                    |
+| `Float`  | —                   | Floating-point number                                                                                                                                                                                                                                                                                            |
+| `Bool`   | —                   | Boolean: `true` / `false`                                                                                                                                                                                                                                                                                         |
+| `Char`   | —                   | Unicode character                                                                                                                                                                                                                                                                                                 |
+| `String` | —                   | String                                                                                                                                                                                                                                                                                                            |
+
+##### Bound methods
+
+**Way 1: Bind an external function directly inside the type definition body**
 
 ```yaoxiang
 distance: (a: Point, b: Point) -> Float = { ... }
 Point: Type = {
     x: Float = 0,
     y: Float = 0,
-    distance = distance[0]           // bound to position 0, after currying: method: (b: Point) -> Float
+    distance = distance[0]           // Bound to position 0; after currying the method is: (b: Point) -> Float
 }
 // Call: p1.distance(p2) → distance(p1, p2)
 ```
 
-**Method 2: Anonymous function + positional binding**
+**Way 2: Anonymous function + positional binding**
 
 ```yaoxiang
 Point: Type = {
@@ -475,9 +498,9 @@ Point: Type = {
 // Call: p1.distance(p2) → distance(p1, p2)
 ```
 
-##### Interface Implementation
+##### Interface implementation
 
-**Interface names are written inside the type body; the compiler automatically checks the implementation**
+**The interface name is written inside the type body, and the compiler automatically checks its implementation**
 
 ```yaoxiang
 Drawable: Type = {
@@ -492,14 +515,14 @@ Serializable: Type = {
 Point: Type = {
     x: Float,
     y: Float,
-    Drawable,          // implements Drawable interface
-    Serializable      // implements Serializable interface
+    Drawable,          // Implements the Drawable interface
+    Serializable      // Implements the Serializable interface
 }
 ```
 
-##### Interface Definition
+##### Interface definition
 
-**An interface = a record type whose fields are all functions**
+**Interface = a record type whose fields are all functions**
 
 ```yaoxiang
 Drawable: Type = {
@@ -516,12 +539,12 @@ EmptyType: Type = {}
 Empty: Type = {}
 ```
 
-##### Namespace Function Definition
+##### Namespace function definition
 
-**The `Type.name` prefix indicates namespace ownership**, nothing more. It does not trigger any implicit binding.
+**The `Type.name` prefix denotes namespace membership**, nothing more. It does not trigger any implicit binding.
 
 ```yaoxiang
-// Namespace function: a regular function under the Point namespace
+// Namespace function: an ordinary function under the Point namespace
 Point.draw: (p: &Point, surface: Surface) -> Void = {
     surface.plot(p.x, p.y)
 }
@@ -530,67 +553,67 @@ Point.serialize: (p: &Point) -> String = {
     return "Point(${p.x}, ${p.y})"
 }
 
-// Call: just a regular function call
+// Call: just an ordinary function call
 Point.draw(p, screen)
 Point.serialize(p)
 ```
 
-> **Note**: `self` is not a keyword, it is merely a conventional parameter name. Writing `p`, `this`, or `x` has exactly the same effect.
-> The compiler does not look at parameter names, it looks at types.
+> **Note**: `self` is not a keyword, only a conventional parameter name. Naming it `p`, `this`, or `x` works exactly the same.
+> The compiler does not look at the parameter name, only the type.
 
-##### Method Binding (The Only Way)
+##### Method binding (the only way)
 
-For the `.` method call syntax like `p.draw(screen)` to work, **an explicit binding is required**.
-The `[position]` syntax is the only mechanism for binding a function as a "method" (see RFC-004 for detailed syntax).
+For the `.` method-call syntax like `p.draw(screen)` to take effect, **you must explicitly bind**.
+The `[position]` syntax is the only mechanism to bind a function as a "method" (see RFC-004 for detailed syntax).
 
 ```yaoxiang
-// Define a function
+// Define the function
 draw: (p: &Point, surface: Surface) -> Void = {
     surface.plot(p.x, p.y)
 }
 
-// Explicit binding — only after this is the p.draw(screen) syntax available
-Point.draw = draw[0]   // the parameter at position 0 (&Point) is filled in by the caller
+// Explicit binding — only after this does the p.draw(screen) syntax become available
+Point.draw = draw[0]   // The parameter at position 0 (&Point) is filled by the caller
 
 // Usage
-p.draw(screen)          // syntactic sugar → draw(&p, screen)
-Point.draw(p, screen)   // both call forms are equivalent
+p.draw(screen)          // Syntactic sugar → draw(&p, screen)
+Point.draw(p, screen)   // Both call forms are equivalent
 
-// Not writing [0] = no binding. Point.draw is just a regular function alias, with no . syntax
-Point.draw = draw       // no binding: only Point.draw(p, screen) is possible
+// Without [0] = no binding. Point.draw is just an ordinary function alias with no . syntax
+Point.draw = draw       // No binding: only Point.draw(p, screen) works
 ```
 
-**Default Behavior**: Omitting `[n]` = no parameter bound. The user must explicitly decide which parameters are filled in by the caller.
+**Default behavior**: omitting `[n]` = no parameter is bound. The user must explicitly decide which parameters are filled by the caller.
 
-**Multi-position Binding**:
+**Multi-position binding**:
 
 ```yaoxiang
-// Bind multiple positions (auto-currying)
+// Bind multiple positions (automatic currying)
 Point.transform = transform_points[0, 1]
 // Call: p1.transform(p2)(2.0) → transform_points(p1, p2, 2.0)
 ```
 
-**Reverse Operation** (method to regular function):
+**Reverse operation** (method back to ordinary function):
 
 ```yaoxiang
 // Extract the function from a binding
 draw_point: (p: &Point, surface: Surface) -> Void = Point.draw
 ```
 
-#### 4. Interface Composition
+#### 4. Interface composition
 
 ```yaoxiang
 // Interface composition = type intersection
 DrawableSerializable: Type = Drawable & Serializable
 
-// Using intersection types
+// Use the intersection type
 process: (T: Drawable & Serializable) -> ((item: T, screen: Surface) -> String) = {
     item.draw(screen)
     return item.serialize()
 }
 ```
 
-#### 5. Generic Types
+#### 5. Generic types
 
 ```yaoxiang
 // Basic generics (RFC-011 Phase 1)
@@ -616,9 +639,9 @@ List.push = (type: Type) -> {
     }
 }
 
-IntList.push(Int)(self, item)  // call example
+IntList.push(Int)(self, item)  // Call example
 
-// Generic methods (RFC-023 syntax: type parameters automatically inferred at call site)
+// Generic methods (RFC-023 syntax: type parameters inferred automatically at the call site)
 List.push: (self: List(T), item: T) -> Void = {
     self.data.append(item)
     self.length = self.length + 1
@@ -633,13 +656,13 @@ List.get: (self: List(T), index: Int) -> Maybe(T) = {
 }
 ```
 
-#### 6. Generic Call Syntax
+#### 6. Generic call syntax
 
-Generic types and generic function calls uniformly use `()` syntax. `[]` is not used in any generic context.
+Both generic types and generic functions uniformly use `()` syntax. `[]` is never used in any generic context.
 
-**Core Rules**:
+**Core rules**:
 
-1. **`()` does everything**: type application, function calls, and value construction all use `()`
+1. **`()` does it all**: type application, function call, and value construction all use `()`
 
 ```yaoxiang
 # Type annotation
@@ -648,29 +671,29 @@ numbers: List(Int) = List(1, 2, 3)
 # Empty container: T comes from the left
 empty: List(Int) = List()
 
-# Generic function call—types flow automatically from parameters
+# Generic function call — types flow automatically from arguments
 strings = map(numbers, f)
 // T=Int comes from numbers: List(Int)
 // R=String comes from f: (Int) -> String
 ```
 
-2. **Type on the left, value on the right**: `name: type = value`—Type parameters are declared on the left, the right side is always a concrete value. The `T` of an empty container `List()` must be obtained from the left-side type annotation.
+2. **Type on the left, value on the right**: `name: type = value` — Type parameters are declared on the left; the right side is always a concrete value. The `T` of an empty container `List()` must come from the type annotation on the left.
 
-3. **Type information only needs to be written once**—in the parameter declaration, the compiler carries it along:
+3. **Type information only needs to be written once** — when declared in parameters, the compiler carries it along:
 
 ```yaoxiang
 numbers: List(Int) = List(1, 2, 3)  // Int is written once on the left
 f: (Int) -> String = (x) => x.to_string()
-strings = map(numbers, f)   // T=Int, R=String automatically come from the types of numbers and f
+strings = map(numbers, f)   // T=Int, R=String flow automatically from the types of numbers and f
 ```
 
-4. **Value construction infers the type from elements**:
+4. **Value construction infers the type from the elements**:
 
 ```yaoxiang
-x = List(1, 2, 3)       // inferred as List(Int)
-y = List("a", "b")      // inferred as List(String)
-z = List()              // ❌ compile error: cannot infer T
-z: List(Int) = List()   // ✅ T=Int comes from the left-side annotation
+x = List(1, 2, 3)       // Inferred as List(Int)
+y = List("a", "b")      // Inferred as List(String)
+z = List()              // ❌ Compile error: cannot infer T
+z: List(Int) = List()   // ✅ T=Int comes from the left annotation
 ```
 
 5. **Type aliases**:
@@ -681,17 +704,17 @@ StringToInt: Type = (String) -> Int
 Matrix3x3: Type = Matrix(Float, 3, 3)
 ```
 
-> **Comparison with Old Syntax**: `List[Int]` → `List(Int)`, `List[Int]()` → `List()`, `List[Int](1,2,3)` → `List(1,2,3)`.
-> The old `[]` generic syntax has been completely removed. `[]` is now used only for array/list literals and index access.
+> **Comparison with old syntax**: `List[Int]` → `List(Int)`, `List[Int]()` → `List()`, `List[Int](1,2,3)` → `List(1,2,3)`.
+> The old `[]` generic syntax has been completely removed. `[]` is used only for array/list literals and index access.
 
 ### Examples
 
-#### Complete Example
+#### Complete example
 
 ```yaoxiang
-// ======== 1. Interface Definition ========
-// An interface = a record type whose fields are all function types
-// The interface does not need a self parameter — the interface only defines the "function signature with the caller position removed"
+// ======== 1. Interface definition ========
+// Interface = a record type whose fields are all function types
+// Interfaces do not need a self parameter — an interface only defines "the function signature with the caller position removed"
 
 Drawable: Type = {
     draw: (surface: Surface) -> Void,
@@ -703,11 +726,11 @@ Serializable: Type = {
 }
 
 Transformable: Type = {
-    translate: (dx: Float, dy: Float) -> Transformable,  // returns interface type, concrete implementation returns its own type
+    translate: (dx: Float, dy: Float) -> Transformable,  // Returns the interface type; concrete implementations return their own type
     scale: (factor: Float) -> Transformable
 }
 
-// ======== 2. Type Definition ========
+// ======== 2. Type definition ========
 
 Point: Type = {
     x: Float,
@@ -727,7 +750,7 @@ Rect: Type = {
     Transformable
 }
 
-// ======== 3. Method Implementation (regular functions + explicit binding) ========
+// ======== 3. Method implementation (ordinary function + explicit binding) ========
 
 // Define functions (self is just a conventional name, not a keyword)
 draw: (p: &Point, surface: Surface) -> Void = {
@@ -756,7 +779,7 @@ distance: (p1: &Point, p2: &Point) -> Float = {
     return (dx * dx + dy * dy).sqrt()
 }
 
-// Explicit binding — only after binding is the dot call syntax available
+// Explicit binding — only after binding does the dot-call syntax work
 Point.draw = draw[0]
 Point.bounding_box = bounding_box[0]
 Point.serialize = serialize[0]
@@ -798,7 +821,7 @@ r: Rect = Rect(0.0, 0.0, 10.0, 20.0)
 p.draw(screen)
 r.draw(screen)
 
-// Regular method call (direct call)
+// Ordinary method call (direct call)
 d: Float = distance(p, Point(0.0, 0.0))
 
 // Chained call
@@ -820,9 +843,9 @@ process_all: (items: List(T)) -> Void = {
 process_all([p, r])
 ```
 
-## Detailed Design
+## Detailed design
 
-### Interface Check Algorithm
+### Interface checking algorithm
 
 ```rust
 fn check_type_implements_interface(
@@ -831,12 +854,12 @@ fn check_type_implements_interface(
 ) -> Result<(), TypeError> {
     // For each field (function field) of the interface
     for (field_name, iface_field) in &iface.fields {
-        // Check if the type has a method with the same name
+        // Check whether the type has a method of the same name
         if let Some(method) = typ.methods.get(field_name) {
             // Check whether the method signature is compatible
             // Interface field: (Surface) -> Void
             // Method signature: (Point, Surface) -> Void
-            // Comparison: should match after removing the self parameter
+            // Compare: should match after removing the self parameter
             if !method_signature_matches(method, iface_field.type_) {
                 return Err(TypeError::MethodSignatureMismatch {
                     type_name: typ.name,
@@ -856,43 +879,43 @@ fn check_type_implements_interface(
 }
 ```
 
-### Direct Interface Assignment and Compile-Time Optimization
+### Direct interface assignment and compile-time optimization
 
 Interface types support direct assignment, and the compiler automatically selects the optimal call strategy based on the right-hand side type of the assignment:
 
 ```yaoxiang
-// Direct assignment of a concrete type → concrete type is determinable at compile time, zero-overhead call
+// Direct assignment of a concrete type → type is known at compile time, zero-overhead call
 d: Drawable = Circle(1)
 d.draw(screen)  // After compilation: directly calls circle_draw(screen), no vtable
 
-// Function return value → concrete type cannot be determined at compile time, vtable is used
+// Function return value → type cannot be determined at compile time, uses vtable
 d: Drawable = get_shape()
-d.draw(screen)  // Method is looked up through the vtable
+d.draw(screen)  // Method looked up through vtable
 
-// Heterogeneous collection → vtable is used
+// Heterogeneous collection → uses vtable
 shapes: List(Drawable) = [Circle(1), Rect(2, 3)]
 for s in shapes {
-    s.draw(screen)  // Method is looked up through the vtable
+    s.draw(screen)  // Method looked up through vtable
 }
 ```
 
-**Compile-Time Optimization Strategies**:
+**Compile-time optimization strategy**:
 
-| Scenario | Inference Result | Call Method |
-|----------|------------------|-------------|
-| `d: Drawable = Circle(1)` | Concrete type Circle | Direct call (zero overhead) |
-| `d: Drawable = get_shape()` | Unknown | vtable |
-| `shapes: List(Drawable) = [...]` | Heterogeneous | vtable |
+| Scenario                                      | Inferred result     | Call method     |
+|-----------------------------------------------|---------------------|-----------------|
+| `d: Drawable = Circle(1)`                     | Concrete type Circle | Direct call (zero overhead) |
+| `d: Drawable = get_shape()`                   | Unknown              | vtable          |
+| `shapes: List(Drawable) = [...]`              | Heterogeneous        | vtable          |
 
 **Rules**:
-1. When the right-hand side is a concrete type constructor determinable at compile time, generate a direct call IR
+1. When the right-hand side is a concrete type constructor and can be determined at compile time, generate direct-call IR
 2. When the right-hand side type cannot be determined at compile time, fall back to the vtable mechanism
-3. The vtable is the fallback to ensure correctness of runtime polymorphism
+3. The vtable fallback guarantees correctness of runtime polymorphism
 
-### Duck Typing Support
+### Duck typing support
 
 ```yaoxiang
-// As long as the same methods exist, it can be assigned to an interface type
+// As long as the same methods exist, the value can be assigned to the interface type
 CustomPoint: Type = {
     draw: (self: CustomPoint, surface: Surface) -> Void,
     x: Float,
@@ -906,27 +929,27 @@ custom: CustomPoint = CustomPoint(
 )
 ```
 
-### Syntax Changes
+### Syntax changes
 
-| Before | After |
-|--------|-------|
-| `type Point = Point(x: Float, y: Float)` | `type Point = { x: Float, y: Float }` |
-| `type Result(T, E) = ok(T) \| err(E)` | `Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }` |
-| Requires the `impl` keyword | No keyword required, interface names are written after the type body |
+| Before                                                                  | After                                                                                                                                  |
+|-------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
+| `type Point = Point(x: Float, y: Float)`                               | `Point: Type = { x: Float, y: Float }`                                                                                                |
+| `type Result(T, E) = ok(T) \| err(E)`                                  | `Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }`                                        |
+| Requires the `impl` keyword                                             | No keyword required; interface name is written inside the type body                                                                  |
 
-## Syntax Design Note: Named Functions are Essentially Syntactic Sugar for Lambdas
+## Syntax design note: named functions are essentially syntactic sugar over lambdas
 
-### Core Understanding
+### Core understanding
 
-**Named functions and Lambda expressions are the same thing!** The only difference is that a named function gives a Lambda a name.
+**Named functions and lambda expressions are the same thing!** The only difference is: a named function gives a lambda a name.
 
 ```yaoxiang
 // These two are essentially identical
 add: (a: Int, b: Int) -> Int = a + b           // Named function (recommended)
-add: (a: Int, b: Int) -> Int = (a, b) => a + b        // Lambda form (completely equivalent)
+add: (a: Int, b: Int) -> Int = (a, b) => a + b        // Lambda form (fully equivalent)
 ```
 
-### Syntactic Sugar Model
+### Syntactic sugar model
 
 ```
 // Named function = Lambda + name
@@ -936,72 +959,72 @@ name: (Params) -> ReturnType = body
 name: (Params) -> ReturnType = (params) => body
 ```
 
-**Key Point**: When the signature fully declares the parameter types, the parameter names in the Lambda header become redundant and can be omitted.
+**Key point**: when the signature fully declares the parameter types, the parameter names in the lambda head become redundant and can be omitted.
 
-### Parameter Scope Rules
+### Parameter scoping rules
 
-**Parameters shadow outer variables**: parameters in the signature shadow the outer scope, the inner scope has higher priority.
+**Parameters shadow outer variables**: parameters in the signature shadow outer variables, with the inner scope taking precedence.
 
 ```yaoxiang
-x = 10  // outer variable
+x = 10  // Outer variable
 
-double: (x: Int) -> Int = x * 2  // ✅ parameter x shadows outer x, result is 20
+double: (x: Int) -> Int = x * 2  // ✅ Parameter x shadows outer x, result is 20
 ```
 
-### Flexible Annotation Position
+### Flexible annotation position
 
-Type annotations can be placed in any of the following positions, **at least one is required**:
+Type annotations can be at any of the following positions; **at least one annotation is required**:
 
-| Annotation Position | Form | Description |
-|---------------------|------|-------------|
-| Signature only | `double: (x: Int) -> Int = x * 2` | ✅ Recommended |
-| Lambda header only | `double = (x: Int) => x * 2` | ✅ Valid |
-| Both sides | `double: (x: Int) -> Int = (x) => x * 2` | ✅ Redundant but allowed |
+| Annotation position    | Form                                    | Description                                |
+|------------------------|-----------------------------------------|--------------------------------------------|
+| Signature only         | `double: (x: Int) -> Int = x * 2`       | ✅ Recommended                             |
+| Lambda head only       | `double = (x: Int) => x * 2`            | ✅ Legal                                   |
+| Both sides             | `double: (x: Int) -> Int = (x) => x * 2`| ✅ Redundant but allowed                   |
 
-### Complete Example
+### Complete examples
 
 ```yaoxiang
-// ✅ Recommended: signature is complete, Lambda header is omitted
+// ✅ Recommended: signature is complete, lambda head is omitted
 add: (a: Int, b: Int) -> Int = a + b
 inc: (x: Int) -> Int = x + 1
 main: () -> Void = { print("hi") }
 
-// ✅ Valid: type annotations in Lambda header
+// ✅ Legal: type annotation in the lambda head
 double = (x: Int) => x * 2
 
-// ✅ Valid: annotations on both sides
+// ✅ Legal: both sides annotated
 double: (x: Int) -> Int = (x) => x * 2
 ```
 
-### Design Advantages
+### Design advantages
 
-| Feature | Advantage |
-|---------|-----------|
-| **Concise** | No need to repeat parameter names when the signature is complete |
-| **Flexible** | Lambda form is preserved, use whichever you prefer |
-| **Consistent** | Maintains the unified pattern with variable declaration `x: Int = 42` |
-| **Intuitive** | `name: Type = body` directly corresponds to "named name, type Type, value body" |
+| Feature        | Advantage                                                                                                |
+|----------------|----------------------------------------------------------------------------------------------------------|
+| **Concise**    | No need to repeat parameter names when the signature is complete                                        |
+| **Flexible**   | Keep the lambda form; use whichever you prefer                                                           |
+| **Consistent** | Matches the unified pattern of variable declaration `x: Int = 42`                                        |
+| **Intuitive**  | `name: Type = body` directly corresponds to "named name, of type Type, with value body"                 |
 
 ## Trade-offs
 
 ### Advantages
 
-| Advantage | Description |
-|-----------|-------------|
-| Extreme Unity | One syntax rule covers all cases |
-| Theoretically Elegant | Perfectly symmetric `name: type = value` |
-| No New Keywords | Reuses existing syntactic elements |
-| Easy to Implement | The compiler only needs to handle one declaration form |
-| Easy to Learn | Remember one pattern and you can write all code |
-| Easy to Extend | New features can naturally integrate into this model |
+| Advantage          | Description                                                                |
+|--------------------|----------------------------------------------------------------------------|
+| Extreme unity      | One syntax rule covers all cases                                           |
+| Theoretically elegant | Perfectly symmetric `name: type = value`                                |
+| No new keywords    | Reuses existing syntax elements                                             |
+| Easy to implement  | The compiler only needs to handle one declaration form                     |
+| Easy to learn      | Remember one pattern and you can write all code                            |
+| Easy to extend     | New features can be naturally incorporated into this model                 |
 
 ### Disadvantages
 
-| Disadvantage | Description |
-|--------------|-------------|
-| Naming Convention | Methods need to follow the `Type.method` naming convention |
-| Verbosity | The full syntax is longer than the simplified syntax, but inference is available |
-| Learning Curve | Need to understand the unified model |
+| Disadvantage       | Description                                                                |
+|--------------------|----------------------------------------------------------------------------|
+| Naming convention  | Methods must follow the `Type.method` naming                               |
+| Verbosity          | The full syntax is longer than simplified syntax, but inference is possible |
+| Learning curve     | Requires understanding the unified model                                   |
 
 ### Mitigations
 
@@ -1013,23 +1036,23 @@ double: (x: Int) -> Int = (x) => x * 2
 //   Note: Define Point.serialize to implement Serializable
 
 // 2. Type inference
-// Types can be omitted and inferred by the compiler
+// The type can be omitted and inferred by the compiler
 Point.draw = (self: Point, surface: Surface) => surface.plot(self.x, self.y)
 
 // 3. IDE hints
-// IDE automatically hints at missing methods
+// IDE automatically suggests missing methods
 ```
 
 ### Risks
 
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| Parsing Complexity | Unified syntax may increase parsing complexity | Use a recursive descent parser |
-| Performance Overhead | vtable lookup may incur extra overhead | Compile-time monomorphization optimization |
+| Risk                | Impact                                          | Mitigation                                  |
+|---------------------|-------------------------------------------------|---------------------------------------------|
+| Parsing complexity  | The unified syntax may increase parsing complexity | Use a recursive descent parser            |
+| Performance overhead | vtable lookup may incur extra overhead         | Compile-time monomorphization optimization   |
 
 ---
 
-## Easter Egg 🎮: The Source of the Language
+## Easter egg 🎮: The source of the language
 
 > ✨ **Type: Type = Type** ✨
 
@@ -1038,26 +1061,24 @@ Point.draw = (self: Point, surface: Surface) => surface.plot(self.x, self.y)
 Type: Type = Type
 ```
 
-**Warning**: This is the **unspeakable**!
+**Warning**: this is **unnameable**!
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║                                                              ║
-║   One gives birth to two, two gives birth to three,           ║
-║   three gives birth to the myriad things.                      ║
-║   The Yi has the Supreme Ultimate, which begets the Two Modes.║
+║   One begets two, two begets three, three begets all things.   ║
+║   Change has the supreme ultimate; it begot the two forms.    ║
 ║                                                              ║
 ║   Type: Type = Type                                          ║
-║   This is the source of YaoXiang, the boundary of language.  ║
-║   The compiler falls silent here, philosophy pauses here.      ║
+║   This is the source of YaoXiang, the boundary of the language. ║
+║   The compiler falls silent here; philosophy pauses here.     ║
 ║                                                              ║
-║   Thank you for touching the philosophical boundary           ║
-║   of the language.                                           ║
+║   Thank you for touching the philosophical frontier of the language. ║
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
-> **Note**: The compiler cannot correctly handle `Type: Type = Type` (it would lead to a Type0/Type1 universe paradox), but we deliberately keep this "easter egg"—when you try to compile it, you will receive a Zen message from the language's founder. This is not only a technical boundary, but also YaoXiang's tribute to the philosophy of types.
+> **Note**: the compiler cannot correctly process `Type: Type = Type` (it would lead to a Type0/Type1 universe paradox), but we deliberately keep this "easter egg"—when you try to compile it, you will receive a Zen message from the language's founder. This is not only a technical boundary, but also YaoXiang's tribute to the philosophy of types.
 
 ---
 
@@ -1075,23 +1096,23 @@ declaration ::= identifier ':' type_expr '=' expression
 
 # Type expression
 type_expr ::= identifier
-       | identifier '(' type_expr (',' type_expr)* ')'      # type application
-       | '(' type_expr (',' type_expr)* ')' '->' type_expr       # function type
-       | '{' type_field* '}'                       # record/interface type
-       | 'Type'                                    # meta type
+       | identifier '(' type_expr (',' type_expr)* ')'      # Type application
+       | '(' type_expr (',' type_expr)* ')' '->' type_expr       # Function type
+       | '{' type_field* '}'                       # Record/interface type
+       | 'Type'                                    # Metatype
 
 type_field ::= identifier ':' type_expr
-             | identifier                           # interface constraint
+             | identifier                           # Interface constraint
 
-# Generic parameter: as part of a function type, e.g., (T: Type, R: Type) -> (...)
-# No independent BNF rule needed — : Type parameters are ordinary function parameters
+# Generic parameters: as part of a function type, e.g. (T: Type, R: Type) -> (...)
+# No dedicated BNF rule needed — : Type parameters are ordinary function parameters
 
 # Expression
 expression ::= literal
               | identifier
-              | identifier '(' expression (',' expression)* ')'  # function call / constructor call
-              | '(' expression (',' expression)* ')'              # tuple
-              | expression '.' identifier '(' arguments? ')'    # method call
+              | identifier '(' expression (',' expression)* ')'  # Function call / constructor call
+              | '(' expression (',' expression)* ')'              # Tuple
+              | expression '.' identifier '(' arguments? ')'    # Method call
               | lambda
               | '{' field ':' expression (',' field ':' expression)* '}'
 
@@ -1104,20 +1125,20 @@ block ::= expression | '{' expression* '}'
 
 ### Glossary
 
-| Term | Definition |
-|------|------------|
-| Declaration | An assignment statement in the form `name: type = value` |
-| Record type | A `{ ... }` type containing named fields |
-| Interface | A record type whose fields are all function types |
-| Generic type | A type defined as `Name: (T: Type) -> Type = { ... }`, accepting type parameters |
-| Namespace function | A function in `Type.name` form, belonging to the Type namespace. Does not imply any binding |
-| Method binding | `Type.name = func[n]`, binds position n of func as the caller, enabling the `obj.name(args)` syntax |
-| Generic function | A function using `(T: Type)` syntax, with type parameters as the first parameter group |
-| Meta type | `Type`, the sole type hierarchy marker in the language |
+| Term                 | Definition                                                                                                    |
+|----------------------|---------------------------------------------------------------------------------------------------------------|
+| Declaration          | An assignment statement of the form `name: type = value`                                                     |
+| Record type          | A `{ ... }` type containing named fields                                                                      |
+| Interface            | A record type whose fields are all function types                                                            |
+| Generic type         | A type defined as `Name: (T: Type) -> Type = { ... }` that accepts type parameters                          |
+| Namespace function   | A function of the form `Type.name` that belongs to the Type namespace. Implies no binding of any kind         |
+| Method binding       | `Type.name = func[n]`, binds position n of `func` to be filled by the caller, enabling the `obj.name(args)` syntax |
+| Generic function     | A function using the `(T: Type)` syntax; type parameters form the first parameter group                       |
+| Metatype             | `Type`, the only type-level marker in the language                                                            |
 
 ---
 
-## Lifecycle and Destination
+## Lifecycle and fate
 
 ```
 ┌─────────────┐
@@ -1126,8 +1147,7 @@ block ::= expression | '{' expression* '}'
        │
        ▼
 ┌─────────────┐
-│  Under      │  ← Open community discussion and feedback
-│  Review     │
+│  Reviewing  │  ← Open community discussion and feedback
 └──────┬──────┘
        │
        ├──────────────────┐
@@ -1139,7 +1159,6 @@ block ::= expression | '{' expression* '}'
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
 │   accepted/ │    │    rfc/     │
-│ (formal     │    │ (kept in    │
-│  design)    │    │   place)    │
+│  (Official design)│ (Original location retained) │
 └─────────────┘    └─────────────┘
 ```

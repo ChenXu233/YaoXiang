@@ -13,7 +13,7 @@ pub mod instance;
 pub mod type_mono;
 
 use function::FunctionMonomorphizer;
-use instance::{GenericFunctionId, InstantiationRequest, SpecializationKey};
+use instance::{GenericFunctionId, InstantiationRequest, SpecializationKey, TypeId};
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 
@@ -29,6 +29,11 @@ pub struct Monomorphizer {
     processed: HashSet<SpecializationKey>,
     /// 最大递归深度
     max_depth: usize,
+    /// 泛型类型定义：type_name -> MonoType（含 TypeVar）
+    generic_types: HashMap<String, MonoType>,
+    /// 已单态化的类型：TypeId -> MonoType
+    #[allow(dead_code)]
+    monomorphized_types: HashMap<TypeId, MonoType>,
 }
 
 impl Monomorphizer {
@@ -39,6 +44,8 @@ impl Monomorphizer {
             pending_queue: VecDeque::new(),
             processed: HashSet::new(),
             max_depth: 100,
+            generic_types: HashMap::new(),
+            monomorphized_types: HashMap::new(),
         }
     }
 
@@ -62,18 +69,21 @@ impl Monomorphizer {
         // 1. 收集泛型函数定义
         self.collect_generic_functions(module);
 
-        // 2. 初始化队列
+        // 2. 收集泛型类型定义
+        self.collect_generic_types(module);
+
+        // 3. 初始化队列
         for req in requests {
             self.pending_queue.push_back(req.clone());
         }
 
-        // 3. 队列循环（BFS）
+        // 4. 队列循环（BFS）
         self.process_queue()?;
 
-        // 4. 构建输出
+        // 5. 构建输出
         let mut output = self.build_output(module);
 
-        // 5. 替换调用点
+        // 6. 替换调用点
         self.replace_call_sites(&mut output, requests);
 
         Ok(output)

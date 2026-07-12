@@ -17,14 +17,15 @@ pub type TypeErrorCollector = crate::util::diagnostic::ErrorCollector<super::Dia
 ///
 /// 存储泛型类型构造器的模板信息，用于类型实例化展开。
 /// 例如 `List: (T: Type) -> Type = { data: Array(T), length: Int }` 中：
-/// - param_names = ["T"]
-/// - template = Struct { fields: [("data", Array(TypeRef("T"))), ("length", Int)] }
+/// - type_param_names = ["T"]
+/// - poly = PolyType { type_binders: [("T", Type)], body: Struct { ... } }
 #[derive(Debug, Clone)]
 pub struct GenericTypeDef {
-    /// 类型参数名列表
-    pub param_names: Vec<String>,
-    /// 类型体模板（含 TypeRef 占位符）
-    pub template: MonoType,
+    /// 多态类型（type_binders + const_binders + body）
+    pub poly: PolyType,
+    /// 类型参数名，按声明顺序，与 poly.type_binders 一一对应
+    /// 用于实例化时匹配模板体中的 TypeRef 占位符
+    pub type_param_names: Vec<String>,
 }
 
 /// 类型环境
@@ -188,36 +189,48 @@ impl TypeEnvironment {
     pub fn add_generic_type_def(
         &mut self,
         name: String,
-        param_names: Vec<String>,
-        template: MonoType,
+        def: GenericTypeDef,
     ) {
-        self.generic_type_defs.insert(
-            name,
-            GenericTypeDef {
-                param_names,
-                template,
-            },
-        );
+        self.generic_type_defs.insert(name, def);
     }
 
-    /// 实例化泛型类型
-    ///
-    /// 将 `List(Int)` 展开为 `{ data: Array(Int), length: Int }`。
-    /// 查找泛型类型定义模板，将类型参数替换为具体的类型实参。
+    /// 实例化泛型类型（静态方法，StatementChecker 也可调用）
     pub fn instantiate_generic_type(
+        def: &GenericTypeDef,
+        args: &[MonoType],
+    ) -> Option<MonoType> {
+        let type_arg_count = def.type_param_names.len();
+        let const_arg_count = def.poly.const_binders.len();
+
+        if args.len() != type_arg_count + const_arg_count {
+            return None;
+        }
+
+        let type_args = &args[..type_arg_count];
+        let const_args = &args[type_arg_count..];
+
+        let body = Self::replace_type_params(&def.poly.body, &def.type_param_names, type_args);
+
+        // const 验证（inline，不可跳过）
+        if !const_args.is_empty() {
+            crate::frontend::core::typecheck::inference::bounds::validate_const_args(
+                &def.poly.const_binders,
+                const_args,
+            )
+            .ok()?;
+        }
+
+        Some(Self::resolve_type_refs(&body))
+    }
+
+    /// 按名称查找并实例化泛型类型（TypeEnvironment 便捷方法）
+    pub fn instantiate_generic_type_by_name(
         &self,
         name: &str,
         args: &[MonoType],
     ) -> Option<MonoType> {
         let def = self.generic_type_defs.get(name)?;
-        if def.param_names.len() != args.len() {
-            return None;
-        }
-        Some(Self::instantiate_generic_type_static(
-            &def.template,
-            &def.param_names,
-            args,
-        ))
+        Self::instantiate_generic_type(def, args)
     }
 
     /// 在模板中替换类型参数占位符（静态方法）
@@ -226,10 +239,10 @@ impl TypeEnvironment {
     /// 并对已知的内置类型名进行解析（TypeRef("Int") → Int(64) 等）。
     pub fn instantiate_generic_type_static(
         ty: &MonoType,
-        param_names: &[String],
+        type_param_names: &[String],
         args: &[MonoType],
     ) -> MonoType {
-        let result = Self::replace_type_params(ty, param_names, args);
+        let result = Self::replace_type_params(ty, type_param_names, args);
         Self::resolve_type_refs(&result)
     }
 

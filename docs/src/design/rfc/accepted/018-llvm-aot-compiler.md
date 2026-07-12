@@ -3,7 +3,9 @@ title: "RFC-018：LLVM AOT 编译器设计"
 status: "已接受"
 author: "晨煦"
 created: "2026-02-15"
-updated: "2026-06-11（修复 §3.1 ref T 类型 {i32*→i64*}、§4.1 MakeClosure func 字段类型、§6 RFC-026 架构与规则分离、§8 编译产物结构去具体化、§9 spawn 模块目录重构、新增浮点语义一致性小节、运行时库大小估计修正；接受前补充：§4.0 栈平衡前提声明、§6 RFC-026 冻结前置条件、§9 与 RFC-008 大小估计差异说明）"
+updated: "2026-07-05（同步 GitHub Issue #14、#134；添加实施状态分析）"
+issue: "#14"
+tracking_issue: "https://github.com/ChenXu233/YaoXiang/issues/134"
 ---
 
 # RFC-018：LLVM AOT 编译器设计
