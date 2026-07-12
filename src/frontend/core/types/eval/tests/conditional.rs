@@ -60,6 +60,13 @@ fn test_condition_is_never() {
 }
 
 #[test]
+fn test_is_never_monotype() {
+    let inn = |t| TypeCondition::IsNever(Box::new(t));
+    assert_eq!(inn(MonoType::Never).eval(), Some(true));
+    assert_eq!(inn(MonoType::Int(64)).eval(), Some(false));
+}
+
+#[test]
 fn test_condition_is_type() {
     let it = |t, e| TypeCondition::IsType(Box::new(t), Box::new(e));
     assert_eq!(it(MonoType::Int(32), MonoType::Int(32)).eval(), Some(true));

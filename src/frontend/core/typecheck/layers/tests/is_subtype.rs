@@ -36,3 +36,19 @@ fn env_some_accepted() {
     let sup = MonoType::Int(32);
     assert!(is_subtype(&sub, &sup, Some(&env)));
 }
+
+#[test]
+fn test_never_is_subtype_of_any() {
+    assert!(is_subtype(&MonoType::Never, &MonoType::Int(64), None));
+    assert!(is_subtype(&MonoType::Never, &MonoType::Void, None));
+    assert!(is_subtype(&MonoType::Never, &MonoType::Bool, None));
+    assert!(is_subtype(&MonoType::Never, &MonoType::String, None));
+    assert!(is_subtype(
+        &MonoType::Never,
+        &MonoType::Fn {
+            params: vec![],
+            return_type: Box::new(MonoType::Int(64))
+        },
+        None
+    ));
+}
