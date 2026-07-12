@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
-use crate::formatter::{format_source, FormatOptions};
+use crate::formatter::{format_source, FormatError, FormatOptions};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct FormatRunResult {
@@ -11,7 +11,7 @@ pub struct FormatRunResult {
 pub fn run_format_command(
     path: &Path,
     options: &FormatOptions,
-    check: bool,
+    dry_run: bool,
     write: bool,
 ) -> Result<FormatRunResult> {
     let files = collect_yx_files(path)?;
@@ -33,9 +33,9 @@ pub fn run_format_command(
 
         match format_source(&source, options) {
             Ok(formatted) => {
-                if check {
+                if dry_run {
                     if formatted != source {
-                        eprintln!("Needs formatting: {}", file.display());
+                        eprintln!("Would format: {}", file.display());
                         needs_formatting = true;
                     }
                 } else if write {
@@ -50,8 +50,18 @@ pub fn run_format_command(
                     print!("{}", formatted);
                 }
             }
-            Err(e) => {
-                errors.push(format!("Error formatting {}: {}", file.display(), e));
+            Err(FormatError::Semantic(diags)) => {
+                eprintln!("{}:", file.display());
+                for d in diags {
+                    eprintln!("  error[{}]: {}", d.code, d.message);
+                }
+            }
+            Err(FormatError::FormatterBug { .. }) => {
+                eprintln!(
+                    "{}: Formatter internal error — this is a bug, please report it at \
+                     https://github.com/ChenXu233/YaoXiang/issues/new",
+                    file.display()
+                );
             }
         }
     }
