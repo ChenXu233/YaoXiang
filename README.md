@@ -280,8 +280,12 @@ YaoXiang 的设计灵感来自以下项目和语言：
 ## 🌟 Star History
 
 <div align="center">
-
-[![Star History Chart](https://api.star-history.com/svg?repos=ChenXu233/YaoXiang&type=Date)](https://star-history.com/#ChenXu233/YaoXiang&Date)
-
+<a href="https://www.star-history.com/?type=date&repos=ChenXu233%2FYaoXiang">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=ChenXu233/YaoXiang&type=date&theme=dark&legend=top-left&sealed_token=wdeU56ITEYJrILAq17aZ5ciE-iqMUTIMhwkf3fvcrGbRz5Ejbm8pRO_Ef8EYVh8vrEGjwcPvDatnTcyNTSetcCPA88yg8Eia_OTa9dNHUVCTeIamCziUCE25ckxdpmGdLjKsS8ZZc2HWXvqhWAezVmpPtMLtc5p92_PX1MFCCtqppFmAndlJV-Ml8Q_C" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=ChenXu233/YaoXiang&type=date&legend=top-left&sealed_token=wdeU56ITEYJrILAq17aZ5ciE-iqMUTIMhwkf3fvcrGbRz5Ejbm8pRO_Ef8EYVh8vrEGjwcPvDatnTcyNTSetcCPA88yg8Eia_OTa9dNHUVCTeIamCziUCE25ckxdpmGdLjKsS8ZZc2HWXvqhWAezVmpPtMLtc5p92_PX1MFCCtqppFmAndlJV-Ml8Q_C" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=ChenXu233/YaoXiang&type=date&legend=top-left&sealed_token=wdeU56ITEYJrILAq17aZ5ciE-iqMUTIMhwkf3fvcrGbRz5Ejbm8pRO_Ef8EYVh8vrEGjwcPvDatnTcyNTSetcCPA88yg8Eia_OTa9dNHUVCTeIamCziUCE25ckxdpmGdLjKsS8ZZc2HWXvqhWAezVmpPtMLtc5p92_PX1MFCCtqppFmAndlJV-Ml8Q_C" />
+ </picture>
+</a>
 </div>
 
