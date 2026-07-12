@@ -31,7 +31,7 @@
 | 029-module-semantics.md | RFC-029: 模块语义系统 | 草案 | draft\029-module-semantics.md | -- | -- | -- |
 | 031-optimization-levels.md | RFC-031：优化级别与 Pass 管理器 | 草案 | draft\031-optimization-levels.md | -- | -- | -- |
 | 033-reflection-operator.md | RFC-033: `^^` 反射运算符 | 草案 | draft\033-reflection-operator.md | #136 | -- | -- |
-| 034-debug-toolchain.md | RFC-034: 统一调试工具链 | 草案 | draft\034-debug-toolchain.md | -- | -- | -- |
+| 034-debug-toolchain.md | RFC-034: 统一调试工具链 | 草案 | draft\034-debug-toolchain.md | #164 | -- | -- |
 | 035-mcp-server.md | RFC-035: MCP Server 支持（AI Agent 集成） | 草案 | draft\035-mcp-server.md | #154 | -- | -- |
 | 003-version-planning.md | RFC-003：版本规划 | 已拒绝 | rejected\003-version-planning.md | -- | -- | -- |
 | 005-automated-cve-scanning.md | RFC-005: 自动化CVE安全检查系统 | 已拒绝 | rejected\005-automated-cve-scanning.md | -- | -- | -- |
@@ -42,7 +42,7 @@
 | 014b-build-system.md | RFC-014b: 构建系统与二进制分发 | 审核中 | review\014b-build-system.md | #91 | -- | -- |
 | 014c-workspace.md | RFC-014c: 工作空间支持 | 审核中 | review\014c-workspace.md | #113 | -- | -- |
 | 026a-extensible-ffi-system.md | RFC-026a: 可扩展 FFI 机制体系 | 审核中 | review\026a-extensible-ffi-system.md | #135 | -- | -- |
-| 030-assert-mechanism.md | RFC-030: assert 断言机制 | 审核中 | review\030-assert-mechanism.md | -- | -- | -- |
+| 030-assert-mechanism.md | RFC-030: assert 断言机制 | 审核中 | review\030-assert-mechanism.md | #97 | #155 | -- |
 | 032-spawn-unified-expression.md | RFC-032: spawn 统一表达式修饰 — 消除 spawn for 特殊情况 | 审核中 | review\032-spawn-unified-expression.md | #98 | -- | -- |
 
 > 此文件由 check-rfc-tracking.py 自动生成，请勿手动修改。
