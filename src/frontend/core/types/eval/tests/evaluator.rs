@@ -1,7 +1,9 @@
-//! 类型求值测试 — 基于语言规范 §3.11 & RFC-011 §4
+//! 类型求值测试 — 基于语言规范 §3.11 & RFC-011 §4-5
 //!
 //! §3.11: 编译期泛型
 //! RFC-011 §4: 编译期泛型
+//! RFC-011 §4.3: IsTrue / Assert 类型族归约
+//! spec 2026-07-12-assert-refinement-unification-design.md §1.3: IsTrue 桥
 
 use crate::frontend::core::types::eval::evaluator::{EvalConfig, Evaluator};
 use crate::frontend::core::types::MonoType;
@@ -257,66 +259,102 @@ fn test_type_evaluator_eval_void_type() {
 
 // ===================================================================
 // IsTrue/Assert 类型族测试
-// ===================================================================
-
 #[test]
 fn test_istrue_true_evaluates_to_void() {
+    // Arrange
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut evaluator = Evaluator::new(&env, &budget);
-
     let ty = MonoType::TypeRef("IsTrue(true)".to_string());
+
+    // Act
     let result = evaluator.eval(&ty);
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), MonoType::Void);
+
+    // Assert — IsTrue(true) 归约为 Void（spec §1.3）
+    assert!(result.is_ok(), "IsTrue(true) should evaluate successfully");
+    assert_eq!(
+        result.unwrap(),
+        MonoType::Void,
+        "IsTrue(true) must reduce to Void"
+    );
 }
 
 #[test]
 fn test_istrue_false_evaluates_to_never() {
+    // Arrange
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut evaluator = Evaluator::new(&env, &budget);
-
     let ty = MonoType::TypeRef("IsTrue(false)".to_string());
+
+    // Act
     let result = evaluator.eval(&ty);
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), MonoType::Never);
+
+    // Assert — IsTrue(false) 归约为 Never（spec §1.3）
+    assert!(result.is_ok(), "IsTrue(false) should evaluate successfully");
+    assert_eq!(
+        result.unwrap(),
+        MonoType::Never,
+        "IsTrue(false) must reduce to Never"
+    );
 }
 
 #[test]
 fn test_istrue_unknown_preserves_expression() {
+    // Arrange
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut evaluator = Evaluator::new(&env, &budget);
-
     let ty = MonoType::TypeRef("IsTrue(x)".to_string());
+
+    // Act
     let result = evaluator.eval(&ty);
-    assert!(result.is_ok());
-    // x 不可归约，所以保持不变
-    assert_eq!(result.unwrap(), ty);
+
+    // Assert — x 不可归约，IsTrue(x) 保留不归约（spec §1.3）
+    assert!(result.is_ok(), "IsTrue(x) should not error on unknown arg");
+    assert_eq!(
+        result.unwrap(),
+        ty,
+        "IsTrue(x) must preserve when x is unknown"
+    );
 }
 
 #[test]
 fn test_assert_true_evaluates_to_void() {
-    // Assert(true) 内部委托给 IsTrue(true)，应归约为 Void
+    // Arrange — Assert(true) 内部委托给 IsTrue(true)
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut evaluator = Evaluator::new(&env, &budget);
-
     let ty = MonoType::TypeRef("Assert(true)".to_string());
+
+    // Act
     let result = evaluator.eval(&ty);
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), MonoType::Void);
+
+    // Assert — Assert(true) 归约为 Void（spec §1.3 + RFC-011 §4.3）
+    assert!(result.is_ok(), "Assert(true) should evaluate successfully");
+    assert_eq!(
+        result.unwrap(),
+        MonoType::Void,
+        "Assert(true) must reduce to Void"
+    );
 }
 
 #[test]
 fn test_assert_false_evaluates_to_never() {
+    // Arrange — Assert(false) 内部委托给 IsTrue(false)
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut evaluator = Evaluator::new(&env, &budget);
-
     let ty = MonoType::TypeRef("Assert(false)".to_string());
+
+    // Act
     let result = evaluator.eval(&ty);
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), MonoType::Never);
+
+    // Assert — Assert(false) 归约为 Never（spec §1.3 + RFC-011 §4.3）
+    assert!(result.is_ok(), "Assert(false) should evaluate successfully");
+    assert_eq!(
+        result.unwrap(),
+        MonoType::Never,
+        "Assert(false) must reduce to Never"
+    );
 }

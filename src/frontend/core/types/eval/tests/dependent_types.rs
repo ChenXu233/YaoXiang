@@ -1,3 +1,10 @@
+//! 依赖类型与类型族测试 — 基于语言规范 §3.11 & RFC-011 §4-5
+//!
+//! §4.3: 编译期验证（IsTrue / Assert 类型族）
+//! §5.1: If 条件类型（AssociatedTypeDef::Match 归约）
+//! RFC-011 §4.3: Assert 定义为 IsTrue(cond)
+//! spec 2026-07-12-assert-refinement-unification-design.md §1.3: IsTrue 桥
+
 use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::eval::dependent_types::{
     register_builtin_type_families, AssociatedType, AssociatedTypeDef, DependentTypeEnv, TypeFamily,
@@ -255,7 +262,7 @@ fn test_associated_type_new() {
 
 #[test]
 fn test_associated_type_def_match_variant() {
-    // Match 变体：根据参数值匹配合适的结果类型
+    // Arrange — 构造 Match 变体：true→Void, false→Never
     let match_def = AssociatedTypeDef::Match {
         arg_index: 0,
         arms: vec![
@@ -264,65 +271,105 @@ fn test_associated_type_def_match_variant() {
         ],
     };
 
-    // 验证 has_unbound_params
-    assert!(!match_def.has_unbound_params(&[]));
+    // Act & Assert — Match 变体不依赖类型参数，has_unbound_params 返回 false
+    assert!(
+        !match_def.has_unbound_params(&[]),
+        "Match with no type params should have no unbound params"
+    );
 
-    // 验证 substitute 不改变匹配内容
+    // Act & Assert — substitute 不改变 Match 内容
     let mut subs = HashMap::new();
     subs.insert("b".to_string(), MonoType::TypeRef("true".into()));
     let substituted = match_def.substitute(&subs);
-    assert_eq!(substituted, match_def);
+    assert_eq!(
+        substituted, match_def,
+        "substitute should not alter Match variant"
+    );
 
-    // 验证 into_type 返回 Unknown
+    // Assert — into_type 返回 Unknown（Match 不能直接转为类型）
     assert_eq!(
         match_def.into_type(),
-        MonoType::TypeRef("Unknown".to_string())
+        MonoType::TypeRef("Unknown".to_string()),
+        "Match::into_type should return TypeRef(\"Unknown\")"
     );
 }
 
 #[test]
 fn test_istrue_type_family_instantiate() {
-    // 注册内置类型族
+    // Arrange — 注册内建类型族
     let mut env = DependentTypeEnv::new();
     register_builtin_type_families(&mut env);
-
-    // 查找 IsTrue 类型族
     let istrue = env
         .get_type_family("IsTrue")
-        .expect("IsTrue should be registered");
-    assert_eq!(istrue.type_params(), &["b"]);
+        .expect("IsTrue should be registered after register_builtin_type_families");
 
-    // IsTrue(true) => Void
+    // Assert — 类型参数为 ["b"]
+    assert_eq!(
+        istrue.type_params(),
+        &["b"],
+        "IsTrue should have one type param 'b'"
+    );
+
+    // Act & Assert — IsTrue(true) => Void（spec §1.3）
     let result = istrue.instantiate(&[MonoType::TypeRef("true".into())]);
-    assert!(result.is_some());
-    assert_eq!(result.unwrap().into_type(), MonoType::Void);
+    assert!(
+        result.is_some(),
+        "IsTrue(true) should instantiate successfully"
+    );
+    assert_eq!(
+        result.unwrap().into_type(),
+        MonoType::Void,
+        "IsTrue(true) must reduce to Void"
+    );
 
-    // IsTrue(false) => Never
+    // Act & Assert — IsTrue(false) => Never（spec §1.3）
     let result = istrue.instantiate(&[MonoType::TypeRef("false".into())]);
-    assert!(result.is_some());
-    assert_eq!(result.unwrap().into_type(), MonoType::Never);
+    assert!(
+        result.is_some(),
+        "IsTrue(false) should instantiate successfully"
+    );
+    assert_eq!(
+        result.unwrap().into_type(),
+        MonoType::Never,
+        "IsTrue(false) must reduce to Never"
+    );
 
-    // IsTrue(unknown) => None (no matching arm)
+    // Act & Assert — IsTrue(unknown) => None（无匹配 arm，保留不归约）
     let result = istrue.instantiate(&[MonoType::String]);
-    assert!(result.is_none());
+    assert!(
+        result.is_none(),
+        "IsTrue(String) should not match any arm and return None"
+    );
 }
 
 #[test]
 fn test_assert_type_family_instantiate() {
+    // Arrange — 注册内建类型族
     let mut env = DependentTypeEnv::new();
     register_builtin_type_families(&mut env);
-
-    // 查找 Assert 类型族
     let assert_tf = env
         .get_type_family("Assert")
-        .expect("Assert should be registered");
-    assert_eq!(assert_tf.type_params(), &["cond"]);
+        .expect("Assert should be registered after register_builtin_type_families");
 
-    // Assert(true) => AssociatedTypeDef::Direct(TypeRef("IsTrue(true)"))
-    // 即通过 substitute_params 将 "cond" 替换为 "true" 得到 IsTrue(true)
+    // Assert — 类型参数为 ["cond"]
+    assert_eq!(
+        assert_tf.type_params(),
+        &["cond"],
+        "Assert should have one type param 'cond'"
+    );
+
+    // Act — Assert(true) 展开为 IsTrue(true)
     let result = assert_tf.instantiate(&[MonoType::TypeRef("true".into())]);
-    assert!(result.is_some());
+    assert!(
+        result.is_some(),
+        "Assert(true) should instantiate successfully"
+    );
+
+    // Assert — Assert(true) 参数替换后得到 IsTrue(true)
     let result_ty = result.unwrap().into_type();
-    // Assert(true) 展开为 IsTrue(true)
-    assert_eq!(result_ty, MonoType::TypeRef("IsTrue(true)".to_string()));
+    assert_eq!(
+        result_ty,
+        MonoType::TypeRef("IsTrue(true)".to_string()),
+        "Assert(true) must expand to IsTrue(true) via parameter substitution"
+    );
 }
