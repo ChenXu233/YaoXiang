@@ -9,7 +9,7 @@
 //!   §14  导入语句 — 排序(§14.1)/组内排序(§14.2)/注释跟随
 //!   §6   代码块  — 空块(§6.1)/单行(§6.2)/多行(§6.3)
 
-use yaoxiang::formatter::{format_source, FormatOptions};
+use yaoxiang::formatter::{format_source, FormatError, FormatOptions};
 
 fn default_options() -> FormatOptions {
     FormatOptions::default()
@@ -575,4 +575,34 @@ helper: () -> Int = {
         result, re_result,
         "Format should be idempotent for source with function body comments"
     );
+}
+
+#[test]
+fn test_format_rejects_semantic_error() {
+    let result = format_source("let x = 1", &default_options());
+    assert!(
+        matches!(result, Err(FormatError::Semantic(_))),
+        "should reject semantic error"
+    );
+}
+
+#[test]
+fn test_format_valid_code() {
+    let result = format_source("x = 1", &default_options()).unwrap();
+    assert_eq!(result, "x = 1\n");
+}
+
+#[test]
+fn test_format_idempotent_valid() {
+    let formatted = format_source("x=1", &default_options()).unwrap();
+    let formatted2 = format_source(&formatted, &default_options()).unwrap();
+    assert_eq!(formatted, formatted2);
+}
+
+#[test]
+fn test_format_no_verify() {
+    let mut opts = default_options();
+    opts.verify = false;
+    let result = format_source("x = 1", &opts);
+    assert!(result.is_ok());
 }
