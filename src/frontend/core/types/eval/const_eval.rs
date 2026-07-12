@@ -1108,9 +1108,7 @@ impl LiteralTypeValidator {
         ty: &'a Type,
     ) -> Option<(String, ConstValue)> {
         match ty {
-            Type::Literal {
-                name, base_type: _, ..
-            } => {
+            Type::Literal { name, .. } => {
                 // 首先检查是否是已注册的 Const 参数
                 if let Some(value) = self.const_params.get(name) {
                     return Some((name.clone(), value.clone()));

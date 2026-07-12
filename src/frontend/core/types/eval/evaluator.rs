@@ -662,13 +662,10 @@ impl<'a> Evaluator<'a> {
         depth: usize,
     ) -> Result<MonoType, EvalError> {
         // 递归求值参数
-        let mut eval_args = Vec::new();
-        for arg in args {
-            match self.eval_with_depth(arg, depth + 1) {
-                Ok(v) => eval_args.push(v),
-                Err(e) => return Err(e),
-            }
-        }
+        let eval_args: Vec<MonoType> = args
+            .iter()
+            .map(|arg| self.eval_with_depth(arg, depth + 1))
+            .collect::<Result<Vec<_>, _>>()?;
 
         match op {
             // 加法: Nat<Add, a, b>

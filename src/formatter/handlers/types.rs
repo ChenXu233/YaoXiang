@@ -113,9 +113,7 @@ pub fn format_type(
             let items: Vec<String> = types.iter().map(|t| format_type(t, source_map)).collect();
             items.join(" + ")
         }
-        Type::Literal {
-            name, base_type: _, ..
-        } => name.clone(),
+        Type::Literal { name, .. } => name.clone(),
         Type::Ref { mutable, inner, .. } => {
             if *mutable {
                 format!("&mut {}", format_type(inner, source_map))
