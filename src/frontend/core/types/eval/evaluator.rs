@@ -231,6 +231,16 @@ impl<'a> Evaluator<'a> {
             // 处理 Nat 运算
             MonoType::TypeRef(name) if name == "Nat" => self.eval_nat_type(ty, depth),
 
+            // 处理 IsTrue 类型族：IsTrue(true) => Void, IsTrue(false) => Never
+            MonoType::TypeRef(name) if name == "IsTrue" || name.starts_with("IsTrue(") => {
+                self.eval_istrue(ty, depth)
+            }
+
+            // 处理 Assert 类型族：Assert(x) => IsTrue(x) 别名
+            MonoType::TypeRef(name) if name == "Assert" || name.starts_with("Assert(") => {
+                self.eval_istrue(ty, depth)
+            }
+
             // 处理类型引用
             MonoType::TypeRef(name) => self.eval_type_ref(name, depth),
 
@@ -882,6 +892,45 @@ impl<'a> Evaluator<'a> {
 
         // 类型引用本身
         Ok(MonoType::TypeRef(name.to_string()))
+    }
+
+    /// 求值 IsTrue/Assert 类型族
+    ///
+    /// IsTrue(true) => Void
+    /// IsTrue(false) => Never
+    /// IsTrue(x) 当 x 不可归约时保持不变
+    /// Assert(x) 委托给 IsTrue(x)
+    fn eval_istrue(
+        &mut self,
+        ty: &MonoType,
+        _depth: usize,
+    ) -> Result<MonoType, EvalError> {
+        let name = match ty {
+            MonoType::TypeRef(n) => n,
+            _ => return Ok(ty.clone()),
+        };
+        let args = Self::parse_generic_args(name);
+        let arg = match args {
+            Some(a) if a.len() == 1 => a.into_iter().next().unwrap(),
+            _ => return Ok(ty.clone()),
+        };
+        let arg_ty = match self.parse_type(&arg) {
+            Some(t) => t,
+            None => return Ok(ty.clone()),
+        };
+        match &arg_ty {
+            MonoType::TypeRef(n) if n == "true" => Ok(MonoType::Void),
+            MonoType::TypeRef(n) if n == "false" => Ok(MonoType::Never),
+            _ => {
+                // 尝试归约参数——可能是可计算的表达式
+                let reduced_arg = self.eval(&arg_ty)?;
+                match &reduced_arg {
+                    MonoType::TypeRef(n) if n == "true" => Ok(MonoType::Void),
+                    MonoType::TypeRef(n) if n == "false" => Ok(MonoType::Never),
+                    _ => Ok(ty.clone()),
+                }
+            }
+        }
     }
 
     // ============ 公共 API ============

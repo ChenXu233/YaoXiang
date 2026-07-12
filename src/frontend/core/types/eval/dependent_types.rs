@@ -60,6 +60,15 @@ pub enum AssociatedTypeDef {
         /// 类型参数
         arguments: Vec<AssociatedTypeDef>,
     },
+
+    /// 模式匹配类型族
+    /// 根据实际参数匹配对应的结果类型（如 IsTrue 族）
+    Match {
+        /// 要匹配的参数索引
+        arg_index: usize,
+        /// 匹配分支 (pattern, result_type)
+        arms: Vec<(MonoType, MonoType)>,
+    },
 }
 
 impl AssociatedTypeDef {
@@ -74,6 +83,7 @@ impl AssociatedTypeDef {
             AssociatedTypeDef::Applied { arguments, .. } => arguments
                 .iter()
                 .any(|arg| arg.has_unbound_params(bound_params)),
+            AssociatedTypeDef::Match { .. } => false,
         }
     }
 
@@ -86,8 +96,24 @@ impl AssociatedTypeDef {
             AssociatedTypeDef::Direct(ty) => {
                 // 替换 MonoType 中的类型引用
                 if let MonoType::TypeRef(type_name) = ty {
+                    // 先尝试精确匹配整个类型名称
                     if let Some(replacement) = substitutions.get(type_name) {
                         return AssociatedTypeDef::Direct(replacement.clone());
+                    }
+                    // 再尝试在类型名称字符串内进行文本替换
+                    // 例如 "IsTrue(cond)" → "IsTrue(true)" 当 cond 被替换为 true 时
+                    let mut new_name = type_name.clone();
+                    let mut substituted = false;
+                    for (param, replacement) in substitutions.iter() {
+                        if let MonoType::TypeRef(repl_name) = replacement {
+                            if new_name.contains(param.as_str()) {
+                                new_name = new_name.replace(param.as_str(), repl_name);
+                                substituted = true;
+                            }
+                        }
+                    }
+                    if substituted {
+                        return AssociatedTypeDef::Direct(MonoType::TypeRef(new_name));
                     }
                 }
                 AssociatedTypeDef::Direct(ty.clone())
@@ -109,6 +135,10 @@ impl AssociatedTypeDef {
                     .map(|arg| arg.substitute(substitutions))
                     .collect(),
             },
+            AssociatedTypeDef::Match { arg_index, arms } => AssociatedTypeDef::Match {
+                arg_index: *arg_index,
+                arms: arms.clone(),
+            },
         }
     }
 
@@ -116,15 +146,42 @@ impl AssociatedTypeDef {
     pub fn into_type(self) -> MonoType {
         match self {
             AssociatedTypeDef::Direct(ty) => ty,
-            AssociatedTypeDef::TypeParam(_) => {
-                // 类型参数转换为 TypeRef（使用名称）
-                MonoType::TypeRef("Unknown".to_string())
+            AssociatedTypeDef::TypeParam(_) => MonoType::TypeRef("Unknown".to_string()),
+            AssociatedTypeDef::Applied { constructor, .. } => MonoType::TypeRef(constructor),
+            AssociatedTypeDef::Match { .. } => MonoType::TypeRef("Unknown".to_string()),
+        }
+    }
+}
+
+/// 替换 MonoType 中的类型参数引用
+///
+/// 将 body 中所有匹配替换映射的类型引用替换为对应的值。
+/// 也支持在 TypeRef 名称字符串内进行替换（例如 "IsTrue(cond)" → "IsTrue(true)"）。
+fn substitute_type_params(
+    body: &MonoType,
+    substitutions: &HashMap<String, MonoType>,
+) -> MonoType {
+    match body {
+        MonoType::TypeRef(name) => {
+            // 尝试精确匹配整个名称
+            if let Some(replacement) = substitutions.get(name) {
+                return replacement.clone();
             }
-            AssociatedTypeDef::Applied { constructor, .. } => {
-                // 类型应用转换为 TypeRef
-                MonoType::TypeRef(constructor)
+            // 尝试在名称字符串内进行文本替换（如 "IsTrue(cond)" → "IsTrue(true)"）
+            let mut new_name = name.clone();
+            for (param, replacement) in substitutions {
+                if let MonoType::TypeRef(repl_name) = replacement {
+                    new_name = new_name.replace(param.as_str(), repl_name);
+                }
+            }
+            if new_name != *name {
+                MonoType::TypeRef(new_name)
+            } else {
+                body.clone()
             }
         }
+        // 其他类型直接返回
+        _ => body.clone(),
     }
 }
 
@@ -185,8 +242,49 @@ impl TypeFamily {
             .map(|(param, arg)| (param.clone(), arg.clone()))
             .collect();
 
-        // 替换定义中的类型参数
-        Some(self.definition.substitute(&substitutions))
+        // 根据定义类型分派
+        match &self.definition {
+            AssociatedTypeDef::Match { arg_index, arms } => {
+                let scrutinee = args.get(*arg_index)?;
+                for (pattern, result) in arms {
+                    if scrutinee == pattern {
+                        return Some(AssociatedTypeDef::Direct(
+                            self.substitute_params(result, args)?,
+                        ));
+                    }
+                }
+                None
+            }
+            _ => {
+                // 替换定义中的类型参数
+                Some(self.definition.substitute(&substitutions))
+            }
+        }
+    }
+
+    /// 在 MonoType 中替换类型参数
+    ///
+    /// 将 body 中的类型参数名替换为对应的实际参数值
+    pub fn substitute_params(
+        &self,
+        body: &MonoType,
+        args: &[MonoType],
+    ) -> Option<MonoType> {
+        if self.type_params.len() != args.len() {
+            return None;
+        }
+        let substitutions: HashMap<String, MonoType> = self
+            .type_params
+            .iter()
+            .zip(args.iter())
+            .map(|(param, arg)| (param.clone(), arg.clone()))
+            .collect();
+        Some(substitute_type_params(body, &substitutions))
+    }
+
+    /// 获取所有类型参数
+    pub fn type_params(&self) -> &[String] {
+        &self.type_params
     }
 
     /// 获取关联类型
@@ -212,16 +310,6 @@ impl TypeFamily {
             .collect();
 
         Some(associated.definition.substitute(&substitutions).into_type())
-    }
-
-    /// 获取所有类型参数
-    pub fn type_params(&self) -> &[String] {
-        &self.type_params
-    }
-
-    /// 获取所有关联类型
-    pub fn associated_types(&self) -> &[AssociatedType] {
-        &self.associated_types
     }
 }
 
@@ -266,4 +354,29 @@ impl DependentTypeEnv {
         // 简化实现：暂不检查类型是否为类型族实例
         None
     }
+}
+
+/// 注册内置类型族
+///
+/// 注册 IsTrue 和 Assert 类型族到依赖类型环境
+pub fn register_builtin_type_families(env: &mut DependentTypeEnv) {
+    env.register_type_family(TypeFamily::new(
+        "IsTrue".into(),
+        vec!["b".to_string()],
+        vec![],
+        AssociatedTypeDef::Match {
+            arg_index: 0,
+            arms: vec![
+                (MonoType::TypeRef("true".into()), MonoType::Void),
+                (MonoType::TypeRef("false".into()), MonoType::Never),
+            ],
+        },
+    ));
+
+    env.register_type_family(TypeFamily::new(
+        "Assert".into(),
+        vec!["cond".to_string()],
+        vec![],
+        AssociatedTypeDef::Direct(MonoType::TypeRef("IsTrue(cond)".into())),
+    ));
 }
