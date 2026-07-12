@@ -1,6 +1,6 @@
 # Спецификация стандартной библиотеки
 
-В этом документе определяется спецификация стандартной библиотеки языка программирования YaoXiang, включая основную библиотеку, библиотеку ввода-вывода и математическую библиотеку.
+В данном документе определяется спецификация стандартной библиотеки языка программирования YaoXiang, включая основную библиотеку, библиотеку ввода-вывода и математическую библиотеку.
 
 ---
 
@@ -12,12 +12,12 @@
 
 | Тип | Модуль | Описание |
 |------|------|------|
-| `Option(T)` | `std.option` | Опциональный тип значения |
-| `Result(T, E)` | `std.result` | Тип обработки ошибок |
-| `List(T)` | `std.collection` | Динамический массив |
-| `Map(K, V)` | `std.collection` | Хеш-отображение |
-| `String` | `std.string` | Строковый тип |
-| `Array(T, N)` | `std.array` | Массив фиксированного размера |
+| `Option(T)` | `std.option` | тип опционального значения |
+| `Result(T, E)` | `std.result` | тип для обработки ошибок |
+| `List(T)` | `std.collection` | динамический массив |
+| `Map(K, V)` | `std.collection` | хеш-отображение |
+| `String` | `std.string` | строковый тип |
+| `Array(T, N)` | `std.array` | массив фиксированного размера |
 
 ### 1.2 Тип Option
 
@@ -29,23 +29,23 @@ Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 
 | Вариант | Синтаксис | Описание |
 |------|------|------|
-| `Option.some` | `Option.some(value)` | Значение есть |
-| `Option.none` | `Option.none()` | Значения нет |
+| `Option.some` | `Option.some(value)` | значение присутствует |
+| `Option.none` | `Option.none()` | значение отсутствует |
 
 **Основные методы**:
 
 ```yaoxiang
-// Проверить наличие значения
+// Проверка наличия значения
 is_some: (self: Option(T)) -> Bool
 is_none: (self: Option(T)) -> Bool
 
-// Получить значение (может вызвать panic)
+// Получение значения (может вызвать panic)
 unwrap: (self: Option(T)) -> T
 
-// Получить значение или значение по умолчанию
+// Получение значения или значения по умолчанию
 unwrap_or: (self: Option(T), default: T) -> T
 
-// Преобразовать значение
+// Отображение значения
 map: (R: Type) -> ((self: Option(T), f: (T) -> R) -> Option(R))
 ```
 
@@ -59,26 +59,26 @@ Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Resu
 
 | Вариант | Синтаксис | Описание |
 |------|------|------|
-| `Result.ok` | `Result.ok(value)` | Успешное значение |
-| `Result.err` | `Result.err(error)` | Ошибочное значение |
+| `Result.ok` | `Result.ok(value)` | значение успеха |
+| `Result.err` | `Result.err(error)` | значение ошибки |
 
 **Основные методы**:
 
 ```yaoxiang
-// Проверить успешность
+// Проверка успешности
 is_ok: (self: Result(T, E)) -> Bool
 is_err: (self: Result(T, E)) -> Bool
 
-// Получить значение (может вызвать panic)
+// Получение значения (может вызвать panic)
 unwrap: (self: Result(T, E)) -> T
 
-// Получить значение или значение по умолчанию
+// Получение значения или значения по умолчанию
 unwrap_or: (self: Result(T, E), default: T) -> T
 
-// Преобразовать успешное значение
+// Отображение значения успеха
 map: (R: Type) -> ((self: Result(T, E), f: (T) -> R) -> Result(R, E))
 
-// Преобразовать ошибочное значение
+// Отображение значения ошибки
 map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ```
 
@@ -91,7 +91,7 @@ ErrorPropagate ::= Expr '?'
 Оператор `?` автоматически распространяет ошибки типа Result:
 
 ```
-// При успехе возвращает значение, при неудаче возвращает err выше
+// При успехе возвращает значение, при неудаче пробрасывает err наверх
 data = fetch_data()?
 
 // Эквивалентно
@@ -100,6 +100,36 @@ data = match fetch_data() {
     err(e) => return err(e)
 }
 ```
+
+### 1.5 Утверждения (std.assert)
+
+Модуль `std.assert` предоставляет единый механизм утверждений — `assert` времени выполнения и уточняющий тип `Assert` времени компиляции являются двумя сторонами одного и того же примитива.
+
+```yaoxiang
+# IsTrue: функция-мост от значения к типу
+IsTrue: (b: Bool) -> Type = match b {
+    true => Void,      # ⊤, программа продолжается
+    false => Never,    # ⊥, расходится
+}
+
+# Assert: примитив уточняющего типа времени компиляции
+Assert: (cond: Bool) -> Type = IsTrue(cond)
+
+# assert: утверждение времени выполнения (форма введения значения Assert)
+assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))
+
+# Перегрузка для Result
+assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
+```
+
+**Диспетчеризация dispatch**:
+
+| Условие | Поведение |
+|------|------|
+| все свободные переменные cond известны на этапе компиляции | компилятор вычисляет: true → стирается, false → ошибка компиляции |
+| присутствуют свободные переменные времени выполнения | вставляется проверка времени выполнения, внедряется потокочувствительный набор предположений Γ |
+
+`assert(false, "msg")` эквивалентно raise — отдельные ключевые слова throw/raise не требуются.
 
 ---
 
@@ -117,7 +147,7 @@ read_line: () -> String
 read_char: () -> Char
 ```
 
-### 2.2 Операции с файлами
+### 2.2 Файловые операции
 
 ```yaoxiang
 // Тип файла
@@ -135,10 +165,10 @@ create: (path: String) -> Result(File, Error)
 delete: (path: String) -> Result(Void, Error)
 ```
 
-### 2.3 Операции с директориями
+### 2.3 Операции с каталогами
 
 ```yaoxiang
-// Тип директории
+// Тип каталога
 Dir: Type = {
     path: String,
     entries: (self: Dir) -> Result(List(String), Error),
@@ -146,7 +176,7 @@ Dir: Type = {
     delete: (self: Dir) -> Result(Void, Error)
 }
 
-// Операции с директориями
+// Операции с каталогами
 read_dir: (path: String) -> Result(Dir, Error)
 create_dir: (path: String) -> Result(Void, Error)
 delete_dir: (path: String) -> Result(Void, Error)
@@ -156,7 +186,7 @@ delete_dir: (path: String) -> Result(Void, Error)
 
 ## Глава 3: Математическая библиотека
 
-### 3.1 Базовые математические функции
+### 3.1 Основные математические функции
 
 ```yaoxiang
 // Абсолютное значение
@@ -169,11 +199,11 @@ min: (a: Int, b: Int) -> Int
 max: (a: Float, b: Float) -> Float
 min: (a: Float, b: Float) -> Float
 
-// Степенные операции
+// Возведение в степень
 pow: (base: Float, exp: Float) -> Float
 sqrt: (x: Float) -> Float
 
-// Логарифмы
+// Логарифм
 log: (x: Float) -> Float
 log2: (x: Float) -> Float
 log10: (x: Float) -> Float
@@ -204,7 +234,7 @@ e: Float = 2.718281828459045
 
 ---
 
-## Глава 4: Строковая библиотека
+## Глава 4: Библиотека работы со строками
 
 ### 4.1 Операции со строками
 
@@ -231,7 +261,7 @@ trim_left: (s: String) -> String
 trim_right: (s: String) -> String
 ```
 
-### 4.2 Преобразования строк
+### 4.2 Преобразование строк
 
 ```yaoxiang
 // Преобразование типов
@@ -239,7 +269,7 @@ to_string: (x: Int) -> String
 to_string: (x: Float) -> String
 to_string: (x: Bool) -> String
 
-// Парсинг
+// Разбор
 parse_int: (s: String) -> Result(Int, Error)
 parse_float: (s: String) -> Result(Float, Error)
 ```
@@ -292,7 +322,7 @@ Map: (K: Type, V: Type) -> Type = {
 
 ## Глава 6: Библиотека итераторов
 
-### 6.1 Iterator trait
+### 6.1 Trait Iterator
 
 ```yaoxiang
 // Iterator trait
@@ -337,33 +367,34 @@ for i in 0..10 step 2 {
 
 | Модуль | Описание |
 |------|------|
-| `std.option` | Тип Option |
-| `std.result` | Тип Result |
-| `std.collection` | Типы коллекций List, Map и др. |
-| `std.string` | Операции со строками |
-| `std.array` | Операции с массивами |
-| `std.iterator` | Итераторы |
+| `std.assert` | механизм утверждений — assert времени выполнения + уточняющий тип Assert времени компиляции |
+| `std.option` | тип Option |
+| `std.result` | тип Result |
+| `std.collection` | типы коллекций, такие как List, Map |
+| `std.string` | операции со строками |
+| `std.array` | операции с массивами |
+| `std.iterator` | итераторы |
 
 ### A.2 Модули ввода-вывода
 
 | Модуль | Описание |
 |------|------|
-| `std.io` | Стандартный ввод-вывод |
-| `std.file` | Операции с файлами |
-| `std.dir` | Операции с директориями |
+| `std.io` | стандартный ввод-вывод |
+| `std.file` | файловые операции |
+| `std.dir` | операции с каталогами |
 
 ### A.3 Математические модули
 
 | Модуль | Описание |
 |------|------|
-| `std.math` | Математические функции |
-| `std.math.trig` | Тригонометрические функции |
-| `std.math.log` | Логарифмические функции |
+| `std.math` | математические функции |
+| `std.math.trig` | тригонометрические функции |
+| `std.math.log` | логарифмические функции |
 
 ### A.4 Утилитарные модули
 
 | Модуль | Описание |
 |------|------|
-| `std.random` | Генерация случайных чисел |
-| `std.time` | Дата и время |
-| `std.regex` | Регулярные выражения |
+| `std.random` | генерация случайных чисел |
+| `std.time` | время и дата |
+| `std.regex` | регулярные выражения |
