@@ -434,32 +434,22 @@ fn register_module_exports(
 
 /// 对单个模块进行类型检查
 ///
-/// 创建独立的 `Compiler` 实例并编译源文件，将诊断信息追加到结果中。
+/// 使用验证管线对源文件执行静态分析，将诊断信息追加到结果中。
 fn check_single_module(
     path: &std::path::Path,
     result: &mut CheckResult,
 ) {
-    use crate::frontend::Compiler;
-
-    let source_name = path.display().to_string();
     let source = std::fs::read_to_string(path).unwrap_or_default();
-
-    let mut compiler = Compiler::new();
-    if let Err(e) = compiler.compile(&source_name, &source) {
-        let diagnostic = e
-            .diagnostic()
-            .cloned()
-            .unwrap_or_else(|| parse_compile_error(e.message()));
-
-        if diagnostic.severity.is_error() {
+    let vr = crate::frontend::validate::validate_source(&source);
+    for d in vr.diagnostics {
+        if d.severity.is_error() {
             result.error_count += 1;
         } else {
             result.warning_count += 1;
         }
-
         result.diagnostics.push(CheckDiagnostic {
-            file: source_name,
-            diagnostic,
+            file: path.display().to_string(),
+            diagnostic: d,
         });
     }
 }
