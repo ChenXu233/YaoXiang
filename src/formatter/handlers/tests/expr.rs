@@ -154,10 +154,11 @@ fn test_format_cast() {
 fn test_format_syntax_error_returns_error() {
     let source = "let x = 1";
     let result = crate::formatter::format_source(source, &FormatOptions::default());
-    assert!(matches!(
-        result,
-        Err(crate::formatter::FormatError::Semantic(_))
-    ));
+    assert!(
+        matches!(result, Err(crate::formatter::FormatError::Semantic(_))),
+        "语义错误代码应被拒绝，实际返回 {:?}",
+        result
+    );
 }
 
 #[test]
