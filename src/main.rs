@@ -301,14 +301,7 @@ fn main() -> Result<()> {
     let lang = args.lang.map(Into::<String>::into).unwrap_or_else(|| {
         std::env::var("YAOXIANG_LANG")
             .ok()
-            .and_then(|s| {
-                // Only use if it's a valid language
-                if ["en", "zh", "zh-x-miao", "zh-miao"].contains(&s.as_str()) {
-                    Some(s)
-                } else {
-                    None
-                }
-            })
+            .filter(|s| ["en", "zh", "zh-x-miao", "zh-miao"].contains(&s.as_str()))
             .unwrap_or_else(|| "en".to_string())
     });
     set_lang_from_string(lang);
