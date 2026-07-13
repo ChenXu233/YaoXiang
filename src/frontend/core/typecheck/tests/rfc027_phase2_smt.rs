@@ -73,7 +73,7 @@ fn test_assumption_stack_match_proves_without_evaluator_or_smt() {
 
     let env = TypeEnvironment::new();
     let mut ctx = ProofContext::new(&env);
-    ctx.assumptions.push(cond);
+    ctx.assumptions.inject(cond);
 
     // 约束在假设栈中 → 直接 Proved，不经过 Evaluator 和 Z3
     let result = check_predicate(&ctx, &refined, &HashMap::new());
@@ -88,7 +88,7 @@ fn test_assumption_stack_no_match_falls_through_to_evaluator() {
 
     let env = TypeEnvironment::new();
     let mut ctx = ProofContext::new(&env);
-    ctx.assumptions.push(in_stack);
+    ctx.assumptions.inject(in_stack);
 
     let mut bindings = HashMap::new();
     bindings.insert("y".into(), ConstValue::Int(5));
@@ -112,7 +112,7 @@ fn test_smt_implication_from_assumptions_to_weaker_constraint() {
 
     let env = TypeEnvironment::new();
     let mut ctx = ProofContext::new(&env);
-    ctx.assumptions.push(constraint_gt("y", 5));
+    ctx.assumptions.inject(constraint_gt("y", 5));
 
     let result = check_predicate(&ctx, &refined, &HashMap::new());
     assert!(result.is_proved(), "Z3 应证明 y>5 ⇒ y>0");

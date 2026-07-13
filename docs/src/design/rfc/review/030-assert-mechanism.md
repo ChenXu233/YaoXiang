@@ -3,11 +3,17 @@ title: "RFC-030: assert 断言机制"
 status: "审核中"
 author: "晨煦"
 created: "2026-06-15"
-updated: "2026-07-11"
-decision: "Assert 与 assert 编译期断言与运行时断言。"
+updated: "2026-07-14"
+decision: "assert 与 Assert 一体两面，dispatch 自动分派。6 Phase 全部实现（#157-#162 已关闭）。"
 issue: "#97"
 issues_impl:
   - "#155"
+  - "#157"
+  - "#158"
+  - "#159"
+  - "#160"
+  - "#161"
+  - "#162"
 ---
 
 # RFC-030: assert 断言机制

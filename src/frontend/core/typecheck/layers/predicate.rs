@@ -13,6 +13,7 @@ use std::sync::{LazyLock, Mutex};
 
 use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
 use crate::frontend::core::types::eval::evaluator::Evaluator;
+use crate::frontend::core::types::eval::dependent_types::DependentTypeEnv;
 use crate::frontend::core::types::mono::MonoType;
 use super::super::proof::context::ProofContext;
 #[cfg(not(target_arch = "wasm32"))]
@@ -96,7 +97,8 @@ fn try_direct_eval(
     constraint: &ConstExpr,
     bindings: &HashMap<String, ConstValue>,
 ) -> Option<ProofResult> {
-    let mut evaluator = Evaluator::new(ctx.env, &ctx.budget);
+    let dep_env = DependentTypeEnv::new();
+    let mut evaluator = Evaluator::new(ctx.env, &ctx.budget, &dep_env);
     match evaluator.eval_expr(constraint, bindings) {
         Ok(ConstValue::Bool(true)) => Some(ProofResult::Proved),
         Ok(ConstValue::Bool(false)) => Some(ProofResult::Disproved(DisproofModel {
@@ -131,14 +133,14 @@ fn try_implication(
 ) -> Option<ProofResult> {
     // 收集约束和假设中所有变量的 SMT 排序
     let mut var_sorts = translate::infer_var_sorts(constraint, bindings);
-    for assumption in ctx.assumptions.current() {
+    let assumptions = ctx.assumptions.current();
+    for assumption in &assumptions {
         for (k, v) in translate::infer_var_sorts(assumption, bindings) {
             var_sorts.entry(k).or_insert(v);
         }
     }
 
-    let commands =
-        translate::translate_constraint(constraint, ctx.assumptions.current(), &var_sorts);
+    let commands = translate::translate_constraint(constraint, &assumptions, &var_sorts);
 
     match Z3_INSTANCE
         .lock()
@@ -161,8 +163,8 @@ fn try_smt_solve(
     bindings: &HashMap<String, ConstValue>,
 ) -> ProofResult {
     let var_sorts = translate::infer_var_sorts(constraint, bindings);
-    let commands =
-        translate::translate_constraint(constraint, ctx.assumptions.current(), &var_sorts);
+    let assumptions = ctx.assumptions.current();
+    let commands = translate::translate_constraint(constraint, &assumptions, &var_sorts);
 
     match Z3_INSTANCE
         .lock()

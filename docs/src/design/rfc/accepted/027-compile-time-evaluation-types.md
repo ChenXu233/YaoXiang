@@ -5,8 +5,8 @@ author: "晨煦"
 created: "2026-06-07"
 updated: "2026-07-05"
 impl_status: "in_progress"
-impl_detail: "Phase 1-2 完成，Phase 3 部分完成，Phase 4 部分完成"
-impl_percent: 70
+impl_detail: "Phase 1-2 完成，Phase 3 部分完成，Phase 4 部分完成。assert/Assert 统一方案 6 Phase 全部实现（#157-#162 已关闭）：Never 类型、IsTrue 桥接、流敏感 Γ + kill set、类型级递归、宇宙分层弱检查、dispatch 分派管道。"
+impl_percent: 85
 issue_number: 90
 issue_url: "https://github.com/ChenXu233/YaoXiang/issues/90"
 

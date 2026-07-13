@@ -12,6 +12,7 @@ use crate::frontend::core::typecheck::predicate_resolver::PredicateResolver;
 use crate::frontend::core::typecheck::proof::context::ProofContext;
 use crate::frontend::core::typecheck::proof::verdict::ProofResult;
 use crate::frontend::core::typecheck::layers::predicate::check_predicate;
+use crate::frontend::core::types::eval::dependent_types::DependentTypeEnv;
 
 use super::inference;
 use super::semantic_db;
@@ -33,6 +34,8 @@ pub struct TypeChecker {
     body_checker: Option<inference::StatementChecker>,
     /// 语义信息收集（typecheck 阶段同时产出）
     semantic_db: semantic_db::SemanticDB,
+    /// 依赖类型环境（类型族注册与查找）
+    pub dependent_type_env: DependentTypeEnv,
 }
 
 impl TypeChecker {
@@ -46,10 +49,17 @@ impl TypeChecker {
         // 注册预定义的 const 函数
         Self::register_predefined_const_functions(&mut env);
 
+        // 初始化依赖类型环境并注册内置类型族
+        let mut dependent_type_env = DependentTypeEnv::new();
+        crate::frontend::core::types::eval::dependent_types::register_builtin_type_families(
+            &mut dependent_type_env,
+        );
+
         Self {
             env,
             body_checker: None,
             semantic_db: semantic_db::SemanticDB::new(),
+            dependent_type_env,
         }
     }
 
@@ -237,7 +247,7 @@ impl TypeChecker {
         }
 
         // 初始化函数体检查器
-        let mut body_checker = inference::StatementChecker::new(self.env.solver());
+        let mut body_checker = inference::StatementChecker::new(self.env.solver(), None);
         // 设置 native 函数签名表
         body_checker.set_native_signatures(self.env.native_signatures.clone());
         // 设置模块注册表，支持函数体/块作用域 use
@@ -389,7 +399,7 @@ impl TypeChecker {
     /// 获取 body_checker 的可变引用
     fn body_checker_mut(&mut self) -> &mut inference::StatementChecker {
         if self.body_checker.is_none() {
-            let mut body_checker = inference::StatementChecker::new(self.env.solver());
+            let mut body_checker = inference::StatementChecker::new(self.env.solver(), None);
             // 设置 native 函数签名表
             body_checker.set_native_signatures(self.env.native_signatures.clone());
             // 设置模块注册表，支持函数体/块作用域 use
@@ -903,14 +913,7 @@ impl TypeChecker {
                     );
                     return;
                 }
-
-                // E1090: Type: Type = Type 彩蛋（Note 级别）
-                self.add_error(
-                    ErrorCodeDefinition::type_self_reference_easter_egg()
-                        .at(span)
-                        .severity(crate::util::diagnostic::Severity::Info)
-                        .build(),
-                );
+                // 无泛型参数 → 静默跳过（#161 宇宙分层决策）
                 return;
             }
         }

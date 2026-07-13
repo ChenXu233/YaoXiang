@@ -14,6 +14,7 @@
 
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::types::eval::evaluator::Evaluator;
+use crate::frontend::core::types::eval::dependent_types::DependentTypeEnv;
 use crate::frontend::core::types::mono::MonoType;
 use super::super::proof::verdict::{DisproofKind, DisproofModel, ProofResult, UnprovenReason};
 use super::super::proof::context::ProofContext;
@@ -28,6 +29,7 @@ pub fn structurally_equal(
 ) -> bool {
     match (lhs, rhs) {
         // 基础类型
+        (MonoType::Never, MonoType::Never) => true,
         (MonoType::Void, MonoType::Void) => true,
         (MonoType::Bool, MonoType::Bool) => true,
         (MonoType::Int(a), MonoType::Int(b)) => a == b,
@@ -96,6 +98,18 @@ pub fn is_subtype(
 ) -> bool {
     match (sub, sup) {
         (a, b) if a == b => true,
+        // Never <: T 对所有 T 成立（爆炸原理）
+        (MonoType::Never, _) => true,
+        // MetaType 层级弱检查：
+        // Typeₙ <: Typeₘ 当且仅当 n ≤ m
+        (
+            MonoType::MetaType {
+                universe_level: la, ..
+            },
+            MonoType::MetaType {
+                universe_level: lb, ..
+            },
+        ) => la.le(lb),
         // List 协变
         (MonoType::List(a), MonoType::List(b)) => is_subtype(a, b, env),
         // 函数：参数逆变 + 返回值协变
@@ -214,7 +228,8 @@ pub fn check_type_equivalence(
     }
 
     // 3. 确定性归约后比较
-    let mut evaluator = Evaluator::new(ctx.env, &ctx.budget);
+    let dep_env = DependentTypeEnv::new();
+    let mut evaluator = Evaluator::new(ctx.env, &ctx.budget, &dep_env);
     match (evaluator.eval(lhs), evaluator.eval(rhs)) {
         (Ok(l), Ok(r)) if l == r => ProofResult::Proved,
         (Ok(l), Ok(r)) => ProofResult::Disproved(DisproofModel {

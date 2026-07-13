@@ -480,6 +480,46 @@ fn test_universe_level_cmp() {
 }
 
 #[test]
+fn test_universe_level_le() {
+    use crate::frontend::core::types::UniverseLevel;
+    // 同层级
+    assert!(UniverseLevel::type0().le(&UniverseLevel::type0()));
+    assert!(UniverseLevel::type1().le(&UniverseLevel::type1()));
+    // 低 <= 高
+    assert!(UniverseLevel::type0().le(&UniverseLevel::type1()));
+    assert!(UniverseLevel::new("2").le(&UniverseLevel::new("5")));
+    // 高 <= 低：不成立
+    assert!(!UniverseLevel::type1().le(&UniverseLevel::type0()));
+    assert!(!UniverseLevel::new("9").le(&UniverseLevel::new("3")));
+    // 大层级
+    assert!(UniverseLevel::new("999").le(&UniverseLevel::new("1000")));
+}
+
+#[test]
+fn test_universe_level_max() {
+    use crate::frontend::core::types::UniverseLevel;
+    // 同层级
+    assert_eq!(
+        UniverseLevel::max(&UniverseLevel::type0(), &UniverseLevel::type0()),
+        &UniverseLevel::type0()
+    );
+    // 不同层级
+    assert_eq!(
+        UniverseLevel::max(&UniverseLevel::type0(), &UniverseLevel::type1()),
+        &UniverseLevel::type1()
+    );
+    assert_eq!(
+        UniverseLevel::max(&UniverseLevel::type1(), &UniverseLevel::type0()),
+        &UniverseLevel::type1()
+    );
+    // 大层级
+    assert_eq!(
+        UniverseLevel::max(&UniverseLevel::new("5"), &UniverseLevel::new("500")),
+        &UniverseLevel::new("500")
+    );
+}
+
+#[test]
 fn test_poly_type_display_and_name() {
     let poly = PolyType::mono(MonoType::String);
     assert_eq!(poly.type_name(), "string");

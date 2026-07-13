@@ -162,6 +162,8 @@ pub fn add_builtin_types(env: &mut environment::TypeEnvironment) {
     env.types
         .insert("void".to_string(), PolyType::mono(MonoType::Void));
     env.types
+        .insert("never".to_string(), PolyType::mono(MonoType::Never));
+    env.types
         .insert("char".to_string(), PolyType::mono(MonoType::Char));
 
     // RFC-024: 内置资源类型

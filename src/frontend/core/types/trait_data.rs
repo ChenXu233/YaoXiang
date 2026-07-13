@@ -74,6 +74,7 @@ impl TraitTable {
             MonoType::String => "String".to_string(),
             MonoType::Bytes => "Bytes".to_string(),
             MonoType::Void => "Void".to_string(),
+            MonoType::Never => "Never".to_string(),
             _ => ty.type_name(),
         }
     }
@@ -550,6 +551,23 @@ impl TraitTable {
         self.add_impl(TraitImplementation {
             trait_name: "Debug".into(),
             for_type_name: "Void".into(),
+            methods: debug_fn(),
+        });
+
+        // Never: Dup + Equal + Debug（底部类型，无实例可构造）
+        self.add_impl(TraitImplementation {
+            trait_name: "Dup".into(),
+            for_type_name: "Never".into(),
+            methods: HashMap::new(),
+        });
+        self.add_impl(TraitImplementation {
+            trait_name: "Equal".into(),
+            for_type_name: "Never".into(),
+            methods: equal_fn(),
+        });
+        self.add_impl(TraitImplementation {
+            trait_name: "Debug".into(),
+            for_type_name: "Never".into(),
             methods: debug_fn(),
         });
     }
