@@ -7,8 +7,11 @@
 
 use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::eval::dependent_types::{
-    register_builtin_type_families, AssociatedType, AssociatedTypeDef, DependentTypeEnv, TypeFamily,
+    register_builtin_type_families, AssociatedType, AssociatedTypeDef, DependentTypeEnv,
+    RecursiveArm, RecursivePattern, TypeFamily, check_structural_termination,
+    parse_nat_from_type, nat_to_type,
 };
+use crate::frontend::core::types::eval::type_families::Nat;
 use std::collections::HashMap;
 
 #[test]
@@ -371,5 +374,228 @@ fn test_assert_type_family_instantiate() {
         result_ty,
         MonoType::TypeRef("IsTrue(true)".to_string()),
         "Assert(true) must expand to IsTrue(true) via parameter substitution"
+    );
+}
+
+// ===================================================================
+// Recursive 类型族测试
+// ===================================================================
+
+#[test]
+fn test_recursive_instantiate_zero() {
+    // Arrange — factorial(Zero) = 1; factorial(Succ(n)) = Succ(n) * factorial(n)
+    let factorial = TypeFamily::new(
+        "factorial".to_string(),
+        vec!["n".to_string()],
+        vec![],
+        AssociatedTypeDef::Recursive {
+            arg_index: 0,
+            arms: vec![
+                RecursiveArm {
+                    pattern: RecursivePattern::Zero,
+                    result: MonoType::Int(1),
+                },
+                RecursiveArm {
+                    pattern: RecursivePattern::Succ("ih_n".to_string()),
+                    result: MonoType::TypeRef("Nat(Mul, Succ(n), factorial(ih_n))".to_string()),
+                },
+            ],
+        },
+    );
+
+    // Act — factorial(Zero) → Int(1)
+    let result = factorial.instantiate(&[MonoType::TypeRef("Zero".to_string())]);
+
+    // Assert
+    assert!(result.is_some(), "factorial(Zero) should instantiate");
+    assert_eq!(
+        result.unwrap().into_type(),
+        MonoType::Int(1),
+        "factorial(Zero) = 1"
+    );
+}
+
+#[test]
+fn test_recursive_instantiate_succ() {
+    // Arrange — factorial(Succ(Zero)) = Succ(Zero) * factorial(Zero)
+    let factorial = TypeFamily::new(
+        "factorial".to_string(),
+        vec!["n".to_string()],
+        vec![],
+        AssociatedTypeDef::Recursive {
+            arg_index: 0,
+            arms: vec![
+                RecursiveArm {
+                    pattern: RecursivePattern::Zero,
+                    result: MonoType::Int(1),
+                },
+                RecursiveArm {
+                    pattern: RecursivePattern::Succ("ih_n".to_string()),
+                    result: MonoType::TypeRef("Nat(Mul, Succ(n), factorial(ih_n))".to_string()),
+                },
+            ],
+        },
+    );
+
+    // Act — factorial(Succ(Zero))
+    let result = factorial.instantiate(&[MonoType::TypeRef("Succ(Zero)".to_string())]);
+
+    // Assert — should produce Nat(Mul, Succ(Succ(Zero)), factorial(Zero))
+    assert!(result.is_some(), "factorial(Succ(Zero)) should instantiate");
+    let result_ty = result.unwrap().into_type();
+    let expected = MonoType::TypeRef("Nat(Mul, Succ(Succ(Zero)), factorial(Zero))".to_string());
+    assert_eq!(
+        result_ty, expected,
+        "factorial(Succ(Zero)) should expand to one step"
+    );
+}
+
+// ===================================================================
+// Nat 解析/转换测试
+// ===================================================================
+
+#[test]
+fn test_parse_nat_from_type_zero() {
+    assert_eq!(
+        parse_nat_from_type(&MonoType::TypeRef("Zero".to_string())),
+        Some(Nat::Zero),
+        "TypeRef('Zero') → Nat::Zero"
+    );
+}
+
+#[test]
+fn test_parse_nat_from_type_succ() {
+    // Succ(Zero) → Nat::Succ(Nat::Zero)
+    let parsed = parse_nat_from_type(&MonoType::TypeRef("Succ(Zero)".to_string()));
+    assert!(parsed.is_some());
+    assert_eq!(parsed.unwrap().to_usize(), 1, "Succ(Zero) = 1");
+
+    // Succ(Succ(Zero)) → 2
+    let parsed = parse_nat_from_type(&MonoType::TypeRef("Succ(Succ(Zero))".to_string()));
+    assert!(parsed.is_some());
+    assert_eq!(parsed.unwrap().to_usize(), 2, "Succ(Succ(Zero)) = 2");
+}
+
+#[test]
+fn test_parse_nat_from_type_int() {
+    assert_eq!(
+        parse_nat_from_type(&MonoType::Int(5)),
+        Some(Nat::from_usize(5)),
+        "Int(5) → Nat::from_usize(5)"
+    );
+}
+
+#[test]
+fn test_parse_nat_from_type_bool() {
+    assert_eq!(
+        parse_nat_from_type(&MonoType::Bool),
+        None,
+        "Bool should not parse as Nat"
+    );
+}
+
+#[test]
+fn test_nat_to_type_roundtrip() {
+    for i in 0..=5 {
+        let nat = Nat::from_usize(i);
+        let ty = nat_to_type(&nat);
+        let parsed_back = parse_nat_from_type(&ty);
+        assert_eq!(
+            parsed_back,
+            Some(nat.clone()),
+            "Roundtrip failed for {}: {:?} → {:?} → {:?}",
+            i, nat, ty, parsed_back
+        );
+    }
+}
+
+// ===================================================================
+// 结构性终止检查测试
+// ===================================================================
+
+#[test]
+fn test_structural_termination_ok() {
+    // Standard factorial passes structural termination
+    let arms = vec![
+        RecursiveArm {
+            pattern: RecursivePattern::Zero,
+            result: MonoType::Int(1),
+        },
+        RecursiveArm {
+            pattern: RecursivePattern::Succ("n".to_string()),
+            result: MonoType::TypeRef("Nat(Mul, Succ(n), factorial(n))".to_string()),
+        },
+    ];
+    assert!(
+        check_structural_termination("factorial", &arms).is_ok(),
+        "Standard factorial should pass structural termination"
+    );
+}
+
+#[test]
+fn test_structural_termination_zero_branch_recursive() {
+    // Zero branch with self-call → err
+    let arms = vec![
+        RecursiveArm {
+            pattern: RecursivePattern::Zero,
+            result: MonoType::TypeRef("factorial(Zero)".to_string()),
+        },
+        RecursiveArm {
+            pattern: RecursivePattern::Succ("n".to_string()),
+            result: MonoType::TypeRef("Nat(Mul, Succ(n), factorial(n))".to_string()),
+        },
+    ];
+    assert!(
+        check_structural_termination("factorial", &arms).is_err(),
+        "Zero branch with self-call should fail"
+    );
+}
+
+#[test]
+fn test_structural_termination_succ_wrong_arg() {
+    // Succ(n) with func(Succ(n)) → err
+    let arms = vec![
+        RecursiveArm {
+            pattern: RecursivePattern::Zero,
+            result: MonoType::Int(1),
+        },
+        RecursiveArm {
+            pattern: RecursivePattern::Succ("n".to_string()),
+            result: MonoType::TypeRef("factorial(Succ(n))".to_string()),
+        },
+    ];
+    assert!(
+        check_structural_termination("factorial", &arms).is_err(),
+        "Succ(n) with factorial(Succ(n)) should fail"
+    );
+}
+
+#[test]
+fn test_structural_termination_missing_zero() {
+    // Missing Zero branch → err
+    let arms = vec![
+        RecursiveArm {
+            pattern: RecursivePattern::Succ("n".to_string()),
+            result: MonoType::TypeRef("factorial(n)".to_string()),
+        },
+    ];
+    assert!(
+        check_structural_termination("fib", &arms).is_err(),
+        "Missing Zero branch should fail"
+    );
+}
+
+#[test]
+fn test_structural_termination_missing_succ() {
+    // Missing Succ branch → err
+    let arms = vec![
+        RecursiveArm {
+            pattern: RecursivePattern::Zero,
+            result: MonoType::Int(0),
+        },
+    ];
+    assert!(
+        check_structural_termination("constant", &arms).is_err(),
+        "Missing Succ branch should fail"
     );
 }

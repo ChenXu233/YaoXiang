@@ -12,6 +12,7 @@
 use crate::frontend::core::types::{MonoType, Substitution, Substituter};
 use crate::frontend::core::typecheck::TypeEnvironment;
 use crate::frontend::core::typecheck::proof::budget::BudgetTracker;
+use super::dependent_types::DependentTypeEnv;
 use super::evaluator::Evaluator;
 use std::collections::HashMap;
 
@@ -148,6 +149,9 @@ pub struct TypeNormalizer {
 
     /// 内部持有的预算追踪器（为 evaluator 提供引用）
     budget: BudgetTracker,
+
+    /// 内部持有的依赖类型环境（为 evaluator 提供引用）
+    dep_env: DependentTypeEnv,
 }
 
 impl Default for TypeNormalizer {
@@ -163,6 +167,7 @@ impl Clone for TypeNormalizer {
             context: self.context.clone(),
             env: TypeEnvironment::new(),
             budget: BudgetTracker::new(),
+            dep_env: DependentTypeEnv::new(),
         }
     }
 }
@@ -175,6 +180,7 @@ impl TypeNormalizer {
             context: NormalizationContext::new(),
             env: TypeEnvironment::new(),
             budget: BudgetTracker::new(),
+            dep_env: DependentTypeEnv::new(),
         }
     }
 
@@ -185,6 +191,7 @@ impl TypeNormalizer {
             context: NormalizationContext::new(),
             env: TypeEnvironment::new(),
             budget: BudgetTracker::new(),
+            dep_env: DependentTypeEnv::new(),
         }
     }
 
@@ -327,7 +334,8 @@ impl TypeNormalizer {
     ) -> NormalForm {
         // 解析参数为 MonoType（使用不可变求值器解析）
         let parsed_args: Vec<MonoType> = {
-            let evaluator = Evaluator::new(&self.env, &self.budget);
+            let dep_env = DependentTypeEnv::new();
+            let evaluator = Evaluator::new(&self.env, &self.budget, &dep_env);
             args.iter()
                 .filter_map(|arg| {
                     evaluator
@@ -342,7 +350,9 @@ impl TypeNormalizer {
         }
 
         // 创建可变求值器进行实际求值
-        let mut evaluator = Evaluator::new(&self.env, &self.budget);
+        let dep_env = DependentTypeEnv::new();
+        let mut evaluator = Evaluator::new(&self.env, &self.budget, &dep_env);
+
 
         // 根据类型名称调用对应的求值方法
         match type_name {
@@ -385,8 +395,9 @@ impl TypeNormalizer {
 
     /// 获取求值器（用于外部访问）
     pub fn evaluator(&mut self) -> Evaluator<'_> {
-        Evaluator::new(&self.env, &self.budget)
+        Evaluator::new(&self.env, &self.budget, &self.dep_env)
     }
+
 
     /// 获取上下文
     pub fn context(&self) -> &NormalizationContext {
