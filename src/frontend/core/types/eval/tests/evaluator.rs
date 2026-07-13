@@ -10,8 +10,8 @@ use crate::frontend::core::types::MonoType;
 use crate::frontend::core::typecheck::TypeEnvironment;
 use crate::frontend::core::typecheck::proof::budget::BudgetTracker;
 use crate::frontend::core::types::eval::dependent_types::{
-    DependentTypeEnv, register_builtin_type_families, TypeFamily, AssociatedTypeDef,
-    RecursiveArm, RecursivePattern,
+    DependentTypeEnv, register_builtin_type_families, TypeFamily, AssociatedTypeDef, RecursiveArm,
+    RecursivePattern,
 };
 
 // ===================================================================
@@ -486,8 +486,7 @@ fn test_eval_recursive_factorial_succ_zero() {
     // The exact result depends on eval ordering — just verify it's not an error
     // and is different from the input
     assert_ne!(
-        result_ty,
-        ty,
+        result_ty, ty,
         "factorial(Succ(Zero)) should reduce from input"
     );
 }

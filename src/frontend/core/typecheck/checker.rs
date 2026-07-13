@@ -913,14 +913,7 @@ impl TypeChecker {
                     );
                     return;
                 }
-
-                // E1090: Type: Type = Type 彩蛋（Note 级别）
-                self.add_error(
-                    ErrorCodeDefinition::type_self_reference_easter_egg()
-                        .at(span)
-                        .severity(crate::util::diagnostic::Severity::Info)
-                        .build(),
-                );
+                // 无泛型参数 → 静默跳过（#161 宇宙分层决策）
                 return;
             }
         }

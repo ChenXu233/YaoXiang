@@ -52,3 +52,41 @@ fn test_never_is_subtype_of_any() {
         None
     ));
 }
+
+#[test]
+fn test_metatype_subtype_lower_to_higher() {
+    // Type₀ <: Type₁ 应成立（n ≤ m）
+    let t0 = MonoType::MetaType {
+        universe_level: crate::frontend::core::types::UniverseLevel::type0(),
+        type_params: vec![],
+    };
+    let t1 = MonoType::MetaType {
+        universe_level: crate::frontend::core::types::UniverseLevel::type1(),
+        type_params: vec![],
+    };
+    assert!(is_subtype(&t0, &t1, None));
+}
+
+#[test]
+fn test_metatype_subtype_higher_to_lower() {
+    // Type₁ <: Type₀ 应不成立（n > m）
+    let t0 = MonoType::MetaType {
+        universe_level: crate::frontend::core::types::UniverseLevel::type0(),
+        type_params: vec![],
+    };
+    let t1 = MonoType::MetaType {
+        universe_level: crate::frontend::core::types::UniverseLevel::type1(),
+        type_params: vec![],
+    };
+    assert!(!is_subtype(&t1, &t0, None));
+}
+
+#[test]
+fn test_metatype_subtype_same_level() {
+    // Type₀ <: Type₀ 应成立（自反性）
+    let t0 = MonoType::MetaType {
+        universe_level: crate::frontend::core::types::UniverseLevel::type0(),
+        type_params: vec![],
+    };
+    assert!(is_subtype(&t0, &t0, None));
+}

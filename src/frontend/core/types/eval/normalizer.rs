@@ -353,7 +353,6 @@ impl TypeNormalizer {
         let dep_env = DependentTypeEnv::new();
         let mut evaluator = Evaluator::new(&self.env, &self.budget, &dep_env);
 
-
         // 根据类型名称调用对应的求值方法
         match type_name {
             _ if type_name.starts_with("If(") => {
@@ -397,7 +396,6 @@ impl TypeNormalizer {
     pub fn evaluator(&mut self) -> Evaluator<'_> {
         Evaluator::new(&self.env, &self.budget, &self.dep_env)
     }
-
 
     /// 获取上下文
     pub fn context(&self) -> &NormalizationContext {

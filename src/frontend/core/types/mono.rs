@@ -83,6 +83,31 @@ impl UniverseLevel {
             ord => ord,
         }
     }
+    /// 层级转为 usize（用于比较）
+    pub fn as_usize(&self) -> usize {
+        self.level.parse::<usize>().unwrap_or(0)
+    }
+
+    /// 是否小于等于另一个层级
+    /// Typeₙ <: Typeₘ 当且仅当 n ≤ m
+    pub fn le(
+        &self,
+        other: &UniverseLevel,
+    ) -> bool {
+        self.as_usize() <= other.as_usize()
+    }
+
+    /// 取两个层级的最大值
+    pub fn max<'a>(
+        a: &'a UniverseLevel,
+        b: &'a UniverseLevel,
+    ) -> &'a UniverseLevel {
+        if a.as_usize() >= b.as_usize() {
+            a
+        } else {
+            b
+        }
+    }
 }
 
 impl fmt::Display for UniverseLevel {
