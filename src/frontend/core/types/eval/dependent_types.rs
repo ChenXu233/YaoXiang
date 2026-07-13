@@ -16,8 +16,8 @@
 //!     IteratorType: Iterator[T],  # 关联类型依赖于 T
 //! }
 //! ```
-
 use crate::frontend::core::types::MonoType;
+use crate::frontend::core::types::eval::type_families::Nat;
 use std::collections::HashMap;
 
 /// 关联类型定义
@@ -69,6 +69,16 @@ pub enum AssociatedTypeDef {
         /// 匹配分支 (pattern, result_type)
         arms: Vec<(MonoType, MonoType)>,
     },
+
+    /// 类型级递归定义
+    /// 通过 Nat 类型参数的结构分解来实现递归
+    /// 例如: factorial(Zero) = 1; factorial(Succ(n)) = Succ(n) * factorial(n)
+    Recursive {
+        /// 递归参数索引
+        arg_index: usize,
+        /// 递归分支
+        arms: Vec<RecursiveArm>,
+    },
 }
 
 impl AssociatedTypeDef {
@@ -84,6 +94,7 @@ impl AssociatedTypeDef {
                 .iter()
                 .any(|arg| arg.has_unbound_params(bound_params)),
             AssociatedTypeDef::Match { .. } => false,
+            AssociatedTypeDef::Recursive { .. } => false,
         }
     }
 
@@ -139,6 +150,18 @@ impl AssociatedTypeDef {
                 arg_index: *arg_index,
                 arms: arms.clone(),
             },
+            AssociatedTypeDef::Recursive { arg_index, arms } => {
+                AssociatedTypeDef::Recursive {
+                    arg_index: *arg_index,
+                    arms: arms.iter().map(|arm| {
+                        let substituted_result = substitute_type_params(&arm.result, substitutions);
+                        RecursiveArm {
+                            pattern: arm.pattern.clone(),
+                            result: substituted_result,
+                        }
+                    }).collect(),
+                }
+            }
         }
     }
 
@@ -149,8 +172,26 @@ impl AssociatedTypeDef {
             AssociatedTypeDef::TypeParam(_) => MonoType::TypeRef("Unknown".to_string()),
             AssociatedTypeDef::Applied { constructor, .. } => MonoType::TypeRef(constructor),
             AssociatedTypeDef::Match { .. } => MonoType::TypeRef("Unknown".to_string()),
+            AssociatedTypeDef::Recursive { .. } => MonoType::TypeRef("Unknown".to_string()),
         }
     }
+}
+
+/// 递归匹配模式
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum RecursivePattern {
+    /// 零基情况: factorial(Zero) → ...
+    Zero,
+    /// 递推情况: factorial(Succ(n)) → ...
+    /// 包含归纳假设变量名
+    Succ(String),
+}
+
+/// 递归分支
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct RecursiveArm {
+    pub pattern: RecursivePattern,
+    pub result: MonoType,
 }
 
 /// 替换 MonoType 中的类型参数引用
@@ -168,9 +209,12 @@ fn substitute_type_params(
                 return replacement.clone();
             }
             // 尝试在名称字符串内进行文本替换（如 "IsTrue(cond)" → "IsTrue(true)"）
+            // 按参数名长度降序排序，避免 "n" 替换到 "ih_n" 内部
+            let mut sorted_params: Vec<&String> = substitutions.keys().collect();
+            sorted_params.sort_by(|a, b| b.len().cmp(&a.len()));
             let mut new_name = name.clone();
-            for (param, replacement) in substitutions {
-                if let MonoType::TypeRef(repl_name) = replacement {
+            for param in sorted_params {
+                if let Some(MonoType::TypeRef(repl_name)) = substitutions.get(param) {
                     new_name = new_name.replace(param.as_str(), repl_name);
                 }
             }
@@ -255,8 +299,46 @@ impl TypeFamily {
                 }
                 None
             }
+            AssociatedTypeDef::Recursive { arg_index, arms } => {
+                let scrutinee = args.get(*arg_index)?;
+                // 解析被匹配类型为 Nat
+                let nat_val = parse_nat_from_type(scrutinee)?;
+                match nat_val {
+                    Nat::Zero => {
+                        // 查找 Zero 分支
+                        let zero_arm = arms.iter().find(|arm| arm.pattern == RecursivePattern::Zero)?;
+                        Some(AssociatedTypeDef::Direct(
+                            self.substitute_params(&zero_arm.result, args)?,
+                        ))
+                    }
+                    Nat::Succ(inner) => {
+                        // 查找 Succ 分支并提取归纳假设变量名（使用 filter_map 避免 unreachable!）
+                        let (hyp_var, succ_result) = arms.iter()
+                            .filter_map(|arm| {
+                                if let RecursivePattern::Succ(var) = &arm.pattern {
+                                    Some((var.clone(), &arm.result))
+                                } else {
+                                    None
+                                }
+                            })
+                            .next()?;
+                        // 构建替换映射：type_params → args
+                        let mut all_substitutions: HashMap<String, MonoType> = self.type_params.iter()
+                            .zip(args.iter())
+                            .map(|(param, arg)| (param.clone(), arg.clone()))
+                            .collect();
+                        // 归纳假设变量绑定到 inner 的 Nat 编码（如 Succ(Zero)）
+                        // 这样 factorial(ih) 中的 ih 会被替换为 Succ(Zero)，产生 factorial(Succ(Zero))
+                        // 求值器随后会进一步归约这个递归调用
+                        let inner_type = nat_to_type(&inner);
+                        all_substitutions.insert(hyp_var, inner_type);
+                        let substituted = substitute_type_params(succ_result, &all_substitutions);
+                        Some(AssociatedTypeDef::Direct(substituted))
+                    }
+                }
+            }
             _ => {
-                // 替换定义中的类型参数
+                // 替换定义中的类型参数（Direct、TypeParam、Applied）
                 Some(self.definition.substitute(&substitutions))
             }
         }
@@ -311,6 +393,119 @@ impl TypeFamily {
 
         Some(associated.definition.substitute(&substitutions).into_type())
     }
+}
+
+// ============ 递归辅助函数 ============
+
+/// 从 MonoType 解析 Nat 值
+///
+/// 支持以下格式：
+/// - TypeRef("Zero") → Nat::Zero
+/// - TypeRef("Succ(N)") → Nat::Succ(...)
+/// - Int(n) → Nat::from_usize(n)
+pub fn parse_nat_from_type(ty: &MonoType) -> Option<Nat> {
+    match ty {
+        MonoType::TypeRef(name) if name == "Zero" => Some(Nat::Zero),
+        MonoType::TypeRef(name) if name.starts_with("Succ(") => {
+            let inner = &name[5..name.len() - 1];
+            let inner_nat = parse_nat_from_type(&MonoType::TypeRef(inner.to_string()))?;
+            Some(Nat::succ(inner_nat))
+        }
+        MonoType::Int(n) => Some(Nat::from_usize(*n as usize)),
+        _ => None,
+    }
+}
+
+/// 将 Nat 值转换为 MonoType 表示
+pub fn nat_to_type(nat: &Nat) -> MonoType {
+    match nat {
+        Nat::Zero => MonoType::TypeRef("Zero".to_string()),
+        Nat::Succ(inner) => {
+            let inner_str = nat_to_type(inner);
+            match inner_str {
+                MonoType::TypeRef(name) => {
+                    MonoType::TypeRef(format!("Succ({})", name))
+                }
+                _ => {
+                    // 理论上不会发生，因为递归基总是 TypeRef("Zero")
+                    MonoType::TypeRef(format!("Succ({:?})", inner_str))
+                }
+            }
+        }
+    }
+}
+
+/// 检查类型中是否包含对自身的递归调用
+fn references_self_call(ty: &MonoType, family_name: &str) -> bool {
+    match ty {
+        MonoType::TypeRef(name) => name.starts_with(&format!("{}(", family_name)),
+        _ => false,
+    }
+}
+
+/// 检查递归调用的参数：必须严格是归纳假设变量（不能是 Succ(hyp_var)）
+fn check_recursive_call_args(ty: &MonoType, family_name: &str, hyp_var: &str) -> Result<(), String> {
+    match ty {
+        MonoType::TypeRef(name) if name.starts_with(&format!("{}(", family_name)) => {
+            let inner = &name[family_name.len() + 1..name.len() - 1];
+            if inner == hyp_var {
+                Ok(())
+            } else {
+                Err(format!(
+                    "递归调用 {} 参数必须是归纳假设变量 {}，但实际为 {}",
+                    name, hyp_var, inner
+                ))
+            }
+        }
+        _ => Ok(()),
+    }
+}
+
+/// 检查结构性终止：
+/// - Zero 分支不能包含自调用
+/// - Succ(n) 分支的递归调用参数必须恰好是 n
+pub fn check_structural_termination(
+    family_name: &str,
+    arms: &[RecursiveArm],
+) -> Result<(), String> {
+    let mut has_zero = false;
+    let mut succ_hyp_var: Option<&str> = None;
+
+    for arm in arms {
+        match &arm.pattern {
+            RecursivePattern::Zero => {
+                has_zero = true;
+                // Zero 分支不能包含自调用
+                if references_self_call(&arm.result, family_name) {
+                    return Err(format!(
+                        "类型族 {} 的 Zero 分支包含不允许的自调用",
+                        family_name
+                    ));
+                }
+            }
+            RecursivePattern::Succ(var) => {
+                // 检查 Succ(n) 分支中的递归调用参数
+                check_recursive_call_args(&arm.result, family_name, var)?;
+                succ_hyp_var = Some(var.as_str());
+            }
+        }
+    }
+
+    if !has_zero {
+        return Err(format!(
+            "类型族 {} 缺少基情况 (Zero) 分支",
+            family_name
+        ));
+    }
+
+    if succ_hyp_var.is_none() {
+        return Err(format!(
+            "类型族 {} 缺少递推 (Succ) 分支",
+            family_name
+        ));
+    }
+
+    Ok(())
 }
 
 /// 依赖类型环境

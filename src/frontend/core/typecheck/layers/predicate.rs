@@ -13,6 +13,7 @@ use std::sync::{LazyLock, Mutex};
 
 use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
 use crate::frontend::core::types::eval::evaluator::Evaluator;
+use crate::frontend::core::types::eval::dependent_types::DependentTypeEnv;
 use crate::frontend::core::types::mono::MonoType;
 use super::super::proof::context::ProofContext;
 #[cfg(not(target_arch = "wasm32"))]
@@ -96,7 +97,8 @@ fn try_direct_eval(
     constraint: &ConstExpr,
     bindings: &HashMap<String, ConstValue>,
 ) -> Option<ProofResult> {
-    let mut evaluator = Evaluator::new(ctx.env, &ctx.budget);
+    let dep_env = DependentTypeEnv::new();
+    let mut evaluator = Evaluator::new(ctx.env, &ctx.budget, &dep_env);
     match evaluator.eval_expr(constraint, bindings) {
         Ok(ConstValue::Bool(true)) => Some(ProofResult::Proved),
         Ok(ConstValue::Bool(false)) => Some(ProofResult::Disproved(DisproofModel {
