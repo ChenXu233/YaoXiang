@@ -453,6 +453,37 @@ impl TypeConstraintSolver {
             // 具体类型 unify
             (MonoType::Void, MonoType::Void) => Ok(()),
             (MonoType::Never, MonoType::Never) => Ok(()),
+
+            // MetaType unify：层级必须相等
+            (
+                MonoType::MetaType {
+                    universe_level: l1,
+                    type_params: p1,
+                },
+                MonoType::MetaType {
+                    universe_level: l2,
+                    type_params: p2,
+                },
+            ) => {
+                if l1 != l2 {
+                    return Err(ErrorCodeDefinition::type_mismatch(
+                        &t1.type_name(),
+                        &t2.type_name(),
+                    )
+                    .build());
+                }
+                if p1.len() != p2.len() {
+                    return Err(ErrorCodeDefinition::type_mismatch(
+                        &t1.type_name(),
+                        &t2.type_name(),
+                    )
+                    .build());
+                }
+                for (a, b) in p1.iter().zip(p2.iter()) {
+                    self.unify(a, b)?;
+                }
+                Ok(())
+            }
             (MonoType::Bool, MonoType::Bool) => Ok(()),
             (MonoType::Int(n1), MonoType::Int(n2)) if n1 == n2 => Ok(()),
             (MonoType::Float(n1), MonoType::Float(n2)) if n1 == n2 => Ok(()),

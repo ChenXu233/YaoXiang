@@ -10,7 +10,9 @@
 //! §3.14: 交集类型统一 — 无序匹配
 //! §3.8: 泛型实例化
 
-use crate::frontend::core::types::{MonoType, PolyType, StructType, TypeConstraintSolver, TypeVar};
+use crate::frontend::core::types::{
+    MonoType, PolyType, StructType, TypeConstraintSolver, TypeVar, UniverseLevel,
+};
 use crate::util::span::Span;
 
 fn s() -> TypeConstraintSolver {
@@ -1233,4 +1235,60 @@ fn test_resolve_never_builtin() {
         solver.resolve_type(&MonoType::TypeRef("Never".to_string())),
         MonoType::Never
     );
+}
+
+#[test]
+fn test_metatype_unify_same_level() {
+    let mut solver = s();
+    let a = MonoType::MetaType {
+        universe_level: UniverseLevel::type0(),
+        type_params: vec![],
+    };
+    let b = MonoType::MetaType {
+        universe_level: UniverseLevel::type0(),
+        type_params: vec![],
+    };
+    assert!(solver.unify(&a, &b).is_ok());
+}
+
+#[test]
+fn test_metatype_unify_different_level() {
+    let mut solver = s();
+    let a = MonoType::MetaType {
+        universe_level: UniverseLevel::type0(),
+        type_params: vec![],
+    };
+    let b = MonoType::MetaType {
+        universe_level: UniverseLevel::type1(),
+        type_params: vec![],
+    };
+    assert!(solver.unify(&a, &b).is_err());
+}
+
+#[test]
+fn test_metatype_unify_with_params() {
+    let mut solver = s();
+    let a = MonoType::MetaType {
+        universe_level: UniverseLevel::type0(),
+        type_params: vec![MonoType::Int(32)],
+    };
+    let b = MonoType::MetaType {
+        universe_level: UniverseLevel::type0(),
+        type_params: vec![MonoType::Int(32)],
+    };
+    assert!(solver.unify(&a, &b).is_ok());
+}
+
+#[test]
+fn test_metatype_unify_with_params_mismatch() {
+    let mut solver = s();
+    let a = MonoType::MetaType {
+        universe_level: UniverseLevel::type0(),
+        type_params: vec![MonoType::Int(32)],
+    };
+    let b = MonoType::MetaType {
+        universe_level: UniverseLevel::type0(),
+        type_params: vec![MonoType::Int(64)],
+    };
+    assert!(solver.unify(&a, &b).is_err());
 }

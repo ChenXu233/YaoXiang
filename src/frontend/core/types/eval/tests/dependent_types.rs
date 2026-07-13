@@ -8,8 +8,8 @@
 use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::eval::dependent_types::{
     register_builtin_type_families, AssociatedType, AssociatedTypeDef, DependentTypeEnv,
-    RecursiveArm, RecursivePattern, TypeFamily, check_structural_termination,
-    parse_nat_from_type, nat_to_type,
+    RecursiveArm, RecursivePattern, TypeFamily, check_structural_termination, parse_nat_from_type,
+    nat_to_type,
 };
 use crate::frontend::core::types::eval::type_families::Nat;
 use std::collections::HashMap;
@@ -504,7 +504,10 @@ fn test_nat_to_type_roundtrip() {
             parsed_back,
             Some(nat.clone()),
             "Roundtrip failed for {}: {:?} → {:?} → {:?}",
-            i, nat, ty, parsed_back
+            i,
+            nat,
+            ty,
+            parsed_back
         );
     }
 }
@@ -573,12 +576,10 @@ fn test_structural_termination_succ_wrong_arg() {
 #[test]
 fn test_structural_termination_missing_zero() {
     // Missing Zero branch → err
-    let arms = vec![
-        RecursiveArm {
-            pattern: RecursivePattern::Succ("n".to_string()),
-            result: MonoType::TypeRef("factorial(n)".to_string()),
-        },
-    ];
+    let arms = vec![RecursiveArm {
+        pattern: RecursivePattern::Succ("n".to_string()),
+        result: MonoType::TypeRef("factorial(n)".to_string()),
+    }];
     assert!(
         check_structural_termination("fib", &arms).is_err(),
         "Missing Zero branch should fail"
@@ -588,12 +589,10 @@ fn test_structural_termination_missing_zero() {
 #[test]
 fn test_structural_termination_missing_succ() {
     // Missing Succ branch → err
-    let arms = vec![
-        RecursiveArm {
-            pattern: RecursivePattern::Zero,
-            result: MonoType::Int(0),
-        },
-    ];
+    let arms = vec![RecursiveArm {
+        pattern: RecursivePattern::Zero,
+        result: MonoType::Int(0),
+    }];
     assert!(
         check_structural_termination("constant", &arms).is_err(),
         "Missing Succ branch should fail"

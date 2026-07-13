@@ -100,6 +100,16 @@ pub fn is_subtype(
         (a, b) if a == b => true,
         // Never <: T 对所有 T 成立（爆炸原理）
         (MonoType::Never, _) => true,
+        // MetaType 层级弱检查：
+        // Typeₙ <: Typeₘ 当且仅当 n ≤ m
+        (
+            MonoType::MetaType {
+                universe_level: la, ..
+            },
+            MonoType::MetaType {
+                universe_level: lb, ..
+            },
+        ) => la.le(lb),
         // List 协变
         (MonoType::List(a), MonoType::List(b)) => is_subtype(a, b, env),
         // 函数：参数逆变 + 返回值协变
