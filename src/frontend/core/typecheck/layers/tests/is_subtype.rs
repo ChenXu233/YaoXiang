@@ -1,4 +1,4 @@
-//! Layer 0 is_subtype 单元测试
+//! is_subtype 单元测试 — spec §3.x-L0 + RFC-027 §3.2
 
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::layers::equivalence::is_subtype;
@@ -55,7 +55,7 @@ fn test_never_is_subtype_of_any() {
 
 #[test]
 fn test_metatype_subtype_lower_to_higher() {
-    // Type₀ <: Type₁ 应成立（n ≤ m）
+    // Arrange
     let t0 = MonoType::MetaType {
         universe_level: crate::frontend::core::types::UniverseLevel::type0(),
         type_params: vec![],
@@ -64,12 +64,17 @@ fn test_metatype_subtype_lower_to_higher() {
         universe_level: crate::frontend::core::types::UniverseLevel::type1(),
         type_params: vec![],
     };
-    assert!(is_subtype(&t0, &t1, None));
+
+    // Act
+    let result = is_subtype(&t0, &t1, None);
+
+    // Assert
+    assert!(result, "Type₀ should be subtype of Type₁ (n ≤ m)");
 }
 
 #[test]
 fn test_metatype_subtype_higher_to_lower() {
-    // Type₁ <: Type₀ 应不成立（n > m）
+    // Arrange
     let t0 = MonoType::MetaType {
         universe_level: crate::frontend::core::types::UniverseLevel::type0(),
         type_params: vec![],
@@ -78,15 +83,25 @@ fn test_metatype_subtype_higher_to_lower() {
         universe_level: crate::frontend::core::types::UniverseLevel::type1(),
         type_params: vec![],
     };
-    assert!(!is_subtype(&t1, &t0, None));
+
+    // Act & Assert
+    assert!(
+        !is_subtype(&t1, &t0, None),
+        "Type₁ should NOT be subtype of Type₀ (n > m)"
+    );
 }
 
 #[test]
 fn test_metatype_subtype_same_level() {
-    // Type₀ <: Type₀ 应成立（自反性）
+    // Arrange
     let t0 = MonoType::MetaType {
         universe_level: crate::frontend::core::types::UniverseLevel::type0(),
         type_params: vec![],
     };
-    assert!(is_subtype(&t0, &t0, None));
+
+    // Act & Assert
+    assert!(
+        is_subtype(&t0, &t0, None),
+        "Type₀ should be subtype of itself (reflexivity)"
+    );
 }

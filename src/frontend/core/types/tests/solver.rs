@@ -8,6 +8,7 @@
 //! §3.7: 函数类型统一 — 参数 + 返回 + async
 //! §3.13: 联合类型统一 — 无序匹配
 //! §3.14: 交集类型统一 — 无序匹配
+//! §3.5: MetaType 统一 — UniverseLevel + type_params（RFC-027 §3.2）
 //! §3.8: 泛型实例化
 
 use crate::frontend::core::types::{
@@ -1239,6 +1240,7 @@ fn test_resolve_never_builtin() {
 
 #[test]
 fn test_metatype_unify_same_level() {
+    // Arrange
     let mut solver = s();
     let a = MonoType::MetaType {
         universe_level: UniverseLevel::type0(),
@@ -1248,11 +1250,17 @@ fn test_metatype_unify_same_level() {
         universe_level: UniverseLevel::type0(),
         type_params: vec![],
     };
-    assert!(solver.unify(&a, &b).is_ok());
+
+    // Act & Assert
+    assert!(
+        solver.unify(&a, &b).is_ok(),
+        "unify(Type₀, Type₀) should succeed — same level"
+    );
 }
 
 #[test]
 fn test_metatype_unify_different_level() {
+    // Arrange
     let mut solver = s();
     let a = MonoType::MetaType {
         universe_level: UniverseLevel::type0(),
@@ -1262,11 +1270,17 @@ fn test_metatype_unify_different_level() {
         universe_level: UniverseLevel::type1(),
         type_params: vec![],
     };
-    assert!(solver.unify(&a, &b).is_err());
+
+    // Act & Assert
+    assert!(
+        solver.unify(&a, &b).is_err(),
+        "unify(Type₀, Type₁) should fail — different levels"
+    );
 }
 
 #[test]
 fn test_metatype_unify_with_params() {
+    // Arrange
     let mut solver = s();
     let a = MonoType::MetaType {
         universe_level: UniverseLevel::type0(),
@@ -1276,11 +1290,17 @@ fn test_metatype_unify_with_params() {
         universe_level: UniverseLevel::type0(),
         type_params: vec![MonoType::Int(32)],
     };
-    assert!(solver.unify(&a, &b).is_ok());
+
+    // Act & Assert
+    assert!(
+        solver.unify(&a, &b).is_ok(),
+        "unify(Type₀(Int32), Type₀(Int32)) should succeed — same params"
+    );
 }
 
 #[test]
 fn test_metatype_unify_with_params_mismatch() {
+    // Arrange
     let mut solver = s();
     let a = MonoType::MetaType {
         universe_level: UniverseLevel::type0(),
@@ -1290,5 +1310,10 @@ fn test_metatype_unify_with_params_mismatch() {
         universe_level: UniverseLevel::type0(),
         type_params: vec![MonoType::Int(64)],
     };
-    assert!(solver.unify(&a, &b).is_err());
+
+    // Act & Assert
+    assert!(
+        solver.unify(&a, &b).is_err(),
+        "unify(Type₀(Int32), Type₀(Int64)) should fail — param mismatch"
+    );
 }
