@@ -2,8 +2,7 @@
 title: "RFC-010: 统一类型语法 - name: type = value 模型"
 status: "已接受"
 author: "晨煦"
-created: "2025-01-20"
-updated: "2026-06-05（更新返回规则和 {} 语义）"
+updated: "2026-07-14（Never 内建类型已实现，#157 已关闭）"
 issue: "#127"
 ---
 # RFC-010: 统一类型语法 - name: type = value 模型

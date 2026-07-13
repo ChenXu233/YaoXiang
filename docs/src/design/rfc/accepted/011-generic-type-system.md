@@ -2,8 +2,7 @@
 title: "RFC-011: 泛型系统设计 - 零成本抽象与宏替代"
 status: "已接受"
 author: "晨煦"
-created: "2025-01-25"
-updated: "2026-04-22（更新为 Type 自描述机制，统一泛型调用语法）"
+updated: "2026-07-14（IsTrue/Assert 类型族 + 类型级递归已实现，#158/#160 已关闭）"
 issue: "#128"
 issues_impl:
   - "#45"
