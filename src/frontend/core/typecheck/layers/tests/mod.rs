@@ -5,6 +5,7 @@
 //! RFC-027 §7: termination checking
 //! RFC-027 §4: predicate checking (Layer 3)
 
+mod dispatch;
 mod equivalence;
 pub mod is_subtype;
 pub mod ownership;
