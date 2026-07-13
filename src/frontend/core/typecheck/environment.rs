@@ -366,6 +366,7 @@ impl TypeEnvironment {
                 "String" | "string" => MonoType::String,
                 "Bytes" | "bytes" => MonoType::Bytes,
                 "Void" | "void" | "()" => MonoType::Void,
+                "Never" | "never" => MonoType::Never,
                 _ => ty.clone(),
             },
             MonoType::Struct(s) => {

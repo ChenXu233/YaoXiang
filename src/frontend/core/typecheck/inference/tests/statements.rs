@@ -32,7 +32,7 @@ fn make_block(stmts: Vec<Stmt>) -> Block {
 /// 创建默认 StatementChecker
 fn make_checker() -> StatementChecker {
     let mut solver = TypeConstraintSolver::default();
-    StatementChecker::new(&mut solver)
+    StatementChecker::new(&mut solver, None)
 }
 
 /// 创建带 scope 内已有变量的 StatementChecker
@@ -61,7 +61,7 @@ fn test_statement_checker_creation() {
     let mut solver = TypeConstraintSolver::default();
 
     // Act
-    let _checker = StatementChecker::new(&mut solver);
+    let _checker = StatementChecker::new(&mut solver, None);
 
     // Assert — 应该成功创建，不 panic
 }
@@ -480,7 +480,7 @@ fn test_check_statement_checker_with_many_statements() {
 
     // Act
     let mut solver = TypeConstraintSolver::default();
-    let mut checker = StatementChecker::new(&mut solver);
+    let mut checker = StatementChecker::new(&mut solver, None);
     let result = checker.check_fn_def("test_fn", &[], &block);
 
     // Assert

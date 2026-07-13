@@ -66,11 +66,16 @@ pub struct StatementChecker {
     type_defs: HashMap<String, MonoType>,
     /// 实例化请求（收集所有泛型函数实例化需求）
     pub instantiation_requests: Vec<InstantiationRequest>,
+    /// 流敏感假设集 Γ（可选 — None 在测试或未启用证明管道时使用）
+    gamma: Option<crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma>,
 }
 
 impl StatementChecker {
     /// 创建新的语句检查器
-    pub fn new(solver: &mut TypeConstraintSolver) -> Self {
+    pub fn new(
+        solver: &mut TypeConstraintSolver,
+        gamma: Option<crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma>,
+    ) -> Self {
         Self {
             solver: solver.clone(),
             scope: ScopeManager::new(),
@@ -88,6 +93,7 @@ impl StatementChecker {
             method_bindings: HashMap::new(),
             type_defs: HashMap::new(),
             instantiation_requests: Vec::new(),
+            gamma,
         }
     }
 
@@ -121,6 +127,7 @@ impl StatementChecker {
                     "Char" | "char" => return MonoType::Char,
                     "String" | "string" => return MonoType::String,
                     "Void" | "void" | "()" => return MonoType::Void,
+                    "Never" | "never" => return MonoType::Never,
                     _ => {}
                 }
                 // Check type_defs for user-defined types
@@ -1297,12 +1304,24 @@ impl StatementChecker {
         };
 
         if self.scope.var_in_current_scope(name) {
+            // mut 变量被重新赋值 → kill Γ 中依赖该变量的假设
+            if let Some(gamma) = &mut self.gamma {
+                if is_mut {
+                    gamma.kill(name);
+                }
+            }
             // 统一变量类型并写回 scope，确保后续类型推断正确
             self.assign_var(name, ty);
             return Ok(());
         }
 
         if self.scope.var_in_any_scope(name) {
+            // mut 变量被重新赋值 → kill Γ 中依赖该变量的假设
+            if let Some(gamma) = &mut self.gamma {
+                if is_mut {
+                    gamma.kill(name);
+                }
+            }
             self.assign_var(name, ty);
             return Ok(());
         }
