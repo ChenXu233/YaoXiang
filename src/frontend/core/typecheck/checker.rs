@@ -247,7 +247,7 @@ impl TypeChecker {
         }
 
         // 初始化函数体检查器
-        let mut body_checker = inference::StatementChecker::new(self.env.solver());
+        let mut body_checker = inference::StatementChecker::new(self.env.solver(), None);
         // 设置 native 函数签名表
         body_checker.set_native_signatures(self.env.native_signatures.clone());
         // 设置模块注册表，支持函数体/块作用域 use
@@ -399,7 +399,7 @@ impl TypeChecker {
     /// 获取 body_checker 的可变引用
     fn body_checker_mut(&mut self) -> &mut inference::StatementChecker {
         if self.body_checker.is_none() {
-            let mut body_checker = inference::StatementChecker::new(self.env.solver());
+            let mut body_checker = inference::StatementChecker::new(self.env.solver(), None);
             // 设置 native 函数签名表
             body_checker.set_native_signatures(self.env.native_signatures.clone());
             // 设置模块注册表，支持函数体/块作用域 use
