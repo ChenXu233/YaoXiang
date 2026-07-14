@@ -4,7 +4,7 @@ status: "审核中"
 author: "晨煦"
 created: "2026-06-15"
 updated: "2026-07-14"
-decision: "assert 与 Assert 一体两面，dispatch 自动分派。6 Phase 全部实现（#157-#162 已关闭）。"
+decision: "assert 与 Assert 一体两面，dispatch 自动分派。6 Phase 全部实现（#157-#162 已关闭）。std.assert 模块统一注册（#169 已关闭），assert native 函数 + Assert/IsTrue 类型族同路径。"
 issue: "#97"
 issues_impl:
   - "#155"
@@ -14,6 +14,7 @@ issues_impl:
   - "#160"
   - "#161"
   - "#162"
+  - "#169"
 ---
 
 # RFC-030: assert 断言机制
