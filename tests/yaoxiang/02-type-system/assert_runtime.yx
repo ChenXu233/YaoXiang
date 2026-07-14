@@ -10,5 +10,5 @@ main = {
     assert.assert(true, "true should pass")
 
     // 输出成功标记
-    io.println("ASSERT_PASS")
+    io.println("ALL TESTS PASSED")
 }
