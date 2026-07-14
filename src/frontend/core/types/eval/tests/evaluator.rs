@@ -10,9 +10,9 @@ use crate::frontend::core::types::MonoType;
 use crate::frontend::core::typecheck::TypeEnvironment;
 use crate::frontend::core::typecheck::proof::budget::BudgetTracker;
 use crate::frontend::core::types::eval::dependent_types::{
-    DependentTypeEnv, register_builtin_type_families, TypeFamily, AssociatedTypeDef, RecursiveArm,
-    RecursivePattern,
+    DependentTypeEnv, TypeFamily, AssociatedTypeDef, RecursiveArm, RecursivePattern,
 };
+use crate::std::StdModule;
 
 // ===================================================================
 // Happy path 测试
@@ -24,7 +24,7 @@ fn test_type_evaluator_creation() {
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let _evaluator = Evaluator::new(&env, &budget, &dep_env);
 
     // Assert - 应该成功创建
@@ -36,7 +36,7 @@ fn test_type_evaluator_eval_simple_type() {
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
 
     // Act
@@ -52,7 +52,7 @@ fn test_type_evaluator_eval_fn_type() {
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
     let fn_type = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::Float(64)],
@@ -72,7 +72,7 @@ fn test_type_evaluator_eval_tuple_type() {
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
     let tuple_type = MonoType::Tuple(vec![MonoType::Int(32), MonoType::Bool, MonoType::String]);
 
@@ -89,7 +89,7 @@ fn test_type_evaluator_eval_list_type() {
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
     let list_type = MonoType::List(Box::new(MonoType::Float(64)));
 
@@ -110,7 +110,7 @@ fn test_type_evaluator_eval_nat_unknown_operation() {
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
     let a = MonoType::Int(5);
     let b = MonoType::Int(3);
@@ -131,7 +131,7 @@ fn test_type_evaluator_eval_nat_underflow() {
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
     let a = MonoType::Int(3);
     let b = MonoType::Int(5);
@@ -152,7 +152,7 @@ fn test_type_evaluator_eval_nat_division_by_zero() {
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
     let a = MonoType::Int(10);
     let b = MonoType::Int(0);
@@ -170,7 +170,7 @@ fn test_type_evaluator_eval_nat_modulo_by_zero() {
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
     let a = MonoType::Int(10);
     let b = MonoType::Int(0);
@@ -188,7 +188,7 @@ fn test_type_evaluator_eval_max_depth_exceeded() {
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let config = EvalConfig {
         max_depth: 0,
         enable_cache: true,
@@ -220,7 +220,7 @@ fn test_type_evaluator_eval_match_no_matching_arm() {
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
     let target = MonoType::Int(32);
     let arms = vec![(MonoType::String, MonoType::Bool)];
@@ -245,7 +245,7 @@ fn test_type_evaluator_eval_nested_type() {
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
     let nested_type = MonoType::Fn {
         params: vec![MonoType::Tuple(vec![
@@ -274,7 +274,7 @@ fn test_type_evaluator_eval_void_type() {
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
 
     // Act
@@ -295,7 +295,7 @@ fn test_istrue_true_evaluates_to_void() {
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
     let ty = MonoType::TypeRef("IsTrue(true)".to_string());
 
@@ -317,7 +317,7 @@ fn test_istrue_false_evaluates_to_never() {
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
     let ty = MonoType::TypeRef("IsTrue(false)".to_string());
 
@@ -339,7 +339,7 @@ fn test_istrue_unknown_preserves_expression() {
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
     let ty = MonoType::TypeRef("IsTrue(x)".to_string());
 
@@ -361,7 +361,7 @@ fn test_assert_true_evaluates_to_void() {
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
     let ty = MonoType::TypeRef("Assert(true)".to_string());
 
@@ -383,7 +383,7 @@ fn test_assert_false_evaluates_to_never() {
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
     let ty = MonoType::TypeRef("Assert(false)".to_string());
 
@@ -407,7 +407,7 @@ fn test_assert_false_evaluates_to_never() {
 fn test_eval_recursive_factorial_zero() {
     // Arrange — 注册 factorial 递归类型族
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     dep_env.register_type_family(TypeFamily::new(
         "factorial".to_string(),
         vec!["n".to_string()],
@@ -448,7 +448,7 @@ fn test_eval_recursive_factorial_zero() {
 fn test_eval_recursive_factorial_succ_zero() {
     // Arrange — 注册 factorial 递归类型族
     let mut dep_env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut dep_env);
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     dep_env.register_type_family(TypeFamily::new(
         "factorial".to_string(),
         vec!["n".to_string()],

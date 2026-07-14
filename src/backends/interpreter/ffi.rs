@@ -96,7 +96,9 @@ impl FfiRegistry {
     /// This registers all `std.*` native functions that are available by default.
     pub fn with_std() -> Self {
         let mut registry = Self::new();
-        crate::std::register_all(&mut registry);
+        let mut dep_env =
+            crate::frontend::core::types::eval::dependent_types::DependentTypeEnv::new();
+        crate::std::register_all(&mut registry, &mut dep_env);
         registry
     }
 

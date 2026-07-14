@@ -2,6 +2,7 @@
 //!
 //! This module contains built-in functions and types.
 
+pub mod assert;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod concurrent;
 pub mod convert;
@@ -138,6 +139,33 @@ impl NativeExport {
 /// Trait for std modules to self-register.
 ///
 /// Each std sub-module (io, math, net, etc.) implements this trait
+
+/// 类型族导出声明（类型宇宙的函数导出）。
+///
+/// 与 NativeExport（值宇宙）平行——std 模块可同时导出两者。
+#[derive(Debug, Clone)]
+pub struct TypeFamilyExport {
+    /// 短名称（如 "Assert"）
+    pub name: &'static str,
+    /// 类型参数名（如 ["cond"]）
+    pub params: Vec<&'static str>,
+    /// 关联类型定义
+    pub definition: crate::frontend::core::types::eval::dependent_types::AssociatedTypeDef,
+}
+
+impl TypeFamilyExport {
+    pub fn new(
+        name: &'static str,
+        params: Vec<&'static str>,
+        definition: crate::frontend::core::types::eval::dependent_types::AssociatedTypeDef,
+    ) -> Self {
+        Self {
+            name,
+            params,
+            definition,
+        }
+    }
+}
 /// to provide its exports and FFI handlers.
 pub trait StdModule {
     /// Returns the module path (e.g., "std.io").
@@ -145,6 +173,11 @@ pub trait StdModule {
 
     /// Returns all exports declared by this module.
     fn exports(&self) -> Vec<NativeExport>;
+
+    /// 导出类型族（类型宇宙的函数）。默认空——现有模块不受影响。
+    fn type_families(&self) -> Vec<TypeFamilyExport> {
+        vec![]
+    }
 
     /// Registers this module's functions into the FFI registry.
     fn register_ffi(
@@ -155,6 +188,22 @@ pub trait StdModule {
             if let Some(handler) = export.handler {
                 registry.register(export.native_name, handler);
             }
+        }
+    }
+
+    /// 注册类型族到依赖类型环境。
+    fn register_type_families(
+        &self,
+        dep_env: &mut crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
+    ) {
+        for export in self.type_families() {
+            let family = crate::frontend::core::types::eval::dependent_types::TypeFamily::new(
+                export.name.to_string(),
+                export.params.iter().map(|s| s.to_string()).collect(),
+                vec![],
+                export.definition.clone(),
+            );
+            dep_env.register_type_family(family);
         }
     }
 
@@ -175,6 +224,16 @@ pub trait StdModule {
                 full_path: export.native_name.to_string(),
                 kind,
                 signature: export.signature.to_string(),
+            });
+        }
+
+        // 类型族导出映射为 ExportKind::Type
+        for export in self.type_families() {
+            module.add_export(Export {
+                name: export.name.to_string(),
+                full_path: format!("{}.{}", self.module_path(), export.name),
+                kind: ExportKind::Type,
+                signature: format!("({}) -> Type", export.params.join(", ")),
             });
         }
 
@@ -241,7 +300,10 @@ fn builtin_dict_keys(
 ///
 /// This is the single entry point that ffi.rs should call.
 /// New std modules only need to be added to this function.
-pub fn register_all(registry: &mut FfiRegistry) {
+pub fn register_all(
+    registry: &mut FfiRegistry,
+    dep_env: &mut crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
+) {
     #[cfg(not(target_arch = "wasm32"))]
     concurrent::ConcurrentModule.register_ffi(registry);
     convert::ConvertModule.register_ffi(registry);
@@ -255,6 +317,8 @@ pub fn register_all(registry: &mut FfiRegistry) {
     time::TimeModule.register_ffi(registry);
     #[cfg(not(target_arch = "wasm32"))]
     os::OsModule.register_ffi(registry);
+    assert::AssertModule.register_ffi(registry);
+    assert::AssertModule.register_type_families(dep_env);
     // Register built-in generic functions (replacing hardcoded interpreter special cases)
     registry.register("len", builtin_len as NativeHandler);
     registry.register("dict_keys", builtin_dict_keys as NativeHandler);
@@ -291,5 +355,6 @@ pub fn all_module_infos() -> Vec<ModuleInfo> {
         time::TimeModule.to_module_info(),
         #[cfg(not(target_arch = "wasm32"))]
         os::OsModule.to_module_info(),
+        assert::AssertModule.to_module_info(),
     ]
 }

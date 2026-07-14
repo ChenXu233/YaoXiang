@@ -13,6 +13,7 @@ use crate::frontend::core::typecheck::proof::context::ProofContext;
 use crate::frontend::core::typecheck::proof::verdict::ProofResult;
 use crate::frontend::core::typecheck::layers::predicate::check_predicate;
 use crate::frontend::core::types::eval::dependent_types::DependentTypeEnv;
+use crate::std::StdModule;
 
 use super::inference;
 use super::semantic_db;
@@ -49,11 +50,9 @@ impl TypeChecker {
         // 注册预定义的 const 函数
         Self::register_predefined_const_functions(&mut env);
 
-        // 初始化依赖类型环境并注册内置类型族
+        // 初始化依赖类型环境并通过 std::assert 注册类型族
         let mut dependent_type_env = DependentTypeEnv::new();
-        crate::frontend::core::types::eval::dependent_types::register_builtin_type_families(
-            &mut dependent_type_env,
-        );
+        crate::std::assert::AssertModule.register_type_families(&mut dependent_type_env);
 
         Self {
             env,
@@ -247,7 +246,11 @@ impl TypeChecker {
         }
 
         // 初始化函数体检查器
-        let mut body_checker = inference::StatementChecker::new(self.env.solver(), None);
+        let mut body_checker = inference::StatementChecker::new(
+            self.env.solver(),
+            None,
+            self.dependent_type_env.clone(),
+        );
         // 设置 native 函数签名表
         body_checker.set_native_signatures(self.env.native_signatures.clone());
         // 设置模块注册表，支持函数体/块作用域 use
@@ -399,7 +402,11 @@ impl TypeChecker {
     /// 获取 body_checker 的可变引用
     fn body_checker_mut(&mut self) -> &mut inference::StatementChecker {
         if self.body_checker.is_none() {
-            let mut body_checker = inference::StatementChecker::new(self.env.solver(), None);
+            let mut body_checker = inference::StatementChecker::new(
+                self.env.solver(),
+                None,
+                self.dependent_type_env.clone(),
+            );
             // 设置 native 函数签名表
             body_checker.set_native_signatures(self.env.native_signatures.clone());
             // 设置模块注册表，支持函数体/块作用域 use

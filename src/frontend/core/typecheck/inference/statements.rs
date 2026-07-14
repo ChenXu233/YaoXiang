@@ -68,6 +68,8 @@ pub struct StatementChecker {
     pub instantiation_requests: Vec<InstantiationRequest>,
     /// 流敏感假设集 Γ（可选 — None 在测试或未启用证明管道时使用）
     gamma: Option<crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma>,
+    /// 依赖类型环境（类型族注册与查找）
+    dep_env: crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
 }
 
 impl StatementChecker {
@@ -75,6 +77,7 @@ impl StatementChecker {
     pub fn new(
         solver: &mut TypeConstraintSolver,
         gamma: Option<crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma>,
+        dep_env: crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
     ) -> Self {
         Self {
             solver: solver.clone(),
@@ -94,6 +97,7 @@ impl StatementChecker {
             type_defs: HashMap::new(),
             instantiation_requests: Vec::new(),
             gamma,
+            dep_env,
         }
     }
 
@@ -707,7 +711,11 @@ impl StatementChecker {
                                 .collect();
 
                             // 从 struct body 提取 const 参数的值约束（如 Assert(N > 0)）
-                            Self::extract_const_constraints(body, &mut const_binders);
+                            Self::extract_const_constraints(
+                                body,
+                                &mut const_binders,
+                                &self.dep_env,
+                            );
 
                             if !type_param_names.is_empty() || !const_binders.is_empty() {
                                 let type_binders: Vec<TypeVar> =
@@ -1624,6 +1632,7 @@ impl StatementChecker {
     fn extract_const_constraints(
         body_stmts: &[Stmt],
         const_binders: &mut [crate::frontend::core::types::const_data::ConstVarDef],
+        dep_env: &crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
     ) {
         for stmt in body_stmts {
             if let crate::frontend::core::parser::ast::StmtKind::Var {
@@ -1632,7 +1641,7 @@ impl StatementChecker {
                 ..
             } = &stmt.kind
             {
-                if name == "Assert" && !args.is_empty() {
+                if dep_env.get_type_family(name).is_some() && !args.is_empty() {
                     // 从 args[0] 提取约束表达式
                     if let crate::frontend::core::parser::ast::Type::ConstExpr(expr) = &args[0] {
                         if let Some(const_expr) =
