@@ -69,6 +69,7 @@ pub struct StatementChecker {
     /// 流敏感假设集 Γ（可选 — None 在测试或未启用证明管道时使用）
     gamma: Option<crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma>,
     /// 依赖类型环境（类型族注册与查找）
+    #[allow(dead_code)]
     dep_env: crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
 }
 
@@ -177,7 +178,7 @@ impl StatementChecker {
                 let def = self.generic_type_defs.get(name)?;
                 let arg_types: Vec<MonoType> =
                     args.iter().map(|a| MonoType::from(a.clone())).collect();
-                TypeEnvironment::instantiate_generic_type(def, &arg_types)
+                TypeEnvironment::instantiate_generic_type(def, &arg_types).ok()
             }
             _ => None,
         }
@@ -287,6 +288,7 @@ impl StatementChecker {
             field_mutability: Vec::new(),
             field_has_default: Vec::new(),
             interfaces: vec![],
+            constraints: Vec::new(),
         })
     }
 
@@ -650,6 +652,7 @@ impl StatementChecker {
                                 field_mutability: vec![false; field_count],
                                 field_has_default: vec![false; field_count],
                                 interfaces,
+                                constraints: Vec::new(),
                             });
                         self.type_defs.insert(name.to_string(), struct_ty.clone());
                         self.scope.add_var(
@@ -710,12 +713,17 @@ impl StatementChecker {
                                 })
                                 .collect();
 
-                            // 从 struct body 提取 const 参数的值约束（如 Assert(N > 0)）
-                            Self::extract_const_constraints(
-                                body,
-                                &mut const_binders,
-                                &self.dep_env,
-                            );
+                            // 从 Type::Struct::constraints 提取 const 参数的值约束（如 Assert(N > 0)）
+                            if let Some(crate::frontend::core::parser::ast::Type::Struct {
+                                constraints,
+                                ..
+                            }) = type_annotation
+                            {
+                                Self::extract_const_constraints_from_decl(
+                                    constraints,
+                                    &mut const_binders,
+                                );
+                            }
 
                             if !type_param_names.is_empty() || !const_binders.is_empty() {
                                 let type_binders: Vec<TypeVar> =
@@ -1627,27 +1635,21 @@ impl StatementChecker {
         }
     }
 
-    /// 从 struct body 提取 const 参数的值约束
-    /// 识别 `length: Assert(N > 0)` 模式的字段
-    fn extract_const_constraints(
-        body_stmts: &[Stmt],
+    /// 从 Type::Struct::constraints 提取 const 参数的值约束
+    /// 识别 ConstraintDecl { ty: Type::Generic { name: "Assert", args: [ConstExpr(expr)] } } 模式
+    fn extract_const_constraints_from_decl(
+        constraints: &[crate::frontend::core::parser::ast::ConstraintDecl],
         const_binders: &mut [crate::frontend::core::types::const_data::ConstVarDef],
-        dep_env: &crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
     ) {
-        for stmt in body_stmts {
-            if let crate::frontend::core::parser::ast::StmtKind::Var {
-                type_annotation:
-                    Some(crate::frontend::core::parser::ast::Type::Generic { name, args, .. }),
-                ..
-            } = &stmt.kind
-            {
-                if dep_env.get_type_family(name).is_some() && !args.is_empty() {
-                    // 从 args[0] 提取约束表达式
+        use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
+        for decl in constraints {
+            if let crate::frontend::core::parser::ast::Type::Generic { name, args, .. } = &decl.ty {
+                if name == "Assert" && !args.is_empty() {
                     if let crate::frontend::core::parser::ast::Type::ConstExpr(expr) = &args[0] {
-                        if let Some(const_expr) =
-                            crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)
-                        {
-                            if let Some(const_var) = Self::find_const_var_in_expr(expr, const_binders) {
+                        if let Some(const_expr) = convert_expr_to_const_expr(expr) {
+                            if let Some(const_var) =
+                                Self::find_const_var_in_expr(expr, const_binders)
+                            {
                                 const_binders[const_var.index()]
                                     .constraints
                                     .push(const_expr);

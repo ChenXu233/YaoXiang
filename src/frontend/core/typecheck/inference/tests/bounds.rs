@@ -9,6 +9,7 @@
 
 use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
 use crate::frontend::core::types::{MonoType, StructType, TraitTable};
+use crate::frontend::core::typecheck::proof::verdict::ProofResult;
 use crate::frontend::core::types::const_data::ConstVarDef;
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use std::collections::HashMap;
@@ -67,21 +68,19 @@ fn test_check_trait_bounds_empty() {
 
 /// §3.5.2: 泛型参数边界检查 — Int 满足 Clone + 空 const 边界
 #[test]
-fn test_check_generic_bounds() {
+fn test_check_const_bounds_empty() {
     // Arrange
     let checker = BoundsChecker::new();
-    let ty = MonoType::Int(32);
-    let trait_bounds = vec!["Clone".to_string()];
-    let const_bounds: Vec<MonoType> = vec![];
     let const_binders: Vec<ConstVarDef> = vec![];
+    let const_args: Vec<MonoType> = vec![];
 
     // Act
-    let result = checker.check_generic_bounds(&ty, &trait_bounds, &const_binders, &const_bounds);
+    let result = checker.check_const_bounds(&const_binders, &const_args);
 
     // Assert
     assert!(
-        result.is_ok(),
-        "Int should satisfy generic bounds with Clone trait"
+        matches!(result, ProofResult::Proved),
+        "Empty const args should trivially pass const bounds"
     );
 }
 
@@ -98,6 +97,7 @@ fn test_check_constraint_empty_constraint() {
         field_mutability: vec![],
         field_has_default: vec![],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
 
     // Act
@@ -141,6 +141,7 @@ fn test_check_constraint_missing_method() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
     let constraint = MonoType::Struct(StructType {
         name: "Drawable".to_string(),
@@ -155,6 +156,7 @@ fn test_check_constraint_missing_method() {
         field_mutability: vec![],
         field_has_default: vec![],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
 
     // Act
@@ -182,6 +184,7 @@ fn test_check_constraint_signature_mismatch() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
     let constraint = MonoType::Struct(StructType {
         name: "Drawable".to_string(),
@@ -196,6 +199,7 @@ fn test_check_constraint_signature_mismatch() {
         field_mutability: vec![],
         field_has_default: vec![],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
 
     // Act
@@ -235,6 +239,7 @@ fn test_check_constraint_with_method_binding() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
     let constraint = MonoType::Struct(StructType {
         name: "Drawable".to_string(),
@@ -249,6 +254,7 @@ fn test_check_constraint_with_method_binding() {
         field_mutability: vec![],
         field_has_default: vec![],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
 
     // Act
@@ -287,6 +293,7 @@ fn test_check_trait_bounds_dup_struct_auto_derive() {
         field_mutability: vec![false, false],
         field_has_default: vec![false, false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
 
     // Act & Assert
@@ -315,6 +322,7 @@ fn test_check_trait_bounds_dup_struct_auto_derive_fails() {
         field_mutability: vec![false, false],
         field_has_default: vec![false, false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
 
     // Act & Assert
@@ -346,6 +354,7 @@ fn test_bounds_checker_dup_struct_passes() {
         field_mutability: vec![false, false],
         field_has_default: vec![false, false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
     let bounds = vec!["Dup".to_string()];
 
@@ -378,6 +387,7 @@ fn test_bounds_checker_dup_struct_fails() {
         field_mutability: vec![false, false],
         field_has_default: vec![false, false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
     let bounds = vec!["Dup".to_string()];
 
@@ -413,6 +423,7 @@ fn test_bounds_checker_dup_nested_struct_passes() {
         field_mutability: vec![false, false],
         field_has_default: vec![false, false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
 
     let conn_type = MonoType::Struct(StructType {
@@ -425,6 +436,7 @@ fn test_bounds_checker_dup_nested_struct_passes() {
         field_mutability: vec![false, false],
         field_has_default: vec![false, false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
     let bounds = vec!["Dup".to_string()];
 

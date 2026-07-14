@@ -139,7 +139,7 @@ impl NativeExport {
 /// Trait for std modules to self-register.
 ///
 /// Each std sub-module (io, math, net, etc.) implements this trait
-
+///
 /// 类型族导出声明（类型宇宙的函数导出）。
 ///
 /// 与 NativeExport（值宇宙）平行——std 模块可同时导出两者。

@@ -533,7 +533,10 @@ impl From<ast::Type> for MonoType {
             ast::Type::Bool => MonoType::Bool,
             ast::Type::Void => MonoType::Void,
             ast::Type::Struct {
-                fields, interfaces, ..
+                fields,
+                interfaces,
+                constraints,
+                ..
             } => {
                 let (field_names, field_types, field_mutability, field_has_default) = fields
                     .into_iter()
@@ -548,6 +551,19 @@ impl From<ast::Type> for MonoType {
                             (names, types, mutability, defaults)
                         },
                     );
+                // 转换约束声明: ConstraintDecl → const_data::ConstExpr
+                let mono_constraints = constraints.iter()
+                    .filter_map(|c| {
+                        if let ast::Type::Generic { name, args, .. } = &c.ty {
+                            if name == "Assert" && !args.is_empty() {
+                                if let ast::Type::ConstExpr(expr) = &args[0] {
+                                    return crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr);
+                                }
+                            }
+                        }
+                        None
+                    })
+                    .collect();
                 MonoType::Struct(StructType {
                     name: String::new(),
                     fields: field_names.into_iter().zip(field_types).collect(),
@@ -555,6 +571,7 @@ impl From<ast::Type> for MonoType {
                     field_mutability,
                     field_has_default,
                     interfaces,
+                    constraints: mono_constraints,
                 })
             }
             ast::Type::Union(variants) => MonoType::Enum(EnumType {
@@ -645,6 +662,7 @@ impl From<ast::Type> for MonoType {
                     field_mutability,
                     field_has_default: Vec::new(),
                     interfaces: vec![],
+                    constraints: Vec::new(),
                 })
             }
             ast::Type::Sum(types) => {
@@ -659,11 +677,36 @@ impl From<ast::Type> for MonoType {
                 ))
             }
             ast::Type::Literal {
-                name: _, base_type, ..
+                name, base_type, ..
             } => {
-                // Literal type - for now, convert to the base type
-                // The actual literal value is handled during const evaluation
-                MonoType::from(*base_type)
+                // 保留字面量值 — const 泛型参数需要 ConstValue
+                let value = name
+                    .parse::<i128>()
+                    .map(crate::frontend::core::types::const_data::ConstValue::Int)
+                    .ok()
+                    .or_else(|| {
+                        if name == "true" {
+                            Some(crate::frontend::core::types::const_data::ConstValue::Bool(
+                                true,
+                            ))
+                        } else if name == "false" {
+                            Some(crate::frontend::core::types::const_data::ConstValue::Bool(
+                                false,
+                            ))
+                        } else {
+                            name.parse::<f32>()
+                                .ok()
+                                .map(crate::frontend::core::types::const_data::ConstValue::Float)
+                        }
+                    });
+                match value {
+                    Some(v) => MonoType::Literal {
+                        name,
+                        base_type: Box::new(MonoType::from(*base_type)),
+                        value: v,
+                    },
+                    None => MonoType::TypeRef(name),
+                }
             }
             ast::Type::Ptr(inner) => {
                 // Raw pointer type: *T
@@ -739,7 +782,6 @@ pub fn get_ast_type_universe_level(ast_type: &ast::Type) -> usize {
     }
 }
 
-/// 结构体类型
 #[derive(Debug, Clone)]
 pub struct StructType {
     pub name: String,
@@ -752,6 +794,8 @@ pub struct StructType {
     pub field_has_default: Vec<bool>,
     /// RFC-010: 接口约束列表
     pub interfaces: Vec<String>,
+    /// 编译期约束声明（如 Assert(N > 0)），不占据运行时布局
+    pub constraints: Vec<crate::frontend::core::types::eval::const_eval::ConstExpr>,
 }
 
 impl StructType {

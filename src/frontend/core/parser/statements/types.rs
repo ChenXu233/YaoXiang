@@ -489,7 +489,7 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
     let mut fields = Vec::new();
     let mut bindings = Vec::new();
     let mut interfaces = Vec::new();
-
+    let mut constraints = Vec::new();
     if !state.at(&TokenKind::RBrace) {
         while let Some(TokenKind::Identifier(name)) = state.current().map(|t| &t.kind) {
             let name = name.clone();
@@ -532,8 +532,21 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                         ));
                     }
                 } else {
-                    // 普通字段: name: Type
-                    fields.push(StructField::new(name, is_mut, field_type));
+                    // 约束声明: 字段类型是 Assert(...) → 放入 constraints
+                    if let Type::Generic { name: ref n, .. } = &field_type {
+                        if n == "Assert" {
+                            constraints.push(ConstraintDecl {
+                                name: name.clone(),
+                                name_span: state.span(),
+                                ty: field_type,
+                            });
+                        } else {
+                            fields.push(StructField::new(name, is_mut, field_type));
+                        }
+                    } else {
+                        // 普通字段: name: Type
+                        fields.push(StructField::new(name, is_mut, field_type));
+                    }
                 }
             } else if state.skip(&TokenKind::Eq) {
                 // 无冒号但有等号: 外部函数绑定 name = function[positions] 或默认绑定 name = function
@@ -598,6 +611,7 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
         fields,
         bindings,
         interfaces,
+        constraints,
     })
 }
 
