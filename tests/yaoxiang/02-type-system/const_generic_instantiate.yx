@@ -1,0 +1,16 @@
+// 02-type-system/const_generic_instantiate.yx
+// 覆盖: RFC-011 §4.3 编译期验证 — const 泛型约束满足时实例化通过
+// 验证: SafeArray(Int, 3) 中 Assert(3 > 0) 求值为 true，编译通过
+// 状态: ✅ 可运行
+
+use std.io
+
+SafeArray: (T: Type, N: Int) -> Type = {
+    _assert_n: Assert(N > 0),
+    data: Array(T, N),
+}
+
+main = {
+    arr = SafeArray(Int, 3)
+    io.println("ALL TESTS PASSED")
+}
