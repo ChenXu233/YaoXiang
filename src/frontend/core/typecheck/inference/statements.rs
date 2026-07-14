@@ -177,7 +177,7 @@ impl StatementChecker {
                 let def = self.generic_type_defs.get(name)?;
                 let arg_types: Vec<MonoType> =
                     args.iter().map(|a| MonoType::from(a.clone())).collect();
-                TypeEnvironment::instantiate_generic_type(def, &arg_types)
+                TypeEnvironment::instantiate_generic_type(def, &arg_types).ok()
             }
             _ => None,
         }
