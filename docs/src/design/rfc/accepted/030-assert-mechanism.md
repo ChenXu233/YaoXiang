@@ -1,6 +1,6 @@
 ---
 title: "RFC-030: assert 断言机制"
-status: "审核中"
+status: "已接受"
 author: "晨煦"
 created: "2026-06-15"
 updated: "2026-07-14"
@@ -288,5 +288,5 @@ Result 重载的合理性在于：这是错误传播最短的路径——"Result
 - [RFC-007: 函数定义语法统一方案](007-function-syntax-unification.md) — `name: type = value` 模型
 - [RFC-010: 统一类型语法](010-unified-type-syntax.md) — 类型系统基础
 - [RFC-011: 泛型系统设计 §4.3](../accepted/011-generic-type-system.md) — 编译期验证与 `Assert(C)` 条件类型
-- [RFC-026: FFI 核心机制](../review/026-ffi-core-mechanism.md) — native 函数注册机制
+- [RFC-026: FFI 核心机制](026-ffi-core-mechanism.md) — native 函数注册机制
 - [RFC-027: 编译期谓词与统一静态验证](../accepted/027-compile-time-evaluation-types.md) — 编译期求值系统

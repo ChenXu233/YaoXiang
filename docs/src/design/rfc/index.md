@@ -47,7 +47,6 @@ title: "RFC 索引"
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
 | RFC-026a | [RFC-026a: 可扩展 FFI 机制体系](./review/026a-extensible-ffi-system.md) | 晨煦 | 2026-07-03 | 审核中 |
-| RFC-030 | [RFC-030: assert 断言机制](./review/030-assert-mechanism.md) | 晨煦 | 2026-06-15 | 审核中 |
 | RFC-032 | [RFC-032: spawn 统一表达式修饰 — 消除 spawn for 特殊情况](./review/032-spawn-unified-expression.md) | 晨煦 | 2026-06-16 | 审核中 |
 ---
 
@@ -76,6 +75,7 @@ title: "RFC 索引"
 | RFC-024 | [RFC-024：基于 spawn 块的并发模型](./accepted/024-concurrency-model.md) | 晨煦 | 2026-06-05 | 已接受 |
 | RFC-026 | [RFC-026: FFI 核心机制](./accepted/026-ffi-core-mechanism.md) | 晨煦 | 2026-06-05 | 已接受 |
 | RFC-027 | [RFC-027：编译期谓词与统一静态验证](./accepted/027-compile-time-evaluation-types.md) | 晨煦 | 2026-06-07 | 已接受 |
+| RFC-030 | [RFC-030: assert 断言机制](./accepted/030-assert-mechanism.md) | 晨煦 | 2026-06-15 | 已接受 |
 
 ---
 
