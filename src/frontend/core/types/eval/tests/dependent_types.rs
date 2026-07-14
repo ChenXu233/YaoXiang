@@ -7,12 +7,12 @@
 
 use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::eval::dependent_types::{
-    register_builtin_type_families, AssociatedType, AssociatedTypeDef, DependentTypeEnv,
-    RecursiveArm, RecursivePattern, TypeFamily, check_structural_termination, parse_nat_from_type,
-    nat_to_type,
+    AssociatedType, AssociatedTypeDef, DependentTypeEnv, RecursiveArm, RecursivePattern,
+    TypeFamily, check_structural_termination, parse_nat_from_type, nat_to_type,
 };
 use crate::frontend::core::types::eval::type_families::Nat;
 use std::collections::HashMap;
+use crate::std::StdModule;
 
 #[test]
 fn test_associated_type() {
@@ -299,12 +299,12 @@ fn test_associated_type_def_match_variant() {
 
 #[test]
 fn test_istrue_type_family_instantiate() {
-    // Arrange — 注册内建类型族
+    // Arrange — 注册内建类型族（AssertModule.register_type_families）
     let mut env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut env);
+    crate::std::assert::AssertModule.register_type_families(&mut env);
     let istrue = env
         .get_type_family("IsTrue")
-        .expect("IsTrue should be registered after register_builtin_type_families");
+        .expect("IsTrue should be registered after AssertModule.register_type_families");
 
     // Assert — 类型参数为 ["b"]
     assert_eq!(
@@ -349,10 +349,10 @@ fn test_istrue_type_family_instantiate() {
 fn test_assert_type_family_instantiate() {
     // Arrange — 注册内建类型族
     let mut env = DependentTypeEnv::new();
-    register_builtin_type_families(&mut env);
+    crate::std::assert::AssertModule.register_type_families(&mut env);
     let assert_tf = env
         .get_type_family("Assert")
-        .expect("Assert should be registered after register_builtin_type_families");
+        .expect("Assert should be registered after AssertModule.register_type_families");
 
     // Assert — 类型参数为 ["cond"]
     assert_eq!(

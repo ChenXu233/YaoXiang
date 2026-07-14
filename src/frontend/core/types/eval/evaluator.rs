@@ -238,16 +238,6 @@ impl<'a> Evaluator<'a> {
             // 处理 Nat 运算
             MonoType::TypeRef(name) if name == "Nat" => self.eval_nat_type(ty, depth),
 
-            // 处理 IsTrue 类型族：IsTrue(true) => Void, IsTrue(false) => Never
-            MonoType::TypeRef(name) if name == "IsTrue" || name.starts_with("IsTrue(") => {
-                self.eval_istrue(ty, depth)
-            }
-
-            // 处理 Assert 类型族：Assert(x) => IsTrue(x) 别名
-            MonoType::TypeRef(name) if name == "Assert" || name.starts_with("Assert(") => {
-                self.eval_istrue(ty, depth)
-            }
-
             // 处理类型引用
             MonoType::TypeRef(name) => self.eval_type_ref(name, depth),
 
@@ -966,6 +956,7 @@ impl<'a> Evaluator<'a> {
     /// IsTrue(false) => Never
     /// IsTrue(x) 当 x 不可归约时保持不变
     /// Assert(x) 委托给 IsTrue(x)
+    #[allow(dead_code)]
     fn eval_istrue(
         &mut self,
         ty: &MonoType,
