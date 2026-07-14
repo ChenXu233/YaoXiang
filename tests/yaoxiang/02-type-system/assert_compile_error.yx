@@ -1,0 +1,17 @@
+// 02-type-system/assert_compile_error.yx
+// 覆盖: RFC-011 §4.3 编译期验证 — Assert(N > 0) 约束违反应编译报错
+// 验证: const 泛型参数 N=0 时 Assert(0 > 0) 求值为 Never，编译失败
+// 状态: ✅ 应编译失败
+
+use std.io
+
+BadArray: (T: Type, N: Int) -> Type = {
+    _assert_n: Assert(N > 0),
+    data: Array(T, N),
+}
+
+main = {
+    // N = 0 违反 Assert(0 > 0) → Assert(false) → Never → 编译错误
+    bad = BadArray(Int, 0)
+    io.println("SHOULD NOT REACH HERE")
+}
