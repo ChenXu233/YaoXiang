@@ -3,7 +3,7 @@
 > AI辅助的编译器开发探索。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-v0.7.6--patch1-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-v0.7.8-blue.svg)]()
 
 > 🌐 **Language** | [English](docs/gh/README.en.md)
 >
@@ -178,37 +178,6 @@ pre-commit install
 ```bash
 pre-commit run --all-files
 ```
-
-
-## 项目结构
-
-```
-yaoxiang/
-├── Cargo.toml                  # 项目配置
-├── README.md                   # 本文件
-├── LICENSE                     # MIT 许可证
-├── src/                        # 源代码
-│   ├── main.rs                 # CLI 入口
-│   └── lib.rs                  # 库入口
-├── docs/                       # 文档
-│   ├── src/
-│   │   ├── design/             # 设计文档
-│   │   │   ├── rfc/            # RFC 提案
-│   │   │   │   ├── accepted/   # 已接受的 RFC
-│   │   │   │   └── draft/      # RFC 草案
-│   │   │   └── manifesto.md    # 设计宣言
-│   │   ├── reference/          # 语言参考
-│   │   │   └── language-spec/  # 语言规范
-│   │   ├── guide/              # 用户指南
-│   │   │   └── YaoXiang-book.md
-│   │   ├── tutorial/           # 教程（zh/en）
-│   │   ├── blog/               # 博客
-│   │   └── dev/                # 开发者文档
-│   ├── examples/               # 示例代码
-│   └── gh/                     # GitHub 文档（英文 README 等）
-└── tests/                      # 测试
-```
-
 
 ## 与现有语言的对比
 
