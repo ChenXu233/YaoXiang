@@ -555,28 +555,3 @@ impl DependentTypeEnv {
         None
     }
 }
-
-/// 注册内置类型族
-///
-/// 注册 IsTrue 和 Assert 类型族到依赖类型环境
-pub fn register_builtin_type_families(env: &mut DependentTypeEnv) {
-    env.register_type_family(TypeFamily::new(
-        "IsTrue".into(),
-        vec!["b".to_string()],
-        vec![],
-        AssociatedTypeDef::Match {
-            arg_index: 0,
-            arms: vec![
-                (MonoType::TypeRef("true".into()), MonoType::Void),
-                (MonoType::TypeRef("false".into()), MonoType::Never),
-            ],
-        },
-    ));
-
-    env.register_type_family(TypeFamily::new(
-        "Assert".into(),
-        vec!["cond".to_string()],
-        vec![],
-        AssociatedTypeDef::Direct(MonoType::TypeRef("IsTrue(cond)".into())),
-    ));
-}
