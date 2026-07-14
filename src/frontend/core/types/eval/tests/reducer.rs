@@ -335,6 +335,7 @@ fn test_reducer_reduce_struct_type() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
     let result = r.reduce(&s);
     assert!(matches!(result, ReductionResult::Stuck));
@@ -753,6 +754,7 @@ fn test_unifier_unify_struct_same() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
     let s2 = MonoType::Struct(crate::frontend::core::types::StructType {
         name: "Point".to_string(),
@@ -761,6 +763,7 @@ fn test_unifier_unify_struct_same() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
     // Struct unification may fail (not handled) or succeed
     let _ = u.unify(&s1, &s2);

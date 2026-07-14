@@ -39,6 +39,7 @@ fn struct_ty(
         field_mutability: vec![false; field_count],
         field_has_default: vec![false; field_count],
         interfaces: vec![],
+        constraints: Vec::new(),
     })
 }
 
@@ -531,6 +532,7 @@ fn test_contains_var_nested() {
             field_mutability: vec![false],
             field_has_default: vec![false],
             interfaces: vec![],
+            constraints: Vec::new(),
         }),
         tv,
     ));
@@ -780,6 +782,7 @@ fn test_contains_var_in_containers() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
     assert!(solver.contains_var(&s, v));
 
@@ -1110,6 +1113,7 @@ fn test_instantiate_poly_with_struct() {
             field_mutability: vec![false],
             field_has_default: vec![false],
             interfaces: vec![],
+            constraints: Vec::new(),
         }),
     );
     let inst = solver.instantiate(&poly);
@@ -1165,6 +1169,7 @@ fn test_expand_mut_struct_with_bound_var() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
     let resolved = solver.resolve(&s);
     assert!(matches!(resolved, MonoType::Struct(ref ss) if ss.fields[0].1 == MonoType::Float(64)));
@@ -1223,6 +1228,7 @@ fn test_generalize_with_nested_containers() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
     let poly = solver.generalize(&body);
     assert!(!poly.is_mono());

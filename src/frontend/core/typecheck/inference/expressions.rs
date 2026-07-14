@@ -1071,9 +1071,32 @@ impl<'a> ExpressionInferrer<'a> {
                             let expected_arg_count = type_param_count + const_param_count;
 
                             if arg_types.len() == expected_arg_count {
+                                // const 参数需要 MonoType::Literal，而非 MonoType::Int
+                                let mut full_args = arg_types.clone();
+                                for (i, binder) in generic_def.poly.const_binders.iter().enumerate()
+                                {
+                                    let arg_idx = type_param_count + i;
+                                    if let Some(arg) = full_args.get_mut(arg_idx) {
+                                        if !matches!(arg, MonoType::Literal { .. }) {
+                                            // 尝试从表达式提取字面量值
+                                            if let Some(lit) = args.get(arg_idx) {
+                                                if let Some(value) =
+                                                    extract_const_value_from_expr(lit)
+                                                {
+                                                    *arg = MonoType::Literal {
+                                                        name: format!("{}", value),
+                                                        base_type: Box::new(arg.clone()),
+                                                        value,
+                                                    };
+                                                }
+                                            }
+                                        }
+                                    }
+                                    let _ = binder; // 避免未使用警告
+                                }
                                 match crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(
                                     &generic_def,
-                                    &arg_types,
+                                    &full_args,
                                 ) {
                                     Ok(result) => return Ok(result),
                                     Err(diag) => return Err(diag),
@@ -1771,6 +1794,27 @@ fn extract_string_literal_from_expr(
             crate::frontend::core::lexer::tokens::Literal::String(s),
             _,
         ) => Some(s.clone()),
+        _ => None,
+    }
+}
+/// 从表达式提取编译期常量值（用于 const 泛型参数）
+fn extract_const_value_from_expr(
+    expr: &crate::frontend::core::parser::ast::Expr
+) -> Option<crate::frontend::core::types::const_data::ConstValue> {
+    use crate::frontend::core::types::const_data::ConstValue;
+    match expr {
+        crate::frontend::core::parser::ast::Expr::Lit(
+            crate::frontend::core::lexer::tokens::Literal::Int(n),
+            _,
+        ) => Some(ConstValue::Int(*n)),
+        crate::frontend::core::parser::ast::Expr::Lit(
+            crate::frontend::core::lexer::tokens::Literal::Bool(b),
+            _,
+        ) => Some(ConstValue::Bool(*b)),
+        crate::frontend::core::parser::ast::Expr::Lit(
+            crate::frontend::core::lexer::tokens::Literal::Float(f),
+            _,
+        ) => Some(ConstValue::Float(*f as f32)),
         _ => None,
     }
 }

@@ -21,6 +21,7 @@ pub fn format_type(
             fields,
             bindings,
             interfaces,
+            constraints: _,
         } => format_struct_type(fields, bindings, interfaces, source_map),
         Type::NamedStruct { name, fields, .. } => {
             let fields_str = format_struct_fields(fields, source_map);

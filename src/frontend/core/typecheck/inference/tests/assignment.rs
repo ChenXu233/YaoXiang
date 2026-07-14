@@ -30,6 +30,7 @@ fn empty_struct(name: &str) -> MonoType {
         field_mutability: vec![],
         field_has_default: vec![],
         interfaces: vec![],
+        constraints: Vec::new(),
     })
 }
 
@@ -50,6 +51,7 @@ fn make_drawable_interface() -> MonoType {
         field_mutability: vec![],
         field_has_default: vec![],
         interfaces: vec![],
+        constraints: Vec::new(),
     })
 }
 
@@ -71,6 +73,7 @@ fn make_circle_implementing_drawable() -> MonoType {
         field_mutability: vec![false, false],
         field_has_default: vec![false, false],
         interfaces: vec!["Drawable".to_string()],
+        constraints: Vec::new(),
     })
 }
 
@@ -272,6 +275,7 @@ fn test_assignment_constraint_missing_method() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
     let span = dummy_span();
 

@@ -81,6 +81,7 @@ fn test_normalizer_normalize_struct() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
     assert_eq!(n.normalize(&s), NormalForm::Normalized);
 }
@@ -368,6 +369,7 @@ fn test_normalization_context_apply_through_struct() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
     let result = ctx.apply_substitution(&s);
     match result {

@@ -555,6 +555,7 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                 fields,
                 bindings,
                 interfaces,
+                constraints,
             } => AstType::Struct {
                 fields: fields
                     .iter()
@@ -567,6 +568,7 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                     .collect(),
                 bindings: bindings.clone(),
                 interfaces: interfaces.clone(),
+                constraints: constraints.clone(),
             },
 
             // 命名结构体
