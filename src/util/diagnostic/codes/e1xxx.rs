@@ -96,6 +96,16 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
         code: "E1061",
         category: ErrorCategory::TypeCheck,
     },
+    // E1062: const 泛型约束失败（约束求值为 false）
+    ErrorCodeDefinition {
+        code: "E1062",
+        category: ErrorCategory::TypeCheck,
+    },
+    // W1063: const 泛型约束无法求值（警告）
+    ErrorCodeDefinition {
+        code: "W1063",
+        category: ErrorCategory::TypeCheck,
+    },
     // === 控制流 ===
     ErrorCodeDefinition {
         code: "E1070",
