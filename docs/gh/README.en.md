@@ -1,19 +1,17 @@
 # YaoXiang (爻象) Programming Language
 
-> An experimental general-purpose programming language that integrates the power of type theory, ownership model, and natural syntax.
->
-> Based on "Concurrent Model: All Things Work Together, and We Observe the Return"
+> AI-assisted compiler development exploration.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-v0.7.0--experimental-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-v0.7.8-blue.svg)]()
 
-> **Language: [中文](../README.md)**
-
----
+> 🌐 **Language** | [中文](../../README.md)
+>
+> ❤️ **Docs** | [Docs Website](https://chenxu233.github.io/YaoXiang/)
 
 ## Introduction
 
-YaoXiang (爻象) is an **experimental programming language under active development**, designed to explore the fusion of type theory, ownership models, and natural syntax.
+YaoXiang (爻象) is **an experimental programming language under active development**, designed to explore the fusion of type theory, ownership models, and natural syntax.
 
 > **Project Status: Experimental Validation**
 > This is a research project for learning compiler development. The implementation is incomplete and not production-ready.
@@ -22,17 +20,17 @@ YaoXiang (爻象) is an **experimental programming language under active develop
 
 | Goal | Description |
 |------|-------------|
-| **Everything is Type** | Values, functions, modules, generics — all are types. Types are first-class citizens |
+| **Everything is Type** | Values, functions, modules, generics — all are types; types are first-class citizens |
 | **Unified Syntax** | Everything is `name: type = value` — one rule covers all declarations |
 | **Natural Syntax** | Python-like readability, close to natural language |
 | **Ownership Model** | Move semantics + borrow tokens + ref sharing — no GC, no lifetime annotations |
-| **Concurrent Model** | Synchronous syntax, asynchronous essence (design phase, not yet implemented) |
+| **Concurrency Model** | Synchronous syntax, asynchronous essence (design phase, not yet implemented) |
 | **Value-Dependent Types** | Types can depend on values, enabling compile-time dimension verification |
 
-### Code Example
+## Code Examples
 
 ```yaoxiang
-# === Type Definitions (unified: name: type = value) ===
+# ═══════════ Type Definitions (unified syntax: name: type = value) ═══════════
 
 # Record type
 Point: Type = {
@@ -51,20 +49,20 @@ Drawable: Type = {
     draw: (Surface) -> Void,
 }
 
-# === Functions ===
+# ═══════════ Functions ═══════════
 
 add: (a: Int, b: Int) -> Int = a + b
 
 # Generic function
 map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R)) = ...
 
-# === Ownership Model ===
+# ═══════════ Ownership Model ═══════════
 
 # Move (default): zero-copy ownership transfer
 p1 = Point(1.0, 2.0)
 p2 = p1              # Move, p1 no longer readable
 
-# &T / &mut T tokens: zero-cost compile-time access proofs
+# &T / &mut T borrow tokens: zero-cost compile-time access permissions
 p2.print()           # compiler auto-creates &Point token
 p2.shift(1.0, 1.0)  # compiler auto-creates &mut Point token
 
@@ -74,171 +72,178 @@ shared = ref p2      # cross-scope sharing
 # clone(): explicit deep copy
 backup = p2.clone()
 
-# === Entry Point ===
+# ═══════════ Method Definitions ═══════════
+
+Point.draw: (self: &Point, surface: Surface) -> Void = {
+    surface.plot(self.x, self.y)
+}
+
+Point.shift: (self: &mut Point, dx: Float, dy: Float) -> Void = {
+    self.x = self.x + dx
+    self.y = self.y + dy
+}
+
+# ═══════════ Entry Point ═══════════
 
 main: () -> Void = {
     print("Hello, YaoXiang!")
 }
 ```
 
-For more examples, see [docs/examples/](docs/examples/).
+## Type System
 
-### Ownership Model
+### Unified Syntax Model
 
-YaoXiang uses a five-level ownership gradient — no GC, no lifetime annotations:
+YaoXiang has only one declaration form: **`identifier : type = expression`**
 
+| Concept | Notation |
+|---------|----------|
+| Variable | `x: Int = 42` |
+| Function | `add: (a: Int, b: Int) -> Int = a + b` |
+| Record type | `Point: Type = { x: Float, y: Float }` |
+| Interface | `Drawable: Type = { draw: (Surface) -> Void }` |
+| Generic type | `List: (T: Type) -> Type = { data: Array(T), length: Int }` |
+| Method | `Point.draw: (self: &Point, s: Surface) -> Void = ...` |
+
+**No `fn`, `struct`, `trait`, `impl` keywords.** `Type` is the only metatype keyword in the language.
+
+See [RFC-010: Unified Type Syntax](docs/src/design/rfc/accepted/010-unified-type-syntax.md).
+
+### Generics & Value-Dependent Types
+
+YaoXiang's generic system supports **types depending on values**, enabling compile-time dimension verification:
+
+```yaoxiang
+# Matrix type: dimensions determined at compile time
+Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
+    data: Array(Array(T, Cols), Rows),
+}
+
+# Compile-time computation: factorial(3) = 6
+vec: Vec(factorial(3)) = Vec(6)()
+
+# Compile-time dimension verification: mismatched dimensions caught at compile time
+# multiply(matrix_2x3, matrix_4x2)  # Compile error: 3 != 4
 ```
-&T / &mut T       Move            ref            clone()         unsafe
-    |                |               |               |               |
-borrow token      default         shared          deep copy       raw ptr
-zero-cost         zero-copy       auto Rc/Arc     explicit        system-level
-```
 
-| Operation | Cost | When to Use |
-|-----------|------|-------------|
-| `&T` / `&mut T` | Zero (compile-time tokens) | Read-only or exclusive mutable access |
-| Move | Zero (pointer move) | Default — assignment, function args, returns |
-| `ref` | Low (Rc) / Medium (Arc) | Cross-scope shared ownership |
-| `clone()` | Type-dependent | Explicit independent copy |
-| `unsafe` + `*T` | Zero (raw memory) | FFI, system-level programming |
+See [RFC-011: Generic Type System](docs/src/design/rfc/accepted/011-generic-type-system.md).
 
-**Key design decisions:**
-- No lifetime annotations (`'a`) — tokens are values managed by RAII
-- No borrow checker — type properties (Dup/Linear) handle permissions naturally
-- No GC — deterministic resource management
-- Compiler auto-selects Rc (single-threaded) vs Arc (cross-thread) for `ref`
-
-### Installation & Building
+## Installation & Building
 
 ```bash
-# Clone and build (development build)
+# Clone the project
 git clone https://github.com/yaoxiang-lang/yaoxiang.git
 cd yaoxiang
+
+# One-command Z3 dependency install (pure Rust, auto-downloads prebuilt package)
+cd tools/setup-z3 && cargo run && cd ../..
+
+# Build
 cargo build
 
-# Run tests to see current status
+# Run tests
 cargo test
 
-# Try the examples (some may not work)
+# Try examples
 cargo run --example hello
 ```
 
-### Current Working Features
+> Z3 is the SMT solving module used by the compiler for compile-time predicate proving (RFC-027). `tools/setup-z3` automatically downloads a prebuilt package matching your platform from GitHub Releases to `.z3/`, and writes `.cargo/config.toml`. After first run, `cargo build` works directly. See [RFC-027](docs/src/design/rfc/accepted/027-compile-time-evaluation-types.md).
+
+### Development Environment Setup
+
+We use `pre-commit` to run project checks before each commit (cross-platform). The repo includes `.pre-commit-config.yaml`, which runs `cargo fmt` and `cargo clippy`.
+
+Recommended installation (using `pipx` to avoid polluting global site-packages):
 
 ```bash
-# Basic tokenization and parsing only
-echo 'main: () -> Void = { print("Hello") }' | cargo run -- eval
-
-# Build bytecode (partial implementation)
-cargo run -- build docs/examples/hello.yx -o hello.42
-
-# Dump bytecode for debugging
-cargo run -- dump docs/examples/hello.yx
+python3 -m pip install --user pipx
+python3 -m pipx ensurepath
+pipx install pre-commit
+pre-commit install
 ```
 
-### Project Structure
+Quick install (without `pipx`):
 
-```
-yaoxiang/
-├── Cargo.toml              # Project configuration
-├── README.md               # This file (Chinese)
-├── LICENSE                 # MIT License
-├── src/                    # Source code
-│   ├── main.rs             # CLI entry point
-│   └── lib.rs              # Library entry point
-├── docs/                   # Documentation
-│   ├── src/
-│   │   ├── design/         # Design documents
-│   │   │   ├── rfc/        # RFC proposals
-│   │   │   │   ├── accepted/   # Accepted RFCs
-│   │   │   │   └── draft/      # Draft RFCs
-│   │   │   └── manifesto.md    # Design manifesto
-│   │   ├── reference/      # Language reference
-│   │   │   └── language-spec/  # Language specification
-│   │   ├── guide/          # User guides
-│   │   ├── tutorial/       # Tutorials (zh/en)
-│   │   ├── blog/           # Blog posts
-│   │   └── dev/            # Developer docs
-│   ├── examples/           # Example code
-│   └── gh/                 # GitHub-specific docs (this file)
-└── tests/                  # Tests
+```bash
+python -m pip install --user pre-commit
+pre-commit install
 ```
 
-### Design Philosophy
+Run checks locally:
 
-YaoXiang's design philosophy can be summarized in five principles:
-
-```
-Everything is Type → Unified Abstraction → Type as Data → Runtime Available
-Ownership Model → Zero-Cost Abstraction → No GC → High Performance
-Python Syntax → Natural Language → Readability → Beginner-Friendly
-Concurrent Model → Lazy Evaluation → Auto Parallel → Seamless Concurrency
-Send/Sync → Compile-Time Check → Data Race → Thread Safety
+```bash
+pre-commit run --all-files
 ```
 
-### Comparison with Existing Languages
+## Comparison with Existing Languages
 
-| Feature | YaoXiang | Rust | Python | TypeScript | Go |
-|---------|----------|------|--------|------------|-----|
-| Everything is Type | Yes | No | No | No | No |
-| Auto Type Inference | Yes | Yes | Yes | Yes | Yes |
-| Default Immutable | Yes | Yes | No | No | No |
-| Ownership Model | Yes | Yes | No | No | No |
-| Concurrent Model | Yes | No | No | No | No |
-| Zero-Cost Abstraction | Yes | Yes | No | No | No |
-| No GC | Yes | Yes | No | No | No |
-| Compile-Time Thread Safety | Yes | Yes | No | No | No |
-| Value-Dependent Types | Yes | No | No | No | No |
-| Keyword Count | 17 | 51+ | 35 | 64+ | 25 |
+> ⚠️ YaoXiang is in the experimental stage. The "Current" column reflects the real state, and the "Goal" column indicates the design direction.
 
-> **Concurrent Model** = Synchronous Syntax + Lazy Evaluation + Implicit Parallel + Seamless Async (compiler auto-parallelizes, no manual thread management)
+| Dimension | YaoXiang Current | YaoXiang Goal | Rust | Python | Go | Java | TypeScript |
+|-----------|-----------------|---------------|------|--------|----|------|------------|
+| Production Ready | ❌ Experimental | ✅ Stable Release | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Type Safety | 🚧 Refinement Types + Compile-time Proofs | ✅ Refinement Types + Compile-time Proofs | ✅ | ❌ Dynamic | ❌ Weak | ✅ Strong | 🚧 Has Escape Hatches |
+| Runtime Performance | 🚧 Not Measured | ✅ Close to Rust | ✅ | ❌ Slow | ✅ Fast | ✅ Fast | ❌ Slow |
+| Learning Curve | 🚧 To Be Verified | ✅ Smooth | ❌ Steep | ✅ Smooth | ✅ Smooth | ✅ Medium | ✅ Medium |
+| Dev Experience | 🚧 Basic LSP | ✅ Mature | ✅ rust-analyzer | ✅ Mature | ✅ Mature | ✅ Mature | ✅ Mature |
+| Package Management / Ecosystem | ❌ None | ✅ Unified Package Manager | ✅ crates.io | ✅ PyPI | ✅ Standard Library | ✅ Maven | ✅ npm |
+| Memory Management | ✅ Ownership Model | ✅ Low-Cost Ownership | ✅ Ownership | ❌ GC | ❌ GC | ❌ GC | ❌ GC |
+| Concurrency | 🚧 In Design | ✅ Safe Concurrency | ✅ Send+Sync | ❌ GIL | ✅ goroutine | 🚧 Thread Model | ❌ Single-threaded |
+| Compile Speed | 🚧 Fast Check/new | 💥 Very Slow (compile-time proofs) / Incremental Compilation | 💥 Slow / Incremental Compilation | ✅ No Compilation | ✅ Fast | ✅ Fast | 🚧 tsc Slow |
+| Startup Speed | 🚧 Interpreter Init + JIT Wait | ✅ Interpreter Mode / AOT Dual Mode | ✅ No Warmup | 🚧 Interpreter Init + JIT Wait | ✅ No Warmup | ❌ JVM Warmup | 🚧 Interpreter Init + JIT Wait |
+| Generics / Polymorphism | 🚧 Basic Implementation | ✅ Full Generics | ✅ Trait System | ✅ Duck Typing | ❌ None | ✅ Erasure-based | ✅ Structural |
 
-### Key RFCs
+## Core RFCs
 
 | RFC | Title | Description |
 |-----|-------|-------------|
 | [RFC-009](docs/src/design/rfc/accepted/009-ownership-model.md) | Ownership Model | Move + borrow tokens + ref — no GC, no lifetimes |
 | [RFC-010](docs/src/design/rfc/accepted/010-unified-type-syntax.md) | Unified Type Syntax | Everything is `name: type = value` |
-| [RFC-011](docs/src/design/rfc/accepted/011-generic-type-system.md) | Generic System | Value-dependent types with zero-cost abstraction |
+| [RFC-011](docs/src/design/rfc/accepted/011-generic-type-system.md) | Generic System | Value-dependent types, zero-cost abstraction |
 
-### Roadmap
-
-For detailed implementation status and future plans, see [Implementation Roadmap](docs/plan/IMPLEMENTATION-ROADMAP.md).
-
-### Contributing
+## Contributing
 
 Contributions are welcome! Please read the [Contribution Guide](CONTRIBUTING.md).
 
-### Community
+## Community
 
-- GitHub Issues: Feature suggestions, bug reports
+- GitHub Issues: Feature requests, bug reports
 - Discussions: Discussion and exchange
 
-### License
+## License
 
-This project uses the MIT License. See [LICENSE](LICENSE) for details.
+This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
-### Acknowledgments
+## Acknowledgments
 
 YaoXiang's design is inspired by the following projects and languages:
 
-- **Rust** - Ownership model, zero-cost abstraction
-- **Python** - Syntax style, readability
-- **Idris/Agda** - Dependent types, type-driven development
-- **TypeScript** - Type annotations, runtime types
-- **MoonBit** - AI-friendly design
+- **Rust** — Ownership model, zero-cost abstraction
+- **Python** — Syntax style, readability
+- **Idris/Agda** — Dependent types, type-driven development
+- **TypeScript** — Type annotations, runtime types
+- **MoonBit** — AI-friendly design
 
-### Yes, It's Still an Experimental Project
+## Yes, It's Still an Experimental Project
 
 Before you criticize, check this out:
 
-- [YaoXiang Design Manifesto (Satirical Version)](docs/src/design/manifesto-wtf.md) - DeepSeek's Review
+- [YaoXiang Design Manifesto (Satirical Version)](docs/src/design/manifesto-wtf.md) — DeepSeek's Review
 
 > "The One generates two, two generates three, three generates all things."
 > — Tao Te Ching
 >
 > Types are like the Way, all things are born from them.
 
----
+## 🌟 Star History
 
-> **Main documentation: [中文](../README.md)**
+<div align="center">
+<a href="https://www.star-history.com/?type=date&repos=ChenXu233%2FYaoXiang">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=ChenXu233/YaoXiang&type=date&theme=dark&legend=top-left&sealed_token=wdeU56ITEYJrILAq17aZ5ciE-iqMUTIMhwkf3fvcrGbRz5Ejbm8pRO_Ef8EYVh8vrEGjwcPvDatnTcyNTSetcCPA88yg8Eia_OTa9dNHUVCTeIamCziUCE25ckxdpmGdLjKsS8ZZc2HWXvqhWAezVmpPtMLtc5p92_PX1MFCCtqppFmAndlJV-Ml8Q_C" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=ChenXu233/YaoXiang&type=date&legend=top-left&sealed_token=wdeU56ITEYJrILAq17aZ5ciE-iqMUTIMhwkf3fvcrGbRz5Ejbm8pRO_Ef8EYVh8vrEGjwcPvDatnTcyNTSetcCPA88yg8Eia_OTa9dNHUVCTeIamCziUCE25ckxdpmGdLjKsS8ZZc2HWXvqhWAezVmpPtMLtc5p92_PX1MFCCtqppFmAndlJV-Ml8Q_C" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=ChenXu233/YaoXiang&type=date&legend=top-left&sealed_token=wdeU56ITEYJrILAq17aZ5ciE-iqMUTIMhwkf3fvcrGbRz5Ejbm8pRO_Ef8EYVh8vrEGjwcPvDatnTcyNTSetcCPA88yg8Eia_OTa9dNHUVCTeIamCziUCE25ckxdpmGdLjKsS8ZZc2HWXvqhWAezVmpPtMLtc5p92_PX1MFCCtqppFmAndlJV-Ml8Q_C" />
+ </picture>
+</a>
+</div>
