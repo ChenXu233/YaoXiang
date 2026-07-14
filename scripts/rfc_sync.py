@@ -21,13 +21,14 @@ import os
 import sys
 import subprocess
 
+from check_rfc_tracking import scan_rfcs
+
 RFC_ROOT = os.path.join("docs", "src", "design", "rfc")
 TRACKING_FILE = os.path.join(RFC_ROOT, "TRACKING.md")
 JSONL_FILE = os.path.join(".omp", "tmp", "rfc-sync-report.jsonl")
 
 # 复用 check_rfc_tracking.py 的解析和扫描逻辑
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from check_rfc_tracking import parse_frontmatter, scan_rfcs, DIR_TO_STATUS
 
 # RFC 状态优先级（数值越小越优先）
 PRIORITY_ORDER = {
@@ -194,7 +195,7 @@ def cmd_summary():
     print(f"✅ 已创建新 issue: {created}")
     print(f"⚠️ 不匹配: {mismatched}")
     print(f"❌ 错误: {errors}")
-    print(f"📊 实现情况:")
+    print("📊 实现情况:")
     for status, count in sorted(impl_statuses.items()):
         print(f"   {status}: {count}")
 
