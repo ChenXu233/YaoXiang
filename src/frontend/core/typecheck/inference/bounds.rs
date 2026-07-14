@@ -6,9 +6,11 @@
 //! 支持鸭子类型：检查类型是否满足接口要求的所有方法（包括方法绑定）
 
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition, Result};
+use crate::frontend::core::typecheck::proof::verdict::BudgetReport;
 use crate::frontend::core::typecheck::proof::verdict::DisproofKind;
 use crate::frontend::core::typecheck::proof::verdict::DisproofModel;
 use crate::frontend::core::typecheck::proof::verdict::ProofResult;
+use crate::frontend::core::typecheck::proof::verdict::UnprovenReason;
 use crate::frontend::core::types::const_data::ConstVarDef;
 use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::TraitTable;
@@ -121,32 +123,23 @@ impl BoundsChecker {
                         });
                     }
                     Ok(_) | Err(_) => {
-                        return ProofResult::Disproved(DisproofModel {
-                            kind: DisproofKind::PredicateViolation,
-                            assignments: Vec::new(),
-                            constraint: format!("无法验证 const 参数 `{}` 的约束", binder.name),
-                            span: None,
-                            predicate_span: None,
-                        });
+                        return ProofResult::Unproven {
+                            reason: UnprovenReason::Symbolic(format!(
+                                "const 参数 `{}` 的约束无法在编译期求值",
+                                binder.name
+                            )),
+                            proof_calls: Vec::new(),
+                            budget: BudgetReport {
+                                steps_used: 0,
+                                steps_limit: 0,
+                            },
+                        };
                     }
                 }
             }
         }
 
         ProofResult::Proved
-    }
-
-    /// 检查泛型参数边界
-    pub fn check_generic_bounds(
-        &self,
-        ty: &MonoType,
-        trait_bounds: &[String],
-        const_binders: &[ConstVarDef],
-        const_args: &[MonoType],
-    ) -> Result<()> {
-        self.check_trait_bounds(ty, trait_bounds)?;
-        let result = self.check_const_bounds(const_binders, const_args);
-        result.into_result()
     }
 
     /// 检查类型是否满足约束（结构化匹配 - 鸭子类型）
