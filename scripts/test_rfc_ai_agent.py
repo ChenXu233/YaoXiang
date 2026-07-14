@@ -8,11 +8,12 @@ import tempfile
 
 import pytest
 
+import rfc_ai_agent as agent
+
+
 # Add scripts dir to path for import
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _SCRIPT_DIR)
-
-import rfc_ai_agent as agent
 
 
 # ══════════════════════════════════════════════════════════════════════════

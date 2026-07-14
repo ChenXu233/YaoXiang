@@ -4,16 +4,13 @@
 import os
 import sys
 import tempfile
-from datetime import date
-from unittest.mock import patch
 
-import pytest
+
+import check_rfc_tracking as crt
 
 # Add scripts dir to path for import
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _SCRIPT_DIR)
-
-import check_rfc_tracking as crt
 
 
 # ── parse_frontmatter ────────────────────────────────────────────────────
