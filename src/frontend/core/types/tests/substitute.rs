@@ -90,6 +90,7 @@ fn test_substitute_through_struct() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
     let result = subber.substitute(&ty, &sub);
     match result {
@@ -377,6 +378,7 @@ fn test_substitute_struct_with_nested_list() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
     let result = subber.substitute(&ty, &sub);
     match result {

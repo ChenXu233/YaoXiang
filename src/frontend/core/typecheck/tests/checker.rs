@@ -401,6 +401,7 @@ fn test_type_checker_with_generic_type_binding() {
                         }],
                         bindings: vec![],
                         interfaces: vec![],
+                        constraints: vec![],
                     }),
 
                     params: vec![],

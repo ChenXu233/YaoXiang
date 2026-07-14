@@ -195,15 +195,25 @@ impl TypeEnvironment {
     }
 
     /// 实例化泛型类型（静态方法，StatementChecker 也可调用）
+    ///
+    /// Layer 1: 类型匹配 — 验证 const 参数类型与 const_binders 的类型声明匹配
+    /// Layer 2: 值约束求值 — 求值约束表达式（const 泛型约束）
     pub fn instantiate_generic_type(
         def: &GenericTypeDef,
         args: &[MonoType],
-    ) -> Option<MonoType> {
+    ) -> Result<MonoType, crate::util::diagnostic::Diagnostic> {
+        use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
+
         let type_arg_count = def.type_param_names.len();
         let const_arg_count = def.poly.const_binders.len();
 
         if args.len() != type_arg_count + const_arg_count {
-            return None;
+            return Err(ErrorCodeDefinition::argument_count_mismatch(
+                "generic type",
+                type_arg_count + const_arg_count,
+                args.len(),
+            )
+            .build());
         }
 
         let type_args = &args[..type_arg_count];
@@ -211,16 +221,53 @@ impl TypeEnvironment {
 
         let body = Self::replace_type_params(&def.poly.body, &def.type_param_names, type_args);
 
-        // const 验证（inline，不可跳过）
+        // const 验证（Layer 1 + Layer 2）
         if !const_args.is_empty() {
+            // Layer 1: 类型匹配
             crate::frontend::core::typecheck::inference::bounds::validate_const_args(
                 &def.poly.const_binders,
                 const_args,
-            )
-            .ok()?;
+            )?;
+
+            // Layer 2: 值约束求值
+            let checker = crate::frontend::core::typecheck::inference::bounds::BoundsChecker::new();
+            let result = checker.check_const_bounds(&def.poly.const_binders, const_args);
+            match result {
+                crate::frontend::core::typecheck::proof::verdict::ProofResult::Proved => {}
+                crate::frontend::core::typecheck::proof::verdict::ProofResult::Disproved(_) => {
+                    let var_info = def
+                        .poly
+                        .const_binders
+                        .iter()
+                        .zip(const_args.iter())
+                        .filter_map(|(b, a)| {
+                            if let crate::frontend::core::types::MonoType::Literal {
+                                value, ..
+                            } = a
+                            {
+                                Some(format!("{} = {}", b.name, value))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    return Err(Diagnostic::error(
+                        "E1062".to_string(),
+                        format!("const 泛型约束失败 ({})", var_info),
+                        "修改 const 参数值使其满足约束".to_string(),
+                        None,
+                    ));
+                }
+                crate::frontend::core::typecheck::proof::verdict::ProofResult::Unproven {
+                    ..
+                } => {
+                    // 约束无法求值 — 允许编译继续
+                }
+            }
         }
 
-        Some(Self::resolve_type_refs(&body))
+        Ok(Self::resolve_type_refs(&body))
     }
 
     /// 按名称查找并实例化泛型类型（TypeEnvironment 便捷方法）
@@ -228,22 +275,11 @@ impl TypeEnvironment {
         &self,
         name: &str,
         args: &[MonoType],
-    ) -> Option<MonoType> {
-        let def = self.generic_type_defs.get(name)?;
+    ) -> Result<MonoType, crate::util::diagnostic::Diagnostic> {
+        let def = self.generic_type_defs.get(name).ok_or_else(|| {
+            crate::util::diagnostic::ErrorCodeDefinition::unknown_type(name).build()
+        })?;
         Self::instantiate_generic_type(def, args)
-    }
-
-    /// 在模板中替换类型参数占位符（静态方法）
-    ///
-    /// 递归遍历 MonoType，将所有匹配 param_names 的 TypeRef 替换为对应的 args。
-    /// 并对已知的内置类型名进行解析（TypeRef("Int") → Int(64) 等）。
-    pub fn instantiate_generic_type_static(
-        ty: &MonoType,
-        type_param_names: &[String],
-        args: &[MonoType],
-    ) -> MonoType {
-        let result = Self::replace_type_params(ty, type_param_names, args);
-        Self::resolve_type_refs(&result)
     }
 
     /// 替换类型参数：将 TypeRef(param_name) 替换为具体的类型实参
@@ -280,6 +316,7 @@ impl TypeEnvironment {
                     field_mutability: s.field_mutability.clone(),
                     field_has_default: s.field_has_default.clone(),
                     interfaces: s.interfaces.clone(),
+                    constraints: s.constraints.clone(),
                 })
             }
             MonoType::List(elem) => {
@@ -382,6 +419,7 @@ impl TypeEnvironment {
                     field_mutability: s.field_mutability.clone(),
                     field_has_default: s.field_has_default.clone(),
                     interfaces: s.interfaces.clone(),
+                    constraints: s.constraints.clone(),
                 })
             }
             MonoType::List(elem) => MonoType::List(Box::new(Self::resolve_type_refs(elem))),

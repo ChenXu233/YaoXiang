@@ -41,6 +41,7 @@ fn create_interface(
         field_mutability,
         field_has_default,
         interfaces: vec![],
+        constraints: Vec::new(),
     })
 }
 
@@ -68,6 +69,7 @@ fn create_struct(
             field_mutability,
             field_has_default,
             interfaces: vec![],
+            constraints: Vec::new(),
         }),
         env,
     )
@@ -295,6 +297,7 @@ fn test_duck_type_field_methods() {
         field_mutability: vec![false, false],
         field_has_default: vec![false, false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
 
     // Act
@@ -333,6 +336,7 @@ fn test_duck_type_no_env() {
         field_mutability: vec![false, false],
         field_has_default: vec![false, false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
 
     // Act

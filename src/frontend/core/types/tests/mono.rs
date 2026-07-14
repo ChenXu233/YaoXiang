@@ -5,6 +5,7 @@
 
 use crate::frontend::core::types::{MonoType, PolyType, StructType, TypeVar};
 use crate::frontend::core::parser::ast;
+use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::types::EnumType;
 use crate::util::span::Span;
 use std::collections::HashMap;
@@ -44,6 +45,7 @@ fn test_from_ast_type_struct() {
         ],
         bindings: vec![],
         interfaces: vec![],
+        constraints: vec![],
     };
     let mono: MonoType = ast_ty.into();
     assert!(matches!(mono, MonoType::Struct(_)));
@@ -54,7 +56,6 @@ fn test_from_ast_type_struct() {
 
 #[test]
 fn test_from_ast_type_struct_with_defaults() {
-    use crate::frontend::core::lexer::tokens::Literal;
     let ast_ty = ast::Type::Struct {
         fields: vec![ast::StructField {
             name: "x".to_string(),
@@ -64,6 +65,7 @@ fn test_from_ast_type_struct_with_defaults() {
         }],
         bindings: vec![],
         interfaces: vec![],
+        constraints: vec![],
     };
     let mono: MonoType = ast_ty.into();
     assert!(matches!(mono, MonoType::Struct(s) if s.field_has_default == vec![true]));
@@ -244,13 +246,20 @@ fn test_from_ast_type_ptr() {
 #[test]
 fn test_from_ast_type_literal() {
     let ast_ty = ast::Type::Literal {
-        name: "five".to_string(),
+        name: "5".to_string(),
         name_span: Span::dummy(),
         base_type: Box::new(ast::Type::Int(64)),
     };
     let mono: MonoType = ast_ty.into();
-    // Literal type converts to base type
-    assert_eq!(mono, MonoType::Int(64));
+    // Literal type preserves value as MonoType::Literal
+    assert_eq!(
+        mono,
+        MonoType::Literal {
+            name: "5".to_string(),
+            base_type: Box::new(MonoType::Int(64)),
+            value: crate::frontend::core::types::const_data::ConstValue::Int(5),
+        }
+    );
 }
 
 // ===================================================================
@@ -266,6 +275,7 @@ fn test_struct_type_eq_same_fields() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
+        constraints: Vec::new(),
     };
     let b = StructType {
         name: "P".to_string(),
@@ -274,6 +284,7 @@ fn test_struct_type_eq_same_fields() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
+        constraints: Vec::new(),
     };
     assert_eq!(a, b);
 }
@@ -287,6 +298,7 @@ fn test_struct_type_eq_different_fields() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
+        constraints: Vec::new(),
     };
     let b = StructType {
         name: "P".to_string(),
@@ -295,6 +307,7 @@ fn test_struct_type_eq_different_fields() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
+        constraints: Vec::new(),
     };
     assert_ne!(a, b);
 }
@@ -425,6 +438,7 @@ fn test_is_constraint_and_constraint_fields() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
+        constraints: Vec::new(),
     });
     assert!(iface.is_constraint());
     let fields = iface.constraint_fields();
@@ -446,6 +460,7 @@ fn test_struct_field_is_mut_found() {
         field_mutability: vec![true, false],
         field_has_default: vec![false, false],
         interfaces: vec![],
+        constraints: Vec::new(),
     };
     assert_eq!(s.field_is_mut("a"), Some(true));
     assert_eq!(s.field_is_mut("b"), Some(false));

@@ -86,6 +86,7 @@ impl PatternInferrer {
                     field_mutability,
                     field_has_default: Vec::new(),
                     interfaces: vec![],
+                    constraints: Vec::new(),
                 }))
             }
             ast::Pattern::Or(patterns) => {

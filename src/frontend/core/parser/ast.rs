@@ -351,6 +351,18 @@ impl StructField {
     }
 }
 
+/// 约束声明（编译期约束，如 Assert(N > 0)）
+///
+/// 与 StructField 结构相似但语义不同：
+/// - StructField 是运行时数据字段，占据内存布局
+/// - ConstraintDecl 是编译期约束声明，不占据运行时布局
+#[derive(Debug, Clone)]
+pub struct ConstraintDecl {
+    pub name: String,
+    pub name_span: Span,
+    pub ty: Type,
+}
+
 /// 类型体内置绑定
 ///
 /// 在类型定义体内绑定方法到字段
@@ -422,6 +434,8 @@ pub enum Type {
         bindings: Vec<TypeBodyBinding>,
         /// RFC-010: 接口约束列表
         interfaces: Vec<String>,
+        /// 编译期约束声明列表（如 Assert(N > 0)）
+        constraints: Vec<ConstraintDecl>,
     },
     NamedStruct {
         name: String,
