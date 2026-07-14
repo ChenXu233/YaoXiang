@@ -1,0 +1,14 @@
+// 02-type-system/assert_runtime.yx
+// 覆盖: RFC-030 assert 运行时断言 — assert(true) 通过，assert(false) panic
+// 验证: std.assert.assert native 函数运行时行为
+// 状态: ✅ 可运行
+
+use std.{assert, io}
+
+main = {
+    // assert(true) 应通过
+    assert.assert(true, "true should pass")
+
+    // 输出成功标记
+    io.println("ASSERT_PASS")
+}

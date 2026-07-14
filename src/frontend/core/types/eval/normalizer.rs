@@ -15,6 +15,7 @@ use crate::frontend::core::typecheck::proof::budget::BudgetTracker;
 use super::dependent_types::DependentTypeEnv;
 use super::evaluator::Evaluator;
 use std::collections::HashMap;
+use crate::std::StdModule;
 
 /// 范式类型标记
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -162,12 +163,14 @@ impl Default for TypeNormalizer {
 
 impl Clone for TypeNormalizer {
     fn clone(&self) -> Self {
+        let mut dep_env = DependentTypeEnv::new();
+        crate::std::assert::AssertModule.register_type_families(&mut dep_env);
         Self {
             config: self.config.clone(),
             context: self.context.clone(),
             env: TypeEnvironment::new(),
             budget: BudgetTracker::new(),
-            dep_env: DependentTypeEnv::new(),
+            dep_env,
         }
     }
 }
@@ -175,26 +178,29 @@ impl Clone for TypeNormalizer {
 impl TypeNormalizer {
     /// 创建新的范式化器
     pub fn new() -> Self {
+        let mut dep_env = DependentTypeEnv::new();
+        crate::std::assert::AssertModule.register_type_families(&mut dep_env);
         Self {
             config: ReductionConfig::default(),
             context: NormalizationContext::new(),
             env: TypeEnvironment::new(),
             budget: BudgetTracker::new(),
-            dep_env: DependentTypeEnv::new(),
+            dep_env,
         }
     }
 
     /// 创建带配置的范式化器
     pub fn with_config(config: ReductionConfig) -> Self {
+        let mut dep_env = DependentTypeEnv::new();
+        crate::std::assert::AssertModule.register_type_families(&mut dep_env);
         Self {
             config,
             context: NormalizationContext::new(),
             env: TypeEnvironment::new(),
             budget: BudgetTracker::new(),
-            dep_env: DependentTypeEnv::new(),
+            dep_env,
         }
     }
-
     /// 范式化类型
     pub fn normalize(
         &mut self,
@@ -334,8 +340,7 @@ impl TypeNormalizer {
     ) -> NormalForm {
         // 解析参数为 MonoType（使用不可变求值器解析）
         let parsed_args: Vec<MonoType> = {
-            let dep_env = DependentTypeEnv::new();
-            let evaluator = Evaluator::new(&self.env, &self.budget, &dep_env);
+            let evaluator = Evaluator::new(&self.env, &self.budget, &self.dep_env);
             args.iter()
                 .filter_map(|arg| {
                     evaluator
@@ -350,8 +355,7 @@ impl TypeNormalizer {
         }
 
         // 创建可变求值器进行实际求值
-        let dep_env = DependentTypeEnv::new();
-        let mut evaluator = Evaluator::new(&self.env, &self.budget, &dep_env);
+        let mut evaluator = Evaluator::new(&self.env, &self.budget, &self.dep_env);
 
         // 根据类型名称调用对应的求值方法
         match type_name {

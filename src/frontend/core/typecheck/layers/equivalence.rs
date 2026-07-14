@@ -14,7 +14,6 @@
 
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::types::eval::evaluator::Evaluator;
-use crate::frontend::core::types::eval::dependent_types::DependentTypeEnv;
 use crate::frontend::core::types::mono::MonoType;
 use super::super::proof::verdict::{DisproofKind, DisproofModel, ProofResult, UnprovenReason};
 use super::super::proof::context::ProofContext;
@@ -228,8 +227,7 @@ pub fn check_type_equivalence(
     }
 
     // 3. 确定性归约后比较
-    let dep_env = DependentTypeEnv::new();
-    let mut evaluator = Evaluator::new(ctx.env, &ctx.budget, &dep_env);
+    let mut evaluator = Evaluator::new(ctx.env, &ctx.budget, &ctx.dep_env);
     match (evaluator.eval(lhs), evaluator.eval(rhs)) {
         (Ok(l), Ok(r)) if l == r => ProofResult::Proved,
         (Ok(l), Ok(r)) => ProofResult::Disproved(DisproofModel {
