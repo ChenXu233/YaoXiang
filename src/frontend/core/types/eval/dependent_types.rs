@@ -212,7 +212,7 @@ fn substitute_type_params(
             // 尝试在名称字符串内进行文本替换（如 "IsTrue(cond)" → "IsTrue(true)"）
             // 按参数名长度降序排序，避免 "n" 替换到 "ih_n" 内部
             let mut sorted_params: Vec<&String> = substitutions.keys().collect();
-            sorted_params.sort_by(|a, b| b.len().cmp(&a.len()));
+            sorted_params.sort_by_key(|p| std::cmp::Reverse(p.len()));
             let mut new_name = name.clone();
             for param in sorted_params {
                 if let Some(MonoType::TypeRef(repl_name)) = substitutions.get(param) {

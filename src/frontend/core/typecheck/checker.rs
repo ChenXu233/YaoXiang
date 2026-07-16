@@ -6,8 +6,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::parser::ast::Module;
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable};
-use crate::frontend::core::types::eval::const_eval::{ConstFunction, ConstExpr as ConstEvalExpr};
-use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
+use crate::frontend::core::types::eval::const_eval::ConstFunction;
+use crate::frontend::core::types::const_data::{ConstExpr, ConstValue, BinOp};
 use crate::frontend::core::typecheck::predicate_resolver::PredicateResolver;
 use crate::frontend::core::typecheck::proof::context::ProofContext;
 use crate::frontend::core::typecheck::proof::verdict::ProofResult;
@@ -65,28 +65,26 @@ impl TypeChecker {
     /// 注册预定义的 const 函数
     /// 这些函数用于值依赖类型的编译期求值
     fn register_predefined_const_functions(env: &mut TypeEnvironment) {
-        use crate::frontend::core::types::eval::const_eval::ConstBinOp;
-
         // 注册 factorial 函数
         let factorial = ConstFunction::new(
             "factorial".to_string(),
             vec!["n".to_string()],
-            ConstEvalExpr::If {
-                condition: Box::new(ConstEvalExpr::BinOp {
-                    op: ConstBinOp::Lte,
-                    lhs: Box::new(ConstEvalExpr::Var("n".to_string())),
-                    rhs: Box::new(ConstEvalExpr::Int(1)),
+            ConstExpr::If {
+                condition: Box::new(ConstExpr::BinOp {
+                    op: BinOp::Le,
+                    left: Box::new(ConstExpr::NamedVar("n".to_string())),
+                    right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
                 }),
-                true_branch: Box::new(ConstEvalExpr::Int(1)),
-                false_branch: Box::new(ConstEvalExpr::BinOp {
-                    op: ConstBinOp::Mul,
-                    lhs: Box::new(ConstEvalExpr::Var("n".to_string())),
-                    rhs: Box::new(ConstEvalExpr::Call {
-                        name: "factorial".to_string(),
-                        args: vec![ConstEvalExpr::BinOp {
-                            op: ConstBinOp::Sub,
-                            lhs: Box::new(ConstEvalExpr::Var("n".to_string())),
-                            rhs: Box::new(ConstEvalExpr::Int(1)),
+                then_branch: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
+                else_branch: Box::new(ConstExpr::BinOp {
+                    op: BinOp::Mul,
+                    left: Box::new(ConstExpr::NamedVar("n".to_string())),
+                    right: Box::new(ConstExpr::Call {
+                        func: "factorial".to_string(),
+                        args: vec![ConstExpr::BinOp {
+                            op: BinOp::Sub,
+                            left: Box::new(ConstExpr::NamedVar("n".to_string())),
+                            right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
                         }],
                     }),
                 }),
@@ -98,29 +96,29 @@ impl TypeChecker {
         let fibonacci = ConstFunction::new(
             "fibonacci".to_string(),
             vec!["n".to_string()],
-            ConstEvalExpr::If {
-                condition: Box::new(ConstEvalExpr::BinOp {
-                    op: ConstBinOp::Lte,
-                    lhs: Box::new(ConstEvalExpr::Var("n".to_string())),
-                    rhs: Box::new(ConstEvalExpr::Int(1)),
+            ConstExpr::If {
+                condition: Box::new(ConstExpr::BinOp {
+                    op: BinOp::Le,
+                    left: Box::new(ConstExpr::NamedVar("n".to_string())),
+                    right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
                 }),
-                true_branch: Box::new(ConstEvalExpr::Var("n".to_string())),
-                false_branch: Box::new(ConstEvalExpr::BinOp {
-                    op: ConstBinOp::Add,
-                    lhs: Box::new(ConstEvalExpr::Call {
-                        name: "fibonacci".to_string(),
-                        args: vec![ConstEvalExpr::BinOp {
-                            op: ConstBinOp::Sub,
-                            lhs: Box::new(ConstEvalExpr::Var("n".to_string())),
-                            rhs: Box::new(ConstEvalExpr::Int(1)),
+                then_branch: Box::new(ConstExpr::NamedVar("n".to_string())),
+                else_branch: Box::new(ConstExpr::BinOp {
+                    op: BinOp::Add,
+                    left: Box::new(ConstExpr::Call {
+                        func: "fibonacci".to_string(),
+                        args: vec![ConstExpr::BinOp {
+                            op: BinOp::Sub,
+                            left: Box::new(ConstExpr::NamedVar("n".to_string())),
+                            right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
                         }],
                     }),
-                    rhs: Box::new(ConstEvalExpr::Call {
-                        name: "fibonacci".to_string(),
-                        args: vec![ConstEvalExpr::BinOp {
-                            op: ConstBinOp::Sub,
-                            lhs: Box::new(ConstEvalExpr::Var("n".to_string())),
-                            rhs: Box::new(ConstEvalExpr::Int(2)),
+                    right: Box::new(ConstExpr::Call {
+                        func: "fibonacci".to_string(),
+                        args: vec![ConstExpr::BinOp {
+                            op: BinOp::Sub,
+                            left: Box::new(ConstExpr::NamedVar("n".to_string())),
+                            right: Box::new(ConstExpr::Lit(ConstValue::Int(2))),
                         }],
                     }),
                 }),

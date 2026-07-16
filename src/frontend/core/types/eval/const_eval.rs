@@ -74,263 +74,67 @@ impl ConstGenericResult {
 /// - Const函数调用
 /// - Const参数替换
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
-use std::cmp::{PartialEq, Eq};
 
-/// Const表达式
-#[derive(Debug, Clone)]
-pub enum ConstExpr {
-    /// 整数字面量
-    Int(i128),
-
-    /// 浮点数字面量 (使用 f32，与 ConstValue 保持一致)
-    Float(f32),
-
-    /// 布尔字面量
-    Bool(bool),
-
-    /// 变量引用
-    Var(String),
-
-    /// 二元运算
-    BinOp {
-        op: ConstBinOp,
-        lhs: Box<ConstExpr>,
-        rhs: Box<ConstExpr>,
-    },
-
-    /// 一元运算
-    UnOp { op: ConstUnOp, expr: Box<ConstExpr> },
-
-    /// 函数调用
-    Call { name: String, args: Vec<ConstExpr> },
-
-    /// 条件表达式
-    If {
-        condition: Box<ConstExpr>,
-        true_branch: Box<ConstExpr>,
-        false_branch: Box<ConstExpr>,
-    },
-}
-
-impl PartialEq for ConstExpr {
-    fn eq(
-        &self,
-        other: &Self,
-    ) -> bool {
-        match (self, other) {
-            (ConstExpr::Int(a), ConstExpr::Int(b)) => a == b,
-            (ConstExpr::Float(a), ConstExpr::Float(b)) => a.to_bits() == b.to_bits(),
-            (ConstExpr::Bool(a), ConstExpr::Bool(b)) => a == b,
-            (ConstExpr::Var(a), ConstExpr::Var(b)) => a == b,
-            (
-                ConstExpr::BinOp {
-                    op: o1,
-                    lhs: l1,
-                    rhs: r1,
-                },
-                ConstExpr::BinOp {
-                    op: o2,
-                    lhs: l2,
-                    rhs: r2,
-                },
-            ) => o1 == o2 && l1 == l2 && r1 == r2,
-            (ConstExpr::UnOp { op: o1, expr: e1 }, ConstExpr::UnOp { op: o2, expr: e2 }) => {
-                o1 == o2 && e1 == e2
-            }
-            (ConstExpr::Call { name: n1, args: a1 }, ConstExpr::Call { name: n2, args: a2 }) => {
-                n1 == n2 && a1 == a2
-            }
-            (
-                ConstExpr::If {
-                    condition: c1,
-                    true_branch: t1,
-                    false_branch: f1,
-                },
-                ConstExpr::If {
-                    condition: c2,
-                    true_branch: t2,
-                    false_branch: f2,
-                },
-            ) => c1 == c2 && t1 == t2 && f1 == f2,
-            _ => false,
-        }
-    }
-}
-
-impl Eq for ConstExpr {}
-
-impl Hash for ConstExpr {
-    fn hash<H: Hasher>(
-        &self,
-        state: &mut H,
-    ) {
-        match self {
-            ConstExpr::Int(n) => {
-                0u8.hash(state);
-                n.hash(state);
-            }
-            ConstExpr::Float(f) => {
-                1u8.hash(state);
-                f.to_bits().hash(state);
-            }
-            ConstExpr::Bool(b) => {
-                2u8.hash(state);
-                b.hash(state);
-            }
-            ConstExpr::Var(s) => {
-                3u8.hash(state);
-                s.hash(state);
-            }
-            ConstExpr::BinOp { op, lhs, rhs } => {
-                4u8.hash(state);
-                op.hash(state);
-                lhs.hash(state);
-                rhs.hash(state);
-            }
-            ConstExpr::UnOp { op, expr } => {
-                5u8.hash(state);
-                op.hash(state);
-                expr.hash(state);
-            }
-            ConstExpr::Call { name, args } => {
-                6u8.hash(state);
-                name.hash(state);
-                args.hash(state);
-            }
-            ConstExpr::If {
-                condition,
-                true_branch,
-                false_branch,
-            } => {
-                7u8.hash(state);
-                condition.hash(state);
-                true_branch.hash(state);
-                false_branch.hash(state);
-            }
-        }
-    }
-}
-
-/// Const二元运算符
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ConstBinOp {
-    /// 加法
-    Add,
-
-    /// 减法
-    Sub,
-
-    /// 乘法
-    Mul,
-
-    /// 除法
-    Div,
-
-    /// 取模
-    Mod,
-
-    /// 等于
-    Eq,
-
-    /// 不等于
-    Neq,
-
-    /// 小于
-    Lt,
-
-    /// 大于
-    Gt,
-
-    /// 小于等于
-    Lte,
-
-    /// 大于等于
-    Gte,
-
-    /// 位与
-    BitAnd,
-
-    /// 位或
-    BitOr,
-
-    /// 位异或
-    BitXor,
-
-    /// 左移
-    Shl,
-
-    /// 右移
-    Shr,
-}
-
-/// Const一元运算符
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ConstUnOp {
-    /// 负号
-    Neg,
-    /// 逻辑非
-    Not,
-}
-
-/// 将 AST Expr 转换为 ConstExpr
+/// 将 AST Expr 转换为 const_data::ConstExpr
 ///
 /// 只支持常量约束表达式：字面量、变量引用、二元运算、一元运算。
 /// 其他表达式（函数调用、if、match 等）返回 None。
-pub fn convert_expr_to_const_expr(expr: &Expr) -> Option<ConstExpr> {
+pub fn convert_expr_to_const_expr(
+    expr: &Expr
+) -> Option<crate::frontend::core::types::const_data::ConstExpr> {
+    use crate::frontend::core::types::const_data::{ConstExpr as CE, ConstValue};
     match expr {
         Expr::Lit(lit, _) => match lit {
-            Literal::Int(n) => Some(ConstExpr::Int(*n)),
-            Literal::Bool(b) => Some(ConstExpr::Bool(*b)),
-            Literal::Float(f) => Some(ConstExpr::Float(*f as f32)),
+            Literal::Int(n) => Some(CE::Lit(ConstValue::Int(*n))),
+            Literal::Bool(b) => Some(CE::Lit(ConstValue::Bool(*b))),
+            Literal::Float(f) => Some(CE::Lit(ConstValue::Float(*f as f32))),
             _ => None,
         },
-        Expr::Var(name, _) => Some(ConstExpr::Var(name.clone())),
+        Expr::Var(name, _) => Some(CE::NamedVar(name.clone())),
         Expr::BinOp {
             op, left, right, ..
         } => {
-            let const_op = convert_binop(op)?;
-            let lhs = convert_expr_to_const_expr(left)?;
-            let rhs = convert_expr_to_const_expr(right)?;
-            Some(ConstExpr::BinOp {
+            let const_op = convert_ast_binop(op)?;
+            Some(CE::BinOp {
                 op: const_op,
-                lhs: Box::new(lhs),
-                rhs: Box::new(rhs),
+                left: Box::new(convert_expr_to_const_expr(left)?),
+                right: Box::new(convert_expr_to_const_expr(right)?),
             })
         }
         Expr::UnOp { op, expr, .. } => {
-            let const_op = convert_unop(op)?;
-            let inner = convert_expr_to_const_expr(expr)?;
-            Some(ConstExpr::UnOp {
+            let const_op = convert_ast_unop(op)?;
+            Some(CE::UnOp {
                 op: const_op,
-                expr: Box::new(inner),
+                expr: Box::new(convert_expr_to_const_expr(expr)?),
             })
         }
         _ => None,
     }
 }
 
-fn convert_binop(op: &AstBinOp) -> Option<ConstBinOp> {
+fn convert_ast_binop(op: &AstBinOp) -> Option<crate::frontend::core::types::const_data::BinOp> {
+    use crate::frontend::core::types::const_data::BinOp;
     match op {
-        AstBinOp::Add => Some(ConstBinOp::Add),
-        AstBinOp::Sub => Some(ConstBinOp::Sub),
-        AstBinOp::Mul => Some(ConstBinOp::Mul),
-        AstBinOp::Div => Some(ConstBinOp::Div),
-        AstBinOp::Mod => Some(ConstBinOp::Mod),
-        AstBinOp::Eq => Some(ConstBinOp::Eq),
-        AstBinOp::Neq => Some(ConstBinOp::Neq),
-        AstBinOp::Lt => Some(ConstBinOp::Lt),
-        AstBinOp::Le => Some(ConstBinOp::Lte),
-        AstBinOp::Gt => Some(ConstBinOp::Gt),
-        AstBinOp::Ge => Some(ConstBinOp::Gte),
+        AstBinOp::Add => Some(BinOp::Add),
+        AstBinOp::Sub => Some(BinOp::Sub),
+        AstBinOp::Mul => Some(BinOp::Mul),
+        AstBinOp::Div => Some(BinOp::Div),
+        AstBinOp::Mod => Some(BinOp::Mod),
+        AstBinOp::Eq => Some(BinOp::Eq),
+        AstBinOp::Neq => Some(BinOp::Ne),
+        AstBinOp::Lt => Some(BinOp::Lt),
+        AstBinOp::Le => Some(BinOp::Le),
+        AstBinOp::Gt => Some(BinOp::Gt),
+        AstBinOp::Ge => Some(BinOp::Ge),
         _ => None,
     }
 }
 
-fn convert_unop(op: &AstUnOp) -> Option<ConstUnOp> {
+fn convert_ast_unop(op: &AstUnOp) -> Option<crate::frontend::core::types::const_data::UnOp> {
+    use crate::frontend::core::types::const_data::UnOp;
     match op {
-        AstUnOp::Neg => Some(ConstUnOp::Neg),
-        AstUnOp::Not => Some(ConstUnOp::Not),
+        AstUnOp::Neg => Some(UnOp::Neg),
+        AstUnOp::Not => Some(UnOp::Not),
         _ => None,
     }
 }
@@ -400,56 +204,74 @@ impl ConstGenericEval {
     /// 求值Const表达式
     pub fn eval(
         &self,
-        expr: &ConstExpr,
+        expr: &crate::frontend::core::types::const_data::ConstExpr,
     ) -> Result<ConstValue, Diagnostic> {
+        use crate::frontend::core::types::const_data::ConstExpr as CE;
         match expr {
-            ConstExpr::Int(n) => Ok(ConstValue::Int(*n)),
-            ConstExpr::Float(f) => Ok(ConstValue::Float(*f)),
-            ConstExpr::Bool(b) => Ok(ConstValue::Bool(*b)),
-            ConstExpr::Var(name) => self.bindings.get(name).cloned().ok_or_else(|| {
+            CE::Lit(v) => Ok(v.clone()),
+            CE::Var(cv) => self.bindings.get(&cv.to_string()).cloned().ok_or_else(|| {
+                ErrorCodeDefinition::const_eval_failed(&format!("Undefined variable: {}", cv))
+                    .build()
+            }),
+            CE::NamedVar(name) => self.bindings.get(name).cloned().ok_or_else(|| {
                 ErrorCodeDefinition::const_eval_failed(&format!("Undefined variable: {}", name))
                     .build()
             }),
-            ConstExpr::BinOp { op, lhs, rhs } => self.eval_binop(op, lhs, rhs),
-            ConstExpr::UnOp { op, expr } => self.eval_unop(op, expr),
-            ConstExpr::Call { name, args } => self.eval_call(name, args),
-            ConstExpr::If {
+            CE::BinOp { op, left, right } => {
+                let l = self.eval(left)?;
+                let r = self.eval(right)?;
+                self.eval_binop(*op, l, r)
+            }
+            CE::UnOp { op, expr } => {
+                let v = self.eval(expr)?;
+                self.eval_unop(*op, v)
+            }
+            CE::Call { func, args } => self.eval_call(func, args),
+            CE::If {
                 condition,
-                true_branch,
-                false_branch,
-            } => self.eval_if(condition, true_branch, false_branch),
+                then_branch,
+                else_branch,
+            } => match self.eval(condition)? {
+                ConstValue::Bool(true) => self.eval(then_branch),
+                ConstValue::Bool(false) => self.eval(else_branch),
+                _ => Err(
+                    ErrorCodeDefinition::const_eval_failed("Condition must be a boolean").build(),
+                ),
+            },
+            CE::Range { .. } => Err(ErrorCodeDefinition::const_eval_failed(
+                "Range cannot be evaluated as a scalar constraint",
+            )
+            .build()),
         }
     }
 
     /// 求值二元运算
     fn eval_binop(
         &self,
-        op: &ConstBinOp,
-        lhs: &ConstExpr,
-        rhs: &ConstExpr,
+        op: crate::frontend::core::types::const_data::BinOp,
+        left: ConstValue,
+        right: ConstValue,
     ) -> Result<ConstValue, Diagnostic> {
-        let left = self.eval(lhs)?;
-        let right = self.eval(rhs)?;
-
+        use crate::frontend::core::types::const_data::BinOp;
         match (op, &left, &right) {
             // 整数运算
-            (ConstBinOp::Add, ConstValue::Int(a), ConstValue::Int(b)) => {
+            (BinOp::Add, ConstValue::Int(a), ConstValue::Int(b)) => {
                 Ok(ConstValue::Int(a.saturating_add(*b)))
             }
-            (ConstBinOp::Sub, ConstValue::Int(a), ConstValue::Int(b)) => {
+            (BinOp::Sub, ConstValue::Int(a), ConstValue::Int(b)) => {
                 Ok(ConstValue::Int(a.saturating_sub(*b)))
             }
-            (ConstBinOp::Mul, ConstValue::Int(a), ConstValue::Int(b)) => {
+            (BinOp::Mul, ConstValue::Int(a), ConstValue::Int(b)) => {
                 Ok(ConstValue::Int(a.saturating_mul(*b)))
             }
-            (ConstBinOp::Div, ConstValue::Int(a), ConstValue::Int(b)) => {
+            (BinOp::Div, ConstValue::Int(a), ConstValue::Int(b)) => {
                 if *b == 0 {
                     Err(ErrorCodeDefinition::const_division_by_zero().build())
                 } else {
                     Ok(ConstValue::Int(a.saturating_div(*b)))
                 }
             }
-            (ConstBinOp::Mod, ConstValue::Int(a), ConstValue::Int(b)) => {
+            (BinOp::Mod, ConstValue::Int(a), ConstValue::Int(b)) => {
                 if *b == 0 {
                     Err(ErrorCodeDefinition::const_division_by_zero().build())
                 } else {
@@ -458,24 +280,18 @@ impl ConstGenericEval {
             }
 
             // 浮点数运算（仅限加法和乘法，保持编译期可确定性）
-            (ConstBinOp::Add, ConstValue::Float(a), ConstValue::Float(b)) => {
+            (BinOp::Add, ConstValue::Float(a), ConstValue::Float(b)) => {
                 Ok(ConstValue::Float(*a + *b))
             }
-            (ConstBinOp::Mul, ConstValue::Float(a), ConstValue::Float(b)) => {
+            (BinOp::Mul, ConstValue::Float(a), ConstValue::Float(b)) => {
                 Ok(ConstValue::Float(*a * *b))
             }
 
             // 位运算（仅限整数）
-            (ConstBinOp::BitAnd, ConstValue::Int(a), ConstValue::Int(b)) => {
-                Ok(ConstValue::Int(a & b))
-            }
-            (ConstBinOp::BitOr, ConstValue::Int(a), ConstValue::Int(b)) => {
-                Ok(ConstValue::Int(a | b))
-            }
-            (ConstBinOp::BitXor, ConstValue::Int(a), ConstValue::Int(b)) => {
-                Ok(ConstValue::Int(a ^ b))
-            }
-            (ConstBinOp::Shl, ConstValue::Int(a), ConstValue::Int(b)) => {
+            (BinOp::BitAnd, ConstValue::Int(a), ConstValue::Int(b)) => Ok(ConstValue::Int(a & b)),
+            (BinOp::BitOr, ConstValue::Int(a), ConstValue::Int(b)) => Ok(ConstValue::Int(a | b)),
+            (BinOp::BitXor, ConstValue::Int(a), ConstValue::Int(b)) => Ok(ConstValue::Int(a ^ b)),
+            (BinOp::Shl, ConstValue::Int(a), ConstValue::Int(b)) => {
                 // 检查移位是否超出范围
                 if *b < 0 || *b >= 128 {
                     Err(ErrorCodeDefinition::const_overflow().build())
@@ -483,7 +299,7 @@ impl ConstGenericEval {
                     Ok(ConstValue::Int(a.checked_shl(*b as u32).unwrap_or(0)))
                 }
             }
-            (ConstBinOp::Shr, ConstValue::Int(a), ConstValue::Int(b)) => {
+            (BinOp::Shr, ConstValue::Int(a), ConstValue::Int(b)) => {
                 if *b < 0 || *b >= 128 {
                     Err(ErrorCodeDefinition::const_overflow().build())
                 } else {
@@ -492,29 +308,17 @@ impl ConstGenericEval {
             }
 
             // 比较运算（整数）
-            (ConstBinOp::Eq, _, _) => Ok(ConstValue::Bool(left == right)),
-            (ConstBinOp::Neq, _, _) => Ok(ConstValue::Bool(left != right)),
-            (ConstBinOp::Lt, ConstValue::Int(a), ConstValue::Int(b)) => Ok(ConstValue::Bool(a < b)),
-            (ConstBinOp::Gt, ConstValue::Int(a), ConstValue::Int(b)) => Ok(ConstValue::Bool(a > b)),
-            (ConstBinOp::Lte, ConstValue::Int(a), ConstValue::Int(b)) => {
-                Ok(ConstValue::Bool(a <= b))
-            }
-            (ConstBinOp::Gte, ConstValue::Int(a), ConstValue::Int(b)) => {
-                Ok(ConstValue::Bool(a >= b))
-            }
+            (BinOp::Eq, _, _) => Ok(ConstValue::Bool(left == right)),
+            (BinOp::Ne, _, _) => Ok(ConstValue::Bool(left != right)),
+            (BinOp::Lt, ConstValue::Int(a), ConstValue::Int(b)) => Ok(ConstValue::Bool(a < b)),
+            (BinOp::Gt, ConstValue::Int(a), ConstValue::Int(b)) => Ok(ConstValue::Bool(a > b)),
+            (BinOp::Le, ConstValue::Int(a), ConstValue::Int(b)) => Ok(ConstValue::Bool(a <= b)),
+            (BinOp::Ge, ConstValue::Int(a), ConstValue::Int(b)) => Ok(ConstValue::Bool(a >= b)),
             // 比较运算（浮点数）
-            (ConstBinOp::Lt, ConstValue::Float(a), ConstValue::Float(b)) => {
-                Ok(ConstValue::Bool(a < b))
-            }
-            (ConstBinOp::Gt, ConstValue::Float(a), ConstValue::Float(b)) => {
-                Ok(ConstValue::Bool(a > b))
-            }
-            (ConstBinOp::Lte, ConstValue::Float(a), ConstValue::Float(b)) => {
-                Ok(ConstValue::Bool(a <= b))
-            }
-            (ConstBinOp::Gte, ConstValue::Float(a), ConstValue::Float(b)) => {
-                Ok(ConstValue::Bool(a >= b))
-            }
+            (BinOp::Lt, ConstValue::Float(a), ConstValue::Float(b)) => Ok(ConstValue::Bool(a < b)),
+            (BinOp::Gt, ConstValue::Float(a), ConstValue::Float(b)) => Ok(ConstValue::Bool(a > b)),
+            (BinOp::Le, ConstValue::Float(a), ConstValue::Float(b)) => Ok(ConstValue::Bool(a <= b)),
+            (BinOp::Ge, ConstValue::Float(a), ConstValue::Float(b)) => Ok(ConstValue::Bool(a >= b)),
 
             _ => Err(ErrorCodeDefinition::const_eval_failed(&format!(
                 "Unsupported operation: {:?} for {:?} and {:?}",
@@ -527,14 +331,15 @@ impl ConstGenericEval {
     /// 求值一元运算
     fn eval_unop(
         &self,
-        op: &ConstUnOp,
-        expr: &ConstExpr,
+        op: crate::frontend::core::types::const_data::UnOp,
+        value: ConstValue,
     ) -> Result<ConstValue, Diagnostic> {
-        let value = self.eval(expr)?;
-
+        use crate::frontend::core::types::const_data::UnOp;
         match (op, &value) {
-            (ConstUnOp::Neg, ConstValue::Int(n)) => Ok(ConstValue::Int(-*n)),
-            (ConstUnOp::Not, ConstValue::Bool(b)) => Ok(ConstValue::Bool(!*b)),
+            (UnOp::Neg, ConstValue::Int(n)) => Ok(ConstValue::Int(-*n)),
+            (UnOp::Not, ConstValue::Bool(b)) => Ok(ConstValue::Bool(!*b)),
+            (UnOp::BitNot, ConstValue::Int(n)) => Ok(ConstValue::Int(!*n)),
+            (UnOp::Pos, ConstValue::Int(n)) => Ok(ConstValue::Int(*n)),
             _ => Err(ErrorCodeDefinition::const_eval_failed(&format!(
                 "Unsupported unary operation: {:?} for {:?}",
                 op, value
@@ -547,7 +352,7 @@ impl ConstGenericEval {
     fn eval_call(
         &self,
         name: &str,
-        args: &[ConstExpr],
+        args: &[crate::frontend::core::types::const_data::ConstExpr],
     ) -> Result<ConstValue, Diagnostic> {
         // 查找内置函数
         if let Some(result) = self.eval_builtin(name, args) {
@@ -569,7 +374,7 @@ impl ConstGenericEval {
     fn eval_builtin(
         &self,
         name: &str,
-        args: &[ConstExpr],
+        args: &[crate::frontend::core::types::const_data::ConstExpr],
     ) -> Option<Result<ConstValue, Diagnostic>> {
         match name {
             "abs" => {
@@ -594,7 +399,9 @@ impl ConstGenericEval {
             "sizeof" => {
                 // 期望参数是类型名称字符串
                 let type_name = match args.first() {
-                    Some(ConstExpr::Var(name)) => name.as_str(),
+                    Some(crate::frontend::core::types::const_data::ConstExpr::NamedVar(name)) => {
+                        name.as_str()
+                    }
                     _ => {
                         return Some(Err(ErrorCodeDefinition::const_eval_failed(
                             "sizeof expects a type name",
@@ -633,7 +440,7 @@ impl ConstGenericEval {
     fn eval_function_call(
         &self,
         func: &ConstFunction,
-        args: &[ConstExpr],
+        args: &[crate::frontend::core::types::const_data::ConstExpr],
     ) -> Result<ConstValue, Diagnostic> {
         if args.len() != func.params.len() {
             return Err(ErrorCodeDefinition::const_eval_failed(&format!(
@@ -659,20 +466,6 @@ impl ConstGenericEval {
 
         eval.eval(&func.body)
     }
-
-    /// 求值条件表达式
-    fn eval_if(
-        &self,
-        condition: &ConstExpr,
-        true_branch: &ConstExpr,
-        false_branch: &ConstExpr,
-    ) -> Result<ConstValue, Diagnostic> {
-        match self.eval(condition)? {
-            ConstValue::Bool(true) => self.eval(true_branch),
-            ConstValue::Bool(false) => self.eval(false_branch),
-            _ => Err(ErrorCodeDefinition::const_eval_failed("Condition must be a boolean").build()),
-        }
-    }
 }
 
 /// Const函数定义
@@ -685,7 +478,7 @@ pub struct ConstFunction {
     pub params: Vec<String>,
 
     /// 函数体
-    pub body: ConstExpr,
+    pub body: crate::frontend::core::types::const_data::ConstExpr,
 }
 
 impl ConstFunction {
@@ -693,7 +486,7 @@ impl ConstFunction {
     pub fn new(
         name: String,
         params: Vec<String>,
-        body: ConstExpr,
+        body: crate::frontend::core::types::const_data::ConstExpr,
     ) -> Self {
         Self { name, params, body }
     }
@@ -701,29 +494,29 @@ impl ConstFunction {
 
 /// 预定义的Const函数
 pub mod functions {
-    use super::*;
+    use crate::frontend::core::types::const_data::{ConstExpr as CE, BinOp, ConstValue};
 
     /// Factorial 函数
-    pub fn factorial() -> ConstFunction {
-        ConstFunction::new(
+    pub fn factorial() -> super::ConstFunction {
+        super::ConstFunction::new(
             "factorial".to_string(),
             vec!["n".to_string()],
-            ConstExpr::If {
-                condition: Box::new(ConstExpr::BinOp {
-                    op: ConstBinOp::Lte,
-                    lhs: Box::new(ConstExpr::Var("n".to_string())),
-                    rhs: Box::new(ConstExpr::Int(1)),
+            CE::If {
+                condition: Box::new(CE::BinOp {
+                    op: BinOp::Le,
+                    left: Box::new(CE::NamedVar("n".to_string())),
+                    right: Box::new(CE::Lit(ConstValue::Int(1))),
                 }),
-                true_branch: Box::new(ConstExpr::Int(1)),
-                false_branch: Box::new(ConstExpr::BinOp {
-                    op: ConstBinOp::Mul,
-                    lhs: Box::new(ConstExpr::Var("n".to_string())),
-                    rhs: Box::new(ConstExpr::Call {
-                        name: "factorial".to_string(),
-                        args: vec![ConstExpr::BinOp {
-                            op: ConstBinOp::Sub,
-                            lhs: Box::new(ConstExpr::Var("n".to_string())),
-                            rhs: Box::new(ConstExpr::Int(1)),
+                then_branch: Box::new(CE::Lit(ConstValue::Int(1))),
+                else_branch: Box::new(CE::BinOp {
+                    op: BinOp::Mul,
+                    left: Box::new(CE::NamedVar("n".to_string())),
+                    right: Box::new(CE::Call {
+                        func: "factorial".to_string(),
+                        args: vec![CE::BinOp {
+                            op: BinOp::Sub,
+                            left: Box::new(CE::NamedVar("n".to_string())),
+                            right: Box::new(CE::Lit(ConstValue::Int(1))),
                         }],
                     }),
                 }),
@@ -732,33 +525,33 @@ pub mod functions {
     }
 
     /// Fibonacci 函数
-    pub fn fibonacci() -> ConstFunction {
-        ConstFunction::new(
+    pub fn fibonacci() -> super::ConstFunction {
+        super::ConstFunction::new(
             "fibonacci".to_string(),
             vec!["n".to_string()],
-            ConstExpr::If {
-                condition: Box::new(ConstExpr::BinOp {
-                    op: ConstBinOp::Lte,
-                    lhs: Box::new(ConstExpr::Var("n".to_string())),
-                    rhs: Box::new(ConstExpr::Int(1)),
+            CE::If {
+                condition: Box::new(CE::BinOp {
+                    op: BinOp::Le,
+                    left: Box::new(CE::NamedVar("n".to_string())),
+                    right: Box::new(CE::Lit(ConstValue::Int(1))),
                 }),
-                true_branch: Box::new(ConstExpr::Var("n".to_string())),
-                false_branch: Box::new(ConstExpr::BinOp {
-                    op: ConstBinOp::Add,
-                    lhs: Box::new(ConstExpr::Call {
-                        name: "fibonacci".to_string(),
-                        args: vec![ConstExpr::BinOp {
-                            op: ConstBinOp::Sub,
-                            lhs: Box::new(ConstExpr::Var("n".to_string())),
-                            rhs: Box::new(ConstExpr::Int(1)),
+                then_branch: Box::new(CE::NamedVar("n".to_string())),
+                else_branch: Box::new(CE::BinOp {
+                    op: BinOp::Add,
+                    left: Box::new(CE::Call {
+                        func: "fibonacci".to_string(),
+                        args: vec![CE::BinOp {
+                            op: BinOp::Sub,
+                            left: Box::new(CE::NamedVar("n".to_string())),
+                            right: Box::new(CE::Lit(ConstValue::Int(1))),
                         }],
                     }),
-                    rhs: Box::new(ConstExpr::Call {
-                        name: "fibonacci".to_string(),
-                        args: vec![ConstExpr::BinOp {
-                            op: ConstBinOp::Sub,
-                            lhs: Box::new(ConstExpr::Var("n".to_string())),
-                            rhs: Box::new(ConstExpr::Int(2)),
+                    right: Box::new(CE::Call {
+                        func: "fibonacci".to_string(),
+                        args: vec![CE::BinOp {
+                            op: BinOp::Sub,
+                            left: Box::new(CE::NamedVar("n".to_string())),
+                            right: Box::new(CE::Lit(ConstValue::Int(2))),
                         }],
                     }),
                 }),
