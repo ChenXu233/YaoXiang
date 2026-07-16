@@ -7,10 +7,10 @@
 //! §4.3: GenericSize 类型尺寸计算
 //! §4.3: SizeExpr 表达式
 
+use crate::frontend::core::types::const_data::{BinOp, ConstExpr};
 use crate::frontend::core::types::{ConstValue, MonoType};
 use crate::frontend::core::types::eval::const_eval::{
-    ConstBinOp, ConstExpr, ConstFunction, ConstGenericEval, ConstGenericResult, GenericSize,
-    SizeExpr, SizeResult,
+    ConstFunction, ConstGenericEval, ConstGenericResult, GenericSize, SizeExpr, SizeResult,
 };
 use crate::util::diagnostic::Diagnostic;
 
@@ -53,25 +53,44 @@ fn test_const_result_not_const() {
 #[test]
 fn test_eval_int_literal() {
     let e = ConstGenericEval::new();
-    assert_eval_eq(e.eval(&ConstExpr::Int(42)), ConstValue::Int(42));
-    assert_eval_eq(e.eval(&ConstExpr::Int(0)), ConstValue::Int(0));
-    assert_eval_eq(e.eval(&ConstExpr::Int(-1)), ConstValue::Int(-1));
+    assert_eval_eq(
+        e.eval(&ConstExpr::Lit(ConstValue::Int(42))),
+        ConstValue::Int(42),
+    );
+    assert_eval_eq(
+        e.eval(&ConstExpr::Lit(ConstValue::Int(0))),
+        ConstValue::Int(0),
+    );
+    assert_eval_eq(
+        e.eval(&ConstExpr::Lit(ConstValue::Int(-1))),
+        ConstValue::Int(-1),
+    );
 }
 
 #[test]
 fn test_eval_bool_literal() {
     let e = ConstGenericEval::new();
-    assert_eval_eq(e.eval(&ConstExpr::Bool(true)), ConstValue::Bool(true));
-    assert_eval_eq(e.eval(&ConstExpr::Bool(false)), ConstValue::Bool(false));
+    assert_eval_eq(
+        e.eval(&ConstExpr::Lit(ConstValue::Bool(true))),
+        ConstValue::Bool(true),
+    );
+    assert_eval_eq(
+        e.eval(&ConstExpr::Lit(ConstValue::Bool(false))),
+        ConstValue::Bool(false),
+    );
 }
 
 #[test]
 fn test_eval_float_literal() {
     let e = ConstGenericEval::new();
-    assert!(e.eval(&ConstExpr::Float(std::f32::consts::PI)).is_ok());
-    assert!(e.eval(&ConstExpr::Float(std::f32::consts::PI)).is_ok());
-    assert!(e.eval(&ConstExpr::Float(0.0)).is_ok());
-    assert!(e.eval(&ConstExpr::Float(-1.5)).is_ok());
+    assert!(e
+        .eval(&ConstExpr::Lit(ConstValue::Float(std::f32::consts::PI)))
+        .is_ok());
+    assert!(e
+        .eval(&ConstExpr::Lit(ConstValue::Float(std::f32::consts::PI)))
+        .is_ok());
+    assert!(e.eval(&ConstExpr::Lit(ConstValue::Float(0.0))).is_ok());
+    assert!(e.eval(&ConstExpr::Lit(ConstValue::Float(-1.5))).is_ok());
 }
 
 // ===================================================================
@@ -79,76 +98,76 @@ fn test_eval_float_literal() {
 // ===================================================================
 
 fn bin(
-    op: ConstBinOp,
+    op: BinOp,
     l: i128,
     r: i128,
 ) -> ConstExpr {
     ConstExpr::BinOp {
         op,
-        lhs: Box::new(ConstExpr::Int(l)),
-        rhs: Box::new(ConstExpr::Int(r)),
+        left: Box::new(ConstExpr::Lit(ConstValue::Int(l))),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(r))),
     }
 }
 
 #[test]
 fn test_eval_arithmetic_ops() {
     let e = ConstGenericEval::new();
-    assert_eval_eq(e.eval(&bin(ConstBinOp::Add, 3, 4)), ConstValue::Int(7));
-    assert_eval_eq(e.eval(&bin(ConstBinOp::Sub, 10, 3)), ConstValue::Int(7));
-    assert_eval_eq(e.eval(&bin(ConstBinOp::Mul, 6, 7)), ConstValue::Int(42));
-    assert_eval_eq(e.eval(&bin(ConstBinOp::Div, 10, 2)), ConstValue::Int(5));
-    assert_eval_eq(e.eval(&bin(ConstBinOp::Mod, 10, 3)), ConstValue::Int(1));
+    assert_eval_eq(e.eval(&bin(BinOp::Add, 3, 4)), ConstValue::Int(7));
+    assert_eval_eq(e.eval(&bin(BinOp::Sub, 10, 3)), ConstValue::Int(7));
+    assert_eval_eq(e.eval(&bin(BinOp::Mul, 6, 7)), ConstValue::Int(42));
+    assert_eval_eq(e.eval(&bin(BinOp::Div, 10, 2)), ConstValue::Int(5));
+    assert_eval_eq(e.eval(&bin(BinOp::Mod, 10, 3)), ConstValue::Int(1));
 }
 
 #[test]
 fn test_eval_division_by_zero() {
     let e = ConstGenericEval::new();
-    assert!(e.eval(&bin(ConstBinOp::Div, 1, 0)).is_err());
-    assert!(e.eval(&bin(ConstBinOp::Mod, 1, 0)).is_err());
+    assert!(e.eval(&bin(BinOp::Div, 1, 0)).is_err());
+    assert!(e.eval(&bin(BinOp::Mod, 1, 0)).is_err());
 }
 
 #[test]
 fn test_eval_comparison_ops() {
     let e = ConstGenericEval::new();
-    assert_eval_eq(e.eval(&bin(ConstBinOp::Eq, 5, 5)), ConstValue::Bool(true));
-    assert_eval_eq(e.eval(&bin(ConstBinOp::Eq, 5, 6)), ConstValue::Bool(false));
-    assert_eval_eq(e.eval(&bin(ConstBinOp::Neq, 5, 6)), ConstValue::Bool(true));
-    assert_eval_eq(e.eval(&bin(ConstBinOp::Lt, 3, 5)), ConstValue::Bool(true));
-    assert_eval_eq(e.eval(&bin(ConstBinOp::Gt, 5, 3)), ConstValue::Bool(true));
-    assert_eval_eq(e.eval(&bin(ConstBinOp::Lte, 5, 5)), ConstValue::Bool(true));
-    assert_eval_eq(e.eval(&bin(ConstBinOp::Gte, 5, 5)), ConstValue::Bool(true));
+    assert_eval_eq(e.eval(&bin(BinOp::Eq, 5, 5)), ConstValue::Bool(true));
+    assert_eval_eq(e.eval(&bin(BinOp::Eq, 5, 6)), ConstValue::Bool(false));
+    assert_eval_eq(e.eval(&bin(BinOp::Ne, 5, 6)), ConstValue::Bool(true));
+    assert_eval_eq(e.eval(&bin(BinOp::Lt, 3, 5)), ConstValue::Bool(true));
+    assert_eval_eq(e.eval(&bin(BinOp::Gt, 5, 3)), ConstValue::Bool(true));
+    assert_eval_eq(e.eval(&bin(BinOp::Le, 5, 5)), ConstValue::Bool(true));
+    assert_eval_eq(e.eval(&bin(BinOp::Ge, 5, 5)), ConstValue::Bool(true));
 }
 
 #[test]
 fn test_eval_bitwise_ops() {
     let e = ConstGenericEval::new();
-    assert_eval_eq(e.eval(&bin(ConstBinOp::BitAnd, 6, 3)), ConstValue::Int(2));
-    assert_eval_eq(e.eval(&bin(ConstBinOp::BitOr, 6, 3)), ConstValue::Int(7));
-    assert_eval_eq(e.eval(&bin(ConstBinOp::BitXor, 6, 3)), ConstValue::Int(5));
-    assert_eval_eq(e.eval(&bin(ConstBinOp::Shl, 1, 8)), ConstValue::Int(256));
-    assert_eval_eq(e.eval(&bin(ConstBinOp::Shr, 256, 8)), ConstValue::Int(1));
+    assert_eval_eq(e.eval(&bin(BinOp::BitAnd, 6, 3)), ConstValue::Int(2));
+    assert_eval_eq(e.eval(&bin(BinOp::BitOr, 6, 3)), ConstValue::Int(7));
+    assert_eval_eq(e.eval(&bin(BinOp::BitXor, 6, 3)), ConstValue::Int(5));
+    assert_eval_eq(e.eval(&bin(BinOp::Shl, 1, 8)), ConstValue::Int(256));
+    assert_eval_eq(e.eval(&bin(BinOp::Shr, 256, 8)), ConstValue::Int(1));
 }
 
 #[test]
 fn test_eval_shift_out_of_range() {
     let e = ConstGenericEval::new();
-    assert!(e.eval(&bin(ConstBinOp::Shl, 1, 128)).is_err());
-    assert!(e.eval(&bin(ConstBinOp::Shr, 1, -1)).is_err());
+    assert!(e.eval(&bin(BinOp::Shl, 1, 128)).is_err());
+    assert!(e.eval(&bin(BinOp::Shr, 1, -1)).is_err());
 }
 
 #[test]
 fn test_eval_float_arith() {
     let e = ConstGenericEval::new();
     let fa = ConstExpr::BinOp {
-        op: ConstBinOp::Add,
-        lhs: Box::new(ConstExpr::Float(1.5)),
-        rhs: Box::new(ConstExpr::Float(2.5)),
+        op: BinOp::Add,
+        left: Box::new(ConstExpr::Lit(ConstValue::Float(1.5))),
+        right: Box::new(ConstExpr::Lit(ConstValue::Float(2.5))),
     };
     assert_eval_eq(e.eval(&fa), ConstValue::Float(4.0));
     let fm = ConstExpr::BinOp {
-        op: ConstBinOp::Mul,
-        lhs: Box::new(ConstExpr::Float(3.0)),
-        rhs: Box::new(ConstExpr::Float(2.0)),
+        op: BinOp::Mul,
+        left: Box::new(ConstExpr::Lit(ConstValue::Float(3.0))),
+        right: Box::new(ConstExpr::Lit(ConstValue::Float(2.0))),
     };
     assert_eval_eq(e.eval(&fm), ConstValue::Float(6.0));
 }
@@ -157,9 +176,9 @@ fn test_eval_float_arith() {
 fn test_eval_float_compare() {
     let e = ConstGenericEval::new();
     let flt = ConstExpr::BinOp {
-        op: ConstBinOp::Lt,
-        lhs: Box::new(ConstExpr::Float(1.0)),
-        rhs: Box::new(ConstExpr::Float(2.0)),
+        op: BinOp::Lt,
+        left: Box::new(ConstExpr::Lit(ConstValue::Float(1.0))),
+        right: Box::new(ConstExpr::Lit(ConstValue::Float(2.0))),
     };
     assert_eval_eq(e.eval(&flt), ConstValue::Bool(true));
 }
@@ -171,10 +190,10 @@ fn test_eval_float_compare() {
 #[test]
 fn test_eval_neg() {
     let e = ConstGenericEval::new();
-    use crate::frontend::core::types::eval::const_eval::ConstUnOp;
+    use crate::frontend::core::types::const_data::UnOp;
     let neg = |x| ConstExpr::UnOp {
-        op: ConstUnOp::Neg,
-        expr: Box::new(ConstExpr::Int(x)),
+        op: UnOp::Neg,
+        expr: Box::new(ConstExpr::Lit(ConstValue::Int(x))),
     };
     assert_eval_eq(e.eval(&neg(42)), ConstValue::Int(-42));
     assert_eval_eq(e.eval(&neg(-5)), ConstValue::Int(5));
@@ -183,10 +202,10 @@ fn test_eval_neg() {
 #[test]
 fn test_eval_not() {
     let e = ConstGenericEval::new();
-    use crate::frontend::core::types::eval::const_eval::ConstUnOp;
+    use crate::frontend::core::types::const_data::UnOp;
     let not = |b| ConstExpr::UnOp {
-        op: ConstUnOp::Not,
-        expr: Box::new(ConstExpr::Bool(b)),
+        op: UnOp::Not,
+        expr: Box::new(ConstExpr::Lit(ConstValue::Bool(b))),
     };
     assert_eval_eq(e.eval(&not(true)), ConstValue::Bool(false));
     assert_eval_eq(e.eval(&not(false)), ConstValue::Bool(true));
@@ -201,7 +220,7 @@ fn test_eval_var_bound() {
     let mut e = ConstGenericEval::new();
     e.bind_var("x".to_string(), ConstValue::Int(42));
     assert_eval_eq(
-        e.eval(&ConstExpr::Var("x".to_string())),
+        e.eval(&ConstExpr::NamedVar("x".to_string())),
         ConstValue::Int(42),
     );
 }
@@ -209,7 +228,9 @@ fn test_eval_var_bound() {
 #[test]
 fn test_eval_var_unbound() {
     let e = ConstGenericEval::new();
-    assert!(e.eval(&ConstExpr::Var("undefined".to_string())).is_err());
+    assert!(e
+        .eval(&ConstExpr::NamedVar("undefined".to_string()))
+        .is_err());
 }
 
 // ===================================================================
@@ -220,9 +241,9 @@ fn test_eval_var_unbound() {
 fn test_eval_if_true_false() {
     let e = ConstGenericEval::new();
     let iff = |c, t, f| ConstExpr::If {
-        condition: Box::new(ConstExpr::Bool(c)),
-        true_branch: Box::new(ConstExpr::Int(t)),
-        false_branch: Box::new(ConstExpr::Int(f)),
+        condition: Box::new(ConstExpr::Lit(ConstValue::Bool(c))),
+        then_branch: Box::new(ConstExpr::Lit(ConstValue::Int(t))),
+        else_branch: Box::new(ConstExpr::Lit(ConstValue::Int(f))),
     };
     assert_eval_eq(e.eval(&iff(true, 1, 2)), ConstValue::Int(1));
     assert_eval_eq(e.eval(&iff(false, 10, 20)), ConstValue::Int(20));
@@ -241,16 +262,16 @@ fn test_eval_custom_function() {
             "double".to_string(),
             vec!["x".to_string()],
             ConstExpr::BinOp {
-                op: ConstBinOp::Mul,
-                lhs: Box::new(ConstExpr::Var("x".to_string())),
-                rhs: Box::new(ConstExpr::Int(2)),
+                op: BinOp::Mul,
+                left: Box::new(ConstExpr::NamedVar("x".to_string())),
+                right: Box::new(ConstExpr::Lit(ConstValue::Int(2))),
             },
         ),
     );
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "double".to_string(),
-            args: vec![ConstExpr::Int(21)],
+            func: "double".to_string(),
+            args: vec![ConstExpr::Lit(ConstValue::Int(21))],
         }),
         ConstValue::Int(42),
     );
@@ -261,11 +282,15 @@ fn test_eval_custom_function_arg_count_mismatch() {
     let mut e = ConstGenericEval::new();
     e.register_function(
         "f".to_string(),
-        ConstFunction::new("f".to_string(), vec!["x".to_string()], ConstExpr::Int(0)),
+        ConstFunction::new(
+            "f".to_string(),
+            vec!["x".to_string()],
+            ConstExpr::Lit(ConstValue::Int(0)),
+        ),
     );
     assert!(e
         .eval(&ConstExpr::Call {
-            name: "f".to_string(),
+            func: "f".to_string(),
             args: vec![],
         })
         .is_err());
@@ -284,22 +309,22 @@ fn test_eval_factorial() {
     );
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "factorial".to_string(),
-            args: vec![ConstExpr::Int(0)],
+            func: "factorial".to_string(),
+            args: vec![ConstExpr::Lit(ConstValue::Int(0))],
         }),
         ConstValue::Int(1),
     );
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "factorial".to_string(),
-            args: vec![ConstExpr::Int(5)],
+            func: "factorial".to_string(),
+            args: vec![ConstExpr::Lit(ConstValue::Int(5))],
         }),
         ConstValue::Int(120),
     );
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "factorial".to_string(),
-            args: vec![ConstExpr::Int(10)],
+            func: "factorial".to_string(),
+            args: vec![ConstExpr::Lit(ConstValue::Int(10))],
         }),
         ConstValue::Int(3628800),
     );
@@ -312,22 +337,22 @@ fn test_eval_fibonacci() {
     e.register_function(fib.name.clone(), fib);
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "fibonacci".to_string(),
-            args: vec![ConstExpr::Int(0)],
+            func: "fibonacci".to_string(),
+            args: vec![ConstExpr::Lit(ConstValue::Int(0))],
         }),
         ConstValue::Int(0),
     );
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "fibonacci".to_string(),
-            args: vec![ConstExpr::Int(1)],
+            func: "fibonacci".to_string(),
+            args: vec![ConstExpr::Lit(ConstValue::Int(1))],
         }),
         ConstValue::Int(1),
     );
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "fibonacci".to_string(),
-            args: vec![ConstExpr::Int(10)],
+            func: "fibonacci".to_string(),
+            args: vec![ConstExpr::Lit(ConstValue::Int(10))],
         }),
         ConstValue::Int(55),
     );
@@ -342,15 +367,15 @@ fn test_eval_builtin_abs() {
     let e = ConstGenericEval::new();
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "abs".to_string(),
-            args: vec![ConstExpr::Int(-5)],
+            func: "abs".to_string(),
+            args: vec![ConstExpr::Lit(ConstValue::Int(-5))],
         }),
         ConstValue::Int(5),
     );
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "abs".to_string(),
-            args: vec![ConstExpr::Int(0)],
+            func: "abs".to_string(),
+            args: vec![ConstExpr::Lit(ConstValue::Int(0))],
         }),
         ConstValue::Int(0),
     );
@@ -361,15 +386,21 @@ fn test_eval_builtin_min_max() {
     let e = ConstGenericEval::new();
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "min".to_string(),
-            args: vec![ConstExpr::Int(3), ConstExpr::Int(7)],
+            func: "min".to_string(),
+            args: vec![
+                ConstExpr::Lit(ConstValue::Int(3)),
+                ConstExpr::Lit(ConstValue::Int(7)),
+            ],
         }),
         ConstValue::Int(3),
     );
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "max".to_string(),
-            args: vec![ConstExpr::Int(3), ConstExpr::Int(7)],
+            func: "max".to_string(),
+            args: vec![
+                ConstExpr::Lit(ConstValue::Int(3)),
+                ConstExpr::Lit(ConstValue::Int(7)),
+            ],
         }),
         ConstValue::Int(7),
     );
@@ -380,15 +411,15 @@ fn test_eval_builtin_sizeof() {
     let e = ConstGenericEval::new();
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "sizeof".to_string(),
-            args: vec![ConstExpr::Var("Int".to_string())],
+            func: "sizeof".to_string(),
+            args: vec![ConstExpr::NamedVar("Int".to_string())],
         }),
         ConstValue::Int(8),
     );
     assert!(e
         .eval(&ConstExpr::Call {
-            name: "sizeof".to_string(),
-            args: vec![ConstExpr::Var("Unknown".to_string())],
+            func: "sizeof".to_string(),
+            args: vec![ConstExpr::NamedVar("Unknown".to_string())],
         })
         .is_err());
 }
@@ -398,7 +429,7 @@ fn test_eval_undefined_function() {
     let e = ConstGenericEval::new();
     assert!(e
         .eval(&ConstExpr::Call {
-            name: "nonexistent".to_string(),
+            func: "nonexistent".to_string(),
             args: vec![],
         })
         .is_err());
@@ -412,9 +443,9 @@ fn test_eval_undefined_function() {
 fn test_eval_mismatched_types_in_binop() {
     let e = ConstGenericEval::new();
     let mixed = ConstExpr::BinOp {
-        op: ConstBinOp::Add,
-        lhs: Box::new(ConstExpr::Int(1)),
-        rhs: Box::new(ConstExpr::Bool(true)),
+        op: BinOp::Add,
+        left: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
+        right: Box::new(ConstExpr::Lit(ConstValue::Bool(true))),
     };
     assert!(e.eval(&mixed).is_err());
 }
@@ -527,21 +558,21 @@ fn test_size_result() {
 fn test_eval_float_gt_lte_gte() {
     let e = ConstGenericEval::new();
     let gt = ConstExpr::BinOp {
-        op: ConstBinOp::Gt,
-        lhs: Box::new(ConstExpr::Float(5.0)),
-        rhs: Box::new(ConstExpr::Float(3.0)),
+        op: BinOp::Gt,
+        left: Box::new(ConstExpr::Lit(ConstValue::Float(5.0))),
+        right: Box::new(ConstExpr::Lit(ConstValue::Float(3.0))),
     };
     assert_eval_eq(e.eval(&gt), ConstValue::Bool(true));
     let lte = ConstExpr::BinOp {
-        op: ConstBinOp::Lte,
-        lhs: Box::new(ConstExpr::Float(3.0)),
-        rhs: Box::new(ConstExpr::Float(3.0)),
+        op: BinOp::Le,
+        left: Box::new(ConstExpr::Lit(ConstValue::Float(3.0))),
+        right: Box::new(ConstExpr::Lit(ConstValue::Float(3.0))),
     };
     assert_eval_eq(e.eval(&lte), ConstValue::Bool(true));
     let gte = ConstExpr::BinOp {
-        op: ConstBinOp::Gte,
-        lhs: Box::new(ConstExpr::Float(5.0)),
-        rhs: Box::new(ConstExpr::Float(3.0)),
+        op: BinOp::Ge,
+        left: Box::new(ConstExpr::Lit(ConstValue::Float(5.0))),
+        right: Box::new(ConstExpr::Lit(ConstValue::Float(3.0))),
     };
     assert_eval_eq(e.eval(&gte), ConstValue::Bool(true));
 }
@@ -570,9 +601,9 @@ fn test_generic_size_array_typeref() {
 fn test_eval_bool_plus_int_unsupported() {
     let e = ConstGenericEval::new();
     let bad = ConstExpr::BinOp {
-        op: ConstBinOp::Add,
-        lhs: Box::new(ConstExpr::Bool(true)),
-        rhs: Box::new(ConstExpr::Int(1)),
+        op: BinOp::Add,
+        left: Box::new(ConstExpr::Lit(ConstValue::Bool(true))),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
     };
     assert!(e.eval(&bad).is_err());
 }
@@ -580,11 +611,11 @@ fn test_eval_bool_plus_int_unsupported() {
 #[test]
 fn test_eval_neg_zero() {
     let e = ConstGenericEval::new();
-    use crate::frontend::core::types::eval::const_eval::ConstUnOp;
+    use crate::frontend::core::types::const_data::UnOp;
     assert_eval_eq(
         e.eval(&ConstExpr::UnOp {
-            op: ConstUnOp::Neg,
-            expr: Box::new(ConstExpr::Int(0)),
+            op: UnOp::Neg,
+            expr: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
         }),
         ConstValue::Int(0),
     );
@@ -598,9 +629,9 @@ fn test_eval_neg_zero() {
 fn test_eval_if_non_boolean_condition() {
     let e = ConstGenericEval::new();
     let iff = ConstExpr::If {
-        condition: Box::new(ConstExpr::Int(1)), // Not a boolean
-        true_branch: Box::new(ConstExpr::Int(1)),
-        false_branch: Box::new(ConstExpr::Int(2)),
+        condition: Box::new(ConstExpr::Lit(ConstValue::Int(1))), // Not a boolean
+        then_branch: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
+        else_branch: Box::new(ConstExpr::Lit(ConstValue::Int(2))),
     };
     assert!(e.eval(&iff).is_err(), "non-boolean condition should fail");
 }
@@ -610,8 +641,8 @@ fn test_eval_builtin_abs_positive() {
     let e = ConstGenericEval::new();
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "abs".to_string(),
-            args: vec![ConstExpr::Int(5)],
+            func: "abs".to_string(),
+            args: vec![ConstExpr::Lit(ConstValue::Int(5))],
         }),
         ConstValue::Int(5),
     );
@@ -622,7 +653,7 @@ fn test_eval_builtin_compile_time() {
     let e = ConstGenericEval::new();
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "compile_time".to_string(),
+            func: "compile_time".to_string(),
             args: vec![],
         }),
         ConstValue::Bool(true),
@@ -634,8 +665,8 @@ fn test_eval_builtin_sizeof_void() {
     let e = ConstGenericEval::new();
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "sizeof".to_string(),
-            args: vec![ConstExpr::Var("Void".to_string())],
+            func: "sizeof".to_string(),
+            args: vec![ConstExpr::NamedVar("Void".to_string())],
         }),
         ConstValue::Int(0),
     );
@@ -646,8 +677,8 @@ fn test_eval_builtin_sizeof_char() {
     let e = ConstGenericEval::new();
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "sizeof".to_string(),
-            args: vec![ConstExpr::Var("Char".to_string())],
+            func: "sizeof".to_string(),
+            args: vec![ConstExpr::NamedVar("Char".to_string())],
         }),
         ConstValue::Int(4),
     );
@@ -658,8 +689,8 @@ fn test_eval_builtin_sizeof_uint() {
     let e = ConstGenericEval::new();
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "sizeof".to_string(),
-            args: vec![ConstExpr::Var("Uint".to_string())],
+            func: "sizeof".to_string(),
+            args: vec![ConstExpr::NamedVar("Uint".to_string())],
         }),
         ConstValue::Int(8),
     );
@@ -670,8 +701,8 @@ fn test_eval_builtin_sizeof_float() {
     let e = ConstGenericEval::new();
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "sizeof".to_string(),
-            args: vec![ConstExpr::Var("Float".to_string())],
+            func: "sizeof".to_string(),
+            args: vec![ConstExpr::NamedVar("Float".to_string())],
         }),
         ConstValue::Int(8),
     );
@@ -682,8 +713,8 @@ fn test_eval_builtin_sizeof_string() {
     let e = ConstGenericEval::new();
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "sizeof".to_string(),
-            args: vec![ConstExpr::Var("String".to_string())],
+            func: "sizeof".to_string(),
+            args: vec![ConstExpr::NamedVar("String".to_string())],
         }),
         ConstValue::Int(8),
     );
@@ -694,8 +725,8 @@ fn test_eval_builtin_sizeof_non_var() {
     let e = ConstGenericEval::new();
     assert!(e
         .eval(&ConstExpr::Call {
-            name: "sizeof".to_string(),
-            args: vec![ConstExpr::Int(42)], // Not a Var
+            func: "sizeof".to_string(),
+            args: vec![ConstExpr::Lit(ConstValue::Int(42))], // Not a Var
         })
         .is_err());
 }
@@ -709,20 +740,24 @@ fn test_eval_custom_function_multiple_args() {
             "add3".to_string(),
             vec!["a".to_string(), "b".to_string(), "c".to_string()],
             ConstExpr::BinOp {
-                op: ConstBinOp::Add,
-                lhs: Box::new(ConstExpr::BinOp {
-                    op: ConstBinOp::Add,
-                    lhs: Box::new(ConstExpr::Var("a".to_string())),
-                    rhs: Box::new(ConstExpr::Var("b".to_string())),
+                op: BinOp::Add,
+                left: Box::new(ConstExpr::BinOp {
+                    op: BinOp::Add,
+                    left: Box::new(ConstExpr::NamedVar("a".to_string())),
+                    right: Box::new(ConstExpr::NamedVar("b".to_string())),
                 }),
-                rhs: Box::new(ConstExpr::Var("c".to_string())),
+                right: Box::new(ConstExpr::NamedVar("c".to_string())),
             },
         ),
     );
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "add3".to_string(),
-            args: vec![ConstExpr::Int(1), ConstExpr::Int(2), ConstExpr::Int(3)],
+            func: "add3".to_string(),
+            args: vec![
+                ConstExpr::Lit(ConstValue::Int(1)),
+                ConstExpr::Lit(ConstValue::Int(2)),
+                ConstExpr::Lit(ConstValue::Int(3)),
+            ],
         }),
         ConstValue::Int(6),
     );
@@ -733,8 +768,11 @@ fn test_eval_builtin_min_same() {
     let e = ConstGenericEval::new();
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "min".to_string(),
-            args: vec![ConstExpr::Int(5), ConstExpr::Int(5)],
+            func: "min".to_string(),
+            args: vec![
+                ConstExpr::Lit(ConstValue::Int(5)),
+                ConstExpr::Lit(ConstValue::Int(5)),
+            ],
         }),
         ConstValue::Int(5),
     );
@@ -745,8 +783,11 @@ fn test_eval_builtin_max_same() {
     let e = ConstGenericEval::new();
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
-            name: "max".to_string(),
-            args: vec![ConstExpr::Int(5), ConstExpr::Int(5)],
+            func: "max".to_string(),
+            args: vec![
+                ConstExpr::Lit(ConstValue::Int(5)),
+                ConstExpr::Lit(ConstValue::Int(5)),
+            ],
         }),
         ConstValue::Int(5),
     );
@@ -755,10 +796,10 @@ fn test_eval_builtin_max_same() {
 #[test]
 fn test_eval_neg_float() {
     let e = ConstGenericEval::new();
-    use crate::frontend::core::types::eval::const_eval::ConstUnOp;
+    use crate::frontend::core::types::const_data::UnOp;
     let neg = ConstExpr::UnOp {
-        op: ConstUnOp::Neg,
-        expr: Box::new(ConstExpr::Float(std::f32::consts::PI)),
+        op: UnOp::Neg,
+        expr: Box::new(ConstExpr::Lit(ConstValue::Float(std::f32::consts::PI))),
     };
     // Neg on float should fail (unsupported)
     assert!(e.eval(&neg).is_err());
@@ -767,10 +808,10 @@ fn test_eval_neg_float() {
 #[test]
 fn test_eval_not_int() {
     let e = ConstGenericEval::new();
-    use crate::frontend::core::types::eval::const_eval::ConstUnOp;
+    use crate::frontend::core::types::const_data::UnOp;
     let not = ConstExpr::UnOp {
-        op: ConstUnOp::Not,
-        expr: Box::new(ConstExpr::Int(1)),
+        op: UnOp::Not,
+        expr: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
     };
     // Not on int should fail (unsupported)
     assert!(e.eval(&not).is_err());
@@ -780,9 +821,9 @@ fn test_eval_not_int() {
 fn test_eval_float_sub() {
     let e = ConstGenericEval::new();
     let sub = ConstExpr::BinOp {
-        op: ConstBinOp::Sub,
-        lhs: Box::new(ConstExpr::Float(5.0)),
-        rhs: Box::new(ConstExpr::Float(3.0)),
+        op: BinOp::Sub,
+        left: Box::new(ConstExpr::Lit(ConstValue::Float(5.0))),
+        right: Box::new(ConstExpr::Lit(ConstValue::Float(3.0))),
     };
     // Float Sub is not supported
     assert!(e.eval(&sub).is_err());
@@ -792,9 +833,9 @@ fn test_eval_float_sub() {
 fn test_eval_float_div() {
     let e = ConstGenericEval::new();
     let div = ConstExpr::BinOp {
-        op: ConstBinOp::Div,
-        lhs: Box::new(ConstExpr::Float(10.0)),
-        rhs: Box::new(ConstExpr::Float(2.0)),
+        op: BinOp::Div,
+        left: Box::new(ConstExpr::Lit(ConstValue::Float(10.0))),
+        right: Box::new(ConstExpr::Lit(ConstValue::Float(2.0))),
     };
     // Float Div is not supported
     assert!(e.eval(&div).is_err());
@@ -804,9 +845,9 @@ fn test_eval_float_div() {
 fn test_eval_float_eq() {
     let e = ConstGenericEval::new();
     let eq = ConstExpr::BinOp {
-        op: ConstBinOp::Eq,
-        lhs: Box::new(ConstExpr::Float(3.0)),
-        rhs: Box::new(ConstExpr::Float(3.0)),
+        op: BinOp::Eq,
+        left: Box::new(ConstExpr::Lit(ConstValue::Float(3.0))),
+        right: Box::new(ConstExpr::Lit(ConstValue::Float(3.0))),
     };
     assert_eval_eq(e.eval(&eq), ConstValue::Bool(true));
 }
@@ -815,9 +856,9 @@ fn test_eval_float_eq() {
 fn test_eval_float_neq() {
     let e = ConstGenericEval::new();
     let neq = ConstExpr::BinOp {
-        op: ConstBinOp::Neq,
-        lhs: Box::new(ConstExpr::Float(3.0)),
-        rhs: Box::new(ConstExpr::Float(4.0)),
+        op: BinOp::Ne,
+        left: Box::new(ConstExpr::Lit(ConstValue::Float(3.0))),
+        right: Box::new(ConstExpr::Lit(ConstValue::Float(4.0))),
     };
     assert_eval_eq(e.eval(&neq), ConstValue::Bool(true));
 }
@@ -826,9 +867,9 @@ fn test_eval_float_neq() {
 fn test_eval_float_div_by_zero() {
     let e = ConstGenericEval::new();
     let div = ConstExpr::BinOp {
-        op: ConstBinOp::Div,
-        lhs: Box::new(ConstExpr::Float(1.0)),
-        rhs: Box::new(ConstExpr::Float(0.0)),
+        op: BinOp::Div,
+        left: Box::new(ConstExpr::Lit(ConstValue::Float(1.0))),
+        right: Box::new(ConstExpr::Lit(ConstValue::Float(0.0))),
     };
     // Float division by zero may or may not error depending on implementation
     let _ = e.eval(&div);
@@ -895,7 +936,7 @@ fn test_const_function_new() {
     let func = ConstFunction::new(
         "test".to_string(),
         vec!["x".to_string()],
-        ConstExpr::Var("x".to_string()),
+        ConstExpr::NamedVar("x".to_string()),
     );
     assert_eq!(func.name, "test");
     assert_eq!(func.params.len(), 1);
@@ -907,7 +948,7 @@ fn test_eval_var_bound_bool() {
     let mut e = ConstGenericEval::new();
     e.bind_var("flag".to_string(), ConstValue::Bool(true));
     assert_eval_eq(
-        e.eval(&ConstExpr::Var("flag".to_string())),
+        e.eval(&ConstExpr::NamedVar("flag".to_string())),
         ConstValue::Bool(true),
     );
 }
@@ -917,7 +958,7 @@ fn test_eval_var_bound_float() {
     let mut e = ConstGenericEval::new();
     e.bind_var("pi".to_string(), ConstValue::Float(std::f32::consts::PI));
     assert_eval_eq(
-        e.eval(&ConstExpr::Var("pi".to_string())),
+        e.eval(&ConstExpr::NamedVar("pi".to_string())),
         ConstValue::Float(std::f32::consts::PI),
     );
 }
@@ -927,13 +968,13 @@ fn test_eval_multiple_if() {
     let e = ConstGenericEval::new();
     // Nested if
     let nested_if = ConstExpr::If {
-        condition: Box::new(ConstExpr::Bool(true)),
-        true_branch: Box::new(ConstExpr::If {
-            condition: Box::new(ConstExpr::Bool(false)),
-            true_branch: Box::new(ConstExpr::Int(1)),
-            false_branch: Box::new(ConstExpr::Int(2)),
+        condition: Box::new(ConstExpr::Lit(ConstValue::Bool(true))),
+        then_branch: Box::new(ConstExpr::If {
+            condition: Box::new(ConstExpr::Lit(ConstValue::Bool(false))),
+            then_branch: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
+            else_branch: Box::new(ConstExpr::Lit(ConstValue::Int(2))),
         }),
-        false_branch: Box::new(ConstExpr::Int(3)),
+        else_branch: Box::new(ConstExpr::Lit(ConstValue::Int(3))),
     };
     assert_eval_eq(e.eval(&nested_if), ConstValue::Int(2));
 }
@@ -1136,21 +1177,21 @@ fn test_const_result_debug() {
 
 #[test]
 fn test_const_expr_debug() {
-    let expr = ConstExpr::Int(42);
+    let expr = ConstExpr::Lit(ConstValue::Int(42));
     let debug = format!("{:?}", expr);
     assert!(debug.contains("Int"));
 }
 
 #[test]
 fn test_const_bin_op_debug() {
-    let op = ConstBinOp::Add;
+    let op = BinOp::Add;
     let debug = format!("{:?}", op);
     assert!(debug.contains("Add"));
 }
 
 #[test]
 fn test_const_un_op_debug() {
-    let op = crate::frontend::core::types::eval::const_eval::ConstUnOp::Neg;
+    let op = crate::frontend::core::types::const_data::UnOp::Neg;
     let debug = format!("{:?}", op);
     assert!(debug.contains("Neg"));
 }
@@ -1172,8 +1213,8 @@ fn test_convert_expr_to_const_expr_int_literal() {
     // Assert
     assert_eq!(
         result,
-        Some(ConstExpr::Int(42)),
-        "Int literal 42 should convert to ConstExpr::Int(42)"
+        Some(ConstExpr::Lit(ConstValue::Int(42))),
+        "Int literal 42 should convert to ConstExpr::Lit(ConstValue::Int(42))"
     );
 }
 
@@ -1188,8 +1229,8 @@ fn test_convert_expr_to_const_expr_var() {
     // Assert
     assert_eq!(
         result,
-        Some(ConstExpr::Var("N".to_string())),
-        "Variable reference N should convert to ConstExpr::Var(\"N\")"
+        Some(ConstExpr::NamedVar("N".to_string())),
+        "Variable reference N should convert to ConstExpr::NamedVar(\"N\")"
     );
 }
 
@@ -1213,9 +1254,9 @@ fn test_convert_expr_to_const_expr_binop_gt() {
     assert_eq!(
         result,
         Some(ConstExpr::BinOp {
-            op: ConstBinOp::Gt,
-            lhs: Box::new(ConstExpr::Var("N".to_string())),
-            rhs: Box::new(ConstExpr::Int(0)),
+            op: crate::frontend::core::types::const_data::BinOp::Gt,
+            left: Box::new(ConstExpr::NamedVar("N".to_string())),
+            right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
         }),
         "AST BinOp(Gt, Var(N), Lit(0)) should convert to ConstExpr::BinOp(Gt, Var(N), Int(0))"
     );

@@ -795,7 +795,7 @@ pub struct StructType {
     /// RFC-010: 接口约束列表
     pub interfaces: Vec<String>,
     /// 编译期约束声明（如 Assert(N > 0)），不占据运行时布局
-    pub constraints: Vec<crate::frontend::core::types::eval::const_eval::ConstExpr>,
+    pub constraints: Vec<crate::frontend::core::types::const_data::ConstExpr>,
 }
 
 impl StructType {
