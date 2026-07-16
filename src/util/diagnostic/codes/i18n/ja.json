@@ -672,8 +672,8 @@
   },
   "E2029": {
     "title": "spawn ref 循環",
-    "template": "タスク間循環参照: {cycle}",
-    "help": "spawn ブロック内の ref 変数が参照循環を形成しています。Weak を使って循環を解除するか、unsafe ブロックで検出をバイパスしてください。"
+    "template": "タスク間の循環参照: {cycle}",
+    "help": "spawn ブロック内の ref 変数が参照ループを形成しています。Weak を使用してループを断ち切るか、unsafe ブロックで検出を回避してください。"
   },
   "E3001": {
     "title": "未実装の式（IR）",
@@ -894,9 +894,20 @@
   "_meta": {
     "lastUpdated": "2026-06-13T07:29:13.339Z"
   },
-  "E2029": {
-    "title": "spawn ref 循環",
-    "template": "タスク間の循環参照: {cycle}",
-    "help": "spawn ブロック内の ref 変数が参照ループを形成しています。Weak を使用してループを断ち切るか、unsafe ブロックで検出を回避してください。"
+  "E1062": {
+    "title": "const ジェネリック制約違反",
+    "message": "const ジェネリックパラメータの値制約が満たされていません",
+    "template": "const ジェネリック制約違反: `{constraint}` が成立しません ({var} = {value})",
+    "help": "const パラメータの値を変更して制約を満たすようにしてください",
+    "example": "BadArray(Int, 0)  // Assert(0 > 0) 失敗",
+    "error_output": "error[E1062]: const ジェネリック制約違反\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, 0)\n  | ^ const 制約 `N > 0` が成立しません (N = 0)"
+  },
+  "W1063": {
+    "title": "const ジェネリック制約を評価できません",
+    "message": "const ジェネリックパラメータの値制約をコンパイル時に評価できません",
+    "template": "const ジェネリック制約を評価できません: `{constraint}` ({var} = {value})",
+    "help": "const パラメータがコンパイル時定数であることを確認してください",
+    "example": "BadArray(Int, n)  // n はコンパイル時定数ではありません",
+    "error_output": "warning[W1063]: const ジェネリック制約を評価できません\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ 制約 `N > 0` をコンパイル時に評価できません"
   }
 }

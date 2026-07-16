@@ -248,20 +248,20 @@
     "error_output": "error[E1061]: cannot instantiate generic\n --> example.yx:1:9\n  |\n1 | let x = Foo::<Int>();\n  |         ^ cannot instantiate with given arguments"
   },
   "E1062": {
-    "title": "Const generic constraint failed",
-    "message": "Const generic parameter value constraint not satisfied",
-    "template": "Const generic constraint failed: `{constraint}` is false ({var} = {value})",
-    "help": "Change the const parameter value to satisfy the constraint",
-    "example": "BadArray(Int, 0)  // Assert(0 > 0) fails",
-    "error_output": "error[E1062]: Const generic constraint failed\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, 0)\n  | ^ const constraint `N > 0` is false (N = 0)"
+    "title": "const generic constraint failed",
+    "message": "the value constraint of const generic parameter is not satisfied",
+    "template": "const generic constraint failed: `{constraint}` does not hold ({var} = {value})",
+    "help": "modify the const parameter value to satisfy the constraint",
+    "example": "BadArray(Int, 0)  // Assert(0 > 0) failed",
+    "error_output": "error[E1062]: const generic constraint failed\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, 0)\n  | ^ const constraint `N > 0` does not hold (N = 0)"
   },
   "W1063": {
-    "title": "Const generic constraint unevaluable",
-    "message": "Const generic parameter value constraint cannot be evaluated at compile time",
-    "template": "Const generic constraint unevaluable: `{constraint}` ({var} = {value})",
-    "help": "Ensure the const parameter is a compile-time constant",
+    "title": "const generic constraint cannot be evaluated",
+    "message": "the value constraint of const generic parameter cannot be evaluated at compile-time",
+    "template": "const generic constraint cannot be evaluated: `{constraint}` ({var} = {value})",
+    "help": "ensure the const parameter is a compile-time constant",
     "example": "BadArray(Int, n)  // n is not a compile-time constant",
-    "error_output": "warning[W1063]: Const generic constraint unevaluable\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ cannot evaluate constraint `N > 0` at compile time"
+    "error_output": "warning[W1063]: const generic constraint cannot be evaluated\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ cannot evaluate constraint `N > 0` at compile-time"
   },
   "E1070": {
     "title": "Unknown label",
