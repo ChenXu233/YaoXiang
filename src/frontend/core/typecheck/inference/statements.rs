@@ -1628,6 +1628,10 @@ impl StatementChecker {
                         inferrer.set_method_bindings(&self.method_bindings);
                         inferrer.set_type_defs(&self.type_defs);
                         inferrer.set_generic_type_defs(&self.generic_type_defs);
+                        inferrer.set_dep_env(&self.dep_env);
+                        if let Some(gamma) = &mut self.gamma {
+                            inferrer.set_gamma(gamma);
+                        }
                         let result = inferrer.infer_expr(expr).map_err(Box::new);
                         self.instantiation_requests
                             .extend(inferrer.instantiation_requests);
@@ -1649,6 +1653,10 @@ impl StatementChecker {
                 );
                 inferrer.set_type_defs(&self.type_defs);
                 inferrer.set_generic_type_defs(&self.generic_type_defs);
+                inferrer.set_dep_env(&self.dep_env);
+                if let Some(gamma) = &mut self.gamma {
+                    inferrer.set_gamma(gamma);
+                }
                 let result = inferrer.infer_expr(expr).map_err(Box::new);
                 self.instantiation_requests
                     .extend(inferrer.instantiation_requests);

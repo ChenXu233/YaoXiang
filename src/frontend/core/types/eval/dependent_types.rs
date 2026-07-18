@@ -520,13 +520,15 @@ pub fn check_structural_termination(
 pub struct DependentTypeEnv {
     /// 类型族映射
     type_families: HashMap<String, TypeFamily>,
+    /// native 符号名 → 效应声明
+    effect_specs: std::collections::HashMap<String, EffectSpec>,
 }
-
 impl DependentTypeEnv {
     /// 创建新的依赖类型环境
     pub fn new() -> Self {
         Self {
             type_families: HashMap::new(),
+            effect_specs: HashMap::new(),
         }
     }
 
@@ -546,6 +548,21 @@ impl DependentTypeEnv {
         self.type_families.get(name)
     }
 
+    /// 注册效应声明
+    pub fn register_effect_spec(
+        &mut self,
+        spec: EffectSpec,
+    ) {
+        self.effect_specs.insert(spec.name.to_string(), spec);
+    }
+    /// 查询效应声明
+    pub fn get_effect_spec(
+        &self,
+        name: &str,
+    ) -> Option<&EffectSpec> {
+        self.effect_specs.get(name)
+    }
+
     /// 检查类型是否是类型族实例
     pub fn is_type_family_instance(
         &self,
@@ -553,5 +570,37 @@ impl DependentTypeEnv {
     ) -> Option<&TypeFamily> {
         // 简化实现：暂不检查类型是否为类型族实例
         None
+    }
+}
+
+/// 效应系统种子。第一阶段只有 GammaAssume 一个变体。
+///
+/// 未来: Diverges（发散/不可达）, Pure（可编译期提升）, Terminating。
+#[derive(Debug, Clone)]
+pub enum Effect {
+    /// 成功返回后，将第 n 个参数的谓词加入流敏感 Γ
+    GammaAssume { predicate_arg: usize },
+}
+
+/// 一个 native 符号的效应声明。
+#[derive(Debug, Clone)]
+pub struct EffectSpec {
+    pub name: &'static str,
+    pub effects: Vec<Effect>,
+    /// 返回类型中的证明令牌是否擦除
+    pub erase_proof_return: bool,
+}
+
+impl EffectSpec {
+    pub fn new(
+        name: &'static str,
+        effects: Vec<Effect>,
+        erase_proof_return: bool,
+    ) -> Self {
+        Self {
+            name,
+            effects,
+            erase_proof_return,
+        }
     }
 }

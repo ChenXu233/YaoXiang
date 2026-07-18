@@ -53,6 +53,10 @@ pub struct ExpressionInferrer<'a> {
         &'a HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
     /// 实例化请求（收集遇到的所有泛型函数实例化需求）
     pub instantiation_requests: Vec<InstantiationRequest>,
+    /// 依赖类型环境（效应查询）—— 由 StatementChecker 注入
+    dep_env: Option<&'a crate::frontend::core::types::eval::dependent_types::DependentTypeEnv>,
+    /// 流敏感假设集 Γ（效应注入）—— 由 StatementChecker 注入
+    gamma: Option<&'a mut crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma>,
 }
 
 impl<'a> ExpressionInferrer<'a> {
@@ -74,6 +78,8 @@ impl<'a> ExpressionInferrer<'a> {
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
+            dep_env: None,
+            gamma: None,
         }
     }
 
@@ -96,6 +102,8 @@ impl<'a> ExpressionInferrer<'a> {
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
+            dep_env: None,
+            gamma: None,
         }
     }
 
@@ -119,6 +127,8 @@ impl<'a> ExpressionInferrer<'a> {
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
+            dep_env: None,
+            gamma: None,
         }
     }
 
@@ -144,6 +154,8 @@ impl<'a> ExpressionInferrer<'a> {
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
+            dep_env: None,
+            gamma: None,
         }
     }
 
@@ -174,6 +186,22 @@ impl<'a> ExpressionInferrer<'a> {
         defs: &'a HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
     ) {
         self.generic_type_defs = defs;
+    }
+
+    /// 设置依赖类型环境（效应查询）
+    pub fn set_dep_env(
+        &mut self,
+        dep_env: &'a crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
+    ) {
+        self.dep_env = Some(dep_env);
+    }
+
+    /// 设置流敏感假设集 Γ（效应注入）
+    pub fn set_gamma(
+        &mut self,
+        gamma: &'a mut crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma,
+    ) {
+        self.gamma = Some(gamma);
     }
 
     /// 添加变量到当前作用域
@@ -734,6 +762,7 @@ impl<'a> ExpressionInferrer<'a> {
     }
 
     /// 推断表达式的类型
+    #[allow(irrefutable_let_patterns)]
     pub fn infer_expr(
         &mut self,
         expr: &crate::frontend::core::parser::ast::Expr,
@@ -1106,6 +1135,25 @@ impl<'a> ExpressionInferrer<'a> {
                     }
                 }
 
+                // 效应消费：成功调用后向流敏感 Γ 注入谓词
+                // （如 std.assert(x > 0) 成功后把 x > 0 加入 Γ）
+                if let crate::frontend::core::parser::ast::Expr::Var(fn_name, _) = &**func {
+                    if let Some(dep_env) = self.dep_env {
+                        if let Some(spec) = dep_env.get_effect_spec(fn_name) {
+                            for effect in &spec.effects {
+                                if let crate::frontend::core::types::eval::dependent_types::Effect::GammaAssume { predicate_arg } = effect {
+                                    if let Some(arg_expr) = args.get(*predicate_arg) {
+                                        if let Some(pred) = crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(arg_expr) {
+                                            if let Some(gamma) = self.gamma.as_deref_mut() {
+                                                gamma.inject(pred);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 // 分发
                 match mono_func_ty {
                     MonoType::Fn {

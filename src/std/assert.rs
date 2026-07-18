@@ -53,6 +53,14 @@ impl StdModule for AssertModule {
             ),
         ]
     }
+
+    fn effect_specs(&self) -> Vec<crate::std::EffectSpec> {
+        vec![crate::std::EffectSpec::new(
+            "assert",
+            vec![crate::std::Effect::GammaAssume { predicate_arg: 0 }],
+            true,
+        )]
+    }
 }
 
 /// native assert 函数：cond 为 false 时 panic
