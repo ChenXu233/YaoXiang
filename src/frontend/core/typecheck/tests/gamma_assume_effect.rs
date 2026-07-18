@@ -1,4 +1,9 @@
-//! Phase 3 后半：GammaAssume 效应消费端到端冒烟测试
+//! GammaAssume 效应消费测试 — 基于 RFC-011 §4.3（编译期验证）
+//!
+//! 规范来源：
+//! - RFC-011 §4.3: Assert(cond) 类型族 — true → Void（擦除）, false → Never
+//! - spec 2026-07-15-type-body-block-effect-seed-design.md §4:
+//!   assert(x > 0) 成功返回后将完整谓词 x > 0 注入流敏感 Γ
 //!
 //! 验证 ExpressionInferrer 在成功调用 `assert(x > 0)` 后把完整谓词
 //! `x > 0` 注入流敏感 Γ。assert 通过 scope 内的 Fn 变量注册，
@@ -99,7 +104,7 @@ fn test_assert_call_injects_predicate_into_gamma() {
     assert_eq!(
         resolved,
         MonoType::Void,
-        "assert 返回类型应为 Void，际: {:?}",
+        "assert 返回类型应为 Void，实际: {:?}",
         resolved
     );
 
@@ -126,6 +131,7 @@ fn test_assert_call_injects_predicate_into_gamma() {
 /// 没有 dep_env / gamma 时，assert 调用仍应正常完成（不注入）
 #[test]
 fn test_assert_call_without_gamma_does_not_inject() {
+    // Arrange — scope 注册 assert 与 x，但不设置 dep_env / gamma
     let mut scope = crate::frontend::core::typecheck::inference::scope::ScopeManager::new();
     scope.add_var(
         "assert".to_string(),
@@ -152,8 +158,11 @@ fn test_assert_call_without_gamma_does_not_inject() {
     );
     // 不设置 dep_env / gamma
 
+    // Act — 推断 assert(x > 0)
     let call_expr = make_assert_call();
     let result = inferrer.infer_expr(&call_expr);
+
+    // Assert — 无 Γ 时调用仍应成功返回（不崩溃即合规）
     assert!(
         result.is_ok(),
         "无 Γ 时 assert 仍应成功: {:?}",
