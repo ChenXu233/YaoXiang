@@ -39,13 +39,18 @@ fn test_from_ast_type_primitives() {
 #[test]
 fn test_from_ast_type_struct() {
     let ast_ty = ast::Type::Struct {
-        fields: vec![
-            ast::StructField::new("x".to_string(), false, ast::Type::Float(64)),
-            ast::StructField::new("y".to_string(), false, ast::Type::Float(64)),
+        body: vec![
+            ast::TypeBodyItem::Field(ast::StructField::new(
+                "x".to_string(),
+                false,
+                ast::Type::Float(64),
+            )),
+            ast::TypeBodyItem::Field(ast::StructField::new(
+                "y".to_string(),
+                false,
+                ast::Type::Float(64),
+            )),
         ],
-        bindings: vec![],
-        interfaces: vec![],
-        constraints: vec![],
     };
     let mono: MonoType = ast_ty.into();
     assert!(matches!(mono, MonoType::Struct(_)));
@@ -57,15 +62,12 @@ fn test_from_ast_type_struct() {
 #[test]
 fn test_from_ast_type_struct_with_defaults() {
     let ast_ty = ast::Type::Struct {
-        fields: vec![ast::StructField {
+        body: vec![ast::TypeBodyItem::Field(ast::StructField {
             name: "x".to_string(),
             is_mut: false,
             ty: ast::Type::Float(64),
             default: Some(Box::new(ast::Expr::Lit(Literal::Float(0.0), Span::dummy()))),
-        }],
-        bindings: vec![],
-        interfaces: vec![],
-        constraints: vec![],
+        })],
     };
     let mono: MonoType = ast_ty.into();
     assert!(matches!(mono, MonoType::Struct(s) if s.field_has_default == vec![true]));

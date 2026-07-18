@@ -2,7 +2,7 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::statements::types::parse_type_annotation;
-use crate::frontend::core::parser::ast::Type;
+use crate::frontend::core::parser::ast::{Type, StructField, TypeBodyItem};
 use crate::frontend::core::parser::ParserState;
 
 fn with_type<F>(
@@ -124,7 +124,17 @@ fn test_struct_type_empty() {
 #[test]
 fn test_struct_type_fields() {
     with_type("{ x: Float, y: Float }", |t| {
-        if let Type::Struct { fields, .. } = &t {
+        if let Type::Struct { body } = &t {
+            let fields: Vec<&StructField> = body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Field(f) = it {
+                        Some(f)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
             assert_eq!(fields.len(), 2);
             assert_eq!(fields[0].name, "x");
             assert_eq!(fields[1].name, "y");
@@ -137,10 +147,27 @@ fn test_struct_type_fields() {
 #[test]
 fn test_struct_type_with_interface() {
     with_type("{ x: Float, Drawable, Serializable }", |t| {
-        if let Type::Struct {
-            fields, interfaces, ..
-        } = &t
-        {
+        if let Type::Struct { body } = &t {
+            let fields: Vec<&StructField> = body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Field(f) = it {
+                        Some(f)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let interfaces: Vec<String> = body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Interface(s) = it {
+                        Some(s.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
             assert_eq!(fields.len(), 1);
             assert!(interfaces.contains(&"Drawable".to_string()));
             assert!(interfaces.contains(&"Serializable".to_string()));
@@ -153,7 +180,17 @@ fn test_struct_type_with_interface() {
 #[test]
 fn test_struct_type_with_default() {
     with_type("{ x: Float = 0, y: Float = 0 }", |t| {
-        if let Type::Struct { fields, .. } = &t {
+        if let Type::Struct { body } = &t {
+            let fields: Vec<&StructField> = body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Field(f) = it {
+                        Some(f)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
             assert_eq!(fields.len(), 2);
             assert!(fields[0].default.is_some());
         } else {
@@ -300,7 +337,17 @@ fn test_reject_old_curried_fn_syntax() {
 fn test_struct_mut_field() {
     // Note: "mut" in struct fields may not be fully supported
     with_type("{ x: Int, y: Float }", |t| {
-        if let Type::Struct { fields, .. } = &t {
+        if let Type::Struct { body } = &t {
+            let fields: Vec<&StructField> = body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Field(f) = it {
+                        Some(f)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
             assert!(!fields.is_empty(), "Should parse at least one field");
         } else {
             panic!("Expected Type::Struct");

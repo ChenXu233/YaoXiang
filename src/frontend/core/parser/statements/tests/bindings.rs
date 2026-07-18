@@ -14,7 +14,7 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::parser::ast::{StmtKind, BindingKind, Type};
+use crate::frontend::core::parser::ast::{StmtKind, BindingKind, Type, TypeBodyBinding, TypeBodyItem};
 use crate::frontend::core::parser::statements::bindings::{BindingParser, BindingPositionValidator};
 
 fn parse_stmt(source: &str) -> StmtKind {
@@ -181,7 +181,17 @@ fn test_rfc010_type_body_external_binding() {
     } = &kind
     {
         assert_eq!(name, "Point");
-        if let Type::Struct { bindings, .. } = type_annotation.as_ref().unwrap() {
+        if let Type::Struct { body } = type_annotation.as_ref().unwrap() {
+            let bindings: Vec<&TypeBodyBinding> = body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Binding(b) = it {
+                        Some(b)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
             assert!(!bindings.is_empty());
             assert_eq!(bindings[0].name, "distance");
         } else {
@@ -199,7 +209,17 @@ fn test_rfc010_type_body_default_binding() {
         type_annotation, ..
     } = &kind
     {
-        if let Type::Struct { bindings, .. } = type_annotation.as_ref().unwrap() {
+        if let Type::Struct { body } = type_annotation.as_ref().unwrap() {
+            let bindings: Vec<&TypeBodyBinding> = body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Binding(b) = it {
+                        Some(b)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
             assert!(!bindings.is_empty());
             assert!(matches!(
                 bindings[0].kind,
@@ -217,7 +237,17 @@ fn test_rfc010_anonymous_binding() {
         type_annotation, ..
     } = &kind
     {
-        if let Type::Struct { bindings, .. } = type_annotation.as_ref().unwrap() {
+        if let Type::Struct { body } = type_annotation.as_ref().unwrap() {
+            let bindings: Vec<&TypeBodyBinding> = body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Binding(b) = it {
+                        Some(b)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
             assert!(!bindings.is_empty());
             assert!(matches!(bindings[0].kind, BindingKind::Anonymous { .. }));
         }

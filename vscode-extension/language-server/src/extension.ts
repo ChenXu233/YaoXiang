@@ -75,10 +75,21 @@ function ensureTempExecutable(originalPath: string): string {
   // 加入时间戳避免覆盖被占用的文件
   const uniqueName = `${executableBase}-${Date.now()}${ext}`;
   const tempPath = path.join(tempDir, uniqueName);
-
   // 复制出最新的可执行文件
   fs.copyFileSync(originalPath, tempPath);
-  
+
+  // 复制 exe 同目录下的所有 DLL（如 libz3.dll），否则进程会因 STATUS_DLL_NOT_FOUND 崩溃
+  const sourceDir = path.dirname(originalPath);
+  try {
+    const dirFiles = fs.readdirSync(sourceDir);
+    for (const file of dirFiles) {
+      if (file.toLowerCase().endsWith('.dll')) {
+        fs.copyFileSync(path.join(sourceDir, file), path.join(tempDir, file));
+      }
+    }
+  } catch (e) {
+    console.error('Failed to copy DLLs alongside executable', e);
+  }
   // 在 Linux/macOS 下确保拥有执行权限
   if (!isWin) {
     fs.chmodSync(tempPath, 0o755);

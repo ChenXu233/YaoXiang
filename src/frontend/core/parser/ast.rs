@@ -351,16 +351,19 @@ impl StructField {
     }
 }
 
-/// 约束声明（编译期约束，如 Assert(N > 0)）
+/// 类型体项 — 类型定义 `{}` 是有序代码块，每项按序求值
 ///
-/// 与 StructField 结构相似但语义不同：
-/// - StructField 是运行时数据字段，占据内存布局
-/// - ConstraintDecl 是编译期约束声明，不占据运行时布局
+/// parser 只按语法区分，不认识任何类型族名字。
 #[derive(Debug, Clone)]
-pub struct ConstraintDecl {
-    pub name: String,
-    pub name_span: Span,
-    pub ty: Type,
+pub enum TypeBodyItem {
+    /// `name: Type` 或 `name: Type = default` — 运行时数据字段
+    Field(StructField),
+    /// `name = function[pos]` 或 `name = function` 或匿名函数绑定 — 保留现有 TypeBodyBinding 语义
+    Binding(TypeBodyBinding),
+    /// 接口约束名 `InterfaceName`
+    Interface(String),
+    /// 匿名类型表达式 `Assert(N > 0)` / `SomeProofType(t)` — 结果未命名
+    Expr(Type),
 }
 
 /// 类型体内置绑定
@@ -430,12 +433,8 @@ pub enum Type {
     Bool,
     Void,
     Struct {
-        fields: Vec<StructField>,
-        bindings: Vec<TypeBodyBinding>,
-        /// RFC-010: 接口约束列表
-        interfaces: Vec<String>,
-        /// 编译期约束声明列表（如 Assert(N > 0)）
-        constraints: Vec<ConstraintDecl>,
+        /// 有序类型体项（字段/绑定/接口/表达式按源码顺序）
+        body: Vec<TypeBodyItem>,
     },
     NamedStruct {
         name: String,
@@ -503,6 +502,59 @@ pub enum Type {
     },
     /// 编译期表达式（泛型参数位置的值表达式，如 Assert(N > 0) 中的 N > 0）
     ConstExpr(Box<Expr>),
+}
+
+impl Type {
+    /// 从 Type::Struct 的 body 中提取字段引用（顺序保留）
+    pub fn struct_fields(&self) -> Vec<&StructField> {
+        match self {
+            Type::Struct { body } => body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Field(f) = it {
+                        Some(f)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// 提取接口约束名引用
+    pub fn struct_interfaces(&self) -> Vec<&String> {
+        match self {
+            Type::Struct { body } => body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Interface(s) = it {
+                        Some(s)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// 提取绑定引用
+    pub fn struct_bindings(&self) -> Vec<&TypeBodyBinding> {
+        match self {
+            Type::Struct { body } => body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Binding(b) = it {
+                        Some(b)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
 }
 
 /// Block

@@ -614,17 +614,23 @@ impl StatementChecker {
                         let mut interfaces = Vec::new();
 
                         // 情况 1：type_annotation 是 Type::Struct（直接结构体定义）
-                        if let Some(crate::frontend::core::parser::ast::Type::Struct {
-                            fields: ast_fields,
-                            interfaces: ast_interfaces,
-                            ..
-                        }) = type_annotation
+                        if let Some(crate::frontend::core::parser::ast::Type::Struct { body }) =
+                            type_annotation
                         {
-                            for field in ast_fields {
-                                let field_ty = MonoType::from(field.ty.clone());
-                                fields.push((field.name.clone(), field_ty));
+                            for item in body {
+                                match item {
+                                    crate::frontend::core::parser::ast::TypeBodyItem::Field(f) => {
+                                        let field_ty = MonoType::from(f.ty.clone());
+                                        fields.push((f.name.clone(), field_ty));
+                                    }
+                                    crate::frontend::core::parser::ast::TypeBodyItem::Interface(
+                                        s,
+                                    ) => {
+                                        interfaces.push(s.clone());
+                                    }
+                                    _ => {}
+                                }
                             }
-                            interfaces = ast_interfaces.clone();
                         } else {
                             // 情况 2：type_annotation 是 Type::Fn（类型级函数）
                             // 从 body 的语句中提取字段
@@ -712,17 +718,10 @@ impl StatementChecker {
                                     ConstVarDef::new(p.name.clone(), kind, idx)
                                 })
                                 .collect();
-
-                            // 从 Type::Struct::constraints 提取 const 参数的值约束（如 Assert(N > 0)）
-                            if let Some(crate::frontend::core::parser::ast::Type::Struct {
-                                constraints,
-                                ..
-                            }) = type_annotation
+                            if let Some(crate::frontend::core::parser::ast::Type::Struct { body }) =
+                                type_annotation
                             {
-                                Self::extract_const_constraints_from_decl(
-                                    constraints,
-                                    &mut const_binders,
-                                );
+                                Self::extract_const_constraints_from_decl(body, &mut const_binders);
                             }
 
                             if !type_param_names.is_empty() || !const_binders.is_empty() {
@@ -1635,24 +1634,28 @@ impl StatementChecker {
         }
     }
 
-    /// 从 Type::Struct::constraints 提取 const 参数的值约束
-    /// 识别 ConstraintDecl { ty: Type::Generic { name: "Assert", args: [ConstExpr(expr)] } } 模式
+    /// 从 Type::Struct body 中提取 const 参数的值约束
+    /// 识别 TypeBodyItem::Expr(Type::Generic { name: "Assert", args: [ConstExpr(expr)] }) 模式
+    #[allow(clippy::collapsible_match)] // Phase 2 Task 10 将重写此函数
     fn extract_const_constraints_from_decl(
-        constraints: &[crate::frontend::core::parser::ast::ConstraintDecl],
+        body: &[crate::frontend::core::parser::ast::TypeBodyItem],
         const_binders: &mut [crate::frontend::core::types::const_data::ConstVarDef],
     ) {
         use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
-        for decl in constraints {
-            if let crate::frontend::core::parser::ast::Type::Generic { name, args, .. } = &decl.ty {
-                if name == "Assert" && !args.is_empty() {
-                    if let crate::frontend::core::parser::ast::Type::ConstExpr(expr) = &args[0] {
-                        if let Some(const_expr) = convert_expr_to_const_expr(expr) {
-                            if let Some(const_var) =
-                                Self::find_const_var_in_expr(expr, const_binders)
-                            {
-                                const_binders[const_var.index()]
-                                    .constraints
-                                    .push(const_expr);
+        for item in body {
+            if let crate::frontend::core::parser::ast::TypeBodyItem::Expr(ty) = item {
+                if let crate::frontend::core::parser::ast::Type::Generic { name, args, .. } = ty {
+                    if name == "Assert" && !args.is_empty() {
+                        if let crate::frontend::core::parser::ast::Type::ConstExpr(expr) = &args[0]
+                        {
+                            if let Some(const_expr) = convert_expr_to_const_expr(expr) {
+                                if let Some(const_var) =
+                                    Self::find_const_var_in_expr(expr, const_binders)
+                                {
+                                    const_binders[const_var.index()]
+                                        .constraints
+                                        .push(const_expr);
+                                }
                             }
                         }
                     }

@@ -532,38 +532,38 @@ impl From<ast::Type> for MonoType {
             ast::Type::Bytes => MonoType::Bytes,
             ast::Type::Bool => MonoType::Bool,
             ast::Type::Void => MonoType::Void,
-            ast::Type::Struct {
-                fields,
-                interfaces,
-                constraints,
-                ..
-            } => {
-                let (field_names, field_types, field_mutability, field_has_default) = fields
-                    .into_iter()
-                    .map(|f| (f.name, MonoType::from(f.ty), f.is_mut, f.default.is_some()))
-                    .fold(
-                        (Vec::new(), Vec::new(), Vec::new(), Vec::new()),
-                        |(mut names, mut types, mut mutability, mut defaults), (n, t, m, d)| {
-                            names.push(n);
-                            types.push(t);
-                            mutability.push(m);
-                            defaults.push(d);
-                            (names, types, mutability, defaults)
-                        },
-                    );
-                // 转换约束声明: ConstraintDecl → const_data::ConstExpr
-                let mono_constraints = constraints.iter()
-                    .filter_map(|c| {
-                        if let ast::Type::Generic { name, args, .. } = &c.ty {
-                            if name == "Assert" && !args.is_empty() {
-                                if let ast::Type::ConstExpr(expr) = &args[0] {
-                                    return crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr);
+            ast::Type::Struct { body } => {
+                let mut field_names = Vec::new();
+                let mut field_types = Vec::new();
+                let mut field_mutability = Vec::new();
+                let mut field_has_default = Vec::new();
+                let mut interfaces = Vec::new();
+                let mut mono_constraints = Vec::new();
+                for item in body {
+                    match item {
+                        ast::TypeBodyItem::Field(f) => {
+                            field_names.push(f.name.clone());
+                            field_types.push(MonoType::from(f.ty.clone()));
+                            field_mutability.push(f.is_mut);
+                            field_has_default.push(f.default.is_some());
+                        }
+                        ast::TypeBodyItem::Interface(s) => {
+                            interfaces.push(s.clone());
+                        }
+                        ast::TypeBodyItem::Expr(ty) => {
+                            if let ast::Type::Generic { name, args, .. } = ty {
+                                if name == "Assert" && !args.is_empty() {
+                                    if let ast::Type::ConstExpr(expr) = &args[0] {
+                                        if let Some(ce) = crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr) {
+                                            mono_constraints.push(ce);
+                                        }
+                                    }
                                 }
                             }
                         }
-                        None
-                    })
-                    .collect();
+                        ast::TypeBodyItem::Binding(_) => {}
+                    }
+                }
                 MonoType::Struct(StructType {
                     name: String::new(),
                     fields: field_names.into_iter().zip(field_types).collect(),
