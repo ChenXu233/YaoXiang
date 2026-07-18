@@ -18,6 +18,7 @@
 
 mod checker;
 mod environment;
+mod gamma_assume_effect;
 mod rfc010;
 mod rfc011;
 mod rfc027_phase1_integration;

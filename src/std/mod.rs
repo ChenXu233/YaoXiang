@@ -25,6 +25,7 @@ use crate::backends::interpreter::ffi::FfiRegistry;
 use crate::backends::common::{RuntimeValue, Heap, HeapValue};
 use crate::backends::ExecutorError;
 use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
+pub use crate::frontend::core::types::eval::dependent_types::{Effect, EffectSpec};
 
 /// Type alias for native function call signature
 /// Simplifies complex type definitions
@@ -179,6 +180,11 @@ pub trait StdModule {
         vec![]
     }
 
+    /// 声明本模块 native 符号的效应。默认空。
+    fn effect_specs(&self) -> Vec<crate::frontend::core::types::eval::dependent_types::EffectSpec> {
+        vec![]
+    }
+
     /// Registers this module's functions into the FFI registry.
     fn register_ffi(
         &self,
@@ -319,6 +325,9 @@ pub fn register_all(
     os::OsModule.register_ffi(registry);
     assert::AssertModule.register_ffi(registry);
     assert::AssertModule.register_type_families(dep_env);
+    for spec in assert::AssertModule.effect_specs() {
+        dep_env.register_effect_spec(spec);
+    }
     // Register built-in generic functions (replacing hardcoded interpreter special cases)
     registry.register("len", builtin_len as NativeHandler);
     registry.register("dict_keys", builtin_dict_keys as NativeHandler);
