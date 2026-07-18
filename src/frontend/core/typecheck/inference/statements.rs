@@ -69,7 +69,6 @@ pub struct StatementChecker {
     /// 流敏感假设集 Γ（可选 — None 在测试或未启用证明管道时使用）
     gamma: Option<crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma>,
     /// 依赖类型环境（类型族注册与查找）
-    #[allow(dead_code)]
     dep_env: crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
 }
 
@@ -718,10 +717,34 @@ impl StatementChecker {
                                     ConstVarDef::new(p.name.clone(), kind, idx)
                                 })
                                 .collect();
+                            // 从类型体收集待定证明义务到 const 参数
                             if let Some(crate::frontend::core::parser::ast::Type::Struct { body }) =
                                 type_annotation
                             {
-                                Self::extract_const_constraints_from_decl(body, &mut const_binders);
+                                for item in body {
+                                    match item {
+                                        crate::frontend::core::parser::ast::TypeBodyItem::Expr(
+                                            ty,
+                                        ) => {
+                                            Self::process_body_expr_item(
+                                                ty,
+                                                &mut const_binders,
+                                                &self.dep_env,
+                                            );
+                                        }
+                                        crate::frontend::core::parser::ast::TypeBodyItem::Field(
+                                            f,
+                                        ) => {
+                                            // 命名字段的类型也可能是类型族应用（如 _assert_n: Assert(N > 0)）
+                                            Self::process_body_expr_item(
+                                                &f.ty,
+                                                &mut const_binders,
+                                                &self.dep_env,
+                                            );
+                                        }
+                                        _ => {}
+                                    }
+                                }
                             }
 
                             if !type_param_names.is_empty() || !const_binders.is_empty() {
@@ -1634,28 +1657,24 @@ impl StatementChecker {
         }
     }
 
-    /// 从 Type::Struct body 中提取 const 参数的值约束
-    /// 识别 TypeBodyItem::Expr(Type::Generic { name: "Assert", args: [ConstExpr(expr)] }) 模式
-    #[allow(clippy::collapsible_match)] // Phase 2 Task 10 将重写此函数
-    fn extract_const_constraints_from_decl(
-        body: &[crate::frontend::core::parser::ast::TypeBodyItem],
+    /// 处理类型体中的类型表达式项（匿名 Expr 项或命名字段的类型）。
+    /// 不比较名字是否为 "Assert" —— 判断依据是 dep_env 里是否注册了该类型族。
+    /// 归约不了（含自由 const 变量）的类型族谓词转 ConstExpr 挂到对应 const 参数。
+    fn process_body_expr_item(
+        ty: &crate::frontend::core::parser::ast::Type,
         const_binders: &mut [crate::frontend::core::types::const_data::ConstVarDef],
+        dep_env: &crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
     ) {
+        use crate::frontend::core::parser::ast::Type;
         use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
-        for item in body {
-            if let crate::frontend::core::parser::ast::TypeBodyItem::Expr(ty) = item {
-                if let crate::frontend::core::parser::ast::Type::Generic { name, args, .. } = ty {
-                    if name == "Assert" && !args.is_empty() {
-                        if let crate::frontend::core::parser::ast::Type::ConstExpr(expr) = &args[0]
-                        {
-                            if let Some(const_expr) = convert_expr_to_const_expr(expr) {
-                                if let Some(const_var) =
-                                    Self::find_const_var_in_expr(expr, const_binders)
-                                {
-                                    const_binders[const_var.index()]
-                                        .constraints
-                                        .push(const_expr);
-                                }
+        if let Type::Generic { name, args, .. } = ty {
+            // 只处理已注册的类型族，不比较具体名字
+            if dep_env.get_type_family(name).is_some() {
+                for arg in args {
+                    if let Type::ConstExpr(expr) = arg {
+                        if let Some(const_expr) = convert_expr_to_const_expr(expr) {
+                            if let Some(cv) = Self::find_const_var_in_expr(expr, const_binders) {
+                                const_binders[cv.index()].constraints.push(const_expr);
                             }
                         }
                     }
