@@ -978,10 +978,19 @@ impl TypeChecker {
         definition: &crate::frontend::core::parser::ast::Type,
     ) {
         // 提取字段列表
-        let fields = match definition {
-            crate::frontend::core::parser::ast::Type::NamedStruct { fields, .. } => fields,
-            crate::frontend::core::parser::ast::Type::Struct { fields, .. } => fields,
-            _ => return, // 非 Record 类型不自动派生
+        let fields: Vec<crate::frontend::core::parser::ast::StructField> = match definition {
+            crate::frontend::core::parser::ast::Type::NamedStruct { fields, .. } => fields.clone(),
+            crate::frontend::core::parser::ast::Type::Struct { body } => body
+                .iter()
+                .filter_map(|it| {
+                    if let crate::frontend::core::parser::ast::TypeBodyItem::Field(f) = it {
+                        Some(f.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            _ => return,
         };
 
         // 获取 trait 表的引用（用于检查）
@@ -992,7 +1001,7 @@ impl TypeChecker {
 
         for trait_name in TraitTable::BUILTIN_DERIVES {
             // 检查是否可以自动派生
-            let can_derive = trait_table.can_auto_derive(trait_name, fields);
+            let can_derive = trait_table.can_auto_derive(trait_name, &fields);
 
             if can_derive {
                 // 检查是否已有显式实现

@@ -486,14 +486,30 @@ fn parse_tuple_type(state: &mut ParserState<'_>) -> Option<Type> {
 fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
     state.skip(&TokenKind::LBrace);
 
-    let mut fields = Vec::new();
-    let mut bindings = Vec::new();
-    let mut interfaces = Vec::new();
-    let mut constraints = Vec::new();
+    let mut body: Vec<TypeBodyItem> = Vec::new();
     if !state.at(&TokenKind::RBrace) {
         while let Some(TokenKind::Identifier(name)) = state.current().map(|t| &t.kind) {
             let name = name.clone();
+            let name_start = state.save_position();
             state.bump();
+
+            // 匿名类型表达式: Identifier 后接跟 '('（如 Assert(N > 0)）
+            // 与枚举变体 ok(Int) | err(String) 歧义，需前瞻区分。
+            if state.at(&TokenKind::LParen) {
+                state.restore_position(name_start);
+                let ty = parse_type_annotation(state)?;
+                // 前瞻：枚举变体后跟 '|'，匿名类型表达式后跟 ',' 或 '}'
+                if state.at(&TokenKind::Pipe) {
+                    // 是枚举变体，回退交给枚举整体重解析
+                    state.restore_position(name_start);
+                    return parse_enum_variants_in_braces(state);
+                }
+                body.push(TypeBodyItem::Expr(ty));
+                if !state.skip(&TokenKind::Comma) {
+                    break;
+                }
+                continue;
+            }
 
             // 检查下一个 token 是否是 mut 或冒号
             let is_mut = state.skip(&TokenKind::KwMut);
@@ -512,7 +528,7 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                         // 匿名函数绑定: name: FnType[pos] = lambda
                         let body_expr = state.parse_expression(BP_LOWEST)?;
                         let (params, return_type) = extract_fn_type_info(&field_type);
-                        bindings.push(TypeBodyBinding {
+                        body.push(TypeBodyItem::Binding(TypeBodyBinding {
                             name,
                             kind: BindingKind::Anonymous {
                                 params,
@@ -520,33 +536,24 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                                 positions: pos,
                                 body: Box::new(body_expr),
                             },
-                        });
+                        }));
                     } else {
                         // 默认值字段: name: Type = expression
                         let default_expr = state.parse_expression(BP_LOWEST)?;
-                        fields.push(StructField::with_default(
+                        body.push(TypeBodyItem::Field(StructField::with_default(
                             name,
                             is_mut,
                             field_type,
                             default_expr,
-                        ));
+                        )));
                     }
                 } else {
-                    // 约束声明: 字段类型是 Assert(...) → 放入 constraints
-                    if let Type::Generic { name: ref n, .. } = &field_type {
-                        if n == "Assert" {
-                            constraints.push(ConstraintDecl {
-                                name: name.clone(),
-                                name_span: state.span(),
-                                ty: field_type,
-                            });
-                        } else {
-                            fields.push(StructField::new(name, is_mut, field_type));
-                        }
-                    } else {
-                        // 普通字段: name: Type
-                        fields.push(StructField::new(name, is_mut, field_type));
-                    }
+                    // 普通字段: name: Type
+                    // 注意：不再硬编码 "Assert" — 所有 name: Type 形式一律作为字段。
+                    // 匿名类型表达式 Assert(N > 0) 已由前面的 LParen 前瞻分支处理。
+                    body.push(TypeBodyItem::Field(StructField::new(
+                        name, is_mut, field_type,
+                    )));
                 }
             } else if state.skip(&TokenKind::Eq) {
                 // 无冒号但有等号: 外部函数绑定 name = function[positions] 或默认绑定 name = function
@@ -565,21 +572,21 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                 // RFC-004: 尝试解析位置绑定 [positions]，如果没有则为默认绑定
                 if state.at(&TokenKind::LBracket) {
                     let positions = parse_binding_positions(state).ok()?;
-                    bindings.push(TypeBodyBinding {
+                    body.push(TypeBodyItem::Binding(TypeBodyBinding {
                         name,
                         kind: BindingKind::External {
                             function: func_name,
                             positions,
                         },
-                    });
+                    }));
                 } else {
                     // 默认绑定: name = function（自动查找第一个类型匹配位置）
-                    bindings.push(TypeBodyBinding {
+                    body.push(TypeBodyItem::Binding(TypeBodyBinding {
                         name,
                         kind: BindingKind::DefaultExternal {
                             function: func_name,
                         },
-                    });
+                    }));
                 }
             } else if is_mut {
                 // mut 后面没有冒号是语法错误
@@ -588,14 +595,14 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                     name
                 )));
                 return None;
-            } else if state.at(&TokenKind::Pipe) || state.at(&TokenKind::LParen) {
-                // 枚举变体: red | green | blue 或 ok(Int) | err(String)
-                // 回退一个 token，从头开始解析枚举
+            } else if state.at(&TokenKind::Pipe) {
+                // 枚举变体: red | green | blue
+                // 回退一个 token，从头开始析枚举
                 state.restore_position(state.save_position() - 1);
                 return parse_enum_variants_in_braces(state);
             } else {
                 // 接口约束: InterfaceName
-                interfaces.push(name);
+                body.push(TypeBodyItem::Interface(name));
             }
 
             // 跳过逗号，如果不是逗号则结束循环
@@ -607,12 +614,7 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
 
     state.skip(&TokenKind::RBrace);
 
-    Some(Type::Struct {
-        fields,
-        bindings,
-        interfaces,
-        constraints,
-    })
+    Some(Type::Struct { body })
 }
 
 /// 解析花括号内的枚举变体: { red | green | blue }

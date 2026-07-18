@@ -17,12 +17,39 @@ pub fn format_type(
         Type::Bytes => "Bytes".to_string(),
         Type::Bool => "Bool".to_string(),
         Type::Void => "()".to_string(),
-        Type::Struct {
-            fields,
-            bindings,
-            interfaces,
-            constraints: _,
-        } => format_struct_type(fields, bindings, interfaces, source_map),
+        Type::Struct { body } => {
+            let fields: Vec<StructField> = body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Field(f) = it {
+                        Some(f.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let bindings: Vec<TypeBodyBinding> = body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Binding(b) = it {
+                        Some(b.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let interfaces: Vec<String> = body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Interface(s) = it {
+                        Some(s.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            format_struct_type(&fields, &bindings, &interfaces, source_map)
+        }
         Type::NamedStruct { name, fields, .. } => {
             let fields_str = format_struct_fields(fields, source_map);
             format!("{} {{ {} }}", name, fields_str)

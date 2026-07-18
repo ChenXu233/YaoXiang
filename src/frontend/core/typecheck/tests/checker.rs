@@ -390,18 +390,17 @@ fn test_type_checker_with_generic_type_binding() {
                         constraints: vec![],
                     }],
                     type_annotation: Some(AstType::Struct {
-                        fields: vec![crate::frontend::core::parser::ast::StructField {
-                            name: "value".to_string(),
-                            is_mut: false,
-                            ty: AstType::Name {
-                                name: "T".to_string(),
-                                span: Span::dummy(),
+                        body: vec![crate::frontend::core::parser::ast::TypeBodyItem::Field(
+                            crate::frontend::core::parser::ast::StructField {
+                                name: "value".to_string(),
+                                is_mut: false,
+                                ty: AstType::Name {
+                                    name: "T".to_string(),
+                                    span: Span::dummy(),
+                                },
+                                default: None,
                             },
-                            default: None,
-                        }],
-                        bindings: vec![],
-                        interfaces: vec![],
-                        constraints: vec![],
+                        )],
                     }),
 
                     params: vec![],

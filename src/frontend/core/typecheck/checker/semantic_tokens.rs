@@ -160,30 +160,33 @@ impl TypeChecker {
                     self.collect_type_tokens(file_path, &f.ty);
                 }
             }
-            Type::Struct {
-                fields, bindings, ..
-            } => {
-                for f in fields {
-                    self.collect_type_tokens(file_path, &f.ty);
-                }
-                for b in bindings {
-                    match &b.kind {
-                        crate::frontend::core::parser::ast::BindingKind::Anonymous {
-                            params,
-                            return_type,
-                            ..
-                        } => {
-                            for p in params {
-                                if let Some(t) = &p.ty {
-                                    self.collect_type_tokens(file_path, t);
-                                }
-                            }
-                            self.collect_type_tokens(file_path, return_type);
+            Type::Struct { body } => {
+                for item in body {
+                    match item {
+                        crate::frontend::core::parser::ast::TypeBodyItem::Field(f) => {
+                            self.collect_type_tokens(file_path, &f.ty);
                         }
-                        crate::frontend::core::parser::ast::BindingKind::External { .. }
-                        | crate::frontend::core::parser::ast::BindingKind::DefaultExternal {
-                            ..
-                        } => {}
+                        crate::frontend::core::parser::ast::TypeBodyItem::Binding(b) => {
+                            match &b.kind {
+                                crate::frontend::core::parser::ast::BindingKind::Anonymous {
+                                    params,
+                                    return_type,
+                                    ..
+                                } => {
+                                    for p in params {
+                                        if let Some(t) = &p.ty {
+                                            self.collect_type_tokens(file_path, t);
+                                        }
+                                    }
+                                    self.collect_type_tokens(file_path, return_type);
+                                }
+                                crate::frontend::core::parser::ast::BindingKind::External { .. }
+                                | crate::frontend::core::parser::ast::BindingKind::DefaultExternal {
+                                    ..
+                                } => {}
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
