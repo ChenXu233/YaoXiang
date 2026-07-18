@@ -178,7 +178,6 @@ impl TypeConstraintSolver {
                 field_mutability: s.field_mutability.clone(),
                 field_has_default: s.field_has_default.clone(),
                 interfaces: s.interfaces.clone(),
-                constraints: s.constraints.clone(),
             }),
             MonoType::Enum(e) => MonoType::Enum(EnumType {
                 name: e.name.clone(),
@@ -349,7 +348,6 @@ impl TypeConstraintSolver {
                 field_mutability: s.field_mutability.clone(),
                 field_has_default: s.field_has_default.clone(),
                 interfaces: s.interfaces.clone(),
-                constraints: s.constraints.clone(),
             }),
             MonoType::Enum(e) => MonoType::Enum(EnumType {
                 name: e.name.clone(),
@@ -740,7 +738,6 @@ impl TypeConstraintSolver {
                 field_mutability: s.field_mutability.clone(),
                 field_has_default: s.field_has_default.clone(),
                 interfaces: s.interfaces.clone(),
-                constraints: s.constraints.clone(),
             }),
             MonoType::Enum(e) => MonoType::Enum(EnumType {
                 name: e.name.clone(),

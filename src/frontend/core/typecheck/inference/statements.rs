@@ -287,7 +287,6 @@ impl StatementChecker {
             field_mutability: Vec::new(),
             field_has_default: Vec::new(),
             interfaces: vec![],
-            constraints: Vec::new(),
         })
     }
 
@@ -657,7 +656,6 @@ impl StatementChecker {
                                 field_mutability: vec![false; field_count],
                                 field_has_default: vec![false; field_count],
                                 interfaces,
-                                constraints: Vec::new(),
                             });
                         self.type_defs.insert(name.to_string(), struct_ty.clone());
                         self.scope.add_var(
@@ -1682,7 +1680,14 @@ impl StatementChecker {
                     if let Type::ConstExpr(expr) = arg {
                         if let Some(const_expr) = convert_expr_to_const_expr(expr) {
                             if let Some(cv) = Self::find_const_var_in_expr(expr, const_binders) {
+                                // 泛型场景：含自由 const 变量，挂 constraints。
                                 const_binders[cv.index()].constraints.push(const_expr);
+                            } else {
+                                // 非泛型场景：无自由 const 变量。
+                                // 第一阶段不立即归约——当前无此用例（如 Assert(3 > 0)）。
+                                // 未来：尝试 dep_env 归约，按结果分派——
+                                //   Void 擦除 / Never 报 E1062 / 其他发 W1063 unused。
+                                // 约束走 const_binders 路径，StructType 不再承载约束。
                             }
                         }
                     }

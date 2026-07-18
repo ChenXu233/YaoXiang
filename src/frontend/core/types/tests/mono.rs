@@ -277,7 +277,6 @@ fn test_struct_type_eq_same_fields() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
-        constraints: Vec::new(),
     };
     let b = StructType {
         name: "P".to_string(),
@@ -286,7 +285,6 @@ fn test_struct_type_eq_same_fields() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
-        constraints: Vec::new(),
     };
     assert_eq!(a, b);
 }
@@ -300,7 +298,6 @@ fn test_struct_type_eq_different_fields() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
-        constraints: Vec::new(),
     };
     let b = StructType {
         name: "P".to_string(),
@@ -309,7 +306,6 @@ fn test_struct_type_eq_different_fields() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
-        constraints: Vec::new(),
     };
     assert_ne!(a, b);
 }
@@ -440,7 +436,6 @@ fn test_is_constraint_and_constraint_fields() {
         field_mutability: vec![false],
         field_has_default: vec![false],
         interfaces: vec![],
-        constraints: Vec::new(),
     });
     assert!(iface.is_constraint());
     let fields = iface.constraint_fields();
@@ -462,7 +457,6 @@ fn test_struct_field_is_mut_found() {
         field_mutability: vec![true, false],
         field_has_default: vec![false, false],
         interfaces: vec![],
-        constraints: Vec::new(),
     };
     assert_eq!(s.field_is_mut("a"), Some(true));
     assert_eq!(s.field_is_mut("b"), Some(false));

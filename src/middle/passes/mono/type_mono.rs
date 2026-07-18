@@ -67,7 +67,6 @@ impl Monomorphizer {
                     field_mutability: fields.iter().map(|f| f.is_mut).collect(),
                     field_has_default: fields.iter().map(|f| f.default.is_some()).collect(),
                     interfaces: vec![],
-                    constraints: Vec::new(),
                 })
             }
             AstType::NamedStruct { name, fields, .. } => MonoType::Struct(StructType {
@@ -80,7 +79,6 @@ impl Monomorphizer {
                 field_mutability: fields.iter().map(|f| f.is_mut).collect(),
                 field_has_default: fields.iter().map(|f| f.default.is_some()).collect(),
                 interfaces: vec![],
-                constraints: Vec::new(),
             }),
             AstType::Union(variants) => MonoType::Union(
                 variants
@@ -435,7 +433,6 @@ impl Monomorphizer {
                     field_mutability: struct_type.field_mutability.clone(),
                     field_has_default: struct_type.field_has_default.clone(),
                     interfaces: struct_type.interfaces.clone(),
-                    constraints: struct_type.constraints.clone(),
                 }))
             }
             MonoType::Enum(enum_type) => Some(MonoType::Enum(EnumType {
@@ -530,7 +527,6 @@ impl Monomorphizer {
                 field_mutability: struct_type.field_mutability.clone(),
                 field_has_default: struct_type.field_has_default.clone(),
                 interfaces: struct_type.interfaces.clone(),
-                constraints: struct_type.constraints.clone(),
             }),
             MonoType::List(elem) => MonoType::List(Box::new(self.substitute_type_args(
                 elem,

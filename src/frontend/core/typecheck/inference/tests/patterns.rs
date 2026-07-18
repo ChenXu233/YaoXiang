@@ -179,7 +179,6 @@ fn test_pattern_infer_struct() {
         field_mutability: vec![false, false],
         field_has_default: vec![],
         interfaces: vec![],
-        constraints: Vec::new(),
     });
     assert_eq!(result, expected, "Struct 模式应正确推断各字段类型");
 }

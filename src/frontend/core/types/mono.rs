@@ -538,7 +538,6 @@ impl From<ast::Type> for MonoType {
                 let mut field_mutability = Vec::new();
                 let mut field_has_default = Vec::new();
                 let mut interfaces = Vec::new();
-                let mut mono_constraints = Vec::new();
                 for item in body {
                     match item {
                         ast::TypeBodyItem::Field(f) => {
@@ -550,16 +549,10 @@ impl From<ast::Type> for MonoType {
                         ast::TypeBodyItem::Interface(s) => {
                             interfaces.push(s.clone());
                         }
-                        ast::TypeBodyItem::Expr(ty) => {
-                            if let ast::Type::Generic { name, args, .. } = ty {
-                                if name == "Assert" && !args.is_empty() {
-                                    if let ast::Type::ConstExpr(expr) = &args[0] {
-                                        if let Some(ce) = crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr) {
-                                            mono_constraints.push(ce);
-                                        }
-                                    }
-                                }
-                            }
+                        ast::TypeBodyItem::Expr(_) => {
+                            // 类型族表达式（如 Assert(N > 0)）不在此处提取——
+                            // 约束走 const_binders 路径（见 inference/statements.rs
+                            // process_body_expr_item），StructType 不再承载约束。
                         }
                         ast::TypeBodyItem::Binding(_) => {}
                     }
@@ -571,7 +564,6 @@ impl From<ast::Type> for MonoType {
                     field_mutability,
                     field_has_default,
                     interfaces,
-                    constraints: mono_constraints,
                 })
             }
             ast::Type::Union(variants) => MonoType::Enum(EnumType {
@@ -662,7 +654,6 @@ impl From<ast::Type> for MonoType {
                     field_mutability,
                     field_has_default: Vec::new(),
                     interfaces: vec![],
-                    constraints: Vec::new(),
                 })
             }
             ast::Type::Sum(types) => {
@@ -794,8 +785,6 @@ pub struct StructType {
     pub field_has_default: Vec<bool>,
     /// RFC-010: 接口约束列表
     pub interfaces: Vec<String>,
-    /// 编译期约束声明（如 Assert(N > 0)），不占据运行时布局
-    pub constraints: Vec<crate::frontend::core::types::const_data::ConstExpr>,
 }
 
 impl StructType {
