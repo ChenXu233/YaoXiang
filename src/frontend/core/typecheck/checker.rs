@@ -821,7 +821,6 @@ impl TypeChecker {
             field_mutability: Vec::new(),
             field_has_default: Vec::new(),
             interfaces: vec![],
-            constraints: Vec::new(),
         });
         self.env
             .add_var(module_alias.to_string(), PolyType::mono(module_ty));
@@ -862,7 +861,6 @@ impl TypeChecker {
                     field_mutability: Vec::new(),
                     field_has_default: Vec::new(),
                     interfaces: vec![],
-                    constraints: Vec::new(),
                 });
                 self.env.add_var(register_name, PolyType::mono(module_ty));
             }
@@ -936,7 +934,6 @@ impl TypeChecker {
                     field_mutability: s.field_mutability.clone(),
                     field_has_default: s.field_has_default.clone(),
                     interfaces: s.interfaces.clone(),
-                    constraints: s.constraints.clone(),
                 })
             }
             _ => poly.body.clone(),

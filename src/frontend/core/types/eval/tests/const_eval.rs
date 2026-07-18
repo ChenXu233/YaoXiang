@@ -888,7 +888,6 @@ fn test_generic_size_struct() {
         field_mutability: vec![false, false],
         field_has_default: vec![false, false],
         interfaces: vec![],
-        constraints: Vec::new(),
     });
     // Struct is not supported by GenericSize
     assert!(gs.size_of(&s).is_err());

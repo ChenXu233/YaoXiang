@@ -316,7 +316,6 @@ impl TypeEnvironment {
                     field_mutability: s.field_mutability.clone(),
                     field_has_default: s.field_has_default.clone(),
                     interfaces: s.interfaces.clone(),
-                    constraints: s.constraints.clone(),
                 })
             }
             MonoType::List(elem) => {
@@ -419,7 +418,6 @@ impl TypeEnvironment {
                     field_mutability: s.field_mutability.clone(),
                     field_has_default: s.field_has_default.clone(),
                     interfaces: s.interfaces.clone(),
-                    constraints: s.constraints.clone(),
                 })
             }
             MonoType::List(elem) => MonoType::List(Box::new(Self::resolve_type_refs(elem))),

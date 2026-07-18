@@ -270,7 +270,6 @@ pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
             field_mutability: vec![false, false],
             field_has_default: vec![false, false],
             interfaces: Vec::new(),
-            constraints: Vec::new(),
         })),
     );
 
