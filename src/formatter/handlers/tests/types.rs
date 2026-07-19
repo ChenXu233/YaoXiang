@@ -339,3 +339,59 @@ fn test_format_type_body_binding_default_and_anonymous() {
         "Anonymous 绑定应输出完整签名与 lambda 体"
     );
 }
+#[test]
+fn test_format_generic_type_params_rules() {
+    // 覆盖: RFC-010 泛型类型定义 — 参数签名重建须带类型标注
+    // 验证: Type 无约束 → "T: Type"；Type 带约束 → "T: Clone"；Const → "N: Int"；Platform → "P"
+    use crate::formatter::handlers::common::format_generic_type_params;
+
+    let type_no_constraint = vec![GenericParam {
+        name: "T".to_string(),
+        kind: GenericParamKind::Type,
+        constraints: vec![],
+    }];
+    let type_with_constraint = vec![GenericParam {
+        name: "T".to_string(),
+        kind: GenericParamKind::Type,
+        constraints: vec![Type::Name {
+            name: "Clone".to_string(),
+            span: Span::dummy(),
+        }],
+    }];
+    let const_param = vec![GenericParam {
+        name: "N".to_string(),
+        kind: GenericParamKind::Const {
+            const_type: Box::new(Type::Name {
+                name: "Int".to_string(),
+                span: Span::dummy(),
+            }),
+        },
+        constraints: vec![],
+    }];
+    let platform = vec![GenericParam {
+        name: "P".to_string(),
+        kind: GenericParamKind::Platform,
+        constraints: vec![],
+    }];
+
+    assert_eq!(
+        format_generic_type_params(&type_no_constraint, &default_ctx(), &default_source_map()),
+        "(T: Type)",
+        "Type 参数无约束应补 Type 标注"
+    );
+    assert_eq!(
+        format_generic_type_params(&type_with_constraint, &default_ctx(), &default_source_map()),
+        "(T: Clone)",
+        "Type 参数有约束应输出约束名"
+    );
+    assert_eq!(
+        format_generic_type_params(&const_param, &default_ctx(), &default_source_map()),
+        "(N: Int)",
+        "Const 参数应输出 const_type 标注"
+    );
+    assert_eq!(
+        format_generic_type_params(&platform, &default_ctx(), &default_source_map()),
+        "(P)",
+        "Platform 参数无约束时不输出标注"
+    );
+}

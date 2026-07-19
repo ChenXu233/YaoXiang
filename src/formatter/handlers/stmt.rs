@@ -166,22 +166,25 @@ fn format_binding(
         }
     }
 
-    // 类型定义: name: Type = { ... }
+    // 类型定义: name: Type = { ... } 或 name: (T: Type, ...) -> Type = { ... }
     // 但排除函数类型 (Type::Fn)，函数类型应该格式化为函数定义
     if params.is_empty() {
         if let Some(ty) = type_annotation {
             // 检查是否是函数类型
             let is_fn_type = matches!(ty, Type::Fn { .. });
             if !is_fn_type {
-                let generics = if generic_params.is_empty() {
-                    String::new()
+                let signature = if generic_params.is_empty() {
+                    "Type".to_string()
                 } else {
-                    super::common::format_generic_params(generic_params, ctx, source_map)
+                    format!(
+                        "{} -> Type",
+                        super::common::format_generic_type_params(generic_params, ctx, source_map)
+                    )
                 };
                 return format!(
-                    "{}{}: Type = {}",
+                    "{}: {} = {}",
                     name,
-                    generics,
+                    signature,
                     format_type(ty, ctx, source_map)
                 );
             }

@@ -110,3 +110,50 @@ pub fn format_generic_params(
         .collect();
     format!("({})", items.join(", "))
 }
+
+/// 重建泛型类型定义的参数签名：(T: Type, N: Int)
+///
+/// 与 format_generic_params（函数定义分支用，仅输出名字）不同，
+/// 类型定义分支需要完整的类型标注。
+pub fn format_generic_type_params(
+    generic_params: &[GenericParam],
+    ctx: &FormatContext,
+    source_map: &SourceMap,
+) -> String {
+    let items: Vec<String> = generic_params
+        .iter()
+        .map(|gp| {
+            let annotation = match &gp.kind {
+                GenericParamKind::Type => {
+                    if gp.constraints.is_empty() {
+                        "Type".to_string()
+                    } else {
+                        gp.constraints
+                            .iter()
+                            .map(|c| format_type(c, ctx, source_map))
+                            .collect::<Vec<_>>()
+                            .join(" + ")
+                    }
+                }
+                GenericParamKind::Const { const_type } => format_type(const_type, ctx, source_map),
+                GenericParamKind::Platform => {
+                    if gp.constraints.is_empty() {
+                        String::new()
+                    } else {
+                        gp.constraints
+                            .iter()
+                            .map(|c| format_type(c, ctx, source_map))
+                            .collect::<Vec<_>>()
+                            .join(" + ")
+                    }
+                }
+            };
+            if annotation.is_empty() {
+                gp.name.clone()
+            } else {
+                format!("{}: {}", gp.name, annotation)
+            }
+        })
+        .collect();
+    format!("({})", items.join(", "))
+}
