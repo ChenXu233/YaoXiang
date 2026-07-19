@@ -606,3 +606,12 @@ fn test_format_no_verify() {
     let result = format_source("x = 1", &opts);
     assert!(result.is_ok(), "no-verify 模式下合法代码应正常通过");
 }
+
+#[test]
+fn test_format_generic_type_definition_roundtrip() {
+    // RFC-010: 泛型类型定义 name: (params) -> Type = body 格式化后保持
+    assert_format_eq(
+        "Wrapper: (T: Type) -> Type = { data: T }",
+        "Wrapper: (T: Type) -> Type = { data: T }\n",
+    );
+}
