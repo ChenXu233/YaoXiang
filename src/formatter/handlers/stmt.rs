@@ -114,7 +114,7 @@ fn format_var_decl(
 
     if let Some(ty) = type_annotation {
         result.push_str(": ");
-        result.push_str(&format_type(ty, source_map));
+        result.push_str(&format_type(ty, ctx, source_map));
     }
 
     if let Some(init) = initializer {
@@ -159,7 +159,7 @@ fn format_binding(
                 "{}.{}: {} = {} => {}",
                 ty_name,
                 name,
-                format_type(mt, source_map),
+                format_type(mt, ctx, source_map),
                 params_str,
                 format_block(&body_block, ctx, source_map)
             );
@@ -176,13 +176,13 @@ fn format_binding(
                 let generics = if generic_params.is_empty() {
                     String::new()
                 } else {
-                    super::common::format_generic_params(generic_params, source_map)
+                    super::common::format_generic_params(generic_params, ctx, source_map)
                 };
                 return format!(
                     "{}{}: Type = {}",
                     name,
                     generics,
-                    format_type(ty, source_map)
+                    format_type(ty, ctx, source_map)
                 );
             }
         }
@@ -193,11 +193,11 @@ fn format_binding(
     let generics = if generic_params.is_empty() {
         String::new()
     } else {
-        super::common::format_generic_params(generic_params, source_map)
+        super::common::format_generic_params(generic_params, ctx, source_map)
     };
 
     let type_str = if let Some(ty) = type_annotation {
-        format!(": {}", format_type(ty, source_map))
+        format!(": {}", format_type(ty, ctx, source_map))
     } else {
         String::new()
     };
@@ -300,7 +300,7 @@ fn format_external_binding(
                 type_name,
                 method_name,
                 params_str,
-                format_type(return_type, source_map),
+                format_type(return_type, ctx, source_map),
                 pos_strs.join(", "),
                 params_str,
                 format_expr(body, ctx, source_map)

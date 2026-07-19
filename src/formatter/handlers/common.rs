@@ -89,6 +89,7 @@ pub fn format_while_loop(
 /// 格式化泛型参数列表
 pub fn format_generic_params(
     generic_params: &[GenericParam],
+    ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
     let items: Vec<String> = generic_params
@@ -100,7 +101,7 @@ pub fn format_generic_params(
                 let cs: Vec<String> = gp
                     .constraints
                     .iter()
-                    .map(|c| format_type(c, source_map))
+                    .map(|c| format_type(c, ctx, source_map))
                     .collect();
                 format!(": {}", cs.join(" + "))
             };
