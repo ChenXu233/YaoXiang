@@ -1123,13 +1123,10 @@ impl<'a> ExpressionInferrer<'a> {
                                     }
                                     let _ = binder; // 避免未使用警告
                                 }
-                                match crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(
+                                return crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(
                                     &generic_def,
                                     &full_args,
-                                ) {
-                                    Ok(result) => return Ok(result),
-                                    Err(diag) => return Err(diag),
-                                }
+                                );
                             }
                         }
                     }
