@@ -101,7 +101,7 @@ pub fn format_expr(
             format!(
                 "{} as {}",
                 format_expr(inner, ctx, source_map),
-                super::types::format_type(target_type, source_map)
+                super::types::format_type(target_type, ctx, source_map)
             )
         }
         Expr::Tuple(exprs, _span) => {
@@ -356,7 +356,7 @@ fn format_fn_def(
 ) -> String {
     let params_str = format_params(params, ctx, source_map);
     let ret_str = if let Some(ty) = return_type {
-        format!(" -> {}", super::types::format_type(ty, source_map))
+        format!(" -> {}", super::types::format_type(ty, ctx, source_map))
     } else {
         String::new()
     };
@@ -385,7 +385,7 @@ pub fn format_params(
             s.push_str(&p.name);
             if let Some(ty) = &p.ty {
                 s.push_str(": ");
-                s.push_str(&super::types::format_type(ty, source_map));
+                s.push_str(&super::types::format_type(ty, ctx, source_map));
             }
             s
         })
