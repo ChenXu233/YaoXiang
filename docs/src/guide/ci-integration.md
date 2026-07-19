@@ -1,6 +1,6 @@
 ---
 title: CI 集成指南
-description: 将 yaoxiang check 和 yaoxiang fmt 集成到 CI/CD 流水线
+description: 将 yaoxiang check 和 yaoxiang format 集成到 CI/CD 流水线
 ---
 
 # CI 集成指南
@@ -33,7 +33,7 @@ jobs:
         run: yaoxiang check --color never --no-progress
 
       - name: Format check
-        run: yaoxiang fmt --check
+        run: yaoxiang format --dry-run .
 ```
 
 ## GitLab CI
@@ -45,7 +45,7 @@ yaoxiang-check:
     - curl -fsSL https://yaoxiang.dev/install.sh | sh
     - export PATH="$HOME/.yaoxiang/bin:$PATH"
     - yaoxiang check --color never --no-progress
-    - yaoxiang fmt --check
+    - yaoxiang format --dry-run .
   rules:
     - if: $CI_MERGE_REQUEST_IID
     - if: $CI_COMMIT_BRANCH == "main"
@@ -70,7 +70,8 @@ yaoxiang check --json | jq '.error_count'
 
 ## 最佳实践
 
-1. **分离检查和格式化**：分别运行 `check` 和 `fmt --check`，便于定位问题
-2. **使用 `--no-progress`**：CI 环境不需要进度条
-3. **使用 `--color never`**：避免 ANSI 颜色码污染日志
-4. **缓存依赖**：利用 CI 缓存机制加速构建
+1. **路径参数**：`yaoxiang check` 默认检查当前目录，也可以指定路径：`yaoxiang check src/`
+2. **分离检查和格式化**：分别运行 `check` 和 `format --dry-run`，便于定位问题
+3. **使用 `--no-progress`**：CI 环境不需要进度条
+4. **使用 `--color never`**：避免 ANSI 颜色码污染日志
+5. **缓存依赖**：利用 CI 缓存机制加速构建

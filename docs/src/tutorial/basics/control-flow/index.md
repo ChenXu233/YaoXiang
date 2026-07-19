@@ -19,22 +19,22 @@ YaoXiang 提供了五种控制流结构，各司其职：
 快速感受一下：
 
 ```yaoxiang
-# if 是表达式，可以返回值
+// if 是表达式，可以返回值
 status = if score >= 60 { "及格" } else { "不及格" }
 
-# for 遍历范围
+// for 遍历范围
 for i in 0..5 {
-    println(i)
+    print(i)
 }
 
-# while 条件循环
+// while 条件循环
 mut n = 3
 while n > 0 {
-    println(n)
+    print(n)
     n = n - 1
 }
 
-# match 模式匹配
+// match 模式匹配
 description = match number {
     0 => "零",
     1 => "一",

@@ -27,11 +27,10 @@ dead-code = "warn"
 
 **原因**：导出的函数从未被任何代码调用。
 
-**示例**：
 ```yaoxiang
-pub fn dead_function() { }  // W1001: 未使用的导出函数
+pub dead_function: () -> Void = { }  // W1001: 未使用的导出函数
 
-fn main() {
+main = {
     // dead_function 从未被调用
 }
 ```
@@ -48,15 +47,14 @@ fn main() {
 
 **示例**：
 ```yaoxiang
-pub type DeadType = Int  // W1002: 未使用的导出类型
+DeadType: Type = Int  // W1002: 未使用的导出类型
 
-fn main() {
-    let x: Int = 42;
+main = {
+    x = 42
 }
 ```
 
 **建议**：
-- 移除不必要的 `pub` 修饰符
 - 如果类型需要导出但暂未使用，忽略此警告
 
 ---
@@ -65,11 +63,10 @@ fn main() {
 
 **原因**：`use` 语句导入的模块或符号从未被使用。
 
-**示例**：
 ```yaoxiang
 use std.json  // W1003: 未使用的导入
 
-fn main() {
+main = {
     // json 模块从未被使用
 }
 ```
@@ -82,13 +79,13 @@ fn main() {
 
 ### W1004: 未使用的导出变量
 
-**原因**：使用 `pub let` 导出的变量从未被读取。
+**原因**：使用 `pub` 导出的变量从未被读取。
 
 **示例**：
 ```yaoxiang
-pub let dead_var = 42  // W1004: 未使用的导出变量
+pub dead_var = 42  // W1004: 未使用的导出变量
 
-fn main() {
+main = {
     // dead_var 从未被读取
 }
 ```
@@ -105,12 +102,12 @@ fn main() {
 
 **示例**：
 ```yaoxiang
-type Foo { value: Int }
+Foo: Type = { value: Int }
 
-pub fn Foo.dead_method(self) { }  // W1005: 未使用的导出方法
+pub Foo.dead_method: (self: Foo) -> Void = { }  // W1005: 未使用的导出方法
 
-fn main() {
-    let foo = Foo { value: 1 };
+main = {
+    foo = Foo(1)
     // dead_method 从未被调用
 }
 ```
