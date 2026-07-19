@@ -682,20 +682,41 @@ fn parse_var_stmt_with_pub(
                         }
                     }
 
-                    // 合并类型信息
-                    let mut merged = Vec::new();
-                    for (i, extracted) in extracted_params.iter().enumerate() {
-                        if let Some(lambda_p) = lambda_params.get(i) {
-                            merged.push(Param {
-                                name: lambda_p.name.clone(),
-                                ty: extracted.ty.clone(),
-                                is_mut: lambda_p.is_mut,
-                                span: lambda_p.span,
-                            });
-                        } else {
-                            merged.push(extracted.clone());
-                        }
-                    }
+                    // 值参数对齐：签名值参数（剔除 Type 级泛型参数）与 lambda 参数 zip。
+                    // 仅剔除 Type 级泛型（MetaType/Type/大写约束名）；Const 泛型（如 N: Int）
+                    // 仍是值级参数，保留 Int 标注。与 extract_generic_params 的 Type 分类同源。
+                    let generic_params_list = extract_generic_params(extracted_params);
+                    let generic_names: std::collections::HashSet<&str> = generic_params_list
+                        .iter()
+                        .filter(|gp| {
+                            matches!(
+                                gp.kind,
+                                crate::frontend::core::parser::ast::GenericParamKind::Type
+                            )
+                        })
+                        .map(|p| p.name.as_str())
+                        .collect();
+                    let value_sig: Vec<&Param> = extracted_params
+                        .iter()
+                        .filter(|p| !generic_names.contains(p.name.as_str()))
+                        .collect();
+                    // 全泛型签名时（值参数在内层返回类型，如 map: (T: Type) -> ((x: T) -> R)）
+                    // value_sig 为空，params 直接取 lambda 参数（标注 None，HM 推断）；
+                    // 否则 RFC-007 校验已保证 value_sig 与 lambda_params 等长。
+                    let merged: Vec<Param> = if value_sig.is_empty() {
+                        lambda_params.to_vec()
+                    } else {
+                        value_sig
+                            .iter()
+                            .zip(lambda_params.iter())
+                            .map(|(sig, lam)| Param {
+                                name: lam.name.clone(),
+                                ty: sig.ty.clone(),
+                                is_mut: lam.is_mut,
+                                span: lam.span,
+                            })
+                            .collect()
+                    };
                     state.skip(&TokenKind::Semicolon);
                     return Some(Stmt {
                         kind: StmtKind::Binding {
@@ -726,14 +747,30 @@ fn parse_var_stmt_with_pub(
                         }]
                     };
 
+                    let generic_params_list = extract_generic_params(extracted_params);
+                    let generic_names: std::collections::HashSet<&str> = generic_params_list
+                        .iter()
+                        .filter(|gp| {
+                            matches!(
+                                gp.kind,
+                                crate::frontend::core::parser::ast::GenericParamKind::Type
+                            )
+                        })
+                        .map(|p| p.name.as_str())
+                        .collect();
+                    let value_params: Vec<Param> = extracted_params
+                        .iter()
+                        .filter(|p| !generic_names.contains(p.name.as_str()))
+                        .cloned()
+                        .collect();
                     return Some(Stmt {
                         kind: StmtKind::Binding {
                             name,
                             type_name: None,
                             method_type: None,
                             signature_params: extracted_params.clone(),
+                            params: value_params,
                             type_annotation: type_annotation.clone(),
-                            params: extracted_params.clone(),
                             body,
                             is_pub: final_is_pub,
                         },

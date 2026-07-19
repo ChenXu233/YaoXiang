@@ -1142,36 +1142,7 @@ impl StatementChecker {
             params
         };
 
-        // 对于泛型函数，将类型级参数（MetaType 类型）替换为新的类型变量
-        // 这些参数是泛型类型参数声明合并到值级参数的结果
-        let owned_value_params: Vec<Param>;
-        let value_params_slice: &[Param] = if !type_generic_params.is_empty() {
-            owned_value_params = params
-                .iter()
-                .map(|p| {
-                    let is_meta = matches!(
-                        p.ty.as_ref().map(|t| MonoType::from(t.clone())),
-                        Some(MonoType::MetaType { .. })
-                    );
-                    if is_meta {
-                        // MetaType 参数：移除类型标注，让 HM 推断
-                        Param {
-                            name: p.name.clone(),
-                            ty: None,
-                            is_mut: p.is_mut,
-                            span: p.span,
-                        }
-                    } else {
-                        p.clone()
-                    }
-                })
-                .collect();
-            &owned_value_params
-        } else {
-            params
-        };
-
-        let out = self.check_fn_def(name, value_params_slice, &body);
+        let out = self.check_fn_def(name, params, &body);
 
         // Clear expected return type after function body checking
         self.expected_return_type = None;

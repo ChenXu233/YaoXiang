@@ -245,3 +245,38 @@ fn test_signature_params_stored_verbatim() {
         "x 的标注应为 Int"
     );
 }
+
+#[test]
+fn test_value_params_no_merged_misalignment() {
+    // 覆盖: RFC-007 参数匹配 — params 存值参数，标注来自签名对应值参数而非错位 zip
+    // 验证: foo: (T: Type, x: Int) -> Int = (x) => x 的 params == [x: Int]
+    //       （修复前 merged 产出 x: MetaType 错位——x 配上了 T 的标注）
+    let kind = parse_stmt("foo: (T: Type, x: Int) -> Int = (x) => x");
+    let StmtKind::Binding { params, .. } = &kind else {
+        panic!("Expected StmtKind::Binding, got {:?}", kind);
+    };
+
+    assert_eq!(params.len(), 1, "params 应只含值参数（泛型 T 不在其中）");
+    assert_eq!(params[0].name, "x", "值参数名应为 x");
+    assert!(
+        matches!(&params[0].ty, Some(Type::Name { name, .. }) if name == "Int"),
+        "x 的标注应为 Int（来自签名值参数），而非 MetaType 错位"
+    );
+}
+
+#[test]
+fn test_generic_curried_fn_params_from_lambda() {
+    // 覆盖: RFC-010 泛型函数 — 全泛型第一组时值参数在内层签名
+    // 验证: map: (T: Type) -> ((x: Int) -> Int) = (x) => x 的 params == [x: 无标注]
+    let kind = parse_stmt("map: (T: Type) -> ((x: Int) -> Int) = (x) => x");
+    let StmtKind::Binding { params, .. } = &kind else {
+        panic!("Expected StmtKind::Binding, got {:?}", kind);
+    };
+
+    assert_eq!(params.len(), 1, "params 应含 lambda 参数 x");
+    assert_eq!(params[0].name, "x", "参数名应来自 lambda");
+    assert!(
+        params[0].ty.is_none(),
+        "curried 泛型函数值参数标注 None（HM 推断），不应有 MetaType 错位标注"
+    );
+}
