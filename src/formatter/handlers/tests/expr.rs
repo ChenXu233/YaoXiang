@@ -3,8 +3,8 @@
 //! 对应 formatter 规范 §3, §7, §8, §10, §11, §12, §13, §17, §18
 
 use crate::formatter::handlers::expr::{
-    format_binop, format_block, format_call, format_dict, format_expr, format_list, format_literal,
-    format_params,
+    format_binop, format_block, format_call, format_dict, format_expr, format_fn_signature,
+    format_list, format_literal, format_params,
 };
 use crate::formatter::context::FormatContext;
 use crate::formatter::source_map::SourceMap;
@@ -651,4 +651,60 @@ fn test_format_error_placeholder() {
     let expr = Expr::Error(Span::dummy());
     let result = format_expr(&expr, &ctx, &default_source_map());
     assert_eq!(result, "/* error */");
+}
+
+// === 签名参数约束语义 / curried 分组 ===
+
+#[test]
+fn test_format_fn_signature_curried_grouping() {
+    // 构造 curried 泛型函数签名：
+    //   signature_params = [T: Type]
+    //   fn_type = (Type) -> ((Int) -> Int)
+    //   value_params = [x]
+    // 预期输出：(T: Type) -> ((x: Int) -> Int)
+    // —— 第一组带名签名参数原样保留，内层 Fn 用值参数名补全并加圆括号分组。
+    let ctx = default_ctx();
+    let signature_params = vec![Param {
+        name: "T".to_string(),
+        ty: Some(Type::MetaType {
+            name_span: Span::dummy(),
+            args: vec![],
+        }),
+        is_mut: false,
+        span: Span::dummy(),
+    }];
+    let fn_type = Type::Fn {
+        params: vec![Type::MetaType {
+            name_span: Span::dummy(),
+            args: vec![],
+        }],
+        return_type: Box::new(Type::Fn {
+            params: vec![Type::Name {
+                name: "Int".to_string(),
+                span: Span::dummy(),
+            }],
+            return_type: Box::new(Type::Name {
+                name: "Int".to_string(),
+                span: Span::dummy(),
+            }),
+        }),
+    };
+    let value_params = vec![Param {
+        name: "x".to_string(),
+        ty: None,
+        is_mut: false,
+        span: Span::dummy(),
+    }];
+    let result = format_fn_signature(
+        &signature_params,
+        &fn_type,
+        &value_params,
+        &ctx,
+        &default_source_map(),
+    );
+    assert_eq!(
+        result, "(T: Type) -> ((x: Int) -> Int)",
+        "curried 签名应保留签名参数并给内层 Fn 分组：got {:?}",
+        result
+    );
 }

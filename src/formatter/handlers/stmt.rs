@@ -4,7 +4,7 @@ use crate::frontend::core::parser::ast::*;
 
 use super::super::context::FormatContext;
 use super::super::source_map::SourceMap;
-use super::expr::{format_block, format_expr, format_params};
+use super::expr::{format_block, format_expr, format_params, format_signature_params};
 use super::types::format_type;
 
 /// 格式化语句
@@ -140,8 +140,6 @@ fn format_binding(
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
-    let generic_params =
-        crate::frontend::core::parser::ast::extract_generic_params(signature_params);
     // 方法绑定: Type.method: (Type, ...) -> ReturnType = (params) => body
     if let Some(ty_name) = type_name {
         if let Some(mt) = method_type {
@@ -176,12 +174,12 @@ fn format_binding(
             // 检查是否是函数类型
             let is_fn_type = matches!(ty, Type::Fn { .. });
             if !is_fn_type {
-                let signature = if generic_params.is_empty() {
+                let signature = if signature_params.is_empty() {
                     "Type".to_string()
                 } else {
                     format!(
                         "{} -> Type",
-                        super::common::format_generic_type_params(&generic_params, ctx, source_map)
+                        format_signature_params(signature_params, ctx, source_map)
                     )
                 };
                 return format!(
@@ -196,14 +194,15 @@ fn format_binding(
 
     // 函数定义: name: Type = (params) => body
     let pub_str = if is_pub { "pub " } else { "" };
-    let generics = if generic_params.is_empty() {
-        String::new()
-    } else {
-        super::common::format_generic_params(&generic_params, ctx, source_map)
-    };
-
     let type_str = if let Some(ty) = type_annotation {
-        format!(": {}", format_type(ty, ctx, source_map))
+        if matches!(ty, Type::Fn { .. }) {
+            format!(
+                ": {}",
+                super::expr::format_fn_signature(signature_params, ty, params, ctx, source_map)
+            )
+        } else {
+            format!(": {}", format_type(ty, ctx, source_map))
+        }
     } else {
         String::new()
     };
@@ -223,20 +222,18 @@ fn format_binding(
     // 如果参数为空，直接输出 = { ... }，不输出 () =>
     if params.is_empty() {
         format!(
-            "{}{}{}{} = {}",
+            "{}{}{} = {}",
             pub_str,
             name,
-            generics,
             type_str,
             format_block(&body_block, ctx, source_map)
         )
     } else {
         let params_str = format_params(params, ctx, source_map);
         format!(
-            "{}{}{}{} = {} => {}",
+            "{}{}{} = {} => {}",
             pub_str,
             name,
-            generics,
             type_str,
             params_str,
             format_block(&body_block, ctx, source_map)
