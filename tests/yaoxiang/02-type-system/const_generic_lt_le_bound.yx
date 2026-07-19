@@ -1,0 +1,17 @@
+// 02-type-system/const_generic_lt_le_bound.yx
+// 覆盖: RFC-011 §4.3 编译期验证 — const 泛型约束 < 与 <= 满足时实例化通过
+// 验证: Capped(Int, 3) 中 Assert(3 < 100) 与 Assert(3 <= 100) 求值为 true，编译通过
+// 状态: ✅ 可运行
+
+use std.io
+
+Capped: (T: Type, N: Int) -> Type = {
+    _assert_lt: Assert(N < 100),
+    _assert_le: Assert(N <= 100),
+    data: Array(T, N),
+}
+
+main = {
+    arr = Capped(Int, 3)
+    io.println("ALL TESTS PASSED")
+}
