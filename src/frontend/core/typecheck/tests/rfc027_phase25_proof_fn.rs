@@ -186,7 +186,7 @@ fn make_proof_fn_module(
             name: fn_name.into(),
             type_name: None,
             method_type: None,
-            generic_params: vec![],
+            signature_params: vec![],
             type_annotation: Some(return_type),
             params: vec![param],
             // body_expr 通过 return 语句返回

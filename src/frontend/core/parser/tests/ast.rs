@@ -333,7 +333,7 @@ fn test_stmtkind_binding() {
             name: "add".into(),
             type_name: None,
             method_type: None,
-            generic_params: vec![],
+            signature_params: vec![],
             type_annotation: None,
 
             params: vec![],

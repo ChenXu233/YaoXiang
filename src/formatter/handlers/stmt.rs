@@ -34,16 +34,17 @@ pub fn format_stmt(
             name,
             type_name,
             method_type,
-            generic_params,
+            signature_params,
             type_annotation,
             params,
             body,
             is_pub,
+            ..
         } => format_binding(
             name,
             type_name.as_deref(),
             method_type.as_ref(),
-            generic_params,
+            signature_params,
             type_annotation.as_ref(),
             params,
             body,
@@ -131,7 +132,7 @@ fn format_binding(
     name: &str,
     type_name: Option<&str>,
     method_type: Option<&Type>,
-    generic_params: &[GenericParam],
+    signature_params: &[Param],
     type_annotation: Option<&Type>,
     params: &[Param],
     body: &[Stmt],
@@ -139,6 +140,8 @@ fn format_binding(
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
+    let generic_params =
+        crate::frontend::core::parser::ast::extract_generic_params(signature_params);
     // 方法绑定: Type.method: (Type, ...) -> ReturnType = (params) => body
     if let Some(ty_name) = type_name {
         if let Some(mt) = method_type {
@@ -178,7 +181,7 @@ fn format_binding(
                 } else {
                     format!(
                         "{} -> Type",
-                        super::common::format_generic_type_params(generic_params, ctx, source_map)
+                        super::common::format_generic_type_params(&generic_params, ctx, source_map)
                     )
                 };
                 return format!(
@@ -196,7 +199,7 @@ fn format_binding(
     let generics = if generic_params.is_empty() {
         String::new()
     } else {
-        super::common::format_generic_params(generic_params, ctx, source_map)
+        super::common::format_generic_params(&generic_params, ctx, source_map)
     };
 
     let type_str = if let Some(ty) = type_annotation {

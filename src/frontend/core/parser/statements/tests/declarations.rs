@@ -2,7 +2,7 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::parser::ast::{StmtKind, Type};
+use crate::frontend::core::parser::ast::{extract_generic_params, StmtKind, Type};
 
 fn parse_stmt(source: &str) -> StmtKind {
     let tokens = tokenize(source).unwrap();
@@ -150,10 +150,11 @@ fn test_type_def_generic() {
     let kind = parse_stmt("Option: (T: Type) -> Type = { some(T) | none }");
     if let StmtKind::Binding {
         name,
-        generic_params,
+        signature_params,
         ..
     } = &kind
     {
+        let generic_params = extract_generic_params(signature_params);
         assert_eq!(name, "Option");
         assert_eq!(generic_params.len(), 1);
         assert_eq!(generic_params[0].name, "T");
@@ -214,4 +215,33 @@ fn test_expr_stmt_literal() {
 fn test_expr_stmt_call() {
     let kind = parse_stmt("foo()");
     assert!(matches!(&kind, StmtKind::Expr(..)));
+}
+
+#[test]
+fn test_signature_params_stored_verbatim() {
+    // 覆盖: RFC-010 统一声明语法 — signature_params 原样存储签名第一组参数
+    // 验证: 泛型与值参数混合签名 (T: Type, x: Int) 两项按序保留，名字与标注完整
+    let kind = parse_stmt("foo: (T: Type, x: Int) -> Int = x");
+    let StmtKind::Binding {
+        signature_params, ..
+    } = &kind
+    else {
+        panic!("Expected StmtKind::Binding, got {:?}", kind);
+    };
+
+    assert_eq!(
+        signature_params.len(),
+        2,
+        "签名第一组两个参数应原样保留（泛型 T 与值参数 x）"
+    );
+    assert_eq!(signature_params[0].name, "T", "第一个参数应为 T");
+    assert!(
+        matches!(signature_params[0].ty, Some(Type::MetaType { .. })),
+        "T 的标注应为 MetaType（Type 关键字）"
+    );
+    assert_eq!(signature_params[1].name, "x", "第二个参数应为 x");
+    assert!(
+        matches!(&signature_params[1].ty, Some(Type::Name { name, .. }) if name == "Int"),
+        "x 的标注应为 Int"
+    );
 }

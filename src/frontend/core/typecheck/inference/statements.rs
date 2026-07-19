@@ -556,13 +556,16 @@ impl StatementChecker {
             crate::frontend::core::parser::ast::StmtKind::Binding {
                 name,
                 type_name,
-                generic_params,
+                signature_params,
                 type_annotation,
                 params,
                 body,
                 is_pub: _,
                 method_type,
+                ..
             } => {
+                let generic_params =
+                    crate::frontend::core::parser::ast::extract_generic_params(signature_params);
                 // 根据是否有 type_name 来区分方法绑定和其他绑定
                 // 注意：不能根据 params 是否为空来判断，因为空参数的函数也是函数
                 let body_block = Block {
@@ -576,7 +579,7 @@ impl StatementChecker {
                     self.check_fn_stmt(
                         name,
                         type_ann,
-                        generic_params,
+                        signature_params,
                         params,
                         body,
                         body_block,
@@ -772,7 +775,7 @@ impl StatementChecker {
                     self.check_fn_stmt(
                         name,
                         type_annotation.as_ref(),
-                        generic_params,
+                        signature_params,
                         params,
                         body,
                         body_block,
@@ -930,12 +933,14 @@ impl StatementChecker {
         &mut self,
         name: &str,
         type_annotation: Option<&crate::frontend::core::parser::ast::Type>,
-        generic_params: &[crate::frontend::core::parser::ast::GenericParam],
+        signature_params: &[Param],
         params: &[Param],
         _stmts: &[Stmt],
         body: Block,
         _span: crate::util::span::Span,
     ) -> Result<(), Box<Diagnostic>> {
+        let generic_params =
+            crate::frontend::core::parser::ast::extract_generic_params(signature_params);
         // 检查是否与结构体重名
         if let Some(existing) = self.scope.get_var(name) {
             if let MonoType::Struct(_) = &existing.body {

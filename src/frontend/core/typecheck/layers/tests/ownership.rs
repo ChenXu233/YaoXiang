@@ -415,7 +415,7 @@ fn make_binding(
             name: name.into(),
             type_name: None,
             method_type: None,
-            generic_params: vec![],
+            signature_params: vec![],
             type_annotation: None,
             params: params
                 .into_iter()

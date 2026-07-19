@@ -32,12 +32,6 @@ impl TypeStatementParser for ParserState<'_> {
     }
 }
 
-/// Const parameter primitive types
-pub(crate) const CONST_PARAM_TYPES: &[&str] = &[
-    "Int", "Bool", "Float", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F32", "F64",
-    "Char", "String",
-];
-
 #[allow(dead_code)]
 fn looks_like_parenthesized_lambda(state: &mut ParserState<'_>) -> bool {
     if !state.at(&TokenKind::LParen) {
