@@ -1,148 +1,148 @@
 ---
-title: for Loop
+title: for 循环
 ---
 
-# for Loop
+# for 循环
 
-When you need to perform the same operation on a series of elements one by one, the `for` loop is the right tool. YaoXiang's `for` loop is designed to be concise and precise.
+当你需要对一系列元素逐一做同样的事情时，`for` 循环就是正确的工具。YaoXiang 的 `for` 循环设计得简洁而精确。
 
-## Basic Syntax
+## 基本语法
 
-The formal definition of the `for` statement in the language specification:
+语法规范中 `for` 语句的形式定义：
 
 ```
 for 'mut'? Identifier 'in' Expr Block
 ```
 
-In plain words: it starts with `for`, optionally followed by `mut`, then the loop variable name, then `in` and the expression to iterate over, and finally the loop body block.
+翻译过来：`for` 开头，可以有一个可选的 `mut`，然后是循环变量名，接着是 `in` 和被遍历的表达式，最后是循环体代码块。
 
-## Iterating Over Numeric Ranges
+## 遍历数字范围
 
-The most common usage is to create a range with `..` and then iterate over it with `for`:
+最常见的用法是用 `..` 创建范围，然后用 `for` 遍历：
 
 ```yaoxiang
-# From 0 to 4 (excluding 5)
+// 从 0 到 4（不包括 5）
 for i in 0..5 {
-    println(i)
+    print(i)
 }
-# Output: 0 1 2 3 4
+// 输出：0 1 2 3 4
 ```
 
-`0..5` represents a range starting at 0 (inclusive) and ending at 5 (exclusive). This follows the universal convention in computer science—a half-open interval (left-closed, right-open).
+`0..5` 表示从 0 开始（包含）到 5 结束（不包含）的范围。这是计算机科学领域的通用惯例——左闭右开区间。
 
-You can also use variables to define the start and end of the range:
+你也可以用变量来定义范围的起点和终点：
 
 ```yaoxiang
 start = 10
 end = 15
 for n in start..end {
-    println(n)
+    print(n)
 }
-# Output: 10 11 12 13 14
+// 输出：10 11 12 13 14
 ```
 
-## Iterating Over Lists
+## 遍历列表
 
-`for` is not limited to iterating over numeric ranges—you can also iterate directly over collections like lists and arrays:
+`for` 不仅可以遍历数字范围，还可以直接遍历列表、数组等集合：
 
 ```yaoxiang
 colors = ["红", "橙", "黄", "绿", "蓝"]
 
 for color in colors {
-    println("当前颜色: " + color)
+    print("当前颜色: " + color)
 }
-# Output:
-# 当前颜色: 红
-# 当前颜色: 橙
-# ... and so on
+// 输出：
+// 当前颜色: 红
+// 当前颜色: 橙
+// ... 依此类推
 ```
 
-## for's Unique Semantics: A New Binding Per Iteration
+## for 的独特语义：每次迭代绑定新值
 
-YaoXiang's `for` loop has a design that differs from other languages: **each iteration creates a new binding, rather than modifying the same variable**.
+YaoXiang 的 `for` 循环有一个和其他语言不同的设计：**每次迭代是创建新的绑定，而不是修改同一个变量**。
 
-Use this table to understand it:
+用表格来理解：
 
-| Iteration | What Happens |
-|-----------|--------------|
-| 1st | A new binding `i = 0` is created, the loop body executes, then the binding is destroyed |
-| 2nd | A new binding `i = 1` is created (a brand-new binding), the loop body executes, then it's destroyed |
-| 3rd | A new binding `i = 2` is created, the loop body executes, then it's destroyed |
+| 迭代 | 发生的事情 |
+|------|-----------|
+| 第 1 次 | 创建新绑定 `i = 0`，执行循环体，然后绑定销毁 |
+| 第 2 次 | 创建新绑定 `i = 1`（全新的绑定），执行循环体，然后销毁 |
+| 第 3 次 | 创建新绑定 `i = 2`，执行循环体，然后销毁 |
 | ... | ... |
-| Loop ends | The range is exhausted and the loop terminates |
+| 循环结束 | 范围耗尽，循环终止 |
 
-This means the loop variable in each iteration is an independent new value. This is a huge boost for safety—you never have to worry about the loop variable being accidentally modified:
+这意味着每次迭代的循环变量都是一个独立的新值。这对安全性非常有帮助——你不用担心循环变量被意外修改：
 
 ```yaoxiang
 for i in 1..5 {
-    # i = i + 1   // Error: immutable by default, cannot modify i
-    println(i)
+    // i = i + 1   // 错误：默认不可变，不能修改 i
+    print(i)
 }
 ```
 
-## for mut: Declare Mutability Explicitly When You Need It
+## for mut：需要修改时显式声明
 
-If you genuinely need to modify the loop variable inside the loop body (for example, using it as an accumulator), use `for mut`:
+如果你确实需要在循环体内修改循环变量（比如当作累加器），用 `for mut`：
 
 ```yaoxiang
-# Use for mut to allow modifying the binding inside the loop body
+// 用 for mut 允许在循环体内修改绑定
 for mut i in 0..5 {
     i = i * 2
-    println(i)
+    print(i)
 }
-# Output: 0 2 4 6 8
+// 输出：0 2 4 6 8
 ```
 
-Note: even with `for mut`, each iteration is still a new binding. `for mut` only makes the new binding itself mutable—it does not carry modifications from the previous iteration into the next one.
+注意：即使使用 `for mut`，每次迭代依然是新的绑定。`for mut` 只是让新绑定本身是可变而已，并不会让上一个迭代的修改传递到下一个迭代。
 
 ```yaoxiang
 for mut i in 1..5 {
     i = i + 100
-    println(i)        # Prints 101, 102, 103, 104 each time
+    print(i)        // 每次都打印 101, 102, 103, 104
 }
-# Each iteration i restarts from the range value; the previous iteration's modification does not affect the next
+// 每次迭代 i 都从范围值重新开始，上一次的修改不影响下一次
 ```
 
-## Loop Variables Cannot Shadow Outer Variables
+## 循环变量不能遮蔽外层变量
 
-YaoXiang forbids variable shadowing. The loop variable in `for` cannot share the same name as a variable in an outer scope:
+YaoXiang 禁止变量遮蔽。`for` 的循环变量不能和外层作用域中的变量同名：
 
 ```yaoxiang
-# Wrong example
+// 错误示范
 i = 10
-# for i in 1..5 {     # Compilation error! i is already declared in the outer scope
-#     println(i)
-# }
+// for i in 1..5 {     // 编译错误！i 已经在外层声明
+//     print(i)
+// }
 
-# Correct way—use a different name
+// 正确写法——换个名字
 i = 10
 for j in 1..5 {
-    println(j)
+    print(j)
 }
 ```
 
-This rule ensures you never get confused about "which variable does the current code refer to."
+这个规则让你永远不会困惑"当前代码里的变量到底指向哪个"。
 
-## Comparison With Other Languages
+## 与其他语言的对比
 
-| Language | for Loop Variable Semantics |
-|----------|------------------------------|
-| YaoXiang | A new binding is created per iteration |
-| Rust | Modifies the same variable (requires mut) |
-| Python | Modifies the same variable |
-| C/C++ | Modifies the same variable |
+| 语言 | for 循环变量语义 |
+|------|-----------------|
+| YaoXiang | 每次迭代绑定新值 |
+| Rust | 修改同一个变量（需要 mut） |
+| Python | 修改同一个变量 |
+| C/C++ | 修改同一个变量 |
 
-YaoXiang's design aligns more closely with human intuition—"do something with each element in the collection"—where each element is an independent individual.
+YaoXiang 的设计更接近人类直觉——"对于集合中的每个元素做某件事"——每个元素是独立的个体。
 
-## Summary
+## 小结
 
-| Key Point | Description |
-|-----------|-------------|
-| Iterating over a range | `for i in 0..5`, left-closed right-open |
-| Iterating over a collection | `for item in list`, takes elements one by one |
-| Binding semantics | A new binding is created per iteration, not a modification of the same variable |
-| Immutable by default | Loop variables cannot be modified, preventing accidents |
-| `for mut` | Declare explicitly when modification is needed |
-| Shadowing prohibited | Loop variables cannot share a name with outer variables |
+| 要点 | 说明 |
+|------|------|
+| 遍历范围 | `for i in 0..5`，左闭右开 |
+| 遍历集合 | `for item in list`，逐个取元素 |
+| 绑定语义 | 每次迭代创建新绑定，不是修改同一个变量 |
+| 默认不可变 | 循环变量不可修改，防止意外 |
+| `for mut` | 需要修改时显式声明 |
+| 禁止遮蔽 | 循环变量不能与外层变量同名 |
 
-In the next chapter you'll learn about the `while` loop—the standard way to repeat based on a condition.
+下一章你将学习 `while` 循环——基于条件重复执行的标准方式。
