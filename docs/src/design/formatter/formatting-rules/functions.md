@@ -13,46 +13,46 @@ description: 函数定义、函数调用、Lambda 表达式的格式化规则
 
 ```
 // ✅ 正确
-fn foo(a: Int, b: Int) -> Int { ... }
+foo: (a: Int, b: Int) -> Int = a + b
 
 // ❌ 错误
-fn foo (a: Int, b: Int) -> Int { ... }
+foo : (a: Int, b: Int) -> Int = a + b
 ```
 
 **§4.2 参数列表换行。** 当参数列表超过行宽时，每个参数占一行，尾随逗号。
 
 ```
 // 超过行宽时
-fn very_long_function_name(first_param: Int, second_param: Int, third_param: Int) -> Int { ... }
+very_long_function_name: (first_param: Int, second_param: Int, third_param: Int) -> Int = first_param + second_param + third_param
 
 // 格式化后
-fn very_long_function_name(
+very_long_function_name:
     first_param: Int,
     second_param: Int,
     third_param: Int,
-) -> Int { ... }
+) -> Int = first_param + second_param + third_param
 ```
 
 **§4.3 返回类型。** 返回类型与参数列表之间用 ` -> ` 连接，` ->` 前后各有一个空格。
 
 ```
 // ✅ 正确
-fn foo() -> Int { ... }
+foo: () -> Int = 1
 
 // ❌ 错误
-fn foo()->Int { ... }
-fn foo() ->Int { ... }
-fn foo()-> Int { ... }
+foo: () ->Int = 1
+foo: ()-> Int = 1
+foo:()-> Int = 1
 ```
 
 **§4.4 函数体。** 函数体与返回类型之间用一个空格分隔。
 
 ```
 // ✅ 正确
-fn foo() -> Int { 1 }
+foo: () -> Int = 1
 
 // ❌ 错误（两个空格）
-fn foo() -> Int  { 1 }
+foo: () -> Int  = 1
 ```
 
 ---
@@ -102,14 +102,14 @@ very_long_function_name(
 
 ```
 // ✅ 正确
-let f = (x) => x + 1;
+f = (x) => x + 1
 
 // 单表达式 body
-let f = (x) => x * 2;
+f = (x) => x * 2
 
 // 多语句 body
-let f = (x) => {
-    let y = x + 1;
+f = (x) => {
+    y = x + 1
     y * 2
-};
+}
 ```

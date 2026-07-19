@@ -1,7 +1,0 @@
-use std.io.print
-
-main = {
-    use std.string
-    s = string.index_of("hello", "l")
-    print(s)
-}
