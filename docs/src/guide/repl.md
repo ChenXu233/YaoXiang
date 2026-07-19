@@ -36,14 +36,14 @@ Press Ctrl+D or :quit to exit
 
 在提示符 `>>` 后输入 YaoXiang 代码并按回车执行：
 
-```rust
+```yaoxiang
 >> 1 + 2
 3
 
 >> "Hello, World!"
 "Hello, World!"
 
->> let x = 10
+>> x = 10
 >> x * 2
 20
 ```
@@ -62,7 +62,7 @@ REPL 提供了一系列以冒号 `:` 开头的特殊命令。
 
 ### 帮助命令
 
-```rust
+```yaoxiang
 >> :help
 ```
 
@@ -70,7 +70,7 @@ REPL 提供了一系列以冒号 `:` 开头的特殊命令。
 
 ### 退出命令
 
-```rust
+```yaoxiang
 >> :quit
 ```
 
@@ -78,7 +78,7 @@ REPL 提供了一系列以冒号 `:` 开头的特殊命令。
 
 ### 清除命令
 
-```rust
+```yaoxiang
 >> :clear
 ```
 
@@ -86,7 +86,7 @@ REPL 提供了一系列以冒号 `:` 开头的特殊命令。
 
 ### 类型查看命令
 
-```rust
+```yaoxiang
 >> :type x
 ```
 
@@ -94,19 +94,19 @@ REPL 提供了一系列以冒号 `:` 开头的特殊命令。
 
 **示例**：
 
-```rust
->> let name = "YaoXiang"
+```yaoxiang
+>> name = "YaoXiang"
 >> :type name
 name: String
 
->> fn add(a: Int, b: Int) -> Int = a + b
+>> add: (a: Int, b: Int) -> Int = a + b
 >> :type add
 add: fn(Int, Int) -> Int
 ```
 
 ### 符号列表命令
 
-```rust
+```yaoxiang
 >> :symbols
 ```
 
@@ -114,10 +114,10 @@ add: fn(Int, Int) -> Int
 
 **示例**：
 
-```rust
->> let x = 10
->> let y = 20
->> fn greet(name: String) -> String = "Hello, " + name
+```yaoxiang
+>> x = 10
+>> y = 20
+>> greet: (name: String) -> String = "Hello, " + name
 >> :symbols
 x: Int
 y: Int
@@ -126,7 +126,7 @@ greet: fn(String) -> String
 
 ### 历史命令
 
-```rust
+```yaoxiang
 >> :history
 ```
 
@@ -134,7 +134,7 @@ greet: fn(String) -> String
 
 ### 统计命令
 
-```rust
+```yaoxiang
 >> :stats
 ```
 
@@ -142,7 +142,7 @@ greet: fn(String) -> String
 
 **示例**：
 
-```rust
+```yaoxiang
 >> :stats
 Eval count: 5
 Total time: 12.34ms
@@ -154,7 +154,7 @@ Total time: 12.34ms
 
 REPL 可以执行任何有效的 YaoXiang 表达式：
 
-```rust
+```yaoxiang
 >> 1 + 2
 3
 
@@ -170,17 +170,24 @@ false
 
 ### 变量定义
 
-使用 `let` 关键字定义变量：
+直接使用变量名定义变量：
 
-```rust
->> let name = "YaoXiang"
->> let age = 25
->> let pi = 3.14159
+```yaoxiang
+>> name = "YaoXiang"
+>> age = 25
+>> pi = 3.14159
+```
+
+也可以显式标注类型：
+
+```yaoxiang
+>> name: String = "YaoXiang"
+>> age: Int = 25
 ```
 
 定义后，变量可以在后续代码中使用：
 
-```rust
+```yaoxiang
 >> name
 "YaoXiang"
 
@@ -190,16 +197,16 @@ false
 
 ### 函数定义
 
-使用 `fn` 关键字定义函数：
+YaoXiang 没有 `fn` 关键字，函数就是有签名的值：
 
-```rust
->> fn add(a: Int, b: Int) -> Int = a + b
->> fn greet(name: String) -> String = "Hello, " + name
+```yaoxiang
+>> add: (a: Int, b: Int) -> Int = a + b
+>> greet: (name: String) -> String = "Hello, " + name
 ```
 
 调用函数：
 
-```rust
+```yaoxiang
 >> add(3, 4)
 7
 
@@ -211,31 +218,25 @@ false
 
 REPL 支持多行代码输入。当检测到代码不完整时（如未闭合的括号），会自动进入续行模式：
 
-```rust
->> fn factorial(n: Int) -> Int =
-..   if n <= 1 then 1
-..   else n * factorial(n - 1)
+```yaoxiang
+>> factorial: (n: Int) -> Int = {
+..     if n <= 1 { return 1 }
+..     return n * factorial(n - 1)
+.. }
 ```
 
 续行提示符为 `..`，表示当前处于多行输入模式。
 
-### 结构体定义
+### 类型定义
 
-```rust
->> struct Point {
-..   x: Float,
-..   y: Float
-.. }
+```yaoxiang
+>> Point: Type = { x: Float, y: Float }
 ```
 
-### 枚举定义
+### 变体类型定义（枚举）
 
-```rust
->> enum Color {
-..   Red,
-..   Green,
-..   Blue
-.. }
+```yaoxiang
+>> Color: Type = { red | green | blue }
 ```
 
 ## 自动补全
@@ -248,26 +249,18 @@ REPL 提供智能自动补全功能，帮助您快速输入代码。
 
 ### 补全内容
 
-1. **关键字补全**：YaoXiang 语言关键字
-   - `let`, `fn`, `if`, `else`, `match`, `for`, `while`, `return` 等
-
-2. **变量补全**：已定义的变量
-   - 输入变量名的前几个字符，按 Tab 补全
-
-3. **函数补全**：已定义的函数
-   - 输入函数名的前几个字符，按 Tab 补全
-
-4. **内置函数补全**：内置函数
-   - `print`, `len`, `range`, `typeof`, `assert` 等
+1. **关键字补全**：YaoXiang 语言关键字（按 Tab 可展开）
+2. **符号补全**：已定义的变量和函数名
+3. **内置函数补全**：`print`, `len`, `range`, `typeof`, `assert` 等内置函数
 
 ### 补全示例
 
-```rust
->> let my_variable = 42
+```yaoxiang
+>> my_variable = 42
 >> my_<Tab>
 my_variable: Int
 
->> fn calculate_sum(a: Int, b: Int) -> Int = a + b
+>> calculate_sum: (a: Int, b: Int) -> Int = a + b
 >> calc<Tab>
 calculate_sum: fn(Int, Int) -> Int
 ```
@@ -278,8 +271,8 @@ calculate_sum: fn(Int, Int) -> Int
 
 当代码出现错误时，REPL 会显示详细的错误信息：
 
-```rust
->> let x = 10 / 0
+```yaoxiang
+>> x = 10 / 0
 Error: Runtime error: DivisionByZero
 
 >> undefined_variable
@@ -300,7 +293,7 @@ REPL 自动保存命令历史，支持：
 
 使用 `:stats` 命令查看执行统计：
 
-```rust
+```yaoxiang
 >> :stats
 Eval count: 15
 Total time: 45.67ms
@@ -312,20 +305,20 @@ Total time: 45.67ms
 
 ### 1. 使用有意义的变量名
 
-```rust
+```yaoxiang
 // 好
-let user_name = "YaoXiang"
-let max_retries = 3
+user_name = "YaoXiang"
+max_retries = 3
 
 // 不好
-let x = "YaoXiang"
-let n = 3
+x = "YaoXiang"
+n = 3
 ```
 
 ### 2. 定义函数复用代码
 
-```rust
->> fn is_even(n: Int) -> Bool = n % 2 == 0
+```yaoxiang
+>> is_even: (n: Int) -> Bool = n % 2 == 0
 >> is_even(4)
 true
 >> is_even(7)
@@ -336,7 +329,7 @@ false
 
 当 REPL 状态混乱时，使用 `:clear` 重置：
 
-```rust
+```yaoxiang
 >> :clear
 Context cleared
 ```
@@ -347,10 +340,11 @@ Context cleared
 
 ### 5. 使用多行输入处理复杂代码
 
-```rust
->> fn fibonacci(n: Int) -> Int =
-..   if n <= 1 then n
-..   else fibonacci(n - 1) + fibonacci(n - 2)
+```yaoxiang
+>> fibonacci: (n: Int) -> Int = {
+..     if n <= 1 { return n }
+..     return fibonacci(n - 1) + fibonacci(n - 2)
+.. }
 ```
 
 ## 常见问题
@@ -359,7 +353,7 @@ Context cleared
 
 A: 使用 `:type` 命令查看函数签名：
 
-```rust
+```yaoxiang
 >> :type my_function
 my_function: fn(Int, String) -> Bool
 ```
@@ -368,7 +362,7 @@ my_function: fn(Int, String) -> Bool
 
 A: 使用 `:clear` 命令：
 
-```rust
+```yaoxiang
 >> :clear
 ```
 
@@ -387,25 +381,26 @@ A: REPL 支持所有 YaoXiang 数据类型：
 - `Float`：浮点数
 - `String`：字符串
 - `Bool`：布尔值
-- `Unit`：单元类型
-- 自定义结构体和枚举
+- `Void`：空类型
+- 自定义记录类型和变体类型
 
 ## 示例会话
 
 以下是一个完整的 REPL 会话示例：
 
-```rust
+```yaoxiang
 YaoXiang REPL - Type :help for assistance
 Press Ctrl+D or :quit to exit
 
->> let greeting = "Hello"
->> let name = "YaoXiang"
+>> greeting = "Hello"
+>> name = "YaoXiang"
 >> greeting + ", " + name + "!"
 "Hello, YaoXiang!"
 
->> fn factorial(n: Int) -> Int =
-..   if n <= 1 then 1
-..   else n * factorial(n - 1)
+>> factorial: (n: Int) -> Int = {
+..     if n <= 1 { return 1 }
+..     return n * factorial(n - 1)
+.. }
 ..
 >> factorial(5)
 120
