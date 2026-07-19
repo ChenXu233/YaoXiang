@@ -4,7 +4,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::frontend::core::parser::ast::Module;
+use crate::frontend::core::parser::ast::{extract_generic_params, Module};
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable};
 use crate::frontend::core::types::eval::const_eval::ConstFunction;
 use crate::frontend::core::types::const_data::{ConstExpr, ConstValue, BinOp};
@@ -206,12 +206,13 @@ impl TypeChecker {
                 type_name,
                 method_type: _,
                 type_annotation,
-                generic_params,
+                signature_params,
                 params,
                 body,
                 ..
             } = &stmt.kind
             {
+                let generic_params = extract_generic_params(signature_params);
                 if crate::frontend::core::parser::ast::classify_binding_semantic_kind(
                     type_name.as_ref(),
                     type_annotation.as_ref(),
@@ -514,11 +515,12 @@ impl TypeChecker {
                 type_name,
                 method_type,
                 type_annotation,
-                generic_params,
+                signature_params,
                 params,
                 is_pub,
                 ..
             } => {
+                let generic_params = extract_generic_params(signature_params);
                 // 处理统一函数语法
                 // 方法绑定使用 method_type，普通函数使用 type_annotation
                 let (param_types, return_type) = if let Some(meth_ty) = method_type {

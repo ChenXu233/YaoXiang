@@ -37,7 +37,7 @@ fn make_binding(
             is_pub,
             params: vec![],
             body: body_stmts,
-            generic_params: vec![],
+            signature_params: vec![],
             type_annotation: None,
         },
         span: Span::dummy(),
@@ -55,7 +55,7 @@ fn make_type_constructor(name: &str) -> Stmt {
             is_pub: false,
             params: vec![],
             body: vec![],
-            generic_params: vec![],
+            signature_params: vec![],
             type_annotation: Some(Type::Name {
                 name: name.to_string(),
                 span: Span::dummy(),

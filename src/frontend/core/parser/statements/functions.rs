@@ -38,7 +38,7 @@ pub fn parse_fn_stmt_with_name(
             name,
             type_name: None,
             method_type: None,
-            generic_params: Vec::new(),
+            signature_params: Vec::new(),
             type_annotation: None,
             params,
             body,
@@ -74,7 +74,7 @@ pub fn parse_fn_stmt_with_name_simple(
             name,
             type_name: None,
             method_type: None,
-            generic_params: Vec::new(),
+            signature_params: Vec::new(),
             type_annotation: None,
             params: vec![Param {
                 name: param_name,

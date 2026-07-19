@@ -162,7 +162,7 @@ fn test_type_checker_reports_fn_param_type_mismatch() {
                     name: "add".to_string(),
                     type_name: None,
                     method_type: None,
-                    generic_params: vec![],
+                    signature_params: vec![],
                     type_annotation: Some(AstType::Fn {
                         params: vec![AstType::Int(32)],
                         return_type: Box::new(AstType::Int(32)),
@@ -255,7 +255,7 @@ fn test_type_checker_with_multiple_function_definitions() {
                 name: name.to_string(),
                 type_name: None,
                 method_type: None,
-                generic_params: vec![],
+                signature_params: vec![],
                 type_annotation: Some(AstType::Fn {
                     params: vec![AstType::Int(32)],
                     return_type: Box::new(AstType::Int(32)),
@@ -329,7 +329,7 @@ fn test_type_checker_with_nested_function_definition() {
                 name: "outer".to_string(),
                 type_name: None,
                 method_type: None,
-                generic_params: vec![],
+                signature_params: vec![],
                 type_annotation: Some(AstType::Fn {
                     params: vec![AstType::Int(32)],
                     return_type: Box::new(AstType::Int(32)),
@@ -384,10 +384,14 @@ fn test_type_checker_with_generic_type_binding() {
                     name: "Wrapper".to_string(),
                     type_name: None,
                     method_type: None,
-                    generic_params: vec![crate::frontend::core::parser::ast::GenericParam {
+                    signature_params: vec![crate::frontend::core::parser::ast::Param {
                         name: "T".to_string(),
-                        kind: crate::frontend::core::parser::ast::GenericParamKind::Type,
-                        constraints: vec![],
+                        ty: Some(crate::frontend::core::parser::ast::Type::MetaType {
+                            name_span: crate::util::span::Span::dummy(),
+                            args: vec![],
+                        }),
+                        is_mut: false,
+                        span: crate::util::span::Span::dummy(),
                     }],
                     type_annotation: Some(AstType::Struct {
                         body: vec![crate::frontend::core::parser::ast::TypeBodyItem::Field(

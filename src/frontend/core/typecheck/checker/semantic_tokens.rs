@@ -444,13 +444,14 @@ impl TypeChecker {
                     name,
                     type_name,
                     method_type,
-                    generic_params,
+                    signature_params,
                     type_annotation,
                     params,
                     body,
                     is_pub,
                     ..
                 } => {
+                    let generic_params = crate::frontend::core::parser::ast::extract_generic_params(signature_params);
                     // 根据字段值区分类型：方法绑定 / 类型定义 / 函数
                     let is_method = type_name.is_some();
                     // 函数定义：body 有语句
@@ -557,7 +558,7 @@ impl TypeChecker {
                         }
 
                         // 泛型参数 → TypeParameter (定义)
-                        for gp in generic_params {
+                        for gp in &generic_params {
                             let gp_name = match &gp.kind {
                                 crate::frontend::core::parser::ast::GenericParamKind::Type => {
                                     gp.name.clone()
@@ -576,7 +577,7 @@ impl TypeChecker {
                         }
 
                         // 泛型约束中的类型引用
-                        for gp in generic_params {
+                        for gp in &generic_params {
                             for c in &gp.constraints {
                                 self.collect_type_tokens(&fp, c);
                             }
@@ -945,11 +946,12 @@ impl TypeChecker {
             StmtKind::Binding {
                 name,
                 params,
-                generic_params,
+                signature_params,
                 type_annotation,
                 body,
                 ..
             } => {
+                let generic_params = crate::frontend::core::parser::ast::extract_generic_params(signature_params);
                 // 嵌套函数
                 self.semantic_db.add_token(
                     file_path,
@@ -971,7 +973,7 @@ impl TypeChecker {
                         },
                     );
                 }
-                for gp in generic_params {
+                for gp in &generic_params {
                     for c in &gp.constraints {
                         self.collect_type_tokens(file_path, c);
                     }

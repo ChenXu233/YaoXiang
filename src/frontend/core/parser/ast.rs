@@ -248,9 +248,9 @@ pub enum StmtKind {
         type_name: Option<String>,
         /// Method type (for method binding)
         method_type: Option<Type>,
-        /// Generic type parameters
-        generic_params: Vec<GenericParam>,
-        /// Type annotation / return type
+        /// 签名第一组参数原样（RFC-010 `name: (params) -> Ret = body` 的 params 部分）
+        /// 泛型参数由 extract_generic_params 从此提取（Task 3 起不再单独存储）
+        signature_params: Vec<Param>,
         type_annotation: Option<Type>,
         /// Parameters (for functions and methods)
         params: Vec<Param>,
@@ -659,4 +659,72 @@ pub fn classify_binding_semantic_kind(
     }
 
     BindingSemanticKind::Function
+}
+
+/// Const parameter primitive types
+pub const CONST_PARAM_TYPES: &[&str] = &[
+    "Int", "Bool", "Float", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F32", "F64",
+    "Char", "String",
+];
+
+/// 从签名第一组参数提取泛型参数：(T: Type, N: Int) → [T, N]
+///
+/// 判定规则：MetaType 或 Name("Type") → Type 参数；
+/// CONST_PARAM_TYPES 原始类型名 → Const 参数；
+/// 大写 Name → Type 参数（标注记入 constraints）；其余忽略。
+pub fn extract_generic_params(params: &[Param]) -> Vec<GenericParam> {
+    params
+        .iter()
+        .filter_map(|p| {
+            let ty = p.ty.as_ref()?;
+            match ty {
+                // (T: Type) — Type is parsed as MetaType, not Name("Type")
+                Type::MetaType { .. } => Some(GenericParam {
+                    name: p.name.clone(),
+                    kind: GenericParamKind::Type,
+                    constraints: Vec::new(),
+                }),
+                Type::Name { name, .. } if name == "Type" => Some(GenericParam {
+                    name: p.name.clone(),
+                    kind: GenericParamKind::Type,
+                    constraints: Vec::new(),
+                }),
+                Type::Name { name, .. } if CONST_PARAM_TYPES.contains(&name.as_str()) => {
+                    Some(GenericParam {
+                        name: p.name.clone(),
+                        kind: GenericParamKind::Const {
+                            const_type: Box::new(ty.clone()),
+                        },
+                        constraints: Vec::new(),
+                    })
+                }
+                Type::Name { .. } => {
+                    let first_char = p.name.chars().next().unwrap_or('a');
+                    if first_char.is_uppercase() {
+                        Some(GenericParam {
+                            name: p.name.clone(),
+                            kind: GenericParamKind::Type,
+                            constraints: vec![ty.clone()],
+                        })
+                    } else {
+                        None
+                    }
+                }
+                // (T: Clone + Add) — Type::Tuple stores multiple constraints
+                Type::Tuple(types) => {
+                    let first_char = p.name.chars().next().unwrap_or('a');
+                    if first_char.is_uppercase() {
+                        Some(GenericParam {
+                            name: p.name.clone(),
+                            kind: GenericParamKind::Type,
+                            constraints: types.clone(),
+                        })
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        })
+        .collect()
 }
