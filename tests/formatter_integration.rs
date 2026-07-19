@@ -615,3 +615,30 @@ fn test_format_generic_type_definition_roundtrip() {
         "Wrapper: (T: Type) -> Type = { data: T }\n",
     );
 }
+
+#[test]
+fn test_format_generic_type_with_assert_constraint_roundtrip() {
+    // RFC-010 + RFC-011: 带 const 约束的泛型类型定义完整往返
+    assert_format_eq(
+        "SafeArray: (T: Type, N: Int) -> Type = { _assert: Assert(N > 0), data: Array(T, N) }",
+        "SafeArray: (T: Type, N: Int) -> Type = { _assert: Assert(N > 0), data: Array(T, N) }\n",
+    );
+}
+
+#[test]
+fn test_format_non_generic_type_definition_unchanged() {
+    // RFC-010: 非泛型类型定义保持原样（防回归）
+    assert_format_eq(
+        "Point: Type = { x: Int, y: Int }",
+        "Point: Type = { x: Int, y: Int }\n",
+    );
+}
+
+#[test]
+fn test_format_field_default_value_unchanged() {
+    // RFC-010: 字段默认值格式化保持（防回归：临时 ctx 已删除）
+    assert_format_eq(
+        "Pair: Type = { x: Int = 42 }",
+        "Pair: Type = { x: Int = 42 }\n",
+    );
+}
