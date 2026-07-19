@@ -1,28 +1,28 @@
-# YaoXiang: Краткое руководство
+# YaoXiang — Быстрый старт
 
-> Данное руководство поможет вам быстро освоить YaoXiang — язык программирования.
+> Это руководство поможет вам быстро освоить язык программирования YaoXiang.
 >
-> **Примечание**: Примеры кода в этом документе написаны в соответствии со спецификацией YaoXiang. При обнаружении синтаксических расхождений при запуске обратитесь к [спецификации языка](../design/language-spec.md).
+> **Примечание**: Примеры кода в данном документе основаны на спецификации языка YaoXiang. Если при реальном запуске вы столкнётесь с синтаксическими различиями, обратитесь к [спецификации языка](../design/language-spec.md).
 
 ## Установка
 
-### Компиляция из исходного кода (рекомендуется)
+### Сборка из исходного кода (рекомендуется)
 
 ```bash
 # Клонирование репозитория
 git clone https://github.com/yourusername/yaoxiang.git
 cd yaoxiang
 
-# Компиляция (отладочная версия, для разработки и тестирования)
+# Сборка (отладочная версия, для разработки и тестирования)
 cargo build
 
-# Компиляция (релизная версия, рекомендуется для продакшена)
+# Сборка (релизная версия, рекомендуется для продакшена)
 cargo build --release
 
 # Запуск тестов
 cargo test
 
-# Проверка версии
+# Просмотр версии
 ./target/debug/yaoxiang --version
 # или
 ./target/release/yaoxiang --version
@@ -31,7 +31,7 @@ cargo test
 **Проверка успешной установки**:
 ```bash
 ./target/debug/yaoxiang --version
-# Должно вывести: yaoxiang x.y.z
+# Должно вывести что-то вроде: yaoxiang x.y.z
 ```
 
 ## Первая программа
@@ -39,13 +39,13 @@ cargo test
 Создайте файл `hello.yx`:
 
 ```yaoxiang
-# hello.yx
+// hello.yx
 use std.io
 
-# Определение функции: name: (param: Type, ...) -> return_type = { return ... }  # Блок кода требует явного return
-# Выражение: name: (param: Type, ...) -> return_type = expr                       # Выражение возвращает значение напрямую
+// 函数定义: name: (param: Type, ...) -> return_type = { return ... }  # 代码块必须显式 return
+// 表达式形式: name: (param: Type, ...) -> return_type = expr           # 表达式直接返回值
 main: () -> Void = {
-    println("Hello, YaoXiang!")
+    print("Hello, YaoXiang!")
 }
 ```
 
@@ -68,174 +68,174 @@ Hello, YaoXiang!
 ### Переменные и типы
 
 ```yaoxiang
-# Автоматический вывод типов
-x = 42                    # Выводится как Int
-name = "YaoXiang"         # Выводится как String
-pi = 3.14159              # Выводится как Float
-is_valid = true           # Выводится как Bool
+// 自动类型推断
+x = 42  // 推断为 Int
+name = "YaoXiang"  // 推断为 String
+pi = 3.14159  // 推断为 Float
+is_valid = true  // 推断为 Bool
 
-# Явные аннотации типов (рекомендуется использовать в стиле type-first)
+// 显式类型注解（推荐使用类型集中约定）
 count: Int = 100
 
-# По умолчанию неизменяемо (безопасность)
+// 默认不可变（安全特性）
 x = 10
-x = 20                    # ❌ Ошибка компиляции! Неизменяемо
+x = 20  // ❌ 编译错误！不可变
 
-# Изменяемые переменные (требуется явное объявление)
+// 可变变量（需要显式声明）
 mut counter = 0
-counter = counter + 1     # ✅ OK
+counter = counter + 1  // ✅ OK
 ```
 
 ### Функции
 
 ```yaoxiang
-# Синтаксис определения функций
-# Выражение: возвращает значение напрямую, без return
+// 函数定义语法
+// 表达式形式：直接返回值，不需要 return
 add: (a: Int, b: Int) -> Int = a + b
 
-# Блок кода: требует использования return для возврата значения
-# add: (a: Int, b: Int) -> Int = { return a + b }
+// 代码块形式：必须使用 return 返回值
+// add: (a: Int, b: Int) -> Int = { return a + b }
 
-# Вызов
-result = add(1, 2)        # result = 3
+// 调用
+result = add(1, 2)  // result = 3
 
-# Функция с одним параметром (выражение)
+// 单参数函数（表达式形式）
 inc: (x: Int) -> Int = x + 1
 ```
 
-### Определение типов
+### Определения типов
 
-YaoXiang использует унифицированную модель синтаксиса `name: type = value`:
+YaoXiang использует унифицированный синтаксис `name: type = value`:
 
 ```yaoxiang
-# Объявление переменной
+// 变量声明
 x: Int = 42
 name: String = "YaoXiang"
 
-# Определение функции
+// 函数定义
 add: (a: Int, b: Int) -> Int = a + b
 
-# Определение типа (с использованием фигурных скобок)
-type Point = { x: Float, y: Float }
+// 类型定义（使用花括号）
+Point: Type = { x: Float, y: Float }
 
-# Использование типа
-p: Point = Point(x: 1.0, y: 2.0)
-p.x  # 1.0
-p.y  # 2.0
+// 使用类型
+p: Point = Point(x=1.0, y=2.0)
+p.x  // 1.0
+p.y  // 2.0
 ```
 
-#### Record types
+#### Record type (запись)
 
 ```yaoxiang
-# Структурные типы
-type Point = { x: Float, y: Float }
-type Rect = { x: Float, y: Float, width: Float, height: Float }
+// 结构体类型
+Point: Type = { x: Float, y: Float }
+Rect: Type = { x: Float, y: Float, width: Float, height: Float }
 
-# Использование
-p = Point(x: 3.0, y: 4.0)
-r = Rect(x: 0.0, y: 0.0, width: 10.0, height: 20.0)
+// 使用
+p = Point(x=3.0, y=4.0)
+r = Rect(x=0.0, y=0.0, width=10.0, height=20.0)
 ```
 
-#### Определение интерфейсов
+#### Определение interface type (интерфейса)
 
-Интерфейсы — это record types, все поля которых являются function types:
+Интерфейс — это record type, все поля которого являются функциональными типами:
 
 ```yaoxiang
-# Определение интерфейса
-type Drawable = {
+// 定义接口
+Drawable: Type = {
     draw: (Surface) -> Void,
     bounding_box: () -> Rect
 }
 
-type Serializable = {
+Serializable: Type = {
     serialize: () -> String
 }
 
-# Пустой интерфейс
-type EmptyInterface = {}
+// 空接口
+EmptyInterface: Type = {}
 ```
 
-#### Методы типов
+#### Методы типа
 
-Для определения методов типов используется синтаксис `Type.method: (Type, ...) -> Return = ...`:
+Используйте синтаксис `Type.method: (Type, ...) -> Return = ...` для определения методов типа:
 
 ```yaoxiang
-# Определение типа
-type Point = { x: Float, y: Float }
+// 类型定义
+Point: Type = { x: Float, y: Float }
 
-# Определение метода типа
+// 类型方法定义
 Point.draw: (self: Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
 
 Point.serialize: (self: Point) -> String = {
-    "Point(${self.x}, ${self.y})"
+    "Point({self.x}, {self.y})"
 }
 
-# Использование методов (синтаксический сахар)
-p = Point(x: 1.0, y: 2.0)
-p.draw(screen)           # → Point.draw(p, screen)
-str = p.serialize()      # → Point.serialize(p)
+// 使用方法（语法糖）
+p = Point(x=1.0, y=2.0)
+p.draw(screen)  // → Point.draw(p, screen)
+str = p.serialize()  // → Point.serialize(p)
 ```
 
-#### Автоматическое связывание
+#### Автоматическое связывание (builtin binding)
 
 Функции, объявленные с ключевым словом `pub`, автоматически привязываются к типам, определённым в том же файле:
 
 ```yaoxiang
-type Point = { x: Float, y: Float }
+Point: Type = { x: Float, y: Float }
 
-# Объявление pub автоматически привязывается к Point
+// pub 声明自动绑定到 Point
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
     (dx * dx + dy * dy).sqrt()
 }
 
-# Использование
-p1 = Point(x: 3.0, y: 4.0)
-p2 = Point(x: 1.0, y: 2.0)
+// 使用
+p1 = Point(x=3.0, y=4.0)
+p2 = Point(x=1.0, y=2.0)
 
-# Функциональный вызов
-d = distance(p1, p2)           # 3.606...
+// 函数式调用
+d = distance(p1, p2)  // 3.606...
 
-# ООП-синтаксис (автоматическая привязка к Point.distance)
-d2 = p1.distance(p2)           # → distance(p1, p2)
+// OOP 语法糖（自动绑定到 Point.distance）
+d2 = p1.distance(p2)  // → distance(p1, p2)
 ```
 
-#### Enum types
+#### Enum type (перечисление)
 
 ```yaoxiang
-# Простой enum
-type Color = red | green | blue
+// 简单枚举
+Color: Type = { red | green | blue }
 
-# Enum с данными
-Result: (T: Type, E: Type) -> Type = ok(T) | err(E)
+// 带数据的枚举
+Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
-# Использование generics
+// 使用泛型
 success: Result(Int, String) = ok(42)
 failure: Result(Int, String) = err("not found")
 ```
 
-#### Generics
+#### Generic типы
 
 ```yaoxiang
-# Определение generics-типа
+// 泛型类型定义
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
     push: (List(T), T) -> Void
 }
 
-# Конкретная реализация
-type IntList = List(Int)
-type StringList = List(String)
+// 具体实例化
+IntList: Type = List(Int)
+StringList: Type = List(String)
 ```
 
-### Управляющие конструкции
+### Управление потоком
 
 ```yaoxiang
-# Условное выражение
+// 条件表达式
 if x > 0 {
     "positive"
 } elif x == 0 {
@@ -244,12 +244,12 @@ if x > 0 {
     "negative"
 }
 
-# Цикл
+// 循环
 for i in 0..5 {
     print(i)
 }
 
-# Цикл while
+// while 循环
 mut n = 0
 while n < 5 {
     print(n)
@@ -260,23 +260,23 @@ while n < 5 {
 ### Списки и словари
 
 ```yaoxiang
-# Списки
+// 列表
 numbers = [1, 2, 3, 4, 5]
-first = numbers[0]         # 1
+first = numbers[0]  // 1
 
-# Словари
+// 字典
 scores = {"Alice": 90, "Bob": 85}
-alice_score = scores["Alice"]  # 90
+alice_score = scores["Alice"]  // 90
 
-# Добавление элементов
+// 添加元素
 mut list = [1, 2, 3]
 list.append(4)
 ```
 
-### Pattern matching
+### Pattern matching (сопоставление с образцом)
 
 ```yaoxiang
-# Выражение match
+// match 表达式
 result: Result(Int, String) = ok(42)
 
 message = match result {
@@ -285,67 +285,67 @@ message = match result {
 }
 ```
 
-## Spawn-программирование (асинхронное)
+## Spawn-программирование (асинхронность)
 
 Уникальная особенность YaoXiang: функции, помеченные `spawn`, автоматически получают асинхронные возможности.
 
 ```yaoxiang
-# Определение spawn-функции (автоматическое асинхронное выполнение)
+// 定义并作函数（自动异步执行）
 fetch_data: (url: String) -> JSON spawn = {
     HTTP.get(url).json()
 }
 
-# Вызов spawn-функции (автоматический параллелизм, без await)
+// 调用并作函数（自动并行，无需 await）
 main: () -> Void = {
-    # Два вызова выполняются автоматически параллельно
-    user = fetch_user(1)     # Автоматический параллелизм
-    posts = fetch_posts()    # Автоматический параллелизм
+    // 两次调用自动并行执行
+    user = fetch_user(1)  // 自动并行
+    posts = fetch_posts()  // 自动并行
 
-    # Автоматическое ожидание при обращении к результату
+    // 当需要结果时自动等待
     print(user.name)
     print(posts.length)
 }
 ```
 
-## Модульная система
+## Система модулей
 
 ```yaoxiang
-# Импорт стандартной библиотеки
+// 导入标准库
 use std.io
 use std.math
 
-# Использование импортированных функций
-result = math.sqrt(16)      # 4.0
-println("Hello!")
+// 使用导入的函数
+result = math.sqrt(16)  // 4.0
+print("Hello!")
 ```
 
 ## Часто задаваемые вопросы
 
-### В: Переменные по умолчанию неизменяемы, как тогда изменять переменные?
+### В: Переменные по умолчанию неизменяемые — как их изменять?
 
 ```yaoxiang
-# Используйте ключевое слово mut для объявления изменяемой переменной
+// 使用 mut 关键字声明可变变量
 mut x = 10
-x = 20                       # ✅ OK
+x = 20  // ✅ OK
 ```
 
-### В: Как определять функции?
+### В: Как определить функцию?
 
 ```yaoxiang
-# Полная форма (рекомендуется)
+// 完整形式（推荐）
 add: (a: Int, b: Int) -> Int = a + b
 
-# Краткая форма (type inference)
+// 简短形式（类型推断）
 add = (a, b) => a + b
 ```
 
 ### В: Как обрабатывать ошибки?
 
 ```yaoxiang
-# Использование типа Result
-Result: (T: Type, E: Type) -> Type = ok(T) | err(E)
+// 使用 Result 类型
+Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
-# Обработка через pattern matching
+// 模式匹配处理
 result = risky_operation()
 match result {
     ok(value) => print("Success: " + value)
@@ -353,15 +353,15 @@ match result {
 }
 ```
 
-## Что дальше
+## Следующие шаги
 
-- 📖 Прочитайте [Руководство по YaoXiang](../YaoXiang-book.md) для изучения ключевых возможностей
-- 📚 Изучите [Спецификацию языка](../YaoXiang-language-specification.md) для полного понимания синтаксиса
-- 🏗️ Ознакомьтесь с [архитектурной документацией](../architecture/) для понимания деталей реализации
-- 💡 Прочитайте [Манифест дизайна](../YaoXiang-design-manifesto.md) для понимания основных принципов
+- 📖 Прочтите [Руководство YaoXiang](../YaoXiang-book.md), чтобы узнать об основных возможностях
+- 📚 Ознакомьтесь со [Спецификацией языка](../YaoXiang-language-specification.md) для изучения полного синтаксиса
+- 🏗️ Изучите [Документацию по архитектуре](../architecture/), чтобы понять детали реализации
+- 💡 Прочтите [Манифест дизайна](../YaoXiang-design-manifesto.md) для понимания ключевых идей
 
-## Дополнительные ресурсы
+## Связанные ресурсы
 
-- [GitHub-репозиторий](https://github.com/yourusername/yaoxiang)
-- [Сообщения об ошибках](https://github.com/yourusername/yaoxiang/issues)
-- [Руководство по участию в разработке](../guides/dev/)
+- [Репозиторий на GitHub](https://github.com/yourusername/yaoxiang)
+- [Сообщить о проблеме](https://github.com/yourusername/yaoxiang/issues)
+- [Руководство для контрибьюторов](../guides/dev/)

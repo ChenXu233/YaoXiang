@@ -4,42 +4,42 @@ title: Система типов
 
 # Система типов
 
-В базовом руководстве вы научились использовать встроенные типы, такие как `Int`, `String`, `Bool`. Эта глава углубляется в систему типов YaoXiang и научит вас **определять собственные типы**.
+В базовом руководстве вы научились использовать встроенные типы вроде `Int`, `String`, `Bool`. В этой главе мы углубимся в систему типов YaoXiang и научимся **определять собственные типы**.
 
 ## Единая синтаксическая модель
 
-Система типов YaoXiang основана на едином синтаксисе, определённом в RFC-010: **всё есть `name: type = value`**.
+Система типов YaoXiang основана на едином синтаксисе, описанном в RFC-010: **всё есть `имя: тип = значение`**.
 
 | Понятие | Запись |
 |------|------|
 | Переменная | `x: Int = 42` |
 | Функция | `add: (a: Int, b: Int) -> Int = a + b` |
-| Record type | `Point: Type = { x: Float, y: Float }` |
+| Тип записи | `Point: Type = { x: Float, y: Float }` |
 | Интерфейс | `Drawable: Type = { draw: (Surface) -> Void }` |
-| Generics type | `List: (T: Type) -> Type = { ... }` |
+| Обобщённый тип | `List: (T: Type) -> Type = { ... }` |
 
-Обратите внимание: **определение типа само по себе является `name: Type = value`**.
+Обратите внимание: **определение типа само по себе тоже имеет вид `имя: Type = значение`**.
 
-## Record type
+## Тип записи
 
-Record type (в других языках называемый «структурой») — это самый базовый способ организации данных в YaoXiang:
+Тип записи (в других языках называемый «структурой») — самый базовый способ организации данных в YaoXiang:
 
 ```yaoxiang
-# 定义记录类型
+// Определение типа записи
 Point: Type = { x: Float, y: Float }
 
-# 创建实例
+// Создание экземпляра
 origin = Point(x: 0.0, y: 0.0)
 p = Point(x: 3.0, y: 4.0)
 
-# 访问字段
-println(p.x)  # 3.0
-println(p.y)  # 4.0
+// Доступ к полям
+print(p.x)  // 3.0
+print(p.y)  // 4.0
 ```
 
 ### Значения полей по умолчанию
 
-Поля могут иметь значения по умолчанию, которые можно не указывать при создании:
+Для полей можно указать значения по умолчанию — тогда при конструировании их можно опускать:
 
 ```yaoxiang
 User: Type = {
@@ -48,9 +48,9 @@ User: Type = {
     active: Bool = true,
 }
 
-alice = User(name: "Alice", age: 25)        # active 取默认值 true
-bob = User(name: "Bob")                      # age=0, active=true
-anonymous = User(name: "guest", active: false)  # age=0
+alice = User(name: "Alice", age: 25)        // active принимает значение по умолчанию true
+bob = User(name: "Bob")                      // age=0, active=true
+anonymous = User(name: "guest", active: false)  // age=0
 ```
 
 ### Определение методов
@@ -60,26 +60,26 @@ anonymous = User(name: "guest", active: false)  # age=0
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
 
-# 定义方法：Point.method 语法
+// Определение метода: синтаксис Point.method
 Point.length: (self: Point) -> Float = {
     return (self.x * self.x + self.y * self.y).sqrt()
 }
 
 p = Point(x: 3.0, y: 4.0)
 
-# 两种调用方式等价
-println(Point.length(p))  # 5.0 — 函数式调用
-println(p.length())       # 5.0 — .调用语法
+// Оба способа вызова эквивалентны
+print(Point.length(p))  // 5.0 — функциональный вызов
+print(p.length())       // 5.0 — синтаксис вызова через точку
 ```
 
-### Автоматическая привязка `pub`
+### Автоматическое связывание через `pub`
 
-В одном файле функции, объявленные с `pub`, автоматически привязываются к типам, определённым в том же файле:
+В пределах одного файла функции, объявленные с `pub`, автоматически привязываются к типам, определённым в этом же файле:
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
 
-# pub 函数自动绑定到 Point
+// Функция с pub автоматически привязывается к Point
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
@@ -89,26 +89,26 @@ pub distance: (p1: Point, p2: Point) -> Float = {
 p1 = Point(x: 0.0, y: 0.0)
 p2 = Point(x: 3.0, y: 4.0)
 
-# 自动绑定的方法用 . 调用
-println(p1.distance(p2))  # 5.0
+// Автоматически привязанный метод вызывается через точку
+print(p1.distance(p2))  // 5.0
 ```
 
-## Enum type
+## Тип перечисления
 
-Enum определяет набор взаимоисключающих вариантов. Варианты без данных записываются строчными буквами, варианты с данными — с использованием функционального синтаксиса:
+Перечисление задаёт набор взаимоисключающих вариантов. Варианты без данных записываются в нижнем регистре, варианты с данными — в функциональном синтаксисе:
 
 ```yaoxiang
-# 简单枚举
-type Color = red | green | blue
+// Простое перечисление
+Color: Type = { red | green | blue }
 
-# 带数据的枚举
-type Result(T, E) = ok(T) | err(E)
+// Перечисление с данными
+Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
-# 嵌套枚举
-type Shape = circle(Float) | rect(Float, Float) | point
+// Вложенное перечисление
+Shape: Type = { circle(Float) | rect(Float, Float) | point }
 ```
 
-Ключевая идея enum: **каждый вариант сам по себе является типом**.
+Ключевая идея перечислений: **каждый вариант сам по себе тоже является типом**.
 
 ```yaoxiang
 area: (s: Shape) -> Float = match s {
@@ -117,30 +117,30 @@ area: (s: Shape) -> Float = match s {
     point => 0,
 }
 
-println(area(circle(5.0)))    # 78.53975
-println(area(rect(3.0, 4.0))) # 12.0
+print(area(circle(5.0)))    // 78.53975
+print(area(rect(3.0, 4.0))) // 12.0
 ```
 
-## Интерфейс
+## Интерфейсы
 
-Интерфейс — это **record type, все поля которого имеют тип функции**. Реализация интерфейса означает, что запись содержит имя интерфейса:
+Интерфейс — это **тип записи, все поля которого имеют функциональный тип**. Реализовать интерфейс — значит включить его имя в тело записи:
 
 ```yaoxiang
-# 定义接口
+// Определение интерфейса
 Drawable: Type = {
     draw: (Surface) -> Void,
     bounding_box: () -> Rect,
 }
 
-# 实现接口：在记录类型中包含接口名
+// Реализация интерфейса: включение имени интерфейса в запись
 Circle: Type = {
     x: Float,
     y: Float,
     radius: Float,
-    Drawable,       # 实现 Drawable 接口
+    Drawable,       // реализация интерфейса Drawable
 }
 
-# 提供接口要求的方法
+// Предоставление методов, требуемых интерфейсом
 Circle.draw: (self: Circle, surface: Surface) -> Void = {
     surface.draw_circle(self.x, self.y, self.radius)
 }
@@ -155,25 +155,25 @@ Circle.bounding_box: (self: Circle) -> Rect = {
 }
 ```
 
-Интерфейсы реализуют полиморфизм — любой тип, реализующий `Drawable`, можно передать в функцию, принимающую `Drawable`.
+Интерфейсы обеспечивают полиморфизм — любой тип, реализующий `Drawable`, можно передать функции, принимающей `Drawable`.
 
-## Generics type
+## Обобщённые типы
 
-Generics позволяет писать определения типов **без привязки к конкретным типам**:
+Обобщения (generics) позволяют писать **определения типов, не привязанные к конкретному типу**:
 
 ```yaoxiang
-# 泛型 Pair
+// Обобщённый Pair
 Pair: (T: Type, U: Type) -> Type = { first: T, second: U }
 
-# 使用
+// Использование
 string_pair = Pair(Int, String)(first: 1, second: "hello")
 float_pair = Pair(Float, Float)(first: 3.14, second: 2.71)
 ```
 
-Generics функция:
+Обобщённые функции:
 
 ```yaoxiang
-# 泛型 map：对列表的每个元素应用函数
+// Обобщённая map: применяет функцию к каждому элементу списка
 map: (T: Type, R: Type) -> ((list: List(T), f: (T) -> R) -> List(R)) = {
     mut result: List(R) = []
     for item in list {
@@ -184,15 +184,15 @@ map: (T: Type, R: Type) -> ((list: List(T), f: (T) -> R) -> List(R)) = {
 
 numbers = [1, 2, 3, 4]
 doubled = map(Int, Int)(numbers, (x) => x * 2)
-println(doubled)  # [2, 4, 6, 8]
+print(doubled)  // [2, 4, 6, 8]
 ```
 
-## Резюме
+## Итоги
 
 | Понятие | Синтаксис | Назначение |
 |------|------|------|
-| Record type | `Point: Type = { x: Float, y: Float }` | Организация связанных данных |
-| Enum | `type Color = red \| green \| blue` | Выбор одного из вариантов |
+| Тип записи | `Point: Type = { x: Float, y: Float }` | Организация связанных данных |
+| Перечисление | `Color: Type = { red \| green \| blue }` | Выбор одного из вариантов |
 | Интерфейс | `Drawable: Type = { draw: ... }` | Полиморфная абстракция |
-| Generics | `List: (T: Type) -> Type = { ... }` | Параметризация типов |
-| Метод | `Type.method: (self: Type, ...) -> ...` | Присоединение поведения |
+| Обобщения | `List: (T: Type) -> Type = { ... }` | Параметризация типов |
+| Метод | `Type.method: (self: Type, ...) -> ...` | Привязка поведения |

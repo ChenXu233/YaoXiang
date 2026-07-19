@@ -1,12 +1,12 @@
 # YaoXiang Quick Start
 
-> This guide helps you get started with the YaoXiang programming language.
+> This guide helps you get up and running with the YaoXiang programming language quickly.
 >
-> **Note**: The code examples in this document are based on the YaoXiang language specification. If you encounter syntax differences when actually running the code, please refer to the [Language Specification](../design/language-spec.md).
+> **Note**: The code examples in this document are based on the YaoXiang language specification. If you encounter syntax differences in actual execution, please refer to the [Language Specification](../design/language-spec.md).
 
 ## Installation
 
-### Building from Source (Recommended)
+### Build from Source (Recommended)
 
 ```bash
 # Clone the repository
@@ -28,7 +28,7 @@ cargo test
 ./target/release/yaoxiang --version
 ```
 
-**Verify successful installation**:
+**Verify Successful Installation**:
 ```bash
 ./target/debug/yaoxiang --version
 # Should output something like: yaoxiang x.y.z
@@ -39,13 +39,13 @@ cargo test
 Create a file `hello.yx`:
 
 ```yaoxiang
-# hello.yx
+// hello.yx
 use std.io
 
-# Function definition: name: (param: Type, ...) -> return_type = { return ... }  # Code block must explicitly return
-# Expression form: name: (param: Type, ...) -> return_type = expr                 # Expression directly returns value
+// Function definition: name: (param: Type, ...) -> return_type = { return ... }  # code block must explicitly return
+// Expression form: name: (param: Type, ...) -> return_type = expr           # expression directly returns value
 main: () -> Void = {
-    println("Hello, YaoXiang!")
+    print("Hello, YaoXiang!")
 }
 ```
 
@@ -53,7 +53,7 @@ Run it:
 
 ```bash
 ./target/debug/yaoxiang hello.yx
-# or use the release version
+# Or use the release version
 ./target/release/yaoxiang hello.yx
 ```
 
@@ -68,38 +68,38 @@ Hello, YaoXiang!
 ### Variables and Types
 
 ```yaoxiang
-# Automatic type inference
-x = 42                    # Inferred as Int
-name = "YaoXiang"         # Inferred as String
-pi = 3.14159              # Inferred as Float
-is_valid = true           # Inferred as Bool
+// Automatic type inference
+x = 42  // inferred as Int
+name = "YaoXiang"  // inferred as String
+pi = 3.14159  // inferred as Float
+is_valid = true  // inferred as Bool
 
-# Explicit type annotations (recommended per type convention)
+// Explicit type annotation (recommended: use centralized type conventions)
 count: Int = 100
 
-# Immutable by default (safety feature)
+// Immutable by default (safety feature)
 x = 10
-x = 20                    # ❌ Compile error! Immutable
+x = 20  // ❌ Compile error! Immutable.
 
-# Mutable variables (requires explicit declaration)
+// Mutable variables (require explicit declaration)
 mut counter = 0
-counter = counter + 1     # ✅ OK
+counter = counter + 1  // ✅ OK
 ```
 
 ### Functions
 
 ```yaoxiang
-# Function definition syntax
-# Expression form: directly returns value, no return needed
+// Function definition syntax
+// Expression form: directly returns value, no return needed
 add: (a: Int, b: Int) -> Int = a + b
 
-# Code block form: must use return to return value
-# add: (a: Int, b: Int) -> Int = { return a + b }
+// Code block form: must use return to return value
+// add: (a: Int, b: Int) -> Int = { return a + b }
 
-# Call
-result = add(1, 2)        # result = 3
+// Invocation
+result = add(1, 2)  // result = 3
 
-# Single parameter function (expression form)
+// Single-parameter function (expression form)
 inc: (x: Int) -> Int = x + 1
 ```
 
@@ -108,74 +108,74 @@ inc: (x: Int) -> Int = x + 1
 YaoXiang uses a unified `name: type = value` syntax model:
 
 ```yaoxiang
-# Variable declaration
+// Variable declaration
 x: Int = 42
 name: String = "YaoXiang"
 
-# Function definition
+// Function definition
 add: (a: Int, b: Int) -> Int = a + b
 
-# Type definition (using curly braces)
-type Point = { x: Float, y: Float }
+// Type definition (uses curly braces)
+Point: Type = { x: Float, y: Float }
 
-# Using the type
-p: Point = Point(x: 1.0, y: 2.0)
-p.x  # 1.0
-p.y  # 2.0
+// Using the type
+p: Point = Point(x=1.0, y=2.0)
+p.x  // 1.0
+p.y  // 2.0
 ```
 
-#### Record Types
+#### Record Type
 
 ```yaoxiang
-# Struct types
-type Point = { x: Float, y: Float }
-type Rect = { x: Float, y: Float, width: Float, height: Float }
+// Struct type
+Point: Type = { x: Float, y: Float }
+Rect: Type = { x: Float, y: Float, width: Float, height: Float }
 
-# Usage
-p = Point(x: 3.0, y: 4.0)
-r = Rect(x: 0.0, y: 0.0, width: 10.0, height: 20.0)
+// Usage
+p = Point(x=3.0, y=4.0)
+r = Rect(x=0.0, y=0.0, width=10.0, height=20.0)
 ```
 
-#### Interface Definitions
+#### Interface Definition
 
-Interfaces are record types where all fields are function types:
+An interface is a record type whose fields are all function types:
 
 ```yaoxiang
-# Define interfaces
-type Drawable = {
+// Define an interface
+Drawable: Type = {
     draw: (Surface) -> Void,
     bounding_box: () -> Rect
 }
 
-type Serializable = {
+Serializable: Type = {
     serialize: () -> String
 }
 
-# Empty interface
-type EmptyInterface = {}
+// Empty interface
+EmptyInterface: Type = {}
 ```
 
 #### Type Methods
 
-Define type methods using `Type.method: (Type, ...) -> Return = ...` syntax:
+Use the `Type.method: (Type, ...) -> Return = ...` syntax to define type methods:
 
 ```yaoxiang
-# Type definition
-type Point = { x: Float, y: Float }
+// Type definition
+Point: Type = { x: Float, y: Float }
 
-# Type method definition
+// Type method definition
 Point.draw: (self: Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
 
 Point.serialize: (self: Point) -> String = {
-    "Point(${self.x}, ${self.y})"
+    "Point({self.x}, {self.y})"
 }
 
-# Using methods (syntactic sugar)
-p = Point(x: 1.0, y: 2.0)
-p.draw(screen)           # → Point.draw(p, screen)
-str = p.serialize()      # → Point.serialize(p)
+// Using methods (syntactic sugar)
+p = Point(x=1.0, y=2.0)
+p.draw(screen)  // → Point.draw(p, screen)
+str = p.serialize()  // → Point.serialize(p)
 ```
 
 #### Automatic Binding
@@ -183,36 +183,36 @@ str = p.serialize()      # → Point.serialize(p)
 Functions declared with the `pub` keyword are automatically bound to types defined in the same file:
 
 ```yaoxiang
-type Point = { x: Float, y: Float }
+Point: Type = { x: Float, y: Float }
 
-# pub declaration automatically binds to Point
+// pub declaration automatically binds to Point
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
     (dx * dx + dy * dy).sqrt()
 }
 
-# Usage
-p1 = Point(x: 3.0, y: 4.0)
-p2 = Point(x: 1.0, y: 2.0)
+// Usage
+p1 = Point(x=3.0, y=4.0)
+p2 = Point(x=1.0, y=2.0)
 
-# Functional call
-d = distance(p1, p2)           # 3.606...
+// Functional call
+d = distance(p1, p2)  // 3.606...
 
-# OOP syntax sugar (automatically bound to Point.distance)
-d2 = p1.distance(p2)           # → distance(p1, p2)
+// OOP syntactic sugar (auto-bound to Point.distance)
+d2 = p1.distance(p2)  // → distance(p1, p2)
 ```
 
-#### Enum Types
+#### Enum Type
 
 ```yaoxiang
-# Simple enum
-type Color = red | green | blue
+// Simple enum
+Color: Type = { red | green | blue }
 
-# Enum with data
-Result: (T: Type, E: Type) -> Type = ok(T) | err(E)
+// Enum with data
+Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
-# Using generics
+// Using generics
 success: Result(Int, String) = ok(42)
 failure: Result(Int, String) = err("not found")
 ```
@@ -220,22 +220,22 @@ failure: Result(Int, String) = err("not found")
 #### Generic Types
 
 ```yaoxiang
-# Generic type definition
+// Generic type definition
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
     push: (List(T), T) -> Void
 }
 
-# Concrete instantiation
-type IntList = List(Int)
-type StringList = List(String)
+// Concrete instantiation
+IntList: Type = List(Int)
+StringList: Type = List(String)
 ```
 
 ### Control Flow
 
 ```yaoxiang
-# Conditional expression
+// Conditional expression
 if x > 0 {
     "positive"
 } elif x == 0 {
@@ -244,12 +244,12 @@ if x > 0 {
     "negative"
 }
 
-# Loop
+// Loop
 for i in 0..5 {
     print(i)
 }
 
-# while loop
+// while loop
 mut n = 0
 while n < 5 {
     print(n)
@@ -260,15 +260,15 @@ while n < 5 {
 ### Lists and Dictionaries
 
 ```yaoxiang
-# Lists
+// List
 numbers = [1, 2, 3, 4, 5]
-first = numbers[0]         # 1
+first = numbers[0]  // 1
 
-# Dictionaries
+// Dictionary
 scores = {"Alice": 90, "Bob": 85}
-alice_score = scores["Alice"]  # 90
+alice_score = scores["Alice"]  // 90
 
-# Adding elements
+// Add an element
 mut list = [1, 2, 3]
 list.append(4)
 ```
@@ -276,7 +276,7 @@ list.append(4)
 ### Pattern Matching
 
 ```yaoxiang
-# match expression
+// match expression
 result: Result(Int, String) = ok(42)
 
 message = match result {
@@ -287,21 +287,21 @@ message = match result {
 
 ## Spawn Programming (Async)
 
-YaoXiang's unique feature: functions marked with `spawn` automatically gain async capabilities.
+A unique feature of YaoXiang: functions marked with `spawn` automatically gain asynchronous capabilities.
 
 ```yaoxiang
-# Define spawn function (automatically async execution)
+// Define a spawn function (automatically executed asynchronously)
 fetch_data: (url: String) -> JSON spawn = {
     HTTP.get(url).json()
 }
 
-# Call spawn function (automatically parallel, no await needed)
+// Calling spawn functions (automatically parallel, no await needed)
 main: () -> Void = {
-    # Two calls automatically execute in parallel
-    user = fetch_user(1)     # Automatically parallel
-    posts = fetch_posts()    # Automatically parallel
+    // Two calls automatically run in parallel
+    user = fetch_user(1)  // automatically parallel
+    posts = fetch_posts()  // automatically parallel
 
-    # Automatically wait when results are needed
+    // Automatically waits when the result is needed
     print(user.name)
     print(posts.length)
 }
@@ -310,42 +310,42 @@ main: () -> Void = {
 ## Module System
 
 ```yaoxiang
-# Import standard library
+// Import standard library
 use std.io
 use std.math
 
-# Use imported functions
-result = math.sqrt(16)      # 4.0
-println("Hello!")
+// Use imported functions
+result = math.sqrt(16)  // 4.0
+print("Hello!")
 ```
 
 ## FAQ
 
-### Q: Variables are immutable by default, how do I modify a variable?
+### Q: Variables are immutable by default. How do I modify a variable?
 
 ```yaoxiang
-# Use the mut keyword to declare a mutable variable
+// Use the mut keyword to declare a mutable variable
 mut x = 10
-x = 20                       # ✅ OK
+x = 20  // ✅ OK
 ```
 
-### Q: How do I define functions?
+### Q: How do I define a function?
 
 ```yaoxiang
-# Full form (recommended)
+// Full form (recommended)
 add: (a: Int, b: Int) -> Int = a + b
 
-# Short form (type inference)
+// Short form (type inference)
 add = (a, b) => a + b
 ```
 
 ### Q: How do I handle errors?
 
 ```yaoxiang
-# Use the Result type
-Result: (T: Type, E: Type) -> Type = ok(T) | err(E)
+// Use the Result type
+Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
-# Handle with pattern matching
+// Handle via pattern matching
 result = risky_operation()
 match result {
     ok(value) => print("Success: " + value)
@@ -356,12 +356,12 @@ match result {
 ## Next Steps
 
 - 📖 Read the [YaoXiang Guide](../YaoXiang-book.md) to learn about core features
-- 📚 Check the [Language Specification](../YaoXiang-language-specification.md) for complete syntax
-- 🏗️ Browse the [Architecture Documentation](../architecture/) to understand implementation details
-- 💡 Read the [Design Manifesto](../YaoXiang-design-manifesto.md) to understand core philosophy
+- 📚 Check the [Language Specification](../YaoXiang-language-specification.md) for the complete syntax
+- 🏗️ Browse the [Architecture Documentation](../architecture/) for implementation details
+- 💡 Read the [Design Manifesto](../YaoXiang-design-manifesto.md) to understand the core ideas
 
 ## Related Resources
 
 - [GitHub Repository](https://github.com/yourusername/yaoxiang)
 - [Issue Tracker](https://github.com/yourusername/yaoxiang/issues)
-- [Contribution Guide](../guides/dev/)
+- [Contributing Guide](../guides/dev/)
