@@ -2,7 +2,7 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::statements::types::parse_type_annotation;
-use crate::frontend::core::parser::ast::{Type, StructField, TypeBodyItem};
+use crate::frontend::core::parser::ast::{BinOp, Expr, StructField, Type, TypeBodyItem};
 use crate::frontend::core::parser::ParserState;
 
 fn with_type<F>(
@@ -352,5 +352,86 @@ fn test_struct_mut_field() {
         } else {
             panic!("Expected Type::Struct");
         }
+    });
+}
+// ============================================================================
+// const 泛型约束比较运算符 (RFC-011 §4.3) — issue #173
+// ============================================================================
+
+/// 提取类型体中 Assert(...) 约束的参量表达式（字段或匿名位置）。
+fn extract_assert_arg(ty: &Type) -> &Expr {
+    let Type::Struct { body } = ty else {
+        panic!("Expected Type::Struct, got: {ty:?}")
+    };
+    for item in body {
+        let item_ty = match item {
+            TypeBodyItem::Field(f) if f.name.starts_with("_assert") => Some(&f.ty),
+            TypeBodyItem::Expr(e) => Some(e),
+            _ => None,
+        };
+        if let Some(Type::Generic { name, args, .. }) = item_ty {
+            assert_eq!(name, "Assert", "constraint type family should be Assert");
+            assert_eq!(args.len(), 1, "Assert should take exactly one argument");
+            if let Type::ConstExpr(expr) = &args[0] {
+                return expr;
+            }
+            panic!(
+                "Assert argument should be Type::ConstExpr, got: {:?}",
+                args[0]
+            );
+        }
+    }
+    panic!("no Assert constraint found in struct body: {body:?}");
+}
+
+#[test]
+fn test_struct_field_assert_lt() {
+    // Arrange & Act: 解析字段位置的 Assert(N < 100) 约束
+    with_type("{ _assert_n: Assert(N < 100), data: Int }", |t| {
+        // Assert: 参数应解析为 Lt 比较的 ConstExpr
+        let expr = extract_assert_arg(&t);
+        assert!(
+            matches!(expr, Expr::BinOp { op: BinOp::Lt, .. }),
+            "field constraint should parse as Lt comparison, got: {expr:?}"
+        );
+    });
+}
+
+#[test]
+fn test_struct_field_assert_le() {
+    // Arrange & Act: 解析字段位置的 Assert(N <= 100) 约束
+    with_type("{ _assert_n: Assert(N <= 100), data: Int }", |t| {
+        // Assert: 参数应解析为 Le 比较的 ConstExpr
+        let expr = extract_assert_arg(&t);
+        assert!(
+            matches!(expr, Expr::BinOp { op: BinOp::Le, .. }),
+            "field constraint should parse as Le comparison, got: {expr:?}"
+        );
+    });
+}
+
+#[test]
+fn test_struct_anon_assert_lt() {
+    // Arrange & Act: 解析匿名位置的 Assert(N < 100) 约束
+    with_type("{ data: Int, Assert(N < 100) }", |t| {
+        // Assert: 参数应解析为 Lt 比较的 ConstExpr
+        let expr = extract_assert_arg(&t);
+        assert!(
+            matches!(expr, Expr::BinOp { op: BinOp::Lt, .. }),
+            "anonymous constraint should parse as Lt comparison, got: {expr:?}"
+        );
+    });
+}
+
+#[test]
+fn test_struct_anon_assert_le() {
+    // Arrange & Act: 解析匿名位置的 Assert(N <= 100) 约束
+    with_type("{ data: Int, Assert(N <= 100) }", |t| {
+        // Assert: 参数应解析为 Le 比较的 ConstExpr
+        let expr = extract_assert_arg(&t);
+        assert!(
+            matches!(expr, Expr::BinOp { op: BinOp::Le, .. }),
+            "anonymous constraint should parse as Le comparison, got: {expr:?}"
+        );
     });
 }

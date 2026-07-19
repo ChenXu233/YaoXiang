@@ -155,7 +155,14 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             // 后视检查：如果下一个 token 是比较/相等运算符，继续作为表达式解析
             if matches!(
                 state.current().map(|t| &t.kind),
-                Some(TokenKind::EqEq | TokenKind::Neq | TokenKind::Gt | TokenKind::Ge)
+                Some(
+                    TokenKind::EqEq
+                        | TokenKind::Neq
+                        | TokenKind::Gt
+                        | TokenKind::Ge
+                        | TokenKind::Lt
+                        | TokenKind::Le
+                )
             ) {
                 let left_expr = Expr::Var(name.clone(), name_span);
                 // 使用 infix 处理器继续解析右侧
@@ -163,15 +170,6 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
                     let full_expr = parser_fn(state, left_expr, bp_right)?;
                     return Some(Type::ConstExpr(Box::new(full_expr)));
                 }
-            }
-            // Check for old angle bracket generic syntax: Name<Args>
-            if state.at(&TokenKind::Lt) {
-                state.error(parse_msg(
-                    "Old 'Name<...>' angle bracket syntax is no longer supported. \
-                     Use '()' application syntax: 'Name(Type1, Type2)'"
-                        .to_string(),
-                ));
-                return None;
             }
             Some(Type::Name {
                 name,
