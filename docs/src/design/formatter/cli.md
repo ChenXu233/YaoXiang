@@ -1,5 +1,4 @@
----
-title: "yaoxiang fmt 命令行用法"
+title: "yaoxiang format 命令行用法"
 description: 格式化工具的命令行参数和使用方法
 ---
 
@@ -11,16 +10,16 @@ description: 格式化工具的命令行参数和使用方法
 
 ```bash
 # 格式化文件（输出到 stdout）
-yaoxiang fmt file.yx
+yaoxiang format file.yx
 
 # 检查文件是否已格式化
-yaoxiang fmt --check file.yx
+yaoxiang format --dry-run file.yx
 
 # 格式化并写入文件
-yaoxiang fmt --write file.yx
+yaoxiang format -w file.yx
 
 # 格式化目录下所有 .yx 文件
-yaoxiang fmt --write src/
+yaoxiang format -w src/
 ```
 
 ---
@@ -29,8 +28,8 @@ yaoxiang fmt --write src/
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--check` | 检查模式，不修改文件 | false |
-| `--write` | 写入模式，修改文件 | false |
+| `--dry-run` | 检查模式，不修改文件 | false |
+| `-w`, `--write` | 写入模式，修改文件 | false |
 | `--stdout` | 输出到 stdout | false |
 | `--indent-width` | 缩进宽度 | 4 |
 | `--line-width` | 最大行宽 | 120 |
@@ -41,6 +40,6 @@ yaoxiang fmt --write src/
 
 ## C. 参考资料
 
-- [Issue #13: 实现 yaoxiang fmt 代码格式化工具](https://github.com/ChenXu233/YaoXiang/issues/13)
+- [Issue #13: 实现 yaoxiang format 代码格式化工具](https://github.com/ChenXu233/YaoXiang/issues/13)
 - [Rustfmt 风格指南](https://rust-lang.github.io/rustfmt/)
 - [测试编写规范](../test-specification.md)
