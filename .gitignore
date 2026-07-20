@@ -52,6 +52,9 @@ pkg/
 docs/src/.vitepress/public/wasm/*.wasm
 docs/src/.vitepress/public/wasm/*.js
 
+# TextMate grammar build artifacts (synced from vscode-extension/language-pack/syntaxes/)
+docs/src/.vitepress/syntaxes/yaoxiang.tmLanguage.json
+
 # i18n translation scripts
 scripts/i18n/.env
 

@@ -4,7 +4,10 @@
   "description": "YaoXiang 官方文档站点",
   "type": "module",
   "scripts": {
-    "docs:dev": "vitepress dev src",
+    "presync:syntax": "node ../scripts/sync-syntax.mjs",
+    "sync:syntax": "node ../scripts/sync-syntax.mjs",
+    "sync:syntax:watch": "node ../scripts/sync-syntax.mjs --watch",
+    "docs:dev": "node ../scripts/sync-syntax.mjs && vitepress dev src",
     "docs:build": "node build.js",
     "docs:preview": "vitepress preview src",
     "info": "vuepress info",
