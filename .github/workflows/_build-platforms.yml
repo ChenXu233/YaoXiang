@@ -35,7 +35,7 @@ jobs:
       matrix:
         target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -50,7 +50,7 @@ jobs:
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index
@@ -70,7 +70,7 @@ jobs:
              target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang-${{ matrix.target }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.artifact-prefix }}-${{ matrix.target }}
           path: target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang-${{ matrix.target }}
@@ -87,7 +87,7 @@ jobs:
       matrix:
         target: [x86_64-apple-darwin, aarch64-apple-darwin]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -96,7 +96,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index
@@ -116,7 +116,7 @@ jobs:
              target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang-${{ matrix.target }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.artifact-prefix }}-${{ matrix.target }}
           path: target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang-${{ matrix.target }}
@@ -133,7 +133,7 @@ jobs:
       matrix:
         target: [x86_64-pc-windows-gnu, aarch64-pc-windows-gnullvm]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -174,7 +174,7 @@ jobs:
           TOML
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index
@@ -194,7 +194,7 @@ jobs:
              target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang-${{ matrix.target }}.exe
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.artifact-prefix }}-${{ matrix.target }}
           path: target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang-${{ matrix.target }}.exe
@@ -208,7 +208,7 @@ jobs:
     continue-on-error: true
     if: inputs.build-profile == 'release'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -216,7 +216,7 @@ jobs:
           toolchain: ${{ vars.RUST_TOOLCHAIN }}
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index
@@ -247,7 +247,7 @@ jobs:
         run: iscc scripts/setup.iss
 
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.artifact-prefix }}-windows-installer
           path: dist/YaoXiang-Setup-*.exe

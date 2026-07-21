@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -33,7 +33,7 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Download Z3 wasm (cross-run)
-        uses: dawidd6/action-download-artifact@v4
+        uses: dawidd6/action-download-artifact@v21
         with:
           workflow: _build-z3-wasm.yml
           name: z3-wasm-4.16.0
@@ -49,7 +49,7 @@ jobs:
           fi
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index
@@ -67,7 +67,7 @@ jobs:
         run: cd pkg && zip -r ../yaoxiang-wasm.zip .
 
       - name: Upload wasm artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.artifact-name }}
           path: yaoxiang-wasm.zip
