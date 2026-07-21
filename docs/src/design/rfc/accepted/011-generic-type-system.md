@@ -46,10 +46,10 @@ pr_impl:
 | [RFC-010: 统一类型语法](./010-unified-type-syntax.md) | **语法基础** | 泛型语法与统一 `name: type = value` 模型集成 |
 | [RFC-010: 统一类型语法](./010-unified-type-syntax.md) | **调用语法** | 第6节：泛型调用语法——统一 `()` 应用，`[]` 彻底移除 |
 | [RFC-009: 所有权模型](./accepted/009-ownership-model.md) | **类型系统** | Move语义与泛型的自然结合 |
-| [RFC-001: 并作模型](./accepted/001-concurrent-model-error-handling.md) | **执行模型** | DAG分析与泛型类型检查 |
+| [RFC-024: 基于 spawn 的并发运行时语义](./024-concurrency-model.md) | **执行模型** | DAG分析与泛型类型检查 |
 | [RFC-008: 运行时模型](./accepted/008-runtime-concurrency-model.md) | **编译器架构** | 泛型单态化与编译期优化策略 |
 | [类型宇宙思想](../reference/plan/ongoing/类型宇宙思想.md) | **理论核心** | 类型宇宙层级模型与值依赖类型设计 |
-| [RFC-022: 霍尔逻辑静态验证](./draft/022-hol-logic-verification.md) | **终止检查** | decreases规约与编译期求值安全保障 |
+| [RFC-027: 编译期谓词与统一静态验证](./027-compile-time-evaluation-types.md) | **终止检查** | decreases规约与编译期求值安全保障 |
 
 ## 类型宇宙思想与值依赖类型
 
@@ -1683,9 +1683,7 @@ generic_type ::= identifier ':' type '=' type_expression
 - [RFC-009: 所有权模型](./accepted/009-ownership-model.md)
 - [RFC-001: 并作模型](./accepted/001-concurrent-model-error-handling.md)
 - [RFC-008: 运行时模型](./accepted/008-runtime-concurrency-model.md)
-- [语言规范](../language-spec.md)
-- [YaoXiang指南](../guides/YaoXiang-book.md)
-
+- [tutorial/ 教程](../../../../../tutorial/)
 ### 外部参考
 
 - [Rust泛型系统](https://doc.rust-lang.org/book/ch10-01-syntax.html)

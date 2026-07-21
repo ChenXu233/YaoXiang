@@ -2,7 +2,7 @@
 
 > 本指南帮助您快速上手 YaoXiang 编程语言。
 >
-> **注意**：本文档中的代码示例基于 YaoXiang 语言规范编写。如在实际运行中遇到语法差异，请参考 [语言规范](../design/language-spec.md)。
+> **注意**：本文档中的代码示例基于 YaoXiang 语言规范编写。如在实际运行中遇到语法差异，请参考 [语言规范](../reference/language-spec/index.md)。
 
 ## 安装
 
@@ -10,7 +10,7 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/yourusername/yaoxiang.git
+git clone https://github.com/ChenXu233/YaoXiang.git
 cd yaoxiang
 
 # 编译（调试版本，用于开发测试）
@@ -285,27 +285,23 @@ message = match result {
 }
 ```
 
-## 并作编程（异步）
+## 并作编程（并发）
 
-YaoXiang 的独特特性：使用 `spawn` 标记的函数自动获得异步能力。
+YaoXiang 的并发模型围绕 `spawn <expr>` 原语构建——它是唯一的并行入口。
 
 ```yaoxiang
-// 定义并作函数（自动异步执行）
-fetch_data: (url: String) -> JSON spawn = {
-    HTTP.get(url).json()
-}
-
-// 调用并作函数（自动并行，无需 await）
+// spawn 修饰任意表达式，自动并行执行
 main: () -> Void = {
-    // 两次调用自动并行执行
-    user = fetch_user(1)  // 自动并行
-    posts = fetch_posts()  // 自动并行
+    user = spawn fetch_user(1)   // 后台执行
+    posts = spawn fetch_posts()  // 并行的另一步
 
-    // 当需要结果时自动等待
+    // 需要结果时自动阻塞等待
     print(user.name)
     print(posts.length)
 }
 ```
+
+**核心规则**：`spawn` 修饰的表达式在后台执行，外层同步阻塞等待结果。无依赖的任务自动并行，由运行时 GMP 模型调度。
 
 ## 模块系统
 
@@ -355,7 +351,6 @@ match result {
 
 ## 下一步
 
-- 📖 阅读 [YaoXiang 指南](../YaoXiang-book.md) 了解核心特性
 - 📚 查看 [语言规范](../YaoXiang-language-specification.md) 了解完整语法
 - 🏗️ 浏览 [架构文档](../architecture/) 了解实现细节
 - 💡 查看 [设计宣言](../YaoXiang-design-manifesto.md) 了解核心理念

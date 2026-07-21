@@ -49,9 +49,9 @@ docs/
 ├── guides/                    # User guides
 │   ├── getting-started.md     # Quick start (5 minutes)
 │   ├── getting-started.en.md  # Quick Start (English)
-│   ├── error-system-design.md # Error system design
-│   ├── YaoXiang-book.md       # Language guide (tutorial)
-│   ├── YaoXiang-book.en.md    # Language Guide (English)
+│   ├── getting-started.md    # Quick start guide
+│   ├── basics/               # Core concepts (variables, functions, types)
+│   ├── advanced/             # Advanced topics (type system, ownership)
 │   └── dev/                   # Developer guides
 │       ├── commit-convention.md   # Commit convention
 │       └── release-guide.md       # Release guide
@@ -103,8 +103,7 @@ docs/
 
 ### Getting Started
 
-1. [Quick Start](guides/getting-started.md) - Get up and running in 5 minutes
-2. [YaoXiang Guide](guides/YaoXiang-book.md) - Learn core concepts systematically
+2. [教程：基础概念](tutorial/basics/variables/) - 系统学习核心概念
 3. [Tutorial: Basics](tutorial/en/basics.md) - Variables, types, operators
 
 ### Advanced Learning
@@ -180,9 +179,9 @@ docs/
 ├── guides/                    # 用户指南
 │   ├── getting-started.md     # 快速入门（5 分钟上手）
 │   ├── getting-started.en.md  # Quick Start (English)
-│   ├── error-system-design.md # 错误系统设计
-│   ├── YaoXiang-book.md       # 语言指南（入门教程）
-│   ├── YaoXiang-book.en.md    # Language Guide (English)
+│   ├── getting-started.md    # 快速入门
+│   ├── basics/               # 核心概念（变量、函数、类型）
+│   ├── advanced/             # 进阶主题（类型系统、所有权）
 │   └── dev/                   # 开发者指南
 │       ├── commit-convention.md   # 提交规范
 │       └── release-guide.md       # 发布指南
@@ -234,8 +233,7 @@ docs/
 
 ### 新手入门
 
-1. [快速入门](guides/getting-started.md) - 5 分钟快速上手
-2. [YaoXiang 指南](guides/YaoXiang-book.md) - 系统学习核心概念
+2. [教程：基础概念](tutorial/basics/variables/) - 系统学习核心概念
 3. [教程：基础](tutorial/zh/basics.md) - 变量、类型、运算符
 
 ### 进阶学习

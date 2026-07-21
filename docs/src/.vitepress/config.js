@@ -124,7 +124,6 @@ export default defineConfig({
               items: [
                 { text: "教程首页", link: "/tutorial/" },
                 { text: "快速开始", link: "/tutorial/getting-started" },
-                { text: "爻象手册", link: "/tutorial/YaoXiang-book" },
               ],
             },
             {
@@ -383,21 +382,6 @@ export default defineConfig({
                 },
               ],
             },
-            {
-              text: "路线图",
-              items: [
-                { text: "路线图首页", link: "/dev/plan/roadmap" },
-                {
-                  text: "模块状态",
-                  collapsed: true,
-                  items: generateSidebar({
-                    scanStartPath: "/dev/plan/roadmap",
-                    useTitleFromFrontmatter: true,
-                    collapsed: true,
-                    hyphenToSpace: true,
-                  }),
-                },
-              ],
             },
           ],
 
