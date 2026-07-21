@@ -2,7 +2,7 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::statements::types::parse_type_annotation;
-use crate::frontend::core::parser::ast::Type;
+use crate::frontend::core::parser::ast::{BinOp, Expr, StructField, Type, TypeBodyItem};
 use crate::frontend::core::parser::ParserState;
 
 fn with_type<F>(
@@ -124,7 +124,17 @@ fn test_struct_type_empty() {
 #[test]
 fn test_struct_type_fields() {
     with_type("{ x: Float, y: Float }", |t| {
-        if let Type::Struct { fields, .. } = &t {
+        if let Type::Struct { body } = &t {
+            let fields: Vec<&StructField> = body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Field(f) = it {
+                        Some(f)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
             assert_eq!(fields.len(), 2);
             assert_eq!(fields[0].name, "x");
             assert_eq!(fields[1].name, "y");
@@ -137,10 +147,27 @@ fn test_struct_type_fields() {
 #[test]
 fn test_struct_type_with_interface() {
     with_type("{ x: Float, Drawable, Serializable }", |t| {
-        if let Type::Struct {
-            fields, interfaces, ..
-        } = &t
-        {
+        if let Type::Struct { body } = &t {
+            let fields: Vec<&StructField> = body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Field(f) = it {
+                        Some(f)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let interfaces: Vec<String> = body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Interface(s) = it {
+                        Some(s.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
             assert_eq!(fields.len(), 1);
             assert!(interfaces.contains(&"Drawable".to_string()));
             assert!(interfaces.contains(&"Serializable".to_string()));
@@ -153,7 +180,17 @@ fn test_struct_type_with_interface() {
 #[test]
 fn test_struct_type_with_default() {
     with_type("{ x: Float = 0, y: Float = 0 }", |t| {
-        if let Type::Struct { fields, .. } = &t {
+        if let Type::Struct { body } = &t {
+            let fields: Vec<&StructField> = body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Field(f) = it {
+                        Some(f)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
             assert_eq!(fields.len(), 2);
             assert!(fields[0].default.is_some());
         } else {
@@ -300,10 +337,101 @@ fn test_reject_old_curried_fn_syntax() {
 fn test_struct_mut_field() {
     // Note: "mut" in struct fields may not be fully supported
     with_type("{ x: Int, y: Float }", |t| {
-        if let Type::Struct { fields, .. } = &t {
+        if let Type::Struct { body } = &t {
+            let fields: Vec<&StructField> = body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Field(f) = it {
+                        Some(f)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
             assert!(!fields.is_empty(), "Should parse at least one field");
         } else {
             panic!("Expected Type::Struct");
         }
+    });
+}
+// ============================================================================
+// const 泛型约束比较运算符 (RFC-011 §4.3) — issue #173
+// ============================================================================
+
+/// 提取类型体中 Assert(...) 约束的参量表达式（字段或匿名位置）。
+fn extract_assert_arg(ty: &Type) -> &Expr {
+    let Type::Struct { body } = ty else {
+        panic!("Expected Type::Struct, got: {ty:?}")
+    };
+    for item in body {
+        let item_ty = match item {
+            TypeBodyItem::Field(f) if f.name.starts_with("_assert") => Some(&f.ty),
+            TypeBodyItem::Expr(e) => Some(e),
+            _ => None,
+        };
+        if let Some(Type::Generic { name, args, .. }) = item_ty {
+            assert_eq!(name, "Assert", "constraint type family should be Assert");
+            assert_eq!(args.len(), 1, "Assert should take exactly one argument");
+            if let Type::ConstExpr(expr) = &args[0] {
+                return expr;
+            }
+            panic!(
+                "Assert argument should be Type::ConstExpr, got: {:?}",
+                args[0]
+            );
+        }
+    }
+    panic!("no Assert constraint found in struct body: {body:?}");
+}
+
+#[test]
+fn test_struct_field_assert_lt() {
+    // Arrange & Act: 解析字段位置的 Assert(N < 100) 约束
+    with_type("{ _assert_n: Assert(N < 100), data: Int }", |t| {
+        // Assert: 参数应解析为 Lt 比较的 ConstExpr
+        let expr = extract_assert_arg(&t);
+        assert!(
+            matches!(expr, Expr::BinOp { op: BinOp::Lt, .. }),
+            "field constraint should parse as Lt comparison, got: {expr:?}"
+        );
+    });
+}
+
+#[test]
+fn test_struct_field_assert_le() {
+    // Arrange & Act: 解析字段位置的 Assert(N <= 100) 约束
+    with_type("{ _assert_n: Assert(N <= 100), data: Int }", |t| {
+        // Assert: 参数应解析为 Le 比较的 ConstExpr
+        let expr = extract_assert_arg(&t);
+        assert!(
+            matches!(expr, Expr::BinOp { op: BinOp::Le, .. }),
+            "field constraint should parse as Le comparison, got: {expr:?}"
+        );
+    });
+}
+
+#[test]
+fn test_struct_anon_assert_lt() {
+    // Arrange & Act: 解析匿名位置的 Assert(N < 100) 约束
+    with_type("{ data: Int, Assert(N < 100) }", |t| {
+        // Assert: 参数应解析为 Lt 比较的 ConstExpr
+        let expr = extract_assert_arg(&t);
+        assert!(
+            matches!(expr, Expr::BinOp { op: BinOp::Lt, .. }),
+            "anonymous constraint should parse as Lt comparison, got: {expr:?}"
+        );
+    });
+}
+
+#[test]
+fn test_struct_anon_assert_le() {
+    // Arrange & Act: 解析匿名位置的 Assert(N <= 100) 约束
+    with_type("{ data: Int, Assert(N <= 100) }", |t| {
+        // Assert: 参数应解析为 Le 比较的 ConstExpr
+        let expr = extract_assert_arg(&t);
+        assert!(
+            matches!(expr, Expr::BinOp { op: BinOp::Le, .. }),
+            "anonymous constraint should parse as Le comparison, got: {expr:?}"
+        );
     });
 }

@@ -248,9 +248,9 @@ pub enum StmtKind {
         type_name: Option<String>,
         /// Method type (for method binding)
         method_type: Option<Type>,
-        /// Generic type parameters
-        generic_params: Vec<GenericParam>,
-        /// Type annotation / return type
+        /// 签名第一组参数原样（RFC-010 `name: (params) -> Ret = body` 的 params 部分）
+        /// 泛型参数由 extract_generic_params 从此提取（Task 3 起不再单独存储）
+        signature_params: Vec<Param>,
         type_annotation: Option<Type>,
         /// Parameters (for functions and methods)
         params: Vec<Param>,
@@ -351,6 +351,21 @@ impl StructField {
     }
 }
 
+/// 类型体项 — 类型定义 `{}` 是有序代码块，每项按序求值
+///
+/// parser 只按语法区分，不认识任何类型族名字。
+#[derive(Debug, Clone)]
+pub enum TypeBodyItem {
+    /// `name: Type` 或 `name: Type = default` — 运行时数据字段
+    Field(StructField),
+    /// `name = function[pos]` 或 `name = function` 或匿名函数绑定 — 保留现有 TypeBodyBinding 语义
+    Binding(TypeBodyBinding),
+    /// 接口约束名 `InterfaceName`
+    Interface(String),
+    /// 匿名类型表达式 `Assert(N > 0)` / `SomeProofType(t)` — 结果未命名
+    Expr(Type),
+}
+
 /// 类型体内置绑定
 ///
 /// 在类型定义体内绑定方法到字段
@@ -418,10 +433,8 @@ pub enum Type {
     Bool,
     Void,
     Struct {
-        fields: Vec<StructField>,
-        bindings: Vec<TypeBodyBinding>,
-        /// RFC-010: 接口约束列表
-        interfaces: Vec<String>,
+        /// 有序类型体项（字段/绑定/接口/表达式按源码顺序）
+        body: Vec<TypeBodyItem>,
     },
     NamedStruct {
         name: String,
@@ -489,6 +502,59 @@ pub enum Type {
     },
     /// 编译期表达式（泛型参数位置的值表达式，如 Assert(N > 0) 中的 N > 0）
     ConstExpr(Box<Expr>),
+}
+
+impl Type {
+    /// 从 Type::Struct 的 body 中提取字段引用（顺序保留）
+    pub fn struct_fields(&self) -> Vec<&StructField> {
+        match self {
+            Type::Struct { body } => body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Field(f) = it {
+                        Some(f)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// 提取接口约束名引用
+    pub fn struct_interfaces(&self) -> Vec<&String> {
+        match self {
+            Type::Struct { body } => body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Interface(s) = it {
+                        Some(s)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// 提取绑定引用
+    pub fn struct_bindings(&self) -> Vec<&TypeBodyBinding> {
+        match self {
+            Type::Struct { body } => body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Binding(b) = it {
+                        Some(b)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
 }
 
 /// Block
@@ -593,4 +659,72 @@ pub fn classify_binding_semantic_kind(
     }
 
     BindingSemanticKind::Function
+}
+
+/// Const parameter primitive types
+pub const CONST_PARAM_TYPES: &[&str] = &[
+    "Int", "Bool", "Float", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F32", "F64",
+    "Char", "String",
+];
+
+/// 从签名第一组参数提取泛型参数：(T: Type, N: Int) → [T, N]
+///
+/// 判定规则：MetaType 或 Name("Type") → Type 参数；
+/// CONST_PARAM_TYPES 原始类型名 → Const 参数；
+/// 大写 Name → Type 参数（标注记入 constraints）；其余忽略。
+pub fn extract_generic_params(params: &[Param]) -> Vec<GenericParam> {
+    params
+        .iter()
+        .filter_map(|p| {
+            let ty = p.ty.as_ref()?;
+            match ty {
+                // (T: Type) — Type is parsed as MetaType, not Name("Type")
+                Type::MetaType { .. } => Some(GenericParam {
+                    name: p.name.clone(),
+                    kind: GenericParamKind::Type,
+                    constraints: Vec::new(),
+                }),
+                Type::Name { name, .. } if name == "Type" => Some(GenericParam {
+                    name: p.name.clone(),
+                    kind: GenericParamKind::Type,
+                    constraints: Vec::new(),
+                }),
+                Type::Name { name, .. } if CONST_PARAM_TYPES.contains(&name.as_str()) => {
+                    Some(GenericParam {
+                        name: p.name.clone(),
+                        kind: GenericParamKind::Const {
+                            const_type: Box::new(ty.clone()),
+                        },
+                        constraints: Vec::new(),
+                    })
+                }
+                Type::Name { .. } => {
+                    let first_char = p.name.chars().next().unwrap_or('a');
+                    if first_char.is_uppercase() {
+                        Some(GenericParam {
+                            name: p.name.clone(),
+                            kind: GenericParamKind::Type,
+                            constraints: vec![ty.clone()],
+                        })
+                    } else {
+                        None
+                    }
+                }
+                // (T: Clone + Add) — Type::Tuple stores multiple constraints
+                Type::Tuple(types) => {
+                    let first_char = p.name.chars().next().unwrap_or('a');
+                    if first_char.is_uppercase() {
+                        Some(GenericParam {
+                            name: p.name.clone(),
+                            kind: GenericParamKind::Type,
+                            constraints: types.clone(),
+                        })
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        })
+        .collect()
 }

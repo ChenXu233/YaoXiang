@@ -21,6 +21,7 @@ use super::TypeLevelError;
 use super::TypeLevelResult;
 use crate::frontend::core::typecheck::TypeEnvironment;
 use crate::frontend::core::typecheck::proof::budget::BudgetTracker;
+use super::dependent_types::DependentTypeEnv;
 
 /// 类型求值错误
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,9 +70,11 @@ pub struct Evaluator<'a> {
 
     /// 已访问类型（用于循环检测）
     visiting: HashSet<MonoType>,
-
     /// 求值配置
     config: EvalConfig,
+
+    /// 依赖类型环境（用于解析类型族）
+    dep_env: &'a DependentTypeEnv,
 }
 
 impl<'a> Evaluator<'a> {
@@ -79,12 +82,14 @@ impl<'a> Evaluator<'a> {
     pub fn new(
         env: &'a TypeEnvironment,
         budget: &'a BudgetTracker,
+        dep_env: &'a DependentTypeEnv,
     ) -> Self {
         Self {
             cache: HashMap::new(),
             dependencies: HashMap::new(),
             env,
             budget,
+            dep_env,
             visiting: HashSet::new(),
             config: EvalConfig {
                 max_depth: 100, // 设置合理的默认深度
@@ -99,12 +104,14 @@ impl<'a> Evaluator<'a> {
         env: &'a TypeEnvironment,
         budget: &'a BudgetTracker,
         config: EvalConfig,
+        dep_env: &'a DependentTypeEnv,
     ) -> Self {
         Self {
             cache: HashMap::new(),
             dependencies: HashMap::new(),
             env,
             budget,
+            dep_env,
             visiting: HashSet::new(),
             config,
         }
@@ -351,7 +358,7 @@ impl<'a> Evaluator<'a> {
             "Float" => Some(MonoType::Float(64)),
             "Char" => Some(MonoType::Char),
             "String" => Some(MonoType::String),
-            "Never" => Some(MonoType::TypeRef("Never".to_string())),
+            "Never" => Some(MonoType::Never),
             "True" => Some(MonoType::TypeRef("True".to_string())),
             "False" => Some(MonoType::TypeRef("False".to_string())),
             s if s.starts_with("If(") => Some(MonoType::TypeRef(s.to_string())),
@@ -872,6 +879,11 @@ impl<'a> Evaluator<'a> {
         name: &str,
         depth: usize,
     ) -> Result<MonoType, EvalError> {
+        // 先尝试解析为类型族调用
+        if let Some(result) = self.eval_type_family_call(name, depth)? {
+            return Ok(result);
+        }
+
         // 检查类型环境中的类型定义
         if let Some(poly) = self.env.types.get(name) {
             return self.eval_with_depth(&poly.body, depth + 1);
@@ -879,6 +891,103 @@ impl<'a> Evaluator<'a> {
 
         // 类型引用本身
         Ok(MonoType::TypeRef(name.to_string()))
+    }
+
+    /// 尝试求值类型族调用
+    ///
+    /// 检查 name 是否为类型族调用（如 "factorial(Zero)"），
+    /// 如果是且类型族已注册，则进行实例化归约。
+    fn eval_type_family_call(
+        &mut self,
+        name: &str,
+        depth: usize,
+    ) -> Result<Option<MonoType>, EvalError> {
+        // 解析函数名和参数
+        let (family_name, arg_strs) = match Self::parse_type_family_call(name) {
+            Some(pair) => pair,
+            None => return Ok(None),
+        };
+
+        // 查找类型族
+        let family = match self.dep_env.get_type_family(&family_name) {
+            Some(f) => f,
+            None => return Ok(None),
+        };
+
+        // 递归归约参数
+        let mut reduced_args = Vec::new();
+        for arg_str in &arg_strs {
+            let parsed = match self.parse_type(arg_str) {
+                Some(t) => t,
+                None => return Ok(None),
+            };
+            let reduced = self.eval_with_depth(&parsed, depth + 1)?;
+            reduced_args.push(reduced);
+        }
+
+        // 实例化类型族
+        match family.instantiate(&reduced_args) {
+            Some(def) => {
+                let result = def.into_type();
+                // 递归归约结果（可能产生新的类型族调用）
+                self.eval_with_depth(&result, depth + 1).map(Some)
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// 解析类型族调用字符串
+    ///
+    /// 将 "factorial(Zero)" 解析为 ("factorial", ["Zero"])
+    fn parse_type_family_call(name: &str) -> Option<(String, Vec<String>)> {
+        let args = Self::parse_generic_args(name)?;
+        if args.is_empty() {
+            return None;
+        }
+        // 函数名是 name 中括号前的部分
+        let paren_pos = name.find('(')?;
+        let family_name = name[..paren_pos].to_string();
+        Some((family_name, args))
+    }
+
+    /// 求值 IsTrue/Assert 类型族
+    ///
+    /// IsTrue(true) => Void
+    /// IsTrue(false) => Never
+    /// IsTrue(x) 当 x 不可归约时保持不变
+    /// Assert(x) 委托给 IsTrue(x)
+    #[allow(dead_code)]
+    fn eval_istrue(
+        &mut self,
+        ty: &MonoType,
+        _depth: usize,
+    ) -> Result<MonoType, EvalError> {
+        let name = match ty {
+            MonoType::TypeRef(n) => n,
+            _ => return Ok(ty.clone()),
+        };
+        let args = Self::parse_generic_args(name);
+        let arg = match args {
+            Some(a) if a.len() == 1 => a.into_iter().next().unwrap(),
+            _ => return Ok(ty.clone()),
+        };
+        let arg_ty = match self.parse_type(&arg) {
+            Some(t) => t,
+            None => return Ok(ty.clone()),
+        };
+        match &arg_ty {
+            MonoType::TypeRef(n) if n == "true" => Ok(MonoType::Void),
+            MonoType::TypeRef(n) if n == "false" => Ok(MonoType::Never),
+            _ => {
+                // 尝试归约参数——可能是可计算的表达式
+                let reduced_arg = self.eval(&arg_ty)?;
+                match &reduced_arg {
+                    MonoType::TypeRef(n) if n == "true" => Ok(MonoType::Void),
+                    MonoType::TypeRef(n) if n == "false" => Ok(MonoType::Never),
+                    _ => Ok(ty.clone()),
+                }
+            }
+        }
     }
 
     // ============ 公共 API ============

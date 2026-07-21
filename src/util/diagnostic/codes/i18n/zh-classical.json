@@ -671,9 +671,9 @@
     "help": "值已移动，若需多次使用，当于移动前先克隆之。"
   },
   "E2029": {
-    "title": "spawn ref 循环",
-    "template": "跨任务循环引用: {cycle}",
-    "help": "spawn 块内之 ref 变量形成引用循环。以 Weak 打破循环，或于 unsafe 块中绕过检测。"
+    "title": "spawn ref 之循环",
+    "template": "跨任务循环引用:{cycle}",
+    "help": "spawn 块内之 ref 变量，构成循环引用。可用 Weak 破其循环，亦可于 unsafe 块中规避检测。"
   },
   "E3001": {
     "title": "未实行之表达式（IR）",
@@ -894,9 +894,20 @@
   "_meta": {
     "lastUpdated": "2026-06-13T07:57:03.576Z"
   },
-  "E2029": {
-    "title": "spawn ref 之循环",
-    "template": "跨任务循环引用:{cycle}",
-    "help": "spawn 块内之 ref 变量，构成循环引用。可用 Weak 破其循环，亦可于 unsafe 块中规避检测。"
+  "E1062": {
+    "title": "const 泛型约束不立",
+    "message": "const 泛型参数之值约束未惬",
+    "template": "const 泛型约束不立: `{constraint}` 未立 ({var} = {value})",
+    "help": "改 const 参数之值使惬于约束",
+    "example": "BadArray(Int, 0)  // Assert(0 > 0) 不立",
+    "error_output": "error[E1062]: const 泛型约束不立\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, 0)\n  | ^ const 约束 `N > 0` 未立 (N = 0)"
+  },
+  "W1063": {
+    "title": "const 泛型约束不可求值",
+    "message": "const 泛型参数之值约束不可于编译期求值",
+    "template": "const 泛型约束不可求值: `{constraint}` ({var} = {value})",
+    "help": "须使 const 参数为编译期常量",
+    "example": "BadArray(Int, n)  // n 非编译期常量",
+    "error_output": "warning[W1063]: const 泛型约束不可求值\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ 不可于编译期求值约束 `N > 0`"
   }
 }

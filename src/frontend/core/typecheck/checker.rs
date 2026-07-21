@@ -4,14 +4,16 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::frontend::core::parser::ast::Module;
+use crate::frontend::core::parser::ast::{extract_generic_params, Module};
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable};
-use crate::frontend::core::types::eval::const_eval::{ConstFunction, ConstExpr as ConstEvalExpr};
-use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
+use crate::frontend::core::types::eval::const_eval::ConstFunction;
+use crate::frontend::core::types::const_data::{ConstExpr, ConstValue, BinOp};
 use crate::frontend::core::typecheck::predicate_resolver::PredicateResolver;
 use crate::frontend::core::typecheck::proof::context::ProofContext;
 use crate::frontend::core::typecheck::proof::verdict::ProofResult;
 use crate::frontend::core::typecheck::layers::predicate::check_predicate;
+use crate::frontend::core::types::eval::dependent_types::DependentTypeEnv;
+use crate::std::StdModule;
 
 use super::inference;
 use super::semantic_db;
@@ -33,6 +35,8 @@ pub struct TypeChecker {
     body_checker: Option<inference::StatementChecker>,
     /// 语义信息收集（typecheck 阶段同时产出）
     semantic_db: semantic_db::SemanticDB,
+    /// 依赖类型环境（类型族注册与查找）
+    pub dependent_type_env: DependentTypeEnv,
 }
 
 impl TypeChecker {
@@ -46,38 +50,41 @@ impl TypeChecker {
         // 注册预定义的 const 函数
         Self::register_predefined_const_functions(&mut env);
 
+        // 初始化依赖类型环境并通过 std::assert 注册类型族
+        let mut dependent_type_env = DependentTypeEnv::new();
+        crate::std::assert::AssertModule.register_type_families(&mut dependent_type_env);
+
         Self {
             env,
             body_checker: None,
             semantic_db: semantic_db::SemanticDB::new(),
+            dependent_type_env,
         }
     }
 
     /// 注册预定义的 const 函数
     /// 这些函数用于值依赖类型的编译期求值
     fn register_predefined_const_functions(env: &mut TypeEnvironment) {
-        use crate::frontend::core::types::eval::const_eval::ConstBinOp;
-
         // 注册 factorial 函数
         let factorial = ConstFunction::new(
             "factorial".to_string(),
             vec!["n".to_string()],
-            ConstEvalExpr::If {
-                condition: Box::new(ConstEvalExpr::BinOp {
-                    op: ConstBinOp::Lte,
-                    lhs: Box::new(ConstEvalExpr::Var("n".to_string())),
-                    rhs: Box::new(ConstEvalExpr::Int(1)),
+            ConstExpr::If {
+                condition: Box::new(ConstExpr::BinOp {
+                    op: BinOp::Le,
+                    left: Box::new(ConstExpr::NamedVar("n".to_string())),
+                    right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
                 }),
-                true_branch: Box::new(ConstEvalExpr::Int(1)),
-                false_branch: Box::new(ConstEvalExpr::BinOp {
-                    op: ConstBinOp::Mul,
-                    lhs: Box::new(ConstEvalExpr::Var("n".to_string())),
-                    rhs: Box::new(ConstEvalExpr::Call {
-                        name: "factorial".to_string(),
-                        args: vec![ConstEvalExpr::BinOp {
-                            op: ConstBinOp::Sub,
-                            lhs: Box::new(ConstEvalExpr::Var("n".to_string())),
-                            rhs: Box::new(ConstEvalExpr::Int(1)),
+                then_branch: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
+                else_branch: Box::new(ConstExpr::BinOp {
+                    op: BinOp::Mul,
+                    left: Box::new(ConstExpr::NamedVar("n".to_string())),
+                    right: Box::new(ConstExpr::Call {
+                        func: "factorial".to_string(),
+                        args: vec![ConstExpr::BinOp {
+                            op: BinOp::Sub,
+                            left: Box::new(ConstExpr::NamedVar("n".to_string())),
+                            right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
                         }],
                     }),
                 }),
@@ -89,29 +96,29 @@ impl TypeChecker {
         let fibonacci = ConstFunction::new(
             "fibonacci".to_string(),
             vec!["n".to_string()],
-            ConstEvalExpr::If {
-                condition: Box::new(ConstEvalExpr::BinOp {
-                    op: ConstBinOp::Lte,
-                    lhs: Box::new(ConstEvalExpr::Var("n".to_string())),
-                    rhs: Box::new(ConstEvalExpr::Int(1)),
+            ConstExpr::If {
+                condition: Box::new(ConstExpr::BinOp {
+                    op: BinOp::Le,
+                    left: Box::new(ConstExpr::NamedVar("n".to_string())),
+                    right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
                 }),
-                true_branch: Box::new(ConstEvalExpr::Var("n".to_string())),
-                false_branch: Box::new(ConstEvalExpr::BinOp {
-                    op: ConstBinOp::Add,
-                    lhs: Box::new(ConstEvalExpr::Call {
-                        name: "fibonacci".to_string(),
-                        args: vec![ConstEvalExpr::BinOp {
-                            op: ConstBinOp::Sub,
-                            lhs: Box::new(ConstEvalExpr::Var("n".to_string())),
-                            rhs: Box::new(ConstEvalExpr::Int(1)),
+                then_branch: Box::new(ConstExpr::NamedVar("n".to_string())),
+                else_branch: Box::new(ConstExpr::BinOp {
+                    op: BinOp::Add,
+                    left: Box::new(ConstExpr::Call {
+                        func: "fibonacci".to_string(),
+                        args: vec![ConstExpr::BinOp {
+                            op: BinOp::Sub,
+                            left: Box::new(ConstExpr::NamedVar("n".to_string())),
+                            right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
                         }],
                     }),
-                    rhs: Box::new(ConstEvalExpr::Call {
-                        name: "fibonacci".to_string(),
-                        args: vec![ConstEvalExpr::BinOp {
-                            op: ConstBinOp::Sub,
-                            lhs: Box::new(ConstEvalExpr::Var("n".to_string())),
-                            rhs: Box::new(ConstEvalExpr::Int(2)),
+                    right: Box::new(ConstExpr::Call {
+                        func: "fibonacci".to_string(),
+                        args: vec![ConstExpr::BinOp {
+                            op: BinOp::Sub,
+                            left: Box::new(ConstExpr::NamedVar("n".to_string())),
+                            right: Box::new(ConstExpr::Lit(ConstValue::Int(2))),
                         }],
                     }),
                 }),
@@ -199,12 +206,13 @@ impl TypeChecker {
                 type_name,
                 method_type: _,
                 type_annotation,
-                generic_params,
+                signature_params,
                 params,
                 body,
                 ..
             } = &stmt.kind
             {
+                let generic_params = extract_generic_params(signature_params);
                 if crate::frontend::core::parser::ast::classify_binding_semantic_kind(
                     type_name.as_ref(),
                     type_annotation.as_ref(),
@@ -237,7 +245,11 @@ impl TypeChecker {
         }
 
         // 初始化函数体检查器
-        let mut body_checker = inference::StatementChecker::new(self.env.solver());
+        let mut body_checker = inference::StatementChecker::new(
+            self.env.solver(),
+            None,
+            self.dependent_type_env.clone(),
+        );
         // 设置 native 函数签名表
         body_checker.set_native_signatures(self.env.native_signatures.clone());
         // 设置模块注册表，支持函数体/块作用域 use
@@ -389,7 +401,11 @@ impl TypeChecker {
     /// 获取 body_checker 的可变引用
     fn body_checker_mut(&mut self) -> &mut inference::StatementChecker {
         if self.body_checker.is_none() {
-            let mut body_checker = inference::StatementChecker::new(self.env.solver());
+            let mut body_checker = inference::StatementChecker::new(
+                self.env.solver(),
+                None,
+                self.dependent_type_env.clone(),
+            );
             // 设置 native 函数签名表
             body_checker.set_native_signatures(self.env.native_signatures.clone());
             // 设置模块注册表，支持函数体/块作用域 use
@@ -499,11 +515,12 @@ impl TypeChecker {
                 type_name,
                 method_type,
                 type_annotation,
-                generic_params,
+                signature_params,
                 params,
                 is_pub,
                 ..
             } => {
+                let generic_params = extract_generic_params(signature_params);
                 // 处理统一函数语法
                 // 方法绑定使用 method_type，普通函数使用 type_annotation
                 let (param_types, return_type) = if let Some(meth_ty) = method_type {
@@ -903,14 +920,7 @@ impl TypeChecker {
                     );
                     return;
                 }
-
-                // E1090: Type: Type = Type 彩蛋（Note 级别）
-                self.add_error(
-                    ErrorCodeDefinition::type_self_reference_easter_egg()
-                        .at(span)
-                        .severity(crate::util::diagnostic::Severity::Info)
-                        .build(),
-                );
+                // 无泛型参数 → 静默跳过（#161 宇宙分层决策）
                 return;
             }
         }
@@ -967,10 +977,19 @@ impl TypeChecker {
         definition: &crate::frontend::core::parser::ast::Type,
     ) {
         // 提取字段列表
-        let fields = match definition {
-            crate::frontend::core::parser::ast::Type::NamedStruct { fields, .. } => fields,
-            crate::frontend::core::parser::ast::Type::Struct { fields, .. } => fields,
-            _ => return, // 非 Record 类型不自动派生
+        let fields: Vec<crate::frontend::core::parser::ast::StructField> = match definition {
+            crate::frontend::core::parser::ast::Type::NamedStruct { fields, .. } => fields.clone(),
+            crate::frontend::core::parser::ast::Type::Struct { body } => body
+                .iter()
+                .filter_map(|it| {
+                    if let crate::frontend::core::parser::ast::TypeBodyItem::Field(f) = it {
+                        Some(f.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            _ => return,
         };
 
         // 获取 trait 表的引用（用于检查）
@@ -981,7 +1000,7 @@ impl TypeChecker {
 
         for trait_name in TraitTable::BUILTIN_DERIVES {
             // 检查是否可以自动派生
-            let can_derive = trait_table.can_auto_derive(trait_name, fields);
+            let can_derive = trait_table.can_auto_derive(trait_name, &fields);
 
             if can_derive {
                 // 检查是否已有显式实现

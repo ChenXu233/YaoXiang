@@ -1,6 +1,6 @@
 # 標準ライブラリ仕様
 
-本ファイルは YaoXiang プログラミング言語の標準ライブラリ仕様を定義する。コアライブラリ、IO ライブラリ、数学ライブラリを含む。
+本文書はYaoXiangプログラミング言語の標準ライブラリ仕様を定義する。コアライブラリ、IOライブラリ、数学ライブラリを含む。
 
 ---
 
@@ -17,7 +17,7 @@
 | `List(T)` | `std.collection` | 動的配列 |
 | `Map(K, V)` | `std.collection` | ハッシュマップ |
 | `String` | `std.string` | 文字列型 |
-| `Array(T, N)` | `std.array` | 固定長配列 |
+| `Array(T, N)` | `std.array` | 固定サイズ配列 |
 
 ### 1.2 Option 型
 
@@ -32,20 +32,20 @@ Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 | `Option.some` | `Option.some(value)` | 値あり |
 | `Option.none` | `Option.none()` | 値なし |
 
-**常用メソッド**：
+**よく使われるメソッド**：
 
 ```yaoxiang
-// 値の有無を確認
+// 値を持つかどうかをチェック
 is_some: (self: Option(T)) -> Bool
 is_none: (self: Option(T)) -> Bool
 
-// 値を取得（panic の可能性あり）
+// 値を取得（panicの可能性あり）
 unwrap: (self: Option(T)) -> T
 
 // 値またはデフォルト値を取得
 unwrap_or: (self: Option(T), default: T) -> T
 
-// 値を写像
+// 値をマップ
 map: (R: Type) -> ((self: Option(T), f: (T) -> R) -> Option(R))
 ```
 
@@ -62,23 +62,23 @@ Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Resu
 | `Result.ok` | `Result.ok(value)` | 成功値 |
 | `Result.err` | `Result.err(error)` | エラー値 |
 
-**常用メソッド**：
+**よく使われるメソッド**：
 
 ```yaoxiang
-// 成功かどうかを確認
+// 成功かどうかをチェック
 is_ok: (self: Result(T, E)) -> Bool
 is_err: (self: Result(T, E)) -> Bool
 
-// 値を取得（panic の可能性あり）
+// 値を取得（panicの可能性あり）
 unwrap: (self: Result(T, E)) -> T
 
 // 値またはデフォルト値を取得
 unwrap_or: (self: Result(T, E), default: T) -> T
 
-// 成功値を写像
+// 成功値をマップ
 map: (R: Type) -> ((self: Result(T, E), f: (T) -> R) -> Result(R, E))
 
-// エラー値を写像
+// エラー値をマップ
 map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ```
 
@@ -88,10 +88,10 @@ map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ErrorPropagate ::= Expr '?'
 ```
 
-`?` 演算子は Result 型のエラーを自動的に伝播する：
+`?` 演算子はResult型のエラーを自動的に伝播する：
 
 ```
-// 成功時は値を返し、失敗時は err を上位に返す
+// 成功時は値を返し、失敗時は上にerrを返す
 data = fetch_data()?
 
 // 以下と等価
@@ -104,22 +104,22 @@ data = match fetch_data() {
 
 ### 1.5 アサーション（std.assert）
 
-`std.assert` モジュールは統一されたアサーション機構を提供する——ランタイム `assert` とコンパイル時の精化型 `Assert` は同一プリミティブの二つの側面である。
+`std.assert` モジュールは統一されたアサーション機構を提供する——ランタイム `assert` とコンパイル時の精錬型 `Assert` は同じプリミティブの二つの側面である。
 
 ```yaoxiang
-# IsTrue：値から型への橋渡し関数
+// IsTrue：値から型への橋渡し関数
 IsTrue: (b: Bool) -> Type = match b {
-    true => Void,      # ⊤，プログラムは継続
-    false => Never,    # ⊥，発散
+    true => Void,      // ⊤、プログラム続行
+    false => Never,    // ⊥、発散
 }
 
-# Assert：コンパイル時の精化型プリミティブ
+// Assert：コンパイル時精錬型プリミティブ
 Assert: (cond: Bool) -> Type = IsTrue(cond)
 
-# assert：ランタイムアサーション（Assert の値導入子）
+// assert：ランタイムアサーション（Assert の値導入子）
 assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))
 
-# Result オーバーロード
+// Result オーバーロード
 assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 ```
 
@@ -128,13 +128,13 @@ assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 | 条件 | 動作 |
 |------|------|
 | cond のすべての自由変数がコンパイル時に既知 | コンパイラが評価、true → 消去、false → コンパイルエラー |
-| ランタイム自由変数が存在する | ランタイム check を挿入し、フロー敏感的仮定集合 Γ を注入 |
+| ランタイム自由変数が存在 | ランタイムcheckを挿入し、フロー依存仮説集合 Γ を注入 |
 
-`assert(false, "msg")` は raise と等価である——個別の throw/raise キーワードは不要である。
+`assert(false, "msg")` は raise と等価である——独立した throw/raise キーワードは不要。
 
 ---
 
-## 第二章：IO ライブラリ
+## 第二章：IOライブラリ
 
 ### 2.1 標準入出力
 
@@ -200,7 +200,7 @@ min: (a: Int, b: Int) -> Int
 max: (a: Float, b: Float) -> Float
 min: (a: Float, b: Float) -> Float
 
-// べき乗
+// べき乗演算
 pow: (base: Float, exp: Float) -> Float
 sqrt: (x: Float) -> Float
 
@@ -256,7 +256,7 @@ contains: (s: String, pattern: String) -> Bool
 // 文字列置換
 replace: (s: String, old: String, new: String) -> String
 
-// 文字列トリミング
+// 文字列トリム
 trim: (s: String) -> String
 trim_left: (s: String) -> String
 trim_right: (s: String) -> String
@@ -270,7 +270,7 @@ to_string: (x: Int) -> String
 to_string: (x: Float) -> String
 to_string: (x: Bool) -> String
 
-// 解析
+// パース
 parse_int: (s: String) -> Result(Int, Error)
 parse_float: (s: String) -> Result(Float, Error)
 ```
@@ -350,7 +350,7 @@ Range: Type = {
     Iterator(Int)
 }
 
-// 使用
+// 使用例
 for i in 0..10 {
     print(i)
 }
@@ -368,13 +368,14 @@ for i in 0..10 step 2 {
 
 | モジュール | 説明 |
 |------|------|
-| `std.assert` | アサーション機構——ランタイム assert + コンパイル時 Assert 精化型 |
+| `std.assert` | アサーション機構——ランタイム assert + コンパイル時 Assert 精錬型 |
 | `std.option` | Option 型 |
 | `std.result` | Result 型 |
 | `std.collection` | List、Map などのコレクション型 |
 | `std.string` | 文字列操作 |
 | `std.array` | 配列操作 |
 | `std.iterator` | イテレータ |
+
 ### A.2 IO モジュール
 
 | モジュール | 説明 |
@@ -396,5 +397,5 @@ for i in 0..10 step 2 {
 | モジュール | 説明 |
 |------|------|
 | `std.random` | 乱数生成 |
-| `std.time` | 日時 |
+| `std.time` | 時刻と日付 |
 | `std.regex` | 正規表現 |

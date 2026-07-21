@@ -22,83 +22,7 @@ use crate::util::span::Span;
 
 // Import from sibling modules
 use super::functions::{parse_fn_stmt_with_name, parse_fn_stmt_with_name_simple};
-use super::types::{
-    parse_type_annotation, parse_fn_type_with_names, parse_binding_positions, CONST_PARAM_TYPES,
-};
-/// Extract parameter name from a Type for generic_params
-/// Returns None if the type is complex (e.g., MetaType) and doesn't have a simple name
-fn extract_type_name(ty: &Type) -> Option<String> {
-    match ty {
-        Type::Name { name, .. } => Some(name.clone()),
-        // For MetaType like Type[T], extract T's name
-        Type::MetaType { args, .. } => {
-            if args.len() == 1 {
-                extract_type_name(&args[0])
-            } else {
-                None
-            }
-        }
-        _ => None,
-    }
-}
-
-/// Extract generic params from parsed function params: (T: Type, N: Int) -> ...
-fn extract_generic_params(params: &[Param]) -> Vec<GenericParam> {
-    params
-        .iter()
-        .filter_map(|p| {
-            let ty = p.ty.as_ref()?;
-            match ty {
-                // (T: Type) — Type is parsed as MetaType, not Name("Type")
-                Type::MetaType { .. } => Some(GenericParam {
-                    name: p.name.clone(),
-                    kind: GenericParamKind::Type,
-                    constraints: Vec::new(),
-                }),
-                Type::Name { name, .. } if name == "Type" => Some(GenericParam {
-                    name: p.name.clone(),
-                    kind: GenericParamKind::Type,
-                    constraints: Vec::new(),
-                }),
-                Type::Name { name, .. } if CONST_PARAM_TYPES.contains(&name.as_str()) => {
-                    Some(GenericParam {
-                        name: p.name.clone(),
-                        kind: GenericParamKind::Const {
-                            const_type: Box::new(ty.clone()),
-                        },
-                        constraints: Vec::new(),
-                    })
-                }
-                Type::Name { .. } => {
-                    let first_char = p.name.chars().next().unwrap_or('a');
-                    if first_char.is_uppercase() {
-                        Some(GenericParam {
-                            name: p.name.clone(),
-                            kind: GenericParamKind::Type,
-                            constraints: vec![ty.clone()],
-                        })
-                    } else {
-                        None
-                    }
-                }
-                // (T: Clone + Add) — Type::Tuple stores multiple constraints
-                Type::Tuple(types) => {
-                    let first_char = p.name.chars().next().unwrap_or('a');
-                    if first_char.is_uppercase() {
-                        Some(GenericParam {
-                            name: p.name.clone(),
-                            kind: GenericParamKind::Type,
-                            constraints: types.clone(),
-                        })
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            }
-        })
-        .collect()
-}
+use super::types::{parse_type_annotation, parse_fn_type_with_names, parse_binding_positions};
 
 #[allow(dead_code)]
 fn fn_returns_meta_type(type_annotation: Option<&Type>) -> bool {
@@ -109,26 +33,6 @@ fn fn_returns_meta_type(type_annotation: Option<&Type>) -> bool {
             ..
         }) if matches!(return_type.as_ref(), Type::MetaType { .. })
     )
-}
-
-#[allow(dead_code)]
-fn generic_params_from_constructor_params(params: &[Param]) -> Vec<GenericParam> {
-    params
-        .iter()
-        .map(|p| {
-            let kind = match p.ty.as_ref() {
-                Some(Type::MetaType { .. }) | None => GenericParamKind::Type,
-                Some(ty) => GenericParamKind::Const {
-                    const_type: Box::new(ty.clone()),
-                },
-            };
-            GenericParam {
-                name: p.name.clone(),
-                kind,
-                constraints: Vec::new(),
-            }
-        })
-        .collect()
 }
 
 fn is_old_function_syntax(state: &mut ParserState<'_>) -> bool {
@@ -439,7 +343,7 @@ pub fn parse_method_bind_stmt(
             name: method_name,
             type_name: Some(type_name),
             method_type: Some(method_type),
-            generic_params: Vec::new(),
+            signature_params: Vec::new(),
             type_annotation: None,
 
             params,
@@ -544,7 +448,7 @@ fn parse_var_stmt_with_pub(
     // RFC-010 新语法: name: (a: Int, b: Int) -> Ret = body (参数名在签名中)
     // 特征: 冒号后面跟着函数类型 (param: Type, ...) -> Ret
     // 包括空参数 () 也属于 RFC-010 语法
-    let (type_annotation, generic_params, fn_params) = if state.at(&TokenKind::Colon) {
+    let (type_annotation, fn_params) = if state.at(&TokenKind::Colon) {
         state.bump(); // consume ':'
 
         // RFC-010: name: type = value. Generic params (T: Type) extracted from parsed fn type.
@@ -619,9 +523,7 @@ fn parse_var_stmt_with_pub(
                     return_type: return_type.clone(),
                 };
 
-                // Extract generic params from (T: Type) etc. in function params
-                let generic = extract_generic_params(&fn_params_parsed);
-                (Some(type_annotation), generic, Some(fn_params_parsed))
+                (Some(type_annotation), Some(fn_params_parsed))
             } else {
                 // Check if this looks like old function syntax: (Type, Type) -> Ret
                 // If so, reject it with a helpful error message
@@ -649,14 +551,14 @@ fn parse_var_stmt_with_pub(
 
                 // Not a function type, parse as normal type annotation
                 let type_ann = parse_type_annotation(state)?;
-                (Some(type_ann), Vec::new(), None)
+                (Some(type_ann), None)
             }
         } else {
             let type_ann = parse_type_annotation(state)?;
-            (Some(type_ann), Vec::new(), None)
+            (Some(type_ann), None)
         }
     } else {
-        (None, Vec::new(), None)
+        (None, None)
     };
 
     // Check for invalid syntax after type annotation.
@@ -703,12 +605,6 @@ fn parse_var_stmt_with_pub(
         if let Some(Type::Fn { return_type, .. }) = &type_annotation {
             if matches!(return_type.as_ref(), Type::MetaType { .. }) {
                 // This is a type constructor with generic params
-                let generic_params_for_type: Vec<GenericParam> = if let Some(ref params) = fn_params
-                {
-                    extract_generic_params(params)
-                } else {
-                    Vec::new()
-                };
 
                 let definition = parse_type_definition(state)?;
                 state.skip(&TokenKind::Semicolon);
@@ -717,7 +613,7 @@ fn parse_var_stmt_with_pub(
                         name,
                         type_name: None,
                         method_type: None,
-                        generic_params: generic_params_for_type,
+                        signature_params: fn_params.clone().unwrap_or_default(),
                         type_annotation: Some(definition),
 
                         params: Vec::new(),
@@ -786,27 +682,32 @@ fn parse_var_stmt_with_pub(
                         }
                     }
 
-                    // 合并类型信息
-                    let mut merged = Vec::new();
-                    for (i, extracted) in extracted_params.iter().enumerate() {
-                        if let Some(lambda_p) = lambda_params.get(i) {
-                            merged.push(Param {
-                                name: lambda_p.name.clone(),
-                                ty: extracted.ty.clone(),
-                                is_mut: lambda_p.is_mut,
-                                span: lambda_p.span,
-                            });
-                        } else {
-                            merged.push(extracted.clone());
-                        }
-                    }
+                    // 值参数对齐：复用上方 RFC-007 校验块的 value_params（首字母小写规则），
+                    // 与校验同源——泛型参数（含 Const 泛型 N: Int）均为大写名，天然剔除。
+                    // 全泛型签名时（值参数在内层返回类型，如 map: (T: Type) -> ((x: T) -> R)）
+                    // value_params 为空，params 直接取 lambda 参数（标注 None，HM 推断）；
+                    // 否则 RFC-007 校验已保证 value_params 与 lambda_params 等长。
+                    let merged: Vec<Param> = if value_params.is_empty() {
+                        lambda_params.to_vec()
+                    } else {
+                        value_params
+                            .iter()
+                            .zip(lambda_params.iter())
+                            .map(|(sig, lam)| Param {
+                                name: lam.name.clone(),
+                                ty: sig.ty.clone(),
+                                is_mut: lam.is_mut,
+                                span: lam.span,
+                            })
+                            .collect()
+                    };
                     state.skip(&TokenKind::Semicolon);
                     return Some(Stmt {
                         kind: StmtKind::Binding {
                             name,
                             type_name: None,
                             method_type: None,
-                            generic_params,
+                            signature_params: extracted_params.clone(),
                             type_annotation: type_annotation.clone(),
                             params: merged,
                             body: body.stmts.clone(),
@@ -830,14 +731,24 @@ fn parse_var_stmt_with_pub(
                         }]
                     };
 
+                    // 值参数 = 首字母小写名（泛型参数含 Const 泛型均为大写名，
+                    // 与上方 lambda 分支的 RFC-007 校验过滤同源）。
+                    let value_params: Vec<Param> = extracted_params
+                        .iter()
+                        .filter(|p| {
+                            let first_char = p.name.chars().next().unwrap_or('a');
+                            first_char.is_lowercase()
+                        })
+                        .cloned()
+                        .collect();
                     return Some(Stmt {
                         kind: StmtKind::Binding {
                             name,
                             type_name: None,
                             method_type: None,
-                            generic_params,
+                            signature_params: extracted_params.clone(),
+                            params: value_params,
                             type_annotation: type_annotation.clone(),
-                            params: extracted_params.clone(),
                             body,
                             is_pub: final_is_pub,
                         },
@@ -855,10 +766,7 @@ fn parse_var_stmt_with_pub(
 
         // RFC-010: Check if type annotation is MetaType (`Type` or `Type[T]`)
         // If so, this is a type definition: `Name: Type = { ... }` or `Name: Type[T] = { ... }`
-        if let Some(Type::MetaType {
-            args: meta_args, ..
-        }) = &type_annotation
-        {
+        if let Some(Type::MetaType { .. }) = &type_annotation {
             // RFC-010 Easter Egg: Type: Type = Type
             // 检测 `Type: Type = Type` 彩蛋（用户尝试定义 Type 自身）
             if name == "Type" {
@@ -871,21 +779,12 @@ fn parse_var_stmt_with_pub(
                         // 返回一个特殊的 TypeDef 表示彩蛋
                         // 编译器后续阶段会检测并输出禅意消息
                         // 保留 meta_args 以便类型检查器区分 E1090 和 E1091
-                        let generic_params: Vec<GenericParam> = meta_args
-                            .iter()
-                            .filter_map(extract_type_name)
-                            .map(|name| GenericParam {
-                                name,
-                                kind: GenericParamKind::Type,
-                                constraints: Vec::new(),
-                            })
-                            .collect();
                         return Some(Stmt {
                             kind: StmtKind::Binding {
                                 name: "Type".to_string(),
                                 type_name: None,
                                 method_type: None,
-                                generic_params,
+                                signature_params: Vec::new(),
                                 type_annotation: Some(Type::MetaType {
                                     name_span: Span::dummy(),
                                     args: Vec::new(),
@@ -902,17 +801,6 @@ fn parse_var_stmt_with_pub(
                 state.restore_position(saved_easter);
             }
 
-            // Extract generic parameter names from meta_args (Vec<Type>) for StmtKind::TypeDef
-            let generic_params_for_type: Vec<GenericParam> = meta_args
-                .iter()
-                .filter_map(extract_type_name)
-                .map(|name| GenericParam {
-                    name,
-                    kind: GenericParamKind::Type,
-                    constraints: Vec::new(),
-                })
-                .collect();
-
             let definition = parse_type_definition(state)?;
             state.skip(&TokenKind::Semicolon);
             return Some(Stmt {
@@ -920,7 +808,7 @@ fn parse_var_stmt_with_pub(
                     name,
                     type_name: None,
                     method_type: None,
-                    generic_params: generic_params_for_type,
+                    signature_params: Vec::new(),
                     type_annotation: Some(definition),
 
                     params: Vec::new(),
@@ -954,7 +842,7 @@ fn parse_var_stmt_with_pub(
                         name,
                         type_name: None,
                         method_type: None,
-                        generic_params: Vec::new(),
+                        signature_params: Vec::new(),
                         // 保留变量的显式类型注解，供后续类型检查做 Void/Int 等一致性校验。
                         type_annotation: type_annotation.clone(),
 
@@ -1119,7 +1007,7 @@ pub fn parse_identifier_stmt(
                         name,
                         type_name: None,
                         method_type: None,
-                        generic_params: Vec::new(),
+                        signature_params: Vec::new(),
                         type_annotation: None, // Will be inferred
 
                         params: Vec::new(),

@@ -551,22 +551,23 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             | AstType::Enum(_) => ty.clone(),
 
             // 结构体：递归替换字段类型
-            AstType::Struct {
-                fields,
-                bindings,
-                interfaces,
-            } => AstType::Struct {
-                fields: fields
+            AstType::Struct { body } => AstType::Struct {
+                body: body
                     .iter()
-                    .map(|f| crate::frontend::core::parser::ast::StructField {
-                        name: f.name.clone(),
-                        is_mut: f.is_mut,
-                        ty: self.substitute_type_ast(&f.ty, type_map),
-                        default: f.default.clone(),
+                    .map(|it| match it {
+                        crate::frontend::core::parser::ast::TypeBodyItem::Field(f) => {
+                            crate::frontend::core::parser::ast::TypeBodyItem::Field(
+                                crate::frontend::core::parser::ast::StructField {
+                                    name: f.name.clone(),
+                                    is_mut: f.is_mut,
+                                    ty: self.substitute_type_ast(&f.ty, type_map),
+                                    default: f.default.clone(),
+                                },
+                            )
+                        }
+                        other => other.clone(),
                     })
                     .collect(),
-                bindings: bindings.clone(),
-                interfaces: interfaces.clone(),
             },
 
             // 命名结构体

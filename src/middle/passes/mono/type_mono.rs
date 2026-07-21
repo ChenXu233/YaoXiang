@@ -3,6 +3,7 @@
 //! 提供类型单态化相关的辅助函数和trait
 
 use crate::frontend::core::parser::ast::Type as AstType;
+use crate::frontend::core::parser::ast::TypeBodyItem;
 use crate::frontend::core::typecheck::{EnumType, MonoType, StructType};
 use crate::middle::core::ir::ModuleIR;
 use crate::middle::passes::mono::instance::{GenericTypeId, TypeId};
@@ -42,20 +43,32 @@ impl Monomorphizer {
             AstType::Bytes => MonoType::Bytes,
             AstType::Bool => MonoType::Bool,
             AstType::Void => MonoType::Void,
-            AstType::Struct { fields, .. } => MonoType::Struct(StructType {
-                name: fields
-                    .first()
-                    .map(|f| f.name.clone())
-                    .unwrap_or_else(|| "Struct".to_string()),
-                fields: fields
+            AstType::Struct { body } => {
+                let fields: Vec<&crate::frontend::core::parser::ast::StructField> = body
                     .iter()
-                    .map(|f| (f.name.clone(), self.type_to_mono_type(&f.ty)))
-                    .collect(),
-                methods: HashMap::new(),
-                field_mutability: fields.iter().map(|f| f.is_mut).collect(),
-                field_has_default: fields.iter().map(|f| f.default.is_some()).collect(),
-                interfaces: vec![],
-            }),
+                    .filter_map(|it| {
+                        if let TypeBodyItem::Field(f) = it {
+                            Some(f)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                MonoType::Struct(StructType {
+                    name: fields
+                        .first()
+                        .map(|f| f.name.clone())
+                        .unwrap_or_else(|| "Struct".to_string()),
+                    fields: fields
+                        .iter()
+                        .map(|f| (f.name.clone(), self.type_to_mono_type(&f.ty)))
+                        .collect(),
+                    methods: HashMap::new(),
+                    field_mutability: fields.iter().map(|f| f.is_mut).collect(),
+                    field_has_default: fields.iter().map(|f| f.default.is_some()).collect(),
+                    interfaces: vec![],
+                })
+            }
             AstType::NamedStruct { name, fields, .. } => MonoType::Struct(StructType {
                 name: name.clone(),
                 fields: fields
@@ -178,9 +191,15 @@ impl Monomorphizer {
             AstType::Bytes => "bytes".to_string(),
             AstType::Bool => "bool".to_string(),
             AstType::Void => "void".to_string(),
-            AstType::Struct { fields, .. } => fields
-                .first()
-                .map(|f| f.name.clone())
+            AstType::Struct { body } => body
+                .iter()
+                .find_map(|it| {
+                    if let TypeBodyItem::Field(f) = it {
+                        Some(f.name.clone())
+                    } else {
+                        None
+                    }
+                })
                 .unwrap_or_else(|| "Struct".to_string()),
             AstType::NamedStruct { name, .. } => name.clone(),
             AstType::Union(variants) => variants
@@ -235,7 +254,14 @@ impl Monomorphizer {
             | AstType::Bytes
             | AstType::Bool
             | AstType::Void => false,
-            AstType::Struct { fields, .. } | AstType::NamedStruct { fields, .. } => {
+            AstType::Struct { body } => body.iter().any(|it| {
+                if let TypeBodyItem::Field(f) = it {
+                    self.contains_type_var_type(&f.ty)
+                } else {
+                    false
+                }
+            }),
+            AstType::NamedStruct { fields, .. } => {
                 fields.iter().any(|f| self.contains_type_var_type(&f.ty))
             }
             AstType::Union(variants) => variants
@@ -298,7 +324,14 @@ impl Monomorphizer {
                     type_params.push(name.clone());
                 }
             }
-            AstType::Struct { fields, .. } | AstType::NamedStruct { fields, .. } => {
+            AstType::Struct { body } => {
+                body.iter().for_each(|it| {
+                    if let TypeBodyItem::Field(f) = it {
+                        self.collect_type_vars_from_type(&f.ty, type_params, seen);
+                    }
+                });
+            }
+            AstType::NamedStruct { fields, .. } => {
                 fields
                     .iter()
                     .for_each(|f| self.collect_type_vars_from_type(&f.ty, type_params, seen));
@@ -659,6 +692,7 @@ impl Monomorphizer {
                 self.collect_type_vars_from_mono_type(err, type_params, seen);
             }
             MonoType::TypeRef(_)
+            | MonoType::Never
             | MonoType::Void
             | MonoType::Bool
             | MonoType::Int(_)

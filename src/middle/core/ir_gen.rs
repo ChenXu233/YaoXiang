@@ -511,13 +511,14 @@ impl AstToIrGenerator {
                 name,
                 type_name,
                 method_type,
-                generic_params,
+                signature_params,
                 type_annotation,
                 params,
                 body,
                 is_pub: _,
             } => {
-                // 区分函数定义、方法绑定和类型定义
+                let generic_params =
+                    crate::frontend::core::parser::ast::extract_generic_params(signature_params);
                 if type_name.is_some() {
                     // MethodBind: 有 type_name
                     self.generate_method_ir(
@@ -1119,17 +1120,35 @@ impl AstToIrGenerator {
                     .insert(struct_name.clone(), fields.clone());
                 self.generate_struct_constructor_ir(struct_name, fields)
             }
-            ast::Type::Struct {
-                fields, bindings, ..
-            } => {
+            ast::Type::Struct { body } => {
+                let fields: Vec<ast::StructField> = body
+                    .iter()
+                    .filter_map(|it| {
+                        if let ast::TypeBodyItem::Field(f) = it {
+                            Some(f.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                let bindings: Vec<ast::TypeBodyBinding> = body
+                    .iter()
+                    .filter_map(|it| {
+                        if let ast::TypeBodyItem::Binding(b) = it {
+                            Some(b.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 self.struct_definitions
                     .insert(_name.to_string(), fields.clone());
                 // 记录绑定信息（用于方法调用时的参数重排，RFC-004）
-                self.register_type_bindings(_name, bindings);
+                self.register_type_bindings(_name, &bindings);
 
                 // RFC-004: 为匿名函数绑定生成独立的 FunctionIR
                 let mut anon_functions = Vec::new();
-                for binding in bindings {
+                for binding in &bindings {
                     if let ast::BindingKind::Anonymous {
                         params,
                         return_type,
@@ -1153,7 +1172,7 @@ impl AstToIrGenerator {
                     }
                 }
 
-                let constructor = self.generate_struct_constructor_ir(_name, fields);
+                let constructor = self.generate_struct_constructor_ir(_name, &fields);
 
                 // 将匿名函数 IR 存储为独立函数（在模块级别注册）
                 for func_ir in anon_functions {
@@ -1478,14 +1497,15 @@ impl AstToIrGenerator {
                 name,
                 type_name: None,
                 method_type: _,
-                generic_params,
+                signature_params,
                 type_annotation,
                 params,
                 body,
                 is_pub: _,
             } => {
                 // 生成嵌套函数的 IR（排除方法绑定和类型定义）
-                // 从 GenericParam 提取参数名字符串
+                let generic_params =
+                    crate::frontend::core::parser::ast::extract_generic_params(signature_params);
                 let generic_param_names = if generic_params.is_empty() {
                     None
                 } else {

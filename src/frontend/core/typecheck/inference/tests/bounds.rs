@@ -9,6 +9,7 @@
 
 use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
 use crate::frontend::core::types::{MonoType, StructType, TraitTable};
+use crate::frontend::core::typecheck::proof::verdict::ProofResult;
 use crate::frontend::core::types::const_data::ConstVarDef;
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use std::collections::HashMap;
@@ -67,21 +68,19 @@ fn test_check_trait_bounds_empty() {
 
 /// §3.5.2: 泛型参数边界检查 — Int 满足 Clone + 空 const 边界
 #[test]
-fn test_check_generic_bounds() {
+fn test_check_const_bounds_empty() {
     // Arrange
     let checker = BoundsChecker::new();
-    let ty = MonoType::Int(32);
-    let trait_bounds = vec!["Clone".to_string()];
-    let const_bounds: Vec<MonoType> = vec![];
     let const_binders: Vec<ConstVarDef> = vec![];
+    let const_args: Vec<MonoType> = vec![];
 
     // Act
-    let result = checker.check_generic_bounds(&ty, &trait_bounds, &const_binders, &const_bounds);
+    let result = checker.check_const_bounds(&const_binders, &const_args);
 
     // Assert
     assert!(
-        result.is_ok(),
-        "Int should satisfy generic bounds with Clone trait"
+        matches!(result, ProofResult::Proved),
+        "Empty const args should trivially pass const bounds"
     );
 }
 
@@ -572,14 +571,14 @@ fn test_check_const_bounds_empty_proved() {
 #[test]
 fn test_check_const_bounds_layer2_constraint_satisfied() {
     use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
-    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
-    use crate::frontend::core::types::eval::const_eval::ConstExpr;
+    use crate::frontend::core::types::const_data::{ConstExpr, ConstKind, ConstVarDef, ConstValue};
     use crate::frontend::core::types::MonoType;
 
     let checker = BoundsChecker::new();
     let mut binders = vec![ConstVarDef::new("N".to_string(), ConstKind::Int(None), 0)];
-    // 添加真实约束: Bool(true) — 总是满足
-    binders[0].constraints.push(ConstExpr::Bool(true));
+    binders[0]
+        .constraints
+        .push(ConstExpr::Lit(ConstValue::Bool(true)));
     let args = vec![MonoType::Literal {
         name: "5".to_string(),
         base_type: Box::new(MonoType::Int(64)),
@@ -595,14 +594,14 @@ fn test_check_const_bounds_layer2_constraint_satisfied() {
 #[test]
 fn test_check_const_bounds_layer2_constraint_violated() {
     use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
-    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
-    use crate::frontend::core::types::eval::const_eval::ConstExpr;
+    use crate::frontend::core::types::const_data::{ConstExpr, ConstKind, ConstVarDef, ConstValue};
     use crate::frontend::core::types::MonoType;
 
     let checker = BoundsChecker::new();
     let mut binders = vec![ConstVarDef::new("N".to_string(), ConstKind::Int(None), 0)];
-    // Bool(false) — 约束违反
-    binders[0].constraints.push(ConstExpr::Bool(false));
+    binders[0]
+        .constraints
+        .push(ConstExpr::Lit(ConstValue::Bool(false)));
     let args = vec![MonoType::Literal {
         name: "5".to_string(),
         base_type: Box::new(MonoType::Int(64)),
@@ -623,17 +622,18 @@ fn test_check_const_bounds_layer2_constraint_violated() {
 #[test]
 fn test_check_const_bounds_layer2_real_constraint_satisfied() {
     use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
-    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
-    use crate::frontend::core::types::eval::const_eval::{ConstExpr, ConstBinOp};
+    use crate::frontend::core::types::const_data::{
+        BinOp, ConstExpr, ConstKind, ConstVarDef, ConstValue,
+    };
     use crate::frontend::core::types::MonoType;
 
     // Arrange
     let checker = BoundsChecker::new();
     let mut binders = vec![ConstVarDef::new("N".to_string(), ConstKind::Int(None), 0)];
     binders[0].constraints.push(ConstExpr::BinOp {
-        op: ConstBinOp::Gt,
-        lhs: Box::new(ConstExpr::Var("N".to_string())),
-        rhs: Box::new(ConstExpr::Int(0)),
+        op: BinOp::Gt,
+        left: Box::new(ConstExpr::NamedVar("N".to_string())),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
     });
     let args = vec![MonoType::Literal {
         name: "5".to_string(),
@@ -652,17 +652,17 @@ fn test_check_const_bounds_layer2_real_constraint_satisfied() {
 #[test]
 fn test_check_const_bounds_layer2_real_constraint_violated() {
     use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
-    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
-    use crate::frontend::core::types::eval::const_eval::{ConstExpr, ConstBinOp};
-    use crate::frontend::core::types::MonoType;
+    use crate::frontend::core::types::const_data::{
+        BinOp, ConstExpr, ConstKind, ConstVarDef, ConstValue,
+    };
 
     // Arrange
     let checker = BoundsChecker::new();
     let mut binders = vec![ConstVarDef::new("N".to_string(), ConstKind::Int(None), 0)];
     binders[0].constraints.push(ConstExpr::BinOp {
-        op: ConstBinOp::Gt,
-        lhs: Box::new(ConstExpr::Var("N".to_string())),
-        rhs: Box::new(ConstExpr::Int(0)),
+        op: BinOp::Gt,
+        left: Box::new(ConstExpr::NamedVar("N".to_string())),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
     });
     let args = vec![MonoType::Literal {
         name: "0".to_string(),
@@ -681,21 +681,19 @@ fn test_check_const_bounds_layer2_real_constraint_violated() {
 #[test]
 fn test_check_const_bounds_layer2_chain_expr_negative_violated() {
     use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
-    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
-    use crate::frontend::core::types::eval::const_eval::{ConstExpr, ConstBinOp};
-    use crate::frontend::core::types::MonoType;
-
-    // Arrange
+    use crate::frontend::core::types::const_data::{
+        BinOp, ConstExpr, ConstKind, ConstVarDef, ConstValue,
+    };
     let checker = BoundsChecker::new();
     let mut binders = vec![ConstVarDef::new("N".to_string(), ConstKind::Int(None), 0)];
     binders[0].constraints.push(ConstExpr::BinOp {
-        op: ConstBinOp::Gt,
-        lhs: Box::new(ConstExpr::BinOp {
-            op: ConstBinOp::Add,
-            lhs: Box::new(ConstExpr::Var("N".to_string())),
-            rhs: Box::new(ConstExpr::Int(1)),
+        op: BinOp::Gt,
+        left: Box::new(ConstExpr::BinOp {
+            op: BinOp::Add,
+            left: Box::new(ConstExpr::NamedVar("N".to_string())),
+            right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
         }),
-        rhs: Box::new(ConstExpr::Int(0)),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
     });
     // N = -1: -1 + 1 > 0 → 0 > 0 → false → Disproved
     let args = vec![MonoType::Literal {
@@ -714,22 +712,22 @@ fn test_check_const_bounds_layer2_chain_expr_negative_violated() {
 
 #[test]
 fn test_check_const_bounds_layer2_chain_expr_positive_satisfied() {
-    use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
-    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
-    use crate::frontend::core::types::eval::const_eval::{ConstExpr, ConstBinOp};
+    use crate::frontend::core::types::const_data::{
+        BinOp, ConstExpr, ConstKind, ConstVarDef, ConstValue,
+    };
     use crate::frontend::core::types::MonoType;
 
     // Arrange
     let checker = BoundsChecker::new();
     let mut binders = vec![ConstVarDef::new("N".to_string(), ConstKind::Int(None), 0)];
     binders[0].constraints.push(ConstExpr::BinOp {
-        op: ConstBinOp::Gt,
-        lhs: Box::new(ConstExpr::BinOp {
-            op: ConstBinOp::Add,
-            lhs: Box::new(ConstExpr::Var("N".to_string())),
-            rhs: Box::new(ConstExpr::Int(1)),
+        op: BinOp::Gt,
+        left: Box::new(ConstExpr::BinOp {
+            op: BinOp::Add,
+            left: Box::new(ConstExpr::NamedVar("N".to_string())),
+            right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
         }),
-        rhs: Box::new(ConstExpr::Int(0)),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
     });
     // N = 0: 0 + 1 > 0 → 1 > 0 → true → Proved
     let args = vec![MonoType::Literal {

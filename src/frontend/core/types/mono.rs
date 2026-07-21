@@ -83,6 +83,31 @@ impl UniverseLevel {
             ord => ord,
         }
     }
+    /// 层级转为 usize（用于比较）
+    pub fn as_usize(&self) -> usize {
+        self.level.parse::<usize>().unwrap_or(0)
+    }
+
+    /// 是否小于等于另一个层级
+    /// Typeₙ <: Typeₘ 当且仅当 n ≤ m
+    pub fn le(
+        &self,
+        other: &UniverseLevel,
+    ) -> bool {
+        self.as_usize() <= other.as_usize()
+    }
+
+    /// 取两个层级的最大值
+    pub fn max<'a>(
+        a: &'a UniverseLevel,
+        b: &'a UniverseLevel,
+    ) -> &'a UniverseLevel {
+        if a.as_usize() >= b.as_usize() {
+            a
+        } else {
+            b
+        }
+    }
 }
 
 impl fmt::Display for UniverseLevel {
@@ -141,6 +166,8 @@ pub struct DepParam {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MonoType {
     /// 空类型
+    /// 底部类型（爆炸原理：Never <: T 对所有 T 成立）
+    Never,
     Void,
     /// 布尔类型
     Bool,
@@ -261,7 +288,10 @@ pub enum MonoType {
     /// LibraryRef 是 Native.c("lib") 返回值的编译期类型。
     /// 运行时不存在——仅用于类型推断和编译期求值触发。
     /// 编译器知道它可调用：(sym: String) -> ExternRef
-    LibraryRef { mechanism: String, lib: String },
+    LibraryRef {
+        mechanism: String,
+        lib: String,
+    },
 
     /// ExternRef 是 lib("sym") 求值后得到的 FFI 绑定描述类型。
     /// 当它出现在绑定 RHS 时，代码生成器按 LHS 类型决定语义：
@@ -333,6 +363,7 @@ impl MonoType {
     /// 获取类型的字符串描述
     pub fn type_name(&self) -> String {
         match self {
+            MonoType::Never => "never".to_string(),
             MonoType::Void => "void".to_string(),
             MonoType::Bool => "bool".to_string(),
             MonoType::Int(n) => format!("int{}", n),
@@ -501,22 +532,31 @@ impl From<ast::Type> for MonoType {
             ast::Type::Bytes => MonoType::Bytes,
             ast::Type::Bool => MonoType::Bool,
             ast::Type::Void => MonoType::Void,
-            ast::Type::Struct {
-                fields, interfaces, ..
-            } => {
-                let (field_names, field_types, field_mutability, field_has_default) = fields
-                    .into_iter()
-                    .map(|f| (f.name, MonoType::from(f.ty), f.is_mut, f.default.is_some()))
-                    .fold(
-                        (Vec::new(), Vec::new(), Vec::new(), Vec::new()),
-                        |(mut names, mut types, mut mutability, mut defaults), (n, t, m, d)| {
-                            names.push(n);
-                            types.push(t);
-                            mutability.push(m);
-                            defaults.push(d);
-                            (names, types, mutability, defaults)
-                        },
-                    );
+            ast::Type::Struct { body } => {
+                let mut field_names = Vec::new();
+                let mut field_types = Vec::new();
+                let mut field_mutability = Vec::new();
+                let mut field_has_default = Vec::new();
+                let mut interfaces = Vec::new();
+                for item in body {
+                    match item {
+                        ast::TypeBodyItem::Field(f) => {
+                            field_names.push(f.name.clone());
+                            field_types.push(MonoType::from(f.ty.clone()));
+                            field_mutability.push(f.is_mut);
+                            field_has_default.push(f.default.is_some());
+                        }
+                        ast::TypeBodyItem::Interface(s) => {
+                            interfaces.push(s.clone());
+                        }
+                        ast::TypeBodyItem::Expr(_) => {
+                            // 类型族表达式（如 Assert(N > 0)）不在此处提取——
+                            // 约束走 const_binders 路径（见 inference/statements.rs
+                            // process_body_expr_item），StructType 不再承载约束。
+                        }
+                        ast::TypeBodyItem::Binding(_) => {}
+                    }
+                }
                 MonoType::Struct(StructType {
                     name: String::new(),
                     fields: field_names.into_iter().zip(field_types).collect(),
@@ -628,11 +668,36 @@ impl From<ast::Type> for MonoType {
                 ))
             }
             ast::Type::Literal {
-                name: _, base_type, ..
+                name, base_type, ..
             } => {
-                // Literal type - for now, convert to the base type
-                // The actual literal value is handled during const evaluation
-                MonoType::from(*base_type)
+                // 保留字面量值 — const 泛型参数需要 ConstValue
+                let value = name
+                    .parse::<i128>()
+                    .map(crate::frontend::core::types::const_data::ConstValue::Int)
+                    .ok()
+                    .or_else(|| {
+                        if name == "true" {
+                            Some(crate::frontend::core::types::const_data::ConstValue::Bool(
+                                true,
+                            ))
+                        } else if name == "false" {
+                            Some(crate::frontend::core::types::const_data::ConstValue::Bool(
+                                false,
+                            ))
+                        } else {
+                            name.parse::<f32>()
+                                .ok()
+                                .map(crate::frontend::core::types::const_data::ConstValue::Float)
+                        }
+                    });
+                match value {
+                    Some(v) => MonoType::Literal {
+                        name,
+                        base_type: Box::new(MonoType::from(*base_type)),
+                        value: v,
+                    },
+                    None => MonoType::TypeRef(name),
+                }
             }
             ast::Type::Ptr(inner) => {
                 // Raw pointer type: *T
@@ -708,7 +773,6 @@ pub fn get_ast_type_universe_level(ast_type: &ast::Type) -> usize {
     }
 }
 
-/// 结构体类型
 #[derive(Debug, Clone)]
 pub struct StructType {
     pub name: String,

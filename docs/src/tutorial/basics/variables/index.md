@@ -17,15 +17,15 @@ name: type = value
 这是 YaoXiang 最核心的设计理念。看几个例子就能感受到这种一致性：
 
 ```yaoxiang
-# 变量声明
+// 变量声明
 x: Int = 42
 name: String = "YaoXiang"
 
-# 函数定义
+// 函数定义
 add: (a: Int, b: Int) -> Int = a + b
 
-# 类型定义
-type Point = { x: Float, y: Float }
+// 类型定义
+Point: Type = { x: Float, y: Float }
 ```
 
 语法规范中变量声明的形式定义是：
@@ -42,7 +42,7 @@ type Point = { x: Float, y: Float }
 
 ```yaoxiang
 x = 10
-# x = 20   // 编译错误！x 是不可变的
+// x = 20   // 编译错误！x 是不可变的
 ```
 
 使用 `=` 声明的变量，编译器会沿着作用域链向外查找同名的变量。如果找到了，就给它赋值；如果找不到，就在当前作用域内创建一个新的不可变变量。
@@ -154,7 +154,7 @@ is_done = false
 
 ```yaoxiang
 if is_ready {
-    println("开始处理")
+    print("开始处理")
 }
 ```
 
@@ -167,9 +167,9 @@ if is_ready {
 ```yaoxiang
 {
     x = 10
-    println(x)   // 可以访问：x 在当前作用域内
+    print(x)   // 可以访问：x 在当前作用域内
 }
-// println(x)    // 错误：x 在作用域外不可见
+// print(x)    // 错误：x 在作用域外不可见
 ```
 
 内层可以访问外层的变量：
@@ -177,17 +177,17 @@ if is_ready {
 ```yaoxiang
 outer = "我在外面"
 {
-    println(outer)   // 可以访问外层的 outer
+    print(outer)   // 可以访问外层的 outer
     inner = "我在里面"
 }
-// println(inner)    // 错误：inner 在作用域外不可见
+// print(inner)    // 错误：inner 在作用域外不可见
 ```
 
 ### 函数参数的作用域
 
 ```yaoxiang
 greet: (name: String) -> Void = {
-    println("你好, " + name)
+    print("你好, " + name)
     // name 在这个函数体内部可见
 }
 // name 在函数体外不可见

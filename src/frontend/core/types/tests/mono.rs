@@ -5,6 +5,7 @@
 
 use crate::frontend::core::types::{MonoType, PolyType, StructType, TypeVar};
 use crate::frontend::core::parser::ast;
+use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::types::EnumType;
 use crate::util::span::Span;
 use std::collections::HashMap;
@@ -38,12 +39,18 @@ fn test_from_ast_type_primitives() {
 #[test]
 fn test_from_ast_type_struct() {
     let ast_ty = ast::Type::Struct {
-        fields: vec![
-            ast::StructField::new("x".to_string(), false, ast::Type::Float(64)),
-            ast::StructField::new("y".to_string(), false, ast::Type::Float(64)),
+        body: vec![
+            ast::TypeBodyItem::Field(ast::StructField::new(
+                "x".to_string(),
+                false,
+                ast::Type::Float(64),
+            )),
+            ast::TypeBodyItem::Field(ast::StructField::new(
+                "y".to_string(),
+                false,
+                ast::Type::Float(64),
+            )),
         ],
-        bindings: vec![],
-        interfaces: vec![],
     };
     let mono: MonoType = ast_ty.into();
     assert!(matches!(mono, MonoType::Struct(_)));
@@ -54,16 +61,13 @@ fn test_from_ast_type_struct() {
 
 #[test]
 fn test_from_ast_type_struct_with_defaults() {
-    use crate::frontend::core::lexer::tokens::Literal;
     let ast_ty = ast::Type::Struct {
-        fields: vec![ast::StructField {
+        body: vec![ast::TypeBodyItem::Field(ast::StructField {
             name: "x".to_string(),
             is_mut: false,
             ty: ast::Type::Float(64),
             default: Some(Box::new(ast::Expr::Lit(Literal::Float(0.0), Span::dummy()))),
-        }],
-        bindings: vec![],
-        interfaces: vec![],
+        })],
     };
     let mono: MonoType = ast_ty.into();
     assert!(matches!(mono, MonoType::Struct(s) if s.field_has_default == vec![true]));
@@ -244,13 +248,20 @@ fn test_from_ast_type_ptr() {
 #[test]
 fn test_from_ast_type_literal() {
     let ast_ty = ast::Type::Literal {
-        name: "five".to_string(),
+        name: "5".to_string(),
         name_span: Span::dummy(),
         base_type: Box::new(ast::Type::Int(64)),
     };
     let mono: MonoType = ast_ty.into();
-    // Literal type converts to base type
-    assert_eq!(mono, MonoType::Int(64));
+    // Literal type preserves value as MonoType::Literal
+    assert_eq!(
+        mono,
+        MonoType::Literal {
+            name: "5".to_string(),
+            base_type: Box::new(MonoType::Int(64)),
+            value: crate::frontend::core::types::const_data::ConstValue::Int(5),
+        }
+    );
 }
 
 // ===================================================================
@@ -477,6 +488,46 @@ fn test_universe_level_cmp() {
         std::cmp::Ordering::Greater
     );
     assert_eq!(UniverseLevel::new("999").succ().level, "1000");
+}
+
+#[test]
+fn test_universe_level_le() {
+    use crate::frontend::core::types::UniverseLevel;
+    // 同层级
+    assert!(UniverseLevel::type0().le(&UniverseLevel::type0()));
+    assert!(UniverseLevel::type1().le(&UniverseLevel::type1()));
+    // 低 <= 高
+    assert!(UniverseLevel::type0().le(&UniverseLevel::type1()));
+    assert!(UniverseLevel::new("2").le(&UniverseLevel::new("5")));
+    // 高 <= 低：不成立
+    assert!(!UniverseLevel::type1().le(&UniverseLevel::type0()));
+    assert!(!UniverseLevel::new("9").le(&UniverseLevel::new("3")));
+    // 大层级
+    assert!(UniverseLevel::new("999").le(&UniverseLevel::new("1000")));
+}
+
+#[test]
+fn test_universe_level_max() {
+    use crate::frontend::core::types::UniverseLevel;
+    // 同层级
+    assert_eq!(
+        UniverseLevel::max(&UniverseLevel::type0(), &UniverseLevel::type0()),
+        &UniverseLevel::type0()
+    );
+    // 不同层级
+    assert_eq!(
+        UniverseLevel::max(&UniverseLevel::type0(), &UniverseLevel::type1()),
+        &UniverseLevel::type1()
+    );
+    assert_eq!(
+        UniverseLevel::max(&UniverseLevel::type1(), &UniverseLevel::type0()),
+        &UniverseLevel::type1()
+    );
+    // 大层级
+    assert_eq!(
+        UniverseLevel::max(&UniverseLevel::new("5"), &UniverseLevel::new("500")),
+        &UniverseLevel::new("500")
+    );
 }
 
 #[test]

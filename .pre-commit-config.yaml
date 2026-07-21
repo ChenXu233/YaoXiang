@@ -1,6 +1,13 @@
 repos:
   - repo: local
     hooks:
+      - id: sync-version-badge
+        name: sync version badge
+        entry: python scripts/sync-version-badge.py
+        language: system
+        pass_filenames: false
+        files: '^(Cargo\.toml|README\.md|docs/gh/README\.en\.md)$'
+
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt

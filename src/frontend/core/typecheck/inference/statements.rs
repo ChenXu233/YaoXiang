@@ -66,11 +66,19 @@ pub struct StatementChecker {
     type_defs: HashMap<String, MonoType>,
     /// 实例化请求（收集所有泛型函数实例化需求）
     pub instantiation_requests: Vec<InstantiationRequest>,
+    /// 流敏感假设集 Γ（可选 — None 在测试或未启用证明管道时使用）
+    gamma: Option<crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma>,
+    /// 依赖类型环境（类型族注册与查找）
+    dep_env: crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
 }
 
 impl StatementChecker {
     /// 创建新的语句检查器
-    pub fn new(solver: &mut TypeConstraintSolver) -> Self {
+    pub fn new(
+        solver: &mut TypeConstraintSolver,
+        gamma: Option<crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma>,
+        dep_env: crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
+    ) -> Self {
         Self {
             solver: solver.clone(),
             scope: ScopeManager::new(),
@@ -88,6 +96,8 @@ impl StatementChecker {
             method_bindings: HashMap::new(),
             type_defs: HashMap::new(),
             instantiation_requests: Vec::new(),
+            gamma,
+            dep_env,
         }
     }
 
@@ -121,6 +131,7 @@ impl StatementChecker {
                     "Char" | "char" => return MonoType::Char,
                     "String" | "string" => return MonoType::String,
                     "Void" | "void" | "()" => return MonoType::Void,
+                    "Never" | "never" => return MonoType::Never,
                     _ => {}
                 }
                 // Check type_defs for user-defined types
@@ -166,7 +177,7 @@ impl StatementChecker {
                 let def = self.generic_type_defs.get(name)?;
                 let arg_types: Vec<MonoType> =
                     args.iter().map(|a| MonoType::from(a.clone())).collect();
-                TypeEnvironment::instantiate_generic_type(def, &arg_types)
+                TypeEnvironment::instantiate_generic_type(def, &arg_types).ok()
             }
             _ => None,
         }
@@ -545,13 +556,16 @@ impl StatementChecker {
             crate::frontend::core::parser::ast::StmtKind::Binding {
                 name,
                 type_name,
-                generic_params,
+                signature_params,
                 type_annotation,
                 params,
                 body,
                 is_pub: _,
                 method_type,
+                ..
             } => {
+                let generic_params =
+                    crate::frontend::core::parser::ast::extract_generic_params(signature_params);
                 // 根据是否有 type_name 来区分方法绑定和其他绑定
                 // 注意：不能根据 params 是否为空来判断，因为空参数的函数也是函数
                 let body_block = Block {
@@ -565,7 +579,7 @@ impl StatementChecker {
                     self.check_fn_stmt(
                         name,
                         type_ann,
-                        generic_params,
+                        signature_params,
                         params,
                         body,
                         body_block,
@@ -601,17 +615,23 @@ impl StatementChecker {
                         let mut interfaces = Vec::new();
 
                         // 情况 1：type_annotation 是 Type::Struct（直接结构体定义）
-                        if let Some(crate::frontend::core::parser::ast::Type::Struct {
-                            fields: ast_fields,
-                            interfaces: ast_interfaces,
-                            ..
-                        }) = type_annotation
+                        if let Some(crate::frontend::core::parser::ast::Type::Struct { body }) =
+                            type_annotation
                         {
-                            for field in ast_fields {
-                                let field_ty = MonoType::from(field.ty.clone());
-                                fields.push((field.name.clone(), field_ty));
+                            for item in body {
+                                match item {
+                                    crate::frontend::core::parser::ast::TypeBodyItem::Field(f) => {
+                                        let field_ty = MonoType::from(f.ty.clone());
+                                        fields.push((f.name.clone(), field_ty));
+                                    }
+                                    crate::frontend::core::parser::ast::TypeBodyItem::Interface(
+                                        s,
+                                    ) => {
+                                        interfaces.push(s.clone());
+                                    }
+                                    _ => {}
+                                }
                             }
-                            interfaces = ast_interfaces.clone();
                         } else {
                             // 情况 2：type_annotation 是 Type::Fn（类型级函数）
                             // 从 body 的语句中提取字段
@@ -698,9 +718,35 @@ impl StatementChecker {
                                     ConstVarDef::new(p.name.clone(), kind, idx)
                                 })
                                 .collect();
-
-                            // 从 struct body 提取 const 参数的值约束（如 Assert(N > 0)）
-                            Self::extract_const_constraints(body, &mut const_binders);
+                            // 从类型体收集待定证明义务到 const 参数
+                            if let Some(crate::frontend::core::parser::ast::Type::Struct { body }) =
+                                type_annotation
+                            {
+                                for item in body {
+                                    match item {
+                                        crate::frontend::core::parser::ast::TypeBodyItem::Expr(
+                                            ty,
+                                        ) => {
+                                            Self::process_body_expr_item(
+                                                ty,
+                                                &mut const_binders,
+                                                &self.dep_env,
+                                            );
+                                        }
+                                        crate::frontend::core::parser::ast::TypeBodyItem::Field(
+                                            f,
+                                        ) => {
+                                            // 命名字段的类型也可能是类型族应用（如 _assert_n: Assert(N > 0)）
+                                            Self::process_body_expr_item(
+                                                &f.ty,
+                                                &mut const_binders,
+                                                &self.dep_env,
+                                            );
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
 
                             if !type_param_names.is_empty() || !const_binders.is_empty() {
                                 let type_binders: Vec<TypeVar> =
@@ -729,7 +775,7 @@ impl StatementChecker {
                     self.check_fn_stmt(
                         name,
                         type_annotation.as_ref(),
-                        generic_params,
+                        signature_params,
                         params,
                         body,
                         body_block,
@@ -887,12 +933,14 @@ impl StatementChecker {
         &mut self,
         name: &str,
         type_annotation: Option<&crate::frontend::core::parser::ast::Type>,
-        generic_params: &[crate::frontend::core::parser::ast::GenericParam],
+        signature_params: &[Param],
         params: &[Param],
         _stmts: &[Stmt],
         body: Block,
         _span: crate::util::span::Span,
     ) -> Result<(), Box<Diagnostic>> {
+        let generic_params =
+            crate::frontend::core::parser::ast::extract_generic_params(signature_params);
         // 检查是否与结构体重名
         if let Some(existing) = self.scope.get_var(name) {
             if let MonoType::Struct(_) = &existing.body {
@@ -1094,36 +1142,7 @@ impl StatementChecker {
             params
         };
 
-        // 对于泛型函数，将类型级参数（MetaType 类型）替换为新的类型变量
-        // 这些参数是泛型类型参数声明合并到值级参数的结果
-        let owned_value_params: Vec<Param>;
-        let value_params_slice: &[Param] = if !type_generic_params.is_empty() {
-            owned_value_params = params
-                .iter()
-                .map(|p| {
-                    let is_meta = matches!(
-                        p.ty.as_ref().map(|t| MonoType::from(t.clone())),
-                        Some(MonoType::MetaType { .. })
-                    );
-                    if is_meta {
-                        // MetaType 参数：移除类型标注，让 HM 推断
-                        Param {
-                            name: p.name.clone(),
-                            ty: None,
-                            is_mut: p.is_mut,
-                            span: p.span,
-                        }
-                    } else {
-                        p.clone()
-                    }
-                })
-                .collect();
-            &owned_value_params
-        } else {
-            params
-        };
-
-        let out = self.check_fn_def(name, value_params_slice, &body);
+        let out = self.check_fn_def(name, params, &body);
 
         // Clear expected return type after function body checking
         self.expected_return_type = None;
@@ -1297,12 +1316,24 @@ impl StatementChecker {
         };
 
         if self.scope.var_in_current_scope(name) {
+            // mut 变量被重新赋值 → kill Γ 中依赖该变量的假设
+            if let Some(gamma) = &mut self.gamma {
+                if is_mut {
+                    gamma.kill(name);
+                }
+            }
             // 统一变量类型并写回 scope，确保后续类型推断正确
             self.assign_var(name, ty);
             return Ok(());
         }
 
         if self.scope.var_in_any_scope(name) {
+            // mut 变量被重新赋值 → kill Γ 中依赖该变量的假设
+            if let Some(gamma) = &mut self.gamma {
+                if is_mut {
+                    gamma.kill(name);
+                }
+            }
             self.assign_var(name, ty);
             return Ok(());
         }
@@ -1571,6 +1602,10 @@ impl StatementChecker {
                         inferrer.set_method_bindings(&self.method_bindings);
                         inferrer.set_type_defs(&self.type_defs);
                         inferrer.set_generic_type_defs(&self.generic_type_defs);
+                        inferrer.set_dep_env(&self.dep_env);
+                        if let Some(gamma) = &mut self.gamma {
+                            inferrer.set_gamma(gamma);
+                        }
                         let result = inferrer.infer_expr(expr).map_err(Box::new);
                         self.instantiation_requests
                             .extend(inferrer.instantiation_requests);
@@ -1592,6 +1627,10 @@ impl StatementChecker {
                 );
                 inferrer.set_type_defs(&self.type_defs);
                 inferrer.set_generic_type_defs(&self.generic_type_defs);
+                inferrer.set_dep_env(&self.dep_env);
+                if let Some(gamma) = &mut self.gamma {
+                    inferrer.set_gamma(gamma);
+                }
                 let result = inferrer.infer_expr(expr).map_err(Box::new);
                 self.instantiation_requests
                     .extend(inferrer.instantiation_requests);
@@ -1600,29 +1639,31 @@ impl StatementChecker {
         }
     }
 
-    /// 从 struct body 提取 const 参数的值约束
-    /// 识别 `length: Assert(N > 0)` 模式的字段
-    fn extract_const_constraints(
-        body_stmts: &[Stmt],
+    /// 处理类型体中的类型表达式项（匿名 Expr 项或命名字段的类型）。
+    /// 不比较名字是否为 "Assert" —— 判断依据是 dep_env 里是否注册了该类型族。
+    /// 归约不了（含自由 const 变量）的类型族谓词转 ConstExpr 挂到对应 const 参数。
+    fn process_body_expr_item(
+        ty: &crate::frontend::core::parser::ast::Type,
         const_binders: &mut [crate::frontend::core::types::const_data::ConstVarDef],
+        dep_env: &crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
     ) {
-        for stmt in body_stmts {
-            if let crate::frontend::core::parser::ast::StmtKind::Var {
-                type_annotation:
-                    Some(crate::frontend::core::parser::ast::Type::Generic { name, args, .. }),
-                ..
-            } = &stmt.kind
-            {
-                if name == "Assert" && !args.is_empty() {
-                    // 从 args[0] 提取约束表达式
-                    if let crate::frontend::core::parser::ast::Type::ConstExpr(expr) = &args[0] {
-                        if let Some(const_expr) =
-                            crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)
-                        {
-                            if let Some(const_var) = Self::find_const_var_in_expr(expr, const_binders) {
-                                const_binders[const_var.index()]
-                                    .constraints
-                                    .push(const_expr);
+        use crate::frontend::core::parser::ast::Type;
+        use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
+        if let Type::Generic { name, args, .. } = ty {
+            // 只处理已注册的类型族，不比较具体名字
+            if dep_env.get_type_family(name).is_some() {
+                for arg in args {
+                    if let Type::ConstExpr(expr) = arg {
+                        if let Some(const_expr) = convert_expr_to_const_expr(expr) {
+                            if let Some(cv) = Self::find_const_var_in_expr(expr, const_binders) {
+                                // 泛型场景：含自由 const 变量，挂 constraints。
+                                const_binders[cv.index()].constraints.push(const_expr);
+                            } else {
+                                // 非泛型场景：无自由 const 变量。
+                                // 第一阶段不立即归约——当前无此用例（如 Assert(3 > 0)）。
+                                // 未来：尝试 dep_env 归约，按结果分派——
+                                //   Void 擦除 / Never 报 E1062 / 其他发 W1063 unused。
+                                // 约束走 const_binders 路径，StructType 不再承载约束。
                             }
                         }
                     }

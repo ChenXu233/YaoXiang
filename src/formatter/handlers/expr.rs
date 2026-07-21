@@ -101,7 +101,7 @@ pub fn format_expr(
             format!(
                 "{} as {}",
                 format_expr(inner, ctx, source_map),
-                super::types::format_type(target_type, source_map)
+                super::types::format_type(target_type, ctx, source_map)
             )
         }
         Expr::Tuple(exprs, _span) => {
@@ -356,7 +356,7 @@ fn format_fn_def(
 ) -> String {
     let params_str = format_params(params, ctx, source_map);
     let ret_str = if let Some(ty) = return_type {
-        format!(" -> {}", super::types::format_type(ty, source_map))
+        format!(" -> {}", super::types::format_type(ty, ctx, source_map))
     } else {
         String::new()
     };
@@ -385,12 +385,106 @@ pub fn format_params(
             s.push_str(&p.name);
             if let Some(ty) = &p.ty {
                 s.push_str(": ");
-                s.push_str(&super::types::format_type(ty, source_map));
+                s.push_str(&super::types::format_type(ty, ctx, source_map));
             }
             s
         })
         .collect();
     super::delimited::format_delimited_list("(", ")", &items, None, ctx)
+}
+
+/// 格式化签名参数列表（类型定义/函数签名位置）
+///
+/// 与 format_params 的区别：签名位置的 Type::Tuple 是多约束容器
+/// （parser 将 `T: A + B` 存为 Tuple），须渲染为 `A + B` 而非元组。
+pub fn format_signature_params(
+    params: &[Param],
+    ctx: &FormatContext,
+    source_map: &SourceMap,
+) -> String {
+    let items: Vec<String> = params
+        .iter()
+        .map(|p| {
+            let mut s = String::new();
+            if p.is_mut {
+                s.push_str("mut ");
+            }
+            s.push_str(&p.name);
+            if let Some(ty) = &p.ty {
+                s.push_str(": ");
+                s.push_str(&format_signature_param_ty(ty, ctx, source_map));
+            }
+            s
+        })
+        .collect();
+    super::delimited::format_delimited_list("(", ")", &items, None, ctx)
+}
+
+/// 签名参数类型的渲染：Tuple 容器 → 约束 join，其余 → format_type
+fn format_signature_param_ty(
+    ty: &Type,
+    ctx: &FormatContext,
+    source_map: &SourceMap,
+) -> String {
+    if let Type::Tuple(items) = ty {
+        return items
+            .iter()
+            .map(|t| super::types::format_type(t, ctx, source_map))
+            .collect::<Vec<_>>()
+            .join(" + ");
+    }
+    super::types::format_type(ty, ctx, source_map)
+}
+
+/// 格式化函数完整签名：(第一组带名参数) -> 返回类型
+///
+/// 返回类型为内层 Fn 时（curried/泛型函数），用值参数名补全内层参数标注。
+pub fn format_fn_signature(
+    signature_params: &[Param],
+    fn_type: &Type,
+    value_params: &[Param],
+    ctx: &FormatContext,
+    source_map: &SourceMap,
+) -> String {
+    let params_str = format_signature_params(signature_params, ctx, source_map);
+    if let Type::Fn { return_type, .. } = fn_type {
+        let ret = format_return_with_names(return_type, value_params, ctx, source_map);
+        format!("{} -> {}", params_str, ret)
+    } else {
+        params_str
+    }
+}
+
+/// 递归格式化返回类型：内层 Fn 的参数与值参数名逐层 zip 补全
+fn format_return_with_names(
+    ty: &Type,
+    value_params: &[Param],
+    ctx: &FormatContext,
+    source_map: &SourceMap,
+) -> String {
+    if let Type::Fn {
+        params: inner_tys,
+        return_type,
+    } = ty
+    {
+        if !value_params.is_empty() && inner_tys.len() <= value_params.len() {
+            let named: Vec<String> = inner_tys
+                .iter()
+                .zip(value_params.iter())
+                .map(|(t, p)| {
+                    format!(
+                        "{}: {}",
+                        p.name,
+                        super::types::format_type(t, ctx, source_map)
+                    )
+                })
+                .collect();
+            let rest = &value_params[inner_tys.len()..];
+            let ret = format_return_with_names(return_type, rest, ctx, source_map);
+            return format!("(({}) -> {})", named.join(", "), ret);
+        }
+    }
+    super::types::format_type(ty, ctx, source_map)
 }
 
 /// 格式化 match 表达式

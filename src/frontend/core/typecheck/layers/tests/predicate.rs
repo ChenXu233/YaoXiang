@@ -114,7 +114,7 @@ fn test_assumption_stack_direct_match_proves_immediately() {
     };
     let env = TypeEnvironment::new();
     let mut ctx = ProofContext::new(&env);
-    ctx.assumptions.push(constraint);
+    ctx.assumptions.inject(constraint);
 
     // Act
     let result = check_predicate(&ctx, &refined, &HashMap::new());
@@ -171,7 +171,7 @@ fn test_implication_stronger_assumption_proves_weaker_constraint() {
 
     let env = TypeEnvironment::new();
     let mut ctx = ProofContext::new(&env);
-    ctx.assumptions.push(assumption);
+    ctx.assumptions.inject(assumption);
 
     // Act
     let result = check_predicate(&ctx, &refined, &HashMap::new());
@@ -205,7 +205,7 @@ fn test_implication_unrelated_assumption_falls_through_to_level3() {
 
     let env = TypeEnvironment::new();
     let mut ctx = ProofContext::new(&env);
-    ctx.assumptions.push(assumption);
+    ctx.assumptions.inject(assumption);
 
     // Act
     let result = check_predicate(&ctx, &refined, &HashMap::new());
@@ -232,12 +232,17 @@ fn test_implication_multiple_assumptions_combined_imply() {
     };
     let env = TypeEnvironment::new();
     let mut ctx = ProofContext::new(&env);
-    ctx.assumptions.push(ConstExpr::BinOp {
+    ctx.assumptions.inject(ConstExpr::BinOp {
         op: BinOp::Ge,
         left: Box::new(ConstExpr::NamedVar("y".into())),
         right: Box::new(ConstExpr::Lit(ConstValue::Int(5))),
     });
-    ctx.assumptions.push(ConstExpr::BinOp {
+    ctx.assumptions.inject(ConstExpr::BinOp {
+        op: BinOp::Lt,
+        left: Box::new(ConstExpr::NamedVar("y".into())),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(10))),
+    });
+    ctx.assumptions.inject(ConstExpr::BinOp {
         op: BinOp::Lt,
         left: Box::new(ConstExpr::NamedVar("y".into())),
         right: Box::new(ConstExpr::Lit(ConstValue::Int(10))),
@@ -296,18 +301,19 @@ fn test_implication_nested_push_pop_restores_stack() {
     let mut ctx = ProofContext::new(&env);
 
     // 外层 if：压入
-    ctx.assumptions.push(ConstExpr::BinOp {
+    ctx.assumptions.inject(ConstExpr::BinOp {
         op: BinOp::Ge,
         left: Box::new(ConstExpr::NamedVar("y".into())),
         right: Box::new(ConstExpr::Lit(ConstValue::Int(5))),
     });
-    // 内层 block：压入后弹出
-    ctx.assumptions.push(ConstExpr::BinOp {
+    // 内层 block：进入 scope，压入后退出
+    ctx.assumptions.enter_scope();
+    ctx.assumptions.inject(ConstExpr::BinOp {
         op: BinOp::Gt,
         left: Box::new(ConstExpr::NamedVar("z".into())),
         right: Box::new(ConstExpr::Lit(ConstValue::Int(3))),
     });
-    ctx.assumptions.pop(); // 离开内层，z>0 消失，y>=5 仍在
+    ctx.assumptions.exit_scope(); // 离开内层，z>3 消失，y>=5 仍在
 
     // Act
     let result = check_predicate(&ctx, &refined, &HashMap::new());
@@ -334,12 +340,13 @@ fn test_implication_all_popped_falls_through() {
     };
     let env = TypeEnvironment::new();
     let mut ctx = ProofContext::new(&env);
-    ctx.assumptions.push(ConstExpr::BinOp {
+    ctx.assumptions.enter_scope();
+    ctx.assumptions.inject(ConstExpr::BinOp {
         op: BinOp::Ge,
         left: Box::new(ConstExpr::NamedVar("y".into())),
         right: Box::new(ConstExpr::Lit(ConstValue::Int(5))),
     });
-    ctx.assumptions.pop(); // 全部弹出
+    ctx.assumptions.exit_scope(); // 全部弹出
 
     // Act
     let result = check_predicate(&ctx, &refined, &HashMap::new());
