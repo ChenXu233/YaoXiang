@@ -24,17 +24,6 @@ use crate::util::span::Span;
 use super::functions::{parse_fn_stmt_with_name, parse_fn_stmt_with_name_simple};
 use super::types::{parse_type_annotation, parse_fn_type_with_names, parse_binding_positions};
 
-#[allow(dead_code)]
-fn fn_returns_meta_type(type_annotation: Option<&Type>) -> bool {
-    matches!(
-        type_annotation,
-        Some(Type::Fn {
-            return_type,
-            ..
-        }) if matches!(return_type.as_ref(), Type::MetaType { .. })
-    )
-}
-
 fn is_old_function_syntax(state: &mut ParserState<'_>) -> bool {
     // 保存当前位置
     let saved = state.save_position();
