@@ -766,7 +766,7 @@ fn parse_var_stmt_with_pub(
 
         // RFC-010: Check if type annotation is MetaType (`Type` or `Type[T]`)
         // If so, this is a type definition: `Name: Type = { ... }` or `Name: Type[T] = { ... }`
-        if let Some(Type::MetaType { args: _, .. }) = &type_annotation {
+        if let Some(Type::MetaType { .. }) = &type_annotation {
             // RFC-010 Easter Egg: Type: Type = Type
             // 检测 `Type: Type = Type` 彩蛋（用户尝试定义 Type 自身）
             if name == "Type" {
