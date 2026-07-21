@@ -8,8 +8,8 @@
 ---
 
 > **⚠️ 归档说明**：本文档记录了 YaoXiang 语言的设计早期概念，已被以下正式文档取代：
-> - [YaoXiang-book.md](../YaoXiang-book.md) - 语言指南
-> - [YaoXiang-design-manifesto.md](../YaoXiang-design-manifesto.md) - 设计宣言
+> - [tutorial/](../tutorial/) - 教程
+> - [设计宣言](../design/manifesto.md) - 设计宣言
 >
 > 仅保留作为历史参考。
 

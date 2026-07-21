@@ -195,4 +195,5 @@ print(doubled)  // [2, 4, 6, 8]
 | 枚举 | `Color: Type = { red \| green \| blue }` | 多选一 |
 | 接口 | `Drawable: Type = { draw: ... }` | 多态抽象 |
 | 泛型 | `List: (T: Type) -> Type = { ... }` | 类型参数化 |
+| Never | `Never` 是系统内建底类型 | 发散/永不返回的代码路径 |
 | 方法 | `Type.method: (self: Type, ...) -> ...` | 行为附加 |

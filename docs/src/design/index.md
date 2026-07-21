@@ -37,56 +37,67 @@ design/
 
 | 文档 | 状态 | 描述 |
 |------|------|------|
-| [RFC-001 并发模型错误处理](./rfc/accepted/001-concurrent-model-error-handling.md) | ✅ 已接受 | 并发模型中的错误处理设计 |
-| [RFC-008 运行时并发模型](./rfc/accepted/008-runtime-concurrency-model.md) | ✅ 已接受 | 并作模型与任务调度器设计 |
-| [RFC-009 所有权模型](./rfc/accepted/009-ownership-model.md) | ✅ 已接受 | 所有权与借用系统设计 |
 | [RFC-010 统一类型语法](./rfc/accepted/010-unified-type-syntax.md) | ✅ 已接受 | 统一类型定义语法 |
 | [RFC-011 泛型类型系统](./rfc/accepted/011-generic-type-system.md) | ✅ 已接受 | 泛型类型系统设计 |
-
-> 查看 [`rfc/accepted/`](./rfc/accepted/) 目录获取完整列表。
+| [RFC-009 所有权模型](./rfc/accepted/009-ownership-model.md) | ✅ 已接受 | 所有权与借用系统设计 |
+| [RFC-024 并发模型](./rfc/accepted/024-concurrency-model.md) | ✅ 已接受 | spawn并发原语语义 |
+| [RFC-027 编译期断言](./rfc/accepted/027-compile-time-evaluation-types.md) | ✅ 已接受 | 编译期谓词与静态验证 |
+|
+| > 查看 [`rfc/accepted/`](./rfc/accepted/) 目录获取完整列表（共16个），及 [`rfc/index.md`](./rfc/index.md) 查看最新状态。
 
 ## RFC 提案
 
 > RFC（Request for Comments）是新特性和重大变更的提案流程。
 
-### 活跃提案
 
+### 活跃提案
 | 编号 | 标题 | 状态 |
 |------|------|------|
-| RFC-003 | 版本规划 | 审核中 |
-| RFC-016 | 量子原生支持 | 草案 |
-| RFC-018 | LLVM AOT 编译器 | 审核中 |
 | RFC-019 | 类型化同像性 | 草案 |
-| RFC-020 | 动态模块 FFI | 草案 |
-| RFC-021 | 库驱动 FFI 扩展 | 审核中 |
-| RFC-022 | Hoare 逻辑静态验证 | 审核中 |
+| RFC-028 | JIT编译器 | 草案 |
+| RFC-029 | 模块语义系统 | 草案 |
+| RFC-031 | 优化级别 | 草案 |
+| RFC-033 | ^^反射运算符 | 草案 |
+| RFC-034 | 调试工具链 | 草案 |
+| RFC-035 | MCP Server | 草案 |
+| RFC-002 | 跨平台IO(libuv) | 草案 |
+| RFC-026b | yx-bindgen | 草案 |
+| RFC-011a | 接口实现与动态分发 | 审核中 |
+| RFC-014a | Registry协议 | 审核中 |
+| RFC-014b | 构建系统 | 审核中 |
+| RFC-014c | 工作空间 | 审核中 |
+| RFC-026a | 可扩展FFI | 审核中 |
+| RFC-032 | spawn统一表达式 | 审核中 |
 
 ### 已接受提案
-
 | 编号 | 标题 | 状态 |
 |------|------|------|
-| RFC-001 | 并发模型错误处理 | 已接受 |
 | RFC-004 | 柯里化多位置绑定 | 已接受 |
 | RFC-006 | 文档站点优化 | 已接受 |
 | RFC-007 | 函数语法统一 | 已接受 |
 | RFC-008 | 运行时并发模型 | 已接受 |
 | RFC-009 | 所有权模型 | 已接受 |
+| RFC-009a | 令牌生命期分析 | 已接受 |
 | RFC-010 | 统一类型语法 | 已接受 |
-| RFC-011 | 泛型类型系统 | 已接受 |
-| RFC-012 | f-string 模板字符串 | 已接受 |
+| RFC-011 | 泛型系统 | 已接受 |
+| RFC-012 | f-string | 已接受 |
 | RFC-013 | 错误码规范 | 已接受 |
 | RFC-014 | 包管理器 | 已接受 |
 | RFC-015 | 配置系统 | 已接受 |
-| RFC-017 | LSP 支持 | 已接受 |
-| RFC-023 | 闭包捕获模型 | 已接受 |
+| RFC-017 | LSP支持 | 已接受 |
+| RFC-018 | LLVM AOT编译器 | 已接受 |
+| RFC-024 | 并发模型 | 已接受 |
+| RFC-026 | FFI核心机制 | 已接受 |
+| RFC-027 | 编译期断言 | 已接受 |
+| RFC-030 | assert断言机制 | 已接受 |
 
 ### 已拒绝提案
-
 | 编号 | 标题 | 状态 |
 |------|------|------|
-| RFC-002 | 跨平台 IO (libuv) | 已拒绝 |
-| RFC-005 | 自动化 CVE 扫描 | 已拒绝 |
-
+| RFC-003 | 版本规划 | 已拒绝 |
+| RFC-005 | CVE扫描 | 已拒绝 |
+| RFC-016 | 量子原生支持 | 已拒绝 |
+| RFC-025 | 原语类型扩展 | 已拒绝 |
 ### RFC 模板
 
 提交新提案前，请参考：
