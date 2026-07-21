@@ -1,149 +1,178 @@
-# 📦 v0.7.8
+# Changelog
 
-| 项目 | 值 |
-| ---- | ----- |
-| 发布日期 | 2026-07-12 |
-| 版本变更 | `v0.7.7` → `v0.7.8` |
-| 提交数 | 42 个 commit |
+## :bookmark: V0.7.9: Never 内建类型与类型系统深化
 
-## 📋 本次更新概要
+> 发布日期: 2026-07-21
 
-本次发版以 ConstExpr 约束表达式系统为核心，完成了 `Assert(N > 0)` 泛型约束从解析到求值再到单态化的全链路实现，并将断言机制（assert/Assert）统一为一个精化原语的两面。配套完成了类型检查器 Layer 0/2 重构、Formatter validate_source 统一入口、以及 Monomorphizer 泛型单态化重构。大量文档同步更新了 RFC 与语言规范中 Never/Void 语义与断言设计的修订。
+### 📦 版本信息
 
-## ✨ 新功能
+| 项目     | 值                |
+| -------- | ----------------- |
+| 发布日期 | 2026-07-21        |
+| 版本变更 | `0.7.8` → `0.7.9` |
+| 提交数   | 56 个 commit      |
 
-### ConstExpr 约束表达式系统（Assert 泛型约束）
+### 📋 本次更新概要
 
-`Assert(N > 0)` 泛型约束全链路实现：解析器扩展 Assert 语法、类型检查器 Layer 2 约束求值、单态化层处理 ConstExpr 传递，并配套端到端集成测试。
+本次发版是类型系统的一次重大深化。Never 内建类型正式引入（爆炸原则、子类型判定、trait 实现），宇宙分层 predicative 弱检查和类型级递归终止性检查为泛型系统提供了更坚实的理论基础。流敏感假设集替代旧栈式 AssumptionStack 实现了更精确的 Γ 推导，const 泛型约束新增 `<` 和 `<=` 运算符支持。同时 std.assert 统一注册机制、TextMate grammar 重写和 formatter 泛型签名重建等改进进一步提升了开发体验。
 
-- AST 新增 `Type::ConstExpr(Box<Expr>)` 变体
-- `convert_expr_to_const_expr` 转换函数支持字面量与运算
-- Layer 2 constraint evaluation（`ConstGenericEval`）
-- `validate_const_args` 泛型参数约束验证
-- `constraints` 字段加入 `ConstVarDef`
-- `check_const_bounds` fast-slow path 重构
-- 单态化层 `ConstExpr` 传递处理
-- `tests/yaoxiang/02-type-system/const_generic_assert.yx` 集成测试
+### ✨ 新功能
 
-### Formatter 增强
+#### Never 内建类型
 
-- 新增 `--dry-run` / `--no-verify` 参数
-- 统一验证入口 `validate_source`，替代分散的格式验证逻辑
-- `FormatError` 结构化错误类型，`verify` 字段标记验证失败
-- 导入排序后注释与空行处理修复
-- 链式调用换行格式统一
+正式引入 Never 底类型，完整实现爆炸原则（ex falso quodlibet）、子类型判定（Never 是任何类型的子类型）和 trait impl 注册。Never 在所有解析点正确解析，支持 const_eval size 计算，与 Void 类型形成了完整的底层类型体系。
 
-### CLI 与工具
+- 新增 MonoType::Never 变体及穷举匹配 arm
+- 注册为类型检查环境的内建类型
+- 所有解析点正确解析 Never/never → MonoType::Never
+- 实现爆炸原则、trait impls、const_eval size 支持
+- 修复 trait_key、structurally_equal、unify 三处核心路径
 
-- 完善 `yaoxiang eval` 命令
-- RFC 元数据同步工具与多语言翻译支持
+#### IsTrue 类型族桥接
 
-### 测试
+实现 IsTrue 类型族，将 `true` 映射到 `Void`、`false` 映射到 `Never`，为编译期条件判定提供了统一的类型级表达。
 
-- validate 测试迁移至独立文件，补充断言消息
-- CLI 子命令集成测试套件
+#### const 泛型约束运算符
 
-## 🐛 Bug 修复
+parser 全面支持 const 泛型约束中的 `<` 和 `<=` 比较运算符，新增 E1062/W1063 错误码覆盖约束检查。
 
-### LSP
+#### 流敏感假设集 Γ
 
-- 适配 lsp-server 0.9.0 Response API 变更（`response_kind` 替代 `result`/`error` 字段）
+流敏感假设集 Γ 配合 kill set 完全替换了旧的栈式 AssumptionStack，实现了更精确的类型推导路径追踪。
 
-### Formatter
+#### 宇宙分层与类型级递归
 
-- 修复导入排序后注释丢失与空行错乱
+- 宇宙分层 predicative 弱检查 — Typeₙ <: Typeₘ 当 n ≤ m
+- 类型级递归检测 + 结构递归终止性检查（AssociatedTypeDef::Recursive）
+- dispatch 分派管道接线 — CompileTime/Runtime + mut kill
 
-## ♻️ 重构优化
+#### TextMate grammar 重构
 
-### 类型检查器
+lexer 层重构 TextMate grammar，完整支持 fstrings 和全部类型的高亮标记，配合新的构建流水线实现自动同步。
 
-- `is_subtype` 提取至 Layer 0，删除死代码 subtyping 与 compatibility
-- 泛型推断模块移除，统一测试辅助函数
-- `check_single_module` 统一为 `validate_source`
+#### std.assert 统一注册
 
-### 单态化
+StdModule trait 扩展 type_families 方法，std.assert 模块通过统一注册机制接入，dispatch 分派管道支持 CompileTime/Runtime 双路径。
 
-- 泛型类型单态化重构，`generic_types` / `monomorphized_types` 字段拆分
+### 🐛 Bug 修复
 
-### 代码清理
+#### parser 值参数处理
 
-- 删除废弃 ShareRef IR 指令及相关空行
-- 删除未完成解构赋值 stub
-- crossbeam-epoch 安全漏洞升级
+修复值参数过滤统一大小写规则导致的 Const 泛型错位问题，修正 merged 状态下的错位并移除了临时的清洗补丁代码。
 
-## 📝 文档
+#### formatter ConstExpr 还原
 
-### 语言规范
+修复 ConstExpr 还原与类型体保序格式化问题，确保格式化输出与解析输入一致。
 
-- `std.assert` 模块文档（运行时 assert + 编译期 Assert）
-- 类型系统新增 §8.3 Assert 精化类型章节，Never/Void Curry-Howard 对应
-- 语法规范补充标识符三层体系（关键字 / 字面量保留字 / 内建类型名）
-- README 特性对比表更新
+#### Never 子类型修复
 
-### RFC
+修复 Never 在 trait_key、structurally_equal、unify 三条核心路径的错误 — 分别补全 MonoType::Never arm、对称递归判定和统一分支。
 
-- RFC-030 全面重构：assert 定位为 Assert 的值引入子，dispatch 分派管道
-- RFC-010 新增内建类型名表
-- RFC-011 新增 Never/Void 语义，移除重复 Assert 定义
-- RFC-027 新增 dispatch 分派管道，编译期谓词擦除改为分派
-- RFC 跟踪表新增 RFC-034/035 条目
-- 新增 `assert-unification-discussion.md` blog 记录六小时设计讨论
+#### yx_runner 兼容性
 
-## 🔧 其他变更
+将编译错误测试移至 06 目录，运行时失败标记 skip，确保 yx_runner 兼容运行。
 
-- commit-msg 校验器新增 `rfc` scope
-- dead-code clippy 告警抑制
-- pycache 历史文件清理
+### ♻️ 重构优化
 
-## 📋 提交记录
+#### 类型体与约束分离
 
-| Hash | 描述 |
-| :---: | ----- |
-| `c05c38b` | :memo: docs(design): 补充标识符三层体系说明 |
-| `59efa7c` | :memo: docs(docs): 记录 assert/Assert 统一方案的六小时讨论过程 |
-| `0765296` | :memo: docs(rfc): 更新 RFC-010/011/027 与 RFC-030 的 assert/Assert 统一设计 |
-| `ff80cb9` | :memo: docs(design): 补充 Never/Void 类型定义与 assert/Assert 统一文档 |
-| `0e8ec14` | :pencil: docs: auto-translate documentation |
-| `62df06d` | :memo: docs(rfc): 重构 assert 机制设计方案 |
-| `0dce985` | :white_check_mark: test(frontend): 迁移 validate 测试到独立文件，补充断言消息 |
-| `ce18620` | :bug: fix(lsp): 适配 lsp-server 0.9.0 Response API 变更 |
-| `8f16b56` | :white_check_mark: test(formatter): 添加语义验证集成测试 |
-| `2ad85c7` | :sparkles: feat(formatter): dry-run / no-verify 参数 |
-| `93caac7` | :recycle: refactor(util): check_single_module 使用 validate_source |
-| `3590023` | :recycle: refactor(formatter): integrate validate_source, add FormatError, verify field |
-| `89418b1` | :pencil: docs: auto-translate documentation |
-| `90ceaf3` | :sparkles: feat(frontend): 添加 validate_source 前端验证统一入口 |
-| `584cc76` | :arrow_up: chore(deps): Bump the production-dependencies group |
-| `b0c05c2` | :wrench: chore(build): 将 rfc 加入合法 scope 列表 |
-| `6cfda7b` | :memo: docs(docs): 更新 RFC 跟踪表，新增 RFC-034/035 |
-| `6987f8f` | :sparkles: feat(types): 支持 ConstExpr 约束表达式系统 |
-| `eeb5745` | :recycle: refactor(typecheck): extract is_subtype to Layer 0 |
-| `c6dd7d9` | :sparkles: feat(typecheck): implement Layer 2 constraint evaluation |
-| `9a47c2b` | :white_check_mark: test(typecheck): add check_const_bounds fast-path tests |
-| `92c9b33` | :recycle: refactor(typecheck): rewrite check_const_bounds with fast-slow path |
-| `0437c9b` | :sparkles: feat(typecheck): extract const constraints from struct body |
-| `21386b9` | :sparkles: feat(types): add constraints field to ConstVarDef |
-| `76023a7` | :recycle: refactor(typecheck): integrate const params via PolyType |
-| `bf65539` | :sparkles: feat(typecheck): add validate_const_args |
-| `6f104fd` | :wrench: chore(monomorphize): suppress dead-code clippy warnings |
-| `6c8623e` | :sparkles: feat(types): add ConstKind::from_ast_type_name |
-| `2b36c8d` | :pencil: docs: auto-translate documentation |
-| `d1d7119` | :memo: docs(design): RFC 011 注册关联 issue #151 |
-| `563388a` | :recycle: refactor(monomorphize): 重构泛型类型单态化 |
-| `6adc299` | :sparkles: feat(monomorphize): 添加 generic_types 和 monomorphized_types |
-| `bdf2020` | :fire: chore(typecheck): 删除未完成的解构赋值 stub |
-| `639320d` | :wrench: chore(build): 升级 crossbeam-epoch 修复安全漏洞 |
-| `866c4b6` | :recycle: refactor(typecheck): 移除泛型推断模块 |
-| `8d359ac` | :art: style(formatter): 链式调用换行格式统一 |
-| `35fc47e` | :wrench: chore(codegen): 清理 ShareRef 删除后的多余空行 |
-| `0ea3d06` | :sparkles: feat(formatter): 修复导入排序后注释与空行处理 |
-| `8d57dc6` | :fire: chore(middle): 删除废弃的 ShareRef IR 指令 |
-| `6c31f4a` | :white_check_mark: test(package): 新增 CLI 子命令集成测试套件 |
-| `ff2b42f` | :pencil: docs: auto-translate documentation |
-| `d91f58f` | :memo: docs(design): 新增 RFC-034 统一调试工具链规范 |
-| `48bf6e2` | :pencil: docs: auto-translate documentation |
-| `cf8dff0` | :sparkles: feat(backends): 完善 yaoxiang eval 命令 |
-| `1d402a0` | :pencil: docs: auto-translate documentation |
-| `de1a26c` | :fire: chore(meta): 移除历史 pycache 文件 |
-| `092a845` | :sparkles: feat(build): 新增 RFC 元数据同步工具与多语言翻译 |
-| `aa07d5d` | :memo: docs(design): 同步 RFC 元数据与 GitHub Issue 引用 |
+Type::Struct 改为有序 TypeBodyItem，约束字段与普通字段分离 — Assert 走 constraints 路径不混入 fields。ConstExpr 统一到 const_data，StructType.constraints 和 Assert 硬编码删除。
+
+#### 泛型实例化路径统一
+
+统一泛型实例化路径，Layer 2 约束检查接管所有分支。消除 clippy match 简化警告，StdModule trait 扩展 type_families。
+
+#### Binding 签名参数
+
+Binding 的签名参数统一存储到 signature_params，消除了重复构造和双路径问题。
+
+### ✅ 测试改进
+
+- formatter 泛型类型定义 round-trip 集成用例
+- parser const 约束 < 与 <= E2E 用例
+- typecheck gamma_assume 测试补规范引用与 AAA 分段
+- assert 运行时通过和 panic 的 E2E 测试
+- 测试合规修复 — inline tests 拆出 + AAA + 断言消息 + 规范头
+- IsTrue 测试合规修复
+- Never 新增子类型/解析/条件判定三组测试
+
+### 📝 文档
+
+- 同步文档至统一声明语法
+- 同步英文翻译并清理项目结构章节
+- 重写模块语义 RFC-029
+- RFC-011 类型体代码块与效应种子已实现
+- RFC-030 assert 断言机制移入已接受并标注实现
+- 标注 assert/Assert 统一方案 6 Phase 已实现 — #157-#162 已关闭
+- 升级 Star History 图表支持暗黑模式
+- 自动翻译文档同步
+
+### 🔧 其他变更
+
+- TextMate grammar 同步构建流水线
+- 清理废弃的教程示例与更新 formatter 设计文档
+- Bump production-dependencies (regex, toml, clap, tokio, lsp-server)
+- 清理 Python 测试脚本中未使用的导入和格式问题
+- 添加版本号 badge 自动同步 hook
+- i18n 自动翻译 locale 文件
+
+### 📝 提交记录
+
+|   Hash    | 描述                                                                  |
+| :-------: | --------------------------------------------------------------------- |
+| `4b886b6` | feat(types): Never 内建类型 — add MonoType::Never variant with exhaustiveness arms |
+| `490f523` | feat(types): Never 内建类型 — register as builtin type in typecheck environment |
+| `ef6647c` | feat(types): Never 内建类型 — resolve Never/never to MonoType::Never at all parse points |
+| `c502dd9` | feat(types): Never 内建类型 — add explosion principle, trait impls, and const_eval size support |
+| `552c47f` | fix(types): Never — trait_key structural_equal unify 三处修复 |
+| `c74fbc1` | test(types): Never — 新增子类型/解析/条件判定三组测试 |
+| `db25f6c` | feat(types): 实现 IsTrue 类型族桥接 — true→Void false→Never |
+| `a5c1554` | test(types): IsTrue — 测试合规修复 |
+| `5e0eace` | feat(proof): 流敏感假设集 Γ + kill set — 替换纯栈 AssumptionStack |
+| `c820535` | feat(typecheck): dispatch 分派管道接线 — CompileTime/Runtime + mut kill |
+| `5a7e576` | feat(types): 宇宙分层 predicative 弱检查 — Typeₙ<:Typeₘ 当 n≤m |
+| `90e6772` | feat(types): 类型级递归 + 结构递归终止性 — AssociatedTypeDef::Recursive |
+| `56828f6` | feat(typecheck): 新增 E1062/W1063 错误码 — const 泛型约束 |
+| `3b233b0` | refactor(typecheck): 统一泛型实例化路径 — Layer 2 约束检查 |
+| `d340240` | feat(parser): 支持 const 泛型约束中的 < 和 <= 比较运算符 |
+| `c6757f1` | test(parser): const 约束 < 与 <= E2E 用例 |
+| `24e5f17` | refactor(typecheck): Type::Struct 分离约束字段 — Assert 走 constraints 不混入 fields |
+| `6af2de1` | refactor(parser): Type::Struct 改为有序 TypeBodyItem |
+| `63a8268` | refactor(types): 删 StructType.constraints 与 Assert 硬编码 |
+| `f39daf4` | refactor(types): 统一 ConstExpr 到 const_data |
+| `4ba6c52` | feat(typecheck): 顺序处理类型体收集 const 约束 |
+| `b304574` | feat(typecheck): 效应种子 GammaAssume 接入 Γ |
+| `24ff47f` | test(typecheck): gamma_assume 测试补规范引用与 AAA 分段 |
+| `c96e5f0` | test(typecheck): 测试合规修复 — inline tests 拆出 + AAA + 断言消息 + 规范头 |
+| `210e603` | docs(rfc): RFC-011 类型体代码块与效应种子已实现 |
+| `1caa3ca` | refactor(std): StdModule trait 扩展 type_families + std.assert 模块 |
+| `6a6985a` | refactor(typecheck): 清除硬编码 + 修复空 dep_env — 走 std.assert 正路 |
+| `09c4f78` | test(test): assert 运行时通过和 panic 的 E2E 测试 |
+| `616b265` | docs(design): RFC-030 标注 std.assert 统一注册已实现 — #169 已关闭 |
+| `08f4a38` | docs(docs): 将 RFC-030 assert 断言机制移入已接受 |
+| `abe8a8e` | docs(rfc): 标注 assert/Assert 统一方案 6 Phase 已实现 — #157-#162 已关闭 |
+| `c9ff2f5` | fix(test): yx_runner 兼容 — 编译错误测试移至 06 + 运行时失败标记 skip |
+| `089a1b8` | refactor(parser): Binding 签名参数统一存储 signature_params |
+| `457b54b` | feat(formatter): 函数签名统一带名输出并删除双补丁函数 |
+| `deb344f` | feat(formatter): 泛型类型定义重建 RFC-010 函数式签名 |
+| `c04990b` | test(formatter): 泛型类型定义 round-trip 集成用例 |
+| `75b588b` | fix(formatter): ConstExpr 还原与类型体保序格式化 |
+| `123b66f` | fix(parser): 值参数过滤统一大小写规则修复 Const 泛型错位 |
+| `8e6708d` | fix(parser): 修正值参数 merged 错位并移除清洗补丁 |
+| `9e38255` | feat(lexer): 重构 TextMate grammar 支持 fstrings 和完整类型高亮 |
+| `2fde7c1` | build(docs): 新增 TextMate grammar 同步构建流水线 |
+| `6411127` | refactor(typecheck): 消除 clippy match 简化警告 |
+| `9cd4990` | chore(docs): 清理废弃的教程示例与更新 formatter 设计文档 |
+| `0b0e5bc` | docs(docs): 同步文档至统一声明语法 |
+| `4f5e302` | docs: auto-translate documentation |
+| `c7b5613` | docs: auto-translate documentation |
+| `5b33ef6` | docs: auto-translate documentation |
+| `0bab085` | docs: auto-translate documentation |
+| `a3969dc` | docs: auto-translate documentation |
+| `261126a` | chore(deps): Bump production-dependencies |
+| `68d9ef2` | docs(design): 重写模块语义 RFC-029 |
+| `2454ceb` | docs(docs): 同步英文翻译并清理项目结构章节 |
+| `3795a00` | style(test): 清理 Python 测试脚本中未使用的导入和格式问题 |
+| `7d23914` | chore(build): 添加版本号 badge 自动同步 hook |
+| `3fe5b82` | docs(docs): 升级 Star History 图表支持暗黑模式 |
+| `3afa123` | i18n: auto-translate locale files |
