@@ -667,16 +667,6 @@ fn test_generic_param_const_kind() {
     assert!(matches!(gp.kind, GenericParamKind::Const { .. }));
 }
 
-#[test]
-fn test_generic_param_platform_kind() {
-    let gp = GenericParam {
-        name: "P".into(),
-        kind: GenericParamKind::Platform,
-        constraints: vec![],
-    };
-    assert!(matches!(gp.kind, GenericParamKind::Platform));
-}
-
 // ============================================================================
 // FStringSegment
 // ============================================================================

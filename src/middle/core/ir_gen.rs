@@ -255,27 +255,6 @@ impl AstToIrGenerator {
         tlog!(debug, MSG::IrGenExitScope, &self.symbols.len().to_string());
     }
 
-    /// 从表达式中提取构造器类型名
-    ///
-    /// 用于接口直接赋值优化：判断初始化表达式是否为具体类型构造器调用
-    /// 例如：`Circle(1)` → Some("Circle"), `get_shape()` → None
-    fn extract_constructor_type_name(expr: &ast::Expr) -> Option<String> {
-        match expr {
-            // 构造器调用：TypeName(args...)
-            ast::Expr::Call { func, .. } => {
-                if let ast::Expr::Var(name, _) = func.as_ref() {
-                    // 首字母大写的标识符通常是类型构造器
-                    if name.chars().next().is_some_and(|c| c.is_uppercase()) {
-                        return Some(name.clone());
-                    }
-                }
-                None
-            }
-            // 直接变量引用（可能是已知具体类型的值）
-            _ => None,
-        }
-    }
-
     /// 获取约束变量的具体类型名（如果编译期可确定）
     ///
     /// 用于方法调用时选择直接调用（零开销）而非 vtable 查找
@@ -1425,7 +1404,7 @@ impl AstToIrGenerator {
                     if mono.is_constraint() {
                         if let Some(init_expr) = initializer {
                             if let Some(concrete_type_name) =
-                                Self::extract_constructor_type_name(init_expr)
+                                self.get_expr_struct_type_name(init_expr)
                             {
                                 self.constraint_var_concrete_types
                                     .insert(name.clone(), concrete_type_name);

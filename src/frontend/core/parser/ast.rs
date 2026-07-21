@@ -395,7 +395,7 @@ pub enum BindingKind {
     DefaultExternal { function: String },
 }
 
-/// Generic parameter kind: Type parameter, Const parameter, or Platform parameter
+/// Generic parameter kind: Type parameter or Const parameter
 #[derive(Debug, Clone)]
 pub enum GenericParamKind {
     /// Type parameter: `T`
@@ -405,9 +405,6 @@ pub enum GenericParamKind {
         /// The type of the const parameter (e.g., Int)
         const_type: Box<Type>,
     },
-    /// Platform parameter: `P` or `P: X86_64`
-    /// RFC-011: P is reserved for platform specialization
-    Platform,
 }
 
 /// Generic parameter with constraints: `[T: Clone]` or `[N: Int]`
