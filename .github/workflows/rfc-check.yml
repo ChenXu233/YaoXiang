@@ -7,7 +7,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Run RFC validation
         run: python scripts/check_rfc_tracking.py
       - name: Commit TRACKING.md if changed
