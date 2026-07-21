@@ -451,6 +451,10 @@ impl ModuleDependencyGraph {
                 } => {
                     // 非公开绑定不导出
                 }
+                StmtKind::TypeDefinition { name, .. } => {
+                    // 类型定义始终导出
+                    export_names.push(name.clone());
+                }
                 _ => {}
             }
         }

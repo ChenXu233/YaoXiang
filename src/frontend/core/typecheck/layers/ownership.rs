@@ -1669,22 +1669,9 @@ impl OwnershipChecker {
         let mut merged_escaped: HashSet<String> = HashSet::new();
         for stmt in &module.items {
             if let StmtKind::Binding {
-                name,
-                params,
-                body,
-                type_name,
-                type_annotation,
-                ..
+                name, params, body, ..
             } = &stmt.kind
             {
-                // 跳过类型构造器（type_name 存在且无 params 和 body）
-                if type_name.is_some() && params.is_empty() && body.is_empty() {
-                    continue;
-                }
-                // 跳过纯类型注解（有 type_annotation 但无 params 和 body）
-                if type_annotation.is_some() && params.is_empty() && body.is_empty() {
-                    continue;
-                }
                 // 跳过空函数体（无 params 也无 body — const 之类）
                 if params.is_empty() && body.is_empty() {
                     continue;

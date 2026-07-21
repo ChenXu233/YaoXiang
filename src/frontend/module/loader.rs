@@ -164,18 +164,15 @@ impl ModuleLoader {
 
         for stmt in &ast.items {
             match &stmt.kind {
-                // Binding 导出 (函数、方法、类型)
+                // Binding 导出 (函数)
                 StmtKind::Binding {
                     name,
                     type_name,
                     method_type,
                     type_annotation,
-                    params,
-                    body,
                     is_pub,
                     ..
                 } => {
-                    let is_type_def = params.is_empty() && body.is_empty();
                     if let Some(ty_name) = type_name {
                         // 方法绑定：pub 导出为 Type.method
                         if *is_pub {
@@ -186,14 +183,6 @@ impl ModuleLoader {
                                 signature: format_type(method_type.as_ref().unwrap()),
                             });
                         }
-                    } else if is_type_def {
-                        // 类型定义始终导出
-                        module.add_export(Export {
-                            name: name.clone(),
-                            full_path: format!("{}.{}", module_path, name),
-                            kind: ExportKind::Type,
-                            signature: "Type".to_string(),
-                        });
                     } else {
                         // 函数定义：pub 导出
                         if *is_pub {
@@ -210,27 +199,15 @@ impl ModuleLoader {
                         }
                     }
                 }
-
-                // 顶层不可变绑定 → 常量导出
-                StmtKind::Var {
-                    name,
-                    is_mut,
-                    type_annotation,
-                    ..
-                } if !is_mut => {
-                    let signature = type_annotation
-                        .as_ref()
-                        .map(format_type)
-                        .unwrap_or_else(|| "Any".to_string());
+                StmtKind::TypeDefinition { name, .. } => {
+                    // 类型定义始终导出
                     module.add_export(Export {
                         name: name.clone(),
                         full_path: format!("{}.{}", module_path, name),
-                        kind: ExportKind::Constant,
-                        signature,
+                        kind: ExportKind::Type,
+                        signature: "Type".to_string(),
                     });
                 }
-
-                // use/方法绑定/其他语句不产生导出
                 _ => {}
             }
         }

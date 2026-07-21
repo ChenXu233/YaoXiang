@@ -452,12 +452,8 @@ impl TypeChecker {
                     ..
                 } => {
                     let generic_params = crate::frontend::core::parser::ast::extract_generic_params(signature_params);
-                    // 根据字段值区分类型：方法绑定 / 类型定义 / 函数
+                    // 根据字段值区分类型：方法绑定 / 函数
                     let is_method = type_name.is_some();
-                    // 函数定义：body 有语句
-                    let has_body = !body.is_empty();
-                    // 类型定义：没有 body 且有 type_annotation
-                    let is_type_def = !has_body && type_annotation.is_some();
 
                     if is_method {
                         // 方法绑定 → Method (定义)
@@ -486,43 +482,6 @@ impl TypeChecker {
 
                         if let Some(mt) = method_type {
                             self.collect_type_tokens(&fp, mt);
-                        }
-                    } else if is_type_def {
-                        // 类型定义 → Type (定义)
-                        let mut modifiers = vec![SemanticTokenModifier::Declaration];
-                        if !generic_params.is_empty() {
-                            modifiers.push(SemanticTokenModifier::Generic);
-                        }
-                        self.semantic_db.add_token(
-                            &fp,
-                            SemanticToken {
-                                name: name.clone(),
-                                token_type: SemanticTokenType::Type,
-                                modifiers,
-                                span: stmt.span,
-                            },
-                        );
-                        global_symbols.push(name.clone());
-
-                        // 类型定义体中的类型引用
-                        if let Some(def) = type_annotation {
-                            self.collect_type_tokens(&fp, def);
-
-                            // Variant constructors → EnumMember (定义)
-                            if let crate::frontend::core::parser::ast::Type::Variant(variants) = def
-                            {
-                                for v in variants {
-                                    self.semantic_db.add_token(
-                                        &fp,
-                                        SemanticToken {
-                                            name: v.name.clone(),
-                                            token_type: SemanticTokenType::EnumMember,
-                                            modifiers: vec![SemanticTokenModifier::Declaration],
-                                            span: v.name_span,
-                                        },
-                                    );
-                                }
-                            }
                         }
                     } else {
                         // 函数定义 → Function (定义)
@@ -747,6 +706,48 @@ impl TypeChecker {
                     );
                 }
                 StmtKind::If { .. } | StmtKind::Error(_) | StmtKind::ExternalBindingStmt { .. } => {
+                }
+                StmtKind::TypeDefinition {
+                    name,
+                    signature_params,
+                    definition,
+                    ..
+                } => {
+                    let generic_params =
+                        crate::frontend::core::parser::ast::extract_generic_params(signature_params);
+                    // 类型定义 → Type (定义)
+                    let mut modifiers = vec![SemanticTokenModifier::Declaration];
+                    if !generic_params.is_empty() {
+                        modifiers.push(SemanticTokenModifier::Generic);
+                    }
+                    self.semantic_db.add_token(
+                        &fp,
+                        SemanticToken {
+                            name: name.clone(),
+                            token_type: SemanticTokenType::Type,
+                            modifiers,
+                            span: stmt.span,
+                        },
+                    );
+                    global_symbols.push(name.clone());
+
+                    // 类型定义体中的类型引用
+                    self.collect_type_tokens(&fp, definition);
+
+                    // Variant constructors → EnumMember (定义)
+                    if let crate::frontend::core::parser::ast::Type::Variant(variants) = definition {
+                        for v in variants {
+                            self.semantic_db.add_token(
+                                &fp,
+                                SemanticToken {
+                                    name: v.name.clone(),
+                                    token_type: SemanticTokenType::EnumMember,
+                                    modifiers: vec![SemanticTokenModifier::Declaration],
+                                    span: v.name_span,
+                                },
+                            );
+                        }
+                    }
                 }
                 StmtKind::Return(expr_opt) => {
                     if let Some(expr) = expr_opt {
