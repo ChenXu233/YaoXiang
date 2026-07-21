@@ -427,6 +427,15 @@ fn register_module_exports(
                     .unwrap_or_else(|| "Any".to_string()),
             });
         }
+        if let StmtKind::TypeDefinition { name, .. } = &stmt.kind {
+            let qualified_name = format!("{}.{}", module_id.name, name);
+            module_info.add_export(Export {
+                name: name.clone(),
+                full_path: qualified_name.clone(),
+                kind: ExportKind::Type,
+                signature: "Type".to_string(),
+            });
+        }
     }
 
     env.module_registry.register(module_info);

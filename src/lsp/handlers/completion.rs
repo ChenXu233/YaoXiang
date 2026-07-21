@@ -176,16 +176,16 @@ fn extract_symbols_from_module(module: &Module) -> Vec<CompletionItem> {
                         sort_text: Some(format!("4_{}", name)),
                         ..CompletionItem::default()
                     });
-                } else {
-                    // 类型定义
-                    items.push(CompletionItem {
-                        label: name.clone(),
-                        kind: Some(CompletionItemKind::CLASS),
-                        detail: Some("类型".to_string()),
-                        sort_text: Some(format!("4_{}", name)),
-                        ..CompletionItem::default()
-                    });
                 }
+            }
+            StmtKind::TypeDefinition { name, .. } => {
+                items.push(CompletionItem {
+                    label: name.clone(),
+                    kind: Some(CompletionItemKind::CLASS),
+                    detail: Some("类型".to_string()),
+                    sort_text: Some(format!("4_{}", name)),
+                    ..CompletionItem::default()
+                });
             }
             _ => {}
         }

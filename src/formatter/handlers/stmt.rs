@@ -93,6 +93,30 @@ pub fn format_stmt(
                 "return".to_string()
             }
         }
+        StmtKind::TypeDefinition {
+            name,
+            signature_params,
+            definition,
+            is_pub,
+        } => {
+            let pub_prefix = if *is_pub { "pub " } else { "" };
+            if signature_params.is_empty() {
+                format!(
+                    "{}{}: Type = {}",
+                    pub_prefix,
+                    name,
+                    format_type(definition, ctx, source_map)
+                )
+            } else {
+                format!(
+                    "{}{}: {} -> Type = {}",
+                    pub_prefix,
+                    name,
+                    format_signature_params(signature_params, ctx, source_map),
+                    format_type(definition, ctx, source_map)
+                )
+            }
+        }
     }
 }
 

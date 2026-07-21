@@ -377,6 +377,7 @@ fn collect_from_stmt(
                 local_var_types,
             );
         }
+        StmtKind::TypeDefinition { .. } => {}
         StmtKind::Use { .. } | StmtKind::ExternalBindingStmt { .. } | StmtKind::Error(_) => {}
         StmtKind::Return(expr_opt) => {
             if let Some(expr) = expr_opt {

@@ -117,30 +117,27 @@ fn test_fn_def_block_body() {
 #[test]
 fn test_type_def_struct() {
     let kind = parse_stmt("Point: Type = { x: Float, y: Float }");
-    if let StmtKind::Binding {
-        name,
-        type_annotation,
-        ..
+    if let StmtKind::TypeDefinition {
+        name, definition, ..
     } = &kind
     {
-        assert_eq!(name, "Point");
-        assert!(type_annotation.is_some());
-        assert!(matches!(
-            type_annotation.as_ref().unwrap(),
-            Type::Struct { .. }
-        ));
+        assert_eq!(name, "Point", "类型名应为 Point");
+        assert!(
+            matches!(definition, Type::Struct { .. }),
+            "definition 应为 Struct"
+        );
     } else {
-        panic!("Expected StmtKind::Binding for type def");
+        panic!("Expected StmtKind::TypeDefinition for type def");
     }
 }
 
 #[test]
 fn test_type_def_enum() {
     let kind = parse_stmt("Color: Type = { red | green | blue }");
-    if let StmtKind::Binding { name, .. } = &kind {
-        assert_eq!(name, "Color");
+    if let StmtKind::TypeDefinition { name, .. } = &kind {
+        assert_eq!(name, "Color", "类型名应为 Color");
     } else {
-        panic!("Expected StmtKind::Binding for enum def");
+        panic!("Expected StmtKind::TypeDefinition for enum def");
     }
 }
 
@@ -148,18 +145,18 @@ fn test_type_def_enum() {
 fn test_type_def_generic() {
     // RFC-011: Option: (T: Type) -> Type = { some(T) | none }
     let kind = parse_stmt("Option: (T: Type) -> Type = { some(T) | none }");
-    if let StmtKind::Binding {
+    if let StmtKind::TypeDefinition {
         name,
         signature_params,
         ..
     } = &kind
     {
         let generic_params = extract_generic_params(signature_params);
-        assert_eq!(name, "Option");
-        assert_eq!(generic_params.len(), 1);
-        assert_eq!(generic_params[0].name, "T");
+        assert_eq!(name, "Option", "类型名应为 Option");
+        assert_eq!(generic_params.len(), 1, "应有 1 个泛型参数");
+        assert_eq!(generic_params[0].name, "T", "泛型参数名应为 T");
     } else {
-        panic!("Expected StmtKind::Binding for generic type def");
+        panic!("Expected StmtKind::TypeDefinition for generic type def");
     }
 }
 

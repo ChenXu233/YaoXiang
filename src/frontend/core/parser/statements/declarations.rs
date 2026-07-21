@@ -598,15 +598,10 @@ fn parse_var_stmt_with_pub(
                 let definition = parse_type_definition(state)?;
                 state.skip(&TokenKind::Semicolon);
                 return Some(Stmt {
-                    kind: StmtKind::Binding {
+                    kind: StmtKind::TypeDefinition {
                         name,
-                        type_name: None,
-                        method_type: None,
                         signature_params: fn_params.clone().unwrap_or_default(),
-                        type_annotation: Some(definition),
-
-                        params: Vec::new(),
-                        body: Vec::new(),
+                        definition,
                         is_pub: final_is_pub,
                     },
                     span,
@@ -769,18 +764,13 @@ fn parse_var_stmt_with_pub(
                         // 编译器后续阶段会检测并输出禅意消息
                         // 保留 meta_args 以便类型检查器区分 E1090 和 E1091
                         return Some(Stmt {
-                            kind: StmtKind::Binding {
+                            kind: StmtKind::TypeDefinition {
                                 name: "Type".to_string(),
-                                type_name: None,
-                                method_type: None,
                                 signature_params: Vec::new(),
-                                type_annotation: Some(Type::MetaType {
+                                definition: Type::MetaType {
                                     name_span: Span::dummy(),
                                     args: Vec::new(),
-                                }),
-
-                                params: Vec::new(),
-                                body: Vec::new(),
+                                },
                                 is_pub: false,
                             },
                             span,
@@ -793,15 +783,10 @@ fn parse_var_stmt_with_pub(
             let definition = parse_type_definition(state)?;
             state.skip(&TokenKind::Semicolon);
             return Some(Stmt {
-                kind: StmtKind::Binding {
+                kind: StmtKind::TypeDefinition {
                     name,
-                    type_name: None,
-                    method_type: None,
                     signature_params: Vec::new(),
-                    type_annotation: Some(definition),
-
-                    params: Vec::new(),
-                    body: Vec::new(),
+                    definition,
                     is_pub: false,
                 },
                 span,

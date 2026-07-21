@@ -2,10 +2,9 @@
 
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{
-    self, BindingKind, BindingSemanticKind, BinOp, Block, Expr, FStringSegment, GenericParam,
-    GenericParamKind, MatchArm, Param, Pattern, SpannedIdent, Stmt, StmtKind, StructField, Type,
-    TypeBodyBinding, UnOp, VariantDef, classify_binding_semantic_kind, is_meta_type,
-    type_annotation_returns_meta_type,
+    self, BindingKind, BinOp, Block, Expr, FStringSegment, GenericParam, GenericParamKind,
+    MatchArm, Param, Pattern, SpannedIdent, Stmt, StmtKind, StructField, Type, TypeBodyBinding,
+    UnOp, VariantDef, is_meta_type,
 };
 use crate::util::span::Span;
 
@@ -440,7 +439,6 @@ fn test_type_meta_type() {
         args: vec![],
     };
     assert!(is_meta_type(&t));
-    assert!(type_annotation_returns_meta_type(&t));
 }
 
 #[test]
@@ -570,43 +568,104 @@ fn test_unop_all_variants() {
 }
 
 // ============================================================================
-// classify_binding_semantic_kind
+// StmtKind::TypeDefinition
 // ============================================================================
 
 #[test]
-fn test_classify_method() {
-    let kind = classify_binding_semantic_kind(Some(&"Point".to_string()), None, &[], &[]);
-    assert_eq!(kind, BindingSemanticKind::Method);
+fn test_type_definition_variant() {
+    let stmt = Stmt {
+        kind: StmtKind::TypeDefinition {
+            name: "Point".into(),
+            signature_params: vec![],
+            definition: Type::Struct {
+                body: vec![
+                    ast::TypeBodyItem::Field(StructField {
+                        name: "x".into(),
+                        ty: Type::Float(64),
+                        is_mut: false,
+                        default: None,
+                    }),
+                    ast::TypeBodyItem::Field(StructField {
+                        name: "y".into(),
+                        ty: Type::Float(64),
+                        is_mut: false,
+                        default: None,
+                    }),
+                ],
+            },
+            is_pub: false,
+        },
+        span: Span::dummy(),
+    };
+    if let StmtKind::TypeDefinition {
+        name, definition, ..
+    } = &stmt.kind
+    {
+        assert_eq!(name, "Point", "类型名应为 Point");
+        assert!(
+            matches!(definition, Type::Struct { .. }),
+            "definition 应为 Struct"
+        );
+    } else {
+        panic!("Expected StmtKind::TypeDefinition");
+    }
 }
 
 #[test]
-fn test_classify_type_constructor() {
-    let kind = classify_binding_semantic_kind(
-        None,
-        Some(&Type::MetaType {
-            name_span: Span::dummy(),
-            args: vec![],
-        }),
-        &[],
-        &[],
-    );
-    assert_eq!(kind, BindingSemanticKind::TypeConstructor);
-}
-
-#[test]
-fn test_classify_function() {
-    let kind = classify_binding_semantic_kind(
-        None,
-        None,
-        &[Param {
-            name: "x".into(),
-            ty: None,
-            is_mut: false,
-            span: Span::dummy(),
-        }],
-        &[],
-    );
-    assert_eq!(kind, BindingSemanticKind::Function);
+fn test_type_definition_generic() {
+    let stmt = Stmt {
+        kind: StmtKind::TypeDefinition {
+            name: "Option".into(),
+            signature_params: vec![Param {
+                name: "T".into(),
+                ty: Some(Type::MetaType {
+                    name_span: Span::dummy(),
+                    args: vec![],
+                }),
+                is_mut: false,
+                span: Span::dummy(),
+            }],
+            definition: Type::Variant(vec![
+                VariantDef {
+                    name: "some".into(),
+                    name_span: Span::dummy(),
+                    params: vec![(
+                        None,
+                        Type::Name {
+                            name: "T".into(),
+                            span: Span::dummy(),
+                        },
+                    )],
+                    span: Span::dummy(),
+                },
+                VariantDef {
+                    name: "none".into(),
+                    name_span: Span::dummy(),
+                    params: vec![],
+                    span: Span::dummy(),
+                },
+            ]),
+            is_pub: false,
+        },
+        span: Span::dummy(),
+    };
+    if let StmtKind::TypeDefinition {
+        name,
+        signature_params,
+        definition,
+        ..
+    } = &stmt.kind
+    {
+        assert_eq!(name, "Option", "类型名应为 Option");
+        assert_eq!(signature_params.len(), 1, "应有 1 个泛型参数");
+        assert_eq!(signature_params[0].name, "T", "泛型参数名应为 T");
+        assert!(
+            matches!(definition, Type::Variant(_)),
+            "definition 应为 Variant"
+        );
+    } else {
+        panic!("Expected StmtKind::TypeDefinition");
+    }
 }
 
 // ============================================================================
@@ -776,27 +835,6 @@ fn test_is_meta_type_false() {
         name: "Int".into(),
         span: Span::dummy()
     }));
-}
-
-#[test]
-fn test_type_annotation_returns_meta_type_fn() {
-    let t = Type::Fn {
-        params: vec![],
-        return_type: Box::new(Type::MetaType {
-            name_span: Span::dummy(),
-            args: vec![],
-        }),
-    };
-    assert!(type_annotation_returns_meta_type(&t));
-}
-
-#[test]
-fn test_type_annotation_returns_meta_type_false() {
-    let t = Type::Fn {
-        params: vec![],
-        return_type: Box::new(Type::Int(64)),
-    };
-    assert!(!type_annotation_returns_meta_type(&t));
 }
 
 // ============================================================================

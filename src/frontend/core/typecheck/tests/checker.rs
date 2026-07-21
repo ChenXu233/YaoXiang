@@ -380,10 +380,8 @@ fn test_type_checker_with_generic_type_binding() {
         items: vec![
             // Wrapper: Type = { value: T }  (泛型类型定义)
             Stmt {
-                kind: crate::frontend::core::parser::ast::StmtKind::Binding {
+                kind: crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
                     name: "Wrapper".to_string(),
-                    type_name: None,
-                    method_type: None,
                     signature_params: vec![crate::frontend::core::parser::ast::Param {
                         name: "T".to_string(),
                         ty: Some(crate::frontend::core::parser::ast::Type::MetaType {
@@ -393,7 +391,7 @@ fn test_type_checker_with_generic_type_binding() {
                         is_mut: false,
                         span: crate::util::span::Span::dummy(),
                     }],
-                    type_annotation: Some(AstType::Struct {
+                    definition: AstType::Struct {
                         body: vec![crate::frontend::core::parser::ast::TypeBodyItem::Field(
                             crate::frontend::core::parser::ast::StructField {
                                 name: "value".to_string(),
@@ -405,10 +403,7 @@ fn test_type_checker_with_generic_type_binding() {
                                 default: None,
                             },
                         )],
-                    }),
-
-                    params: vec![],
-                    body: vec![],
+                    },
                     is_pub: false,
                 },
                 span: Span::dummy(),

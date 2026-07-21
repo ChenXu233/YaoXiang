@@ -486,6 +486,12 @@ impl AstToIrGenerator {
         constants: &mut Vec<ConstValue>,
     ) -> Result<Option<FunctionIR>, Diagnostic> {
         match &stmt.kind {
+            ast::StmtKind::TypeDefinition {
+                name,
+                signature_params: _,
+                definition,
+                is_pub: _,
+            } => self.generate_constructor_ir(name, definition),
             ast::StmtKind::Binding {
                 name,
                 type_name,
@@ -508,37 +514,8 @@ impl AstToIrGenerator {
                         body,
                         constants,
                     )
-                } else if type_annotation.as_ref().is_some_and(|t| {
-                    crate::frontend::core::parser::ast::type_annotation_returns_meta_type(t)
-                }) && body.len() == 1
-                {
-                    // TypeDef with ExternRef: 检查 RHS body 是否为 ExternRef（不透明句柄类型）
-                    if let Some(ConstValue::ExternRef {
-                        mechanism,
-                        lib,
-                        symbol,
-                    }) = self.eval_body_for_type_decl(body)
-                    {
-                        let lib_id = self.get_or_create_lib_id(&mechanism, &lib);
-                        self.ffi_bindings
-                            .push(crate::middle::core::ir::FfiBinding::TypeBinding {
-                                type_name: name.clone(),
-                                lib_id,
-                                symbol: symbol.clone(),
-                            });
-                        return Ok(None);
-                    }
-                    // 普通 MetaType 构造器（如自定义类型别名）
-                    self.generate_constructor_ir(name, type_annotation.as_ref().unwrap())
-                } else if type_annotation.as_ref().is_some_and(|t| {
-                    crate::frontend::core::parser::ast::type_annotation_returns_meta_type(t)
-                        || matches!(t, ast::Type::Struct { .. })
-                }) {
-                    // TypeDef: 类型标注返回 Type 或者是 Struct 类型
-                    self.generate_constructor_ir(name, type_annotation.as_ref().unwrap())
                 } else {
                     // Fn: 普通函数
-                    // 从 GenericParam 提取参数名字符串
                     let generic_param_names = if generic_params.is_empty() {
                         None
                     } else {
@@ -994,19 +971,6 @@ impl AstToIrGenerator {
             lib_name: lib_name.to_string(),
         });
         id
-    }
-
-    /// 从声明 body 中提取单个表达式并求值
-    fn eval_body_for_type_decl(
-        &self,
-        body: &[ast::Stmt],
-    ) -> Option<ConstValue> {
-        if body.len() == 1 {
-            if let ast::StmtKind::Expr(expr) = &body[0].kind {
-                return self.eval_const_expr(expr);
-            }
-        }
-        None
     }
 
     /// 检查函数体（Stmt 列表）是否是对 ExternRef 的求值

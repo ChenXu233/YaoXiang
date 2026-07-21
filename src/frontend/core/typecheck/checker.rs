@@ -4,10 +4,12 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::frontend::core::parser::ast::{extract_generic_params, Module};
+use crate::frontend::core::parser::ast::{
+    extract_generic_params, GenericParamKind, Module, Param, TypeBodyItem,
+};
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable};
-use crate::frontend::core::types::eval::const_eval::ConstFunction;
-use crate::frontend::core::types::const_data::{ConstExpr, ConstValue, BinOp};
+use crate::frontend::core::types::const_data::{ConstExpr, ConstValue, BinOp, ConstKind, ConstVarDef};
+use crate::frontend::core::types::eval::const_eval::{ConstFunction, convert_expr_to_const_expr};
 use crate::frontend::core::typecheck::predicate_resolver::PredicateResolver;
 use crate::frontend::core::typecheck::proof::context::ProofContext;
 use crate::frontend::core::typecheck::proof::verdict::ProofResult;
@@ -201,33 +203,14 @@ impl TypeChecker {
     ) -> TypeCheckResult {
         // 第一遍：收集所有类型定义
         for stmt in &module.items {
-            if let crate::frontend::core::parser::ast::StmtKind::Binding {
+            if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
                 name,
-                type_name,
-                method_type: _,
-                type_annotation,
                 signature_params,
-                params,
-                body,
+                definition,
                 ..
             } = &stmt.kind
             {
-                let generic_params = extract_generic_params(signature_params);
-                if crate::frontend::core::parser::ast::classify_binding_semantic_kind(
-                    type_name.as_ref(),
-                    type_annotation.as_ref(),
-                    params,
-                    body,
-                ) == crate::frontend::core::parser::ast::BindingSemanticKind::TypeConstructor
-                {
-                    // 这是一个类型定义
-                    if let Some(type_annotation) = type_annotation {
-                        // 从 GenericParam 中提取名称
-                        let param_names: Vec<String> =
-                            generic_params.iter().map(|p| p.name.clone()).collect();
-                        self.add_type_definition(name, type_annotation, &param_names, stmt.span);
-                    }
-                }
+                self.add_type_definition(name, definition, signature_params, stmt.span);
             }
         }
 
@@ -885,9 +868,11 @@ impl TypeChecker {
         &mut self,
         name: &str,
         definition: &crate::frontend::core::parser::ast::Type,
-        generic_params: &[String],
+        signature_params: &[Param],
         span: crate::util::span::Span,
     ) {
+        let generic_params = extract_generic_params(signature_params);
+        let param_names: Vec<String> = generic_params.iter().map(|p| p.name.clone()).collect();
         // RFC-010 Easter Egg: Type: Type = Type
         // 当用户尝试定义 Type 自身时，触发彩蛋
         if name == "Type" {
@@ -911,8 +896,7 @@ impl TypeChecker {
             if is_type_self_ref {
                 // 检查 type_annotation 是否有泛型参数（这表示 Type: Type[T] = ...）
                 if !generic_params.is_empty() {
-                    // E1091: 泛型元类型自引用错误
-                    let decl = format!("Type: Type({}) = ...", generic_params.join(", "));
+                    let decl = format!("Type: Type({}) = ...", param_names.join(", "));
                     self.add_error(
                         ErrorCodeDefinition::invalid_generic_self_reference(&decl)
                             .at(span)
@@ -941,20 +925,71 @@ impl TypeChecker {
             _ => poly.body.clone(),
         });
         self.env.add_type(name.to_string(), poly.clone());
+        // 同时注册到 vars，使类型名可以在表达式中使用（如 Point(1.0, 2.0) 构造器调用）
+        self.env.add_var(name.to_string(), poly.clone());
 
         // 如果是泛型类型构造器（有泛型参数），存储模板信息用于类型实例化
         if !generic_params.is_empty() {
             use crate::frontend::core::typecheck::environment::GenericTypeDef;
             use crate::frontend::core::types::var::TypeVar;
 
-            let type_param_names: Vec<String> = generic_params.to_vec();
+            let type_param_names: Vec<String> = generic_params
+                .iter()
+                .filter(|p| matches!(p.kind, GenericParamKind::Type))
+                .map(|p| p.name.clone())
+                .collect();
+
+            let mut const_binders: Vec<ConstVarDef> = generic_params
+                .iter()
+                .filter_map(|p| {
+                    if let GenericParamKind::Const { const_type } = &p.kind {
+                        let type_name = match const_type.as_ref() {
+                            crate::frontend::core::parser::ast::Type::Name { name, .. } => {
+                                name.clone()
+                            }
+                            crate::frontend::core::parser::ast::Type::Int(_) => "Int".to_string(),
+                            crate::frontend::core::parser::ast::Type::Float(_) => {
+                                "Float".to_string()
+                            }
+                            crate::frontend::core::parser::ast::Type::Bool => "Bool".to_string(),
+                            _ => "Int".to_string(),
+                        };
+                        let kind = ConstKind::from_ast_type_name(&type_name)
+                            .unwrap_or(ConstKind::Int(None));
+                        Some((p, kind))
+                    } else {
+                        None
+                    }
+                })
+                .enumerate()
+                .map(|(i, (p, kind))| {
+                    let idx = type_param_names.len() + i;
+                    ConstVarDef::new(p.name.clone(), kind, idx)
+                })
+                .collect();
+
+            // 从类型体收集待定证明义务到 const 参数
+            if let crate::frontend::core::parser::ast::Type::Struct { body } = definition {
+                for item in body {
+                    match item {
+                        TypeBodyItem::Expr(ty) => {
+                            process_body_expr_item(ty, &mut const_binders);
+                        }
+                        TypeBodyItem::Field(f) => {
+                            process_body_expr_item(&f.ty, &mut const_binders);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
             let type_binders: Vec<TypeVar> =
                 (0..type_param_names.len()).map(TypeVar::new).collect();
 
             let def = GenericTypeDef {
                 poly: PolyType {
                     type_binders,
-                    const_binders: vec![],
+                    const_binders,
                     body: poly.body.clone(),
                 },
                 type_param_names,
@@ -965,7 +1000,47 @@ impl TypeChecker {
         // 自动为 Record 类型派生标准库 traits
         self.auto_derive_traits(name, definition);
     }
+}
 
+/// 处理类型体中的类型表达式项，收集 const 约束到对应的 const binder。
+/// 遍历类型表达式中的 Generic 类型（如 Assert(N < 100)），
+/// 将含自由 const 变量的 ConstExpr 参数关联到对应 const binder 的 constraints。
+fn process_body_expr_item(
+    ty: &crate::frontend::core::parser::ast::Type,
+    const_binders: &mut [ConstVarDef],
+) {
+    use crate::frontend::core::parser::ast::Type;
+    if let Type::Generic { args, .. } = ty {
+        for arg in args {
+            if let Type::ConstExpr(expr) = arg {
+                if let Some(const_expr) = convert_expr_to_const_expr(expr) {
+                    if let Some(cv) = find_const_var_in_expr(expr, const_binders) {
+                        const_binders[cv.index()].constraints.push(const_expr);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// 在 Expr 树中查找引用的 const 变量名，返回对应的 ConstVar index
+fn find_const_var_in_expr(
+    expr: &Expr,
+    const_binders: &[ConstVarDef],
+) -> Option<crate::frontend::core::types::var::ConstVar> {
+    use crate::frontend::core::parser::ast::Expr;
+    match expr {
+        Expr::Var(name, _) => const_binders
+            .iter()
+            .position(|b| b.name == *name)
+            .map(crate::frontend::core::types::var::ConstVar::new),
+        Expr::BinOp { left, right, .. } => find_const_var_in_expr(left, const_binders)
+            .or_else(|| find_const_var_in_expr(right, const_binders)),
+        Expr::UnOp { expr, .. } => find_const_var_in_expr(expr, const_binders),
+        _ => None,
+    }
+}
+impl TypeChecker {
     /// 为 Record 类型自动派生标准库 traits
     ///
     /// 规则：
@@ -1058,9 +1133,6 @@ impl TypeChecker {
             if let StmtKind::Binding {
                 name,
                 type_name,
-                type_annotation,
-
-                body,
                 is_pub,
                 ..
             } = &stmt.kind
@@ -1068,13 +1140,8 @@ impl TypeChecker {
                 // 方法绑定
                 let is_method = type_name.is_some();
 
-                // 函数定义：body 有语句
-                let has_body = !body.is_empty();
-                // 类型定义：没有 body 且有 type_annotation
-                let is_type_def = !has_body && type_annotation.is_some();
-
-                // 类型定义始终导出，方法绑定始终导出，函数仅 pub 导出
-                if is_type_def || is_method || *is_pub {
+                // 方法绑定始终导出，函数仅 pub 导出
+                if is_method || *is_pub {
                     if is_method {
                         // 方法绑定导出为 Type.method 格式
                         if let Some(ty_name) = type_name {
@@ -1084,6 +1151,10 @@ impl TypeChecker {
                         self.env.add_export(name);
                     }
                 }
+            }
+            if let StmtKind::TypeDefinition { name, .. } = &stmt.kind {
+                // 类型定义始终导出
+                self.env.add_export(name);
             }
         }
     }
@@ -1108,8 +1179,8 @@ impl TypeChecker {
 
         let mut names = HashSet::new();
         for stmt in &module.items {
-            if let StmtKind::Binding {
-                type_annotation: Some(Type::Variant(variants)),
+            if let StmtKind::TypeDefinition {
+                definition: Type::Variant(variants),
                 ..
             } = &stmt.kind
             {

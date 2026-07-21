@@ -79,6 +79,7 @@ impl SpawnPlacementChecker {
             StmtKind::DestructureAssign { rhs, .. } => {
                 self.check_expr(rhs);
             }
+            StmtKind::TypeDefinition { .. } => {}
             StmtKind::Use { .. } | StmtKind::ExternalBindingStmt { .. } | StmtKind::Error(_) => {}
             StmtKind::Return(expr_opt) => {
                 if let Some(expr) = expr_opt {
