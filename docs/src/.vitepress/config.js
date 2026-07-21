@@ -146,16 +146,6 @@ export default defineConfig({
                 hyphenToSpace: true,
               }),
             },
-            {
-              text: "示例项目",
-              collapsed: true,
-              items: generateSidebar({
-                scanStartPath: "/tutorial/examples",
-                useTitleFromFrontmatter: true,
-                collapsed: true,
-                hyphenToSpace: true,
-              }),
-            },
           ],
 
           "/design/": [
