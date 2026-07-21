@@ -280,3 +280,48 @@ fn test_generic_curried_fn_params_from_lambda() {
         "curried 泛型函数值参数标注 None（HM 推断），不应有 MetaType 错位标注"
     );
 }
+
+#[test]
+fn test_const_generic_no_merged_misalignment() {
+    // 覆盖: RFC-011 Const 泛型 — 大写参数名 + 原始类型标注（N: Int）是 Const 泛型而非值参数
+    // 验证: f: (N: Int, s: String) -> String = (s) => s 的 params == [s: String]
+    //       （修复前 extract_generic_params 将 N 判为 Const 不剔除，value_sig = [N, s]
+    //        与 lambda [s] zip 产出 s: Int 错位——s 配上了 N 的标注）
+    let kind = parse_stmt("f: (N: Int, s: String) -> String = (s) => s");
+    let StmtKind::Binding { params, .. } = &kind else {
+        panic!("Expected StmtKind::Binding, got {:?}", kind);
+    };
+
+    assert_eq!(
+        params.len(),
+        1,
+        "params 应只含值参数 s（Const 泛型 N 不参与值参数对齐）"
+    );
+    assert_eq!(params[0].name, "s", "值参数名应为 s");
+    assert!(
+        matches!(&params[0].ty, Some(Type::Name { name, .. }) if name == "String"),
+        "s 的标注应为 String（来自签名值参数），而非 N 的 Int 错位"
+    );
+}
+
+#[test]
+fn test_const_generic_filtered_without_lambda_head() {
+    // 覆盖: RFC-011 Const 泛型 — 无 lambda 头分支同样剔除 Const 泛型
+    // 验证: f: (N: Int, s: String) -> String = s 的 params == [s: String]
+    //       （修复前 Const 泛型 N 未剔除，params 混入 N: Int）
+    let kind = parse_stmt("f: (N: Int, s: String) -> String = s");
+    let StmtKind::Binding { params, .. } = &kind else {
+        panic!("Expected StmtKind::Binding, got {:?}", kind);
+    };
+
+    assert_eq!(
+        params.len(),
+        1,
+        "params 应只含值参数 s（Const 泛型 N 不是值参数）"
+    );
+    assert_eq!(params[0].name, "s", "值参数名应为 s");
+    assert!(
+        matches!(&params[0].ty, Some(Type::Name { name, .. }) if name == "String"),
+        "s 的标注应为 String"
+    );
+}
