@@ -682,31 +682,15 @@ fn parse_var_stmt_with_pub(
                         }
                     }
 
-                    // 值参数对齐：签名值参数（剔除 Type 级泛型参数）与 lambda 参数 zip。
-                    // 仅剔除 Type 级泛型（MetaType/Type/大写约束名）；Const 泛型（如 N: Int）
-                    // 仍是值级参数，保留 Int 标注。与 extract_generic_params 的 Type 分类同源。
-                    let generic_params_list = extract_generic_params(extracted_params);
-                    let generic_names: std::collections::HashSet<&str> = generic_params_list
-                        .iter()
-                        .filter(|gp| {
-                            matches!(
-                                gp.kind,
-                                crate::frontend::core::parser::ast::GenericParamKind::Type
-                            )
-                        })
-                        .map(|p| p.name.as_str())
-                        .collect();
-                    let value_sig: Vec<&Param> = extracted_params
-                        .iter()
-                        .filter(|p| !generic_names.contains(p.name.as_str()))
-                        .collect();
+                    // 值参数对齐：复用上方 RFC-007 校验块的 value_params（首字母小写规则），
+                    // 与校验同源——泛型参数（含 Const 泛型 N: Int）均为大写名，天然剔除。
                     // 全泛型签名时（值参数在内层返回类型，如 map: (T: Type) -> ((x: T) -> R)）
-                    // value_sig 为空，params 直接取 lambda 参数（标注 None，HM 推断）；
-                    // 否则 RFC-007 校验已保证 value_sig 与 lambda_params 等长。
-                    let merged: Vec<Param> = if value_sig.is_empty() {
+                    // value_params 为空，params 直接取 lambda 参数（标注 None，HM 推断）；
+                    // 否则 RFC-007 校验已保证 value_params 与 lambda_params 等长。
+                    let merged: Vec<Param> = if value_params.is_empty() {
                         lambda_params.to_vec()
                     } else {
-                        value_sig
+                        value_params
                             .iter()
                             .zip(lambda_params.iter())
                             .map(|(sig, lam)| Param {
@@ -747,20 +731,14 @@ fn parse_var_stmt_with_pub(
                         }]
                     };
 
-                    let generic_params_list = extract_generic_params(extracted_params);
-                    let generic_names: std::collections::HashSet<&str> = generic_params_list
-                        .iter()
-                        .filter(|gp| {
-                            matches!(
-                                gp.kind,
-                                crate::frontend::core::parser::ast::GenericParamKind::Type
-                            )
-                        })
-                        .map(|p| p.name.as_str())
-                        .collect();
+                    // 值参数 = 首字母小写名（泛型参数含 Const 泛型均为大写名，
+                    // 与上方 lambda 分支的 RFC-007 校验过滤同源）。
                     let value_params: Vec<Param> = extracted_params
                         .iter()
-                        .filter(|p| !generic_names.contains(p.name.as_str()))
+                        .filter(|p| {
+                            let first_char = p.name.chars().next().unwrap_or('a');
+                            first_char.is_lowercase()
+                        })
                         .cloned()
                         .collect();
                     return Some(Stmt {
