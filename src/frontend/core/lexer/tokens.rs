@@ -149,6 +149,7 @@ pub enum Literal {
     Bool(bool),
     Char(char),
     String(String),
+    Void,
 }
 
 impl From<TokenKind> for Token {
