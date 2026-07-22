@@ -15,4 +15,3 @@ pub mod value;
 pub use opcode::Opcode;
 pub use value::RuntimeValue;
 pub use heap::{Handle, Heap, HeapValue};
-pub use allocator::{Allocator, BumpAllocator, MemoryLayout, AllocError};

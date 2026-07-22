@@ -38,7 +38,7 @@ pub use thiserror::Error;
 
 // Backend re-exports
 pub use backends::{Executor, DebuggableExecutor, ExecutorError, ExecutorResult, ExecutorConfig};
-pub use backends::common::{RuntimeValue, Opcode, Heap, Handle, BumpAllocator};
+pub use backends::common::{RuntimeValue, Opcode, Heap, Handle};
 pub use backends::interpreter::Interpreter;
 #[cfg(not(target_arch = "wasm32"))]
 pub use repl::Repl;
