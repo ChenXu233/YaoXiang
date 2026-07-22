@@ -505,7 +505,7 @@ impl Pipeline {
         if failed_proofs.is_empty() {
             ProofExecResult::success()
         } else {
-            ProofExecResult::failed(failed_proofs, errors)
+            ProofExecResult::failed(errors)
         }
     }
 
@@ -716,29 +716,7 @@ struct TypecheckResult {
     errors: Vec<Diagnostic>,
     warnings: Vec<String>,
 }
-
-#[allow(dead_code)]
 impl TypecheckResult {
-    fn success(
-        type_result: typecheck::TypeCheckResult,
-        warnings: Vec<String>,
-    ) -> Self {
-        Self {
-            type_result,
-            errors: Vec::new(),
-            warnings,
-        }
-    }
-
-    fn failed(errors: Vec<Diagnostic>) -> Self {
-        Self {
-            type_result: typecheck::TypeCheckResult::default(),
-            errors,
-            warnings: Vec::new(),
-        }
-    }
-
-    #[allow(dead_code)]
     fn is_success(&self) -> bool {
         self.errors.is_empty()
     }
@@ -769,28 +747,16 @@ impl IRResult {
 
 /// 证明函数执行结果
 struct ProofExecResult {
-    /// 执行失败的证明函数名
-    #[allow(dead_code)] // Phase 2.5: 将用于更详细的错误报告
-    failed_proofs: Vec<String>,
     errors: Vec<String>,
 }
 
 impl ProofExecResult {
     fn success() -> Self {
-        Self {
-            failed_proofs: Vec::new(),
-            errors: Vec::new(),
-        }
+        Self { errors: Vec::new() }
     }
 
-    fn failed(
-        failed_proofs: Vec<String>,
-        errors: Vec<String>,
-    ) -> Self {
-        Self {
-            failed_proofs,
-            errors,
-        }
+    fn failed(errors: Vec<String>) -> Self {
+        Self { errors }
     }
 
     fn is_success(&self) -> bool {
