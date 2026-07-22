@@ -247,6 +247,7 @@ pub(crate) fn format_literal(
                 format!("\"{}\"", escaped)
             }
         }
+        Literal::Void => "void".to_string(),
     }
 }
 

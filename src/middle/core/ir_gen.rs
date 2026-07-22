@@ -874,6 +874,7 @@ impl AstToIrGenerator {
                 ast::Literal::Bool(b) => Some(ConstValue::Bool(*b)),
                 ast::Literal::String(s) => Some(ConstValue::String(s.clone())),
                 ast::Literal::Char(c) => Some(ConstValue::Char(*c)),
+                ast::Literal::Void => None,
             },
             // RFC-012: F-string 常量求值
             ast::Expr::FString { segments, .. } => {
@@ -2484,6 +2485,7 @@ impl AstToIrGenerator {
                     Literal::Bool(b) => ConstValue::Bool(*b),
                     Literal::String(s) => ConstValue::String(s.clone()),
                     Literal::Char(c) => ConstValue::Char(*c),
+                    Literal::Void => ConstValue::Int(0),
                 };
                 // 添加到常量池
                 constants.push(const_val.clone());
@@ -3720,10 +3722,11 @@ impl AstToIrGenerator {
                             ast::Pattern::Literal(lit) => {
                                 let const_val = match lit {
                                     ast::Literal::Int(n) => ConstValue::Int(*n),
-                                    ast::Literal::Bool(b) => ConstValue::Bool(*b),
                                     ast::Literal::Float(f) => ConstValue::Float(*f),
+                                    ast::Literal::Bool(b) => ConstValue::Bool(*b),
                                     ast::Literal::String(s) => ConstValue::String(s.clone()),
                                     ast::Literal::Char(c) => ConstValue::Char(*c),
+                                    ast::Literal::Void => ConstValue::Int(0),
                                 };
                                 constants.push(const_val.clone());
                                 instructions.push(Instruction::Load {

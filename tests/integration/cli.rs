@@ -155,6 +155,23 @@ fn test_run_nonexistent_file_returns_error() {
 // ============================================================================
 
 #[test]
+fn test_run_void_literal_in_variable_declaration() {
+    // Act
+    let result = run(r#"
+        main = {
+            x: Void = void
+            print("ok")
+        }
+        "#);
+    // Assert
+    assert!(
+        result.is_ok(),
+        "void literal in variable declaration should compile and run, got: {:?}",
+        result
+    );
+}
+
+#[test]
 fn test_run_file_compile_error_returns_error() {
     // Arrange
     let dir = temp_dir();

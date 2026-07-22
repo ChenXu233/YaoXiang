@@ -351,6 +351,7 @@ impl<'a> ExpressionInferrer<'a> {
             crate::frontend::core::lexer::tokens::Literal::Bool(_) => MonoType::Bool,
             crate::frontend::core::lexer::tokens::Literal::Char(_) => MonoType::Char,
             crate::frontend::core::lexer::tokens::Literal::String(_) => MonoType::String,
+            crate::frontend::core::lexer::tokens::Literal::Void => MonoType::Void,
         };
         Ok(ty)
     }

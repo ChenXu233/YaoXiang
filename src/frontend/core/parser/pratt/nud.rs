@@ -45,6 +45,7 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::StringLiteral(_)) => Some((BP_HIGHEST, Self::parse_string_literal)),
             Some(TokenKind::CharLiteral(_)) => Some((BP_HIGHEST, Self::parse_char_literal)),
             Some(TokenKind::BoolLiteral(_)) => Some((BP_HIGHEST, Self::parse_bool_literal)),
+            Some(TokenKind::VoidLiteral) => Some((BP_HIGHEST, Self::parse_void_literal)),
             // RFC-012: F-string literal
             Some(TokenKind::FStringLiteral(_)) => Some((BP_HIGHEST, Self::parse_fstring)),
             // Identifier or path
@@ -395,6 +396,13 @@ impl<'a> ParserState<'a> {
         } else {
             None
         }
+    }
+
+    /// Parse void literal expression
+    fn parse_void_literal(&mut self) -> Option<Expr> {
+        let span = self.span();
+        self.bump(); // consume 'void'
+        Some(Expr::Lit(Literal::Void, span))
     }
 
     /// RFC-012: Parse f-string literal into FString AST node
