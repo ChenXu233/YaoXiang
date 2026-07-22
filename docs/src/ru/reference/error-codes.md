@@ -4,12 +4,12 @@
 
 ---
 
-## E0xxx — Лексический и синтаксический анализ
+## E0xxx -- Лексический и синтаксический анализ
 
 Ошибки, возникающие на этапах лексического анализатора (Lexer) и синтаксического анализатора (Parser).
 
 | Код ошибки | Шаблон | Описание |
-|--------|------|------|
+|------------|--------|----------|
 | E0001 | `Invalid character: '{char}'` | Недопустимый символ |
 | E0002 | `Invalid number literal: '{literal}'` | Недопустимый числовой литерал |
 | E0003 | `Unterminated string starting at line {line}` | Незавершённая строка |
@@ -20,135 +20,138 @@
 | E0013 | `Mismatched {bracket_type}: opened at line {open_line}, column {open_col}, not closed` | Несоответствующая скобка |
 | E0014 | `Missing semicolon after {statement}` | Отсутствует точка с запятой |
 
-## E1xxx — Проверка типов
+## E1xxx -- Проверка типов
 
-Ошибки, возникающие на этапе проверки типов, охватывающие типы переменных, вызовы функций, сопоставление с образцом, инстанцирование дженериков, семантику параллелизма и распространение ошибок.
+Ошибки, возникающие на этапе проверки типов, охватывающие типы переменных, вызовы функций, pattern matching, инстанцирование generics, семантику параллелизма и распространение ошибок.
 
 | Код ошибки | Шаблон | Описание |
-|--------|------|------|
+|------------|--------|----------|
 | E1001 | `Unknown variable: '{name}'` | Неизвестная переменная |
 | E1002 | `Expected type '{expected}', found type '{found}'` | Несоответствие типов |
 | E1003 | `Unknown type: '{type}'` | Неизвестный тип |
 | E1010 | `Function '{func}' expects {expected} arguments, found {found}` | Несоответствие количества аргументов |
-| E1011 | `Parameter type mismatch: expected '{expected}', found '{found}'` | Несоответствие типа аргумента |
-| E1012 | `Return type mismatch: expected '{expected}', found '{found}'` | Несоответствие типа возврата |
+| E1011 | `Parameter type mismatch: expected '{expected}', found '{found}'` | Несоответствие типа параметра |
+| E1012 | `Return type mismatch: expected '{expected}', found '{found}'` | Несоответствие возвращаемого типа |
 | E1013 | `Function not found: '{func}'` | Функция не найдена |
-| E1020 | `Cannot infer type for '{expr}'` | Не удаётся вывести тип |
-| E1021 | `Type inference conflict: {reason}` | Конфликт вывода типа |
-| E1030 | `Pattern non-exhaustive: missing patterns {patterns}` | Неполный паттерн |
+| E1020 | `Cannot infer type for '{expr}'` | Невозможно вывести тип |
+| E1021 | `Type inference conflict: {reason}` | Конфликт вывода типов |
+| E1030 | `Pattern non-exhaustive: missing patterns {patterns}` | Неполное pattern matching |
 | E1031 | `Unreachable pattern: '{pattern}'` | Недостижимый паттерн |
 | E1040 | `Operation '{op}' is not supported for type '{type}'` | Операция не поддерживается |
 | E1041 | `Index out of bounds: valid range is 0..{max}, found {index}` | Выход индекса за границы |
 | E1042 | `Field '{field}' not found in struct '{struct}'` | Поле не найдено |
-| E1050 | `Logical operation requires boolean operands, found '{left}' and '{right}'` | Требуются булевы операнды |
-| E1051 | `Logical NOT requires boolean operand, found '{type}'` | Логическое НЕ требует булев операнд |
+| E1050 | `Logical operation requires boolean operands, found '{left}' and '{right}'` | Требуются логические операнды |
+| E1051 | `Logical NOT requires boolean operand, found '{type}'` | Логическое NOT требует логического операнда |
 | E1052 | `Cannot dereference type '{type}', expected pointer type` | Недопустимое разыменование |
 | E1053 | `Cannot access field on non-struct type '{type}'` | Доступ к полю неструктурного типа |
-| E1054 | `Condition must be boolean, found '{type}'` | Условие должно быть булевым |
-| E1055 | `Constraint type '{type}' can only be used in generic context` | Ограничение в необобщённом контексте |
-| E1060 | `Expected {expected} type argument(s), found {found}` | Несоответствие количества аргументов типа |
-| E1061 | `Cannot instantiate generic type with given arguments` | Не удаётся инстанцировать обобщённый тип |
+| E1054 | `Condition must be boolean, found '{type}'` | Несоответствие типа условия |
+| E1055 | `Constraint type '{type}' can only be used in generic context` | Ограничение вне контекста generics |
+| E1060 | `Expected {expected} type argument(s), found {found}` | Несоответствие количества типовых аргументов |
+| E1061 | `Cannot instantiate generic type with given arguments` | Невозможно инстанцировать generic |
 | E1070 | `Unknown label: '{label}'` | Неизвестная метка |
-| E1081 | `` `?` is only allowed inside functions returning Result `` | `?` разрешён только в функциях, возвращающих Result |
-| E1082 | `` `?` requires a Result expression, found '{type}' `` | `?` может использоваться только с выражением Result |
-| E1083 | `` Result error type mismatch for `?`: expected '{expected}', found '{found}' `` | Несоответствие типа ошибки `?` |
-| E1090 | `Type: Type = Type` | Невыразимо (пасхалка) |
-| E1091 | `Generic meta-type self-reference is not allowed: '{decl}'` | Недопустимая само-ссылка обобщённого мета-типа |
+| E1081 | `` `?` is only allowed inside functions returning Result `` | `?` допускается только в функциях, возвращающих Result |
+| E1082 | `` `?` requires a Result expression, found '{type}' `` | `?` может использоваться только с Result-выражениями |
+| E1083 | `` Result error type mismatch for `?`: expected '{expected}', found '{found}' `` | Несоответствие типа ошибки для `?` |
+| E1090 | `Type: Type = Type` | Непроизносимое (пасхалка) |
+| E1091 | `Generic meta-type self-reference is not allowed: '{decl}'` | Недопустимый generic метатип |
+| E1062 | `Const generic constraint violation: {reason}` | Нарушение ограничения const generic |
 
-## E2xxx — Семантический анализ
+## E2xxx -- Семантический анализ
 
-Ошибки, возникающие на этапе семантического анализа, охватывающие области видимости, время жизни переменных, владение и разбор сигнатур функций.
+Ошибки, возникающие на этапе семантического анализа, охватывающие область видимости, время жизни переменных, ownership и разбор сигнатур функций.
 
 | Код ошибки | Шаблон | Описание |
-|--------|------|------|
+|------------|--------|----------|
 | E2001 | `Variable '{name}' is not in scope` | Ошибка области видимости |
 | E2002 | `Duplicate definition: '{name}' is already defined in this scope` | Дублирующееся определение |
-| E2003 | `Ownership constraint violated: {reason}` | Нарушение ограничения владения |
-| E2010 | `Cannot assign to immutable variable '{name}'` | Присваивание неизменяемой переменной |
+| E2003 | `Ownership constraint violated: {reason}` | Ошибка ownership |
+| E2010 | `Cannot assign to immutable variable '{name}'` | Присвоение неизменяемой переменной |
 | E2011 | `Use of uninitialized variable '{name}'` | Использование неинициализированной переменной |
 | E2012 | `Mutability conflict: cannot use mutable reference in immutable context` | Конфликт изменяемости |
 | E2013 | `Cannot shadow existing variable '{name}'` | Затенение переменной |
 | E2014 | `'{name}' has been moved and cannot be used` | Использование перемещённой переменной |
 | E2090 | `Invalid signature: {reason}` | Недопустимая сигнатура |
 | E2091 | `Invalid signature: unknown type '{type_name}'` | Неизвестный тип в сигнатуре |
-| E2092 | `Invalid signature: missing '->'` | В сигнатуре отсутствует '->' |
+| E2092 | `Invalid signature: missing '->'` | В сигнатуре отсутствует стрелка |
 | E2093 | `Invalid signature: duplicate parameter '{name}'` | Дублирующееся имя параметра |
-| E2094 | `Invalid signature: generic '{name}' shadows outer generic` | Затенение обобщённого параметра |
-| E2095 | `Invalid signature: parameter '{name}' shadows generic` | Имя параметра затеняет обобщённый |
+| E2094 | `Invalid signature: generic '{name}' shadows outer generic` | Затенение внешнего generic параметром |
+| E2095 | `Invalid signature: parameter '{name}' shadows generic` | Затенение generic параметром |
 
-## E4xxx — Дженерики и трейты
+## E4xxx -- Generics и trait
 
-Ошибки, связанные с ограничениями дженериков и системой трейтов.
+Ошибки, связанные с ограничениями generics и системой trait.
 
 | Код ошибки | Шаблон | Описание |
-|--------|------|------|
-| E4001 | `Type '{type}' does not satisfy the trait bound '{trait}'` | Нарушение ограничения трейта |
-| E4002 | `Trait '{trait}' not found` | Трейт не найден |
-| E4003 | `Missing implementation for trait '{trait}' for type '{type}'` | Отсутствует реализация трейта |
-| E4004 | `Conflicting trait implementations for '{trait}'` | Конфликтующие реализации трейта |
-| E4005 | `Associated type '{assoc_type}' not found in '{container}'` | Ассоциированный тип не найден |
+|------------|--------|----------|
+| E4001 | `Type '{type}' does not satisfy the trait bound '{trait}'` | Нарушение ограничения generic |
+| E4002 | `Trait '{trait}' not found` | Trait не найден |
+| E4003 | `Missing implementation for trait '{trait}' for type '{type}'` | Отсутствует реализация trait |
+| E4004 | `Conflicting trait implementations for '{trait}'` | Конфликт реализаций trait |
+| E4005 | `Associated type '{assoc_type}' not found in '{container}'` | Связанный тип не найден |
 
-## E5xxx — Модули и импорт
+## E5xxx -- Модули и импорт
 
 Ошибки, связанные с системой модулей и импортом.
 
 | Код ошибки | Шаблон | Описание |
-|--------|------|------|
+|------------|--------|----------|
 | E5001 | `Module '{module}' not found` | Модуль не найден |
 | E5002 | `Failed to import module '{module}': {reason}` | Ошибка импорта |
 | E5003 | `Export '{export}' not found in module '{module}'` | Экспорт не найден |
-| E5004 | `Circular dependency detected: {path}` | Циклическая зависимость |
+| E5004 | `Circular dependency detected: {path}` | Обнаружена циклическая зависимость |
 | E5005 | `Invalid module path: '{path}'` | Недопустимый путь модуля |
 | E5006 | `Duplicate import: '{name}' is already imported` | Дублирующийся импорт |
 | E5007 | `Module '{module}' exports: {available}` | Подсказка об экспортах модуля |
 
-## E6xxx — Время выполнения
+## E6xxx -- Runtime
 
 Ошибки, возникающие на этапе выполнения.
 
 | Код ошибки | Шаблон | Описание |
-|--------|------|------|
+|------------|--------|----------|
 | E6001 | `Division by zero in expression: {expr}` | Деление на ноль |
 | E6002 | `Null pointer dereference at {location}` | Разыменование нулевого указателя |
 | E6003 | `Array index out of bounds: valid range is 0..{max}, found {index}` | Выход индекса массива за границы |
 | E6004 | `Stack overflow: recursion depth exceeded limit {limit}` | Переполнение стека |
 | E6005 | `Assertion failed: {condition}` | Сбой утверждения |
-| E6006 | `Function not found: '{func}'` | Функция не найдена (время выполнения) |
-| E6007 | `Runtime error: {message}` | Ошибка времени выполнения |
+| E6006 | `Function not found: '{func}'` | Функция не найдена (runtime) |
+| E6007 | `Runtime error: {message}` | Ошибка runtime |
 
-## E7xxx — Ввод-вывод и система
+## E7xxx -- I/O и системные
 
-Ошибки операций ввода-вывода и системного уровня.
+Ошибки операций I/O и системного уровня.
 
 | Код ошибки | Шаблон | Описание |
-|--------|------|------|
+|------------|--------|----------|
 | E7001 | `File not found: '{path}'` | Файл не найден |
 | E7002 | `Permission denied: '{path}'` | Доступ запрещён |
-| E7003 | `I/O error: {reason}` | Ошибка ввода-вывода |
+| E7003 | `I/O error: {reason}` | Ошибка I/O |
 | E7004 | `Network error: {reason}` | Сетевая ошибка |
 
-## E8xxx — Внутренние ошибки компилятора
+## E8xxx -- Внутренние ошибки компилятора
 
-Внутренние ошибки компилятора, как правило, указывающие на баг в самом компиляторе. При обнаружении таких ошибок, пожалуйста, сообщайте в [GitHub Issues](https://github.com/yaoxiang/yaoxiang/issues).
+Внутренние ошибки компилятора, обычно указывающие на баг в самом компиляторе. При обнаружении таких ошибок, пожалуйста, сообщите о них в [GitHub Issues](https://github.com/yaoxiang/yaoxiang/issues).
 
 | Код ошибки | Шаблон | Описание |
-|--------|------|------|
+|------------|--------|----------|
 | E8001 | `Internal compiler error: {message}` | Внутренняя ошибка компилятора |
-| E8002 | `Unexpected compiler panic: {reason}` | Неожиданная паника |
+| E8002 | `Unexpected compiler panic: {reason}` | Неожиданный panic |
 | E8003 | `Compiler phase error: {phase} - {message}` | Ошибка фазы компилятора |
 
-## W1xxx — Предупреждения
+## W1xxx -- Предупреждения
 
-Предупреждения, связанные с обнаружением мёртвого кода. Предупреждения не препятствуют компиляции, но указывают на возможные проблемы в коде.
+Предупреждения, связанные с обнаружением мёртвого кода. Предупреждения не блокируют компиляцию, но указывают на возможные проблемы в коде.
 
 | Код ошибки | Шаблон | Описание |
-|--------|------|------|
+|------------|--------|----------|
 | W1001 | `Unused exported function: '{name}'` | Неиспользуемая экспортированная функция |
 | W1002 | `Unused exported type: '{name}'` | Неиспользуемый экспортированный тип |
 | W1003 | `Unused import: '{name}'` | Неиспользуемый импорт |
 | W1004 | `Unused exported variable: '{name}'` | Неиспользуемая экспортированная переменная |
 | W1005 | `Unused exported method: '{name}'` | Неиспользуемый экспортированный метод |
 
+| W1063 | `Const generic constraint not evaluable at compile time` | Ограничение const generic не может быть вычислено в compile-time |
+
 ---
 
-Всего **83** диагностических кода (78 кодов ошибок + 5 кодов предупреждений).
+Всего **85** диагностических кодов (79 кодов ошибок + 6 кодов предупреждений).
