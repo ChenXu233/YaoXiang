@@ -275,19 +275,6 @@ impl SourceMap {
         }
     }
 
-    /// 根据字节偏移获取列号（1-indexed）
-    pub fn offset_to_column(
-        &self,
-        offset: usize,
-    ) -> usize {
-        let line = self.offset_to_line(offset);
-        if line > 0 && line <= self.line_offsets.len() {
-            offset - self.line_offsets[line - 1] + 1
-        } else {
-            1
-        }
-    }
-
     /// 获取在给定 span 之前的注释
     pub fn comments_before(
         &self,

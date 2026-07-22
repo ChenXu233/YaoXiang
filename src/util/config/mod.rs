@@ -236,84 +236,40 @@ impl Default for RuntimeConfig {
     }
 }
 
-/// Get the user config directory
-pub fn get_config_dir() -> Option<PathBuf> {
-    // Try XDG config directory on Unix
-    if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
-        return Some(PathBuf::from(xdg_config).join("yaoxiang"));
-    }
-
-    // Fallback to ~/.config/yaoxiang
-    if let Ok(home) = std::env::var("HOME") {
-        return Some(PathBuf::from(home).join(".config").join("yaoxiang"));
-    }
-
-    // On Windows, try %APPDATA%
-    if let Ok(appdata) = std::env::var("APPDATA") {
-        return Some(PathBuf::from(appdata).join("yaoxiang"));
-    }
-
-    None
-}
-
-/// Get the user config file path (~/.config/yaoxiang/config.toml)
-pub fn get_config_path() -> Option<PathBuf> {
-    get_config_dir().map(|dir| dir.join("config.toml"))
-}
-
-/// Check if user config exists
-pub fn config_exists() -> bool {
-    get_config_path().map(|p| p.exists()).unwrap_or(false)
-}
-
 /// Load user-level configuration
 /// Returns default config if file doesn't exist
 pub fn load_user_config() -> Result<UserConfig, ConfigError> {
-    let path = match get_config_path() {
+    let path = std::env::var("XDG_CONFIG_HOME")
+        .map(|xdg| {
+            std::path::PathBuf::from(xdg)
+                .join("yaoxiang")
+                .join("config.toml")
+        })
+        .or_else(|_| {
+            std::env::var("HOME").map(|home| {
+                std::path::PathBuf::from(home)
+                    .join(".config")
+                    .join("yaoxiang")
+                    .join("config.toml")
+            })
+        })
+        .or_else(|_| {
+            std::env::var("APPDATA").map(|appdata| {
+                std::path::PathBuf::from(appdata)
+                    .join("yaoxiang")
+                    .join("config.toml")
+            })
+        })
+        .ok();
+    let path = match path {
         Some(p) => p,
         None => return Ok(UserConfig::default()),
     };
-
     if !path.exists() {
         return Ok(UserConfig::default());
     }
-
     let content = fs::read_to_string(&path).map_err(ConfigError::IoError)?;
-
     toml::from_str(&content).map_err(ConfigError::ParseError)
-}
-
-/// Load user-level config, creating default if not exists
-pub fn load_or_create_user_config() -> Result<UserConfig, ConfigError> {
-    let path = match get_config_path() {
-        Some(p) => p,
-        None => return Ok(UserConfig::default()),
-    };
-
-    if !path.exists() {
-        // Create default config
-        let config = UserConfig::default();
-        save_user_config(&config)?;
-        return Ok(config);
-    }
-
-    load_user_config()
-}
-
-/// Save user-level configuration
-pub fn save_user_config(config: &UserConfig) -> Result<(), ConfigError> {
-    let dir = get_config_dir().ok_or(ConfigError::NoConfigDir)?;
-    let path = dir.join("config.toml");
-
-    // Create directory if not exists
-    if !dir.exists() {
-        fs::create_dir_all(&dir).map_err(ConfigError::IoError)?;
-    }
-
-    let content = toml::to_string_pretty(config).map_err(ConfigError::SerializeError)?;
-    fs::write(&path, content).map_err(ConfigError::IoError)?;
-
-    Ok(())
 }
 
 /// Configuration errors
