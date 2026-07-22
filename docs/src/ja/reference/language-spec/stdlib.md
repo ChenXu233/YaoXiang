@@ -1,6 +1,6 @@
 # 標準ライブラリ仕様
 
-本文書はYaoXiangプログラミング言語の標準ライブラリ仕様を定義する。コアライブラリ、IOライブラリ、数学ライブラリを含む。
+本ファイルは YaoXiang プログラミング言語の標準ライブラリ仕様を定義する。コアライブラリ、IO ライブラリ、数学ライブラリを含む。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 型 | モジュール | 説明 |
 |------|------|------|
-| `Option(T)` | `std.option` | オプショナル値型 |
+| `Option(T)` | `std.option` | オプション値型 |
 | `Result(T, E)` | `std.result` | エラー処理型 |
 | `List(T)` | `std.collection` | 動的配列 |
 | `Map(K, V)` | `std.collection` | ハッシュマップ |
@@ -25,21 +25,21 @@
 Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 ```
 
-**バリアントコンストラクタ**：
+**バリアント構築**：
 
 | バリアント | 構文 | 説明 |
 |------|------|------|
 | `Option.some` | `Option.some(value)` | 値あり |
 | `Option.none` | `Option.none()` | 値なし |
 
-**よく使われるメソッド**：
+**常用メソッド**：
 
 ```yaoxiang
-// 値を持つかどうかをチェック
+// 値の有無をチェック
 is_some: (self: Option(T)) -> Bool
 is_none: (self: Option(T)) -> Bool
 
-// 値を取得（panicの可能性あり）
+// 値を取得（パニックの可能性あり）
 unwrap: (self: Option(T)) -> T
 
 // 値またはデフォルト値を取得
@@ -55,21 +55,21 @@ map: (R: Type) -> ((self: Option(T), f: (T) -> R) -> Option(R))
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 ```
 
-**バリアントコンストラクタ**：
+**バリアント構築**：
 
 | バリアント | 構文 | 説明 |
 |------|------|------|
 | `Result.ok` | `Result.ok(value)` | 成功値 |
 | `Result.err` | `Result.err(error)` | エラー値 |
 
-**よく使われるメソッド**：
+**常用メソッド**：
 
 ```yaoxiang
 // 成功かどうかをチェック
 is_ok: (self: Result(T, E)) -> Bool
 is_err: (self: Result(T, E)) -> Bool
 
-// 値を取得（panicの可能性あり）
+// 値を取得（パニックの可能性あり）
 unwrap: (self: Result(T, E)) -> T
 
 // 値またはデフォルト値を取得
@@ -88,10 +88,10 @@ map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ErrorPropagate ::= Expr '?'
 ```
 
-`?` 演算子はResult型のエラーを自動的に伝播する：
+`?` 演算子は Result 型のエラーを自動的に伝播する：
 
 ```
-// 成功時は値を返し、失敗時は上にerrを返す
+// 成功時は値を返し、失敗時は err を上位に返す
 data = fetch_data()?
 
 // 以下と等価
@@ -104,37 +104,37 @@ data = match fetch_data() {
 
 ### 1.5 アサーション（std.assert）
 
-`std.assert` モジュールは統一されたアサーション機構を提供する——ランタイム `assert` とコンパイル時の精錬型 `Assert` は同じプリミティブの二つの側面である。
+`std.assert` モジュールは統一されたアサーションメカニズムを提供する——実行時 `assert` とコンパイル時精緻化型 `Assert` は同一プリミティブの二つの側面である。
 
 ```yaoxiang
-// IsTrue：値から型への橋渡し関数
+// IsTrue：値から型へのブリッジ関数
 IsTrue: (b: Bool) -> Type = match b {
     true => Void,      // ⊤、プログラム続行
     false => Never,    // ⊥、発散
 }
 
-// Assert：コンパイル時精錬型プリミティブ
+// Assert：コンパイル時精緻化型プリミティブ
 Assert: (cond: Bool) -> Type = IsTrue(cond)
 
-// assert：ランタイムアサーション（Assert の値導入子）
+// assert：実行時アサーション（Assert の値導入子）
 assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))
 
 // Result オーバーロード
 assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 ```
 
-**dispatch 分派**：
+**dispatch ディスパッチ**：
 
 | 条件 | 動作 |
 |------|------|
-| cond のすべての自由変数がコンパイル時に既知 | コンパイラが評価、true → 消去、false → コンパイルエラー |
-| ランタイム自由変数が存在 | ランタイムcheckを挿入し、フロー依存仮説集合 Γ を注入 |
+| cond のすべての自由変数がコンパイル時既知 | コンパイラが評価、true → 消去、false → コンパイルエラー |
+| 実行時自由変数が存在 | 実行時 check を挿入し、フロー依存仮定集合 Γ を注入 |
 
 `assert(false, "msg")` は raise と等価である——独立した throw/raise キーワードは不要。
 
 ---
 
-## 第二章：IOライブラリ
+## 第二章：IO ライブラリ
 
 ### 2.1 標準入出力
 
@@ -194,7 +194,7 @@ delete_dir: (path: String) -> Result(Void, Error)
 abs: (x: Int) -> Int
 abs: (x: Float) -> Float
 
-// 最大値・最小値
+// 最大最小値
 max: (a: Int, b: Int) -> Int
 min: (a: Int, b: Int) -> Int
 max: (a: Float, b: Float) -> Float
@@ -350,7 +350,7 @@ Range: Type = {
     Iterator(Int)
 }
 
-// 使用例
+// 使用
 for i in 0..10 {
     print(i)
 }
@@ -364,18 +364,15 @@ for i in 0..10 step 2 {
 
 ## 付録：標準ライブラリモジュール索引
 
-### A.1 コアモジュール
-
 | モジュール | 説明 |
 |------|------|
-| `std.assert` | アサーション機構——ランタイム assert + コンパイル時 Assert 精錬型 |
+| `std.assert` | アサーションメカニズム——実行時 assert + コンパイル時 Assert 精緻化型 |
 | `std.option` | Option 型 |
 | `std.result` | Result 型 |
 | `std.collection` | List、Map などのコレクション型 |
 | `std.string` | 文字列操作 |
 | `std.array` | 配列操作 |
 | `std.iterator` | イテレータ |
-
 ### A.2 IO モジュール
 
 | モジュール | 説明 |
@@ -393,9 +390,9 @@ for i in 0..10 step 2 {
 | `std.math.log` | 対数関数 |
 
 ### A.4 ユーティリティモジュール
-
 | モジュール | 説明 |
 |------|------|
 | `std.random` | 乱数生成 |
-| `std.time` | 時刻と日付 |
+| `std.time` | 日時 |
+| `std.assert` | コンパイル時 `Assert(C)` と実行時 `assert(x > 0)` の統一（RFC-030） |
 | `std.regex` | 正規表現 |

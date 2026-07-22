@@ -4,7 +4,7 @@ title: Type System
 
 # Type System
 
-In the basic tutorial, you learned to use builtin types like `Int`, `String`, `Bool`. This chapter dives deeper into YaoXiang's type system and teaches you to **define your own types**.
+In the basics tutorial, you learned to use built-in types like `Int`, `String`, and `Bool`. This chapter dives deep into YaoXiang's type system and teaches you to **define your own types**.
 
 ## Unified Syntax Model
 
@@ -18,17 +18,17 @@ YaoXiang's type system is built on the unified syntax defined in RFC-010: **ever
 | Interface | `Drawable: Type = { draw: (Surface) -> Void }` |
 | Generic type | `List: (T: Type) -> Type = { ... }` |
 
-Note: **A type definition is itself `name: Type = value`**.
+Note: **a type definition itself is also `name: Type = value`**.
 
-## Record Type
+## Record Types
 
-A record type (called "struct" in other languages) is the most basic way of organizing data in YaoXiang:
+A record type (called a "struct" in other languages) is the most basic data organization form in YaoXiang:
 
 ```yaoxiang
 // Define a record type
 Point: Type = { x: Float, y: Float }
 
-// Create instances
+// Create an instance
 origin = Point(x: 0.0, y: 0.0)
 p = Point(x: 3.0, y: 4.0)
 
@@ -39,7 +39,7 @@ print(p.y)  // 4.0
 
 ### Field Default Values
 
-Fields can specify default values, which are optional when constructing:
+Fields can have default values and are optional at construction time:
 
 ```yaoxiang
 User: Type = {
@@ -48,33 +48,33 @@ User: Type = {
     active: Bool = true,
 }
 
-alice = User(name: "Alice", age: 25)        // active takes default value true
+alice = User(name: "Alice", age: 25)        // active takes the default value true
 bob = User(name: "Bob")                      // age=0, active=true
 anonymous = User(name: "guest", active: false)  // age=0
 ```
 
-### Method Definition
+### Method Definitions
 
 Use the `Type.method` syntax to define methods for a type:
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
 
-// Define a method using Point.method syntax
+// Define a method: Point.method syntax
 Point.length: (self: Point) -> Float = {
     return (self.x * self.x + self.y * self.y).sqrt()
 }
 
 p = Point(x: 3.0, y: 4.0)
 
-// Two equivalent ways to call it
+// The two calling styles are equivalent
 print(Point.length(p))  // 5.0 — functional call
 print(p.length())       // 5.0 — .call syntax
 ```
 
-### Automatic `pub` Binding
+### pub Auto-Binding
 
-Within the same file, a function declared with `pub` is automatically bound to a type defined in the same file:
+Within the same file, `pub`-declared functions are automatically bound to types defined in the same file:
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
@@ -89,13 +89,13 @@ pub distance: (p1: Point, p2: Point) -> Float = {
 p1 = Point(x: 0.0, y: 0.0)
 p2 = Point(x: 3.0, y: 4.0)
 
-// Use . call syntax for automatically bound methods
+// Auto-bound methods are called with .
 print(p1.distance(p2))  // 5.0
 ```
 
-## Enum Type
+## Enum Types
 
-An enum defines a set of mutually exclusive variants. Data-less variants use lowercase; variants carrying data use function-style syntax:
+An enum defines a set of mutually exclusive value variants. Variants without data use lowercase; variants with data use function-style syntax:
 
 ```yaoxiang
 // Simple enum
@@ -108,7 +108,7 @@ Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 Shape: Type = { circle(Float) | rect(Float, Float) | point }
 ```
 
-The core idea of an enum: **each variant is itself a type**.
+The core idea of enums: **each value variant is itself a type**.
 
 ```yaoxiang
 area: (s: Shape) -> Float = match s {
@@ -121,9 +121,9 @@ print(area(circle(5.0)))    // 78.53975
 print(area(rect(3.0, 4.0))) // 12.0
 ```
 
-## Interface
+## Interfaces
 
-An interface is a **record type whose fields are all function types**. Implementing an interface means the record includes the interface's name:
+An interface is **a record type whose fields are all function types**. Implementing an interface means including the interface name inside the record:
 
 ```yaoxiang
 // Define an interface
@@ -157,7 +157,7 @@ Circle.bounding_box: (self: Circle) -> Rect = {
 
 Interfaces enable polymorphism — any type that implements `Drawable` can be passed to a function that accepts `Drawable`.
 
-## Generic Type
+## Generic Types
 
 Generics let you write **type definitions that are not tied to a specific type**:
 
@@ -189,10 +189,11 @@ print(doubled)  // [2, 4, 6, 8]
 
 ## Summary
 
-| Concept | Syntax | Purpose |
+| Concept | Syntax | Use |
 |------|------|------|
-| Record type | `Point: Type = { x: Float, y: Float }` | Organize related data |
-| Enum | `Color: Type = { red \| green \| blue }` | Choose one from many |
+| Record type | `Point: Type = { x: Float, y: Float }` | Group related data |
+| Enum | `Color: Type = { red \| green \| blue }` | Choose one of many |
 | Interface | `Drawable: Type = { draw: ... }` | Polymorphic abstraction |
 | Generics | `List: (T: Type) -> Type = { ... }` | Type parameterization |
+| Never | `Never` is the system's built-in bottom type | Diverging / never-returning code paths |
 | Method | `Type.method: (self: Type, ...) -> ...` | Attach behavior |
