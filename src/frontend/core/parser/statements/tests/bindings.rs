@@ -22,7 +22,7 @@ use crate::frontend::core::parser::statements::bindings::{BindingParser, Binding
 fn parse_stmt(source: &str) -> StmtKind {
     let tokens = tokenize(source).unwrap();
     let result = parse(&tokens);
-    assert!(!result.has_errors);
+    assert!(!result.has_errors, "解析不应有错误");
     assert_eq!(result.module.items.len(), 1);
     result.module.items.into_iter().next().unwrap().kind
 }
@@ -53,7 +53,7 @@ fn test_rfc004_default_binding() {
 }
 
 #[test]
-fn test_rfc004_position_0() {
+fn test_rfc004_external_binding_position_zero() {
     let kind = parse_stmt("Point.distance = distance[0]");
     if let StmtKind::Assign { target, value, .. } = &kind {
         if let Expr::FieldAccess { expr, field, .. } = target.as_ref() {
@@ -73,7 +73,7 @@ fn test_rfc004_position_0() {
 }
 
 #[test]
-fn test_rfc004_position_1() {
+fn test_rfc004_external_binding_position_one() {
     let kind = parse_stmt("Point.transform = transform[1]");
     if let StmtKind::Assign { target, value, .. } = &kind {
         if let Expr::FieldAccess { expr, field, .. } = target.as_ref() {
@@ -264,7 +264,7 @@ fn test_rfc010_anonymous_binding() {
 fn test_rfc010_pub_fn_with_point_param() {
     let kind = parse_stmt("pub distance: (p1: Point, p2: Point) -> Float = { 0.0 }");
     if let StmtKind::Assign { is_pub, .. } = &kind {
-        assert!(is_pub);
+        assert!(is_pub, "pub 标记应被识别");
     } else {
         panic!("Expected Binding");
     }
@@ -281,7 +281,10 @@ fn test_binding_parser_validate_ok() {
 #[test]
 fn test_binding_parser_validate_missing_eq() {
     let parser = BindingParser::new();
-    assert!(parser.validate_binding_syntax("invalid").is_err());
+    assert!(
+        parser.validate_binding_syntax("invalid").is_err(),
+        "无效绑定语法应被拒绝"
+    );
 }
 
 #[test]
@@ -300,18 +303,27 @@ fn test_position_validator_ok() {
 #[test]
 fn test_position_validator_exceeds() {
     let v = BindingPositionValidator::new(3);
-    assert!(v.validate_positions(&[5]).is_err());
+    assert!(
+        v.validate_positions(&[5]).is_err(),
+        "超出范围的位置应被拒绝"
+    );
 }
 
 #[test]
 fn test_position_validator_negative() {
     let v = BindingPositionValidator::new(5);
-    assert!(v.validate_positions(&[-1]).is_err());
+    assert!(v.validate_positions(&[-1]).is_err(), "负数位置应被拒绝");
 }
 
 #[test]
 fn test_position_validator_syntax() {
     let v = BindingPositionValidator::new(5);
-    assert!(v.validate_binding_syntax("func[0]").is_ok());
-    assert!(v.validate_binding_syntax("func").is_err());
+    assert!(
+        v.validate_binding_syntax("func[0]").is_ok(),
+        "func[0] 是合法绑定语法"
+    );
+    assert!(
+        v.validate_binding_syntax("func").is_err(),
+        "func 缺少位置索引应被拒绝"
+    );
 }

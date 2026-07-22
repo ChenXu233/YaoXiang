@@ -167,7 +167,7 @@ fn test_call_args() {
     } = &expr
     {
         assert_eq!(args.len(), 2);
-        assert!(named_args.is_empty());
+        assert!(named_args.is_empty(), "无命名参数时 named_args 应为空");
     } else {
         panic!("Expected Call");
     }

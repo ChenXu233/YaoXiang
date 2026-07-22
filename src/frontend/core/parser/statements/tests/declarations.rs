@@ -7,7 +7,7 @@ use crate::frontend::core::parser::ast::{extract_generic_param_names, Expr, Stmt
 fn parse_stmt(source: &str) -> StmtKind {
     let tokens = tokenize(source).unwrap();
     let result = parse(&tokens);
-    assert!(!result.has_errors);
+    assert!(!result.has_errors, "解析不应有错误");
     assert_eq!(result.module.items.len(), 1);
     result.module.items.into_iter().next().unwrap().kind
 }
@@ -40,7 +40,7 @@ fn test_var_typed() {
             panic!("Expected Var target")
         };
         assert_eq!(name, "x");
-        assert!(type_annotation.is_some());
+        assert!(type_annotation.is_some(), "类型标注应被解析");
     } else {
         panic!("Expected StmtKind::Assign");
     }
@@ -56,7 +56,7 @@ fn test_var_mut() {
             panic!("Expected Var target")
         };
         assert_eq!(name, "x");
-        assert!(is_mut);
+        assert!(is_mut, "mut 标记应被识别");
     } else {
         panic!("Expected StmtKind::Var");
     }
@@ -77,7 +77,10 @@ fn test_var_no_annotation() {
             panic!("Expected Var target")
         };
         assert_eq!(name, "x");
-        assert!(type_annotation.is_none());
+        assert!(
+            type_annotation.is_none(),
+            "无类型标注时不应有 type_annotation"
+        );
     } else {
         panic!("Expected StmtKind::Assign");
     }
@@ -141,7 +144,7 @@ fn test_fn_def_no_params() {
             (Vec::new(), Vec::new())
         };
         assert_eq!(name, "main");
-        assert!(params.is_empty());
+        assert!(params.is_empty(), "无参数函数 params 应为空");
     } else {
         panic!("Expected StmtKind::Binding");
     }
