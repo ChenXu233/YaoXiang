@@ -2,7 +2,7 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::parser::ast::StmtKind;
+use crate::frontend::core::parser::ast::{Expr, StmtKind};
 
 fn parse_fn(source: &str) -> StmtKind {
     let tokens = tokenize(source).unwrap();
@@ -15,7 +15,21 @@ fn parse_fn(source: &str) -> StmtKind {
 #[test]
 fn test_fn_no_params_block_body() {
     let kind = parse_fn("f = () => { return 1 }");
-    if let StmtKind::Binding { name, params, .. } = &kind {
+    if let StmtKind::Assign { target, value, .. } = &kind {
+        let name = if let Expr::Var(n, _) = target.as_ref() {
+            n.clone()
+        } else {
+            panic!("Expected Var target")
+        };
+        let (params, _body) = if let Some(v) = value {
+            if let Expr::Lambda { params, body, .. } = v.as_ref() {
+                (params.clone(), body.stmts.clone())
+            } else {
+                (Vec::new(), Vec::new())
+            }
+        } else {
+            (Vec::new(), Vec::new())
+        };
         assert_eq!(name, "f");
         assert!(params.is_empty());
     } else {
@@ -26,7 +40,21 @@ fn test_fn_no_params_block_body() {
 #[test]
 fn test_fn_one_param_expr_body() {
     let kind = parse_fn("inc = (x) => x + 1");
-    if let StmtKind::Binding { name, params, .. } = &kind {
+    if let StmtKind::Assign { target, value, .. } = &kind {
+        let name = if let Expr::Var(n, _) = target.as_ref() {
+            n.clone()
+        } else {
+            panic!("Expected Var target")
+        };
+        let (params, _body) = if let Some(v) = value {
+            if let Expr::Lambda { params, body, .. } = v.as_ref() {
+                (params.clone(), body.stmts.clone())
+            } else {
+                (Vec::new(), Vec::new())
+            }
+        } else {
+            (Vec::new(), Vec::new())
+        };
         assert_eq!(name, "inc");
         assert_eq!(params.len(), 1);
     } else {
@@ -37,32 +65,56 @@ fn test_fn_one_param_expr_body() {
 #[test]
 fn test_fn_multi_param() {
     let kind = parse_fn("add = (a, b) => a + b");
-    if let StmtKind::Binding { params, .. } = &kind {
-        assert_eq!(params.len(), 2);
-        assert_eq!(params[0].name, "a");
-        assert_eq!(params[1].name, "b");
+    let StmtKind::Assign { value, .. } = &kind else {
+        panic!("Expected Assign");
+    };
+    let params = if let Some(v) = value {
+        if let Expr::Lambda { params, .. } = v.as_ref() {
+            params.clone()
+        } else {
+            Vec::new()
+        }
     } else {
-        panic!("Expected Binding");
-    }
+        Vec::new()
+    };
+    assert_eq!(params.len(), 2);
+    assert_eq!(params[0].name, "a");
+    assert_eq!(params[1].name, "b");
 }
 
 #[test]
 fn test_fn_typed_params() {
     let kind = parse_fn("add: (a: Int, b: Int) -> Int = (a, b) => a + b");
-    if let StmtKind::Binding { params, .. } = &kind {
-        assert_eq!(params.len(), 2);
-        assert!(params[0].ty.is_some());
+    let StmtKind::Assign { value, .. } = &kind else {
+        panic!("Expected Assign");
+    };
+    let params = if let Some(v) = value {
+        if let Expr::Lambda { params, .. } = v.as_ref() {
+            params.clone()
+        } else {
+            Vec::new()
+        }
     } else {
-        panic!("Expected Binding");
-    }
+        Vec::new()
+    };
+    assert_eq!(params.len(), 2);
+    assert!(params[0].ty.is_some());
 }
 
 #[test]
 fn test_fn_mut_param() {
     let kind = parse_fn("inc: (mut x: Int) -> Int = (mut x) => x + 1");
-    if let StmtKind::Binding { params, .. } = &kind {
-        assert!(params[0].is_mut);
+    let StmtKind::Assign { value, .. } = &kind else {
+        panic!("Expected Assign");
+    };
+    let params = if let Some(v) = value {
+        if let Expr::Lambda { params, .. } = v.as_ref() {
+            params.clone()
+        } else {
+            Vec::new()
+        }
     } else {
-        panic!("Expected Binding");
-    }
+        Vec::new()
+    };
+    assert!(params[0].is_mut);
 }

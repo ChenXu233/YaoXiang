@@ -143,36 +143,49 @@ fn extract_symbols_from_module(module: &Module) -> Vec<CompletionItem> {
 
     for stmt in &module.items {
         match &stmt.kind {
-            StmtKind::Var { name, .. } => {
-                items.push(CompletionItem {
-                    label: name.clone(),
-                    kind: Some(CompletionItemKind::VARIABLE),
-                    detail: Some("变量".to_string()),
-                    sort_text: Some(format!("4_{}", name)),
-                    ..CompletionItem::default()
-                });
-            }
-            StmtKind::Binding {
-                name,
-                type_name,
-                params,
+            StmtKind::Assign {
+                target,
+                type_annotation: _,
+                value,
                 ..
             } => {
-                if let Some(type_name) = type_name {
-                    // 方法绑定
+                use crate::frontend::core::parser::ast::Expr;
+                let (name, type_name) = match target.as_ref() {
+                    Expr::Var(n, _) => (n.clone(), None),
+                    Expr::FieldAccess { expr, field, .. } => {
+                        if let Expr::Var(tn, _) = expr.as_ref() {
+                            (field.clone(), Some(tn.clone()))
+                        } else {
+                            (field.clone(), None)
+                        }
+                    }
+                    _ => continue,
+                };
+                if let Some(tn) = type_name {
                     items.push(CompletionItem {
-                        label: format!("{}.{}", type_name, name),
+                        label: format!("{}.{}", tn, name),
                         kind: Some(CompletionItemKind::METHOD),
                         detail: Some("方法绑定".to_string()),
-                        sort_text: Some(format!("4_{}.{}", type_name, name)),
+                        sort_text: Some(format!("4_{}.{}", tn, name)),
                         ..CompletionItem::default()
                     });
-                } else if !params.is_empty() {
-                    // 函数定义
+                } else if let Some(v) = value {
+                    if let Expr::Lambda { params, .. } = v.as_ref() {
+                        if !params.is_empty() {
+                            items.push(CompletionItem {
+                                label: name.clone(),
+                                kind: Some(CompletionItemKind::FUNCTION),
+                                detail: Some(format!("函数 (参数: {})", params.len())),
+                                sort_text: Some(format!("4_{}", name)),
+                                ..CompletionItem::default()
+                            });
+                        }
+                    }
+                } else {
                     items.push(CompletionItem {
                         label: name.clone(),
-                        kind: Some(CompletionItemKind::FUNCTION),
-                        detail: Some(format!("函数 (参数: {})", params.len())),
+                        kind: Some(CompletionItemKind::VARIABLE),
+                        detail: Some("变量".to_string()),
                         sort_text: Some(format!("4_{}", name)),
                         ..CompletionItem::default()
                     });

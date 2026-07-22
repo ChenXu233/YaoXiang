@@ -7,7 +7,7 @@
 
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::types::{MonoType, PolyType};
-use crate::frontend::core::parser::ast::{Module, Stmt, Expr, Type as AstType};
+use crate::frontend::core::parser::ast::{Block, Module, Stmt, Expr, Type as AstType};
 use crate::util::span::Span;
 
 // ===================================================================
@@ -94,15 +94,17 @@ fn test_type_checker_reports_type_mismatch() {
     // 构造一个类型不匹配的 AST：将 Int 赋值给 String 变量
     let module = Module {
         items: vec![Stmt {
-            kind: crate::frontend::core::parser::ast::StmtKind::Var {
-                name: "x".to_string(),
-                name_span: Span::dummy(),
+            kind: crate::frontend::core::parser::ast::StmtKind::Assign {
+                target: Box::new(Expr::Var("x".to_string(), Span::dummy())),
                 type_annotation: Some(AstType::String),
-                initializer: Some(Box::new(Expr::Lit(
+                signature_params: vec![],
+                value: Some(Box::new(Expr::Lit(
                     crate::frontend::core::lexer::tokens::Literal::Int(42),
                     Span::dummy(),
                 ))),
+                is_pub: false,
                 is_mut: false,
+                span: Span::dummy(),
             },
             span: Span::dummy(),
         }],
@@ -158,29 +160,34 @@ fn test_type_checker_reports_fn_param_type_mismatch() {
         items: vec![
             // fn add(x: Int) -> Int { x }
             Stmt {
-                kind: crate::frontend::core::parser::ast::StmtKind::Binding {
-                    name: "add".to_string(),
-                    type_name: None,
-                    method_type: None,
-                    signature_params: vec![],
+                kind: crate::frontend::core::parser::ast::StmtKind::Assign {
+                    target: Box::new(Expr::Var("add".to_string(), Span::dummy())),
                     type_annotation: Some(AstType::Fn {
                         params: vec![AstType::Int(32)],
                         return_type: Box::new(AstType::Int(32)),
                     }),
-
-                    params: vec![crate::frontend::core::parser::ast::Param {
-                        name: "x".to_string(),
-                        ty: Some(AstType::Int(32)),
-                        is_mut: false,
+                    signature_params: vec![],
+                    value: Some(Box::new(Expr::Lambda {
+                        params: vec![crate::frontend::core::parser::ast::Param {
+                            name: "x".to_string(),
+                            ty: Some(AstType::Int(32)),
+                            is_mut: false,
+                            span: Span::dummy(),
+                        }],
+                        body: Box::new(Block {
+                            stmts: vec![Stmt {
+                                kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(
+                                    Expr::Var("x".to_string(), Span::dummy()),
+                                )),
+                                span: Span::dummy(),
+                            }],
+                            span: Span::dummy(),
+                        }),
                         span: Span::dummy(),
-                    }],
-                    body: vec![Stmt {
-                        kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(
-                            Expr::Var("x".to_string(), Span::dummy()),
-                        )),
-                        span: Span::dummy(),
-                    }],
+                    })),
                     is_pub: false,
+                    is_mut: false,
+                    span: Span::dummy(),
                 },
                 span: Span::dummy(),
             },
@@ -251,30 +258,34 @@ fn test_type_checker_with_multiple_function_definitions() {
     let mut checker = TypeChecker::new("test");
     let make_fn_binding = |name: &str| -> Stmt {
         Stmt {
-            kind: crate::frontend::core::parser::ast::StmtKind::Binding {
-                name: name.to_string(),
-                type_name: None,
-                method_type: None,
-                signature_params: vec![],
+            kind: crate::frontend::core::parser::ast::StmtKind::Assign {
+                target: Box::new(Expr::Var(name.to_string(), Span::dummy())),
                 type_annotation: Some(AstType::Fn {
                     params: vec![AstType::Int(32)],
                     return_type: Box::new(AstType::Int(32)),
                 }),
-
-                params: vec![crate::frontend::core::parser::ast::Param {
-                    name: "x".to_string(),
-                    ty: Some(AstType::Int(32)),
-                    is_mut: false,
+                signature_params: vec![],
+                value: Some(Box::new(Expr::Lambda {
+                    params: vec![crate::frontend::core::parser::ast::Param {
+                        name: "x".to_string(),
+                        ty: Some(AstType::Int(32)),
+                        is_mut: false,
+                        span: Span::dummy(),
+                    }],
+                    body: Box::new(Block {
+                        stmts: vec![Stmt {
+                            kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(
+                                Expr::Var("x".to_string(), Span::dummy()),
+                            )),
+                            span: Span::dummy(),
+                        }],
+                        span: Span::dummy(),
+                    }),
                     span: Span::dummy(),
-                }],
-                body: vec![Stmt {
-                    kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(Expr::Var(
-                        "x".to_string(),
-                        Span::dummy(),
-                    ))),
-                    span: Span::dummy(),
-                }],
+                })),
                 is_pub: false,
+                is_mut: false,
+                span: Span::dummy(),
             },
             span: Span::dummy(),
         }
@@ -325,37 +336,42 @@ fn test_type_checker_with_nested_function_definition() {
     };
     let module = Module {
         items: vec![Stmt {
-            kind: crate::frontend::core::parser::ast::StmtKind::Binding {
-                name: "outer".to_string(),
-                type_name: None,
-                method_type: None,
-                signature_params: vec![],
+            kind: crate::frontend::core::parser::ast::StmtKind::Assign {
+                target: Box::new(Expr::Var("outer".to_string(), Span::dummy())),
                 type_annotation: Some(AstType::Fn {
                     params: vec![AstType::Int(32)],
                     return_type: Box::new(AstType::Int(32)),
                 }),
-
-                params: vec![crate::frontend::core::parser::ast::Param {
-                    name: "x".to_string(),
-                    ty: Some(AstType::Int(32)),
-                    is_mut: false,
+                signature_params: vec![],
+                value: Some(Box::new(Expr::Lambda {
+                    params: vec![crate::frontend::core::parser::ast::Param {
+                        name: "x".to_string(),
+                        ty: Some(AstType::Int(32)),
+                        is_mut: false,
+                        span: Span::dummy(),
+                    }],
+                    body: Box::new(Block {
+                        stmts: vec![
+                            Stmt {
+                                kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(
+                                    inner_fn,
+                                )),
+                                span: Span::dummy(),
+                            },
+                            Stmt {
+                                kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(
+                                    Expr::Var("x".to_string(), Span::dummy()),
+                                )),
+                                span: Span::dummy(),
+                            },
+                        ],
+                        span: Span::dummy(),
+                    }),
                     span: Span::dummy(),
-                }],
-                body: vec![
-                    Stmt {
-                        kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(
-                            inner_fn,
-                        )),
-                        span: Span::dummy(),
-                    },
-                    Stmt {
-                        kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(
-                            Expr::Var("x".to_string(), Span::dummy()),
-                        )),
-                        span: Span::dummy(),
-                    },
-                ],
+                })),
                 is_pub: false,
+                is_mut: false,
+                span: Span::dummy(),
             },
             span: Span::dummy(),
         }],
@@ -410,16 +426,24 @@ fn test_type_checker_with_generic_type_binding() {
             },
             // let w: Wrapper<Int> = ...  (使用泛型类型)
             Stmt {
-                kind: crate::frontend::core::parser::ast::StmtKind::Var {
-                    name: "w".to_string(),
-                    name_span: Span::dummy(),
+                kind: crate::frontend::core::parser::ast::StmtKind::Assign {
+                    target: Box::new(crate::frontend::core::parser::ast::Expr::Var(
+                        "w".to_string(),
+                        Span::dummy(),
+                    )),
                     type_annotation: Some(AstType::Generic {
                         name: "Wrapper".to_string(),
                         name_span: Span::dummy(),
-                        args: vec![AstType::Int(32)],
+                        args: vec![AstType::Name {
+                            name: "Int".to_string(),
+                            span: Span::dummy(),
+                        }],
                     }),
-                    initializer: None,
+                    signature_params: Vec::new(),
+                    value: None,
+                    is_pub: false,
                     is_mut: false,
+                    span: Span::dummy(),
                 },
                 span: Span::dummy(),
             },

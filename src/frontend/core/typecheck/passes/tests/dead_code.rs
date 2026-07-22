@@ -7,7 +7,7 @@ use crate::frontend::core::typecheck::passes::dead_code::{DeadCodeAnalyzer, Dead
 use crate::frontend::core::typecheck::semantic_db::{
     SemanticDB, SemanticToken, SemanticTokenType, SemanticTokenModifier,
 };
-use crate::frontend::core::parser::ast::{Module, Stmt, StmtKind, Expr};
+use crate::frontend::core::parser::ast::{Block, Module, Stmt, StmtKind, Expr};
 use crate::util::span::Span;
 
 // ---------------------------------------------------------------------------
@@ -22,23 +22,38 @@ fn empty_module() -> Module {
     }
 }
 
-/// 构造一个 Binding 语句（函数 / 类型构造器 / 方法）
+/// 构造一个 Assign 语句（函数 / 类型构造器 / 方法）
 fn make_binding(
     name: &str,
     is_pub: bool,
     type_name: Option<&str>,
     body_stmts: Vec<Stmt>,
 ) -> Stmt {
+    let target = if let Some(tn) = type_name {
+        Box::new(Expr::FieldAccess {
+            expr: Box::new(Expr::Var(tn.to_string(), Span::dummy())),
+            field: name.to_string(),
+            span: Span::dummy(),
+        })
+    } else {
+        Box::new(Expr::Var(name.to_string(), Span::dummy()))
+    };
     Stmt {
-        kind: StmtKind::Binding {
-            name: name.to_string(),
-            type_name: type_name.map(String::from),
-            method_type: None,
-            is_pub,
-            params: vec![],
-            body: body_stmts,
-            signature_params: vec![],
+        kind: StmtKind::Assign {
+            target,
             type_annotation: None,
+            signature_params: vec![],
+            value: Some(Box::new(Expr::Lambda {
+                params: vec![],
+                body: Box::new(Block {
+                    stmts: body_stmts,
+                    span: Span::dummy(),
+                }),
+                span: Span::dummy(),
+            })),
+            is_pub,
+            is_mut: false,
+            span: Span::dummy(),
         },
         span: Span::dummy(),
     }
@@ -48,32 +63,32 @@ fn make_binding(
 fn make_type_constructor(name: &str) -> Stmt {
     use crate::frontend::core::parser::ast::Type;
     Stmt {
-        kind: StmtKind::Binding {
-            name: name.to_string(),
-            type_name: None,
-            method_type: None,
-            is_pub: false,
-            params: vec![],
-            body: vec![],
-            signature_params: vec![],
+        kind: StmtKind::Assign {
+            target: Box::new(Expr::Var(name.to_string(), Span::dummy())),
             type_annotation: Some(Type::Name {
                 name: name.to_string(),
                 span: Span::dummy(),
             }),
+            signature_params: vec![],
+            value: None,
+            is_pub: false,
+            is_mut: false,
+            span: Span::dummy(),
         },
         span: Span::dummy(),
     }
 }
 
-/// 构造一个 Var 语句
 fn make_var(name: &str) -> Stmt {
     Stmt {
-        kind: StmtKind::Var {
-            name: name.to_string(),
-            name_span: Span::dummy(),
+        kind: StmtKind::Assign {
+            target: Box::new(Expr::Var(name.to_string(), Span::dummy())),
             type_annotation: None,
-            initializer: None,
+            signature_params: vec![],
+            value: None,
+            is_pub: false,
             is_mut: false,
+            span: Span::dummy(),
         },
         span: Span::dummy(),
     }

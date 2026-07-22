@@ -36,12 +36,14 @@ fn spawn_stmt(body_stmts: Vec<Stmt>) -> Stmt {
 
 fn var_stmt(name: &str) -> Stmt {
     Stmt {
-        kind: StmtKind::Var {
-            name: name.to_string(),
-            name_span: Span::dummy(),
+        kind: StmtKind::Assign {
+            target: Box::new(Expr::Var(name.to_string(), Span::dummy())),
             type_annotation: None,
-            initializer: None,
+            signature_params: vec![],
+            value: None,
+            is_pub: false,
             is_mut: false,
+            span: Span::dummy(),
         },
         span: Span::dummy(),
     }

@@ -405,26 +405,31 @@ fn register_module_exports(
     let mut module_info = ModuleInfo::new(module_id.name.clone(), ModuleSource::User);
 
     for stmt in &ast.items {
-        if let StmtKind::Binding {
-            name,
+        if let StmtKind::Assign {
+            target,
             is_pub: true,
             type_annotation,
             ..
         } = &stmt.kind
         {
+            let name = match target.as_ref() {
+                crate::frontend::core::parser::ast::Expr::Var(n, _) => n.clone(),
+                _ => continue,
+            };
             let qualified_name = format!("{}.{}", module_id.name, name);
             if let Some(ty) = type_annotation {
                 let poly_type = ast_type_to_poly_type(ty);
                 env.vars.insert(qualified_name.clone(), poly_type);
             }
+            let signature = type_annotation
+                .as_ref()
+                .map(|t| format!("{:?}", t))
+                .unwrap_or_else(|| "(...) -> Any".to_string());
             module_info.add_export(Export {
                 name: name.clone(),
                 full_path: qualified_name,
                 kind: ExportKind::Function,
-                signature: type_annotation
-                    .as_ref()
-                    .map(|t| format!("{:?}", t))
-                    .unwrap_or_else(|| "Any".to_string()),
+                signature,
             });
         }
         if let StmtKind::TypeDefinition { name, .. } = &stmt.kind {

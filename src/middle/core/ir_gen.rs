@@ -492,31 +492,52 @@ impl AstToIrGenerator {
                 definition,
                 is_pub: _,
             } => self.generate_constructor_ir(name, definition),
-            ast::StmtKind::Binding {
-                name,
-                type_name,
-                method_type,
-                signature_params,
+            ast::StmtKind::Assign {
+                target,
                 type_annotation,
-                params,
-                body,
-                is_pub: _,
+                signature_params,
+                value,
+                ..
             } => {
+                use crate::frontend::core::parser::ast::Expr;
+                let (name, type_name) = match target.as_ref() {
+                    Expr::Var(n, _) => (n.clone(), None),
+                    Expr::FieldAccess { expr, field, .. } => {
+                        if let Expr::Var(tn, _) = expr.as_ref() {
+                            (field.clone(), Some(tn.clone()))
+                        } else {
+                            (field.clone(), None)
+                        }
+                    }
+                    _ => return Ok(None),
+                };
+                let (params, body): (Vec<_>, Vec<_>) = match value {
+                    Some(v) => {
+                        if let Expr::Lambda { params, body, .. } = v.as_ref() {
+                            (params.clone(), body.stmts.clone())
+                        } else if let Expr::Block(block) = v.as_ref() {
+                            (Vec::new(), block.stmts.clone())
+                        } else {
+                            (Vec::new(), Vec::new())
+                        }
+                    }
+                    None => (Vec::new(), Vec::new()),
+                };
                 let generic_params =
                     crate::frontend::core::parser::ast::extract_generic_param_names(
                         signature_params,
                     );
                 if type_name.is_some() {
-                    // MethodBind: 有 type_name
+                    // MethodBind
                     self.generate_method_ir(
                         type_name.as_ref().unwrap(),
-                        name,
-                        method_type.as_ref().unwrap(),
-                        params,
-                        body,
+                        &name,
+                        type_annotation.as_ref().unwrap(),
+                        &params,
+                        &body,
                         constants,
                     )
-                } else {
+                } else if !params.is_empty() || !body.is_empty() {
                     // Fn: 普通函数
                     let generic_param_names = if generic_params.is_empty() {
                         None
@@ -524,39 +545,21 @@ impl AstToIrGenerator {
                         Some(generic_params.iter().map(|p| p.name.clone()).collect())
                     };
                     self.generate_function_ir(
-                        name,
+                        &name,
                         type_annotation.as_ref(),
-                        params,
-                        body,
+                        &params,
+                        &body,
                         constants,
                         generic_param_names,
                     )
+                } else {
+                    // 全局变量
+                    self.generate_global_var_ir(
+                        &name,
+                        type_annotation.as_ref(),
+                        value.as_ref().map(|v| v.as_ref()),
+                    )
                 }
-            }
-            ast::StmtKind::Var {
-                name,
-                name_span: _,
-                type_annotation,
-                initializer,
-                is_mut: _,
-            } => self.generate_global_var_ir(
-                name,
-                type_annotation.as_ref(),
-                initializer.as_ref().map(|v| &**v),
-            ),
-            ast::StmtKind::ExternalBindingStmt {
-                type_name,
-                method_name,
-                binding,
-            } => {
-                // RFC-004: 外部绑定语句 `Type.method = function[pos]`
-                // 注册到类型绑定映射中
-                let binding_entry = ast::TypeBodyBinding {
-                    name: method_name.clone(),
-                    kind: binding.clone(),
-                };
-                self.register_type_bindings(type_name, &[binding_entry]);
-                Ok(None)
             }
             _ => Ok(None),
         }
@@ -1352,22 +1355,64 @@ impl AstToIrGenerator {
                 let result_reg = self.next_temp_reg();
                 self.generate_expr_ir(expr, result_reg, instructions, constants)?;
             }
-            ast::StmtKind::Var {
-                name,
-                name_span: _,
+            ast::StmtKind::Assign {
+                target,
                 type_annotation,
-                initializer,
+                signature_params,
+                value,
                 is_mut,
+                ..
             } => {
-                // 记录变量的类型信息（用于错误消息）
+                use crate::frontend::core::parser::ast::Expr;
+                let name = match target.as_ref() {
+                    Expr::Var(n, _) => n.clone(),
+                    _ => return Ok(()),
+                };
+                let (params, body): (Vec<_>, Vec<_>) = match value {
+                    Some(v) => {
+                        if let Expr::Lambda { params, body, .. } = v.as_ref() {
+                            (params.clone(), body.stmts.clone())
+                        } else if let Expr::Block(block) = v.as_ref() {
+                            (Vec::new(), block.stmts.clone())
+                        } else {
+                            (Vec::new(), Vec::new())
+                        }
+                    }
+                    None => (Vec::new(), Vec::new()),
+                };
+                // 如果有 params/body，是嵌套函数
+                if !params.is_empty() || !body.is_empty() {
+                    let generic_params =
+                        crate::frontend::core::parser::ast::extract_generic_param_names(
+                            signature_params,
+                        );
+                    let generic_param_names = if generic_params.is_empty() {
+                        None
+                    } else {
+                        Some(generic_params.iter().map(|p| p.name.clone()).collect())
+                    };
+                    match self.generate_function_ir(
+                        &name,
+                        type_annotation.as_ref(),
+                        &params,
+                        &body,
+                        constants,
+                        generic_param_names,
+                    ) {
+                        Ok(Some(func_ir)) => {
+                            self.nested_functions.push(func_ir);
+                        }
+                        Ok(None) => {}
+                        Err(e) => return Err(e),
+                    }
+                    return Ok(());
+                }
+                // 普通变量
+                let initializer = value.as_ref().map(|v| v.as_ref());
                 if let Some(type_ann) = type_annotation {
                     let mono: MonoType = type_ann.clone().into();
                     let type_name = mono.type_name();
                     self.local_var_types.insert(name.clone(), type_name.clone());
-
-                    // 接口直接赋值优化：
-                    // 当 type_annotation 是约束类型且 initializer 是具体类型构造器时，
-                    // 记录变量的具体类型信息，用于后续方法调用优化
                     if mono.is_constraint() {
                         if let Some(init_expr) = initializer {
                             if let Some(concrete_type_name) =
@@ -1379,100 +1424,46 @@ impl AstToIrGenerator {
                         }
                     }
                 } else if let Some(init_expr) = initializer {
-                    // 优先使用 typecheck 结果推导类型名，AST 推断仅作为兜底
                     let inferred = self.get_expr_type_name(init_expr);
                     if inferred != "<unknown>" {
                         self.local_var_types.insert(name.clone(), inferred);
                     }
                 }
-
-                // 检查变量是否已经存在于当前或外层作用域
-                // 如果存在，这是赋值操作而不是新声明
-                let var_idx = if let Some(existing_idx) = self.lookup_local(name) {
-                    // 变量已存在，复用其索引（这是赋值操作）
+                let var_idx = if let Some(existing_idx) = self.lookup_local(&name) {
                     existing_idx
                 } else {
-                    // 新变量声明，分配新索引
                     let idx = self.next_temp_reg();
-                    self.register_local(name, idx);
-                    // 记录可变性信息
+                    self.register_local(&name, idx);
                     if *is_mut {
                         self.current_mut_locals.insert(idx);
                     }
                     idx
                 };
-
                 if let Some(expr) = initializer {
-                    // 变量到变量的赋值生成 Move（RFC-009 所有权转移）
-                    if let ast::Expr::Var(src_name, _) = expr.as_ref() {
-                        // 直接使用源变量的寄存器
+                    if let ast::Expr::Var(src_name, _) = expr {
                         if let Some(src_idx) = self.lookup_local(src_name) {
                             instructions.push(Instruction::Move {
                                 dst: Operand::Local(var_idx),
                                 src: Operand::Local(src_idx),
                             });
                         } else {
-                            // 源变量不存在，回退到普通赋值
                             self.generate_expr_ir(expr, var_idx, instructions, constants)?;
                         }
                     } else {
                         self.generate_expr_ir(expr, var_idx, instructions, constants)?;
                     }
                 } else {
-                    // 默认初始化为 0
                     instructions.push(Instruction::Load {
                         dst: Operand::Local(var_idx),
                         src: Operand::Const(ConstValue::Int(0)),
                     });
                 }
-                // 变量到变量的 Move 已经在上面处理，不需要额外的 Store
-                // 只有非 Move 的情况才需要 Store
-                if !matches!(
-                    initializer.as_ref().map(|e| e.as_ref()),
-                    Some(ast::Expr::Var(_, _))
-                ) {
-                    // 生成 Store 指令将值存储到局部变量
+                if !matches!(initializer, Some(ast::Expr::Var(_, _))) {
                     instructions.push(Instruction::Store {
                         dst: Operand::Local(var_idx),
                         src: Operand::Local(var_idx),
                         span: stmt.span,
                     });
-                }
-            }
-            ast::StmtKind::Binding {
-                name,
-                type_name: None,
-                method_type: _,
-                signature_params,
-                type_annotation,
-                params,
-                body,
-                is_pub: _,
-            } => {
-                // 生成嵌套函数的 IR（排除方法绑定和类型定义）
-                let generic_params =
-                    crate::frontend::core::parser::ast::extract_generic_param_names(
-                        signature_params,
-                    );
-                let generic_param_names = if generic_params.is_empty() {
-                    None
-                } else {
-                    Some(generic_params.iter().map(|p| p.name.clone()).collect())
-                };
-                match self.generate_function_ir(
-                    name,
-                    type_annotation.as_ref(),
-                    params,
-                    body,
-                    constants,
-                    generic_param_names,
-                ) {
-                    Ok(Some(func_ir)) => {
-                        // 将嵌套函数添加到列表（会被提升到模块级别）
-                        self.nested_functions.push(func_ir);
-                    }
-                    Ok(None) => {} // Native 函数或其他情况
-                    Err(e) => return Err(e),
                 }
             }
             ast::StmtKind::If {

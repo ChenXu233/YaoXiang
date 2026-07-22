@@ -86,8 +86,8 @@ pub fn eval_code(source: &str) -> Result<()> {
     let has_main = parse_result.module.items.iter().any(|stmt| {
         matches!(
             &stmt.kind,
-            crate::frontend::core::parser::ast::StmtKind::Binding { name, .. }
-            if name == "main"
+            crate::frontend::core::parser::ast::StmtKind::Assign { target, .. }
+            if matches!(target.as_ref(), crate::frontend::core::parser::ast::Expr::Var(name, _) if name == "main")
         )
     });
     let compile_source: String = if has_main {

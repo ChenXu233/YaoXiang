@@ -28,18 +28,22 @@ pub fn handle_inlay_hint(
 
     for stmt in &ast.items {
         match &stmt.kind {
-            StmtKind::Var {
-                name_span,
+            StmtKind::Assign {
+                target,
                 type_annotation,
-                initializer,
+                value,
                 is_mut,
+                span: stmt_span,
                 ..
             } => {
-                let range = span_to_range(name_span);
-
-                // 1. 类型推断提示
+                use crate::frontend::core::parser::ast::Expr;
+                let name_span = match target.as_ref() {
+                    Expr::Var(_, s) => *s,
+                    _ => *stmt_span,
+                };
+                let range = span_to_range(&name_span);
                 if type_annotation.is_none() {
-                    if let Some(init) = initializer {
+                    if let Some(init) = value {
                         if let Some(inferred_type) = simple_infer_type(init) {
                             hints.push(InlayHint {
                                 position: range.end,
@@ -54,10 +58,8 @@ pub fn handle_inlay_hint(
                         }
                     }
                 }
-
-                // 2. 常量计算提示
-                if !is_mut {
-                    if let Some(init) = initializer {
+                if !*is_mut {
+                    if let Some(init) = value {
                         if let Some(val) = evaluate_constant(init) {
                             if !is_literal(init) {
                                 hints.push(InlayHint {
@@ -76,8 +78,6 @@ pub fn handle_inlay_hint(
                         }
                     }
                 }
-
-                // 3. 可变性提示
                 if *is_mut {
                     hints.push(InlayHint {
                         position: range.start,
@@ -91,26 +91,7 @@ pub fn handle_inlay_hint(
                     });
                 }
             }
-            StmtKind::Binding { params, .. } => {
-                // 所有权消费/可变性提示
-                for param in params {
-                    if param.is_mut {
-                        let range = span_to_range(&param.span);
-                        hints.push(InlayHint {
-                            position: range.start,
-                            label: InlayHintLabel::String("mut ".to_string()),
-                            kind: Some(InlayHintKind::PARAMETER),
-                            text_edits: None,
-                            tooltip: Some(lsp_types::InlayHintTooltip::String(
-                                "可变参数".to_string(),
-                            )),
-                            padding_left: Some(false),
-                            padding_right: Some(true),
-                            data: None,
-                        });
-                    }
-                }
-            }
+            // 第二个 Assign 分支已被合并到上面，避免 unreachable pattern
             _ => {}
         }
     }

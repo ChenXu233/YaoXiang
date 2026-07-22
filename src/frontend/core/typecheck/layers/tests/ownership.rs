@@ -371,12 +371,14 @@ fn make_var_stmt(
     init: Expr,
 ) -> Stmt {
     Stmt {
-        kind: StmtKind::Var {
-            name: name.into(),
-            name_span: Span::default(),
+        kind: StmtKind::Assign {
+            target: Box::new(Expr::Var(name.into(), Span::default())),
             type_annotation: None,
-            initializer: Some(Box::new(init)),
+            signature_params: vec![],
+            value: Some(Box::new(init)),
+            is_pub: false,
             is_mut: false,
+            span: Span::default(),
         },
         span: Span::default(),
     }
@@ -387,12 +389,14 @@ fn make_mut_var_stmt(
     init: Expr,
 ) -> Stmt {
     Stmt {
-        kind: StmtKind::Var {
-            name: name.into(),
-            name_span: Span::default(),
+        kind: StmtKind::Assign {
+            target: Box::new(Expr::Var(name.into(), Span::default())),
             type_annotation: None,
-            initializer: Some(Box::new(init)),
+            signature_params: vec![],
+            value: Some(Box::new(init)),
+            is_pub: false,
             is_mut: true,
+            span: Span::default(),
         },
         span: Span::default(),
     }
@@ -404,30 +408,35 @@ fn make_expr_stmt(expr: Expr) -> Stmt {
         span: Span::default(),
     }
 }
-
 fn make_binding(
     name: &str,
     params: Vec<String>,
     body: Vec<Stmt>,
 ) -> Stmt {
     Stmt {
-        kind: StmtKind::Binding {
-            name: name.into(),
-            type_name: None,
-            method_type: None,
-            signature_params: vec![],
+        kind: StmtKind::Assign {
+            target: Box::new(Expr::Var(name.into(), Span::default())),
             type_annotation: None,
-            params: params
-                .into_iter()
-                .map(|n| Param {
-                    name: n,
-                    ty: None,
-                    is_mut: false,
+            signature_params: vec![],
+            value: Some(Box::new(Expr::Lambda {
+                params: params
+                    .into_iter()
+                    .map(|n| Param {
+                        name: n,
+                        ty: None,
+                        is_mut: false,
+                        span: Span::default(),
+                    })
+                    .collect(),
+                body: Box::new(Block {
+                    stmts: body,
                     span: Span::default(),
-                })
-                .collect(),
-            body,
+                }),
+                span: Span::default(),
+            })),
             is_pub: false,
+            is_mut: false,
+            span: Span::default(),
         },
         span: Span::default(),
     }
@@ -1682,21 +1691,23 @@ fn test_e2e_ref_holds_ref_through_field_assignment() {
                 body: Box::new(make_block(vec![
                     // ra.field = rb（字段赋值）
                     Stmt {
-                        kind: StmtKind::Var {
-                            name: "temp".into(),
-                            name_span: Span::default(),
+                        kind: StmtKind::Assign {
+                            target: Box::new(make_var("temp")),
                             type_annotation: None,
-                            initializer: Some(Box::new(Expr::BinOp {
-                                op: BinOp::Assign,
+                            signature_params: Vec::new(),
+                            value: Some(Box::new(Expr::BinOp {
+                                op: crate::frontend::core::parser::ast::BinOp::Assign,
                                 left: Box::new(Expr::FieldAccess {
                                     expr: Box::new(make_var("ra")),
-                                    field: "field".into(),
+                                    field: "field".to_string(),
                                     span: Span::default(),
                                 }),
                                 right: Box::new(make_var("rb")),
                                 span: Span::default(),
                             })),
+                            is_pub: false,
                             is_mut: false,
+                            span: Span::default(),
                         },
                         span: Span::default(),
                     },

@@ -232,6 +232,8 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse indexing expression
+    /// `arr[0]` → Index(arr, 0)
+    /// `arr[0, 1]` → Index(arr, Tuple(0, 1)) — multi-position indexing
     fn parse_index(
         &mut self,
         lhs: Expr,
@@ -240,13 +242,32 @@ impl<'a> ParserState<'a> {
         let span = self.span();
         self.bump(); // consume '['
 
-        let index = self.parse_expression(BP_LOWEST)?;
+        let first = self.parse_expression(BP_LOWEST)?;
+
+        // Multi-index: [0, 1, 2] → Tuple(0, 1, 2)
+        if self.skip(&TokenKind::Comma) {
+            let mut elems = vec![first];
+            loop {
+                let e = self.parse_expression(BP_LOWEST)?;
+                elems.push(e);
+                if !self.skip(&TokenKind::Comma) {
+                    break;
+                }
+            }
+            self.expect(&TokenKind::RBracket);
+            let tuple_span = span;
+            return Some(Expr::Index {
+                expr: Box::new(lhs),
+                index: Box::new(Expr::Tuple(elems, tuple_span)),
+                span,
+            });
+        }
 
         self.expect(&TokenKind::RBracket);
 
         Some(Expr::Index {
             expr: Box::new(lhs),
-            index: Box::new(index),
+            index: Box::new(first),
             span,
         })
     }

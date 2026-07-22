@@ -439,17 +439,15 @@ impl ModuleDependencyGraph {
         let mut export_names = Vec::new();
         for stmt in &ast.items {
             match &stmt.kind {
-                StmtKind::Binding {
-                    name, is_pub: true, ..
-                } => {
-                    export_names.push(name.clone());
-                }
-                StmtKind::Binding {
-                    name: _,
-                    is_pub: false,
+                StmtKind::Assign {
+                    target,
+                    is_pub: true,
                     ..
                 } => {
-                    // 非公开绑定不导出
+                    if let crate::frontend::core::parser::ast::Expr::Var(name, _) = target.as_ref()
+                    {
+                        export_names.push(name.clone());
+                    }
                 }
                 StmtKind::TypeDefinition { name, .. } => {
                     // 类型定义始终导出

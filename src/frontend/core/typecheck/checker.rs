@@ -497,16 +497,60 @@ impl TypeChecker {
                     }
                 }
             }
-            crate::frontend::core::parser::ast::StmtKind::Binding {
-                name,
-                type_name,
-                method_type,
+            crate::frontend::core::parser::ast::StmtKind::Assign {
+                target,
                 type_annotation,
                 signature_params,
-                params,
+                value,
                 is_pub,
                 ..
-            } => {
+            } if value.as_ref().is_some_and(|v| {
+                matches!(
+                    v.as_ref(),
+                    crate::frontend::core::parser::ast::Expr::Lambda { .. }
+                        | crate::frontend::core::parser::ast::Expr::Block(..)
+                )
+            }) || (value.is_none() && type_annotation.is_some()) =>
+            {
+                // 从 target 提取 name 和 type_name
+                let (name, type_name) = match target.as_ref() {
+                    crate::frontend::core::parser::ast::Expr::Var(n, _) => (n.clone(), None),
+                    crate::frontend::core::parser::ast::Expr::FieldAccess {
+                        expr, field, ..
+                    } => {
+                        if let crate::frontend::core::parser::ast::Expr::Var(tn, _) = expr.as_ref()
+                        {
+                            (field.clone(), Some(tn.clone()))
+                        } else {
+                            (field.clone(), None)
+                        }
+                    }
+                    _ => {
+                        // 无法从 target 提取名字，跳过
+                        return;
+                    }
+                };
+                // 从 value 提取 params 和 body（Lambda 形式）
+                let (params, _): (Vec<_>, Vec<_>) = match value {
+                    Some(expr) => {
+                        if let crate::frontend::core::parser::ast::Expr::Lambda {
+                            params: p,
+                            body: b,
+                            ..
+                        } = expr.as_ref()
+                        {
+                            (p.clone(), b.stmts.clone())
+                        } else if let crate::frontend::core::parser::ast::Expr::Block(b) =
+                            expr.as_ref()
+                        {
+                            (Vec::new(), b.stmts.clone())
+                        } else {
+                            (Vec::new(), Vec::new())
+                        }
+                    }
+                    None => (Vec::new(), Vec::new()),
+                };
+                let method_type = type_annotation.as_ref();
                 let generic_params =
                     classify_generic_params(signature_params, &|name| self.env.has_trait(name));
                 // 处理统一函数语法
@@ -754,7 +798,7 @@ impl TypeChecker {
                 // 如果有 type_name（显式方法绑定），使用 add_fn_binding
                 if type_name.is_some() {
                     self.env
-                        .add_fn_binding(name, type_name.as_deref(), fn_ty.clone());
+                        .add_fn_binding(&name, type_name.as_deref(), fn_ty.clone());
                 } else {
                     // 如果函数有 const 泛型参数，存进 PolyType.const_binders
                     let poly = if const_binders.is_empty() {
@@ -769,7 +813,7 @@ impl TypeChecker {
 
                 // 处理 pub 自动绑定
                 if *is_pub {
-                    self.auto_bind_to_type(name, &final_param_types, fn_ty);
+                    self.auto_bind_to_type(&name, &final_param_types, fn_ty);
                 }
             }
             crate::frontend::core::parser::ast::StmtKind::Use {
@@ -842,30 +886,43 @@ impl TypeChecker {
                     }
                 }
             }
-            crate::frontend::core::parser::ast::StmtKind::ExternalBindingStmt {
-                type_name,
-                method_name,
-                binding,
+            // 外部绑定: Type.method = function 或 Type.method = function[pos]
+            crate::frontend::core::parser::ast::StmtKind::Assign {
+                target,
+                value: Some(val),
+                ..
             } => {
-                // 外部方法绑定: Point.distance = distance[0] 或 Point.calc = calculate[1, 2]
-                // 查找函数的类型并注册为方法绑定
-                let (func_name, positions) = match binding {
-                    crate::frontend::core::parser::ast::BindingKind::External {
-                        function,
-                        positions,
-                    } => (function.clone(), positions.clone()),
-                    crate::frontend::core::parser::ast::BindingKind::DefaultExternal {
-                        function,
-                    } => (function.clone(), vec![0]),
+                use crate::frontend::core::parser::ast::Expr;
+                let (type_name, method_name) = match target.as_ref() {
+                    Expr::FieldAccess { expr, field, .. } => {
+                        if let Expr::Var(tn, _) = expr.as_ref() {
+                            (tn.clone(), field.clone())
+                        } else {
+                            return;
+                        }
+                    }
+                    _ => return,
+                };
+                // 从 value 提取 func_name 和 positions
+                let (func_name, positions) = match val.as_ref() {
+                    Expr::Var(fn_name, _) => (fn_name.clone(), vec![0]),
+                    Expr::Index {
+                        expr: inner, index, ..
+                    } => {
+                        let fn_name = if let Expr::Var(n, _) = inner.as_ref() {
+                            n.clone()
+                        } else {
+                            return;
+                        };
+                        let positions = Self::extract_positions(index);
+                        (fn_name, positions)
+                    }
                     _ => return,
                 };
                 if let Some(poly) = self.env.get_var(&func_name) {
                     let method_ty = if positions.len() <= 1 {
-                        // Single position [0] or default: use the full function type directly
                         poly.body.clone()
                     } else {
-                        // Multi-position [1, 2]: filter out bound params
-                        // The resulting method type has params minus the bound positions
                         match &poly.body {
                             MonoType::Fn {
                                 params,
@@ -886,10 +943,29 @@ impl TypeChecker {
                         }
                     };
                     self.env
-                        .add_method_binding(type_name, method_name, method_ty);
+                        .add_method_binding(&type_name, &method_name, method_ty);
                 }
             }
             _ => {}
+        }
+    }
+
+    /// 从 Index 表达式的 index 部分提取位置列表
+    fn extract_positions(index: &crate::frontend::core::parser::ast::Expr) -> Vec<i64> {
+        use crate::frontend::core::lexer::tokens::Literal;
+        match index {
+            Expr::Lit(Literal::Int(n), _) => vec![*n as i64],
+            Expr::Tuple(items, _) => items
+                .iter()
+                .filter_map(|e| {
+                    if let Expr::Lit(Literal::Int(n), _) = e {
+                        Some(*n as i64)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            _ => vec![0],
         }
     }
 
@@ -1342,25 +1418,27 @@ impl TypeChecker {
     ) {
         use crate::frontend::core::parser::ast::StmtKind;
         for stmt in &module.items {
-            if let StmtKind::Binding {
-                name,
-                type_name,
-                is_pub,
-                ..
-            } = &stmt.kind
-            {
-                // 方法绑定
+            if let StmtKind::Assign { target, is_pub, .. } = &stmt.kind {
+                use crate::frontend::core::parser::ast::Expr;
+                let (name, type_name) = match target.as_ref() {
+                    Expr::Var(n, _) => (n.clone(), None),
+                    Expr::FieldAccess { expr, field, .. } => {
+                        if let Expr::Var(tn, _) = expr.as_ref() {
+                            (field.clone(), Some(tn.clone()))
+                        } else {
+                            (field.clone(), None)
+                        }
+                    }
+                    _ => continue,
+                };
                 let is_method = type_name.is_some();
-
-                // 方法绑定始终导出，函数仅 pub 导出
                 if is_method || *is_pub {
                     if is_method {
-                        // 方法绑定导出为 Type.method 格式
                         if let Some(ty_name) = type_name {
                             self.env.add_export(&format!("{}.{}", ty_name, name));
                         }
                     } else {
-                        self.env.add_export(name);
+                        self.env.add_export(&name);
                     }
                 }
             }
@@ -1670,50 +1748,42 @@ impl TypeChecker {
         use crate::frontend::core::parser::ast::StmtKind;
 
         match &stmt.kind {
-            StmtKind::Var {
-                name,
+            StmtKind::Assign {
+                target,
                 type_annotation: Some(type_ann),
-                initializer,
+                value,
                 ..
             } => {
+                use crate::frontend::core::parser::ast::Expr;
+                let name = match target.as_ref() {
+                    Expr::Var(n, _) => n.clone(),
+                    _ => return,
+                };
                 let mono_ty = MonoType::from(type_ann.clone());
                 let resolved_ty = self.resolve_type_annotation(&mono_ty);
-
                 if let MonoType::Refined { constraint, .. } = &resolved_ty {
-                    // 构建依赖图：提取约束中的自由变量 → 记录 dep
                     let free_vars = Self::extract_free_vars(constraint);
                     for fv in &free_vars {
-                        if fv != name {
-                            dep_graph.add_dep(name, fv);
+                        if fv != &name {
+                            dep_graph.add_dep(&name, fv);
                         }
                     }
-
-                    // 检查初始化绑定
                     let mut bindings = HashMap::new();
-                    if let Some(init_expr) = initializer {
+                    if let Some(init_expr) = value {
                         if let Some(const_val) = self.extract_const_value(init_expr) {
                             bindings.insert(name.clone(), const_val);
                         }
                     }
-                    let proof_result =
-                        crate::frontend::core::typecheck::layers::predicate::check_predicate(
-                            shared_ctx,
-                            &resolved_ty,
-                            &bindings,
-                        );
-                    if let ProofResult::Unproven {
-                        proof_calls: calls, ..
-                    } = &proof_result
-                    {
-                        if !calls.is_empty() {
-                            proof_calls.extend(calls.clone());
-                        }
-                    }
                 }
             }
-            StmtKind::Binding { body: stmts, .. } => {
-                for s in stmts {
-                    self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+            StmtKind::Assign {
+                value: Some(expr), ..
+            } => {
+                if let crate::frontend::core::parser::ast::Expr::Lambda { body, .. } = expr.as_ref()
+                {
+                    for s in &body.stmts {
+                        self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                    }
                 }
             }
             StmtKind::Expr(expr) => {
@@ -1804,28 +1874,30 @@ impl TypeChecker {
         shared_ctx: &mut crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
         proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
     ) {
-        use crate::frontend::core::parser::ast::StmtKind;
+        use crate::frontend::core::parser::ast::{StmtKind, Expr};
 
         match &stmt.kind {
-            // 赋值语句：x = expr（有 initializer 的 Var）
-            StmtKind::Var {
-                name,
-                initializer: Some(_),
+            // 赋值语句：x = expr（有 value 的 Assign，target 是 Var）
+            StmtKind::Assign {
+                target,
+                value: Some(v),
                 ..
             } => {
-                let affected = dep_graph.affected_by(name);
-                if !affected.is_empty() {
-                    self.generate_vc_for_dependants(name, &affected, shared_ctx, proof_calls);
+                if let Expr::Var(name, _) = target.as_ref() {
+                    let affected = dep_graph.affected_by(name);
+                    if !affected.is_empty() {
+                        self.generate_vc_for_dependants(name, &affected, shared_ctx, proof_calls);
+                    }
                 }
-            }
-            // 表达式赋值：i += 1（BinOp::Assign in expression position）
-            StmtKind::Expr(expr) => {
-                self.check_assign_expr_with_deps(expr.as_ref(), dep_graph, shared_ctx, proof_calls);
-            }
-            // 递归处理子语句
-            StmtKind::Binding { body: stmts, .. } => {
-                for s in stmts {
-                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                // 递归处理 Lambda/Block 函数体
+                if let Expr::Lambda { body, .. } = v.as_ref() {
+                    for s in &body.stmts {
+                        self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                    }
+                } else if let Expr::Block(block) = v.as_ref() {
+                    for s in &block.stmts {
+                        self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                    }
                 }
             }
             StmtKind::If {
@@ -1849,52 +1921,6 @@ impl TypeChecker {
                 }
             }
             StmtKind::For { body, .. } => {
-                for s in &body.stmts {
-                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    /// 检查表达式赋值中的依赖触发（处理 i += 1 等 BinOp::Assign）
-    fn check_assign_expr_with_deps(
-        &self,
-        expr: &crate::frontend::core::parser::ast::Expr,
-        dep_graph: &crate::frontend::core::typecheck::proof::dep_graph::TypeDepGraph,
-        shared_ctx: &mut crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
-        proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
-    ) {
-        match expr {
-            crate::frontend::core::parser::ast::Expr::BinOp {
-                op: crate::frontend::core::parser::ast::BinOp::Assign,
-                left,
-                ..
-            } => {
-                if let crate::frontend::core::parser::ast::Expr::Var(var_name, _) = left.as_ref() {
-                    let affected = dep_graph.affected_by(var_name);
-                    if !affected.is_empty() {
-                        self.generate_vc_for_dependants(
-                            var_name,
-                            &affected,
-                            shared_ctx,
-                            proof_calls,
-                        );
-                    }
-                }
-            }
-            // 递归处理子表达式中的语句（While/For body 等）
-            crate::frontend::core::parser::ast::Expr::Block(block) => {
-                for s in &block.stmts {
-                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
-                }
-            }
-            crate::frontend::core::parser::ast::Expr::While { body, .. } => {
-                for s in &body.stmts {
-                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
-                }
-            }
-            crate::frontend::core::parser::ast::Expr::For { body, .. } => {
                 for s in &body.stmts {
                     self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
                 }

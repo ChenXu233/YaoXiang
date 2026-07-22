@@ -1725,103 +1725,90 @@ impl<'a> ExpressionInferrer<'a> {
                 self.infer_expr(expr)?;
                 Ok(())
             }
-            crate::frontend::core::parser::ast::StmtKind::Var {
-                name,
+            crate::frontend::core::parser::ast::StmtKind::Assign {
+                target,
                 type_annotation,
-                initializer,
+                value,
                 is_mut,
+                span: stmt_span,
                 ..
             } => {
-                let init_ty = if let Some(expr) = initializer {
+                use crate::frontend::core::parser::ast::Expr;
+                let name = match target.as_ref() {
+                    Expr::Var(n, _) => n.clone(),
+                    _ => return Ok(()),
+                };
+                // 如果 value 是 Lambda，走函数推断
+                if let Some(v) = value {
+                    if let Expr::Lambda { params, .. } = v.as_ref() {
+                        let param_types: Vec<MonoType> =
+                            params.iter().map(|_| self.solver.new_var()).collect();
+                        let return_type = type_annotation
+                            .as_ref()
+                            .map_or(MonoType::Void, |t| t.clone().into());
+                        let fn_type = MonoType::Fn {
+                            params: param_types,
+                            return_type: Box::new(return_type),
+                        };
+                        self.try_add_var(
+                            name.clone(),
+                            PolyType::mono(fn_type),
+                            *stmt_span,
+                            *is_mut,
+                        )?;
+                        return Ok(());
+                    }
+                    if let Expr::Block(..) = v.as_ref() {
+                        let fn_type = MonoType::Fn {
+                            params: vec![],
+                            return_type: Box::new(
+                                type_annotation
+                                    .as_ref()
+                                    .map_or(MonoType::Void, |t| t.clone().into()),
+                            ),
+                        };
+                        self.try_add_var(
+                            name.clone(),
+                            PolyType::mono(fn_type),
+                            *stmt_span,
+                            *is_mut,
+                        )?;
+                        return Ok(());
+                    }
+                }
+                // 普通变量
+                let init_ty = if let Some(expr) = value {
                     self.infer_expr(expr)?
                 } else {
                     type_annotation
                         .as_ref()
                         .map_or_else(|| self.solver.new_var(), |t| t.clone().into())
                 };
-
-                if self.scope.var_in_any_scope(name) {
-                    if self.scope.var_in_current_scope(name) {
-                        // 当前作用域已有此变量
-                        if self.scope.var_is_moved(name).unwrap_or(false) {
-                            // 已 moved 的变量：视为"未找到"，重新声明
-                            // 先移除旧的 moved 绑定，再添加新绑定
-                            self.scope.remove_var(name);
-                            // 继续到下面的 try_add_var
+                if self.scope.var_in_any_scope(&name) {
+                    if self.scope.var_in_current_scope(&name) {
+                        if self.scope.var_is_moved(&name).unwrap_or(false) {
+                            self.scope.remove_var(&name);
                         } else {
-                            return Err(ErrorCodeDefinition::duplicate_definition(name)
-                                .at(stmt.span)
+                            return Err(ErrorCodeDefinition::duplicate_definition(&name)
+                                .at(*stmt_span)
                                 .build());
                         }
                     } else {
-                        // 外层作用域有此变量
-                        if self.scope.var_is_moved(name).unwrap_or(false) {
+                        if self.scope.var_is_moved(&name).unwrap_or(false) {
                             // 外层变量已 moved：在当前作用域重新声明
-                            // 继续到下面的 try_add_var
                         } else if !*is_mut {
-                            // 非 mut 的 Var 在外部作用域存在同名变量时，是赋值操作
-                            // 需要检查外层变量是否可变
-                            if !self.scope.var_is_mutable(name).unwrap_or(false) {
-                                return Err(ErrorCodeDefinition::immutable_assignment(name)
-                                    .at(stmt.span)
+                            if !self.scope.var_is_mutable(&name).unwrap_or(false) {
+                                return Err(ErrorCodeDefinition::immutable_assignment(&name)
+                                    .at(*stmt_span)
                                     .build());
                             }
-                            self.assign_var(name, init_ty);
+                            self.assign_var(&name, init_ty);
                             return Ok(());
                         }
-                        // mut 声明允许遮蔽外层变量（与 StatementChecker.check_var_stmt 行为一致）
                     }
                 }
-                self.try_add_var(name.clone(), PolyType::mono(init_ty), stmt.span, *is_mut)?;
+                self.try_add_var(name.clone(), PolyType::mono(init_ty), *stmt_span, *is_mut)?;
                 Ok(())
-            }
-            crate::frontend::core::parser::ast::StmtKind::Binding {
-                name,
-                params,
-                body,
-                type_annotation,
-                ..
-            } => {
-                let param_types: Vec<MonoType> =
-                    params.iter().map(|_| self.solver.new_var()).collect();
-
-                let return_type = type_annotation
-                    .as_ref()
-                    .map_or(MonoType::Void, |t| t.clone().into());
-
-                let fn_type = MonoType::Fn {
-                    params: param_types.clone(),
-                    return_type: Box::new(return_type.clone()),
-                };
-
-                self.scope.add_var(
-                    name.clone(),
-                    PolyType::mono(fn_type),
-                    false,
-                    crate::util::span::Span::default(),
-                );
-
-                self.scope.enter_scope();
-                let result: Result<()> = (|| {
-                    for (param, param_ty) in params.iter().zip(param_types.iter()) {
-                        self.scope.add_var(
-                            param.name.clone(),
-                            PolyType::mono(param_ty.clone()),
-                            param.is_mut,
-                            crate::util::span::Span::default(),
-                        );
-                    }
-
-                    let block = crate::frontend::core::parser::ast::Block {
-                        stmts: body.clone(),
-                        span: stmt.span,
-                    };
-                    let _ = self.infer_block(&block, true, Some(&return_type))?;
-
-                    Ok(())
-                })();
-                self.scope.exit_scope();
-                result
             }
             _ => Ok(()),
         }

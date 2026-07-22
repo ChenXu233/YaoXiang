@@ -3,6 +3,7 @@
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse_expression;
 use crate::frontend::core::parser::ast::{BinOp, Expr, UnOp};
+use crate::frontend::core::lexer::tokens::Literal;
 
 fn parse_expr(source: &str) -> Expr {
     let tokens = tokenize(source).unwrap();
@@ -41,6 +42,12 @@ fn test_bool_literal() {
 fn test_char_literal() {
     let expr = parse_expr("'a'");
     assert!(matches!(expr, Expr::Lit(..)));
+}
+
+#[test]
+fn test_void_literal() {
+    let expr = parse_expr("void");
+    assert!(matches!(expr, Expr::Lit(Literal::Void, _)));
 }
 
 #[test]

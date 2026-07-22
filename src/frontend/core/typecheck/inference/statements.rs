@@ -577,63 +577,81 @@ impl StatementChecker {
     ) -> Result<(), Box<Diagnostic>> {
         match &stmt.kind {
             crate::frontend::core::parser::ast::StmtKind::Expr(expr) => self.check_expr_stmt(expr),
-            crate::frontend::core::parser::ast::StmtKind::Binding {
-                name,
-                type_name,
-                signature_params,
+            crate::frontend::core::parser::ast::StmtKind::Assign {
+                target,
                 type_annotation,
-                params,
-                body,
-                is_pub: _,
-                method_type,
+                signature_params,
+                value,
+                is_mut,
+                span: stmt_span,
                 ..
             } => {
-                // 根据是否有 type_name 来区分方法绑定和其他绑定
-                // 注意：不能根据 params 是否为空来判断，因为空参数的函数也是函数
+                use crate::frontend::core::parser::ast::Expr;
+                let (name, type_name) = match target.as_ref() {
+                    Expr::Var(n, _) => (n.clone(), None),
+                    Expr::FieldAccess { expr, field, .. } => {
+                        if let Expr::Var(tn, _) = expr.as_ref() {
+                            (field.clone(), Some(tn.clone()))
+                        } else {
+                            (field.clone(), None)
+                        }
+                    }
+                    _ => return Ok(()),
+                };
+                // 从 value 提取 Lambda params/body
+                let (params, body_stmts) = match value {
+                    Some(v) => {
+                        if let Expr::Lambda { params, body, .. } = v.as_ref() {
+                            (params.clone(), body.stmts.clone())
+                        } else if let Expr::Block(block) = v.as_ref() {
+                            (Vec::new(), block.stmts.clone())
+                        } else {
+                            return self.check_var_stmt(
+                                &name,
+                                type_annotation.as_ref(),
+                                &[],
+                                Some(v.as_ref()),
+                                *is_mut,
+                            );
+                        }
+                    }
+                    None => {
+                        return self.check_var_stmt(
+                            &name,
+                            type_annotation.as_ref(),
+                            &[],
+                            None,
+                            *is_mut,
+                        );
+                    }
+                };
                 let body_block = Block {
-                    stmts: body.clone(),
+                    stmts: body_stmts.clone(),
                     span: stmt.span,
                 };
-                if type_name.is_some() {
-                    // 方法绑定：使用 method_type 作为签名
-                    // method_type 包含完整的 (params) -> ReturnType 签名
-                    let type_ann = method_type.as_ref();
+                let result = if type_name.is_some() {
                     self.check_fn_stmt(
-                        name,
-                        type_ann,
-                        signature_params,
-                        params,
-                        body,
-                        body_block,
-                        stmt.span,
-                    )
-                } else {
-                    // 函数绑定（包括空参数的函数）
-                    // 使用 type_annotation 作为签名
-                    self.check_fn_stmt(
-                        name,
+                        &name,
                         type_annotation.as_ref(),
                         signature_params,
-                        params,
-                        body,
+                        &params,
+                        &body_stmts,
                         body_block,
-                        stmt.span,
+                        *stmt_span,
                     )
-                }
+                } else {
+                    self.check_fn_stmt(
+                        &name,
+                        type_annotation.as_ref(),
+                        signature_params,
+                        &params,
+                        &body_stmts,
+                        body_block,
+                        *stmt_span,
+                    )
+                };
+                result
             }
-            crate::frontend::core::parser::ast::StmtKind::Var {
-                name,
-                type_annotation,
-                initializer,
-                is_mut,
-                ..
-            } => self.check_var_stmt(
-                name,
-                type_annotation.as_ref(),
-                &[],
-                initializer.as_deref(),
-                *is_mut,
-            ),
             crate::frontend::core::parser::ast::StmtKind::For {
                 var,
                 var_mut,

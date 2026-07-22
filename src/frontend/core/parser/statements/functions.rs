@@ -34,15 +34,18 @@ pub fn parse_fn_stmt_with_name(
     let body = parse_fn_body(state)?;
 
     Some(Stmt {
-        kind: StmtKind::Binding {
-            name,
-            type_name: None,
-            method_type: None,
-            signature_params: Vec::new(),
+        kind: StmtKind::Assign {
+            target: Box::new(Expr::Var(name, span)),
             type_annotation: None,
-            params,
-            body,
+            signature_params: Vec::new(),
+            value: Some(Box::new(Expr::Lambda {
+                params,
+                body: Box::new(Block { stmts: body, span }),
+                span,
+            })),
             is_pub,
+            is_mut: false,
+            span,
         },
         span,
     })
@@ -70,20 +73,23 @@ pub fn parse_fn_stmt_with_name_simple(
     let body = parse_fn_body(state)?;
 
     Some(Stmt {
-        kind: StmtKind::Binding {
-            name,
-            type_name: None,
-            method_type: None,
-            signature_params: Vec::new(),
+        kind: StmtKind::Assign {
+            target: Box::new(Expr::Var(name, span)),
             type_annotation: None,
-            params: vec![Param {
-                name: param_name,
-                ty: None,
-                is_mut: false,
-                span: param_span,
-            }],
-            body,
+            signature_params: Vec::new(),
+            value: Some(Box::new(Expr::Lambda {
+                params: vec![Param {
+                    name: param_name,
+                    ty: None,
+                    is_mut: false,
+                    span: param_span,
+                }],
+                body: Box::new(Block { stmts: body, span }),
+                span,
+            })),
             is_pub,
+            is_mut: false,
+            span,
         },
         span,
     })
