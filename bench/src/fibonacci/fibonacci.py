@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Fibonacci iterative - Python"""
+"""Fibonacci iterative - Python
+Reads BENCH_INPUT env var for input size, defaults to 1000"""
+
+import os
 
 def fibonacci(n: int) -> int:
     if n <= 1:
@@ -10,10 +13,11 @@ def fibonacci(n: int) -> int:
     return b
 
 def main():
+    n = int(os.environ.get("BENCH_INPUT", "1000"))
     result = 0
     for _ in range(10000):
-        result = fibonacci(1000)
-    return result
+        result = fibonacci(n)
+    print(result)
 
 if __name__ == "__main__":
     main()
