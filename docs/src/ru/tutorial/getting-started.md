@@ -1,8 +1,8 @@
-# YaoXiang — Быстрый старт
+# YaoXiang Краткое руководство
 
-> Это руководство поможет вам быстро освоить язык программирования YaoXiang.
+> Данное руководство поможет вам быстро освоить язык программирования YaoXiang.
 >
-> **Примечание**: Примеры кода в данном документе основаны на спецификации языка YaoXiang. Если при реальном запуске вы столкнётесь с синтаксическими различиями, обратитесь к [спецификации языка](../design/language-spec.md).
+> **Внимание**: Примеры кода в этом документе основаны на спецификации языка YaoXiang. Если при фактическом выполнении вы столкнётесь с различиями в синтаксисе, обратитесь к [спецификации языка](../reference/language-spec/index.md).
 
 ## Установка
 
@@ -10,7 +10,7 @@
 
 ```bash
 # Клонирование репозитория
-git clone https://github.com/yourusername/yaoxiang.git
+git clone https://github.com/ChenXu233/YaoXiang.git
 cd yaoxiang
 
 # Сборка (отладочная версия, для разработки и тестирования)
@@ -22,7 +22,7 @@ cargo build --release
 # Запуск тестов
 cargo test
 
-# Просмотр версии
+# Проверка версии
 ./target/debug/yaoxiang --version
 # или
 ./target/release/yaoxiang --version
@@ -31,7 +31,7 @@ cargo test
 **Проверка успешной установки**:
 ```bash
 ./target/debug/yaoxiang --version
-# Должно вывести что-то вроде: yaoxiang x.y.z
+# Должен вывести что-то вроде: yaoxiang x.y.z
 ```
 
 ## Первая программа
@@ -42,8 +42,8 @@ cargo test
 // hello.yx
 use std.io
 
-// 函数定义: name: (param: Type, ...) -> return_type = { return ... }  # 代码块必须显式 return
-// 表达式形式: name: (param: Type, ...) -> return_type = expr           # 表达式直接返回值
+// Определение функции: name: (param: Type, ...) -> return_type = { return ... }  # В блоке кода необходим явный return
+// Форма выражения: name: (param: Type, ...) -> return_type = expr           # Выражение возвращает значение напрямую
 main: () -> Void = {
     print("Hello, YaoXiang!")
 }
@@ -53,7 +53,7 @@ main: () -> Void = {
 
 ```bash
 ./target/debug/yaoxiang hello.yx
-# или с релизной версией
+# или с использованием release-версии
 ./target/release/yaoxiang hello.yx
 ```
 
@@ -68,20 +68,20 @@ Hello, YaoXiang!
 ### Переменные и типы
 
 ```yaoxiang
-// 自动类型推断
-x = 42  // 推断为 Int
-name = "YaoXiang"  // 推断为 String
-pi = 3.14159  // 推断为 Float
-is_valid = true  // 推断为 Bool
+// Автоматический вывод типов
+x = 42  // выводится как Int
+name = "YaoXiang"  // выводится как String
+pi = 3.14159  // выводится как Float
+is_valid = true  // выводится как Bool
 
-// 显式类型注解（推荐使用类型集中约定）
+// Явные аннотации типов (рекомендуется использовать единый стиль)
 count: Int = 100
 
-// 默认不可变（安全特性）
+// По умолчанию неизменяемые (безопасное поведение)
 x = 10
-x = 20  // ❌ 编译错误！不可变
+x = 20  // ❌ Ошибка компиляции! Неизменяемая
 
-// 可变变量（需要显式声明）
+// Изменяемые переменные (требуется явное объявление)
 mut counter = 0
 counter = counter + 1  // ✅ OK
 ```
@@ -89,59 +89,59 @@ counter = counter + 1  // ✅ OK
 ### Функции
 
 ```yaoxiang
-// 函数定义语法
-// 表达式形式：直接返回值，不需要 return
+// Синтаксис определения функций
+// Форма выражения: возвращает значение напрямую, без return
 add: (a: Int, b: Int) -> Int = a + b
 
-// 代码块形式：必须使用 return 返回值
+// Блочная форма: необходимо использовать return
 // add: (a: Int, b: Int) -> Int = { return a + b }
 
-// 调用
+// Вызов
 result = add(1, 2)  // result = 3
 
-// 单参数函数（表达式形式）
+// Функция с одним параметром (форма выражения)
 inc: (x: Int) -> Int = x + 1
 ```
 
-### Определения типов
+### Определение типов
 
-YaoXiang использует унифицированный синтаксис `name: type = value`:
+YaoXiang использует единую синтаксическую модель `name: type = value`:
 
 ```yaoxiang
-// 变量声明
+// Объявление переменной
 x: Int = 42
 name: String = "YaoXiang"
 
-// 函数定义
+// Определение функции
 add: (a: Int, b: Int) -> Int = a + b
 
-// 类型定义（使用花括号）
+// Определение типа (с использованием фигурных скобок)
 Point: Type = { x: Float, y: Float }
 
-// 使用类型
+// Использование типа
 p: Point = Point(x=1.0, y=2.0)
 p.x  // 1.0
 p.y  // 2.0
 ```
 
-#### Record type (запись)
+#### record type
 
 ```yaoxiang
-// 结构体类型
+// Тип-структура
 Point: Type = { x: Float, y: Float }
 Rect: Type = { x: Float, y: Float, width: Float, height: Float }
 
-// 使用
+// Использование
 p = Point(x=3.0, y=4.0)
 r = Rect(x=0.0, y=0.0, width=10.0, height=20.0)
 ```
 
-#### Определение interface type (интерфейса)
+#### Определение интерфейсов
 
-Интерфейс — это record type, все поля которого являются функциональными типами:
+Интерфейсы — это record type, все поля которого имеют функциональный тип:
 
 ```yaoxiang
-// 定义接口
+// Определение интерфейса
 Drawable: Type = {
     draw: (Surface) -> Void,
     bounding_box: () -> Rect
@@ -151,19 +151,19 @@ Serializable: Type = {
     serialize: () -> String
 }
 
-// 空接口
+// Пустой интерфейс
 EmptyInterface: Type = {}
 ```
 
 #### Методы типа
 
-Используйте синтаксис `Type.method: (Type, ...) -> Return = ...` для определения методов типа:
+Для определения методов типа используется синтаксис `Type.method: (Type, ...) -> Return = ...`:
 
 ```yaoxiang
-// 类型定义
+// Определение типа
 Point: Type = { x: Float, y: Float }
 
-// 类型方法定义
+// Определение метода типа
 Point.draw: (self: Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
@@ -172,7 +172,7 @@ Point.serialize: (self: Point) -> String = {
     "Point({self.x}, {self.y})"
 }
 
-// 使用方法（语法糖）
+// Использование метода (синтаксический сахар)
 p = Point(x=1.0, y=2.0)
 p.draw(screen)  // → Point.draw(p, screen)
 str = p.serialize()  // → Point.serialize(p)
@@ -185,49 +185,49 @@ str = p.serialize()  // → Point.serialize(p)
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
 
-// pub 声明自动绑定到 Point
+// Объявление с pub автоматически привязывается к Point
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
     (dx * dx + dy * dy).sqrt()
 }
 
-// 使用
+// Использование
 p1 = Point(x=3.0, y=4.0)
 p2 = Point(x=1.0, y=2.0)
 
-// 函数式调用
+// Функциональный вызов
 d = distance(p1, p2)  // 3.606...
 
-// OOP 语法糖（自动绑定到 Point.distance）
+// ООП-синтаксический сахар (автоматическая привязка к Point.distance)
 d2 = p1.distance(p2)  // → distance(p1, p2)
 ```
 
-#### Enum type (перечисление)
+#### enum type
 
 ```yaoxiang
-// 简单枚举
+// Простое перечисление
 Color: Type = { red | green | blue }
 
-// 带数据的枚举
+// Перечисление с данными
 Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
-// 使用泛型
+// Использование generics
 success: Result(Int, String) = ok(42)
 failure: Result(Int, String) = err("not found")
 ```
 
-#### Generic типы
+#### generics (обобщённые типы)
 
 ```yaoxiang
-// 泛型类型定义
+// Определение обобщённого типа
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
     push: (List(T), T) -> Void
 }
 
-// 具体实例化
+// Конкретные инстанциации
 IntList: Type = List(Int)
 StringList: Type = List(String)
 ```
@@ -235,7 +235,7 @@ StringList: Type = List(String)
 ### Управление потоком
 
 ```yaoxiang
-// 条件表达式
+// Условное выражение
 if x > 0 {
     "positive"
 } elif x == 0 {
@@ -244,12 +244,12 @@ if x > 0 {
     "negative"
 }
 
-// 循环
+// Цикл for
 for i in 0..5 {
     print(i)
 }
 
-// while 循环
+// Цикл while
 mut n = 0
 while n < 5 {
     print(n)
@@ -260,23 +260,23 @@ while n < 5 {
 ### Списки и словари
 
 ```yaoxiang
-// 列表
+// Список
 numbers = [1, 2, 3, 4, 5]
 first = numbers[0]  // 1
 
-// 字典
+// Словарь
 scores = {"Alice": 90, "Bob": 85}
 alice_score = scores["Alice"]  // 90
 
-// 添加元素
+// Добавление элемента
 mut list = [1, 2, 3]
 list.append(4)
 ```
 
-### Pattern matching (сопоставление с образцом)
+### pattern matching
 
 ```yaoxiang
-// match 表达式
+// Выражение match
 result: Result(Int, String) = ok(42)
 
 message = match result {
@@ -285,46 +285,42 @@ message = match result {
 }
 ```
 
-## Spawn-программирование (асинхронность)
+## spawn-программирование (параллелизм)
 
-Уникальная особенность YaoXiang: функции, помеченные `spawn`, автоматически получают асинхронные возможности.
+Модель параллелизма YaoXiang построена вокруг примитива `spawn <expr>` — это единственная точка входа для параллельного выполнения.
 
 ```yaoxiang
-// 定义并作函数（自动异步执行）
-fetch_data: (url: String) -> JSON spawn = {
-    HTTP.get(url).json()
-}
-
-// 调用并作函数（自动并行，无需 await）
+// spawn модифицирует любое выражение, выполняя его параллельно
 main: () -> Void = {
-    // 两次调用自动并行执行
-    user = fetch_user(1)  // 自动并行
-    posts = fetch_posts()  // 自动并行
+    user = spawn fetch_user(1)   // Выполнение в фоне
+    posts = spawn fetch_posts()  // Параллельный шаг
 
-    // 当需要结果时自动等待
+    // При обращении к результату автоматически блокируется ожидание
     print(user.name)
     print(posts.length)
 }
 ```
 
+**Ключевое правило**: Выражение, модифицированное `spawn`, выполняется в фоне, а внешний синхронный код блокируется в ожидании результата. Независимые задачи автоматически выполняются параллельно,调度аются runtime-моделью GMP.
+
 ## Система модулей
 
 ```yaoxiang
-// 导入标准库
+// Импорт стандартной библиотеки
 use std.io
 use std.math
 
-// 使用导入的函数
+// Использование импортированных функций
 result = math.sqrt(16)  // 4.0
 print("Hello!")
 ```
 
 ## Часто задаваемые вопросы
 
-### В: Переменные по умолчанию неизменяемые — как их изменять?
+### В: Переменные по умолчанию неизменяемы, как изменить переменную?
 
 ```yaoxiang
-// 使用 mut 关键字声明可变变量
+// Используйте ключевое слово mut для объявления изменяемой переменной
 mut x = 10
 x = 20  // ✅ OK
 ```
@@ -332,20 +328,20 @@ x = 20  // ✅ OK
 ### В: Как определить функцию?
 
 ```yaoxiang
-// 完整形式（推荐）
+// Полная форма (рекомендуется)
 add: (a: Int, b: Int) -> Int = a + b
 
-// 简短形式（类型推断）
+// Краткая форма (с type inference)
 add = (a, b) => a + b
 ```
 
 ### В: Как обрабатывать ошибки?
 
 ```yaoxiang
-// 使用 Result 类型
+// Используйте тип Result
 Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
-// 模式匹配处理
+// Обработка через pattern matching
 result = risky_operation()
 match result {
     ok(value) => print("Success: " + value)
@@ -355,13 +351,12 @@ match result {
 
 ## Следующие шаги
 
-- 📖 Прочтите [Руководство YaoXiang](../YaoXiang-book.md), чтобы узнать об основных возможностях
-- 📚 Ознакомьтесь со [Спецификацией языка](../YaoXiang-language-specification.md) для изучения полного синтаксиса
-- 🏗️ Изучите [Документацию по архитектуре](../architecture/), чтобы понять детали реализации
-- 💡 Прочтите [Манифест дизайна](../YaoXiang-design-manifesto.md) для понимания ключевых идей
+- 📚 Ознакомьтесь со [спецификацией языка](../YaoXiang-language-specification.md) для изучения полного синтаксиса
+- 🏗️ Просмотрите [архитектурную документацию](../architecture/) для понимания деталей реализации
+- 💡 Прочтите [манифест дизайна](../YaoXiang-design-manifesto.md) для понимания основных концепций
 
 ## Связанные ресурсы
 
 - [Репозиторий на GitHub](https://github.com/yourusername/yaoxiang)
-- [Сообщить о проблеме](https://github.com/yourusername/yaoxiang/issues)
+- [Обратная связь через Issue](https://github.com/yourusername/yaoxiang/issues)
 - [Руководство для контрибьюторов](../guides/dev/)
