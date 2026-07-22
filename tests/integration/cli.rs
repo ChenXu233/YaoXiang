@@ -18,7 +18,7 @@ use yaoxiang::package::commands::{add, rm, install, list};
 use yaoxiang::package::manifest::PackageManifest;
 use yaoxiang::package::error::PackageError;
 use yaoxiang::formatter::{format_source, FormatOptions, run_format_command};
-use yaoxiang::{run, build_bytecode, build_bytecode_with_options, eval_code};
+use yaoxiang::{run, run_file, build_bytecode, build_bytecode_with_options, eval_code};
 
 // ============================================================================
 // 辅助函数
@@ -153,6 +153,22 @@ fn test_run_nonexistent_file_returns_error() {
 }
 
 // ============================================================================
+
+#[test]
+fn test_run_file_compile_error_returns_error() {
+    // Arrange
+    let dir = temp_dir();
+    let path = write_yx_file(dir.path(), "compile_error.yx", "x: Int = "); // incomplete expression = compile error
+
+    // Act
+    let result = run_file(&path);
+
+    // Assert
+    assert!(
+        result.is_err(),
+        "run_file on compile error should return error"
+    );
+}
 // build 命令 — 字节码编译
 // ============================================================================
 
