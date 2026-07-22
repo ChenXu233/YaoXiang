@@ -7,7 +7,7 @@ use crate::frontend::core::parser::ast::{Expr, StmtKind};
 fn parse_fn(source: &str) -> StmtKind {
     let tokens = tokenize(source).unwrap();
     let result = parse(&tokens);
-    assert!(!result.has_errors);
+    assert!(!result.has_errors, "解析不应有错误");
     assert_eq!(result.module.items.len(), 1);
     result.module.items.into_iter().next().unwrap().kind
 }
@@ -31,7 +31,7 @@ fn test_fn_no_params_block_body() {
             (Vec::new(), Vec::new())
         };
         assert_eq!(name, "f");
-        assert!(params.is_empty());
+        assert!(params.is_empty(), "无参数函数 params 应为空");
     } else {
         panic!("Expected Binding");
     }
@@ -98,7 +98,7 @@ fn test_fn_typed_params() {
         Vec::new()
     };
     assert_eq!(params.len(), 2);
-    assert!(params[0].ty.is_some());
+    assert!(params[0].ty.is_some(), "参数应有类型标注");
 }
 
 #[test]
@@ -116,5 +116,5 @@ fn test_fn_mut_param() {
     } else {
         Vec::new()
     };
-    assert!(params[0].is_mut);
+    assert!(params[0].is_mut, "mut 参数应被识别");
 }

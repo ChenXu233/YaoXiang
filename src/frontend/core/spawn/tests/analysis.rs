@@ -818,7 +818,13 @@ fn test_spawn_for_end_to_end_independent_iterations() {
 
     // Assert
     assert_eq!(analysis.iter_var, "item");
-    assert!(analysis.reads.contains("process"));
-    assert!(analysis.reads.contains("item"));
+    assert!(
+        analysis.reads.contains("process"),
+        "spawn 分析应识别 process 读取"
+    );
+    assert!(
+        analysis.reads.contains("item"),
+        "spawn 分析应识别 item 读取"
+    );
     assert!(analysis.writes.is_empty(), "无写操作时应允许并行");
 }

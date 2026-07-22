@@ -1,4 +1,5 @@
 //! Tests for all AST type definitions: Expr, StmtKind, Type, Pattern, operators.
+//! 基于语言规范 §3（AST 结构）
 
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{
@@ -137,7 +138,7 @@ fn test_expr_block() {
     };
     let expr = Expr::Block(block);
     if let Expr::Block(b) = &expr {
-        assert!(!b.stmts.is_empty());
+        assert!(!b.stmts.is_empty(), "块不应为空");
     } else {
         panic!("Expected Expr::Block");
     }
@@ -320,7 +321,7 @@ fn test_stmtkind_var() {
         if let Expr::Var(name, _) = target.as_ref() {
             assert_eq!(name, "x");
         }
-        assert!(!is_mut);
+        assert!(!is_mut, "非 mut 参数 is_mut 应为 false");
     } else {
         panic!("Expected StmtKind::Assign");
     }
@@ -448,7 +449,7 @@ fn test_type_meta_type() {
         name_span: Span::dummy(),
         args: vec![],
     };
-    assert!(is_meta_type(&t));
+    assert!(is_meta_type(&t), "Type 应是 MetaType");
 }
 
 #[test]
@@ -505,7 +506,7 @@ fn test_type_meta_type_nested() {
             args: vec![inner],
         }],
     };
-    assert!(is_meta_type(&outer));
+    assert!(is_meta_type(&outer), "外层 Type 应是 MetaType");
     // Verify nested MetaType has args
     if let Type::MetaType { args, .. } = &outer {
         assert_eq!(args.len(), 1);
@@ -693,8 +694,8 @@ fn test_struct_field_new() {
         },
     );
     assert_eq!(field.name, "x");
-    assert!(!field.is_mut);
-    assert!(field.default.is_none());
+    assert!(!field.is_mut, "非 mut 字段 is_mut 应为 false");
+    assert!(field.default.is_none(), "无默认值时 default 应为 None");
 }
 
 #[test]
@@ -706,7 +707,7 @@ fn test_struct_field_with_default() {
         Expr::Lit(Literal::Float(0.0), Span::dummy()),
     );
     assert_eq!(field.name, "x");
-    assert!(field.default.is_some());
+    assert!(field.default.is_some(), "有默认值时 default 应为 Some");
 }
 
 // ============================================================================
@@ -821,7 +822,7 @@ fn test_variant_def_no_params() {
         span: Span::dummy(),
     };
     assert_eq!(vd.name, "red");
-    assert!(vd.params.is_empty());
+    assert!(vd.params.is_empty(), "变体无参数时 params 应为空");
 }
 
 #[test]
@@ -857,7 +858,7 @@ fn test_module_default() {
         items: vec![],
         span: Span::dummy(),
     };
-    assert!(m.items.is_empty());
+    assert!(m.items.is_empty(), "空 use 语句 items 应为空");
 }
 
 // ============================================================================
@@ -917,7 +918,7 @@ fn test_expr_listcomp() {
     };
     if let Expr::ListComp { var, condition, .. } = &expr {
         assert_eq!(var, "x");
-        assert!(condition.is_some());
+        assert!(condition.is_some(), "if 语句应有条件");
     }
 }
 
