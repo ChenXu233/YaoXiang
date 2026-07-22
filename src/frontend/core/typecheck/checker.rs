@@ -11,9 +11,7 @@ use crate::frontend::core::types::{MonoType, PolyType, TraitTable};
 use crate::frontend::core::types::const_data::{ConstExpr, ConstValue, BinOp, ConstKind, ConstVarDef};
 use crate::frontend::core::types::eval::const_eval::{ConstFunction, convert_expr_to_const_expr};
 use crate::frontend::core::typecheck::predicate_resolver::PredicateResolver;
-use crate::frontend::core::typecheck::proof::context::ProofContext;
 use crate::frontend::core::typecheck::proof::verdict::ProofResult;
-use crate::frontend::core::typecheck::layers::predicate::check_predicate;
 use crate::frontend::core::types::eval::dependent_types::DependentTypeEnv;
 use crate::std::StdModule;
 
@@ -376,7 +374,7 @@ impl TypeChecker {
             local_var_types,
             semantic_db: std::mem::take(&mut self.semantic_db),
             trait_table: self.env.trait_table.clone(),
-            proof_calls, // Phase 2.5: 由 check_refined_binding 收集
+            proof_calls, // Phase 2.5 预留：证明调用收集
             release_plan,
             escaped_refs,
             instantiation_requests,
@@ -1994,28 +1992,6 @@ impl TypeChecker {
             // Lit, If, Range 不含变量引用
             _ => {}
         }
-    }
-
-    /// 对绑定点的精化类型执行谓词检查
-    ///
-    /// 仅处理 Refined 类型，非 Refined 直接返回 Proved。
-    /// 构造 ProofContext 后调用 Layer 3 的 check_predicate。
-    #[allow(dead_code)] // Phase 2.5 预留：精化类型绑定点谓词检查
-    fn check_refined_binding(
-        &self,
-        ty: &MonoType,
-        bindings: &std::collections::HashMap<String, crate::frontend::core::types::ConstValue>,
-    ) -> ProofResult {
-        // 只处理 Refined 类型
-        if !matches!(ty, MonoType::Refined { .. }) {
-            return ProofResult::Proved;
-        }
-
-        // 构造 ProofContext
-        let ctx = ProofContext::new(&self.env);
-
-        // 调用 Layer 3
-        check_predicate(&ctx, ty, bindings)
     }
 }
 include!("checker/semantic_tokens.rs");
