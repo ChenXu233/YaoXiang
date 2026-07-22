@@ -415,6 +415,13 @@ pub struct GenericParam {
     pub kind: GenericParamKind,
     pub constraints: Vec<Type>,
 }
+/// Generic parameter with name and constraints only (no Type/Const classification).
+/// Used by consumers that only need structural info, not kind dispatch.
+#[derive(Debug, Clone)]
+pub struct GenericParamName {
+    pub name: String,
+    pub constraints: Vec<Type>,
+}
 
 /// Type
 #[derive(Debug, Clone)]
@@ -636,7 +643,7 @@ pub const CONST_PARAM_TYPES: &[&str] = &[
 ///
 /// 判定规则：MetaType 或 Name("Type") → Type 参数；
 /// CONST_PARAM_TYPES 原始类型名 → Const 参数；
-/// 大写 Name → Type 参数（标注记入 constraints）；其余忽略。
+/// 其余忽略（typechecker 应使用 classify_generic_params 判定 trait 约束）。
 pub fn extract_generic_params(params: &[Param]) -> Vec<GenericParam> {
     params
         .iter()
@@ -664,21 +671,103 @@ pub fn extract_generic_params(params: &[Param]) -> Vec<GenericParam> {
                     })
                 }
                 Type::Name { .. } => {
-                    let first_char = p.name.chars().next().unwrap_or('a');
-                    if first_char.is_uppercase() {
-                        Some(GenericParam {
-                            name: p.name.clone(),
-                            kind: GenericParamKind::Type,
-                            constraints: vec![ty.clone()],
-                        })
-                    } else {
-                        None
-                    }
+                    // 无法判断 annotation 是否为 trait → 不猜测为泛型参数
+                    // typechecker 应使用 classify_generic_params 区分
+                    None
                 }
-                // (T: Clone + Add) — Type::Tuple stores multiple constraints
+                // (T: Clone + Add) — 无法确认所有元素都是 trait → 保守忽略
+                Type::Tuple(_types) => None,
+                _ => None,
+            }
+        })
+        .collect()
+}
+/// Extract just the names and constraints of generic parameters from signature params.
+/// Only returns structurally determined generic params (Type/MetaType + CONST_PARAM_TYPES).
+/// Trait-constrained params (T: Clone) are not recognized — typechecker's classify_generic_params
+/// handles those with access to the trait table.
+pub fn extract_generic_param_names(params: &[Param]) -> Vec<GenericParamName> {
+    params
+        .iter()
+        .filter_map(|p| {
+            let ty = p.ty.as_ref()?;
+            match ty {
+                // (T: Type) — MetaType
+                Type::MetaType { .. } => Some(GenericParamName {
+                    name: p.name.clone(),
+                    constraints: Vec::new(),
+                }),
+                Type::Name { name, .. } if name == "Type" => Some(GenericParamName {
+                    name: p.name.clone(),
+                    constraints: Vec::new(),
+                }),
+                Type::Name { name, .. } if CONST_PARAM_TYPES.contains(&name.as_str()) => {
+                    Some(GenericParamName {
+                        name: p.name.clone(),
+                        constraints: Vec::new(),
+                    })
+                }
+                Type::Name { .. } => {
+                    // 无法确认是否为 trait → 保守不下泛型参数
+                    None
+                }
+                // (T: Clone + Add) — 无法确认所有元素都是 trait → 保守忽略（typechecker 负责）
+                Type::Tuple(_types) => None,
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+/// 用 trait_table 判定泛型参数分类（替代 extract_generic_params 的旧大小写猜测）。
+///
+/// MetaType 或 Name("Type") → Type 参数（无约束）；
+/// CONST_PARAM_TYPES 原始类型名 → Const 参数；
+/// Name 且 `is_trait(name)` → Type 参数（约束=该 annotation）；
+/// Tuple 且所有元素都是 trait → Type 参数（多约束）；
+/// 其余 → 跳过（值参数）。
+pub fn classify_generic_params(
+    params: &[Param],
+    is_trait: &dyn Fn(&str) -> bool,
+) -> Vec<GenericParam> {
+    params
+        .iter()
+        .filter_map(|p| {
+            let ty = p.ty.as_ref()?;
+            match ty {
+                // (T: Type) — MetaType
+                Type::MetaType { .. } => Some(GenericParam {
+                    name: p.name.clone(),
+                    kind: GenericParamKind::Type,
+                    constraints: Vec::new(),
+                }),
+                Type::Name { name, .. } if name == "Type" => Some(GenericParam {
+                    name: p.name.clone(),
+                    kind: GenericParamKind::Type,
+                    constraints: Vec::new(),
+                }),
+                Type::Name { name, .. } if CONST_PARAM_TYPES.contains(&name.as_str()) => {
+                    Some(GenericParam {
+                        name: p.name.clone(),
+                        kind: GenericParamKind::Const {
+                            const_type: Box::new(ty.clone()),
+                        },
+                        constraints: Vec::new(),
+                    })
+                }
+                Type::Name { name, .. } if is_trait(name) => Some(GenericParam {
+                    name: p.name.clone(),
+                    kind: GenericParamKind::Type,
+                    constraints: vec![ty.clone()],
+                }),
+                // annotation 为具体类型（非 trait、非 CONST_PARAM_TYPES）→ 非泛型参数
+                Type::Name { .. } => None,
                 Type::Tuple(types) => {
-                    let first_char = p.name.chars().next().unwrap_or('a');
-                    if first_char.is_uppercase() {
+                    let all_traits = types.iter().all(|t| match t {
+                        Type::Name { name, .. } => is_trait(name),
+                        _ => false,
+                    });
+                    if all_traits && !types.is_empty() {
                         Some(GenericParam {
                             name: p.name.clone(),
                             kind: GenericParamKind::Type,

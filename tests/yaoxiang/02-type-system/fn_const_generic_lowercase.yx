@@ -1,0 +1,13 @@
+// 02-type-system/fn_const_generic_lowercase.yx
+// 覆盖: RFC-011 §4.1 函数级 const 泛型 — 大小写等价
+// 验证: 小写 m 作为 const 泛型参数，大小写不决定分类，与大写 N 版行为一致
+// 状态: ✅ 可运行
+
+use std.io
+
+f: (m: Int) -> (n: m) -> Int = (n) => n
+
+main = {
+    result = f(42)(5)
+    io.println("ALL TESTS PASSED")
+}

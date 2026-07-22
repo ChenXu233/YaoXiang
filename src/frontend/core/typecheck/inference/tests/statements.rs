@@ -4,7 +4,7 @@
 //! RFC-010: 统一类型语法
 
 use crate::frontend::core::typecheck::inference::statements::StatementChecker;
-use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
+use crate::frontend::core::types::{MonoType, PolyType, TraitTable, TypeConstraintSolver};
 use crate::frontend::core::parser::ast::{self, Stmt, StmtKind, Expr, BinOp, Block, Param};
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::util::span::Span;
@@ -36,6 +36,7 @@ fn make_checker() -> StatementChecker {
         &mut solver,
         None,
         crate::frontend::core::types::eval::dependent_types::DependentTypeEnv::new(),
+        TraitTable::default(),
     )
 }
 
@@ -68,6 +69,7 @@ fn test_statement_checker_creation() {
         &mut solver,
         None,
         crate::frontend::core::types::eval::dependent_types::DependentTypeEnv::new(),
+        TraitTable::default(),
     );
 
     // Assert — 应该成功创建，不 panic
@@ -491,6 +493,7 @@ fn test_check_statement_checker_with_many_statements() {
         &mut solver,
         None,
         crate::frontend::core::types::eval::dependent_types::DependentTypeEnv::new(),
+        TraitTable::default(),
     );
     let result = checker.check_fn_def("test_fn", &[], &block);
 

@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::parser::ast::{
-    extract_generic_params, GenericParamKind, Module, Param, TypeBodyItem,
+    classify_generic_params, GenericParam, GenericParamKind, Module, Param, TypeBodyItem,
 };
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable};
 use crate::frontend::core::types::const_data::{ConstExpr, ConstValue, BinOp, ConstKind, ConstVarDef};
@@ -228,10 +228,12 @@ impl TypeChecker {
         }
 
         // 初始化函数体检查器
+        let trait_table = self.env.trait_table.clone();
         let mut body_checker = inference::StatementChecker::new(
             self.env.solver(),
             None,
             self.dependent_type_env.clone(),
+            trait_table,
         );
         // 设置 native 函数签名表
         body_checker.set_native_signatures(self.env.native_signatures.clone());
@@ -384,10 +386,12 @@ impl TypeChecker {
     /// 获取 body_checker 的可变引用
     fn body_checker_mut(&mut self) -> &mut inference::StatementChecker {
         if self.body_checker.is_none() {
+            let trait_table = self.env.trait_table.clone();
             let mut body_checker = inference::StatementChecker::new(
                 self.env.solver(),
                 None,
                 self.dependent_type_env.clone(),
+                trait_table,
             );
             // 设置 native 函数签名表
             body_checker.set_native_signatures(self.env.native_signatures.clone());
@@ -503,7 +507,8 @@ impl TypeChecker {
                 is_pub,
                 ..
             } => {
-                let generic_params = extract_generic_params(signature_params);
+                let generic_params =
+                    classify_generic_params(signature_params, &|name| self.env.has_trait(name));
                 // 处理统一函数语法
                 // 方法绑定使用 method_type，普通函数使用 type_annotation
                 let (param_types, return_type) = if let Some(meth_ty) = method_type {
@@ -602,6 +607,80 @@ impl TypeChecker {
                     })
                     .collect();
 
+                // === 函数 const 泛型判定（用途分析） ===
+                // 候选 = generic_params 中 annotation 为原始类型的参数（const 候选）。
+                // 扫描 curry 后续组的类型标注（内层 Fn 的 params），
+                // 被引用的候选 → const。
+                let const_generic_params: Vec<_> = generic_params
+                    .iter()
+                    .filter(|p| {
+                        matches!(
+                            p.kind,
+                            crate::frontend::core::parser::ast::GenericParamKind::Const { .. }
+                        )
+                    })
+                    .collect();
+
+                let mut const_binders: Vec<ConstVarDef> = Vec::new();
+                if !const_generic_params.is_empty() {
+                    let candidate_names: HashSet<String> = const_generic_params
+                        .iter()
+                        .map(|p| p.name.clone())
+                        .collect();
+                    let mut used_as_const = HashSet::new();
+
+                    // 扫描内层 Fn 的 params：对于 (N: Int) -> (n: N) -> Int，
+                    // type_annotation.return_type 是 Fn { params: [Type::Name("N")], ... }。
+                    // N 出现在内层 params 中 → const。
+                    if let Some(crate::frontend::core::parser::ast::Type::Fn {
+                        return_type, ..
+                    }) = type_annotation
+                    {
+                        if let crate::frontend::core::parser::ast::Type::Fn {
+                            params: inner_params,
+                            ..
+                        } = return_type.as_ref()
+                        {
+                            for p in inner_params {
+                                collect_used_in_type(p, &candidate_names, &mut used_as_const);
+                            }
+                        }
+                        // 也扫描 return_type 自身（深度嵌套场景）
+                        collect_used_in_type(return_type, &candidate_names, &mut used_as_const);
+                    }
+
+                    let type_param_names: Vec<String> =
+                        type_generic_params.iter().map(|p| p.name.clone()).collect();
+                    for (i, gp) in const_generic_params.iter().enumerate() {
+                        if used_as_const.contains(&gp.name) {
+                            if let crate::frontend::core::parser::ast::GenericParamKind::Const {
+                                const_type,
+                            } = &gp.kind
+                            {
+                                let type_name = match const_type.as_ref() {
+                                    crate::frontend::core::parser::ast::Type::Name {
+                                        name, ..
+                                    } => name.clone(),
+                                    crate::frontend::core::parser::ast::Type::Int(_) => {
+                                        "Int".to_string()
+                                    }
+                                    crate::frontend::core::parser::ast::Type::Float(_) => {
+                                        "Float".to_string()
+                                    }
+                                    crate::frontend::core::parser::ast::Type::Bool => {
+                                        "Bool".to_string()
+                                    }
+                                    _ => "Int".to_string(),
+                                };
+                                let kind = ConstKind::from_ast_type_name(&type_name)
+                                    .unwrap_or(ConstKind::Int(None));
+                                let idx = type_param_names.len() + i;
+                                const_binders.push(ConstVarDef::new(gp.name.clone(), kind, idx));
+                            }
+                        }
+                    }
+                }
+
                 let (final_param_types, final_return_type) = if !type_generic_params.is_empty()
                     && param_types.len() >= type_generic_params.len()
                 {
@@ -610,6 +689,16 @@ impl TypeChecker {
                     for gp in &type_generic_params {
                         let fresh_var = self.env.solver().new_var();
                         subst.insert(gp.name.clone(), fresh_var);
+                    }
+
+                    // 添加 const 参数名到 subst，使内层 Fn 中的 TypeRef("N") 解析为底层类型
+                    for cb in &const_binders {
+                        let base_ty = match cb.kind {
+                            ConstKind::Int(_) => MonoType::Int(64),
+                            ConstKind::Bool => MonoType::Bool,
+                            ConstKind::Float(_) => MonoType::Float(64),
+                        };
+                        subst.insert(cb.name.clone(), base_ty);
                     }
 
                     // 剥离类型级参数，使用 return_type 作为实际函数类型
@@ -624,6 +713,20 @@ impl TypeChecker {
                         // return_type 不是 Fn（可能是单值泛型），保持原样
                         _ => (param_types, return_type),
                     }
+                } else if !const_binders.is_empty() {
+                    // 没有 Type 泛型但有 const 泛型（如 factorial: (N: Int) -> ...）
+                    // 替换 return_type 中的 TypeRef("N") 为 Int
+                    let mut subst = HashMap::new();
+                    for cb in &const_binders {
+                        let base_ty = match cb.kind {
+                            ConstKind::Int(_) => MonoType::Int(64),
+                            ConstKind::Bool => MonoType::Bool,
+                            ConstKind::Float(_) => MonoType::Float(64),
+                        };
+                        subst.insert(cb.name.clone(), base_ty);
+                    }
+                    let substituted_ret = Self::substitute_type_refs(return_type.clone(), &subst);
+                    (param_types, substituted_ret)
                 } else {
                     (param_types, return_type)
                 };
@@ -653,9 +756,15 @@ impl TypeChecker {
                     self.env
                         .add_fn_binding(name, type_name.as_deref(), fn_ty.clone());
                 } else {
-                    // 否则使用普通的 add_var
-                    self.env
-                        .add_var(name.clone(), PolyType::mono(fn_ty.clone()));
+                    // 如果函数有 const 泛型参数，存进 PolyType.const_binders
+                    let poly = if const_binders.is_empty() {
+                        PolyType::mono(fn_ty.clone())
+                    } else {
+                        // type_binders 从 solver 的新变量管理，PolyType 中 type_binders 留空
+                        // （函数类型 Level 的泛型由 solver 处理，PolyType 仅存 const_binders）
+                        PolyType::new_with_const(Vec::new(), const_binders.clone(), fn_ty.clone())
+                    };
+                    self.env.add_var(name.clone(), poly);
                 }
 
                 // 处理 pub 自动绑定
@@ -871,7 +980,8 @@ impl TypeChecker {
         signature_params: &[Param],
         span: crate::util::span::Span,
     ) {
-        let generic_params = extract_generic_params(signature_params);
+        let generic_params =
+            classify_generic_params(signature_params, &|name| self.env.has_trait(name));
         let param_names: Vec<String> = generic_params.iter().map(|p| p.name.clone()).collect();
         // RFC-010 Easter Egg: Type: Type = Type
         // 当用户尝试定义 Type 自身时，触发彩蛋
@@ -939,7 +1049,10 @@ impl TypeChecker {
                 .map(|p| p.name.clone())
                 .collect();
 
-            let mut const_binders: Vec<ConstVarDef> = generic_params
+            // const 判定：用途分析是唯一裁判（取代名单+大小写猜测）。
+            // 候选 = generic_params 里 annotation 为具体类型的参数；
+            // 只有在类型体中被当编译期值/类型使用的候选，才认定为 const。
+            let const_candidates: Vec<(&GenericParam, ConstKind)> = generic_params
                 .iter()
                 .filter_map(|p| {
                     if let GenericParamKind::Const { const_type } = &p.kind {
@@ -961,10 +1074,21 @@ impl TypeChecker {
                         None
                     }
                 })
+                .collect();
+
+            let candidate_names: HashSet<String> = const_candidates
+                .iter()
+                .map(|(p, _)| p.name.clone())
+                .collect();
+            let used_as_const = collect_used_const_names(&candidate_names, definition);
+
+            let mut const_binders: Vec<ConstVarDef> = const_candidates
+                .iter()
+                .filter(|(p, _)| used_as_const.contains(&p.name))
                 .enumerate()
                 .map(|(i, (p, kind))| {
                     let idx = type_param_names.len() + i;
-                    ConstVarDef::new(p.name.clone(), kind, idx)
+                    ConstVarDef::new(p.name.clone(), *kind, idx)
                 })
                 .collect();
 
@@ -1038,6 +1162,94 @@ fn find_const_var_in_expr(
             .or_else(|| find_const_var_in_expr(right, const_binders)),
         Expr::UnOp { expr, .. } => find_const_var_in_expr(expr, const_binders),
         _ => None,
+    }
+}
+
+/// 用途分析：扫描类型定义体，找出候选参数中哪些**被当编译期值/类型使用**。
+///
+/// 这是 const 判定的唯一裁判——取代旧的"CONST_PARAM_TYPES 名单 + 大小写猜测"。
+/// 用途 = 参数名出现在以下任一编译期位置：
+/// - `Array(T, N)` 里作为泛型实参的裸 `Name`（Generic.args）
+/// - `Assert(N > 0)` 里的 `ConstExpr` 表达式引用
+/// - `length: N` 里作为字段类型标注的裸 `Name`
+fn collect_used_const_names(
+    candidates: &HashSet<String>,
+    definition: &crate::frontend::core::parser::ast::Type,
+) -> HashSet<String> {
+    use crate::frontend::core::parser::ast::Type;
+    let mut found = HashSet::new();
+    if let Type::Struct { body } = definition {
+        for item in body {
+            match item {
+                TypeBodyItem::Expr(ty) => collect_used_in_type(ty, candidates, &mut found),
+                TypeBodyItem::Field(f) => collect_used_in_type(&f.ty, candidates, &mut found),
+                _ => {}
+            }
+        }
+    }
+    found
+}
+
+/// 递归扫描类型表达式，收集被引用的候选参数名。
+pub(crate) fn collect_used_in_type(
+    ty: &crate::frontend::core::parser::ast::Type,
+    candidates: &HashSet<String>,
+    found: &mut HashSet<String>,
+) {
+    use crate::frontend::core::parser::ast::Type;
+    match ty {
+        Type::Name { name, .. } if candidates.contains(name) => {
+            found.insert(name.clone());
+        }
+        Type::ConstExpr(expr) => collect_used_in_expr(expr, candidates, found),
+        Type::Generic { args, .. } => {
+            for arg in args {
+                collect_used_in_type(arg, candidates, found);
+            }
+        }
+        Type::Fn {
+            params,
+            return_type,
+        } => {
+            for p in params {
+                collect_used_in_type(p, candidates, found);
+            }
+            collect_used_in_type(return_type, candidates, found);
+        }
+        Type::Option(inner) | Type::Ptr(inner) => {
+            collect_used_in_type(inner, candidates, found);
+        }
+        Type::Ref { inner, .. } => collect_used_in_type(inner, candidates, found),
+        Type::Result(a, b) => {
+            collect_used_in_type(a, candidates, found);
+            collect_used_in_type(b, candidates, found);
+        }
+        Type::Tuple(types) | Type::Sum(types) => {
+            for t in types {
+                collect_used_in_type(t, candidates, found);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// 递归扫描编译期表达式（如 `N > 0`），收集被引用的候选参数名。
+fn collect_used_in_expr(
+    expr: &Expr,
+    candidates: &HashSet<String>,
+    found: &mut HashSet<String>,
+) {
+    use crate::frontend::core::parser::ast::Expr;
+    match expr {
+        Expr::Var(name, _) if candidates.contains(name) => {
+            found.insert(name.clone());
+        }
+        Expr::BinOp { left, right, .. } => {
+            collect_used_in_expr(left, candidates, found);
+            collect_used_in_expr(right, candidates, found);
+        }
+        Expr::UnOp { expr, .. } => collect_used_in_expr(expr, candidates, found),
+        _ => {}
     }
 }
 impl TypeChecker {

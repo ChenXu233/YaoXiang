@@ -503,7 +503,9 @@ impl AstToIrGenerator {
                 is_pub: _,
             } => {
                 let generic_params =
-                    crate::frontend::core::parser::ast::extract_generic_params(signature_params);
+                    crate::frontend::core::parser::ast::extract_generic_param_names(
+                        signature_params,
+                    );
                 if type_name.is_some() {
                     // MethodBind: 有 type_name
                     self.generate_method_ir(
@@ -1448,7 +1450,9 @@ impl AstToIrGenerator {
             } => {
                 // 生成嵌套函数的 IR（排除方法绑定和类型定义）
                 let generic_params =
-                    crate::frontend::core::parser::ast::extract_generic_params(signature_params);
+                    crate::frontend::core::parser::ast::extract_generic_param_names(
+                        signature_params,
+                    );
                 let generic_param_names = if generic_params.is_empty() {
                     None
                 } else {

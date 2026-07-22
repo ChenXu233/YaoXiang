@@ -451,7 +451,7 @@ impl TypeChecker {
                     is_pub,
                     ..
                 } => {
-                    let generic_params = crate::frontend::core::parser::ast::extract_generic_params(signature_params);
+                    let generic_params = crate::frontend::core::parser::ast::extract_generic_param_names(signature_params);
                     // 根据字段值区分类型：方法绑定 / 函数
                     let is_method = type_name.is_some();
 
@@ -518,12 +518,7 @@ impl TypeChecker {
 
                         // 泛型参数 → TypeParameter (定义)
                         for gp in &generic_params {
-                            let gp_name = match &gp.kind {
-                                crate::frontend::core::parser::ast::GenericParamKind::Type => {
-                                    gp.name.clone()
-                                }
-                                _ => gp.name.clone(),
-                            };
+                            let gp_name = gp.name.clone();
                             self.semantic_db.add_token(
                                 &fp,
                                 SemanticToken {
@@ -714,7 +709,7 @@ impl TypeChecker {
                     ..
                 } => {
                     let generic_params =
-                        crate::frontend::core::parser::ast::extract_generic_params(signature_params);
+                        crate::frontend::core::parser::ast::extract_generic_param_names(signature_params);
                     // 类型定义 → Type (定义)
                     let mut modifiers = vec![SemanticTokenModifier::Declaration];
                     if !generic_params.is_empty() {
@@ -952,7 +947,7 @@ impl TypeChecker {
                 body,
                 ..
             } => {
-                let generic_params = crate::frontend::core::parser::ast::extract_generic_params(signature_params);
+                let generic_params = crate::frontend::core::parser::ast::extract_generic_param_names(signature_params);
                 // 嵌套函数
                 self.semantic_db.add_token(
                     file_path,
