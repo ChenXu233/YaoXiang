@@ -313,6 +313,7 @@ pub fn register_all(
     #[cfg(not(target_arch = "wasm32"))]
     concurrent::ConcurrentModule.register_ffi(registry);
     convert::ConvertModule.register_ffi(registry);
+    dict::DictModule.register_ffi(registry);
     io::IoModule.register_ffi(registry);
     list::ListModule.register_ffi(registry);
     math::MathModule.register_ffi(registry);
@@ -323,6 +324,8 @@ pub fn register_all(
     time::TimeModule.register_ffi(registry);
     #[cfg(not(target_arch = "wasm32"))]
     os::OsModule.register_ffi(registry);
+    #[cfg(not(target_arch = "wasm32"))]
+    weak::WeakModule.register_ffi(registry);
     assert::AssertModule.register_ffi(registry);
     assert::AssertModule.register_type_families(dep_env);
     for spec in assert::AssertModule.effect_specs() {
@@ -353,6 +356,7 @@ pub fn all_module_infos() -> Vec<ModuleInfo> {
     vec![
         #[cfg(not(target_arch = "wasm32"))]
         concurrent::ConcurrentModule.to_module_info(),
+        convert::ConvertModule.to_module_info(),
         dict::DictModule.to_module_info(),
         io::IoModule.to_module_info(),
         list::ListModule.to_module_info(),
@@ -364,6 +368,8 @@ pub fn all_module_infos() -> Vec<ModuleInfo> {
         time::TimeModule.to_module_info(),
         #[cfg(not(target_arch = "wasm32"))]
         os::OsModule.to_module_info(),
+        #[cfg(not(target_arch = "wasm32"))]
+        weak::WeakModule.to_module_info(),
         assert::AssertModule.to_module_info(),
     ]
 }
