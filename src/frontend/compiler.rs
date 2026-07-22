@@ -9,8 +9,7 @@ use thiserror::Error;
 use tracing::debug;
 
 use super::config::CompileConfig;
-use super::events::*;
-use super::pipeline::{Pipeline, PipelineState};
+use super::pipeline::{Pipeline, PipelineState, CompilationPhase};
 
 /// 编译器
 ///
@@ -68,16 +67,6 @@ impl Compiler {
     #[inline]
     pub fn pipeline_mut(&mut self) -> &mut Pipeline {
         &mut self.pipeline
-    }
-
-    /// 订阅编译器事件
-    ///
-    /// 允许外部组件订阅编译器事件，用于 IDE 集成和进度显示。
-    pub fn subscribe<S: EventSubscriber + 'static>(
-        &self,
-        subscriber: S,
-    ) -> SubscriptionHandle {
-        self.pipeline.subscribe(subscriber)
     }
 
     /// 编译源文件
@@ -344,87 +333,6 @@ impl CompileProgress {
             current_line,
             total_lines,
             message: message.into(),
-        }
-    }
-}
-
-/// 编译进度回调实现
-///
-/// 用于从编译器事件生成进度信息。
-#[derive(Debug)]
-pub struct ProgressReporter {
-    total_lines: usize,
-}
-
-impl ProgressReporter {
-    /// 创建新的进度报告器
-    pub fn new(total_lines: usize) -> Self {
-        Self { total_lines }
-    }
-
-    /// 从事件生成进度信息
-    pub fn on_event<E: Event>(
-        &self,
-        event: &E,
-    ) -> Option<CompileProgress> {
-        match event.name() {
-            "LexingStart" => Some(CompileProgress::new(
-                CompilationPhase::Lexing,
-                0.0,
-                0,
-                self.total_lines,
-                "Starting lexing...",
-            )),
-            "LexingComplete" => Some(CompileProgress::new(
-                CompilationPhase::Lexing,
-                25.0,
-                self.total_lines,
-                self.total_lines,
-                "Lexing complete",
-            )),
-            "ParsingStart" => Some(CompileProgress::new(
-                CompilationPhase::Parsing,
-                25.0,
-                0,
-                self.total_lines,
-                "Starting parsing...",
-            )),
-            "ParsingComplete" => Some(CompileProgress::new(
-                CompilationPhase::Parsing,
-                50.0,
-                self.total_lines,
-                self.total_lines,
-                "Parsing complete",
-            )),
-            "TypeCheckingStart" => Some(CompileProgress::new(
-                CompilationPhase::TypeChecking,
-                50.0,
-                0,
-                self.total_lines,
-                "Starting type checking...",
-            )),
-            "TypeCheckingComplete" => Some(CompileProgress::new(
-                CompilationPhase::TypeChecking,
-                80.0,
-                self.total_lines,
-                self.total_lines,
-                "Type checking complete",
-            )),
-            "IRGenerationStart" => Some(CompileProgress::new(
-                CompilationPhase::IRGeneration,
-                80.0,
-                0,
-                self.total_lines,
-                "Starting IR generation...",
-            )),
-            "IRGenerationComplete" => Some(CompileProgress::new(
-                CompilationPhase::IRGeneration,
-                100.0,
-                self.total_lines,
-                self.total_lines,
-                "IR generation complete",
-            )),
-            _ => None,
         }
     }
 }

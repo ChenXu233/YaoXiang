@@ -8,7 +8,7 @@ pub mod incremental_scheduler;
 use crate::middle;
 use crate::util::span::SourceFile;
 use crate::util::diagnostic::Diagnostic;
-use super::{config::CompileConfig, events::*, core::typecheck};
+use super::{config::CompileConfig, core::typecheck};
 
 use compilation_cache::CompilationCache;
 use incremental_scheduler::IncrementalStats;
@@ -46,6 +46,39 @@ impl PipelineError {
         match self {
             PipelineError::TypeCheck(err) => Some(err.clone()),
             _ => None,
+        }
+    }
+}
+
+/// 编译阶段
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompilationPhase {
+    /// 词法分析
+    Lexing,
+    /// 语法分析
+    Parsing,
+    /// 类型检查
+    TypeChecking,
+    /// IR 生成
+    IRGeneration,
+    /// 证明函数执行（RFC-027 Phase 2.5）
+    ProofExecution,
+    /// 完整编译
+    Full,
+}
+
+impl std::fmt::Display for CompilationPhase {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        match self {
+            CompilationPhase::Lexing => write!(f, "lexing"),
+            CompilationPhase::Parsing => write!(f, "parsing"),
+            CompilationPhase::TypeChecking => write!(f, "type checking"),
+            CompilationPhase::IRGeneration => write!(f, "IR generation"),
+            CompilationPhase::ProofExecution => write!(f, "proof execution"),
+            CompilationPhase::Full => write!(f, "full compilation"),
         }
     }
 }
@@ -190,8 +223,6 @@ pub struct Pipeline {
     state: PipelineState,
     /// 配置
     config: CompileConfig,
-    /// 事件总线
-    event_bus: EventBus,
     /// 缓存目录（用于增量编译）
     cache_dir: Option<PathBuf>,
     /// 编译缓存（内存）
@@ -228,26 +259,6 @@ impl Pipeline {
         Self {
             state: PipelineState::Idle,
             config,
-            event_bus: EventBus::new(),
-            cache_dir: None,
-            compilation_cache: cache,
-            incremental_stats: IncrementalStats::default(),
-        }
-    }
-
-    /// 创建带事件总线的流水线
-    pub fn with_event_bus(
-        config: CompileConfig,
-        event_bus: EventBus,
-    ) -> Self {
-        let cache = CompilationCache::with_config(
-            config.incremental.cache_ttl,
-            (config.incremental.max_cache_size / 1024) as usize,
-        );
-        Self {
-            state: PipelineState::Idle,
-            config,
-            event_bus,
             cache_dir: None,
             compilation_cache: cache,
             incremental_stats: IncrementalStats::default(),
@@ -266,18 +277,6 @@ impl Pipeline {
         &self.config
     }
 
-    /// 获取事件总线
-    #[inline]
-    pub fn event_bus(&self) -> &EventBus {
-        &self.event_bus
-    }
-
-    /// 获取可变事件总线
-    #[inline]
-    pub fn event_bus_mut(&mut self) -> &mut EventBus {
-        &mut self.event_bus
-    }
-
     /// 设置缓存目录
     #[inline]
     pub fn set_cache_dir(
@@ -285,14 +284,6 @@ impl Pipeline {
         dir: PathBuf,
     ) {
         self.cache_dir = Some(dir);
-    }
-
-    /// 订阅事件
-    pub fn subscribe<S: EventSubscriber + 'static>(
-        &self,
-        subscriber: S,
-    ) -> SubscriptionHandle {
-        self.event_bus.subscribe(subscriber)
     }
 
     /// 运行完整编译流程
@@ -303,13 +294,6 @@ impl Pipeline {
     ) -> CompilationResult {
         let start_time = crate::util::time_compat::Instant::now();
         let mut phase_durations = Vec::new();
-
-        // 发射编译开始事件
-        self.event_bus.emit(CompilationStart::new(
-            source_name,
-            source.len(),
-            self.config.incremental.enabled,
-        ));
 
         // 执行各阶段
         let lex_result = self.run_lexing(source_name, source, &mut phase_durations);
@@ -384,13 +368,6 @@ impl Pipeline {
 
         let total_ms = start_time.elapsed().as_millis() as u64;
 
-        // 发射编译完成事件
-        self.event_bus.emit(CompilationComplete::new(
-            ir_result.is_success(),
-            total_ms,
-            phase_durations.clone(),
-        ));
-
         if ir_result.is_success() {
             // 收集所有警告（来自 typecheck 阶段）
             let warnings = typecheck_result.warnings;
@@ -409,15 +386,12 @@ impl Pipeline {
     /// 词法分析阶段
     fn run_lexing(
         &mut self,
-        source_name: &str,
+        _source_name: &str,
         source: &str,
         phase_durations: &mut Vec<(CompilationPhase, u64)>,
     ) -> LexResult {
         let start = crate::util::time_compat::Instant::now();
         self.state = PipelineState::Lexing;
-
-        self.event_bus
-            .emit(LexingStart::new(source_name, source.len()));
 
         let tokens = match super::core::lexer::tokenize(source) {
             Ok(tokens) => tokens,
@@ -425,22 +399,12 @@ impl Pipeline {
                 let duration = start.elapsed().as_millis() as u64;
                 phase_durations.push((CompilationPhase::Lexing, duration));
 
-                self.event_bus.emit(LexingComplete::new(0, duration));
-                self.event_bus.emit(ErrorOccurred::new(
-                    e.to_string(),
-                    "E0100",
-                    ErrorLevel::Error,
-                ));
-
                 return LexResult::failed(vec![e.to_string()]);
             }
         };
 
         let duration = start.elapsed().as_millis() as u64;
         phase_durations.push((CompilationPhase::Lexing, duration));
-
-        self.event_bus
-            .emit(LexingComplete::new(tokens.len(), duration));
 
         LexResult::success(tokens)
     }
@@ -455,25 +419,17 @@ impl Pipeline {
         let start = crate::util::time_compat::Instant::now();
         self.state = PipelineState::Parsing;
 
-        self.event_bus.emit(ParsingStart::new(tokens.len()));
-
         let ast = match super::core::parser::parse(tokens) {
             result if result.has_errors => {
                 let duration = start.elapsed().as_millis() as u64;
                 phase_durations.push((CompilationPhase::Parsing, duration));
 
-                self.event_bus.emit(ParsingComplete::new(0, duration));
                 let error_msg = result
                     .errors
                     .into_iter()
                     .next()
                     .map(|e| e.to_string())
                     .unwrap_or_else(|| "Unknown parse error".to_string());
-                self.event_bus.emit(ErrorOccurred::new(
-                    error_msg.clone(),
-                    "E0200",
-                    ErrorLevel::Error,
-                ));
 
                 return ParseResult::failed(vec![error_msg]);
             }
@@ -482,9 +438,6 @@ impl Pipeline {
 
         let duration = start.elapsed().as_millis() as u64;
         phase_durations.push((CompilationPhase::Parsing, duration));
-
-        self.event_bus
-            .emit(ParsingComplete::new(ast.items.len(), duration));
 
         ParseResult::success(ast)
     }
@@ -500,9 +453,6 @@ impl Pipeline {
         let start = crate::util::time_compat::Instant::now();
         self.state = PipelineState::TypeChecking;
 
-        self.event_bus
-            .emit(TypeCheckingStart::new(source_name, ast.items.len()));
-
         // 预留：用于后续增量编译的诊断格式化
         let _source_file = SourceFile::new(source_name.to_string(), source.to_string());
         let _ = _source_file;
@@ -510,11 +460,8 @@ impl Pipeline {
         let mut type_result = typecheck::check_module(ast, &mut None);
         let duration = start.elapsed().as_millis() as u64;
         phase_durations.push((CompilationPhase::TypeChecking, duration));
-
-        let error_count = type_result.diagnostics.len();
-        let has_errors = error_count > 0;
+        let has_errors = !type_result.diagnostics.is_empty();
         let errors = std::mem::take(&mut type_result.diagnostics);
-        let error_messages: Vec<String> = errors.iter().map(|e| e.message.clone()).collect();
 
         // 执行死代码分析（根据配置决定是否启用）
         let warnings = if self.config.dead_code.enabled && !has_errors {
@@ -522,25 +469,6 @@ impl Pipeline {
         } else {
             Vec::new()
         };
-
-        let warning_count = warnings.len();
-
-        self.event_bus.emit(TypeCheckingComplete::new(
-            type_result.bindings.len(),
-            error_count,
-            warning_count,
-            duration,
-        ));
-
-        for warning in &warnings {
-            self.event_bus
-                .emit(WarningOccurred::new(warning.clone(), "W1000"));
-        }
-
-        for err in &error_messages {
-            self.event_bus
-                .emit(ErrorOccurred::new(err.clone(), "E0300", ErrorLevel::Error));
-        }
 
         TypecheckResult {
             type_result,
@@ -608,11 +536,6 @@ impl Pipeline {
         let duration = start.elapsed().as_millis() as u64;
         phase_durations.push((CompilationPhase::ProofExecution, duration));
 
-        for err in &errors {
-            self.event_bus
-                .emit(ErrorOccurred::new(err.clone(), "E8002", ErrorLevel::Error));
-        }
-
         if failed_proofs.is_empty() {
             ProofExecResult::success()
         } else {
@@ -631,8 +554,6 @@ impl Pipeline {
     ) -> IRResult {
         let start = crate::util::time_compat::Instant::now();
         self.state = PipelineState::IRGenerating;
-
-        self.event_bus.emit(IRGenerationStart::new(ast.items.len()));
 
         // 预留：用于后续增量编译的诊断格式化
         let _source_file = SourceFile::new(source_name.to_string(), source.to_string());
@@ -654,30 +575,12 @@ impl Pipeline {
                 let duration = start.elapsed().as_millis() as u64;
                 phase_durations.push((CompilationPhase::IRGeneration, duration));
 
-                self.event_bus.emit(IRGenerationComplete::new(
-                    std::mem::size_of_val(&ir),
-                    ast.items.len(),
-                    duration,
-                ));
-
                 IRResult::success(ir)
             }
             Err(errors) => {
                 let duration = start.elapsed().as_millis() as u64;
                 phase_durations.push((CompilationPhase::IRGeneration, duration));
 
-                let error_messages: Vec<String> = errors.iter().map(|e| format!("{}", e)).collect();
-
-                self.event_bus
-                    .emit(IRGenerationComplete::new(0, 0, duration));
-
-                for err in &error_messages {
-                    self.event_bus.emit(ErrorOccurred::new(
-                        err.clone(),
-                        "E0400",
-                        ErrorLevel::Error,
-                    ));
-                }
                 // IR 生成错误被归类为类型检查错误（因为它们源于类型检查）
                 IRResult::failed(errors)
             }
