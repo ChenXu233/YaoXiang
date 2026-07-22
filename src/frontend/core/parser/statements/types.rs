@@ -354,7 +354,9 @@ fn parse_constructor_type(
 /// Returns (Vec<Param>, return_type)
 /// This is for RFC-010 unified syntax: `name: (a: Int, b: Int) -> Ret = body`
 /// Also supports const generic literal types: `factorial: [n: Int](n: n) -> Int`
-pub fn parse_fn_type_with_names(state: &mut ParserState<'_>) -> Option<(Vec<Param>, Box<Type>)> {
+pub fn parse_fn_type_with_names(
+    state: &mut ParserState<'_>
+) -> Option<(Vec<Param>, Vec<Param>, Box<Type>)> {
     if !state.expect(&TokenKind::LParen) {
         return None;
     }
@@ -429,10 +431,41 @@ pub fn parse_fn_type_with_names(state: &mut ParserState<'_>) -> Option<(Vec<Para
     if !state.expect(&TokenKind::Arrow) {
         return None;
     }
+    // return_type 位置可能是另一组 curry（如 (n: N) -> Int）。
+    // parse_type_annotation 会丢参数名，故自行检测 curry 组并递归收集带名参数。
+    // all_params = 第一组 + 后续各组（拍平带名），供 signature_params 存全部 curry 组参数名。
+    // return_type 保持嵌套 Type::Fn（纯类型），供 type_annotation 构建正确嵌套结构。
+    let saved = state.save_position();
+    let is_named_curry = if state.at(&TokenKind::LParen) {
+        state.bump();
+        let result = if let Some(TokenKind::Identifier(_)) = state.current().map(|t| &t.kind) {
+            let next = state.peek().map(|t| &t.kind);
+            matches!(next, Some(TokenKind::Colon))
+                || matches!(next, Some(TokenKind::Comma) | Some(TokenKind::RParen))
+        } else {
+            false
+        };
+        state.restore_position(saved);
+        result
+    } else {
+        false
+    };
 
+    if is_named_curry {
+        if let Some((inner_first, inner_all, inner_ret)) = parse_fn_type_with_names(state) {
+            let mut all_params = params.clone();
+            all_params.extend(inner_all);
+            let nested_fn = Type::Fn {
+                params: inner_first.iter().filter_map(|p| p.ty.clone()).collect(),
+                return_type: inner_ret,
+            };
+            return Some((params, all_params, Box::new(nested_fn)));
+        }
+        state.restore_position(saved);
+    }
     let return_type = Box::new(parse_type_annotation(state)?);
-
-    Some((params, return_type))
+    let all_params = params.clone();
+    Some((params, all_params, return_type))
 }
 
 /// Wrap a type annotation as a literal type if it's a const parameter reference

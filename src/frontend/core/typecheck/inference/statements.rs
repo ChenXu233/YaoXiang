@@ -10,8 +10,8 @@ use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use std::collections::HashMap;
 use crate::frontend::module::{Export, ExportKind, ModuleInfo};
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
-use crate::frontend::core::parser::ast::{Block, Expr, Param, Stmt};
+use crate::frontend::core::types::{MonoType, PolyType, TraitTable, TypeConstraintSolver};
+use crate::frontend::core::parser::ast::{classify_generic_params, Block, Expr, Param, Stmt};
 use crate::middle::passes::mono::instance::InstantiationRequest;
 
 use super::scope::ScopeManager;
@@ -70,6 +70,8 @@ pub struct StatementChecker {
     gamma: Option<crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma>,
     /// 依赖类型环境（类型族注册与查找）
     dep_env: crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
+    /// Trait 表（用于 classify_generic_params 判定 annotation 是否为 trait）
+    trait_table: TraitTable,
 }
 
 impl StatementChecker {
@@ -78,6 +80,7 @@ impl StatementChecker {
         solver: &mut TypeConstraintSolver,
         gamma: Option<crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma>,
         dep_env: crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
+        trait_table: TraitTable,
     ) -> Self {
         Self {
             solver: solver.clone(),
@@ -98,6 +101,7 @@ impl StatementChecker {
             instantiation_requests: Vec::new(),
             gamma,
             dep_env,
+            trait_table,
         }
     }
 
@@ -107,6 +111,14 @@ impl StatementChecker {
         defs: HashMap<String, MonoType>,
     ) {
         self.type_defs = defs;
+    }
+
+    /// 设置 Trait 表
+    pub fn set_trait_table(
+        &mut self,
+        trait_table: TraitTable,
+    ) {
+        self.trait_table = trait_table;
     }
 
     /// 解析 TypeRef 为实际的类型定义
@@ -465,6 +477,17 @@ impl StatementChecker {
         params: &[Param],
         body: &Block,
     ) -> Result<(), Box<Diagnostic>> {
+        self.check_fn_def_with_subst(name, params, body, &std::collections::HashMap::new())
+    }
+
+    /// 带 const 替换的 check_fn_def（const 泛型参数名 → 底层类型的 MonoType）
+    fn check_fn_def_with_subst(
+        &mut self,
+        name: &str,
+        params: &[Param],
+        body: &Block,
+        const_subst: &std::collections::HashMap<String, MonoType>,
+    ) -> Result<(), Box<Diagnostic>> {
         // 检查是否已经检查过
         if self.checked_functions.contains_key(name) {
             return Ok(());
@@ -480,13 +503,14 @@ impl StatementChecker {
         // 创建函数作用域
         self.scope.enter_scope();
 
-        // 添加参数到函数作用域
+        // 添加参数到函数作用域，const 泛型引用用 subst 替换
         for param in params {
             let param_ty = param
                 .ty
                 .as_ref()
                 .map(|t| MonoType::from(t.clone()))
                 .unwrap_or_else(|| self.solver.new_var());
+            let param_ty = Self::substitute_type_refs(param_ty, const_subst);
             self.scope.add_var(
                 param.name.clone(),
                 PolyType::mono(param_ty),
@@ -754,7 +778,7 @@ impl StatementChecker {
         _span: crate::util::span::Span,
     ) -> Result<(), Box<Diagnostic>> {
         let generic_params =
-            crate::frontend::core::parser::ast::extract_generic_params(signature_params);
+            classify_generic_params(signature_params, &|name| self.trait_table.has_trait(name));
         // 检查是否与结构体重名
         if let Some(existing) = self.scope.get_var(name) {
             if let MonoType::Struct(_) = &existing.body {
@@ -776,6 +800,85 @@ impl StatementChecker {
                 )
             })
             .collect();
+
+        // === 函数 const 泛型判定（用途分析） ===
+        // 与 checker.rs 中 collect_function_signature 相同逻辑
+        let const_generic_params: Vec<_> = generic_params
+            .iter()
+            .filter(|p| {
+                matches!(
+                    p.kind,
+                    crate::frontend::core::parser::ast::GenericParamKind::Const { .. }
+                )
+            })
+            .collect();
+
+        let mut const_binders: Vec<crate::frontend::core::types::const_data::ConstVarDef> =
+            Vec::new();
+        if !const_generic_params.is_empty() {
+            let candidate_names: std::collections::HashSet<String> = const_generic_params
+                .iter()
+                .map(|p| p.name.clone())
+                .collect();
+            let mut used_as_const = std::collections::HashSet::new();
+
+            // 扫描内层 Fn 的 params 判断 const 用途
+            if let Some(crate::frontend::core::parser::ast::Type::Fn { return_type, .. }) =
+                type_annotation
+            {
+                if let crate::frontend::core::parser::ast::Type::Fn {
+                    params: inner_params,
+                    ..
+                } = return_type.as_ref()
+                {
+                    for p in inner_params {
+                        crate::frontend::core::typecheck::checker::collect_used_in_type(
+                            p,
+                            &candidate_names,
+                            &mut used_as_const,
+                        );
+                    }
+                }
+                crate::frontend::core::typecheck::checker::collect_used_in_type(
+                    return_type,
+                    &candidate_names,
+                    &mut used_as_const,
+                );
+            }
+
+            let type_param_names: Vec<String> =
+                type_generic_params.iter().map(|p| p.name.clone()).collect();
+            for (i, gp) in const_generic_params.iter().enumerate() {
+                if used_as_const.contains(&gp.name) {
+                    if let crate::frontend::core::parser::ast::GenericParamKind::Const {
+                        const_type,
+                    } = &gp.kind
+                    {
+                        let type_name = match const_type.as_ref() {
+                            crate::frontend::core::parser::ast::Type::Name { name, .. } => {
+                                name.clone()
+                            }
+                            crate::frontend::core::parser::ast::Type::Int(_) => "Int".to_string(),
+                            crate::frontend::core::parser::ast::Type::Float(_) => {
+                                "Float".to_string()
+                            }
+                            crate::frontend::core::parser::ast::Type::Bool => "Bool".to_string(),
+                            _ => "Int".to_string(),
+                        };
+                        let kind = crate::frontend::core::types::const_data::ConstKind::from_ast_type_name(&type_name)
+                            .unwrap_or(crate::frontend::core::types::const_data::ConstKind::Int(None));
+                        let idx = type_param_names.len() + i;
+                        const_binders.push(
+                            crate::frontend::core::types::const_data::ConstVarDef::new(
+                                gp.name.clone(),
+                                kind,
+                                idx,
+                            ),
+                        );
+                    }
+                }
+            }
+        }
 
         // 将函数自身注册到变量环境中
         if let Some(type_ann) = type_annotation {
@@ -800,6 +903,22 @@ impl StatementChecker {
                         subst.insert(gp.name.clone(), fresh_var);
                     }
 
+                    // 添加 const 参数名到 subst
+                    for cb in &const_binders {
+                        let base_ty = match cb.kind {
+                            crate::frontend::core::types::const_data::ConstKind::Int(_) => {
+                                MonoType::Int(64)
+                            }
+                            crate::frontend::core::types::const_data::ConstKind::Bool => {
+                                MonoType::Bool
+                            }
+                            crate::frontend::core::types::const_data::ConstKind::Float(_) => {
+                                MonoType::Float(64)
+                            }
+                        };
+                        subst.insert(cb.name.clone(), base_ty);
+                    }
+
                     let inner_fn_ty = Self::substitute_type_refs(fn_return_type.clone(), &subst);
                     match inner_fn_ty {
                         MonoType::Fn {
@@ -807,8 +926,33 @@ impl StatementChecker {
                             return_type: inner_ret,
                             ..
                         } => (inner_params, *inner_ret),
+                        // return_type 不是 Fn（可能是单值泛型），保持原样
                         _ => (fn_param_types, fn_return_type),
                     }
+                } else if !const_binders.is_empty() {
+                    // 没有 Type 泛型但有 const 泛型：替换 param_types 和 return_type 中的 const ref
+                    let mut subst = std::collections::HashMap::new();
+                    for cb in &const_binders {
+                        let base_ty = match cb.kind {
+                            crate::frontend::core::types::const_data::ConstKind::Int(_) => {
+                                MonoType::Int(64)
+                            }
+                            crate::frontend::core::types::const_data::ConstKind::Bool => {
+                                MonoType::Bool
+                            }
+                            crate::frontend::core::types::const_data::ConstKind::Float(_) => {
+                                MonoType::Float(64)
+                            }
+                        };
+                        subst.insert(cb.name.clone(), base_ty);
+                    }
+                    let substituted_params: Vec<MonoType> = fn_param_types
+                        .iter()
+                        .map(|t| Self::substitute_type_refs(t.clone(), &subst))
+                        .collect();
+                    let substituted_ret =
+                        Self::substitute_type_refs(fn_return_type.clone(), &subst);
+                    (substituted_params, substituted_ret)
                 } else {
                     (fn_param_types, fn_return_type)
                 };
@@ -817,9 +961,14 @@ impl StatementChecker {
                     params: final_params,
                     return_type: Box::new(final_ret),
                 };
+                let poly = if const_binders.is_empty() {
+                    PolyType::mono(fn_type)
+                } else {
+                    PolyType::new_with_const(Vec::new(), const_binders.clone(), fn_type)
+                };
                 self.scope.add_var(
                     name.to_string(),
-                    PolyType::mono(fn_type),
+                    poly,
                     false,
                     crate::util::span::Span::default(),
                 );
@@ -956,7 +1105,41 @@ impl StatementChecker {
             params
         };
 
-        let out = self.check_fn_def(name, params, &body);
+        // 补充 curry 后续组的值参数（如 `factorial: (N: Int) -> (n: N) -> Int` 的 `n`）
+        // signature_params 现含全部 curry 组带名参数；第一组已被 extract_generic_params 处理，
+        // 后续组值参数（不在 generic_params 名单）需补进 params 供 check_fn_def 绑定进作用域。
+        let generic_names: std::collections::HashSet<&str> =
+            generic_params.iter().map(|p| p.name.as_str()).collect();
+        let mut params: Vec<Param> = params.to_vec();
+        for p in signature_params {
+            if !generic_names.contains(p.name.as_str())
+                && !params.iter().any(|ep| ep.name == p.name)
+            {
+                params.push(p.clone());
+            }
+        }
+
+        // 如果有 const 泛型参数，构建 subst 传给 check_fn_def_with_subst
+        let const_subst = if !const_binders.is_empty() {
+            let mut subst = std::collections::HashMap::new();
+            for cb in &const_binders {
+                let base_ty = match cb.kind {
+                    crate::frontend::core::types::const_data::ConstKind::Int(_) => {
+                        MonoType::Int(64)
+                    }
+                    crate::frontend::core::types::const_data::ConstKind::Bool => MonoType::Bool,
+                    crate::frontend::core::types::const_data::ConstKind::Float(_) => {
+                        MonoType::Float(64)
+                    }
+                };
+                subst.insert(cb.name.clone(), base_ty);
+            }
+            subst
+        } else {
+            std::collections::HashMap::new()
+        };
+
+        let out = self.check_fn_def_with_subst(name, &params, &body, &const_subst);
 
         // Clear expected return type after function body checking
         self.expected_return_type = None;

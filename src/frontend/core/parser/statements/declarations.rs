@@ -24,6 +24,40 @@ use crate::util::span::Span;
 use super::functions::{parse_fn_stmt_with_name, parse_fn_stmt_with_name_simple};
 use super::types::{parse_type_annotation, parse_fn_type_with_names, parse_binding_positions};
 
+/// 判断 annotation 是否为类型参数标注（`Type` / `MetaType`）。纯结构，不看名字。
+fn is_type_param_annotation(ty: Option<&Type>) -> bool {
+    match ty {
+        Some(Type::MetaType { .. }) => true,
+        Some(Type::Name { name, .. }) => name == "Type",
+        _ => false,
+    }
+}
+
+/// 结构判定：参数名是否在给定类型中作为类型引用（`Type::Name`）出现。
+/// 用于识别 const 泛型参数——如 `(n: N)` 里的 N 被当类型用。不看大小写。
+fn name_used_as_type(
+    name: &str,
+    ty: &Type,
+) -> bool {
+    match ty {
+        Type::Name { name: n, .. } => n == name,
+        Type::Generic { args, .. } => args.iter().any(|a| name_used_as_type(name, a)),
+        Type::Fn {
+            params,
+            return_type,
+        } => {
+            params.iter().any(|p| name_used_as_type(name, p))
+                || name_used_as_type(name, return_type)
+        }
+        Type::Option(inner) | Type::Ptr(inner) => name_used_as_type(name, inner),
+        Type::Ref { inner, .. } => name_used_as_type(name, inner),
+        Type::Result(a, b) => name_used_as_type(name, a) || name_used_as_type(name, b),
+        Type::Tuple(types) | Type::Sum(types) => types.iter().any(|t| name_used_as_type(name, t)),
+        Type::Literal { name: n, .. } => n == name,
+        _ => false,
+    }
+}
+
 fn is_old_function_syntax(state: &mut ParserState<'_>) -> bool {
     // 保存当前位置
     let saved = state.save_position();
@@ -71,10 +105,10 @@ fn skip_old_function_syntax(_state: &mut ParserState<'_>) {
 fn is_method_bind_syntax(state: &mut ParserState<'_>) -> bool {
     let saved = state.save_position();
 
-    // 检查是否是 Identifier (类型名) — 类型名必须以大写字母开头
+    // 方法绑定判定靠结构 Identifier . Identifier : — 纯结构，不靠名字大小写
     let has_type_name = matches!(
         state.current().map(|t| &t.kind),
-        Some(TokenKind::Identifier(name)) if name.chars().next().is_some_and(|c| c.is_uppercase())
+        Some(TokenKind::Identifier(_))
     );
 
     if has_type_name {
@@ -111,36 +145,35 @@ fn is_method_bind_syntax(state: &mut ParserState<'_>) -> bool {
 fn is_external_binding_syntax(state: &mut ParserState<'_>) -> bool {
     let saved = state.save_position();
 
-    // 检查是否是 Identifier (类型名) — 类型名必须以大写字母开头
-    let has_type_name = matches!(
+    // 外部绑定: Identifier . Identifier = Identifier (可选 [positions])
+    // 与字段赋值 self.field = expr 区分: 靠等号右边是不是 Identifier。
+    // Type.method = function → 右边是 Identifier → 外部绑定
+    // self.field = false  右边是字面量 → 不是外部绑定
+    // 纯结构判定，不靠名字大小写。
+    let is_external = matches!(
         state.current().map(|t| &t.kind),
-        Some(TokenKind::Identifier(name)) if name.chars().next().is_some_and(|c| c.is_uppercase())
-    );
-
-    if has_type_name {
-        state.bump(); // consume type name
-
-        if state.at(&TokenKind::Dot) {
-            state.bump(); // consume dot
-
-            let has_method_name = matches!(
-                state.current().map(|t| &t.kind),
-                Some(TokenKind::Identifier(_))
-            );
-
-            if has_method_name {
-                state.bump(); // consume method name
-
-                // 检查是否是等号 (不是冒号)
-                let has_eq = state.at(&TokenKind::Eq);
-                state.restore_position(saved);
-                return has_eq;
-            }
-        }
-    }
-
+        Some(TokenKind::Identifier(_))
+    ) && {
+        state.bump();
+        state.at(&TokenKind::Dot)
+    } && {
+        state.bump();
+        matches!(
+            state.current().map(|t| &t.kind),
+            Some(TokenKind::Identifier(_))
+        )
+    } && {
+        state.bump();
+        state.at(&TokenKind::Eq)
+    } && {
+        state.bump();
+        matches!(
+            state.current().map(|t| &t.kind),
+            Some(TokenKind::Identifier(_))
+        )
+    };
     state.restore_position(saved);
-    false
+    is_external
 }
 
 /// RFC-004: 解析外部绑定语句: `Type.method = function[pos]` 或 `Type.method = function`
@@ -260,7 +293,7 @@ pub fn parse_method_bind_stmt(
 
     // Parse method type annotation - use parse_fn_type_with_names to preserve param names
     // This returns (Vec<Param>, Box<Type>) where Param has name and ty.
-    let (method_fn_params, method_return_type) = match parse_fn_type_with_names(state) {
+    let (method_fn_params, _all_curry, method_return_type) = match parse_fn_type_with_names(state) {
         Some(result) => result,
         None => {
             state.error(parse_msg(
@@ -466,15 +499,12 @@ fn parse_var_stmt_with_pub(
             } else if state.at(&TokenKind::KwMut) {
                 // mut keyword signals a named parameter
                 true
-            } else if let Some(TokenKind::Identifier(name)) = state.current().map(|t| &t.kind) {
-                let first_char = name.chars().next().unwrap_or('A');
+            } else if let Some(TokenKind::Identifier(_)) = state.current().map(|t| &t.kind) {
                 let next = state.peek().map(|t| &t.kind);
                 // RFC-010: ':' after param name (e.g., a: Int)
-                // RFC-007 HM style: lowercase identifier followed by ',' or ')' (e.g., (a, b))
-                // Old syntax: Uppercase identifier (type) followed by ',' or ')' (e.g., (Int, Int))
+                // RFC-007 HM style: identifier followed by ',' or ')' (e.g., (a, b))
                 matches!(next, Some(TokenKind::Colon))
-                    || (first_char.is_lowercase()
-                        && matches!(next, Some(TokenKind::Comma) | Some(TokenKind::RParen)))
+                    || matches!(next, Some(TokenKind::Comma) | Some(TokenKind::RParen))
             } else {
                 false
             };
@@ -499,9 +529,11 @@ fn parse_var_stmt_with_pub(
 
             if is_rfc010 {
                 // RFC-010 new syntax: () or (a: Int, b: Int) -> Ret
-                let (fn_params_parsed, return_type) = parse_fn_type_with_names(state)?;
+                let (fn_params_parsed, all_curry_params, return_type) =
+                    parse_fn_type_with_names(state)?;
 
-                // Build function type for type_annotation
+                // Build function type for type_annotation — 只用第一组类型构建第一层，
+                // return_type 已含嵌套 curry 组（纯类型），保持嵌套结构不拍平。
                 let param_types: Vec<Type> = fn_params_parsed
                     .iter()
                     .filter_map(|p| p.ty.clone())
@@ -512,7 +544,9 @@ fn parse_var_stmt_with_pub(
                     return_type: return_type.clone(),
                 };
 
-                (Some(type_annotation), Some(fn_params_parsed))
+                // signature_params 存全部 curry 组带名参数（供 typechecker 绑定第二组参数）
+                // 通过外层 extracted_params 覆盖（见下方 signature_params 赋值）
+                (Some(type_annotation), Some(all_curry_params))
             } else {
                 // Check if this looks like old function syntax: (Type, Type) -> Ret
                 // If so, reject it with a helpful error message
@@ -623,30 +657,27 @@ fn parse_var_stmt_with_pub(
                 }) => {
                     // Lambda 形式: name: (a: Int, b: Int) -> Int = (a, b) => a + b
                     // RFC-007: 签名参数名和 lambda 参数名必须匹配
+                    // Lambda 形式: name: (a: Int, b: Int) -> Int = (a, b) => a + b
+                    // RFC-007: 签名参数名和 lambda 参数名必须匹配（值参数从签名取，类型从标注取）
                     //
-                    // For generic functions like `map: (T: Type, R: Type) -> (...) = (list, f) => ...`
-                    // or `clone: (T: Clone) -> ((value: T) -> T) = (value) => ...`,
-                    // the value-level parameter names are in the return type's function type,
-                    // not in the first parameter group. Filter out type params (uppercase names)
-                    // before matching, since type parameter names follow the uppercase convention.
+                    // 值参数判定：不再用大小写猜测，改用"名对名"匹配。
+                    // value_params = signature_params 中名字在 lambda_params 里也出现的参数。
+                    // 这自然剔除类型参数和 const 泛型参数（它们不会出现在 lambda_params 中）。
+                    let lambda_names: std::collections::HashSet<&str> =
+                        lambda_params.iter().map(|p| p.name.as_str()).collect();
                     let value_params: Vec<&Param> = extracted_params
                         .iter()
-                        .filter(|p| {
-                            let first_char = p.name.chars().next().unwrap_or('a');
-                            first_char.is_lowercase()
-                        })
+                        .filter(|p| lambda_names.contains(p.name.as_str()))
                         .collect();
 
-                    // If there are value params in the signature, verify they match lambda.
-                    // If ALL params are type params (generic function), skip matching
-                    // since the real value params are embedded in the return type.
+                    // 如果有值参数匹配上了，校验数量和名字。
                     if !value_params.is_empty() {
                         if lambda_params.len() != value_params.len() {
                             state.error(parse_msg(format!(
-                                "Parameter count mismatch: signature has {} parameters, lambda has {}",
-                                value_params.len(),
-                                lambda_params.len()
-                            )));
+                            "Parameter count mismatch: signature has {} value parameters, lambda has {}",
+                            value_params.len(),
+                            lambda_params.len()
+                        )));
                             return None;
                         }
 
@@ -655,33 +686,41 @@ fn parse_var_stmt_with_pub(
                         {
                             if sig_param.name != lambda_param.name {
                                 state.error(parse_msg(format!(
-                                    "Parameter name mismatch at position {}: signature has '{}', lambda has '{}'. \
-                                     RFC-007 requires matching parameter names, or omit the lambda head entirely.",
-                                    i + 1,
-                                    sig_param.name,
-                                    lambda_param.name
-                                )));
+                                "Parameter name mismatch at position {}: signature has '{}', lambda has '{}'. \
+                                 RFC-007 requires matching parameter names, or omit the lambda head entirely.",
+                                i + 1,
+                                sig_param.name,
+                                lambda_param.name
+                            )));
                                 return None;
                             }
                         }
                     }
 
-                    // 值参数对齐：复用上方 RFC-007 校验块的 value_params（首字母小写规则），
-                    // 与校验同源——泛型参数（含 Const 泛型 N: Int）均为大写名，天然剔除。
-                    // 全泛型签名时（值参数在内层返回类型，如 map: (T: Type) -> ((x: T) -> R)）
-                    // value_params 为空，params 直接取 lambda 参数（标注 None，HM 推断）；
-                    // 否则 RFC-007 校验已保证 value_params 与 lambda_params 等长。
+                    // 值参数对齐：value_params = 与 lambda_params 名匹配的 signature 参数。
+                    // 全泛型签名时（如 map: (T: Type) -> ((x: T) -> R)）value_params 为空，
+                    // merged 直接用 lambda 参数（标注 None，HM 推断）；
+                    // 否则 RFC-007 校验已保证一一对应。
                     let merged: Vec<Param> = if value_params.is_empty() {
                         lambda_params.to_vec()
                     } else {
-                        value_params
+                        // value_params 按 lambda_params 顺序排列，确保对齐正确。
+                        // 重新按 lambda 顺序收集：遍历 lambda_params，在 extracted_params 中找到匹配的。
+                        let sig_by_name: std::collections::HashMap<&str, &Param> = extracted_params
                             .iter()
-                            .zip(lambda_params.iter())
-                            .map(|(sig, lam)| Param {
-                                name: lam.name.clone(),
-                                ty: sig.ty.clone(),
-                                is_mut: lam.is_mut,
-                                span: lam.span,
+                            .map(|p| (p.name.as_str(), p))
+                            .collect();
+                        lambda_params
+                            .iter()
+                            .map(|lam| {
+                                let sig =
+                                    sig_by_name.get(lam.name.as_str()).copied().unwrap_or(lam);
+                                Param {
+                                    name: lam.name.clone(),
+                                    ty: sig.ty.clone(),
+                                    is_mut: lam.is_mut,
+                                    span: lam.span,
+                                }
                             })
                             .collect()
                     };
@@ -714,14 +753,21 @@ fn parse_var_stmt_with_pub(
                             span: state.span(),
                         }]
                     };
-
-                    // 值参数 = 首字母小写名（泛型参数含 Const 泛型均为大写名，
-                    // 与上方 lambda 分支的 RFC-007 校验过滤同源）。
+                    // 值参数判定（无大小写）：第一组参数中，剔除
+                    // (1) annotation 是 Type/MetaType 的类型参数；
+                    // (2) 名字在签名类型位置被引用的 const 泛型参数（如 (n: N) 里的 N）。
+                    // 剩下的才是值参数。纯结构判定，不看首字母大小写。
                     let value_params: Vec<Param> = extracted_params
                         .iter()
                         .filter(|p| {
-                            let first_char = p.name.chars().next().unwrap_or('a');
-                            first_char.is_lowercase()
+                            if is_type_param_annotation(p.ty.as_ref()) {
+                                return false; // 类型参数
+                            }
+                            // 名字在返回类型（含内层 curry 组）被当类型用 → const 泛型参数
+                            let used_as_const = type_annotation
+                                .as_ref()
+                                .is_some_and(|ann| name_used_as_type(&p.name, ann));
+                            !used_as_const
                         })
                         .cloned()
                         .collect();

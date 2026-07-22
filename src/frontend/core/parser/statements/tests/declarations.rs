@@ -1,8 +1,8 @@
-//! Variable declaration tests — based on spec §5.2, §6.1
+//! Declaration parsing tests — based on spec §5.2, §6.1, RFC-011 §4.1
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::parser::ast::{extract_generic_params, StmtKind, Type};
+use crate::frontend::core::parser::ast::{extract_generic_param_names, StmtKind, Type};
 
 fn parse_stmt(source: &str) -> StmtKind {
     let tokens = tokenize(source).unwrap();
@@ -144,20 +144,29 @@ fn test_type_def_enum() {
 #[test]
 fn test_type_def_generic() {
     // RFC-011: Option: (T: Type) -> Type = { some(T) | none }
+    // 验证 (T: Type) 被识别为泛型参数
+
+    // Arrange
     let kind = parse_stmt("Option: (T: Type) -> Type = { some(T) | none }");
-    if let StmtKind::TypeDefinition {
+
+    // Act
+    let StmtKind::TypeDefinition {
         name,
         signature_params,
         ..
     } = &kind
-    {
-        let generic_params = extract_generic_params(signature_params);
-        assert_eq!(name, "Option", "类型名应为 Option");
-        assert_eq!(generic_params.len(), 1, "应有 1 个泛型参数");
-        assert_eq!(generic_params[0].name, "T", "泛型参数名应为 T");
-    } else {
-        panic!("Expected StmtKind::TypeDefinition for generic type def");
-    }
+    else {
+        panic!(
+            "Expected StmtKind::TypeDefinition for generic type def, got {:?}",
+            kind
+        );
+    };
+    let generic_params = extract_generic_param_names(signature_params);
+
+    // Assert
+    assert_eq!(name, "Option", "类型名应为 Option");
+    assert_eq!(generic_params.len(), 1, "应有 1 个泛型参数");
+    assert_eq!(generic_params[0].name, "T", "泛型参数名应为 T");
 }
 
 // ============================================================================
@@ -280,10 +289,11 @@ fn test_generic_curried_fn_params_from_lambda() {
 
 #[test]
 fn test_const_generic_no_merged_misalignment() {
-    // 覆盖: RFC-011 Const 泛型 — 大写参数名 + 原始类型标注（N: Int）是 Const 泛型而非值参数
+    // 覆盖: RFC-011 Const 泛型 — (N: Int) 被 extract_generic_params 判为 Const 泛型而非值参数
+    // 泛型参数名改用法判定（不再大小写猜测）。
     // 验证: f: (N: Int, s: String) -> String = (s) => s 的 params == [s: String]
-    //       （修复前 extract_generic_params 将 N 判为 Const 不剔除，value_sig = [N, s]
-    //        与 lambda [s] zip 产出 s: Int 错位——s 配上了 N 的标注）
+    //       (N: Int) 是 Const 泛型（Int 在 CONST_PARAM_TYPES 中），
+    //       不参与 lambda name 匹配 → 仅 s 匹配上
     let kind = parse_stmt("f: (N: Int, s: String) -> String = (s) => s");
     let StmtKind::Binding { params, .. } = &kind else {
         panic!("Expected StmtKind::Binding, got {:?}", kind);
@@ -303,18 +313,23 @@ fn test_const_generic_no_merged_misalignment() {
 
 #[test]
 fn test_const_generic_filtered_without_lambda_head() {
-    // 覆盖: RFC-011 Const 泛型 — 无 lambda 头分支同样剔除 Const 泛型
-    // 验证: f: (N: Int, s: String) -> String = s 的 params == [s: String]
-    //       （修复前 Const 泛型 N 未剔除，params 混入 N: Int）
-    let kind = parse_stmt("f: (N: Int, s: String) -> String = s");
+    // 覆盖: RFC-011 §4.1 Const 泛型 — 无 lambda 头分支同样剔除 Const 泛型
+    // 泛型参数按"用途"判定（不再大小写/名单猜测）：
+    // N 被用在返回类型 Array(Int, N) 的类型位置 → 是 Const 泛型 → 从值参数剔除。
+    // 验证: f: (N: Int, s: String) -> Array(Int, N) = s 的 params == [s: String]
+
+    // Arrange
+    let kind = parse_stmt("f: (N: Int, s: String) -> Array(Int, N) = s");
     let StmtKind::Binding { params, .. } = &kind else {
         panic!("Expected StmtKind::Binding, got {:?}", kind);
     };
 
+    // Assert
+
     assert_eq!(
         params.len(),
         1,
-        "params 应只含值参数 s（Const 泛型 N 不是值参数）"
+        "params 应只含值参数 s（Const 泛型 N 被当类型用，不是值参数）"
     );
     assert_eq!(params[0].name, "s", "值参数名应为 s");
     assert!(

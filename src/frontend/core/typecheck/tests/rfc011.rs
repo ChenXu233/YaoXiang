@@ -598,3 +598,82 @@ fn test_rfc011_float_not_subtype_of_int() {
         "Float should not be subtype of Int"
     );
 }
+
+// ===================================================================
+// RFC-011 §4.1: 函数级 const 泛型（curry 形式）
+// ===================================================================
+
+/// 规范：函数级 const 泛型 curry
+///
+/// `f: (N: Int) -> (n: N) -> Int = (n) => n`
+///
+/// 预期行为：
+/// - N 作为函数级 const 泛型参数，n 使用 N 作为类型
+/// - 类型检查通过，无诊断错误
+#[test]
+fn test_rfc011_fn_const_generic_curry() {
+    // Arrange
+    let source = r#"
+        f: (N: Int) -> (n: N) -> Int = (n) => n
+        result = f(42)(5)
+    "#;
+
+    // Act
+    let result = check_source(source);
+
+    // Assert
+    assert!(
+        result.diagnostics.is_empty(),
+        "函数级 const 泛型 curry 应类型检查通过"
+    );
+}
+
+/// 规范：函数级 const 泛型大小写等价
+///
+/// `f: (m: Int) -> (n: m) -> Int = (n) => n`
+///
+/// 预期行为：
+/// - 小写 m 作为 const 泛型参数，大小写不决定分类
+/// - 与大写 N 版行为一致，类型检查通过
+#[test]
+fn test_rfc011_fn_const_generic_lowercase_equiv() {
+    // Arrange
+    let source = r#"
+        f: (m: Int) -> (n: m) -> Int = (n) => n
+        result = f(42)(5)
+    "#;
+
+    // Act
+    let result = check_source(source);
+
+    // Assert
+    assert!(
+        result.diagnostics.is_empty(),
+        "小写 const 泛型参数应和大写一样通过类型检查"
+    );
+}
+
+/// 规范：函数级 const 泛型块体
+///
+/// `double: (N: Int) -> (n: N) -> Int = { n + n }`
+///
+/// 预期行为：
+/// - 块体中的 n 被正确识别为 N 类型的参数
+/// - 类型检查通过
+#[test]
+fn test_rfc011_fn_const_generic_block_body() {
+    // Arrange
+    let source = r#"
+        double: (N: Int) -> (n: N) -> Int = { n + n }
+        result = double(10)(7)
+    "#;
+
+    // Act
+    let result = check_source(source);
+
+    // Assert
+    assert!(
+        result.diagnostics.is_empty(),
+        "函数级 const 泛型块体应类型检查通过"
+    );
+}
