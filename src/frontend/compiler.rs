@@ -105,16 +105,37 @@ impl Compiler {
         if result.is_success() {
             Ok(result.ir.unwrap())
         } else {
-            // 取第一个错误作为主要诊断
+            // 取第一个错误
             let first_error = result.errors.first();
-            let first_diagnostic = first_error.and_then(|e| e.diagnostic()).map(Box::new);
             let error_message = result
                 .errors
                 .iter()
                 .map(|e| format!("{}", e))
                 .collect::<Vec<_>>()
                 .join("\n");
-            Err(CompileError::TypeError(error_message, first_diagnostic))
+
+            // 根据管道错误类型映射到合适的编译错误变体
+            let compilation_error = match first_error {
+                Some(err) => match err {
+                    super::pipeline::PipelineError::LexParse(_) => {
+                        let diagnostic =
+                            crate::util::diagnostic::ErrorCodeDefinition::internal_error(
+                                &error_message,
+                            )
+                            .build();
+                        CompileError::Parse(diagnostic)
+                    }
+                    super::pipeline::PipelineError::TypeCheck(diag) => {
+                        CompileError::TypeError(error_message, Some(Box::new(diag.clone())))
+                    }
+                    other => {
+                        let diagnostic = other.diagnostic().map(Box::new);
+                        CompileError::TypeError(error_message, diagnostic)
+                    }
+                },
+                None => CompileError::Internal(error_message),
+            };
+            Err(compilation_error)
         }
     }
 
@@ -168,65 +189,6 @@ impl Compiler {
         type_result: &super::core::typecheck::TypeCheckResult,
     ) -> Result<middle::ModuleIR, Vec<Diagnostic>> {
         middle::generate_ir(ast, type_result)
-    }
-
-    /// 检查是否可以进行增量编译
-    ///
-    /// # 参数
-    ///
-    /// - `file`: 要检查的文件路径
-    /// - `source`: 当前源代码内容
-    ///
-    /// # 返回
-    ///
-    /// 如果可以增量编译返回 `true`
-    #[inline]
-    pub fn can_incremental_compile(
-        &self,
-        file: &std::path::Path,
-        source: &str,
-    ) -> bool {
-        self.pipeline.can_incremental_compile(file, source)
-    }
-
-    /// 使用增量编译（如果可能）
-    ///
-    /// 先检查缓存，如果命中则直接返回缓存结果，否则执行完整编译并缓存。
-    pub fn compile_incremental(
-        &mut self,
-        source_name: &str,
-        source: &str,
-        file: std::path::PathBuf,
-    ) -> Result<middle::ModuleIR, CompileError> {
-        // 尝试从缓存获取
-        if let Some(result) = self.pipeline.get_cached_result(&file, source) {
-            if let Some(ir) = result.ir {
-                return Ok(ir);
-            }
-        }
-
-        // 缓存未命中，执行编译并缓存
-        let result = self.pipeline.run_and_cache(source_name, source, file);
-
-        if result.is_success() {
-            Ok(result.ir.unwrap())
-        } else {
-            let first_error = result.errors.first();
-            let first_diagnostic = first_error.and_then(|e| e.diagnostic()).map(Box::new);
-            let error_message = result
-                .errors
-                .iter()
-                .map(|e| format!("{}", e))
-                .collect::<Vec<_>>()
-                .join("\n");
-            Err(CompileError::TypeError(error_message, first_diagnostic))
-        }
-    }
-
-    /// 清空编译缓存（用于 --force 全量重编译）
-    #[inline]
-    pub fn clear_cache(&mut self) {
-        self.pipeline.clear_cache();
     }
 
     /// 获取当前编译状态

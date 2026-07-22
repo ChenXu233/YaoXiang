@@ -267,10 +267,6 @@ pub struct CompileConfig {
     #[serde(default)]
     pub error_recovery: ErrorRecoveryStrategy,
 
-    /// 增量编译配置
-    #[serde(default)]
-    pub incremental: IncrementalConfig,
-
     /// 死代码分析配置
     #[serde(default)]
     pub dead_code: DeadCodeConfig,
@@ -344,26 +340,6 @@ impl CompileConfig {
         enabled: bool,
     ) -> Self {
         self.dead_code.enabled = enabled;
-        self
-    }
-
-    /// 启用/禁用增量编译
-    #[inline]
-    pub fn with_incremental(
-        mut self,
-        enabled: bool,
-    ) -> Self {
-        self.incremental.enabled = enabled;
-        self
-    }
-
-    /// 设置缓存目录
-    #[inline]
-    pub fn with_cache_dir(
-        mut self,
-        dir: PathBuf,
-    ) -> Self {
-        self.incremental.cache_dir = Some(dir);
         self
     }
 
@@ -453,9 +429,6 @@ pub struct JsonConfig {
     pub error_recovery: ErrorRecoveryStrategy,
 
     #[serde(default)]
-    pub incremental: IncrementalConfig,
-
-    #[serde(default)]
     pub import_paths: Vec<PathBuf>,
 }
 
@@ -466,7 +439,6 @@ impl ConfigAdapter for JsonConfig {
             diagnostic_level: self.diagnostic_level,
             features: self.features.clone(),
             error_recovery: self.error_recovery,
-            incremental: self.incremental.clone(),
             dead_code: DeadCodeConfig::default(),
             mono: MonoConfig::default(),
             verbose: false,

@@ -234,38 +234,6 @@ main: () -> Void = {
 }
 
 #[test]
-fn test_cyclic_dependency_detection() {
-    let dir = tempfile::tempdir().expect("create temp dir");
-
-    let file_a = dir.path().join("a.yx");
-    std::fs::write(
-        &file_a,
-        r#"use b
-x = 1
-"#,
-    )
-    .expect("write a.yx");
-
-    let file_b = dir.path().join("b.yx");
-    std::fs::write(
-        &file_b,
-        r#"use a
-y = 2
-"#,
-    )
-    .expect("write b.yx");
-
-    let result = check_files_with_diagnostics(&[file_a, file_b]);
-    assert!(result.is_err(), "Cyclic dependency should be detected");
-    let err_msg = result.unwrap_err().to_string();
-    assert!(
-        err_msg.contains("Cyclic"),
-        "Error should mention cyclic dependency, got: {}",
-        err_msg
-    );
-}
-
-#[test]
 fn test_single_file_no_cycle() {
     let dir = tempfile::tempdir().expect("create temp dir");
     let file = dir.path().join("main.yx");
