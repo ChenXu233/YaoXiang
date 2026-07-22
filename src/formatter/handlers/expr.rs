@@ -439,27 +439,34 @@ fn format_signature_param_ty(
 
 /// 格式化函数完整签名：(第一组带名参数) -> 返回类型
 ///
-/// 返回类型为内层 Fn 时（curried/泛型函数），用值参数名补全内层参数标注。
+/// 按 `fn_type` 的嵌套 Fn 结构切分 `signature_params`，保留 curry 分组。
+/// `value_params` 仅在 signature_params 不足时作回退（目前不使用）。
 pub fn format_fn_signature(
     signature_params: &[Param],
     fn_type: &Type,
-    value_params: &[Param],
+    _value_params: &[Param],
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
-    let params_str = format_signature_params(signature_params, ctx, source_map);
-    if let Type::Fn { return_type, .. } = fn_type {
-        let ret = format_return_with_names(return_type, value_params, ctx, source_map);
+    if let Type::Fn {
+        params,
+        return_type,
+    } = fn_type
+    {
+        let first_count = params.len();
+        let (first, rest) = split_params_at(signature_params, first_count);
+        let params_str = format_signature_params(first, ctx, source_map);
+        let ret = format_return_with_names(return_type, rest, ctx, source_map);
         format!("{} -> {}", params_str, ret)
     } else {
-        params_str
+        format_signature_params(signature_params, ctx, source_map)
     }
 }
 
-/// 递归格式化返回类型：内层 Fn 的参数与值参数名逐层 zip 补全
+/// 递归格式化返回类型：按嵌套 Fn 结构逐层取参数名补全
 fn format_return_with_names(
     ty: &Type,
-    value_params: &[Param],
+    params: &[Param],
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
@@ -468,10 +475,12 @@ fn format_return_with_names(
         return_type,
     } = ty
     {
-        if !value_params.is_empty() && inner_tys.len() <= value_params.len() {
+        let count = inner_tys.len();
+        let (group, rest) = split_params_at(params, count);
+        if !group.is_empty() && group.len() == count {
             let named: Vec<String> = inner_tys
                 .iter()
-                .zip(value_params.iter())
+                .zip(group.iter())
                 .map(|(t, p)| {
                     format!(
                         "{}: {}",
@@ -480,12 +489,23 @@ fn format_return_with_names(
                     )
                 })
                 .collect();
-            let rest = &value_params[inner_tys.len()..];
             let ret = format_return_with_names(return_type, rest, ctx, source_map);
-            return format!("(({}) -> {})", named.join(", "), ret);
+            return format!("({}) -> {}", named.join(", "), ret);
         }
     }
     super::types::format_type(ty, ctx, source_map)
+}
+
+/// 按 count 切分参数切片，count 为 0 或超长时返回 (full, empty)
+fn split_params_at(
+    params: &[Param],
+    count: usize,
+) -> (&[Param], &[Param]) {
+    if count > 0 && params.len() >= count {
+        params.split_at(count)
+    } else {
+        (params, &[])
+    }
 }
 
 /// 格式化 match 表达式

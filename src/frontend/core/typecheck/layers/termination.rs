@@ -132,7 +132,7 @@ impl LinearMeasure {
 // 1. 识别直接递归调用
 // 2. 检查调用参数是否严格递减（`f(n-1)` where `n-1 < n`）
 
-use crate::frontend::core::parser::ast::{self, Expr, Stmt, StmtKind, BinOp};
+use crate::frontend::core::parser::ast::{self, Expr, Stmt, StmtKind, BinOp, Type};
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::proof::verdict::{BudgetReport, ProofResult, UnprovenReason};
 use super::super::proof::smt::ast::{SMTExpr, SMTCommand, SMTSort};
@@ -150,6 +150,8 @@ pub struct TerminationChecker {
     /// Z3 后端引用——策略 1 秩函数 SMT 验证
     #[cfg(not(target_arch = "wasm32"))]
     z3: Option<&'static Z3Backend>,
+    /// 当前函数是否返回 Never —— Never 函数内的循环不要求终止
+    in_never_function: bool,
 }
 
 impl Default for TerminationChecker {
@@ -165,6 +167,7 @@ impl TerminationChecker {
             results: Vec::new(),
             #[cfg(not(target_arch = "wasm32"))]
             z3: None,
+            in_never_function: false,
         }
     }
 
@@ -201,8 +204,16 @@ impl TerminationChecker {
     ) {
         match &stmt.kind {
             StmtKind::Expr(expr) => self.check_expr(expr),
-            StmtKind::Assign { value: Some(v), .. } => {
+            StmtKind::Assign {
+                value: Some(v),
+                type_annotation,
+                ..
+            } => {
                 use crate::frontend::core::parser::ast::Expr;
+                let saved_never = self.in_never_function;
+                if is_never_return_type(type_annotation.as_ref()) {
+                    self.in_never_function = true;
+                }
                 if let Expr::Lambda { body, .. } = v.as_ref() {
                     for s in &body.stmts {
                         self.check_stmt(s);
@@ -214,6 +225,7 @@ impl TerminationChecker {
                 } else {
                     self.check_expr(v);
                 }
+                self.in_never_function = saved_never;
             }
             StmtKind::If {
                 condition,
@@ -340,6 +352,10 @@ impl TerminationChecker {
         body: &ast::Block,
         span: crate::util::span::Span,
     ) {
+        // Never 返回函数：循环不终止是类型签名保证的语义，直接放行
+        if self.in_never_function {
+            return;
+        }
         // 1. 从条件中提取边界信息
         let bounds = self.extract_bounds_from_condition(condition);
 
@@ -1012,4 +1028,19 @@ struct LoopAssignment {
     var: String,
     /// delta 信息
     delta_info: DeltaInfo,
+}
+
+/// 判断函数类型签名的返回类型是否为 Never
+///
+/// `(P1, P2, ...) -> Never` → true
+fn is_never_return_type(ty: Option<&Type>) -> bool {
+    match ty {
+        Some(Type::Fn { return_type, .. }) => is_type_never(return_type.as_ref()),
+        _ => false,
+    }
+}
+
+/// 递归判断 Type 是否为 Never（支持 Type::Name { name: "Never", .. }）
+fn is_type_never(ty: &Type) -> bool {
+    matches!(ty, Type::Name { name, .. } if name == "Never" || name == "never")
 }
