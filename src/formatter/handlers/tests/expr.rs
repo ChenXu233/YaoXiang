@@ -658,21 +658,32 @@ fn test_format_error_placeholder() {
 #[test]
 fn test_format_fn_signature_curried_grouping() {
     // 构造 curried 泛型函数签名：
-    //   signature_params = [T: Type]
+    //   signature_params = [T: Type, x: Int]  (第一组 T + 第二组 x，按嵌套 Fn 切分)
     //   fn_type = (Type) -> ((Int) -> Int)
-    //   value_params = [x]
+    //   value_params = []  (不再使用 value_params 回退)
     // 预期输出：(T: Type) -> ((x: Int) -> Int)
-    // —— 第一组带名签名参数原样保留，内层 Fn 用值参数名补全并加圆括号分组。
+    // —— 按嵌套 Fn 结构切分 signature_params，第一组给外层，第二组给内层。
     let ctx = default_ctx();
-    let signature_params = vec![Param {
-        name: "T".to_string(),
-        ty: Some(Type::MetaType {
-            name_span: Span::dummy(),
-            args: vec![],
-        }),
-        is_mut: false,
-        span: Span::dummy(),
-    }];
+    let signature_params = vec![
+        Param {
+            name: "T".to_string(),
+            ty: Some(Type::MetaType {
+                name_span: Span::dummy(),
+                args: vec![],
+            }),
+            is_mut: false,
+            span: Span::dummy(),
+        },
+        Param {
+            name: "x".to_string(),
+            ty: Some(Type::Name {
+                name: "Int".to_string(),
+                span: Span::dummy(),
+            }),
+            is_mut: false,
+            span: Span::dummy(),
+        },
+    ];
     let fn_type = Type::Fn {
         params: vec![Type::MetaType {
             name_span: Span::dummy(),
@@ -689,12 +700,7 @@ fn test_format_fn_signature_curried_grouping() {
             }),
         }),
     };
-    let value_params = vec![Param {
-        name: "x".to_string(),
-        ty: None,
-        is_mut: false,
-        span: Span::dummy(),
-    }];
+    let value_params: Vec<Param> = vec![];
     let result = format_fn_signature(
         &signature_params,
         &fn_type,
@@ -703,8 +709,8 @@ fn test_format_fn_signature_curried_grouping() {
         &default_source_map(),
     );
     assert_eq!(
-        result, "(T: Type) -> ((x: Int) -> Int)",
-        "curried 签名应保留签名参数并给内层 Fn 分组：got {:?}",
+        result, "(T: Type) -> (x: Int) -> Int",
+        "curried 签名应按嵌套 Fn 切分 signature_params：got {:?}",
         result
     );
 }

@@ -672,7 +672,7 @@ fn test_format_named_params_function_roundtrip() {
     // （带签名的函数绑定 params 携带标注、单表达式体为 Return 语句）。
     assert_format_eq(
         "add: (a: Int, b: Int) -> Int = (a, b) => a + b",
-        "add: (a: Int, b: Int) -> Int = (a: Int, b: Int) => { return a + b }\n",
+        "add: (a: Int, b: Int) -> Int = (a: Int, b: Int) => a + b\n",
     );
 }
 
