@@ -165,26 +165,34 @@ impl ModuleLoader {
         for stmt in &ast.items {
             match &stmt.kind {
                 // Binding 导出 (函数)
-                StmtKind::Binding {
-                    name,
-                    type_name,
-                    method_type,
+                StmtKind::Assign {
+                    target,
                     type_annotation,
                     is_pub,
                     ..
                 } => {
+                    use crate::frontend::core::parser::ast::Expr;
+                    let (name, type_name) = match target.as_ref() {
+                        Expr::Var(n, _) => (n.clone(), None),
+                        Expr::FieldAccess { expr, field, .. } => {
+                            if let Expr::Var(tn, _) = expr.as_ref() {
+                                (field.clone(), Some(tn.clone()))
+                            } else {
+                                (field.clone(), None)
+                            }
+                        }
+                        _ => continue,
+                    };
                     if let Some(ty_name) = type_name {
-                        // 方法绑定：pub 导出为 Type.method
                         if *is_pub {
                             module.add_export(Export {
                                 name: format!("{}.{}", ty_name, name),
                                 full_path: format!("{}.{}.{}", module_path, ty_name, name),
                                 kind: ExportKind::Function,
-                                signature: format_type(method_type.as_ref().unwrap()),
+                                signature: format_type(type_annotation.as_ref().unwrap()),
                             });
                         }
                     } else {
-                        // 函数定义：pub 导出
                         if *is_pub {
                             let signature = type_annotation
                                 .as_ref()

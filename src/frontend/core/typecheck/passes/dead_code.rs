@@ -100,63 +100,70 @@ impl DeadCodeAnalyzer {
     ) {
         for stmt in &ast.items {
             match &stmt.kind {
-                StmtKind::Binding {
-                    name,
-                    type_name,
-                    is_pub,
-                    params,
-                    body,
+                StmtKind::Assign {
+                    target,
                     type_annotation,
+                    value,
+                    is_pub,
                     ..
                 } => {
+                    use crate::frontend::core::parser::ast::Expr;
+                    let (name, type_name) = match target.as_ref() {
+                        Expr::Var(n, _) => (n.clone(), None),
+                        Expr::FieldAccess { expr, field, .. } => {
+                            if let Expr::Var(tn, _) = expr.as_ref() {
+                                (field.clone(), Some(tn.clone()))
+                            } else {
+                                (field.clone(), None)
+                            }
+                        }
+                        _ => continue,
+                    };
+                    let (params, body): (Vec<_>, Vec<_>) = match value {
+                        Some(v) => {
+                            if let Expr::Lambda { params, body, .. } = v.as_ref() {
+                                (params.clone(), body.stmts.clone())
+                            } else if let Expr::Block(block) = v.as_ref() {
+                                (Vec::new(), block.stmts.clone())
+                            } else {
+                                (Vec::new(), Vec::new())
+                            }
+                        }
+                        None => (Vec::new(), Vec::new()),
+                    };
                     let is_method = type_name.is_some();
-
-                    // 判定是否为类型构造器：参数为空、body为空、有类型注解
                     let is_type_constructor =
                         type_annotation.is_some() && params.is_empty() && body.is_empty();
-
                     let (def_name, kind) = if is_method {
                         let full_name = format!("{}.{}", type_name.as_ref().unwrap(), name);
                         (full_name, SymbolKind::Method)
                     } else if is_type_constructor {
-                        // 类型构造器标记为类型，不是入口点
                         (name.clone(), SymbolKind::Type)
+                    } else if value.as_ref().is_some_and(|v| {
+                        matches!(v.as_ref(), Expr::Lambda { .. } | Expr::Block(..))
+                    }) {
+                        (name.clone(), SymbolKind::Function)
+                    } else if params.is_empty() && body.is_empty() {
+                        (name.clone(), SymbolKind::Variable)
                     } else {
                         (name.clone(), SymbolKind::Function)
                     };
-
                     let def = SymbolDef {
                         name: def_name.clone(),
                         kind: kind.clone(),
                         location: stmt.span,
                         is_exported: *is_pub,
                     };
-
-                    // main 函数是入口点（但类型构造器不是）
                     if !is_method && !is_type_constructor && name == "main" {
                         self.entry_points.insert(name.clone());
                     }
-                    // pub 函数也是入口点（但类型构造器不是，因为它不可调用）
                     if *is_pub && kind == SymbolKind::Function {
                         self.entry_points.insert(def_name.clone());
                     }
-                    // 类型本身是入口点（可被实例化）
                     if kind == SymbolKind::Type {
                         self.entry_points.insert(def_name.clone());
                     }
-
                     self.all_defs.insert(def_name, def);
-                }
-                StmtKind::Var { name, .. } => {
-                    self.all_defs.insert(
-                        name.clone(),
-                        SymbolDef {
-                            name: name.clone(),
-                            kind: SymbolKind::Variable,
-                            location: stmt.span,
-                            is_exported: false,
-                        },
-                    );
                 }
                 StmtKind::Use { path, items, .. } => {
                     self.imports.push(ImportInfo {
@@ -377,27 +384,25 @@ impl DeadCodeAnalyzer {
                 StmtKind::Expr(expr) => {
                     collect_from_expr(expr, referenced);
                 }
-                StmtKind::Var {
-                    name: _,
-                    initializer: Some(expr),
-                    ..
-                } => {
-                    collect_from_expr(expr, referenced);
-                }
-                StmtKind::Var {
-                    name: _,
-                    initializer: None,
-                    ..
-                } => {}
-                StmtKind::Binding { name, body, .. } => {
-                    referenced.insert(name.clone());
-                    collect_from_block(
-                        &Block {
-                            stmts: body.clone(),
-                            span: stmt.span,
-                        },
-                        referenced,
-                    );
+                StmtKind::Assign { value, target, .. } => {
+                    use crate::frontend::core::parser::ast::Expr;
+                    if let Some(expr) = value {
+                        collect_from_expr(expr, referenced);
+                    }
+                    if let Expr::Var(name, _) = target.as_ref() {
+                        referenced.insert(name.clone());
+                    }
+                    if let Some(v) = value {
+                        if let Expr::Lambda { body, .. } = v.as_ref() {
+                            collect_from_block(
+                                &Block {
+                                    stmts: body.stmts.clone(),
+                                    span: stmt.span,
+                                },
+                                referenced,
+                            );
+                        }
+                    }
                 }
                 StmtKind::For {
                     var,

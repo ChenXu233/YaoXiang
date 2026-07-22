@@ -45,9 +45,18 @@ impl SpawnPlacementChecker {
     ) {
         match &stmt.kind {
             StmtKind::Expr(expr) => self.check_expr(expr),
-            StmtKind::Var { initializer, .. } => {
-                if let Some(init) = initializer {
+            StmtKind::Assign { value, .. } => {
+                if let Some(init) = value {
                     self.check_expr(init);
+                    if let Expr::Lambda { body, .. } = init.as_ref() {
+                        for s in &body.stmts {
+                            self.check_stmt(s);
+                        }
+                    } else if let Expr::Block(block) = init.as_ref() {
+                        for s in &block.stmts {
+                            self.check_stmt(s);
+                        }
+                    }
                 }
             }
             StmtKind::For { iterable, body, .. } => {
@@ -71,16 +80,11 @@ impl SpawnPlacementChecker {
                     self.check_block(else_body);
                 }
             }
-            StmtKind::Binding { body, .. } => {
-                for s in body {
-                    self.check_stmt(s);
-                }
-            }
             StmtKind::DestructureAssign { rhs, .. } => {
                 self.check_expr(rhs);
             }
             StmtKind::TypeDefinition { .. } => {}
-            StmtKind::Use { .. } | StmtKind::ExternalBindingStmt { .. } | StmtKind::Error(_) => {}
+            StmtKind::Use { .. } | StmtKind::Error(_) => {}
             StmtKind::Return(expr_opt) => {
                 if let Some(expr) = expr_opt {
                     self.check_expr(expr);

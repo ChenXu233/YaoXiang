@@ -305,46 +305,56 @@ fn test_expr_error() {
 #[test]
 fn test_stmtkind_var() {
     let stmt = Stmt {
-        kind: StmtKind::Var {
-            name: "x".into(),
-            name_span: Span::dummy(),
-            type_annotation: Some(Type::Name {
-                name: "Int".into(),
-                span: Span::dummy(),
-            }),
-            initializer: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
+        kind: StmtKind::Assign {
+            target: Box::new(Expr::Var("x".into(), Span::dummy())),
+            type_annotation: None,
+            signature_params: Vec::new(),
+            value: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
+            is_pub: false,
             is_mut: false,
+            span: Span::dummy(),
         },
         span: Span::dummy(),
     };
-    if let StmtKind::Var { name, is_mut, .. } = &stmt.kind {
-        assert_eq!(name, "x");
+    if let StmtKind::Assign { target, is_mut, .. } = &stmt.kind {
+        if let Expr::Var(name, _) = target.as_ref() {
+            assert_eq!(name, "x");
+        }
         assert!(!is_mut);
     } else {
-        panic!("Expected StmtKind::Var");
+        panic!("Expected StmtKind::Assign");
     }
 }
 
 #[test]
 fn test_stmtkind_binding() {
     let stmt = Stmt {
-        kind: StmtKind::Binding {
-            name: "add".into(),
-            type_name: None,
-            method_type: None,
-            signature_params: vec![],
+        kind: StmtKind::Assign {
+            target: Box::new(Expr::Var("add".into(), Span::dummy())),
             type_annotation: None,
-
-            params: vec![],
-            body: vec![],
+            signature_params: vec![],
+            value: Some(Box::new(Expr::Lambda {
+                params: vec![],
+                body: Box::new(Block {
+                    stmts: vec![],
+                    span: Span::dummy(),
+                }),
+                span: Span::dummy(),
+            })),
             is_pub: false,
+            is_mut: false,
+            span: Span::dummy(),
         },
         span: Span::dummy(),
     };
-    if let StmtKind::Binding { name, .. } = &stmt.kind {
-        assert_eq!(name, "add");
+    if let StmtKind::Assign { target, .. } = &stmt.kind {
+        if let Expr::Var(name, _) = target.as_ref() {
+            assert_eq!(name, "add");
+        } else {
+            panic!("Expected Var target");
+        }
     } else {
-        panic!("Expected StmtKind::Binding");
+        panic!("Expected StmtKind::Assign");
     }
 }
 
@@ -843,7 +853,10 @@ fn test_is_meta_type_false() {
 
 #[test]
 fn test_module_default() {
-    let m = ast::Module::default();
+    let m = ast::Module {
+        items: vec![],
+        span: Span::dummy(),
+    };
     assert!(m.items.is_empty());
 }
 

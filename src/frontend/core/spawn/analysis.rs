@@ -273,8 +273,8 @@ fn collect_from_stmt(
                 local_var_types,
             );
         }
-        StmtKind::Var { initializer, .. } => {
-            if let Some(init) = initializer {
+        StmtKind::Assign { value, .. } => {
+            if let Some(init) = value {
                 collect_reads_writes(
                     init,
                     reads,
@@ -283,6 +283,29 @@ fn collect_from_stmt(
                     trait_table,
                     local_var_types,
                 );
+                if let Expr::Lambda { body, .. } = init.as_ref() {
+                    for s in &body.stmts {
+                        collect_from_stmt(
+                            s,
+                            reads,
+                            writes,
+                            resource_vars,
+                            trait_table,
+                            local_var_types,
+                        );
+                    }
+                } else if let Expr::Block(block) = init.as_ref() {
+                    for s in &block.stmts {
+                        collect_from_stmt(
+                            s,
+                            reads,
+                            writes,
+                            resource_vars,
+                            trait_table,
+                            local_var_types,
+                        );
+                    }
+                }
             }
         }
         StmtKind::For { iterable, body, .. } => {
@@ -355,18 +378,6 @@ fn collect_from_stmt(
                 );
             }
         }
-        StmtKind::Binding { body, .. } => {
-            for s in body {
-                collect_from_stmt(
-                    s,
-                    reads,
-                    writes,
-                    resource_vars,
-                    trait_table,
-                    local_var_types,
-                );
-            }
-        }
         StmtKind::DestructureAssign { rhs, .. } => {
             collect_reads_writes(
                 rhs,
@@ -378,7 +389,7 @@ fn collect_from_stmt(
             );
         }
         StmtKind::TypeDefinition { .. } => {}
-        StmtKind::Use { .. } | StmtKind::ExternalBindingStmt { .. } | StmtKind::Error(_) => {}
+        StmtKind::Use { .. } | StmtKind::Error(_) => {}
         StmtKind::Return(expr_opt) => {
             if let Some(expr) = expr_opt {
                 collect_reads_writes(

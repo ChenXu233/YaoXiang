@@ -782,15 +782,31 @@ pub(crate) fn execute_single_proof_fn(
         .items
         .iter()
         .find_map(|stmt| match &stmt.kind {
-            StmtKind::Binding {
-                name,
-                type_name,
+            StmtKind::Assign {
+                target,
                 type_annotation,
-                params,
-                body,
+                value,
                 ..
-            } if *name == call.func_name && type_name.is_none() => {
-                Some((params.clone(), body.clone(), type_annotation.clone()))
+            } => {
+                use crate::frontend::core::parser::ast::Expr;
+                let name = match target.as_ref() {
+                    Expr::Var(n, _) => n.clone(),
+                    _ => return None,
+                };
+                if name != call.func_name {
+                    return None;
+                }
+                if let Some(v) = value {
+                    if let Expr::Lambda { params, body, .. } = v.as_ref() {
+                        Some((params.clone(), body.stmts.clone(), type_annotation.clone()))
+                    } else if let Expr::Block(block) = v.as_ref() {
+                        Some((Vec::new(), block.stmts.clone(), type_annotation.clone()))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
             }
             _ => None,
         })

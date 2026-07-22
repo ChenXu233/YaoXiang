@@ -147,7 +147,7 @@ fn test_call_with_named_var_args() {
 
 use crate::frontend::pipeline::execute_single_proof_fn;
 use crate::frontend::core::parser::ast::{
-    BinOp as AstBinOp, Expr, Literal, Module, Param, Stmt, StmtKind, Type as AstType,
+    BinOp as AstBinOp, Block, Expr, Literal, Module, Param, Stmt, StmtKind, Type as AstType,
 };
 use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::util::span::Span;
@@ -182,19 +182,24 @@ fn make_proof_fn_module(
     };
 
     let binding = Stmt {
-        kind: StmtKind::Binding {
-            name: fn_name.into(),
-            type_name: None,
-            method_type: None,
-            signature_params: vec![],
+        kind: StmtKind::Assign {
+            target: Box::new(Expr::Var(fn_name.into(), Span::dummy())),
             type_annotation: Some(return_type),
-            params: vec![param],
-            // body_expr 通过 return 语句返回
-            body: vec![Stmt {
-                kind: StmtKind::Return(Some(Box::new(body_expr))),
+            signature_params: vec![],
+            value: Some(Box::new(Expr::Lambda {
+                params: vec![param],
+                body: Box::new(Block {
+                    stmts: vec![Stmt {
+                        kind: StmtKind::Return(Some(Box::new(body_expr))),
+                        span: Span::dummy(),
+                    }],
+                    span: Span::dummy(),
+                }),
                 span: Span::dummy(),
-            }],
+            })),
             is_pub: false,
+            is_mut: false,
+            span: Span::dummy(),
         },
         span: Span::dummy(),
     };

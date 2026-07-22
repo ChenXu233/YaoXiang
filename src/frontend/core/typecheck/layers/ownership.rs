@@ -1340,31 +1340,34 @@ impl OwnershipChecker {
         let result = match &stmt.kind {
             StmtKind::Expr(expr) => self.walk_expr(expr),
 
-            StmtKind::Var {
-                name,
-                initializer,
+            StmtKind::Assign {
+                target,
+                value,
                 is_mut,
                 ..
             } => {
+                use crate::frontend::core::parser::ast::Expr;
+                let name = match target.as_ref() {
+                    Expr::Var(n, _) => n.clone(),
+                    _ => return Vec::new(),
+                };
+                let initializer = value.as_deref();
                 let mut results = Vec::new();
-                let is_new = !self.var_state.contains_key(name);
+                let is_new = !self.var_state.contains_key(&name);
                 self.var_state.insert(name.clone(), VarState::Alive);
                 self.var_mutability.insert(name.clone(), *is_mut);
-                // 仅新声明的变量加入作用域（重赋值不重复注册，避免内层作用域错误 Drop）
                 if is_new {
                     if let Some(scope) = self.scope_vars.last_mut() {
                         scope.push(name.clone());
                     }
                 }
-
-                // 记录字段赋值: a.field = b
                 if let Some(init) = initializer {
                     if let Expr::BinOp {
                         op: crate::frontend::core::parser::ast::BinOp::Assign,
                         left,
                         right,
                         ..
-                    } = init.as_ref()
+                    } = init
                     {
                         if let Expr::FieldAccess {
                             expr: inner, field, ..
@@ -1382,41 +1385,49 @@ impl OwnershipChecker {
                         }
                     }
                 }
-
-                // 检测 ref x 声明
                 if let Some(init) = initializer {
-                    if matches!(init.as_ref(), Expr::Ref { .. }) {
+                    if matches!(init, Expr::Ref { .. }) {
                         self.ref_vars.insert(name.clone());
                     }
                 }
-
                 if let Some(init) = initializer {
-                    // 检测解析器回退 artifact：init 是 BinOp::Assign(Var(name), rhs)
-                    // 此时只 walk rhs（真正的值），避免把声明误判为重赋值
                     if let Expr::BinOp {
                         op: crate::frontend::core::parser::ast::BinOp::Assign,
                         left,
                         right,
                         ..
-                    } = init.as_ref()
+                    } = init
                     {
                         if let Expr::Var(assigned_name, _) = left.as_ref() {
-                            if assigned_name == name {
+                            if assigned_name == &name {
                                 results.extend(self.walk_expr(right));
                                 return results;
                             }
                         }
                     }
                     results.extend(self.walk_expr(init));
-                    // 只有直接传变量才标记 Move（字段访问或借用不转移所有权）
-                    // ref 类型是 Dup——不 Move，可多次复制
-                    if let Expr::Var(src_name, _) = init.as_ref() {
+                    if let Expr::Var(src_name, _) = init {
                         if !self.ref_vars.contains(src_name) {
                             self.var_state.insert(src_name.clone(), VarState::Moved);
                         }
-                        // ref 属性传播：alias = shared → alias 也是 ref 变量
                         if self.ref_vars.contains(src_name) {
                             self.ref_vars.insert(name.clone());
+                        }
+                    }
+                }
+                // 递归处理 Lambda/Block 函数体
+                if let Some(init) = initializer {
+                    if let Expr::Lambda { params, body, .. } = init {
+                        if !body.stmts.is_empty() {
+                            for param in params {
+                                self.var_state.insert(param.name.clone(), VarState::Alive);
+                                self.var_mutability.insert(param.name.clone(), param.is_mut);
+                            }
+                            results.extend(self.walk_stmts(&body.stmts));
+                        }
+                    } else if let Expr::Block(block) = init {
+                        if !block.stmts.is_empty() {
+                            results.extend(self.walk_stmts(&block.stmts));
                         }
                     }
                 }
@@ -1456,18 +1467,6 @@ impl OwnershipChecker {
                 body,
                 ..
             } => self.walk_for(var, *var_mut, iterable, &body.stmts),
-
-            StmtKind::Binding { body, params, .. } => {
-                let mut results = Vec::new();
-                if !body.is_empty() {
-                    for param in params {
-                        self.var_state.insert(param.name.clone(), VarState::Alive);
-                        self.var_mutability.insert(param.name.clone(), param.is_mut);
-                    }
-                    results.extend(self.walk_stmts(body));
-                }
-                results
-            }
 
             _ => vec![],
         };
@@ -1668,16 +1667,29 @@ impl OwnershipChecker {
         let mut merged_drops: HashMap<Span, Vec<String>> = HashMap::new();
         let mut merged_escaped: HashSet<String> = HashSet::new();
         for stmt in &module.items {
-            if let StmtKind::Binding {
-                name, params, body, ..
-            } = &stmt.kind
-            {
-                // 跳过空函数体（无 params 也无 body — const 之类）
+            if let StmtKind::Assign { target, value, .. } = &stmt.kind {
+                use crate::frontend::core::parser::ast::Expr;
+                let name = match target.as_ref() {
+                    Expr::Var(n, _) => n.clone(),
+                    _ => continue,
+                };
+                let (params, body) = match value {
+                    Some(v) => {
+                        if let Expr::Lambda { params, body, .. } = v.as_ref() {
+                            (params.clone(), body.stmts.clone())
+                        } else if let Expr::Block(block) = v.as_ref() {
+                            (Vec::new(), block.stmts.clone())
+                        } else {
+                            (Vec::new(), Vec::new())
+                        }
+                    }
+                    None => (Vec::new(), Vec::new()),
+                };
                 if params.is_empty() && body.is_empty() {
                     continue;
                 }
                 let (func_results, func_plan, escaped) =
-                    self.check_function(name, params, body, _env);
+                    self.check_function(&name, &params, &body, _env);
                 results.extend(func_results);
                 merged_drops.extend(func_plan.drops);
                 merged_escaped.extend(escaped);

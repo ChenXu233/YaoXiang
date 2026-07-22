@@ -201,16 +201,19 @@ impl TerminationChecker {
     ) {
         match &stmt.kind {
             StmtKind::Expr(expr) => self.check_expr(expr),
-            StmtKind::Binding { body, .. } => {
-                for s in body {
-                    self.check_stmt(s);
+            StmtKind::Assign { value: Some(v), .. } => {
+                use crate::frontend::core::parser::ast::Expr;
+                if let Expr::Lambda { body, .. } = v.as_ref() {
+                    for s in &body.stmts {
+                        self.check_stmt(s);
+                    }
+                } else if let Expr::Block(block) = v.as_ref() {
+                    for s in &block.stmts {
+                        self.check_stmt(s);
+                    }
+                } else {
+                    self.check_expr(v);
                 }
-            }
-            StmtKind::Var {
-                initializer: Some(init),
-                ..
-            } => {
-                self.check_expr(init);
             }
             StmtKind::If {
                 condition,
@@ -488,24 +491,31 @@ impl TerminationChecker {
                     }
                 }
             }
-            // `i = i - 1` 在语句上下文中被解析为 StmtKind::Var
-            // initializer 包含右侧表达式
-            StmtKind::Var {
-                name,
-                initializer: Some(init),
+            // `i = i - 1` → Assign { target: Var(name), value: Some(init) }
+            StmtKind::Assign {
+                target,
+                value: Some(v),
                 ..
             } => {
-                let delta_info = self.analyze_delta(init, name);
-                if !matches!(delta_info, DeltaInfo::Unknown) {
-                    assignments.push(LoopAssignment {
-                        var: name.clone(),
-                        delta_info,
-                    });
+                use crate::frontend::core::parser::ast::Expr;
+                if let Expr::Var(name, _) = target.as_ref() {
+                    let delta_info = self.analyze_delta(v, name);
+                    if !matches!(delta_info, DeltaInfo::Unknown) {
+                        assignments.push(LoopAssignment {
+                            var: name.clone(),
+                            delta_info,
+                        });
+                    }
                 }
-            }
-            StmtKind::Binding { body, .. } => {
-                for s in body {
-                    self.collect_assignments_from_stmt(s, assignments);
+                // 递归处理 Lambda/Block 函数体
+                if let Expr::Lambda { body, .. } = v.as_ref() {
+                    for s in &body.stmts {
+                        self.collect_assignments_from_stmt(s, assignments);
+                    }
+                } else if let Expr::Block(block) = v.as_ref() {
+                    for s in &block.stmts {
+                        self.collect_assignments_from_stmt(s, assignments);
+                    }
                 }
             }
             StmtKind::If {

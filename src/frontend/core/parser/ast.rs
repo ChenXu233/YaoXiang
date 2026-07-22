@@ -208,15 +208,20 @@ pub struct Stmt {
 #[derive(Debug, Clone)]
 pub enum StmtKind {
     Expr(Box<Expr>),
-    /// Variable declaration: `mut` name `:` type `=` expr
-    Var {
-        name: String,
-        /// 变量名的源码位置（用于代码染色等）
-        /// Span of the `Type` meta-keyword identifier.
-        name_span: Span,
+    /// 赋值语句：target = 值 或 target: 类型 = 值
+    /// target 是表达式（Var("x")、FieldAccess(Var("File"), "open")、...）
+    /// parser 不区分 target 能否当左值——typechecker 检查时判断
+    /// type_annotation 是可选的类型标注
+    /// value 是可选的初始化表达式（extern 绑定 / 方法绑定有，纯声明无）
+    Assign {
+        target: Box<Expr>,
         type_annotation: Option<Type>,
-        initializer: Option<Box<Expr>>,
+        /// 签名第一组参数原样（含参数名），供 typechecker classify_generic_params 使用
+        signature_params: Vec<Param>,
+        value: Option<Box<Expr>>,
+        is_pub: bool,
         is_mut: bool,
+        span: Span,
     },
     /// For loop: `for [mut] item in iterable { body }`
     For {
@@ -227,26 +232,6 @@ pub enum StmtKind {
         iterable: Box<Expr>,
         body: Box<Block>,
         label: Option<String>,
-    },
-    /// Unified binding: combines Fn, TypeDef, and MethodBind
-    /// Used for RFC-022: Unified binding syntax
-    Binding {
-        /// Binding name (function name, type name, or method name)
-        name: String,
-        /// Optional type name for method binding
-        type_name: Option<String>,
-        /// Method type (for method binding)
-        method_type: Option<Type>,
-        /// 签名第一组参数原样（RFC-010 `name: (params) -> Ret = body` 的 params 部分）
-        /// 泛型参数由 extract_generic_params 从此提取（Task 3 起不再单独存储）
-        signature_params: Vec<Param>,
-        type_annotation: Option<Type>,
-        /// Parameters (for functions and methods)
-        params: Vec<Param>,
-        /// Body statements (last expression statement is the return value)
-        body: Vec<Stmt>,
-        /// Whether this binding is public
-        is_pub: bool,
     },
     /// 类型定义：`Point: Type = { x: Float, y: Float }`
     /// 或泛型：`Option: (T: Type) -> Type = { some(T) | none }`
@@ -277,12 +262,6 @@ pub enum StmtKind {
         elif_branches: Vec<(Box<Expr>, Box<Block>)>,
         else_branch: Option<Box<Block>>,
         span: Span,
-    },
-    /// RFC-004: 外部绑定语句: `Type.method = function[positions]`
-    ExternalBindingStmt {
-        type_name: String,
-        method_name: String,
-        binding: BindingKind,
     },
     /// 元组解构赋值: `a, b = (1, 2)` 或 `(a, b) = (1, 2)`
     DestructureAssign {

@@ -95,8 +95,22 @@ pub fn format_module(
         prev_end_line = match &stmt.kind {
             // Binding 的 span.end 只覆盖声明头，不包含 body 块
             // 实际输出到 `}` 所在行，需要从 body 最后一个语句计算
-            StmtKind::Binding { body, .. } if !body.is_empty() => {
-                body.last().unwrap().span.end.line + 1
+            StmtKind::Assign { value: Some(v), .. } => {
+                if let Expr::Lambda { body, .. } = v.as_ref() {
+                    if !body.stmts.is_empty() {
+                        body.stmts.last().unwrap().span.end.line + 1
+                    } else {
+                        stmt.span.end.line
+                    }
+                } else if let Expr::Block(block) = v.as_ref() {
+                    if !block.stmts.is_empty() {
+                        block.stmts.last().unwrap().span.end.line + 1
+                    } else {
+                        stmt.span.end.line
+                    }
+                } else {
+                    stmt.span.end.line
+                }
             }
             _ => stmt.span.end.line,
         };

@@ -440,23 +440,42 @@ impl TypeChecker {
 
         for stmt in &module.items {
             match &stmt.kind {
-                StmtKind::Binding {
-                    name,
-                    type_name,
-                    method_type,
-                    signature_params,
+                StmtKind::Assign {
+                    target,
                     type_annotation,
-                    params,
-                    body,
+                    signature_params,
+                    value,
                     is_pub,
                     ..
                 } => {
+                    use crate::frontend::core::parser::ast::Expr;
+                    let (name, type_name) = match target.as_ref() {
+                        Expr::Var(n, _) => (n.clone(), None),
+                        Expr::FieldAccess { expr, field, .. } => {
+                            if let Expr::Var(tn, _) = expr.as_ref() {
+                                (field.clone(), Some(tn.clone()))
+                            } else {
+                                (field.clone(), None)
+                            }
+                        }
+                        _ => continue,
+                    };
+                    // 从 value 提取 Lambda params/body
+                    let (params, body): (Vec<_>, Vec<_>) = match value {
+                        Some(v) => {
+                            if let Expr::Lambda { params, body, .. } = v.as_ref() {
+                                (params.clone(), body.stmts.clone())
+                            } else if let Expr::Block(block) = v.as_ref() {
+                                (Vec::new(), block.stmts.clone())
+                            } else {
+                                (Vec::new(), Vec::new())
+                            }
+                        }
+                        None => (Vec::new(), Vec::new()),
+                    };
                     let generic_params = crate::frontend::core::parser::ast::extract_generic_param_names(signature_params);
-                    // 根据字段值区分类型：方法绑定 / 函数
                     let is_method = type_name.is_some();
-
                     if is_method {
-                        // 方法绑定 → Method (定义)
                         self.semantic_db.add_token(
                             &fp,
                             SemanticToken {
@@ -466,9 +485,7 @@ impl TypeChecker {
                                 span: stmt.span,
                             },
                         );
-
-                        // 参数 → Parameter (定义)
-                        for param in params {
+                        for param in &params {
                             self.semantic_db.add_token(
                                 &fp,
                                 SemanticToken {
@@ -479,12 +496,10 @@ impl TypeChecker {
                                 },
                             );
                         }
-
-                        if let Some(mt) = method_type {
+                        if let Some(mt) = type_annotation {
                             self.collect_type_tokens(&fp, mt);
                         }
-                    } else {
-                        // 函数定义 → Function (定义)
+                    } else if !params.is_empty() || !body.is_empty() {
                         let mut modifiers = vec![SemanticTokenModifier::Declaration];
                         if *is_pub {
                             modifiers.push(SemanticTokenModifier::Public);
@@ -502,9 +517,7 @@ impl TypeChecker {
                             },
                         );
                         global_symbols.push(name.clone());
-
-                        // 参数 → Parameter (定义)
-                        for param in params {
+                        for param in &params {
                             self.semantic_db.add_token(
                                 &fp,
                                 SemanticToken {
@@ -515,8 +528,6 @@ impl TypeChecker {
                                 },
                             );
                         }
-
-                        // 泛型参数 → TypeParameter (定义)
                         for gp in &generic_params {
                             let gp_name = gp.name.clone();
                             self.semantic_db.add_token(
@@ -529,19 +540,14 @@ impl TypeChecker {
                                 },
                             );
                         }
-
-                        // 泛型约束中的类型引用
                         for gp in &generic_params {
                             for c in &gp.constraints {
                                 self.collect_type_tokens(&fp, c);
                             }
                         }
-
-                        // 函数签名中的类型引用
                         if let Some(ty) = type_annotation {
                             self.collect_type_tokens(&fp, ty);
                         }
-
                         let scope_idx = self
                             .semantic_db
                             .get_scopes(&fp)
@@ -557,10 +563,8 @@ impl TypeChecker {
                                 kind: ScopeKind::Function,
                             },
                         );
-
-                        // 递归收集函数体中的表达式
                         let mut fn_roots = imported_module_roots.clone();
-                        for body_stmt in body {
+                        for body_stmt in &body {
                             self.collect_stmt_tokens(
                                 &fp,
                                 body_stmt,
@@ -570,48 +574,43 @@ impl TypeChecker {
                                 &mut fn_roots,
                             );
                         }
-                    }
-                }
-                StmtKind::Var {
-                    name,
-                    name_span,
-                    type_annotation,
-                    initializer,
-                    ..
-                } => {
-                    // 变量名 → Variable (定义)
-                    let is_declaration = declared.entry(0).or_default().insert(name.clone());
-                    let modifiers = if is_declaration {
-                        vec![SemanticTokenModifier::Declaration]
                     } else {
-                        vec![SemanticTokenModifier::Mutable]
-                    };
-                    self.semantic_db.add_token(
-                        &fp,
-                        SemanticToken {
-                            name: name.clone(),
-                            token_type: SemanticTokenType::Variable,
-                            modifiers,
-                            span: *name_span,
-                        },
-                    );
-                    if is_declaration {
-                        global_symbols.push(name.clone());
-                    }
-
-                    if let Some(ty) = type_annotation {
-                        self.collect_type_tokens(&fp, ty);
-                    }
-
-                    if let Some(init) = initializer {
-                        self.collect_expr_tokens(
+                        // 变量名 → Variable (定义)
+                        let name_span = match target.as_ref() {
+                            Expr::Var(_, s) => *s,
+                            _ => stmt.span,
+                        };
+                        let is_declaration = declared.entry(0).or_default().insert(name.clone());
+                        let modifiers = if is_declaration {
+                            vec![SemanticTokenModifier::Declaration]
+                        } else {
+                            vec![SemanticTokenModifier::Mutable]
+                        };
+                        self.semantic_db.add_token(
                             &fp,
-                            init,
-                            0,
-                            &mut declared,
-                            &constructor_names,
-                            &mut imported_module_roots,
+                            SemanticToken {
+                                name: name.clone(),
+                                token_type: SemanticTokenType::Variable,
+                                modifiers,
+                                span: name_span,
+                            },
                         );
+                        if is_declaration {
+                            global_symbols.push(name.clone());
+                        }
+                        if let Some(ty) = type_annotation {
+                            self.collect_type_tokens(&fp, ty);
+                        }
+                        if let Some(init) = value {
+                            self.collect_expr_tokens(
+                                &fp,
+                                init,
+                                0,
+                                &mut declared,
+                                &constructor_names,
+                                &mut imported_module_roots,
+                            );
+                        }
                     }
                 }
                 StmtKind::Use {
@@ -700,7 +699,7 @@ impl TypeChecker {
                         &mut imported_module_roots,
                     );
                 }
-                StmtKind::If { .. } | StmtKind::Error(_) | StmtKind::ExternalBindingStmt { .. } => {
+                StmtKind::If { .. } | StmtKind::Error(_) => {
                 }
                 StmtKind::TypeDefinition {
                     name,
@@ -782,39 +781,98 @@ impl TypeChecker {
         use semantic_db::SemanticTokenModifier;
 
         match &stmt.kind {
-            StmtKind::Var {
-                name,
-                name_span,
+            StmtKind::Assign {
+                target,
                 type_annotation,
-                initializer,
+                value,
                 ..
             } => {
-                let is_declaration = declared.entry(scope_idx).or_default().insert(name.clone());
-                let modifiers = if is_declaration {
-                    vec![SemanticTokenModifier::Declaration]
+                use crate::frontend::core::parser::ast::Expr;
+                let name = match target.as_ref() {
+                    Expr::Var(n, _) => n.clone(),
+                    _ => return,
+                };
+                let name_span = match target.as_ref() {
+                    Expr::Var(_, s) => *s,
+                    _ => stmt.span,
+                };
+                // 非 Lambda value → 变量
+                let is_lambda = value.as_ref().is_some_and(|v| matches!(v.as_ref(), Expr::Lambda { .. } | Expr::Block(..)));
+                if !is_lambda {
+                    let is_declaration = declared.entry(scope_idx).or_default().insert(name.clone());
+                    let modifiers = if is_declaration {
+                        vec![SemanticTokenModifier::Declaration]
+                    } else {
+                        vec![SemanticTokenModifier::Mutable]
+                    };
+                    self.semantic_db.add_token(
+                        file_path,
+                        semantic_db::SemanticToken {
+                            name: name.clone(),
+                            token_type: semantic_db::SemanticTokenType::LocalVariable,
+                            modifiers,
+                            span: name_span,
+                        },
+                    );
+                    if let Some(ty) = type_annotation {
+                        self.collect_type_tokens(file_path, ty);
+                    }
+                    if let Some(init) = value {
+                        self.collect_expr_tokens(
+                            file_path,
+                            init,
+                            scope_idx,
+                            declared,
+                            constructor_names,
+                            imported_module_roots,
+                        );
+                    }
+                    return;
+                }
+                // Lambda/Block value → 嵌套函数
+                let (params, body_stmts) = if let Some(v) = value {
+                    if let Expr::Lambda { params, body, .. } = v.as_ref() {
+                        (params.clone(), body.stmts.clone())
+                    } else if let Expr::Block(block) = v.as_ref() {
+                        (Vec::new(), block.stmts.clone())
+                    } else {
+                        (Vec::new(), Vec::new())
+                    }
                 } else {
-                    vec![SemanticTokenModifier::Mutable]
+                    (Vec::new(), Vec::new())
                 };
                 self.semantic_db.add_token(
                     file_path,
                     semantic_db::SemanticToken {
                         name: name.clone(),
-                        token_type: semantic_db::SemanticTokenType::LocalVariable,
-                        modifiers,
-                        span: *name_span,
+                        token_type: semantic_db::SemanticTokenType::Function,
+                        modifiers: vec![semantic_db::SemanticTokenModifier::Declaration],
+                        span: stmt.span,
                     },
                 );
+                for param in &params {
+                    self.semantic_db.add_token(
+                        file_path,
+                        semantic_db::SemanticToken {
+                            name: param.name.clone(),
+                            token_type: semantic_db::SemanticTokenType::Parameter,
+                            modifiers: vec![semantic_db::SemanticTokenModifier::Declaration],
+                            span: param.span,
+                        },
+                    );
+                }
                 if let Some(ty) = type_annotation {
                     self.collect_type_tokens(file_path, ty);
                 }
-                if let Some(init) = initializer {
-                    self.collect_expr_tokens(
+                let mut fn_roots = imported_module_roots.clone();
+                for body_stmt in &body_stmts {
+                    self.collect_stmt_tokens(
                         file_path,
-                        init,
+                        body_stmt,
                         scope_idx,
                         declared,
                         constructor_names,
-                        imported_module_roots,
+                        &mut fn_roots,
                     );
                 }
             }
@@ -937,56 +995,6 @@ impl TypeChecker {
                             &mut else_roots,
                         );
                     }
-                }
-            }
-            StmtKind::Binding {
-                name,
-                params,
-                signature_params,
-                type_annotation,
-                body,
-                ..
-            } => {
-                let generic_params = crate::frontend::core::parser::ast::extract_generic_param_names(signature_params);
-                // 嵌套函数
-                self.semantic_db.add_token(
-                    file_path,
-                    semantic_db::SemanticToken {
-                        name: name.clone(),
-                        token_type: semantic_db::SemanticTokenType::Function,
-                        modifiers: vec![semantic_db::SemanticTokenModifier::Declaration],
-                        span: stmt.span,
-                    },
-                );
-                for param in params {
-                    self.semantic_db.add_token(
-                        file_path,
-                        semantic_db::SemanticToken {
-                            name: param.name.clone(),
-                            token_type: semantic_db::SemanticTokenType::Parameter,
-                            modifiers: vec![semantic_db::SemanticTokenModifier::Declaration],
-                            span: param.span,
-                        },
-                    );
-                }
-                for gp in &generic_params {
-                    for c in &gp.constraints {
-                        self.collect_type_tokens(file_path, c);
-                    }
-                }
-                if let Some(ty) = type_annotation {
-                    self.collect_type_tokens(file_path, ty);
-                }
-                let mut fn_roots = imported_module_roots.clone();
-                for body_stmt in body {
-                    self.collect_stmt_tokens(
-                        file_path,
-                        body_stmt,
-                        scope_idx,
-                        declared,
-                        constructor_names,
-                        &mut fn_roots,
-                    );
                 }
             }
             StmtKind::DestructureAssign { names, rhs, .. } => {

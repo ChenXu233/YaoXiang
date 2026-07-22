@@ -58,15 +58,22 @@ pub fn parse_method_bind(
     state.skip(&TokenKind::Semicolon);
 
     Some(Stmt {
-        kind: StmtKind::Binding {
-            name: method_name,
-            type_name: Some(type_name),
-            method_type: Some(method_type),
+        kind: StmtKind::Assign {
+            target: Box::new(Expr::FieldAccess {
+                expr: Box::new(Expr::Var(type_name, span)),
+                field: method_name,
+                span,
+            }),
+            type_annotation: Some(method_type),
             signature_params: Vec::new(),
-            type_annotation: None,
-            params,
-            body,
+            value: Some(Box::new(Expr::Lambda {
+                params,
+                body: Box::new(Block { stmts: body, span }),
+                span,
+            })),
             is_pub: false,
+            is_mut: false,
+            span,
         },
         span,
     })

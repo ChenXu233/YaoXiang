@@ -120,15 +120,17 @@ fn test_is_direct_child_with_var_decl_is_false() {
     // RFC-024 §2.1: 变量声明不是直接子表达式
     // Arrange
     let stmt = Stmt {
-        kind: StmtKind::Var {
-            name: "x".to_string(),
-            name_span: dummy_span(),
+        kind: StmtKind::Assign {
+            target: Box::new(Expr::Var("x".to_string(), dummy_span())),
             type_annotation: None,
-            initializer: Some(Box::new(Expr::Lit(
+            signature_params: vec![],
+            value: Some(Box::new(Expr::Lit(
                 crate::frontend::core::lexer::tokens::Literal::Int(42),
                 dummy_span(),
             ))),
+            is_pub: false,
             is_mut: false,
+            span: dummy_span(),
         },
         span: dummy_span(),
     };
@@ -638,15 +640,17 @@ fn test_spawn_body_mixed_children_and_non_children() {
         stmts: vec![
             // 非直接子表达式：var 声明
             Stmt {
-                kind: StmtKind::Var {
-                    name: "local_var".to_string(),
-                    name_span: dummy_span(),
+                kind: StmtKind::Assign {
+                    target: Box::new(Expr::Var("local_var".to_string(), dummy_span())),
                     type_annotation: None,
-                    initializer: Some(Box::new(Expr::Lit(
+                    signature_params: vec![],
+                    value: Some(Box::new(Expr::Lit(
                         crate::frontend::core::lexer::tokens::Literal::Int(0),
                         dummy_span(),
                     ))),
+                    is_pub: false,
                     is_mut: false,
+                    span: dummy_span(),
                 },
                 span: dummy_span(),
             },
@@ -678,12 +682,14 @@ fn test_spawn_body_no_direct_children() {
     // Arrange
     let body = Block {
         stmts: vec![Stmt {
-            kind: StmtKind::Var {
-                name: "x".to_string(),
-                name_span: dummy_span(),
+            kind: StmtKind::Assign {
+                target: Box::new(Expr::Var("x".to_string(), dummy_span())),
                 type_annotation: None,
-                initializer: None,
+                signature_params: vec![],
+                value: None,
+                is_pub: false,
                 is_mut: false,
+                span: dummy_span(),
             },
             span: dummy_span(),
         }],
