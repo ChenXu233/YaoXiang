@@ -522,7 +522,7 @@ impl MonoType {
             "Float32" | "float32" | "f32" => Some(MonoType::Float(32)),
             "Bool" | "bool" => Some(MonoType::Bool),
             "Char" | "char" => Some(MonoType::Char),
-            "String" | "string" => Some(MonoType::String),
+            "String" | "string" | "str" => Some(MonoType::String),
             "Bytes" | "bytes" => Some(MonoType::Bytes),
             "Void" | "void" | "()" => Some(MonoType::Void),
             "Never" | "never" => Some(MonoType::Never),
