@@ -1281,10 +1281,8 @@ impl StatementChecker {
                 // Check type assignment compatibility:
                 // - Float cannot be assigned to Int (no implicit narrowing)
                 //   Resolve TypeRef("Int") to Int(64) for comparison (§3.2: Int defaults to 8 bytes)
+                // RFC-027: Refined 类型用 base 做 unify
                 let resolved_ann = match &ann_ty {
-                    MonoType::TypeRef(n) if n == "Int" => MonoType::Int(64),
-                    MonoType::TypeRef(n) if n == "Float" => MonoType::Float(64),
-                    // RFC-027: Refined 类型用 base 做 unify
                     MonoType::Refined { base, .. } => *base.clone(),
                     _ => ann_ty.clone(),
                 };
@@ -1305,20 +1303,8 @@ impl StatementChecker {
                 // The annotation type is NOT resolved when it's a struct/interface TypeRef,
                 // so the solver can detect the Struct vs TypeRef pattern.
                 let resolved_init = self.resolve_type_ref_type(&init_ty);
-                // For the annotation type, resolve built-in primitives (Float → Float(64))
-                // to allow proper unify, but leave user-defined TypeRefs as-is
-                // for structural subtyping detection.
+                // RFC-027: Refined 类型用 base 做 unify
                 let resolved_ann = match &ann_ty {
-                    MonoType::TypeRef(name) => {
-                        if self.type_defs.contains_key(name) {
-                            // User-defined type (struct/interface) — keep as TypeRef
-                            ann_ty.clone()
-                        } else {
-                            // Built-in or unknown — try to resolve
-                            self.resolve_type_ref_type(&ann_ty)
-                        }
-                    }
-                    // RFC-027: Refined 类型用 base 做 unify
                     MonoType::Refined { base, .. } => *base.clone(),
                     _ => ann_ty.clone(),
                 };
