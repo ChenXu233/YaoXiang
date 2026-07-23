@@ -356,32 +356,6 @@ export default defineConfig({
                 { text: "测试规范", link: "/dev/test-specification" },
               ],
             },
-            {
-              text: "计划",
-              items: [
-                { text: "计划目录", link: "/dev/plan" },
-                {
-                  text: "处理中",
-                  collapsed: true,
-                  items: generateSidebar({
-                    scanStartPath: "/dev/plan/ongoing",
-                    useTitleFromFrontmatter: true,
-                    collapsed: true,
-                    hyphenToSpace: true,
-                  }),
-                },
-                {
-                  text: "任务",
-                  collapsed: true,
-                  items: generateSidebar({
-                    scanStartPath: "/dev/plan/task",
-                    useTitleFromFrontmatter: true,
-                    collapsed: true,
-                    hyphenToSpace: true,
-                  }),
-                },
-              ],
-            },
           ],
 
           "/guide/": [

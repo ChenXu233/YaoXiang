@@ -21,10 +21,10 @@
       "link": "/ja/reference/"
     },
     {
-      "text": "更多",
+      "text": "もっと",
       "items": [
         {
-          "text": "設計",
+          "text": "デザイン",
           "link": "/ja/design/"
         },
         {
@@ -54,46 +54,37 @@
     }
   ],
   "sidebar": {
-    "/ja/tutorial/": [
+    "/tutorial/": [
       {
         "text": "チュートリアル",
         "items": [
           {
-            "text": "チュートリアルTOP",
+            "text": "チュートリアル TOP",
             "link": "/ja/tutorial/"
           },
           {
             "text": "クイックスタート",
             "link": "/ja/tutorial/getting-started"
-          },
-          {
-            "text": "爻象マニュアル",
-            "link": "/ja/tutorial/YaoXiang-book"
           }
         ]
       },
       {
-        "text": "零基礎入門",
+        "text": "ゼロからの入門",
         "collapsed": true,
         "items": []
       },
       {
-        "text": "上級",
-        "collapsed": true,
-        "items": []
-      },
-      {
-        "text": "サンプルプロジェクト",
+        "text": "上級者向け",
         "collapsed": true,
         "items": []
       }
     ],
-    "/ja/design/": [
+    "/design/": [
       {
-        "text": "設計ドキュメント",
+        "text": "デザインドキュメント",
         "items": [
           {
-            "text": "設計ディレクトリ",
+            "text": "デザイン索引",
             "link": "/ja/design"
           },
           {
@@ -101,7 +92,7 @@
             "link": "/ja/design/manifesto"
           },
           {
-            "text": "爻象マニフェスト WTF版",
+            "text": "爻象マニフェスト WTF 版",
             "link": "/ja/design/manifesto-wtf"
           },
           {
@@ -111,18 +102,18 @@
         ]
       },
       {
-        "text": "RFCドキュメント",
+        "text": "RFC ドキュメント",
         "items": [
           {
-            "text": "RFCディレクトリ",
+            "text": "RFC 索引",
             "link": "/ja/design/rfc"
           },
           {
-            "text": "RFCテンプレート",
+            "text": "RFC テンプレート",
             "link": "/ja/design/rfc/RFC_TEMPLATE"
           },
           {
-            "text": "RFC完全テンプレート（例）",
+            "text": "RFC 完全テンプレート（例）",
             "link": "/ja/design/rfc/EXAMPLE_full_feature_proposal"
           },
           {
@@ -136,7 +127,7 @@
             "items": []
           },
           {
-            "text": "草案",
+            "text": "下書き",
             "collapsed": true,
             "items": []
           },
@@ -153,11 +144,11 @@
         ]
       },
       {
-        "text": "ツール設計",
+        "text": "ツールデザイン",
         "collapsed": true,
         "items": [
           {
-            "text": "checkコマンド",
+            "text": "check コマンド",
             "link": "/ja/design/check/"
           },
           {
@@ -165,11 +156,11 @@
             "link": "/ja/design/check/diagnostic-system"
           },
           {
-            "text": "クロスファイル分析",
+            "text": "跨ファイル分析",
             "link": "/ja/design/check/cross-file-analysis"
           },
           {
-            "text": "インクリメンタルチェック",
+            "text": "増分チェック",
             "link": "/ja/design/check/incremental-checking"
           }
         ]
@@ -179,7 +170,7 @@
         "collapsed": true,
         "items": [
           {
-            "text": "仕様総覧",
+            "text": "仕様概要",
             "link": "/ja/design/formatter/"
           },
           {
@@ -187,7 +178,7 @@
             "collapsed": true,
             "items": [
               {
-                "text": "ルール総覧",
+                "text": "ルール概要",
                 "link": "/ja/design/formatter/formatting-rules/"
               },
               {
@@ -229,22 +220,22 @@
             "link": "/ja/design/formatter/error-handling"
           },
           {
-            "text": "CLI仕様",
+            "text": "CLI 仕様",
             "link": "/ja/design/formatter/cli"
           }
         ]
       }
     ],
-    "/ja/reference/": [
+    "/reference/": [
       {
         "text": "言語仕様",
         "items": [
           {
-            "text": "リファレンスディレクトリ",
+            "text": "リファレンス索引",
             "link": "/ja/reference"
           },
           {
-            "text": "言語仕様総覧",
+            "text": "言語仕様概要",
             "link": "/ja/reference/language-spec/"
           },
           {
@@ -277,7 +268,7 @@
         "text": "標準ライブラリ",
         "items": [
           {
-            "text": "標準ライブラリ総覧",
+            "text": "標準ライブラリ概要",
             "link": "/ja/reference/stdlib/"
           }
         ]
@@ -286,7 +277,7 @@
         "text": "エラーと警告",
         "items": [
           {
-            "text": "エラーコード総覧",
+            "text": "エラーコード索引",
             "link": "/ja/reference/error-code/"
           },
           {
@@ -309,18 +300,18 @@
         "text": "ツールコマンド",
         "items": [
           {
-            "text": "checkコマンド",
+            "text": "check コマンド",
             "link": "/ja/reference/check-command"
           }
         ]
       }
     ],
-    "/ja/dev/": [
+    "/dev/": [
       {
         "text": "開発ドキュメント",
         "items": [
           {
-            "text": "開発ディレクトリ",
+            "text": "開発索引",
             "link": "/ja/dev/"
           },
           {
@@ -336,7 +327,7 @@
             "link": "/ja/dev/branch-maintenance-guide"
           },
           {
-            "text": "リリースフロー",
+            "text": "リリースプロセス",
             "link": "/ja/dev/release"
           },
           {
@@ -344,51 +335,18 @@
             "link": "/ja/dev/test-specification"
           }
         ]
-      },
-      {
-        "text": "計画",
-        "items": [
-          {
-            "text": "計画ディレクトリ",
-            "link": "/ja/dev/plan"
-          },
-          {
-            "text": "進行中",
-            "collapsed": true,
-            "items": []
-          },
-          {
-            "text": "タスク",
-            "collapsed": true,
-            "items": []
-          }
-        ]
-      },
-      {
-        "text": "ロードマップ",
-        "items": [
-          {
-            "text": "ロードマップTOP",
-            "link": "/ja/dev/plan/roadmap"
-          },
-          {
-            "text": "モジュール状態",
-            "collapsed": true,
-            "items": []
-          }
-        ]
       }
     ],
-    "/ja/guide/": [
+    "/guide/": [
       {
         "text": "ガイド",
         "items": [
           {
-            "text": "ガイドディレクトリ",
+            "text": "ガイド索引",
             "link": "/ja/guide/"
           },
           {
-            "text": "言語概要",
+            "text": "構文早見表",
             "link": "/ja/guide/language-overview"
           },
           {
@@ -396,17 +354,17 @@
             "link": "/ja/guide/packaging"
           },
           {
-            "text": "CI統合",
+            "text": "CI 統合",
             "link": "/ja/guide/ci-integration"
           },
           {
-            "text": "REPL対話環境",
+            "text": "REPL 対話環境",
             "link": "/ja/guide/repl"
           }
         ]
       }
     ],
-    "/ja/": [
+    "/": [
       {
         "text": "日本語ドキュメント",
         "items": [

@@ -81,15 +81,15 @@ importers:
         specifier: ^3.5.28
         version: 3.5.28
     devDependencies:
+      '@chenxu233/vitepress-ai-i18n':
+        specifier: ^1.0.2
+        version: 1.0.2
       cd:
         specifier: ^0.3.3
         version: 0.3.3
       docs:
         specifier: 0.3.1
         version: 0.3.1
-      vitepress-ai-i18n:
-        specifier: ^1.0.1
-        version: 1.0.1
 
 packages:
 
@@ -195,6 +195,10 @@ packages:
 
   '@braintree/sanitize-url@7.1.2':
     resolution: {integrity: sha512-jigsZK+sMF/cuiB7sERuo9V7N9jx+dhmHHnQyDSVdpZwVutaBu7WvNYqMDLSgFgfB30n452TP3vjDAvFC973mA==}
+
+  '@chenxu233/vitepress-ai-i18n@1.0.2':
+    resolution: {integrity: sha512-f5cf2CRgmA/QnXHyYneZE/mAkMv5s+7rtEwhfFXN4jhddtIPqb+xs8GU9670XKLPpNqPfH/+3nvUZ7lGUOcH5A==}
+    hasBin: true
 
   '@chevrotain/cst-dts-gen@11.1.1':
     resolution: {integrity: sha512-fRHyv6/f542qQqiRGalrfJl/evD39mAvbJLCekPazhiextEatq1Jx1K/i9gSd5NNO0ds03ek0Cbo/4uVKmOBcw==}
@@ -2013,10 +2017,6 @@ packages:
       terser:
         optional: true
 
-  vitepress-ai-i18n@1.0.1:
-    resolution: {integrity: sha512-vSdVzQambyKT6BbSmOdirfxILD8HFaGf3VuN5KtsD1VIqo0/ahJzyWqDr1XFV5gakjtyVLv/liEc+Ci3zqDS5A==}
-    hasBin: true
-
   vitepress-mermaid-renderer@1.1.11:
     resolution: {integrity: sha512-Yrew74GoZarfvjCeHhrgLozFoaoRhN2/3w7KpC+KhweZW0ug0P0nxoAAiGaAEP35j0h1QOI63uWZqOLtvuFXQQ==}
     engines: {node: '>=16.0.0'}
@@ -2238,6 +2238,20 @@ snapshots:
       '@babel/helper-validator-identifier': 7.28.5
 
   '@braintree/sanitize-url@7.1.2': {}
+
+  '@chenxu233/vitepress-ai-i18n@1.0.2':
+    dependencies:
+      cac: 6.7.14
+      chalk: 5.6.2
+      crypto-js: 4.2.0
+      dotenv: 17.4.2
+      fast-glob: 3.3.3
+      fs-extra: 11.3.5
+      openai: 6.39.0
+      ora: 9.4.0
+    transitivePeerDependencies:
+      - ws
+      - zod
 
   '@chevrotain/cst-dts-gen@11.1.1':
     dependencies:
@@ -4032,20 +4046,6 @@ snapshots:
       fsevents: 2.3.3
       less: 4.6.6
       lightningcss: 1.31.1
-
-  vitepress-ai-i18n@1.0.1:
-    dependencies:
-      cac: 6.7.14
-      chalk: 5.6.2
-      crypto-js: 4.2.0
-      dotenv: 17.4.2
-      fast-glob: 3.3.3
-      fs-extra: 11.3.5
-      openai: 6.39.0
-      ora: 9.4.0
-    transitivePeerDependencies:
-      - ws
-      - zod
 
   vitepress-mermaid-renderer@1.1.11(mermaid@11.12.3)(vue@3.5.28):
     dependencies:
