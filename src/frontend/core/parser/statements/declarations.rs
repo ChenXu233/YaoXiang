@@ -230,15 +230,13 @@ fn parse_assign_after_target(
         (None, None)
     };
 
-    // Check for invalid syntax after type annotation
+    // 纯声明: `name: Type` 后无 `=`，直接跟换行/分号/新语句
+    // 仅拦截明确无效的后续 token（LParen/FatArrow/Comma）
+    // Identifier 不拦截——它可能是下一个顶层语句（#168: 纯函数声明）
     if type_annotation.is_some() {
         let is_invalid = state.at(&TokenKind::LParen)
             || state.at(&TokenKind::FatArrow)
-            || state.at(&TokenKind::Comma)
-            || matches!(
-                state.current().map(|t| &t.kind),
-                Some(TokenKind::Identifier(_))
-            );
+            || state.at(&TokenKind::Comma);
         if is_invalid && !state.at(&TokenKind::Eq) {
             let span = state.current().map(|t| t.span).unwrap_or_else(Span::dummy);
             state.error(

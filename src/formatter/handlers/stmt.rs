@@ -142,18 +142,17 @@ fn format_assign(
     };
     let target_str = format_expr(target, ctx, source_map);
 
-    let type_str = if let Some(ty) = type_annotation {
-        if matches!(ty, Type::Fn { .. }) {
-            format!(
-                ": {}",
-                super::expr::format_fn_signature(signature_params, ty, &[], ctx, source_map)
-            )
-        } else {
-            format!(": {}", format_type(ty, ctx, source_map))
-        }
-    } else {
-        String::new()
+    let lambda_params: &[Param] = match value.as_ref().map(|v| v.as_ref()) {
+        Some(Expr::Lambda { params, .. }) => params,
+        _ => &[],
     };
+    let type_str = format_type_annotation(
+        type_annotation,
+        signature_params,
+        lambda_params,
+        ctx,
+        source_map,
+    );
 
     if let Some(val) = value {
         let val_str = match val.as_ref() {
@@ -183,22 +182,49 @@ fn format_assign(
     }
 }
 
-/// 格式化 Lambda 函数体：无类型标注时单条 Return 语句去掉 return 关键字
+/// 格式化 Lambda 函数体：单条 Return 语句去掉 return 关键字
+///
+/// 有类型标注时输出 `=> expr`（与无标注一致，确保 re-parse 后类型不变）；
+/// 无类型标注时输出 `{ expr }`（保留块语义，避免歧义）。
 fn format_lambda_body(
     body: &Block,
     has_type_annotation: bool,
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
-    // 无类型标注时，单条 Return 语句去掉 return，保留 { }
-    if !has_type_annotation && body.stmts.len() == 1 {
+    if body.stmts.len() == 1 {
         if let Stmt {
             kind: StmtKind::Return(Some(expr)),
             ..
         } = &body.stmts[0]
         {
-            return format!("{{ {} }}", format_expr(expr, ctx, source_map));
+            if has_type_annotation {
+                return format_expr(expr, ctx, source_map);
+            } else {
+                return format!("{{ {} }}", format_expr(expr, ctx, source_map));
+            }
         }
     }
     format_block(body, ctx, source_map)
+}
+
+/// 格式化类型标注字符串（含冒号前缀）
+///
+/// Fn 类型走 format_fn_signature，用 value_params 补全内层参数名；
+/// 其他类型直接 format_type。无标注返回空串。
+fn format_type_annotation(
+    type_annotation: &Option<Type>,
+    signature_params: &[Param],
+    value_params: &[Param],
+    ctx: &FormatContext,
+    source_map: &SourceMap,
+) -> String {
+    match type_annotation {
+        Some(ty) if matches!(ty, Type::Fn { .. }) => format!(
+            ": {}",
+            super::expr::format_fn_signature(signature_params, ty, value_params, ctx, source_map)
+        ),
+        Some(ty) => format!(": {}", format_type(ty, ctx, source_map)),
+        None => String::new(),
+    }
 }
