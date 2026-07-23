@@ -1058,27 +1058,16 @@ impl StatementChecker {
 
         // Set expected return type for return statement type checking
         // 对于泛型函数，预期返回类型是内层 Fn 的返回类型
-        let fn_expected_ret = if !type_generic_params.is_empty() {
-            type_annotation.and_then(|t| match t {
-                crate::frontend::core::parser::ast::Type::Fn { return_type, .. } => {
-                    match return_type.as_ref() {
-                        crate::frontend::core::parser::ast::Type::Fn {
-                            return_type: inner_ret,
-                            ..
-                        } => Some(MonoType::from((**inner_ret).clone())),
-                        other => Some(MonoType::from(other.clone())),
-                    }
-                }
-                _ => None,
-            })
-        } else {
-            type_annotation.and_then(|t| match t {
-                crate::frontend::core::parser::ast::Type::Fn { return_type, .. } => {
-                    Some(MonoType::from((**return_type).clone()))
-                }
-                _ => None,
-            })
-        };
+        let fn_expected_ret = type_annotation.and_then(|t| {
+            if let crate::frontend::core::parser::ast::Type::Fn { return_type, .. } = t {
+                // 对 curried 函数（嵌套 Fn），取最内层 Fn 的返回类型
+                Some(MonoType::from(
+                    innermost_return_type(return_type.as_ref()).clone(),
+                ))
+            } else {
+                None
+            }
+        });
         self.expected_return_type = fn_expected_ret;
 
         // 当 body 的参数缺少类型标注时，从函数签名中补全
@@ -1088,19 +1077,22 @@ impl StatementChecker {
         let owned_merged_params: Vec<Param>;
         let params = if let Some(crate::frontend::core::parser::ast::Type::Fn {
             params: sig_param_types,
+            return_type,
             ..
         }) = type_annotation
         {
+            // 当 lambda 参数缺类型标注时，从最内层 Fn（值级参数层）补全类型
+            let value_param_types = innermost_fn_param_types(sig_param_types, return_type);
             let needs_merge = params.iter().any(|p| p.ty.is_none())
                 && !params.is_empty()
-                && sig_param_types.len() >= params.len();
+                && value_param_types.len() >= params.len();
             if needs_merge {
                 owned_merged_params = params
                     .iter()
                     .enumerate()
                     .map(|(i, p)| {
                         if p.ty.is_none() {
-                            if let Some(sig_ty) = sig_param_types.get(i) {
+                            if let Some(sig_ty) = value_param_types.get(i) {
                                 Param {
                                     name: p.name.clone(),
                                     ty: Some(sig_ty.clone()),
@@ -1652,5 +1644,38 @@ impl StatementChecker {
                 result
             }
         }
+    }
+}
+
+/// 从最内层 Fn 类型中提取参数类型（值级参数层）
+///
+/// `(T: Type) -> ((x: Int) -> Int)` → `[Int]`（最内层 Fn 的参数）
+/// 非嵌套场景 `(x: Int) -> Int` → `[Int]`
+fn innermost_fn_param_types(
+    outer_params: &[crate::frontend::core::parser::ast::Type],
+    return_type: &crate::frontend::core::parser::ast::Type,
+) -> Vec<crate::frontend::core::parser::ast::Type> {
+    if let crate::frontend::core::parser::ast::Type::Fn {
+        params: inner_params,
+        return_type: inner_ret,
+    } = return_type
+    {
+        innermost_fn_param_types(inner_params, inner_ret)
+    } else {
+        outer_params.to_vec()
+    }
+}
+
+/// 从嵌套 Fn 类型中提取最内层的返回类型
+///
+/// `(Int) -> ((Int) -> Int)` → `Int`
+/// `Int` → `Int`（非 Fn 直接返回自身）
+fn innermost_return_type(
+    ty: &crate::frontend::core::parser::ast::Type
+) -> &crate::frontend::core::parser::ast::Type {
+    if let crate::frontend::core::parser::ast::Type::Fn { return_type, .. } = ty {
+        innermost_return_type(return_type.as_ref())
+    } else {
+        ty
     }
 }
