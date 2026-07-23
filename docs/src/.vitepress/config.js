@@ -382,7 +382,6 @@ export default defineConfig({
                 },
               ],
             },
-            },
           ],
 
           "/guide/": [
