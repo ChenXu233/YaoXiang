@@ -133,7 +133,7 @@ async function loadWasm() {
     statusText.value = 'Ready'
     statusType.value = 'success'
   } catch (e) {
-    statusText.value = 'Failed to load Wasm — run scripts/build-wasm.sh first'
+    statusText.value = 'Failed to load Wasm — run scripts/build/build-wasm.sh first'
     statusType.value = 'error'
     console.error('Wasm load error:', e)
   }

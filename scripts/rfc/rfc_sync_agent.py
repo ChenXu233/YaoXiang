@@ -7,13 +7,13 @@
   4. 调用 gh CLI 搜索/创建/评论 issue
 
 使用:
-  python scripts/rfc_sync_agent.py read-frontmatter <path>
-  python scripts/rfc_sync_agent.py update-frontmatter <path> <key> <value>
-  python scripts/rfc_sync_agent.py update-frontmatter-list <path> <key> <item1> [item2 ...]
-  python scripts/rfc_sync_agent.py check-modules <module1> [module2 ...]
-  python scripts/rfc_sync_agent.py gh-search <query>
-  python scripts/rfc_sync_agent.py gh-create-issue <title> <body>
-  python scripts/rfc_sync_agent.py gh-comment <issue_number> <body>
+  python scripts/rfc/rfc_sync_agent.py read-frontmatter <path>
+  python scripts/rfc/rfc_sync_agent.py update-frontmatter <path> <key> <value>
+  python scripts/rfc/rfc_sync_agent.py update-frontmatter-list <path> <key> <item1> [item2 ...]
+  python scripts/rfc/rfc_sync_agent.py check-modules <module1> [module2 ...]
+  python scripts/rfc/rfc_sync_agent.py gh-search <query>
+  python scripts/rfc/rfc_sync_agent.py gh-create-issue <title> <body>
+  python scripts/rfc/rfc_sync_agent.py gh-comment <issue_number> <body>
 """
 
 import json
@@ -24,7 +24,7 @@ import sys
 
 # 复用 check_rfc_tracking.py 的解析函数
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from check_rfc_tracking import parse_frontmatter
+from check_tracking import parse_frontmatter
 
 
 def cmd_read_frontmatter(filepath):

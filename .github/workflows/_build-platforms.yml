@@ -235,7 +235,7 @@ jobs:
         run: |
           VERSION=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
           echo "Detected version: $VERSION"
-          sed -i "s/#define MyAppVersion \".*\"/#define MyAppVersion \"${VERSION}\"/" scripts/setup.iss
+          sed -i "s/#define MyAppVersion \".*\"/#define MyAppVersion \"${VERSION}\"/" scripts/build/setup.iss
 
       - name: Install Inno Setup
         run: choco install innosetup -y
@@ -244,7 +244,7 @@ jobs:
         run: mkdir dist
 
       - name: Build installer
-        run: iscc scripts/setup.iss
+        run: iscc scripts/build/setup.iss
 
       - name: Upload installer
         uses: actions/upload-artifact@v7

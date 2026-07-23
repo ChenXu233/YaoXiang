@@ -6,14 +6,14 @@ RFC-GH Issue 同步编排器
 1. 扫描 RFC 目录，按状态和优先级排序
 2. 输出 RFC 清单供分波下发
 3. 收集子 agent 结果，写入 JSONL
-4. 调用 check_rfc_tracking.py 更新 TRACKING.md
+4. 调用 check_tracking.py 更新 TRACKING.md
 
 使用:
-  python scripts/rfc_sync.py scan          # 扫描并打印 RFC 清单 (JSON)
-  python scripts/rfc_sync.py wave --size 5  # 生成当前波次的 RFC 列表
-  python scripts/rfc_sync.py append-jsonl <json>  # 追加一行到 JSONL
-  python scripts/rfc_sync.py update-tracking      # 重新生成 TRACKING.md
-  python scripts/rfc_sync.py summary              # 输出汇总报告
+  python scripts/rfc/rfc_sync.py scan          # 扫描并打印 RFC 清单 (JSON)
+  python scripts/rfc/rfc_sync.py wave --size 5  # 生成当前波次的 RFC 列表
+  python scripts/rfc/rfc_sync.py append-jsonl <json>  # 追加一行到 JSONL
+  python scripts/rfc/rfc_sync.py update-tracking      # 重新生成 TRACKING.md
+  python scripts/rfc/rfc_sync.py summary              # 输出汇总报告
 """
 
 import json
@@ -21,7 +21,7 @@ import os
 import sys
 import subprocess
 
-from check_rfc_tracking import scan_rfcs
+from check_tracking import scan_rfcs
 
 RFC_ROOT = os.path.join("docs", "src", "design", "rfc")
 TRACKING_FILE = os.path.join(RFC_ROOT, "TRACKING.md")
@@ -138,16 +138,13 @@ def cmd_append_jsonl(json_str):
 
 
 def cmd_update_tracking():
-    """调用 check_rfc_tracking.py 重新生成 TRACKING.md"""
+    """调用 check_tracking.py 重新生成 TRACKING.md"""
     scripts_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(scripts_dir)
     result = subprocess.run(
-        [sys.executable, os.path.join(scripts_dir, "check_rfc_tracking.py")],
+        [sys.executable, os.path.join(scripts_dir, "check_tracking.py")],
         capture_output=True, text=True, cwd=project_root
     )
-    print(result.stdout, end="")
-    if result.returncode != 0:
-        print(f"WARNING: check_rfc_tracking.py 返回非零: {result.stderr}", file=sys.stderr)
     return result.returncode
 
 

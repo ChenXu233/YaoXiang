@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-rfc_ai_agent.py — Transitional AI agent for RFC workflow.
+ai_agent.py — Transitional AI agent for RFC workflow.
 
 This script reads a GitHub event, determines which task to perform, calls
 an LLM (OpenAI-compatible API) to analyze the event, and posts a comment

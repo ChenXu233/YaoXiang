@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-check-rfc-tracking.py - 验证 RFC 目录中的 frontmatter 完整性并生成 TRACKING.md
+check_tracking.py - 验证 RFC 目录中的 frontmatter 完整性并生成 TRACKING.md
 
 扫描 docs/src/design/rfc/ 下所有状态子目录中的 .md 文件，
 解析 YAML frontmatter，验证必填字段，生成 TRACKING.md 追踪表。
 
 用法:
-    python scripts/check-rfc-tracking.py
+    python scripts/rfc/check_tracking.py
 
 退出码:
     0 - 无错误（可能有警告）

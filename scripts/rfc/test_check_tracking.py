@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Unit tests for check_rfc_tracking.py frontmatter parser and validator."""
+"""Unit tests for check_tracking.py frontmatter parser and validator."""
 
 import os
 import sys
 import tempfile
 
 
-import check_rfc_tracking as crt
+import check_tracking as crt
 
 # Add scripts dir to path for import
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))

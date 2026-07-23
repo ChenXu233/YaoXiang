@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Run RFC validation
-        run: python scripts/check_rfc_tracking.py
+        run: python scripts/rfc/check_tracking.py
       - name: Commit TRACKING.md if changed
         run: |
           git config user.name "rfc-bot"

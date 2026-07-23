@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unit tests for rfc_ai_agent.py — the transitional AI agent."""
+"""Unit tests for ai_agent.py — the transitional AI agent."""
 
 import json
 import os
@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-import rfc_ai_agent as agent
+import ai_agent as agent
 
 
 # Add scripts dir to path for import
