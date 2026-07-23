@@ -18,3 +18,27 @@ updates:
         dependency-type: "development"
       production-dependencies:
         dependency-type: "production"
+  - package-ecosystem: "npm"
+    directory: "/scripts/i18n"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: ":arrow_up: chore"
+      include: "scope"
+  - package-ecosystem: "npm"
+    directory: "/vscode-extension/language-server"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: ":arrow_up: chore"
+      include: "scope"
+  - package-ecosystem: "npm"
+    directory: "/docs"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: ":arrow_up: chore"
+      include: "scope"
