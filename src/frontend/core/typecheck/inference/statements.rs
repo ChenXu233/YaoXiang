@@ -72,6 +72,8 @@ pub struct StatementChecker {
     dep_env: crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
     /// Trait 表（用于 classify_generic_params 判定 annotation 是否为 trait）
     trait_table: TraitTable,
+    /// 证明函数基类型表: "IsPositive" -> Int(64)（RFC-027 Phase 2.5）
+    proof_fn_bases: HashMap<String, MonoType>,
 }
 
 impl StatementChecker {
@@ -102,6 +104,7 @@ impl StatementChecker {
             gamma,
             dep_env,
             trait_table,
+            proof_fn_bases: HashMap::new(),
         }
     }
 
@@ -173,6 +176,14 @@ impl StatementChecker {
         bindings: HashMap<String, MonoType>,
     ) {
         self.method_bindings = bindings;
+    }
+
+    /// 设置证明函数基类型表（RFC-027 Phase 2.5）
+    pub fn set_proof_fn_bases(
+        &mut self,
+        bases: HashMap<String, MonoType>,
+    ) {
+        self.proof_fn_bases = bases;
     }
 
     /// 尝试实例化泛型类型
@@ -1240,12 +1251,52 @@ impl StatementChecker {
                 let ann_ty = self
                     .try_instantiate_generic_type(type_ann)
                     .unwrap_or_else(|| MonoType::from(type_ann.clone()));
+                // RFC-027 Phase 2.5: 证明函数类型解析（从 AST Type 直接提取）
+                // IsPositive(5) → Refined { base: Int(64), constraint: Call("IsPositive", [5]) }
+                let ann_ty = if let crate::frontend::core::parser::ast::Type::Generic {
+                    name,
+                    args,
+                    ..
+                } = type_ann
+                {
+                    if !args.is_empty() {
+                        if let Some(base) = self.proof_fn_bases.get(name) {
+                            let constraint_args: Vec<crate::frontend::core::types::const_data::ConstExpr> = args
+                                .iter()
+                                .filter_map(|a| {
+                                    if let crate::frontend::core::parser::ast::Type::ConstExpr(expr) = a {
+                                        crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+                            let constraint =
+                                crate::frontend::core::types::const_data::ConstExpr::Call {
+                                    func: name.clone(),
+                                    args: constraint_args,
+                                };
+                            MonoType::Refined {
+                                base: Box::new(base.clone()),
+                                constraint,
+                            }
+                        } else {
+                            ann_ty
+                        }
+                    } else {
+                        ann_ty
+                    }
+                } else {
+                    ann_ty
+                };
                 // Check type assignment compatibility:
                 // - Float cannot be assigned to Int (no implicit narrowing)
                 //   Resolve TypeRef("Int") to Int(64) for comparison (§3.2: Int defaults to 8 bytes)
                 let resolved_ann = match &ann_ty {
                     MonoType::TypeRef(n) if n == "Int" => MonoType::Int(64),
                     MonoType::TypeRef(n) if n == "Float" => MonoType::Float(64),
+                    // RFC-027: Refined 类型用 base 做 unify
+                    MonoType::Refined { base, .. } => *base.clone(),
                     _ => ann_ty.clone(),
                 };
                 if matches!(
@@ -1278,6 +1329,8 @@ impl StatementChecker {
                             self.resolve_type_ref_type(&ann_ty)
                         }
                     }
+                    // RFC-027: Refined 类型用 base 做 unify
+                    MonoType::Refined { base, .. } => *base.clone(),
                     _ => ann_ty.clone(),
                 };
                 // Check Int → Float subtype (widening conversion is always safe)
