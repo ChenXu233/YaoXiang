@@ -39,6 +39,20 @@ pub struct GenericTypeDef {
 /// - 方法绑定
 /// - Trait 表
 /// - Native 函数签名
+/// base 的语义归属：类型空间 / 类型值空间 / 未知（issue #180 F 组）。
+///
+/// typechecker 据此把 `X.字段 = 右值` 分流到类型空间或类型值空间，
+/// 不靠语法形式 / 大小写，查类型表与变量表。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BaseKind {
+    /// base 是类型（在类型表）→ 类型空间
+    TypeSpace,
+    /// base 是变量/实例（在变量表）→ 类型值空间
+    ValueSpace,
+    /// 既非类型也非已知变量
+    Unknown,
+}
+
 #[derive(Debug, Default)]
 pub struct TypeEnvironment {
     pub vars: HashMap<String, PolyType>,
@@ -181,6 +195,21 @@ impl TypeEnvironment {
         name: &str,
     ) -> Option<&PolyType> {
         self.types.get(name)
+    }
+
+    /// 语义解析 base：是类型还是值（issue #180 F 组）。
+    /// 不靠语法形式 / 大小写——查类型表（类型空间）与变量表（类型值空间）。
+    pub fn resolve_base_kind(
+        &self,
+        name: &str,
+    ) -> BaseKind {
+        if self.types.contains_key(name) {
+            BaseKind::TypeSpace
+        } else if self.vars.contains_key(name) {
+            BaseKind::ValueSpace
+        } else {
+            BaseKind::Unknown
+        }
     }
 
     /// 添加泛型类型定义模板
