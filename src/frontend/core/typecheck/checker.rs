@@ -537,7 +537,16 @@ impl TypeChecker {
                     } => {
                         if let crate::frontend::core::parser::ast::Expr::Var(tn, _) = expr.as_ref()
                         {
-                            (field.clone(), Some(tn.clone()))
+                            {
+                                // 语义分流（issue #180 F 组）：base 是类型才是方法定义；
+                                // base 是值（实例）→ 字段赋值，pass3 处理，不当方法定义收集。
+                                let ty_name = matches!(
+                                    self.env.resolve_base_kind(tn),
+                                    crate::frontend::core::typecheck::environment::BaseKind::TypeSpace
+                                )
+                                .then(|| tn.clone());
+                                (field.clone(), ty_name)
+                            }
                         } else {
                             (field.clone(), None)
                         }
@@ -920,6 +929,14 @@ impl TypeChecker {
                     }
                     _ => return,
                 };
+                // 语义分流（issue #180 F 组）：base 必须是已注册类型才在 pass2 登记类型空间方法。
+                // base 是值（实例）→ 不在此登记，由 pass3 check_stmt 做 schema 校验。
+                if !matches!(
+                    self.env.resolve_base_kind(&type_name),
+                    crate::frontend::core::typecheck::environment::BaseKind::TypeSpace
+                ) {
+                    return;
+                }
                 // 从 value 提取 func_name 和 positions
                 let (func_name, positions) = match val.as_ref() {
                     Expr::Var(fn_name, _) => (fn_name.clone(), vec![0]),

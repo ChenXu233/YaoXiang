@@ -655,6 +655,65 @@ fn test_rfc010_multi_position_binding() {
     );
 }
 
+/// 规范（issue #180 F 组）：赋值按 base 语义分流——
+/// base 是类型 → 类型空间方法登记；base 是值（实例）→ 不在 pass2 登记为方法
+///（值空间字段赋值由 pass3 schema 校验处理）。判别靠类型表/变量表，不靠语法形式。
+#[test]
+fn test_semantic_dispatch_type_vs_value_base() {
+    // 类型 base：Point.get_x = get_x → 登记类型空间方法
+    let src_type = r#"
+        Point: Type = { x: Float, y: Float }
+        get_x: (p: Point) -> Float = { return 1.0 }
+        Point.get_x = get_x
+    "#;
+    let tokens = tokenize(src_type).expect("tokenize failed");
+    let r = parse(&tokens);
+    assert!(!r.has_errors, "parse failed: {:?}", r.errors);
+    let mut checker = TypeChecker::new("test");
+    checker.check_module(&r.module);
+    assert!(
+        checker.env().method_bindings.contains_key("Point.get_x"),
+        "类型 base 应登记类型空间方法"
+    );
+
+    // 值 base：p.get_x = get_x → pass2 不当方法登记（走 pass3 schema 校验）
+    let src_val = r#"
+        Point: Type = { x: Float, y: Float }
+        get_x: (p: Point) -> Float = { return 1.0 }
+        p: Point = Point(1.0, 2.0)
+        p.get_x = get_x
+    "#;
+    let tokens = tokenize(src_val).expect("tokenize failed");
+    let r = parse(&tokens);
+    assert!(!r.has_errors, "parse failed: {:?}", r.errors);
+    let mut checker = TypeChecker::new("test");
+    checker.check_module(&r.module);
+    assert!(
+        !checker.env().method_bindings.contains_key("p.get_x"),
+        "值 base 不应在 pass2 登记为方法（应走 pass3 schema 校验）"
+    );
+}
+
+/// 方法定义臂语义分流：base 是值（非类型）→ 不当方法定义收集。
+#[test]
+fn test_method_def_arm_value_base_not_method() {
+    // f.handler = (x) => ... 其中 f 是实例（非类型）→ 不应登记 "f.handler" 方法
+    let src = r#"
+        File: Type = { name: String }
+        f: File = File("a")
+        f.handler = (x: Int) -> Int = (x) => x
+    "#;
+    let tokens = tokenize(src).expect("tokenize failed");
+    let r = parse(&tokens);
+    assert!(!r.has_errors, "parse failed: {:?}", r.errors);
+    let mut checker = TypeChecker::new("test");
+    checker.check_module(&r.module);
+    assert!(
+        !checker.env().method_bindings.contains_key("f.handler"),
+        "值 base 的方法定义臂不应登记为方法"
+    );
+}
+
 /// 规范：结构化子类型 — 接口赋值应失败（未实现接口）
 ///
 /// 确保没有实现 Serializable 的 Point 不能赋值给 Serializable 变量。
