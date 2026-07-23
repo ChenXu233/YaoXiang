@@ -677,3 +677,46 @@ fn test_rfc011_fn_const_generic_block_body() {
         "函数级 const 泛型块体应类型检查通过"
     );
 }
+/// 规范：Float 不能作为 Int 参数传递（函数调用路径）
+///
+/// 预期行为：
+/// - f(3.14) 其中 f: (x: Int) -> Int 应报类型错误
+#[test]
+fn test_rfc011_float_arg_to_int_param_reports_error() {
+    // Arrange
+    let source = r#"
+        f: (x: Int) -> Int = (x) => x
+        y = f(3.14)
+    "#;
+
+    // Act
+    let result = check_source(source);
+
+    // Assert
+    assert!(
+        !result.diagnostics.is_empty(),
+        "Float argument to Int parameter must be a type error"
+    );
+}
+
+/// 规范：Int 可以作为 Float 参数传递（widening 转换）
+///
+/// 预期行为：
+/// - f(42) 其中 f: (x: Float) -> Float 不报错
+#[test]
+fn test_rfc011_int_arg_to_float_param_ok() {
+    // Arrange
+    let source = r#"
+        f: (x: Float) -> Float = (x) => x
+        y = f(42)
+    "#;
+
+    // Act
+    let result = check_source(source);
+
+    // Assert
+    assert!(
+        result.diagnostics.is_empty(),
+        "Int argument to Float parameter (widening) should be allowed"
+    );
+}

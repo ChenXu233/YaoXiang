@@ -436,3 +436,150 @@ fn test_const_generic_filtered_without_lambda_head() {
         "s 的标注应为 String"
     );
 }
+
+// ============================================================================
+// 精化约束类型定义 (RFC-011)
+// ============================================================================
+
+#[test]
+fn test_type_def_constraint_expr_single() {
+    // Arrange
+    let kind = parse_stmt("IsPositive: Type = { x > 0 }");
+
+    // Act & Assert
+    let StmtKind::TypeDefinition {
+        name, definition, ..
+    } = &kind
+    else {
+        panic!(
+            "Expected StmtKind::TypeDefinition for IsPositive, got {:?}",
+            kind
+        );
+    };
+    assert_eq!(name, "IsPositive", "类型名应为 IsPositive");
+    let Type::Struct { body } = definition else {
+        panic!("Expected Type::Struct, got {:?}", definition);
+    };
+    assert_eq!(body.len(), 1, "结构体应有 1 个体项");
+    assert!(
+        matches!(
+            &body[0],
+            crate::frontend::core::parser::ast::TypeBodyItem::Expr(Type::ConstExpr(_))
+        ),
+        "体项应为 Expr(ConstExpr), got {:?}",
+        body[0]
+    );
+}
+
+#[test]
+fn test_type_def_constraint_expr_multi() {
+    // Arrange
+    let kind = parse_stmt("P: Type = { x > 0, y > 0 }");
+
+    // Act & Assert
+    let StmtKind::TypeDefinition {
+        name, definition, ..
+    } = &kind
+    else {
+        panic!("Expected StmtKind::TypeDefinition for P, got {:?}", kind);
+    };
+    assert_eq!(name, "P", "类型名应为 P");
+    let Type::Struct { body } = definition else {
+        panic!("Expected Type::Struct, got {:?}", definition);
+    };
+    assert_eq!(body.len(), 2, "结构体应有 2 个体项");
+    assert!(
+        matches!(
+            &body[0],
+            crate::frontend::core::parser::ast::TypeBodyItem::Expr(Type::ConstExpr(_))
+        ),
+        "第 1 项应为 Expr(ConstExpr), got {:?}",
+        body[0]
+    );
+    assert!(
+        matches!(
+            &body[1],
+            crate::frontend::core::parser::ast::TypeBodyItem::Expr(Type::ConstExpr(_))
+        ),
+        "第 2 项应为 Expr(ConstExpr), got {:?}",
+        body[1]
+    );
+}
+
+#[test]
+fn test_type_def_constraint_expr_mixed() {
+    // Arrange
+    let kind = parse_stmt("PP: Type = { x: Float, x > 0 }");
+
+    // Act & Assert
+    let StmtKind::TypeDefinition {
+        name, definition, ..
+    } = &kind
+    else {
+        panic!("Expected StmtKind::TypeDefinition for PP, got {:?}", kind);
+    };
+    assert_eq!(name, "PP", "类型名应为 PP");
+    let Type::Struct { body } = definition else {
+        panic!("Expected Type::Struct, got {:?}", definition);
+    };
+    assert_eq!(body.len(), 2, "结构体应有 2 个体项");
+    assert!(
+        matches!(
+            &body[0],
+            crate::frontend::core::parser::ast::TypeBodyItem::Field(_)
+        ),
+        "第 1 项应为 Field, got {:?}",
+        body[0]
+    );
+    assert!(
+        matches!(
+            &body[1],
+            crate::frontend::core::parser::ast::TypeBodyItem::Expr(Type::ConstExpr(_))
+        ),
+        "第 2 项应为 Expr(ConstExpr), got {:?}",
+        body[1]
+    );
+}
+
+#[test]
+fn test_type_def_constraint_expr_simplified_form() {
+    // Arrange & Act
+    let kind = parse_stmt("IsPositive: (x: Int) -> Type = x > 0");
+
+    // Assert
+    assert!(
+        matches!(&kind, StmtKind::Assign { .. }),
+        "简化形式应解析为 Assign, got {:?}",
+        kind
+    );
+}
+
+#[test]
+fn test_type_def_constraint_expr_block_form() {
+    // Arrange
+    let kind = parse_stmt("IsPositive: (x: Int) -> Type = { x > 0 }");
+
+    // Act & Assert
+    let StmtKind::TypeDefinition {
+        name, definition, ..
+    } = &kind
+    else {
+        panic!(
+            "Expected StmtKind::TypeDefinition for IsPositive (block form), got {:?}",
+            kind
+        );
+    };
+    assert_eq!(name, "IsPositive", "类型名应为 IsPositive");
+    let Type::Struct { body } = definition else {
+        panic!("Expected Type::Struct, got {:?}", definition);
+    };
+    assert_eq!(body.len(), 1, "结构体应有 1 个体项");
+    assert!(
+        matches!(
+            &body[0],
+            crate::frontend::core::parser::ast::TypeBodyItem::Expr(Type::ConstExpr(_))
+        ),
+        "体项应为 Expr(ConstExpr), got {:?}",
+        body[0]
+    );
+}

@@ -1176,7 +1176,7 @@ impl<'a> ExpressionInferrer<'a> {
                                     _ => arg_ty.clone(),
                                 };
                                 // resolve 参数类型：TypeRef("Int") → Int(64) 等
-                                let resolved_param = self.solver.resolve_type(param_ty);
+                                let mut resolved_param = self.solver.resolve_type(param_ty);
                                 // Int -> Float 扩展转换是允许的
                                 if matches!(
                                     (&actual_arg, &resolved_param),
@@ -1184,14 +1184,17 @@ impl<'a> ExpressionInferrer<'a> {
                                 ) {
                                     continue;
                                 }
-                                // 用户自定义类型名（TypeRef resolve 后仍为 TypeRef）跳过
-                                if matches!(resolved_param, MonoType::TypeRef(_)) {
-                                    continue;
+                                // TypeRef: 先 solver.resolve 解析内置类型（Int/Float 等），
+                                // 再 type_defs 解析用户自定义类型；都不匹配则跳过
+                                if let MonoType::TypeRef(name) = &resolved_param {
+                                    resolved_param = match self.type_defs.get(name) {
+                                        Some(def_ty) => self.solver.resolve_type(def_ty),
+                                        None => continue,
+                                    };
                                 }
-                                // TypeVar 是泛型类型参数 —— 必须 unify 以推断具体类型
                                 if self.solver.unify(&actual_arg, &resolved_param).is_err() {
                                     return Err(ErrorCodeDefinition::type_mismatch(
-                                        &format!("{}", param_ty),
+                                        &format!("{}", resolved_param),
                                         &format!("{}", arg_ty),
                                     )
                                     .at(*span)
