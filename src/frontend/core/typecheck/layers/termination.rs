@@ -150,8 +150,6 @@ pub struct TerminationChecker {
     /// Z3 后端引用——策略 1 秩函数 SMT 验证
     #[cfg(not(target_arch = "wasm32"))]
     z3: Option<&'static Z3Backend>,
-    /// 当前函数是否返回 Never —— Never 函数内的循环不要求终止
-    in_never_function: bool,
 }
 
 impl Default for TerminationChecker {
@@ -167,10 +165,8 @@ impl TerminationChecker {
             results: Vec::new(),
             #[cfg(not(target_arch = "wasm32"))]
             z3: None,
-            in_never_function: false,
         }
     }
-
     /// 设置 Z3 后端（由调用方在初始化后注入）
     #[cfg(not(target_arch = "wasm32"))]
     pub fn with_z3(
@@ -191,7 +187,7 @@ impl TerminationChecker {
         _env: &TypeEnvironment,
     ) -> Vec<ProofResult> {
         for stmt in &module.items {
-            self.check_stmt(stmt);
+            self.check_stmt(stmt, false);
         }
         std::mem::take(&mut self.results)
     }
@@ -201,31 +197,28 @@ impl TerminationChecker {
     fn check_stmt(
         &mut self,
         stmt: &Stmt,
+        is_never: bool,
     ) {
         match &stmt.kind {
-            StmtKind::Expr(expr) => self.check_expr(expr),
+            StmtKind::Expr(expr) => self.check_expr(expr, is_never),
             StmtKind::Assign {
                 value: Some(v),
                 type_annotation,
                 ..
             } => {
                 use crate::frontend::core::parser::ast::Expr;
-                let saved_never = self.in_never_function;
-                if is_never_return_type(type_annotation.as_ref()) {
-                    self.in_never_function = true;
-                }
+                let child_never = is_never || is_never_return_type(type_annotation.as_ref());
                 if let Expr::Lambda { body, .. } = v.as_ref() {
                     for s in &body.stmts {
-                        self.check_stmt(s);
+                        self.check_stmt(s, child_never);
                     }
                 } else if let Expr::Block(block) = v.as_ref() {
                     for s in &block.stmts {
-                        self.check_stmt(s);
+                        self.check_stmt(s, child_never);
                     }
                 } else {
-                    self.check_expr(v);
+                    self.check_expr(v, child_never);
                 }
-                self.in_never_function = saved_never;
             }
             StmtKind::If {
                 condition,
@@ -234,19 +227,19 @@ impl TerminationChecker {
                 else_branch,
                 ..
             } => {
-                self.check_expr(condition);
+                self.check_expr(condition, is_never);
                 for s in &then_branch.stmts {
-                    self.check_stmt(s);
+                    self.check_stmt(s, is_never);
                 }
                 for (cond, body) in elif_branches {
-                    self.check_expr(cond);
+                    self.check_expr(cond, is_never);
                     for s in &body.stmts {
-                        self.check_stmt(s);
+                        self.check_stmt(s, is_never);
                     }
                 }
                 if let Some(else_body) = else_branch {
                     for s in &else_body.stmts {
-                        self.check_stmt(s);
+                        self.check_stmt(s, is_never);
                     }
                 }
             }
@@ -260,6 +253,7 @@ impl TerminationChecker {
     fn check_expr(
         &mut self,
         expr: &Expr,
+        is_never: bool,
     ) {
         match expr {
             Expr::While {
@@ -268,46 +262,44 @@ impl TerminationChecker {
                 span,
                 ..
             } => {
-                self.check_while_loop(condition, body, *span);
+                self.check_while_loop(condition, body, *span, is_never);
                 // 递归检查循环体内的嵌套循环
                 for s in &body.stmts {
-                    self.check_stmt(s);
+                    self.check_stmt(s, is_never);
                 }
             }
             Expr::For { iterable, body, .. } => {
-                // for 循环天然终止——范围迭代必须有界
-                // 但我们要检查循环体内的嵌套循环
                 for s in &body.stmts {
-                    self.check_stmt(s);
+                    self.check_stmt(s, is_never);
                 }
-                // 也检查迭代器表达式
-                self.check_expr(iterable);
+                self.check_expr(iterable, is_never);
             }
             Expr::FnDef {
                 name: _,
                 params,
                 body,
+                return_type,
                 ..
             } => {
                 let param_names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
-                self.check_fn_body(&param_names, body);
+                let fn_never = is_never || is_never_return_type(return_type.as_ref());
+                self.check_fn_body(&param_names, body, fn_never);
             }
             Expr::Call { func, args, .. } => {
                 for a in args {
-                    self.check_expr(a);
+                    self.check_expr(a, is_never);
                 }
-                // 检查是否是直接递归调用
                 self.check_possible_recursive_call(func, args);
             }
             Expr::BinOp {
                 op: _, left, right, ..
             } => {
-                self.check_expr(left);
-                self.check_expr(right);
+                self.check_expr(left, is_never);
+                self.check_expr(right, is_never);
             }
             Expr::Block(block) => {
                 for s in &block.stmts {
-                    self.check_stmt(s);
+                    self.check_stmt(s, is_never);
                 }
             }
             Expr::If {
@@ -317,25 +309,25 @@ impl TerminationChecker {
                 else_branch,
                 ..
             } => {
-                self.check_expr(condition);
+                self.check_expr(condition, is_never);
                 for s in &then_branch.stmts {
-                    self.check_stmt(s);
+                    self.check_stmt(s, is_never);
                 }
                 for (cond, body) in elif_branches {
-                    self.check_expr(cond);
+                    self.check_expr(cond, is_never);
                     for s in &body.stmts {
-                        self.check_stmt(s);
+                        self.check_stmt(s, is_never);
                     }
                 }
                 if let Some(else_body) = else_branch {
                     for s in &else_body.stmts {
-                        self.check_stmt(s);
+                        self.check_stmt(s, is_never);
                     }
                 }
             }
             Expr::Lambda { body, .. } => {
                 for s in &body.stmts {
-                    self.check_stmt(s);
+                    self.check_stmt(s, is_never);
                 }
             }
             // 叶子节点不需要检查
@@ -351,9 +343,10 @@ impl TerminationChecker {
         condition: &Expr,
         body: &ast::Block,
         span: crate::util::span::Span,
+        is_never: bool,
     ) {
         // Never 返回函数：循环不终止是类型签名保证的语义，直接放行
-        if self.in_never_function {
+        if is_never {
             return;
         }
         // 1. 从条件中提取边界信息
@@ -861,9 +854,10 @@ impl TerminationChecker {
         &mut self,
         _param_names: &[String],
         body: &ast::Block,
+        is_never: bool,
     ) {
         for s in &body.stmts {
-            self.check_stmt(s);
+            self.check_stmt(s, is_never);
         }
     }
 
@@ -1035,8 +1029,11 @@ struct LoopAssignment {
 /// `(P1, P2, ...) -> Never` → true
 fn is_never_return_type(ty: Option<&Type>) -> bool {
     match ty {
+        // `name: () -> Never` — type_annotation 是 Fn 类型，取 return_type
         Some(Type::Fn { return_type, .. }) => is_type_never(return_type.as_ref()),
-        _ => false,
+        // `fn(): Never` — FnDef.return_type 是裸返回类型
+        Some(t) => is_type_never(t),
+        None => false,
     }
 }
 

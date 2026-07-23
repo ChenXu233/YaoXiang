@@ -15,9 +15,13 @@
 **根因**: `TerminationChecker` 对所有函数一视同仁地执行循环终止性检查，未区分返回类型。`Never` 语义上保证发散，循环不终止是类型签名承诺的行为。
 
 **修复**: `src/frontend/core/typecheck/layers/termination.rs`
-- 新增 `in_never_function: bool` 字段
-- 进入 `-> Never` 函数时置 `true`
-- `check_while_loop` 检测到该标志时直接放行
+- `is_never` 作为参数沿 `check_stmt`/`check_expr`/`check_while_loop`/`check_fn_body` 传递
+- 进入 `-> Never` 函数时 `is_never = true`，传递给子语句
+- `check_while_loop` 检测到 `is_never` 时直接放行
+- `Expr::FnDef` 从 `return_type` 推导 `is_never`（支持 `fn(): Never` 语法）
+- `is_never_return_type` 同时处理 `Type::Fn` 包装和裸 `Type::Name("Never")`
+
+**重构**: 移除了 `in_never_function: bool` 结构体字段，改为参数传递。类型信息从已有的 AST 节点推导，不额外缓存状态。
 
 **RFC 依据**:
 - RFC-009: `Never` 是底部类型，表示永不返回
@@ -27,7 +31,6 @@
 - `forever: () -> Never = { while true {} }` → 编译通过 ✅
 - `main: () -> Void = { while true {} }` → 仍报 E8001（Void 承诺返回）✅
 - 非 Never 函数的循环终止检查不受影响 ✅
-
 **未关闭源 Issue**: 按用户要求，不关闭 GitHub Issue #166，留待用户决定。
 
 ---
@@ -42,7 +45,7 @@
 - `format_fn_signature` 按 `fn_type` 嵌套 Fn 结构递归拆分 `signature_params`
 - 每层 curry 用单层括号 `(n: N) -> Int`，保证格式化幂等
 - 新增 `format_return_with_names` 递归补全各层参数名
-- 新增 `split_params_at` 按层级切分参数
+- `split_params_at` 用 `count.min(params.len())` 保证数量不匹配时正确切分而非 silent failure
 
 **RFC 依据**:
 - RFC-011: const 泛型函数签名语法
@@ -63,9 +66,10 @@
 **根因**: 类型检查器处理 `return` 语句时，取的是**最外层** curry 函数的参数类型（`T: Type`），而非 `return` 所在的**最内层**函数签名（参数 `x: Int`，返回 `Int`）。
 
 **修复**: `src/frontend/core/typecheck/inference/statements.rs`
-- 新增 `innermost_fn_param_types` 沿 curry 嵌套定位最内层函数参数
-- 新增 `innermost_return_type` 定位最内层返回类型
-- `return` 语句类型检查使用最内层签名
+- `innermost_return_type` 定位 curry 嵌套最内层返回类型
+- `innermost_fn_param_types` 定位最内层函数参数类型
+- 统一 `fn_result_err` 和 `expected_return_type` 提取逻辑：一次 `innermost_return_type` 调用，两处复用
+- 消除了泛型/非泛型分支的重复 curry 解包代码
 
 **用户可见行为**:
 - `(x) => { return x }` 块形式 → 通过 ✅
@@ -122,41 +126,6 @@
 
 ---
 
-### Issue #146: 常量表达式求值仅支持FFI符号，其他返回None
-
-**问题**: `eval_const_expr` 仅支持字面量和 FFI 符号求值（LibraryRef/ExternRef），`PI * 2.0`、`1 + 1` 等基本常量表达式返回 None，全局变量初始化为 0。
-
-**根因**: `src/middle/core/ir_gen.rs` 的 `eval_const_expr` 对 `BinOp`/`UnOp`/`Var` 分支直接返回 None（`_ => None`），没有实现算术/逻辑/比较运算和全局常量引用。
-
-**修复**: `src/middle/core/ir_gen.rs`
-- `eval_const_expr` 新增 `BinOp` 分支：算术（+,-,*,/,%）、比较（==,!=,<,<=,>,>=）、逻辑（&&,||）、字符串拼接（+）
-- 新增 `UnOp` 分支：一元负（-）、正（+）、非（!）
-- 新增 `Var` 分支：查找已注册的全局变量常量值
-- 新增 `eval_binop` 辅助函数：按类型分派运算
-- 新增 `eval_unop` 辅助函数：按类型分派一元运算
-
-**RFC 依据**:
-- RFC-027 §编译期求值：全局常量应可在编译期求值
-- `ConstValue` 已有 Int/Float/Bool/String/Char 变体，扩展求值器是正确方向
-
-**用户可见行为**:
-- `TWO: Int = 1 + 1` → 编译期求值为 2 ✅
-- `HALF: Float = 3.0 / 2.0` → 编译期求值为 1.5 ✅
-- `PI: Float = 3.14159` + `DOUBLE_PI: Float = PI * 2.0` → 6.28318 ✅
-- `C: Int = A + B`（全局常量引用）→ 30 ✅
-- `D: Bool = A < B` → true ✅
-- `E: Int = -A` → -10 ✅
-
-**未关闭源 Issue**: 按用户要求，不关闭 GitHub Issue #146，留待用户决定。
-
----
-
-## 已撤出：Issue #181 死代码清理
-
-**原因**: PR #186（`cleanup/dead-code-removal`）已于 2026-07-22 提交，删除 ~7800 行死代码，是本分支 #181 清理（~1097 行）的超集。为避免重复工作，已从 `auto-dev-night` 分支撤出 #181 相关 commit，留待 PR #186 合并。
-
----
-
 ## 验收命令
 
 ```bash
@@ -182,8 +151,14 @@ yaoxiang check /tmp/test_float_int.yx  # 应: error E1002 Expected type 'Int', f
 printf 'use std.io\n\ndo_forever: () -> Never\n\nmain = {\n    io.println("OK")\n}\n' > /tmp/test_decl.yx
 yaoxiang check /tmp/test_decl.yx  # 应: Type check passed
 yaoxiang run /tmp/test_decl.yx    # 应: 输出 OK
-
-# #146 验证
-printf 'use std.io\n\nPI: Float = 3.14159\nDOUBLE_PI: Float = PI * 2.0\n\nmain = {\n    io.println(DOUBLE_PI)\n}\n' > /tmp/test_const.yx
-yaoxiang run /tmp/test_const.yx  # 应: 输出 6.28318
 ```
+
+---
+
+## 已撤出
+
+### Issue #181 死代码清理
+PR #186（`cleanup/dead-code-removal`）已于 2026-07-22 提交，删除 ~7800 行，是本分支清理的超集。留待 PR #186 合并。
+
+### Issue #146 常量表达式求值扩展
+首版实现（eval_binop/eval_unop 穷举 match + UnOp::Pos 潜在 bug）品味不达标，已撤出。需要重新设计，留待后续。
