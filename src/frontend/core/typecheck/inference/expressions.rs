@@ -1184,12 +1184,10 @@ impl<'a> ExpressionInferrer<'a> {
                                 }
                                 // TypeRef: 尝试解析为用户自定义类型，解析不了才跳过
                                 let resolved_param = match param_ty {
-                                    MonoType::TypeRef(name) => {
-                                        match self.type_defs.get(name) {
-                                            Some(def_ty) => self.solver.resolve_type(def_ty),
-                                            None => continue,
-                                        }
-                                    }
+                                    MonoType::TypeRef(name) => match self.type_defs.get(name) {
+                                        Some(def_ty) => self.solver.resolve_type(def_ty),
+                                        None => continue,
+                                    },
                                     _ => param_ty.clone(),
                                 };
                                 // Int → Float 扩展转换仍然允许（resolved 后再次检查）
