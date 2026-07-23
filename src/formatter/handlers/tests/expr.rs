@@ -657,12 +657,10 @@ fn test_format_error_placeholder() {
 
 #[test]
 fn test_format_fn_signature_curried_grouping() {
-    // 构造 curried 泛型函数签名：
+    // Arrange — 构造 curried 泛型函数签名：
     //   signature_params = [T: Type, x: Int]  (第一组 T + 第二组 x，按嵌套 Fn 切分)
     //   fn_type = (Type) -> ((Int) -> Int)
     //   value_params = []  (不再使用 value_params 回退)
-    // 预期输出：(T: Type) -> ((x: Int) -> Int)
-    // —— 按嵌套 Fn 结构切分 signature_params，第一组给外层，第二组给内层。
     let ctx = default_ctx();
     let signature_params = vec![
         Param {
@@ -701,6 +699,8 @@ fn test_format_fn_signature_curried_grouping() {
         }),
     };
     let value_params: Vec<Param> = vec![];
+
+    // Act — 按嵌套 Fn 结构切分 signature_params
     let result = format_fn_signature(
         &signature_params,
         &fn_type,
@@ -708,6 +708,8 @@ fn test_format_fn_signature_curried_grouping() {
         &ctx,
         &default_source_map(),
     );
+
+    // Assert — 第一组给外层，第二组给内层，单层括号保证幂等
     assert_eq!(
         result, "(T: Type) -> (x: Int) -> Int",
         "curried 签名应按嵌套 Fn 切分 signature_params：got {:?}",

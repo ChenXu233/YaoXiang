@@ -645,22 +645,30 @@ fn test_format_field_default_value_unchanged() {
 
 #[test]
 fn test_format_generic_function_roundtrip() {
-    // RFC-010: 泛型函数定义签名带名保留（#174）
+    // Arrange — RFC-010: 泛型函数定义签名带名保留（#174）
     // #175 修复后：curried 泛型函数 return 块形式类型检查通过
-    // formatter 输出：(T: Type) -> (Int) -> Int = (x) => x（不补全内层参数名）
-    assert_format_eq(
-        "map: (T: Type) -> ((x: Int) -> Int) = (x) => x",
-        "map: (T: Type) -> (Int) -> Int = (x) => x\n",
-    );
+    let input = "map: (T: Type) -> ((x: Int) -> Int) = (x) => x";
+
+    // Act — formatter 输出：(T: Type) -> (Int) -> Int = (x) => x（不补全内层参数名）
+    let result = format_source(input, &default_options())
+        .unwrap_or_else(|e| panic!("Failed to format: {}", e));
+
+    // Assert — 签名按嵌套 Fn 切分，body 保持表达式形式
+    assert_eq!(result, "map: (T: Type) -> (Int) -> Int = (x) => x\n");
 }
 
 #[test]
 fn test_format_named_params_function_roundtrip() {
-    // #174 核心：签名参数名保留。lambda 参数与函数体遵循解析器构建的 AST
-    // （带签名的函数绑定 params 携带标注、单表达式体为 Return 语句）。
-    assert_format_eq(
-        "add: (a: Int, b: Int) -> Int = (a, b) => a + b",
-        "add: (a: Int, b: Int) -> Int = (a: Int, b: Int) => a + b\n",
+    // Arrange — RFC-010 §3: 签名参数名保留
+    let input = "add: (a: Int, b: Int) -> Int = (a, b) => a + b";
+
+    // Act — lambda 参数与函数体遵循解析器构建的 AST
+    let result = format_source(input, &default_options())
+        .unwrap_or_else(|e| panic!("Failed to format: {}", e));
+
+    // Assert — 带签名的函数绑定 params 携带标注、单表达式体为 Return 语句
+    assert_eq!(
+        result, "add: (a: Int, b: Int) -> Int = (a: Int, b: Int) => a + b\n"
     );
 }
 
