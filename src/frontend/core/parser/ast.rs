@@ -618,49 +618,6 @@ pub const CONST_PARAM_TYPES: &[&str] = &[
     "Char", "String",
 ];
 
-/// 从签名第一组参数提取泛型参数：(T: Type, N: Int) → [T, N]
-///
-/// 判定规则：MetaType 或 Name("Type") → Type 参数；
-/// CONST_PARAM_TYPES 原始类型名 → Const 参数；
-/// 其余忽略（typechecker 应使用 classify_generic_params 判定 trait 约束）。
-pub fn extract_generic_params(params: &[Param]) -> Vec<GenericParam> {
-    params
-        .iter()
-        .filter_map(|p| {
-            let ty = p.ty.as_ref()?;
-            match ty {
-                // (T: Type) — Type is parsed as MetaType, not Name("Type")
-                Type::MetaType { .. } => Some(GenericParam {
-                    name: p.name.clone(),
-                    kind: GenericParamKind::Type,
-                    constraints: Vec::new(),
-                }),
-                Type::Name { name, .. } if name == "Type" => Some(GenericParam {
-                    name: p.name.clone(),
-                    kind: GenericParamKind::Type,
-                    constraints: Vec::new(),
-                }),
-                Type::Name { name, .. } if CONST_PARAM_TYPES.contains(&name.as_str()) => {
-                    Some(GenericParam {
-                        name: p.name.clone(),
-                        kind: GenericParamKind::Const {
-                            const_type: Box::new(ty.clone()),
-                        },
-                        constraints: Vec::new(),
-                    })
-                }
-                Type::Name { .. } => {
-                    // 无法判断 annotation 是否为 trait → 不猜测为泛型参数
-                    // typechecker 应使用 classify_generic_params 区分
-                    None
-                }
-                // (T: Clone + Add) — 无法确认所有元素都是 trait → 保守忽略
-                Type::Tuple(_types) => None,
-                _ => None,
-            }
-        })
-        .collect()
-}
 /// Extract just the names and constraints of generic parameters from signature params.
 /// Only returns structurally determined generic params (Type/MetaType + CONST_PARAM_TYPES).
 /// Trait-constrained params (T: Clone) are not recognized — typechecker's classify_generic_params
