@@ -1,70 +1,69 @@
-```markdown
 ---
-title: パターンマッチング
+title: パターン照合
 ---
 
-# パターンマッチング
+# パターン照合
 
-[match の基礎](../control-flow/match.md) では、`match` の基本的な使い方——リテラル、識別子、ワイルドカード——を学びました。ここから YaoXiang のパターンマッチングの全能力を深掘りしていきましょう。
+[match の基礎](../control-flow/match.md) では、`match` の基本的な使い方——リテラル、識別子、ワイルドカード——を学びました。ここでは、YaoXiang のパターン照合のすべての能力を深く探求します。
 
 ## 完全なパターン型
 
-文法仕様によると、`Pattern` の完全な定義は次のとおりです：
+構文仕様に基づくと、`Pattern` の完全な定義は次のとおりです：
 
 ```
-Pattern     ::= Literal       # リテラルパターン: 42, "hello"
-            | Identifier      # 識別子パターン: 値をキャプチャ
-            | Wildcard        # ワイルドカード: _
-            | StructPattern   # 構造体パターン: レコードを分解
-            | TuplePattern    # タプルパターン: タプルを分解
-            | EnumPattern     # 列挙パターン: バリアントを分解
-            | OrPattern       # OR パターン: pattern1 | pattern2
+Pattern     ::= Literal       # リテラルパターン：42, "hello"
+            | Identifier      # 識別子パターン：値をキャプチャ
+            | Wildcard        # ワイルドカード：_
+            | StructPattern   # 構造体パターン：レコードの分解
+            | TuplePattern    # タプルパターン：タプルの分解
+            | EnumPattern     # 列挙型パターン：バリアントの分解
+            | OrPattern       # またはパターン：pattern1 | pattern2
 ```
 
-前 3 種類の基本パターンは前章で学びました。本章では残り 4 種類の応用パターンに焦点を当てます。
+前の章で最初の3つの基本パターンを学びました。本章では、残りの4つの発展パターンを取り上げます。
 
-## 列挙パターン
+## 列挙型パターン
 
-列挙パターンは `match` で最もよく使われる応用機能です。列挙バリアントを分解し、内部のデータを抽出できます。
+列挙型パターンは、`match` で最もよく使われる高度な機能です。列挙型のバリアントを分解し、内部データを抽出できます。
 
-### 基本的な列挙マッチ
+### 基本的な列挙型のマッチ
 
 ```yaoxiang
 // Result 型を定義
 Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
-// match を使って Result を処理する関数
+// 関数で match を使用して Result を処理
 handle: (result: Result(Int, String)) -> String = match result {
-    ok(value) => "成功！取得した値: {value}",
-    err(msg) => "エラーが発生しました: {msg}",
+    ok(value) => "成功！得到的值是: {value}",
+    err(msg) => "出错啦: {msg}",
 }
 
 a = ok(42)
-b = err("接続タイムアウト")
+b = err("连接超时")
 
-print(handle(a))  // 成功！取得した値: 42
-print(handle(b))  // エラーが発生しました: 接続タイムアウト
+print(handle(a))  // 成功！得到的值是: 42
+print(handle(b))  // 出错啦: 连接超时
 ```
 
 ### Option 型
 
 ```yaoxiang
-// Option を使って null を回避
+// null を避けるために Option を使用
 // 組み込み型: Option: (T: Type) -> Type = some(T) | none
 
 describe: (opt: Option(Int)) -> String = match opt {
-    some(n) => "値あり: {n}",
-    none => "値なし",
+    some(n) => "有值: {n}",
+    none => "什么也没有",
 }
 
-print(describe(some(100)))  // 値あり: 100
-print(describe(none))       // 値なし
+print(describe(some(100)))  // 有值: 100
+print(describe(none))       // 什么也没有
 ```
 
-### カスタム列挙
+### カスタム列挙型
 
 ```yaoxiang
-// 色の列挙を定義
+// 颜色枚举を定義
 Color: Type = { red | green | blue | rgb(Int, Int, Int) }
 
 to_hex: (c: Color) -> String = match c {
@@ -78,17 +77,17 @@ print(to_hex(red))                // #FF0000
 print(to_hex(rgb(128, 128, 128))) // #808080
 ```
 
-`rgb(r, g, b)` 内の `r`、`g`、`b` は識別子パターンであり、`rgb` バリアント内の 3 つの値をキャプチャします。
+`rgb(r, g, b)` の `r`、`g`、`b` は識別子パターンです——これらは `rgb` バリアント内部の3つの値をキャプチャします。
 
-## 構造体パターン（レコード分解）
+## 構造体パターン（レコードの分解）
 
-構造体パターンを使うと、構造体から必要なフィールドを直接抽出できます：
+構造体パターンを使用すると、構造体から関心のあるフィールドを直接抽出できます：
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
 Rect: Type = { x: Float, y: Float, width: Float, height: Float }
 
-// 構造体パターンによる分解
+// 構造体パターンの分解
 area: (shape: Rect) -> Float = match shape {
     { x: _, y: _, width: w, height: h } => w * h,
 }
@@ -97,23 +96,23 @@ r = Rect(0.0, 0.0, 10.0, 20.0)
 print(area(r))  // 200.0
 ```
 
-`{ width: w, height: h }` は「レコードから `width` フィールドを取り出して変数 `w` に束縛し、`height` フィールドを変数 `h` に束縛する」という意味です。`x: _` と `y: _` は「これらのフィールドは存在するが値には興味がない」ことを表します。
+`{ width: w, height: h }` は、「レコードから `width` フィールドを取り出して変数 `w` にバインドし、`height` フィールドを取り出して変数 `h` にバインドする」ことを意味します。`x: _` と `y: _` は「これらのフィールドは存在するが値は気にしない」ことを表します。
 
-**簡略記法**：フィールド名と変数名が同じ場合、省略形が使えます——コンパイラが自動的に同名の変数に分解します：
+**簡略記法**：フィールド名と変数名が同じ場合、略記できます——コンパイラが自動的に同名変数に分解します：
 
 ```yaoxiang
 describe_point: (p: Point) -> String = match p {
     { x: 0.0, y: 0.0 } => "原点",
-    { x, y } => "座標 ({x}, {y})",
+    { x, y } => "坐标 ({x}, {y})",
 }
 
 print(describe_point(Point(0.0, 0.0)))  // 原点
-print(describe_point(Point(3.0, 4.0)))  // 座標 (3.0, 4.0)
+print(describe_point(Point(3.0, 4.0)))  // 坐标 (3.0, 4.0)
 ```
 
 ## タプルパターン
 
-タプルパターンはタプルの各要素を分解します：
+タプルパターンは、タプルの各要素を分解します：
 
 ```yaoxiang
 Pair: Type = (Int, String)
@@ -131,14 +130,14 @@ print(first(p))   // 42
 print(second(p))  // "hello"
 ```
 
-## OR パターン
+## またはパターン
 
-`|` を使って複数のパターンを組み合わせ、そのうちのいずれかにマッチさせます：
+`|` を使用して複数のパターンを組み合わせ、いずれかに一致させます：
 
 ```yaoxiang
 Token: Type = { number(Int) | plus | minus | times | divide | eof }
 
-// 複数のバリアントを「演算子」グループとして組み合わせる
+// 複数のバリアントを「演算子」カテゴリにまとめる
 is_operator: (t: Token) -> Bool = match t {
     plus | minus | times | divide => true,
     _ => false,
@@ -150,12 +149,12 @@ print(is_operator(number(5))) // false
 
 ## ガード式（if ガード）
 
-マッチアームの後ろに `if 条件` を追加すると、パターンが一致し**かつ**条件も満たされた場合にのみマッチが成立します：
+マッチアームの後に `if 条件` を追加すると、パターンが一致し**かつ**条件が満たされた場合にのみ、マッチが有効になります：
 
 ```yaoxiang
 Age: Type = { adult(Int) | child(Int) }
 
-// ガード式で追加条件を付ける
+// ガード式で追加の条件を指定
 can_drive: (a: Age) -> Bool = match a {
     adult(n) if n >= 18 => true,
     adult(n) if n < 18 => false,
@@ -166,16 +165,16 @@ print(can_drive(adult(20)))  // true
 print(can_drive(adult(16)))  // false
 ```
 
-ガード式内の変数は直前のパターンから来ています——`adult(n) if n >= 18` はまず `n` で値をキャプチャし、それから `n >= 18` でチェックします。
+ガード式の変数は前述のパターンから来ます——`adult(n) if n >= 18` は、まず `n` で値をキャプチャし、次に `n >= 18` でチェックします。
 
-## 網羅性検査
+## 網羅性チェック
 
-YaoXiang のコンパイラは `match` がすべての可能性あるケースをカバーしていることを保証します。分岐が欠けていると、コンパイラはエラーを報告します：
+YaoXiang コンパイラは、`match` がすべての考えられるケースをカバーすることを保証します。分支を見落とすと、コンパイラはエラーを出します：
 
 ```yaoxiang
 Direction: Type = { north | south | east | west }
 
-// ✅ 正しく: 4 つの方向をすべてカバー
+// ✅ 正しい：4つの方向をすべてカバー
 turn: (d: Direction) -> Direction = match d {
     north => east,
     east => south,
@@ -183,25 +182,25 @@ turn: (d: Direction) -> Direction = match d {
     west => north,
 }
 
-// ❌ コンパイルエラー: west が欠落
+// ❌ コンパイルエラー：west が欠落
 // broken: (d: Direction) -> Direction = match d {
 //     north => east,
 //     east => south,
 //     south => west,
-//     // west 未処理 → コンパイルエラー
+//     // west が未処理 → コンパイルエラー
 // }
 ```
 
-これは YaoXiang が実行時の予期せぬ事態を防ぐ重要な仕組みです——バリアントが追加されると、すべての `match` 箇所でコンパイラが更新を促します。
+これは、YaoXiang がランタイムの予期せぬ動作を防ぐ重要な仕組みです——新しいバリアントを追加すると、すべての `match` 箇所でコンパイラが更新を提醒します。
 
-## ネストパターン
+## ネストされたパターン
 
-パターンの真の威力は**ネスト**から生まれます——あるパターンの中に別のパターンを入れ子にできます：
+パターンの真の力は**ネスト**にあります——1つのパターン内に別のパターンをネストできます：
 
 ```yaoxiang
 Expr: Type = { literal(Int) | add(Expr, Expr) | mul(Expr, Expr) }
 
-// ネストパターン: add の内側で literal をさらにマッチ
+// ネストされたパターン：add の中で再度 literal を照合
 simplify: (e: Expr) -> Expr = match e {
     add(literal(0), right) => right,  // 0 + x = x
     add(left, literal(0)) => left,    // x + 0 = x
@@ -214,20 +213,19 @@ e = add(literal(0), literal(5))
 print(simplify(e))  // literal(5)
 ```
 
-`add(literal(0), right)` では、外側が `add` の列挙パターン、内側が `literal(0)` のリテラルパターンとなっており、2 層のネストを 1 回のマッチで処理しています。
+`add(literal(0), right)` では、外側は `add` 列挙型パターン、内側は `literal(0)` リテラルパターン——2階のネストで、1回の照合ですべて 처리됩니다。
 
-## まとめ
+## 小まとめ
 
-| パターン種別 | 構文 | 用途 |
-|--------------|------|------|
-| リテラル | `42`, `"hi"` | 値を厳密に一致させる |
-| 識別子 | `x` | 一致した値をキャプチャする |
-| ワイルドカード | `_` | デフォルトマッチ |
-| 列挙 | `ok(value)` | 列挙バリアントを分解する |
-| 構造体 | `{ x, y }` | レコードのフィールドを分解する |
-| タプル | `(a, b)` | タプルの要素を分解する |
-| OR | `a \| b \| c` | 複数候補のいずれかに一致 |
-| ガード | `pattern if cond` | 追加条件を判定する |
+| パターン型 | 構文 | 用途 |
+|----------|------|------|
+| リテラル | `42`, `"hi"` | 値を正確に照合 |
+| 識別子 | `x` | 照合した値をキャプチャ |
+| ワイルドカード | `_` | フォールバック照合 |
+| 列挙型 | `ok(value)` | 列挙型バリアントを分解 |
+| 構造体 | `{ x, y }` | レコードフィールドを分解 |
+| タプル | `(a, b)` | タプル要素を分解 |
+| または | `a \| b \| c` | 複数選択の照合 |
+| ガード式 | `pattern if cond` | 条件判断を追加 |
 
-`match` + パターンマッチング = YaoXiang における最強の制御フローツール。これをマスターすれば、より安全でより明快なコードが書けるようになります。
-```
+`match` + パターン照合 = YaoXiang における最も強力な制御フローツールです。使い方をマスターすれば、より安全性が高く、より明確なコードが書けるようになります。

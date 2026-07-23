@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "RFC-014a: Registry プロトコル仕様"
 status: "レビュー中"
@@ -10,26 +9,26 @@ group: "rfc-014"
 
 # RFC-014a: Registry プロトコル仕様
 
-> 本 RFC は [RFC-014: パッケージ管理システム設計](../accepted/014-package-manager.md) のサブ RFC である。
+> 本 RFC は [RFC-014: パッケージ管理システム設計](../accepted/014-package-manager.md) のサブ RFC です。
 
 ## 概要
 
-YaoXiang パッケージ管理システムの Registry プロトコルを定義する：オープンインターフェース設計、公式 Registry 仕様、GitHub アダプタ層、パッケージ公開/取り下げフロー、認証モデル。
+YaoXiang パッケージ管理システムの Registry プロトコルを定義します：オープンインターフェース設計、公式 Registry 仕様、GitHub アダプタ層、パッケージ公開/撤回フロー、認証モデル。
 
-## 動機
+## 背景
 
-RFC-014 総論ではパッケージ管理システムのアーキテクチャ全体を定義しているが、Registry の部分は「予約」のみで示されている。Registry プロトコルがなければ、パッケージを配布できない――これは商店のないショッピングカートを設計するようなものだ。
+RFC-014 の総論ではパッケージ管理システムの全体アーキテクチャを定義しましたが、Registry の部分は「予約」としてしかマークされていません。Registry プロトコルがないと、パケットの配信ができません——これは商店のないショッピングカートの設計するようなものです。
 
-### 現状の問題
+### 現在の問題
 
-- `RegistrySource` はスタブコードであり（`source/mod.rs:150-203`）、`resolve` は宣言されたバージョンを直接返し、`download` は空のパスを返す
-- HTTP クライアントがない（`reqwest` 依存関係なし）
-- パッケージ公開メカニズムがない
-- 認証/認可がない
+- `RegistrySource` はスタブコードです（`source/mod.rs:150-203`）。`resolve` は宣言されたバージョンをそのまま返し、`download` は空のパスを返します
+- HTTP クライアントがありません（`reqwest` 依存なし）
+- パッケージ公開メカニズムがありません
+- 認証/認可がありません
 
 ## 提案
 
-### 中核設計：オープンプロトコル + アダプタ層
+### コア設計：オープンプrotocol + アダプタ層
 
 ```
 ┌──────────────────────────────────────────┐
@@ -48,14 +47,14 @@ RFC-014 総論ではパッケージ管理システムのアーキテクチャ全
         ┌──────────┼──────────┐
         ▼          ▼          ▼
    ┌─────────┐ ┌────────┐ ┌────────┐
-   │ 公式    │ │ GitHub │ │ カスタム │
+   │ 公式    │ │ GitHub │ │ カスタム│
    │ Registry│ │ アダプタ│ │ Registry│
    └─────────┘ └────────┘ └────────┘
 ```
 
 ### 非同期アーキテクチャの決定
 
-`Source` trait を一括して async へ変更し、tokio を全面採用する：
+`Source` trait を一律で async に変更し、tokio を全面的に採用します：
 
 ```rust
 // 既存（同期）→ 変更後（非同期）
@@ -69,35 +68,35 @@ pub trait Source: Send + Sync {
 }
 ```
 
-すべての実装（`LocalSource`、`GitSource`、`RegistrySource`）を一括して async へ変更する。CLI エントリは `#[tokio::main]` または `Runtime::block_on` で駆動する。
+すべての実装（`LocalSource`、`GitSource`、`RegistrySource`）を一律で async に変更します。CLI エントリポイントは `#[tokio::main]` または `Runtime::block_on` で駆動します。
 
 **理由：**
-- Registry は HTTP リクエストを必要とし、ブロッキングはインストールフロー全体を停止させる
-- 複数依存の並列ダウンロード（`join_all`）はインストール速度を大幅に向上させる
-- Git clone も I/O 操作であり、async の方が自然である
-- tokio は既にプロジェクト依存関係に含まれている
+- Registry は HTTP リクエストを必要とし、ブロッキングはインストールプロセス全体を停止させます
+- 複数依存の並列ダウンロード（`join_all`）でインストール速度が大幅に向上します
+- Git clone も I/O 操作なので、async の方がより自然です
+- tokio はすでにプロジェクト依存関係に含まれています
 
 ### Registry Trait
 
 ```rust
 #[async_trait]
 trait Registry: Send + Sync {
-    /// パッケージを公開
+    /// パッケージを公開する
     async fn publish(&self, package: &PackageManifest, artifact: &Path) -> PackageResult<()>;
 
-    /// 公開済みバージョンを削除（復元不可、バージョン番号は永久にロック）
+    /// 公開済みバージョンを削除する（取り消し不可、バージョン番号は固定）
     async fn yank(&self, name: &str, version: &Version) -> PackageResult<()>;
 
-    /// パッケージ情報を照会
+    /// パッケージ情報をクエリする
     async fn info(&self, name: &str) -> PackageResult<PackageInfo>;
 
-    /// 利用可能なバージョン一覧を照会
+    /// 利用可能なバージョン一覧をクエリする
     async fn versions(&self, name: &str) -> PackageResult<Vec<Version>>;
 
-    /// パッケージを検索
+    /// パッケージを検索する
     async fn search(&self, query: &str) -> PackageResult<Vec<PackageSummary>>;
 
-    /// 指定バージョンをダウンロード
+    /// 指定バージョンをダウンロードする
     async fn download(&self, name: &str, version: &Version) -> PackageResult<PathBuf>;
 
     /// 認証
@@ -105,89 +104,89 @@ trait Registry: Send + Sync {
 }
 ```
 
-### ソース優先順位（デフォルト検索チェーン）
+### ソースの優先順位（デフォルト検索チェーン）
 
-`yaoxiang add foo`（フラグなし）実行時のデフォルト検索順序：
+`yaoxiang add foo`（flag なし）時のデフォルト検索順序：
 
-| 優先度 | 検索先 | 説明 |
-|--------|--------|------|
+| 優先度 | 検索場所 | 説明 |
+|--------|------|------|
 | 1 | グローバルキャッシュ | `~/.yaoxiang/cache/registry/foo-<ver>/` |
-| 2 | 公式 Registry | バージョン照会 → ダウンロード |
-| 3 | 失敗 | エラー報告、パッケージ名またはネットワークの確認をユーザに促す |
+| 2 | 公式 Registry | バージョン查询 → ダウンロード |
+| 3 | 失敗 | エラーを返し、ユーザーにパッケージ名またはネットワークを確認するよう促す |
 
-**明示的なオーバーライド（デフォルトチェーンを使用しない）：**
+**明示的な上書き（デフォルトチェーンをスキップ）：**
 
 | flag | 動作 |
 |------|------|
-| `--git <url>` | Registry をスキップし、直接 Git clone（Release assets 優先 → tag/branch にフォールバック） |
-| `--path <dir>` | Registry をスキップし、直接ローカルパスを使用 |
-| `--registry <url>` | 公式 Registry をスキップし、指定された Registry を使用 |
+| `--git <url>` | Registry をスキップして、直接 Git clone（Release assets を優先 → tag/branch にフォールバック） |
+| `--path <dir>` | Registry をスキップして、ローカルパスを使用 |
+| `--registry <url>` | 公式 Registry をスキップして、指定 Registry を使用 |
 
 ### 公式 Registry
 
-公式 Registry は crates.io に類似し、パッケージ配布の主要チャネルである。
+公式 Registry は crates.io 类似で、パッケージ配信の主要な渠道です。
 
 **API エンドポイント：**
 
 | エンドポイント | メソッド | 説明 |
 |------|------|------|
-| `/api/v1/packages/{name}` | GET | パッケージ情報を照会 |
-| `/api/v1/packages/{name}/versions` | GET | バージョン一覧を照会 |
+| `/api/v1/packages/{name}` | GET | パッケージ情報をクエリ |
+| `/api/v1/packages/{name}/versions` | GET | バージョン一覧をクエリ |
 | `/api/v1/packages/{name}/{version}` | GET | パッケージをダウンロード |
 | `/api/v1/packages` | PUT | パッケージを公開 |
-| `/api/v1/packages/{name}/{version}/yank` | DELETE | バージョン取り下げ |
+| `/api/v1/packages/{name}/{version}/yank` | DELETE | バージョンを撤回 |
 | `/api/v1/search?q={query}` | GET | パッケージを検索 |
 | `/api/v1/login` | POST | 認証 |
 
 ### GitHub 統合
 
-GitHub をパッケージソースとして使用する場合、Go modules と同様の戦略を採用する：
+GitHub をパッケージソースとして使用する場合、Go modules スタイルのアプローチを採用します：
 
-1. **Release assets 優先**：GitHub Release ページにプラットフォーム一致のビルド済みアーティファクトがあるか確認
-2. **main ブランチへフォールバック**：Release がない場合は git clone
+1. **Release assets を優先**：GitHub Release ページに一致するプラットフォームのプリコンパイル成果物があるかをチェック
+2. **main ブランチへのフォールバック**：Release がない場合は git clone
 
 ```toml
 [dependencies]
 # 基本的な git 依存
 foo = { git = "https://github.com/user/foo" }
 
-# バージョン指定（tag マッチ）
+# バージョンを指定（tag に一致）
 bar = { git = "https://github.com/user/bar", version = "^1.0.0" }
 
-# ブランチ指定
+# ブランチを指定
 baz = { git = "https://github.com/user/baz", branch = "main" }
 
-# コミット指定
+# commit を指定
 qux = { git = "https://github.com/user/qux", rev = "abc123" }
 
 # プライベートリポジトリ（credentials.toml の GitHub token を使用）
 private = { git = "https://github.com/my-org/private-lib" }
 ```
 
-### パッケージ形式（.yxpkg）
+### パッケージフォーマット（.yxpkg）
 
 ```
 foo-1.2.3.yxpkg (tar.gz)
 ├── yaoxiang.toml          # パッケージメタデータ
 ├── src/                   # ソースコード
-├── build/                 # ビルド成果物（あれば）
+├── build/                 # ビルド成果物（該当する場合）
 │   └── native/
 │       └── linux-x86_64/
 │           └── libfoo.so
-├── build.yx               # ビルドスクリプト（あれば）
+├── build.yx               # ビルドスクリプト（該当する場合）
 └── SHA256SUMS             # チェックサム
 ```
 
 ### publish フロー
 
 ```bash
-# 公式 Registry へ公開
+# 公式 Registry に公開
 yaoxiang publish
 
-# 指定 Registry へ公開
+# 指定 Registry に公開
 yaoxiang publish --registry my-company
 
-# 同時に GitHub Release を作成
+# GitHub Release も作成
 yaoxiang publish --github
 
 # ドライラン
@@ -195,25 +194,25 @@ yaoxiang publish --dry-run
 ```
 
 公開前の検証：
-1. `yaoxiang.toml` には `name`、`version`、`description` が必須
-2. バージョン番号が既に存在してはならない
-3. テスト実行（オプション、`--no-test` でスキップ）
-4. 全ファイルの SHA-256 を計算
-5. `.yxpkg`（tar.gz）としてパッケージング
-6. Registry へアップロード
+1. `yaoxiang.toml` には `name`、`version`、`description` がなければならない
+2. バージョン番号がすでに存在していてはならない
+3. テストを実行（オプション、`--no-test` でスキップ可能）
+4. すべてのファイルの SHA-256 を計算
+5. `.yxpkg`（tar.gz）にパッケージング
+6. Registry にアップロード
 
-### yank セマンティクス
+### yank 意味論
 
 ```bash
 yaoxiang yank foo@1.2.3
 ```
 
-**削除 + バージョン番号永久ロック：**
+**削除 + バージョン番号の固定：**
 
-- パッケージは完全に削除され、復元不可
-- バージョン番号は永久に占有され、同一番号での再公開は不可
-- 既に lockfile が当該バージョンを参照するプロジェクトはエラーとなり、別バージョンへの更新が必要
-- **安全目的**：npm 型のサプライチェーン攻撃を防止。攻撃者が削除されたパッケージのバージョン番号を乗っ取って悪意あるコードを注入した事例があり、yank によるバージョン番号ロックはこの経路を完全に遮断する。
+- パッケージは完全に削除され、取り消し不可
+- バージョン番号は永久に占有され、同じバージョン番号を再公開できない
+- 該当バージョンを参照する既存の lockfile を持つプロジェクトはエラーになり、他のバージョンにアップグレードする必要がある
+- **セキュリティ目的**：npm 型のサプライチェーン攻撃を防止。攻撃者は削除されたパッケージのバージョン番号を先取りして悪意のあるコードを注入していたが、yank でバージョン番号を固定することでこの手法を完全に塞ぎます。
 
 ### 認証モデル
 
@@ -227,9 +226,9 @@ url = "https://yxreg.my-company.com"
 token = "xxx"
 ```
 
-**マッピングルール：** `yaoxiang login --registry <url>` は URL で `[registries.*]` の `url` フィールドをマッチする。マッチしない場合は新規エントリを作成する（`reg-1` 等の名称を自動生成）。
+**マッピングルール：** `yaoxiang login --registry <url>` は URL で `[registries.*]` の `url` フィールドにマッチさせる。マッチしない場合、新しいエントリを作成する（自動生成された名前、 例：`reg-1`）。
 
-**優先度：** 環境変数 > 設定ファイル
+**優先順位：** 環境変数 > 設定ファイル
 
 | 環境変数 | 用途 |
 |----------|------|
@@ -242,19 +241,19 @@ token = "xxx"
 ```bash
 yaoxiang login --registry https://yxreg.example.com   # URL でマッチまたは新規作成
 yaoxiang login --github                                # GitHub OAuth または token
-yaoxiang logout --registry https://yxreg.example.com   # マッチするエントリを削除
+yaoxiang logout --registry https://yxreg.example.com   # マッチしたエントリを削除
 ```
 
 **セキュリティ制約：**
 - Token は決して `yaoxiang.toml` や `yaoxiang.lock` に書き込まない
-- `credentials.toml` のファイルパーミッションは 600
-- CI シナリオでは環境変数、開発シナリオではファイルを使用
+- `credentials.toml` のファイル権限は 600
+- CI シナリオでは環境変数を使用し、開発シナリオではファイルを使用
 
-## 詳細設計
+## 詳細な設計
 
 ### RegistrySource 実装
 
-既存スタブコード（`source/mod.rs:150-203`）を置換：
+既存のスタブコード（`source/mod.rs:150-203`）を置き換えます：
 
 ```rust
 pub struct RegistrySource {
@@ -281,9 +280,9 @@ impl Source for RegistrySource {
         let url = format!("{}/api/v1/packages/{}/{}/download", self.base_url, spec.name, version);
         let bytes = self.client.get(&url).send().await?.bytes().await?;
 
-        // SHA-256 検証
+        // SHA-256 チェック
         let actual_hash = sha256_hex(&bytes);
-        // ... dest へ展開 ...
+        // ... dest に展開 ...
 
         Ok(ResolvedPackage {
             name: spec.name.clone(),
@@ -297,27 +296,27 @@ impl Source for RegistrySource {
 }
 ```
 
-### 依存クレート
+### 依存関係
 
 | crate | 用途 |
 |-------|------|
 | `reqwest` | HTTP クライアント |
-| `sha2` | SHA-256 検証 |
-| `flate2` + `tar` | パッケージ形式処理 |
+| `sha2` | SHA-256 チェックサム |
+| `flate2` + `tar` | パッケージフォーマットの処理 |
 | `async-trait` | async trait サポート |
 
-### エラー型
+### エラータイプ
 
 ```rust
 #[derive(Debug, thiserror::Error)]
 pub enum RegistryError {
-    #[error("パッケージ '{0}' は存在しません")]
+    #[error("パッケージ '{0}' が存在しません")]
     PackageNotFound(String),
 
-    #[error("バージョン '{0}' は存在しません")]
+    #[error("バージョン '{0}' が存在しません")]
     VersionNotFound(String),
 
-    #[error("バージョン '{0}' は既に占有されています")]
+    #[error("バージョン '{0}' はすでに存在します")]
     VersionAlreadyExists(String),
 
     #[error("認証失敗: {0}")]
@@ -326,7 +325,7 @@ pub enum RegistryError {
     #[error("ネットワークエラー: {0}")]
     NetworkError(#[from] reqwest::Error),
 
-    #[error("SHA-256 検証失敗: 期待値 {expected}, 実際 {actual}")]
+    #[error("SHA-256 チェックサム不一致: 期待値 {expected}, 実際 {actual}")]
     ChecksumMismatch { expected: String, actual: String },
 
     #[error("権限不足: {0}")]
@@ -336,26 +335,26 @@ pub enum RegistryError {
 
 ## トレードオフ
 
-### 利点
+### メリット
 
-- オープンプロトコルで特定のサーバに縛られない
-- GitHub を軽量な配布チャネルとして活用し、参入障壁を低減
-- バージョン番号永久ロックによるセキュリティモデル
-- ビルド済み優先のインストール戦略
+- オープンプrotocolで、特定のサーバーに縛られない
+- GitHub を軽量な配信渠道として使用でき、参入障壁が低い
+- バージョン番号固定のセキュリティモデル
+- プリコンパイル成果物を優先したインストール戦略
 
-### 欠点
+### デメリット
 
-- 公式 Registry は独立運用が必要
+- 公式 Registry は独立した運用が必要
 - GitHub API にはレート制限がある
-- バージョン番号永久ロックにより番号が浪費される可能性がある
+- バージョン番号の固定により、バージョン番号の浪費が発生する可能性がある
 
 ## 代替案
 
-| 案 | 採用しなかった理由 |
+| 案 | 選択しなかった理由 |
 |------|-----------|
-| GitHub のみサポート | GitHub エコシステムに制約され、自前 Registry が立てられない |
-| Cargo 風 crates.io | 複雑すぎ、YaoXiang エコシステム初期には不要 |
-| npm 風 yank（マークのみ） | セキュリティリスク、既知のサプライチェーン攻撃事例あり |
+| GitHub のみサポート | GitHub エコシステムに制限され、カスタム Registry を構築できない |
+| Cargo 式の crates.io | 複雑すぎ、YaoXiang エコシステムの初期段階では不要 |
+| npm 式の yank（マークのみ） | セキュリティリスクがあり、既知のサプライチェーン攻撃事例がある |
 
 ## 実装戦略
 
@@ -363,22 +362,22 @@ pub enum RegistryError {
 
 | フェーズ | 内容 |
 |------|------|
-| Phase 3.5 | Source trait を async 化 + async-trait + 全実装の移行 |
+| Phase 3.5 | Source trait を async に変更 + async-trait + 全実装の移行 |
 | Phase 4a | Registry trait + reqwest 統合 + ローカル Registry モック |
 | Phase 4b | GitHub Release アダプタ |
-| Phase 4c | publish コマンド + パッケージ形式のパッケージング |
+| Phase 4c | publish コマンド + パッケージフォーマットのパッキング |
 | Phase 4d | 認証 + yank |
 
 ### 依存関係
 
-- RFC-014 Phase 3（グローバルキャッシュ、semver 置換）に依存
-- RFC-014b（ビルドシステム、`build/` ディレクトリ処理のため）に依存
+- RFC-014 Phase 3 に依存（グローバルキャッシュ、semver 置換）
+- RFC-014b に依存（ビルドシステム、`build/` ディレクトリ処理用）
 
-## 未解決問題
+## オープンクエスチョン
 
-- [ ] Registry API のバージョン化が必要か（`/api/v1/` vs `/api/v2/`）？
-- [ ] パッケージ名に namespace を許可するか（例：`@org/pkg`）？
-- [ ] レート制限の方針は？
+- [ ] Registry API はバージョン化管理が必要か（`/api/v1/` vs `/api/v2/`）？
+- [ ] パッケージ名は namespace をサポートするか（例：`@org/pkg`）？
+- [ ] レート制限戦略は？
 - [ ] パッケージサイズの上限は？
 
 ---
@@ -389,4 +388,3 @@ pub enum RegistryError {
 - [Go Module Proxy Protocol](https://go.dev/ref/mod#module-proxy)
 - [npm Registry API](https://github.com/npm/registry/blob/main/docs/REGISTRY-API.md)
 - [GitHub Packages](https://docs.github.com/en/packages)
-```
