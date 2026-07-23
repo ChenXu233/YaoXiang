@@ -290,7 +290,7 @@ impl TraitTable {
                             MonoType::TypeRef("Self".to_string()),
                             MonoType::TypeRef("Self".to_string()),
                         ],
-                        return_type: Box::new(MonoType::TypeRef("Bool".to_string())),
+                        return_type: Box::new(MonoType::Bool),
                     },
                 );
             }
@@ -302,7 +302,7 @@ impl TraitTable {
                             MonoType::TypeRef("Self".to_string()),
                             MonoType::TypeRef("Formatter".to_string()),
                         ],
-                        return_type: Box::new(MonoType::TypeRef("Void".to_string())),
+                        return_type: Box::new(MonoType::Void),
                     },
                 );
             }
@@ -375,7 +375,7 @@ impl TraitTable {
                         MonoType::TypeRef("Self".to_string()),
                         MonoType::TypeRef("Self".to_string()),
                     ],
-                    return_type: MonoType::TypeRef("Bool".to_string()),
+                    return_type: MonoType::Bool,
                     is_static: false,
                 },
             )]),
@@ -396,7 +396,7 @@ impl TraitTable {
                         MonoType::TypeRef("Self".to_string()),
                         MonoType::TypeRef("Formatter".to_string()),
                     ],
-                    return_type: MonoType::TypeRef("Void".to_string()),
+                    return_type: MonoType::Void,
                     is_static: false,
                 },
             )]),
@@ -462,7 +462,7 @@ impl TraitTable {
                         MonoType::TypeRef("Self".to_string()),
                         MonoType::TypeRef("Self".to_string()),
                     ],
-                    return_type: Box::new(MonoType::TypeRef("Bool".to_string())),
+                    return_type: Box::new(MonoType::Bool),
                 },
             )])
         };
@@ -474,7 +474,7 @@ impl TraitTable {
                         MonoType::TypeRef("Self".to_string()),
                         MonoType::TypeRef("Formatter".to_string()),
                     ],
-                    return_type: Box::new(MonoType::TypeRef("Void".to_string())),
+                    return_type: Box::new(MonoType::Void),
                 },
             )])
         };
