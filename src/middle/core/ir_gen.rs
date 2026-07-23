@@ -498,10 +498,10 @@ impl AstToIrGenerator {
                     crate::frontend::core::parser::ast::extract_generic_param_names(
                         signature_params,
                     );
-                if type_name.is_some() {
+                if let Some(type_name) = type_name {
                     // MethodBind
                     self.generate_method_ir(
-                        type_name.as_ref().unwrap(),
+                        &type_name,
                         &name,
                         type_annotation.as_ref().unwrap(),
                         &params,

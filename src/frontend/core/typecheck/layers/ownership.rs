@@ -1352,26 +1352,24 @@ impl OwnershipChecker {
                         scope.push(name.clone());
                     }
                 }
-                if let Some(init) = initializer {
-                    if let Expr::BinOp {
-                        op: crate::frontend::core::parser::ast::BinOp::Assign,
-                        left,
-                        right,
-                        ..
-                    } = init
+                if let Some(Expr::BinOp {
+                    op: crate::frontend::core::parser::ast::BinOp::Assign,
+                    left,
+                    right,
+                    ..
+                }) = initializer
+                {
+                    if let Expr::FieldAccess {
+                        expr: inner, field, ..
+                    } = left.as_ref()
                     {
-                        if let Expr::FieldAccess {
-                            expr: inner, field, ..
-                        } = left.as_ref()
-                        {
-                            if let Some(var_name) = Self::extract_var_name(inner) {
-                                if let Expr::Var(assigned_name, _) = right.as_ref() {
-                                    self.field_assignments.push((
-                                        var_name,
-                                        field.clone(),
-                                        assigned_name.clone(),
-                                    ));
-                                }
+                        if let Some(var_name) = Self::extract_var_name(inner) {
+                            if let Expr::Var(assigned_name, _) = right.as_ref() {
+                                self.field_assignments.push((
+                                    var_name,
+                                    field.clone(),
+                                    assigned_name.clone(),
+                                ));
                             }
                         }
                     }

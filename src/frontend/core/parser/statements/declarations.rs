@@ -154,17 +154,16 @@ fn parse_assign_after_target(
             let saved = state.save_position();
             state.bump(); // consume '('
 
-            let looks_like_named_params = if state.at(&TokenKind::RParen) {
-                true
-            } else if state.at(&TokenKind::KwMut) {
-                true
-            } else if let Some(TokenKind::Identifier(_)) = state.current().map(|t| &t.kind) {
-                let next = state.peek().map(|t| &t.kind);
-                matches!(next, Some(TokenKind::Colon))
-                    || matches!(next, Some(TokenKind::Comma) | Some(TokenKind::RParen))
-            } else {
-                false
-            };
+            let looks_like_named_params =
+                if state.at(&TokenKind::RParen) || state.at(&TokenKind::KwMut) {
+                    true
+                } else if let Some(TokenKind::Identifier(_)) = state.current().map(|t| &t.kind) {
+                    let next = state.peek().map(|t| &t.kind);
+                    matches!(next, Some(TokenKind::Colon))
+                        || matches!(next, Some(TokenKind::Comma) | Some(TokenKind::RParen))
+                } else {
+                    false
+                };
 
             let is_rfc010 = if looks_like_named_params {
                 let mut paren_depth = 1;

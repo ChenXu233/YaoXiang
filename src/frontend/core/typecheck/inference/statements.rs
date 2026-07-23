@@ -587,7 +587,7 @@ impl StatementChecker {
                 ..
             } => {
                 use crate::frontend::core::parser::ast::Expr;
-                let (name, type_name) = match target.as_ref() {
+                let (name, _type_name) = match target.as_ref() {
                     Expr::Var(n, _) => (n.clone(), None),
                     Expr::FieldAccess { expr, field, .. } => {
                         if let Expr::Var(tn, _) = expr.as_ref() {
@@ -629,27 +629,15 @@ impl StatementChecker {
                     stmts: body_stmts.clone(),
                     span: stmt.span,
                 };
-                let result = if type_name.is_some() {
-                    self.check_fn_stmt(
-                        &name,
-                        type_annotation.as_ref(),
-                        signature_params,
-                        &params,
-                        &body_stmts,
-                        body_block,
-                        *stmt_span,
-                    )
-                } else {
-                    self.check_fn_stmt(
-                        &name,
-                        type_annotation.as_ref(),
-                        signature_params,
-                        &params,
-                        &body_stmts,
-                        body_block,
-                        *stmt_span,
-                    )
-                };
+                let result = self.check_fn_stmt(
+                    &name,
+                    type_annotation.as_ref(),
+                    signature_params,
+                    &params,
+                    &body_stmts,
+                    body_block,
+                    *stmt_span,
+                );
                 result
             }
             crate::frontend::core::parser::ast::StmtKind::For {

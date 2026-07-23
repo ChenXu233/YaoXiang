@@ -55,6 +55,7 @@ pub struct FfiRegistry {
     #[cfg(not(target_arch = "wasm32"))]
     loaded_libs: HashMap<String, Arc<Library>>,
     /// Registered opaque type names
+    #[expect(dead_code)]
     opaque_types: HashSet<String>,
 }
 

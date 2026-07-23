@@ -27,72 +27,69 @@ pub fn handle_inlay_hint(
     let mut hints = Vec::new();
 
     for stmt in &ast.items {
-        match &stmt.kind {
-            StmtKind::Assign {
-                target,
-                type_annotation,
-                value,
-                is_mut,
-                span: stmt_span,
-                ..
-            } => {
-                use crate::frontend::core::parser::ast::Expr;
-                let name_span = match target.as_ref() {
-                    Expr::Var(_, s) => *s,
-                    _ => *stmt_span,
-                };
-                let range = span_to_range(&name_span);
-                if type_annotation.is_none() {
-                    if let Some(init) = value {
-                        if let Some(inferred_type) = simple_infer_type(init) {
+        if let StmtKind::Assign {
+            target,
+            type_annotation,
+            value,
+            is_mut,
+            span: stmt_span,
+            ..
+        } = &stmt.kind
+        {
+            use crate::frontend::core::parser::ast::Expr;
+            let name_span = match target.as_ref() {
+                Expr::Var(_, s) => *s,
+                _ => *stmt_span,
+            };
+            let range = span_to_range(&name_span);
+            if type_annotation.is_none() {
+                if let Some(init) = value {
+                    if let Some(inferred_type) = simple_infer_type(init) {
+                        hints.push(InlayHint {
+                            position: range.end,
+                            label: InlayHintLabel::String(format!(": {}", inferred_type)),
+                            kind: Some(InlayHintKind::TYPE),
+                            text_edits: None,
+                            tooltip: None,
+                            padding_left: Some(false),
+                            padding_right: Some(false),
+                            data: None,
+                        });
+                    }
+                }
+            }
+            if !*is_mut {
+                if let Some(init) = value {
+                    if let Some(val) = evaluate_constant(init) {
+                        if !is_literal(init) {
                             hints.push(InlayHint {
-                                position: range.end,
-                                label: InlayHintLabel::String(format!(": {}", inferred_type)),
-                                kind: Some(InlayHintKind::TYPE),
+                                position: span_to_range(&get_expr_span(init)).end,
+                                label: InlayHintLabel::String(format!(" => {}", val)),
+                                kind: None,
                                 text_edits: None,
-                                tooltip: None,
-                                padding_left: Some(false),
+                                tooltip: Some(lsp_types::InlayHintTooltip::String(
+                                    "编译期计算的常量值".to_string(),
+                                )),
+                                padding_left: Some(true),
                                 padding_right: Some(false),
                                 data: None,
                             });
                         }
                     }
                 }
-                if !*is_mut {
-                    if let Some(init) = value {
-                        if let Some(val) = evaluate_constant(init) {
-                            if !is_literal(init) {
-                                hints.push(InlayHint {
-                                    position: span_to_range(&get_expr_span(init)).end,
-                                    label: InlayHintLabel::String(format!(" => {}", val)),
-                                    kind: None,
-                                    text_edits: None,
-                                    tooltip: Some(lsp_types::InlayHintTooltip::String(
-                                        "编译期计算的常量值".to_string(),
-                                    )),
-                                    padding_left: Some(true),
-                                    padding_right: Some(false),
-                                    data: None,
-                                });
-                            }
-                        }
-                    }
-                }
-                if *is_mut {
-                    hints.push(InlayHint {
-                        position: range.start,
-                        label: InlayHintLabel::String("mut ".to_string()),
-                        kind: Some(InlayHintKind::PARAMETER),
-                        text_edits: None,
-                        tooltip: Some(lsp_types::InlayHintTooltip::String("可变变量".to_string())),
-                        padding_left: Some(false),
-                        padding_right: Some(true),
-                        data: None,
-                    });
-                }
             }
-            // 第二个 Assign 分支已被合并到上面，避免 unreachable pattern
-            _ => {}
+            if *is_mut {
+                hints.push(InlayHint {
+                    position: range.start,
+                    label: InlayHintLabel::String("mut ".to_string()),
+                    kind: Some(InlayHintKind::PARAMETER),
+                    text_edits: None,
+                    tooltip: Some(lsp_types::InlayHintTooltip::String("可变变量".to_string())),
+                    padding_left: Some(false),
+                    padding_right: Some(true),
+                    data: None,
+                });
+            }
         }
     }
 

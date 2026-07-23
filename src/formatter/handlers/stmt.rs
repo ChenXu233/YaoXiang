@@ -121,6 +121,7 @@ pub fn format_stmt(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn format_assign(
     target: &Expr,
     type_annotation: &Option<Type>,

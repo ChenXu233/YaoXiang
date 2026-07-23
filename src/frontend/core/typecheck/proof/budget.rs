@@ -12,6 +12,7 @@ use super::verdict::BudgetReport;
 pub struct BudgetTracker {
     steps_used: Cell<u32>,
     steps_limit: u32,
+    #[expect(dead_code)]
     time_ms_used: Cell<u64>, // 阶段 1 保留，阶段 2 (SMT) 启用
     time_ms_limit: u64,
 }
