@@ -1175,19 +1175,21 @@ impl<'a> ExpressionInferrer<'a> {
                                     }
                                     _ => arg_ty.clone(),
                                 };
+                                // resolve 参数类型：TypeRef("Int") → Int(64) 等
+                                let resolved_param = self.solver.resolve_type(param_ty);
                                 // Int -> Float 扩展转换是允许的
                                 if matches!(
-                                    (&actual_arg, param_ty),
+                                    (&actual_arg, &resolved_param),
                                     (MonoType::Int(_), MonoType::Float(_))
                                 ) {
                                     continue;
                                 }
-                                // TypeRef 未完全解析时跳过（如用户自定义类型名）
-                                if matches!(param_ty, MonoType::TypeRef(_)) {
+                                // 用户自定义类型名（TypeRef resolve 后仍为 TypeRef）跳过
+                                if matches!(resolved_param, MonoType::TypeRef(_)) {
                                     continue;
                                 }
                                 // TypeVar 是泛型类型参数 —— 必须 unify 以推断具体类型
-                                if self.solver.unify(&actual_arg, param_ty).is_err() {
+                                if self.solver.unify(&actual_arg, &resolved_param).is_err() {
                                     return Err(ErrorCodeDefinition::type_mismatch(
                                         &format!("{}", param_ty),
                                         &format!("{}", arg_ty),
