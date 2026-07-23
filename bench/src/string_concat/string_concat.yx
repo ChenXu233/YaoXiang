@@ -1,0 +1,26 @@
+// string_concat — 字符串拼接
+// 测试: 字符串操作性能
+// 从 BENCH_INPUT 环境变量读取循环次数，默认 500
+
+use std.{io, os, string, result}
+
+main = {
+    n_str = os.get_env("BENCH_INPUT")
+    limit = if n_str == "" {
+        500
+    } else {
+        parsed = string.parse_int(n_str)
+        result.unwrap_or(parsed, 500)
+    }
+
+    mut s = ""
+    mut i = 0
+    while i < limit {
+        s = s + "Hello"
+        s = s + " "
+        s = s + "World"
+        s = s + "!"
+        i = i + 1
+    }
+    io.println(s)
+}

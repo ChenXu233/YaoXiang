@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Matrix multiply - Python"""
+"""Matrix multiply - Python
+Reads BENCH_INPUT env var for matrix size, defaults to 20"""
+
+import os
 
 def create_matrix(size: int):
     return [[i * j for j in range(size)] for i in range(size)]
@@ -15,7 +18,7 @@ def multiply(a, b, size: int):
     return result
 
 def main():
-    size = 20
+    size = int(os.environ.get("BENCH_INPUT", "20"))
     a = create_matrix(size)
     b = create_matrix(size)
     c = multiply(a, b, size)
