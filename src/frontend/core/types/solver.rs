@@ -893,21 +893,7 @@ impl TypeConstraintSolver {
         &self,
         name: &str,
     ) -> Option<MonoType> {
-        match name {
-            "Int" | "int" | "int64" | "i64" => Some(MonoType::Int(64)),
-            "Int32" | "int32" | "i32" => Some(MonoType::Int(32)),
-            "Int16" | "int16" | "i16" => Some(MonoType::Int(16)),
-            "Int8" | "int8" | "i8" => Some(MonoType::Int(8)),
-            "Float" | "float" | "float64" | "f64" => Some(MonoType::Float(64)),
-            "Float32" | "float32" | "f32" => Some(MonoType::Float(32)),
-            "Bool" | "bool" => Some(MonoType::Bool),
-            "Char" | "char" => Some(MonoType::Char),
-            "String" | "string" | "str" => Some(MonoType::String),
-            "Bytes" | "bytes" => Some(MonoType::Bytes),
-            "Void" | "void" | "()" => Some(MonoType::Void),
-            "Never" | "never" => Some(MonoType::Never),
-            _ => None,
-        }
+        MonoType::from_builtin_name(name)
     }
 
     fn find_readonly(

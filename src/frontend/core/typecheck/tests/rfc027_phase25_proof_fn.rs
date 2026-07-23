@@ -148,6 +148,7 @@ fn test_call_with_named_var_args() {
 use crate::frontend::pipeline::execute_single_proof_fn;
 use crate::frontend::core::parser::ast::{
     BinOp as AstBinOp, Block, Expr, Literal, Module, Param, Stmt, StmtKind, Type as AstType,
+    TypeBodyItem,
 };
 use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::util::span::Span;
@@ -368,6 +369,83 @@ fn test_execute_proof_fn_negative_boundary() {
     assert!(!result_neg1.unwrap(), "-1 > 0 应为 false");
 }
 
+/// 构造一个 TypeDefinition 形式的 Module AST，包含一个简单的证明函数。
+///
+/// 生成的 AST 结构：
+/// ```text
+/// fn_name: (x: Int) -> Type = { body_expr }
+/// ```
+///
+/// 规范来源: RFC-027 §4.2 Phase 2.5 — 证明函数执行管线（TypeDefinition 形式）
+fn make_proof_fn_typedef_module(
+    fn_name: &str,
+    body_expr: Expr,
+) -> Module {
+    let param = Param {
+        name: "x".into(),
+        ty: Some(AstType::Int(64)),
+        is_mut: false,
+        span: Span::dummy(),
+    };
+
+    let type_def_stmt = Stmt {
+        kind: StmtKind::TypeDefinition {
+            name: fn_name.into(),
+            signature_params: vec![param],
+            definition: AstType::Struct {
+                body: vec![TypeBodyItem::Expr(AstType::ConstExpr(Box::new(body_expr)))],
+            },
+            is_pub: false,
+        },
+        span: Span::dummy(),
+    };
+
+    Module {
+        items: vec![type_def_stmt],
+        span: Span::dummy(),
+    }
+}
+
+// Arrange & Act & Assert
+#[test]
+fn test_execute_proof_fn_typedef_returns_true() {
+    // Arrange: TypeDefinition 形式的 IsPositive，x > 0 约束，参数 5
+    let body = var_gt_literal(0);
+    let ast = make_proof_fn_typedef_module("IsPositive", body);
+    let type_result = TypeCheckResult::default();
+    let call = ProofFunctionCall {
+        func_name: "IsPositive".into(),
+        args: vec![ConstValue::Int(5)],
+    };
+
+    // Act
+    let result = execute_single_proof_fn(&call, &ast, &type_result);
+
+    // Assert: IsPositive(5) = 5>0 应返回 true
+    assert!(result.is_ok(), "IsPositive(5) 应成功执行: {:?}", result);
+    assert!(result.unwrap(), "5 > 0 应为 true");
+}
+
+// Arrange & Act & Assert
+#[test]
+fn test_execute_proof_fn_typedef_returns_false() {
+    // Arrange: TypeDefinition 形式的 IsPositive，x > 0 约束，参数 -1
+    let body = var_gt_literal(0);
+    let ast = make_proof_fn_typedef_module("IsPositive", body);
+    let type_result = TypeCheckResult::default();
+    let call = ProofFunctionCall {
+        func_name: "IsPositive".into(),
+        args: vec![ConstValue::Int(-1)],
+    };
+
+    // Act
+    let result = execute_single_proof_fn(&call, &ast, &type_result);
+
+    // Assert: IsPositive(-1) = -1>0 应返回 false
+    assert!(result.is_ok(), "IsPositive(-1) 应成功执行: {:?}", result);
+    assert!(!result.unwrap(), "-1 > 0 应为 false");
+}
+
 // --- Section 3: E2E Compiler 全流程 ---
 // 规范来源: RFC-027 §4.2 Phase 2.5 — 证明函数编译器集成
 
@@ -393,9 +471,7 @@ fn test_e2e_proof_fn_compilation_succeeds() {
 }
 
 // Arrange & Act & Assert
-// FIXME: 移除 #[ignore] 后此测试应失败——暴露了解析器未正确处理 (x: Int) -> Type 语法的 bug
 #[test]
-#[ignore = "解析器未正确处理 (x: Int) -> Type 语法，导致 IsPositive 函数未被识别为证明函数"]
 fn test_e2e_proof_fn_compilation_fails_on_false() {
     // Arrange: IsPositive(-1) 在编译期应返回 false
     let source = r#"
@@ -410,6 +486,48 @@ fn test_e2e_proof_fn_compilation_fails_on_false() {
     let result = compiler.compile_with_source("test.yao", source);
 
     // Assert: 编译应失败——证明不通过
+    assert!(
+        result.is_err(),
+        "期望编译失败（IsPositive(-1) 不成立），但编译通过了: {:?}",
+        result
+    );
+}
+
+// Arrange & Act & Assert
+#[test]
+fn test_e2e_proof_fn_expression_form_succeeds() {
+    // Arrange: 表达式形式 = x > 0（RFC-007 表达式简写）
+    let source = r#"
+        IsPositive: (x: Int) -> Type = x > 0
+        main = {
+            val: IsPositive(5) = 5
+        }
+    "#;
+    let mut compiler = Compiler::new();
+
+    // Act
+    let result = compiler.compile_with_source("test.yao", source);
+
+    // Assert: 编译应通过
+    assert!(result.is_ok(), "期望编译通过，但失败: {:?}", result);
+}
+
+// Arrange & Act & Assert
+#[test]
+fn test_e2e_proof_fn_expression_form_fails_on_false() {
+    // Arrange: 表达式形式，IsPositive(-1) 应失败
+    let source = r#"
+        IsPositive: (x: Int) -> Type = x > 0
+        main = {
+            val: IsPositive(-1) = -1
+        }
+    "#;
+    let mut compiler = Compiler::new();
+
+    // Act
+    let result = compiler.compile_with_source("test.yao", source);
+
+    // Assert: 编译应失败
     assert!(
         result.is_err(),
         "期望编译失败（IsPositive(-1) 不成立），但编译通过了: {:?}",

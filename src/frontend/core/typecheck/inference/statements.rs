@@ -72,6 +72,8 @@ pub struct StatementChecker {
     dep_env: crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
     /// Trait 表（用于 classify_generic_params 判定 annotation 是否为 trait）
     trait_table: TraitTable,
+    /// 证明函数基类型表: "IsPositive" -> Int(64)（RFC-027 Phase 2.5）
+    proof_fn_bases: HashMap<String, MonoType>,
 }
 
 impl StatementChecker {
@@ -102,6 +104,7 @@ impl StatementChecker {
             gamma,
             dep_env,
             trait_table,
+            proof_fn_bases: HashMap::new(),
         }
     }
 
@@ -131,22 +134,11 @@ impl StatementChecker {
     ) -> MonoType {
         match ty {
             MonoType::TypeRef(name) => {
-                // Check built-in types first
-                match name.as_str() {
-                    "Int" | "int" | "Int64" | "int64" | "i64" => return MonoType::Int(64),
-                    "Int32" | "int32" | "i32" => return MonoType::Int(32),
-                    "Float" | "float" | "Float64" | "float64" | "f64" => {
-                        return MonoType::Float(64)
-                    }
-                    "Float32" | "float32" | "f32" => return MonoType::Float(32),
-                    "Bool" | "bool" => return MonoType::Bool,
-                    "Char" | "char" => return MonoType::Char,
-                    "String" | "string" => return MonoType::String,
-                    "Void" | "void" | "()" => return MonoType::Void,
-                    "Never" | "never" => return MonoType::Never,
-                    _ => {}
+                // 先查内置类型名
+                if let Some(builtin) = MonoType::from_builtin_name(name) {
+                    return builtin;
                 }
-                // Check type_defs for user-defined types
+                // 再查用户类型定义
                 if let Some(struct_ty) = self.type_defs.get(name) {
                     return struct_ty.clone();
                 }
@@ -173,6 +165,14 @@ impl StatementChecker {
         bindings: HashMap<String, MonoType>,
     ) {
         self.method_bindings = bindings;
+    }
+
+    /// 设置证明函数基类型表（RFC-027 Phase 2.5）
+    pub fn set_proof_fn_bases(
+        &mut self,
+        bases: HashMap<String, MonoType>,
+    ) {
+        self.proof_fn_bases = bases;
     }
 
     /// 尝试实例化泛型类型
@@ -1196,12 +1196,50 @@ impl StatementChecker {
                 let ann_ty = self
                     .try_instantiate_generic_type(type_ann)
                     .unwrap_or_else(|| MonoType::from(type_ann.clone()));
+                // RFC-027 Phase 2.5: 证明函数类型解析（从 AST Type 直接提取）
+                // IsPositive(5) → Refined { base: Int(64), constraint: Call("IsPositive", [5]) }
+                let ann_ty = if let crate::frontend::core::parser::ast::Type::Generic {
+                    name,
+                    args,
+                    ..
+                } = type_ann
+                {
+                    if !args.is_empty() {
+                        if let Some(base) = self.proof_fn_bases.get(name) {
+                            let constraint_args: Vec<crate::frontend::core::types::const_data::ConstExpr> = args
+                                .iter()
+                                .filter_map(|a| {
+                                    if let crate::frontend::core::parser::ast::Type::ConstExpr(expr) = a {
+                                        crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+                            let constraint =
+                                crate::frontend::core::types::const_data::ConstExpr::Call {
+                                    func: name.clone(),
+                                    args: constraint_args,
+                                };
+                            MonoType::Refined {
+                                base: Box::new(base.clone()),
+                                constraint,
+                            }
+                        } else {
+                            ann_ty
+                        }
+                    } else {
+                        ann_ty
+                    }
+                } else {
+                    ann_ty
+                };
                 // Check type assignment compatibility:
                 // - Float cannot be assigned to Int (no implicit narrowing)
                 //   Resolve TypeRef("Int") to Int(64) for comparison (§3.2: Int defaults to 8 bytes)
+                // RFC-027: Refined 类型用 base 做 unify
                 let resolved_ann = match &ann_ty {
-                    MonoType::TypeRef(n) if n == "Int" => MonoType::Int(64),
-                    MonoType::TypeRef(n) if n == "Float" => MonoType::Float(64),
+                    MonoType::Refined { base, .. } => *base.clone(),
                     _ => ann_ty.clone(),
                 };
                 if matches!(
@@ -1221,19 +1259,9 @@ impl StatementChecker {
                 // The annotation type is NOT resolved when it's a struct/interface TypeRef,
                 // so the solver can detect the Struct vs TypeRef pattern.
                 let resolved_init = self.resolve_type_ref_type(&init_ty);
-                // For the annotation type, resolve built-in primitives (Float → Float(64))
-                // to allow proper unify, but leave user-defined TypeRefs as-is
-                // for structural subtyping detection.
+                // RFC-027: Refined 类型用 base 做 unify
                 let resolved_ann = match &ann_ty {
-                    MonoType::TypeRef(name) => {
-                        if self.type_defs.contains_key(name) {
-                            // User-defined type (struct/interface) — keep as TypeRef
-                            ann_ty.clone()
-                        } else {
-                            // Built-in or unknown — try to resolve
-                            self.resolve_type_ref_type(&ann_ty)
-                        }
-                    }
+                    MonoType::Refined { base, .. } => *base.clone(),
                     _ => ann_ty.clone(),
                 };
                 // Check Int → Float subtype (widening conversion is always safe)
