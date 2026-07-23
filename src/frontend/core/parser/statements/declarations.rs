@@ -258,23 +258,29 @@ fn parse_assign_after_target(
 
     // ── 可选初始化 ──
     if state.skip(&TokenKind::Eq) {
-        // Check if this is a generic type constructor definition:
-        //   name: (T: Type, ...) -> Type = { ... }
+        // RFC-010: 返回 Type 时，先尝试类型体解析（字段/枚举）
+        // 失败则 fall through 到表达式分支（精化约束）
         if let Some(Type::Fn { return_type, .. }) = &type_annotation {
             if matches!(return_type.as_ref(), Type::MetaType { .. }) {
-                // 类型构造器
                 if let Expr::Var(name, _) = &target {
-                    let definition = parse_type_definition(state)?;
-                    state.skip(&TokenKind::Semicolon);
-                    return Some(Stmt {
-                        kind: StmtKind::TypeDefinition {
-                            name: name.clone(),
-                            signature_params: fn_params.clone().unwrap_or_default(),
-                            definition,
-                            is_pub,
-                        },
-                        span,
-                    });
+                    let saved = state.save_position();
+                    if let Some(definition) = parse_type_definition(state) {
+                        // 只有 Struct/Variant 才是类型体；ConstExpr 等是表达式，走 Assign
+                        if matches!(&definition, Type::Struct { .. } | Type::Variant(..)) {
+                            state.skip(&TokenKind::Semicolon);
+                            return Some(Stmt {
+                                kind: StmtKind::TypeDefinition {
+                                    name: name.clone(),
+                                    signature_params: fn_params.clone().unwrap_or_default(),
+                                    definition,
+                                    is_pub,
+                                },
+                                span,
+                            });
+                        }
+                    }
+                    // 类型体解析失败（如 { x > 0 }）→ 回退，走表达式分支
+                    state.restore_position(saved);
                 }
             }
         }

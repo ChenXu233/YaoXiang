@@ -266,6 +266,35 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             ));
             None
         }
+        // 整数字面量类型：IsPositive(5) 中的 5
+        Some(TokenKind::IntLiteral(n)) => {
+            let n = *n;
+            let span = state.span();
+            state.bump();
+            Some(Type::ConstExpr(Box::new(Expr::Lit(
+                crate::frontend::core::lexer::tokens::Literal::Int(n),
+                span,
+            ))))
+        }
+        // 负整数字面量类型：IsPositive(-1) 中的 -1
+        Some(TokenKind::Minus) => {
+            let span = state.span();
+            state.bump();
+            if let Some(TokenKind::IntLiteral(n)) = state.current().map(|t| &t.kind) {
+                let n = *n;
+                state.bump();
+                Some(Type::ConstExpr(Box::new(Expr::UnOp {
+                    op: crate::frontend::core::parser::ast::UnOp::Neg,
+                    expr: Box::new(Expr::Lit(
+                        crate::frontend::core::lexer::tokens::Literal::Int(n),
+                        span,
+                    )),
+                    span,
+                })))
+            } else {
+                None
+            }
+        }
         // Note: fn type uses (Params) -> ReturnType syntax, not `fn` keyword
         _ => None,
     }
@@ -625,6 +654,21 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                 // 回退一个 token，从头开始析枚举
                 state.restore_position(state.save_position() - 1);
                 return parse_enum_variants_in_braces(state);
+            } else if matches!(
+                state.current().map(|t| &t.kind),
+                Some(
+                    TokenKind::Gt
+                        | TokenKind::Lt
+                        | TokenKind::Ge
+                        | TokenKind::Le
+                        | TokenKind::EqEq
+                        | TokenKind::Neq
+                )
+            ) {
+                // 精化约束表达式: x > 0
+                state.restore_position(name_start);
+                let ty = parse_type_annotation(state)?;
+                body.push(TypeBodyItem::Expr(ty));
             } else {
                 // 接口约束: InterfaceName
                 body.push(TypeBodyItem::Interface(name));
@@ -637,7 +681,10 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
         }
     }
 
-    state.skip(&TokenKind::RBrace);
+    if !state.skip(&TokenKind::RBrace) {
+        // 未找到闭合 }——内容不是合法类型体
+        return None;
+    }
 
     Some(Type::Struct { body })
 }

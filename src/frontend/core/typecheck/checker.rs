@@ -251,6 +251,25 @@ impl TypeChecker {
             .map(|(name, poly)| (name.clone(), poly.body.clone()))
             .collect();
         body_checker.set_type_defs(type_defs);
+        // RFC-027 Phase 2.5: 构建证明函数基类型表
+        let proof_fn_bases: HashMap<String, MonoType> = self
+            .env
+            .vars
+            .iter()
+            .filter_map(|(name, poly)| {
+                if let MonoType::Fn {
+                    params,
+                    return_type,
+                } = &poly.body
+                {
+                    if matches!(return_type.as_ref(), MonoType::MetaType { .. }) {
+                        return params.first().map(|base| (name.clone(), base.clone()));
+                    }
+                }
+                None
+            })
+            .collect();
+        body_checker.set_proof_fn_bases(proof_fn_bases);
         // 如果启用收集模式，设置收集所有错误
         if collect_all {
             body_checker.set_collect_all_errors(true);
@@ -1114,6 +1133,34 @@ impl TypeChecker {
         // 同时注册到 vars，使类型名可以在表达式中使用（如 Point(1.0, 2.0) 构造器调用）
         self.env.add_var(name.to_string(), poly.clone());
 
+        // RFC-027 Phase 2.5: 带约束表达式的类型定义同时注册为 proof 函数
+        // IsPositive: (x: Int) -> Type = { x > 0 }
+        // → 注册 `IsPositive` 为 `Fn { params: [Int], return_type: MetaType }`
+        if let crate::frontend::core::parser::ast::Type::Struct { body } = definition {
+            let has_constraint = body.iter().any(|item| {
+                matches!(
+                    item,
+                    crate::frontend::core::parser::ast::TypeBodyItem::Expr(
+                        crate::frontend::core::parser::ast::Type::ConstExpr(_)
+                    )
+                )
+            });
+            if has_constraint && !signature_params.is_empty() {
+                let param_types: Vec<MonoType> = signature_params
+                    .iter()
+                    .filter_map(|p| p.ty.as_ref().map(|t| MonoType::from(t.clone())))
+                    .collect();
+                let fn_ty = MonoType::Fn {
+                    params: param_types,
+                    return_type: Box::new(MonoType::MetaType {
+                        universe_level: crate::frontend::core::types::mono::UniverseLevel::type0(),
+                        type_params: vec![],
+                    }),
+                };
+                self.env.add_var(name.to_string(), PolyType::mono(fn_ty));
+            }
+        }
+
         // 如果是泛型类型构造器（有泛型参数），存储模板信息用于类型实例化
         if !generic_params.is_empty() {
             use crate::frontend::core::typecheck::environment::GenericTypeDef;
@@ -1676,6 +1723,7 @@ impl TypeChecker {
     /// 从表达式中提取常量值
     ///
     /// 用于从初始化器中提取值，以便在精化类型检查中使用。
+    #[allow(dead_code)]
     fn extract_const_value(
         &self,
         expr: &Expr,
@@ -1751,7 +1799,6 @@ impl TypeChecker {
             StmtKind::Assign {
                 target,
                 type_annotation: Some(type_ann),
-                value,
                 ..
             } => {
                 use crate::frontend::core::parser::ast::Expr;
@@ -1762,16 +1809,35 @@ impl TypeChecker {
                 let mono_ty = MonoType::from(type_ann.clone());
                 let resolved_ty = self.resolve_type_annotation(&mono_ty);
                 if let MonoType::Refined { constraint, .. } = &resolved_ty {
+                    // RFC-027 Phase 2.5: Call 约束直接生成 proof call
+                    if let crate::frontend::core::types::const_data::ConstExpr::Call {
+                        func,
+                        args,
+                    } = constraint
+                    {
+                        let call_args: Vec<crate::frontend::core::types::ConstValue> = args
+                            .iter()
+                            .filter_map(|a| {
+                                if let crate::frontend::core::types::const_data::ConstExpr::Lit(v) =
+                                    a
+                                {
+                                    Some(v.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        proof_calls.push(
+                            crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall {
+                                func_name: func.clone(),
+                                args: call_args,
+                            },
+                        );
+                    }
                     let free_vars = Self::extract_free_vars(constraint);
                     for fv in &free_vars {
                         if fv != &name {
                             dep_graph.add_dep(&name, fv);
-                        }
-                    }
-                    let mut bindings = HashMap::new();
-                    if let Some(init_expr) = value {
-                        if let Some(const_val) = self.extract_const_value(init_expr) {
-                            bindings.insert(name.clone(), const_val);
                         }
                     }
                 }
@@ -1782,6 +1848,11 @@ impl TypeChecker {
                 if let crate::frontend::core::parser::ast::Expr::Lambda { body, .. } = expr.as_ref()
                 {
                     for s in &body.stmts {
+                        self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                    }
+                } else if let crate::frontend::core::parser::ast::Expr::Block(block) = expr.as_ref()
+                {
+                    for s in &block.stmts {
                         self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
                     }
                 }

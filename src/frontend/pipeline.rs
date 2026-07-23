@@ -763,19 +763,15 @@ impl Pipeline {
 }
 
 /// 执行单个证明函数（RFC-027 Phase 2.5）
+/// RFC-027 Phase 2.5: 执行单个证明函数
 ///
-/// 完整的编译→执行管线：AST 查找 → IR 生成 → 字节码编译 → 解释器执行
+/// 优先使用 const 求值（约束表达式），回退到 IR/字节码管线（return 形式）
 pub(crate) fn execute_single_proof_fn(
     call: &typecheck::proof::verdict::ProofFunctionCall,
     ast: &super::core::parser::ast::Module,
     type_result: &typecheck::TypeCheckResult,
 ) -> Result<bool, String> {
-    use crate::backends::common::value::from_const_value;
-    use crate::backends::common::RuntimeValue;
-    use crate::backends::interpreter::Interpreter;
-    use crate::backends::Executor;
     use crate::frontend::core::parser::ast::StmtKind;
-    use crate::middle;
 
     // 1. 在 AST 中查找函数定义
     let (params, body_stmts, type_ann) = ast
@@ -810,9 +806,82 @@ pub(crate) fn execute_single_proof_fn(
             }
             _ => None,
         })
+        .or_else(|| {
+            // 同时搜索 TypeDefinition 项（类型级证明函数语法）
+            ast.items.iter().find_map(|stmt| match &stmt.kind {
+                StmtKind::TypeDefinition {
+                    name,
+                    signature_params,
+                    definition,
+                    ..
+                } => {
+                    if *name != call.func_name {
+                        return None;
+                    }
+                    use crate::frontend::core::parser::ast::{Type, TypeBodyItem};
+                    if let Type::Struct { body } = definition {
+                        for item in body {
+                            if let TypeBodyItem::Expr(Type::ConstExpr(expr)) = item {
+                                let constraint_stmt = crate::frontend::core::parser::ast::Stmt {
+                                    kind: StmtKind::Expr(expr.clone()),
+                                    span: crate::util::span::Span::dummy(),
+                                };
+                                return Some((
+                                    signature_params.clone(),
+                                    vec![constraint_stmt],
+                                    None,
+                                ));
+                            }
+                        }
+                    }
+                    None
+                }
+                _ => None,
+            })
+        })
         .ok_or_else(|| format!("证明函数 '{}' 未在 AST 中找到", call.func_name))?;
 
-    // 2. IR 生成：单个函数 → FunctionIR
+    // 2. 提取约束表达式（Expr 或 Return 中的表达式）
+    let constraint_expr = body_stmts.iter().find_map(|s| match &s.kind {
+        StmtKind::Expr(e) => Some(e.as_ref().clone()),
+        StmtKind::Return(Some(e)) => Some(e.as_ref().clone()),
+        _ => None,
+    });
+
+    // 3. 优先 const 求值（精化约束语义：表达式是约束，不是返回值）
+    if let Some(ref expr) = constraint_expr {
+        if let Some(const_expr) =
+            crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)
+        {
+            let mut evaluator =
+                crate::frontend::core::types::eval::const_eval::ConstGenericEval::new();
+            // 绑定参数：param name → proof call arg value
+            for (i, param) in params.iter().enumerate() {
+                if let Some(arg) = call.args.get(i) {
+                    evaluator.bind_var(param.name.clone(), arg.clone());
+                }
+            }
+            if let Ok(result) = evaluator.eval(&const_expr) {
+                match result {
+                    crate::frontend::core::types::ConstValue::Bool(b) => return Ok(b),
+                    other => {
+                        return Err(format!(
+                            "证明函数 '{}' 约束求值结果不是 Bool: {:?}",
+                            call.func_name, other
+                        ))
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. 回退：IR 生成 → 字节码 → 解释器（支持 return 形式的复杂证明函数）
+    use crate::backends::common::value::from_const_value;
+    use crate::backends::common::RuntimeValue;
+    use crate::backends::interpreter::Interpreter;
+    use crate::backends::Executor;
+    use crate::middle;
+
     let mut ir_gen = middle::core::ir_gen::AstToIrGenerator::new_with_type_result(type_result);
     let mut constants: Vec<middle::core::ir::ConstValue> = Vec::new();
     let func_ir = ir_gen
@@ -833,32 +902,25 @@ pub(crate) fn execute_single_proof_fn(
         )
     })?;
 
-    // 3. 构造最小 ModuleIR（仅含一个函数）
     let module_ir = middle::ModuleIR {
         functions: vec![func_ir],
         ..Default::default()
     };
 
-    // 4. 字节码编译
     let mut codegen = middle::passes::codegen::CodegenContext::new(module_ir);
     let bytecode_file = codegen
         .generate()
         .map_err(|e| format!("证明函数 '{}' 字节码编译失败: {}", call.func_name, e))?;
 
     let mut bytecode_module = crate::middle::core::bytecode::BytecodeModule::from(bytecode_file);
-    // 证明函数没有 main 入口，不应自动执行 entry_point（会把参数为空的函数执行一遍）
     bytecode_module.entry_point = None;
 
-    // 5. ConstValue → RuntimeValue
     let args: Vec<RuntimeValue> = call.args.iter().map(from_const_value).collect();
 
-    // 6. 解释器执行
     let mut interpreter = Interpreter::new();
-    // 先通过 execute_module 加载常量池和函数表
     interpreter
         .execute_module(&bytecode_module)
         .map_err(|e| format!("证明函数 '{}' 模块加载失败: {}", call.func_name, e))?;
-    // 然后通过 call_function_by_id 执行具体函数（函数已在 execute_module 中注册）
     let func_id = bytecode_module
         .functions
         .iter()
@@ -871,7 +933,6 @@ pub(crate) fn execute_single_proof_fn(
         )
         .map_err(|e| format!("证明函数 '{}' 执行失败: {}", call.func_name, e))?;
 
-    // 7. 提取 bool
     match result {
         RuntimeValue::Bool(b) => Ok(b),
         other => Err(format!(

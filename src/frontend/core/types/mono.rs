@@ -720,8 +720,31 @@ impl From<ast::Type> for MonoType {
                     type_params: args.into_iter().map(MonoType::from).collect(),
                 }
             }
-            ast::Type::ConstExpr(_expr) => {
-                // ConstExpr 只在 Assert 参数位置出现，不应出现在类型转换中
+            ast::Type::ConstExpr(expr) => {
+                // RFC-027: 尝试求值为字面量类型（如 IsPositive(5) 中的 5）
+                if let Some(const_expr) =
+                    crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(
+                        &expr,
+                    )
+                {
+                    let evaluator =
+                        crate::frontend::core::types::eval::const_eval::ConstGenericEval::new();
+                    if let Ok(value) = evaluator.eval(&const_expr) {
+                        let base = match &value {
+                            crate::frontend::core::types::ConstValue::Int(_) => MonoType::Int(64),
+                            crate::frontend::core::types::ConstValue::Bool(_) => MonoType::Bool,
+                            crate::frontend::core::types::ConstValue::Float(_) => {
+                                MonoType::Float(64)
+                            }
+                            _ => MonoType::Int(64),
+                        };
+                        return MonoType::Literal {
+                            name: format!("{}", value),
+                            value,
+                            base_type: Box::new(base),
+                        };
+                    }
+                }
                 MonoType::TypeRef("<const-expr>".to_string())
             }
         }
