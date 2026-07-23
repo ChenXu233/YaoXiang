@@ -681,7 +681,6 @@ fn test_rfc011_fn_const_generic_block_body() {
 ///
 /// 预期行为：
 /// - f(3.14) 其中 f: (x: Int) -> Int 应报类型错误
-#[ignore]
 #[test]
 fn test_rfc011_float_arg_to_int_param_reports_error() {
     // Arrange
