@@ -249,6 +249,8 @@ impl TypeChecker {
             .map(|(name, poly)| (name.clone(), poly.body.clone()))
             .collect();
         body_checker.set_type_defs(type_defs);
+        // issue #180 F 组：同步类型名集合，供值空间 schema 校验区分类型/值 base
+        body_checker.set_type_names(self.env.types.keys().cloned().collect());
         // RFC-027 Phase 2.5: 构建证明函数基类型表
         let proof_fn_bases: HashMap<String, MonoType> = self
             .env

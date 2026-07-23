@@ -64,6 +64,8 @@ pub struct StatementChecker {
     /// 类型定义表: type_name -> MonoType(Struct)
     /// 用于 TypeRef → Struct 解析
     type_defs: HashMap<String, MonoType>,
+    /// 类型名集合（从 TypeEnvironment.types 同步），语义区分 base 是类型还是值（issue #180 F 组）
+    type_names: std::collections::HashSet<String>,
     /// 实例化请求（收集所有泛型函数实例化需求）
     pub instantiation_requests: Vec<InstantiationRequest>,
     /// 流敏感假设集 Γ（可选 — None 在测试或未启用证明管道时使用）
@@ -100,6 +102,7 @@ impl StatementChecker {
             generic_type_defs: std::collections::HashMap::new(),
             method_bindings: HashMap::new(),
             type_defs: HashMap::new(),
+            type_names: std::collections::HashSet::new(),
             instantiation_requests: Vec::new(),
             gamma,
             dep_env,
@@ -114,6 +117,14 @@ impl StatementChecker {
         defs: HashMap<String, MonoType>,
     ) {
         self.type_defs = defs;
+    }
+
+    /// 设置类型名集合（值空间 schema 校验区分类型/值 base，issue #180 F 组）
+    pub fn set_type_names(
+        &mut self,
+        names: std::collections::HashSet<String>,
+    ) {
+        self.type_names = names;
     }
 
     /// 设置 Trait 表
@@ -598,6 +609,56 @@ impl StatementChecker {
                     }
                     _ => return Ok(()),
                 };
+                // 值空间 schema 校验（issue #180 F 组，全受限）：
+                // target 是 base.field 且 base 是值（实例）→ 字段必须在类型 schema 内。
+                if let Expr::FieldAccess { expr, field, .. } = target.as_ref() {
+                    // base 是类型 → 类型空间（pass2 已登记），此处不重复校验
+                    let base_is_type = if let Expr::Var(base, _) = expr.as_ref() {
+                        self.type_names.contains(base)
+                    } else {
+                        false
+                    };
+                    if !base_is_type {
+                        if let Ok(base_ty) = self.check_expr(expr) {
+                            // 剥 Ref 层：&mut File -> File（同 expressions.rs 字段访问）
+                            let mut resolved = self.solver.resolve_type(&base_ty);
+                            while let MonoType::Ref { inner, .. } = resolved {
+                                resolved = *inner;
+                            }
+                            let resolved = self.solver.resolve_type(&resolved);
+                            let in_schema = |st: &crate::frontend::core::types::StructType| {
+                                st.fields.iter().any(|(n, _)| n == field)
+                                    || st.methods.contains_key(field)
+                            };
+                            let schema_ok = match &resolved {
+                                MonoType::Struct(st) => in_schema(st),
+                                MonoType::TypeRef(tn) => self
+                                    .type_defs
+                                    .get(tn)
+                                    .map(|t| self.solver.resolve_type(t))
+                                    .and_then(|t| match t {
+                                        MonoType::Struct(st) => Some(in_schema(&st)),
+                                        _ => None,
+                                    })
+                                    .unwrap_or(false),
+                                _ => false,
+                            };
+                            if !schema_ok {
+                                let type_name = match &resolved {
+                                    MonoType::Struct(st) => st.name.clone(),
+                                    MonoType::TypeRef(tn) => tn.clone(),
+                                    other => format!("{}", other),
+                                };
+                                return Err(Box::new(
+                                    crate::util::diagnostic::ErrorCodeDefinition::field_not_found(
+                                        field, &type_name,
+                                    )
+                                    .build(),
+                                ));
+                            }
+                        }
+                    }
+                }
                 // 从 value 提取 Lambda params/body
                 let (params, body_stmts) = match value {
                     Some(v) => {
