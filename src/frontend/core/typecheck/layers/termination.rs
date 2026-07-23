@@ -863,50 +863,6 @@ impl TerminationChecker {
         let _ = func;
     }
 
-    /// 检查递归调用的参数是否递减
-    ///
-    /// 支持的模式：
-    /// - `f(n-1)` 当 `n-1 < n` → 递减
-    /// - `f(arg)` 当 `arg` 是字面量且小于对应参数 → 递减
-    #[allow(dead_code)]
-    fn check_recursive_args(
-        &self,
-        param_names: &[String],
-        args: &[Box<Expr>],
-    ) -> Option<usize> {
-        // 查找至少一个参数是"变量 - 正常数"模式
-        for (i, (param_name, arg)) in param_names.iter().zip(args.iter()).enumerate() {
-            if let Expr::BinOp {
-                op: BinOp::Sub,
-                left,
-                right,
-                ..
-            } = arg.as_ref()
-            {
-                // 检查 left 是否引用参数自身
-                if let Expr::Var(var_name, _) = left.as_ref() {
-                    if var_name == param_name {
-                        // right 是正常数
-                        if let Expr::Lit(ast::Literal::Int(v), _) = right.as_ref() {
-                            if *v > 0 {
-                                return Some(i); // 参数递减，递归终止
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 也可以检查 arg 是小于参数的字面量
-            if let Expr::Lit(ast::Literal::Int(v), _) = arg.as_ref() {
-                // 这是一个常量参数——无法从上下文确定是否递减
-                // 但我们保守地认为如果常量 <= 0，可能仍在递减
-                let _ = (*v, param_name);
-            }
-        }
-
-        None
-    }
-
     // ==================== 诊断输出 ====================
 
     fn emit_terminates(
@@ -924,43 +880,6 @@ impl TerminationChecker {
     ) {
         let reason =
             UnprovenReason::BeyondKernel("循环无法证明终止：未找到有效的递减度量".to_string());
-        self.results.push(ProofResult::Unproven {
-            reason,
-            proof_calls: vec![],
-            budget: BudgetReport {
-                steps_used: 0,
-                steps_limit: 0,
-            },
-        });
-    }
-
-    #[allow(dead_code)]
-    fn emit_recursion_not_terminating(
-        &mut self,
-        _span: crate::util::span::Span,
-        func_name: &str,
-    ) {
-        let reason = UnprovenReason::BeyondKernel(format!(
-            "递归函数 `{}` 无法证明终止：参数未严格递减",
-            func_name
-        ));
-        self.results.push(ProofResult::Unproven {
-            reason,
-            proof_calls: vec![],
-            budget: BudgetReport {
-                steps_used: 0,
-                steps_limit: 0,
-            },
-        });
-    }
-
-    #[allow(dead_code)]
-    fn emit_measure_not_decreasing(
-        &mut self,
-        _span: crate::util::span::Span,
-        measure: &str,
-    ) {
-        let reason = UnprovenReason::BeyondKernel(format!("度量 `{}` 未严格递减", measure));
         self.results.push(ProofResult::Unproven {
             reason,
             proof_calls: vec![],

@@ -32,30 +32,6 @@ impl TypeStatementParser for ParserState<'_> {
     }
 }
 
-#[allow(dead_code)]
-fn looks_like_parenthesized_lambda(state: &mut ParserState<'_>) -> bool {
-    if !state.at(&TokenKind::LParen) {
-        return false;
-    }
-
-    let saved = state.save_position();
-    state.bump();
-
-    let mut depth = 1;
-    while depth > 0 && !state.at_end() {
-        if state.at(&TokenKind::LParen) {
-            depth += 1;
-        } else if state.at(&TokenKind::RParen) {
-            depth -= 1;
-        }
-        state.bump();
-    }
-
-    let is_lambda = depth == 0 && state.at(&TokenKind::FatArrow);
-    state.restore_position(saved);
-    is_lambda
-}
-
 /// Parse type annotation
 pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
     match state.current().map(|t| &t.kind) {

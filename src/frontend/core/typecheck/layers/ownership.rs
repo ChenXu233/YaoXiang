@@ -915,15 +915,6 @@ impl OwnershipChecker {
         }
     }
 
-    /// 推进 CFG 节点（创建新节点并从当前节点连 Normal 边）
-    #[allow(dead_code)] // 控制流方法提取后暂未使用，保留供后续使用
-    fn next_node(&mut self) -> usize {
-        let node = self.cfg.add_node(None);
-        self.cfg.add_edge(self.current_node, node, EdgeKind::Normal);
-        self.current_node = node;
-        node
-    }
-
     // ── 控制流方法（walk_expr 和 walk_stmt 共用） ──────────
 
     /// walk_if：If 表达式/语句的控制流构建

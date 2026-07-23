@@ -402,7 +402,6 @@ impl Monomorphizer {
     ) -> Option<MonoType> {
         let generic_def = self.generic_types.get(generic_id.name())?;
         let mono_type = self.instantiate_type(generic_id, type_args, generic_def)?;
-        self.register_monomorphized_type(mono_type.clone(), generic_id, type_args);
         Some(mono_type)
     }
 
@@ -618,19 +617,6 @@ impl Monomorphizer {
                 .join("_");
             format!("{}_{}", generic_id.name(), args_str)
         }
-    }
-
-    fn register_monomorphized_type(
-        &mut self,
-        mono_type: MonoType,
-        generic_id: &GenericTypeId,
-        type_args: &[MonoType],
-    ) -> TypeId {
-        let type_id = self.generate_type_id(generic_id, type_args);
-        self.monomorphized_types
-            .entry(type_id.clone())
-            .or_insert(mono_type);
-        type_id
     }
 
     fn extract_type_params_from_mono_type(

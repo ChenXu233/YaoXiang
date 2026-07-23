@@ -15,13 +15,7 @@
 //! 2. 支持模块搜索路径和缓存
 //! 3. 支持循环依赖检测
 
-pub mod cache;
-pub mod dep_graph;
-pub mod loader;
 pub mod registry;
-pub mod resolver;
-#[cfg(feature = "cli")]
-pub mod vendor;
 
 use std::collections::HashMap;
 

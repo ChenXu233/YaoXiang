@@ -9,8 +9,7 @@ use thiserror::Error;
 use tracing::debug;
 
 use super::config::CompileConfig;
-use super::events::*;
-use super::pipeline::{Pipeline, PipelineState};
+use super::pipeline::{Pipeline, PipelineState, CompilationPhase};
 
 /// 编译器
 ///
@@ -70,16 +69,6 @@ impl Compiler {
         &mut self.pipeline
     }
 
-    /// 订阅编译器事件
-    ///
-    /// 允许外部组件订阅编译器事件，用于 IDE 集成和进度显示。
-    pub fn subscribe<S: EventSubscriber + 'static>(
-        &self,
-        subscriber: S,
-    ) -> SubscriptionHandle {
-        self.pipeline.subscribe(subscriber)
-    }
-
     /// 编译源文件
     ///
     /// 对源文件进行完整的编译流程，包括词法分析、语法分析、类型检查和 IR 生成。
@@ -116,16 +105,37 @@ impl Compiler {
         if result.is_success() {
             Ok(result.ir.unwrap())
         } else {
-            // 取第一个错误作为主要诊断
+            // 取第一个错误
             let first_error = result.errors.first();
-            let first_diagnostic = first_error.and_then(|e| e.diagnostic()).map(Box::new);
             let error_message = result
                 .errors
                 .iter()
                 .map(|e| format!("{}", e))
                 .collect::<Vec<_>>()
                 .join("\n");
-            Err(CompileError::TypeError(error_message, first_diagnostic))
+
+            // 根据管道错误类型映射到合适的编译错误变体
+            let compilation_error = match first_error {
+                Some(err) => match err {
+                    super::pipeline::PipelineError::LexParse(_) => {
+                        let diagnostic =
+                            crate::util::diagnostic::ErrorCodeDefinition::internal_error(
+                                &error_message,
+                            )
+                            .build();
+                        CompileError::Parse(diagnostic)
+                    }
+                    super::pipeline::PipelineError::TypeCheck(diag) => {
+                        CompileError::TypeError(error_message, Some(Box::new(diag.clone())))
+                    }
+                    other => {
+                        let diagnostic = other.diagnostic().map(Box::new);
+                        CompileError::TypeError(error_message, diagnostic)
+                    }
+                },
+                None => CompileError::Internal(error_message),
+            };
+            Err(compilation_error)
         }
     }
 
@@ -179,65 +189,6 @@ impl Compiler {
         type_result: &super::core::typecheck::TypeCheckResult,
     ) -> Result<middle::ModuleIR, Vec<Diagnostic>> {
         middle::generate_ir(ast, type_result)
-    }
-
-    /// 检查是否可以进行增量编译
-    ///
-    /// # 参数
-    ///
-    /// - `file`: 要检查的文件路径
-    /// - `source`: 当前源代码内容
-    ///
-    /// # 返回
-    ///
-    /// 如果可以增量编译返回 `true`
-    #[inline]
-    pub fn can_incremental_compile(
-        &self,
-        file: &std::path::Path,
-        source: &str,
-    ) -> bool {
-        self.pipeline.can_incremental_compile(file, source)
-    }
-
-    /// 使用增量编译（如果可能）
-    ///
-    /// 先检查缓存，如果命中则直接返回缓存结果，否则执行完整编译并缓存。
-    pub fn compile_incremental(
-        &mut self,
-        source_name: &str,
-        source: &str,
-        file: std::path::PathBuf,
-    ) -> Result<middle::ModuleIR, CompileError> {
-        // 尝试从缓存获取
-        if let Some(result) = self.pipeline.get_cached_result(&file, source) {
-            if let Some(ir) = result.ir {
-                return Ok(ir);
-            }
-        }
-
-        // 缓存未命中，执行编译并缓存
-        let result = self.pipeline.run_and_cache(source_name, source, file);
-
-        if result.is_success() {
-            Ok(result.ir.unwrap())
-        } else {
-            let first_error = result.errors.first();
-            let first_diagnostic = first_error.and_then(|e| e.diagnostic()).map(Box::new);
-            let error_message = result
-                .errors
-                .iter()
-                .map(|e| format!("{}", e))
-                .collect::<Vec<_>>()
-                .join("\n");
-            Err(CompileError::TypeError(error_message, first_diagnostic))
-        }
-    }
-
-    /// 清空编译缓存（用于 --force 全量重编译）
-    #[inline]
-    pub fn clear_cache(&mut self) {
-        self.pipeline.clear_cache();
     }
 
     /// 获取当前编译状态
@@ -344,87 +295,6 @@ impl CompileProgress {
             current_line,
             total_lines,
             message: message.into(),
-        }
-    }
-}
-
-/// 编译进度回调实现
-///
-/// 用于从编译器事件生成进度信息。
-#[derive(Debug)]
-pub struct ProgressReporter {
-    total_lines: usize,
-}
-
-impl ProgressReporter {
-    /// 创建新的进度报告器
-    pub fn new(total_lines: usize) -> Self {
-        Self { total_lines }
-    }
-
-    /// 从事件生成进度信息
-    pub fn on_event<E: Event>(
-        &self,
-        event: &E,
-    ) -> Option<CompileProgress> {
-        match event.name() {
-            "LexingStart" => Some(CompileProgress::new(
-                CompilationPhase::Lexing,
-                0.0,
-                0,
-                self.total_lines,
-                "Starting lexing...",
-            )),
-            "LexingComplete" => Some(CompileProgress::new(
-                CompilationPhase::Lexing,
-                25.0,
-                self.total_lines,
-                self.total_lines,
-                "Lexing complete",
-            )),
-            "ParsingStart" => Some(CompileProgress::new(
-                CompilationPhase::Parsing,
-                25.0,
-                0,
-                self.total_lines,
-                "Starting parsing...",
-            )),
-            "ParsingComplete" => Some(CompileProgress::new(
-                CompilationPhase::Parsing,
-                50.0,
-                self.total_lines,
-                self.total_lines,
-                "Parsing complete",
-            )),
-            "TypeCheckingStart" => Some(CompileProgress::new(
-                CompilationPhase::TypeChecking,
-                50.0,
-                0,
-                self.total_lines,
-                "Starting type checking...",
-            )),
-            "TypeCheckingComplete" => Some(CompileProgress::new(
-                CompilationPhase::TypeChecking,
-                80.0,
-                self.total_lines,
-                self.total_lines,
-                "Type checking complete",
-            )),
-            "IRGenerationStart" => Some(CompileProgress::new(
-                CompilationPhase::IRGeneration,
-                80.0,
-                0,
-                self.total_lines,
-                "Starting IR generation...",
-            )),
-            "IRGenerationComplete" => Some(CompileProgress::new(
-                CompilationPhase::IRGeneration,
-                100.0,
-                self.total_lines,
-                self.total_lines,
-                "IR generation complete",
-            )),
-            _ => None,
         }
     }
 }

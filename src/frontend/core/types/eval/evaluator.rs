@@ -950,46 +950,6 @@ impl<'a> Evaluator<'a> {
         Some((family_name, args))
     }
 
-    /// 求值 IsTrue/Assert 类型族
-    ///
-    /// IsTrue(true) => Void
-    /// IsTrue(false) => Never
-    /// IsTrue(x) 当 x 不可归约时保持不变
-    /// Assert(x) 委托给 IsTrue(x)
-    #[allow(dead_code)]
-    fn eval_istrue(
-        &mut self,
-        ty: &MonoType,
-        _depth: usize,
-    ) -> Result<MonoType, EvalError> {
-        let name = match ty {
-            MonoType::TypeRef(n) => n,
-            _ => return Ok(ty.clone()),
-        };
-        let args = Self::parse_generic_args(name);
-        let arg = match args {
-            Some(a) if a.len() == 1 => a.into_iter().next().unwrap(),
-            _ => return Ok(ty.clone()),
-        };
-        let arg_ty = match self.parse_type(&arg) {
-            Some(t) => t,
-            None => return Ok(ty.clone()),
-        };
-        match &arg_ty {
-            MonoType::TypeRef(n) if n == "true" => Ok(MonoType::Void),
-            MonoType::TypeRef(n) if n == "false" => Ok(MonoType::Never),
-            _ => {
-                // 尝试归约参数——可能是可计算的表达式
-                let reduced_arg = self.eval(&arg_ty)?;
-                match &reduced_arg {
-                    MonoType::TypeRef(n) if n == "true" => Ok(MonoType::Void),
-                    MonoType::TypeRef(n) if n == "false" => Ok(MonoType::Never),
-                    _ => Ok(ty.clone()),
-                }
-            }
-        }
-    }
-
     // ============ 公共 API ============
 
     /// 快速求值 If 条件类型
@@ -1141,63 +1101,6 @@ fn eval_unop(
     }
 }
 
-/// 替换类型中的类型引用：将 body 中所有 TypeRef(name) 替换为 replacement
-#[allow(dead_code)]
-fn substitute_type(
-    body: &MonoType,
-    param_name: &str,
-    replacement: &MonoType,
-) -> MonoType {
-    match body {
-        MonoType::TypeRef(name) if name == param_name => replacement.clone(),
-        MonoType::Fn {
-            params,
-            return_type,
-        } => MonoType::Fn {
-            params: params
-                .iter()
-                .map(|p| substitute_type(p, param_name, replacement))
-                .collect(),
-            return_type: Box::new(substitute_type(return_type, param_name, replacement)),
-        },
-        MonoType::List(inner) => {
-            MonoType::List(Box::new(substitute_type(inner, param_name, replacement)))
-        }
-        MonoType::Option(inner) => {
-            MonoType::Option(Box::new(substitute_type(inner, param_name, replacement)))
-        }
-        MonoType::Tuple(elems) => MonoType::Tuple(
-            elems
-                .iter()
-                .map(|e| substitute_type(e, param_name, replacement))
-                .collect(),
-        ),
-        MonoType::Ref { mutable, inner } => MonoType::Ref {
-            mutable: *mutable,
-            inner: Box::new(substitute_type(inner, param_name, replacement)),
-        },
-        MonoType::Refined { base, constraint } => MonoType::Refined {
-            base: Box::new(substitute_type(base, param_name, replacement)),
-            constraint: constraint.clone(), // ConstExpr 暂不替换
-        },
-        MonoType::DepFn {
-            params,
-            return_type,
-        } => MonoType::DepFn {
-            params: params
-                .iter()
-                .map(|p| crate::frontend::core::types::mono::DepParam {
-                    name: p.name.clone(),
-                    ty: substitute_type(&p.ty, param_name, replacement),
-                })
-                .collect(),
-            return_type: Box::new(substitute_type(return_type, param_name, replacement)),
-        },
-        // 叶子类型和不含类型参数的类型直接返回
-        _ => body.clone(),
-    }
-}
-
 // ============ 与类型归一化器集成 ============
 
 /// 类型求值结果转换
@@ -1206,55 +1109,6 @@ impl From<Result<MonoType, EvalError>> for TypeLevelResult<MonoType> {
         match result {
             Ok(ty) => TypeLevelResult::Normalized(ty),
             Err(e) => TypeLevelResult::Error(TypeLevelError::ComputationFailed(format!("{:?}", e))),
-        }
-    }
-}
-
-/// 集成到现有类型归一化器的辅助函数
-///
-/// 将 Evaluator 与 TypeNormalizer 集成，确保：
-/// 1. 求值器的缓存与归一化器的缓存同步
-/// 2. 条件类型的求值结果被正确缓存
-/// 3. 避免重复求值相同类型
-///
-/// **设计说明**：当前架构采用"嵌入式集成"模式，
-/// TypeNormalizer 内部包含 Evaluator，共享生命周期。
-/// 这种设计避免了需要手动同步两个独立缓存的问题。
-#[allow(dead_code)]
-pub fn integrate_evaluator(
-    _evaluator: &mut Evaluator<'_>,
-    _normalizer: &mut super::normalizer::TypeNormalizer,
-) {
-    // TypeNormalizer 现在内部包含 Evaluator
-    // 缓存同步由 TypeNormalizer 内部处理
-    // 这个函数保留用于未来可能的外部集成需求
-}
-
-/// 同步两个缓存系统（备用方法，当前架构不需要）
-///
-/// 如果未来需要分离 Evaluator 和 TypeNormalizer，
-/// 可以使用此函数同步缓存。
-#[allow(dead_code)]
-pub fn sync_caches(
-    evaluator: &Evaluator<'_>,
-    context: &mut super::normalizer::NormalizationContext,
-) {
-    use super::normalizer::NormalForm;
-
-    let cache = context.cache_mut();
-
-    // 将 Evaluator 的缓存同步到 NormalizationContext
-    // Result<MonoType, EvalError> -> NormalForm 转换
-    for (ty, eval_result) in &evaluator.cache {
-        match eval_result {
-            Ok(_result_ty) => {
-                // 已求值的类型标记为已归一化
-                cache.insert(ty.clone(), NormalForm::Normalized);
-            }
-            Err(_) => {
-                // 错误的类型也标记
-                cache.insert(ty.clone(), NormalForm::Normalized);
-            }
         }
     }
 }

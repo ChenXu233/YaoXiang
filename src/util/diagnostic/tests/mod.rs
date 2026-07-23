@@ -5,5 +5,4 @@
 
 mod collect;
 mod mod_tests;
-mod session;
 mod suggest;

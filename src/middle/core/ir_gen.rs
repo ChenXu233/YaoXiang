@@ -104,20 +104,6 @@ struct SymbolEntry {
     local_idx: usize,
 }
 
-/// IR 生成器配置
-#[derive(Debug, Default, Clone)]
-pub struct IrGeneratorConfig {
-    /// 是否生成调试信息
-    pub generate_debug_info: bool,
-}
-
-impl IrGeneratorConfig {
-    /// 创建默认配置
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
 /// AST 到 IR 的生成器
 ///
 /// 将 AST 节点转换为 IR 指令序列。
@@ -196,18 +182,12 @@ struct LambdaBodyIR {
     mut_locals: std::collections::HashSet<usize>,
 }
 
-impl Default for AstToIrGenerator {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl AstToIrGenerator {
-    /// 创建新的 IR 生成器
-    pub fn new() -> Self {
+    /// 创建新的 IR 生成器（带类型信息）
+    pub fn new_with_type_result(type_result: &TypeCheckResult) -> Self {
         Self {
             symbols: vec![HashMap::new()],
-            type_result: None,
+            type_result: Some(Box::new(type_result.clone())),
             next_temp: 0,
             current_mut_locals: std::collections::HashSet::new(),
             module_mut_locals: HashMap::new(),
@@ -227,17 +207,8 @@ impl AstToIrGenerator {
             constraint_var_concrete_types: HashMap::new(),
             anon_function_irs: Vec::new(),
             function_param_types: HashMap::new(),
-            release_plan: HashMap::new(),
-            pending_env_vars: Vec::new(),
-        }
-    }
-
-    /// 创建新的 IR 生成器（带类型信息）
-    pub fn new_with_type_result(type_result: &TypeCheckResult) -> Self {
-        Self {
-            type_result: Some(Box::new(type_result.clone())),
             release_plan: type_result.release_plan.drops.clone(),
-            ..Self::new()
+            pending_env_vars: Vec::new(),
         }
     }
 
