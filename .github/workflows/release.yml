@@ -135,6 +135,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Sync version badge to README
+        run: |
+          python scripts/sync-version-badge.py
+          git add README.md docs/gh/README.en.md
+          git diff --cached --quiet || \
+            git commit -m "chore: sync version badge to v${{ needs.check-version.outputs.version }} [skip ci]"
+          git push
+
       - name: Create and push tag
         run: |
           TAG="v${{ needs.check-version.outputs.version }}"
