@@ -510,6 +510,25 @@ impl MonoType {
             _ => None,
         }
     }
+    /// 将内置类型名解析为具体 MonoType。
+    /// 返回 None 表示非内置名（用户自定义类型）。
+    pub fn from_builtin_name(name: &str) -> Option<MonoType> {
+        match name {
+            "Int" | "int" | "Int64" | "int64" | "i64" => Some(MonoType::Int(64)),
+            "Int32" | "int32" | "i32" => Some(MonoType::Int(32)),
+            "Int16" | "int16" | "i16" => Some(MonoType::Int(16)),
+            "Int8" | "int8" | "i8" => Some(MonoType::Int(8)),
+            "Float" | "float" | "Float64" | "float64" | "f64" => Some(MonoType::Float(64)),
+            "Float32" | "float32" | "f32" => Some(MonoType::Float(32)),
+            "Bool" | "bool" => Some(MonoType::Bool),
+            "Char" | "char" => Some(MonoType::Char),
+            "String" | "string" => Some(MonoType::String),
+            "Bytes" | "bytes" => Some(MonoType::Bytes),
+            "Void" | "void" | "()" => Some(MonoType::Void),
+            "Never" | "never" => Some(MonoType::Never),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for MonoType {
@@ -524,7 +543,9 @@ impl fmt::Display for MonoType {
 impl From<ast::Type> for MonoType {
     fn from(ast_type: ast::Type) -> Self {
         match ast_type {
-            ast::Type::Name { name, .. } => MonoType::TypeRef(name),
+            ast::Type::Name { name, .. } => {
+                Self::from_builtin_name(&name).unwrap_or(MonoType::TypeRef(name))
+            }
             ast::Type::Int(n) => MonoType::Int(n),
             ast::Type::Float(n) => MonoType::Float(n),
             ast::Type::Char => MonoType::Char,
