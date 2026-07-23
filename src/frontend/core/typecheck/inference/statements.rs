@@ -134,22 +134,11 @@ impl StatementChecker {
     ) -> MonoType {
         match ty {
             MonoType::TypeRef(name) => {
-                // Check built-in types first
-                match name.as_str() {
-                    "Int" | "int" | "Int64" | "int64" | "i64" => return MonoType::Int(64),
-                    "Int32" | "int32" | "i32" => return MonoType::Int(32),
-                    "Float" | "float" | "Float64" | "float64" | "f64" => {
-                        return MonoType::Float(64)
-                    }
-                    "Float32" | "float32" | "f32" => return MonoType::Float(32),
-                    "Bool" | "bool" => return MonoType::Bool,
-                    "Char" | "char" => return MonoType::Char,
-                    "String" | "string" => return MonoType::String,
-                    "Void" | "void" | "()" => return MonoType::Void,
-                    "Never" | "never" => return MonoType::Never,
-                    _ => {}
+                // 先查内置类型名
+                if let Some(builtin) = MonoType::from_builtin_name(name) {
+                    return builtin;
                 }
-                // Check type_defs for user-defined types
+                // 再查用户类型定义
                 if let Some(struct_ty) = self.type_defs.get(name) {
                     return struct_ty.clone();
                 }
