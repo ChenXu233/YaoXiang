@@ -392,7 +392,9 @@ impl TypeEnvironment {
     /// TypeRef("Int") → Int(64), TypeRef("Float") → Float(64), 等等。
     fn resolve_type_refs(ty: &MonoType) -> MonoType {
         match ty {
-            MonoType::TypeRef(name) => MonoType::from_builtin_name(name).unwrap_or_else(|| ty.clone()),
+            MonoType::TypeRef(name) => {
+                MonoType::from_builtin_name(name).unwrap_or_else(|| ty.clone())
+            }
             MonoType::Struct(s) => {
                 let new_fields: Vec<(String, MonoType)> = s
                     .fields
