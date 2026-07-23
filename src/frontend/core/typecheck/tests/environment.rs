@@ -144,3 +144,40 @@ fn test_resolve_base_kind_type_vs_value() {
     assert_eq!(env.resolve_base_kind("p"), BaseKind::ValueSpace);
     assert_eq!(env.resolve_base_kind("nope"), BaseKind::Unknown);
 }
+
+#[test]
+fn test_add_method_binding_writes_struct_methods() {
+    use crate::frontend::core::types::StructType;
+    use std::collections::HashMap;
+    let mut env = TypeEnvironment::new();
+    // 注册类型 Point（Struct）
+    let point = StructType {
+        name: "Point".to_string(),
+        fields: vec![("x".to_string(), MonoType::Float(64))],
+        methods: HashMap::new(),
+        field_mutability: vec![false],
+        field_has_default: vec![false],
+        interfaces: vec![],
+    };
+    env.add_type("Point".to_string(), PolyType::mono(MonoType::Struct(point)));
+
+    // 登记方法 Point.get_x
+    let fn_ty = MonoType::Fn {
+        params: vec![],
+        return_type: Box::new(MonoType::Float(64)),
+    };
+    env.add_method_binding("Point", "get_x", fn_ty);
+
+    // 类型空间：StructType.methods 应含 get_x
+    let poly = env.get_type("Point").expect("Point 应存在");
+    if let MonoType::Struct(st) = &poly.body {
+        assert!(
+            st.methods.contains_key("get_x"),
+            "StructType.methods 应含 get_x"
+        );
+    } else {
+        panic!("Point 应是 Struct");
+    }
+    // 兼容镜像：平表仍有（迁移期）
+    assert!(env.get_method_binding("Point", "get_x").is_some());
+}
