@@ -496,16 +496,13 @@ fn format_return_with_names(
     super::types::format_type(ty, ctx, source_map)
 }
 
-/// 按 count 切分参数切片，count 为 0 或超长时返回 (full, empty)
+/// 按 count 切分参数切片
 fn split_params_at(
     params: &[Param],
     count: usize,
 ) -> (&[Param], &[Param]) {
-    if count > 0 && params.len() >= count {
-        params.split_at(count)
-    } else {
-        (params, &[])
-    }
+    let count = count.min(params.len());
+    params.split_at(count)
 }
 
 /// 格式化 match 表达式

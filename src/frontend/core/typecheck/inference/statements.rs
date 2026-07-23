@@ -1013,54 +1013,9 @@ impl StatementChecker {
             );
         }
 
-        // 进入函数 Result 上下文（用于 `?` 运算符检查）
-        // 对于泛型函数，需要从内层 return_type 提取 Result 类型
-        let fn_result_err = if !type_generic_params.is_empty() {
-            // 泛型函数：从内层 Fn 的 return_type 提取
-            type_annotation.and_then(|t| match t {
-                crate::frontend::core::parser::ast::Type::Fn { return_type, .. } => {
-                    // return_type 本身可能是 Fn，取其 return_type
-                    match return_type.as_ref() {
-                        crate::frontend::core::parser::ast::Type::Fn {
-                            return_type: inner_ret,
-                            ..
-                        } => {
-                            let ret_mono = MonoType::from((**inner_ret).clone());
-                            match ret_mono {
-                                MonoType::Result(_, err) => Some((*err).clone()),
-                                _ => None,
-                            }
-                        }
-                        other => {
-                            let ret_mono = MonoType::from(other.clone());
-                            match ret_mono {
-                                MonoType::Result(_, err) => Some((*err).clone()),
-                                _ => None,
-                            }
-                        }
-                    }
-                }
-                _ => None,
-            })
-        } else {
-            type_annotation.and_then(|t| match t {
-                crate::frontend::core::parser::ast::Type::Fn { return_type, .. } => {
-                    let ret_mono = MonoType::from((**return_type).clone());
-                    match ret_mono {
-                        MonoType::Result(_, err) => Some((*err).clone()),
-                        _ => None,
-                    }
-                }
-                _ => None,
-            })
-        };
-        self.result_err_stack.push(fn_result_err);
-
-        // Set expected return type for return statement type checking
-        // 对于泛型函数，预期返回类型是内层 Fn 的返回类型
-        let fn_expected_ret = type_annotation.and_then(|t| {
+        // 从函数签名提取最内层返回类型（curried 函数的值级返回类型）
+        let innermost_ret = type_annotation.and_then(|t| {
             if let crate::frontend::core::parser::ast::Type::Fn { return_type, .. } = t {
-                // 对 curried 函数（嵌套 Fn），取最内层 Fn 的返回类型
                 Some(MonoType::from(
                     innermost_return_type(return_type.as_ref()).clone(),
                 ))
@@ -1068,7 +1023,16 @@ impl StatementChecker {
                 None
             }
         });
-        self.expected_return_type = fn_expected_ret;
+
+        // Result 错误类型（用于 `?` 运算符检查）
+        let fn_result_err = innermost_ret.as_ref().and_then(|ret| match ret {
+            MonoType::Result(_, err) => Some((**err).clone()),
+            _ => None,
+        });
+        self.result_err_stack.push(fn_result_err);
+
+        // 预期返回类型（用于 return 语句类型检查）
+        self.expected_return_type = innermost_ret;
 
         // 当 body 的参数缺少类型标注时，从函数签名中补全
         // 例如: Point.getX: (self: &Point) -> Float = (self) => { ... }
