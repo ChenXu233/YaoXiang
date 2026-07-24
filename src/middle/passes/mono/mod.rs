@@ -10,7 +10,6 @@ use crate::util::diagnostic::Diagnostic;
 
 pub mod function;
 pub mod instance;
-pub mod type_mono;
 
 use function::FunctionMonomorphizer;
 use instance::{GenericFunctionId, InstantiationRequest, SpecializationKey};
@@ -29,8 +28,6 @@ pub struct Monomorphizer {
     processed: HashSet<SpecializationKey>,
     /// 最大递归深度
     max_depth: usize,
-    /// 泛型类型定义：type_name -> MonoType（含 TypeVar）
-    generic_types: HashMap<String, MonoType>,
 }
 
 impl Monomorphizer {
@@ -41,7 +38,6 @@ impl Monomorphizer {
             pending_queue: VecDeque::new(),
             processed: HashSet::new(),
             max_depth: 100,
-            generic_types: HashMap::new(),
         }
     }
 
@@ -64,9 +60,6 @@ impl Monomorphizer {
     ) -> Result<ModuleIR, Diagnostic> {
         // 1. 收集泛型函数定义
         self.collect_generic_functions(module);
-
-        // 2. 收集泛型类型定义
-        self.collect_generic_types(module);
 
         // 3. 初始化队列
         for req in requests {

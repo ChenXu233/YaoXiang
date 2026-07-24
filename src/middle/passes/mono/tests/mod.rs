@@ -6,4 +6,3 @@
 
 mod instance;
 mod monomorphizer;
-mod type_mono;
