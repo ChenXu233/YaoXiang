@@ -1,12 +1,17 @@
 // 02-type-system/generic_types.yx
-// 覆盖: 规范 §3.8 泛型类型
-// 验证: Option: (T: Type) -> Type = { some(T) | none }
-// 状态: 🔴 未实现 - 泛型类型在运行时未支持
-
-// Option: (T: Type) -> Type = { some(T) | none }
-// x = Option.some(42)
+// 覆盖: 规范 §3.8 泛型类型 + Issue #197 类型侧单态化
+// 验证: Container: (T: Type) -> Type = { value: T } 单态化
 
 use std.io
+
+// 泛型类型定义
+Container: (T: Type) -> Type = {
+    value: T
+}
+
 main = {
+    // 泛型类型实例化
+    c: Container(Int) = Container(42)
+    io.println(c.value)
     io.println("ALL TESTS PASSED")
 }
