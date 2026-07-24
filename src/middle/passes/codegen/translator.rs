@@ -985,11 +985,19 @@ impl Translator {
         env: &[Operand],
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
-        let func_id = if let Some(ref name_to_idx) = self.function_name_to_idx {
-            name_to_idx.get(func_name).copied().unwrap_or(0) as u32
-        } else {
-            0
-        };
+        let name_to_idx = self.function_name_to_idx.as_ref().ok_or_else(|| {
+            ErrorCodeDefinition::internal_error(
+                "translate_make_closure 调用时 function_name_to_idx 未初始化",
+            )
+            .build()
+        })?;
+        let func_id = name_to_idx.get(func_name).copied().ok_or_else(|| {
+            ErrorCodeDefinition::internal_error(&format!(
+                "闭包函数 '{}' 未在函数名映射表中注册",
+                func_name
+            ))
+            .build()
+        })? as u32;
         let mut operands = vec![dst_reg];
         operands.extend_from_slice(&func_id.to_le_bytes());
         operands.push(env.len() as u8);

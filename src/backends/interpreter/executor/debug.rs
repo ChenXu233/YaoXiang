@@ -151,7 +151,9 @@ impl Interpreter {
                 let c = self
                     .force_register(frame, *cond)?
                     .to_bool()
-                    .unwrap_or(false);
+                    .ok_or_else(|| {
+                        ExecutorError::type_error("JmpIf 条件值不是布尔类型", self.capture_stack())
+                    })?;
                 if c {
                     let offset = Self::decode_label_offset(*target);
                     frame.ip = ((frame.ip as i32) + offset) as usize;
@@ -164,7 +166,12 @@ impl Interpreter {
                 let c = self
                     .force_register(frame, *cond)?
                     .to_bool()
-                    .unwrap_or(false);
+                    .ok_or_else(|| {
+                        ExecutorError::type_error(
+                            "JmpIfNot 条件值不是布尔类型",
+                            self.capture_stack(),
+                        )
+                    })?;
                 if !c {
                     let offset = Self::decode_label_offset(*target);
                     frame.ip = ((frame.ip as i32) + offset) as usize;
@@ -980,18 +987,30 @@ impl Interpreter {
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StringFromInt { dst, src } => {
-                let val = self.force_register(frame, *src)?.to_int().unwrap_or(0);
+                let val = self.force_register(frame, *src)?.to_int().ok_or_else(|| {
+                    ExecutorError::type_error(
+                        "StringFromInt 操作数不是 Int 类型",
+                        self.capture_stack(),
+                    )
+                })?;
                 frame.set_register(dst.0 as usize, RuntimeValue::String(val.to_string().into()));
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StringFromFloat { dst, src } => {
-                let val = self.force_register(frame, *src)?.to_float().unwrap_or(0.0);
+                let val = self
+                    .force_register(frame, *src)?
+                    .to_float()
+                    .ok_or_else(|| {
+                        ExecutorError::type_error(
+                            "StringFromFloat 操作数不是 Float 类型",
+                            self.capture_stack(),
+                        )
+                    })?;
                 frame.set_register(dst.0 as usize, RuntimeValue::String(val.to_string().into()));
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
-
             // ── Reference counting ──────────────────────────────
             BytecodeInstr::ArcNew { dst, src } => {
                 let val = frame

@@ -366,7 +366,7 @@ impl TypeNormalizer {
                         evaluator.eval_if(&parsed_args[0], &parsed_args[1], &parsed_args[2]);
                     match result {
                         Ok(_) => NormalForm::Normalized,
-                        Err(_) => NormalForm::Normalized,
+                        Err(_) => NormalForm::Stuck,
                     }
                 } else {
                     NormalForm::Normalized
@@ -389,7 +389,7 @@ impl TypeNormalizer {
                 let result = evaluator.eval_match(target, arms);
                 match result {
                     Ok(_) => NormalForm::Normalized,
-                    Err(_) => NormalForm::Normalized,
+                    Err(_) => NormalForm::Stuck,
                 }
             }
             _ => NormalForm::Normalized,

@@ -979,6 +979,8 @@ impl AstToIrGenerator {
             .unwrap_or(MonoType::Int(64));
 
         // 尝试从 initializer 提取常量值
+        // 这里返回 None 是正常的——表示初始值不是编译期常量表达式
+        // （如 main = {} 这样的块表达式），需要运行时求值
         let init_value = if let Some(expr) = initializer {
             self.eval_const_expr(expr)
         } else {
@@ -1087,7 +1089,7 @@ impl AstToIrGenerator {
                         ) {
                             Ok(Some(func_ir)) => anon_functions.push(func_ir),
                             Ok(None) => {}
-                            Err(_) => {} // 忽略匿名函数生成错误，不影响构造函数
+                            Err(e) => return Err(e),
                         }
                     }
                 }
@@ -2288,7 +2290,7 @@ impl AstToIrGenerator {
     fn resolve_function_name(
         &self,
         func: &ast::Expr,
-    ) -> Operand {
+    ) -> Result<Operand, Diagnostic> {
         if let Expr::Var(name, _) = func {
             let resolved_name = if ModuleRegistry::with_std().is_native_name(name) {
                 name.clone()
@@ -2300,9 +2302,14 @@ impl AstToIrGenerator {
             } else {
                 name.clone()
             };
-            Operand::Const(ConstValue::String(resolved_name))
+            Ok(Operand::Const(ConstValue::String(resolved_name)))
         } else {
-            Operand::Const(ConstValue::Int(0))
+            Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                "无法解析函数名：非变量表达式 {:?}",
+                func
+            ))
+            .at(Self::get_expr_span(func))
+            .build())
         }
     }
 
@@ -3031,7 +3038,7 @@ impl AstToIrGenerator {
                                 }
                             } else {
                                 // 无法获取类型，使用默认处理
-                                let func_operand = self.resolve_function_name(func);
+                                let func_operand = self.resolve_function_name(func)?;
                                 instructions.push(Instruction::Call {
                                     dst: Some(Operand::Local(result_reg)),
                                     func: func_operand,
@@ -3044,7 +3051,7 @@ impl AstToIrGenerator {
                             // ========== 默认函数调用处理 ==========
                             let final_args: Vec<Operand> = arg_regs.clone();
 
-                            let func_operand = self.resolve_function_name(func);
+                            let func_operand = self.resolve_function_name(func)?;
                             instructions.push(Instruction::Call {
                                 dst: Some(Operand::Local(result_reg)),
                                 func: func_operand,
@@ -3086,7 +3093,15 @@ impl AstToIrGenerator {
                         // 普通字段访问
                         let obj_reg = self.next_temp_reg();
                         self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
-                        let field_index = self.resolve_field_index(expr, field).unwrap_or(0);
+                        let field_index =
+                            self.resolve_field_index(expr, field).ok_or_else(|| {
+                                ErrorCodeDefinition::ir_internal_error(&format!(
+                                    "无法解析字段索引: '{}'",
+                                    field
+                                ))
+                                .at(Self::get_expr_span(expr))
+                                .build()
+                            })?;
                         instructions.push(Instruction::LoadField {
                             dst: Operand::Local(result_reg),
                             src: Operand::Local(obj_reg),
@@ -3111,7 +3126,15 @@ impl AstToIrGenerator {
                         // 普通字段访问
                         let obj_reg = self.next_temp_reg();
                         self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
-                        let field_index = self.resolve_field_index(expr, field).unwrap_or(0);
+                        let field_index =
+                            self.resolve_field_index(expr, field).ok_or_else(|| {
+                                ErrorCodeDefinition::ir_internal_error(&format!(
+                                    "无法解析字段索引: '{}'",
+                                    field
+                                ))
+                                .at(Self::get_expr_span(expr))
+                                .build()
+                            })?;
                         instructions.push(Instruction::LoadField {
                             dst: Operand::Local(result_reg),
                             src: Operand::Local(obj_reg),

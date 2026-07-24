@@ -1661,20 +1661,23 @@ impl TypeChecker {
                 }
                 // Phase 2.5: 检查是否是证明函数（源码定义的返回 Type 的函数）
                 if let Some(base) = self.lookup_proof_fn_base_type(name, args) {
-                    let constraint = ConstExpr::Call {
-                        func: name.clone(),
-                        args: args
-                            .iter()
-                            .map(|a| {
-                                self.mono_type_to_const_expr(a)
-                                    .unwrap_or(ConstExpr::Lit(ConstValue::Int(0)))
-                            })
-                            .collect(),
-                    };
-                    return MonoType::Refined {
-                        base: Box::new(base),
-                        constraint,
-                    };
+                    // 将参数转换为 ConstExpr，任何一个转换失败就跳过整个证明函数解析
+                    let const_args: Option<Vec<ConstExpr>> = args
+                        .iter()
+                        .map(|a| self.mono_type_to_const_expr(a))
+                        .collect();
+                    if let Some(const_args) = const_args {
+                        let constraint = ConstExpr::Call {
+                            func: name.clone(),
+                            args: const_args,
+                        };
+                        return MonoType::Refined {
+                            base: Box::new(base),
+                            constraint,
+                        };
+                    }
+                    // 参数转换失败，不降级，直接返回原始类型
+                    return ty.clone();
                 }
                 ty.clone()
             }
