@@ -3,7 +3,10 @@
 //! 将中间表示（IR）翻译为字节码指令。
 
 use crate::backends::common::Opcode;
-use crate::middle::core::ir::{ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
+use crate::middle::core::ir::{
+    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
+};
+use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::Reg;
 use crate::middle::passes::codegen::emitter::Emitter;
 use crate::middle::passes::codegen::operand::OperandResolver;
@@ -150,8 +153,18 @@ impl Translator {
         };
 
         for func in &module.functions {
-            let func_code = self.translate_function(func)?;
-            code_section.functions.push(func_code);
+            match &func.body {
+                FunctionBody::TypeDecl { definition } => {
+                    // 类型定义：从定义机械合成构造函数
+                    let ctor = self.synthesize_constructor(func, definition)?;
+                    code_section.functions.push(ctor);
+                }
+                FunctionBody::Code { .. } => {
+                    // 普通函数：翻译指令
+                    let func_code = self.translate_function(func)?;
+                    code_section.functions.push(func_code);
+                }
+            }
         }
 
         let const_pool = self.emitter.take_constant_pool();
@@ -175,7 +188,22 @@ impl Translator {
         let mut pending_jumps: Vec<(usize, usize, Opcode)> = Vec::new(); // (bytecode_idx, target_ir_idx, opcode)
         let mut global_ir_index = 0;
 
-        for block in func.blocks.iter() {
+        let (blocks_ref, locals_len) = match &func.body {
+            FunctionBody::Code { blocks, locals, .. } => {
+                (blocks.iter().collect::<Vec<_>>(), locals.len())
+            }
+            FunctionBody::TypeDecl { .. } => {
+                return Err(Diagnostic::error(
+                    "E_INTERNAL".to_string(),
+                    "translate_function called on TypeDecl — should be handled by synthesize_constructor"
+                        .to_string(),
+                    "This is a compiler bug".to_string(),
+                    None,
+                ));
+            }
+        };
+
+        for block in blocks_ref {
             for instr in &block.instructions {
                 ir_to_bytecode_map.insert(global_ir_index, instructions.len());
                 let current_bytecode_idx = instructions.len();
@@ -213,9 +241,83 @@ impl Translator {
             params: func.params.clone(),
             return_type: func.return_type.clone(),
             instructions,
-            local_count: func.locals.len(),
+            local_count: locals_len,
             debug_map,
         })
+    }
+
+    /// 从类型定义机械合成构造函数
+    ///
+    /// 等价于旧 ir_gen 的 `generate_struct_constructor_ir`，但在 codegen 阶段执行。
+    /// 数据源从 `struct_definitions` HashMap 变为 `FunctionBody::TypeDecl { definition }`。
+    fn synthesize_constructor(
+        &mut self,
+        type_func: &FunctionIR,
+        definition: &crate::frontend::core::parser::ast::Type,
+    ) -> Result<super::FunctionCode, Diagnostic> {
+        let fields = definition.struct_fields();
+        let struct_name = &type_func.name;
+
+        if fields.is_empty() {
+            // 无字段类型（如枚举）——返回空构造函数
+            return Ok(super::FunctionCode {
+                name: struct_name.clone(),
+                params: Vec::new(),
+                return_type: type_func.return_type.clone(),
+                instructions: Vec::new(),
+                local_count: 0,
+                debug_map: HashMap::new(),
+            });
+        }
+
+        // 构造函数 IR 指令序列：Load(每个字段) + CreateStruct + Ret
+        let mut ir_instructions = Vec::new();
+        let mut field_operands = Vec::new();
+
+        for (i, _field) in fields.iter().enumerate() {
+            let local_reg = i;
+            ir_instructions.push(Instruction::Load {
+                dst: Operand::Local(local_reg),
+                src: Operand::Arg(i),
+            });
+            field_operands.push(Operand::Local(local_reg));
+        }
+
+        let result_reg = fields.len();
+        ir_instructions.push(Instruction::CreateStruct {
+            dst: Operand::Local(result_reg),
+            type_name: struct_name.clone(),
+            fields: field_operands,
+        });
+        ir_instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+
+        // 创建临时 FunctionIR 用于 translate_instruction
+        let param_types: Vec<MonoType> = fields.iter().map(|f| f.ty.clone().into()).collect();
+        let mut locals: Vec<MonoType> = param_types.clone();
+        locals.push(MonoType::TypeRef(struct_name.clone()));
+
+        let temp_func = FunctionIR {
+            name: struct_name.clone(),
+            params: param_types,
+            return_type: type_func.return_type.clone(),
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions: ir_instructions.clone(),
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: locals.clone(),
+            },
+        };
+
+        // 设置临时当前函数，调用 translate_function 完成翻译
+        let saved_func = self.current_function.clone();
+        let func_code = self.translate_function(&temp_func)?;
+        self.current_function = saved_func;
+
+        Ok(func_code)
     }
 
     fn extract_span(instr: &Instruction) -> Option<Span> {

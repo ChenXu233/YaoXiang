@@ -14,7 +14,9 @@ pub mod instance;
 use function::FunctionMonomorphizer;
 use instance::{GenericFunctionId, InstantiationRequest, SpecializationKey};
 use crate::frontend::core::typecheck::MonoType;
-use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
+use crate::middle::core::ir::{
+    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
+};
 
 /// 单态化器
 pub struct Monomorphizer {
@@ -138,8 +140,13 @@ impl Monomorphizer {
         }
 
         ModuleIR {
+            globals: module.globals.clone(),
             functions,
-            ..module.clone()
+            mut_locals: module.mut_locals.clone(),
+            loop_binding_locals: module.loop_binding_locals.clone(),
+            local_names: module.local_names.clone(),
+            ffi_libs: module.ffi_libs.clone(),
+            ffi_bindings: module.ffi_bindings.clone(),
         }
     }
 
@@ -174,18 +181,27 @@ impl Monomorphizer {
         let new_return_type = self.substitute_single_type(&generic.return_type, &type_map);
 
         // 替换局部变量类型
-        let new_locals: Vec<MonoType> = generic
-            .locals
-            .iter()
-            .map(|ty| self.substitute_single_type(ty, &type_map))
-            .collect();
+        let new_locals: Vec<MonoType> = match &generic.body {
+            FunctionBody::Code { locals, .. } => locals
+                .iter()
+                .map(|ty| self.substitute_single_type(ty, &type_map))
+                .collect(),
+            _ => Vec::new(),
+        };
 
         // 替换指令中的类型
-        let new_blocks: Vec<BasicBlock> = generic
-            .blocks
-            .iter()
-            .map(|block| self.substitute_block(block, &type_map))
-            .collect();
+        let new_blocks: Vec<BasicBlock> = match &generic.body {
+            FunctionBody::Code { blocks, .. } => blocks
+                .iter()
+                .map(|block| self.substitute_block(block, &type_map))
+                .collect(),
+            _ => Vec::new(),
+        };
+
+        let new_entry = match &generic.body {
+            FunctionBody::Code { entry, .. } => *entry,
+            _ => 0,
+        };
 
         // 生成特化后的函数名: identity → identity(Int)
         let type_args_str = type_args
@@ -200,10 +216,12 @@ impl Monomorphizer {
             name: specialized_name,
             params: new_params,
             return_type: new_return_type,
-            locals: new_locals,
-            blocks: new_blocks,
-            entry: generic.entry,
             generic_params: None, // 清除泛型标记
+            body: FunctionBody::Code {
+                blocks: new_blocks,
+                entry: new_entry,
+                locals: new_locals,
+            },
         })
     }
 
@@ -274,8 +292,12 @@ impl Monomorphizer {
         op: &Operand,
         func: &FunctionIR,
     ) -> Option<MonoType> {
+        let locals = match &func.body {
+            FunctionBody::Code { locals, .. } => locals,
+            _ => return None,
+        };
         match op {
-            Operand::Local(idx) => func.locals.get(*idx).cloned(),
+            Operand::Local(idx) => locals.get(*idx).cloned(),
             Operand::Arg(idx) => {
                 if *idx < func.params.len() {
                     Some(func.params[*idx].clone())
@@ -292,7 +314,7 @@ impl Monomorphizer {
                 ConstValue::Void => Some(MonoType::Void),
                 _ => None,
             },
-            Operand::Temp(idx) => func.locals.get(*idx).cloned(),
+            Operand::Temp(idx) => locals.get(*idx).cloned(),
             _ => None,
         }
     }
@@ -346,16 +368,19 @@ impl Monomorphizer {
         func: &mut FunctionIR,
         call_site_map: &HashMap<String, String>,
     ) {
-        for block in &mut func.blocks {
-            for instr in &mut block.instructions {
-                if let Instruction::Call {
-                    func: ref mut callee,
-                    ..
-                } = instr
-                {
-                    if let Operand::Const(ConstValue::String(name)) = callee {
-                        if let Some(specialized_name) = call_site_map.get(name) {
-                            *callee = Operand::Const(ConstValue::String(specialized_name.clone()));
+        if let FunctionBody::Code { blocks, .. } = &mut func.body {
+            for block in blocks {
+                for instr in &mut block.instructions {
+                    if let Instruction::Call {
+                        func: ref mut callee,
+                        ..
+                    } = instr
+                    {
+                        if let Operand::Const(ConstValue::String(name)) = callee {
+                            if let Some(specialized_name) = call_site_map.get(name) {
+                                *callee =
+                                    Operand::Const(ConstValue::String(specialized_name.clone()));
+                            }
                         }
                     }
                 }

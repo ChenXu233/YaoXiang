@@ -4,7 +4,9 @@
 
 use crate::frontend::core::parser::ast::Type as AstType;
 use crate::frontend::core::typecheck::MonoType;
-use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
+use crate::middle::core::ir::{
+    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
+};
 use crate::middle::passes::mono::instance::{FunctionId, GenericFunctionId, InstantiationRequest};
 use crate::util::diagnostic::Diagnostic;
 use std::collections::{HashMap, HashSet};
@@ -179,7 +181,11 @@ impl FunctionMonomorphizer for super::Monomorphizer {
         let mut all_generic_calls: Vec<(String, Vec<MonoType>)> = Vec::new();
 
         for func in &module.functions {
-            for block in &func.blocks {
+            let blocks: Vec<&BasicBlock> = match &func.body {
+                FunctionBody::Code { blocks, .. } => blocks.iter().collect(),
+                _ => Vec::new(),
+            };
+            for block in blocks {
                 for instr in &block.instructions {
                     self.collect_instruction_types(
                         instr,
@@ -420,25 +426,35 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             .collect();
         let new_return_type =
             self.substitute_single_type(&generic_func.return_type, &type_param_map);
-        let new_locals: Vec<MonoType> = generic_func
-            .locals
-            .iter()
-            .map(|ty| self.substitute_single_type(ty, &type_param_map))
-            .collect();
-        let new_blocks: Vec<BasicBlock> = generic_func
-            .blocks
-            .iter()
-            .map(|block| self.substitute_block(block, &type_param_map))
-            .collect();
+        let new_locals: Vec<MonoType> = match &generic_func.body {
+            FunctionBody::Code { locals, .. } => locals
+                .iter()
+                .map(|ty| self.substitute_single_type(ty, &type_param_map))
+                .collect(),
+            _ => Vec::new(),
+        };
+        let new_blocks: Vec<BasicBlock> = match &generic_func.body {
+            FunctionBody::Code { blocks, .. } => blocks
+                .iter()
+                .map(|block| self.substitute_block(block, &type_param_map))
+                .collect(),
+            _ => Vec::new(),
+        };
+        let new_entry = match &generic_func.body {
+            FunctionBody::Code { entry, .. } => *entry,
+            _ => 0,
+        };
 
         FunctionIR {
             name: func_id.name().to_string(),
             params: new_params,
             return_type: new_return_type,
-            locals: new_locals,
-            blocks: new_blocks,
-            entry: generic_func.entry,
             generic_params: None,
+            body: FunctionBody::Code {
+                blocks: new_blocks,
+                entry: new_entry,
+                locals: new_locals,
+            },
         }
     }
 
@@ -727,7 +743,6 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             output_funcs.push(func.clone());
         }
         ModuleIR {
-            types: original_module.types.clone(),
             globals: original_module.globals.clone(),
             functions: output_funcs,
             mut_locals: original_module.mut_locals.clone(),

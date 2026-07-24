@@ -1,7 +1,7 @@
 //! E2E Test Runner for YaoXiang (.yx) test files
 //!
 //! Discovers all `*.yx` files under `tests/yaoxiang/`, runs each through the
-//! `yaoxiang run` binary, and verifies the output contains `ALL TESTS PASSED`.
+//! `yaoxiang run` binary, and verifies the exit code (0 = pass, non-zero = fail).
 //!
 //! Directory structure (aligned with `docs/src/reference/language-spec/`):
 //!
@@ -100,7 +100,6 @@ fn test_all_yx_files_pass() {
     assert!(!files.is_empty(), "No .yx test files found!");
 
     let binary = binary_name();
-    let mut failed = Vec::new();
 
     for file in &files {
         let relative = file
@@ -122,27 +121,16 @@ fn test_all_yx_files_pass() {
         let is_error_test = relative.contains("06-compile-errors");
 
         if is_error_test {
-            // Error test files should fail compilation
-            if code == 0 {
-                failed.push((relative, code, stdout, stderr));
-            }
-        } else if !stdout.contains("ALL TESTS PASSED") {
-            failed.push((relative, code, stdout, stderr));
+            assert!(
+                code != 0,
+                "Error test should fail: {relative}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+            );
+        } else {
+            assert!(
+                code == 0,
+                "Test failed: {relative} (exit: {code})\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+            );
         }
-    }
-
-    if !failed.is_empty() {
-        let mut msg = String::from("\n\n========== FAILED YX TESTS ==========\n");
-        for (name, code, stdout, stderr) in &failed {
-            msg.push_str(&format!("\n--- {name} (exit code: {code}) ---\n"));
-            if !stdout.is_empty() {
-                msg.push_str(&format!("STDOUT:\n{stdout}\n"));
-            }
-            if !stderr.is_empty() {
-                msg.push_str(&format!("STDERR:\n{stderr}\n"));
-            }
-        }
-        panic!("{msg}");
     }
 }
 

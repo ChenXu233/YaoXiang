@@ -383,15 +383,30 @@ pub struct BasicBlock {
     pub successors: Vec<usize>,
 }
 
+/// 函数体形态
+///
+/// RFC-010 §328：`{}` 在 YaoXiang 中是依赖驱动计算单元。
+/// 当返回类型是 `Type` 时，`{}` 是类型字面量（字段/变体列表）；
+/// 当返回类型是值类型时，`{}` 是代码块（指令序列）。
+#[derive(Debug, Clone)]
+pub enum FunctionBody {
+    /// 返回值是值 → {} 是代码块
+    Code {
+        blocks: Vec<BasicBlock>,
+        entry: usize,
+        locals: Vec<MonoType>,
+    },
+    /// 返回值是类型 → {} 是类型字面量
+    TypeDecl { definition: Type },
+}
+
 /// Function IR
 #[derive(Debug, Clone)]
 pub struct FunctionIR {
     pub name: String,
     pub params: Vec<MonoType>,
     pub return_type: MonoType,
-    pub locals: Vec<MonoType>,
-    pub blocks: Vec<BasicBlock>,
-    pub entry: usize,
+    pub body: FunctionBody,
     /// 泛型参数列表
     /// Some(["T", "U"]) 表示泛型函数定义
     /// None 表示普通函数或已特化函数
@@ -399,11 +414,46 @@ pub struct FunctionIR {
 }
 
 impl FunctionIR {
-    /// 迭代所有指令
-    pub fn all_instructions(&self) -> impl Iterator<Item = &Instruction> {
-        self.blocks
-            .iter()
-            .flat_map(|block| block.instructions.iter())
+    /// 迭代所有指令（TypeDecl 返回空迭代器）
+    pub fn all_instructions(&self) -> Box<dyn Iterator<Item = &Instruction> + '_> {
+        match &self.body {
+            FunctionBody::Code { blocks, .. } => {
+                Box::new(blocks.iter().flat_map(|block| block.instructions.iter()))
+            }
+            FunctionBody::TypeDecl { .. } => Box::new(std::iter::empty()),
+        }
+    }
+
+    /// 获取基本块列表（仅 Code 体有效）
+    pub fn blocks(&self) -> &[BasicBlock] {
+        match &self.body {
+            FunctionBody::Code { blocks, .. } => blocks,
+            FunctionBody::TypeDecl { .. } => &[],
+        }
+    }
+
+    /// 获取可变基本块列表（仅 Code 体有效）
+    pub fn blocks_mut(&mut self) -> &mut Vec<BasicBlock> {
+        match &mut self.body {
+            FunctionBody::Code { blocks, .. } => blocks,
+            FunctionBody::TypeDecl { .. } => panic!("blocks_mut called on TypeDecl"),
+        }
+    }
+
+    /// 获取局部变量类型列表（仅 Code 体有效）
+    pub fn locals(&self) -> &[MonoType] {
+        match &self.body {
+            FunctionBody::Code { locals, .. } => locals,
+            FunctionBody::TypeDecl { .. } => &[],
+        }
+    }
+
+    /// 获取入口基本块索引（仅 Code 体有效）
+    pub fn entry(&self) -> usize {
+        match &self.body {
+            FunctionBody::Code { entry, .. } => *entry,
+            FunctionBody::TypeDecl { .. } => 0,
+        }
     }
 }
 
@@ -529,7 +579,6 @@ pub enum FfiBinding {
 /// Module IR
 #[derive(Debug, Clone, Default)]
 pub struct ModuleIR {
-    pub types: Vec<Type>,
     pub globals: Vec<(String, Type, Option<ConstValue>)>,
     pub functions: Vec<FunctionIR>,
     /// 每个函数的可变局部变量索引映射 (function_name -> set of mutable local indices)

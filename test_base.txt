@@ -5,9 +5,7 @@
 
 use crate::frontend::core::typecheck::MonoType;
 use crate::frontend::core::types::var::TypeVar;
-use crate::middle::core::ir::{
-    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
-};
+use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::middle::passes::mono::instance::{
     GenericFunctionId, InstantiationRequest, SpecializationKey,
 };
@@ -24,22 +22,20 @@ fn make_identity_ir() -> FunctionIR {
         name: "identity".to_string(),
         params: vec![param_type.clone()],
         return_type: param_type.clone(),
+        locals: vec![param_type.clone()],
+        blocks: vec![BasicBlock {
+            label: 0,
+            instructions: vec![
+                Instruction::Load {
+                    dst: Operand::Local(0),
+                    src: Operand::Arg(0),
+                },
+                Instruction::Ret(Some(Operand::Local(0))),
+            ],
+            successors: Vec::new(),
+        }],
+        entry: 0,
         generic_params: Some(vec!["T".to_string()]),
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![
-                    Instruction::Load {
-                        dst: Operand::Local(0),
-                        src: Operand::Arg(0),
-                    },
-                    Instruction::Ret(Some(Operand::Local(0))),
-                ],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![param_type.clone()],
-        },
     }
 }
 
@@ -51,26 +47,24 @@ fn make_swap_ir() -> FunctionIR {
         name: "swap".to_string(),
         params: vec![t.clone(), t.clone()],
         return_type: MonoType::Tuple(vec![t.clone(), t.clone()]),
+        locals: vec![t.clone(), t.clone()],
+        blocks: vec![BasicBlock {
+            label: 0,
+            instructions: vec![
+                Instruction::Load {
+                    dst: Operand::Local(0),
+                    src: Operand::Arg(0),
+                },
+                Instruction::Load {
+                    dst: Operand::Local(1),
+                    src: Operand::Arg(1),
+                },
+                Instruction::Ret(Some(Operand::Local(0))),
+            ],
+            successors: Vec::new(),
+        }],
+        entry: 0,
         generic_params: Some(vec!["T".to_string()]),
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![
-                    Instruction::Load {
-                        dst: Operand::Local(0),
-                        src: Operand::Arg(0),
-                    },
-                    Instruction::Load {
-                        dst: Operand::Local(1),
-                        src: Operand::Arg(1),
-                    },
-                    Instruction::Ret(Some(Operand::Local(0))),
-                ],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![t.clone(), t.clone()],
-        },
     }
 }
 
@@ -100,13 +94,13 @@ fn test_specialize_identity_with_int() {
     assert_eq!(func.params[0], MonoType::Int(64), "参数类型应为 Int(64)");
     assert_eq!(func.return_type, MonoType::Int(64), "返回类型应为 Int(64)");
     assert_eq!(
-        func.locals()[0],
+        func.locals[0],
         MonoType::Int(64),
         "局部变量类型应为 Int(64)"
     );
     assert!(func.generic_params.is_none(), "泛型标记应已清除");
-    assert_eq!(func.blocks().len(), 1);
-    assert_eq!(func.blocks()[0].instructions.len(), 2);
+    assert_eq!(func.blocks.len(), 1);
+    assert_eq!(func.blocks[0].instructions.len(), 2);
 }
 
 #[test]
@@ -209,16 +203,14 @@ fn test_specialize_non_generic_function_returns_none() {
         name: "add".to_string(),
         params: vec![MonoType::Int(64), MonoType::Int(64)],
         return_type: MonoType::Int(64),
+        locals: vec![],
+        blocks: vec![BasicBlock {
+            label: 0,
+            instructions: vec![],
+            successors: Vec::new(),
+        }],
+        entry: 0,
         generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![],
-        },
     };
     mono.generic_functions.insert("add".to_string(), func);
 
@@ -248,16 +240,14 @@ fn test_specialize_with_generic_type_args_replaces_inner_types() {
         name: "first".to_string(),
         params: vec![list_t],
         return_type: t,
+        locals: vec![MonoType::List(Box::new(MonoType::TypeVar(TypeVar::new(0))))],
+        blocks: vec![BasicBlock {
+            label: 0,
+            instructions: vec![Instruction::Ret(None)],
+            successors: Vec::new(),
+        }],
+        entry: 0,
         generic_params: Some(vec!["T".to_string()]),
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![Instruction::Ret(None)],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![MonoType::List(Box::new(MonoType::TypeVar(TypeVar::new(0))))],
-        },
     };
 
     let mut mono = Monomorphizer::new();
@@ -277,7 +267,7 @@ fn test_specialize_with_generic_type_args_replaces_inner_types() {
     let func = result.unwrap();
     assert_eq!(func.params[0], MonoType::List(Box::new(MonoType::String)));
     assert_eq!(func.return_type, MonoType::String);
-    assert_eq!(func.locals()[0], MonoType::List(Box::new(MonoType::String)));
+    assert_eq!(func.locals[0], MonoType::List(Box::new(MonoType::String)));
 }
 
 // ==================== scan_for_new_calls 测试 ====================
@@ -290,16 +280,14 @@ fn test_scan_for_new_calls_no_generic_calls_leaves_queue_empty() {
         name: "simple".to_string(),
         params: vec![],
         return_type: MonoType::Void,
+        locals: vec![],
+        blocks: vec![BasicBlock {
+            label: 0,
+            instructions: vec![Instruction::Ret(None)],
+            successors: Vec::new(),
+        }],
+        entry: 0,
         generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![Instruction::Ret(None)],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![],
-        },
     };
 
     // Act
@@ -320,24 +308,22 @@ fn test_scan_for_new_calls_with_generic_call_enqueues_request() {
         name: "wrapper(Int)".to_string(),
         params: vec![MonoType::Int(64)],
         return_type: MonoType::Int(64),
+        locals: vec![MonoType::Int(64)],
+        blocks: vec![BasicBlock {
+            label: 0,
+            instructions: vec![
+                Instruction::Call {
+                    dst: Some(Operand::Local(0)),
+                    func: Operand::Const(ConstValue::String("identity".to_string())),
+                    args: vec![Operand::Arg(0)],
+                    span: Span::default(),
+                },
+                Instruction::Ret(Some(Operand::Local(0))),
+            ],
+            successors: Vec::new(),
+        }],
+        entry: 0,
         generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![
-                    Instruction::Call {
-                        dst: Some(Operand::Local(0)),
-                        func: Operand::Const(ConstValue::String("identity".to_string())),
-                        args: vec![Operand::Arg(0)],
-                        span: Span::default(),
-                    },
-                    Instruction::Ret(Some(Operand::Local(0))),
-                ],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![MonoType::Int(64)],
-        },
     };
 
     // Act
@@ -367,24 +353,22 @@ fn test_scan_for_new_calls_duplicate_prevented_by_processed_set() {
         name: "dup_check".to_string(),
         params: vec![MonoType::Int(64)],
         return_type: MonoType::Int(64),
+        locals: vec![MonoType::Int(64)],
+        blocks: vec![BasicBlock {
+            label: 0,
+            instructions: vec![
+                Instruction::Call {
+                    dst: Some(Operand::Local(0)),
+                    func: Operand::Const(ConstValue::String("identity".to_string())),
+                    args: vec![Operand::Arg(0)],
+                    span: Span::default(),
+                },
+                Instruction::Ret(Some(Operand::Local(0))),
+            ],
+            successors: Vec::new(),
+        }],
+        entry: 0,
         generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![
-                    Instruction::Call {
-                        dst: Some(Operand::Local(0)),
-                        func: Operand::Const(ConstValue::String("identity".to_string())),
-                        args: vec![Operand::Arg(0)],
-                        span: Span::default(),
-                    },
-                    Instruction::Ret(Some(Operand::Local(0))),
-                ],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![MonoType::Int(64)],
-        },
     };
 
     // Act
@@ -407,12 +391,10 @@ fn test_operand_to_type_hint_resolves_arg_local_and_const() {
         name: "test".to_string(),
         params: vec![MonoType::Int(64), MonoType::String],
         return_type: MonoType::Void,
+        locals: vec![MonoType::Bool, MonoType::Float(64)],
+        blocks: vec![],
+        entry: 0,
         generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![],
-            entry: 0,
-            locals: vec![MonoType::Bool, MonoType::Float(64)],
-        },
     };
 
     // Assert: Arg(0) -> Int(64)
@@ -465,24 +447,22 @@ fn test_replace_call_sites_replaces_generic_call_in_main() {
         name: "main".to_string(),
         params: vec![],
         return_type: MonoType::Void,
+        locals: vec![MonoType::Int(64)],
+        blocks: vec![BasicBlock {
+            label: 0,
+            instructions: vec![
+                Instruction::Call {
+                    dst: Some(Operand::Local(0)),
+                    func: Operand::Const(ConstValue::String("identity".to_string())),
+                    args: vec![Operand::Const(ConstValue::Int(42))],
+                    span: Span::default(),
+                },
+                Instruction::Ret(Some(Operand::Local(0))),
+            ],
+            successors: Vec::new(),
+        }],
+        entry: 0,
         generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![
-                    Instruction::Call {
-                        dst: Some(Operand::Local(0)),
-                        func: Operand::Const(ConstValue::String("identity".to_string())),
-                        args: vec![Operand::Const(ConstValue::Int(42))],
-                        span: Span::default(),
-                    },
-                    Instruction::Ret(Some(Operand::Local(0))),
-                ],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![MonoType::Int(64)],
-        },
     };
 
     let mut module = ModuleIR {
@@ -503,7 +483,7 @@ fn test_replace_call_sites_replaces_generic_call_in_main() {
     let main_func = &module.functions[0];
     assert!(
         matches!(
-            &main_func.blocks()[0].instructions[0],
+            &main_func.blocks[0].instructions[0],
             Instruction::Call { func: callee, .. }
             if *callee == Operand::Const(ConstValue::String("identity(int64)".to_string()))
         ),
@@ -520,24 +500,22 @@ fn test_replace_call_sites_skips_generic_functions() {
         name: "wrapper".to_string(),
         params: vec![MonoType::TypeVar(TypeVar::new(0))],
         return_type: MonoType::TypeVar(TypeVar::new(0)),
+        locals: vec![MonoType::TypeVar(TypeVar::new(0))],
+        blocks: vec![BasicBlock {
+            label: 0,
+            instructions: vec![
+                Instruction::Call {
+                    dst: Some(Operand::Local(0)),
+                    func: Operand::Const(ConstValue::String("identity".to_string())),
+                    args: vec![Operand::Arg(0)],
+                    span: Span::default(),
+                },
+                Instruction::Ret(Some(Operand::Local(0))),
+            ],
+            successors: Vec::new(),
+        }],
+        entry: 0,
         generic_params: Some(vec!["T".to_string()]),
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![
-                    Instruction::Call {
-                        dst: Some(Operand::Local(0)),
-                        func: Operand::Const(ConstValue::String("identity".to_string())),
-                        args: vec![Operand::Arg(0)],
-                        span: Span::default(),
-                    },
-                    Instruction::Ret(Some(Operand::Local(0))),
-                ],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![MonoType::TypeVar(TypeVar::new(0))],
-        },
     };
 
     let mut module = ModuleIR {
@@ -558,7 +536,7 @@ fn test_replace_call_sites_skips_generic_functions() {
     let wrapper = &module.functions[0];
     assert!(
         matches!(
-            &wrapper.blocks()[0].instructions[0],
+            &wrapper.blocks[0].instructions[0],
             Instruction::Call { func: callee, .. }
             if *callee == Operand::Const(ConstValue::String("identity".to_string()))
         ),
@@ -575,21 +553,19 @@ fn test_replace_call_sites_no_matching_request_does_not_replace() {
         name: "main".to_string(),
         params: vec![],
         return_type: MonoType::Void,
-        generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![Instruction::Call {
-                    dst: None,
-                    func: Operand::Const(ConstValue::String("foo".to_string())),
-                    args: vec![],
-                    span: Span::default(),
-                }],
-                successors: Vec::new(),
+        locals: vec![],
+        blocks: vec![BasicBlock {
+            label: 0,
+            instructions: vec![Instruction::Call {
+                dst: None,
+                func: Operand::Const(ConstValue::String("foo".to_string())),
+                args: vec![],
+                span: Span::default(),
             }],
-            entry: 0,
-            locals: vec![],
-        },
+            successors: Vec::new(),
+        }],
+        entry: 0,
+        generic_params: None,
     };
 
     let mut module = ModuleIR {
@@ -610,7 +586,7 @@ fn test_replace_call_sites_no_matching_request_does_not_replace() {
     let main_func = &module.functions[0];
     assert!(
         matches!(
-            &main_func.blocks()[0].instructions[0],
+            &main_func.blocks[0].instructions[0],
             Instruction::Call { func: callee, .. }
             if *callee == Operand::Const(ConstValue::String("foo".to_string()))
         ),
@@ -629,24 +605,22 @@ fn test_monomorphize_end_to_end_specializes_and_replaces_calls() {
         name: "main".to_string(),
         params: vec![],
         return_type: MonoType::Int(64),
+        locals: vec![MonoType::Int(64)],
+        blocks: vec![BasicBlock {
+            label: 0,
+            instructions: vec![
+                Instruction::Call {
+                    dst: Some(Operand::Local(0)),
+                    func: Operand::Const(ConstValue::String("identity".to_string())),
+                    args: vec![Operand::Const(ConstValue::Int(42))],
+                    span: Span::default(),
+                },
+                Instruction::Ret(Some(Operand::Local(0))),
+            ],
+            successors: Vec::new(),
+        }],
+        entry: 0,
         generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![
-                    Instruction::Call {
-                        dst: Some(Operand::Local(0)),
-                        func: Operand::Const(ConstValue::String("identity".to_string())),
-                        args: vec![Operand::Const(ConstValue::Int(42))],
-                        span: Span::default(),
-                    },
-                    Instruction::Ret(Some(Operand::Local(0))),
-                ],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![MonoType::Int(64)],
-        },
     };
 
     let module = ModuleIR {
@@ -671,7 +645,7 @@ fn test_monomorphize_end_to_end_specializes_and_replaces_calls() {
     let main_out = result.functions.iter().find(|f| f.name == "main").unwrap();
     assert!(
         matches!(
-            &main_out.blocks()[0].instructions[0],
+            &main_out.blocks[0].instructions[0],
             Instruction::Call { func: callee, .. }
             if *callee == Operand::Const(ConstValue::String("identity(int64)".to_string()))
         ),

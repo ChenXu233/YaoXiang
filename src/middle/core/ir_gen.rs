@@ -13,7 +13,9 @@ use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{self, Expr};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::core::typecheck::{MonoType, PolyType, TypeCheckResult};
-use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
+use crate::middle::core::ir::{
+    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
+};
 use crate::tlog;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::i18n::MSG;
@@ -439,7 +441,6 @@ impl AstToIrGenerator {
         functions.extend(std::mem::take(&mut self.anon_function_irs));
 
         Ok(ModuleIR {
-            types: Vec::new(),
             globals: Vec::new(),
             functions,
             mut_locals: std::mem::take(&mut self.module_mut_locals),
@@ -459,10 +460,112 @@ impl AstToIrGenerator {
         match &stmt.kind {
             ast::StmtKind::TypeDefinition {
                 name,
-                signature_params: _,
+                signature_params,
                 definition,
                 is_pub: _,
-            } => self.generate_constructor_ir(name, definition),
+            } => {
+                use crate::frontend::core::parser::ast::extract_generic_param_names;
+                use crate::frontend::core::types::mono::UniverseLevel;
+
+                // 提取泛型参数名
+                let generic_params = extract_generic_param_names(signature_params);
+                let generic_param_names = if generic_params.is_empty() {
+                    None
+                } else {
+                    Some(generic_params.iter().map(|p| p.name.clone()).collect())
+                };
+
+                // 签名：(T: Type) -> Type → params = [MetaType], return_type = MetaType
+                let params: Vec<MonoType> = signature_params
+                    .iter()
+                    .map(|p| {
+                        p.ty.as_ref()
+                            .map(|t| t.clone().into())
+                            .unwrap_or(MonoType::MetaType {
+                                universe_level: UniverseLevel::type1(),
+                                type_params: Vec::new(),
+                            })
+                    })
+                    .collect();
+                let return_type = MonoType::MetaType {
+                    universe_level: UniverseLevel::type1(),
+                    type_params: Vec::new(),
+                };
+
+                // 记录 struct_definitions（字段索引解析仍需要）
+                // 同时处理类型绑定和匿名函数 IR 生成
+                match definition {
+                    ast::Type::NamedStruct {
+                        name: struct_name,
+                        fields,
+                        ..
+                    } => {
+                        self.struct_definitions
+                            .insert(struct_name.clone(), fields.clone());
+                    }
+                    ast::Type::Struct { body } => {
+                        let fields: Vec<ast::StructField> = body
+                            .iter()
+                            .filter_map(|it| {
+                                if let ast::TypeBodyItem::Field(f) = it {
+                                    Some(f.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        let bindings: Vec<ast::TypeBodyBinding> = body
+                            .iter()
+                            .filter_map(|it| {
+                                if let ast::TypeBodyItem::Binding(b) = it {
+                                    Some(b.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        self.struct_definitions.insert(name.clone(), fields);
+                        // 记录绑定信息（用于方法调用时的参数重排，RFC-004）
+                        self.register_type_bindings(name, &bindings);
+                        // RFC-004: 为匿名函数绑定生成独立的 FunctionIR
+                        for binding in &bindings {
+                            if let ast::BindingKind::Anonymous {
+                                params: anon_params,
+                                return_type: anon_ret,
+                                positions: _,
+                                body,
+                            } = &binding.kind
+                            {
+                                let anon_func_name = format!("{}.__anon_{}", name, binding.name);
+                                match self.generate_anon_binding_ir(
+                                    &anon_func_name,
+                                    anon_params,
+                                    anon_ret,
+                                    body,
+                                    constants,
+                                ) {
+                                    Ok(Some(func_ir)) => {
+                                        self.anon_function_irs.push(func_ir);
+                                    }
+                                    Ok(None) => {}
+                                    Err(e) => return Err(e),
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+
+                Ok(Some(FunctionIR {
+                    name: name.clone(),
+                    params,
+                    return_type,
+                    generic_params: generic_param_names,
+                    body: FunctionBody::TypeDecl {
+                        definition: definition.clone(),
+                    },
+                }))
+            }
             ast::StmtKind::Assign {
                 target,
                 type_annotation,
@@ -624,14 +727,16 @@ impl AstToIrGenerator {
             name: func_name.clone(),
             params: param_types.clone(),
             return_type,
-            locals: locals_types,
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions,
-                successors: Vec::new(),
-            }],
-            entry: 0,
             generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: locals_types,
+            },
         };
 
         // 保存当前函数的可变局部变量信息到模块级别映射
@@ -795,14 +900,16 @@ impl AstToIrGenerator {
                 .map(|t| t.into())
                 .collect(),
             return_type,
-            locals: locals_types,
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions,
-                successors: Vec::new(),
-            }],
-            entry: 0,
             generic_params,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: locals_types,
+            },
         };
 
         // 记录函数参数类型（用于调用点发出 Borrow 指令）
@@ -1011,103 +1118,19 @@ impl AstToIrGenerator {
             name: name.to_string(),
             params: Vec::new(),
             return_type: var_type,
-            locals: vec![MonoType::Int(64)], // 分配一个局部变量用于存储结果
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions,
-                successors: Vec::new(),
-            }],
-            entry: 0,
             generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: vec![MonoType::Int(64)], // 分配一个局部变量用于存储结果
+            },
         };
 
         Ok(Some(func_ir))
-    }
-
-    /// 生成构造函数 IR
-    fn generate_constructor_ir(
-        &mut self,
-        _name: &str,
-        definition: &ast::Type,
-    ) -> Result<Option<FunctionIR>, Diagnostic> {
-        // 只为结构体类型生成构造函数
-        match definition {
-            ast::Type::NamedStruct {
-                name: struct_name,
-                fields,
-                ..
-            } => {
-                // 记录结构体定义（用于调用时填充默认值）
-                self.struct_definitions
-                    .insert(struct_name.clone(), fields.clone());
-                self.generate_struct_constructor_ir(struct_name, fields)
-            }
-            ast::Type::Struct { body } => {
-                let fields: Vec<ast::StructField> = body
-                    .iter()
-                    .filter_map(|it| {
-                        if let ast::TypeBodyItem::Field(f) = it {
-                            Some(f.clone())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                let bindings: Vec<ast::TypeBodyBinding> = body
-                    .iter()
-                    .filter_map(|it| {
-                        if let ast::TypeBodyItem::Binding(b) = it {
-                            Some(b.clone())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                self.struct_definitions
-                    .insert(_name.to_string(), fields.clone());
-                // 记录绑定信息（用于方法调用时的参数重排，RFC-004）
-                self.register_type_bindings(_name, &bindings);
-
-                // RFC-004: 为匿名函数绑定生成独立的 FunctionIR
-                let mut anon_functions = Vec::new();
-                for binding in &bindings {
-                    if let ast::BindingKind::Anonymous {
-                        params,
-                        return_type,
-                        positions: _,
-                        body,
-                    } = &binding.kind
-                    {
-                        let anon_func_name = format!("{}.__anon_{}", _name, binding.name);
-                        let mut constants = Vec::new();
-                        match self.generate_anon_binding_ir(
-                            &anon_func_name,
-                            params,
-                            return_type,
-                            body,
-                            &mut constants,
-                        ) {
-                            Ok(Some(func_ir)) => anon_functions.push(func_ir),
-                            Ok(None) => {}
-                            Err(e) => return Err(e),
-                        }
-                    }
-                }
-
-                let constructor = self.generate_struct_constructor_ir(_name, &fields);
-
-                // 将匿名函数 IR 存储为独立函数（在模块级别注册）
-                for func_ir in anon_functions {
-                    self.anon_function_irs.push(func_ir);
-                }
-
-                constructor
-            }
-            _ => {
-                // 非结构体类型，不生成构造函数
-                Ok(None)
-            }
-        }
     }
 
     /// RFC-004: 为匿名函数绑定生成独立的 FunctionIR
@@ -1181,14 +1204,16 @@ impl AstToIrGenerator {
                 .map(|t| t.into())
                 .collect(),
             return_type: ret_type,
-            locals: locals_types,
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions,
-                successors: Vec::new(),
-            }],
-            entry: 0,
             generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: locals_types,
+            },
         };
 
         Ok(Some(func_ir))
@@ -1256,63 +1281,6 @@ impl AstToIrGenerator {
             self.type_bindings
                 .insert(type_name.to_string(), binding_map);
         }
-    }
-
-    /// 为结构体生成构造函数 IR 的辅助方法
-    fn generate_struct_constructor_ir(
-        &self,
-        struct_name: &str,
-        fields: &[ast::StructField],
-    ) -> Result<Option<FunctionIR>, Diagnostic> {
-        // 构造函数接受所有字段作为参数
-        let mut param_types = Vec::new();
-        for field in fields {
-            param_types.push(field.ty.clone().into());
-        }
-
-        let mut instructions = Vec::new();
-
-        // 将所有参数加载到局部变量中（用于 CreateStruct）
-        let mut field_operands = Vec::new();
-        for (i, _field) in fields.iter().enumerate() {
-            let local_reg = i;
-            instructions.push(Instruction::Load {
-                dst: Operand::Local(local_reg),
-                src: Operand::Arg(i),
-            });
-            field_operands.push(Operand::Local(local_reg));
-        }
-
-        // 使用 CreateStruct 指令创建结构体
-        let result_reg = fields.len(); // 结果寄存器放在所有字段之后
-        instructions.push(Instruction::CreateStruct {
-            dst: Operand::Local(result_reg),
-            type_name: struct_name.to_string(),
-            fields: field_operands,
-        });
-
-        // 返回创建的结构体
-        instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
-
-        // 局部变量类型：每个字段 + 结果寄存器
-        let mut locals_types: Vec<MonoType> = fields.iter().map(|f| f.ty.clone().into()).collect();
-        locals_types.push(MonoType::TypeRef(struct_name.to_string()));
-
-        let func_ir = FunctionIR {
-            name: struct_name.to_string(),
-            params: param_types,
-            return_type: MonoType::TypeRef(struct_name.to_string()),
-            locals: locals_types,
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions,
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            generic_params: None,
-        };
-
-        Ok(Some(func_ir))
     }
 
     /// 生成局部语句 IR
@@ -3642,14 +3610,16 @@ impl AstToIrGenerator {
                     name: closure_name.clone(),
                     params: param_types,
                     return_type,
-                    locals: closure_body.locals.clone(),
-                    blocks: vec![BasicBlock {
-                        label: 0,
-                        instructions: closure_body.instructions,
-                        successors: Vec::new(),
-                    }],
-                    entry: 0,
                     generic_params: None,
+                    body: FunctionBody::Code {
+                        blocks: vec![BasicBlock {
+                            label: 0,
+                            instructions: closure_body.instructions,
+                            successors: Vec::new(),
+                        }],
+                        entry: 0,
+                        locals: closure_body.locals.clone(),
+                    },
                 };
 
                 // 7. 将闭包函数添加到嵌套函数列表
