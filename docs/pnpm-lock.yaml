@@ -88,8 +88,8 @@ importers:
         specifier: ^0.3.3
         version: 0.3.3
       docs:
-        specifier: 0.3.1
-        version: 0.3.1
+        specifier: 0.4.0
+        version: 0.4.0
 
 packages:
 
@@ -971,6 +971,9 @@ packages:
     resolution: {integrity: sha512-Bq3SmSpyFHaWjPk8If9yc6svM8c56dB5BAtW4Qbw5jHTwwXXcTLoRMkpDJp6VL0XzlWaCHTXrkFURMYmD0sLqg==}
     engines: {node: '>=12'}
 
+  arg@5.0.2:
+    resolution: {integrity: sha512-PYjyFOLKQ9y57JvQ6QLo8dAgNqswh8M1RMJYdQduT6xbWSgK36P/Z/v+p888pM69jMMfS8Xd8F6I1kQ/I9HUGg==}
+
   argparse@1.0.10:
     resolution: {integrity: sha512-o5Roy6tNG4SL/FOkCAN6RzjiakZS25RLYFrcMttJqbdd8BWrnA+fGz57iN5Pb06pvBGvl5gQ0B48dJlslXvoTg==}
 
@@ -1274,8 +1277,8 @@ packages:
   devlop@1.1.0:
     resolution: {integrity: sha512-RWmIqhcFf1lRYBvNmr7qTNuyCt/7/ns2jbpp1+PalgE/rDQcBT0fioSMUpJ93irlUhC5hrg4cYqe6U+0ImW0rA==}
 
-  docs@0.3.1:
-    resolution: {integrity: sha512-OUMTxW/p3VU5mKWMth5aK1HaH0w1agM4CAE+31uITzDHC9gKRBe1yyKh6KqSSi9IQAnYOOLMMB7ZSUI+ABKERg==}
+  docs@0.4.0:
+    resolution: {integrity: sha512-+XavQ6oVS+p4+afyGv5MPAyALt6c8iWruc1WvLoknvIysyMdL51Y4xU+N2ieDTsHYrOjwYX+lXH2SD8MmNStDA==}
     hasBin: true
 
   dompurify@3.3.1:
@@ -1364,6 +1367,9 @@ packages:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
+
+  func@2.2.0:
+    resolution: {integrity: sha512-xfryio+jxGqYNhAlZ3lrNlAN5EAy93vaWoKF9b7tegiHYnzpoVZI5tlsxraypp76bI9D8lfuTKWtqDQPNw8O8Q==}
 
   get-east-asian-width@1.6.0:
     resolution: {integrity: sha512-QRbvDIbx6YklUe6RxeTeleMR0yv3cYH6PsPZHcnVn7xv7zO1BHN8r0XETu8n6Ye3Q+ahtSarc3WgtNWmehIBfA==}
@@ -1795,6 +1801,9 @@ packages:
   queue-microtask@1.2.3:
     resolution: {integrity: sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==}
 
+  reflect-metadata@0.2.2:
+    resolution: {integrity: sha512-urBwgfrvVP/eAyXx4hluJivBKzuEbSQs9rKWCrCkbSxNv8mxPcUZKeuoF3Uy4mJl3Lwprp6yy5/39VWigZ4K6Q==}
+
   regex-recursion@6.0.2:
     resolution: {integrity: sha512-0YCaSCq2VRIebiaUviZNs0cBz1kg5kVS2UKUfNIx8YVs1cN3AV7NTctO5FOKBA+UT2BPJIWZauYHPqJODG50cg==}
 
@@ -2095,6 +2104,10 @@ packages:
     resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
     engines: {node: '>= 8'}
     hasBin: true
+
+  yocto-spinner@1.2.2:
+    resolution: {integrity: sha512-DODGl1wJjA/s5pnJFKau9lIYHT81lnhob1i3e1TjxZRxEhWRKl74nTbWE6H5KlkViQQTo/Z29YFdxzTZAMY3ng==}
+    engines: {node: '>=18.19'}
 
   yoctocolors@2.1.2:
     resolution: {integrity: sha512-CzhO+pFNo8ajLM2d2IW/R93ipy99LWjtwblvC1RsoSUMZgyLbYFr221TnSNT7GjGdYui6P459mw9JH/g/zW2ug==}
@@ -2989,6 +3002,8 @@ snapshots:
 
   ansi-regex@6.2.2: {}
 
+  arg@5.0.2: {}
+
   argparse@1.0.10:
     dependencies:
       sprintf-js: 1.0.3
@@ -3310,7 +3325,10 @@ snapshots:
     dependencies:
       dequal: 2.0.3
 
-  docs@0.3.1: {}
+  docs@0.4.0:
+    dependencies:
+      func: 2.2.0
+      yocto-spinner: 1.2.2
 
   dompurify@3.3.1:
     optionalDependencies:
@@ -3426,6 +3444,11 @@ snapshots:
 
   fsevents@2.3.3:
     optional: true
+
+  func@2.2.0:
+    dependencies:
+      arg: 5.0.2
+      reflect-metadata: 0.2.2
 
   get-east-asian-width@1.6.0: {}
 
@@ -3835,6 +3858,8 @@ snapshots:
 
   queue-microtask@1.2.3: {}
 
+  reflect-metadata@0.2.2: {}
+
   regex-recursion@6.0.2:
     dependencies:
       regex-utilities: 2.3.0
@@ -4160,6 +4185,10 @@ snapshots:
   which@2.0.2:
     dependencies:
       isexe: 2.0.0
+
+  yocto-spinner@1.2.2:
+    dependencies:
+      yoctocolors: 2.1.2
 
   yoctocolors@2.1.2: {}
 
