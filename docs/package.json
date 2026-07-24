@@ -27,7 +27,7 @@
     "@vueuse/core": "^14.2.1",
     "autoprefixer": "^10.4.24",
     "codemirror": "^6.0.0",
-    "daisyui": "^5.5.19",
+    "daisyui": "^5.7.0",
     "medium-zoom": "^1.1.0",
     "mermaid": "^11.12.3",
     "postcss": "^8.5.6",
