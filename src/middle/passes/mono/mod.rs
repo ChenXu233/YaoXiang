@@ -122,11 +122,17 @@ impl Monomorphizer {
             self.processed.insert(key);
             depth += 1;
 
-            if let Some(specialized) = self.specialize_function(&req) {
-                self.scan_for_new_calls(&specialized);
-                self.scan_for_generic_types(&specialized);
-                self.specialized_functions
-                    .insert(specialized.name.clone(), specialized);
+            // 先尝试类型特化，再尝试函数特化
+            let specialized = if self.generic_types.contains_key(req.generic_id().name()) {
+                self.specialize_type(&req)
+            } else {
+                self.specialize_function(&req)
+            };
+
+            if let Some(spec) = specialized {
+                self.scan_for_new_calls(&spec);
+                self.scan_for_generic_types(&spec);
+                self.specialized_functions.insert(spec.name.clone(), spec);
             }
         }
         Ok(())
@@ -229,6 +235,66 @@ impl Monomorphizer {
                 blocks: new_blocks,
                 entry: new_entry,
                 locals: new_locals,
+            },
+        })
+    }
+
+    /// 特化类型定义：将泛型类型按类型参数替换为具体类型定义
+    fn specialize_type(
+        &self,
+        req: &InstantiationRequest,
+    ) -> Option<FunctionIR> {
+        let generic = self.generic_types.get(req.generic_id().name())?;
+        let type_params = generic.generic_params.as_ref()?;
+        let type_args = req.type_args();
+
+        if type_args.len() != type_params.len() {
+            return None;
+        }
+
+        // MonoType 替换表：TypeVar(index) → 具体类型
+        let type_map: std::collections::HashMap<usize, MonoType> = (0..type_params.len())
+            .map(|i| (i, type_args[i].clone()))
+            .collect();
+
+        // 名称替换表：参数名 → 具体类型（用于 ast::Type 中的 Type::Name）
+        let name_map: std::collections::HashMap<String, MonoType> = type_params
+            .iter()
+            .zip(type_args.iter())
+            .map(|(name, ty)| (name.clone(), ty.clone()))
+            .collect();
+
+        // 替换签名
+        let new_params: Vec<MonoType> = generic
+            .params
+            .iter()
+            .map(|ty| self.substitute_single_type(ty, &type_map))
+            .collect();
+        let new_return_type = self.substitute_single_type(&generic.return_type, &type_map);
+
+        // 替换类型体里的类型参数
+        let new_definition = match &generic.body {
+            FunctionBody::TypeDecl { definition } => {
+                self.substitute_type_in_ast(definition, &name_map)
+            }
+            _ => return None,
+        };
+
+        // 特化名：List → List(Int)
+        let type_args_str = type_args
+            .iter()
+            .map(|t| t.type_name())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let specialized_name = format!("{}({})", generic.name, type_args_str);
+
+        Some(FunctionIR {
+            name: specialized_name,
+            params: new_params,
+            return_type: new_return_type,
+            generic_params: None,
+            body: FunctionBody::TypeDecl {
+                definition: new_definition,
             },
         })
     }

@@ -4,6 +4,7 @@
 //! RFC-011 §4: 泛型函数特化
 
 use crate::frontend::core::typecheck::MonoType;
+use crate::frontend::core::types::mono::UniverseLevel;
 use crate::frontend::core::types::var::TypeVar;
 use crate::middle::core::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
@@ -688,4 +689,188 @@ fn test_monomorphize_end_to_end_specializes_and_replaces_calls() {
         specialized.generic_params.is_none(),
         "特化函数的泛型标记应已清除"
     );
+}
+
+// ==================== specialize_type 测试 ====================
+
+#[test]
+fn test_specialize_generic_struct() {
+    use crate::frontend::core::parser::ast::{Type as AstType, TypeBodyItem, StructField};
+
+    // 构造泛型类型定义：Pair: (T: Type) -> Type = { first: T, second: T }
+    let definition = AstType::Struct {
+        body: vec![
+            TypeBodyItem::Field(StructField {
+                name: "first".to_string(),
+                ty: AstType::Name {
+                    name: "T".to_string(),
+                    span: Span::dummy(),
+                },
+                default: None,
+                is_mut: false,
+            }),
+            TypeBodyItem::Field(StructField {
+                name: "second".to_string(),
+                ty: AstType::Name {
+                    name: "T".to_string(),
+                    span: Span::dummy(),
+                },
+                default: None,
+                is_mut: false,
+            }),
+        ],
+    };
+
+    let type_def = FunctionIR {
+        name: "Pair".to_string(),
+        params: vec![MonoType::MetaType {
+            universe_level: UniverseLevel::type1(),
+            type_params: Vec::new(),
+        }],
+        return_type: MonoType::MetaType {
+            universe_level: UniverseLevel::type1(),
+            type_params: Vec::new(),
+        },
+        generic_params: Some(vec!["T".to_string()]),
+        body: FunctionBody::TypeDecl { definition },
+    };
+
+    let mut mono = Monomorphizer::new();
+    mono.generic_types.insert("Pair".to_string(), type_def);
+
+    let req = InstantiationRequest::new(
+        GenericFunctionId::new("Pair".to_string(), vec!["T".to_string()]),
+        vec![MonoType::Int(64)],
+        Span::default(),
+    );
+
+    let result = mono.specialize_type(&req).expect("特化应成功");
+
+    assert_eq!(result.name, "Pair(int64)");
+    assert!(result.generic_params.is_none());
+
+    // 验证类型体中的 T 被替换为 Int(64)
+    if let FunctionBody::TypeDecl { definition } = &result.body {
+        if let AstType::Struct { body } = definition {
+            if let TypeBodyItem::Field(f) = &body[0] {
+                assert_eq!(f.name, "first");
+                assert!(
+                    matches!(&f.ty, AstType::Int(64)),
+                    "first 字段类型应为 Int(64)"
+                );
+            } else {
+                panic!("第一个 body item 应是 Field");
+            }
+            if let TypeBodyItem::Field(f) = &body[1] {
+                assert_eq!(f.name, "second");
+                assert!(
+                    matches!(&f.ty, AstType::Int(64)),
+                    "second 字段类型应为 Int(64)"
+                );
+            } else {
+                panic!("第二个 body item 应是 Field");
+            }
+        } else {
+            panic!("definition 应是 Struct");
+        }
+    } else {
+        panic!("body 应是 TypeDecl");
+    }
+}
+
+#[test]
+fn test_type_specialization_dedup() {
+    use crate::frontend::core::parser::ast::{Type as AstType, TypeBodyItem, StructField};
+
+    let definition = AstType::Struct {
+        body: vec![TypeBodyItem::Field(StructField {
+            name: "value".to_string(),
+            ty: AstType::Name {
+                name: "T".to_string(),
+                span: Span::dummy(),
+            },
+            default: None,
+            is_mut: false,
+        })],
+    };
+
+    let type_def = FunctionIR {
+        name: "Pair".to_string(),
+        params: vec![MonoType::MetaType {
+            universe_level: UniverseLevel::type1(),
+            type_params: Vec::new(),
+        }],
+        return_type: MonoType::MetaType {
+            universe_level: UniverseLevel::type1(),
+            type_params: Vec::new(),
+        },
+        generic_params: Some(vec!["T".to_string()]),
+        body: FunctionBody::TypeDecl { definition },
+    };
+
+    let mut mono = Monomorphizer::new();
+    mono.generic_types.insert("Pair".to_string(), type_def);
+
+    let req = InstantiationRequest::new(
+        GenericFunctionId::new("Pair".to_string(), vec!["T".to_string()]),
+        vec![MonoType::Int(64)],
+        Span::default(),
+    );
+
+    // 第一次特化
+    let result1 = mono.specialize_type(&req).expect("第一次特化应成功");
+    let key = req.specialization_key();
+    mono.processed.insert(key);
+
+    // 同一请求的 specialization_key 应在 processed 集合中
+    let key2 = req.specialization_key();
+    assert!(mono.processed.contains(&key2), "去重缓存应命中");
+
+    // 验证特化结果可用
+    assert_eq!(result1.name, "Pair(int64)");
+    assert!(result1.generic_params.is_none());
+}
+
+#[test]
+fn test_type_specialization_arg_count_mismatch() {
+    use crate::frontend::core::parser::ast::{Type as AstType, TypeBodyItem, StructField};
+
+    let definition = AstType::Struct {
+        body: vec![TypeBodyItem::Field(StructField {
+            name: "value".to_string(),
+            ty: AstType::Name {
+                name: "T".to_string(),
+                span: Span::dummy(),
+            },
+            default: None,
+            is_mut: false,
+        })],
+    };
+
+    let type_def = FunctionIR {
+        name: "Pair".to_string(),
+        params: vec![MonoType::MetaType {
+            universe_level: UniverseLevel::type1(),
+            type_params: Vec::new(),
+        }],
+        return_type: MonoType::MetaType {
+            universe_level: UniverseLevel::type1(),
+            type_params: Vec::new(),
+        },
+        generic_params: Some(vec!["T".to_string()]),
+        body: FunctionBody::TypeDecl { definition },
+    };
+
+    let mut mono = Monomorphizer::new();
+    mono.generic_types.insert("Pair".to_string(), type_def);
+
+    // Pair 只有 1 个类型参数 T，但传入 2 个类型参数
+    let req = InstantiationRequest::new(
+        GenericFunctionId::new("Pair".to_string(), vec!["T".to_string()]),
+        vec![MonoType::Int(64), MonoType::String],
+        Span::default(),
+    );
+
+    let result = mono.specialize_type(&req);
+    assert!(result.is_none(), "类型参数数量不匹配应返回 None");
 }
