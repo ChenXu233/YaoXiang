@@ -38,7 +38,7 @@
     "vitepress-plugin-group-icons": "^1.7.5",
     "vitepress-plugin-nprogress": "^0.1.1",
     "vitepress-plugin-tabs": "^0.9.0",
-    "vitepress-sidebar": "^1.33.1",
+    "vitepress-sidebar": "^1.36.1",
     "vue": "^3.5.28"
   },
   "devDependencies": {
