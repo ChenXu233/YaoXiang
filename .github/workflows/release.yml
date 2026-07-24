@@ -43,6 +43,13 @@ jobs:
             echo "Tag $TAG not found, will release"
             echo "should_release=true" >> $GITHUB_OUTPUT
           fi
+      - name: Delete existing tag (if any)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          TAG="v${{ steps.version.outputs.value }}"
+          git tag -d "$TAG" 2>/dev/null || true
+          git push origin --delete "$TAG" 2>/dev/null || true
+          echo "Tag cleanup complete (was either absent or deleted)"
 
   build:
     name: Build Platforms
@@ -166,7 +173,7 @@ jobs:
         with:
           tag_name: v${{ needs.check-version.outputs.version }}
           name: v${{ needs.check-version.outputs.version }}
-          body: ${{ github.event.head_commit.message }}
+          body_path: CHANGELOG.md
           files: |
             release-artifacts/**/yaoxiang-*
             release-artifacts/**/YaoXiang-Setup-*.exe
