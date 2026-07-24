@@ -122,24 +122,23 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
                     return parse_constructor_type(name, name_span, state);
                 }
             }
-            // 后视检查：如果下一个 token 是比较/相等运算符，继续作为表达式解析
-            if matches!(
-                state.current().map(|t| &t.kind),
-                Some(
-                    TokenKind::EqEq
-                        | TokenKind::Neq
-                        | TokenKind::Gt
-                        | TokenKind::Ge
-                        | TokenKind::Lt
-                        | TokenKind::Le
+            // 后视检查：如果不是类型语法专用的 token，则作为表达式解析（blacklist）
+            if state.infix_info().is_some()
+                && !matches!(
+                    state.current().map(|t| &t.kind),
+                    Some(TokenKind::Dot | TokenKind::Eq | TokenKind::KwAs)
                 )
-            ) {
-                let left_expr = Expr::Var(name.clone(), name_span);
-                // 使用 infix 处理器继续解析右侧
-                if let Some((_bp_left, bp_right, parser_fn)) = state.infix_info() {
-                    let full_expr = parser_fn(state, left_expr, bp_right)?;
-                    return Some(Type::ConstExpr(Box::new(full_expr)));
+            {
+                // 使用完整的 Pratt 循环解析整个表达式（从 Var 开始）
+                let mut expr = Expr::Var(name.clone(), name_span);
+                while state.current().is_some() {
+                    let (_bp_left, bp_right, parser_fn) = match state.infix_info() {
+                        Some(info) => info,
+                        None => break,
+                    };
+                    expr = parser_fn(state, expr, bp_right)?;
                 }
+                return Some(Type::ConstExpr(Box::new(expr)));
             }
             Some(Type::Name {
                 name,

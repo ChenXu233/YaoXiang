@@ -435,3 +435,49 @@ fn test_struct_anon_assert_le() {
         );
     });
 }
+
+// ============================================================================
+// const 泛型约束算术运算符 (RFC-011 §4.3) — issue #189
+// ============================================================================
+
+#[test]
+fn test_struct_field_assert_arith_plus() {
+    // Arrange & Act: 解析字段位置的 Assert(N + 1 > 0) 约束
+    with_type("{ _assert_n: Assert(N + 1 > 0), data: Int }", |t| {
+        // Assert: 参数应解析为 BinOp(Plus) 内嵌 BinOp(Gt) 的 ConstExpr
+        let expr = extract_assert_arg(&t);
+        assert!(
+            matches!(expr, Expr::BinOp { op: BinOp::Gt, left, .. }
+                if matches!(left.as_ref(), Expr::BinOp { op: BinOp::Add, .. })),
+            "field constraint should parse as `N + 1 > 0`, got: {expr:?}"
+        );
+    });
+}
+
+#[test]
+fn test_struct_field_assert_arith_mod() {
+    // Arrange & Act: 解析字段位置的 Assert(N % 2 == 0) 约束
+    with_type("{ _assert_n: Assert(N % 2 == 0), data: Int }", |t| {
+        // Assert: 参数应解析为 Mod 比较的 ConstExpr
+        let expr = extract_assert_arg(&t);
+        assert!(
+            matches!(expr, Expr::BinOp { op: BinOp::Eq, left, .. }
+                if matches!(left.as_ref(), Expr::BinOp { op: BinOp::Mod, .. })),
+            "field constraint should parse as `N % 2 == 0`, got: {expr:?}"
+        );
+    });
+}
+
+#[test]
+fn test_struct_field_assert_arith_mul() {
+    // Arrange & Act: 解析字段位置的 Assert(N * 2 > 0) 约束
+    with_type("{ _assert_n: Assert(N * 2 > 0), data: Int }", |t| {
+        // Assert: 参数应解析为 Mul 比较的 ConstExpr
+        let expr = extract_assert_arg(&t);
+        assert!(
+            matches!(expr, Expr::BinOp { op: BinOp::Gt, left, .. }
+                if matches!(left.as_ref(), Expr::BinOp { op: BinOp::Mul, .. })),
+            "field constraint should parse as `N * 2 > 0`, got: {expr:?}"
+        );
+    });
+}
