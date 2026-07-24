@@ -39,6 +39,7 @@ pub struct GenericTypeDef {
 /// - 方法绑定
 /// - Trait 表
 /// - Native 函数签名
+///
 /// base 的语义归属：类型空间 / 类型值空间 / 未知（issue #180 F 组）。
 ///
 /// typechecker 据此把 `X.字段 = 右值` 分流到类型空间或类型值空间，

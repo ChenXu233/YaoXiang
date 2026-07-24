@@ -15,8 +15,7 @@ pub enum PipelineError {
     TypeCheck(Diagnostic),
     /// IR 生成错误
     IRGeneration(String),
-    /// 证明函数执行错误（RFC-027 Phase 2.5）
-    ProofExecution(String),
+    ProofExecution(Diagnostic),
 }
 
 impl fmt::Display for PipelineError {
@@ -38,6 +37,7 @@ impl PipelineError {
     pub fn diagnostic(&self) -> Option<Diagnostic> {
         match self {
             PipelineError::TypeCheck(err) => Some(err.clone()),
+            PipelineError::ProofExecution(err) => Some(err.clone()),
             _ => None,
         }
     }
@@ -487,14 +487,27 @@ impl Pipeline {
                 }
                 Ok(false) => {
                     failed_proofs.push(call.func_name.clone());
-                    errors.push(format!(
+                    let msg = format!(
                         "证明函数 '{}' 返回 false，约束不满足（参数: {:?}）",
                         call.func_name, call.args,
-                    ));
+                    );
+                    let diag = Diagnostic::error(
+                        "E4018".to_string(),
+                        msg,
+                        "检查约束条件或修改传入值".to_string(),
+                        None,
+                    );
+                    errors.push(diag);
                 }
                 Err(e) => {
                     failed_proofs.push(call.func_name.clone());
-                    errors.push(format!("证明函数 '{}' 执行失败: {}", call.func_name, e,));
+                    let diag = Diagnostic::error(
+                        "E4018".to_string(),
+                        format!("证明函数 '{}' 执行失败: {}", call.func_name, e),
+                        String::new(),
+                        None,
+                    );
+                    errors.push(diag);
                 }
             }
         }
@@ -824,7 +837,7 @@ impl IRResult {
 
 /// 证明函数执行结果
 struct ProofExecResult {
-    errors: Vec<String>,
+    errors: Vec<Diagnostic>,
 }
 
 impl ProofExecResult {
@@ -832,7 +845,7 @@ impl ProofExecResult {
         Self { errors: Vec::new() }
     }
 
-    fn failed(errors: Vec<String>) -> Self {
+    fn failed(errors: Vec<Diagnostic>) -> Self {
         Self { errors }
     }
 
