@@ -455,6 +455,11 @@ impl FunctionIR {
             FunctionBody::TypeDecl { .. } => 0,
         }
     }
+
+    /// 判断是否是类型定义（而非代码函数）
+    pub fn is_type_decl(&self) -> bool {
+        matches!(self.body, FunctionBody::TypeDecl { .. })
+    }
 }
 
 /// Constant value

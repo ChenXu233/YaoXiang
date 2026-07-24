@@ -22,6 +22,8 @@ use crate::middle::core::ir::{
 pub struct Monomorphizer {
     /// 泛型函数定义（从 IR 收集）
     generic_functions: HashMap<String, FunctionIR>,
+    /// 泛型类型定义（从 IR 收集）
+    generic_types: HashMap<String, FunctionIR>,
     /// 已生成的特化函数
     specialized_functions: HashMap<String, FunctionIR>,
     /// 待处理的实例化队列
@@ -36,6 +38,7 @@ impl Monomorphizer {
     pub fn new() -> Self {
         Self {
             generic_functions: HashMap::new(),
+            generic_types: HashMap::new(),
             specialized_functions: HashMap::new(),
             pending_queue: VecDeque::new(),
             processed: HashSet::new(),
@@ -60,8 +63,8 @@ impl Monomorphizer {
         module: &ModuleIR,
         requests: &[InstantiationRequest],
     ) -> Result<ModuleIR, Diagnostic> {
-        // 1. 收集泛型函数定义
-        self.collect_generic_functions(module);
+        // 1. 收集泛型定义（函数和类型）
+        self.collect_generic_definitions(module);
 
         // 3. 初始化队列
         for req in requests {
@@ -80,14 +83,18 @@ impl Monomorphizer {
         Ok(output)
     }
 
-    fn collect_generic_functions(
+    fn collect_generic_definitions(
         &mut self,
         module: &ModuleIR,
     ) {
         for func in &module.functions {
             if func.generic_params.is_some() {
-                self.generic_functions
-                    .insert(func.name.clone(), func.clone());
+                if func.is_type_decl() {
+                    self.generic_types.insert(func.name.clone(), func.clone());
+                } else {
+                    self.generic_functions
+                        .insert(func.name.clone(), func.clone());
+                }
             }
         }
     }
@@ -117,6 +124,7 @@ impl Monomorphizer {
 
             if let Some(specialized) = self.specialize_function(&req) {
                 self.scan_for_new_calls(&specialized);
+                self.scan_for_generic_types(&specialized);
                 self.specialized_functions
                     .insert(specialized.name.clone(), specialized);
             }
@@ -284,6 +292,91 @@ impl Monomorphizer {
                 }
             }
         }
+    }
+
+    /// 扫描函数体中的 MonoType::Generic 引用，发现类型特化请求
+    fn scan_for_generic_types(
+        &mut self,
+        func: &FunctionIR,
+    ) {
+        // 扫描 params
+        for ty in &func.params {
+            self.collect_generic_type_refs(ty);
+        }
+
+        // 扫描 locals 和指令中的类型
+        if let FunctionBody::Code { locals, blocks, .. } = &func.body {
+            for ty in locals {
+                self.collect_generic_type_refs(ty);
+            }
+            for block in blocks {
+                for instr in &block.instructions {
+                    self.collect_generic_type_refs_from_instr(instr);
+                }
+            }
+        }
+    }
+
+    /// 从 MonoType 中收集泛型类型引用
+    fn collect_generic_type_refs(
+        &mut self,
+        ty: &MonoType,
+    ) {
+        match ty {
+            MonoType::Generic { name, args } => {
+                if self.generic_types.contains_key(name) {
+                    let key = SpecializationKey::new(name.clone(), args.clone());
+                    if !self.processed.contains(&key) {
+                        let req = InstantiationRequest::new(
+                            GenericFunctionId::new(name.clone(), Vec::new()),
+                            args.clone(),
+                            crate::util::span::Span::default(),
+                        );
+                        self.pending_queue.push_back(req);
+                    }
+                }
+                // 递归扫描参数（嵌套泛型：List(List(Int))）
+                for arg in args {
+                    self.collect_generic_type_refs(arg);
+                }
+            }
+            MonoType::List(elem) => self.collect_generic_type_refs(elem),
+            MonoType::Dict(k, v) => {
+                self.collect_generic_type_refs(k);
+                self.collect_generic_type_refs(v);
+            }
+            MonoType::Set(elem) => self.collect_generic_type_refs(elem),
+            MonoType::Tuple(types) => {
+                for t in types {
+                    self.collect_generic_type_refs(t);
+                }
+            }
+            MonoType::Fn {
+                params,
+                return_type,
+            } => {
+                for t in params {
+                    self.collect_generic_type_refs(t);
+                }
+                self.collect_generic_type_refs(return_type);
+            }
+            MonoType::Option(t) => self.collect_generic_type_refs(t),
+            MonoType::Result(ok, err) => {
+                self.collect_generic_type_refs(ok);
+                self.collect_generic_type_refs(err);
+            }
+            _ => {}
+        }
+    }
+
+    /// 从指令中收集泛型类型引用
+    fn collect_generic_type_refs_from_instr(
+        &mut self,
+        _instr: &Instruction,
+    ) {
+        // 指令中的类型信息主要通过操作数间接携带
+        // 目前 scan_for_new_calls 已处理函数调用，此处无需额外操作
+        // 未来如果指令直接携带 MonoType，可在此扩展
     }
 
     /// 从特化函数中获取操作数对应的类型提示
