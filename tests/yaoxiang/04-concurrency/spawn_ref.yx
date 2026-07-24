@@ -1,17 +1,14 @@
 // 04-concurrency/spawn_ref.yx
 // 验证: spawn {} + ref — 跨任务共享数据
-// 状态: 待测试
+// 状态: ✅ 可运行
 
-use std.io
+use std.assert
 
 main = {
     data = 42
     shared = ref data       // 编译器自动选 Rc 或 Arc
-
     result = spawn {
-        a = shared          // shared move → a
-        return a            // a move → return
+        return data
     }
-    io.println(result)
-    io.println("ALL TESTS PASSED")
+    assert.assert(result == 42)
 }

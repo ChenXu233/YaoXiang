@@ -7,7 +7,7 @@ updated: "2026-07-05"
 group: "rfc-011"
 ---
 
-# RFC-011a: 接口实现与动态分发
+# RFC-011a: 接口实现与动态分发  
 
 > **父 RFC**: [RFC-011: 泛型系统设计](../accepted/011-generic-type-system.md)
 >

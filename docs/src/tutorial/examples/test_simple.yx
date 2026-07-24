@@ -1,6 +1,0 @@
-use std.io
-
-main = {
-    a = io.read_line()
-    print(a)
-}

@@ -606,3 +606,78 @@ fn test_format_no_verify() {
     let result = format_source("x = 1", &opts);
     assert!(result.is_ok(), "no-verify 模式下合法代码应正常通过");
 }
+
+#[test]
+fn test_format_generic_type_definition_roundtrip() {
+    // RFC-010: 泛型类型定义 name: (params) -> Type = body 格式化后保持
+    assert_format_eq(
+        "Wrapper: (T: Type) -> Type = { data: T }",
+        "Wrapper: (T: Type) -> Type = { data: T }\n",
+    );
+}
+
+#[test]
+fn test_format_generic_type_with_assert_constraint_roundtrip() {
+    // RFC-010 + RFC-011: 带 const 约束的泛型类型定义完整往返
+    assert_format_eq(
+        "SafeArray: (T: Type, N: Int) -> Type = { _assert: Assert(N > 0), data: Array(T, N) }",
+        "SafeArray: (T: Type, N: Int) -> Type = { _assert: Assert(N > 0), data: Array(T, N) }\n",
+    );
+}
+
+#[test]
+fn test_format_non_generic_type_definition_unchanged() {
+    // RFC-010: 非泛型类型定义保持原样（防回归）
+    assert_format_eq(
+        "Point: Type = { x: Int, y: Int }",
+        "Point: Type = { x: Int, y: Int }\n",
+    );
+}
+
+#[test]
+fn test_format_field_default_value_unchanged() {
+    // RFC-010: 字段默认值格式化保持（防回归：临时 ctx 已删除）
+    assert_format_eq(
+        "Pair: Type = { x: Int = 42 }",
+        "Pair: Type = { x: Int = 42 }\n",
+    );
+}
+
+#[test]
+fn test_format_generic_function_roundtrip() {
+    // Arrange — RFC-010: 泛型函数定义签名带名保留（#174）
+    // #175 修复后：curried 泛型函数 return 块形式类型检查通过
+    let input = "map: (T: Type) -> ((x: Int) -> Int) = (x) => x";
+
+    // Act — formatter 输出：(T: Type) -> (Int) -> Int = (x) => x（不补全内层参数名）
+    let result = format_source(input, &default_options())
+        .unwrap_or_else(|e| panic!("Failed to format: {}", e));
+
+    // Assert — 签名按嵌套 Fn 切分，body 保持表达式形式
+    assert_eq!(result, "map: (T: Type) -> (Int) -> Int = (x) => x\n");
+}
+
+#[test]
+fn test_format_named_params_function_roundtrip() {
+    // Arrange — RFC-010 §3: 签名参数名保留
+    let input = "add: (a: Int, b: Int) -> Int = (a, b) => a + b";
+
+    // Act — lambda 参数与函数体遵循解析器构建的 AST
+    let result = format_source(input, &default_options())
+        .unwrap_or_else(|e| panic!("Failed to format: {}", e));
+
+    // Assert — 带签名的函数绑定 params 携带标注、单表达式体为 Return 语句
+    assert_eq!(
+        result,
+        "add: (a: Int, b: Int) -> Int = (a: Int, b: Int) => a + b\n"
+    );
+}
+
+#[test]
+fn test_format_multi_constraint_type_param_roundtrip() {
+    // RFC-010: 多约束泛型参数 T: Clone + Add 格式化后保持约束语法而非元组语法
+    assert_format_eq(
+        "Pair: (T: Clone + Add) -> Type = { x: T }",
+        "Pair: (T: Clone + Add) -> Type = { x: T }\n",
+    );
+}

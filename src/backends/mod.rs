@@ -340,48 +340,6 @@ pub trait DebuggableExecutor: Executor {
     fn breakpoints(&self) -> Vec<usize>;
 }
 
-/// Frame information for debugging
-#[derive(Debug, Clone)]
-pub struct FrameInfo {
-    /// Function name
-    pub function: String,
-    /// Instruction pointer
-    pub ip: usize,
-    /// Local variables
-    pub locals: Vec<(String, RuntimeValue)>,
-}
-
-/// Debug state for DebuggableExecutor
-#[derive(Debug, Clone, Default)]
-pub struct DebugState {
-    /// Current execution state
-    pub execution: ExecutionState,
-    /// Breakpoint locations
-    pub breakpoints: Vec<usize>,
-    /// Current breakpoint hit (if any)
-    pub breakpoint_hit: Option<usize>,
-    /// Step mode (step, step-over, step-out)
-    pub step_mode: StepMode,
-    /// Step target for step-over
-    pub step_target_ip: Option<usize>,
-    /// Step target function for step-out
-    pub step_target_depth: Option<usize>,
-}
-
-/// Step mode for debugging
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum StepMode {
-    /// Continue execution normally
-    #[default]
-    Continue,
-    /// Step one instruction
-    Step,
-    /// Step over calls
-    StepOver,
-    /// Step out of current function
-    StepOut,
-}
-
 /// Build mode for the backend
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BuildMode {

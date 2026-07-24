@@ -1,22 +1,22 @@
-# YaoXiang: Краткое руководство
+# YaoXiang Краткое руководство
 
-> Данное руководство поможет вам быстро освоить YaoXiang — язык программирования.
+> Данное руководство поможет вам быстро освоить язык программирования YaoXiang.
 >
-> **Примечание**: Примеры кода в этом документе написаны в соответствии со спецификацией YaoXiang. При обнаружении синтаксических расхождений при запуске обратитесь к [спецификации языка](../design/language-spec.md).
+> **Внимание**: Примеры кода в этом документе основаны на спецификации языка YaoXiang. Если при фактическом выполнении вы столкнётесь с различиями в синтаксисе, обратитесь к [спецификации языка](../reference/language-spec/index.md).
 
 ## Установка
 
-### Компиляция из исходного кода (рекомендуется)
+### Сборка из исходного кода (рекомендуется)
 
 ```bash
 # Клонирование репозитория
-git clone https://github.com/yourusername/yaoxiang.git
+git clone https://github.com/ChenXu233/YaoXiang.git
 cd yaoxiang
 
-# Компиляция (отладочная версия, для разработки и тестирования)
+# Сборка (отладочная версия, для разработки и тестирования)
 cargo build
 
-# Компиляция (релизная версия, рекомендуется для продакшена)
+# Сборка (релизная версия, рекомендуется для продакшена)
 cargo build --release
 
 # Запуск тестов
@@ -31,7 +31,7 @@ cargo test
 **Проверка успешной установки**:
 ```bash
 ./target/debug/yaoxiang --version
-# Должно вывести: yaoxiang x.y.z
+# Должен вывести что-то вроде: yaoxiang x.y.z
 ```
 
 ## Первая программа
@@ -39,13 +39,13 @@ cargo test
 Создайте файл `hello.yx`:
 
 ```yaoxiang
-# hello.yx
+// hello.yx
 use std.io
 
-# Определение функции: name: (param: Type, ...) -> return_type = { return ... }  # Блок кода требует явного return
-# Выражение: name: (param: Type, ...) -> return_type = expr                       # Выражение возвращает значение напрямую
+// Определение функции: name: (param: Type, ...) -> return_type = { return ... }  # В блоке кода необходим явный return
+// Форма выражения: name: (param: Type, ...) -> return_type = expr           # Выражение возвращает значение напрямую
 main: () -> Void = {
-    println("Hello, YaoXiang!")
+    print("Hello, YaoXiang!")
 }
 ```
 
@@ -53,7 +53,7 @@ main: () -> Void = {
 
 ```bash
 ./target/debug/yaoxiang hello.yx
-# или с релизной версией
+# или с использованием release-версии
 ./target/release/yaoxiang hello.yx
 ```
 
@@ -68,174 +68,174 @@ Hello, YaoXiang!
 ### Переменные и типы
 
 ```yaoxiang
-# Автоматический вывод типов
-x = 42                    # Выводится как Int
-name = "YaoXiang"         # Выводится как String
-pi = 3.14159              # Выводится как Float
-is_valid = true           # Выводится как Bool
+// Автоматический вывод типов
+x = 42  // выводится как Int
+name = "YaoXiang"  // выводится как String
+pi = 3.14159  // выводится как Float
+is_valid = true  // выводится как Bool
 
-# Явные аннотации типов (рекомендуется использовать в стиле type-first)
+// Явные аннотации типов (рекомендуется использовать единый стиль)
 count: Int = 100
 
-# По умолчанию неизменяемо (безопасность)
+// По умолчанию неизменяемые (безопасное поведение)
 x = 10
-x = 20                    # ❌ Ошибка компиляции! Неизменяемо
+x = 20  // ❌ Ошибка компиляции! Неизменяемая
 
-# Изменяемые переменные (требуется явное объявление)
+// Изменяемые переменные (требуется явное объявление)
 mut counter = 0
-counter = counter + 1     # ✅ OK
+counter = counter + 1  // ✅ OK
 ```
 
 ### Функции
 
 ```yaoxiang
-# Синтаксис определения функций
-# Выражение: возвращает значение напрямую, без return
+// Синтаксис определения функций
+// Форма выражения: возвращает значение напрямую, без return
 add: (a: Int, b: Int) -> Int = a + b
 
-# Блок кода: требует использования return для возврата значения
-# add: (a: Int, b: Int) -> Int = { return a + b }
+// Блочная форма: необходимо использовать return
+// add: (a: Int, b: Int) -> Int = { return a + b }
 
-# Вызов
-result = add(1, 2)        # result = 3
+// Вызов
+result = add(1, 2)  // result = 3
 
-# Функция с одним параметром (выражение)
+// Функция с одним параметром (форма выражения)
 inc: (x: Int) -> Int = x + 1
 ```
 
 ### Определение типов
 
-YaoXiang использует унифицированную модель синтаксиса `name: type = value`:
+YaoXiang использует единую синтаксическую модель `name: type = value`:
 
 ```yaoxiang
-# Объявление переменной
+// Объявление переменной
 x: Int = 42
 name: String = "YaoXiang"
 
-# Определение функции
+// Определение функции
 add: (a: Int, b: Int) -> Int = a + b
 
-# Определение типа (с использованием фигурных скобок)
-type Point = { x: Float, y: Float }
+// Определение типа (с использованием фигурных скобок)
+Point: Type = { x: Float, y: Float }
 
-# Использование типа
-p: Point = Point(x: 1.0, y: 2.0)
-p.x  # 1.0
-p.y  # 2.0
+// Использование типа
+p: Point = Point(x=1.0, y=2.0)
+p.x  // 1.0
+p.y  // 2.0
 ```
 
-#### Record types
+#### record type
 
 ```yaoxiang
-# Структурные типы
-type Point = { x: Float, y: Float }
-type Rect = { x: Float, y: Float, width: Float, height: Float }
+// Тип-структура
+Point: Type = { x: Float, y: Float }
+Rect: Type = { x: Float, y: Float, width: Float, height: Float }
 
-# Использование
-p = Point(x: 3.0, y: 4.0)
-r = Rect(x: 0.0, y: 0.0, width: 10.0, height: 20.0)
+// Использование
+p = Point(x=3.0, y=4.0)
+r = Rect(x=0.0, y=0.0, width=10.0, height=20.0)
 ```
 
 #### Определение интерфейсов
 
-Интерфейсы — это record types, все поля которых являются function types:
+Интерфейсы — это record type, все поля которого имеют функциональный тип:
 
 ```yaoxiang
-# Определение интерфейса
-type Drawable = {
+// Определение интерфейса
+Drawable: Type = {
     draw: (Surface) -> Void,
     bounding_box: () -> Rect
 }
 
-type Serializable = {
+Serializable: Type = {
     serialize: () -> String
 }
 
-# Пустой интерфейс
-type EmptyInterface = {}
+// Пустой интерфейс
+EmptyInterface: Type = {}
 ```
 
-#### Методы типов
+#### Методы типа
 
-Для определения методов типов используется синтаксис `Type.method: (Type, ...) -> Return = ...`:
+Для определения методов типа используется синтаксис `Type.method: (Type, ...) -> Return = ...`:
 
 ```yaoxiang
-# Определение типа
-type Point = { x: Float, y: Float }
+// Определение типа
+Point: Type = { x: Float, y: Float }
 
-# Определение метода типа
+// Определение метода типа
 Point.draw: (self: Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
 
 Point.serialize: (self: Point) -> String = {
-    "Point(${self.x}, ${self.y})"
+    "Point({self.x}, {self.y})"
 }
 
-# Использование методов (синтаксический сахар)
-p = Point(x: 1.0, y: 2.0)
-p.draw(screen)           # → Point.draw(p, screen)
-str = p.serialize()      # → Point.serialize(p)
+// Использование метода (синтаксический сахар)
+p = Point(x=1.0, y=2.0)
+p.draw(screen)  // → Point.draw(p, screen)
+str = p.serialize()  // → Point.serialize(p)
 ```
 
-#### Автоматическое связывание
+#### Автоматическое связывание (builtin binding)
 
 Функции, объявленные с ключевым словом `pub`, автоматически привязываются к типам, определённым в том же файле:
 
 ```yaoxiang
-type Point = { x: Float, y: Float }
+Point: Type = { x: Float, y: Float }
 
-# Объявление pub автоматически привязывается к Point
+// Объявление с pub автоматически привязывается к Point
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
     (dx * dx + dy * dy).sqrt()
 }
 
-# Использование
-p1 = Point(x: 3.0, y: 4.0)
-p2 = Point(x: 1.0, y: 2.0)
+// Использование
+p1 = Point(x=3.0, y=4.0)
+p2 = Point(x=1.0, y=2.0)
 
-# Функциональный вызов
-d = distance(p1, p2)           # 3.606...
+// Функциональный вызов
+d = distance(p1, p2)  // 3.606...
 
-# ООП-синтаксис (автоматическая привязка к Point.distance)
-d2 = p1.distance(p2)           # → distance(p1, p2)
+// ООП-синтаксический сахар (автоматическая привязка к Point.distance)
+d2 = p1.distance(p2)  // → distance(p1, p2)
 ```
 
-#### Enum types
+#### enum type
 
 ```yaoxiang
-# Простой enum
-type Color = red | green | blue
+// Простое перечисление
+Color: Type = { red | green | blue }
 
-# Enum с данными
-Result: (T: Type, E: Type) -> Type = ok(T) | err(E)
+// Перечисление с данными
+Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
-# Использование generics
+// Использование generics
 success: Result(Int, String) = ok(42)
 failure: Result(Int, String) = err("not found")
 ```
 
-#### Generics
+#### generics (обобщённые типы)
 
 ```yaoxiang
-# Определение generics-типа
+// Определение обобщённого типа
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
     push: (List(T), T) -> Void
 }
 
-# Конкретная реализация
-type IntList = List(Int)
-type StringList = List(String)
+// Конкретные инстанциации
+IntList: Type = List(Int)
+StringList: Type = List(String)
 ```
 
-### Управляющие конструкции
+### Управление потоком
 
 ```yaoxiang
-# Условное выражение
+// Условное выражение
 if x > 0 {
     "positive"
 } elif x == 0 {
@@ -244,12 +244,12 @@ if x > 0 {
     "negative"
 }
 
-# Цикл
+// Цикл for
 for i in 0..5 {
     print(i)
 }
 
-# Цикл while
+// Цикл while
 mut n = 0
 while n < 5 {
     print(n)
@@ -260,23 +260,23 @@ while n < 5 {
 ### Списки и словари
 
 ```yaoxiang
-# Списки
+// Список
 numbers = [1, 2, 3, 4, 5]
-first = numbers[0]         # 1
+first = numbers[0]  // 1
 
-# Словари
+// Словарь
 scores = {"Alice": 90, "Bob": 85}
-alice_score = scores["Alice"]  # 90
+alice_score = scores["Alice"]  // 90
 
-# Добавление элементов
+// Добавление элемента
 mut list = [1, 2, 3]
 list.append(4)
 ```
 
-### Pattern matching
+### pattern matching
 
 ```yaoxiang
-# Выражение match
+// Выражение match
 result: Result(Int, String) = ok(42)
 
 message = match result {
@@ -285,67 +285,63 @@ message = match result {
 }
 ```
 
-## Spawn-программирование (асинхронное)
+## spawn-программирование (параллелизм)
 
-Уникальная особенность YaoXiang: функции, помеченные `spawn`, автоматически получают асинхронные возможности.
+Модель параллелизма YaoXiang построена вокруг примитива `spawn <expr>` — это единственная точка входа для параллельного выполнения.
 
 ```yaoxiang
-# Определение spawn-функции (автоматическое асинхронное выполнение)
-fetch_data: (url: String) -> JSON spawn = {
-    HTTP.get(url).json()
-}
-
-# Вызов spawn-функции (автоматический параллелизм, без await)
+// spawn модифицирует любое выражение, выполняя его параллельно
 main: () -> Void = {
-    # Два вызова выполняются автоматически параллельно
-    user = fetch_user(1)     # Автоматический параллелизм
-    posts = fetch_posts()    # Автоматический параллелизм
+    user = spawn fetch_user(1)   // Выполнение в фоне
+    posts = spawn fetch_posts()  // Параллельный шаг
 
-    # Автоматическое ожидание при обращении к результату
+    // При обращении к результату автоматически блокируется ожидание
     print(user.name)
     print(posts.length)
 }
 ```
 
-## Модульная система
+**Ключевое правило**: Выражение, модифицированное `spawn`, выполняется в фоне, а внешний синхронный код блокируется в ожидании результата. Независимые задачи автоматически выполняются параллельно,调度аются runtime-моделью GMP.
+
+## Система модулей
 
 ```yaoxiang
-# Импорт стандартной библиотеки
+// Импорт стандартной библиотеки
 use std.io
 use std.math
 
-# Использование импортированных функций
-result = math.sqrt(16)      # 4.0
-println("Hello!")
+// Использование импортированных функций
+result = math.sqrt(16)  // 4.0
+print("Hello!")
 ```
 
 ## Часто задаваемые вопросы
 
-### В: Переменные по умолчанию неизменяемы, как тогда изменять переменные?
+### В: Переменные по умолчанию неизменяемы, как изменить переменную?
 
 ```yaoxiang
-# Используйте ключевое слово mut для объявления изменяемой переменной
+// Используйте ключевое слово mut для объявления изменяемой переменной
 mut x = 10
-x = 20                       # ✅ OK
+x = 20  // ✅ OK
 ```
 
-### В: Как определять функции?
+### В: Как определить функцию?
 
 ```yaoxiang
-# Полная форма (рекомендуется)
+// Полная форма (рекомендуется)
 add: (a: Int, b: Int) -> Int = a + b
 
-# Краткая форма (type inference)
+// Краткая форма (с type inference)
 add = (a, b) => a + b
 ```
 
 ### В: Как обрабатывать ошибки?
 
 ```yaoxiang
-# Использование типа Result
-Result: (T: Type, E: Type) -> Type = ok(T) | err(E)
+// Используйте тип Result
+Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
-# Обработка через pattern matching
+// Обработка через pattern matching
 result = risky_operation()
 match result {
     ok(value) => print("Success: " + value)
@@ -353,15 +349,14 @@ match result {
 }
 ```
 
-## Что дальше
+## Следующие шаги
 
-- 📖 Прочитайте [Руководство по YaoXiang](../YaoXiang-book.md) для изучения ключевых возможностей
-- 📚 Изучите [Спецификацию языка](../YaoXiang-language-specification.md) для полного понимания синтаксиса
-- 🏗️ Ознакомьтесь с [архитектурной документацией](../architecture/) для понимания деталей реализации
-- 💡 Прочитайте [Манифест дизайна](../YaoXiang-design-manifesto.md) для понимания основных принципов
+- 📚 Ознакомьтесь со [спецификацией языка](../YaoXiang-language-specification.md) для изучения полного синтаксиса
+- 🏗️ Просмотрите [архитектурную документацию](../architecture/) для понимания деталей реализации
+- 💡 Прочтите [манифест дизайна](../YaoXiang-design-manifesto.md) для понимания основных концепций
 
-## Дополнительные ресурсы
+## Связанные ресурсы
 
-- [GitHub-репозиторий](https://github.com/yourusername/yaoxiang)
-- [Сообщения об ошибках](https://github.com/yourusername/yaoxiang/issues)
-- [Руководство по участию в разработке](../guides/dev/)
+- [Репозиторий на GitHub](https://github.com/yourusername/yaoxiang)
+- [Обратная связь через Issue](https://github.com/yourusername/yaoxiang/issues)
+- [Руководство для контрибьюторов](../guides/dev/)

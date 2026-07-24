@@ -32,7 +32,6 @@ pub use core::ir::*;
 pub use core::bytecode;
 pub use core::ir_gen::*;
 pub use passes::mono::*;
-pub use passes::module::*;
 pub use passes::codegen;
 
 // 特别导出：monomorphize的实例化相关类型

@@ -1,0 +1,43 @@
+// list_ops — 列表操作
+// 测试: 列表创建、遍历、过滤和映射
+// 从 BENCH_INPUT 环境变量读取外层循环次数，默认 100
+
+use std.{io, os, string, result}
+
+double: (n: Int) -> Int = (n) => {
+    return n * 2
+}
+
+main = {
+    n_str = os.get_env("BENCH_INPUT")
+    limit = if n_str == "" {
+        100
+    } else {
+        parsed = string.parse_int(n_str)
+        result.unwrap_or(parsed, 100)
+    }
+
+    mut total = 0
+    mut i = 0
+    while i < limit {
+        mut nums = []
+        mut j = 0
+        while j < 1000 {
+            nums = nums + [j]
+            j = j + 1
+        }
+        mut filtered = []
+        for n in nums {
+            if n % 2 == 0 {
+                filtered = filtered + [n]
+            }
+        }
+        mut doubled = []
+        for n in filtered {
+            doubled = doubled + [double(n)]
+        }
+        total = total + doubled[0]
+        i = i + 1
+    }
+    io.println(total)
+}

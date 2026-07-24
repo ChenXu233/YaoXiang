@@ -5,7 +5,7 @@ description: YaoXiang REPL User Guide - Interactive Code Execution Environment
 
 # REPL Interactive Interpreter
 
-YaoXiang REPL (Read-Eval-Print Loop) is an interactive code execution environment that allows you to input and execute YaoXiang code line by line, making it ideal for learning, testing, and debugging.
+YaoXiang REPL (Read-Eval-Print Loop) is an interactive code execution environment that allows you to input and execute YaoXiang code line by line, ideal for learning, testing, and debugging.
 
 ## Quick Start
 
@@ -23,7 +23,7 @@ Or run `yaoxiang` directly (without any subcommand):
 yaoxiang
 ```
 
-After startup, you will see the prompt:
+After starting, you will see the prompt:
 
 ```
 YaoXiang REPL - Type :help for assistance
@@ -34,16 +34,16 @@ Press Ctrl+D or :quit to exit
 
 ### Basic Usage
 
-Enter YaoXiang code after the prompt `>>` and press Enter to execute:
+Enter YaoXiang code after the `>>` prompt and press Enter to execute:
 
-```rust
+```yaoxiang
 >> 1 + 2
 3
 
 >> "Hello, World!"
 "Hello, World!"
 
->> let x = 10
+>> x = 10
 >> x * 2
 20
 ```
@@ -52,9 +52,9 @@ Enter YaoXiang code after the prompt `>>` and press Enter to execute:
 
 There are three ways to exit the REPL:
 
-1. **Shortcut**: Press `Ctrl+D`
-2. **Command**: Enter `:quit` or `:q`
-3. **Interrupt**: Press `Ctrl+C` to interrupt current input
+1. **Keyboard shortcut**: Press `Ctrl+D`
+2. **Command**: Type `:quit` or `:q`
+3. **Interrupt**: Press `Ctrl+C` to interrupt the current input
 
 ## Command System
 
@@ -62,7 +62,7 @@ The REPL provides a series of special commands prefixed with a colon `:`.
 
 ### Help Command
 
-```rust
+```yaoxiang
 >> :help
 ```
 
@@ -70,54 +70,54 @@ Displays help information for all available commands.
 
 ### Quit Command
 
-```rust
+```yaoxiang
 >> :quit
 ```
 
-Exits the REPL. Can also use the shorthand `:q`.
+Exits the REPL. The shorthand `:q` is also accepted.
 
 ### Clear Command
 
-```rust
+```yaoxiang
 >> :clear
 ```
 
-Clears all defined variables and functions, resetting the REPL state. Can also use the shorthand `:c`.
+Clears all defined variables and functions, resetting the REPL state. The shorthand `:c` is also accepted.
 
-### Type Command
+### Type Inspection Command
 
-```rust
+```yaoxiang
 >> :type x
 ```
 
-View type information for symbol `x`. Can also use the shorthand `:t`.
+Shows the type information of symbol `x`. The shorthand `:t` is also accepted.
 
 **Example**:
 
-```rust
->> let name = "YaoXiang"
+```yaoxiang
+>> name = "YaoXiang"
 >> :type name
 name: String
 
->> fn add(a: Int, b: Int) -> Int = a + b
+>> add: (a: Int, b: Int) -> Int = a + b
 >> :type add
 add: fn(Int, Int) -> Int
 ```
 
-### Symbols Command
+### Symbol List Command
 
-```rust
+```yaoxiang
 >> :symbols
 ```
 
-Lists all defined symbols (variables and functions) in the current REPL. Can also use the shorthand `:i` or `:info`.
+Lists all symbols (variables and functions) currently defined in the REPL. The shorthand `:i` or `:info` is also accepted.
 
 **Example**:
 
-```rust
->> let x = 10
->> let y = 20
->> fn greet(name: String) -> String = "Hello, " + name
+```yaoxiang
+>> x = 10
+>> y = 20
+>> greet: (name: String) -> String = "Hello, " + name
 >> :symbols
 x: Int
 y: Int
@@ -126,23 +126,23 @@ greet: fn(String) -> String
 
 ### History Command
 
-```rust
+```yaoxiang
 >> :history
 ```
 
-Displays command history. Can also use the shorthand `:hist`.
+Displays the command history. The shorthand `:hist` is also accepted.
 
-### Stats Command
+### Statistics Command
 
-```rust
+```yaoxiang
 >> :stats
 ```
 
-Displays execution statistics, including evaluation count and total execution time.
+Displays execution statistics, including the evaluation count and total execution time.
 
 **Example**:
 
-```rust
+```yaoxiang
 >> :stats
 Eval count: 5
 Total time: 12.34ms
@@ -152,9 +152,9 @@ Total time: 12.34ms
 
 ### Expression Evaluation
 
-The REPL can execute any valid YaoXiang expression:
+The REPL can evaluate any valid YaoXiang expression:
 
-```rust
+```yaoxiang
 >> 1 + 2
 3
 
@@ -170,17 +170,24 @@ false
 
 ### Variable Definition
 
-Use the `let` keyword to define variables:
+Define variables directly using their names:
 
-```rust
->> let name = "YaoXiang"
->> let age = 25
->> let pi = 3.14159
+```yaoxiang
+>> name = "YaoXiang"
+>> age = 25
+>> pi = 3.14159
 ```
 
-After definition, variables can be used in subsequent code:
+You can also explicitly annotate the type:
 
-```rust
+```yaoxiang
+>> name: String = "YaoXiang"
+>> age: Int = 25
+```
+
+Once defined, variables can be used in subsequent code:
+
+```yaoxiang
 >> name
 "YaoXiang"
 
@@ -190,16 +197,16 @@ After definition, variables can be used in subsequent code:
 
 ### Function Definition
 
-Use the `fn` keyword to define functions:
+YaoXiang has no `fn` keyword; functions are simply values with signatures:
 
-```rust
->> fn add(a: Int, b: Int) -> Int = a + b
->> fn greet(name: String) -> String = "Hello, " + name
+```yaoxiang
+>> add: (a: Int, b: Int) -> Int = a + b
+>> greet: (name: String) -> String = "Hello, " + name
 ```
 
 Calling functions:
 
-```rust
+```yaoxiang
 >> add(3, 4)
 7
 
@@ -211,63 +218,49 @@ Calling functions:
 
 The REPL supports multi-line code input. When incomplete code is detected (such as unclosed brackets), it automatically enters continuation mode:
 
-```rust
->> fn factorial(n: Int) -> Int =
-..   if n <= 1 then 1
-..   else n * factorial(n - 1)
-```
-
-The continuation prompt is `..`, indicating the current multi-line input mode.
-
-### Struct Definition
-
-```rust
->> struct Point {
-..   x: Float,
-..   y: Float
+```yaoxiang
+>> factorial: (n: Int) -> Int = {
+..     if n <= 1 { return 1 }
+..     return n * factorial(n - 1)
 .. }
 ```
 
-### Enum Definition
+The continuation prompt is `..`, indicating that multi-line input mode is active.
 
-```rust
->> enum Color {
-..   Red,
-..   Green,
-..   Blue
-.. }
+### Type Definition
+
+```yaoxiang
+>> Point: Type = { x: Float, y: Float }
+```
+
+### Variant Type Definition (Enum)
+
+```yaoxiang
+>> Color: Type = { red | green | blue }
 ```
 
 ## Auto-completion
 
-The REPL provides intelligent auto-completion to help you quickly input code.
+The REPL provides intelligent auto-completion to help you input code quickly.
 
-### Trigger Method
+### Trigger
 
-Press the `Tab` key to trigger auto-completion.
+Press `Tab` to trigger auto-completion.
 
 ### Completion Content
 
-1. **Keyword completion**: YaoXiang language keywords
-   - `let`, `fn`, `if`, `else`, `match`, `for`, `while`, `return`, etc.
-
-2. **Variable completion**: Defined variables
-   - Type the first few characters of a variable name and press Tab to complete.
-
-3. **Function completion**: Defined functions
-   - Type the first few characters of a function name and press Tab to complete.
-
-4. **Built-in function completion**: Built-in functions
-   - `print`, `len`, `range`, `typeof`, `assert`, etc.
+1. **Keyword completion**: YaoXiang language keywords (press Tab to expand)
+2. **Symbol completion**: Already defined variable and function names
+3. **Builtin function completion**: Builtin functions such as `print`, `len`, `range`, `typeof`, `assert`, etc.
 
 ### Completion Example
 
-```rust
->> let my_variable = 42
+```yaoxiang
+>> my_variable = 42
 >> my_<Tab>
 my_variable: Int
 
->> fn calculate_sum(a: Int, b: Int) -> Int = a + b
+>> calculate_sum: (a: Int, b: Int) -> Int = a + b
 >> calc<Tab>
 calculate_sum: fn(Int, Int) -> Int
 ```
@@ -276,10 +269,10 @@ calculate_sum: fn(Int, Int) -> Int
 
 ### Error Handling
 
-When code contains errors, the REPL displays detailed error information:
+When code produces an error, the REPL displays detailed error information:
 
-```rust
->> let x = 10 / 0
+```yaoxiang
+>> x = 10 / 0
 Error: Runtime error: DivisionByZero
 
 >> undefined_variable
@@ -292,15 +285,15 @@ Errors do not terminate the REPL session; you can continue entering new code.
 
 The REPL automatically saves command history, supporting:
 
-- **Up/Down arrows**: Browse history commands
-- **Search**: Use up/down arrows to search after entering partial content
-- **History file**: History is saved to a file and automatically loaded on next startup
+- **Up/Down arrow keys**: Browse command history
+- **Search**: Type part of a command then use up/down arrows to search
+- **History file**: History is saved to a file and automatically loaded on the next start
 
-### Execution Stats
+### Execution Statistics
 
 Use the `:stats` command to view execution statistics:
 
-```rust
+```yaoxiang
 >> :stats
 Eval count: 15
 Total time: 45.67ms
@@ -312,20 +305,20 @@ This helps monitor code performance.
 
 ### 1. Use Meaningful Variable Names
 
-```rust
+```yaoxiang
 // Good
-let user_name = "YaoXiang"
-let max_retries = 3
+user_name = "YaoXiang"
+max_retries = 3
 
 // Bad
-let x = "YaoXiang"
-let n = 3
+x = "YaoXiang"
+n = 3
 ```
 
 ### 2. Define Functions to Reuse Code
 
-```rust
->> fn is_even(n: Int) -> Bool = n % 2 == 0
+```yaoxiang
+>> is_even: (n: Int) -> Bool = n % 2 == 0
 >> is_even(4)
 true
 >> is_even(7)
@@ -336,30 +329,31 @@ false
 
 When the REPL state becomes messy, use `:clear` to reset:
 
-```rust
+```yaoxiang
 >> :clear
 Context cleared
 ```
 
 ### 4. Leverage Auto-completion for Efficiency
 
-Type the first few characters and press Tab to quickly complete variable and function names.
+After typing the first few characters, press Tab to quickly complete variable and function names.
 
 ### 5. Use Multi-line Input for Complex Code
 
-```rust
->> fn fibonacci(n: Int) -> Int =
-..   if n <= 1 then n
-..   else fibonacci(n - 1) + fibonacci(n - 2)
+```yaoxiang
+>> fibonacci: (n: Int) -> Int = {
+..     if n <= 1 { return n }
+..     return fibonacci(n - 1) + fibonacci(n - 2)
+.. }
 ```
 
-## FAQ
+## Frequently Asked Questions
 
-### Q: How do I view a function's definition?
+### Q: How do I view the definition of a function?
 
 A: Use the `:type` command to view the function signature:
 
-```rust
+```yaoxiang
 >> :type my_function
 my_function: fn(Int, String) -> Bool
 ```
@@ -368,11 +362,11 @@ my_function: fn(Int, String) -> Bool
 
 A: Use the `:clear` command:
 
-```rust
+```yaoxiang
 >> :clear
 ```
 
-### Q: Why didn't my multi-line code execute?
+### Q: Why isn't my multi-line code being executed?
 
 A: Check for unclosed brackets, quotes, or braces. The REPL waits for complete code input.
 
@@ -384,28 +378,29 @@ A: Press `Ctrl+C` to interrupt the current execution.
 
 A: The REPL supports all YaoXiang data types:
 - `Int`: Integer
-- `Float`: Floating-point number
+- `Float`: Floating-point
 - `String`: String
 - `Bool`: Boolean
-- `Unit`: Unit type
-- Custom structs and enums
+- `Void`: Void type
+- Custom record types and variant types
 
 ## Example Session
 
-Here is a complete REPL session example:
+The following is a complete REPL session example:
 
-```rust
+```yaoxiang
 YaoXiang REPL - Type :help for assistance
 Press Ctrl+D or :quit to exit
 
->> let greeting = "Hello"
->> let name = "YaoXiang"
+>> greeting = "Hello"
+>> name = "YaoXiang"
 >> greeting + ", " + name + "!"
 "Hello, YaoXiang!"
 
->> fn factorial(n: Int) -> Int =
-..   if n <= 1 then 1
-..   else n * factorial(n - 1)
+>> factorial: (n: Int) -> Int = {
+..     if n <= 1 { return 1 }
+..     return n * factorial(n - 1)
+.. }
 ..
 >> factorial(5)
 120
@@ -424,12 +419,12 @@ Total time: 2.34ms
 
 ## Related Commands
 
-| Command | Shortcut | Function |
-|---------|----------|----------|
-| `:help` | `:h` | Show help information |
-| `:quit` | `:q` | Exit REPL |
+| Command | Shorthand | Function |
+|------|------|------|
+| `:help` | `:h` | Display help information |
+| `:quit` | `:q` | Exit the REPL |
 | `:clear` | `:c` | Clear all state |
 | `:type` | `:t` | View symbol type |
 | `:symbols` | `:i` | List all symbols |
-| `:history` | `:hist` | Show command history |
-| `:stats` | - | Show execution statistics |
+| `:history` | `:hist` | Display command history |
+| `:stats` | - | Display execution statistics |

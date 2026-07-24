@@ -19,7 +19,7 @@
 
 本文档定义了 YaoXiang 编程语言的语法和语义。它是语言的权威参考，面向编译器和工具实现者。
 
-教程和示例代码请参考 [YaoXiang 指南](../guide/YaoXiang-book.md) 和 [tutorial/](../tutorial/) 目录。
+教程和示例代码请参考 [tutorial/](../tutorial/) 目录。
 
 ### 1.2 符合性
 
@@ -1868,5 +1868,4 @@ result = f(arg2, arg3)
 
 ---
 
-> 本规范定义了 YaoXiang 编程语言的核心语法和语义。
-> 教程和示例代码请参考 [YaoXiang 指南](../guide/YaoXiang-book.md) 和 [tutorial/](../tutorial/) 目录。
+> 教程和示例代码请参考 [tutorial/](../tutorial/) 目录。

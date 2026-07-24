@@ -108,7 +108,7 @@ fn test_e2e_level2a_exact_match_from_if_guard() {
 
     let env = TypeEnvironment::new();
     let mut ctx = ProofContext::new(&env);
-    ctx.assumptions.push(guard_assumption);
+    ctx.assumptions.inject(guard_assumption);
 
     // Act
     let result = check_predicate(&ctx, &refined, &HashMap::new());
@@ -144,7 +144,7 @@ fn test_e2e_level2b_implication_from_if_guard() {
 
     let env = TypeEnvironment::new();
     let mut ctx = ProofContext::new(&env);
-    ctx.assumptions.push(guard);
+    ctx.assumptions.inject(guard);
 
     // Act
     let result = check_predicate(&ctx, &refined, &HashMap::new());
@@ -210,7 +210,7 @@ fn test_e2e_level2b_fallback_to_level3() {
 
     let env = TypeEnvironment::new();
     let mut ctx = ProofContext::new(&env);
-    ctx.assumptions.push(irrelevant_guard);
+    ctx.assumptions.inject(irrelevant_guard);
 
     // Act
     let result = check_predicate(&ctx, &refined, &HashMap::new());
@@ -363,7 +363,7 @@ fn test_e2e_assumption_not_exact_still_triggers_implication_check() {
     // y=6 满足 y>5 但不满足 y>10 → 不蕴含
     let env = TypeEnvironment::new();
     let mut ctx = ProofContext::new(&env);
-    ctx.assumptions.push(ConstExpr::BinOp {
+    ctx.assumptions.inject(ConstExpr::BinOp {
         op: BinOp::Gt,
         left: Box::new(ConstExpr::NamedVar("y".into())),
         right: Box::new(ConstExpr::Lit(ConstValue::Int(5))),
@@ -394,7 +394,7 @@ fn test_e2e_exact_equivalent_constraint_matched() {
     };
     let env = TypeEnvironment::new();
     let mut ctx = ProofContext::new(&env);
-    ctx.assumptions.push(ConstExpr::BinOp {
+    ctx.assumptions.inject(ConstExpr::BinOp {
         op: BinOp::Gt,
         left: Box::new(ConstExpr::NamedVar("y".into())),
         right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),

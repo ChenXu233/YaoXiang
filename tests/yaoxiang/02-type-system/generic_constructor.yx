@@ -2,7 +2,7 @@
 // 验证: 泛型类型构造器单态化
 // 状态: 待测试
 
-use std.io
+use std.assert
 
 List: (T: Type) -> Type = {
     data: Array(T),
@@ -12,6 +12,5 @@ List: (T: Type) -> Type = {
 main = {
     // 泛型构造器：List(1, 2, 3) 应自动推导 T=Int
     numbers: List(Int) = List(1, 2, 3)
-    io.println(numbers)
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "generic constructor compiled and ran")
 }

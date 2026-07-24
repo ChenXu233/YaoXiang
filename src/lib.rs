@@ -38,7 +38,7 @@ pub use thiserror::Error;
 
 // Backend re-exports
 pub use backends::{Executor, DebuggableExecutor, ExecutorError, ExecutorResult, ExecutorConfig};
-pub use backends::common::{RuntimeValue, Opcode, Heap, Handle, BumpAllocator};
+pub use backends::common::{RuntimeValue, Opcode, Heap, Handle};
 pub use backends::interpreter::Interpreter;
 #[cfg(not(target_arch = "wasm32"))]
 pub use repl::Repl;
@@ -86,8 +86,8 @@ pub fn eval_code(source: &str) -> Result<()> {
     let has_main = parse_result.module.items.iter().any(|stmt| {
         matches!(
             &stmt.kind,
-            crate::frontend::core::parser::ast::StmtKind::Binding { name, .. }
-            if name == "main"
+            crate::frontend::core::parser::ast::StmtKind::Assign { target, .. }
+            if matches!(target.as_ref(), crate::frontend::core::parser::ast::Expr::Var(name, _) if name == "main")
         )
     });
     let compile_source: String = if has_main {
@@ -344,6 +344,7 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
 fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
     match ty {
         crate::frontend::core::typecheck::MonoType::Void => "void".to_string(),
+        crate::frontend::core::typecheck::MonoType::Never => "never".to_string(),
         crate::frontend::core::typecheck::MonoType::Bool => "bool".to_string(),
         crate::frontend::core::typecheck::MonoType::Int(n) => format!("i{}", n),
         crate::frontend::core::typecheck::MonoType::Float(n) => format!("f{}", n),

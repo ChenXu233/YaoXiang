@@ -8,56 +8,56 @@ title: if-elif-else
 
 ## Basic Syntax
 
-The grammar spec defines `if` expressions and `if` statements identically:
+In the syntax specification, `if` expressions and `if` statements are defined identically:
 
 ```
 if Expr Block ('elif' Expr Block)* ('else' Block)?
 ```
 
-In plain language: start with `if`, followed by a condition expression and a code block, then optionally followed by zero or more `elif condition block` pairs, and finally an optional `else block`.
+Translated into everyday language: it starts with `if`, followed by a condition expression and a code block, then optionally zero or more `elif condition block` pairs, and finally an optional `else block`.
 
-The simplest form—only `if`:
+The simplest form—just `if`:
 
 ```yaoxiang
 if temperature > 30 {
-    println("It's hot, turn on the air conditioner")
+    print("It's hot, turn on the AC")
 }
 ```
 
-Add an `else`:
+Adding `else`:
 
 ```yaoxiang
 if is_raining {
-    println("Bring an umbrella")
+    print("Bring an umbrella")
 } else {
-    println("No need to bring an umbrella")
+    print("No umbrella needed")
 }
 ```
 
-Use `elif` for multiple conditions:
+Multiple conditions with `elif`:
 
 ```yaoxiang
 score = 85
 
 if score >= 90 {
-    println("Excellent")
+    print("Excellent")
 } elif score >= 80 {
-    println("Good")
+    print("Good")
 } elif score >= 60 {
-    println("Pass")
+    print("Pass")
 } else {
-    println("Need to work harder")
+    print("Needs improvement")
 }
 ```
 
-Note that YaoXiang's keyword is `elif`, not `else if`. This reflects the language's deliberate effort to keep its keyword set concise.
+Note that YaoXiang's keyword is `elif`, not `else if`. This reflects the language's deliberate effort to keep its keywords concise.
 
-## `if` as an Expression
+## if as an Expression
 
-This is one of the most important features of YaoXiang's control flow: **`if` can be used as an expression that evaluates to a value**.
+This is one of YaoXiang's most important control flow features: **`if` can be used as an expression that computes a value**.
 
 ```yaoxiang
-# if expression: the value of each branch is assigned to result
+// if expression: the value of each branch is assigned to result
 result = if x > 0 {
     "Positive"
 } elif x < 0 {
@@ -65,15 +65,15 @@ result = if x > 0 {
 } else {
     "Zero"
 }
-# result is now one of "Positive", "Negative", or "Zero"
+// result is now one of "Positive", "Negative", or "Zero"
 ```
 
-When `if` is used as an expression, the return value types of all branches must be the same:
+When `if` is used as an expression, the return value types of all branches must be consistent:
 
 ```yaoxiang
 score = 88
 
-# All branches return String, types match—fine
+// All branches return String, types are consistent, no problem
 grade = if score >= 90 {
     "A"
 } elif score >= 80 {
@@ -83,16 +83,16 @@ grade = if score >= 90 {
 } else {
     "D"
 }
-println(grade)  # "B"
+print(grade)  // "B"
 ```
 
-Within each branch's block, **the value of the last expression is the return value of that branch**. You can also use `return` to explicitly return, but in branches it's usually enough to just write the expression directly.
+In each branch's code block, **the value of the last expression is that branch's return value**. You can also use `return` to return explicitly, but inside branches, simply writing the expression is usually enough.
 
 ```yaoxiang
-# Write the expression directly—recommended
+// Directly write the expression—recommended
 category = if age < 18 { "Minor" } else { "Adult" }
 
-# Or use return explicitly—same effect
+// You can also use return explicitly—same effect
 category = if age < 18 {
     return "Minor"
 } else {
@@ -100,11 +100,11 @@ category = if age < 18 {
 }
 ```
 
-If you only use `if` for conditional judgment and don't need a value, it's just a regular statement—fully compatible with the expression form.
+If you only use `if` for conditional judgment and don't need a value, it's an ordinary statement—fully compatible with the expression form.
 
-## Nested `if`
+## Nested if
 
-You can write `if` inside `if` to handle multi-level conditional logic:
+You can write another `if` inside an `if` to handle multi-level conditional logic:
 
 ```yaoxiang
 age = 25
@@ -112,47 +112,47 @@ has_ticket = true
 
 if age >= 18 {
     if has_ticket {
-        println("Welcome in")
+        print("Welcome in")
     } else {
-        println("Please purchase a ticket first")
+        print("Please purchase a ticket first")
     }
 } else {
-    println("Minors must be accompanied by a parent")
+    print("Minors must be accompanied by a parent")
 }
 ```
 
-When expressions are nested, YaoXiang has no "dangling else" ambiguity like in C—every `else` always binds to the nearest unmatched `if`.
+When expressions are nested, YaoXiang has no C-style "dangling else" ambiguity—each `else` always belongs to the nearest unmatched `if`.
 
 ## Combining Conditions with Boolean Operators
 
-You can use `and`, `or`, `not` to combine multiple predicates in a condition:
+In conditions, you can use `and`, `or`, `not` to combine multiple judgments:
 
 ```yaoxiang
 username = "admin"
 password = "123456"
 
-# and: both conditions must hold
+// and: both conditions must hold
 if username == "admin" and password == "123456" {
-    println("Login successful")
+    print("Login successful")
 }
 
-# or: either condition holds
+// or: either condition holds
 if role == "admin" or role == "moderator" {
-    println("Has admin privileges")
+    print("Has admin permissions")
 }
 
-# not: negate
+// not: negation
 if not is_banned {
-    println("Allowed to speak")
+    print("Allowed to post")
 }
 
-# Combined usage
+// Combined usage
 if (age >= 18 and age <= 60) or is_vip {
-    println("Can attend the event")
+    print("Can attend the event")
 }
 ```
 
-In terms of operator precedence, `not` is higher than `and`, and `and` is higher than `or`. When in doubt, add parentheses to make your intent clearer.
+In operator precedence, `not` is higher than `and`, and `and` is higher than `or`. When in doubt, add parentheses to make your intent clearer.
 
 ## Summary
 
@@ -160,9 +160,9 @@ In terms of operator precedence, `not` is higher than `and`, and `and` is higher
 |------|------|
 | Basic structure | `if condition { ... } elif condition { ... } else { ... }` |
 | elif | YaoXiang uses `elif`, not `else if` |
-| Expression | `if` can return a value; all branches must have the same type |
-| Branch return value | The last expression in a branch block is the return value |
-| Nesting | `if` can contain another `if`; no dangling-else ambiguity |
-| Boolean operators | `and`, `or`, `not` for combining conditions |
+| Expression | `if` can return a value; all branches must have consistent types |
+| Branch return value | The value of the last expression in the branch block is the return value |
+| Nesting | `if` can contain another `if`; no dangling else ambiguity |
+| Boolean operators | `and`, `or`, `not` combine conditions |
 
-In the next chapter you'll learn about the `for` loop—the standard way to iterate over collections and ranges.
+The next chapter will cover `for` loops—the standard way to iterate over collections and ranges.

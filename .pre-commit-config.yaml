@@ -1,6 +1,7 @@
 repos:
   - repo: local
     hooks:
+
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt
@@ -44,7 +45,7 @@ repos:
 
       - id: check-commit-msg
         name: check commit message format
-        entry: python scripts/check-commit-msg.py
+        entry: python scripts/hooks/check-commit-msg.py
         language: system
         stages: [commit-msg]
         always_run: true

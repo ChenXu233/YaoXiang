@@ -3,14 +3,12 @@
 // 验证: 列表字面量、索引访问、列表操作
 // 状态: ✅ 可运行
 
-use std.io
+use std.assert
 
 main = {
     mut items = [1, 2, 3]
 
     // 索引访问
     first = items[0]
-    io.println(first)
-
-    io.println("ALL TESTS PASSED")
+    assert.assert(first == 1, "first element should be 1")
 }

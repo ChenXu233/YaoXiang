@@ -1,0 +1,11 @@
+[package]
+name = "bench-runner"
+version = "0.1.0"
+edition = "2021"
+description = "YaoXiang 多语言基准测试运行器"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }

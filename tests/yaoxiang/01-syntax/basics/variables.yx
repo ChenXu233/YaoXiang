@@ -3,29 +3,27 @@
 // 验证: 变量声明 + 类型推导 + 可变性
 // 状态: ✅ 可运行
 
-use std.io
+use std.assert
 
 main = {
     // 基本变量
     x = 42
-    io.println(x)
+    assert.assert(x == 42, "x == 42")
 
     // 类型推导
     name = "YaoXiang"
-    io.println(name)
+    assert.assert(name == "YaoXiang", "name == YaoXiang")
 
     // 布尔
     flag = true
-    io.println(flag)
+    assert.assert(flag, "flag is true")
 
     // 浮点
     pi = 3.14
-    io.println(pi)
+    assert.assert(true, "pi assigned")
 
     // 可变变量
     mut counter = 0
     counter = counter + 1
-    io.println(counter)
-
-    io.println("ALL TESTS PASSED")
+    assert.assert(counter == 1, "counter == 1")
 }

@@ -32,36 +32,6 @@ impl TypeStatementParser for ParserState<'_> {
     }
 }
 
-/// Const parameter primitive types
-pub(crate) const CONST_PARAM_TYPES: &[&str] = &[
-    "Int", "Bool", "Float", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F32", "F64",
-    "Char", "String",
-];
-
-#[allow(dead_code)]
-fn looks_like_parenthesized_lambda(state: &mut ParserState<'_>) -> bool {
-    if !state.at(&TokenKind::LParen) {
-        return false;
-    }
-
-    let saved = state.save_position();
-    state.bump();
-
-    let mut depth = 1;
-    while depth > 0 && !state.at_end() {
-        if state.at(&TokenKind::LParen) {
-            depth += 1;
-        } else if state.at(&TokenKind::RParen) {
-            depth -= 1;
-        }
-        state.bump();
-    }
-
-    let is_lambda = depth == 0 && state.at(&TokenKind::FatArrow);
-    state.restore_position(saved);
-    is_lambda
-}
-
 /// Parse type annotation
 pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
     match state.current().map(|t| &t.kind) {
@@ -152,26 +122,23 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
                     return parse_constructor_type(name, name_span, state);
                 }
             }
-            // 后视检查：如果下一个 token 是比较/相等运算符，继续作为表达式解析
-            if matches!(
-                state.current().map(|t| &t.kind),
-                Some(TokenKind::EqEq | TokenKind::Neq | TokenKind::Gt | TokenKind::Ge)
-            ) {
-                let left_expr = Expr::Var(name.clone(), name_span);
-                // 使用 infix 处理器继续解析右侧
-                if let Some((_bp_left, bp_right, parser_fn)) = state.infix_info() {
-                    let full_expr = parser_fn(state, left_expr, bp_right)?;
-                    return Some(Type::ConstExpr(Box::new(full_expr)));
+            // 后视检查：如果不是类型语法专用的 token，则作为表达式解析（blacklist）
+            if state.infix_info().is_some()
+                && !matches!(
+                    state.current().map(|t| &t.kind),
+                    Some(TokenKind::Dot | TokenKind::Eq | TokenKind::KwAs)
+                )
+            {
+                // 使用完整的 Pratt 循环解析整个表达式（从 Var 开始）
+                let mut expr = Expr::Var(name.clone(), name_span);
+                while state.current().is_some() {
+                    let (_bp_left, bp_right, parser_fn) = match state.infix_info() {
+                        Some(info) => info,
+                        None => break,
+                    };
+                    expr = parser_fn(state, expr, bp_right)?;
                 }
-            }
-            // Check for old angle bracket generic syntax: Name<Args>
-            if state.at(&TokenKind::Lt) {
-                state.error(parse_msg(
-                    "Old 'Name<...>' angle bracket syntax is no longer supported. \
-                     Use '()' application syntax: 'Name(Type1, Type2)'"
-                        .to_string(),
-                ));
-                return None;
+                return Some(Type::ConstExpr(Box::new(expr)));
             }
             Some(Type::Name {
                 name,
@@ -274,6 +241,35 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             ));
             None
         }
+        // 整数字面量类型：IsPositive(5) 中的 5
+        Some(TokenKind::IntLiteral(n)) => {
+            let n = *n;
+            let span = state.span();
+            state.bump();
+            Some(Type::ConstExpr(Box::new(Expr::Lit(
+                crate::frontend::core::lexer::tokens::Literal::Int(n),
+                span,
+            ))))
+        }
+        // 负整数字面量类型：IsPositive(-1) 中的 -1
+        Some(TokenKind::Minus) => {
+            let span = state.span();
+            state.bump();
+            if let Some(TokenKind::IntLiteral(n)) = state.current().map(|t| &t.kind) {
+                let n = *n;
+                state.bump();
+                Some(Type::ConstExpr(Box::new(Expr::UnOp {
+                    op: crate::frontend::core::parser::ast::UnOp::Neg,
+                    expr: Box::new(Expr::Lit(
+                        crate::frontend::core::lexer::tokens::Literal::Int(n),
+                        span,
+                    )),
+                    span,
+                })))
+            } else {
+                None
+            }
+        }
         // Note: fn type uses (Params) -> ReturnType syntax, not `fn` keyword
         _ => None,
     }
@@ -362,7 +358,9 @@ fn parse_constructor_type(
 /// Returns (Vec<Param>, return_type)
 /// This is for RFC-010 unified syntax: `name: (a: Int, b: Int) -> Ret = body`
 /// Also supports const generic literal types: `factorial: [n: Int](n: n) -> Int`
-pub fn parse_fn_type_with_names(state: &mut ParserState<'_>) -> Option<(Vec<Param>, Box<Type>)> {
+pub fn parse_fn_type_with_names(
+    state: &mut ParserState<'_>
+) -> Option<(Vec<Param>, Vec<Param>, Box<Type>)> {
     if !state.expect(&TokenKind::LParen) {
         return None;
     }
@@ -437,10 +435,41 @@ pub fn parse_fn_type_with_names(state: &mut ParserState<'_>) -> Option<(Vec<Para
     if !state.expect(&TokenKind::Arrow) {
         return None;
     }
+    // return_type 位置可能是另一组 curry（如 (n: N) -> Int）。
+    // parse_type_annotation 会丢参数名，故自行检测 curry 组并递归收集带名参数。
+    // all_params = 第一组 + 后续各组（拍平带名），供 signature_params 存全部 curry 组参数名。
+    // return_type 保持嵌套 Type::Fn（纯类型），供 type_annotation 构建正确嵌套结构。
+    let saved = state.save_position();
+    let is_named_curry = if state.at(&TokenKind::LParen) {
+        state.bump();
+        let result = if let Some(TokenKind::Identifier(_)) = state.current().map(|t| &t.kind) {
+            let next = state.peek().map(|t| &t.kind);
+            matches!(next, Some(TokenKind::Colon))
+                || matches!(next, Some(TokenKind::Comma) | Some(TokenKind::RParen))
+        } else {
+            false
+        };
+        state.restore_position(saved);
+        result
+    } else {
+        false
+    };
 
+    if is_named_curry {
+        if let Some((inner_first, inner_all, inner_ret)) = parse_fn_type_with_names(state) {
+            let mut all_params = params.clone();
+            all_params.extend(inner_all);
+            let nested_fn = Type::Fn {
+                params: inner_first.iter().filter_map(|p| p.ty.clone()).collect(),
+                return_type: inner_ret,
+            };
+            return Some((params, all_params, Box::new(nested_fn)));
+        }
+        state.restore_position(saved);
+    }
     let return_type = Box::new(parse_type_annotation(state)?);
-
-    Some((params, return_type))
+    let all_params = params.clone();
+    Some((params, all_params, return_type))
 }
 
 /// Wrap a type annotation as a literal type if it's a const parameter reference
@@ -486,14 +515,30 @@ fn parse_tuple_type(state: &mut ParserState<'_>) -> Option<Type> {
 fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
     state.skip(&TokenKind::LBrace);
 
-    let mut fields = Vec::new();
-    let mut bindings = Vec::new();
-    let mut interfaces = Vec::new();
-
+    let mut body: Vec<TypeBodyItem> = Vec::new();
     if !state.at(&TokenKind::RBrace) {
         while let Some(TokenKind::Identifier(name)) = state.current().map(|t| &t.kind) {
             let name = name.clone();
+            let name_start = state.save_position();
             state.bump();
+
+            // 匿名类型表达式: Identifier 后接跟 '('（如 Assert(N > 0)）
+            // 与枚举变体 ok(Int) | err(String) 歧义，需前瞻区分。
+            if state.at(&TokenKind::LParen) {
+                state.restore_position(name_start);
+                let ty = parse_type_annotation(state)?;
+                // 前瞻：枚举变体后跟 '|'，匿名类型表达式后跟 ',' 或 '}'
+                if state.at(&TokenKind::Pipe) {
+                    // 是枚举变体，回退交给枚举整体重解析
+                    state.restore_position(name_start);
+                    return parse_enum_variants_in_braces(state);
+                }
+                body.push(TypeBodyItem::Expr(ty));
+                if !state.skip(&TokenKind::Comma) {
+                    break;
+                }
+                continue;
+            }
 
             // 检查下一个 token 是否是 mut 或冒号
             let is_mut = state.skip(&TokenKind::KwMut);
@@ -512,7 +557,7 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                         // 匿名函数绑定: name: FnType[pos] = lambda
                         let body_expr = state.parse_expression(BP_LOWEST)?;
                         let (params, return_type) = extract_fn_type_info(&field_type);
-                        bindings.push(TypeBodyBinding {
+                        body.push(TypeBodyItem::Binding(TypeBodyBinding {
                             name,
                             kind: BindingKind::Anonymous {
                                 params,
@@ -520,20 +565,24 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                                 positions: pos,
                                 body: Box::new(body_expr),
                             },
-                        });
+                        }));
                     } else {
                         // 默认值字段: name: Type = expression
                         let default_expr = state.parse_expression(BP_LOWEST)?;
-                        fields.push(StructField::with_default(
+                        body.push(TypeBodyItem::Field(StructField::with_default(
                             name,
                             is_mut,
                             field_type,
                             default_expr,
-                        ));
+                        )));
                     }
                 } else {
                     // 普通字段: name: Type
-                    fields.push(StructField::new(name, is_mut, field_type));
+                    // 注意：不再硬编码 "Assert" — 所有 name: Type 形式一律作为字段。
+                    // 匿名类型表达式 Assert(N > 0) 已由前面的 LParen 前瞻分支处理。
+                    body.push(TypeBodyItem::Field(StructField::new(
+                        name, is_mut, field_type,
+                    )));
                 }
             } else if state.skip(&TokenKind::Eq) {
                 // 无冒号但有等号: 外部函数绑定 name = function[positions] 或默认绑定 name = function
@@ -552,21 +601,21 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                 // RFC-004: 尝试解析位置绑定 [positions]，如果没有则为默认绑定
                 if state.at(&TokenKind::LBracket) {
                     let positions = parse_binding_positions(state).ok()?;
-                    bindings.push(TypeBodyBinding {
+                    body.push(TypeBodyItem::Binding(TypeBodyBinding {
                         name,
                         kind: BindingKind::External {
                             function: func_name,
                             positions,
                         },
-                    });
+                    }));
                 } else {
                     // 默认绑定: name = function（自动查找第一个类型匹配位置）
-                    bindings.push(TypeBodyBinding {
+                    body.push(TypeBodyItem::Binding(TypeBodyBinding {
                         name,
                         kind: BindingKind::DefaultExternal {
                             function: func_name,
                         },
-                    });
+                    }));
                 }
             } else if is_mut {
                 // mut 后面没有冒号是语法错误
@@ -575,14 +624,29 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                     name
                 )));
                 return None;
-            } else if state.at(&TokenKind::Pipe) || state.at(&TokenKind::LParen) {
-                // 枚举变体: red | green | blue 或 ok(Int) | err(String)
-                // 回退一个 token，从头开始解析枚举
+            } else if state.at(&TokenKind::Pipe) {
+                // 枚举变体: red | green | blue
+                // 回退一个 token，从头开始析枚举
                 state.restore_position(state.save_position() - 1);
                 return parse_enum_variants_in_braces(state);
+            } else if matches!(
+                state.current().map(|t| &t.kind),
+                Some(
+                    TokenKind::Gt
+                        | TokenKind::Lt
+                        | TokenKind::Ge
+                        | TokenKind::Le
+                        | TokenKind::EqEq
+                        | TokenKind::Neq
+                )
+            ) {
+                // 精化约束表达式: x > 0
+                state.restore_position(name_start);
+                let ty = parse_type_annotation(state)?;
+                body.push(TypeBodyItem::Expr(ty));
             } else {
                 // 接口约束: InterfaceName
-                interfaces.push(name);
+                body.push(TypeBodyItem::Interface(name));
             }
 
             // 跳过逗号，如果不是逗号则结束循环
@@ -592,13 +656,12 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
         }
     }
 
-    state.skip(&TokenKind::RBrace);
+    if !state.skip(&TokenKind::RBrace) {
+        // 未找到闭合 }——内容不是合法类型体
+        return None;
+    }
 
-    Some(Type::Struct {
-        fields,
-        bindings,
-        interfaces,
-    })
+    Some(Type::Struct { body })
 }
 
 /// 解析花括号内的枚举变体: { red | green | blue }

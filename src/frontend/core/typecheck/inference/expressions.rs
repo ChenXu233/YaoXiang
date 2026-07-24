@@ -53,6 +53,10 @@ pub struct ExpressionInferrer<'a> {
         &'a HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
     /// 实例化请求（收集遇到的所有泛型函数实例化需求）
     pub instantiation_requests: Vec<InstantiationRequest>,
+    /// 依赖类型环境（效应查询）—— 由 StatementChecker 注入
+    dep_env: Option<&'a crate::frontend::core::types::eval::dependent_types::DependentTypeEnv>,
+    /// 流敏感假设集 Γ（效应注入）—— 由 StatementChecker 注入
+    gamma: Option<&'a mut crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma>,
 }
 
 impl<'a> ExpressionInferrer<'a> {
@@ -74,6 +78,8 @@ impl<'a> ExpressionInferrer<'a> {
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
+            dep_env: None,
+            gamma: None,
         }
     }
 
@@ -96,6 +102,8 @@ impl<'a> ExpressionInferrer<'a> {
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
+            dep_env: None,
+            gamma: None,
         }
     }
 
@@ -119,6 +127,8 @@ impl<'a> ExpressionInferrer<'a> {
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
+            dep_env: None,
+            gamma: None,
         }
     }
 
@@ -144,6 +154,8 @@ impl<'a> ExpressionInferrer<'a> {
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
+            dep_env: None,
+            gamma: None,
         }
     }
 
@@ -174,6 +186,22 @@ impl<'a> ExpressionInferrer<'a> {
         defs: &'a HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
     ) {
         self.generic_type_defs = defs;
+    }
+
+    /// 设置依赖类型环境（效应查询）
+    pub fn set_dep_env(
+        &mut self,
+        dep_env: &'a crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
+    ) {
+        self.dep_env = Some(dep_env);
+    }
+
+    /// 设置流敏感假设集 Γ（效应注入）
+    pub fn set_gamma(
+        &mut self,
+        gamma: &'a mut crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma,
+    ) {
+        self.gamma = Some(gamma);
     }
 
     /// 添加变量到当前作用域
@@ -323,6 +351,7 @@ impl<'a> ExpressionInferrer<'a> {
             crate::frontend::core::lexer::tokens::Literal::Bool(_) => MonoType::Bool,
             crate::frontend::core::lexer::tokens::Literal::Char(_) => MonoType::Char,
             crate::frontend::core::lexer::tokens::Literal::String(_) => MonoType::String,
+            crate::frontend::core::lexer::tokens::Literal::Void => MonoType::Void,
         };
         Ok(ty)
     }
@@ -486,67 +515,6 @@ impl<'a> ExpressionInferrer<'a> {
                 }
             }
             _ => {}
-        }
-    }
-
-    /// 将类型中的 TypeRef 替换为对应的 TypeVar
-    ///
-    /// 用于泛型类型构造时，将 struct fields 中的 TypeRef("T") 替换为 TypeVar，
-    /// 以便与实参类型 unify 推断具体类型。
-    fn replace_type_refs_with_vars(
-        ty: &MonoType,
-        subst: &HashMap<String, MonoType>,
-    ) -> MonoType {
-        match ty {
-            MonoType::TypeRef(name) => subst.get(name).cloned().unwrap_or_else(|| ty.clone()),
-            MonoType::Struct(s) => {
-                let new_fields: Vec<(String, MonoType)> = s
-                    .fields
-                    .iter()
-                    .map(|(n, t)| (n.clone(), Self::replace_type_refs_with_vars(t, subst)))
-                    .collect();
-                MonoType::Struct(crate::frontend::core::types::StructType {
-                    name: s.name.clone(),
-                    fields: new_fields,
-                    methods: s.methods.clone(),
-                    field_mutability: s.field_mutability.clone(),
-                    field_has_default: s.field_has_default.clone(),
-                    interfaces: s.interfaces.clone(),
-                })
-            }
-            MonoType::List(elem) => {
-                MonoType::List(Box::new(Self::replace_type_refs_with_vars(elem, subst)))
-            }
-            MonoType::Option(elem) => {
-                MonoType::Option(Box::new(Self::replace_type_refs_with_vars(elem, subst)))
-            }
-            MonoType::Tuple(elems) => MonoType::Tuple(
-                elems
-                    .iter()
-                    .map(|e| Self::replace_type_refs_with_vars(e, subst))
-                    .collect(),
-            ),
-            MonoType::Fn {
-                params,
-                return_type,
-            } => MonoType::Fn {
-                params: params
-                    .iter()
-                    .map(|p| Self::replace_type_refs_with_vars(p, subst))
-                    .collect(),
-                return_type: Box::new(Self::replace_type_refs_with_vars(return_type, subst)),
-            },
-            MonoType::Arc(elem) => {
-                MonoType::Arc(Box::new(Self::replace_type_refs_with_vars(elem, subst)))
-            }
-            MonoType::Generic { name, args } => MonoType::Generic {
-                name: name.clone(),
-                args: args
-                    .iter()
-                    .map(|a| Self::replace_type_refs_with_vars(a, subst))
-                    .collect(),
-            },
-            _ => ty.clone(),
         }
     }
 
@@ -795,6 +763,7 @@ impl<'a> ExpressionInferrer<'a> {
     }
 
     /// 推断表达式的类型
+    #[allow(irrefutable_let_patterns)]
     pub fn infer_expr(
         &mut self,
         expr: &crate::frontend::core::parser::ast::Expr,
@@ -811,6 +780,12 @@ impl<'a> ExpressionInferrer<'a> {
                     // 因为 assign_var 已经将更新后的类型写入了 scope
                     // 不需要再通过 solver 解析（solver 不知道 scope 的更新）
                     Ok(poly.body)
+                } else if is_builtin_type_name(name) {
+                    // 内置类型名在表达式位置 — 当作 Type 宇宙的值
+                    Ok(crate::frontend::core::types::MonoType::MetaType {
+                        universe_level: crate::frontend::core::types::mono::UniverseLevel::type0(),
+                        type_params: Vec::new(),
+                    })
                 } else {
                     Err(ErrorCodeDefinition::unknown_variable(name)
                         .at(*span)
@@ -1117,57 +1092,66 @@ impl<'a> ExpressionInferrer<'a> {
                 );
 
                 // 泛型类型构造：当函数名在 generic_type_defs 中且 func_ty 是 Struct 时，
-                // 通过 unify arg_types 与 struct fields 推断泛型参数，返回实例化后的结构体
-                if let crate::frontend::core::parser::ast::Expr::Var(ref fn_name, _) = **func {
+                // 直接使用 arg_types 调用 instantiate_generic_type（Layer 1 + Layer 2）
+                if let crate::frontend::core::parser::ast::Expr::Var(fn_name, _) = &**func {
                     if let Some(generic_def) = self.generic_type_defs.get(fn_name).cloned() {
-                        if let MonoType::Struct(ref s) = func_ty {
-                            if !generic_def.type_param_names.is_empty() && !s.fields.is_empty() {
-                                // 使用 struct fields 的类型作为参数类型，
-                                // 与 arg_types unify 以推断泛型参数的具体类型
-                                let field_types: Vec<MonoType> =
-                                    s.fields.iter().map(|(_, t)| t.clone()).collect();
-                                if arg_types.len() == field_types.len() {
-                                    // 创建新的 TypeVar 用于每个泛型参数
-                                    let mut param_subst: HashMap<String, MonoType> = HashMap::new();
-                                    for param_name in &generic_def.type_param_names {
-                                        param_subst
-                                            .insert(param_name.clone(), self.solver.new_var());
+                        if let crate::frontend::core::types::MonoType::Struct(_) = &func_ty {
+                            let type_param_count = generic_def.type_param_names.len();
+                            let const_param_count = generic_def.poly.const_binders.len();
+                            let expected_arg_count = type_param_count + const_param_count;
+
+                            if arg_types.len() == expected_arg_count {
+                                // const 参数需要 MonoType::Literal，而非 MonoType::Int
+                                let mut full_args = arg_types.clone();
+                                for (i, binder) in generic_def.poly.const_binders.iter().enumerate()
+                                {
+                                    let arg_idx = type_param_count + i;
+                                    if let Some(arg) = full_args.get_mut(arg_idx) {
+                                        if !matches!(arg, MonoType::Literal { .. }) {
+                                            // 尝试从表达式提取字面量值
+                                            if let Some(lit) = args.get(arg_idx) {
+                                                if let Some(value) =
+                                                    extract_const_value_from_expr(lit)
+                                                {
+                                                    *arg = MonoType::Literal {
+                                                        name: format!("{}", value),
+                                                        base_type: Box::new(arg.clone()),
+                                                        value,
+                                                    };
+                                                }
+                                            }
+                                        }
                                     }
-                                    // 替换 field types 中的 TypeRef 为 TypeVar
-                                    let resolved_fields: Vec<MonoType> = field_types
-                                        .iter()
-                                        .map(|ft| {
-                                            Self::replace_type_refs_with_vars(ft, &param_subst)
-                                        })
-                                        .collect();
-                                    // Unify resolved field types with arg types
-                                    for (field_ty, arg_ty) in
-                                        resolved_fields.iter().zip(arg_types.iter())
-                                    {
-                                        let _ = self.solver.unify(field_ty, arg_ty);
-                                    }
-                                    // 解析泛型参数的具体类型
-                                    let concrete_args: Vec<MonoType> = generic_def
-                                        .type_param_names
-                                        .iter()
-                                        .map(|name| {
-                                            let var = param_subst.get(name).unwrap();
-                                            self.solver.resolve_type(var)
-                                        })
-                                        .collect();
-                                    // 实例化模板
-                                    let result = crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type_static(
-                                        &generic_def.poly.body,
-                                        &generic_def.type_param_names,
-                                        &concrete_args,
-                                    );
-                                    return Ok(result);
+                                    let _ = binder; // 避免未使用警告
                                 }
+                                return crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(
+                                    &generic_def,
+                                    &full_args,
+                                );
                             }
                         }
                     }
                 }
 
+                // 效应消费：成功调用后向流敏感 Γ 注入谓词
+                // （如 std.assert(x > 0) 成功后把 x > 0 加入 Γ）
+                if let crate::frontend::core::parser::ast::Expr::Var(fn_name, _) = &**func {
+                    if let Some(dep_env) = self.dep_env {
+                        if let Some(spec) = dep_env.get_effect_spec(fn_name) {
+                            for effect in &spec.effects {
+                                if let crate::frontend::core::types::eval::dependent_types::Effect::GammaAssume { predicate_arg } = effect {
+                                    if let Some(arg_expr) = args.get(*predicate_arg) {
+                                        if let Some(pred) = crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(arg_expr) {
+                                            if let Some(gamma) = self.gamma.as_deref_mut() {
+                                                gamma.inject(pred);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 // 分发
                 match mono_func_ty {
                     MonoType::Fn {
@@ -1191,21 +1175,26 @@ impl<'a> ExpressionInferrer<'a> {
                                     }
                                     _ => arg_ty.clone(),
                                 };
+                                // resolve 参数类型：TypeRef("Int") → Int(64) 等
+                                let mut resolved_param = self.solver.resolve_type(param_ty);
                                 // Int -> Float 扩展转换是允许的
                                 if matches!(
-                                    (&actual_arg, param_ty),
+                                    (&actual_arg, &resolved_param),
                                     (MonoType::Int(_), MonoType::Float(_))
                                 ) {
                                     continue;
                                 }
-                                // TypeRef 未完全解析时跳过（如用户自定义类型名）
-                                if matches!(param_ty, MonoType::TypeRef(_)) {
-                                    continue;
+                                // TypeRef: 先 solver.resolve 解析内置类型（Int/Float 等），
+                                // 再 type_defs 解析用户自定义类型；都不匹配则跳过
+                                if let MonoType::TypeRef(name) = &resolved_param {
+                                    resolved_param = match self.type_defs.get(name) {
+                                        Some(def_ty) => self.solver.resolve_type(def_ty),
+                                        None => continue,
+                                    };
                                 }
-                                // TypeVar 是泛型类型参数 —— 必须 unify 以推断具体类型
-                                if self.solver.unify(&actual_arg, param_ty).is_err() {
+                                if self.solver.unify(&actual_arg, &resolved_param).is_err() {
                                     return Err(ErrorCodeDefinition::type_mismatch(
-                                        &format!("{}", param_ty),
+                                        &format!("{}", resolved_param),
                                         &format!("{}", arg_ty),
                                     )
                                     .at(*span)
@@ -1741,103 +1730,90 @@ impl<'a> ExpressionInferrer<'a> {
                 self.infer_expr(expr)?;
                 Ok(())
             }
-            crate::frontend::core::parser::ast::StmtKind::Var {
-                name,
+            crate::frontend::core::parser::ast::StmtKind::Assign {
+                target,
                 type_annotation,
-                initializer,
+                value,
                 is_mut,
+                span: stmt_span,
                 ..
             } => {
-                let init_ty = if let Some(expr) = initializer {
+                use crate::frontend::core::parser::ast::Expr;
+                let name = match target.as_ref() {
+                    Expr::Var(n, _) => n.clone(),
+                    _ => return Ok(()),
+                };
+                // 如果 value 是 Lambda，走函数推断
+                if let Some(v) = value {
+                    if let Expr::Lambda { params, .. } = v.as_ref() {
+                        let param_types: Vec<MonoType> =
+                            params.iter().map(|_| self.solver.new_var()).collect();
+                        let return_type = type_annotation
+                            .as_ref()
+                            .map_or(MonoType::Void, |t| t.clone().into());
+                        let fn_type = MonoType::Fn {
+                            params: param_types,
+                            return_type: Box::new(return_type),
+                        };
+                        self.try_add_var(
+                            name.clone(),
+                            PolyType::mono(fn_type),
+                            *stmt_span,
+                            *is_mut,
+                        )?;
+                        return Ok(());
+                    }
+                    if let Expr::Block(..) = v.as_ref() {
+                        let fn_type = MonoType::Fn {
+                            params: vec![],
+                            return_type: Box::new(
+                                type_annotation
+                                    .as_ref()
+                                    .map_or(MonoType::Void, |t| t.clone().into()),
+                            ),
+                        };
+                        self.try_add_var(
+                            name.clone(),
+                            PolyType::mono(fn_type),
+                            *stmt_span,
+                            *is_mut,
+                        )?;
+                        return Ok(());
+                    }
+                }
+                // 普通变量
+                let init_ty = if let Some(expr) = value {
                     self.infer_expr(expr)?
                 } else {
                     type_annotation
                         .as_ref()
                         .map_or_else(|| self.solver.new_var(), |t| t.clone().into())
                 };
-
-                if self.scope.var_in_any_scope(name) {
-                    if self.scope.var_in_current_scope(name) {
-                        // 当前作用域已有此变量
-                        if self.scope.var_is_moved(name).unwrap_or(false) {
-                            // 已 moved 的变量：视为"未找到"，重新声明
-                            // 先移除旧的 moved 绑定，再添加新绑定
-                            self.scope.remove_var(name);
-                            // 继续到下面的 try_add_var
+                if self.scope.var_in_any_scope(&name) {
+                    if self.scope.var_in_current_scope(&name) {
+                        if self.scope.var_is_moved(&name).unwrap_or(false) {
+                            self.scope.remove_var(&name);
                         } else {
-                            return Err(ErrorCodeDefinition::duplicate_definition(name)
-                                .at(stmt.span)
+                            return Err(ErrorCodeDefinition::duplicate_definition(&name)
+                                .at(*stmt_span)
                                 .build());
                         }
                     } else {
-                        // 外层作用域有此变量
-                        if self.scope.var_is_moved(name).unwrap_or(false) {
+                        if self.scope.var_is_moved(&name).unwrap_or(false) {
                             // 外层变量已 moved：在当前作用域重新声明
-                            // 继续到下面的 try_add_var
                         } else if !*is_mut {
-                            // 非 mut 的 Var 在外部作用域存在同名变量时，是赋值操作
-                            // 需要检查外层变量是否可变
-                            if !self.scope.var_is_mutable(name).unwrap_or(false) {
-                                return Err(ErrorCodeDefinition::immutable_assignment(name)
-                                    .at(stmt.span)
+                            if !self.scope.var_is_mutable(&name).unwrap_or(false) {
+                                return Err(ErrorCodeDefinition::immutable_assignment(&name)
+                                    .at(*stmt_span)
                                     .build());
                             }
-                            self.assign_var(name, init_ty);
+                            self.assign_var(&name, init_ty);
                             return Ok(());
                         }
-                        // mut 声明允许遮蔽外层变量（与 StatementChecker.check_var_stmt 行为一致）
                     }
                 }
-                self.try_add_var(name.clone(), PolyType::mono(init_ty), stmt.span, *is_mut)?;
+                self.try_add_var(name.clone(), PolyType::mono(init_ty), *stmt_span, *is_mut)?;
                 Ok(())
-            }
-            crate::frontend::core::parser::ast::StmtKind::Binding {
-                name,
-                params,
-                body,
-                type_annotation,
-                ..
-            } => {
-                let param_types: Vec<MonoType> =
-                    params.iter().map(|_| self.solver.new_var()).collect();
-
-                let return_type = type_annotation
-                    .as_ref()
-                    .map_or(MonoType::Void, |t| t.clone().into());
-
-                let fn_type = MonoType::Fn {
-                    params: param_types.clone(),
-                    return_type: Box::new(return_type.clone()),
-                };
-
-                self.scope.add_var(
-                    name.clone(),
-                    PolyType::mono(fn_type),
-                    false,
-                    crate::util::span::Span::default(),
-                );
-
-                self.scope.enter_scope();
-                let result: Result<()> = (|| {
-                    for (param, param_ty) in params.iter().zip(param_types.iter()) {
-                        self.scope.add_var(
-                            param.name.clone(),
-                            PolyType::mono(param_ty.clone()),
-                            param.is_mut,
-                            crate::util::span::Span::default(),
-                        );
-                    }
-
-                    let block = crate::frontend::core::parser::ast::Block {
-                        stmts: body.clone(),
-                        span: stmt.span,
-                    };
-                    let _ = self.infer_block(&block, true, Some(&return_type))?;
-
-                    Ok(())
-                })();
-                self.scope.exit_scope();
-                result
             }
             _ => Ok(()),
         }
@@ -1858,4 +1834,46 @@ fn extract_string_literal_from_expr(
         ) => Some(s.clone()),
         _ => None,
     }
+}
+/// 从表达式提取编译期常量值（用于 const 泛型参数）
+fn extract_const_value_from_expr(
+    expr: &crate::frontend::core::parser::ast::Expr
+) -> Option<crate::frontend::core::types::const_data::ConstValue> {
+    use crate::frontend::core::types::const_data::ConstValue;
+    match expr {
+        crate::frontend::core::parser::ast::Expr::Lit(
+            crate::frontend::core::lexer::tokens::Literal::Int(n),
+            _,
+        ) => Some(ConstValue::Int(*n)),
+        crate::frontend::core::parser::ast::Expr::Lit(
+            crate::frontend::core::lexer::tokens::Literal::Bool(b),
+            _,
+        ) => Some(ConstValue::Bool(*b)),
+        crate::frontend::core::parser::ast::Expr::Lit(
+            crate::frontend::core::lexer::tokens::Literal::Float(f),
+            _,
+        ) => Some(ConstValue::Float(*f as f32)),
+        _ => None,
+    }
+}
+/// 检查名称是否为内置类型名（Type 宇宙的值）
+fn is_builtin_type_name(name: &str) -> bool {
+    matches!(
+        name,
+        "Int"
+            | "int"
+            | "Float"
+            | "float"
+            | "Bool"
+            | "bool"
+            | "String"
+            | "string"
+            | "Void"
+            | "void"
+            | "Never"
+            | "never"
+            | "Char"
+            | "char"
+            | "Type"
+    )
 }

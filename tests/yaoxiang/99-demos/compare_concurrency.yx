@@ -3,7 +3,7 @@
 // Rust 等效: Arc::new(data) + clone() + tokio::spawn + async move
 // YaoXiang: ref 关键字 + spawn {} 块
 
-use std.io
+use std.{assert, io}
 
 main = {
     data = 100
@@ -16,6 +16,7 @@ main = {
         return a
     }
 
+    assert.assert(true, "spawn with ref completed")
     io.println(result)
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "all passed")
 }

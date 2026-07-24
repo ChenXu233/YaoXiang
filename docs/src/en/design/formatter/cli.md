@@ -1,26 +1,25 @@
----
-title: "yaoxiang fmt Command Line Usage"
-description: Command line arguments and usage methods for the formatting tool
----
-
-# Command Line Usage
-
+title: "yaoxiang format Command-Line Usage"
+description: Command-line arguments and usage of the formatting tool
 ---
 
-## A. Command Line Usage
+# Command-Line Usage
+
+---
+
+## A. Command-Line Usage
 
 ```bash
 # Format a file (output to stdout)
-yaoxiang fmt file.yx
+yaoxiang format file.yx
 
 # Check if a file is already formatted
-yaoxiang fmt --check file.yx
+yaoxiang format --dry-run file.yx
 
-# Format and write to file
-yaoxiang fmt --write file.yx
+# Format and write back to the file
+yaoxiang format -w file.yx
 
 # Format all .yx files in a directory
-yaoxiang fmt --write src/
+yaoxiang format -w src/
 ```
 
 ---
@@ -28,9 +27,9 @@ yaoxiang fmt --write src/
 ## B. CLI Arguments
 
 | Argument | Description | Default |
-|----------|-------------|---------|
-| `--check` | Check mode, does not modify files | false |
-| `--write` | Write mode, modifies files | false |
+|------|------|--------|
+| `--dry-run` | Check mode, do not modify files | false |
+| `-w`, `--write` | Write mode, modify files | false |
 | `--stdout` | Output to stdout | false |
 | `--indent-width` | Indent width | 4 |
 | `--line-width` | Maximum line width | 120 |
@@ -41,6 +40,6 @@ yaoxiang fmt --write src/
 
 ## C. References
 
-- [Issue #13: Implement yaoxiang fmt code formatting tool](https://github.com/ChenXu233/YaoXiang/issues/13)
+- [Issue #13: Implement yaoxiang format code formatting tool](https://github.com/ChenXu233/YaoXiang/issues/13)
 - [Rustfmt Style Guide](https://rust-lang.github.io/rustfmt/)
-- [Test Writing Specification](../test-specification.md)
+- [Test Specification](../test-specification.md)

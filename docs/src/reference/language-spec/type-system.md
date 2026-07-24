@@ -319,7 +319,7 @@ Result: (T: Type, E: Type) -> Type = {
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
-    push: (self: List(T), item: T) -> Void,   # self 只是约定名，不是关键字
+    push: (self: List(T), item: T) -> Void,   // self 只是约定名，不是关键字
     get: (self: List(T), index: Int) -> Option(T)
 }
 ```
@@ -482,10 +482,10 @@ If: (C: Bool, T: Type, E: Type) -> Type = match C {
 
 // 示例：编译期分支
 NonEmpty: (T: Type) -> Type = If(T != Void, T, Never)
-# IsTrue 桥接与 Assert 精化类型（详见 §8.3）
+// IsTrue 桥接与 Assert 精化类型（详见 §8.3）
 IsTrue: (b: Bool) -> Type = match b {
-    true => Void,      # ⊤，程序继续
-    false => Never,    # ⊥，发散/编译错误
+    true => Void,      // ⊤，程序继续
+    false => Never,    // ⊥，发散/编译错误
 }
 Assert: (cond: Bool) -> Type = IsTrue(cond)
 ```
@@ -520,9 +520,9 @@ AsString: (T: Type) -> Type = match T {
 编译器维护每个控制流点的已知命题集合：
 
 ```yaoxiang
-assert(x > 0)       # Γ = {x > 0}
-y = x + 1           # Γ = {x > 0, y > 1}  ← SP 传播
-mut x = x - 5       # Γ = {}  ← mut kill set：旧假设失效
+assert(x > 0)       // Γ = {x > 0}
+y = x + 1           // Γ = {x > 0, y > 1}  ← SP 传播
+mut x = x - 5       // Γ = {}  ← mut kill set：旧假设失效
 ```
 
 `mut` 变量赋值后，涉及该变量的所有假设被移除（kill set）。分支合流时 Γ 取各分支交集。

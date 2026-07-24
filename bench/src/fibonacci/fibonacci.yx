@@ -1,0 +1,30 @@
+// fibonacci — 迭代斐波那契数列
+// 测试: 整数运算和循环性能
+// 从 BENCH_INPUT 环境变量读取输入规模，默认 1000
+
+use std.{io, os, string, result}
+
+main = {
+    n_str = os.get_env("BENCH_INPUT")
+    n = if n_str == "" {
+        1000
+    } else {
+        parsed = string.parse_int(n_str)
+        result.unwrap_or(parsed, 1000)
+    }
+
+    mut total = 0
+    for i in 0..10000 {
+        mut a = 0
+        mut b = 1
+        mut j = 2
+        while j <= n {
+            mut temp = a + b
+            a = b
+            b = temp
+            j = j + 1
+        }
+        total = b
+    }
+    io.println(total)
+}

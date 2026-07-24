@@ -9,16 +9,6 @@ use crate::util::i18n::current_lang;
 /// Global language setting for i18n (stored as atomic u8 for thread-safe access)
 static CURRENT_LANG: AtomicU8 = AtomicU8::new(0);
 
-/// Set the current language for i18n
-pub fn set_lang(lang_code: &str) {
-    let val = match lang_code {
-        "zh" => 1,
-        "zh-x-miao" | "zh-miao" => 2,
-        _ => 0,
-    };
-    CURRENT_LANG.store(val, Ordering::SeqCst);
-}
-
 /// Get the current language for i18n
 pub fn get_lang() -> &'static str {
     let val = CURRENT_LANG.load(Ordering::SeqCst);
@@ -102,10 +92,4 @@ pub fn init_lsp_with_level(level: LogLevel) {
         .with_filter(filter);
 
     Registry::default().with(layer).init();
-}
-
-/// Initialize logger for debug use (DEBUG level)
-#[cfg(feature = "cli")]
-pub fn init_debug() {
-    init_with_level(LogLevel::Debug);
 }

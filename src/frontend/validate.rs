@@ -12,7 +12,20 @@ use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::parser::ast::Module;
 use crate::frontend::core::typecheck::check_module;
-use crate::frontend::pipeline::compilation_cache::content_hash;
+/// FNV-1a 哈希算法（内联自 compilation_cache::content_hash）
+///
+/// 非加密用途的快速哈希，用于内容变更检测。
+fn content_hash(content: &str) -> u64 {
+    const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+    const FNV_PRIME: u64 = 0x100000001b3;
+
+    let mut hash = FNV_OFFSET;
+    for &byte in content.as_bytes() {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    hash
+}
 use crate::util::diagnostic::Diagnostic;
 use std::sync::LazyLock;
 

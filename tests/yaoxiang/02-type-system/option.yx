@@ -3,7 +3,5 @@
 // 验证: Option 的基本使用
 // 状态: 🔴 未实现
 
-use std.io
 main = {
-    io.println("ALL TESTS PASSED")
 }

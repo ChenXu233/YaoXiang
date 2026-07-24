@@ -132,7 +132,7 @@ impl LinearMeasure {
 // 1. 识别直接递归调用
 // 2. 检查调用参数是否严格递减（`f(n-1)` where `n-1 < n`）
 
-use crate::frontend::core::parser::ast::{self, Expr, Stmt, StmtKind, BinOp};
+use crate::frontend::core::parser::ast::{self, Expr, Stmt, StmtKind, BinOp, Type};
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::proof::verdict::{BudgetReport, ProofResult, UnprovenReason};
 use super::super::proof::smt::ast::{SMTExpr, SMTCommand, SMTSort};
@@ -167,7 +167,6 @@ impl TerminationChecker {
             z3: None,
         }
     }
-
     /// 设置 Z3 后端（由调用方在初始化后注入）
     #[cfg(not(target_arch = "wasm32"))]
     pub fn with_z3(
@@ -188,7 +187,7 @@ impl TerminationChecker {
         _env: &TypeEnvironment,
     ) -> Vec<ProofResult> {
         for stmt in &module.items {
-            self.check_stmt(stmt);
+            self.check_stmt(stmt, false);
         }
         std::mem::take(&mut self.results)
     }
@@ -198,19 +197,28 @@ impl TerminationChecker {
     fn check_stmt(
         &mut self,
         stmt: &Stmt,
+        is_never: bool,
     ) {
         match &stmt.kind {
-            StmtKind::Expr(expr) => self.check_expr(expr),
-            StmtKind::Binding { body, .. } => {
-                for s in body {
-                    self.check_stmt(s);
-                }
-            }
-            StmtKind::Var {
-                initializer: Some(init),
+            StmtKind::Expr(expr) => self.check_expr(expr, is_never),
+            StmtKind::Assign {
+                value: Some(v),
+                type_annotation,
                 ..
             } => {
-                self.check_expr(init);
+                use crate::frontend::core::parser::ast::Expr;
+                let child_never = is_never || is_never_return_type(type_annotation.as_ref());
+                if let Expr::Lambda { body, .. } = v.as_ref() {
+                    for s in &body.stmts {
+                        self.check_stmt(s, child_never);
+                    }
+                } else if let Expr::Block(block) = v.as_ref() {
+                    for s in &block.stmts {
+                        self.check_stmt(s, child_never);
+                    }
+                } else {
+                    self.check_expr(v, child_never);
+                }
             }
             StmtKind::If {
                 condition,
@@ -219,19 +227,19 @@ impl TerminationChecker {
                 else_branch,
                 ..
             } => {
-                self.check_expr(condition);
+                self.check_expr(condition, is_never);
                 for s in &then_branch.stmts {
-                    self.check_stmt(s);
+                    self.check_stmt(s, is_never);
                 }
                 for (cond, body) in elif_branches {
-                    self.check_expr(cond);
+                    self.check_expr(cond, is_never);
                     for s in &body.stmts {
-                        self.check_stmt(s);
+                        self.check_stmt(s, is_never);
                     }
                 }
                 if let Some(else_body) = else_branch {
                     for s in &else_body.stmts {
-                        self.check_stmt(s);
+                        self.check_stmt(s, is_never);
                     }
                 }
             }
@@ -245,6 +253,7 @@ impl TerminationChecker {
     fn check_expr(
         &mut self,
         expr: &Expr,
+        is_never: bool,
     ) {
         match expr {
             Expr::While {
@@ -253,46 +262,44 @@ impl TerminationChecker {
                 span,
                 ..
             } => {
-                self.check_while_loop(condition, body, *span);
+                self.check_while_loop(condition, body, *span, is_never);
                 // 递归检查循环体内的嵌套循环
                 for s in &body.stmts {
-                    self.check_stmt(s);
+                    self.check_stmt(s, is_never);
                 }
             }
             Expr::For { iterable, body, .. } => {
-                // for 循环天然终止——范围迭代必须有界
-                // 但我们要检查循环体内的嵌套循环
                 for s in &body.stmts {
-                    self.check_stmt(s);
+                    self.check_stmt(s, is_never);
                 }
-                // 也检查迭代器表达式
-                self.check_expr(iterable);
+                self.check_expr(iterable, is_never);
             }
             Expr::FnDef {
                 name: _,
                 params,
                 body,
+                return_type,
                 ..
             } => {
                 let param_names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
-                self.check_fn_body(&param_names, body);
+                let fn_never = is_never || is_never_return_type(return_type.as_ref());
+                self.check_fn_body(&param_names, body, fn_never);
             }
             Expr::Call { func, args, .. } => {
                 for a in args {
-                    self.check_expr(a);
+                    self.check_expr(a, is_never);
                 }
-                // 检查是否是直接递归调用
                 self.check_possible_recursive_call(func, args);
             }
             Expr::BinOp {
                 op: _, left, right, ..
             } => {
-                self.check_expr(left);
-                self.check_expr(right);
+                self.check_expr(left, is_never);
+                self.check_expr(right, is_never);
             }
             Expr::Block(block) => {
                 for s in &block.stmts {
-                    self.check_stmt(s);
+                    self.check_stmt(s, is_never);
                 }
             }
             Expr::If {
@@ -302,25 +309,25 @@ impl TerminationChecker {
                 else_branch,
                 ..
             } => {
-                self.check_expr(condition);
+                self.check_expr(condition, is_never);
                 for s in &then_branch.stmts {
-                    self.check_stmt(s);
+                    self.check_stmt(s, is_never);
                 }
                 for (cond, body) in elif_branches {
-                    self.check_expr(cond);
+                    self.check_expr(cond, is_never);
                     for s in &body.stmts {
-                        self.check_stmt(s);
+                        self.check_stmt(s, is_never);
                     }
                 }
                 if let Some(else_body) = else_branch {
                     for s in &else_body.stmts {
-                        self.check_stmt(s);
+                        self.check_stmt(s, is_never);
                     }
                 }
             }
             Expr::Lambda { body, .. } => {
                 for s in &body.stmts {
-                    self.check_stmt(s);
+                    self.check_stmt(s, is_never);
                 }
             }
             // 叶子节点不需要检查
@@ -336,7 +343,12 @@ impl TerminationChecker {
         condition: &Expr,
         body: &ast::Block,
         span: crate::util::span::Span,
+        is_never: bool,
     ) {
+        // Never 返回函数：循环不终止是类型签名保证的语义，直接放行
+        if is_never {
+            return;
+        }
         // 1. 从条件中提取边界信息
         let bounds = self.extract_bounds_from_condition(condition);
 
@@ -488,24 +500,31 @@ impl TerminationChecker {
                     }
                 }
             }
-            // `i = i - 1` 在语句上下文中被解析为 StmtKind::Var
-            // initializer 包含右侧表达式
-            StmtKind::Var {
-                name,
-                initializer: Some(init),
+            // `i = i - 1` → Assign { target: Var(name), value: Some(init) }
+            StmtKind::Assign {
+                target,
+                value: Some(v),
                 ..
             } => {
-                let delta_info = self.analyze_delta(init, name);
-                if !matches!(delta_info, DeltaInfo::Unknown) {
-                    assignments.push(LoopAssignment {
-                        var: name.clone(),
-                        delta_info,
-                    });
+                use crate::frontend::core::parser::ast::Expr;
+                if let Expr::Var(name, _) = target.as_ref() {
+                    let delta_info = self.analyze_delta(v, name);
+                    if !matches!(delta_info, DeltaInfo::Unknown) {
+                        assignments.push(LoopAssignment {
+                            var: name.clone(),
+                            delta_info,
+                        });
+                    }
                 }
-            }
-            StmtKind::Binding { body, .. } => {
-                for s in body {
-                    self.collect_assignments_from_stmt(s, assignments);
+                // 递归处理 Lambda/Block 函数体
+                if let Expr::Lambda { body, .. } = v.as_ref() {
+                    for s in &body.stmts {
+                        self.collect_assignments_from_stmt(s, assignments);
+                    }
+                } else if let Expr::Block(block) = v.as_ref() {
+                    for s in &block.stmts {
+                        self.collect_assignments_from_stmt(s, assignments);
+                    }
                 }
             }
             StmtKind::If {
@@ -835,9 +854,10 @@ impl TerminationChecker {
         &mut self,
         _param_names: &[String],
         body: &ast::Block,
+        is_never: bool,
     ) {
         for s in &body.stmts {
-            self.check_stmt(s);
+            self.check_stmt(s, is_never);
         }
     }
 
@@ -851,50 +871,6 @@ impl TerminationChecker {
         // 后续可扩展到间接递归
         let _ = args;
         let _ = func;
-    }
-
-    /// 检查递归调用的参数是否递减
-    ///
-    /// 支持的模式：
-    /// - `f(n-1)` 当 `n-1 < n` → 递减
-    /// - `f(arg)` 当 `arg` 是字面量且小于对应参数 → 递减
-    #[allow(dead_code)]
-    fn check_recursive_args(
-        &self,
-        param_names: &[String],
-        args: &[Box<Expr>],
-    ) -> Option<usize> {
-        // 查找至少一个参数是"变量 - 正常数"模式
-        for (i, (param_name, arg)) in param_names.iter().zip(args.iter()).enumerate() {
-            if let Expr::BinOp {
-                op: BinOp::Sub,
-                left,
-                right,
-                ..
-            } = arg.as_ref()
-            {
-                // 检查 left 是否引用参数自身
-                if let Expr::Var(var_name, _) = left.as_ref() {
-                    if var_name == param_name {
-                        // right 是正常数
-                        if let Expr::Lit(ast::Literal::Int(v), _) = right.as_ref() {
-                            if *v > 0 {
-                                return Some(i); // 参数递减，递归终止
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 也可以检查 arg 是小于参数的字面量
-            if let Expr::Lit(ast::Literal::Int(v), _) = arg.as_ref() {
-                // 这是一个常量参数——无法从上下文确定是否递减
-                // 但我们保守地认为如果常量 <= 0，可能仍在递减
-                let _ = (*v, param_name);
-            }
-        }
-
-        None
     }
 
     // ==================== 诊断输出 ====================
@@ -914,43 +890,6 @@ impl TerminationChecker {
     ) {
         let reason =
             UnprovenReason::BeyondKernel("循环无法证明终止：未找到有效的递减度量".to_string());
-        self.results.push(ProofResult::Unproven {
-            reason,
-            proof_calls: vec![],
-            budget: BudgetReport {
-                steps_used: 0,
-                steps_limit: 0,
-            },
-        });
-    }
-
-    #[allow(dead_code)]
-    fn emit_recursion_not_terminating(
-        &mut self,
-        _span: crate::util::span::Span,
-        func_name: &str,
-    ) {
-        let reason = UnprovenReason::BeyondKernel(format!(
-            "递归函数 `{}` 无法证明终止：参数未严格递减",
-            func_name
-        ));
-        self.results.push(ProofResult::Unproven {
-            reason,
-            proof_calls: vec![],
-            budget: BudgetReport {
-                steps_used: 0,
-                steps_limit: 0,
-            },
-        });
-    }
-
-    #[allow(dead_code)]
-    fn emit_measure_not_decreasing(
-        &mut self,
-        _span: crate::util::span::Span,
-        measure: &str,
-    ) {
-        let reason = UnprovenReason::BeyondKernel(format!("度量 `{}` 未严格递减", measure));
         self.results.push(ProofResult::Unproven {
             reason,
             proof_calls: vec![],
@@ -1002,4 +941,22 @@ struct LoopAssignment {
     var: String,
     /// delta 信息
     delta_info: DeltaInfo,
+}
+
+/// 判断函数类型签名的返回类型是否为 Never
+///
+/// `(P1, P2, ...) -> Never` → true
+fn is_never_return_type(ty: Option<&Type>) -> bool {
+    match ty {
+        // `name: () -> Never` — type_annotation 是 Fn 类型，取 return_type
+        Some(Type::Fn { return_type, .. }) => is_type_never(return_type.as_ref()),
+        // `fn(): Never` — FnDef.return_type 是裸返回类型
+        Some(t) => is_type_never(t),
+        None => false,
+    }
+}
+
+/// 递归判断 Type 是否为 Never（支持 Type::Name { name: "Never", .. }）
+fn is_type_never(ty: &Type) -> bool {
+    matches!(ty, Type::Name { name, .. } if name == "Never" || name == "never")
 }

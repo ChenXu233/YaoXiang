@@ -247,6 +247,22 @@
         "example": "let x = Foo::<Int>();",
         "error_output": "error[E1061]: 无法实例化泛型\n --> example.yx:1:9\n  |\n1 | let x = Foo::<Int>();\n  |         ^ 无法用给定参数实例化"
     },
+    "E1062": {
+        "title": "const 泛型约束失败",
+        "message": "const 泛型参数的值约束不满足",
+        "template": "const 泛型约束失败: `{constraint}` 不成立 ({var} = {value})",
+        "help": "修改 const 参数值使其满足约束",
+        "example": "BadArray(Int, 0)  // Assert(0 > 0) 失败",
+        "error_output": "error[E1062]: const 泛型约束失败\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, 0)\n  | ^ const 约束 `N > 0` 不成立 (N = 0)"
+    },
+    "W1063": {
+        "title": "const 泛型约束无法求值",
+        "message": "const 泛型参数的值约束无法在编译期求值",
+        "template": "const 泛型约束无法求值: `{constraint}` ({var} = {value})",
+        "help": "确保 const 参数是编译期常量",
+        "example": "BadArray(Int, n)  // n 不是编译期常量",
+        "error_output": "warning[W1063]: const 泛型约束无法求值\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ 无法在编译期求值约束 `N > 0`"
+    },
     "E1070": {
         "title": "未知标签",
         "message": "引用的标签不存在",

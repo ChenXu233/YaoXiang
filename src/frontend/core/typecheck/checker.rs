@@ -4,14 +4,16 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::frontend::core::parser::ast::Module;
+use crate::frontend::core::parser::ast::{
+    classify_generic_params, GenericParam, GenericParamKind, Module, Param, TypeBodyItem,
+};
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable};
-use crate::frontend::core::types::eval::const_eval::{ConstFunction, ConstExpr as ConstEvalExpr};
-use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
+use crate::frontend::core::types::const_data::{ConstExpr, ConstValue, BinOp, ConstKind, ConstVarDef};
+use crate::frontend::core::types::eval::const_eval::{ConstFunction, convert_expr_to_const_expr};
 use crate::frontend::core::typecheck::predicate_resolver::PredicateResolver;
-use crate::frontend::core::typecheck::proof::context::ProofContext;
 use crate::frontend::core::typecheck::proof::verdict::ProofResult;
-use crate::frontend::core::typecheck::layers::predicate::check_predicate;
+use crate::frontend::core::types::eval::dependent_types::DependentTypeEnv;
+use crate::std::StdModule;
 
 use super::inference;
 use super::semantic_db;
@@ -33,6 +35,8 @@ pub struct TypeChecker {
     body_checker: Option<inference::StatementChecker>,
     /// 语义信息收集（typecheck 阶段同时产出）
     semantic_db: semantic_db::SemanticDB,
+    /// 依赖类型环境（类型族注册与查找）
+    pub dependent_type_env: DependentTypeEnv,
 }
 
 impl TypeChecker {
@@ -46,38 +50,41 @@ impl TypeChecker {
         // 注册预定义的 const 函数
         Self::register_predefined_const_functions(&mut env);
 
+        // 初始化依赖类型环境并通过 std::assert 注册类型族
+        let mut dependent_type_env = DependentTypeEnv::new();
+        crate::std::assert::AssertModule.register_type_families(&mut dependent_type_env);
+
         Self {
             env,
             body_checker: None,
             semantic_db: semantic_db::SemanticDB::new(),
+            dependent_type_env,
         }
     }
 
     /// 注册预定义的 const 函数
     /// 这些函数用于值依赖类型的编译期求值
     fn register_predefined_const_functions(env: &mut TypeEnvironment) {
-        use crate::frontend::core::types::eval::const_eval::ConstBinOp;
-
         // 注册 factorial 函数
         let factorial = ConstFunction::new(
             "factorial".to_string(),
             vec!["n".to_string()],
-            ConstEvalExpr::If {
-                condition: Box::new(ConstEvalExpr::BinOp {
-                    op: ConstBinOp::Lte,
-                    lhs: Box::new(ConstEvalExpr::Var("n".to_string())),
-                    rhs: Box::new(ConstEvalExpr::Int(1)),
+            ConstExpr::If {
+                condition: Box::new(ConstExpr::BinOp {
+                    op: BinOp::Le,
+                    left: Box::new(ConstExpr::NamedVar("n".to_string())),
+                    right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
                 }),
-                true_branch: Box::new(ConstEvalExpr::Int(1)),
-                false_branch: Box::new(ConstEvalExpr::BinOp {
-                    op: ConstBinOp::Mul,
-                    lhs: Box::new(ConstEvalExpr::Var("n".to_string())),
-                    rhs: Box::new(ConstEvalExpr::Call {
-                        name: "factorial".to_string(),
-                        args: vec![ConstEvalExpr::BinOp {
-                            op: ConstBinOp::Sub,
-                            lhs: Box::new(ConstEvalExpr::Var("n".to_string())),
-                            rhs: Box::new(ConstEvalExpr::Int(1)),
+                then_branch: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
+                else_branch: Box::new(ConstExpr::BinOp {
+                    op: BinOp::Mul,
+                    left: Box::new(ConstExpr::NamedVar("n".to_string())),
+                    right: Box::new(ConstExpr::Call {
+                        func: "factorial".to_string(),
+                        args: vec![ConstExpr::BinOp {
+                            op: BinOp::Sub,
+                            left: Box::new(ConstExpr::NamedVar("n".to_string())),
+                            right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
                         }],
                     }),
                 }),
@@ -89,29 +96,29 @@ impl TypeChecker {
         let fibonacci = ConstFunction::new(
             "fibonacci".to_string(),
             vec!["n".to_string()],
-            ConstEvalExpr::If {
-                condition: Box::new(ConstEvalExpr::BinOp {
-                    op: ConstBinOp::Lte,
-                    lhs: Box::new(ConstEvalExpr::Var("n".to_string())),
-                    rhs: Box::new(ConstEvalExpr::Int(1)),
+            ConstExpr::If {
+                condition: Box::new(ConstExpr::BinOp {
+                    op: BinOp::Le,
+                    left: Box::new(ConstExpr::NamedVar("n".to_string())),
+                    right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
                 }),
-                true_branch: Box::new(ConstEvalExpr::Var("n".to_string())),
-                false_branch: Box::new(ConstEvalExpr::BinOp {
-                    op: ConstBinOp::Add,
-                    lhs: Box::new(ConstEvalExpr::Call {
-                        name: "fibonacci".to_string(),
-                        args: vec![ConstEvalExpr::BinOp {
-                            op: ConstBinOp::Sub,
-                            lhs: Box::new(ConstEvalExpr::Var("n".to_string())),
-                            rhs: Box::new(ConstEvalExpr::Int(1)),
+                then_branch: Box::new(ConstExpr::NamedVar("n".to_string())),
+                else_branch: Box::new(ConstExpr::BinOp {
+                    op: BinOp::Add,
+                    left: Box::new(ConstExpr::Call {
+                        func: "fibonacci".to_string(),
+                        args: vec![ConstExpr::BinOp {
+                            op: BinOp::Sub,
+                            left: Box::new(ConstExpr::NamedVar("n".to_string())),
+                            right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
                         }],
                     }),
-                    rhs: Box::new(ConstEvalExpr::Call {
-                        name: "fibonacci".to_string(),
-                        args: vec![ConstEvalExpr::BinOp {
-                            op: ConstBinOp::Sub,
-                            lhs: Box::new(ConstEvalExpr::Var("n".to_string())),
-                            rhs: Box::new(ConstEvalExpr::Int(2)),
+                    right: Box::new(ConstExpr::Call {
+                        func: "fibonacci".to_string(),
+                        args: vec![ConstExpr::BinOp {
+                            op: BinOp::Sub,
+                            left: Box::new(ConstExpr::NamedVar("n".to_string())),
+                            right: Box::new(ConstExpr::Lit(ConstValue::Int(2))),
                         }],
                     }),
                 }),
@@ -194,32 +201,14 @@ impl TypeChecker {
     ) -> TypeCheckResult {
         // 第一遍：收集所有类型定义
         for stmt in &module.items {
-            if let crate::frontend::core::parser::ast::StmtKind::Binding {
+            if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
                 name,
-                type_name,
-                method_type: _,
-                type_annotation,
-                generic_params,
-                params,
-                body,
+                signature_params,
+                definition,
                 ..
             } = &stmt.kind
             {
-                if crate::frontend::core::parser::ast::classify_binding_semantic_kind(
-                    type_name.as_ref(),
-                    type_annotation.as_ref(),
-                    params,
-                    body,
-                ) == crate::frontend::core::parser::ast::BindingSemanticKind::TypeConstructor
-                {
-                    // 这是一个类型定义
-                    if let Some(type_annotation) = type_annotation {
-                        // 从 GenericParam 中提取名称
-                        let param_names: Vec<String> =
-                            generic_params.iter().map(|p| p.name.clone()).collect();
-                        self.add_type_definition(name, type_annotation, &param_names, stmt.span);
-                    }
-                }
+                self.add_type_definition(name, definition, signature_params, stmt.span);
             }
         }
 
@@ -237,7 +226,13 @@ impl TypeChecker {
         }
 
         // 初始化函数体检查器
-        let mut body_checker = inference::StatementChecker::new(self.env.solver());
+        let trait_table = self.env.trait_table.clone();
+        let mut body_checker = inference::StatementChecker::new(
+            self.env.solver(),
+            None,
+            self.dependent_type_env.clone(),
+            trait_table,
+        );
         // 设置 native 函数签名表
         body_checker.set_native_signatures(self.env.native_signatures.clone());
         // 设置模块注册表，支持函数体/块作用域 use
@@ -254,6 +249,25 @@ impl TypeChecker {
             .map(|(name, poly)| (name.clone(), poly.body.clone()))
             .collect();
         body_checker.set_type_defs(type_defs);
+        // RFC-027 Phase 2.5: 构建证明函数基类型表
+        let proof_fn_bases: HashMap<String, MonoType> = self
+            .env
+            .vars
+            .iter()
+            .filter_map(|(name, poly)| {
+                if let MonoType::Fn {
+                    params,
+                    return_type,
+                } = &poly.body
+                {
+                    if matches!(return_type.as_ref(), MonoType::MetaType { .. }) {
+                        return params.first().map(|base| (name.clone(), base.clone()));
+                    }
+                }
+                None
+            })
+            .collect();
+        body_checker.set_proof_fn_bases(proof_fn_bases);
         // 如果启用收集模式，设置收集所有错误
         if collect_all {
             body_checker.set_collect_all_errors(true);
@@ -379,7 +393,7 @@ impl TypeChecker {
             local_var_types,
             semantic_db: std::mem::take(&mut self.semantic_db),
             trait_table: self.env.trait_table.clone(),
-            proof_calls, // Phase 2.5: 由 check_refined_binding 收集
+            proof_calls, // Phase 2.5 预留：证明调用收集
             release_plan,
             escaped_refs,
             instantiation_requests,
@@ -389,7 +403,13 @@ impl TypeChecker {
     /// 获取 body_checker 的可变引用
     fn body_checker_mut(&mut self) -> &mut inference::StatementChecker {
         if self.body_checker.is_none() {
-            let mut body_checker = inference::StatementChecker::new(self.env.solver());
+            let trait_table = self.env.trait_table.clone();
+            let mut body_checker = inference::StatementChecker::new(
+                self.env.solver(),
+                None,
+                self.dependent_type_env.clone(),
+                trait_table,
+            );
             // 设置 native 函数签名表
             body_checker.set_native_signatures(self.env.native_signatures.clone());
             // 设置模块注册表，支持函数体/块作用域 use
@@ -494,16 +514,71 @@ impl TypeChecker {
                     }
                 }
             }
-            crate::frontend::core::parser::ast::StmtKind::Binding {
-                name,
-                type_name,
-                method_type,
+            crate::frontend::core::parser::ast::StmtKind::Assign {
+                target,
                 type_annotation,
-                generic_params,
-                params,
+                signature_params,
+                value,
                 is_pub,
                 ..
-            } => {
+            } if value.as_ref().is_some_and(|v| {
+                matches!(
+                    v.as_ref(),
+                    crate::frontend::core::parser::ast::Expr::Lambda { .. }
+                        | crate::frontend::core::parser::ast::Expr::Block(..)
+                )
+            }) || (value.is_none() && type_annotation.is_some()) =>
+            {
+                // 从 target 提取 name 和 type_name
+                let (name, type_name) = match target.as_ref() {
+                    crate::frontend::core::parser::ast::Expr::Var(n, _) => (n.clone(), None),
+                    crate::frontend::core::parser::ast::Expr::FieldAccess {
+                        expr, field, ..
+                    } => {
+                        if let crate::frontend::core::parser::ast::Expr::Var(tn, _) = expr.as_ref()
+                        {
+                            {
+                                // 语义分流（issue #180 F 组）：base 是类型才是方法定义；
+                                // base 是值（实例）→ 字段赋值，pass3 处理，不当方法定义收集。
+                                let ty_name = matches!(
+                                    self.env.resolve_base_kind(tn),
+                                    crate::frontend::core::typecheck::environment::BaseKind::TypeSpace
+                                )
+                                .then(|| tn.clone());
+                                (field.clone(), ty_name)
+                            }
+                        } else {
+                            (field.clone(), None)
+                        }
+                    }
+                    _ => {
+                        // 无法从 target 提取名字，跳过
+                        return;
+                    }
+                };
+                // 从 value 提取 params 和 body（Lambda 形式）
+                let (params, _): (Vec<_>, Vec<_>) = match value {
+                    Some(expr) => {
+                        if let crate::frontend::core::parser::ast::Expr::Lambda {
+                            params: p,
+                            body: b,
+                            ..
+                        } = expr.as_ref()
+                        {
+                            (p.clone(), b.stmts.clone())
+                        } else if let crate::frontend::core::parser::ast::Expr::Block(b) =
+                            expr.as_ref()
+                        {
+                            (Vec::new(), b.stmts.clone())
+                        } else {
+                            (Vec::new(), Vec::new())
+                        }
+                    }
+                    None => (Vec::new(), Vec::new()),
+                };
+                let method_type = type_annotation.as_ref();
+                let generic_params =
+                    classify_generic_params(signature_params, &|name| self.env.has_trait(name));
                 // 处理统一函数语法
                 // 方法绑定使用 method_type，普通函数使用 type_annotation
                 let (param_types, return_type) = if let Some(meth_ty) = method_type {
@@ -602,6 +677,80 @@ impl TypeChecker {
                     })
                     .collect();
 
+                // === 函数 const 泛型判定（用途分析） ===
+                // 候选 = generic_params 中 annotation 为原始类型的参数（const 候选）。
+                // 扫描 curry 后续组的类型标注（内层 Fn 的 params），
+                // 被引用的候选 → const。
+                let const_generic_params: Vec<_> = generic_params
+                    .iter()
+                    .filter(|p| {
+                        matches!(
+                            p.kind,
+                            crate::frontend::core::parser::ast::GenericParamKind::Const { .. }
+                        )
+                    })
+                    .collect();
+
+                let mut const_binders: Vec<ConstVarDef> = Vec::new();
+                if !const_generic_params.is_empty() {
+                    let candidate_names: HashSet<String> = const_generic_params
+                        .iter()
+                        .map(|p| p.name.clone())
+                        .collect();
+                    let mut used_as_const = HashSet::new();
+
+                    // 扫描内层 Fn 的 params：对于 (N: Int) -> (n: N) -> Int，
+                    // type_annotation.return_type 是 Fn { params: [Type::Name("N")], ... }。
+                    // N 出现在内层 params 中 → const。
+                    if let Some(crate::frontend::core::parser::ast::Type::Fn {
+                        return_type, ..
+                    }) = type_annotation
+                    {
+                        if let crate::frontend::core::parser::ast::Type::Fn {
+                            params: inner_params,
+                            ..
+                        } = return_type.as_ref()
+                        {
+                            for p in inner_params {
+                                collect_used_in_type(p, &candidate_names, &mut used_as_const);
+                            }
+                        }
+                        // 也扫描 return_type 自身（深度嵌套场景）
+                        collect_used_in_type(return_type, &candidate_names, &mut used_as_const);
+                    }
+
+                    let type_param_names: Vec<String> =
+                        type_generic_params.iter().map(|p| p.name.clone()).collect();
+                    for (i, gp) in const_generic_params.iter().enumerate() {
+                        if used_as_const.contains(&gp.name) {
+                            if let crate::frontend::core::parser::ast::GenericParamKind::Const {
+                                const_type,
+                            } = &gp.kind
+                            {
+                                let type_name = match const_type.as_ref() {
+                                    crate::frontend::core::parser::ast::Type::Name {
+                                        name, ..
+                                    } => name.clone(),
+                                    crate::frontend::core::parser::ast::Type::Int(_) => {
+                                        "Int".to_string()
+                                    }
+                                    crate::frontend::core::parser::ast::Type::Float(_) => {
+                                        "Float".to_string()
+                                    }
+                                    crate::frontend::core::parser::ast::Type::Bool => {
+                                        "Bool".to_string()
+                                    }
+                                    _ => "Int".to_string(),
+                                };
+                                let kind = ConstKind::from_ast_type_name(&type_name)
+                                    .unwrap_or(ConstKind::Int(None));
+                                let idx = type_param_names.len() + i;
+                                const_binders.push(ConstVarDef::new(gp.name.clone(), kind, idx));
+                            }
+                        }
+                    }
+                }
+
                 let (final_param_types, final_return_type) = if !type_generic_params.is_empty()
                     && param_types.len() >= type_generic_params.len()
                 {
@@ -610,6 +759,16 @@ impl TypeChecker {
                     for gp in &type_generic_params {
                         let fresh_var = self.env.solver().new_var();
                         subst.insert(gp.name.clone(), fresh_var);
+                    }
+
+                    // 添加 const 参数名到 subst，使内层 Fn 中的 TypeRef("N") 解析为底层类型
+                    for cb in &const_binders {
+                        let base_ty = match cb.kind {
+                            ConstKind::Int(_) => MonoType::Int(64),
+                            ConstKind::Bool => MonoType::Bool,
+                            ConstKind::Float(_) => MonoType::Float(64),
+                        };
+                        subst.insert(cb.name.clone(), base_ty);
                     }
 
                     // 剥离类型级参数，使用 return_type 作为实际函数类型
@@ -624,6 +783,20 @@ impl TypeChecker {
                         // return_type 不是 Fn（可能是单值泛型），保持原样
                         _ => (param_types, return_type),
                     }
+                } else if !const_binders.is_empty() {
+                    // 没有 Type 泛型但有 const 泛型（如 factorial: (N: Int) -> ...）
+                    // 替换 return_type 中的 TypeRef("N") 为 Int
+                    let mut subst = HashMap::new();
+                    for cb in &const_binders {
+                        let base_ty = match cb.kind {
+                            ConstKind::Int(_) => MonoType::Int(64),
+                            ConstKind::Bool => MonoType::Bool,
+                            ConstKind::Float(_) => MonoType::Float(64),
+                        };
+                        subst.insert(cb.name.clone(), base_ty);
+                    }
+                    let substituted_ret = Self::substitute_type_refs(return_type.clone(), &subst);
+                    (param_types, substituted_ret)
                 } else {
                     (param_types, return_type)
                 };
@@ -651,16 +824,22 @@ impl TypeChecker {
                 // 如果有 type_name（显式方法绑定），使用 add_fn_binding
                 if type_name.is_some() {
                     self.env
-                        .add_fn_binding(name, type_name.as_deref(), fn_ty.clone());
+                        .add_fn_binding(&name, type_name.as_deref(), fn_ty.clone());
                 } else {
-                    // 否则使用普通的 add_var
-                    self.env
-                        .add_var(name.clone(), PolyType::mono(fn_ty.clone()));
+                    // 如果函数有 const 泛型参数，存进 PolyType.const_binders
+                    let poly = if const_binders.is_empty() {
+                        PolyType::mono(fn_ty.clone())
+                    } else {
+                        // type_binders 从 solver 的新变量管理，PolyType 中 type_binders 留空
+                        // （函数类型 Level 的泛型由 solver 处理，PolyType 仅存 const_binders）
+                        PolyType::new_with_const(Vec::new(), const_binders.clone(), fn_ty.clone())
+                    };
+                    self.env.add_var(name.clone(), poly);
                 }
 
                 // 处理 pub 自动绑定
                 if *is_pub {
-                    self.auto_bind_to_type(name, &final_param_types, fn_ty);
+                    self.auto_bind_to_type(&name, &final_param_types, fn_ty);
                 }
             }
             crate::frontend::core::parser::ast::StmtKind::Use {
@@ -733,30 +912,51 @@ impl TypeChecker {
                     }
                 }
             }
-            crate::frontend::core::parser::ast::StmtKind::ExternalBindingStmt {
-                type_name,
-                method_name,
-                binding,
+            // 外部绑定: Type.method = function 或 Type.method = function[pos]
+            crate::frontend::core::parser::ast::StmtKind::Assign {
+                target,
+                value: Some(val),
+                ..
             } => {
-                // 外部方法绑定: Point.distance = distance[0] 或 Point.calc = calculate[1, 2]
-                // 查找函数的类型并注册为方法绑定
-                let (func_name, positions) = match binding {
-                    crate::frontend::core::parser::ast::BindingKind::External {
-                        function,
-                        positions,
-                    } => (function.clone(), positions.clone()),
-                    crate::frontend::core::parser::ast::BindingKind::DefaultExternal {
-                        function,
-                    } => (function.clone(), vec![0]),
+                use crate::frontend::core::parser::ast::Expr;
+                let (type_name, method_name) = match target.as_ref() {
+                    Expr::FieldAccess { expr, field, .. } => {
+                        if let Expr::Var(tn, _) = expr.as_ref() {
+                            (tn.clone(), field.clone())
+                        } else {
+                            return;
+                        }
+                    }
+                    _ => return,
+                };
+                // 语义分流（issue #180 F 组）：base 必须是已注册类型才在 pass2 登记类型空间方法。
+                // base 是值（实例）→ 不在此登记，由 pass3 check_stmt 做 schema 校验。
+                if !matches!(
+                    self.env.resolve_base_kind(&type_name),
+                    crate::frontend::core::typecheck::environment::BaseKind::TypeSpace
+                ) {
+                    return;
+                }
+                // 从 value 提取 func_name 和 positions
+                let (func_name, positions) = match val.as_ref() {
+                    Expr::Var(fn_name, _) => (fn_name.clone(), vec![0]),
+                    Expr::Index {
+                        expr: inner, index, ..
+                    } => {
+                        let fn_name = if let Expr::Var(n, _) = inner.as_ref() {
+                            n.clone()
+                        } else {
+                            return;
+                        };
+                        let positions = Self::extract_positions(index);
+                        (fn_name, positions)
+                    }
                     _ => return,
                 };
                 if let Some(poly) = self.env.get_var(&func_name) {
                     let method_ty = if positions.len() <= 1 {
-                        // Single position [0] or default: use the full function type directly
                         poly.body.clone()
                     } else {
-                        // Multi-position [1, 2]: filter out bound params
-                        // The resulting method type has params minus the bound positions
                         match &poly.body {
                             MonoType::Fn {
                                 params,
@@ -777,10 +977,29 @@ impl TypeChecker {
                         }
                     };
                     self.env
-                        .add_method_binding(type_name, method_name, method_ty);
+                        .add_method_binding(&type_name, &method_name, method_ty);
                 }
             }
             _ => {}
+        }
+    }
+
+    /// 从 Index 表达式的 index 部分提取位置列表
+    fn extract_positions(index: &crate::frontend::core::parser::ast::Expr) -> Vec<i64> {
+        use crate::frontend::core::lexer::tokens::Literal;
+        match index {
+            Expr::Lit(Literal::Int(n), _) => vec![*n as i64],
+            Expr::Tuple(items, _) => items
+                .iter()
+                .filter_map(|e| {
+                    if let Expr::Lit(Literal::Int(n), _) = e {
+                        Some(*n as i64)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            _ => vec![0],
         }
     }
 
@@ -868,9 +1087,12 @@ impl TypeChecker {
         &mut self,
         name: &str,
         definition: &crate::frontend::core::parser::ast::Type,
-        generic_params: &[String],
+        signature_params: &[Param],
         span: crate::util::span::Span,
     ) {
+        let generic_params =
+            classify_generic_params(signature_params, &|name| self.env.has_trait(name));
+        let param_names: Vec<String> = generic_params.iter().map(|p| p.name.clone()).collect();
         // RFC-010 Easter Egg: Type: Type = Type
         // 当用户尝试定义 Type 自身时，触发彩蛋
         if name == "Type" {
@@ -894,8 +1116,7 @@ impl TypeChecker {
             if is_type_self_ref {
                 // 检查 type_annotation 是否有泛型参数（这表示 Type: Type[T] = ...）
                 if !generic_params.is_empty() {
-                    // E1091: 泛型元类型自引用错误
-                    let decl = format!("Type: Type({}) = ...", generic_params.join(", "));
+                    let decl = format!("Type: Type({}) = ...", param_names.join(", "));
                     self.add_error(
                         ErrorCodeDefinition::invalid_generic_self_reference(&decl)
                             .at(span)
@@ -903,14 +1124,7 @@ impl TypeChecker {
                     );
                     return;
                 }
-
-                // E1090: Type: Type = Type 彩蛋（Note 级别）
-                self.add_error(
-                    ErrorCodeDefinition::type_self_reference_easter_egg()
-                        .at(span)
-                        .severity(crate::util::diagnostic::Severity::Info)
-                        .build(),
-                );
+                // 无泛型参数 → 静默跳过（#161 宇宙分层决策）
                 return;
             }
         }
@@ -931,20 +1145,113 @@ impl TypeChecker {
             _ => poly.body.clone(),
         });
         self.env.add_type(name.to_string(), poly.clone());
+        // 同时注册到 vars，使类型名可以在表达式中使用（如 Point(1.0, 2.0) 构造器调用）
+        self.env.add_var(name.to_string(), poly.clone());
+
+        // RFC-027 Phase 2.5: 带约束表达式的类型定义同时注册为 proof 函数
+        // IsPositive: (x: Int) -> Type = { x > 0 }
+        // → 注册 `IsPositive` 为 `Fn { params: [Int], return_type: MetaType }`
+        if let crate::frontend::core::parser::ast::Type::Struct { body } = definition {
+            let has_constraint = body.iter().any(|item| {
+                matches!(
+                    item,
+                    crate::frontend::core::parser::ast::TypeBodyItem::Expr(
+                        crate::frontend::core::parser::ast::Type::ConstExpr(_)
+                    )
+                )
+            });
+            if has_constraint && !signature_params.is_empty() {
+                let param_types: Vec<MonoType> = signature_params
+                    .iter()
+                    .filter_map(|p| p.ty.as_ref().map(|t| MonoType::from(t.clone())))
+                    .collect();
+                let fn_ty = MonoType::Fn {
+                    params: param_types,
+                    return_type: Box::new(MonoType::MetaType {
+                        universe_level: crate::frontend::core::types::mono::UniverseLevel::type0(),
+                        type_params: vec![],
+                    }),
+                };
+                self.env.add_var(name.to_string(), PolyType::mono(fn_ty));
+            }
+        }
 
         // 如果是泛型类型构造器（有泛型参数），存储模板信息用于类型实例化
         if !generic_params.is_empty() {
             use crate::frontend::core::typecheck::environment::GenericTypeDef;
             use crate::frontend::core::types::var::TypeVar;
 
-            let type_param_names: Vec<String> = generic_params.to_vec();
+            let type_param_names: Vec<String> = generic_params
+                .iter()
+                .filter(|p| matches!(p.kind, GenericParamKind::Type))
+                .map(|p| p.name.clone())
+                .collect();
+
+            // const 判定：用途分析是唯一裁判（取代名单+大小写猜测）。
+            // 候选 = generic_params 里 annotation 为具体类型的参数；
+            // 只有在类型体中被当编译期值/类型使用的候选，才认定为 const。
+            let const_candidates: Vec<(&GenericParam, ConstKind)> = generic_params
+                .iter()
+                .filter_map(|p| {
+                    if let GenericParamKind::Const { const_type } = &p.kind {
+                        let type_name = match const_type.as_ref() {
+                            crate::frontend::core::parser::ast::Type::Name { name, .. } => {
+                                name.clone()
+                            }
+                            crate::frontend::core::parser::ast::Type::Int(_) => "Int".to_string(),
+                            crate::frontend::core::parser::ast::Type::Float(_) => {
+                                "Float".to_string()
+                            }
+                            crate::frontend::core::parser::ast::Type::Bool => "Bool".to_string(),
+                            _ => "Int".to_string(),
+                        };
+                        let kind = ConstKind::from_ast_type_name(&type_name)
+                            .unwrap_or(ConstKind::Int(None));
+                        Some((p, kind))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            let candidate_names: HashSet<String> = const_candidates
+                .iter()
+                .map(|(p, _)| p.name.clone())
+                .collect();
+            let used_as_const = collect_used_const_names(&candidate_names, definition);
+
+            let mut const_binders: Vec<ConstVarDef> = const_candidates
+                .iter()
+                .filter(|(p, _)| used_as_const.contains(&p.name))
+                .enumerate()
+                .map(|(i, (p, kind))| {
+                    let idx = type_param_names.len() + i;
+                    ConstVarDef::new(p.name.clone(), *kind, idx)
+                })
+                .collect();
+
+            // 从类型体收集待定证明义务到 const 参数
+            if let crate::frontend::core::parser::ast::Type::Struct { body } = definition {
+                for item in body {
+                    match item {
+                        TypeBodyItem::Expr(ty) => {
+                            process_body_expr_item(ty, &mut const_binders);
+                        }
+                        TypeBodyItem::Field(f) => {
+                            process_body_expr_item(&f.ty, &mut const_binders);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
             let type_binders: Vec<TypeVar> =
                 (0..type_param_names.len()).map(TypeVar::new).collect();
 
             let def = GenericTypeDef {
                 poly: PolyType {
                     type_binders,
-                    const_binders: vec![],
+                    const_binders,
                     body: poly.body.clone(),
                 },
                 type_param_names,
@@ -955,7 +1262,135 @@ impl TypeChecker {
         // 自动为 Record 类型派生标准库 traits
         self.auto_derive_traits(name, definition);
     }
+}
 
+/// 处理类型体中的类型表达式项，收集 const 约束到对应的 const binder。
+/// 遍历类型表达式中的 Generic 类型（如 Assert(N < 100)），
+/// 将含自由 const 变量的 ConstExpr 参数关联到对应 const binder 的 constraints。
+fn process_body_expr_item(
+    ty: &crate::frontend::core::parser::ast::Type,
+    const_binders: &mut [ConstVarDef],
+) {
+    use crate::frontend::core::parser::ast::Type;
+    if let Type::Generic { args, .. } = ty {
+        for arg in args {
+            if let Type::ConstExpr(expr) = arg {
+                if let Some(const_expr) = convert_expr_to_const_expr(expr) {
+                    if let Some(cv) = find_const_var_in_expr(expr, const_binders) {
+                        const_binders[cv.index()].constraints.push(const_expr);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// 在 Expr 树中查找引用的 const 变量名，返回对应的 ConstVar index
+fn find_const_var_in_expr(
+    expr: &Expr,
+    const_binders: &[ConstVarDef],
+) -> Option<crate::frontend::core::types::var::ConstVar> {
+    use crate::frontend::core::parser::ast::Expr;
+    match expr {
+        Expr::Var(name, _) => const_binders
+            .iter()
+            .position(|b| b.name == *name)
+            .map(crate::frontend::core::types::var::ConstVar::new),
+        Expr::BinOp { left, right, .. } => find_const_var_in_expr(left, const_binders)
+            .or_else(|| find_const_var_in_expr(right, const_binders)),
+        Expr::UnOp { expr, .. } => find_const_var_in_expr(expr, const_binders),
+        _ => None,
+    }
+}
+
+/// 用途分析：扫描类型定义体，找出候选参数中哪些**被当编译期值/类型使用**。
+///
+/// 这是 const 判定的唯一裁判——取代旧的"CONST_PARAM_TYPES 名单 + 大小写猜测"。
+/// 用途 = 参数名出现在以下任一编译期位置：
+/// - `Array(T, N)` 里作为泛型实参的裸 `Name`（Generic.args）
+/// - `Assert(N > 0)` 里的 `ConstExpr` 表达式引用
+/// - `length: N` 里作为字段类型标注的裸 `Name`
+fn collect_used_const_names(
+    candidates: &HashSet<String>,
+    definition: &crate::frontend::core::parser::ast::Type,
+) -> HashSet<String> {
+    use crate::frontend::core::parser::ast::Type;
+    let mut found = HashSet::new();
+    if let Type::Struct { body } = definition {
+        for item in body {
+            match item {
+                TypeBodyItem::Expr(ty) => collect_used_in_type(ty, candidates, &mut found),
+                TypeBodyItem::Field(f) => collect_used_in_type(&f.ty, candidates, &mut found),
+                _ => {}
+            }
+        }
+    }
+    found
+}
+
+/// 递归扫描类型表达式，收集被引用的候选参数名。
+pub(crate) fn collect_used_in_type(
+    ty: &crate::frontend::core::parser::ast::Type,
+    candidates: &HashSet<String>,
+    found: &mut HashSet<String>,
+) {
+    use crate::frontend::core::parser::ast::Type;
+    match ty {
+        Type::Name { name, .. } if candidates.contains(name) => {
+            found.insert(name.clone());
+        }
+        Type::ConstExpr(expr) => collect_used_in_expr(expr, candidates, found),
+        Type::Generic { args, .. } => {
+            for arg in args {
+                collect_used_in_type(arg, candidates, found);
+            }
+        }
+        Type::Fn {
+            params,
+            return_type,
+        } => {
+            for p in params {
+                collect_used_in_type(p, candidates, found);
+            }
+            collect_used_in_type(return_type, candidates, found);
+        }
+        Type::Option(inner) | Type::Ptr(inner) => {
+            collect_used_in_type(inner, candidates, found);
+        }
+        Type::Ref { inner, .. } => collect_used_in_type(inner, candidates, found),
+        Type::Result(a, b) => {
+            collect_used_in_type(a, candidates, found);
+            collect_used_in_type(b, candidates, found);
+        }
+        Type::Tuple(types) | Type::Sum(types) => {
+            for t in types {
+                collect_used_in_type(t, candidates, found);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// 递归扫描编译期表达式（如 `N > 0`），收集被引用的候选参数名。
+fn collect_used_in_expr(
+    expr: &Expr,
+    candidates: &HashSet<String>,
+    found: &mut HashSet<String>,
+) {
+    use crate::frontend::core::parser::ast::Expr;
+    match expr {
+        Expr::Var(name, _) if candidates.contains(name) => {
+            found.insert(name.clone());
+        }
+        Expr::BinOp { left, right, .. } => {
+            collect_used_in_expr(left, candidates, found);
+            collect_used_in_expr(right, candidates, found);
+        }
+        Expr::UnOp { expr, .. } => collect_used_in_expr(expr, candidates, found),
+        _ => {}
+    }
+}
+impl TypeChecker {
     /// 为 Record 类型自动派生标准库 traits
     ///
     /// 规则：
@@ -967,10 +1402,19 @@ impl TypeChecker {
         definition: &crate::frontend::core::parser::ast::Type,
     ) {
         // 提取字段列表
-        let fields = match definition {
-            crate::frontend::core::parser::ast::Type::NamedStruct { fields, .. } => fields,
-            crate::frontend::core::parser::ast::Type::Struct { fields, .. } => fields,
-            _ => return, // 非 Record 类型不自动派生
+        let fields: Vec<crate::frontend::core::parser::ast::StructField> = match definition {
+            crate::frontend::core::parser::ast::Type::NamedStruct { fields, .. } => fields.clone(),
+            crate::frontend::core::parser::ast::Type::Struct { body } => body
+                .iter()
+                .filter_map(|it| {
+                    if let crate::frontend::core::parser::ast::TypeBodyItem::Field(f) = it {
+                        Some(f.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            _ => return,
         };
 
         // 获取 trait 表的引用（用于检查）
@@ -981,7 +1425,7 @@ impl TypeChecker {
 
         for trait_name in TraitTable::BUILTIN_DERIVES {
             // 检查是否可以自动派生
-            let can_derive = trait_table.can_auto_derive(trait_name, fields);
+            let can_derive = trait_table.can_auto_derive(trait_name, &fields);
 
             if can_derive {
                 // 检查是否已有显式实现
@@ -1036,35 +1480,33 @@ impl TypeChecker {
     ) {
         use crate::frontend::core::parser::ast::StmtKind;
         for stmt in &module.items {
-            if let StmtKind::Binding {
-                name,
-                type_name,
-                type_annotation,
-
-                body,
-                is_pub,
-                ..
-            } = &stmt.kind
-            {
-                // 方法绑定
+            if let StmtKind::Assign { target, is_pub, .. } = &stmt.kind {
+                use crate::frontend::core::parser::ast::Expr;
+                let (name, type_name) = match target.as_ref() {
+                    Expr::Var(n, _) => (n.clone(), None),
+                    Expr::FieldAccess { expr, field, .. } => {
+                        if let Expr::Var(tn, _) = expr.as_ref() {
+                            (field.clone(), Some(tn.clone()))
+                        } else {
+                            (field.clone(), None)
+                        }
+                    }
+                    _ => continue,
+                };
                 let is_method = type_name.is_some();
-
-                // 函数定义：body 有语句
-                let has_body = !body.is_empty();
-                // 类型定义：没有 body 且有 type_annotation
-                let is_type_def = !has_body && type_annotation.is_some();
-
-                // 类型定义始终导出，方法绑定始终导出，函数仅 pub 导出
-                if is_type_def || is_method || *is_pub {
+                if is_method || *is_pub {
                     if is_method {
-                        // 方法绑定导出为 Type.method 格式
                         if let Some(ty_name) = type_name {
                             self.env.add_export(&format!("{}.{}", ty_name, name));
                         }
                     } else {
-                        self.env.add_export(name);
+                        self.env.add_export(&name);
                     }
                 }
+            }
+            if let StmtKind::TypeDefinition { name, .. } = &stmt.kind {
+                // 类型定义始终导出
+                self.env.add_export(name);
             }
         }
     }
@@ -1089,8 +1531,8 @@ impl TypeChecker {
 
         let mut names = HashSet::new();
         for stmt in &module.items {
-            if let StmtKind::Binding {
-                type_annotation: Some(Type::Variant(variants)),
+            if let StmtKind::TypeDefinition {
+                definition: Type::Variant(variants),
                 ..
             } = &stmt.kind
             {
@@ -1219,20 +1661,23 @@ impl TypeChecker {
                 }
                 // Phase 2.5: 检查是否是证明函数（源码定义的返回 Type 的函数）
                 if let Some(base) = self.lookup_proof_fn_base_type(name, args) {
-                    let constraint = ConstExpr::Call {
-                        func: name.clone(),
-                        args: args
-                            .iter()
-                            .map(|a| {
-                                self.mono_type_to_const_expr(a)
-                                    .unwrap_or(ConstExpr::Lit(ConstValue::Int(0)))
-                            })
-                            .collect(),
-                    };
-                    return MonoType::Refined {
-                        base: Box::new(base),
-                        constraint,
-                    };
+                    // 将参数转换为 ConstExpr，任何一个转换失败就跳过整个证明函数解析
+                    let const_args: Option<Vec<ConstExpr>> = args
+                        .iter()
+                        .map(|a| self.mono_type_to_const_expr(a))
+                        .collect();
+                    if let Some(const_args) = const_args {
+                        let constraint = ConstExpr::Call {
+                            func: name.clone(),
+                            args: const_args,
+                        };
+                        return MonoType::Refined {
+                            base: Box::new(base),
+                            constraint,
+                        };
+                    }
+                    // 参数转换失败，不降级，直接返回原始类型
+                    return ty.clone();
                 }
                 ty.clone()
             }
@@ -1296,6 +1741,7 @@ impl TypeChecker {
     /// 从表达式中提取常量值
     ///
     /// 用于从初始化器中提取值，以便在精化类型检查中使用。
+    #[allow(dead_code)]
     fn extract_const_value(
         &self,
         expr: &Expr,
@@ -1368,50 +1814,65 @@ impl TypeChecker {
         use crate::frontend::core::parser::ast::StmtKind;
 
         match &stmt.kind {
-            StmtKind::Var {
-                name,
+            StmtKind::Assign {
+                target,
                 type_annotation: Some(type_ann),
-                initializer,
                 ..
             } => {
+                use crate::frontend::core::parser::ast::Expr;
+                let name = match target.as_ref() {
+                    Expr::Var(n, _) => n.clone(),
+                    _ => return,
+                };
                 let mono_ty = MonoType::from(type_ann.clone());
                 let resolved_ty = self.resolve_type_annotation(&mono_ty);
-
                 if let MonoType::Refined { constraint, .. } = &resolved_ty {
-                    // 构建依赖图：提取约束中的自由变量 → 记录 dep
+                    // RFC-027 Phase 2.5: Call 约束直接生成 proof call
+                    if let crate::frontend::core::types::const_data::ConstExpr::Call {
+                        func,
+                        args,
+                    } = constraint
+                    {
+                        let call_args: Vec<crate::frontend::core::types::ConstValue> = args
+                            .iter()
+                            .filter_map(|a| {
+                                if let crate::frontend::core::types::const_data::ConstExpr::Lit(v) =
+                                    a
+                                {
+                                    Some(v.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        proof_calls.push(
+                            crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall {
+                                func_name: func.clone(),
+                                args: call_args,
+                            },
+                        );
+                    }
                     let free_vars = Self::extract_free_vars(constraint);
                     for fv in &free_vars {
-                        if fv != name {
-                            dep_graph.add_dep(name, fv);
-                        }
-                    }
-
-                    // 检查初始化绑定
-                    let mut bindings = HashMap::new();
-                    if let Some(init_expr) = initializer {
-                        if let Some(const_val) = self.extract_const_value(init_expr) {
-                            bindings.insert(name.clone(), const_val);
-                        }
-                    }
-                    let proof_result =
-                        crate::frontend::core::typecheck::layers::predicate::check_predicate(
-                            shared_ctx,
-                            &resolved_ty,
-                            &bindings,
-                        );
-                    if let ProofResult::Unproven {
-                        proof_calls: calls, ..
-                    } = &proof_result
-                    {
-                        if !calls.is_empty() {
-                            proof_calls.extend(calls.clone());
+                        if fv != &name {
+                            dep_graph.add_dep(&name, fv);
                         }
                     }
                 }
             }
-            StmtKind::Binding { body: stmts, .. } => {
-                for s in stmts {
-                    self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+            StmtKind::Assign {
+                value: Some(expr), ..
+            } => {
+                if let crate::frontend::core::parser::ast::Expr::Lambda { body, .. } = expr.as_ref()
+                {
+                    for s in &body.stmts {
+                        self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                    }
+                } else if let crate::frontend::core::parser::ast::Expr::Block(block) = expr.as_ref()
+                {
+                    for s in &block.stmts {
+                        self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                    }
                 }
             }
             StmtKind::Expr(expr) => {
@@ -1502,28 +1963,30 @@ impl TypeChecker {
         shared_ctx: &mut crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
         proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
     ) {
-        use crate::frontend::core::parser::ast::StmtKind;
+        use crate::frontend::core::parser::ast::{StmtKind, Expr};
 
         match &stmt.kind {
-            // 赋值语句：x = expr（有 initializer 的 Var）
-            StmtKind::Var {
-                name,
-                initializer: Some(_),
+            // 赋值语句：x = expr（有 value 的 Assign，target 是 Var）
+            StmtKind::Assign {
+                target,
+                value: Some(v),
                 ..
             } => {
-                let affected = dep_graph.affected_by(name);
-                if !affected.is_empty() {
-                    self.generate_vc_for_dependants(name, &affected, shared_ctx, proof_calls);
+                if let Expr::Var(name, _) = target.as_ref() {
+                    let affected = dep_graph.affected_by(name);
+                    if !affected.is_empty() {
+                        self.generate_vc_for_dependants(name, &affected, shared_ctx, proof_calls);
+                    }
                 }
-            }
-            // 表达式赋值：i += 1（BinOp::Assign in expression position）
-            StmtKind::Expr(expr) => {
-                self.check_assign_expr_with_deps(expr.as_ref(), dep_graph, shared_ctx, proof_calls);
-            }
-            // 递归处理子语句
-            StmtKind::Binding { body: stmts, .. } => {
-                for s in stmts {
-                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                // 递归处理 Lambda/Block 函数体
+                if let Expr::Lambda { body, .. } = v.as_ref() {
+                    for s in &body.stmts {
+                        self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                    }
+                } else if let Expr::Block(block) = v.as_ref() {
+                    for s in &block.stmts {
+                        self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                    }
                 }
             }
             StmtKind::If {
@@ -1547,52 +2010,6 @@ impl TypeChecker {
                 }
             }
             StmtKind::For { body, .. } => {
-                for s in &body.stmts {
-                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    /// 检查表达式赋值中的依赖触发（处理 i += 1 等 BinOp::Assign）
-    fn check_assign_expr_with_deps(
-        &self,
-        expr: &crate::frontend::core::parser::ast::Expr,
-        dep_graph: &crate::frontend::core::typecheck::proof::dep_graph::TypeDepGraph,
-        shared_ctx: &mut crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
-        proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
-    ) {
-        match expr {
-            crate::frontend::core::parser::ast::Expr::BinOp {
-                op: crate::frontend::core::parser::ast::BinOp::Assign,
-                left,
-                ..
-            } => {
-                if let crate::frontend::core::parser::ast::Expr::Var(var_name, _) = left.as_ref() {
-                    let affected = dep_graph.affected_by(var_name);
-                    if !affected.is_empty() {
-                        self.generate_vc_for_dependants(
-                            var_name,
-                            &affected,
-                            shared_ctx,
-                            proof_calls,
-                        );
-                    }
-                }
-            }
-            // 递归处理子表达式中的语句（While/For body 等）
-            crate::frontend::core::parser::ast::Expr::Block(block) => {
-                for s in &block.stmts {
-                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
-                }
-            }
-            crate::frontend::core::parser::ast::Expr::While { body, .. } => {
-                for s in &body.stmts {
-                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
-                }
-            }
-            crate::frontend::core::parser::ast::Expr::For { body, .. } => {
                 for s in &body.stmts {
                     self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
                 }
@@ -1692,28 +2109,6 @@ impl TypeChecker {
             // Lit, If, Range 不含变量引用
             _ => {}
         }
-    }
-
-    /// 对绑定点的精化类型执行谓词检查
-    ///
-    /// 仅处理 Refined 类型，非 Refined 直接返回 Proved。
-    /// 构造 ProofContext 后调用 Layer 3 的 check_predicate。
-    #[allow(dead_code)] // Phase 2.5 预留：精化类型绑定点谓词检查
-    fn check_refined_binding(
-        &self,
-        ty: &MonoType,
-        bindings: &std::collections::HashMap<String, crate::frontend::core::types::ConstValue>,
-    ) -> ProofResult {
-        // 只处理 Refined 类型
-        if !matches!(ty, MonoType::Refined { .. }) {
-            return ProofResult::Proved;
-        }
-
-        // 构造 ProofContext
-        let ctx = ProofContext::new(&self.env);
-
-        // 调用 Layer 3
-        check_predicate(&ctx, ty, bindings)
     }
 }
 include!("checker/semantic_tokens.rs");

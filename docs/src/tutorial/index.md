@@ -72,10 +72,11 @@ description: 系统学习 YaoXiang 核心概念
 
 或者，从核心概念开始：
 
-- [什么是「一切皆类型」？](./YaoXiang-book#一语言概述)
-- [为什么不需要写 await？](./YaoXiang-book#五异步编程与并发)
-- [所有权是什么？](./YaoXiang-book#四内存管理)
+- [什么是「一切皆类型」？](./basics/variables/)
+- [为什么不需要写 await？](./getting-started#并作编程并发)
+- [所有权是什么？](./advanced/type-system/)
 
+推荐从 [快速开始](./getting-started) 开始系统学习。
 ---
 
 > 「天行健，君子以自强不息。」

@@ -1,5 +1,0 @@
-// Test function with content
-add: (a: Int, b: Int) -> Int = {
-    result = a + b
-    result
-}

@@ -9,17 +9,6 @@ pub struct SpannedIdent {
     pub span: Span,
 }
 
-/// Semantic category for unified binding statements.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BindingSemanticKind {
-    /// `TypeName.method = ...`
-    Method,
-    /// Type definition / type constructor lowered form.
-    TypeConstructor,
-    /// Function-like binding (including block sugar and lambda forms).
-    Function,
-}
-
 /// Expression
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -219,15 +208,20 @@ pub struct Stmt {
 #[derive(Debug, Clone)]
 pub enum StmtKind {
     Expr(Box<Expr>),
-    /// Variable declaration: `mut` name `:` type `=` expr
-    Var {
-        name: String,
-        /// 变量名的源码位置（用于代码染色等）
-        /// Span of the `Type` meta-keyword identifier.
-        name_span: Span,
+    /// 赋值语句：target = 值 或 target: 类型 = 值
+    /// target 是表达式（Var("x")、FieldAccess(Var("File"), "open")、...）
+    /// parser 不区分 target 能否当左值——typechecker 检查时判断
+    /// type_annotation 是可选的类型标注
+    /// value 是可选的初始化表达式（extern 绑定 / 方法绑定有，纯声明无）
+    Assign {
+        target: Box<Expr>,
         type_annotation: Option<Type>,
-        initializer: Option<Box<Expr>>,
+        /// 签名第一组参数原样（含参数名），供 typechecker classify_generic_params 使用
+        signature_params: Vec<Param>,
+        value: Option<Box<Expr>>,
+        is_pub: bool,
         is_mut: bool,
+        span: Span,
     },
     /// For loop: `for [mut] item in iterable { body }`
     For {
@@ -239,24 +233,16 @@ pub enum StmtKind {
         body: Box<Block>,
         label: Option<String>,
     },
-    /// Unified binding: combines Fn, TypeDef, and MethodBind
-    /// Used for RFC-022: Unified binding syntax
-    Binding {
-        /// Binding name (function name, type name, or method name)
+    /// 类型定义：`Point: Type = { x: Float, y: Float }`
+    /// 或泛型：`Option: (T: Type) -> Type = { some(T) | none }`
+    TypeDefinition {
+        /// 类型名
         name: String,
-        /// Optional type name for method binding
-        type_name: Option<String>,
-        /// Method type (for method binding)
-        method_type: Option<Type>,
-        /// Generic type parameters
-        generic_params: Vec<GenericParam>,
-        /// Type annotation / return type
-        type_annotation: Option<Type>,
-        /// Parameters (for functions and methods)
-        params: Vec<Param>,
-        /// Body statements (last expression statement is the return value)
-        body: Vec<Stmt>,
-        /// Whether this binding is public
+        /// 泛型参数原样（简单类型定义为空 Vec）
+        signature_params: Vec<Param>,
+        /// 解析后的类型体（必有）
+        definition: Type,
+        /// 是否 pub
         is_pub: bool,
     },
     /// Use statement: `use module.path` or `use module.{a, b} as c, d`
@@ -276,12 +262,6 @@ pub enum StmtKind {
         elif_branches: Vec<(Box<Expr>, Box<Block>)>,
         else_branch: Option<Box<Block>>,
         span: Span,
-    },
-    /// RFC-004: 外部绑定语句: `Type.method = function[positions]`
-    ExternalBindingStmt {
-        type_name: String,
-        method_name: String,
-        binding: BindingKind,
     },
     /// 元组解构赋值: `a, b = (1, 2)` 或 `(a, b) = (1, 2)`
     DestructureAssign {
@@ -351,6 +331,21 @@ impl StructField {
     }
 }
 
+/// 类型体项 — 类型定义 `{}` 是有序代码块，每项按序求值
+///
+/// parser 只按语法区分，不认识任何类型族名字。
+#[derive(Debug, Clone)]
+pub enum TypeBodyItem {
+    /// `name: Type` 或 `name: Type = default` — 运行时数据字段
+    Field(StructField),
+    /// `name = function[pos]` 或 `name = function` 或匿名函数绑定 — 保留现有 TypeBodyBinding 语义
+    Binding(TypeBodyBinding),
+    /// 接口约束名 `InterfaceName`
+    Interface(String),
+    /// 匿名类型表达式 `Assert(N > 0)` / `SomeProofType(t)` — 结果未命名
+    Expr(Type),
+}
+
 /// 类型体内置绑定
 ///
 /// 在类型定义体内绑定方法到字段
@@ -380,7 +375,7 @@ pub enum BindingKind {
     DefaultExternal { function: String },
 }
 
-/// Generic parameter kind: Type parameter, Const parameter, or Platform parameter
+/// Generic parameter kind: Type parameter or Const parameter
 #[derive(Debug, Clone)]
 pub enum GenericParamKind {
     /// Type parameter: `T`
@@ -390,9 +385,6 @@ pub enum GenericParamKind {
         /// The type of the const parameter (e.g., Int)
         const_type: Box<Type>,
     },
-    /// Platform parameter: `P` or `P: X86_64`
-    /// RFC-011: P is reserved for platform specialization
-    Platform,
 }
 
 /// Generic parameter with constraints: `[T: Clone]` or `[N: Int]`
@@ -400,6 +392,13 @@ pub enum GenericParamKind {
 pub struct GenericParam {
     pub name: String,
     pub kind: GenericParamKind,
+    pub constraints: Vec<Type>,
+}
+/// Generic parameter with name and constraints only (no Type/Const classification).
+/// Used by consumers that only need structural info, not kind dispatch.
+#[derive(Debug, Clone)]
+pub struct GenericParamName {
+    pub name: String,
     pub constraints: Vec<Type>,
 }
 
@@ -418,10 +417,8 @@ pub enum Type {
     Bool,
     Void,
     Struct {
-        fields: Vec<StructField>,
-        bindings: Vec<TypeBodyBinding>,
-        /// RFC-010: 接口约束列表
-        interfaces: Vec<String>,
+        /// 有序类型体项（字段/绑定/接口/表达式按源码顺序）
+        body: Vec<TypeBodyItem>,
     },
     NamedStruct {
         name: String,
@@ -489,6 +486,59 @@ pub enum Type {
     },
     /// 编译期表达式（泛型参数位置的值表达式，如 Assert(N > 0) 中的 N > 0）
     ConstExpr(Box<Expr>),
+}
+
+impl Type {
+    /// 从 Type::Struct 的 body 中提取字段引用（顺序保留）
+    pub fn struct_fields(&self) -> Vec<&StructField> {
+        match self {
+            Type::Struct { body } => body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Field(f) = it {
+                        Some(f)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// 提取接口约束名引用
+    pub fn struct_interfaces(&self) -> Vec<&String> {
+        match self {
+            Type::Struct { body } => body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Interface(s) = it {
+                        Some(s)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// 提取绑定引用
+    pub fn struct_bindings(&self) -> Vec<&TypeBodyBinding> {
+        match self {
+            Type::Struct { body } => body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Binding(b) = it {
+                        Some(b)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
 }
 
 /// Block
@@ -562,35 +612,109 @@ pub fn is_meta_type(ty: &Type) -> bool {
     matches!(ty, Type::MetaType { .. })
 }
 
-/// Returns true if a type annotation semantically returns `Type`.
-pub fn type_annotation_returns_meta_type(ty: &Type) -> bool {
-    match ty {
-        Type::MetaType { .. } => true,
-        Type::Fn { return_type, .. } => matches!(return_type.as_ref(), Type::MetaType { .. }),
-        _ => false,
-    }
+/// Const parameter primitive types
+pub const CONST_PARAM_TYPES: &[&str] = &[
+    "Int", "Bool", "Float", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F32", "F64",
+    "Char", "String",
+];
+
+/// Extract just the names and constraints of generic parameters from signature params.
+/// Only returns structurally determined generic params (Type/MetaType + CONST_PARAM_TYPES).
+/// Trait-constrained params (T: Clone) are not recognized — typechecker's classify_generic_params
+/// handles those with access to the trait table.
+pub fn extract_generic_param_names(params: &[Param]) -> Vec<GenericParamName> {
+    params
+        .iter()
+        .filter_map(|p| {
+            let ty = p.ty.as_ref()?;
+            match ty {
+                // (T: Type) — MetaType
+                Type::MetaType { .. } => Some(GenericParamName {
+                    name: p.name.clone(),
+                    constraints: Vec::new(),
+                }),
+                Type::Name { name, .. } if name == "Type" => Some(GenericParamName {
+                    name: p.name.clone(),
+                    constraints: Vec::new(),
+                }),
+                Type::Name { name, .. } if CONST_PARAM_TYPES.contains(&name.as_str()) => {
+                    Some(GenericParamName {
+                        name: p.name.clone(),
+                        constraints: Vec::new(),
+                    })
+                }
+                Type::Name { .. } => {
+                    // 无法确认是否为 trait → 保守不下泛型参数
+                    None
+                }
+                // (T: Clone + Add) — 无法确认所有元素都是 trait → 保守忽略（typechecker 负责）
+                Type::Tuple(_types) => None,
+                _ => None,
+            }
+        })
+        .collect()
 }
 
-/// Classify a unified binding into method/type-constructor/function semantics.
+/// 用 trait_table 判定泛型参数分类（替代 extract_generic_params 的旧大小写猜测）。
 ///
-/// The parser lowers type constructors into bindings with empty params/body and
-/// concrete type annotations, so downstream phases can use one stable predicate.
-pub fn classify_binding_semantic_kind(
-    type_name: Option<&String>,
-    type_annotation: Option<&Type>,
+/// MetaType 或 Name("Type") → Type 参数（无约束）；
+/// CONST_PARAM_TYPES 原始类型名 → Const 参数；
+/// Name 且 `is_trait(name)` → Type 参数（约束=该 annotation）；
+/// Tuple 且所有元素都是 trait → Type 参数（多约束）；
+/// 其余 → 跳过（值参数）。
+pub fn classify_generic_params(
     params: &[Param],
-    body_stmts: &[Stmt],
-) -> BindingSemanticKind {
-    if type_name.is_some() {
-        return BindingSemanticKind::Method;
-    }
-
-    // 解析器会把类型构造器降级为"空 params + 空 body + concrete type annotation"形态。
-    // 例如 `Id: (T: Type) -> Type = { x: T }` 在 AST 中 type_annotation 已是 Struct，
-    // 不再保留 `-> Type` 的函数签名，因此这里必须按降级后的形状判断。
-    if type_annotation.is_some() && params.is_empty() && body_stmts.is_empty() {
-        return BindingSemanticKind::TypeConstructor;
-    }
-
-    BindingSemanticKind::Function
+    is_trait: &dyn Fn(&str) -> bool,
+) -> Vec<GenericParam> {
+    params
+        .iter()
+        .filter_map(|p| {
+            let ty = p.ty.as_ref()?;
+            match ty {
+                // (T: Type) — MetaType
+                Type::MetaType { .. } => Some(GenericParam {
+                    name: p.name.clone(),
+                    kind: GenericParamKind::Type,
+                    constraints: Vec::new(),
+                }),
+                Type::Name { name, .. } if name == "Type" => Some(GenericParam {
+                    name: p.name.clone(),
+                    kind: GenericParamKind::Type,
+                    constraints: Vec::new(),
+                }),
+                Type::Name { name, .. } if CONST_PARAM_TYPES.contains(&name.as_str()) => {
+                    Some(GenericParam {
+                        name: p.name.clone(),
+                        kind: GenericParamKind::Const {
+                            const_type: Box::new(ty.clone()),
+                        },
+                        constraints: Vec::new(),
+                    })
+                }
+                Type::Name { name, .. } if is_trait(name) => Some(GenericParam {
+                    name: p.name.clone(),
+                    kind: GenericParamKind::Type,
+                    constraints: vec![ty.clone()],
+                }),
+                // annotation 为具体类型（非 trait、非 CONST_PARAM_TYPES）→ 非泛型参数
+                Type::Name { .. } => None,
+                Type::Tuple(types) => {
+                    let all_traits = types.iter().all(|t| match t {
+                        Type::Name { name, .. } => is_trait(name),
+                        _ => false,
+                    });
+                    if all_traits && !types.is_empty() {
+                        Some(GenericParam {
+                            name: p.name.clone(),
+                            kind: GenericParamKind::Type,
+                            constraints: types.clone(),
+                        })
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        })
+        .collect()
 }

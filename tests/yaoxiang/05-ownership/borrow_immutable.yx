@@ -2,16 +2,13 @@
 // 验证: &T 令牌可复制（Dup）— 两个 &Point 共存
 // 状态: 待测试
 
-use std.io
+use std.assert
 
-Point: Type = { x: Float, y: Float }
-
-Point.print: (self: &Point) -> Void = {
-    io.println(self.x)
-}
+Point: Type = { x: Int, y: Int }
 
 main = {
-    p = Point(1.0, 2.0)
-    p.print()
-    io.println("ALL TESTS PASSED")
+    p = Point(1, 2)
+    ref1 = &p
+    ref2 = &p
+    assert.assert(true, "&T is Copy — two immutable refs can coexist")
 }

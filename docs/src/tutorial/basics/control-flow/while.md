@@ -20,7 +20,7 @@ while Expr Block
 mut count = 1
 
 while count <= 5 {
-    println(count)
+    print(count)
     count = count + 1
 }
 // 输出：1 2 3 4 5
@@ -41,7 +41,7 @@ while count <= 5 {
 ```yaoxiang
 mut n = 0
 while n > 0 {
-    println("这句话永远不会被打印")
+    print("这句话永远不会被打印")
     n = n - 1
 }
 // 条件 n > 0 一开始就是 false，循环体直接跳过
@@ -59,12 +59,12 @@ mut index = 0
 while index < 5 {
     if numbers[index] == 9 {
         found = true
-        break      # 找到了，不需要继续找
+        break      // 找到了，不需要继续找
     }
     index = index + 1
 }
 
-println("找到了吗？" + found.to_string())  # "找到了吗？true"
+print("找到了吗？" + found.to_string())  // "找到了吗？true"
 ```
 
 `break` 让程序立刻跳出当前循环，继续执行循环后面的代码。
@@ -78,9 +78,9 @@ mut n = 0
 while n < 5 {
     n = n + 1
     if n == 3 {
-        continue   # 跳过 3，不打印
+        continue   // 跳过 3，不打印
     }
-    println(n)
+    print(n)
 }
 // 输出：1 2 4 5
 ```
@@ -92,17 +92,17 @@ while n < 5 {
 使用 `while` 时要特别注意——确保循环条件最终会变成 `false`，否则程序会永远卡住：
 
 ```yaoxiang
-# 危险！死循环——条件永远为 true
-# mut x = 1
-# while x > 0 {
-#     x = x + 1     # x 越来越大，永远不会 <= 0
-# }
+// 危险！死循环——条件永远为 true
+// mut x = 1
+// while x > 0 {
+//     x = x + 1     // x 越来越大，永远不会 <= 0
+// }
 
-# 正确——有明确的终止条件
+// 正确——有明确的终止条件
 mut x = 1
 while x <= 5 {
-    println(x)
-    x = x + 1        # x 逐渐增大，最终 x > 5 时循环结束
+    print(x)
+    x = x + 1        // x 逐渐增大，最终 x > 5 时循环结束
 }
 ```
 
@@ -111,8 +111,8 @@ while x <= 5 {
 `while` 一个经典场景是处理不确定长度的输入——你不知道用户会输入多少次，只知道"输入为空时停止"：
 
 ```yaoxiang
-# 伪代码示例——展示 while 的典型用法
-# read_line 在读到空行时返回空字符串
+// 伪代码示例——展示 while 的典型用法
+// read_line 在读到空行时返回空字符串
 mut line = read_line()
 while line != "" {
     process(line)

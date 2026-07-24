@@ -2,7 +2,7 @@
 // 复杂数据结构: 链表遍历 — 多个 &Node 令牌共存
 // 论文价值: 不可变遍历天然安全，无需 Rc/RefCell
 
-use std.io
+use std.{assert, io}
 
 Node: Type = { value: Int, next: Int }
 
@@ -19,6 +19,7 @@ main = {
     // 三个 &Node 令牌同时活跃 — 自然（Dup）
     total = sum_nodes(n1, n2)
     total = total + n3.value
+    assert.assert(total == 60, "total should be 60")
     io.println(total)
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "all passed")
 }

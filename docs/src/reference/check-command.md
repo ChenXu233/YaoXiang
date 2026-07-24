@@ -116,7 +116,7 @@ yaoxiang check src/ --exclude tests/
 
 ## 另请参阅
 
-- [`yaoxiang fmt`](./format-command.md) -- 代码格式化
+- [`yaoxiang format`](./format-command.md) -- 代码格式化
 - [错误码参考](./error-codes.md) -- 完整错误码列表
 - [CI 集成指南](../guide/ci-integration.md) -- CI/CD 集成
 - [诊断系统设计](../design/check/diagnostic-system.md) -- 架构设计文档

@@ -213,8 +213,8 @@ fn native_pop(
         }
     };
 
-    let mut items = match ctx.heap.get(list_handle) {
-        Some(HeapValue::List(items)) => items.clone(),
+    let items = match ctx.heap.get_mut(list_handle) {
+        Some(HeapValue::List(items)) => items,
         _ => {
             return Err(ExecutorError::runtime_only(
                 "Invalid list handle".to_string(),
@@ -222,14 +222,7 @@ fn native_pop(
         }
     };
 
-    match items.pop() {
-        Some(val) => {
-            // Update the list in-place (write back without the last element)
-            let _ = ctx.heap.write(list_handle, HeapValue::List(items));
-            Ok(val)
-        }
-        None => Ok(RuntimeValue::Unit),
-    }
+    Ok(items.pop().unwrap_or(RuntimeValue::Unit))
 }
 
 /// Native implementation: append - alias for push
@@ -283,8 +276,8 @@ fn native_remove_at(
     };
     let index = args.get(1).and_then(|v| v.to_int()).unwrap_or(0) as usize;
 
-    let mut items = match ctx.heap.get(list_handle) {
-        Some(HeapValue::List(items)) => items.clone(),
+    let items = match ctx.heap.get_mut(list_handle) {
+        Some(HeapValue::List(items)) => items,
         _ => {
             return Err(ExecutorError::runtime_only(
                 "Invalid list handle".to_string(),
@@ -293,9 +286,7 @@ fn native_remove_at(
     };
 
     if index < items.len() {
-        let removed = items.remove(index);
-        let _ = ctx.heap.write(list_handle, HeapValue::List(items));
-        Ok(removed)
+        Ok(items.remove(index))
     } else {
         Err(ExecutorError::runtime_only(format!(
             "Index {} out of bounds for list of length {}",

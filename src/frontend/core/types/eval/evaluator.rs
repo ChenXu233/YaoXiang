@@ -21,6 +21,7 @@ use super::TypeLevelError;
 use super::TypeLevelResult;
 use crate::frontend::core::typecheck::TypeEnvironment;
 use crate::frontend::core::typecheck::proof::budget::BudgetTracker;
+use super::dependent_types::DependentTypeEnv;
 
 /// 类型求值错误
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,9 +70,11 @@ pub struct Evaluator<'a> {
 
     /// 已访问类型（用于循环检测）
     visiting: HashSet<MonoType>,
-
     /// 求值配置
     config: EvalConfig,
+
+    /// 依赖类型环境（用于解析类型族）
+    dep_env: &'a DependentTypeEnv,
 }
 
 impl<'a> Evaluator<'a> {
@@ -79,12 +82,14 @@ impl<'a> Evaluator<'a> {
     pub fn new(
         env: &'a TypeEnvironment,
         budget: &'a BudgetTracker,
+        dep_env: &'a DependentTypeEnv,
     ) -> Self {
         Self {
             cache: HashMap::new(),
             dependencies: HashMap::new(),
             env,
             budget,
+            dep_env,
             visiting: HashSet::new(),
             config: EvalConfig {
                 max_depth: 100, // 设置合理的默认深度
@@ -99,12 +104,14 @@ impl<'a> Evaluator<'a> {
         env: &'a TypeEnvironment,
         budget: &'a BudgetTracker,
         config: EvalConfig,
+        dep_env: &'a DependentTypeEnv,
     ) -> Self {
         Self {
             cache: HashMap::new(),
             dependencies: HashMap::new(),
             env,
             budget,
+            dep_env,
             visiting: HashSet::new(),
             config,
         }
@@ -351,7 +358,7 @@ impl<'a> Evaluator<'a> {
             "Float" => Some(MonoType::Float(64)),
             "Char" => Some(MonoType::Char),
             "String" => Some(MonoType::String),
-            "Never" => Some(MonoType::TypeRef("Never".to_string())),
+            "Never" => Some(MonoType::Never),
             "True" => Some(MonoType::TypeRef("True".to_string())),
             "False" => Some(MonoType::TypeRef("False".to_string())),
             s if s.starts_with("If(") => Some(MonoType::TypeRef(s.to_string())),
@@ -872,6 +879,11 @@ impl<'a> Evaluator<'a> {
         name: &str,
         depth: usize,
     ) -> Result<MonoType, EvalError> {
+        // 先尝试解析为类型族调用
+        if let Some(result) = self.eval_type_family_call(name, depth)? {
+            return Ok(result);
+        }
+
         // 检查类型环境中的类型定义
         if let Some(poly) = self.env.types.get(name) {
             return self.eval_with_depth(&poly.body, depth + 1);
@@ -879,6 +891,63 @@ impl<'a> Evaluator<'a> {
 
         // 类型引用本身
         Ok(MonoType::TypeRef(name.to_string()))
+    }
+
+    /// 尝试求值类型族调用
+    ///
+    /// 检查 name 是否为类型族调用（如 "factorial(Zero)"），
+    /// 如果是且类型族已注册，则进行实例化归约。
+    fn eval_type_family_call(
+        &mut self,
+        name: &str,
+        depth: usize,
+    ) -> Result<Option<MonoType>, EvalError> {
+        // 解析函数名和参数
+        let (family_name, arg_strs) = match Self::parse_type_family_call(name) {
+            Some(pair) => pair,
+            None => return Ok(None),
+        };
+
+        // 查找类型族
+        let family = match self.dep_env.get_type_family(&family_name) {
+            Some(f) => f,
+            None => return Ok(None),
+        };
+
+        // 递归归约参数
+        let mut reduced_args = Vec::new();
+        for arg_str in &arg_strs {
+            let parsed = match self.parse_type(arg_str) {
+                Some(t) => t,
+                None => return Ok(None),
+            };
+            let reduced = self.eval_with_depth(&parsed, depth + 1)?;
+            reduced_args.push(reduced);
+        }
+
+        // 实例化类型族
+        match family.instantiate(&reduced_args) {
+            Some(def) => {
+                let result = def.into_type();
+                // 递归归约结果（可能产生新的类型族调用）
+                self.eval_with_depth(&result, depth + 1).map(Some)
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// 解析类型族调用字符串
+    ///
+    /// 将 "factorial(Zero)" 解析为 ("factorial", ["Zero"])
+    fn parse_type_family_call(name: &str) -> Option<(String, Vec<String>)> {
+        let args = Self::parse_generic_args(name)?;
+        if args.is_empty() {
+            return None;
+        }
+        // 函数名是 name 中括号前的部分
+        let paren_pos = name.find('(')?;
+        let family_name = name[..paren_pos].to_string();
+        Some((family_name, args))
     }
 
     // ============ 公共 API ============
@@ -1032,63 +1101,6 @@ fn eval_unop(
     }
 }
 
-/// 替换类型中的类型引用：将 body 中所有 TypeRef(name) 替换为 replacement
-#[allow(dead_code)]
-fn substitute_type(
-    body: &MonoType,
-    param_name: &str,
-    replacement: &MonoType,
-) -> MonoType {
-    match body {
-        MonoType::TypeRef(name) if name == param_name => replacement.clone(),
-        MonoType::Fn {
-            params,
-            return_type,
-        } => MonoType::Fn {
-            params: params
-                .iter()
-                .map(|p| substitute_type(p, param_name, replacement))
-                .collect(),
-            return_type: Box::new(substitute_type(return_type, param_name, replacement)),
-        },
-        MonoType::List(inner) => {
-            MonoType::List(Box::new(substitute_type(inner, param_name, replacement)))
-        }
-        MonoType::Option(inner) => {
-            MonoType::Option(Box::new(substitute_type(inner, param_name, replacement)))
-        }
-        MonoType::Tuple(elems) => MonoType::Tuple(
-            elems
-                .iter()
-                .map(|e| substitute_type(e, param_name, replacement))
-                .collect(),
-        ),
-        MonoType::Ref { mutable, inner } => MonoType::Ref {
-            mutable: *mutable,
-            inner: Box::new(substitute_type(inner, param_name, replacement)),
-        },
-        MonoType::Refined { base, constraint } => MonoType::Refined {
-            base: Box::new(substitute_type(base, param_name, replacement)),
-            constraint: constraint.clone(), // ConstExpr 暂不替换
-        },
-        MonoType::DepFn {
-            params,
-            return_type,
-        } => MonoType::DepFn {
-            params: params
-                .iter()
-                .map(|p| crate::frontend::core::types::mono::DepParam {
-                    name: p.name.clone(),
-                    ty: substitute_type(&p.ty, param_name, replacement),
-                })
-                .collect(),
-            return_type: Box::new(substitute_type(return_type, param_name, replacement)),
-        },
-        // 叶子类型和不含类型参数的类型直接返回
-        _ => body.clone(),
-    }
-}
-
 // ============ 与类型归一化器集成 ============
 
 /// 类型求值结果转换
@@ -1097,55 +1109,6 @@ impl From<Result<MonoType, EvalError>> for TypeLevelResult<MonoType> {
         match result {
             Ok(ty) => TypeLevelResult::Normalized(ty),
             Err(e) => TypeLevelResult::Error(TypeLevelError::ComputationFailed(format!("{:?}", e))),
-        }
-    }
-}
-
-/// 集成到现有类型归一化器的辅助函数
-///
-/// 将 Evaluator 与 TypeNormalizer 集成，确保：
-/// 1. 求值器的缓存与归一化器的缓存同步
-/// 2. 条件类型的求值结果被正确缓存
-/// 3. 避免重复求值相同类型
-///
-/// **设计说明**：当前架构采用"嵌入式集成"模式，
-/// TypeNormalizer 内部包含 Evaluator，共享生命周期。
-/// 这种设计避免了需要手动同步两个独立缓存的问题。
-#[allow(dead_code)]
-pub fn integrate_evaluator(
-    _evaluator: &mut Evaluator<'_>,
-    _normalizer: &mut super::normalizer::TypeNormalizer,
-) {
-    // TypeNormalizer 现在内部包含 Evaluator
-    // 缓存同步由 TypeNormalizer 内部处理
-    // 这个函数保留用于未来可能的外部集成需求
-}
-
-/// 同步两个缓存系统（备用方法，当前架构不需要）
-///
-/// 如果未来需要分离 Evaluator 和 TypeNormalizer，
-/// 可以使用此函数同步缓存。
-#[allow(dead_code)]
-pub fn sync_caches(
-    evaluator: &Evaluator<'_>,
-    context: &mut super::normalizer::NormalizationContext,
-) {
-    use super::normalizer::NormalForm;
-
-    let cache = context.cache_mut();
-
-    // 将 Evaluator 的缓存同步到 NormalizationContext
-    // Result<MonoType, EvalError> -> NormalForm 转换
-    for (ty, eval_result) in &evaluator.cache {
-        match eval_result {
-            Ok(_result_ty) => {
-                // 已求值的类型标记为已归一化
-                cache.insert(ty.clone(), NormalForm::Normalized);
-            }
-            Err(_) => {
-                // 错误的类型也标记
-                cache.insert(ty.clone(), NormalForm::Normalized);
-            }
         }
     }
 }

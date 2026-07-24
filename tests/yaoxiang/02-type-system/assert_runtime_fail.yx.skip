@@ -1,0 +1,11 @@
+// 02-type-system/assert_runtime_fail.yx
+// 覆盖: RFC-030 assert 运行时断言 — assert(false) 应 panic
+// 验证: std.assert.assert(false, msg) 触发运行时错误
+// 状态: ✅ 应运行时失败
+
+use std.{assert, io}
+
+main = {
+    assert.assert(false, "expected failure")
+    io.println("SHOULD NOT REACH HERE")
+}

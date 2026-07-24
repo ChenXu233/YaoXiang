@@ -1,7 +1,9 @@
-// no_tail_expr_return.yx - 测试显式 return 语句语义
-//
-// 验证：函数体中必须使用显式 return，尾表达式不再隐式返回
-use std.io
+// 03-semantics/no_tail_expr_return.yx
+// 覆盖: 规范 §8.3 return 语句 — 显式 return 语义
+// 验证: 函数体中必须使用显式 return，尾表达式不再隐式返回
+// 状态: ✅ 可运行
+
+use std.{assert, io}
 
 explicit_return: (x: Int) -> Int = {
     return x * 2
@@ -20,27 +22,13 @@ no_return_has_side_effect: () -> () = {
 
 main = {
     val = explicit_return(21)
-    if val != 42 {
-        io.println("FAIL: explicit_return(21) should be 42, got")
-        io.println(val)
-        return
-    }
+    assert.assert(val == 42, "explicit_return(21) should be 42")
 
     r1 = early_return(-5)
-    if r1 != 0 {
-        io.println("FAIL: early_return(-5) should be 0, got")
-        io.println(r1)
-        return
-    }
+    assert.assert(r1 == 0, "early_return(-5) should be 0")
 
     r2 = early_return(7)
-    if r2 != 7 {
-        io.println("FAIL: early_return(7) should be 7, got")
-        io.println(r2)
-        return
-    }
+    assert.assert(r2 == 7, "early_return(7) should be 7")
 
     no_return_has_side_effect()
-
-    io.println("ALL TESTS PASSED")
 }

@@ -124,3 +124,23 @@ fn test_environment_with_many_types() {
     // Assert
     assert_eq!(env.types.len(), 1000, "should have 1000 types");
 }
+
+#[test]
+fn test_resolve_base_kind_type_vs_value() {
+    use crate::frontend::core::typecheck::environment::BaseKind;
+    let mut env = TypeEnvironment::new();
+    // Point 是类型
+    env.add_type(
+        "Point".to_string(),
+        PolyType::mono(MonoType::TypeRef("Point".to_string())),
+    );
+    // p 是变量
+    env.add_var(
+        "p".to_string(),
+        PolyType::mono(MonoType::TypeRef("Point".to_string())),
+    );
+
+    assert_eq!(env.resolve_base_kind("Point"), BaseKind::TypeSpace);
+    assert_eq!(env.resolve_base_kind("p"), BaseKind::ValueSpace);
+    assert_eq!(env.resolve_base_kind("nope"), BaseKind::Unknown);
+}

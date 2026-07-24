@@ -107,19 +107,19 @@ data = match fetch_data() {
 `std.assert` 模块提供统一的断言机制——运行时 `assert` 和编译期精化类型 `Assert` 是同一原语的两面。
 
 ```yaoxiang
-# IsTrue：值到类型的桥接函数
+// IsTrue：值到类型的桥接函数
 IsTrue: (b: Bool) -> Type = match b {
-    true => Void,      # ⊤，程序继续
-    false => Never,    # ⊥，发散
+    true => Void,      // ⊤，程序继续
+    false => Never,    // ⊥，发散
 }
 
-# Assert：编译期精化类型原语
+// Assert：编译期精化类型原语
 Assert: (cond: Bool) -> Type = IsTrue(cond)
 
-# assert：运行时断言（Assert 的值引入子）
+// assert：运行时断言（Assert 的值引入子）
 assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))
 
-# Result 重载
+// Result 重载
 assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 ```
 
@@ -364,8 +364,6 @@ for i in 0..10 step 2 {
 
 ## 附录：标准库模块索引
 
-### A.1 核心模块
-
 | 模块 | 说明 |
 |------|------|
 | `std.assert` | 断言机制——运行时 assert + 编译期 Assert 精化类型 |
@@ -392,9 +390,9 @@ for i in 0..10 step 2 {
 | `std.math.log` | 对数函数 |
 
 ### A.4 工具模块
-
 | 模块 | 说明 |
 |------|------|
 | `std.random` | 随机数生成 |
 | `std.time` | 时间日期 |
+| `std.assert` | 编译期 `Assert(C)` 与运行时 `assert(x > 0)` 统一（RFC-030） |
 | `std.regex` | 正则表达式 |

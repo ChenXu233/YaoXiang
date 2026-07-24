@@ -364,7 +364,10 @@ fn main() -> Result<()> {
                 0 // 0 = auto-detect
             };
 
-            run_file_with_diagnostics(&file, debug_info, &runtime_mode, workers)?;
+            if run_file_with_diagnostics(&file, debug_info, &runtime_mode, workers).is_err() {
+                // Error already printed by run_file_with_diagnostics
+                ::std::process::exit(1);
+            }
         }
         Commands::Eval { code } => {
             let source = if code == "-" {

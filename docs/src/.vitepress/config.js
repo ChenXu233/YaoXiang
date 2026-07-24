@@ -124,7 +124,6 @@ export default defineConfig({
               items: [
                 { text: "教程首页", link: "/tutorial/" },
                 { text: "快速开始", link: "/tutorial/getting-started" },
-                { text: "爻象手册", link: "/tutorial/YaoXiang-book" },
               ],
             },
             {
@@ -141,16 +140,6 @@ export default defineConfig({
               collapsed: true,
               items: generateSidebar({
                 scanStartPath: "/tutorial/advanced",
-                useTitleFromFrontmatter: true,
-                collapsed: true,
-                hyphenToSpace: true,
-              }),
-            },
-            {
-              text: "示例项目",
-              collapsed: true,
-              items: generateSidebar({
-                scanStartPath: "/tutorial/examples",
                 useTitleFromFrontmatter: true,
                 collapsed: true,
                 hyphenToSpace: true,
@@ -365,48 +354,6 @@ export default defineConfig({
                 { text: "分支指南", link: "/dev/branch-maintenance-guide" },
                 { text: "发布流程", link: "/dev/release" },
                 { text: "测试规范", link: "/dev/test-specification" },
-              ],
-            },
-            {
-              text: "计划",
-              items: [
-                { text: "计划目录", link: "/dev/plan" },
-                {
-                  text: "处理中",
-                  collapsed: true,
-                  items: generateSidebar({
-                    scanStartPath: "/dev/plan/ongoing",
-                    useTitleFromFrontmatter: true,
-                    collapsed: true,
-                    hyphenToSpace: true,
-                  }),
-                },
-                {
-                  text: "任务",
-                  collapsed: true,
-                  items: generateSidebar({
-                    scanStartPath: "/dev/plan/task",
-                    useTitleFromFrontmatter: true,
-                    collapsed: true,
-                    hyphenToSpace: true,
-                  }),
-                },
-              ],
-            },
-            {
-              text: "路线图",
-              items: [
-                { text: "路线图首页", link: "/dev/plan/roadmap" },
-                {
-                  text: "模块状态",
-                  collapsed: true,
-                  items: generateSidebar({
-                    scanStartPath: "/dev/plan/roadmap",
-                    useTitleFromFrontmatter: true,
-                    collapsed: true,
-                    hyphenToSpace: true,
-                  }),
-                },
               ],
             },
           ],

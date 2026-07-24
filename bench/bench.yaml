@@ -1,0 +1,70 @@
+# YaoXiang 多语言基准测试配置
+# 用法: cargo run --package bench-runner [--bench <name>] [--lang <lang>]
+#
+# 每个 benchmark 通过 BENCH_INPUT 环境变量注入输入规模
+# 所有语言实现均从 BENCH_INPUT 读取，无需 %i 模板替换
+
+benchmarks:
+  fibonacci:
+    description: "迭代斐波那契数列 — 整数运算和循环性能"
+    warmup: 3
+    runs: 10
+    inputs: [20, 30, 40]
+    languages:
+      yaoxiang:
+        src: src/fibonacci/fibonacci.yx
+        compile: { cmd: "yaoxiang build %s -o %o" }
+        run: { cmd: "%o" }
+      rust:
+        src: src/fibonacci/fibonacci.rs
+        compile: { cmd: "rustc -O %s -o %o" }
+        run: { cmd: "%o" }
+      python:
+        src: src/fibonacci/fibonacci.py
+        compile: false
+        run: { cmd: "python %s" }
+      cpp:
+        src: src/fibonacci/fibonacci.cpp
+        compile: { cmd: "g++ -O3 -o %o %s" }
+        run: { cmd: "%o" }
+      go:
+        src: src/fibonacci/fibonacci.go
+        compile: { cmd: "go build -o %o %s" }
+        run: { cmd: "%o" }
+
+  matrix:
+    description: "矩阵乘法 — 嵌套循环和多维数组"
+    warmup: 3
+    runs: 10
+    inputs: [10, 20, 50]
+    languages:
+      yaoxiang:
+        src: src/matrix/matrix.yx
+        compile: { cmd: "yaoxiang build %s -o %o" }
+        run: { cmd: "%o" }
+      python:
+        src: src/matrix/matrix.py
+        compile: false
+        run: { cmd: "python %s" }
+
+  list_ops:
+    description: "列表操作 — 列表创建、遍历、过滤和映射"
+    warmup: 3
+    runs: 10
+    inputs: [100]
+    languages:
+      yaoxiang:
+        src: src/list_ops/list_ops.yx
+        compile: { cmd: "yaoxiang build %s -o %o" }
+        run: { cmd: "%o" }
+
+  string_concat:
+    description: "字符串拼接 — 字符串操作性能"
+    warmup: 3
+    runs: 10
+    inputs: [100, 500, 1000]
+    languages:
+      yaoxiang:
+        src: src/string_concat/string_concat.yx
+        compile: { cmd: "yaoxiang build %s -o %o" }
+        run: { cmd: "%o" }

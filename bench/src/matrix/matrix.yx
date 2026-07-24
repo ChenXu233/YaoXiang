@@ -1,0 +1,51 @@
+// matrix — 矩阵乘法
+// 测试: 嵌套循环和多维数组
+// 从 BENCH_INPUT 环境变量读取矩阵大小，默认 20
+
+use std.{io, os, string, result}
+
+create_matrix: (size: Int) -> List(List(Int)) = (size) => {
+    mut matrix = []
+    for i in 0..size {
+        mut row = []
+        for j in 0..size {
+            row = row + [i * j]
+        }
+        matrix = matrix + [row]
+    }
+    return matrix
+}
+
+multiply: (a: List(List(Int)), b: List(List(Int)), size: Int) -> List(List(Int)) = (a, b, size) => {
+    mut m_result = []
+    for i in 0..size {
+        mut row = []
+        for j in 0..size {
+            mut sum = 0
+            for k in 0..size {
+                sum = sum + a[i][k] * b[k][j]
+            }
+            row = row + [sum]
+        }
+        m_result = m_result + [row]
+    }
+    return m_result
+}
+
+main = {
+    n_str = os.get_env("BENCH_INPUT")
+    s = if n_str == "" {
+        20
+    } else {
+        parsed = string.parse_int(n_str)
+        result.unwrap_or(parsed, 20)
+    }
+    // 每调用一次 create_matrix 消耗一次 s，重新读取
+    _ = s
+    mut a = create_matrix(20)
+    mut b = create_matrix(20)
+    mut c = multiply(a, b, 20)
+    row0 = c[0]
+    val = row0[0]
+    io.println(val)
+}

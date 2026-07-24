@@ -2,7 +2,7 @@
 
 本文件定义 YaoXiang 编程语言的 FFI（外部函数接口）规范，包括类型定义、函数声明、方法绑定和不透明类型的处理。
 
-> **详细设计**：FFI 的完整设计、动机和权衡详见 [RFC-026: FFI 核心机制](../design/rfc/review/026-ffi-core-mechanism.md)。
+> **详细设计**：FFI 的完整设计、动机和权衡详见 [RFC-026: FFI 核心机制](../design/rfc/accepted/026-ffi-core-mechanism.md)。
 
 ---
 

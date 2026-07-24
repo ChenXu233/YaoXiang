@@ -108,9 +108,6 @@ pub struct Interpreter {
     pub(super) breakpoints: HashMap<usize, ()>,
     /// FFI Registry for native function calls
     pub(super) ffi: FfiRegistry,
-    /// Standard output
-    #[allow(dead_code)] // Might be unused if only accessed via write!
-    stdout: Option<std::sync::Arc<std::sync::Mutex<dyn std::io::Write + Send>>>,
     /// Interpreter-side runtime configuration (defaults to current behavior).
     pub(super) runtime_config: InterpreterRuntimeConfig,
     /// Runtime facade used for task scheduling (Embedded / Standard / Full).
@@ -144,14 +141,6 @@ impl fmt::Debug for Interpreter {
             .field("config", &self.config)
             .field("breakpoints", &self.breakpoints)
             .field("ffi", &self.ffi)
-            .field(
-                "stdout",
-                &if self.stdout.is_some() {
-                    "Some(...)"
-                } else {
-                    "None"
-                },
-            )
             .field("shared", &self.shared)
             .field("current_frame_info", &self.current_frame_info)
             .field("called_func", &self.called_func)
@@ -193,7 +182,6 @@ impl Interpreter {
             config,
             breakpoints: HashMap::new(),
             ffi: FfiRegistry::with_std(),
-            stdout: None, // Default to stdout (handled by None check)
             runtime_config,
             rt,
             shared: std::ptr::null(),
@@ -248,7 +236,6 @@ impl Interpreter {
             config: ExecutorConfig::default(),
             breakpoints: HashMap::new(),
             ffi,
-            stdout: None,
             runtime_config: InterpreterRuntimeConfig::default(),
             rt,
             // 不设置 shared 字段，避免 Drop 时双重释放。
@@ -272,14 +259,6 @@ impl Interpreter {
             work_stealing: self.runtime_config.work_stealing,
         })
         .unwrap_or_else(|_| Runtime::new(RuntimeConfig::default()).unwrap());
-    }
-
-    /// Set standard output redirect
-    pub fn set_stdout(
-        &mut self,
-        stdout: std::sync::Arc<std::sync::Mutex<dyn std::io::Write + Send>>,
-    ) {
-        self.stdout = Some(stdout);
     }
 
     /// Get mutable reference to the FFI registry for registering native functions

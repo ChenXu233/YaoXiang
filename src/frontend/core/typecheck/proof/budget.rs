@@ -12,6 +12,7 @@ use super::verdict::BudgetReport;
 pub struct BudgetTracker {
     steps_used: Cell<u32>,
     steps_limit: u32,
+    #[expect(dead_code)]
     time_ms_used: Cell<u64>, // 阶段 1 保留，阶段 2 (SMT) 启用
     time_ms_limit: u64,
 }
@@ -53,15 +54,6 @@ impl BudgetTracker {
     /// Z3 超时毫秒数。SMT 后端在调用 Z3 前读取此值。
     pub fn time_ms_limit(&self) -> u64 {
         self.time_ms_limit
-    }
-
-    /// 记录 Z3 求解消耗的时间
-    #[allow(dead_code)] // 精确计时在 Phase 3/4 实现
-    pub fn record_time_ms(
-        &self,
-        ms: u64,
-    ) {
-        self.time_ms_used.set(self.time_ms_used.get() + ms);
     }
 }
 

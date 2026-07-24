@@ -3,6 +3,10 @@
 //! Weak references that don't prevent value drop.
 //! Used for caches, observer patterns, and breaking reference cycles.
 
+use crate::backends::common::value::TypeId;
+use crate::backends::common::RuntimeValue;
+use crate::backends::ExecutorError;
+use crate::std::{NativeContext, NativeExport, NativeHandler, StdModule};
 /// `Weak[T]` - A weak reference type that doesn't increase reference count.
 ///
 /// # Example
@@ -42,4 +46,85 @@ pub fn weak_upgrade(
     weak: &crate::backends::common::value::RuntimeValue
 ) -> Option<crate::backends::common::value::RuntimeValue> {
     weak.upgrade()
+}
+
+// ============================================================================
+// WeakModule - StdModule Implementation
+// ============================================================================
+
+/// Weak module implementation.
+pub struct WeakModule;
+
+impl Default for WeakModule {
+    fn default() -> Self {
+        Self
+    }
+}
+
+impl StdModule for WeakModule {
+    fn module_path(&self) -> &str {
+        "std.weak"
+    }
+
+    fn exports(&self) -> Vec<NativeExport> {
+        vec![
+            NativeExport::new(
+                "new",
+                "std.weak.new",
+                "(arc: Arc[T]) -> Weak[T]",
+                native_weak_new as NativeHandler,
+            ),
+            NativeExport::new(
+                "upgrade",
+                "std.weak.upgrade",
+                "(weak: Weak[T]) -> Option[Arc[T]]",
+                native_weak_upgrade as NativeHandler,
+            ),
+        ]
+    }
+}
+
+// ============================================================================
+// Native Handler Wrappers
+// ============================================================================
+
+/// Native handler wrapper for weak_new.
+fn native_weak_new(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    if args.is_empty() {
+        return Err(ExecutorError::runtime_only(
+            "std.weak.new expects 1 argument (arc: Arc[T])".to_string(),
+        ));
+    }
+    Ok(weak_new(&args[0]))
+}
+
+/// Native handler wrapper for weak_upgrade.
+///
+/// Returns Option[Arc[T]] as a RuntimeValue::Enum:
+/// - Some(arc): Enum { type_id: ENUM, variant_id: 0, payload: arc }
+/// - None:      Enum { type_id: ENUM, variant_id: 1, payload: Unit }
+fn native_weak_upgrade(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    if args.is_empty() {
+        return Err(ExecutorError::runtime_only(
+            "std.weak.upgrade expects 1 argument (weak: Weak[T])".to_string(),
+        ));
+    }
+    match weak_upgrade(&args[0]) {
+        Some(val) => Ok(RuntimeValue::Enum {
+            type_id: TypeId::ENUM,
+            variant_id: 0,
+            payload: Box::new(val),
+        }),
+        None => Ok(RuntimeValue::Enum {
+            type_id: TypeId::ENUM,
+            variant_id: 1,
+            payload: Box::new(RuntimeValue::Unit),
+        }),
+    }
 }

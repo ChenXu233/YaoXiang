@@ -10,17 +10,20 @@ use crate::util::diagnostic::Diagnostic;
 
 pub mod function;
 pub mod instance;
-pub mod type_mono;
 
 use function::FunctionMonomorphizer;
-use instance::{GenericFunctionId, InstantiationRequest, SpecializationKey, TypeId};
+use instance::{GenericFunctionId, InstantiationRequest, SpecializationKey};
 use crate::frontend::core::typecheck::MonoType;
-use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
+use crate::middle::core::ir::{
+    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
+};
 
 /// 单态化器
 pub struct Monomorphizer {
     /// 泛型函数定义（从 IR 收集）
     generic_functions: HashMap<String, FunctionIR>,
+    /// 泛型类型定义（从 IR 收集）
+    generic_types: HashMap<String, FunctionIR>,
     /// 已生成的特化函数
     specialized_functions: HashMap<String, FunctionIR>,
     /// 待处理的实例化队列
@@ -29,23 +32,17 @@ pub struct Monomorphizer {
     processed: HashSet<SpecializationKey>,
     /// 最大递归深度
     max_depth: usize,
-    /// 泛型类型定义：type_name -> MonoType（含 TypeVar）
-    generic_types: HashMap<String, MonoType>,
-    /// 已单态化的类型：TypeId -> MonoType
-    #[allow(dead_code)]
-    monomorphized_types: HashMap<TypeId, MonoType>,
 }
 
 impl Monomorphizer {
     pub fn new() -> Self {
         Self {
             generic_functions: HashMap::new(),
+            generic_types: HashMap::new(),
             specialized_functions: HashMap::new(),
             pending_queue: VecDeque::new(),
             processed: HashSet::new(),
             max_depth: 100,
-            generic_types: HashMap::new(),
-            monomorphized_types: HashMap::new(),
         }
     }
 
@@ -66,11 +63,8 @@ impl Monomorphizer {
         module: &ModuleIR,
         requests: &[InstantiationRequest],
     ) -> Result<ModuleIR, Diagnostic> {
-        // 1. 收集泛型函数定义
-        self.collect_generic_functions(module);
-
-        // 2. 收集泛型类型定义
-        self.collect_generic_types(module);
+        // 1. 收集泛型定义（函数和类型）
+        self.collect_generic_definitions(module);
 
         // 3. 初始化队列
         for req in requests {
@@ -89,14 +83,18 @@ impl Monomorphizer {
         Ok(output)
     }
 
-    fn collect_generic_functions(
+    fn collect_generic_definitions(
         &mut self,
         module: &ModuleIR,
     ) {
         for func in &module.functions {
             if func.generic_params.is_some() {
-                self.generic_functions
-                    .insert(func.name.clone(), func.clone());
+                if func.is_type_decl() {
+                    self.generic_types.insert(func.name.clone(), func.clone());
+                } else {
+                    self.generic_functions
+                        .insert(func.name.clone(), func.clone());
+                }
             }
         }
     }
@@ -124,10 +122,17 @@ impl Monomorphizer {
             self.processed.insert(key);
             depth += 1;
 
-            if let Some(specialized) = self.specialize_function(&req) {
-                self.scan_for_new_calls(&specialized);
-                self.specialized_functions
-                    .insert(specialized.name.clone(), specialized);
+            // 先尝试类型特化，再尝试函数特化
+            let specialized = if self.generic_types.contains_key(req.generic_id().name()) {
+                self.specialize_type(&req)
+            } else {
+                self.specialize_function(&req)
+            };
+
+            if let Some(spec) = specialized {
+                self.scan_for_new_calls(&spec);
+                self.scan_for_generic_types(&spec);
+                self.specialized_functions.insert(spec.name.clone(), spec);
             }
         }
         Ok(())
@@ -149,8 +154,13 @@ impl Monomorphizer {
         }
 
         ModuleIR {
+            globals: module.globals.clone(),
             functions,
-            ..module.clone()
+            mut_locals: module.mut_locals.clone(),
+            loop_binding_locals: module.loop_binding_locals.clone(),
+            local_names: module.local_names.clone(),
+            ffi_libs: module.ffi_libs.clone(),
+            ffi_bindings: module.ffi_bindings.clone(),
         }
     }
 
@@ -185,18 +195,27 @@ impl Monomorphizer {
         let new_return_type = self.substitute_single_type(&generic.return_type, &type_map);
 
         // 替换局部变量类型
-        let new_locals: Vec<MonoType> = generic
-            .locals
-            .iter()
-            .map(|ty| self.substitute_single_type(ty, &type_map))
-            .collect();
+        let new_locals: Vec<MonoType> = match &generic.body {
+            FunctionBody::Code { locals, .. } => locals
+                .iter()
+                .map(|ty| self.substitute_single_type(ty, &type_map))
+                .collect(),
+            _ => Vec::new(),
+        };
 
         // 替换指令中的类型
-        let new_blocks: Vec<BasicBlock> = generic
-            .blocks
-            .iter()
-            .map(|block| self.substitute_block(block, &type_map))
-            .collect();
+        let new_blocks: Vec<BasicBlock> = match &generic.body {
+            FunctionBody::Code { blocks, .. } => blocks
+                .iter()
+                .map(|block| self.substitute_block(block, &type_map))
+                .collect(),
+            _ => Vec::new(),
+        };
+
+        let new_entry = match &generic.body {
+            FunctionBody::Code { entry, .. } => *entry,
+            _ => 0,
+        };
 
         // 生成特化后的函数名: identity → identity(Int)
         let type_args_str = type_args
@@ -211,10 +230,72 @@ impl Monomorphizer {
             name: specialized_name,
             params: new_params,
             return_type: new_return_type,
-            locals: new_locals,
-            blocks: new_blocks,
-            entry: generic.entry,
             generic_params: None, // 清除泛型标记
+            body: FunctionBody::Code {
+                blocks: new_blocks,
+                entry: new_entry,
+                locals: new_locals,
+            },
+        })
+    }
+
+    /// 特化类型定义：将泛型类型按类型参数替换为具体类型定义
+    fn specialize_type(
+        &self,
+        req: &InstantiationRequest,
+    ) -> Option<FunctionIR> {
+        let generic = self.generic_types.get(req.generic_id().name())?;
+        let type_params = generic.generic_params.as_ref()?;
+        let type_args = req.type_args();
+
+        if type_args.len() != type_params.len() {
+            return None;
+        }
+
+        // MonoType 替换表：TypeVar(index) → 具体类型
+        let type_map: std::collections::HashMap<usize, MonoType> = (0..type_params.len())
+            .map(|i| (i, type_args[i].clone()))
+            .collect();
+
+        // 名称替换表：参数名 → 具体类型（用于 ast::Type 中的 Type::Name）
+        let name_map: std::collections::HashMap<String, MonoType> = type_params
+            .iter()
+            .zip(type_args.iter())
+            .map(|(name, ty)| (name.clone(), ty.clone()))
+            .collect();
+
+        // 替换签名
+        let new_params: Vec<MonoType> = generic
+            .params
+            .iter()
+            .map(|ty| self.substitute_single_type(ty, &type_map))
+            .collect();
+        let new_return_type = self.substitute_single_type(&generic.return_type, &type_map);
+
+        // 替换类型体里的类型参数
+        let new_definition = match &generic.body {
+            FunctionBody::TypeDecl { definition } => {
+                self.substitute_type_in_ast(definition, &name_map)
+            }
+            _ => return None,
+        };
+
+        // 特化名：List → List(Int)
+        let type_args_str = type_args
+            .iter()
+            .map(|t| t.type_name())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let specialized_name = format!("{}({})", generic.name, type_args_str);
+
+        Some(FunctionIR {
+            name: specialized_name,
+            params: new_params,
+            return_type: new_return_type,
+            generic_params: None,
+            body: FunctionBody::TypeDecl {
+                definition: new_definition,
+            },
         })
     }
 
@@ -279,14 +360,103 @@ impl Monomorphizer {
         }
     }
 
+    /// 扫描函数体中的 MonoType::Generic 引用，发现类型特化请求
+    fn scan_for_generic_types(
+        &mut self,
+        func: &FunctionIR,
+    ) {
+        // 扫描 params
+        for ty in &func.params {
+            self.collect_generic_type_refs(ty);
+        }
+
+        // 扫描 locals 和指令中的类型
+        if let FunctionBody::Code { locals, blocks, .. } = &func.body {
+            for ty in locals {
+                self.collect_generic_type_refs(ty);
+            }
+            for block in blocks {
+                for instr in &block.instructions {
+                    self.collect_generic_type_refs_from_instr(instr);
+                }
+            }
+        }
+    }
+
+    /// 从 MonoType 中收集泛型类型引用
+    fn collect_generic_type_refs(
+        &mut self,
+        ty: &MonoType,
+    ) {
+        match ty {
+            MonoType::Generic { name, args } => {
+                if self.generic_types.contains_key(name) {
+                    let key = SpecializationKey::new(name.clone(), args.clone());
+                    if !self.processed.contains(&key) {
+                        let req = InstantiationRequest::new(
+                            GenericFunctionId::new(name.clone(), Vec::new()),
+                            args.clone(),
+                            crate::util::span::Span::default(),
+                        );
+                        self.pending_queue.push_back(req);
+                    }
+                }
+                // 递归扫描参数（嵌套泛型：List(List(Int))）
+                for arg in args {
+                    self.collect_generic_type_refs(arg);
+                }
+            }
+            MonoType::List(elem) => self.collect_generic_type_refs(elem),
+            MonoType::Dict(k, v) => {
+                self.collect_generic_type_refs(k);
+                self.collect_generic_type_refs(v);
+            }
+            MonoType::Set(elem) => self.collect_generic_type_refs(elem),
+            MonoType::Tuple(types) => {
+                for t in types {
+                    self.collect_generic_type_refs(t);
+                }
+            }
+            MonoType::Fn {
+                params,
+                return_type,
+            } => {
+                for t in params {
+                    self.collect_generic_type_refs(t);
+                }
+                self.collect_generic_type_refs(return_type);
+            }
+            MonoType::Option(t) => self.collect_generic_type_refs(t),
+            MonoType::Result(ok, err) => {
+                self.collect_generic_type_refs(ok);
+                self.collect_generic_type_refs(err);
+            }
+            _ => {}
+        }
+    }
+
+    /// 从指令中收集泛型类型引用
+    fn collect_generic_type_refs_from_instr(
+        &mut self,
+        _instr: &Instruction,
+    ) {
+        // 指令中的类型信息主要通过操作数间接携带
+        // 目前 scan_for_new_calls 已处理函数调用，此处无需额外操作
+        // 未来如果指令直接携带 MonoType，可在此扩展
+    }
+
     /// 从特化函数中获取操作数对应的类型提示
     fn operand_to_type_hint(
         &self,
         op: &Operand,
         func: &FunctionIR,
     ) -> Option<MonoType> {
+        let locals = match &func.body {
+            FunctionBody::Code { locals, .. } => locals,
+            _ => return None,
+        };
         match op {
-            Operand::Local(idx) => func.locals.get(*idx).cloned(),
+            Operand::Local(idx) => locals.get(*idx).cloned(),
             Operand::Arg(idx) => {
                 if *idx < func.params.len() {
                     Some(func.params[*idx].clone())
@@ -303,7 +473,7 @@ impl Monomorphizer {
                 ConstValue::Void => Some(MonoType::Void),
                 _ => None,
             },
-            Operand::Temp(idx) => func.locals.get(*idx).cloned(),
+            Operand::Temp(idx) => locals.get(*idx).cloned(),
             _ => None,
         }
     }
@@ -357,16 +527,19 @@ impl Monomorphizer {
         func: &mut FunctionIR,
         call_site_map: &HashMap<String, String>,
     ) {
-        for block in &mut func.blocks {
-            for instr in &mut block.instructions {
-                if let Instruction::Call {
-                    func: ref mut callee,
-                    ..
-                } = instr
-                {
-                    if let Operand::Const(ConstValue::String(name)) = callee {
-                        if let Some(specialized_name) = call_site_map.get(name) {
-                            *callee = Operand::Const(ConstValue::String(specialized_name.clone()));
+        if let FunctionBody::Code { blocks, .. } = &mut func.body {
+            for block in blocks {
+                for instr in &mut block.instructions {
+                    if let Instruction::Call {
+                        func: ref mut callee,
+                        ..
+                    } = instr
+                    {
+                        if let Operand::Const(ConstValue::String(name)) = callee {
+                            if let Some(specialized_name) = call_site_map.get(name) {
+                                *callee =
+                                    Operand::Const(ConstValue::String(specialized_name.clone()));
+                            }
                         }
                     }
                 }

@@ -333,6 +333,7 @@ fn parse_type_str_with_generics(
     // 基本类型
     match type_str {
         "Void" | "void" => MonoType::Void,
+        "Never" | "never" => MonoType::Never,
         "Bool" | "bool" => MonoType::Bool,
         "Int" | "int" => MonoType::Int(64),
         "Float" | "float" => MonoType::Float(64),

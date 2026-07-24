@@ -245,25 +245,25 @@ Block       ::= '{' Stmt* Expr? '}'
 - 表达式形式 `= expr` 直接返回值
 
 ```yaoxiang
-# 普通 {} 块：return 返回值
+// 普通 {} 块：return 返回值
 result = {
     x = compute()
-    return x  # 返回值给上一作用域
+    return x  // 返回值给上一作用域
 }
 
-# unsafe {} 块：return 返回类型定义
+// unsafe {} 块：return 返回类型定义
 SqliteDb = unsafe {
     SqliteDb: Type = {
         handle: *Void
     }
-    return SqliteDb  # 返回类型定义给上一作用域
+    return SqliteDb  // 返回类型定义给上一作用域
 }
 
-# spawn {} 块：return 返回结果
+// spawn {} 块：return 返回结果
 (a, b) = spawn {
     result1 = fetch("url1"),
     result2 = fetch("url2")
-    return (result1, result2)  # 返回结果给上一作用域
+    return (result1, result2)  // 返回结果给上一作用域
 }
 ```
 
@@ -331,15 +331,15 @@ UnsafeExpr  ::= 'unsafe' Block
 - 类型的字段访问需要 unsafe 权限
 
 ```yaoxiang
-# 在 unsafe 块中定义不透明类型
+// 在 unsafe 块中定义不透明类型
 SqliteDb = unsafe {
     SqliteDb: Type = {
-        handle: *Void  # 裸指针
+        handle: *Void  // 裸指针
     }
     return SqliteDb
 }
 
-# SqliteDb 在 unsafe 块外可用
+// SqliteDb 在 unsafe 块外可用
 db = sqlite3_open("test.db")
 ```
 
@@ -352,19 +352,19 @@ db = sqlite3_open("test.db")
 - 变量声明遵循"赋值优先"原则
 
 ```yaoxiang
-# 块作用域
+// 块作用域
 {
     x = 10
-    # x 在此作用域内可见
+    // x 在此作用域内可见
 }
-# x 在此作用域外不可见
+// x 在此作用域外不可见
 
-# 函数作用域
+// 函数作用域
 add: (a: Int, b: Int) -> Int = {
     result = a + b
     return result
 }
-# result 在函数外不可见
+// result 在函数外不可见
 ```
 
 **变量声明与遮蔽**：

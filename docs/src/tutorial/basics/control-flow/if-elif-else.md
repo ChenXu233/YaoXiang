@@ -20,7 +20,7 @@ if Expr Block ('elif' Expr Block)* ('else' Block)?
 
 ```yaoxiang
 if temperature > 30 {
-    println("天热了，开空调吧")
+    print("天热了，开空调吧")
 }
 ```
 
@@ -28,9 +28,9 @@ if temperature > 30 {
 
 ```yaoxiang
 if is_raining {
-    println("带伞")
+    print("带伞")
 } else {
-    println("不用带伞")
+    print("不用带伞")
 }
 ```
 
@@ -40,13 +40,13 @@ if is_raining {
 score = 85
 
 if score >= 90 {
-    println("优秀")
+    print("优秀")
 } elif score >= 80 {
-    println("良好")
+    print("良好")
 } elif score >= 60 {
-    println("及格")
+    print("及格")
 } else {
-    println("需要努力")
+    print("需要努力")
 }
 ```
 
@@ -57,7 +57,7 @@ if score >= 90 {
 这是 YaoXiang 控制流最重要的特性之一：**`if` 可以作为表达式使用，计算出一个值**。
 
 ```yaoxiang
-# if 表达式：各分支的值会赋给 result
+// if 表达式：各分支的值会赋给 result
 result = if x > 0 {
     "正数"
 } elif x < 0 {
@@ -65,7 +65,7 @@ result = if x > 0 {
 } else {
     "零"
 }
-# result 现在是 "正数"、"负数" 或 "零" 中的一个
+// result 现在是 "正数"、"负数" 或 "零" 中的一个
 ```
 
 当 `if` 作为表达式时，所有分支的返回值类型必须一致：
@@ -73,7 +73,7 @@ result = if x > 0 {
 ```yaoxiang
 score = 88
 
-# 所有分支都返回 String，类型一致，没问题
+// 所有分支都返回 String，类型一致，没问题
 grade = if score >= 90 {
     "A"
 } elif score >= 80 {
@@ -83,16 +83,16 @@ grade = if score >= 90 {
 } else {
     "D"
 }
-println(grade)  # "B"
+print(grade)  // "B"
 ```
 
 在每个分支的代码块中，**最后一个表达式的值就是该分支的返回值**。你也可以用 `return` 显式返回，但在分支中通常直接写表达式就够了。
 
 ```yaoxiang
-# 直接写表达式——推荐
+// 直接写表达式——推荐
 category = if age < 18 { "未成年" } else { "成年" }
 
-# 也可以显式 return——效果相同
+// 也可以显式 return——效果相同
 category = if age < 18 {
     return "未成年"
 } else {
@@ -112,12 +112,12 @@ has_ticket = true
 
 if age >= 18 {
     if has_ticket {
-        println("欢迎入场")
+        print("欢迎入场")
     } else {
-        println("请先购票")
+        print("请先购票")
     }
 } else {
-    println("未成年人需家长陪同")
+    print("未成年人需家长陪同")
 }
 ```
 
@@ -131,24 +131,24 @@ if age >= 18 {
 username = "admin"
 password = "123456"
 
-# and：两个条件都成立
+// and：两个条件都成立
 if username == "admin" and password == "123456" {
-    println("登录成功")
+    print("登录成功")
 }
 
-# or：任一条件成立
+// or：任一条件成立
 if role == "admin" or role == "moderator" {
-    println("有管理权限")
+    print("有管理权限")
 }
 
-# not：取反
+// not：取反
 if not is_banned {
-    println("允许发言")
+    print("允许发言")
 }
 
-# 组合使用
+// 组合使用
 if (age >= 18 and age <= 60) or is_vip {
-    println("可以参加活动")
+    print("可以参加活动")
 }
 ```
 

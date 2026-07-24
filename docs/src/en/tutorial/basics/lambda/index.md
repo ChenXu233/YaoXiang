@@ -4,7 +4,7 @@ title: Lambda Expressions
 
 # Lambda Expressions
 
-A Lambda is an **anonymous, inline-defined function**. In YaoXiang, a regular function is essentially a named Lambda.
+A Lambda is **an anonymous function that you can define on the fly**. In YaoXiang, regular functions are essentially named Lambdas.
 
 ## Syntax
 
@@ -18,37 +18,37 @@ Lambda      ::= '(' ParamList? ')' '=>' Expr
 The simplest Lambda:
 
 ```yaoxiang
-# Expression-form Lambda
+// Expression-form Lambda
 double = (x) => x * 2
 
-println(double(5))   # 10
-println(double(10))  # 20
+print(double(5))   // 10
+print(double(10))  // 20
 ```
 
-## Unification of Lambdas and Functions
+## Lambda and Function Unification
 
-YaoXiang's core design philosophy is unified syntax. **A function is a Lambda bound to a name**:
+YaoXiang's core design philosophy is unified syntax. **Functions are Lambdas bound to a name**:
 
 ```yaoxiang
-# These two are completely equivalent:
+// These two are completely equivalent:
 
-# Lambda form
+// Lambda form
 add = (a, b) => a + b
 
-# Function form (syntactic sugar)
+// Function form (syntactic sugar)
 add: (a: Int, b: Int) -> Int = a + b
 ```
 
-The first line is "assign a Lambda to the variable `add`", and the second line is "define a function named `add`". The compiler processes them in nearly the same way.
+The first line is "assigning a Lambda to the variable `add`", and the second line is "defining a function named `add`". The compiler processes them in nearly the same way.
 
-## When to Use Lambdas
+## When to Use Lambda
 
-Lambdas are best suited for two scenarios:
+Lambda is most suitable for two scenarios:
 
 ### 1. Higher-order functions — passing functions as arguments
 
 ```yaoxiang
-# Apply an operation to every element of a list
+// Apply an operation to each element of a list
 apply_to_all: (list: List(Int), op: (Int) -> Int) -> List(Int) = {
     mut result = []
     for item in list {
@@ -59,20 +59,20 @@ apply_to_all: (list: List(Int), op: (Int) -> Int) -> List(Int) = {
 
 numbers = [1, 2, 3, 4, 5]
 
-# Pass in a Lambda
+// Pass a Lambda
 doubled = apply_to_all(numbers, (x) => x * 2)
 squared = apply_to_all(numbers, (x) => x * x)
 
-println(doubled)  # [2, 4, 6, 8, 10]
-println(squared)  # [1, 4, 9, 16, 25]
+print(doubled)  // [2, 4, 6, 8, 10]
+print(squared)  // [1, 4, 9, 16, 25]
 ```
 
-### 2. One-off, throwaway operations
+### 2. Temporary one-off operations
 
-No need to define a dedicated function for logic used only once:
+No need to define a separate function for logic used only once:
 
 ```yaoxiang
-# Sorting — define the sort rule inline
+// Sorting — temporarily define sorting rules
 students = [
     {"name": "Alice", "score": 90},
     {"name": "Bob", "score": 85},
@@ -82,12 +82,12 @@ students = [
 sorted_students = students.sort_by((a, b) => a["score"].compare(b["score"]))
 ```
 
-## Block-form Lambdas
+## Block-form Lambda
 
-When a Lambda requires multiple lines of logic, use the block form:
+When a Lambda needs multiple lines of logic, use the block form:
 
 ```yaoxiang
-# Block Lambda: can contain multiple statements
+// Block Lambda: can contain multiple statements
 process = (data) => {
     cleaned = data.trim()
     lower = cleaned.lowercase()
@@ -95,47 +95,47 @@ process = (data) => {
 }
 
 result = process("  Hello World  ")
-println(result)  # "hello world"
+print(result)  // "hello world"
 ```
 
-Note that the block form requires `return` to produce a value, which is fully consistent with functions.
+Note that the block form requires `return` to return a value, which is exactly the same as functions.
 
-## Multi-parameter Lambdas
+## Multi-parameter Lambda
 
 ```yaoxiang
-# Three parameters
+// Three parameters
 add_three = (x, y, z) => x + y + z
-println(add_three(1, 2, 3))  # 6
+print(add_three(1, 2, 3))  // 6
 
-# Zero-parameter Lambda
+// No-parameter Lambda
 greet = () => "Hello, YaoXiang!"
-println(greet())  # "Hello, YaoXiang!"
+print(greet())  // "Hello, YaoXiang!"
 ```
 
 ## Type Inference
 
-The parameter types of a Lambda can be inferred from context:
+Lambda parameter types can be inferred from context:
 
 ```yaoxiang
-# Types are inferred from the usage site — no need to write (x: Int) => x * 2
+// Types are inferred from the call site — no need to write (x: Int) => x * 2
 apply: (op: (Int) -> Int, value: Int) -> Int = op(value)
 
 result = apply((x) => x + 10, 5)
-println(result)  # 15
+print(result)  // 15
 ```
 
-The compiler knows `op`'s type is `(Int) -> Int`, so `x` in the Lambda `(x) => x + 10` is automatically inferred as `Int`.
+The compiler knows that the type of `op` is `(Int) -> Int`, so `x` in the Lambda `(x) => x + 10` is automatically inferred to be `Int`.
 
-> **Note**: According to the rules of function definition, parameter types must be annotated in at least one of the signature or the Lambda header. When a Lambda is passed as an argument, the type is usually provided by the receiver's signature.
+> **Note**: According to the function definition rules, parameter types must be annotated in at least one place — either in the signature or in the Lambda header. When a Lambda is passed as an argument, the type is usually provided by the receiver's signature.
 
 ## Summary
 
 | Key Point | Description |
-|-----------|-------------|
+|------|------|
 | Syntax | `(params) => expr` or `(params) => { return ... }` |
-| Essence | A function = a named Lambda |
+| Essence | Function = named Lambda |
 | Higher-order functions | Lambdas can be passed as arguments |
-| Block form | Multi-line logic uses `{}` + `return` |
+| Block form | Use `{}` + `return` for multi-line logic |
 | Type inference | Parameter types are automatically inferred from context |
 
-Lambdas are the most concise way to express "throwaway logic" in YaoXiang. Master them, and your code will become more flexible and compact.
+Lambda is the most concise way to express "temporary logic" in YaoXiang. Master it, and your code will be more flexible and compact.

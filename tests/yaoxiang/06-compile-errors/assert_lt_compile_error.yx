@@ -1,0 +1,16 @@
+// 06-compile-errors/assert_lt_compile_error.yx
+// 覆盖: RFC-011 §4.3 编译期验证 — Assert(N < 100) 约束违反应编译报错
+// 验证: const 泛型参数 N=150 时 Assert(150 < 100) 求值为 false，编译失败 E1062
+// 状态: ❌ 应编译失败
+
+use std.io
+
+Capped: (T: Type, N: Int) -> Type = {
+    _assert_lt: Assert(N < 100),
+    data: Array(T, N),
+}
+
+main = {
+    bad = Capped(Int, 150)
+    io.println("SHOULD NOT REACH HERE")
+}

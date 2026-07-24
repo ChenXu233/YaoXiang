@@ -13,15 +13,15 @@
       "link": "/ru/tutorial/"
     },
     {
-      "text": "Гайд",
+      "text": "Гайды",
       "link": "/ru/guide/"
     },
     {
-      "text": "Справочник",
+      "text": "Справка",
       "link": "/ru/reference/"
     },
     {
-      "text": "Ещё",
+      "text": "Больше",
       "items": [
         {
           "text": "Дизайн",
@@ -62,10 +62,6 @@
           {
             "text": "Быстрый старт",
             "link": "/ru/tutorial/getting-started"
-          },
-          {
-            "text": "Справочник YaoXiang",
-            "link": "/ru/tutorial/YaoXiang-book"
           }
         ]
       },
@@ -75,35 +71,35 @@
         "items": []
       },
       {
-        "text": "Примеры проектов",
+        "text": "Продвинутые темы",
         "collapsed": true,
         "items": []
       }
     ],
     "/design/": [
       {
-        "text": "Документация по дизайну",
+        "text": "Документы по дизайну",
         "items": [
           {
             "text": "Содержание дизайна",
             "link": "/ru/design"
           },
           {
-            "text": "Манифест YaoXiang",
+            "text": "Манифест ЯоСян",
             "link": "/ru/design/manifesto"
           },
           {
-            "text": "Манифест YaoXiang WTF версия",
+            "text": "Манифест ЯоСян (WTF версия)",
             "link": "/ru/design/manifesto-wtf"
           },
           {
-            "text": "Взгляд на дизайн языка от человека 2006 года рождения",
+            "text": "Взгляд на дизайн языка от человека, родившегося в 2006",
             "link": "/ru/design/2006-born-language-design"
           }
         ]
       },
       {
-        "text": "RFC документация",
+        "text": "RFC документы",
         "items": [
           {
             "text": "Содержание RFC",
@@ -123,7 +119,7 @@
             "items": []
           },
           {
-            "text": "В процессе",
+            "text": "На рассмотрении",
             "collapsed": true,
             "items": []
           },
@@ -157,7 +153,7 @@
             "link": "/ru/design/check/diagnostic-system"
           },
           {
-            "text": "Кроссфайловый анализ",
+            "text": "Межфайловый анализ",
             "link": "/ru/design/check/cross-file-analysis"
           },
           {
@@ -232,7 +228,7 @@
         "text": "Спецификация языка",
         "items": [
           {
-            "text": "Содержание справочника",
+            "text": "Содержание справки",
             "link": "/ru/reference"
           },
           {
@@ -248,7 +244,7 @@
             "link": "/ru/reference/language-spec/type-system"
           },
           {
-            "text": "Система модулей",
+            "text": "Модульная система",
             "link": "/ru/reference/language-spec/modules"
           },
           {
@@ -282,7 +278,7 @@
             "link": "/ru/reference/error-code/"
           },
           {
-            "text": "Категории кодов ошибок",
+            "text": "Классификация кодов ошибок",
             "collapsed": true,
             "items": []
           },
@@ -309,7 +305,7 @@
     ],
     "/dev/": [
       {
-        "text": "Документация для разработчиков",
+        "text": "Документы разработки",
         "items": [
           {
             "text": "Содержание разработки",
@@ -336,55 +332,26 @@
             "link": "/ru/dev/test-specification"
           }
         ]
-      },
-      {
-        "text": "Планы",
-        "items": [
-          {
-            "text": "Содержание планов",
-            "link": "/ru/dev/plan"
-          },
-          {
-            "text": "В обработке",
-            "collapsed": true,
-            "items": []
-          },
-          {
-            "text": "Задачи",
-            "collapsed": true,
-            "items": []
-          }
-        ]
-      },
-      {
-        "text": "Дорожная карта",
-        "items": [
-          {
-            "text": "Главная дорожной карты",
-            "link": "/ru/dev/plan/roadmap"
-          },
-          {
-            "text": "Статус модулей",
-            "collapsed": true,
-            "items": []
-          }
-        ]
       }
     ],
     "/guide/": [
       {
-        "text": "Гайд",
+        "text": "Гайды",
         "items": [
           {
-            "text": "Содержание гайда",
+            "text": "Содержание гайдов",
             "link": "/ru/guide/"
+          },
+          {
+            "text": "Краткий обзор синтаксиса",
+            "link": "/ru/guide/language-overview"
           },
           {
             "text": "Система управления пакетами",
             "link": "/ru/guide/packaging"
           },
           {
-            "text": "CI интеграция",
+            "text": "Интеграция CI",
             "link": "/ru/guide/ci-integration"
           },
           {
@@ -396,22 +363,22 @@
     ],
     "/": [
       {
-        "text": "Русская документация",
+        "text": "Английская документация",
         "items": [
           {
             "text": "Быстрый старт",
-            "link": "/ru/getting-started"
+            "link": "/ru/tutorial/getting-started"
           },
           {
             "text": "Руководство",
             "link": "/ru/tutorial/"
           },
           {
-            "text": "Гайд",
+            "text": "Гайды",
             "link": "/ru/guide/"
           },
           {
-            "text": "Справочник",
+            "text": "Справка",
             "link": "/ru/reference/"
           }
         ]

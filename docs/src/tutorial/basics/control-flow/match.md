@@ -32,7 +32,7 @@ text = match number {
     1 => "一",
     2 => "二",
 }
-println(text)  # "二"
+print(text)  // "二"
 ```
 
 ## match 是表达式
@@ -43,13 +43,13 @@ println(text)  # "二"
 score = 85
 
 grade = match score {
-    90..100 => "A",    # 范围模式（进阶内容）
+    90..100 => "A",    // 范围模式（进阶内容）
     80..89 => "B",
     70..79 => "C",
     60..69 => "D",
-    _ => "F",          # 通配符：匹配所有剩余情况
+    _ => "F",          // 通配符：匹配所有剩余情况
 }
-println(grade)  # "B"
+print(grade)  // "B"
 ```
 
 > **注意**：范围模式 `90..100` 等属于进阶内容，将在 [模式匹配进阶](../pattern-matching.md) 中深入讲解。本章先聚焦于基础模式。
@@ -70,7 +70,7 @@ message = match response {
     500 => "Server Error",
     _ => "Unknown",
 }
-println(message)  # "Not Found"
+print(message)  // "Not Found"
 ```
 
 ### 标识符模式
@@ -84,7 +84,7 @@ description = match result {
     ok(value) => "成功，值是: " + value.to_string(),
     err(error) => "失败，原因: " + error,
 }
-println(description)  # "成功，值是: 42"
+print(description)  // "成功，值是: 42"
 ```
 
 `ok(value)` 中的 `value` 是一个标识符模式——它捕获了 `ok` 包裹的实际值，你可以在 `=>` 后面的表达式里使用它。
@@ -102,7 +102,7 @@ action = match command {
     "restart" => "重启服务",
     _ => "未知指令: " + command,
 }
-println(action)  # "未知指令: exit"
+print(action)  // "未知指令: exit"
 ```
 
 ## 匹配必须穷尽
@@ -110,18 +110,18 @@ println(action)  # "未知指令: exit"
 YaoXiang 的 `match` 要求覆盖所有可能的情况——如果编译器发现你漏掉了某些可能的值，会直接报错。这是 `match` 安全性的体现。
 
 ```yaoxiang
-# 这段代码会编译失败
-# value = true
-# result = match value {
-#     true => "是",
-#     # 缺少 false 分支——编译错误！
-# }
+// 这段代码会编译失败
+// value = true
+// result = match value {
+//     true => "是",
+//     // 缺少 false 分支——编译错误！
+// }
 
-# 正确——使用 _ 兜底
+// 正确——使用 _ 兜底
 value = true
 result = match value {
     true => "是",
-    _ => "否",      # _ 确保 false 也有处理
+    _ => "否",      // _ 确保 false 也有处理
 }
 ```
 
@@ -139,7 +139,7 @@ type = match day {
     "saturday" | "sunday" => "休息日",
     _ => "无效",
 }
-println(type)  # "休息日"
+print(type)  // "休息日"
 ```
 
 ## 匹配臂按顺序执行
@@ -150,10 +150,10 @@ println(type)  # "休息日"
 number = 5
 
 result = match number {
-    _ => "其他",     # 通配符匹配一切，这里会匹配
-    5 => "五",       # 永远不会被执行——上面已经匹配了
+    _ => "其他",     // 通配符匹配一切，这里会匹配
+    5 => "五",       // 永远不会被执行——上面已经匹配了
 }
-println(result)  # "其他"
+print(result)  // "其他"
 ```
 
 这个特性意味着**把通配符 `_` 放在最后**是一个好习惯。

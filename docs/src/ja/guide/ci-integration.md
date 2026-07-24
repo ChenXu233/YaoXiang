@@ -1,11 +1,11 @@
 ---
 title: CI 統合ガイド
-description: yaoxiang check と yaoxiang fmt を CI/CD パイプラインに統合する
+description: yaoxiang check と yaoxiang format を CI/CD パイプラインに統合する
 ---
 
 # CI 統合ガイド
 
-YaoXiang の静的チェックとフォーマットツールを CI/CD パイプラインに統合し、コード品質を確保する。
+YaoXiang の静的チェックおよびフォーマットツールを CI/CD パイプラインに統合し、コード品質を保証します。
 
 ## GitHub Actions
 
@@ -24,16 +24,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: YaoXiang のインストール
+      - name: Install YaoXiang
         run: |
           curl -fsSL https://yaoxiang.dev/install.sh | sh
           echo "$HOME/.yaoxiang/bin" >> $GITHUB_PATH
 
-      - name: 型チェック
+      - name: Type check
         run: yaoxiang check --color never --no-progress
 
-      - name: フォーマットチェック
-        run: yaoxiang fmt --check
+      - name: Format check
+        run: yaoxiang format --dry-run .
 ```
 
 ## GitLab CI
@@ -45,7 +45,7 @@ yaoxiang-check:
     - curl -fsSL https://yaoxiang.dev/install.sh | sh
     - export PATH="$HOME/.yaoxiang/bin:$PATH"
     - yaoxiang check --color never --no-progress
-    - yaoxiang fmt --check
+    - yaoxiang format --dry-run .
   rules:
     - if: $CI_MERGE_REQUEST_IID
     - if: $CI_COMMIT_BRANCH == "main"
@@ -55,14 +55,14 @@ yaoxiang-check:
 ## 終了コード
 
 | 終了コード | 意味 | CI 動作 |
-|------------|------|---------|
+|--------|------|---------|
 | `0` | エラーなし | 成功 |
-| `1` | チェックでエラーが見つかった | 失敗 |
-| `2` | `.yx` ファイルが見つからない | 設定に依存 |
+| `1` | チェックでエラー検出 | 失敗 |
+| `2` | `.yx` ファイルが見つからない | 設定による |
 
 ## JSON 出力の解析
 
-`--json` を使用して機械可読な出力を取得する：
+`--json` オプションで機械可読な出力を取得できます:
 
 ```bash
 yaoxiang check --json | jq '.error_count'
@@ -70,7 +70,8 @@ yaoxiang check --json | jq '.error_count'
 
 ## ベストプラクティス
 
-1. **チェックとフォーマットの分離**：`check` と `fmt --check` を別々に実行し、問題の特定を容易にする
-2. **`--no-progress` の使用**：CI 環境では進捗バーは不要
-3. **`--color never` の使用**：ANSI カラーコードをログに混入させない
-4. **依存関係のキャッシュ**：CI キャッシュ機能を活用してビルドを高速化する
+1. **パス引数**: `yaoxiang check` はデフォルトでカレントディレクトリをチェックしますが、`yaoxiang check src/` のようにパスを指定することもできます
+2. **チェックとフォーマットを分離**: `check` と `format --dry-run` を別々に実行することで、問題の特定が容易になります
+3. **`--no-progress` を使用**: CI 環境ではプログレスバーは不要です
+4. **`--color never` を使用**: ANSI カラーコードがログを汚染するのを防ぎます
+5. **依存関係をキャッシュ**: CI のキャッシュ機能を活用してビルドを高速化します

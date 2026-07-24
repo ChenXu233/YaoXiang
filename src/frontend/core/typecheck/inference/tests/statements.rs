@@ -4,7 +4,7 @@
 //! RFC-010: 统一类型语法
 
 use crate::frontend::core::typecheck::inference::statements::StatementChecker;
-use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
+use crate::frontend::core::types::{MonoType, PolyType, TraitTable, TypeConstraintSolver};
 use crate::frontend::core::parser::ast::{self, Stmt, StmtKind, Expr, BinOp, Block, Param};
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::util::span::Span;
@@ -32,7 +32,12 @@ fn make_block(stmts: Vec<Stmt>) -> Block {
 /// 创建默认 StatementChecker
 fn make_checker() -> StatementChecker {
     let mut solver = TypeConstraintSolver::default();
-    StatementChecker::new(&mut solver)
+    StatementChecker::new(
+        &mut solver,
+        None,
+        crate::frontend::core::types::eval::dependent_types::DependentTypeEnv::new(),
+        TraitTable::default(),
+    )
 }
 
 /// 创建带 scope 内已有变量的 StatementChecker
@@ -59,9 +64,13 @@ fn make_checker_with_var(
 fn test_statement_checker_creation() {
     // Arrange
     let mut solver = TypeConstraintSolver::default();
-
     // Act
-    let _checker = StatementChecker::new(&mut solver);
+    let _checker = StatementChecker::new(
+        &mut solver,
+        None,
+        crate::frontend::core::types::eval::dependent_types::DependentTypeEnv::new(),
+        TraitTable::default(),
+    );
 
     // Assert — 应该成功创建，不 panic
 }
@@ -71,12 +80,14 @@ fn test_statement_checker_creation() {
 fn test_check_var_stmt_with_type_annotation() {
     // Arrange
     let mut checker = make_checker();
-    let stmt = make_stmt(StmtKind::Var {
-        name: "x".to_string(),
-        name_span: Span::dummy(),
+    let stmt = make_stmt(StmtKind::Assign {
+        target: Box::new(Expr::Var("x".to_string(), Span::dummy())),
         type_annotation: Some(ast::Type::Int(64)),
-        initializer: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
+        signature_params: vec![],
+        value: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
+        is_pub: false,
         is_mut: false,
+        span: Span::dummy(),
     });
 
     // Act
@@ -99,12 +110,14 @@ fn test_check_var_stmt_with_type_annotation() {
 fn test_check_var_stmt_type_inference() {
     // Arrange
     let mut checker = make_checker();
-    let stmt = make_stmt(StmtKind::Var {
-        name: "x".to_string(),
-        name_span: Span::dummy(),
+    let stmt = make_stmt(StmtKind::Assign {
+        target: Box::new(Expr::Var("x".to_string(), Span::dummy())),
         type_annotation: None,
-        initializer: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
+        signature_params: vec![],
+        value: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
+        is_pub: false,
         is_mut: false,
+        span: Span::dummy(),
     });
 
     // Act
@@ -308,12 +321,14 @@ fn test_check_var_stmt_type_mismatch() {
     // Arrange
     let mut checker = make_checker();
     // x: Bool = 42 — Int 字面量与 Bool 注解不匹配
-    let stmt = make_stmt(StmtKind::Var {
-        name: "x".to_string(),
-        name_span: Span::dummy(),
+    let stmt = make_stmt(StmtKind::Assign {
+        target: Box::new(Expr::Var("x".to_string(), Span::dummy())),
         type_annotation: Some(ast::Type::Bool),
-        initializer: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
+        signature_params: vec![],
+        value: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
+        is_pub: false,
         is_mut: false,
+        span: Span::dummy(),
     });
 
     // Act
@@ -468,19 +483,26 @@ fn test_check_statement_checker_with_many_statements() {
 
     let mut stmts = Vec::new();
     for i in 0..100 {
-        stmts.push(make_stmt(StmtKind::Var {
-            name: format!("var_{}", i),
-            name_span: Span::dummy(),
+        stmts.push(make_stmt(StmtKind::Assign {
+            target: Box::new(Expr::Var(format!("var_{}", i), Span::dummy())),
             type_annotation: Some(ast::Type::Int(64)),
-            initializer: Some(Box::new(Expr::Lit(Literal::Int(i as i128), Span::dummy()))),
+            signature_params: vec![],
+            value: Some(Box::new(Expr::Lit(Literal::Int(i as i128), Span::dummy()))),
+            is_pub: false,
             is_mut: false,
+            span: Span::dummy(),
         }));
     }
     let block = make_block(stmts);
 
     // Act
     let mut solver = TypeConstraintSolver::default();
-    let mut checker = StatementChecker::new(&mut solver);
+    let mut checker = StatementChecker::new(
+        &mut solver,
+        None,
+        crate::frontend::core::types::eval::dependent_types::DependentTypeEnv::new(),
+        TraitTable::default(),
+    );
     let result = checker.check_fn_def("test_fn", &[], &block);
 
     // Assert
@@ -556,12 +578,14 @@ fn test_check_fn_def_params_visible_in_body() {
 fn test_check_var_stmt_only_annotation() {
     // Arrange
     let mut checker = make_checker();
-    let stmt = make_stmt(StmtKind::Var {
-        name: "y".to_string(),
-        name_span: Span::dummy(),
+    let stmt = make_stmt(StmtKind::Assign {
+        target: Box::new(Expr::Var("y".to_string(), Span::dummy())),
         type_annotation: Some(ast::Type::Float(64)),
-        initializer: None,
+        signature_params: vec![],
+        value: None,
+        is_pub: false,
         is_mut: false,
+        span: Span::dummy(),
     });
 
     // Act

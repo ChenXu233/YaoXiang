@@ -98,7 +98,9 @@ fn test_check_syntax_error() {
     );
     let err_msg = format!("{}", result.unwrap_err());
     assert!(
-        err_msg.contains("parse") || err_msg.contains("syntax") || err_msg.contains("expect"),
+        err_msg.to_lowercase().contains("parse")
+            || err_msg.to_lowercase().contains("syntax")
+            || err_msg.to_lowercase().contains("expect"),
         "Error message should mention parse/syntax issue, got: {}",
         err_msg
     );

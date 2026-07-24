@@ -701,9 +701,7 @@ unsafe {
 - [设计宣言](../manifesto.md)
 - [RFC-001 并作模型](./001-concurrent-model-error-handling.md)
 - [RFC-010 统一类型语法](./010-unified-type-syntax.md)
-- [RFC-011 泛型系统设计](./011-generic-type-system.md)
-- [YaoXiang 指南](../guides/YaoXiang-book.md)
-
+- [tutorial/ 教程](../../../../../tutorial/)
 ### 外部参考
 
 - [Rust 所有权模型](https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html)

@@ -54,6 +54,7 @@ impl PatternInferrer {
                     crate::frontend::core::lexer::tokens::Literal::String(_) => {
                         Ok(MonoType::String)
                     }
+                    crate::frontend::core::lexer::tokens::Literal::Void => Ok(MonoType::Void),
                 }
             }
             ast::Pattern::Identifier(name) => {

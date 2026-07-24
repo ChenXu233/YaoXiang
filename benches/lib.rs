@@ -106,7 +106,7 @@ fn bench_matrix_rust(c: &mut Criterion) {
 // ============================================================================
 
 fn bench_yaoxiang_fibonacci(c: &mut Criterion) {
-    let source = std::fs::read_to_string("benches/yx_benchmarks/fibonacci.yx")
+    let source = std::fs::read_to_string("bench/src/fibonacci/fibonacci.yx")
         .expect("Cannot read fibonacci.yx");
 
     // 禁用日志以减少噪音
@@ -123,7 +123,7 @@ fn bench_yaoxiang_fibonacci(c: &mut Criterion) {
 
 fn bench_yaoxiang_matrix(c: &mut Criterion) {
     let source =
-        std::fs::read_to_string("benches/yx_benchmarks/matrix.yx").expect("Cannot read matrix.yx");
+        std::fs::read_to_string("bench/src/matrix/matrix.yx").expect("Cannot read matrix.yx");
 
     let _ = tracing_subscriber::fmt::Subscriber::builder()
         .with_max_level(tracing::Level::ERROR)
@@ -137,8 +137,8 @@ fn bench_yaoxiang_matrix(c: &mut Criterion) {
 }
 
 fn bench_yaoxiang_list_ops(c: &mut Criterion) {
-    let source = std::fs::read_to_string("benches/yx_benchmarks/list_ops.yx")
-        .expect("Cannot read list_ops.yx");
+    let source =
+        std::fs::read_to_string("bench/src/list_ops/list_ops.yx").expect("Cannot read list_ops.yx");
 
     let _ = tracing_subscriber::fmt::Subscriber::builder()
         .with_max_level(tracing::Level::ERROR)
@@ -152,7 +152,7 @@ fn bench_yaoxiang_list_ops(c: &mut Criterion) {
 }
 
 fn bench_yaoxiang_string_concat(c: &mut Criterion) {
-    let source = std::fs::read_to_string("benches/yx_benchmarks/string_concat.yx")
+    let source = std::fs::read_to_string("bench/src/string_concat/string_concat.yx")
         .expect("Cannot read string_concat.yx");
 
     let _ = tracing_subscriber::fmt::Subscriber::builder()

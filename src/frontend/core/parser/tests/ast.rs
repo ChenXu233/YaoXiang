@@ -1,11 +1,11 @@
 //! Tests for all AST type definitions: Expr, StmtKind, Type, Pattern, operators.
+//! 基于语言规范 §3（AST 结构）
 
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{
-    self, BindingKind, BindingSemanticKind, BinOp, Block, Expr, FStringSegment, GenericParam,
-    GenericParamKind, MatchArm, Param, Pattern, SpannedIdent, Stmt, StmtKind, StructField, Type,
-    TypeBodyBinding, UnOp, VariantDef, classify_binding_semantic_kind, is_meta_type,
-    type_annotation_returns_meta_type,
+    self, BindingKind, BinOp, Block, Expr, FStringSegment, GenericParam, GenericParamKind,
+    MatchArm, Param, Pattern, SpannedIdent, Stmt, StmtKind, StructField, Type, TypeBodyBinding,
+    UnOp, VariantDef, is_meta_type,
 };
 use crate::util::span::Span;
 
@@ -138,7 +138,7 @@ fn test_expr_block() {
     };
     let expr = Expr::Block(block);
     if let Expr::Block(b) = &expr {
-        assert!(!b.stmts.is_empty());
+        assert!(!b.stmts.is_empty(), "块不应为空");
     } else {
         panic!("Expected Expr::Block");
     }
@@ -306,46 +306,56 @@ fn test_expr_error() {
 #[test]
 fn test_stmtkind_var() {
     let stmt = Stmt {
-        kind: StmtKind::Var {
-            name: "x".into(),
-            name_span: Span::dummy(),
-            type_annotation: Some(Type::Name {
-                name: "Int".into(),
-                span: Span::dummy(),
-            }),
-            initializer: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
+        kind: StmtKind::Assign {
+            target: Box::new(Expr::Var("x".into(), Span::dummy())),
+            type_annotation: None,
+            signature_params: Vec::new(),
+            value: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
+            is_pub: false,
             is_mut: false,
+            span: Span::dummy(),
         },
         span: Span::dummy(),
     };
-    if let StmtKind::Var { name, is_mut, .. } = &stmt.kind {
-        assert_eq!(name, "x");
-        assert!(!is_mut);
+    if let StmtKind::Assign { target, is_mut, .. } = &stmt.kind {
+        if let Expr::Var(name, _) = target.as_ref() {
+            assert_eq!(name, "x");
+        }
+        assert!(!is_mut, "非 mut 参数 is_mut 应为 false");
     } else {
-        panic!("Expected StmtKind::Var");
+        panic!("Expected StmtKind::Assign");
     }
 }
 
 #[test]
 fn test_stmtkind_binding() {
     let stmt = Stmt {
-        kind: StmtKind::Binding {
-            name: "add".into(),
-            type_name: None,
-            method_type: None,
-            generic_params: vec![],
+        kind: StmtKind::Assign {
+            target: Box::new(Expr::Var("add".into(), Span::dummy())),
             type_annotation: None,
-
-            params: vec![],
-            body: vec![],
+            signature_params: vec![],
+            value: Some(Box::new(Expr::Lambda {
+                params: vec![],
+                body: Box::new(Block {
+                    stmts: vec![],
+                    span: Span::dummy(),
+                }),
+                span: Span::dummy(),
+            })),
             is_pub: false,
+            is_mut: false,
+            span: Span::dummy(),
         },
         span: Span::dummy(),
     };
-    if let StmtKind::Binding { name, .. } = &stmt.kind {
-        assert_eq!(name, "add");
+    if let StmtKind::Assign { target, .. } = &stmt.kind {
+        if let Expr::Var(name, _) = target.as_ref() {
+            assert_eq!(name, "add");
+        } else {
+            panic!("Expected Var target");
+        }
     } else {
-        panic!("Expected StmtKind::Binding");
+        panic!("Expected StmtKind::Assign");
     }
 }
 
@@ -439,8 +449,7 @@ fn test_type_meta_type() {
         name_span: Span::dummy(),
         args: vec![],
     };
-    assert!(is_meta_type(&t));
-    assert!(type_annotation_returns_meta_type(&t));
+    assert!(is_meta_type(&t), "Type 应是 MetaType");
 }
 
 #[test]
@@ -497,7 +506,7 @@ fn test_type_meta_type_nested() {
             args: vec![inner],
         }],
     };
-    assert!(is_meta_type(&outer));
+    assert!(is_meta_type(&outer), "外层 Type 应是 MetaType");
     // Verify nested MetaType has args
     if let Type::MetaType { args, .. } = &outer {
         assert_eq!(args.len(), 1);
@@ -570,43 +579,104 @@ fn test_unop_all_variants() {
 }
 
 // ============================================================================
-// classify_binding_semantic_kind
+// StmtKind::TypeDefinition
 // ============================================================================
 
 #[test]
-fn test_classify_method() {
-    let kind = classify_binding_semantic_kind(Some(&"Point".to_string()), None, &[], &[]);
-    assert_eq!(kind, BindingSemanticKind::Method);
+fn test_type_definition_variant() {
+    let stmt = Stmt {
+        kind: StmtKind::TypeDefinition {
+            name: "Point".into(),
+            signature_params: vec![],
+            definition: Type::Struct {
+                body: vec![
+                    ast::TypeBodyItem::Field(StructField {
+                        name: "x".into(),
+                        ty: Type::Float(64),
+                        is_mut: false,
+                        default: None,
+                    }),
+                    ast::TypeBodyItem::Field(StructField {
+                        name: "y".into(),
+                        ty: Type::Float(64),
+                        is_mut: false,
+                        default: None,
+                    }),
+                ],
+            },
+            is_pub: false,
+        },
+        span: Span::dummy(),
+    };
+    if let StmtKind::TypeDefinition {
+        name, definition, ..
+    } = &stmt.kind
+    {
+        assert_eq!(name, "Point", "类型名应为 Point");
+        assert!(
+            matches!(definition, Type::Struct { .. }),
+            "definition 应为 Struct"
+        );
+    } else {
+        panic!("Expected StmtKind::TypeDefinition");
+    }
 }
 
 #[test]
-fn test_classify_type_constructor() {
-    let kind = classify_binding_semantic_kind(
-        None,
-        Some(&Type::MetaType {
-            name_span: Span::dummy(),
-            args: vec![],
-        }),
-        &[],
-        &[],
-    );
-    assert_eq!(kind, BindingSemanticKind::TypeConstructor);
-}
-
-#[test]
-fn test_classify_function() {
-    let kind = classify_binding_semantic_kind(
-        None,
-        None,
-        &[Param {
-            name: "x".into(),
-            ty: None,
-            is_mut: false,
-            span: Span::dummy(),
-        }],
-        &[],
-    );
-    assert_eq!(kind, BindingSemanticKind::Function);
+fn test_type_definition_generic() {
+    let stmt = Stmt {
+        kind: StmtKind::TypeDefinition {
+            name: "Option".into(),
+            signature_params: vec![Param {
+                name: "T".into(),
+                ty: Some(Type::MetaType {
+                    name_span: Span::dummy(),
+                    args: vec![],
+                }),
+                is_mut: false,
+                span: Span::dummy(),
+            }],
+            definition: Type::Variant(vec![
+                VariantDef {
+                    name: "some".into(),
+                    name_span: Span::dummy(),
+                    params: vec![(
+                        None,
+                        Type::Name {
+                            name: "T".into(),
+                            span: Span::dummy(),
+                        },
+                    )],
+                    span: Span::dummy(),
+                },
+                VariantDef {
+                    name: "none".into(),
+                    name_span: Span::dummy(),
+                    params: vec![],
+                    span: Span::dummy(),
+                },
+            ]),
+            is_pub: false,
+        },
+        span: Span::dummy(),
+    };
+    if let StmtKind::TypeDefinition {
+        name,
+        signature_params,
+        definition,
+        ..
+    } = &stmt.kind
+    {
+        assert_eq!(name, "Option", "类型名应为 Option");
+        assert_eq!(signature_params.len(), 1, "应有 1 个泛型参数");
+        assert_eq!(signature_params[0].name, "T", "泛型参数名应为 T");
+        assert!(
+            matches!(definition, Type::Variant(_)),
+            "definition 应为 Variant"
+        );
+    } else {
+        panic!("Expected StmtKind::TypeDefinition");
+    }
 }
 
 // ============================================================================
@@ -624,8 +694,8 @@ fn test_struct_field_new() {
         },
     );
     assert_eq!(field.name, "x");
-    assert!(!field.is_mut);
-    assert!(field.default.is_none());
+    assert!(!field.is_mut, "非 mut 字段 is_mut 应为 false");
+    assert!(field.default.is_none(), "无默认值时 default 应为 None");
 }
 
 #[test]
@@ -637,7 +707,7 @@ fn test_struct_field_with_default() {
         Expr::Lit(Literal::Float(0.0), Span::dummy()),
     );
     assert_eq!(field.name, "x");
-    assert!(field.default.is_some());
+    assert!(field.default.is_some(), "有默认值时 default 应为 Some");
 }
 
 // ============================================================================
@@ -665,16 +735,6 @@ fn test_generic_param_const_kind() {
         constraints: vec![],
     };
     assert!(matches!(gp.kind, GenericParamKind::Const { .. }));
-}
-
-#[test]
-fn test_generic_param_platform_kind() {
-    let gp = GenericParam {
-        name: "P".into(),
-        kind: GenericParamKind::Platform,
-        constraints: vec![],
-    };
-    assert!(matches!(gp.kind, GenericParamKind::Platform));
 }
 
 // ============================================================================
@@ -762,7 +822,7 @@ fn test_variant_def_no_params() {
         span: Span::dummy(),
     };
     assert_eq!(vd.name, "red");
-    assert!(vd.params.is_empty());
+    assert!(vd.params.is_empty(), "变体无参数时 params 应为空");
 }
 
 #[test]
@@ -788,35 +848,17 @@ fn test_is_meta_type_false() {
     }));
 }
 
-#[test]
-fn test_type_annotation_returns_meta_type_fn() {
-    let t = Type::Fn {
-        params: vec![],
-        return_type: Box::new(Type::MetaType {
-            name_span: Span::dummy(),
-            args: vec![],
-        }),
-    };
-    assert!(type_annotation_returns_meta_type(&t));
-}
-
-#[test]
-fn test_type_annotation_returns_meta_type_false() {
-    let t = Type::Fn {
-        params: vec![],
-        return_type: Box::new(Type::Int(64)),
-    };
-    assert!(!type_annotation_returns_meta_type(&t));
-}
-
 // ============================================================================
 // Module default
 // ============================================================================
 
 #[test]
 fn test_module_default() {
-    let m = ast::Module::default();
-    assert!(m.items.is_empty());
+    let m = ast::Module {
+        items: vec![],
+        span: Span::dummy(),
+    };
+    assert!(m.items.is_empty(), "空 use 语句 items 应为空");
 }
 
 // ============================================================================
@@ -876,7 +918,7 @@ fn test_expr_listcomp() {
     };
     if let Expr::ListComp { var, condition, .. } = &expr {
         assert_eq!(var, "x");
-        assert!(condition.is_some());
+        assert!(condition.is_some(), "if 语句应有条件");
     }
 }
 

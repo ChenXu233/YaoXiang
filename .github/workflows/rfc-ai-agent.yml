@@ -23,7 +23,7 @@ jobs:
       (github.event_name == 'pull_request' && contains(github.event.pull_request.body, 'RFC-')) ||
       (github.event_name == 'workflow_dispatch')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Python dependencies
         run: pip install httpx
       - name: Run RFC AI Agent
@@ -32,4 +32,4 @@ jobs:
           AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
           AI_MODEL: ${{ secrets.AI_MODEL }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python scripts/rfc_ai_agent.py
+        run: python scripts/rfc/ai_agent.py

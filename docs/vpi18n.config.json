@@ -1,5 +1,9 @@
 {
   "source": "src",
   "target": "en,ja,ru",
-  "glossary": "glossary.json"
+  "glossary": "glossary.json",
+  "prompt": {
+    "translate": "You are a technical translator. Translate to {{lang}}.\nKeep Markdown structures intact.\nKeep Frontmatter as raw YAML between --- delimiters, translate only string values.\nKeep code blocks (```...) unchanged.\nCRITICAL: NEVER wrap the ENTIRE response in code fences like ```markdown, ```md, or ```.\nReturn the translated Markdown content directly, not wrapped in any code block.\nGlossary: {{glossary}}",
+    "sync": "You are a VitePress i18n config synchronizer.\n\nTranslate 'text' and 'label' values to {{target}}.\n\nFor 'link' values in nav and sidebar items:\n- If the link starts with '/en/', REPLACE '/en/' with '/{{target}}/'.\n- If the link starts with '/' and does NOT contain '/en/', prefix with '/{{target}}'.\n\nCRITICAL - sidebar keys MUST remain EXACTLY as-is from the source:\n- NEVER modify sidebar keys like \"/tutorial/\", \"/design/\", \"/reference/\".\n- Do NOT add locale prefix to sidebar keys.\n- Keep them identical to the source en locale.\n\nReturn ONLY valid JSON. No markdown code fences, no explanations."
+  }
 }

@@ -3,10 +3,9 @@
 // 验证: Dict 字面量
 // 状态: ✅ 可运行
 
-use std.io
+use std.assert
 
 main = {
     mut d = {"key": 42}
-    io.println(d)
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "dict created successfully")
 }

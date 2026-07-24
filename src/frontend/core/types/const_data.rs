@@ -8,7 +8,6 @@
 
 use std::fmt;
 use std::hash::Hash;
-use crate::frontend::core::types::eval::const_eval::ConstExpr as EvalConstExpr;
 
 /// Const值（编译期常量）
 #[derive(Debug, Clone)]
@@ -419,7 +418,7 @@ pub struct ConstVarDef {
     /// 变量索引
     pub index: usize,
     /// 值约束表达式（如 N > 0），空 vec = 无约束
-    pub constraints: Vec<EvalConstExpr>,
+    pub constraints: Vec<ConstExpr>,
 }
 
 impl ConstVarDef {

@@ -22,26 +22,26 @@ YaoXiang 不用垃圾回收（GC），也不用生命周期标注。它的内存
 
 ```yaoxiang
 p = Point(1.0, 2.0)
-p2 = p              # Move! p 的所有权转给 p2
-                    # 此后不能再读 p
+p2 = p              // Move! p 的所有权转给 p2
+                    // 此后不能再读 p
 
-# 想要修改 p2？用 mut
+// 想要修改 p2？用 mut
 mut p3 = Point(3.0, 4.0)
-shift(p3, 1.0, 1.0)    # 原地修改
+shift(p3, 1.0, 1.0)    // 原地修改
 ```
 
 函数传参和返回也是 Move：
 
 ```yaoxiang
-# 参数：Move 传入
+// 参数：Move 传入
 process: (p: Point) -> Point = {
     p.transform()
-    p                  # Move 返回——零拷贝
+    p                  // Move 返回——零拷贝
 }
 
-# 调用
+// 调用
 p = Point(1.0, 2.0)
-result = process(p)    # p 被 Move 走了
+result = process(p)    // p 被 Move 走了
 ```
 
 ## &T / &mut T：借用令牌
@@ -51,28 +51,28 @@ result = process(p)    # p 被 Move 走了
 ```yaoxiang
 data = [1, 2, 3, 4, 5]
 
-# 编译器自动传 &List(Int) 令牌——不拿走所有权
-println(data.len())    # 5
-println(data)          # ✅ data 还在，只是看了一眼
+// 编译器自动传 &List(Int) 令牌——不拿走所有权
+print(data.len())    // 5
+print(data)          // ✅ data 还在，只是看了一眼
 ```
 
 `&T` 和 `&mut T` 是**零大小类型**——编译期存在，运行时消失。你不需要手动写 `&`，编译器根据使用场景自动决定：
 
 ```yaoxiang
-# 只读访问 → 自动 &T
+// 只读访问 → 自动 &T
 print: (point: &Point) -> Void = {
-    println("(${point.x}, ${point.y})")
+    print("({point.x}, {point.y})")
 }
 
-# 可变修改 → 自动 &mut T
+// 可变修改 → 自动 &mut T
 shift: (point: &mut Point, dx: Float, dy: Float) -> Void = {
     point.x = point.x + dx
     point.y = point.y + dy
 }
 
 mut p = Point(1.0, 2.0)
-print(p)                # 传入 &Point
-shift(p, 1.0, 1.0)      # 传入 &mut Point
+print(p)                // 传入 &Point
+shift(p, 1.0, 1.0)      // 传入 &mut Point
 ```
 
 **关键区别**：`&T` 可复制（共享只读），`&mut T` 不可复制（独占可变）。这不是特殊规则——是两条类型属性。
@@ -84,18 +84,18 @@ shift(p, 1.0, 1.0)      # 传入 &mut Point
 ```yaoxiang
 data = [1, 2, 3, 4, 5]
 
-# ref 创建共享持有
+// ref 创建共享持有
 shared = ref data
 
-# 编译器自动选择引用计数器：
-# - 不跨任务 → Rc（单线程引用计数）
-# - 跨任务 → Arc（原子引用计数）
+// 编译器自动选择引用计数器：
+// - 不跨任务 → Rc（单线程引用计数）
+// - 跨任务 → Arc（原子引用计数）
 spawn {
-    use(shared)    # 跨任务！编译器自动用 Arc
+    use(shared)    // 跨任务！编译器自动用 Arc
 }
 
-# 你不需要知道 Rc 和 Arc 的区别
-# 编译器自动帮你选
+// 你不需要知道 Rc 和 Arc 的区别
+// 编译器自动帮你选
 ```
 
 ## clone()：显式深拷贝
@@ -104,11 +104,11 @@ spawn {
 
 ```yaoxiang
 original = [1, 2, 3]
-backup = original.clone()   # 深拷贝——拥有独立的副本
+backup = original.clone()   // 深拷贝——拥有独立的副本
 
-# 各自独立
+// 各自独立
 original[0] = 10
-println(backup[0])    # 1——不受影响
+print(backup[0])    // 1——不受影响
 ```
 
 `clone()` 是显式的——你明确要复制，不像某些语言默认复制。

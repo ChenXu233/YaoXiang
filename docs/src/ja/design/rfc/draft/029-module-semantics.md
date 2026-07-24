@@ -3,191 +3,302 @@ title: "RFC-029: モジュール意味論システム"
 status: "草案"
 author: "晨煦"
 created: "2026-06-13"
-updated: "2026-06-13（孤児規則/一貫性チェックを削除、モジュールのコンパイルパイプライン統合に焦点を絞る）"
+updated: "2026-07-14（改稿：互換性セクションを削除、開放問題をRFCの子RFCへ分離）"
 ---
 
 # RFC-029: モジュール意味論システム
 
 ## 概要
 
-モジュールシステムをコンパイルパイプラインに統合し、複数ファイルコンパイル、モジュールレベルの可視性制御、ホットリロードを実現する。**孤児規則や一貫性チェックは導入しない**——YaoXiang の trait は構造的型（RFC-011 §2.1）であり、Rust スタイルの名目的な impl 帰属追跡を必要としない。
+モジュールシステムをコンパイルパイプラインに接続し、マルチファイルコンパイルとパッケージレベルの可視性制御を実現する。
+
+**基本原則**：型チェッカーは事前に構築されたモジュールレジストリのクエリのみを行い、ディスクにはアクセスしない。モジュールグラフは型チェック前に完全に構築される。
+
+**含まない**：キャッシュ、ファイル監視、Hotreload、インクリメンタル再コンパイル。これらはコンパイルライフサイクル最適化であり、後続の独立したRFCで扱う。
 
 ## 動機
 
-### 現状の問題
+### 現在の問題
 
-モジュールシステムの**物理層**（読み込み、解析、キャッシュ、依存関係グラフ、ホットリロード）は既に完全に実装されている（`frontend/module/`）が、**コンパイルパイプラインには統合されていない**：
+1. **コンパイラは単一ファイルのみサポート**：`Compiler::compile(name, source)` はファイル間依存関係を処理できない
+2. **エクスポートルールが互いに競合**：型は自動エクスポート、定数は自動エクスポート、メソッドは自動エクスポート、関数は`pub`をチェック——4つの例外系
+3. **2つのモジュールリゾルバ**：`frontend/module/resolver.rs`と`package/source/module_resolver.rs`の検索順序が異なる
+4. **型チェッカーがファイルロードと密結合**：草案では`use`が型チェック時に`ModuleLoader::load()`をトリガーすることを要求していた
 
-- `pipeline.rs` は単一のソース文字列のみを受け付け、複数ファイルプロジェクトをサポートしていない
-- `use` 文は型チェック時にモジュールを実際に読み込めない
-- `ModuleCache`、`HotReloader`、`VendorLoader` は実装されているが呼び出し元がない
-- 標準ライブラリの native 関数は `ModuleRegistry::with_std()` でハードコード登録されており、汎用モジュール読み込みパスを通っていない
+### 設計目標
 
-### なぜ孤児規則が不要なのか
-
-RFC-011 は trait を構造的型として定義している：
-
-```yaoxiang
-Clone: Type = { clone: (Self) -> Self }
-```
-
-- **`impl Trait for Type` がない** — メソッドは型に直接定義される
-- **孤児規則がない** — どのモジュールも自分の型にメソッドを追加できる
-- **一貫性チェックがない** — メソッドは型構造の一部であり、名目的マッチングによらない
-
-したがって `TraitImplementation` には `defined_in` や `module` フィールドは不要である。関連する issue #46 と #73 は既にクローズされている。
+- 1つのプロジェクトで複数の`.yx`ファイルをコンパイル可能
+- `use`文の семантика が明確で曖昧さがない
+- 可視性ルールは1つに統一
+- 単一ファイルモードは引き続き動作し、`yaoxiang.toml`を要求しない
+- 型チェッカーは純粋なロジックであり、ファイルI/Oを実行しない
 
 ## 提案
 
-### コア設計
+### 1. モジュールのアイデンティティとパス解決
 
-**二層統合**：
+#### モジュールの定義
 
-```text
-┌─────────────────────────────────────────────────┐
-│  コンパイルパイプライン統合 (Pipeline Integration) │  ← 新規：複数ファイルコンパイル、モジュール読み込み
-├─────────────────────────────────────────────────┤
-│  可視性 (Visibility)                              │  ← 新規：pub / デフォルト（モジュール内可視）
-└─────────────────────────────────────────────────┘
+**モジュール**は1つの`.yx`ファイルである。モジュールパスはドット区切りの名前パスであり、ファイルシステム上の位置に対応する。
+
+```
+math.geometry → src/math/geometry.yx
+             → src/math/geometry/mod.yx
+             → src/math/geometry/index.yx
 ```
 
-### 1. 複数ファイルコンパイル
+**パッケージ**は`yaoxiang.toml`を持つプロジェクトであり、複数のモジュールを含む。パッケージは唯一の캡슐화境界である。
 
-コンパイラのエントリポイントを単一ファイルからプロジェクトディレクトリに拡張する：
+#### パス解決ルール
 
-```rust
-/// プロジェクトをコンパイルする（単一ファイルではなく）
-pub fn compile_project(&mut self, project_root: &Path) -> Result<Vec<ModuleIR>, CompileError> {
-    // 1. yaoxiang.toml を読み取りエントリーファイルを取得
-    // 2. エントリーファイルから依存モジュールを再帰的に読み込み
-    // 3. 依存関係グラフをトポロジカルソート
-    // 4. 各モジュールを順次コンパイル
-    // 5. モジュール間型チェック（use 文の解決）
-}
+検索順序（唯一のルール、既存の2つのリゾルバを置き換え）：
+
+1. **標準ライブラリ**：`std`または`std.*`→ 組み込みモジュール、`ModuleRegistry`からクエリ
+2. **vendorディレクトリ**：`.yaoxiang/vendor/<pkg>-*/src/` → 依存パッケージ
+3. **現在のファイルの相対パス**：現在の`.yx`ファイルがあるディレクトリ基準
+4. **プロジェクトsrcディレクトリ**：`<project_root>/src/`
+
+ファイル配置的試行順序：
+
+```
+base/name.yx
+base/name/mod.yx
+base/name/index.yx
 ```
 
-統合ポイント：`compiler.rs` に `compile_project` メソッドを新規追加し、内部で `ModuleLoader` を使用してモジュールを読み込む。
+最初に見つかったファイルで停止。`name.yx`と`name/mod.yx`が同時に存在する場合、エラー：
 
-### 2. use 文のモジュール解決
+```
+モジュールパスの曖昧：`math.geometry`が以下と一致：
+  src/math/geometry.yx
+  src/math/geometry/mod.yx
+どちらかを削除してください。
+```
 
-現在の `statements.rs` には `ModuleRegistry` があるが、登録クエリのみを行う。実際に読み込むよう拡張が必要：
+#### 統一リゾルバ
+
+既存の2つの`ModuleResolver`を削除。`frontend/module/resolver.rs`を唯一の實現として保持し、`package/source/module_resolver.rs`を削除。`YXPATH`環境変数のサポートは唯一のリゾルバに統合する。
+
+### 2. インポート семантика
+
+#### 構文形式
 
 ```yaoxiang
-# 現状：use 文は型チェック時にモジュールを見つけられない
-use math.geometry.Point  # ❌ ModuleRegistry に math.geometry がない
-
-# 目標：use 文がモジュールの読み込みをトリガーする
-use math.geometry.Point  # ✅ ModuleLoader が math/geometry.yx を読み込み、Point エクスポートを抽出
+use math.geometry                          # モジュール名前空間
+use math.geometry as geo                   # モジュール名前空間エイリアス
+use math.geometry.{Point}                  # 選択的インポート
+use math.geometry.{Point, distance}        # 複数選択的インポート
+use math.geometry.{Point as P}             # 選択的インポート＋エイリアス
+use math.geometry.{Point as P, distance as dist}  # 複数選択的インポート＋エイリアス
 ```
 
-実装パス：
-1. `use` 文が `ModuleLoader::load()` をトリガー
-2. 読み込み結果を `ModuleRegistry` に登録
-3. 型チェッカーが `ModuleRegistry` からエクスポート型をクエリ
+#### семантика
 
-### 3. 可視性システム
+すべてのインポート形式は**コンパイル時の名前解決ルール**であり、実行時の参照コピーではない。インポートされた名前はモジュールエクスポートテーブル内の宣言アイデンティティを指す。
 
-```yaoxiang
-# math/geometry.yx
-pub type Point = { x: Int, y: Int }       # pub = 他モジュールから利用可
-type InternalState = { cache: Int }        # デフォルト = geometry モジュール内のみ可視
+| 構文 | 現在のスコープへのバインド | 使用方法 |
+|------|-----------------|----------|
+| `use path` | パスの最後のセグメントがモジュール名前空間 | `geometry.Point` |
+| `use path as alias` | aliasがモジュール名前空間 | `alias.Point` |
+| `use path.{item}` | item自体 | `item` |
+| `use path.{item as alias}` | alias自体 | `alias` |
 
-pub Point.distance: (self: Point, other: Point) -> Float = {
-    # ...
-}
+#### 削除された構文
+
+- ~~`from path use item`~~：Pythonのfrom-import形式は採用しない
+- ~~`use path.*`~~：ワイルドカードインポートは競合リスクを伴う、モジュール名前空間インポートで十分
+- ~~`use path.{a, b} as c, d`~~：位置でペアリングする平行リストは脆弱なデータ構造、エイリアスは各宣言の後に付ける：`use path.{a as c, b as d}`
+
+#### パスのсемантика
+
+`use path`の`path`は常に**モジュールパス**であり、宣言ではない。モジュールが見つからない場合は直接エラー：
+
 ```
+モジュール`math.geometry.Point`が見つかりません。
+`Point`がモジュール`math.geometry`内の宣言の場合、以下を使用：
+use math.geometry.{Point}
+```
+
+「まず完全なモジュールを探し、失敗したら最後のセグメントを宣言として扱う」というフォールバックはしない。
+
+#### インポート競合
+
+同名インポートは直接エラーとなり、上書きされない：
+
+```
+名前`Point`のインポート競合：
+  math.geometry.Point
+  graphics.geometry.Point
+選択的インポートまたはモジュール名前空間エイリアスを使用してください。
+```
+
+### 3. 可視性
+
+#### ルール
+
+パッケージは唯一の캡슐화境界である。モジュールは権限境界を担わない。
+
+| 記述 | 現在のpkg内 | 其他pkg |
+|------|:--------:|:------:|
+| デフォルト（`pub`なし） | ✅ | ❌ |
+| `pub` | ✅ | ✅ |
+
+**型、関数、定数、メソッドを含むすべてのトップレベル宣言に適用される1つのルール。**
+
+既存のコードの4つの例外を削除：
+
+- ~~型定義は常にエクスポート~~ → 同一ルール
+- ~~定数は自動エクスポート~~ → 同一ルール
+- ~~メソッドは自動エクスポート~~ → 同一ルール
+- ~~関数のみ`pub`をチェック~~ → 同一ルール
+
+#### データ構造
+
+ASTの`is_pub: bool`を以下で置換：
 
 ```rust
-/// 可視性レベル
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Visibility {
-    /// 公開 — すべてのモジュールからアクセス可能
-    Public,
-    /// デフォルト — 定義モジュール内のみ可視
-    Module,
+    Package,  // デフォルト：現在のパkg内可见
+    Public,   // pub：すべてのパkg可见
 }
 ```
 
-型チェッカーがモジュール間参照時に可視性をチェックする。
+#### エクスポートテーブル
 
-### 4. モジュールキャッシュ
+各モジュールは2つのテーブルを維持：
 
-`ModuleCache` は既に LRU/TTL キャッシュ戦略を実装済み。コンパイルパイプライン統合後は：
-- 初回コンパイル：読み込み + コンパイル + キャッシュ
-- 以降のコンパイル：キャッシュヒットならスキップ
-- ファイル変更：`HotReloader` が自動的にダーティキャッシュを無効化
+- **PackageSymbols**：すべての人格的宣言を含むpkg内完全シンボルテーブル
+- **PublicExports**：他のpkg提供する`pub`宣言のサブセット
 
-### 5. ホットリロード統合
+同pkgの`use`は`PackageSymbols`をクエリ；跨pkgの`use`は`PublicExports`のみクエリ可能。
 
-`HotReloader` は既に完全に実装されている（`frontend/module/hot_reload.rs`）が、コンパイルパイプラインへの統合が必要：
+跨pkgで非`pub`宣言を参照すると直接エラー：
 
-```rust
-// コンパイルパイプライン起動時
-let mut reloader = HotReloader::new(project_root, config, cache.clone());
-let mut event_rx = reloader.start()?;
-
-// 非同期メインループ内
-tokio::spawn(async move {
-    while let Some(event) = event_rx.recv().await {
-        for module in &event.affected_modules {
-            pipeline.recompile_module(module).await;
-        }
-    }
-});
+```
+モジュール`math.geometry`の`internalHelper`は不可視。
+pub宣言ではなく、`math`pkg内でのみ使用可能。
 ```
 
-## コンパイラの変更
+### 4. プロジェクトコンパイルフロー
 
-| コンポーネント | 変更内容 |
+#### コンパイルパイプライン
+
+```
+プロジェクト入口
+  → yaoxiang.tomlを読み込んで入口ファイルを取得
+  → 入口から再帰的にuse文を解析し、すべての依存モジュールを発見
+  → モジュールの依存グラフ（ModuleDependencyGraph）を構築
+  → 循環依存を検出
+  → トポロジカルソート
+  → 各モジュールを順に実行：字句解析 → 構文解析 → エクスポート抽出
+  → ModuleRegistryを構築（すべてのモジュールのエクスポートテーブルを含む）
+  → 各モジュールをトポロジカル順に型チェック（ModuleRegistryをクエリ）
+  → 複数のModuleIRを生成
+  → 診断を集約
+```
+
+型チェッカーは事前に構築された`ModuleRegistry`のみをクエリし、ファイルロードやディスクアクセスは実行しない。
+
+#### 入口ファイルの選択
+
+優先順位：
+
+1. `[run].main`（存在する場合）
+2. `[[bin]]`の最初の項目の`path`
+3. `[lib].path`
+4. `src/main.yx`（約定デフォルト）
+
+単一ファイルモードは`yaoxiang.toml`を必要とせず、指定されたファイルを直接コンパイル。
+
+#### 循環依存
+
+```
+循環依存を検出：
+  math.geometry → math.transform → math.geometry
+```
+
+循環依存はコンパイルエラーであり、特別な処理はしない。
+
+#### エラーの集約
+
+マルチファイルコンパイルのエラーはモジュールのトポロジカル順に集約。各エラーにはソースモジュールとファイル位置を标注：
+
+```
+エラー：モジュール`math.geometry`内：
+  src/math/geometry.yx:12:5
+  型`Circle`が未定義
+
+エラー：モジュール`app.main`内：
+  src/main.yx:3:1
+  モジュール`math.geometry`が不可視
+```
+
+### 5. コンパイラの改动
+
+| コンポーネント | 改动 |
 |------|------|
-| `compiler.rs` | `compile_project` メソッドを新規追加 |
-| `pipeline.rs` | 複数モジュールコンパイル、モジュールキャッシュクエリのサポート |
-| `typecheck/inference/statements.rs` | `use` 文がモジュール読み込みをトリガー |
-| `typecheck/mod.rs` | 汎用モジュールパスから native 関数を登録（ハードコードの代替） |
-| `frontend/module/loader.rs` | 実装済み、変更不要 |
-| `frontend/module/cache.rs` | 実装済み、変更不要 |
-| `frontend/module/hot_reload.rs` | 実装済み、変更不要 |
-| AST 層 | 型への `pub` キーワード可視性注釈（未サポートの場合） |
+| `compiler.rs` | 新規`compile_project(project_root)`メソッド追加 |
+| `pipeline.rs` | 単一モジュールコンパイル职责を維持、神オブジェクトにならない |
+| `typecheck/checker.rs` | `use`文は`ModuleRegistry`をクエリ、ファイルロードをトリガーしない |
+| `typecheck/inference/statements.rs` | 同上、`process_use_stmt`はクエリのみでロードなし |
+| `frontend/module/resolver.rs` | `package/source/module_resolver.rs`のYXPATHサポートを統合し、唯一のリゾルバに |
+| `frontend/module/loader.rs` | 拡張：再帰的発見、完全なモジュールグラフ構築をサポート |
+| `frontend/module/dep_graph.rs` | 実装済み、トポロジカルソートと循環検出を再利用 |
+| `frontend/module/registry.rs` | 実装済み、エクスポートテーブルクエリを再利用 |
+| `frontend/module/cache.rs` | 実装済み、本RFCではコンパイルパイプラインに接続しない |
+| `frontend/module/hot_reload.rs` | 実装済み、本RFCではコンパイルパイプラインに接続しない |
+| AST `is_pub: bool` | `Visibility`列挙型で置換 |
+| `package/source/module_resolver.rs` | 删除、职责は`frontend/module/resolver.rs`に統合 |
 
 ## 実装戦略
 
-### フェーズ分割
+### フェーズ分け
 
-**Phase 1：複数ファイルコンパイルエントリ**
-1. `compiler.rs` に `compile_project(project_root)` メソッドを新規追加
-2. `ModuleLoader` を使用してエントリーファイルから依存関係を再帰的に読み込み
-3. `ModuleDependencyGraph` でトポロジカルソート
-4. 既存の単一ファイルコンパイルフローを順次呼び出し
+**Phase 1：モジュールの統一解決**
+1. 2つの`ModuleResolver`を統合、`package/source/module_resolver.rs`を削除
+2. `YXPATH`環境変数をサポート
+3. モジュールパスの曖昧検出
 
-**Phase 2：use 文のモジュール解決**
-5. `statements.rs` の `use` 文が `ModuleLoader::load()` をトリガー
-6. 読み込み結果を `ModuleRegistry` に登録
-7. エクスポート型が型チェック時に利用可能
+**Phase 2：可視性データ構造**
+4. AST `is_pub: bool` → `Visibility`列挙型
+5. リゾルバが`pub`キーワードを`Visibility::Public`にマッピングをサポート
+6. `ModuleLoader::extract_exports`が`Visibility`を使用してエクスポート判断を統一
 
-**Phase 3：可視性**
-8. AST 層で型への `pub` 注釈を解析
-9. 型チェッカーがモジュール間参照時に可視性をチェック
+**Phase 3：プロジェクトコンパイル入口**
+7. `compiler.rs`に新規`compile_project(project_root)`メソッド追加
+8. 入口から再帰的にモジュールを発見、`ModuleDependencyGraph`を構築
+9. トポロジカルソート、順にモジュールをロードしてエクスポートを抽出
+10. 完全な`ModuleRegistry`を構築
+11. 各モジュールをトポロジカル順に型チェック
+12. 複数の`ModuleIR`を生成、診断を集約
 
-**Phase 4：キャッシュとホットリロード**
-10. `pipeline.rs` に `ModuleCache` を統合
-11. `pipeline.rs` に `HotReloader` を統合
-12. インクリメンタル再コンパイルは影響を受けるモジュールのみ処理
+**Phase 4：インポート構文**
+13. `use path.{item as alias}`構文を実装
+14. パス末尾のフォールバック推測を削除
 
 ### 依存関係
 
-- RFC-014（パッケージマネージャ）— パッケージ名は `yaoxiang.toml` から取得
-- RFC-011（ジェネリクスシステム）— trait は構造的型であり、モジュール帰属は関与しない
+- RFC-014（pkgマネージャ）— 名前は`yaoxiang.toml`から、vendorディレクトリの構造
+- RFC-011（genericsシステム）— 特質は構造化型であり、モジュールの帰属无关
+- RFC-009（所有権モデル）— モジュールのインポートはコンパイル時の名前解決であり、実行時の参照コピー无关
 
-## 開放問題
+## 子RFC計画
 
-- [ ] デフォルト可視性は「モジュール内」か「パッケージ内」か？（Rust はデフォルトでモジュール内、Go はデフォルトでパッケージ内）
-- [ ] `pub(crate)` レベルは必要か？
-- [ ] ホットリロードはモジュール間の依存関係チェーン再コンパイルをサポートする必要があるか？
-- [ ] 複数ファイルコンパイルのエラーレポートをどのように集約するか？
+以下の子RFCは**予定計画中**であり、まだ起草を開始していない：
 
----
+| 子RFC | 能力（予定） | 前提条件（予定） |
+|--------|-------------|-----------------|
+| 029a | モジュールのキャッシュと增量再コンパイル | モジュールグラフとエクスポートテーブルが安定 |
+| 029b | ファイル監視とHotreload | 029aのキャッシュ失效メカニズム |
+| 029c | 再エクスポート（`pub use`） | エクスポートテーブルと可視性ルールが実装済み |
+| 029d | CLIパラメータ`--entry`による入口選択の上書き | プロジェクトコンパイル入口が利用可能 |
+| 029e | マルチファイル診断`--json`出力フォーマット | 診断集約メカニズムが利用可能 |
+| — | `pub(pkg)`モジュールプライベート可視性 | 現在现实的な需求がなく、当面含めない |
+| — | ワークスペースのマルチパッケージコンパイル | RFC-014cが担当 |
 
 ## 参考文献
 
-- [RFC-011: ジェネリック型システム](accepted/011-generic-type-system.md) — 構造的型定義
-- [RFC-014: パッケージ管理システム設計](accepted/014-package-manager.md) — パッケージ名のソース
+- [RFC-009: 所有権モデル](accepted/009-ownership-model.md) — Move семантика、インポートはコンパイル時の名前解決
+- [RFC-011: 泛型型システム](accepted/011-generic-type-system.md) — 構造化型定義
+- [RFC-014: pkg管理システムの設計](accepted/014-package-manager.md) — pkg名の來源、vendorディレクトリ
+- [RFC-015: 設定システム](accepted/015-configuration-system.md) — `yaoxiang.toml`フィールド定義

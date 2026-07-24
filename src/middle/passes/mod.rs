@@ -3,7 +3,6 @@
 //! 包含中间层的各个编译阶段。
 
 pub mod codegen;
-pub mod module;
 pub mod mono;
 
 // IR生成器实际在core模块中，直接re-export

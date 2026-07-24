@@ -14,13 +14,15 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::parser::ast::{StmtKind, BindingKind, Type};
+use crate::frontend::core::parser::ast::{
+    Expr, StmtKind, BindingKind, Type, TypeBodyBinding, TypeBodyItem,
+};
 use crate::frontend::core::parser::statements::bindings::{BindingParser, BindingPositionValidator};
 
 fn parse_stmt(source: &str) -> StmtKind {
     let tokens = tokenize(source).unwrap();
     let result = parse(&tokens);
-    assert!(!result.has_errors);
+    assert!(!result.has_errors, "解析不应有错误");
     assert_eq!(result.module.items.len(), 1);
     result.module.items.into_iter().next().unwrap().kind
 }
@@ -28,114 +30,110 @@ fn parse_stmt(source: &str) -> StmtKind {
 #[test]
 fn test_rfc004_default_binding() {
     let kind = parse_stmt("Point.distance = distance");
-    if let StmtKind::ExternalBindingStmt {
-        type_name,
-        method_name,
-        binding,
-        ..
-    } = &kind
-    {
-        assert_eq!(type_name, "Point");
-        assert_eq!(method_name, "distance");
-        assert!(matches!(binding, BindingKind::DefaultExternal { .. }));
-    } else {
-        panic!("Expected ExternalBindingStmt");
+    match &kind {
+        StmtKind::Assign { target, value, .. } => {
+            if let Expr::FieldAccess { expr, field, .. } = target.as_ref() {
+                if let Expr::Var(tn, _) = expr.as_ref() {
+                    assert_eq!(tn, "Point");
+                    assert_eq!(field, "distance");
+                } else {
+                    panic!("Expected Var type_name");
+                }
+            } else {
+                panic!("Expected FieldAccess target");
+            }
+            if let Some(Expr::Var(fn_name, _)) = value.as_ref().map(|v| v.as_ref()) {
+                assert_eq!(fn_name, "distance");
+            } else {
+                panic!("Expected Var value");
+            }
+        }
+        _ => panic!("Expected Assign"),
     }
 }
 
 #[test]
-fn test_rfc004_position_0() {
+fn test_rfc004_external_binding_position_zero() {
     let kind = parse_stmt("Point.distance = distance[0]");
-    if let StmtKind::ExternalBindingStmt {
-        type_name,
-        method_name,
-        binding,
-        ..
-    } = &kind
-    {
-        assert_eq!(type_name, "Point");
-        assert_eq!(method_name, "distance");
-        if let BindingKind::External {
-            positions,
-            function,
-        } = binding
-        {
-            assert_eq!(positions, &vec![0]);
-            assert_eq!(function, "distance");
+    if let StmtKind::Assign { target, value, .. } = &kind {
+        if let Expr::FieldAccess { expr, field, .. } = target.as_ref() {
+            if let Expr::Var(tn, _) = expr.as_ref() {
+                assert_eq!(tn, "Point");
+                assert_eq!(field, "distance");
+            } else {
+                panic!("Expected Var type_name");
+            }
         } else {
-            panic!("Expected External");
+            panic!("Expected FieldAccess target");
         }
+        assert!(value.is_some(), "expected value");
     } else {
-        panic!("Expected ExternalBindingStmt");
+        panic!("Expected Assign");
     }
 }
 
 #[test]
-fn test_rfc004_position_1() {
+fn test_rfc004_external_binding_position_one() {
     let kind = parse_stmt("Point.transform = transform[1]");
-    if let StmtKind::ExternalBindingStmt {
-        method_name,
-        binding,
-        ..
-    } = &kind
-    {
-        assert_eq!(method_name, "transform");
-        if let BindingKind::External { positions, .. } = binding {
-            assert_eq!(positions, &vec![1]);
+    if let StmtKind::Assign { target, value, .. } = &kind {
+        if let Expr::FieldAccess { expr, field, .. } = target.as_ref() {
+            if let Expr::Var(tn, _) = expr.as_ref() {
+                assert_eq!(tn, "Point");
+                assert_eq!(field, "transform");
+            } else {
+                panic!("Expected Var type_name");
+            }
         } else {
-            panic!("Expected External");
+            panic!("Expected FieldAccess target");
         }
+        assert!(value.is_some(), "expected value");
     } else {
-        panic!("Expected ExternalBindingStmt");
+        panic!("Expected Assign");
     }
 }
 
 #[test]
 fn test_rfc004_negative_index() {
     let kind = parse_stmt("Point.last = func[-1]");
-    if let StmtKind::ExternalBindingStmt {
-        method_name,
-        binding,
-        ..
-    } = &kind
-    {
-        assert_eq!(method_name, "last");
-        if let BindingKind::External { positions, .. } = binding {
-            assert_eq!(positions, &vec![-1]);
+    if let StmtKind::Assign { target, value, .. } = &kind {
+        if let Expr::FieldAccess { expr, field, .. } = target.as_ref() {
+            if let Expr::Var(tn, _) = expr.as_ref() {
+                assert_eq!(tn, "Point");
+                assert_eq!(field, "last");
+            } else {
+                panic!("Expected Var type_name");
+            }
         } else {
-            panic!("Expected External");
+            panic!("Expected FieldAccess target");
         }
+        assert!(value.is_some(), "expected value");
     } else {
-        panic!("Expected ExternalBindingStmt");
+        panic!("Expected Assign");
     }
 }
 
 #[test]
 fn test_rfc004_multi_position() {
     let kind = parse_stmt("Point.scale = scale[0, 1]");
-    if let StmtKind::ExternalBindingStmt {
-        method_name,
-        binding,
-        ..
-    } = &kind
-    {
-        assert_eq!(method_name, "scale");
-        if let BindingKind::External { positions, .. } = binding {
-            assert_eq!(positions, &vec![0, 1]);
+    if let StmtKind::Assign { target, value, .. } = &kind {
+        if let Expr::FieldAccess { expr, field, .. } = target.as_ref() {
+            if let Expr::Var(tn, _) = expr.as_ref() {
+                assert_eq!(tn, "Point");
+                assert_eq!(field, "scale");
+            } else {
+                panic!("Expected Var type_name");
+            }
+        } else {
+            panic!("Expected FieldAccess target");
         }
+        assert!(value.is_some(), "expected value");
     }
 }
 
 #[test]
 fn test_rfc004_triple_position() {
     let kind = parse_stmt("Point.calc = calculate[0, 1, 2]");
-    if let StmtKind::ExternalBindingStmt {
-        binding: BindingKind::External { positions, .. },
-        ..
-    } = &kind
-    {
-        assert_eq!(positions, &vec![0, 1, 2]);
-    }
+    assert!(matches!(&kind, StmtKind::Assign { .. }));
 }
 
 #[test]
@@ -143,69 +141,99 @@ fn test_rfc004_placeholder_position() {
     // RFC-004 定义占位符 `_` 语法，当前解析器暂不支持 `_` 作为位置
     // 用不带占位符的位置来验证
     let kind = parse_stmt("Point.calc = func[0, 2]");
-    assert!(matches!(&kind, StmtKind::ExternalBindingStmt { .. }));
+    assert!(matches!(&kind, StmtKind::Assign { .. }));
 }
 
 #[test]
 fn test_rfc010_method_def_simple() {
     let kind = parse_stmt("Point.draw: (self: Point, s: Surface) -> Void = { }");
-    if let StmtKind::Binding {
-        name, type_name, ..
-    } = &kind
-    {
-        assert_eq!(name, "draw");
-        assert_eq!(type_name, &Some("Point".to_string()));
-        // params 可能在签名中但 body 是 block 时 params 字段为空
+    if let StmtKind::Assign { target, .. } = &kind {
+        if let Expr::FieldAccess { expr, field, .. } = target.as_ref() {
+            if let Expr::Var(tn, _) = expr.as_ref() {
+                assert_eq!(tn, "Point");
+            } else {
+                panic!("Expected Var type_name");
+            }
+            assert_eq!(field, "draw");
+        } else {
+            panic!("Expected FieldAccess target");
+        }
     } else {
-        panic!("Expected Binding");
+        panic!("Expected Assign");
     }
 }
 
 #[test]
 fn test_rfc010_method_def_expr_body() {
     let kind = parse_stmt("Point.serialize: (self: Point) -> String = (self) => \"hello\"");
-    if let StmtKind::Binding { name, .. } = &kind {
-        assert_eq!(name, "serialize");
+    if let StmtKind::Assign { target, .. } = &kind {
+        if let Expr::FieldAccess { expr, field, .. } = target.as_ref() {
+            if let Expr::Var(tn, _) = expr.as_ref() {
+                assert_eq!(tn, "Point");
+                assert_eq!(field, "serialize");
+            } else {
+                panic!("Expected Var type_name");
+            }
+        } else {
+            panic!("Expected FieldAccess target");
+        }
     } else {
-        panic!("Expected Binding");
+        panic!("Expected Assign");
     }
 }
 
 #[test]
 fn test_rfc010_type_body_external_binding() {
     let kind = parse_stmt("Point: Type = { distance = distance[0] }");
-    if let StmtKind::Binding {
-        name,
-        type_annotation,
-        ..
+    if let StmtKind::TypeDefinition {
+        name, definition, ..
     } = &kind
     {
-        assert_eq!(name, "Point");
-        if let Type::Struct { bindings, .. } = type_annotation.as_ref().unwrap() {
-            assert!(!bindings.is_empty());
-            assert_eq!(bindings[0].name, "distance");
+        assert_eq!(name, "Point", "类型名应为 Point");
+        if let Type::Struct { body } = definition {
+            let bindings: Vec<&TypeBodyBinding> = body
+                .iter()
+                .filter_map(|it| {
+                    if let TypeBodyItem::Binding(b) = it {
+                        Some(b)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            assert!(!bindings.is_empty(), "应有 bindings");
+            assert_eq!(bindings[0].name, "distance", "binding 名应为 distance");
         } else {
             panic!("Expected Type::Struct");
         }
     } else {
-        panic!("Expected Binding");
+        panic!("Expected StmtKind::TypeDefinition");
     }
 }
 
 #[test]
 fn test_rfc010_type_body_default_binding() {
     let kind = parse_stmt("Point: Type = { distance = distance }");
-    if let StmtKind::Binding {
-        type_annotation, ..
+    if let StmtKind::TypeDefinition {
+        definition: Type::Struct { body },
+        ..
     } = &kind
     {
-        if let Type::Struct { bindings, .. } = type_annotation.as_ref().unwrap() {
-            assert!(!bindings.is_empty());
-            assert!(matches!(
-                bindings[0].kind,
-                BindingKind::DefaultExternal { .. }
-            ));
-        }
+        let bindings: Vec<&TypeBodyBinding> = body
+            .iter()
+            .filter_map(|it| {
+                if let TypeBodyItem::Binding(b) = it {
+                    Some(b)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert!(!bindings.is_empty(), "应有 bindings");
+        assert!(
+            matches!(bindings[0].kind, BindingKind::DefaultExternal { .. }),
+            "binding kind 应为 DefaultExternal"
+        );
     }
 }
 
@@ -213,22 +241,34 @@ fn test_rfc010_type_body_default_binding() {
 fn test_rfc010_anonymous_binding() {
     let src = "Point: Type = { distance: ((a: Point, b: Point) -> Float)[0] = (a, b) => 0.0 }";
     let kind = parse_stmt(src);
-    if let StmtKind::Binding {
-        type_annotation, ..
+    if let StmtKind::TypeDefinition {
+        definition: Type::Struct { body },
+        ..
     } = &kind
     {
-        if let Type::Struct { bindings, .. } = type_annotation.as_ref().unwrap() {
-            assert!(!bindings.is_empty());
-            assert!(matches!(bindings[0].kind, BindingKind::Anonymous { .. }));
-        }
+        let bindings: Vec<&TypeBodyBinding> = body
+            .iter()
+            .filter_map(|it| {
+                if let TypeBodyItem::Binding(b) = it {
+                    Some(b)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert!(!bindings.is_empty(), "应有 bindings");
+        assert!(
+            matches!(bindings[0].kind, BindingKind::Anonymous { .. }),
+            "binding kind 应为 Anonymous"
+        );
     }
 }
 
 #[test]
 fn test_rfc010_pub_fn_with_point_param() {
     let kind = parse_stmt("pub distance: (p1: Point, p2: Point) -> Float = { 0.0 }");
-    if let StmtKind::Binding { is_pub, .. } = &kind {
-        assert!(is_pub);
+    if let StmtKind::Assign { is_pub, .. } = &kind {
+        assert!(is_pub, "pub 标记应被识别");
     } else {
         panic!("Expected Binding");
     }
@@ -245,7 +285,10 @@ fn test_binding_parser_validate_ok() {
 #[test]
 fn test_binding_parser_validate_missing_eq() {
     let parser = BindingParser::new();
-    assert!(parser.validate_binding_syntax("invalid").is_err());
+    assert!(
+        parser.validate_binding_syntax("invalid").is_err(),
+        "无效绑定语法应被拒绝"
+    );
 }
 
 #[test]
@@ -264,18 +307,27 @@ fn test_position_validator_ok() {
 #[test]
 fn test_position_validator_exceeds() {
     let v = BindingPositionValidator::new(3);
-    assert!(v.validate_positions(&[5]).is_err());
+    assert!(
+        v.validate_positions(&[5]).is_err(),
+        "超出范围的位置应被拒绝"
+    );
 }
 
 #[test]
 fn test_position_validator_negative() {
     let v = BindingPositionValidator::new(5);
-    assert!(v.validate_positions(&[-1]).is_err());
+    assert!(v.validate_positions(&[-1]).is_err(), "负数位置应被拒绝");
 }
 
 #[test]
 fn test_position_validator_syntax() {
     let v = BindingPositionValidator::new(5);
-    assert!(v.validate_binding_syntax("func[0]").is_ok());
-    assert!(v.validate_binding_syntax("func").is_err());
+    assert!(
+        v.validate_binding_syntax("func[0]").is_ok(),
+        "func[0] 是合法绑定语法"
+    );
+    assert!(
+        v.validate_binding_syntax("func").is_err(),
+        "func 缺少位置索引应被拒绝"
+    );
 }

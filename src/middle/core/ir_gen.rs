@@ -13,7 +13,9 @@ use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{self, Expr};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::core::typecheck::{MonoType, PolyType, TypeCheckResult};
-use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
+use crate::middle::core::ir::{
+    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
+};
 use crate::tlog;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::i18n::MSG;
@@ -104,20 +106,6 @@ struct SymbolEntry {
     local_idx: usize,
 }
 
-/// IR 生成器配置
-#[derive(Debug, Default, Clone)]
-pub struct IrGeneratorConfig {
-    /// 是否生成调试信息
-    pub generate_debug_info: bool,
-}
-
-impl IrGeneratorConfig {
-    /// 创建默认配置
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
 /// AST 到 IR 的生成器
 ///
 /// 将 AST 节点转换为 IR 指令序列。
@@ -196,18 +184,12 @@ struct LambdaBodyIR {
     mut_locals: std::collections::HashSet<usize>,
 }
 
-impl Default for AstToIrGenerator {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl AstToIrGenerator {
-    /// 创建新的 IR 生成器
-    pub fn new() -> Self {
+    /// 创建新的 IR 生成器（带类型信息）
+    pub fn new_with_type_result(type_result: &TypeCheckResult) -> Self {
         Self {
             symbols: vec![HashMap::new()],
-            type_result: None,
+            type_result: Some(Box::new(type_result.clone())),
             next_temp: 0,
             current_mut_locals: std::collections::HashSet::new(),
             module_mut_locals: HashMap::new(),
@@ -227,17 +209,8 @@ impl AstToIrGenerator {
             constraint_var_concrete_types: HashMap::new(),
             anon_function_irs: Vec::new(),
             function_param_types: HashMap::new(),
-            release_plan: HashMap::new(),
-            pending_env_vars: Vec::new(),
-        }
-    }
-
-    /// 创建新的 IR 生成器（带类型信息）
-    pub fn new_with_type_result(type_result: &TypeCheckResult) -> Self {
-        Self {
-            type_result: Some(Box::new(type_result.clone())),
             release_plan: type_result.release_plan.drops.clone(),
-            ..Self::new()
+            pending_env_vars: Vec::new(),
         }
     }
 
@@ -253,27 +226,6 @@ impl AstToIrGenerator {
         tlog!(debug, MSG::IrGenExitScope, &self.symbols.len().to_string());
         self.symbols.pop();
         tlog!(debug, MSG::IrGenExitScope, &self.symbols.len().to_string());
-    }
-
-    /// 从表达式中提取构造器类型名
-    ///
-    /// 用于接口直接赋值优化：判断初始化表达式是否为具体类型构造器调用
-    /// 例如：`Circle(1)` → Some("Circle"), `get_shape()` → None
-    fn extract_constructor_type_name(expr: &ast::Expr) -> Option<String> {
-        match expr {
-            // 构造器调用：TypeName(args...)
-            ast::Expr::Call { func, .. } => {
-                if let ast::Expr::Var(name, _) = func.as_ref() {
-                    // 首字母大写的标识符通常是类型构造器
-                    if name.chars().next().is_some_and(|c| c.is_uppercase()) {
-                        return Some(name.clone());
-                    }
-                }
-                None
-            }
-            // 直接变量引用（可能是已知具体类型的值）
-            _ => None,
-        }
     }
 
     /// 获取约束变量的具体类型名（如果编译期可确定）
@@ -489,7 +441,6 @@ impl AstToIrGenerator {
         functions.extend(std::mem::take(&mut self.anon_function_irs));
 
         Ok(ModuleIR {
-            types: Vec::new(),
             globals: Vec::new(),
             functions,
             mut_locals: std::mem::take(&mut self.module_mut_locals),
@@ -507,97 +458,182 @@ impl AstToIrGenerator {
         constants: &mut Vec<ConstValue>,
     ) -> Result<Option<FunctionIR>, Diagnostic> {
         match &stmt.kind {
-            ast::StmtKind::Binding {
+            ast::StmtKind::TypeDefinition {
                 name,
-                type_name,
-                method_type,
-                generic_params,
-                type_annotation,
-                params,
-                body,
+                signature_params,
+                definition,
                 is_pub: _,
             } => {
-                // 区分函数定义、方法绑定和类型定义
-                if type_name.is_some() {
-                    // MethodBind: 有 type_name
+                use crate::frontend::core::parser::ast::extract_generic_param_names;
+                use crate::frontend::core::types::mono::UniverseLevel;
+
+                // 提取泛型参数名
+                let generic_params = extract_generic_param_names(signature_params);
+                let generic_param_names = if generic_params.is_empty() {
+                    None
+                } else {
+                    Some(generic_params.iter().map(|p| p.name.clone()).collect())
+                };
+
+                // 签名：(T: Type) -> Type → params = [MetaType], return_type = MetaType
+                let params: Vec<MonoType> = signature_params
+                    .iter()
+                    .map(|p| {
+                        p.ty.as_ref()
+                            .map(|t| t.clone().into())
+                            .unwrap_or(MonoType::MetaType {
+                                universe_level: UniverseLevel::type1(),
+                                type_params: Vec::new(),
+                            })
+                    })
+                    .collect();
+                let return_type = MonoType::MetaType {
+                    universe_level: UniverseLevel::type1(),
+                    type_params: Vec::new(),
+                };
+
+                // 记录 struct_definitions（字段索引解析仍需要）
+                // 同时处理类型绑定和匿名函数 IR 生成
+                match definition {
+                    ast::Type::NamedStruct {
+                        name: struct_name,
+                        fields,
+                        ..
+                    } => {
+                        self.struct_definitions
+                            .insert(struct_name.clone(), fields.clone());
+                    }
+                    ast::Type::Struct { body } => {
+                        let fields: Vec<ast::StructField> = body
+                            .iter()
+                            .filter_map(|it| {
+                                if let ast::TypeBodyItem::Field(f) = it {
+                                    Some(f.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        let bindings: Vec<ast::TypeBodyBinding> = body
+                            .iter()
+                            .filter_map(|it| {
+                                if let ast::TypeBodyItem::Binding(b) = it {
+                                    Some(b.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        self.struct_definitions.insert(name.clone(), fields);
+                        // 记录绑定信息（用于方法调用时的参数重排，RFC-004）
+                        self.register_type_bindings(name, &bindings);
+                        // RFC-004: 为匿名函数绑定生成独立的 FunctionIR
+                        for binding in &bindings {
+                            if let ast::BindingKind::Anonymous {
+                                params: anon_params,
+                                return_type: anon_ret,
+                                positions: _,
+                                body,
+                            } = &binding.kind
+                            {
+                                let anon_func_name = format!("{}.__anon_{}", name, binding.name);
+                                match self.generate_anon_binding_ir(
+                                    &anon_func_name,
+                                    anon_params,
+                                    anon_ret,
+                                    body,
+                                    constants,
+                                ) {
+                                    Ok(Some(func_ir)) => {
+                                        self.anon_function_irs.push(func_ir);
+                                    }
+                                    Ok(None) => {}
+                                    Err(e) => return Err(e),
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+
+                Ok(Some(FunctionIR {
+                    name: name.clone(),
+                    params,
+                    return_type,
+                    generic_params: generic_param_names,
+                    body: FunctionBody::TypeDecl {
+                        definition: definition.clone(),
+                    },
+                }))
+            }
+            ast::StmtKind::Assign {
+                target,
+                type_annotation,
+                signature_params,
+                value,
+                ..
+            } => {
+                use crate::frontend::core::parser::ast::Expr;
+                let (name, type_name) = match target.as_ref() {
+                    Expr::Var(n, _) => (n.clone(), None),
+                    Expr::FieldAccess { expr, field, .. } => {
+                        if let Expr::Var(tn, _) = expr.as_ref() {
+                            (field.clone(), Some(tn.clone()))
+                        } else {
+                            (field.clone(), None)
+                        }
+                    }
+                    _ => return Ok(None),
+                };
+                let (params, body): (Vec<_>, Vec<_>) = match value {
+                    Some(v) => {
+                        if let Expr::Lambda { params, body, .. } = v.as_ref() {
+                            (params.clone(), body.stmts.clone())
+                        } else if let Expr::Block(block) = v.as_ref() {
+                            (Vec::new(), block.stmts.clone())
+                        } else {
+                            (Vec::new(), Vec::new())
+                        }
+                    }
+                    None => (Vec::new(), Vec::new()),
+                };
+                let generic_params =
+                    crate::frontend::core::parser::ast::extract_generic_param_names(
+                        signature_params,
+                    );
+                if let Some(type_name) = type_name {
+                    // MethodBind
                     self.generate_method_ir(
-                        type_name.as_ref().unwrap(),
-                        name,
-                        method_type.as_ref().unwrap(),
-                        params,
-                        body,
+                        &type_name,
+                        &name,
+                        type_annotation.as_ref().unwrap(),
+                        &params,
+                        &body,
                         constants,
                     )
-                } else if type_annotation.as_ref().is_some_and(|t| {
-                    crate::frontend::core::parser::ast::type_annotation_returns_meta_type(t)
-                }) && body.len() == 1
-                {
-                    // TypeDef with ExternRef: 检查 RHS body 是否为 ExternRef（不透明句柄类型）
-                    if let Some(ConstValue::ExternRef {
-                        mechanism,
-                        lib,
-                        symbol,
-                    }) = self.eval_body_for_type_decl(body)
-                    {
-                        let lib_id = self.get_or_create_lib_id(&mechanism, &lib);
-                        self.ffi_bindings
-                            .push(crate::middle::core::ir::FfiBinding::TypeBinding {
-                                type_name: name.clone(),
-                                lib_id,
-                                symbol: symbol.clone(),
-                            });
-                        return Ok(None);
-                    }
-                    // 普通 MetaType 构造器（如自定义类型别名）
-                    self.generate_constructor_ir(name, type_annotation.as_ref().unwrap())
-                } else if type_annotation.as_ref().is_some_and(|t| {
-                    crate::frontend::core::parser::ast::type_annotation_returns_meta_type(t)
-                        || matches!(t, ast::Type::Struct { .. })
-                }) {
-                    // TypeDef: 类型标注返回 Type 或者是 Struct 类型
-                    self.generate_constructor_ir(name, type_annotation.as_ref().unwrap())
-                } else {
+                } else if !params.is_empty() || !body.is_empty() {
                     // Fn: 普通函数
-                    // 从 GenericParam 提取参数名字符串
                     let generic_param_names = if generic_params.is_empty() {
                         None
                     } else {
                         Some(generic_params.iter().map(|p| p.name.clone()).collect())
                     };
                     self.generate_function_ir(
-                        name,
+                        &name,
                         type_annotation.as_ref(),
-                        params,
-                        body,
+                        &params,
+                        &body,
                         constants,
                         generic_param_names,
                     )
+                } else {
+                    // 全局变量
+                    self.generate_global_var_ir(
+                        &name,
+                        type_annotation.as_ref(),
+                        value.as_ref().map(|v| v.as_ref()),
+                    )
                 }
-            }
-            ast::StmtKind::Var {
-                name,
-                name_span: _,
-                type_annotation,
-                initializer,
-                is_mut: _,
-            } => self.generate_global_var_ir(
-                name,
-                type_annotation.as_ref(),
-                initializer.as_ref().map(|v| &**v),
-            ),
-            ast::StmtKind::ExternalBindingStmt {
-                type_name,
-                method_name,
-                binding,
-            } => {
-                // RFC-004: 外部绑定语句 `Type.method = function[pos]`
-                // 注册到类型绑定映射中
-                let binding_entry = ast::TypeBodyBinding {
-                    name: method_name.clone(),
-                    kind: binding.clone(),
-                };
-                self.register_type_bindings(type_name, &[binding_entry]);
-                Ok(None)
             }
             _ => Ok(None),
         }
@@ -691,14 +727,16 @@ impl AstToIrGenerator {
             name: func_name.clone(),
             params: param_types.clone(),
             return_type,
-            locals: locals_types,
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions,
-                successors: Vec::new(),
-            }],
-            entry: 0,
             generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: locals_types,
+            },
         };
 
         // 保存当前函数的可变局部变量信息到模块级别映射
@@ -862,14 +900,16 @@ impl AstToIrGenerator {
                 .map(|t| t.into())
                 .collect(),
             return_type,
-            locals: locals_types,
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions,
-                successors: Vec::new(),
-            }],
-            entry: 0,
             generic_params,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: locals_types,
+            },
         };
 
         // 记录函数参数类型（用于调用点发出 Borrow 指令）
@@ -915,6 +955,7 @@ impl AstToIrGenerator {
                 ast::Literal::Bool(b) => Some(ConstValue::Bool(*b)),
                 ast::Literal::String(s) => Some(ConstValue::String(s.clone())),
                 ast::Literal::Char(c) => Some(ConstValue::Char(*c)),
+                ast::Literal::Void => None,
             },
             // RFC-012: F-string 常量求值
             ast::Expr::FString { segments, .. } => {
@@ -1016,19 +1057,6 @@ impl AstToIrGenerator {
         id
     }
 
-    /// 从声明 body 中提取单个表达式并求值
-    fn eval_body_for_type_decl(
-        &self,
-        body: &[ast::Stmt],
-    ) -> Option<ConstValue> {
-        if body.len() == 1 {
-            if let ast::StmtKind::Expr(expr) = &body[0].kind {
-                return self.eval_const_expr(expr);
-            }
-        }
-        None
-    }
-
     /// 检查函数体（Stmt 列表）是否是对 ExternRef 的求值
     fn try_eval_body_as_extern_ref(
         &self,
@@ -1058,6 +1086,8 @@ impl AstToIrGenerator {
             .unwrap_or(MonoType::Int(64));
 
         // 尝试从 initializer 提取常量值
+        // 这里返回 None 是正常的——表示初始值不是编译期常量表达式
+        // （如 main = {} 这样的块表达式），需要运行时求值
         let init_value = if let Some(expr) = initializer {
             self.eval_const_expr(expr)
         } else {
@@ -1088,85 +1118,19 @@ impl AstToIrGenerator {
             name: name.to_string(),
             params: Vec::new(),
             return_type: var_type,
-            locals: vec![MonoType::Int(64)], // 分配一个局部变量用于存储结果
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions,
-                successors: Vec::new(),
-            }],
-            entry: 0,
             generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: vec![MonoType::Int(64)], // 分配一个局部变量用于存储结果
+            },
         };
 
         Ok(Some(func_ir))
-    }
-
-    /// 生成构造函数 IR
-    fn generate_constructor_ir(
-        &mut self,
-        _name: &str,
-        definition: &ast::Type,
-    ) -> Result<Option<FunctionIR>, Diagnostic> {
-        // 只为结构体类型生成构造函数
-        match definition {
-            ast::Type::NamedStruct {
-                name: struct_name,
-                fields,
-                ..
-            } => {
-                // 记录结构体定义（用于调用时填充默认值）
-                self.struct_definitions
-                    .insert(struct_name.clone(), fields.clone());
-                self.generate_struct_constructor_ir(struct_name, fields)
-            }
-            ast::Type::Struct {
-                fields, bindings, ..
-            } => {
-                self.struct_definitions
-                    .insert(_name.to_string(), fields.clone());
-                // 记录绑定信息（用于方法调用时的参数重排，RFC-004）
-                self.register_type_bindings(_name, bindings);
-
-                // RFC-004: 为匿名函数绑定生成独立的 FunctionIR
-                let mut anon_functions = Vec::new();
-                for binding in bindings {
-                    if let ast::BindingKind::Anonymous {
-                        params,
-                        return_type,
-                        positions: _,
-                        body,
-                    } = &binding.kind
-                    {
-                        let anon_func_name = format!("{}.__anon_{}", _name, binding.name);
-                        let mut constants = Vec::new();
-                        match self.generate_anon_binding_ir(
-                            &anon_func_name,
-                            params,
-                            return_type,
-                            body,
-                            &mut constants,
-                        ) {
-                            Ok(Some(func_ir)) => anon_functions.push(func_ir),
-                            Ok(None) => {}
-                            Err(_) => {} // 忽略匿名函数生成错误，不影响构造函数
-                        }
-                    }
-                }
-
-                let constructor = self.generate_struct_constructor_ir(_name, fields);
-
-                // 将匿名函数 IR 存储为独立函数（在模块级别注册）
-                for func_ir in anon_functions {
-                    self.anon_function_irs.push(func_ir);
-                }
-
-                constructor
-            }
-            _ => {
-                // 非结构体类型，不生成构造函数
-                Ok(None)
-            }
-        }
     }
 
     /// RFC-004: 为匿名函数绑定生成独立的 FunctionIR
@@ -1240,14 +1204,16 @@ impl AstToIrGenerator {
                 .map(|t| t.into())
                 .collect(),
             return_type: ret_type,
-            locals: locals_types,
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions,
-                successors: Vec::new(),
-            }],
-            entry: 0,
             generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: locals_types,
+            },
         };
 
         Ok(Some(func_ir))
@@ -1317,63 +1283,6 @@ impl AstToIrGenerator {
         }
     }
 
-    /// 为结构体生成构造函数 IR 的辅助方法
-    fn generate_struct_constructor_ir(
-        &self,
-        struct_name: &str,
-        fields: &[ast::StructField],
-    ) -> Result<Option<FunctionIR>, Diagnostic> {
-        // 构造函数接受所有字段作为参数
-        let mut param_types = Vec::new();
-        for field in fields {
-            param_types.push(field.ty.clone().into());
-        }
-
-        let mut instructions = Vec::new();
-
-        // 将所有参数加载到局部变量中（用于 CreateStruct）
-        let mut field_operands = Vec::new();
-        for (i, _field) in fields.iter().enumerate() {
-            let local_reg = i;
-            instructions.push(Instruction::Load {
-                dst: Operand::Local(local_reg),
-                src: Operand::Arg(i),
-            });
-            field_operands.push(Operand::Local(local_reg));
-        }
-
-        // 使用 CreateStruct 指令创建结构体
-        let result_reg = fields.len(); // 结果寄存器放在所有字段之后
-        instructions.push(Instruction::CreateStruct {
-            dst: Operand::Local(result_reg),
-            type_name: struct_name.to_string(),
-            fields: field_operands,
-        });
-
-        // 返回创建的结构体
-        instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
-
-        // 局部变量类型：每个字段 + 结果寄存器
-        let mut locals_types: Vec<MonoType> = fields.iter().map(|f| f.ty.clone().into()).collect();
-        locals_types.push(MonoType::TypeRef(struct_name.to_string()));
-
-        let func_ir = FunctionIR {
-            name: struct_name.to_string(),
-            params: param_types,
-            return_type: MonoType::TypeRef(struct_name.to_string()),
-            locals: locals_types,
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions,
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            generic_params: None,
-        };
-
-        Ok(Some(func_ir))
-    }
-
     /// 生成局部语句 IR
     #[allow(clippy::only_used_in_recursion)]
     fn generate_local_stmt_ir(
@@ -1387,26 +1296,68 @@ impl AstToIrGenerator {
                 let result_reg = self.next_temp_reg();
                 self.generate_expr_ir(expr, result_reg, instructions, constants)?;
             }
-            ast::StmtKind::Var {
-                name,
-                name_span: _,
+            ast::StmtKind::Assign {
+                target,
                 type_annotation,
-                initializer,
+                signature_params,
+                value,
                 is_mut,
+                ..
             } => {
-                // 记录变量的类型信息（用于错误消息）
+                use crate::frontend::core::parser::ast::Expr;
+                let name = match target.as_ref() {
+                    Expr::Var(n, _) => n.clone(),
+                    _ => return Ok(()),
+                };
+                let (params, body): (Vec<_>, Vec<_>) = match value {
+                    Some(v) => {
+                        if let Expr::Lambda { params, body, .. } = v.as_ref() {
+                            (params.clone(), body.stmts.clone())
+                        } else if let Expr::Block(block) = v.as_ref() {
+                            (Vec::new(), block.stmts.clone())
+                        } else {
+                            (Vec::new(), Vec::new())
+                        }
+                    }
+                    None => (Vec::new(), Vec::new()),
+                };
+                // 如果有 params/body，是嵌套函数
+                if !params.is_empty() || !body.is_empty() {
+                    let generic_params =
+                        crate::frontend::core::parser::ast::extract_generic_param_names(
+                            signature_params,
+                        );
+                    let generic_param_names = if generic_params.is_empty() {
+                        None
+                    } else {
+                        Some(generic_params.iter().map(|p| p.name.clone()).collect())
+                    };
+                    match self.generate_function_ir(
+                        &name,
+                        type_annotation.as_ref(),
+                        &params,
+                        &body,
+                        constants,
+                        generic_param_names,
+                    ) {
+                        Ok(Some(func_ir)) => {
+                            self.nested_functions.push(func_ir);
+                        }
+                        Ok(None) => {}
+                        Err(e) => return Err(e),
+                    }
+                    return Ok(());
+                }
+                // 普通变量
+                let initializer = value.as_ref().map(|v| v.as_ref());
                 if let Some(type_ann) = type_annotation {
                     let mono: MonoType = type_ann.clone().into();
                     let type_name = mono.type_name();
                     self.local_var_types.insert(name.clone(), type_name.clone());
-
-                    // 接口直接赋值优化：
-                    // 当 type_annotation 是约束类型且 initializer 是具体类型构造器时，
-                    // 记录变量的具体类型信息，用于后续方法调用优化
                     if mono.is_constraint() {
                         if let Some(init_expr) = initializer {
                             if let Some(concrete_type_name) =
-                                Self::extract_constructor_type_name(init_expr)
+                                self.get_expr_struct_type_name(init_expr)
                             {
                                 self.constraint_var_concrete_types
                                     .insert(name.clone(), concrete_type_name);
@@ -1414,97 +1365,46 @@ impl AstToIrGenerator {
                         }
                     }
                 } else if let Some(init_expr) = initializer {
-                    // 优先使用 typecheck 结果推导类型名，AST 推断仅作为兜底
                     let inferred = self.get_expr_type_name(init_expr);
                     if inferred != "<unknown>" {
                         self.local_var_types.insert(name.clone(), inferred);
                     }
                 }
-
-                // 检查变量是否已经存在于当前或外层作用域
-                // 如果存在，这是赋值操作而不是新声明
-                let var_idx = if let Some(existing_idx) = self.lookup_local(name) {
-                    // 变量已存在，复用其索引（这是赋值操作）
+                let var_idx = if let Some(existing_idx) = self.lookup_local(&name) {
                     existing_idx
                 } else {
-                    // 新变量声明，分配新索引
                     let idx = self.next_temp_reg();
-                    self.register_local(name, idx);
-                    // 记录可变性信息
+                    self.register_local(&name, idx);
                     if *is_mut {
                         self.current_mut_locals.insert(idx);
                     }
                     idx
                 };
-
                 if let Some(expr) = initializer {
-                    // 变量到变量的赋值生成 Move（RFC-009 所有权转移）
-                    if let ast::Expr::Var(src_name, _) = expr.as_ref() {
-                        // 直接使用源变量的寄存器
+                    if let ast::Expr::Var(src_name, _) = expr {
                         if let Some(src_idx) = self.lookup_local(src_name) {
                             instructions.push(Instruction::Move {
                                 dst: Operand::Local(var_idx),
                                 src: Operand::Local(src_idx),
                             });
                         } else {
-                            // 源变量不存在，回退到普通赋值
                             self.generate_expr_ir(expr, var_idx, instructions, constants)?;
                         }
                     } else {
                         self.generate_expr_ir(expr, var_idx, instructions, constants)?;
                     }
                 } else {
-                    // 默认初始化为 0
                     instructions.push(Instruction::Load {
                         dst: Operand::Local(var_idx),
                         src: Operand::Const(ConstValue::Int(0)),
                     });
                 }
-                // 变量到变量的 Move 已经在上面处理，不需要额外的 Store
-                // 只有非 Move 的情况才需要 Store
-                if !matches!(
-                    initializer.as_ref().map(|e| e.as_ref()),
-                    Some(ast::Expr::Var(_, _))
-                ) {
-                    // 生成 Store 指令将值存储到局部变量
+                if !matches!(initializer, Some(ast::Expr::Var(_, _))) {
                     instructions.push(Instruction::Store {
                         dst: Operand::Local(var_idx),
                         src: Operand::Local(var_idx),
                         span: stmt.span,
                     });
-                }
-            }
-            ast::StmtKind::Binding {
-                name,
-                type_name: None,
-                method_type: _,
-                generic_params,
-                type_annotation,
-                params,
-                body,
-                is_pub: _,
-            } => {
-                // 生成嵌套函数的 IR（排除方法绑定和类型定义）
-                // 从 GenericParam 提取参数名字符串
-                let generic_param_names = if generic_params.is_empty() {
-                    None
-                } else {
-                    Some(generic_params.iter().map(|p| p.name.clone()).collect())
-                };
-                match self.generate_function_ir(
-                    name,
-                    type_annotation.as_ref(),
-                    params,
-                    body,
-                    constants,
-                    generic_param_names,
-                ) {
-                    Ok(Some(func_ir)) => {
-                        // 将嵌套函数添加到列表（会被提升到模块级别）
-                        self.nested_functions.push(func_ir);
-                    }
-                    Ok(None) => {} // Native 函数或其他情况
-                    Err(e) => return Err(e),
                 }
             }
             ast::StmtKind::If {
@@ -2358,7 +2258,7 @@ impl AstToIrGenerator {
     fn resolve_function_name(
         &self,
         func: &ast::Expr,
-    ) -> Operand {
+    ) -> Result<Operand, Diagnostic> {
         if let Expr::Var(name, _) = func {
             let resolved_name = if ModuleRegistry::with_std().is_native_name(name) {
                 name.clone()
@@ -2370,9 +2270,33 @@ impl AstToIrGenerator {
             } else {
                 name.clone()
             };
-            Operand::Const(ConstValue::String(resolved_name))
+            Ok(Operand::Const(ConstValue::String(resolved_name)))
         } else {
-            Operand::Const(ConstValue::Int(0))
+            Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                "无法解析函数名：非变量表达式 {:?}",
+                func
+            ))
+            .at(Self::get_expr_span(func))
+            .build())
+        }
+    }
+
+    /// 判断函数表达式是否可在编译期解析为静态函数名。
+    ///
+    /// 只有全局函数声明（通过 let/fn 定义的具名函数）才是静态的。
+    /// 局部变量、闭包表达式、函数调用返回值等全部走动态分发。
+    fn is_static_fn_name(
+        &self,
+        func: &ast::Expr,
+    ) -> bool {
+        match func {
+            ast::Expr::Var(name, _) => {
+                if self.lookup_local(name).is_some() {
+                    return false;
+                }
+                self.lookup_var_type(name).is_some()
+            }
+            _ => false,
         }
     }
 
@@ -2517,6 +2441,7 @@ impl AstToIrGenerator {
                     Literal::Bool(b) => ConstValue::Bool(*b),
                     Literal::String(s) => ConstValue::String(s.clone()),
                     Literal::Char(c) => ConstValue::Char(*c),
+                    Literal::Void => ConstValue::Int(0),
                 };
                 // 添加到常量池
                 constants.push(const_val.clone());
@@ -2954,12 +2879,8 @@ impl AstToIrGenerator {
                         }
                     }
 
-                    // 命名空间解析：将短名称解析为完整名称
-                    // 例如：print -> std.io.print (当 print 是通过 use std.io.{print} 导入时)
-                    // 检查是否是闭包调用（函数表达式不是简单的变量名）
-                    let is_closure_call = !matches!(func.as_ref(), Expr::Var(_, _));
-
-                    if is_closure_call {
+                    // 检查是否是动态函数调用（非静态函数名的 Var）
+                    if !self.is_static_fn_name(func) {
                         // 闭包调用：先加载函数值，然后使用 CallDyn
                         let func_reg = self.next_temp_reg();
                         self.generate_expr_ir(func, func_reg, instructions, constants)?;
@@ -3100,7 +3021,7 @@ impl AstToIrGenerator {
                                 }
                             } else {
                                 // 无法获取类型，使用默认处理
-                                let func_operand = self.resolve_function_name(func);
+                                let func_operand = self.resolve_function_name(func)?;
                                 instructions.push(Instruction::Call {
                                     dst: Some(Operand::Local(result_reg)),
                                     func: func_operand,
@@ -3113,7 +3034,7 @@ impl AstToIrGenerator {
                             // ========== 默认函数调用处理 ==========
                             let final_args: Vec<Operand> = arg_regs.clone();
 
-                            let func_operand = self.resolve_function_name(func);
+                            let func_operand = self.resolve_function_name(func)?;
                             instructions.push(Instruction::Call {
                                 dst: Some(Operand::Local(result_reg)),
                                 func: func_operand,
@@ -3155,7 +3076,15 @@ impl AstToIrGenerator {
                         // 普通字段访问
                         let obj_reg = self.next_temp_reg();
                         self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
-                        let field_index = self.resolve_field_index(expr, field).unwrap_or(0);
+                        let field_index =
+                            self.resolve_field_index(expr, field).ok_or_else(|| {
+                                ErrorCodeDefinition::ir_internal_error(&format!(
+                                    "无法解析字段索引: '{}'",
+                                    field
+                                ))
+                                .at(Self::get_expr_span(expr))
+                                .build()
+                            })?;
                         instructions.push(Instruction::LoadField {
                             dst: Operand::Local(result_reg),
                             src: Operand::Local(obj_reg),
@@ -3180,7 +3109,15 @@ impl AstToIrGenerator {
                         // 普通字段访问
                         let obj_reg = self.next_temp_reg();
                         self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
-                        let field_index = self.resolve_field_index(expr, field).unwrap_or(0);
+                        let field_index =
+                            self.resolve_field_index(expr, field).ok_or_else(|| {
+                                ErrorCodeDefinition::ir_internal_error(&format!(
+                                    "无法解析字段索引: '{}'",
+                                    field
+                                ))
+                                .at(Self::get_expr_span(expr))
+                                .build()
+                            })?;
                         instructions.push(Instruction::LoadField {
                             dst: Operand::Local(result_reg),
                             src: Operand::Local(obj_reg),
@@ -3673,14 +3610,16 @@ impl AstToIrGenerator {
                     name: closure_name.clone(),
                     params: param_types,
                     return_type,
-                    locals: closure_body.locals.clone(),
-                    blocks: vec![BasicBlock {
-                        label: 0,
-                        instructions: closure_body.instructions,
-                        successors: Vec::new(),
-                    }],
-                    entry: 0,
                     generic_params: None,
+                    body: FunctionBody::Code {
+                        blocks: vec![BasicBlock {
+                            label: 0,
+                            instructions: closure_body.instructions,
+                            successors: Vec::new(),
+                        }],
+                        entry: 0,
+                        locals: closure_body.locals.clone(),
+                    },
                 };
 
                 // 7. 将闭包函数添加到嵌套函数列表
@@ -3753,10 +3692,11 @@ impl AstToIrGenerator {
                             ast::Pattern::Literal(lit) => {
                                 let const_val = match lit {
                                     ast::Literal::Int(n) => ConstValue::Int(*n),
-                                    ast::Literal::Bool(b) => ConstValue::Bool(*b),
                                     ast::Literal::Float(f) => ConstValue::Float(*f),
+                                    ast::Literal::Bool(b) => ConstValue::Bool(*b),
                                     ast::Literal::String(s) => ConstValue::String(s.clone()),
                                     ast::Literal::Char(c) => ConstValue::Char(*c),
+                                    ast::Literal::Void => ConstValue::Int(0),
                                 };
                                 constants.push(const_val.clone());
                                 instructions.push(Instruction::Load {

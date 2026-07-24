@@ -3,7 +3,7 @@
 // 验证: const 泛型参数值约束在类型定义中的解析和编译，Assert 约束作为字段类型
 // 状态: ✅ 可运行
 
-use std.io
+use std.assert
 
 Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
     _assert_rows: Assert(Rows > 0),
@@ -12,5 +12,5 @@ Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
 }
 
 main = {
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "compiled with Assert(Rows > 0) and Assert(Cols > 0)")
 }

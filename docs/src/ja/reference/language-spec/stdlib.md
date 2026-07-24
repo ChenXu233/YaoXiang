@@ -12,12 +12,12 @@
 
 | 型 | モジュール | 説明 |
 |------|------|------|
-| `Option(T)` | `std.option` | オプショナル値型 |
+| `Option(T)` | `std.option` | オプション値型 |
 | `Result(T, E)` | `std.result` | エラー処理型 |
 | `List(T)` | `std.collection` | 動的配列 |
 | `Map(K, V)` | `std.collection` | ハッシュマップ |
 | `String` | `std.string` | 文字列型 |
-| `Array(T, N)` | `std.array` | 固定長配列 |
+| `Array(T, N)` | `std.array` | 固定サイズ配列 |
 
 ### 1.2 Option 型
 
@@ -25,7 +25,7 @@
 Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 ```
 
-**バリアントコンストラクタ**：
+**バリアント構築**：
 
 | バリアント | 構文 | 説明 |
 |------|------|------|
@@ -35,17 +35,17 @@ Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 **常用メソッド**：
 
 ```yaoxiang
-// 値の有無を確認
+// 値の有無をチェック
 is_some: (self: Option(T)) -> Bool
 is_none: (self: Option(T)) -> Bool
 
-// 値を取得（panic の可能性あり）
+// 値を取得（パニックの可能性あり）
 unwrap: (self: Option(T)) -> T
 
 // 値またはデフォルト値を取得
 unwrap_or: (self: Option(T), default: T) -> T
 
-// 値を写像
+// 値をマップ
 map: (R: Type) -> ((self: Option(T), f: (T) -> R) -> Option(R))
 ```
 
@@ -55,7 +55,7 @@ map: (R: Type) -> ((self: Option(T), f: (T) -> R) -> Option(R))
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 ```
 
-**バリアントコンストラクタ**：
+**バリアント構築**：
 
 | バリアント | 構文 | 説明 |
 |------|------|------|
@@ -65,20 +65,20 @@ Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Resu
 **常用メソッド**：
 
 ```yaoxiang
-// 成功かどうかを確認
+// 成功かどうかをチェック
 is_ok: (self: Result(T, E)) -> Bool
 is_err: (self: Result(T, E)) -> Bool
 
-// 値を取得（panic の可能性あり）
+// 値を取得（パニックの可能性あり）
 unwrap: (self: Result(T, E)) -> T
 
 // 値またはデフォルト値を取得
 unwrap_or: (self: Result(T, E), default: T) -> T
 
-// 成功値を写像
+// 成功値をマップ
 map: (R: Type) -> ((self: Result(T, E), f: (T) -> R) -> Result(R, E))
 
-// エラー値を写像
+// エラー値をマップ
 map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ```
 
@@ -104,33 +104,33 @@ data = match fetch_data() {
 
 ### 1.5 アサーション（std.assert）
 
-`std.assert` モジュールは統一されたアサーション機構を提供する——ランタイム `assert` とコンパイル時の精化型 `Assert` は同一プリミティブの二つの側面である。
+`std.assert` モジュールは統一されたアサーションメカニズムを提供する——実行時 `assert` とコンパイル時精緻化型 `Assert` は同一プリミティブの二つの側面である。
 
 ```yaoxiang
-# IsTrue：値から型への橋渡し関数
+// IsTrue：値から型へのブリッジ関数
 IsTrue: (b: Bool) -> Type = match b {
-    true => Void,      # ⊤，プログラムは継続
-    false => Never,    # ⊥，発散
+    true => Void,      // ⊤、プログラム続行
+    false => Never,    // ⊥、発散
 }
 
-# Assert：コンパイル時の精化型プリミティブ
+// Assert：コンパイル時精緻化型プリミティブ
 Assert: (cond: Bool) -> Type = IsTrue(cond)
 
-# assert：ランタイムアサーション（Assert の値導入子）
+// assert：実行時アサーション（Assert の値導入子）
 assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))
 
-# Result オーバーロード
+// Result オーバーロード
 assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 ```
 
-**dispatch 分派**：
+**dispatch ディスパッチ**：
 
 | 条件 | 動作 |
 |------|------|
-| cond のすべての自由変数がコンパイル時に既知 | コンパイラが評価、true → 消去、false → コンパイルエラー |
-| ランタイム自由変数が存在する | ランタイム check を挿入し、フロー敏感的仮定集合 Γ を注入 |
+| cond のすべての自由変数がコンパイル時既知 | コンパイラが評価、true → 消去、false → コンパイルエラー |
+| 実行時自由変数が存在 | 実行時 check を挿入し、フロー依存仮定集合 Γ を注入 |
 
-`assert(false, "msg")` は raise と等価である——個別の throw/raise キーワードは不要である。
+`assert(false, "msg")` は raise と等価である——独立した throw/raise キーワードは不要。
 
 ---
 
@@ -194,13 +194,13 @@ delete_dir: (path: String) -> Result(Void, Error)
 abs: (x: Int) -> Int
 abs: (x: Float) -> Float
 
-// 最大値・最小値
+// 最大最小値
 max: (a: Int, b: Int) -> Int
 min: (a: Int, b: Int) -> Int
 max: (a: Float, b: Float) -> Float
 min: (a: Float, b: Float) -> Float
 
-// べき乗
+// べき乗演算
 pow: (base: Float, exp: Float) -> Float
 sqrt: (x: Float) -> Float
 
@@ -256,7 +256,7 @@ contains: (s: String, pattern: String) -> Bool
 // 文字列置換
 replace: (s: String, old: String, new: String) -> String
 
-// 文字列トリミング
+// 文字列トリム
 trim: (s: String) -> String
 trim_left: (s: String) -> String
 trim_right: (s: String) -> String
@@ -270,7 +270,7 @@ to_string: (x: Int) -> String
 to_string: (x: Float) -> String
 to_string: (x: Bool) -> String
 
-// 解析
+// パース
 parse_int: (s: String) -> Result(Int, Error)
 parse_float: (s: String) -> Result(Float, Error)
 ```
@@ -364,11 +364,9 @@ for i in 0..10 step 2 {
 
 ## 付録：標準ライブラリモジュール索引
 
-### A.1 コアモジュール
-
 | モジュール | 説明 |
 |------|------|
-| `std.assert` | アサーション機構——ランタイム assert + コンパイル時 Assert 精化型 |
+| `std.assert` | アサーションメカニズム——実行時 assert + コンパイル時 Assert 精緻化型 |
 | `std.option` | Option 型 |
 | `std.result` | Result 型 |
 | `std.collection` | List、Map などのコレクション型 |
@@ -392,9 +390,9 @@ for i in 0..10 step 2 {
 | `std.math.log` | 対数関数 |
 
 ### A.4 ユーティリティモジュール
-
 | モジュール | 説明 |
 |------|------|
 | `std.random` | 乱数生成 |
 | `std.time` | 日時 |
+| `std.assert` | コンパイル時 `Assert(C)` と実行時 `assert(x > 0)` の統一（RFC-030） |
 | `std.regex` | 正規表現 |

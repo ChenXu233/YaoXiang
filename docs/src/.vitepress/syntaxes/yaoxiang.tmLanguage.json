@@ -1,15 +1,19 @@
 {
-  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "$schema": "https://json.schemastore.org/tmlanguage.json",
+  "$comment": "═══════════════════════════════════════════════════════════════   BUILD ARTIFACT — 请勿直接编辑此文件    此文件由 scripts/sync-syntax.mjs 从 canonical source  (vscode-extension/language-pack/syntaxes/) 自动同步生成。  如需修改语法规则，请在 canonical source 中编辑后运行:    node scripts/sync-syntax.mjs═══════════════════════════════════════════════════════════════",
   "name": "YaoXiang",
   "patterns": [
     {
-      "include": "#comments"
+      "include": "#fstrings"
     },
     {
       "include": "#strings"
     },
     {
       "include": "#numbers"
+    },
+    {
+      "include": "#comments"
     },
     {
       "include": "#keywords"
@@ -28,15 +32,15 @@
     "keywords": {
       "patterns": [
         {
-          "name": "keyword.control",
+          "name": "keyword.control.yaoxiang",
           "match": "\\b(if|elif|else|match|while|for|in|return|break|continue)\\b"
         },
         {
-          "name": "keyword.declaration",
+          "name": "keyword.declaration.yaoxiang",
           "match": "\\b(pub|use|spawn|ref|mut|unsafe)\\b"
         },
         {
-          "name": "keyword.other",
+          "name": "keyword.other.yaoxiang",
           "match": "\\bas\\b"
         }
       ]
@@ -44,54 +48,83 @@
     "builtins": {
       "patterns": [
         {
-          "name": "support.function",
-          "match": "\\b(Type|true|false|void)\\b"
+          "name": "support.type.yaoxiang",
+          "match": "\\bNever\\b"
         },
         {
-          "name": "support.function",
-          "match": "\\b(Maybe\\.|Result\\.|Some\\(|Ok\\(|Err\\()"
+          "name": "support.type.yaoxiang",
+          "match": "\\b(Int|Float|Bool|Char|String|Void|Type)\\b"
+        },
+        {
+          "name": "support.type.yaoxiang",
+          "match": "\\b(Maybe|Result)\\b"
+        },
+        {
+          "name": "constant.language.boolean.yaoxiang",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.yaoxiang",
+          "match": "\\bvoid\\b"
+        },
+        {
+          "name": "constant.language.wildcard.yaoxiang",
+          "match": "\\b_\\b"
+        },
+        {
+          "name": "support.function.yaoxiang",
+          "match": "\\b(Some|Ok|Err)(?=\\()"
+        }
+      ]
+    },
+    "fstrings": {
+      "name": "string.quoted.fstring.yaoxiang",
+      "begin": "f\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.yaoxiang",
+          "match": "\\\\([\"\\\\nrt])"
+        },
+        {
+          "name": "meta.embedded.expression.yaoxiang",
+          "begin": "\\{",
+          "end": "\\}",
+          "patterns": [{ "include": "$self" }]
         }
       ]
     },
     "strings": {
       "begin": "\"",
       "end": "\"",
-      "name": "string.quoted",
+      "name": "string.quoted.yaoxiang",
       "patterns": [
         {
-          "name": "constant.character.escape",
-          "match": "\\\\(\"|\\\\|[nrt\\\\])"
-        },
-        {
-          "name": "string.interpolated",
-          "match": "\\$\\{[^}]+\\}"
-        },
-        {
-          "name": "string.interpolated",
-          "match": "\\$[a-zA-Z_][a-zA-Z0-9_]*"
+          "name": "constant.character.escape.yaoxiang",
+          "match": "\\\\([\"\\\\nrt])"
         }
       ]
     },
     "numbers": {
       "patterns": [
         {
-          "name": "constant.numeric.hex",
+          "name": "constant.numeric.hex.yaoxiang",
           "match": "\\b0x[0-9a-fA-F][0-9a-fA-F_]*\\b"
         },
         {
-          "name": "constant.numeric.octal",
+          "name": "constant.numeric.octal.yaoxiang",
           "match": "\\b0o[0-7][0-7_]*\\b"
         },
         {
-          "name": "constant.numeric.binary",
+          "name": "constant.numeric.binary.yaoxiang",
           "match": "\\b0b[01][01_]*\\b"
         },
         {
-          "name": "constant.numeric.float",
+          "name": "constant.numeric.float.yaoxiang",
           "match": "\\b[0-9][0-9_]*\\.[0-9][0-9_]*([eE][+-]?[0-9][0-9_]*)?\\b"
         },
         {
-          "name": "constant.numeric.decimal",
+          "name": "constant.numeric.decimal.yaoxiang",
           "match": "\\b[0-9][0-9_]*\\b"
         }
       ]
@@ -99,11 +132,19 @@
     "comments": {
       "patterns": [
         {
-          "name": "comment.line.double-slash",
+          "name": "comment.line.documentation.yaoxiang",
+          "match": "///.*$"
+        },
+        {
+          "name": "comment.line.documentation.yaoxiang",
+          "match": "//!.*$"
+        },
+        {
+          "name": "comment.line.double-slash.yaoxiang",
           "match": "//.*$"
         },
         {
-          "name": "comment.block",
+          "name": "comment.block.yaoxiang",
           "begin": "/\\*",
           "end": "\\*/"
         }
@@ -112,19 +153,51 @@
     "operators": {
       "patterns": [
         {
-          "name": "keyword.operator",
-          "match": "=>|->"
+          "name": "keyword.operator.fat-arrow.yaoxiang",
+          "match": "=>"
         },
         {
-          "name": "keyword.operator",
-          "match": "(=|\\+|-|\\*|/|%|==|!=|<|>|>=|<=|&&|\\|\\||!|::)"
+          "name": "keyword.operator.arrow.yaoxiang",
+          "match": "->"
+        },
+        {
+          "name": "keyword.operator.comparison.yaoxiang",
+          "match": "==|!=|>=|<=|<(?!<)|>(?!>)"
+        },
+        {
+          "name": "keyword.operator.logical.yaoxiang",
+          "match": "&&|\\|\\||!"
+        },
+        {
+          "name": "keyword.operator.assignment.yaoxiang",
+          "match": "=(?![=>])"
+        },
+        {
+          "name": "keyword.operator.arithmetic.yaoxiang",
+          "match": "\\+|-|\\*|/|%"
+        },
+        {
+          "name": "keyword.operator.path.yaoxiang",
+          "match": "::"
+        },
+        {
+          "name": "keyword.operator.reference.yaoxiang",
+          "match": "&(?!&)"
+        },
+        {
+          "name": "keyword.operator.bitwise.yaoxiang",
+          "match": "\\|(?!\\|)"
+        },
+        {
+          "name": "keyword.operator.range.yaoxiang",
+          "match": "\\.\\."
         }
       ]
     },
     "delimiters": {
       "patterns": [
         {
-          "name": "punctuation",
+          "name": "punctuation.yaoxiang",
           "match": "[:,;\\[\\]{}\\(\\)]"
         }
       ]

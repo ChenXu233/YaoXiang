@@ -8,9 +8,12 @@
 //! §3.7: 函数类型统一 — 参数 + 返回 + async
 //! §3.13: 联合类型统一 — 无序匹配
 //! §3.14: 交集类型统一 — 无序匹配
+//! §3.5: MetaType 统一 — UniverseLevel + type_params（RFC-027 §3.2）
 //! §3.8: 泛型实例化
 
-use crate::frontend::core::types::{MonoType, PolyType, StructType, TypeConstraintSolver, TypeVar};
+use crate::frontend::core::types::{
+    MonoType, PolyType, StructType, TypeConstraintSolver, TypeVar, UniverseLevel,
+};
 use crate::util::span::Span;
 
 fn s() -> TypeConstraintSolver {
@@ -1224,4 +1227,93 @@ fn test_generalize_with_nested_containers() {
     let poly = solver.generalize(&body);
     assert!(!poly.is_mono());
     assert_eq!(poly.type_binders.len(), 1);
+}
+
+#[test]
+fn test_resolve_never_builtin() {
+    let solver = s();
+    assert_eq!(
+        solver.resolve_type(&MonoType::TypeRef("Never".to_string())),
+        MonoType::Never
+    );
+}
+
+#[test]
+fn test_metatype_unify_same_level() {
+    // Arrange
+    let mut solver = s();
+    let a = MonoType::MetaType {
+        universe_level: UniverseLevel::type0(),
+        type_params: vec![],
+    };
+    let b = MonoType::MetaType {
+        universe_level: UniverseLevel::type0(),
+        type_params: vec![],
+    };
+
+    // Act & Assert
+    assert!(
+        solver.unify(&a, &b).is_ok(),
+        "unify(Type₀, Type₀) should succeed — same level"
+    );
+}
+
+#[test]
+fn test_metatype_unify_different_level() {
+    // Arrange
+    let mut solver = s();
+    let a = MonoType::MetaType {
+        universe_level: UniverseLevel::type0(),
+        type_params: vec![],
+    };
+    let b = MonoType::MetaType {
+        universe_level: UniverseLevel::type1(),
+        type_params: vec![],
+    };
+
+    // Act & Assert
+    assert!(
+        solver.unify(&a, &b).is_err(),
+        "unify(Type₀, Type₁) should fail — different levels"
+    );
+}
+
+#[test]
+fn test_metatype_unify_with_params() {
+    // Arrange
+    let mut solver = s();
+    let a = MonoType::MetaType {
+        universe_level: UniverseLevel::type0(),
+        type_params: vec![MonoType::Int(32)],
+    };
+    let b = MonoType::MetaType {
+        universe_level: UniverseLevel::type0(),
+        type_params: vec![MonoType::Int(32)],
+    };
+
+    // Act & Assert
+    assert!(
+        solver.unify(&a, &b).is_ok(),
+        "unify(Type₀(Int32), Type₀(Int32)) should succeed — same params"
+    );
+}
+
+#[test]
+fn test_metatype_unify_with_params_mismatch() {
+    // Arrange
+    let mut solver = s();
+    let a = MonoType::MetaType {
+        universe_level: UniverseLevel::type0(),
+        type_params: vec![MonoType::Int(32)],
+    };
+    let b = MonoType::MetaType {
+        universe_level: UniverseLevel::type0(),
+        type_params: vec![MonoType::Int(64)],
+    };
+
+    // Act & Assert
+    assert!(
+        solver.unify(&a, &b).is_err(),
+        "unify(Type₀(Int32), Type₀(Int64)) should fail — param mismatch"
+    );
 }

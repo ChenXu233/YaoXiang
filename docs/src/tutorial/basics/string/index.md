@@ -15,16 +15,16 @@ name = "Alice"
 age = 25
 
 greeting = f"Hello {name}, you are {age} years old"
-println(greeting)  # Hello Alice, you are 25 years old
+print(greeting)  // Hello Alice, you are 25 years old
 ```
 
 对比传统拼接方式，f-string 的差异一目了然：
 
 ```yaoxiang
-# ❌ 传统拼接：冗长且容易出错
+// ❌ 传统拼接：冗长且容易出错
 message = "Hello ".concat(name).concat(", age: ").concat(age.to_string())
 
-# ✅ f-string：直观、简洁
+// ✅ f-string：直观、简洁
 message = f"Hello {name}, age: {age}"
 ```
 
@@ -36,9 +36,9 @@ message = f"Hello {name}, age: {age}"
 x = 10
 y = 20
 
-println(f"Sum: {x + y}")         # Sum: 30
-println(f"Product: {x * y}")     # Product: 200
-println(f"Is positive? {x > 0}") # Is positive? true
+print(f"Sum: {x + y}")         // Sum: 30
+print(f"Product: {x * y}")     // Product: 200
+print(f"Is positive? {x > 0}") // Is positive? true
 ```
 
 ## 格式化说明符
@@ -48,9 +48,9 @@ println(f"Is positive? {x > 0}") # Is positive? true
 ```yaoxiang
 pi = 3.14159265
 
-println(f"Pi: {pi}")       # Pi: 3.14159265
-println(f"Pi: {pi:.2f}")   # Pi: 3.14（保留2位小数）
-println(f"Pi: {pi:.4f}")   # Pi: 3.1416（保留4位小数）
+print(f"Pi: {pi}")       // Pi: 3.14159265
+print(f"Pi: {pi:.2f}")   // Pi: 3.14（保留2位小数）
+print(f"Pi: {pi:.4f}")   // Pi: 3.1416（保留4位小数）
 ```
 
 常用格式化说明符：
@@ -70,8 +70,8 @@ println(f"Pi: {pi:.4f}")   # Pi: 3.1416（保留4位小数）
 ```yaoxiang
 name = "alice"
 
-println(f"Upper: {name.uppercase()}")   # Upper: ALICE
-println(f"Length: {name.len()}")        # Length: 5
+print(f"Upper: {name.uppercase()}")   // Upper: ALICE
+print(f"Length: {name.len()}")        // Length: 5
 ```
 
 ## 转义大括号
@@ -79,12 +79,12 @@ println(f"Length: {name.len()}")        # Length: 5
 如果需要输出字面的 `{` 或 `}`，**双写**即可：
 
 ```yaoxiang
-println(f"{{literal braces}}")     # {literal braces}
-println(f"Set: {{1, 2, 3}}")       # Set: {1, 2, 3}
+print(f"{{literal braces}}")     // {literal braces}
+print(f"Set: {{1, 2, 3}}")       // Set: {1, 2, 3}
 
-# 混合：双写输出字面量 {，单写是插值
+// 混合：双写输出字面量 {，单写是插值
 name = "YaoXiang"
-println(f"{{name}} is {name}")     # {name} is YaoXiang
+print(f"{{name}} is {name}")     // {name} is YaoXiang
 ```
 
 ## 多行 f-string
@@ -102,10 +102,10 @@ Age: {age}
 City: {city}
 """
 
-println(info)
-# Name: Alice
-# Age: 25
-# City: Beijing
+print(info)
+// Name: Alice
+// Age: 25
+// City: Beijing
 ```
 
 ## f-string 的工作原理
@@ -113,10 +113,10 @@ println(info)
 编译器看到 f-string 时，会把它转换为高效的字符串拼接：
 
 ```yaoxiang
-# 你写的
+// 你写的
 f"Hello {name}, age: {age}"
 
-# 编译器转换结果
+// 编译器转换结果
 "Hello ".concat(name.to_string()).concat(", age: ").concat(age.to_string())
 ```
 
@@ -124,7 +124,7 @@ f"Hello {name}, age: {age}"
 
 ## 小结
 
-::: v-pre
+:::: v-pre
 | 要点 | 语法 |
 |------|------|
 | 基本插值 | `f"text {var}"` |
@@ -132,4 +132,4 @@ f"Hello {name}, age: {age}"
 | 格式化 | `f"value: {pi:.2f}"` |
 | 转义括号 | `f"{{not interpolation}}"` |
 | 多行 | `f"""..."""` |
-:::
+::::
