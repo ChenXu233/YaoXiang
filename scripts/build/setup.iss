@@ -55,7 +55,7 @@ Name: "addtopath"; Description: "Add to system PATH"; GroupDescription: "Other o
 
 [Files]
 ; Main executable
-Source: "..\target\release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\target\release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
