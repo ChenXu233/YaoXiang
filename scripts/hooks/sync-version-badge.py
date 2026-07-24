@@ -8,7 +8,7 @@ Runs whenever Cargo.toml or the README files change.
 import re
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parent.parent.parent
 
 CARGO_TOML = REPO / "Cargo.toml"
 README_FILES = [
@@ -20,7 +20,7 @@ README_FILES = [
 BADGE_RE = re.compile(
     r'(\[!\[Version\]\(https://img\.shields\.io/badge/Version-)'
     r'v[^)]+'
-    r'(-blue\.svg\]\(\))'
+    r'(-blue\.svg\)\]\(\))'
 )
 
 
