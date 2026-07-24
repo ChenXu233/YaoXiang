@@ -1,6 +1,6 @@
 [package]
 name = "yaoxiang-wasm"
-version = "0.7.5"
+version = "0.7.10"
 edition = "2021"
 rust-version = "1.96"
 description = "YaoXiang WebAssembly Playground"
