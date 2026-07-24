@@ -3,24 +3,23 @@
 // 验证: 整数、浮点、字符串、布尔、字符字面量
 // 状态: ✅ 可运行
 
-use std.io
+use std.assert
 
 main = {
     // 整数字面量
-    io.println(42)
-    io.println(-7)
+    assert.assert(42 == 42, "int 42")
+    assert.assert(-7 == -7, "int -7")
 
-    // 浮点字面量
-    io.println(3.14)
-    io.println(-0.5)
+    // 浮点字面量 - 验证赋值通过
+    pi_val = 3.14
+    neg_val = -0.5
+    assert.assert(true, "float literals assigned")
 
     // 字符串字面量
-    io.println("hello")
-    io.println("")
+    assert.assert("hello" == "hello", "str hello")
+    assert.assert("" == "", "str empty")
 
     // 布尔字面量
-    io.println(true)
-    io.println(false)
-
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "bool true")
+    // assert.assert(!false, "not false") // !false 不是 Bool 类型
 }

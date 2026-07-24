@@ -2,7 +2,7 @@
 // 验证: 令牌作为结构体字段 — 视图模式
 // 论文价值: 在 Rust 中需要 'a 生命周期标注
 
-use std.io
+use std.{assert, io}
 
 Buffer: Type = { value: Int }
 
@@ -16,6 +16,7 @@ main = {
     buf = Buffer(42)
     ref_buf = &buf              // 显式借用 buf，不转移所有权
     v = BufferView(buf, ref_buf)  // view 令牌从 buf 派生
+    assert.assert(v.view.value == 42, "view value should be 42")
     io.println(v.view.value)      // 通过视图读取
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "all passed")
 }

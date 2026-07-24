@@ -2,7 +2,7 @@
 // 验证: 泛型单态化
 // 状态: 测试中
 
-use std.io
+use std.assert
 
 // 单参数泛型函数
 identity: (T: Type) -> (x: T) -> T = (x) => x
@@ -18,16 +18,14 @@ main = {
     x = identity(42)
     s = identity("hello")
 
-    io.println(x)
-    io.println(s)
+    assert.assert(x == 42, "identity(42) should be 42")
+    assert.assert(s == "hello", "identity(\"hello\") should be \"hello\"")
 
     // 测试 2: 多参数泛型函数
     r = add_pair(10, 20)
-    io.println(r)
+    assert.assert(r == 10, "add_pair(10, 20) should return first arg 10")
 
     // 测试 3: 嵌套泛型调用
     y = double_identity(99)
-    io.println(y)
-
-    io.println("ALL TESTS PASSED")
+    assert.assert(y == 99, "double_identity(99) should be 99")
 }

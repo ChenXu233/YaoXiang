@@ -148,14 +148,20 @@ impl CodegenContext {
         let const_count = const_pool.len();
         debug!("{}", t(MSG::CodegenConstPool, lang, Some(&[&const_count])));
 
-        // 3. 生成类型表
-        let type_count = self.module.types.len();
+        // 3. 生成类型表（从 TypeDecl 函数中收集）
         let type_table: Vec<MonoType> = self
             .module
-            .types
+            .functions
             .iter()
-            .map(|t| self.type_from_ast(t))
+            .filter_map(|f| {
+                if let crate::middle::core::ir::FunctionBody::TypeDecl { definition } = &f.body {
+                    Some(self.type_from_ast(definition))
+                } else {
+                    None
+                }
+            })
             .collect();
+        let type_count = type_table.len();
         debug!("{}", t(MSG::CodegenTypeTable, lang, Some(&[&type_count])));
 
         // 4. 生成文件头

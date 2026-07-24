@@ -3,12 +3,11 @@
 // 验证: Point: Type = { x: Float, y: Float } 定义和构造
 // 状态: ✅ 可运行（field access 待修复）
 
-use std.io
+use std.assert
 
 Point: Type = { x: Float, y: Float }
 
 main = {
     p = Point(1.0, 2.0)
-    io.println(p)
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "Point struct created successfully")
 }

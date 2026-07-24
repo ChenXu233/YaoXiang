@@ -3,41 +3,39 @@
 // 验证: 算术、比较运算符
 // 状态: ✅ 可运行
 
-use std.io
+use std.assert
 
 main = {
     // 算术运算
     a = 10 + 20
-    io.println(a)
+    assert.assert(a == 30, "10 + 20 == 30")
 
     b = 100 - 30
-    io.println(b)
+    assert.assert(b == 70, "100 - 30 == 70")
 
     c = 6 * 7
-    io.println(c)
+    assert.assert(c == 42, "6 * 7 == 42")
 
     d = 42 / 2
-    io.println(d)
+    assert.assert(d == 21, "42 / 2 == 21")
 
     e = 10 % 3
-    io.println(e)
+    assert.assert(e == 1, "10 % 3 == 1")
 
     // 比较运算
     gt = 5 > 3
-    io.println(gt)
+    assert.assert(gt, "5 > 3")
 
     lt = 3 < 5
-    io.println(lt)
+    assert.assert(lt, "3 < 5")
 
     eq = 42 == 42
-    io.println(eq)
+    assert.assert(eq, "42 == 42")
 
     ne = 42 != 0
-    io.println(ne)
+    assert.assert(ne, "42 != 0")
 
     // 复合表达式
-    mut result = (10 + 20) * 2 - 5
-    io.println(result)
-
-    io.println("ALL TESTS PASSED")
+    result = (10 + 20) * 2 - 5
+    assert.assert(result == 55, "(10+20)*2-5 == 55")
 }

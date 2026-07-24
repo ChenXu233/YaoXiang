@@ -3,24 +3,29 @@
 // 验证: map/filter/reduce 闭包调用
 // 状态: ✅ 可运行
 
-use std.{io, list}
+use std.{assert, list}
 
 main = {
     mut items = [1, 2, 3, 4, 5]
 
     // map
     mut doubled = list.map(items, x => x * 2)
-    io.println(doubled)
+    assert.assert(doubled[0] == 2, "doubled[0]")
+    assert.assert(doubled[1] == 4, "doubled[1]")
+    assert.assert(doubled[2] == 6, "doubled[2]")
+    assert.assert(doubled[3] == 8, "doubled[3]")
+    assert.assert(doubled[4] == 10, "doubled[4]")
 
     // filter
     items2 = [1, 2, 3, 4, 5]
     mut evens = list.filter(items2, x => x % 2 == 0)
-    io.println(evens)
+    assert.assert(evens[0] == 2, "evens[0]")
+    assert.assert(evens[1] == 4, "evens[1]")
 
     // reduce
     items3 = [1, 2, 3, 4, 5]
     total = list.reduce(items3, (acc, x) => acc + x, 0)
-    io.println(total)
+    assert.assert(total == 15, "reduce total == 15")
 
     // 链式操作 (filter + map)
     items4 = [1, 2, 3, 4, 5]
@@ -28,7 +33,7 @@ main = {
         list.filter(items4, x => x > 2),
         x => x * 10
     )
-    io.println(result)
-
-    io.println("ALL TESTS PASSED")
+    assert.assert(result[0] == 30, "chain[0]")
+    assert.assert(result[1] == 40, "chain[1]")
+    assert.assert(result[2] == 50, "chain[2]")
 }

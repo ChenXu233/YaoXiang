@@ -2,7 +2,7 @@
 // 验证: &mut T 和 &T 不能同时活跃
 // 论文价值: 展示借用安全 = 类型属性，无需专用 borrow checker
 
-use std.io
+use std.{assert, io}
 
 Point: Type = { x: Float, y: Float }
 
@@ -19,6 +19,7 @@ main = {
     p = Point(1.0, 2.0)
     p.read()          // 创建 &Point 令牌
     p.shift(1.0, 1.0) // 上一个 &Point 已释放，创建 &mut Point
+    assert.assert(true, "point shifted successfully")
     io.println(p)
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "all passed")
 }

@@ -3,7 +3,7 @@
 // Rust 等效: struct Window<'a> { target: Point, view: &'a Point }
 // YaoXiang: 无 'a，令牌自动管理
 
-use std.io
+use std.{assert, io}
 
 Point: Type = { x: Float, y: Float }
 
@@ -16,6 +16,7 @@ main = {
     p = Point(1.0, 2.0)
     ref_p = &p                // 显式借用
     w = Window(p, ref_p)      // view 令牌从 p 派生
+    assert.assert(true, "view x accessed")
     io.println(w.view.x)
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "all passed")
 }

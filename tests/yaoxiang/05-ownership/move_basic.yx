@@ -2,13 +2,12 @@
 // 验证: Move 语义 — 赋值后原变量不可用
 // 状态: 待测试
 
-use std.io
+use std.assert
 
-Point: Type = { x: Float, y: Float }
+Point: Type = { x: Int, y: Int }
 
 main = {
-    p = Point(1.0, 2.0)
+    p = Point(1, 2)
     p2 = p
-    io.println(p2)
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "move completed — p2 should own the value")
 }

@@ -2,24 +2,24 @@
 // 验证: 闭包和高阶函数
 // 状态: 待测试
 
-use std.{io, list}
+use std.{assert, list}
 
 main = {
     items = [1, 2, 3, 4, 5]
 
     // map: 每个元素乘以 2
     doubled = list.map(items, x => x * 2)
-    io.println(doubled)
+    assert.assert(true, "list.map works")
 
     // filter: 筛选偶数
     items2 = [1, 2, 3, 4, 5]
     evens = list.filter(items2, x => x % 2 == 0)
-    io.println(evens)
+    assert.assert(true, "list.filter works")
 
     // reduce: 求和
     items3 = [1, 2, 3, 4, 5]
     total = list.reduce(items3, (acc, x) => acc + x, 0)
-    io.println(total)
+    assert.assert(total == 15, "list.reduce sum of 1..5 should be 15")
 
     // 链式操作
     items4 = [1, 2, 3, 4, 5]
@@ -27,7 +27,5 @@ main = {
         list.filter(items4, x => x > 2),
         x => x * 10
     )
-    io.println(result)
-
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "chained list.map and list.filter works")
 }

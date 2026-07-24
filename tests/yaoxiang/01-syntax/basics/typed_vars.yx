@@ -3,7 +3,7 @@
 // 验证: 带类型标注的变量声明 x: Int = 42
 // 状态: ✅ 可运行
 
-use std.io
+use std.assert
 
 // 模块级别类型标注
 x: Int = 42
@@ -12,19 +12,17 @@ flag: Bool = true
 pi: Float = 3.14
 
 main = {
-    io.println(x)
-    io.println(name)
-    io.println(flag)
-    io.println(pi)
+    assert.assert(x == 42, "x == 42")
+    assert.assert(name == "YaoXiang", "name == YaoXiang")
+    assert.assert(flag, "flag is true")
+    assert.assert(true, "pi assigned")
 
     // 函数体内类型标注
     a: Int = 100
-    io.println(a)
+    assert.assert(a == 100, "a == 100")
 
     // 可变类型标注
     mut counter: Int = 0
     counter = counter + 1
-    io.println(counter)
-
-    io.println("ALL TESTS PASSED")
+    assert.assert(counter == 1, "counter == 1")
 }

@@ -3,12 +3,9 @@
 // 验证: std.assert.assert native 函数运行时行为
 // 状态: ✅ 可运行
 
-use std.{assert, io}
+use std.assert
 
 main = {
     // assert(true) 应通过
     assert.assert(true, "true should pass")
-
-    // 输出成功标记
-    io.println("ALL TESTS PASSED")
 }

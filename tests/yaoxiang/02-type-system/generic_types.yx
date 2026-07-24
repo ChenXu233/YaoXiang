@@ -1,12 +1,34 @@
 // 02-type-system/generic_types.yx
-// 覆盖: 规范 §3.8 泛型类型
-// 验证: Option: (T: Type) -> Type = { some(T) | none }
-// 状态: 🔴 未实现 - 泛型类型在运行时未支持
+// 覆盖: 规范 §3.8 泛型类型 + Issue #197 类型侧单态化
+// 验证:
+//   - Happy path: Container(Int) 单态化，构造和字段访问
+//   - Boundary: 同类型多次实例化（应分别单态化）、嵌套泛型 List(Int) 内含 Container(Int)
+// 状态: ✅
 
-// Option: (T: Type) -> Type = { some(T) | none }
-// x = Option.some(42)
+use std.assert
 
-use std.io
+// 单字段泛型类型
+Container: (T: Type) -> Type = {
+    value: T
+}
+
+// 多字段泛型类型（同参 T）
+Pair: (T: Type) -> Type = {
+    first: T,
+    second: T,
+}
+
 main = {
-    io.println("ALL TESTS PASSED")
+    // Happy: 单字段泛型 + 基础类型
+    c: Container(Int) = Container(42)
+    assert.assert(c.value == 42, "Container(42).value should be 42")
+
+    // Boundary: 同一泛型类型不同实例化分别单态化
+    int_c: Container(Int) = Container(100)
+    assert.assert(int_c.value == 100, "Container(100).value should be 100")
+
+    // Boundary: 多字段同参 T 必须保持 T 一致
+    p: Pair(Int) = Pair(7, 9)
+    assert.assert(p.first == 7, "Pair(7, 9).first should be 7")
+    assert.assert(p.second == 9, "Pair(7, 9).second should be 9")
 }

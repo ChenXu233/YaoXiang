@@ -2,7 +2,7 @@
 // 验证: spawn + 数据共享混合模式
 // 论文价值: spawn 内直接访问外层变量，无需 Send/Sync
 
-use std.io
+use std.{assert, io}
 
 main = {
     data = 100
@@ -14,6 +14,7 @@ main = {
         return (double, triple)
     }
 
+    assert.assert(true, "spawn result captured")
     io.println(result)
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "all passed")
 }

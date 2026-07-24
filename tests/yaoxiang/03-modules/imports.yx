@@ -3,7 +3,7 @@
 // 验证: use 语句各种形式
 // 状态: ✅ 可运行
 
-use std.io
+use std.{assert, io}
 use std.list
 use std.math.{sqrt, sin, cos}
 
@@ -12,7 +12,9 @@ main = {
 
     mut items = [3, 1, 4, 1, 5]
     mut mapped = list.map(items, x => x * 2)
-    io.println(mapped)
-
-    io.println("ALL TESTS PASSED")
+    assert.assert(mapped[0] == 6, "list.map[0] == 6")
+    assert.assert(mapped[1] == 2, "list.map[1] == 2")
+    assert.assert(mapped[2] == 8, "list.map[2] == 8")
+    assert.assert(mapped[3] == 2, "list.map[3] == 2")
+    assert.assert(mapped[4] == 10, "list.map[4] == 10")
 }

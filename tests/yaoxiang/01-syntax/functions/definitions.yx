@@ -3,7 +3,7 @@
 // 验证: 带类型标注的函数定义 (RFC-010 语法)
 // 状态: ✅ 可运行
 
-use std.io
+use std.assert
 
 // 函数定义：参数名在签名中
 add: (a: Int, b: Int) -> Int = (a, b) => {
@@ -22,13 +22,11 @@ greet: () -> String = () => {
 
 main = {
     r1 = add(3, 4)
-    io.println(r1)
+    assert.assert(r1 == 7, "add(3, 4) == 7")
 
     r2 = inc(41)
-    io.println(r2)
+    assert.assert(r2 == 42, "inc(41) == 42")
 
     msg = greet()
-    io.println(msg)
-
-    io.println("ALL TESTS PASSED")
+    assert.assert(msg == "Hello", "greet() == Hello")
 }
