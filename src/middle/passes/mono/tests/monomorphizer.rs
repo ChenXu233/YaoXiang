@@ -10,8 +10,11 @@
 //! - `Monomorphizer::specialize_type` 单态化泛型类型
 //! - 类型侧单态化的去重缓存
 //! - 类型参数数量不匹配时的错误路径
+//! - 泛型 enum variant 单态化（Variant 类型体替换）
+//! - 嵌套泛型 BFS 引用扫描（如 List(List(Int))）
+//! - 小写参数名类型参数判定（靠名单不靠大小写启发式）
 
-use crate::frontend::core::parser::ast::{StructField, Type as AstType, TypeBodyItem};
+use crate::frontend::core::parser::ast::{StructField, Type as AstType, TypeBodyItem, VariantDef};
 use crate::frontend::core::typecheck::MonoType;
 use crate::frontend::core::types::mono::UniverseLevel;
 use crate::frontend::core::types::var::TypeVar;
@@ -839,5 +842,212 @@ fn test_type_specialization_arg_count_mismatch_returns_none() {
     assert!(
         result.is_none(),
         "类型参数数量不匹配应返回 None 而非部分特化"
+    );
+}
+
+// ==================== 泛型 enum variant 测试 (Issue #197) ====================
+
+#[test]
+fn test_specialize_enum_variant_substitutes_type_params() {
+    // Arrange: Option<T> = { some(T) | none } 注册到 generic_types，实例化为 Option(Int)
+    let mut mono = Monomorphizer::new();
+
+    let variant_def = AstType::Variant(vec![
+        VariantDef {
+            name: "some".to_string(),
+            name_span: Span::dummy(),
+            params: vec![(
+                Some("x".to_string()),
+                AstType::Name {
+                    name: "T".to_string(),
+                    span: Span::dummy(),
+                },
+            )],
+            span: Span::dummy(),
+        },
+        VariantDef {
+            name: "none".to_string(),
+            name_span: Span::dummy(),
+            params: Vec::new(),
+            span: Span::dummy(),
+        },
+    ]);
+
+    let type_def = FunctionIR {
+        name: "Option".to_string(),
+        params: vec![MonoType::MetaType {
+            universe_level: UniverseLevel::type1(),
+            type_params: Vec::new(),
+        }],
+        return_type: MonoType::MetaType {
+            universe_level: UniverseLevel::type1(),
+            type_params: Vec::new(),
+        },
+        generic_params: Some(vec!["T".to_string()]),
+        body: FunctionBody::TypeDecl {
+            definition: variant_def,
+        },
+    };
+
+    mono.generic_types.insert("Option".to_string(), type_def);
+
+    let req = InstantiationRequest::new(
+        GenericFunctionId::new("Option".to_string(), vec!["T".to_string()]),
+        vec![MonoType::Int(64)],
+        Span::default(),
+    );
+
+    // Act
+    let result = mono.specialize_type(&req).expect("特化 Option(Int) 应成功");
+
+    // Assert
+    assert_eq!(result.name, "Option(int64)", "特化类型名应为 Option(int64)");
+    assert!(result.generic_params.is_none(), "特化类型不应有泛型参数");
+
+    // 验证 variant 中的 T 被替换为 Int(64)
+    let FunctionBody::TypeDecl { definition } = &result.body else {
+        panic!("body 应是 TypeDecl");
+    };
+    let AstType::Variant(variants) = definition else {
+        panic!("definition 应是 Variant，实际为 {:?}", definition);
+    };
+    assert_eq!(variants.len(), 2, "Option 应有 2 个 variant");
+
+    let some = &variants[0];
+    assert_eq!(some.name, "some", "第一个 variant 应为 some");
+    assert_eq!(some.params.len(), 1, "some(T) 应有 1 个参数");
+    let (_, param_ty) = &some.params[0];
+    assert!(
+        matches!(param_ty, AstType::Int(64)),
+        "some 的参数类型应为 Int(64)，实际为 {:?}",
+        param_ty
+    );
+
+    let none = &variants[1];
+    assert_eq!(none.name, "none", "第二个 variant 应为 none");
+    assert_eq!(none.params.len(), 0, "none 应无参数");
+}
+
+// ==================== 嵌套泛型引用测试 (Issue #197) ====================
+
+#[test]
+fn test_collect_generic_type_refs_nested_specialization() {
+    // Arrange: List<T> 类型定义，模拟 List(List(Int)) 的嵌套泛型引用
+    let mut mono = Monomorphizer::new();
+    let body_items = vec![TypeBodyItem::Field(StructField {
+        name: "data".to_string(),
+        ty: AstType::Name {
+            name: "T".to_string(),
+            span: Span::dummy(),
+        },
+        default: None,
+        is_mut: false,
+    })];
+    let type_def = FunctionIR {
+        name: "List".to_string(),
+        params: vec![MonoType::MetaType {
+            universe_level: UniverseLevel::type1(),
+            type_params: Vec::new(),
+        }],
+        return_type: MonoType::MetaType {
+            universe_level: UniverseLevel::type1(),
+            type_params: Vec::new(),
+        },
+        generic_params: Some(vec!["T".to_string()]),
+        body: FunctionBody::TypeDecl {
+            definition: AstType::Struct { body: body_items },
+        },
+    };
+    mono.generic_types.insert("List".to_string(), type_def);
+
+    // 构造嵌套泛型引用：List(List(Int))
+    let nested_ty = MonoType::Generic {
+        name: "List".to_string(),
+        args: vec![MonoType::Generic {
+            name: "List".to_string(),
+            args: vec![MonoType::Int(64)],
+        }],
+    };
+
+    // Act: 从嵌套类型收集引用
+    mono.collect_generic_type_refs(&nested_ty);
+
+    // BFS 顺序：先外层 List(List(Int))（collect_generic_type_refs 在递归入队之前先入队外层）
+    let first = &mono.pending_queue[0];
+    assert_eq!(first.type_args().len(), 1, "第一个请求应有 1 个类型参数");
+    assert!(
+        matches!(&first.type_args()[0], MonoType::Generic { name, .. } if name == "List"),
+        "第一个请求应为 List(List(Int))，实际为 {:?}",
+        first.type_args()[0]
+    );
+
+    let second = &mono.pending_queue[1];
+    assert_eq!(second.type_args().len(), 1, "第二个请求应有 1 个类型参数");
+    assert_eq!(
+        second.type_args()[0],
+        MonoType::Int(64),
+        "第二个请求应为 List(Int)"
+    );
+}
+
+// ==================== 小写参数名测试 (Issue #197) ====================
+
+#[test]
+fn test_specialize_type_lowercase_param_name() {
+    // Arrange: 小写参数名 `t: Type` 不应靠大写启发式识别
+    let mut mono = Monomorphizer::new();
+
+    let body = vec![TypeBodyItem::Field(StructField {
+        name: "value".to_string(),
+        ty: AstType::Name {
+            name: "t".to_string(),
+            span: Span::dummy(),
+        },
+        default: None,
+        is_mut: false,
+    })];
+
+    let type_def = FunctionIR {
+        name: "Small".to_string(),
+        params: vec![MonoType::MetaType {
+            universe_level: UniverseLevel::type1(),
+            type_params: Vec::new(),
+        }],
+        return_type: MonoType::MetaType {
+            universe_level: UniverseLevel::type1(),
+            type_params: Vec::new(),
+        },
+        generic_params: Some(vec!["t".to_string()]),
+        body: FunctionBody::TypeDecl {
+            definition: AstType::Struct { body },
+        },
+    };
+
+    mono.generic_types.insert("Small".to_string(), type_def);
+
+    let req = InstantiationRequest::new(
+        GenericFunctionId::new("Small".to_string(), vec!["t".to_string()]),
+        vec![MonoType::String],
+        Span::default(),
+    );
+
+    // Act
+    let result = mono.specialize_type(&req).expect("小写参数名特化应成功");
+
+    // Assert
+    assert_eq!(result.name, "Small(string)", "特化类型名应为 Small(string)");
+    let FunctionBody::TypeDecl { definition } = &result.body else {
+        panic!("body 应是 TypeDecl");
+    };
+    let AstType::Struct { body } = definition else {
+        panic!("definition 应是 Struct");
+    };
+    let TypeBodyItem::Field(f) = &body[0] else {
+        panic!("body 应是 Field");
+    };
+    assert!(
+        matches!(&f.ty, AstType::String),
+        "小写参数名 t 应被替换为 String，实际为 {:?}",
+        f.ty
     );
 }
