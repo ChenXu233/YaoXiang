@@ -22,3 +22,7 @@ mod token_system;
 /// `yaoxiang` CLI 子命令集成测试
 #[path = "integration/cli.rs"]
 mod cli;
+
+/// `yaoxiang` CLI 子命令端到端测试（子进程级）
+#[path = "integration/cli_e2e.rs"]
+mod cli_e2e;
