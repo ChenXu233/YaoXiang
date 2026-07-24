@@ -214,24 +214,26 @@ fn test_rfc010_type_body_external_binding() {
 #[test]
 fn test_rfc010_type_body_default_binding() {
     let kind = parse_stmt("Point: Type = { distance = distance }");
-    if let StmtKind::TypeDefinition { definition, .. } = &kind {
-        if let Type::Struct { body } = definition {
-            let bindings: Vec<&TypeBodyBinding> = body
-                .iter()
-                .filter_map(|it| {
-                    if let TypeBodyItem::Binding(b) = it {
-                        Some(b)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            assert!(!bindings.is_empty(), "应有 bindings");
-            assert!(
-                matches!(bindings[0].kind, BindingKind::DefaultExternal { .. }),
-                "binding kind 应为 DefaultExternal"
-            );
-        }
+    if let StmtKind::TypeDefinition {
+        definition: Type::Struct { body },
+        ..
+    } = &kind
+    {
+        let bindings: Vec<&TypeBodyBinding> = body
+            .iter()
+            .filter_map(|it| {
+                if let TypeBodyItem::Binding(b) = it {
+                    Some(b)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert!(!bindings.is_empty(), "应有 bindings");
+        assert!(
+            matches!(bindings[0].kind, BindingKind::DefaultExternal { .. }),
+            "binding kind 应为 DefaultExternal"
+        );
     }
 }
 
@@ -239,24 +241,26 @@ fn test_rfc010_type_body_default_binding() {
 fn test_rfc010_anonymous_binding() {
     let src = "Point: Type = { distance: ((a: Point, b: Point) -> Float)[0] = (a, b) => 0.0 }";
     let kind = parse_stmt(src);
-    if let StmtKind::TypeDefinition { definition, .. } = &kind {
-        if let Type::Struct { body } = definition {
-            let bindings: Vec<&TypeBodyBinding> = body
-                .iter()
-                .filter_map(|it| {
-                    if let TypeBodyItem::Binding(b) = it {
-                        Some(b)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            assert!(!bindings.is_empty(), "应有 bindings");
-            assert!(
-                matches!(bindings[0].kind, BindingKind::Anonymous { .. }),
-                "binding kind 应为 Anonymous"
-            );
-        }
+    if let StmtKind::TypeDefinition {
+        definition: Type::Struct { body },
+        ..
+    } = &kind
+    {
+        let bindings: Vec<&TypeBodyBinding> = body
+            .iter()
+            .filter_map(|it| {
+                if let TypeBodyItem::Binding(b) = it {
+                    Some(b)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert!(!bindings.is_empty(), "应有 bindings");
+        assert!(
+            matches!(bindings[0].kind, BindingKind::Anonymous { .. }),
+            "binding kind 应为 Anonymous"
+        );
     }
 }
 
