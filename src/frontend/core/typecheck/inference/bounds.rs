@@ -171,16 +171,8 @@ impl BoundsChecker {
             _ => Vec::new(),
         };
 
-        // 类型空间方法：优先从 StructType.methods 取（issue #180 F 组），平表作兼容兜底（P4 删）
-        let struct_methods: Vec<(String, MonoType)> = match ty {
-            MonoType::Struct(s) => s
-                .methods
-                .iter()
-                .map(|(name, poly)| (name.clone(), poly.body.clone()))
-                .collect(),
-            _ => Vec::new(),
-        };
-        let method_bindings: Vec<(String, MonoType)> = if struct_methods.is_empty() {
+        // 查找方法绑定：从 TypeEnvironment.method_bindings 扁平表获取
+        let method_bindings: Vec<(String, MonoType)> =
             if let (Some(env), Some(ref name)) = (env, &type_name) {
                 env.method_bindings
                     .iter()
@@ -192,10 +184,7 @@ impl BoundsChecker {
                     .collect()
             } else {
                 Vec::new()
-            }
-        } else {
-            struct_methods
-        };
+            };
 
         let mut missing_fields = Vec::new();
         let mut mismatched_fields = Vec::new();

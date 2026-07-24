@@ -959,11 +959,7 @@ impl<'a> ExpressionInferrer<'a> {
                                 return Ok(field_ty.clone());
                             }
                         }
-                        // Field not found in struct — try type-space method table (StructType.methods)
-                        if let Some(method_poly) = struct_type.methods.get(field) {
-                            return Ok(method_poly.body.clone());
-                        }
-                        // 兼容镜像（迁移期，P4 删除）
+                        // Field not found in struct — try method lookup
                         let method_key = format!("{}.{}", struct_type.name, field);
                         if let Some(method_ty) = self.method_bindings.get(&method_key) {
                             return Ok(method_ty.clone());
@@ -980,11 +976,7 @@ impl<'a> ExpressionInferrer<'a> {
                                         return Ok(field_ty.clone());
                                     }
                                 }
-                                // Field not found in resolved struct — try type-space method table
-                                if let Some(method_poly) = struct_type.methods.get(field) {
-                                    return Ok(method_poly.body.clone());
-                                }
-                                // 兼容镜像（迁移期，P4 删除）
+                                // Field not found in resolved struct — try method lookup
                                 let method_key = format!("{}.{}", struct_type.name, field);
                                 if let Some(method_ty) = self.method_bindings.get(&method_key) {
                                     return Ok(method_ty.clone());

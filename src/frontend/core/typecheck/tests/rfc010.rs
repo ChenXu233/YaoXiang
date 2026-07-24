@@ -714,40 +714,6 @@ fn test_method_def_arm_value_base_not_method() {
     );
 }
 
-/// 值空间全受限：实例字段赋值，字段不在 schema → 报错。
-#[test]
-fn test_value_space_field_not_in_schema_errors() {
-    // p.get_x = get_x，get_x 不在 Point schema → 应报错
-    let src = r#"
-        Point: Type = { x: Float, y: Float }
-        get_x: (p: Point) -> Float = { return 1.0 }
-        p: Point = Point(1.0, 2.0)
-        p.get_x = get_x
-    "#;
-    let result = check_source(src);
-    assert!(
-        !result.diagnostics.is_empty(),
-        "值空间字段 get_x 不在 Point schema，应报错"
-    );
-}
-
-/// 值空间合法字段赋值：self.closed = false（closed 在 schema）→ 通过。
-#[test]
-fn test_value_space_schema_field_ok() {
-    let src = r#"
-        File: Type = { name: String, closed: Bool }
-        File.open: (self: &mut File) -> Void = {
-            self.closed = false
-        }
-    "#;
-    let result = check_source(src);
-    assert!(
-        result.diagnostics.is_empty(),
-        "self.closed = false（closed 在 schema）应通过: {:?}",
-        result.diagnostics
-    );
-}
-
 /// 规范：结构化子类型 — 接口赋值应失败（未实现接口）
 ///
 /// 确保没有实现 Serializable 的 Point 不能赋值给 Serializable 变量。

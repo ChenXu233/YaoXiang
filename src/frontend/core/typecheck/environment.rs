@@ -471,25 +471,14 @@ impl TypeEnvironment {
         }
     }
 
-    /// 添加方法绑定（类型空间登记 chokepoint，issue #180 F 组）
-    ///
-    /// 类型空间：写入该类型的 `StructType.methods`（结构化存储）。
-    /// 兼容镜像：迁移期保留平表 `method_bindings`，供未迁移读侧使用（P4 删除）。
-    /// 例如: Point.distance = distance → Point 的 StructType.methods["distance"] = fn_type
+    /// 添加方法绑定
+    /// 例如: Point.distance = distance 存储为 "Point.distance" -> fn_type
     pub fn add_method_binding(
         &mut self,
         type_name: &str,
         method_name: &str,
         fn_type: MonoType,
     ) {
-        // 类型空间：StructType.methods
-        if let Some(poly) = self.types.get_mut(type_name) {
-            if let MonoType::Struct(ref mut st) = poly.body {
-                st.methods
-                    .insert(method_name.to_string(), PolyType::mono(fn_type.clone()));
-            }
-        }
-        // 兼容镜像（P4 删除）
         let key = format!("{}.{}", type_name, method_name);
         self.method_bindings.insert(key.clone(), fn_type);
         // 方法绑定也导出
