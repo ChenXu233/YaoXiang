@@ -1,7 +1,7 @@
 # YaoXiang 测试规范
 
-> 版本: 1.0
-> 适用分支: refactor/test-suite
+> 版本: 2.0
+> 适用分支: all (assert.assert pattern)
 
 ---
 
@@ -67,13 +67,27 @@ tests/yaoxiang/
 
 ### 2.3 断言约定
 
-每个 `.yx` 测试文件**必须**在末尾输出 `ALL TESTS PASSED`：
+使用 `assert.assert` 验证值，不再使用 `io.println("ALL TESTS PASSED")` 哨兵字符串：
 
 ```yaoxiang
-io.println("ALL TESTS PASSED")
+// 🟢 新模式（强制）
+use std.assert
+
+main = {
+    x = 42
+    assert.assert(x == 42, "x should be 42")
+}
+
+// 🔴 旧模式（已废弃）
+use std.io
+main = {
+    x = 42
+    io.println(x)
+    io.println("ALL TESTS PASSED")  // ❌ 不再使用
+}
 ```
 
-测试框架捕获 stdout 验证此行存在。
+测试框架通过 exit code 判断（0=通过，非0=断言失败），不再依赖 stdout 字符串匹配。
 
 ### 2.4 已知 Bug 的处理
 
@@ -181,6 +195,7 @@ cargo run -- run tests/yaoxiang/01-syntax/basics/variables.yx
 提交前确认：
 
 - [ ] `cargo test` 全部通过
-- [ ] E2E 测试文件有正确的文件头
-- [ ] 新测试输出 `ALL TESTS PASSED`
-- [ ] 禁用的测试注明原因
+- [ ] E2E 测试文件有正确的文件头（// 覆盖: + // 验证: + // 状态:）
+- [ ] 使用 `assert.assert` 而非 `io.println("ALL TESTS PASSED")`
+- [ ] 每个 `assert.assert` 有自定义错误消息
+- [ ] `[test:ignore]` 文件有追踪 issue 编号
