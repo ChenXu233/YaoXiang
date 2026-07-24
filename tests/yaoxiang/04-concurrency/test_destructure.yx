@@ -3,23 +3,21 @@
 // 验证: `a, b = (1, 2)` 和 `(a, b) = (1, 2)` 两种形式
 // 状态: ✅ 可运行
 
-use std.io
+use std.assert
 main = {
     // Non-paren form: a, b = (1, 2)
     a, b = (1, 2)
-    io.println(a)
-    io.println(b);
+    assert.assert(a == 1)
+    assert.assert(b == 2);
 
     // Parenthesized form: (c, d) = (3, 4)
     (c, d) = (3, 4)
-    io.println(c)
-    io.println(d);
+    assert.assert(c == 3)
+    assert.assert(d == 4);
 
     // Three-element destructuring
     x, y, z = (10, 20, 30)
-    io.println(x)
-    io.println(y)
-    io.println(z);
-
-    io.println("ALL TESTS PASSED")
+    assert.assert(x == 10)
+    assert.assert(y == 20)
+    assert.assert(z == 30);
 }

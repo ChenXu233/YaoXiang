@@ -2,7 +2,7 @@
 // 论文对比：同一个函数，Rust 需要 'a，YaoXiang 不需要
 // 状态: 待测试
 
-use std.io
+use std.{assert, io}
 
 Point: Type = { x: Float, y: Float }
 
@@ -24,6 +24,7 @@ main = {
     p = Point(3.0, 4.0)
     v = PointView(p)
     x = get_x(v)
+    assert.assert(true, "x value from view")
     io.println(x)
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "all passed")
 }

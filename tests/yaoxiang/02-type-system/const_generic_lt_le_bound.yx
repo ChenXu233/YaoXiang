@@ -3,7 +3,7 @@
 // 验证: Capped(Int, 3) 中 Assert(3 < 100) 与 Assert(3 <= 100) 求值为 true，编译通过
 // 状态: ✅ 可运行
 
-use std.io
+use std.assert
 
 Capped: (T: Type, N: Int) -> Type = {
     _assert_lt: Assert(N < 100),
@@ -13,5 +13,5 @@ Capped: (T: Type, N: Int) -> Type = {
 
 main = {
     arr = Capped(Int, 3)
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "Capped(Int, 3) with N < 100 and N <= 100 compiled and ran")
 }

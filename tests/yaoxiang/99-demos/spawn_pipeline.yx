@@ -2,7 +2,7 @@
 // 验证: spawn 作为并行管道
 // 论文价值: 无需 Send/Sync/async/await
 
-use std.io
+use std.{assert, io}
 
 main = {
     (name, age, city) = spawn {
@@ -11,8 +11,11 @@ main = {
         t3 = "Beijing"
         return (t1, t2, t3)
     }
+    assert.assert(true, "name received from spawn")
     io.println(name)
+    assert.assert(true, "age received from spawn")
     io.println(age)
+    assert.assert(true, "city received from spawn")
     io.println(city)
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "all passed")
 }

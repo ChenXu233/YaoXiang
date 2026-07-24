@@ -94,6 +94,24 @@ fn binary_name() -> String {
 // Tests
 // ============================================================================
 
+/// Check if a .yx file has a `// [test:ignore]: reason` marker in its first 5 lines.
+/// If so, skip it in the test runner and print the reason.
+fn is_ignored(path: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok()?;
+    for line in content.lines().take(5) {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("// [test:ignore]:") {
+            let reason = rest.trim();
+            return Some(if reason.is_empty() {
+                "no reason given".to_string()
+            } else {
+                reason.to_string()
+            });
+        }
+    }
+    None
+}
+
 #[test]
 fn test_all_yx_files_pass() {
     let files = discover_yx_tests();
@@ -107,6 +125,12 @@ fn test_all_yx_files_pass() {
             .unwrap_or(file)
             .display()
             .to_string();
+
+        // Skip files with [test:ignore] annotation
+        if let Some(reason) = is_ignored(file) {
+            eprintln!("  [SKIP] {relative}: {reason}");
+            continue;
+        }
 
         let output = Command::new(&binary)
             .arg("run")

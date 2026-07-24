@@ -3,7 +3,7 @@
 // 验证: SafeArray(Int, 3) 中 Assert(3 > 0) 求值为 true，编译通过
 // 状态: ✅ 可运行
 
-use std.io
+use std.assert
 
 SafeArray: (T: Type, N: Int) -> Type = {
     _assert_n: Assert(N > 0),
@@ -12,5 +12,5 @@ SafeArray: (T: Type, N: Int) -> Type = {
 
 main = {
     arr = SafeArray(Int, 3)
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "SafeArray(Int, 3) instantiation compiled and ran")
 }

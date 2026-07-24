@@ -3,16 +3,16 @@
 // 验证: Lambda 定义和调用
 // 状态: ✅ 可运行
 
-use std.io
+use std.assert
 
 main = {
     // 基本 Lambda
     double = (x) => x * 2
-    io.println(double(21))
+    assert.assert(double(21) == 42, "double(21) == 42")
 
     // 多参数 Lambda
     add = (a, b) => a + b
-    io.println(add(3, 4))
+    assert.assert(add(3, 4) == 7, "add(3, 4) == 7")
 
     // Lambda 代码块
     max = (a, b) => {
@@ -22,8 +22,6 @@ main = {
             return b
         }
     }
-    io.println(max(10, 20))
-    io.println(max(30, 5))
-
-    io.println("ALL TESTS PASSED")
+    assert.assert(max(10, 20) == 20, "max(10, 20) == 20")
+    assert.assert(max(30, 5) == 30, "max(30, 5) == 30")
 }

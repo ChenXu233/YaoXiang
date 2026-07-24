@@ -3,11 +3,5 @@
 // 验证: Result 的基本使用
 // 状态: 🔴 未实现 - Result 类型在运行时未完全支持
 
-// use std.io
-// x = ok(42)
-// y = err("fail")
-
-use std.io
 main = {
-    io.println("ALL TESTS PASSED")
 }

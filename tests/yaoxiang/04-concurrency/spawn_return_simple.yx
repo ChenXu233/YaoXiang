@@ -1,10 +1,9 @@
 // 测试: spawn 块 return 语义（纯计算，无子任务）
-use std.io
+use std.assert
 
 main = {
     result = spawn {
         return 10 + 20
     }
-    io.println(result)
-    io.println("ALL TESTS PASSED")
+    assert.assert(result == 30)
 }

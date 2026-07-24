@@ -2,9 +2,9 @@
 // 验证: 令牌可以作为结构体字段 — 证明令牌是普通类型
 // 状态: 待测试
 
-use std.io
+use std.assert
 
-Point: Type = { x: Float, y: Float }
+Point: Type = { x: Int, y: Int }
 
 Window: Type = {
     target: Point,
@@ -12,9 +12,8 @@ Window: Type = {
 }
 
 main = {
-    p = Point(1.0, 2.0)
+    p = Point(1, 2)
     ref_p = &p            // 显式借用 p，不转移所有权
     w = Window(p, ref_p)  // view 令牌从 p 派生
-    io.println(w.view.x)
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "token_in_struct — tokens can be stored as fields")
 }

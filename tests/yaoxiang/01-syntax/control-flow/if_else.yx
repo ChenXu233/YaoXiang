@@ -3,41 +3,47 @@
 // 验证: if-elif-else 条件分支
 // 状态: ✅ 可运行
 
-use std.io
+use std.assert
 
 main = {
     // if-else
+    mut r1 = ""
     if true {
-        io.println("true_branch")
+        r1 = "true_branch"
     }
+    assert.assert(r1 == "true_branch", "if true branch")
 
+    mut r2 = ""
     if false {
-        io.println("should_not_print")
+        r2 = "should_not_print"
     } else {
-        io.println("false_branch")
+        r2 = "false_branch"
     }
+    assert.assert(r2 == "false_branch", "if-else branch")
 
     // if-elif-else
     score = 85
+    mut grade = ""
     if score >= 90 {
-        io.println("A")
+        grade = "A"
     } elif score >= 80 {
-        io.println("B")
+        grade = "B"
     } elif score >= 70 {
-        io.println("C")
+        grade = "C"
     } else {
-        io.println("D")
+        grade = "D"
     }
+    assert.assert(grade == "B", "grade B for score 85")
 
     // 嵌套 if
     x = 42
+    mut size = ""
     if x > 0 {
         if x > 100 {
-            io.println("large")
+            size = "large"
         } else {
-            io.println("small")
+            size = "small"
         }
     }
-
-    io.println("ALL TESTS PASSED")
+    assert.assert(size == "small", "nested if small")
 }

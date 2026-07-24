@@ -1,13 +1,13 @@
 // 04-concurrency/spawn_simple.yx
 // 验证: spawn {} 简单返回值
+// 状态: ✅ 可运行
 
-use std.io
+use std.assert
 
 main = {
     result = spawn {
         x = 42
         return x
     }
-    io.println(result)
-    io.println("ALL TESTS PASSED")
+    assert.assert(result == 42, "result should be 42")
 }

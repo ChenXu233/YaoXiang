@@ -3,16 +3,14 @@
 // 验证: f"hello {name}" 插值
 // 状态: ✅ 可运行
 
-use std.io
+use std.assert
 
 main = {
     name = "world"
     msg = f"hello {name}"
-    io.println(msg)
+    assert.assert(msg == "hello world", "f-string name == world")
 
     x = 42
     val = f"value: {x}"
-    io.println(val)
-
-    io.println("ALL TESTS PASSED")
+    assert.assert(val == "value: 42", "f-string x == 42")
 }

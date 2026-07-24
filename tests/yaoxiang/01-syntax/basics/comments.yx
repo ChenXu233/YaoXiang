@@ -10,10 +10,9 @@
   可以跨越多行
 */
 
-use std.io
+use std.assert
 
 main = {
     // 单行注释在函数体内
-    io.println("comments_work") // 行尾注释
-    io.println("ALL TESTS PASSED")
+    assert.assert("comments_work" == "comments_work", "string literal") // 行尾注释
 }

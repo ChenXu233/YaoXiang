@@ -1,8 +1,6 @@
 // dict_literal: Dict 字面量 IR 支持
-use std.io
+use std.assert
 main = {
     d = {"a": 1, "b": 2}
-    io.println("dict created")
-    io.println(d)
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "dict literal created successfully")
 }

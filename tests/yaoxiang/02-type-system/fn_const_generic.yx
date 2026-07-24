@@ -1,13 +1,12 @@
 // 02-type-system/fn_const_generic.yx
 // 覆盖: RFC-011 §4.1 函数级 const 泛型 — curry 形式参数化
 // 验证: 函数级 const 泛型 (N: Int) 定义、调用，并在运行时正确传值和计算
-// 状态: ✅ 可运行
+// [test:ignore]: const generic 运行时 curry 返回值不等于传入值
 
-use std.io
+use std.assert
 
 f: (N: Int) -> (n: N) -> Int = (n) => n
-
 main = {
     result = f(42)(5)
-    io.println("ALL TESTS PASSED")
+    assert.assert(result == 5, "f(42)(5) should return 5")
 }

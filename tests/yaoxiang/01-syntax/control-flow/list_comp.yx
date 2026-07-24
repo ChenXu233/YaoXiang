@@ -4,23 +4,30 @@
 // 状态: ✅ 可运行
 // TODO: 带条件的 [expr for var in iterable if cond] 需修复 parser
 
-use std.io
+use std.assert
 
 main = {
     mut items = [1, 2, 3, 4, 5]
 
     // 基本列表推导式
     squares = [x * x for x in items]
-    io.println(squares)
+    assert.assert(squares[0] == 1, "squares[0] == 1")
+    assert.assert(squares[1] == 4, "squares[1] == 4")
+    assert.assert(squares[2] == 9, "squares[2] == 9")
+    assert.assert(squares[3] == 16, "squares[3] == 16")
+    assert.assert(squares[4] == 25, "squares[4] == 25")
 
     // 字符串映射
     mut words = ["hello", "world"]
     shouts = [s + "!!" for s in words]
-    io.println(shouts)
+    assert.assert(shouts[0] == "hello!!", "shouts[0] == hello!!")
+    assert.assert(shouts[1] == "world!!", "shouts[1] == world!!")
 
     // 常量表达式
     tens = [10 for x in items]
-    io.println(tens)
-
-    io.println("ALL TESTS PASSED")
+    assert.assert(tens[0] == 10, "tens[0] == 10")
+    assert.assert(tens[1] == 10, "tens[1] == 10")
+    assert.assert(tens[2] == 10, "tens[2] == 10")
+    assert.assert(tens[3] == 10, "tens[3] == 10")
+    assert.assert(tens[4] == 10, "tens[4] == 10")
 }

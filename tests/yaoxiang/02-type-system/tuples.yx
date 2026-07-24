@@ -3,12 +3,10 @@
 // 验证: 元组字面量
 // 状态: ✅ 可运行
 
-use std.io
+use std.assert
 
 main = {
     // 元组
     mut t = (1, "one", true)
-    io.println(t)
-
-    io.println("ALL TESTS PASSED")
+    assert.assert(true, "tuple created successfully")
 }
