@@ -2306,6 +2306,25 @@ impl AstToIrGenerator {
         }
     }
 
+    /// 判断函数表达式是否可在编译期解析为静态函数名。
+    ///
+    /// 只有全局函数声明（通过 let/fn 定义的具名函数）才是静态的。
+    /// 局部变量、闭包表达式、函数调用返回值等全部走动态分发。
+    fn is_static_fn_name(
+        &self,
+        func: &ast::Expr,
+    ) -> bool {
+        match func {
+            ast::Expr::Var(name, _) => {
+                if self.lookup_local(name).is_some() {
+                    return false;
+                }
+                self.lookup_var_type(name).is_some()
+            }
+            _ => false,
+        }
+    }
+
     /// 获取表达式的推断类型（用于 IR 生成阶段的分支）
     fn get_expr_mono_type(
         &self,
@@ -2885,12 +2904,8 @@ impl AstToIrGenerator {
                         }
                     }
 
-                    // 命名空间解析：将短名称解析为完整名称
-                    // 例如：print -> std.io.print (当 print 是通过 use std.io.{print} 导入时)
-                    // 检查是否是闭包调用（函数表达式不是简单的变量名）
-                    let is_closure_call = !matches!(func.as_ref(), Expr::Var(_, _));
-
-                    if is_closure_call {
+                    // 检查是否是动态函数调用（非静态函数名的 Var）
+                    if !self.is_static_fn_name(func) {
                         // 闭包调用：先加载函数值，然后使用 CallDyn
                         let func_reg = self.next_temp_reg();
                         self.generate_expr_ir(func, func_reg, instructions, constants)?;
