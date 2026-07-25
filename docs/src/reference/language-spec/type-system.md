@@ -586,7 +586,7 @@ sum: (T: Add)(arr: Array(T)) -> T = {
 
 ```yaoxiang
 // 平台类型枚举（标准库定义）
-Platform: Type = X86_64 | AArch64 | RISC_V | ARM | X86
+Platform: Type = { X86_64: () -> Platform, AArch64: () -> Platform, RISC_V: () -> Platform, ARM: () -> Platform, X86: () -> Platform }
 
 // P 是预定义泛型参数名，代表当前编译平台
 sum: (P: X86_64)(arr: Array(Float)) -> Float = {

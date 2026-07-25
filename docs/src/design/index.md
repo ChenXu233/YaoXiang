@@ -153,7 +153,7 @@ RFC 提案有 5 个状态：
 ```yaoxiang
 // 类型定义
 Point: Type = { x: Float, y: Float }
-Result: Type(T, E) = { ok(T) | err(E) }
+Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 // 函数定义
 add: (a: Int, b: Int) -> Int = a + b
@@ -199,7 +199,7 @@ process: () -> Void = () => {
 ### 3. 错误处理
 
 ```yaoxiang
-Result: Type(T, E) = { ok(T) | err(E) }
+Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 process: () -> Result(Data, Error) = {
     data = fetch_data()?      // ? 运算符透明传播

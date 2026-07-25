@@ -236,7 +236,7 @@ REPL 支持多行代码输入。当检测到代码不完整时（如未闭合的
 ### 变体类型定义（枚举）
 
 ```yaoxiang
->> Color: Type = { red | green | blue }
+>> Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 ```
 
 ## 自动补全

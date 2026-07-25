@@ -207,10 +207,10 @@ d2 = p1.distance(p2)  // → distance(p1, p2)
 
 ```yaoxiang
 // 简单枚举
-Color: Type = { red | green | blue }
+Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
 // 带数据的枚举
-Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
+Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 // 使用泛型
 success: Result(Int, String) = ok(42)

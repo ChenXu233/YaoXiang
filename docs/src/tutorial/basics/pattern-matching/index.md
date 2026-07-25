@@ -30,7 +30,7 @@ Pattern     ::= Literal       # 字面量模式：42, "hello"
 
 ```yaoxiang
 // 定义 Result 类型
-Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
+Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 // 函数使用 match 处理 Result
 handle: (result: Result(Int, String)) -> String = match result {
@@ -49,7 +49,7 @@ print(handle(b))  // 出错啦: 连接超时
 
 ```yaoxiang
 // 使用 Option 避免 null
-// 内置类型: Option: (T: Type) -> Type = some(T) | none
+// 内置类型: Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 
 describe: (opt: Option(Int)) -> String = match opt {
     some(n) => "有值: {n}",
@@ -64,7 +64,7 @@ print(describe(none))       // 什么也没有
 
 ```yaoxiang
 // 定义颜色枚举
-Color: Type = { red | green | blue | rgb(Int, Int, Int) }
+Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color, rgb: (Int, Int, Int) -> Color }
 
 to_hex: (c: Color) -> String = match c {
     red => "#FF0000",
@@ -135,7 +135,7 @@ print(second(p))  // "hello"
 用 `|` 将多个模式组合在一起，匹配其中任意一个：
 
 ```yaoxiang
-Token: Type = { number(Int) | plus | minus | times | divide | eof }
+Token: Type = { number: (Int) -> Token, plus: () -> Token, minus: () -> Token, times: () -> Token, divide: () -> Token, eof: () -> Token }
 
 // 将多个变体组合为"运算符"类
 is_operator: (t: Token) -> Bool = match t {
@@ -152,7 +152,7 @@ print(is_operator(number(5))) // false
 在一个匹配臂后面加 `if 条件`，让匹配只在模式匹配**且**条件满足时才生效：
 
 ```yaoxiang
-Age: Type = { adult(Int) | child(Int) }
+Age: Type = { adult: (Int) -> Age, child: (Int) -> Age }
 
 // 卫表达式附加额外条件
 can_drive: (a: Age) -> Bool = match a {
@@ -172,7 +172,7 @@ print(can_drive(adult(16)))  // false
 YaoXiang 编译器确保 `match` 覆盖了所有可能的情况。如果遗漏分支，编译器会报错：
 
 ```yaoxiang
-Direction: Type = { north | south | east | west }
+Direction: Type = { north: () -> Direction, south: () -> Direction, east: () -> Direction, west: () -> Direction }
 
 // ✅ 正确：四个方向全部覆盖
 turn: (d: Direction) -> Direction = match d {
@@ -198,7 +198,7 @@ turn: (d: Direction) -> Direction = match d {
 模式的真正威力来自**嵌套**——你可以在一个模式里嵌套另一个模式：
 
 ```yaoxiang
-Expr: Type = { literal(Int) | add(Expr, Expr) | mul(Expr, Expr) }
+Expr: Type = { literal: (Int) -> Expr, add: (Expr, Expr) -> Expr, mul: (Expr, Expr) -> Expr }
 
 // 嵌套模式：在 add 内部再匹配 literal
 simplify: (e: Expr) -> Expr = match e {

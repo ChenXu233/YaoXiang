@@ -54,7 +54,7 @@ YaoXiang 目前处于 **实验验证阶段**，标准库和 API 正在逐步完�
 Point: Type = { x: Float, y: Float }
 
 // 枚举类型
-Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
+Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 // 接口类型（所有字段为函数）
 Callable: Type = { call: (String) -> Void }

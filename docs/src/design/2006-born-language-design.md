@@ -233,17 +233,17 @@ if condition {
 
 ### 4.1 为什么选择"构造器即类型"？
 
-YaoXiang的类型定义只有一种形式：用`|`分隔的构造器。
+YaoXiang的类型定义统一使用`构造器`语法。不同变体对应不同构造器函数：
 
 ```yaoxiang
 # 零参数构造器（枚举风格）
-type Color = red | green | blue
+type Color = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
 # 多参数构造器（结构体风格）
 type Point = Point(x: Float, y: Float)
 
 # 泛型构造器
-type Result[T, E] = ok(T) | err(E)
+type Result[T, E] = { ok: (T) -> Result[T, E], err: (E) -> Result[T, E] }
 ```
 
 这回应了什么？它回应了**类型系统应该统一而不是分裂**。

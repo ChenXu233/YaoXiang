@@ -99,13 +99,13 @@ print(p1.distance(p2))  // 5.0
 
 ```yaoxiang
 // 简单枚举
-Color: Type = { red | green | blue }
+Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
 // 带数据的枚举
-Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
+Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 // 嵌套枚举
-Shape: Type = { circle(Float) | rect(Float, Float) | point }
+Shape: Type = { circle: (Float) -> Shape, rect: (Float, Float) -> Shape, point: () -> Shape }
 ```
 
 枚举的核心理念：**每个变体本身也是一个类型**。
@@ -192,7 +192,7 @@ print(doubled)  // [2, 4, 6, 8]
 | 概念 | 语法 | 用途 |
 |------|------|------|
 | 记录类型 | `Point: Type = { x: Float, y: Float }` | 组织相关数据 |
-| 枚举 | `Color: Type = { red \| green \| blue }` | 多选一 |
+| 枚举 | `Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }` | 多选一 |
 | 接口 | `Drawable: Type = { draw: ... }` | 多态抽象 |
 | 泛型 | `List: (T: Type) -> Type = { ... }` | 类型参数化 |
 | Never | `Never` 是系统内建底类型 | 发散/永不返回的代码路径 |
