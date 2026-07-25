@@ -822,6 +822,20 @@ impl AstToIrGenerator {
         constants: &mut Vec<ConstValue>,
         generic_params: Option<Vec<String>>,
     ) -> Result<Option<FunctionIR>, Diagnostic> {
+        // curry 分流：如果 return_type 是 Type::Fn，走 curry 生成路径
+        // 这是"curry 是 1 层时退化为普通函数"的自然边界（递归基例）
+        if let Some(ast::Type::Fn { return_type, .. }) = type_annotation {
+            if matches!(return_type.as_ref(), ast::Type::Fn { .. }) {
+                return self.generate_curry_function_ir(
+                    name,
+                    type_annotation.unwrap(),
+                    params,
+                    body,
+                    constants,
+                    generic_params,
+                );
+            }
+        }
         // 检测 native("symbol") 模式：函数体为空语句 + Native("...") 表达式
         // 形如: my_add: (a: Int, b: Int) -> Int = Native("my_add")
         //
