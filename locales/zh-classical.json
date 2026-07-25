@@ -58,7 +58,7 @@
   "bytecode_func_instr_count": "  指令数：{0}",
   "bytecode_func_code": "  代码：",
   "bytecode_instr_index": "    [{0:04}] {1:14} {2}",
-  "bytecode_unknown_opcode": "    [{0:04}] 未知指令：0x{1:02x}  ({2})",
+  "bytecode_unknown_opcode": "    [{0:04}] 未識操作碼：0x{1:02x}  ({2})",
   "repl_welcome": "YaoXiang REPL v0.3.0",
   "repl_help": "输入 :help 以观可用之令，:quit 以退。",
   "repl_error": "错误：{0}",

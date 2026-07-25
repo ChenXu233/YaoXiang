@@ -143,7 +143,6 @@
   "debug_registers": "DEBUG: registers.len={0}, lhs_idx={1}, rhs_idx={2}",
   "debug_match": "DEBUG: Matched BinaryOp!",
   "formatter_not_implemented": "Formatter not implemented yet",
-
   "ir_gen_enter_scope": "DEBUG IR gen: enter_scope, symbols stack depth before: {0}",
   "ir_gen_exit_scope": "DEBUG IR gen: exit_scope, symbols stack depth: {0}",
   "ir_gen_register_local": "DEBUG IR gen: register_local '{0}' with local_idx={1}",
