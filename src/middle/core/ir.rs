@@ -126,6 +126,10 @@ pub enum Instruction {
         dst: Operand,
         src: Operand,
     },
+    Not {
+        dst: Operand,
+        src: Operand,
+    },
     Eq {
         dst: Operand,
         lhs: Operand,

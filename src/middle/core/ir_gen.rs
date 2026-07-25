@@ -3520,10 +3520,9 @@ impl AstToIrGenerator {
                         // 逻辑非：!x
                         let src_reg = self.next_temp_reg();
                         self.generate_expr_ir(expr, src_reg, instructions, constants)?;
-                        // 生成一个简单的取反操作
-                        instructions.push(Instruction::Load {
+                        instructions.push(Instruction::Not {
                             dst: Operand::Local(result_reg),
-                            src: Operand::Const(ConstValue::Int(0)),
+                            src: Operand::Local(src_reg),
                         });
                     }
                 }

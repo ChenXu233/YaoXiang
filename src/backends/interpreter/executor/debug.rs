@@ -286,6 +286,9 @@ impl Interpreter {
                     (crate::middle::bytecode::UnaryOp::Neg, RuntimeValue::Float(f)) => {
                         RuntimeValue::Float(-f)
                     }
+                    (crate::middle::bytecode::UnaryOp::Neg, RuntimeValue::Bool(b)) => {
+                        RuntimeValue::Bool(!b)
+                    }
                     (crate::middle::bytecode::UnaryOp::Not, RuntimeValue::Int(n)) => {
                         RuntimeValue::Int(!n)
                     }

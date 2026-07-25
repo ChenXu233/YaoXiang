@@ -947,6 +947,25 @@ impl Interpreter {
             (CompareOp::Ge, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
                 RuntimeValue::Bool(l >= r)
             }
+            // Bool comparison
+            (CompareOp::Eq, RuntimeValue::Bool(l), RuntimeValue::Bool(r)) => {
+                RuntimeValue::Bool(l == r)
+            }
+            (CompareOp::Ne, RuntimeValue::Bool(l), RuntimeValue::Bool(r)) => {
+                RuntimeValue::Bool(l != r)
+            }
+            (CompareOp::Lt, RuntimeValue::Bool(l), RuntimeValue::Bool(r)) => {
+                RuntimeValue::Bool(l < r)
+            }
+            (CompareOp::Le, RuntimeValue::Bool(l), RuntimeValue::Bool(r)) => {
+                RuntimeValue::Bool(l <= r)
+            }
+            (CompareOp::Gt, RuntimeValue::Bool(l), RuntimeValue::Bool(r)) => {
+                RuntimeValue::Bool(l > r)
+            }
+            (CompareOp::Ge, RuntimeValue::Bool(l), RuntimeValue::Bool(r)) => {
+                RuntimeValue::Bool(l >= r)
+            }
             // String comparison
             (CompareOp::Eq, RuntimeValue::String(l), RuntimeValue::String(r)) => {
                 RuntimeValue::Bool(l == r)

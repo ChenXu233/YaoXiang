@@ -405,6 +405,7 @@ impl Translator {
             Shr { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Shr, dst, lhs, rhs),
             Sar { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Sar, dst, lhs, rhs),
             Neg { dst, src } => self.translate_unary_op(Opcode::I64Neg, dst, src),
+            Not { dst, src } => self.translate_unary_op(Opcode::I64Neg, dst, src),
 
             Eq { dst, lhs, rhs } => {
                 self.translate_compare(Opcode::I64Eq, Opcode::I64Ne, dst, lhs, rhs)
