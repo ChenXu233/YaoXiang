@@ -1,4 +1,4 @@
-//! Declaration parsing tests — based on spec §5.2, §6.1, RFC-011 §4.1
+//! Declaration parsing tests — based on spec §5.2, §6.1, RFC-010 (issue #203), RFC-011 §4.1
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
