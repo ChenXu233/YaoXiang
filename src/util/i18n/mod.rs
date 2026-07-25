@@ -426,8 +426,6 @@ pub enum MSG {
     VmComplete,
 
     // Bytecode
-    BytecodeDecodeI64Add,
-    BytecodeDecodeI64AddTooShort,
 
     // IR Gen
     IrGenEnterScope,
@@ -697,8 +695,6 @@ impl MSG {
             MSG::VmRegWrite => "vm_reg_write",
             MSG::VmPushStack => "vm_push_stack",
             MSG::VmPopStack => "vm_pop_stack",
-            MSG::VmCallFunc => "vm_call_func",
-            MSG::VmReturnFunc => "vm_return_func",
             MSG::VmBinaryOp => "vm_binary_op",
             MSG::VmI64Add => "vm_i64_add",
             MSG::VmExecutingFunction => "vm_executing_function",

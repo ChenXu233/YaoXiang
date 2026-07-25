@@ -10,8 +10,6 @@
 //! - Can be interpreted or compiled further
 
 use std::collections::HashMap;
-use crate::tlog;
-use crate::util::i18n::MSG;
 use crate::backends::common::Opcode;
 
 // Re-export types for conversion
@@ -882,18 +880,10 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                 }
                             }
                             Opcode::I64Add => {
-                                tlog!(
-                                    debug,
-                                    MSG::BytecodeDecodeI64Add,
-                                    &instr.operands.len().to_string()
-                                );
-                                if instr.operands.len() >= 6 {
-                                    let dst =
-                                        u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
-                                    let lhs =
-                                        u16::from_le_bytes([instr.operands[2], instr.operands[3]]);
-                                    let rhs =
-                                        u16::from_le_bytes([instr.operands[4], instr.operands[5]]);
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
                                     decoded_instructions.push(BytecodeInstr::BinaryOp {
                                         op: BinaryOp::Add,
                                         dst: Reg(dst),
@@ -901,7 +891,7 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                         rhs: Reg(rhs),
                                     });
                                 } else {
-                                    tlog!(warn, MSG::BytecodeDecodeI64AddTooShort);
+                                    decoded_instructions.push(BytecodeInstr::Nop);
                                 }
                             }
                             Opcode::I64Sub => {

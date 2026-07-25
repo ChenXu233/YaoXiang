@@ -1,8 +1,8 @@
 [package]
-name = "bench-runner"
+name = "shootout"
 version = "0.1.0"
 edition = "2021"
-description = "YaoXiang 多语言基准测试运行器"
+description = "YaoXiang 多语言基准对比运行器"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

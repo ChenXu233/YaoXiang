@@ -1,13 +1,13 @@
-//! # bench-runner — YaoXiang 多语言基准测试运行器
+//! # shootout — YaoXiang 多语言基准对比运行器
 //!
 //! 读取 `bench.yaml`，逐 benchmark 编译/运行各语言实现，输出对比结果。
 //!
 //! ## 用法
 //! ```bash
-//! cargo run --package bench-runner                          # 全部
-//! cargo run --package bench-runner -- --bench fibonacci     # 单问题
-//! cargo run --package bench-runner -- --lang yaoxiang       # 单语言
-//! cargo run --package bench-runner -- --bench-root bench    # 指定根目录
+//! cargo run -p shootout                          # 全部
+//! cargo run -p shootout -- --bench fibonacci     # 单问题
+//! cargo run -p shootout -- --lang yaoxiang       # 单语言
+//! cargo run -p shootout -- --bench-root benches/shootout  # 指定根目录
 //! ```
 
 use std::collections::BTreeMap;
@@ -59,7 +59,7 @@ struct RunDef {
 // ============================================================================
 
 #[derive(Parser)]
-#[command(name = "bench-runner", about = "YaoXiang 多语言基准测试运行器")]
+#[command(name = "shootout", about = "YaoXiang 多语言基准对比运行器")]
 struct Cli {
     /// 只运行指定的 benchmark（问题名）
     #[arg(long, value_name = "NAME")]
@@ -70,12 +70,16 @@ struct Cli {
     lang: Option<String>,
 
     /// bench.yaml 路径
-    #[arg(long, default_value = "bench/bench.yaml")]
+    #[arg(long, default_value = "benches/shootout/bench.yaml")]
     config: PathBuf,
 
     /// 基准根目录（源码、编译产物等基准路径）
-    #[arg(long, default_value = ".")]
+    #[arg(long, default_value = "benches/shootout")]
     bench_root: PathBuf,
+
+    /// yaoxiang 可执行文件路径（不依赖 PATH，避免用到旧版本）
+    #[arg(long, default_value = if cfg!(target_os = "windows") { "target/release/yaoxiang.exe" } else { "target/release/yaoxiang" })]
+    yaoxiang_bin: PathBuf,
 }
 
 // ============================================================================
@@ -83,7 +87,10 @@ struct Cli {
 // ============================================================================
 
 /// 构造 Command，设置环境变量，执行并返回耗时
-fn time_cmd(cmd_str: &str, input: &str) -> Result<Duration> {
+fn time_cmd(
+    cmd_str: &str,
+    input: &str,
+) -> Result<Duration> {
     let start = Instant::now();
 
     let mut cmd = if cfg!(target_os = "windows") {
@@ -99,7 +106,9 @@ fn time_cmd(cmd_str: &str, input: &str) -> Result<Duration> {
     // 注入 BENCH_INPUT 环境变量，所有语言实现统一读取
     cmd.env("BENCH_INPUT", input);
 
-    let status = cmd.status().with_context(|| format!("执行命令失败: {}", cmd_str))?;
+    let status = cmd
+        .status()
+        .with_context(|| format!("执行命令失败: {}", cmd_str))?;
 
     if !status.success() {
         anyhow::bail!("命令退出码非零: {} (exit: {:?})", cmd_str, status.code());
@@ -108,7 +117,12 @@ fn time_cmd(cmd_str: &str, input: &str) -> Result<Duration> {
 }
 
 /// 运行 N 轮测量，返回毫秒 Vec
-fn run_rounds(cmd_str: &str, input: &str, warmup: u32, runs: u32) -> Result<Vec<f64>> {
+fn run_rounds(
+    cmd_str: &str,
+    input: &str,
+    warmup: u32,
+    runs: u32,
+) -> Result<Vec<f64>> {
     for _ in 0..warmup {
         time_cmd(cmd_str, input)?;
     }
@@ -149,10 +163,21 @@ fn fmt_duration(ms: f64) -> String {
 // 模板替换
 // ============================================================================
 
-fn render_cmd(template: &str, src: &Path, out: &Path) -> String {
+fn render_cmd(
+    template: &str,
+    src: &Path,
+    out: &Path,
+    yaoxiang_bin: &Path,
+) -> String {
+    // Windows cmd /C 拒绝路径里混用 / 和 \，统一用 OS 原生分隔符
+    let normalize = |p: &Path| {
+        p.to_string_lossy()
+            .replace('/', std::path::MAIN_SEPARATOR_STR)
+    };
     template
-        .replace("%s", &src.to_string_lossy())
-        .replace("%o", &out.to_string_lossy())
+        .replace("%y", &normalize(yaoxiang_bin))
+        .replace("%s", &normalize(src))
+        .replace("%o", &normalize(out))
 }
 
 // ============================================================================
@@ -161,6 +186,7 @@ fn render_cmd(template: &str, src: &Path, out: &Path) -> String {
 
 struct RunCtx {
     bench_root: PathBuf,
+    yaoxiang_bin: PathBuf,
     filter_bench: Option<String>,
     filter_lang: Option<String>,
 }
@@ -169,12 +195,16 @@ impl RunCtx {
     fn new(cli: &Cli) -> Self {
         Self {
             bench_root: cli.bench_root.clone(),
+            yaoxiang_bin: cli.yaoxiang_bin.clone(),
             filter_bench: cli.bench.clone(),
             filter_lang: cli.lang.clone(),
         }
     }
 
-    fn run(&self, cfg: &Config) -> Result<()> {
+    fn run(
+        &self,
+        cfg: &Config,
+    ) -> Result<()> {
         for (bench_name, bench_def) in &cfg.benchmarks {
             if let Some(filter) = &self.filter_bench {
                 if bench_name != filter {
@@ -191,7 +221,7 @@ impl RunCtx {
             }
             println!();
 
-            let out_dir = self.bench_root.join("bench/out");
+            let out_dir = self.bench_root.join("out");
             std::fs::create_dir_all(&out_dir)?;
 
             for (lang_name, lang_def) in &bench_def.languages {
@@ -206,7 +236,7 @@ impl RunCtx {
 
                 // 编译阶段
                 let compile_time = if let Some(compile) = &lang_def.compile {
-                    let cmd = render_cmd(&compile.cmd, &src_path, &out_path);
+                    let cmd = render_cmd(&compile.cmd, &src_path, &out_path, &self.yaoxiang_bin);
                     print!("  [{:>10}] 编译 ... ", lang_name);
                     std::io::Write::flush(&mut std::io::stdout())?;
                     match time_cmd(&cmd, "") {
@@ -229,7 +259,8 @@ impl RunCtx {
                 // 运行阶段
                 if let Some(run_def) = &lang_def.run {
                     for input in &bench_def.inputs {
-                        let run_cmd = render_cmd(&run_def.cmd, &src_path, &out_path);
+                        let run_cmd =
+                            render_cmd(&run_def.cmd, &src_path, &out_path, &self.yaoxiang_bin);
 
                         print!("  [{:>10}] 输入={:>6} 运行 ... ", lang_name, input);
                         std::io::Write::flush(&mut std::io::stdout())?;
@@ -273,8 +304,7 @@ impl RunCtx {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let yaml_content =
-        std::fs::read_to_string(&cli.config).context("读取 bench.yaml 失败")?;
+    let yaml_content = std::fs::read_to_string(&cli.config).context("读取 bench.yaml 失败")?;
     let cfg: Config = serde_yaml::from_str(&yaml_content).context("解析 bench.yaml 失败")?;
 
     let ctx = RunCtx::new(&cli);

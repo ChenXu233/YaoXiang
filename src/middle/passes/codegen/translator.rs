@@ -584,17 +584,10 @@ impl Translator {
         let lhs_reg = self.operand_resolver.to_reg(lhs)?;
         let rhs_reg = self.operand_resolver.to_reg(rhs)?;
 
-        if matches!(opcode, Opcode::I64Add) {
-            Ok(BytecodeInstruction::new(
-                opcode,
-                vec![dst_reg, 0, lhs_reg, 0, rhs_reg, 0],
-            ))
-        } else {
-            Ok(BytecodeInstruction::new(
-                opcode,
-                vec![dst_reg, lhs_reg, rhs_reg],
-            ))
-        }
+        Ok(BytecodeInstruction::new(
+            opcode,
+            vec![dst_reg, lhs_reg, rhs_reg],
+        ))
     }
 
     /// 翻译比较操作，统一使用整数比较指令
