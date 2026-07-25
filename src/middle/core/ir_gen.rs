@@ -184,6 +184,16 @@ struct LambdaBodyIR {
     mut_locals: std::collections::HashSet<usize>,
 }
 
+/// 一层 curry 签名
+///
+/// 由 `split_curry` 从嵌套的 `Type::Fn` 拆出。
+/// `params` 是这层的参数（带名字），从拍平的 `signature_params` 切出。
+/// `return_type` 是这层的返回类型：还有下一层时是 `Type::Fn`，最后一层是值类型。
+struct CurryLayer {
+    params: Vec<ast::Param>,
+    return_type: ast::Type,
+}
+
 impl AstToIrGenerator {
     /// 创建新的 IR 生成器（带类型信息）
     pub fn new_with_type_result(type_result: &TypeCheckResult) -> Self {
@@ -212,6 +222,43 @@ impl AstToIrGenerator {
             release_plan: type_result.release_plan.drops.clone(),
             pending_env_vars: Vec::new(),
         }
+    }
+
+    /// 拆分 curry 签名为多层
+    ///
+    /// 输入：`type_annotation` 是 `Type::Fn` 的嵌套结构（如 `(N: Int) -> (n: N) -> Int`）
+    /// 输入：`signature_params` 是拍平的所有 curry 参数（如 `[N: Int, n: N]`）
+    /// 输出：按层切分的 `CurryLayer` 列表
+    ///
+    /// 非 curry 函数（如 `(a: Int, b: Int) -> Int`）返回 1 个 layer，
+    /// 其 `return_type` 不是 `Type::Fn`。
+    fn split_curry(
+        type_ann: &ast::Type,
+        signature_params: &[ast::Param],
+    ) -> Vec<CurryLayer> {
+        let mut layers = Vec::new();
+        let mut params_iter = signature_params.iter().cloned().peekable();
+        let mut current_type = type_ann.clone();
+
+        loop {
+            match current_type {
+                ast::Type::Fn {
+                    params: type_params,
+                    return_type,
+                } => {
+                    let layer_params: Vec<ast::Param> =
+                        (&mut params_iter).take(type_params.len()).collect();
+                    let ret_type = *return_type;
+                    current_type = ret_type.clone();
+                    layers.push(CurryLayer {
+                        params: layer_params,
+                        return_type: ret_type,
+                    });
+                }
+                _ => break,
+            }
+        }
+        layers
     }
 
     /// 进入新的作用域
