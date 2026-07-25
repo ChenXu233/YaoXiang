@@ -1,5 +1,5 @@
 # YaoXiang 多语言基准测试配置
-# 用法: cargo run --package bench-runner [--bench <name>] [--lang <lang>]
+# 用法: cargo run -p shootout [--bench <name>] [--lang <lang>]
 #
 # 每个 benchmark 通过 BENCH_INPUT 环境变量注入输入规模
 # 所有语言实现均从 BENCH_INPUT 读取，无需 %i 模板替换
@@ -13,15 +13,15 @@ benchmarks:
     languages:
       yaoxiang:
         src: src/fibonacci/fibonacci.yx
-        compile: { cmd: "yaoxiang build %s -o %o" }
-        run: { cmd: "%o" }
+        compile: { cmd: "%y build %s -o %o" }
+        run: { cmd: "%y run %s" }
       rust:
         src: src/fibonacci/fibonacci.rs
         compile: { cmd: "rustc -O %s -o %o" }
         run: { cmd: "%o" }
       python:
         src: src/fibonacci/fibonacci.py
-        compile: false
+        # 无 compile = 解释执行
         run: { cmd: "python %s" }
       cpp:
         src: src/fibonacci/fibonacci.cpp
@@ -40,11 +40,10 @@ benchmarks:
     languages:
       yaoxiang:
         src: src/matrix/matrix.yx
-        compile: { cmd: "yaoxiang build %s -o %o" }
-        run: { cmd: "%o" }
+        compile: { cmd: "%y build %s -o %o" }
+        run: { cmd: "%y run %s" }
       python:
         src: src/matrix/matrix.py
-        compile: false
         run: { cmd: "python %s" }
 
   list_ops:
@@ -55,8 +54,8 @@ benchmarks:
     languages:
       yaoxiang:
         src: src/list_ops/list_ops.yx
-        compile: { cmd: "yaoxiang build %s -o %o" }
-        run: { cmd: "%o" }
+        compile: { cmd: "%y build %s -o %o" }
+        run: { cmd: "%y run %s" }
 
   string_concat:
     description: "字符串拼接 — 字符串操作性能"
@@ -66,5 +65,5 @@ benchmarks:
     languages:
       yaoxiang:
         src: src/string_concat/string_concat.yx
-        compile: { cmd: "yaoxiang build %s -o %o" }
-        run: { cmd: "%o" }
+        compile: { cmd: "%y build %s -o %o" }
+        run: { cmd: "%y run %s" }

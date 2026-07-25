@@ -39,6 +39,7 @@ title: "RFC 索引"
 | RFC-026b | [RFC-026b: yx-bindgen 工具链](./draft/026b-yx-bindgen.md) | 晨煦 | 2026-07-03 | 草案 |
 | RFC-034 | [RFC-034: 统一调试工具链](./draft/034-debug-toolchain.md) | 晨煦 | 2026-07-06 | 草案 |
 | RFC-035 | [RFC-035: MCP Server 支持（AI Agent 集成）](./draft/035-mcp-server.md) | Chen Xu | 2026-07-11 | 草案 |
+| RFC-036 | [RFC-036: std.test 测试框架与 yaoxiang test 命令](./draft/036-test-framework.md) | 晨煦 | 2026-07-25 | 草案 |
 
 ---
 
@@ -48,6 +49,7 @@ title: "RFC 索引"
 |------|------|------|----------|------|
 | RFC-026a | [RFC-026a: 可扩展 FFI 机制体系](./review/026a-extensible-ffi-system.md) | 晨煦 | 2026-07-03 | 审核中 |
 | RFC-032 | [RFC-032: spawn 统一表达式修饰 — 消除 spawn for 特殊情况](./review/032-spawn-unified-expression.md) | 晨煦 | 2026-06-16 | 审核中 |
+
 ---
 
 ## 已接受RFC
