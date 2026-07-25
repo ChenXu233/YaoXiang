@@ -517,6 +517,15 @@ impl Translator {
         dst: &Operand,
         src: &Operand,
     ) -> Result<BytecodeInstruction, Diagnostic> {
+        // 防御性：如果 dst 是 Local，走 StoreLocal 语义
+        // （IR 层统一走 Store 后正常路径不会触发，但 if/match 表达式结果聚合的 Move{dst:Local} 仍可能存在）
+        if let Operand::Local(local_idx) = dst {
+            let src_reg = self.operand_resolver.to_reg(src)?;
+            return Ok(BytecodeInstruction::new(
+                Opcode::StoreLocal,
+                vec![*local_idx as u8, src_reg],
+            ));
+        }
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(

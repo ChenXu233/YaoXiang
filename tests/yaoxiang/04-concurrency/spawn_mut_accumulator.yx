@@ -1,0 +1,31 @@
+// 04-concurrency/spawn_mut_accumulator.yx
+// 覆盖: 规范 §3.10 spawn 语句 + §3.2 变量声明（mut 累加）
+// 验证: spawn 块读取外层变量 + for 循环内 mut 累加写回（issue #223 防回归）
+// 规范来源: docs/src/reference/language-spec/syntax.md §3.10 SpawnStmt
+// 状态: ✅ 可运行
+
+use std.assert
+
+main = {
+    // spawn 块捕获外层变量（规范 §3.10 SpawnBlock）
+    data = 42
+    result = spawn {
+        return data
+    }
+    assert.assert(result == 42, "spawn should capture outer variable")
+
+    // for 循环内 mut 累加 — 验证 mut 写回穿过 for 循环（规范 §3.9 + §3.2）
+    mut total = 0
+    for i in 0..100 {
+        total = total + i
+    }
+    assert.assert(total == 4950, "for loop sum 0..99 == 4950")
+
+    // for 遍历列表 + mut 累加（另一种 mut 写回路径）
+    mut sum = 0
+    items = [10, 20, 30, 40]
+    for n in items {
+        sum = sum + n
+    }
+    assert.assert(sum == 100, "for list sum 10+20+30+40 == 100")
+}

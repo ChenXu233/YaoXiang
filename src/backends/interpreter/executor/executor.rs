@@ -662,12 +662,12 @@ impl Interpreter {
         }
     }
 
-    pub(super) fn force_register(
+    pub(super) fn force_slot(
         &mut self,
         frame: &mut Frame,
         reg: Reg,
     ) -> ExecutorResult<RuntimeValue> {
-        if let Some(v) = frame.registers.get_mut(reg.0 as usize) {
+        if let Some(v) = frame.get_slot_mut(reg.0 as usize) {
             self.force_value_in_place(v)?;
             Ok(v.clone())
         } else {
@@ -801,12 +801,12 @@ impl Interpreter {
         tlog!(
             debug,
             MSG::DebugRegisters,
-            &frame.registers.len(),
+            &frame.local_count(),
             &(lhs.0 as usize),
             &(rhs.0 as usize)
         );
-        let a = self.force_register(frame, lhs)?;
-        let b = self.force_register(frame, rhs)?;
+        let a = self.force_slot(frame, lhs)?;
+        let b = self.force_slot(frame, rhs)?;
 
         tlog!(debug, MSG::DebugBinaryOp, &a, &b);
 
@@ -892,7 +892,7 @@ impl Interpreter {
             }
         };
 
-        frame.set_register(dst.0 as usize, result);
+        frame.set_slot(dst.0 as usize, result);
         Ok(())
     }
 
@@ -905,8 +905,8 @@ impl Interpreter {
         cmp: CompareOp,
         frame: &mut Frame,
     ) -> ExecutorResult<()> {
-        let a = self.force_register(frame, lhs)?;
-        let b = self.force_register(frame, rhs)?;
+        let a = self.force_slot(frame, lhs)?;
+        let b = self.force_slot(frame, rhs)?;
 
         let result = match (cmp, &a, &b) {
             // Integer comparison
@@ -926,6 +926,25 @@ impl Interpreter {
                 RuntimeValue::Bool(l > r)
             }
             (CompareOp::Ge, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Bool(l >= r)
+            }
+            // Float comparison
+            (CompareOp::Eq, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Bool(l == r)
+            }
+            (CompareOp::Ne, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Bool(l != r)
+            }
+            (CompareOp::Lt, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Bool(l < r)
+            }
+            (CompareOp::Le, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Bool(l <= r)
+            }
+            (CompareOp::Gt, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Bool(l > r)
+            }
+            (CompareOp::Ge, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
                 RuntimeValue::Bool(l >= r)
             }
             // String comparison
@@ -950,7 +969,7 @@ impl Interpreter {
             _ => RuntimeValue::Bool(false),
         };
 
-        frame.set_register(dst.0 as usize, result);
+        frame.set_slot(dst.0 as usize, result);
         Ok(())
     }
 }

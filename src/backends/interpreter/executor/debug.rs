@@ -129,8 +129,7 @@ impl Interpreter {
             }
             BytecodeInstr::ReturnValue { value } => {
                 let result = frame
-                    .registers
-                    .get(value.0 as usize)
+                    .get_slot(value.0 as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Unit);
                 for task_id in frame.take_all_spawned_tasks() {
@@ -148,12 +147,9 @@ impl Interpreter {
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::JmpIf { cond, target } => {
-                let c = self
-                    .force_register(frame, *cond)?
-                    .to_bool()
-                    .ok_or_else(|| {
-                        ExecutorError::type_error("JmpIf 条件值不是布尔类型", self.capture_stack())
-                    })?;
+                let c = self.force_slot(frame, *cond)?.to_bool().ok_or_else(|| {
+                    ExecutorError::type_error("JmpIf 条件值不是布尔类型", self.capture_stack())
+                })?;
                 if c {
                     let offset = Self::decode_label_offset(*target);
                     frame.ip = ((frame.ip as i32) + offset) as usize;
@@ -163,15 +159,9 @@ impl Interpreter {
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::JmpIfNot { cond, target } => {
-                let c = self
-                    .force_register(frame, *cond)?
-                    .to_bool()
-                    .ok_or_else(|| {
-                        ExecutorError::type_error(
-                            "JmpIfNot 条件值不是布尔类型",
-                            self.capture_stack(),
-                        )
-                    })?;
+                let c = self.force_slot(frame, *cond)?.to_bool().ok_or_else(|| {
+                    ExecutorError::type_error("JmpIfNot 条件值不是布尔类型", self.capture_stack())
+                })?;
                 if !c {
                     let offset = Self::decode_label_offset(*target);
                     frame.ip = ((frame.ip as i32) + offset) as usize;
@@ -181,7 +171,7 @@ impl Interpreter {
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::Switch { value, targets } => {
-                let val = self.force_register(frame, *value)?;
+                let val = self.force_slot(frame, *value)?;
                 let mut jumped = false;
                 for (case_val, target) in targets {
                     if let Some(case_label) = case_val {
@@ -216,46 +206,44 @@ impl Interpreter {
             // ── Register operations ─────────────────────────────
             BytecodeInstr::Mov { dst, src } => {
                 let val = frame
-                    .registers
-                    .get(src.0 as usize)
+                    .get_slot(src.0 as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Unit);
-                frame.set_register(dst.0 as usize, val);
+                frame.set_slot(dst.0 as usize, val);
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::LoadConst { dst, const_idx } => {
                 let val = self.load_constant(*const_idx);
-                frame.set_register(dst.0 as usize, val);
+                frame.set_slot(dst.0 as usize, val);
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::LoadLocal { dst, local_idx } => {
                 let val = frame
-                    .get_local(*local_idx as usize)
+                    .get_slot(*local_idx as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Unit);
-                frame.set_register(dst.0 as usize, val);
+                frame.set_slot(dst.0 as usize, val);
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StoreLocal { local_idx, src } => {
                 let val = frame
-                    .registers
-                    .get(src.0 as usize)
+                    .get_slot(src.0 as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Unit);
-                frame.set_local(*local_idx as usize, val);
+                frame.set_slot(*local_idx as usize, val);
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::LoadArg { dst, arg_idx } => {
                 // Args are stored in locals by Frame::with_args
                 let val = frame
-                    .get_local(*arg_idx as usize)
+                    .get_slot(*arg_idx as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Unit);
-                frame.set_register(dst.0 as usize, val);
+                frame.set_slot(dst.0 as usize, val);
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
@@ -264,14 +252,13 @@ impl Interpreter {
                     .get_upvalue(*upvalue_idx as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Unit);
-                frame.set_register(dst.0 as usize, val);
+                frame.set_slot(dst.0 as usize, val);
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StoreUpvalue { src, upvalue_idx } => {
                 let val = frame
-                    .registers
-                    .get(src.0 as usize)
+                    .get_slot(src.0 as usize)
                     .cloned()
                     .expect("register index out of bounds");
                 frame.set_upvalue(*upvalue_idx as usize, val);
@@ -291,7 +278,7 @@ impl Interpreter {
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::UnaryOp { dst, src, op } => {
-                let val = self.force_register(frame, *src)?;
+                let val = self.force_slot(frame, *src)?;
                 let result = match (op, val) {
                     (crate::middle::bytecode::UnaryOp::Neg, RuntimeValue::Int(n)) => {
                         RuntimeValue::Int(-n)
@@ -313,7 +300,7 @@ impl Interpreter {
                         ));
                     }
                 };
-                frame.set_register(dst.0 as usize, result);
+                frame.set_slot(dst.0 as usize, result);
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
@@ -339,8 +326,7 @@ impl Interpreter {
                     .iter()
                     .map(|r| {
                         frame
-                            .registers
-                            .get(r.0 as usize)
+                            .get_slot(r.0 as usize)
                             .cloned()
                             .unwrap_or(RuntimeValue::Unit)
                     })
@@ -351,7 +337,7 @@ impl Interpreter {
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
                     let result = self.call_static_by_name(&func_name, &call_args)?;
                     if let Some(dst_reg) = dst {
-                        frame.set_register(dst_reg.index() as usize, result);
+                        frame.set_slot(dst_reg.index() as usize, result);
                     }
                     frame.advance();
                     return Ok(StepOutcome::Continue);
@@ -391,7 +377,7 @@ impl Interpreter {
                 let mut v = self.make_async_pending(task_id);
                 self.force_value_in_place(&mut v)?;
                 if let Some(dst_reg) = dst {
-                    frame.set_register(dst_reg.index() as usize, v);
+                    frame.set_slot(dst_reg.index() as usize, v);
                 }
 
                 frame.advance();
@@ -409,8 +395,7 @@ impl Interpreter {
                     .iter()
                     .map(|r| {
                         frame
-                            .registers
-                            .get(r.0 as usize)
+                            .get_slot(r.0 as usize)
                             .cloned()
                             .unwrap_or(RuntimeValue::Unit)
                     })
@@ -422,7 +407,7 @@ impl Interpreter {
                     let result = self
                         .call_native_with_ffi_meta(func_name, mechanism, lib, symbol, &call_args)?;
                     if let Some(dst_reg) = dst {
-                        frame.set_register(dst_reg.index() as usize, result);
+                        frame.set_slot(dst_reg.index() as usize, result);
                     }
                     frame.advance();
                     return Ok(StepOutcome::Continue);
@@ -448,7 +433,7 @@ impl Interpreter {
                 let mut v = self.make_async_pending(task_id);
                 self.force_value_in_place(&mut v)?;
                 if let Some(dst_reg) = dst {
-                    frame.set_register(dst_reg.index() as usize, v);
+                    frame.set_slot(dst_reg.index() as usize, v);
                 }
 
                 frame.advance();
@@ -460,7 +445,7 @@ impl Interpreter {
                 method_idx,
                 args,
             } => {
-                let obj_val = self.force_register(frame, *obj)?;
+                let obj_val = self.force_slot(frame, *obj)?;
 
                 let method_name = self
                     .constants
@@ -477,15 +462,15 @@ impl Interpreter {
                 if let Some(func_value) = obj_val.get_method(&method_name).cloned() {
                     let mut call_args = Vec::with_capacity(args.len());
                     for r in args {
-                        call_args.push(self.force_register(frame, *r)?);
+                        call_args.push(self.force_slot(frame, *r)?);
                     }
                     let result = self.call_function_by_id(func_value.func_id, &call_args)?;
                     if let Some(dst_reg) = dst {
-                        frame.set_register(dst_reg.index() as usize, result);
+                        frame.set_slot(dst_reg.index() as usize, result);
                     }
                 } else {
                     if let Some(dst_reg) = dst {
-                        frame.set_register(dst_reg.index() as usize, RuntimeValue::Unit);
+                        frame.set_slot(dst_reg.index() as usize, RuntimeValue::Unit);
                     }
                 }
                 frame.advance();
@@ -497,23 +482,23 @@ impl Interpreter {
                 name_idx: _,
                 args,
             } => {
-                let closure_val = self.force_register(frame, *obj)?;
+                let closure_val = self.force_slot(frame, *obj)?;
 
                 if let RuntimeValue::Function(func_value) = closure_val {
                     let env_args: Vec<RuntimeValue> = func_value.env.clone();
                     let mut call_args = Vec::with_capacity(args.len());
                     for r in args {
-                        call_args.push(self.force_register(frame, *r)?);
+                        call_args.push(self.force_slot(frame, *r)?);
                     }
                     let mut final_args = env_args;
                     final_args.extend(call_args);
                     let result = self.call_function_by_id(func_value.func_id, &final_args)?;
                     if let Some(dst_reg) = dst {
-                        frame.set_register(dst_reg.index() as usize, result);
+                        frame.set_slot(dst_reg.index() as usize, result);
                     }
                 } else {
                     if let Some(dst_reg) = dst {
-                        frame.set_register(dst_reg.index() as usize, RuntimeValue::Unit);
+                        frame.set_slot(dst_reg.index() as usize, RuntimeValue::Unit);
                     }
                 }
                 frame.advance();
@@ -534,7 +519,7 @@ impl Interpreter {
 
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
                     for func_reg in closures.iter() {
-                        let closure_val = self.force_register(frame, *func_reg)?;
+                        let closure_val = self.force_slot(frame, *func_reg)?;
                         let RuntimeValue::Function(func_value) = closure_val else {
                             let stack = self.capture_stack();
                             return Err(ExecutorError::type_error(
@@ -544,7 +529,7 @@ impl Interpreter {
                         };
                         let _result =
                             self.call_function_by_id(func_value.func_id, &func_value.env)?;
-                        frame.set_register(func_reg.0 as usize, _result);
+                        frame.set_slot(func_reg.0 as usize, _result);
                     }
                 } else {
                     use crate::backends::runtime::engine::{ResourceKey, TaskMeta};
@@ -554,7 +539,7 @@ impl Interpreter {
                         Vec::new();
 
                     for (i, func_reg) in closures.iter().enumerate() {
-                        let closure_val = self.force_register(frame, *func_reg)?;
+                        let closure_val = self.force_slot(frame, *func_reg)?;
                         let RuntimeValue::Function(func_value) = closure_val else {
                             let stack = self.capture_stack();
                             return Err(ExecutorError::type_error(
@@ -598,7 +583,7 @@ impl Interpreter {
                     for (func_reg, task_id) in &task_ids {
                         let mut v = self.make_async_pending(*task_id);
                         self.force_value_in_place(&mut v)?;
-                        frame.set_register(func_reg.0 as usize, v);
+                        frame.set_slot(func_reg.0 as usize, v);
                     }
                 }
 
@@ -615,7 +600,7 @@ impl Interpreter {
                 let task_deps = task_deps.clone();
                 let task_resources = task_resources.clone();
 
-                let list_val = self.force_register(frame, closures_list)?;
+                let list_val = self.force_slot(frame, closures_list)?;
                 let closures: Vec<RuntimeValue> = match list_val {
                     RuntimeValue::List(handle) => match self.heap.get(handle) {
                         Some(crate::backends::common::HeapValue::List(items)) => items.clone(),
@@ -712,7 +697,7 @@ impl Interpreter {
                 let handle = self
                     .heap
                     .allocate(crate::backends::common::HeapValue::Tuple(Vec::new()));
-                frame.set_register(dst.0 as usize, RuntimeValue::Tuple(handle));
+                frame.set_slot(dst.0 as usize, RuntimeValue::Tuple(handle));
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
@@ -720,7 +705,7 @@ impl Interpreter {
                 let handle = self.heap.allocate(crate::backends::common::HeapValue::List(
                     Vec::with_capacity(*capacity as usize),
                 ));
-                frame.set_register(dst.0 as usize, RuntimeValue::List(handle));
+                frame.set_slot(dst.0 as usize, RuntimeValue::List(handle));
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
@@ -728,13 +713,11 @@ impl Interpreter {
                 let mut map = std::collections::HashMap::new();
                 for (key_reg, val_reg) in keys.iter().zip(values.iter()) {
                     let key = frame
-                        .registers
-                        .get(key_reg.0 as usize)
+                        .get_slot(key_reg.0 as usize)
                         .cloned()
                         .unwrap_or(RuntimeValue::Unit);
                     let val = frame
-                        .registers
-                        .get(val_reg.0 as usize)
+                        .get_slot(val_reg.0 as usize)
                         .cloned()
                         .unwrap_or(RuntimeValue::Unit);
                     map.insert(key, val);
@@ -742,13 +725,13 @@ impl Interpreter {
                 let handle = self
                     .heap
                     .allocate(crate::backends::common::HeapValue::Dict(map));
-                frame.set_register(dst.0 as usize, RuntimeValue::Dict(handle));
+                frame.set_slot(dst.0 as usize, RuntimeValue::Dict(handle));
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::LoadElement { dst, array, index } => {
-                let arr = self.force_register(frame, *array)?;
-                let idx_value = self.force_register(frame, *index)?;
+                let arr = self.force_slot(frame, *array)?;
+                let idx_value = self.force_slot(frame, *index)?;
 
                 match arr {
                     RuntimeValue::List(handle) => {
@@ -757,7 +740,7 @@ impl Interpreter {
                             self.heap.get(handle)
                         {
                             if idx < items.len() {
-                                frame.set_register(dst.0 as usize, items[idx].clone());
+                                frame.set_slot(dst.0 as usize, items[idx].clone());
                             }
                         }
                     }
@@ -767,7 +750,7 @@ impl Interpreter {
                             self.heap.get(handle)
                         {
                             if idx < items.len() {
-                                frame.set_register(dst.0 as usize, items[idx].clone());
+                                frame.set_slot(dst.0 as usize, items[idx].clone());
                             }
                         }
                     }
@@ -777,7 +760,7 @@ impl Interpreter {
                             self.heap.get(handle)
                         {
                             if idx < items.len() {
-                                frame.set_register(dst.0 as usize, items[idx].clone());
+                                frame.set_slot(dst.0 as usize, items[idx].clone());
                             }
                         }
                     }
@@ -786,7 +769,7 @@ impl Interpreter {
                             self.heap.get(handle)
                         {
                             if let Some(value) = map.get(&idx_value) {
-                                frame.set_register(dst.0 as usize, value.clone());
+                                frame.set_slot(dst.0 as usize, value.clone());
                             }
                         }
                     }
@@ -800,9 +783,9 @@ impl Interpreter {
                 index,
                 value,
             } => {
-                let arr = self.force_register(frame, *array)?;
-                let idx_value = self.force_register(frame, *index)?;
-                let val = self.force_register(frame, *value)?;
+                let arr = self.force_slot(frame, *array)?;
+                let idx_value = self.force_slot(frame, *index)?;
+                let val = self.force_slot(frame, *value)?;
 
                 match arr {
                     RuntimeValue::List(handle) => {
@@ -844,13 +827,13 @@ impl Interpreter {
                 src,
                 field_idx,
             } => {
-                let obj = self.force_register(frame, *src)?;
+                let obj = self.force_slot(frame, *src)?;
                 if let RuntimeValue::Struct { fields, .. } = obj {
                     if let Some(crate::backends::common::HeapValue::Tuple(items)) =
                         self.heap.get(fields)
                     {
                         if (*field_idx as usize) < items.len() {
-                            frame.set_register(dst.0 as usize, items[*field_idx as usize].clone());
+                            frame.set_slot(dst.0 as usize, items[*field_idx as usize].clone());
                         }
                     }
                 }
@@ -862,8 +845,8 @@ impl Interpreter {
                 field_idx,
                 value,
             } => {
-                let obj = self.force_register(frame, *src)?;
-                let val = self.force_register(frame, *value)?;
+                let obj = self.force_slot(frame, *src)?;
+                let val = self.force_slot(frame, *value)?;
                 if let RuntimeValue::Struct { fields, .. } = obj {
                     if let Some(crate::backends::common::HeapValue::Tuple(items)) =
                         self.heap.get_mut(fields)
@@ -885,8 +868,7 @@ impl Interpreter {
                     .iter()
                     .map(|reg| {
                         frame
-                            .registers
-                            .get(reg.0 as usize)
+                            .get_slot(reg.0 as usize)
                             .cloned()
                             .unwrap_or(RuntimeValue::Unit)
                     })
@@ -900,13 +882,13 @@ impl Interpreter {
                     fields: handle,
                     vtable,
                 };
-                frame.set_register(dst.0 as usize, struct_val);
+                frame.set_slot(dst.0 as usize, struct_val);
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::BoundsCheck { array, index } => {
-                let arr = self.force_register(frame, *array)?;
-                let idx = self.force_register(frame, *index)?.to_int().unwrap_or(-1);
+                let arr = self.force_slot(frame, *array)?;
+                let idx = self.force_slot(frame, *index)?.to_int().unwrap_or(-1);
                 let len = match &arr {
                     RuntimeValue::List(h) | RuntimeValue::Tuple(h) | RuntimeValue::Array(h) => {
                         match self.heap.get(*h) {
@@ -932,15 +914,15 @@ impl Interpreter {
 
             // ── String operations ────────────────────────────────
             BytecodeInstr::StringConcat { dst, str1, str2 } => {
-                let s1: String = match self.force_register(frame, *str1)? {
+                let s1: String = match self.force_slot(frame, *str1)? {
                     RuntimeValue::String(s) => s.as_ref().to_string(),
                     _ => String::new(),
                 };
-                let s2: String = match self.force_register(frame, *str2)? {
+                let s2: String = match self.force_slot(frame, *str2)? {
                     RuntimeValue::String(s) => s.as_ref().to_string(),
                     _ => String::new(),
                 };
-                frame.set_register(
+                frame.set_slot(
                     dst.0 as usize,
                     RuntimeValue::String(format!("{}{}", s1, s2).into()),
                 );
@@ -948,24 +930,24 @@ impl Interpreter {
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StringLength { dst, src } => {
-                let s: String = match self.force_register(frame, *src)? {
+                let s: String = match self.force_slot(frame, *src)? {
                     RuntimeValue::String(s) => s.as_ref().to_string(),
                     _ => String::new(),
                 };
-                frame.set_register(dst.0 as usize, RuntimeValue::Int(s.len() as i64));
+                frame.set_slot(dst.0 as usize, RuntimeValue::Int(s.len() as i64));
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StringEqual { dst, str1, str2 } => {
-                let s1: String = match self.force_register(frame, *str1)? {
+                let s1: String = match self.force_slot(frame, *str1)? {
                     RuntimeValue::String(s) => s.as_ref().to_string(),
                     _ => String::new(),
                 };
-                let s2: String = match self.force_register(frame, *str2)? {
+                let s2: String = match self.force_slot(frame, *str2)? {
                     RuntimeValue::String(s) => s.as_ref().to_string(),
                     _ => String::new(),
                 };
-                frame.set_register(
+                frame.set_slot(
                     dst.0 as usize,
                     RuntimeValue::Int(if s1 == s2 { 1 } else { 0 }),
                 );
@@ -973,7 +955,7 @@ impl Interpreter {
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StringGetChar { dst, src, index } => {
-                let s: String = match self.force_register(frame, *src)? {
+                let s: String = match self.force_slot(frame, *src)? {
                     RuntimeValue::String(s) => s.as_ref().to_string(),
                     _ => String::new(),
                 };
@@ -982,99 +964,91 @@ impl Interpreter {
                     .nth(index.0 as usize)
                     .map(|c| RuntimeValue::Char(c as u32))
                     .unwrap_or(RuntimeValue::Unit);
-                frame.set_register(dst.0 as usize, result);
+                frame.set_slot(dst.0 as usize, result);
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StringFromInt { dst, src } => {
-                let val = self.force_register(frame, *src)?.to_int().ok_or_else(|| {
+                let val = self.force_slot(frame, *src)?.to_int().ok_or_else(|| {
                     ExecutorError::type_error(
                         "StringFromInt 操作数不是 Int 类型",
                         self.capture_stack(),
                     )
                 })?;
-                frame.set_register(dst.0 as usize, RuntimeValue::String(val.to_string().into()));
+                frame.set_slot(dst.0 as usize, RuntimeValue::String(val.to_string().into()));
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StringFromFloat { dst, src } => {
-                let val = self
-                    .force_register(frame, *src)?
-                    .to_float()
-                    .ok_or_else(|| {
-                        ExecutorError::type_error(
-                            "StringFromFloat 操作数不是 Float 类型",
-                            self.capture_stack(),
-                        )
-                    })?;
-                frame.set_register(dst.0 as usize, RuntimeValue::String(val.to_string().into()));
+                let val = self.force_slot(frame, *src)?.to_float().ok_or_else(|| {
+                    ExecutorError::type_error(
+                        "StringFromFloat 操作数不是 Float 类型",
+                        self.capture_stack(),
+                    )
+                })?;
+                frame.set_slot(dst.0 as usize, RuntimeValue::String(val.to_string().into()));
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
             // ── Reference counting ──────────────────────────────
             BytecodeInstr::ArcNew { dst, src } => {
                 let val = frame
-                    .registers
-                    .get(src.0 as usize)
+                    .get_slot(src.0 as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Unit);
-                frame.set_register(dst.0 as usize, val.into_arc());
+                frame.set_slot(dst.0 as usize, val.into_arc());
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::RcNew { dst, src } => {
                 let val = frame
-                    .registers
-                    .get(src.0 as usize)
+                    .get_slot(src.0 as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Unit);
-                frame.set_register(dst.0 as usize, val.into_arc());
+                frame.set_slot(dst.0 as usize, val.into_arc());
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::ArcClone { dst, src } => {
                 let val = frame
-                    .registers
-                    .get(src.0 as usize)
+                    .get_slot(src.0 as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Unit);
                 if let RuntimeValue::Arc(inner) = val {
-                    frame.set_register(dst.0 as usize, RuntimeValue::Arc(inner));
+                    frame.set_slot(dst.0 as usize, RuntimeValue::Arc(inner));
                 }
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::WeakNew { dst, src } => {
                 let val = frame
-                    .registers
-                    .get(src.0 as usize)
+                    .get_slot(src.0 as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Unit);
                 if let RuntimeValue::Arc(arc) = val {
-                    frame.set_register(
+                    frame.set_slot(
                         dst.0 as usize,
                         RuntimeValue::Weak(std::sync::Arc::downgrade(&arc)),
                     );
                 } else {
-                    frame.set_register(dst.0 as usize, RuntimeValue::Unit);
+                    frame.set_slot(dst.0 as usize, RuntimeValue::Unit);
                 }
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::WeakUpgrade { dst, src } => {
                 let val = frame
-                    .registers
-                    .get(src.0 as usize)
+                    .get_slot(src.0 as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Unit);
                 if let RuntimeValue::Weak(weak) = val {
                     if let Some(arc) = weak.upgrade() {
-                        frame.set_register(dst.0 as usize, RuntimeValue::Arc(arc));
+                        frame.set_slot(dst.0 as usize, RuntimeValue::Arc(arc));
                     } else {
-                        frame.set_register(dst.0 as usize, RuntimeValue::Unit);
+                        frame.set_slot(dst.0 as usize, RuntimeValue::Unit);
                     }
                 } else {
-                    frame.set_register(dst.0 as usize, RuntimeValue::Unit);
+                    frame.set_slot(dst.0 as usize, RuntimeValue::Unit);
                 }
                 frame.advance();
                 Ok(StepOutcome::Continue)
@@ -1083,11 +1057,10 @@ impl Interpreter {
             // ── Borrow (ZST, runtime equivalent to Mov) ─────────
             BytecodeInstr::Borrow { dst, src, .. } => {
                 let val = frame
-                    .registers
-                    .get(src.0 as usize)
+                    .get_slot(src.0 as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Unit);
-                frame.set_register(dst.0 as usize, val);
+                frame.set_slot(dst.0 as usize, val);
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
@@ -1134,21 +1107,26 @@ impl Interpreter {
                 };
                 let captured_env: Vec<RuntimeValue> = env
                     .iter()
-                    .map(|r| frame.registers[r.0 as usize].clone())
+                    .map(|r| {
+                        frame
+                            .get_slot(r.0 as usize)
+                            .cloned()
+                            .unwrap_or(RuntimeValue::Unit)
+                    })
                     .collect();
                 let closure =
                     RuntimeValue::Function(crate::backends::common::value::FunctionValue {
                         func_id,
                         env: captured_env,
                     });
-                frame.set_register(dst.0 as usize, closure);
+                frame.set_slot(dst.0 as usize, closure);
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
 
             // ── Type operations ──────────────────────────────────
             BytecodeInstr::TypeOf { dst, src } => {
-                let val = self.force_register(frame, *src)?;
+                let val = self.force_slot(frame, *src)?;
                 let type_name: &str = match &val {
                     RuntimeValue::Unit => "Void",
                     RuntimeValue::Bool(_) => "Bool",
@@ -1170,7 +1148,7 @@ impl Interpreter {
                     RuntimeValue::Ptr { .. } => "Ptr",
                     RuntimeValue::OpaqueHandle { .. } => "OpaqueHandle",
                 };
-                frame.set_register(
+                frame.set_slot(
                     dst.0 as usize,
                     RuntimeValue::String(std::sync::Arc::from(type_name)),
                 );
@@ -1182,7 +1160,7 @@ impl Interpreter {
                 src,
                 target_type_id,
             } => {
-                let val = self.force_register(frame, *src)?;
+                let val = self.force_slot(frame, *src)?;
                 let result = match (val, *target_type_id) {
                     (RuntimeValue::Int(n), 1) => RuntimeValue::Float(n as f64),
                     (RuntimeValue::Float(f), 0) => RuntimeValue::Int(f as i64),
@@ -1190,12 +1168,12 @@ impl Interpreter {
                     (RuntimeValue::Bool(b), 0) => RuntimeValue::Int(if b { 1 } else { 0 }),
                     (v, _) => v,
                 };
-                frame.set_register(dst.0 as usize, result);
+                frame.set_slot(dst.0 as usize, result);
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::TypeCheck { value, type_id } => {
-                let val = self.force_register(frame, *value)?;
+                let val = self.force_slot(frame, *value)?;
                 let actual_id: u16 = match val {
                     RuntimeValue::Int(_) => 0,
                     RuntimeValue::Float(_) => 1,
