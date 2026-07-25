@@ -189,6 +189,7 @@ struct LambdaBodyIR {
 /// 由 `split_curry` 从嵌套的 `Type::Fn` 拆出。
 /// `params` 是这层的参数（带名字），从拍平的 `signature_params` 切出。
 /// `return_type` 是这层的返回类型：还有下一层时是 `Type::Fn`，最后一层是值类型。
+#[expect(dead_code)]
 struct CurryLayer {
     params: Vec<ast::Param>,
     return_type: ast::Type,
@@ -232,6 +233,8 @@ impl AstToIrGenerator {
     ///
     /// 非 curry 函数（如 `(a: Int, b: Int) -> Int`）返回 1 个 layer，
     /// 其 `return_type` 不是 `Type::Fn`。
+    #[expect(dead_code)]
+    #[allow(clippy::while_let_loop)]
     fn split_curry(
         type_ann: &ast::Type,
         signature_params: &[ast::Param],
@@ -982,6 +985,153 @@ impl AstToIrGenerator {
         );
 
         Ok(Some(func_ir))
+    }
+
+    /// 生成 curry 中间层的 FunctionIR
+    ///
+    /// 中间层职责：LoadArg 本层参数 → MakeClosure 包装下一层 → Ret(闭包)
+    /// env 累积规则：env = 外层 env_operands + 本层参数
+    #[expect(dead_code)]
+    #[allow(clippy::too_many_arguments)]
+    fn generate_curry_intermediate_func(
+        &mut self,
+        func_name: &str,
+        layer: &CurryLayer,
+        env_operands: &[Operand],
+        next_func_name: &str,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<FunctionIR, Diagnostic> {
+        let _ = constants; // 中间层不生成常量
+        let mut instructions = Vec::new();
+
+        // 1. LoadArg 本层参数
+        for (i, param) in layer.params.iter().enumerate() {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(i),
+                src: Operand::Arg(i),
+            });
+            self.register_local(&param.name, i);
+        }
+        self.next_temp = layer.params.len();
+
+        // 2. MakeClosure：env = 外层 env + 本层参数
+        let mut full_env: Vec<Operand> = env_operands.to_vec();
+        for (i, _) in layer.params.iter().enumerate() {
+            full_env.push(Operand::Local(i));
+        }
+        let closure_dst = self.next_temp_reg();
+        instructions.push(Instruction::MakeClosure {
+            dst: Operand::Local(closure_dst),
+            func: next_func_name.to_string(),
+            env: full_env,
+        });
+
+        // 3. Ret(closure)
+        instructions.push(Instruction::Ret(Some(Operand::Local(closure_dst))));
+
+        // 4. 构建 FunctionIR
+        // return_type：中间层的返回类型是下一层的函数类型
+        // 对 layer.return_type（一个 Type::Fn）调用 .into() 转换为 MonoType
+        let param_types: Vec<MonoType> = layer
+            .params
+            .iter()
+            .filter_map(|p| p.ty.clone())
+            .map(MonoType::from)
+            .collect();
+        let return_type: MonoType = layer.return_type.clone().into();
+        let total_locals = self.next_temp;
+        let locals_types: Vec<MonoType> = vec![MonoType::Int(64); total_locals];
+
+        Ok(FunctionIR {
+            name: func_name.to_string(),
+            params: param_types,
+            return_type,
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: locals_types,
+            },
+        })
+    }
+
+    /// 生成 curry 最内层的 FunctionIR
+    ///
+    /// 最内层职责：LoadUpvalue 读所有外层参数 → LoadArg 本层参数 → 执行原 body → Ret
+    /// env_param_names：所有外层参数名（按累积顺序）
+    #[expect(dead_code)]
+    #[allow(clippy::too_many_arguments)]
+    fn generate_curry_innermost_func(
+        &mut self,
+        func_name: &str,
+        layer: &CurryLayer,
+        env_param_names: &[String],
+        body: &[ast::Stmt],
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<FunctionIR, Diagnostic> {
+        let mut instructions = Vec::new();
+
+        // 1. LoadUpvalue 读所有外层参数到 local
+        //    upvalue 索引 = 在 env 中的位置（0, 1, 2, ...）
+        //    local 索引 = 本层参数数 + upvalue 索引
+        let upvalue_start = layer.params.len();
+        for (i, name) in env_param_names.iter().enumerate() {
+            let dst = upvalue_start + i;
+            instructions.push(Instruction::LoadUpvalue {
+                dst: Operand::Local(dst),
+                upvalue_idx: i,
+            });
+            self.register_local(name, dst);
+        }
+
+        // 2. LoadArg 本层参数
+        for (i, param) in layer.params.iter().enumerate() {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(i),
+                src: Operand::Arg(i),
+            });
+            self.register_local(&param.name, i);
+        }
+
+        // 3. next_temp 起始 = 参数数 + upvalue 数
+        self.next_temp = upvalue_start + env_param_names.len();
+
+        // 4. 执行原 body（复用 generate_local_stmt_ir）
+        for stmt in body {
+            self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+        }
+        instructions.push(Instruction::Ret(None));
+
+        // 5. 构建 FunctionIR
+        let param_types: Vec<MonoType> = layer
+            .params
+            .iter()
+            .filter_map(|p| p.ty.clone())
+            .map(MonoType::from)
+            .collect();
+        let return_type: MonoType = layer.return_type.clone().into();
+        let total_locals = self.next_temp;
+        let locals_types: Vec<MonoType> = vec![MonoType::Int(64); total_locals];
+
+        Ok(FunctionIR {
+            name: func_name.to_string(),
+            params: param_types,
+            return_type,
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: locals_types,
+            },
+        })
     }
 
     /// 尝试将表达式求值为编译时常量
