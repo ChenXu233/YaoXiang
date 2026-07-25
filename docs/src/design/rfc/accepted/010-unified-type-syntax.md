@@ -934,6 +934,46 @@ custom: CustomPoint = CustomPoint(
 | `type Point = Point(x: Float, y: Float)` | `type Point = { x: Float, y: Float }` |
 | `type Result(T, E) = ok(T) \| err(E)` | `Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }` |
 | 需要 `impl` 关键字 | 无需关键字，接口名写在类型体后 |
+### 已废弃：`|` 变体语法
+
+> **废弃声明（2026-07-25，issue #203）**：`|` 变体语法正式废弃并从实现中移除。
+
+以下写法**不再支持**：
+
+```
+type Color = red | green | blue                # ❌ 废弃
+type Result(T, E) = ok(T) | err(E)             # ❌ 废弃
+type Option(T) = some(T) | none                # ❌ 废弃
+```
+
+统一使用记录类型表达和类型（sum type）。当记录类型的字段全为函数、且都返回该类型本身时，它就是和类型：
+
+```yaoxiang
+Color: Type = {
+    red: () -> Color,
+    green: () -> Color,
+    blue: () -> Color
+}
+
+Result: (T: Type, E: Type) -> Type = {
+    ok: (T) -> Result(T, E),
+    err: (E) -> Result(T, E)
+}
+
+Option: (T: Type) -> Type = {
+    some: (T) -> Option(T),
+    none: () -> Option(T)
+}
+```
+
+**设计理由**：
+
+1. **消除特殊情况**：`|` 是 BNF 中唯一的非 `name: type = value` 形式语法。移除后，`type_expr` 产生式完全统一，parser 不再需要为变体类型维护独立路径和前瞻回退。
+2. **数学等价**：在 Curry-Howard 同构下，析取 P ⊕ Q 对应的和类型，等价于"字段全为返回自身类型的函数"的记录类型。二者表达相同语义，无需两套语法。
+3. **零破坏性**：移除前 `|` 语法在 parser 中半支持（无参数变体可解析但参数类型在单态化时丢失），无任何用户代码依赖。
+4. **AST 简化**：`Type::Variant(Vec<VariantDef>)` 节点删除，所有变体类型统一走 `Type::Struct` 路径，下游 typecheck/mono/formatter 的特殊分支全部消除。
+
+> **注**：和类型的语义属性（如 match 穷尽性检查、tagged union 内存布局）由 typecheck 层从 `Type::Struct` 结构推导，不依赖独立的 AST 节点。
 
 ## 语法设计说明：具名函数本质是 Lambda 的语法糖
 
