@@ -77,12 +77,9 @@ impl Executor for Interpreter {
                 stack,
             ));
         }
-        // Create new frame and push onto call stack
         let mut frame = Frame::with_args(func.clone(), args);
         frame.set_entry_ip(0);
         self.push_frame(frame)?;
-
-        // Execute via step_one loop — all instruction logic is in debug.rs
         loop {
             match self.step_one()? {
                 super::debug::StepOutcome::Continue => {}

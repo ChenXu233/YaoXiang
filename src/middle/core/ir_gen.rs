@@ -189,7 +189,7 @@ struct LambdaBodyIR {
 /// 由 `split_curry` 从嵌套的 `Type::Fn` 拆出。
 /// `params` 是这层的参数（带名字），从拍平的 `signature_params` 切出。
 /// `return_type` 是这层的返回类型：还有下一层时是 `Type::Fn`，最后一层是值类型。
-#[expect(dead_code)]
+/// 一层 curry 签名
 struct CurryLayer {
     params: Vec<ast::Param>,
     return_type: ast::Type,
@@ -233,7 +233,6 @@ impl AstToIrGenerator {
     ///
     /// 非 curry 函数（如 `(a: Int, b: Int) -> Int`）返回 1 个 layer，
     /// 其 `return_type` 不是 `Type::Fn`。
-    #[expect(dead_code)]
     #[allow(clippy::while_let_loop)]
     fn split_curry(
         type_ann: &ast::Type,
@@ -668,14 +667,38 @@ impl AstToIrGenerator {
                     } else {
                         Some(generic_params.iter().map(|p| p.name.clone()).collect())
                     };
-                    self.generate_function_ir(
-                        &name,
-                        type_annotation.as_ref(),
-                        &params,
-                        &body,
-                        constants,
-                        generic_param_names,
-                    )
+                    // curry 分流：如果 return_type 是 Type::Fn，走 curry 生成路径
+                    // 注意：必须传 signature_params（所有层参数），而非 params（仅 Lambda 参数）
+                    if let Some(ast::Type::Fn { return_type, .. }) = type_annotation.as_ref() {
+                        if matches!(return_type.as_ref(), ast::Type::Fn { .. }) {
+                            self.generate_curry_function_ir(
+                                &name,
+                                type_annotation.as_ref().unwrap(),
+                                signature_params,
+                                &body,
+                                constants,
+                                generic_param_names,
+                            )
+                        } else {
+                            self.generate_function_ir(
+                                &name,
+                                type_annotation.as_ref(),
+                                &params,
+                                &body,
+                                constants,
+                                generic_param_names,
+                            )
+                        }
+                    } else {
+                        self.generate_function_ir(
+                            &name,
+                            type_annotation.as_ref(),
+                            &params,
+                            &body,
+                            constants,
+                            generic_param_names,
+                        )
+                    }
                 } else {
                     // 全局变量
                     self.generate_global_var_ir(
@@ -822,20 +845,7 @@ impl AstToIrGenerator {
         constants: &mut Vec<ConstValue>,
         generic_params: Option<Vec<String>>,
     ) -> Result<Option<FunctionIR>, Diagnostic> {
-        // curry 分流：如果 return_type 是 Type::Fn，走 curry 生成路径
-        // 这是"curry 是 1 层时退化为普通函数"的自然边界（递归基例）
-        if let Some(ast::Type::Fn { return_type, .. }) = type_annotation {
-            if matches!(return_type.as_ref(), ast::Type::Fn { .. }) {
-                return self.generate_curry_function_ir(
-                    name,
-                    type_annotation.unwrap(),
-                    params,
-                    body,
-                    constants,
-                    generic_params,
-                );
-            }
-        }
+        // 检测 native("symbol") 模式：函数体为空语句 + Native("...") 表达式
         // 检测 native("symbol") 模式：函数体为空语句 + Native("...") 表达式
         // 形如: my_add: (a: Int, b: Int) -> Int = Native("my_add")
         //
@@ -1004,33 +1014,43 @@ impl AstToIrGenerator {
     /// 生成 curry 中间层的 FunctionIR
     ///
     /// 中间层职责：LoadArg 本层参数 → MakeClosure 包装下一层 → Ret(闭包)
-    /// env 累积规则：env = 外层 env_operands + 本层参数
-    #[expect(dead_code)]
     #[allow(clippy::too_many_arguments)]
     fn generate_curry_intermediate_func(
         &mut self,
         func_name: &str,
         layer: &CurryLayer,
-        env_operands: &[Operand],
+        env_count: usize,
         next_func_name: &str,
         constants: &mut Vec<ConstValue>,
     ) -> Result<FunctionIR, Diagnostic> {
         let _ = constants; // 中间层不生成常量
         let mut instructions = Vec::new();
 
-        // 1. LoadArg 本层参数
+        // 1. 本层参数先加载（用 Arg(env_count + i)）
         for (i, param) in layer.params.iter().enumerate() {
             instructions.push(Instruction::Load {
                 dst: Operand::Local(i),
-                src: Operand::Arg(i),
+                src: Operand::Arg(env_count + i),
             });
             self.register_local(&param.name, i);
         }
-        self.next_temp = layer.params.len();
 
-        // 2. MakeClosure：env = 外层 env + 本层参数
-        let mut full_env: Vec<Operand> = env_operands.to_vec();
-        for (i, _) in layer.params.iter().enumerate() {
+        // 2. 外层参数后加载（用 Arg(i)）
+        let env_start = layer.params.len();
+        for i in 0..env_count {
+            let dst = env_start + i;
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(dst),
+                src: Operand::Arg(i),
+            });
+        }
+        self.next_temp = env_start + env_count;
+
+        // 3. MakeClosure：env = 外层 env + 本层参数
+        let mut full_env: Vec<Operand> = (env_start..env_start + env_count)
+            .map(Operand::Local)
+            .collect();
+        for i in 0..layer.params.len() {
             full_env.push(Operand::Local(i));
         }
         let closure_dst = self.next_temp_reg();
@@ -1040,12 +1060,10 @@ impl AstToIrGenerator {
             env: full_env,
         });
 
-        // 3. Ret(closure)
+        // 4. Ret(closure)
         instructions.push(Instruction::Ret(Some(Operand::Local(closure_dst))));
 
-        // 4. 构建 FunctionIR
-        // return_type：中间层的返回类型是下一层的函数类型
-        // 对 layer.return_type（一个 Type::Fn）调用 .into() 转换为 MonoType
+        // 5. 构建 FunctionIR
         let param_types: Vec<MonoType> = layer
             .params
             .iter()
@@ -1077,7 +1095,6 @@ impl AstToIrGenerator {
     ///
     /// 最内层职责：LoadUpvalue 读所有外层参数 → LoadArg 本层参数 → 执行原 body → Ret
     /// env_param_names：所有外层参数名（按累积顺序）
-    #[expect(dead_code)]
     #[allow(clippy::too_many_arguments)]
     fn generate_curry_innermost_func(
         &mut self,
@@ -1088,31 +1105,31 @@ impl AstToIrGenerator {
         constants: &mut Vec<ConstValue>,
     ) -> Result<FunctionIR, Diagnostic> {
         let mut instructions = Vec::new();
+        let env_count = env_param_names.len();
 
-        // 1. LoadUpvalue 读所有外层参数到 local
-        //    upvalue 索引 = 在 env 中的位置（0, 1, 2, ...）
-        //    local 索引 = 本层参数数 + upvalue 索引
-        let upvalue_start = layer.params.len();
-        for (i, name) in env_param_names.iter().enumerate() {
-            let dst = upvalue_start + i;
-            instructions.push(Instruction::LoadUpvalue {
-                dst: Operand::Local(dst),
-                upvalue_idx: i,
-            });
-            self.register_local(name, dst);
-        }
-
-        // 2. LoadArg 本层参数
+        // 1. 本层参数先加载（用 Arg(env_count + i)，此时 slots[env_count + i] 还未被覆盖）
         for (i, param) in layer.params.iter().enumerate() {
             instructions.push(Instruction::Load {
                 dst: Operand::Local(i),
-                src: Operand::Arg(i),
+                src: Operand::Arg(env_count + i),
             });
             self.register_local(&param.name, i);
         }
 
-        // 3. next_temp 起始 = 参数数 + upvalue 数
-        self.next_temp = upvalue_start + env_param_names.len();
+        // 2. 外层参数后加载（用 Arg(i) 读 slots[i]）
+        //    注意：必须在参数之后加载，因为 env 写入的 slots 位置可能与 arg 重叠
+        let env_start = layer.params.len();
+        for (i, name) in env_param_names.iter().enumerate() {
+            let dst = env_start + i;
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(dst),
+                src: Operand::Arg(i),
+            });
+            self.register_local(name, dst);
+        }
+
+        // 3. next_temp 起始 = 参数数 + env 数
+        self.next_temp = env_start + env_count;
 
         // 4. 执行原 body（复用 generate_local_stmt_ir）
         for stmt in body {
@@ -1120,7 +1137,6 @@ impl AstToIrGenerator {
         }
         instructions.push(Instruction::Ret(None));
 
-        // 5. 构建 FunctionIR
         let param_types: Vec<MonoType> = layer
             .params
             .iter()
@@ -1154,9 +1170,8 @@ impl AstToIrGenerator {
     /// 最外层用原名 `name`，内层用 `__{name}_l{index}`。
     ///
     /// env_param_names 在循环中累积：进入第 k 层时，它包含 layer 0..k-1 的所有参数名。
-    /// env_operands 通过 lookup_local 把这些名字解析成 Local 索引（外层参数在上一层循环的
-    /// LoadArg/LoadUpvalue 步骤已 register_local）。
-    #[expect(dead_code)]
+    /// 中间层函数从 Arg(0..env_count) 加载外层参数作为 env，从 Arg(env_count..) 加载本层参数。
+    /// 最内层函数同理加载后执行原 body。
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn generate_curry_function_ir(
         &mut self,
@@ -1185,13 +1200,6 @@ impl AstToIrGenerator {
                 format!("__{}_l{}", name, i - 1)
             };
 
-            // 先查 env_operands（外层参数在上一层循环已 register_local），再进入新作用域
-            let env_operands: Vec<Operand> = env_param_names
-                .iter()
-                .filter_map(|n| self.lookup_local(n))
-                .map(Operand::Local)
-                .collect();
-
             // 进入新作用域
             self.enter_scope();
             // 重置本层的临时寄存器（每层独立计数）
@@ -1210,15 +1218,14 @@ impl AstToIrGenerator {
                 self.generate_curry_intermediate_func(
                     &func_name,
                     layer,
-                    &env_operands,
+                    env_param_names.len(),
                     &next_name,
                     constants,
                 )?
             };
-
             self.exit_scope();
 
-            // 累积本层参数名，供下一层使用
+            // 累积本层参数到 env 追踪（给 innermost_func 用）
             for p in &layer.params {
                 env_param_names.push(p.name.clone());
             }
@@ -1236,7 +1243,6 @@ impl AstToIrGenerator {
         self.nested_functions.extend(layer_funcs);
         Ok(Some(outer))
     }
-
     /// 尝试将表达式求值为编译时常量
     #[allow(clippy::only_used_in_recursion)]
     fn eval_const_expr(
@@ -1623,14 +1629,40 @@ impl AstToIrGenerator {
                     } else {
                         Some(generic_params.iter().map(|p| p.name.clone()).collect())
                     };
-                    match self.generate_function_ir(
-                        &name,
-                        type_annotation.as_ref(),
-                        &params,
-                        &body,
-                        constants,
-                        generic_param_names,
-                    ) {
+                    // curry 分流：如果 return_type 是 Type::Fn，走 curry 生成路径
+                    // 注意：必须传 signature_params（所有层参数），而非 params（仅 Lambda 参数）
+                    let func_result =
+                        if let Some(ast::Type::Fn { return_type, .. }) = type_annotation.as_ref() {
+                            if matches!(return_type.as_ref(), ast::Type::Fn { .. }) {
+                                self.generate_curry_function_ir(
+                                    &name,
+                                    type_annotation.as_ref().unwrap(),
+                                    signature_params,
+                                    &body,
+                                    constants,
+                                    generic_param_names,
+                                )
+                            } else {
+                                self.generate_function_ir(
+                                    &name,
+                                    type_annotation.as_ref(),
+                                    &params,
+                                    &body,
+                                    constants,
+                                    generic_param_names,
+                                )
+                            }
+                        } else {
+                            self.generate_function_ir(
+                                &name,
+                                type_annotation.as_ref(),
+                                &params,
+                                &body,
+                                constants,
+                                generic_param_names,
+                            )
+                        };
+                    match func_result {
                         Ok(Some(func_ir)) => {
                             self.nested_functions.push(func_ir);
                         }

@@ -331,6 +331,48 @@ impl Interpreter {
         self.execute_function(&func, args)
     }
 
+    /// Call a closure function with env as upvalues.
+    /// Unlike call_function_by_id which passes env as regular args,
+    /// this method sets the env as the new frame's upvalues so that
+    /// LoadUpvalue instructions can read them.
+    pub fn call_closure(
+        &mut self,
+        func_id: crate::backends::common::value::FunctionId,
+        args: &[RuntimeValue],
+        upvalues: &[RuntimeValue],
+    ) -> Result<RuntimeValue, ExecutorError> {
+        let idx = func_id.0 as usize;
+        if idx >= self.functions_by_id.len() {
+            let stack = self.capture_stack();
+            return Err(ExecutorError::function_not_found(
+                format!(
+                    "Function with id {} not found (total functions: {})",
+                    idx,
+                    self.functions_by_id.len()
+                ),
+                stack,
+            ));
+        }
+        let func = self.functions_by_id[idx].clone();
+        let mut frame = crate::backends::interpreter::Frame::with_args(func.clone(), args);
+        frame.set_entry_ip(0);
+        // Set upvalues from closure env (for LoadUpvalue instructions)
+        *frame.upvalues_mut() = upvalues.to_vec();
+        self.push_frame(frame)?;
+
+        loop {
+            match self.step_one()? {
+                super::debug::StepOutcome::Continue => {}
+                super::debug::StepOutcome::Returned => {
+                    return Ok(std::mem::replace(
+                        &mut self.last_return_value,
+                        RuntimeValue::Unit,
+                    ))
+                }
+            }
+        }
+    }
+
     /// Push a frame onto the call stack
     pub(super) fn push_frame(
         &mut self,
