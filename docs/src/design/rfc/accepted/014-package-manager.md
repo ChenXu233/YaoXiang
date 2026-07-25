@@ -155,16 +155,88 @@ integrity = "sha256-xxxx"
 
 ### 模块解析顺序
 
+解析顺序取决于工作模式（是否有 `yaoxiang.toml`）。
+
+#### 项目模式（有 yaoxiang.toml）
+
 ```
 use foo.bar.baz;
 
 查找顺序:
-1. ./.yaoxiang/vendor/*/src/foo/bar/baz.yx  (vendor/)
-2. ./src/foo/bar/baz.yx                     (本地模块)
-3. ~/.yaoxiang/cache/foo/<ver>/src/foo/bar/baz.yx  (全局缓存)
-4. $YXPATH/foo/bar/baz.yx                   (全局路径，预留)
-5. $YXLIB/std/foo/bar/baz.yx                (标准库)
+0. 嵌入二进制                          (std/*.yx — 编译时嵌入，版本绑定，仅 std.* 命名空间)
+1. ./.yaoxiang/std/foo/bar/baz.yx     (项目级标准库 — 存在时全局标准库完全失效)
+2. ./.yaoxiang/vendor/*/src/foo/bar/baz.yx  (vendor/)
+3. ./src/foo/bar/baz.yx                       (本地模块)
+4. ~/.yaoxiang/cache/foo/<ver>/src/foo/bar/baz.yx  (全局缓存)
+5. $YXPATH/foo/bar/baz.yx                     (全局路径，预留)
 ```
+
+**项目模式规则**：
+- 嵌入二进制仅对 `std.*` 命名空间生效，优先级最高
+- 项目级标准库（`.yaoxiang/std/`）存在时，全局标准库完全跳过——保证构建确定性
+- 项目可通过 `yaoxiang add std@1.0.1` 将标准库作为依赖管理，锁定版本
+
+#### 单文件模式（无 yaoxiang.toml）
+
+```
+use foo.bar.baz;
+
+查找顺序:
+0. 嵌入二进制                          (std/*.yx — 编译时嵌入，版本绑定)
+1. <yaoxiang-install-dir>/yx/<version>/std/foo/bar/baz.yx  (全局标准库)
+2. ./src/foo/bar/baz.yx                                       (本地模块)
+3. $YXPATH/foo/bar/baz.yx                                     (全局路径，预留)
+```
+
+**单文件模式规则**：
+- 无项目级依赖，标准库直接从全局路径加载
+- 全局标准库路径与编译器版本绑定：`<install-dir>/yx/<version>/std/`
+
+### 标准库安装目录结构
+
+#### 全局标准库
+
+```
+<yaoxiang-install-dir>/
+├── yx/                          # YaoXiang 语言目录
+│   ├── 1.0.1/                   # 版本目录
+│   │   ├── std/
+│   │   │   ├── test.yx          # 纯 YaoXiang 标准库模块
+│   │   │   ├── math.yx          # 未来自举模块
+│   │   │   └── ...
+│   │   └── ...
+│   └── 1.1.0/
+│       └── std/
+│           └── ...
+└── bin/
+    └── yaoxiang                 # 编译器二进制
+```
+
+#### 项目级标准库
+
+项目可通过 `yaoxiang add std@1.0.1` 将标准库作为依赖加入项目，存储在 `.yaoxiang/std/`：
+
+```
+my-project/
+├── yaoxiang.toml
+├── yaoxiang.lock
+├── .yaoxiang/
+│   ├── std/                     # 项目级标准库（存在时全局标准库失效）
+│   │   ├── test.yx
+│   │   ├── math.yx
+│   │   └── ...
+│   └── vendor/                  # 其他依赖
+│       └── ...
+├── src/
+│   └── main.yx
+```
+
+**设计要点**：
+- 嵌入二进制作为兼容层：在文件系统标准库完全落地前，先通过嵌入二进制提供标准库模块
+- 版本目录隔离：`yx/<version>/std/` 使不同版本的标准库共存，不会互相影响
+- 项目级标准库覆盖全局标准库：确保构建确定性，不受全局环境变化影响
+- 无 yaoxiang.toml 时（单文件模式），退回到全局标准库
+- `.yaoxiang/std/` 的存在即表示"项目级标准库已启用"，全局标准库不再参与
 
 ### 核心数据结构
 
