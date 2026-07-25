@@ -1134,6 +1134,95 @@ impl AstToIrGenerator {
         })
     }
 
+    /// 生成 curry 函数的完整 IR 链
+    ///
+    /// 从外（layer 0）往内（layer N-1）遍历 layers，每层生成一个 FunctionIR。
+    /// 最外层用原名 `name`，内层用 `__{name}_l{index}`。
+    ///
+    /// env_param_names 在循环中累积：进入第 k 层时，它包含 layer 0..k-1 的所有参数名。
+    /// env_operands 通过 lookup_local 把这些名字解析成 Local 索引（外层参数在上一层循环的
+    /// LoadArg/LoadUpvalue 步骤已 register_local）。
+    #[expect(dead_code)]
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn generate_curry_function_ir(
+        &mut self,
+        name: &str,
+        type_annotation: &ast::Type,
+        all_params: &[ast::Param],
+        body: &[ast::Stmt],
+        constants: &mut Vec<ConstValue>,
+        _generic_params: Option<Vec<String>>,
+    ) -> Result<Option<FunctionIR>, Diagnostic> {
+        let layers = Self::split_curry(type_annotation, all_params);
+
+        let mut layer_funcs: Vec<FunctionIR> = Vec::new();
+        let mut env_param_names: Vec<String> = Vec::new();
+
+        // 保存外层状态，避免污染
+        let saved_mut_locals = std::mem::take(&mut self.current_mut_locals);
+        let saved_local_names = std::mem::take(&mut self.current_local_names);
+        let saved_next_temp = self.next_temp;
+
+        for (i, layer) in layers.iter().enumerate() {
+            let is_innermost = i == layers.len() - 1;
+            let func_name = if i == 0 {
+                name.to_string()
+            } else {
+                format!("__{}_l{}", name, i - 1)
+            };
+
+            // 先查 env_operands（外层参数在上一层循环已 register_local），再进入新作用域
+            let env_operands: Vec<Operand> = env_param_names
+                .iter()
+                .filter_map(|n| self.lookup_local(n))
+                .map(Operand::Local)
+                .collect();
+
+            // 进入新作用域
+            self.enter_scope();
+            // 重置本层的临时寄存器（每层独立计数）
+            self.next_temp = 0;
+
+            let func = if is_innermost {
+                self.generate_curry_innermost_func(
+                    &func_name,
+                    layer,
+                    &env_param_names,
+                    body,
+                    constants,
+                )?
+            } else {
+                let next_name = format!("__{}_l{}", name, i);
+                self.generate_curry_intermediate_func(
+                    &func_name,
+                    layer,
+                    &env_operands,
+                    &next_name,
+                    constants,
+                )?
+            };
+
+            self.exit_scope();
+
+            // 累积本层参数名，供下一层使用
+            for p in &layer.params {
+                env_param_names.push(p.name.clone());
+            }
+            layer_funcs.push(func);
+        }
+
+        // 恢复外层状态
+        self.current_mut_locals = saved_mut_locals;
+        self.current_local_names = saved_local_names;
+        self.next_temp = saved_next_temp;
+
+        // 内层函数加入 nested_functions，最外层返回给调用者
+        // 第 0 个是最外层，其余是内层
+        let outer = layer_funcs.remove(0);
+        self.nested_functions.extend(layer_funcs);
+        Ok(Some(outer))
+    }
+
     /// 尝试将表达式求值为编译时常量
     #[allow(clippy::only_used_in_recursion)]
     fn eval_const_expr(
