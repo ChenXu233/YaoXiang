@@ -804,12 +804,7 @@ impl AstToIrGenerator {
                 dst: Operand::Local(i),
                 src: Operand::Arg(i),
             });
-            // 存储到局部变量并注册
-            instructions.push(Instruction::Store {
-                dst: Operand::Local(i),
-                src: Operand::Local(i),
-                span: Span::dummy(),
-            });
+
             self.register_local(&param.name, i);
             // Only mut parameters are registered as mutable
             if param.is_mut {
@@ -1161,11 +1156,7 @@ impl AstToIrGenerator {
                 dst: Operand::Local(i),
                 src: Operand::Arg(i),
             });
-            instructions.push(Instruction::Store {
-                dst: Operand::Local(i),
-                src: Operand::Local(i),
-                span: Span::dummy(),
-            });
+
             self.register_local(&param.name, i);
             if param.is_mut {
                 self.current_mut_locals.insert(i);
@@ -1381,29 +1372,12 @@ impl AstToIrGenerator {
                     idx
                 };
                 if let Some(expr) = initializer {
-                    if let ast::Expr::Var(src_name, _) = expr {
-                        if let Some(src_idx) = self.lookup_local(src_name) {
-                            instructions.push(Instruction::Move {
-                                dst: Operand::Local(var_idx),
-                                src: Operand::Local(src_idx),
-                            });
-                        } else {
-                            self.generate_expr_ir(expr, var_idx, instructions, constants)?;
-                        }
-                    } else {
-                        self.generate_expr_ir(expr, var_idx, instructions, constants)?;
-                    }
+                    // 统一走 generate_expr_ir — 把 RHS 值直接放入 var_idx 槽
+                    self.generate_expr_ir(expr, var_idx, instructions, constants)?;
                 } else {
                     instructions.push(Instruction::Load {
                         dst: Operand::Local(var_idx),
                         src: Operand::Const(ConstValue::Int(0)),
-                    });
-                }
-                if !matches!(initializer, Some(ast::Expr::Var(_, _))) {
-                    instructions.push(Instruction::Store {
-                        dst: Operand::Local(var_idx),
-                        src: Operand::Local(var_idx),
-                        span: stmt.span,
                     });
                 }
             }
@@ -1454,12 +1428,6 @@ impl AstToIrGenerator {
                         if let Some(elem) = elems.get(i) {
                             self.generate_expr_ir(elem, var_idx, instructions, constants)?;
                         }
-
-                        instructions.push(Instruction::Store {
-                            dst: Operand::Local(var_idx),
-                            src: Operand::Local(var_idx),
-                            span: *span,
-                        });
                     }
                 } else {
                     // 非字面量元组：生成 RHS，然后通过 LoadIndex 提取
@@ -1480,12 +1448,6 @@ impl AstToIrGenerator {
                             dst: Operand::Local(var_idx),
                             src: Operand::Local(rhs_reg),
                             index: Operand::Local(index_reg),
-                            span: *span,
-                        });
-
-                        instructions.push(Instruction::Store {
-                            dst: Operand::Local(var_idx),
-                            src: Operand::Local(var_idx),
                             span: *span,
                         });
                     }
@@ -2503,19 +2465,12 @@ impl AstToIrGenerator {
                                 self.local_var_types.insert(var_name.clone(), inferred);
                             }
 
-                            // 变量到变量的赋值生成 Move，值表达式生成 Store
-                            if let Expr::Var(_, _) = right.as_ref() {
-                                instructions.push(Instruction::Move {
-                                    dst: Operand::Local(local_idx),
-                                    src: Operand::Local(val_reg),
-                                });
-                            } else {
-                                instructions.push(Instruction::Store {
-                                    dst: Operand::Local(local_idx),
-                                    src: Operand::Local(val_reg),
-                                    span: *span,
-                                });
-                            }
+                            // 统一走 Store — 消除 Var→Var 走 Move 的特殊情况
+                            instructions.push(Instruction::Store {
+                                dst: Operand::Local(local_idx),
+                                src: Operand::Local(val_reg),
+                                span: *span,
+                            });
                             instructions.push(Instruction::Load {
                                 dst: Operand::Local(result_reg),
                                 src: Operand::Local(local_idx),

@@ -1,0 +1,30 @@
+// 04-concurrency/closure_mut_capture.yx
+// 覆盖: 规范 §并发模型 闭包捕获 + §变量赋值
+// 验证: spawn 读取外层变量 + for 循环内 mut 累加（issue #223 防回归）
+// 状态: ✅ 可运行
+
+use std.assert
+
+main = {
+    // spawn 读取外层变量（捕获路径正确）
+    data = 42
+    result = spawn {
+        return data
+    }
+    assert.assert(result == 42, "spawn should capture outer variable")
+
+    // for 循环内 mut 累加（验证 mut 写回穿过 for 循环）
+    mut total = 0
+    for i in 0..100 {
+        total = total + i
+    }
+    assert.assert(total == 4950, "for loop sum 0..99 == 4950")
+
+    // for 遍历列表 + mut 累加（另一种 mut 写回路径）
+    mut sum = 0
+    items = [10, 20, 30, 40]
+    for n in items {
+        sum = sum + n
+    }
+    assert.assert(sum == 100, "for list sum 10+20+30+40 == 100")
+}

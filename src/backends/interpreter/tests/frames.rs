@@ -35,6 +35,31 @@ fn test_frame_new() {
 fn test_frame_local_access() {
     let func = make_test_function();
     let mut frame = Frame::new(func);
-    frame.set_local(0, RuntimeValue::Int(42));
-    assert_eq!(frame.get_local(0).unwrap().to_int(), Some(42));
+    frame.set_slot(0, RuntimeValue::Int(42));
+    assert_eq!(frame.get_slot(0).unwrap().to_int(), Some(42));
+}
+
+#[test]
+fn test_slots_unified_read_write() {
+    let func = BytecodeFunction {
+        name: "test_slots".to_string(),
+        params: vec![],
+        return_type: crate::middle::core::ir::Type::Void,
+        local_count: 4,
+        upvalue_count: 0,
+        instructions: vec![],
+        labels: std::collections::HashMap::new(),
+        exception_handlers: vec![],
+        debug_map: std::collections::HashMap::new(),
+    };
+    let mut frame = Frame::new(func);
+    // 通过 set_slot 写入，通过 get_slot 读取 — 同一个数组
+    frame.set_slot(0, RuntimeValue::Int(42));
+    frame.set_slot(1, RuntimeValue::Int(7));
+    assert_eq!(frame.get_slot(0).unwrap().to_int(), Some(42));
+    assert_eq!(frame.get_slot(1).unwrap().to_int(), Some(7));
+    // 自动 resize
+    frame.set_slot(10, RuntimeValue::Int(99));
+    assert_eq!(frame.get_slot(10).unwrap().to_int(), Some(99));
+    assert_eq!(frame.local_count(), 11);
 }
