@@ -1,62 +1,59 @@
 # A Language Design Perspective from Someone Born in 2006
 
-> When Rust was conceived, I was just born; when Rust matured, I was a young adult; and in the next decade, I can create a language for our generation.
+> When Rust was being conceived, I was just born; when Rust matured, I was in my youth; and in the next decade, I am precisely the one who can create a language belonging to our generation.
 
 ## Introduction: The Passing of a Generational Mission
 
-2006 was the year Rust was born, and also the year I came into this world. Nineteen years later, when I began designing and implementing YaoXiang, I realized this wasn't just a coincidence of timing, but a **passing of generational mission**.
+2006 is the year the Rust programming language was born, and also the year I came into this world. Nineteen years later, when I began designing and implementing YaoXiang (爻象), I realized this was not merely a coincidence of time, but a passing of a generational mission.
 
-Rust solved the pain points of the 2000s: memory safety, concurrency safety. It was an answer given by a generation of engineers who struggled in the quagmire of C/C++. But every generation has its own problems, and every generation needs its own tools.
+Rust solved the pain points of the 2000s: memory safety, concurrency safety. It is the answer given by a generation of engineers after struggling in the quagmire of C/C++. But each generation has its own problems, and each generation needs its own tools.
 
-This article is not a technical specification document, but a generational manifesto. It answers the question: **Why does our generation of developers need our own language? How does YaoXiang respond to our needs?**
+This article is not a technical specification document, but a generational manifesto. The question it seeks to answer is: **Why do developers of our generation need our own language? How does YaoXiang respond to our needs?**
 
 ---
 
-## I. Generational Gap—Why Existing Languages Feel "Unfamiliar" to Us
+## I. The Generation Gap — Why Existing Languages Make Us Feel "Culturally Disconnected"
 
 ### 1.1 Those "Counter-intuitive" Designs
 
-When I first learned Rust, I was tortured by its borrow checker. I understood the importance of memory safety, but I couldn't understand why a simple string concatenation required such tedious lifetime annotations. Later, I realized that **the designers of Rust lived in a different era**.
+When I first learned Rust, I was tormented to death by its borrow checker. I understood the importance of memory safety, but I couldn't understand why a simple string concatenation required such cumbersome lifetime annotations. Later I realized, **Rust's designers lived in a different era.**
 
-Their mindset was:
-
-- "Memory safety is a problem that requires deliberate solving"
-- "Concurrency is a monster that requires careful handling"
+Their thought patterns are:
+- "Memory safety is a problem that needs to be deliberately solved"
+- "Concurrency is a beast that needs careful handling"
 - "The type system is a tool for catching errors"
 
-My mindset is:
-
+Whereas my thought patterns are:
 - "Isn't memory safety something a language should provide by default?"
 - "Isn't concurrency as natural as breathing?"
-- "Can't the type system be a scaffolding for me to explore problems?"
+- "Can't the type system become scaffolding for me to explore problems?"
 
-This is not criticism of Rust. Rust was revolutionary in its era. But **every generation's "default" is the previous generation's "luxury"**.
+This is not a criticism of Rust. Rust was revolutionary in its time. But **each generation's "default" is the previous generation's "luxury."**
 
-### 1.2 "Air" vs. "Obstacles"
+### 1.2 "Air" and "Obstacles"
 
-My generation of developers grew up in a world of multi-core CPUs, cloud-native computing, and mobile internet. For us:
+Our generation of developers grew up in a world of multi-core CPUs, cloud-native, and mobile internet. For us:
+- Multi-core processors are "air" — we have never experienced the limits of single-core
+- Async programming is "air" — we have never experienced synchronous blocking as the default model
+- Distributed systems are "air" — we have never experienced a local-first design mindset
 
-- Multi-core processors are "air"—we've never experienced single-core limitations
-- Async programming is "air"—we've never experienced synchronous blocking as the default model
-- Distributed systems are "air"—we've never experienced local-first design thinking
+When we open a programming language tutorial and see the author spend large portions explaining "why you need to learn concurrent programming," our inner OS is: **"Isn't this obvious? Why do I need to learn it?"**
 
-When we open a programming language tutorial and see the author spend a great deal of time explaining "why you need to learn concurrent programming," our internal reaction is: **"Isn't this obvious? Why does it need to be learned?"**
+This is the generation gap. **What the previous generation needs to "learn" is "instinct" for our generation.**
 
-This is the generational gap. **What the previous generation had to "learn" is "instinct" to our generation**.
+### 1.3 The "Illiteracy" Predicament of the AI Era
 
-### 1.3 The "Illiteracy" Dilemma in the AI Era
-
-When I began interacting with AI programming assistants, I discovered a deeper problem: **existing languages were never designed with AI in mind**.
+When I began engaging with AI programming assistants, I discovered a deeper problem: **existing languages were never designed with AI in mind.**
 
 - Syntactic ambiguity causes AI hallucinations
-- Implicit rules prevent AI from inferring behavior
-- Fuzzy type system boundaries lead AI to give wrong type suggestions
+- Implicit rules make it impossible for AI to infer behavior
+- The fuzzy boundaries of type systems cause AI to give incorrect type suggestions
 
-I've witnessed AI confuse Python's list comprehensions with C++ lambda expressions, and mix up Rust's `impl Trait` with TypeScript generics. This isn't an AI problem—**this is a problem of language design not being prepared for the AI era**.
+I have personally seen AI confuse Python's list comprehensions with C++'s lambda expressions, and mix up Rust's `impl Trait` with TypeScript's generics. This is not AI's fault, **this is a failure of language design to prepare for the AI era.**
 
 ---
 
-## II. Our Programming Instincts—What Technical Environment We Grew Up In
+## II. Our Programming Instincts — In What Kind of Technical Environment We Grew Up
 
 ### 2.1 The Cognitive Patterns of Digital Natives
 
@@ -64,44 +61,44 @@ The programming education trajectory of our generation (born in 2006) is unique:
 
 | Age | Milestone | Technical Environment |
 |------|-----------|----------------------|
-| 9 (2015) | Scratch/Visual programming | iPad generation, touch interaction |
-| 12 (2018) | Python/JavaScript | Cloud computing rises, Web 2.0 matures |
-| 15 (2021) |接触到Copilot雏形 | AI-assisted programming emerges |
-| 18 (2024) | Graduated high school, entered university | GitHub Copilot becomes widespread |
+| 9 (2015) | Scratch/visual programming | iPad generation, touch interaction |
+| 12 (2018) | Python/JavaScript | Cloud computing rising, Web 2.0 maturing |
+| 15 (2021) | Encountered early Copilot | AI-assisted programming emerging |
+| 18 (2024) | College entrance exam ended, entered university | GitHub Copilot widely adopted |
 | 19 (2025) | Began designing YaoXiang | Claude/GPT-4o era |
 
-What does this trajectory mean? **We have native intuition for "human-machine collaborative programming"**.
+What does this trajectory mean? **We have native intuition for "human-machine collaborative programming."**
 
-When we learned programming, AI assistants were already by our side. We never experienced "facing a blank editor alone." We are accustomed to: having AI generate code scaffolding, then filling in details; having AI explain syntax we don't understand; having AI help us debug.
+When we learned to program, AI assistants were already by our side. We have never experienced the fear of "facing a blank editor alone." We are accustomed to: letting AI generate code skeletons, then filling in details; letting AI explain syntax we don't understand; letting AI help us debug.
 
-This isn't dependency—this is a **symbiotic programming model**.
+This is not dependency, this is a **symbiotic programming model.**
 
 ### 2.2 Concurrency Is Our "Mother Tongue"
 
-I never experienced an era of manual thread pool management. When I wrote my first concurrent code, I used JavaScript's `async/await`. When I later learned Rust's `async/await`, I was amazed at why a simple "wait" operation required such a complex `Future` trait, `Pin`, and `Context`.
+I have never experienced an era requiring manual thread pool management. The first time I wrote concurrent code, I used JavaScript's `async/await`. When I later learned Rust's `async/await`, I was surprised that such a simple "wait" operation required such a complex `Future` trait, `Pin`, and `Context`.
 
-**Concurrency is not a feature for us—it's the default state.** Just as multi-tasking operating systems are "air" to this generation.
+**Concurrency is not a feature for us, it is the default state.** Just as multitasking operating systems are "air" for this generation.
 
-So when YaoXiang adopts the "spawn model," this isn't innovation—it's **encoding our instincts into the language**.
+So when YaoXiang adopts the "spawn model," this is not innovation, this is **encoding our instincts into the language.**
 
 ```yaoxiang
-# YaoXiang's spawn syntax: concurrency is default, not explicit
+# YaoXiang's spawn syntax: concurrency is the default, not explicit
 fetch_user(Int) -> User spawn = (id) => { ... }
 fetch_posts(User) -> Posts spawn = (user) => { ... }
 
 main() -> Void = () => {
-    user = fetch_user(1)     # Auto-parallel
-    posts = fetch_posts(user) # Auto-wait for user, then parallel
+    user = fetch_user(1)     # Automatic parallelism
+    posts = fetch_posts(user) # Automatically waits for user, then runs in parallel
     
-    print(posts.title)       # Auto-wait for posts to be ready
+    print(posts.title)       # Automatically waits for posts to be ready
 }
 ```
 
-This isn't "simplification"—this is **restoring our cognitive model**.
+This is not "simplification," this is **restoring our cognitive model.**
 
-### 2.3 A Generation of Visual Thinkers
+### 2.3 A Generation of Visual Thinking
 
-We grew up in Figma, Canva, and Minecraft. We're accustomed to **WYSIWYG design thinking**. When we learned programming, we were confused about why "writing an interface" required traversing so many abstraction layers.
+Our generation grew up in Figma, Canva, and Minecraft. We are accustomed to **WYSIWYG (What You See Is What You Get)** design thinking. When we learn to program, we are puzzled why "writing an interface" requires crossing so many layers of abstraction.
 
 ```yaoxiang
 # YaoXiang's visual component syntax
@@ -115,22 +112,21 @@ user_profile(User) -> Component = (user) => {
 }
 ```
 
-This isn't just syntactic sugar—it's **acknowledging our generation's thinking patterns**.
+This is not just syntactic sugar, this is **acknowledging the thought patterns of our generation.**
 
 ---
 
-## III. YaoXiang's Design Responses—A Language Designed for the New Generation
+## III. YaoXiang's Design Response — A Language Designed for the New Generation
 
-### 3.1 Everything Is a Type: A Category Theory Worldview
+### 3.1 Everything Is a Type: A Category-Theoretic Worldview
 
-YaoXiang's core design philosophy is **"everything is a type"**. This isn't a technical choice—it's a **worldview choice**.
+YaoXiang's core design philosophy is **"everything is a type."** This is not a technical choice, but a **choice of worldview.**
 
 In YaoXiang's world:
-
 - Values are instances of types
-- Types themselves are also instances of types (meta types)
+- Types themselves are also instances of types (meta type)
 - Functions are mappings from input types to output types
-- Modules are namespace compositions of types
+- Modules are combinations of type namespaces
 
 ```yaoxiang
 # Types as values
@@ -139,7 +135,7 @@ MyList = List(Int)    # MyList is now a type value
 # Dependent types: types depend on values
 type Vector[T, n: Nat] = vector(T, n)
 
-# Pattern matching types
+# Pattern matching on types
 describe_type(type) -> String = (t) => {
     match t {
         Point(x, y) -> "Point with x=" + x + ", y=" + y
@@ -149,14 +145,13 @@ describe_type(type) -> String = (t) => {
 }
 ```
 
-What does this design respond to? It responds to our generation's pursuit of **mathematical beauty**. When we studied mathematics and encountered set theory and category theory, they taught us: **types are the highest level of abstraction**. Why not carry this through completely?
+What does this design respond to? It responds to our generation's pursuit of **mathematical beauty.** The set theory and category theory we encountered while learning mathematics tell us: **types are the highest-level abstraction.** Why not carry this through to the end?
 
-### 3.2 Spawn Model: Making Concurrency into Air
+### 3.2 The Spawn Model: Making Concurrency the Air
 
-YaoXiang's spawn model is a **paradigm颠覆 of traditional async programming**.
+YaoXiang's spawn model is a **paradigm disruption of traditional async programming.**
 
 Traditional async programming looks like this:
-
 ```rust
 // Rust
 async fn fetch_data(url: &str) -> Result<Data, Error> {
@@ -166,22 +161,20 @@ async fn fetch_data(url: &str) -> Result<Data, Error> {
 ```
 
 You need to understand:
-
 - `async`/`await` syntax
-- `Future` trait
+- The `Future` trait
 - `Pin` and `Unpin`
-- Runtimes (tokio/async-std)
-- Task schedulers
+- The runtime (tokio/async-std)
+- Task scheduler
 
 YaoXiang's spawn model looks like this:
-
 ```yaoxiang
-# Spawn functions: only one spawn marker needed
+# Spawn function: just a spawn marker
 fetch_data(String) -> JSON spawn = (url) => {
     HTTP.get(url).json()
 }
 
-# Spawn blocks: explicit parallelism
+# Spawn block: explicit parallelism
 compute_all(Int, Int) -> (Int, Int, Int) spawn = (a, b) => {
     (x, y, z) = spawn {
         heavy_calc(a),
@@ -191,7 +184,7 @@ compute_all(Int, Int) -> (Int, Int, Int) spawn = (a, b) => {
     (x, y, z)
 }
 
-# Spawn loops: data parallelism
+# Spawn loop: data parallelism
 parallel_sum(Int) -> Int spawn = (n) => {
     total = spawn for i in 0..n {
         fibonacci(i)
@@ -200,29 +193,28 @@ parallel_sum(Int) -> Int spawn = (n) => {
 }
 ```
 
-This isn't simplification—it's **redefining the problem**. Traditional async programming asks "how to make non-blocking code look like synchronous code?" YaoXiang asks "why should there be a distinction between async and sync?"
+This is not simplification, this is **redefining the problem.** Traditional async programming asks "how do we make non-blocking code look like synchronous code?" YaoXiang asks "why should there be a difference between async and sync?"
 
-**When concurrency becomes air, syntactic differences disappear**.
+**When concurrency becomes air, the syntactic differences disappear.**
 
 ### 3.3 AI-Friendly Syntax Design
 
-YaoXiang's design considers the needs of AI code generation. This isn't shallow "AI can understand it," but deep "AI participated in the design."
+YaoXiang's design accounts for the needs of AI code generation. This is not a superficial concern of "AI can understand it," but a deep consideration of "AI participates in the design."
 
 **Design principles:**
-
-1. **Strictly structured, unambiguous syntax** - AI won't hallucinate due to syntactic ambiguity
-2. **Clear AST, easy localization** - AI can precisely locate code positions
-3. **Explicit semantics, no hidden behavior** - AI can correctly infer code behavior
-4. **Clear code block boundaries** - AI won't misunderstand scope
-5. **Complete type information** - AI can give correct type suggestions
+1. **Strict structure, unambiguous syntax** — AI won't hallucinate due to syntactic ambiguity
+2. **Clear AST, easy location** — AI can precisely locate code positions
+3. **Explicit semantics, no hidden behavior** — AI can correctly infer code behavior
+4. **Clear code block boundaries** — AI won't misunderstand scope
+5. **Complete type information** — AI can give correct type suggestions
 
 ```yaoxiang
-# Clear code block boundaries
+# Explicit code block boundaries
 function_name(Params) -> ReturnType = (params) => {
     # Function body
 }
 
-# No omitted parentheses (unambiguous)
+# No optional parentheses (no ambiguity)
 foo(T) -> T = (x) => x
 
 # Must use 4-space indentation (clear structure)
@@ -233,65 +225,65 @@ if condition {
 }
 ```
 
-This isn't just a style guide—it's **language infrastructure designed for AI collaboration**.
+This is not just a style guide, this is **language infrastructure designed for AI collaboration.**
 
 ---
 
-## IV. Generational Thinking Behind Specific Design Decisions
+## IV. The Generational Thinking Behind Specific Design Decisions
 
-### 4.1 Why Choose "Constructors as Types"?
+### 4.1 Why Choose "Constructors Are Types"?
 
-YaoXiang has only one form of type definition: constructors separated by `|`.
+YaoXiang's type definitions uniformly use `constructor` syntax. Different variants correspond to different constructor functions:
 
 ```yaoxiang
-# Zero-parameter constructors (enum style)
-type Color = red | green | blue
+# Zero-argument constructors (enum style)
+type Color = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
-# Multi-parameter constructors (struct style)
+# Multi-argument constructors (struct style)
 type Point = Point(x: Float, y: Float)
 
 # Generic constructors
-type Result[T, E] = ok(T) | err(E)
+type Result[T, E] = { ok: (T) -> Result[T, E], err: (E) -> Result[T, E] }
 ```
 
-What does this respond to? It responds to **the type system being unified rather than fragmented**.
+What does this respond to? It responds to **the type system should be unified, not fragmented.**
 
 In Java, you have `class`, `enum`, `interface`. In Rust, you have `struct`, `enum`, `trait`. In TypeScript, you have `interface`, `type`, `class`.
 
-Why should types have so many forms? **Types are types—the distinction should be in the form of values, not the form of types**.
+Why should types have so many forms? **Types are types; the distinction should be in the form of values, not in the form of types.**
 
-### 4.2 Why Abandon GC and Use the Ownership Model?
+### 4.2 Why Abandon GC and Adopt the Ownership Model?
 
-YaoXiang adopts a Rust-style ownership model instead of GC.
+YaoXiang adopts a Rust-style ownership model rather than GC.
 
 ```yaoxiang
-# Immutable reference by default
+# Default immutable references
 process(ref Data) -> Void = (data) => {
     # data is read-only
 }
 
-# Mutable reference
+# Mutable references
 modify(mut Data) -> Void = (data) => {
-    # can modify data
+    # data can be modified
 }
 
 # Transfer ownership
 consume(Data) -> Void = (data) => {
-    # ownership of data transfers in
+    # ownership of data is transferred in
 }
 ```
 
-This isn't just a performance choice—it's a **philosophical choice**.
+This is not just a performance choice, it is a **philosophical choice.**
 
-Our generation cares about the environment and resource efficiency. **We don't take "unlimited memory" for granted**. We have cloud service bills; we know every byte has a cost.
+Our generation cares about the environment, cares about resource efficiency. **We do not take "infinite memory" for granted.** We have cloud service bills, we know every byte has a cost.
 
-At the same time, we don't want to be plagued by GC's "Stop the World" pauses. We're accustomed to smooth user experiences and the responsiveness of real-time systems.
+At the same time, we don't want to be troubled by GC's "Stop the World" pauses. We are accustomed to fluid user experiences, to the responsiveness of real-time systems.
 
-The ownership model gives us: **zero-cost abstractions + deterministic performance + memory safety**.
+The ownership model gives us: **zero-cost abstraction + deterministic performance + memory safety.**
 
 ### 4.3 Why Is Currying Core Syntax?
 
-YaoXiang achieves object-method-call-like syntactic sugar through currying.
+YaoXiang implements syntactic sugar similar to object method calls through currying.
 
 ```yaoxiang
 # Core function definition
@@ -311,74 +303,72 @@ d1 = distance(p1, p2)     # Direct call
 d2 = p1.distance(p2)      # Method syntax
 ```
 
-What does this respond to? It responds to **our desire for the purity of functional programming while retaining the intuitiveness of object orientation**.
+What does this respond to? It responds to **we want the purity of functional programming while preserving the intuitiveness of object orientation.**
 
-When our generation learned programming, we often started with Python, then encountered JavaScript. We're accustomed to `obj.method()` calling style, but we also appreciate the elegance of functional programming.
+Our generation, when learning to program, often started with Python, then encountered JavaScript. We are accustomed to the `obj.method()` calling style, but we also appreciate the elegance of functional programming.
 
-Currying makes both **two sides of the same coin**.
+Currying makes both **two sides of the same coin.**
 
 ---
 
-## V. Beyond Technology—The Cultural Significance of a Generational Perspective
+## V. Beyond Technology — The Cultural Significance of a Generational Perspective
 
 ### 5.1 We Need Our Own Voice
 
-Programming language design has long been the domain of "elders." Linus Torvalds started Linux at 21; Graydon Hoare was already a senior engineer when designing Rust.
+Programming language design has long been the discursive domain of "elders." Linus Torvalds started Linux at 21, and Graydon Hoare was already a senior engineer when designing Rust.
 
-But every generation has its own unique insights. **Young people see problems differently—this isn't a flaw, it's value.**
+But each generation has its own unique insights. **Young people see problems from different angles, this is not a flaw, it is value.**
 
-When I designed YaoXiang, I had no historical baggage from C/C++. I didn't need to "adapt" to existing systems—I could "natively" design new systems.
+When I designed YaoXiang, I had no historical baggage from C/C++. I didn't need to "adapt" to existing systems, I could "natively" design new systems.
 
-### 5.2 A New Paradigm for Open Source Collaboration
+### 5.2 A New Paradigm of Open Source Collaboration
 
-Open source collaboration, as we understand it, means:
-
+The open source collaboration our generation understands is:
 - Not mailing lists, but Discord communities
 - Not official documentation, but interactive tutorials
-- Not conference speeches, but live coding sessions
+- Not conference talks, but live coding streams
 - Not patent protection, but open collaboration
 
-YaoXiang has been open source from day one. This isn't idealism—**this is how our generation does things**.
+YaoXiang has been open source from day one. This is not because of idealism, but **this is the way our generation does things.**
 
 ### 5.3 Designed for the AI-Native Era
 
-Current languages were designed for the 2000s (single-core, local, human-written). YaoXiang is designed for the 2030s (multi-core, distributed, human-machine co-written).
+Current languages are designed for the 2000s (single-core, local, human-written). YaoXiang is designed for the 2030s (multi-core, distributed, human-AI co-written).
 
-This isn't exaggeration—it's **urgent reality**.
+This is not exaggeration, this is an **urgent reality.**
 
-AI is changing every aspect of programming. Code generation, code review, debugging assistance, documentation writing—AI is becoming the default partner of developers.
+AI is transforming every aspect of programming. Code generation, code review, debugging assistance, documentation writing — AI is becoming the developer's default partner.
 
-**A language that doesn't consider AI is like a font design that doesn't consider printers—it will seem outdated and clumsy**.
+**A language that doesn't consider AI is like a font design that doesn't consider the printer — it will appear outdated and clumsy.**
 
 ---
 
-## VI. Future Outlook—An Invitation to Join
+## VI. Future Outlook — Inviting You to Join
 
-### 6.1 This Isn't Just a Project
+### 6.1 This Is More Than a Project
 
-YaoXiang isn't just a programming language project—it's a **generational manifesto**.
+YaoXiang is not just a programming language project, it is a **generational manifesto.**
 
-It says: our generation doesn't just learn our predecessors' tools; we have the ability to create our own tools. It says: people born in 2006 aren't just Rust users; we can have our own language.
+It says: our generation is not just learning the tools of our predecessors, we have the ability to create our own tools. It says: people born in 2006 are not just users of Rust, we can have our own language.
 
-### 6.2 Looking for Contributors from the "2006 Generation"
+### 6.2 Seeking Contributors of the "2006 Generation"
 
-I'm looking for developers my age—those who grew up in the AI era as the first generation of developers, those who feel "unfamiliar" with existing languages, those who have their own design ideas but no platform to implement them.
+I am seeking developers of my age — those who are the first generation of developers to grow up in the AI era, those who feel "culturally disconnected" from existing languages, those who have their own design ideas but lack a platform to implement them.
 
 **Your advantages:**
-
-- Same freedom from historical baggage
-- Same technical intuition
-- Same long career perspective
+- The same lack of historical baggage
+- The same technical intuition
+- The same long career horizon
 
 ### 6.3 Concrete Next Steps
 
-If you're interested in YaoXiang, you can:
+If you are interested in YaoXiang, you can:
 
-1. **Try it out** - Run your first YaoXiang program
-2. **Read the source code** - Understand the implementation of the spawn model
-3. **Contribute code** - Implement new features or fix bugs
-4. **Design discussions** - Participate in language design decisions
-5. **Spread the word** - Share with more people your age
+1. **Try using it** — Run your first YaoXiang program
+2. **Read the source code** — Understand the implementation of the spawn model
+3. **Contribute code** — Implement new features or fix bugs
+4. **Participate in design discussions** — Join language design decisions
+5. **Spread the philosophy** — Share with more peers
 
 ---
 
@@ -386,12 +376,12 @@ If you're interested in YaoXiang, you can:
 
 Rust solved the pain points of the 2000s. YaoXiang can solve the pain points of the 2020s.
 
-This isn't a coincidence of history—it's an invitation from the era.
+This is not a coincidence of history, but an invitation of the times.
 
-**Your greatest asset isn't code—it's time.**
+**Your greatest asset is not code, but time.**
 
-While your peers are still learning to use existing tools, you're creating the next generation of tools. Ten years from now, when people ask "why did YaoXiang succeed," the answer might be:
+While peers are still learning to use existing tools, you are creating the next generation of tools. Ten years from now, when people ask "why was YaoXiang successful," the answer might be:
 
-> "Because it was born in the AI era, designed by the first generation of developers who grew up in the AI era—they know what the future needs, because they are the future."
+> "Because it was born in the AI era, designed by the first generation of developers who grew up in the AI era — they knew what the future needs, because they are the future."
 
-Start your era.
+Begin your era.
