@@ -624,23 +624,6 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                     .collect(),
             ),
 
-            // 变体类型
-            AstType::Variant(variants) => AstType::Variant(
-                variants
-                    .iter()
-                    .map(|v| crate::frontend::core::parser::ast::VariantDef {
-                        name: v.name.clone(),
-                        name_span: v.name_span,
-                        params: v
-                            .params
-                            .iter()
-                            .map(|(n, t)| (n.clone(), self.substitute_type_ast(t, type_map)))
-                            .collect(),
-                        span: v.span,
-                    })
-                    .collect(),
-            ),
-
             // 元组：递归替换元素类型
             AstType::Tuple(types) => AstType::Tuple(
                 types
@@ -805,24 +788,6 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                     })
                     .collect(),
             },
-            AstType::Variant(variants) => AstType::Variant(
-                variants
-                    .iter()
-                    .map(|v| {
-                        let new_params = v
-                            .params
-                            .iter()
-                            .map(|(n, t)| (n.clone(), self.substitute_type_in_ast(t, name_map)))
-                            .collect();
-                        ast::VariantDef {
-                            name: v.name.clone(),
-                            name_span: v.name_span,
-                            params: new_params,
-                            span: v.span,
-                        }
-                    })
-                    .collect(),
-            ),
             AstType::Tuple(types) => AstType::Tuple(
                 types
                     .iter()

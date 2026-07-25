@@ -1526,22 +1526,11 @@ impl TypeChecker {
     /// - Expr::Call          → Function (引用)
     /// - Expr::FieldAccess   → Property (引用)
     /// - Expr::Cast          → Type (引用)
-    fn constructor_names_from_module(module: &Module) -> HashSet<String> {
-        use crate::frontend::core::parser::ast::{StmtKind, Type};
-
-        let mut names = HashSet::new();
-        for stmt in &module.items {
-            if let StmtKind::TypeDefinition {
-                definition: Type::Variant(variants),
-                ..
-            } = &stmt.kind
-            {
-                for v in variants {
-                    names.insert(v.name.clone());
-                }
-            }
-        }
-        names
+    fn constructor_names_from_module(_module: &Module) -> HashSet<String> {
+        // Variant 语法已废弃（RFC-010，issue #203）。
+        // 类型定义的构造器识别由下游类型系统统一处理，此处保留空集合作占位，
+        // 避免破坏 semantic_tokens 中 EnumMember 识别链路。
+        HashSet::new()
     }
 
     fn add_use_module_root(

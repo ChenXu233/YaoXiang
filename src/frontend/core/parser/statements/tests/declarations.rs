@@ -187,22 +187,15 @@ fn test_type_def_struct() {
 }
 
 #[test]
-fn test_type_def_enum() {
-    let kind = parse_stmt("Color: Type = { red | green | blue }");
-    if let StmtKind::TypeDefinition { name, .. } = &kind {
-        assert_eq!(name, "Color", "类型名应为 Color");
-    } else {
-        panic!("Expected StmtKind::TypeDefinition for enum def");
-    }
-}
-
-#[test]
 fn test_type_def_generic() {
-    // RFC-011: Option: (T: Type) -> Type = { some(T) | none }
-    // 验证 (T: Type) 被识别为泛型参数
+    // RFC-011 + RFC-010 issue #203:
+    //   Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
+    // `|` 变体语法已废弃，统一用记录类型表达和类型。
+    // 验证 (T: Type) 被识别为泛型参数。
 
     // Arrange
-    let kind = parse_stmt("Option: (T: Type) -> Type = { some(T) | none }");
+    let kind =
+        parse_stmt("Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }");
 
     // Act
     let StmtKind::TypeDefinition {
@@ -581,5 +574,84 @@ fn test_type_def_constraint_expr_block_form() {
         ),
         "体项应为 Expr(ConstExpr), got {:?}",
         body[0]
+    );
+}
+
+// ============================================================================
+// RFC-010 和类型新语法 (issue #203)
+//
+// `|` 变体语法废弃后，和类型用记录类型表达：
+//   Result: (T: Type, E: Type) -> Type = {
+//       ok: (T) -> Result(T, E),
+//       err: (E) -> Result(T, E)
+//   }
+// 以下测试守护：(1) parser 能解析泛型参数；(2) 定义体被识别为 TypeDefinition；
+// (3) definition 为 Type::Struct（非已删除的 Type::Variant）。
+// ============================================================================
+
+#[test]
+fn test_type_def_generic_sum_type_recognized_as_struct() {
+    // RFC-010 issue #203: 泛型 Option 用新语法定义，应解析为 TypeDefinition
+    // 且 definition 为 Type::Struct（不再有 Type::Variant 节点）。
+
+    // Arrange
+    let kind =
+        parse_stmt("Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }");
+
+    // Act
+    let StmtKind::TypeDefinition {
+        name,
+        signature_params,
+        definition,
+        ..
+    } = &kind
+    else {
+        panic!(
+            "Expected StmtKind::TypeDefinition for sum type, got {:?}",
+            kind
+        );
+    };
+    let generic_params = extract_generic_param_names(signature_params);
+
+    // Assert
+    assert_eq!(name, "Option", "类型名应为 Option");
+    assert_eq!(generic_params.len(), 1, "应有 1 个泛型参数 T");
+    assert_eq!(generic_params[0].name, "T", "泛型参数名应为 T");
+    assert!(
+        matches!(definition, Type::Struct { .. }),
+        "和类型 definition 应为 Type::Struct（RFC-010 issue #203），实际为 {:?}",
+        definition
+    );
+}
+
+#[test]
+fn test_type_def_generic_sum_type_field_count() {
+    // RFC-010 issue #203: 和类型 Option 的 some/none 在记录体中作为函数字段
+
+    // Arrange
+    let kind =
+        parse_stmt("Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }");
+    let StmtKind::TypeDefinition { definition, .. } = &kind else {
+        panic!("Expected TypeDefinition, got {kind:?}");
+    };
+
+    // Act
+    let Type::Struct { body } = definition else {
+        panic!("Expected Type::Struct body, got {definition:?}");
+    };
+    let field_count = body
+        .iter()
+        .filter(|it| {
+            matches!(
+                it,
+                crate::frontend::core::parser::ast::TypeBodyItem::Field(_)
+            )
+        })
+        .count();
+
+    // Assert
+    assert_eq!(
+        field_count, 2,
+        "Option 应有 2 个函数字段（some, none），实际为 {field_count}"
     );
 }

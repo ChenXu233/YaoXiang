@@ -1,4 +1,11 @@
 //! Type annotation parsing tests — based on spec §3, RFC-010, RFC-011
+//!
+//! RFC-010 (issue #203): `|` 变体语法已废弃。和类型统一用记录类型表达
+//! （字段全为函数，返回自身类型）。本文件覆盖：
+//! - §3.2 基元类型
+//! - §3.3 记录/接口类型（含和类型新语法）
+//! - §3.8 泛型类型
+//! - RFC-010 废弃语法的错误路径回归
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::statements::types::parse_type_annotation;
@@ -195,37 +202,6 @@ fn test_struct_type_with_default() {
             assert!(fields[0].default.is_some());
         } else {
             panic!("Expected Type::Struct");
-        }
-    });
-}
-
-// ============================================================================
-// 枚举/变体类型 (Spec §3.4)
-// ============================================================================
-
-#[test]
-fn test_variant_type() {
-    with_type("{ red | green | blue }", |t| {
-        if let Type::Variant(variants) = &t {
-            assert_eq!(variants.len(), 3);
-            assert_eq!(variants[0].name, "red");
-            assert_eq!(variants[1].name, "green");
-            assert_eq!(variants[2].name, "blue");
-        } else {
-            panic!("Expected Type::Variant");
-        }
-    });
-}
-
-#[test]
-fn test_variant_type_with_params() {
-    with_type("{ ok(Int) | err(String) }", |t| {
-        if let Type::Variant(variants) = &t {
-            assert_eq!(variants.len(), 2);
-            assert_eq!(variants[0].params.len(), 1);
-            assert_eq!(variants[1].params.len(), 1);
-        } else {
-            panic!("Expected Type::Variant");
         }
     });
 }
@@ -480,4 +456,83 @@ fn test_struct_field_assert_arith_mul() {
             "field constraint should parse as `N * 2 > 0`, got: {expr:?}"
         );
     });
+}
+
+// ============================================================================
+// RFC-010 废弃语法回归 (issue #203)
+//
+// `|` 变体语法已废弃。和类型统一用记录类型表达：
+//   { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
+//
+// 废弃写法 `{ red | green | blue }` 不再被 parser 识别为 Type::Variant，
+// 也不产生任何特殊 AST 节点——parser 将按普通记录/表达式路径解析，
+// 最终由语义分析阶段给出明确的错误（如未知变量）。
+// ============================================================================
+
+#[test]
+fn test_sum_type_record_syntax_no_variant_ast() {
+    // RFC-010 issue #203: 和类型用记录类型表达，不应产生 Type::Variant
+    // （该变体已从 AST 中删除）。此测试守护 AST 简化不被回退。
+
+    // Arrange
+    let source = "{ ok: (Int) -> Result(Int, String), err: (String) -> Result(Int, String) }";
+
+    // Act
+    with_type(source, |t| {
+        // Assert: 必须解析为 Type::Struct，不得存在 Type::Variant 节点
+        assert!(
+            matches!(t, Type::Struct { .. }),
+            "和类型应解析为 Type::Struct（RFC-010 issue #203），实际为 {:?}",
+            t
+        );
+    });
+}
+
+#[test]
+fn test_sum_type_record_field_count() {
+    // RFC-010 issue #203: 和类型的每个变体构造器是记录的一个函数字段
+
+    // Arrange
+    let source = "{ some: (Int) -> Option(Int), none: () -> Option(Int) }";
+
+    // Act
+    with_type(source, |t| {
+        let Type::Struct { body } = &t else {
+            panic!("Expected Type::Struct for sum type, got {t:?}");
+        };
+        let field_count = body
+            .iter()
+            .filter(|it| matches!(it, TypeBodyItem::Field(_)))
+            .count();
+
+        // Assert: 两个变体构造器 = 两个字段
+        assert_eq!(
+            field_count, 2,
+            "Option 和类型应有 2 个函数字段（some, none），实际为 {field_count}"
+        );
+    });
+}
+
+#[test]
+fn test_deprecated_pipe_syntax_not_parsed_as_variant() {
+    // RFC-010 issue #203: `{ red | green | blue }` 不再产生 Type::Variant。
+    // parser 不再为 `|` 维护特殊路径。此测试验证：
+    // 废弃语法不会让 parser 产出 Type::Variant（该变体已删除），
+    // 也不会让 parser 把整体识别为单个 Type::Struct 字段。
+
+    // Arrange
+    let source = "{ red | green | blue }";
+    let tokens = tokenize(source).unwrap();
+    let mut state = ParserState::new(&tokens);
+
+    // Act
+    let _ = parse_type_annotation(&mut state);
+
+    // Assert: parser 已消费 `}` 之外的额外 token（red 后续 | green ...）
+    // 说明 `|` 不再被识别为变体分隔符。具体语义错误由下游类型检查报告。
+    // 此处只守护 parser 层面不产生特殊的"变体整体回退"路径。
+    assert!(
+        !state.at_end(),
+        "废弃 `|` 语法不应被整体吞掉为单个类型节点；parser 应停留在 `|` 附近"
+    );
 }

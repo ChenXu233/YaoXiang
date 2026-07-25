@@ -279,15 +279,6 @@ pub enum StmtKind {
     Error(Span),
 }
 
-/// Variant constructor definition (for variant types)
-#[derive(Debug, Clone)]
-pub struct VariantDef {
-    pub name: String,
-    pub name_span: Span,
-    pub params: Vec<(Option<String>, Type)>,
-    pub span: Span,
-}
-
 /// 结构体字段定义
 ///
 /// 用于表示类型定义中的字段，包含可变性标记和可选默认值
@@ -427,8 +418,6 @@ pub enum Type {
     },
     Union(Vec<(String, Option<Type>)>),
     Enum(Vec<String>),
-    /// Variant type: `type Color = red | green | blue` or `type Result = ok(T) | err(E)`
-    Variant(Vec<VariantDef>),
     Tuple(Vec<Type>),
     Fn {
         params: Vec<Type>,

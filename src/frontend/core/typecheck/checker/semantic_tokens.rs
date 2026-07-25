@@ -197,13 +197,6 @@ impl TypeChecker {
                     }
                 }
             }
-            Type::Variant(variants) => {
-                for v in variants {
-                    for (_param_name, t) in &v.params {
-                        self.collect_type_tokens(file_path, t);
-                    }
-                }
-            }
             Type::Tuple(types) => {
                 for t in types {
                     self.collect_type_tokens(file_path, t);
@@ -728,20 +721,6 @@ impl TypeChecker {
                     // 类型定义体中的类型引用
                     self.collect_type_tokens(&fp, definition);
 
-                    // Variant constructors → EnumMember (定义)
-                    if let crate::frontend::core::parser::ast::Type::Variant(variants) = definition {
-                        for v in variants {
-                            self.semantic_db.add_token(
-                                &fp,
-                                SemanticToken {
-                                    name: v.name.clone(),
-                                    token_type: SemanticTokenType::EnumMember,
-                                    modifiers: vec![SemanticTokenModifier::Declaration],
-                                    span: v.name_span,
-                                },
-                            );
-                        }
-                    }
                 }
                 StmtKind::Return(expr_opt) => {
                     if let Some(expr) = expr_opt {

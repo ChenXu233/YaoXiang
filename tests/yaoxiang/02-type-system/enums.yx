@@ -1,9 +1,0 @@
-// 02-type-system/enums.yx
-// 覆盖: 规范 §3.4 枚举类型
-// 验证: Color: Type = { red | green | blue } 定义和使用
-// 状态: 🔴 未实现 - "Cannot access field on non-struct type 'fn() -> t121'"
-
-use std.assert
-main = {
-    assert.assert(true, "enums test compiled and ran")
-}
