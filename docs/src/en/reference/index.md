@@ -7,9 +7,9 @@ YaoXiang is currently in the **experimental verification stage**, with the stand
 ## Language Specification
 
 - [Language Specification Overview](./language-spec/index.md)
-- [Syntax Specification](./language-spec/syntax.md) - Lexical structure, grammar rules, operator precedence
-- [Type System](./language-spec/type-system.md) - Basic types, composite types, generics, trait
-- [Module System](./language-spec/modules.md) - Module definition, import/export, scope
+- [Syntax Specification](./language-spec/syntax.md) - Lexical structure, syntax rules, operator precedence
+- [Type System](./language-spec/type-system.md) - Primitive types, composite types, generics, trait
+- [Module System](./language-spec/modules.md) - Module definitions, imports/exports, scope
 - [Concurrency Model](./language-spec/concurrency.md) - Asynchronous programming, concurrency primitives, memory model
 - [Standard Library](./language-spec/stdlib.md) - Core library, IO library, math library
 
@@ -17,11 +17,11 @@ YaoXiang is currently in the **experimental verification stage**, with the stand
 
 | Module | Status | Description |
 |------|------|------|
-| `std.io` | 🔨 In Progress | Input/Output |
-| `std.string` | 🔨 In Progress | String operations |
-| `std.list` | 🔨 In Progress | List operations |
+| `std.io` | 🔨 Under Construction | Input/Output |
+| `std.string` | 🔨 Under Construction | String operations |
+| `std.list` | 🔨 Under Construction | List operations |
 | `std.dict` | 📋 Planned | Dictionary operations |
-| `std.math` | 🔨 In Progress | Math functions |
+| `std.math` | 🔨 Under Construction | Math functions |
 | `std.net` | 📋 Planned | Network operations |
 | `std.concurrent` | 📋 Planned | Concurrency primitives |
 
@@ -34,7 +34,7 @@ YaoXiang is currently in the **experimental verification stage**, with the stand
 | `Void` | Empty value / no return | `()` |
 | `Bool` | Boolean value | `true`, `false` |
 | `Int` | Integer | `42`, `-10` |
-| `Float` | Floating point number | `3.14`, `-0.5` |
+| `Float` | Floating-point number | `3.14`, `-0.5` |
 | `Char` | Character | `'a'`, `'中'` |
 | `String` | String | `"hello"` |
 
@@ -54,7 +54,7 @@ YaoXiang is currently in the **experimental verification stage**, with the stand
 Point: Type = { x: Float, y: Float }
 
 // Enum type
-Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
+Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 // Interface type (all fields are functions)
 Callable: Type = { call: (String) -> Void }
@@ -65,8 +65,8 @@ Callable: Type = { call: (String) -> Void }
 ### Output
 
 ```yaoxiang
-print(value)           // Print without newline
-println(value)         // Print with newline
+print(value)           // Print, no newline
+println(value)         // Print, with newline
 ```
 
 ### Conversion
@@ -80,8 +80,8 @@ to_float(value)        // Convert to float
 ### Type Checking
 
 ```yaoxiang
-typeof(value)         // Return type name
-is_type(value, type)  // Check type
+typeof(value)         // Returns type name
+is_type(value, type)  // Checks type
 ```
 
 ## Keywords
@@ -89,14 +89,14 @@ is_type(value, type)  // Check type
 | Keyword | Description |
 |--------|------|
 | `Type` | Meta type |
-| `spawn` | Mark spawn function |
+| `spawn` | Marks a spawn function |
 | `spawn for` | Parallel loop |
-| `spawn {}` | spawn block |
+| `spawn {}` | Spawn block |
 | `if` / `elif` / `else` | Conditional branch |
-| `match` | pattern matching |
+| `match` | Pattern matching |
 | `while` / `for` | Loop |
 | `return` | Return value |
-| `ref` | Create reference |
+| `ref` | Creates a reference |
 | `mut` | Mutable marker |
 
 ## Syntax Cheatsheet
@@ -106,7 +106,7 @@ is_type(value, type)  // Check type
 ```yaoxiang
 // Immutable variable (default)
 x: Int = 42
-y = 42                 // type inference
+y = 42                 // Type inference
 
 // Mutable variable
 mut count: Int = 0
@@ -119,7 +119,7 @@ count = count + 1
 // Normal function
 add: (a: Int, b: Int) -> Int = a + b
 
-// spawn function (auto-concurrent)
+// Spawn function (auto-concurrent)
 fetch: (url: String) -> JSON spawn = HTTP.get(url).json()
 
 // Generic function
@@ -138,7 +138,7 @@ if x > 0 {
     print("zero")
 }
 
-// pattern matching
+// Pattern matching
 match result {
     ok(value) => print("success: " + value),
     err(error) => print("error: " + error),
@@ -164,7 +164,7 @@ data = fetch_file(path)?
 | Highest | `( )` Function call |
 | | `.` Field access |
 | | `[ ]` Index |
-| | `unary -` Unary negation |
+| | `unary -` Unary minus |
 | | `* / %` Multiply, divide, modulo |
 | | `+ -` Add, subtract |
 | | `== != < > <= >=` Comparison |
@@ -188,16 +188,16 @@ println("Hello, YaoXiang!")
 result = sqrt(16.0)  // 4.0
 ```
 
-## Command Line Tool
+## Command-line Tool
 
 ```bash
-# Run script
+# Run a script
 yaoxiang run hello.yx
 
 # Build bytecode
 yaoxiang build hello.yx -o hello.42
 
-# Interpret and execute
+# Interpret execution
 yaoxiang eval 'println("Hello")'
 
 # View help
@@ -207,7 +207,7 @@ yaoxiang --help
 ## Complete Example
 
 ```yaoxiang
-// Calculate Fibonacci sequence
+// Compute the Fibonacci sequence
 fib: (n: Int) -> Int = if n <= 1 {
     n
 } else {
@@ -222,7 +222,7 @@ main: () -> Void = {
 
 ## Related Resources
 
-- [Tutorial](../tutorial/) - Learn YaoXiang
+- [Tutorials](../tutorial/) - Learn YaoXiang
 - [Design Documents](../design/) - Language design decisions
 - [GitHub](https://github.com/ChenXu233/YaoXiang)
 
@@ -230,7 +230,7 @@ main: () -> Void = {
 
 The standard library is under construction, contributions are welcome!
 
-1. Choose a module (e.g., `std.io`, `std.net`)
+1. Choose a module (e.g. `std.io`, `std.net`)
 2. Implement functions in `src/std/`
 3. Add documentation comments
 4. Submit a PR

@@ -4,11 +4,11 @@ title: Type System
 
 # Type System
 
-In the basics tutorial, you learned to use built-in types like `Int`, `String`, and `Bool`. This chapter dives deep into YaoXiang's type system and teaches you to **define your own types**.
+In the basic tutorial, you learned to use built-in types like `Int`, `String`, `Bool`. This chapter dives deep into YaoXiang's type system, teaching you how to **define your own types**.
 
 ## Unified Syntax Model
 
-YaoXiang's type system is built on the unified syntax defined in RFC-010: **everything is `name: type = value`**.
+YaoXiang's type system is built upon the unified syntax defined in RFC-010: **everything is `name: type = value`**.
 
 | Concept | Syntax |
 |------|------|
@@ -22,7 +22,7 @@ Note: **a type definition itself is also `name: Type = value`**.
 
 ## Record Types
 
-A record type (called a "struct" in other languages) is the most basic data organization form in YaoXiang:
+Record types (called "structs" in other languages) are the most basic way to organize data in YaoXiang:
 
 ```yaoxiang
 // Define a record type
@@ -39,7 +39,7 @@ print(p.y)  // 4.0
 
 ### Field Default Values
 
-Fields can have default values and are optional at construction time:
+Fields can specify default values, which are optional at construction time:
 
 ```yaoxiang
 User: Type = {
@@ -67,14 +67,14 @@ Point.length: (self: Point) -> Float = {
 
 p = Point(x: 3.0, y: 4.0)
 
-// The two calling styles are equivalent
+// Both calling styles are equivalent
 print(Point.length(p))  // 5.0 — functional call
 print(p.length())       // 5.0 — .call syntax
 ```
 
-### pub Auto-Binding
+### `pub` Auto-Binding
 
-Within the same file, `pub`-declared functions are automatically bound to types defined in the same file:
+Within the same file, functions declared with `pub` are automatically bound to types defined in the same file:
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
@@ -89,26 +89,26 @@ pub distance: (p1: Point, p2: Point) -> Float = {
 p1 = Point(x: 0.0, y: 0.0)
 p2 = Point(x: 3.0, y: 4.0)
 
-// Auto-bound methods are called with .
+// The auto-bound method is called with .
 print(p1.distance(p2))  // 5.0
 ```
 
 ## Enum Types
 
-An enum defines a set of mutually exclusive value variants. Variants without data use lowercase; variants with data use function-style syntax:
+Enums define a set of mutually exclusive variants. Variants with no data use lowercase identifiers, while variants with data use function-style syntax:
 
 ```yaoxiang
 // Simple enum
-Color: Type = { red | green | blue }
+Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
 // Enum with data
-Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
+Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 // Nested enum
-Shape: Type = { circle(Float) | rect(Float, Float) | point }
+Shape: Type = { circle: (Float) -> Shape, rect: (Float, Float) -> Shape, point: () -> Shape }
 ```
 
-The core idea of enums: **each value variant is itself a type**.
+The core idea behind enums: **each variant is itself a type**.
 
 ```yaoxiang
 area: (s: Shape) -> Float = match s {
@@ -123,7 +123,7 @@ print(area(rect(3.0, 4.0))) // 12.0
 
 ## Interfaces
 
-An interface is **a record type whose fields are all function types**. Implementing an interface means including the interface name inside the record:
+An interface is **a record type whose fields are all function types**. To implement an interface, a record includes the interface name:
 
 ```yaoxiang
 // Define an interface
@@ -137,7 +137,7 @@ Circle: Type = {
     x: Float,
     y: Float,
     radius: Float,
-    Drawable,       // implement the Drawable interface
+    Drawable,       // Implements the Drawable interface
 }
 
 // Provide the methods required by the interface
@@ -189,11 +189,11 @@ print(doubled)  // [2, 4, 6, 8]
 
 ## Summary
 
-| Concept | Syntax | Use |
+| Concept | Syntax | Purpose |
 |------|------|------|
-| Record type | `Point: Type = { x: Float, y: Float }` | Group related data |
-| Enum | `Color: Type = { red \| green \| blue }` | Choose one of many |
+| Record type | `Point: Type = { x: Float, y: Float }` | Organize related data |
+| Enum | `Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }` | One-of-many choice |
 | Interface | `Drawable: Type = { draw: ... }` | Polymorphic abstraction |
 | Generics | `List: (T: Type) -> Type = { ... }` | Type parameterization |
-| Never | `Never` is the system's built-in bottom type | Diverging / never-returning code paths |
-| Method | `Type.method: (self: Type, ...) -> ...` | Attach behavior |
+| Never | `Never` is a built-in bottom type of the system | Diverging / never-returning code paths |
+| Methods | `Type.method: (self: Type, ...) -> ...` | Attaching behavior |
