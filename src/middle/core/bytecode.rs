@@ -1266,6 +1266,34 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     decoded_instructions.push(BytecodeInstr::Nop);
                                 }
                             }
+                            Opcode::CallDyn => {
+                                // CallDyn: dst(1) + obj(1) + name_idx(2) + args(N) + arg_count(1)
+                                if instr.operands.len() >= 5 {
+                                    let dst = instr.operands[0] as u16;
+                                    let obj = instr.operands[1] as u16;
+                                    let _name_idx =
+                                        u16::from_le_bytes([instr.operands[2], instr.operands[3]]);
+                                    let arg_count =
+                                        instr.operands[instr.operands.len() - 1] as usize;
+                                    let mut args = Vec::with_capacity(arg_count);
+                                    for i in 0..arg_count {
+                                        let idx = 4 + i;
+                                        if idx < instr.operands.len() - 1 {
+                                            args.push(Reg(instr.operands[idx] as u16));
+                                        }
+                                    }
+                                    let dst_reg = Some(Reg(dst));
+                                    let call_instr = BytecodeInstr::CallDyn {
+                                        dst: dst_reg,
+                                        obj: Reg(obj),
+                                        name_idx: _name_idx,
+                                        args,
+                                    };
+                                    decoded_instructions.push(call_instr);
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
                             Opcode::Return => {
                                 decoded_instructions.push(BytecodeInstr::Return);
                             }

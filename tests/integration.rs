@@ -6,6 +6,12 @@ mod check;
 mod codegen;
 #[path = "integration/codegen_extended.rs"]
 mod codegen_extended;
+#[path = "integration/curry_codegen.rs"]
+mod curry_codegen;
+#[path = "integration/curry_execution.rs"]
+mod curry_execution;
+#[path = "integration/curry_regression.rs"]
+mod curry_regression;
 #[path = "integration/eval.rs"]
 mod eval;
 #[path = "integration/execution.rs"]

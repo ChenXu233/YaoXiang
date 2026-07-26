@@ -184,6 +184,17 @@ struct LambdaBodyIR {
     mut_locals: std::collections::HashSet<usize>,
 }
 
+/// 一层 curry 签名
+///
+/// 由 `split_curry` 从嵌套的 `Type::Fn` 拆出。
+/// `params` 是这层的参数（带名字），从拍平的 `signature_params` 切出。
+/// `return_type` 是这层的返回类型：还有下一层时是 `Type::Fn`，最后一层是值类型。
+/// 一层 curry 签名
+struct CurryLayer {
+    params: Vec<ast::Param>,
+    return_type: ast::Type,
+}
+
 impl AstToIrGenerator {
     /// 创建新的 IR 生成器（带类型信息）
     pub fn new_with_type_result(type_result: &TypeCheckResult) -> Self {
@@ -212,6 +223,44 @@ impl AstToIrGenerator {
             release_plan: type_result.release_plan.drops.clone(),
             pending_env_vars: Vec::new(),
         }
+    }
+
+    /// 拆分 curry 签名为多层
+    ///
+    /// 输入：`type_annotation` 是 `Type::Fn` 的嵌套结构（如 `(N: Int) -> (n: N) -> Int`）
+    /// 输入：`signature_params` 是拍平的所有 curry 参数（如 `[N: Int, n: N]`）
+    /// 输出：按层切分的 `CurryLayer` 列表
+    ///
+    /// 非 curry 函数（如 `(a: Int, b: Int) -> Int`）返回 1 个 layer，
+    /// 其 `return_type` 不是 `Type::Fn`。
+    #[allow(clippy::while_let_loop)]
+    fn split_curry(
+        type_ann: &ast::Type,
+        signature_params: &[ast::Param],
+    ) -> Vec<CurryLayer> {
+        let mut layers = Vec::new();
+        let mut params_iter = signature_params.iter().cloned().peekable();
+        let mut current_type = type_ann.clone();
+
+        loop {
+            match current_type {
+                ast::Type::Fn {
+                    params: type_params,
+                    return_type,
+                } => {
+                    let layer_params: Vec<ast::Param> =
+                        (&mut params_iter).take(type_params.len()).collect();
+                    let ret_type = *return_type;
+                    current_type = ret_type.clone();
+                    layers.push(CurryLayer {
+                        params: layer_params,
+                        return_type: ret_type,
+                    });
+                }
+                _ => break,
+            }
+        }
+        layers
     }
 
     /// 进入新的作用域
@@ -618,14 +667,38 @@ impl AstToIrGenerator {
                     } else {
                         Some(generic_params.iter().map(|p| p.name.clone()).collect())
                     };
-                    self.generate_function_ir(
-                        &name,
-                        type_annotation.as_ref(),
-                        &params,
-                        &body,
-                        constants,
-                        generic_param_names,
-                    )
+                    // curry 分流：如果 return_type 是 Type::Fn，走 curry 生成路径
+                    // 注意：必须传 signature_params（所有层参数），而非 params（仅 Lambda 参数）
+                    if let Some(ast::Type::Fn { return_type, .. }) = type_annotation.as_ref() {
+                        if matches!(return_type.as_ref(), ast::Type::Fn { .. }) {
+                            self.generate_curry_function_ir(
+                                &name,
+                                type_annotation.as_ref().unwrap(),
+                                signature_params,
+                                &body,
+                                constants,
+                                generic_param_names,
+                            )
+                        } else {
+                            self.generate_function_ir(
+                                &name,
+                                type_annotation.as_ref(),
+                                &params,
+                                &body,
+                                constants,
+                                generic_param_names,
+                            )
+                        }
+                    } else {
+                        self.generate_function_ir(
+                            &name,
+                            type_annotation.as_ref(),
+                            &params,
+                            &body,
+                            constants,
+                            generic_param_names,
+                        )
+                    }
                 } else {
                     // 全局变量
                     self.generate_global_var_ir(
@@ -772,6 +845,7 @@ impl AstToIrGenerator {
         constants: &mut Vec<ConstValue>,
         generic_params: Option<Vec<String>>,
     ) -> Result<Option<FunctionIR>, Diagnostic> {
+        // 检测 native("symbol") 模式：函数体为空语句 + Native("...") 表达式
         // 检测 native("symbol") 模式：函数体为空语句 + Native("...") 表达式
         // 形如: my_add: (a: Int, b: Int) -> Int = Native("my_add")
         //
@@ -937,6 +1011,238 @@ impl AstToIrGenerator {
         Ok(Some(func_ir))
     }
 
+    /// 生成 curry 中间层的 FunctionIR
+    ///
+    /// 中间层职责：LoadArg 本层参数 → MakeClosure 包装下一层 → Ret(闭包)
+    #[allow(clippy::too_many_arguments)]
+    fn generate_curry_intermediate_func(
+        &mut self,
+        func_name: &str,
+        layer: &CurryLayer,
+        env_count: usize,
+        next_func_name: &str,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<FunctionIR, Diagnostic> {
+        let _ = constants; // 中间层不生成常量
+        let mut instructions = Vec::new();
+
+        // 1. 本层参数先加载（用 Arg(env_count + i)）
+        for (i, param) in layer.params.iter().enumerate() {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(i),
+                src: Operand::Arg(env_count + i),
+            });
+            self.register_local(&param.name, i);
+        }
+
+        // 2. 外层参数后加载（用 Arg(i)）
+        let env_start = layer.params.len();
+        for i in 0..env_count {
+            let dst = env_start + i;
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(dst),
+                src: Operand::Arg(i),
+            });
+        }
+        self.next_temp = env_start + env_count;
+
+        // 3. MakeClosure：env = 外层 env + 本层参数
+        let mut full_env: Vec<Operand> = (env_start..env_start + env_count)
+            .map(Operand::Local)
+            .collect();
+        for i in 0..layer.params.len() {
+            full_env.push(Operand::Local(i));
+        }
+        let closure_dst = self.next_temp_reg();
+        instructions.push(Instruction::MakeClosure {
+            dst: Operand::Local(closure_dst),
+            func: next_func_name.to_string(),
+            env: full_env,
+        });
+
+        // 4. Ret(closure)
+        instructions.push(Instruction::Ret(Some(Operand::Local(closure_dst))));
+
+        // 5. 构建 FunctionIR
+        let param_types: Vec<MonoType> = layer
+            .params
+            .iter()
+            .filter_map(|p| p.ty.clone())
+            .map(MonoType::from)
+            .collect();
+        let return_type: MonoType = layer.return_type.clone().into();
+        let total_locals = self.next_temp;
+        let locals_types: Vec<MonoType> = vec![MonoType::Int(64); total_locals];
+
+        Ok(FunctionIR {
+            name: func_name.to_string(),
+            params: param_types,
+            return_type,
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: locals_types,
+            },
+        })
+    }
+
+    /// 生成 curry 最内层的 FunctionIR
+    ///
+    /// 最内层职责：LoadUpvalue 读所有外层参数 → LoadArg 本层参数 → 执行原 body → Ret
+    /// env_param_names：所有外层参数名（按累积顺序）
+    #[allow(clippy::too_many_arguments)]
+    fn generate_curry_innermost_func(
+        &mut self,
+        func_name: &str,
+        layer: &CurryLayer,
+        env_param_names: &[String],
+        body: &[ast::Stmt],
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<FunctionIR, Diagnostic> {
+        let mut instructions = Vec::new();
+        let env_count = env_param_names.len();
+
+        // 1. 本层参数先加载（用 Arg(env_count + i)，此时 slots[env_count + i] 还未被覆盖）
+        for (i, param) in layer.params.iter().enumerate() {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(i),
+                src: Operand::Arg(env_count + i),
+            });
+            self.register_local(&param.name, i);
+        }
+
+        // 2. 外层参数后加载（用 Arg(i) 读 slots[i]）
+        //    注意：必须在参数之后加载，因为 env 写入的 slots 位置可能与 arg 重叠
+        let env_start = layer.params.len();
+        for (i, name) in env_param_names.iter().enumerate() {
+            let dst = env_start + i;
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(dst),
+                src: Operand::Arg(i),
+            });
+            self.register_local(name, dst);
+        }
+
+        // 3. next_temp 起始 = 参数数 + env 数
+        self.next_temp = env_start + env_count;
+
+        // 4. 执行原 body（复用 generate_local_stmt_ir）
+        for stmt in body {
+            self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+        }
+        instructions.push(Instruction::Ret(None));
+
+        let param_types: Vec<MonoType> = layer
+            .params
+            .iter()
+            .filter_map(|p| p.ty.clone())
+            .map(MonoType::from)
+            .collect();
+        let return_type: MonoType = layer.return_type.clone().into();
+        let total_locals = self.next_temp;
+        let locals_types: Vec<MonoType> = vec![MonoType::Int(64); total_locals];
+
+        Ok(FunctionIR {
+            name: func_name.to_string(),
+            params: param_types,
+            return_type,
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: locals_types,
+            },
+        })
+    }
+
+    /// 生成 curry 函数的完整 IR 链
+    ///
+    /// 从外（layer 0）往内（layer N-1）遍历 layers，每层生成一个 FunctionIR。
+    /// 最外层用原名 `name`，内层用 `__{name}_l{index}`。
+    ///
+    /// env_param_names 在循环中累积：进入第 k 层时，它包含 layer 0..k-1 的所有参数名。
+    /// 中间层函数从 Arg(0..env_count) 加载外层参数作为 env，从 Arg(env_count..) 加载本层参数。
+    /// 最内层函数同理加载后执行原 body。
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn generate_curry_function_ir(
+        &mut self,
+        name: &str,
+        type_annotation: &ast::Type,
+        all_params: &[ast::Param],
+        body: &[ast::Stmt],
+        constants: &mut Vec<ConstValue>,
+        _generic_params: Option<Vec<String>>,
+    ) -> Result<Option<FunctionIR>, Diagnostic> {
+        let layers = Self::split_curry(type_annotation, all_params);
+
+        let mut layer_funcs: Vec<FunctionIR> = Vec::new();
+        let mut env_param_names: Vec<String> = Vec::new();
+
+        // 保存外层状态，避免污染
+        let saved_mut_locals = std::mem::take(&mut self.current_mut_locals);
+        let saved_local_names = std::mem::take(&mut self.current_local_names);
+        let saved_next_temp = self.next_temp;
+
+        for (i, layer) in layers.iter().enumerate() {
+            let is_innermost = i == layers.len() - 1;
+            let func_name = if i == 0 {
+                name.to_string()
+            } else {
+                format!("__{}_l{}", name, i - 1)
+            };
+
+            // 进入新作用域
+            self.enter_scope();
+            // 重置本层的临时寄存器（每层独立计数）
+            self.next_temp = 0;
+
+            let func = if is_innermost {
+                self.generate_curry_innermost_func(
+                    &func_name,
+                    layer,
+                    &env_param_names,
+                    body,
+                    constants,
+                )?
+            } else {
+                let next_name = format!("__{}_l{}", name, i);
+                self.generate_curry_intermediate_func(
+                    &func_name,
+                    layer,
+                    env_param_names.len(),
+                    &next_name,
+                    constants,
+                )?
+            };
+            self.exit_scope();
+
+            // 累积本层参数到 env 追踪（给 innermost_func 用）
+            for p in &layer.params {
+                env_param_names.push(p.name.clone());
+            }
+            layer_funcs.push(func);
+        }
+
+        // 恢复外层状态
+        self.current_mut_locals = saved_mut_locals;
+        self.current_local_names = saved_local_names;
+        self.next_temp = saved_next_temp;
+
+        // 内层函数加入 nested_functions，最外层返回给调用者
+        // 第 0 个是最外层，其余是内层
+        let outer = layer_funcs.remove(0);
+        self.nested_functions.extend(layer_funcs);
+        Ok(Some(outer))
+    }
     /// 尝试将表达式求值为编译时常量
     #[allow(clippy::only_used_in_recursion)]
     fn eval_const_expr(
@@ -1323,14 +1629,40 @@ impl AstToIrGenerator {
                     } else {
                         Some(generic_params.iter().map(|p| p.name.clone()).collect())
                     };
-                    match self.generate_function_ir(
-                        &name,
-                        type_annotation.as_ref(),
-                        &params,
-                        &body,
-                        constants,
-                        generic_param_names,
-                    ) {
+                    // curry 分流：如果 return_type 是 Type::Fn，走 curry 生成路径
+                    // 注意：必须传 signature_params（所有层参数），而非 params（仅 Lambda 参数）
+                    let func_result =
+                        if let Some(ast::Type::Fn { return_type, .. }) = type_annotation.as_ref() {
+                            if matches!(return_type.as_ref(), ast::Type::Fn { .. }) {
+                                self.generate_curry_function_ir(
+                                    &name,
+                                    type_annotation.as_ref().unwrap(),
+                                    signature_params,
+                                    &body,
+                                    constants,
+                                    generic_param_names,
+                                )
+                            } else {
+                                self.generate_function_ir(
+                                    &name,
+                                    type_annotation.as_ref(),
+                                    &params,
+                                    &body,
+                                    constants,
+                                    generic_param_names,
+                                )
+                            }
+                        } else {
+                            self.generate_function_ir(
+                                &name,
+                                type_annotation.as_ref(),
+                                &params,
+                                &body,
+                                constants,
+                                generic_param_names,
+                            )
+                        };
+                    match func_result {
                         Ok(Some(func_ir)) => {
                             self.nested_functions.push(func_ir);
                         }

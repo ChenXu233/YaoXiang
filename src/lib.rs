@@ -220,9 +220,6 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
     let bytecode_file: crate::middle::passes::codegen::bytecode::BytecodeFile = ctx
         .generate()
         .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
-
-    // Dump header information
-    tracing::info!("{}", t_cur_simple(MSG::BytecodeFileHeader));
     tracing::info!(
         "{}",
         t_cur(MSG::BytecodeMagic, Some(&[&bytecode_file.header.magic]))

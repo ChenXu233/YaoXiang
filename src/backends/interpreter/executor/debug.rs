@@ -508,7 +508,6 @@ impl Interpreter {
                 Ok(StepOutcome::Continue)
             }
 
-            // ── Concurrency ─────────────────────────────────────
             BytecodeInstr::Spawn {
                 dst: _,
                 closures,

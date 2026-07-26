@@ -878,24 +878,18 @@ impl Translator {
         } else {
             0
         };
-        // func 是闭包寄存器
         let obj_reg = self.operand_resolver.to_reg(func)?;
-
-        // 将所有参数寄存器添加到操作数列表
         let mut arg_regs: Vec<Reg> = Vec::new();
         for arg in args {
             let reg = self.operand_resolver.to_reg(arg)? as u16;
             arg_regs.push(Reg(reg));
         }
-
-        // name_idx 设为 0，表示闭包调用
         let mut operands = vec![dst_reg, obj_reg];
         operands.extend_from_slice(&0u16.to_le_bytes());
         for reg in &arg_regs {
             operands.push(reg.0 as u8);
         }
         operands.push(arg_regs.len() as u8);
-
         Ok(BytecodeInstruction::new(Opcode::CallDyn, operands))
     }
 
