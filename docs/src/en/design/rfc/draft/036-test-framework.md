@@ -2,479 +2,280 @@
 title: "RFC-036: std.test Testing Framework and yaoxiang test Command"
 status: "Draft"
 author: "Chenxu"
-created: "2026-07-25"
-updated: "2026-07-25"
-issue: "#94"
+created: "2026-07-26"
+updated: "2026-07-26"
+issue: "#94, #95, #221"
 ---
 
 # RFC-036: std.test Testing Framework and yaoxiang test Command
 
 ## Summary
 
-Introduce the standard testing framework `std.test` module and the `yaoxiang test` CLI subcommand for YaoXiang. Test discovery is based on existing `@test` annotation-marked functions (**zero new syntax**); assertions use pure functions exported by the `std.test` module (`assert_eq`, `assert_ne`, `assert_ok`, `assert_err`); test execution is driven by compiler annotation scanning + runtime scheduling. No new keywords, reserved words, or syntax constructs are introduced.
+Introduce the standard testing framework `std.test` module and the `yaoxiang test` CLI subcommand for YaoXiang. Test files are ordinary `.yx` files that pass or fail based on `std.assert.assert` and exit codes. The `std.test` module is implemented in pure YaoXiang and serves as the first dogfooding library. `yaoxiang test` is a CLI tool, not a compiler feature—no changes to the parser, IR, bytecode, or executor are involved.
 
 ## Motivation
 
 ### Why do we need a testing framework?
 
-Currently, tests in YaoXiang are scattered across Rust-side `#[test]` and `tests/` integration tests, so test coverage for the YaoXiang language itself depends on writing tests in Rust. This means:
+YaoXiang's current test coverage relies on Rust-side `#[test]` and `tests/` integration tests. This means:
 
-1. Unit tests for the YaoXiang standard library (`std.math` / `std.list` / `std.dict` / `std.convert` / `std.io`) cannot be written in YaoXiang
-2. Issue `#117: Unit test coverage for std lib modules` is blocked because no usable testing infrastructure exists
-3. Regression tests for language features (such as the spawn semantic changes in RFC-032) lack automated means
+1. Unit tests for the standard library (std.math / std.list / std.dict / std.convert / std.io) cannot be written in YaoXiang
+2. `#117 Unit test coverage for each std module` is blocked because no usable test infrastructure exists
+3. Regression tests for language features (e.g., RFC-032 spawn semantic changes) lack automated means
 
-### Key Constraint: Zero New Syntax
+### Key Constraints
 
-YaoXiang retains only 17 core keywords (`pub`, `use`, `spawn`, `if`, `else`, `match`, `for`, `in`, `while`, `return`, `break`, `continue`, `as`, `ref`, `true`, `false`, `None`), which is an explicit non-negotiable principle in the design manifesto.
+- **17 keyword rule**: Do not introduce any new keywords or syntax constructs
+- **Zero compiler changes**: Do not touch the parser, IR, bytecode, or executor
+- **Self-bootstrap first**: The test library is written in YaoXiang, the first dogfooding library
 
-**The testing framework must never introduce new keywords (such as the `test` or `assert` keywords) or new syntax constructs (such as `test` code blocks).**
-
-## Proposal
-
-### Core Design
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Test Architecture (Three Layers)             │
-│                                                                 │
-│  ① Discovery Layer: Compiler scans @test annotations             │
-│     → generates test manifest                                    │
-│     No new syntax; @ annotation already exists                  │
-│                                                                 │
-│  ② Execution Layer: yaoxiang test subcommand                     │
-│     discover → compile → execute in parallel → report            │
-│                                                                 │
-│  ③ Assertion Layer: Pure functions in std.test module            │
-│     assert_eq / assert_ne / assert_ok / assert_err              │
-│     Zero new syntax; pure function calls                         │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                    yaoxiang test                              │
+│                                                              │
+│  CLI layer:     yaoxiang test [--filter --fail-fast --json...]│
+│                     │                                        │
+│  Discovery:     Read yaoxiang.toml → [tool.test] patterns    │
+│                 Default: tests/**/*.yx                       │
+│                     │                                        │
+│  Execution:     For each file: yaoxiang run <file>           │
+│                 Check exit code → serial execution           │
+│                     │                                        │
+│  Reporting:     PASS/FAIL → summary                          │
+│                 Supports --json / --verbose / --fail-fast     │
+│                                                              │
+│  Assertion:     std.test (pure YaoXiang, self-bootstrapped)  │
+│                 Underlying: std.assert.assert                │
+│                 Diagnostics: f"Expected {expected}, got {actual}" │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-### Usage Example
+### Core Principles
 
-```yaoxiang
-# Test file: math_test.yx
-use std.test
-use std.math
-
-# @test annotation marks test functions (@ is an existing Token, not new syntax)
-@test
-fn test_add() -> Void = {
-    test.assert_eq(2 + 3, 5)
-    test.assert_eq(-1 + 1, 0)
-    test.assert_eq(0 + 0, 0)
-}
-
-@test
-fn test_subtract() -> Void = {
-    test.assert_eq(10 - 3, 7)
-    test.assert_ne(10 - 3, 8)
-}
-
-@test
-fn test_divide_by_zero() -> Void = {
-    test.assert_err(1 / 0)
-}
-```
-
-```bash
-# Run all tests
-yaoxiang test
-
-# Run a single file
-yaoxiang test math_test.yx
-
-# Run tests matching a name pattern
-yaoxiang test --filter "add"
-```
-
-### Syntax Changes
-
-**None.** This proposal introduces no new syntax constructs.
-
-| Item | Status |
-|------|--------|
-| New keywords | ❌ None |
-| New reserved words | ❌ None |
-| New syntax constructs | ❌ None |
-| `@test` annotation | ✅ Reuses existing `@` Token |
-| `std.test` module | ✅ New module, pure functions |
+1. **The testing framework is not a compiler feature, but a CLI tool** — `yaoxiang run` can already "execute tests"; `yaoxiang test` just helps you run all the files and view the report
+2. **Zero compiler changes** — No introduction of `@test` annotation scanning, bytecode metadata sections, or special executor entry points
+3. **Self-bootstrap** — The `std.test` module is implemented in pure YaoXiang, calling `std.assert.assert` underneath
+4. **Test files are ordinary `.yx` files** — Pass or fail is determined by the exit code
 
 ## Detailed Design
 
-### 1. Test Discovery Mechanism
+### 1. CLI Design
 
-#### 1.1 The `@test` Annotation
+```
+yaoxiang test [OPTIONS] [PATHS]
 
-`@test` uses YaoXiang's existing `@` annotation syntax. The annotation mechanism is already supported at the parser layer (use of `@block`/`@eager` annotations in RFC-008 demonstrates that this mechanism is usable).
+Arguments:
+  [PATHS]...      Specify test files or directories (default: read from yaoxiang.toml, otherwise tests/)
 
-**Annotation format**:
+Options:
+  --filter <NAME>     Only run tests whose file names contain <NAME>
+  --fail-fast         Stop on the first failure
+  --verbose, -v       Show detailed stdout/stderr for each test
+  --list              List test files only, do not run
+  --no-progress       Do not show progress bar (CI scenarios)
+  --json              Output results in JSON format (for CI integration)
+```
+
+#### Output Format
+
+**Default output**:
+```
+Running 5 tests from 3 files...
+
+tests/math_test.yx ........................ PASS (0.002s)
+tests/list_test.yx ........................ PASS (0.001s)
+tests/string_test.yx ...................... FAIL (0.003s)
+  `-- Expected "hello", got "world"
+      at tests/string_test.yx:12:5
+
+Results: 2 passed, 1 failed, 0 skipped (0.006s)
+```
+
+**JSON output** (`--json`):
+```json
+{
+  "summary": { "total": 3, "passed": 2, "failed": 1, "skipped": 0, "time_secs": 0.006 },
+  "tests": [
+    { "file": "tests/math_test.yx", "passed": true, "time_secs": 0.002 },
+    {
+      "file": "tests/string_test.yx", "passed": false, "time_secs": 0.003,
+      "error": "Expected \"hello\", got \"world\"",
+      "exit_code": 1
+    }
+  ]
+}
+```
+
+### 2. yaoxiang.toml Configuration
+
+Placed under `[tool.test]`, conforming to RFC-015's `[tool.*]` third-party extension convention:
+
+```toml
+[project]
+name = "my-project"
+
+[tool.test]
+patterns = ["tests/**/*.yx"]
+# 未来可扩展:
+# exclude = ["tests/fixtures/**"]
+# parallel = true
+```
+
+- Default `patterns = ["tests/**/*.yx"]` — works out of the box with zero configuration
+- Single-file mode (`yaoxiang test foo.yx`) runs directly without reading configuration
+- May be split into a separate repository in the future (the `[tool.test]` position remains unchanged)
+
+### 3. std.test Module (Pure YaoXiang)
 
 ```yaoxiang
-@test
-fn test_name() -> Void = { ... }
-```
+// std/test.yx — Pure YaoXiang test assertion library
+// First dogfooding library: YaoXiang's test library written in YaoXiang
 
-**Rules**:
-- `@test` immediately precedes the function definition
-- The annotated function must have the signature `() -> Void`
-- The annotation only marks; it does not alter function behavior — under a normal `run`, `@test` functions remain ordinary callable functions (but are not auto-invoked)
-- Test discovery takes effect only under the `yaoxiang test` subcommand
+use std.assert
 
-#### 1.2 Test Discovery Flow
+assert_eq: (a: ?, b: ?) -> Void = (a, b) => {
+    assert.assert(a == b, f"Expected {b}, got {a}")
+}
 
-```
-yaoxiang test
-    │
-    ▼
-┌─────────────────────┐
-│ Scan all .yx files  │  ← By default, scans src/ and tests/ directories
-│ Collect @test funcs  │
-└────────┬────────────┘
-         ▼
-┌─────────────────────┐
-│ Filter:             │  ← --filter parameter matches function name
-│ --filter pattern    │
-└────────┬────────────┘
-         ▼
-┌─────────────────────┐
-│ Compile: each test  │  ← Reuses existing compiler; test marks
-│ file; inject test    │     embedded in bytecode
-│ registration code   │
-└────────┬────────────┘
-         ▼
-┌─────────────────────┐
-│ Execute: run tests  │  ← Reuses existing spawn concurrency
-│ in parallel;        │     model
-│ collect results     │
-└────────┬────────────┘
-         ▼
-┌─────────────────────┐
-│ Report: pass/fail/  │
-│ duration; JUnit XML │
-│ (optional)          │
-└─────────────────────┘
-```
+assert_ne: (a: ?, b: ?) -> Void = (a, b) => {
+    assert.assert(a != b, f"Expected not equal to {b}, got {a}")
+}
 
-### 2. `std.test` Module Design
+assert_true: (cond: Bool) -> Void = (cond) => {
+    assert.assert(cond, f"Expected true, got {cond}")
+}
 
-#### 2.1 Module Structure
-
-```
-src/std/test.rs
-    ├── assert_eq(actual, expected)     → Void
-    ├── assert_ne(actual, expected)     → Void
-    ├── assert_ok(value)                → Void
-    ├── assert_err(value)               → Void
-    ├── assert_true(cond)               → Void
-    ├── assert_false(cond)              → Void
-    ├── assert_passes()                 → Void
-    └── assert_fails()                  → Void (explicit failure)
-```
-
-#### 2.2 Assertion Function Specification
-
-All assertion functions throw `ExecutorError::TestAssertionFailed` on failure, including:
-- File path (obtained from the source location of the annotated function)
-- Line number
-- Failure message (actual vs expected)
-- Test function name
-
-```yaoxiang
-# std.test.assert_eq implementation pseudocode
-fn assert_eq(actual, expected) -> Void = {
-    if actual == expected {
-        return
-    }
-    raise TestAssertionFailed(
-        "assertion failed: {actual} != {expected}",
-        file, line, test_name
-    )
+assert_false: (cond: Bool) -> Void = (cond) => {
+    assert.assert(!cond, f"Expected false, got {cond}")
 }
 ```
 
-#### 2.3 Module Registration
+- 4 assertion functions, all using `f"..."` for diagnostic messages
+- The `?` generic parameter of `assert_eq` / `assert_ne` depends on the generics system
+- `std.test` does not depend on any native code, implemented in pure YaoXiang
 
-Registered via the existing `StdModule` trait, completely consistent with modules such as `std.io` and `std.math`:
+### 4. Standard Library Loading Mechanism (Key Design)
+
+**Phase 1: Embedded in Binary**
+
+`std/test.yx` (and all future std modules written in YaoXiang) is embedded in the binary at build time:
 
 ```rust
-impl StdModule for TestModule {
-    fn module_path(&self) -> &str { "std.test" }
-
-    fn exports(&self) -> Vec<NativeExport> {
-        vec![
-            NativeExport::new("assert_eq",  "std.test.assert_eq",  "(a: T, b: T) -> Void", native_assert_eq),
-            NativeExport::new("assert_ne",  "std.test.assert_ne",  "(a: T, b: T) -> Void", native_assert_ne),
-            NativeExport::new("assert_ok",  "std.test.assert_ok",  "(r: Result(T)) -> Void", native_assert_ok),
-            NativeExport::new("assert_err", "std.test.assert_err", "(r: Result(T)) -> Void", native_assert_err),
-            NativeExport::new("assert_true", "std.test.assert_true", "(b: Bool) -> Void", native_assert_true),
-            NativeExport::new("assert_false","std.test.assert_false","(b: Bool) -> Void", native_assert_false),
-            NativeExport::new("fail",       "std.test.fail",       "(msg: String) -> Void", native_fail),
-        ]
-    }
-}
+// build.rs or build script, auto-generated
+pub const STD_YX_FILES: &[(&str, &str)] = &[
+    ("std/test.yx", r#"..."#),  // Source code text
+    // More in the future
+];
 ```
 
-**Key point**: The `T` in `assert_eq` / `assert_ne` requires generics support. The current compiler already has infrastructure for runtime dispatch of generic functions (RFC-011). If generic dispatch is not yet complete, the first version may be limited to explicit overloads for `Int` / `Float` / `String` / `Bool`, with future upgrades.
+When the module loader resolves `use std.test`:
+1. First, check Rust native modules (existing mechanism, e.g., `std.assert`)
+2. If not found, check the embedded `STD_YX_FILES` for the source code of `std/test.yx`
+3. Compile the source code and register it into the module system
 
-### 3. The `yaoxiang test` Subcommand
+Advantages:
+- `use std.test` works in single-file mode
+- The standard library version is strictly bound to the binary, no version mismatch
+- No need for users to configure the std path
 
-#### 3.1 CLI Arguments
+**Future: File System Standard Library**
 
-Added to the `Commands` enum:
+When the YaoXiang project mode matures, the standard library will transition to a file system form. See the update to RFC-014 for details.
 
-```rust
-/// Run YaoXiang tests
-Test {
-    /// Source files or directories to test (default: all .yx files in src/ and tests/)
-    #[arg(value_name = "PATH", num_args = 0..)]
-    paths: Vec<PathBuf>,
+### 5. Discovery and Execution
 
-    /// Filter test names (substring match)
-    #[arg(short, long, value_name = "PATTERN")]
-    filter: Option<String>,
+**Discovery phase**:
+1. If `[PATHS]` is specified, use the specified path directly
+2. Otherwise, read `patterns` from `[tool.test]` in `yaoxiang.toml`
+3. If no configuration exists, default to `tests/**/*.yx`
+4. Apply the `--filter` filter (file name contains the pattern)
 
-    /// Run tests serially (disable parallel execution)
-    #[arg(long)]
-    serial: bool,
+**Execution phase**:
+1. For each file: launch a subprocess with `yaoxiang run <file>`
+2. Check the exit code: 0 means PASS, non-zero means FAIL
+3. Capture stdout/stderr for reporting
+4. Serial execution only (Phase 1); `--parallel` supported in the future
+5. If `--fail-fast` is set, stop immediately on the first FAIL
 
-    /// Number of parallel workers (0 = auto)
-    #[arg(long, default_value = "0")]
-    workers: usize,
+### 6. Test Isolation
 
-    /// Output JUnit XML report
-    #[arg(long, value_name = "FILE")]
-    junit: Option<PathBuf>,
+Test isolation is naturally achieved through process-level boundaries:
+- Each test file runs in an independent subprocess
+- Each subprocess has its own Heap, Frame, and NativeContext
+- A panic in one test file does not affect other test files
+- No additional independent Heap context mechanism is required
 
-    /// Stop on first failure
-    #[arg(long)]
-    fail_fast: bool,
-}
-```
+## Relationship with Existing Systems
 
-#### 3.2 Execution Flow
-
-```rust
-match command {
-    Commands::Test { paths, filter, serial, workers, junit, fail_fast } => {
-        // 1. Discover test files
-        let test_files = discover_test_files(&paths);
-
-        // 2. Scan @test annotations, collect test functions
-        let test_cases = scan_test_functions(&test_files, &filter);
-
-        // 3. Compile each test file (reuses compiler.compile)
-        let compiled = compile_tests(&test_cases);
-
-        // 4. Execute tests in parallel (reuses runtime spawn)
-        let results = execute_tests(&compiled, serial, workers);
-
-        // 5. Generate report
-        print_test_report(&results, junit);
-    }
-}
-```
-
-#### 3.3 Test Isolation
-
-Each test function runs in an independent runtime context:
-- Independent Heap (lists/dicts are not polluted between tests)
-- Independent register file
-- Independent FFI Registry snapshot (standard library state is not polluted between tests)
-
-Implementation: a new `Frame` + `Heap` is created on each `execute_function`, reusing the existing isolation mechanism (see `src/backends/interpreter/executor/tests/execute.rs`).
-
-### 4. Bytecode-Level Changes
-
-#### 4.1 Test Metadata
-
-When the compiler scans `@test` annotations, it appends a test metadata section to the generated bytecode file header:
-
-```
-[Bytecode Header]
-    ...
-[Test Metadata Section]
-    test_count: u16
-    tests: [
-        { name: str, file: str, line: u32, param_count: u8 }
-    ]
-```
-
-#### 4.2 Executor Changes
-
-The `Executor` adds a test execution entry point:
-
-```rust
-impl Executor<'_> {
-    /// Execute a function marked as a test
-    fn run_test(&mut self, test: &TestMeta) -> TestResult {
-        let start = Instant::now();
-        match self.execute_function(&self.func_by_name(&test.name), &[]) {
-            Ok(RuntimeValue::Unit) => TestResult { name: test.name.clone(), passed: true, elapsed, error: None },
-            Ok(_) => TestResult { name: test.name.clone(), passed: false, elapsed, error: Some("test returned non-Void".to_string()) },
-            Err(e) if is_assertion_error(&e) => TestResult { name: test.name.clone(), passed: false, elapsed, error: Some(e.to_string()) },
-            Err(e) => TestResult { name: test.name.clone(), passed: false, elapsed, error: Some(format!("unexpected: {}", e)) },
-        }
-    }
-}
-```
-
-### 5. Output Format
-
-#### 5.1 Default Output
-
-```
-Running 5 tests...
-
-PASS test_add (0.002s)
-PASS test_subtract (0.001s)
-FAIL test_divide_by_zero (0.003s)
-  └── assertion failed: 1 / 0
-      Expected: Error
-      Actual:   ExecutorError: division by zero
-PASS test_max_value (0.001s)
-PASS test_min_value (0.001s)
-
-Results: 4 passed, 1 failed, 0 skipped (0.007s)
-```
-
-#### 5.2 JUnit XML
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuites>
-  <testsuite name="math_test" tests="5" failures="1" time="0.007">
-    <testcase name="test_add" classname="math_test" time="0.002"/>
-    <testcase name="test_divide_by_zero" classname="math_test" time="0.003">
-      <failure message="assertion failed: 1 / 0">ExecutorError: division by zero</failure>
-    </testcase>
-  </testsuite>
-</testsuites>
-```
-
-## Type System Impact
-
-**None.** The testing framework introduces no new types, type constraints, or type system changes. All assertion functions return `Void`, and parameters use the existing generics infrastructure.
-
-## Runtime Behavior
-
-- Functions annotated with `@test` behave unchanged under `yaoxiang run` — they remain ordinary functions
-- Only the `yaoxiang test` subcommand triggers test discovery and automatic invocation
-- `TestAssertionFailed` thrown by test failures shares the same error handling pipeline as ordinary `ExecutorError`
-
-## Compiler Changes
-
-| Module | Change |
-|--------|--------|
-| `src/frontend/core/parser/` | Reuses existing annotation parsing (`@` Token), no changes needed |
-| `src/middle/core/ir_gen.rs` | Scans `@test` annotations, marks AST nodes |
-| `src/middle/passes/codegen/` | Writes test metadata section into bytecode header |
-| `src/backends/interpreter/executor/` | Adds `run_test` entry point |
-| `src/std/test.rs` | Adds `std.test` module implementation |
-| `src/main.rs` | Adds `Test` subcommand branch |
-
-## Backward Compatibility
-
-- ✅ **Fully backward compatible**: A new `yaoxiang test` subcommand is added without altering the behavior of any existing subcommand
-- ✅ **Existing code is unaffected**: `@test` is optional; unannotated functions are completely unaffected
-- ✅ **Std module registration is independent**: `std.test` is registered as a new `StdModule` and does not affect existing modules
-
-## Trade-offs
-
-### Advantages
-
-1. **Zero new syntax**: Fully conforms to YaoXiang's 17-keyword constraint
-2. **Leverages existing mechanisms**: `@` annotation, `StdModule` trait, `NativeExport`, and the spawn concurrency model are all reused
-3. **Aligned with Rust's testing experience**: `#[test]` → `@test`, `assert_eq!` → `test.assert_eq()`
-4. **Extensible**: Future annotations such as `@benchmark` and `@ignore` can be added without syntax changes
-
-### Disadvantages
-
-1. `assert_eq(a, b)` is a function call, not a macro — unlike Rust, it cannot print the exact values such as `a = 42, b = 43` (values must be captured inside the native implementation)
-2. Generic assertions (`assert_eq<T>`) depend on runtime generics dispatch; if that capability is not complete, the first version needs type specialization
-3. Annotation scanning happens at compile time, so tests cannot be registered dynamically
-
-## Alternatives
-
-| Option | Description | Advantages | Disadvantages |
-|--------|-------------|------------|---------------|
-| **A: This proposal (`@test` + `std.test` module)** | Annotation + pure functions | Zero new syntax; leverages existing mechanisms | Function calls rather than macros; slightly weaker diagnostics |
-| **B: Test block syntax `test { }`** | Introduces the new keyword `test` | Concise syntax | ❌ Violates the 17-keyword constraint; major parser changes required |
-| **C: Naming convention (`test_*` prefix)** | Pure naming convention; scans functions with `test_` prefix | Zero annotation changes | Namespace pollution; easy to mis-match; no explicit marker |
-| **D: External test runner** | A separate Rust tool compiles and executes .yx tests | No compiler changes | Architecture split; two parallel compilation pipelines |
-
-**Choice of A**: Under the zero-new-syntax constraint, the annotation approach is the most explicit way to mark tests while minimizing namespace pollution.
+| Item | Relationship |
+|------|------|
+| Rust `#[test]` | Untouched; compiler internal tests continue to use Rust |
+| Existing `.yx` integration tests (`tests/yaoxiang/`) | Discovered and executed by `yaoxiang test` |
+| `std.assert.assert(cond)` | Retained; `std.test` depends on it underneath |
+| `#200` refactoring (`io.println` → `assert.assert`) | Direction fully aligned with `yaoxiang test` |
+| `@` annotations | Not used; no `@test` introduced |
 
 ## Implementation Strategy
 
-### Phase 1: Infrastructure (v0.7.8)
+### Phase 1: Core Functionality
 
-- `std.test` module: `assert_eq` / `assert_ne` / `assert_ok` / `assert_err` / `fail`
-- The initial version is limited to specialization for `Int` / `Float` / `String` / `Bool`
-- Confirm annotation parsing (ensure `@` is correctly propagated to the AST at the parser layer)
+Scope of changes:
+- `src/main.rs` — Add the `Test` subcommand
+- `src/std/test.yx` — Add the pure YaoXiang module
+- `build.rs` — Embed `std/*.yx` into the binary
+- Module loader — Support loading `.yx` modules from embedded sources
+- RFC-015 config parsing — `[tool.test]` section
+- Subprocess execution + reporting
 
-### Phase 2: Test Discovery and Execution (v0.7.8)
+Deliverables:
+- `yaoxiang test` basically usable
+- 4 assertion functions in `std.test`
+- Default `tests/**/*.yx` discovery
+- Serial execution + default output format
 
-- IR layer scans `@test` annotations and marks them
-- Bytecode test metadata section
-- `yaoxiang test` subcommand skeleton
-- Basic test execution + default output
+### Phase 2: Refinement
 
-### Phase 3: Polish (v0.7.9)
+- `--filter` / `--fail-fast` / `--verbose` parameters
+- `--json` output (for CI integration)
+- `--list` option
+- `--no-progress` option
 
-- `assert_true` / `assert_false`
-- `--filter` / `--serial` / `--fail-fast` parameters
-- JUnit XML output
-- Test isolation (independent Heap contexts)
-- Generic assertion support (if runtime generics dispatch is complete)
+### Phase 3: Advanced
 
-### Dependencies
+- `--parallel` parallel execution (depends on maturation of the spawn concurrency model)
+- `[tool.test].exclude` configuration
+- More assertion functions (e.g., `assert_approx_eq` for Float)
 
-| Dependency | Status | Note |
-|------------|--------|------|
-| `@` annotation parsing | ✅ Existing | Lexer already has `TokenKind::At`; parser must confirm propagation |
-| `StdModule` trait | ✅ Existing | Full implementation already in `src/std/mod.rs` |
-| `NativeExport` | ✅ Existing | Standard library function registration mechanism |
-| Runtime generics dispatch | ⚠️ Partially implemented | Affects the `assert_eq<T>` generic version; Phase 1 can use type specialization as a workaround |
-| `yaoxiang` CLI (clap) | ✅ Existing | The `Commands` enum can be extended directly |
-| Concurrent execution model | ⚠️ Draft | RFC-024 is accepted but implementation is in progress; Phase 2 can use a single-threaded implementation |
+## Risks and Mitigations
 
-### Risks
-
-1. **Incomplete annotation parsing**: If the parser layer's handling of `@test` is incomplete (only `@block`/`@eager` are recognized), annotation parsing must be extended. **Mitigation**: An annotation is essentially `@` + identifier, so extending it into a general annotation parser is a small amount of work
-2. **Immature generics dispatch**: `assert_eq<T>` requires runtime generics support. **Mitigation**: Phase 1 uses four explicit functions for `Int` / `Float` / `String` / `Bool`, not depending on generics dispatch
-3. **Insufficient test isolation**: If global state of the `std` module is polluted between tests. **Mitigation**: A new `NativeContext` + `Heap` is created on each test execution
+| Risk | Probability | Mitigation |
+|------|------|------|
+| `f"..."` interpolation fails on generic types | Low | Verified that basic types work in `std.assert.assert` |
+| Subprocess startup overhead affects test speed | Medium | Phase 1 serial execution is acceptable; Phase 3 parallel execution mitigates this |
+| `yaoxiang.toml` config parsing not in current CLI | Low | Simple extension, does not affect core functionality |
+| Generic `?` unavailable in `std.test` | Low | Can fall back to `Any` type or type specialization |
+| Embedding `.yx` source files into binary increases size | Low | `.yx` source files are tiny, negligible |
 
 ## Open Questions
 
-- [ ] Does the `@test` annotation support parameters (e.g. `@test(reason = "flaky")`)? Not supported for now; keep it simple
-- [ ] Test module naming convention? Proposed convention: test files share the same name as their source file with a `_test` suffix, e.g. `math.rs` → `math_test.yx`
-- [ ] Is the `@ignore` annotation supported for skipping specific tests? Not in Phase 1; can be considered in Phase 3
-- [ ] Assertion diagnostic message format? Need to determine how `actual` / `expected` are displayed (the current `RuntimeValue` already supports `format_value_with_prefix`)
+- [ ] Can the `use std.assert` reference in `std/test.yx` be correctly resolved in the module loader? Need to verify dependency relationships between embedded source modules
+- [ ] Will the generic `to_string` in `f"..."` for test output introduce new type constraints? Needs verification
 
-## Appendix A: Relationship with Existing Testing Infrastructure
-
-| Item | Existing | This RFC | Relationship |
-|------|----------|----------|--------------|
-| Rust `#[test]` | `src/**/tests/` directories | Untouched | Compiler-internal tests continue to use Rust |
-| YaoXiang `.yx` integration tests | `tests/yaoxiang/` | Untouched | Existing `.yx` regression test files continue to serve as integration tests |
-| `std.assert.assert(cond)` | Existing | Untouched | Retained for use in ordinary code |
-| `TestAssertionFailed` error | None | New | A new error type, aligned with the existing error code specification (RFC-013) |
-
-## Appendix B: Design Decision Records
+## Design Decision Record
 
 | Decision | Resolution | Date | Reason |
-|----------|------------|------|--------|
-| Test marking method | `@test` annotation | 2026-07-25 | Zero new syntax; `@` already exists |
-| Assertion method | `std.test` module functions | 2026-07-25 | Pure functions; no macros; no syntax changes |
-| Test execution model | Independent Heap context | 2026-07-25 | Avoid state pollution between tests |
-| Generic assertions | Type specialization in Phase 1, generics in Phase 3 | 2026-07-25 | Avoid the risk of incomplete generics dispatch |
+|------|------|------|------|
+| Test marking method | Do not use `@test` annotations; test files are ordinary `.yx` | 2026-07-26 | Zero compiler changes, subprocess equals isolation |
+| Assertion method | `std.test` module as pure YaoXiang functions | 2026-07-26 | Self-bootstrap, no native code |
+| Test execution model | Subprocess `yaoxiang run <file>` + exit code | 2026-07-26 | Process-level isolation, zero compiler changes |
+| Standard library loading | Currently embedded in binary, file system in the future | 2026-07-26 | Version binding, works in single-file mode |
+| Generic assertions | Depend on `?` generic parameter | 2026-07-26 | No specialization introduced, trust the generics system |
 
 ## References
 
-- [RFC-008: Runtime Concurrency Model](../accepted/008-runtime-concurrency-model.md) — Reference for the `@` annotation mechanism
-- [RFC-013: Error Code Specification](../accepted/013-error-code-specification.md) — `TestAssertionFailed` error encoding
-- [RFC-030: assert Mechanism](../review/030-assert-mechanism.md) — Runtime implementation of the existing `assert(cond)`
-- [RFC-011: Generic Type System](../accepted/011-generic-type-system.md) — Type constraints for generic assertions
+- [RFC-014: Package Management System Design](../accepted/014-package-manager.md) — Standard library directory structure
+- [RFC-015: Configuration System](../accepted/015-configuration-system.md) — `[tool.test]` configuration section
+- [RFC-030: assert Mechanism](../review/030-assert-mechanism.md) — Underlying dependency
 - [Rust `#[test]` mechanism](https://doc.rust-lang.org/book/ch11-01-writing-tests.html) — Reference design
-- [Go `testing` package](https://pkg.go.dev/testing) — Reference design
