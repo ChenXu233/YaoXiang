@@ -2,7 +2,7 @@
 title: "RFC-037: 工业化分发方案 — 基于 cargo-dist 的编译器/工具链打包"
 author: "ChenXu233"
 created: "2026-07-26"
-updated: "2026-07-26"
+updated: "2026-07-27"
 issue: "#230"
 ---
 
@@ -41,32 +41,22 @@ yaoxiang-v0.7.10-x86_64-pc-windows-msvc.zip
 └── yaoxiang.exe
 ```
 
-标准库接口文件（`.yx` 文件，LSP 需要）没有包含在发行包中，用户需要运行 `yaoxiang package init` 才能生成。工业化的做法应该是：
-
-```
-yaoxiang-0.7.10-x86_64-pc-windows-msvc.zip
-├── bin/
-│   ├── yaoxiang.exe
-│   └── libz3.dll
-└── lib/
-    └── std/
-        ├── io.yx
-        ├── math.yx
-        ├── ...
-        └── mod.yx
-```
+标准库接口文件（`.yx` 文件，LSP 需要）没有包含在发行包中。用户需要运行 `yaoxiang package init` 才能生成。工业化的做法是发行包自带标准库。
 
 #### 问题 3：CI 手写脚本重复维护
 
-当前维护了 3 套构建流水线：
+当前维护了 4 套构建流水线：
 
 | 文件 | 职责 | 行数 |
 |------|------|------|
-| `_build-platforms.yml` | 跨平台构建（Linux/macOS/Windows） | ~250 行 |
-| `release.yml` | 版本发布流程 | ~170 行 |
-| `nightly.yml` | 每日构建 | ~170 行 |
+| `_build-platforms.yml` | 跨平台构建 | ~255 行 |
+| `release.yml` | 版本发布 | ~176 行 |
+| `nightly.yml` | 每日构建 | ~145 行 |
+| `_build-wasm.yml` | Wasm 构建 | ~75 行 |
+| `scripts/build/setup.iss` | Inno Setup 安装器 | ~250 行 |
+| **合计** | | **~900 行** |
 
-**总计 ~600 行手写 YAML。** 这些脚本大部分是重复的（安装 Rust → 缓存 → 构建 → 重命名 → 上传），每个平台都要写一次。`cargo-dist` 一行命令就能生成同等的流水线。
+大部分是重复的（安装 Rust → 缓存 → 构建 → 重命名 → 上传），每个平台都要写一次。`cargo-dist` 一行命令就能生成同等的流水线。
 
 #### 问题 4：Inno Setup 版本号硬编码
 
@@ -80,43 +70,49 @@ RFC-014b 定义了"YaoXiang 包的构建和分发机制"（即 `yaoxiang.toml` �
 
 ### 核心设计
 
-采用 **cargo-dist** 作为发布流水线，配合自定义 post-build 脚本处理 Z3 DLL 和标准库接口文件。
+采用 **cargo-dist** 作为发布流水线骨架，配合自定义 post-build 脚本处理包结构和附加文件。
 
 ```
-cargo-dist 负责:
-  ├── 跨平台构建（6 个平台）
-  ├── 生成 tar.gz/zip 压缩包
-  ├── 生成安装脚本（shell/powershell）
-  ├── 生成 Windows MSI 安装器
-  ├── 自动发布 GitHub Release
-  └── changelog 自动生成
+cargo-dist 职责:
+  ├── 跨平台编译（6 个 target）
+  ├── 生成 CI 流水线（取代手写 ~900 行 YAML）
+  ├── 生成安装器（MSI / shell / powershell / homebrew）
+  ├── npm 发布（@yaoxiang/cli — 二进制下载 wrapper）
+  ├── checksum + 签名
+  └── 上传到 GitHub Release
 
 build.rs 继续负责:
-  └── Z3 下载/链接（已有逻辑，只需要微调）
+  └── Z3 下载/链接（已有逻辑，改为全平台动态链接）
 
-自定义脚本负责:
-  ├── 构建后复制 libz3.dll 到打包目录
+YaoXiang 自定义脚本（package-dist.sh）负责:
+  ├── 构建后重组 zip 结构（bin/ + lib/）
+  ├── 附带共享库（libz3.so / dylib / dll）
   └── 预生成标准库 .yx 接口文件
 ```
 
 ### 发布目录结构
 
-每个平台 release 压缩包：
+每个平台 release 压缩包，由 `package-dist.sh` 在 cargo-dist 构建后重组：
 
 ```
 yaoxiang-{version}-{target}.tar.gz / .zip
 ├── bin/
 │   ├── yaoxiang                      # 或 yaoxiang.exe
-│   └── libz3.dll                     # 仅 Windows，其他平台静态链接
+│   └── libz3.so / libz3.dylib / libz3.dll
 ├── lib/
-│   └── std/                          # 预生成的标准库接口文件
-│       ├── io.yx
-│       ├── math.yx
-│       ├── string.yx
-│       ├── ...
-│       └── mod.yx
-└── README.md                         # 简短的安装说明
+│   └── yaoxiang/
+│       └── std/                      # 预生成的标准库接口文件
+│           ├── io.yx
+│           ├── math.yx
+│           ├── string.yx
+│           ├── ...
+│           └── mod.yx
+├── README.md
+└── LICENSE
 ```
+
+cargo-dist 默认的 zip 是扁平的（二进制 + 自动包含的 README/LICENSE 都在根目录）。
+这不构成问题 — 明确分工：cargo-dist 管编译+CI+安装器，YaoXiang 用 50 行 `package-dist.sh` 管 zip 结构。
 
 ### 平台支持
 
@@ -127,151 +123,212 @@ yaoxiang-{version}-{target}.tar.gz / .zip
 | macOS x86_64 | `x86_64-apple-darwin` | Intel Mac |
 | macOS ARM64 | `aarch64-apple-darwin` | Apple Silicon |
 | Windows x86_64 | `x86_64-pc-windows-msvc` | 主平台 |
-| Windows ARM64 | `aarch64-pc-windows-msvc` | 可选，后续支持 |
+
+暂不支持 Windows ARM64（Z3 官方无预编译 ARM64 包）。
 
 ### Z3 分发策略
 
-| 平台 | 策略 | 原因 |
+**统一改为全平台动态链接。**
+
+| 平台 | 改动 | 产物 |
 |------|------|------|
-| Linux | 静态链接 `libz3.a` | 已有，保持 |
-| macOS | 静态链接 `libz3.a` | 已有，保持 |
-| Windows | 打包 `libz3.dll` | Z3 官方 Windows 预编译只有 DLL |
-| wasm32 | 静态链接 `libz3.a` | 已有，保持 |
+| Linux | **原静态→改为动态** | `libz3.so` |
+| macOS | **原静态→改为动态** | `libz3.dylib` |
+| Windows | 不变 | `libz3.dll` |
+| wasm32 | 不变（静态链接） | 内嵌 `.a` |
 
-**Windows 的 `libz3.dll` 由 build.rs 在构建时下载到 `.z3/` 目录，再由 cargo-dist 的 `extra-artifacts` 机制打包进压缩包。**
+理由：
+- **一致性** — 三个平台行为统一，不再各有特例
+- **这是外部库，就该用共享库分发**。Python（`python3.dll`+`DLLs/lib*.dll`）、Node（`node`+`lib/`）都这么干
+- **用户升级 Z3 不需要等编译器版本** — 换一个 `.so`/`.dylib`/`.dll` 就行
+- **二进制体积更小** — Z3 不小，静态链接会让 exe 膨胀数 MB
 
-长期目标：自行编译 Z3 的 Windows 静态库（`-DZ3_BUILD_LIBZ3_SHARED=OFF`），实现全平台静态链接单文件分发。
+对应的 `build.rs` 修改：
+
+```rust
+// 统一动态链接
+fn link_z3(z3_dir: &Path) {
+    println!("cargo:rustc-link-lib=z3");     // 不再区分 Windows/非 Windows
+    // 保持 C++ 标准库链接不变
+    let cxx = if target_os == "macos" { "c++" } else { "stdc++" };
+    println!("cargo:rustc-link-lib={}", cxx);
+}
+```
+
+**"全平台静态链接"不再作为目标。** 这不是消除特殊情况，是用错误的方式消除一个合理的情况。共享库是外部库的正常分发方式。
 
 ### 安装器支持
 
-| 安装器 | 支持 | 说明 |
+| 安装器 | 状态 | 说明 |
 |--------|------|------|
-| tar.gz / zip | ✅ 默认 | 所有平台 |
-| shell 安装脚本 | ✅ cargo-dist 内置 | Unix 平台 |
-| powershell 安装脚本 | ✅ cargo-dist 内置 | Windows 平台 |
-| Homebrew formula | ✅ cargo-dist 内置 | macOS |
-| Windows MSI | ✅ cargo-dist 内置 | 替代 Inno Setup |
-| Inno Setup | ❌ 废弃 | 迁到 cargo-dist 的 MSI |
+| zip / tar.gz | ✅ 默认 | 所有平台，手动下载 |
+| shell 脚本 | ✅ cargo-dist | Unix: `curl ... \| sh` |
+| powershell 脚本 | ✅ cargo-dist | Windows: `irm ... \| iex` |
+| Homebrew formula | ✅ cargo-dist | macOS: `brew install yaoxiang` |
+| Windows MSI | ✅ cargo-dist | 基于 WiX，主 Windows 安装器 |
+| **Inno Setup** | **✅ 保留为辅助** | 国内用户备选，不删除 |
 
-## 详细设计
+**Inno Setup 保留理由：**
+- 国内 Windows 用户更习惯 exe 安装向导（下一步 → 下一步 → 完成）
+- MSI 在某些企业/学校网络环境中被屏蔽
+- 多维护一个 `setup.iss` 的成本远低于丢掉一部分用户
 
-### cargo-dist 配置
+### 标准库接口文件生成
 
-在项目根目录创建 `dist-workspace.toml`：
+子命令名：**`yaoxiang package gen-std`**（与现有 `package init`/`add`/`install` 在同一体系下）
+
+当前 `src/std/gen_interfaces.rs` 已有完整实现（`generate_all_interfaces()`、`write_interfaces_to_dir()`），只需在 `main.rs` 新增子命令入口，然后在 `package-dist.sh` 中调用：
+
+```bash
+yaoxiang package gen-std --out-dir "$PKG_ROOT/lib/yaoxiang/std/"
+```
+
+### Wasm 构建
+
+**保持独立，不迁入 cargo-dist。**
+
+cargo-dist 管的是"把编译器发给用户"，wasm 是"在线 playground 嵌入文档网站"——两套完全不同的交付物。
+
+| 方面 | 做法 |
+|------|------|
+| 构建工具 | 保持 `wasm-pack build` |
+| CI workflow | 保留 `_build-wasm.yml` 独立 job |
+| 触发时机 | 跟 release 同一次 push，并行的独立 job |
+| 发布目标 | `docs/public/wasm/` → GitHub Pages |
+
+### npm 发布
+
+两个不同的 npm 包，各自独立：
+
+| 包 | 内容 | 工具 | 状态 |
+|----|------|------|------|
+| `@yaoxiang/cli` | 下载 CLI 二进制（wrapper） | cargo-dist 原生生成 | cargo-dist 配置即用 |
+| `@yaoxiang/playground` | wasm 库（JS + .wasm） | wasm-pack + `npm publish` | 可选，目前只发 docs |
+
+两者不冲突，名字也不冲突。
+
+### Nightly 发布
+
+cargo-dist 无原生 nightly 支持（[#1143](https://github.com/axodotdev/cargo-dist/issues/1143)，仍为 open feature request）。
+
+**保持现有 cron + tag 方案**，构建部分换成 cargo-dist：
+
+```yaml
+# nightly.yml（迁移后，约 50 行）
+on: schedule: "17 22 * * *"
+jobs:
+  build:
+    # 复用 cargo-dist 构建能力，但不走它的 release 流程
+    uses: ./.github/workflows/release.yml  # cargo-dist 生成的构建 job
+  publish:
+    # 沿用现有：打 nightly tag → 覆盖 GitHub Pre-release
+```
+
+### cargo-dist 配置（草案）
+
+跑 `cargo dist init` 后生成的初始配置，预期核心部分：
 
 ```toml
 [workspace]
-# 指向 Cargo 工作区，所有 binary 包会自动发现
 members = ["cargo:."]
 
 [dist]
-# 构建产物
-package-libraries = ["cdylib"]
-
-# 安装器
+targets = [
+  "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-apple-darwin",
+  "aarch64-apple-darwin",
+  "x86_64-pc-windows-msvc",
+]
 installers = [
-    "shell",           # Unix shell 安装脚本
-    "powershell",      # Windows powershell 安装脚本
-    "homebrew",        # macOS Homebrew
-    "msi",             # Windows MSI 安装器
+  "shell",
+  "powershell",
+  "homebrew",
+  "msi",
 ]
-
-# 构建后额外处理的脚本
-extra-artifacts = [
-    "scripts/build/package-z3.sh",   # 复制 libz3.dll + 标准库接口文件
-]
-
-# CI 配置
-ci = "github"
-ci.github.create-release = true
-ci.github.pr-run-mode = "plan"
 ```
 
-### 构建后处理脚本
+具体配置项以 `cargo dist init` 实际生成为准。
 
-`scripts/build/package-z3.sh`（跨平台，在 cargo-dist 构建后执行）：
+### package-dist.sh（草案）
 
 ```bash
 #!/bin/bash
-# 在 cargo-dist 构建后，将 libz3.dll 和标准库接口文件复制到打包目录
-
+# 在 cargo-dist 构建后执行，重组发行包结构
+# 被 cargo-dist 的 extra-artifacts 或独立 CI step 调用
 set -euo pipefail
 
-# 1. 复制 Z3 DLL（仅 Windows）
-if [ "$CARGO_DIST_TARGET" = "x86_64-pc-windows-msvc" ]; then
-    Z3_DIR=".z3/z3-4.16.0-x64-win"
-    cp "$Z3_DIR/bin/libz3.dll" "$DIST_DIR/bin/"
-fi
+VERSION="$1"
+TARGET="$2"
+DIST_DIR="target/distrib"
+PKG_ROOT="$DIST_DIR/yaoxiang-$VERSION-$TARGET"
 
-# 2. 生成标准库接口文件
-yaoxiang package gen-std-interfaces --out-dir "$DIST_DIR/lib/std/"
-```
+mkdir -p "$PKG_ROOT/bin" "$PKG_ROOT/lib/yaoxiang/std"
 
-### CI 流水线变化
+# binary
+mv "$DIST_DIR/yaoxiang" "$PKG_ROOT/bin/"
 
-#### 迁移前（当前）：
+# 共享库
+Z3_DIR=".z3/z3-4.16.0-..."
+case "$TARGET" in
+  *windows*)   cp "$Z3_DIR/bin/libz3.dll"   "$PKG_ROOT/bin/" ;;
+  *linux*)     cp "$Z3_DIR/lib/libz3.so"    "$PKG_ROOT/bin/" ;;
+  *apple*)     cp "$Z3_DIR/lib/libz3.dylib" "$PKG_ROOT/bin/" ;;
+esac
 
-```
-release.yml (170 行) ──→ _build-platforms.yml (250 行) ──→ 构建 → 上传
-                  └──→ wasm 构建
-                  └──→ 安全审计
-                  └──→ 测试
-                  └──→ 发布
+# 标准库接口文件
+yaoxiang package gen-std --out-dir "$PKG_ROOT/lib/yaoxiang/std/"
 
-nightly.yml (170 行) ──→ 同上（重复）
-```
+# README + LICENSE
+cp README.md LICENSE "$PKG_ROOT/"
 
-#### 迁移后：
-
-```
-cargo-dist 生成的 release.yml（~100 行，自动维护）
-  └──→ 6 平台并行构建
-  └──→ 生成压缩包 + 安装脚本
-  └──→ 创建 GitHub Release
-  └──→ 上传到 Homebrew / npm
-
-cargo-dist 生成的 pr.yml（~50 行，自动维护）
-  └──→ PR 时运行 dist plan 检查
+# 重新打包
+cd "$DIST_DIR"
+tar czf "yaoxiang-$VERSION-$TARGET.tar.gz" "yaoxiang-$VERSION-$TARGET"
 ```
 
 ### 标准库接口文件生成
 
 当前 `src/std/gen_interfaces.rs` 已经实现了生成 `.yx` 接口文件的功能（`write_interfaces_to_dir`），`package init` 命令也调用了它。
 
-只需要：
-
-1. 在 `main.rs` 中新增一个子命令 `yaoxiang package gen-std-interfaces`（或独立脚本）
-2. 在打包脚本中调用该命令生成到 `lib/std/`
+只需要在 `main.rs` 中新增子命令入口，然后在打包脚本中调用。
 
 ### 废弃的手写 CI
 
 迁移完成后删除以下文件：
 
-| 文件 | 替代 |
-|------|------|
-| `.github/workflows/_build-platforms.yml` | cargo-dist 自动生成 |
-| `.github/workflows/release.yml` | cargo-dist 自动生成 |
-| `.github/workflows/nightly.yml` | cargo-dist 的 schedule 触发 |
-| `scripts/build/setup.iss` | cargo-dist 的 MSI 安装器 |
-| `scripts/build/ChineseSimplified.isl` | 同上 |
+| 文件 | 行数 | 替代 |
+|------|------|------|
+| `.github/workflows/_build-platforms.yml` | 255 | cargo-dist 自动生成 |
+| `.github/workflows/release.yml` | 176 | cargo-dist 自动生成 |
+| `.github/workflows/nightly.yml` | 145 | cargo-dist 构建 + 保留发布逻辑 |
+| `scripts/build/setup.iss` | ~250 | **保留**（国内用） |
+| **合计删减** | **~600 行** | |
+
+保留的：
+- `ci.yml`（日常 fmt + clippy + test + MSRV，不属于发布流程）
+- `nightly.yml`（发布逻辑部分保留）
+- `_build-wasm.yml`（独立构建流）
+- `_build-z3-wasm.yml`（wasm 专用 Z3）
+- `setup.iss`（国内辅助安装器）
+- `docs-deploy.yml`（文档部署）
 
 ## 权衡
 
 ### 优点
 
-- **开箱即用** — 用户下载压缩包解压后直接运行，没有缺失 DLL 的问题
+- **开箱即用** — 用户下载解压后直接运行，没有缺失 DLL 的问题
 - **减少维护成本** — 删除 ~600 行手写 CI YAML，cargo-dist 自动维护
 - **标准化** — 业界标准工具，几百个项目验证过
-- **跨平台一致性** — 6 个平台使用同一套流水线
-- **自动 changelog** — 内置 changelog 生成和发布说明
-- **安装器覆盖** — shell/powershell/homebrew/msi 全支持
+- **跨平台一致性** — 全平台动态链接，行为统一
+- **安装器覆盖** — shell/powershell/homebrew/msi/inno setup 全支持
 
 ### 缺点
 
 - **学习 cargo-dist 配置** — 团队需要学习新工具
-- **自定义处理仍有维护成本** — Z3 DLL 和标准库接口文件的脚本需要维护
-- **cargo-dist 版本迭代** — 需要跟随 upstream 更新
-- **Windows ARM64 支持** — cargo-dist 默认支持，但 Z3 可能没有预编译 ARM64 的 DLL
+- **自定义打包脚本仍有维护成本** — 包结构和标准库接口文件的脚本需要维护
+- **cargo-dist 版本迭代** — 需要关注 upstream 变更
+- **cargo-dist 无原生 nightly** — nightly 发布部分仍需手写
 
 ### 与 RFC-014b 的关系
 
@@ -286,68 +343,54 @@ cargo-dist 生成的 pr.yml（~50 行，自动维护）
 
 | 方案 | 为什么不选 |
 |------|-----------|
-| **继续手写 CI** | 已经手写了 ~600 行，重复劳动，容易遗漏 DLL |
+| **继续手写 CI** | 已经手写了 ~900 行，重复劳动，容易遗漏 DLL |
 | **自己写打包工具** | 不要重新发明轮子，cargo-dist 已经成熟 |
 | **只用 tar.gz 不用安装器** | 用户需要更友好的安装方式（Homebrew/MSI） |
 | **Docker 分发** | 编译器和语言工具链需要原生二进制，不是容器场景 |
-| **全静态链接 Z3** | 理想方案，但 Windows 静态编译 Z3 需要额外 CI 步骤，可以后续优化 |
+| **全静态链接 Z3** | 外部库正常就该用共享库分发，不追求静态 |
+| **废弃 Inno Setup** | 国内用户习惯不同，保留成本极低 |
 
 ## 实现策略
 
-### 阶段一：基础迁移（高优先级）
+### 阶段一：build.rs 修改 + gen-std 子命令（P0）
 
-1. 调研确认 cargo-dist 的最新版本和配置格式
-2. 安装 cargo-dist，运行 `dist init` 生成初始配置
-3. 配置 `dist-workspace.toml`，指定目标平台
-4. 使用 `cc` crate 替代 build.rs 的 Z3 外部下载逻辑（可选）
+1. 修改 `build.rs`：全平台统一动态链接，`copy_dll()` 扩展为 `copy_shared_lib()`
+2. 在 `main.rs` 新增 `yaoxiang package gen-std` 子命令（复用 `gen_interfaces.rs`）
 
-### 阶段二：自定义打包（中优先级）
+### 阶段二：cargo-dist 接入（P0）
 
-1. 编写 `package-z3.sh` 构建后处理脚本
-2. 在 `main.rs` 新增 `gen-std-interfaces` 子命令
-3. 在打包脚本中调用生成标准库接口文件
-4. 验证生成的压缩包结构正确
+1. 跑 `cargo dist init` 生成初始配置
+2. 编写 `package-dist.sh` 打包脚本
+3. 在 `release.yml` 中集成：cargo-dist 构建 → `package-dist.sh` 重组 → 上传
+4. 验证生成的压缩包结构和内容正确
 
-### 阶段三：废弃旧 CI（高优先级）
+### 阶段三：旧 CI 下线（P1）
 
-1. 在 `release.yml` 中集成 cargo-dist 流水线
-2. 并行运行新旧 CI，对比产物一致性
-3. 确认无误后删除旧 CI 文件
-4. 删除 `setup.iss` 和相关脚本
+1. 并行运行新旧 CI，对比产物
+2. 确认无误后删除 `_build-platforms.yml`
+3. 精简 `nightly.yml`（构建部分换成 cargo-dist）
+4. 确认 `setup.iss` 仍然可用
 
-### 阶段四：优化（低优先级）
+### 阶段四：安装器启用（P2）
 
-1. 研究 Windows 静态编译 Z3 的可行性
-2. 添加 Homebrew formula 自动发布
-3. 添加 MSI 安装器
-4. 考虑 ARM64 Windows 支持
+1. 配置 Homebrew tap 自动发布
+2. 配置 MSI 安装器生成
+3. 配置 npm 发布（`@yaoxiang/cli`）
 
-### 依赖关系
+## 开放问题（已关闭）
 
-- 无外部工具链依赖（cargo-dist 通过 cargo install 安装）
-- 需要 GitHub Actions 运行 CI
-- 需要 Homebrew 维护者账号（可选）
+以下问题在设计讨论中已解决：
 
-### 风险
-
-- **cargo-dist 版本升级**：配置格式可能变化，需要关注 changelog
-- **Z3 官方发布变更**：Z3 预编译包的位置或格式可能变化
-- **Windows 静态链接**：Z3 的静态库在 Windows 上可能需要额外处理（如 C++ 运行时依赖）
-
-## 开放问题
-
-- [ ] Windows 上 Z3 静态链接的可行性？需要实测 `-DZ3_BUILD_LIBZ3_SHARED=OFF` 在 MSVC 下的表现
-- [ ] `gen-std-interfaces` 子命令的具体命名和接口设计？
-- [ ] 是否保留 Inno Setup 安装器作为 MSI 的补充？国内用户可能更习惯 exe 安装向导
-- [ ] cargo-dist 的 `extra-artifacts` 是否支持跨平台条件执行（如仅 Windows 复制 DLL）？
-- [ ] 标准库接口文件是否有版本兼容性保证？是否需要随编译器版本一起发布？
+- ~~Windows 上 Z3 静态链接的可行性？~~ → **不做静态链接，全平台动态**
+- ~~gen-std-interfaces 子命令命名？~~ → **`yaoxiang package gen-std`**
+- ~~是否保留 Inno Setup？~~ → **保留**
+- ~~cargo-dist extra-artifacts 条件执行？~~ → **用 `package-dist.sh` 脚本处理，走 shell case 分支**
+- ~~标准库接口版本兼容性？~~ → **随编译器版本一起发布，同一压缩包内**
 
 ## 参考文献
 
 - [cargo-dist 官方文档](https://axodotdev.github.io/cargo-dist/)
 - [cargo-dist GitHub](https://github.com/axodotdev/cargo-dist)
 - [RFC-014b: 构建系统与二进制分发](../review/014b-build-system.md)
-- [Rust 编译器分发流程 — bootstrap dist](https://doc.rust-lang.org/stable/nightly-rustc/bootstrap/core/build_steps/dist/index.html)
-- [Go 工具链分发 — Go Toolchains](https://go.dev/doc/toolchain)
+- [cargo-dist nightly feature request](https://github.com/axodotdev/cargo-dist/issues/1143)
 - [Z3 构建配置 — CMakeLists.txt](https://github.com/Z3Prover/z3/blob/master/src/CMakeLists.txt)
-- [Z3 Windows 分发脚本](https://github.com/Z3Prover/z3/blob/master/scripts/mk_win_dist_cmake.py)
