@@ -1823,7 +1823,7 @@ impl AstToIrGenerator {
         instructions.push(Instruction::JmpIfNot(Operand::Local(condition_reg), 0)); // 占位符
 
         // 3. 生成 then 分支
-        self.generate_block_ir(then_branch, instructions, constants)?;
+        self.generate_block_ir(then_branch, None, instructions, constants)?;
 
         // 4. then 分支结束后，跳转到整个 if 语句的结束 (Jmp to end)
         let mut jump_to_end_indices = Vec::new();
@@ -1851,7 +1851,7 @@ impl AstToIrGenerator {
             instructions.push(Instruction::JmpIfNot(Operand::Local(elif_condition_reg), 0));
 
             // 生成 elif 分支
-            self.generate_block_ir(elif_body, instructions, constants)?;
+            self.generate_block_ir(elif_body, None, instructions, constants)?;
 
             // elif 分支结束后跳转到结束
             let idx = instructions.len();
@@ -1867,7 +1867,7 @@ impl AstToIrGenerator {
 
         // 7. 生成 else 分支
         if let Some(else_body) = else_branch {
-            self.generate_block_ir(else_body, instructions, constants)?;
+            self.generate_block_ir(else_body, None, instructions, constants)?;
         }
 
         // 8. 修复所有跳转到结束的指令
@@ -1909,7 +1909,7 @@ impl AstToIrGenerator {
 
         // 3. then 分支
         let then_result_reg = self.next_temp_reg();
-        self.generate_block_expr_ir(then_branch, then_result_reg, instructions, constants)?;
+        self.generate_block_ir(then_branch, Some(then_result_reg), instructions, constants)?;
         instructions.push(Instruction::Move {
             dst: Operand::Local(result_reg),
             src: Operand::Local(then_result_reg),
@@ -1936,7 +1936,7 @@ impl AstToIrGenerator {
             instructions.push(Instruction::JmpIfNot(Operand::Local(elif_cond_reg), 0));
 
             let elif_res = self.next_temp_reg();
-            self.generate_block_expr_ir(elif_body, elif_res, instructions, constants)?;
+            self.generate_block_ir(elif_body, Some(elif_res), instructions, constants)?;
             instructions.push(Instruction::Move {
                 dst: Operand::Local(result_reg),
                 src: Operand::Local(elif_res),
@@ -1954,7 +1954,7 @@ impl AstToIrGenerator {
         // 7. Else 分支
         if let Some(else_body) = else_branch {
             let else_res = self.next_temp_reg();
-            self.generate_block_expr_ir(else_body, else_res, instructions, constants)?;
+            self.generate_block_ir(else_body, Some(else_res), instructions, constants)?;
             instructions.push(Instruction::Move {
                 dst: Operand::Local(result_reg),
                 src: Operand::Local(else_res),
@@ -1973,44 +1973,60 @@ impl AstToIrGenerator {
         Ok(())
     }
 
-    /// 生成代码块的 IR（用于表达式）
+    /// 生成代码块的 IR
+    ///
+    /// 当 `result_reg` 为 `Some(reg)` 时，表示块作为表达式使用：
+    /// 块中最后一条语句如果是表达式（`StmtKind::Expr`），
+    /// 其值直接写入 `reg` 作为块的返回值。
+    /// 块中没有 return 也没有尾部表达式时，`reg` 保持默认（Void）。
+    ///
+    /// 当 `result_reg` 为 `None` 时，块作为语句序列执行，不关心返回值。
     fn generate_block_ir(
         &mut self,
         block: &ast::Block,
+        result_reg: Option<usize>,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
         // 进入新的作用域
         self.enter_scope();
 
-        // 生成语句
-        for stmt in &block.stmts {
+        let last_idx = block.stmts.len().checked_sub(1);
+        for (i, stmt) in block.stmts.iter().enumerate() {
+            let is_last = Some(i) == last_idx;
+            // 块作为表达式 + 最后一条语句是表达式 → 表达式的值写入 result_reg
+            if let (Some(reg), true) = (result_reg, is_last) {
+                match &stmt.kind {
+                    ast::StmtKind::Expr(expr) => {
+                        self.generate_expr_ir(expr, reg, instructions, constants)?;
+                        continue;
+                    }
+                    ast::StmtKind::If {
+                        condition,
+                        then_branch,
+                        elif_branches,
+                        else_branch,
+                        ..
+                    } => {
+                        // 块里的 if 在表达式位置：按 if 表达式生成（值写入 reg）
+                        self.generate_if_expr_ir(
+                            condition,
+                            then_branch,
+                            elif_branches,
+                            else_branch.as_deref(),
+                            reg,
+                            instructions,
+                            constants,
+                        )?;
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
+            // 其他情况正常生成语句
             self.generate_local_stmt_ir(stmt, instructions, constants)?;
         }
 
-        // 退出作用域
-        self.exit_scope();
-
-        Ok(())
-    }
-
-    /// 生成代码块的 IR（用于表达式）
-    fn generate_block_expr_ir(
-        &mut self,
-        block: &ast::Block,
-        _result_reg: usize,
-        instructions: &mut Vec<Instruction>,
-        constants: &mut Vec<ConstValue>,
-    ) -> Result<(), Diagnostic> {
-        // 进入新的作用域
-        self.enter_scope();
-
-        // 生成语句
-        for stmt in &block.stmts {
-            self.generate_local_stmt_ir(stmt, instructions, constants)?;
-        }
-
-        // 如果没有 return 语句，result_reg 保持默认值（Void）
         // 退出作用域
         self.exit_scope();
 
@@ -2038,7 +2054,7 @@ impl AstToIrGenerator {
         instructions.push(Instruction::JmpIfNot(Operand::Local(cond_reg), 0)); // Placeholder
 
         // Body
-        self.generate_block_ir(body, instructions, constants)?;
+        self.generate_block_ir(body, None, instructions, constants)?;
 
         // Jump back to start
         instructions.push(Instruction::Jmp(loop_start_idx));
@@ -2136,7 +2152,7 @@ impl AstToIrGenerator {
             // 4. 执行循环体
             // 循环体访问 i 时，会从 var_reg 读取
             // var_reg 在每次循环迭代前都会被更新为 current 的值
-            self.generate_block_ir(body, instructions, constants)?;
+            self.generate_block_ir(body, None, instructions, constants)?;
 
             // 5. 递增：current = current + 1
             let one_reg = self.next_temp_reg();
@@ -2277,7 +2293,7 @@ impl AstToIrGenerator {
         });
 
         // 8. 执行循环体
-        self.generate_block_ir(body, instructions, constants)?;
+        self.generate_block_ir(body, None, instructions, constants)?;
 
         // 9. 跳转回循环开始
         instructions.push(Instruction::Jmp(loop_start_idx));
@@ -3694,7 +3710,7 @@ impl AstToIrGenerator {
                 instructions.push(Instruction::UnsafeBlockStart);
 
                 // 生成块内语句的 IR
-                self.generate_block_ir(body, instructions, constants)?;
+                self.generate_block_ir(body, None, instructions, constants)?;
 
                 // 生成 UnsafeBlockEnd 指令
                 instructions.push(Instruction::UnsafeBlockEnd);
@@ -4018,9 +4034,9 @@ impl AstToIrGenerator {
 
                     // 生成 arm body，结果放入 result_reg
                     let arm_result_reg = self.next_temp_reg();
-                    self.generate_block_expr_ir(
+                    self.generate_block_ir(
                         &arm.body,
-                        arm_result_reg,
+                        Some(arm_result_reg),
                         instructions,
                         constants,
                     )?;
