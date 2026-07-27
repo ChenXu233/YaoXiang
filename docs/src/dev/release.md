@@ -58,12 +58,6 @@ title: "发版模板"
 
 - 具体改动
 
-## 📝 提交记录
-
-|   Hash    | 描述              |
-| :-------: | ----------------- |
-| `abc1234` | feat(scope): 描述 |
-| `def5678` | fix(scope): 描述  |
 
 ## 标题规则
 
@@ -186,29 +180,6 @@ git log <最新tag>..HEAD --oneline --no-merges
 移除 Send/Sync 约束系统，`spawn {}` 重构为分组执行模型。移除
 `@block`/`@eager`/`@auto` 装饰器相关代码（RFC-024 phase 1）。
 简化并发模型，为后续可扩展并发原语设计铺路。
-
-## 📝 提交记录
-
-|   Hash    | 描述                                                        |
-| :-------: | ----------------------------------------------------------- |
-| `7297c65` | feat: 泛型函数多次调用 + yx_runner 错误测试支持             |
-| `57a9893` | feat: 泛型类型实例化 — List(Int) = List(1, 2, 3)            |
-| `ab8a133` | feat: 根因修复 — 类型构造器注册为 Struct                    |
-| `196daec` | feat: 修复泛型实例化 + 接口方法绑定                         |
-| `148e7a2` | feat: 完成 PLDI SRC demo MVP 全部任务                       |
-| `9a5a1b3` | fix(lsp): 修复 spawn 块和元组解构的语义高亮                 |
-| `75489c4` | feat: 修复 &T 字段访问 + 构造函数推断 + 移除 freeze         |
-| `a5b6135` | feat: 修复 &T 字段访问 + 字段赋值 + 元组解构                |
-| `0e24fcd` | refactor(diagnostic): 迁移剩余 5 个错误枚举至统一诊断系统   |
-| `c262ddc` | refactor(diagnostic): 迁移错误码至统一诊断系统              |
-| `e8869c2` | feat(middle): 添加 Resource marker trait 支持 IO 副作用感知 |
-| `a76cdd3` | refactor(lifetime): 将所有权检查统一为 OwnershipPass        |
-| `c7af770` | feat(typecheck): 赋值优先查找增加 moved 分支                |
-| `bb83e12` | feat(typecheck): VarInfo 增加 moved 状态标记                |
-| `e4a44c4` | refactor(middle): 移除 Send/Sync 约束系统                   |
-| `1d3fe2d` | refactor(frontend): 移除 @block/@eager/@auto 相关代码       |
-| `4fd4e0a` | feat(formatter): 实现缺失的格式化规则                       |
-| `13fbc21` | fix(backends): 修复 execute.rs 中的语法错误                 |
 ```
 
 ## 流程概览

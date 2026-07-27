@@ -168,12 +168,27 @@ jobs:
       - name: List artifacts
         run: ls -R release-artifacts || echo "No artifacts found"
 
+      - name: Get previous tag
+        id: prev-tag
+        run: |
+          PREV=$(git tag --sort=-version:refname | head -2 | tail -1)
+          echo "value=$PREV" >> $GITHUB_OUTPUT
+          echo "Previous tag: $PREV"
+
+      - name: Generate commit list with @mentions
+        run: |
+          node scripts/release/generate-commit-list.mjs \
+            --from-tag ${{ steps.prev-tag.outputs.value }} \
+            --to-tag v${{ needs.check-version.outputs.version }} \
+            --changelog CHANGELOG.md \
+            > final-release-body.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.check-version.outputs.version }}
           name: v${{ needs.check-version.outputs.version }}
-          body_path: CHANGELOG.md
+          body_path: final-release-body.md
           files: |
             release-artifacts/**/yaoxiang-*
             release-artifacts/**/YaoXiang-Setup-*.exe
