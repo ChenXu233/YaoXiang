@@ -211,8 +211,10 @@ pub fn run_file_with_diagnostics(
     use crate::Executor;
     use crate::Interpreter;
 
-    // 检测 .42 字节码文件，跳过编译直接执行
-    if file.extension().map(|e| e == "42").unwrap_or(false) {
+    // 通过文件头魔数判定字节码 vs 源码
+    // 内容即身份：不依赖文件名，cat dist.42 > out.bin 也能执行
+    // probe I/O 错误退化为源码路径（read_to_string 产生更好的错误信息）
+    if crate::middle::passes::codegen::BytecodeFile::probe(file).unwrap_or(false) {
         let bytecode_file = crate::middle::passes::codegen::BytecodeFile::load(file)
             .map_err(|e| anyhow::anyhow!("Failed to load bytecode file: {}", e))?;
         let bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);

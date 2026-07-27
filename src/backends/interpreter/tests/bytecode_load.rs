@@ -3,6 +3,7 @@
 //! 覆盖: `src/middle/passes/codegen/bytecode.rs` (BytecodeFile::load / read_from)
 //! 和 `src/util/diagnostic/mod.rs` (run_file_with_diagnostics .42 分支)
 //! 设计: `docs/superpowers/specs/2026-07-03-bytecode-run-support-design.md`
+//! 修正: `docs/superpowers/specs/2026-07-26-issue231-bytecode-run-magic-probe-design.md` (魔数探针替代扩展名)
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -99,15 +100,22 @@ fn test_run_yx_file_uses_source_compile_path() {
     );
 }
 
-/// 验证 .42 文件路径进入字节码加载分支。
+/// 验证包含 YXBC 魔数的文件路径进入字节码加载分支。
+/// 通过临时文件写入有效魔数但损坏数据的方式测试，确保 probe() 返回 true 后进入 load 路径。
 #[test]
-fn test_run_42_file_uses_bytecode_load_path() {
-    // Arrange
-    let path = PathBuf::from("/nonexistent/path/file.42");
+fn test_run_file_with_yxbc_magic_uses_bytecode_load_path() {
+    // Arrange: 写入一个有效 YXBC 魔数但内容损坏的文件
+    let dir = tempfile::TempDir::new().expect("create temp dir");
+    let path = dir.path().join("test.bin");
+    // 魔数 YXBC (0x59584243) 大端序 + 垃圾数据
+    let mut data = Vec::new();
+    data.extend_from_slice(&0x59584243u32.to_be_bytes());
+    data.extend_from_slice(b"corrupted data");
+    std::fs::write(&path, &data).expect("write file");
 
     // Act
     let err = crate::util::diagnostic::run_file_with_diagnostics(&path, false, "embedded", 0)
-        .expect_err("expected error for nonexistent .42 file");
+        .expect_err("expected error for file with YXBC magic");
 
     // Assert
     let msg = format!("{}", err);

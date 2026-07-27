@@ -7,7 +7,7 @@
 //! - RFC-014: 包管理系统 (init/new/add/rm/install/list/update)
 //! - docs/src/design/language-spec.md: 执行与编译章节
 //! - docs/src/dev/test-specification.md §集成测试规范 规则 9.1: E2E 三条路径
-//!
+//! - docs/superpowers/specs/2026-07-26-issue231-bytecode-run-magic-probe-design.md: 魔数探针
 //! 覆盖命令：run / build / check / init
 //! 函数级 API 契约见 `cli.rs`，本文件只验证"二进制入口"行为。
 
@@ -101,6 +101,92 @@ fn test_e2e_run_nonexistent_file_exits_nonzero() {
 
     // Assert
     assert_ne!(code, 0, "missing file should exit non-zero");
+}
+
+// ============================================================================
+// run 命令 + .42 字节码文件
+// 规范来源：design spec — 魔数探针判定字节码 vs 源码 (issue #231)
+// ============================================================================
+
+#[test]
+fn test_e2e_run_42_file() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(tmp.path(), "prog.yx", "main = { print(42) }");
+    let out = tmp.path().join("prog.42");
+
+    // 先 build
+    let (code, _, _) = run_yx(
+        &["build", src.to_str().unwrap(), "-o", out.to_str().unwrap()],
+        tmp.path(),
+    );
+    assert_eq!(code, 0, "build should succeed before running .42 file");
+
+    // Act: run .42 文件
+    let (code, stdout, stderr) = run_yx(&["run", out.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0, "run .42 should exit 0; stderr: {stderr:?}");
+    assert!(
+        stdout.contains("42"),
+        "stdout should contain program output, got: {stdout:?}"
+    );
+}
+
+#[test]
+fn test_e2e_run_bytecode_by_content_not_extension() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(tmp.path(), "prog.yx", "main = { print(1) }");
+    let out_42 = tmp.path().join("prog.42");
+    let out_bin = tmp.path().join("prog.bin");
+
+    // 先 build 为 .42，再 cp 为 .bin（无 .42 扩展名）
+    let (code, _, _) = run_yx(
+        &[
+            "build",
+            src.to_str().unwrap(),
+            "-o",
+            out_42.to_str().unwrap(),
+        ],
+        tmp.path(),
+    );
+    assert_eq!(
+        code, 0,
+        "build should succeed before testing content-based detection"
+    );
+    std::fs::copy(&out_42, &out_bin).expect("copy .42 to .bin");
+
+    // Act: run .bin 文件（无 .42 扩展名）
+    let (code, stdout, stderr) = run_yx(&["run", out_bin.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(
+        code, 0,
+        "run .bin (with YXBC magic) should exit 0; stderr: {stderr:?}"
+    );
+    assert!(
+        stdout.contains("1"),
+        "stdout should contain program output, got: {stdout:?}"
+    );
+}
+
+#[test]
+fn test_e2e_run_non_42_binary_file_exits_nonzero() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    let not_bytecode = tmp.path().join("not_bytecode.bin");
+    std::fs::write(&not_bytecode, b"garbage data that is not bytecode").expect("write garbage");
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(&["run", not_bytecode.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_ne!(code, 0, "non-bytecode binary should exit non-zero");
+    assert!(
+        !stderr.is_empty(),
+        "stderr should have error diagnostics: {stderr:?}"
+    );
 }
 
 // ============================================================================

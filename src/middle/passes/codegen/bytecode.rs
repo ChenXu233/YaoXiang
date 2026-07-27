@@ -514,6 +514,17 @@ impl BytecodeFile {
         let mut reader = std::io::BufReader::new(file);
         Self::read_from(&mut reader)
     }
+
+    /// 检测文件是否包含 YXBC 字节码魔数
+    ///
+    /// 只读取文件前 4 字节，不打开完整文件。
+    /// 文件不存在、无权限、或 < 4 字节均返回 `Ok(false)`。
+    pub fn probe(path: &std::path::Path) -> io::Result<bool> {
+        let mut file = std::fs::File::open(path)?;
+        let mut magic = [0u8; 4];
+        let n = file.read(&mut magic)?;
+        Ok(n >= 4 && u32::from_be_bytes(magic) == MAGIC)
+    }
 }
 
 /// 将 type_id (u32) 转换为相应的 MonoType。
