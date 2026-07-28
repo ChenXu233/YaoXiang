@@ -4,8 +4,8 @@ title: 'Release Template'
 
 # Release Template
 
-> The `/release` command generates changelogs based on this template.  
-> Changelogs are **change descriptions for human readers**, not commit lists.
+> The `/release` command generates the changelog following this template.  
+> The changelog is **a change description written for humans**, not a commit list.
 
 ## Format Specification
 
@@ -13,15 +13,15 @@ title: 'Release Template'
 :bookmark: V<version>: <title>
 ```
 
-## 📦 Version Information
+## 📦 Version Info
 
-| Item           | Value             |
-| -------------- | ----------------- |
-| Release Date   | YYYY-MM-DD        |
-| Version Change | `<old>` → `<new>` |
-| Commit Count   | N commits         |
+| Item           | Value                             |
+| -------------- | --------------------------------- |
+| Release Date   | YYYY-MM-DD                        |
+| Version Change | `<old version>` → `<new version>` |
+| Commit Count   | N commits                         |
 
-## 📋 Release Summary
+## 📋 This Release Summary
 
 Summarize the core content and significance of this release in 2-3 sentences.
 
@@ -29,7 +29,7 @@ Summarize the core content and significance of this release in 2-3 sentences.
 
 ### <Feature Area Title>
 
-<Explain what this feature does, what problem it solves, and what it means for users>
+<A paragraph explaining what this feature does, what problem it solves, and what it means for users>
 
 - Specific change 1
 - Specific change 2
@@ -45,7 +45,7 @@ Summarize the core content and significance of this release in 2-3 sentences.
 
 ### <Fix Area>
 
-<Explain what was fixed and the impact>
+<Description of what was fixed and the scope of impact>
 
 - Specific fix 1
 - Specific fix 2
@@ -54,20 +54,13 @@ Summarize the core content and significance of this release in 2-3 sentences.
 
 ### <Refactoring Direction>
 
-<Explain why the refactoring was done and its benefits>
+<Explanation of why the refactoring was done and the benefits after refactoring>
 
 - Specific change
 
-## 📝 Commit History
-
-|   Hash    | Description              |
-| :-------: | ------------------------ |
-| `abc1234` | feat(scope): description |
-| `def5678` | fix(scope): description  |
-
 ## Title Rules
 
-One sentence summarizing the core change, no more than 50 characters:
+Summarize the core change in one sentence, no more than 50 characters:
 
 ```
 :bookmark: V0.7.2: REPL Rewrite and Type System Improvements
@@ -75,34 +68,34 @@ One sentence summarizing the core change, no more than 50 characters:
 :bookmark: V0.8.0: Concurrency Model and Generics System
 ```
 
-## Classification Rules
+## Categorization Rules
 
-Categorized by `type` prefix, empty categories are omitted:
+Categorize by `type` prefix; omit empty categories:
 
-|    type    |       Category       |        Prefix        |
-| :--------: | :------------------: | :------------------: |
-|   `feat`   |   ✨ New Features    |     `:sparkles:`     |
-|   `fix`    |     🐛 Bug Fixes     |       `:bug:`        |
-| `refactor` | Refactoring & Optim. |     `:recycle:`      |
-|   `perf`   |    ⚡ Performance    |       `:zap:`        |
-|   `docs`   |       📝 Docs        |       `:memo:`       |
-|  `style`   |    🎨 Formatting     |       `:art:`        |
-|   `test`   |       ✅ Tests       | `:white_check_mark:` |
-|  `chore`   |   🔧 Build/Tooling   |      `:wrench:`      |
-|    `ci`    |       💚 CI/CD       |   `:green_heart:`    |
+|    type    |           Category            |        Prefix        |
+| :--------: | :---------------------------: | :------------------: |
+|   `feat`   |        ✨ New Features        |     `:sparkles:`     |
+|   `fix`    |         🐛 Bug Fixes          |       `:bug:`        |
+| `refactor` | ♻️ Refactoring & Optimization |     `:recycle:`      |
+|   `perf`   |  ⚡ Performance Optimization  |       `:zap:`        |
+|   `docs`   |       📝 Documentation        |       `:memo:`       |
+|  `style`   |         🎨 Formatting         |       `:art:`        |
+|   `test`   |          ✅ Testing           | `:white_check_mark:` |
+|  `chore`   |       🔧 Build/Tooling        |      `:wrench:`      |
+|    `ci`    |           💚 CI/CD            |   `:green_heart:`    |
 
-## Getting Commit History
+## Get Commit Records
 
 ```bash
-git log <latest-tag>..HEAD --oneline --no-merges
+git log <latest tag>..HEAD --oneline --no-merges
 ```
 
-## Full Example
+## Complete Example
 
 `:bookmark: V0.7.3: Type System Fixes and Ownership Model Improvements`
 
 ```markdown
-## 📦 Version Information
+## 📦 Version Info
 
 | Item           | Value             |
 | -------------- | ----------------- |
@@ -110,116 +103,94 @@ git log <latest-tag>..HEAD --oneline --no-merges
 | Version Change | `0.7.2` → `0.7.3` |
 | Commit Count   | 22 commits        |
 
-## 📋 Release Summary
+## 📋 This Release Summary
 
 This release focuses on stability fixes for the type system and ownership model. Generic type
-instantiation (e.g. `List(Int) = List(1, 2, 3)`) now works correctly, and multiple edge cases for
-`&T` field access and tuple destructuring assignment have been fixed. The ownership check
-unification has also been completed, laying the foundation for future move semantics improvements.
+instantiation (e.g., `List(Int) = List(1, 2, 3)`) now works correctly, and multiple edge cases in
+`&T` field access and tuple destructuring assignment have been fixed. At the same time, the unified
+refactoring of ownership checks has been completed, laying the foundation for future improvements to
+move semantics.
 
 ## ✨ New Features
 
 ### Generic Type Instantiation
 
-Supports `List(Int) = List(1, 2, 3)` syntax. Type constructors are correctly registered as Structs.
-Type inference no longer conflicts across multiple calls to generic functions, with each call
-getting an independent type variable instance.
+Supports the `List(Int) = List(1, 2, 3)` syntax, with type constructors correctly registered as
+Struct. Type inference no longer conflicts when generic functions are called multiple times; each
+call gets an independent type variable instance.
 
-- Type constructor registered as Struct, fixing root cause of instantiation
-- Independent inference for multiple generic function calls
-- Interface method binding fixes
+- Type constructor registered as Struct, fixing the root cause of instantiation
+- Independent inference for multiple calls of generic functions
+- Interface method binding fix
 
-### Re-binding After Move
+### Rebinding After Move
 
-Variables can be re-bound to new values after being moved. Assignment priority lookup now correctly
-handles moved state, avoiding false "variable already moved" errors.
+After a variable is moved, it can be rebound to a new value. The assignment priority lookup now
+correctly handles the moved state, avoiding false "variable already moved" errors.
 
-- VarInfo added moved state marker
-- Assignment priority lookup added moved branch
+- VarInfo adds a moved state flag
+- Assignment priority lookup adds a moved branch
 
-### Resource Marker Trait
+### Resource marker trait
 
-Added `Resource` marker trait to mark types that implement IO side effects. Provides a foundation
-for future side effect tracking and concurrency safety analysis.
+Adds the `Resource` marker trait to mark types that implement IO side effects. Provides the
+foundation for future side effect tracking and concurrency safety analysis.
 
-### PLDI SRC Demo
+### PLDI SRC demo
 
-Completed all PLDI SRC demo MVP tasks, including end-to-end type checking and code generation
-demonstrations.
+Completes all tasks for the PLDI SRC demo MVP, including end-to-end type checking and code
+generation demos.
 
 ## 🐛 Bug Fixes
 
 ### &T Field Access
 
-Fixed multiple issues with immutable reference type field access in type checking, including field
-assignment and inference when calling constructors through references.
+Fixes multiple issues with field access on immutable reference types in type checking, including
+field assignment and inference for constructors called through references.
 
-- `&T` field access type checking fixed
-- Field assignment target type inference
-- Constructor inference for reference calls
+- Type checking fix for `&T` field access
+- Target type inference for field assignment
+- Inference for constructors called through references
 
 ### LSP Semantic Highlighting
 
-Fixed missing semantic highlighting for variables inside `spawn {}` blocks and tuple destructuring
-assignment `(a, b) = ...`. `DestructureAssign.names` in the AST now carries position information for
-each variable name.
+Fixes missing semantic highlighting for variables inside `spawn {}` blocks and tuple destructuring
+assignment `(a, b) = ...`. `DestructureAssign.names` in the AST now carries the position information
+for each variable name.
 
-- Variables inside spawn blocks correctly colored
-- Variable names in tuple destructuring correctly colored
-- Laid foundation for future LSP support of move semantics
+- Variables in spawn blocks correctly tokenized
+- Variable names in tuple destructuring assignment correctly tokenized
+- Lays the foundation for future LSP support of move semantics
 
 ### freeze Removal
 
-Removed the deprecated `freeze` function, cleaning up related test cases.
+Removes the deprecated `freeze` function and cleans up related test cases.
 
 ## ♻️ Refactoring & Optimization
 
 ### Unified Diagnostic System
 
-Migrated the remaining 5 error enums to the unified `ErrorCodeDefinition` diagnostic system. Error
-code coverage increased from 60% to 80%. All compilation errors now follow unified formatting and
-error code conventions.
+Migrates the remaining 5 error enums to the unified `ErrorCodeDefinition` diagnostic system, with
+error code coverage increased from 60% to 80%. All compile errors now follow a unified format and
+error code specification.
 
 ### Unified Ownership Check
 
-Unified ownership checking logic scattered across multiple places into `OwnershipPass`. A single
-entry point handles borrow, move, and lifetime checks. Reduces maintenance costs and improves error
-consistency.
+Unifies the ownership check logic scattered across multiple places into `OwnershipPass`, with a
+single entry point handling borrow, move, and lifetime checks. Reduces maintenance cost and improves
+error consistency.
 
 ### Concurrency Model Simplification
 
-Removed Send/Sync constraint system. Refactored `spawn {}` to a grouped execution model. Removed
-decorator-related code for `@block`/`@eager`/`@auto` (RFC-024 phase 1). Simplified concurrency model
-to pave the way for future extensible concurrency primitives.
-
-## 📝 Commit History
-
-|   Hash    | Description                                                                         |
-| :-------: | ----------------------------------------------------------------------------------- |
-| `7297c65` | feat: multiple generic function calls + yx_runner error test support                |
-| `57a9893` | feat: generic type instantiation — List(Int) = List(1, 2, 3)                        |
-| `ab8a133` | feat: root cause fix — type constructor registered as Struct                        |
-| `196daec` | feat: generic instantiation fix + interface method binding                          |
-| `148e7a2` | feat: completed all PLDI SRC demo MVP tasks                                         |
-| `9a5a1b3` | fix(lsp): fixed semantic highlighting for spawn blocks and tuple destructuring      |
-| `75489c4` | feat: fixed &T field access + constructor inference + removed freeze                |
-| `a5b6135` | feat: fixed &T field access + field assignment + tuple destructuring                |
-| `0e24fcd` | refactor(diagnostic): migrated remaining 5 error enums to unified diagnostic system |
-| `c262ddc` | refactor(diagnostic): migrated error codes to unified diagnostic system             |
-| `e8869c2` | feat(middle): added Resource marker trait for IO side effect awareness              |
-| `a76cdd3` | refactor(lifetime): unified ownership check into OwnershipPass                      |
-| `c7af770` | feat(typecheck): assignment priority lookup added moved branch                      |
-| `bb83e12` | feat(typecheck): VarInfo added moved state marker                                   |
-| `e4a44c4` | refactor(middle): removed Send/Sync constraint system                               |
-| `1d3fe2d` | refactor(frontend): removed @block/@eager/@auto related code                        |
-| `4fd4e0a` | feat(formatter): implemented missing formatting rules                               |
-| `13fbc21` | fix(backends): fixed syntax error in execute.rs                                     |
+Removes the Send/Sync constraint system, refactors `spawn {}` to a grouped execution model, and
+removes code related to `@block`/`@eager`/`@auto` decorators (RFC-024 phase 1). Simplifies the
+concurrency model, paving the way for future extensible concurrency primitive designs.
 ```
 
 ## Process Overview
 
 ```
-Collect commits → Generate changelog → Create PR → Wait for CI green → Bump version → Merge
+Collect commits → Generate changelog → Create PR → Wait for CI to fully pass → Bump version → Merge
 ```
 
-See `.claude/commands/release.md` for details.
+See `.claude/commands/release.md` for details
