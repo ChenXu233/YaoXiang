@@ -1,24 +1,22 @@
 ---
-title: Incremental Checking
-description: YaoXiang check incremental checking design
+title: Incremental Check
+description: Design of YaoXiang check incremental checking
 ---
 
-# Incremental Checking
+# Incremental Check
 
 ## Problem Statement
 
-In watch mode, any file change triggers a re-check of all files (full re-check), and debouncing uses
-busy-wait (checking every 50ms), causing CPU idle spinning.
+In watch mode, any file change triggers a re-check of all files (full recheck), and debouncing uses busy-wait (checking every 50ms), causing CPU idle spinning.
 
 ## Solution
 
-Use `CheckSession` to manage incremental checking state, utilizing
-`ModuleDependencyGraph::affected_modules` to only re-check affected files.
+Use `CheckSession` to manage incremental check state, leveraging `ModuleDependencyGraph::affected_modules` to only re-check affected files.
 
 ## Implementation Flow
 
 ```text
-Initial check:
+First check:
   Full check → Cache dependency graph + check result for each module
 
 File change:
@@ -45,11 +43,10 @@ impl CheckSession {
 ## Known Limitations
 
 - Watch mode still uses busy-wait debouncing (`Instant::now()` + `recv_timeout` in `command.rs`)
-- `check_incremental` internally still calls `check_files_with_diagnostics` (full path), not truly
-  leveraging incremental checking
+- `check_incremental` internally still calls `check_files_with_diagnostics` (full path), not truly leveraging incremental checking
 
 ## Future Work
 
 - A2/P1: Replace busy-wait debouncing with `HotReloader`
-- P2/P3: Integrate watch mode with `CheckSession` to achieve true incremental checking
-- T9: Incremental checking correctness tests
+- P2/P3: Integrate watch mode with `CheckSession` for true incremental checking
+- T9: Incremental check correctness tests

@@ -1,7 +1,7 @@
 ---
 layout: page
 sidebar: false
-title: 'YaoXiang ツール'
+title: 'ツール'
 permalink: /tools/
 ---
 

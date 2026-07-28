@@ -1,20 +1,19 @@
 ---
 title: 'パッケージマネージャー'
-description: YaoXiang パッケージマネージャー リファレンスドキュメント
+description: YaoXiang パッケージマネージャーリファレンスドキュメント
 ---
 
 # パッケージマネージャー
 
-YaoXiang に組み込まれたパッケージマネージャーで、プロジェクトの初期化、依存関係管理、バージョンロック機能を提供します。
+YaoXiangに組み込まれたパッケージマネージャーで、プロジェクトの初期化、依存関係管理、バージョンロックなどの機能を提供します。
 
 ## 概要
 
-YaoXiang パッケージマネージャー（略称 YPM）は、Cargo と同様の設計思想を採用しています：
+YaoXiang パッケージマネージャー（略称 YPM）は、Cargoに似た設計思想を採用しています：
 
 - **宣言的依存関係**：`yaoxiang.toml` で必要な依存関係を宣言
-- **決定論的ビルド**：`yaoxiang.lock` でバージョンをロックし、再現可能なビルドを確保
-- **ローカルキャッシュ**：依存関係は `vendor`
-  ディレクトリにダウンロードされ、オフライン使用をサポート
+- **決定論的ビルド**：`yaoxiang.lock` でバージョンをロックし、再現可能なビルドを保証
+- **ローカルキャッシュ**：依存関係は `vendor` ディレクトリにダウンロードされ、オフライン利用が可能
 
 ## クイックスタート
 
@@ -22,27 +21,27 @@ YaoXiang パッケージマネージャー（略称 YPM）は、Cargo と同様�
 # 1. 新規プロジェクト作成
 yaoxiang init my-project
 
-# 2. 依存関係を追加
+# 2. 依存関係追加
 cd my-project
 yaoxiang add http
 
-# 3. 依存関係をインストール
+# 3. 依存関係インストール
 yaoxiang install
 
-# 4. プロジェクトを実行
+# 4. プロジェクト実行
 yaoxiang run src/main.yx
 ```
 
 ## コマンド一覧
 
-| コマンド                                          | 説明                     |
-| ------------------------------------------------- | ------------------------ |
-| [`yaoxiang init`](./commands#yaoxiang-init)       | 新規プロジェクトを初期化 |
-| [`yaoxiang add`](./commands#yaoxiang-add)         | 依存関係を追加           |
-| [`yaoxiang rm`](./commands#yaoxiang-rm)           | 依存関係を削除           |
-| [`yaoxiang install`](./commands#yaoxiang-install) | 依存関係をインストール   |
-| [`yaoxiang update`](./commands#yaoxiang-update)   | 依存関係を更新           |
-| [`yaoxiang list`](./commands#yaoxiang-list)       | 依存関係を一覧表示       |
+| コマンド                                              | 説明           |
+| ------------------------------------------------- | -------------- |
+| [`yaoxiang init`](./commands#yaoxiang-init)       | 新規プロジェクト初期化 |
+| [`yaoxiang add`](./commands#yaoxiang-add)         | 依存関係追加     |
+| [`yaoxiang rm`](./commands#yaoxiang-rm)           | 依存関係削除     |
+| [`yaoxiang install`](./commands#yaoxiang-install) | 依存関係インストール |
+| [`yaoxiang update`](./commands#yaoxiang-update)   | 依存関係更新     |
+| [`yaoxiang list`](./commands#yaoxiang-list)       | 依存関係一覧     |
 
 ## プロジェクト構造
 
@@ -55,13 +54,9 @@ my-project/
     └── main.yx       # エントリーポイント
 ```
 
-## ドキュメント索引
+## ドキュメントインデックス
 
-- [コマンドラインインターフェース](./commands) - 全コマンドの詳細説明
+- [コマンドラインインターフェース](./commands) - 全コマンドの詳細な説明
 - [yaoxiang.toml 形式](./manifest) - プロジェクト設定ファイルの形式
 - [yaoxiang.lock 形式](./lock) - ロックファイルの形式説明
 - [エラーコード](./error-codes) - 一般的なエラーと対処方法
-
-```
-
-```

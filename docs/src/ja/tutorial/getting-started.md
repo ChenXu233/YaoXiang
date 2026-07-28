@@ -1,50 +1,51 @@
 # YaoXiang クイックスタート
 
-> このガイドは YaoXiang プログラミング言語を素早く習得するのに役立ちます。
+> 本ガイドは、YaoXiang プログラミング言語への快速な入門を目的としています。
 >
-> **注意**：本文書のコード例は YaoXiang 言語仕様に基づいて書かれています。実際に実行する際に構文の違いに遭遇した場合は、[言語仕様](../reference/language-spec/index.md)を参照してください。
+> **注意**：本ドキュメントのコード示例は YaoXiang 言語仕様書に準拠して記述されています。実際の実行時に構文の差異が発生した場合は、
+> [言語仕様書](../reference/language-spec/index.md)を参照してください。
 
 ## インストール
 
-### ソースコードからコンパイル（推奨）
+### ソースからのビルド（推奨）
 
 ```bash
-# 克隆仓库
+# リポジトリのクローン
 git clone https://github.com/ChenXu233/YaoXiang.git
 cd yaoxiang
 
-# 编译（调试版本，用于开发测试）
+# ビルド（デバッグバージョン、開発・テスト用）
 cargo build
 
-# 编译（发布版本，推荐用于生产）
+# ビルド（リリースバージョン、本番環境推奨）
 cargo build --release
 
-# 运行测试
+# テストの実行
 cargo test
 
-# 查看版本
+# バージョンの確認
 ./target/debug/yaoxiang --version
-# 或
+# または
 ./target/release/yaoxiang --version
 ```
 
-**インストールの成功を確認**：
+**インストール成功の確認**：
 
 ```bash
 ./target/debug/yaoxiang --version
-# 应输出类似: yaoxiang x.y.z
+# 次のような出力がされるはず: yaoxiang x.y.z
 ```
 
 ## 最初のプログラム
 
-ファイル `hello.yx` を作成：
+ファイル `hello.yx` を作成します：
 
 ```yaoxiang
 // hello.yx
 use std.io
 
-// 函数定义: name: (param: Type, ...) -> return_type = { return ... }  # 代码块必须显式 return
-// 表达式形式: name: (param: Type, ...) -> return_type = expr           # 表达式直接返回值
+// 関数定義: name: (param: Type, ...) -> return_type = { return ... }  # コードブロックは明示的な return が必要
+// 式形式: name: (param: Type, ...) -> return_type = expr           # 式は直接値を返す
 main: () -> Void = {
     print("Hello, YaoXiang!")
 }
@@ -54,7 +55,7 @@ main: () -> Void = {
 
 ```bash
 ./target/debug/yaoxiang hello.yx
-# 或使用 release 版本
+# または release バージョンを使用
 ./target/release/yaoxiang hello.yx
 ```
 
@@ -69,20 +70,20 @@ Hello, YaoXiang!
 ### 変数と型
 
 ```yaoxiang
-// 自动类型推断
-x = 42  // 推断为 Int
-name = "YaoXiang"  // 推断为 String
-pi = 3.14159  // 推断为 Float
-is_valid = true  // 推断为 Bool
+// 自動的な型推論
+x = 42  // Int に推論される
+name = "YaoXiang"  // String に推論される
+pi = 3.14159  // Float に推論される
+is_valid = true  // Bool に推論される
 
-// 显式类型注解（推荐使用类型集中约定）
+// 明示的な型注釈（型集約の規則に従って使用することを推奨）
 count: Int = 100
 
-// 默认不可变（安全特性）
+// デフォルトで不変（安全性のための機能）
 x = 10
-x = 20  // ❌ 编译错误！不可变
+x = 20  // ❌ コンパイルエラー！不変
 
-// 可变变量（需要显式声明）
+// 可変変数（明示的な宣言が必要）
 mut counter = 0
 counter = counter + 1  // ✅ OK
 ```
@@ -90,17 +91,17 @@ counter = counter + 1  // ✅ OK
 ### 関数
 
 ```yaoxiang
-// 函数定义语法
-// 表达式形式：直接返回值，不需要 return
+// 関数定義の構文
+// 式形式：直接値を返す、return は不要
 add: (a: Int, b: Int) -> Int = a + b
 
-// 代码块形式：必须使用 return 返回值
+// コードブロック形式：return を使用して値を返す必要がある
 // add: (a: Int, b: Int) -> Int = { return a + b }
 
-// 调用
+// 呼び出し
 result = add(1, 2)  // result = 3
 
-// 单参数函数（表达式形式）
+// 単一引数関数（式形式）
 inc: (x: Int) -> Int = x + 1
 ```
 
@@ -109,26 +110,26 @@ inc: (x: Int) -> Int = x + 1
 YaoXiang は統一された `name: type = value` 構文モデルを使用します：
 
 ```yaoxiang
-// 变量声明
+// 変数宣言
 x: Int = 42
 name: String = "YaoXiang"
 
-// 函数定义
+// 関数定義
 add: (a: Int, b: Int) -> Int = a + b
 
-// 类型定义（使用花括号）
+// 型定義（中括弧を使用）
 Point: Type = { x: Float, y: Float }
 
-// 使用类型
+// 型の使用
 p: Point = Point(x=1.0, y=2.0)
 p.x  // 1.0
 p.y  // 2.0
 ```
 
-#### レコード型
+#### 記録型
 
 ```yaoxiang
-// 结构体类型
+// 構造体型
 Point: Type = { x: Float, y: Float }
 Rect: Type = { x: Float, y: Float, width: Float, height: Float }
 
@@ -139,10 +140,10 @@ r = Rect(x=0.0, y=0.0, width=10.0, height=20.0)
 
 #### インターフェース定義
 
-インターフェースはすべてのフィールドが関数型であるレコード型です：
+インターフェースは、フィールドがすべて関数型である記録型です：
 
 ```yaoxiang
-// 定义接口
+// インターフェース定義
 Drawable: Type = {
     draw: (Surface) -> Void,
     bounding_box: () -> Rect
@@ -152,7 +153,7 @@ Serializable: Type = {
     serialize: () -> String
 }
 
-// 空接口
+// 空インターフェース
 EmptyInterface: Type = {}
 ```
 
@@ -161,10 +162,10 @@ EmptyInterface: Type = {}
 `Type.method: (Type, ...) -> Return = ...` 構文を使用して型メソッドを定義します：
 
 ```yaoxiang
-// 类型定义
+// 型定義
 Point: Type = { x: Float, y: Float }
 
-// 类型方法定义
+// 型メソッド定義
 Point.draw: (self: Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
@@ -173,7 +174,7 @@ Point.serialize: (self: Point) -> String = {
     "Point({self.x}, {self.y})"
 }
 
-// 使用方法（语法糖）
+// メソッドの使用（糖衣構文）
 p = Point(x=1.0, y=2.0)
 p.draw(screen)  // → Point.draw(p, screen)
 str = p.serialize()  // → Point.serialize(p)
@@ -186,7 +187,7 @@ str = p.serialize()  // → Point.serialize(p)
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
 
-// pub 声明自动绑定到 Point
+// pub 宣言は Point に自動的にバインド
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
@@ -197,38 +198,38 @@ pub distance: (p1: Point, p2: Point) -> Float = {
 p1 = Point(x=3.0, y=4.0)
 p2 = Point(x=1.0, y=2.0)
 
-// 函数式调用
+// 関数呼び出し
 d = distance(p1, p2)  // 3.606...
 
-// OOP 语法糖（自动绑定到 Point.distance）
+// OOP 糖衣構文（Point.distance に自動バインド）
 d2 = p1.distance(p2)  // → distance(p1, p2)
 ```
 
 #### 列挙型
 
 ```yaoxiang
-// 简单枚举
+// 単純な列挙型
 Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
-// 带数据的枚举
+// データ付き列挙型
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
-// 使用泛型
+// 泛型 の使用
 success: Result(Int, String) = ok(42)
 failure: Result(Int, String) = err("not found")
 ```
 
-#### ジェネリック型
+#### 泛型型
 
 ```yaoxiang
-// 泛型类型定义
+// 泛型型定義
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
     push: (List(T), T) -> Void
 }
 
-// 具体实例化
+// 具体的なインスタンス化
 IntList: Type = List(Int)
 StringList: Type = List(String)
 ```
@@ -236,21 +237,21 @@ StringList: Type = List(String)
 ### 制御フロー
 
 ```yaoxiang
-// 条件表达式
+// 条件式
 if x > 0 {
     "positive"
-} elif x == 0 {
+} else if x == 0 {
     "zero"
 } else {
     "negative"
 }
 
-// 循环
+// ループ
 for i in 0..5 {
     print(i)
 }
 
-// while 循环
+// while ループ
 mut n = 0
 while n < 5 {
     print(n)
@@ -261,15 +262,15 @@ while n < 5 {
 ### リストと辞書
 
 ```yaoxiang
-// 列表
+// リスト
 numbers = [1, 2, 3, 4, 5]
 first = numbers[0]  // 1
 
-// 字典
+// 辞書
 scores = {"Alice": 90, "Bob": 85}
 alice_score = scores["Alice"]  // 90
 
-// 添加元素
+// 要素の追加
 mut list = [1, 2, 3]
 list.append(4)
 ```
@@ -277,7 +278,7 @@ list.append(4)
 ### パターン照合
 
 ```yaoxiang
-// match 表达式
+// match 式
 result: Result(Int, String) = ok(42)
 
 message = match result {
@@ -286,65 +287,64 @@ message = match result {
 }
 ```
 
-## spawn プログラミング（並行処理）
+## 並作プログラミング（並行性）
 
-YaoXiang の並行モデルは `spawn <expr>`
-プリミティブを中心に構築されています — これが唯一の並列エントリポイントです。
+YaoXiang の並行モデルは `spawn <expr>` 基本要素を中心に構築されています—これが唯一の並列入口です。
 
 ```yaoxiang
-// spawn 修饰任意表达式，自动并行执行
+// spawn は任意の式を修飾し、自動的に並行実行する
 main: () -> Void = {
-    user = spawn fetch_user(1)   // 后台执行
-    posts = spawn fetch_posts()  // 并行的另一步
+    user = spawn fetch_user(1)   // バックグラウンドで実行
+    posts = spawn fetch_posts()  // 並行する別の処理
 
-    // 需要结果时自动阻塞等待
+    // 結果が必要なときに自動的にブロックして待機
     print(user.name)
     print(posts.length)
 }
 ```
 
-**コアルール**：`spawn`
-で修飾された式はバックグラウンドで実行され、外側は結果を待つために同期的にブロックします。依存関係のないタスクは自動的に並列実行され、ランタイム GMP モデルによってスケジュールされます。
+**核心の規則**：`spawn`
+で修飾された式はバックグラウンドで実行され、外層の同期コードは結果の待機時にブロックします。依存関係のないタスクは自動的に並列実行され、実行時の GMP モデルによってスケジュールされます。
 
 ## モジュールシステム
 
 ```yaoxiang
-// 导入标准库
+// 標準ライブラリのインポート
 use std.io
 use std.math
 
-// 使用导入的函数
+// インポートした関数の使用
 result = math.sqrt(16)  // 4.0
 print("Hello!")
 ```
 
 ## よくある質問
 
-### Q: 変数はデフォルトで不変ですが、変数を変更するにはどうすればよいですか？
+### Q: 変数はデフォルトで不変ですが、変数を変更するには？
 
 ```yaoxiang
-// 使用 mut 关键字声明可变变量
+// mut キーワードを使用して可変変数を宣言する
 mut x = 10
 x = 20  // ✅ OK
 ```
 
-### Q: 関数を定義するにはどうすればよいですか？
+### Q: 関数はどのように定義しますか？
 
 ```yaoxiang
-// 完整形式（推荐）
+// 完全形式（推奨）
 add: (a: Int, b: Int) -> Int = a + b
 
-// 简短形式（类型推断）
+// 短縮形式（型推論）
 add = (a, b) => a + b
 ```
 
-### Q: エラーを処理するにはどうすればよいですか？
+### Q: エラーはどのように処理しますか？
 
 ```yaoxiang
-// 使用 Result 类型
+// Result 型を使用する
 Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
-// 模式匹配处理
+// パターン照合で処理
 result = risky_operation()
 match result {
     ok(value) => print("Success: " + value)
@@ -354,9 +354,9 @@ match result {
 
 ## 次のステップ
 
-- 📚 完全な構文を理解するために[言語仕様](../YaoXiang-language-specification.md)を確認する
-- 🏗️ 実装の詳細を理解するために[アーキテクチャドキュメント](../architecture/)を閲覧する
-- 💡 核となる理念を理解するために[デザインマニフェスト](../YaoXiang-design-manifesto.md)を確認する
+- 📚 完全な構文については [言語仕様書](../YaoXiang-language-specification.md) を参照
+- 🏗️ 実装の詳細については [アーキテクチャドキュメント](../architecture/) を参照
+- 💡 核心の理念については [設計宣言](../YaoXiang-design-manifesto.md) を参照
 
 ## 関連リソース
 

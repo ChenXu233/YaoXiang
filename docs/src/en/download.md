@@ -1,4 +1,3 @@
-```yaml
 ---
 layout: page
 is_download: true
@@ -14,15 +13,13 @@ download:
   supported: 'Supported platforms: Windows (PowerShell), macOS, Linux (x64/ARM64)'
   download_btn: 'Download'
   coming_soon: 'Coming Soon'
-  checksum: 'Checksum / Signature'
+  checksum: 'Checksum / Signatures'
   build_from_source:
     title: 'Build from Source'
-    description: 'Build YaoXiang from source using Cargo, ensure Rust is installed.'
+    description: 'Build YaoXiang from source using Cargo, make sure Rust is installed.'
   nightly_builds:
     title: 'Nightly Builds'
-    description:
-      'The latest cutting-edge builds are available. Recommended for testing; use with caution in
-      production.'
+    description: 'The latest cutting-edge version is available. Recommended for testing, use with caution in production.'
   github_actions: 'Go to GitHub Actions'
 
 versions:
@@ -53,6 +50,4 @@ versions:
           - name: 'Universal (.tar.gz)'
             url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.1.0/yaoxiang-v0.1.0-universal-apple-darwin.tar.gz'
 sidebar: false
-
 ---
-```

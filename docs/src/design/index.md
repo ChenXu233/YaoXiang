@@ -42,8 +42,8 @@ design/
 | [RFC-009 所有权模型](./rfc/accepted/009-ownership-model.md)                                                              | ✅ 已接受 | 所有权与借用系统设计 |
 | [RFC-024 并发模型](./rfc/accepted/024-concurrency-model.md)                                                              | ✅ 已接受 | spawn并发原语语义    |
 | [RFC-027 编译期断言](./rfc/accepted/027-compile-time-evaluation-types.md)                                                | ✅ 已接受 | 编译期谓词与静态验证 |
-|                                                                                                                          |
-| > 查看 [`rfc/accepted/`](./rfc/accepted/) 目录获取完整列表（共16个），及 [`rfc/index.md`](./rfc/index.md) 查看最新状态。 |
+
+> 查看 [`rfc/accepted/`](./rfc/accepted/) 目录获取完整列表（共16个），及 [`rfc/index.md`](./rfc/index.md) 查看最新状态。
 
 ## RFC 提案
 

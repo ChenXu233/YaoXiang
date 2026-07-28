@@ -1,11 +1,11 @@
 ---
 title: 'Error Codes'
-description: 'YaoXiang package manager error codes and handling methods'
+description: Package manager error codes and handling methods
 ---
 
 # Error Codes
 
-This document lists errors that the YaoXiang package manager may return and how to handle them.
+This document lists errors that YaoXiang package manager may return and their handling methods.
 
 ## Error List
 
@@ -17,7 +17,7 @@ Error: Project already exists: <path>
 
 **Cause**: The project directory you are trying to create already exists.
 
-**Handling**:
+**Handling Methods**:
 
 1. Choose a different project name
 2. Delete or move the existing directory
@@ -32,7 +32,7 @@ Error: Not a YaoXiang project: yaoxiang.toml not found
 
 **Cause**: The current directory or specified directory does not contain a `yaoxiang.toml` file.
 
-**Handling**:
+**Handling Methods**:
 
 1. Make sure you are executing commands within the project directory
 2. Use `yaoxiang init` to create a new project
@@ -47,7 +47,7 @@ Error: Dependency not found: <name>
 
 **Cause**: Attempting to operate on a dependency that does not exist.
 
-**Handling**:
+**Handling Methods**:
 
 1. Check if the dependency name is spelled correctly
 2. Use `yaoxiang list` to view existing dependencies
@@ -62,9 +62,9 @@ Error: Dependency already exists: <name>
 
 **Cause**: Attempting to add a dependency that already exists.
 
-**Handling**:
+**Handling Methods**:
 
-1. If you need to update the version, first remove it with `yaoxiang rm`
+1. If you need to update the version, first use `yaoxiang rm` to remove it
 2. Or simply use the existing dependency
 
 ---
@@ -77,9 +77,9 @@ Error: Invalid yaoxiang.toml format: <details>
 
 **Cause**: The `yaoxiang.toml` file format is incorrect.
 
-**Handling**:
+**Handling Methods**:
 
-1. Check if TOML syntax is correct
+1. Check if the TOML syntax is correct
 2. Ensure all required fields are present
 3. Check for syntax errors (such as missing quotes, commas, etc.)
 
@@ -93,17 +93,17 @@ Error: IO error: <details>
 
 **Cause**: File read/write operation failed.
 
-**Common causes**:
+**Common Causes**:
 
 - Insufficient disk space
 - Insufficient permissions
-- File is being used by another program
+- File is occupied by another program
 
-**Handling**:
+**Handling Methods**:
 
 1. Check disk space
 2. Check file permissions
-3. Close other programs that may be using the file
+3. Close other programs that may be occupying the file
 
 ---
 
@@ -115,7 +115,7 @@ Error: TOML parse error: <details>
 
 **Cause**: TOML file format error.
 
-**Handling**:
+**Handling Methods**:
 
 1. Validate TOML syntax
 2. Check if special characters are properly escaped
@@ -134,6 +134,6 @@ Error: TOML parse error: <details>
 
 Check if there are incompatible dependency version requirements in `yaoxiang.toml`.
 
-### Q: What should I do if the vendor directory is corrupted?
+### Q: What if the vendor directory is corrupted?
 
 Delete the `vendor` directory and run `yaoxiang install` again.

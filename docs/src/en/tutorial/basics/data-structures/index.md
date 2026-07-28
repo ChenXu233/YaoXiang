@@ -4,19 +4,17 @@ title: Lists and Dictionaries
 
 # Lists and Dictionaries
 
-Data structures are the skeleton of a program. YaoXiang provides two built-in collection types:
-lists and dictionaries.
+Data structures are the skeleton of programs. YaoXiang provides two built-in collection types: lists and dictionaries.
 
 ## Lists
 
-A list is an **ordered** sequence of values, where all elements have the same type. Create one with
-`[]`:
+A list is an **ordered** sequence of values, where all elements have the same type. Create them with `[]`:
 
 ```yaoxiang
-// Create lists
+// Creating a list
 numbers = [1, 2, 3, 4, 5]
 names = ["Alice", "Bob", "Charlie"]
-empty: List(Int) = []       // Empty lists require a type annotation
+empty: List(Int) = []       // Empty lists need type annotations
 ```
 
 ### Index Access
@@ -36,7 +34,7 @@ last = scores[3]     // 91
 ```yaoxiang
 mut items = [1, 2, 3]
 
-// Append an element
+// Adding elements
 items.append(4)       // [1, 2, 3, 4]
 
 // Length
@@ -48,34 +46,33 @@ slice = items[0..2]   // [1, 2]
 
 ### List Comprehensions
 
-List comprehensions are a powerful tool for creating lists — generate new lists from existing ones:
+List comprehensions are a powerful tool for creating lists—generating new lists from existing ones:
 
 ```yaoxiang
 // Basic comprehension
 squares = [x * x for x in [1, 2, 3, 4, 5]]
 print(squares)  // [1, 4, 9, 16, 25]
 
-// Comprehension with filter
+// Comprehension with filter condition
 evens = [x for x in [1, 2, 3, 4, 5, 6] if x % 2 == 0]
 print(evens)  // [2, 4, 6]
 
-// Transform types
+// Type conversion
 names = ["Alice", "Bob", "Charlie"]
 lengths = [n.len() for n in names]
 print(lengths)  // [5, 3, 7]
 ```
 
-Syntax: `[expression for variable in list if condition]` — the `if condition` part is optional.
+Syntax: `[expression for variable in list if condition]`—the `if condition` part is optional.
 
 ## Dictionaries
 
-A dictionary is a collection of **key-value pairs**, where keys are strings and values can be of any
-type. Create one with `{}`:
+A dictionary is a collection of **key-value pairs**, where keys are strings and values can be of any type. Create them with `{}`:
 
 ```yaoxiang
-// Create dictionaries
+// Creating a dictionary
 scores = {"Alice": 90, "Bob": 85, "Charlie": 92}
-empty: Dict(Int) = {}          // Empty dictionaries require a type annotation
+empty: Dict(Int) = {}          // Empty dictionaries need type annotations
 ```
 
 ### Key Access
@@ -89,21 +86,21 @@ alice = scores["Alice"]   // 90
 bob = scores["Bob"]       // 85
 ```
 
-### Modifying a Dictionary
+### Modifying Dictionaries
 
 ```yaoxiang
 mut data = {"name": "Alice"}
 
-// Add/update a key-value pair
+// Adding/updating key-value pairs
 data["age"] = 25
 data["name"] = "Bob"
 
 print(data)  // {"name": "Bob", "age": 25}
 ```
 
-### Membership Check
+### Membership Testing
 
-Use `in` to check whether a key exists:
+Use `in` to check if a key exists:
 
 ```yaoxiang
 config = {"host": "localhost", "port": "8080"}
@@ -114,9 +111,9 @@ has_user = "user" in config    // false
 
 ## Summary
 
-| Type       | Syntax      | Ordered? | Duplicates? | Key Type      |
-| ---------- | ----------- | -------- | ----------- | ------------- |
-| List       | `[1, 2, 3]` | ✅       | ✅          | Integer index |
-| Dictionary | `{"a": 1}`  | ✅       | Keys unique | String        |
+| Type       | Syntax         | Ordered? | Allows Duplicates? | Key Type     |
+| ---------- | -------------- | -------- | ------------------ | ------------ |
+| List       | `[1, 2, 3]`    | ✅        | ✅                  | Integer index |
+| Dictionary | `{"a": 1}`     | ✅        | Keys are unique    | String       |
 
-Lists are your go-to container; dictionaries are well-suited for key-value lookups.
+Lists are your go-to containers, and dictionaries are well-suited for key-value lookups.

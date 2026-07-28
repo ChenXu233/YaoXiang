@@ -1,92 +1,85 @@
 ---
 title: 'Tutorial'
-description: Systematic learning of YaoXiang core concepts
+description: Systematically learn the core concepts of YaoXiang
 ---
 
 # Welcome to the YaoXiang Universe!
 
-> "Wuji gives rise to Taiji. When Taiji moves, it generates Yang; when still, it generates Yin." —
-> Zhou Dunyi, _Explanation of the Diagram of the Supreme Ultimate_
+> "From non-polarity comes the Supreme Ultimate. The Supreme Ultimate moves and produces yang, stillness produces yin." — Zhou Dunyi, "Explanation of the Diagram of the Supreme Ultimate"
 
-This is the heart of the YaoXiang universe.
+This is the center of the YaoXiang universe.
 
-In Eastern philosophy, the _Yao_ (爻) is the fundamental symbol that composes hexagrams—the
-interplay of Yin and Yang lies within. _Xiang_ (象) is the outward manifestation of the essence of
-things; all phenomena follow discernible patterns.
+In Eastern philosophy, "Yao" (hexagram lines) are the basic symbols that form hexagrams, containing all the transformations of yin and yang. "Xiang" (images) are the external manifestations of the essence of things, and all phenomena follow discernible patterns.
 
-The **YaoXiang programming language** is an attempt to weave this ancient wisdom into a modern type
-system.
+**YaoXiang** is an attempt to integrate this ancient wisdom into a modern type system.
 
 ## What is YaoXiang?
 
-Imagine building with LEGO blocks:
+Imagine you're building with LEGO blocks:
 
-| Concept       | LEGO          | YaoXiang             |
-| ------------- | ------------- | -------------------- |
-| Basic unit    | Block         | **Type**             |
-| Composition   | Joining       | **Function Mapping** |
-| Final product | Airplane, Car | **Program**          |
+| Concept         | LEGO                     | YaoXiang              |
+| --------------- | ------------------------ | --------------------- |
+| Basic unit      | Building blocks          | **Type**              |
+| How to combine  | Snapping together        | **Function mapping**  |
+| Final product   | Planes, cars             | **Programs**          |
 
-In the world of YaoXiang, **everything is a type**:
+In the YaoXiang world, **everything is a type**:
 
 - Numbers are types, text is types
-- Types themselves are types (meta type)
+- Types themselves are also types (meta types)
 - Functions are bridges from type to type
 
 ## Core Features
 
-| Feature                  | YaoXiang                                  | Examples in Other Languages |
-| ------------------------ | ----------------------------------------- | --------------------------- |
-| Type system              | Dependent types + parametric polymorphism | TypeScript                  |
-| Memory management        | Ownership model (no GC)                   | Rust                        |
-| Asynchronous programming | Spawn model (seamless concurrency)        | async/await                 |
-| Syntax style             | Python style                              | Python                      |
+| Feature              | YaoXiang                                    | Example in Other Languages |
+| -------------------- | ------------------------------------------- | -------------------------- |
+| Type system          | Dependent types + parametric polymorphism    | TypeScript                 |
+| Memory management    | Ownership model (no GC)                     | Rust                       |
+| Async programming    | Spawn model (seamless concurrency)           | async/await                |
+| Syntax style         | Python style                                | Python                     |
 
-**In a nutshell**: as fluid as writing Python, as safe as Rust.
+**One-liner summary**: As smooth as writing Python, as safe as Rust.
 
 ## Learning Path
 
-### Users with Programming Background
+### Users with Programming Experience
 
-If you have a programming background, we recommend starting with the "Quick Start for Programmers."
+If you have programming experience, we recommend starting with "Getting Started for Experienced Programmers".
 
-[🚀 Quick Start for Programmers →](./getting-started)
+[🚀 Getting Started for Experienced Programmers →](./getting-started)
 
-### Users without Programming Background
+### Users without Programming Experience
 
-If you are new to programming, we recommend starting with the "Beginner's Introduction."
+If you're new to programming, we recommend starting with "Getting Started from Zero".
 
-[💡 Beginner's Introduction →](./basics/01-hello-program.md)
+[💡 Getting Started from Zero →](./basics/01-hello-program.md)
 
-> **💡 Tip**: Having no programming background is actually an advantage—you carry no baggage from
-> other languages, so you can understand YaoXiang's design philosophy most directly.
+> **💡 Tip**: Not having programming experience is actually an advantage — without the baggage of other languages, you can most directly understand the design philosophy of YaoXiang.
 
-## Who Should Learn YaoXiang?
+## Who is YaoXiang for?
 
-- ✅ Explorers who want to learn about programming language design
+- ✅ Explorers who want to understand programming language design
 - ✅ Enthusiasts who enjoy functional programming
 - ✅ Practitioners interested in type systems
 - ✅ Developers who want to experience "seamless concurrency"
-- ❌ Teams that need to put projects into production immediately (the language is still
-  experimental)
+- ❌ Teams that need to immediately put it into production projects (language is still in experimental stage)
 
-> "The Tao that can be named is not the eternal Tao." — YaoXiang is still in its early exploratory
-> stage; every pioneer is shaping its future.
+> "The Tao that can be told is not the eternal Tao." — YaoXiang is still in an early exploration stage, and every pioneer is shaping its future.
 
-## Next Steps
+## What's Next
 
 [🚀 Quick Start →](./getting-started)
 
-Or begin with the core concepts:
+Or start with core concepts:
 
-- [What is "everything is a type"?](./basics/variables/)
-- [Why do you not need to write await?](./getting-started#spawn-programming-concurrency)
+- [What is "Everything is a Type"?](./basics/variables/)
+- [Why don't we need to write await?](./getting-started#spawn-programming-concurrency)
 - [What is ownership?](./advanced/type-system/)
 
-We recommend starting from [Quick Start](./getting-started) for systematic learning.
+We recommend starting with [Quick Start](./getting-started) for a systematic learning.
+
 ---
 
-> "As Heaven maintains vigor through movements, a gentleman should constantly strive for
-> self-improvement."
+> "The heavens move with strength, and the gentleman strives for unremitting self-improvement."
 >
-> May you find your own Tao in the YaoXiang universe.
+> May you discover your own Tao in the YaoXiang universe.

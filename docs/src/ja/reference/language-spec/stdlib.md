@@ -1,23 +1,23 @@
-# 標準ライブラリ仕様
+# YaoXiang 標準ライブラリ仕様
 
-本ファイルは YaoXiang プログラミング言語の標準ライブラリ仕様を定義する。コアライブラリ、IO ライブラリ、数学ライブラリを含む。
+本ドキュメントは、YaoXiang プログラミング言語の標準ライブラリ仕様を定義ものであり、コアライブラリ、IOライブラリ、数学ライブラリを含む。
 
 ---
 
-## 第一章：コアライブラリ
+## 第1章：コアライブラリ
 
 ### 1.1 基本型
 
-標準ライブラリは以下の基本型の実装を提供する：
+標準ライブラリは以下の基本型を提供する：
 
-| 型             | モジュール       | 説明           |
-| -------------- | ---------------- | -------------- |
-| `Option(T)`    | `std.option`     | オプション値型 |
-| `Result(T, E)` | `std.result`     | エラー処理型   |
-| `List(T)`      | `std.collection` | 動的配列       |
-| `Map(K, V)`    | `std.collection` | ハッシュマップ |
-| `String`       | `std.string`     | 文字列型       |
-| `Array(T, N)`  | `std.array`      | 固定サイズ配列 |
+| 型                   | モジュール            | 説明             |
+| -------------------- | --------------------- | ---------------- |
+| `Option(T)`          | `std.option`          | オプショナル型   |
+| `Result(T, E)`       | `std.result`          | エラー処理型     |
+| `List(T)`            | `std.collection`      | 動的配列         |
+| `Map(K, V)`          | `std.collection`      | ハッシュマップ   |
+| `String`             | `std.string`          | 文字列型         |
+| `Array(T, N)`        | `std.array`           | 固定長配列       |
 
 ### 1.2 Option 型
 
@@ -25,27 +25,27 @@
 Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 ```
 
-**バリアント構築**：
+**値変体構築子**：
 
-| バリアント    | 構文                 | 説明   |
-| ------------- | -------------------- | ------ |
-| `Option.some` | `Option.some(value)` | 値あり |
-| `Option.none` | `Option.none()`      | 値なし |
+| 値変体            | 構文                    | 説明   |
+| ----------------- | ----------------------- | ------ |
+| `Option.some`     | `Option.some(value)`    | 値あり |
+| `Option.none`     | `Option.none()`         | 値なし |
 
-**常用メソッド**：
+**主要なメソッド**：
 
 ```yaoxiang
-// 値の有無をチェック
+// 値があるか確認
 is_some: (self: Option(T)) -> Bool
 is_none: (self: Option(T)) -> Bool
 
-// 値を取得（パニックの可能性あり）
+// 値を取得（panic の可能性あり）
 unwrap: (self: Option(T)) -> T
 
 // 値またはデフォルト値を取得
 unwrap_or: (self: Option(T), default: T) -> T
 
-// 値をマップ
+// 値の射影
 map: (R: Type) -> ((self: Option(T), f: (T) -> R) -> Option(R))
 ```
 
@@ -55,30 +55,30 @@ map: (R: Type) -> ((self: Option(T), f: (T) -> R) -> Option(R))
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 ```
 
-**バリアント構築**：
+**値変体構築子**：
 
-| バリアント   | 構文                | 説明     |
-| ------------ | ------------------- | -------- |
-| `Result.ok`  | `Result.ok(value)`  | 成功値   |
-| `Result.err` | `Result.err(error)` | エラー値 |
+| 値変体           | 構文                     | 説明     |
+| ---------------- | ------------------------ | -------- |
+| `Result.ok`      | `Result.ok(value)`       | 成功値   |
+| `Result.err`     | `Result.err(error)`      | エラー値 |
 
-**常用メソッド**：
+**主要なメソッド**：
 
 ```yaoxiang
-// 成功かどうかをチェック
+// 成功か確認
 is_ok: (self: Result(T, E)) -> Bool
 is_err: (self: Result(T, E)) -> Bool
 
-// 値を取得（パニックの可能性あり）
+// 値を取得（panic の可能性あり）
 unwrap: (self: Result(T, E)) -> T
 
 // 値またはデフォルト値を取得
 unwrap_or: (self: Result(T, E), default: T) -> T
 
-// 成功値をマップ
+// 成功値の射影
 map: (R: Type) -> ((self: Result(T, E), f: (T) -> R) -> Result(R, E))
 
-// エラー値をマップ
+// エラー値の射影
 map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ```
 
@@ -91,10 +91,10 @@ ErrorPropagate ::= Expr '?'
 `?` 演算子は Result 型のエラーを自動的に伝播する：
 
 ```
-// 成功時は値を返し、失敗時は err を上位に返す
+// 成功時は値を返し、失敗時は err を上に返す
 data = fetch_data()?
 
-// 以下と等価
+// 以下と同等
 data = match fetch_data() {
     ok(v) => v
     err(e) => return err(e)
@@ -103,38 +103,37 @@ data = match fetch_data() {
 
 ### 1.5 アサーション（std.assert）
 
-`std.assert` モジュールは統一されたアサーションメカニズムを提供する——実行時 `assert`
-とコンパイル時精緻化型 `Assert` は同一プリミティブの二つの側面である。
+`std.assert` モジュールは統一的なアサーション機構を提供する——実行時 `assert` とコンパイル時精化型 `Assert` は同一の原語の両面である。
 
 ```yaoxiang
-// IsTrue：値から型へのブリッジ関数
+// IsTrue：値から型への橋渡し関数
 IsTrue: (b: Bool) -> Type = match b {
     true => Void,      // ⊤、プログラム続行
     false => Never,    // ⊥、発散
 }
 
-// Assert：コンパイル時精緻化型プリミティブ
+// Assert：コンパイル時精化型原語
 Assert: (cond: Bool) -> Type = IsTrue(cond)
 
 // assert：実行時アサーション（Assert の値導入子）
 assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))
 
-// Result オーバーロード
+// Result のオーバーロード
 assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 ```
 
-**dispatch ディスパッチ**：
+**dispatch 分派**：
 
-| 条件                                      | 動作                                                    |
-| ----------------------------------------- | ------------------------------------------------------- |
-| cond のすべての自由変数がコンパイル時既知 | コンパイラが評価、true → 消去、false → コンパイルエラー |
-| 実行時自由変数が存在                      | 実行時 check を挿入し、フロー依存仮定集合 Γ を注入      |
+| 条件                               | 動作                                              |
+| ---------------------------------- | ------------------------------------------------- |
+| cond の全自由変数がコンパイル時既知 | コンパイラの評価、true → 消去、false → コンパイルエラー |
+| 実行時自由変数が存在                | 実行時チェックを挿入、フローSensitiveな仮定集合 Γ を注入    |
 
-`assert(false, "msg")` は raise と等価である——独立した throw/raise キーワードは不要。
+`assert(false, "msg")` は raise と同等——throw/raise キーワードは別途不要である。
 
 ---
 
-## 第二章：IO ライブラリ
+## 第2章：IO ライブラリ
 
 ### 2.1 標準入出力
 
@@ -185,9 +184,9 @@ delete_dir: (path: String) -> Result(Void, Error)
 
 ---
 
-## 第三章：数学ライブラリ
+## 第3章：数学ライブラリ
 
-### 3.1 基本数学関数
+### 3.1 基礎数学関数
 
 ```yaoxiang
 // 絶対値
@@ -200,7 +199,7 @@ min: (a: Int, b: Int) -> Int
 max: (a: Float, b: Float) -> Float
 min: (a: Float, b: Float) -> Float
 
-// べき乗演算
+// 冪乗演算
 pow: (base: Float, exp: Float) -> Float
 sqrt: (x: Float) -> Float
 
@@ -235,7 +234,7 @@ e: Float = 2.718281828459045
 
 ---
 
-## 第四章：文字列ライブラリ
+## 第4章：文字列ライブラリ
 
 ### 4.1 文字列操作
 
@@ -277,7 +276,7 @@ parse_float: (s: String) -> Result(Float, Error)
 
 ---
 
-## 第五章：コレクションライブラリ
+## 第5章：コレクションライブラリ
 
 ### 5.1 List 型
 
@@ -321,7 +320,7 @@ Map: (K: Type, V: Type) -> Type = {
 
 ---
 
-## 第六章：イテレータライブラリ
+## 第6章：イテレータライブラリ
 
 ### 6.1 Iterator trait
 
@@ -339,10 +338,10 @@ Iterator: (T: Type) -> Type = {
 }
 ```
 
-### 6.2 イテレータアダプタ
+### 6.2 イテレータAdaptor
 
 ```yaoxiang
-// 範囲イテレータ
+// レンジイテレータ
 Range: Type = {
     start: Int,
     end: Int,
@@ -350,7 +349,7 @@ Range: Type = {
     Iterator(Int)
 }
 
-// 使用
+// 使用例
 for i in 0..10 {
     print(i)
 }
@@ -364,37 +363,39 @@ for i in 0..10 step 2 {
 
 ## 付録：標準ライブラリモジュール索引
 
-| モジュール       | 説明                                                                 |
-| ---------------- | -------------------------------------------------------------------- |
-| `std.assert`     | アサーションメカニズム——実行時 assert + コンパイル時 Assert 精緻化型 |
-| `std.option`     | Option 型                                                            |
-| `std.result`     | Result 型                                                            |
-| `std.collection` | List、Map などのコレクション型                                       |
-| `std.string`     | 文字列操作                                                           |
-| `std.array`      | 配列操作                                                             |
-| `std.iterator`   | イテレータ                                                           |
+### A.1 コアモジュール
+
+| モジュール        | 説明                                                       |
+| ----------------- | ---------------------------------------------------------- |
+| `std.assert`      | アサーション機構——実行時 assert + コンパイル時 Assert 精化型 |
+| `std.option`      | Option 型                                                  |
+| `std.result`      | Result 型                                                  |
+| `std.collection`  | List、Map 等のコレクション型                                |
+| `std.string`      | 文字列操作                                                 |
+| `std.array`       | 配列操作                                                   |
+| `std.iterator`    | イテレータ                                                 |
 
 ### A.2 IO モジュール
 
-| モジュール | 説明             |
-| ---------- | ---------------- |
-| `std.io`   | 標準入出力       |
-| `std.file` | ファイル操作     |
-| `std.dir`  | ディレクトリ操作 |
+| モジュール     | 説明         |
+| -------------- | ------------ |
+| `std.io`       | 標準入出力   |
+| `std.file`     | ファイル操作 |
+| `std.dir`      | ディレクトリ操作 |
 
 ### A.3 数学モジュール
 
-| モジュール      | 説明     |
-| --------------- | -------- |
-| `std.math`      | 数学関数 |
-| `std.math.trig` | 三角関数 |
-| `std.math.log`  | 対数関数 |
+| モジュール          | 説明       |
+| ------------------- | ---------- |
+| `std.math`          | 数学関数   |
+| `std.math.trig`     | 三角関数   |
+| `std.math.log`      | 対数関数   |
 
 ### A.4 ユーティリティモジュール
 
-| モジュール   | 説明                                                                |
-| ------------ | ------------------------------------------------------------------- |
-| `std.random` | 乱数生成                                                            |
-| `std.time`   | 日時                                                                |
-| `std.assert` | コンパイル時 `Assert(C)` と実行時 `assert(x > 0)` の統一（RFC-030） |
-| `std.regex`  | 正規表現                                                            |
+| モジュール      | 説明                                                        |
+| --------------- | ----------------------------------------------------------- |
+| `std.random`    | 乱数生成                                                    |
+| `std.time`      | 時刻日付                                                    |
+| `std.assert`    | コンパイル時 `Assert(C)` と実行時 `assert(x > 0)` の統一（RFC-030） |
+| `std.regex`     | 正規表現                                                    |

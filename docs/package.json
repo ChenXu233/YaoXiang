@@ -16,7 +16,9 @@
     "info": "vuepress info",
     "generate:rfc-index": "node scripts/generate-rfc-index.js",
     "migrate:rfc-metadata": "node scripts/migrate-rfc-metadata.js",
-    "migrate:rfc-metadata:dry-run": "node scripts/migrate-rfc-metadata.js --dry-run"
+    "migrate:rfc-metadata:dry-run": "node scripts/migrate-rfc-metadata.js --dry-run",
+    "trans:gen": "npx vpi gen",
+    "trans:sync": "npx vpi sync"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.0",

@@ -1,6 +1,6 @@
 ---
 title: 'Function-Related Formatting Rules'
-description: Formatting rules for function definitions, function calls, and Lambda expressions
+description: 'Formatting rules for function definitions, function calls, and Lambda expressions'
 ---
 
 # Function-Related Formatting Rules
@@ -19,11 +19,10 @@ foo: (a: Int, b: Int) -> Int = a + b
 foo : (a: Int, b: Int) -> Int = a + b
 ```
 
-**§4.2 Parameter List Line Break.** When the parameter list exceeds the line width, each parameter
-occupies one line, with a trailing comma.
+**§4.2 Parameter List Line Break.** When the parameter list exceeds the line width, each parameter occupies one line, with a trailing comma.
 
 ```
-// When exceeding the line width
+// Exceeds line width
 very_long_function_name: (first_param: Int, second_param: Int, third_param: Int) -> Int = first_param + second_param + third_param
 
 // After formatting
@@ -34,8 +33,7 @@ very_long_function_name:
 ) -> Int = first_param + second_param + third_param
 ```
 
-**§4.3 Return Type.** The return type is connected to the parameter list using `->`, with a space on
-each side of `->`.
+**§4.3 Return Type.** The return type is connected to the parameter list with `->`, with one space before and after `->`.
 
 ```
 // ✅ Correct
@@ -61,7 +59,7 @@ foo: () -> Int  = 1
 
 ## §7 Function Call
 
-**§7.1 Parameter List.** Parameters are separated by commas, with a space after each comma.
+**§7.1 Parameter List.** Parameters are separated by commas, with one space after each comma.
 
 ```
 // ✅ Correct
@@ -82,11 +80,10 @@ foo(x = 1, y = 2)
 foo(x=1, y=2)
 ```
 
-**§7.3 Argument Line Break.** When the argument list exceeds the line width, each argument occupies
-one line, with a trailing comma.
+**§7.3 Parameter Line Break.** When the argument list exceeds the line width, each argument occupies one line, with a trailing comma.
 
 ```
-// When exceeding the line width
+// Exceeds line width
 very_long_function_name(first_argument, second_argument, third_argument)
 
 // After formatting
@@ -99,7 +96,7 @@ very_long_function_name(
 
 ---
 
-## §12 Lambda Expression
+## §12 Lambda Expressions
 
 **§12.1 Lambda Format.** Lambda uses the `(params) => body` format.
 
@@ -107,7 +104,7 @@ very_long_function_name(
 // ✅ Correct
 f = (x) => x + 1
 
-// Single-expression body
+// Single expression body
 f = (x) => x * 2
 
 // Multi-statement body

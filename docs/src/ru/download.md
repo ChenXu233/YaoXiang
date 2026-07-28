@@ -3,7 +3,7 @@ layout: page
 is_download: true
 
 title: 'TYPE THE UNIVERSE'
-description: 'Выберите вашу платформу и начните создавать мир.'
+description: 'Выберите вашу платформу и начните строить мир.'
 
 download:
   latest_stable: 'Последняя стабильная версия v{version}'
@@ -15,14 +15,11 @@ download:
   coming_soon: 'Скоро'
   checksum: 'Контрольная сумма / Подпись'
   build_from_source:
-    title: 'Сборка из исходного кода'
-    description:
-      'Сборка YaoXiang из исходного кода с помощью Cargo. Убедитесь, что установлен Rust.'
+    title: 'Сборка из исходников'
+    description: 'Сборка YaoXiang из исходников с помощью Cargo. Убедитесь, что установлен Rust.'
   nightly_builds:
     title: 'Ночные сборки'
-    description:
-      'Доступны последние передовые версии. Рекомендуется для тестирования, в продакшене используйте
-      с осторожностью.'
+    description: 'Доступны самые последние версии. Рекомендуется для тестирования, в продакшене используйте с осторожностью.'
   github_actions: 'Перейти к GitHub Actions'
 
 versions:
@@ -54,7 +51,3 @@ versions:
             url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.1.0/yaoxiang-v0.1.0-universal-apple-darwin.tar.gz'
 sidebar: false
 ---
-
-```
-
-```

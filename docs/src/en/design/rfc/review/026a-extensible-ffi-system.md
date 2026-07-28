@@ -1,8 +1,8 @@
 ---
 title: 'RFC-026a: Extensible FFI Mechanism System'
-status: 'Under Review'
+status: 'Review'
 issue: '#135'
-author: '晨煦 (Chenxu)'
+author: 'Chen Xu'
 created: '2026-06-05'
 updated: '2026-07-05'
 group: 'rfc-026'
@@ -12,44 +12,33 @@ group: 'rfc-026'
 
 > **Parent RFC**: [RFC-026: FFI Core Mechanism](../accepted/026-ffi-core-mechanism.md)
 >
-> This RFC defines the extensibility portion of RFC-026—how FFI mechanisms other than the C ABI
-> (Wasm, Python, custom ABIs) plug in as plugins, and the dynamic loading mode.
+> This RFC defines the extensibility portion of RFC-026—how to plug in FFI mechanisms beyond C ABI (Wasm, Python, custom ABI) as plugins, along with dynamic loading patterns.
 
 ## Summary
 
-RFC-026 defines the FFI core mechanism, where `Native.c("lib")` goes through the builtin C ABI. This
-RFC abstracts the ABI mechanism as a pluggable `FfiMechanism`, so the core hardcodes no specific
-ABI:
+RFC-026 defines the FFI core mechanism, with `Native.c("lib")` going through the built-in C ABI. This RFC abstracts the ABI mechanism as a pluggable `FfiMechanism`, so the core does not hardcode any specific ABI:
 
-1. **`FfiMechanism` Abstraction**: Defines the four operations every mechanism must implement (load
-   library, resolve symbol, marshal, invoke)
-2. **Mechanism Tag as Mechanism Selector**: `Native.c` / `Native.wasm` / `Native.python` each select
-   a registered mechanism
-3. **Compile-Time Mechanism Registry**: Mechanism tags are validated at compile-time; unregistered
-   tags produce compile errors
-4. **Static vs. Dynamic Loading**: Both modes preserve RFC-026's safety boundaries
+1. **`FfiMechanism` abstraction**: Define four operations that mechanisms must implement (load library, resolve symbols, marshal, invoke)
+2. **Mechanism tag as mechanism selection**: `Native.c` / `Native.wasm` / `Native.python` respectively select registered mechanisms
+3. **Compile-time mechanism registry**: Mechanism tags are validated at compile-time; unregistered tags produce compile errors
+4. **Static vs dynamic loading**: Both modes maintain RFC-026's security boundaries
 
 ## Motivation
 
-RFC-026 only built-ins the C ABI (`Native.c`). But YaoXiang may in the future need to:
+RFC-026 only includes the built-in C ABI (`Native.c`). But YaoXiang may need in the future:
 
-- Call Wasm modules (`Native.wasm`)
+- Invoke Wasm modules (`Native.wasm`)
 - Embed Python extensions (`Native.python`)
-- Support user-defined ABIs (proprietary hardware, RPC bridging)
+- User-defined ABIs (proprietary hardware, RPC bridging)
 
-Rather than hardcoding these ABIs in the compiler, abstract "how to load a library, how to resolve a
-symbol, how to marshal, how to invoke" into a trait, with each mechanism implemented as a plugin.
-The core only knows about `FfiMechanism`, not any specific ABI.
+Instead of hardcoding these ABIs in the compiler, we abstract "how to load libraries, how to resolve symbols, how to marshal, how to invoke" into a trait, with each mechanism implemented as a plugin. The core only knows `FfiMechanism`, not any specific ABI.
 
 ### Design Constraints
 
-1. **Compile-time mechanism tag validation**: The `xxx` in `Native.xxx(...)` must be a registered
-   mechanism, otherwise it's a compile error
-2. **No hardcoded mechanisms**: The compiler does not maintain a builtin mechanism list (except `.c`
-   as a reference implementation); mechanisms are registered by plugins
-3. **Preserve RFC-026 safety boundaries**: Every mechanism must obey the two-type classification,
-   marshalling scratchpad isolation, and Move + RAII
-4. **Self-hosting compatible**: The mechanism registry degrades to YaoXiang's `Dict`/`Set`
+1. **Compile-time mechanism tag validation**: `xxx` in `Native.xxx(...)` must be a registered mechanism, otherwise compile error
+2. **No hardcoded mechanisms**: The compiler does not have a built-in mechanism list (except `.c` as a reference implementation); mechanisms are registered by plugins
+3. **Maintain RFC-026 security boundaries**: Any mechanism must comply with type dichotomy, marshaling temporary zone isolation, Move + RAII
+4. **Bootstrapping compatibility**: The mechanism registry degrades to YaoXiang's `Dict`/`Set`
 
 ---
 
@@ -57,25 +46,23 @@ The core only knows about `FfiMechanism`, not any specific ABI.
 
 ### 1. `FfiMechanism` Abstraction
 
-Each FFI mechanism implements four operations. This is the key to the core not hardcoding any
-ABI—the compiler only calls this interface and does not know whether the backend is C, Wasm, or
-something else:
+Each FFI mechanism implements four operations. This is the key to the core not hardcoding ABI—the compiler only calls this interface and doesn't know if the backend is C, Wasm, or something else:
 
 ```rust
 trait FfiMechanism {
-    /// Mechanism tag, e.g. "c" / "wasm" / "python"
+    /// Mechanism tag, e.g., "c" / "wasm" / "python"
     fn tag(&self) -> &str;
 
-    /// Load a library. C: dlopen/static link; Wasm: instantiate module; Python: import.
+    /// Load library. C: dlopen/static link; Wasm: instantiate module; Python: import.
     /// Returns a mechanism-internal library handle.
     fn load_library(&self, id: &str) -> Result<LibraryHandle>;
 
-    /// Resolve a symbol. Callable at compile-time to verify the symbol exists.
+    /// Resolve symbol. Can be called at compile-time to verify symbol existence.
     /// C: dlsym/symbol table lookup; Wasm: export table lookup.
     fn resolve(&self, lib: &LibraryHandle, symbol: &str) -> Result<SymbolHandle>;
 
-    /// Invoke. Marshal arguments per the YaoXiang signature, execute, marshal the return value.
-    /// Must obey the marshalling rules from RFC-026 §3 (scratchpad isolation).
+    /// Invoke. Marshal arguments, execute, marshal return value according to YaoXiang signature.
+    /// Must comply with RFC-026 §3 marshaling rules (temporary zone isolation).
     fn invoke(
         &self,
         sym: &SymbolHandle,
@@ -85,40 +72,35 @@ trait FfiMechanism {
 }
 ```
 
-**Key**: The `invoke` implementation must obey RFC-026 §3—copy arguments into a scratchpad, return
-via memcpy, single-call borrow qualification. A mechanism may choose its own ABI details, but **may
-not violate the safety boundaries**. This is the plugin's obligation.
+**Key**: The `invoke` implementation must comply with RFC-026 §3—input parameters copied to temporary zone, return value via memcpy, borrow限定 single invocation. Mechanisms can choose their own ABI details, but **cannot violate security boundaries**. This is the plugin's obligation.
 
-### 2. Mechanism Tag as Mechanism Selector
+### 2. Mechanism Tag as Mechanism Selection
 
 ```yaoxiang
-// .c → C ABI mechanism (RFC-026 builtin reference implementation)
+// .c → C ABI mechanism (RFC-026 built-in reference implementation)
 sqlite3 = Native.c("libsqlite3")
 SqliteDb.open: (f: String) -> ?SqliteDb = sqlite3("sqlite3_open")
 
-// .wasm → Wasm mechanism (registered by the yx_wasm_ffi plugin)
+// .wasm → Wasm mechanism (registered by yx_wasm_ffi plugin)
 wasm_mod = Native.wasm("mymodule.wasm")
 process: (input: String) -> String = wasm_mod("process")
 
-// .python → Python mechanism (registered by the yx_python_ffi plugin)
+// .python → Python mechanism (registered by yx_python_ffi plugin)
 np = Native.python("numpy")
 ```
 
-The `.c` / `.wasm` in `Native.c` / `Native.wasm` are **mechanism tags** that select which registered
-`FfiMechanism` to use. The core builds in `.c` as a reference implementation; the rest are provided
-by plugins.
+The `.c` / `.wasm` in `Native.c` / `Native.wasm` are **mechanism tags**, selecting which registered `FfiMechanism` to use. The core has `.c` built-in as a reference implementation; others are provided by plugins.
 
-### 3. Mechanism Registration and Compile-Time Validation
+### 3. Mechanism Registration and Compile-time Validation
 
-A plugin declares the mechanism tags it provides to the mechanism registry at compile-time via a
-`.so`:
+Plugins declare the mechanism tags they provide at compile-time via `.so`:
 
 ```text
 use yx_wasm_ffi
   → Load libyx_wasm_ffi.so
   → Call yx_register_mechanism()
   → Register FfiMechanism { tag: "wasm", ... }
-  → Mechanism registry gains "wasm"
+  → Add "wasm" to mechanism registry
 
 // Afterwards:
 Native.wasm("mod.wasm")    // ✅ Compiles, "wasm" is registered
@@ -126,30 +108,26 @@ Native.foo("x")            // ❌ Compile error: Unknown FFI mechanism 'foo'
                            //    Try: `use yx_foo_ffi`
 ```
 
-The compile-time mechanism registry **only stores mechanism tags** (strings) + the corresponding
-`FfiMechanism` instance pointer. When compiling `Native.xxx(...)`, the table is consulted; a missing
-tag yields a compile error.
+The compile-time mechanism registry **only stores mechanism tags** (strings) + pointers to corresponding `FfiMechanism` instances. When compiling `Native.xxx(...)`, the table is checked; if the tag doesn't exist, compile error.
 
-### 4. Static vs. Dynamic Loading
+### 4. Static vs Dynamic Loading
 
-The implementation of `load_library` determines the load timing. Both modes preserve RFC-026's
-safety boundaries:
+The `load_library` implementation determines loading timing; both modes maintain RFC-026's security boundaries:
 
-| Mode                        | `load_library` Behavior                               | Symbol Verification                               | Type                                    |
-| --------------------------- | ----------------------------------------------------- | ------------------------------------------------- | --------------------------------------- |
-| **Static** (default, C ABI) | Compile-time `-llib`, library enters the symbol table | Reads the symbol table at compile-time            | Fully concrete                          |
-| **Dynamic**                 | dlopen/instantiate on first call at runtime           | Verified on first load; missing symbols fail-fast | Declaratively trusted, verified on load |
+| Mode             | `load_library` behavior              | Symbol validation                    | Type               |
+| ---------------- | ------------------------------------ | ------------------------------------ | ------------------ |
+| **Static** (default, C ABI) | Compile-time `-llib`, library in symbol table | Compile-time symbol table read       | Fully concrete     |
+| **Dynamic**      | dlopen/instantiate at first invocation | Validate on first load, fail-fast on missing | Trust declaration, validate on load |
 
 ```yaoxiang
-// Static: C library linked at compile-time
-sqlite3 = Native.c("libsqlite3")           // compile-time -lsqlite3
+// Static: C library linked at compile time
+sqlite3 = Native.c("libsqlite3")           // Compile-time -lsqlite3
 
-// Dynamic: plugin discovered at runtime
-plugin = Native.c.dynamic("./plugins/foo.so")   // runtime dlopen
+// Dynamic: Plugins discovered at runtime
+plugin = Native.c.dynamic("./plugins/foo.so")   // Runtime dlopen
 ```
 
-Whether static or dynamic, marshalling goes through the scratchpad isolation from RFC-026 §3. In
-dynamic mode, missing symbols are a **clean runtime error** (fail-fast), not a crash.
+Regardless of static or dynamic, marshaling follows RFC-026 §3 temporary zone isolation. In dynamic mode, missing symbols are **clean runtime errors** (fail-fast), not crashes.
 
 ### 5. Complete Information Flow
 
@@ -158,28 +136,27 @@ use yx_wasm_ffi                     ← Register "wasm" mechanism
        │
        ▼
 wasm_mod = Native.wasm("mod.wasm")
-  Compile-time: Check mechanism registry; "wasm" exists ✅
+  Compile-time: Check mechanism registry "wasm" exists ✅
          → Call wasm mechanism's load_library("mod.wasm")
-         → Instantiate the Wasm module, return library handle
+         → Instantiate Wasm module, return library handle
        │
        ▼
 process: (input: String) -> String = wasm_mod("process")
-  Compile-time: Call wasm mechanism's resolve(lib, "process") to verify the export exists ✅
+  Compile-time: Call wasm mechanism's resolve(lib, "process") to verify export exists ✅
          → Generate CallNative { mechanism: "wasm", lib, symbol: "process", sig }
        │
        ▼  Runtime
-  CallNative executes
-  → Mechanism's invoke(sym, args, sig)
-  → Marshal per sig (scratchpad isolation) → Execute Wasm → Marshal return
+  Execute CallNative
+  → Call mechanism's invoke(sym, args, sig)
+  → Marshal according to sig (temporary zone isolation) → Execute Wasm → Marshal return
 ```
 
-### 6. Degradation After Self-Hosting
+### 6. Degradation After Bootstrapping
 
-The Rust-hosted `FfiMechanism` trait + mechanism registry degrade after self-hosting to ordinary
-YaoXiang structures:
+The `FfiMechanism` trait + mechanism registry during Rust-hosted period degrades to ordinary YaoXiang structures after bootstrapping:
 
 ```yaoxiang
-// After self-hosting, the mechanism registry is a Dict
+// After bootstrapping, mechanism registry is a Dict
 let mechanisms: Dict(String, FfiMechanism) = {}
 mechanisms["c"] = c_mechanism
 mechanisms["wasm"] = wasm_mechanism
@@ -188,28 +165,23 @@ mechanisms["wasm"] = wasm_mechanism
 // Native.c("lib") → mechanisms["c"].load_library("lib")
 ```
 
-The Rust era uses a trait object (`Box<dyn FfiMechanism>`); after self-hosting, it uses a YaoXiang
-interface (RFC-011a). The interface is consistent: load, resolve, marshal, invoke.
+During the Rust period, use trait objects (`Box<dyn FfiMechanism>`); after bootstrapping, use YaoXiang interfaces (RFC-011a). Interface is consistent: load, resolve, marshal, invoke.
 
 ---
 
-## Trade-offs
+## Tradeoffs
 
 ### Advantages
 
-1. **Zero hardcoded ABIs**: The core only knows `FfiMechanism`; a new ABI = a new plugin
-2. **Unified safety boundary**: All mechanisms are forced to obey the RFC-026 §3 marshalling rules
-3. **Compile-time mechanism validation**: A missing mechanism tag produces a compile error, not a
-   runtime surprise
-4. **Unified static/dynamic abstraction**: The implementation details of `load_library` are hidden
-   inside the mechanism
+1. **Zero hardcoded ABIs**: Core only knows `FfiMechanism`; new ABI = new plugin
+2. **Unified security boundaries**: All mechanisms are forced to comply with RFC-026 §3 marshaling rules
+3. **Compile-time mechanism validation**: Unregistered mechanism tags produce compile errors, not runtime surprises
+4. **Unified static/dynamic abstraction**: `load_library` implementation details are hidden within mechanisms
 
 ### Disadvantages
 
-1. **Plugin authoring门槛**: Implementing `FfiMechanism` requires understanding the target ABI + the
-   marshalling contract
-2. **Mechanism obligation is by convention**: The core cannot force-verify that plugins obey
-   scratchpad isolation; it relies on convention
+1. **Plugin authoring barrier**: Implementing `FfiMechanism` requires understanding target ABI + marshaling contract
+2. **Mechanism obligations rely on convention**: Marshaling temporary zone isolation depends on plugin compliance; core cannot forcefully verify plugin implementation
 
 ---
 
@@ -217,47 +189,43 @@ interface (RFC-011a). The interface is consistent: load, resolve, marshal, invok
 
 ### Phase 1a: Mechanism Abstraction (v0.8)
 
-- [ ] Define the `FfiMechanism` trait (load_library / resolve / invoke)
-- [ ] Refactor the C ABI implementation from RFC-026 into `CMechanism: FfiMechanism`
-- [ ] Implement the compile-time mechanism registry (tag → mechanism instance)
-- [ ] Have `Native.xxx` consult the mechanism registry at compile-time for validation
+- [ ] Define `FfiMechanism` trait (load_library / resolve / invoke)
+- [ ] Refactor RFC-026's C ABI implementation to `CMechanism: FfiMechanism`
+- [ ] Implement compile-time mechanism registry (tag → mechanism instance)
+- [ ] `Native.xxx` compile-time check against mechanism registry
 
 ### Phase 1b: Dynamic Loading + Plugins (v0.9)
 
 - [ ] Implement `.so` plugin loading (`yx_register_mechanism`)
-- [ ] Implement the dynamic library loading mode (`Native.c.dynamic`)
+- [ ] Implement dynamic library loading mode (`Native.c.dynamic`)
 - [ ] Reference plugin: `yx_wasm_ffi` (Wasm mechanism)
 
 ---
 
-## Relationship to Other RFCs
+## Relationship with Other RFCs
 
-- **RFC-026** (parent): FFI core mechanism—`FfiMechanism` must obey its marshalling rules and safety
-  boundaries
-- **RFC-011a**: Interfaces and Dynamic Dispatch—after self-hosting, `FfiMechanism` degrades to a
-  YaoXiang interface
-- **RFC-014**: Package Management System—discovery and loading of `.so` plugins depends on the
-  package manager
-- **RFC-021** (deprecated): Library-Driven FFI Extension—this RFC sinks its `ffi.load_library` API
-  down to the mechanism plugin layer
+- **RFC-026** (parent): FFI core mechanism—`FfiMechanism` must comply with its marshaling rules and security boundaries
+- **RFC-011a**: Interfaces and dynamic dispatch—after bootstrapping, `FfiMechanism` degrades to YaoXiang interface
+- **RFC-014**: Package management system—`.so` plugin discovery and loading depend on package manager
+- **RFC-021** (deprecated): Library-driven FFI extensions—this RFC sinks its `ffi.load_library` API to the mechanism plugin layer
 
 ---
 
-## Design Decision Log
+## Design Decision Record
 
-| Decision                 | Resolution                                  | Reason                                                          | Date       |
-| ------------------------ | ------------------------------------------- | --------------------------------------------------------------- | ---------- |
-| Mechanism abstraction    | `FfiMechanism` trait, four operations       | Core hardcodes no ABI, only knows the interface                 | 2026-07-03 |
-| Mechanism obligation     | Plugins must obey RFC-026 marshalling rules | Safety boundary does not break because of mechanism differences | 2026-07-03 |
-| Mechanism tag validation | Compile-time registry lookup                | Unregistered mechanisms produce compile errors                  | 2026-07-03 |
-| Static/dynamic           | Decided by `load_library` implementation    | Timing is a mechanism detail; safety boundary is unchanged      | 2026-07-03 |
-| Self-hosting degradation | trait → YaoXiang interface (RFC-011a)       | Avoid over-abstracting against the host language                | 2026-07-03 |
+| Decision             | Decision                                | Reason                                          | Date       |
+| -------------------- | --------------------------------------- | ----------------------------------------------- | ---------- |
+| Mechanism abstraction | `FfiMechanism` trait, four operations   | Core doesn't hardcode ABI, only knows interface | 2026-07-03 |
+| Mechanism obligation  | Plugins must comply with RFC-026 marshaling rules | Security boundaries don't break with different mechanisms | 2026-07-03 |
+| Mechanism tag validation | Compile-time registry check         | Unregistered mechanisms produce compile errors  | 2026-07-03 |
+| Static/dynamic       | Determined by `load_library` implementation | Timing is a mechanism detail, security boundary unchanged | 2026-07-03 |
+| Bootstrapping degradation | trait → YaoXiang interface (RFC-011a) | No excessive abstraction in host language       | 2026-07-03 |
 
 ---
 
-## Lifecycle and Destination
+## Lifecycle and Disposition
 
-| Status           | Location                    | Description                  |
-| ---------------- | --------------------------- | ---------------------------- |
-| **Under Review** | `docs/design/rfc/review/`   | Open to community discussion |
-| **Accepted**     | `docs/design/rfc/accepted/` | Formal design document       |
+| Status        | Location                          | Description              |
+| ------------- | --------------------------------- | ------------------------ |
+| **Review**    | `docs/design/rfc/review/`         | Open for community discussion |
+| **Accepted**  | `docs/design/rfc/accepted/`       | Formal design document   |

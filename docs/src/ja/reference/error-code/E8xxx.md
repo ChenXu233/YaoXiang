@@ -1,24 +1,24 @@
 # E8xxx：内部コンパイラエラー
 
-> 自動生成自 `src/util/diagnostic/codes/`
+> 自動生成元: `src/util/diagnostic/codes/`
 
 ## エラー一覧
 
 ## E8001：Internal compiler error
 
-**カテゴリ**: Internal
+**カテゴリー**: 内部
 
 **メッセージ**: コンパイラで内部エラーが発生しました
 
-**ヘルプ**: このバグを報告してください https://github.com/yaoxiang-lang/yaoxiang/issues
+**ヘルプ**: このバグを https://github.com/yaoxiang-lang/yaoxiang/issues で報告してください
 
 ---
 
 ## E8002：Unexpected panic
 
-**カテゴリ**: Internal
+**カテゴリー**: 内部
 
-**メッセージ**: コンパイラが予期しないパニックに遭遇しました
+**メッセージ**: コンパイラで予期しないパニックが発生しました
 
 **ヘルプ**: パニックの詳細を報告してください
 
@@ -26,8 +26,8 @@
 
 ## E8003：Compiler phase error
 
-**カテゴリ**: Internal
+**カテゴリー**: 内部
 
 **メッセージ**: コンパイラフェーズ中にエラーが発生しました
 
-**ヘルプ**: これはコンパイラのバグの可能性があります。報告してください
+**ヘルプ**: これはコンパイラのバグである可能性があります。報告してください

@@ -10,32 +10,30 @@ issue: '#113'
 
 # RFC-014c: ワークスペースサポート
 
-> 本 RFC は [RFC-014: パッケージ管理システム設計](../accepted/014-package-manager.md)
-> のサブ RFC です。
+> 本 RFC は [RFC-014: パッケージ管理システム設計](../accepted/014-package-manager.md) のサブ RFC です。
 
 ## 概要
 
-YaoXiang のワークスペース（workspace）メカニズムを定義します。複数の関連パッケージを一緒に開発する際の、依存関係の共有、パス参照、lockfile の統一、Cargo
-workspace との統合を含みます。
+YaoXiang のワークスペース（workspace）メカニズムを定義します：複数の関連パッケージを一緒に開発する際の依存関係共有、パス参照、lockfile 統合、Cargo workspace との統合。
 
 ## 動機
 
-プロジェクトの規模が拡大すると、コードを複数のパッケージに分割する必要があります。これらのパッケージには以下が必要です：
+プロジェクト規模が拡大すると、コードを複数のパッケージに分割する必要があります。これらのパッケージには以下の要件があります：
 
-- 相互参照（パス依存関係）
-- 外部依存関係のバージョンの共有（バージョンドリフトの回避）
+- 互いに参照する（パス依存関係）
+- 外部依存関係のバージョンを共有する（バージョンドリフトの回避）
 - 統一された lockfile（ビルド一貫性の保証）
 - Cargo workspace との協調（FFI 部分）
 
 ### 現在の問題
 
-- 各プロジェクトが独立して依存関係を管理しており、共有できない
-- パス依存関係の公開時の自動置換メカニズムがない
+- 各プロジェクトが個別に依存関係を管理し、共有できない
+- パス依存関係のリリース時における自動置換メカニズムがない
 - Cargo workspace との統合がない
 
 ## 提案
 
-### コアデザイン：調整層 + 自己完結型メンバー
+### コア設計：調整レイヤー + 自己完結型メンバー
 
 ルートワークスペースは調整のみを行い、各メンバーは完全に自己完結型です。
 
@@ -49,14 +47,13 @@ utils = "packages/utils/yaoxiang.toml"
 app = "packages/app/yaoxiang.toml"
 ```
 
-**ルート toml は3つのことだけを行います：**
+**ルート toml は三つのことだけを実行します：**
 
 1. メンバーリストの宣言（辞書形式、key がメンバー名、value が toml パス）
 2. 共有 lockfile の提供（`yaoxiang.lock`）
 3. 共有 vendor ディレクトリの提供（`.yaoxiang/vendor/`）
 
-**ルート toml は dependencies を定義しません。** 各メンバーの依存関係はそれぞれの `yaoxiang.toml`
-に書きます。
+**ルート toml は dependencies を定義しません。** 各メンバーの依存関係は自分の `yaoxiang.toml` に記述します。
 
 ### メンバー yaoxiang.toml
 
@@ -100,15 +97,15 @@ my-workspace/
 │   └── app/
 │       ├── yaoxiang.toml
 │       └── src/main.yx
-└── Cargo.toml                 # 任意：共有 Cargo workspace（FFI）
+└── Cargo.toml                 # オプション：共有 Cargo workspace（FFI）
 ```
 
 ### 依存関係解決
 
 - 各メンバーは自分の `[dependencies]` を読み取る
-- 解決時にすべてのメンバーの依存関係をマージし、共有 lockfile を生成する
-- バージョンの競合は lockfile 生成時にエラーとして報告される
-- 同じパッケージが複数のメンバーで異なるバージョンに解決されてはならない
+- 解決時に全メンバーの依存関係をマージし、共有 lockfile を生成
+- バージョン衝突は lockfile 生成時にエラーとして報告
+- 同一パッケージが不同メンバー）で異なるバージョンに解決されてはならない
 
 ### workspace 依存関係参照
 
@@ -131,34 +128,34 @@ utils = { workspace = "utils" }   # ✅ key "utils" を参照
 # packages/utils/yaoxiang.toml 内で name = "my-utils" と書いてあってもOK
 ```
 
-**key 而不是 name の理由：**
+**なぜ key を使うのか：**
 
-- key はワークスペースが制御し、安定して一意
-- `[package].name` は公開名で、公開時に変更される可能性がある
-- key は BTreeMap の key であり、本質的に一意
-- 公開時に workspace 参照はバージョンの依存関係に置き換えられ、key は公開 API に漏洩しない
+- key はワークスペースが制御するため、安定して一意
+- `[package].name` は公開名で、リリース時に変更可能性がある
+- key は BTreeMap の key であり、aturally 一意
+- リリース時に workspace 参照はバージョン依存関係に置き換えられ、key は公開 API に漏洩しない
 
-### パス依存関係と公開
+### パス依存関係とリリース
 
-開発時はワークスペース参照を使用：
+開発時にはワークスペース参照を使用：
 
 ```toml
 [dependencies]
 utils = { workspace = "utils" }
 ```
 
-公開時は自動的にバージョン依存関係に置き換え：
+リリース時にはバージョン依存関係に自動置き換え：
 
 ```toml
 [dependencies]
 utils = "^0.2.0"
 ```
 
-**バージョンのソース：** 依存されるメンバーの `[package].version` を読んで、`^`
-接頭辞を付加する。Registry はチェックしない——バージョンの権威あるソースはメンバーの `yaoxiang.toml`
-であり、Registry は配布渠道に過ぎない。
+**バージョンのソース：** 被依存メンバーの `[package].version` を読み取り、`^`
+プレフィックスを付与。Registry のチェックは行わない——バージョンの権威あるソースはメンバーの
+`yaoxiang.toml` であり、Registry は配布渠道にすぎない。
 
-パッケージマネージャーは `yaoxiang publish` 時にこの置換を自動的に行う。
+パッケージマネージャーは `yaoxiang publish` 時にこの置換を自動で行う。
 
 ### Cargo Workspace との統合
 
@@ -187,23 +184,23 @@ my-workspace/
 │           └── src/lib.rs
 ```
 
-`yaoxiang build` は自動的に検出して `cargo build` を呼び出し、native 部分をコンパイルする。
+`yaoxiang build` は native 部分をビルドするために `cargo build` を自動的に検出して呼び出す。
 
 ### CLI コマンド
 
-| コマンド                           | 機能                                                       |
-| ---------------------------------- | ---------------------------------------------------------- |
-| `yaoxiang workspace list`          | ワークスペースメンバーの一覧表示                           |
-| `yaoxiang workspace add <path>`    | メンバーの追加                                             |
-| `yaoxiang workspace remove <name>` | メンバーの削除                                             |
-| `yaoxiang build`                   | すべてのメンバーをビルド（依存関係のトポロジカルソート順） |
-| `yaoxiang build core`              | 指定メンバーのビルド                                       |
-| `yaoxiang test`                    | すべてのメンバーのテストを実行                             |
+| コマンド                             | 機能                                 |
+| ------------------------------------ | ------------------------------------ |
+| `yaoxiang workspace list`           | ワークスペースメンバーを一覧表示     |
+| `yaoxiang workspace add <path>`     | メンバーを追加                       |
+| `yaoxiang workspace remove <name>`  | メンバーを削除                       |
+| `yaoxiang build`                    | 全メンバーをビルド（依存トポロジ順） |
+| `yaoxiang build core`               | 指定メンバーをビルド                 |
+| `yaoxiang test`                     | 全メンバーのテストを実行           |
 
-**`yaoxiang build` の動作：** すべてのメンバーをビルドし、依存関係のトポロジカルソート順で行う。core
-→ utils → app の場合、ビルド順序は core → utils → app となる。
+**`yaoxiang build` の動作：** 全メンバーをビルドし、依存トポロジ順にソートする。core → utils →
+app の依存関係がある場合、ビルド順序は core → utils → app となる。
 
-## 詳細設計
+## 詳細な設計
 
 ### WorkspaceManifest 構造
 
@@ -232,69 +229,69 @@ struct WorkspaceMember {
 }
 ```
 
-**検出ロジック：** toml をロードする際、`[workspace]` セクションがある場合は `WorkspaceManifest`
-として解析し、なければ `PackageManifest` として解析する。
+**探测ロジック：** toml の読み込み時、`[workspace]` セクションがある場合は `WorkspaceManifest`
+として解析し、そうでなければ `PackageManifest` として解析する。
 
 ### workspace 依存関係参照
 
 `{ workspace = "member-name" }` のセマンティクス：
 
-- `dependencies` 内で別のワークスペースメンバーを参照する
-- 開発時はローカルパスとして解決
-- 公開時は Registry バージョンに置き換え
+- `dependencies` で別のワークスペースメンバーを参照する
+- 開発時にはローカルパスとして解決
+- リリース時には Registry バージョンに置き換え
 - メンバー名は `[workspace.members]` に存在しなければならない
 
 ### lockfile 共有
 
-- ワークスペースには `yaoxiang.lock` が1つだけ（ルートディレクトリにある）
-- すべてのメンバーの依存関係解決が同じ lockfile にマージされる
-- バージョンの競合は lockfile 生成時にエラーとして報告され、競合元情報が含まれる
+- ワークスペースには `yaoxiang.lock` が一つだけ（ルートディレクトリ）
+- 全メンバーの依存関係解決は同じ lockfile にマージされる
+- バージョン衝突は lockfile 生成時にエラーとして報告、衝突元情報を含む
 
 ## トレードオフ
 
-### メリット
+### 优点
 
-- マルチパッケージプロジェクトを一元管理
-- 共有 lockfile が一貫性を保証
-- パス依存関係で開発体験が良好
-- Cargo workspace とシームレスに統合
+- マルチパッケージプロジェクトの統一管理
+- 共有 lockfile による一貫性の保証
+- パス依存関係による優れた開発体験
+- Cargo workspace とのシームレスな統合
 
-### デメリット
+### 缺点
 
-- すべてのメンバーが同じ外部依存関係バージョンを使わなければならない（厳しすぎる可能性）
-- ルート toml は独自の依存関係を持てない（設計上の制約）
-- Cargo workspace 統合が複雑さを増す
+- 全メンバーが同じ外部依存関係バージョンを使用しなければならない（過度に厳格な可能性）
+- ルート toml は独自の依存関係を持てない（設計制約）
+- Cargo workspace 統合により複雑性が増す
 
 ## 代替案
 
-| 方案                             | 選擇しない理由                                          |
-| -------------------------------- | ------------------------------------------------------- |
-| 独立プロジェクト + path 依存関係 | lockfile が統一されず、バージョンドリフトのリスクがある |
-| npm workspaces のようなもの      | npm の workspace 問題が多く、模仿する価値がない         |
-| Cargo workspace を直接再利用     | YaoXiang と Cargo は異なるパッケージエコシステム        |
+| 方案                       | なぜ選択しなかったか                       |
+| -------------------------- | ---------------------------------------- |
+| 獨立プロジェクト + path 依存 | lockfile が統一されず、バージョンドリフトのリスク |
+| npm workspaces 类似        | npm の workspace には問題が多く、真似する価値がない |
+| Cargo workspace 直接再利用  | YaoXiang と Cargo は異なるパッケージエコシステム |
 
 ## 実装戦略
 
 ### フェーズ分け
 
-| フェーズ | 内容                                             |
-| -------- | ------------------------------------------------ |
-| Phase 6a | `[workspace.members]` の解析 + WorkspaceManifest |
-| Phase 6b | 共有 lockfile + 依存関係のマージ解決             |
-| Phase 6c | `{ workspace = "name" }` パス依存関係参照        |
-| Phase 6d | 公開時のパス依存関係の自動置き換え               |
-| Phase 6e | Cargo workspace 統合                             |
+| フェーズ   | 内容                                               |
+| ---------- | -------------------------------------------------- |
+| Phase 6a   | `[workspace.members]` 解析 + WorkspaceManifest     |
+| Phase 6b   | 共有 lockfile + 依存関係マージ解決                   |
+| Phase 6c   | `{ workspace = "name" }` パス依存関係参照           |
+| Phase 6d   | リリース時パス依存関係の自動置き換え                 |
+| Phase 6e   | Cargo workspace 統合                               |
 
 ### 依存関係
 
 - RFC-014 Phase 3（グローバルキャッシュ）に依存
-- 任意で RFC-014b（ビルドシステム、native メンバー用）に依存
+- RFC-014b（ビルドシステム、native メンバー用）へのオプション依存
 
 ## 開放問題
 
 - [ ] メンバー間の循環依存を許可するか？
 - [ ] workspace レベルの `[build]` 設定をサポートするか？
-- [ ] メンバーは独自の lockfile を持てるか（ルートの lockfile を上書き）？
+- [ ] メンバーは独自の lockfile を持てるか（ルート lockfile をオーバーライド）？
 - [ ] ネストされた workspace をサポートするか？
 
 ---

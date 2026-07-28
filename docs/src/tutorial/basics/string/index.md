@@ -133,4 +133,3 @@ f"Hello {name}, age: {age}"
 | 格式化   | `f"value: {pi:.2f}"`       |
 | 转义括号 | `f"{{not interpolation}}"` |
 | 多行     | `f"""..."""`               |
-| ::::     |

@@ -1,27 +1,27 @@
-# Error Code Reference
+# Error Codes Reference
 
 > Auto-generated from `src/util/diagnostic/codes/`
 
-The YaoXiang compiler uses a unified error code system, where each error code includes:
+The YaoXiang compiler uses a unified error code system, where each error code contains:
 
 - **Code**: Error identifier (e.g., `E1001`)
-- **Category**: The phase the error belongs to
+- **Category**: Compilation phase the error belongs to
 - **Title**: Short description of the error
 - **Message**: Detailed error message
 - **Help**: Possible solutions
 
 ## Error Code List
 
-| Prefix | Category     | Description                        |
-| ------ | ------------ | ---------------------------------- |
-| E0xxx  | Lexer/Parser | Lexical and syntax analysis errors |
-| E1xxx  | TypeCheck    | Type checking errors               |
-| E2xxx  | Semantic     | Semantic analysis errors           |
-| E4xxx  | Generic      | Generics and trait errors          |
-| E5xxx  | Module       | Module and import errors           |
-| E6xxx  | Runtime      | Runtime errors                     |
-| E7xxx  | I/O          | I/O and system errors              |
-| E8xxx  | Internal     | Internal compiler errors           |
+| Prefix | Category       | Description                  |
+| ------ | -------------- | ---------------------------- |
+| E0xxx  | Lexer/Parser   | Lexer and parser errors      |
+| E1xxx  | TypeCheck      | Type checking errors         |
+| E2xxx  | Semantic       | Semantic analysis errors     |
+| E4xxx  | Generic        | Generics and trait errors    |
+| E5xxx  | Module         | Module and import errors     |
+| E6xxx  | Runtime        | Runtime errors               |
+| E7xxx  | I/O            | I/O and system errors        |
+| E8xxx  | Internal       | Internal compiler errors     |
 
 ## Usage
 
@@ -42,7 +42,7 @@ yaoxiang explain E1001 --json
 ```rust
 use yaoxiang::util::diagnostic::{ErrorCodeDefinition, I18nRegistry};
 
-// Lookup error code, and retrieve title and help info through I18nRegistry
+// Find the error code and retrieve title and help info via I18nRegistry
 let i18n = I18nRegistry::default();
 
 if let Some(code) = ErrorCodeDefinition::find("E1001") {

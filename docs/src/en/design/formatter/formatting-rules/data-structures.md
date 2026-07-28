@@ -1,6 +1,6 @@
 ---
 title: 'Data Structure Formatting Rules'
-description: 'Formatting rules for literals, lists and dictionaries, and Match expressions'
+description: 'Formatting rules for literals, lists and dictionaries, Match expressions'
 ---
 
 # Data Structure Formatting Rules
@@ -9,7 +9,7 @@ description: 'Formatting rules for literals, lists and dictionaries, and Match e
 
 ## §8 Literals
 
-**§8.1 Integer literals.** Integer literals output directly.
+**§8.1 Integer literals.** Integer literals are output directly.
 
 ```
 // ✅ Correct
@@ -23,12 +23,11 @@ let x = 42;
 let x = 3.14;
 let y = 42.0;  // Must have decimal point
 
-// ❌ Incorrect
+// ❌ Wrong
 let y = 42;    // Integer, not float
 ```
 
-**§8.3 String literals.** Use double quotes by default. When `single_quote = true`, use single
-quotes.
+**§8.3 String literals.** Double quotes are used by default. When `single_quote = true`, single quotes are used.
 
 ```
 // Default (double quotes)
@@ -45,7 +44,7 @@ let s = 'hello';
 let x = true;
 let y = false;
 
-// ❌ Incorrect
+// ❌ Wrong
 let x = True;
 let y = FALSE;
 ```
@@ -54,28 +53,27 @@ let y = FALSE;
 
 ## §10 Lists and Dictionaries
 
-**§10.1 List format.** Lists are enclosed in `[]`, with elements separated by commas.
+**§10.1 List formatting.** Lists are enclosed in `[]`, with elements separated by commas.
 
 ```
 // ✅ Correct
 let x = [1, 2, 3];
 
-// ❌ Incorrect
+// ❌ Wrong
 let x = [1,2,3];
 ```
 
-**§10.2 Dictionary format.** Dictionaries are enclosed in `{}`, with key-value pairs using
-`key: value` format.
+**§10.2 Dictionary formatting.** Dictionaries are enclosed in `{}`, with key-value pairs in `key: value` format.
 
 ```
 // ✅ Correct
 let x = {"a": 1, "b": 2};
 
-// ❌ Incorrect
+// ❌ Wrong
 let x = {"a":1, "b":2};
 ```
 
-**§10.3 List comprehensions.** List comprehensions use `[expr for var in iterable]` format.
+**§10.3 List comprehension.** List comprehension uses `[expr for var in iterable]` format.
 
 ```
 // ✅ Correct
@@ -89,17 +87,17 @@ let x = [i for i in range(10) if i > 5];
 
 ## §11 Match Expressions
 
-**§11.1 Match format.** The `match` keyword is separated from the expression by a space.
+**§11.1 Match formatting.** The `match` keyword is separated from the expression by a space.
 
 ```
 // ✅ Correct
 match x { ... }
 
-// ❌ Incorrect
+// ❌ Wrong
 match(x) { ... }
 ```
 
-**§11.2 Pattern alignment.** Multiple patterns should be aligned with space padding.
+**§11.2 Pattern alignment.** Multiple patterns should be aligned, with spaces used for padding.
 
 ```
 // ✅ Aligned
@@ -111,8 +109,7 @@ match x {
 }
 ```
 
-**§11.3 Pattern line break.** When a pattern is too long, the pattern wraps and `=>` aligns with the
-body.
+**§11.3 Pattern wrapping when too long.** When a pattern is too long, the pattern wraps to a new line, with `=>` aligned with the body.
 
 ```
 // ✅ Wrapped
@@ -127,19 +124,19 @@ match x {
 
 ## §11.4 Tuples
 
-**§11.4.1 Tuple format.** Tuples are enclosed in `()`, with elements separated by commas.
+**§11.4.1 Tuple formatting.** Tuples are enclosed in `()`, with elements separated by commas.
 
 ```
 // ✅ Correct
 let t = (1, "hello", true);
 let t = (1,);  // Single-element tuple
 
-// ❌ Incorrect
+// ❌ Wrong
 let t = (1, "hello", true);  // Missing space after comma
 let t = (1,"hello",true);  // Missing space after comma
 ```
 
-**§11.4.2 Empty tuple.** Empty tuples are represented by `()`.
+**§11.4.2 Empty tuple.** Empty tuple is represented by `()`.
 
 ```
 // ✅ Correct
@@ -150,39 +147,38 @@ let t = ();
 
 ## §11.5 Index Access
 
-**§11.5.1 Index format.** Index access uses `expr[index]` format.
+**§11.5.1 Index formatting.** Index access uses `expr[index]` format.
 
 ```
 // ✅ Correct
 let x = arr[0];
 let y = matrix[i][j];
 
-// ❌ Incorrect
+// ❌ Wrong
 let x = arr [0];  // Extra space
-let y = matrix[ i ][ j ];  // Extra space
+let y = matrix[ i ][ j ];  // Extra spaces
 ```
 
 ---
 
 ## §11.6 Field Access
 
-**§11.6.1 Field access format.** Field access uses `expr.field` format.
+**§11.6.1 Field access formatting.** Field access uses `expr.field` format.
 
 ```
 // ✅ Correct
 let x = obj.field;
 let y = obj.method();
 
-// ❌ Incorrect
+// ❌ Wrong
 let x = obj . field;  // Extra space
 let y = obj. field;  // Extra space
 ```
 
-**§11.6.2 Chained field access.** When chained field access exceeds line width, each method call
-goes on its own line.
+**§11.6.2 Chained field access.** When chained field access exceeds the line width, each method call goes on its own line.
 
 ```
-// When exceeding line width
+// Exceeds line width
 let result = object.method1().method2().method3().method4();
 
 // After formatting

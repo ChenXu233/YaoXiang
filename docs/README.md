@@ -138,7 +138,7 @@ MIT License
 ---
 
 <!-- separator-start -->
-***
+---
 ---
 
 ## <a name="中文"></a>📚 文档结构

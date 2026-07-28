@@ -1,9 +1,8 @@
 ---
 layout: page
 sidebar: false
-title: 'プレイグラウンド'
+title: 'コード場'
 permalink: /playground/
 ---
 
 <Playground />
-```

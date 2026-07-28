@@ -1,6 +1,6 @@
 ---
 title: Diagnostic System
-description: Architecture design of the YaoXiang diagnostic system
+description: Architecture design of YaoXiang's diagnostic system
 ---
 
 # Diagnostic System
@@ -9,17 +9,17 @@ description: Architecture design of the YaoXiang diagnostic system
 
 Error codes are grouped by category:
 
-| Range | Category          | Description                              |
-| ----- | ----------------- | ---------------------------------------- |
-| E0xxx | Lexical/Syntax    | Lexer and parser errors                  |
-| E1xxx | Type Checking     | Type mismatch, undefined variables, etc. |
-| E2xxx | Semantic Analysis | Semantic errors                          |
-| E4xxx | Generics/Traits   | Generics and trait system errors         |
-| E5xxx | Modules/Imports   | Module system errors                     |
-| E6xxx | Runtime           | Runtime errors                           |
-| E7xxx | I/O               | I/O and system errors                    |
-| E8xxx | Internal          | Internal compiler errors                 |
-| W1xxx | Warnings          | Dead code, unused variables, etc.        |
+| Range  | Category      | Description                       |
+| ------ | ------------- | --------------------------------- |
+| E0xxx | Lexical/Syntax | Lexical analysis and syntax errors |
+| E1xxx | Type Checking | Type mismatches, undefined variables, etc. |
+| E2xxx | Semantic Analysis | Semantic errors                  |
+| E4xxx | Generics/Trait | Generics and trait system errors  |
+| E5xxx | Module/Import | Module system errors              |
+| E6xxx | Runtime      | Runtime errors                    |
+| E7xxx | I/O          | I/O and system errors             |
+| E8xxx | Internal     | Internal compiler errors          |
+| W1xxx | Warning      | Dead code, unused variables, etc. |
 
 ## Diagnostic Data Structure
 
@@ -29,14 +29,14 @@ pub struct Diagnostic {
     pub severity: Severity,     // Error / Warning / Info / Hint
     pub message: String,        // Rendered message
     pub span: Option<Span>,     // Source code location
-    pub help: Option<String>,   // Fix suggestions
+    pub help: Option<String>,   // Fix suggestion
     pub related: Vec<Box<Diagnostic>>,  // Related diagnostics
 }
 ```
 
 ## DiagnosticBuilder Pattern
 
-Obtain a builder via `ErrorCodeDefinition`, chain calls to set parameters:
+Obtain a builder through `ErrorCodeDefinition`, chain calls to set parameters:
 
 ```rust
 let diagnostic = ErrorCodeDefinition::unknown_variable("x")
@@ -47,10 +47,9 @@ let diagnostic = ErrorCodeDefinition::unknown_variable("x")
 
 ## i18n Support
 
-Titles and help text for all error codes are managed through `I18nRegistry`, supporting
-Chinese/English switching. Message templates support `{param}` placeholders.
+Titles and help text for all error codes are managed through `I18nRegistry`, supporting Chinese and English switching. Message templates support `{param}` placeholders.
 
 ## Emitter Output
 
-- `TextEmitter`: Text format output, with color and Unicode symbol support
-- `JsonEmitter`: JSON format output, for CI and LSP
+- `TextEmitter`：Text format output, supports colors and Unicode symbols
+- `JsonEmitter`：JSON format output, used for CI and LSP

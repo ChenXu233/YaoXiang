@@ -1032,6 +1032,7 @@ result = native_sum_int(int_arr.data, int_arr.length)
    - 无需虚函数表
 
 4. **完美契合RFC-010**
+
    ```yaoxiang
    # 完全使用统一语法
    name: type = value

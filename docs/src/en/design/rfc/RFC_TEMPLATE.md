@@ -3,31 +3,30 @@ title: 'RFC [Number]: [Proposal Title]'
 author: '[Author Name]'
 created: 'YYYY-MM-DD'
 updated: 'YYYY-MM-DD'
-issue: '#123' # Required: associated initial idea Issue
-issues_impl: # Required after acceptance: list of implementation Issues split out
+issue: '#123' # Required: Linked initial idea Issue
+issues_impl: # Required after acceptance: Implementation Issue list
   - '#456'
-pr_impl: # Required after PR merge: list of implementation PRs
+pr_impl: # Required after PR merge: Implementation PR list
   - '#789'
 ---
 
 # RFC [Number]: [Proposal Title]
 
-> **Reference**: See the [full example](EXAMPLE_full_feature_proposal.md) to learn how to write an
-> RFC.
+> **Reference**: See [Full Example](EXAMPLE_full_feature_proposal.md) for how to write an RFC.
 
 ## Summary
 
-Summarize the problem this RFC addresses and the proposed solution in 1-2 sentences.
+Summarize the problem this RFC aims to solve and the proposed solution in 1-2 sentences.
 
 ## Motivation
 
 ### Why is this feature/change needed?
 
-Explain why this RFC is necessary, what problem it solves, or what need it fulfills.
+Explain why this RFC is necessary, what problem it solves or what need it fulfills.
 
 ### Current Problem
 
-Describe the issues with the current state, using concrete examples if available.
+Describe the issues with the current state, with specific examples if available.
 
 ## Proposal
 
@@ -37,7 +36,7 @@ Describe the proposed solution, including core concepts and data structures.
 
 ### Examples
 
-Provide code examples to illustrate the use of the proposal:
+Provide code examples to illustrate how the proposal works:
 
 ```yaoxiang
 # Example code
@@ -45,10 +44,10 @@ Provide code examples to illustrate the use of the proposal:
 
 ### Syntax Changes
 
-If the proposal involves syntax changes, list a before/after comparison:
+If the proposal involves syntax changes, list before/after comparisons:
 
-| Before   | After    |
-| -------- | -------- |
+| Before   | After   |
+| -------- | ------- |
 | Syntax A | Syntax B |
 
 ## Detailed Design
@@ -59,7 +58,7 @@ Describe the impact on the type system, whether new types or type constraints ar
 
 ### Runtime Behavior
 
-Describe changes in runtime behavior, if any.
+Describe changes in runtime behavior (if any).
 
 ### Compiler Changes
 
@@ -67,21 +66,21 @@ List compiler components that need to be modified.
 
 ### Backward Compatibility
 
-Evaluate backward compatibility and how to handle existing code.
+Evaluate whether this is backward compatible and how to handle existing code.
 
 ## Trade-offs
 
 ### Advantages
 
-- List the advantages of adopting this proposal
+- List the benefits of adopting this proposal
 
 ### Disadvantages
 
-- List the disadvantages or risks of adopting this proposal
+- List the drawbacks or risks of this proposal
 
-## Alternatives
+## Alternative Solutions
 
-List alternative solutions that were considered and why they were not chosen.
+List considered alternatives and why they were not chosen.
 
 ## Implementation Strategy
 
@@ -91,23 +90,23 @@ List other RFCs or features this RFC depends on.
 
 ### Risks
 
-Identify potential risks in implementation.
+Identify potential risks in the implementation.
 
 ## Open Questions
 
-List questions that require further discussion.
+List issues that need further discussion.
 
 Format:
 
 ```markdown
-- [ ] Question description (@username: supplementary explanation)
+- [ ] Issue description (@username: additional notes)
 ```
 
 ---
 
-## Appendices (Optional)
+## Appendix (Optional)
 
-### Appendix A: Design Discussion Records
+### Appendix A: Design Discussion Log
 
 > Used to record detailed discussions during the design decision process.
 
@@ -116,23 +115,23 @@ Format:
 ```markdown
 ### [Discussion Topic]
 
-> **Discussion Status**: [Open | Resolved] **Initiator**: @username **Date**: YYYY-MM-DD
+> **Status**: [Open | Resolved] **Initiator**: @username **Date**: YYYY-MM-DD
 
 #### Problem Description
 
 [Describe the issue to be discussed]
 
-#### Alternatives
+#### Options
 
-| Option | Description | Advantages | Disadvantages |
-| ------ | ----------- | ---------- | ------------- |
-| A      | ...         | ...        | ...           |
-| B      | ...         | ...        | ...           |
+| Option | Description | Pros | Cons |
+| ------ | ----------- | ---- | ---- |
+| A      | ...         | ...  | ...  |
+| B      | ...         | ...  | ...  |
 
-#### Discussion Records
+#### Discussion Log
 
-- [Date] @username: [Opinion]
-- [Date] @username: [Opinion]
+- [Date] @username: [comment]
+- [Date] @username: [comment]
 
 #### Resolution
 
@@ -141,20 +140,19 @@ Format:
 
 #### Discussion Management Rules
 
-| Stage         | Action                                                                       |
-| ------------- | ---------------------------------------------------------------------------- |
-| In Discussion | Record in appendix, keep status open                                         |
-| Resolved      | Update resolution, mark status, **update relevant content in the main body** |
-| Abandoned     | Mark the reason for abandonment, keep records for reference                  |
+| Stage     | Action                                              |
+| --------- | --------------------------------------------------- |
+| In Progress | Record in appendix, keep open                     |
+| Resolved  | Update resolution, mark status, **update main content** |
+| Abandoned | Mark reason, keep record for reference             |
 
-> **Important**: After a discussion is finalized, the relevant content in the main body must be
-> updated! Discussion records may be retained as historical reference.
+> **Important**: After discussion is concluded, the main content must be updated! Discussion records can be kept as historical reference.
 
 ---
 
-### Appendix B: Design Decision Records
+### Appendix B: Design Decision Record
 
-> Record the design decisions made in the RFC and their rationale.
+> Records established design decisions and their rationale.
 
 | Decision | Resolution | Date | Recorder |
 | -------- | ---------- | ---- | -------- |
@@ -164,15 +162,13 @@ Format:
 
 ### Appendix C: Glossary
 
-| Term | Definition |
-| ---- | ---------- |
-| ...  | ...        |
+| Term   | Definition |
+| ------ | ---------- |
+| ...    | ...        |
 
 ---
 
 ## References
 
 - Links to related documentation or external resources
-- References to similar implementations in other languages
-
----
+- Similar implementations or references from other languages

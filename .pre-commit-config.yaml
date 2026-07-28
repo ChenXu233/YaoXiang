@@ -46,7 +46,7 @@ repos:
 
       - id: markdownlint
         name: markdownlint docs
-        entry: markdownlint "docs/**/*.md" --config docs/.markdownlint.jsonc
+        entry: markdownlint "docs/**/*.md" --fix --config docs/.markdownlint.jsonc --ignore-path docs/.markdownlintignore
         language: system
         types: [text]
         pass_filenames: false

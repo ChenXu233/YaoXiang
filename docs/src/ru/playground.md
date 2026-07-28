@@ -1,7 +1,7 @@
 ---
 layout: page
 sidebar: false
-title: 'Площадка'
+title: 'Песочница'
 permalink: /playground/
 ---
 

@@ -1,10 +1,15 @@
+---
+title: "E2xxx: Semantic Analysis"
+description: "Auto-generated from `src/util/diagnostic/codes/`"
+---
+
 # E2xxx: Semantic Analysis
 
 > Auto-generated from `src/util/diagnostic/codes/`
 
 ## Error List
 
-## E2001: Scope Error
+## E2001: Scope error
 
 **Category**: Semantic
 
@@ -14,7 +19,7 @@
 
 ---
 
-## E2002: Duplicate Definition
+## E2002: Duplicate definition
 
 **Category**: Semantic
 
@@ -24,7 +29,7 @@
 
 ---
 
-## E2003: Ownership Error
+## E2003: Ownership error
 
 **Category**: Semantic
 
@@ -34,7 +39,7 @@
 
 ---
 
-## E2010: Immutable Assignment
+## E2010: Immutable assignment
 
 **Category**: Semantic
 
@@ -44,7 +49,7 @@
 
 ---
 
-## E2011: Uninitialized Use
+## E2011: Uninitialized use
 
 **Category**: Semantic
 
@@ -54,7 +59,7 @@
 
 ---
 
-## E2012: Mutability Conflict
+## E2012: Mutability conflict
 
 **Category**: Semantic
 

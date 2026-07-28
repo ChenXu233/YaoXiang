@@ -30,7 +30,3 @@ a:hover {
   text-decoration: underline !important;
 }
 </style>
-
-```
-
-```

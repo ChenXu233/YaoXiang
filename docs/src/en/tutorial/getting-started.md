@@ -1,9 +1,8 @@
 # YaoXiang Quick Start
 
-> This guide helps you quickly get started with the YaoXiang programming language.
+> This guide helps you get started with YaoXiang programming language.
 >
-> **Note**: The code examples in this document are based on the YaoXiang language specification. If
-> you encounter syntax differences during actual execution, please refer to the
+> **Note**: Code examples in this document are written based on YaoXiang language specification. If you encounter syntax differences in actual execution, please refer to
 > [Language Specification](../reference/language-spec/index.md).
 
 ## Installation
@@ -11,7 +10,7 @@
 ### Build from Source (Recommended)
 
 ```bash
-# Clone the repository
+# Clone repository
 git clone https://github.com/ChenXu233/YaoXiang.git
 cd yaoxiang
 
@@ -39,14 +38,14 @@ cargo test
 
 ## Your First Program
 
-Create a file `hello.yx`:
+Create file `hello.yx`:
 
 ```yaoxiang
 // hello.yx
 use std.io
 
-// Function definition: name: (param: Type, ...) -> return_type = { return ... }  # Code block must explicitly return
-// Expression form: name: (param: Type, ...) -> return_type = expr           # Expression directly returns the value
+// Function definition: name: (param: Type, ...) -> return_type = { return ... }  # code block must explicitly return
+// Expression form: name: (param: Type, ...) -> return_type = expr           # expression returns value directly
 main: () -> Void = {
     print("Hello, YaoXiang!")
 }
@@ -56,7 +55,7 @@ Run:
 
 ```bash
 ./target/debug/yaoxiang hello.yx
-# Or use the release version
+# or use release version
 ./target/release/yaoxiang hello.yx
 ```
 
@@ -72,19 +71,19 @@ Hello, YaoXiang!
 
 ```yaoxiang
 // Automatic type inference
-x = 42  // Inferred as Int
-name = "YaoXiang"  // Inferred as String
-pi = 3.14159  // Inferred as Float
-is_valid = true  // Inferred as Bool
+x = 42  // inferred as Int
+name = "YaoXiang"  // inferred as String
+pi = 3.14159  // inferred as Float
+is_valid = true  // inferred as Bool
 
-// Explicit type annotation (recommended to use type-centric conventions)
+// Explicit type annotation (recommended to use type-centric convention)
 count: Int = 100
 
 // Immutable by default (safety feature)
 x = 10
 x = 20  // ❌ Compile error! Immutable
 
-// Mutable variables (require explicit declaration)
+// Mutable variable (requires explicit declaration)
 mut counter = 0
 counter = counter + 1  // ✅ OK
 ```
@@ -93,22 +92,22 @@ counter = counter + 1  // ✅ OK
 
 ```yaoxiang
 // Function definition syntax
-// Expression form: directly returns the value, no return needed
+// Expression form: return value directly, no return needed
 add: (a: Int, b: Int) -> Int = a + b
 
-// Code block form: must use return to return the value
+// Code block form: must use return to return value
 // add: (a: Int, b: Int) -> Int = { return a + b }
 
 // Call
 result = add(1, 2)  // result = 3
 
-// Single-parameter function (expression form)
+// Single parameter function (expression form)
 inc: (x: Int) -> Int = x + 1
 ```
 
 ### Type Definitions
 
-YaoXiang uses a unified `name: type = value` syntax model:
+YaoXiang uses unified `name: type = value` syntax model:
 
 ```yaoxiang
 // Variable declaration
@@ -118,10 +117,10 @@ name: String = "YaoXiang"
 // Function definition
 add: (a: Int, b: Int) -> Int = a + b
 
-// Type definition (using curly braces)
+// Type definition (using braces)
 Point: Type = { x: Float, y: Float }
 
-// Using the type
+// Use type
 p: Point = Point(x=1.0, y=2.0)
 p.x  // 1.0
 p.y  // 2.0
@@ -141,10 +140,10 @@ r = Rect(x=0.0, y=0.0, width=10.0, height=20.0)
 
 #### Interface Definitions
 
-An interface is a record type whose fields are all function types:
+Interfaces are record types with all function fields:
 
 ```yaoxiang
-// Define an interface
+// Define interface
 Drawable: Type = {
     draw: (Surface) -> Void,
     bounding_box: () -> Rect
@@ -160,7 +159,7 @@ EmptyInterface: Type = {}
 
 #### Type Methods
 
-Use the `Type.method: (Type, ...) -> Return = ...` syntax to define type methods:
+Use `Type.method: (Type, ...) -> Return = ...` syntax to define type methods:
 
 ```yaoxiang
 // Type definition
@@ -175,16 +174,15 @@ Point.serialize: (self: Point) -> String = {
     "Point({self.x}, {self.y})"
 }
 
-// Using methods (syntax sugar)
+// Use methods (syntactic sugar)
 p = Point(x=1.0, y=2.0)
 p.draw(screen)  // → Point.draw(p, screen)
 str = p.serialize()  // → Point.serialize(p)
 ```
 
-#### Auto Binding
+#### Automatic Binding
 
-Functions declared with the `pub` keyword are automatically bound to the types defined in the same
-file:
+Functions declared with `pub` keyword automatically bind to types defined in the same file:
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
@@ -203,7 +201,7 @@ p2 = Point(x=1.0, y=2.0)
 // Functional call
 d = distance(p1, p2)  // 3.606...
 
-// OOP syntax sugar (automatically bound to Point.distance)
+// OOP syntactic sugar (auto-binds to Point.distance)
 d2 = p1.distance(p2)  // → distance(p1, p2)
 ```
 
@@ -242,7 +240,7 @@ StringList: Type = List(String)
 // Conditional expression
 if x > 0 {
     "positive"
-} elif x == 0 {
+} else if x == 0 {
     "zero"
 } else {
     "negative"
@@ -264,11 +262,11 @@ while n < 5 {
 ### Lists and Dictionaries
 
 ```yaoxiang
-// List
+// Lists
 numbers = [1, 2, 3, 4, 5]
 first = numbers[0]  // 1
 
-// Dictionary
+// Dictionaries
 scores = {"Alice": 90, "Bob": 85}
 alice_score = scores["Alice"]  // 90
 
@@ -291,24 +289,21 @@ message = match result {
 
 ## Spawn Programming (Concurrency)
 
-YaoXiang's concurrency model is built around the `spawn <expr>` primitive—it is the only entry point
-for parallelism.
+YaoXiang's concurrency model builds around the `spawn <expr>` primitive — the sole entry point for parallelism.
 
 ```yaoxiang
-// spawn modifies any expression, automatically executing in parallel
+// spawn can decorate any expression, executed in parallel automatically
 main: () -> Void = {
-    user = spawn fetch_user(1)   // Background execution
-    posts = spawn fetch_posts()  // Another parallel step
+    user = spawn fetch_user(1)   // executes in background
+    posts = spawn fetch_posts()  // another parallel step
 
-    // Automatically blocks when the result is needed
+    // automatically blocks waiting for result when needed
     print(user.name)
     print(posts.length)
 }
 ```
 
-**Core rule**: An expression modified by `spawn` executes in the background, and the outer scope
-synchronously blocks waiting for the result. Independent tasks are automatically parallelized,
-scheduled by the runtime's GMP model.
+**Core rule**: Expressions decorated with `spawn` execute in background, and the outer scope synchronously blocks waiting for results. Independent tasks automatically run in parallel, scheduled by the runtime's GMP model.
 
 ## Module System
 
@@ -324,10 +319,10 @@ print("Hello!")
 
 ## FAQ
 
-### Q: Variables are immutable by default; how do I modify a variable?
+### Q: Variables are immutable by default, how do I modify a variable?
 
 ```yaoxiang
-// Use the mut keyword to declare a mutable variable
+// Use mut keyword to declare mutable variable
 mut x = 10
 x = 20  // ✅ OK
 ```
@@ -338,14 +333,14 @@ x = 20  // ✅ OK
 // Full form (recommended)
 add: (a: Int, b: Int) -> Int = a + b
 
-// Short form (with type inference)
+// Short form (type inference)
 add = (a, b) => a + b
 ```
 
 ### Q: How do I handle errors?
 
 ```yaoxiang
-// Use the Result type
+// Use Result type
 Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
 // Handle with pattern matching
@@ -358,13 +353,12 @@ match result {
 
 ## Next Steps
 
-- 📚 Check out the [Language Specification](../YaoXiang-language-specification.md) for the complete
-  syntax
-- 🏗️ Browse the [Architecture Documentation](../architecture/) for implementation details
-- 💡 Read the [Design Manifesto](../YaoXiang-design-manifesto.md) for the core philosophy
+- 📚 Check out [Language Specification](../YaoXiang-language-specification.md) for complete syntax
+- 🏗️ Browse [Architecture Documentation](../architecture/) for implementation details
+- 💡 Read [Design Manifesto](../YaoXiang-design-manifesto.md) for core philosophy
 
 ## Related Resources
 
 - [GitHub Repository](https://github.com/yourusername/yaoxiang)
 - [Issue Tracker](https://github.com/yourusername/yaoxiang/issues)
-- [Contributing Guide](../guides/dev/)
+- [Contribution Guide](../guides/dev/)

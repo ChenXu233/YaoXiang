@@ -1,26 +1,24 @@
 ---
-title: if-elif-else
+title: if-else-if-else
 ---
 
-# if-elif-else
+# if-else-if-else
 
-`if-elif-else` is the most fundamental decision-making tool in programming. Its logic is very
-intuitive—**if the condition holds, execute a block of code; otherwise, check the next condition; if
-none hold, take the default path**.
+`if-else-if-else`
+is the most fundamental decision-making tool in programming. Its logic is very intuitive — **if the condition is true, execute some code; otherwise, check the next condition; if none are true, go the default path**.
 
 ## Basic Syntax
 
-In the syntax specification, `if` expressions and `if` statements are defined identically:
+In the syntax specification, the definitions of `if` expression and `if` statement are identical:
 
 ```
-if Expr Block ('elif' Expr Block)* ('else' Block)?
+if Expr Block ('else' 'if' Expr Block)* ('else' Block)?
 ```
 
-Translated into everyday language: it starts with `if`, followed by a condition expression and a
-code block, then optionally zero or more `elif condition block` pairs, and finally an optional
-`else block`.
+Translated into everyday language: starts with `if`, followed by a conditional expression and a code block, then zero to many
+`else if condition code block`, and finally an optional `else code block`.
 
-The simplest form—just `if`:
+The simplest form — only `if`:
 
 ```yaoxiang
 if temperature > 30 {
@@ -28,53 +26,49 @@ if temperature > 30 {
 }
 ```
 
-Adding `else`:
+With `else`:
 
 ```yaoxiang
 if is_raining {
     print("Bring an umbrella")
 } else {
-    print("No umbrella needed")
+    print("No need for an umbrella")
 }
 ```
 
-Multiple conditions with `elif`:
+Multiple conditions with `else if`:
 
 ```yaoxiang
 score = 85
 
 if score >= 90 {
     print("Excellent")
-} elif score >= 80 {
+} else if score >= 80 {
     print("Good")
-} elif score >= 60 {
+} else if score >= 60 {
     print("Pass")
 } else {
     print("Needs improvement")
 }
 ```
 
-Note that YaoXiang's keyword is `elif`, not `else if`. This reflects the language's deliberate
-effort to keep its keywords concise.
+## if is an Expression
 
-## if as an Expression
-
-This is one of YaoXiang's most important control flow features: **`if` can be used as an expression
-that computes a value**.
+This is one of the most important features of YaoXiang's control flow: **`if` can be used as an expression to compute a value**.
 
 ```yaoxiang
-// if expression: the value of each branch is assigned to result
+// if expression: the value from each branch is assigned to result
 result = if x > 0 {
-    "Positive"
-} elif x < 0 {
-    "Negative"
+    "positive"
+} else if x < 0 {
+    "negative"
 } else {
-    "Zero"
+    "zero"
 }
-// result is now one of "Positive", "Negative", or "Zero"
+// result is now one of "positive", "negative", or "zero"
 ```
 
-When `if` is used as an expression, the return value types of all branches must be consistent:
+When `if` is used as an expression, the return value types from all branches must be consistent:
 
 ```yaoxiang
 score = 88
@@ -82,9 +76,9 @@ score = 88
 // All branches return String, types are consistent, no problem
 grade = if score >= 90 {
     "A"
-} elif score >= 80 {
+} else if score >= 80 {
     "B"
-} elif score >= 60 {
+} else if score >= 60 {
     "C"
 } else {
     "D"
@@ -92,28 +86,26 @@ grade = if score >= 90 {
 print(grade)  // "B"
 ```
 
-In each branch's code block, **the value of the last expression is that branch's return value**. You
-can also use `return` to return explicitly, but inside branches, simply writing the expression is
-usually enough.
+In the code block of each branch, **the value of the last expression is the return value of that branch**. You can also use `return`
+to explicitly return, but in branches it's usually sufficient to just write the expression.
 
 ```yaoxiang
-// Directly write the expression—recommended
-category = if age < 18 { "Minor" } else { "Adult" }
+// Writing the expression directly — recommended
+category = if age < 18 { "minor" } else { "adult" }
 
-// You can also use return explicitly—same effect
+// Can also explicitly return — same effect
 category = if age < 18 {
-    return "Minor"
+    return "minor"
 } else {
-    return "Adult"
+    return "adult"
 }
 ```
 
-If you only use `if` for conditional judgment and don't need a value, it's an ordinary
-statement—fully compatible with the expression form.
+If you only use `if` for conditional logic without needing a value, it's just a regular statement — fully compatible with the expression form.
 
 ## Nested if
 
-You can write another `if` inside an `if` to handle multi-level conditional logic:
+You can write `if` inside `if` to handle multi-level conditional logic:
 
 ```yaoxiang
 age = 25
@@ -121,34 +113,34 @@ has_ticket = true
 
 if age >= 18 {
     if has_ticket {
-        print("Welcome in")
+        print("Welcome")
     } else {
         print("Please purchase a ticket first")
     }
 } else {
-    print("Minors must be accompanied by a parent")
+    print("Minors must be accompanied by a guardian")
 }
 ```
 
-When expressions are nested, YaoXiang has no C-style "dangling else" ambiguity—each `else` always
-belongs to the nearest unmatched `if`.
+When dealing with nested expressions, YaoXiang doesn't have the "dangling else" ambiguity found in C — each `else` always belongs to the nearest unmatched
+`if`.
 
 ## Combining Conditions with Boolean Operators
 
-In conditions, you can use `and`, `or`, `not` to combine multiple judgments:
+You can use `and`, `or`, and `not` to combine multiple conditions:
 
 ```yaoxiang
 username = "admin"
 password = "123456"
 
-// and: both conditions must hold
+// and: both conditions must be true
 if username == "admin" and password == "123456" {
     print("Login successful")
 }
 
-// or: either condition holds
+// or: either condition can be true
 if role == "admin" or role == "moderator" {
-    print("Has admin permissions")
+    print("Has admin privileges")
 }
 
 // not: negation
@@ -158,22 +150,21 @@ if not is_banned {
 
 // Combined usage
 if (age >= 18 and age <= 60) or is_vip {
-    print("Can attend the event")
+    print("Eligible to participate")
 }
 ```
 
-In operator precedence, `not` is higher than `and`, and `and` is higher than `or`. When in doubt,
-add parentheses to make your intent clearer.
+In terms of operator precedence, `not` is higher than `and`, and `and` is higher than `or`. When in doubt, add parentheses to make your intent clearer.
 
 ## Summary
 
-| Key Point           | Description                                                              |
-| ------------------- | ------------------------------------------------------------------------ |
-| Basic structure     | `if condition { ... } elif condition { ... } else { ... }`               |
-| elif                | YaoXiang uses `elif`, not `else if`                                      |
-| Expression          | `if` can return a value; all branches must have consistent types         |
-| Branch return value | The value of the last expression in the branch block is the return value |
-| Nesting             | `if` can contain another `if`; no dangling else ambiguity                |
-| Boolean operators   | `and`, `or`, `not` combine conditions                                    |
+| Key Point      | Description                                           |
+| -------------- | ----------------------------------------------------- |
+| Basic Structure | `if condition { ... } else if condition { ... } else { ... }` |
+| else if        | YaoXiang uses `else if` for multi-way branching      |
+| Expression     | `if` can return a value, all branches must have consistent types |
+| Branch Return  | The last expression in a branch block is the return value |
+| Nesting        | You can write `if` inside `if`, no dangling else ambiguity |
+| Boolean Ops    | `and`, `or`, `not` to combine conditions              |
 
-The next chapter will cover `for` loops—the standard way to iterate over collections and ranges.
+In the next chapter you will learn about `for` loops — the standard way to iterate over collections and ranges.

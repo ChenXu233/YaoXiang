@@ -5,8 +5,7 @@ description: Classification and index of YaoXiang code formatting rules
 
 # Formatting Rules
 
-This section defines all formatting rules for `yaoxiang fmt`. Rules are categorized by topic as
-follows:
+This section defines all formatting rules for `yaoxiang fmt`. Rules are categorized by topic as follows:
 
 ---
 
@@ -16,11 +15,11 @@ follows:
 
 ## Functions
 
-- [Function Rules](./functions.md) — Function definitions, function calls, Lambda expressions
+- [Function-related Rules](./functions.md) — Function definitions, function calls, Lambda expressions
 
 ## Type System
 
-- [Type System Rules](./types.md) — Type annotations, references and borrowing, type conversions
+- [Type System Rules](./types.md) — Type annotations, references and borrowing, type casting
 
 ## Data Structures
 
@@ -28,9 +27,8 @@ follows:
 
 ## Control Flow
 
-- [Control Flow Rules](./control-flow.md) — if/elif/else, for loops, while loops, loop labels
+- [Control Flow Rules](./control-flow.md) — if/else if/else, for loops, while loops, loop labels
 
 ## Special Syntax
 
-- [Special Syntax Rules](./special-syntax.md) — F-String, import statements, error handling, Unsafe
-  blocks
+- [Special Syntax Rules](./special-syntax.md) — F-Strings, import statements, error handling, Unsafe blocks

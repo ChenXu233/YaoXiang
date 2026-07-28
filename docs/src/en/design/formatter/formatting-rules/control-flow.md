@@ -1,6 +1,6 @@
 ---
 title: 'Control Flow Formatting Rules'
-description: 'Formatting rules for if/elif/else, for loops, while loops, and loop labels'
+description: 'Formatting rules for if/else if/else, for loops, while loops, and loop labels'
 ---
 
 # Control Flow Formatting Rules
@@ -9,8 +9,7 @@ description: 'Formatting rules for if/elif/else, for loops, while loops, and loo
 
 ## §5 Control Flow
 
-**§5.1 if Expression.** The `if` keyword is separated from the condition by a space, and the
-condition is separated from the code block by a space.
+**§5.1 if Expression.** A space separates the `if` keyword from the condition, and a space separates the condition from the code block.
 
 ```
 // ✅ Correct
@@ -21,17 +20,17 @@ if(condition) { ... }
 if condition{ ... }
 ```
 
-**§5.2 elif/else.** `elif` and `else` are separated from the preceding code block by a space.
+**§5.2 else if/else.** A space separates `else if` and `else` from the previous code block.
 
 ```
 // ✅ Correct
-if a > 0 { ... } elif a < 0 { ... } else { ... }
+if a > 0 { ... } else if a < 0 { ... } else { ... }
 
 // ❌ Incorrect
-if a > 0 { ... }elif a < 0 { ... }else { ... }
+if a > 0 { ... }else if a < 0 { ... }else { ... }
 ```
 
-**§5.3 for Loop.** The `for` keyword, variable, `in` keyword, and iterator are separated by spaces.
+**§5.3 for Loop.** A space separates the `for` keyword, variable, `in` keyword, and iterator.
 
 ```
 // ✅ Correct
@@ -42,7 +41,7 @@ for item in(collection) { ... }
 for(item) in collection { ... }
 ```
 
-**§5.4 while Loop.** The `while` keyword is separated from the condition by a space.
+**§5.4 while Loop.** A space separates the `while` keyword from the condition.
 
 ```
 // ✅ Correct
@@ -52,7 +51,7 @@ while condition { ... }
 while(condition) { ... }
 ```
 
-**§5.5 Loop Labels.** The label is connected to the loop keyword by `: `.
+**§5.5 Loop Labels.** The label connects to the loop keyword with `: `.
 
 ```
 // ✅ Correct
@@ -65,9 +64,9 @@ while(condition) { ... }
 
 ---
 
-## §5.6 Return Statement
+## §5.6 Return Statements
 
-**§5.6.1 Return Format.** The `return` keyword is separated from the expression by a space.
+**§5.6.1 Return Format.** A space separates the `return` keyword from the expression.
 
 ```
 // ✅ Correct
@@ -92,9 +91,9 @@ return void;  // void not needed
 
 ---
 
-## §5.7 Break Statement
+## §5.7 Break Statements
 
-**§5.7.1 Break Format.** The `break` keyword is separated from the label by a space.
+**§5.7.1 Break Format.** A space separates the `break` keyword from the label.
 
 ```
 // ✅ Correct
@@ -102,15 +101,15 @@ break;
 break 'outer;
 
 // ❌ Incorrect
-break(outer);  // Incorrect syntax
+break(outer);  // Wrong syntax
 break  'outer;  // Extra space
 ```
 
 ---
 
-## §5.8 Continue Statement
+## §5.8 Continue Statements
 
-**§5.8.1 Continue Format.** The `continue` keyword is separated from the label by a space.
+**§5.8.1 Continue Format.** A space separates the `continue` keyword from the label.
 
 ```
 // ✅ Correct
@@ -118,6 +117,6 @@ continue;
 continue 'outer;
 
 // ❌ Incorrect
-continue(outer);  // Incorrect syntax
+continue(outer);  // Wrong syntax
 continue  'outer;  // Extra space
 ```
