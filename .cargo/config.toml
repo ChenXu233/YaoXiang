@@ -1,5 +1,5 @@
 [build]
-jobs = 4
+jobs = 8
 # 默认目标目录
 # target-dir = "target"
 
