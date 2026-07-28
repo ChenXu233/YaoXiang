@@ -1,15 +1,12 @@
-> **Note: This document is archived and no longer maintained.**
-> **Please refer to the new language specification document: [Language Specification](../reference/language-spec/index.md)**
+> **Note: This document is archived and no longer maintained.** **Please refer to the new language
+> specification document: [Language Specification](../reference/language-spec/index.md)**
 
 ---
 
 # YaoXiang Programming Language Specification
 
-> Version: v1.8.0
-> Status: Specification
-> Author: 晨煦
-> Date: 2024-12-31
-> Update: 2026-02-22 - Meta type is not a keyword.
+> Version: v1.8.0 Status: Specification Author: 晨煦 Date: 2024-12-31 Update: 2026-02-22 - Meta type
+> is not a keyword.
 
 ---
 
@@ -17,13 +14,15 @@
 
 ### 1.1 Scope
 
-This document defines the syntax and semantics of the YaoXiang programming language. It is the authoritative reference for the language, intended for compiler and tool implementers.
+This document defines the syntax and semantics of the YaoXiang programming language. It is the
+authoritative reference for the language, intended for compiler and tool implementers.
 
 For tutorials and example code, please refer to the [tutorial/](../tutorial/) directory.
 
 ### 1.2 Conformance
 
-A program or implementation is considered compliant with the YaoXiang specification if it satisfies all the rules defined in this document.
+A program or implementation is considered compliant with the YaoXiang specification if it satisfies
+all the rules defined in this document.
 
 ---
 
@@ -35,13 +34,13 @@ YaoXiang source files must use UTF-8 encoding. Source files typically use the `.
 
 ### 2.2 Lexical Token Categories
 
-| Category | Description | Example |
-|----------|-------------|---------|
+| Category   | Description                        | Example                   |
+| ---------- | ---------------------------------- | ------------------------- |
 | Identifier | Starts with a letter or underscore | `x`, `_private`, `my_var` |
-| Keyword | Language-defined reserved words | `Type`, `pub`, `use` |
-| Literal | Fixed values | `42`, `"hello"`, `true` |
-| Operator | Operator symbols | `+`, `-`, `*`, `/` |
-| Separator | Syntax delimiters | `(`, `)`, `{`, `}`, `,` |
+| Keyword    | Language-defined reserved words    | `Type`, `pub`, `use`      |
+| Literal    | Fixed values                       | `42`, `"hello"`, `true`   |
+| Operator   | Operator symbols                   | `+`, `-`, `*`, `/`        |
+| Separator  | Syntax delimiters                  | `(`, `)`, `{`, `}`, `,`   |
 
 ### 2.3 Keywords
 
@@ -58,21 +57,23 @@ These keywords have special meaning in any context and cannot be used as identif
 
 ### 2.4 Reserved Words
 
-| Reserved Word | Type | Description |
-|---------------|------|-------------|
-| `Type` | Type | Meta type |
-| `true` | Bool | Boolean true value |
-| `false` | Bool | Boolean false value |
-| `void` | Void | Void value |
-| `some(T)` | Option | Option value variant |
-| `ok(T)` | Result | Result success variant |
-| `err(E)` | Result | Result error variant |
+| Reserved Word | Type   | Description            |
+| ------------- | ------ | ---------------------- |
+| `Type`        | Type   | Meta type              |
+| `true`        | Bool   | Boolean true value     |
+| `false`       | Bool   | Boolean false value    |
+| `void`        | Void   | Void value             |
+| `some(T)`     | Option | Option value variant   |
+| `ok(T)`       | Result | Result success variant |
+| `err(E)`      | Result | Result error variant   |
 
 ### 2.5 Identifiers
 
-Identifiers start with a letter or underscore, followed by letters, digits, or underscores. Identifiers are case-sensitive.
+Identifiers start with a letter or underscore, followed by letters, digits, or underscores.
+Identifiers are case-sensitive.
 
 Special identifiers:
+
 - `_` is used as a placeholder, indicating an ignored value
 - Identifiers starting with an underscore represent private members
 
@@ -132,7 +133,8 @@ Membership  ::= Expr 'in' Expr
 
 ### 2.8 Indentation Rules
 
-Code must use 4 spaces for indentation; Tab characters are forbidden. This is a mandatory syntactic rule.
+Code must use 4 spaces for indentation; Tab characters are forbidden. This is a mandatory syntactic
+rule.
 
 ---
 
@@ -157,20 +159,20 @@ TypeExpr    ::= PrimitiveType
 
 ### 3.2 Primitive Types
 
-| Type | Description | Default Size |
-|------|-------------|--------------|
-| `Type` | Meta type | 0 bytes |
-| `Void` | Void value | 0 bytes |
-| `Bool` | Boolean value | 1 byte |
-| `Int` | Signed integer | 8 bytes |
-| `Uint` | Unsigned integer | 8 bytes |
-| `Float` | Floating-point number | 8 bytes |
-| `String` | UTF-8 string | Variable |
-| `Char` | Unicode character | 4 bytes |
-| `Bytes` | Raw bytes | Variable |
+| Type     | Description           | Default Size |
+| -------- | --------------------- | ------------ |
+| `Type`   | Meta type             | 0 bytes      |
+| `Void`   | Void value            | 0 bytes      |
+| `Bool`   | Boolean value         | 1 byte       |
+| `Int`    | Signed integer        | 8 bytes      |
+| `Uint`   | Unsigned integer      | 8 bytes      |
+| `Float`  | Floating-point number | 8 bytes      |
+| `String` | UTF-8 string          | Variable     |
+| `Char`   | Unicode character     | 4 bytes      |
+| `Bytes`  | Raw bytes             | Variable     |
 
-Integers with bit widths: `Int8`, `Int16`, `Int32`, `Int64`, `Int128`
-Floats with bit widths: `Float32`, `Float64`
+Integers with bit widths: `Int8`, `Int16`, `Int32`, `Int64`, `Int128` Floats with bit widths:
+`Float32`, `Float64`
 
 ### 3.3 Record Types
 
@@ -203,6 +205,7 @@ Point: Type = {
 ```
 
 **Rules**:
+
 - Record types are defined using curly braces `{}`
 - Field names are directly followed by a colon and type
 - Interface names written in the type body indicate implementation of that interface
@@ -235,6 +238,7 @@ Point2()          # ✗ Error
 ```
 
 **Rules**:
+
 - `field: Type = expression` → has default value, optional when constructing
 - `field: Type` → no default value, required when constructing
 
@@ -314,7 +318,8 @@ Serializable: Type = {
 EmptyInterface: Type = {}
 ```
 
-**Interface implementation**: A type implements an interface by listing the interface name at the end of its definition
+**Interface implementation**: A type implements an interface by listing the interface name at the
+end of its definition
 
 ```yaoxiang
 // A type that implements interfaces
@@ -326,7 +331,8 @@ Point: Type = {
 }
 ```
 
-**Direct interface assignment**: A concrete type can be directly assigned to an interface type variable (structural subtyping)
+**Direct interface assignment**: A concrete type can be directly assigned to an interface type
+variable (structural subtyping)
 
 ```yaoxiang
 // Direct assignment (concrete type determinable at compile time → zero-overhead call)
@@ -343,11 +349,11 @@ process: (d: Drawable) -> Void = d.draw(screen)
 
 **Compile-time optimization strategy**:
 
-| Scenario | Inference Result | Call Method |
-|----------|------------------|-------------|
+| Scenario                           | Inference Result           | Call Method                 |
+| ---------------------------------- | -------------------------- | --------------------------- |
 | Direct assignment of concrete type | Concrete type determinable | Direct call (zero overhead) |
-| Function return value | Unknown | vtable |
-| Heterogeneous collection | Multiple types | vtable |
+| Function return value              | Unknown                    | vtable                      |
+| Heterogeneous collection           | Multiple types             | vtable                      |
 
 ### 3.6 Tuple Types
 
@@ -496,7 +502,8 @@ LiteralType   ::= Identifier ':' Int          # Compile-time constant
 CompileTimeFn ::= '[' Identifier ':' Int ']' '(' Identifier ')' '->' TypeExpr
 ```
 
-**Core design**: Use `[n: Int]` generic parameter + `(n: n)` value parameter to distinguish compile-time constants from runtime values.
+**Core design**: Use `[n: Int]` generic parameter + `(n: n)` value parameter to distinguish
+compile-time constants from runtime values.
 
 ```yaoxiang
 // Compile-time factorial: parameter must be a literal known at compile time
@@ -637,7 +644,8 @@ sum: [P: AArch64](arr: Array[Float]) -> Float = {
 
 ### 3.17 Relationship Between Named Functions and Lambdas
 
-**Core understanding**: Named functions and Lambda expressions are the same thing! The only difference is that a named function gives the Lambda a name.
+**Core understanding**: Named functions and Lambda expressions are the same thing! The only
+difference is that a named function gives the Lambda a name.
 
 ```yaoxiang
 // These two are essentially identical
@@ -655,11 +663,13 @@ name: (Params) -> ReturnType = body
 name: (Params) -> ReturnType = (params) => body
 ```
 
-**Key point**: When the signature fully declares parameter types, the parameter names in the Lambda head become redundant and can be omitted.
+**Key point**: When the signature fully declares parameter types, the parameter names in the Lambda
+head become redundant and can be omitted.
 
 ### 3.18 Parameter Scope Rules
 
-**Parameters override outer variables**: Parameters in the signature take precedence over function body, with inner scope having higher priority.
+**Parameters override outer variables**: Parameters in the signature take precedence over function
+body, with inner scope having higher priority.
 
 ```yaoxiang
 x = 10  # Outer variable
@@ -670,11 +680,11 @@ double: (x: Int) -> Int = x * 2  # ✅ Parameter x overrides outer x, result is 
 
 Type annotations can be at any of the following positions, **at least one annotation is required**:
 
-| Annotation Position | Form | Description |
-|---------------------|------|-------------|
-| Signature only | `double: (x: Int) -> Int = x * 2` | ✅ Recommended |
-| Lambda head only | `double = (x: Int) => x * 2` | ✅ Valid |
-| Both sides | `double: (x: Int) -> Int = (x: Int) => x * 2` | ✅ Redundant but allowed |
+| Annotation Position | Form                                          | Description              |
+| ------------------- | --------------------------------------------- | ------------------------ |
+| Signature only      | `double: (x: Int) -> Int = x * 2`             | ✅ Recommended           |
+| Lambda head only    | `double = (x: Int) => x * 2`                  | ✅ Valid                 |
+| Both sides          | `double: (x: Int) -> Int = (x: Int) => x * 2` | ✅ Redundant but allowed |
 
 ### 4.1 Expression Classification
 
@@ -695,19 +705,19 @@ Expr        ::= Literal
 
 ### 4.2 Operator Precedence
 
-| Precedence | Operator | Associativity |
-|------------|----------|---------------|
-| 1 | `()` `[]` `.` | Left to right |
-| 2 | `as` | Left to right |
-| 3 | `*` `/` `%` | Left to right |
-| 4 | `+` `-` | Left to right |
-| 5 | `<<` `>>` | Left to right |
-| 6 | `&` `\|` `^` | Left to right |
-| 7 | `==` `!=` `<` `>` `<=` `>=` | Left to right |
-| 8 | `not` | Right to left |
-| 9 | `and` `or` | Left to right |
-| 10 | `if...else` | Right to left |
-| 11 | `=` `+=` `-=` `*=` `/=` | Right to left |
+| Precedence | Operator                    | Associativity |
+| ---------- | --------------------------- | ------------- |
+| 1          | `()` `[]` `.`               | Left to right |
+| 2          | `as`                        | Left to right |
+| 3          | `*` `/` `%`                 | Left to right |
+| 4          | `+` `-`                     | Left to right |
+| 5          | `<<` `>>`                   | Left to right |
+| 6          | `&` `\|` `^`                | Left to right |
+| 7          | `==` `!=` `<` `>` `<=` `>=` | Left to right |
+| 8          | `not`                       | Right to left |
+| 9          | `and` `or`                  | Left to right |
+| 10         | `if...else`                 | Right to left |
+| 11         | `=` `+=` `-=` `*=` `/=`     | Right to left |
 
 ### 4.3 Function Calls
 
@@ -837,7 +847,8 @@ ForStmt     ::= 'for' 'mut'? Identifier 'in' Expr Block
 
 #### 5.9.1 Semantics: Each Iteration Binds a New Value
 
-YaoXiang's for loop semantics differ from traditional languages: **each iteration binds a new value, rather than modifying the same variable**.
+YaoXiang's for loop semantics differ from traditional languages: **each iteration binds a new value,
+rather than modifying the same variable**.
 
 ```yaoxiang
 // Example: for i in 1..5
@@ -848,22 +859,23 @@ for i in 1..5 {
 
 **Execution process**:
 
-| Iteration | Behavior of Loop Variable |
-|-----------|---------------------------|
-| 1st | Create new binding `i = 1`, execute loop body, print 1 |
-| 2nd | Create new binding `i = 2` (previous binding destroyed), execute loop body, print 2 |
-| 3rd | Create new binding `i = 3`, execute loop body, print 3 |
-| 4th | Create new binding `i = 4`, execute loop body, print 4 |
-| End | Loop body ends, binding destroyed |
+| Iteration | Behavior of Loop Variable                                                           |
+| --------- | ----------------------------------------------------------------------------------- |
+| 1st       | Create new binding `i = 1`, execute loop body, print 1                              |
+| 2nd       | Create new binding `i = 2` (previous binding destroyed), execute loop body, print 2 |
+| 3rd       | Create new binding `i = 3`, execute loop body, print 3                              |
+| 4th       | Create new binding `i = 4`, execute loop body, print 4                              |
+| End       | Loop body ends, binding destroyed                                                   |
 
-**Key point**: After each iteration ends, the binding created for that iteration is destroyed. The next iteration is a brand new binding, unrelated to the previous iteration's binding.
+**Key point**: After each iteration ends, the binding created for that iteration is destroyed. The
+next iteration is a brand new binding, unrelated to the previous iteration's binding.
 
 #### 5.9.2 Difference Between for and for mut
 
-| Syntax | Loop Variable Mutability | Description |
-|--------|--------------------------|-------------|
-| `for i in 1..5` | Immutable | Cannot modify the binding in the loop body |
-| `for mut i in 1..5` | Mutable | Can modify the binding in the loop body |
+| Syntax              | Loop Variable Mutability | Description                                |
+| ------------------- | ------------------------ | ------------------------------------------ |
+| `for i in 1..5`     | Immutable                | Cannot modify the binding in the loop body |
+| `for mut i in 1..5` | Mutable                  | Can modify the binding in the loop body    |
 
 ```yaoxiang
 // ✅ Valid: each iteration binds a new value, no modification needed
@@ -904,14 +916,15 @@ Error code: `E2013 - Cannot shadow existing variable`
 
 #### 5.9.4 Comparison with Other Languages
 
-| Language | For Loop Variable Semantics |
-|----------|------------------------------|
-| YaoXiang | Each iteration binds a new value |
-| Rust | Modifies the same variable (requires mut) |
-| Python | Modifies the same variable (no mut needed) |
-| C/C++ | Modifies the same variable (requires pointer or reference) |
+| Language | For Loop Variable Semantics                                |
+| -------- | ---------------------------------------------------------- |
+| YaoXiang | Each iteration binds a new value                           |
+| Rust     | Modifies the same variable (requires mut)                  |
+| Python   | Modifies the same variable (no mut needed)                 |
+| C/C++    | Modifies the same variable (requires pointer or reference) |
 
 **Design rationale**: YaoXiang uses binding semantics because:
+
 1. After each iteration, variables in the loop body are destroyed
 2. The next iteration is a brand new binding
 3. This is safer, no need to consider state between iterations
@@ -924,7 +937,8 @@ Error code: `E2013 - Cannot shadow existing variable`
 
 **Core syntax**: `name: type = value`
 
-YaoXiang uses a **unified declaration model**: variables, functions, and methods all use the same form `name: type = value`.
+YaoXiang uses a **unified declaration model**: variables, functions, and methods all use the same
+form `name: type = value`.
 
 ```
 Declaration   ::= Identifier ':' Type '=' Expression
@@ -1066,7 +1080,8 @@ Point.calc = func[0, _, 2]
 
 #### 6.6.2 pub Automatic Binding
 
-Functions declared with `pub` are automatically bound to types defined in the same file by the compiler:
+Functions declared with `pub` are automatically bound to types defined in the same file by the
+compiler:
 
 ```yaoxiang
 // Using pub declaration, compiler automatically binds
@@ -1088,16 +1103,17 @@ d2 = p1.distance(p2)           # OOP syntactic sugar
 
 ### 6.7 Method Binding Rules
 
-| Rule | Description |
-|------|-------------|
-| Positions start from 0 | `func[0]` binds the 1st parameter (index 0) |
-| Maximum position | Must be < number of function parameters |
-| Negative index | `[-1]` means the last parameter |
-| Placeholder | `_` skips that position, provided by the user |
+| Rule                   | Description                                   |
+| ---------------------- | --------------------------------------------- |
+| Positions start from 0 | `func[0]` binds the 1st parameter (index 0)   |
+| Maximum position       | Must be < number of function parameters       |
+| Negative index         | `[-1]` means the last parameter               |
+| Placeholder            | `_` skips that position, provided by the user |
 
 ### 6.8 Currying Support
 
-Binding naturally supports currying. When fewer parameters than remaining are provided at call time, a function accepting the remaining parameters is returned:
+Binding naturally supports currying. When fewer parameters than remaining are provided at call time,
+a function accepting the remaining parameters is returned:
 
 ```yaoxiang
 // Original function: 5 parameters
@@ -1124,10 +1140,10 @@ Annotation  ::= 'block' | 'eager'
 
 **Function annotations**:
 
-| Annotation | Position | Behavior |
-|------------|----------|----------|
-| `@block` | After return type | Disable concurrency optimization, completely sequential execution |
-| `@eager` | After return type | Force eager evaluation |
+| Annotation | Position          | Behavior                                                          |
+| ---------- | ----------------- | ----------------------------------------------------------------- |
+| `@block`   | After return type | Disable concurrency optimization, completely sequential execution |
+| `@eager`   | After return type | Force eager evaluation                                            |
 
 **Syntax examples**:
 
@@ -1217,12 +1233,12 @@ ImportItems  ::= Identifier (',' Identifier)* ','?
 AliasList    ::= Identifier (',' Identifier)*
 ```
 
-| Syntax | Description | Example |
-|--------|-------------|---------|
-| `use path;` | Import module, access using the last part | `use std.io;` → `io.print` |
-| `use path.{a, b};` | Import specified items | `use std.io.{print};` → `print` |
-| `use path as alias;` | Import and rename | `use std.io as io;` → `io.print` |
-| `use path.{i1, i2} as a, b;` | Import specified items and rename | `use std.io.{print, read} as p, r;` → `p`, `r` |
+| Syntax                       | Description                               | Example                                        |
+| ---------------------------- | ----------------------------------------- | ---------------------------------------------- |
+| `use path;`                  | Import module, access using the last part | `use std.io;` → `io.print`                     |
+| `use path.{a, b};`           | Import specified items                    | `use std.io.{print};` → `print`                |
+| `use path as alias;`         | Import and rename                         | `use std.io as io;` → `io.print`               |
+| `use path.{i1, i2} as a, b;` | Import specified items and rename         | `use std.io.{print, read} as p, r;` → `p`, `r` |
 
 ---
 
@@ -1232,11 +1248,11 @@ AliasList    ::= Identifier (',' Identifier)*
 
 YaoXiang uses an **ownership model** to manage memory, where each value has a unique owner:
 
-| Semantic | Description | Syntax |
-|----------|-------------|--------|
-| **Move** | Default semantic, ownership transfer | `p2 = p` |
-| **ref** | Shared (Arc reference counting) | `shared = ref p` |
-| **clone()** | Explicit copy | `p2 = p.clone()` |
+| Semantic    | Description                          | Syntax           |
+| ----------- | ------------------------------------ | ---------------- |
+| **Move**    | Default semantic, ownership transfer | `p2 = p`         |
+| **ref**     | Shared (Arc reference counting)      | `shared = ref p` |
+| **clone()** | Explicit copy                        | `p2 = p.clone()` |
 
 ### 8.2 Move Semantics (Default)
 
@@ -1274,6 +1290,7 @@ spawn(() => print(shared.x))   # ✅ Safe
 ```
 
 **Features**:
+
 - Thread-safe reference counting
 - Automatic lifetime management
 - Safe across spawn boundaries
@@ -1315,6 +1332,7 @@ unsafe {
 ```
 
 **Restrictions**:
+
 - Raw pointers can only be used in `unsafe` blocks
 - User guarantees no dangling pointers, no use-after-free
 - Does not participate in Send/Sync checks
@@ -1341,10 +1359,10 @@ UnsafeBlock   ::= 'unsafe' '{' Stmt* '}'
 
 ### 8.8 Send / Sync Constraints
 
-| Constraint | Semantic | Description |
-|------------|----------|-------------|
-| **Send** | Can be safely transferred across threads | Value can be moved to another thread |
-| **Sync** | Can be safely shared across threads | Immutable references can be shared to another thread |
+| Constraint | Semantic                                 | Description                                          |
+| ---------- | ---------------------------------------- | ---------------------------------------------------- |
+| **Send**   | Can be safely transferred across threads | Value can be moved to another thread                 |
+| **Sync**   | Can be safely shared across threads      | Immutable references can be shared to another thread |
 
 **Auto derivation**:
 
@@ -1358,11 +1376,11 @@ Struct[T1, T2]: Sync ⇐ T1: Sync and T2: Sync
 
 **Type constraints**:
 
-| Type | Send | Sync | Description |
-|------|------|------|-------------|
-| `T` (value) | ✅ | ✅ | Immutable data |
-| `ref T` | ✅ | ✅ | Arc thread-safe |
-| `*T` | ❌ | ❌ | Raw pointer unsafe |
+| Type        | Send | Sync | Description        |
+| ----------- | ---- | ---- | ------------------ |
+| `T` (value) | ✅   | ✅   | Immutable data     |
+| `ref T`     | ✅   | ✅   | Arc thread-safe    |
+| `*T`        | ❌   | ❌   | Raw pointer unsafe |
 
 ---
 
@@ -1372,10 +1390,10 @@ Struct[T1, T2]: Sync ⇐ T1: Sync and T2: Sync
 
 YaoXiang uses Rust-style type constraints to ensure concurrency safety:
 
-| Constraint | Semantic | Description |
-|------------|----------|-------------|
-| **Send** | Can be safely transferred across threads | Value can be moved to another thread |
-| **Sync** | Can be safely shared across threads | Immutable references can be shared to another thread |
+| Constraint | Semantic                                 | Description                                          |
+| ---------- | ---------------------------------------- | ---------------------------------------------------- |
+| **Send**   | Can be safely transferred across threads | Value can be moved to another thread                 |
+| **Sync**   | Can be safely shared across threads      | Immutable references can be shared to another thread |
 
 **Constraint hierarchy**:
 
@@ -1392,13 +1410,13 @@ Mutex[T] provides interior mutability
 
 ### 8.8 Concurrency-Safe Types
 
-| Type | Semantic | Concurrency Safety | Description |
-|------|----------|--------------------|-------------|
-| `T` | Immutable data | ✅ Safe | Default type, multi-task reads without races |
-| `Ref[T]` | Mutable reference | ⚠️ Needs sync | Marked as concurrently modifiable, compile checks lock usage |
-| `Atomic[T]` | Atomic type | ✅ Safe | Low-level atomic operations, lock-free concurrency |
-| `Mutex[T]` | Mutex wrapper | ✅ Safe | Automatic lock/unlock, compile-time guarantee |
-| `RwLock[T]` | Read-write lock wrapper | ✅ Safe | Optimization for read-heavy scenarios |
+| Type        | Semantic                | Concurrency Safety | Description                                                  |
+| ----------- | ----------------------- | ------------------ | ------------------------------------------------------------ |
+| `T`         | Immutable data          | ✅ Safe            | Default type, multi-task reads without races                 |
+| `Ref[T]`    | Mutable reference       | ⚠️ Needs sync      | Marked as concurrently modifiable, compile checks lock usage |
+| `Atomic[T]` | Atomic type             | ✅ Safe            | Low-level atomic operations, lock-free concurrency           |
+| `Mutex[T]`  | Mutex wrapper           | ✅ Safe            | Automatic lock/unlock, compile-time guarantee                |
+| `RwLock[T]` | Read-write lock wrapper | ✅ Safe            | Optimization for read-heavy scenarios                        |
 
 **Syntax**:
 
@@ -1429,10 +1447,10 @@ Result: Type[T, E] = ok(T) | err(E)
 
 **Variant construction**:
 
-| Variant | Syntax | Description |
-|---------|--------|-------------|
-| `ok(T)` | `ok(value)` | Success value |
-| `err(E)` | `err(error)` | Error value |
+| Variant  | Syntax       | Description   |
+| -------- | ------------ | ------------- |
+| `ok(T)`  | `ok(value)`  | Success value |
+| `err(E)` | `err(error)` | Error value   |
 
 ### 9.2 Option Type
 
@@ -1442,10 +1460,10 @@ Option: Type[T] = some(T) | none
 
 **Variant construction**:
 
-| Variant | Syntax | Description |
-|---------|--------|-------------|
-| `some(T)` | `some(value)` | Has value |
-| `none` | `none` | No value |
+| Variant   | Syntax        | Description |
+| --------- | ------------- | ----------- |
+| `some(T)` | `some(value)` | Has value   |
+| `none`    | `none`        | No value    |
 
 ### 9.3 Error Propagation
 
@@ -1598,65 +1616,66 @@ match value {
 
 ## Appendix B: Differences from Code Implementation
 
-> This section describes known differences between the language specification and the current code implementation.
+> This section describes known differences between the language specification and the current code
+> implementation.
 
 ### B.1 Keywords
 
-| Keyword | Specification Status | Code Implementation | Description |
-|---------|---------------------|---------------------|-------------|
-| `struct` | Removed | ❌ None | Use unified syntax `Name: Type = {...}` |
-| `enum` | Removed | ❌ None | Use variant syntax `Name: Type = { A \| B \| C }` |
-| `type` | Removed | ❌ None | Use `Type` (capitalized) as the meta type keyword |
+| Keyword  | Specification Status | Code Implementation | Description                                       |
+| -------- | -------------------- | ------------------- | ------------------------------------------------- |
+| `struct` | Removed              | ❌ None             | Use unified syntax `Name: Type = {...}`           |
+| `enum`   | Removed              | ❌ None             | Use variant syntax `Name: Type = { A \| B \| C }` |
+| `type`   | Removed              | ❌ None             | Use `Type` (capitalized) as the meta type keyword |
 
 ### B.2 Syntax Differences
 
-| Syntax Element | Specification | Code Implementation | Description |
-|----------------|---------------|---------------------|-------------|
-| match arm separator | `->` | `=>` | Use `=>` (FatArrow) |
-| Function definition | `name(types) -> type = (params) => body` | Two forms | Supports type-centralized `name: Type = (params) =>` |
-| Interface type | `type Serializable = [ serialize() -> String ]` | ❌ Not implemented | Square bracket syntax pending implementation |
+| Syntax Element      | Specification                                   | Code Implementation | Description                                          |
+| ------------------- | ----------------------------------------------- | ------------------- | ---------------------------------------------------- |
+| match arm separator | `->`                                            | `=>`                | Use `=>` (FatArrow)                                  |
+| Function definition | `name(types) -> type = (params) => body`        | Two forms           | Supports type-centralized `name: Type = (params) =>` |
+| Interface type      | `type Serializable = [ serialize() -> String ]` | ❌ Not implemented  | Square bracket syntax pending implementation         |
 
 ### B.3 Features to be Implemented
 
 The following features described in the specification have not yet been implemented in the code:
 
-| Feature | Priority | Description |
-|---------|----------|-------------|
-| Unified type syntax `Name: Type = {...}` | P0 | RFC-010: Unified syntax replaces `type Name = ...` |
-| Curly brace type syntax | P0 | `Point: Type = { x: Float, y: Float }` |
-| Interface type | P1 | `Drawable: Type = { draw() -> Void }` |
-| List comprehension | P2 | `[x for x in list if condition]` |
-| `?` error propagation | P1 | Automatic error propagation for Result type |
-| `ref` keyword | P1 | Arc reference-counted sharing |
-| `unsafe` code block | P1 | Raw pointers and systems-level programming |
-| `*T` raw pointer type | P1 | Raw pointer type syntax |
-| `clone()` semantics | P1 | Explicit copy |
-| `@block` annotation | P1 | Synchronous execution guarantee |
-| `spawn` function | P1 | spawn function marker |
-| `spawn {}` block | P1 | Explicit concurrency region |
-| `spawn for` loop | P1 | Data-parallel loop |
-| Send/Sync constraints | P2 | Concurrency-safe type checking |
-| Mutex/Atomic types | P2 | Concurrency-safe data types |
-| Error graph visualization | P3 | Concurrency error propagation tracing |
-| **Generic type system** | P1 | RFC-011 |
-| Basic generics `[T]` | P1 | Generic type parameters and monomorphization |
-| Type constraint `[T: Clone]` | P2 | Single/multiple constraint system |
-| Associated type `Item: T` | P3 | GAT support |
-| Compile-time generic `[N: Int]` | P3 | Literal type constraint |
-| Conditional type `If[C, T, E]` | P3 | Type-level computation |
-| Function overloading specialization | P2 | Platform and type specialization |
-| Method syntax `Type.method` | P1 | `Point.draw: (...) -> ... = ...` |
+| Feature                                  | Priority | Description                                        |
+| ---------------------------------------- | -------- | -------------------------------------------------- |
+| Unified type syntax `Name: Type = {...}` | P0       | RFC-010: Unified syntax replaces `type Name = ...` |
+| Curly brace type syntax                  | P0       | `Point: Type = { x: Float, y: Float }`             |
+| Interface type                           | P1       | `Drawable: Type = { draw() -> Void }`              |
+| List comprehension                       | P2       | `[x for x in list if condition]`                   |
+| `?` error propagation                    | P1       | Automatic error propagation for Result type        |
+| `ref` keyword                            | P1       | Arc reference-counted sharing                      |
+| `unsafe` code block                      | P1       | Raw pointers and systems-level programming         |
+| `*T` raw pointer type                    | P1       | Raw pointer type syntax                            |
+| `clone()` semantics                      | P1       | Explicit copy                                      |
+| `@block` annotation                      | P1       | Synchronous execution guarantee                    |
+| `spawn` function                         | P1       | spawn function marker                              |
+| `spawn {}` block                         | P1       | Explicit concurrency region                        |
+| `spawn for` loop                         | P1       | Data-parallel loop                                 |
+| Send/Sync constraints                    | P2       | Concurrency-safe type checking                     |
+| Mutex/Atomic types                       | P2       | Concurrency-safe data types                        |
+| Error graph visualization                | P3       | Concurrency error propagation tracing              |
+| **Generic type system**                  | P1       | RFC-011                                            |
+| Basic generics `[T]`                     | P1       | Generic type parameters and monomorphization       |
+| Type constraint `[T: Clone]`             | P2       | Single/multiple constraint system                  |
+| Associated type `Item: T`                | P3       | GAT support                                        |
+| Compile-time generic `[N: Int]`          | P3       | Literal type constraint                            |
+| Conditional type `If[C, T, E]`           | P3       | Type-level computation                             |
+| Function overloading specialization      | P2       | Platform and type specialization                   |
+| Method syntax `Type.method`              | P1       | `Point.draw: (...) -> ... = ...`                   |
 
 ### B.4 Features Not to be Implemented
 
 The following Rust-style features **will not be implemented**:
 
-| Feature | Reason |
-|---------|--------|
-| Lifetime `'a` | No reference concept, no need for lifetime |
-| Borrow checker | ref = Arc replacement |
-| `&T` borrow syntax | Use Move semantics |
-| `&mut T` mutable borrow | Use mut + Move |
+| Feature                 | Reason                                     |
+| ----------------------- | ------------------------------------------ |
+| Lifetime `'a`           | No reference concept, no need for lifetime |
+| Borrow checker          | ref = Arc replacement                      |
+| `&T` borrow syntax      | Use Move semantics                         |
+| `&mut T` mutable borrow | Use mut + Move                             |
 
 ---
 
@@ -1664,7 +1683,9 @@ The following Rust-style features **will not be implemented**:
 
 ### 10.1 Binding Overview
 
-YaoXiang adopts a **pure functional design**, where all operations are implemented through functions. The binding mechanism associates functions with types, allowing callers to invoke functions as if they were calling methods.
+YaoXiang adopts a **pure functional design**, where all operations are implemented through
+functions. The binding mechanism associates functions with types, allowing callers to invoke
+functions as if they were calling methods.
 
 ```
 BindingDeclaration ::= Type '.' Identifier '=' FunctionName '[' PositionList ']'
@@ -1673,6 +1694,7 @@ Position     ::= Integer (starting from 0) | NegativeInteger | Placeholder
 ```
 
 **Core rules**:
+
 - Position index starts from **0**
 - Default binding to position **0** (first parameter)
 - Supports negative index `[-1]` meaning the last parameter
@@ -1682,6 +1704,7 @@ Position     ::= Integer (starting from 0) | NegativeInteger | Placeholder
 ### 10.2 Binding Syntax
 
 **Syntax**:
+
 ```
 Type.method = func[position]
 Type.method = func[0, 1, 2]    # Multi-position binding
@@ -1690,7 +1713,9 @@ Type.method = func[-1]        # Negative index (last parameter)
 ```
 
 **Semantics**:
-- `Type.method = func[0]` means when calling `obj.method(arg)`, `obj` is bound to the 0th parameter of `func`
+
+- `Type.method = func[0]` means when calling `obj.method(arg)`, `obj` is bound to the 0th parameter
+  of `func`
 - Remaining parameters are filled in original order
 
 ### 10.3 Binding Examples
@@ -1740,14 +1765,16 @@ result = f2(p2)         # → distance(p1, p2)
 ### 10.4 Binding Rules
 
 **Position rules**:
-| Rule | Description |
-|------|-------------|
-| Positions start from 0 | `func[0]` binds the 1st parameter (index 0) |
-| Maximum position | Must be < number of function parameters |
-| Negative index | `[-1]` means the last parameter |
-| Placeholder | `_` skips that position, provided by the user |
+
+| Rule                   | Description                                   |
+| ---------------------- | --------------------------------------------- |
+| Positions start from 0 | `func[0]` binds the 1st parameter (index 0)   |
+| Maximum position       | Must be < number of function parameters       |
+| Negative index         | `[-1]` means the last parameter               |
+| Placeholder            | `_` skips that position, provided by the user |
 
 **Type checking**:
+
 ```yaoxiang
 // ✅ Legal binding
 Point.distance = distance[0]          # distance(Point, Point)
@@ -1761,7 +1788,8 @@ Point.wrong = distance[-2]            # -2 out of range
 
 ### 10.5 Automatic Binding
 
-For functions defined in a module whose first parameter matches the module type, method call syntax is automatically supported:
+For functions defined in a module whose first parameter matches the module type, method call syntax
+is automatically supported:
 
 ```yaoxiang
 // === Point.yx ===
@@ -1784,13 +1812,15 @@ p3 = p1.add(p2)
 ```
 
 **Automatic binding rules**:
+
 - Function is defined in the module file
 - Function's 0th parameter type matches the module name
 - Function must be `pub` to be automatically bound outside the module
 
 ### 10.6 Relationship Between Binding and Currying
 
-Binding naturally supports currying. When fewer parameters than remaining are provided at call time, a function accepting the remaining parameters is returned:
+Binding naturally supports currying. When fewer parameters than remaining are provided at call time,
+a function accepting the remaining parameters is returned:
 
 ```yaoxiang
 // Original function: 5 parameters
@@ -1853,18 +1883,18 @@ result = f(arg2, arg3)
 
 ## Version History
 
-| Version | Date | Author | Change Description |
-|---------|------|--------|--------------------|
-| v1.0.0 | 2024-12-31 | 晨煦 | Initial version |
-| v1.1.0 | 2025-01-04 | 沫郁酱 | Fixed match arm using `=>` instead of `->`; updated function definition syntax; updated type definition syntax; added differences from code implementation |
-| v1.2.0 | 2025-01-05 | 沫郁酱 | Streamlined to pure specification, example code moved to tutorial/ directory |
-| v1.3.0 | 2025-01-05 | 沫郁酱 | Added spawn model specification (three-layer concurrency architecture, spawn syntax, annotations); added type system constraints (Send/Sync); added concurrency-safe types (Mutex, Atomic); updated error handling (`?` operator); updated features to be implemented list |
-| v1.4.0 | 2025-01-15 | 晨煦 | Updated ownership model (default Move + explicit ref=Arc); added unsafe keyword; removed lifetime `'a` and borrow checker; updated features to be implemented list |
-| v1.5.0 | 2025-01-20 | 晨煦 | Added method binding specification (RFC-004): position index starts from 0; default binding to position 0; supports negative index and multi-position binding |
-| v1.6.0 | 2025-02-06 | 晨煦 | Integrated RFC-010 (unified type syntax): updated `type Name = {...}` syntax, parameter names in signature for function definition, Type.method method syntax; integrated RFC-011 (generic system): added generic type `[T]`, type constraint `[T: Clone]`, associated type `Item: T`, compile-time generic `[N: Int]`, conditional type `If[C, T, E]`, function overloading specialization, platform specialization |
-| v1.7.0 | 2026-02-13 | 晨煦 | RFC-010 update: `Name: Type = {...}` replaces `type Name = {...}`; only `Type` (capitalized) is the meta type keyword; all declarations use unified syntax |
-| v1.8.0 | 2026-02-18 | 晨煦 | RFC-010 added default value initialization, built-in binding syntax; RFC-004 added built-in binding, anonymous function binding |
-| v1.8.1 | 2026-02-20 | 晨煦 | Meta type is not a keyword. |
+| Version | Date       | Author | Change Description                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------- | ---------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v1.0.0  | 2024-12-31 | 晨煦   | Initial version                                                                                                                                                                                                                                                                                                                                                                                                      |
+| v1.1.0  | 2025-01-04 | 沫郁酱 | Fixed match arm using `=>` instead of `->`; updated function definition syntax; updated type definition syntax; added differences from code implementation                                                                                                                                                                                                                                                           |
+| v1.2.0  | 2025-01-05 | 沫郁酱 | Streamlined to pure specification, example code moved to tutorial/ directory                                                                                                                                                                                                                                                                                                                                         |
+| v1.3.0  | 2025-01-05 | 沫郁酱 | Added spawn model specification (three-layer concurrency architecture, spawn syntax, annotations); added type system constraints (Send/Sync); added concurrency-safe types (Mutex, Atomic); updated error handling (`?` operator); updated features to be implemented list                                                                                                                                           |
+| v1.4.0  | 2025-01-15 | 晨煦   | Updated ownership model (default Move + explicit ref=Arc); added unsafe keyword; removed lifetime `'a` and borrow checker; updated features to be implemented list                                                                                                                                                                                                                                                   |
+| v1.5.0  | 2025-01-20 | 晨煦   | Added method binding specification (RFC-004): position index starts from 0; default binding to position 0; supports negative index and multi-position binding                                                                                                                                                                                                                                                        |
+| v1.6.0  | 2025-02-06 | 晨煦   | Integrated RFC-010 (unified type syntax): updated `type Name = {...}` syntax, parameter names in signature for function definition, Type.method method syntax; integrated RFC-011 (generic system): added generic type `[T]`, type constraint `[T: Clone]`, associated type `Item: T`, compile-time generic `[N: Int]`, conditional type `If[C, T, E]`, function overloading specialization, platform specialization |
+| v1.7.0  | 2026-02-13 | 晨煦   | RFC-010 update: `Name: Type = {...}` replaces `type Name = {...}`; only `Type` (capitalized) is the meta type keyword; all declarations use unified syntax                                                                                                                                                                                                                                                           |
+| v1.8.0  | 2026-02-18 | 晨煦   | RFC-010 added default value initialization, built-in binding syntax; RFC-004 added built-in binding, anonymous function binding                                                                                                                                                                                                                                                                                      |
+| v1.8.1  | 2026-02-20 | 晨煦   | Meta type is not a keyword.                                                                                                                                                                                                                                                                                                                                                                                          |
 
 ---
 

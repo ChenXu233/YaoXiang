@@ -22,29 +22,29 @@
 
 ### コアブランチ（Core Branches）
 
-| ブランチ名 | 用途 | ライフサイクル | 保護レベル |
-|------------|------|----------------|------------|
-| `main` | 本番環境コード | 永久 | 厳格保護 |
-| `dev` | メイン開発ブランチ | 永久 | 中程度保護 |
-| `master` | メインブランチ（互換性） | 永久 | 厳格保護 |
+| ブランチ名 | 用途                     | ライフサイクル | 保護レベル |
+| ---------- | ------------------------ | -------------- | ---------- |
+| `main`     | 本番環境コード           | 永久           | 厳格保護   |
+| `dev`      | メイン開発ブランチ       | 永久           | 中程度保護 |
+| `master`   | メインブランチ（互換性） | 永久           | 厳格保護   |
 
 ### 機能ブランチ（Feature Branches）
 
-| プレフィックス | 用途 | 命名例 | マージ先 |
-|----------------|------|--------|----------|
-| `feature/` | 新機能開発 | `feature/type-inference`<br>`feature/ownership-model` | `dev` |
-| `bugfix/` | 既知の欠陥修正 | `bugfix/memory-leak`<br>`bugfix/parser-error` | `dev` |
-| `hotfix/` | 緊急の本番環境問題修正 | `hotfix/security-patch`<br>`hotfix/crash-bug` | `main` + `dev` |
-| `release/` | リリース準備ブランチ | `release/v0.8.0`<br>`release/v1.0.0` | `main` |
+| プレフィックス | 用途                   | 命名例                                                | マージ先       |
+| -------------- | ---------------------- | ----------------------------------------------------- | -------------- |
+| `feature/`     | 新機能開発             | `feature/type-inference`<br>`feature/ownership-model` | `dev`          |
+| `bugfix/`      | 既知の欠陥修正         | `bugfix/memory-leak`<br>`bugfix/parser-error`         | `dev`          |
+| `hotfix/`      | 緊急の本番環境問題修正 | `hotfix/security-patch`<br>`hotfix/crash-bug`         | `main` + `dev` |
+| `release/`     | リリース準備ブランチ   | `release/v0.8.0`<br>`release/v1.0.0`                  | `main`         |
 
 ### 補助ブランチ（Auxiliary Branches）
 
-| プレフィックス | 用途 | 命名例 | マージ先 |
-|----------------|------|--------|----------|
-| `docs/` | ドキュメント更新 | `docs/api-reference`<br>`docs/tutorial-update` | `dev` |
-| `ci/` | CI/CD 設定変更 | `ci/add-deploy-script`<br>`ci/optimize-build` | `dev` |
-| `refactor/` | コードリファクタリング | `refactor/lexer-optimization`<br>`refactor/memory-manager` | `dev` |
-| `test/` | テスト関連変更 | `test/add-integration`<br>`test/performance-bench` | `dev` |
+| プレフィックス | 用途                   | 命名例                                                     | マージ先 |
+| -------------- | ---------------------- | ---------------------------------------------------------- | -------- |
+| `docs/`        | ドキュメント更新       | `docs/api-reference`<br>`docs/tutorial-update`             | `dev`    |
+| `ci/`          | CI/CD 設定変更         | `ci/add-deploy-script`<br>`ci/optimize-build`              | `dev`    |
+| `refactor/`    | コードリファクタリング | `refactor/lexer-optimization`<br>`refactor/memory-manager` | `dev`    |
+| `test/`        | テスト関連変更         | `test/add-integration`<br>`test/performance-bench`         | `dev`    |
 
 ---
 
@@ -200,6 +200,7 @@ graph TD
 ### 主要ブランチの保護
 
 **main ブランチ**
+
 - 直接プッシュを禁止
 - PR 経由でのみマージ可能
 - フォースプッシュを禁止
@@ -207,6 +208,7 @@ graph TD
 - ステータチェック通過を必須化
 
 **dev ブランチ**
+
 - 直接プッシュを禁止（開発メンバー）
 - PR 経由でのマージを必須化
 - ステータチェック通過を必須化
@@ -214,12 +216,12 @@ graph TD
 
 ### ブランチ権限設定
 
-| ブランチタイプ | 開発者 | メンテナー | 管理者 |
-|----------------|--------|------------|--------|
-| `main` | PR のみ | PR のみ | PR 承認 |
-| `dev` | PR マージ | PR マージ | 直接プッシュ |
-| `feature/*` | フル権限 | フル権限 | フル権限 |
-| `hotfix/*` | フル権限 | フル権限 | フル権限 |
+| ブランチタイプ | 開発者    | メンテナー | 管理者       |
+| -------------- | --------- | ---------- | ------------ |
+| `main`         | PR のみ   | PR のみ    | PR 承認      |
+| `dev`          | PR マージ | PR マージ  | 直接プッシュ |
+| `feature/*`    | フル権限  | フル権限   | フル権限     |
+| `hotfix/*`     | フル権限  | フル権限   | フル権限     |
 
 ---
 
@@ -267,6 +269,7 @@ graph TD
 ### Q1: ブランチタイプはどのように選択すればよいですか？
 
 **回答：**
+
 - 新機能 → `feature/`
 - 既知の欠陥修正 → `bugfix/`
 - 緊急の本番環境修正 → `hotfix/`
@@ -276,8 +279,7 @@ graph TD
 
 ### Q2: feature ブランチはどのブランチから作成すべきですか？
 
-**回答：**
-常に `dev` ブランチから作成し、最新の開発コードに基づいて機能を実現します：
+**回答：** 常に `dev` ブランチから作成し、最新の開発コードに基づいて機能を実現します：
 
 ```bash
 git checkout dev
@@ -288,6 +290,7 @@ git checkout -b feature/new-feature
 ### Q3: release ブランチはいつ作成すべきですか？
 
 **回答：**
+
 - 新バージョンのリリース準備時
 - 新機能の追加を凍結する必要がある時
 - 安定バージョンの专门的なテストが必要な時
@@ -295,6 +298,7 @@ git checkout -b feature/new-feature
 ### Q4: ブランチの競合（コンフリクト）はどのように処理しますか？
 
 **回答：**
+
 1. 対象ブランチを更新：`git checkout dev && git pull origin dev`
 2. 機能ブランチに切り替え：`git checkout feature/your-branch`
 3. マージして競合を解決：`git rebase dev` または `git merge dev`
@@ -303,6 +307,7 @@ git checkout -b feature/new-feature
 ### Q5: hotfix ブランチはどのように処理しますか？
 
 **回答：**
+
 1. `main` ブランチから作成：`git checkout main && git checkout -b hotfix/urgent-fix`
 2. 問題を修正してテスト
 3. `main` と `dev` に同時に PR を作成
@@ -363,6 +368,7 @@ echo "ブランチを作成してプッシュしました: $BRANCH_TYPE/$BRANCH_
 
 ---
 
-> 💡 **ヒント**：ブランチの原子性と集中性を保ち、各ブランチで1つのことだけを実行することで、コード管理をより明確かつ効率的に行うことができます！
+> 💡
+> **ヒント**：ブランチの原子性と集中性を保ち、各ブランチで1つのことだけを実行することで、コード管理をより明確かつ効率的に行うことができます！
 
 > 📞 **サポート**：質問がある場合は、GitHub Discussions で議論してください。

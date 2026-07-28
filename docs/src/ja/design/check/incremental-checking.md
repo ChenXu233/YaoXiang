@@ -11,7 +11,8 @@ watch モードでは、任意のファイル変更に対して全ファイル�
 
 ## 解決策
 
-`CheckSession` を使用して增量チェックの状態を管理し、`ModuleDependencyGraph::affected_modules` を利用して影響を受けるファイルのみを再チェックする。
+`CheckSession` を使用して增量チェックの状態を管理し、`ModuleDependencyGraph::affected_modules`
+を利用して影響を受けるファイルのみを再チェックする。
 
 ## 実装フロー
 
@@ -42,8 +43,10 @@ impl CheckSession {
 
 ## 既知の制限
 
-- watch モードでは依然として busy-wait debounce を使用（`command.rs` の `Instant::now()` + `recv_timeout`）
-- `check_incremental` 内部では依然として `check_files_with_diagnostics`（全量パス）を呼び出しており、真の增量を活用していない
+- watch モードでは依然として busy-wait debounce を使用（`command.rs` の `Instant::now()` +
+  `recv_timeout`）
+- `check_incremental` 内部では依然として
+  `check_files_with_diagnostics`（全量パス）を呼び出しており、真の增量を活用していない
 
 ## 今後の課題
 

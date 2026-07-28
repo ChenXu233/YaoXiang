@@ -1,15 +1,16 @@
 ---
-title: "RFC-002：基于 libuv 的资源类型 IO 实现层"
-status: "草案"
-author: "晨煦"
-created: "2025-01-05"
-updated: "2026-07-05"
-issue: "#102"
+title: 'RFC-002：基于 libuv 的资源类型 IO 实现层'
+status: '草案'
+author: '晨煦'
+created: '2025-01-05'
+updated: '2026-07-05'
+issue: '#102'
 ---
 
 # RFC-002：基于 libuv 的资源类型 IO 实现层
 
 > **参考**:
+>
 > - [RFC-024: 基于 spawn 块的并发模型](./024-concurrency-model.md)
 > - [RFC-008: Runtime 并发模型与调度器脱耦设计](./008-runtime-concurrency-model.md)
 > - [RFC-009: 所有权模型设计](./009-ownership-model.md)
@@ -30,11 +31,13 @@ libuv：跨平台 IO 引擎（事件循环 + 线程池）
 ```
 
 **不是什么**：
+
 - ❌ 不是"透明异步"——用户通过 spawn 块显式控制并发
 - ❌ 不是"自动异步化"——IO 操作需要在 spawn 块内显式调用
 - ❌ 不是"开发者无需关心底层细节"——资源类型系统确保并发安全
 
 **是什么**：
+
 - ✅ 资源类型（FilePath, HttpUrl, DBUrl, Console）的 IO 实现层
 - ✅ 跨平台 IO 统一（libuv 处理 Windows/Linux/macOS 差异）
 - ✅ 共享事件循环架构（一个 libuv 事件循环处理所有 IO）
@@ -45,6 +48,7 @@ libuv：跨平台 IO 引擎（事件循环 + 线程池）
 ### 为什么需要 libuv？
 
 RFC-024 定义了资源类型系统：
+
 - `FilePath` - 文件系统路径
 - `HttpUrl` - HTTP 端点
 - `DBUrl` - 数据库连接
@@ -52,12 +56,12 @@ RFC-024 定义了资源类型系统：
 
 这些资源类型需要底层 IO 实现。libuv 提供：
 
-| 需求 | libuv 提供 |
-|------|-----------|
-| 跨平台 IO | 统一 Windows/Linux/macOS API |
-| 异步能力 | 共享事件循环，所有 worker 的 IO 集中处理 |
-| 线程池 | 阻塞操作专用线程池 |
-| 并发安全 | 单线程事件循环，天然无竞争 |
+| 需求      | libuv 提供                               |
+| --------- | ---------------------------------------- |
+| 跨平台 IO | 统一 Windows/Linux/macOS API             |
+| 异步能力  | 共享事件循环，所有 worker 的 IO 集中处理 |
+| 线程池    | 阻塞操作专用线程池                       |
+| 并发安全  | 单线程事件循环，天然无竞争               |
 
 ### 与 RFC-024 的关系
 
@@ -114,6 +118,7 @@ RFC-024 定义了资源类型系统：
 ```
 
 **关键特性**：
+
 - 一个共享的 libuv 事件循环（在专用线程上运行）
 - 所有 worker 的 IO 操作提交到这个共享事件循环
 - 单线程事件循环天然避免竞争
@@ -121,11 +126,11 @@ RFC-024 定义了资源类型系统：
 
 #### 1.2 并发安全机制
 
-| libuv 特性 | YaoXiang 对应 | 并发安全 |
-|------------|---------------|----------|
-| 单线程事件循环 | spawn 块内顺序执行 | 天然无竞争 |
-| 线程池隔离 | 阻塞操作不阻塞主线程 | 无共享状态 |
-| 异步回调 | DAG 调度器管理依赖 | 确定性执行 |
+| libuv 特性     | YaoXiang 对应        | 并发安全   |
+| -------------- | -------------------- | ---------- |
+| 单线程事件循环 | spawn 块内顺序执行   | 天然无竞争 |
+| 线程池隔离     | 阻塞操作不阻塞主线程 | 无共享状态 |
+| 异步回调       | DAG 调度器管理依赖   | 确定性执行 |
 
 ### 2. 资源类型 IO 映射
 
@@ -139,16 +144,16 @@ impl StdModule for IoModule {
     fn exports(&self) -> Vec<NativeExport> {
         vec![
             // 文件操作 → libuv fs_* API
-            NativeExport::new("read_file", "std.io.read_file", 
+            NativeExport::new("read_file", "std.io.read_file",
                 "(path: FilePath) -> String", native_read_file),
-            NativeExport::new("write_file", "std.io.write_file", 
+            NativeExport::new("write_file", "std.io.write_file",
                 "(path: FilePath, content: String) -> Bool", native_write_file),
-            NativeExport::new("append_file", "std.io.append_file", 
+            NativeExport::new("append_file", "std.io.append_file",
                 "(path: FilePath, content: String) -> Bool", native_append_file),
             // Console 操作 → libuv tty API
-            NativeExport::new("print", "std.io.print", 
+            NativeExport::new("print", "std.io.print",
                 "(...args) -> ()", native_print),
-            NativeExport::new("println", "std.io.println", 
+            NativeExport::new("println", "std.io.println",
                 "(...args) -> ()", native_println),
         ]
     }
@@ -157,7 +162,7 @@ impl StdModule for IoModule {
 // libuv 文件 IO 实现
 fn native_read_file(args: &[RuntimeValue], ctx: &mut NativeContext) -> Result<RuntimeValue, ExecutorError> {
     let path = extract_file_path(args)?;
-    
+
     // 提交到 libuv 事件循环
     // libuv 异步读取文件
     // 返回结果
@@ -175,9 +180,9 @@ impl StdModule for NetModule {
     fn exports(&self) -> Vec<NativeExport> {
         vec![
             // HTTP 操作 → libuv http API
-            NativeExport::new("http_get", "std.net.http_get", 
+            NativeExport::new("http_get", "std.net.http_get",
                 "(url: HttpUrl) -> Response", native_http_get),
-            NativeExport::new("http_post", "std.net.http_post", 
+            NativeExport::new("http_post", "std.net.http_post",
                 "(url: HttpUrl, body: String) -> Response", native_http_post),
         ]
     }
@@ -186,7 +191,7 @@ impl StdModule for NetModule {
 // libuv 网络 IO 实现
 fn native_http_get(args: &[RuntimeValue], ctx: &mut NativeContext) -> Result<RuntimeValue, ExecutorError> {
     let url = extract_http_url(args)?;
-    
+
     // 提交到 libuv 事件循环
     // libuv 异步 HTTP 请求
     // 返回结果
@@ -204,7 +209,7 @@ impl StdModule for DbModule {
     fn exports(&self) -> Vec<NativeExport> {
         vec![
             // 数据库操作 → libuv 线程池
-            NativeExport::new("query", "std.db.query", 
+            NativeExport::new("query", "std.db.query",
                 "(url: DBUrl, sql: String) -> Rows", native_query),
         ]
     }
@@ -214,7 +219,7 @@ impl StdModule for DbModule {
 fn native_query(args: &[RuntimeValue], ctx: &mut NativeContext) -> Result<RuntimeValue, ExecutorError> {
     let url = extract_db_url(args)?;
     let sql = extract_sql(args)?;
-    
+
     // 提交到 libuv 线程池
     // 数据库查询在线程池执行
     // 完成后回调通知主线程
@@ -229,7 +234,7 @@ fn native_query(args: &[RuntimeValue], ctx: &mut NativeContext) -> Result<Runtim
 // 所有 Console 操作在同一线程内顺序执行
 fn native_print(args: &[RuntimeValue], ctx: &mut NativeContext) -> Result<RuntimeValue, ExecutorError> {
     let output = format_args(args);
-    
+
     // Console 操作串行化
     // libuv tty 写入
     ctx.uv_loop.tty_write(output)
@@ -280,11 +285,11 @@ HTTP.get: (HttpUrl) -> Response
 
 ### 4. Runtime 三层架构与 libuv
 
-| 层级 | libuv 使用 | 异步能力 | 适用场景 |
-|------|-----------|----------|----------|
-| Embedded Runtime | 无 libuv | 无异步 | WASM、游戏脚本 |
-| Standard Runtime | 共享事件循环 | IO 异步 | Web 服务、数据管道 |
-| Full Runtime | 共享事件循环 | IO 异步 + 并行 | 科学计算、大规模并行 |
+| 层级             | libuv 使用   | 异步能力       | 适用场景             |
+| ---------------- | ------------ | -------------- | -------------------- |
+| Embedded Runtime | 无 libuv     | 无异步         | WASM、游戏脚本       |
+| Standard Runtime | 共享事件循环 | IO 异步        | Web 服务、数据管道   |
+| Full Runtime     | 共享事件循环 | IO 异步 + 并行 | 科学计算、大规模并行 |
 
 **Embedded Runtime**：无 libuv，即时执行，无异步能力。
 
@@ -305,25 +310,25 @@ pub mod uv {
     pub struct UvLoop {
         loop_handle: *mut uv_loop_t,
     }
-    
+
     // 文件操作
     pub trait FileOps {
         fn fs_read(&self, path: &str) -> Result<String, UvError>;
         fn fs_write(&self, path: &str, content: &str) -> Result<(), UvError>;
         fn fs_append(&self, path: &str, content: &str) -> Result<(), UvError>;
     }
-    
+
     // 网络操作
     pub trait NetOps {
         fn http_get(&self, url: &str) -> Result<Response, UvError>;
         fn http_post(&self, url: &str, body: &str) -> Result<Response, UvError>;
     }
-    
+
     // 数据库操作
     pub trait DbOps {
         fn db_query(&self, url: &str, sql: &str) -> Result<Rows, UvError>;
     }
-    
+
     // Console 操作
     pub trait ConsoleOps {
         fn tty_write(&self, data: &str) -> Result<(), UvError>;
@@ -349,7 +354,7 @@ src/std/
 trait IoScheduler {
     // 提交 IO 任务，返回句柄
     fn submit_io(&self, task: IoTask) -> IoHandle;
-    
+
     // IO 完成时由 libuv 调用，唤醒 DAG 节点
     fn on_io_complete(&self, handle: IoHandle);
 }
@@ -364,7 +369,7 @@ impl IoScheduler for UvLoop {
             ResourceType::Console => self.tty_write(task.data),
         }
     }
-    
+
     fn on_io_complete(&self, handle: IoHandle) {
         // 通知 DAG 调度器唤醒下游节点
         self.dag_scheduler.wake_dependents(handle.node_id);
@@ -395,12 +400,12 @@ impl IoScheduler for UvLoop {
 
 ## 替代方案
 
-| 方案 | 为什么不选择 |
-|------|--------------|
-| Rust std::io | 同步阻塞，无法与 spawn 块配合实现异步 |
-| tokio | 为 Rust async/await 设计，与 YaoXiang 显式并发模型不契合 |
-| mio | 仅提供原始异步原语，缺乏高级 IO 功能 |
-| 从零实现 | 复杂且易出错，无法与 libuv 成熟度相比 |
+| 方案         | 为什么不选择                                             |
+| ------------ | -------------------------------------------------------- |
+| Rust std::io | 同步阻塞，无法与 spawn 块配合实现异步                    |
+| tokio        | 为 Rust async/await 设计，与 YaoXiang 显式并发模型不契合 |
+| mio          | 仅提供原始异步原语，缺乏高级 IO 功能                     |
+| 从零实现     | 复杂且易出错，无法与 libuv 成熟度相比                    |
 
 ---
 
@@ -424,13 +429,13 @@ impl IoScheduler for UvLoop {
 
 ## 设计决策记录
 
-| 决策 | 决定 | 原因 | 日期 |
-|------|------|------|------|
-| IO 实现层 | libuv | 跨平台、异步能力、并发安全 | 2025-01-05 |
-| 定位 | 资源类型 IO 实现层 | 与 RFC-024 资源类型系统集成 | 2026-06-16 |
-| 事件循环架构 | 共享事件循环 | 资源效率高，避免重复创建 | 2026-06-16 |
-| 并发安全 | 单线程事件循环 | 天然无竞争，与 RFC-024 契合 | 2026-06-16 |
-| 标准库重写 | std.io/std.net 基于 libuv | 跨平台统一、异步能力 | 2026-06-16 |
+| 决策         | 决定                      | 原因                        | 日期       |
+| ------------ | ------------------------- | --------------------------- | ---------- |
+| IO 实现层    | libuv                     | 跨平台、异步能力、并发安全  | 2025-01-05 |
+| 定位         | 资源类型 IO 实现层        | 与 RFC-024 资源类型系统集成 | 2026-06-16 |
+| 事件循环架构 | 共享事件循环              | 资源效率高，避免重复创建    | 2026-06-16 |
+| 并发安全     | 单线程事件循环            | 天然无竞争，与 RFC-024 契合 | 2026-06-16 |
+| 标准库重写   | std.io/std.net 基于 libuv | 跨平台统一、异步能力        | 2026-06-16 |
 
 ---
 
@@ -464,6 +469,6 @@ impl IoScheduler for UvLoop {
 
 ## 生命周期与归宿
 
-| 状态 | 位置 | 说明 |
-|------|------|------|
+| 状态     | 位置                     | 说明       |
+| -------- | ------------------------ | ---------- |
 | **草案** | `docs/design/rfc/draft/` | 重新审核中 |

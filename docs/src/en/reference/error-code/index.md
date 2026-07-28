@@ -3,6 +3,7 @@
 > Auto-generated from `src/util/diagnostic/codes/`
 
 The YaoXiang compiler uses a unified error code system, where each error code includes:
+
 - **Code**: Error identifier (e.g., `E1001`)
 - **Category**: The phase the error belongs to
 - **Title**: Short description of the error
@@ -11,16 +12,16 @@ The YaoXiang compiler uses a unified error code system, where each error code in
 
 ## Error Code List
 
-| Prefix | Category | Description |
-|--------|----------|-------------|
-| E0xxx | Lexer/Parser | Lexical and syntax analysis errors |
-| E1xxx | TypeCheck | Type checking errors |
-| E2xxx | Semantic | Semantic analysis errors |
-| E4xxx | Generic | Generics and trait errors |
-| E5xxx | Module | Module and import errors |
-| E6xxx | Runtime | Runtime errors |
-| E7xxx | I/O | I/O and system errors |
-| E8xxx | Internal | Internal compiler errors |
+| Prefix | Category     | Description                        |
+| ------ | ------------ | ---------------------------------- |
+| E0xxx  | Lexer/Parser | Lexical and syntax analysis errors |
+| E1xxx  | TypeCheck    | Type checking errors               |
+| E2xxx  | Semantic     | Semantic analysis errors           |
+| E4xxx  | Generic      | Generics and trait errors          |
+| E5xxx  | Module       | Module and import errors           |
+| E6xxx  | Runtime      | Runtime errors                     |
+| E7xxx  | I/O          | I/O and system errors              |
+| E8xxx  | Internal     | Internal compiler errors           |
 
 ## Usage
 

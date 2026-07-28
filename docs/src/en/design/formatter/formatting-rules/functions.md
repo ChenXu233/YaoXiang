@@ -1,5 +1,5 @@
 ---
-title: "Function-Related Formatting Rules"
+title: 'Function-Related Formatting Rules'
 description: Formatting rules for function definitions, function calls, and Lambda expressions
 ---
 
@@ -19,7 +19,8 @@ foo: (a: Int, b: Int) -> Int = a + b
 foo : (a: Int, b: Int) -> Int = a + b
 ```
 
-**§4.2 Parameter List Line Break.** When the parameter list exceeds the line width, each parameter occupies one line, with a trailing comma.
+**§4.2 Parameter List Line Break.** When the parameter list exceeds the line width, each parameter
+occupies one line, with a trailing comma.
 
 ```
 // When exceeding the line width
@@ -33,7 +34,8 @@ very_long_function_name:
 ) -> Int = first_param + second_param + third_param
 ```
 
-**§4.3 Return Type.** The return type is connected to the parameter list using ` -> `, with a space on each side of `->`.
+**§4.3 Return Type.** The return type is connected to the parameter list using `->`, with a space on
+each side of `->`.
 
 ```
 // ✅ Correct
@@ -80,7 +82,8 @@ foo(x = 1, y = 2)
 foo(x=1, y=2)
 ```
 
-**§7.3 Argument Line Break.** When the argument list exceeds the line width, each argument occupies one line, with a trailing comma.
+**§7.3 Argument Line Break.** When the argument list exceeds the line width, each argument occupies
+one line, with a trailing comma.
 
 ```
 // When exceeding the line width

@@ -1,11 +1,11 @@
 ---
-title: "RFC-006: 文档站点建设"
-status: "已接受"
-author: "晨煦"
-created: "2025-01-05"
-updated: "2026-07-05"
+title: 'RFC-006: 文档站点建设'
+status: '已接受'
+author: '晨煦'
+created: '2025-01-05'
+updated: '2026-07-05'
 
-issue: "#130"
+issue: '#130'
 ---
 
 # RFC-006: 文档站点建设
@@ -20,7 +20,8 @@ issue: "#130"
 
 ### 为什么需要这个特性？
 
-当前文档散落在多个目录，仅靠 GitHub Readme 展示，新用户难以找到所需信息，无法搜索，中英文文档不同步。
+当前文档散落在多个目录，仅靠 GitHub
+Readme 展示，新用户难以找到所需信息，无法搜索，中英文文档不同步。
 
 ### 当前的问题
 
@@ -39,6 +40,7 @@ docs/
 ```
 
 问题：
+
 1. 无统一入口，仅靠 GitHub Readme
 2. 无法搜索
 3. 无版本切换，用户可能阅读过时文档
@@ -99,14 +101,15 @@ docs/
 
 ### URL 路径规范（核心设计）
 
-| 场景 | URL 格式 | 说明 |
-|------|---------|------|
-| 最新版中文 | `/zh/getting-started/` | 跳转到最新版本 |
-| 最新版英文 | `/en/getting-started/` | 跳转到最新版本 |
-| 指定版本 | `/v0.5/zh/getting-started/` | 版本号前缀 |
-| 首页 | `/zh/` 或 `/en/` | 语言首页 |
+| 场景       | URL 格式                    | 说明           |
+| ---------- | --------------------------- | -------------- |
+| 最新版中文 | `/zh/getting-started/`      | 跳转到最新版本 |
+| 最新版英文 | `/en/getting-started/`      | 跳转到最新版本 |
+| 指定版本   | `/v0.5/zh/getting-started/` | 版本号前缀     |
+| 首页       | `/zh/` 或 `/en/`            | 语言首页       |
 
 **版本切换设计**：
+
 ```
 版本切换下拉菜单：
 ├── v0.6 (latest)
@@ -116,6 +119,7 @@ docs/
 ```
 
 **版本路径规范**（关键决策，后期难改）：
+
 - 最新版：`/zh/xxx/` → 重定向到最新版本
 - 指定版本：`/v0.5/zh/xxx/` → 固定版本
 - 导航栏版本切换：切换 `/v0.5/` 和 `/zh/` 的组合
@@ -137,12 +141,10 @@ export default {
   '/zh/reference/': [
     {
       text: '参考',
-      items: [
-        { text: '内置函数', link: '/zh/reference/builtins' },
-      ],
+      items: [{ text: '内置函数', link: '/zh/reference/builtins' }],
     },
   ],
-}
+};
 ```
 
 ### CI/CD 集成
@@ -184,15 +186,15 @@ export default [
   { text: '参考', link: '/zh/reference/' },
   { text: '设计', link: '/zh/design/' },
   { text: 'GitHub', link: 'https://github.com/yaoxiang-lang/yaoxiang' },
-]
+];
 ```
 
 ### 站点配置
 
 ```typescript
 // docs/.vitepress/config.mts
-import { defineConfig } from 'vitepress'
-import starlight from '@astrojs/starlight'
+import { defineConfig } from 'vitepress';
+import starlight from '@astrojs/starlight';
 
 export default defineConfig({
   title: 'YaoXiang',
@@ -215,7 +217,7 @@ export default defineConfig({
   editLink: {
     pattern: 'https://github.com/yaoxiang-lang/yaoxiang/edit/main/docs/:path',
   },
-})
+});
 ```
 
 ## 权衡
@@ -235,25 +237,25 @@ export default defineConfig({
 
 ## 替代方案
 
-| 方案 | 为什么不选 |
-|------|-----------|
+| 方案        | 为什么不选       |
+| ----------- | ---------------- |
 | GitHub Wiki | 搜索差，定制性低 |
-| 仅 README | 无搜索、无导航 |
-| Docusaurus | 较重，启动慢 |
+| 仅 README   | 无搜索、无导航   |
+| Docusaurus  | 较重，启动慢     |
 
 ## 实现策略
 
 ### 阶段划分
 
-| 阶段 | 内容 | 状态 |
-|------|------|------|
-| P0 | 初始化 VitePress + Starlight 配置 | 待办 |
-| P0 | 配置目录结构、导航栏、侧边栏 | 待办 |
-| P0 | 迁移 README + 快速开始 | 待办 |
-| P0 | CI/CD 自动部署到 GitHub Pages | 待办 |
-| P1 | 迁移教程、参考文档 | 待办 |
-| P1 | 配置版本切换菜单 | 待办 |
-| P2 | 补充英文文档 | 待办 |
+| 阶段 | 内容                              | 状态 |
+| ---- | --------------------------------- | ---- |
+| P0   | 初始化 VitePress + Starlight 配置 | 待办 |
+| P0   | 配置目录结构、导航栏、侧边栏      | 待办 |
+| P0   | 迁移 README + 快速开始            | 待办 |
+| P0   | CI/CD 自动部署到 GitHub Pages     | 待办 |
+| P1   | 迁移教程、参考文档                | 待办 |
+| P1   | 配置版本切换菜单                  | 待办 |
+| P2   | 补充英文文档                      | 待办 |
 
 ### 依赖关系
 
@@ -261,8 +263,8 @@ export default defineConfig({
 
 ### 风险
 
-| 风险 | 影响 | 缓解措施 |
-|------|------|---------|
+| 风险     | 影响           | 缓解措施 |
+| -------- | -------------- | -------- |
 | 内容丢失 | 迁移前完整备份 |
 
 ## 开放问题
@@ -275,13 +277,13 @@ export default defineConfig({
 
 ### 附录A：设计决策记录
 
-| 决策 | 决定 | 日期 | 记录人 |
-|------|------|------|--------|
-| SSG 选型 | VitePress + Starlight | 2025-02-07 | 晨煦 |
-| 托管平台 | GitHub Pages | 2025-02-07 | 晨煦 |
-| 搜索方案 | 本地搜索 | 2025-02-07 | 晨煦 |
-| 多语言结构 | `/zh/` 和 `/en/` 前缀 | 2025-02-07 | 晨煦 |
-| 版本路径 | `/v0.5/zh/` 格式 | 2025-02-07 | 晨煦 |
+| 决策       | 决定                  | 日期       | 记录人 |
+| ---------- | --------------------- | ---------- | ------ |
+| SSG 选型   | VitePress + Starlight | 2025-02-07 | 晨煦   |
+| 托管平台   | GitHub Pages          | 2025-02-07 | 晨煦   |
+| 搜索方案   | 本地搜索              | 2025-02-07 | 晨煦   |
+| 多语言结构 | `/zh/` 和 `/en/` 前缀 | 2025-02-07 | 晨煦   |
+| 版本路径   | `/v0.5/zh/` 格式      | 2025-02-07 | 晨煦   |
 
 ---
 

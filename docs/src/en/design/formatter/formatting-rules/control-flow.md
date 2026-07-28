@@ -1,6 +1,6 @@
 ---
-title: "Control Flow Formatting Rules"
-description: "Formatting rules for if/elif/else, for loops, while loops, and loop labels"
+title: 'Control Flow Formatting Rules'
+description: 'Formatting rules for if/elif/else, for loops, while loops, and loop labels'
 ---
 
 # Control Flow Formatting Rules
@@ -9,7 +9,8 @@ description: "Formatting rules for if/elif/else, for loops, while loops, and loo
 
 ## §5 Control Flow
 
-**§5.1 if Expression.** The `if` keyword is separated from the condition by a space, and the condition is separated from the code block by a space.
+**§5.1 if Expression.** The `if` keyword is separated from the condition by a space, and the
+condition is separated from the code block by a space.
 
 ```
 // ✅ Correct

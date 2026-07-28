@@ -1,20 +1,24 @@
 ---
-title: "RFC-037: 工業的配布ソリューション — cargo-dist ベースのコンパイラ/ツールチェーンパッケージング"
-author: "ChenXu233"
-created: "2026-07-26"
-updated: "2026-07-27"
-issue: "#230"
+title:
+  'RFC-037: 工業的配布ソリューション — cargo-dist ベースのコンパイラ/ツールチェーンパッケージング'
+author: 'ChenXu233'
+created: '2026-07-26'
+updated: '2026-07-27'
+issue: '#230'
 ---
 
 # RFC-037: 工業的配布ソリューション — cargo-dist ベースのコンパイラ/ツールチェーンパッケージング
 
-> 本 RFC は [RFC-014b: ビルドシステムとバイナリ配布](../review/014b-build-system.md) と補完関係にある。
-> RFC-014b は **YaoXiang パッケージマネージャ**がサードパーティパッケージをビルド・配布する方法を定義しており、
-> 本 RFC は **YaoXiang コンパイラ/ツールチェーン自体**をパッケージング・配布する方法を定義する。
+> 本 RFC は [RFC-014b: ビルドシステムとバイナリ配布](../review/014b-build-system.md)
+> と補完関係にある。RFC-014b は
+> **YaoXiang パッケージマネージャ**がサードパーティパッケージをビルド・配布する方法を定義しており、本 RFC は
+> **YaoXiang コンパイラ/ツールチェーン自体**をパッケージング・配布する方法を定義する。
 
 ## 概要
 
-既存の hand-written CI ビルド/パッケージングロジックを `cargo-dist`（Rust エコシステムのバイナリ配布標準ツール）に置き換え、クロスプラットフォーム自動リリースを実現する。`libz3.dll` の欠落、標準ライブラリインターフェースファイルがパッケージに含まれない問題、ディレクトリ構造の混乱、CI スクリプトの重複メンテナンスなどの問題を解決する。
+既存の hand-written CI ビルド/パッケージングロジックを
+`cargo-dist`（Rust エコシステムのバイナリ配布標準ツール）に置き換え、クロスプラットフォーム自動リリースを実現する。`libz3.dll`
+の欠落、標準ライブラリインターフェースファイルがパッケージに含まれない問題、ディレクトリ構造の混乱、CI スクリプトの重複メンテナンスなどの問題を解決する。
 
 ## 動機
 
@@ -26,7 +30,8 @@ YaoXiang をダウンロードしたユーザーは、追加の手順なしで**
 
 #### 問題 1：Windows ユーザーがダウンロード後に実行できない
 
-現在の Release では `yaoxiang.exe` のみアップロードされており、`libz3.dll` がパッケージに含まれていない。Windows でダブルクリックして実行すると以下のエラーが出る：
+現在の Release では `yaoxiang.exe` のみアップロードされており、`libz3.dll`
+がパッケージに含まれていない。Windows でダブルクリックして実行すると以下のエラーが出る：
 
 ```
 The code execution cannot proceed because libz3.dll was not found.
@@ -41,36 +46,43 @@ yaoxiang-v0.7.10-x86_64-pc-windows-msvc.zip
 └── yaoxiang.exe
 ```
 
-標準ライブラリインターフェースファイル（`.yx` ファイル、LSP で必要）が配布パッケージに含まれていない。ユーザーは `yaoxiang package init` を実行して生成する必要がある。工業的なアプローチとしては、配布パッケージに標準ライブラリを同梱すべきである。
+標準ライブラリインターフェースファイル（`.yx`
+ファイル、LSP で必要）が配布パッケージに含まれていない。ユーザーは `yaoxiang package init`
+を実行して生成する必要がある。工業的なアプローチとしては、配布パッケージに標準ライブラリを同梱すべきである。
 
 #### 問題 3：CI の hand-written スクリプトの重複メンテナンス
 
 現在、4 セットのビルドパイプラインをメンテナンスしている：
 
-| ファイル | 役割 | 行数 |
-|------|------|------|
-| `_build-platforms.yml` | クロスプラットフォームビルド | ~255 行 |
-| `release.yml` | バージョンリリース | ~176 行 |
-| `nightly.yml` | デイリービルド | ~145 行 |
-| `_build-wasm.yml` | Wasm ビルド | ~75 行 |
-| `scripts/build/setup.iss` | Inno Setup インストーラ | ~250 行 |
-| **合計** | | **~900 行** |
+| ファイル                  | 役割                         | 行数        |
+| ------------------------- | ---------------------------- | ----------- |
+| `_build-platforms.yml`    | クロスプラットフォームビルド | ~255 行     |
+| `release.yml`             | バージョンリリース           | ~176 行     |
+| `nightly.yml`             | デイリービルド               | ~145 行     |
+| `_build-wasm.yml`         | Wasm ビルド                  | ~75 行      |
+| `scripts/build/setup.iss` | Inno Setup インストーラ      | ~250 行     |
+| **合計**                  |                              | **~900 行** |
 
-大部分は重複しており（Rust のインストール → キャッシュ → ビルド → リネーム → アップロード）、各プラットフォームごとに記述が必要。`cargo-dist` なら 1 コマンドで同等のパイプラインを生成できる。
+大部分は重複しており（Rust のインストール → キャッシュ → ビルド → リネーム → アップロード）、各プラットフォームごとに記述が必要。`cargo-dist`
+なら 1 コマンドで同等のパイプラインを生成できる。
 
 #### 問題 4：Inno Setup のバージョン番号ハードコード
 
-`setup.iss` の `MyAppVersion` が `0.7.0` とハードコードされており、ビルド時に `sed` で置換している。迟早壊れる。
+`setup.iss` の `MyAppVersion` が `0.7.0` とハードコードされており、ビルド時に `sed`
+で置換している。迟早壊れる。
 
 #### 問題 5：RFC-014b との境界が曖昧
 
-RFC-014b は「YaoXiang パッケージのビルドと配布メカニズム」（すなわち `yaoxiang.toml` の `[build]` と `[binaries]` 設定）を定義しているが、**「YaoXiang コンパイラ自体をどうリリースするか」をカバーしていない**。本 RFC はこの空白を埋める。
+RFC-014b は「YaoXiang パッケージのビルドと配布メカニズム」（すなわち `yaoxiang.toml` の `[build]` と
+`[binaries]`
+設定）を定義しているが、**「YaoXiang コンパイラ自体をどうリリースするか」をカバーしていない**。本 RFC はこの空白を埋める。
 
 ## 提案
 
 ### コアデザイン
 
-**cargo-dist** をリリースパイプラインの骨格として採用し、カスタム post-build スクリプトでパッケージ構造と追加ファイルを処理する。
+**cargo-dist**
+をリリースパイプラインの骨格として採用し、カスタム post-build スクリプトでパッケージ構造と追加ファイルを処理する。
 
 ```
 cargo-dist の役割:
@@ -92,7 +104,8 @@ YaoXiang カスタムスクリプト（package-dist.sh）の役割:
 
 ### 配布ディレクトリ構造
 
-各プラットフォームの release 圧縮パッケージは、`package-dist.sh` が cargo-dist ビルド後に再編成する：
+各プラットフォームの release 圧縮パッケージは、`package-dist.sh`
+が cargo-dist ビルド後に再編成する：
 
 ```
 yaoxiang-{version}-{target}.tar.gz / .zip
@@ -111,18 +124,18 @@ yaoxiang-{version}-{target}.tar.gz / .zip
 └── LICENSE
 ```
 
-cargo-dist デフォルトの zip はフラット構造（バイナリ + 自動同梱の README/LICENSE がすべてルートディレクトリ）になっている。
-これは問題ではない — 役割を明確に分ける：cargo-dist はコンパイル + CI + インストーラを担当し、YaoXiang は 50 行の `package-dist.sh` で zip 構造を管理する。
+cargo-dist デフォルトの zip はフラット構造（バイナリ + 自動同梱の README/LICENSE がすべてルートディレクトリ）になっている。これは問題ではない — 役割を明確に分ける：cargo-dist はコンパイル +
+CI + インストーラを担当し、YaoXiang は 50 行の `package-dist.sh` で zip 構造を管理する。
 
 ### プラットフォームサポート
 
-| プラットフォーム | target triple | 説明 |
-|------|-------------|------|
-| Linux x86_64 | `x86_64-unknown-linux-gnu` | メインプラットフォーム |
-| Linux ARM64 | `aarch64-unknown-linux-gnu` | CI 上でクロスコンパイル |
-| macOS x86_64 | `x86_64-apple-darwin` | Intel Mac |
-| macOS ARM64 | `aarch64-apple-darwin` | Apple Silicon |
-| Windows x86_64 | `x86_64-pc-windows-msvc` | メインプラットフォーム |
+| プラットフォーム | target triple               | 説明                    |
+| ---------------- | --------------------------- | ----------------------- |
+| Linux x86_64     | `x86_64-unknown-linux-gnu`  | メインプラットフォーム  |
+| Linux ARM64      | `aarch64-unknown-linux-gnu` | CI 上でクロスコンパイル |
+| macOS x86_64     | `x86_64-apple-darwin`       | Intel Mac               |
+| macOS ARM64      | `aarch64-apple-darwin`      | Apple Silicon           |
+| Windows x86_64   | `x86_64-pc-windows-msvc`    | メインプラットフォーム  |
 
 Windows ARM64 は当面サポートしない（Z3 公式に ARM64 のプレコンパイルパッケージがない）。
 
@@ -130,17 +143,19 @@ Windows ARM64 は当面サポートしない（Z3 公式に ARM64 のプレコ�
 
 **全プラットフォームで統一して動的リンクに変更する。**
 
-| プラットフォーム | 変更点 | 成果物 |
-|------|------|------|
-| Linux | **静的→動的に変更** | `libz3.so` |
-| macOS | **静的→動的に変更** | `libz3.dylib` |
-| Windows | 変更なし | `libz3.dll` |
-| wasm32 | 変更なし（静的リンク） | 埋め込み `.a` |
+| プラットフォーム | 変更点                 | 成果物        |
+| ---------------- | ---------------------- | ------------- |
+| Linux            | **静的→動的に変更**    | `libz3.so`    |
+| macOS            | **静的→動的に変更**    | `libz3.dylib` |
+| Windows          | 変更なし               | `libz3.dll`   |
+| wasm32           | 変更なし（静的リンク） | 埋め込み `.a` |
 
 理由：
+
 - **一貫性** — 3 つのプラットフォームの動作が統一され、特別なケースがなくなる
 - **外部ライブラリは共有ライブラリで配布すべき**。Python（`python3.dll`+`DLLs/lib*.dll`）、Node（`node`+`lib/`）も同じ方式
-- **ユーザーが Z3 をアップグレードする際にコンパイラのバージョンを待つ必要がない** — `.so`/`.dylib`/`.dll` を置き換えるだけ
+- **ユーザーが Z3 をアップグレードする際にコンパイラのバージョンを待つ必要がない** —
+  `.so`/`.dylib`/`.dll` を置き換えるだけ
 - **バイナリサイズが小さくなる** — Z3 は小さくないため、静的リンクは exe を数 MB 膨張させる
 
 対応する `build.rs` の変更：
@@ -155,20 +170,22 @@ fn link_z3(z3_dir: &Path) {
 }
 ```
 
-**「全プラットフォームでの静的リンク」は目標としない。** これは特殊ケースの排除ではなく、合理的なケースを誤った方法で排除するものである。共有ライブラリは外部ライブラリの通常の配布方式である。
+**「全プラットフォームでの静的リンク」は目標としない。**
+これは特殊ケースの排除ではなく、合理的なケースを誤った方法で排除するものである。共有ライブラリは外部ライブラリの通常の配布方式である。
 
 ### インストーラサポート
 
-| インストーラ | ステータス | 説明 |
-|--------|------|------|
-| zip / tar.gz | ✅ デフォルト | 全プラットフォーム、手動ダウンロード |
-| shell スクリプト | ✅ cargo-dist | Unix: `curl ... \| sh` |
-| powershell スクリプト | ✅ cargo-dist | Windows: `irm ... \| iex` |
-| Homebrew formula | ✅ cargo-dist | macOS: `brew install yaoxiang` |
-| Windows MSI | ✅ cargo-dist | WiX ベース、メイン Windows インストーラ |
-| **Inno Setup** | **✅ 補助として保持** | 国内ユーザ向けオプション、削除しない |
+| インストーラ          | ステータス            | 説明                                    |
+| --------------------- | --------------------- | --------------------------------------- |
+| zip / tar.gz          | ✅ デフォルト         | 全プラットフォーム、手動ダウンロード    |
+| shell スクリプト      | ✅ cargo-dist         | Unix: `curl ... \| sh`                  |
+| powershell スクリプト | ✅ cargo-dist         | Windows: `irm ... \| iex`               |
+| Homebrew formula      | ✅ cargo-dist         | macOS: `brew install yaoxiang`          |
+| Windows MSI           | ✅ cargo-dist         | WiX ベース、メイン Windows インストーラ |
+| **Inno Setup**        | **✅ 補助として保持** | 国内ユーザ向けオプション、削除しない    |
 
 **Inno Setup を保持する理由：**
+
 - 国内の Windows ユーザは exe インストールウィザート（次へ → 次へ → 完了）に慣れている
 - MSI は一部の企業/学校のネットワーク環境でブロックされる
 - `setup.iss` を 1 つ追加でメンテナンスするコストは、一部のユーザを失うコストよりはるかに低い
@@ -177,7 +194,9 @@ fn link_z3(z3_dir: &Path) {
 
 サブコマンド名：**`yaoxiang package gen-std`**（既存の `package init`/`add`/`install` と同じ体系）
 
-現在 `src/std/gen_interfaces.rs` に完全な実装が既にある（`generate_all_interfaces()`、`write_interfaces_to_dir()`）。`main.rs` にサブコマンドエントリを追加し、`package-dist.sh` から呼び出すだけ：
+現在 `src/std/gen_interfaces.rs`
+に完全な実装が既にある（`generate_all_interfaces()`、`write_interfaces_to_dir()`）。`main.rs`
+にサブコマンドエントリを追加し、`package-dist.sh` から呼び出すだけ：
 
 ```bash
 yaoxiang package gen-std --out-dir "$PKG_ROOT/lib/yaoxiang/std/"
@@ -189,27 +208,28 @@ yaoxiang package gen-std --out-dir "$PKG_ROOT/lib/yaoxiang/std/"
 
 cargo-dist は「コンパイラをユーザに配布する」役割であり、wasm は「ドキュメントサイトにオンライン playground を埋め込む」ためのもので、2 つは全く異なる成果物である。
 
-| 側面 | 方針 |
-|------|------|
-| ビルドツール | `wasm-pack build` を維持 |
-| CI workflow | `_build-wasm.yml` を独立 job として保持 |
+| 側面             | 方針                                             |
+| ---------------- | ------------------------------------------------ |
+| ビルドツール     | `wasm-pack build` を維持                         |
+| CI workflow      | `_build-wasm.yml` を独立 job として保持          |
 | トリガタイミング | release と同じ push で並行して実行される独立 job |
-| 公開先 | `docs/public/wasm/` → GitHub Pages |
+| 公開先           | `docs/public/wasm/` → GitHub Pages               |
 
 ### npm 公開
 
 2 つの異なる npm パッケージ、それぞれ独立：
 
-| パッケージ | 内容 | ツール | ステータス |
-|----|------|------|------|
-| `@yaoxiang/cli` | CLI バイナリのダウンロード（wrapper） | cargo-dist ネイティブ生成 | cargo-dist 設定で動作 |
-| `@yaoxiang/playground` | wasm ライブラリ（JS + .wasm） | wasm-pack + `npm publish` | オプション、現在 docs のみ公開 |
+| パッケージ             | 内容                                  | ツール                    | ステータス                     |
+| ---------------------- | ------------------------------------- | ------------------------- | ------------------------------ |
+| `@yaoxiang/cli`        | CLI バイナリのダウンロード（wrapper） | cargo-dist ネイティブ生成 | cargo-dist 設定で動作          |
+| `@yaoxiang/playground` | wasm ライブラリ（JS + .wasm）         | wasm-pack + `npm publish` | オプション、現在 docs のみ公開 |
 
 両者は競合せず、名前も競合しない。
 
 ### Nightly 公開
 
-cargo-dist にはネイティブの nightly サポートがない（[#1143](https://github.com/axodotdev/cargo-dist/issues/1143)、依然として open feature request）。
+cargo-dist にはネイティブの nightly サポートがない（[#1143](https://github.com/axodotdev/cargo-dist/issues/1143)、依然として open
+feature request）。
 
 **既存の cron + tag 方式を維持**し、ビルド部分を cargo-dist に置き換える：
 
@@ -289,7 +309,9 @@ tar czf "yaoxiang-$VERSION-$TARGET.tar.gz" "yaoxiang-$VERSION-$TARGET"
 
 ### 標準ライブラリインターフェースファイルの生成
 
-現在 `src/std/gen_interfaces.rs` に `.yx` インターフェースファイル生成機能が既に実装されており（`write_interfaces_to_dir`）、`package init` コマンドもこれを呼び出している。
+現在 `src/std/gen_interfaces.rs` に `.yx`
+インターフェースファイル生成機能が既に実装されており（`write_interfaces_to_dir`）、`package init`
+コマンドもこれを呼び出している。
 
 `main.rs` にサブコマンドエントリを追加し、パッケージングスクリプトから呼び出すだけでよい。
 
@@ -297,15 +319,16 @@ tar czf "yaoxiang-$VERSION-$TARGET.tar.gz" "yaoxiang-$VERSION-$TARGET"
 
 移行完了後に以下のファイルを削除する：
 
-| ファイル | 行数 | 代替 |
-|------|------|------|
-| `.github/workflows/_build-platforms.yml` | 255 | cargo-dist 自動生成 |
-| `.github/workflows/release.yml` | 176 | cargo-dist 自動生成 |
-| `.github/workflows/nightly.yml` | 145 | cargo-dist ビルド + 公開ロジック保持 |
-| `scripts/build/setup.iss` | ~250 | **保持**（国内向け） |
-| **削除合計** | **~600 行** | |
+| ファイル                                 | 行数        | 代替                                 |
+| ---------------------------------------- | ----------- | ------------------------------------ |
+| `.github/workflows/_build-platforms.yml` | 255         | cargo-dist 自動生成                  |
+| `.github/workflows/release.yml`          | 176         | cargo-dist 自動生成                  |
+| `.github/workflows/nightly.yml`          | 145         | cargo-dist ビルド + 公開ロジック保持 |
+| `scripts/build/setup.iss`                | ~250        | **保持**（国内向け）                 |
+| **削除合計**                             | **~600 行** |                                      |
 
 保持する：
+
 - `ci.yml`（日常 fmt + clippy + test + MSRV、リリースフローに属さない）
 - `nightly.yml`（公開ロジック部分のみ保持）
 - `_build-wasm.yml`（独立したビルドフロー）
@@ -326,29 +349,30 @@ tar czf "yaoxiang-$VERSION-$TARGET.tar.gz" "yaoxiang-$VERSION-$TARGET"
 ### デメリット
 
 - **cargo-dist 設定の学習** — チームが新しいツールを学習する必要がある
-- **カスタムパッケージングスクリプトのメンテナンスコストが残る** — パッケージ構造と標準ライブラリインターフェースファイルのスクリプトのメンテナンスが必要
+- **カスタムパッケージングスクリプトのメンテナンスコストが残る**
+  — パッケージ構造と標準ライブラリインターフェースファイルのスクリプトのメンテナンスが必要
 - **cargo-dist のバージョンアップ** — upstream の変更をフォローする必要がある
 - **cargo-dist にネイティブの nightly がない** — nightly 公開部分は引き続き手書きが必要
 
 ### RFC-014b との関係
 
-| | RFC-014b | RFC-037 |
-|--|----------|---------|
-| **範囲** | サードパーティパッケージのビルドと配布 | コンパイラ自体のパッケージングと配布 |
-| **ツール** | `yaoxiang build` / `yaoxiang publish` | `cargo-dist` |
+|            | RFC-014b                                  | RFC-037                                      |
+| ---------- | ----------------------------------------- | -------------------------------------------- |
+| **範囲**   | サードパーティパッケージのビルドと配布    | コンパイラ自体のパッケージングと配布         |
+| **ツール** | `yaoxiang build` / `yaoxiang publish`     | `cargo-dist`                                 |
 | **成果物** | サードパーティパッケージの FFI ライブラリ | コンパイラ + 標準ライブラリ + ツールチェーン |
-| **排他** | いいえ、補完関係 | いいえ、補完関係 |
+| **排他**   | いいえ、補完関係                          | いいえ、補完関係                             |
 
 ## 代替案
 
-| 案 | 採用しない理由 |
-|------|-----------|
-| **手書き CI を継続** | 既に約 900 行手書き済みで、重複作業となり DLL 漏れが発生しやすい |
-| **独自のパッケージングツールを作成** | 車輪の再発明はしない、cargo-dist は既に成熟している |
-| **tar.gz のみでインストーラを使わない** | ユーザによりフレンドリーなインストール方式（Homebrew/MSI）が必要 |
-| **Docker 配布** | コンパイラと言語ツールチェーンにはネイティブバイナリが必要で、コンテナ向けではない |
-| **Z3 を全静的リンク** | 外部ライブラリは共有ライブラリで配布するのが普通であり、静的リンクを追求しない |
-| **Inno Setup を廃止** | 国内ユーザの習慣が異なるため、保持コストは非常に低い |
+| 案                                      | 採用しない理由                                                                     |
+| --------------------------------------- | ---------------------------------------------------------------------------------- |
+| **手書き CI を継続**                    | 既に約 900 行手書き済みで、重複作業となり DLL 漏れが発生しやすい                   |
+| **独自のパッケージングツールを作成**    | 車輪の再発明はしない、cargo-dist は既に成熟している                                |
+| **tar.gz のみでインストーラを使わない** | ユーザによりフレンドリーなインストール方式（Homebrew/MSI）が必要                   |
+| **Docker 配布**                         | コンパイラと言語ツールチェーンにはネイティブバイナリが必要で、コンテナ向けではない |
+| **Z3 を全静的リンク**                   | 外部ライブラリは共有ライブラリで配布するのが普通であり、静的リンクを追求しない     |
+| **Inno Setup を廃止**                   | 国内ユーザの習慣が異なるため、保持コストは非常に低い                               |
 
 ## 実装戦略
 
@@ -384,8 +408,10 @@ tar czf "yaoxiang-$VERSION-$TARGET.tar.gz" "yaoxiang-$VERSION-$TARGET"
 - ~~Windows での Z3 静的リンクの実現性？~~ → **静的リンクは行わず、全プラットフォーム動的に**
 - ~~gen-std-interfaces サブコマンドの命名？~~ → **`yaoxiang package gen-std`**
 - ~~Inno Setup を保持するか？~~ → **保持**
-- ~~cargo-dist extra-artifacts の条件付き実行？~~ → **`package-dist.sh` スクリプトで処理、shell case 分岐を使用**
-- ~~標準ライブラリインターフェースのバージョン互換性？~~ → **コンパイラのバージョンと一緒にリリース、同じ圧縮パッケージ内**
+- ~~cargo-dist extra-artifacts の条件付き実行？~~ → **`package-dist.sh` スクリプトで処理、shell
+  case 分岐を使用**
+- ~~標準ライブラリインターフェースのバージョン互換性？~~ →
+  **コンパイラのバージョンと一緒にリリース、同じ圧縮パッケージ内**
 
 ## 参考資料
 

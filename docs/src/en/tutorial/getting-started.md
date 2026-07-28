@@ -2,7 +2,9 @@
 
 > This guide helps you quickly get started with the YaoXiang programming language.
 >
-> **Note**: The code examples in this document are based on the YaoXiang language specification. If you encounter syntax differences during actual execution, please refer to the [Language Specification](../reference/language-spec/index.md).
+> **Note**: The code examples in this document are based on the YaoXiang language specification. If
+> you encounter syntax differences during actual execution, please refer to the
+> [Language Specification](../reference/language-spec/index.md).
 
 ## Installation
 
@@ -29,6 +31,7 @@ cargo test
 ```
 
 **Verify successful installation**:
+
 ```bash
 ./target/debug/yaoxiang --version
 # Should output something like: yaoxiang x.y.z
@@ -180,7 +183,8 @@ str = p.serialize()  // → Point.serialize(p)
 
 #### Auto Binding
 
-Functions declared with the `pub` keyword are automatically bound to the types defined in the same file:
+Functions declared with the `pub` keyword are automatically bound to the types defined in the same
+file:
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
@@ -287,7 +291,8 @@ message = match result {
 
 ## Spawn Programming (Concurrency)
 
-YaoXiang's concurrency model is built around the `spawn <expr>` primitive—it is the only entry point for parallelism.
+YaoXiang's concurrency model is built around the `spawn <expr>` primitive—it is the only entry point
+for parallelism.
 
 ```yaoxiang
 // spawn modifies any expression, automatically executing in parallel
@@ -301,7 +306,9 @@ main: () -> Void = {
 }
 ```
 
-**Core rule**: An expression modified by `spawn` executes in the background, and the outer scope synchronously blocks waiting for the result. Independent tasks are automatically parallelized, scheduled by the runtime's GMP model.
+**Core rule**: An expression modified by `spawn` executes in the background, and the outer scope
+synchronously blocks waiting for the result. Independent tasks are automatically parallelized,
+scheduled by the runtime's GMP model.
 
 ## Module System
 
@@ -351,7 +358,8 @@ match result {
 
 ## Next Steps
 
-- 📚 Check out the [Language Specification](../YaoXiang-language-specification.md) for the complete syntax
+- 📚 Check out the [Language Specification](../YaoXiang-language-specification.md) for the complete
+  syntax
 - 🏗️ Browse the [Architecture Documentation](../architecture/) for implementation details
 - 💡 Read the [Design Manifesto](../YaoXiang-design-manifesto.md) for the core philosophy
 

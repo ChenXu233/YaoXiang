@@ -1,20 +1,22 @@
 ---
-title: "RFC-014c: ワークスペースサポート"
-status: "審査中"
-author: "晨煦"
-created: "2026-06-11"
-updated: "2026-07-05"
-group: "rfc-014"
-issue: "#113"
+title: 'RFC-014c: ワークスペースサポート'
+status: '審査中'
+author: '晨煦'
+created: '2026-06-11'
+updated: '2026-07-05'
+group: 'rfc-014'
+issue: '#113'
 ---
 
 # RFC-014c: ワークスペースサポート
 
-> 本 RFC は [RFC-014: パッケージ管理システム設計](../accepted/014-package-manager.md) のサブ RFC です。
+> 本 RFC は [RFC-014: パッケージ管理システム設計](../accepted/014-package-manager.md)
+> のサブ RFC です。
 
 ## 概要
 
-YaoXiang のワークスペース（workspace）メカニズムを定義します。複数の関連パッケージを一緒に開発する際の、依存関係の共有、パス参照、lockfile の統一、Cargo workspace との統合を含みます。
+YaoXiang のワークスペース（workspace）メカニズムを定義します。複数の関連パッケージを一緒に開発する際の、依存関係の共有、パス参照、lockfile の統一、Cargo
+workspace との統合を含みます。
 
 ## 動機
 
@@ -53,7 +55,8 @@ app = "packages/app/yaoxiang.toml"
 2. 共有 lockfile の提供（`yaoxiang.lock`）
 3. 共有 vendor ディレクトリの提供（`.yaoxiang/vendor/`）
 
-**ルート toml は dependencies を定義しません。** 各メンバーの依存関係はそれぞれの `yaoxiang.toml` に書きます。
+**ルート toml は dependencies を定義しません。** 各メンバーの依存関係はそれぞれの `yaoxiang.toml`
+に書きます。
 
 ### メンバー yaoxiang.toml
 
@@ -109,7 +112,8 @@ my-workspace/
 
 ### workspace 依存関係参照
 
-`{ workspace = "member-name" }` は `[workspace.members]` の **key** を参照します（メンバーの `[package].name` ではありません）。
+`{ workspace = "member-name" }` は `[workspace.members]` の **key** を参照します（メンバーの
+`[package].name` ではありません）。
 
 ```toml
 # ルート yaoxiang.toml
@@ -150,7 +154,9 @@ utils = { workspace = "utils" }
 utils = "^0.2.0"
 ```
 
-**バージョンのソース：** 依存されるメンバーの `[package].version` を読んで、`^` 接頭辞を付加する。Registry はチェックしない——バージョンの権威あるソースはメンバーの `yaoxiang.toml` であり、Registry は配布渠道に過ぎない。
+**バージョンのソース：** 依存されるメンバーの `[package].version` を読んで、`^`
+接頭辞を付加する。Registry はチェックしない——バージョンの権威あるソースはメンバーの `yaoxiang.toml`
+であり、Registry は配布渠道に過ぎない。
 
 パッケージマネージャーは `yaoxiang publish` 時にこの置換を自動的に行う。
 
@@ -185,16 +191,17 @@ my-workspace/
 
 ### CLI コマンド
 
-| コマンド | 機能 |
-|------|------|
-| `yaoxiang workspace list` | ワークスペースメンバーの一覧表示 |
-| `yaoxiang workspace add <path>` | メンバーの追加 |
-| `yaoxiang workspace remove <name>` | メンバーの削除 |
-| `yaoxiang build` | すべてのメンバーをビルド（依存関係のトポロジカルソート順） |
-| `yaoxiang build core` | 指定メンバーのビルド |
-| `yaoxiang test` | すべてのメンバーのテストを実行 |
+| コマンド                           | 機能                                                       |
+| ---------------------------------- | ---------------------------------------------------------- |
+| `yaoxiang workspace list`          | ワークスペースメンバーの一覧表示                           |
+| `yaoxiang workspace add <path>`    | メンバーの追加                                             |
+| `yaoxiang workspace remove <name>` | メンバーの削除                                             |
+| `yaoxiang build`                   | すべてのメンバーをビルド（依存関係のトポロジカルソート順） |
+| `yaoxiang build core`              | 指定メンバーのビルド                                       |
+| `yaoxiang test`                    | すべてのメンバーのテストを実行                             |
 
-**`yaoxiang build` の動作：** すべてのメンバーをビルドし、依存関係のトポロジカルソート順で行う。core → utils → app の場合、ビルド順序は core → utils → app となる。
+**`yaoxiang build` の動作：** すべてのメンバーをビルドし、依存関係のトポロジカルソート順で行う。core
+→ utils → app の場合、ビルド順序は core → utils → app となる。
 
 ## 詳細設計
 
@@ -225,7 +232,8 @@ struct WorkspaceMember {
 }
 ```
 
-**検出ロジック：** toml をロードする際、`[workspace]` セクションがある場合は `WorkspaceManifest` として解析し、なければ `PackageManifest` として解析する。
+**検出ロジック：** toml をロードする際、`[workspace]` セクションがある場合は `WorkspaceManifest`
+として解析し、なければ `PackageManifest` として解析する。
 
 ### workspace 依存関係参照
 
@@ -259,23 +267,23 @@ struct WorkspaceMember {
 
 ## 代替案
 
-| 方案 | 選擇しない理由 |
-|------|-----------|
+| 方案                             | 選擇しない理由                                          |
+| -------------------------------- | ------------------------------------------------------- |
 | 独立プロジェクト + path 依存関係 | lockfile が統一されず、バージョンドリフトのリスクがある |
-| npm workspaces のようなもの | npm の workspace 問題が多く、模仿する価値がない |
-| Cargo workspace を直接再利用 | YaoXiang と Cargo は異なるパッケージエコシステム |
+| npm workspaces のようなもの      | npm の workspace 問題が多く、模仿する価値がない         |
+| Cargo workspace を直接再利用     | YaoXiang と Cargo は異なるパッケージエコシステム        |
 
 ## 実装戦略
 
 ### フェーズ分け
 
-| フェーズ | 内容 |
-|------|------|
+| フェーズ | 内容                                             |
+| -------- | ------------------------------------------------ |
 | Phase 6a | `[workspace.members]` の解析 + WorkspaceManifest |
-| Phase 6b | 共有 lockfile + 依存関係のマージ解決 |
-| Phase 6c | `{ workspace = "name" }` パス依存関係参照 |
-| Phase 6d | 公開時のパス依存関係の自動置き換え |
-| Phase 6e | Cargo workspace 統合 |
+| Phase 6b | 共有 lockfile + 依存関係のマージ解決             |
+| Phase 6c | `{ workspace = "name" }` パス依存関係参照        |
+| Phase 6d | 公開時のパス依存関係の自動置き換え               |
+| Phase 6e | Cargo workspace 統合                             |
 
 ### 依存関係
 

@@ -7,7 +7,9 @@ description: YaoXiang check cross-file type checking design
 
 ## Problem Description
 
-In the early implementation, `check_files_with_diagnostics` created an independent `Compiler` for each file, making it impossible to detect cross-file references. A `pub` function defined in fileA could not be recognized in fileB.
+In the early implementation, `check_files_with_diagnostics` created an independent `Compiler` for
+each file, making it impossible to detect cross-file references. A `pub` function defined in fileA
+could not be recognized in fileB.
 
 ## Solution
 
@@ -29,12 +31,14 @@ Use a shared `TypeEnvironment` and check all modules in dependency order.
 
 ## Namespace Isolation
 
-Use `module_name.symbol_name` format to store exported symbols, avoiding name conflicts between symbols with the same name in different modules.
+Use `module_name.symbol_name` format to store exported symbols, avoiding name conflicts between
+symbols with the same name in different modules.
 
 ## Known Limitations
 
 - `traits/` placeholder implementation (coherence/impl_check/object_safety/resolution) is incomplete
-- `check_single_module` still creates an independent Compiler for each module (full implementation of type information propagation via shared env is not yet complete)
+- `check_single_module` still creates an independent Compiler for each module (full implementation
+  of type information propagation via shared env is not yet complete)
 
 ## Future Work
 

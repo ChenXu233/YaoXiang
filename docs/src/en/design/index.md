@@ -1,18 +1,20 @@
 # YaoXiang Design Document
 
-> The Tao gives birth to One, One gives birth to Two, Two gives birth to Three, Three gives birth to the ten thousand things.
+> The Tao gives birth to One, One gives birth to Two, Two gives birth to Three, Three gives birth to
+> the ten thousand things.
 
-This directory contains the design decisions, proposals, and discussions for the YaoXiang programming language.
+This directory contains the design decisions, proposals, and discussions for the YaoXiang
+programming language.
 
 ## Core Design Philosophy
 
-| Philosophy | Description |
-|------|------|
+| Philosophy               | Description                                                              |
+| ------------------------ | ------------------------------------------------------------------------ |
 | **Everything is a type** | Values, functions, modules are all types; types are first-class citizens |
-| **Natural syntax** | Python-like readability, close to natural language |
-| **Ownership model** | Zero-cost abstraction, no GC, high performance |
-| **spawn model** | Synchronous syntax, asynchronous nature, automatic parallelism |
-| **AI-friendly** | Strict structure, clear AST |
+| **Natural syntax**       | Python-like readability, close to natural language                       |
+| **Ownership model**      | Zero-cost abstraction, no GC, high performance                           |
+| **spawn model**          | Synchronous syntax, asynchronous nature, automatic parallelism           |
+| **AI-friendly**          | Strict structure, clear AST                                              |
 
 ## Design Document Structure
 
@@ -35,15 +37,16 @@ design/
 
 ## Accepted Design Proposals
 
-| Document | Status | Description |
-|------|------|------|
-| [RFC-010 Unified Type Syntax](./rfc/accepted/010-unified-type-syntax.md) | ✅ Accepted | Unified type definition syntax |
-| [RFC-011 Generic Type System](./rfc/accepted/011-generic-type-system.md) | ✅ Accepted | Generics type system design |
-| [RFC-009 Ownership Model](./rfc/accepted/009-ownership-model.md) | ✅ Accepted | Ownership and borrowing system design |
-| [RFC-024 Concurrency Model](./rfc/accepted/024-concurrency-model.md) | ✅ Accepted | spawn concurrency primitive semantics |
+| Document                                                                               | Status      | Description                                     |
+| -------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------- |
+| [RFC-010 Unified Type Syntax](./rfc/accepted/010-unified-type-syntax.md)               | ✅ Accepted | Unified type definition syntax                  |
+| [RFC-011 Generic Type System](./rfc/accepted/011-generic-type-system.md)               | ✅ Accepted | Generics type system design                     |
+| [RFC-009 Ownership Model](./rfc/accepted/009-ownership-model.md)                       | ✅ Accepted | Ownership and borrowing system design           |
+| [RFC-024 Concurrency Model](./rfc/accepted/024-concurrency-model.md)                   | ✅ Accepted | spawn concurrency primitive semantics           |
 | [RFC-027 Compile-time Assertions](./rfc/accepted/027-compile-time-evaluation-types.md) | ✅ Accepted | Compile-time predicates and static verification |
 
-> See the [`rfc/accepted/`](./rfc/accepted/) directory for the full list (16 in total), and [`rfc/index.md`](./rfc/index.md) for the latest status.
+> See the [`rfc/accepted/`](./rfc/accepted/) directory for the full list (16 in total), and
+> [`rfc/index.md`](./rfc/index.md) for the latest status.
 
 ## RFC Proposals
 
@@ -51,59 +54,60 @@ design/
 
 ### Active Proposals
 
-| Number | Title | Status |
-|------|------|------|
-| RFC-019 | Typed Homoiconicity | Draft |
-| RFC-028 | JIT Compiler | Draft |
-| RFC-029 | Module Semantics System | Draft |
-| RFC-031 | Optimization Levels | Draft |
-| RFC-033 | ^^ Reflection Operator | Draft |
-| RFC-034 | Debug Toolchain | Draft |
-| RFC-035 | MCP Server | Draft |
-| RFC-002 | Cross-platform IO (libuv) | Draft |
-| RFC-026b | yx-bindgen | Draft |
+| Number   | Title                                         | Status       |
+| -------- | --------------------------------------------- | ------------ |
+| RFC-019  | Typed Homoiconicity                           | Draft        |
+| RFC-028  | JIT Compiler                                  | Draft        |
+| RFC-029  | Module Semantics System                       | Draft        |
+| RFC-031  | Optimization Levels                           | Draft        |
+| RFC-033  | ^^ Reflection Operator                        | Draft        |
+| RFC-034  | Debug Toolchain                               | Draft        |
+| RFC-035  | MCP Server                                    | Draft        |
+| RFC-002  | Cross-platform IO (libuv)                     | Draft        |
+| RFC-026b | yx-bindgen                                    | Draft        |
 | RFC-011a | Interface Implementation and Dynamic Dispatch | Under Review |
-| RFC-014a | Registry Protocol | Under Review |
-| RFC-014b | Build System | Under Review |
-| RFC-014c | Workspace | Under Review |
-| RFC-026a | Extensible FFI | Under Review |
-| RFC-032 | Unified spawn Expression | Under Review |
+| RFC-014a | Registry Protocol                             | Under Review |
+| RFC-014b | Build System                                  | Under Review |
+| RFC-014c | Workspace                                     | Under Review |
+| RFC-026a | Extensible FFI                                | Under Review |
+| RFC-032  | Unified spawn Expression                      | Under Review |
 
 ### Accepted Proposals
 
-| Number | Title | Status |
-|------|------|------|
-| RFC-004 | Currying and Multi-position Binding | Accepted |
-| RFC-006 | Documentation Site Optimization | Accepted |
-| RFC-007 | Unified Function Syntax | Accepted |
-| RFC-008 | Runtime Concurrency Model | Accepted |
-| RFC-009 | Ownership Model | Accepted |
-| RFC-009a | Token Lifetime Analysis | Accepted |
-| RFC-010 | Unified Type Syntax | Accepted |
-| RFC-011 | Generics System | Accepted |
-| RFC-012 | f-string | Accepted |
-| RFC-013 | Error Code Specification | Accepted |
-| RFC-014 | Package Manager | Accepted |
-| RFC-015 | Configuration System | Accepted |
-| RFC-017 | LSP Support | Accepted |
-| RFC-018 | LLVM AOT Compiler | Accepted |
-| RFC-024 | Concurrency Model | Accepted |
-| RFC-026 | FFI Core Mechanism | Accepted |
-| RFC-027 | Compile-time Assertions | Accepted |
-| RFC-030 | assert Mechanism | Accepted |
+| Number   | Title                               | Status   |
+| -------- | ----------------------------------- | -------- |
+| RFC-004  | Currying and Multi-position Binding | Accepted |
+| RFC-006  | Documentation Site Optimization     | Accepted |
+| RFC-007  | Unified Function Syntax             | Accepted |
+| RFC-008  | Runtime Concurrency Model           | Accepted |
+| RFC-009  | Ownership Model                     | Accepted |
+| RFC-009a | Token Lifetime Analysis             | Accepted |
+| RFC-010  | Unified Type Syntax                 | Accepted |
+| RFC-011  | Generics System                     | Accepted |
+| RFC-012  | f-string                            | Accepted |
+| RFC-013  | Error Code Specification            | Accepted |
+| RFC-014  | Package Manager                     | Accepted |
+| RFC-015  | Configuration System                | Accepted |
+| RFC-017  | LSP Support                         | Accepted |
+| RFC-018  | LLVM AOT Compiler                   | Accepted |
+| RFC-024  | Concurrency Model                   | Accepted |
+| RFC-026  | FFI Core Mechanism                  | Accepted |
+| RFC-027  | Compile-time Assertions             | Accepted |
+| RFC-030  | assert Mechanism                    | Accepted |
 
 ### Rejected Proposals
 
-| Number | Title | Status |
-|------|------|------|
-| RFC-003 | Version Planning | Rejected |
-| RFC-005 | CVE Scanning | Rejected |
-| RFC-016 | Quantum-native Support | Rejected |
+| Number  | Title                     | Status   |
+| ------- | ------------------------- | -------- |
+| RFC-003 | Version Planning          | Rejected |
+| RFC-005 | CVE Scanning              | Rejected |
+| RFC-016 | Quantum-native Support    | Rejected |
 | RFC-025 | Primitive Type Extensions | Rejected |
 
 ### RFC Template
 
 Before submitting a new proposal, please refer to:
+
 - [RFC_TEMPLATE.md](./rfc/RFC_TEMPLATE.md)
 - [Complete Example](./rfc/EXAMPLE_full_feature_proposal.md)
 
@@ -113,15 +117,16 @@ Before submitting a new proposal, please refer to:
 
 RFC proposals have 5 states:
 
-| State | Meaning |
-|------|------|
-| Draft | Work in progress |
-| Under Review | Open for discussion |
-| Accepted | Design approved |
-| Deprecated | Was accepted, replaced by a new design |
-| Rejected | Not approved |
+| State        | Meaning                                |
+| ------------ | -------------------------------------- |
+| Draft        | Work in progress                       |
+| Under Review | Open for discussion                    |
+| Accepted     | Design approved                        |
+| Deprecated   | Was accepted, replaced by a new design |
+| Rejected     | Not approved                           |
 
 Full lifecycle:
+
 ```
 Draft → Under Review → Accepted → Deprecated (replaced)
                           ↓
@@ -221,7 +226,9 @@ process: () -> Result(Data, Error) = {
 
 ## Historical Archive
 
-Historical documents from the design process have been moved to the [`docs/old/`](../../old/) directory, including:
+Historical documents from the design process have been moved to the [`docs/old/`](../../old/)
+directory, including:
+
 - Early architecture design
 - Deprecated proposals
 - Outdated implementation plans

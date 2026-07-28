@@ -1,7 +1,7 @@
 ---
 layout: page
 sidebar: false
-title: "プレイグラウンド"
+title: 'プレイグラウンド'
 permalink: /playground/
 ---
 

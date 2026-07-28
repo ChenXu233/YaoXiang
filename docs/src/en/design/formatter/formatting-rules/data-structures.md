@@ -1,6 +1,6 @@
 ---
-title: "Data Structure Formatting Rules"
-description: "Formatting rules for literals, lists and dictionaries, and Match expressions"
+title: 'Data Structure Formatting Rules'
+description: 'Formatting rules for literals, lists and dictionaries, and Match expressions'
 ---
 
 # Data Structure Formatting Rules
@@ -27,7 +27,8 @@ let y = 42.0;  // Must have decimal point
 let y = 42;    // Integer, not float
 ```
 
-**§8.3 String literals.** Use double quotes by default. When `single_quote = true`, use single quotes.
+**§8.3 String literals.** Use double quotes by default. When `single_quote = true`, use single
+quotes.
 
 ```
 // Default (double quotes)
@@ -63,7 +64,8 @@ let x = [1, 2, 3];
 let x = [1,2,3];
 ```
 
-**§10.2 Dictionary format.** Dictionaries are enclosed in `{}`, with key-value pairs using `key: value` format.
+**§10.2 Dictionary format.** Dictionaries are enclosed in `{}`, with key-value pairs using
+`key: value` format.
 
 ```
 // ✅ Correct
@@ -109,7 +111,8 @@ match x {
 }
 ```
 
-**§11.3 Pattern line break.** When a pattern is too long, the pattern wraps and `=>` aligns with the body.
+**§11.3 Pattern line break.** When a pattern is too long, the pattern wraps and `=>` aligns with the
+body.
 
 ```
 // ✅ Wrapped
@@ -175,7 +178,8 @@ let x = obj . field;  // Extra space
 let y = obj. field;  // Extra space
 ```
 
-**§11.6.2 Chained field access.** When chained field access exceeds line width, each method call goes on its own line.
+**§11.6.2 Chained field access.** When chained field access exceeds line width, each method call
+goes on its own line.
 
 ```
 // When exceeding line width

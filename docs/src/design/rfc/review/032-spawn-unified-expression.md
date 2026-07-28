@@ -1,31 +1,36 @@
 ---
-title: "RFC-032: spawn 统一表达式修饰 — 消除 spawn for 特殊情况"
-status: "审核中"
-author: "晨煦"
-created: "2026-06-16"
-updated: "2026-07-03"
-issue: "#98"
+title: 'RFC-032: spawn 统一表达式修饰 — 消除 spawn for 特殊情况'
+status: '审核中'
+author: '晨煦'
+created: '2026-06-16'
+updated: '2026-07-03'
+issue: '#98'
 ---
 
 # RFC-032: spawn 统一表达式修饰
 
-> **本文档定义 `spawn` 的语法、AST/IR 重构、类型系统扩展**。
-> 运行时行为语义（任务拆解粒度、所有权、作用域、错误传播、资源类型、嵌套）见 [RFC-024: 基于 spawn 的并发运行时语义](./024-concurrency-model.md)。
+> **本文档定义 `spawn`
+> 的语法、AST/IR 重构、类型系统扩展**。运行时行为语义（任务拆解粒度、所有权、作用域、错误传播、资源类型、嵌套）见
+> [RFC-024: 基于 spawn 的并发运行时语义](./024-concurrency-model.md)。
 >
 > 两个 RFC 协同定义 `spawn` —— 024 回答"做什么"，032 回答"怎么表示"。
 
-> **核心洞察**：`spawn` 不应该只修饰 `{}` 块。它可以修饰**任意表达式**。`spawn for` 不是特殊语法——它就是 `spawn` + `for` 表达式的自然组合。
+> **核心洞察**：`spawn` 不应该只修饰 `{}` 块。它可以修饰**任意表达式**。`spawn for`
+> 不是特殊语法——它就是 `spawn` + `for` 表达式的自然组合。
 
 ## 摘要
 
-将 `spawn` 从 `spawn { }`（仅修饰块）扩展为 `spawn <expr>`（修饰任意表达式）。`Expr::SpawnFor` 从 AST 中删除，由 `Expr::Spawn { body: Expr::For { .. } }` 自然替代。表达式结构的类型（Block、For、While、If 等）作为新 `MonoType` 变体进入类型系统，`Spawn<T>` 包装并发执行的计算结构，编译期标记，检查后擦除。
-
+将 `spawn` 从 `spawn { }`（仅修饰块）扩展为 `spawn <expr>`（修饰任意表达式）。`Expr::SpawnFor`
+从 AST 中删除，由 `Expr::Spawn { body: Expr::For { .. } }`
+自然替代。表达式结构的类型（Block、For、While、If 等）作为新 `MonoType` 变体进入类型系统，`Spawn<T>`
+包装并发执行的计算结构，编译期标记，检查后擦除。
 
 ## 动机
 
 ### 为什么需要这个变更？
 
-当前 `spawn for x in items { body }` 是独立的关键词组合，AST 中有 `Expr::SpawnFor` 专门表示它。这破坏了语言的正交性：
+当前 `spawn for x in items { body }` 是独立的关键词组合，AST 中有 `Expr::SpawnFor`
+专门表示它。这破坏了语言的正交性：
 
 1. **语法不统一**：`spawn` 只能修饰 `{}` 块，`spawn for` 是硬编码的例外
 2. **正交性缺失**：`spawn while`、`spawn if` 等组合无法自然表达
@@ -49,35 +54,38 @@ SpawnFor { var, var_mut, iterable, body, span },  // spawn for x in items { ... 
 
 `spawn <expr>`：`spawn` 修饰任意表达式。表达式的形状决定 DAG 如何分解任务。
 
-**一切皆类型**：`MonoType` 从"值类型"扩展为"值类型 + 计算结构类型"。每个关键表达式结构在类型系统中有对应的类型变体。`Spawn<T>` 包装被并发执行的计算结构。
+**一切皆类型**：`MonoType`
+从"值类型"扩展为"值类型 + 计算结构类型"。每个关键表达式结构在类型系统中有对应的类型变体。`Spawn<T>`
+包装被并发执行的计算结构。
 
 ### 用户心智模型
 
 `spawn` = "把这个表达式拿去做并发"。表达式的形状决定怎么拆：
 
-| 表达式形状 | 并发行为 | 类型 |
-|-----------|---------|------|
-| `spawn { a, b, c }` | `a`、`b`、`c` 独立并行 | `Spawn(Block(Tuple(T_a, T_b, T_c)))` |
-| `spawn for x in items { f(x) }` | N 个迭代独立并行 | `Spawn(ForExpr { body_ty: List(T) })` |
-| `spawn while cond { step() }` | 每轮迭代独立任务 | `Spawn(WhileExpr { body_ty: List(T) })` |
-| `spawn if c { a } else { b }` | 被选中分支整体为 spawn 域 | `Spawn(IfExpr { then_ty: T_a, else_ty: Some(T_b) })` |
-| `spawn call(x)` | 调用本身作为一个任务 | `Spawn(Call { fn_ty: Fn(A→R), result_ty: R })` |
-| `spawn 42` | 单独一个任务 | `Spawn(Int)` |
+| 表达式形状                      | 并发行为                  | 类型                                                 |
+| ------------------------------- | ------------------------- | ---------------------------------------------------- |
+| `spawn { a, b, c }`             | `a`、`b`、`c` 独立并行    | `Spawn(Block(Tuple(T_a, T_b, T_c)))`                 |
+| `spawn for x in items { f(x) }` | N 个迭代独立并行          | `Spawn(ForExpr { body_ty: List(T) })`                |
+| `spawn while cond { step() }`   | 每轮迭代独立任务          | `Spawn(WhileExpr { body_ty: List(T) })`              |
+| `spawn if c { a } else { b }`   | 被选中分支整体为 spawn 域 | `Spawn(IfExpr { then_ty: T_a, else_ty: Some(T_b) })` |
+| `spawn call(x)`                 | 调用本身作为一个任务      | `Spawn(Call { fn_ty: Fn(A→R), result_ty: R })`       |
+| `spawn 42`                      | 单独一个任务              | `Spawn(Int)`                                         |
 
 编译器负责 DAG 分析确定依赖关系，运行时按 GMP 模型调度——无依赖的任务扔进工作队列，worker 抢着跑。整体同步阻塞，等待所有任务完成。
 
-**与 Go 的区别**：Go 的 `go` 是"扔出去不管"，YaoXiang 的 `spawn` 是"拆开并行执行，等全部干完再往下"。
+**与 Go 的区别**：Go 的 `go` 是"扔出去不管"，YaoXiang 的 `spawn`
+是"拆开并行执行，等全部干完再往下"。
 
 ### 控制流正交性
 
-| 组合 | 语义 | 差异 |
-|------|------|------|
-| `spawn for x in items { body }` | 数据并行：每次迭代 = 独立任务 | DAG 跨迭代分析依赖 |
-| `for x in items spawn { body }` | 每次迭代创建一个 spawn 域 | 不跨迭代分析 |
-| `spawn while cond { body }` | 条件并行：每次迭代 = 独立任务 | 迭代间依赖由条件保证 |
-| `while cond spawn { body }` | 每次迭代创建一个 spawn 域 | 与上面语义不同但不需要特殊处理 |
-| `spawn if c { a } else { b }` | 整个 if-else 为一个 spawn 域 | 执行时按条件选分支 |
-| `if c spawn { a } else { b }` | 仅单分支 spawn | if 表达式内部包 spawn |
+| 组合                            | 语义                          | 差异                           |
+| ------------------------------- | ----------------------------- | ------------------------------ |
+| `spawn for x in items { body }` | 数据并行：每次迭代 = 独立任务 | DAG 跨迭代分析依赖             |
+| `for x in items spawn { body }` | 每次迭代创建一个 spawn 域     | 不跨迭代分析                   |
+| `spawn while cond { body }`     | 条件并行：每次迭代 = 独立任务 | 迭代间依赖由条件保证           |
+| `while cond spawn { body }`     | 每次迭代创建一个 spawn 域     | 与上面语义不同但不需要特殊处理 |
+| `spawn if c { a } else { b }`   | 整个 if-else 为一个 spawn 域  | 执行时按条件选分支             |
+| `if c spawn { a } else { b }`   | 仅单分支 spawn                | if 表达式内部包 spawn          |
 
 ### 消除的复杂度
 
@@ -118,9 +126,9 @@ Expr::Spawn {
 
 **IF 特殊情况**：
 
-| 写法 | AST 结构 |
-|------|---------|
-| `spawn if cond { a } else { b }` | `Spawn { body: Expr::If { ... } }` |
+| 写法                             | AST 结构                                            |
+| -------------------------------- | --------------------------------------------------- |
+| `spawn if cond { a } else { b }` | `Spawn { body: Expr::If { ... } }`                  |
 | `if cond spawn { a } else { b }` | `Expr::If { then: Spawn { body: {a} }, else: {b} }` |
 
 两者语义不同但都是自然组合，不需要特殊规则。
@@ -140,7 +148,8 @@ Parser 改动：`pratt/nud.rs` 中 `spawn` 不再要求 `{`，而是调用通用
 token spawn → parse_expr(min_precedence) → Expr::Spawn { body: expr }
 ```
 
-`spawn for` 不再作为组合关键词处理——`for` 由通用表达式解析器处理产生 `Expr::For`，`spawn` 只负责包装。
+`spawn for` 不再作为组合关键词处理——`for` 由通用表达式解析器处理产生 `Expr::For`，`spawn`
+只负责包装。
 
 ### 3. 类型系统
 
@@ -175,14 +184,18 @@ Call {
 Spawn(Box<MonoType>),
 ```
 
-**类型推导规则**：每个表达式的类型推导返回"计算结构类型"。无 `Spawn` 包装 = 顺序执行，有 `Spawn` 包装 = 并发执行。类型检查完毕后 `Spawn` 擦除，类型降级为内部值类型。
+**类型推导规则**：每个表达式的类型推导返回"计算结构类型"。无 `Spawn` 包装 = 顺序执行，有 `Spawn`
+包装 = 并发执行。类型检查完毕后 `Spawn` 擦除，类型降级为内部值类型。
 
 **类型检查流程**：
+
 1. 推导 body 表达式的类型 T（计算结构类型）
 2. 若为 spawn 包裹，包装为 `Spawn(T)`
-3. 赋值推导时解构：`results: List(Data) = spawn for ... {}` — 从 `Spawn(ForExpr { body_ty: List(Data) })` 提取 `List(Data)`
+3. 赋值推导时解构：`results: List(Data) = spawn for ... {}` — 从
+   `Spawn(ForExpr { body_ty: List(Data) })` 提取 `List(Data)`
 
-`Spawn<T>` 在类型检查完毕后擦除，运行时不需要知道数据来自并发还是顺序。但编译期反射（`type_of(x)`）可获取完整的并发拓扑结构。
+`Spawn<T>`
+在类型检查完毕后擦除，运行时不需要知道数据来自并发还是顺序。但编译期反射（`type_of(x)`）可获取完整的并发拓扑结构。
 
 ### 4. DAG 分析层
 
@@ -230,13 +243,13 @@ enum IterKind { For, While }
 
 `SpawnForAnalysis` 结构体删除。
 
-| body 种类 | 如何分解为任务 |
-|-----------|--------------|
-| `Expr::Block` | 直接子表达式 → 任务列表 |
-| `Expr::For` | 每次迭代 → 一个任务（数据并行） |
-| `Expr::While` | 每次迭代 → 一个任务 |
-| `Expr::If` | 被选中分支整体 → 一个任务 |
-| `Expr::Call` / 其他 | 表达式本身 → 一个任务 |
+| body 种类           | 如何分解为任务                  |
+| ------------------- | ------------------------------- |
+| `Expr::Block`       | 直接子表达式 → 任务列表         |
+| `Expr::For`         | 每次迭代 → 一个任务（数据并行） |
+| `Expr::While`       | 每次迭代 → 一个任务             |
+| `Expr::If`          | 被选中分支整体 → 一个任务       |
+| `Expr::Call` / 其他 | 表达式本身 → 一个任务           |
 
 DAG 分析完成后，运行时按 GMP 模型调度——无依赖的任务扔进工作队列，worker 抢着跑。
 
@@ -245,6 +258,7 @@ DAG 分析完成后，运行时按 GMP 模型调度——无依赖的任务扔�
 `Ir::SpawnFor` 删除。统一为 `Ir::Spawn`，携带 `TaskSource` 信息。
 
 HIR → IR 翻译根据 `SpawnAnalysis.source` 生成运行时调用：
+
 - `TaskSource::Explicit(tasks)` → 编译期已知任务列表
 - `TaskSource::Iterate { .. }` → 运行时展开（编译器驱动，类似 par_iter 但零成本）
 
@@ -266,9 +280,11 @@ Expr::Spawn { body, .. } => self.check_expr(body),   // body 是 Expr，递归�
 
 ### 7. 向后兼容性
 
-已有 `spawn for` 代码语义不变，Parser 自动将 `spawn for x in items { body }` 解析为 `Expr::Spawn { body: Expr::For }`。内部表示变化，用户可见行为不变。
+已有 `spawn for` 代码语义不变，Parser 自动将 `spawn for x in items { body }` 解析为
+`Expr::Spawn { body: Expr::For }`。内部表示变化，用户可见行为不变。
 
 新语法自然获得：
+
 ```yx
 spawn while has_next() {
     item = next()
@@ -299,31 +315,35 @@ spawn if use_cache {
 
 ## 替代方案
 
-| 方案 | 为什么不选择 |
-|------|-------------|
-| 保持 `spawn for` 独立语法 | 破坏正交性，成为语言中唯一的关键词组合特例 |
+| 方案                                             | 为什么不选择                                                  |
+| ------------------------------------------------ | ------------------------------------------------------------- |
+| 保持 `spawn for` 独立语法                        | 破坏正交性，成为语言中唯一的关键词组合特例                    |
 | `spawn` 仅修饰 `{}`，数据并行走标准库 `par_iter` | 语言原始能力下沉到库，失去编译器层面的 DAG 分析和资源冲突检测 |
-| 只删除 `SpawnFor` 但不在类型系统引入计算结构类型 | 类型系统失去反射能力，spawn 在类型层面不可见 |
-
+| 只删除 `SpawnFor` 但不在类型系统引入计算结构类型 | 类型系统失去反射能力，spawn 在类型层面不可见                  |
 
 ## 与 RFC-019 的关系
 
-本 RFC 引入的 6 个 `MonoType` 变体（Block/ForExpr/WhileExpr/IfExpr/Call/Spawn）是 [RFC-019: 类型级同像性](./019-typed-homoiconicity.md) 的**编译器内置子集**。RFC-019 的核心理念"语法结构进入类型系统"在这里实现为：6 种编译器原生理解的计算结构拥有对应的类型表示。用户不能通过 `SyntaxRule` 自定义新的计算结构类型，但编译器内置的这 6 种已覆盖所有关键控制流。
+本 RFC 引入的 6 个 `MonoType` 变体（Block/ForExpr/WhileExpr/IfExpr/Call/Spawn）是
+[RFC-019: 类型级同像性](./019-typed-homoiconicity.md)
+的**编译器内置子集**。RFC-019 的核心理念"语法结构进入类型系统"在这里实现为：6 种编译器原生理解的计算结构拥有对应的类型表示。用户不能通过
+`SyntaxRule` 自定义新的计算结构类型，但编译器内置的这 6 种已覆盖所有关键控制流。
 
 ## 证明管道集成
 
-6 个 `MonoType` 变体存在的原因：它们告诉 [RFC-027 编译期证明管道](../accepted/027-compile-time-evaluation-types.md) **要验证的命题是什么形状**。管道本身负责实际证明工作（自由变量分析、效果分类、别名分析、冲突检测），MonoType 只做一件事——提供结构化的输入接口。
+6 个 `MonoType` 变体存在的原因：它们告诉
+[RFC-027 编译期证明管道](../accepted/027-compile-time-evaluation-types.md)
+**要验证的命题是什么形状**。管道本身负责实际证明工作（自由变量分析、效果分类、别名分析、冲突检测），MonoType 只做一件事——提供结构化的输入接口。
 
 ### 变体 → 命题映射
 
-| 类型 | 命题形状 | 证明策略 |
-|------|---------|---------|
-| `Spawn(ForExpr { body_ty })` | 数据并行：N 个迭代任务无跨迭代冲突 | 提取 body 自由变量 → 效果分类 → 检查无 Write(Shared) / `&mut`(Shared) |
-| `Spawn(WhileExpr { body_ty })` | 条件并行：每轮迭代独立 + 无跨迭代因果依赖 | 同上 + 检查迭代条件是否有跨迭代副作用 |
-| `Spawn(Block(T))` | 显式任务组：任务间依赖关系由 DAG 给出 | 验证 DAG 分析的依赖图——每个任务所需的输入在其开始时已就绪 |
-| `Spawn(IfExpr { then_ty, else_ty })` | 分支 spawn：选中分支整体为一个 spawn 域 | 分支选择无冲突，body 内递归检查 |
-| `Spawn(Call { fn_ty, result_ty })` | 调用 spawn：被调用函数作为一个独立任务 | 验证函数的纯性或隔离性 |
-| `Spawn(T)`（值，如 `spawn 42`） | 单值 spawn：无并发 | 平凡通过 |
+| 类型                                 | 命题形状                                  | 证明策略                                                              |
+| ------------------------------------ | ----------------------------------------- | --------------------------------------------------------------------- |
+| `Spawn(ForExpr { body_ty })`         | 数据并行：N 个迭代任务无跨迭代冲突        | 提取 body 自由变量 → 效果分类 → 检查无 Write(Shared) / `&mut`(Shared) |
+| `Spawn(WhileExpr { body_ty })`       | 条件并行：每轮迭代独立 + 无跨迭代因果依赖 | 同上 + 检查迭代条件是否有跨迭代副作用                                 |
+| `Spawn(Block(T))`                    | 显式任务组：任务间依赖关系由 DAG 给出     | 验证 DAG 分析的依赖图——每个任务所需的输入在其开始时已就绪             |
+| `Spawn(IfExpr { then_ty, else_ty })` | 分支 spawn：选中分支整体为一个 spawn 域   | 分支选择无冲突，body 内递归检查                                       |
+| `Spawn(Call { fn_ty, result_ty })`   | 调用 spawn：被调用函数作为一个独立任务    | 验证函数的纯性或隔离性                                                |
+| `Spawn(T)`（值，如 `spawn 42`）      | 单值 spawn：无并发                        | 平凡通过                                                              |
 
 ### 证明场景
 
@@ -361,7 +381,8 @@ spawn for item in items { counter += 1 }
 1. 自由变量：`item`（Read(Local)）、`counter`（外部，`+=` 脱糖为写入）
 2. 效果分类：`counter` 为 Write(Shared)，跨迭代写入同一内存
 3. 实例化冲突：`Write(task_0, counter) ∧ Write(task_1, counter) = True`
-4. Disproved ✗ → 编译错误：`错误：spawn for body 中存在跨迭代写冲突。变量 counter 被多个并发任务写入。`
+4. Disproved ✗
+   → 编译错误：`错误：spawn for body 中存在跨迭代写冲突。变量 counter 被多个并发任务写入。`
 
 **场景 4 — while + 有状态迭代器（警告/拒绝）：**
 
@@ -406,13 +427,14 @@ spawn {
 
 ### MonoType 不做什么
 
-| 做什么 | 不做什么 |
-|--------|---------|
-| 标识命题形状 | 不执行证明 |
-| 在类型层面记录计算结构 | 不替代 DAG 分析 |
+| 做什么                      | 不做什么                               |
+| --------------------------- | -------------------------------------- |
+| 标识命题形状                | 不执行证明                             |
+| 在类型层面记录计算结构      | 不替代 DAG 分析                        |
 | 给 RFC-027 管道提供类型输入 | 不替代自由变量分析、别名分析、冲突检测 |
 
 实际的证明工作由编译器标准分析 pass 完成。MonoType 的价值是让这些 pass 在一个统一的类型框架下被调度——证明管道不需要针对每种 AST 节点写特殊分支。
+
 ## 实现策略
 
 ### 阶段划分
@@ -426,17 +448,17 @@ spawn {
 
 ### 影响范围
 
-| 文件/目录 | 改动 |
-|-----------|------|
-| `frontend/core/parser/ast.rs` | `Spawn` body 改为 `Box<Expr>`，删除 `SpawnFor` |
-| `frontend/core/parser/pratt/nud.rs` | `spawn` 处理器简化为通用表达式解析 |
-| `frontend/core/types/mono.rs` | 新增 `Block`/`ForExpr`/`WhileExpr`/`IfExpr`/`Call`/`Spawn` 变体 |
-| `frontend/core/spawn/analysis.rs` | 统一入口，`TaskSource` 合并 Explicit + Iterate |
-| `frontend/core/spawn/placement.rs` | 删除 `SpawnFor` 分支 |
-| `frontend/core/typecheck/` | 所有表达式节点适配计算结构类型推导 |
-| `middle/core/ir.rs` | 删除 `Ir::SpawnFor` |
-| `middle/` (IR gen, codegen) | 统一 spawn 路径，Spawn 类型擦除 |
-| `tests/yaoxiang/04-concurrency/spawn_for.yx` | 语义不变，验证通过 |
+| 文件/目录                                    | 改动                                                            |
+| -------------------------------------------- | --------------------------------------------------------------- |
+| `frontend/core/parser/ast.rs`                | `Spawn` body 改为 `Box<Expr>`，删除 `SpawnFor`                  |
+| `frontend/core/parser/pratt/nud.rs`          | `spawn` 处理器简化为通用表达式解析                              |
+| `frontend/core/types/mono.rs`                | 新增 `Block`/`ForExpr`/`WhileExpr`/`IfExpr`/`Call`/`Spawn` 变体 |
+| `frontend/core/spawn/analysis.rs`            | 统一入口，`TaskSource` 合并 Explicit + Iterate                  |
+| `frontend/core/spawn/placement.rs`           | 删除 `SpawnFor` 分支                                            |
+| `frontend/core/typecheck/`                   | 所有表达式节点适配计算结构类型推导                              |
+| `middle/core/ir.rs`                          | 删除 `Ir::SpawnFor`                                             |
+| `middle/` (IR gen, codegen)                  | 统一 spawn 路径，Spawn 类型擦除                                 |
+| `tests/yaoxiang/04-concurrency/spawn_for.yx` | 语义不变，验证通过                                              |
 
 ### 依赖关系
 
@@ -447,18 +469,18 @@ spawn {
 
 ## 设计决策记录
 
-| 决策 | 决定 | 原因 | 日期 |
-|------|------|------|------|
-| spawn 修饰范围 | 任意表达式 | 消除 `spawn for` 特殊情况 | 2026-06-16 |
-| `spawn while` 支持 | 支持 | 语法正交，实现成本低 | 2026-06-16 |
-| `spawn if` 语义 | 修饰整个 if-else | 与 `if spawn { }` 区分 | 2026-06-16 |
-| 类型系统 | 引入计算结构类型 | "一切皆类型"，支持编译期反射 | 2026-06-16 |
-| spawn 类型擦除 | 类型检查后擦除 | 运行时不需要并发结构信息 | 2026-06-16 |
-| spawn 绑定优先级 | 最低（等同 return） | 吃掉后面整个表达式 | 2026-06-16 |
-| DAG 对 for 内部 | 不展开 for 内部子表达式 | 直接子表达式规则不变，for 整体为一个任务来源 | 2026-06-16 |
-| 证明管道集成 | MonoType 变体映射到 RFC-027 证明命题 | 管道需要知道验证的命题形状，MonoType 提供结构化输入 | 2026-07-03 |
-| RFC-019 关系 | 编译器内置子集 | 用户不能自定义，但共享"语法即类型"理念 | 2026-07-03 |
-| 证明边界 | 6 个场景覆盖：纯并行/只读共享/写冲突/while 依赖/spawn if/spawn block | 明确每个 MonoType 变体的证明义务和失败条件 | 2026-07-03 |
+| 决策               | 决定                                                                 | 原因                                                | 日期       |
+| ------------------ | -------------------------------------------------------------------- | --------------------------------------------------- | ---------- |
+| spawn 修饰范围     | 任意表达式                                                           | 消除 `spawn for` 特殊情况                           | 2026-06-16 |
+| `spawn while` 支持 | 支持                                                                 | 语法正交，实现成本低                                | 2026-06-16 |
+| `spawn if` 语义    | 修饰整个 if-else                                                     | 与 `if spawn { }` 区分                              | 2026-06-16 |
+| 类型系统           | 引入计算结构类型                                                     | "一切皆类型"，支持编译期反射                        | 2026-06-16 |
+| spawn 类型擦除     | 类型检查后擦除                                                       | 运行时不需要并发结构信息                            | 2026-06-16 |
+| spawn 绑定优先级   | 最低（等同 return）                                                  | 吃掉后面整个表达式                                  | 2026-06-16 |
+| DAG 对 for 内部    | 不展开 for 内部子表达式                                              | 直接子表达式规则不变，for 整体为一个任务来源        | 2026-06-16 |
+| 证明管道集成       | MonoType 变体映射到 RFC-027 证明命题                                 | 管道需要知道验证的命题形状，MonoType 提供结构化输入 | 2026-07-03 |
+| RFC-019 关系       | 编译器内置子集                                                       | 用户不能自定义，但共享"语法即类型"理念              | 2026-07-03 |
+| 证明边界           | 6 个场景覆盖：纯并行/只读共享/写冲突/while 依赖/spawn if/spawn block | 明确每个 MonoType 变体的证明义务和失败条件          | 2026-07-03 |
 
 ---
 
@@ -475,6 +497,6 @@ spawn {
 
 ## 生命周期与归宿
 
-| 状态 | 位置 | 说明 |
-|------|------|------|
+| 状态       | 位置                      | 说明         |
+| ---------- | ------------------------- | ------------ |
 | **审核中** | `docs/design/rfc/review/` | 开放社区讨论 |

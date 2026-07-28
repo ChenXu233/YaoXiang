@@ -1,5 +1,4 @@
-title: "yaoxiang format 命令行用法"
-description: 格式化工具的命令行参数和使用方法
+title: "yaoxiang format 命令行用法" description: 格式化工具的命令行参数和使用方法
 ---
 
 # 命令行用法
@@ -26,15 +25,15 @@ yaoxiang format -w src/
 
 ## B. CLI 参数
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `--dry-run` | 检查模式，不修改文件 | false |
-| `-w`, `--write` | 写入模式，修改文件 | false |
-| `--stdout` | 输出到 stdout | false |
-| `--indent-width` | 缩进宽度 | 4 |
-| `--line-width` | 最大行宽 | 120 |
-| `--use-tabs` | 使用 tab 缩进 | false |
-| `--single-quote` | 使用单引号 | false |
+| 参数             | 说明                 | 默认值 |
+| ---------------- | -------------------- | ------ |
+| `--dry-run`      | 检查模式，不修改文件 | false  |
+| `-w`, `--write`  | 写入模式，修改文件   | false  |
+| `--stdout`       | 输出到 stdout        | false  |
+| `--indent-width` | 缩进宽度             | 4      |
+| `--line-width`   | 最大行宽             | 120    |
+| `--use-tabs`     | 使用 tab 缩进        | false  |
+| `--single-quote` | 使用单引号           | false  |
 
 ---
 

@@ -1,13 +1,13 @@
 ---
-title: "RFC-014b: 构建系统与二进制分发"
-status: "审核中"
-author: "晨煦"
-created: "2026-06-11"
-updated: "2026-07-05"
-group: "rfc-014"
-issue: "#91"
-impl: "0%"
-impl_status: "not-started"
+title: 'RFC-014b: 构建系统与二进制分发'
+status: '审核中'
+author: '晨煦'
+created: '2026-06-11'
+updated: '2026-07-05'
+group: 'rfc-014'
+issue: '#91'
+impl: '0%'
+impl_status: 'not-started'
 ---
 
 # RFC-014b: 构建系统与二进制分发
@@ -20,7 +20,8 @@ impl_status: "not-started"
 
 ## 动机
 
-有些包是纯 `.yx` 代码，无需构建。有些需要编译 FFI 绑定（调用 Cargo、CMake 等）。需要统一的机制让包作者声明构建需求，让包管理器自动处理。
+有些包是纯 `.yx`
+代码，无需构建。有些需要编译 FFI 绑定（调用 Cargo、CMake 等）。需要统一的机制让包作者声明构建需求，让包管理器自动处理。
 
 ### 当前的问题
 
@@ -136,9 +137,11 @@ cargo build --release --features ffi,linux-ffi
 "aarch64-apple-darwin" = { url = "releases/download/v1.0.0/foo-macos-aarch64.tar.gz", sha256 = "ghi789" }
 ```
 
-**URL 格式：** 支持绝对 URL 和相对路径。相对路径相对于包的仓库地址（GitHub repo URL 或 Registry 根 URL）。
+**URL 格式：** 支持绝对 URL 和相对路径。相对路径相对于包的仓库地址（GitHub repo
+URL 或 Registry 根 URL）。
 
 **跳过构建的条件：**
+
 1. `[binaries]` 中有当前平台的条目
 2. SHA-256 校验通过
 3. 下载成功
@@ -150,6 +153,7 @@ cargo build --release --features ffi,linux-ffi
 当 `strategy = "custom"` 时执行 `build.yx`。
 
 **执行模型（最小规范）：**
+
 - 脚本是普通 `.yx` 代码，拥有完整 `std` 访问权限
 - 工作目录：包根目录（`vendor/<pkg>-<ver>/`）
 - 成功：退出码 0
@@ -190,7 +194,8 @@ Error: Build requirement not satisfied
 
 ### yx-bindgen 集成（headers 字段）
 
-`[build].headers` 声明需要 yx-bindgen 处理的 C 头文件。构建系统自动运行 yx-bindgen 生成 `.yx` 绑定文件。
+`[build].headers` 声明需要 yx-bindgen 处理的 C 头文件。构建系统自动运行 yx-bindgen 生成 `.yx`
+绑定文件。
 
 ```toml
 [build]
@@ -207,9 +212,11 @@ headers = ["include/sqlite3.h", "include/json.h"]
 4. 安装
 ```
 
-yx-bindgen 从 C 头文件（`.h`）解析函数签名和类型定义，自动生成 `.yx` 绑定声明。用户不需要手动运行——构建系统在检测到 `headers` 配置时自动处理。
+yx-bindgen 从 C 头文件（`.h`）解析函数签名和类型定义，自动生成 `.yx`
+绑定声明。用户不需要手动运行——构建系统在检测到 `headers` 配置时自动处理。
 
-**与 RFC-026 的关系：** RFC-026 定义了 `yx-bindgen` 的语言级语义（`native("symbol")` 语法、unsafe 类型）。RFC-014b 定义了它在构建流程中的集成方式（`headers` 配置）。两者互补。
+**与 RFC-026 的关系：** RFC-026 定义了 `yx-bindgen` 的语言级语义（`native("symbol")`
+语法、unsafe 类型）。RFC-014b 定义了它在构建流程中的集成方式（`headers` 配置）。两者互补。
 
 ### 与 Cargo Workspace 的集成
 
@@ -235,17 +242,18 @@ my-package/
 
 使用 Rust target triple 格式（`arch-vendor-os-env`）：
 
-| 平台 | 标识 |
-|------|------|
-| Linux x86_64 (glibc) | `x86_64-unknown-linux-gnu` |
-| Linux x86_64 (musl) | `x86_64-unknown-linux-musl` |
-| Linux ARM64 | `aarch64-unknown-linux-gnu` |
-| Windows x86_64 (MSVC) | `x86_64-pc-windows-msvc` |
-| Windows x86_64 (MinGW) | `x86_64-pc-windows-gnu` |
-| macOS ARM64 | `aarch64-apple-darwin` |
-| macOS x86_64 | `x86_64-apple-darwin` |
+| 平台                   | 标识                        |
+| ---------------------- | --------------------------- |
+| Linux x86_64 (glibc)   | `x86_64-unknown-linux-gnu`  |
+| Linux x86_64 (musl)    | `x86_64-unknown-linux-musl` |
+| Linux ARM64            | `aarch64-unknown-linux-gnu` |
+| Windows x86_64 (MSVC)  | `x86_64-pc-windows-msvc`    |
+| Windows x86_64 (MinGW) | `x86_64-pc-windows-gnu`     |
+| macOS ARM64            | `aarch64-apple-darwin`      |
+| macOS x86_64           | `x86_64-apple-darwin`       |
 
 使用 Rust target triple 而非简化格式，因为：
+
 1. 区分同一 OS 上的不同 ABI（gnu vs musl，msvc vs gnu）
 2. 与 Rust/Cargo 生态对齐，减少映射错误
 3. 未来扩展无需改格式
@@ -296,24 +304,24 @@ build/
 
 ## 替代方案
 
-| 方案 | 为什么没选 |
-|------|-----------|
-| 纯源码分发 | 用户需要安装构建工具链，门槛高 |
+| 方案                           | 为什么没选                        |
+| ------------------------------ | --------------------------------- |
+| 纯源码分发                     | 用户需要安装构建工具链，门槛高    |
 | 类似 Python wheel 的二进制格式 | 过于复杂，YaoXiang 生态初期不需要 |
-| 不支持 FFI 构建 | 限制了语言的扩展能力 |
+| 不支持 FFI 构建                | 限制了语言的扩展能力              |
 
 ## 实现策略
 
 ### 阶段划分
 
-| 阶段 | 内容 |
-|------|------|
-| Phase 5a | `[build]` 配置解析 + `BuildStrategy` 枚举 |
-| Phase 5b | 系统依赖检查 |
+| 阶段     | 内容                                        |
+| -------- | ------------------------------------------- |
+| Phase 5a | `[build]` 配置解析 + `BuildStrategy` 枚举   |
+| Phase 5b | 系统依赖检查                                |
 | Phase 5c | Cargo 构建集成（读 `[build.cargo]` 拼命令） |
-| Phase 5d | 预编译二进制下载 + 校验 |
-| Phase 5e | build.yx 脚本执行 |
-| Phase 5f | yx-bindgen 集成（`headers` 字段） |
+| Phase 5d | 预编译二进制下载 + 校验                     |
+| Phase 5e | build.yx 脚本执行                           |
+| Phase 5f | yx-bindgen 集成（`headers` 字段）           |
 
 ### 依赖关系
 

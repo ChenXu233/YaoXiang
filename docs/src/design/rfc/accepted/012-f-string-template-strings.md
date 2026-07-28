@@ -1,19 +1,21 @@
 ---
-title: "RFC 012: F-String 模板字符串"
-status: "已接受"
-author: "Chen Xu"
-created: "2025-01-27"
-updated: "2026-07-05"
-issue: "#124"
+title: 'RFC 012: F-String 模板字符串'
+status: '已接受'
+author: 'Chen Xu'
+created: '2025-01-27'
+updated: '2026-07-05'
+issue: '#124'
 ---
 
 # RFC 012: F-String 模板字符串
 
 ## 摘要
 
-为 YaoXiang 语言添加 f-string 模板字符串特性，支持变量插值、表达式求值和格式化输出。f-string 使用 Python 风格语法（`f"..."` 前缀），在字符串中通过 `{expression}` 语法嵌入表达式，编译时转换为高效的字符串操作。
+为 YaoXiang 语言添加 f-string 模板字符串特性，支持变量插值、表达式求值和格式化输出。f-string 使用 Python 风格语法（`f"..."`
+前缀），在字符串中通过 `{expression}` 语法嵌入表达式，编译时转换为高效的字符串操作。
 
-> **注意**: f-string 语法和行为与 Python 保持一致，具体规范参考 [Python 官方文档](https://docs.python.org/3/tutorial/inputoutput.html#formatted-string-literals)。
+> **注意**: f-string 语法和行为与 Python 保持一致，具体规范参考
+> [Python 官方文档](https://docs.python.org/3/tutorial/inputoutput.html#formatted-string-literals)。
 
 ## 动机
 
@@ -44,6 +46,7 @@ message2 = format("Hello {}, age: {}", name, age)
 ### 核心设计
 
 引入 f-string 作为新的字符串字面量前缀，支持：
+
 - **变量插值**：`f"Hello {name}"`
 - **表达式求值**：`f"Sum: {x + y}"`
 - **格式化说明符**：`f"Pi: {pi:.2f}"`
@@ -76,11 +79,11 @@ bio = f"Name: {user.name}, age: {user.get_age()}"
 
 ### 语法变化
 
-| 之前 | 之后 |
-|------|------|
-| `"Hello ".concat(name)` | `f"Hello {name}"` |
+| 之前                         | 之后                |
+| ---------------------------- | ------------------- |
+| `"Hello ".concat(name)`      | `f"Hello {name}"`   |
 | `format("Value: {}", value)` | `f"Value: {value}"` |
-| `format("Pi: {:.2f}", pi)` | `f"Pi: {pi:.2f}"` |
+| `format("Pi: {:.2f}", pi)`   | `f"Pi: {pi:.2f}"`   |
 
 ### 语法规范
 
@@ -105,37 +108,49 @@ type            ::= 'b' | 'c' | 'd' | 'e' | 'E' | 'f' | 'F' | 'g' | 'G' | 'n' | 
 f-string 在编译时转换为高效的字符串操作：
 
 **简单插值**：
+
 ```yaoxiang
 f"Hello {name}"
 ```
+
 转换为：
+
 ```yaoxiang
 "Hello ".concat(name.to_string())
 ```
 
 **表达式插值**：
+
 ```yaoxiang
 f"Sum: {x + y}"
 ```
+
 转换为：
+
 ```yaoxiang
 "Sum: ".concat((x + y).to_string())
 ```
 
 **格式化说明符**：
+
 ```yaoxiang
 f"Pi: {pi:.2f}"
 ```
+
 转换为：
+
 ```yaoxiang
 format("Pi: {:.2f}", pi)
 ```
 
 **多个插值**：
+
 ```yaoxiang
 f"Hello {name}, you are {age} years old"
 ```
+
 转换为：
+
 ```yaoxiang
 "Hello ".concat(name.to_string()).concat(", you are ").concat(age.to_string()).concat(" years old")
 ```
@@ -148,12 +163,12 @@ f"Hello {name}, you are {age} years old"
 
 ### 编译器改动
 
-| 组件 | 改动 |
-|------|------|
-| lexer | 识别 f 前缀，解析字符串内插值语法 |
-| parser | 新增 FStringLiteral 语法节点 |
+| 组件      | 改动                               |
+| --------- | ---------------------------------- |
+| lexer     | 识别 f 前缀，解析字符串内插值语法  |
+| parser    | 新增 FStringLiteral 语法节点       |
 | typecheck | 检查插值表达式类型，验证格式化规则 |
-| codegen | 生成字符串拼接或格式化调用代码 |
+| codegen   | 生成字符串拼接或格式化调用代码     |
 
 ### 向后兼容性
 
@@ -179,12 +194,12 @@ f"Hello {name}, you are {age} years old"
 
 ## 替代方案
 
-| 方案 | 为什么不选择 |
-|------|--------------|
-| 仅支持变量插值 | 无法满足复杂格式化需求 |
-| 使用函数式风格 `format(...)` | 语法不够简洁 |
-| 延迟到 v2.0 | 用户对字符串便利性有明确需求 |
-| 使用反引号或其他前缀 | 与 Python 生态不一致 |
+| 方案                         | 为什么不选择                 |
+| ---------------------------- | ---------------------------- |
+| 仅支持变量插值               | 无法满足复杂格式化需求       |
+| 使用函数式风格 `format(...)` | 语法不够简洁                 |
+| 延迟到 v2.0                  | 用户对字符串便利性有明确需求 |
+| 使用反引号或其他前缀         | 与 Python 生态不一致         |
 
 ## 实现策略
 
@@ -222,7 +237,9 @@ f"Hello {name}, you are {age} years old"
 
 ## 开放问题
 
-- [x] 是否支持转义的大括号？与 Python 一致：使用双大括号表示单大括号，如 <code v-pre>{{</code> 表示 <code v-pre>{</code>，<code v-pre>}}</code> 表示 <code v-pre>}</code>
+- [x] 是否支持转义的大括号？与 Python 一致：使用双大括号表示单大括号，如
+      <code v-pre>{{</code> 表示 <code v-pre>{</code>，<code v-pre>}}</code> 表示
+      <code v-pre>}</code>
 - [x] 是否支持自定义格式化函数？与 Python 一致：支持通过 `__format__` 方法自定义类型的格式化行为
 - [x] 格式化说明符的完整规范？与 Python 一致，详见上文 BNF
 - [x] 性能优化的具体策略？与 Python 一致：运行时拼接，无需特殊优化
@@ -232,13 +249,13 @@ f"Hello {name}, you are {age} years old"
 
 ### 附录A：格式化说明符参考
 
-| 类型 | 说明符 | 示例 | 输出 |
-|------|--------|------|------|
-| 整数 | `d` | `f"{42:d}"` | "42" |
-| 浮点 | `f` | `f"{3.14:.2f}"` | "3.14" |
-| 科学计数 | `e` | `f"{1000:e}"` | "1.000000e+03" |
-| 字符串 | `s` | `f"{name:s}"` | "Alice" |
-| 十六进制 | `x` | `f"{255:x}"` | "ff" |
+| 类型     | 说明符 | 示例            | 输出           |
+| -------- | ------ | --------------- | -------------- |
+| 整数     | `d`    | `f"{42:d}"`     | "42"           |
+| 浮点     | `f`    | `f"{3.14:.2f}"` | "3.14"         |
+| 科学计数 | `e`    | `f"{1000:e}"`   | "1.000000e+03" |
+| 字符串   | `s`    | `f"{name:s}"`   | "Alice"        |
+| 十六进制 | `x`    | `f"{255:x}"`    | "ff"           |
 
 ### 附录B：使用场景示例
 

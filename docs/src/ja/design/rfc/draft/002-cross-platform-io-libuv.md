@@ -1,15 +1,16 @@
 ---
-title: "RFC-002: libuv ベースのリソース型 IO 実装層"
-status: "ドラフト"
-author: "晨煦"
-created: "2025-01-05"
-updated: "2026-07-05"
-issue: "#102"
+title: 'RFC-002: libuv ベースのリソース型 IO 実装層'
+status: 'ドラフト'
+author: '晨煦'
+created: '2025-01-05'
+updated: '2026-07-05'
+issue: '#102'
 ---
 
 # RFC-002: libuv ベースのリソース型 IO 実装層
 
 > **参考**:
+>
 > - [RFC-024: spawn ブロックベースの並行モデル](./024-concurrency-model.md)
 > - [RFC-008: Runtime 並行モデルとスケジューラの疎結合設計](./008-runtime-concurrency-model.md)
 > - [RFC-009: 所有権モデル設計](./009-ownership-model.md)
@@ -17,7 +18,8 @@ issue: "#102"
 
 ## 概要
 
-本文書では、YaoXiang の IO 実装層を定義する: libuv ベースでクロスプラットフォームの IO 機能を提供し、RFC-024 のリソース型システムの基盤実装となる。
+本文書では、YaoXiang の IO 実装層を定義する:
+libuv ベースでクロスプラットフォームの IO 機能を提供し、RFC-024 のリソース型システムの基盤実装となる。
 
 **中核的な位置付け**:
 
@@ -30,11 +32,13 @@ libuv: クロスプラットフォーム IO エンジン (イベントループ 
 ```
 
 **何ではないのか**:
+
 - ❌ 「透過的な非同期」ではない——ユーザは spawn ブロックで明示的に並行性を制御する
 - ❌ 「自動的な非同期化」ではない——IO 操作は spawn ブロック内で明示的に呼び出す必要がある
 - ❌ 「開発者が下層の詳細を気にする必要がない」わけではない——リソース型システムが並行安全性を保証する
 
 **何であるのか**:
+
 - ✅ リソース型 (FilePath, HttpUrl, DBUrl, Console) の IO 実装層
 - ✅ クロスプラットフォーム IO の統合 (libuv が Windows/Linux/macOS の差異を処理)
 - ✅ 共有イベントループアーキテクチャ (1 つの libuv イベントループがすべての IO を処理)
@@ -45,6 +49,7 @@ libuv: クロスプラットフォーム IO エンジン (イベントループ 
 ### なぜ libuv が必要なのか
 
 RFC-024 ではリソース型システムを定義している:
+
 - `FilePath` - ファイルシステムパス
 - `HttpUrl` - HTTP エンドポイント
 - `DBUrl` - データベース接続
@@ -52,12 +57,12 @@ RFC-024 ではリソース型システムを定義している:
 
 これらのリソース型には下層の IO 実装が必要である。libuv は次を提供する:
 
-| ニーズ | libuv の提供内容 |
-|------|-----------|
-| クロスプラットフォーム IO | Windows/Linux/macOS の統一 API |
-| 非同期機能 | 共有イベントループで全 worker の IO を集中処理 |
-| スレッドプール | ブロッキング操作専用のスレッドプール |
-| 並行安全性 | シングルスレッドイベントループで競合が原理的に発生しない |
+| ニーズ                    | libuv の提供内容                                         |
+| ------------------------- | -------------------------------------------------------- |
+| クロスプラットフォーム IO | Windows/Linux/macOS の統一 API                           |
+| 非同期機能                | 共有イベントループで全 worker の IO を集中処理           |
+| スレッドプール            | ブロッキング操作専用のスレッドプール                     |
+| 並行安全性                | シングルスレッドイベントループで競合が原理的に発生しない |
 
 ### RFC-024 との関係
 
@@ -114,6 +119,7 @@ RFC-024 ではリソース型システムを定義している:
 ```
 
 **主要な特徴**:
+
 - 1 つの共有 libuv イベントループ (専用スレッドで実行)
 - すべての worker の IO 操作をこの共有イベントループに投入
 - シングルスレッドイベントループにより競合が原理的に発生しない
@@ -121,11 +127,11 @@ RFC-024 ではリソース型システムを定義している:
 
 #### 1.2 並行安全性のメカニズム
 
-| libuv の特徴 | YaoXiang での対応 | 並行安全性 |
-|------------|---------------|----------|
-| シングルスレッドイベントループ | spawn ブロック内の順次実行 | 原理的に競合なし |
-| スレッドプールの隔離 | ブロッキング操作はメインスレッドをブロックしない | 共有状態なし |
-| 非同期コールバック | DAG スケジューラによる依存関係管理 | 決定論的実行 |
+| libuv の特徴                   | YaoXiang での対応                                | 並行安全性       |
+| ------------------------------ | ------------------------------------------------ | ---------------- |
+| シングルスレッドイベントループ | spawn ブロック内の順次実行                       | 原理的に競合なし |
+| スレッドプールの隔離           | ブロッキング操作はメインスレッドをブロックしない | 共有状態なし     |
+| 非同期コールバック             | DAG スケジューラによる依存関係管理               | 決定論的実行     |
 
 ### 2. リソース型 IO マッピング
 
@@ -139,16 +145,16 @@ impl StdModule for IoModule {
     fn exports(&self) -> Vec<NativeExport> {
         vec![
             // ファイル操作 → libuv fs_* API
-            NativeExport::new("read_file", "std.io.read_file", 
+            NativeExport::new("read_file", "std.io.read_file",
                 "(path: FilePath) -> String", native_read_file),
-            NativeExport::new("write_file", "std.io.write_file", 
+            NativeExport::new("write_file", "std.io.write_file",
                 "(path: FilePath, content: String) -> Bool", native_write_file),
-            NativeExport::new("append_file", "std.io.append_file", 
+            NativeExport::new("append_file", "std.io.append_file",
                 "(path: FilePath, content: String) -> Bool", native_append_file),
             // Console 操作 → libuv tty API
-            NativeExport::new("print", "std.io.print", 
+            NativeExport::new("print", "std.io.print",
                 "(...args) -> ()", native_print),
-            NativeExport::new("println", "std.io.println", 
+            NativeExport::new("println", "std.io.println",
                 "(...args) -> ()", native_println),
         ]
     }
@@ -157,7 +163,7 @@ impl StdModule for IoModule {
 // libuv ファイル IO 実装
 fn native_read_file(args: &[RuntimeValue], ctx: &mut NativeContext) -> Result<RuntimeValue, ExecutorError> {
     let path = extract_file_path(args)?;
-    
+
     // libuv イベントループに投入
     // libuv でファイルを非同期読み込み
     // 結果を返す
@@ -175,9 +181,9 @@ impl StdModule for NetModule {
     fn exports(&self) -> Vec<NativeExport> {
         vec![
             // HTTP 操作 → libuv http API
-            NativeExport::new("http_get", "std.net.http_get", 
+            NativeExport::new("http_get", "std.net.http_get",
                 "(url: HttpUrl) -> Response", native_http_get),
-            NativeExport::new("http_post", "std.net.http_post", 
+            NativeExport::new("http_post", "std.net.http_post",
                 "(url: HttpUrl, body: String) -> Response", native_http_post),
         ]
     }
@@ -186,7 +192,7 @@ impl StdModule for NetModule {
 // libuv ネットワーク IO 実装
 fn native_http_get(args: &[RuntimeValue], ctx: &mut NativeContext) -> Result<RuntimeValue, ExecutorError> {
     let url = extract_http_url(args)?;
-    
+
     // libuv イベントループに投入
     // libuv で HTTP リクエストを非同期実行
     // 結果を返す
@@ -204,7 +210,7 @@ impl StdModule for DbModule {
     fn exports(&self) -> Vec<NativeExport> {
         vec![
             // データベース操作 → libuv スレッドプール
-            NativeExport::new("query", "std.db.query", 
+            NativeExport::new("query", "std.db.query",
                 "(url: DBUrl, sql: String) -> Rows", native_query),
         ]
     }
@@ -214,7 +220,7 @@ impl StdModule for DbModule {
 fn native_query(args: &[RuntimeValue], ctx: &mut NativeContext) -> Result<RuntimeValue, ExecutorError> {
     let url = extract_db_url(args)?;
     let sql = extract_sql(args)?;
-    
+
     // libuv スレッドプールに投入
     // データベースクエリをスレッドプールで実行
     // 完了時にコールバックでメインスレッドに通知
@@ -229,7 +235,7 @@ fn native_query(args: &[RuntimeValue], ctx: &mut NativeContext) -> Result<Runtim
 // すべての Console 操作は同じスレッド内で順次実行される
 fn native_print(args: &[RuntimeValue], ctx: &mut NativeContext) -> Result<RuntimeValue, ExecutorError> {
     let output = format_args(args);
-    
+
     // Console 操作の直列化
     // libuv tty への書き込み
     ctx.uv_loop.tty_write(output)
@@ -280,11 +286,11 @@ HTTP.get: (HttpUrl) -> Response
 
 ### 4. Runtime 3 層アーキテクチャと libuv
 
-| 階層 | libuv の利用 | 非同期機能 | 適用シーン |
-|------|-----------|----------|----------|
-| Embedded Runtime | libuv なし | 非同期なし | WASM、ゲームスクリプト |
-| Standard Runtime | 共有イベントループ | IO 非同期 | Web サービス、データパイプライン |
-| Full Runtime | 共有イベントループ | IO 非同期 + 並列 | 科学計算、大規模並列 |
+| 階層             | libuv の利用       | 非同期機能       | 適用シーン                       |
+| ---------------- | ------------------ | ---------------- | -------------------------------- |
+| Embedded Runtime | libuv なし         | 非同期なし       | WASM、ゲームスクリプト           |
+| Standard Runtime | 共有イベントループ | IO 非同期        | Web サービス、データパイプライン |
+| Full Runtime     | 共有イベントループ | IO 非同期 + 並列 | 科学計算、大規模並列             |
 
 **Embedded Runtime**: libuv なし、即時実行、非同期機能なし。
 
@@ -305,25 +311,25 @@ pub mod uv {
     pub struct UvLoop {
         loop_handle: *mut uv_loop_t,
     }
-    
+
     // ファイル操作
     pub trait FileOps {
         fn fs_read(&self, path: &str) -> Result<String, UvError>;
         fn fs_write(&self, path: &str, content: &str) -> Result<(), UvError>;
         fn fs_append(&self, path: &str, content: &str) -> Result<(), UvError>;
     }
-    
+
     // ネットワーク操作
     pub trait NetOps {
         fn http_get(&self, url: &str) -> Result<Response, UvError>;
         fn http_post(&self, url: &str, body: &str) -> Result<Response, UvError>;
     }
-    
+
     // データベース操作
     pub trait DbOps {
         fn db_query(&self, url: &str, sql: &str) -> Result<Rows, UvError>;
     }
-    
+
     // Console 操作
     pub trait ConsoleOps {
         fn tty_write(&self, data: &str) -> Result<(), UvError>;
@@ -349,7 +355,7 @@ src/std/
 trait IoScheduler {
     // IO タスクを投入し、ハンドルを返す
     fn submit_io(&self, task: IoTask) -> IoHandle;
-    
+
     // IO 完了時に libuv から呼び出され、DAG ノードを起床
     fn on_io_complete(&self, handle: IoHandle);
 }
@@ -364,7 +370,7 @@ impl IoScheduler for UvLoop {
             ResourceType::Console => self.tty_write(task.data),
         }
     }
-    
+
     fn on_io_complete(&self, handle: IoHandle) {
         // DAG スケジューラに下流ノードを起床するよう通知
         self.dag_scheduler.wake_dependents(handle.node_id);
@@ -395,12 +401,12 @@ impl IoScheduler for UvLoop {
 
 ## 代替案
 
-| 代替案 | 選択しない理由 |
-|------|--------------|
-| Rust std::io | 同期ブロッキングで、spawn ブロックと協調した非同期化が不可能 |
-| tokio | Rust の async/await 向けに設計されており、YaoXiang の明示的並行モデルと適合しない |
-| mio | 生の非同期プリミティブのみ提供し、高レベルな IO 機能が不足 |
-| ゼロから実装 | 複雑でバグが発生しやすく、libuv の成熟度と比較にならない |
+| 代替案       | 選択しない理由                                                                    |
+| ------------ | --------------------------------------------------------------------------------- |
+| Rust std::io | 同期ブロッキングで、spawn ブロックと協調した非同期化が不可能                      |
+| tokio        | Rust の async/await 向けに設計されており、YaoXiang の明示的並行モデルと適合しない |
+| mio          | 生の非同期プリミティブのみ提供し、高レベルな IO 機能が不足                        |
+| ゼロから実装 | 複雑でバグが発生しやすく、libuv の成熟度と比較にならない                          |
 
 ---
 
@@ -424,13 +430,13 @@ impl IoScheduler for UvLoop {
 
 ## 設計意思決定記録
 
-| 意思決定 | 決定内容 | 理由 | 日付 |
-|------|------|------|------|
-| IO 実装層 | libuv | クロスプラットフォーム、非同期機能、並行安全性 | 2025-01-05 |
-| 位置付け | リソース型 IO 実装層 | RFC-024 リソース型システムとの統合 | 2026-06-16 |
-| イベントループアーキテクチャ | 共有イベントループ | リソース効率が高く、繰り返し作成を回避 | 2026-06-16 |
-| 並行安全性 | シングルスレッドイベントループ | 原理的に競合なしで、RFC-024 と適合 | 2026-06-16 |
-| 標準ライブラリ書き換え | std.io/std.net は libuv ベース | クロスプラットフォーム統一、非同期機能 | 2026-06-16 |
+| 意思決定                     | 決定内容                       | 理由                                           | 日付       |
+| ---------------------------- | ------------------------------ | ---------------------------------------------- | ---------- |
+| IO 実装層                    | libuv                          | クロスプラットフォーム、非同期機能、並行安全性 | 2025-01-05 |
+| 位置付け                     | リソース型 IO 実装層           | RFC-024 リソース型システムとの統合             | 2026-06-16 |
+| イベントループアーキテクチャ | 共有イベントループ             | リソース効率が高く、繰り返し作成を回避         | 2026-06-16 |
+| 並行安全性                   | シングルスレッドイベントループ | 原理的に競合なしで、RFC-024 と適合             | 2026-06-16 |
+| 標準ライブラリ書き換え       | std.io/std.net は libuv ベース | クロスプラットフォーム統一、非同期機能         | 2026-06-16 |
 
 ---
 
@@ -464,6 +470,6 @@ impl IoScheduler for UvLoop {
 
 ## ライフサイクルと帰趣
 
-| 状態 | 場所 | 説明 |
-|------|------|------|
+| 状態         | 場所                     | 説明     |
+| ------------ | ------------------------ | -------- |
 | **ドラフト** | `docs/design/rfc/draft/` | 再審査中 |

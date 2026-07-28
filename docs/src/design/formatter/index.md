@@ -1,5 +1,5 @@
 ---
-title: "YaoXiang 代码格式化规范"
+title: 'YaoXiang 代码格式化规范'
 description: YaoXiang 代码格式化工具（yaoxiang fmt）的行为规范总则，定义格式化原则和适用范围
 ---
 
@@ -34,7 +34,8 @@ assert_eq!(format_source(input, &opts), format_source(&format_source(input, &opt
 
 **原则 3：格式化保留所有注释。** 单行注释、多行注释、文档注释必须被保留，不得删除或修改。
 
-**原则 4：配置优先级。** 配置优先级链为：CLI 参数 > 项目级配置（`yaoxiang.toml`）> 用户级配置（`~/.config/yaoxiang/config.toml`）> 默认值。
+**原则 4：配置优先级。**
+配置优先级链为：CLI 参数 > 项目级配置（`yaoxiang.toml`）> 用户级配置（`~/.config/yaoxiang/config.toml`）> 默认值。
 
 ## 适用范围
 

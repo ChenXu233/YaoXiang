@@ -1,5 +1,5 @@
 ---
-title: "フォーマット規則の概要"
+title: 'フォーマット規則の概要'
 description: YaoXiang コードフォーマット規則の分類とインデックス
 ---
 
@@ -32,4 +32,7 @@ description: YaoXiang コードフォーマット規則の分類とインデッ�
 ## 特殊構文
 
 - [特殊構文規則](./special-syntax.md) — F-String、インポート文、エラー処理、Unsafe ブロック
+
+```
+
 ```

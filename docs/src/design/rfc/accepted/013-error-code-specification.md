@@ -1,24 +1,25 @@
 ---
-title: "RFC 013: 错误代码规范"
-status: "已接受"
-author: "晨煦"
-created: "2026-02-02"
-updated: "2026-02-12"
-issue: "#125"
+title: 'RFC 013: 错误代码规范'
+status: '已接受'
+author: '晨煦'
+created: '2026-02-02'
+updated: '2026-02-12'
+issue: '#125'
 issues_impl:
-  - "#125"
+  - '#125'
 pr_impl:
-  - "#7"
-  - "#9"
-  - "#29"
-  - "#66"
+  - '#7'
+  - '#9'
+  - '#29'
+  - '#66'
 ---
 
 # RFC 013: 错误代码规范
 
 ## 摘要
 
-本 RFC 提出 YaoXiang 编译器的错误代码分类规范，采用类似 Rust 的单层编号系统，配合 JSON 资源文件实现多语种支持，通过 `yaoxiang explain` 命令提供错误解释功能。
+本 RFC 提出 YaoXiang 编译器的错误代码分类规范，采用类似 Rust 的单层编号系统，配合 JSON 资源文件实现多语种支持，通过
+`yaoxiang explain` 命令提供错误解释功能。
 
 ## 动机
 
@@ -54,18 +55,18 @@ Exxxx
 
 ### 阶段划分
 
-| 阶段 | 范围 | 描述 |
-|------|------|------|
+| 阶段  | 范围  | 描述           |
+| ----- | ----- | -------------- |
 | **0** | E0xxx | 词法与语法分析 |
-| **1** | E1xxx | 类型检查 |
-| **2** | E2xxx | 语义分析 |
-| **3** | E3xxx | 代码生成 |
-| **4** | E4xxx | 泛型与特质 |
-| **5** | E5xxx | 模块与导入 |
-| **6** | E6xxx | 运行时错误 |
+| **1** | E1xxx | 类型检查       |
+| **2** | E2xxx | 语义分析       |
+| **3** | E3xxx | 代码生成       |
+| **4** | E4xxx | 泛型与特质     |
+| **5** | E5xxx | 模块与导入     |
+| **6** | E6xxx | 运行时错误     |
 | **7** | E7xxx | I/O 与系统错误 |
 | **8** | E8xxx | 内部编译器错误 |
-| **9** | E9xxx | 保留/实验性 |
+| **9** | E9xxx | 保留/实验性    |
 
 ### 错误类别枚举
 
@@ -224,13 +225,13 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
 
 #### 设计优势
 
-| 特性 | 说明 |
-|------|------|
-| **单一 Builder** | 一个 `DiagnosticBuilder` 通用所有错误码 |
-| **类型安全** | 快捷方法确保参数正确性 |
-| **自文档** | `E1001::unknown_variable(name)` 一目了然 |
-| **模板分离** | 消息模板与代码分离，易于 i18n |
-| **零运行时开销** | 编译期渲染，AOT 二进制无查表 |
+| 特性             | 说明                                     |
+| ---------------- | ---------------------------------------- |
+| **单一 Builder** | 一个 `DiagnosticBuilder` 通用所有错误码  |
+| **类型安全**     | 快捷方法确保参数正确性                   |
+| **自文档**       | `E1001::unknown_variable(name)` 一目了然 |
+| **模板分离**     | 消息模板与代码分离，易于 i18n            |
+| **零运行时开销** | 编译期渲染，AOT 二进制无查表             |
 
 ---
 
@@ -271,98 +272,98 @@ E1001::unknown_variable(&var_name)
 
 #### E0xxx：词法与语法分析
 
-| 代码 | 错误类型 | 说明 |
-|------|----------|------|
-| E0001 | Invalid character | 源代码包含非法字符 |
-| E0002 | Invalid number literal | 数字字面量格式不正确 |
-| E0003 | Unterminated string | 多行字符串缺少结束引号 |
-| E0004 | Invalid character literal | 字符字面量不正确 |
-| E0010 | Expected token | 语法分析时期望特定 token |
-| E0011 | Unexpected token | 遇到意外的 token |
-| E0012 | Invalid syntax | 表达式/语句语法错误 |
-| E0013 | Mismatched brackets | 圆括号、方括号、花括号不匹配 |
-| E0014 | Missing semicolon | 语句末尾缺少分号 |
+| 代码  | 错误类型                  | 说明                         |
+| ----- | ------------------------- | ---------------------------- |
+| E0001 | Invalid character         | 源代码包含非法字符           |
+| E0002 | Invalid number literal    | 数字字面量格式不正确         |
+| E0003 | Unterminated string       | 多行字符串缺少结束引号       |
+| E0004 | Invalid character literal | 字符字面量不正确             |
+| E0010 | Expected token            | 语法分析时期望特定 token     |
+| E0011 | Unexpected token          | 遇到意外的 token             |
+| E0012 | Invalid syntax            | 表达式/语句语法错误          |
+| E0013 | Mismatched brackets       | 圆括号、方括号、花括号不匹配 |
+| E0014 | Missing semicolon         | 语句末尾缺少分号             |
 
 #### E1xxx：类型检查
 
-| 代码 | 错误类型 | 说明 |
-|------|----------|------|
-| E1001 | Unknown variable | 引用的变量未定义 |
-| E1002 | Type mismatch | 期望类型与实际类型不符 |
-| E1003 | Unknown type | 引用的类型不存在 |
+| 代码  | 错误类型                 | 说明                       |
+| ----- | ------------------------ | -------------------------- |
+| E1001 | Unknown variable         | 引用的变量未定义           |
+| E1002 | Type mismatch            | 期望类型与实际类型不符     |
+| E1003 | Unknown type             | 引用的类型不存在           |
 | E1010 | Parameter count mismatch | 函数调用参数数量与定义不符 |
-| E1011 | Parameter type mismatch | 参数类型检查失败 |
-| E1012 | Return type mismatch | 函数返回值类型错误 |
-| E1013 | Function not found | 调用未定义的函数 |
-| E1020 | Cannot infer type | 上下文无法推断类型 |
-| E1021 | Type inference conflict | 多处约束导致类型矛盾 |
-| E1030 | Pattern non-exhaustive | match 表达式未覆盖所有情况 |
-| E1031 | Unreachable pattern | 永远无法匹配的模式 |
-| E1040 | Operation not supported | 类型不支持该操作 |
-| E1041 | Index out of bounds | 数组/列表索引超出范围 |
-| E1042 | Field not found | 访问不存在的结构体字段 |
+| E1011 | Parameter type mismatch  | 参数类型检查失败           |
+| E1012 | Return type mismatch     | 函数返回值类型错误         |
+| E1013 | Function not found       | 调用未定义的函数           |
+| E1020 | Cannot infer type        | 上下文无法推断类型         |
+| E1021 | Type inference conflict  | 多处约束导致类型矛盾       |
+| E1030 | Pattern non-exhaustive   | match 表达式未覆盖所有情况 |
+| E1031 | Unreachable pattern      | 永远无法匹配的模式         |
+| E1040 | Operation not supported  | 类型不支持该操作           |
+| E1041 | Index out of bounds      | 数组/列表索引超出范围      |
+| E1042 | Field not found          | 访问不存在的结构体字段     |
 
 #### E2xxx：语义分析
 
-| 代码 | 错误类型 | 说明 |
-|------|----------|------|
-| E2001 | Scope error | 变量不在当前作用域 |
-| E2002 | Duplicate definition | 同一作用域内重复定义 |
-| E2003 | Lifetime error | 生命周期约束不满足 |
-| E2010 | Immutable assignment | 尝试修改不可变变量 |
-| E2011 | Uninitialized use | 使用未初始化的变量 |
-| E2012 | Mutability conflict | 不可变上下文中使用可变引用 |
+| 代码  | 错误类型             | 说明                       |
+| ----- | -------------------- | -------------------------- |
+| E2001 | Scope error          | 变量不在当前作用域         |
+| E2002 | Duplicate definition | 同一作用域内重复定义       |
+| E2003 | Lifetime error       | 生命周期约束不满足         |
+| E2010 | Immutable assignment | 尝试修改不可变变量         |
+| E2011 | Uninitialized use    | 使用未初始化的变量         |
+| E2012 | Mutability conflict  | 不可变上下文中使用可变引用 |
 
 #### E4xxx：泛型与特质
 
-| 代码 | 错误类型 | 说明 |
-|------|----------|------|
-| E4001 | Generic parameter mismatch | 泛型参数数量/类型不匹配 |
-| E4002 | Trait bound violated | 不满足 trait 约束 |
-| E4003 | Associated type error | 关联类型定义/使用错误 |
-| E4004 | Duplicate trait implementation | 重复实现同一 trait |
-| E4005 | Trait not found | 找不到要求的 trait |
-| E4006 | Sized bound violated | Sized 约束不满足 |
+| 代码  | 错误类型                       | 说明                    |
+| ----- | ------------------------------ | ----------------------- |
+| E4001 | Generic parameter mismatch     | 泛型参数数量/类型不匹配 |
+| E4002 | Trait bound violated           | 不满足 trait 约束       |
+| E4003 | Associated type error          | 关联类型定义/使用错误   |
+| E4004 | Duplicate trait implementation | 重复实现同一 trait      |
+| E4005 | Trait not found                | 找不到要求的 trait      |
+| E4006 | Sized bound violated           | Sized 约束不满足        |
 
 #### E5xxx：模块与导入
 
-| 代码 | 错误类型 | 说明 |
-|------|----------|------|
-| E5001 | Module not found | 导入的模块不存在 |
-| E5002 | Cyclic import | 模块间循环依赖 |
+| 代码  | 错误类型            | 说明                 |
+| ----- | ------------------- | -------------------- |
+| E5001 | Module not found    | 导入的模块不存在     |
+| E5002 | Cyclic import       | 模块间循环依赖       |
 | E5003 | Symbol not exported | 尝试访问未导出的符号 |
-| E5004 | Invalid module path | 模块路径格式错误 |
-| E5005 | Private access | 访问私有符号 |
+| E5004 | Invalid module path | 模块路径格式错误     |
+| E5005 | Private access      | 访问私有符号         |
 
 #### E6xxx：运行时错误
 
-| 代码 | 错误类型 | 说明 |
-|------|----------|------|
-| E6001 | Division by zero | 整数除以零 |
-| E6002 | Assertion failed | assert! 宏失败 |
-| E6003 | Arithmetic overflow | 算术运算溢出 |
-| E6004 | Stack overflow | 栈空间耗尽 |
-| E6005 | Heap allocation failed | 内存分配失败 |
-| E6006 | Runtime index out of bounds | 运行时索引越界 |
-| E6007 | Type cast failed | 尝试将类型断言为不兼容类型 |
+| 代码  | 错误类型                    | 说明                       |
+| ----- | --------------------------- | -------------------------- |
+| E6001 | Division by zero            | 整数除以零                 |
+| E6002 | Assertion failed            | assert! 宏失败             |
+| E6003 | Arithmetic overflow         | 算术运算溢出               |
+| E6004 | Stack overflow              | 栈空间耗尽                 |
+| E6005 | Heap allocation failed      | 内存分配失败               |
+| E6006 | Runtime index out of bounds | 运行时索引越界             |
+| E6007 | Type cast failed            | 尝试将类型断言为不兼容类型 |
 
 #### E7xxx：I/O 与系统错误
 
-| 代码 | 错误类型 | 说明 |
-|------|----------|------|
-| E7001 | File not found | 尝试读取不存在的文件 |
-| E7002 | Permission denied | 文件权限不足 |
-| E7003 | I/O error | 通用 I/O 错误 |
-| E7004 | Network error | 网络操作失败 |
+| 代码  | 错误类型          | 说明                 |
+| ----- | ----------------- | -------------------- |
+| E7001 | File not found    | 尝试读取不存在的文件 |
+| E7002 | Permission denied | 文件权限不足         |
+| E7003 | I/O error         | 通用 I/O 错误        |
+| E7004 | Network error     | 网络操作失败         |
 
 #### E8xxx：内部编译器错误
 
-| 代码 | 错误类型 | 说明 |
-|------|----------|------|
-| E8001 | Internal compiler error | 编译器内部错误 |
-| E8002 | Codegen error | IR/字节码生成失败 |
-| E8003 | Unimplemented feature | 使用未实现的功能 |
-| E8004 | Optimization error | 编译器优化错误 |
+| 代码  | 错误类型                | 说明              |
+| ----- | ----------------------- | ----------------- |
+| E8001 | Internal compiler error | 编译器内部错误    |
+| E8002 | Codegen error           | IR/字节码生成失败 |
+| E8003 | Unimplemented feature   | 使用未实现的功能  |
+| E8004 | Optimization error      | 编译器优化错误    |
 
 ---
 
@@ -497,16 +498,16 @@ impl I18nRegistry {
 
 ##### 预定义占位符（常用）
 
-| 占位符 | 用途 | 示例 |
-|--------|------|------|
-| `{name}` | 变量名/类型名/特质名等标识符 | `Unknown variable: '{name}'` |
-| `{expected}` | 期望类型 | `Expected type '{expected}'` |
-| `{found}` | 实际/找到的类型 | `, found type '{found}'` |
-| `{method}` | 方法名 | `Method {method} is not a function` |
-| `{trait}` | 特质名 | `Cannot find trait: {trait}` |
-| `{path}` | 模块路径 | `Invalid path: {path}` |
-| `{ty}` | 类型表达式 | `Invalid type: {ty}` |
-| `{message}` | 内部错误消息 | `Internal error: {message}` |
+| 占位符       | 用途                         | 示例                                |
+| ------------ | ---------------------------- | ----------------------------------- |
+| `{name}`     | 变量名/类型名/特质名等标识符 | `Unknown variable: '{name}'`        |
+| `{expected}` | 期望类型                     | `Expected type '{expected}'`        |
+| `{found}`    | 实际/找到的类型              | `, found type '{found}'`            |
+| `{method}`   | 方法名                       | `Method {method} is not a function` |
+| `{trait}`    | 特质名                       | `Cannot find trait: {trait}`        |
+| `{path}`     | 模块路径                     | `Invalid path: {path}`              |
+| `{ty}`       | 类型表达式                   | `Invalid type: {ty}`                |
+| `{message}`  | 内部错误消息                 | `Internal error: {message}`         |
 
 ##### 任意 key 支持
 
@@ -599,12 +600,12 @@ default = "zh"
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-| 组件 | 职责 | 渲染时机 |
-|------|------|----------|
-| `I18nRegistry` | 提供模板和展示文案 | 编译用户项目时 |
+| 组件                         | 职责                     | 渲染时机       |
+| ---------------------------- | ------------------------ | -------------- |
+| `I18nRegistry`               | 提供模板和展示文案       | 编译用户项目时 |
 | `DiagnosticBuilder.render()` | 模板 + 参数 → 最终字符串 | 编译用户项目时 |
-| `Diagnostic.message` | 已渲染的字符串 | 存储最终结果 |
-| AOT 二进制 | 包含最终字符串 | 运行时直接用 |
+| `Diagnostic.message`         | 已渲染的字符串           | 存储最终结果   |
+| AOT 二进制                   | 包含最终字符串           | 运行时直接用   |
 
 ---
 
@@ -644,12 +645,12 @@ pub enum DiagnosticLevel {
 }
 ```
 
-| 级别 | 前缀 | 说明 |
-|------|------|------|
-| Error | `error[E####]:` | 导致编译失败 |
-| Warning | `warning[E####]:` | 不影响编译 |
-| Note | `note[E####]:` | 补充信息 |
-| Help | `help[E####]:` | 修复建议 |
+| 级别    | 前缀              | 说明         |
+| ------- | ----------------- | ------------ |
+| Error   | `error[E####]:`   | 导致编译失败 |
+| Warning | `warning[E####]:` | 不影响编译   |
+| Note    | `note[E####]:`    | 补充信息     |
+| Help    | `help[E####]:`    | 修复建议     |
 
 ---
 
@@ -663,13 +664,13 @@ yaoxiang explain <ERROR_CODE> [OPTIONS]
 
 #### 选项
 
-| 选项 | 描述 |
-|------|------|
+| 选项            | 描述                                |
+| --------------- | ----------------------------------- |
 | `--lang <code>` | 指定语言 (en-US, zh-CN，默认 en-US) |
-| `--json` | JSON 格式输出（供 IDE/LSP 使用） |
-| `--json-pretty` | 格式化的 JSON 输出 |
-| `--examples` | 只显示示例代码 |
-| `--help` | 显示帮助信息 |
+| `--json`        | JSON 格式输出（供 IDE/LSP 使用）    |
+| `--json-pretty` | 格式化的 JSON 输出                  |
+| `--examples`    | 只显示示例代码                      |
+| `--help`        | 显示帮助信息                        |
 
 #### 使用示例
 
@@ -712,9 +713,7 @@ $ yaoxiang explain E1001 --json
   "code": "E1001",
   "message": "Unknown variable: {name}",
   "help": "Did you mean to define it?",
-  "examples": [
-    "let {name} = value;"
-  ],
+  "examples": ["let {name} = value;"],
   "language": "en-US"
 }
 ```
@@ -769,25 +768,25 @@ $ yaoxiang explain E1001 --json
 
 ### 完整错误代码速查表
 
-| 范围 | 类别 |
-|------|------|
+| 范围  | 类别           |
+| ----- | -------------- |
 | E0xxx | 词法与语法分析 |
-| E1xxx | 类型检查 |
-| E2xxx | 语义分析 |
-| E3xxx | 代码生成 |
-| E4xxx | 泛型与特质 |
-| E5xxx | 模块与导入 |
-| E6xxx | 运行时错误 |
+| E1xxx | 类型检查       |
+| E2xxx | 语义分析       |
+| E3xxx | 代码生成       |
+| E4xxx | 泛型与特质     |
+| E5xxx | 模块与导入     |
+| E6xxx | 运行时错误     |
 | E7xxx | I/O 与系统错误 |
 | E8xxx | 内部编译器错误 |
-| E9xxx | 保留 |
+| E9xxx | 保留           |
 
 ### 支持的语言
 
-| 代码 | 语言 | 状态 |
-|------|------|------|
-| en-US | English (US) | 默认 |
-| zh-CN | 简体中文 | 计划中 |
+| 代码  | 语言         | 状态   |
+| ----- | ------------ | ------ |
+| en-US | English (US) | 默认   |
+| zh-CN | 简体中文     | 计划中 |
 
 ### 错误消息示例对比
 

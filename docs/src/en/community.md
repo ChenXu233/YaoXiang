@@ -2,7 +2,7 @@
 ---
 layout: page
 is_community: true
-title: "Community"
+title: 'Community'
 sidebar: false
 description: "Though I'm alone for now, the sparks will eventually spread like a wildfire."
 ---

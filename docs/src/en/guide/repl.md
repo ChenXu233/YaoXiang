@@ -5,7 +5,8 @@ description: YaoXiang REPL User Guide - Interactive Code Execution Environment
 
 # REPL Interactive Interpreter
 
-YaoXiang REPL (Read-Eval-Print Loop) is an interactive code execution environment that allows you to input and execute YaoXiang code line by line, ideal for learning, testing, and debugging.
+YaoXiang REPL (Read-Eval-Print Loop) is an interactive code execution environment that allows you to
+input and execute YaoXiang code line by line, ideal for learning, testing, and debugging.
 
 ## Quick Start
 
@@ -82,7 +83,8 @@ Exits the REPL. You can also use the shorthand `:q`.
 >> :clear
 ```
 
-Clears all defined variables and functions, resetting the REPL state. You can also use the shorthand `:c`.
+Clears all defined variables and functions, resetting the REPL state. You can also use the shorthand
+`:c`.
 
 ### Type Inspection Command
 
@@ -110,7 +112,8 @@ add: fn(Int, Int) -> Int
 >> :symbols
 ```
 
-Lists all symbols (variables and functions) currently defined in the REPL. You can also use the shorthand `:i` or `:info`.
+Lists all symbols (variables and functions) currently defined in the REPL. You can also use the
+shorthand `:i` or `:info`.
 
 **Example**:
 
@@ -216,7 +219,8 @@ Call a function:
 
 ### Multi-line Code
 
-The REPL supports multi-line code input. When the code is detected as incomplete (e.g., unclosed parentheses), it automatically enters continuation mode:
+The REPL supports multi-line code input. When the code is detected as incomplete (e.g., unclosed
+parentheses), it automatically enters continuation mode:
 
 ```yaoxiang
 >> factorial: (n: Int) -> Int = {
@@ -251,7 +255,8 @@ Press the `Tab` key to trigger auto-completion.
 
 1. **Keyword completion**: YaoXiang language keywords (press Tab to expand)
 2. **Symbol completion**: Names of already-defined variables and functions
-3. **Builtin function completion**: Builtin functions like `print`, `len`, `range`, `typeof`, `assert`, etc.
+3. **Builtin function completion**: Builtin functions like `print`, `len`, `range`, `typeof`,
+   `assert`, etc.
 
 ### Completion Examples
 
@@ -368,7 +373,8 @@ A: Use the `:clear` command:
 
 ### Q: Why is my multi-line code not executing?
 
-A: Check whether there are any unclosed parentheses, quotes, or braces. The REPL waits for the complete code input.
+A: Check whether there are any unclosed parentheses, quotes, or braces. The REPL waits for the
+complete code input.
 
 ### Q: How do I interrupt long-running code?
 
@@ -377,6 +383,7 @@ A: Press `Ctrl+C` to interrupt the current execution.
 ### Q: What data types does the REPL support?
 
 A: The REPL supports all YaoXiang data types:
+
 - `Int`: Integer
 - `Float`: Floating-point number
 - `String`: String
@@ -419,12 +426,12 @@ Total time: 2.34ms
 
 ## Related Commands
 
-| Command | Shorthand | Function |
-|------|------|------|
-| `:help` | `:h` | Display help information |
-| `:quit` | `:q` | Exit the REPL |
-| `:clear` | `:c` | Clear all state |
-| `:type` | `:t` | Inspect symbol type |
-| `:symbols` | `:i` | List all symbols |
-| `:history` | `:hist` | Display command history |
-| `:stats` | - | Display execution statistics |
+| Command    | Shorthand | Function                     |
+| ---------- | --------- | ---------------------------- |
+| `:help`    | `:h`      | Display help information     |
+| `:quit`    | `:q`      | Exit the REPL                |
+| `:clear`   | `:c`      | Clear all state              |
+| `:type`    | `:t`      | Inspect symbol type          |
+| `:symbols` | `:i`      | List all symbols             |
+| `:history` | `:hist`   | Display command history      |
+| `:stats`   | -         | Display execution statistics |

@@ -1,6 +1,7 @@
 # Standard Library Specification
 
-This document defines the standard library specification of the YaoXiang programming language, including the core library, IO library, and math library.
+This document defines the standard library specification of the YaoXiang programming language,
+including the core library, IO library, and math library.
 
 ---
 
@@ -10,14 +11,14 @@ This document defines the standard library specification of the YaoXiang program
 
 The standard library provides implementations for the following basic types:
 
-| Type | Module | Description |
-|------|--------|-------------|
-| `Option(T)` | `std.option` | Optional value type |
-| `Result(T, E)` | `std.result` | Error handling type |
-| `List(T)` | `std.collection` | Dynamic array |
-| `Map(K, V)` | `std.collection` | Hash map |
-| `String` | `std.string` | String type |
-| `Array(T, N)` | `std.array` | Fixed-size array |
+| Type           | Module           | Description         |
+| -------------- | ---------------- | ------------------- |
+| `Option(T)`    | `std.option`     | Optional value type |
+| `Result(T, E)` | `std.result`     | Error handling type |
+| `List(T)`      | `std.collection` | Dynamic array       |
+| `Map(K, V)`    | `std.collection` | Hash map            |
+| `String`       | `std.string`     | String type         |
+| `Array(T, N)`  | `std.array`      | Fixed-size array    |
 
 ### 1.2 Option Type
 
@@ -27,10 +28,10 @@ Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 
 **Value variants**:
 
-| Variant | Syntax | Description |
-|---------|--------|-------------|
+| Variant       | Syntax               | Description |
+| ------------- | -------------------- | ----------- |
 | `Option.some` | `Option.some(value)` | Has a value |
-| `Option.none` | `Option.none()` | No value |
+| `Option.none` | `Option.none()`      | No value    |
 
 **Common methods**:
 
@@ -57,10 +58,10 @@ Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Resu
 
 **Value variants**:
 
-| Variant | Syntax | Description |
-|---------|--------|-------------|
-| `Result.ok` | `Result.ok(value)` | Success value |
-| `Result.err` | `Result.err(error)` | Error value |
+| Variant      | Syntax              | Description   |
+| ------------ | ------------------- | ------------- |
+| `Result.ok`  | `Result.ok(value)`  | Success value |
+| `Result.err` | `Result.err(error)` | Error value   |
 
 **Common methods**:
 
@@ -103,7 +104,8 @@ data = match fetch_data() {
 
 ### 1.5 Assertions (`std.assert`)
 
-The `std.assert` module provides a unified assertion mechanism — the runtime `assert` and the compile-time refinement type `Assert` are two faces of the same primitive.
+The `std.assert` module provides a unified assertion mechanism — the runtime `assert` and the
+compile-time refinement type `Assert` are two faces of the same primitive.
 
 ```yaoxiang
 // IsTrue: the bridge function from value to type
@@ -124,10 +126,10 @@ assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 
 **Dispatch**:
 
-| Condition | Behavior |
-|-----------|----------|
-| All free variables of `cond` are known at compile-time | Compiler evaluates: `true` → erased, `false` → compile error |
-| Free variables exist at runtime | Insert a runtime check, inject the flow-sensitive assumption set Γ |
+| Condition                                              | Behavior                                                           |
+| ------------------------------------------------------ | ------------------------------------------------------------------ |
+| All free variables of `cond` are known at compile-time | Compiler evaluates: `true` → erased, `false` → compile error       |
+| Free variables exist at runtime                        | Insert a runtime check, inject the flow-sensitive assumption set Γ |
 
 `assert(false, "msg")` is equivalent to `raise` — no separate `throw`/`raise` keyword is required.
 
@@ -363,37 +365,37 @@ for i in 0..10 step 2 {
 
 ## Appendix: Standard Library Module Index
 
-| Module | Description |
-|--------|-------------|
-| `std.assert` | Assertion mechanism — runtime `assert` + compile-time `Assert` refinement type |
-| `std.option` | Option type |
-| `std.result` | Result type |
-| `std.collection` | Collection types such as List and Map |
-| `std.string` | String operations |
-| `std.array` | Array operations |
-| `std.iterator` | Iterator |
+| Module           | Description                                                                    |
+| ---------------- | ------------------------------------------------------------------------------ |
+| `std.assert`     | Assertion mechanism — runtime `assert` + compile-time `Assert` refinement type |
+| `std.option`     | Option type                                                                    |
+| `std.result`     | Result type                                                                    |
+| `std.collection` | Collection types such as List and Map                                          |
+| `std.string`     | String operations                                                              |
+| `std.array`      | Array operations                                                               |
+| `std.iterator`   | Iterator                                                                       |
 
 ### A.2 IO Modules
 
-| Module | Description |
-|--------|-------------|
-| `std.io` | Standard input/output |
-| `std.file` | File operations |
-| `std.dir` | Directory operations |
+| Module     | Description           |
+| ---------- | --------------------- |
+| `std.io`   | Standard input/output |
+| `std.file` | File operations       |
+| `std.dir`  | Directory operations  |
 
 ### A.3 Math Modules
 
-| Module | Description |
-|--------|-------------|
-| `std.math` | Math functions |
+| Module          | Description             |
+| --------------- | ----------------------- |
+| `std.math`      | Math functions          |
 | `std.math.trig` | Trigonometric functions |
-| `std.math.log` | Logarithmic functions |
+| `std.math.log`  | Logarithmic functions   |
 
 ### A.4 Utility Modules
 
-| Module | Description |
-|--------|-------------|
-| `std.random` | Random number generation |
-| `std.time` | Time and date |
+| Module       | Description                                                                   |
+| ------------ | ----------------------------------------------------------------------------- |
+| `std.random` | Random number generation                                                      |
+| `std.time`   | Time and date                                                                 |
 | `std.assert` | Unification of compile-time `Assert(C)` and runtime `assert(x > 0)` (RFC-030) |
-| `std.regex` | Regular expressions |
+| `std.regex`  | Regular expressions                                                           |

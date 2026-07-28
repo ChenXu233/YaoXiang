@@ -1,11 +1,11 @@
 ---
-title: "RFC-014c: 工作空间支持"
-status: "审核中"
-author: "晨煦"
-created: "2026-06-11"
-updated: "2026-07-05"
-group: "rfc-014"
-issue: "#113"
+title: 'RFC-014c: 工作空间支持'
+status: '审核中'
+author: '晨煦'
+created: '2026-06-11'
+updated: '2026-07-05'
+group: 'rfc-014'
+issue: '#113'
 ---
 
 # RFC-014c: 工作空间支持
@@ -14,11 +14,13 @@ issue: "#113"
 
 ## 摘要
 
-定义 YaoXiang 的工作空间（workspace）机制：多个相关包一起开发时的依赖共享、路径引用、lockfile 统一、与 Cargo workspace 的集成。
+定义 YaoXiang 的工作空间（workspace）机制：多个相关包一起开发时的依赖共享、路径引用、lockfile 统一、与 Cargo
+workspace 的集成。
 
 ## 动机
 
 当项目规模增长，代码需要拆成多个包。这些包需要：
+
 - 互相引用（路径依赖）
 - 共享外部依赖版本（避免版本漂移）
 - 统一 lockfile（保证构建一致性）
@@ -47,6 +49,7 @@ app = "packages/app/yaoxiang.toml"
 ```
 
 **根 toml 只做三件事：**
+
 1. 声明成员列表（字典形式，key 为成员名，value 为 toml 路径）
 2. 提供共享 lockfile（`yaoxiang.lock`）
 3. 提供共享 vendor 目录（`.yaoxiang/vendor/`）
@@ -107,7 +110,8 @@ my-workspace/
 
 ### workspace 依赖引用
 
-`{ workspace = "member-name" }` 引用 `[workspace.members]` 的 **key**（不是成员的 `[package].name`）。
+`{ workspace = "member-name" }` 引用 `[workspace.members]` 的 **key**（不是成员的
+`[package].name`）。
 
 ```toml
 # 根 yaoxiang.toml
@@ -126,6 +130,7 @@ utils = { workspace = "utils" }   # ✅ 引用 key "utils"
 ```
 
 **为什么用 key 而不是 name：**
+
 - key 由工作空间控制，稳定唯一
 - `[package].name` 是公开名，发布时可能变
 - key 是 BTreeMap 的 key，天然唯一
@@ -147,7 +152,8 @@ utils = { workspace = "utils" }
 utils = "^0.2.0"
 ```
 
-**版本来源：** 读被依赖成员的 `[package].version`，加 `^` 前缀。不检查 Registry——版本的权威来源是成员的 `yaoxiang.toml`，Registry 只是分发渠道。
+**版本来源：** 读被依赖成员的 `[package].version`，加 `^`
+前缀。不检查 Registry——版本的权威来源是成员的 `yaoxiang.toml`，Registry 只是分发渠道。
 
 包管理器在 `yaoxiang publish` 时自动完成这个替换。
 
@@ -182,16 +188,17 @@ my-workspace/
 
 ### CLI 命令
 
-| 命令 | 功能 |
-|------|------|
-| `yaoxiang workspace list` | 列出工作空间成员 |
-| `yaoxiang workspace add <path>` | 添加成员 |
-| `yaoxiang workspace remove <name>` | 移除成员 |
-| `yaoxiang build` | 构建所有成员（按依赖拓扑排序） |
-| `yaoxiang build core` | 构建指定成员 |
-| `yaoxiang test` | 运行所有成员的测试 |
+| 命令                               | 功能                           |
+| ---------------------------------- | ------------------------------ |
+| `yaoxiang workspace list`          | 列出工作空间成员               |
+| `yaoxiang workspace add <path>`    | 添加成员                       |
+| `yaoxiang workspace remove <name>` | 移除成员                       |
+| `yaoxiang build`                   | 构建所有成员（按依赖拓扑排序） |
+| `yaoxiang build core`              | 构建指定成员                   |
+| `yaoxiang test`                    | 运行所有成员的测试             |
 
-**`yaoxiang build` 行为：** 构建所有成员，按依赖拓扑排序。如果 core → utils → app，构建顺序为 core → utils → app。
+**`yaoxiang build` 行为：** 构建所有成员，按依赖拓扑排序。如果 core → utils → app，构建顺序为 core →
+utils → app。
 
 ## 详细设计
 
@@ -222,11 +229,13 @@ struct WorkspaceMember {
 }
 ```
 
-**探测逻辑：** 加载 toml 时，如果有 `[workspace]` 段则解析为 `WorkspaceManifest`，否则解析为 `PackageManifest`。
+**探测逻辑：** 加载 toml 时，如果有 `[workspace]` 段则解析为 `WorkspaceManifest`，否则解析为
+`PackageManifest`。
 
 ### workspace 依赖引用
 
 `{ workspace = "member-name" }` 的语义：
+
 - 在 `dependencies` 中引用另一个工作空间成员
 - 开发时解析为本地路径
 - 发布时替换为 Registry 版本
@@ -255,23 +264,23 @@ struct WorkspaceMember {
 
 ## 替代方案
 
-| 方案 | 为什么没选 |
-|------|-----------|
-| 独立项目 + path 依赖 | lockfile 不统一，版本漂移风险 |
-| 类似 npm workspaces | npm 的 workspace 问题多，不值得模仿 |
+| 方案                     | 为什么没选                           |
+| ------------------------ | ------------------------------------ |
+| 独立项目 + path 依赖     | lockfile 不统一，版本漂移风险        |
+| 类似 npm workspaces      | npm 的 workspace 问题多，不值得模仿  |
 | Cargo workspace 直接复用 | YaoXiang 和 Cargo 是不同的包生态系统 |
 
 ## 实现策略
 
 ### 阶段划分
 
-| 阶段 | 内容 |
-|------|------|
+| 阶段     | 内容                                           |
+| -------- | ---------------------------------------------- |
 | Phase 6a | `[workspace.members]` 解析 + WorkspaceManifest |
-| Phase 6b | 共享 lockfile + 依赖合并解析 |
-| Phase 6c | `{ workspace = "name" }` 路径依赖引用 |
-| Phase 6d | 发布时路径依赖自动替换 |
-| Phase 6e | Cargo workspace 集成 |
+| Phase 6b | 共享 lockfile + 依赖合并解析                   |
+| Phase 6c | `{ workspace = "name" }` 路径依赖引用          |
+| Phase 6d | 发布时路径依赖自动替换                         |
+| Phase 6e | Cargo workspace 集成                           |
 
 ### 依赖关系
 

@@ -1,5 +1,5 @@
 ---
-title: "フォーマット設定オプション"
+title: 'フォーマット設定オプション'
 description: yaoxiang fmt の設定ファイル形式、優先順位、デフォルト値について
 ---
 
@@ -44,11 +44,14 @@ sort_imports = true
 
 ## デフォルト値
 
-| オプション | デフォルト値 | 説明 |
-|------|--------|------|
-| `line_width` | 120 | 最大行幅 |
-| `indent_width` | 4 | インデントスペース数 |
-| `use_tabs` | false | tab を使用するか |
-| `single_quote` | false | シングルクォートを使用するか |
-| `sort_imports` | true | import をソートするか |
+| オプション     | デフォルト値 | 説明                         |
+| -------------- | ------------ | ---------------------------- |
+| `line_width`   | 120          | 最大行幅                     |
+| `indent_width` | 4            | インデントスペース数         |
+| `use_tabs`     | false        | tab を使用するか             |
+| `single_quote` | false        | シングルクォートを使用するか |
+| `sort_imports` | true         | import をソートするか        |
+
+```
+
 ```

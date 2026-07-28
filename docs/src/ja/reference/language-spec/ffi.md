@@ -2,7 +2,8 @@
 
 本ファイルは YaoXiang プログラミング言語の FFI（外部関数インタフェース）仕様を定義する。型定義、関数宣言、メソッドバインディング、不透明型の処理を含む。
 
-> **詳細設計**：FFI の完全な設計、動機、トレードオフについては [RFC-026: FFI コア機構](../design/rfc/accepted/026-ffi-core-mechanism.md) を参照。
+> **詳細設計**：FFI の完全な設計、動機、トレードオフについては
+> [RFC-026: FFI コア機構](../design/rfc/accepted/026-ffi-core-mechanism.md) を参照。
 
 ---
 
@@ -17,11 +18,11 @@
 
 ### 1.2 FFI の構成要素
 
-| コンポーネント | 説明 | 構文 |
-|------|------|------|
-| 型定義 | FFI 型（不透明または透明）を定義する | `unsafe {}` + `return` |
-| 関数宣言 | 外部関数を宣言する | `native("symbol")` |
-| メソッドバインディング | 型にメソッドをバインドする | `[0]` 構文 |
+| コンポーネント         | 説明                                 | 構文                   |
+| ---------------------- | ------------------------------------ | ---------------------- |
+| 型定義                 | FFI 型（不透明または透明）を定義する | `unsafe {}` + `return` |
+| 関数宣言               | 外部関数を宣言する                   | `native("symbol")`     |
+| メソッドバインディング | 型にメソッドをバインドする           | `[0]` 構文             |
 
 ---
 
@@ -81,6 +82,7 @@ MyType: Type = {}
 ```
 
 **判定ルール**：
+
 - 型が `native` 関数から参照される場合 → 不透明型
 - そうでない場合 → 真空型
 
@@ -103,19 +105,19 @@ sqlite3_exec: (db: SqliteDb, sql: String) -> Int32 = native("sqlite3_exec")
 
 FFI 関数の引数型には YaoXiang 型を直接使用し、C 型のマッピングはコンパイラが自動的に処理する：
 
-| C 型 | YaoXiang 型 |
-|--------|---------------|
-| `int` | `Int32` |
-| `long` | `Int64` |
-| `float` | `Float32` |
-| `double` | `Float64` |
-| `char` | `Char` |
-| `char*` | `String` |
-| `bool` | `Bool` |
-| `size_t` | `Uint` |
-| `void*` | `*Void` |
-| `struct T*` | `T`（透明型）|
-| `typedef struct T T` | `T`（不透明型）|
+| C 型                 | YaoXiang 型     |
+| -------------------- | --------------- |
+| `int`                | `Int32`         |
+| `long`               | `Int64`         |
+| `float`              | `Float32`       |
+| `double`             | `Float64`       |
+| `char`               | `Char`          |
+| `char*`              | `String`        |
+| `bool`               | `Bool`          |
+| `size_t`             | `Uint`          |
+| `void*`              | `*Void`         |
+| `struct T*`          | `T`（透明型）   |
+| `typedef struct T T` | `T`（不透明型） |
 
 ### 3.3 戻り型
 
@@ -151,6 +153,7 @@ SqliteDb.exec = sqlite3_exec[0]
 ```
 
 **呼び出し方法**：
+
 ```yaoxiang
 db = sqlite3_open("test.db")
 
@@ -172,6 +175,7 @@ SqliteDb.open = sqlite3_open
 ```
 
 **呼び出し方法**：
+
 ```yaoxiang
 // コンストラクタを通して生成
 db = SqliteDb.open("test.db")
@@ -231,6 +235,7 @@ FFI 型がリソース型でない場合、spawn ブロック内で並列実行�
 ### 6.1 生成内容
 
 yx-bindgen は以下の内容を生成する：
+
 - FFI 型定義（unsafe ブロック + return）
 - FFI 関数宣言（native 構文）
 - メソッドバインディング（`[0]` 構文）

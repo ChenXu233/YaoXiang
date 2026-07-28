@@ -1,24 +1,25 @@
 ---
-title: "RFC 013: エラーコード仕様"
-status: "承認済み"
-author: "晨煦"
-created: "2026-02-02"
-updated: "2026-02-12"
-issue: "#125"
+title: 'RFC 013: エラーコード仕様'
+status: '承認済み'
+author: '晨煦'
+created: '2026-02-02'
+updated: '2026-02-12'
+issue: '#125'
 issues_impl:
-  - "#125"
+  - '#125'
 pr_impl:
-  - "#7"
-  - "#9"
-  - "#29"
-  - "#66"
+  - '#7'
+  - '#9'
+  - '#29'
+  - '#66'
 ---
 
 # RFC 013: エラーコード仕様
 
 ## 概要
 
-本 RFC は YaoXiang コンパイラのエラーコード分類仕様を提案する。Rust のような単層番号システムを採用し、JSON リソースファイルにより多言語サポートを実現し、`yaoxiang explain` コマンドによりエラー説明機能を提供する。
+本 RFC は YaoXiang コンパイラのエラーコード分類仕様を提案する。Rust のような単層番号システムを採用し、JSON リソースファイルにより多言語サポートを実現し、`yaoxiang explain`
+コマンドによりエラー説明機能を提供する。
 
 ## 動機
 
@@ -54,18 +55,18 @@ Exxxx
 
 ### 段階划分
 
-| 段階 | 範囲 | 説明 |
-|------|------|------|
-| **0** | E0xxx | 字句解析と構文解析 |
-| **1** | E1xxx | 型チェック |
-| **2** | E2xxx | 意味解析 |
-| **3** | E3xxx | コード生成 |
-| **4** | E4xxx | ジェネリクスとtrait |
+| 段階  | 範囲  | 説明                   |
+| ----- | ----- | ---------------------- |
+| **0** | E0xxx | 字句解析と構文解析     |
+| **1** | E1xxx | 型チェック             |
+| **2** | E2xxx | 意味解析               |
+| **3** | E3xxx | コード生成             |
+| **4** | E4xxx | ジェネリクスとtrait    |
 | **5** | E5xxx | モジュールとインポート |
-| **6** | E6xxx | ランタイムエラー |
-| **7** | E7xxx | I/O とシステムエラー |
-| **8** | E8xxx | 内部コンパイラエラー |
-| **9** | E9xxx | 予約/実験的 |
+| **6** | E6xxx | ランタイムエラー       |
+| **7** | E7xxx | I/O とシステムエラー   |
+| **8** | E8xxx | 内部コンパイラエラー   |
+| **9** | E9xxx | 予約/実験的            |
 
 ### エラーカテゴリ enum
 
@@ -224,12 +225,12 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
 
 #### 設計の優位性
 
-| 特性 | 説明 |
-|------|------|
-| **単一 Builder** | 1つの `DiagnosticBuilder` がすべてのエラーコードに対応 |
-| **型安全** | クイックメソッドによりパラメータの正しさを保証 |
-| **自己文書化** | `E1001::unknown_variable(name)` が一目でわかる |
-| **テンプレート分離** | メッセージテンプレートとコードを分離し、i18n が容易 |
+| 特性                             | 説明                                                     |
+| -------------------------------- | -------------------------------------------------------- |
+| **単一 Builder**                 | 1つの `DiagnosticBuilder` がすべてのエラーコードに対応   |
+| **型安全**                       | クイックメソッドによりパラメータの正しさを保証           |
+| **自己文書化**                   | `E1001::unknown_variable(name)` が一目でわかる           |
+| **テンプレート分離**             | メッセージテンプレートとコードを分離し、i18n が容易      |
 | **ゼロランタイムオーバーヘッド** | コンパイル時レンダリング、AOT バイナリはルックアップなし |
 
 ---
@@ -271,98 +272,98 @@ E1001::unknown_variable(&var_name)
 
 #### E0xxx：字句解析と構文解析
 
-| コード | エラー種類 | 説明 |
-|------|----------|------|
-| E0001 | Invalid character | ソースコードに不正な文字が含まれている |
-| E0002 | Invalid number literal | 数字リテラルの形式が不正 |
-| E0003 | Unterminated string | 複数行文字列の終了引用符がない |
-| E0004 | Invalid character literal | 文字リテラルが不正 |
-| E0010 | Expected token | 構文解析時に特定のトークンが期待された |
-| E0011 | Unexpected token | 予期しないトークンに遭遇 |
-| E0012 | Invalid syntax | 式/文の構文エラー |
-| E0013 | Mismatched brackets | 丸括弧、角括弧、波括弧が一致しない |
-| E0014 | Missing semicolon | 文の末尾にセミコロンがない |
+| コード | エラー種類                | 説明                                   |
+| ------ | ------------------------- | -------------------------------------- |
+| E0001  | Invalid character         | ソースコードに不正な文字が含まれている |
+| E0002  | Invalid number literal    | 数字リテラルの形式が不正               |
+| E0003  | Unterminated string       | 複数行文字列の終了引用符がない         |
+| E0004  | Invalid character literal | 文字リテラルが不正                     |
+| E0010  | Expected token            | 構文解析時に特定のトークンが期待された |
+| E0011  | Unexpected token          | 予期しないトークンに遭遇               |
+| E0012  | Invalid syntax            | 式/文の構文エラー                      |
+| E0013  | Mismatched brackets       | 丸括弧、角括弧、波括弧が一致しない     |
+| E0014  | Missing semicolon         | 文の末尾にセミコロンがない             |
 
 #### E1xxx：型チェック
 
-| コード | エラー種類 | 説明 |
-|------|----------|------|
-| E1001 | Unknown variable | 参照された変数が未定義 |
-| E1002 | Type mismatch | 期待される型と実際の型が一致しない |
-| E1003 | Unknown type | 参照された型が存在しない |
-| E1010 | Parameter count mismatch | 関数呼び出しのパラメータ数が定義と一致しない |
-| E1011 | Parameter type mismatch | パラメータの型チェック失敗 |
-| E1012 | Return type mismatch | 関数の戻り値型が不正 |
-| E1013 | Function not found | 未定義の関数を呼び出そうとした |
-| E1020 | Cannot infer type | コンテキストから型を推論できない |
-| E1021 | Type inference conflict | 複数の制約により型が矛盾 |
-| E1030 | Pattern non-exhaustive | match 式がすべてのケースをカバーしていない |
-| E1031 | Unreachable pattern | 決してマッチしないパターン |
-| E1040 | Operation not supported | 型がその操作をサポートしていない |
-| E1041 | Index out of bounds | 配列/リストのインデックスが範囲外 |
-| E1042 | Field not found | 存在しない構造体フィールドにアクセス |
+| コード | エラー種類               | 説明                                         |
+| ------ | ------------------------ | -------------------------------------------- |
+| E1001  | Unknown variable         | 参照された変数が未定義                       |
+| E1002  | Type mismatch            | 期待される型と実際の型が一致しない           |
+| E1003  | Unknown type             | 参照された型が存在しない                     |
+| E1010  | Parameter count mismatch | 関数呼び出しのパラメータ数が定義と一致しない |
+| E1011  | Parameter type mismatch  | パラメータの型チェック失敗                   |
+| E1012  | Return type mismatch     | 関数の戻り値型が不正                         |
+| E1013  | Function not found       | 未定義の関数を呼び出そうとした               |
+| E1020  | Cannot infer type        | コンテキストから型を推論できない             |
+| E1021  | Type inference conflict  | 複数の制約により型が矛盾                     |
+| E1030  | Pattern non-exhaustive   | match 式がすべてのケースをカバーしていない   |
+| E1031  | Unreachable pattern      | 決してマッチしないパターン                   |
+| E1040  | Operation not supported  | 型がその操作をサポートしていない             |
+| E1041  | Index out of bounds      | 配列/リストのインデックスが範囲外            |
+| E1042  | Field not found          | 存在しない構造体フィールドにアクセス         |
 
 #### E2xxx：意味解析
 
-| コード | エラー種類 | 説明 |
-|------|----------|------|
-| E2001 | Scope error | 変数が現在のスコープにない |
-| E2002 | Duplicate definition | 同一スコープ内で重複定義 |
-| E2003 | Lifetime error | ライフタイム制約が満たされていない |
-| E2010 | Immutable assignment | 不変変数を変更しようとした |
-| E2011 | Uninitialized use | 未初期化の変数の使用 |
-| E2012 | Mutability conflict | 不変コンテキストで可変参照を使用 |
+| コード | エラー種類           | 説明                               |
+| ------ | -------------------- | ---------------------------------- |
+| E2001  | Scope error          | 変数が現在のスコープにない         |
+| E2002  | Duplicate definition | 同一スコープ内で重複定義           |
+| E2003  | Lifetime error       | ライフタイム制約が満たされていない |
+| E2010  | Immutable assignment | 不変変数を変更しようとした         |
+| E2011  | Uninitialized use    | 未初期化の変数の使用               |
+| E2012  | Mutability conflict  | 不変コンテキストで可変参照を使用   |
 
 #### E4xxx：ジェネリクスとtrait
 
-| コード | エラー種類 | 説明 |
-|------|----------|------|
-| E4001 | Generic parameter mismatch | ジェネリックパラメータの数/型が一致しない |
-| E4002 | Trait bound violated | trait 制約が満たされていない |
-| E4003 | Associated type error | 関連型の定義/使用エラー |
-| E4004 | Duplicate trait implementation | 同一 trait の重複実装 |
-| E4005 | Trait not found | 要求された trait が見つからない |
-| E4006 | Sized bound violated | Sized 制約が満たされていない |
+| コード | エラー種類                     | 説明                                      |
+| ------ | ------------------------------ | ----------------------------------------- |
+| E4001  | Generic parameter mismatch     | ジェネリックパラメータの数/型が一致しない |
+| E4002  | Trait bound violated           | trait 制約が満たされていない              |
+| E4003  | Associated type error          | 関連型の定義/使用エラー                   |
+| E4004  | Duplicate trait implementation | 同一 trait の重複実装                     |
+| E4005  | Trait not found                | 要求された trait が見つからない           |
+| E4006  | Sized bound violated           | Sized 制約が満たされていない              |
 
 #### E5xxx：モジュールとインポート
 
-| コード | エラー種類 | 説明 |
-|------|----------|------|
-| E5001 | Module not found | インポートされたモジュールが存在しない |
-| E5002 | Cyclic import | モジュールの循環依存 |
-| E5003 | Symbol not exported | 未エクスポートのシンボルにアクセスしようとした |
-| E5004 | Invalid module path | モジュールパス形式が不正 |
-| E5005 | Private access | プライベートシンボルへのアクセス |
+| コード | エラー種類          | 説明                                           |
+| ------ | ------------------- | ---------------------------------------------- |
+| E5001  | Module not found    | インポートされたモジュールが存在しない         |
+| E5002  | Cyclic import       | モジュールの循環依存                           |
+| E5003  | Symbol not exported | 未エクスポートのシンボルにアクセスしようとした |
+| E5004  | Invalid module path | モジュールパス形式が不正                       |
+| E5005  | Private access      | プライベートシンボルへのアクセス               |
 
 #### E6xxx：ランタイムエラー
 
-| コード | エラー種類 | 説明 |
-|------|----------|------|
-| E6001 | Division by zero | 整数をゼロで除算 |
-| E6002 | Assertion failed | assert! マクロ失敗 |
-| E6003 | Arithmetic overflow | 算術演算のオーバーフロー |
-| E6004 | Stack overflow | スタック領域の枯渇 |
-| E6005 | Heap allocation failed | メモリ割り当て失敗 |
-| E6006 | Runtime index out of bounds | ランタイム時のインデックス逸脱 |
-| E6007 | Type cast failed | 型を互換性のない型にキャストしようとした |
+| コード | エラー種類                  | 説明                                     |
+| ------ | --------------------------- | ---------------------------------------- |
+| E6001  | Division by zero            | 整数をゼロで除算                         |
+| E6002  | Assertion failed            | assert! マクロ失敗                       |
+| E6003  | Arithmetic overflow         | 算術演算のオーバーフロー                 |
+| E6004  | Stack overflow              | スタック領域の枯渇                       |
+| E6005  | Heap allocation failed      | メモリ割り当て失敗                       |
+| E6006  | Runtime index out of bounds | ランタイム時のインデックス逸脱           |
+| E6007  | Type cast failed            | 型を互換性のない型にキャストしようとした |
 
 #### E7xxx：I/O とシステムエラー
 
-| コード | エラー種類 | 説明 |
-|------|----------|------|
-| E7001 | File not found | 存在しないファイルの読み込みを試行 |
-| E7002 | Permission denied | ファイルの権限が不十分 |
-| E7003 | I/O error | 汎用 I/O エラー |
-| E7004 | Network error | ネットワーク操作失敗 |
+| コード | エラー種類        | 説明                               |
+| ------ | ----------------- | ---------------------------------- |
+| E7001  | File not found    | 存在しないファイルの読み込みを試行 |
+| E7002  | Permission denied | ファイルの権限が不十分             |
+| E7003  | I/O error         | 汎用 I/O エラー                    |
+| E7004  | Network error     | ネットワーク操作失敗               |
 
 #### E8xxx：内部コンパイラエラー
 
-| コード | エラー種類 | 説明 |
-|------|----------|------|
-| E8001 | Internal compiler error | コンパイラの内部エラー |
-| E8002 | Codegen error | IR/バイトコード生成失敗 |
-| E8003 | Unimplemented feature | 未実装の機能を使用 |
-| E8004 | Optimization error | コンパイラの最適化エラー |
+| コード | エラー種類              | 説明                     |
+| ------ | ----------------------- | ------------------------ |
+| E8001  | Internal compiler error | コンパイラの内部エラー   |
+| E8002  | Codegen error           | IR/バイトコード生成失敗  |
+| E8003  | Unimplemented feature   | 未実装の機能を使用       |
+| E8004  | Optimization error      | コンパイラの最適化エラー |
 
 ---
 
@@ -497,16 +498,16 @@ impl I18nRegistry {
 
 ##### 定義済みプレースホルダー（よく使用）
 
-| プレースホルダー | 用途 | 例 |
-|--------|------|------|
-| `{name}` | 変数名/型名/trait名などの識別子 | `Unknown variable: '{name}'` |
-| `{expected}` | 期待される型 | `Expected type '{expected}'` |
-| `{found}` | 実際/見つかった型 | `, found type '{found}'` |
-| `{method}` | メソッド名 | `Method {method} is not a function` |
-| `{trait}` | trait 名 | `Cannot find trait: {trait}` |
-| `{path}` | モジュールパス | `Invalid path: {path}` |
-| `{ty}` | 型式 | `Invalid type: {ty}` |
-| `{message}` | 内部エラーメッセージ | `Internal error: {message}` |
+| プレースホルダー | 用途                            | 例                                  |
+| ---------------- | ------------------------------- | ----------------------------------- |
+| `{name}`         | 変数名/型名/trait名などの識別子 | `Unknown variable: '{name}'`        |
+| `{expected}`     | 期待される型                    | `Expected type '{expected}'`        |
+| `{found}`        | 実際/見つかった型               | `, found type '{found}'`            |
+| `{method}`       | メソッド名                      | `Method {method} is not a function` |
+| `{trait}`        | trait 名                        | `Cannot find trait: {trait}`        |
+| `{path}`         | モジュールパス                  | `Invalid path: {path}`              |
+| `{ty}`           | 型式                            | `Invalid type: {ty}`                |
+| `{message}`      | 内部エラーメッセージ            | `Internal error: {message}`         |
 
 ##### 任意の key サポート
 
@@ -599,12 +600,12 @@ default = "zh"
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-| コンポーネント | 責務 | レンダリングタイミング |
-|------|------|----------|
-| `I18nRegistry` | テンプレートと表示テキストを提供 | ユーザープロジェクトのコンパイル時 |
+| コンポーネント               | 責務                                   | レンダリングタイミング             |
+| ---------------------------- | -------------------------------------- | ---------------------------------- |
+| `I18nRegistry`               | テンプレートと表示テキストを提供       | ユーザープロジェクトのコンパイル時 |
 | `DiagnosticBuilder.render()` | テンプレート + パラメータ → 最終文字列 | ユーザープロジェクトのコンパイル時 |
-| `Diagnostic.message` | レンダリング済み文字列 | 最終結果を存储 |
-| AOT バイナリ | 最終文字列を含む | ランタイムで直接使用 |
+| `Diagnostic.message`         | レンダリング済み文字列                 | 最終結果を存储                     |
+| AOT バイナリ                 | 最終文字列を含む                       | ランタイムで直接使用               |
 
 ---
 
@@ -644,12 +645,12 @@ pub enum DiagnosticLevel {
 }
 ```
 
-| レベル | プレフィックス | 説明 |
-|------|------|------|
-| Error | `error[E####]:` | コンパイル失敗の原因 |
+| レベル  | プレフィックス    | 説明                 |
+| ------- | ----------------- | -------------------- |
+| Error   | `error[E####]:`   | コンパイル失敗の原因 |
 | Warning | `warning[E####]:` | コンパイルに影響なし |
-| Note | `note[E####]:` | 補足情報 |
-| Help | `help[E####]:` | 修正提案 |
+| Note    | `note[E####]:`    | 補足情報             |
+| Help    | `help[E####]:`    | 修正提案             |
 
 ---
 
@@ -663,13 +664,13 @@ yaoxiang explain <ERROR_CODE> [OPTIONS]
 
 #### オプション
 
-| オプション | 説明 |
-|------|------|
+| オプション      | 説明                                        |
+| --------------- | ------------------------------------------- |
 | `--lang <code>` | 言語を指定 (en-US, zh-CN、デフォルト en-US) |
-| `--json` | JSON 形式で出力（IDE/LSP 用） |
-| `--json-pretty` | 整形された JSON 出力 |
-| `--examples` | サンプルコードのみ表示 |
-| `--help` | ヘルプ情報を表示 |
+| `--json`        | JSON 形式で出力（IDE/LSP 用）               |
+| `--json-pretty` | 整形された JSON 出力                        |
+| `--examples`    | サンプルコードのみ表示                      |
+| `--help`        | ヘルプ情報を表示                            |
 
 #### 使用例
 
@@ -712,9 +713,7 @@ $ yaoxiang explain E1001 --json
   "code": "E1001",
   "message": "Unknown variable: {name}",
   "help": "Did you mean to define it?",
-  "examples": [
-    "let {name} = value;"
-  ],
+  "examples": ["let {name} = value;"],
   "language": "en-US"
 }
 ```
@@ -769,25 +768,25 @@ $ yaoxiang explain E1001 --json
 
 ### 完全エラーコード早見表
 
-| 範囲 | カテゴリ |
-|------|------|
-| E0xxx | 字句解析と構文解析 |
-| E1xxx | 型チェック |
-| E2xxx | 意味解析 |
-| E3xxx | コード生成 |
-| E4xxx | ジェネリクスとtrait |
+| 範囲  | カテゴリ               |
+| ----- | ---------------------- |
+| E0xxx | 字句解析と構文解析     |
+| E1xxx | 型チェック             |
+| E2xxx | 意味解析               |
+| E3xxx | コード生成             |
+| E4xxx | ジェネリクスとtrait    |
 | E5xxx | モジュールとインポート |
-| E6xxx | ランタイムエラー |
-| E7xxx | I/O とシステムエラー |
-| E8xxx | 内部コンパイラエラー |
-| E9xxx | 予約 |
+| E6xxx | ランタイムエラー       |
+| E7xxx | I/O とシステムエラー   |
+| E8xxx | 内部コンパイラエラー   |
+| E9xxx | 予約                   |
 
 ### サポートされている言語
 
-| コード | 言語 | ステータス |
-|------|------|------|
-| en-US | English (US) | デフォルト |
-| zh-CN | 簡体字中国語 | 計画中 |
+| コード | 言語         | ステータス |
+| ------ | ------------ | ---------- |
+| en-US  | English (US) | デフォルト |
+| zh-CN  | 簡体字中国語 | 計画中     |
 
 ### エラーメッセージ例の比較
 

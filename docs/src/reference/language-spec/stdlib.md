@@ -10,14 +10,14 @@
 
 标准库提供以下基础类型的实现：
 
-| 类型 | 模块 | 说明 |
-|------|------|------|
-| `Option(T)` | `std.option` | 可选值类型 |
-| `Result(T, E)` | `std.result` | 错误处理类型 |
-| `List(T)` | `std.collection` | 动态数组 |
-| `Map(K, V)` | `std.collection` | 哈希映射 |
-| `String` | `std.string` | 字符串类型 |
-| `Array(T, N)` | `std.array` | 固定大小数组 |
+| 类型           | 模块             | 说明         |
+| -------------- | ---------------- | ------------ |
+| `Option(T)`    | `std.option`     | 可选值类型   |
+| `Result(T, E)` | `std.result`     | 错误处理类型 |
+| `List(T)`      | `std.collection` | 动态数组     |
+| `Map(K, V)`    | `std.collection` | 哈希映射     |
+| `String`       | `std.string`     | 字符串类型   |
+| `Array(T, N)`  | `std.array`      | 固定大小数组 |
 
 ### 1.2 Option 类型
 
@@ -27,10 +27,10 @@ Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 
 **变体构造**：
 
-| 变体 | 语法 | 说明 |
-|------|------|------|
+| 变体          | 语法                 | 说明 |
+| ------------- | -------------------- | ---- |
 | `Option.some` | `Option.some(value)` | 有值 |
-| `Option.none` | `Option.none()` | 无值 |
+| `Option.none` | `Option.none()`      | 无值 |
 
 **常用方法**：
 
@@ -57,9 +57,9 @@ Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Resu
 
 **变体构造**：
 
-| 变体 | 语法 | 说明 |
-|------|------|------|
-| `Result.ok` | `Result.ok(value)` | 成功值 |
+| 变体         | 语法                | 说明   |
+| ------------ | ------------------- | ------ |
+| `Result.ok`  | `Result.ok(value)`  | 成功值 |
 | `Result.err` | `Result.err(error)` | 错误值 |
 
 **常用方法**：
@@ -101,7 +101,6 @@ data = match fetch_data() {
 }
 ```
 
-
 ### 1.5 断言（std.assert）
 
 `std.assert` 模块提供统一的断言机制——运行时 `assert` 和编译期精化类型 `Assert` 是同一原语的两面。
@@ -125,10 +124,10 @@ assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 
 **dispatch 分派**：
 
-| 条件 | 行为 |
-|------|------|
+| 条件                          | 行为                                      |
+| ----------------------------- | ----------------------------------------- |
 | cond 的所有自由变量编译期已知 | 编译器求值，true → 擦除，false → 编译错误 |
-| 存在运行时自由变量 | 插入运行时 check，注入流敏感假设集 Γ |
+| 存在运行时自由变量            | 插入运行时 check，注入流敏感假设集 Γ      |
 
 `assert(false, "msg")` 等价于 raise——不需要单独的 throw/raise 关键字。
 
@@ -364,35 +363,37 @@ for i in 0..10 step 2 {
 
 ## 附录：标准库模块索引
 
-| 模块 | 说明 |
-|------|------|
-| `std.assert` | 断言机制——运行时 assert + 编译期 Assert 精化类型 |
-| `std.option` | Option 类型 |
-| `std.result` | Result 类型 |
-| `std.collection` | List、Map 等集合类型 |
-| `std.string` | 字符串操作 |
-| `std.array` | 数组操作 |
-| `std.iterator` | 迭代器 |
+| 模块             | 说明                                             |
+| ---------------- | ------------------------------------------------ |
+| `std.assert`     | 断言机制——运行时 assert + 编译期 Assert 精化类型 |
+| `std.option`     | Option 类型                                      |
+| `std.result`     | Result 类型                                      |
+| `std.collection` | List、Map 等集合类型                             |
+| `std.string`     | 字符串操作                                       |
+| `std.array`      | 数组操作                                         |
+| `std.iterator`   | 迭代器                                           |
+
 ### A.2 IO 模块
 
-| 模块 | 说明 |
-|------|------|
-| `std.io` | 标准输入输出 |
-| `std.file` | 文件操作 |
-| `std.dir` | 目录操作 |
+| 模块       | 说明         |
+| ---------- | ------------ |
+| `std.io`   | 标准输入输出 |
+| `std.file` | 文件操作     |
+| `std.dir`  | 目录操作     |
 
 ### A.3 数学模块
 
-| 模块 | 说明 |
-|------|------|
-| `std.math` | 数学函数 |
+| 模块            | 说明     |
+| --------------- | -------- |
+| `std.math`      | 数学函数 |
 | `std.math.trig` | 三角函数 |
-| `std.math.log` | 对数函数 |
+| `std.math.log`  | 对数函数 |
 
 ### A.4 工具模块
-| 模块 | 说明 |
-|------|------|
-| `std.random` | 随机数生成 |
-| `std.time` | 时间日期 |
+
+| 模块         | 说明                                                        |
+| ------------ | ----------------------------------------------------------- |
+| `std.random` | 随机数生成                                                  |
+| `std.time`   | 时间日期                                                    |
 | `std.assert` | 编译期 `Assert(C)` 与运行时 `assert(x > 0)` 统一（RFC-030） |
-| `std.regex` | 正则表达式 |
+| `std.regex`  | 正则表达式                                                  |

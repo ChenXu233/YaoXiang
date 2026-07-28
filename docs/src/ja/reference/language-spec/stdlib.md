@@ -10,14 +10,14 @@
 
 標準ライブラリは以下の基本型の実装を提供する：
 
-| 型 | モジュール | 説明 |
-|------|------|------|
-| `Option(T)` | `std.option` | オプション値型 |
-| `Result(T, E)` | `std.result` | エラー処理型 |
-| `List(T)` | `std.collection` | 動的配列 |
-| `Map(K, V)` | `std.collection` | ハッシュマップ |
-| `String` | `std.string` | 文字列型 |
-| `Array(T, N)` | `std.array` | 固定サイズ配列 |
+| 型             | モジュール       | 説明           |
+| -------------- | ---------------- | -------------- |
+| `Option(T)`    | `std.option`     | オプション値型 |
+| `Result(T, E)` | `std.result`     | エラー処理型   |
+| `List(T)`      | `std.collection` | 動的配列       |
+| `Map(K, V)`    | `std.collection` | ハッシュマップ |
+| `String`       | `std.string`     | 文字列型       |
+| `Array(T, N)`  | `std.array`      | 固定サイズ配列 |
 
 ### 1.2 Option 型
 
@@ -27,10 +27,10 @@ Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 
 **バリアント構築**：
 
-| バリアント | 構文 | 説明 |
-|------|------|------|
+| バリアント    | 構文                 | 説明   |
+| ------------- | -------------------- | ------ |
 | `Option.some` | `Option.some(value)` | 値あり |
-| `Option.none` | `Option.none()` | 値なし |
+| `Option.none` | `Option.none()`      | 値なし |
 
 **常用メソッド**：
 
@@ -57,9 +57,9 @@ Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Resu
 
 **バリアント構築**：
 
-| バリアント | 構文 | 説明 |
-|------|------|------|
-| `Result.ok` | `Result.ok(value)` | 成功値 |
+| バリアント   | 構文                | 説明     |
+| ------------ | ------------------- | -------- |
+| `Result.ok`  | `Result.ok(value)`  | 成功値   |
 | `Result.err` | `Result.err(error)` | エラー値 |
 
 **常用メソッド**：
@@ -101,10 +101,10 @@ data = match fetch_data() {
 }
 ```
 
-
 ### 1.5 アサーション（std.assert）
 
-`std.assert` モジュールは統一されたアサーションメカニズムを提供する——実行時 `assert` とコンパイル時精緻化型 `Assert` は同一プリミティブの二つの側面である。
+`std.assert` モジュールは統一されたアサーションメカニズムを提供する——実行時 `assert`
+とコンパイル時精緻化型 `Assert` は同一プリミティブの二つの側面である。
 
 ```yaoxiang
 // IsTrue：値から型へのブリッジ関数
@@ -125,10 +125,10 @@ assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 
 **dispatch ディスパッチ**：
 
-| 条件 | 動作 |
-|------|------|
+| 条件                                      | 動作                                                    |
+| ----------------------------------------- | ------------------------------------------------------- |
 | cond のすべての自由変数がコンパイル時既知 | コンパイラが評価、true → 消去、false → コンパイルエラー |
-| 実行時自由変数が存在 | 実行時 check を挿入し、フロー依存仮定集合 Γ を注入 |
+| 実行時自由変数が存在                      | 実行時 check を挿入し、フロー依存仮定集合 Γ を注入      |
 
 `assert(false, "msg")` は raise と等価である——独立した throw/raise キーワードは不要。
 
@@ -364,35 +364,37 @@ for i in 0..10 step 2 {
 
 ## 付録：標準ライブラリモジュール索引
 
-| モジュール | 説明 |
-|------|------|
-| `std.assert` | アサーションメカニズム——実行時 assert + コンパイル時 Assert 精緻化型 |
-| `std.option` | Option 型 |
-| `std.result` | Result 型 |
-| `std.collection` | List、Map などのコレクション型 |
-| `std.string` | 文字列操作 |
-| `std.array` | 配列操作 |
-| `std.iterator` | イテレータ |
+| モジュール       | 説明                                                                 |
+| ---------------- | -------------------------------------------------------------------- |
+| `std.assert`     | アサーションメカニズム——実行時 assert + コンパイル時 Assert 精緻化型 |
+| `std.option`     | Option 型                                                            |
+| `std.result`     | Result 型                                                            |
+| `std.collection` | List、Map などのコレクション型                                       |
+| `std.string`     | 文字列操作                                                           |
+| `std.array`      | 配列操作                                                             |
+| `std.iterator`   | イテレータ                                                           |
+
 ### A.2 IO モジュール
 
-| モジュール | 説明 |
-|------|------|
-| `std.io` | 標準入出力 |
-| `std.file` | ファイル操作 |
-| `std.dir` | ディレクトリ操作 |
+| モジュール | 説明             |
+| ---------- | ---------------- |
+| `std.io`   | 標準入出力       |
+| `std.file` | ファイル操作     |
+| `std.dir`  | ディレクトリ操作 |
 
 ### A.3 数学モジュール
 
-| モジュール | 説明 |
-|------|------|
-| `std.math` | 数学関数 |
+| モジュール      | 説明     |
+| --------------- | -------- |
+| `std.math`      | 数学関数 |
 | `std.math.trig` | 三角関数 |
-| `std.math.log` | 対数関数 |
+| `std.math.log`  | 対数関数 |
 
 ### A.4 ユーティリティモジュール
-| モジュール | 説明 |
-|------|------|
-| `std.random` | 乱数生成 |
-| `std.time` | 日時 |
+
+| モジュール   | 説明                                                                |
+| ------------ | ------------------------------------------------------------------- |
+| `std.random` | 乱数生成                                                            |
+| `std.time`   | 日時                                                                |
 | `std.assert` | コンパイル時 `Assert(C)` と実行時 `assert(x > 0)` の統一（RFC-030） |
-| `std.regex` | 正規表現 |
+| `std.regex`  | 正規表現                                                            |

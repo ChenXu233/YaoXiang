@@ -1,5 +1,5 @@
 ---
-title: "Contributing Guide"
+title: 'Contributing Guide'
 description: Learn how to contribute code to the YaoXiang project
 ---
 

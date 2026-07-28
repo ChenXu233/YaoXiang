@@ -1,17 +1,20 @@
 ---
-title: "RFC-034: 统一调试工具链"
-status: "草案"
-author: "晨煦"
-created: "2026-07-06"
-updated: "2026-07-06"
-issue: "#164"
+title: 'RFC-034: 统一调试工具链'
+status: '草案'
+author: '晨煦'
+created: '2026-07-06'
+updated: '2026-07-06'
+issue: '#164'
 ---
 
 # RFC-034: 统一调试工具链
 
 ## 摘要
 
-为 YaoXiang 引入统一的调试工具链。核心设计是**一个源头，三种消费**：编译前端将源码位置、变量名、类型信息作为一等公民嵌入 YaoXiang IR，解释器、JIT、LLVM 三个后端各自消费同一套元数据。用户通过 `yaoxiang run --debug` 启动 DAP（Debug Adapter Protocol）服务器，VS Code 通过 stdio 连接，获得断点、单步、变量查看、调用栈、表达式求值、并发调试的统一体验——无论底层是哪种执行引擎。
+为 YaoXiang 引入统一的调试工具链。核心设计是**一个源头，三种消费**：编译前端将源码位置、变量名、类型信息作为一等公民嵌入 YaoXiang
+IR，解释器、JIT、LLVM 三个后端各自消费同一套元数据。用户通过 `yaoxiang run --debug` 启动 DAP（Debug
+Adapter Protocol）服务器，VS
+Code 通过 stdio 连接，获得断点、单步、变量查看、调用栈、表达式求值、并发调试的统一体验——无论底层是哪种执行引擎。
 
 ## 动机
 
@@ -27,7 +30,8 @@ io.println("DEBUG: entered branch A")
 三个致命问题：
 
 1. **编译器开发自举受阻**：用 YaoXiang 写 YaoXiang 编译器，但写编译器的人 debug 不了自己写的代码。自举阶段缺乏交互式调试手段是死胡同。
-2. **三种引擎，零调试**：解释器、JIT、LLVM 各自跑各自的，出了问题用户只能看 `ALL TESTS PASSED` 有没有出现在 stdout 里。断言失败？不知道在哪行、不知道变量值。
+2. **三种引擎，零调试**：解释器、JIT、LLVM 各自跑各自的，出了问题用户只能看 `ALL TESTS PASSED`
+   有没有出现在 stdout 里。断言失败？不知道在哪行、不知道变量值。
 3. **并发是黑盒**：`spawn` 创建了多个任务，哪个任务挂了？变量被谁 move 了？全靠运气猜。
 
 ### 设计目标
@@ -70,21 +74,25 @@ io.println("DEBUG: entered branch A")
 
 **关键设计决策**：
 
-1. **DAP 服务器与运行时通过 trait 解耦**。服务器不关心底层是解释器还是 JIT——它只通过 `DebugEngine` trait 发号施令。每个引擎独立实现同一个 trait。
-2. **`yaoxiang run --debug` 强制使用解释器**。调试需要可控性，不需要性能。LLVM 模式下仅生成 DWARF 用于事后回溯（core dump / crash report），不做交互式调试。
+1. **DAP 服务器与运行时通过 trait 解耦**。服务器不关心底层是解释器还是 JIT——它只通过 `DebugEngine`
+   trait 发号施令。每个引擎独立实现同一个 trait。
+2. **`yaoxiang run --debug`
+   强制使用解释器**。调试需要可控性，不需要性能。LLVM 模式下仅生成 DWARF 用于事后回溯（core dump /
+   crash report），不做交互式调试。
 3. **从 `yaoxiang run` 复用入口发现逻辑**。不引入新子命令，心智模型就是"以调试模式运行我的程序"。
 
 ### IR 调试元数据
 
-在现有 YaoXiang IR 上附加元数据，不新增 IR 种类。所有元数据在**编译前端**一处生成，后端消费是只读的：
+在现有 YaoXiang
+IR 上附加元数据，不新增 IR 种类。所有元数据在**编译前端**一处生成，后端消费是只读的：
 
-| 元数据 | 附着点 | 说明 |
-|--------|--------|------|
-| `SourceLocation` | 每个 IR 节点 | 源文件:行号:列号 |
-| `VarName` | 变量声明/绑定节点 | 源码中的变量名 |
-| `TypeAnnotation` | 变量/表达式节点 | 推断出的类型（含编译期谓词） |
-| `ScopeBoundary` | 块/函数入口出口 | 变量作用域的生命周期 |
-| `SpanInfo` | spawn 节点 | spawn 块内任务边界 |
+| 元数据           | 附着点            | 说明                         |
+| ---------------- | ----------------- | ---------------------------- |
+| `SourceLocation` | 每个 IR 节点      | 源文件:行号:列号             |
+| `VarName`        | 变量声明/绑定节点 | 源码中的变量名               |
+| `TypeAnnotation` | 变量/表达式节点   | 推断出的类型（含编译期谓词） |
+| `ScopeBoundary`  | 块/函数入口出口   | 变量作用域的生命周期         |
+| `SpanInfo`       | spawn 节点        | spawn 块内任务边界           |
 
 ### 启动流程
 
@@ -110,11 +118,11 @@ yaoxiang run --debug file.yx
 
 ### 各模式差异
 
-| 模式 | 调试方式 |
-|------|---------|
-| `yaoxiang run --debug` | 强制解释器，全功能 DAP 交互调试 |
+| 模式                     | 调试方式                                                         |
+| ------------------------ | ---------------------------------------------------------------- |
+| `yaoxiang run --debug`   | 强制解释器，全功能 DAP 交互调试                                  |
 | `yaoxiang run --release` | 生成 DWARF，用于事后回溯（core dump / crash report），不启动 DAP |
-| `yaoxiang run`（普通） | 无调试元数据，无调试支持 |
+| `yaoxiang run`（普通）   | 无调试元数据，无调试支持                                         |
 
 ## 详细设计
 
@@ -145,11 +153,11 @@ DAP 服务器:
 
 **三个引擎实现**：
 
-| | 解释器 | JIT | LLVM |
-|---|---|---|---|
+|              | 解释器                    | JIT                     | LLVM                       |
+| ------------ | ------------------------- | ----------------------- | -------------------------- |
 | 断点插入方式 | 执行循环中检查 IR 节点 ID | JIT 在机器码中插 `int3` | 利用 LLVM DWARF + 硬件断点 |
-| 条件断点求值 | 直接解释表达式 | 临时 JIT 编译条件表达式 | DWARF 表达式栈 + 求值 |
-| 性能开销 | 每个 IR 节点多一次查表 | 仅断点处有开销 | 几乎零开销（硬件断点） |
+| 条件断点求值 | 直接解释表达式            | 临时 JIT 编译条件表达式 | DWARF 表达式栈 + 求值      |
+| 性能开销     | 每个 IR 节点多一次查表    | 仅断点处有开销          | 几乎零开销（硬件断点）     |
 
 ### 2. 单步执行
 
@@ -183,9 +191,12 @@ Step Out:
 **临时断点的四个边界情况处理**：
 
 1. **并发归属**：临时断点绑定到当前任务 ID，其他任务命中后直接忽略。
-2. **Step Over spawn 块**：在 spawn 外部按 Step Over 等于跑完整个 spawn 块，跳转到之后。进入 spawn 内部调试应使用 Step Into。
-3. **临时断点未命中**：设看门狗超时（30 秒无任何断点命中）→ 强制暂停 → 通知 VS Code。同时监听程序退出事件 → 立即清理。
-4. **同一行多个 IR 节点**：Step Over 的临时断点标记 `ignore_current_line`，命中后若源码行号等于当前行号 → 忽略，继续。
+2. **Step Over spawn 块**：在 spawn 外部按 Step
+   Over 等于跑完整个 spawn 块，跳转到之后。进入 spawn 内部调试应使用 Step Into。
+3. **临时断点未命中**：设看门狗超时（30 秒无任何断点命中）→ 强制暂停 → 通知 VS
+   Code。同时监听程序退出事件 → 立即清理。
+4. **同一行多个 IR 节点**：Step Over 的临时断点标记
+   `ignore_current_line`，命中后若源码行号等于当前行号 → 忽略，继续。
 
 ### 3. 变量检查与作用域
 
@@ -216,11 +227,11 @@ DAP 服务器:
 
 **引擎差异**：
 
-| 引擎 | 变量值获取 |
-|------|-----------|
-| 解释器 | 直接读 VM 栈帧和堆。每个值在内存里有明确表示 |
-| JIT | 寄存器和栈上的值 → 需要 JIT 编译时记录"变量 → 寄存器/栈槽"映射表 |
-| LLVM | DWARF 的 `.debug_info` 段 → `DW_AT_location` → LLDB 原生支持 |
+| 引擎   | 变量值获取                                                       |
+| ------ | ---------------------------------------------------------------- |
+| 解释器 | 直接读 VM 栈帧和堆。每个值在内存里有明确表示                     |
+| JIT    | 寄存器和栈上的值 → 需要 JIT 编译时记录"变量 → 寄存器/栈槽"映射表 |
+| LLVM   | DWARF 的 `.debug_info` 段 → `DW_AT_location` → LLDB 原生支持     |
 
 **特殊类型显示**：编译期谓词精化类型展示对调试有价值的信息：
 
@@ -283,11 +294,11 @@ Watch: f(x)          → 调用函数（有副作用风险）
 
 **引擎差异**：
 
-| 引擎 | 表达式求值 |
-|------|-----------|
-| 解释器 | 复用现有 eval 代码路径，注入当前帧环境 |
-| JIT | 临时编译表达式 → 链接到当前帧 → 执行 → 废弃临时代码 |
-| LLVM | 不支持——LLVM 模式不做交互调试 |
+| 引擎   | 表达式求值                                          |
+| ------ | --------------------------------------------------- |
+| 解释器 | 复用现有 eval 代码路径，注入当前帧环境              |
+| JIT    | 临时编译表达式 → 链接到当前帧 → 执行 → 废弃临时代码 |
+| LLVM   | 不支持——LLVM 模式不做交互调试                       |
 
 ### 6. 并发调试
 
@@ -306,10 +317,10 @@ DAP 的 `threads` 概念映射为 YaoXiang 的 `spawn` 任务。每个任务有�
 
 **断点在并发上下文**：
 
-| 暂停模式 | 行为 | 适用场景 |
-|----------|------|---------|
+| 暂停模式           | 行为                        | 适用场景               |
+| ------------------ | --------------------------- | ---------------------- |
 | `stop-all`（默认） | 一个任务命中 → 所有任务暂停 | 调试数据竞争、全局状态 |
-| `stop-this-only` | 只暂停命中任务，其他继续 | 调试独立任务逻辑 |
+| `stop-this-only`   | 只暂停命中任务，其他继续    | 调试独立任务逻辑       |
 
 **spawn 块的单步语义**：
 
@@ -324,31 +335,31 @@ spawn {          // Step Over → 跑完整个 spawn 块
 
 #### 第一阶段：核心请求
 
-| DAP 请求 | YaoXiang 语义 |
-|----------|--------------|
-| `initialize` | 能力协商：支持断点、单步、变量、栈帧 |
+| DAP 请求            | YaoXiang 语义                                         |
+| ------------------- | ----------------------------------------------------- |
+| `initialize`        | 能力协商：支持断点、单步、变量、栈帧                  |
 | `launch` / `attach` | 启动/附加到 YaoXiang 程序（`--debug` 走 attach 模式） |
-| `setBreakpoints` | 设置源码行断点 |
-| `configurationDone` | 断点就绪，开始执行 |
-| `threads` | 返回所有活跃 spawn 任务列表 |
-| `stackTrace` | 返回指定任务的栈帧列表 |
-| `scopes` | 返回当前帧的变量作用域 |
-| `variables` | 返回指定作用域的变量列表 |
-| `continue` | 恢复执行 |
-| `next` | Step Over |
-| `stepIn` | Step Into |
-| `stepOut` | Step Out |
-| `pause` | 中断所有任务 |
-| `evaluate` | 在当前帧求值表达式 |
-| `disconnect` | 结束调试会话 |
+| `setBreakpoints`    | 设置源码行断点                                        |
+| `configurationDone` | 断点就绪，开始执行                                    |
+| `threads`           | 返回所有活跃 spawn 任务列表                           |
+| `stackTrace`        | 返回指定任务的栈帧列表                                |
+| `scopes`            | 返回当前帧的变量作用域                                |
+| `variables`         | 返回指定作用域的变量列表                              |
+| `continue`          | 恢复执行                                              |
+| `next`              | Step Over                                             |
+| `stepIn`            | Step Into                                             |
+| `stepOut`           | Step Out                                              |
+| `pause`             | 中断所有任务                                          |
+| `evaluate`          | 在当前帧求值表达式                                    |
+| `disconnect`        | 结束调试会话                                          |
 
 #### 第二阶段：增强请求
 
-| DAP 请求 | YaoXiang 语义 |
-|----------|--------------|
-| `setFunctionBreakpoints` | 函数名断点 |
-| `setExceptionBreakpoints` | 错误/panic 时暂停 |
-| `dataBreakpointInfo` | 数据断点（变量修改触发） |
+| DAP 请求                  | YaoXiang 语义            |
+| ------------------------- | ------------------------ |
+| `setFunctionBreakpoints`  | 函数名断点               |
+| `setExceptionBreakpoints` | 错误/panic 时暂停        |
+| `dataBreakpointInfo`      | 数据断点（变量修改触发） |
 
 ## 实现策略
 
@@ -356,12 +367,12 @@ spawn {          // Step Over → 跑完整个 spawn 块
 
 **目标**：编译前端附加调试元数据到 IR。
 
-| 组件 | 改动 |
-|------|------|
-| IR 定义 | 新增 `SourceLocation`、`VarName`、`TypeAnnotation` 等元数据字段 |
-| Parser | 每个 AST 节点记录源码位置 |
-| TypeChecker | 类型信息附着到 IR 节点 |
-| 测试 | 验证 IR dump 包含位置和变量信息 |
+| 组件        | 改动                                                            |
+| ----------- | --------------------------------------------------------------- |
+| IR 定义     | 新增 `SourceLocation`、`VarName`、`TypeAnnotation` 等元数据字段 |
+| Parser      | 每个 AST 节点记录源码位置                                       |
+| TypeChecker | 类型信息附着到 IR 节点                                          |
+| 测试        | 验证 IR dump 包含位置和变量信息                                 |
 
 **不涉及运行时。**
 
@@ -369,12 +380,12 @@ spawn {          // Step Over → 跑完整个 spawn 块
 
 **目标**：`yaoxiang run --debug file.yx` 可以设置断点、单步、查看变量。
 
-| 组件 | 改动 |
-|------|------|
-| DAP 服务器 (yx-core 新模块) | stdio 传输层、核心请求处理、断点管理器（源码行 → IR 节点映射） |
-| 运行时调试 trait (yx-core) | `DebugEngine` trait 定义（pause, resume, step, get_frames, eval, get_variables） |
-| 解释器 | 执行循环中断点检查、暂停/恢复机制、帧链表维护、`InterpreterDebugEngine` 实现 |
-| CLI | `yaoxiang run --debug` 参数 |
+| 组件                        | 改动                                                                             |
+| --------------------------- | -------------------------------------------------------------------------------- |
+| DAP 服务器 (yx-core 新模块) | stdio 传输层、核心请求处理、断点管理器（源码行 → IR 节点映射）                   |
+| 运行时调试 trait (yx-core)  | `DebugEngine` trait 定义（pause, resume, step, get_frames, eval, get_variables） |
+| 解释器                      | 执行循环中断点检查、暂停/恢复机制、帧链表维护、`InterpreterDebugEngine` 实现     |
+| CLI                         | `yaoxiang run --debug` 参数                                                      |
 
 **验收标准**：对 `tests/yaoxiang/` 下任意 `.yx` 文件，能用 VS Code 设置断点、Step Over、看变量值。
 
@@ -382,21 +393,21 @@ spawn {          // Step Over → 跑完整个 spawn 块
 
 **目标**：表达式求值、函数断点、并发调试、异常断点。
 
-| 组件 | 改动 |
-|------|------|
-| 表达式求值引擎 | 微程序编译（复用 parser + typechecker）、临时帧推入 VM、副作用隔离 |
-| 并发调试 | spawn 任务列表映射、断点绑定任务 ID、stop-all / stop-this-only 暂停策略 |
-| 函数/异常断点 | `setFunctionBreakpoints`、`setExceptionBreakpoints` 映射 |
-| VS Code 扩展 | 提供默认的 `launch.json` 模板 |
+| 组件           | 改动                                                                    |
+| -------------- | ----------------------------------------------------------------------- |
+| 表达式求值引擎 | 微程序编译（复用 parser + typechecker）、临时帧推入 VM、副作用隔离      |
+| 并发调试       | spawn 任务列表映射、断点绑定任务 ID、stop-all / stop-this-only 暂停策略 |
+| 函数/异常断点  | `setFunctionBreakpoints`、`setExceptionBreakpoints` 映射                |
+| VS Code 扩展   | 提供默认的 `launch.json` 模板                                           |
 
 ### 第三阶段：JIT 调试 & LLVM DWARF
 
 **目标**：JIT 引擎复用 DAP，LLVM 产出 DWARF 用于崩溃回溯。
 
-| 组件 | 改动 |
-|------|------|
-| JIT | 实现 `DebugEngine` trait、编译时生成变量→寄存器映射表、运行时帧链表、表达式临时编译 |
-| LLVM | IR 调试元数据 → LLVM `DILocation` / `DISubprogram` → DWARF（无 DAP 交互） |
+| 组件 | 改动                                                                                |
+| ---- | ----------------------------------------------------------------------------------- |
+| JIT  | 实现 `DebugEngine` trait、编译时生成变量→寄存器映射表、运行时帧链表、表达式临时编译 |
+| LLVM | IR 调试元数据 → LLVM `DILocation` / `DISubprogram` → DWARF（无 DAP 交互）           |
 
 ### 依赖关系
 
@@ -412,12 +423,12 @@ spawn {          // Step Over → 跑完整个 spawn 块
 
 ### 风险
 
-| 风险 | 缓解 |
-|------|------|
-| 解释器暂停机制的复杂度 | 用简单的 channel/signal 而非复杂状态机，暂停就是不让 fetch 下一条指令 |
-| 表达式求值的类型安全 | 复用现有 typechecker，只读引用，不提交副作用 |
-| DAP 协议细节 | 参考 debugpy / delve 的实现，协议是成熟的 |
-| 并发调试的 stop-all 活锁 | 超时机制 + 强制暂停 |
+| 风险                     | 缓解                                                                  |
+| ------------------------ | --------------------------------------------------------------------- |
+| 解释器暂停机制的复杂度   | 用简单的 channel/signal 而非复杂状态机，暂停就是不让 fetch 下一条指令 |
+| 表达式求值的类型安全     | 复用现有 typechecker，只读引用，不提交副作用                          |
+| DAP 协议细节             | 参考 debugpy / delve 的实现，协议是成熟的                             |
+| 并发调试的 stop-all 活锁 | 超时机制 + 强制暂停                                                   |
 
 ## 权衡
 
@@ -431,22 +442,24 @@ spawn {          // Step Over → 跑完整个 spawn 块
 ### 缺点
 
 - **调试模式性能差**：解释器比 JIT/LLVM 慢很多。但调试不需要性能——没人指望 debug 模式跑生产负载
-- **LLVM 调试受限**：AOT 编译无法交互调试，只能用 GDB/LLDB + DWARF。但这是权衡：LLVM 模式下本就不该有调试行为差异
+- **LLVM 调试受限**：AOT 编译无法交互调试，只能用 GDB/LLDB +
+  DWARF。但这是权衡：LLVM 模式下本就不该有调试行为差异
 - **并发暂停复杂**：stop-all 语义在解释器上实现需要遍历所有活跃任务
 
 ### 替代方案
 
-| 方案 | 为什么不选择 |
-|------|-------------|
-| 三种引擎各自实现 DAP | 三倍工作，三套 bug。违反"好品味" |
-| 只用 DWARF，不搞自有 DAP | 解释器和 JIT 没有 DWARF 概念，LLDB 进不了 VM 内部 |
-| 比照 Python pdb 做命令行调试器 | VS Code 体验完爆命令行调试器 |
-| 把 DAP 塞进 LSP 进程 | 生命周期完全不同——LSP 跟随项目，DAP 跟随调试会话。进程隔离是硬需求 |
+| 方案                           | 为什么不选择                                                       |
+| ------------------------------ | ------------------------------------------------------------------ |
+| 三种引擎各自实现 DAP           | 三倍工作，三套 bug。违反"好品味"                                   |
+| 只用 DWARF，不搞自有 DAP       | 解释器和 JIT 没有 DWARF 概念，LLDB 进不了 VM 内部                  |
+| 比照 Python pdb 做命令行调试器 | VS Code 体验完爆命令行调试器                                       |
+| 把 DAP 塞进 LSP 进程           | 生命周期完全不同——LSP 跟随项目，DAP 跟随调试会话。进程隔离是硬需求 |
 
 ## 开放问题
 
 - [ ] 条件断点的表达式语法与正常 YaoXiang 完全一致？（建议：完全一致，复用 parser）
-- [ ] `spawn` 块内的 Step Into 行为：用户按下 Step Into 进入 spawn 块时，多个并行任务应展示哪个？（建议：暂停在第一个已创建的任务上）
+- [ ] `spawn` 块内的 Step Into 行为：用户按下 Step
+      Into 进入 spawn 块时，多个并行任务应展示哪个？（建议：暂停在第一个已创建的任务上）
 - [ ] VS Code 扩展：调试配置是放在现有 `vscode-extension/` 目录下还是独立仓库？
 
 ## 参考文献

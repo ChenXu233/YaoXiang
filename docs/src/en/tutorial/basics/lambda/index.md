@@ -4,7 +4,8 @@ title: Lambda Expressions
 
 # Lambda Expressions
 
-A Lambda is **an anonymous function that you can define on the fly**. In YaoXiang, regular functions are essentially named Lambdas.
+A Lambda is **an anonymous function that you can define on the fly**. In YaoXiang, regular functions
+are essentially named Lambdas.
 
 ## Syntax
 
@@ -39,7 +40,8 @@ add = (a, b) => a + b
 add: (a: Int, b: Int) -> Int = a + b
 ```
 
-The first line is "assigning a Lambda to the variable `add`", and the second line is "defining a function named `add`". The compiler processes them in nearly the same way.
+The first line is "assigning a Lambda to the variable `add`", and the second line is "defining a
+function named `add`". The compiler processes them in nearly the same way.
 
 ## When to Use Lambda
 
@@ -98,7 +100,8 @@ result = process("  Hello World  ")
 print(result)  // "hello world"
 ```
 
-Note that the block form requires `return` to return a value, which is exactly the same as functions.
+Note that the block form requires `return` to return a value, which is exactly the same as
+functions.
 
 ## Multi-parameter Lambda
 
@@ -124,18 +127,22 @@ result = apply((x) => x + 10, 5)
 print(result)  // 15
 ```
 
-The compiler knows that the type of `op` is `(Int) -> Int`, so `x` in the Lambda `(x) => x + 10` is automatically inferred to be `Int`.
+The compiler knows that the type of `op` is `(Int) -> Int`, so `x` in the Lambda `(x) => x + 10` is
+automatically inferred to be `Int`.
 
-> **Note**: According to the function definition rules, parameter types must be annotated in at least one place — either in the signature or in the Lambda header. When a Lambda is passed as an argument, the type is usually provided by the receiver's signature.
+> **Note**: According to the function definition rules, parameter types must be annotated in at
+> least one place — either in the signature or in the Lambda header. When a Lambda is passed as an
+> argument, the type is usually provided by the receiver's signature.
 
 ## Summary
 
-| Key Point | Description |
-|------|------|
-| Syntax | `(params) => expr` or `(params) => { return ... }` |
-| Essence | Function = named Lambda |
-| Higher-order functions | Lambdas can be passed as arguments |
-| Block form | Use `{}` + `return` for multi-line logic |
-| Type inference | Parameter types are automatically inferred from context |
+| Key Point              | Description                                             |
+| ---------------------- | ------------------------------------------------------- |
+| Syntax                 | `(params) => expr` or `(params) => { return ... }`      |
+| Essence                | Function = named Lambda                                 |
+| Higher-order functions | Lambdas can be passed as arguments                      |
+| Block form             | Use `{}` + `return` for multi-line logic                |
+| Type inference         | Parameter types are automatically inferred from context |
 
-Lambda is the most concise way to express "temporary logic" in YaoXiang. Master it, and your code will be more flexible and compact.
+Lambda is the most concise way to express "temporary logic" in YaoXiang. Master it, and your code
+will be more flexible and compact.

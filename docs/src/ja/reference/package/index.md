@@ -1,5 +1,5 @@
 ---
-title: "パッケージマネージャー"
+title: 'パッケージマネージャー'
 description: YaoXiang パッケージマネージャー リファレンスドキュメント
 ---
 
@@ -13,7 +13,8 @@ YaoXiang パッケージマネージャー（略称 YPM）は、Cargo と同様�
 
 - **宣言的依存関係**：`yaoxiang.toml` で必要な依存関係を宣言
 - **決定論的ビルド**：`yaoxiang.lock` でバージョンをロックし、再現可能なビルドを確保
-- **ローカルキャッシュ**：依存関係は `vendor` ディレクトリにダウンロードされ、オフライン使用をサポート
+- **ローカルキャッシュ**：依存関係は `vendor`
+  ディレクトリにダウンロードされ、オフライン使用をサポート
 
 ## クイックスタート
 
@@ -34,14 +35,14 @@ yaoxiang run src/main.yx
 
 ## コマンド一覧
 
-| コマンド | 説明 |
-|------|------|
-| [`yaoxiang init`](./commands#yaoxiang-init) | 新規プロジェクトを初期化 |
-| [`yaoxiang add`](./commands#yaoxiang-add) | 依存関係を追加 |
-| [`yaoxiang rm`](./commands#yaoxiang-rm) | 依存関係を削除 |
-| [`yaoxiang install`](./commands#yaoxiang-install) | 依存関係をインストール |
-| [`yaoxiang update`](./commands#yaoxiang-update) | 依存関係を更新 |
-| [`yaoxiang list`](./commands#yaoxiang-list) | 依存関係を一覧表示 |
+| コマンド                                          | 説明                     |
+| ------------------------------------------------- | ------------------------ |
+| [`yaoxiang init`](./commands#yaoxiang-init)       | 新規プロジェクトを初期化 |
+| [`yaoxiang add`](./commands#yaoxiang-add)         | 依存関係を追加           |
+| [`yaoxiang rm`](./commands#yaoxiang-rm)           | 依存関係を削除           |
+| [`yaoxiang install`](./commands#yaoxiang-install) | 依存関係をインストール   |
+| [`yaoxiang update`](./commands#yaoxiang-update)   | 依存関係を更新           |
+| [`yaoxiang list`](./commands#yaoxiang-list)       | 依存関係を一覧表示       |
 
 ## プロジェクト構造
 
@@ -60,4 +61,7 @@ my-project/
 - [yaoxiang.toml 形式](./manifest) - プロジェクト設定ファイルの形式
 - [yaoxiang.lock 形式](./lock) - ロックファイルの形式説明
 - [エラーコード](./error-codes) - 一般的なエラーと対処方法
+
+```
+
 ```

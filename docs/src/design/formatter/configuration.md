@@ -1,5 +1,5 @@
 ---
-title: "格式化配置选项"
+title: '格式化配置选项'
 description: yaoxiang fmt 的配置文件格式、优先级和默认值
 ---
 
@@ -44,10 +44,10 @@ sort_imports = true
 
 ## 默认值
 
-| 选项 | 默认值 | 说明 |
-|------|--------|------|
-| `line_width` | 120 | 最大行宽 |
-| `indent_width` | 4 | 缩进空格数 |
-| `use_tabs` | false | 是否使用 tab |
-| `single_quote` | false | 是否使用单引号 |
-| `sort_imports` | true | 是否排序导入 |
+| 选项           | 默认值 | 说明           |
+| -------------- | ------ | -------------- |
+| `line_width`   | 120    | 最大行宽       |
+| `indent_width` | 4      | 缩进空格数     |
+| `use_tabs`     | false  | 是否使用 tab   |
+| `single_quote` | false  | 是否使用单引号 |
+| `sort_imports` | true   | 是否排序导入   |

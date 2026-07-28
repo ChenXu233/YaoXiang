@@ -1,6 +1,7 @@
 # Commit Submission Guidelines
 
-This document defines the Git commit conventions for the YaoXiang project, aiming to keep the commit history clear, readable, and easy to understand.
+This document defines the Git commit conventions for the YaoXiang project, aiming to keep the commit
+history clear, readable, and easy to understand.
 
 ---
 
@@ -22,8 +23,7 @@ This document defines the Git commit conventions for the YaoXiang project, aimin
 
 ## Commit Format
 
-**Very important!!!!!!!! Don't forget!!!!!!**
-All commit messages follow this format:
+**Very important!!!!!!!! Don't forget!!!!!!** All commit messages follow this format:
 
 ```
 :emoji: type(scope): subject (Chinese)
@@ -33,167 +33,171 @@ All commit messages follow this format:
 [Optional footer]
 ```
 
-> ⚠️ **Important**: Must use **emoji codes** (e.g., `:sparkles:`) instead of directly typing emoji characters.
+> ⚠️ **Important**: Must use **emoji codes** (e.g., `:sparkles:`) instead of directly typing emoji
+> characters.
 >
-> **It is recommended to use Chinese for commit messages** to maintain consistency in team communication.
+> **It is recommended to use Chinese for commit messages** to maintain consistency in team
+> communication.
 
 ### Components
 
-| Part | Description | Required |
-|------|-------------|----------|
-| emoji | Emoji code marking commit type | ✅ |
-| type | Commit type | ✅ |
-| scope | Affected scope | ✅ |
-| subject | Brief description (Chinese, no more than 50 characters) | ✅ |
-| body | Detailed explanation (optional) | ❌ |
-| footer | Breaking changes or issue closing (optional) | ❌ |
+| Part    | Description                                             | Required |
+| ------- | ------------------------------------------------------- | -------- |
+| emoji   | Emoji code marking commit type                          | ✅       |
+| type    | Commit type                                             | ✅       |
+| scope   | Affected scope                                          | ✅       |
+| subject | Brief description (Chinese, no more than 50 characters) | ✅       |
+| body    | Detailed explanation (optional)                         | ❌       |
+| footer  | Breaking changes or issue closing (optional)            | ❌       |
 
 ---
 
 ## Commit Types
 
-| emoji | type | Description |
-|-------|------|-------------|
-| :sparkles: | feat | New feature |
-| :bug: | fix | Bug fix |
-| :memo: | docs | Documentation changes only |
-| :lipstick: | style | Code formatting (no functional change) |
-| :recycle: | refactor | Code refactoring |
-| :zap: | perf | Performance optimization |
-| :white_check_mark: | test | Add or modify tests |
-| :wrench: | chore | Build tools, auxiliary tool changes |
-| :building_construction: | build | Build system changes |
-| :rocket: | ci | CI configuration changes |
+| emoji                   | type     | Description                            |
+| ----------------------- | -------- | -------------------------------------- |
+| :sparkles:              | feat     | New feature                            |
+| :bug:                   | fix      | Bug fix                                |
+| :memo:                  | docs     | Documentation changes only             |
+| :lipstick:              | style    | Code formatting (no functional change) |
+| :recycle:               | refactor | Code refactoring                       |
+| :zap:                   | perf     | Performance optimization               |
+| :white_check_mark:      | test     | Add or modify tests                    |
+| :wrench:                | chore    | Build tools, auxiliary tool changes    |
+| :building_construction: | build    | Build system changes                   |
+| :rocket:                | ci       | CI configuration changes               |
 
 ---
 
 ## Complete Emoji Reference
 
-The following is a complete emoji list consistent with the gitmoji project. Select the appropriate emoji based on commit content:
+The following is a complete emoji list consistent with the gitmoji project. Select the appropriate
+emoji based on commit content:
 
-| emoji | emoji code | commit description |
-| :---- | :---------------------------- | :--------------------------- |
-| 🎨 | `:art:` | Improve code structure/formatting |
-| ⚡️ | `:zap:` / `:racehorse:` | Improve performance |
-| 🔥 | `:fire:` | Remove code or files |
-| 🐛 | `:bug:` | Fix a bug |
-| 🚑 | `:ambulance:` | Critical patch |
-| ✨ | `:sparkles:` | Introduce new features |
-| 📝 | `:memo:` | Write docs |
-| 🚀 | `:rocket:` | Deploy stuff |
-| 💄 | `:lipstick:` | Update UI and style files |
-| 🎉 | `:tada:` | Begin a project |
-| ✅ | `:white_check_mark:` | Add tests |
-| 🔒 | `:lock:` | Fix security issues |
-| 🍎 | `:apple:` | Fix something on macOS |
-| 🐧 | `:penguin:` | Fix something on Linux |
-| 🏁 | `:checkered_flag:` | Fix something on Windows |
-| 🤖 | `:robot:` | Fix something on Android |
-| 🍏 | `:green_apple:` | Fix something on iOS |
-| 🔖 | `:bookmark:` | Release/Version tag |
-| 🚨 | `:rotating_light:` | Remove linter warnings |
-| 🚧 | `:construction:` | Work in progress |
-| 💚 | `:green_heart:` | Fix CI build |
-| ⬇️ | `:arrow_down:` | Downgrade dependencies |
-| ⬆️ | `:arrow_up:` | Upgrade dependencies |
-| 📌 | `:pushpin:` | Pin dependencies to specific versions |
-| 👷 | `:construction_worker:` | Add or update CI build system |
-| 📈 | `:chart_with_upwards_trend:` | Add analytics or tracking code |
-| ♻️ | `:recycle:` | Refactor code |
-| 🔨 | `:hammer:` | Major refactoring |
-| ➖ | `:heavy_minus_sign:` | Remove a dependency |
-| 🐳 | `:whale:` | Docker related work |
-| ➕ | `:heavy_plus_sign:` | Add a dependency |
-| 🔧 | `:wrench:` | Modify configuration files |
-| 🌐 | `:globe_with_meridians:` | Internationalization and localization |
-| ✏️ | `:pencil2:` | Fix typos |
-| 💩 | `:hankey:` | Write bad code that needs to be improved |
-| ⏪️ | `:rewind:` | Revert changes |
-| 🔀 | `:twisted_rightwards_arrows:` | Merge branches |
-| 📦 | `:package:` | Update compiled files or packages |
-| 👽 | `:alien:` | Update code due to external API changes |
-| 🚚 | `:truck:` | Move or rename files |
-| 📄 | `:page_facing_up:` | Add or update license |
-| 💥 | `:boom:` | Introduce breaking changes |
-| 🍱 | `:bento:` | Add or update assets |
-| 👌 | `:ok_hand:` | Update code due to code review changes |
-| ♿️ | `:wheelchair:` | Improve accessibility |
-| 💡 | `:bulb:` | Document source code |
-| 🍻 | `:beers:` | Write code drunkenly |
-| 💬 | `:speech_balloon:` | Update text and literals |
-| 🗃️ | `:card_file_box:` | Perform database related changes |
-| 🔊 | `:loud_sound:` | Add logging |
-| 🔇 | `:mute:` | Remove logging |
-| 👥 | `:busts_in_silhouette:` | Add contributors |
-| 🚸 | `:children_crossing:` | Improve user experience/usability |
-| 🏗️ | `:building_construction:` | Make architectural changes |
-| 📱 | `:iphone:` | Work on responsive design |
-| 🤡 | `:clown_face:` | Mock things |
-| 🥚 | `:egg:` | Add an easter egg |
-| 🙈 | `:see_no_evil:` | Add or update .gitignore files |
-| 📸 | `:camera_flash:` | Add or update snapshots |
+| emoji | emoji code                    | commit description                       |
+| :---- | :---------------------------- | :--------------------------------------- |
+| 🎨    | `:art:`                       | Improve code structure/formatting        |
+| ⚡️    | `:zap:` / `:racehorse:`       | Improve performance                      |
+| 🔥    | `:fire:`                      | Remove code or files                     |
+| 🐛    | `:bug:`                       | Fix a bug                                |
+| 🚑    | `:ambulance:`                 | Critical patch                           |
+| ✨    | `:sparkles:`                  | Introduce new features                   |
+| 📝    | `:memo:`                      | Write docs                               |
+| 🚀    | `:rocket:`                    | Deploy stuff                             |
+| 💄    | `:lipstick:`                  | Update UI and style files                |
+| 🎉    | `:tada:`                      | Begin a project                          |
+| ✅    | `:white_check_mark:`          | Add tests                                |
+| 🔒    | `:lock:`                      | Fix security issues                      |
+| 🍎    | `:apple:`                     | Fix something on macOS                   |
+| 🐧    | `:penguin:`                   | Fix something on Linux                   |
+| 🏁    | `:checkered_flag:`            | Fix something on Windows                 |
+| 🤖    | `:robot:`                     | Fix something on Android                 |
+| 🍏    | `:green_apple:`               | Fix something on iOS                     |
+| 🔖    | `:bookmark:`                  | Release/Version tag                      |
+| 🚨    | `:rotating_light:`            | Remove linter warnings                   |
+| 🚧    | `:construction:`              | Work in progress                         |
+| 💚    | `:green_heart:`               | Fix CI build                             |
+| ⬇️    | `:arrow_down:`                | Downgrade dependencies                   |
+| ⬆️    | `:arrow_up:`                  | Upgrade dependencies                     |
+| 📌    | `:pushpin:`                   | Pin dependencies to specific versions    |
+| 👷    | `:construction_worker:`       | Add or update CI build system            |
+| 📈    | `:chart_with_upwards_trend:`  | Add analytics or tracking code           |
+| ♻️    | `:recycle:`                   | Refactor code                            |
+| 🔨    | `:hammer:`                    | Major refactoring                        |
+| ➖    | `:heavy_minus_sign:`          | Remove a dependency                      |
+| 🐳    | `:whale:`                     | Docker related work                      |
+| ➕    | `:heavy_plus_sign:`           | Add a dependency                         |
+| 🔧    | `:wrench:`                    | Modify configuration files               |
+| 🌐    | `:globe_with_meridians:`      | Internationalization and localization    |
+| ✏️    | `:pencil2:`                   | Fix typos                                |
+| 💩    | `:hankey:`                    | Write bad code that needs to be improved |
+| ⏪️    | `:rewind:`                    | Revert changes                           |
+| 🔀    | `:twisted_rightwards_arrows:` | Merge branches                           |
+| 📦    | `:package:`                   | Update compiled files or packages        |
+| 👽    | `:alien:`                     | Update code due to external API changes  |
+| 🚚    | `:truck:`                     | Move or rename files                     |
+| 📄    | `:page_facing_up:`            | Add or update license                    |
+| 💥    | `:boom:`                      | Introduce breaking changes               |
+| 🍱    | `:bento:`                     | Add or update assets                     |
+| 👌    | `:ok_hand:`                   | Update code due to code review changes   |
+| ♿️    | `:wheelchair:`                | Improve accessibility                    |
+| 💡    | `:bulb:`                      | Document source code                     |
+| 🍻    | `:beers:`                     | Write code drunkenly                     |
+| 💬    | `:speech_balloon:`            | Update text and literals                 |
+| 🗃️    | `:card_file_box:`             | Perform database related changes         |
+| 🔊    | `:loud_sound:`                | Add logging                              |
+| 🔇    | `:mute:`                      | Remove logging                           |
+| 👥    | `:busts_in_silhouette:`       | Add contributors                         |
+| 🚸    | `:children_crossing:`         | Improve user experience/usability        |
+| 🏗️    | `:building_construction:`     | Make architectural changes               |
+| 📱    | `:iphone:`                    | Work on responsive design                |
+| 🤡    | `:clown_face:`                | Mock things                              |
+| 🥚    | `:egg:`                       | Add an easter egg                        |
+| 🙈    | `:see_no_evil:`               | Add or update .gitignore files           |
+| 📸    | `:camera_flash:`              | Add or update snapshots                  |
 
 ---
 
 ## Scopes
 
-Scopes are based on the project `src/` directory structure. **You must use the following defined scopes**:
+Scopes are based on the project `src/` directory structure. **You must use the following defined
+scopes**:
 
 ### Top-level Modules
 
-| Scope | Corresponding Directory | Description |
-|-------|-------------------------|-------------|
-| `frontend` | `src/frontend/` | Frontend: lexer, parser, type checker |
-| `middle` | `src/middle/` | Middle layer: IR, optimization, monomorphization |
-| `backends` | `src/backends/` | Backends: interpreter, runtime, REPL |
-| `std` | `src/std/` | Standard library |
-| `formatter` | `src/formatter/` | Code formatter |
-| `lsp` | `src/lsp/` | Language Server Protocol |
-| `package` | `src/package/` | Package manager |
-| `util` | `src/util/` | Utilities: diagnostics, caching, i18n |
+| Scope       | Corresponding Directory | Description                                      |
+| ----------- | ----------------------- | ------------------------------------------------ |
+| `frontend`  | `src/frontend/`         | Frontend: lexer, parser, type checker            |
+| `middle`    | `src/middle/`           | Middle layer: IR, optimization, monomorphization |
+| `backends`  | `src/backends/`         | Backends: interpreter, runtime, REPL             |
+| `std`       | `src/std/`              | Standard library                                 |
+| `formatter` | `src/formatter/`        | Code formatter                                   |
+| `lsp`       | `src/lsp/`              | Language Server Protocol                         |
+| `package`   | `src/package/`          | Package manager                                  |
+| `util`      | `src/util/`             | Utilities: diagnostics, caching, i18n            |
 
 ### Frontend Submodules
 
-| Scope | Corresponding Directory | Description |
-|-------|-------------------------|-------------|
-| `parser` | `src/frontend/core/parser/` | Parser |
-| `lexer` | `src/frontend/core/lexer/` | Lexer |
-| `typecheck` | `src/frontend/core/typecheck/` | Type checking |
-| `types` | `src/frontend/core/types/` | Type system definitions |
+| Scope       | Corresponding Directory        | Description             |
+| ----------- | ------------------------------ | ----------------------- |
+| `parser`    | `src/frontend/core/parser/`    | Parser                  |
+| `lexer`     | `src/frontend/core/lexer/`     | Lexer                   |
+| `typecheck` | `src/frontend/core/typecheck/` | Type checking           |
+| `types`     | `src/frontend/core/types/`     | Type system definitions |
 
 ### Middle Layer Submodules
 
-| Scope | Corresponding Directory | Description |
-|-------|-------------------------|-------------|
-| `codegen` | `src/middle/passes/codegen/` | Code generation (bytecode) |
-| `monomorphize` | `src/middle/passes/monomorphize/` | Monomorphization |
-| `lifetime` | `src/middle/passes/lifetime/` | Lifetime analysis |
+| Scope          | Corresponding Directory           | Description                |
+| -------------- | --------------------------------- | -------------------------- |
+| `codegen`      | `src/middle/passes/codegen/`      | Code generation (bytecode) |
+| `monomorphize` | `src/middle/passes/monomorphize/` | Monomorphization           |
+| `lifetime`     | `src/middle/passes/lifetime/`     | Lifetime analysis          |
 
 ### Backend Submodules
 
-| Scope | Corresponding Directory | Description |
-|-------|-------------------------|-------------|
-| `repl` | `src/backends/dev/repl/` | REPL interactive command line |
-| `shell` | `src/backends/dev/shell.rs` | Shell command handling |
-| `runtime` | `src/backends/runtime/` | Runtime execution engine |
+| Scope     | Corresponding Directory     | Description                   |
+| --------- | --------------------------- | ----------------------------- |
+| `repl`    | `src/backends/dev/repl/`    | REPL interactive command line |
+| `shell`   | `src/backends/dev/shell.rs` | Shell command handling        |
+| `runtime` | `src/backends/runtime/`     | Runtime execution engine      |
 
 ### Documentation Scopes
 
-| Scope | Description |
-|-------|-------------|
-| `docs` | General documentation updates |
+| Scope    | Description                          |
+| -------- | ------------------------------------ |
+| `docs`   | General documentation updates        |
 | `design` | Language design specifications (RFC) |
-| `plan` | Implementation plan documents |
+| `plan`   | Implementation plan documents        |
 
 ### Other Scopes
 
-| Scope | Description |
-|-------|-------------|
-| `build` | Build system, Cargo configuration |
-| `ci` | CI/CD configuration (GitHub Actions) |
-| `test` | Test related |
-| `release` | Release related |
-| `meta` | Project meta configuration (.claude, .gitignore, etc.) |
+| Scope     | Description                                            |
+| --------- | ------------------------------------------------------ |
+| `build`   | Build system, Cargo configuration                      |
+| `ci`      | CI/CD configuration (GitHub Actions)                   |
+| `test`    | Test related                                           |
+| `release` | Release related                                        |
+| `meta`    | Project meta configuration (.claude, .gitignore, etc.) |
 
 ---
 
@@ -210,13 +214,15 @@ version = "0.7.2"
 
 Semantic versioning `MAJOR.MINOR.PATCH` is used:
 
-| Version Type | Description | Example |
-|--------------|-------------|---------|
-| **major** | Major update, breaking API changes | 0.7.2 → 1.0.0 |
-| **minor** | New features, backward compatible | 0.7.2 → 0.8.0 |
-| **patch** | Bug fixes, backward compatible | 0.7.2 → 0.7.3 |
+| Version Type | Description                        | Example       |
+| ------------ | ---------------------------------- | ------------- |
+| **major**    | Major update, breaking API changes | 0.7.2 → 1.0.0 |
+| **minor**    | New features, backward compatible  | 0.7.2 → 0.8.0 |
+| **patch**    | Bug fixes, backward compatible     | 0.7.2 → 0.7.3 |
 
-> ⚠️ When releasing, **update the `Cargo.toml` version number on the dev branch**. After merging the PR to main, CI will automatically create the tag and Release. **Do not manually push tags**, otherwise CI will skip the release process.
+> ⚠️ When releasing, **update the `Cargo.toml` version number on the dev branch**. After merging the
+> PR to main, CI will automatically create the tag and Release. **Do not manually push tags**,
+> otherwise CI will skip the release process.
 
 ---
 
@@ -243,12 +249,12 @@ Releases are automatically handled by GitHub Actions (`release.yml`) with the fo
 
 ### Key Rules
 
-| Rule | Description |
-|------|-------------|
-| **Do not manually push tags** | CI decides whether to release based on tag existence; manual tag push will cause CI to skip |
-| **Bump version on dev** | Release commit is done on dev, merged to main via PR |
+| Rule                                       | Description                                                                                         |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| **Do not manually push tags**              | CI decides whether to release based on tag existence; manual tag push will cause CI to skip         |
+| **Bump version on dev**                    | Release commit is done on dev, merged to main via PR                                                |
 | **Release commit contains full changelog** | Commit message must include all changes for this release, as it serves as the PR description source |
-| **Do not merge main back to dev** | After PR merges, dev will sync automatically; no reverse merge needed |
+| **Do not merge main back to dev**          | After PR merges, dev will sync automatically; no reverse merge needed                               |
 
 ---
 
@@ -256,7 +262,8 @@ Releases are automatically handled by GitHub Actions (`release.yml`) with the fo
 
 ### Language Conventions
 
-**It is recommended to use Chinese for commit messages** to maintain consistency in team communication.
+**It is recommended to use Chinese for commit messages** to maintain consistency in team
+communication.
 
 - Subject in Chinese, concise and clear
 - Body can be in Chinese with detailed explanation
@@ -433,7 +440,8 @@ When the commit is a **Release**, it must follow these conventions:
 
 1. **Message header**: Must use `:bookmark:` + `V<version>` format
 2. **Version number**: Follow semantic versioning
-3. **Content completeness**: Must include **all commit** content introductions since the last release
+3. **Content completeness**: Must include **all commit** content introductions since the last
+   release
 4. **Categorized by type**: Organize by `feat`, `fix`, `refactor`, `chore`, etc.
 5. **Commit history**: List hashes and descriptions of all related commits
 
@@ -579,4 +587,5 @@ The format of the `.gitmessage.txt` file in the project root:
 
 ---
 
-> 💡 **Tip**: Keep commits atomic and descriptions clear, making code review and tracing more efficient!
+> 💡 **Tip**: Keep commits atomic and descriptions clear, making code review and tracing more
+> efficient!

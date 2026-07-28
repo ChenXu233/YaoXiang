@@ -1,9 +1,9 @@
 ---
-title: "RFC-029: 模块语义系统"
-status: "草案"
-author: "晨煦"
-created: "2026-06-13"
-updated: "2026-07-14（重写：删除兼容性章节，开放问题拆入子 RFC）"
+title: 'RFC-029: 模块语义系统'
+status: '草案'
+author: '晨煦'
+created: '2026-06-13'
+updated: '2026-07-14（重写：删除兼容性章节，开放问题拆入子 RFC）'
 ---
 
 # RFC-029: 模块语义系统
@@ -22,7 +22,8 @@ updated: "2026-07-14（重写：删除兼容性章节，开放问题拆入子 RF
 
 1. **编译器只支持单文件**：`Compiler::compile(name, source)` 无法处理跨文件依赖
 2. **导出规则互相打架**：类型自动导出、常量自动导出、方法自动导出、函数检查 `pub`——四套例外
-3. **两套模块解析器**：`frontend/module/resolver.rs` 和 `package/source/module_resolver.rs` 搜索顺序不同
+3. **两套模块解析器**：`frontend/module/resolver.rs` 和 `package/source/module_resolver.rs`
+   搜索顺序不同
 4. **类型检查器耦合文件加载**：草案曾要求 `use` 在类型检查时触发 `ModuleLoader::load()`
 
 ### 设计目标
@@ -77,7 +78,8 @@ base/name/index.yx
 
 #### 统一解析器
 
-消灭现有两套 `ModuleResolver`。保留 `frontend/module/resolver.rs` 作为唯一实现，删除 `package/source/module_resolver.rs`。`YXPATH` 环境变量支持合并到唯一解析器中。
+消灭现有两套 `ModuleResolver`。保留 `frontend/module/resolver.rs` 作为唯一实现，删除
+`package/source/module_resolver.rs`。`YXPATH` 环境变量支持合并到唯一解析器中。
 
 ### 2. 导入语义
 
@@ -96,12 +98,12 @@ use math.geometry.{Point as P, distance as dist}  # 多项带别名
 
 所有导入形式都是**编译期名字解析规则**，不是运行时引用拷贝。导入的名字指向模块导出表中的声明身份。
 
-| 语法 | 绑定到当前作用域 | 使用方式 |
-|------|-----------------|----------|
-| `use path` | path 的最后一段作为模块命名空间 | `geometry.Point` |
-| `use path as alias` | alias 作为模块命名空间 | `alias.Point` |
-| `use path.{item}` | item 本身 | `item` |
-| `use path.{item as alias}` | alias 本身 | `alias` |
+| 语法                       | 绑定到当前作用域                | 使用方式         |
+| -------------------------- | ------------------------------- | ---------------- |
+| `use path`                 | path 的最后一段作为模块命名空间 | `geometry.Point` |
+| `use path as alias`        | alias 作为模块命名空间          | `alias.Point`    |
+| `use path.{item}`          | item 本身                       | `item`           |
+| `use path.{item as alias}` | alias 本身                      | `alias`          |
 
 #### 删除的语法
 
@@ -138,10 +140,10 @@ use math.geometry.{Point}
 
 包是唯一封装边界。模块不承担权限边界。
 
-| 写法 | 当前包内 | 其他包 |
-|------|:--------:|:------:|
-| 默认（无 `pub`） | ✅ | ❌ |
-| `pub` | ✅ | ✅ |
+| 写法             | 当前包内 | 其他包 |
+| ---------------- | :------: | :----: |
+| 默认（无 `pub`） |    ✅    |   ❌   |
+| `pub`            |    ✅    |   ✅   |
 
 **一条规则，适用于所有顶层声明**：类型、函数、常量、方法。
 
@@ -235,46 +237,40 @@ pub enum Visibility {
 
 ### 5. 编译器改动
 
-| 组件 | 改动 |
-|------|------|
-| `compiler.rs` | 新增 `compile_project(project_root)` 方法 |
-| `pipeline.rs` | 保持单模块编译职责，不变成上帝对象 |
-| `typecheck/checker.rs` | `use` 语句查询 `ModuleRegistry`，不触发文件加载 |
-| `typecheck/inference/statements.rs` | 同上，`process_use_stmt` 只查询不加载 |
-| `frontend/module/resolver.rs` | 合并 `package/source/module_resolver.rs` 的 YXPATH 支持，成为唯一解析器 |
-| `frontend/module/loader.rs` | 扩展：支持递归发现、构建完整模块图 |
-| `frontend/module/dep_graph.rs` | 已实现，复用拓扑排序和循环检测 |
-| `frontend/module/registry.rs` | 已实现，复用导出表查询 |
-| `frontend/module/cache.rs` | 已实现，本 RFC 不接入编译管线 |
-| `frontend/module/hot_reload.rs` | 已实现，本 RFC 不接入编译管线 |
-| AST `is_pub: bool` | 替换为 `Visibility` 枚举 |
-| `package/source/module_resolver.rs` | 删除，职责合并到 `frontend/module/resolver.rs` |
+| 组件                                | 改动                                                                    |
+| ----------------------------------- | ----------------------------------------------------------------------- |
+| `compiler.rs`                       | 新增 `compile_project(project_root)` 方法                               |
+| `pipeline.rs`                       | 保持单模块编译职责，不变成上帝对象                                      |
+| `typecheck/checker.rs`              | `use` 语句查询 `ModuleRegistry`，不触发文件加载                         |
+| `typecheck/inference/statements.rs` | 同上，`process_use_stmt` 只查询不加载                                   |
+| `frontend/module/resolver.rs`       | 合并 `package/source/module_resolver.rs` 的 YXPATH 支持，成为唯一解析器 |
+| `frontend/module/loader.rs`         | 扩展：支持递归发现、构建完整模块图                                      |
+| `frontend/module/dep_graph.rs`      | 已实现，复用拓扑排序和循环检测                                          |
+| `frontend/module/registry.rs`       | 已实现，复用导出表查询                                                  |
+| `frontend/module/cache.rs`          | 已实现，本 RFC 不接入编译管线                                           |
+| `frontend/module/hot_reload.rs`     | 已实现，本 RFC 不接入编译管线                                           |
+| AST `is_pub: bool`                  | 替换为 `Visibility` 枚举                                                |
+| `package/source/module_resolver.rs` | 删除，职责合并到 `frontend/module/resolver.rs`                          |
 
 ## 实现策略
 
 ### 阶段划分
 
 **Phase 1：统一模块解析**
+
 1. 合并两套 `ModuleResolver`，删除 `package/source/module_resolver.rs`
 2. 支持 `YXPATH` 环境变量
 3. 模块路径歧义检测
 
-**Phase 2：可见性数据结构**
-4. AST `is_pub: bool` → `Visibility` 枚举
-5. 解析器支持 `pub` 关键字映射到 `Visibility::Public`
-6. `ModuleLoader::extract_exports` 统一使用 `Visibility` 判断导出
+**Phase 2：可见性数据结构** 4. AST `is_pub: bool` → `Visibility` 枚举 5. 解析器支持 `pub`
+关键字映射到 `Visibility::Public` 6. `ModuleLoader::extract_exports` 统一使用 `Visibility` 判断导出
 
-**Phase 3：项目编译入口**
-7. `compiler.rs` 新增 `compile_project(project_root)` 方法
-8. 从入口递归发现模块，构建 `ModuleDependencyGraph`
-9. 拓扑排序，按顺序加载模块并提取导出
-10. 构建完整 `ModuleRegistry`
-11. 按拓扑顺序类型检查每个模块
-12. 生成多个 `ModuleIR`，聚合诊断
+**Phase 3：项目编译入口** 7. `compiler.rs` 新增 `compile_project(project_root)`
+方法 8. 从入口递归发现模块，构建
+`ModuleDependencyGraph` 9. 拓扑排序，按顺序加载模块并提取导出 10. 构建完整
+`ModuleRegistry` 11. 按拓扑顺序类型检查每个模块 12. 生成多个 `ModuleIR`，聚合诊断
 
-**Phase 4：导入语法**
-13. 实现 `use path.{item as alias}` 语法
-14. 消灭路径末尾 fallback 猜测
+**Phase 4：导入语法** 13. 实现 `use path.{item as alias}` 语法 14. 消灭路径末尾 fallback 猜测
 
 ### 依赖关系
 
@@ -286,15 +282,15 @@ pub enum Visibility {
 
 以下子 RFC 在**预计规划中**，尚未开始起草：
 
-| 子 RFC | 能力（预计） | 前提条件（预计） |
-|--------|-------------|-----------------|
-| 029a | 模块缓存与增量重编译 | 模块图和导出表稳定 |
-| 029b | 文件监听与热重载 | 029a 的缓存失效机制 |
-| 029c | 重导出（`pub use`） | 导出表和可见性规则落地 |
-| 029d | CLI 参数 `--entry` 覆盖入口选择 | 项目编译入口可用 |
-| 029e | 多文件诊断 `--json` 输出格式 | 诊断聚合机制可用 |
-| — | `pub(package)` 模块私有可见性 | 当前无现实需求，暂不纳入 |
-| — | 工作空间多包编译 | 由 RFC-014c 承载 |
+| 子 RFC | 能力（预计）                    | 前提条件（预计）         |
+| ------ | ------------------------------- | ------------------------ |
+| 029a   | 模块缓存与增量重编译            | 模块图和导出表稳定       |
+| 029b   | 文件监听与热重载                | 029a 的缓存失效机制      |
+| 029c   | 重导出（`pub use`）             | 导出表和可见性规则落地   |
+| 029d   | CLI 参数 `--entry` 覆盖入口选择 | 项目编译入口可用         |
+| 029e   | 多文件诊断 `--json` 输出格式    | 诊断聚合机制可用         |
+| —      | `pub(package)` 模块私有可见性   | 当前无现实需求，暂不纳入 |
+| —      | 工作空间多包编译                | 由 RFC-014c 承载         |
 
 ## 参考文献
 

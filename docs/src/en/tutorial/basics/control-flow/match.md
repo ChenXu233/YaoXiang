@@ -4,13 +4,15 @@ title: match Basics
 
 # match Basics
 
-`match` is the most powerful control flow structure in YaoXiang. It lets you choose different handling paths based on the **shape** of a **value**. If you've used `switch` in other languages, you'll find that `match` is a comprehensive upgrade.
+`match` is the most powerful control flow structure in YaoXiang. It lets you choose different
+handling paths based on the **shape** of a **value**. If you've used `switch` in other languages,
+you'll find that `match` is a comprehensive upgrade.
 
 ## Basic Syntax
 
 The `match` expression as defined in the syntax specification:
 
-```
+````
 match Expr { MatchArm+ }
 MatchArm : Pattern ('|' Pattern)* ('if' Expr)? '=>' Expr ','
 `
@@ -33,11 +35,12 @@ text = match number {
     2 => "two",
 }
 print(text)  // "two"
-```
+````
 
 ## match Is an Expression
 
-Like `if`, `match` is also an **expression**—it evaluates to a value. All match arm return values must be of the same type:
+Like `if`, `match` is also an **expression**—it evaluates to a value. All match arm return values
+must be of the same type:
 
 ```yaoxiang
 score = 85
@@ -52,7 +55,8 @@ grade = match score {
 print(grade)  // "B"
 ```
 
-> **Note**: Range patterns like `90..100` are advanced topics and will be covered in detail in [Pattern Matching Advanced](../pattern-matching.md). This chapter focuses on basic patterns first.
+> **Note**: Range patterns like `90..100` are advanced topics and will be covered in detail in
+> [Pattern Matching Advanced](../pattern-matching.md). This chapter focuses on basic patterns first.
 
 ## Basic Patterns
 
@@ -87,7 +91,8 @@ description = match result {
 print(description)  // "Success, value is: 42"
 ```
 
-The `value` in `ok(value)` is an identifier pattern—it captures the actual value wrapped by `ok`, and you can use it in the expression after `=>`.
+The `value` in `ok(value)` is an identifier pattern—it captures the actual value wrapped by `ok`,
+and you can use it in the expression after `=>`.
 
 ### Wildcard Pattern
 
@@ -107,7 +112,9 @@ print(action)  // "Unknown command: exit"
 
 ## Matches Must Be Exhaustive
 
-YaoXiang's `match` requires all possible cases to be covered—if the compiler finds that you've missed some possible values, it will report an error directly. This reflects the safety guarantees of `match`.
+YaoXiang's `match` requires all possible cases to be covered—if the compiler finds that you've
+missed some possible values, it will report an error directly. This reflects the safety guarantees
+of `match`.
 
 ```yaoxiang
 // This code will fail to compile
@@ -125,7 +132,9 @@ result = match value {
 }
 ```
 
-When you know for certain that there are only a finite number of cases (such as matching an enum), the compiler will help you check whether every variant is covered. This is a powerful tool to prevent bugs from missing branches.
+When you know for certain that there are only a finite number of cases (such as matching an enum),
+the compiler will help you check whether every variant is covered. This is a powerful tool to
+prevent bugs from missing branches.
 
 ## Combining Multiple Patterns
 
@@ -144,7 +153,8 @@ print(type)  // "weekend"
 
 ## Match Arms Execute in Order
 
-`match` starts trying to match from the first arm, and **the first branch that successfully matches takes effect**; subsequent branches will not be executed:
+`match` starts trying to match from the first arm, and **the first branch that successfully matches
+takes effect**; subsequent branches will not be executed:
 
 ```yaoxiang
 number = 5
@@ -160,15 +170,17 @@ This feature means it's a good habit to **place the wildcard `_` last**.
 
 ## Summary
 
-| Key Point | Description |
-|------|------|
-| Syntax | `match value { pattern => expression, ... }` |
-| Expression | `match` evaluates to a value; all branches must have the same type |
-| Literal pattern | Precisely match concrete values: `200 => "OK"` |
-| Identifier pattern | Capture value into a variable: `ok(value) => ...` |
-| Wildcard `_` | Matches any value, used as catch-all |
-| Exhaustiveness | All possible cases must be covered; the compiler checks |
-| Multiple patterns | `pattern1 \| pattern2 => expression` |
-| Order of execution | From top to bottom, the first matching branch takes effect |
+| Key Point          | Description                                                        |
+| ------------------ | ------------------------------------------------------------------ |
+| Syntax             | `match value { pattern => expression, ... }`                       |
+| Expression         | `match` evaluates to a value; all branches must have the same type |
+| Literal pattern    | Precisely match concrete values: `200 => "OK"`                     |
+| Identifier pattern | Capture value into a variable: `ok(value) => ...`                  |
+| Wildcard `_`       | Matches any value, used as catch-all                               |
+| Exhaustiveness     | All possible cases must be covered; the compiler checks            |
+| Multiple patterns  | `pattern1 \| pattern2 => expression`                               |
+| Order of execution | From top to bottom, the first matching branch takes effect         |
 
-> **Next**: This article covers the basic usage of `match`. For more advanced patterns (nested patterns, guard expressions, struct destructuring, etc.), please refer to [Pattern Matching Advanced](../pattern-matching.md).
+> **Next**: This article covers the basic usage of `match`. For more advanced patterns (nested
+> patterns, guard expressions, struct destructuring, etc.), please refer to
+> [Pattern Matching Advanced](../pattern-matching.md).

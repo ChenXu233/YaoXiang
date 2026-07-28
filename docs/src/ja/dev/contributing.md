@@ -1,5 +1,5 @@
 ---
-title: "貢献ガイド"
+title: '貢献ガイド'
 description: YaoXiang プロジェクトへのコード貢献方法を学ぶ
 ---
 
@@ -36,4 +36,7 @@ chore: ビルド/ツール更新
 
 - [GitHub](https://github.com/yaoxiang-lang/yaoxiang)
 - [Issue フィードバック](https://github.com/yaoxiang-lang/yaoxiang/issues)
+
+```
+
 ```

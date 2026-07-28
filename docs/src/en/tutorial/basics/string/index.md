@@ -4,7 +4,8 @@ title: F-string
 
 # F-string
 
-f-string is a **template string** in YaoXiang — you can embed variables and expressions directly within the string, and the compiler automatically handles type conversion and concatenation.
+f-string is a **template string** in YaoXiang — you can embed variables and expressions directly
+within the string, and the compiler automatically handles type conversion and concatenation.
 
 ## Basic Usage
 
@@ -55,13 +56,13 @@ print(f"Pi: {pi:.4f}")   // Pi: 3.1416 (4 decimal places)
 
 Common format specifiers:
 
-| Specifier | Meaning | Example | Output |
-|-----------|---------|---------|--------|
-| `:.2f` | Float, 2 decimal places | `f"{3.14159:.2f}"` | `3.14` |
-| `:d` | Decimal integer | `f"{42:d}"` | `42` |
-| `:x` | Hexadecimal | `f"{255:x}"` | `ff` |
-| `:e` | Scientific notation | `f"{1000:e}"` | `1.000000e+03` |
-| `:s` | String | `f"{name:s}"` | `hello` |
+| Specifier | Meaning                 | Example            | Output         |
+| --------- | ----------------------- | ------------------ | -------------- |
+| `:.2f`    | Float, 2 decimal places | `f"{3.14159:.2f}"` | `3.14`         |
+| `:d`      | Decimal integer         | `f"{42:d}"`        | `42`           |
+| `:x`      | Hexadecimal             | `f"{255:x}"`       | `ff`           |
+| `:e`      | Scientific notation     | `f"{1000:e}"`      | `1.000000e+03` |
+| `:s`      | String                  | `f"{name:s}"`      | `hello`        |
 
 ## Calling Methods
 
@@ -120,16 +121,18 @@ f"Hello {name}, age: {age}"
 "Hello ".concat(name.to_string()).concat(", age: ").concat(age.to_string())
 ```
 
-This means f-strings aren't just more concise to write — their runtime performance is on par with hand-written concatenation — **zero extra overhead**.
+This means f-strings aren't just more concise to write — their runtime performance is on par with
+hand-written concatenation — **zero extra overhead**.
 
 ## Summary
 
 :::: v-pre
-| Key Point | Syntax |
-|-----------|--------|
-| Basic interpolation | `f"text {var}"` |
-| Expressions | `f"result: {x + y}"` |
-| Formatting | `f"value: {pi:.2f}"` |
-| Escaping braces | `f"{{not interpolation}}"` |
-| Multi-line | `f"""..."""` |
-::::
+
+| Key Point           | Syntax                     |
+| ------------------- | -------------------------- |
+| Basic interpolation | `f"text {var}"`            |
+| Expressions         | `f"result: {x + y}"`       |
+| Formatting          | `f"value: {pi:.2f}"`       |
+| Escaping braces     | `f"{{not interpolation}}"` |
+| Multi-line          | `f"""..."""`               |
+| ::::                |

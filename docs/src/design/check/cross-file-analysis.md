@@ -7,7 +7,8 @@ description: YaoXiang check 跨文件类型检查的设计
 
 ## 问题描述
 
-早期实现中，`check_files_with_diagnostics` 为每个文件创建独立的 `Compiler`，无法检测跨文件引用。fileA 定义的 `pub` 函数在 fileB 中无法被识别。
+早期实现中，`check_files_with_diagnostics` 为每个文件创建独立的
+`Compiler`，无法检测跨文件引用。fileA 定义的 `pub` 函数在 fileB 中无法被识别。
 
 ## 解决方案
 

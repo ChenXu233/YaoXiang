@@ -1,5 +1,5 @@
 ---
-title: "错误码"
+title: '错误码'
 description: 包管理器错误码及处理方式
 ---
 
@@ -18,6 +18,7 @@ Error: Project already exists: <path>
 **原因**：尝试创建的项目目录已存在。
 
 **处理方式**：
+
 1. 选择不同的项目名称
 2. 删除或移动已存在的目录
 
@@ -32,6 +33,7 @@ Error: Not a YaoXiang project: yaoxiang.toml not found
 **原因**：当前目录或指定目录不包含 `yaoxiang.toml` 文件。
 
 **处理方式**：
+
 1. 确保在项目目录内执行命令
 2. 使用 `yaoxiang init` 创建新项目
 
@@ -46,6 +48,7 @@ Error: Dependency not found: <name>
 **原因**：尝试操作一个不存在的依赖。
 
 **处理方式**：
+
 1. 检查依赖名称拼写是否正确
 2. 使用 `yaoxiang list` 查看现有依赖
 
@@ -60,6 +63,7 @@ Error: Dependency already exists: <name>
 **原因**：尝试添加已存在的依赖。
 
 **处理方式**：
+
 1. 如果需要更新版本，先用 `yaoxiang rm` 移除
 2. 或者直接使用现有依赖
 
@@ -74,6 +78,7 @@ Error: Invalid yaoxiang.toml format: <details>
 **原因**：`yaoxiang.toml` 文件格式不正确。
 
 **处理方式**：
+
 1. 检查 TOML 语法是否正确
 2. 确保所有必需字段存在
 3. 检查是否有语法错误（如缺少引号、逗号等）
@@ -89,11 +94,13 @@ Error: IO error: <details>
 **原因**：文件读写操作失败。
 
 **常见原因**：
+
 - 磁盘空间不足
 - 权限不足
 - 文件被其他程序占用
 
 **处理方式**：
+
 1. 检查磁盘空间
 2. 检查文件权限
 3. 关闭可能占用文件的其他程序
@@ -109,6 +116,7 @@ Error: TOML parse error: <details>
 **原因**：TOML 文件格式错误。
 
 **处理方式**：
+
 1. 验证 TOML 语法
 2. 检查特殊字符是否正确转义
 

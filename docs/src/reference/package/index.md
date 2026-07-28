@@ -1,5 +1,5 @@
 ---
-title: "包管理器"
+title: '包管理器'
 description: YaoXiang 包管理器参考文档
 ---
 
@@ -34,14 +34,14 @@ yaoxiang run src/main.yx
 
 ## 命令列表
 
-| 命令 | 说明 |
-|------|------|
-| [`yaoxiang init`](./commands#yaoxiang-init) | 初始化新项目 |
-| [`yaoxiang add`](./commands#yaoxiang-add) | 添加依赖 |
-| [`yaoxiang rm`](./commands#yaoxiang-rm) | 移除依赖 |
-| [`yaoxiang install`](./commands#yaoxiang-install) | 安装依赖 |
-| [`yaoxiang update`](./commands#yaoxiang-update) | 更新依赖 |
-| [`yaoxiang list`](./commands#yaoxiang-list) | 列出依赖 |
+| 命令                                              | 说明         |
+| ------------------------------------------------- | ------------ |
+| [`yaoxiang init`](./commands#yaoxiang-init)       | 初始化新项目 |
+| [`yaoxiang add`](./commands#yaoxiang-add)         | 添加依赖     |
+| [`yaoxiang rm`](./commands#yaoxiang-rm)           | 移除依赖     |
+| [`yaoxiang install`](./commands#yaoxiang-install) | 安装依赖     |
+| [`yaoxiang update`](./commands#yaoxiang-update)   | 更新依赖     |
+| [`yaoxiang list`](./commands#yaoxiang-list)       | 列出依赖     |
 
 ## 项目结构
 

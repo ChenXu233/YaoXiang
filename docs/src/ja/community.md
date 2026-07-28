@@ -1,8 +1,11 @@
 ---
 layout: page
 is_community: true
-title: "コミュニティ"
+title: 'コミュニティ'
 sidebar: false
-description: "今はまだ私だけだが、星の火はいつか燃え広がる。"
+description: '今はまだ私だけだが、星の火はいつか燃え広がる。'
 ---
+
+```
+
 ```

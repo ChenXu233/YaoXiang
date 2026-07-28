@@ -1,6 +1,6 @@
 ---
-title: "特殊構文規則"
-description: "F-String、インポート文、エラー処理、Unsafe ブロックのフォーマット規則"
+title: '特殊構文規則'
+description: 'F-String、インポート文、エラー処理、Unsafe ブロックのフォーマット規則'
 ---
 
 # 特殊構文規則
@@ -9,7 +9,8 @@ description: "F-String、インポート文、エラー処理、Unsafe ブロッ
 
 ## §13 F-String
 
-**§13.1 F-String フォーマット。** F-String は `f"..."` フォーマットを使用し、補間に `{expr}` を使用します。
+**§13.1 F-String フォーマット。** F-String は `f"..."` フォーマットを使用し、補間に `{expr}`
+を使用します。
 
 ```
 // ✅ 正しい
@@ -28,7 +29,8 @@ let msg = f"{value:.2f}";
 
 ## §14 インポート文
 
-**§14.1 インポートのソート。** `sort_imports = true` の場合、インポート文は次の順序でソートされます：
+**§14.1 インポートのソート。** `sort_imports = true`
+の場合、インポート文は次の順序でソートされます：
 
 1. 標準ライブラリ（`std`, `core`, `alloc`）
 2. 外部 crate

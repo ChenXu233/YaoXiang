@@ -1,9 +1,8 @@
 ---
 layout: page
 sidebar: false
-title: "YaoXiang ツール"
+title: 'YaoXiang ツール'
 permalink: /tools/
-
 ---
 
 <div style="min-height: calc(100vh - 200px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">

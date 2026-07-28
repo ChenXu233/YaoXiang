@@ -1,31 +1,34 @@
 ---
-title: "RFC-014: 包管理系统设计"
-status: "已接受"
-author: "晨煦"
-created: "2026-02-12"
-updated: "2026-06-11"
-group: "rfc-014"  # 本 RFC 是包管理系统的总纲，子 RFC：014a/014b/014c
-issue: "#88"
-impl: "48%"
-impl_status: "partial"
+title: 'RFC-014: 包管理系统设计'
+status: '已接受'
+author: '晨煦'
+created: '2026-02-12'
+updated: '2026-06-11'
+group: 'rfc-014' # 本 RFC 是包管理系统的总纲，子 RFC：014a/014b/014c
+issue: '#88'
+impl: '48%'
+impl_status: 'partial'
 ---
 
 # RFC-014: 包管理系统设计（总纲）
 
 > **子 RFC：**
+>
 > - [RFC-014a: Registry 协议规范](../draft/014a-registry-protocol.md)
 > - [RFC-014b: 构建系统与二进制分发](../draft/014b-build-system.md)
 > - [RFC-014c: 工作空间支持](../draft/014c-workspace.md)
 
 ## 摘要
 
-设计 YaoXiang 语言的包管理系统，支持语义化版本控制、本地与 GitHub 依赖、统一导入语法、`yaoxiang.toml` 配置文件和 `yaoxiang.lock` 锁定文件。
+设计 YaoXiang 语言的包管理系统，支持语义化版本控制、本地与 GitHub 依赖、统一导入语法、`yaoxiang.toml`
+配置文件和 `yaoxiang.lock` 锁定文件。
 
 ## 动机
 
 ### 为什么需要这个特性/变更？
 
 包管理是现代编程语言生态的基础设施。当前 YaoXiang 语言缺少：
+
 - 依赖声明机制
 - 版本管理能力
 - 标准分发渠道
@@ -47,6 +50,7 @@ my-project/
 ### 核心设计
 
 **分层架构**：
+
 ```
 ┌─────────────────────────────────────────────┐
 │           Resolution Engine                  │ ← 依赖解析
@@ -111,6 +115,7 @@ my-project/
 ### 配置文件格式
 
 **yaoxiang.toml**：
+
 ```toml
 [package]
 name = "my-package"
@@ -142,6 +147,7 @@ core = "packages/core/yaoxiang.toml"
 ```
 
 **yaoxiang.lock**：
+
 ```toml
 version = 1
 
@@ -172,6 +178,7 @@ use foo.bar.baz;
 ```
 
 **项目模式规则**：
+
 - 嵌入二进制仅对 `std.*` 命名空间生效，优先级最高
 - 项目级标准库（`.yaoxiang/std/`）存在时，全局标准库完全跳过——保证构建确定性
 - 项目可通过 `yaoxiang add std@1.0.1` 将标准库作为依赖管理，锁定版本
@@ -189,6 +196,7 @@ use foo.bar.baz;
 ```
 
 **单文件模式规则**：
+
 - 无项目级依赖，标准库直接从全局路径加载
 - 全局标准库路径与编译器版本绑定：`<install-dir>/yx/<version>/std/`
 
@@ -232,6 +240,7 @@ my-project/
 ```
 
 **设计要点**：
+
 - 嵌入二进制作为兼容层：在文件系统标准库完全落地前，先通过嵌入二进制提供标准库模块
 - 版本目录隔离：`yx/<version>/std/` 使不同版本的标准库共存，不会互相影响
 - 项目级标准库覆盖全局标准库：确保构建确定性，不受全局环境变化影响
@@ -289,47 +298,47 @@ enum BuildStrategy {
 
 #### 单文件模式 vs 项目模式
 
-| 命令 | 单文件 | 项目模式 | 说明 |
-|------|--------|---------|------|
-| `yaoxiang run <file>` | ✅ | ✅ | 运行文件/项目入口 |
-| `yaoxiang build` | ❌ | ✅ | 构建项目 |
-| `yaoxiang build <file>` | ✅ | ✅ | 构建单个文件 |
-| `yaoxiang init <name>` | ❌ | ✅ | 创建项目 |
-| `yaoxiang add <dep>` | ❌ | ✅ | 添加依赖 |
-| `yaoxiang update` | ❌ | ✅ | 更新依赖 |
-| `yaoxiang fmt` | ✅ | ✅ | 格式化 |
-| `yaoxiang check` | ✅ | ✅ | 类型检查 |
-| `yaoxiang` (无参数) | ✅ | ✅ | 直接进入 REPL |
+| 命令                    | 单文件 | 项目模式 | 说明              |
+| ----------------------- | ------ | -------- | ----------------- |
+| `yaoxiang run <file>`   | ✅     | ✅       | 运行文件/项目入口 |
+| `yaoxiang build`        | ❌     | ✅       | 构建项目          |
+| `yaoxiang build <file>` | ✅     | ✅       | 构建单个文件      |
+| `yaoxiang init <name>`  | ❌     | ✅       | 创建项目          |
+| `yaoxiang add <dep>`    | ❌     | ✅       | 添加依赖          |
+| `yaoxiang update`       | ❌     | ✅       | 更新依赖          |
+| `yaoxiang fmt`          | ✅     | ✅       | 格式化            |
+| `yaoxiang check`        | ✅     | ✅       | 类型检查          |
+| `yaoxiang` (无参数)     | ✅     | ✅       | 直接进入 REPL     |
 
 #### 命令详解
 
-| 命令 | 功能 | 示例 |
-|------|------|------|
-| `yaoxiang` | 直接进入 REPL | `yaoxiang` |
-| `yaoxiang run <file>` | 运行单文件/项目 | `yaoxiang run main.yx` |
-| `yaoxiang init <name>` | 创建新项目 | `yaoxiang init my-app` |
-| `yaoxiang build` | 构建项目 | `yaoxiang build` |
-| `yaoxiang build <file>` | 构建单个文件 | `yaoxiang build foo.yx` |
-| `yaoxiang add <dep>` | 添加依赖 | `yaoxiang add foo` |
-| `yaoxiang add -D <dep>` | 添加开发依赖 | `yaoxiang add -D test` |
-| `yaoxiang rm <dep>` | 移除依赖 | `yaoxiang rm foo` |
-| `yaoxiang update` | 更新所有依赖 | `yaoxiang update` |
-| `yaoxiang update foo` | 更新指定依赖 | `yaoxiang update foo` |
-| `yaoxiang install` | 安装所有依赖 | `yaoxiang install` |
-| `yaoxiang list` | 列出依赖 | `yaoxiang list` |
-| `yaoxiang outdated` | 检查过时依赖 | `yaoxiang outdated` |
-| `yaoxiang fmt` | 格式化代码 | `yaoxiang fmt` |
-| `yaoxiang check` | 类型检查 | `yaoxiang check` |
-| `yaoxiang clean` | 清理构建产物 | `yaoxiang clean` |
-| `yaoxiang task <name>` | 运行自定义任务 | `yaoxiang task lint` |
-| `yaoxiang publish` | 发布包到 Registry | `yaoxiang publish` |
-| `yaoxiang publish --github` | 发布并创建 GitHub Release | `yaoxiang publish --github` |
-| `yaoxiang yank <pkg>@<ver>` | 删除已发布版本（不可恢复） | `yaoxiang yank foo@1.2.3` |
-| `yaoxiang login --registry <url>` | Registry 认证 | `yaoxiang login --registry https://reg.example.com` |
-| `yaoxiang login --github` | GitHub 认证 | `yaoxiang login --github` |
-| `yaoxiang logout --registry <url>` | 登出 | `yaoxiang logout --registry https://reg.example.com` |
-| `yaoxiang cache clean` | 清理全局缓存 | `yaoxiang cache clean` |
-| `yaoxiang workspace <cmd>` | 工作空间操作 | `yaoxiang workspace list` |
+| 命令                               | 功能                       | 示例                                                 |
+| ---------------------------------- | -------------------------- | ---------------------------------------------------- |
+| `yaoxiang`                         | 直接进入 REPL              | `yaoxiang`                                           |
+| `yaoxiang run <file>`              | 运行单文件/项目            | `yaoxiang run main.yx`                               |
+| `yaoxiang init <name>`             | 创建新项目                 | `yaoxiang init my-app`                               |
+| `yaoxiang build`                   | 构建项目                   | `yaoxiang build`                                     |
+| `yaoxiang build <file>`            | 构建单个文件               | `yaoxiang build foo.yx`                              |
+| `yaoxiang add <dep>`               | 添加依赖                   | `yaoxiang add foo`                                   |
+| `yaoxiang add -D <dep>`            | 添加开发依赖               | `yaoxiang add -D test`                               |
+| `yaoxiang rm <dep>`                | 移除依赖                   | `yaoxiang rm foo`                                    |
+| `yaoxiang update`                  | 更新所有依赖               | `yaoxiang update`                                    |
+| `yaoxiang update foo`              | 更新指定依赖               | `yaoxiang update foo`                                |
+| `yaoxiang install`                 | 安装所有依赖               | `yaoxiang install`                                   |
+| `yaoxiang list`                    | 列出依赖                   | `yaoxiang list`                                      |
+| `yaoxiang outdated`                | 检查过时依赖               | `yaoxiang outdated`                                  |
+| `yaoxiang fmt`                     | 格式化代码                 | `yaoxiang fmt`                                       |
+| `yaoxiang check`                   | 类型检查                   | `yaoxiang check`                                     |
+| `yaoxiang clean`                   | 清理构建产物               | `yaoxiang clean`                                     |
+| `yaoxiang task <name>`             | 运行自定义任务             | `yaoxiang task lint`                                 |
+| `yaoxiang publish`                 | 发布包到 Registry          | `yaoxiang publish`                                   |
+| `yaoxiang publish --github`        | 发布并创建 GitHub Release  | `yaoxiang publish --github`                          |
+| `yaoxiang yank <pkg>@<ver>`        | 删除已发布版本（不可恢复） | `yaoxiang yank foo@1.2.3`                            |
+| `yaoxiang login --registry <url>`  | Registry 认证              | `yaoxiang login --registry https://reg.example.com`  |
+| `yaoxiang login --github`          | GitHub 认证                | `yaoxiang login --github`                            |
+| `yaoxiang logout --registry <url>` | 登出                       | `yaoxiang logout --registry https://reg.example.com` |
+| `yaoxiang cache clean`             | 清理全局缓存               | `yaoxiang cache clean`                               |
+| `yaoxiang workspace <cmd>`         | 工作空间操作               | `yaoxiang workspace list`                            |
 
 #### 命令约束说明
 
@@ -377,6 +386,7 @@ ttl = "30d"
 ```
 
 缓存失效规则：
+
 - Registry 包：版本号不可变，永不失效
 - Git 依赖：按 tag/rev 缓存，tag 不变则不失效
 - `yaoxiang cache clean` 手动清理
@@ -440,25 +450,25 @@ token = "xxx"
 
 ## 替代方案
 
-| 方案 | 为什么没选 |
-|------|-----------|
-| 实时 GitHub 访问 | 安全性和缓存复用难以保证 |
-| 全局缓存 ($HOME/.yaoxiang) | 隔离性差，版本冲突复杂 |
-| 仅支持注册表 | GitHub 是当前主流代码托管平台 |
+| 方案                       | 为什么没选                    |
+| -------------------------- | ----------------------------- |
+| 实时 GitHub 访问           | 安全性和缓存复用难以保证      |
+| 全局缓存 ($HOME/.yaoxiang) | 隔离性差，版本冲突复杂        |
+| 仅支持注册表               | GitHub 是当前主流代码托管平台 |
 
 ## 实现策略
 
 ### 阶段划分
 
-| 阶段 | 内容 | 状态 |
-|------|------|------|
-| **Phase 1** | toml 解析、本地依赖、lock 生成、基础算法 | ✅ 已完成 |
-| **Phase 2** | GitHub 支持、.yaoxiang/vendor 管理、下载工具 | ✅ 已完成 |
-| **Phase 3** | 全局缓存、semver crate 替换、CLI 完善 | 待开始 |
-| **Phase 3.5** | Source trait 改 async、async-trait 集成 | 待开始 |
-| **Phase 4** | Registry 协议、publish、auth（RFC-014a） | 待开始 |
-| **Phase 5** | 构建系统、预编译二进制（RFC-014b） | 待开始 |
-| **Phase 6** | 工作空间支持（RFC-014c） | 待开始 |
+| 阶段          | 内容                                         | 状态      |
+| ------------- | -------------------------------------------- | --------- |
+| **Phase 1**   | toml 解析、本地依赖、lock 生成、基础算法     | ✅ 已完成 |
+| **Phase 2**   | GitHub 支持、.yaoxiang/vendor 管理、下载工具 | ✅ 已完成 |
+| **Phase 3**   | 全局缓存、semver crate 替换、CLI 完善        | 待开始    |
+| **Phase 3.5** | Source trait 改 async、async-trait 集成      | 待开始    |
+| **Phase 4**   | Registry 协议、publish、auth（RFC-014a）     | 待开始    |
+| **Phase 5**   | 构建系统、预编译二进制（RFC-014b）           | 待开始    |
+| **Phase 6**   | 工作空间支持（RFC-014c）                     | 待开始    |
 
 ### 依赖关系
 
@@ -467,11 +477,11 @@ token = "xxx"
 
 ### 风险
 
-| 风险 | 缓解措施 |
-|------|----------|
+| 风险             | 缓解措施                     |
+| ---------------- | ---------------------------- |
 | 依赖解析算法复杂 | 先实现简单版本，后加冲突检测 |
-| Git 下载不稳定 | 重试和缓存机制 |
-| 性能问题 | 惰性加载、增量解析 |
+| Git 下载不稳定   | 重试和缓存机制               |
+| 性能问题         | 惰性加载、增量解析           |
 
 ## 开放问题
 
@@ -485,12 +495,12 @@ token = "xxx"
 
 ## 依赖项（Cargo.toml 需新增）
 
-| 用途 | crate | 说明 |
-|------|-------|------|
-| 语义化版本 | `semver` | 替换手写解析器 |
-| HTTP 客户端 | `reqwest` | Registry 通信 |
-| SHA-256 | `sha2` | 完整性校验 |
-| 压缩 | `flate2` + `tar` | 包格式处理 |
+| 用途        | crate            | 说明           |
+| ----------- | ---------------- | -------------- |
+| 语义化版本  | `semver`         | 替换手写解析器 |
+| HTTP 客户端 | `reqwest`        | Registry 通信  |
+| SHA-256     | `sha2`           | 完整性校验     |
+| 压缩        | `flate2` + `tar` | 包格式处理     |
 
 ---
 

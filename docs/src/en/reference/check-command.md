@@ -1,6 +1,7 @@
 # yaoxiang check
 
-Performs static checking (type checking, ownership checking) on YaoXiang source code, without generating any code.
+Performs static checking (type checking, ownership checking) on YaoXiang source code, without
+generating any code.
 
 ## Usage
 
@@ -10,27 +11,27 @@ yaoxiang check [OPTIONS] [PATH]...
 
 ## Arguments
 
-| Argument | Description |
-|------|------|
-| `PATH` | One or more file or directory paths. When not specified, checks the current project. |
+| Argument | Description                                                                          |
+| -------- | ------------------------------------------------------------------------------------ |
+| `PATH`   | One or more file or directory paths. When not specified, checks the current project. |
 
 ## Options
 
-| Option | Description | Default |
-|------|------|--------|
-| `--json` | Output diagnostic information in JSON format | No |
-| `-w`, `--watch` | Watch for file changes and automatically recheck | No |
-| `--color <MODE>` | Color output mode: `auto`, `always`, `never` | `auto` |
-| `--exclude <PATH>` | Exclude the specified path (can be used multiple times) | None |
-| `--no-progress` | Suppress progress and summary messages | No |
+| Option             | Description                                             | Default |
+| ------------------ | ------------------------------------------------------- | ------- |
+| `--json`           | Output diagnostic information in JSON format            | No      |
+| `-w`, `--watch`    | Watch for file changes and automatically recheck        | No      |
+| `--color <MODE>`   | Color output mode: `auto`, `always`, `never`            | `auto`  |
+| `--exclude <PATH>` | Exclude the specified path (can be used multiple times) | None    |
+| `--no-progress`    | Suppress progress and summary messages                  | No      |
 
 ## Exit Codes
 
-| Exit Code | Description |
-|--------|------|
-| `0` | No errors |
-| `1` | Errors found during checking |
-| `2` | No `.yx` file found |
+| Exit Code | Description                  |
+| --------- | ---------------------------- |
+| `0`       | No errors                    |
+| `1`       | Errors found during checking |
+| `2`       | No `.yx` file found          |
 
 ## Cross-File Analysis
 

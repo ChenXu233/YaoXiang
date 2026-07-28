@@ -1,20 +1,22 @@
 ---
-title: "RFC-037: 工业化分发方案 — 基于 cargo-dist 的编译器/工具链打包"
-author: "ChenXu233"
-created: "2026-07-26"
-updated: "2026-07-27"
-issue: "#230"
+title: 'RFC-037: 工业化分发方案 — 基于 cargo-dist 的编译器/工具链打包'
+author: 'ChenXu233'
+created: '2026-07-26'
+updated: '2026-07-27'
+issue: '#230'
 ---
 
 # RFC-037: 工业化分发方案 — 基于 cargo-dist 的编译器/工具链打包
 
-> 本 RFC 与 [RFC-014b: 构建系统与二进制分发](../review/014b-build-system.md) 互补。
-> RFC-014b 定义了 **YaoXiang 包管理器**如何构建和分发第三方包；
-> 本 RFC 定义 **YaoXiang 编译器/工具链本身**如何打包和分发。
+> 本 RFC 与 [RFC-014b: 构建系统与二进制分发](../review/014b-build-system.md) 互补。RFC-014b 定义了
+> **YaoXiang 包管理器**如何构建和分发第三方包；本 RFC 定义
+> **YaoXiang 编译器/工具链本身**如何打包和分发。
 
 ## 摘要
 
-用 `cargo-dist`（Rust 生态的二进制分发标准工具）替换现有的手写 CI 构建/打包逻辑，实现跨平台自动化发布。解决 `libz3.dll` 缺失、标准库接口文件未打包、目录结构混乱、CI 脚本重复维护等问题。
+用
+`cargo-dist`（Rust 生态的二进制分发标准工具）替换现有的手写 CI 构建/打包逻辑，实现跨平台自动化发布。解决
+`libz3.dll` 缺失、标准库接口文件未打包、目录结构混乱、CI 脚本重复维护等问题。
 
 ## 动机
 
@@ -41,22 +43,24 @@ yaoxiang-v0.7.10-x86_64-pc-windows-msvc.zip
 └── yaoxiang.exe
 ```
 
-标准库接口文件（`.yx` 文件，LSP 需要）没有包含在发行包中。用户需要运行 `yaoxiang package init` 才能生成。工业化的做法是发行包自带标准库。
+标准库接口文件（`.yx` 文件，LSP 需要）没有包含在发行包中。用户需要运行 `yaoxiang package init`
+才能生成。工业化的做法是发行包自带标准库。
 
 #### 问题 3：CI 手写脚本重复维护
 
 当前维护了 4 套构建流水线：
 
-| 文件 | 职责 | 行数 |
-|------|------|------|
-| `_build-platforms.yml` | 跨平台构建 | ~255 行 |
-| `release.yml` | 版本发布 | ~176 行 |
-| `nightly.yml` | 每日构建 | ~145 行 |
-| `_build-wasm.yml` | Wasm 构建 | ~75 行 |
-| `scripts/build/setup.iss` | Inno Setup 安装器 | ~250 行 |
-| **合计** | | **~900 行** |
+| 文件                      | 职责              | 行数        |
+| ------------------------- | ----------------- | ----------- |
+| `_build-platforms.yml`    | 跨平台构建        | ~255 行     |
+| `release.yml`             | 版本发布          | ~176 行     |
+| `nightly.yml`             | 每日构建          | ~145 行     |
+| `_build-wasm.yml`         | Wasm 构建         | ~75 行      |
+| `scripts/build/setup.iss` | Inno Setup 安装器 | ~250 行     |
+| **合计**                  |                   | **~900 行** |
 
-大部分是重复的（安装 Rust → 缓存 → 构建 → 重命名 → 上传），每个平台都要写一次。`cargo-dist` 一行命令就能生成同等的流水线。
+大部分是重复的（安装 Rust → 缓存 → 构建 → 重命名 → 上传），每个平台都要写一次。`cargo-dist`
+一行命令就能生成同等的流水线。
 
 #### 问题 4：Inno Setup 版本号硬编码
 
@@ -64,7 +68,8 @@ yaoxiang-v0.7.10-x86_64-pc-windows-msvc.zip
 
 #### 问题 5：与 RFC-014b 的边界模糊
 
-RFC-014b 定义了"YaoXiang 包的构建和分发机制"（即 `yaoxiang.toml` 中的 `[build]` 和 `[binaries]` 配置），但**没有覆盖"YaoXiang 编译器本身怎么发布"**。本 RFC 填补这个空白。
+RFC-014b 定义了"YaoXiang 包的构建和分发机制"（即 `yaoxiang.toml` 中的 `[build]` 和 `[binaries]`
+配置），但**没有覆盖"YaoXiang 编译器本身怎么发布"**。本 RFC 填补这个空白。
 
 ## 提案
 
@@ -111,18 +116,18 @@ yaoxiang-{version}-{target}.tar.gz / .zip
 └── LICENSE
 ```
 
-cargo-dist 默认的 zip 是扁平的（二进制 + 自动包含的 README/LICENSE 都在根目录）。
-这不构成问题 — 明确分工：cargo-dist 管编译+CI+安装器，YaoXiang 用 50 行 `package-dist.sh` 管 zip 结构。
+cargo-dist 默认的 zip 是扁平的（二进制 + 自动包含的 README/LICENSE 都在根目录）。这不构成问题 — 明确分工：cargo-dist 管编译+CI+安装器，YaoXiang 用 50 行
+`package-dist.sh` 管 zip 结构。
 
 ### 平台支持
 
-| 平台 | target triple | 说明 |
-|------|-------------|------|
-| Linux x86_64 | `x86_64-unknown-linux-gnu` | 主平台 |
-| Linux ARM64 | `aarch64-unknown-linux-gnu` | CI 上交叉编译 |
-| macOS x86_64 | `x86_64-apple-darwin` | Intel Mac |
-| macOS ARM64 | `aarch64-apple-darwin` | Apple Silicon |
-| Windows x86_64 | `x86_64-pc-windows-msvc` | 主平台 |
+| 平台           | target triple               | 说明          |
+| -------------- | --------------------------- | ------------- |
+| Linux x86_64   | `x86_64-unknown-linux-gnu`  | 主平台        |
+| Linux ARM64    | `aarch64-unknown-linux-gnu` | CI 上交叉编译 |
+| macOS x86_64   | `x86_64-apple-darwin`       | Intel Mac     |
+| macOS ARM64    | `aarch64-apple-darwin`      | Apple Silicon |
+| Windows x86_64 | `x86_64-pc-windows-msvc`    | 主平台        |
 
 暂不支持 Windows ARM64（Z3 官方无预编译 ARM64 包）。
 
@@ -130,14 +135,15 @@ cargo-dist 默认的 zip 是扁平的（二进制 + 自动包含的 README/LICEN
 
 **统一改为全平台动态链接。**
 
-| 平台 | 改动 | 产物 |
-|------|------|------|
-| Linux | **原静态→改为动态** | `libz3.so` |
-| macOS | **原静态→改为动态** | `libz3.dylib` |
-| Windows | 不变 | `libz3.dll` |
-| wasm32 | 不变（静态链接） | 内嵌 `.a` |
+| 平台    | 改动                | 产物          |
+| ------- | ------------------- | ------------- |
+| Linux   | **原静态→改为动态** | `libz3.so`    |
+| macOS   | **原静态→改为动态** | `libz3.dylib` |
+| Windows | 不变                | `libz3.dll`   |
+| wasm32  | 不变（静态链接）    | 内嵌 `.a`     |
 
 理由：
+
 - **一致性** — 三个平台行为统一，不再各有特例
 - **这是外部库，就该用共享库分发**。Python（`python3.dll`+`DLLs/lib*.dll`）、Node（`node`+`lib/`）都这么干
 - **用户升级 Z3 不需要等编译器版本** — 换一个 `.so`/`.dylib`/`.dll` 就行
@@ -155,20 +161,22 @@ fn link_z3(z3_dir: &Path) {
 }
 ```
 
-**"全平台静态链接"不再作为目标。** 这不是消除特殊情况，是用错误的方式消除一个合理的情况。共享库是外部库的正常分发方式。
+**"全平台静态链接"不再作为目标。**
+这不是消除特殊情况，是用错误的方式消除一个合理的情况。共享库是外部库的正常分发方式。
 
 ### 安装器支持
 
-| 安装器 | 状态 | 说明 |
-|--------|------|------|
-| zip / tar.gz | ✅ 默认 | 所有平台，手动下载 |
-| shell 脚本 | ✅ cargo-dist | Unix: `curl ... \| sh` |
-| powershell 脚本 | ✅ cargo-dist | Windows: `irm ... \| iex` |
-| Homebrew formula | ✅ cargo-dist | macOS: `brew install yaoxiang` |
-| Windows MSI | ✅ cargo-dist | 基于 WiX，主 Windows 安装器 |
-| **Inno Setup** | **✅ 保留为辅助** | 国内用户备选，不删除 |
+| 安装器           | 状态              | 说明                           |
+| ---------------- | ----------------- | ------------------------------ |
+| zip / tar.gz     | ✅ 默认           | 所有平台，手动下载             |
+| shell 脚本       | ✅ cargo-dist     | Unix: `curl ... \| sh`         |
+| powershell 脚本  | ✅ cargo-dist     | Windows: `irm ... \| iex`      |
+| Homebrew formula | ✅ cargo-dist     | macOS: `brew install yaoxiang` |
+| Windows MSI      | ✅ cargo-dist     | 基于 WiX，主 Windows 安装器    |
+| **Inno Setup**   | **✅ 保留为辅助** | 国内用户备选，不删除           |
 
 **Inno Setup 保留理由：**
+
 - 国内 Windows 用户更习惯 exe 安装向导（下一步 → 下一步 → 完成）
 - MSI 在某些企业/学校网络环境中被屏蔽
 - 多维护一个 `setup.iss` 的成本远低于丢掉一部分用户
@@ -177,7 +185,9 @@ fn link_z3(z3_dir: &Path) {
 
 子命令名：**`yaoxiang package gen-std`**（与现有 `package init`/`add`/`install` 在同一体系下）
 
-当前 `src/std/gen_interfaces.rs` 已有完整实现（`generate_all_interfaces()`、`write_interfaces_to_dir()`），只需在 `main.rs` 新增子命令入口，然后在 `package-dist.sh` 中调用：
+当前 `src/std/gen_interfaces.rs`
+已有完整实现（`generate_all_interfaces()`、`write_interfaces_to_dir()`），只需在 `main.rs`
+新增子命令入口，然后在 `package-dist.sh` 中调用：
 
 ```bash
 yaoxiang package gen-std --out-dir "$PKG_ROOT/lib/yaoxiang/std/"
@@ -189,27 +199,28 @@ yaoxiang package gen-std --out-dir "$PKG_ROOT/lib/yaoxiang/std/"
 
 cargo-dist 管的是"把编译器发给用户"，wasm 是"在线 playground 嵌入文档网站"——两套完全不同的交付物。
 
-| 方面 | 做法 |
-|------|------|
-| 构建工具 | 保持 `wasm-pack build` |
-| CI workflow | 保留 `_build-wasm.yml` 独立 job |
-| 触发时机 | 跟 release 同一次 push，并行的独立 job |
-| 发布目标 | `docs/public/wasm/` → GitHub Pages |
+| 方面        | 做法                                   |
+| ----------- | -------------------------------------- |
+| 构建工具    | 保持 `wasm-pack build`                 |
+| CI workflow | 保留 `_build-wasm.yml` 独立 job        |
+| 触发时机    | 跟 release 同一次 push，并行的独立 job |
+| 发布目标    | `docs/public/wasm/` → GitHub Pages     |
 
 ### npm 发布
 
 两个不同的 npm 包，各自独立：
 
-| 包 | 内容 | 工具 | 状态 |
-|----|------|------|------|
-| `@yaoxiang/cli` | 下载 CLI 二进制（wrapper） | cargo-dist 原生生成 | cargo-dist 配置即用 |
-| `@yaoxiang/playground` | wasm 库（JS + .wasm） | wasm-pack + `npm publish` | 可选，目前只发 docs |
+| 包                     | 内容                       | 工具                      | 状态                |
+| ---------------------- | -------------------------- | ------------------------- | ------------------- |
+| `@yaoxiang/cli`        | 下载 CLI 二进制（wrapper） | cargo-dist 原生生成       | cargo-dist 配置即用 |
+| `@yaoxiang/playground` | wasm 库（JS + .wasm）      | wasm-pack + `npm publish` | 可选，目前只发 docs |
 
 两者不冲突，名字也不冲突。
 
 ### Nightly 发布
 
-cargo-dist 无原生 nightly 支持（[#1143](https://github.com/axodotdev/cargo-dist/issues/1143)，仍为 open feature request）。
+cargo-dist 无原生 nightly 支持（[#1143](https://github.com/axodotdev/cargo-dist/issues/1143)，仍为 open
+feature request）。
 
 **保持现有 cron + tag 方案**，构建部分换成 cargo-dist：
 
@@ -289,7 +300,8 @@ tar czf "yaoxiang-$VERSION-$TARGET.tar.gz" "yaoxiang-$VERSION-$TARGET"
 
 ### 标准库接口文件生成
 
-当前 `src/std/gen_interfaces.rs` 已经实现了生成 `.yx` 接口文件的功能（`write_interfaces_to_dir`），`package init` 命令也调用了它。
+当前 `src/std/gen_interfaces.rs` 已经实现了生成 `.yx`
+接口文件的功能（`write_interfaces_to_dir`），`package init` 命令也调用了它。
 
 只需要在 `main.rs` 中新增子命令入口，然后在打包脚本中调用。
 
@@ -297,15 +309,16 @@ tar czf "yaoxiang-$VERSION-$TARGET.tar.gz" "yaoxiang-$VERSION-$TARGET"
 
 迁移完成后删除以下文件：
 
-| 文件 | 行数 | 替代 |
-|------|------|------|
-| `.github/workflows/_build-platforms.yml` | 255 | cargo-dist 自动生成 |
-| `.github/workflows/release.yml` | 176 | cargo-dist 自动生成 |
-| `.github/workflows/nightly.yml` | 145 | cargo-dist 构建 + 保留发布逻辑 |
-| `scripts/build/setup.iss` | ~250 | **保留**（国内用） |
-| **合计删减** | **~600 行** | |
+| 文件                                     | 行数        | 替代                           |
+| ---------------------------------------- | ----------- | ------------------------------ |
+| `.github/workflows/_build-platforms.yml` | 255         | cargo-dist 自动生成            |
+| `.github/workflows/release.yml`          | 176         | cargo-dist 自动生成            |
+| `.github/workflows/nightly.yml`          | 145         | cargo-dist 构建 + 保留发布逻辑 |
+| `scripts/build/setup.iss`                | ~250        | **保留**（国内用）             |
+| **合计删减**                             | **~600 行** |                                |
 
 保留的：
+
 - `ci.yml`（日常 fmt + clippy + test + MSRV，不属于发布流程）
 - `nightly.yml`（发布逻辑部分保留）
 - `_build-wasm.yml`（独立构建流）
@@ -332,23 +345,23 @@ tar czf "yaoxiang-$VERSION-$TARGET.tar.gz" "yaoxiang-$VERSION-$TARGET"
 
 ### 与 RFC-014b 的关系
 
-| | RFC-014b | RFC-037 |
-|--|----------|---------|
-| **范围** | 第三方包的构建和分发 | 编译器本身的打包和分发 |
-| **工具** | `yaoxiang build` / `yaoxiang publish` | `cargo-dist` |
-| **产物** | 第三方包的 FFI 库 | 编译器 + 标准库 + 工具链 |
-| **互斥** | 否，互补 | 否，互补 |
+|          | RFC-014b                              | RFC-037                  |
+| -------- | ------------------------------------- | ------------------------ |
+| **范围** | 第三方包的构建和分发                  | 编译器本身的打包和分发   |
+| **工具** | `yaoxiang build` / `yaoxiang publish` | `cargo-dist`             |
+| **产物** | 第三方包的 FFI 库                     | 编译器 + 标准库 + 工具链 |
+| **互斥** | 否，互补                              | 否，互补                 |
 
 ## 替代方案
 
-| 方案 | 为什么不选 |
-|------|-----------|
-| **继续手写 CI** | 已经手写了 ~900 行，重复劳动，容易遗漏 DLL |
-| **自己写打包工具** | 不要重新发明轮子，cargo-dist 已经成熟 |
-| **只用 tar.gz 不用安装器** | 用户需要更友好的安装方式（Homebrew/MSI） |
-| **Docker 分发** | 编译器和语言工具链需要原生二进制，不是容器场景 |
-| **全静态链接 Z3** | 外部库正常就该用共享库分发，不追求静态 |
-| **废弃 Inno Setup** | 国内用户习惯不同，保留成本极低 |
+| 方案                       | 为什么不选                                     |
+| -------------------------- | ---------------------------------------------- |
+| **继续手写 CI**            | 已经手写了 ~900 行，重复劳动，容易遗漏 DLL     |
+| **自己写打包工具**         | 不要重新发明轮子，cargo-dist 已经成熟          |
+| **只用 tar.gz 不用安装器** | 用户需要更友好的安装方式（Homebrew/MSI）       |
+| **Docker 分发**            | 编译器和语言工具链需要原生二进制，不是容器场景 |
+| **全静态链接 Z3**          | 外部库正常就该用共享库分发，不追求静态         |
+| **废弃 Inno Setup**        | 国内用户习惯不同，保留成本极低                 |
 
 ## 实现策略
 

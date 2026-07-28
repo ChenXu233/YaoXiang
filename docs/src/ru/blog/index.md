@@ -1,9 +1,8 @@
 ---
 layout: page
 sidebar: false
-title: "Блог"
+title: 'Блог'
 permalink: /blog/
-
 ---
 
 <div style="min-height: calc(100vh - 200px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
@@ -31,4 +30,7 @@ a:hover {
   text-decoration: underline !important;
 }
 </style>
+
+```
+
 ```

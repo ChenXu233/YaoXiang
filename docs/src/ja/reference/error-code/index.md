@@ -12,16 +12,16 @@ YaoXiang コンパイラは統一されたエラーコードシステムを使�
 
 ## エラーコード一覧
 
-| プレフィックス | カテゴリ | 説明 |
-|------|------|------|
-| E0xxx | Lexer/Parser | レキサーおよび構文解析エラー |
-| E1xxx | TypeCheck | 型チェックエラー |
-| E2xxx | Semantic | 意味解析エラー |
-| E4xxx | Generic | ジェネリクスとトレイトエラー |
-| E5xxx | Module | モジュールとインポートエラー |
-| E6xxx | Runtime | ランタイムエラー |
-| E7xxx | I/O | I/Oとシステムエラー |
-| E8xxx | Internal | 内部コンパイルエラー |
+| プレフィックス | カテゴリ     | 説明                         |
+| -------------- | ------------ | ---------------------------- |
+| E0xxx          | Lexer/Parser | レキサーおよび構文解析エラー |
+| E1xxx          | TypeCheck    | 型チェックエラー             |
+| E2xxx          | Semantic     | 意味解析エラー               |
+| E4xxx          | Generic      | ジェネリクスとトレイトエラー |
+| E5xxx          | Module       | モジュールとインポートエラー |
+| E6xxx          | Runtime      | ランタイムエラー             |
+| E7xxx          | I/O          | I/Oとシステムエラー          |
+| E8xxx          | Internal     | 内部コンパイルエラー         |
 
 ## 使用方法
 

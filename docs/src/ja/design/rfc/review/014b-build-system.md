@@ -1,18 +1,19 @@
 ---
-title: "RFC-014b: ビルドシステムとバイナリ配布"
-status: "レビュー中"
-author: "晨煦"
-created: "2026-06-11"
-updated: "2026-07-05"
-group: "rfc-014"
-issue: "#91"
-impl: "0%"
-impl_status: "not-started"
+title: 'RFC-014b: ビルドシステムとバイナリ配布'
+status: 'レビュー中'
+author: '晨煦'
+created: '2026-06-11'
+updated: '2026-07-05'
+group: 'rfc-014'
+issue: '#91'
+impl: '0%'
+impl_status: 'not-started'
 ---
 
 # RFC-014b: ビルドシステムとバイナリ配布
 
-> 本 RFC は [RFC-014: パッケージ管理システム設計](../accepted/014-package-manager.md) のサブ RFC である。
+> 本 RFC は [RFC-014: パッケージ管理システム設計](../accepted/014-package-manager.md)
+> のサブ RFC である。
 
 ## 概要
 
@@ -20,7 +21,8 @@ YaoXiang パッケージ管理システムのビルド機構を定義する：�
 
 ## 動機
 
-純粋な `.yx` コードのみで構成され、ビルド不要なパッケージもあれば、FFI バインディングのコンパイルが必要なものもある（Cargo や CMake などの呼び出し）。パッケージ作者がビルド要件を宣言し、パッケージマネージャが自動的に処理する統一的な仕組みが必要である。
+純粋な `.yx`
+コードのみで構成され、ビルド不要なパッケージもあれば、FFI バインディングのコンパイルが必要なものもある（Cargo や CMake などの呼び出し）。パッケージ作者がビルド要件を宣言し、パッケージマネージャが自動的に処理する統一的な仕組みが必要である。
 
 ### 現状の問題
 
@@ -33,7 +35,8 @@ YaoXiang パッケージ管理システムのビルド機構を定義する：�
 
 ### 中核設計：宣言型ビルド + 事前コンパイル優先
 
-パッケージ作者が `yaoxiang.toml` にビルド要件を宣言し、パッケージマネージャが宣言内容に応じて自動的に判断する。
+パッケージ作者が `yaoxiang.toml`
+にビルド要件を宣言し、パッケージマネージャが宣言内容に応じて自動的に判断する。
 
 ### ビルド戦略
 
@@ -46,7 +49,8 @@ enum BuildStrategy {
 }
 ```
 
-注意：`Precompiled` バリアントは削除済み。`[binaries]` の存在により自動的に事前コンパイル優先動作がトリガーされ、strategy を明示的に宣言する必要はない。
+注意：`Precompiled` バリアントは削除済み。`[binaries]`
+の存在により自動的に事前コンパイル優先動作がトリガーされ、strategy を明示的に宣言する必要はない。
 
 ### yaoxiang.toml におけるビルド宣言
 
@@ -96,7 +100,8 @@ yaoxiang install foo
     └─ 5. vendor/ にインストール
 ```
 
-**事前コンパイル優先、ソースコードはフォールバック。** `[binaries]` の存在により自動的に事前コンパイルチェックがトリガーされ、明示的な strategy は不要。
+**事前コンパイル優先、ソースコードはフォールバック。** `[binaries]`
+の存在により自動的に事前コンパイルチェックがトリガーされ、明示的な strategy は不要。
 
 ### cargo 戦略の詳細
 
@@ -136,9 +141,11 @@ cargo build --release --features ffi,linux-ffi
 "aarch64-apple-darwin" = { url = "releases/download/v1.0.0/foo-macos-aarch64.tar.gz", sha256 = "ghi789" }
 ```
 
-**URL 形式：** 絶対 URL と相対パスの両方をサポート。相対パスはパッケージのリポジトリアドレス（GitHub repo URL または Registry ルート URL）からの相対パスとなる。
+**URL 形式：** 絶対 URL と相対パスの両方をサポート。相対パスはパッケージのリポジトリアドレス（GitHub
+repo URL または Registry ルート URL）からの相対パスとなる。
 
 **ビルドをスキップする条件：**
+
 1. `[binaries]` に現在のプラットフォームのエントリがある
 2. SHA-256 検証が通る
 3. ダウンロードが成功する
@@ -150,6 +157,7 @@ cargo build --release --features ffi,linux-ffi
 `strategy = "custom"` の場合、`build.yx` を実行する。
 
 **実行モデル（最小限の仕様）：**
+
 - スクリプトは通常の `.yx` コードであり、完全な `std` アクセス権限を持つ
 - 作業ディレクトリ：パッケージルートディレクトリ（`vendor/<pkg>-<ver>/`）
 - 成功：終了コード 0
@@ -180,7 +188,8 @@ fn main() {
 
 ### システム依存チェック
 
-インストール前にすべての `[build.requirements]` を自動的にチェックし、満たされない場合はエラーを報告する：
+インストール前にすべての `[build.requirements]`
+を自動的にチェックし、満たされない場合はエラーを報告する：
 
 ```
 Error: Build requirement not satisfied
@@ -190,7 +199,9 @@ Error: Build requirement not satisfied
 
 ### yx-bindgen 統合（headers フィールド）
 
-`[build].headers` は yx-bindgen が処理する必要のある C ヘッダファイルを宣言する。ビルドシステムが自動的に yx-bindgen を実行し、`.yx` バインディングファイルを生成する。
+`[build].headers`
+は yx-bindgen が処理する必要のある C ヘッダファイルを宣言する。ビルドシステムが自動的に yx-bindgen を実行し、`.yx`
+バインディングファイルを生成する。
 
 ```toml
 [build]
@@ -207,9 +218,13 @@ headers = ["include/sqlite3.h", "include/json.h"]
 4. インストール
 ```
 
-yx-bindgen は C ヘッダファイル（`.h`）から関数シグネチャと型定義を解析し、`.yx` バインディング宣言を自動生成する。ユーザーが手動で実行する必要はなく、ビルドシステムが `headers` 設定を検出した時点で自動的に処理する。
+yx-bindgen は C ヘッダファイル（`.h`）から関数シグネチャと型定義を解析し、`.yx`
+バインディング宣言を自動生成する。ユーザーが手動で実行する必要はなく、ビルドシステムが `headers`
+設定を検出した時点で自動的に処理する。
 
-**RFC-026 との関係：** RFC-026 は `yx-bindgen` の言語レベルセマンティクス（`native("symbol")` 構文、unsafe 型）を定義する。RFC-014b はビルドフローにおけるその統合方法（`headers` 設定）を定義する。両者は補完関係にある。
+**RFC-026 との関係：** RFC-026 は `yx-bindgen` の言語レベルセマンティクス（`native("symbol")`
+構文、unsafe 型）を定義する。RFC-014b はビルドフローにおけるその統合方法（`headers`
+設定）を定義する。両者は補完関係にある。
 
 ### Cargo Workspace との統合
 
@@ -235,17 +250,18 @@ my-package/
 
 Rust target triple 形式（`arch-vendor-os-env`）を使用：
 
-| プラットフォーム | 識別子 |
-|------|------|
-| Linux x86_64 (glibc) | `x86_64-unknown-linux-gnu` |
-| Linux x86_64 (musl) | `x86_64-unknown-linux-musl` |
-| Linux ARM64 | `aarch64-unknown-linux-gnu` |
-| Windows x86_64 (MSVC) | `x86_64-pc-windows-msvc` |
-| Windows x86_64 (MinGW) | `x86_64-pc-windows-gnu` |
-| macOS ARM64 | `aarch64-apple-darwin` |
-| macOS x86_64 | `x86_64-apple-darwin` |
+| プラットフォーム       | 識別子                      |
+| ---------------------- | --------------------------- |
+| Linux x86_64 (glibc)   | `x86_64-unknown-linux-gnu`  |
+| Linux x86_64 (musl)    | `x86_64-unknown-linux-musl` |
+| Linux ARM64            | `aarch64-unknown-linux-gnu` |
+| Windows x86_64 (MSVC)  | `x86_64-pc-windows-msvc`    |
+| Windows x86_64 (MinGW) | `x86_64-pc-windows-gnu`     |
+| macOS ARM64            | `aarch64-apple-darwin`      |
+| macOS x86_64           | `x86_64-apple-darwin`       |
 
 簡略化された形式ではなく Rust target triple を使用する理由：
+
 1. 同一 OS 上の異なる ABI を区別できる（gnu vs musl、msvc vs gnu）
 2. Rust/Cargo エコシステムと整合し、マッピングエラーを削減
 3. 将来拡張時にフォーマット変更が不要
@@ -296,24 +312,24 @@ build/
 
 ## 代替案
 
-| 代替案 | 採用しなかった理由 |
-|------|-----------|
-| 純粋なソースコード配布 | ユーザーがビルドツールチェーンをインストールする必要があり、敷居が高い |
-| Python wheel のようなバイナリ形式 | 複雑すぎ、YaoXiang エコシステムの初期段階では不要 |
-| FFI ビルドの非サポート | 言語の拡張能力を制限する |
+| 代替案                            | 採用しなかった理由                                                     |
+| --------------------------------- | ---------------------------------------------------------------------- |
+| 純粋なソースコード配布            | ユーザーがビルドツールチェーンをインストールする必要があり、敷居が高い |
+| Python wheel のようなバイナリ形式 | 複雑すぎ、YaoXiang エコシステムの初期段階では不要                      |
+| FFI ビルドの非サポート            | 言語の拡張能力を制限する                                               |
 
 ## 実装戦略
 
 ### フェーズ区分
 
-| フェーズ | 内容 |
-|------|------|
-| Phase 5a | `[build]` 設定の解析 + `BuildStrategy` 列挙型 |
-| Phase 5b | システム依存チェック |
+| フェーズ | 内容                                                               |
+| -------- | ------------------------------------------------------------------ |
+| Phase 5a | `[build]` 設定の解析 + `BuildStrategy` 列挙型                      |
+| Phase 5b | システム依存チェック                                               |
 | Phase 5c | Cargo ビルド統合（`[build.cargo]` を読み取りコマンドを組み立てる） |
-| Phase 5d | 事前コンパイル済みバイナリのダウンロード + 検証 |
-| Phase 5e | build.yx スクリプトの実行 |
-| Phase 5f | yx-bindgen 統合（`headers` フィールド） |
+| Phase 5d | 事前コンパイル済みバイナリのダウンロード + 検証                    |
+| Phase 5e | build.yx スクリプトの実行                                          |
+| Phase 5f | yx-bindgen 統合（`headers` フィールド）                            |
 
 ### 依存関係
 

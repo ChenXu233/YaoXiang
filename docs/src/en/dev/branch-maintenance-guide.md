@@ -1,6 +1,7 @@
 # Git Branch Maintenance Handbook
 
-> This handbook defines the Git branch management strategy for the YaoXiang project, aiming to ensure orderly development and efficient collaboration of the codebase.
+> This handbook defines the Git branch management strategy for the YaoXiang project, aiming to
+> ensure orderly development and efficient collaboration of the codebase.
 
 ---
 
@@ -20,29 +21,29 @@
 
 ### Core Branches
 
-| Branch | Purpose | Lifecycle | Protection Level |
-|--------|---------|-----------|------------------|
-| `main` | Production environment code | Permanent | Strict protection |
-| `dev` | Main development branch | Permanent | Medium protection |
-| `master` | Main branch (legacy) | Permanent | Strict protection |
+| Branch   | Purpose                     | Lifecycle | Protection Level  |
+| -------- | --------------------------- | --------- | ----------------- |
+| `main`   | Production environment code | Permanent | Strict protection |
+| `dev`    | Main development branch     | Permanent | Medium protection |
+| `master` | Main branch (legacy)        | Permanent | Strict protection |
 
 ### Feature Branches
 
-| Prefix | Purpose | Naming Examples | Merge Target |
-|--------|---------|-----------------|--------------|
-| `feature/` | New feature development | `feature/type-inference`<br>`feature/ownership-model` | `dev` |
-| `bugfix/` | Fix known defects | `bugfix/memory-leak`<br>`bugfix/parser-error` | `dev` |
-| `hotfix/` | Urgent production issue fix | `hotfix/security-patch`<br>`hotfix/crash-bug` | `main` + `dev` |
-| `release/` | Release preparation branch | `release/v0.8.0`<br>`release/v1.0.0` | `main` |
+| Prefix     | Purpose                     | Naming Examples                                       | Merge Target   |
+| ---------- | --------------------------- | ----------------------------------------------------- | -------------- |
+| `feature/` | New feature development     | `feature/type-inference`<br>`feature/ownership-model` | `dev`          |
+| `bugfix/`  | Fix known defects           | `bugfix/memory-leak`<br>`bugfix/parser-error`         | `dev`          |
+| `hotfix/`  | Urgent production issue fix | `hotfix/security-patch`<br>`hotfix/crash-bug`         | `main` + `dev` |
+| `release/` | Release preparation branch  | `release/v0.8.0`<br>`release/v1.0.0`                  | `main`         |
 
 ### Auxiliary Branches
 
-| Prefix | Purpose | Naming Examples | Merge Target |
-|--------|---------|-----------------|--------------|
-| `docs/` | Documentation updates | `docs/api-reference`<br>`docs/tutorial-update` | `dev` |
-| `ci/` | CI/CD configuration changes | `ci/add-deploy-script`<br>`ci/optimize-build` | `dev` |
-| `refactor/` | Code refactoring | `refactor/lexer-optimization`<br>`refactor/memory-manager` | `dev` |
-| `test/` | Test-related modifications | `test/add-integration`<br>`test/performance-bench` | `dev` |
+| Prefix      | Purpose                     | Naming Examples                                            | Merge Target |
+| ----------- | --------------------------- | ---------------------------------------------------------- | ------------ |
+| `docs/`     | Documentation updates       | `docs/api-reference`<br>`docs/tutorial-update`             | `dev`        |
+| `ci/`       | CI/CD configuration changes | `ci/add-deploy-script`<br>`ci/optimize-build`              | `dev`        |
+| `refactor/` | Code refactoring            | `refactor/lexer-optimization`<br>`refactor/memory-manager` | `dev`        |
+| `test/`     | Test-related modifications  | `test/add-integration`<br>`test/performance-bench`         | `dev`        |
 
 ---
 
@@ -198,6 +199,7 @@ graph TD
 ### Main Branch Protection
 
 **main branch**
+
 - Direct push forbidden
 - Must merge via PR
 - Force push forbidden
@@ -205,6 +207,7 @@ graph TD
 - Status checks must pass
 
 **dev branch**
+
 - Direct push forbidden (for developers)
 - PR merge required
 - Status checks must pass
@@ -212,12 +215,12 @@ graph TD
 
 ### Branch Permission Settings
 
-| Branch Type | Developer | Maintainer | Admin |
-|------------|-----------|------------|-------|
-| `main` | PR only | PR only | Approve PR |
-| `dev` | PR merge | PR merge | Direct push |
+| Branch Type | Developer   | Maintainer  | Admin       |
+| ----------- | ----------- | ----------- | ----------- |
+| `main`      | PR only     | PR only     | Approve PR  |
+| `dev`       | PR merge    | PR merge    | Direct push |
 | `feature/*` | Full access | Full access | Full access |
-| `hotfix/*` | Full access | Full access | Full access |
+| `hotfix/*`  | Full access | Full access | Full access |
 
 ---
 
@@ -265,6 +268,7 @@ Follow the [commit convention](./commit-convention.md):
 ### Q1: How to choose a branch type?
 
 **Answer:**
+
 - New feature → `feature/`
 - Known defect fix → `bugfix/`
 - Urgent production fix → `hotfix/`
@@ -274,8 +278,8 @@ Follow the [commit convention](./commit-convention.md):
 
 ### Q2: Which branch should a feature branch be created from?
 
-**Answer:**
-Always create from the `dev` branch to ensure the feature is based on the latest development code:
+**Answer:** Always create from the `dev` branch to ensure the feature is based on the latest
+development code:
 
 ```bash
 git checkout dev
@@ -286,6 +290,7 @@ git checkout -b feature/new-feature
 ### Q3: When to create a release branch?
 
 **Answer:**
+
 - When preparing to release a new version
 - When freezing new feature additions
 - When needing to test a stable version specifically
@@ -293,6 +298,7 @@ git checkout -b feature/new-feature
 ### Q4: How to handle branch conflicts?
 
 **Answer:**
+
 1. Update target branch: `git checkout dev && git pull origin dev`
 2. Switch to feature branch: `git checkout feature/your-branch`
 3. Merge and resolve conflicts: `git rebase dev` or `git merge dev`
@@ -301,6 +307,7 @@ git checkout -b feature/new-feature
 ### Q5: How to handle hotfix branches?
 
 **Answer:**
+
 1. Create from `main`: `git checkout main && git checkout -b hotfix/urgent-fix`
 2. Fix the issue and test
 3. Create PRs to both `main` and `dev` simultaneously
@@ -308,8 +315,8 @@ git checkout -b feature/new-feature
 
 ### Q6: Is there a limit on branch name length?
 
-**Answer:**
-It is recommended not to exceed 50 characters, keeping it concise and clear. Git itself supports longer names, but overly long names affect readability.
+**Answer:** It is recommended not to exceed 50 characters, keeping it concise and clear. Git itself
+supports longer names, but overly long names affect readability.
 
 ---
 
@@ -361,6 +368,7 @@ echo "Branch created and pushed: $BRANCH_TYPE/$BRANCH_NAME"
 
 ---
 
-> 💡 **Tip**: Keep branches atomic and focused—each branch should do one thing—this makes code management clearer and more efficient!
+> 💡 **Tip**: Keep branches atomic and focused—each branch should do one thing—this makes code
+> management clearer and more efficient!
 
 > 📞 **Support**: If you have questions, please discuss in GitHub Discussions.

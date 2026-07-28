@@ -1,18 +1,19 @@
 ---
-title: "RFC [Number]: [Proposal Title]"
-author: "[Author Name]"
-created: "YYYY-MM-DD"
-updated: "YYYY-MM-DD"
-issue: "#123"           # Required: associated initial idea Issue
-issues_impl:            # Required after acceptance: list of implementation Issues split out
-  - "#456"
-pr_impl:                # Required after PR merge: list of implementation PRs
-  - "#789"
+title: 'RFC [Number]: [Proposal Title]'
+author: '[Author Name]'
+created: 'YYYY-MM-DD'
+updated: 'YYYY-MM-DD'
+issue: '#123' # Required: associated initial idea Issue
+issues_impl: # Required after acceptance: list of implementation Issues split out
+  - '#456'
+pr_impl: # Required after PR merge: list of implementation PRs
+  - '#789'
 ---
 
 # RFC [Number]: [Proposal Title]
 
-> **Reference**: See the [full example](EXAMPLE_full_feature_proposal.md) to learn how to write an RFC.
+> **Reference**: See the [full example](EXAMPLE_full_feature_proposal.md) to learn how to write an
+> RFC.
 
 ## Summary
 
@@ -46,8 +47,8 @@ Provide code examples to illustrate the use of the proposal:
 
 If the proposal involves syntax changes, list a before/after comparison:
 
-| Before | After |
-|--------|-------|
+| Before   | After    |
+| -------- | -------- |
 | Syntax A | Syntax B |
 
 ## Detailed Design
@@ -97,6 +98,7 @@ Identify potential risks in implementation.
 List questions that require further discussion.
 
 Format:
+
 ```markdown
 - [ ] Question description (@username: supplementary explanation)
 ```
@@ -114,9 +116,7 @@ Format:
 ```markdown
 ### [Discussion Topic]
 
-> **Discussion Status**: [Open | Resolved]
-> **Initiator**: @username
-> **Date**: YYYY-MM-DD
+> **Discussion Status**: [Open | Resolved] **Initiator**: @username **Date**: YYYY-MM-DD
 
 #### Problem Description
 
@@ -125,9 +125,9 @@ Format:
 #### Alternatives
 
 | Option | Description | Advantages | Disadvantages |
-|--------|-------------|------------|---------------|
-| A | ... | ... | ... |
-| B | ... | ... | ... |
+| ------ | ----------- | ---------- | ------------- |
+| A      | ...         | ...        | ...           |
+| B      | ...         | ...        | ...           |
 
 #### Discussion Records
 
@@ -141,13 +141,14 @@ Format:
 
 #### Discussion Management Rules
 
-| Stage | Action |
-|-------|--------|
-| In Discussion | Record in appendix, keep status open |
-| Resolved | Update resolution, mark status, **update relevant content in the main body** |
-| Abandoned | Mark the reason for abandonment, keep records for reference |
+| Stage         | Action                                                                       |
+| ------------- | ---------------------------------------------------------------------------- |
+| In Discussion | Record in appendix, keep status open                                         |
+| Resolved      | Update resolution, mark status, **update relevant content in the main body** |
+| Abandoned     | Mark the reason for abandonment, keep records for reference                  |
 
-> **Important**: After a discussion is finalized, the relevant content in the main body must be updated! Discussion records may be retained as historical reference.
+> **Important**: After a discussion is finalized, the relevant content in the main body must be
+> updated! Discussion records may be retained as historical reference.
 
 ---
 
@@ -156,16 +157,16 @@ Format:
 > Record the design decisions made in the RFC and their rationale.
 
 | Decision | Resolution | Date | Recorder |
-|----------|------------|------|----------|
-| ... | ... | ... | ... |
+| -------- | ---------- | ---- | -------- |
+| ...      | ...        | ...  | ...      |
 
 ---
 
 ### Appendix C: Glossary
 
 | Term | Definition |
-|------|------------|
-| ... | ... |
+| ---- | ---------- |
+| ...  | ...        |
 
 ---
 

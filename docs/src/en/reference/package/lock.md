@@ -1,17 +1,19 @@
 ---
-title: "yaoxiang.lock Format"
-description: "Dependency lock file format specification"
+title: 'yaoxiang.lock Format'
+description: 'Dependency lock file format specification'
 ---
 
 # yaoxiang.lock Format
 
-`yaoxiang.lock` is YaoXiang's dependency lock file, recording precise version information for all dependencies.
+`yaoxiang.lock` is YaoXiang's dependency lock file, recording precise version information for all
+dependencies.
 
 ## Overview
 
 - **Auto-generated**: Created and updated automatically by `yaoxiang install` and `yaoxiang update`
 - **Do not edit manually**: This file is maintained by the package manager
-- **Should be committed to version control**: Ensures team members and CI builds use the same dependency versions
+- **Should be committed to version control**: Ensures team members and CI builds use the same
+  dependency versions
 
 ## File Structure
 
@@ -31,17 +33,17 @@ checksum = "checksum (optional)"
 
 ### [package] Section
 
-| Field | Type | Description |
-|-------|------|-------------|
+| Field     | Type    | Description                           |
+| --------- | ------- | ------------------------------------- |
 | `version` | integer | Lock file format version, currently 1 |
 
 ### [package.\<name\>] Section
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `version` | string | Resolved exact version number |
-| `source` | string | Dependency source: `registry`, `git`, `path` |
-| `checksum` | string | SHA-256 checksum (optional) |
+| Field      | Type   | Description                                  |
+| ---------- | ------ | -------------------------------------------- |
+| `version`  | string | Resolved exact version number                |
+| `source`   | string | Dependency source: `registry`, `git`, `path` |
+| `checksum` | string | SHA-256 checksum (optional)                  |
 
 ## Example
 
@@ -72,11 +74,11 @@ source = "git"
 
 ## Source Types
 
-| Type | Description | Configuration Example |
-|------|-------------|----------------------|
-| `registry` | Fetched from remote registry | `http = "1.0.0"` |
-| `git` | Fetched from Git repository | `{ git = "https://..." }` |
-| `path` | Fetched from local path | `{ path = "./lib" }` |
+| Type       | Description                  | Configuration Example     |
+| ---------- | ---------------------------- | ------------------------- |
+| `registry` | Fetched from remote registry | `http = "1.0.0"`          |
+| `git`      | Fetched from Git repository  | `{ git = "https://..." }` |
+| `path`     | Fetched from local path      | `{ path = "./lib" }`      |
 
 ## Relationship with Manifest
 

@@ -1,19 +1,24 @@
 ---
-title: "RFC 012: F-String Template Strings"
-status: "Accepted"
-author: "Chen Xu"
-created: "2025-01-27"
-updated: "2026-07-05"
-issue: "#124"
+title: 'RFC 012: F-String Template Strings'
+status: 'Accepted'
+author: 'Chen Xu'
+created: '2025-01-27'
+updated: '2026-07-05'
+issue: '#124'
 ---
 
 # RFC 012: F-String Template Strings
 
 ## Summary
 
-Add f-string template string support to the YaoXiang language, enabling variable interpolation, expression evaluation, and formatted output. F-strings use Python-style syntax (the `f"..."` prefix), embedding expressions in strings via the `{expression}` syntax, and are converted at compile-time to efficient string operations.
+Add f-string template string support to the YaoXiang language, enabling variable interpolation,
+expression evaluation, and formatted output. F-strings use Python-style syntax (the `f"..."`
+prefix), embedding expressions in strings via the `{expression}` syntax, and are converted at
+compile-time to efficient string operations.
 
-> **Note**: The f-string syntax and behavior are kept consistent with Python. For detailed specifications, refer to the [Python official documentation](https://docs.python.org/3/tutorial/inputoutput.html#formatted-string-literals).
+> **Note**: The f-string syntax and behavior are kept consistent with Python. For detailed
+> specifications, refer to the
+> [Python official documentation](https://docs.python.org/3/tutorial/inputoutput.html#formatted-string-literals).
 
 ## Motivation
 
@@ -34,7 +39,8 @@ message2 = format("Hello {}, age: {}", name, age)
 
 ### Current Issues
 
-1. **Poor readability**: String concatenation and formatting require multiple calls, making code verbose
+1. **Poor readability**: String concatenation and formatting require multiple calls, making code
+   verbose
 2. **Error-prone**: Manually handling type conversions makes it easy to miss `.to_string()`
 3. **Performance concerns**: Multiple string concatenations may impact performance
 4. **Insufficient expressiveness**: Cannot intuitively embed complex expressions in strings
@@ -44,6 +50,7 @@ message2 = format("Hello {}, age: {}", name, age)
 ### Core Design
 
 Introduce f-string as a new string literal prefix that supports:
+
 - **Variable interpolation**: `f"Hello {name}"`
 - **Expression evaluation**: `f"Sum: {x + y}"`
 - **Format specifiers**: `f"Pi: {pi:.2f}"`
@@ -76,11 +83,11 @@ bio = f"Name: {user.name}, age: {user.get_age()}"
 
 ### Syntax Changes
 
-| Before | After |
-|------|------|
-| `"Hello ".concat(name)` | `f"Hello {name}"` |
+| Before                       | After               |
+| ---------------------------- | ------------------- |
+| `"Hello ".concat(name)`      | `f"Hello {name}"`   |
 | `format("Value: {}", value)` | `f"Value: {value}"` |
-| `format("Pi: {:.2f}", pi)` | `f"Pi: {pi:.2f}"` |
+| `format("Pi: {:.2f}", pi)`   | `f"Pi: {pi:.2f}"`   |
 
 ### Syntax Specification
 
@@ -98,62 +105,76 @@ type            ::= 'b' | 'c' | 'd' | 'e' | 'E' | 'f' | 'F' | 'g' | 'G' | 'n' | 
 
 ### Syntax Analysis
 
-The compiler identifies the `f`-prefixed string literal during the lexical analysis phase, parsing expressions and optional format specifiers within curly braces.
+The compiler identifies the `f`-prefixed string literal during the lexical analysis phase, parsing
+expressions and optional format specifiers within curly braces.
 
 ### Conversion Strategy
 
 F-strings are converted at compile-time into efficient string operations:
 
 **Simple interpolation**:
+
 ```yaoxiang
 f"Hello {name}"
 ```
+
 Is converted to:
+
 ```yaoxiang
 "Hello ".concat(name.to_string())
 ```
 
 **Expression interpolation**:
+
 ```yaoxiang
 f"Sum: {x + y}"
 ```
+
 Is converted to:
+
 ```yaoxiang
 "Sum: ".concat((x + y).to_string())
 ```
 
 **Format specifier**:
+
 ```yaoxiang
 f"Pi: {pi:.2f}"
 ```
+
 Is converted to:
+
 ```yaoxiang
 format("Pi: {:.2f}", pi)
 ```
 
 **Multiple interpolations**:
+
 ```yaoxiang
 f"Hello {name}, you are {age} years old"
 ```
+
 Is converted to:
+
 ```yaoxiang
 "Hello ".concat(name.to_string()).concat(", you are ").concat(age.to_string()).concat(" years old")
 ```
 
 ### Type System Impact
 
-- Interpolated expressions must implement the `Stringable` interface (auto-implemented for primitive types and strings)
+- Interpolated expressions must implement the `Stringable` interface (auto-implemented for primitive
+  types and strings)
 - Format specifiers require the type to support the corresponding formatting
 - The compiler checks the match between expression types and format rules
 
 ### Compiler Changes
 
-| Component | Change |
-|------|------|
-| lexer | Recognize the `f` prefix and parse string interpolation syntax |
-| parser | Add new FStringLiteral syntax node |
-| typecheck | Check interpolated expression types and validate format rules |
-| codegen | Generate string concatenation or formatting call code |
+| Component | Change                                                         |
+| --------- | -------------------------------------------------------------- |
+| lexer     | Recognize the `f` prefix and parse string interpolation syntax |
+| parser    | Add new FStringLiteral syntax node                             |
+| typecheck | Check interpolated expression types and validate format rules  |
+| codegen   | Generate string concatenation or formatting call code          |
 
 ### Backward Compatibility
 
@@ -179,12 +200,12 @@ Is converted to:
 
 ## Alternatives
 
-| Approach | Why Not Chosen |
-|------|--------------|
-| Variable interpolation only | Cannot meet complex formatting needs |
-| Use a functional style `format(...)` | Syntax is not concise enough |
-| Defer to v2.0 | Users have clear demand for string convenience |
-| Use backticks or other prefixes | Inconsistent with the Python ecosystem |
+| Approach                             | Why Not Chosen                                 |
+| ------------------------------------ | ---------------------------------------------- |
+| Variable interpolation only          | Cannot meet complex formatting needs           |
+| Use a functional style `format(...)` | Syntax is not concise enough                   |
+| Defer to v2.0                        | Users have clear demand for string convenience |
+| Use backticks or other prefixes      | Inconsistent with the Python ecosystem         |
 
 ## Implementation Strategy
 
@@ -222,23 +243,30 @@ Is converted to:
 
 ## Open Questions
 
-- [x] Is escaped curly brace supported? Consistent with Python: use double curly braces for a single curly brace, e.g. <code v-pre>{{</code> represents <code v-pre>{</code>, and <code v-pre>}}</code> represents <code v-pre>}</code>
-- [x] Is custom format function supported? Consistent with Python: support customizing type formatting behavior via the `__format__` method
-- [x] Complete specification for format specifiers? Consistent with Python, see the BNF above for details
-- [x] Specific strategy for performance optimization? Consistent with Python: runtime concatenation, no special optimization needed
-- [x] Best practices for error diagnostics? Consistent with Python: display the original f-string content and position when reporting errors
+- [x] Is escaped curly brace supported? Consistent with Python: use double curly braces for a single
+      curly brace, e.g.
+      <code v-pre>{{</code> represents <code v-pre>{</code>, and <code v-pre>}}</code> represents
+      <code v-pre>}</code>
+- [x] Is custom format function supported? Consistent with Python: support customizing type
+      formatting behavior via the `__format__` method
+- [x] Complete specification for format specifiers? Consistent with Python, see the BNF above for
+      details
+- [x] Specific strategy for performance optimization? Consistent with Python: runtime concatenation,
+      no special optimization needed
+- [x] Best practices for error diagnostics? Consistent with Python: display the original f-string
+      content and position when reporting errors
 
 ## Appendix
 
 ### Appendix A: Format Specifier Reference
 
-| Type | Specifier | Example | Output |
-|------|--------|------|------|
-| Integer | `d` | `f"{42:d}"` | "42" |
-| Float | `f` | `f"{3.14:.2f}"` | "3.14" |
-| Scientific notation | `e` | `f"{1000:e}"` | "1.000000e+03" |
-| String | `s` | `f"{name:s}"` | "Alice" |
-| Hexadecimal | `x` | `f"{255:x}"` | "ff" |
+| Type                | Specifier | Example         | Output         |
+| ------------------- | --------- | --------------- | -------------- |
+| Integer             | `d`       | `f"{42:d}"`     | "42"           |
+| Float               | `f`       | `f"{3.14:.2f}"` | "3.14"         |
+| Scientific notation | `e`       | `f"{1000:e}"`   | "1.000000e+03" |
+| String              | `s`       | `f"{name:s}"`   | "Alice"        |
+| Hexadecimal         | `x`       | `f"{255:x}"`    | "ff"           |
 
 ### Appendix B: Use Case Examples
 

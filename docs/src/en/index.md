@@ -27,18 +27,24 @@ tracks:
     trackLabel: TRACK 01
     rfc: RFC-010
     title: Unified Syntax
-    description: "Minimalist philosophy. From variables to functions, all declarations follow the `name: type = value` pattern — lower learning cost, more consistent code."
+    description:
+      'Minimalist philosophy. From variables to functions, all declarations follow the `name: type =
+      value` pattern — lower learning cost, more consistent code.'
     features:
       - Extremely unified syntax declarations
       - Types are first-class citizens
   track02:
     rfc: RFC-011
     title: Zero-Cost Generics
-    description: "Generic specialization happens at compile-time, type abstraction brings no runtime overhead. Compile-time monomorphization. Dead code elimination. The type system is the macro."
+    description:
+      'Generic specialization happens at compile-time, type abstraction brings no runtime overhead.
+      Compile-time monomorphization. Dead code elimination. The type system is the macro.'
   track03:
     rfc: RFC-009
     title: Ownership Model
-    description: "Say goodbye to GC pauses. YaoXiang uses a scope-based ownership model — memory safety is determined at compile-time, no surprises."
+    description:
+      'Say goodbye to GC pauses. YaoXiang uses a scope-based ownership model — memory safety is
+      determined at compile-time, no surprises.'
     features:
       - Shared references
       - Predictable
@@ -47,17 +53,24 @@ tracks:
   track04:
     trackLabel: TRACK 04
     title: Decoupled Scheduler
-    description: "From microcontrollers to high-performance servers, the runtime adapts to the environment. Different scenarios choose different scheduling strategies, balancing performance and resources."
+    description:
+      'From microcontrollers to high-performance servers, the runtime adapts to the environment.
+      Different scenarios choose different scheduling strategies, balancing performance and
+      resources.'
     steps:
       - label: Embedded
-        sub: "Fully synchronous (Sync)"
+        sub: 'Fully synchronous (Sync)'
       - label: Standard
-        sub: "Automated concurrency management based on Directed Acyclic Graph (DAG) and lazy evaluation"
+        sub:
+          'Automated concurrency management based on Directed Acyclic Graph (DAG) and lazy
+          evaluation'
       - label: Full
-        sub: "Work stealing mechanism (WorkSteal)"
+        sub: 'Work stealing mechanism (WorkSteal)'
   track05:
     title: Language Specification v1.8
-    description: "Reject syntax sugar bombing. 17 keywords cover all features — no complex syntax sugar, only pure expressiveness."
+    description:
+      'Reject syntax sugar bombing. 17 keywords cover all features — no complex syntax sugar, only
+      pure expressiveness.'
 
 ---
 ```

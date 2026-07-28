@@ -1,24 +1,27 @@
 ---
-title: "RFC-014c: Workspace Support"
-status: "Under Review"
-author: "Chenxu"
-created: "2026-06-11"
-updated: "2026-07-05"
-group: "rfc-014"
-issue: "#113"
+title: 'RFC-014c: Workspace Support'
+status: 'Under Review'
+author: 'Chenxu'
+created: '2026-06-11'
+updated: '2026-07-05'
+group: 'rfc-014'
+issue: '#113'
 ---
 
 # RFC-014c: Workspace Support
 
-> This RFC is a sub-RFC of [RFC-014: Package Management System Design](../accepted/014-package-manager.md).
+> This RFC is a sub-RFC of
+> [RFC-014: Package Management System Design](../accepted/014-package-manager.md).
 
 ## Summary
 
-Define the workspace mechanism for YaoXiang: dependency sharing, path references, unified lockfile, and integration with Cargo workspace when developing multiple related packages together.
+Define the workspace mechanism for YaoXiang: dependency sharing, path references, unified lockfile,
+and integration with Cargo workspace when developing multiple related packages together.
 
 ## Motivation
 
 As projects grow in scale, code needs to be split into multiple packages. These packages need:
+
 - Cross-referencing (path dependencies)
 - Shared external dependency versions (to avoid version drift)
 - A unified lockfile (to ensure build consistency)
@@ -47,11 +50,14 @@ app = "packages/app/yaoxiang.toml"
 ```
 
 **The root toml only does three things:**
-1. Declare the member list (in dictionary form, where the key is the member name and the value is the toml path)
+
+1. Declare the member list (in dictionary form, where the key is the member name and the value is
+   the toml path)
 2. Provide a shared lockfile (`yaoxiang.lock`)
 3. Provide a shared vendor directory (`.yaoxiang/vendor/`)
 
-**The root toml does not define dependencies.** Each member's dependencies are written in its own `yaoxiang.toml`.
+**The root toml does not define dependencies.** Each member's dependencies are written in its own
+`yaoxiang.toml`.
 
 ### Member yaoxiang.toml
 
@@ -107,7 +113,8 @@ my-workspace/
 
 ### Workspace Dependency References
 
-`{ workspace = "member-name" }` references the **key** in `[workspace.members]` (not the member's `[package].name`).
+`{ workspace = "member-name" }` references the **key** in `[workspace.members]` (not the member's
+`[package].name`).
 
 ```toml
 # Root yaoxiang.toml
@@ -126,10 +133,12 @@ utils = { workspace = "utils" }   # ✅ References the key "utils"
 ```
 
 **Why use the key instead of the name:**
+
 - The key is controlled by the workspace and is stable and unique
 - `[package].name` is the public name and may change when published
 - The key is the key of a BTreeMap, which is unique by nature
-- At publish time, workspace references are replaced with version dependencies, so the key does not leak into the public API
+- At publish time, workspace references are replaced with version dependencies, so the key does not
+  leak into the public API
 
 ### Path Dependencies and Publishing
 
@@ -147,7 +156,9 @@ At publish time, they are automatically replaced with version dependencies:
 utils = "^0.2.0"
 ```
 
-**Version source:** Read the `[package].version` of the depended-on member, with a `^` prefix. The Registry is not consulted—the authoritative source of the version is the member's `yaoxiang.toml`; the Registry is merely a distribution channel.
+**Version source:** Read the `[package].version` of the depended-on member, with a `^` prefix. The
+Registry is not consulted—the authoritative source of the version is the member's `yaoxiang.toml`;
+the Registry is merely a distribution channel.
 
 The package manager automatically performs this replacement on `yaoxiang publish`.
 
@@ -182,16 +193,17 @@ my-workspace/
 
 ### CLI Commands
 
-| Command | Function |
-|------|------|
-| `yaoxiang workspace list` | List workspace members |
-| `yaoxiang workspace add <path>` | Add a member |
-| `yaoxiang workspace remove <name>` | Remove a member |
-| `yaoxiang build` | Build all members (sorted by dependency topology) |
-| `yaoxiang build core` | Build a specified member |
-| `yaoxiang test` | Run tests for all members |
+| Command                            | Function                                          |
+| ---------------------------------- | ------------------------------------------------- |
+| `yaoxiang workspace list`          | List workspace members                            |
+| `yaoxiang workspace add <path>`    | Add a member                                      |
+| `yaoxiang workspace remove <name>` | Remove a member                                   |
+| `yaoxiang build`                   | Build all members (sorted by dependency topology) |
+| `yaoxiang build core`              | Build a specified member                          |
+| `yaoxiang test`                    | Run tests for all members                         |
 
-**`yaoxiang build` behavior:** Builds all members, sorted by dependency topology. If core → utils → app, the build order is core → utils → app.
+**`yaoxiang build` behavior:** Builds all members, sorted by dependency topology. If core → utils →
+app, the build order is core → utils → app.
 
 ## Detailed Design
 
@@ -222,11 +234,13 @@ struct WorkspaceMember {
 }
 ```
 
-**Detection logic:** When loading the toml, if a `[workspace]` section exists, parse it as `WorkspaceManifest`; otherwise, parse it as `PackageManifest`.
+**Detection logic:** When loading the toml, if a `[workspace]` section exists, parse it as
+`WorkspaceManifest`; otherwise, parse it as `PackageManifest`.
 
 ### Workspace Dependency References
 
 The semantics of `{ workspace = "member-name" }`:
+
 - References another workspace member in `dependencies`
 - Resolves to a local path during development
 - Replaced with a Registry version at publish time
@@ -236,7 +250,8 @@ The semantics of `{ workspace = "member-name" }`:
 
 - The workspace has only one `yaoxiang.lock` (in the root directory)
 - All members' dependency resolutions are merged into the same lockfile
-- Version conflicts are reported as errors when the lockfile is generated, with information about the source of the conflict
+- Version conflicts are reported as errors when the lockfile is generated, with information about
+  the source of the conflict
 
 ## Trade-offs
 
@@ -255,23 +270,23 @@ The semantics of `{ workspace = "member-name" }`:
 
 ## Alternatives
 
-| Approach | Why Not Chosen |
-|------|-----------|
-| Independent projects + path dependencies | Lockfiles are not unified, risk of version drift |
-| npm workspaces style | npm's workspace has many issues, not worth imitating |
-| Direct reuse of Cargo workspace | YaoXiang and Cargo are different package ecosystems |
+| Approach                                 | Why Not Chosen                                       |
+| ---------------------------------------- | ---------------------------------------------------- |
+| Independent projects + path dependencies | Lockfiles are not unified, risk of version drift     |
+| npm workspaces style                     | npm's workspace has many issues, not worth imitating |
+| Direct reuse of Cargo workspace          | YaoXiang and Cargo are different package ecosystems  |
 
 ## Implementation Strategy
 
 ### Phasing
 
-| Phase | Content |
-|------|------|
-| Phase 6a | `[workspace.members]` parsing + WorkspaceManifest |
-| Phase 6b | Shared lockfile + merged dependency resolution |
-| Phase 6c | `{ workspace = "name" }` path dependency references |
+| Phase    | Content                                                    |
+| -------- | ---------------------------------------------------------- |
+| Phase 6a | `[workspace.members]` parsing + WorkspaceManifest          |
+| Phase 6b | Shared lockfile + merged dependency resolution             |
+| Phase 6c | `{ workspace = "name" }` path dependency references        |
 | Phase 6d | Automatic replacement of path dependencies at publish time |
-| Phase 6e | Cargo workspace integration |
+| Phase 6e | Cargo workspace integration                                |
 
 ### Dependencies
 

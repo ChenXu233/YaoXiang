@@ -2,50 +2,53 @@
 
 > This document is under construction...
 
-YaoXiang is currently in the **experimental verification stage**, with the standard library and API being progressively refined.
+YaoXiang is currently in the **experimental verification stage**, with the standard library and API
+being progressively refined.
 
 ## Language Specification
 
 - [Language Specification Overview](./language-spec/index.md)
-- [Syntax Specification](./language-spec/syntax.md) - Lexical structure, syntax rules, operator precedence
+- [Syntax Specification](./language-spec/syntax.md) - Lexical structure, syntax rules, operator
+  precedence
 - [Type System](./language-spec/type-system.md) - Primitive types, composite types, generics, trait
 - [Module System](./language-spec/modules.md) - Module definitions, imports/exports, scope
-- [Concurrency Model](./language-spec/concurrency.md) - Asynchronous programming, concurrency primitives, memory model
+- [Concurrency Model](./language-spec/concurrency.md) - Asynchronous programming, concurrency
+  primitives, memory model
 - [Standard Library](./language-spec/stdlib.md) - Core library, IO library, math library
 
 ## Current Status
 
-| Module | Status | Description |
-|------|------|------|
-| `std.io` | 🔨 Under Construction | Input/Output |
-| `std.string` | 🔨 Under Construction | String operations |
-| `std.list` | 🔨 Under Construction | List operations |
-| `std.dict` | 📋 Planned | Dictionary operations |
-| `std.math` | 🔨 Under Construction | Math functions |
-| `std.net` | 📋 Planned | Network operations |
-| `std.concurrent` | 📋 Planned | Concurrency primitives |
+| Module           | Status                | Description            |
+| ---------------- | --------------------- | ---------------------- |
+| `std.io`         | 🔨 Under Construction | Input/Output           |
+| `std.string`     | 🔨 Under Construction | String operations      |
+| `std.list`       | 🔨 Under Construction | List operations        |
+| `std.dict`       | 📋 Planned            | Dictionary operations  |
+| `std.math`       | 🔨 Under Construction | Math functions         |
+| `std.net`        | 📋 Planned            | Network operations     |
+| `std.concurrent` | 📋 Planned            | Concurrency primitives |
 
 ## Built-in Types
 
 ### Primitive Types
 
-| Type | Description | Examples |
-|------|------|------|
-| `Void` | Empty value / no return | `()` |
-| `Bool` | Boolean value | `true`, `false` |
-| `Int` | Integer | `42`, `-10` |
-| `Float` | Floating-point number | `3.14`, `-0.5` |
-| `Char` | Character | `'a'`, `'中'` |
-| `String` | String | `"hello"` |
+| Type     | Description             | Examples        |
+| -------- | ----------------------- | --------------- |
+| `Void`   | Empty value / no return | `()`            |
+| `Bool`   | Boolean value           | `true`, `false` |
+| `Int`    | Integer                 | `42`, `-10`     |
+| `Float`  | Floating-point number   | `3.14`, `-0.5`  |
+| `Char`   | Character               | `'a'`, `'中'`   |
+| `String` | String                  | `"hello"`       |
 
 ### Composite Types
 
-| Type | Description | Examples |
-|------|------|------|
-| `List(T)` | List of homogeneous elements | `[1, 2, 3]` |
+| Type                 | Description                     | Examples       |
+| -------------------- | ------------------------------- | -------------- |
+| `List(T)`            | List of homogeneous elements    | `[1, 2, 3]`    |
 | `Tuple(T1, T2, ...)` | Tuple of heterogeneous elements | `(1, "hello")` |
-| `Dict(K, V)` | Key-value mapping | `{"a": 1}` |
-| `(Args) -> Ret` | Function type | `(Int) -> Int` |
+| `Dict(K, V)`         | Key-value mapping               | `{"a": 1}`     |
+| `(Args) -> Ret`      | Function type                   | `(Int) -> Int` |
 
 ### User-defined Types
 
@@ -86,18 +89,18 @@ is_type(value, type)  // Checks type
 
 ## Keywords
 
-| Keyword | Description |
-|--------|------|
-| `Type` | Meta type |
-| `spawn` | Marks a spawn function |
-| `spawn for` | Parallel loop |
-| `spawn {}` | Spawn block |
-| `if` / `elif` / `else` | Conditional branch |
-| `match` | Pattern matching |
-| `while` / `for` | Loop |
-| `return` | Return value |
-| `ref` | Creates a reference |
-| `mut` | Mutable marker |
+| Keyword                | Description            |
+| ---------------------- | ---------------------- |
+| `Type`                 | Meta type              |
+| `spawn`                | Marks a spawn function |
+| `spawn for`            | Parallel loop          |
+| `spawn {}`             | Spawn block            |
+| `if` / `elif` / `else` | Conditional branch     |
+| `match`                | Pattern matching       |
+| `while` / `for`        | Loop                   |
+| `return`               | Return value           |
+| `ref`                  | Creates a reference    |
+| `mut`                  | Mutable marker         |
 
 ## Syntax Cheatsheet
 
@@ -159,17 +162,17 @@ data = fetch_file(path)?
 
 ## Operator Precedence
 
-| Precedence | Operator |
-|--------|--------|
-| Highest | `( )` Function call |
-| | `.` Field access |
-| | `[ ]` Index |
-| | `unary -` Unary minus |
-| | `* / %` Multiply, divide, modulo |
-| | `+ -` Add, subtract |
-| | `== != < > <= >=` Comparison |
-| | `and or` Logical operations |
-| Lowest | `=` Assignment |
+| Precedence | Operator                         |
+| ---------- | -------------------------------- |
+| Highest    | `( )` Function call              |
+|            | `.` Field access                 |
+|            | `[ ]` Index                      |
+|            | `unary -` Unary minus            |
+|            | `* / %` Multiply, divide, modulo |
+|            | `+ -` Add, subtract              |
+|            | `== != < > <= >=` Comparison     |
+|            | `and or` Logical operations      |
+| Lowest     | `=` Assignment                   |
 
 ## Standard Library Usage Examples
 

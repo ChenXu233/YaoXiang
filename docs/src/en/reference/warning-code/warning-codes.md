@@ -1,11 +1,12 @@
 ---
-title: "Warning Codes"
+title: 'Warning Codes'
 description: Compiler warning codes and their explanations
 ---
 
 # Warning Codes
 
-This document lists the warning codes that the YaoXiang compiler may produce. Warnings do not prevent compilation, but may indicate potential issues in the code.
+This document lists the warning codes that the YaoXiang compiler may produce. Warnings do not
+prevent compilation, but may indicate potential issues in the code.
 
 ## Configuration
 
@@ -36,8 +37,10 @@ main = {
 ```
 
 **Suggestions**:
+
 - If the function does not need to be used externally, remove the `pub` modifier
-- If the function needs to be kept but is currently unused, you can set `dead-code = "off"` in the configuration
+- If the function needs to be kept but is currently unused, you can set `dead-code = "off"` in the
+  configuration
 
 ---
 
@@ -46,6 +49,7 @@ main = {
 **Reason**: An exported type (type alias or custom type) is never used.
 
 **Example**:
+
 ```yaoxiang
 DeadType: Type = Int  // W1002: unused exported type
 
@@ -55,6 +59,7 @@ main = {
 ```
 
 **Suggestions**:
+
 - If the type needs to be exported but is currently unused, ignore this warning
 
 ---
@@ -72,8 +77,10 @@ main = {
 ```
 
 **Suggestions**:
+
 - Remove unused imports to keep the code clean
-- If the import needs to be kept (for side effects), consider using `use std.json.*` or adding a comment explaining why
+- If the import needs to be kept (for side effects), consider using `use std.json.*` or adding a
+  comment explaining why
 
 ---
 
@@ -82,6 +89,7 @@ main = {
 **Reason**: A variable exported with `pub` is never read.
 
 **Example**:
+
 ```yaoxiang
 pub dead_var = 42  // W1004: unused exported variable
 
@@ -91,6 +99,7 @@ main = {
 ```
 
 **Suggestions**:
+
 - Remove unnecessary `pub` modifiers
 - If the variable needs to be exported but is currently unused, ignore this warning
 
@@ -101,6 +110,7 @@ main = {
 **Reason**: A method exported on a type is never called.
 
 **Example**:
+
 ```yaoxiang
 Foo: Type = { value: Int }
 
@@ -113,6 +123,7 @@ main = {
 ```
 
 **Suggestions**:
+
 - Remove unnecessary `pub` modifiers
 - If the method needs to be kept but is currently unused, ignore this warning
 
@@ -120,11 +131,11 @@ main = {
 
 ## Warning Levels Explained
 
-| Level | Effect |
-|------|------|
-| `off` | Completely disable this warning |
+| Level  | Effect                                                 |
+| ------ | ------------------------------------------------------ |
+| `off`  | Completely disable this warning                        |
 | `warn` | Display the warning but continue compilation (default) |
-| `deny` | Treat the warning as an error and prevent compilation |
+| `deny` | Treat the warning as an error and prevent compilation  |
 
 ### Usage Scenarios
 

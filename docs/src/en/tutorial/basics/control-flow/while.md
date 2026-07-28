@@ -4,7 +4,8 @@ title: while Loop
 
 # while Loop
 
-`for` is suited for scenarios where you **iterate over a known collection**, while `while` fits another situation—**you don't know how many times to loop, only when to stop**.
+`for` is suited for scenarios where you **iterate over a known collection**, while `while` fits
+another situation—**you don't know how many times to loop, only when to stop**.
 
 ## Basic Syntax
 
@@ -14,7 +15,8 @@ The definition of a `while` statement in the syntax specification:
 while Expr Block
 ```
 
-The structure is simple: `while` is followed by a condition expression, then the loop body block. As long as the condition is `true`, the loop body keeps executing.
+The structure is simple: `while` is followed by a condition expression, then the loop body block. As
+long as the condition is `true`, the loop body keeps executing.
 
 ```yaoxiang
 mut count = 1
@@ -26,7 +28,9 @@ while count <= 5 {
 // Output: 1 2 3 4 5
 ```
 
-Note that we declare the variable with `mut count`—because `count` needs to be modified inside the loop. If we wrote `count = 1` (immutable), the `count = count + 1` in the loop body would cause an error.
+Note that we declare the variable with `mut count`—because `count` needs to be modified inside the
+loop. If we wrote `count = 1` (immutable), the `count = count + 1` in the loop body would cause an
+error.
 
 ## while Execution Flow
 
@@ -36,7 +40,8 @@ The execution steps of a `while` loop are as follows:
 2. If the condition is `true`, execute the loop body, then go back to step 1
 3. If the condition is `false`, end the loop and continue executing the code after it
 
-The condition is checked **before each iteration begins**. If the condition is `false` from the start, the loop body won't execute even once:
+The condition is checked **before each iteration begins**. If the condition is `false` from the
+start, the loop body won't execute even once:
 
 ```yaoxiang
 mut n = 0
@@ -49,7 +54,8 @@ while n > 0 {
 
 ## break: Exit the Loop Early
 
-Sometimes you need to exit the loop midway—for example, when you've found what you were searching for:
+Sometimes you need to exit the loop midway—for example, when you've found what you were searching
+for:
 
 ```yaoxiang
 numbers = [3, 7, 2, 9, 5]
@@ -67,11 +73,13 @@ while index < 5 {
 print("Found it? " + found.to_string())  // "Found it? true"
 ```
 
-`break` makes the program immediately jump out of the current loop and continue executing the code after the loop.
+`break` makes the program immediately jump out of the current loop and continue executing the code
+after the loop.
 
 ## continue: Skip the Current Iteration
 
-`continue` is different from `break`—it doesn't exit the loop, but instead skips the rest of the current iteration and goes directly to the next condition check:
+`continue` is different from `break`—it doesn't exit the loop, but instead skips the rest of the
+current iteration and goes directly to the next condition check:
 
 ```yaoxiang
 mut n = 0
@@ -85,11 +93,13 @@ while n < 5 {
 // Output: 1 2 4 5
 ```
 
-In this code, when `n` equals 3, `continue` skips `println(n)` and goes back to `while n < 5` to check the condition.
+In this code, when `n` equals 3, `continue` skips `println(n)` and goes back to `while n < 5` to
+check the condition.
 
 ## Avoiding Infinite Loops
 
-When using `while`, you must pay special attention—make sure the loop condition eventually becomes `false`, otherwise the program will hang forever:
+When using `while`, you must pay special attention—make sure the loop condition eventually becomes
+`false`, otherwise the program will hang forever:
 
 ```yaoxiang
 // Danger! Infinite loop—the condition is always true
@@ -108,7 +118,8 @@ while x <= 5 {
 
 ## Using while to Read Input
 
-A classic use case for `while` is handling input of unknown length—you don't know how many times the user will input, only that "when the input is empty, stop":
+A classic use case for `while` is handling input of unknown length—you don't know how many times the
+user will input, only that "when the input is empty, stop":
 
 ```yaoxiang
 // Pseudocode example—demonstrating a typical use of while
@@ -120,17 +131,19 @@ while line != "" {
 }
 ```
 
-This pattern of "check condition → process data → update condition" is the core usage paradigm of `while`.
+This pattern of "check condition → process data → update condition" is the core usage paradigm of
+`while`.
 
 ## Summary
 
-| Key Point | Description |
-|------|------|
-| Use Case | When the number of iterations is unknown, only the termination condition is known |
-| Syntax | `while condition { ... }` |
-| Execution Flow | Check condition first, then execute the loop body |
-| `break` | Immediately exit the loop |
-| `continue` | Skip the current iteration and go back to the condition check |
-| Caution | Ensure the condition eventually becomes `false` to avoid infinite loops |
+| Key Point      | Description                                                                       |
+| -------------- | --------------------------------------------------------------------------------- |
+| Use Case       | When the number of iterations is unknown, only the termination condition is known |
+| Syntax         | `while condition { ... }`                                                         |
+| Execution Flow | Check condition first, then execute the loop body                                 |
+| `break`        | Immediately exit the loop                                                         |
+| `continue`     | Skip the current iteration and go back to the condition check                     |
+| Caution        | Ensure the condition eventually becomes `false` to avoid infinite loops           |
 
-In the next chapter, you'll learn the basics of `match`—YaoXiang's most powerful branching control tool.
+In the next chapter, you'll learn the basics of `match`—YaoXiang's most powerful branching control
+tool.

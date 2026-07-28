@@ -1,6 +1,6 @@
 ---
-title: "Command Line Interface"
-description: "Detailed description of all package manager commands"
+title: 'Command Line Interface'
+description: 'Detailed description of all package manager commands'
 ---
 
 # Command Line Interface
@@ -17,14 +17,14 @@ yaoxiang init <project-name>
 
 ### Arguments
 
-| Argument | Description |
-|----------|-------------|
+| Argument     | Description             |
+| ------------ | ----------------------- |
 | project-name | Name of the new project |
 
 ### Options
 
-| Option | Description |
-|--------|-------------|
+| Option   | Description              |
+| -------- | ------------------------ |
 | `--help` | Display help information |
 
 ### Examples
@@ -56,15 +56,15 @@ yaoxiang add <package-name> --dev
 
 ### Arguments
 
-| Argument | Description |
-|----------|-------------|
-| package-name | Name of the dependency to add |
-| version | Version number (optional, defaults to `*`) |
+| Argument     | Description                                |
+| ------------ | ------------------------------------------ |
+| package-name | Name of the dependency to add              |
+| version      | Version number (optional, defaults to `*`) |
 
 ### Options
 
-| Option | Description |
-|--------|-------------|
+| Option        | Description             |
+| ------------- | ----------------------- |
 | `--dev`, `-D` | Add as a dev dependency |
 
 ### Examples
@@ -99,14 +99,14 @@ yaoxiang rm <package-name> --dev
 
 ### Arguments
 
-| Argument | Description |
-|----------|-------------|
+| Argument     | Description                      |
+| ------------ | -------------------------------- |
 | package-name | Name of the dependency to remove |
 
 ### Options
 
-| Option | Description |
-|--------|-------------|
+| Option        | Description             |
+| ------------- | ----------------------- |
 | `--dev`, `-D` | Remove a dev dependency |
 
 ### Examples
@@ -166,8 +166,8 @@ yaoxiang update <package-name>
 
 ### Arguments
 
-| Argument | Description |
-|----------|-------------|
+| Argument     | Description                              |
+| ------------ | ---------------------------------------- |
 | package-name | Specific dependency to update (optional) |
 
 ### Description

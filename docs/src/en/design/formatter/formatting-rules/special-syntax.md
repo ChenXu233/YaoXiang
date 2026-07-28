@@ -1,6 +1,6 @@
 ---
-title: "Special Syntax Rules"
-description: "Formatting rules for F-Strings, import statements, error handling, and Unsafe blocks"
+title: 'Special Syntax Rules'
+description: 'Formatting rules for F-Strings, import statements, error handling, and Unsafe blocks'
 ---
 
 # Special Syntax Rules
@@ -28,7 +28,8 @@ let msg = f"{value:.2f}";
 
 ## §14 Import Statements
 
-**§14.1 Import Sorting.** When `sort_imports = true`, import statements are sorted in the following order:
+**§14.1 Import Sorting.** When `sort_imports = true`, import statements are sorted in the following
+order:
 
 1. Standard library (`std`, `core`, `alloc`)
 2. External crates

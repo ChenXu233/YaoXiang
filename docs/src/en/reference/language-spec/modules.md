@@ -1,6 +1,7 @@
 # Module System Specification
 
-This document defines the module system specification of the YaoXiang programming language, including module definition, import/export, and scope.
+This document defines the module system specification of the YaoXiang programming language,
+including module definition, import/export, and scope.
 
 ---
 
@@ -39,12 +40,12 @@ AliasList    ::= Identifier (',' Identifier)*
 
 ### 2.2 Import Methods
 
-| Syntax | Description | Example |
-|------|------|------|
-| `use path;` | Import the module, access via the last part | `use std.io;` -> `io.print` |
-| `use path.{a, b};` | Import specific items | `use std.io.{print};` -> `print` |
-| `use path as alias;` | Import and rename | `use std.io as io;` -> `io.print` |
-| `use path.{i1, i2} as a, b;` | Import specific items and rename | `use std.io.{print, read} as p, r;` -> `p`, `r` |
+| Syntax                       | Description                                 | Example                                         |
+| ---------------------------- | ------------------------------------------- | ----------------------------------------------- |
+| `use path;`                  | Import the module, access via the last part | `use std.io;` -> `io.print`                     |
+| `use path.{a, b};`           | Import specific items                       | `use std.io.{print};` -> `print`                |
+| `use path as alias;`         | Import and rename                           | `use std.io as io;` -> `io.print`               |
+| `use path.{i1, i2} as a, b;` | Import specific items and rename            | `use std.io.{print, read} as p, r;` -> `p`, `r` |
 
 ### 2.3 Import Examples
 
@@ -91,7 +92,8 @@ internal_value: Int = 42
 
 ### 3.3 Automatic `pub` Binding
 
-For functions declared with `pub`, the compiler automatically binds them to the type defined in the same file:
+For functions declared with `pub`, the compiler automatically binds them to the type defined in the
+same file:
 
 ```yaoxiang
 // Declared with pub, the compiler binds automatically
@@ -139,9 +141,11 @@ add: (a: Int, b: Int) -> Int = {
 
 ### 4.3 Variable Declaration and Shadowing
 
-YaoXiang has no `let` keyword. Is `x = value` a declaration or an assignment? One principle is followed:
+YaoXiang has no `let` keyword. Is `x = value` a declaration or an assignment? One principle is
+followed:
 
-**Assignment takes priority.** Declaration happens only once, but assignment happens hundreds of times. Let high-frequency operations take the shortest path.
+**Assignment takes priority.** Declaration happens only once, but assignment happens hundreds of
+times. Let high-frequency operations take the shortest path.
 
 ```
 x = value:
@@ -177,7 +181,10 @@ mut z = 20          // E2002: 'z' is already defined in this scope (mut cannot o
 
 #### Rebinding After Move
 
-If an immutable variable owns the value, when its value is moved (consumed), the original binding enters the **moved** state—the name still occupies the scope slot, but the value is no longer accessible. At this point, `x = value` is not modifying the old binding, but re-declaring `x` in the same scope.
+If an immutable variable owns the value, when its value is moved (consumed), the original binding
+enters the **moved** state—the name still occupies the scope slot, but the value is no longer
+accessible. At this point, `x = value` is not modifying the old binding, but re-declaring `x` in the
+same scope.
 
 ```
 The "moved" branch for assignment-priority lookup:
@@ -186,7 +193,8 @@ The "moved" branch for assignment-priority lookup:
     → Re-declare x in the current scope (overwrites the old moved slot)
 ```
 
-**Core mechanism:** After the old value is consumed, the binding becomes invalid, and the name returns to a "declarable" state. This is not shadowing—the old binding no longer exists.
+**Core mechanism:** After the old value is consumed, the binding becomes invalid, and the name
+returns to a "declarable" state. This is not shadowing—the old binding no longer exists.
 
 ```yaoxiang
 // Pipeline-style data flow: each step consumes the old value and produces a new one
@@ -204,19 +212,25 @@ process(data3)
 
 **Semantic separation:**
 
-| Operation | Meaning | Mechanism | Syntax |
-|------|------|------|------|
-| **Rebinding** | Old value disappears, new value is born | move + re-declare | `x = f(x)` |
-| **In-place modification** | The value at the same memory location changes | mut assignment | `mut x; x = v` |
+| Operation                 | Meaning                                       | Mechanism         | Syntax         |
+| ------------------------- | --------------------------------------------- | ----------------- | -------------- |
+| **Rebinding**             | Old value disappears, new value is born       | move + re-declare | `x = f(x)`     |
+| **In-place modification** | The value at the same memory location changes | mut assignment    | `mut x; x = v` |
 
 **Why this differs from shadowing:**
-- Shadowing (Rust's `let x = ...`): the old binding still exists, it's just covered by the new binding
-- Rebinding after move: the old binding has been consumed, the name returns to an uninitialized state, re-declaration is the only way out
+
+- Shadowing (Rust's `let x = ...`): the old binding still exists, it's just covered by the new
+  binding
+- Rebinding after move: the old binding has been consumed, the name returns to an uninitialized
+  state, re-declaration is the only way out
 
 **Constraints:**
+
 - Only values that own can be moved. References (`&T`, `&mut T`) are copied, not moved
-- Move checking is done at compile-time; reading a variable in the moved state in any expression raises E2014
-- IDE can display a grayed-out hint on moved variables, indicating that the name is in an uninitialized state
+- Move checking is done at compile-time; reading a variable in the moved state in any expression
+  raises E2014
+- IDE can display a grayed-out hint on moved variables, indicating that the name is in an
+  uninitialized state
 
 ```yaoxiang
 // Reading after move → error
@@ -318,12 +332,12 @@ for i in 1..5 {
 
 #### Related Error Codes
 
-| Error Code | Message | Trigger Scenario |
-|--------|------|----------|
-| E2002 | `'{name}' is already defined in this scope` | Duplicate declaration in the same scope (whether mut or not) |
-| E2010 | `Cannot assign to immutable variable '{name}'` | Inner without `mut` assignment, outer variable is immutable and not moved |
-| E2013 | `Cannot shadow existing variable '{name}'` | Inner explicit declaration (`mut x` or `x: Type`) shares name with outer |
-| E2014 | `'{name}' has been moved and cannot be used` | Reading a variable that has been moved |
+| Error Code | Message                                        | Trigger Scenario                                                          |
+| ---------- | ---------------------------------------------- | ------------------------------------------------------------------------- |
+| E2002      | `'{name}' is already defined in this scope`    | Duplicate declaration in the same scope (whether mut or not)              |
+| E2010      | `Cannot assign to immutable variable '{name}'` | Inner without `mut` assignment, outer variable is immutable and not moved |
+| E2013      | `Cannot shadow existing variable '{name}'`     | Inner explicit declaration (`mut x` or `x: Type`) shares name with outer  |
+| E2014      | `'{name}' has been moved and cannot be used`   | Reading a variable that has been moved                                    |
 
 ---
 

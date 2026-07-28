@@ -1,5 +1,6 @@
-title: "Специальные правила синтаксиса"
-description: Правила форматирования F-String, операторов импорта, обработки ошибок и блоков Unsafe
+title: "Специальные правила синтаксиса" description: Правила форматирования F-String, операторов
+импорта, обработки ошибок и блоков Unsafe
+
 ```
 
 # Специальные правила синтаксиса
@@ -11,16 +12,17 @@ description: Правила форматирования F-String, операт�
 **§13.1 Формат F-String.** F-String использует формат `f"..."`, интерполяция с помощью `{expr}`.
 
 ```
-// ✅ Правильно
-let msg = f"Hello, {name}!";
-let msg = f"Result: {x + y}";
+
+// ✅ Правильно let msg = f"Hello, {name}!"; let msg = f"Result: {x + y}";
+
 ```
 
 **§13.2 Спецификаторы формата.** F-String поддерживает спецификаторы формата `{expr:spec}`.
 
 ```
-// ✅ Правильно
-let msg = f"{value:.2f}";
+
+// ✅ Правильно let msg = f"{value:.2f}";
+
 ```
 
 ---
@@ -36,17 +38,11 @@ let msg = f"{value:.2f}";
 **§14.2 Сортировка внутри группы.** Импорты внутри одной группы сортируются по алфавиту.
 
 ```
-// До сортировки
-use z_crate;
-use std::collections;
-use a_crate;
-use ./local;
 
-// После сортировки
-use std::collections;
-use a_crate;
-use z_crate;
-use ./local;
+// До сортировки use z_crate; use std::collections; use a_crate; use ./local;
+
+// После сортировки use std::collections; use a_crate; use z_crate; use ./local;
+
 ```
 
 ---
@@ -56,11 +52,11 @@ use ./local;
 **§17.1 Оператор Try.** Использует формат `expr?`.
 
 ```
-// ✅ Правильно
-let x = foo()?;
 
-// ❌ Неправильно
-let x = foo() ?;
+// ✅ Правильно let x = foo()?;
+
+// ❌ Неправильно let x = foo() ?;
+
 ```
 
 ---
@@ -70,9 +66,11 @@ let x = foo() ?;
 **§18.1 Формат Unsafe.** Использует формат `unsafe { ... }`.
 
 ```
-// ✅ Правильно
-let x = unsafe { dangerous_function() };
 
-// ❌ Неправильно
-let x = unsafe{ dangerous_function() };
+// ✅ Правильно let x = unsafe { dangerous_function() };
+
+// ❌ Неправильно let x = unsafe{ dangerous_function() };
+
+```
+
 ```

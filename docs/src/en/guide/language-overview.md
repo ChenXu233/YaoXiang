@@ -4,7 +4,8 @@ title: Syntax Cheatsheet
 
 # Syntax Cheatsheet
 
-Understand YaoXiang's core syntax in 5 minutes. For in-depth learning, visit the [Tutorial](/tutorial/).
+Understand YaoXiang's core syntax in 5 minutes. For in-depth learning, visit the
+[Tutorial](/tutorial/).
 
 ## Variables
 

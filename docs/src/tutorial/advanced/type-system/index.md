@@ -4,19 +4,20 @@ title: 类型系统
 
 # 类型系统
 
-在基础教程中你学会了使用 `Int`、`String`、`Bool` 等内置类型。本章深入 YaoXiang 的类型系统，学会**定义自己的类型**。
+在基础教程中你学会了使用 `Int`、`String`、`Bool`
+等内置类型。本章深入 YaoXiang 的类型系统，学会**定义自己的类型**。
 
 ## 统一语法模型
 
 YaoXiang 的类型系统建立在 RFC-010 定义的统一语法之上：**一切皆 `name: type = value`**。
 
-| 概念 | 写法 |
-|------|------|
-| 变量 | `x: Int = 42` |
-| 函数 | `add: (a: Int, b: Int) -> Int = a + b` |
-| 记录类型 | `Point: Type = { x: Float, y: Float }` |
-| 接口 | `Drawable: Type = { draw: (Surface) -> Void }` |
-| 泛型类型 | `List: (T: Type) -> Type = { ... }` |
+| 概念     | 写法                                           |
+| -------- | ---------------------------------------------- |
+| 变量     | `x: Int = 42`                                  |
+| 函数     | `add: (a: Int, b: Int) -> Int = a + b`         |
+| 记录类型 | `Point: Type = { x: Float, y: Float }`         |
+| 接口     | `Drawable: Type = { draw: (Surface) -> Void }` |
+| 泛型类型 | `List: (T: Type) -> Type = { ... }`            |
 
 注意：**类型定义本身也是 `name: Type = value`**。
 
@@ -189,11 +190,11 @@ print(doubled)  // [2, 4, 6, 8]
 
 ## 小结
 
-| 概念 | 语法 | 用途 |
-|------|------|------|
-| 记录类型 | `Point: Type = { x: Float, y: Float }` | 组织相关数据 |
-| 枚举 | `Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }` | 多选一 |
-| 接口 | `Drawable: Type = { draw: ... }` | 多态抽象 |
-| 泛型 | `List: (T: Type) -> Type = { ... }` | 类型参数化 |
-| Never | `Never` 是系统内建底类型 | 发散/永不返回的代码路径 |
-| 方法 | `Type.method: (self: Type, ...) -> ...` | 行为附加 |
+| 概念     | 语法                                                                        | 用途                    |
+| -------- | --------------------------------------------------------------------------- | ----------------------- |
+| 记录类型 | `Point: Type = { x: Float, y: Float }`                                      | 组织相关数据            |
+| 枚举     | `Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }` | 多选一                  |
+| 接口     | `Drawable: Type = { draw: ... }`                                            | 多态抽象                |
+| 泛型     | `List: (T: Type) -> Type = { ... }`                                         | 类型参数化              |
+| Never    | `Never` 是系统内建底类型                                                    | 发散/永不返回的代码路径 |
+| 方法     | `Type.method: (self: Type, ...) -> ...`                                     | 行为附加                |

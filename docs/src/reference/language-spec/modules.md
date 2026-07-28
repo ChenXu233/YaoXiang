@@ -39,12 +39,12 @@ AliasList    ::= Identifier (',' Identifier)*
 
 ### 2.2 导入方式
 
-| 语法 | 说明 | 示例 |
-|------|------|------|
-| `use path;` | 导入模块，使用最后部分访问 | `use std.io;` -> `io.print` |
-| `use path.{a, b};` | 导入指定项 | `use std.io.{print};` -> `print` |
-| `use path as alias;` | 导入并重命名 | `use std.io as io;` -> `io.print` |
-| `use path.{i1, i2} as a, b;` | 导入指定项并重命名 | `use std.io.{print, read} as p, r;` -> `p`, `r` |
+| 语法                         | 说明                       | 示例                                            |
+| ---------------------------- | -------------------------- | ----------------------------------------------- |
+| `use path;`                  | 导入模块，使用最后部分访问 | `use std.io;` -> `io.print`                     |
+| `use path.{a, b};`           | 导入指定项                 | `use std.io.{print};` -> `print`                |
+| `use path as alias;`         | 导入并重命名               | `use std.io as io;` -> `io.print`               |
+| `use path.{i1, i2} as a, b;` | 导入指定项并重命名         | `use std.io.{print, read} as p, r;` -> `p`, `r` |
 
 ### 2.3 导入示例
 
@@ -177,7 +177,9 @@ mut z = 20          // E2002：'z' 已在此作用域定义（mut 不能覆盖�
 
 #### Move 后重新绑定
 
-不可变变量如果拥有所有权，当它的值被 move（消耗）后，原绑定进入 **moved** 状态——名字仍然占据作用域槽位，但值已不可访问。此时 `x = value` 不是修改旧绑定，而是在同一作用域内重新声明 `x`。
+不可变变量如果拥有所有权，当它的值被 move（消耗）后，原绑定进入 **moved**
+状态——名字仍然占据作用域槽位，但值已不可访问。此时 `x = value`
+不是修改旧绑定，而是在同一作用域内重新声明 `x`。
 
 ```
 赋值优先查找的"已 moved"分支：
@@ -204,16 +206,18 @@ process(data3)
 
 **语义分离：**
 
-| 操作 | 含义 | 机制 | 语法 |
-|------|------|------|------|
-| **重新绑定** | 旧值消失，新值诞生 | move + 重新声明 | `x = f(x)` |
-| **原地修改** | 同一内存位置的值变化 | mut 赋值 | `mut x; x = v` |
+| 操作         | 含义                 | 机制            | 语法           |
+| ------------ | -------------------- | --------------- | -------------- |
+| **重新绑定** | 旧值消失，新值诞生   | move + 重新声明 | `x = f(x)`     |
+| **原地修改** | 同一内存位置的值变化 | mut 赋值        | `mut x; x = v` |
 
 **为什么这不同于遮蔽：**
+
 - 遮蔽（Rust 的 `let x = ...`）：旧绑定仍然存在，只是被新绑定遮住了
 - Move 后重新绑定：旧绑定已被消耗，名字回归未初始化状态，重新声明是唯一出路
 
 **约束：**
+
 - 只有拥有所有权的值才能被 move。引用（`&T`、`&mut T`）被复制而非移动
 - Move 检查是编译期完成的，moved 状态的变量在任何表达式中被读取都会报 E2014
 - IDE 可以在 moved 变量上显示灰色提示，表明该名字处于未初始化状态
@@ -318,12 +322,12 @@ for i in 1..5 {
 
 #### 相关错误码
 
-| 错误码 | 消息 | 触发场景 |
-|--------|------|----------|
-| E2002 | `'{name}' is already defined in this scope` | 同作用域重复声明（无论 mut 与否） |
-| E2010 | `Cannot assign to immutable variable '{name}'` | 内层无 `mut` 赋值时，外层变量不可变且未 moved |
-| E2013 | `Cannot shadow existing variable '{name}'` | 内层显式声明（`mut x` 或 `x: Type`）与外层同名 |
-| E2014 | `'{name}' has been moved and cannot be used` | 读取已 moved 的变量 |
+| 错误码 | 消息                                           | 触发场景                                       |
+| ------ | ---------------------------------------------- | ---------------------------------------------- |
+| E2002  | `'{name}' is already defined in this scope`    | 同作用域重复声明（无论 mut 与否）              |
+| E2010  | `Cannot assign to immutable variable '{name}'` | 内层无 `mut` 赋值时，外层变量不可变且未 moved  |
+| E2013  | `Cannot shadow existing variable '{name}'`     | 内层显式声明（`mut x` 或 `x: Type`）与外层同名 |
+| E2014  | `'{name}' has been moved and cannot be used`   | 读取已 moved 的变量                            |
 
 ---
 

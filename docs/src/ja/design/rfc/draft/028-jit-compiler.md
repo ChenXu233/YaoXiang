@@ -1,22 +1,25 @@
 ---
-title: "RFC-028：JIT コンパイラ — VM 内マルチレベル実行エンジン"
-status: "ドラフト"
-author: "晨煦"
-created: "2026-06-11"
-updated: "2026-07-05"
-issue: "#101"
+title: 'RFC-028：JIT コンパイラ — VM 内マルチレベル実行エンジン'
+status: 'ドラフト'
+author: '晨煦'
+created: '2026-06-11'
+updated: '2026-07-05'
+issue: '#101'
 ---
 
 # RFC-028：JIT コンパイラ — VM 内マルチレベル実行エンジン
 
 > **参考**:
+>
 > - [RFC-018：LLVM AOT コンパイラ設計](../review/018-llvm-aot-compiler.md)
 > - [RFC-024：spawn ブロックに基づく並行モデル](../accepted/024-concurrency-model.md)
 > - [RFC-008：Runtime 並行モデルとスケジューラの疎結合設計](../accepted/008-runtime-concurrency-model.md)
 
 ## 概要
 
-本文書では、YaoXiang の VM バックエンドに Cranelift JIT コンパイラを導入し、VM を純粋なインタープリタから**マルチレベル実行エンジン**へ昇格させることを提案する。コールドコードはインタープリタで実行し、ホット関数は Cranelift でネイティブコードにコンパイルされる。JIT パスは RFC-018 の LLVM AOT パスと IR 正規化パスを共有し、Cranelift は JIT の高速コンパイルを担当し、LLVM は AOT の深い最適化を担当する。互いの長所を活用する。
+本文書では、YaoXiang の VM バックエンドに Cranelift
+JIT コンパイラを導入し、VM を純粋なインタープリタから**マルチレベル実行エンジン**へ昇格させることを提案する。コールドコードはインタープリタで実行し、ホット関数は Cranelift でネイティブコードにコンパイルされる。JIT パスは RFC-018 の LLVM
+AOT パスと IR 正規化パスを共有し、Cranelift は JIT の高速コンパイルを担当し、LLVM は AOT の深い最適化を担当する。互いの長所を活用する。
 
 **核心的な位置付け：JIT は VM に奉仕するものであり、VM を代替するものではない。**
 
@@ -28,16 +31,18 @@ issue: "#101"
 
 ### なぜ LLVM AOT だけでは不十分なのか？
 
-LLVM AOT のコンパイルは時間がかかる（秒単位）ため、開発イテレーションには適していない。開発には「変更して即実行する」体験が求められる：1 行のコードを変更 → 再実行 → ほぼ即座に結果を確認。Cranelift JIT なら 1 関数あたり 1〜5ms しかかからず、ユーザーにはコンパイル遅延を感じさせない。
+LLVM
+AOT のコンパイルは時間がかかる（秒単位）ため、開発イテレーションには適していない。開発には「変更して即実行する」体験が求められる：1 行のコードを変更 → 再実行 → ほぼ即座に結果を確認。Cranelift
+JIT なら 1 関数あたり 1〜5ms しかかからず、ユーザーにはコンパイル遅延を感じさせない。
 
 ### なぜ Cranelift であって LLVM ORC JIT ではないのか？
 
-| 次元 | Cranelift JIT | LLVM ORC JIT |
-|------|--------------|--------------|
-| コンパイル速度 | 1〜5ms/関数 | 10〜100ms/関数 |
-| 依存サイズ | 小 | 大（完全な LLVM が必要） |
-| コード品質 | LLVM -O2 の 70〜80% | 極めて高い |
-| 適用シナリオ | 開発デバッグ、高速イテレーション | 適用不可（本稿のトレードオフ参照） |
+| 次元           | Cranelift JIT                    | LLVM ORC JIT                       |
+| -------------- | -------------------------------- | ---------------------------------- |
+| コンパイル速度 | 1〜5ms/関数                      | 10〜100ms/関数                     |
+| 依存サイズ     | 小                               | 大（完全な LLVM が必要）           |
+| コード品質     | LLVM -O2 の 70〜80%              | 極めて高い                         |
+| 適用シナリオ   | 開発デバッグ、高速イテレーション | 適用不可（本稿のトレードオフ参照） |
 
 Cranelift はコンパイルが速く、コード品質も十分。LLVM は AOT のオフライン深い最適化に任せる。1 つのツールが 1 つの仕事をきちんとやる。
 
@@ -76,7 +81,8 @@ VM 実行エンジン
                                               └→ LLVM AOT codegen → .o → リンク → exe（本番）
 ```
 
-JIT と AOT は **IR 正規化パス**（`middle/passes/ir_normalize.rs`）を共有し、バックエンドの codegen が LLVM から Cranelift に変わる。
+JIT と AOT は
+**IR 正規化パス**（`middle/passes/ir_normalize.rs`）を共有し、バックエンドの codegen が LLVM から Cranelift に変わる。
 
 ### 実行フロー
 
@@ -120,9 +126,11 @@ src/
 ```
 
 **重要な制約**：
+
 - `backends/jit/` は `middle/`（IR 定義、正規化パス）、標準ライブラリ、Cranelift crate のみに依存
 - `backends/jit/` は `backends/llvm/` に依存しない。両者は対等なバックエンド
-- `backends/jit/` は `backends/interpreter/` に依存しない。`FunctionEntry` インターフェース経由で対話
+- `backends/jit/` は `backends/interpreter/` に依存しない。`FunctionEntry`
+  インターフェース経由で対話
 
 ### 2. ホットネス分析と階層的トリガ
 
@@ -134,7 +142,8 @@ Warm ──(invocation > 200)─────────────────
 Hot ──(コンパイルキュー送信、コンパイル完了)──────────────────→ Compiled
 ```
 
-> 閾値は設定可能項目で、上記はデフォルト値。LuaJIT、JVM C1、V8 Sparkplug の実際の閾値範囲（50〜1000）を参考にした。
+> 閾値は設定可能項目で、上記はデフォルト値。LuaJIT、JVM C1、V8
+> Sparkplug の実際の閾値範囲（50〜1000）を参考にした。
 
 #### 2.2 カウンタ
 
@@ -192,49 +201,53 @@ YaoXiang IR (スタック形式)
 
 #### 3.2 YaoXiang 型 → Cranelift 型
 
-| YaoXiang 型 | Cranelift 型 | 説明 |
-|---------------|---------------|------|
-| `Int` | `i64` | |
-| `Int32` | `i32` | |
-| `Float` | `f64` | |
-| `Float32` | `f32` | |
-| `Bool` | `i8` | Cranelift に `i1` がないため `i8` を使用 |
-| `Char` | `i32` | Unicode コードポイント |
-| `String` | `{ i64, i64 }` | ポインタ + 長さ |
-| `Void` | 空タプル | |
-| `&T` | — | ゼロサイズ、コンパイル後消滅 |
-| `&mut T` | — | ゼロサイズ、コンパイル後消滅 |
-| `ref T` | `{ i64, i64 }` | 参照カウントポインタ + データポインタ |
-| `*T` | `i64` | 生ポインタ |
-| `List(T)` | `{ i64, i64, i64 }` | データポインタ + 長さ + 容量 |
-| 構造体 | Cranelift struct | |
-| レコード enum | `{ i64, [max_payload] }` | タグ + union |
-| `?T` | `{ i8, T }` | 値存在フラグ + データ |
+| YaoXiang 型   | Cranelift 型             | 説明                                     |
+| ------------- | ------------------------ | ---------------------------------------- |
+| `Int`         | `i64`                    |                                          |
+| `Int32`       | `i32`                    |                                          |
+| `Float`       | `f64`                    |                                          |
+| `Float32`     | `f32`                    |                                          |
+| `Bool`        | `i8`                     | Cranelift に `i1` がないため `i8` を使用 |
+| `Char`        | `i32`                    | Unicode コードポイント                   |
+| `String`      | `{ i64, i64 }`           | ポインタ + 長さ                          |
+| `Void`        | 空タプル                 |                                          |
+| `&T`          | —                        | ゼロサイズ、コンパイル後消滅             |
+| `&mut T`      | —                        | ゼロサイズ、コンパイル後消滅             |
+| `ref T`       | `{ i64, i64 }`           | 参照カウントポインタ + データポインタ    |
+| `*T`          | `i64`                    | 生ポインタ                               |
+| `List(T)`     | `{ i64, i64, i64 }`      | データポインタ + 長さ + 容量             |
+| 構造体        | Cranelift struct         |                                          |
+| レコード enum | `{ i64, [max_payload] }` | タグ + union                             |
+| `?T`          | `{ i8, T }`              | 値存在フラグ + データ                    |
 
-> RFC-018 §3 の LLVM 型表との比較：Cranelift はポインタ型を区別せず、`i1` もないため、全体としてよりシンプル。
+> RFC-018 §3 の LLVM 型表との比較：Cranelift はポインタ型を区別せず、`i1`
+> もないため、全体としてよりシンプル。
 
 #### 3.3 主要命令の翻訳
 
-| IR 命令 | Cranelift IR |
-|---------|-------------|
-| `Add { dst, lhs, rhs }` | `iadd`（整数）/ `fadd`（浮動小数点） |
-| `Sub { dst, lhs, rhs }` | `isub` / `fsub` |
-| `Mul { dst, lhs, rhs }` | `imul` / `fmul` |
-| `Div { dst, lhs, rhs }` | `sdiv` / `udiv` / `fdiv` |
-| `Eq { dst, lhs, rhs }` | `icmp eq` / `fcmp eq` |
-| `Jmp(label)` | `jump` |
-| `JmpIf(cond, label)` | `brnz` |
-| `Ret(Some(v))` | `return` |
-| `Call { dst, func, args }` | `call` |
-| `Load { dst, src }` | `load` |
-| `Store { dst, src }` | `store` |
-| `Spawn { ... }` | ランタイム `task_spawn` + `task_wait_all` を呼び出し |
+| IR 命令                    | Cranelift IR                                         |
+| -------------------------- | ---------------------------------------------------- |
+| `Add { dst, lhs, rhs }`    | `iadd`（整数）/ `fadd`（浮動小数点）                 |
+| `Sub { dst, lhs, rhs }`    | `isub` / `fsub`                                      |
+| `Mul { dst, lhs, rhs }`    | `imul` / `fmul`                                      |
+| `Div { dst, lhs, rhs }`    | `sdiv` / `udiv` / `fdiv`                             |
+| `Eq { dst, lhs, rhs }`     | `icmp eq` / `fcmp eq`                                |
+| `Jmp(label)`               | `jump`                                               |
+| `JmpIf(cond, label)`       | `brnz`                                               |
+| `Ret(Some(v))`             | `return`                                             |
+| `Call { dst, func, args }` | `call`                                               |
+| `Load { dst, src }`        | `load`                                               |
+| `Store { dst, src }`       | `store`                                              |
+| `Spawn { ... }`            | ランタイム `task_spawn` + `task_wait_all` を呼び出し |
 
-> 完全な翻訳表は RFC 本文を参照。核心原則：Cranelift 命令セットは YaoXiang IR のすべての操作をカバーし、意味的な欠落は存在しない。
+> 完全な翻訳表は RFC 本文を参照。核心原則：Cranelift 命令セットは YaoXiang
+> IR のすべての操作をカバーし、意味的な欠落は存在しない。
 
 #### 3.4 2 種類の正規化の共存
 
-VM インタープリタはスタックセマンティクス（`Push`/`Pop`/`Dup`/`Swap`）を必要とし、Cranelift JIT と LLVM AOT はレジスタ/SSA を必要とする。IR 正規化パスが一度変換を行い（RFC-018 §4.0）、JIT と AOT が共有する。IR 自身の表現は変えない。各バックエンドが自分のニーズに応じて同じ IR を消費する。
+VM インタープリタはスタックセマンティクス（`Push`/`Pop`/`Dup`/`Swap`）を必要とし、Cranelift
+JIT と LLVM AOT はレジスタ/SSA を必要とする。IR 正規化パスが一度変換を行い（RFC-018
+§4.0）、JIT と AOT が共有する。IR 自身の表現は変えない。各バックエンドが自分のニーズに応じて同じ IR を消費する。
 
 ### 4. 関数入口テーブルとアトミック置換
 
@@ -321,7 +334,8 @@ impl CodeCache {
 
 ### 6. ホットリロード预留拡張ポイント
 
-以下のインターフェースはコンパイルは通るが、ホットリロード実装前は呼び出さない。インターフェース設計原則：**JIT 実装時は `insert` と単関数 `compare_exchange` のみ必要で、モジュールレベルの操作はホットリロードに任せる。**
+以下のインターフェースはコンパイルは通るが、ホットリロード実装前は呼び出さない。インターフェース設計原則：**JIT 実装時は
+`insert` と単関数 `compare_exchange` のみ必要で、モジュールレベルの操作はホットリロードに任せる。**
 
 ```rust
 /// コードキャッシュ拡張インターフェース（预留、未実装）
@@ -343,7 +357,8 @@ trait CompileQueueExt {
 }
 ```
 
-**なぜモジュールごとにグループ化するか？** JIT 自身は関数しか必要としない。モジュール単位の組織化は完全にホットリロードのためである：モジュール再コンパイル後、モジュール全体の関数セットをアトミックに置換できる。関数ごとの CAS では、関数間に循環依存がある場合に不整合状態を引き起こす可能性がある。
+**なぜモジュールごとにグループ化するか？**
+JIT 自身は関数しか必要としない。モジュール単位の組織化は完全にホットリロードのためである：モジュール再コンパイル後、モジュール全体の関数セットをアトミックに置換できる。関数ごとの CAS では、関数間に循環依存がある場合に不整合状態を引き起こす可能性がある。
 
 ## トレードオフ
 
@@ -365,21 +380,21 @@ trait CompileQueueExt {
 
 ### 関連 RFC との一貫性
 
-| RFC | 一貫性 |
-|-----|--------|
-| RFC-018 LLVM AOT | ✅ IR 正規化パスを共有、JIT と AOT は対等なバックエンド |
-| RFC-024 spawn ブロック並行 | ✅ spawn ブロックはランタイム関数呼び出しへコンパイル |
+| RFC                              | 一貫性                                                             |
+| -------------------------------- | ------------------------------------------------------------------ |
+| RFC-018 LLVM AOT                 | ✅ IR 正規化パスを共有、JIT と AOT は対等なバックエンド            |
+| RFC-024 spawn ブロック並行       | ✅ spawn ブロックはランタイム関数呼び出しへコンパイル              |
 | RFC-008 ランタイムアーキテクチャ | ✅ 3 層ランタイム（Embedded/Standard/Full）すべてで JIT をサポート |
 
 ## 代替案
 
-| 代替案 | 選択しない理由 |
-|------|--------|
-| LLVM AOT のみ、JIT なし | 開発時にプログラム全体の再コンパイルが必要で、高速イテレーション体験を喪失 |
-| LLVM ORC JIT | コンパイル遅延が高い（10〜100ms）、LLVM 依存が大きい、VM への埋め込みに適さない |
-| カスタム軽量 JIT（dynasm） | 手書きバックエンドのメンテナンスコストが高く、Cranelift ほど成熟していない |
-| テンプレート JIT | 最適化ゼロ、コード品質が低く、JIT コンパイルの時間を浪費 |
-| 全プログラム JIT（インタープリタなし） | コールドスタートが遅く、簡単なスクリプトはコンパイルする価値がない |
+| 代替案                                 | 選択しない理由                                                                  |
+| -------------------------------------- | ------------------------------------------------------------------------------- |
+| LLVM AOT のみ、JIT なし                | 開発時にプログラム全体の再コンパイルが必要で、高速イテレーション体験を喪失      |
+| LLVM ORC JIT                           | コンパイル遅延が高い（10〜100ms）、LLVM 依存が大きい、VM への埋め込みに適さない |
+| カスタム軽量 JIT（dynasm）             | 手書きバックエンドのメンテナンスコストが高く、Cranelift ほど成熟していない      |
+| テンプレート JIT                       | 最適化ゼロ、コード品質が低く、JIT コンパイルの時間を浪費                        |
+| 全プログラム JIT（インタープリタなし） | コールドスタートが遅く、簡単なスクリプトはコンパイルする価値がない              |
 
 ## 依存関係
 
@@ -394,13 +409,15 @@ trait CompileQueueExt {
 - [RFC-018：LLVM AOT コンパイラ設計](../review/018-llvm-aot-compiler.md)
 - [RFC-024：spawn ブロックに基づく並行モデル](../accepted/024-concurrency-model.md)
 - [RFC-008：Runtime 並行モデルとスケジューラの疎結合設計](../accepted/008-runtime-concurrency-model.md)
-- Hölzle, U. (1994). *Adaptive Optimization for Self: Reconciling High Performance with Exploratory Programming*. Stanford.
+- Hölzle, U. (1994). _Adaptive Optimization for Self: Reconciling High Performance with Exploratory
+  Programming_. Stanford.
 
 ---
+
 ## ライフサイクルと帰属
 
-| 状態 | 場所 | 説明 |
-|------|------|------|
-| **ドラフト** | `docs/src/design/rfc/draft/` | 著者の草稿、レビュー提出待ち |
-| **レビュー中** | `docs/src/design/rfc/review/` | コミュニティの議論とフィードバックを公開 |
-| **承認済み** | `docs/src/design/rfc/accepted/` | 正式な設計ドキュメントとなる |
+| 状態           | 場所                            | 説明                                     |
+| -------------- | ------------------------------- | ---------------------------------------- |
+| **ドラフト**   | `docs/src/design/rfc/draft/`    | 著者の草稿、レビュー提出待ち             |
+| **レビュー中** | `docs/src/design/rfc/review/`   | コミュニティの議論とフィードバックを公開 |
+| **承認済み**   | `docs/src/design/rfc/accepted/` | 正式な設計ドキュメントとなる             |

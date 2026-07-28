@@ -1,8 +1,11 @@
 # FFI Specification
 
-This document defines the FFI (Foreign Function Interface) specification for the YaoXiang programming language, including type definitions, function declarations, method bindings, and handling of opaque types.
+This document defines the FFI (Foreign Function Interface) specification for the YaoXiang
+programming language, including type definitions, function declarations, method bindings, and
+handling of opaque types.
 
-> **Detailed Design**: The complete design, motivation, and trade-offs of FFI are detailed in [RFC-026: FFI Core Mechanism](../design/rfc/accepted/026-ffi-core-mechanism.md).
+> **Detailed Design**: The complete design, motivation, and trade-offs of FFI are detailed in
+> [RFC-026: FFI Core Mechanism](../design/rfc/accepted/026-ffi-core-mechanism.md).
 
 ---
 
@@ -17,11 +20,11 @@ The default without return is Void
 
 ### 1.2 Components of FFI
 
-| Component | Description | Syntax |
-|------|------|------|
-| Type Definition | Define FFI types (opaque or transparent) | `unsafe {}` + `return` |
-| Function Declaration | Declare external functions | `native("symbol")` |
-| Method Binding | Bind methods to types | `[0]` syntax |
+| Component            | Description                              | Syntax                 |
+| -------------------- | ---------------------------------------- | ---------------------- |
+| Type Definition      | Define FFI types (opaque or transparent) | `unsafe {}` + `return` |
+| Function Declaration | Declare external functions               | `native("symbol")`     |
+| Method Binding       | Bind methods to types                    | `[0]` syntax           |
 
 ---
 
@@ -81,6 +84,7 @@ MyType: Type = {}
 ```
 
 **Discrimination Rules**:
+
 - If the type is referenced by a `native` function → opaque type
 - Otherwise → empty type
 
@@ -101,21 +105,22 @@ sqlite3_exec: (db: SqliteDb, sql: String) -> Int32 = native("sqlite3_exec")
 
 ### 3.2 Parameter Type Mapping
 
-FFI function parameter types use YaoXiang types directly, and the compiler automatically handles C type mapping:
+FFI function parameter types use YaoXiang types directly, and the compiler automatically handles C
+type mapping:
 
-| C Type | YaoXiang Type |
-|--------|---------------|
-| `int` | `Int32` |
-| `long` | `Int64` |
-| `float` | `Float32` |
-| `double` | `Float64` |
-| `char` | `Char` |
-| `char*` | `String` |
-| `bool` | `Bool` |
-| `size_t` | `Uint` |
-| `void*` | `*Void` |
-| `struct T*` | `T` (transparent type) |
-| `typedef struct T T` | `T` (opaque type) |
+| C Type               | YaoXiang Type          |
+| -------------------- | ---------------------- |
+| `int`                | `Int32`                |
+| `long`               | `Int64`                |
+| `float`              | `Float32`              |
+| `double`             | `Float64`              |
+| `char`               | `Char`                 |
+| `char*`              | `String`               |
+| `bool`               | `Bool`                 |
+| `size_t`             | `Uint`                 |
+| `void*`              | `*Void`                |
+| `struct T*`          | `T` (transparent type) |
+| `typedef struct T T` | `T` (opaque type)      |
 
 ### 3.3 Return Type
 
@@ -151,6 +156,7 @@ SqliteDb.exec = sqlite3_exec[0]
 ```
 
 **Invocation**:
+
 ```yaoxiang
 db = sqlite3_open("test.db")
 
@@ -172,6 +178,7 @@ SqliteDb.open = sqlite3_open
 ```
 
 **Invocation**:
+
 ```yaoxiang
 // Create through the constructor
 db = SqliteDb.open("test.db")
@@ -231,6 +238,7 @@ If an FFI type is not a resource type, spawn blocks can run in parallel:
 ### 6.1 Generated Content
 
 yx-bindgen generates the following:
+
 - FFI type definitions (unsafe block + return)
 - FFI function declarations (native syntax)
 - Method bindings ([0] syntax)

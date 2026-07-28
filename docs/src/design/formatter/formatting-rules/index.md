@@ -1,5 +1,5 @@
 ---
-title: "格式化规则总览"
+title: '格式化规则总览'
 description: YaoXiang 代码格式化规则的分类和索引
 ---
 

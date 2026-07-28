@@ -4,7 +4,9 @@ title: if-elif-else
 
 # if-elif-else
 
-`if-elif-else` is the most fundamental decision-making tool in programming. Its logic is very intuitive—**if the condition holds, execute a block of code; otherwise, check the next condition; if none hold, take the default path**.
+`if-elif-else` is the most fundamental decision-making tool in programming. Its logic is very
+intuitive—**if the condition holds, execute a block of code; otherwise, check the next condition; if
+none hold, take the default path**.
 
 ## Basic Syntax
 
@@ -14,7 +16,9 @@ In the syntax specification, `if` expressions and `if` statements are defined id
 if Expr Block ('elif' Expr Block)* ('else' Block)?
 ```
 
-Translated into everyday language: it starts with `if`, followed by a condition expression and a code block, then optionally zero or more `elif condition block` pairs, and finally an optional `else block`.
+Translated into everyday language: it starts with `if`, followed by a condition expression and a
+code block, then optionally zero or more `elif condition block` pairs, and finally an optional
+`else block`.
 
 The simplest form—just `if`:
 
@@ -50,11 +54,13 @@ if score >= 90 {
 }
 ```
 
-Note that YaoXiang's keyword is `elif`, not `else if`. This reflects the language's deliberate effort to keep its keywords concise.
+Note that YaoXiang's keyword is `elif`, not `else if`. This reflects the language's deliberate
+effort to keep its keywords concise.
 
 ## if as an Expression
 
-This is one of YaoXiang's most important control flow features: **`if` can be used as an expression that computes a value**.
+This is one of YaoXiang's most important control flow features: **`if` can be used as an expression
+that computes a value**.
 
 ```yaoxiang
 // if expression: the value of each branch is assigned to result
@@ -86,7 +92,9 @@ grade = if score >= 90 {
 print(grade)  // "B"
 ```
 
-In each branch's code block, **the value of the last expression is that branch's return value**. You can also use `return` to return explicitly, but inside branches, simply writing the expression is usually enough.
+In each branch's code block, **the value of the last expression is that branch's return value**. You
+can also use `return` to return explicitly, but inside branches, simply writing the expression is
+usually enough.
 
 ```yaoxiang
 // Directly write the expression—recommended
@@ -100,7 +108,8 @@ category = if age < 18 {
 }
 ```
 
-If you only use `if` for conditional judgment and don't need a value, it's an ordinary statement—fully compatible with the expression form.
+If you only use `if` for conditional judgment and don't need a value, it's an ordinary
+statement—fully compatible with the expression form.
 
 ## Nested if
 
@@ -121,7 +130,8 @@ if age >= 18 {
 }
 ```
 
-When expressions are nested, YaoXiang has no C-style "dangling else" ambiguity—each `else` always belongs to the nearest unmatched `if`.
+When expressions are nested, YaoXiang has no C-style "dangling else" ambiguity—each `else` always
+belongs to the nearest unmatched `if`.
 
 ## Combining Conditions with Boolean Operators
 
@@ -152,17 +162,18 @@ if (age >= 18 and age <= 60) or is_vip {
 }
 ```
 
-In operator precedence, `not` is higher than `and`, and `and` is higher than `or`. When in doubt, add parentheses to make your intent clearer.
+In operator precedence, `not` is higher than `and`, and `and` is higher than `or`. When in doubt,
+add parentheses to make your intent clearer.
 
 ## Summary
 
-| Key Point | Description |
-|------|------|
-| Basic structure | `if condition { ... } elif condition { ... } else { ... }` |
-| elif | YaoXiang uses `elif`, not `else if` |
-| Expression | `if` can return a value; all branches must have consistent types |
+| Key Point           | Description                                                              |
+| ------------------- | ------------------------------------------------------------------------ |
+| Basic structure     | `if condition { ... } elif condition { ... } else { ... }`               |
+| elif                | YaoXiang uses `elif`, not `else if`                                      |
+| Expression          | `if` can return a value; all branches must have consistent types         |
 | Branch return value | The value of the last expression in the branch block is the return value |
-| Nesting | `if` can contain another `if`; no dangling else ambiguity |
-| Boolean operators | `and`, `or`, `not` combine conditions |
+| Nesting             | `if` can contain another `if`; no dangling else ambiguity                |
+| Boolean operators   | `and`, `or`, `not` combine conditions                                    |
 
 The next chapter will cover `for` loops—the standard way to iterate over collections and ranges.

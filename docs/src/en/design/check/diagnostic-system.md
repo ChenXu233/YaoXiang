@@ -9,17 +9,17 @@ description: Architecture design of the YaoXiang diagnostic system
 
 Error codes are grouped by category:
 
-| Range | Category | Description |
-|-------|----------|-------------|
-| E0xxx | Lexical/Syntax | Lexer and parser errors |
-| E1xxx | Type Checking | Type mismatch, undefined variables, etc. |
-| E2xxx | Semantic Analysis | Semantic errors |
-| E4xxx | Generics/Traits | Generics and trait system errors |
-| E5xxx | Modules/Imports | Module system errors |
-| E6xxx | Runtime | Runtime errors |
-| E7xxx | I/O | I/O and system errors |
-| E8xxx | Internal | Internal compiler errors |
-| W1xxx | Warnings | Dead code, unused variables, etc. |
+| Range | Category          | Description                              |
+| ----- | ----------------- | ---------------------------------------- |
+| E0xxx | Lexical/Syntax    | Lexer and parser errors                  |
+| E1xxx | Type Checking     | Type mismatch, undefined variables, etc. |
+| E2xxx | Semantic Analysis | Semantic errors                          |
+| E4xxx | Generics/Traits   | Generics and trait system errors         |
+| E5xxx | Modules/Imports   | Module system errors                     |
+| E6xxx | Runtime           | Runtime errors                           |
+| E7xxx | I/O               | I/O and system errors                    |
+| E8xxx | Internal          | Internal compiler errors                 |
+| W1xxx | Warnings          | Dead code, unused variables, etc.        |
 
 ## Diagnostic Data Structure
 
@@ -47,7 +47,8 @@ let diagnostic = ErrorCodeDefinition::unknown_variable("x")
 
 ## i18n Support
 
-Titles and help text for all error codes are managed through `I18nRegistry`, supporting Chinese/English switching. Message templates support `{param}` placeholders.
+Titles and help text for all error codes are managed through `I18nRegistry`, supporting
+Chinese/English switching. Message templates support `{param}` placeholders.
 
 ## Emitter Output
 

@@ -1,13 +1,13 @@
 ---
-title: "RFC-011a: Interface Implementation and Dynamic Dispatch"
-status: "Under Review"
-author: "Chenxu"
-created: "2026-06-14"
-updated: "2026-07-05"
-group: "rfc-011"
+title: 'RFC-011a: Interface Implementation and Dynamic Dispatch'
+status: 'Under Review'
+author: 'Chenxu'
+created: '2026-06-14'
+updated: '2026-07-05'
+group: 'rfc-011'
 ---
 
-# RFC-011a: Interface Implementation and Dynamic Dispatch  
+# RFC-011a: Interface Implementation and Dynamic Dispatch
 
 > **Parent RFC**: [RFC-011: Generic Type System Design](../accepted/011-generic-type-system.md)
 >
@@ -15,11 +15,14 @@ group: "rfc-011"
 
 ## Abstract
 
-RFC-011 defines the generic type system, but does not detail the interface implementation mechanism. This document supplements:
+RFC-011 defines the generic type system, but does not detail the interface implementation mechanism.
+This document supplements:
 
-1. **Interface Declaration**: Write the interface name directly in the type definition, no `impl` keyword required
+1. **Interface Declaration**: Write the interface name directly in the type definition, no `impl`
+   keyword required
 2. **Method Implementation**: Both internal and external declarations are supported
-3. **Overload Rules**: Overloading allowed with different signatures; same signature triggers an error (override prohibited)
+3. **Overload Rules**: Overloading allowed with different signatures; same signature triggers an
+   error (override prohibited)
 4. **Default Values**: Write `= value` directly after the field
 5. **Dynamic Dispatch**: Compile-time type collection + interface matching, no vtable
 
@@ -47,6 +50,7 @@ animals[0].speak()  # "Woof"
 ```
 
 **Eliminated Complexity**:
+
 - ❌ No `impl` keyword
 - ❌ No `dyn Trait + 'a` annotation
 - ❌ No vtable (compile-time type collection + enum wrapping)
@@ -60,13 +64,13 @@ animals[0].speak()  # "Woof"
 
 RFC-011 defines the generic type system but does not detail:
 
-| Problem | Description |
-|------|------|
-| Interface declaration syntax | How to declare that a type implements an interface? |
-| Method implementation location | Internal or external declaration? |
-| Overload rules | How to handle methods with the same name? |
-| Default value syntax | How to set default values for fields? |
-| Dynamic dispatch | How to implement heterogeneous containers? |
+| Problem                        | Description                                         |
+| ------------------------------ | --------------------------------------------------- |
+| Interface declaration syntax   | How to declare that a type implements an interface? |
+| Method implementation location | Internal or external declaration?                   |
+| Overload rules                 | How to handle methods with the same name?           |
+| Default value syntax           | How to set default values for fields?               |
+| Dynamic dispatch               | How to implement heterogeneous containers?          |
 
 ### Design Goals
 
@@ -78,14 +82,14 @@ RFC-011 defines the generic type system but does not detail:
 
 ### Comparison with Rust
 
-| Feature | Rust | YaoXiang |
-|------|------|----------|
-| Interface declaration | `impl Animal for Dog { ... }` | `Dog: Type = { Animal, ... }` |
-| Method implementation | In `impl` block | Internal or external |
-| Overloading | Not supported | Supported (different signatures) |
-| Default values | Requires `#[default]` | Write `= value` directly |
-| Heterogeneous container | `Vec<Box<dyn Animal + 'a>>` | `List(Animal)` |
-| Dynamic dispatch | Vtable lookup | Compile-time type collection |
+| Feature                 | Rust                          | YaoXiang                         |
+| ----------------------- | ----------------------------- | -------------------------------- |
+| Interface declaration   | `impl Animal for Dog { ... }` | `Dog: Type = { Animal, ... }`    |
+| Method implementation   | In `impl` block               | Internal or external             |
+| Overloading             | Not supported                 | Supported (different signatures) |
+| Default values          | Requires `#[default]`         | Write `= value` directly         |
+| Heterogeneous container | `Vec<Box<dyn Animal + 'a>>`   | `List(Animal)`                   |
+| Dynamic dispatch        | Vtable lookup                 | Compile-time type collection     |
 
 ---
 
@@ -109,6 +113,7 @@ Dog: Type = {
 ```
 
 **Compiler Processing**:
+
 1. Identify `Animal` as an interface type
 2. Check whether `Dog` has all methods required by `Animal`
 3. If passed → generate implementation proof
@@ -130,6 +135,7 @@ Dog: Type = {
 ```
 
 **Why Source Tags Are Needed**:
+
 - Direct expansion loses source information
 - Source tags are used to generate implementation proofs
 - At runtime, the correct method is located via the proof
@@ -174,6 +180,7 @@ Dog.play: (Self) -> Void = { ... }
 ```
 
 **Compiler Processing**:
+
 1. Collect all definitions (internal and external)
 2. Group by signature (overload)
 3. Check for overrides (error if found)
@@ -183,6 +190,7 @@ Dog.play: (Self) -> Void = { ... }
 ### 3. Overload and Override
 
 **Core Rules**:
+
 - Different signatures → overload → allowed
 - Same signatures → override → error
 
@@ -238,7 +246,8 @@ Dog.speak: (Self) -> String = "Bark"  # ❌ Error
 
 ### 4. Default Values
 
-**Core Rule**: Write `= value` directly after the field, eliminating the need for constructor functions.
+**Core Rule**: Write `= value` directly after the field, eliminating the need for constructor
+functions.
 
 ```yaoxiang
 Dog: Type = {
@@ -363,7 +372,9 @@ animals[1].speak()  # "Meow"
 
 #### 6.2 Compile-Time Type Collection
 
-**Core Strategy: Ownership tracking with incremental construction.** Rather than scanning all types implementing the interface at compile time, we incrementally collect at each **ownership operation point** of `List(Animal)`:
+**Core Strategy: Ownership tracking with incremental construction.** Rather than scanning all types
+implementing the interface at compile time, we incrementally collect at each **ownership operation
+point** of `List(Animal)`:
 
 ```yaoxiang
 // Construction point
@@ -376,8 +387,10 @@ animals.append(Bird.new())                 // Expands to { Dog, Cat, Bird }
 
 **Compiler Processing** (incremental):
 
-1. When `List(I)` is first constructed → generate the initial enum (all constructible types known in the current compilation unit)
-2. Each `append` / `push` / index assignment → check whether the value's type is already in the enum; if not, extend the enum variants
+1. When `List(I)` is first constructed → generate the initial enum (all constructible types known in
+   the current compilation unit)
+2. Each `append` / `push` / index assignment → check whether the value's type is already in the
+   enum; if not, extend the enum variants
 3. Generate monomorphized `match` dispatch code for the final enum
 4. Cross-compilation-unit: merge each unit's enum variant set at link time
 
@@ -396,7 +409,8 @@ AnimalGroup: Type = {
 
 #### 6.3 Interface Matching Check
 
-**Key Insight**: Interface matching is a compile-time check, even for types from dynamically loaded plugins.
+**Key Insight**: Interface matching is a compile-time check, even for types from dynamically loaded
+plugins.
 
 ```yaoxiang
 # Plugin system
@@ -411,6 +425,7 @@ animals.append(bird)                 # Compiler: (1) verify bird implements Anim
 ```
 
 **Compiler Processing**:
+
 1. Check the return type of the `append` parameter
 2. Verify whether the type implements the target interface
 3. If passed → extend enum, allow insertion
@@ -433,15 +448,16 @@ Compiler-generated match:
 
 **Comparison with Vtable**:
 
-| | Vtable (Rust) | Compile-Time Enum (YaoXiang) |
-|---|---|---|
-| Lookup method | Vtable pointer → method pointer | Enum match → direct call |
-| Runtime overhead | One indirection | String comparison/branch (optimizable by CPU branch prediction) |
-| Compile-time generation | Vtable | Enum + match |
-| User annotation | Requires `dyn Trait + 'a` | Not required |
-| ImplementationProof | Not applicable | Compile-time erased, nonexistent at runtime |
+|                         | Vtable (Rust)                   | Compile-Time Enum (YaoXiang)                                    |
+| ----------------------- | ------------------------------- | --------------------------------------------------------------- |
+| Lookup method           | Vtable pointer → method pointer | Enum match → direct call                                        |
+| Runtime overhead        | One indirection                 | String comparison/branch (optimizable by CPU branch prediction) |
+| Compile-time generation | Vtable                          | Enum + match                                                    |
+| User annotation         | Requires `dyn Trait + 'a`       | Not required                                                    |
+| ImplementationProof     | Not applicable                  | Compile-time erased, nonexistent at runtime                     |
 
 **YaoXiang's Advantages**:
+
 - No brand annotation required
 - Compile-time type safety
 - Transparent to users (no need to write `dyn Animal`)
@@ -449,11 +465,15 @@ Compiler-generated match:
 
 #### 6.5 Limitations and Scope
 
-**Within a single compilation unit:** Full support. Ownership tracking covers all `append`/construction points; the enum is incrementally built.
+**Within a single compilation unit:** Full support. Ownership tracking covers all
+`append`/construction points; the enum is incrementally built.
 
-**Cross-compilation-unit:** Each unit's enum variant set is merged at link time. The design shares the same mechanism as link-time monomorphization (each unit generates a partial enum; the linker merges them).
+**Cross-compilation-unit:** Each unit's enum variant set is merged at link time. The design shares
+the same mechanism as link-time monomorphization (each unit generates a partial enum; the linker
+merges them).
 
-**Not supported:** Runtime dynamic typing (full duck typing). The type set is fully known at compile time.
+**Not supported:** Runtime dynamic typing (full duck typing). The type set is fully known at compile
+time.
 ---
 
 ## Use Case Analysis
@@ -599,44 +619,49 @@ main: () -> Void = {
 ### Disadvantages
 
 1. **Limitations**: No runtime dynamic typing (full duck typing)
-2. **Compile-time overhead**: Need to generate enum variants and match dispatch code for each interface
+2. **Compile-time overhead**: Need to generate enum variants and match dispatch code for each
+   interface
 3. **Type set**: Must be fully known at compile time (within a single compilation unit)
 
 ### Mitigations
 
 1. **Plugin system**: Supported via compile-time interface matching checks
-2. **Type set**: Ownership tracking with incremental construction — collected at each `append`/construction point, not via global scan
-3. **Cross-compilation-unit**: Merge enum variant sets at link time, sharing the mechanism with link-time monomorphization
+2. **Type set**: Ownership tracking with incremental construction — collected at each
+   `append`/construction point, not via global scan
+3. **Cross-compilation-unit**: Merge enum variant sets at link time, sharing the mechanism with
+   link-time monomorphization
 
 ---
 
 ## Alternatives
 
-| Alternative | Why Not Chosen |
-|------|--------------|
-| `impl` keyword | Increases syntax complexity |
+| Alternative          | Why Not Chosen                   |
+| -------------------- | -------------------------------- |
+| `impl` keyword       | Increases syntax complexity      |
 | Vtable (`dyn Trait`) | Requires brand annotation (`'a`) |
-| Full duck typing | Runtime overhead, not type-safe |
-| Manual enum wrapping | Heavy user burden |
+| Full duck typing     | Runtime overhead, not type-safe  |
+| Manual enum wrapping | Heavy user burden                |
 
 ---
 
 ## Relationship with RFC-009
 
 **Brands and Interface Implementation**:
+
 - Interface implementation lives at the type layer, not involving brands
 - Brands live at the borrow proof layer (RFC-009a)
 - The two are orthogonal and do not affect each other
 
 **Dynamic Dispatch and Brands**:
+
 - Dynamic dispatch uses implementation proofs, no brand annotation required
 - Implementation proofs are generated at compile time, zero lookup at runtime
 - Avoids the complexity of `dyn Trait + 'a`
 
-
 ## Interface Inheritance
 
-Interfaces can include other interfaces. **No new syntax introduced**—uses the exact same syntactic position as type interface declarations:
+Interfaces can include other interfaces. **No new syntax introduced**—uses the exact same syntactic
+position as type interface declarations:
 
 ```yaoxiang
 Animal: Type = {
@@ -657,13 +682,19 @@ Dog: Type = {
 }
 ```
 
-**Design Principle:** Inheritance exists but is not encouraged for overuse. The primary composition approach is through multiple interface declarations (`Dog: Type = { Animal, Pet, ... }`). A type can directly declare all interfaces it satisfies without needing to express it through an inheritance tree. Interface inheritance is only used when there is a clear "is-a" hierarchy.
+**Design Principle:** Inheritance exists but is not encouraged for overuse. The primary composition
+approach is through multiple interface declarations (`Dog: Type = { Animal, Pet, ... }`). A type can
+directly declare all interfaces it satisfies without needing to express it through an inheritance
+tree. Interface inheritance is only used when there is a clear "is-a" hierarchy.
 
-**Compiler Processing:** Expand the inheritance chain. `Pet` expands to `{ all methods from Animal, name: ... }`. When `Dog` declares `Pet`, the compiler verifies that `Dog` satisfies all methods from both `Animal` and `Pet`.
+**Compiler Processing:** Expand the inheritance chain. `Pet` expands to
+`{ all methods from Animal, name: ... }`. When `Dog` declares `Pet`, the compiler verifies that
+`Dog` satisfies all methods from both `Animal` and `Pet`.
 
 ## Default Method Implementation
 
-Interfaces can provide default implementations for methods. Implementing types can choose to override or inherit the default:
+Interfaces can provide default implementations for methods. Implementing types can choose to
+override or inherit the default:
 
 ```yaoxiang
 fmt: Type = {
@@ -673,9 +704,15 @@ fmt: Type = {
 }
 ```
 
-**Core Constraint: Interfaces cannot assume supertype implementations.** Default methods can only reference methods declared in the same interface. Fields of concrete types or methods of other interfaces are invisible to default methods—an interface is a closed contract and cannot reach into the implementing type's pockets. Violations of this constraint trigger an error at **interface definition time**.
+**Core Constraint: Interfaces cannot assume supertype implementations.** Default methods can only
+reference methods declared in the same interface. Fields of concrete types or methods of other
+interfaces are invisible to default methods—an interface is a closed contract and cannot reach into
+the implementing type's pockets. Violations of this constraint trigger an error at **interface
+definition time**.
 
-**Inheritance Can Assume Subtype Implementations:** When interface `Pet` inherits `Animal`, the default methods of `Pet` can use methods declared by `Animal`—because it's inherited, so it's guaranteed to exist.
+**Inheritance Can Assume Subtype Implementations:** When interface `Pet` inherits `Animal`, the
+default methods of `Pet` can use methods declared by `Animal`—because it's inherited, so it's
+guaranteed to exist.
 
 ```yaoxiang
 Animal: Type = {
@@ -690,48 +727,54 @@ Pet: Type = {
 ```
 
 **Compile-Time Behavior:** When a type implements an interface, for each method:
+
 1. Type provides it → use the type's method
-2. Type does not provide, interface has default → compiler inlines the default implementation into the type (zero vtable overhead)
+2. Type does not provide, interface has default → compiler inlines the default implementation into
+   the type (zero vtable overhead)
 3. Type does not provide, interface has no default → compile error
 
-**Design Principle:** Default methods are similar to the auto-derive mechanism for `Copy`/`Clone`—the compiler auto-generates them when needed, and users can override. No `virtual`/`override`/`super` keywords introduced.
+**Design Principle:** Default methods are similar to the auto-derive mechanism for `Copy`/`Clone`—the
+compiler auto-generates them when needed, and users can override. No `virtual`/`override`/`super`
+keywords introduced.
 ---
 
 ## Implementation Phases
 
-| Phase | Content | Dependencies |
-|------|------|------|
-| Phase 1 | Interface declaration syntax | RFC-011 |
-| Phase 2 | Internal/external method implementation | Phase 1 |
-| Phase 3 | Overload and override rules | Phase 2 |
-| Phase 4 | Default value syntax | Phase 2 |
-| Phase 5 | Interface inheritance | Phase 3 |
-| Phase 6 | Default method implementation | Phase 5 |
-| Phase 7 | Implementation proof generation | Phase 6 |
-| Phase 8 | Compile-time type collection | Phase 7 |
-| Phase 9 | Dynamic dispatch implementation | Phase 8 |
+| Phase   | Content                                 | Dependencies |
+| ------- | --------------------------------------- | ------------ |
+| Phase 1 | Interface declaration syntax            | RFC-011      |
+| Phase 2 | Internal/external method implementation | Phase 1      |
+| Phase 3 | Overload and override rules             | Phase 2      |
+| Phase 4 | Default value syntax                    | Phase 2      |
+| Phase 5 | Interface inheritance                   | Phase 3      |
+| Phase 6 | Default method implementation           | Phase 5      |
+| Phase 7 | Implementation proof generation         | Phase 6      |
+| Phase 8 | Compile-time type collection            | Phase 7      |
+| Phase 9 | Dynamic dispatch implementation         | Phase 8      |
 
 ---
 
 ## Design Decision Records
 
-| Decision | Resolution | Reason | Date |
-|------|------|------|------|
-| Interface declaration syntax | Write interface name directly in type body | Eliminate `impl` keyword; interface declaration is a natural part of type definition | 2026-06-14 |
-| Dynamic dispatch | Compile-time type collection + auto enum generation | No vtable, zero runtime lookup, transparent to users | 2026-06-14 |
-| External method declaration | Supported | Equivalent flexibility to internal declaration; compiler handles cross-file collection | 2026-06-14 |
-| Override | Prohibited (same signature triggers error) | Override causes unpredictable behavior; overloading covers all cases | 2026-06-14 |
-| Interface inheritance | Supported, no new syntax | Same syntactic position as type interface declarations. Encourages composition (multi-interface declaration), discourages deep inheritance trees | 2026-07-03 |
-| Default method implementation | Supported, similar to Copy/Clone auto-derive | Interface provides body, compiler inlines on the implementing type; users can override. No virtual/override introduced | 2026-07-03 |
-| Default method constraints | Verify at interface definition: can only reference same-interface methods, cannot assume supertype implementations | Interface is a closed contract. Inheritance can assume subtype implementations, but interfaces cannot assume fields/methods of implementing types | 2026-07-03 |
-| Type collection strategy | Ownership tracking, incremental construction — collected at each append/construction point | Not a global scan of all implementers; incremental enum extension at ownership operation points | 2026-07-03 |
-| ImplementationProof | Pure compile-time concept, erased at runtime | Runtime uses enum match dispatch; proof is only for compile-time validation | 2026-07-03 |
-| Cross-compilation-unit | Merge each unit's enum variants at link time | Shares mechanism with link-time monomorphization; each unit generates partial enum, linker merges | 2026-07-03 |
+| Decision                      | Resolution                                                                                                         | Reason                                                                                                                                            | Date       |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| Interface declaration syntax  | Write interface name directly in type body                                                                         | Eliminate `impl` keyword; interface declaration is a natural part of type definition                                                              | 2026-06-14 |
+| Dynamic dispatch              | Compile-time type collection + auto enum generation                                                                | No vtable, zero runtime lookup, transparent to users                                                                                              | 2026-06-14 |
+| External method declaration   | Supported                                                                                                          | Equivalent flexibility to internal declaration; compiler handles cross-file collection                                                            | 2026-06-14 |
+| Override                      | Prohibited (same signature triggers error)                                                                         | Override causes unpredictable behavior; overloading covers all cases                                                                              | 2026-06-14 |
+| Interface inheritance         | Supported, no new syntax                                                                                           | Same syntactic position as type interface declarations. Encourages composition (multi-interface declaration), discourages deep inheritance trees  | 2026-07-03 |
+| Default method implementation | Supported, similar to Copy/Clone auto-derive                                                                       | Interface provides body, compiler inlines on the implementing type; users can override. No virtual/override introduced                            | 2026-07-03 |
+| Default method constraints    | Verify at interface definition: can only reference same-interface methods, cannot assume supertype implementations | Interface is a closed contract. Inheritance can assume subtype implementations, but interfaces cannot assume fields/methods of implementing types | 2026-07-03 |
+| Type collection strategy      | Ownership tracking, incremental construction — collected at each append/construction point                         | Not a global scan of all implementers; incremental enum extension at ownership operation points                                                   | 2026-07-03 |
+| ImplementationProof           | Pure compile-time concept, erased at runtime                                                                       | Runtime uses enum match dispatch; proof is only for compile-time validation                                                                       | 2026-07-03 |
+| Cross-compilation-unit        | Merge each unit's enum variants at link time                                                                       | Shares mechanism with link-time monomorphization; each unit generates partial enum, linker merges                                                 | 2026-07-03 |
 
 ## Open Questions
 
-- [x] ~~Interface inheritance (interfaces can inherit other interfaces)~~ → Supported, no new syntax. `Pet: Type = { Animal, ... }`
-- [x] ~~Default method implementation (interfaces can provide default implementations)~~ → Supported, similar to Copy auto-derive. Interface provides body, compiler inlines as needed
+- [x] ~~Interface inheritance (interfaces can inherit other interfaces)~~ → Supported, no new
+      syntax. `Pet: Type = { Animal, ... }`
+- [x] ~~Default method implementation (interfaces can provide default implementations)~~ →
+      Supported, similar to Copy auto-derive. Interface provides body, compiler inlines as needed
 - [ ] Advanced usage of interface constraints (associated types, GAT)
 - [ ] Interaction with closures (closures implementing interfaces)
 
@@ -748,6 +791,6 @@ Pet: Type = {
 
 ## Lifecycle and Destination
 
-| Status | Location | Description |
-|------|------|------|
+| Status           | Location                  | Description               |
+| ---------------- | ------------------------- | ------------------------- |
 | **Under Review** | `docs/design/rfc/review/` | Open community discussion |
