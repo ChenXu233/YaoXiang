@@ -69,6 +69,15 @@ jobs:
         run: node scripts/cleanup-translations.mjs
         working-directory: docs
 
+      - name: Install markdown tools
+        run: npm install -g prettier markdownlint-cli
+
+      - name: Format translated Markdown files
+        run: prettier --write "docs/src/{en,ja,ru}/**/*.md" --config docs/.prettierrc.json
+
+      - name: Lint Markdown for common issues
+        run: markdownlint "docs/src/{en,ja,ru}/**/*.md" --config docs/.markdownlint.jsonc || echo "::warning::Some translated markdown files have lint issues. Run 'cd docs && npm run lint:md' to see details."
+
       - name: Commit translations
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
