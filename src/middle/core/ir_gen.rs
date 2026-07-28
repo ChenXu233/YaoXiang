@@ -1716,7 +1716,7 @@ impl AstToIrGenerator {
             ast::StmtKind::If {
                 condition,
                 then_branch,
-                elif_branches,
+                else_if_branches,
                 else_branch,
                 span: _,
             } => {
@@ -1724,7 +1724,7 @@ impl AstToIrGenerator {
                 self.generate_if_stmt_ir(
                     condition,
                     then_branch,
-                    elif_branches,
+                    else_if_branches,
                     else_branch.as_deref(),
                     instructions,
                     constants,
@@ -1806,7 +1806,7 @@ impl AstToIrGenerator {
         &mut self,
         condition: &ast::Expr,
         then_branch: &ast::Block,
-        elif_branches: &[(Box<ast::Expr>, Box<ast::Block>)],
+        else_if_branches: &[(Box<ast::Expr>, Box<ast::Block>)],
         else_branch: Option<&ast::Block>,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -1827,40 +1827,49 @@ impl AstToIrGenerator {
 
         // 4. then 分支结束后，跳转到整个 if 语句的结束 (Jmp to end)
         let mut jump_to_end_indices = Vec::new();
-        // 只有当有 else/elif 时才需要跳过它们，否则这里已经是 end
-        if !elif_branches.is_empty() || else_branch.is_some() {
+        // 只有当有 else/else if 时才需要跳过它们，否则这里已经是 end
+        if !else_if_branches.is_empty() || else_branch.is_some() {
             let idx = instructions.len();
             instructions.push(Instruction::Jmp(0)); // 占位符
             jump_to_end_indices.push(idx);
         }
 
-        // 5. 修复条件跳转 (JmpIfNot)，使其指向 elif 或 else (即当前位置)
+        // 5. 修复条件跳转 (JmpIfNot)，使其指向 else if 或 else (即当前位置)
         let len = instructions.len();
         if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_to_next_branch_idx] {
             *target = len;
         }
 
-        // 6. 处理 elif 分支
-        for (elif_condition, elif_body) in elif_branches.iter() {
-            // 评估 elif 条件
-            let elif_condition_reg = self.next_temp_reg();
-            self.generate_expr_ir(elif_condition, elif_condition_reg, instructions, constants)?;
+        // 6. 处理 else if 分支
+        for (else_if_condition, else_if_body) in else_if_branches.iter() {
+            // 评估 else if 条件
+            let else_if_condition_reg = self.next_temp_reg();
+            self.generate_expr_ir(
+                else_if_condition,
+                else_if_condition_reg,
+                instructions,
+                constants,
+            )?;
 
             // 跳转到下一个分支 (JmpIfNot)
-            let jump_to_next_elif_idx = instructions.len();
-            instructions.push(Instruction::JmpIfNot(Operand::Local(elif_condition_reg), 0));
+            let jump_to_next_else_if_idx = instructions.len();
+            instructions.push(Instruction::JmpIfNot(
+                Operand::Local(else_if_condition_reg),
+                0,
+            ));
 
-            // 生成 elif 分支
-            self.generate_block_ir(elif_body, None, instructions, constants)?;
+            // 生成 else if 分支
+            self.generate_block_ir(else_if_body, None, instructions, constants)?;
 
-            // elif 分支结束后跳转到结束
+            // else if 分支结束后跳转到结束
             let idx = instructions.len();
             instructions.push(Instruction::Jmp(0)); // 占位符
             jump_to_end_indices.push(idx);
 
             // 修复条件跳转
             let len = instructions.len();
-            if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_to_next_elif_idx] {
+            if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_to_next_else_if_idx]
+            {
                 *target = len;
             }
         }
@@ -1890,7 +1899,7 @@ impl AstToIrGenerator {
         &mut self,
         condition: &ast::Expr,
         then_branch: &ast::Block,
-        elif_branches: &[(Box<ast::Expr>, Box<ast::Block>)],
+        else_if_branches: &[(Box<ast::Expr>, Box<ast::Block>)],
         else_branch: Option<&ast::Block>,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
@@ -1927,19 +1936,19 @@ impl AstToIrGenerator {
             *target = len;
         }
 
-        // 6. Elif 分支
-        for (elif_condition, elif_body) in elif_branches.iter() {
-            let elif_cond_reg = self.next_temp_reg();
-            self.generate_expr_ir(elif_condition, elif_cond_reg, instructions, constants)?;
+        // 6. else if 分支
+        for (else_if_condition, else_if_body) in else_if_branches.iter() {
+            let else_if_cond_reg = self.next_temp_reg();
+            self.generate_expr_ir(else_if_condition, else_if_cond_reg, instructions, constants)?;
 
             let jump_idx = instructions.len();
-            instructions.push(Instruction::JmpIfNot(Operand::Local(elif_cond_reg), 0));
+            instructions.push(Instruction::JmpIfNot(Operand::Local(else_if_cond_reg), 0));
 
-            let elif_res = self.next_temp_reg();
-            self.generate_block_ir(elif_body, Some(elif_res), instructions, constants)?;
+            let else_if_res = self.next_temp_reg();
+            self.generate_block_ir(else_if_body, Some(else_if_res), instructions, constants)?;
             instructions.push(Instruction::Move {
                 dst: Operand::Local(result_reg),
-                src: Operand::Local(elif_res),
+                src: Operand::Local(else_if_res),
             });
 
             let jmp_end_idx = instructions.len();
@@ -2004,7 +2013,7 @@ impl AstToIrGenerator {
                     ast::StmtKind::If {
                         condition,
                         then_branch,
-                        elif_branches,
+                        else_if_branches,
                         else_branch,
                         ..
                     } => {
@@ -2012,7 +2021,7 @@ impl AstToIrGenerator {
                         self.generate_if_expr_ir(
                             condition,
                             then_branch,
-                            elif_branches,
+                            else_if_branches,
                             else_branch.as_deref(),
                             reg,
                             instructions,
@@ -3634,7 +3643,7 @@ impl AstToIrGenerator {
             Expr::If {
                 condition,
                 then_branch,
-                elif_branches,
+                else_if_branches,
                 else_branch,
                 span: _,
             } => {
@@ -3642,7 +3651,7 @@ impl AstToIrGenerator {
                 self.generate_if_expr_ir(
                     condition,
                     then_branch,
-                    elif_branches,
+                    else_if_branches,
                     else_branch.as_deref(),
                     result_reg,
                     instructions,

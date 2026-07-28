@@ -5,11 +5,11 @@ use super::super::context::FormatContext;
 use super::super::source_map::SourceMap;
 use super::expr::{format_expr, format_block};
 
-/// 格式化 if-elif-else 结构
+/// 格式化 if-else-if-else 结构
 pub fn format_if(
     condition: &Expr,
     then_branch: &Block,
-    elif_branches: &[(Box<Expr>, Box<Block>)],
+    else_if_branches: &[(Box<Expr>, Box<Block>)],
     else_branch: &Option<Box<Block>>,
     ctx: &FormatContext,
     source_map: &SourceMap,
@@ -20,11 +20,11 @@ pub fn format_if(
         format_block(then_branch, ctx, source_map)
     );
 
-    for (elif_cond, elif_body) in elif_branches {
+    for (else_if_cond, else_if_body) in else_if_branches {
         result.push_str(&format!(
-            " elif {} {}",
-            format_expr(elif_cond, ctx, source_map),
-            format_block(elif_body, ctx, source_map)
+            " else if {} {}",
+            format_expr(else_if_cond, ctx, source_map),
+            format_block(else_if_body, ctx, source_map)
         ));
     }
 

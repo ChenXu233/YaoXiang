@@ -108,8 +108,8 @@ fn test_if_else() {
 }
 
 #[test]
-fn test_if_elif_else() {
-    assert_run_ok("main = { if false { x = 1 } elif true { x = 2 } else { x = 3 } }");
+fn test_if_else_if_else() {
+    assert_run_ok("main = { if false { x = 1 } else if true { x = 2 } else { x = 3 } }");
 }
 
 #[test]

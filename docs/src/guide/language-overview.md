@@ -121,7 +121,7 @@ Point.draw: (self: &Point, surface: Surface) -> Void = {
 
 ```yaoxiang
 // if 是表达式
-grade = if score >= 90 { "A" } elif score >= 60 { "B" } else { "C" }
+grade = if score >= 90 { "A" } else if score >= 60 { "B" } else { "C" }
 
 // match
 result = match value {

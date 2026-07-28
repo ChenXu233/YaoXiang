@@ -42,7 +42,7 @@ pub enum Expr {
     If {
         condition: Box<Expr>,
         then_branch: Box<Block>,
-        elif_branches: Vec<(Box<Expr>, Box<Block>)>,
+        else_if_branches: Vec<(Box<Expr>, Box<Block>)>,
         else_branch: Option<Box<Block>>,
         span: Span,
     },
@@ -259,7 +259,7 @@ pub enum StmtKind {
     If {
         condition: Box<Expr>,
         then_branch: Box<Block>,
-        elif_branches: Vec<(Box<Expr>, Box<Block>)>,
+        else_if_branches: Vec<(Box<Expr>, Box<Block>)>,
         else_branch: Option<Box<Block>>,
         span: Span,
     },

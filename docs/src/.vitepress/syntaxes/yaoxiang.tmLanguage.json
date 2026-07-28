@@ -33,7 +33,7 @@
       "patterns": [
         {
           "name": "keyword.control.yaoxiang",
-          "match": "\\b(if|elif|else|match|while|for|in|return|break|continue)\\b"
+          "match": "\\b(if|else|match|while|for|in|return|break|continue)\\b"
         },
         {
           "name": "keyword.declaration.yaoxiang",

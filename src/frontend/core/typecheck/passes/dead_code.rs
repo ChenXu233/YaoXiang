@@ -248,13 +248,13 @@ impl DeadCodeAnalyzer {
                 Expr::If {
                     condition,
                     then_branch,
-                    elif_branches,
+                    else_if_branches,
                     else_branch,
                     ..
                 } => {
                     collect_from_expr(condition, referenced);
                     collect_from_block(then_branch, referenced);
-                    for (_, branch) in elif_branches {
+                    for (_, branch) in else_if_branches {
                         collect_from_block(branch, referenced);
                     }
                     if let Some(branch) = else_branch {
@@ -417,13 +417,13 @@ impl DeadCodeAnalyzer {
                 StmtKind::If {
                     condition,
                     then_branch,
-                    elif_branches,
+                    else_if_branches,
                     else_branch,
                     ..
                 } => {
                     collect_from_expr(condition, referenced);
                     collect_from_block(then_branch, referenced);
-                    for (_, branch) in elif_branches {
+                    for (_, branch) in else_if_branches {
                         collect_from_block(branch, referenced);
                     }
                     if let Some(branch) = else_branch {

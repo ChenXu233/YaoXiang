@@ -65,7 +65,6 @@ fn log_token(token: &Token) {
         | TokenKind::KwRef
         | TokenKind::KwMut
         | TokenKind::KwIf
-        | TokenKind::KwElif
         | TokenKind::KwElse
         | TokenKind::KwMatch
         | TokenKind::KwWhile

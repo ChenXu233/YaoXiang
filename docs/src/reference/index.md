@@ -92,7 +92,7 @@ is_type(value, type)  // 检查类型
 | `spawn` | 标记并作函数 |
 | `spawn for` | 并行循环 |
 | `spawn {}` | 并作块 |
-| `if` / `elif` / `else` | 条件分支 |
+| `if` / `else if` / `else` | 条件分支 |
 | `match` | 模式匹配 |
 | `while` / `for` | 循环 |
 | `return` | 返回值 |
@@ -132,7 +132,7 @@ identity: [T](x: T) -> T = x
 // 条件
 if x > 0 {
     print("positive")
-} elif x < 0 {
+} else if x < 0 {
     print("negative")
 } else {
     print("zero")

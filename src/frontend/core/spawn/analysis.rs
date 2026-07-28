@@ -329,7 +329,7 @@ fn collect_from_stmt(
         StmtKind::If {
             condition,
             then_branch,
-            elif_branches,
+            else_if_branches,
             else_branch,
             ..
         } => {
@@ -349,9 +349,9 @@ fn collect_from_stmt(
                 trait_table,
                 local_var_types,
             );
-            for (elif_cond, elif_body) in elif_branches {
+            for (else_if_cond, else_if_body) in else_if_branches {
                 collect_reads_writes(
-                    elif_cond,
+                    else_if_cond,
                     reads,
                     writes,
                     resource_vars,
@@ -359,7 +359,7 @@ fn collect_from_stmt(
                     local_var_types,
                 );
                 collect_from_block(
-                    elif_body,
+                    else_if_body,
                     reads,
                     writes,
                     resource_vars,
@@ -654,7 +654,7 @@ fn collect_reads_writes(
         Expr::If {
             condition,
             then_branch,
-            elif_branches,
+            else_if_branches,
             else_branch,
             ..
         } => {
@@ -674,9 +674,9 @@ fn collect_reads_writes(
                 trait_table,
                 local_var_types,
             );
-            for (elif_cond, elif_body) in elif_branches {
+            for (else_if_cond, else_if_body) in else_if_branches {
                 collect_reads_writes(
-                    elif_cond,
+                    else_if_cond,
                     reads,
                     writes,
                     resource_vars,
@@ -684,7 +684,7 @@ fn collect_reads_writes(
                     local_var_types,
                 );
                 collect_from_block(
-                    elif_body,
+                    else_if_body,
                     reads,
                     writes,
                     resource_vars,

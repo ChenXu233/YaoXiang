@@ -99,7 +99,7 @@ fn test_expr_if() {
             stmts: vec![],
             span: Span::dummy(),
         }),
-        elif_branches: vec![],
+        else_if_branches: vec![],
         else_branch: None,
         span: Span::dummy(),
     };

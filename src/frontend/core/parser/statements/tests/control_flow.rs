@@ -39,8 +39,8 @@ fn test_if_else() {
 }
 
 #[test]
-fn test_if_elif_else() {
-    let kind = parse_stmt("if a { } elif b { } else { }");
+fn test_if_else_if_else() {
+    let kind = parse_stmt("if a { } else if b { } else { }");
     assert!(matches!(&kind, StmtKind::If { .. }));
 }
 

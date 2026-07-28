@@ -66,15 +66,15 @@ impl SpawnPlacementChecker {
             StmtKind::If {
                 condition,
                 then_branch,
-                elif_branches,
+                else_if_branches,
                 else_branch,
                 ..
             } => {
                 self.check_expr(condition);
                 self.check_block(then_branch);
-                for (elif_cond, elif_body) in elif_branches {
-                    self.check_expr(elif_cond);
-                    self.check_block(elif_body);
+                for (else_if_cond, else_if_body) in else_if_branches {
+                    self.check_expr(else_if_cond);
+                    self.check_block(else_if_body);
                 }
                 if let Some(else_body) = else_branch {
                     self.check_block(else_body);
@@ -124,15 +124,15 @@ impl SpawnPlacementChecker {
             Expr::If {
                 condition,
                 then_branch,
-                elif_branches,
+                else_if_branches,
                 else_branch,
                 ..
             } => {
                 self.check_expr(condition);
                 self.check_block(then_branch);
-                for (elif_cond, elif_body) in elif_branches {
-                    self.check_expr(elif_cond);
-                    self.check_block(elif_body);
+                for (else_if_cond, else_if_body) in else_if_branches {
+                    self.check_expr(else_if_cond);
+                    self.check_block(else_if_body);
                 }
                 if let Some(else_body) = else_branch {
                     self.check_block(else_body);

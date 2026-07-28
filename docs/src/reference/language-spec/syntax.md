@@ -26,7 +26,7 @@ YaoXiang 定义了极少量的关键字：
 
 ```
 pub    use    spawn
-ref    mut    if     elif
+ref    mut    if     else
 else   match  while  for    return
 break  continue as     in     unsafe
 ```
@@ -208,7 +208,7 @@ TypeCast    ::= Expr 'as' TypeExpr
 ### 2.7 条件表达式
 
 ```
-IfExpr      ::= 'if' Expr Block ('elif' Expr Block)* ('else' Block)?
+IfExpr      ::= 'if' Expr Block ('else' 'if' Expr Block)* ('else' Block)?
 ```
 
 ### 2.8 模式匹配
@@ -422,7 +422,7 @@ ContinueStmt::= 'continue'
 ### 3.6 if 语句
 
 ```
-IfStmt      ::= 'if' Expr Block ('elif' Expr Block)* ('else' Block)?
+IfStmt      ::= 'if' Expr Block ('else' 'if' Expr Block)* ('else' Block)?
 ```
 
 ### 3.7 match 语句
@@ -562,7 +562,7 @@ results = spawn for item in items {
 ### A.1 控制流
 
 ```
-if Expr Block (elif Expr Block)* (else Block)?
+if Expr Block (else if Expr Block)* (else Block)?
 match Expr { MatchArm+ }
 while Expr Block
 for 'mut'? Identifier 'in' Expr Block

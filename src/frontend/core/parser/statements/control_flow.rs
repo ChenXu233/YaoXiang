@@ -170,42 +170,46 @@ pub fn parse_if_stmt(
 
     let then_branch = parse_block_after_lbrace(state, span)?;
 
-    // Parse elif branches
-    let mut elif_branches = Vec::new();
-    while state.skip(&TokenKind::KwElif) {
-        let elif_condition = state.parse_expression(crate::frontend::core::parser::BP_LOWEST)?;
-        if !state.expect(&TokenKind::LBrace) {
-            return None;
-        }
-        let elif_body = parse_block_after_lbrace(state, state.span())?;
-        elif_branches.push((Box::new(elif_condition), Box::new(elif_body)));
-    }
+    // Parse else if / else branches
+    let mut else_if_branches = Vec::new();
+    let mut else_branch = None;
 
-    // Parse else branch
-    let else_branch = if state.skip(&TokenKind::KwElse) {
-        if state.at(&TokenKind::LBrace) {
-            state.bump(); // consume '{'
-            Some(Box::new(parse_block_after_lbrace(state, state.span())?))
+    while state.at(&TokenKind::KwElse) {
+        state.bump(); // consume 'else'
+        if state.at(&TokenKind::KwIf) {
+            state.bump(); // consume 'if'
+            let else_if_condition =
+                state.parse_expression(crate::frontend::core::parser::BP_LOWEST)?;
+            if !state.expect(&TokenKind::LBrace) {
+                return None;
+            }
+            let else_if_body = parse_block_after_lbrace(state, state.span())?;
+            else_if_branches.push((Box::new(else_if_condition), Box::new(else_if_body)));
         } else {
-            let expr = state.parse_expression(crate::frontend::core::parser::BP_LOWEST)?;
-            let span = state.span();
-            Some(Box::new(Block {
-                stmts: vec![Stmt {
-                    kind: StmtKind::Expr(Box::new(expr)),
+            // 真实的 else 块
+            if state.at(&TokenKind::LBrace) {
+                state.bump(); // consume '{'
+                else_branch = Some(Box::new(parse_block_after_lbrace(state, state.span())?));
+            } else {
+                let expr = state.parse_expression(crate::frontend::core::parser::BP_LOWEST)?;
+                let span = state.span();
+                else_branch = Some(Box::new(Block {
+                    stmts: vec![Stmt {
+                        kind: StmtKind::Expr(Box::new(expr)),
+                        span,
+                    }],
                     span,
-                }],
-                span,
-            }))
+                }));
+            }
+            break;
         }
-    } else {
-        None
-    };
+    }
 
     Some(Stmt {
         kind: StmtKind::If {
             condition: Box::new(condition),
             then_branch: Box::new(then_branch),
-            elif_branches,
+            else_if_branches,
             else_branch,
             span,
         },

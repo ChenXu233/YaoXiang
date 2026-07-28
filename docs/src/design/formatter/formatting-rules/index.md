@@ -27,7 +27,7 @@ description: YaoXiang 代码格式化规则的分类和索引
 
 ## 控制流
 
-- [控制流规则](./control-flow.md) — if/elif/else、for 循环、while 循环、循环标签
+- [控制流规则](./control-flow.md) — if/else if/else、for 循环、while 循环、循环标签
 
 ## 特殊语法
 

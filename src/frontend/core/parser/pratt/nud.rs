@@ -838,31 +838,28 @@ impl<'a> ParserState<'a> {
         // Parse then branch
         let then_branch = self.parse_block_expr()?;
 
-        // Parse optional else branch
-        let else_branch = if self.skip(&TokenKind::KwElse) {
+        // Parse optional else if / else branches (flat syntax)
+        let mut else_if_branches = Vec::new();
+        let mut else_branch = None;
+
+        while self.at(&TokenKind::KwElse) {
+            self.bump(); // consume 'else'
             if self.at(&TokenKind::KwIf) {
-                // Else if: parse another if expression
-                // For else-if, we need to parse it as a block containing the if expression
-                let if_expr = self.parse_if()?;
-                Some(Box::new(Block {
-                    stmts: vec![Stmt {
-                        kind: StmtKind::Expr(Box::new(if_expr)),
-                        span: self.span(),
-                    }],
-                    span: self.span(),
-                }))
+                self.bump(); // consume 'if'
+                let else_if_condition = self.parse_expression(BP_LOWEST)?;
+                let else_if_body = self.parse_block_expr()?;
+                else_if_branches.push((Box::new(else_if_condition), Box::new(else_if_body)));
             } else {
                 // Regular else: parse block
-                Some(Box::new(self.parse_block_expr()?))
+                else_branch = Some(Box::new(self.parse_block_expr()?));
+                break;
             }
-        } else {
-            None
-        };
+        }
 
         Some(Expr::If {
             condition: Box::new(condition),
             then_branch: Box::new(then_branch),
-            elif_branches: Vec::new(), // No elif branches for simple if expressions
+            else_if_branches,
             else_branch,
             span,
         })

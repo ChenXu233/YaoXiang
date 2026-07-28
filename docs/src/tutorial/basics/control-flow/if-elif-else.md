@@ -1,20 +1,20 @@
 ---
-title: if-elif-else
+title: if-else-if-else
 ---
 
-# if-elif-else
+# if-else-if-else
 
-`if-elif-else` 是编程中最基本的决策工具。它的逻辑非常直观——**如果条件成立，就执行某段代码；否则，检查下一个条件；都不成立，走默认路径**。
+`if-else-if-else` 是编程中最基本的决策工具。它的逻辑非常直观——**如果条件成立，就执行某段代码；否则，检查下一个条件；都不成立，走默认路径**。
 
 ## 基本语法
 
 语法规范中 `if` 表达式和 `if` 语句的定义完全一致：
 
 ```
-if Expr Block ('elif' Expr Block)* ('else' Block)?
+if Expr Block ('else' 'if' Expr Block)* ('else' Block)?
 ```
 
-用日常语言翻译：`if` 开头，后面跟一个条件表达式和一个代码块，之后可以接零到多个 `elif 条件 代码块`，最后可以有一个可选的 `else 代码块`。
+用日常语言翻译：`if` 开头，后面跟一个条件表达式和一个代码块，之后可以接零到多个 `else if 条件 代码块`，最后可以有一个可选的 `else 代码块`。
 
 最简单的形式——只有 `if`：
 
@@ -34,23 +34,21 @@ if is_raining {
 }
 ```
 
-多个条件用 `elif`：
+多个条件用 `else if`：
 
 ```yaoxiang
 score = 85
 
 if score >= 90 {
     print("优秀")
-} elif score >= 80 {
+} else if score >= 80 {
     print("良好")
-} elif score >= 60 {
+} else if score >= 60 {
     print("及格")
 } else {
     print("需要努力")
 }
 ```
-
-注意 YaoXiang 的关键字是 `elif`，不是 `else if`。这是语言刻意保持关键字精简的一个体现。
 
 ## if 是表达式
 
@@ -60,7 +58,7 @@ if score >= 90 {
 // if 表达式：各分支的值会赋给 result
 result = if x > 0 {
     "正数"
-} elif x < 0 {
+} else if x < 0 {
     "负数"
 } else {
     "零"
@@ -76,9 +74,9 @@ score = 88
 // 所有分支都返回 String，类型一致，没问题
 grade = if score >= 90 {
     "A"
-} elif score >= 80 {
+} else if score >= 80 {
     "B"
-} elif score >= 60 {
+} else if score >= 60 {
     "C"
 } else {
     "D"
@@ -158,8 +156,8 @@ if (age >= 18 and age <= 60) or is_vip {
 
 | 要点 | 说明 |
 |------|------|
-| 基本结构 | `if 条件 { ... } elif 条件 { ... } else { ... }` |
-| elif | YaoXiang 用 `elif`，不是 `else if` |
+| 基本结构 | `if 条件 { ... } else if 条件 { ... } else { ... }` |
+| else if | YaoXiang 用 `else if` 实现多路分支 |
 | 表达式 | `if` 可以返回值，所有分支类型必须一致 |
 | 分支返回值 | 分支块中最后一个表达式的值即为返回值 |
 | 嵌套 | `if` 内可以再写 `if`，没有悬空 else 歧义 |

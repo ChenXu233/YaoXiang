@@ -317,7 +317,7 @@ fn test_reads_writes_if_expr_branches() {
             }],
             span: dummy_span(),
         }),
-        elif_branches: vec![],
+        else_if_branches: vec![],
         else_branch: Some(Box::new(Block {
             stmts: vec![Stmt {
                 kind: StmtKind::Expr(Box::new(var_expr("b"))),

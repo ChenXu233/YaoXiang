@@ -373,7 +373,7 @@ YaoXiang 仅定义 17 个核心关键字，数量远少于主流语言：
 
 ```
 pub    use    spawn
-ref    mut    if     elif
+ref    mut    if     else
 else   match  while  for    return
 break  continue as     in     unsafe
 ```
@@ -783,7 +783,7 @@ docs(readme): update installation instructions
 | `spawn` | 并作标记 |
 | `ref` | 共享持有（编译器自动选 Rc/Arc） |
 | `mut` | 可变变量 |
-| `if/elif/else` | 条件分支 |
+| `if/else if/else` | 条件分支 |
 | `match` | 模式匹配 |
 | `while/for` | 循环 |
 | `return/break/continue` | 控制流 |

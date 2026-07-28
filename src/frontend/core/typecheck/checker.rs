@@ -1869,14 +1869,14 @@ impl TypeChecker {
             }
             StmtKind::If {
                 then_branch,
-                elif_branches,
+                else_if_branches,
                 else_branch,
                 ..
             } => {
                 for s in &then_branch.stmts {
                     self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
                 }
-                for (_, body) in elif_branches {
+                for (_, body) in else_if_branches {
                     for s in &body.stmts {
                         self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
                     }
@@ -1922,14 +1922,14 @@ impl TypeChecker {
             }
             crate::frontend::core::parser::ast::Expr::If {
                 then_branch,
-                elif_branches,
+                else_if_branches,
                 else_branch,
                 ..
             } => {
                 for s in &then_branch.stmts {
                     self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
                 }
-                for (_, body) in elif_branches {
+                for (_, body) in else_if_branches {
                     for s in &body.stmts {
                         self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
                     }
@@ -1980,14 +1980,14 @@ impl TypeChecker {
             }
             StmtKind::If {
                 then_branch,
-                elif_branches,
+                else_if_branches,
                 else_branch,
                 ..
             } => {
                 for s in &then_branch.stmts {
                     self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
                 }
-                for (_, body) in elif_branches {
+                for (_, body) in else_if_branches {
                     for s in &body.stmts {
                         self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
                     }

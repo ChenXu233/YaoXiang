@@ -238,7 +238,7 @@ StringList: Type = List(String)
 // 条件表达式
 if x > 0 {
     "positive"
-} elif x == 0 {
+} else if x == 0 {
     "zero"
 } else {
     "negative"

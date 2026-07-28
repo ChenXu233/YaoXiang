@@ -77,14 +77,12 @@ impl StatementParser for ParserState<'_> {
             // 关键字不能用作变量名或表达式的语句开头
             Some(kw @ TokenKind::KwRef)
             | Some(kw @ TokenKind::KwUnsafe)
-            | Some(kw @ TokenKind::KwElif)
             | Some(kw @ TokenKind::KwElse)
             | Some(kw @ TokenKind::KwIn)
             | Some(kw @ TokenKind::KwAs) => {
                 let keyword = match kw {
                     TokenKind::KwRef => "ref",
                     TokenKind::KwUnsafe => "unsafe",
-                    TokenKind::KwElif => "elif",
                     TokenKind::KwElse => "else",
                     TokenKind::KwIn => "in",
                     TokenKind::KwAs => "as",
