@@ -9,17 +9,17 @@ description: Architecture design of YaoXiang's diagnostic system
 
 Error codes are grouped by category:
 
-| Range  | Category      | Description                       |
-| ------ | ------------- | --------------------------------- |
-| E0xxx | Lexical/Syntax | Lexical analysis and syntax errors |
-| E1xxx | Type Checking | Type mismatches, undefined variables, etc. |
-| E2xxx | Semantic Analysis | Semantic errors                  |
-| E4xxx | Generics/Trait | Generics and trait system errors  |
-| E5xxx | Module/Import | Module system errors              |
-| E6xxx | Runtime      | Runtime errors                    |
-| E7xxx | I/O          | I/O and system errors             |
-| E8xxx | Internal     | Internal compiler errors          |
-| W1xxx | Warning      | Dead code, unused variables, etc. |
+| Range | Category          | Description                                |
+| ----- | ----------------- | ------------------------------------------ |
+| E0xxx | Lexical/Syntax    | Lexical analysis and syntax errors         |
+| E1xxx | Type Checking     | Type mismatches, undefined variables, etc. |
+| E2xxx | Semantic Analysis | Semantic errors                            |
+| E4xxx | Generics/Trait    | Generics and trait system errors           |
+| E5xxx | Module/Import     | Module system errors                       |
+| E6xxx | Runtime           | Runtime errors                             |
+| E7xxx | I/O               | I/O and system errors                      |
+| E8xxx | Internal          | Internal compiler errors                   |
+| W1xxx | Warning           | Dead code, unused variables, etc.          |
 
 ## Diagnostic Data Structure
 
@@ -47,7 +47,8 @@ let diagnostic = ErrorCodeDefinition::unknown_variable("x")
 
 ## i18n Support
 
-Titles and help text for all error codes are managed through `I18nRegistry`, supporting Chinese and English switching. Message templates support `{param}` placeholders.
+Titles and help text for all error codes are managed through `I18nRegistry`, supporting Chinese and
+English switching. Message templates support `{param}` placeholders.
 
 ## Emitter Output
 

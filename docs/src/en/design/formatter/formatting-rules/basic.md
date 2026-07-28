@@ -9,7 +9,8 @@ description: 'Formatting rules for indentation, line width, operators, and code 
 
 ## §1 Indentation
 
-**§1.1 Indentation Width.** Default indentation uses 4 spaces. Can be modified via the `indent_width` configuration option.
+**§1.1 Indentation Width.** Default indentation uses 4 spaces. Can be modified via the
+`indent_width` configuration option.
 
 ```
 // Default indentation (4 spaces)
@@ -29,7 +30,8 @@ fn foo() {
 }
 ```
 
-**§1.2 Tab Indentation.** When `use_tabs = true`, use tab characters for indentation. Defaults to `false`.
+**§1.2 Tab Indentation.** When `use_tabs = true`, use tab characters for indentation. Defaults to
+`false`.
 
 **§1.3 Indentation Consistency.** Tabs and spaces must not be mixed within the same file.
 
@@ -37,9 +39,11 @@ fn foo() {
 
 ## §2 Line Width
 
-**§2.1 Maximum Line Width.** Default maximum line width is 120 characters. Can be modified via the `line_width` configuration option.
+**§2.1 Maximum Line Width.** Default maximum line width is 120 characters. Can be modified via the
+`line_width` configuration option.
 
-**§2.2 Line Break Strategy.** When a line exceeds the maximum line width, it must be broken at an appropriate position. Priority order for line breaks:
+**§2.2 Line Break Strategy.** When a line exceeds the maximum line width, it must be broken at an
+appropriate position. Priority order for line breaks:
 
 1. After low-priority operators (`+`, `-`, `||`, `&&`, `=`)
 2. Function parameter lists
@@ -87,7 +91,8 @@ let x = - 1;
 let y = ! flag;
 ```
 
-**§3.3 Low-Priority Operator Line Breaks.** When an expression exceeds line width, low-priority operators go at the start of the new line.
+**§3.3 Low-Priority Operator Line Breaks.** When an expression exceeds line width, low-priority
+operators go at the start of the new line.
 
 ```
 // When exceeding line width
@@ -100,7 +105,8 @@ let result = first_value
     + fourth_value;
 ```
 
-**§3.4 High-Priority Operator Line Breaks.** High-priority operators go at the start of the new line.
+**§3.4 High-Priority Operator Line Breaks.** High-priority operators go at the start of the new
+line.
 
 ```
 // When exceeding line width
@@ -117,7 +123,8 @@ let result = first_value
 
 ## §3.5 Variable References
 
-**§3.5.1 Variable Names.** Variable references output the variable name directly without additional spacing.
+**§3.5.1 Variable Names.** Variable references output the variable name directly without additional
+spacing.
 
 ```
 // ✅ Correct
@@ -133,7 +140,8 @@ let y = "camelCaseName";  // Should not have quotes
 
 ## §6 Code Blocks
 
-**§6.1 Code Block Format.** Code blocks are enclosed in curly braces `{}`, with a space before the opening brace.
+**§6.1 Code Block Format.** Code blocks are enclosed in curly braces `{}`, with a space before the
+opening brace.
 
 ```
 // ✅ Correct
@@ -151,7 +159,8 @@ fn foo()
 }
 ```
 
-**§6.2 Single-Line Code Blocks.** When a code block contains only one statement and the total length does not exceed the line width, a single-line format may be used.
+**§6.2 Single-Line Code Blocks.** When a code block contains only one statement and the total length
+does not exceed the line width, a single-line format may be used.
 
 ```
 // ✅ Single-line format

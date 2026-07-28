@@ -16,11 +16,15 @@ impl_status: 'not-started'
 
 ## Summary
 
-Define the build mechanism for the YaoXiang package manager: declarative build configuration, build strategies (cargo/cmake/custom/none), precompiled binary distribution, and system dependency checking.
+Define the build mechanism for the YaoXiang package manager: declarative build configuration, build
+strategies (cargo/cmake/custom/none), precompiled binary distribution, and system dependency
+checking.
 
 ## Motivation
 
-Some packages are pure `.yx` code that don't require building. Some need to compile FFI bindings (calling Cargo, CMake, etc.). A unified mechanism is needed to allow package authors to declare build requirements, letting the package manager handle them automatically.
+Some packages are pure `.yx` code that don't require building. Some need to compile FFI bindings
+(calling Cargo, CMake, etc.). A unified mechanism is needed to allow package authors to declare
+build requirements, letting the package manager handle them automatically.
 
 ### Current Problems
 
@@ -33,7 +37,8 @@ Some packages are pure `.yx` code that don't require building. Some need to comp
 
 ### Core Design: Declarative Build + Precompiled First
 
-Package authors declare build requirements in `yaoxiang.toml`, and the package manager automatically makes decisions based on these declarations.
+Package authors declare build requirements in `yaoxiang.toml`, and the package manager automatically
+makes decisions based on these declarations.
 
 ### Build Strategy
 
@@ -46,7 +51,8 @@ enum BuildStrategy {
 }
 ```
 
-Note: The `Precompiled` variant has been removed. The existence of `[binaries]` automatically triggers precompiled-first behavior, without requiring an explicit strategy declaration.
+Note: The `Precompiled` variant has been removed. The existence of `[binaries]` automatically
+triggers precompiled-first behavior, without requiring an explicit strategy declaration.
 
 ### Build Declaration in yaoxiang.toml
 
@@ -96,7 +102,8 @@ yaoxiang install foo
     └─ 5. Install to vendor/
 ```
 
-**Precompiled first, source as fallback.** The existence of `[binaries]` automatically triggers precompiled checking without requiring an explicit strategy.
+**Precompiled first, source as fallback.** The existence of `[binaries]` automatically triggers
+precompiled checking without requiring an explicit strategy.
 
 ### Cargo Strategy Details
 
@@ -136,7 +143,8 @@ cargo build --release --features ffi,linux-ffi
 "aarch64-apple-darwin" = { url = "releases/download/v1.0.0/foo-macos-aarch64.tar.gz", sha256 = "ghi789" }
 ```
 
-**URL Format:** Supports both absolute URLs and relative paths. Relative paths are resolved relative to the package's repository address (GitHub repo URL or Registry root URL).
+**URL Format:** Supports both absolute URLs and relative paths. Relative paths are resolved relative
+to the package's repository address (GitHub repo URL or Registry root URL).
 
 **Conditions to skip build:**
 
@@ -192,7 +200,8 @@ Error: Build requirement not satisfied
 
 ### yx-bindgen Integration (headers field)
 
-`[build].headers` declares C header files that need yx-bindgen processing. The build system automatically runs yx-bindgen to generate `.yx` binding files.
+`[build].headers` declares C header files that need yx-bindgen processing. The build system
+automatically runs yx-bindgen to generate `.yx` binding files.
 
 ```toml
 [build]
@@ -209,9 +218,13 @@ Build flow:
 4. Install
 ```
 
-yx-bindgen parses function signatures and type definitions from C header files (`.h`), automatically generating `.yx` binding declarations. Users don't need to run it manually—the build system handles it automatically when `headers` configuration is detected.
+yx-bindgen parses function signatures and type definitions from C header files (`.h`), automatically
+generating `.yx` binding declarations. Users don't need to run it manually—the build system handles
+it automatically when `headers` configuration is detected.
 
-**Relationship with RFC-026:** RFC-026 defines the language-level semantics of `yx-bindgen` (`native("symbol")` syntax, unsafe types). RFC-014b defines its integration into the build flow (`headers` configuration). The two are complementary.
+**Relationship with RFC-026:** RFC-026 defines the language-level semantics of `yx-bindgen`
+(`native("symbol")` syntax, unsafe types). RFC-014b defines its integration into the build flow
+(`headers` configuration). The two are complementary.
 
 ### Integration with Cargo Workspace
 
@@ -237,15 +250,15 @@ my-package/
 
 Use Rust target triple format (`arch-vendor-os-env`):
 
-| Platform                  | Identifier                     |
-| ------------------------- | ------------------------------ |
-| Linux x86_64 (glibc)      | `x86_64-unknown-linux-gnu`     |
-| Linux x86_64 (musl)       | `x86_64-unknown-linux-musl`    |
-| Linux ARM64               | `aarch64-unknown-linux-gnu`    |
-| Windows x86_64 (MSVC)     | `x86_64-pc-windows-msvc`       |
-| Windows x86_64 (MinGW)    | `x86_64-pc-windows-gnu`        |
-| macOS ARM64               | `aarch64-apple-darwin`         |
-| macOS x86_64              | `x86_64-apple-darwin`          |
+| Platform               | Identifier                  |
+| ---------------------- | --------------------------- |
+| Linux x86_64 (glibc)   | `x86_64-unknown-linux-gnu`  |
+| Linux x86_64 (musl)    | `x86_64-unknown-linux-musl` |
+| Linux ARM64            | `aarch64-unknown-linux-gnu` |
+| Windows x86_64 (MSVC)  | `x86_64-pc-windows-msvc`    |
+| Windows x86_64 (MinGW) | `x86_64-pc-windows-gnu`     |
+| macOS ARM64            | `aarch64-apple-darwin`      |
+| macOS x86_64           | `x86_64-apple-darwin`       |
 
 Using Rust target triples instead of simplified formats because:
 
@@ -299,24 +312,24 @@ User:
 
 ## Alternative Approaches
 
-| Approach                          | Why Not Chosen                         |
-| --------------------------------- | -------------------------------------- |
-| Pure source distribution          | Users need to install build toolchain, high barrier |
-| Python wheel-like binary format   | Too complex, not needed for YaoXiang ecosystem in early stages |
-| No FFI build support              | Limits language extensibility          |
+| Approach                        | Why Not Chosen                                                 |
+| ------------------------------- | -------------------------------------------------------------- |
+| Pure source distribution        | Users need to install build toolchain, high barrier            |
+| Python wheel-like binary format | Too complex, not needed for YaoXiang ecosystem in early stages |
+| No FFI build support            | Limits language extensibility                                  |
 
 ## Implementation Strategy
 
 ### Phase Breakdown
 
-| Phase     | Content                                              |
-| --------- | ---------------------------------------------------- |
-| Phase 5a  | `[build]` configuration parsing + `BuildStrategy` enum |
-| Phase 5b  | System dependency checking                           |
-| Phase 5c  | Cargo build integration (read `[build.cargo]`, construct commands) |
-| Phase 5d  | Precompiled binary download + verification            |
-| Phase 5e  | build.yx script execution                            |
-| Phase 5f  | yx-bindgen integration (`headers` field)             |
+| Phase    | Content                                                            |
+| -------- | ------------------------------------------------------------------ |
+| Phase 5a | `[build]` configuration parsing + `BuildStrategy` enum             |
+| Phase 5b | System dependency checking                                         |
+| Phase 5c | Cargo build integration (read `[build.cargo]`, construct commands) |
+| Phase 5d | Precompiled binary download + verification                         |
+| Phase 5e | build.yx script execution                                          |
+| Phase 5f | yx-bindgen integration (`headers` field)                           |
 
 ### Dependencies
 

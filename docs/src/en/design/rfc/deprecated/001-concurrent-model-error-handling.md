@@ -8,10 +8,12 @@ updated: '2026-05-11 (pruned: removed @auto, L1 fallback heuristics, streamlined
 
 > **⚠️ Deprecated**
 >
-> This RFC has been superseded by **[RFC-024: New Concurrency Model](/design/rfc/accepted/024-new-concurrency-model)**.
+> This RFC has been superseded by
+> **[RFC-024: New Concurrency Model](/design/rfc/accepted/024-new-concurrency-model)**.
 >
-> RFC-001's three-layer concurrency architecture (L1/L2/L3), @block/@eager annotations, and DAG automatic analysis have been removed. The new design uses
-> `spawn {}` blocks as the sole parallelism primitive, requiring no annotations.
+> RFC-001's three-layer concurrency architecture (L1/L2/L3), @block/@eager annotations, and DAG
+> automatic analysis have been removed. The new design uses `spawn {}` blocks as the sole
+> parallelism primitive, requiring no annotations.
 >
 > This document is retained for historical reference only.
 
@@ -26,39 +28,43 @@ title: "RFC-001: Concurrent Spawn Model and Error Handling System"
 
 ## Design Sources
 
-| Document                                              | Relationship          |
-| ----------------------------------------------------- | --------------------- |
-| [async-whitepaper](/src/archive/async-whitepaper)     | Design origin, theoretical basis |
-| [language-spec](/src/design/language-spec)            | Specification target  |
+| Document                                          | Relationship                     |
+| ------------------------------------------------- | -------------------------------- |
+| [async-whitepaper](/src/archive/async-whitepaper) | Design origin, theoretical basis |
+| [language-spec](/src/design/language-spec)        | Specification target             |
 
 ## Abstract
 
-Proposes YaoXiang's concurrent spawn model: describe logic in synchronous syntax, automatically execute concurrently at runtime. Core mechanism: three-layer concurrency architecture + DAG dependency analysis + Result type system.
+Proposes YaoXiang's concurrent spawn model: describe logic in synchronous syntax, automatically
+execute concurrently at runtime. Core mechanism: three-layer concurrency architecture + DAG
+dependency analysis + Result type system.
 
 ## Quick Reference
 
-| Scenario      | Syntax             | Description                    |
-| ------------- | ------------------ | ------------------------------ |
-| Auto-parallel | No annotation (default) | Maximize parallelism          |
-| Sync wait     | `@eager`           | Wait for dependencies          |
-| Fully sequential | `@block`       | No concurrency, for debugging |
-| Local concurrency | `spawn`       | Concurrency within @block scope |
+| Scenario          | Syntax                  | Description                     |
+| ----------------- | ----------------------- | ------------------------------- |
+| Auto-parallel     | No annotation (default) | Maximize parallelism            |
+| Sync wait         | `@eager`                | Wait for dependencies           |
+| Fully sequential  | `@block`                | No concurrency, for debugging   |
+| Local concurrency | `spawn`                 | Concurrency within @block scope |
 
 ## Motivation
 
 Current mainstream language concurrency models have obvious flaws:
 
-| Language      | Concurrency Model           | Problems                        |
-| ------------- | --------------------------- | ------------------------------- |
-| Rust          | async/await + tokio         | Async contagion, steep learning curve |
-| Go            | goroutine                   | No type safety                  |
-| Python        | asyncio                     | GIL limitations                 |
-| JavaScript    | Promise/async               | Complex callbacks               |
+| Language   | Concurrency Model   | Problems                              |
+| ---------- | ------------------- | ------------------------------------- |
+| Rust       | async/await + tokio | Async contagion, steep learning curve |
+| Go         | goroutine           | No type safety                        |
+| Python     | asyncio             | GIL limitations                       |
+| JavaScript | Promise/async       | Complex callbacks                     |
 
 ### Core Contradictions
 
-1. **Transparency vs Controllability**: Fully transparent but uncontrollable vs fully controllable but opaque
-2. **Concurrency vs Debuggability**: Concurrent programs are hard to debug vs debuggable programs are hard to parallelize
+1. **Transparency vs Controllability**: Fully transparent but uncontrollable vs fully controllable
+   but opaque
+2. **Concurrency vs Debuggability**: Concurrent programs are hard to debug vs debuggable programs
+   are hard to parallelize
 
 ---
 
@@ -66,13 +72,14 @@ Current mainstream language concurrency models have obvious flaws:
 
 ### 1. Concurrent Spawn Model: Three-Layer Concurrency Architecture
 
-> **Note**: L1/L2/L3 are mental models to help users understand different scenarios. The actual implementation has only one mechanism: automatic DAG analysis + annotation control.
+> **Note**: L1/L2/L3 are mental models to help users understand different scenarios. The actual
+> implementation has only one mechanism: automatic DAG analysis + annotation control.
 
-| Layer   | Mental Model       | Syntax          | Execution Mode                  | Parallelism |
-| ------- | ------------------ | --------------- | ------------------------------- | ----------- |
-| **L1**  | Concurrency forbidden | `@block`     | Pure sequential execution       | ❌ None     |
-| **L2**  | Concurrency within @block | `spawn` | Controlled concurrency within @block scope | ⚠️ Partial |
-| **L3**  | Full concurrency   | Default (no annotation) | Automatic DAG analysis   | ✅ Full      |
+| Layer  | Mental Model              | Syntax                  | Execution Mode                             | Parallelism |
+| ------ | ------------------------- | ----------------------- | ------------------------------------------ | ----------- |
+| **L1** | Concurrency forbidden     | `@block`                | Pure sequential execution                  | ❌ None     |
+| **L2** | Concurrency within @block | `spawn`                 | Controlled concurrency within @block scope | ⚠️ Partial  |
+| **L3** | Full concurrency          | Default (no annotation) | Automatic DAG analysis                     | ✅ Full     |
 
 #### L1: @block Synchronous Mode
 
@@ -112,11 +119,11 @@ auto_parallel: (n: Int) -> Int = {
 
 ### 2. Annotation Complete Comparison
 
-| Dimension        | Default (no annotation) | `@eager`      | `@block` | `spawn`             |
-| ---------------- | ----------------------- | ------------- | -------- | ------------------- |
-| **Execution**    | Automatic DAG analysis  | Sync wait for deps | Pure sequential | Concurrency within @block |
-| **Parallelism**  | ✅ Full                  | ⚠️ By dependency order | ❌ None | ⚠️ Partial |
-| **DAG Building** | ✅                      | ✅            | ❌       | ✅                  |
+| Dimension        | Default (no annotation) | `@eager`               | `@block`        | `spawn`                   |
+| ---------------- | ----------------------- | ---------------------- | --------------- | ------------------------- |
+| **Execution**    | Automatic DAG analysis  | Sync wait for deps     | Pure sequential | Concurrency within @block |
+| **Parallelism**  | ✅ Full                 | ⚠️ By dependency order | ❌ None         | ⚠️ Partial                |
+| **DAG Building** | ✅                      | ✅                     | ❌              | ✅                        |
 
 **Selection Guide**:
 
@@ -174,7 +181,8 @@ Runtime scheduling (from leaves):
     fetch(url1)                ← isolated, parallel independently
 ```
 
-**Key Insight**: Not "top-down" generating Futures, but "bottom-up" reverse-analyzing dependencies from results.
+**Key Insight**: Not "top-down" generating Futures, but "bottom-up" reverse-analyzing dependencies
+from results.
 
 #### 3.2 Isolated DAG: Independent Parallelism
 
@@ -187,18 +195,20 @@ Scheduler: main flow executes by dependency chain, isolated uses another core in
 
 #### 3.3 Resource Types and Side Effects
 
-**Core Idea**: Resource operations are marked through types, DAG is automatically constructed. Same resource is automatically serialized, different resources are automatically parallelized.
+**Core Idea**: Resource operations are marked through types, DAG is automatically constructed. Same
+resource is automatically serialized, different resources are automatically parallelized.
 
 **Resource Type Boundaries — Clearly Defined**:
 
-Resource types are compiler-built-in marker types. The following types are recognized by the compiler as resources:
+Resource types are compiler-built-in marker types. The following types are recognized by the
+compiler as resources:
 
-| Resource Type | Description         | Compiler Behavior                     |
-| ------------- | ------------------- | ------------------------------------- |
-| `FilePath`    | Filesystem path     | Same-path operations auto-serialized  |
-| `HttpUrl`     | HTTP endpoint       | Same URL operations auto-serialized   |
+| Resource Type | Description         | Compiler Behavior                          |
+| ------------- | ------------------- | ------------------------------------------ |
+| `FilePath`    | Filesystem path     | Same-path operations auto-serialized       |
+| `HttpUrl`     | HTTP endpoint       | Same URL operations auto-serialized        |
 | `DBUrl`       | Database connection | Same connection operations auto-serialized |
-| `Console`     | Standard output     | All Console operations auto-serialized |
+| `Console`     | Standard output     | All Console operations auto-serialized     |
 
 User-defined resource types need explicit marking:
 
@@ -264,11 +274,11 @@ struct Node {
 }
 ```
 
-| Edge Type      | Symbol | Semantics                         |
-| -------------- | ------ | --------------------------------- |
-| DataEdge       | →      | Data dependency (value flow)      |
-| ControlEdge    | ●      | Control dependency (sequential execution) |
-| SpawnEdge      | ◎      | Concurrency entry (parallelizable start) |
+| Edge Type   | Symbol | Semantics                                 |
+| ----------- | ------ | ----------------------------------------- |
+| DataEdge    | →      | Data dependency (value flow)              |
+| ControlEdge | ●      | Control dependency (sequential execution) |
+| SpawnEdge   | ◎      | Concurrency entry (parallelizable start)  |
 
 ### 6. Type System
 
@@ -297,12 +307,12 @@ Arc(T) implements Send + Sync (thread-safe reference counting)
 
 ## Alternative Approaches
 
-| Approach                 | Why Not Chosen                     |
-| ------------------------ | ---------------------------------- |
-| Only explicit async/await | Cannot achieve transparent concurrency |
-| Only fully transparent concurrency | Users lose control         |
-| Go-style goroutine       | No type safety, cannot compile-time check |
-| L1 mode only             | Abandon core value of concurrent spawn model |
+| Approach                           | Why Not Chosen                               |
+| ---------------------------------- | -------------------------------------------- |
+| Only explicit async/await          | Cannot achieve transparent concurrency       |
+| Only fully transparent concurrency | Users lose control                           |
+| Go-style goroutine                 | No type safety, cannot compile-time check    |
+| L1 mode only                       | Abandon core value of concurrent spawn model |
 
 ## Implementation Strategy
 
@@ -331,34 +341,34 @@ Arc(T) implements Send + Sync (thread-safe reference counting)
 
 ## Design Decision Log
 
-| Decision                | Decision                           | Date       |
-| ----------------------- | ---------------------------------- | ---------- |
-| Three-layer concurrency | L1/L2/L3 progressive              | 2025-01-05 |
-| @block annotation position | After return type             | 2025-01-05 |
-| DAG error propagation   | Propagate up along dependency edges | 2025-01-06 |
-| DAG performance         | Incremental construction + caching | 2025-01-06 |
-| Runtime selection       | Generics + compile-time injection | 2025-01-06 |
-| Node interface          | Generics + function injection (no trait) | 2025-01-06 |
-| Error graph memory      | DAG only built within single function | 2025-01-06 |
-| Resource conflict detection | DAG data flow dependency, user variable passing | 2025-01-06 |
-| Resource type system    | Resource marker + DAG auto-dependency | 2026-01-06 |
-| L1/L2/L3 mental model   | Three-layer abstraction, not implementation mechanism | 2026-01-06 |
-| @auto annotation        | Removed, duplicates default behavior | 2026-05-11 |
-| L1 auto-fallback        | Removed, behavior unpredictable   | 2026-05-11 |
+| Decision                    | Decision                                              | Date       |
+| --------------------------- | ----------------------------------------------------- | ---------- |
+| Three-layer concurrency     | L1/L2/L3 progressive                                  | 2025-01-05 |
+| @block annotation position  | After return type                                     | 2025-01-05 |
+| DAG error propagation       | Propagate up along dependency edges                   | 2025-01-06 |
+| DAG performance             | Incremental construction + caching                    | 2025-01-06 |
+| Runtime selection           | Generics + compile-time injection                     | 2025-01-06 |
+| Node interface              | Generics + function injection (no trait)              | 2025-01-06 |
+| Error graph memory          | DAG only built within single function                 | 2025-01-06 |
+| Resource conflict detection | DAG data flow dependency, user variable passing       | 2025-01-06 |
+| Resource type system        | Resource marker + DAG auto-dependency                 | 2026-01-06 |
+| L1/L2/L3 mental model       | Three-layer abstraction, not implementation mechanism | 2026-01-06 |
+| @auto annotation            | Removed, duplicates default behavior                  | 2026-05-11 |
+| L1 auto-fallback            | Removed, behavior unpredictable                       | 2026-05-11 |
 
 ---
 
 ## Appendix: Glossary
 
-| Term              | Definition                                             |
-| ----------------- | ------------------------------------------------------ |
-| Concurrent spawn model | YaoXiang's concurrency paradigm: sync syntax, async nature |
-| DAG               | Directed Acyclic Graph, describes computation dependencies |
-| spawn             | Controlled concurrency within @block scope            |
-| @block            | Sync annotation, disables concurrency optimization     |
-| @eager            | Eager evaluation, waits for dependencies to complete   |
-| Resource          | Resource type marker, operations auto-build DAG dependencies |
-| Error graph       | Visualized error propagation path                     |
+| Term                   | Definition                                                   |
+| ---------------------- | ------------------------------------------------------------ |
+| Concurrent spawn model | YaoXiang's concurrency paradigm: sync syntax, async nature   |
+| DAG                    | Directed Acyclic Graph, describes computation dependencies   |
+| spawn                  | Controlled concurrency within @block scope                   |
+| @block                 | Sync annotation, disables concurrency optimization           |
+| @eager                 | Eager evaluation, waits for dependencies to complete         |
+| Resource               | Resource type marker, operations auto-build DAG dependencies |
+| Error graph            | Visualized error propagation path                            |
 
 ## References
 

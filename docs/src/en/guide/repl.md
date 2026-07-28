@@ -5,8 +5,9 @@ description: YaoXiang REPL User Guide - Interactive Code Execution Environment
 
 # REPL Interactive Interpreter
 
-The YaoXiang REPL (Read-Eval-Print
-Loop) is an interactive code execution environment that allows you to input and execute YaoXiang code line by line, making it ideal for learning, testing, and debugging.
+The YaoXiang REPL (Read-Eval-Print Loop) is an interactive code execution environment that allows
+you to input and execute YaoXiang code line by line, making it ideal for learning, testing, and
+debugging.
 
 ## Quick Start
 
@@ -83,7 +84,8 @@ Exits the REPL. You can also use the shorthand `:q`.
 >> :clear
 ```
 
-Clears all defined variables and functions, resetting the REPL state. You can also use the shorthand `:c`.
+Clears all defined variables and functions, resetting the REPL state. You can also use the shorthand
+`:c`.
 
 ### Type Lookup Command
 
@@ -111,7 +113,8 @@ add: fn(Int, Int) -> Int
 >> :symbols
 ```
 
-Lists all defined symbols (variables and functions) in the current REPL. You can also use the shorthand `:i` or `:info`.
+Lists all defined symbols (variables and functions) in the current REPL. You can also use the
+shorthand `:i` or `:info`.
 
 **Example**:
 
@@ -217,7 +220,8 @@ Calling functions:
 
 ### Multi-line Code
 
-The REPL supports multi-line code input. When incomplete code is detected (such as unclosed brackets), it automatically enters continuation mode:
+The REPL supports multi-line code input. When incomplete code is detected (such as unclosed
+brackets), it automatically enters continuation mode:
 
 ```yaoxiang
 >> factorial: (n: Int) -> Int = {
@@ -252,7 +256,8 @@ Press the `Tab` key to trigger auto-completion.
 
 1. **Keyword completion**: YaoXiang language keywords (press Tab to expand)
 2. **Symbol completion**: Defined variable and function names
-3. **Builtin function completion**: `print`, `len`, `range`, `typeof`, `assert`, and other builtin functions
+3. **Builtin function completion**: `print`, `len`, `range`, `typeof`, `assert`, and other builtin
+   functions
 
 ### Completion Examples
 
@@ -421,12 +426,12 @@ Total time: 2.34ms
 
 ## Related Commands
 
-| Command     | Shortcut | Function             |
-| ----------- | -------- | -------------------- |
-| `:help`     | `:h`     | Display help info    |
-| `:quit`     | `:q`     | Exit REPL            |
-| `:clear`    | `:c`     | Clear all state      |
-| `:type`     | `:t`     | View symbol type     |
-| `:symbols`  | `:i`     | List all symbols     |
-| `:history`  | `:hist`  | Show command history |
-| `:stats`    | -        | Show execution stats |
+| Command    | Shortcut | Function             |
+| ---------- | -------- | -------------------- |
+| `:help`    | `:h`     | Display help info    |
+| `:quit`    | `:q`     | Exit REPL            |
+| `:clear`   | `:c`     | Clear all state      |
+| `:type`    | `:t`     | View symbol type     |
+| `:symbols` | `:i`     | List all symbols     |
+| `:history` | `:hist`  | Show command history |
+| `:stats`   | -        | Show execution stats |

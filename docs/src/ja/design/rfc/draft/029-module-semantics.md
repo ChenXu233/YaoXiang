@@ -20,11 +20,14 @@ updated: '2026-07-14（改編：互換性セクションの削除、サブRFCへ
 
 ### 現在の問題
 
-1. **コンパイラは単一ファイルのみサポート**：`Compiler::compile(name, source)` はファイル間依存関係を処理できない
-2. **エクスポートルールが競合**：型は自動エクスポート、定数は自動エクスポート、メソッドは自動エクスポート、関数は `pub` をチェック——4つの例外
+1. **コンパイラは単一ファイルのみサポート**：`Compiler::compile(name, source)`
+   はファイル間依存関係を処理できない
+2. **エクスポートルールが競合**：型は自動エクスポート、定数は自動エクスポート、メソッドは自動エクスポート、関数は
+   `pub` をチェック——4つの例外
 3. **2つのモジュールリゾルバ**：`frontend/module/resolver.rs` と `package/source/module_resolver.rs`
    検索順序が異なる
-4. **型チェッカーがファイルロードと密結合**：草案では `use` が型チェック時に `ModuleLoader::load()` をトリガーすることを要求していた
+4. **型チェッカーがファイルロードと密結合**：草案では `use` が型チェック時に `ModuleLoader::load()`
+   をトリガーすることを要求していた
 
 ### 設計目標
 
@@ -40,7 +43,8 @@ updated: '2026-07-14（改編：互換性セクションの削除、サブRFCへ
 
 #### モジュールの定義
 
-**モジュール**は `.yx` ファイルである。モジュールパスはドット区切りの名前パスであり、ファイルシステム上の位置に対応する。
+**モジュール**は `.yx`
+ファイルである。モジュールパスはドット区切りの名前パスであり、ファイルシステム上の位置に対応する。
 
 ```
 math.geometry → src/math/geometry.yx
@@ -48,7 +52,8 @@ math.geometry → src/math/geometry.yx
              → src/math/geometry/index.yx
 ```
 
-**パッケージ**は `yaoxiang.toml` を持つプロジェクトであり、複数のモジュールを含む。パッケージは唯一の캡슐化境界である。
+**パッケージ**は `yaoxiang.toml`
+を持つプロジェクトであり、複数のモジュールを含む。パッケージは唯一の캡슐化境界である。
 
 #### パス解決ルール
 
@@ -78,7 +83,9 @@ base/name/index.yx
 
 #### 統一リゾルバ
 
-既存の2つの `ModuleResolver` を廃止する。`frontend/module/resolver.rs` を唯一の実装として残し、`package/source/module_resolver.rs` を削除する。`YXPATH` 環境変数のサポートは唯一のリゾルバに統合する。
+既存の2つの `ModuleResolver` を廃止する。`frontend/module/resolver.rs`
+を唯一の実装として残し、`package/source/module_resolver.rs` を削除する。`YXPATH`
+環境変数のサポートは唯一のリゾルバに統合する。
 
 ### 2. インポート意味
 
@@ -97,12 +104,12 @@ use math.geometry.{Point as P, distance as dist}  # 複数選択的インポー�
 
 すべてのインポート形式は**コンパイル時名前解決ルール**であり、実行時の参照コピーではない。インポートされた名前はモジュールエクスポートテーブル内の宣言アイデンティティを指す。
 
-| 構文                       | 現在のスコープにバインド           | 使用方法         |
-| -------------------------- | ---------------------------------- | ---------------- |
+| 構文                       | 現在のスコープにバインド                          | 使用方法         |
+| -------------------------- | ------------------------------------------------- | ---------------- |
 | `use path`                 | path の最後のセグメントをモジュール名前空間として | `geometry.Point` |
-| `use path as alias`        | alias をモジュール名前空間として   | `alias.Point`    |
-| `use path.{item}`          | item そのもの                     | `item`           |
-| `use path.{item as alias}` | alias そのもの                     | `alias`          |
+| `use path as alias`        | alias をモジュール名前空間として                  | `alias.Point`    |
+| `use path.{item}`          | item そのもの                                     | `item`           |
+| `use path.{item as alias}` | alias そのもの                                    | `alias`          |
 
 #### 削除された構文
 
@@ -112,7 +119,8 @@ use math.geometry.{Point as P, distance as dist}  # 複数選択的インポー�
 
 #### パスの意味
 
-`use path` の `path` は常に**モジュールパス**であり、宣言ではない。モジュールが見つからない場合は即座にエラー：
+`use path` の `path`
+は常に**モジュールパス**であり、宣言ではない。モジュールが見つからない場合は即座にエラー：
 
 ```
 モジュール `math.geometry.Point` が見つかりません。
@@ -139,10 +147,10 @@ use math.geometry.{Point}
 
 パッケージは唯一の캡슐화境界である。モジュールは権限境界不承担。
 
-| 記述             | 現在のパッケージ内 | 他パッケージ |
-| ---------------- | :----------------: | :---------: |
-| デフォルト（`pub` なし） |        ✅        |      ❌     |
-| `pub`            |        ✅        |      ✅     |
+| 記述                     | 現在のパッケージ内 | 他パッケージ |
+| ------------------------ | :----------------: | :----------: |
+| デフォルト（`pub` なし） |         ✅         |      ❌      |
+| `pub`                    |         ✅         |      ✅      |
 
 **1つのルール、すべてのトップレベル宣言に適用**：型、関数、定数、メソッド。
 
@@ -171,7 +179,8 @@ pub enum Visibility {
 - **PackageSymbols**：すべてのパトップレベル宣言を含むパッケージ内完全シンボルテーブル
 - **PublicExports**：他パッケージに提供する `pub` 宣言のサブセット
 
-同一パッケージの `use` は `PackageSymbols` をクエリ；パッケージ間 `use` は `PublicExports` のみをクエリ可能。
+同一パッケージの `use` は `PackageSymbols` をクエリ；パッケージ間 `use` は `PublicExports`
+のみをクエリ可能。
 
 パッケージ間での非 `pub` 宣言の参照は即座にエラー：
 
@@ -198,7 +207,8 @@ pub 宣言ではないため、`math` パッケージ内でのみ使用可能。
   → 診断を集約
 ```
 
-型チェッカーは事前構築された `ModuleRegistry` を**のみクエリ**し、ファイルロードを実行せず、ディスクに触れない。
+型チェッカーは事前構築された `ModuleRegistry`
+を**のみクエリ**し、ファイルロードを実行せず、ディスクに触れない。
 
 #### エントリファイルの選択
 
@@ -236,20 +246,20 @@ pub 宣言ではないため、`math` パッケージ内でのみ使用可能。
 
 ### 5. コンパイラの改动
 
-| コンポーネント                          | 改动                                                                    |
-| --------------------------------------- | ----------------------------------------------------------------------- |
-| `compiler.rs`                           | 新規 `compile_project(project_root)` メソッドを追加                                            |
-| `pipeline.rs`                           | 単一モジュールコンパイルの責務を維持し、神オブジェクトにはならない                           |
-| `typecheck/checker.rs`                  | `use` 文は `ModuleRegistry` をクエリし、ファイルロードをトリガーしない                         |
-| `typecheck/inference/statements.rs`     | 同上、`process_use_stmt` はクエリのみを行い、ロードはしない                                   |
-| `frontend/module/resolver.rs`           | `package/source/module_resolver.rs` の YXPATH サポートを統合し、唯一のリゾルバとする             |
-| `frontend/module/loader.rs`             | 拡張：再帰発見、完全なモジュールグラフ構築をサポート                                           |
-| `frontend/module/dep_graph.rs`          | 実装済み、トポロジカルソートと循環検出を再利用                                               |
-| `frontend/module/registry.rs`           | 実装済み、エクスポートテーブルクエリを再利用                                                   |
-| `frontend/module/cache.rs`              | 実装済み、本 RFC ではコンパイルパイプラインに接続しない                                       |
-| `frontend/module/hot_reload.rs`         | 実装済み、本 RFC ではコンパイルパイプラインに接続しない                                       |
-| AST `is_pub: bool`                      | `Visibility` 列挙型で置換                                                                    |
-| `package/source/module_resolver.rs`     | 削除、責務は `frontend/module/resolver.rs` に統合                                              |
+| コンポーネント                      | 改动                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------ |
+| `compiler.rs`                       | 新規 `compile_project(project_root)` メソッドを追加                                  |
+| `pipeline.rs`                       | 単一モジュールコンパイルの責務を維持し、神オブジェクトにはならない                   |
+| `typecheck/checker.rs`              | `use` 文は `ModuleRegistry` をクエリし、ファイルロードをトリガーしない               |
+| `typecheck/inference/statements.rs` | 同上、`process_use_stmt` はクエリのみを行い、ロードはしない                          |
+| `frontend/module/resolver.rs`       | `package/source/module_resolver.rs` の YXPATH サポートを統合し、唯一のリゾルバとする |
+| `frontend/module/loader.rs`         | 拡張：再帰発見、完全なモジュールグラフ構築をサポート                                 |
+| `frontend/module/dep_graph.rs`      | 実装済み、トポロジカルソートと循環検出を再利用                                       |
+| `frontend/module/registry.rs`       | 実装済み、エクスポートテーブルクエリを再利用                                         |
+| `frontend/module/cache.rs`          | 実装済み、本 RFC ではコンパイルパイプラインに接続しない                              |
+| `frontend/module/hot_reload.rs`     | 実装済み、本 RFC ではコンパイルパイプラインに接続しない                              |
+| AST `is_pub: bool`                  | `Visibility` 列挙型で置換                                                            |
+| `package/source/module_resolver.rs` | 削除、責務は `frontend/module/resolver.rs` に統合                                    |
 
 ## 実装戦略
 
@@ -291,19 +301,21 @@ pub 宣言ではないため、`math` パッケージ内でのみ使用可能。
 
 以下のサブ RFC は**予定計画**であり、まだ起草を開始していない：
 
-| サブ RFC | 能力（予定）                    | 前提条件（予定）         |
-| ------ | ------------------------------- | ------------------------ |
-| 029a   | モジュールキャッシュとインクリメンタル再コンパイル            | モジュールのグラフとエクスポートテーブルが安定       |
-| 029b   | ファイル監視とHOTリロード                | 029a のキャッシュ無効化メカニズム      |
-| 029c   | 再エクスポート（`pub use`）             | エクスポートテーブルと可視性ルールが実装済み   |
-| 029d   | CLI パラメータ `--entry` によるエントリ選択の上書き         | プロジェクトコンパイルエントリポイントが使用可能         |
-| 029e   | 複数ファイル診断 `--json` 出力形式    | 診断集約メカニズムが使用可能         |
-| —      | `pub(package)` モジュールの非公開可視性   | 現在の現実的需求がなく、一時的に含めない |
-| —      | ワークスペース複数パッケージコンパイル                | RFC-014c が担当         |
+| サブ RFC | 能力（予定）                                        | 前提条件（予定）                                 |
+| -------- | --------------------------------------------------- | ------------------------------------------------ |
+| 029a     | モジュールキャッシュとインクリメンタル再コンパイル  | モジュールのグラフとエクスポートテーブルが安定   |
+| 029b     | ファイル監視とHOTリロード                           | 029a のキャッシュ無効化メカニズム                |
+| 029c     | 再エクスポート（`pub use`）                         | エクスポートテーブルと可視性ルールが実装済み     |
+| 029d     | CLI パラメータ `--entry` によるエントリ選択の上書き | プロジェクトコンパイルエントリポイントが使用可能 |
+| 029e     | 複数ファイル診断 `--json` 出力形式                  | 診断集約メカニズムが使用可能                     |
+| —        | `pub(package)` モジュールの非公開可視性             | 現在の現実的需求がなく、一時的に含めない         |
+| —        | ワークスペース複数パッケージコンパイル              | RFC-014c が担当                                  |
 
 ## 参考文献
 
-- [RFC-009: 所有権モデル](accepted/009-ownership-model.md) — Move セマンティクス、インポートはコンパイル時名前解決
+- [RFC-009: 所有権モデル](accepted/009-ownership-model.md) —
+  Move セマンティクス、インポートはコンパイル時名前解決
 - [RFC-011: 泛型型システム](accepted/011-generic-type-system.md) — 構造化型定義
-- [RFC-014: パッケージ管理システム設計](accepted/014-package-manager.md) — パッケージ名のソース、vendor ディレクトリ
+- [RFC-014: パッケージ管理システム設計](accepted/014-package-manager.md)
+  — パッケージ名のソース、vendor ディレクトリ
 - [RFC-015: 設定システム](accepted/015-configuration-system.md) — `yaoxiang.toml` のフィールド定義

@@ -11,16 +11,23 @@ issue: '#94, #95, #221'
 
 ## Summary
 
-Introduce a standard testing framework `std.test` module and `yaoxiang test` CLI subcommand for YaoXiang. Test files are ordinary `.yx` files, with pass/fail determined via `std.assert.assert` + exit code. The `std.test` module is implemented in pure YaoXiang and serves as the first dogfooding library. `yaoxiang test` is a CLI tool, not a compiler feature—no changes to parser, IR, bytecode, or executor.
+Introduce a standard testing framework `std.test` module and `yaoxiang test` CLI subcommand for
+YaoXiang. Test files are ordinary `.yx` files, with pass/fail determined via `std.assert.assert` +
+exit code. The `std.test` module is implemented in pure YaoXiang and serves as the first dogfooding
+library. `yaoxiang test` is a CLI tool, not a compiler feature—no changes to parser, IR, bytecode,
+or executor.
 
 ## Motivation
 
 ### Why a Testing Framework?
 
-Currently, YaoXiang's test coverage relies on Rust-side `#[test]` and integration tests in `tests/`. This means:
+Currently, YaoXiang's test coverage relies on Rust-side `#[test]` and integration tests in `tests/`.
+This means:
 
-1. Standard library (std.math / std.list / std.dict / std.convert / std.io) unit tests cannot be written in YaoXiang
-2. Issue #117 "Unit test coverage for standard library modules" is blocked due to lack of available testing infrastructure
+1. Standard library (std.math / std.list / std.dict / std.convert / std.io) unit tests cannot be
+   written in YaoXiang
+2. Issue #117 "Unit test coverage for standard library modules" is blocked due to lack of available
+   testing infrastructure
 3. Regression tests for language features (e.g., RFC-032 spawn semantics changes) lack automation
 
 ### Key Constraints
@@ -54,9 +61,12 @@ Currently, YaoXiang's test coverage relies on Rust-side `#[test]` and integratio
 
 ### Core Principles
 
-1. **Test framework is not a compiler feature, it's a CLI tool** — `yaoxiang run` already "executes tests"; `yaoxiang test` just runs all files for you and shows you the report
-2. **Zero compiler changes** — No `@test` annotation scanning, bytecode metadata sections, or executor special entry points
-3. **Dogfooding** — The `std.test` module is implemented in pure YaoXiang, using `std.assert.assert` as the foundation
+1. **Test framework is not a compiler feature, it's a CLI tool** — `yaoxiang run` already "executes
+   tests"; `yaoxiang test` just runs all files for you and shows you the report
+2. **Zero compiler changes** — No `@test` annotation scanning, bytecode metadata sections, or
+   executor special entry points
+3. **Dogfooding** — The `std.test` module is implemented in pure YaoXiang, using `std.assert.assert`
+   as the foundation
 4. **Test files are ordinary `.yx` files** — Pass/fail determined via exit code
 
 ## Detailed Design
@@ -164,7 +174,8 @@ assert_false: (cond: Bool) -> Void = (cond) => {
 
 **Phase 1: Embedded Binary**
 
-`std/test.yx` (and future YaoXiang-written standard library modules) are embedded in the binary at build time:
+`std/test.yx` (and future YaoXiang-written standard library modules) are embedded in the binary at
+build time:
 
 ```rust
 // build.rs or build script, auto-generated
@@ -188,7 +199,8 @@ Advantages:
 
 **Future: Filesystem Standard Library**
 
-When YaoXiang project mode matures, the standard library will move to filesystem form. See updated RFC-014 for details.
+When YaoXiang project mode matures, the standard library will move to filesystem form. See updated
+RFC-014 for details.
 
 ### 5. Discovery and Execution
 
@@ -218,13 +230,13 @@ Test isolation is naturally achieved via process-level boundaries:
 
 ## Relationship with Existing Systems
 
-| Item                                          | Relationship                           |
-| --------------------------------------------- | -------------------------------------- |
-| Rust `#[test]`                                | Unchanged, compiler internal tests continue using Rust |
-| Existing `.yx` integration tests (`tests/yaoxiang/`) | Discovered and executed by `yaoxiang test` |
-| `std.assert.assert(cond)`                     | Retained, `std.test` depends on it     |
-| `#200` refactoring (`io.println` → `assert.assert`) | Fully aligned with `yaoxiang test` direction |
-| `@` annotation                                | Not used, no `@test` introduced        |
+| Item                                                 | Relationship                                           |
+| ---------------------------------------------------- | ------------------------------------------------------ |
+| Rust `#[test]`                                       | Unchanged, compiler internal tests continue using Rust |
+| Existing `.yx` integration tests (`tests/yaoxiang/`) | Discovered and executed by `yaoxiang test`             |
+| `std.assert.assert(cond)`                            | Retained, `std.test` depends on it                     |
+| `#200` refactoring (`io.println` → `assert.assert`)  | Fully aligned with `yaoxiang test` direction           |
+| `@` annotation                                       | Not used, no `@test` introduced                        |
 
 ## Implementation Strategy
 
@@ -261,32 +273,37 @@ Deliverables:
 
 ## Risks and Mitigations
 
-| Risk                                           | Probability | Mitigation                                    |
-| ---------------------------------------------- | ----------- | --------------------------------------------- |
-| `f"..."` interpolation fails on generic types  | Low         | Basic types verified in `std.assert.assert`   |
-| Subprocess startup overhead affects test speed | Medium      | Phase 1 serial execution acceptable; Phase 3 parallel mitigates |
-| `yaoxiang.toml` config parsing not in current CLI | Low      | Simple extension, doesn't affect core functionality |
-| Generic `?` unavailable in `std.test`          | Low         | Can degrade to `Any` type or type specialization |
-| Embedding `.yx` source files increases binary size | Low      | `.yx` source files are extremely small, negligible |
+| Risk                                               | Probability | Mitigation                                                      |
+| -------------------------------------------------- | ----------- | --------------------------------------------------------------- |
+| `f"..."` interpolation fails on generic types      | Low         | Basic types verified in `std.assert.assert`                     |
+| Subprocess startup overhead affects test speed     | Medium      | Phase 1 serial execution acceptable; Phase 3 parallel mitigates |
+| `yaoxiang.toml` config parsing not in current CLI  | Low         | Simple extension, doesn't affect core functionality             |
+| Generic `?` unavailable in `std.test`              | Low         | Can degrade to `Any` type or type specialization                |
+| Embedding `.yx` source files increases binary size | Low         | `.yx` source files are extremely small, negligible              |
 
 ## Open Questions
 
-- [ ] Can `use std.assert` reference in `std/test.yx` be correctly resolved in the module loader? Need to verify dependency resolution between embedded source modules
-- [ ] Will `f"..."` generic `to_string` in test output introduce new type constraints? Need to verify
+- [ ] Can `use std.assert` reference in `std/test.yx` be correctly resolved in the module loader?
+      Need to verify dependency resolution between embedded source modules
+- [ ] Will `f"..."` generic `to_string` in test output introduce new type constraints? Need to
+      verify
 
 ## Design Decision Records
 
-| Decision             | Rationale                                        | Date       | Reason                                             |
-| -------------------- | ------------------------------------------------ | ---------- | -------------------------------------------------- |
-| Test marking method  | No `@test` annotation, test files are ordinary `.yx` | 2026-07-26 | Zero compiler changes, subprocess provides isolation |
-| Assertion method     | `std.test` module with pure YaoXiang functions   | 2026-07-26 | Dogfooding, no native code                         |
-| Test execution model | Subprocess `yaoxiang run <file>` + exit code     | 2026-07-26 | Process-level isolation, zero compiler changes     |
-| Standard library loading | Currently embedded binary, filesystem in future | 2026-07-26 | Version binding, works in single-file mode        |
-| Generic assertions   | Depends on `?` generic parameters                | 2026-07-26 | No specialization introduced, trust generics system |
+| Decision                 | Rationale                                            | Date       | Reason                                               |
+| ------------------------ | ---------------------------------------------------- | ---------- | ---------------------------------------------------- |
+| Test marking method      | No `@test` annotation, test files are ordinary `.yx` | 2026-07-26 | Zero compiler changes, subprocess provides isolation |
+| Assertion method         | `std.test` module with pure YaoXiang functions       | 2026-07-26 | Dogfooding, no native code                           |
+| Test execution model     | Subprocess `yaoxiang run <file>` + exit code         | 2026-07-26 | Process-level isolation, zero compiler changes       |
+| Standard library loading | Currently embedded binary, filesystem in future      | 2026-07-26 | Version binding, works in single-file mode           |
+| Generic assertions       | Depends on `?` generic parameters                    | 2026-07-26 | No specialization introduced, trust generics system  |
 
 ## References
 
-- [RFC-014: Package Manager Design](../accepted/014-package-manager.md) — Standard library directory structure
-- [RFC-015: Configuration System](../accepted/015-configuration-system.md) — `[tool.test]` config section
+- [RFC-014: Package Manager Design](../accepted/014-package-manager.md) — Standard library directory
+  structure
+- [RFC-015: Configuration System](../accepted/015-configuration-system.md) — `[tool.test]` config
+  section
 - [RFC-030: assert Mechanism](../review/030-assert-mechanism.md) — Foundation dependency
-- [Rust `#[test]` mechanism](https://doc.rust-lang.org/book/ch11-01-writing-tests.html) — Reference design
+- [Rust `#[test]` mechanism](https://doc.rust-lang.org/book/ch11-01-writing-tests.html) — Reference
+  design

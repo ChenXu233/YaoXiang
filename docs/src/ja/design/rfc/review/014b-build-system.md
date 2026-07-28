@@ -12,7 +12,8 @@ impl_status: 'not-started'
 
 # RFC-014b: ビルドシステムとバイナリ配布
 
-> 本 RFC は [RFC-014: パッケージ管理システム設計](../accepted/014-package-manager.md) のサブ RFC です。
+> 本 RFC は [RFC-014: パッケージ管理システム設計](../accepted/014-package-manager.md)
+> のサブ RFC です。
 
 ## 抄録
 
@@ -27,15 +28,15 @@ I バインディング（cargo、CMake などの呼び出し）のコンパイ�
 
 - ビルド設定の宣言がない（`yaoxiang.toml` に `[build]` セクションがない）
 - 事前コンパイルバイナリ配布メカニズムがない
-- FF
-I パッケージのビルドは完全にユーザーの手動操作に依存している
+- FF I パッケージのビルドは完全にユーザーの手動操作に依存している
 - システム依存関係チェックがない
 
 ## 提案
 
 ### コア設計：宣言的ビルド + 事前コンパイル優先
 
-パッケージ作者は `yaoxiang.toml` でビルド要件を宣言し、パackage マネージャーは宣言に基づいて自動的に意思決定を行う。
+パッケージ作者は `yaoxiang.toml`
+でビルド要件を宣言し、パackage マネージャーは宣言に基づいて自動的に意思決定を行う。
 
 ### ビルド戦略
 
@@ -48,7 +49,8 @@ enum BuildStrategy {
 }
 ```
 
-注意：`Precompiled` バリアントは削除された。`[binaries]` の存在は自動的に事前コンパイル優先動作をトリガーするため、明示的な strategy 宣言は不要である。
+注意：`Precompiled` バリアントは削除された。`[binaries]`
+の存在は自動的に事前コンパイル優先動作をトリガーするため、明示的な strategy 宣言は不要である。
 
 ### yaoxiang.toml でのビルド宣言
 
@@ -98,7 +100,8 @@ yaoxiang install foo
     └─ 5. vendor/ にインストール
 ```
 
-**事前コンパイル優先、ソースコードでフォールバック。** `[binaries]` の存在は明示的な strategy なしに事前コンパイルチェックを自動的にトリガーする。
+**事前コンパイル優先、ソースコードでフォールバック。** `[binaries]`
+の存在は明示的な strategy なしに事前コンパイルチェックを自動的にトリガーする。
 
 ### cargo 戦略の詳細
 
@@ -138,7 +141,8 @@ cargo build --release --features ffi,linux-ffi
 "aarch64-apple-darwin" = { url = "releases/download/v1.0.0/foo-macos-aarch64.tar.gz", sha256 = "ghi789" }
 ```
 
-**URL 形式：** 絶対 URL と相対パスの両方をサポート。相対パスはパッケージのリポジトリアドレス（GitHub repo URL または Registry ルート URL）相对于える。
+**URL 形式：** 絶対 URL と相対パスの両方をサポート。相対パスはパッケージのリポジトリアドレス（GitHub
+repo URL または Registry ルート URL）相对于える。
 
 **ビルドをスキップする条件：**
 
@@ -194,7 +198,9 @@ Error: Build requirement not satisfied
 
 ### yx-bindgen 統合（headers フィールド）
 
-`[build].headers` は yx-bindgen で処理する C ヘッダーファイルを宣言する。ビルドシステムは自動的に yx-bindgen を実行して `.yx` バインディングファイルを生成する。
+`[build].headers`
+は yx-bindgen で処理する C ヘッダーファイルを宣言する。ビルドシステムは自動的に yx-bindgen を実行して
+`.yx` バインディングファイルを生成する。
 
 ```toml
 [build]
@@ -211,14 +217,17 @@ headers = ["include/sqlite3.h", "include/json.h"]
 4. インストール
 ```
 
-yx-bindgen は C ヘッダーファイル（`.h`）から関数シグネチャと型定義を解析し、自動的に `.yx` バインディング宣言を生成する。ユーザーが手動で実行する必要はない——ビルドシステムは `headers` 設定を検出すると自動的に処理する。
+yx-bindgen は C ヘッダーファイル（`.h`）から関数シグネチャと型定義を解析し、自動的に `.yx`
+バインディング宣言を生成する。ユーザーが手動で実行する必要はない——ビルドシステムは `headers`
+設定を検出すると自動的に処理する。
 
-**RFC-026 との関係：** RFC-026 は `yx-bindgen` の言語レベルセマンティクス（`native("symbol")` 構文、unsafe 型）を定義している。RFC-014b はビルドフローでの統合方式（`headers` 設定）を定義している。両者は補完関係にある。
+**RFC-026 との関係：** RFC-026 は `yx-bindgen` の言語レベルセマンティクス（`native("symbol")`
+構文、unsafe 型）を定義している。RFC-014b はビルドフローでの統合方式（`headers`
+設定）を定義している。両者は補完関係にある。
 
 ### Cargo Workspace との統合
 
-パッケージに FF
-I コードがある場合、同時に Cargo workspace を定義できる：
+パッケージに FF I コードがある場合、同時に Cargo workspace を定義できる：
 
 ```
 my-package/
@@ -240,7 +249,7 @@ my-package/
 
 Rust target triple 形式（`arch-vendor-os-env`）を使用：
 
-| プラットフォーム              | 識別子                       |
+| プラットフォーム       | 識別子                      |
 | ---------------------- | --------------------------- |
 | Linux x86_64 (glibc)   | `x86_64-unknown-linux-gnu`  |
 | Linux x86_64 (musl)    | `x86_64-unknown-linux-musl` |
@@ -252,8 +261,7 @@ Rust target triple 形式（`arch-vendor-os-env`）を使用：
 
 簡略化された形式ではなく Rust target triple を使用する理由：
 
-1. 同一 OS 上の異なる AB
-I を区別できる（gnu vs musl、msvc vs gnu）
+1. 同一 OS 上の異なる AB I を区別できる（gnu vs musl、msvc vs gnu）
 2. Rust/Cargo エコシステムと整合し、マッピングエラーを減らす
 3. 将来の拡張で形式を変更する必要がない
 
@@ -303,24 +311,24 @@ build/
 
 ## 代替案
 
-| 方案                           | なぜ選択しなかったか                     |
-| ------------------------------ | ----------------------------------- |
-| 純粋なソースコード配布                     | ユーザーはビルドツールチェーンをインストールする必要があり、ハードルが高い    |
-| Python wheel のようなバイナリ形式 | 複雑すぎ、YaoXiang エコシステムの初期段階では不要 |
-| FFI ビルドをサポートしない              | 言語の拡張能力を制限する                      |
+| 方案                              | なぜ選択しなかったか                                                       |
+| --------------------------------- | -------------------------------------------------------------------------- |
+| 純粋なソースコード配布            | ユーザーはビルドツールチェーンをインストールする必要があり、ハードルが高い |
+| Python wheel のようなバイナリ形式 | 複雑すぎ、YaoXiang エコシステムの初期段階では不要                          |
+| FFI ビルドをサポートしない        | 言語の拡張能力を制限する                                                   |
 
 ## 実装戦略
 
 ### フェーズ分け
 
-| フェーズ     | 内容                                        |
-| -------- | ------------------------------------------- |
-| Phase 5a | `[build]` 設定解析 + `BuildStrategy` 列挙型   |
-| Phase 5b | システム依存関係チェック                                |
+| フェーズ | 内容                                                         |
+| -------- | ------------------------------------------------------------ |
+| Phase 5a | `[build]` 設定解析 + `BuildStrategy` 列挙型                  |
+| Phase 5b | システム依存関係チェック                                     |
 | Phase 5c | Cargo ビルド統合（`[build.cargo]` を読み取りコマンドを拼む） |
-| Phase 5d | 事前コンパイルバイナリダウンロード + 検証                     |
-| Phase 5e | build.yx スクリプト実行                           |
-| Phase 5f | yx-bindgen 統合（`headers` フィールド）           |
+| Phase 5d | 事前コンパイルバイナリダウンロード + 検証                    |
+| Phase 5e | build.yx スクリプト実行                                      |
+| Phase 5f | yx-bindgen 統合（`headers` フィールド）                      |
 
 ### 依存関係
 

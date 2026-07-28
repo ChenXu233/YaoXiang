@@ -1,5 +1,5 @@
 ---
-title: "yaoxiang format コマンドライン用法"
+title: 'yaoxiang format コマンドライン用法'
 description: フォーマッタのコマンドライン引数と使用方法
 ---
 
@@ -27,15 +27,15 @@ yaoxiang format -w src/
 
 ## B. CLI 引数
 
-| 引数             | 説明                     | デフォルト値 |
-| ---------------- | ------------------------ | ------------ |
+| 引数             | 説明                                 | デフォルト値 |
+| ---------------- | ------------------------------------ | ------------ |
 | `--dry-run`      | チェックモード、ファイルは変更しない | false        |
 | `-w`, `--write`  | 書き込みモード、ファイルを変更する   | false        |
-| `--stdout`       | stdout に出力                     | false        |
-| `--indent-width` | インデント幅                       | 4            |
-| `--line-width`   | 最大行幅                           | 120          |
-| `--use-tabs`     | タブインデントを使用               | false        |
-| `--single-quote` | 単一引用符を使用                   | false        |
+| `--stdout`       | stdout に出力                        | false        |
+| `--indent-width` | インデント幅                         | 4            |
+| `--line-width`   | 最大行幅                             | 120          |
+| `--use-tabs`     | タブインデントを使用                 | false        |
+| `--single-quote` | 単一引用符を使用                     | false        |
 
 ---
 

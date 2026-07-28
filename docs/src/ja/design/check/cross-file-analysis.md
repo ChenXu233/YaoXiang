@@ -7,8 +7,9 @@ description: YaoXiang check におけるファイル間型検査の設計
 
 ## 問題の説明
 
-初期実装では、`check_files_with_diagnostics` が各ファイルに対して独立した
-`Compiler` を作成し、ファイル間の参照を検出できませんでした。fileA で定義された `pub` 関数は fileB では認識されませんでした。
+初期実装では、`check_files_with_diagnostics` が各ファイルに対して独立した `Compiler`
+を作成し、ファイル間の参照を検出できませんでした。fileA で定義された `pub`
+関数は fileB では認識されませんでした。
 
 ## 解決策
 
@@ -30,12 +31,14 @@ description: YaoXiang check におけるファイル間型検査の設計
 
 ## 名前空間の分離
 
-エクスポートされたシンボルを `module_name.symbol_name` 形式で保存し、異なるモジュールの同名シンボル間の競合を防ぎます。
+エクスポートされたシンボルを `module_name.symbol_name`
+形式で保存し、異なるモジュールの同名シンボル間の競合を防ぎます。
 
 ## 既知の制限
 
 - `traits/` はプレースホルダー実装（coherence/impl_check/object_safety/resolution）は未完成
-- `check_single_module` はまだ各モジュールに対して独立した Compiler を作成（共有 env の型情報伝播がまだ完全に実装されていない）
+- `check_single_module`
+  はまだ各モジュールに対して独立した Compiler を作成（共有 env の型情報伝播がまだ完全に実装されていない）
 
 ## 今後の作業
 

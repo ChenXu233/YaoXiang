@@ -1,54 +1,64 @@
 > **⚠️ Note: This document is outdated and for reference only.**
 >
-> The content described in this document is no longer applicable. Please refer to the latest documentation.
+> The content described in this document is no longer applicable. Please refer to the latest
+> documentation.
 
 # **Spawn: A Transparent Asynchronous Concurrency Model Based on Lazy Evaluation**
 
 ## 🏛️ 1. Core Definition: The Spawn Model
 
-The **Spawn Model**, inspired by "万物并作，吾以观复" (All things arise together; I observe their return) from the Yijing's Hexagram 24 (Fu), is a programming language concurrency paradigm that allows developers to describe logic in a synchronous, sequential manner while the language runtime automatically and efficiently executes the computational units concurrently like all things arising together, finally unifying and coordinating the results.
+The **Spawn Model**, inspired by "万物并作，吾以观复" (All things arise together; I observe their
+return) from the Yijing's Hexagram 24 (Fu), is a programming language concurrency paradigm that
+allows developers to describe logic in a synchronous, sequential manner while the language runtime
+automatically and efficiently executes the computational units concurrently like all things arising
+together, finally unifying and coordinating the results.
 
 ### Core Design Principles: Default Lazy + spawn Type Markers
 
-| Design Principle         | Description                                                                                                  |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| **Default Lazy Evaluation** | All functions are lazy by default (similar to Haskell), returning Lazy[T]                                    |
-| **Core Count Configuration** | Script header `// @cores: N` enables parallelization automatically                                         |
-| **spawn Type Marker**    | `-> T spawn` marks a function as strictly asynchronous and concurrently executable; others are parallelizable by default |
-| **Mixed Evaluation Modes**  | `@eager` (decorator, forces eager evaluation), `@auto` (decorator, maintains parallelism)                |
-| **Void Auto-Eager**      | Functions returning `Void` are automatically eagerly evaluated (side effects must execute)                  |
+| Design Principle             | Description                                                                                                              |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| **Default Lazy Evaluation**  | All functions are lazy by default (similar to Haskell), returning Lazy[T]                                                |
+| **Core Count Configuration** | Script header `// @cores: N` enables parallelization automatically                                                       |
+| **spawn Type Marker**        | `-> T spawn` marks a function as strictly asynchronous and concurrently executable; others are parallelizable by default |
+| **Mixed Evaluation Modes**   | `@eager` (decorator, forces eager evaluation), `@auto` (decorator, maintains parallelism)                                |
+| **Void Auto-Eager**          | Functions returning `Void` are automatically eagerly evaluated (side effects must execute)                               |
 
 ### Three Core Principles
 
-| Core Principle      | Description                                                                             |
-| ------------------- | --------------------------------------------------------------------------------------- |
-| **Synchronous Syntax** | What you see is what you get - sequential code with the execution flow matching the written logic |
+| Core Principle            | Description                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **Synchronous Syntax**    | What you see is what you get - sequential code with the execution flow matching the written logic      |
 | **Concurrency by Nature** | Runtime automatically extracts parallelism, discovering concurrency opportunities in data dependencies |
-| **Unified Coordination** | Results automatically converge when needed, ensuring logical correctness               |
+| **Unified Coordination**  | Results automatically converge when needed, ensuring logical correctness                               |
 
 **It achieves this through two fundamental transformations:**
 
-1. **Transforming "control flow" into "data flow"**: The program is viewed as a pure functional lazy-evaluated data flow graph
-2. **Transforming "async contagion" into "dependency resolution"**: Asynchronicity is no longer an effect in the function signature, but becomes wait operations automatically executed by the runtime at data dependency points
+1. **Transforming "control flow" into "data flow"**: The program is viewed as a pure functional
+   lazy-evaluated data flow graph
+2. **Transforming "async contagion" into "dependency resolution"**: Asynchronicity is no longer an
+   effect in the function signature, but becomes wait operations automatically executed by the
+   runtime at data dependency points
 
 ---
 
 ## 📚 2. Terminology System: A Unified Conceptual Map
 
-Around "spawn", we have constructed a clear, self-consistent terminology system that connects all design elements:
+Around "spawn", we have constructed a clear, self-consistent terminology system that connects all
+design elements:
 
-| Official Term     | Corresponding Syntax/Concept | Description                                                                          |
-| ----------------- | ---------------------------- | ------------------------------------------------------------------------------------ |
-| **spawn function**   | `-> T spawn`                 | Return type marker indicating this is a computation unit that can participate in "spawn" concurrent execution |
-| **spawn block**      | `spawn { a(), b() }`         | Developer-explicitly declared concurrency scope; tasks within the block execute "together" |
-| **spawn loop**       | `spawn for x in xs { ... }`  | Data parallelism paradigm; loop body executes "together" across all data elements     |
-| **spawn value**      | `Async[T]` proxy type        | A "future value" that is currently spawning; automatically waits for completion when used |
-| **spawn graph**      | Lazy computation graph (DAG) | The stage where "spawning" occurs; describes dependencies and parallelism between all computation units |
-| **spawn scheduler**  | Runtime task scheduler       | The intelligent core responsible for coordinating "all things" so they "spawn" at the right moments |
-| **error graph**      | Error Graph                  | Visualization of error propagation paths in a concurrent environment, similar to call stacks but showing error flow in the DAG |
-| **resource conflict**| Resource Conflict            | Conflict when multiple tasks simultaneously access the same writable resource; detected at compile time and automatically serialized |
+| Official Term         | Corresponding Syntax/Concept | Description                                                                                                                          |
+| --------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **spawn function**    | `-> T spawn`                 | Return type marker indicating this is a computation unit that can participate in "spawn" concurrent execution                        |
+| **spawn block**       | `spawn { a(), b() }`         | Developer-explicitly declared concurrency scope; tasks within the block execute "together"                                           |
+| **spawn loop**        | `spawn for x in xs { ... }`  | Data parallelism paradigm; loop body executes "together" across all data elements                                                    |
+| **spawn value**       | `Async[T]` proxy type        | A "future value" that is currently spawning; automatically waits for completion when used                                            |
+| **spawn graph**       | Lazy computation graph (DAG) | The stage where "spawning" occurs; describes dependencies and parallelism between all computation units                              |
+| **spawn scheduler**   | Runtime task scheduler       | The intelligent core responsible for coordinating "all things" so they "spawn" at the right moments                                  |
+| **error graph**       | Error Graph                  | Visualization of error propagation paths in a concurrent environment, similar to call stacks but showing error flow in the DAG       |
+| **resource conflict** | Resource Conflict            | Conflict when multiple tasks simultaneously access the same writable resource; detected at compile time and automatically serialized |
 
-> **Technical discussion example**: "Here we use a spawn block to concurrently call two spawn functions, which automatically gives us their spawn values."
+> **Technical discussion example**: "Here we use a spawn block to concurrently call two spawn
+> functions, which automatically gives us their spawn values."
 
 ---
 
@@ -56,17 +66,19 @@ Around "spawn", we have constructed a clear, self-consistent terminology system 
 
 ### 3.1 Architecture Overview
 
-The Spawn Model provides **three progressive layers of concurrency abstraction**, allowing developers of different skill levels to find the appropriate usage pattern:
+The Spawn Model provides **three progressive layers of concurrency abstraction**, allowing
+developers of different skill levels to find the appropriate usage pattern:
 
-| Layer  | Pattern           | Syntax Marker   | Execution Mode      | Controllability | Applicable Scenario                        |
-| ------ | ----------------- | ---------------- | ------------------- | --------------- | ------------------------------------------- |
-| **L1** | `@blocking` sync  | `@blocking`      | Fully sequential    | Highest         | Debugging, beginners, critical code sections |
-| **L2** | Explicit spawn    | `spawn`          | Developer-controlled | Medium          | Intermediate users, fine-grained concurrency control |
-| **L3** | Fully transparent | None (default)   | Auto-optimal parallel| Lowest          | Experts, automatic parallel optimization    |
+| Layer  | Pattern           | Syntax Marker  | Execution Mode        | Controllability | Applicable Scenario                                  |
+| ------ | ----------------- | -------------- | --------------------- | --------------- | ---------------------------------------------------- |
+| **L1** | `@blocking` sync  | `@blocking`    | Fully sequential      | Highest         | Debugging, beginners, critical code sections         |
+| **L2** | Explicit spawn    | `spawn`        | Developer-controlled  | Medium          | Intermediate users, fine-grained concurrency control |
+| **L3** | Fully transparent | None (default) | Auto-optimal parallel | Lowest          | Experts, automatic parallel optimization             |
 
 ### 3.2 L1: `@blocking` Synchronous Mode
 
-**Core characteristic**: Disable all concurrency optimizations, fully sequential execution, easy for debugging and understanding.
+**Core characteristic**: Disable all concurrency optimizations, fully sequential execution, easy for
+debugging and understanding.
 
 ```yaoxiang
 # L1: @blocking synchronous mode (annotation placed after return type)
@@ -84,7 +96,8 @@ main: () -> Void @blocking = () => {
 
 ### 3.3 L2: Explicit spawn Concurrency
 
-**Core characteristic**: Developer explicitly marks parallelizable units, maintaining control while gaining concurrency benefits.
+**Core characteristic**: Developer explicitly marks parallelizable units, maintaining control while
+gaining concurrency benefits.
 
 ```yaoxiang
 # L2: Explicit spawn concurrency
@@ -113,7 +126,8 @@ compute_all: () -> (Int, Int, Int) spawn = () => {
 
 ### 3.4 L3: Fully Transparent (Default)
 
-**Core characteristic**: No markers needed; compiler automatically analyzes dependencies and generates optimal parallel execution plans.
+**Core characteristic**: No markers needed; compiler automatically analyzes dependencies and
+generates optimal parallel execution plans.
 
 ```yaoxiang
 # L3: Fully transparent (default mode)
@@ -132,9 +146,9 @@ auto_parallel: (Int) -> Int = (n) => {
 
 ### 3.5 Manual Control Annotations
 
-| Annotation | Behavior            | Use Case                              |
-| ---------- | ------------------- | ------------------------------------- |
-| `@eager`   | Force eager evaluation | When you need immediate results      |
+| Annotation | Behavior               | Use Case                        |
+| ---------- | ---------------------- | ------------------------------- |
+| `@eager`   | Force eager evaluation | When you need immediate results |
 
 ---
 
@@ -142,13 +156,14 @@ auto_parallel: (Int) -> Int = (n) => {
 
 ### 2.1 Spawn Graph: The Stage for All Things to Spawn
 
-All programs are transformed into a **directed acyclic computation graph (DAG)** at compile time, which we call the **spawn graph**.
+All programs are transformed into a **directed acyclic computation graph (DAG)** at compile time,
+which we call the **spawn graph**.
 
-| Element   | Description                                                        |
-| --------- | ------------------------------------------------------------------ |
-| **Node**  | Represents a computation unit for an expression                    |
-| **Edge**  | Represents data dependency (A → B means B depends on A's result)  |
-| **Lazy**  | Nodes are only evaluated when their output is **truly needed**    |
+| Element  | Description                                                      |
+| -------- | ---------------------------------------------------------------- |
+| **Node** | Represents a computation unit for an expression                  |
+| **Edge** | Represents data dependency (A → B means B depends on A's result) |
+| **Lazy** | Nodes are only evaluated when their output is **truly needed**   |
 
 ### 2.2 Default Lazy Evaluation
 
@@ -177,14 +192,16 @@ main: () -> Void = () => {
 
 ### 2.3 Mixed Evaluation Annotations (Decorator Style)
 
-YaoXiang's annotations are similar to Python's decorators, used to modify the behavior of functions or expressions:
+YaoXiang's annotations are similar to Python's decorators, used to modify the behavior of functions
+or expressions:
 
-| Annotation (Decorator) | Behavior                                      |
-| ---------------------- | --------------------------------------------- |
-| `@eager`               | **Decorator**: Forces eager evaluation, executes immediately |
+| Annotation (Decorator) | Behavior                                                       |
+| ---------------------- | -------------------------------------------------------------- |
+| `@eager`               | **Decorator**: Forces eager evaluation, executes immediately   |
 | `@auto`                | **Decorator**: Maintains parallelism (default, can be omitted) |
 
-**Void Auto-Eager Rule:** Functions returning `Void` are automatically eagerly evaluated (no annotation needed), because side effects must execute.
+**Void Auto-Eager Rule:** Functions returning `Void` are automatically eagerly evaluated (no
+annotation needed), because side effects must execute.
 
 ```yaoxiang
 # @eager decorator: Forces eager evaluation
@@ -208,7 +225,8 @@ main: () -> Void = () => {
 
 ### 2.4 Spawn Values: Async[T] Lazy Proxy Type
 
-Any function with a return type marked as `-> T spawn` immediately returns a value of type `Async[T]`, which we call a **spawn value**.
+Any function with a return type marked as `-> T spawn` immediately returns a value of type
+`Async[T]`, which we call a **spawn value**.
 
 ```yaoxiang
 # spawn function: Return type marked as -> JSON spawn
@@ -229,21 +247,22 @@ main: () -> Void = () => {
 
 #### Core Characteristics of Spawn Values
 
-| Characteristic      | Description                                                                                      |
-| ------------------- | ------------------------------------------------------------------------------------------------ |
-| **Syntax Transparent** | `Async[T]` is a subtype of `T` in the type system, usable in any context expecting `T`        |
-| **On-demand Wait**  | When a concrete value of type `T` must be used (e.g., field access, arithmetic), runtime automatically suspends and waits |
-| **Error Propagation** | Internally it's actually `Result<T, E>`, errors propagate naturally along the data flow     |
+| Characteristic         | Description                                                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **Syntax Transparent** | `Async[T]` is a subtype of `T` in the type system, usable in any context expecting `T`                                    |
+| **On-demand Wait**     | When a concrete value of type `T` must be used (e.g., field access, arithmetic), runtime automatically suspends and waits |
+| **Error Propagation**  | Internally it's actually `Result<T, E>`, errors propagate naturally along the data flow                                   |
 
 ### 2.7 Spawn Constructs: From "Modifier" to "Type Marker"
 
-The `spawn` keyword is the sole bridge connecting synchronous thinking with asynchronous implementation, with triple semantics:
+The `spawn` keyword is the sole bridge connecting synchronous thinking with asynchronous
+implementation, with triple semantics:
 
-| Syntax Form          | Official Term | Semantic                                                | Runtime Behavior                                                                                          |
-| :------------------ | :------------ | :------------------------------------------------------ | :-------------------------------------------------------------------------------------------------------- |
-| **`-> T spawn`**    | spawn function | Return type marker, indicating this is a computation unit strictly able to participate in spawn | Its call returns `Async[T]`, marking the creation of a spawn graph node                                  |
-| **`spawn { ... }`** | spawn block   | Explicitly declared concurrency scope                   | Runtime **aggressively** executes each expression in the block as an independent task concurrently, implicitly waiting for all results at block end |
-| **`spawn for`**     | spawn loop    | Data parallel loop                                      | Transforms loop body into multiple parallel tasks, automatically performing data sharding, scheduling, and result collection |
+| Syntax Form         | Official Term  | Semantic                                                                                        | Runtime Behavior                                                                                                                                    |
+| :------------------ | :------------- | :---------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`-> T spawn`**    | spawn function | Return type marker, indicating this is a computation unit strictly able to participate in spawn | Its call returns `Async[T]`, marking the creation of a spawn graph node                                                                             |
+| **`spawn { ... }`** | spawn block    | Explicitly declared concurrency scope                                                           | Runtime **aggressively** executes each expression in the block as an independent task concurrently, implicitly waiting for all results at block end |
+| **`spawn for`**     | spawn loop     | Data parallel loop                                                                              | Transforms loop body into multiple parallel tasks, automatically performing data sharding, scheduling, and result collection                        |
 
 ---
 
@@ -320,11 +339,11 @@ impl FlowScheduler {
 
 **Key mechanisms:**
 
-| Mechanism           | Description                                                               |
-| ------------------- | ------------------------------------------------------------------------- |
-| **Lazy Trigger**    | Execution starts from requesting the final result, tracing dependencies backward |
-| **Auto-wait**       | When encountering `Async[T]`, automatically suspend and execute other ready tasks |
-| **Work Stealing**   | Threads steal tasks from other threads' queues, improving CPU utilization |
+| Mechanism         | Description                                                                       |
+| ----------------- | --------------------------------------------------------------------------------- |
+| **Lazy Trigger**  | Execution starts from requesting the final result, tracing dependencies backward  |
+| **Auto-wait**     | When encountering `Async[T]`, automatically suspend and execute other ready tasks |
+| **Work Stealing** | Threads steal tasks from other threads' queues, improving CPU utilization         |
 
 ---
 
@@ -332,13 +351,14 @@ impl FlowScheduler {
 
 ### 4.1 Side Effects and Evaluation Guarantees
 
-Pure lazy evaluation may cause side effects (like logging, writing) to never execute. The Spawn Model uses **automatic derivation based on return type**:
+Pure lazy evaluation may cause side effects (like logging, writing) to never execute. The Spawn
+Model uses **automatic derivation based on return type**:
 
-| Rule             | Condition                         | Behavior                                      |
-| --------------- | --------------------------------- | --------------------------------------------- |
-| **Rule One**     | Functions returning `Void`        | **Auto-eager evaluation** (side effects must execute) |
-| **Rule Two**     | Expressions using `@eager` decorator | **Force eager evaluation** regardless of return type |
-| **Rule Three**   | Functions returning non-Void types | **Lazy evaluation** (default)                |
+| Rule           | Condition                            | Behavior                                              |
+| -------------- | ------------------------------------ | ----------------------------------------------------- |
+| **Rule One**   | Functions returning `Void`           | **Auto-eager evaluation** (side effects must execute) |
+| **Rule Two**   | Expressions using `@eager` decorator | **Force eager evaluation** regardless of return type  |
+| **Rule Three** | Functions returning non-Void types   | **Lazy evaluation** (default)                         |
 
 ```yaoxiang
 # Functions returning Void execute auto-eagerly (side effects)
@@ -464,11 +484,11 @@ Because:
 
 **Execution strategies:**
 
-| Function Type                    | Execution Strategy       | Blocks?              |
-| -------------------------------- | ------------------------ | -------------------- |
-| Pure functions (no I/O)          | Synchronous execution    | No (only CPU usage)  |
-| Async functions (return `Async[T]`) | Async execution       | No                   |
-| `@blocking` annotated functions  | Synchronous execution, internal scheduling | No       |
+| Function Type                       | Execution Strategy                         | Blocks?             |
+| ----------------------------------- | ------------------------------------------ | ------------------- |
+| Pure functions (no I/O)             | Synchronous execution                      | No (only CPU usage) |
+| Async functions (return `Async[T]`) | Async execution                            | No                  |
+| `@blocking` annotated functions     | Synchronous execution, internal scheduling | No                  |
 
 **`@blocking` annotation: Synchronous execution guarantee**
 
@@ -608,17 +628,18 @@ write_logs: () -> Void = () => {
 
 ### 4.5 Parallel Race Control: Type System Guarantees Atomicity
 
-**Core idea: Use the type system to mark data accessed concurrently; compiler checks synchronization correctness.**
+**Core idea: Use the type system to mark data accessed concurrently; compiler checks synchronization
+correctness.**
 
 **Type marking system:**
 
-| Type          | Semantic         | Concurrency Safe | Description                                     |
-| ------------- | ---------------- | ---------------- | ----------------------------------------------- |
-| `T`           | Immutable data   | ✅ Safe          | Default type, multiple tasks can read without races |
-| `Ref[T]`      | Mutable reference| ⚠️ Needs sync    | Marked as concurrently modifiable, compiler checks lock usage |
-| `Atomic[T]`   | Atomic type      | ✅ Safe          | Low-level atomic operations, lock-free concurrency |
-| `Mutex[T]`    | Mutex wrapper    | ✅ Safe          | Auto lock/unlock, compiler guarantees            |
-| `RwLock[T]`   | Read-write lock wrapper | ✅ Safe    | Optimization for read-heavy, write-light scenarios |
+| Type        | Semantic                | Concurrency Safe | Description                                                   |
+| ----------- | ----------------------- | ---------------- | ------------------------------------------------------------- |
+| `T`         | Immutable data          | ✅ Safe          | Default type, multiple tasks can read without races           |
+| `Ref[T]`    | Mutable reference       | ⚠️ Needs sync    | Marked as concurrently modifiable, compiler checks lock usage |
+| `Atomic[T]` | Atomic type             | ✅ Safe          | Low-level atomic operations, lock-free concurrency            |
+| `Mutex[T]`  | Mutex wrapper           | ✅ Safe          | Auto lock/unlock, compiler guarantees                         |
+| `RwLock[T]` | Read-write lock wrapper | ✅ Safe          | Optimization for read-heavy, write-light scenarios            |
 
 **Type safety guarantees:**
 
@@ -704,24 +725,24 @@ fn compile_check_locks(func: &Function) {
 
 **Design advantages:**
 
-| Advantage             | Description                                                       |
-| --------------------- | ----------------------------------------------------------------- |
-| **Compile-time checks** | Lock omissions caught at compile time, not runtime deadlocks    |
-| **Zero runtime overhead** | Mutex wrapper has no overhead when there are no conflicts      |
-| **Concise syntax**    | `with lock() { ... }` syntax sugar, auto-manages lifecycle       |
-| **Type safety**       | Misusing Ref instead of Atomic causes type-level errors           |
+| Advantage                 | Description                                                  |
+| ------------------------- | ------------------------------------------------------------ |
+| **Compile-time checks**   | Lock omissions caught at compile time, not runtime deadlocks |
+| **Zero runtime overhead** | Mutex wrapper has no overhead when there are no conflicts    |
+| **Concise syntax**        | `with lock() { ... }` syntax sugar, auto-manages lifecycle   |
+| **Type safety**           | Misusing Ref instead of Atomic causes type-level errors      |
 
 ---
 
 ## 5. Advantages Summary
 
-| Advantage             | Description                                                                                                       |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| **Zero Contagion**    | Async code is syntactically and type-signature identical to sync code, completely eliminating "async/await" contagion |
+| Advantage                        | Description                                                                                                                                                                      |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Zero Contagion**               | Async code is syntactically and type-signature identical to sync code, completely eliminating "async/await" contagion                                                            |
 | **High-Performance Parallelism** | Lazy spawn graph combined with explicit `spawn` markers allows runtime to auto-discover parallelism while giving programmers explicit tools for extreme performance optimization |
-| **Simple Mental Model** | Developers only need to focus on data flow and business logic, no need to understand complex concurrency primitives and callbacks |
-| **Easy Refactoring**  | Switching between sequential and concurrent logic has extremely low cost, just add or remove `spawn {}` wrappers |
-| **Intuitive Terminology** | "spawn function", "spawn block", "spawn value" make technical discussions extremely intuitive |
+| **Simple Mental Model**          | Developers only need to focus on data flow and business logic, no need to understand complex concurrency primitives and callbacks                                                |
+| **Easy Refactoring**             | Switching between sequential and concurrent logic has extremely low cost, just add or remove `spawn {}` wrappers                                                                 |
+| **Intuitive Terminology**        | "spawn function", "spawn block", "spawn value" make technical discussions extremely intuitive                                                                                    |
 
 ---
 
@@ -750,13 +771,13 @@ fn compile_check_locks(func: &Function) {
 
 **Computation graph visualization debugger** is key to understanding complex program behavior:
 
-| Feature                     | Description                                                     |
-| --------------------------- | --------------------------------------------------------------- |
-| **Node state visualization** | Observe Pending/Running/Completed state of each computation node |
-| **Dependency relationship display** | Show data dependency edges between nodes                  |
-| **Task flow tracking**      | Observe task flow between threads                               |
-| **Performance bottleneck location** | Identify long chains and hot nodes                       |
-| **Error graph visualization** | Show error propagation paths in concurrent environment         |
+| Feature                             | Description                                                      |
+| ----------------------------------- | ---------------------------------------------------------------- |
+| **Node state visualization**        | Observe Pending/Running/Completed state of each computation node |
+| **Dependency relationship display** | Show data dependency edges between nodes                         |
+| **Task flow tracking**              | Observe task flow between threads                                |
+| **Performance bottleneck location** | Identify long chains and hot nodes                               |
+| **Error graph visualization**       | Show error propagation paths in concurrent environment           |
 
 ---
 
@@ -825,4 +846,6 @@ batch_process: (List[Item]) -> List[Result[Processed, Error]] = (items) => {
 
 > _"万物并作，吾以观复。"_ —— Yijing, Hexagram 24 (Fu)
 >
-> The Spawn Model combines the declarative elegance of lazy evaluation with the demands of high-performance concurrency, aiming to provide a new paradigm for systems programming that is both safe and highly expressive.
+> The Spawn Model combines the declarative elegance of lazy evaluation with the demands of
+> high-performance concurrency, aiming to provide a new paradigm for systems programming that is
+> both safe and highly expressive.

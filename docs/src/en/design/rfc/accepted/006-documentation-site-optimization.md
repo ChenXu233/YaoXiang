@@ -14,13 +14,16 @@ issue: '#130'
 
 ## Summary
 
-Establish a YaoXiang documentation site, consolidate scattered documentation, and provide search, navigation, multi-language, and version switching support.
+Establish a YaoXiang documentation site, consolidate scattered documentation, and provide search,
+navigation, multi-language, and version switching support.
 
 ## Motivation
 
 ### Why is this feature needed?
 
-Currently, documentation is scattered across multiple directories and only displayed via GitHub Readme, making it difficult for new users to find the information they need, with no search capability and unsynchronized Chinese and English documentation.
+Currently, documentation is scattered across multiple directories and only displayed via GitHub
+Readme, making it difficult for new users to find the information they need, with no search
+capability and unsynchronized Chinese and English documentation.
 
 ### Current Problems
 
@@ -101,12 +104,12 @@ docs/
 
 ### URL Path Specification (Core Design)
 
-| Scenario         | URL Format                    | Description                    |
-| ---------------- | ----------------------------- | ------------------------------ |
-| Latest (Chinese) | `/zh/getting-started/`        | Redirects to latest version    |
-| Latest (English) | `/en/getting-started/`        | Redirects to latest version    |
-| Specific version | `/v0.5/zh/getting-started/`   | Version number prefix          |
-| Homepage         | `/zh/` or `/en/`              | Language homepage              |
+| Scenario         | URL Format                  | Description                 |
+| ---------------- | --------------------------- | --------------------------- |
+| Latest (Chinese) | `/zh/getting-started/`      | Redirects to latest version |
+| Latest (English) | `/en/getting-started/`      | Redirects to latest version |
+| Specific version | `/v0.5/zh/getting-started/` | Version number prefix       |
+| Homepage         | `/zh/` or `/en/`            | Language homepage           |
 
 **Version Switching Design**:
 
@@ -237,25 +240,25 @@ export default defineConfig({
 
 ## Alternative Solutions
 
-| Solution        | Why Not Chosen                       |
-| --------------- | ------------------------------------ |
-| GitHub Wiki     | Poor search, low customization       |
-| README only     | No search, no navigation             |
-| Docusaurus      | Too heavy, slow startup              |
+| Solution    | Why Not Chosen                 |
+| ----------- | ------------------------------ |
+| GitHub Wiki | Poor search, low customization |
+| README only | No search, no navigation       |
+| Docusaurus  | Too heavy, slow startup        |
 
 ## Implementation Strategy
 
 ### Phase Breakdown
 
-| Phase | Content                                    | Status    |
-| ----- | ------------------------------------------ | --------- |
-| P0    | Initialize VitePress + Starlight config    | TODO      |
+| Phase | Content                                        | Status |
+| ----- | ---------------------------------------------- | ------ |
+| P0    | Initialize VitePress + Starlight config        | TODO   |
 | P0    | Configure directory structure, navbar, sidebar | TODO   |
-| P0    | Migrate README + Quick Start                | TODO      |
-| P0    | CI/CD auto-deploy to GitHub Pages          | TODO      |
-| P1    | Migrate tutorials, reference docs          | TODO      |
-| P1    | Configure version switching menu           | TODO      |
-| P2    | Supplement English documentation           | TODO      |
+| P0    | Migrate README + Quick Start                   | TODO   |
+| P0    | CI/CD auto-deploy to GitHub Pages              | TODO   |
+| P1    | Migrate tutorials, reference docs              | TODO   |
+| P1    | Configure version switching menu               | TODO   |
+| P2    | Supplement English documentation               | TODO   |
 
 ### Dependencies
 
@@ -263,9 +266,9 @@ No external RFC dependencies
 
 ### Risks
 
-| Risk         | Impact  | Mitigation          |
-| ------------ | ------- | ------------------- |
-| Content loss | High    | Full backup before migration |
+| Risk         | Impact | Mitigation                   |
+| ------------ | ------ | ---------------------------- |
+| Content loss | High   | Full backup before migration |
 
 ## Open Questions
 
@@ -277,13 +280,13 @@ No external RFC dependencies
 
 ### Appendix A: Design Decision Records
 
-| Decision           | Decision                  | Date       | Recorder |
-| ------------------ | ------------------------- | ---------- | -------- |
-| SSG Selection      | VitePress + Starlight     | 2025-02-07 | Chen Xu  |
-| Hosting Platform   | GitHub Pages              | 2025-02-07 | Chen Xu  |
-| Search Solution    | Local search              | 2025-02-07 | Chen Xu  |
+| Decision                 | Decision                   | Date       | Recorder |
+| ------------------------ | -------------------------- | ---------- | -------- |
+| SSG Selection            | VitePress + Starlight      | 2025-02-07 | Chen Xu  |
+| Hosting Platform         | GitHub Pages               | 2025-02-07 | Chen Xu  |
+| Search Solution          | Local search               | 2025-02-07 | Chen Xu  |
 | Multi-language Structure | `/zh/` and `/en/` prefixes | 2025-02-07 | Chen Xu  |
-| Version Path       | `/v0.5/zh/` format        | 2025-02-07 | Chen Xu  |
+| Version Path             | `/v0.5/zh/` format         | 2025-02-07 | Chen Xu  |
 
 ---
 

@@ -46,8 +46,8 @@ Provide code examples to illustrate how the proposal works:
 
 If the proposal involves syntax changes, list before/after comparisons:
 
-| Before   | After   |
-| -------- | ------- |
+| Before   | After    |
+| -------- | -------- |
 | Syntax A | Syntax B |
 
 ## Detailed Design
@@ -140,13 +140,14 @@ Format:
 
 #### Discussion Management Rules
 
-| Stage     | Action                                              |
-| --------- | --------------------------------------------------- |
-| In Progress | Record in appendix, keep open                     |
-| Resolved  | Update resolution, mark status, **update main content** |
-| Abandoned | Mark reason, keep record for reference             |
+| Stage       | Action                                                  |
+| ----------- | ------------------------------------------------------- |
+| In Progress | Record in appendix, keep open                           |
+| Resolved    | Update resolution, mark status, **update main content** |
+| Abandoned   | Mark reason, keep record for reference                  |
 
-> **Important**: After discussion is concluded, the main content must be updated! Discussion records can be kept as historical reference.
+> **Important**: After discussion is concluded, the main content must be updated! Discussion records
+> can be kept as historical reference.
 
 ---
 
@@ -162,9 +163,9 @@ Format:
 
 ### Appendix C: Glossary
 
-| Term   | Definition |
-| ------ | ---------- |
-| ...    | ...        |
+| Term | Definition |
+| ---- | ---------- |
+| ...  | ...        |
 
 ---
 

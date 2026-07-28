@@ -15,7 +15,9 @@ issue: '#133'
 
 ## Summary
 
-Design a unified configuration system for YaoXiang language, supporting user-level and project-level scopes, providing shared configuration infrastructure for components like package manager, compiler, REPL, and LSP.
+Design a unified configuration system for YaoXiang language, supporting user-level and project-level
+scopes, providing shared configuration infrastructure for components like package manager, compiler,
+REPL, and LSP.
 
 ## Motivation
 
@@ -58,23 +60,23 @@ Configuration Priority (High → Low):
 
 ### Configuration Layer Restrictions
 
-| Config Section         | User-level | Project-level | Consumer       |
-| ---------------------- | ---------- | ------------- | -------------- |
-| `[package].*`          | ❌         | ✅            | Package manager |
-| `[yaoxiang]`           | ❌         | ✅            | Compiler       |
-| `[dependencies]`       | ❌         | ✅            | Package manager |
-| `[dev-dependencies]`   | ❌         | ✅            | Package manager |
-| `[bin]`                | ❌         | ✅            | Package manager |
-| `[lib]`                | ❌         | ✅            | Package manager |
-| `[build]`              | ✅         | ✅            | Build system   |
-| `[profile.*]`          | ✅         | ✅            | Build system   |
-| `[install]`            | ✅         | ❌            | Package manager |
-| `[i18n]`               | ✅         | ✅            | Compiler       |
-| `[repl]`               | ✅         | ✅            | REPL           |
-| `[fmt]`                | ✅         | ✅            | LSP            |
-| `[lint]`               | ✅         | ✅            | LSP            |
-| `[test]`               | ✅         | ✅            | LSP            |
-| `[tasks]`              | ✅         | ✅            | CLI            |
+| Config Section       | User-level | Project-level | Consumer        |
+| -------------------- | ---------- | ------------- | --------------- |
+| `[package].*`        | ❌         | ✅            | Package manager |
+| `[yaoxiang]`         | ❌         | ✅            | Compiler        |
+| `[dependencies]`     | ❌         | ✅            | Package manager |
+| `[dev-dependencies]` | ❌         | ✅            | Package manager |
+| `[bin]`              | ❌         | ✅            | Package manager |
+| `[lib]`              | ❌         | ✅            | Package manager |
+| `[build]`            | ✅         | ✅            | Build system    |
+| `[profile.*]`        | ✅         | ✅            | Build system    |
+| `[install]`          | ✅         | ❌            | Package manager |
+| `[i18n]`             | ✅         | ✅            | Compiler        |
+| `[repl]`             | ✅         | ✅            | REPL            |
+| `[fmt]`              | ✅         | ✅            | LSP             |
+| `[lint]`             | ✅         | ✅            | LSP             |
+| `[test]`             | ✅         | ✅            | LSP             |
+| `[tasks]`            | ✅         | ✅            | CLI             |
 
 ### Examples
 
@@ -184,23 +186,23 @@ dir = "~/.local/share/yaoxiang"
 
 ### Shared Configuration (Both Levels)
 
-| Field                    | Type       | Default       | Description          |
-| ------------------------ | ---------- | ------------- | -------------------- |
-| `[i18n].lang`            | String     | "en"          | Language             |
-| `[i18n].fallback`        | String     | "en"          | Fallback language    |
-| `[repl].history-size`    | Number     | 1000          | History entries      |
-| `[repl].history-file`    | Path       | ~             | History file         |
-| `[repl].prompt`          | String     | "yx> "        | Prompt               |
-| `[repl].colors`          | Boolean    | true          | Syntax highlighting  |
-| `[repl].auto-imports`    | [String]   | []            | Auto imports          |
-| `[fmt].line-width`       | Number     | 120           | Line width           |
-| `[fmt].indent-width`     | Number     | 4             | Indentation width    |
-| `[fmt].use-tabs`         | Boolean    | false         | Tab indentation       |
-| `[fmt].single-quote`     | Boolean    | false         | Single quotes         |
-| `[lint].rules`           | [String]   | ["recommended"] | Rule set           |
-| `[lint].strict`          | Boolean    | false         | Strict mode           |
-| `[test].report`          | String     | "console"     | Test report           |
-| `[build].output`         | String     | "dist/"       | Output directory       |
+| Field                 | Type     | Default         | Description         |
+| --------------------- | -------- | --------------- | ------------------- |
+| `[i18n].lang`         | String   | "en"            | Language            |
+| `[i18n].fallback`     | String   | "en"            | Fallback language   |
+| `[repl].history-size` | Number   | 1000            | History entries     |
+| `[repl].history-file` | Path     | ~               | History file        |
+| `[repl].prompt`       | String   | "yx> "          | Prompt              |
+| `[repl].colors`       | Boolean  | true            | Syntax highlighting |
+| `[repl].auto-imports` | [String] | []              | Auto imports        |
+| `[fmt].line-width`    | Number   | 120             | Line width          |
+| `[fmt].indent-width`  | Number   | 4               | Indentation width   |
+| `[fmt].use-tabs`      | Boolean  | false           | Tab indentation     |
+| `[fmt].single-quote`  | Boolean  | false           | Single quotes       |
+| `[lint].rules`        | [String] | ["recommended"] | Rule set            |
+| `[lint].strict`       | Boolean  | false           | Strict mode         |
+| `[test].report`       | String   | "console"       | Test report         |
+| `[build].output`      | String   | "dist/"         | Output directory    |
 
 ### Command Line and Environment Variable Overrides
 
@@ -237,7 +239,9 @@ yaoxiang config show --source
 yaoxiang config reset
 ```
 
-**First Run**: When a user runs any `yaoxiang` command for the first time, the system automatically checks if user-level configuration exists. If not, it generates one with default options automatically.
+**First Run**: When a user runs any `yaoxiang` command for the first time, the system automatically
+checks if user-level configuration exists. If not, it generates one with default options
+automatically.
 
 **Configuration File Locations**:
 
@@ -248,11 +252,11 @@ yaoxiang config reset
 
 Configurations from different layers are merged according to the following rules:
 
-| Type                     | Strategy      | Description                                     |
-| ------------------------ | ------------- | ----------------------------------------------- |
-| Scalar (String/Number/Boolean) | Replace | Project-level overrides user-level            |
-| Array                    | Replace       | Project-level completely replaces user-level   |
-| Object                   | Deep merge    | Field-by-field merge; undefined fields inherit from lower layer |
+| Type                           | Strategy   | Description                                                     |
+| ------------------------------ | ---------- | --------------------------------------------------------------- |
+| Scalar (String/Number/Boolean) | Replace    | Project-level overrides user-level                              |
+| Array                          | Replace    | Project-level completely replaces user-level                    |
+| Object                         | Deep merge | Field-by-field merge; undefined fields inherit from lower layer |
 
 **Example - Object Deep Merge**:
 
@@ -278,7 +282,8 @@ strict = true              # from project-level
 - ✅ Existing no-config-file mode continues to be supported (all components use built-in defaults)
 - ✅ New configuration items all have reasonable defaults
 - ✅ Configuration is automatically generated with default options on first command run
-- ✅ Configuration parsing failures display friendly errors with specific line numbers and error reasons
+- ✅ Configuration parsing failures display friendly errors with specific line numbers and error
+  reasons
 
 ## Trade-offs
 
@@ -296,21 +301,21 @@ strict = true              # from project-level
 
 ## Alternative Approaches
 
-| Approach                 | Why Not Chosen                          |
-| ------------------------ | --------------------------------------- |
-| Independent config per component | Duplicate code, fragmented user experience |
-| Command-line arguments only | Cannot persist user preferences      |
-| Environment variables only | Project configuration hard to version control |
+| Approach                         | Why Not Chosen                                |
+| -------------------------------- | --------------------------------------------- |
+| Independent config per component | Duplicate code, fragmented user experience    |
+| Command-line arguments only      | Cannot persist user preferences               |
+| Environment variables only       | Project configuration hard to version control |
 
 ## Implementation Strategy
 
 ### Phases
 
-| Phase        | Contents                                                           |
-| ------------ | ------------------------------------------------------------------ |
-| **Phase 1**  | Basic config parser, toml support, project-level config, `yaoxiang config init` |
-| **Phase 2**  | User-level config, config merge logic, `yaoxiang config edit/show`         |
-| **Phase 3**  | Command line/env var overrides, `platform` constraints, `[tool.*]` extensions |
+| Phase       | Contents                                                                        |
+| ----------- | ------------------------------------------------------------------------------- |
+| **Phase 1** | Basic config parser, toml support, project-level config, `yaoxiang config init` |
+| **Phase 2** | User-level config, config merge logic, `yaoxiang config edit/show`              |
+| **Phase 3** | Command line/env var overrides, `platform` constraints, `[tool.*]` extensions   |
 
 ### Dependencies
 
@@ -318,21 +323,24 @@ strict = true              # from project-level
 
 ### Risks
 
-| Risk              | Mitigation                            |
-| ----------------- | ------------------------------------- |
+| Risk                  | Mitigation                                      |
+| --------------------- | ----------------------------------------------- |
 | Too many config items | Provide reasonable defaults, invisible to users |
-| Complex parser    | Use existing toml library             |
+| Complex parser        | Use existing toml library                       |
 
 ## Open Issues
 
-- [x] `features` conditional compilation syntax? → **Moved to separate RFC**, depends on RFC-011 Generics System
-- [x] `workspace` workspace design? → **Moved to separate RFC**, high complexity, needs independent design
+- [x] `features` conditional compilation syntax? → **Moved to separate RFC**, depends on RFC-011
+      Generics System
+- [x] `workspace` workspace design? → **Moved to separate RFC**, high complexity, needs independent
+      design
 
 ### Accepted Features (Phase 3)
 
 #### `platform` Platform Constraints
 
-> **Note**: The following syntax is used in `yaoxiang.toml` **configuration files**, **not** in YaoXiang source code (`.yx` files). Users do not need to write `cfg(...)` in their code.
+> **Note**: The following syntax is used in `yaoxiang.toml` **configuration files**, **not** in
+> YaoXiang source code (`.yx` files). Users do not need to write `cfg(...)` in their code.
 
 Supports platform-specific configuration based on target OS/architecture:
 

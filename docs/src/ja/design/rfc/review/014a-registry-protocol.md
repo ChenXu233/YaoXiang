@@ -9,7 +9,8 @@ group: 'rfc-014'
 
 # RFC-014a: Registry プロトコル仕様
 
-> 本 RFC は [RFC-014: パッケージ管理システム設計](../accepted/014-package-manager.md) のサブ RFC です。
+> 本 RFC は [RFC-014: パッケージ管理システム設計](../accepted/014-package-manager.md)
+> のサブ RFC です。
 
 ## 概要
 
@@ -21,7 +22,8 @@ RFC-014 の総括ではパッケージ管理システムの全体アーキテク
 
 ### 現在の問題
 
-- `RegistrySource` はスタブコード（`source/mod.rs:150-203`）で、`resolve` は宣言されたバージョンをそのまま返し、`download` は空のパスを返します
+- `RegistrySource` はスタブコード（`source/mod.rs:150-203`）で、`resolve`
+  は宣言されたバージョンをそのまま返し、`download` は空のパスを返します
 - HTTP クライアントがない（`reqwest` 依存なし）
 - パッケージのパブリッシュ機構がない
 - 認証/認可がない
@@ -68,7 +70,8 @@ pub trait Source: Send + Sync {
 }
 ```
 
-すべての実装（`LocalSource`、`GitSource`、`RegistrySource`）を unified に async に変更します。CLI エントリポイントは `#[tokio::main]` または `Runtime::block_on` で駆動します。
+すべての実装（`LocalSource`、`GitSource`、`RegistrySource`）を unified に async に変更します。CLI エントリポイントは
+`#[tokio::main]` または `Runtime::block_on` で駆動します。
 
 **理由：**
 
@@ -109,19 +112,19 @@ trait Registry: Send + Sync {
 
 `yaoxiang add foo`（フラグなし）時のデフォルト検索順序：
 
-| 優先順位 | 検索          | 説明                                    |
-| -------- | ------------- | --------------------------------------- |
-| 1        | グローバルキャッシュ | `~/.yaoxiang/cache/registry/foo-<ver>/` |
-| 2        | 公式 Registry | バージョンのクエリ → ダウンロード                         |
-| 3        | 失敗          | エラーを出力し、ユーザーがパッケージ名またはネットワークを確認するよう促す            |
+| 優先順位 | 検索                 | 説明                                                                       |
+| -------- | -------------------- | -------------------------------------------------------------------------- |
+| 1        | グローバルキャッシュ | `~/.yaoxiang/cache/registry/foo-<ver>/`                                    |
+| 2        | 公式 Registry        | バージョンのクエリ → ダウンロード                                          |
+| 3        | 失敗                 | エラーを出力し、ユーザーがパッケージ名またはネットワークを確認するよう促す |
 
 **明示的なオーバーライド（デフォルトチェーンをバイパス）：**
 
-| フラグ              | 動作                                                                          |
-| ------------------- | ----------------------------------------------------------------------------- |
+| フラグ             | 動作                                                                                      |
+| ------------------ | ----------------------------------------------------------------------------------------- |
 | `--git <url>`      | Registry をスキップして、直接 Git clone（Release assets を優先 → fallback は tag/branch） |
-| `--path <dir>`     | Registry をスキップして、直接ローカルパスを使用                                                 |
-| `--registry <url>` | 公式 Registry をスキップして、指定された Registry を使用                                            |
+| `--path <dir>`     | Registry をスキップして、直接ローカルパスを使用                                           |
+| `--registry <url>` | 公式 Registry をスキップして、指定された Registry を使用                                  |
 
 ### 公式 Registry
 
@@ -129,21 +132,22 @@ trait Registry: Send + Sync {
 
 **API エンドポイント：**
 
-| エンドポイント                               | メソッド  | 説明         |
-| ---------------------------------------- | ------ | ------------ |
-| `/api/v1/packages/{name}`                | GET    | パッケージ情報のクエリ   |
-| `/api/v1/packages/{name}/versions`       | GET    | バージョンリストのクエリ |
-| `/api/v1/packages/{name}/{version}`      | GET    | パッケージのダウンロード |
-| `/api/v1/packages`                       | PUT    | パッケージのパブリッシュ |
-| `/api/v1/packages/{name}/{version}/yank` | DELETE | バージョンの撤回     |
-| `/api/v1/search?q={query}`               | GET    | パッケージの検索     |
-| `/api/v1/login`                          | POST   | 認証         |
+| エンドポイント                           | メソッド | 説明                     |
+| ---------------------------------------- | -------- | ------------------------ |
+| `/api/v1/packages/{name}`                | GET      | パッケージ情報のクエリ   |
+| `/api/v1/packages/{name}/versions`       | GET      | バージョンリストのクエリ |
+| `/api/v1/packages/{name}/{version}`      | GET      | パッケージのダウンロード |
+| `/api/v1/packages`                       | PUT      | パッケージのパブリッシュ |
+| `/api/v1/packages/{name}/{version}/yank` | DELETE   | バージョンの撤回         |
+| `/api/v1/search?q={query}`               | GET      | パッケージの検索         |
+| `/api/v1/login`                          | POST     | 認証                     |
 
 ### GitHub 統合
 
 GitHub をパッケージソースとして使用する場合、Go modules スタイルの strategy を採用します：
 
-1. **Release assets を優先**：GitHub Release ページに一致するプラットフォームのプリコンパイル成果物があるかをチェック
+1. **Release assets を優先**：GitHub
+   Release ページに一致するプラットフォームのプリコンパイル成果物があるかをチェック
 2. **main ブランチへの Fallback**：Release がない場合は git clone
 
 ```toml
@@ -228,15 +232,16 @@ url = "https://yxreg.my-company.com"
 token = "xxx"
 ```
 
-**マッピング規則：** `yaoxiang login --registry <url>` は URL によって `[registries.*]` の `url` フィールドとマッチします。マッチするものがない場合は、新しいエントリを作成します（自動生成された名前、例：`reg-1`）。
+**マッピング規則：** `yaoxiang login --registry <url>` は URL によって `[registries.*]` の `url`
+フィールドとマッチします。マッチするものがない場合は、新しいエントリを作成します（自動生成された名前、例：`reg-1`）。
 
 **優先順位：** 環境変数 > 設定ファイル
 
-| 環境変数              | 用途                               |
-| -------------------- | ---------------------------------- |
-| `$YX_GITHUB_TOKEN`   | GitHub 認証                        |
+| 環境変数             | 用途                                    |
+| -------------------- | --------------------------------------- |
+| `$YX_GITHUB_TOKEN`   | GitHub 認証                             |
 | `$YX_REGISTRY_TOKEN` | Registry 認証（デフォルト Registry 用） |
-| `$YX_REGISTRY_URL`   | デフォルト Registry アドレス                 |
+| `$YX_REGISTRY_URL`   | デフォルト Registry アドレス            |
 
 **CLI コマンド：**
 
@@ -301,12 +306,12 @@ impl Source for RegistrySource {
 
 ### 依存関係
 
-| crate            | 用途             |
-| ---------------- | ---------------- |
-| `reqwest`        | HTTP クライアント      |
-| `sha2`           | SHA-256 チェックサム     |
-| `flate2` + `tar` | パッケージフォーマットの処理       |
-| `async-trait`    | async trait のサポート |
+| crate            | 用途                         |
+| ---------------- | ---------------------------- |
+| `reqwest`        | HTTP クライアント            |
+| `sha2`           | SHA-256 チェックサム         |
+| `flate2` + `tar` | パッケージフォーマットの処理 |
+| `async-trait`    | async trait のサポート       |
 
 ### エラータイプ
 
@@ -353,23 +358,23 @@ pub enum RegistryError {
 
 ## 代替案
 
-| 案                    | 採用しなかった理由                            |
-| --------------------- | ------------------------------------- |
-| GitHub のみサポート           | GitHub エコシステムに依存し、自前で Registry を構築できない     |
-| Cargo 形式の crates.io    | 複雑すぎ、YaoXiang エコシステムの初期段階では不要     |
-| npm 形式の yank（マークのみ） | セキュリティリスクがあり、已知のサプライチェーン攻撃事例がある          |
+| 案                            | 採用しなかった理由                                             |
+| ----------------------------- | -------------------------------------------------------------- |
+| GitHub のみサポート           | GitHub エコシステムに依存し、自前で Registry を構築できない    |
+| Cargo 形式の crates.io        | 複雑すぎ、YaoXiang エコシステムの初期段階では不要              |
+| npm 形式の yank（マークのみ） | セキュリティリスクがあり、已知のサプライチェーン攻撃事例がある |
 
 ## 実装 strategy
 
 ### フェーズ分け
 
-| フェーズ      | 内容                                               |
-| ----------- | -------------------------------------------------- |
+| フェーズ  | 内容                                                      |
+| --------- | --------------------------------------------------------- |
 | Phase 3.5 | Source trait を async に変更 + async-trait + 全実装の移行 |
-| Phase 4a  | Registry trait + reqwest 統合 + ローカル Registry mock |
-| Phase 4b  | GitHub Release アダプタ                                |
-| Phase 4c  | publish コマンド + パッケージフォーマットの打包                          |
-| Phase 4d  | 認証 + yank                                        |
+| Phase 4a  | Registry trait + reqwest 統合 + ローカル Registry mock    |
+| Phase 4b  | GitHub Release アダプタ                                   |
+| Phase 4c  | publish コマンド + パッケージフォーマットの打包           |
+| Phase 4d  | 認証 + yank                                               |
 
 ### 依存関係
 

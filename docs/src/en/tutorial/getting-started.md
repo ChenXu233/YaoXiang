@@ -2,7 +2,8 @@
 
 > This guide helps you get started with YaoXiang programming language.
 >
-> **Note**: Code examples in this document are written based on YaoXiang language specification. If you encounter syntax differences in actual execution, please refer to
+> **Note**: Code examples in this document are written based on YaoXiang language specification. If
+> you encounter syntax differences in actual execution, please refer to
 > [Language Specification](../reference/language-spec/index.md).
 
 ## Installation
@@ -289,7 +290,8 @@ message = match result {
 
 ## Spawn Programming (Concurrency)
 
-YaoXiang's concurrency model builds around the `spawn <expr>` primitive — the sole entry point for parallelism.
+YaoXiang's concurrency model builds around the `spawn <expr>` primitive — the sole entry point for
+parallelism.
 
 ```yaoxiang
 // spawn can decorate any expression, executed in parallel automatically
@@ -303,7 +305,9 @@ main: () -> Void = {
 }
 ```
 
-**Core rule**: Expressions decorated with `spawn` execute in background, and the outer scope synchronously blocks waiting for results. Independent tasks automatically run in parallel, scheduled by the runtime's GMP model.
+**Core rule**: Expressions decorated with `spawn` execute in background, and the outer scope
+synchronously blocks waiting for results. Independent tasks automatically run in parallel, scheduled
+by the runtime's GMP model.
 
 ## Module System
 

@@ -20,13 +20,16 @@ impl_status: 'partial'
 
 ## Summary
 
-Design a package management system for the YaoXiang language, supporting semantic versioning, local and GitHub dependencies, unified import syntax, `yaoxiang.toml` configuration files, and `yaoxiang.lock` lock files.
+Design a package management system for the YaoXiang language, supporting semantic versioning, local
+and GitHub dependencies, unified import syntax, `yaoxiang.toml` configuration files, and
+`yaoxiang.lock` lock files.
 
 ## Motivation
 
 ### Why is this feature/change needed?
 
-Package management is the foundation of modern programming language ecosystems. The YaoXiang language currently lacks:
+Package management is the foundation of modern programming language ecosystems. The YaoXiang
+language currently lacks:
 
 - Dependency declaration mechanism
 - Version management capabilities
@@ -74,7 +77,8 @@ my-project/
 └─────────────────────────────────────────────┘
 ```
 
-**Extensibility Mechanism**: Adding a new Source type only requires implementing the trait, without modifying the resolution engine.
+**Extensibility Mechanism**: Adding a new Source type only requires implementing the trait, without
+modifying the resolution engine.
 
 ### Examples
 
@@ -179,7 +183,8 @@ Search order:
 **Project Mode Rules**:
 
 - Embedded binary only applies to `std.*` namespace, highest priority
-- When project-level stdlib (`.yaoxiang/std/`) exists, global stdlib is completely skipped — ensures deterministic builds
+- When project-level stdlib (`.yaoxiang/std/`) exists, global stdlib is completely skipped — ensures
+  deterministic builds
 - Projects can add stdlib as a dependency via `yaoxiang add std@1.0.1` to lock the version
 
 #### Single-file Mode (without yaoxiang.toml)
@@ -240,11 +245,15 @@ my-project/
 
 **Design Key Points**:
 
-- Embedded binary serves as a compatibility layer: before filesystem stdlib is fully in place, provide stdlib modules via embedded binary
-- Version directory isolation: `yx/<version>/std/` allows different versions of stdlib to coexist without interfering with each other
-- Project-level stdlib overrides global stdlib: ensures deterministic builds, unaffected by global environment changes
+- Embedded binary serves as a compatibility layer: before filesystem stdlib is fully in place,
+  provide stdlib modules via embedded binary
+- Version directory isolation: `yx/<version>/std/` allows different versions of stdlib to coexist
+  without interfering with each other
+- Project-level stdlib overrides global stdlib: ensures deterministic builds, unaffected by global
+  environment changes
 - Without yaoxiang.toml (single-file mode), falls back to global stdlib
-- The existence of `.yaoxiang/std/` indicates "project-level stdlib enabled", global stdlib no longer participates
+- The existence of `.yaoxiang/std/` indicates "project-level stdlib enabled", global stdlib no
+  longer participates
 
 ### Core Data Structures
 
@@ -297,47 +306,47 @@ Adopt a unified approach that integrates compiler, package manager, and REPL int
 
 #### Single-file Mode vs Project Mode
 
-| Command                    | Single-file | Project mode | Description             |
-| -------------------------- | ----------- | ------------ | ----------------------- |
-| `yaoxiang run <file>`      | ✅          | ✅           | Run file/project entry  |
-| `yaoxiang build`           | ❌          | ✅           | Build project           |
-| `yaoxiang build <file>`    | ✅          | ✅           | Build single file       |
-| `yaoxiang init <name>`     | ❌          | ✅           | Create project          |
-| `yaoxiang add <dep>`       | ❌          | ✅           | Add dependency          |
-| `yaoxiang update`          | ❌          | ✅           | Update dependencies     |
-| `yaoxiang fmt`             | ✅          | ✅           | Format                  |
-| `yaoxiang check`           | ✅          | ✅           | Type check              |
-| `yaoxiang` (no arguments)  | ✅          | ✅           | Enter REPL directly     |
+| Command                   | Single-file | Project mode | Description            |
+| ------------------------- | ----------- | ------------ | ---------------------- |
+| `yaoxiang run <file>`     | ✅          | ✅           | Run file/project entry |
+| `yaoxiang build`          | ❌          | ✅           | Build project          |
+| `yaoxiang build <file>`   | ✅          | ✅           | Build single file      |
+| `yaoxiang init <name>`    | ❌          | ✅           | Create project         |
+| `yaoxiang add <dep>`      | ❌          | ✅           | Add dependency         |
+| `yaoxiang update`         | ❌          | ✅           | Update dependencies    |
+| `yaoxiang fmt`            | ✅          | ✅           | Format                 |
+| `yaoxiang check`          | ✅          | ✅           | Type check             |
+| `yaoxiang` (no arguments) | ✅          | ✅           | Enter REPL directly    |
 
 #### Command Details
 
-| Command                               | Function                          | Example                                                 |
-| ------------------------------------- | --------------------------------- | ------------------------------------------------------- |
-| `yaoxiang`                            | Enter REPL directly               | `yaoxiang`                                              |
-| `yaoxiang run <file>`                 | Run single file/project           | `yaoxiang run main.yx`                                  |
-| `yaoxiang init <name>`                | Create new project                | `yaoxiang init my-app`                                  |
-| `yaoxiang build`                      | Build project                     | `yaoxiang build`                                        |
-| `yaoxiang build <file>`               | Build single file                 | `yaoxiang build foo.yx`                                 |
-| `yaoxiang add <dep>`                  | Add dependency                    | `yaoxiang add foo`                                      |
-| `yaoxiang add -D <dep>`               | Add dev dependency                | `yaoxiang add -D test`                                  |
-| `yaoxiang rm <dep>`                   | Remove dependency                 | `yaoxiang rm foo`                                       |
-| `yaoxiang update`                     | Update all dependencies           | `yaoxiang update`                                       |
-| `yaoxiang update foo`                 | Update specific dependency        | `yaoxiang update foo`                                   |
-| `yaoxiang install`                    | Install all dependencies          | `yaoxiang install`                                      |
-| `yaoxiang list`                       | List dependencies                 | `yaoxiang list`                                         |
-| `yaoxiang outdated`                   | Check outdated dependencies       | `yaoxiang outdated`                                     |
-| `yaoxiang fmt`                        | Format code                       | `yaoxiang fmt`                                          |
-| `yaoxiang check`                      | Type check                        | `yaoxiang check`                                        |
-| `yaoxiang clean`                      | Clean build artifacts             | `yaoxiang clean`                                        |
-| `yaoxiang task <name>`                | Run custom task                   | `yaoxiang task lint`                                    |
-| `yaoxiang publish`                    | Publish package to Registry       | `yaoxiang publish`                                      |
-| `yaoxiang publish --github`           | Publish and create GitHub Release | `yaoxiang publish --github`                             |
-| `yaoxiang yank <pkg>@<ver>`           | Remove published version (irreversible) | `yaoxiang yank foo@1.2.3`                        |
-| `yaoxiang login --registry <url>`     | Registry authentication           | `yaoxiang login --registry https://reg.example.com`     |
-| `yaoxiang login --github`             | GitHub authentication             | `yaoxiang login --github`                               |
-| `yaoxiang logout --registry <url>`    | Logout                            | `yaoxiang logout --registry https://reg.example.com`   |
-| `yaoxiang cache clean`                | Clean global cache                | `yaoxiang cache clean`                                  |
-| `yaoxiang workspace <cmd>`            | Workspace operations              | `yaoxiang workspace list`                              |
+| Command                            | Function                                | Example                                              |
+| ---------------------------------- | --------------------------------------- | ---------------------------------------------------- |
+| `yaoxiang`                         | Enter REPL directly                     | `yaoxiang`                                           |
+| `yaoxiang run <file>`              | Run single file/project                 | `yaoxiang run main.yx`                               |
+| `yaoxiang init <name>`             | Create new project                      | `yaoxiang init my-app`                               |
+| `yaoxiang build`                   | Build project                           | `yaoxiang build`                                     |
+| `yaoxiang build <file>`            | Build single file                       | `yaoxiang build foo.yx`                              |
+| `yaoxiang add <dep>`               | Add dependency                          | `yaoxiang add foo`                                   |
+| `yaoxiang add -D <dep>`            | Add dev dependency                      | `yaoxiang add -D test`                               |
+| `yaoxiang rm <dep>`                | Remove dependency                       | `yaoxiang rm foo`                                    |
+| `yaoxiang update`                  | Update all dependencies                 | `yaoxiang update`                                    |
+| `yaoxiang update foo`              | Update specific dependency              | `yaoxiang update foo`                                |
+| `yaoxiang install`                 | Install all dependencies                | `yaoxiang install`                                   |
+| `yaoxiang list`                    | List dependencies                       | `yaoxiang list`                                      |
+| `yaoxiang outdated`                | Check outdated dependencies             | `yaoxiang outdated`                                  |
+| `yaoxiang fmt`                     | Format code                             | `yaoxiang fmt`                                       |
+| `yaoxiang check`                   | Type check                              | `yaoxiang check`                                     |
+| `yaoxiang clean`                   | Clean build artifacts                   | `yaoxiang clean`                                     |
+| `yaoxiang task <name>`             | Run custom task                         | `yaoxiang task lint`                                 |
+| `yaoxiang publish`                 | Publish package to Registry             | `yaoxiang publish`                                   |
+| `yaoxiang publish --github`        | Publish and create GitHub Release       | `yaoxiang publish --github`                          |
+| `yaoxiang yank <pkg>@<ver>`        | Remove published version (irreversible) | `yaoxiang yank foo@1.2.3`                            |
+| `yaoxiang login --registry <url>`  | Registry authentication                 | `yaoxiang login --registry https://reg.example.com`  |
+| `yaoxiang login --github`          | GitHub authentication                   | `yaoxiang login --github`                            |
+| `yaoxiang logout --registry <url>` | Logout                                  | `yaoxiang logout --registry https://reg.example.com` |
+| `yaoxiang cache clean`             | Clean global cache                      | `yaoxiang cache clean`                               |
+| `yaoxiang workspace <cmd>`         | Workspace operations                    | `yaoxiang workspace list`                            |
 
 #### Command Constraint Notes
 
@@ -361,7 +370,8 @@ yaoxiang add foo        # ✅ Add dependency
 
 ### Global Cache
 
-All downloaded dependencies cached in `~/.yaoxiang/cache/`, project vendor directory copied from cache.
+All downloaded dependencies cached in `~/.yaoxiang/cache/`, project vendor directory copied from
+cache.
 
 ```
 ~/.yaoxiang/
@@ -413,25 +423,29 @@ token = "xxx"
 - Package completely deleted, unrecoverable
 - Version number permanently occupied, cannot republish same version
 - Projects with lockfile referencing that version will error, need upgrade
-- **Security purpose**: Prevent npm-style supply chain attacks (attackers claiming deleted version numbers to inject malicious code)
+- **Security purpose**: Prevent npm-style supply chain attacks (attackers claiming deleted version
+  numbers to inject malicious code)
 
 ### Registry Protocol
 
 See [RFC-014a: Registry Protocol Specification](../draft/014a-registry-protocol.md).
 
-Core design: open protocol + adapter layer. Official Registry as primary, GitHub Release/main branch as secondary, support custom Registry.
+Core design: open protocol + adapter layer. Official Registry as primary, GitHub Release/main branch
+as secondary, support custom Registry.
 
 ### Build System
 
 See [RFC-014b: Build System and Binary Distribution](../draft/014b-build-system.md).
 
-Core design: declarative `[build]` configuration, precompiled-first/source-fallback, supports cargo/cmake/custom strategies.
+Core design: declarative `[build]` configuration, precompiled-first/source-fallback, supports
+cargo/cmake/custom strategies.
 
 ### Workspace
 
 See [RFC-014c: Workspace Support](../draft/014c-workspace.md).
 
-Core design: dictionary-style members declaration, shared lockfile, path dependencies, Cargo workspace integration.
+Core design: dictionary-style members declaration, shared lockfile, path dependencies, Cargo
+workspace integration.
 
 ## Trade-offs
 
@@ -449,25 +463,25 @@ Core design: dictionary-style members declaration, shared lockfile, path depende
 
 ## Alternative Approaches
 
-| Approach                   | Why Not Chosen                      |
-| -------------------------- | ----------------------------------- |
-| Real-time GitHub access    | Security and cache reuse difficult  |
-| Global cache ($HOME/.yaoxiang) | Poor isolation, complex version conflicts |
-| Registry-only support      | GitHub is the current mainstream code hosting platform |
+| Approach                       | Why Not Chosen                                         |
+| ------------------------------ | ------------------------------------------------------ |
+| Real-time GitHub access        | Security and cache reuse difficult                     |
+| Global cache ($HOME/.yaoxiang) | Poor isolation, complex version conflicts              |
+| Registry-only support          | GitHub is the current mainstream code hosting platform |
 
 ## Implementation Strategy
 
 ### Phase Breakdown
 
-| Phase          | Content                                               | Status       |
-| -------------- | ----------------------------------------------------- | ------------ |
-| **Phase 1**    | TOML parsing, local dependencies, lock generation, basic algorithms | ✅ Complete |
-| **Phase 2**    | GitHub support, .yaoxiang/vendor management, download tools | ✅ Complete |
-| **Phase 3**    | Global cache, semver crate replacement, CLI improvements | Pending      |
-| **Phase 3.5**  | Source trait async conversion, async-trait integration | Pending      |
-| **Phase 4**    | Registry protocol, publish, auth (RFC-014a)           | Pending      |
-| **Phase 5**    | Build system, precompiled binaries (RFC-014b)        | Pending      |
-| **Phase 6**    | Workspace support (RFC-014c)                          | Pending      |
+| Phase         | Content                                                             | Status      |
+| ------------- | ------------------------------------------------------------------- | ----------- |
+| **Phase 1**   | TOML parsing, local dependencies, lock generation, basic algorithms | ✅ Complete |
+| **Phase 2**   | GitHub support, .yaoxiang/vendor management, download tools         | ✅ Complete |
+| **Phase 3**   | Global cache, semver crate replacement, CLI improvements            | Pending     |
+| **Phase 3.5** | Source trait async conversion, async-trait integration              | Pending     |
+| **Phase 4**   | Registry protocol, publish, auth (RFC-014a)                         | Pending     |
+| **Phase 5**   | Build system, precompiled binaries (RFC-014b)                       | Pending     |
+| **Phase 6**   | Workspace support (RFC-014c)                                        | Pending     |
 
 ### Dependencies
 
@@ -476,15 +490,16 @@ Core design: dictionary-style members declaration, shared lockfile, path depende
 
 ### Risks
 
-| Risk                    | Mitigation                           |
-| ----------------------- | ------------------------------------ |
+| Risk                                    | Mitigation                                                   |
+| --------------------------------------- | ------------------------------------------------------------ |
 | Complex dependency resolution algorithm | Implement simple version first, add conflict detection later |
-| Unstable Git downloads  | Retry and caching mechanisms         |
-| Performance issues      | Lazy loading, incremental resolution |
+| Unstable Git downloads                  | Retry and caching mechanisms                                 |
+| Performance issues                      | Lazy loading, incremental resolution                         |
 
 ## Open Questions
 
-- [x] `dev-dependencies` conditional compilation syntax? → Handled uniformly by RFC-014b build system
+- [x] `dev-dependencies` conditional compilation syntax? → Handled uniformly by RFC-014b build
+      system
 - [x] Integrity check algorithm (SHA-256 / BLAKE3)? → SHA-256
 - [ ] `excludes` to exclude specific files from download?
 - [ ] Package naming convention (namespace support, e.g., `@org/pkg`)?
@@ -494,12 +509,12 @@ Core design: dictionary-style members declaration, shared lockfile, path depende
 
 ## Dependencies (Cargo.toml additions required)
 
-| Purpose              | crate              | Description            |
-| -------------------- | ------------------ | ---------------------- |
-| Semantic versioning  | `semver`           | Replace hand-written parser |
-| HTTP client          | `reqwest`          | Registry communication |
-| SHA-256              | `sha2`             | Integrity verification |
-| Compression          | `flate2` + `tar`   | Package format handling |
+| Purpose             | crate            | Description                 |
+| ------------------- | ---------------- | --------------------------- |
+| Semantic versioning | `semver`         | Replace hand-written parser |
+| HTTP client         | `reqwest`        | Registry communication      |
+| SHA-256             | `sha2`           | Integrity verification      |
+| Compression         | `flate2` + `tar` | Package format handling     |
 
 ---
 

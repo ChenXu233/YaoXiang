@@ -10,11 +10,13 @@ issue: '#113'
 
 # RFC-014c: ワークスペースサポート
 
-> 本 RFC は [RFC-014: パッケージ管理システム設計](../accepted/014-package-manager.md) のサブ RFC です。
+> 本 RFC は [RFC-014: パッケージ管理システム設計](../accepted/014-package-manager.md)
+> のサブ RFC です。
 
 ## 概要
 
-YaoXiang のワークスペース（workspace）メカニズムを定義します：複数の関連パッケージを一緒に開発する際の依存関係共有、パス参照、lockfile 統合、Cargo workspace との統合。
+YaoXiang のワークスペース（workspace）メカニズムを定義します：複数の関連パッケージを一緒に開発する際の依存関係共有、パス参照、lockfile 統合、Cargo
+workspace との統合。
 
 ## 動機
 
@@ -53,7 +55,8 @@ app = "packages/app/yaoxiang.toml"
 2. 共有 lockfile の提供（`yaoxiang.lock`）
 3. 共有 vendor ディレクトリの提供（`.yaoxiang/vendor/`）
 
-**ルート toml は dependencies を定義しません。** 各メンバーの依存関係は自分の `yaoxiang.toml` に記述します。
+**ルート toml は dependencies を定義しません。** 各メンバーの依存関係は自分の `yaoxiang.toml`
+に記述します。
 
 ### メンバー yaoxiang.toml
 
@@ -188,14 +191,14 @@ my-workspace/
 
 ### CLI コマンド
 
-| コマンド                             | 機能                                 |
-| ------------------------------------ | ------------------------------------ |
-| `yaoxiang workspace list`           | ワークスペースメンバーを一覧表示     |
-| `yaoxiang workspace add <path>`     | メンバーを追加                       |
-| `yaoxiang workspace remove <name>`  | メンバーを削除                       |
-| `yaoxiang build`                    | 全メンバーをビルド（依存トポロジ順） |
-| `yaoxiang build core`               | 指定メンバーをビルド                 |
-| `yaoxiang test`                     | 全メンバーのテストを実行           |
+| コマンド                           | 機能                                 |
+| ---------------------------------- | ------------------------------------ |
+| `yaoxiang workspace list`          | ワークスペースメンバーを一覧表示     |
+| `yaoxiang workspace add <path>`    | メンバーを追加                       |
+| `yaoxiang workspace remove <name>` | メンバーを削除                       |
+| `yaoxiang build`                   | 全メンバーをビルド（依存トポロジ順） |
+| `yaoxiang build core`              | 指定メンバーをビルド                 |
+| `yaoxiang test`                    | 全メンバーのテストを実行             |
 
 **`yaoxiang build` の動作：** 全メンバーをビルドし、依存トポロジ順にソートする。core → utils →
 app の依存関係がある場合、ビルド順序は core → utils → app となる。
@@ -264,23 +267,23 @@ struct WorkspaceMember {
 
 ## 代替案
 
-| 方案                       | なぜ選択しなかったか                       |
-| -------------------------- | ---------------------------------------- |
-| 獨立プロジェクト + path 依存 | lockfile が統一されず、バージョンドリフトのリスク |
-| npm workspaces 类似        | npm の workspace には問題が多く、真似する価値がない |
-| Cargo workspace 直接再利用  | YaoXiang と Cargo は異なるパッケージエコシステム |
+| 方案                         | なぜ選択しなかったか                                |
+| ---------------------------- | --------------------------------------------------- |
+| 獨立プロジェクト + path 依存 | lockfile が統一されず、バージョンドリフトのリスク   |
+| npm workspaces 类似          | npm の workspace には問題が多く、真似する価値がない |
+| Cargo workspace 直接再利用   | YaoXiang と Cargo は異なるパッケージエコシステム    |
 
 ## 実装戦略
 
 ### フェーズ分け
 
-| フェーズ   | 内容                                               |
-| ---------- | -------------------------------------------------- |
-| Phase 6a   | `[workspace.members]` 解析 + WorkspaceManifest     |
-| Phase 6b   | 共有 lockfile + 依存関係マージ解決                   |
-| Phase 6c   | `{ workspace = "name" }` パス依存関係参照           |
-| Phase 6d   | リリース時パス依存関係の自動置き換え                 |
-| Phase 6e   | Cargo workspace 統合                               |
+| フェーズ | 内容                                           |
+| -------- | ---------------------------------------------- |
+| Phase 6a | `[workspace.members]` 解析 + WorkspaceManifest |
+| Phase 6b | 共有 lockfile + 依存関係マージ解決             |
+| Phase 6c | `{ workspace = "name" }` パス依存関係参照      |
+| Phase 6d | リリース時パス依存関係の自動置き換え           |
+| Phase 6e | Cargo workspace 統合                           |
 
 ### 依存関係
 

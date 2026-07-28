@@ -1,6 +1,6 @@
 ---
-title: "E2xxx: Semantic Analysis"
-description: "Auto-generated from `src/util/diagnostic/codes/`"
+title: 'E2xxx: Semantic Analysis'
+description: 'Auto-generated from `src/util/diagnostic/codes/`'
 ---
 
 # E2xxx: Semantic Analysis

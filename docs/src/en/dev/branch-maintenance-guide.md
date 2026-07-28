@@ -1,6 +1,7 @@
 # Git Branch Maintenance Handbook
 
-> This handbook defines the Git branch management strategy for the YaoXiang project, aiming to ensure orderly development and efficient collaboration of the codebase.
+> This handbook defines the Git branch management strategy for the YaoXiang project, aiming to
+> ensure orderly development and efficient collaboration of the codebase.
 
 ---
 
@@ -20,29 +21,29 @@
 
 ### Core Branches
 
-| Branch   | Purpose             | Lifecycle | Protection Level |
-| -------- | ------------------- | --------- | ---------------- |
-| `main`   | Production code     | Permanent | Strict protection |
+| Branch   | Purpose                 | Lifecycle | Protection Level  |
+| -------- | ----------------------- | --------- | ----------------- |
+| `main`   | Production code         | Permanent | Strict protection |
 | `dev`    | Main development branch | Permanent | Medium protection |
-| `master` | Main branch (legacy) | Permanent | Strict protection |
+| `master` | Main branch (legacy)    | Permanent | Strict protection |
 
 ### Feature Branches
 
-| Prefix       | Purpose                 | Naming Examples                                         | Merge Target     |
-| ------------ | ----------------------- | ------------------------------------------------------- | ---------------- |
-| `feature/`   | New feature development | `feature/type-inference`<br>`feature/ownership-model`   | `dev`            |
-| `bugfix/`    | Fix known defects       | `bugfix/memory-leak`<br>`bugfix/parser-error`           | `dev`            |
-| `hotfix/`    | Urgent production fixes | `hotfix/security-patch`<br>`hotfix/crash-bug`           | `main` + `dev`   |
-| `release/`   | Release preparation     | `release/v0.8.0`<br>`release/v1.0.0`                    | `main`           |
+| Prefix     | Purpose                 | Naming Examples                                       | Merge Target   |
+| ---------- | ----------------------- | ----------------------------------------------------- | -------------- |
+| `feature/` | New feature development | `feature/type-inference`<br>`feature/ownership-model` | `dev`          |
+| `bugfix/`  | Fix known defects       | `bugfix/memory-leak`<br>`bugfix/parser-error`         | `dev`          |
+| `hotfix/`  | Urgent production fixes | `hotfix/security-patch`<br>`hotfix/crash-bug`         | `main` + `dev` |
+| `release/` | Release preparation     | `release/v0.8.0`<br>`release/v1.0.0`                  | `main`         |
 
 ### Auxiliary Branches
 
-| Prefix        | Purpose               | Naming Examples                                                   | Merge Target |
-| ------------- | --------------------- | ------------------------------------------------------------------ | ------------ |
-| `docs/`       | Documentation updates | `docs/api-reference`<br>`docs/tutorial-update`                    | `dev`        |
-| `ci/`         | CI/CD configuration   | `ci/add-deploy-script`<br>`ci/optimize-build`                     | `dev`        |
-| `refactor/`   | Code refactoring      | `refactor/lexer-optimization`<br>`refactor/memory-manager`         | `dev`        |
-| `test/`       | Test-related changes  | `test/add-integration`<br>`test/performance-bench`                 | `dev`        |
+| Prefix      | Purpose               | Naming Examples                                            | Merge Target |
+| ----------- | --------------------- | ---------------------------------------------------------- | ------------ |
+| `docs/`     | Documentation updates | `docs/api-reference`<br>`docs/tutorial-update`             | `dev`        |
+| `ci/`       | CI/CD configuration   | `ci/add-deploy-script`<br>`ci/optimize-build`              | `dev`        |
+| `refactor/` | Code refactoring      | `refactor/lexer-optimization`<br>`refactor/memory-manager` | `dev`        |
+| `test/`     | Test-related changes  | `test/add-integration`<br>`test/performance-bench`         | `dev`        |
 
 ---
 
@@ -214,12 +215,12 @@ graph TD
 
 ### Branch Permission Settings
 
-| Branch Type   | Developer | Maintainer | Admin   |
-| ------------ | --------- | ---------- | ------- |
-| `main`       | PR only   | PR only    | Approve PR |
-| `dev`        | PR merge  | PR merge   | Direct push |
-| `feature/*`  | Full access | Full access | Full access |
-| `hotfix/*`   | Full access | Full access | Full access |
+| Branch Type | Developer   | Maintainer  | Admin       |
+| ----------- | ----------- | ----------- | ----------- |
+| `main`      | PR only     | PR only     | Approve PR  |
+| `dev`       | PR merge    | PR merge    | Direct push |
+| `feature/*` | Full access | Full access | Full access |
+| `hotfix/*`  | Full access | Full access | Full access |
 
 ---
 
@@ -277,7 +278,8 @@ Follow [Commit Conventions](./commit-convention.md):
 
 ### Q2: From which branch should I create a feature branch?
 
-**Answer:** Always create from the `dev` branch to ensure features are based on the latest development code:
+**Answer:** Always create from the `dev` branch to ensure features are based on the latest
+development code:
 
 ```bash
 git checkout dev
@@ -313,7 +315,8 @@ git checkout -b feature/new-feature
 
 ### Q6: Is there a limit on branch name length?
 
-**Answer:** It is recommended not to exceed 50 characters, keeping them concise and clear. Git itself supports longer names, but overly long names affect readability.
+**Answer:** It is recommended not to exceed 50 characters, keeping them concise and clear. Git
+itself supports longer names, but overly long names affect readability.
 
 ---
 
@@ -365,6 +368,7 @@ echo "Created and pushed branch: $BRANCH_TYPE/$BRANCH_NAME"
 
 ---
 
-> 💡 **Tip**: Keep branches atomic and focused, each branch should do one thing, this makes code management much clearer and more efficient!
+> 💡 **Tip**: Keep branches atomic and focused, each branch should do one thing, this makes code
+> management much clearer and more efficient!
 
 > 📞 **Support**: If you have questions, please discuss them in GitHub Discussions.

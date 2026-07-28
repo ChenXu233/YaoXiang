@@ -3,7 +3,8 @@
 このドキュメントでは、YaoXiang プログラミング言語の FFI（外部関数インターフェース）の仕様を定義します。これには、型定義、関数宣言、メソッドバインディング、不透明型の処理が含まれます。
 
 > **詳細設計**：FFI の完全な設計、動機、トレードオフについては、
-> [RFC-026: FFI コアメカニズム](../design/rfc/accepted/026-ffi-core-mechanism.md) を参照してください。
+> [RFC-026: FFI コアメカニズム](../design/rfc/accepted/026-ffi-core-mechanism.md)
+> を参照してください。
 
 ---
 
@@ -18,11 +19,11 @@
 
 ### 1.2 FFI の構成要素
 
-| コンポーネント | 説明                        | 構文                   |
-| -------------- | --------------------------- | ---------------------- |
-| 型定義         | FFI 型の定義（不透明または透明） | `unsafe {}` + `return` |
-| 関数宣言       | 外部関数の宣言              | `native("symbol")`     |
-| メソッドバインディング | 型へのメソッドのバインディング | `[0]` 構文             |
+| コンポーネント         | 説明                             | 構文                   |
+| ---------------------- | -------------------------------- | ---------------------- |
+| 型定義                 | FFI 型の定義（不透明または透明） | `unsafe {}` + `return` |
+| 関数宣言               | 外部関数の宣言                   | `native("symbol")`     |
+| メソッドバインディング | 型へのメソッドのバインディング   | `[0]` 構文             |
 
 ---
 
@@ -105,19 +106,19 @@ sqlite3_exec: (db: SqliteDb, sql: String) -> Int32 = native("sqlite3_exec")
 
 FFI 関数の引数型は YaoXiang 型を直接使用し、コンパイラが C 型のマッピングを自動的に処理します：
 
-| C 型                  | YaoXiang 型     |
-| --------------------- | --------------- |
-| `int`                 | `Int32`         |
-| `long`                | `Int64`         |
-| `float`               | `Float32`       |
-| `double`              | `Float64`       |
-| `char`                | `Char`          |
-| `char*`               | `String`        |
-| `bool`                | `Bool`          |
-| `size_t`              | `Uint`          |
-| `void*`               | `*Void`         |
-| `struct T*`           | `T`（透明型）   |
-| `typedef struct T T`  | `T`（不透明型） |
+| C 型                 | YaoXiang 型     |
+| -------------------- | --------------- |
+| `int`                | `Int32`         |
+| `long`               | `Int64`         |
+| `float`              | `Float32`       |
+| `double`             | `Float64`       |
+| `char`               | `Char`          |
+| `char*`              | `String`        |
+| `bool`               | `Bool`          |
+| `size_t`             | `Uint`          |
+| `void*`              | `*Void`         |
+| `struct T*`          | `T`（透明型）   |
+| `typedef struct T T` | `T`（不透明型） |
 
 ### 3.3 戻り値の型
 

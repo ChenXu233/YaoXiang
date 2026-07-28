@@ -1,10 +1,12 @@
 # YaoXiang Design Manifesto
 
-> **Version**: v2.0.0 **Status**: Official Release **Authors**: Chen Xu + YaoXiang Community **Date**: 2026-05-31
+> **Version**: v2.0.0 **Status**: Official Release **Authors**: Chen Xu + YaoXiang Community
+> **Date**: 2026-05-31
 
 ---
 
-> "The Tao gave birth to the One, the One gave birth to the Two, the Two gave birth to the Three, and the Three gave birth to all things." — *Tao Te Ching*
+> "The Tao gave birth to the One, the One gave birth to the Two, the Two gave birth to the Three,
+> and the Three gave birth to all things." — _Tao Te Ching_
 >
 > Types are like the Tao, from which all things are born.
 
@@ -14,64 +16,106 @@
 
 ### 1.1 The Language Gap
 
-Throughout the history of programming languages, we have witnessed the birth and evolution of countless excellent languages: C brought the efficiency revolution of systems programming, Python created a programming experience accessible to everyone, Rust proved that memory safety and performance can coexist, and TypeScript made large frontend projects maintainable. However, when we examine today's language ecosystem, we still find a clear gap—**no single language can simultaneously satisfy these three core requirements**:
+Throughout the history of programming languages, we have witnessed the birth and evolution of
+countless excellent languages: C brought the efficiency revolution of systems programming, Python
+created a programming experience accessible to everyone, Rust proved that memory safety and
+performance can coexist, and TypeScript made large frontend projects maintainable. However, when we
+examine today's language ecosystem, we still find a clear gap—**no single language can
+simultaneously satisfy these three core requirements**:
 
-| Requirement     | Problems with Existing Solutions                                                                 |
-| --------------- | ------------------------------------------------------------------------------------------------- |
-| **Type Safety** | Rust is overly strict with a steep learning curve; TypeScript has optional types, no compile-time guarantees |
-| **Natural Syntax** | Rust has complex and obscure syntax; Haskell's functional paradigm has a high barrier to entry; traditional static languages are verbose |
-| **AI-Friendly** | Existing languages have ambiguous syntax, complex ASTs, and unpredictable hidden behaviors, limiting AI accuracy in code generation and modification |
+| Requirement        | Problems with Existing Solutions                                                                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Type Safety**    | Rust is overly strict with a steep learning curve; TypeScript has optional types, no compile-time guarantees                                         |
+| **Natural Syntax** | Rust has complex and obscure syntax; Haskell's functional paradigm has a high barrier to entry; traditional static languages are verbose             |
+| **AI-Friendly**    | Existing languages have ambiguous syntax, complex ASTs, and unpredictable hidden behaviors, limiting AI accuracy in code generation and modification |
 
-The birth of YaoXiang is precisely to fill this gap. We believe: **Programming languages should be both powerful and approachable, both safe and efficient, both rigorous and elegant**.
+The birth of YaoXiang is precisely to fill this gap. We believe: **Programming languages should be
+both powerful and approachable, both safe and efficient, both rigorous and elegant**.
 
 ### 1.2 Practical Problems Solved
 
 **Problem One: Type System Fragmentation**
 
-Today's programming languages exhibit severe fragmentation in their type systems. Statically typed languages pursue absolute compile-time correctness but often at the cost of development efficiency; dynamically typed languages provide flexibility but expose maintainability defects in large projects. YaoXiang proposes a unified abstraction framework of "Everything is a Type," making types the thread running through the language's core design, rather than patches added after the fact.
+Today's programming languages exhibit severe fragmentation in their type systems. Statically typed
+languages pursue absolute compile-time correctness but often at the cost of development efficiency;
+dynamically typed languages provide flexibility but expose maintainability defects in large
+projects. YaoXiang proposes a unified abstraction framework of "Everything is a Type," making types
+the thread running through the language's core design, rather than patches added after the fact.
 
 **Problem Two: The Binary Choice Between Memory Safety and Performance**
 
-For a long time, developers have had to make difficult choices between memory safety and runtime performance. While Garbage Collection (GC) liberates developers, it brings latency fluctuations and memory overhead; manual memory management is efficient but as dangerous as walking a tightrope. YaoXiang adopts the Rust-style ownership model to eliminate data races and memory leaks at compile-time while maintaining zero-cost abstractions, achieving high performance without GC.
+For a long time, developers have had to make difficult choices between memory safety and runtime
+performance. While Garbage Collection (GC) liberates developers, it brings latency fluctuations and
+memory overhead; manual memory management is efficient but as dangerous as walking a tightrope.
+YaoXiang adopts the Rust-style ownership model to eliminate data races and memory leaks at
+compile-time while maintaining zero-cost abstractions, achieving high performance without GC.
 
 **Problem Three: The Cognitive Burden of Async Programming**
 
-Modern applications are inseparable from networking and concurrency, yet asynchronous programming has always been a nightmare for programmers. Nested callback functions, Promise chaining, async/await syntax—each approach adds complexity to the code. YaoXiang has redesigned the async model: simply add a `spawn` marker after the function signature, and the compiler automatically handles all async details, making concurrent programming as natural as synchronous code.
+Modern applications are inseparable from networking and concurrency, yet asynchronous programming
+has always been a nightmare for programmers. Nested callback functions, Promise chaining,
+async/await syntax—each approach adds complexity to the code. YaoXiang has redesigned the async
+model: simply add a `spawn` marker after the function signature, and the compiler automatically
+handles all async details, making concurrent programming as natural as synchronous code.
 
 **Problem Four: The Bottleneck in AI-Assisted Programming**
 
-When AI begins to assist developers in writing code, the choices in language design become crucial. Ambiguous syntax rules, implicit type conversions, and complex syntactic sugar—these are characteristics that human programmers have grown accustomed to, but they become obstacles for AI to understand and generate. YaoXiang made "AI-friendly" a core goal from the very beginning: strict indentation rules, clear code block boundaries, and unambiguous syntax structures enable AI to accurately understand, generate, and modify code.
+When AI begins to assist developers in writing code, the choices in language design become crucial.
+Ambiguous syntax rules, implicit type conversions, and complex syntactic sugar—these are
+characteristics that human programmers have grown accustomed to, but they become obstacles for AI to
+understand and generate. YaoXiang made "AI-friendly" a core goal from the very beginning: strict
+indentation rules, clear code block boundaries, and unambiguous syntax structures enable AI to
+accurately understand, generate, and modify code.
 
 ### 1.3 The Philosophical Foundation of the Language
 
-The name YaoXiang comes from "Yao" and "Xiang" in the I Ching (Book of Changes). "Yao" is the basic symbol that forms hexagrams, symbolizing the interplay of yin and yang, movement and stillness; "Xiang" is the external manifestation of the essence of things, representing all phenomena and the universe.
+The name YaoXiang comes from "Yao" and "Xiang" in the I Ching (Book of Changes). "Yao" is the basic
+symbol that forms hexagrams, symbolizing the interplay of yin and yang, movement and stillness;
+"Xiang" is the external manifestation of the essence of things, representing all phenomena and the
+universe.
 
 This philosophical thought is reflected in every detail of the language design:
 
-- **Unity**: Just as simple Yao symbols form complex hexagrams, YaoXiang uses a few core concepts (types, functions, constructors) to build a complete programming model
-- **Hierarchy**: Just as Xiang has distinctions between prior and later heavens, YaoXiang's type system has a clear hierarchical structure, from primitive types to generics, from values to meta types
-- **Variability**: Just as yin and yang flow and change endlessly, YaoXiang supports dependent types, allowing types to evolve as values change
-- **Identifiability**: Just as hexagrams can be interpreted and all things can be symbolized, YaoXiang provides complete type reflection capabilities, with runtime type information fully available
-- **Provability**: Just as hexagrams reveal the patterns of things, YaoXiang's type system follows the Curry-Howard isomorphism (types are propositions, programs are proofs), making type checking a verification of logical proof
+- **Unity**: Just as simple Yao symbols form complex hexagrams, YaoXiang uses a few core concepts
+  (types, functions, constructors) to build a complete programming model
+- **Hierarchy**: Just as Xiang has distinctions between prior and later heavens, YaoXiang's type
+  system has a clear hierarchical structure, from primitive types to generics, from values to meta
+  types
+- **Variability**: Just as yin and yang flow and change endlessly, YaoXiang supports dependent
+  types, allowing types to evolve as values change
+- **Identifiability**: Just as hexagrams can be interpreted and all things can be symbolized,
+  YaoXiang provides complete type reflection capabilities, with runtime type information fully
+  available
+- **Provability**: Just as hexagrams reveal the patterns of things, YaoXiang's type system follows
+  the Curry-Howard isomorphism (types are propositions, programs are proofs), making type checking a
+  verification of logical proof
 
 ---
 
 ## 2. Core Philosophy and Principles
 
-The following design tenets are the cornerstone of YaoXiang, **non-negotiable and unbreakable**. Every feature proposal must pass scrutiny by these principles.
+The following design tenets are the cornerstone of YaoXiang, **non-negotiable and unbreakable**.
+Every feature proposal must pass scrutiny by these principles.
 
 ### 2.1 Principle One: Everything is a Type
 
-In YaoXiang's worldview, types are the highest-level abstraction unit, the core concept running through the language.
+In YaoXiang's worldview, types are the highest-level abstraction unit, the core concept running
+through the language.
 
 **Specific Manifestations**:
 
-- **Values are instances of types**: `42` is an instance of the `Int` type, `"hello"` is an instance of the `String` type
-- **Types themselves are also types**: `Type` is the language's only meta type keyword, and the type of `Int` is `Type`
-- **Functions are type mappings**: `add: (a: Int, b: Int) -> Int` describes a type mapping from `Int × Int` to `Int`
-- **Modules are type compositions**: Modules are named namespace compositions containing functions and types
+- **Values are instances of types**: `42` is an instance of the `Int` type, `"hello"` is an instance
+  of the `String` type
+- **Types themselves are also types**: `Type` is the language's only meta type keyword, and the type
+  of `Int` is `Type`
+- **Functions are type mappings**: `add: (a: Int, b: Int) -> Int` describes a type mapping from
+  `Int × Int` to `Int`
+- **Modules are type compositions**: Modules are named namespace compositions containing functions
+  and types
 
-**Non-negotiable Reason**: Unified type abstraction simplifies language semantics, eliminates the binary opposition between values and types, and makes the type system a guardian of code correctness rather than a stumbling block.
+**Non-negotiable Reason**: Unified type abstraction simplifies language semantics, eliminates the
+binary opposition between values and types, and makes the type system a guardian of code correctness
+rather than a stumbling block.
 
 ### 2.2 Principle Two: Strictly Structured
 
@@ -79,12 +123,18 @@ YaoXiang's syntax design pursues "unambiguous, predictable, and easy to parse."
 
 **Specific Rules**:
 
-- **Mandatory 4-space indentation**: Tab characters are prohibited; code block boundaries are immediately clear
-- **Parentheses cannot be omitted**: Function parameters must have parentheses, list elements must have commas
-- **Code blocks must use curly braces**: Control flow like `if`, `while`, `for` must be wrapped in `{ }`
-- **Streamlined keyword count**: Only 17 core keywords are retained, syntactic sugar proliferation is refused
+- **Mandatory 4-space indentation**: Tab characters are prohibited; code block boundaries are
+  immediately clear
+- **Parentheses cannot be omitted**: Function parameters must have parentheses, list elements must
+  have commas
+- **Code blocks must use curly braces**: Control flow like `if`, `while`, `for` must be wrapped in
+  `{ }`
+- **Streamlined keyword count**: Only 17 core keywords are retained, syntactic sugar proliferation
+  is refused
 
-**Non-negotiable Reason**: Strict structure brings three key advantages—(1) IDE syntax highlighting and code folding are more accurate; (2) AI code generation and modification accuracy improves dramatically; (3) New learners can quickly understand code structure.
+**Non-negotiable Reason**: Strict structure brings three key advantages—(1) IDE syntax highlighting
+and code folding are more accurate; (2) AI code generation and modification accuracy improves
+dramatically; (3) New learners can quickly understand code structure.
 
 ### 2.3 Principle Three: Zero-Cost Abstraction
 
@@ -92,16 +142,22 @@ High-level abstractions should not incur runtime performance overhead.
 
 **Specific Guarantees**:
 
-- **Monomorphization**: Generic functions are expanded into concrete versions at compile time, with no virtual table lookup overhead
-- **Inline optimization**: Simple functions are automatically inlined, eliminating function call overhead
-- **Stack allocation preferred**: Small objects are stack-allocated by default; heap allocation is only used when necessary
-- **No GC**: The ownership model guarantees memory safety without the runtime overhead of a garbage collector
+- **Monomorphization**: Generic functions are expanded into concrete versions at compile time, with
+  no virtual table lookup overhead
+- **Inline optimization**: Simple functions are automatically inlined, eliminating function call
+  overhead
+- **Stack allocation preferred**: Small objects are stack-allocated by default; heap allocation is
+  only used when necessary
+- **No GC**: The ownership model guarantees memory safety without the runtime overhead of a garbage
+  collector
 
-**Non-negotiable Reason**: Performance is the survival底线 of programming languages. Any design that sacrifices performance for convenience is a betrayal of programmers.
+**Non-negotiable Reason**: Performance is the survival底线 of programming languages. Any design that
+sacrifices performance for convenience is a betrayal of programmers.
 
 ### 2.4 Principle Four: Immutability by Default
 
-Mutability comes hand in hand with complexity. YaoXiang chooses immutability by default, making code easier to reason about and understand.
+Mutability comes hand in hand with complexity. YaoXiang chooses immutability by default, making code
+easier to reason about and understand.
 
 **Specific Rules**:
 
@@ -110,7 +166,8 @@ Mutability comes hand in hand with complexity. YaoXiang chooses immutability by 
 - References are immutable by default; mutable references require the `mut` marker
 - Transfer of ownership means the original binding becomes invalid
 
-**Non-negotiable Reason**: Immutability is the foundation of concurrency safety, the guarantee of code readability, and the crystallization of functional programming wisdom.
+**Non-negotiable Reason**: Immutability is the foundation of concurrency safety, the guarantee of
+code readability, and the crystallization of functional programming wisdom.
 
 ### 2.5 Principle Five: Types are Data
 
@@ -123,13 +180,15 @@ Type information should not only exist at compile time; it should be fully avail
 - Pattern matching destructuring: Type constructors can be directly used in pattern matching
 - Generic specialization: Runtime can obtain instantiated types of generic parameters
 
-**Non-negotiable Reason**: Complete type reflection capabilities are the foundation of metaprogramming and the cornerstone of high-performance frameworks and tools.
+**Non-negotiable Reason**: Complete type reflection capabilities are the foundation of
+metaprogramming and the cornerstone of high-performance frameworks and tools.
 
 ---
 
 ## 3. Key Innovations and Features
 
-While absorbing the excellent features of existing languages, YaoXiang proposes the following innovative designs.
+While absorbing the excellent features of existing languages, YaoXiang proposes the following
+innovative designs.
 
 ### 3.1 Innovation One: Unified Type Syntax
 
@@ -143,7 +202,8 @@ enum Color { Red, Green, Blue }
 trait Drawable { fn draw(&self, s: &Surface); }
 ```
 
-**YaoXiang's unified syntax**: Everything is `name: type = value`, `Type` is the only meta type keyword.
+**YaoXiang's unified syntax**: Everything is `name: type = value`, `Type` is the only meta type
+keyword.
 
 ```yaoxiang
 # === Record Types ===
@@ -199,7 +259,8 @@ Point.draw: (self: &Point, surface: Surface) -> Void = {
 }
 ```
 
-**Innovation Value**: No keyword fragmentation like `fn`, `struct`, `enum`, `trait`, `impl`—one unified syntax covers all declarations.
+**Innovation Value**: No keyword fragmentation like `fn`, `struct`, `enum`, `trait`, `impl`—one
+unified syntax covers all declarations.
 
 ### 3.2 Innovation Two: Constructors are Types
 
@@ -227,7 +288,8 @@ match opt {
 
 ### 3.3 Innovation Three: Curried Method Binding
 
-YaoXiang uses pure functional design, achieving object-method-call-like syntax through currying, without introducing `class` and `method` keywords.
+YaoXiang uses pure functional design, achieving object-method-call-like syntax through currying,
+without introducing `class` and `method` keywords.
 
 ```yaoxiang
 # === Type Definitions ===
@@ -261,32 +323,36 @@ dist_from_p1 = p1.distance  # Partial application, waiting for second argument
 d3 = dist_from_p1(p2)       # 2.828
 ```
 
-**Innovation Value**: Pure functional design, no hidden `self` parameter, functions as values can be freely passed and composed.
+**Innovation Value**: Pure functional design, no hidden `self` parameter, functions as values can be
+freely passed and composed.
 
 ### 3.4 Innovation Four: Spawn Model
 
-> "All things arise together, I observe their return." — *I Ching, Hexagram 24 (Fu)*
+> "All things arise together, I observe their return." — _I Ching, Hexagram 24 (Fu)_
 >
-> The Spawn Model derives its meaning from this, describing a programming paradigm: developers describe logic with synchronous, sequential thinking, while the language runtime causes the computational units within to automatically and efficiently execute concurrently like all things arising together, and finally unify and coordinate.
+> The Spawn Model derives its meaning from this, describing a programming paradigm: developers
+> describe logic with synchronous, sequential thinking, while the language runtime causes the
+> computational units within to automatically and efficiently execute concurrently like all things
+> arising together, and finally unify and coordinate.
 
 **Core Three Principles**:
 
-| Principle           | Description                                       |
-| ------------------- | ------------------------------------------------- |
-| **Synchronous Syntax** | Sequential code that is what you see is what you get |
-| **Concurrent Essence** | Automatic parallelization extraction at runtime  |
+| Principle                | Description                                                              |
+| ------------------------ | ------------------------------------------------------------------------ |
+| **Synchronous Syntax**   | Sequential code that is what you see is what you get                     |
+| **Concurrent Essence**   | Automatic parallelization extraction at runtime                          |
 | **Unified Coordination** | Results automatically converge when needed, ensuring logical correctness |
 
 **Terminology System**:
 
-| Official Term      | Corresponding Syntax           | Explanation                                                         |
-| ------------------ | ------------------------------ | ------------------------------------------------------------------- |
-| **Spawn Function**   | `spawn (params) => body`       | Defines a computational unit that can participate in spawn execution |
-| **Spawn Block**       | `spawn { a(), b() }`           | Explicitly declared concurrent scope; tasks inside the block spawn-execute |
-| **Spawn Loop**        | `spawn for x in xs { ... }`   | Data parallelism; loop body spawn-executes on all elements         |
-| **Spawn Value**       | `Async(T)`                     | A future value currently spawning; automatically waits on use      |
-| **Spawn Graph**       | Lazy computation DAG          | The stage where spawning occurs; describes dependencies and parallelism relationships |
-| **Spawn Scheduler**   | Runtime task scheduler        | The intelligent coordinator that harmonizes all things, causing them to spawn at the right moments |
+| Official Term       | Corresponding Syntax        | Explanation                                                                                        |
+| ------------------- | --------------------------- | -------------------------------------------------------------------------------------------------- |
+| **Spawn Function**  | `spawn (params) => body`    | Defines a computational unit that can participate in spawn execution                               |
+| **Spawn Block**     | `spawn { a(), b() }`        | Explicitly declared concurrent scope; tasks inside the block spawn-execute                         |
+| **Spawn Loop**      | `spawn for x in xs { ... }` | Data parallelism; loop body spawn-executes on all elements                                         |
+| **Spawn Value**     | `Async(T)`                  | A future value currently spawning; automatically waits on use                                      |
+| **Spawn Graph**     | Lazy computation DAG        | The stage where spawning occurs; describes dependencies and parallelism relationships              |
+| **Spawn Scheduler** | Runtime task scheduler      | The intelligent coordinator that harmonizes all things, causing them to spawn at the right moments |
 
 > **See Also**: [RFC-001 Spawn Model](./rfc/001-concurrent-model-error-handling.md)
 
@@ -340,7 +406,8 @@ main: () -> Void = {
 
 - See [RFC-001 Spawn Model](./rfc/accepted/001-concurrent-model-error-handling.md)
 
-**Innovation Value**: The cognitive burden of async programming drops to zero; code readability is exactly the same as synchronous code, while gaining high-performance parallel execution efficiency.
+**Innovation Value**: The cognitive burden of async programming drops to zero; code readability is
+exactly the same as synchronous code, while gaining high-performance parallel execution efficiency.
 
 ### 3.5 Innovation Five: Value-Dependent Types (RFC-011)
 
@@ -383,13 +450,15 @@ break  continue as     in     unsafe
 | TypeScript        | 64+           |
 | Go                | 25            |
 
-**Innovation Value**: Lower memory burden, more consistent syntax style, and easier-to-parse syntax structure.
+**Innovation Value**: Lower memory burden, more consistent syntax style, and easier-to-parse syntax
+structure.
 
 ---
 
 ## 4. Preliminary Syntax Preview
 
-The following code examples showcase YaoXiang's language style, helping you quickly feel its design aesthetic.
+The following code examples showcase YaoXiang's language style, helping you quickly feel its design
+aesthetic.
 
 ### 4.1 Hello World
 
@@ -539,20 +608,21 @@ process_all: () -> (JSON, JSON, JSON) spawn = {
 
 ### 5.1 Decided Design Decisions
 
-The following decisions have been thoroughly discussed and reviewed, **no longer accepting changes**:
+The following decisions have been thoroughly discussed and reviewed, **no longer accepting
+changes**:
 
-| Module        | Decision                              | Explanation                                                             |
-| ------------- | ------------------------------------- | ----------------------------------------------------------------------- |
-| **Type System** | Everything is a Type                | Values, functions, modules, and generics are all types                  |
-| **Type Syntax** | Unified `name: type = value`          | One declaration form covers all cases; `Type` is the only meta type keyword |
-| **Keywords**    | 17 core keywords                      | Excludes `type`/`fn`/`struct`/`enum`/`trait`/`impl`                     |
-| **Function Syntax** | Signature + expression           | `name: (params) -> ReturnType = body`                                    |
-| **Method Binding** | RFC-004 Curried Binding           | `Type.method = function[position]`                                       |
-| **Async Model** | Spawn model                          | `spawn` marker, lazy evaluation, automatic parallelization              |
-| **Memory Management** | Ownership model (RFC-009 v9)    | Move + &T/&mut T tokens + ref + clone + unsafe, no GC                   |
-| **File as Module** | Module system                     | Each `.yx` file is a module                                             |
-| **Main Function** | `main: () -> Void`               | Program entry point                                                     |
-| **Thread Safety** | ref auto-selects Rc/Arc            | Compiler escape analysis, transparent to users                          |
+| Module                | Decision                     | Explanation                                                                 |
+| --------------------- | ---------------------------- | --------------------------------------------------------------------------- |
+| **Type System**       | Everything is a Type         | Values, functions, modules, and generics are all types                      |
+| **Type Syntax**       | Unified `name: type = value` | One declaration form covers all cases; `Type` is the only meta type keyword |
+| **Keywords**          | 17 core keywords             | Excludes `type`/`fn`/`struct`/`enum`/`trait`/`impl`                         |
+| **Function Syntax**   | Signature + expression       | `name: (params) -> ReturnType = body`                                       |
+| **Method Binding**    | RFC-004 Curried Binding      | `Type.method = function[position]`                                          |
+| **Async Model**       | Spawn model                  | `spawn` marker, lazy evaluation, automatic parallelization                  |
+| **Memory Management** | Ownership model (RFC-009 v9) | Move + &T/&mut T tokens + ref + clone + unsafe, no GC                       |
+| **File as Module**    | Module system                | Each `.yx` file is a module                                                 |
+| **Main Function**     | `main: () -> Void`           | Program entry point                                                         |
+| **Thread Safety**     | ref auto-selects Rc/Arc      | Compiler escape analysis, transparent to users                              |
 
 ### 5.3 Implementation Roadmap
 
@@ -573,20 +643,25 @@ The following decisions have been thoroughly discussed and reviewed, **no longer
 
 ## 6. How to Contribute
 
-YaoXiang is a language born from the community, growing in the community, and serving the community. We sincerely invite every developer passionate about programming language design to join this journey of exploration.
+YaoXiang is a language born from the community, growing in the community, and serving the community.
+We sincerely invite every developer passionate about programming language design to join this
+journey of exploration.
 
 ### 6.1 Design Discussions
 
-**Suitable for**: Programming language theory researchers, type system enthusiasts, language design enthusiasts
+**Suitable for**: Programming language theory researchers, type system enthusiasts, language design
+enthusiasts
 
 **How to Participate**:
 
 - **GitHub Discussions**: Participate in discussions under the "Language Design" category
-- **Design Proposals (RFC)**: Propose design documents for new features, following the template under the `rfcs/` directory
-- **Syntax Reviews**: Provide improvement suggestions or discover potential issues with existing syntax design
+- **Design Proposals (RFC)**: Propose design documents for new features, following the template
+  under the `rfcs/` directory
+- **Syntax Reviews**: Provide improvement suggestions or discover potential issues with existing
+  syntax design
 
-| **Current Hot Topics**: | | | | - Macro system design and implementation | | - Interface type mechanism | | - Error handling syntax optimization |
-| - Standard library API design |
+| **Current Hot Topics**: | | | | - Macro system design and implementation | | - Interface type
+mechanism | | - Error handling syntax optimization | | - Standard library API design |
 
 **Submitting Design Proposals**:
 
@@ -601,15 +676,15 @@ YaoXiang is a language born from the community, growing in the community, and se
 
 **Current Implementation Priorities** (in order of priority):
 
-| Priority | Module           | Description                         | Difficulty |
-| -------- | ---------------- | ----------------------------------- | ---------- |
-| P0       | **Bytecode VM** | VM instruction completion, optimization | Medium |
-| P0       | **Runtime Memory** | GC implementation, memory allocators | High   |
-| P0       | **Async Runtime** | Complete spawn model implementation | High   |
-| P1       | Standard Library | IO, String, List, Concurrent        | Medium     |
-| P1       | JIT Compiler     | Cranelift integration               | High       |
-| P2       | AOT Compiler     | LLVM/Cranelift backend              | High       |
-| P3       | Self-hosted Compiler | Rewrite in YaoXiang            | Extremely High |
+| Priority | Module               | Description                             | Difficulty     |
+| -------- | -------------------- | --------------------------------------- | -------------- |
+| P0       | **Bytecode VM**      | VM instruction completion, optimization | Medium         |
+| P0       | **Runtime Memory**   | GC implementation, memory allocators    | High           |
+| P0       | **Async Runtime**    | Complete spawn model implementation     | High           |
+| P1       | Standard Library     | IO, String, List, Concurrent            | Medium         |
+| P1       | JIT Compiler         | Cranelift integration                   | High           |
+| P2       | AOT Compiler         | LLVM/Cranelift backend                  | High           |
+| P3       | Self-hosted Compiler | Rewrite in YaoXiang                     | Extremely High |
 
 **Tech Stack**:
 
@@ -631,17 +706,17 @@ YaoXiang is a language born from the community, growing in the community, and se
 
 **Tools Needing Development**:
 
-| Tool                 | Status         | Description                   |
-| -------------------- | -------------- | ----------------------------- |
-| **LSP Server**       | ⏳ Not started | Language Server Protocol support |
-| **Debugger Integration** | ⏳ Not started | GDB/LLDB integration          |
-| **Formatter**        | ⏳ Not started | `yaoxiang fmt`                |
-| **Package Manager**  | ⏳ Not started | Dependency management, version resolution |
-| **Package Registry** | ⏳ Not started | Centralized or decentralized   |
-| **REPL**             | ⏳ Not started | Interactive interpreter        |
-| **Benchmarking Tool**| ⏳ Not started | Performance analysis          |
-| **VS Code Plugin**   | ⏳ Not started | Syntax highlighting, completion, debugging |
-| **Vim/Neovim Plugin** | ⏳ Not started | Syntax highlighting, LSP client |
+| Tool                     | Status         | Description                                |
+| ------------------------ | -------------- | ------------------------------------------ |
+| **LSP Server**           | ⏳ Not started | Language Server Protocol support           |
+| **Debugger Integration** | ⏳ Not started | GDB/LLDB integration                       |
+| **Formatter**            | ⏳ Not started | `yaoxiang fmt`                             |
+| **Package Manager**      | ⏳ Not started | Dependency management, version resolution  |
+| **Package Registry**     | ⏳ Not started | Centralized or decentralized               |
+| **REPL**                 | ⏳ Not started | Interactive interpreter                    |
+| **Benchmarking Tool**    | ⏳ Not started | Performance analysis                       |
+| **VS Code Plugin**       | ⏳ Not started | Syntax highlighting, completion, debugging |
+| **Vim/Neovim Plugin**    | ⏳ Not started | Syntax highlighting, LSP client            |
 
 **Project Structure Reference**:
 
@@ -665,21 +740,21 @@ yaoxiang/
 
 **Standard Library Module Plan**:
 
-| Module              | Priority | Description                    |
-| ------------------- | -------- | ------------------------------ |
-| `std.io`            | P0       | File IO, console I/O           |
-| `std.string`        | P0       | String operations, formatting   |
-| `std.list`          | P0       | List/array operations           |
-| `std.dict`          | P0       | Dictionary/hash table          |
-| `std.math`          | P0       | Math functions, constants      |
-| `std.time`          | P1       | Date and time operations       |
-| `std.net`           | P1       | Network programming, HTTP      |
-| `std.concurrent`   | P1       | Concurrency primitives, channels |
-| `std.crypto`        | P2       | Cryptographic hashing, signatures |
-| `std.json`          | P1       | JSON parsing/generation         |
-| `std.regex`         | P2       | Regular expressions             |
-| `std.database`      | P3       | Database connections            |
-| `std.gui`           | P3       | Graphical interfaces (long-term) |
+| Module           | Priority | Description                       |
+| ---------------- | -------- | --------------------------------- |
+| `std.io`         | P0       | File IO, console I/O              |
+| `std.string`     | P0       | String operations, formatting     |
+| `std.list`       | P0       | List/array operations             |
+| `std.dict`       | P0       | Dictionary/hash table             |
+| `std.math`       | P0       | Math functions, constants         |
+| `std.time`       | P1       | Date and time operations          |
+| `std.net`        | P1       | Network programming, HTTP         |
+| `std.concurrent` | P1       | Concurrency primitives, channels  |
+| `std.crypto`     | P2       | Cryptographic hashing, signatures |
+| `std.json`       | P1       | JSON parsing/generation           |
+| `std.regex`      | P2       | Regular expressions               |
+| `std.database`   | P3       | Database connections              |
+| `std.gui`        | P3       | Graphical interfaces (long-term)  |
 
 **Design Principles**:
 
@@ -694,16 +769,16 @@ yaoxiang/
 
 **Documentation Needing Contribution**:
 
-| Document      | Status         | Description                 |
-| ------------ | -------------- | --------------------------- |
-| Quick Start  | ✅ Completed   | 5-minute getting started guide |
-| Language Guide | ✅ Completed | Systematic learning of core concepts |
-| Language Specification | ✅ Completed | Complete syntax and semantic definitions |
-| Implementation Plan | ✅ Completed | Compiler implementation technical details |
-| API Documentation | ⏳ Not started | Standard library API reference |
-| Tutorials     | ⏳ Not started | Advanced tutorials and best practices |
-| Blog          | ⏳ Not started | Technical articles and design stories |
-| Translations  | ⏳ Not started | Multilingual support        |
+| Document               | Status         | Description                               |
+| ---------------------- | -------------- | ----------------------------------------- |
+| Quick Start            | ✅ Completed   | 5-minute getting started guide            |
+| Language Guide         | ✅ Completed   | Systematic learning of core concepts      |
+| Language Specification | ✅ Completed   | Complete syntax and semantic definitions  |
+| Implementation Plan    | ✅ Completed   | Compiler implementation technical details |
+| API Documentation      | ⏳ Not started | Standard library API reference            |
+| Tutorials              | ⏳ Not started | Advanced tutorials and best practices     |
+| Blog                   | ⏳ Not started | Technical articles and design stories     |
+| Translations           | ⏳ Not started | Multilingual support                      |
 
 ### 6.6 Community Building
 
@@ -770,51 +845,52 @@ docs(readme): update installation instructions
 
 ### A.1 Keywords
 
-| Keyword                  | Purpose                             |
-| ------------------------ | ---------------------------------- |
-| `pub`                    | Public export                      |
-| `use`                    | Import module                      |
-| `spawn`                  | Spawn marker                       |
-| `ref`                    | Shared ownership (compiler auto-selects Rc/Arc) |
-| `mut`                    | Mutable variable                   |
-| `if/else if/else`        | Conditional branching               |
-| `match`                  | Pattern matching                    |
-| `while/for`              | Loops                              |
-| `return/break/continue`  | Control flow                       |
-| `as`                     | Type casting                       |
-| `in`                     | Membership test/list comprehension |
-| `unsafe`                 | Unsafe code block (raw pointers)   |
+| Keyword                 | Purpose                                         |
+| ----------------------- | ----------------------------------------------- |
+| `pub`                   | Public export                                   |
+| `use`                   | Import module                                   |
+| `spawn`                 | Spawn marker                                    |
+| `ref`                   | Shared ownership (compiler auto-selects Rc/Arc) |
+| `mut`                   | Mutable variable                                |
+| `if/else if/else`       | Conditional branching                           |
+| `match`                 | Pattern matching                                |
+| `while/for`             | Loops                                           |
+| `return/break/continue` | Control flow                                    |
+| `as`                    | Type casting                                    |
+| `in`                    | Membership test/list comprehension              |
+| `unsafe`                | Unsafe code block (raw pointers)                |
 
-> **Note**: `Type`, `true`, `false`, `void`, etc. are reserved words, not keywords. The `type` keyword was removed in RFC-010; use the unified `name: Type = value` syntax.
+> **Note**: `Type`, `true`, `false`, `void`, etc. are reserved words, not keywords. The `type`
+> keyword was removed in RFC-010; use the unified `name: Type = value` syntax.
 
 ### A.3 Primitive Types
 
-| Type      | Description          | Default Size |
-| --------- | -------------------- | ------------ |
-| `Void`    | Empty value          | 0 bytes      |
-| `Bool`    | Boolean              | 1 byte       |
-| `Int`     | Signed integer       | 8 bytes      |
-| `Uint`    | Unsigned integer     | 8 bytes      |
-| `Float`   | Floating point       | 8 bytes      |
-| `String`  | UTF-8 string         | Variable     |
-| `Char`    | Unicode character    | 4 bytes      |
-| `Bytes`   | Raw bytes            | Variable     |
+| Type     | Description       | Default Size |
+| -------- | ----------------- | ------------ |
+| `Void`   | Empty value       | 0 bytes      |
+| `Bool`   | Boolean           | 1 byte       |
+| `Int`    | Signed integer    | 8 bytes      |
+| `Uint`   | Unsigned integer  | 8 bytes      |
+| `Float`  | Floating point    | 8 bytes      |
+| `String` | UTF-8 string      | Variable     |
+| `Char`   | Unicode character | 4 bytes      |
+| `Bytes`  | Raw bytes         | Variable     |
 
 ### A.4 Operator Precedence
 
-| Precedence | Operators                       | Associativity |
-| ---------- | ------------------------------- | ------------- |
-| 1          | `()` `[]` `.`                   | Left to right |
-| 2          | `as`                            | Left to right |
-| 3          | `*` `/` `%`                     | Left to right |
-| 4          | `+` `-`                         | Left to right |
-| 5          | `<<` `>>`                       | Left to right |
-| 6          | `&` `\|` `^`                    | Left to right |
-| 7          | `==` `!=` `<` `>` `<=` `>=`     | Left to right |
-| 8          | `not`                           | Right to left |
-| 9          | `and` `or`                      | Left to right |
-| 10         | `if...else`                     | Right to left |
-| 11         | `=` `+=` `-=` `*=` `/=`         | Right to left |
+| Precedence | Operators                   | Associativity |
+| ---------- | --------------------------- | ------------- |
+| 1          | `()` `[]` `.`               | Left to right |
+| 2          | `as`                        | Left to right |
+| 3          | `*` `/` `%`                 | Left to right |
+| 4          | `+` `-`                     | Left to right |
+| 5          | `<<` `>>`                   | Left to right |
+| 6          | `&` `\|` `^`                | Left to right |
+| 7          | `==` `!=` `<` `>` `<=` `>=` | Left to right |
+| 8          | `not`                       | Right to left |
+| 9          | `and` `or`                  | Left to right |
+| 10         | `if...else`                 | Right to left |
+| 11         | `=` `+=` `-=` `*=` `/=`     | Right to left |
 
 ---
 
@@ -822,16 +898,16 @@ docs(readme): update installation instructions
 
 YaoXiang's design draws from the excellent ideas of the following languages and projects:
 
-| Source                  | Borrowed Aspects                                      |
-| ---------------------- | ---------------------------------------------------- |
-| **Rust**               | Ownership model, zero-cost abstractions, type system |
-| **Python**             | Syntax style, readability, list comprehensions        |
-| **Idris/Agda**         | Dependent types, type-driven development              |
+| Source                       | Borrowed Aspects                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------------------- |
+| **Rust**                     | Ownership model, zero-cost abstractions, type system                                  |
+| **Python**                   | Syntax style, readability, list comprehensions                                        |
+| **Idris/Agda**               | Dependent types, type-driven development                                              |
 | **Curry-Howard Isomorphism** | Types are propositions, programs are proofs, unified theory of type systems and logic |
-| **TypeScript**         | Type annotations, runtime types                       |
-| **MoonBit**            | AI-friendly design, concise syntax                    |
-| **Haskell**            | Pure functional, pattern matching                    |
-| **OCaml**              | Type inference, variant types                        |
+| **TypeScript**               | Type annotations, runtime types                                                       |
+| **MoonBit**                  | AI-friendly design, concise syntax                                                    |
+| **Haskell**                  | Pure functional, pattern matching                                                     |
+| **OCaml**                    | Type inference, variant types                                                         |
 
 ---
 
@@ -839,19 +915,28 @@ YaoXiang's design draws from the excellent ideas of the following languages and 
 
 **Q: What advantages does YaoXiang have over Rust?**
 
-A: YaoXiang retains Rust's memory safety and zero-cost abstractions but uses simpler syntax and lower cognitive burden. The **Spawn Model** is more concise than Rust's `async/await`—just one `spawn` marker, no manual Future and Pin management. "All things arise together, I observe their return," making concurrent programming as intuitive as describing natural laws. The **Ownership Model** (RFC-009 v9) uses Move + &T/&mut T tokens to replace lifetime annotations, and type attributes (Dup/Linear) to replace the borrow checker. Unified type syntax eliminates the conceptual fragmentation of `enum`/`struct`/`trait`/`impl`.
+A: YaoXiang retains Rust's memory safety and zero-cost abstractions but uses simpler syntax and
+lower cognitive burden. The **Spawn Model** is more concise than Rust's `async/await`—just one
+`spawn` marker, no manual Future and Pin management. "All things arise together, I observe their
+return," making concurrent programming as intuitive as describing natural laws. The **Ownership
+Model** (RFC-009 v9) uses Move + &T/&mut T tokens to replace lifetime annotations, and type
+attributes (Dup/Linear) to replace the borrow checker. Unified type syntax eliminates the conceptual
+fragmentation of `enum`/`struct`/`trait`/`impl`.
 
 **Q: What types of development is YaoXiang suitable for?**
 
-A: Systems programming, application development, web services, scripting tools, AI-assisted programming. The goal is to become a general-purpose programming language.
+A: Systems programming, application development, web services, scripting tools, AI-assisted
+programming. The goal is to become a general-purpose programming language.
 
 **Q: Why choose 4-space indentation?**
 
-A: 4 spaces provide clear visual separation of code blocks, reducing confusion from nesting depth. This is a thoughtfully considered "AI-friendly" design decision.
+A: 4 spaces provide clear visual separation of code blocks, reducing confusion from nesting depth.
+This is a thoughtfully considered "AI-friendly" design decision.
 
 **Q: When will version 1.0 be released?**
 
-A: v1.0 goal: production-ready. Release timing depends on implementation progress; see [Version Planning RFC](./rfc/003-version-planning.md) for details.
+A: v1.0 goal: production-ready. Release timing depends on implementation progress; see
+[Version Planning RFC](./rfc/003-version-planning.md) for details.
 
 **Q: How do I contact the core team?**
 

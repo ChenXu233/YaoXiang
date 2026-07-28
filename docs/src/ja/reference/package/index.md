@@ -34,14 +34,14 @@ yaoxiang run src/main.yx
 
 ## コマンド一覧
 
-| コマンド                                              | 説明           |
-| ------------------------------------------------- | -------------- |
+| コマンド                                          | 説明                   |
+| ------------------------------------------------- | ---------------------- |
 | [`yaoxiang init`](./commands#yaoxiang-init)       | 新規プロジェクト初期化 |
-| [`yaoxiang add`](./commands#yaoxiang-add)         | 依存関係追加     |
-| [`yaoxiang rm`](./commands#yaoxiang-rm)           | 依存関係削除     |
-| [`yaoxiang install`](./commands#yaoxiang-install) | 依存関係インストール |
-| [`yaoxiang update`](./commands#yaoxiang-update)   | 依存関係更新     |
-| [`yaoxiang list`](./commands#yaoxiang-list)       | 依存関係一覧     |
+| [`yaoxiang add`](./commands#yaoxiang-add)         | 依存関係追加           |
+| [`yaoxiang rm`](./commands#yaoxiang-rm)           | 依存関係削除           |
+| [`yaoxiang install`](./commands#yaoxiang-install) | 依存関係インストール   |
+| [`yaoxiang update`](./commands#yaoxiang-update)   | 依存関係更新           |
+| [`yaoxiang list`](./commands#yaoxiang-list)       | 依存関係一覧           |
 
 ## プロジェクト構造
 

@@ -20,7 +20,8 @@ impl_status: 'partial'
 
 ## 概要
 
-YaoXiang 言語のパッケージ管理系统を設計する。セマンティックバージョニング、ローカル・GitHub 依存、统一インポート構文、`yaoxiang.toml` 設定ファイル、`yaoxiang.lock` ロックファイルをサポートする。
+YaoXiang 言語のパッケージ管理系统を設計する。セマンティックバージョニング、ローカル・GitHub 依存、统一インポート構文、`yaoxiang.toml`
+設定ファイル、`yaoxiang.lock` ロックファイルをサポートする。
 
 ## 動機
 
@@ -180,7 +181,8 @@ use foo.bar.baz;
 
 - 組み込みバイナリは `std.*` 名前空間のみに適用され、優先度最高
 - プロジェクトレベル標準ライブラリ（`.yaoxiang/std/`）が存在する場合、グローバル標準ライブラリは完全にスキップ——ビルドの再現性を保証
-- プロジェクトは `yaoxiang add std@1.0.1` で標準ライブラリを依存関係として管理し、バージョンをロック可能
+- プロジェクトは `yaoxiang add std@1.0.1`
+  で標準ライブラリを依存関係として管理し、バージョンをロック可能
 
 #### 単一ファイルモード（yaoxiang.toml なし）
 
@@ -221,7 +223,8 @@ use foo.bar.baz;
 
 #### プロジェクトレベル標準ライブラリ
 
-プロジェクトは `yaoxiang add std@1.0.1` で標準ライブラリをプロジェクトの依存関係に追加でき、`.yaoxiang/std/` に保存：
+プロジェクトは `yaoxiang add std@1.0.1`
+で標準ライブラリをプロジェクトの依存関係に追加でき、`.yaoxiang/std/` に保存：
 
 ```
 my-project/
@@ -241,10 +244,12 @@ my-project/
 **設計ポイント**：
 
 - 組み込みバイナリは互換レイヤーとして：ファイルシステム標準ライブラリが完全に整備される前に、まず組み込みバイナリで標準ライブラリモジュールを提供
-- バージョン別ディレクトリ隔離：`yx/<version>/std/` により異なるバージョンの標準ライブラリを共存させ、互いの影響を防ぐ
+- バージョン別ディレクトリ隔離：`yx/<version>/std/`
+  により異なるバージョンの標準ライブラリを共存させ、互いの影響を防ぐ
 - プロジェクトレベル標準ライブラリはグローバル標準ライブラリをオーバーライド：ビルドの再現性を確保し、グローバル環境の変化に影響されない
 - yaoxiang.toml がない場合（単一ファイルモード）、グローバル標準ライブラリにフォールバック
-- `.yaoxiang/std/` の存在は「プロジェクトレベル標準ライブラリ有効」を意味し、グローバル標準ライブラリはもう参加しない
+- `.yaoxiang/std/`
+  の存在は「プロジェクトレベル標準ライブラリ有効」を意味し、グローバル標準ライブラリはもう参加しない
 
 ### コアデータ構造
 
@@ -297,47 +302,47 @@ enum BuildStrategy {
 
 #### 単一ファイルモード vs プロジェクトモード
 
-| コマンド                  | 単一ファイル | プロジェクトモード | 説明             |
-| ----------------------- | ------ | -------- | ----------------- |
-| `yaoxiang run <file>`   | ✅     | ✅       | ファイル/プロジェクト入口を実行 |
-| `yaoxiang build`        | ❌     | ✅       | プロジェクトをビルド          |
-| `yaoxiang build <file>` | ✅     | ✅       | 単一ファイルをビルド          |
-| `yaoxiang init <name>`  | ❌     | ✅       | プロジェクトを作成            |
-| `yaoxiang add <dep>`    | ❌     | ✅       | 依存関係を追加              |
-| `yaoxiang update`       | ❌     | ✅       | 依存関係を更新              |
-| `yaoxiang fmt`          | ✅     | ✅       | フォーマット                |
-| `yaoxiang check`        | ✅     | ✅       | 型チェック                  |
-| `yaoxiang` (引数なし)   | ✅     | ✅       | 直接 REPL に入る             |
+| コマンド                | 単一ファイル | プロジェクトモード | 説明                            |
+| ----------------------- | ------------ | ------------------ | ------------------------------- |
+| `yaoxiang run <file>`   | ✅           | ✅                 | ファイル/プロジェクト入口を実行 |
+| `yaoxiang build`        | ❌           | ✅                 | プロジェクトをビルド            |
+| `yaoxiang build <file>` | ✅           | ✅                 | 単一ファイルをビルド            |
+| `yaoxiang init <name>`  | ❌           | ✅                 | プロジェクトを作成              |
+| `yaoxiang add <dep>`    | ❌           | ✅                 | 依存関係を追加                  |
+| `yaoxiang update`       | ❌           | ✅                 | 依存関係を更新                  |
+| `yaoxiang fmt`          | ✅           | ✅                 | フォーマット                    |
+| `yaoxiang check`        | ✅           | ✅                 | 型チェック                      |
+| `yaoxiang` (引数なし)   | ✅           | ✅                 | 直接 REPL に入る                |
 
 #### コマンド詳細
 
-| コマンド                               | 機能                       | 例                                                   |
-| ---------------------------------- | -------------------------- | ---------------------------------------------------- |
-| `yaoxiang`                         | 直接 REPL に入る              | `yaoxiang`                                           |
-| `yaoxiang run <file>`              | 単一ファイル/プロジェクトを実行 | `yaoxiang run main.yx`                               |
-| `yaoxiang init <name>`             | 新規プロジェクトを作成         | `yaoxiang init my-app`                               |
-| `yaoxiang build`                   | プロジェクトをビルド           | `yaoxiang build`                                     |
-| `yaoxiang build <file>`            | 単一ファイルをビルド           | `yaoxiang build foo.yx`                              |
-| `yaoxiang add <dep>`               | 依存関係を追加               | `yaoxiang add foo`                                   |
-| `yaoxiang add -D <dep>`            | 開発依存関係を追加           | `yaoxiang add -D test`                               |
-| `yaoxiang rm <dep>`                | 依存関係を削除               | `yaoxiang rm foo`                                    |
-| `yaoxiang update`                  | すべての依存関係を更新         | `yaoxiang update`                                    |
-| `yaoxiang update foo`              | 指定した依存関係を更新         | `yaoxiang update foo`                                |
-| `yaoxiang install`                 | すべての依存関係をインストール   | `yaoxiang install`                                   |
-| `yaoxiang list`                    | 依存関係を一覧表示             | `yaoxiang list`                                      |
-| `yaoxiang outdated`                | 古くなった依存関係を検査        | `yaoxiang outdated`                                  |
-| `yaoxiang fmt`                     | コードをフォーマット           | `yaoxiang fmt`                                       |
-| `yaoxiang check`                   | 型チェック                  | `yaoxiang check`                                     |
-| `yaoxiang clean`                   | ビルド成果物をクリーンアップ     | `yaoxiang clean`                                     |
-| `yaoxiang task <name>`             | カスタムタスクを実行           | `yaoxiang task lint`                                 |
-| `yaoxiang publish`                 | Registry にパッケージを公開    | `yaoxiang publish`                                   |
-| `yaoxiang publish --github`        | 公開して GitHub Release を作成 | `yaoxiang publish --github`                          |
+| コマンド                           | 機能                                     | 例                                                   |
+| ---------------------------------- | ---------------------------------------- | ---------------------------------------------------- |
+| `yaoxiang`                         | 直接 REPL に入る                         | `yaoxiang`                                           |
+| `yaoxiang run <file>`              | 単一ファイル/プロジェクトを実行          | `yaoxiang run main.yx`                               |
+| `yaoxiang init <name>`             | 新規プロジェクトを作成                   | `yaoxiang init my-app`                               |
+| `yaoxiang build`                   | プロジェクトをビルド                     | `yaoxiang build`                                     |
+| `yaoxiang build <file>`            | 単一ファイルをビルド                     | `yaoxiang build foo.yx`                              |
+| `yaoxiang add <dep>`               | 依存関係を追加                           | `yaoxiang add foo`                                   |
+| `yaoxiang add -D <dep>`            | 開発依存関係を追加                       | `yaoxiang add -D test`                               |
+| `yaoxiang rm <dep>`                | 依存関係を削除                           | `yaoxiang rm foo`                                    |
+| `yaoxiang update`                  | すべての依存関係を更新                   | `yaoxiang update`                                    |
+| `yaoxiang update foo`              | 指定した依存関係を更新                   | `yaoxiang update foo`                                |
+| `yaoxiang install`                 | すべての依存関係をインストール           | `yaoxiang install`                                   |
+| `yaoxiang list`                    | 依存関係を一覧表示                       | `yaoxiang list`                                      |
+| `yaoxiang outdated`                | 古くなった依存関係を検査                 | `yaoxiang outdated`                                  |
+| `yaoxiang fmt`                     | コードをフォーマット                     | `yaoxiang fmt`                                       |
+| `yaoxiang check`                   | 型チェック                               | `yaoxiang check`                                     |
+| `yaoxiang clean`                   | ビルド成果物をクリーンアップ             | `yaoxiang clean`                                     |
+| `yaoxiang task <name>`             | カスタムタスクを実行                     | `yaoxiang task lint`                                 |
+| `yaoxiang publish`                 | Registry にパッケージを公開              | `yaoxiang publish`                                   |
+| `yaoxiang publish --github`        | 公開して GitHub Release を作成           | `yaoxiang publish --github`                          |
 | `yaoxiang yank <pkg>@<ver>`        | 公開済みバージョンを削除（取り消し不可） | `yaoxiang yank foo@1.2.3`                            |
-| `yaoxiang login --registry <url>`  | Registry 認証              | `yaoxiang login --registry https://reg.example.com`  |
-| `yaoxiang login --github`          | GitHub 認証                | `yaoxiang login --github`                            |
-| `yaoxiang logout --registry <url>` | ログアウト                       | `yaoxiang logout --registry https://reg.example.com` |
-| `yaoxiang cache clean`             | グローバルキャッシュをクリーンアップ   | `yaoxiang cache clean`                               |
-| `yaoxiang workspace <cmd>`         | ワークスペース操作               | `yaoxiang workspace list`                            |
+| `yaoxiang login --registry <url>`  | Registry 認証                            | `yaoxiang login --registry https://reg.example.com`  |
+| `yaoxiang login --github`          | GitHub 認証                              | `yaoxiang login --github`                            |
+| `yaoxiang logout --registry <url>` | ログアウト                               | `yaoxiang logout --registry https://reg.example.com` |
+| `yaoxiang cache clean`             | グローバルキャッシュをクリーンアップ     | `yaoxiang cache clean`                               |
+| `yaoxiang workspace <cmd>`         | ワークスペース操作                       | `yaoxiang workspace list`                            |
 
 #### コマンド制約の説明
 
@@ -361,7 +366,8 @@ yaoxiang add foo        # ✅ 依存関係を追加
 
 ### グローバルキャッシュ
 
-ダウンロードしたすべての依存関係を `~/.yaoxiang/cache/` にキャッシュし、プロジェクト vendor ディレクトリはキャッシュからコピーされる。
+ダウンロードしたすべての依存関係を `~/.yaoxiang/cache/`
+にキャッシュし、プロジェクト vendor ディレクトリはキャッシュからコピーされる。
 
 ```
 ~/.yaoxiang/
@@ -419,13 +425,15 @@ token = "xxx"
 
 詳細は [RFC-014a: Registry プロトコル仕様](../draft/014a-registry-protocol.md) を参照。
 
-コア設計：オープンプ Rotokoll + 適応層。公式 Registry を主役に、GitHub Release/main ブランチを補完とし、カスタム Registry をサポート。
+コア設計：オープンプ Rotokoll + 適応層。公式 Registry を主役に、GitHub
+Release/main ブランチを補完とし、カスタム Registry をサポート。
 
 ### ビルドシステム
 
 詳細は [RFC-014b: ビルドシステムとバイナリ配布](../draft/014b-build-system.md) を参照。
 
-コア設計：宣言型 `[build]` 設定、事前コンパイル優先/ソースコードフォールバック、cargo/cmake/custom 戦略をサポート。
+コア設計：宣言型 `[build]`
+設定、事前コンパイル優先/ソースコードフォールバック、cargo/cmake/custom 戦略をサポート。
 
 ### ワークスペース
 
@@ -449,25 +457,25 @@ token = "xxx"
 
 ## 代替案
 
-| 案                       | 採用しなかった理由                    |
-| -------------------------- | ----------------------------- |
-| リアルタイム GitHub アクセス           | セキュリティとキャッシュ再利用の保証が困難      |
-| グローバルキャッシュ ($HOME/.yaoxiang) | 分離性が悪く、バージョン競合が複雑        |
-| Registry のみサポート               | GitHub は現在の主要なコードホスティングプラットフォーム |
+| 案                                     | 採用しなかった理由                                      |
+| -------------------------------------- | ------------------------------------------------------- |
+| リアルタイム GitHub アクセス           | セキュリティとキャッシュ再利用の保証が困難              |
+| グローバルキャッシュ ($HOME/.yaoxiang) | 分離性が悪く、バージョン競合が複雑                      |
+| Registry のみサポート                  | GitHub は現在の主要なコードホスティングプラットフォーム |
 
 ## 実装戦略
 
 ### フェーズ分け
 
-| フェーズ          | 内容                                         | ステータス      |
-| ------------- | -------------------------------------------- | --------- |
-| **Phase 1**   | toml 解析、ローカル依存関係、ロック生成、基础アルゴリズム     | ✅ 完了 |
-| **Phase 2**   | GitHub サポート、.yaoxiang/vendor 管理、ダウンロードツール | ✅ 完了 |
-| **Phase 3**   | グローバルキャッシュ、semver crate 置換、CLI 完善        | 予定    |
-| **Phase 3.5** | Source trait を async に変更、async-trait 統合      | 予定    |
-| **Phase 4**   | Registry プロトコル、publish、認証（RFC-014a）     | 予定    |
-| **Phase 5**   | ビルドシステム、事前コンパイルバイナリ（RFC-014b）           | 予定    |
-| **Phase 6**   | ワークスペースサポート（RFC-014c）                     | 予定    |
+| フェーズ      | 内容                                                       | ステータス |
+| ------------- | ---------------------------------------------------------- | ---------- |
+| **Phase 1**   | toml 解析、ローカル依存関係、ロック生成、基础アルゴリズム  | ✅ 完了    |
+| **Phase 2**   | GitHub サポート、.yaoxiang/vendor 管理、ダウンロードツール | ✅ 完了    |
+| **Phase 3**   | グローバルキャッシュ、semver crate 置換、CLI 完善          | 予定       |
+| **Phase 3.5** | Source trait を async に変更、async-trait 統合             | 予定       |
+| **Phase 4**   | Registry プロトコル、publish、認証（RFC-014a）             | 予定       |
+| **Phase 5**   | ビルドシステム、事前コンパイルバイナリ（RFC-014b）         | 予定       |
+| **Phase 6**   | ワークスペースサポート（RFC-014c）                         | 予定       |
 
 ### 依存関係
 
@@ -476,11 +484,11 @@ token = "xxx"
 
 ### リスク
 
-| リスク             | 軽減措置                     |
-| ---------------- | ---------------------------- |
+| リスク                         | 軽減措置                                             |
+| ------------------------------ | ---------------------------------------------------- |
 | 依存関係解決アルゴリズムが複雑 | まずシンプルバージョンを実装し、後から競合検出を追加 |
-| Git ダウンロードが不安定   | リトライとキャッシュメカニズム               |
-| パフォーマンス問題         | 遅延ロード、インクリメンタル解決               |
+| Git ダウンロードが不安定       | リトライとキャッシュメカニズム                       |
+| パフォーマンス問題             | 遅延ロード、インクリメンタル解決                     |
 
 ## オープン問題
 
@@ -494,12 +502,12 @@ token = "xxx"
 
 ## 依存関係（Cargo.toml に追加が必要）
 
-| 用途        | crate            | 説明           |
-| ----------- | ---------------- | -------------- |
-| セマンティックバージョニング  | `semver`         | 手書きパーサーを置換 |
-| HTTP クライアント | `reqwest`        | Registry 通信  |
-| SHA-256     | `sha2`           | 完全性検証     |
-| 圧縮        | `flate2` + `tar` | パッケージ形式処理     |
+| 用途                         | crate            | 説明                 |
+| ---------------------------- | ---------------- | -------------------- |
+| セマンティックバージョニング | `semver`         | 手書きパーサーを置換 |
+| HTTP クライアント            | `reqwest`        | Registry 通信        |
+| SHA-256                      | `sha2`           | 完全性検証           |
+| 圧縮                         | `flate2` + `tar` | パッケージ形式処理   |
 
 ---
 

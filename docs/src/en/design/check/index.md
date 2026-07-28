@@ -5,7 +5,8 @@ description: Design specification for yaoxiang check static analysis tool
 
 # check Command Design Document
 
-`yaoxiang check` is the static analysis tool for the YaoXiang compiler, providing type checking, cross-file analysis, and incremental checking capabilities.
+`yaoxiang check` is the static analysis tool for the YaoXiang compiler, providing type checking,
+cross-file analysis, and incremental checking capabilities.
 
 ## Design Principles
 
@@ -16,14 +17,16 @@ description: Design specification for yaoxiang check static analysis tool
 
 ## Document Navigation
 
-- [Diagnostic System](./diagnostic-system.md) — Error code system, Diagnostic data structure, Emitter output
-- [Cross-File Analysis](./cross-file-analysis.md) — Shared type environment, dependency graph, topological sort
+- [Diagnostic System](./diagnostic-system.md) — Error code system, Diagnostic data structure,
+  Emitter output
+- [Cross-File Analysis](./cross-file-analysis.md) — Shared type environment, dependency graph,
+  topological sort
 - [Incremental Checking](./incremental-checking.md) — CheckSession, affected_modules, watch mode
 
 ## Boundaries with Other Systems
 
-| System                      | Responsibilities                                      | Relationship with check    |
-| --------------------------- | ----------------------------------------------------- | -------------------------- |
-| Compiler (`yaoxiang build`) | Full compilation (parsing → type checking → codegen) | check only does first two steps |
-| LSP                         | Editor integration (completions, go-to, diagnostics) | check diagnostics are reusable |
-| Formatter (`yaoxiang fmt`)  | Code style                                            | Independent, runs in parallel in CI |
+| System                      | Responsibilities                                     | Relationship with check             |
+| --------------------------- | ---------------------------------------------------- | ----------------------------------- |
+| Compiler (`yaoxiang build`) | Full compilation (parsing → type checking → codegen) | check only does first two steps     |
+| LSP                         | Editor integration (completions, go-to, diagnostics) | check diagnostics are reusable      |
+| Formatter (`yaoxiang fmt`)  | Code style                                           | Independent, runs in parallel in CI |

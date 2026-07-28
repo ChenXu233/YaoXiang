@@ -5,7 +5,8 @@ description: YaoXiang Package Manager Reference Documentation
 
 # Package Manager
 
-YaoXiang's built-in package manager, providing project initialization, dependency management, version locking, and more.
+YaoXiang's built-in package manager, providing project initialization, dependency management,
+version locking, and more.
 
 ## Overview
 
@@ -34,14 +35,14 @@ yaoxiang run src/main.yx
 
 ## Command List
 
-| Command                                              | Description          |
-| ---------------------------------------------------- | -------------------- |
-| [`yaoxiang init`](./commands#yaoxiang-init)          | Initialize a new project |
-| [`yaoxiang add`](./commands#yaoxiang-add)           | Add dependencies     |
-| [`yaoxiang rm`](./commands#yaoxiang-rm)             | Remove dependencies  |
-| [`yaoxiang install`](./commands#yaoxiang-install)    | Install dependencies |
-| [`yaoxiang update`](./commands#yaoxiang-update)      | Update dependencies  |
-| [`yaoxiang list`](./commands#yaoxiang-list)          | List dependencies    |
+| Command                                           | Description              |
+| ------------------------------------------------- | ------------------------ |
+| [`yaoxiang init`](./commands#yaoxiang-init)       | Initialize a new project |
+| [`yaoxiang add`](./commands#yaoxiang-add)         | Add dependencies         |
+| [`yaoxiang rm`](./commands#yaoxiang-rm)           | Remove dependencies      |
+| [`yaoxiang install`](./commands#yaoxiang-install) | Install dependencies     |
+| [`yaoxiang update`](./commands#yaoxiang-update)   | Update dependencies      |
+| [`yaoxiang list`](./commands#yaoxiang-list)       | List dependencies        |
 
 ## Project Structure
 
