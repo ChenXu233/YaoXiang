@@ -2074,10 +2074,10 @@ impl AstToIrGenerator {
             *target = end_idx;
         }
 
-        // While loop returns void/unit (0)
+        // While loop returns void
         instructions.push(Instruction::Load {
             dst: Operand::Local(result_reg),
-            src: Operand::Const(ConstValue::Int(0)),
+            src: Operand::Const(ConstValue::Void),
         });
 
         Ok(())
@@ -2193,11 +2193,11 @@ impl AstToIrGenerator {
 
             self.exit_scope();
 
-            // If expression, load unit
+            // If expression, load void
             if let Some(reg) = result_reg {
                 instructions.push(Instruction::Load {
                     dst: Operand::Local(reg),
-                    src: Operand::Const(ConstValue::Int(0)),
+                    src: Operand::Const(ConstValue::Void),
                 });
             }
 
@@ -2316,9 +2316,10 @@ impl AstToIrGenerator {
         self.exit_scope();
 
         if let Some(reg) = result_reg {
+            // For loop returns void
             instructions.push(Instruction::Load {
                 dst: Operand::Local(reg),
-                src: Operand::Const(ConstValue::Int(0)),
+                src: Operand::Const(ConstValue::Void),
             });
         }
 
@@ -2760,7 +2761,7 @@ impl AstToIrGenerator {
                     Literal::Bool(b) => ConstValue::Bool(*b),
                     Literal::String(s) => ConstValue::String(s.clone()),
                     Literal::Char(c) => ConstValue::Char(*c),
-                    Literal::Void => ConstValue::Int(0),
+                    Literal::Void => ConstValue::Void,
                 };
                 // 添加到常量池
                 constants.push(const_val.clone());
@@ -3724,10 +3725,10 @@ impl AstToIrGenerator {
                 // 生成 UnsafeBlockEnd 指令
                 instructions.push(Instruction::UnsafeBlockEnd);
 
-                // unsafe 块作为表达式时返回 0
+                // unsafe 块作为表达式时返回 void
                 instructions.push(Instruction::Load {
                     dst: Operand::Local(result_reg),
-                    src: Operand::Const(ConstValue::Int(0)),
+                    src: Operand::Const(ConstValue::Void),
                 });
             }
             // spawn for 数据并行循环（RFC-024 §2.4）
@@ -4007,7 +4008,7 @@ impl AstToIrGenerator {
                                     ast::Literal::Bool(b) => ConstValue::Bool(*b),
                                     ast::Literal::String(s) => ConstValue::String(s.clone()),
                                     ast::Literal::Char(c) => ConstValue::Char(*c),
-                                    ast::Literal::Void => ConstValue::Int(0),
+                                    ast::Literal::Void => ConstValue::Void,
                                 };
                                 constants.push(const_val.clone());
                                 instructions.push(Instruction::Load {
