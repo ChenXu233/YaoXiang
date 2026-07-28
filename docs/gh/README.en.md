@@ -3,7 +3,7 @@
 > AI-assisted compiler development exploration.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-v0.7.8-blue.svg)](https://github.com/chenxu233/YaoXiang)
+[![Version](https://img.shields.io/badge/Version-v0.7.10-blue.svg)](https://github.com/chenxu233/YaoXiang)
 
 > 🌐 **Language** | [中文](../../README.md)
 >

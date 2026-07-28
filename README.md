@@ -3,7 +3,7 @@
 > AI辅助的编译器开发探索。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-v0.7.8-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-v0.7.10-blue.svg)]()
 
 > 🌐 **Language** | [English](docs/gh/README.en.md)
 >

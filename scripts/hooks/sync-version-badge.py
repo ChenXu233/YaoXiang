@@ -8,7 +8,7 @@ Runs whenever Cargo.toml or the README files change.
 import re
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parent.parent.parent
 
 CARGO_TOML = REPO / "Cargo.toml"
 README_FILES = [
@@ -16,11 +16,14 @@ README_FILES = [
     REPO / "docs/gh/README.en.md",
 ]
 
-# Matches: [![Version](https://img.shields.io/badge/Version-v<semver>-blue.svg)]()
+# Matches: [![Version](https://img.shields.io/badge/Version-v<semver>-blue.svg)](<link>)
+# <link> 可为空 () 或任意 URL，替换时原样保留。
 BADGE_RE = re.compile(
     r'(\[!\[Version\]\(https://img\.shields\.io/badge/Version-)'
     r'v[^)]+'
-    r'(-blue\.svg\]\(\))'
+    r'(-blue\.svg\)\]\()'
+    r'([^)]*)'
+    r'(\))'
 )
 
 
@@ -31,7 +34,7 @@ def get_version() -> str | None:
 
 def sync_badge(path: Path, version: str) -> bool:
     text = path.read_text(encoding="utf-8")
-    new_text, n = BADGE_RE.subn(rf"\1v{version}\2", text)
+    new_text, n = BADGE_RE.subn(rf"\1v{version}\2\3\4", text)
     if n == 0:
         return False  # no badge found — nothing to do
     if new_text == text:

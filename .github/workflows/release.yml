@@ -43,6 +43,13 @@ jobs:
             echo "Tag $TAG not found, will release"
             echo "should_release=true" >> $GITHUB_OUTPUT
           fi
+      - name: Delete existing tag (if any)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          TAG="v${{ steps.version.outputs.value }}"
+          git tag -d "$TAG" 2>/dev/null || true
+          git push origin --delete "$TAG" 2>/dev/null || true
+          echo "Tag cleanup complete (was either absent or deleted)"
 
   build:
     name: Build Platforms
@@ -161,12 +168,27 @@ jobs:
       - name: List artifacts
         run: ls -R release-artifacts || echo "No artifacts found"
 
+      - name: Get previous tag
+        id: prev-tag
+        run: |
+          PREV=$(git tag --sort=-version:refname | head -2 | tail -1)
+          echo "value=$PREV" >> $GITHUB_OUTPUT
+          echo "Previous tag: $PREV"
+
+      - name: Generate commit list with @mentions
+        run: |
+          node scripts/release/generate-commit-list.mjs \
+            --from-tag ${{ steps.prev-tag.outputs.value }} \
+            --to-tag v${{ needs.check-version.outputs.version }} \
+            --changelog CHANGELOG.md \
+            > final-release-body.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.check-version.outputs.version }}
           name: v${{ needs.check-version.outputs.version }}
-          body: ${{ github.event.head_commit.message }}
+          body_path: final-release-body.md
           files: |
             release-artifacts/**/yaoxiang-*
             release-artifacts/**/YaoXiang-Setup-*.exe
