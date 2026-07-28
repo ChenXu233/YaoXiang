@@ -62,7 +62,7 @@ fn native_sleep(
 ) -> Result<RuntimeValue, ExecutorError> {
     let millis = args.first().and_then(|v| v.to_int()).unwrap_or(0) as u64;
     std::thread::sleep(std::time::Duration::from_millis(millis));
-    Ok(RuntimeValue::Unit)
+    Ok(RuntimeValue::Void)
 }
 
 /// Native implementation: thread_id
@@ -81,5 +81,5 @@ fn native_yield_now(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     std::thread::yield_now();
-    Ok(RuntimeValue::Unit)
+    Ok(RuntimeValue::Void)
 }

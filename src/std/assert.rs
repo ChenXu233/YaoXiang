@@ -84,7 +84,7 @@ fn native_assert(
     };
 
     if cond {
-        Ok(RuntimeValue::Unit)
+        Ok(RuntimeValue::Void)
     } else {
         let msg = if args.len() >= 2 {
             match &args[1] {

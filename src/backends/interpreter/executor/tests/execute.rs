@@ -114,11 +114,11 @@ fn test_borrow_mutable_flag_irrelevant_at_runtime() {
     }
 }
 
-/// Borrow with empty src register yields Unit
+/// Borrow with empty src register yields Void
 #[test]
 fn test_borrow_from_unset_register() {
     let func = make_function(vec![
-        // r1 = borrow r0 (r0 is unset -> Unit)
+        // r1 = borrow r0 (r0 is unset -> Void)
         BytecodeInstr::Borrow {
             dst: Reg(1),
             src: Reg(0),
@@ -132,8 +132,8 @@ fn test_borrow_from_unset_register() {
     let result = interp.execute_function(&func, &[]).unwrap();
     assert_eq!(
         result,
-        RuntimeValue::Unit,
-        "从未设置的寄存器借用应得到 Unit"
+        RuntimeValue::Void,
+        "从未设置的寄存器借用应得到 Void"
     ); // just advances IP; does not corrupt registers
 }
 
@@ -175,7 +175,7 @@ fn test_release_unset_register() {
     let result = interp.execute_function(&func, &[]).unwrap();
     assert_eq!(
         result,
-        RuntimeValue::Unit,
+        RuntimeValue::Void,
         "对未设置寄存器执行 Release 不应 panic"
     );
 }

@@ -36,7 +36,7 @@ impl Frame {
         Self {
             function,
             ip: 0,
-            slots: vec![RuntimeValue::Unit; local_count],
+            slots: vec![RuntimeValue::Void; local_count],
             upvalues: Vec::new(),
             entry_ip: 0,
             spawn_groups: Vec::new(),
@@ -105,7 +105,7 @@ impl Frame {
         value: RuntimeValue,
     ) {
         if index >= self.slots.len() {
-            self.slots.resize(index + 1, RuntimeValue::Unit);
+            self.slots.resize(index + 1, RuntimeValue::Void);
         }
         self.slots[index] = value;
     }
@@ -150,7 +150,7 @@ impl Frame {
         value: RuntimeValue,
     ) {
         if index >= self.upvalues.len() {
-            self.upvalues.resize(index + 1, RuntimeValue::Unit);
+            self.upvalues.resize(index + 1, RuntimeValue::Void);
         }
         self.upvalues[index] = value;
     }

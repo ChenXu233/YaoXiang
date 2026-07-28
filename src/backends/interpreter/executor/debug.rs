@@ -123,7 +123,7 @@ impl Interpreter {
                     let mut v = self.make_async_pending(task_id);
                     self.force_value_in_place(&mut v)?;
                 }
-                self.last_return_value = RuntimeValue::Unit;
+                self.last_return_value = RuntimeValue::Void;
                 // Frame is NOT pushed back — caller handles this
                 Ok(StepOutcome::Returned)
             }
@@ -131,7 +131,7 @@ impl Interpreter {
                 let result = frame
                     .get_slot(value.0 as usize)
                     .cloned()
-                    .unwrap_or(RuntimeValue::Unit);
+                    .unwrap_or(RuntimeValue::Void);
                 for task_id in frame.take_all_spawned_tasks() {
                     let mut v = self.make_async_pending(task_id);
                     self.force_value_in_place(&mut v)?;
@@ -208,7 +208,7 @@ impl Interpreter {
                 let val = frame
                     .get_slot(src.0 as usize)
                     .cloned()
-                    .unwrap_or(RuntimeValue::Unit);
+                    .unwrap_or(RuntimeValue::Void);
                 frame.set_slot(dst.0 as usize, val);
                 frame.advance();
                 Ok(StepOutcome::Continue)
@@ -223,7 +223,7 @@ impl Interpreter {
                 let val = frame
                     .get_slot(*local_idx as usize)
                     .cloned()
-                    .unwrap_or(RuntimeValue::Unit);
+                    .unwrap_or(RuntimeValue::Void);
                 frame.set_slot(dst.0 as usize, val);
                 frame.advance();
                 Ok(StepOutcome::Continue)
@@ -232,7 +232,7 @@ impl Interpreter {
                 let val = frame
                     .get_slot(src.0 as usize)
                     .cloned()
-                    .unwrap_or(RuntimeValue::Unit);
+                    .unwrap_or(RuntimeValue::Void);
                 frame.set_slot(*local_idx as usize, val);
                 frame.advance();
                 Ok(StepOutcome::Continue)
@@ -242,7 +242,7 @@ impl Interpreter {
                 let val = frame
                     .get_slot(*arg_idx as usize)
                     .cloned()
-                    .unwrap_or(RuntimeValue::Unit);
+                    .unwrap_or(RuntimeValue::Void);
                 frame.set_slot(dst.0 as usize, val);
                 frame.advance();
                 Ok(StepOutcome::Continue)
@@ -251,7 +251,7 @@ impl Interpreter {
                 let val = frame
                     .get_upvalue(*upvalue_idx as usize)
                     .cloned()
-                    .unwrap_or(RuntimeValue::Unit);
+                    .unwrap_or(RuntimeValue::Void);
                 frame.set_slot(dst.0 as usize, val);
                 frame.advance();
                 Ok(StepOutcome::Continue)
@@ -331,7 +331,7 @@ impl Interpreter {
                         frame
                             .get_slot(r.0 as usize)
                             .cloned()
-                            .unwrap_or(RuntimeValue::Unit)
+                            .unwrap_or(RuntimeValue::Void)
                     })
                     .collect();
 
@@ -400,7 +400,7 @@ impl Interpreter {
                         frame
                             .get_slot(r.0 as usize)
                             .cloned()
-                            .unwrap_or(RuntimeValue::Unit)
+                            .unwrap_or(RuntimeValue::Void)
                     })
                     .collect();
 
@@ -473,7 +473,7 @@ impl Interpreter {
                     }
                 } else {
                     if let Some(dst_reg) = dst {
-                        frame.set_slot(dst_reg.index() as usize, RuntimeValue::Unit);
+                        frame.set_slot(dst_reg.index() as usize, RuntimeValue::Void);
                     }
                 }
                 frame.advance();
@@ -501,7 +501,7 @@ impl Interpreter {
                     }
                 } else {
                     if let Some(dst_reg) = dst {
-                        frame.set_slot(dst_reg.index() as usize, RuntimeValue::Unit);
+                        frame.set_slot(dst_reg.index() as usize, RuntimeValue::Void);
                     }
                 }
                 frame.advance();
@@ -717,11 +717,11 @@ impl Interpreter {
                     let key = frame
                         .get_slot(key_reg.0 as usize)
                         .cloned()
-                        .unwrap_or(RuntimeValue::Unit);
+                        .unwrap_or(RuntimeValue::Void);
                     let val = frame
                         .get_slot(val_reg.0 as usize)
                         .cloned()
-                        .unwrap_or(RuntimeValue::Unit);
+                        .unwrap_or(RuntimeValue::Void);
                     map.insert(key, val);
                 }
                 let handle = self
@@ -872,7 +872,7 @@ impl Interpreter {
                         frame
                             .get_slot(reg.0 as usize)
                             .cloned()
-                            .unwrap_or(RuntimeValue::Unit)
+                            .unwrap_or(RuntimeValue::Void)
                     })
                     .collect();
                 let handle = self
@@ -965,7 +965,7 @@ impl Interpreter {
                     .chars()
                     .nth(index.0 as usize)
                     .map(|c| RuntimeValue::Char(c as u32))
-                    .unwrap_or(RuntimeValue::Unit);
+                    .unwrap_or(RuntimeValue::Void);
                 frame.set_slot(dst.0 as usize, result);
                 frame.advance();
                 Ok(StepOutcome::Continue)
@@ -997,7 +997,7 @@ impl Interpreter {
                 let val = frame
                     .get_slot(src.0 as usize)
                     .cloned()
-                    .unwrap_or(RuntimeValue::Unit);
+                    .unwrap_or(RuntimeValue::Void);
                 frame.set_slot(dst.0 as usize, val.into_arc());
                 frame.advance();
                 Ok(StepOutcome::Continue)
@@ -1006,7 +1006,7 @@ impl Interpreter {
                 let val = frame
                     .get_slot(src.0 as usize)
                     .cloned()
-                    .unwrap_or(RuntimeValue::Unit);
+                    .unwrap_or(RuntimeValue::Void);
                 frame.set_slot(dst.0 as usize, val.into_arc());
                 frame.advance();
                 Ok(StepOutcome::Continue)
@@ -1015,7 +1015,7 @@ impl Interpreter {
                 let val = frame
                     .get_slot(src.0 as usize)
                     .cloned()
-                    .unwrap_or(RuntimeValue::Unit);
+                    .unwrap_or(RuntimeValue::Void);
                 if let RuntimeValue::Arc(inner) = val {
                     frame.set_slot(dst.0 as usize, RuntimeValue::Arc(inner));
                 }
@@ -1026,14 +1026,14 @@ impl Interpreter {
                 let val = frame
                     .get_slot(src.0 as usize)
                     .cloned()
-                    .unwrap_or(RuntimeValue::Unit);
+                    .unwrap_or(RuntimeValue::Void);
                 if let RuntimeValue::Arc(arc) = val {
                     frame.set_slot(
                         dst.0 as usize,
                         RuntimeValue::Weak(std::sync::Arc::downgrade(&arc)),
                     );
                 } else {
-                    frame.set_slot(dst.0 as usize, RuntimeValue::Unit);
+                    frame.set_slot(dst.0 as usize, RuntimeValue::Void);
                 }
                 frame.advance();
                 Ok(StepOutcome::Continue)
@@ -1042,15 +1042,15 @@ impl Interpreter {
                 let val = frame
                     .get_slot(src.0 as usize)
                     .cloned()
-                    .unwrap_or(RuntimeValue::Unit);
+                    .unwrap_or(RuntimeValue::Void);
                 if let RuntimeValue::Weak(weak) = val {
                     if let Some(arc) = weak.upgrade() {
                         frame.set_slot(dst.0 as usize, RuntimeValue::Arc(arc));
                     } else {
-                        frame.set_slot(dst.0 as usize, RuntimeValue::Unit);
+                        frame.set_slot(dst.0 as usize, RuntimeValue::Void);
                     }
                 } else {
-                    frame.set_slot(dst.0 as usize, RuntimeValue::Unit);
+                    frame.set_slot(dst.0 as usize, RuntimeValue::Void);
                 }
                 frame.advance();
                 Ok(StepOutcome::Continue)
@@ -1061,7 +1061,7 @@ impl Interpreter {
                 let val = frame
                     .get_slot(src.0 as usize)
                     .cloned()
-                    .unwrap_or(RuntimeValue::Unit);
+                    .unwrap_or(RuntimeValue::Void);
                 frame.set_slot(dst.0 as usize, val);
                 frame.advance();
                 Ok(StepOutcome::Continue)
@@ -1113,7 +1113,7 @@ impl Interpreter {
                         frame
                             .get_slot(r.0 as usize)
                             .cloned()
-                            .unwrap_or(RuntimeValue::Unit)
+                            .unwrap_or(RuntimeValue::Void)
                     })
                     .collect();
                 let closure =
@@ -1130,7 +1130,7 @@ impl Interpreter {
             BytecodeInstr::TypeOf { dst, src } => {
                 let val = self.force_slot(frame, *src)?;
                 let type_name: &str = match &val {
-                    RuntimeValue::Unit => "Void",
+                    RuntimeValue::Void => "Void",
                     RuntimeValue::Bool(_) => "Bool",
                     RuntimeValue::Int(_) => "Int",
                     RuntimeValue::Float(_) => "Float",
@@ -1182,7 +1182,7 @@ impl Interpreter {
                     RuntimeValue::Bool(_) => 2,
                     RuntimeValue::String(_) => 3,
                     RuntimeValue::Char(_) => 4,
-                    RuntimeValue::Unit => 5,
+                    RuntimeValue::Void => 5,
                     _ => u16::MAX,
                 };
                 if actual_id != *type_id && *type_id != u16::MAX {

@@ -187,7 +187,7 @@ impl Interpreter {
             shared: std::ptr::null(),
             current_frame_info: None,
             called_func: false,
-            last_return_value: RuntimeValue::Unit,
+            last_return_value: RuntimeValue::Void,
         }
     }
 
@@ -243,7 +243,7 @@ impl Interpreter {
             shared: std::ptr::null(),
             current_frame_info: None,
             called_func: false,
-            last_return_value: RuntimeValue::Unit,
+            last_return_value: RuntimeValue::Void,
         }
     }
 
@@ -366,7 +366,7 @@ impl Interpreter {
                 super::debug::StepOutcome::Returned => {
                     return Ok(std::mem::replace(
                         &mut self.last_return_value,
-                        RuntimeValue::Unit,
+                        RuntimeValue::Void,
                     ))
                 }
             }
@@ -439,7 +439,7 @@ impl Interpreter {
         self.constants
             .get(idx as usize)
             .map(|c| match c {
-                ConstValue::Void => RuntimeValue::Unit,
+                ConstValue::Void => RuntimeValue::Void,
                 ConstValue::Bool(b) => RuntimeValue::Bool(*b),
                 ConstValue::Int(i) => RuntimeValue::Int((*i) as i64),
                 ConstValue::Float(f) => RuntimeValue::Float(*f),
@@ -457,7 +457,7 @@ impl Interpreter {
     ) -> RuntimeValue {
         RuntimeValue::Async(Box::new(AsyncValue {
             state: Box::new(AsyncState::Pending(task_id)),
-            value_type: ValueType::Unit,
+            value_type: ValueType::Void,
         }))
     }
 
@@ -681,7 +681,7 @@ impl Interpreter {
                         let rv = payload
                             .downcast_ref::<RuntimeValue>()
                             .cloned()
-                            .unwrap_or(RuntimeValue::Unit);
+                            .unwrap_or(RuntimeValue::Void);
                         *value = rv;
                         Ok(())
                     }
@@ -713,7 +713,7 @@ impl Interpreter {
             self.force_value_in_place(v)?;
             Ok(v.clone())
         } else {
-            Ok(RuntimeValue::Unit)
+            Ok(RuntimeValue::Void)
         }
     }
 

@@ -302,7 +302,7 @@ fn native_sleep(
     };
 
     std::thread::sleep(Duration::from_secs_f64(seconds));
-    Ok(RuntimeValue::Unit)
+    Ok(RuntimeValue::Void)
 }
 
 // ============================================================================

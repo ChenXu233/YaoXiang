@@ -110,11 +110,11 @@ fn native_get(
             ))
         }
     };
-    let key = args.get(1).cloned().unwrap_or(RuntimeValue::Unit);
+    let key = args.get(1).cloned().unwrap_or(RuntimeValue::Void);
 
     match ctx.heap.get(dict_handle) {
-        Some(HeapValue::Dict(map)) => Ok(map.get(&key).cloned().unwrap_or(RuntimeValue::Unit)),
-        _ => Ok(RuntimeValue::Unit),
+        Some(HeapValue::Dict(map)) => Ok(map.get(&key).cloned().unwrap_or(RuntimeValue::Void)),
+        _ => Ok(RuntimeValue::Void),
     }
 }
 
@@ -131,8 +131,8 @@ fn native_set(
             ))
         }
     };
-    let key = args.get(1).cloned().unwrap_or(RuntimeValue::Unit);
-    let value = args.get(2).cloned().unwrap_or(RuntimeValue::Unit);
+    let key = args.get(1).cloned().unwrap_or(RuntimeValue::Void);
+    let value = args.get(2).cloned().unwrap_or(RuntimeValue::Void);
 
     let mut map = match ctx.heap.get(dict_handle) {
         Some(HeapValue::Dict(map)) => map.clone(),
@@ -152,7 +152,7 @@ fn native_has(
         Some(RuntimeValue::Dict(h)) => *h,
         _ => return Ok(RuntimeValue::Bool(false)),
     };
-    let key = args.get(1).cloned().unwrap_or(RuntimeValue::Unit);
+    let key = args.get(1).cloned().unwrap_or(RuntimeValue::Void);
 
     match ctx.heap.get(dict_handle) {
         Some(HeapValue::Dict(map)) => Ok(RuntimeValue::Bool(map.contains_key(&key))),
@@ -254,7 +254,7 @@ fn native_delete(
             ))
         }
     };
-    let key = args.get(1).cloned().unwrap_or(RuntimeValue::Unit);
+    let key = args.get(1).cloned().unwrap_or(RuntimeValue::Void);
 
     let mut map = match ctx.heap.get(dict_handle) {
         Some(HeapValue::Dict(map)) => map.clone(),

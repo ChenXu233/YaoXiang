@@ -287,7 +287,7 @@ fn native_close(
 
     if let Ok(mut files) = OPEN_FILES.lock() {
         if files.remove(&fd).is_some() {
-            Ok(RuntimeValue::Unit)
+            Ok(RuntimeValue::Void)
         } else {
             Err(ExecutorError::runtime_only(format!(
                 "Invalid file descriptor: {}",
@@ -536,7 +536,7 @@ fn native_flush(
     if let Ok(mut files) = OPEN_FILES.lock() {
         if let Some(file) = files.get_mut(&fd) {
             match file.flush() {
-                Ok(()) => Ok(RuntimeValue::Unit),
+                Ok(()) => Ok(RuntimeValue::Void),
                 Err(e) => Err(ExecutorError::runtime_only(format!(
                     "Failed to flush file: {}",
                     e
@@ -907,7 +907,7 @@ fn native_set_env(
     };
 
     std::env::set_var(&name, &value);
-    Ok(RuntimeValue::Unit)
+    Ok(RuntimeValue::Void)
 }
 
 // ============================================================================

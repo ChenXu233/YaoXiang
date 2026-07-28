@@ -142,6 +142,6 @@ pub(crate) fn native_result_unwrap_or(
             payload,
             ..
         }) => Ok((**payload).clone()),
-        _ => Ok(args.get(1).cloned().unwrap_or(RuntimeValue::Unit)),
+        _ => Ok(args.get(1).cloned().unwrap_or(RuntimeValue::Void)),
     }
 }

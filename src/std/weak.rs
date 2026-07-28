@@ -105,7 +105,7 @@ fn native_weak_new(
 ///
 /// Returns Option[Arc[T]] as a RuntimeValue::Enum:
 /// - Some(arc): Enum { type_id: ENUM, variant_id: 0, payload: arc }
-/// - None:      Enum { type_id: ENUM, variant_id: 1, payload: Unit }
+/// - None:      Enum { type_id: ENUM, variant_id: 1, payload: Void }
 fn native_weak_upgrade(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
@@ -124,7 +124,7 @@ fn native_weak_upgrade(
         None => Ok(RuntimeValue::Enum {
             type_id: TypeId::ENUM,
             variant_id: 1,
-            payload: Box::new(RuntimeValue::Unit),
+            payload: Box::new(RuntimeValue::Void),
         }),
     }
 }

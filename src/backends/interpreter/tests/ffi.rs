@@ -108,7 +108,7 @@ fn test_call_println_via_registry() {
     let registry = FfiRegistry::with_std();
     let mut heap = Heap::new();
     let mut ctx = test_ctx(&mut heap);
-    // println should accept any number of args and return Unit
+    // println should accept any number of args and return Void
     let result = registry
         .call(
             "std.io.println",
@@ -116,7 +116,11 @@ fn test_call_println_via_registry() {
             &mut ctx,
         )
         .unwrap();
-    assert_eq!(result, RuntimeValue::Unit);
+    assert_eq!(
+        result,
+        RuntimeValue::Void,
+        "println 应返回 Void（空值），符合 RFC-007 无 return 默认返回 Void 的约定"
+    );
 }
 
 #[test]
@@ -126,7 +130,7 @@ fn test_repeated_calls_work() {
         args: &[RuntimeValue],
         _ctx: &mut NativeContext<'_>,
     ) -> Result<RuntimeValue, ExecutorError> {
-        Ok(args.first().cloned().unwrap_or(RuntimeValue::Unit))
+        Ok(args.first().cloned().unwrap_or(RuntimeValue::Void))
     }
     registry.register("identity", identity);
 
@@ -176,7 +180,7 @@ fn test_registered_functions_list() {
         _args: &[RuntimeValue],
         _ctx: &mut NativeContext<'_>,
     ) -> Result<RuntimeValue, ExecutorError> {
-        Ok(RuntimeValue::Unit)
+        Ok(RuntimeValue::Void)
     }
     registry.register("alpha", noop);
     registry.register("beta", noop);
