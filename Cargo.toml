@@ -1,5 +1,6 @@
 [workspace]
 members = ["benches/shootout/runner"]
+exclude = ["wasm"]
 resolver = "2"
 
 [package]
