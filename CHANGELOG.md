@@ -1,178 +1,132 @@
 # Changelog
 
-## :bookmark: V0.7.9: Never 内建类型与类型系统深化
+## :bookmark: V0.7.11: Curry 代码生成与语法清理
 
-> 发布日期: 2026-07-21
+> 发布日期: 2026-07-29
 
 ### 📦 版本信息
 
-| 项目     | 值                |
-| -------- | ----------------- |
-| 发布日期 | 2026-07-21        |
-| 版本变更 | `0.7.8` → `0.7.9` |
-| 提交数   | 56 个 commit      |
+| 项目     | 值                  |
+| -------- | ------------------- |
+| 发布日期 | 2026-07-29          |
+| 版本变更 | `0.7.10` → `0.7.11` |
+| 提交数   | 45 个 commit        |
 
 ### 📋 本次更新概要
 
-本次发版是类型系统的一次重大深化。Never 内建类型正式引入（爆炸原则、子类型判定、trait 实现），宇宙分层 predicative 弱检查和类型级递归终止性检查为泛型系统提供了更坚实的理论基础。流敏感假设集替代旧栈式 AssumptionStack 实现了更精确的 Γ 推导，const 泛型约束新增 `<` 和 `<=` 运算符支持。同时 std.assert 统一注册机制、TextMate grammar 重写和 formatter 泛型签名重建等改进进一步提升了开发体验。
+本次发版的核心是 curry（柯里化）函数代码生成的完整落地，从中间层 IR 拆分、调度方法到字节码解码全链路打通，让高阶函数的部分应用得以正确编译执行。同时对语言语法做了一次减法清理：废弃 `elif` 关键字改用 `else if` 平铺语法、移除已废弃的 `|` 变体语法，让语法面更收敛一致。此外修复了 if 表达式值绑定、逻辑非运算符、I64Add 编码等多处代码生成缺陷，并将运行时空值统一命名为 Void，配合文档自动翻译与 lint 工具链的完善，整体提升了语言的健壮性与可维护性。
 
 ### ✨ 新功能
 
-#### Never 内建类型
+#### Curry 函数代码生成
 
-正式引入 Never 底类型，完整实现爆炸原则（ex falso quodlibet）、子类型判定（Never 是任何类型的子类型）和 trait impl 注册。Never 在所有解析点正确解析，支持 const_eval size 计算，与 Void 类型形成了完整的底层类型体系。
+完整实现了 curry（柯里化）函数的代码生成链路（issue #227）。柯里化允许对多参数函数进行部分应用，此前缺少从源码到字节码的完整生成支持。本次引入分层 IR 生成结构，将 curry 函数拆分为多层中间函数，逐层接收参数并在最后一层调用原函数，使部分应用场景可以正确编译并端到端执行。
 
-- 新增 MonoType::Never 变体及穷举匹配 arm
-- 注册为类型检查环境的内建类型
-- 所有解析点正确解析 Never/never → MonoType::Never
-- 实现爆炸原则、trait impls、const_eval size 支持
-- 修复 trait_key、structurally_equal、unify 三处核心路径
+- 新增 `CurryLayer` 结构与 `split_curry` 拆分函数，描述 curry 的分层形态
+- 新增 `generate_curry_intermediate_func` 中间层函数生成
+- 新增 `generate_curry_function_ir` 调度方法，统一协调 curry IR 生成
 
-#### IsTrue 类型族桥接
+#### 模块加载魔数探针
 
-实现 IsTrue 类型族，将 `true` 映射到 `Void`、`false` 映射到 `Never`，为编译期条件判定提供了统一的类型级表达。
+模块加载改用魔数（magic number）探针替代扩展名判定来识别二进制格式。相比依赖文件扩展名，读取文件头魔数更可靠，避免了扩展名被误改或省略时加载失败的问题。
 
-#### const 泛型约束运算符
-
-parser 全面支持 const 泛型约束中的 `<` 和 `<=` 比较运算符，新增 E1062/W1063 错误码覆盖约束检查。
-
-#### 流敏感假设集 Γ
-
-流敏感假设集 Γ 配合 kill set 完全替换了旧的栈式 AssumptionStack，实现了更精确的类型推导路径追踪。
-
-#### 宇宙分层与类型级递归
-
-- 宇宙分层 predicative 弱检查 — Typeₙ <: Typeₘ 当 n ≤ m
-- 类型级递归检测 + 结构递归终止性检查（AssociatedTypeDef::Recursive）
-- dispatch 分派管道接线 — CompileTime/Runtime + mut kill
-
-#### TextMate grammar 重构
-
-lexer 层重构 TextMate grammar，完整支持 fstrings 和全部类型的高亮标记，配合新的构建流水线实现自动同步。
-
-#### std.assert 统一注册
-
-StdModule trait 扩展 type_families 方法，std.assert 模块通过统一注册机制接入，dispatch 分派管道支持 CompileTime/Runtime 双路径。
+- 以文件头魔数判定模块二进制格式，替代扩展名判定
 
 ### 🐛 Bug 修复
 
-#### parser 值参数处理
+#### 代码生成稳定性
 
-修复值参数过滤统一大小写规则导致的 Const 泛型错位问题，修正 merged 状态下的错位并移除了临时的清洗补丁代码。
+修复了多个代码生成路径上的缺陷，这些问题会导致生成的字节码在特定语法场景下产生错误的运行结果，影响范围涵盖条件表达式、逻辑运算、算术编码与 curry 解码。
 
-#### formatter ConstExpr 还原
+- 修复 if 表达式作为值绑定时分支返回值丢失的问题（补充回归测试）
+- 修复 `!`（逻辑非）运算符 IR 生成错误——此前被直接编译为常量 0
+- 修复 curry desugaring 分层 IR 生成与 CallDyn 字节码解码问题（issue #227）
+- 修复 I64Add 编码不一致，并在调试输出中显示操作数 hex 便于排查
 
-修复 ConstExpr 还原与类型体保序格式化问题，确保格式化输出与解析输入一致。
+#### 运行时 Frame 结构
 
-#### Never 子类型修复
-
-修复 Never 在 trait_key、structurally_equal、unify 三条核心路径的错误 — 分别补全 MonoType::Never arm、对称递归判定和统一分支。
-
-#### yx_runner 兼容性
-
-将编译错误测试移至 06 目录，运行时失败标记 skip，确保 yx_runner 兼容运行。
+- 合并 Frame 的 `registers`/`locals` 为统一的 `slots`，简化栈帧模型
 
 ### ♻️ 重构优化
 
-#### 类型体与约束分离
+#### 语言语法收敛
 
-Type::Struct 改为有序 TypeBodyItem，约束字段与普通字段分离 — Assert 走 constraints 路径不混入 fields。ConstExpr 统一到 const_data，StructType.constraints 和 Assert 硬编码删除。
+对语法做减法，移除历史遗留的冗余写法，让语法面更一致、降低解析与学习成本。
 
-#### 泛型实例化路径统一
+- 删除 `elif` 关键字，改用 `else if` 平铺语法
+- 移除已废弃的 `|` 变体语法，并补充废弃声明与文档同步（issue #203）
 
-统一泛型实例化路径，Layer 2 约束检查接管所有分支。消除 clippy match 简化警告，StdModule trait 扩展 type_families。
+#### 运行时空值命名统一
 
-#### Binding 签名参数
+- 统一运行时空值命名为 `Void`，并在 middle 层移除 `Int(0)` 中转改为直传 Void，使空值语义更清晰
 
-Binding 的签名参数统一存储到 signature_params，消除了重复构造和双路径问题。
+### 📝 文档与工具链
 
-### ✅ 测试改进
+#### 文档
 
-- formatter 泛型类型定义 round-trip 集成用例
-- parser const 约束 < 与 <= E2E 用例
-- typecheck gamma_assume 测试补规范引用与 AAA 分段
-- assert 运行时通过和 panic 的 E2E 测试
-- 测试合规修复 — inline tests 拆出 + AAA + 断言消息 + 规范头
-- IsTrue 测试合规修复
-- Never 新增子类型/解析/条件判定三组测试
+- 新增 RFC-037 工业化分发方案草案及设计决策记录
+- 更新 RFC-036 std.test 测试框架、RFC-014 模块解析设计文档
+- 同步多语言文档翻译与内容精炼，多次自动翻译 locale 与文档
 
-### 📝 文档
+#### 构建与工具
 
-- 同步文档至统一声明语法
-- 同步英文翻译并清理项目结构章节
-- 重写模块语义 RFC-029
-- RFC-011 类型体代码块与效应种子已实现
-- RFC-030 assert 断言机制移入已接受并标注实现
-- 标注 assert/Assert 统一方案 6 Phase 已实现 — #157-#162 已关闭
-- 升级 Star History 图表支持暗黑模式
-- 自动翻译文档同步
+- 添加 markdownlint 钩子并启用 fail_fast，文档工作流补充 lint/format 步骤
+- 添加 editorconfig 及 markdownlint 配置、文档 lint/format 脚本
+- 配置 Dependabot 聚合 npm 依赖更新
+- 调整本地构建并行数
 
-### 🔧 其他变更
+#### 测试
 
-- TextMate grammar 同步构建流水线
-- 清理废弃的教程示例与更新 formatter 设计文档
-- Bump production-dependencies (regex, toml, clap, tokio, lsp-server)
-- 清理 Python 测试脚本中未使用的导入和格式问题
-- 添加版本号 badge 自动同步 hook
-- i18n 自动翻译 locale 文件
+- 补全 CLI 子命令集成测试并移除冗余 new 命令
+- 新增 curry 端到端执行、IR 形态与非 curry 回归测试（issue #227）
+- 测试合规修正：补 RFC 引用、AAA 分段与自定义断言消息
 
-### 📝 提交记录
+### 📋 提交记录
 
-|   Hash    | 描述                                                                  |
-| :-------: | --------------------------------------------------------------------- |
-| `4b886b6` | feat(types): Never 内建类型 — add MonoType::Never variant with exhaustiveness arms |
-| `490f523` | feat(types): Never 内建类型 — register as builtin type in typecheck environment |
-| `ef6647c` | feat(types): Never 内建类型 — resolve Never/never to MonoType::Never at all parse points |
-| `c502dd9` | feat(types): Never 内建类型 — add explosion principle, trait impls, and const_eval size support |
-| `552c47f` | fix(types): Never — trait_key structural_equal unify 三处修复 |
-| `c74fbc1` | test(types): Never — 新增子类型/解析/条件判定三组测试 |
-| `db25f6c` | feat(types): 实现 IsTrue 类型族桥接 — true→Void false→Never |
-| `a5c1554` | test(types): IsTrue — 测试合规修复 |
-| `5e0eace` | feat(proof): 流敏感假设集 Γ + kill set — 替换纯栈 AssumptionStack |
-| `c820535` | feat(typecheck): dispatch 分派管道接线 — CompileTime/Runtime + mut kill |
-| `5a7e576` | feat(types): 宇宙分层 predicative 弱检查 — Typeₙ<:Typeₘ 当 n≤m |
-| `90e6772` | feat(types): 类型级递归 + 结构递归终止性 — AssociatedTypeDef::Recursive |
-| `56828f6` | feat(typecheck): 新增 E1062/W1063 错误码 — const 泛型约束 |
-| `3b233b0` | refactor(typecheck): 统一泛型实例化路径 — Layer 2 约束检查 |
-| `d340240` | feat(parser): 支持 const 泛型约束中的 < 和 <= 比较运算符 |
-| `c6757f1` | test(parser): const 约束 < 与 <= E2E 用例 |
-| `24e5f17` | refactor(typecheck): Type::Struct 分离约束字段 — Assert 走 constraints 不混入 fields |
-| `6af2de1` | refactor(parser): Type::Struct 改为有序 TypeBodyItem |
-| `63a8268` | refactor(types): 删 StructType.constraints 与 Assert 硬编码 |
-| `f39daf4` | refactor(types): 统一 ConstExpr 到 const_data |
-| `4ba6c52` | feat(typecheck): 顺序处理类型体收集 const 约束 |
-| `b304574` | feat(typecheck): 效应种子 GammaAssume 接入 Γ |
-| `24ff47f` | test(typecheck): gamma_assume 测试补规范引用与 AAA 分段 |
-| `c96e5f0` | test(typecheck): 测试合规修复 — inline tests 拆出 + AAA + 断言消息 + 规范头 |
-| `210e603` | docs(rfc): RFC-011 类型体代码块与效应种子已实现 |
-| `1caa3ca` | refactor(std): StdModule trait 扩展 type_families + std.assert 模块 |
-| `6a6985a` | refactor(typecheck): 清除硬编码 + 修复空 dep_env — 走 std.assert 正路 |
-| `09c4f78` | test(test): assert 运行时通过和 panic 的 E2E 测试 |
-| `616b265` | docs(design): RFC-030 标注 std.assert 统一注册已实现 — #169 已关闭 |
-| `08f4a38` | docs(docs): 将 RFC-030 assert 断言机制移入已接受 |
-| `abe8a8e` | docs(rfc): 标注 assert/Assert 统一方案 6 Phase 已实现 — #157-#162 已关闭 |
-| `c9ff2f5` | fix(test): yx_runner 兼容 — 编译错误测试移至 06 + 运行时失败标记 skip |
-| `089a1b8` | refactor(parser): Binding 签名参数统一存储 signature_params |
-| `457b54b` | feat(formatter): 函数签名统一带名输出并删除双补丁函数 |
-| `deb344f` | feat(formatter): 泛型类型定义重建 RFC-010 函数式签名 |
-| `c04990b` | test(formatter): 泛型类型定义 round-trip 集成用例 |
-| `75b588b` | fix(formatter): ConstExpr 还原与类型体保序格式化 |
-| `123b66f` | fix(parser): 值参数过滤统一大小写规则修复 Const 泛型错位 |
-| `8e6708d` | fix(parser): 修正值参数 merged 错位并移除清洗补丁 |
-| `9e38255` | feat(lexer): 重构 TextMate grammar 支持 fstrings 和完整类型高亮 |
-| `2fde7c1` | build(docs): 新增 TextMate grammar 同步构建流水线 |
-| `6411127` | refactor(typecheck): 消除 clippy match 简化警告 |
-| `9cd4990` | chore(docs): 清理废弃的教程示例与更新 formatter 设计文档 |
-| `0b0e5bc` | docs(docs): 同步文档至统一声明语法 |
-| `4f5e302` | docs: auto-translate documentation |
-| `c7b5613` | docs: auto-translate documentation |
-| `5b33ef6` | docs: auto-translate documentation |
-| `0bab085` | docs: auto-translate documentation |
-| `a3969dc` | docs: auto-translate documentation |
-| `261126a` | chore(deps): Bump production-dependencies |
-| `68d9ef2` | docs(design): 重写模块语义 RFC-029 |
-| `2454ceb` | docs(docs): 同步英文翻译并清理项目结构章节 |
-| `3795a00` | style(test): 清理 Python 测试脚本中未使用的导入和格式问题 |
-| `7d23914` | chore(build): 添加版本号 badge 自动同步 hook |
-| `3fe5b82` | docs(docs): 升级 Star History 图表支持暗黑模式 |
-| `3afa123` | i18n: auto-translate locale files |
+|   Hash    | 描述                                                          |
+| :-------: | ------------------------------------------------------------- |
+| `ab1e0dee` | chore: 调整本地构建并行数为 8                                   |
+| `6da18144` | refactor(middle): 空值移除 Int(0) 中转直传 Void                |
+| `4051ccf5` | refactor(backends): 统一运行时空值命名为 Void                  |
+| `5e1d8b14` | docs: auto-translate documentation                             |
+| `a90d2c07` | docs(docs): 同步多语言文档翻译与内容精炼                       |
+| `addf2a4f` | ci(ci): 添加 markdownlint 钩子并启用 fail_fast                 |
+| `a3147bef` | style(docs): 统一文档格式与表格对齐                            |
+| `d3c34356` | ci(docs): 自动翻译工作流添加 markdown lint/format 步骤         |
+| `8b9806f5` | chore(docs): 添加文档 lint/format 脚本                         |
+| `f2eed0bd` | chore(build): 添加 editorconfig 及 markdownlint 配置           |
+| `ad8e3dc7` | refactor(parser): 删除 elif 关键字，改用 else if 平铺语法       |
+| `a2887dc1` | docs: auto-translate documentation                             |
+| `2da0a85d` | test(codegen): if 表达式值绑定回归测试                          |
+| `b8c34d19` | docs(design): 更新 RFC-037 工业化分发方案设计决策              |
+| `d92201ed` | fix(codegen): 修复 if 表达式作为值绑定时分支返回值丢失          |
+| `584959e1` | fix(codegen): 修复 if 表达式作为值绑定时分支返回值丢失          |
+| `7f9cb0cd` | feat(codegen): 魔数探针替代扩展名判定                           |
+| `87d3fcad` | docs(test): curry 测试合规修正 (issue #227)                    |
+| `6eb4f268` | docs: auto-translate documentation                             |
+| `2c30dc9c` | fix(codegen): curry desugaring 分层 IR 生成 + CallDyn 解码 (issue #227) |
+| `953f096b` | fix(codegen): ! (逻辑非) 运算符 IR 生成错误修复                |
+| `6b1b40eb` | test(codegen): 非 curry 回归测试 (issue #227)                  |
+| `3475af91` | test(codegen): curry 端到端执行测试 (issue #227)               |
+| `b1b32b02` | docs(rfc): 添加 RFC-037 工业化分发方案草案                     |
+| `1fdc7e8d` | docs(design): 更新 RFC-036 测试框架与 RFC-014 模块解析         |
+| `3f24ce68` | test(codegen): curry IR 形态测试 (issue #227)                  |
+| `5b0dcdf9` | feat(codegen): 新增 generate_curry_function_ir 调度方法 (issue #227) |
+| `59951f81` | feat(codegen): 新增 generate_curry_intermediate_func 中间层生成 (issue #227) |
+| `6e93c580` | feat(codegen): 新增 CurryLayer 结构和 split_curry 拆分函数 (issue #227) |
+| `447313b1` | docs: auto-translate documentation                             |
+| `adb1499e` | test(backends): 测试合规修正                                   |
+| `d573eeae` | docs(test): declarations.rs 文件头补充 RFC-010 引用 (issue #203) |
+| `976c4aa4` | docs(design): 同步 \| 变体语法废弃后的文档示例 (issue #203)     |
+| `0394dca4` | refactor(parser): 移除已废弃的 \| 变体语法 (issue #203)         |
+| `8ffb079f` | docs(rfc): 添加 \| 变体语法废弃声明 (issue #203)                |
+| `32e614c5` | fix(backends): 合并 Frame 的 registers/locals 为 slots          |
+| `2c91463c` | chore(meta): 删除误提交的根目录临时文件                         |
+| `f150bbd1` | docs: auto-translate documentation                             |
+| `4383ff05` | i18n: auto-translate locale files                              |
+| `40e5c97d` | fix(codegen): 显示操作数 hex，修复 I64Add 编码不一致            |
+| `cd07f4e7` | docs: auto-translate documentation                             |
+| `1e56e3ba` | test(package): 补全 CLI 子命令集成测试并移除冗余 new 命令        |
+| `97a9771c` | docs(design): 添加 RFC-036 std.test 测试框架草案               |
+| `29df5d94` | chore(build): 配置 Dependabot 聚合 npm 依赖更新                |
+| `4ae6a860` | chore(build): 聚合 Dependabot 依赖更新                         |
