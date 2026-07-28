@@ -19,7 +19,9 @@ download:
     description: 'Build YaoXiang from source using Cargo, make sure Rust is installed.'
   nightly_builds:
     title: 'Nightly Builds'
-    description: 'The latest cutting-edge version is available. Recommended for testing, use with caution in production.'
+    description:
+      'The latest cutting-edge version is available. Recommended for testing, use with caution in
+      production.'
   github_actions: 'Go to GitHub Actions'
 
 versions:

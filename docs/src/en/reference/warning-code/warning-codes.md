@@ -5,7 +5,8 @@ description: Compiler warning codes and descriptions
 
 # Warning Codes
 
-This document lists the warning codes that the YaoXiang compiler may produce. Warnings do not prevent compilation but may indicate potential issues in the code.
+This document lists the warning codes that the YaoXiang compiler may produce. Warnings do not
+prevent compilation but may indicate potential issues in the code.
 
 ## Configuration
 
@@ -38,7 +39,8 @@ main = {
 **Suggestion**:
 
 - If the function doesn't need to be used externally, remove the `pub` modifier
-- If the function needs to be kept but is temporarily unused, set `dead-code = "off"` in the configuration
+- If the function needs to be kept but is temporarily unused, set `dead-code = "off"` in the
+  configuration
 
 ---
 
@@ -77,7 +79,8 @@ main = {
 **Suggestion**:
 
 - Remove unused imports to keep code clean
-- If you need to keep the import (for side effects), consider using `use std.json.*` or add a comment explaining why
+- If you need to keep the import (for side effects), consider using `use std.json.*` or add a
+  comment explaining why
 
 ---
 
@@ -128,11 +131,11 @@ main = {
 
 ## Warning Levels Explained
 
-| Level   | Effect                           |
-| ------- | -------------------------------- |
-| `off`   | Completely disable this warning  |
-| `warn`  | Show warning but continue compiling (default) |
-| `deny`  | Treat warning as error, block compilation |
+| Level  | Effect                                        |
+| ------ | --------------------------------------------- |
+| `off`  | Completely disable this warning               |
+| `warn` | Show warning but continue compiling (default) |
+| `deny` | Treat warning as error, block compilation     |
 
 ### Use Cases
 

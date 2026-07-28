@@ -27,7 +27,8 @@ let y = 42.0;  // Must have decimal point
 let y = 42;    // Integer, not float
 ```
 
-**§8.3 String literals.** Double quotes are used by default. When `single_quote = true`, single quotes are used.
+**§8.3 String literals.** Double quotes are used by default. When `single_quote = true`, single
+quotes are used.
 
 ```
 // Default (double quotes)
@@ -63,7 +64,8 @@ let x = [1, 2, 3];
 let x = [1,2,3];
 ```
 
-**§10.2 Dictionary formatting.** Dictionaries are enclosed in `{}`, with key-value pairs in `key: value` format.
+**§10.2 Dictionary formatting.** Dictionaries are enclosed in `{}`, with key-value pairs in
+`key: value` format.
 
 ```
 // ✅ Correct
@@ -109,7 +111,8 @@ match x {
 }
 ```
 
-**§11.3 Pattern wrapping when too long.** When a pattern is too long, the pattern wraps to a new line, with `=>` aligned with the body.
+**§11.3 Pattern wrapping when too long.** When a pattern is too long, the pattern wraps to a new
+line, with `=>` aligned with the body.
 
 ```
 // ✅ Wrapped
@@ -175,7 +178,8 @@ let x = obj . field;  // Extra space
 let y = obj. field;  // Extra space
 ```
 
-**§11.6.2 Chained field access.** When chained field access exceeds the line width, each method call goes on its own line.
+**§11.6.2 Chained field access.** When chained field access exceeds the line width, each method call
+goes on its own line.
 
 ```
 // Exceeds line width

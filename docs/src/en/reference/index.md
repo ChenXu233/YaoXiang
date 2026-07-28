@@ -2,50 +2,53 @@
 
 > This documentation is under construction...
 
-YaoXiang is currently in the **experimental verification phase**, and the standard library and API are being gradually improved.
+YaoXiang is currently in the **experimental verification phase**, and the standard library and API
+are being gradually improved.
 
 ## Language Specification
 
 - [Language Specification Overview](./language-spec/index.md)
-- [Syntax Specification](./language-spec/syntax.md) - Lexical structure, syntax rules, operator precedence
+- [Syntax Specification](./language-spec/syntax.md) - Lexical structure, syntax rules, operator
+  precedence
 - [Type System](./language-spec/type-system.md) - Basic types, composite types, generics, trait
 - [Module System](./language-spec/modules.md) - Module definition, import/export, scope
-- [Concurrency Model](./language-spec/concurrency.md) - Async programming, concurrency primitives, memory model
+- [Concurrency Model](./language-spec/concurrency.md) - Async programming, concurrency primitives,
+  memory model
 - [Standard Library](./language-spec/stdlib.md) - Core library, IO library, math library
 
 ## Current Status
 
-| Module             | Status      | Description       |
-| ------------------ | ----------- | ----------------- |
-| `std.io`           | 🔨 In progress | Input/Output   |
-| `std.string`       | 🔨 In progress | String operations |
-| `std.list`         | 🔨 In progress | List operations   |
-| `std.dict`         | 📋 Planned   | Dictionary operations |
-| `std.math`         | 🔨 In progress | Math functions    |
-| `std.net`          | 📋 Planned   | Network operations |
-| `std.concurrent`   | 📋 Planned   | Concurrency primitives |
+| Module           | Status         | Description            |
+| ---------------- | -------------- | ---------------------- |
+| `std.io`         | 🔨 In progress | Input/Output           |
+| `std.string`     | 🔨 In progress | String operations      |
+| `std.list`       | 🔨 In progress | List operations        |
+| `std.dict`       | 📋 Planned     | Dictionary operations  |
+| `std.math`       | 🔨 In progress | Math functions         |
+| `std.net`        | 📋 Planned     | Network operations     |
+| `std.concurrent` | 📋 Planned     | Concurrency primitives |
 
 ## Built-in Types
 
 ### Primitive Types
 
-| Type     | Description          | Example            |
-| -------- | -------------------- | ------------------ |
-| `Void`   | Void/null return     | `()`               |
-| `Bool`   | Boolean value        | `true`, `false`    |
-| `Int`    | Integer              | `42`, `-10`        |
-| `Float`  | Floating-point number| `3.14`, `-0.5`     |
-| `Char`   | Character            | `'a'`, `'中'`      |
-| `String` | String               | `"hello"`          |
+| Type     | Description           | Example         |
+| -------- | --------------------- | --------------- |
+| `Void`   | Void/null return      | `()`            |
+| `Bool`   | Boolean value         | `true`, `false` |
+| `Int`    | Integer               | `42`, `-10`     |
+| `Float`  | Floating-point number | `3.14`, `-0.5`  |
+| `Char`   | Character             | `'a'`, `'中'`   |
+| `String` | String                | `"hello"`       |
 
 ### Composite Types
 
-| Type                   | Description         | Example              |
-| ---------------------- | ------------------- | -------------------- |
-| `List(T)`              | List of same-type elements | `[1, 2, 3]`    |
-| `Tuple(T1, T2, ...)`   | Tuple of different elements | `(1, "hello")` |
-| `Dict(K, V)`           | Key-value map       | `{"a": 1}`           |
-| `(Args) -> Ret`        | Function type       | `(Int) -> Int`       |
+| Type                 | Description                 | Example        |
+| -------------------- | --------------------------- | -------------- |
+| `List(T)`            | List of same-type elements  | `[1, 2, 3]`    |
+| `Tuple(T1, T2, ...)` | Tuple of different elements | `(1, "hello")` |
+| `Dict(K, V)`         | Key-value map               | `{"a": 1}`     |
+| `(Args) -> Ret`      | Function type               | `(Int) -> Int` |
 
 ### User-Defined Types
 
@@ -86,18 +89,18 @@ is_type(value, type)  // Check type
 
 ## Keywords
 
-| Keyword                    | Description         |
-| -------------------------- | ------------------- |
-| `Type`                     | Meta type           |
-| `spawn`                    | Mark spawn function |
-| `spawn for`                | Parallel loop       |
-| `spawn {}`                 | Spawn block         |
-| `if` / `else if` / `else`  | Conditional branch  |
-| `match`                    | Pattern matching    |
-| `while` / `for`            | Loop                |
-| `return`                   | Return value        |
-| `ref`                      | Create reference    |
-| `mut`                      | Mutable marker      |
+| Keyword                   | Description         |
+| ------------------------- | ------------------- |
+| `Type`                    | Meta type           |
+| `spawn`                   | Mark spawn function |
+| `spawn for`               | Parallel loop       |
+| `spawn {}`                | Spawn block         |
+| `if` / `else if` / `else` | Conditional branch  |
+| `match`                   | Pattern matching    |
+| `while` / `for`           | Loop                |
+| `return`                  | Return value        |
+| `ref`                     | Create reference    |
+| `mut`                     | Mutable marker      |
 
 ## Syntax Quick Reference
 
@@ -159,17 +162,17 @@ data = fetch_file(path)?
 
 ## Operator Precedence
 
-| Precedence | Operator                |
-| ---------- | ----------------------- |
-| Highest    | `( )` Function call     |
-|            | `.` Field access        |
-|            | `[ ]` Index             |
-|            | `unary -` Unary minus   |
-|            | `* / %` Mul/Div/Mod      |
-|            | `+ -` Add/Subtract      |
+| Precedence | Operator                     |
+| ---------- | ---------------------------- |
+| Highest    | `( )` Function call          |
+|            | `.` Field access             |
+|            | `[ ]` Index                  |
+|            | `unary -` Unary minus        |
+|            | `* / %` Mul/Div/Mod          |
+|            | `+ -` Add/Subtract           |
 |            | `== != < > <= >=` Comparison |
-|            | `and or` Logical ops    |
-| Lowest     | `=` Assignment          |
+|            | `and or` Logical ops         |
+| Lowest     | `=` Assignment               |
 
 ## Standard Library Usage Examples
 

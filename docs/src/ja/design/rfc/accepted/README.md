@@ -12,15 +12,15 @@ title: '採用された設計提案'
 
 | 番号    | タイトル                                                                              | 採用日     | ステータス |
 | ------- | ------------------------------------------------------------------------------------- | ---------- | ---------- |
-| RFC-001 | [spawnモデルとエラー処理システム](001-concurrent-model-error-handling.md)            | 2025-01-06 | 採用済み   |
+| RFC-001 | [spawnモデルとエラー処理システム](001-concurrent-model-error-handling.md)             | 2025-01-06 | 採用済み   |
 | RFC-004 | [カリー化メソッドの位置間共用バインディング設計](004-curry-multi-position-binding.md) | 2025-01-06 | 採用済み   |
 | RFC-006 | [ドキュメンテーションサイト構築](006-documentation-site-optimization.md)              | 2025-01-06 | 採用済み   |
 | RFC-007 | [関数定義構文統一方案](007-function-syntax-unification.md)                            | 2025-01-06 | 採用済み   |
 | RFC-008 | [Runtime 並発モデルとスケジューラ分離設計](008-runtime-concurrency-model.md)          | 2025-01-05 | 採用済み   |
 | RFC-009 | [所有権モデル v7](009-ownership-model.md)                                             | 2025-01-16 | 採用済み   |
 | RFC-010 | [統合型構文](010-unified-type-syntax.md)                                              | 2025-01-25 | 採用済み   |
-| RFC-011 | [genericsシステム設計 - ゼロコスト抽象化とマクロ代替](011-generic-type-system.md)   | 2025-01-25 | 採用済み   |
-| RFC-013 | [エラーコード仕様設計](012-error-code-specification.md)                              | 2025-01-30 | 採用済み   |
+| RFC-011 | [genericsシステム設計 - ゼロコスト抽象化とマクロ代替](011-generic-type-system.md)     | 2025-01-25 | 採用済み   |
+| RFC-013 | [エラーコード仕様設計](012-error-code-specification.md)                               | 2025-01-30 | 採用済み   |
 
 ## 分類インデックス
 

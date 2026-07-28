@@ -12,23 +12,33 @@ updated: 'YYYY-MM-DD'
 
 >
 
-> **⚠️ Permanent Experimental Declaration**: This is an **exploratory experiment** to verify the feasibility of the language design concept "syntax as type". **This RFC will never be merged**, and will not enter the dev/main branch regardless of the outcome. The experimental branch will be abandoned or archived upon completion.
+> **⚠️ Permanent Experimental Declaration**: This is an **exploratory experiment** to verify the
+> feasibility of the language design concept "syntax as type". **This RFC will never be merged**,
+> and will not enter the dev/main branch regardless of the outcome. The experimental branch will be
+> abandoned or archived upon completion.
 >
-> - **Experiment Goal**: Verify the implementation difficulty and potential value of type-level homoiconicity
+> - **Experiment Goal**: Verify the implementation difficulty and potential value of type-level
+>   homoiconicity
 > - **Stop Loss Line**: Abandon after 6 months without progress
-> - **Success Criteria**: Successfully run at least one user-defined keyword (complete parsing → compilation → execution)
+> - **Success Criteria**: Successfully run at least one user-defined keyword (complete parsing →
+>   compilation → execution)
 >
-> **No guarantee of merging into the main branch**, may be rejected or abandoned for various reasons in the future. Do not use this feature in production environments.
+> **No guarantee of merging into the main branch**, may be rejected or abandoned for various reasons
+> in the future. Do not use this feature in production environments.
 >
-> **⚠️ Positioning Note**: This RFC is a language design thought experiment and does not provide engineering solutions. For practical extensible parser patterns, see Rust `syn::Parse` or Haskell `parsec`.
+> **⚠️ Positioning Note**: This RFC is a language design thought experiment and does not provide
+> engineering solutions. For practical extensible parser patterns, see Rust `syn::Parse` or Haskell
+> `parsec`.
 
 ---
 
 ## Summary
 
-This RFC proposes a radical language design experiment: **making the syntactic structure of a language itself part of the type system**.
+This RFC proposes a radical language design experiment: **making the syntactic structure of a
+language itself part of the type system**.
 
-The core idea derives from Lisp's "code as data" (homoiconicity), but implemented through a **static type system**:
+The core idea derives from Lisp's "code as data" (homoiconicity), but implemented through a **static
+type system**:
 
 - Syntax trees (AST) are types
 - Keywords are predefined instances of types
@@ -42,9 +52,12 @@ This means: the language itself becomes a composable, extensible set of "buildin
 
 ### Why conduct this experiment?
 
-1. **Pursuit of uniformity**: Eliminate the special syntactic element of "keywords", making everything types and functions
-2. **Language extensibility**: Users can define new syntactic structures just like defining functions
-3. **Type-safe macros**: Traditional macros (text replacement) are dangerous; type-level homoiconicity can provide compile-time checking
+1. **Pursuit of uniformity**: Eliminate the special syntactic element of "keywords", making
+   everything types and functions
+2. **Language extensibility**: Users can define new syntactic structures just like defining
+   functions
+3. **Type-safe macros**: Traditional macros (text replacement) are dangerous; type-level
+   homoiconicity can provide compile-time checking
 4. **Learning purpose**: Deeply understand the essence of language design
 
 ### Relationship with Lisp
@@ -98,7 +111,8 @@ compile_while: (node: While, ctx: CompileContext) -> IR = ...
 
 #### 3. Types Carry Parsing Rules (Core Innovation)
 
-This is the key to this experiment: **types not only describe data, but also carry rules for how to parse code**.
+This is the key to this experiment: **types not only describe data, but also carry rules for how to
+parse code**.
 
 ```yaoxiang
 // Syntax rule type
@@ -316,21 +330,21 @@ Solution: Detect circular dependencies at compile time
 
 RFC-010 implemented the unified syntax `name: type = value`; this RFC is its extension:
 
-| RFC-010                                             | This RFC                         |
-| --------------------------------------------------- | -------------------------------- |
-| Variables, functions, types are all `name: type = value` | Keywords are also `name: type = value` |
-| Types are values                                    | Syntax rules are values          |
-| `Type` is a meta type                               | `SyntaxRule` is the meta type of syntax |
+| RFC-010                                                  | This RFC                                |
+| -------------------------------------------------------- | --------------------------------------- |
+| Variables, functions, types are all `name: type = value` | Keywords are also `name: type = value`  |
+| Types are values                                         | Syntax rules are values                 |
+| `Type` is a meta type                                    | `SyntaxRule` is the meta type of syntax |
 
 ### Comparison with Lisp/Macros
 
-| Feature         | Lisp Macros               | This Experiment               |
-| --------------- | ------------------------- | ----------------------------- |
-| Code representation | S-expression (lists)   | Type instances                |
-| Extension method | defmacro                 | Define SyntaxRule types       |
-| Type safety     | Weak (text replacement)  | Strong (type checking)        |
-| Parse timing    | Runtime/compile-time      | Compile-time                  |
-| IDE support     | Weak                     | Strong (type information)     |
+| Feature             | Lisp Macros             | This Experiment           |
+| ------------------- | ----------------------- | ------------------------- |
+| Code representation | S-expression (lists)    | Type instances            |
+| Extension method    | defmacro                | Define SyntaxRule types   |
+| Type safety         | Weak (text replacement) | Strong (type checking)    |
+| Parse timing        | Runtime/compile-time    | Compile-time              |
+| IDE support         | Weak                    | Strong (type information) |
 
 ---
 
@@ -354,15 +368,16 @@ Created from dev branch
 
 > **⚠️ Experiment Time Limit: 6 months**
 
-| Phase   | Goal                                             | Expected Time | Notes                               |
-| ------- | ------------------------------------------------ | ------------- | ---------------------------------- |
-| Phase 1 | Proof of concept: Implement AST types with existing syntax | 2 weeks   |                                    |
-| Phase 2 | Implement basic evaluator                        | 2 weeks       | Key challenge: if/return control flow |
-| Phase 3 | Implement parsing rules for SyntaxRule types     | 3 weeks       |                                    |
-| Phase 4 | User-defined syntax extension                    | 3 weeks       | Core goal: run at least one custom keyword |
-| Phase 5 | Optimization and documentation                   | 2 weeks       | Experiment ends                    |
+| Phase   | Goal                                                       | Expected Time | Notes                                      |
+| ------- | ---------------------------------------------------------- | ------------- | ------------------------------------------ |
+| Phase 1 | Proof of concept: Implement AST types with existing syntax | 2 weeks       |                                            |
+| Phase 2 | Implement basic evaluator                                  | 2 weeks       | Key challenge: if/return control flow      |
+| Phase 3 | Implement parsing rules for SyntaxRule types               | 3 weeks       |                                            |
+| Phase 4 | User-defined syntax extension                              | 3 weeks       | Core goal: run at least one custom keyword |
+| Phase 5 | Optimization and documentation                             | 2 weeks       | Experiment ends                            |
 
-**Timeout Handling**: If Phase 2 (control flow implementation) exceeds 4 weeks without progress, consider abandoning.
+**Timeout Handling**: If Phase 2 (control flow implementation) exceeds 4 weeks without progress,
+consider abandoning.
 
 ---
 
@@ -403,13 +418,13 @@ Created from dev branch
 
 ### Glossary
 
-| Term                          | Definition                                     |
-| ----------------------------- | ---------------------------------------------- |
-| Homoiconicity                 | Code and data use the same representation      |
-| AST (Abstract Syntax Tree)    | Abstract syntax tree representation of a program |
-| SyntaxRule                    | Type that carries syntax parsing rules         |
-| Thunk                         | Function wrapper for delayed evaluation       |
-| CPS (Continuation Passing Style) | Continuation Passing Style                  |
+| Term                             | Definition                                       |
+| -------------------------------- | ------------------------------------------------ |
+| Homoiconicity                    | Code and data use the same representation        |
+| AST (Abstract Syntax Tree)       | Abstract syntax tree representation of a program |
+| SyntaxRule                       | Type that carries syntax parsing rules           |
+| Thunk                            | Function wrapper for delayed evaluation          |
+| CPS (Continuation Passing Style) | Continuation Passing Style                       |
 
 ### References
 
@@ -437,4 +452,5 @@ Created from dev branch
        ⚠️ Regardless of outcome, this RFC will never be merged
 ```
 
-> **⚠️ Important Reminder**: This is an exploratory experiment and **will never be merged**. Please do not depend on this feature in production code.
+> **⚠️ Important Reminder**: This is an exploratory experiment and **will never be merged**. Please
+> do not depend on this feature in production code.

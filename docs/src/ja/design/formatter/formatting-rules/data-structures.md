@@ -21,17 +21,18 @@ let x = 42;
 ```javascript
 // ✅ 正しい
 let x = 3.14;
-let y = 42.0;  // 小数点が必要
+let y = 42.0; // 小数点が必要
 
 // ❌ 誤り
-let y = 42;    // 整数なので誤り
+let y = 42; // 整数なので誤り
 ```
 
-**§8.3 文字列リテラル。** デフォルトではダブルクォートを使用します。`single_quote = true` の場合はシングルクォートを使用します。
+**§8.3 文字列リテラル。** デフォルトではダブルクォートを使用します。`single_quote = true`
+の場合はシングルクォートを使用します。
 
 ```javascript
 // デフォルト（ダブルクォート）
-let s = "hello";
+let s = 'hello';
 
 // single_quote = true
 let s = 'hello';
@@ -60,17 +61,17 @@ let y = FALSE;
 let x = [1, 2, 3];
 
 // ❌ 誤り
-let x = [1,2,3];
+let x = [1, 2, 3];
 ```
 
 **§10.2 辞書の形式。** 辞書は `{}` で囲み、キーと値のペアは `key: value` 形式を使用します。
 
 ```javascript
 // ✅ 正しい
-let x = {"a": 1, "b": 2};
+let x = { a: 1, b: 2 };
 
 // ❌ 誤り
-let x = {"a":1, "b":2};
+let x = { a: 1, b: 2 };
 ```
 
 **§10.3 リスト内包表記。** リスト内包表記は `[expr for var in iterable]` 形式を使用します。
@@ -155,8 +156,8 @@ let x = arr[0];
 let y = matrix[i][j];
 
 // ❌ 誤り
-let x = arr [0];  // 余分なスペース
-let y = matrix[ i ][ j ];  // 余分なスペース
+let x = arr[0]; // 余分なスペース
+let y = matrix[i][j]; // 余分なスペース
 ```
 
 ---
@@ -171,20 +172,17 @@ let x = obj.field;
 let y = obj.method();
 
 // ❌ 誤り
-let x = obj . field;  // 余分なスペース
-let y = obj. field;  // 余分なスペース
+let x = obj.field; // 余分なスペース
+let y = obj.field; // 余分なスペース
 ```
 
-**§11.6.2 チェーンされたフィールドアクセス。** チェーンされたフィールドアクセスが行幅を超える場合、各メソッド呼び出しを1行に1つずつ配置します。
+**§11.6.2 チェーンされたフィールドアクセス。**
+チェーンされたフィールドアクセスが行幅を超える場合、各メソッド呼び出しを1行に1つずつ配置します。
 
 ```javascript
 // 行幅を超える場合
 let result = object.method1().method2().method3().method4();
 
 // フォーマット後
-let result = object
-    .method1()
-    .method2()
-    .method3()
-    .method4();
+let result = object.method1().method2().method3().method4();
 ```

@@ -4,8 +4,9 @@ title: if-else-if-else
 
 # if-else-if-else
 
-`if-else-if-else`
-is the most fundamental decision-making tool in programming. Its logic is very intuitive — **if the condition is true, execute some code; otherwise, check the next condition; if none are true, go the default path**.
+`if-else-if-else` is the most fundamental decision-making tool in programming. Its logic is very
+intuitive — **if the condition is true, execute some code; otherwise, check the next condition; if
+none are true, go the default path**.
 
 ## Basic Syntax
 
@@ -15,8 +16,8 @@ In the syntax specification, the definitions of `if` expression and `if` stateme
 if Expr Block ('else' 'if' Expr Block)* ('else' Block)?
 ```
 
-Translated into everyday language: starts with `if`, followed by a conditional expression and a code block, then zero to many
-`else if condition code block`, and finally an optional `else code block`.
+Translated into everyday language: starts with `if`, followed by a conditional expression and a code
+block, then zero to many `else if condition code block`, and finally an optional `else code block`.
 
 The simplest form — only `if`:
 
@@ -54,7 +55,8 @@ if score >= 90 {
 
 ## if is an Expression
 
-This is one of the most important features of YaoXiang's control flow: **`if` can be used as an expression to compute a value**.
+This is one of the most important features of YaoXiang's control flow: **`if` can be used as an
+expression to compute a value**.
 
 ```yaoxiang
 // if expression: the value from each branch is assigned to result
@@ -86,8 +88,9 @@ grade = if score >= 90 {
 print(grade)  // "B"
 ```
 
-In the code block of each branch, **the value of the last expression is the return value of that branch**. You can also use `return`
-to explicitly return, but in branches it's usually sufficient to just write the expression.
+In the code block of each branch, **the value of the last expression is the return value of that
+branch**. You can also use `return` to explicitly return, but in branches it's usually sufficient to
+just write the expression.
 
 ```yaoxiang
 // Writing the expression directly — recommended
@@ -101,7 +104,8 @@ category = if age < 18 {
 }
 ```
 
-If you only use `if` for conditional logic without needing a value, it's just a regular statement — fully compatible with the expression form.
+If you only use `if` for conditional logic without needing a value, it's just a regular statement —
+fully compatible with the expression form.
 
 ## Nested if
 
@@ -122,8 +126,8 @@ if age >= 18 {
 }
 ```
 
-When dealing with nested expressions, YaoXiang doesn't have the "dangling else" ambiguity found in C — each `else` always belongs to the nearest unmatched
-`if`.
+When dealing with nested expressions, YaoXiang doesn't have the "dangling else" ambiguity found in C
+— each `else` always belongs to the nearest unmatched `if`.
 
 ## Combining Conditions with Boolean Operators
 
@@ -154,17 +158,19 @@ if (age >= 18 and age <= 60) or is_vip {
 }
 ```
 
-In terms of operator precedence, `not` is higher than `and`, and `and` is higher than `or`. When in doubt, add parentheses to make your intent clearer.
+In terms of operator precedence, `not` is higher than `and`, and `and` is higher than `or`. When in
+doubt, add parentheses to make your intent clearer.
 
 ## Summary
 
-| Key Point      | Description                                           |
-| -------------- | ----------------------------------------------------- |
-| Basic Structure | `if condition { ... } else if condition { ... } else { ... }` |
-| else if        | YaoXiang uses `else if` for multi-way branching      |
-| Expression     | `if` can return a value, all branches must have consistent types |
-| Branch Return  | The last expression in a branch block is the return value |
-| Nesting        | You can write `if` inside `if`, no dangling else ambiguity |
-| Boolean Ops    | `and`, `or`, `not` to combine conditions              |
+| Key Point       | Description                                                      |
+| --------------- | ---------------------------------------------------------------- |
+| Basic Structure | `if condition { ... } else if condition { ... } else { ... }`    |
+| else if         | YaoXiang uses `else if` for multi-way branching                  |
+| Expression      | `if` can return a value, all branches must have consistent types |
+| Branch Return   | The last expression in a branch block is the return value        |
+| Nesting         | You can write `if` inside `if`, no dangling else ambiguity       |
+| Boolean Ops     | `and`, `or`, `not` to combine conditions                         |
 
-In the next chapter you will learn about `for` loops — the standard way to iterate over collections and ranges.
+In the next chapter you will learn about `for` loops — the standard way to iterate over collections
+and ranges.

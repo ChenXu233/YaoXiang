@@ -4,7 +4,8 @@ title: Pattern Matching
 
 # Pattern Matching
 
-In [match basics](../control-flow/match.md), you learned the fundamentals of `match` — literals, identifiers, and wildcards. Now let's dive deep into the full power of YaoXiang's pattern matching.
+In [match basics](../control-flow/match.md), you learned the fundamentals of `match` — literals,
+identifiers, and wildcards. Now let's dive deep into the full power of YaoXiang's pattern matching.
 
 ## Complete Pattern Types
 
@@ -20,11 +21,13 @@ Pattern     ::= Literal       # Literal Pattern: 42, "hello"
             | OrPattern       # Or Pattern: pattern1 | pattern2
 ```
 
-You already learned the first three basic patterns in the previous chapter. This chapter focuses on the latter four advanced patterns.
+You already learned the first three basic patterns in the previous chapter. This chapter focuses on
+the latter four advanced patterns.
 
 ## Enum Patterns
 
-Enum patterns are the most commonly used advanced feature of `match`. They can destructure enum variants and extract internal data.
+Enum patterns are the most commonly used advanced feature of `match`. They can destructure enum
+variants and extract internal data.
 
 ### Basic Enum Matching
 
@@ -77,7 +80,8 @@ print(to_hex(red))                // #FF0000
 print(to_hex(rgb(128, 128, 128))) // #808080
 ```
 
-In `rgb(r, g, b)`, `r`, `g`, `b` are identifier patterns — they capture the three values inside the `rgb` variant.
+In `rgb(r, g, b)`, `r`, `g`, `b` are identifier patterns — they capture the three values inside the
+`rgb` variant.
 
 ## Struct Patterns (Record Destructuring)
 
@@ -96,9 +100,12 @@ r = Rect(0.0, 0.0, 10.0, 20.0)
 print(area(r))  // 200.0
 ```
 
-`{ width: w, height: h }` means "extract the `width` field from the record and bind it to variable `w`, extract the `height` field and bind it to variable `h`". `x: _` and `y: _` mean "these fields exist but we don't care about their values".
+`{ width: w, height: h }` means "extract the `width` field from the record and bind it to variable
+`w`, extract the `height` field and bind it to variable `h`". `x: _` and `y: _` mean "these fields
+exist but we don't care about their values".
 
-**Shorthand syntax**: When field name and variable name are the same, you can abbreviate — the compiler automatically destructures into a variable of the same name:
+**Shorthand syntax**: When field name and variable name are the same, you can abbreviate — the
+compiler automatically destructures into a variable of the same name:
 
 ```yaoxiang
 describe_point: (p: Point) -> String = match p {
@@ -149,7 +156,8 @@ print(is_operator(number(5))) // false
 
 ## Guard Expressions (if guards)
 
-Add `if condition` after a match arm so the match only succeeds when the pattern matches **and** the condition is true:
+Add `if condition` after a match arm so the match only succeeds when the pattern matches **and** the
+condition is true:
 
 ```yaoxiang
 Age: Type = { adult: (Int) -> Age, child: (Int) -> Age }
@@ -165,11 +173,13 @@ print(can_drive(adult(20)))  // true
 print(can_drive(adult(16)))  // false
 ```
 
-Variables in guard expressions come from the preceding pattern — `adult(n) if n >= 18` first uses `n` to capture the value, then checks `n >= 18`.
+Variables in guard expressions come from the preceding pattern — `adult(n) if n >= 18` first uses
+`n` to capture the value, then checks `n >= 18`.
 
 ## Exhaustiveness Checking
 
-The YaoXiang compiler ensures `match` covers all possible cases. If you miss a branch, the compiler will report an error:
+The YaoXiang compiler ensures `match` covers all possible cases. If you miss a branch, the compiler
+will report an error:
 
 ```yaoxiang
 Direction: Type = { north: () -> Direction, south: () -> Direction, east: () -> Direction, west: () -> Direction }
@@ -191,7 +201,8 @@ turn: (d: Direction) -> Direction = match d {
 // }
 ```
 
-This is an important mechanism in YaoXiang to prevent runtime surprises — once you add a new variant, the compiler will remind you at every `match` site to update your code.
+This is an important mechanism in YaoXiang to prevent runtime surprises — once you add a new
+variant, the compiler will remind you at every `match` site to update your code.
 
 ## Nested Patterns
 
@@ -213,19 +224,21 @@ e = add(literal(0), literal(5))
 print(simplify(e))  // literal(5)
 ```
 
-In `add(literal(0), right)`, the outer layer is an `add` enum pattern, and the inner layer is a `literal(0)` literal pattern — two levels of nesting, matched at once.
+In `add(literal(0), right)`, the outer layer is an `add` enum pattern, and the inner layer is a
+`literal(0)` literal pattern — two levels of nesting, matched at once.
 
 ## Summary
 
-| Pattern Type | Syntax             | Purpose                     |
-| ------------ | ------------------ | --------------------------- |
-| Literal      | `42`, `"hi"`       | Match values exactly        |
-| Identifier   | `x`                | Capture matched values      |
-| Wildcard     | `_`                | Fallback match              |
-| Enum         | `ok(value)`        | Destructure enum variants   |
-| Struct       | `{ x, y }`         | Destructure record fields   |
-| Tuple        | `(a, b)`           | Destructure tuple elements  |
-| Or           | `a \| b \| c`      | Match any one of multiple   |
-| Guard        | `pattern if cond`  | Additional condition checking |
+| Pattern Type | Syntax            | Purpose                       |
+| ------------ | ----------------- | ----------------------------- |
+| Literal      | `42`, `"hi"`      | Match values exactly          |
+| Identifier   | `x`               | Capture matched values        |
+| Wildcard     | `_`               | Fallback match                |
+| Enum         | `ok(value)`       | Destructure enum variants     |
+| Struct       | `{ x, y }`        | Destructure record fields     |
+| Tuple        | `(a, b)`          | Destructure tuple elements    |
+| Or           | `a \| b \| c`     | Match any one of multiple     |
+| Guard        | `pattern if cond` | Additional condition checking |
 
-`match` + pattern matching = the most powerful control flow tool in YaoXiang. Master it, and you'll write safer, clearer code.
+`match` + pattern matching = the most powerful control flow tool in YaoXiang. Master it, and you'll
+write safer, clearer code.

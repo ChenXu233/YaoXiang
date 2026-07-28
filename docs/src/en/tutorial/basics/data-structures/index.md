@@ -4,11 +4,13 @@ title: Lists and Dictionaries
 
 # Lists and Dictionaries
 
-Data structures are the skeleton of programs. YaoXiang provides two built-in collection types: lists and dictionaries.
+Data structures are the skeleton of programs. YaoXiang provides two built-in collection types: lists
+and dictionaries.
 
 ## Lists
 
-A list is an **ordered** sequence of values, where all elements have the same type. Create them with `[]`:
+A list is an **ordered** sequence of values, where all elements have the same type. Create them with
+`[]`:
 
 ```yaoxiang
 // Creating a list
@@ -67,7 +69,8 @@ Syntax: `[expression for variable in list if condition]`—the `if condition` pa
 
 ## Dictionaries
 
-A dictionary is a collection of **key-value pairs**, where keys are strings and values can be of any type. Create them with `{}`:
+A dictionary is a collection of **key-value pairs**, where keys are strings and values can be of any
+type. Create them with `{}`:
 
 ```yaoxiang
 // Creating a dictionary
@@ -111,9 +114,9 @@ has_user = "user" in config    // false
 
 ## Summary
 
-| Type       | Syntax         | Ordered? | Allows Duplicates? | Key Type     |
-| ---------- | -------------- | -------- | ------------------ | ------------ |
-| List       | `[1, 2, 3]`    | ✅        | ✅                  | Integer index |
-| Dictionary | `{"a": 1}`     | ✅        | Keys are unique    | String       |
+| Type       | Syntax      | Ordered? | Allows Duplicates? | Key Type      |
+| ---------- | ----------- | -------- | ------------------ | ------------- |
+| List       | `[1, 2, 3]` | ✅       | ✅                 | Integer index |
+| Dictionary | `{"a": 1}`  | ✅       | Keys are unique    | String        |
 
 Lists are your go-to containers, and dictionaries are well-suited for key-value lookups.

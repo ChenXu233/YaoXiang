@@ -4,7 +4,8 @@ title: yaoxiang check
 
 # yaoxiang check
 
-Performs static checks (type checking, ownership checking) on YaoXiang source code without generating any code.
+Performs static checks (type checking, ownership checking) on YaoXiang source code without
+generating any code.
 
 ## Usage
 
@@ -14,27 +15,27 @@ yaoxiang check [OPTIONS] [PATH]...
 
 ## Arguments
 
-| Argument | Description                                      |
-| -------- | ------------------------------------------------ |
+| Argument | Description                                                                                     |
+| -------- | ----------------------------------------------------------------------------------------------- |
 | `PATH`   | One or more file or directory paths. Defaults to checking the current project if not specified. |
 
 ## Options
 
-| Option              | Description                                      | Default |
-| ------------------- | ------------------------------------------------ | ------- |
-| `--json`            | Output diagnostics in JSON format                | No      |
-| `-w`, `--watch`     | Watch for file changes and automatically re-check| No      |
-| `--color <MODE>`    | Color output mode: `auto`, `always`, `never`     | `auto`  |
-| `--exclude <PATH>`  | Exclude the specified path (can be used multiple times) | None |
-| `--no-progress`     | Suppress progress and summary messages           | No      |
+| Option             | Description                                             | Default |
+| ------------------ | ------------------------------------------------------- | ------- |
+| `--json`           | Output diagnostics in JSON format                       | No      |
+| `-w`, `--watch`    | Watch for file changes and automatically re-check       | No      |
+| `--color <MODE>`   | Color output mode: `auto`, `always`, `never`            | `auto`  |
+| `--exclude <PATH>` | Exclude the specified path (can be used multiple times) | None    |
+| `--no-progress`    | Suppress progress and summary messages                  | No      |
 
 ## Exit Codes
 
-| Exit Code | Description             |
-| --------- | ----------------------- |
-| `0`      | No errors               |
-| `1`      | Errors found during check|
-| `2`      | No `.yx` files found    |
+| Exit Code | Description               |
+| --------- | ------------------------- |
+| `0`       | No errors                 |
+| `1`       | Errors found during check |
+| `2`       | No `.yx` files found      |
 
 ## Cross-File Analysis
 

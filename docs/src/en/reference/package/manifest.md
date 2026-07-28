@@ -5,7 +5,8 @@ description: Project configuration file format specification
 
 # yaoxiang.toml Format
 
-`yaoxiang.toml` is the manifest file for YaoXiang projects, declaring project metadata and dependencies.
+`yaoxiang.toml` is the manifest file for YaoXiang projects, declaring project metadata and
+dependencies.
 
 ## File Structure
 
@@ -26,13 +27,13 @@ license = "MIT"
 
 ## package Section
 
-| Field         | Type   | Required | Description                                                        |
-| ------------- | ------ | -------- | ------------------------------------------------------------------ |
+| Field         | Type   | Required | Description                                                               |
+| ------------- | ------ | -------- | ------------------------------------------------------------------------- |
 | `name`        | string | Yes      | Project name, must follow naming conventions (lowercase, digits, hyphens) |
-| `version`     | string | Yes      | Semantic version number, follows semver specification              |
-| `description` | string | No       | Short project description                                          |
-| `authors`     | array  | No       | List of authors                                                    |
-| `license`     | string | No       | License identifier                                                 |
+| `version`     | string | Yes      | Semantic version number, follows semver specification                     |
+| `description` | string | No       | Short project description                                                 |
+| `authors`     | array  | No       | List of authors                                                           |
+| `license`     | string | No       | License identifier                                                        |
 
 ### Example
 
@@ -71,24 +72,24 @@ bleeding-edge = { git = "https://github.com/example/edge", branch = "main" }
 
 ### Dependency Field Reference
 
-| Field      | Type   | Description              |
-| ---------- | ------ | ------------------------ |
-| `version`  | string | Version number or range  |
-| `git`      | string | Git repository address  |
-| `branch`   | string | Git branch name          |
-| `path`     | string | Local relative path      |
+| Field     | Type   | Description             |
+| --------- | ------ | ----------------------- |
+| `version` | string | Version number or range |
+| `git`     | string | Git repository address  |
+| `branch`  | string | Git branch name         |
+| `path`    | string | Local relative path     |
 
 ## Version Number Syntax
 
-| Syntax               | Description    | Example                |
-| -------------------- | -------------- | ---------------------- |
-| `*`                  | Any version    | `"*"`                  |
-| `1.0.0`              | Exact version   | `"1.0.0"`              |
-| `>=1.0.0`            | Minimum version | `">=1.0.0"`            |
-| `<2.0.0`             | Maximum version | `"<2.0.0"`             |
-| `>=1.0.0, <2.0.0`    | Range version   | `">=1.0.0, <2.0.0"`    |
-| `~1.0.0`             | Compatible version | `"~1.0.0"`          |
-| `^1.0.0`             | Caret version   | `"^1.0.0"`             |
+| Syntax            | Description        | Example             |
+| ----------------- | ------------------ | ------------------- |
+| `*`               | Any version        | `"*"`               |
+| `1.0.0`           | Exact version      | `"1.0.0"`           |
+| `>=1.0.0`         | Minimum version    | `">=1.0.0"`         |
+| `<2.0.0`          | Maximum version    | `"<2.0.0"`          |
+| `>=1.0.0, <2.0.0` | Range version      | `">=1.0.0, <2.0.0"` |
+| `~1.0.0`          | Compatible version | `"~1.0.0"`          |
+| `^1.0.0`          | Caret version      | `"^1.0.0"`          |
 
 ## Complete Example
 

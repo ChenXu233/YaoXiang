@@ -44,10 +44,10 @@ Configuration priority chain (from highest to lowest):
 
 ## Default Values
 
-| Option          | Default | Description            |
-| --------------- | ------- | ---------------------- |
-| `line_width`    | 120     | Maximum line width     |
-| `indent_width`  | 4       | Indent space count     |
-| `use_tabs`      | false   | Whether to use tabs    |
-| `single_quote`  | false   | Whether to use single quotes |
-| `sort_imports`  | true    | Whether to sort imports |
+| Option         | Default | Description                  |
+| -------------- | ------- | ---------------------------- |
+| `line_width`   | 120     | Maximum line width           |
+| `indent_width` | 4       | Indent space count           |
+| `use_tabs`     | false   | Whether to use tabs          |
+| `single_quote` | false   | Whether to use single quotes |
+| `sort_imports` | true    | Whether to sort imports      |

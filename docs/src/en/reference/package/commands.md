@@ -17,14 +17,14 @@ yaoxiang init <project-name>
 
 ### Arguments
 
-| Argument    | Description         |
-| ----------- | ------------------- |
+| Argument     | Description             |
+| ------------ | ----------------------- |
 | project-name | Name of the new project |
 
 ### Options
 
-| Option    | Description         |
-| --------- | ------------------- |
+| Option   | Description              |
+| -------- | ------------------------ |
 | `--help` | Display help information |
 
 ### Examples
@@ -56,10 +56,10 @@ yaoxiang add <package-name> --dev
 
 ### Arguments
 
-| Argument | Description                       |
-| -------- | --------------------------------- |
-| package-name | Name of the dependency to add |
-| version | Version number (optional, defaults to `*`) |
+| Argument     | Description                                |
+| ------------ | ------------------------------------------ |
+| package-name | Name of the dependency to add              |
+| version      | Version number (optional, defaults to `*`) |
 
 ### Options
 
@@ -99,14 +99,14 @@ yaoxiang rm <package-name> --dev
 
 ### Arguments
 
-| Argument | Description             |
-| -------- | ----------------------- |
+| Argument     | Description                      |
+| ------------ | -------------------------------- |
 | package-name | Name of the dependency to remove |
 
 ### Options
 
-| Option        | Description         |
-| ------------- | ------------------- |
+| Option        | Description           |
+| ------------- | --------------------- |
 | `--dev`, `-D` | Remove dev dependency |
 
 ### Examples
@@ -166,8 +166,8 @@ yaoxiang update <package-name>
 
 ### Arguments
 
-| Argument | Description                       |
-| -------- | --------------------------------- |
+| Argument     | Description                              |
+| ------------ | ---------------------------------------- |
 | package-name | Specific dependency to update (optional) |
 
 ### Description
@@ -204,7 +204,8 @@ yaoxiang list
 
 ### Description
 
-Displays all runtime dependencies and development dependencies, along with their versions and sources.
+Displays all runtime dependencies and development dependencies, along with their versions and
+sources.
 
 ### Examples
 

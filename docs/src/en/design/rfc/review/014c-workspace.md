@@ -14,7 +14,8 @@ issue: '#113'
 
 ## Summary
 
-Defines YaoXiang's workspace mechanism: dependency sharing, path references, unified lockfile, and Cargo workspace integration for developing multiple related packages together.
+Defines YaoXiang's workspace mechanism: dependency sharing, path references, unified lockfile, and
+Cargo workspace integration for developing multiple related packages together.
 
 ## Motivation
 
@@ -53,7 +54,8 @@ app = "packages/app/yaoxiang.toml"
 2. Provides shared lockfile (`yaoxiang.lock`)
 3. Provides shared vendor directory (`.yaoxiang/vendor/`)
 
-**The root toml does not define dependencies.** Each member writes its own dependencies in its own `yaoxiang.toml`.
+**The root toml does not define dependencies.** Each member writes its own dependencies in its own
+`yaoxiang.toml`.
 
 ### Member yaoxiang.toml
 
@@ -109,7 +111,8 @@ my-workspace/
 
 ### Workspace Dependency Reference
 
-`{ workspace = "member-name" }` references the **key** of `[workspace.members]` (not the member's `[package].name`).
+`{ workspace = "member-name" }` references the **key** of `[workspace.members]` (not the member's
+`[package].name`).
 
 ```toml
 # Root yaoxiang.toml
@@ -132,7 +135,8 @@ utils = { workspace = "utils" }   # ✅ Reference key "utils"
 - Key is controlled by workspace, stable and unique
 - `[package].name` is a public name, may change at publish time
 - Key is the BTreeMap key, naturally unique
-- At publish time, workspace references are replaced with version dependencies, key does not leak to public API
+- At publish time, workspace references are replaced with version dependencies, key does not leak to
+  public API
 
 ### Path Dependencies and Publishing
 
@@ -150,7 +154,9 @@ At publish time, automatically replace with version dependencies:
 utils = "^0.2.0"
 ```
 
-**Version source:** Read the `[package].version` of the depended member, add `^` prefix. Does not check Registry — the authoritative source of version is the member's `yaoxiang.toml`, Registry is just the distribution channel.
+**Version source:** Read the `[package].version` of the depended member, add `^` prefix. Does not
+check Registry — the authoritative source of version is the member's `yaoxiang.toml`, Registry is
+just the distribution channel.
 
 The package manager automatically performs this replacement during `yaoxiang publish`.
 
@@ -185,16 +191,17 @@ my-workspace/
 
 ### CLI Commands
 
-| Command                            | Function                              |
-| ---------------------------------- | ------------------------------------- |
-| `yaoxiang workspace list`          | List workspace members                |
-| `yaoxiang workspace add <path>`    | Add a member                          |
-| `yaoxiang workspace remove <name>` | Remove a member                       |
+| Command                            | Function                                |
+| ---------------------------------- | --------------------------------------- |
+| `yaoxiang workspace list`          | List workspace members                  |
+| `yaoxiang workspace add <path>`    | Add a member                            |
+| `yaoxiang workspace remove <name>` | Remove a member                         |
 | `yaoxiang build`                   | Build all members (by dependency order) |
-| `yaoxiang build core`              | Build specific member                 |
-| `yaoxiang test`                    | Run tests for all members             |
+| `yaoxiang build core`              | Build specific member                   |
+| `yaoxiang test`                    | Run tests for all members               |
 
-**`yaoxiang build` behavior:** Build all members, sorted by dependency topology. If core → utils → app, build order is core → utils → app.
+**`yaoxiang build` behavior:** Build all members, sorted by dependency topology. If core → utils →
+app, build order is core → utils → app.
 
 ## Detailed Design
 
@@ -225,7 +232,8 @@ struct WorkspaceMember {
 }
 ```
 
-**Detection logic:** When loading toml, if there is a `[workspace]` section, parse as `WorkspaceManifest`, otherwise parse as `PackageManifest`.
+**Detection logic:** When loading toml, if there is a `[workspace]` section, parse as
+`WorkspaceManifest`, otherwise parse as `PackageManifest`.
 
 ### Workspace Dependency Reference
 
@@ -259,23 +267,23 @@ struct WorkspaceMember {
 
 ## Alternative Solutions
 
-| Solution                     | Why Not Chosen                        |
-| ---------------------------- | ------------------------------------- |
-| Independent projects + path dependencies | Lockfile not unified, version drift risk |
-| Like npm workspaces          | npm's workspace has many problems, not worth copying |
-| Reuse Cargo workspace directly | YaoXiang and Cargo are different package ecosystems |
+| Solution                                 | Why Not Chosen                                       |
+| ---------------------------------------- | ---------------------------------------------------- |
+| Independent projects + path dependencies | Lockfile not unified, version drift risk             |
+| Like npm workspaces                      | npm's workspace has many problems, not worth copying |
+| Reuse Cargo workspace directly           | YaoXiang and Cargo are different package ecosystems  |
 
 ## Implementation Strategy
 
 ### Phase Breakdown
 
-| Phase     | Content                                           |
-| --------- | ------------------------------------------------- |
-| Phase 6a  | `[workspace.members]` parsing + WorkspaceManifest |
-| Phase 6b  | Shared lockfile + dependency merge resolution    |
-| Phase 6c  | `{ workspace = "name" }` path dependency reference |
-| Phase 6d  | Automatic path dependency replacement at publish  |
-| Phase 6e  | Cargo workspace integration                       |
+| Phase    | Content                                            |
+| -------- | -------------------------------------------------- |
+| Phase 6a | `[workspace.members]` parsing + WorkspaceManifest  |
+| Phase 6b | Shared lockfile + dependency merge resolution      |
+| Phase 6c | `{ workspace = "name" }` path dependency reference |
+| Phase 6d | Automatic path dependency replacement at publish   |
+| Phase 6e | Cargo workspace integration                        |
 
 ### Dependencies
 

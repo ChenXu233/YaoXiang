@@ -9,7 +9,8 @@ description: Formatting rules for type annotations, references and borrowing, ty
 
 ## §9 Type Annotations
 
-**§9.1 Variable Type Annotations.** Type annotations use the `: Type` format, with a space after the colon.
+**§9.1 Variable Type Annotations.** Type annotations use the `: Type` format, with a space after the
+colon.
 
 ```
 // ✅ Correct

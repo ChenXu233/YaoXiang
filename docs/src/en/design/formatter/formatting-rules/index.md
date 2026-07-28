@@ -5,7 +5,8 @@ description: Classification and index of YaoXiang code formatting rules
 
 # Formatting Rules
 
-This section defines all formatting rules for `yaoxiang fmt`. Rules are categorized by topic as follows:
+This section defines all formatting rules for `yaoxiang fmt`. Rules are categorized by topic as
+follows:
 
 ---
 
@@ -15,7 +16,8 @@ This section defines all formatting rules for `yaoxiang fmt`. Rules are categori
 
 ## Functions
 
-- [Function-related Rules](./functions.md) — Function definitions, function calls, Lambda expressions
+- [Function-related Rules](./functions.md) — Function definitions, function calls, Lambda
+  expressions
 
 ## Type System
 
@@ -31,4 +33,5 @@ This section defines all formatting rules for `yaoxiang fmt`. Rules are categori
 
 ## Special Syntax
 
-- [Special Syntax Rules](./special-syntax.md) — F-Strings, import statements, error handling, Unsafe blocks
+- [Special Syntax Rules](./special-syntax.md) — F-Strings, import statements, error handling, Unsafe
+  blocks

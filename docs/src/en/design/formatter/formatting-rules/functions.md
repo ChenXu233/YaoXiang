@@ -19,7 +19,8 @@ foo: (a: Int, b: Int) -> Int = a + b
 foo : (a: Int, b: Int) -> Int = a + b
 ```
 
-**§4.2 Parameter List Line Break.** When the parameter list exceeds the line width, each parameter occupies one line, with a trailing comma.
+**§4.2 Parameter List Line Break.** When the parameter list exceeds the line width, each parameter
+occupies one line, with a trailing comma.
 
 ```
 // Exceeds line width
@@ -33,7 +34,8 @@ very_long_function_name:
 ) -> Int = first_param + second_param + third_param
 ```
 
-**§4.3 Return Type.** The return type is connected to the parameter list with `->`, with one space before and after `->`.
+**§4.3 Return Type.** The return type is connected to the parameter list with `->`, with one space
+before and after `->`.
 
 ```
 // ✅ Correct
@@ -80,7 +82,8 @@ foo(x = 1, y = 2)
 foo(x=1, y=2)
 ```
 
-**§7.3 Parameter Line Break.** When the argument list exceeds the line width, each argument occupies one line, with a trailing comma.
+**§7.3 Parameter Line Break.** When the argument list exceeds the line width, each argument occupies
+one line, with a trailing comma.
 
 ```
 // Exceeds line width

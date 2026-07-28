@@ -5,7 +5,8 @@ description: Integrate yaoxiang check and yaoxiang format into CI/CD pipeline
 
 # CI Integration Guide
 
-Integrate YaoXiang's static checking and formatting tools into CI/CD pipelines to ensure code quality.
+Integrate YaoXiang's static checking and formatting tools into CI/CD pipelines to ensure code
+quality.
 
 ## GitHub Actions
 
@@ -54,11 +55,11 @@ yaoxiang-check:
 
 ## Exit Codes
 
-| Exit Code | Meaning                 | CI Behavior |
-| --------- | ----------------------- | ----------- |
-| `0`       | No errors               | Pass        |
-| `1`       | Check found errors      | Fail        |
-| `2`       | No `.yx` files found    | Depends on configuration |
+| Exit Code | Meaning              | CI Behavior              |
+| --------- | -------------------- | ------------------------ |
+| `0`       | No errors            | Pass                     |
+| `1`       | Check found errors   | Fail                     |
+| `2`       | No `.yx` files found | Depends on configuration |
 
 ## JSON Output Parsing
 
@@ -70,8 +71,10 @@ yaoxiang check --json | jq '.error_count'
 
 ## Best Practices
 
-1. **Path arguments**: `yaoxiang check` checks the current directory by default, or you can specify a path: `yaoxiang check src/`
-2. **Separate check and format**: Run `check` and `format --dry-run` separately for easier troubleshooting
+1. **Path arguments**: `yaoxiang check` checks the current directory by default, or you can specify
+   a path: `yaoxiang check src/`
+2. **Separate check and format**: Run `check` and `format --dry-run` separately for easier
+   troubleshooting
 3. **Use `--no-progress`**: CI environments don't need progress bars
 4. **Use `--color never`**: Avoid ANSI color codes polluting logs
 5. **Cache dependencies**: Use CI caching mechanisms to speed up builds

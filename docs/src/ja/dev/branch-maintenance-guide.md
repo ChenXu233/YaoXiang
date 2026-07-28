@@ -20,29 +20,29 @@
 
 ### コアブランチ（Core Branches）
 
-| ブランチ名   | 用途                   | ライフサイクル | 保護レベル |
-| ------------ | ---------------------- | -------------- | ---------- |
-| `main`       | 本番環境コード         | 永続           | 厳格保護   |
-| `dev`        | メイン開発ブランチ     | 永続           | 中程度保護 |
-| `master`     | メインブランチ（互換） | 永続           | 厳格保護   |
+| ブランチ名 | 用途                   | ライフサイクル | 保護レベル |
+| ---------- | ---------------------- | -------------- | ---------- |
+| `main`     | 本番環境コード         | 永続           | 厳格保護   |
+| `dev`      | メイン開発ブランチ     | 永続           | 中程度保護 |
+| `master`   | メインブランチ（互換） | 永続           | 厳格保護   |
 
 ### 機能ブランチ（Feature Branches）
 
-| 接頭辞       | 用途                 | 命名例                                                           | マージ先       |
-| ---------- | ------------------ | --------------------------------------------------------------- | -------------- |
-| `feature/` | 新機能開発           | `feature/type-inference`<br>`feature/ownership-model`            | `dev`          |
-| `bugfix/`  | 既知の欠陥を修正     | `bugfix/memory-leak`<br>`bugfix/parser-error`                    | `dev`          |
-| `hotfix/`  | 緊急の本番問題修正   | `hotfix/security-patch`<br>`hotfix/crash-bug`                     | `main` + `dev` |
-| `release/` | リリース準備ブランチ | `release/v0.8.0`<br>`release/v1.0.0`                              | `main`         |
+| 接頭辞     | 用途                 | 命名例                                                | マージ先       |
+| ---------- | -------------------- | ----------------------------------------------------- | -------------- |
+| `feature/` | 新機能開発           | `feature/type-inference`<br>`feature/ownership-model` | `dev`          |
+| `bugfix/`  | 既知の欠陥を修正     | `bugfix/memory-leak`<br>`bugfix/parser-error`         | `dev`          |
+| `hotfix/`  | 緊急の本番問題修正   | `hotfix/security-patch`<br>`hotfix/crash-bug`         | `main` + `dev` |
+| `release/` | リリース準備ブランチ | `release/v0.8.0`<br>`release/v1.0.0`                  | `main`         |
 
 ### 補助ブランチ（Auxiliary Branches）
 
-| 接頭辞        | 用途             | 命名例                                                           | マージ先 |
-| ----------- | -------------- | --------------------------------------------------------------- | -------- |
-| `docs/`     | ドキュメント更新 | `docs/api-reference`<br>`docs/tutorial-update`                   | `dev`    |
-| `ci/`       | CI/CD 設定変更   | `ci/add-deploy-script`<br>`ci/optimize-build`                     | `dev`    |
+| 接頭辞      | 用途                   | 命名例                                                     | マージ先 |
+| ----------- | ---------------------- | ---------------------------------------------------------- | -------- |
+| `docs/`     | ドキュメント更新       | `docs/api-reference`<br>`docs/tutorial-update`             | `dev`    |
+| `ci/`       | CI/CD 設定変更         | `ci/add-deploy-script`<br>`ci/optimize-build`              | `dev`    |
 | `refactor/` | コードリファクタリング | `refactor/lexer-optimization`<br>`refactor/memory-manager` | `dev`    |
-| `test/`     | テスト関連変更   | `test/add-integration`<br>`test/performance-bench`                | `dev`    |
+| `test/`     | テスト関連変更         | `test/add-integration`<br>`test/performance-bench`         | `dev`    |
 
 ---
 
@@ -214,12 +214,12 @@ graph TD
 
 ### ブランチ権限設定
 
-| ブランチタイプ    | 開発者   | メンテナー | 管理者   |
-| ----------- | -------- | -------- | -------- |
-| `main`      | PR のみ  | PR のみ  | PR を承認 |
-| `dev`       | PR マージ | PR マージ | 直接プッシュ可 |
-| `feature/*` | 全権限   | 全権限   | 全権限   |
-| `hotfix/*`  | 全権限   | 全権限   | 全権限   |
+| ブランチタイプ | 開発者    | メンテナー | 管理者         |
+| -------------- | --------- | ---------- | -------------- |
+| `main`         | PR のみ   | PR のみ    | PR を承認      |
+| `dev`          | PR マージ | PR マージ  | 直接プッシュ可 |
+| `feature/*`    | 全権限    | 全権限     | 全権限         |
+| `hotfix/*`     | 全権限    | 全権限     | 全権限         |
 
 ---
 
@@ -313,7 +313,8 @@ git checkout -b feature/new-feature
 
 ### Q6: ブランチの命名長さに制限はありますか？
 
-**回答：** 50文字を超えないことを推奨し、簡潔で明了に保ちます。Git 自体はより長い名前をサポートしていますが、 長すぎる名前は可読性に影響します。
+**回答：**
+50文字を超えないことを推奨し、簡潔で明了に保ちます。Git 自体はより長い名前をサポートしていますが、 長すぎる名前は可読性に影響します。
 
 ---
 
@@ -365,6 +366,7 @@ echo "ブランチを作成してプッシュしました: $BRANCH_TYPE/$BRANCH_
 
 ---
 
-> 💡 **ヒント**：ブランチの原子性と集中性を保ち、 各ブランチは1つのことだけを行い、 これによりコード管理をより明確で効率的にできます！
+> 💡
+> **ヒント**：ブランチの原子性と集中性を保ち、 各ブランチは1つのことだけを行い、 これによりコード管理をより明確で効率的にできます！
 
 > 📞 **サポート**：質問がある場合は、 GitHub Discussions で議論してください。

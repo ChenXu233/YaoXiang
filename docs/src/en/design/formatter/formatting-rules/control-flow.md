@@ -9,7 +9,8 @@ description: 'Formatting rules for if/else if/else, for loops, while loops, and 
 
 ## §5 Control Flow
 
-**§5.1 if Expression.** A space separates the `if` keyword from the condition, and a space separates the condition from the code block.
+**§5.1 if Expression.** A space separates the `if` keyword from the condition, and a space separates
+the condition from the code block.
 
 ```
 // ✅ Correct

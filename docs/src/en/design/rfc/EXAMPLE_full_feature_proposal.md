@@ -4,7 +4,8 @@ title: 'RFC Example: Enhanced Pattern Matching Syntax'
 
 # RFC Example: Enhanced Pattern Matching Syntax
 
-> **Note**: This is an RFC template example demonstrating how to write a complete RFC proposal. Please refer to this template when writing your own RFC.
+> **Note**: This is an RFC template example demonstrating how to write a complete RFC proposal.
+> Please refer to this template when writing your own RFC.
 >
 > **Status**: Example (for reference only)
 
@@ -12,13 +13,15 @@ title: 'RFC Example: Enhanced Pattern Matching Syntax'
 
 ## Summary
 
-Add more powerful pattern matching capabilities to YaoXiang, including nested patterns, guard expressions, and `let` pattern bindings.
+Add more powerful pattern matching capabilities to YaoXiang, including nested patterns, guard
+expressions, and `let` pattern bindings.
 
 ## Motivation
 
 ### Why is this feature needed?
 
-The current `match` expression has limited functionality and cannot handle the following common scenarios:
+The current `match` expression has limited functionality and cannot handle the following common
+scenarios:
 
 ```yaoxiang
 # Cannot destructure nested structures
@@ -122,12 +125,12 @@ RestPattern   ::= '...'
 
 ### Compiler changes
 
-| Component  | Changes                    |
-| ---------- | -------------------------- |
-| lexer      | Add new pattern-related tokens |
-| parser     | Add new pattern parsing logic |
-| typecheck  | Pattern type inference and binding |
-| codegen    | Pattern matching code generation |
+| Component | Changes                            |
+| --------- | ---------------------------------- |
+| lexer     | Add new pattern-related tokens     |
+| parser    | Add new pattern parsing logic      |
+| typecheck | Pattern type inference and binding |
+| codegen   | Pattern matching code generation   |
 
 ### Backward compatibility
 
@@ -149,11 +152,11 @@ RestPattern   ::= '...'
 
 ## Alternative Solutions
 
-| Solution           | Why not chosen               |
-| ------------------ | ---------------------------- |
-| Support only top-level destructuring | Cannot handle common nested scenarios |
-| Use functional style | Does not blend naturally with imperative code |
-| Defer to v2.0      | Users already have strong demand |
+| Solution                             | Why not chosen                                |
+| ------------------------------------ | --------------------------------------------- |
+| Support only top-level destructuring | Cannot handle common nested scenarios         |
+| Use functional style                 | Does not blend naturally with imperative code |
+| Defer to v2.0                        | Users already have strong demand              |
 
 ## Implementation Strategy
 

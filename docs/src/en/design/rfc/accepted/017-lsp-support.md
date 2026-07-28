@@ -24,7 +24,8 @@ Before implementing LSP, the following two core issues need to be resolved first
 
 ### Issue 1: Diagnostic Error Collection
 
-**Current State**: The type checker currently returns immediately on the first error (using the `?` operator), unable to collect all errors.
+**Current State**: The type checker currently returns immediately on the first error (using the `?`
+operator), unable to collect all errors.
 
 **LSP Requirement**: IDEs need to display **all** errors, not just the first one.
 
@@ -53,7 +54,8 @@ enum ErrorKind {
 
 #### 1.3 Parser Error Recovery
 
-- When parsing fails, insert **placeholder nodes** (such as `MissingExpression`) instead of giving up
+- When parsing fails, insert **placeholder nodes** (such as `MissingExpression`) instead of giving
+  up
 - Avoid type checker panics due to incomplete AST
 - Example: `let x = ;` → `let x = MissingExpression`
 
@@ -97,41 +99,50 @@ struct DocumentCache {
 
 #### 2.4 Difference from cargo check
 
-|          | cargo check  | YaoXiang LSP  |
-| -------- | ------------ | ------------- |
-| Scope    | Entire project | Single file  |
-| Frequency | Manual trigger | Every edit  |
-| Goal     | Complete compile check | Fast incremental response |
+|           | cargo check            | YaoXiang LSP              |
+| --------- | ---------------------- | ------------------------- |
+| Scope     | Entire project         | Single file               |
+| Frequency | Manual trigger         | Every edit                |
+| Goal      | Complete compile check | Fast incremental response |
 
 ### Integration with Existing Modules
 
-| Existing Module                  | LSP Integration Method                                  |
-| -------------------------------- | ------------------------------------------------------- |
-| `util/span.rs`                   | ✅ Already has `Position`/`Span`, directly map to LSP `Position` |
+| Existing Module                  | LSP Integration Method                                                     |
+| -------------------------------- | -------------------------------------------------------------------------- |
+| `util/span.rs`                   | ✅ Already has `Position`/`Span`, directly map to LSP `Position`           |
 | `util/diagnostic/collect.rs`     | ⚠️ Needs modification to "collection mode", continuously accumulate errors |
-| `frontend/core/lexer/symbols.rs` | ⚠️ Needs extension, add `uri` + `span` position information |
-| `frontend/typecheck/mod.rs`      | ⚠️ Needs modification `TypeResult`, return all errors   |
-| `frontend/core/parser/ast.rs`    | ✅ Each node already has `Span`, no changes needed      |
+| `frontend/core/lexer/symbols.rs` | ⚠️ Needs extension, add `uri` + `span` position information                |
+| `frontend/typecheck/mod.rs`      | ⚠️ Needs modification `TypeResult`, return all errors                      |
+| `frontend/core/parser/ast.rs`    | ✅ Each node already has `Span`, no changes needed                         |
 
 ---
 
 ## Summary
 
-Add Language Server Protocol (LSP) support to YaoXiang, implementing a complete language server that enables mainstream IDEs (VS Code, Neovim, Emacs, etc.) to provide development tooling features such as code completion, go-to-definition, diagnostics, and find references.
+Add Language Server Protocol (LSP) support to YaoXiang, implementing a complete language server that
+enables mainstream IDEs (VS Code, Neovim, Emacs, etc.) to provide development tooling features such
+as code completion, go-to-definition, diagnostics, and find references.
 
 ## Motivation
 
 ### Why is this feature needed?
 
-Currently, YaoXiang lacks official IDE integration support. Developers can only write code with basic text editors, lacking:
+Currently, YaoXiang lacks official IDE integration support. Developers can only write code with
+basic text editors, lacking:
 
-1. **Code Completion** - Unable to intelligently complete identifiers, keywords, and types based on context
-2. **Go to Definition** - Unable to quickly jump to definition locations of functions, types, and variables
-3. **Real-time Diagnostics** - Unable to display syntax errors and type errors instantly while editing
+1. **Code Completion** - Unable to intelligently complete identifiers, keywords, and types based on
+   context
+2. **Go to Definition** - Unable to quickly jump to definition locations of functions, types, and
+   variables
+3. **Real-time Diagnostics** - Unable to display syntax errors and type errors instantly while
+   editing
 4. **Find References** - Unable to find all reference locations of symbols
-5. **Hover Information** - Unable to display type information and documentation comments on mouse hover
+5. **Hover Information** - Unable to display type information and documentation comments on mouse
+   hover
 
-LSP is a standard feature for modern programming languages. Mainstream languages (Rust, Python, TypeScript, Go, etc.) all provide mature LSP implementations. Implementing LSP support will significantly improve the YaoXiang development experience.
+LSP is a standard feature for modern programming languages. Mainstream languages (Rust, Python,
+TypeScript, Go, etc.) all provide mature LSP implementations. Implementing LSP support will
+significantly improve the YaoXiang development experience.
 
 ### Current Problems
 
@@ -233,16 +244,16 @@ Core methods:
 
 ### Core LSP Method Support
 
-| Category      | Method                                              | Description            |
-| ------------- | --------------------------------------------------- | ---------------------- |
-| **Lifecycle** | `initialize` / `initialized` / `shutdown` / `exit` | Server lifecycle       |
-| **Doc Sync**  | `didOpen` / `didChange` / `didClose`                | Document management    |
-| **Diagnostics**| `publishDiagnostics`                               | Publish diagnostics    |
-| **Completion**| `completion`                                       | Code completion        |
-| **Go-to**     | `definition`                                       | Go to definition       |
-| **References**| `references`                                       | Find references        |
-| **Hover**     | `hover`                                             | Hover info             |
-| **Symbols**   | `workspace/symbol`                                 | Workspace symbol search|
+| Category        | Method                                             | Description             |
+| --------------- | -------------------------------------------------- | ----------------------- |
+| **Lifecycle**   | `initialize` / `initialized` / `shutdown` / `exit` | Server lifecycle        |
+| **Doc Sync**    | `didOpen` / `didChange` / `didClose`               | Document management     |
+| **Diagnostics** | `publishDiagnostics`                               | Publish diagnostics     |
+| **Completion**  | `completion`                                       | Code completion         |
+| **Go-to**       | `definition`                                       | Go to definition        |
+| **References**  | `references`                                       | Find references         |
+| **Hover**       | `hover`                                            | Hover info              |
+| **Symbols**     | `workspace/symbol`                                 | Workspace symbol search |
 
 ### Text Document Synchronization
 
@@ -265,7 +276,8 @@ Completion sources: keywords, variables, functions, types, struct fields, module
 
 ### Go-to Definition Implementation
 
-AST-based symbol resolution: Find the definition location corresponding to an identifier/function call
+AST-based symbol resolution: Find the definition location corresponding to an identifier/function
+call
 
 ## Detailed Design
 
@@ -283,11 +295,11 @@ AST-based symbol resolution: Find the definition location corresponding to an id
 
 ### Compiler Changes
 
-| Component                        | Changes                              |
-| -------------------------------- | ------------------------------------ |
-| `frontend/events`                | Extend event system, support LSP notifications |
-| `frontend/core/lexer/symbols`    | Enhance symbol table, add position information |
-| New `src/lsp/`                   | LSP server implementation            |
+| Component                     | Changes                                        |
+| ----------------------------- | ---------------------------------------------- |
+| `frontend/events`             | Extend event system, support LSP notifications |
+| `frontend/core/lexer/symbols` | Enhance symbol table, add position information |
+| New `src/lsp/`                | LSP server implementation                      |
 
 ### Backward Compatibility
 
@@ -344,15 +356,21 @@ fn to_lsp_range(span: &Span) -> lsp_types::Range {
 
 ## YaoXiang-Specific Advanced Features
 
-Leverage YaoXiang's powerful compile-time evaluation and ownership system to provide a unique development experience that other languages cannot achieve:
+Leverage YaoXiang's powerful compile-time evaluation and ownership system to provide a unique
+development experience that other languages cannot achieve:
 
 ### 1. Inlay Hints
 
-- **Constant Value Hints**: Show compile-time computed constants (e.g., show `300` next to `const MAX = 100 + 200`)
-- **Mutability Hints**: Show whether variables are mutable (e.g., `mut x`, `x` has obvious underline)
-- **Ownership Consumption Hints**: Show whether function parameters are consumed (e.g., `consumed` / `borrowed`)
-- **Empty Ownership Semantic Hints**: Show hints by dimming variable color when variable can be reassigned after being moved
-- **Type Inference Hints**: Show inferred specific types (e.g., show `Vec<i32>` next to `x = vec![]`)
+- **Constant Value Hints**: Show compile-time computed constants (e.g., show `300` next to
+  `const MAX = 100 + 200`)
+- **Mutability Hints**: Show whether variables are mutable (e.g., `mut x`, `x` has obvious
+  underline)
+- **Ownership Consumption Hints**: Show whether function parameters are consumed (e.g., `consumed` /
+  `borrowed`)
+- **Empty Ownership Semantic Hints**: Show hints by dimming variable color when variable can be
+  reassigned after being moved
+- **Type Inference Hints**: Show inferred specific types (e.g., show `Vec<i32>` next to
+  `x = vec![]`)
 
 ### 2. Ownership Semantics Visualization
 
@@ -365,12 +383,12 @@ Leverage YaoXiang's powerful compile-time evaluation and ownership system to pro
 
 ### Implementation Priority
 
-| Feature                    | Priority |
-| -------------------------- | -------- |
-| Constant Value Inlay Hints | P0       |
-| Mutability Hints           | P0       |
-| Ownership Consumption Hints| P1       |
-| Ownership Visualization    | P2       |
+| Feature                     | Priority |
+| --------------------------- | -------- |
+| Constant Value Inlay Hints  | P0       |
+| Mutability Hints            | P0       |
+| Ownership Consumption Hints | P1       |
+| Ownership Visualization     | P2       |
 
 ---
 
@@ -380,11 +398,11 @@ Leverage YaoXiang's powerful compile-time evaluation and ownership system to pro
 
 Support three modes:
 
-| Mode                  | Usage                    |
-| --------------------- | ----------------------- |
-| stdio                 | Local development (default) |
-| TCP Socket            | Remote development/debugging |
-| Unix Domain Socket   | High-performance local communication |
+| Mode               | Usage                                |
+| ------------------ | ------------------------------------ |
+| stdio              | Local development (default)          |
+| TCP Socket         | Remote development/debugging         |
+| Unix Domain Socket | High-performance local communication |
 
 ### Remote Debugging
 
@@ -454,10 +472,10 @@ yaoxiang-lsp --test
 
 ## Alternative Approaches
 
-| Approach              | Why Not Chosen                  |
-| --------------------- | ------------------------------- |
-| Syntax highlighting only | Cannot meet modern development needs |
-| Use Tree-sitter      | Requires additional learning cost, limited functionality |
+| Approach                 | Why Not Chosen                                           |
+| ------------------------ | -------------------------------------------------------- |
+| Syntax highlighting only | Cannot meet modern development needs                     |
+| Use Tree-sitter          | Requires additional learning cost, limited functionality |
 
 ## Implementation Strategy
 
@@ -531,28 +549,28 @@ yaoxiang-lsp --test
 
 ### Appendix B: Design Decision Records
 
-| Decision             | Decision                                                        | Date       | Recorder |
-| -------------------- | --------------------------------------------------------------- | ---------- | -------- |
-| LSP Server Architecture | Independent process, communicate via stdio                   | 2026-02-15 | Chen Xu  |
-| Protocol Version     | Support LSP 3.18 (needs Inlay Hints and other new features)    | 2026-02-22 | Chen Xu  |
-| Error Collection Mode| Return `Result<Type, Vec<Error>>`, support error levels and error recovery | 2026-02-22 | Chen Xu  |
-| Caching Strategy     | File-level cache: version + content + hash, full file re-parse | 2026-02-22 | Chen Xu  |
-| Communication Mode   | Support stdio + TCP + UnixSocket                                | 2026-02-22 | Chen Xu  |
-| Remote Debugging     | Based on DAP protocol, share transport layer with LSP          | 2026-02-22 | Chen Xu  |
-| Concurrency Model    | Single-threaded + async event loop                              | 2026-02-22 | Chen Xu  |
-| Test Tool (Optional) | JSON test cases + built-in test runner                          | 2026-02-22 | Chen Xu  |
+| Decision                | Decision                                                                   | Date       | Recorder |
+| ----------------------- | -------------------------------------------------------------------------- | ---------- | -------- |
+| LSP Server Architecture | Independent process, communicate via stdio                                 | 2026-02-15 | Chen Xu  |
+| Protocol Version        | Support LSP 3.18 (needs Inlay Hints and other new features)                | 2026-02-22 | Chen Xu  |
+| Error Collection Mode   | Return `Result<Type, Vec<Error>>`, support error levels and error recovery | 2026-02-22 | Chen Xu  |
+| Caching Strategy        | File-level cache: version + content + hash, full file re-parse             | 2026-02-22 | Chen Xu  |
+| Communication Mode      | Support stdio + TCP + UnixSocket                                           | 2026-02-22 | Chen Xu  |
+| Remote Debugging        | Based on DAP protocol, share transport layer with LSP                      | 2026-02-22 | Chen Xu  |
+| Concurrency Model       | Single-threaded + async event loop                                         | 2026-02-22 | Chen Xu  |
+| Test Tool (Optional)    | JSON test cases + built-in test runner                                     | 2026-02-22 | Chen Xu  |
 
 ### Appendix C: Glossary
 
-| Term              | Definition                                          |
-| ----------------- | --------------------------------------------------- |
-| LSP               | Language Server Protocol                            |
-| JSON-RPC          | JSON-Remote Procedure Call                          |
-| DAP               | Debug Adapter Protocol                               |
-| Symbol Index      | Symbol location mapping table built at compile time |
-| Compile World     | Context containing all compilation information       |
-| Inlay Hints       | Inline hint information displayed in the editor     |
-| Ownership Trace   | Visualization of variable ownership flow             |
+| Term            | Definition                                          |
+| --------------- | --------------------------------------------------- |
+| LSP             | Language Server Protocol                            |
+| JSON-RPC        | JSON-Remote Procedure Call                          |
+| DAP             | Debug Adapter Protocol                              |
+| Symbol Index    | Symbol location mapping table built at compile time |
+| Compile World   | Context containing all compilation information      |
+| Inlay Hints     | Inline hint information displayed in the editor     |
+| Ownership Trace | Visualization of variable ownership flow            |
 
 ---
 
@@ -596,12 +614,12 @@ RFC has the following status transitions:
 
 ### Status Descriptions
 
-| Status       | Location                      | Description                           |
-| ------------ | ----------------------------- | ------------------------------------- |
-| **Draft**    | `docs/design/rfc/draft/`      | Author draft, awaiting review         |
-| **Under Review** | `docs/design/rfc/review/` | Open for community discussion and feedback |
-| **Accepted** | `docs/design/accepted/`       | Becomes official design document, enters implementation phase |
-| **Rejected** | `docs/design/rfc/`            | Preserved in RFC directory, status updated |
+| Status           | Location                  | Description                                                   |
+| ---------------- | ------------------------- | ------------------------------------------------------------- |
+| **Draft**        | `docs/design/rfc/draft/`  | Author draft, awaiting review                                 |
+| **Under Review** | `docs/design/rfc/review/` | Open for community discussion and feedback                    |
+| **Accepted**     | `docs/design/accepted/`   | Becomes official design document, enters implementation phase |
+| **Rejected**     | `docs/design/rfc/`        | Preserved in RFC directory, status updated                    |
 
 ### Actions After Acceptance
 
@@ -627,4 +645,5 @@ When consensus is reached on an open issue:
 
 ---
 
-> **Note**: RFC numbers are only used during the discussion phase. After acceptance, remove the number and use a descriptive filename.
+> **Note**: RFC numbers are only used during the discussion phase. After acceptance, remove the
+> number and use a descriptive filename.

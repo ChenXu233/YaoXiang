@@ -4,7 +4,8 @@ title: Ownership Model
 
 # Ownership Model
 
-YaoXiang does not use garbage collection (GC), nor does it use lifetime annotations. Its memory safety is built on **five concepts, one gradient**.
+YaoXiang does not use garbage collection (GC), nor does it use lifetime annotations. Its memory
+safety is built on **five concepts, one gradient**.
 
 ## Five Concepts, One Gradient
 
@@ -46,7 +47,8 @@ result = process(p)    // p is moved away
 
 ## &T / &mut T: Borrow Tokens
 
-If you don't want to take ownership, just temporarily "glance" (`&T`) or "modify in place" (`&mut T`), the compiler automatically generates **zero-size borrow tokens**:
+If you don't want to take ownership, just temporarily "glance" (`&T`) or "modify in place"
+(`&mut T`), the compiler automatically generates **zero-size borrow tokens**:
 
 ```yaoxiang
 data = [1, 2, 3, 4, 5]
@@ -56,7 +58,8 @@ print(data.len())    // 5
 print(data)          // ✅ data is still there, just glanced at
 ```
 
-`&T` and `&mut T` are **zero-size types**—they exist at compile time and disappear at runtime. You don't need to manually write `&`; the compiler decides automatically based on usage:
+`&T` and `&mut T` are **zero-size types**—they exist at compile time and disappear at runtime. You
+don't need to manually write `&`; the compiler decides automatically based on usage:
 
 ```yaoxiang
 // Read-only access → automatically &T
@@ -75,7 +78,8 @@ print(p)                // Pass &Point
 shift(p, 1.0, 1.0)      // Pass &mut Point
 ```
 
-**Key distinction**: `&T` is copyable (shared read-only), `&mut T` is not copyable (exclusive mutable). This is not a special rule—it is two type properties.
+**Key distinction**: `&T` is copyable (shared read-only), `&mut T` is not copyable (exclusive
+mutable). This is not a special rule—it is two type properties.
 
 ## ref: Cross-scope Sharing
 
@@ -117,13 +121,17 @@ print(backup[0])    // 1—unaffected
 
 YaoXiang has no lifetimes `'a`. This design choice comes from a key observation:
 
-> Borrow conflict problems are essentially equivalent to Hoare logic verification. Letting the type checker's proof pipeline solve them unified eliminates the need for an additional borrow checker framework.
+> Borrow conflict problems are essentially equivalent to Hoare logic verification. Letting the type
+> checker's proof pipeline solve them unified eliminates the need for an additional borrow checker
+> framework.
 
-You don't need to annotate `'a`, don't need to understand lifetimes—the compiler automatically verifies ownership safety during type checking.
+You don't need to annotate `'a`, don't need to understand lifetimes—the compiler automatically
+verifies ownership safety during type checking.
 
 ## No GC
 
-The entire ownership model has no garbage collection. All memory deallocation timing is determined at compile time:
+The entire ownership model has no garbage collection. All memory deallocation timing is determined
+at compile time:
 
 - **After Move** → Original variable unavailable, RAII auto-releases
 - **After ref** → Released when reference count reaches zero
@@ -133,13 +141,13 @@ Zero GC pauses, zero runtime overhead.
 
 ## Summary
 
-| Operation        | Keyword/Syntax       | Copy?         | When to use               |
-| ---------------- | -------------------- | ------------- | ------------------------- |
-| Take ownership   | Default behavior     | Zero-copy     | Function args, assignment |
-| Glance           | Automatic `&T`       | Zero-size token | Read-only access        |
-| Modify in place  | Automatic `&mut T`   | Zero-size token | Mutable modification    |
-| Shared ownership | `ref`                | Reference count | Cross-scope/cross-task |
-| Explicit copy    | `.clone()`           | Deep copy     | Need independent copy     |
-| Raw pointer      | `unsafe` + `*T`      | Manual        | System-level operations   |
+| Operation        | Keyword/Syntax     | Copy?           | When to use               |
+| ---------------- | ------------------ | --------------- | ------------------------- |
+| Take ownership   | Default behavior   | Zero-copy       | Function args, assignment |
+| Glance           | Automatic `&T`     | Zero-size token | Read-only access          |
+| Modify in place  | Automatic `&mut T` | Zero-size token | Mutable modification      |
+| Shared ownership | `ref`              | Reference count | Cross-scope/cross-task    |
+| Explicit copy    | `.clone()`         | Deep copy       | Need independent copy     |
+| Raw pointer      | `unsafe` + `*T`    | Manual          | System-level operations   |
 
 **Remember**: Move is default, ref is sharing, clone is the exception. Three rules, goodbye GC.

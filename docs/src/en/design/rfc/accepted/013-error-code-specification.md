@@ -18,16 +18,22 @@ pr_impl:
 
 ## Summary
 
-This RFC proposes a classification specification for YaoXiang compiler error codes, using a single-level numbering system similar to Rust, with JSON resource files for multi-language support, and a `yaoxiang explain` command to provide error explanations.
+This RFC proposes a classification specification for YaoXiang compiler error codes, using a
+single-level numbering system similar to Rust, with JSON resource files for multi-language support,
+and a `yaoxiang explain` command to provide error explanations.
 
 ## Motivation
 
 ### Why do we need standardized error codes?
 
-1. **User experience**: Users can quickly identify the error type and severity by looking at the error code
-2. **Documentation organization**: Grouping by category facilitates writing and maintaining error reference documentation
-3. **Tool integration**: IDE/LSP can provide quick fix suggestions and documentation links based on error codes
-4. **Internationalization support**: Separating error messages from codes facilitates multi-language translation
+1. **User experience**: Users can quickly identify the error type and severity by looking at the
+   error code
+2. **Documentation organization**: Grouping by category facilitates writing and maintaining error
+   reference documentation
+3. **Tool integration**: IDE/LSP can provide quick fix suggestions and documentation links based on
+   error codes
+4. **Internationalization support**: Separating error messages from codes facilitates multi-language
+   translation
 
 ### Design Goals
 
@@ -54,18 +60,18 @@ Exxxx
 
 ### Stage Division
 
-| Stage | Range  | Description                    |
-| ----- | ------ | ------------------------------ |
-| **0** | E0xxx  | Lexical and syntax analysis    |
-| **1** | E1xxx  | Type checking                  |
-| **2** | E2xxx  | Semantic analysis              |
-| **3** | E3xxx  | Code generation                |
-| **4** | E4xxx  | Generics and traits            |
-| **5** | E5xxx  | Modules and imports            |
-| **6** | E6xxx  | Runtime errors                 |
-| **7** | E7xxx  | I/O and system errors          |
-| **8** | E8xxx  | Internal compiler errors       |
-| **9** | E9xxx  | Reserved/experimental          |
+| Stage | Range | Description                 |
+| ----- | ----- | --------------------------- |
+| **0** | E0xxx | Lexical and syntax analysis |
+| **1** | E1xxx | Type checking               |
+| **2** | E2xxx | Semantic analysis           |
+| **3** | E3xxx | Code generation             |
+| **4** | E4xxx | Generics and traits         |
+| **5** | E5xxx | Modules and imports         |
+| **6** | E6xxx | Runtime errors              |
+| **7** | E7xxx | I/O and system errors       |
+| **8** | E8xxx | Internal compiler errors    |
+| **9** | E9xxx | Reserved/experimental       |
 
 ### Error Category Enum
 
@@ -224,12 +230,12 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
 
 #### Design Advantages
 
-| Feature             | Description                                       |
-| ------------------- | ------------------------------------------------- |
-| **Single Builder**  | One `DiagnosticBuilder` works for all error codes |
-| **Type safe**       | Convenience methods ensure parameter correctness  |
-| **Self-documenting** | `E1001::unknown_variable(name)` is self-explanatory |
-| **Template separation** | Message templates separated from code, easy for i18n |
+| Feature                   | Description                                            |
+| ------------------------- | ------------------------------------------------------ |
+| **Single Builder**        | One `DiagnosticBuilder` works for all error codes      |
+| **Type safe**             | Convenience methods ensure parameter correctness       |
+| **Self-documenting**      | `E1001::unknown_variable(name)` is self-explanatory    |
+| **Template separation**   | Message templates separated from code, easy for i18n   |
 | **Zero runtime overhead** | Compile-time rendering, AOT binary has no lookup table |
 
 ---
@@ -271,98 +277,98 @@ E1001::unknown_variable(&var_name)
 
 #### E0xxx: Lexical and Syntax Analysis
 
-| Code  | Error Type               | Description                      |
-| ----- | ------------------------ | -------------------------------- |
-| E0001 | Invalid character        | Source code contains illegal character |
-| E0002 | Invalid number literal   | Incorrect number literal format  |
-| E0003 | Unterminated string      | Multi-line string missing closing quote |
-| E0004 | Invalid character literal | Incorrect character literal     |
-| E0010 | Expected token           | Parser expected specific token   |
-| E0011 | Unexpected token         | Encountered unexpected token     |
-| E0012 | Invalid syntax           | Expression/statement syntax error |
-| E0013 | Mismatched brackets      | Parentheses, brackets, or braces don't match |
-| E0014 | Missing semicolon        | Missing semicolon at end of statement |
+| Code  | Error Type                | Description                                  |
+| ----- | ------------------------- | -------------------------------------------- |
+| E0001 | Invalid character         | Source code contains illegal character       |
+| E0002 | Invalid number literal    | Incorrect number literal format              |
+| E0003 | Unterminated string       | Multi-line string missing closing quote      |
+| E0004 | Invalid character literal | Incorrect character literal                  |
+| E0010 | Expected token            | Parser expected specific token               |
+| E0011 | Unexpected token          | Encountered unexpected token                 |
+| E0012 | Invalid syntax            | Expression/statement syntax error            |
+| E0013 | Mismatched brackets       | Parentheses, brackets, or braces don't match |
+| E0014 | Missing semicolon         | Missing semicolon at end of statement        |
 
 #### E1xxx: Type Checking
 
-| Code  | Error Type               | Description                        |
-| ----- | ------------------------ | ---------------------------------- |
-| E1001 | Unknown variable         | Referenced variable is not defined |
-| E1002 | Type mismatch            | Expected type doesn't match actual type |
-| E1003 | Unknown type             | Referenced type doesn't exist      |
+| Code  | Error Type               | Description                                            |
+| ----- | ------------------------ | ------------------------------------------------------ |
+| E1001 | Unknown variable         | Referenced variable is not defined                     |
+| E1002 | Type mismatch            | Expected type doesn't match actual type                |
+| E1003 | Unknown type             | Referenced type doesn't exist                          |
 | E1010 | Parameter count mismatch | Function call parameter count doesn't match definition |
-| E1011 | Parameter type mismatch  | Parameter type checking failed     |
-| E1012 | Return type mismatch     | Function return type error         |
-| E1013 | Function not found       | Calling undefined function          |
-| E1020 | Cannot infer type        | Cannot infer type from context     |
-| E1021 | Type inference conflict  | Multiple constraints cause type contradiction |
-| E1030 | Pattern non-exhaustive   | match expression doesn't cover all cases |
-| E1031 | Unreachable pattern      | Pattern that can never match       |
-| E1040 | Operation not supported  | Type doesn't support this operation |
-| E1041 | Index out of bounds      | Array/list index out of range      |
-| E1042 | Field not found          | Accessing non-existent struct field |
+| E1011 | Parameter type mismatch  | Parameter type checking failed                         |
+| E1012 | Return type mismatch     | Function return type error                             |
+| E1013 | Function not found       | Calling undefined function                             |
+| E1020 | Cannot infer type        | Cannot infer type from context                         |
+| E1021 | Type inference conflict  | Multiple constraints cause type contradiction          |
+| E1030 | Pattern non-exhaustive   | match expression doesn't cover all cases               |
+| E1031 | Unreachable pattern      | Pattern that can never match                           |
+| E1040 | Operation not supported  | Type doesn't support this operation                    |
+| E1041 | Index out of bounds      | Array/list index out of range                          |
+| E1042 | Field not found          | Accessing non-existent struct field                    |
 
 #### E2xxx: Semantic Analysis
 
-| Code  | Error Type            | Description                        |
-| ----- | --------------------- | ---------------------------------- |
-| E2001 | Scope error           | Variable not in current scope      |
-| E2002 | Duplicate definition  | Duplicate definition in same scope |
-| E2003 | Lifetime error        | Lifetime constraint not satisfied  |
-| E2010 | Immutable assignment  | Attempting to modify immutable variable |
-| E2011 | Uninitialized use     | Using uninitialized variable       |
+| Code  | Error Type           | Description                                  |
+| ----- | -------------------- | -------------------------------------------- |
+| E2001 | Scope error          | Variable not in current scope                |
+| E2002 | Duplicate definition | Duplicate definition in same scope           |
+| E2003 | Lifetime error       | Lifetime constraint not satisfied            |
+| E2010 | Immutable assignment | Attempting to modify immutable variable      |
+| E2011 | Uninitialized use    | Using uninitialized variable                 |
 | E2012 | Mutability conflict  | Using mutable reference in immutable context |
 
 #### E4xxx: Generics and Traits
 
-| Code  | Error Type                    | Description                       |
-| ----- | ----------------------------- | --------------------------------- |
-| E4001 | Generic parameter mismatch    | Generic parameter count/type mismatch |
-| E4002 | Trait bound violated          | Trait constraint not satisfied    |
-| E4003 | Associated type error         | Associated type definition/use error |
+| Code  | Error Type                     | Description                            |
+| ----- | ------------------------------ | -------------------------------------- |
+| E4001 | Generic parameter mismatch     | Generic parameter count/type mismatch  |
+| E4002 | Trait bound violated           | Trait constraint not satisfied         |
+| E4003 | Associated type error          | Associated type definition/use error   |
 | E4004 | Duplicate trait implementation | Duplicate implementation of same trait |
-| E4005 | Trait not found               | Required trait not found          |
-| E4006 | Sized bound violated          | Sized constraint not satisfied    |
+| E4005 | Trait not found                | Required trait not found               |
+| E4006 | Sized bound violated           | Sized constraint not satisfied         |
 
 #### E5xxx: Modules and Imports
 
-| Code  | Error Type             | Description                   |
-| ----- | ---------------------- | ----------------------------- |
-| E5001 | Module not found       | Imported module doesn't exist |
-| E5002 | Cyclic import          | Circular dependency between modules |
-| E5003 | Symbol not exported    | Attempting to access non-exported symbol |
-| E5004 | Invalid module path    | Incorrect module path format  |
-| E5005 | Private access         | Accessing private symbol      |
+| Code  | Error Type          | Description                              |
+| ----- | ------------------- | ---------------------------------------- |
+| E5001 | Module not found    | Imported module doesn't exist            |
+| E5002 | Cyclic import       | Circular dependency between modules      |
+| E5003 | Symbol not exported | Attempting to access non-exported symbol |
+| E5004 | Invalid module path | Incorrect module path format             |
+| E5005 | Private access      | Accessing private symbol                 |
 
 #### E6xxx: Runtime Errors
 
-| Code  | Error Type                   | Description                          |
-| ----- | ---------------------------- | ------------------------------------ |
-| E6001 | Division by zero             | Integer division by zero             |
-| E6002 | Assertion failed             | assert! macro failed                 |
-| E6003 | Arithmetic overflow          | Arithmetic operation overflow         |
-| E6004 | Stack overflow               | Stack space exhausted                |
-| E6005 | Heap allocation failed       | Memory allocation failed             |
-| E6006 | Runtime index out of bounds  | Runtime index out of range           |
-| E6007 | Type cast failed             | Attempting to cast type to incompatible type |
+| Code  | Error Type                  | Description                                  |
+| ----- | --------------------------- | -------------------------------------------- |
+| E6001 | Division by zero            | Integer division by zero                     |
+| E6002 | Assertion failed            | assert! macro failed                         |
+| E6003 | Arithmetic overflow         | Arithmetic operation overflow                |
+| E6004 | Stack overflow              | Stack space exhausted                        |
+| E6005 | Heap allocation failed      | Memory allocation failed                     |
+| E6006 | Runtime index out of bounds | Runtime index out of range                   |
+| E6007 | Type cast failed            | Attempting to cast type to incompatible type |
 
 #### E7xxx: I/O and System Errors
 
-| Code  | Error Type         | Description                     |
-| ----- | ------------------ | ------------------------------- |
-| E7001 | File not found     | Attempting to read non-existent file |
-| E7002 | Permission denied  | Insufficient file permissions    |
-| E7003 | I/O error          | General I/O error               |
-| E7004 | Network error      | Network operation failed         |
+| Code  | Error Type        | Description                          |
+| ----- | ----------------- | ------------------------------------ |
+| E7001 | File not found    | Attempting to read non-existent file |
+| E7002 | Permission denied | Insufficient file permissions        |
+| E7003 | I/O error         | General I/O error                    |
+| E7004 | Network error     | Network operation failed             |
 
 #### E8xxx: Internal Compiler Errors
 
-| Code  | Error Type               | Description                    |
-| ----- | ------------------------ | ------------------------------ |
-| E8001 | Internal compiler error  | Compiler internal error        |
-| E8002 | Codegen error            | IR/bytecode generation failed  |
-| E8003 | Unimplemented feature    | Using unimplemented feature    |
-| E8004 | Optimization error       | Compiler optimization error    |
+| Code  | Error Type              | Description                   |
+| ----- | ----------------------- | ----------------------------- |
+| E8001 | Internal compiler error | Compiler internal error       |
+| E8002 | Codegen error           | IR/bytecode generation failed |
+| E8003 | Unimplemented feature   | Using unimplemented feature   |
+| E8004 | Optimization error      | Compiler optimization error   |
 
 ---
 
@@ -497,16 +503,16 @@ impl I18nRegistry {
 
 ##### Predefined Placeholders (Common)
 
-| Placeholder | Purpose                     | Example                            |
-| ----------- | --------------------------- | ---------------------------------- |
-| `{name}`    | Variable/type/trait name etc. identifier | `Unknown variable: '{name}'` |
-| `{expected}` | Expected type              | `Expected type '{expected}'`       |
-| `{found}`   | Actual/found type          | `, found type '{found}'`           |
-| `{method}`  | Method name                | `Method {method} is not a function` |
-| `{trait}`   | Trait name                 | `Cannot find trait: {trait}`       |
-| `{path}`    | Module path                | `Invalid path: {path}`             |
-| `{ty}`      | Type expression            | `Invalid type: {ty}`               |
-| `{message}` | Internal error message     | `Internal error: {message}`        |
+| Placeholder  | Purpose                                  | Example                             |
+| ------------ | ---------------------------------------- | ----------------------------------- |
+| `{name}`     | Variable/type/trait name etc. identifier | `Unknown variable: '{name}'`        |
+| `{expected}` | Expected type                            | `Expected type '{expected}'`        |
+| `{found}`    | Actual/found type                        | `, found type '{found}'`            |
+| `{method}`   | Method name                              | `Method {method} is not a function` |
+| `{trait}`    | Trait name                               | `Cannot find trait: {trait}`        |
+| `{path}`     | Module path                              | `Invalid path: {path}`              |
+| `{ty}`       | Type expression                          | `Invalid type: {ty}`                |
+| `{message}`  | Internal error message                   | `Internal error: {message}`         |
 
 ##### Arbitrary Key Support
 
@@ -524,7 +530,8 @@ E1001::unknown_variable(&var_name)
 "Unknown variable: '{name}' at {location}. {hint}"
 ```
 
-> **Note**: Not all error codes use placeholders. Some error codes (like E0001) are static messages that don't need parameters.
+> **Note**: Not all error codes use placeholders. Some error codes (like E0001) are static messages
+> that don't need parameters.
 
 #### Language Priority
 
@@ -599,12 +606,12 @@ default = "zh"
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-| Component                   | Responsibility                   | Rendering Time       |
-| --------------------------- | -------------------------------- | --------------------- |
-| `I18nRegistry`              | Provides templates and display text | When compiling user's project |
-| `DiagnosticBuilder.render()` | template + params → final string | When compiling user's project |
-| `Diagnostic.message`        | Rendered string                  | Stores final result   |
-| AOT binary                  | Contains final string            | Used directly at runtime |
+| Component                    | Responsibility                      | Rendering Time                |
+| ---------------------------- | ----------------------------------- | ----------------------------- |
+| `I18nRegistry`               | Provides templates and display text | When compiling user's project |
+| `DiagnosticBuilder.render()` | template + params → final string    | When compiling user's project |
+| `Diagnostic.message`         | Rendered string                     | Stores final result           |
+| AOT binary                   | Contains final string               | Used directly at runtime      |
 
 ---
 
@@ -645,11 +652,11 @@ pub enum DiagnosticLevel {
 ```
 
 | Level   | Prefix            | Description                |
-| ------- | ------------------ | -------------------------- |
-| Error   | `error[E####]:`    | Causes compilation failure |
-| Warning | `warning[E####]:`  | Doesn't affect compilation |
-| Note    | `note[E####]:`     | Additional information     |
-| Help    | `help[E####]:`     | Fix suggestion             |
+| ------- | ----------------- | -------------------------- |
+| Error   | `error[E####]:`   | Causes compilation failure |
+| Warning | `warning[E####]:` | Doesn't affect compilation |
+| Note    | `note[E####]:`    | Additional information     |
+| Help    | `help[E####]:`    | Fix suggestion             |
 
 ---
 
@@ -663,13 +670,13 @@ yaoxiang explain <ERROR_CODE> [OPTIONS]
 
 #### Options
 
-| Option           | Description                                |
-| ---------------- | ------------------------------------------ |
-| `--lang <code>`  | Specify language (en-US, zh-CN, default en-US) |
-| `--json`         | JSON format output (for IDE/LSP use)       |
-| `--json-pretty`  | Formatted JSON output                      |
-| `--examples`     | Show only example code                     |
-| `--help`         | Display help information                   |
+| Option          | Description                                    |
+| --------------- | ---------------------------------------------- |
+| `--lang <code>` | Specify language (en-US, zh-CN, default en-US) |
+| `--json`        | JSON format output (for IDE/LSP use)           |
+| `--json-pretty` | Formatted JSON output                          |
+| `--examples`    | Show only example code                         |
+| `--help`        | Display help information                       |
 
 #### Usage Examples
 
@@ -767,24 +774,24 @@ Since this RFC designs the error code system from scratch, there is no backward 
 
 ### Complete Error Code Quick Reference
 
-| Range  | Category                  |
-| ------ | ------------------------- |
-| E0xxx  | Lexical and syntax analysis |
-| E1xxx  | Type checking             |
-| E2xxx  | Semantic analysis         |
-| E3xxx  | Code generation           |
-| E4xxx  | Generics and traits       |
-| E5xxx  | Modules and imports       |
-| E6xxx  | Runtime errors            |
-| E7xxx  | I/O and system errors     |
-| E8xxx  | Internal compiler errors  |
-| E9xxx  | Reserved                  |
+| Range | Category                    |
+| ----- | --------------------------- |
+| E0xxx | Lexical and syntax analysis |
+| E1xxx | Type checking               |
+| E2xxx | Semantic analysis           |
+| E3xxx | Code generation             |
+| E4xxx | Generics and traits         |
+| E5xxx | Modules and imports         |
+| E6xxx | Runtime errors              |
+| E7xxx | I/O and system errors       |
+| E8xxx | Internal compiler errors    |
+| E9xxx | Reserved                    |
 
 ### Supported Languages
 
-| Code  | Language   | Status    |
-| ----- | ---------- | --------- |
-| en-US | English (US) | Default |
+| Code  | Language           | Status  |
+| ----- | ------------------ | ------- |
+| en-US | English (US)       | Default |
 | zh-CN | Simplified Chinese | Planned |
 
 ### Error Message Example Comparison

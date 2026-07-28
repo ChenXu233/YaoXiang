@@ -16,17 +16,18 @@ updated: '2025-01-06'
 
 ### Problem Analysis
 
-| Issue             | Description                                                                                                                               |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| **Wrong Doc Type** | RFCs are decision documents about "why this design", this document is a project management document about "where we are, where we're going" |
-| **Lack of Design Decisions** | No trade-off analysis for technical choices, no alternative comparison, no design rationale                     |
-| **Over-planning**      | Planned 9 versions (v0.1-v1.0), but only 1.5 are complete; v0.3 and beyond are all speculation                  |
-| **High Maintenance Cost** | Success metrics table has 50 states, difficult to maintain                                                         |
-| **Version Number Chaos** | Skipped v0.8, no explanation provided                                                                 |
+| Issue                        | Description                                                                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Wrong Doc Type**           | RFCs are decision documents about "why this design", this document is a project management document about "where we are, where we're going" |
+| **Lack of Design Decisions** | No trade-off analysis for technical choices, no alternative comparison, no design rationale                                                 |
+| **Over-planning**            | Planned 9 versions (v0.1-v1.0), but only 1.5 are complete; v0.3 and beyond are all speculation                                              |
+| **High Maintenance Cost**    | Success metrics table has 50 states, difficult to maintain                                                                                  |
+| **Version Number Chaos**     | Skipped v0.8, no explanation provided                                                                                                       |
 
 ### Correct Document Type
 
-This document should be managed as a **Project Roadmap**, not an RFC. Roadmaps record facts and short-term plans, RFCs record design decisions.
+This document should be managed as a **Project Roadmap**, not an RFC. Roadmaps record facts and
+short-term plans, RFCs record design decisions.
 
 ---
 
@@ -61,17 +62,17 @@ YaoXiang's version release plan, a roadmap from v0.1 to v1.0.
 
 ## 2. Component Status (Phase)
 
-| Phase | Module            | Status        | Location                                           | Last Updated  |
-| ----- | ----------------- | ------------- | -------------------------------------------------- | ------------- |
-| P1    | Lexer             | ✅ Complete   | `src/frontend/lexer/`                              | 2025-01-23   |
-| P2    | Type Checker      | ✅ Complete   | `src/frontend/typecheck/`                          | 2025-01-23   |
-| P3    | Bytecode Generator| ✅ Complete   | `src/middle/codegen/`                              | 2025-01-25   |
-| P4    | Virtual Machine   | ✅ Complete   | `src/middle/`                                      | 2025-01-25   |
-| P4.1  | Task System       | ✅ Complete   | `src/backends/runtime/task.rs`                     | 2025-01-23   |
-| P4.2  | DAG Scheduler     | 🔶 Design Done| `.claude/plan/flow-scheduler-implementation.md`    | 2026-01-04   |
-| P5    | Standard Library  | ⚠️ Partial    | `src/std/`                                         | 2025-01-23   |
-| P6    | TUI REPL          | ✅ Complete   | `src/backends/dev/repl/`                           | 2025-01-24   |
-| P7    | Generics System   | ✅ Complete   | `docs/design/rfc/011-generic-type-system.md`       | 2025-01-25   |
+| Phase | Module             | Status         | Location                                        | Last Updated |
+| ----- | ------------------ | -------------- | ----------------------------------------------- | ------------ |
+| P1    | Lexer              | ✅ Complete    | `src/frontend/lexer/`                           | 2025-01-23   |
+| P2    | Type Checker       | ✅ Complete    | `src/frontend/typecheck/`                       | 2025-01-23   |
+| P3    | Bytecode Generator | ✅ Complete    | `src/middle/codegen/`                           | 2025-01-25   |
+| P4    | Virtual Machine    | ✅ Complete    | `src/middle/`                                   | 2025-01-25   |
+| P4.1  | Task System        | ✅ Complete    | `src/backends/runtime/task.rs`                  | 2025-01-23   |
+| P4.2  | DAG Scheduler      | 🔶 Design Done | `.claude/plan/flow-scheduler-implementation.md` | 2026-01-04   |
+| P5    | Standard Library   | ⚠️ Partial     | `src/std/`                                      | 2025-01-23   |
+| P6    | TUI REPL           | ✅ Complete    | `src/backends/dev/repl/`                        | 2025-01-24   |
+| P7    | Generics System    | ✅ Complete    | `docs/design/rfc/011-generic-type-system.md`    | 2025-01-25   |
 
 **Core Achievements**:
 
@@ -196,11 +197,11 @@ Hello, YaoXiang!
 
 ## 4. Three-Layer Compilation Strategy
 
-| Layer         | Version | Input         | Output          | Description              |
-| ------------- | ------- | ------------- | --------------- | ------------------------ |
-| L1: Bytecode  | v0.1+   | Source (.yx)  | Bytecode (.yxb) | VM interpreted execution |
-| L2: Bootstrap | v0.9+   | YaoXiang src  | Bytecode        | Self-compilation         |
-| L3: AOT       | v1.0+   | Source/Bytecode| Native code    | Native performance       |
+| Layer         | Version | Input           | Output          | Description              |
+| ------------- | ------- | --------------- | --------------- | ------------------------ |
+| L1: Bytecode  | v0.1+   | Source (.yx)    | Bytecode (.yxb) | VM interpreted execution |
+| L2: Bootstrap | v0.9+   | YaoXiang src    | Bytecode        | Self-compilation         |
+| L3: AOT       | v1.0+   | Source/Bytecode | Native code     | Native performance       |
 
 **Reasons for Bytecode First**:
 
@@ -223,30 +224,30 @@ Hello, YaoXiang!
 
 ## 6. Toolchain
 
-| Version | Tool                   | Status      |
-| ------- | ---------------------- | ----------- |
-| v0.1    | yaoxiang-cli           | ✅ Complete |
-| v0.1    | TUI REPL               | ✅ Complete |
-| v0.2    | yaoxiang-debug         | 🚧 Designing |
-| v0.3    | yaoxiang-fmt           | 📋 Planned  |
-| v0.3    | yaoxiang-lsp (basic)   | 📋 Planned  |
-| v0.5    | yaoxiang-clippy        | 📋 Planned  |
-| v1.0    | Complete toolchain     | 📋 Planned  |
+| Version | Tool                 | Status       |
+| ------- | -------------------- | ------------ |
+| v0.1    | yaoxiang-cli         | ✅ Complete  |
+| v0.1    | TUI REPL             | ✅ Complete  |
+| v0.2    | yaoxiang-debug       | 🚧 Designing |
+| v0.3    | yaoxiang-fmt         | 📋 Planned   |
+| v0.3    | yaoxiang-lsp (basic) | 📋 Planned   |
+| v0.5    | yaoxiang-clippy      | 📋 Planned   |
+| v1.0    | Complete toolchain   | 📋 Planned   |
 
 ## 7. Success Metrics
 
-| Metric            | v0.1 | v0.2 | v0.3    | v0.5    | v1.0 |
-| ----------------- | ---- | ---- | ------- | ------- | ---- |
-| End-to-end run    | ✅   | ✅   | ✅      | ✅      | ✅   |
-| Basic task system | ✅   | ✅   | ✅      | ✅      | ✅   |
-| FlowScheduler     | ❌   | 🚧   | ✅      | ✅      | ✅   |
-| Concurrency       | ⚠️   | 🚧   | ✅ Basic| ✅ Full | ✅   |
-| Standard library  | Basic| Basic| Basic   | Improved| Full |
-| Generics system   | ⚠️   | ⚠️   | 🚧      | ✅      | ✅   |
-| TUI REPL          | ✅   | ✅   | ✅      | ✅      | ✅   |
-| Bootstrap         | ❌   | ❌   | ❌      | ❌      | ✅   |
-| AOT               | ❌   | ❌   | ❌      | ❌      | ✅   |
-| Code coverage     | 60%  | 70%  | 80%     | 90%     | 95%  |
+| Metric            | v0.1  | v0.2  | v0.3     | v0.5     | v1.0 |
+| ----------------- | ----- | ----- | -------- | -------- | ---- |
+| End-to-end run    | ✅    | ✅    | ✅       | ✅       | ✅   |
+| Basic task system | ✅    | ✅    | ✅       | ✅       | ✅   |
+| FlowScheduler     | ❌    | 🚧    | ✅       | ✅       | ✅   |
+| Concurrency       | ⚠️    | 🚧    | ✅ Basic | ✅ Full  | ✅   |
+| Standard library  | Basic | Basic | Basic    | Improved | Full |
+| Generics system   | ⚠️    | ⚠️    | 🚧       | ✅       | ✅   |
+| TUI REPL          | ✅    | ✅    | ✅       | ✅       | ✅   |
+| Bootstrap         | ❌    | ❌    | ❌       | ❌       | ✅   |
+| AOT               | ❌    | ❌    | ❌       | ❌       | ✅   |
+| Code coverage     | 60%   | 70%   | 80%      | 90%      | 95%  |
 
 **Legend**:
 

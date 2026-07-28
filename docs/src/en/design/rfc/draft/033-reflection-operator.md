@@ -18,20 +18,28 @@ issue: '#136'
 
 ## Summary
 
-This document proposes introducing the `^^` operator as a reflection entry point for accessing type and value metadata. `^^T` returns a static metadata object for type `T`, and `^^obj` returns dynamic type metadata for value `obj`. Metadata objects are ordinary record types containing information such as name, parameters, and fields, usable at both compile-time and runtime.
+This document proposes introducing the `^^` operator as a reflection entry point for accessing type
+and value metadata. `^^T` returns a static metadata object for type `T`, and `^^obj` returns dynamic
+type metadata for value `obj`. Metadata objects are ordinary record types containing information
+such as name, parameters, and fields, usable at both compile-time and runtime.
 
 ## Motivation
 
 ### Why is this feature needed?
 
-1. **Serialization/deserialization**: Need to access field information of types to automatically generate serialization code
-2. **Compile-time metaprogramming**: Need to access type structure at compile-time to generate code or verify constraints
+1. **Serialization/deserialization**: Need to access field information of types to automatically
+   generate serialization code
+2. **Compile-time metaprogramming**: Need to access type structure at compile-time to generate code
+   or verify constraints
 3. **Runtime debugging/tools**: Need to print type information at runtime for debugging assistance
-4. **Runtime type checking**: Need to determine type relationships at runtime, such as "what type is obj?"
+4. **Runtime type checking**: Need to determine type relationships at runtime, such as "what type is
+   obj?"
 
 ### Current problems
 
-Currently, YaoXiang has no reflection mechanism to access type metadata at compile-time or runtime. If `.name`, `.fields` were used directly to access type metadata, they would conflict with user-defined fields:
+Currently, YaoXiang has no reflection mechanism to access type metadata at compile-time or runtime.
+If `.name`, `.fields` were used directly to access type metadata, they would conflict with
+user-defined fields:
 
 ```yaoxiang
 Person: Type = { name: String, age: Int }
@@ -40,13 +48,15 @@ Person: Type = { name: String, age: Int }
 # This causes parsing difficulties and semantic confusion
 ```
 
-A syntax that does **not intrude on the ordinary field namespace** is needed to access type metadata.
+A syntax that does **not intrude on the ordinary field namespace** is needed to access type
+metadata.
 
 ## Proposal
 
 ### Core design
 
-Introduce the `^^` operator as a reflection entry point, clearly distinguishing between ordinary code and metadata queries.
+Introduce the `^^` operator as a reflection entry point, clearly distinguishing between ordinary
+code and metadata queries.
 
 **Two usage patterns**:
 
@@ -75,9 +85,11 @@ FieldMeta: Type = {
 }
 ```
 
-**Universe level**: If `T: Type_n`, then `^^T: Type_{n+1}`, conforming to standard universe lifting rules in type theory.
+**Universe level**: If `T: Type_n`, then `^^T: Type_{n+1}`, conforming to standard universe lifting
+rules in type theory.
 
-**Precedence**: `^^` is a unary prefix operator with the highest precedence. `^^T.name` is equivalent to `^^T.name`.
+**Precedence**: `^^` is a unary prefix operator with the highest precedence. `^^T.name` is
+equivalent to `^^T.name`.
 
 ### Examples
 
@@ -176,9 +188,9 @@ print(point_to_json(Point(1.0, 2.0)))  # '{"x": 1.0, "y": 2.0}'
 
 ### Syntax changes
 
-| Before        | After                          |
-| ------------- | ------------------------------ |
-| No reflection | `^^T` gets type metadata       |
+| Before        | After                                        |
+| ------------- | -------------------------------------------- |
+| No reflection | `^^T` gets type metadata                     |
 | No reflection | `^^obj` gets dynamic type metadata for value |
 
 ## Detailed design
@@ -189,7 +201,8 @@ print(point_to_json(Point(1.0, 2.0)))  # '{"x": 1.0, "y": 2.0}'
 - **Universe level**: The type returned by `^^T` is one level higher than `T`
 - **Generic interaction**: Both `^^List` and `^^List(Int)` are supported
 - **Function interaction**: `^^add` returns function metadata (including parameters and return type)
-- **Refinement type interaction**: `^^Positive` returns refinement type metadata (including refinement expression)
+- **Refinement type interaction**: `^^Positive` returns refinement type metadata (including
+  refinement expression)
 
 ### Runtime behavior
 
@@ -233,34 +246,36 @@ print(point_to_json(Point(1.0, 2.0)))  # '{"x": 1.0, "y": 2.0}'
 
 - **Uniformity**: Functions, generics, and refinement types are handled uniformly
 - **Zero overhead**: Compile-time reflection is fully erased; runtime reflection is optional
-- **Integration with existing systems**: Seamlessly integrates with compile-time predicates (RFC-027)
+- **Integration with existing systems**: Seamlessly integrates with compile-time predicates
+  (RFC-027)
 - **Conciseness**: `^^` is pure symbols, does not conflict with user-defined identifiers
 - **On-demand generation**: Treeshake optimization, unused types have zero overhead
 
 ### Disadvantages
 
 - **Learning curve**: Need to understand the semantics of `^^` and metadata structure
-- **Runtime overhead**: Enabling runtime reflection increases memory overhead (one pointer per instance)
+- **Runtime overhead**: Enabling runtime reflection increases memory overhead (one pointer per
+  instance)
 - **Implementation complexity**: Requires modifying multiple compiler components
 
 ## Alternative approaches
 
-| Approach              | Why not chosen                                           |
-| --------------------- | -------------------------------------------------------- |
-| `reflect(T)` function | Introduces additional identifiers into scope, may be shadowed by users |
-| `type_info(T)` function | Same as above                                           |
-| Single `^` operator   | May conflict with bitwise operations; C++26 chose `^^` precisely because of such conflicts |
-| `@@`, `##` or similar | No precedent exists; less intuitive than `^^`            |
+| Approach                | Why not chosen                                                                             |
+| ----------------------- | ------------------------------------------------------------------------------------------ |
+| `reflect(T)` function   | Introduces additional identifiers into scope, may be shadowed by users                     |
+| `type_info(T)` function | Same as above                                                                              |
+| Single `^` operator     | May conflict with bitwise operations; C++26 chose `^^` precisely because of such conflicts |
+| `@@`, `##` or similar   | No precedent exists; less intuitive than `^^`                                              |
 
 ## Implementation phases
 
-| Phase   | Content                           | Dependency    |
-| ------- | --------------------------------- | ------------- |
-| Phase 1 | Compile-time `^^` operator parsing | None        |
-| Phase 2 | `TypeMeta` data structure definition | Phase 1     |
-| Phase 3 | Compile-time metadata generation  | Phase 2       |
-| Phase 4 | Runtime reflection support (optional) | Phase 3   |
-| Phase 5 | Compile-time predicate integration | Phase 3      |
+| Phase   | Content                               | Dependency |
+| ------- | ------------------------------------- | ---------- |
+| Phase 1 | Compile-time `^^` operator parsing    | None       |
+| Phase 2 | `TypeMeta` data structure definition  | Phase 1    |
+| Phase 3 | Compile-time metadata generation      | Phase 2    |
+| Phase 4 | Runtime reflection support (optional) | Phase 3    |
+| Phase 5 | Compile-time predicate integration    | Phase 3    |
 
 ### Dependency graph
 
@@ -281,14 +296,17 @@ reflection)    predicates)
 ### Risks
 
 - **Parsing conflict**: `^^` may conflict with existing syntax (analysis shows no conflict)
-- **Performance impact**: Compile-time metadata generation may increase compilation time (can be optimized with treeshake)
-- **Runtime overhead**: Enabling runtime reflection increases memory overhead (mitigated by on-demand generation)
+- **Performance impact**: Compile-time metadata generation may increase compilation time (can be
+  optimized with treeshake)
+- **Runtime overhead**: Enabling runtime reflection increases memory overhead (mitigated by
+  on-demand generation)
 
 ## Open questions
 
 - [x] Scope of `^^`: Acts only on types and values, not on expressions
 - [x] Chained access: Supported; metadata objects returned by `^^T` can normally access properties
-- [x] Pattern matching: Supported; `TypeMeta` is an ordinary record type, can normally be pattern-matched
+- [x] Pattern matching: Supported; `TypeMeta` is an ordinary record type, can normally be
+      pattern-matched
 - [x] Comparison: Supported; metadata objects of the same type are equal
 - [x] Memory overhead: On-demand generation + treeshake optimization
 
@@ -298,25 +316,25 @@ reflection)    predicates)
 
 ### Appendix A: Design decision records
 
-| Decision                 | Decision                                              | Date       | Recorder |
-| ------------------------ | ----------------------------------------------------- | ---------- | -------- |
-| Scope of `^^`            | Acts only on types and values, not on expressions     | 2026-06-16 | Chen Xu  |
-| Chained access           | Supported                                             | 2026-06-16 | Chen Xu  |
-| Pattern matching          | Supported                                             | 2026-06-16 | Chen Xu  |
-| Comparison               | Supported; metadata of the same type is equal         | 2026-06-16 | Chen Xu  |
-| Memory overhead          | On-demand generation + treeshake                     | 2026-06-16 | Chen Xu  |
-| Generic interaction       | Both `^^List` and `^^List(Int)` are supported        | 2026-06-16 | Chen Xu  |
+| Decision                      | Decision                                             | Date       | Recorder |
+| ----------------------------- | ---------------------------------------------------- | ---------- | -------- |
+| Scope of `^^`                 | Acts only on types and values, not on expressions    | 2026-06-16 | Chen Xu  |
+| Chained access                | Supported                                            | 2026-06-16 | Chen Xu  |
+| Pattern matching              | Supported                                            | 2026-06-16 | Chen Xu  |
+| Comparison                    | Supported; metadata of the same type is equal        | 2026-06-16 | Chen Xu  |
+| Memory overhead               | On-demand generation + treeshake                     | 2026-06-16 | Chen Xu  |
+| Generic interaction           | Both `^^List` and `^^List(Int)` are supported        | 2026-06-16 | Chen Xu  |
 | Refinement expression storage | Available at compile-time, erased to None at runtime | 2026-06-16 | Chen Xu  |
 
 ### Appendix B: Glossary
 
-| Term          | Definition                                                                                      |
-| ------------- | ----------------------------------------------------------------------------------------------- |
-| Reflection    | The ability to access type metadata at runtime or compile-time                                 |
-| Metadata      | Information describing type structure (name, fields, parameters, etc.)                          |
-| RTTI          | Run-Time Type Information, runtime type information                                             |
-| Treeshake     | Compiler optimization that removes unused code                                                   |
-| Refinement type | A type with constraint conditions, e.g., `Positive: (x: Int) -> Type = { x > 0 }`            |
+| Term            | Definition                                                                        |
+| --------------- | --------------------------------------------------------------------------------- |
+| Reflection      | The ability to access type metadata at runtime or compile-time                    |
+| Metadata        | Information describing type structure (name, fields, parameters, etc.)            |
+| RTTI            | Run-Time Type Information, runtime type information                               |
+| Treeshake       | Compiler optimization that removes unused code                                    |
+| Refinement type | A type with constraint conditions, e.g., `Positive: (x: Int) -> Type = { x > 0 }` |
 
 ---
 
