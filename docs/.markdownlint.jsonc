@@ -1,0 +1,41 @@
+{
+  "$schema": "https://raw.githubusercontent.com/DavidAnson/markdownlint/main/schema/markdownlint-config-schema.json",
+  "default": true,
+
+  // 行长度 - VitePress 中可适当放宽
+  "MD013": {
+    "line_length": 120,
+    "code_blocks": false,
+    "tables": false,
+    "headings": false
+  },
+
+  // 内联 HTML - VitePress 中允许
+  "MD033": false,
+
+  // 多个标题中有相同内容 - 合理放宽
+  "MD024": {
+    "allow_different_nesting": true
+  },
+
+  // 首行应为顶级标题 - 文档片段允许
+  "MD041": false,
+
+  // 文件末尾应有空行
+  "MD047": true,
+
+  // 强调应使用 * 而非 _
+  "MD049": true,
+  "MD050": true,
+
+  // 代码块语言
+  "MD040": true,
+
+  // 列表缩进
+  "MD007": {
+    "indent": 2
+  },
+
+  // 允许 bare URL
+  "MD034": false
+}
