@@ -29,7 +29,8 @@ Summarize the core content and significance of this release in 2-3 sentences.
 
 ### &lt;Feature Area Title&gt;
 
-&lt;A paragraph explaining what this feature does, what problem it solves, and what it means for users&gt;
+&lt;A paragraph explaining what this feature does, what problem it solves, and what it means for
+users&gt;
 
 - Specific change 1
 - Specific change 2
