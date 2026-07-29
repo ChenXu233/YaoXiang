@@ -75,10 +75,10 @@ pub struct ErrorCodeDefinition {
     pub category: ErrorCategory,
 }
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 /// 完整的错误码注册表
-static ERROR_CODES: Lazy<Vec<ErrorCodeDefinition>> = Lazy::new(|| {
+static ERROR_CODES: LazyLock<Vec<ErrorCodeDefinition>> = LazyLock::new(|| {
     let mut codes: Vec<ErrorCodeDefinition> = Vec::new();
 
     // E0xxx: 词法和语法分析

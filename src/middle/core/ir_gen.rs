@@ -2357,12 +2357,12 @@ impl AstToIrGenerator {
         let (trait_table, local_var_types) = if let Some(ref type_result) = self.type_result {
             (&type_result.trait_table, &type_result.local_var_types)
         } else {
-            static EMPTY_TRAIT_TABLE: once_cell::sync::Lazy<
+            static EMPTY_TRAIT_TABLE: std::sync::LazyLock<
                 crate::frontend::core::types::TraitTable,
-            > = once_cell::sync::Lazy::new(crate::frontend::core::types::TraitTable::default);
-            static EMPTY_VAR_TYPES: once_cell::sync::Lazy<
+            > = std::sync::LazyLock::new(crate::frontend::core::types::TraitTable::default);
+            static EMPTY_VAR_TYPES: std::sync::LazyLock<
                 std::collections::HashMap<String, crate::frontend::core::types::MonoType>,
-            > = once_cell::sync::Lazy::new(std::collections::HashMap::new);
+            > = std::sync::LazyLock::new(std::collections::HashMap::new);
             (&*EMPTY_TRAIT_TABLE, &*EMPTY_VAR_TYPES)
         };
 
@@ -3760,14 +3760,12 @@ impl AstToIrGenerator {
                     (&type_result.trait_table, &type_result.local_var_types)
                 } else {
                     // 无类型信息时使用空表（向后兼容）
-                    static EMPTY_TRAIT_TABLE: once_cell::sync::Lazy<
+                    static EMPTY_TRAIT_TABLE: std::sync::LazyLock<
                         crate::frontend::core::types::TraitTable,
-                    > = once_cell::sync::Lazy::new(
-                        crate::frontend::core::types::TraitTable::default,
-                    );
-                    static EMPTY_VAR_TYPES: once_cell::sync::Lazy<
+                    > = std::sync::LazyLock::new(crate::frontend::core::types::TraitTable::default);
+                    static EMPTY_VAR_TYPES: std::sync::LazyLock<
                         std::collections::HashMap<String, crate::frontend::core::types::MonoType>,
-                    > = once_cell::sync::Lazy::new(std::collections::HashMap::new);
+                    > = std::sync::LazyLock::new(std::collections::HashMap::new);
                     (&*EMPTY_TRAIT_TABLE, &*EMPTY_VAR_TYPES)
                 };
                 let analysis = crate::frontend::core::spawn::analysis::analyze_spawn_body(

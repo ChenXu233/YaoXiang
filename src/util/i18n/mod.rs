@@ -23,7 +23,7 @@
 
 use std::sync::OnceLock;
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::collections::HashMap;
 
 pub use crate::util::config::{I18nConfig as ConfigI18n};
@@ -122,7 +122,7 @@ fn load_translation_file_from_str(content: &str) -> TranslationMap {
 }
 
 /// 编译期嵌入所有 locale 文件，避免运行时相对路径依赖
-static TRANSLATIONS: Lazy<HashMap<String, TranslationMap>> = Lazy::new(|| {
+static TRANSLATIONS: LazyLock<HashMap<String, TranslationMap>> = LazyLock::new(|| {
     let mut map = HashMap::new();
     let entries: &[(&str, &str)] = &[
         ("en", include_str!("../../../locales/en.json")),
