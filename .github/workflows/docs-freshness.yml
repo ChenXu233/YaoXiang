@@ -1,0 +1,34 @@
+name: Docs Freshness Check
+on:
+  schedule:
+    # 每周一 08:00 UTC 运行 (北京时间 16:00)
+    - cron: "0 8 * * 1"
+  workflow_dispatch:  # 支持手动触发
+
+jobs:
+  freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # 需要完整 git history 检查最后修改时间
+
+      - name: Run freshness check
+        id: freshness
+        run: bash scripts/ci/check-docs-freshness.sh --days=90 --dir=docs/src
+
+      - name: Report stale docs
+        if: env.STALE_COUNT > 0
+        run: |
+          echo "发现 ${{ env.STALE_COUNT }} 个过时文档（≥90 天未更新）："
+          echo "${{ env.STALE_FILES }}"
+
+      - name: Create issue for stale docs (Phase 3 preparation)
+        if: env.STALE_COUNT > 0
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Phase 3 将在此处自动创建 Issue
+          # 目前仅输出报告，不阻断构建
+          echo "过时文档总数: ${{ env.STALE_COUNT }}"
+          echo "后续可启用自动创建 Issue 功能"
