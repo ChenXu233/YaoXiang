@@ -44,6 +44,13 @@ repos:
         language: system
         pass_filenames: false
 
+      - id: sync-version-badge
+        name: sync version badge to README
+        entry: python scripts/hooks/sync-version-badge.py
+        language: system
+        files: '^(Cargo\.toml|README\.md|docs/gh/README\.en\.md)$'
+        pass_filenames: false
+
       - id: markdownlint
         name: markdownlint docs
         entry: markdownlint "docs/**/*.md" --fix --config docs/.markdownlint.jsonc --ignore-path docs/.markdownlintignore
