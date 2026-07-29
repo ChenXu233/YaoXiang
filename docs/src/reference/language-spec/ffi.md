@@ -2,7 +2,8 @@
 
 本文件定义 YaoXiang 编程语言的 FFI（外部函数接口）规范，包括类型定义、函数声明、方法绑定和不透明类型的处理。
 
-> **详细设计**：FFI 的完整设计、动机和权衡详见 [RFC-026: FFI 核心机制](../design/rfc/accepted/026-ffi-core-mechanism.md)。
+> **详细设计**：FFI 的完整设计、动机和权衡详见
+> [RFC-026: FFI 核心机制](../design/rfc/accepted/026-ffi-core-mechanism.md)。
 
 ---
 
@@ -17,11 +18,11 @@
 
 ### 1.2 FFI 的组成
 
-| 组件 | 说明 | 语法 |
-|------|------|------|
+| 组件     | 说明                          | 语法                   |
+| -------- | ----------------------------- | ---------------------- |
 | 类型定义 | 定义 FFI 类型（不透明或透明） | `unsafe {}` + `return` |
-| 函数声明 | 声明外部函数 | `native("symbol")` |
-| 方法绑定 | 绑定方法到类型 | `[0]` 语法 |
+| 函数声明 | 声明外部函数                  | `native("symbol")`     |
+| 方法绑定 | 绑定方法到类型                | `[0]` 语法             |
 
 ---
 
@@ -81,6 +82,7 @@ MyType: Type = {}
 ```
 
 **判断规则**：
+
 - 如果类型被 `native` 函数引用 → 不透明类型
 - 否则 → 真空类型
 
@@ -103,19 +105,19 @@ sqlite3_exec: (db: SqliteDb, sql: String) -> Int32 = native("sqlite3_exec")
 
 FFI 函数的参数类型直接使用 YaoXiang 类型，编译器自动处理 C 类型映射：
 
-| C 类型 | YaoXiang 类型 |
-|--------|---------------|
-| `int` | `Int32` |
-| `long` | `Int64` |
-| `float` | `Float32` |
-| `double` | `Float64` |
-| `char` | `Char` |
-| `char*` | `String` |
-| `bool` | `Bool` |
-| `size_t` | `Uint` |
-| `void*` | `*Void` |
-| `struct T*` | `T`（透明类型）|
-| `typedef struct T T` | `T`（不透明类型）|
+| C 类型               | YaoXiang 类型     |
+| -------------------- | ----------------- |
+| `int`                | `Int32`           |
+| `long`               | `Int64`           |
+| `float`              | `Float32`         |
+| `double`             | `Float64`         |
+| `char`               | `Char`            |
+| `char*`              | `String`          |
+| `bool`               | `Bool`            |
+| `size_t`             | `Uint`            |
+| `void*`              | `*Void`           |
+| `struct T*`          | `T`（透明类型）   |
+| `typedef struct T T` | `T`（不透明类型） |
 
 ### 3.3 返回类型
 
@@ -151,6 +153,7 @@ SqliteDb.exec = sqlite3_exec[0]
 ```
 
 **调用方式**：
+
 ```yaoxiang
 db = sqlite3_open("test.db")
 
@@ -172,6 +175,7 @@ SqliteDb.open = sqlite3_open
 ```
 
 **调用方式**：
+
 ```yaoxiang
 // 通过构造函数创建
 db = SqliteDb.open("test.db")
@@ -231,6 +235,7 @@ SqliteDb.exec = sqlite3_exec[0]
 ### 6.1 生成内容
 
 yx-bindgen 生成以下内容：
+
 - FFI 类型定义（unsafe 块 + return）
 - FFI 函数声明（native 语法）
 - 方法绑定（[0] 语法）

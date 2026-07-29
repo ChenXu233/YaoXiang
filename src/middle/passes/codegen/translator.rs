@@ -405,6 +405,7 @@ impl Translator {
             Shr { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Shr, dst, lhs, rhs),
             Sar { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Sar, dst, lhs, rhs),
             Neg { dst, src } => self.translate_unary_op(Opcode::I64Neg, dst, src),
+            Not { dst, src } => self.translate_unary_op(Opcode::I64Neg, dst, src),
 
             Eq { dst, lhs, rhs } => {
                 self.translate_compare(Opcode::I64Eq, Opcode::I64Ne, dst, lhs, rhs)
@@ -517,6 +518,15 @@ impl Translator {
         dst: &Operand,
         src: &Operand,
     ) -> Result<BytecodeInstruction, Diagnostic> {
+        // 防御性：如果 dst 是 Local，走 StoreLocal 语义
+        // （IR 层统一走 Store 后正常路径不会触发，但 if/match 表达式结果聚合的 Move{dst:Local} 仍可能存在）
+        if let Operand::Local(local_idx) = dst {
+            let src_reg = self.operand_resolver.to_reg(src)?;
+            return Ok(BytecodeInstruction::new(
+                Opcode::StoreLocal,
+                vec![*local_idx as u8, src_reg],
+            ));
+        }
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
@@ -584,17 +594,10 @@ impl Translator {
         let lhs_reg = self.operand_resolver.to_reg(lhs)?;
         let rhs_reg = self.operand_resolver.to_reg(rhs)?;
 
-        if matches!(opcode, Opcode::I64Add) {
-            Ok(BytecodeInstruction::new(
-                opcode,
-                vec![dst_reg, 0, lhs_reg, 0, rhs_reg, 0],
-            ))
-        } else {
-            Ok(BytecodeInstruction::new(
-                opcode,
-                vec![dst_reg, lhs_reg, rhs_reg],
-            ))
-        }
+        Ok(BytecodeInstruction::new(
+            opcode,
+            vec![dst_reg, lhs_reg, rhs_reg],
+        ))
     }
 
     /// 翻译比较操作，统一使用整数比较指令
@@ -875,24 +878,18 @@ impl Translator {
         } else {
             0
         };
-        // func 是闭包寄存器
         let obj_reg = self.operand_resolver.to_reg(func)?;
-
-        // 将所有参数寄存器添加到操作数列表
         let mut arg_regs: Vec<Reg> = Vec::new();
         for arg in args {
             let reg = self.operand_resolver.to_reg(arg)? as u16;
             arg_regs.push(Reg(reg));
         }
-
-        // name_idx 设为 0，表示闭包调用
         let mut operands = vec![dst_reg, obj_reg];
         operands.extend_from_slice(&0u16.to_le_bytes());
         for reg in &arg_regs {
             operands.push(reg.0 as u8);
         }
         operands.push(arg_regs.len() as u8);
-
         Ok(BytecodeInstruction::new(Opcode::CallDyn, operands))
     }
 

@@ -42,7 +42,7 @@ pub enum Expr {
     If {
         condition: Box<Expr>,
         then_branch: Box<Block>,
-        elif_branches: Vec<(Box<Expr>, Box<Block>)>,
+        else_if_branches: Vec<(Box<Expr>, Box<Block>)>,
         else_branch: Option<Box<Block>>,
         span: Span,
     },
@@ -259,7 +259,7 @@ pub enum StmtKind {
     If {
         condition: Box<Expr>,
         then_branch: Box<Block>,
-        elif_branches: Vec<(Box<Expr>, Box<Block>)>,
+        else_if_branches: Vec<(Box<Expr>, Box<Block>)>,
         else_branch: Option<Box<Block>>,
         span: Span,
     },
@@ -277,15 +277,6 @@ pub enum StmtKind {
     /// 类型检查器遇到此节点时应报告错误但不 panic。
     /// 用于 LSP 错误恢复场景。
     Error(Span),
-}
-
-/// Variant constructor definition (for variant types)
-#[derive(Debug, Clone)]
-pub struct VariantDef {
-    pub name: String,
-    pub name_span: Span,
-    pub params: Vec<(Option<String>, Type)>,
-    pub span: Span,
 }
 
 /// 结构体字段定义
@@ -427,8 +418,6 @@ pub enum Type {
     },
     Union(Vec<(String, Option<Type>)>),
     Enum(Vec<String>),
-    /// Variant type: `type Color = red | green | blue` or `type Result = ok(T) | err(E)`
-    Variant(Vec<VariantDef>),
     Tuple(Vec<Type>),
     Fn {
         params: Vec<Type>,

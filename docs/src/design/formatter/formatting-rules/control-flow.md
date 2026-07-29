@@ -1,6 +1,6 @@
 ---
-title: "控制流格式化规则"
-description: if/elif/else、for 循环、while 循环、循环标签的格式化规则
+title: '控制流格式化规则'
+description: if/else if/else、for 循环、while 循环、循环标签的格式化规则
 ---
 
 # 控制流格式化规则
@@ -20,14 +20,14 @@ if(condition) { ... }
 if condition{ ... }
 ```
 
-**§5.2 elif/else。** `elif` 和 `else` 与前一个代码块之间用空格分隔。
+**§5.2 else if/else。** `else if` 和 `else` 与前一个代码块之间用空格分隔。
 
 ```
 // ✅ 正确
-if a > 0 { ... } elif a < 0 { ... } else { ... }
+if a > 0 { ... } else if a < 0 { ... } else { ... }
 
 // ❌ 错误
-if a > 0 { ... }elif a < 0 { ... }else { ... }
+if a > 0 { ... }else if a < 0 { ... }else { ... }
 ```
 
 **§5.3 for 循环。** `for` 关键字、变量、`in` 关键字、迭代器之间用空格分隔。

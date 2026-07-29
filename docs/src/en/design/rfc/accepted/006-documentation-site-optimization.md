@@ -1,11 +1,11 @@
 ---
-title: "RFC-006: Documentation Site Construction"
-status: "Accepted"
-author: "Chenxu"
-created: "2025-01-05"
-updated: "2026-07-05"
+title: 'RFC-006: Documentation Site Construction'
+status: 'Accepted'
+author: 'Chen Xu'
+created: '2025-01-05'
+updated: '2026-07-05'
 
-issue: "#130"
+issue: '#130'
 ---
 
 # RFC-006: Documentation Site Construction
@@ -14,13 +14,16 @@ issue: "#130"
 
 ## Summary
 
-Build a YaoXiang documentation site, consolidate scattered documentation, and provide search, navigation, multi-language, and version switching support.
+Establish a YaoXiang documentation site, consolidate scattered documentation, and provide search,
+navigation, multi-language, and version switching support.
 
 ## Motivation
 
 ### Why is this feature needed?
 
-Currently documentation is scattered across multiple directories, displayed only through GitHub Readme, making it difficult for new users to find the information they need, with no search capability, and Chinese/English docs are out of sync.
+Currently, documentation is scattered across multiple directories and only displayed via GitHub
+Readme, making it difficult for new users to find the information they need, with no search
+capability and unsynchronized Chinese and English documentation.
 
 ### Current Problems
 
@@ -35,14 +38,15 @@ docs/
 ├── plans/                # Implementation plans
 ├── implementation/       # Implementation docs
 ├── maintenance/          # Maintenance docs
-└── archived/             # Archive
+└── archived/             # Archived
 ```
 
 Problems:
-1. No unified entry point, relies only on GitHub Readme
+
+1. No unified entry point, only relying on GitHub Readme
 2. No search capability
 3. No version switching, users may read outdated documentation
-4. `.obsidian` files mixed into version control
+4. .obsidian mixed into version control
 
 ## Proposal
 
@@ -50,9 +54,10 @@ Problems:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│               Documentation Site Frontend                │
+│                    Documentation Site Frontend          │
 │  ┌───────────┐ ┌───────────┐ ┌─────────────────────┐   │
-│  │ Navbar    │ │ Sidebar   │ │ Version Switcher     │   │
+│  │  Navbar   │ │  Sidebar  │ │  Version Switch     │   │
+│  │           │ │           │ │  Dropdown Menu      │   │
 │  └───────────┘ └───────────┘ └─────────────────────┘   │
 └─────────────────────────────────────────────────────────┘
                           │
@@ -97,52 +102,52 @@ docs/
     └── getting-started.md
 ```
 
-### URL Path Convention (Core Design)
+### URL Path Specification (Core Design)
 
-| Scenario | URL Format | Description |
-|------|---------|------|
-| Latest Chinese | `/zh/getting-started/` | Redirects to latest version |
-| Latest English | `/en/getting-started/` | Redirects to latest version |
-| Specific version | `/v0.5/zh/getting-started/` | Version prefix |
-| Homepage | `/zh/` or `/en/` | Language homepage |
+| Scenario         | URL Format                  | Description                 |
+| ---------------- | --------------------------- | --------------------------- |
+| Latest (Chinese) | `/zh/getting-started/`      | Redirects to latest version |
+| Latest (English) | `/en/getting-started/`      | Redirects to latest version |
+| Specific version | `/v0.5/zh/getting-started/` | Version number prefix       |
+| Homepage         | `/zh/` or `/en/`            | Language homepage           |
 
 **Version Switching Design**:
+
 ```
-Version Switcher Dropdown:
+Version dropdown menu:
 ├── v0.6 (latest)
 ├── v0.5
 ├── v0.4
 └── v0.3
 ```
 
-**Version Path Convention** (Key decision, hard to change later):
-- Latest version: `/zh/xxx/` → Redirects to latest version
-- Specific version: `/v0.5/zh/xxx/` → Fixed version
-- Navbar version switch: Toggle between `/v0.5/` and `/zh/` combinations
+**Version Path Specification** (Key decision, difficult to change later):
 
-### Sidebar Convention
+- Latest version: `/zh/xxx/` → Redirect to latest version
+- Specific version: `/v0.5/zh/xxx/` → Fixed version
+- Navbar version switching: Switch between combinations of `/v0.5/` and `/zh/`
+
+### Sidebar Specification
 
 ```typescript
 // docs/.vitepress/sidebar/zh.ts
 export default {
   '/zh/tutorial/': [
     {
-      text: '教程',
+      text: 'Tutorials',
       items: [
-        { text: '快速开始', link: '/zh/getting-started' },
-        { text: '基础', link: '/zh/tutorial/basics' },
+        { text: 'Quick Start', link: '/zh/getting-started' },
+        { text: 'Basics', link: '/zh/tutorial/basics' },
       ],
     },
   ],
   '/zh/reference/': [
     {
-      text: '参考',
-      items: [
-        { text: '内置函数', link: '/zh/reference/builtins' },
-      ],
+      text: 'Reference',
+      items: [{ text: 'Built-in Functions', link: '/zh/reference/builtins' }],
     },
   ],
-}
+};
 ```
 
 ### CI/CD Integration
@@ -179,24 +184,24 @@ jobs:
 ```typescript
 // docs/.vitepress/navbar.ts
 export default [
-  { text: '开始', link: '/zh/getting-started' },
-  { text: '教程', link: '/zh/tutorial/' },
-  { text: '参考', link: '/zh/reference/' },
-  { text: '设计', link: '/zh/design/' },
+  { text: 'Getting Started', link: '/zh/getting-started' },
+  { text: 'Tutorial', link: '/zh/tutorial/' },
+  { text: 'Reference', link: '/zh/reference/' },
+  { text: 'Design', link: '/zh/design/' },
   { text: 'GitHub', link: 'https://github.com/yaoxiang-lang/yaoxiang' },
-]
+];
 ```
 
 ### Site Configuration
 
 ```typescript
 // docs/.vitepress/config.mts
-import { defineConfig } from 'vitepress'
-import starlight from '@astrojs/starlight'
+import { defineConfig } from 'vitepress';
+import starlight from '@astrojs/starlight';
 
 export default defineConfig({
   title: 'YaoXiang',
-  description: '一门面向未来的编程语言',
+  description: 'A future-oriented programming language',
 
   locales: {
     root: { label: '中文', lang: 'zh-CN', link: '/zh/' },
@@ -215,45 +220,45 @@ export default defineConfig({
   editLink: {
     pattern: 'https://github.com/yaoxiang-lang/yaoxiang/edit/main/docs/:path',
   },
-})
+});
 ```
 
 ## Trade-offs
 
 ### Advantages
 
-- Professional documentation site enhances project image
-- Users quickly find the information they need
+- Professional documentation site improves project image
+- Users can quickly find needed information
 - Local search is free and sufficient
 - Multi-language support serves the international community
 - Version switching prevents reading outdated documentation
 
 ### Disadvantages
 
-- Maintenance cost: site configuration needs to be maintained
-- Tech stack introduction: Node.js
+- Maintenance cost: need to maintain site configuration
+- Technology stack introduction: Node.js
 
-## Alternatives
+## Alternative Solutions
 
-| Option | Why Not Chosen |
-|------|-----------|
+| Solution    | Why Not Chosen                 |
+| ----------- | ------------------------------ |
 | GitHub Wiki | Poor search, low customization |
-| README only | No search, no navigation |
-| Docusaurus | Heavier, slower startup |
+| README only | No search, no navigation       |
+| Docusaurus  | Too heavy, slow startup        |
 
 ## Implementation Strategy
 
-### Phasing
+### Phase Breakdown
 
-| Phase | Content | Status |
-|------|------|------|
-| P0 | Initialize VitePress + Starlight configuration | Todo |
-| P0 | Configure directory structure, navbar, sidebar | Todo |
-| P0 | Migrate README + Getting Started | Todo |
-| P0 | CI/CD auto-deploy to GitHub Pages | Todo |
-| P1 | Migrate tutorials, reference docs | Todo |
-| P1 | Configure version switcher menu | Todo |
-| P2 | Supplement English documentation | Todo |
+| Phase | Content                                        | Status |
+| ----- | ---------------------------------------------- | ------ |
+| P0    | Initialize VitePress + Starlight config        | TODO   |
+| P0    | Configure directory structure, navbar, sidebar | TODO   |
+| P0    | Migrate README + Quick Start                   | TODO   |
+| P0    | CI/CD auto-deploy to GitHub Pages              | TODO   |
+| P1    | Migrate tutorials, reference docs              | TODO   |
+| P1    | Configure version switching menu               | TODO   |
+| P2    | Supplement English documentation               | TODO   |
 
 ### Dependencies
 
@@ -261,9 +266,9 @@ No external RFC dependencies
 
 ### Risks
 
-| Risk | Impact | Mitigation |
-|------|------|---------|
-| Content loss | Complete backup before migration |
+| Risk         | Impact | Mitigation                   |
+| ------------ | ------ | ---------------------------- |
+| Content loss | High   | Full backup before migration |
 
 ## Open Questions
 
@@ -273,15 +278,15 @@ No external RFC dependencies
 
 ## Appendix
 
-### Appendix A: Design Decision Record
+### Appendix A: Design Decision Records
 
-| Decision | Resolution | Date | Recorder |
-|------|------|------|--------|
-| SSG Selection | VitePress + Starlight | 2025-02-07 | Chenxu |
-| Hosting Platform | GitHub Pages | 2025-02-07 | Chenxu |
-| Search Solution | Local search | 2025-02-07 | Chenxu |
-| Multi-language Structure | `/zh/` and `/en/` prefix | 2025-02-07 | Chenxu |
-| Version Path | `/v0.5/zh/` format | 2025-02-07 | Chenxu |
+| Decision                 | Decision                   | Date       | Recorder |
+| ------------------------ | -------------------------- | ---------- | -------- |
+| SSG Selection            | VitePress + Starlight      | 2025-02-07 | Chen Xu  |
+| Hosting Platform         | GitHub Pages               | 2025-02-07 | Chen Xu  |
+| Search Solution          | Local search               | 2025-02-07 | Chen Xu  |
+| Multi-language Structure | `/zh/` and `/en/` prefixes | 2025-02-07 | Chen Xu  |
+| Version Path             | `/v0.5/zh/` format         | 2025-02-07 | Chen Xu  |
 
 ---
 

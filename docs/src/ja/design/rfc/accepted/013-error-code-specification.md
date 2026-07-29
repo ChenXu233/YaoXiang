@@ -1,73 +1,74 @@
 ---
-title: "RFC 013: エラーコード仕様"
-status: "承認済み"
-author: "晨煦"
-created: "2026-02-02"
-updated: "2026-02-12"
-issue: "#125"
+title: 'RFC 013: エラーコード仕様'
+status: '承認済み'
+author: '晨煦'
+created: '2026-02-02'
+updated: '2026-02-12'
+issue: '#125'
 issues_impl:
-  - "#125"
+  - '#125'
 pr_impl:
-  - "#7"
-  - "#9"
-  - "#29"
-  - "#66"
+  - '#7'
+  - '#9'
+  - '#29'
+  - '#66'
 ---
 
 # RFC 013: エラーコード仕様
 
 ## 概要
 
-本 RFC は YaoXiang コンパイラのエラーコード分類仕様を提案する。Rust のような単層番号システムを採用し、JSON リソースファイルにより多言語サポートを実現し、`yaoxiang explain` コマンドによりエラー説明機能を提供する。
+本 RFC は YaoXiang コンパイラのエラーコード分類仕様を提案する。Rust のような単層番号システムを採用し、JSON リソースファイルで多言語サポートを実現し、`yaoxiang explain`
+コマンドでエラー説明機能を提供する。
 
 ## 動機
 
-### 標準化されたエラーコードが必要な理由
+### なぜエラーコードの標準化が必要なのか？
 
-1. **ユーザー体験**：エラーコードを見ることで、ユーザーがエラーの種類と重大度をすぐに判断できる
-2. **ドキュメント構成**：カテゴリ別にグループ化することで、エラーリファレンスドキュメントの作成と保守が容易になる
+1. **ユーザー体験**：ユーザーがエラーコードを見ることで、エラーの種類と重大度をすぐに判断できる
+2. **ドキュメント整理**：カテゴリ別分類により、エラー参照ドキュメントの作成と保守が容易になる
 3. **ツール統合**：IDE/LSP はエラーコードに基づいてクイックフィックス提案やドキュメントリンクを提供できる
-4. **国際化サポート**：エラーメッセージとコードを分離することで、多言語翻訳が容易になる
+4. **国際化サポート**：エラーメッセージとコードが分離されているため、多言語への翻訳が容易
 
 ### 設計目標
 
-- **簡潔**：単層番号体系で、ユーザーが複雑な分類ルールを記憶する必要がない
-- **親切**：Rust のエラーメッセージ形式に類似し、ヘルプ信息和サンプルを含む
-- **拡張性**：リソースファイル驱动で、新しいエラーや新しい言語の追加が容易
-- **ツールフレンドリ**：explain コマンド + JSON 出力で、IDE/LSP 統合をサポート
+- **簡潔**：単層番号で、複雑な分類ルールを記憶する必要がない
+- **親切**：Rust のようなエラーメッセージ形式でヘルプ信息和示例を含む
+- **拡張可能**：リソースファイル驱动で、新しいエラーや新しい言語を追加しやすい
+- **ツールフレンドリー**：explain コマンド + JSON 出力で IDE/LSP 統合をサポート
 
 ---
 
 ## 提案
 
-### 中核設計：単層番号システム
+### コア設計：単層番号システム
 
-4桁の数字番号を採用し、コンパイル段階でグループ化する：
+4桁の数字编号を採用し、コンパイル段階でグループ分けする：
 
 ```
 Exxxx
 ││││
-│││└── 序号 (000-999)
+│││└── 番号 (000-999)
 ││└─── コンパイル段階 (0-9)
-└───── 固定プレフィックス 'E'
+└───── 固定接頭辞 'E'
 ```
 
-### 段階划分
+### 段階分け
 
-| 段階 | 範囲 | 説明 |
-|------|------|------|
-| **0** | E0xxx | 字句解析と構文解析 |
-| **1** | E1xxx | 型チェック |
-| **2** | E2xxx | 意味解析 |
-| **3** | E3xxx | コード生成 |
-| **4** | E4xxx | ジェネリクスとtrait |
+| 段階  | 範囲  | 説明                   |
+| ----- | ----- | ---------------------- |
+| **0** | E0xxx | 字句解析と構文解析     |
+| **1** | E1xxx | 型チェック             |
+| **2** | E2xxx | 意味解析               |
+| **3** | E3xxx | コード生成             |
+| **4** | E4xxx | ジェネリクスとトレイト |
 | **5** | E5xxx | モジュールとインポート |
-| **6** | E6xxx | ランタイムエラー |
-| **7** | E7xxx | I/O とシステムエラー |
-| **8** | E8xxx | 内部コンパイラエラー |
-| **9** | E9xxx | 予約/実験的 |
+| **6** | E6xxx | ランタイムエラー       |
+| **7** | E7xxx | I/O とシステムエラー   |
+| **8** | E8xxx | 内部コンパイラエラー   |
+| **9** | E9xxx | 予約/実験的            |
 
-### エラーカテゴリ enum
+### エラーカテゴリ列挙型
 
 ```rust
 /// エラーカテゴリ
@@ -77,7 +78,7 @@ pub enum ErrorCategory {
     Parser,     // E0xxx: Parser errors
     TypeCheck,  // E1xxx: 型チェック
     Semantic,   // E2xxx: 意味解析
-    Generic,    // E4xxx: ジェネリクスとtrait
+    Generic,    // E4xxx: ジェネリクスとトレイト
     Module,     // E5xxx: モジュールとインポート
     Runtime,    // E6xxx: ランタイムエラー
     Io,         // E7xxx: I/Oとシステムエラー
@@ -87,11 +88,11 @@ pub enum ErrorCategory {
 
 ### エラーコード定義と汎用 Builder
 
-**基本原則**：エラーコード定義と表示テキストの分離
+**コア原則**：エラーコード定義と表示メッセージを分離
 
-- `ErrorCodeDefinition`：エラーコードメタデータ（code、category、template）、表示テキストを含まない
-- `i18n/*.json`：各言語の表示テキスト（title、message、help）
-- `DiagnosticBuilder`：汎用ビルダー、trait-per-error 設計の代替
+- `ErrorCodeDefinition`：エラーのメタデータ（code、category、template）で、表示メッセージを含まない
+- `i18n/*.json`：各言語の表示メッセージ（title、message、help）
+- `DiagnosticBuilder`：汎用ビルダーで、trait-per-error 設計の代わり
 
 #### エラーコード定義
 
@@ -101,7 +102,7 @@ pub enum ErrorCategory {
 use crate::util::span::Span;
 use crate::util::diagnostic::{Diagnostic, Severity};
 
-/// エラーコード定義（メタデータのみ、表示テキストは i18n ファイル）
+/// エラーコード定義（メタデータのみ、表示メッセージは i18n ファイル）
 #[derive(Debug, Clone, Copy)]
 pub struct ErrorCodeDefinition {
     pub code: &'static str,
@@ -172,7 +173,7 @@ impl ErrorCodeDefinition {
             .param("name", name)
     }
 
-    /// E1002 型不一致
+    /// E1002 型が一致しない
     pub fn type_mismatch(expected: &str, found: &str) -> DiagnosticBuilder {
         let def = Self::find("E1002").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
@@ -189,12 +190,12 @@ impl ErrorCodeDefinition {
 
 use crate::util::diagnostic::codes::{ErrorCodeDefinition, E1001};
 
-// 簡略化方式
+// 簡略化 방법
 return Err(E1001::unknown_variable(&var_name)
     .at(span)
     .build(&i18n_registry));
 
-// 手動方式
+// 手動 방법
 return Err(ErrorCodeDefinition::find("E1001")
     .builder()
     .param("name", var_name)
@@ -218,28 +219,28 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
         category: ErrorCategory::TypeCheck,
         message_template: "Expected type '{expected}', found type '{found}'",
     },
-    // ... その他のエラーコード
+    // ... 他のエラーコード
 ];
 ```
 
 #### 設計の優位性
 
-| 特性 | 説明 |
-|------|------|
-| **単一 Builder** | 1つの `DiagnosticBuilder` がすべてのエラーコードに対応 |
-| **型安全** | クイックメソッドによりパラメータの正しさを保証 |
-| **自己文書化** | `E1001::unknown_variable(name)` が一目でわかる |
-| **テンプレート分離** | メッセージテンプレートとコードを分離し、i18n が容易 |
-| **ゼロランタイムオーバーヘッド** | コンパイル時レンダリング、AOT バイナリはルックアップなし |
+| 特性                   | 説明                                                       |
+| ---------------------- | ---------------------------------------------------------- |
+| **单一 Builder**       | 1つの `DiagnosticBuilder` がすべてのエラーコードに使用可能 |
+| **型安全**             | クイックメソッドがパラメータの正確性を保証                 |
+| **自己文書化**         | `E1001::unknown_variable(name)` が一目でわかる             |
+| **テンプレート分離**   | メッセージテンプレートとコードが分離され、i18n が容易      |
+| **ゼロオーバーヘッド** | コンパイル時レンダリング、AOT バイナリにはルックアップ不要 |
 
 ---
 
-### error! マクロの簡略化
+### エラーメacroの簡略化
 
-#### error! マクロ（コンテキスト自動注入）
+#### error! macro（自動コンテキスト注入）
 
 ```rust
-/// コンパイル時に span と i18n 設定を自動取得するマクロ
+/// コンパイル時に span と i18n 設定を自動取得する macro
 macro_rules! error {
     ($code:ident, $($key:ident = $value:expr),* $(,)?) => {
         $code()
@@ -249,15 +250,15 @@ macro_rules! error {
     };
 }
 
-/// 使用法：パラメータのみ渡し、span と i18n は自動注入
+/// 使用：パラメータ만 전달하면 되고、span と i18n は自動注入
 return Err(error!(E1001, name = var_name));
 return Err(error!(E1002, expected = "bool", found = cond_ty));
 ```
 
-#### Builder の手動使用
+#### 手動で Builder を使用
 
 ```rust
-// 手動制御が必要な場合
+// 手動で制御する必要がある場合
 E1001::unknown_variable(&var_name)
     .at(my_span)           // カスタム span
     .build(&custom_i18n)   // カスタム i18n
@@ -267,102 +268,102 @@ E1001::unknown_variable(&var_name)
 
 ## 詳細設計
 
-### エラーコード一覧
+### エラーコードリスト
 
 #### E0xxx：字句解析と構文解析
 
-| コード | エラー種類 | 説明 |
-|------|----------|------|
-| E0001 | Invalid character | ソースコードに不正な文字が含まれている |
-| E0002 | Invalid number literal | 数字リテラルの形式が不正 |
-| E0003 | Unterminated string | 複数行文字列の終了引用符がない |
-| E0004 | Invalid character literal | 文字リテラルが不正 |
-| E0010 | Expected token | 構文解析時に特定のトークンが期待された |
-| E0011 | Unexpected token | 予期しないトークンに遭遇 |
-| E0012 | Invalid syntax | 式/文の構文エラー |
-| E0013 | Mismatched brackets | 丸括弧、角括弧、波括弧が一致しない |
-| E0014 | Missing semicolon | 文の末尾にセミコロンがない |
+| コード | エラー種類                | 説明                                    |
+| ------ | ------------------------- | --------------------------------------- |
+| E0001  | Invalid character         | ソースコードに不正な文字が含まれている  |
+| E0002  | Invalid number literal    | 数字リテラルの形式が不正                |
+| E0003  | Unterminated string       | 複数行文字列に終了引用符がない          |
+| E0004  | Invalid character literal | 文字リテラルが不正                      |
+| E0010  | Expected token            | 構文解析時に特定の token を期待していた |
+| E0011  | Unexpected token          | 予期しない token に遭遇                 |
+| E0012  | Invalid syntax            | 式/文の構文エラー                       |
+| E0013  | Mismatched brackets       | 丸括弧、角括弧、波括弧が不一致          |
+| E0014  | Missing semicolon         | 文の末尾にセミコロンがない              |
 
 #### E1xxx：型チェック
 
-| コード | エラー種類 | 説明 |
-|------|----------|------|
-| E1001 | Unknown variable | 参照された変数が未定義 |
-| E1002 | Type mismatch | 期待される型と実際の型が一致しない |
-| E1003 | Unknown type | 参照された型が存在しない |
-| E1010 | Parameter count mismatch | 関数呼び出しのパラメータ数が定義と一致しない |
-| E1011 | Parameter type mismatch | パラメータの型チェック失敗 |
-| E1012 | Return type mismatch | 関数の戻り値型が不正 |
-| E1013 | Function not found | 未定義の関数を呼び出そうとした |
-| E1020 | Cannot infer type | コンテキストから型を推論できない |
-| E1021 | Type inference conflict | 複数の制約により型が矛盾 |
-| E1030 | Pattern non-exhaustive | match 式がすべてのケースをカバーしていない |
-| E1031 | Unreachable pattern | 決してマッチしないパターン |
-| E1040 | Operation not supported | 型がその操作をサポートしていない |
-| E1041 | Index out of bounds | 配列/リストのインデックスが範囲外 |
-| E1042 | Field not found | 存在しない構造体フィールドにアクセス |
+| コード | エラー種類               | 説明                                         |
+| ------ | ------------------------ | -------------------------------------------- |
+| E1001  | Unknown variable         | 参照された変数が未定義                       |
+| E1002  | Type mismatch            | 期待する型と実際の型が一致しない             |
+| E1003  | Unknown type             | 参照された型が存在しない                     |
+| E1010  | Parameter count mismatch | 関数呼び出しのパラメータ数が定義と一致しない |
+| E1011  | Parameter type mismatch  | パラメータの型チェックに失敗                 |
+| E1012  | Return type mismatch     | 関数の戻り値の型エラー                       |
+| E1013  | Function not found       | 未定義の関数を呼び出そうとしている           |
+| E1020  | Cannot infer type        | 文脈から型を推論できない                     |
+| E1021  | Type inference conflict  | 複数の制約により型の矛盾が発生               |
+| E1030  | Pattern non-exhaustive   | match 式がすべてのケースをカバーしていない   |
+| E1031  | Unreachable pattern      | 決してマッチしないパターン                   |
+| E1040  | Operation not supported  | その型は 해당 操作をサポートしていない       |
+| E1041  | Index out of bounds      | 配列/リストのインデックスが範囲外            |
+| E1042  | Field not found          | 存在しない構造体フィールドにアクセス         |
 
 #### E2xxx：意味解析
 
-| コード | エラー種類 | 説明 |
-|------|----------|------|
-| E2001 | Scope error | 変数が現在のスコープにない |
-| E2002 | Duplicate definition | 同一スコープ内で重複定義 |
-| E2003 | Lifetime error | ライフタイム制約が満たされていない |
-| E2010 | Immutable assignment | 不変変数を変更しようとした |
-| E2011 | Uninitialized use | 未初期化の変数の使用 |
-| E2012 | Mutability conflict | 不変コンテキストで可変参照を使用 |
+| コード | エラー種類           | 説明                               |
+| ------ | -------------------- | ---------------------------------- |
+| E2001  | Scope error          | 変数が現在のスコープにない         |
+| E2002  | Duplicate definition | 同一スコープ内での重複定義         |
+| E2003  | Lifetime error       | ライフタイム制約が満たされていない |
+| E2010  | Immutable assignment | 不変変数を変更しようとしている     |
+| E2011  | Uninitialized use    | 未初期化の変数を使用している       |
+| E2012  | Mutability conflict  | 不変コンテキストで可変参照を使用   |
 
-#### E4xxx：ジェネリクスとtrait
+#### E4xxx：ジェネリクスとトレイト
 
-| コード | エラー種類 | 説明 |
-|------|----------|------|
-| E4001 | Generic parameter mismatch | ジェネリックパラメータの数/型が一致しない |
-| E4002 | Trait bound violated | trait 制約が満たされていない |
-| E4003 | Associated type error | 関連型の定義/使用エラー |
-| E4004 | Duplicate trait implementation | 同一 trait の重複実装 |
-| E4005 | Trait not found | 要求された trait が見つからない |
-| E4006 | Sized bound violated | Sized 制約が満たされていない |
+| コード | エラー種類                     | 説明                                      |
+| ------ | ------------------------------ | ----------------------------------------- |
+| E4001  | Generic parameter mismatch     | ジェネリックパラメータの数/型が一致しない |
+| E4002  | Trait bound violated           | トレイト制約が満たされていない            |
+| E4003  | Associated type error          | 関連型の定義/使用エラー                   |
+| E4004  | Duplicate trait implementation | 同一トレイトの重複実装                    |
+| E4005  | Trait not found                | 要求されたトレイトが見つからない          |
+| E4006  | Sized bound violated           | Sized 制約が満たされていない              |
 
 #### E5xxx：モジュールとインポート
 
-| コード | エラー種類 | 説明 |
-|------|----------|------|
-| E5001 | Module not found | インポートされたモジュールが存在しない |
-| E5002 | Cyclic import | モジュールの循環依存 |
-| E5003 | Symbol not exported | 未エクスポートのシンボルにアクセスしようとした |
-| E5004 | Invalid module path | モジュールパス形式が不正 |
-| E5005 | Private access | プライベートシンボルへのアクセス |
+| コード | エラー種類          | 説明                                                       |
+| ------ | ------------------- | ---------------------------------------------------------- |
+| E5001  | Module not found    | インポートされたモジュールが存在しない                     |
+| E5002  | Cyclic import       | モジュール間の循環依存                                     |
+| E5003  | Symbol not exported | エクスポートされていないシンボルにアクセスしようとしている |
+| E5004  | Invalid module path | モジュールパス形式エラー                                   |
+| E5005  | Private access      | プライベートシンボルへのアクセス                           |
 
 #### E6xxx：ランタイムエラー
 
-| コード | エラー種類 | 説明 |
-|------|----------|------|
-| E6001 | Division by zero | 整数をゼロで除算 |
-| E6002 | Assertion failed | assert! マクロ失敗 |
-| E6003 | Arithmetic overflow | 算術演算のオーバーフロー |
-| E6004 | Stack overflow | スタック領域の枯渇 |
-| E6005 | Heap allocation failed | メモリ割り当て失敗 |
-| E6006 | Runtime index out of bounds | ランタイム時のインデックス逸脱 |
-| E6007 | Type cast failed | 型を互換性のない型にキャストしようとした |
+| コード | エラー種類                  | 説明                                         |
+| ------ | --------------------------- | -------------------------------------------- |
+| E6001  | Division by zero            | 整数除算でゼロ除算                           |
+| E6002  | Assertion failed            | assert! macro が失敗                         |
+| E6003  | Arithmetic overflow         | 算術演算のオーバーフロー                     |
+| E6004  | Stack overflow              | スタック領域の枯渇                           |
+| E6005  | Heap allocation failed      | メモリ割り当て失敗                           |
+| E6006  | Runtime index out of bounds | ランタイム時のインデックス範囲外             |
+| E6007  | Type cast failed            | 型を互換性のない型にキャストしようとしている |
 
 #### E7xxx：I/O とシステムエラー
 
-| コード | エラー種類 | 説明 |
-|------|----------|------|
-| E7001 | File not found | 存在しないファイルの読み込みを試行 |
-| E7002 | Permission denied | ファイルの権限が不十分 |
-| E7003 | I/O error | 汎用 I/O エラー |
-| E7004 | Network error | ネットワーク操作失敗 |
+| コード | エラー種類        | 説明                                     |
+| ------ | ----------------- | ---------------------------------------- |
+| E7001  | File not found    | 存在しないファイルを読み込もうとしている |
+| E7002  | Permission denied | ファイル権限が不足                       |
+| E7003  | I/O error         | 汎用 I/O エラー                          |
+| E7004  | Network error     | ネットワーク操作の失敗                   |
 
 #### E8xxx：内部コンパイラエラー
 
-| コード | エラー種類 | 説明 |
-|------|----------|------|
-| E8001 | Internal compiler error | コンパイラの内部エラー |
-| E8002 | Codegen error | IR/バイトコード生成失敗 |
-| E8003 | Unimplemented feature | 未実装の機能を使用 |
-| E8004 | Optimization error | コンパイラの最適化エラー |
+| コード | エラー種類              | 説明                     |
+| ------ | ----------------------- | ------------------------ |
+| E8001  | Internal compiler error | コンパイラの内部エラー   |
+| E8002  | Codegen error           | IR/バイトコード生成失敗  |
+| E8003  | Unimplemented feature   | 未実装の機能を使用       |
+| E8004  | Optimization error      | コンパイラの最適化エラー |
 
 ---
 
@@ -396,20 +397,20 @@ E1001::unknown_variable(&var_name)
 // diagnostic/codes/i18n/zh.json
 {
   "E1001": {
-    "title": "未知変数",
-    "message": "参照された変数が未定義",
-    "template": "未知変数：'{name}'",
-    "help": "変数名が正しく綴られているか確認するか、先に定義してください",
+    "title": "未知变量",
+    "message": "引用的变量未定义",
+    "template": "未知变量：'{name}'",
+    "help": "检查变量名是否拼写正确，或先定义它",
     "example": "x = 100;",
-    "error_output": "error[E1001]: 未知変数：'x'\n  --> example.yx:1:1\n   |\n 1 | print(x)\n   | ^ 未知変数 'x'"
+    "error_output": "error[E1001]: 未知变量：'x'\n  --> example.yx:1:1\n   |\n 1 | print(x)\n   | ^ 未知变量 'x'"
   },
   "E1002": {
-    "title": "型不一致",
-    "message": "期待される型が実際の型と一致しない",
-    "template": "期待される型 '{expected}'、実際の型 '{found}'",
-    "help": "正しい型を使用するか、型変換を追加してください",
+    "title": "类型不匹配",
+    "message": "期望类型与实际类型不匹配",
+    "template": "期望类型 '{expected}'，实际类型 '{found}'",
+    "help": "使用正确的类型或添加类型转换",
     "example": "x: Int = \"hello\";",
-    "error_output": "error[E1002]: 型不一致\n  --> example.yx:1:12\n   |\n 1 | x: Int = \"hello\";\n   |            ^ 期待 'Int'、検出 'String'"
+    "error_output": "error[E1002]: 类型不匹配\n  --> example.yx:1:12\n   |\n 1 | x: Int = \"hello\";\n   |            ^ 期望 'Int'，找到 'String'"
   }
 }
 ```
@@ -419,7 +420,7 @@ E1001::unknown_variable(&var_name)
 ```rust
 // diagnostic/codes/i18n/mod.rs
 
-/// i18n 表示テキストレジストリ（コンパイル時に JSON からロード、ランタイムはゼロルックアップ）
+/// i18n 表示メッセージレジストリ（コンパイル時に JSON からロード、ランタイム時のルックアップ不要）
 pub struct I18nRegistry {
     /// タイトル
     titles: HashMap<&'static str, &'static str>,
@@ -463,7 +464,7 @@ impl I18nRegistry {
         })
     }
 
-    /// テンプレートをレンダリング（コンパイル時に完了、ランタイムはゼロオーバーヘッド）
+    /// テンプレートをレンダリング（コンパイル時に完了、ランタイム時のオーバーヘッドなし）
     pub fn render(&self, template: &'static str, params: &[(&str, String)]) -> String {
         let mut result = String::with_capacity(template.len() + 64);
         let mut chars = template.chars().peekable();
@@ -495,18 +496,18 @@ impl I18nRegistry {
 
 #### テンプレートプレースホルダー
 
-##### 定義済みプレースホルダー（よく使用）
+##### 定義済みプレースホルダー（よく使用するもの）
 
-| プレースホルダー | 用途 | 例 |
-|--------|------|------|
-| `{name}` | 変数名/型名/trait名などの識別子 | `Unknown variable: '{name}'` |
-| `{expected}` | 期待される型 | `Expected type '{expected}'` |
-| `{found}` | 実際/見つかった型 | `, found type '{found}'` |
-| `{method}` | メソッド名 | `Method {method} is not a function` |
-| `{trait}` | trait 名 | `Cannot find trait: {trait}` |
-| `{path}` | モジュールパス | `Invalid path: {path}` |
-| `{ty}` | 型式 | `Invalid type: {ty}` |
-| `{message}` | 内部エラーメッセージ | `Internal error: {message}` |
+| プレースホルダー | 用途                               | 例                                  |
+| ---------------- | ---------------------------------- | ----------------------------------- |
+| `{name}`         | 変数名/型名/トレイト名などの識別子 | `Unknown variable: '{name}'`        |
+| `{expected}`     | 期待する型                         | `Expected type '{expected}'`        |
+| `{found}`        | 実際の/見つかった型                | `, found type '{found}'`            |
+| `{method}`       | メソッド名                         | `Method {method} is not a function` |
+| `{trait}`        | トレイト名                         | `Cannot find trait: {trait}`        |
+| `{path}`         | モジュールパス                     | `Invalid path: {path}'`             |
+| `{ty}`           | 型式                               | `Invalid type: {ty}`                |
+| `{message}`      | 内部エラーメッセージ               | `Internal error: {message}`         |
 
 ##### 任意の key サポート
 
@@ -524,9 +525,9 @@ E1001::unknown_variable(&var_name)
 "Unknown variable: '{name}' at {location}. {hint}"
 ```
 
-> **注意**：すべてのエラーコードがプレースホルダーを使用するわけではない。一部のエラーコード（例：E0001）は静的メッセージで、パラメータは不要。
+> **注意**：必ずしもすべてのエラーコードがプレースホルダーを使用するわけではない。一部のエラーコード（E0001 など）は静的メッセージであり、パラメータを必要としない。
 
-#### 言語優先度
+#### 言語優先順位
 
 ```
 1. yaoxiang.toml [language.default]
@@ -536,7 +537,7 @@ E1001::unknown_variable(&var_name)
 
 ### yaoxiang.toml 設定
 
-#### プロジェクトレベル設定
+#### プロジェクトレベルの設定
 
 ```toml
 # yaoxiang.toml
@@ -545,11 +546,11 @@ name = "my-project"
 version = "0.1.0"
 
 [language]
-# エラーメッセージ言語（オプション：en, zh, ja, ...）
+# エラーメッセージ言語、省略可能：en, zh, ja, ...
 default = "zh"
 ```
 
-#### ユーザーレベル設定
+#### ユーザーレベルの設定
 
 ```toml
 # ~/.yaoxiang/yaoxiang.toml
@@ -560,62 +561,62 @@ default = "zh"
 #### コンパイル時の言語選択
 
 ```
-1. プロジェクトレベルの yaoxiang.toml から language.default を読み取る
-2. 未設定の場合、ユーザーレベルの ~/.yaoxiang/yaoxiang.toml を読み取る
-3. どちらも未設定の場合、デフォルトで "en" を使用
-4. コンパイラは選択された言語に基づいて I18nRegistry を生成（1回）
-5. すべてのエラーは해당 I18nRegistry を使用してメッセージをレンダリング
+1. プロジェクトレベルの yaoxiang.toml の language.default を読み込む
+2. 設定されていない場合、ユーザーレベルの ~/.yaoxiang/yaoxiang.toml を読み込む
+3. どちらも設定されていない場合、デフォルトで "en" を使用
+4. コンパイラは選択した言語に基づいて I18nRegistry を生成する（1回）
+5. すべてのエラーはその I18nRegistry を使用してメッセージをレンダリング
 ```
 
-#### ゼロルックアップオーバーヘッドの鍵
+#### ゼロ・ルックアップ・オーバーヘッドの鍵
 
-**レンダリングはユーザーのプロジェクトをコンパイルする時に発生し、ランタイムではない。**
+**レンダリングはユーザーのプロジェクトのコンパイル時に発生し、ランタイムではない。**
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  段階 1: Rust で YaoXiang コンパイラをコンパイル                                    │
+│  段階 1: Rust で YaoXiang コンパイラをコンパイル                        │
 │                                                                           │
-│  JSON をコンパイラバイナリにパック                                              │
-│  目的：explain コマンドが直接 i18n データを読み取れる                           │
+│  JSON がコンパイラのバイナリにパックされる                               │
+│  目的：explain コマンドが i18n データを直接読み取れる                    │
 └─────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  段階 2: YaoXiang でユーザープロジェクトをコンパイル（レンダリングはここで発生）            │
+│  段階 2: YaoXiang でユーザーのプロジェクトをコンパイル（レンダリング発生） │
 │                                                                           │
-│  error! マクロ呼び出し時：                                                  │
-│  1. yaoxiang.toml から言語設定を読み取る                                       │
-│  2. コンパイラバイナリから对应する言語の i18n JSON をロード                           │
-│  3. テンプレート + パラメータ → render() → "Unknown variable: 'x'"       │
-│  4. Diagnostic.message = レンダリング済み文字列                                   │
+│  error! macro 呼び出し時：                                               │
+│  1. yaoxiang.toml から言語設定を読み込む                                 │
+│  2. コンパイラのバイナリから対応する言語の i18n JSON をロード            │
+│  3. テンプレート + パラメータ → render() → "Unknown variable: 'x'"      │
+│  4. Diagnostic.message = レンダリング済みの文字列                        │
 │                                                                           │
-│  AOT バイナリは最終文字列を直接存储、テンプレートなし、ルックアップなし                  │
+│  AOT バイナリは最終文字列を直接保存、テンプレートなし、ルックアップなし  │
 └─────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  段階 3: ユーザープログラムのランタイム                                              │
+│  段階 3: ユーザープログラムのランタイム                                   │
 │                                                                           │
 │  println!("{}", diagnostic.message)                                      │
-│  // 最終文字列を直接出力、ルックアップなし                                       │
+│  // 最終文字列を直接出力、ルックアップなし                                │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-| コンポーネント | 責務 | レンダリングタイミング |
-|------|------|----------|
-| `I18nRegistry` | テンプレートと表示テキストを提供 | ユーザープロジェクトのコンパイル時 |
-| `DiagnosticBuilder.render()` | テンプレート + パラメータ → 最終文字列 | ユーザープロジェクトのコンパイル時 |
-| `Diagnostic.message` | レンダリング済み文字列 | 最終結果を存储 |
-| AOT バイナリ | 最終文字列を含む | ランタイムで直接使用 |
+| コンポーネント               | 責務                                   | レンダリングタイミング             |
+| ---------------------------- | -------------------------------------- | ---------------------------------- |
+| `I18nRegistry`               | テンプレートと表示メッセージを提供     | ユーザーのプロジェクトコンパイル時 |
+| `DiagnosticBuilder.render()` | テンプレート + パラメータ → 最終文字列 | ユーザーのプロジェクトコンパイル時 |
+| `Diagnostic.message`         | レンダリング済みの文字列               | 最終結果を保存                     |
+| AOT バイナリ                 | 最終文字列を含む                       | ランタイムで直接使用               |
 
 ---
 
 ### エラーメッセージ形式
 
-エラーメッセージは次の形式を使用する：
+エラーメッセージは以下の形式を採用：
 
 ```
-error[E####]: <简短説明>
+error[E####]: <短い説明>
   --> <ファイル>:<行>:<列>
-   <行> | <コードスニペット>
+   <行> | <コード断片>
           ^^^<ハイライト>
 ```
 
@@ -633,23 +634,23 @@ error[E1001]: Unknown variable: x
 
 ### 重大度レベル
 
-エラーの重大度は `DiagnosticLevel` enum で管理され、エラーコード番号と分離されている：
+エラーの重大度は `DiagnosticLevel` 列挙型で管理され、エラーコード番号とは分離されている：
 
 ```rust
 pub enum DiagnosticLevel {
-    Error,    // コンパイル失敗の原因
+    Error,    // コンパイル失敗を引き起こす
     Warning,  // コンパイルには影響しないが、修正を推奨
-    Note,     // 補足情報
+    Note,     |/ 補足情報
     Help,     // 修正提案
 }
 ```
 
-| レベル | プレフィックス | 説明 |
-|------|------|------|
-| Error | `error[E####]:` | コンパイル失敗の原因 |
-| Warning | `warning[E####]:` | コンパイルに影響なし |
-| Note | `note[E####]:` | 補足情報 |
-| Help | `help[E####]:` | 修正提案 |
+| レベル  | 接頭辞            | 説明                       |
+| ------- | ----------------- | -------------------------- |
+| Error   | `error[E####]:`   | コンパイル失敗を引き起こす |
+| Warning | `warning[E####]:` | コンパイルには影響しない   |
+| Note    | `note[E####]:`    | 補足情報                   |
+| Help    | `help[E####]:`    | 修正提案                   |
 
 ---
 
@@ -663,13 +664,13 @@ yaoxiang explain <ERROR_CODE> [OPTIONS]
 
 #### オプション
 
-| オプション | 説明 |
-|------|------|
-| `--lang <code>` | 言語を指定 (en-US, zh-CN、デフォルト en-US) |
-| `--json` | JSON 形式で出力（IDE/LSP 用） |
-| `--json-pretty` | 整形された JSON 出力 |
-| `--examples` | サンプルコードのみ表示 |
-| `--help` | ヘルプ情報を表示 |
+| オプション      | 説明                                        |
+| --------------- | ------------------------------------------- |
+| `--lang <code>` | 言語を指定 (en-US, zh-CN, デフォルト en-US) |
+| `--json`        | JSON 形式出力（IDE/LSP 向け）               |
+| `--json-pretty` | フォーマットされた JSON 出力                |
+| `--examples`    | サンプルコードのみ表示                      |
+| `--help`        | ヘルプ情報を表示                            |
 
 #### 使用例
 
@@ -689,9 +690,9 @@ $ yaoxiang explain E1001 --lang zh
 error[E1001]: 未知変数: {name}
   --> <file>:<line>:<col>
 
-ヘルプ: 定義しようとしていますか？
+帮助: 你是否想要定义它？
 
-サンプル:
+示例:
   let {name} = value;
 
 # JSON 出力（LSP 統合）
@@ -712,33 +713,31 @@ $ yaoxiang explain E1001 --json
   "code": "E1001",
   "message": "Unknown variable: {name}",
   "help": "Did you mean to define it?",
-  "examples": [
-    "let {name} = value;"
-  ],
+  "examples": ["let {name} = value;"],
   "language": "en-US"
 }
 ```
 
 ---
 
-### 後方互換性
+### 下位互換性
 
-本 RFC はゼロからエラーコードシステムを設計しているため、後方互換性の問題はない。
+本 RFC はゼロからエラーコードシステムを設計するため、下位互換性の問題はない。
 
 **将来の移行戦略**（後続バージョンの参照用）：
 
 1. 旧エラーコードから新エラーコードへのマッピングを維持
-2. 移行期間中は新旧のコードを同時に表示
-3. 廃妾スケジュールを提供
+2. 移行期間中は新旧両方のコードを表示
+3. 廃止スケジュールを提供
 
 ---
 
-## 実装戦略
+## 実施戦略
 
-### 段階一：错误コードインフラストラクチャ
+### 段階一：错误コード基盤インフラ
 
 1. `src/diagnostics/` ディレクトリ構造を作成
-2. `ErrorCode` enum を実装
+2. `ErrorCode` 列挙型を実装
 3. `Diagnostic` と `DiagnosticLevel` を実装
 4. リソースファイルディレクトリとサンプル JSON を作成
 
@@ -751,15 +750,15 @@ $ yaoxiang explain E1001 --json
 
 ### 段階三：コンパイル時統合
 
-1. すべてのエラーレポート箇所を更新して新システムを使用
+1. すべてのエラー報告箇所を更新して新システムを使用
 2. メッセージテンプレートパラメータ注入を実装
-3. 言語優先度ロジックを追加
-4. ユニットテストのカバレッジ
+3. 言語優先順位ロジックを追加
+4. ユニットテストカバレッジ
 
 ### 段階四：IDE/LSP 統合
 
 1. LSP サーバーが explain JSON 出力を統合
-2. IDE でエラーコードリンクを表示
+2. IDE にエラーコードリンクを表示
 3. ホバーでエラー説明を表示
 4. クイックフィックス提案
 
@@ -769,27 +768,27 @@ $ yaoxiang explain E1001 --json
 
 ### 完全エラーコード早見表
 
-| 範囲 | カテゴリ |
-|------|------|
-| E0xxx | 字句解析と構文解析 |
-| E1xxx | 型チェック |
-| E2xxx | 意味解析 |
-| E3xxx | コード生成 |
-| E4xxx | ジェネリクスとtrait |
+| 範囲  | カテゴリ               |
+| ----- | ---------------------- |
+| E0xxx | 字句解析と構文解析     |
+| E1xxx | 型チェック             |
+| E2xxx | 意味解析               |
+| E3xxx | コード生成             |
+| E4xxx | ジェネリクスとトレイト |
 | E5xxx | モジュールとインポート |
-| E6xxx | ランタイムエラー |
-| E7xxx | I/O とシステムエラー |
-| E8xxx | 内部コンパイラエラー |
-| E9xxx | 予約 |
+| E6xxx | ランタイムエラー       |
+| E7xxx | I/O とシステムエラー   |
+| E8xxx | 内部コンパイラエラー   |
+| E9xxx | 予約                   |
 
 ### サポートされている言語
 
-| コード | 言語 | ステータス |
-|------|------|------|
-| en-US | English (US) | デフォルト |
-| zh-CN | 簡体字中国語 | 計画中 |
+| コード | 言語         | ステータス |
+| ------ | ------------ | ---------- |
+| en-US  | English (US) | デフォルト |
+| zh-CN  | 简体中文     | 計画中     |
 
-### エラーメッセージ例の比較
+### エラーメッセージ例比較
 
 ```
 # 英語 (en-US)
@@ -804,7 +803,7 @@ error[E1001]: 未知変数: x
   --> src/main.yx:5:12
    5 |   print(x)
           ^
-          ヘルプ: 定義しようとしていますか？
+          帮助: 你是否想要定义它？
 ```
 
 ## 参考文献

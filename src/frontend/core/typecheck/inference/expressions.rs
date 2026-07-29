@@ -1218,7 +1218,7 @@ impl<'a> ExpressionInferrer<'a> {
             crate::frontend::core::parser::ast::Expr::If {
                 condition,
                 then_branch,
-                elif_branches,
+                else_if_branches,
                 else_branch,
                 ..
             } => {
@@ -1236,19 +1236,19 @@ impl<'a> ExpressionInferrer<'a> {
                 self.scope.exit_scope();
                 let _then_ty = then_result?;
 
-                for (elif_cond, elif_block) in elif_branches {
-                    let elif_cond_ty = self.infer_expr(elif_cond)?;
-                    if elif_cond_ty != MonoType::Bool {
+                for (else_if_cond, else_if_block) in else_if_branches {
+                    let else_if_cond_ty = self.infer_expr(else_if_cond)?;
+                    if else_if_cond_ty != MonoType::Bool {
                         return Err(ErrorCodeDefinition::condition_type_mismatch(&format!(
                             "{}",
-                            elif_cond_ty
+                            else_if_cond_ty
                         ))
                         .build());
                     }
                     self.scope.enter_scope();
-                    let elif_result = self.infer_block(elif_block, true, None);
+                    let else_if_result = self.infer_block(else_if_block, true, None);
                     self.scope.exit_scope();
-                    let _ = elif_result?;
+                    let _ = else_if_result?;
                 }
 
                 if let Some(else_block) = else_branch {

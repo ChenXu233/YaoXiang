@@ -14,7 +14,7 @@
 //! - 嵌套泛型 BFS 引用扫描（如 List(List(Int))）
 //! - 小写参数名类型参数判定（靠名单不靠大小写启发式）
 
-use crate::frontend::core::parser::ast::{StructField, Type as AstType, TypeBodyItem, VariantDef};
+use crate::frontend::core::parser::ast::{StructField, Type as AstType, TypeBodyItem};
 use crate::frontend::core::typecheck::MonoType;
 use crate::frontend::core::types::mono::UniverseLevel;
 use crate::frontend::core::types::var::TypeVar;
@@ -846,87 +846,6 @@ fn test_type_specialization_arg_count_mismatch_returns_none() {
 }
 
 // ==================== 泛型 enum variant 测试 (Issue #197) ====================
-
-#[test]
-fn test_specialize_enum_variant_substitutes_type_params() {
-    // Arrange: Option<T> = { some(T) | none } 注册到 generic_types，实例化为 Option(Int)
-    let mut mono = Monomorphizer::new();
-
-    let variant_def = AstType::Variant(vec![
-        VariantDef {
-            name: "some".to_string(),
-            name_span: Span::dummy(),
-            params: vec![(
-                Some("x".to_string()),
-                AstType::Name {
-                    name: "T".to_string(),
-                    span: Span::dummy(),
-                },
-            )],
-            span: Span::dummy(),
-        },
-        VariantDef {
-            name: "none".to_string(),
-            name_span: Span::dummy(),
-            params: Vec::new(),
-            span: Span::dummy(),
-        },
-    ]);
-
-    let type_def = FunctionIR {
-        name: "Option".to_string(),
-        params: vec![MonoType::MetaType {
-            universe_level: UniverseLevel::type1(),
-            type_params: Vec::new(),
-        }],
-        return_type: MonoType::MetaType {
-            universe_level: UniverseLevel::type1(),
-            type_params: Vec::new(),
-        },
-        generic_params: Some(vec!["T".to_string()]),
-        body: FunctionBody::TypeDecl {
-            definition: variant_def,
-        },
-    };
-
-    mono.generic_types.insert("Option".to_string(), type_def);
-
-    let req = InstantiationRequest::new(
-        GenericFunctionId::new("Option".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64)],
-        Span::default(),
-    );
-
-    // Act
-    let result = mono.specialize_type(&req).expect("特化 Option(Int) 应成功");
-
-    // Assert
-    assert_eq!(result.name, "Option(int64)", "特化类型名应为 Option(int64)");
-    assert!(result.generic_params.is_none(), "特化类型不应有泛型参数");
-
-    // 验证 variant 中的 T 被替换为 Int(64)
-    let FunctionBody::TypeDecl { definition } = &result.body else {
-        panic!("body 应是 TypeDecl");
-    };
-    let AstType::Variant(variants) = definition else {
-        panic!("definition 应是 Variant，实际为 {:?}", definition);
-    };
-    assert_eq!(variants.len(), 2, "Option 应有 2 个 variant");
-
-    let some = &variants[0];
-    assert_eq!(some.name, "some", "第一个 variant 应为 some");
-    assert_eq!(some.params.len(), 1, "some(T) 应有 1 个参数");
-    let (_, param_ty) = &some.params[0];
-    assert!(
-        matches!(param_ty, AstType::Int(64)),
-        "some 的参数类型应为 Int(64)，实际为 {:?}",
-        param_ty
-    );
-
-    let none = &variants[1];
-    assert_eq!(none.name, "none", "第二个 variant 应为 none");
-    assert_eq!(none.params.len(), 0, "none 应无参数");
-}
 
 // ==================== 嵌套泛型引用测试 (Issue #197) ====================
 

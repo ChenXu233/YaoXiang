@@ -1,29 +1,36 @@
 ---
-title: "RFC-004: Multi-Position Joint Binding Design for Curried Methods"
-status: "Accepted"
-author: "Chenxu"
-created: "2025-01-05"
-updated: "2026-02-18 (Added builtin binding and post-binding syntax)"
-issue: "#132"
+title: 'RFC-004: Multi-Position Union Binding Design for Curried Methods'
+status: 'Accepted'
+author: 'Chen Xu'
+created: '2025-01-05'
+updated: '2026-02-18 (Added builtin binding and postfix binding syntax)'
+issue: '#132'
 ---
 
-# RFC-004: Multi-Position Joint Binding Design for Curried Methods
+# RFC-004: Multi-Position Union Binding Design for Curried Methods
 
 ## Summary
 
-This RFC proposes a brand-new **multi-position joint binding** syntax that allows functions to be precisely bound to any parameter position of a type, supporting both single-position binding and multi-position joint binding. It fundamentally solves the "who is the caller" problem in curried binding, without introducing a `self` keyword.
+This RFC proposes a new **multi-position union binding** syntax that allows precisely binding
+functions to any parameter position of a type, supporting both single-position binding and
+multi-position union binding. It fundamentally solves the "who is the caller" problem in curried
+bindings without introducing a `self` keyword.
 
 ## Motivation
 
 ### Why is this feature needed?
 
-In the current language design, binding standalone functions as type methods faces the following problems:
+In the current language design, binding standalone functions as type methods faces the following
+issues:
 
-1. **Inflexible caller position**: Traditional binding can only fix `obj` as the first parameter in `obj.method(args)`.
-2. **Difficulty in multi-parameter binding**: When a method needs to receive multiple parameters of the same type, it cannot be expressed elegantly.
-3. **Currying semantic ambiguity**: When partially applying, it is hard to distinguish "which position is being bound".
+1. **Inflexible caller position**: Traditional binding can only fix `obj` in `obj.method(args)` as
+   the first parameter
+2. **Difficult multi-parameter binding**: When a method needs to receive multiple parameters of the
+   same type, there is no elegant way to express it
+3. **Currying semantic ambiguity**: During partial application, it is difficult to distinguish
+   "which position is being bound"
 
-### Design Goal: Unifying Two Programming Perspectives
+### Design Goal: Unify Two Programming Perspectives
 
 This design aims to **unify functional and OOP programming perspectives**:
 
@@ -34,71 +41,75 @@ distance(p1, p2)
 # OOP perspective: implicit this
 p1.distance(p2)
 
-# The [positions] syntax sugar makes the two notations equivalent;
-# essentially, both are function calls
+# [positions] syntax makes both equivalent; both are essentially function calls
 Point.distance = distance[0]   # this bound to position 0
 ```
 
-**Core values**:
-- The bottom layer is a function; the top layer is method syntax
-- No `self` keyword introduced, keeping the language concise
-- Fully functional: method calls are essentially argument passing
-- `[0]`, `[1]`, `[-1]` flexibly control where `this` is bound
-- **Unified syntax**: function definitions use the format `name: (params) -> Return = body`
+**Core Value**:
+
+- The底层是函数，上层是方法语法
+- Does not introduce `self` keyword, keeping the language simple
+- Fully functional: method calls are essentially parameter passing
+- `[0]`, `[1]`, `[-1]` flexibly control this binding position
+- **Syntax unification**: function definitions use `name: (params) -> Return = body` format
 
 ### Current Problems
 
 ```yaoxiang
-# Problems with the existing design:
+# Problems with existing design:
 Point: Type = { x: Float, y: Float }
 Vector: Type = { x: Float, y: Float, z: Float }
 
 distance: (a: Point, b: Point) -> Float = { ... }
 transform: (p: Point, v: Vector) -> Point = { ... }
 
-# Can only bind to the first argument
+# Can only bind to the first parameter
 Point.distance = distance  # equivalent to distance[0]
 # p1.distance(p2) → distance(p1, p2) ✓
 
-# But what if the signature of transform is transform(Vector, Point)?
-# Cannot express the semantics of p1.transform(v1) → transform(v1, p1)
+# But what if transform's signature is transform(Vector, Point)?
+# Cannot express p1.transform(v1) → transform(v1, p1) semantics
 ```
 
 ## Proposal
 
 ### Core Design: Explicit Position Specification
 
-**Core rule: not writing `[n]` = no binding.** `Point.name = func` is only a namespace alias and will not trigger any implicit binding. To make the `.` call syntax `p.name(args)` work, it must be specified explicitly: `Point.name = func[n]`.
+**Core Rule: Not writing `[n]` = No binding.** `Point.name = func` is only a namespace alias and
+does not trigger any implicit binding. For `.` call syntax like `p.name(args)` to work, you must
+explicitly specify: `Point.name = func[n]`.
 
 #### Single-Position Binding
 
 ```yaoxiang
-# Explicitly bind to the first Point argument position (index starts at 0)
+# Explicitly bind to the first Point parameter position (index starts at 0)
 Point.distance = distance[0]
 p1.distance(p2)                     # → distance(p1, p2)
 
-# Bind to the second Point argument position
-Point.compare = distance[1]         # bind to the second Point argument
+# Bind to the second Point parameter position
+Point.compare = distance[1]         # bind to second Point parameter
 p1.compare(p2)                      # → distance(p2, p1)
 ```
 
-**Not writing `[n]` = no binding**:
+**Not writing `[n]` = No binding**:
 
 ```yaoxiang
 # No [n] → pure namespace alias, no . call syntax
 Point.distance = distance            # only Point.distance(p1, p2)
-# p1.distance(p2)  ❌  No binding
+# p1.distance(p2)  ❌  no binding
 
-# Factory functions are naturally legal, requiring no special handling
+# Factory functions are naturally valid, no special handling needed
 create_point: () -> Point = { ... }
 Point.create = create_point          # Point.create()   ✅
 ```
-- Type safety: binding only happens when types match, avoiding errors
-- Flexible control: `[n]` precisely controls the binding position
+
+- Type safe: only binds when types match, preventing errors
+- Flexible control: precisely control binding position via `[n]`
 
 #### Curried Binding
 
-When the number of function arguments exceeds the number of bound positions, a curried function is automatically generated. **Binding is always an explicit operation.**
+When the number of function parameters > number of binding positions, a curried function is
+automatically generated. **Binding is always an explicit operation.**
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
@@ -108,7 +119,7 @@ scale: (p: Point, factor: Float) -> Point = {
     return Point(p.x * factor, p.y * factor)
 }
 
-# Explicitly bind to position 0 → curried: the remaining argument `factor` is supplied by the caller
+# Explicitly bind to position 0 → currying: remaining parameter factor provided by caller
 Point.scale = scale[0]
 
 # Call
@@ -121,7 +132,8 @@ result = Point(2.0, 3.0).scale(2.0)  # → Point(4.0, 6.0)
 
 ### Position Index Binding Syntax
 
-Introduce the `[position]` syntax to precisely control the binding relationship between function arguments and types:
+Introduce `[position]` syntax to precisely control the binding relationship between function
+parameters and types:
 
 ```yaoxiang
 # Syntax format: Type.method = function[positions]
@@ -129,36 +141,37 @@ Introduce the `[position]` syntax to precisely control the binding relationship 
 # === Basic Binding ===
 
 # Single-position binding
-Point.distance = distance[1]           # bind to the 1st argument (index starts at 0)
+Point.distance = distance[1]           # bind to parameter 1 (index starts at 0)
 # Usage: p1.distance(p2) → distance(p2, p1)
 
-# Multi-position joint binding (tuple destructuring)
-Point.transform = transform[1, 2]      # bind to the 1st and 2nd arguments
+# Multi-position union binding (tuple destructuring)
+Point.transform = transform[1, 2]      # bind to parameters 1, 2
 # Usage: p1.transform(v1) → transform(v1, p1)
-# Original signature: transform(Point, Vector) → Point
+# Original function signature: transform(Point, Vector) → Point
 # After binding: Point.transform(Vector) → Point
 ```
 
 ### Detailed Syntax Definition
 
 ```
-binding-decl   ::= type '.' identifier '=' function-name '[' position-list ']'
+Binding Declaration ::= Type '.' Identifier '=' FunctionName '[' PositionList ']'
 
-position-list  ::= position (',' position)*
-position       ::= integer                # placeholder
-                | '_'                    # skip this position (placeholder)
-                | integer '..' integer   # position range (future extension)
+PositionList ::= Position (',' Position)*
+Position     ::= Integer                    # placeholder
+           | '_'                    # skip this position (placeholder)
+           | Integer '..' Integer         # position range (future extension)
 
-function-name  ::= identifier
-type           ::= identifier (generic-args)?
+FunctionName ::= Identifier
+Type     ::= Identifier (GenericParameters)?
 ```
 
 ### Builtin Binding
 
-Binding can be written directly inside the type definition body, without a separate binding statement:
+Bindings can be written directly inside the type definition body without a separate binding
+statement:
 
 ```yaoxiang
-# Method 1: bind directly inside the type definition body
+# Method 1: bind directly inside type definition
 Point: Type = {
     x: Float = 0,
     y: Float = 0,
@@ -178,9 +191,11 @@ Point: Type = {
 # Syntax: ((params) => body)[position]
 ```
 
-**Currying semantics**:
-- When binding `distance = distance[0]`, the original function signature is `(a: Point, b: Point) -> Float`
-- The generated method signature: `b: Point -> Float` (position 0 is filled by the caller)
+**Currying Semantics**:
+
+- When binding `distance = distance[0]`, the original function signature is
+  `(a: Point, b: Point) -> Float`
+- The generated method signature is: `b: Point -> Float` (position 0 filled by caller)
 
 ### Usage Examples
 
@@ -202,7 +217,7 @@ distance: (a: Point, b: Point) -> Float = {
 # But we want p1.distance(p2) → distance(p1, p2), so:
 Point.distance = distance[0]
 
-# 2. Transform operations (multi-position binding)
+# 2. Transform operation (multi-position binding)
 transform: (p: Point, v: Vector) -> Point = {
     return Point(p.x + v.x, p.y + v.y)
 }
@@ -212,12 +227,12 @@ transform: (p: Point, v: Vector) -> Point = {
 # Binding Point.transform = transform[0]
 # Call: p.transform(v) → transform(p, v) ✓
 
-# 3. Complex multi-argument function
+# 3. Complex multi-parameter function
 multiply: (a: Point, s: Float) -> Point = {
     return Point(a.x * s, a.y * s)
 }
 
-# Bind only the 1st argument (Point type), keep the 3rd argument
+# Bind only parameter 1 (Point type), keep parameter 3
 Point.scale = multiply[0, _]
 # Call: p.scale(2.0) → multiply(p, 2.0)
 
@@ -228,7 +243,7 @@ distance: (a: Circle, b: Circle) -> Float = {
     return a.center.distance(b.center) - a.radius - b.radius
 }
 
-# Bind the distance method to the Circle type
+# Bind distance method to Circle type
 Circle.distance = distance[0, 1]
 # Call: c1.distance(c2) → distance(c1, c2)
 ```
@@ -238,7 +253,7 @@ Circle.distance = distance[0, 1]
 ```yaoxiang
 # === Tuple Destructuring Binding ===
 
-# Function takes a tuple argument
+# Function receiving tuple parameter
 process_coordinates: (coord: (Float, Float)) -> String = {
     return match coord {
         (0.0, 0.0) -> "origin"
@@ -250,15 +265,15 @@ process_coordinates: (coord: (Float, Float)) -> String = {
 
 Coord: Type = { x: Float, y: Float }
 
-# Automatic destructuring binding: Coord -> (Float, Float)
+# Auto-destructuring binding: Coord -> (Float, Float)
 Coord.describe = process_coordinates[1]
 # Usage: coord.describe() → process_coordinates((coord.x, coord.y))
 ```
 
-### Multi-Return-Value Binding
+### Multi-Return Value Binding
 
 ```yaoxiang
-# === Multi-Return-Value Binding ===
+# === Multi-Return Value Binding ===
 
 min_max: (list: List(Int)) -> (Int, Int) = {
     min = list.reduce(Int.MAX, (a, b) => if a < b then a else b)
@@ -273,6 +288,7 @@ List.range: (T:Type)->((self: List(T)) -> (T, T)) = min_max[1]
 ## Detailed Design
 
 ### Compiler Implementation
+
 ### Type Checking Rules
 
 ```rust
@@ -280,7 +296,7 @@ fn check_binding_type_compatibility(
     binding: &Binding,
     func: &Function
 ) -> Result<(), TypeError> {
-    // 1. If position is auto-located (not explicitly specified), check if a match is found
+    // 1. If auto-finding position (not explicitly specified), check if match found
     if binding.positions.is_empty() {
         return Err(TypeError::NoMatchingParameter(
             binding.type_name.clone(),
@@ -288,14 +304,14 @@ fn check_binding_type_compatibility(
         ));
     }
 
-    // 2. Verify that all position indices are valid
+    // 2. Verify all position indices are valid
     for pos in &binding.positions {
         if *pos >= func.params.len() {
             return Err(TypeError::InvalidBindingPosition(*pos));
         }
     }
 
-    // 3. Check type compatibility of the bound positions
+    // 3. Check type compatibility at binding positions
     for pos in &binding.positions {
         let param_type = &func.params[*pos].type_;
         let binding_type = &binding.type_name;
@@ -307,61 +323,65 @@ fn check_binding_type_compatibility(
         }
     }
 
-    // 4. Check that method call arguments match the remaining parameters
+    // 4. Check method call arguments match remaining parameters
     Ok(())
 }
 ```
 
 ### Runtime Behavior
 
-| Scenario | Binding Syntax | Call | Translation |
-|------|---------|------|--------|
-| No binding | `Point.distance = distance` | `Point.distance(p1, p2)` | `distance(p1, p2)` |
-| Single position | `Point.distance = distance[0]` | `p1.distance(p2)` | `distance(p1, p2)` |
-| Single position | `Point.distance = distance[1]` | `p1.distance(p2)` | `distance(p2, p1)` |
-| Negative index | `Point.test = func[-1]` | `p.test(a, b)` | `func(a, b, p)` |
-| Multi-position (curried) | `Point.scale = scale[0]` | `p.scale(2.0)` | `scale(p, 2.0)` |
-| Placeholder | `Type.method = func[1]` | `obj.method(arg)` | `func(arg, obj)` |
+| Scenario        | Binding Syntax                 | Call                     | Transforms to      |
+| --------------- | ------------------------------ | ------------------------ | ------------------ |
+| No binding      | `Point.distance = distance`    | `Point.distance(p1, p2)` | `distance(p1, p2)` |
+| Single position | `Point.distance = distance[0]` | `p1.distance(p2)`        | `distance(p1, p2)` |
+| Single position | `Point.distance = distance[1]` | `p1.distance(p2)`        | `distance(p2, p1)` |
+| Negative index  | `Point.test = func[-1]`        | `p.test(a, b)`           | `func(a, b, p)`    |
+| Multi-position  | `Point.scale = scale[0]`       | `p.scale(2.0)`           | `scale(p, 2.0)`    |
+| (curried)       |                                |                          |                    |
+| Placeholder     | `Type.method = func[1]`        | `obj.method(arg)`        | `func(arg, obj)`   |
 
-**Notes**:
-- **No binding**: `Point.name = func` is only a namespace alias, with no `.` call syntax
-- `[0]`: the caller is bound to position 0 (the first argument)
-- `[1]`: the caller is bound to position 1 (the second argument)
-- `[-1]`: the caller is bound to the last position (counting from the end)
+**Explanation**:
+
+- **No binding**: `Point.name = func` is only a namespace alias, no `.` call syntax
+- `[0]`: caller bound to position 0 (first parameter)
+- `[1]`: caller bound to position 1 (second parameter)
+- `[-1]`: caller bound to last position (counting from end)
 
 ## Trade-offs
 
 ### Advantages
 
-- **Explicit binding**: `[n]` is the only binding mechanism; not writing it means no binding, with no implicit behavior
-- **Precise control**: can bind to any argument position with high flexibility
-- **Type safety**: full compile-time type checking; binding only happens when types match
-- **Concise syntax**: the `[position]` syntax is intuitive and easy to understand
-- **No `self` keyword**: keeps the language concise
-- **Currying-friendly**: naturally supports partial application and chained calls
-- **OOP-friendly**: automatic currying allows OOP programmers to migrate seamlessly
+- **Explicit binding**: `[n]` is the sole binding mechanism; no binding without it, no implicit
+  behavior
+- **Precise control**: can bind to any parameter position, high flexibility
+- **Type safe**: complete compile-time type checking, only binds when types match
+- **Concise syntax**: `[position]` syntax is intuitive and easy to understand
+- **No `self` keyword**: keeps the language simple
+- **Currying friendly**: naturally supports partial application and chained calls
+- **OOP friendly**: automatic currying allows OOP programmers to migrate effortlessly
 
 ### Disadvantages
 
-- **Learning cost**: requires understanding the concept of position indices
-- **Compilation complexity**: binding resolution and type checking increase compiler complexity
-- **Debugging difficulty**: error messages must clearly point out binding position issues
+- **Learning curve**: requires understanding position indexing concept
+- **Compiler complexity**: binding resolution and type checking increase compiler complexity
+- **Debugging difficulty**: error messages need to clearly indicate binding position issues
 
-## Alternatives
+## Alternative Approaches
 
-| Plan | Description | Why Not Chosen |
-|------|------|--------|
-| `self` keyword | Introduce Python/Rust-style `self` | Violates YaoXiang's design philosophy of no implicit `self` |
-| Named argument binding | Use named arguments `func(a=obj)` | Requires modifying function signature definitions, adding complexity |
-| Macro system | Use macros to implement binding | Large runtime overhead, reduced type safety |
-| Operator overloading | Restrict `self` to specific positions | Inconsistent syntax, semantic confusion |
+| Approach             | Description                           | Why Not Chosen                                                    |
+| -------------------- | ------------------------------------- | ----------------------------------------------------------------- |
+| `self` keyword       | Introduce Python/Rust-style `self`    | Violates YaoXiang's design philosophy of no implicit `self`       |
+| Named parameter      | Use named parameters `func(a=obj)`    | Requires modifying function signature definition, adds complexity |
+| binding              |                                       |                                                                   |
+| Macro system         | Implement binding via macros          | High runtime overhead, reduced type safety                        |
+| Operator overloading | Restrict `self` to specific positions | Inconsistent syntax, confusing semantics                          |
 
 ## Implementation Strategy
 
-### Phased Plan
+### Phase Breakdown
 
 1. **Phase 1: Basic Binding** (v0.3)
-   - Implement single-position `[n]` binding syntax (n starts at 0, supports negative numbers)
+   - Implement single-position `[n]` binding syntax (n starts at 0, supports negative)
    - Basic type checking and code generation
    - Unit test coverage
 
@@ -372,60 +392,60 @@ fn check_binding_type_compatibility(
 ### Dependencies
 
 - No external dependencies
-- No direct relation to RFC-001 (error handling)
+- No direct relationship with RFC-001 (error handling)
 - Can be implemented independently
 
 ### Risks
 
 - Compatibility handling with existing binding syntax
-- Performance optimization strategy (compile-time expansion vs. runtime lookup)
+- Performance optimization strategy (compile-time expansion vs runtime lookup)
 
 ## Open Questions
 
-The following questions have been resolved in the design and are recorded in Appendix A:
+The following issues have been resolved in the design, recorded in Appendix A:
 
-- ~~Position index starting at 0~~ → Decided: starts at 0
-- ~~Negative index~~ → Decided: supported
+- ~~Position index starts at 0~~ → Decided: starts at 0
+- ~~Negative indices~~ → Decided: supported
 - ~~Placeholder~~ → Decided: use `_`
-- ~~Range syntax~~ → Decided: implemented
+- ~~Range syntax~~ → Decided: implement
 
 **Remaining Open Questions**:
 
 - [ ] Compatibility handling with existing binding syntax
-- [ ] Performance optimization strategy (compile-time expansion vs. runtime lookup)
+- [ ] Performance optimization strategy (compile-time expansion vs runtime lookup)
 
 ---
 
-## Appendix
+## Appendices
 
 ### Appendix A: Design Decision Record
 
-| Decision | Resolution | Rationale |
-|------|------|--------|
-| Index base | Starts at 0 | Consistent with tuple/argument list indexing |
-| Negative index | Supported | Flexibility, counts from the end |
-| Placeholder | `_` | Concise, universal symbol |
-| Range syntax | Implemented | Batch binding, e.g. `[0..2]` |
-| Syntax style | Infix `Type.method = func[positions]` | Unified with RFC-010 |
-| **Binding rule** | **Explicit `[n]` required to bind; no writing means no binding** | **No implicit behavior; function definition and binding are orthogonal** |
-| **Namespace** | **`Type.name` is only namespace ownership, does not trigger binding** | **Separation of definition and binding** |
-| **Function syntax** | **Parameter names in signature `name: (params) -> Return`** | **Unified with RFC-010** |
+| Decision            | Decision                                                              | Reason                                                                   |
+| ------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Index base          | Starts at 0                                                           | Consistent with tuple/parameter list indexing                            |
+| Negative indices    | Supported                                                             | Flexible, counting from end                                              |
+| Placeholder         | `_`                                                                   | Concise, universal symbol                                                |
+| Range syntax        | Implement                                                             | Batch binding, e.g., `[0..2]`                                            |
+| Syntax style        | Infix `Type.method = func[positions]`                                 | Unified with RFC-010                                                     |
+| **Binding rule**    | **Explicit `[n]` for binding, none = no binding**                     | **No implicit behavior, function definition and binding are orthogonal** |
+| **Namespace**       | **`Type.name` is only namespace ownership, does not trigger binding** | **Definition and binding are separate**                                  |
+| **Function syntax** | **Parameter names in signature `name: (params) -> Return`**           | **Unified with RFC-010**                                                 |
 
 ### Appendix B: Glossary
 
-| Term | Definition |
-|------|------|
-| Binding position | Index position in the function argument list |
-| Joint binding | Binding a type to multiple argument positions |
-| Partial application | Providing only some arguments, returning a function awaiting completion of the call |
-| **Unified syntax** | **`name: (params) -> Return = body`, parameter names declared in the signature** |
-| **Namespace function** | **`Type.name` syntax; the function belongs to Type's namespace and does not imply binding** |
-| **Explicit binding** | **`Type.name = func[n]`, the only method binding mechanism** |
+| Term                   | Definition                                                                         |
+| ---------------------- | ---------------------------------------------------------------------------------- |
+| Binding position       | Index position in function parameter list                                          |
+| Union binding          | Binding a type to multiple parameter positions                                     |
+| Partial application    | Providing only part of the parameters, returning a function for the remaining call |
+| **Unified syntax**     | **`name: (params) -> Return = body`, parameter names declared in signature**       |
+| **Namespace function** | **`Type.name` syntax, function belongs to Type's namespace, no implicit binding**  |
+| **Explicit binding**   | **`Type.name = func[n]`, the sole method binding mechanism**                       |
 
 ---
 
 ## References
 
-- [Rust impl syntax](https://doc.rust-lang.org/book/ch05-03-method-syntax.html)
-- [Haskell type classes](https://wiki.haskell.org/Type_class)
-- [Kotlin extension functions](https://kotlinlang.org/docs/extensions.html)
+- [Rust impl Syntax](https://doc.rust-lang.org/book/ch05-03-method-syntax.html)
+- [Haskell Type Classes](https://wiki.haskell.org/Type_class)
+- [Kotlin Extension Functions](https://kotlinlang.org/docs/extensions.html)

@@ -1,19 +1,20 @@
 ---
-title: "Package Manager"
+title: 'Package Manager'
 description: YaoXiang Package Manager Reference Documentation
 ---
 
 # Package Manager
 
-YaoXiang's built-in package manager, providing project initialization, dependency management, version locking, and other features.
+YaoXiang's built-in package manager, providing project initialization, dependency management,
+version locking, and more.
 
 ## Overview
 
-The YaoXiang Package Manager (YPM for short) adopts a design philosophy similar to Cargo:
+The YaoXiang Package Manager (YPM for short) follows a Cargo-inspired design philosophy:
 
-- **Declarative dependencies**: Declare required dependencies in `yaoxiang.toml`
-- **Deterministic build**: Lock versions through `yaoxiang.lock` to ensure reproducible builds
-- **Local cache**: Dependencies are downloaded to the `vendor` directory, supporting offline usage
+- **Declarative Dependencies**: Declare required dependencies in `yaoxiang.toml`
+- **Deterministic Builds**: Lock versions with `yaoxiang.lock` to ensure reproducible builds
+- **Local Caching**: Dependencies are downloaded to the `vendor` directory, supporting offline usage
 
 ## Quick Start
 
@@ -21,7 +22,7 @@ The YaoXiang Package Manager (YPM for short) adopts a design philosophy similar 
 # 1. Create a new project
 yaoxiang init my-project
 
-# 2. Add a dependency
+# 2. Add dependencies
 cd my-project
 yaoxiang add http
 
@@ -34,14 +35,14 @@ yaoxiang run src/main.yx
 
 ## Command List
 
-| Command | Description |
-|---------|-------------|
-| [`yaoxiang init`](./commands#yaoxiang-init) | Initialize a new project |
-| [`yaoxiang add`](./commands#yaoxiang-add) | Add a dependency |
-| [`yaoxiang rm`](./commands#yaoxiang-rm) | Remove a dependency |
-| [`yaoxiang install`](./commands#yaoxiang-install) | Install dependencies |
-| [`yaoxiang update`](./commands#yaoxiang-update) | Update dependencies |
-| [`yaoxiang list`](./commands#yaoxiang-list) | List dependencies |
+| Command                                           | Description              |
+| ------------------------------------------------- | ------------------------ |
+| [`yaoxiang init`](./commands#yaoxiang-init)       | Initialize a new project |
+| [`yaoxiang add`](./commands#yaoxiang-add)         | Add dependencies         |
+| [`yaoxiang rm`](./commands#yaoxiang-rm)           | Remove dependencies      |
+| [`yaoxiang install`](./commands#yaoxiang-install) | Install dependencies     |
+| [`yaoxiang update`](./commands#yaoxiang-update)   | Update dependencies      |
+| [`yaoxiang list`](./commands#yaoxiang-list)       | List dependencies        |
 
 ## Project Structure
 
@@ -51,12 +52,12 @@ my-project/
 ├── yaoxiang.lock      # Dependency lock file (auto-generated)
 ├── vendor/            # Dependency storage directory (auto-generated)
 └── src/
-    └── main.yx       # Entry file
+    └── main.yx        # Entry file
 ```
 
 ## Documentation Index
 
-- [Command Line Interface](./commands) - Detailed description of all commands
+- [Command Line Interface](./commands) - Detailed explanation of all commands
 - [yaoxiang.toml Format](./manifest) - Project configuration file format
 - [yaoxiang.lock Format](./lock) - Lock file format specification
 - [Error Codes](./error-codes) - Common errors and handling methods

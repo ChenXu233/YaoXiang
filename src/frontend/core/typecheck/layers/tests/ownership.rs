@@ -1014,7 +1014,7 @@ fn test_e2e_borrow_in_if_both_branches() {
                         span: Span::default(),
                     },
                 )])),
-                elif_branches: vec![],
+                else_if_branches: vec![],
                 else_branch: Some(Box::new(make_block(vec![make_var_stmt(
                     "z",
                     Expr::Borrow {

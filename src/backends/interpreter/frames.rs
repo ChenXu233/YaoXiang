@@ -19,10 +19,8 @@ pub struct Frame {
     pub function: BytecodeFunction,
     /// Instruction pointer (index into instructions)
     pub ip: usize,
-    /// Register file for this frame
-    pub registers: Vec<RuntimeValue>,
-    /// Local variable values (flat array)
-    locals: Vec<RuntimeValue>,
+    /// Unified slot array (registers + locals merged)
+    slots: Vec<RuntimeValue>,
     /// Upvalue capture values
     upvalues: Vec<RuntimeValue>,
     /// Entry IP (for stack unwinding)
@@ -38,8 +36,7 @@ impl Frame {
         Self {
             function,
             ip: 0,
-            registers: Vec::with_capacity(32),
-            locals: vec![RuntimeValue::Unit; local_count],
+            slots: vec![RuntimeValue::Void; local_count],
             upvalues: Vec::new(),
             entry_ip: 0,
             spawn_groups: Vec::new(),
@@ -53,8 +50,8 @@ impl Frame {
     ) -> Self {
         let mut frame = Self::new(function);
         for (i, arg) in args.iter().enumerate() {
-            if i < frame.locals.len() {
-                frame.locals[i] = arg.clone();
+            if i < frame.slots.len() {
+                frame.slots[i] = arg.clone();
             }
         }
         frame
@@ -85,36 +82,32 @@ impl Frame {
         }
     }
 
-    /// Get a local variable
-    pub fn get_local(
+    /// Get a slot value (unified for locals + registers)
+    pub fn get_slot(
         &self,
         index: usize,
     ) -> Option<&RuntimeValue> {
-        self.locals.get(index)
+        self.slots.get(index)
     }
 
-    /// Set a local variable
-    pub fn set_local(
+    /// Get a mutable slot value
+    pub fn get_slot_mut(
+        &mut self,
+        index: usize,
+    ) -> Option<&mut RuntimeValue> {
+        self.slots.get_mut(index)
+    }
+
+    /// Set a slot value, extending the slot array if necessary
+    pub fn set_slot(
         &mut self,
         index: usize,
         value: RuntimeValue,
     ) {
-        if index >= self.locals.len() {
-            self.locals.resize(index + 1, RuntimeValue::Unit);
+        if index >= self.slots.len() {
+            self.slots.resize(index + 1, RuntimeValue::Void);
         }
-        self.locals[index] = value;
-    }
-
-    /// Set a register value, extending the register file if necessary
-    pub fn set_register(
-        &mut self,
-        index: usize,
-        value: RuntimeValue,
-    ) {
-        if index >= self.registers.len() {
-            self.registers.resize(index + 1, RuntimeValue::Unit);
-        }
-        self.registers[index] = value;
+        self.slots[index] = value;
     }
 
     pub fn push_spawn_group(&mut self) {
@@ -157,7 +150,7 @@ impl Frame {
         value: RuntimeValue,
     ) {
         if index >= self.upvalues.len() {
-            self.upvalues.resize(index + 1, RuntimeValue::Unit);
+            self.upvalues.resize(index + 1, RuntimeValue::Void);
         }
         self.upvalues[index] = value;
     }
@@ -182,7 +175,7 @@ impl Frame {
 
     /// Get the number of local variables
     pub fn local_count(&self) -> usize {
-        self.locals.len()
+        self.slots.len()
     }
 
     /// Get the number of upvalues

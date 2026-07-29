@@ -1,22 +1,25 @@
 ---
-title: "RFC-028：JIT 编译器 — VM 内多级执行引擎"
-status: "草案"
-author: "晨煦"
-created: "2026-06-11"
-updated: "2026-07-05"
-issue: "#101"
+title: 'RFC-028：JIT 编译器 — VM 内多级执行引擎'
+status: '草案'
+author: '晨煦'
+created: '2026-06-11'
+updated: '2026-07-05'
+issue: '#101'
 ---
 
 # RFC-028：JIT 编译器 — VM 内多级执行引擎
 
 > **参考**:
+>
 > - [RFC-018：LLVM AOT 编译器设计](../review/018-llvm-aot-compiler.md)
 > - [RFC-024：基于 spawn 块的并发模型](../accepted/024-concurrency-model.md)
 > - [RFC-008：Runtime 并发模型与调度器脱耦设计](../accepted/008-runtime-concurrency-model.md)
 
 ## 摘要
 
-本文档提出为 YaoXiang 的 VM 后端引入 Cranelift JIT 编译器，将 VM 从纯解释器升级为**多级执行引擎**：冷代码解释执行，热函数经 Cranelift 编译为原生代码。JIT 路径与 RFC-018 的 LLVM AOT 路径共享 IR 规范化 pass，Cranelift 负责 JIT 的快速编译，LLVM 负责 AOT 的深度优化，各取所长。
+本文档提出为 YaoXiang 的 VM 后端引入 Cranelift
+JIT 编译器，将 VM 从纯解释器升级为**多级执行引擎**：冷代码解释执行，热函数经 Cranelift 编译为原生代码。JIT 路径与 RFC-018 的 LLVM
+AOT 路径共享 IR 规范化 pass，Cranelift 负责 JIT 的快速编译，LLVM 负责 AOT 的深度优化，各取所长。
 
 **核心定位：JIT 服务 VM，不是替代 VM。**
 
@@ -28,15 +31,17 @@ issue: "#101"
 
 ### 为什么不是只用 LLVM AOT？
 
-LLVM AOT 编译耗时长（秒级），不适合开发迭代。开发需要"改了就跑"的体验：改动一行代码 → 重新运行 → 几乎即时看到结果。Cranelift JIT 编译单个函数只需 1-5ms，用户感知不到编译延迟。
+LLVM
+AOT 编译耗时长（秒级），不适合开发迭代。开发需要"改了就跑"的体验：改动一行代码 → 重新运行 → 几乎即时看到结果。Cranelift
+JIT 编译单个函数只需 1-5ms，用户感知不到编译延迟。
 
 ### 为什么是 Cranelift 不是 LLVM ORC JIT？
 
-| 维度 | Cranelift JIT | LLVM ORC JIT |
-|------|--------------|--------------|
-| 编译速度 | 1-5ms/函数 | 10-100ms/函数 |
-| 依赖体积 | 小 | 大（需完整 LLVM） |
-| 代码质量 | LLVM -O2 的 70-80% | 极高 |
+| 维度     | Cranelift JIT      | LLVM ORC JIT         |
+| -------- | ------------------ | -------------------- |
+| 编译速度 | 1-5ms/函数         | 10-100ms/函数        |
+| 依赖体积 | 小                 | 大（需完整 LLVM）    |
+| 代码质量 | LLVM -O2 的 70-80% | 极高                 |
 | 适用场景 | 开发调试，快速迭代 | 不适用（见本文权衡） |
 
 Cranelift 编译快，代码质量足够。LLVM 留给 AOT 做离线深度优化。一个工具做好一件事。
@@ -76,7 +81,8 @@ VM 执行引擎
                            └→ LLVM AOT codegen → .o → 链接 → exe（生产）
 ```
 
-JIT 和 AOT 共享 **IR 规范化 pass**（`middle/passes/ir_normalize.rs`），底层 codegen 从 LLVM 换成 Cranelift。
+JIT 和 AOT 共享
+**IR 规范化 pass**（`middle/passes/ir_normalize.rs`），底层 codegen 从 LLVM 换成 Cranelift。
 
 ### 执行流程
 
@@ -120,6 +126,7 @@ src/
 ```
 
 **关键约束**：
+
 - `backends/jit/` 只依赖 `middle/`（IR 定义、规范化 pass）、标准库和 Cranelift crate
 - `backends/jit/` 不依赖 `backends/llvm/`，两者是平级后端
 - `backends/jit/` 不依赖 `backends/interpreter/`，通过 `FunctionEntry` 接口交互
@@ -192,49 +199,51 @@ YaoXiang IR (栈形式)
 
 #### 3.2 YaoXiang 类型 → Cranelift 类型
 
-| YaoXiang 类型 | Cranelift 类型 | 说明 |
-|---------------|---------------|------|
-| `Int` | `i64` | |
-| `Int32` | `i32` | |
-| `Float` | `f64` | |
-| `Float32` | `f32` | |
-| `Bool` | `i8` | Cranelift 无 `i1`，用 `i8` |
-| `Char` | `i32` | Unicode 码点 |
-| `String` | `{ i64, i64 }` | 指针 + 长度 |
-| `Void` | 空元组 | |
-| `&T` | — | 零大小，编译后消失 |
-| `&mut T` | — | 零大小，编译后消失 |
-| `ref T` | `{ i64, i64 }` | 引用计数指针 + 数据指针 |
-| `*T` | `i64` | 裸指针 |
-| `List(T)` | `{ i64, i64, i64 }` | 数据指针 + 长度 + 容量 |
-| 结构体 | Cranelift struct | |
-| 记录枚举 | `{ i64, [max_payload] }` | 标签 + union |
-| `?T` | `{ i8, T }` | 有值标记 + 数据 |
+| YaoXiang 类型 | Cranelift 类型           | 说明                       |
+| ------------- | ------------------------ | -------------------------- |
+| `Int`         | `i64`                    |                            |
+| `Int32`       | `i32`                    |                            |
+| `Float`       | `f64`                    |                            |
+| `Float32`     | `f32`                    |                            |
+| `Bool`        | `i8`                     | Cranelift 无 `i1`，用 `i8` |
+| `Char`        | `i32`                    | Unicode 码点               |
+| `String`      | `{ i64, i64 }`           | 指针 + 长度                |
+| `Void`        | 空元组                   |                            |
+| `&T`          | —                        | 零大小，编译后消失         |
+| `&mut T`      | —                        | 零大小，编译后消失         |
+| `ref T`       | `{ i64, i64 }`           | 引用计数指针 + 数据指针    |
+| `*T`          | `i64`                    | 裸指针                     |
+| `List(T)`     | `{ i64, i64, i64 }`      | 数据指针 + 长度 + 容量     |
+| 结构体        | Cranelift struct         |                            |
+| 记录枚举      | `{ i64, [max_payload] }` | 标签 + union               |
+| `?T`          | `{ i8, T }`              | 有值标记 + 数据            |
 
 > 与 RFC-018 §3 的 LLVM 类型表对比：Cranelift 不区分指针类型、无 `i1`，整体更简洁。
 
 #### 3.3 关键指令翻译
 
-| IR 指令 | Cranelift IR |
-|---------|-------------|
-| `Add { dst, lhs, rhs }` | `iadd`（整数）/ `fadd`（浮点） |
-| `Sub { dst, lhs, rhs }` | `isub` / `fsub` |
-| `Mul { dst, lhs, rhs }` | `imul` / `fmul` |
-| `Div { dst, lhs, rhs }` | `sdiv` / `udiv` / `fdiv` |
-| `Eq { dst, lhs, rhs }` | `icmp eq` / `fcmp eq` |
-| `Jmp(label)` | `jump` |
-| `JmpIf(cond, label)` | `brnz` |
-| `Ret(Some(v))` | `return` |
-| `Call { dst, func, args }` | `call` |
-| `Load { dst, src }` | `load` |
-| `Store { dst, src }` | `store` |
-| `Spawn { ... }` | 调用运行时 `task_spawn` + `task_wait_all` |
+| IR 指令                    | Cranelift IR                              |
+| -------------------------- | ----------------------------------------- |
+| `Add { dst, lhs, rhs }`    | `iadd`（整数）/ `fadd`（浮点）            |
+| `Sub { dst, lhs, rhs }`    | `isub` / `fsub`                           |
+| `Mul { dst, lhs, rhs }`    | `imul` / `fmul`                           |
+| `Div { dst, lhs, rhs }`    | `sdiv` / `udiv` / `fdiv`                  |
+| `Eq { dst, lhs, rhs }`     | `icmp eq` / `fcmp eq`                     |
+| `Jmp(label)`               | `jump`                                    |
+| `JmpIf(cond, label)`       | `brnz`                                    |
+| `Ret(Some(v))`             | `return`                                  |
+| `Call { dst, func, args }` | `call`                                    |
+| `Load { dst, src }`        | `load`                                    |
+| `Store { dst, src }`       | `store`                                   |
+| `Spawn { ... }`            | 调用运行时 `task_spawn` + `task_wait_all` |
 
 > 完整翻译表见 RFC 正文。核心原则：Cranelift 指令集覆盖 YaoXiang IR 所有操作，不存在语义缺口。
 
 #### 3.4 两种规范化共存
 
-VM 解释器需要栈语义（`Push`/`Pop`/`Dup`/`Swap`），Cranelift JIT 和 LLVM AOT 需要寄存器/SSA。IR 规范化 pass 做一次转换（RFC-018 §4.0），JIT 和 AOT 共用，不改变 IR 本身的表示。每个后端按自己的需求消费同一个 IR。
+VM 解释器需要栈语义（`Push`/`Pop`/`Dup`/`Swap`），Cranelift JIT 和 LLVM
+AOT 需要寄存器/SSA。IR 规范化 pass 做一次转换（RFC-018
+§4.0），JIT 和 AOT 共用，不改变 IR 本身的表示。每个后端按自己的需求消费同一个 IR。
 
 ### 4. 函数入口表与原子替换
 
@@ -321,7 +330,8 @@ impl CodeCache {
 
 ### 6. 热重载预留扩展点
 
-以下接口编译通过但热重载实现前不调用。接口设计原则：**JIT 实现时只需 `insert` 和单函数 `compare_exchange`，模块级操作留给热重载。**
+以下接口编译通过但热重载实现前不调用。接口设计原则：**JIT 实现时只需 `insert` 和单函数
+`compare_exchange`，模块级操作留给热重载。**
 
 ```rust
 /// 代码缓存扩展接口（预留，不实现）
@@ -343,7 +353,8 @@ trait CompileQueueExt {
 }
 ```
 
-**为什么按模块分组？** JIT 本身只需要函数。按模块组织完全是为热重载服务的：模块重编译后，可以原子性地替换整个模块的函数集，而不是逐个函数 CAS——后者在函数间有循环依赖时会导致不一致状态。
+**为什么按模块分组？**
+JIT 本身只需要函数。按模块组织完全是为热重载服务的：模块重编译后，可以原子性地替换整个模块的函数集，而不是逐个函数 CAS——后者在函数间有循环依赖时会导致不一致状态。
 
 ## 权衡
 
@@ -365,21 +376,21 @@ trait CompileQueueExt {
 
 ### 与相关 RFC 的一致性
 
-| RFC | 一致性 |
-|-----|--------|
-| RFC-018 LLVM AOT | ✅ 共享 IR 规范化 pass，JIT 和 AOT 是平级后端 |
-| RFC-024 spawn 块并发 | ✅ spawn 块编译为运行时函数调用 |
-| RFC-008 运行时架构 | ✅ 三层运行时（Embedded/Standard/Full）均支持 JIT |
+| RFC                  | 一致性                                            |
+| -------------------- | ------------------------------------------------- |
+| RFC-018 LLVM AOT     | ✅ 共享 IR 规范化 pass，JIT 和 AOT 是平级后端     |
+| RFC-024 spawn 块并发 | ✅ spawn 块编译为运行时函数调用                   |
+| RFC-008 运行时架构   | ✅ 三层运行时（Embedded/Standard/Full）均支持 JIT |
 
 ## 替代方案
 
-| 方案 | 为什么不选 |
-|------|-----------|
-| 仅用 LLVM AOT，不做 JIT | 开发时需要重新编译整个程序，丧失快速迭代体验 |
-| LLVM ORC JIT | 编译延迟高（10-100ms），LLVM 依赖大，不适合嵌入 VM |
-| 自定义轻量 JIT（dynasm） | 手写后端的维护成本高，不如 Cranelift 成熟 |
-| 模板 JIT | 零优化，代码质量差，白白浪费 JIT 编译的时间 |
-| 全程序 JIT（无解释器） | 冷启动慢，简单脚本不值得编译 |
+| 方案                     | 为什么不选                                         |
+| ------------------------ | -------------------------------------------------- |
+| 仅用 LLVM AOT，不做 JIT  | 开发时需要重新编译整个程序，丧失快速迭代体验       |
+| LLVM ORC JIT             | 编译延迟高（10-100ms），LLVM 依赖大，不适合嵌入 VM |
+| 自定义轻量 JIT（dynasm） | 手写后端的维护成本高，不如 Cranelift 成熟          |
+| 模板 JIT                 | 零优化，代码质量差，白白浪费 JIT 编译的时间        |
+| 全程序 JIT（无解释器）   | 冷启动慢，简单脚本不值得编译                       |
 
 ## 依赖关系
 
@@ -394,13 +405,15 @@ trait CompileQueueExt {
 - [RFC-018：LLVM AOT 编译器设计](../review/018-llvm-aot-compiler.md)
 - [RFC-024：基于 spawn 块的并发模型](../accepted/024-concurrency-model.md)
 - [RFC-008：Runtime 并发模型与调度器脱耦设计](../accepted/008-runtime-concurrency-model.md)
-- Hölzle, U. (1994). *Adaptive Optimization for Self: Reconciling High Performance with Exploratory Programming*. Stanford.
+- Hölzle, U. (1994). _Adaptive Optimization for Self: Reconciling High Performance with Exploratory
+  Programming_. Stanford.
 
 ---
+
 ## 生命周期与归宿
 
-| 状态 | 位置 | 说明 |
-|------|------|------|
-| **草案** | `docs/src/design/rfc/draft/` | 作者草稿，等待提交审核 |
-| **审核中** | `docs/src/design/rfc/review/` | 开放社区讨论和反馈 |
-| **已接受** | `docs/src/design/rfc/accepted/` | 成为正式设计文档 |
+| 状态       | 位置                            | 说明                   |
+| ---------- | ------------------------------- | ---------------------- |
+| **草案**   | `docs/src/design/rfc/draft/`    | 作者草稿，等待提交审核 |
+| **审核中** | `docs/src/design/rfc/review/`   | 开放社区讨论和反馈     |
+| **已接受** | `docs/src/design/rfc/accepted/` | 成为正式设计文档       |

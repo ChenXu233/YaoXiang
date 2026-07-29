@@ -1,27 +1,32 @@
 ---
-title: "RFC-030: assert 断言机制"
-status: "已接受"
-author: "晨煦"
-created: "2026-06-15"
-updated: "2026-07-14"
-decision: "assert 与 Assert 一体两面，dispatch 自动分派。6 Phase 全部实现（#157-#162 已关闭）。std.assert 模块统一注册（#169 已关闭），assert native 函数 + Assert/IsTrue 类型族同路径。"
-issue: "#97"
+title: 'RFC-030: assert 断言机制'
+status: '已接受'
+author: '晨煦'
+created: '2026-06-15'
+updated: '2026-07-14'
+decision:
+  'assert 与 Assert 一体两面，dispatch 自动分派。6 Phase 全部实现（#157-#162 已关闭）。std.assert
+  模块统一注册（#169 已关闭），assert native 函数 + Assert/IsTrue 类型族同路径。'
+issue: '#97'
 issues_impl:
-  - "#155"
-  - "#157"
-  - "#158"
-  - "#159"
-  - "#160"
-  - "#161"
-  - "#162"
-  - "#169"
+  - '#155'
+  - '#157'
+  - '#158'
+  - '#159'
+  - '#160'
+  - '#161'
+  - '#162'
+  - '#169'
 ---
 
 # RFC-030: assert 断言机制
 
 ## 摘要
 
-为 YaoXiang 引入 `assert` 断言机制，用于测试、前置条件检查和运行时 panic。`assert` 和编译期精化类型 `Assert(C)`（见 RFC-011 §4.3）是**同一个精化原语的两面**——由 dispatch 按"谓词自由变量编译期是否可及"自动分派为编译期证明或运行时检查。`assert(false, "msg")` 等同于 `raise`，不需要单独的 `throw`/`raise` 关键字。
+为 YaoXiang 引入 `assert` 断言机制，用于测试、前置条件检查和运行时 panic。`assert` 和编译期精化类型
+`Assert(C)`（见 RFC-011
+§4.3）是**同一个精化原语的两面**——由 dispatch 按"谓词自由变量编译期是否可及"自动分派为编译期证明或运行时检查。`assert(false, "msg")`
+等同于 `raise`，不需要单独的 `throw`/`raise` 关键字。
 
 ## 动机
 
@@ -52,7 +57,8 @@ if val != 42 {
 
 ### 设计原则
 
-`assert` 是 YaoXiang 唯一的用户态 panic 机制。`assert(false, "msg")` 等同于 `raise`，不需要单独的 `throw`/`raise` 关键字。`assert` 函数本身就是 `if raise` 的最佳封装。
+`assert` 是 YaoXiang 唯一的用户态 panic 机制。`assert(false, "msg")` 等同于 `raise`，不需要单独的
+`throw`/`raise` 关键字。`assert` 函数本身就是 `if raise` 的最佳封装。
 
 **不引入新关键字，不引入新语法。一切皆函数调用。**
 
@@ -85,7 +91,9 @@ assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))
 ```
 
 `assert` 的实际行为由 dispatch 分派决定：
-- 所有自由变量编译期已知 → **CompileTime**：编译器求值 cond，true → 擦除为 Void，false → 编译错误（Never 不可居留）
+
+- 所有自由变量编译期已知 → **CompileTime**：编译器求值 cond，true → 擦除为 Void，false
+  → 编译错误（Never 不可居留）
 - 存在运行时自由变量 → **Runtime**：插入 check，向流敏感假设集 Γ 注入精化事实
 
 可选消息 `?msg` 和 Result 重载（见下方）作为运行时 raise 载荷保留。
@@ -128,21 +136,22 @@ assert(x > 0, my_error)                // 直接抛 Error 值
 
 #### 各重载的失败行为
 
-| 签名 | 失败时行为 |
-|------|-----------|
-| `assert(false)` | 默认 panic 信息 |
-| `assert(false, "msg")` | 输出字符串消息后 panic |
-| `assert(false, error_val)` | 抛 Error 值 |
-| `assert(Err(x))` | 提取 Err 内容并 panic |
+| 签名                       | 失败时行为             |
+| -------------------------- | ---------------------- |
+| `assert(false)`            | 默认 panic 信息        |
+| `assert(false, "msg")`     | 输出字符串消息后 panic |
+| `assert(false, error_val)` | 抛 Error 值            |
+| `assert(Err(x))`           | 提取 Err 内容并 panic  |
 
 ### 与编译期 Assert 的关系
 
-`assert` 和 `Assert` 是**同一个精化原语的两面**——由 dispatch 分派管道按"谓词自由变量编译期是否可及"自动选择：
+`assert` 和 `Assert`
+是**同一个精化原语的两面**——由 dispatch 分派管道按"谓词自由变量编译期是否可及"自动选择：
 
-| 条件 | 分派 | 行为 |
-|------|------|------|
+| 条件                   | 分派                   | 行为                                                    |
+| ---------------------- | ---------------------- | ------------------------------------------------------- |
 | 所有自由变量编译期已知 | CompileTime → 证明管道 | Proved → 擦除，Disproved → 编译错误，Unknown → 要求证明 |
-| 存在运行时自由变量 | Runtime → 插入 check | Bool 检查 + 向流敏感假设集 Γ 注入精化事实 |
+| 存在运行时自由变量     | Runtime → 插入 check   | Bool 检查 + 向流敏感假设集 Γ 注入精化事实               |
 
 ```yaoxiang
 use std.assert
@@ -158,7 +167,8 @@ x = read_int()
 assert.assert(x > 0, "expected positive")  # 运行时 check
 ```
 
-> **2026-07-12 统一方案**：此前的"完全独立"结论已被取代。`assert()` 是 `Assert` 的值引入子，dispatch 自动分派。
+> **2026-07-12 统一方案**：此前的"完全独立"结论已被取代。`assert()` 是 `Assert`
+> 的值引入子，dispatch 自动分派。
 
 ### 编译器改动
 
@@ -179,7 +189,9 @@ assert.assert(x > 0, "expected positive")  # 运行时 check
 
 ### 缺点
 
-- ~~编译期不可知：与方案 B（关键字）不同，无法在编译期做死代码消除~~ → **在统一方案下已不成立**。CompileTime 模式的 assert 走证明管道，编译期已知的 cond → 擦除或编译错误（`assert(false)` → Never → 死代码）。
+- ~~编译期不可知：与方案 B（关键字）不同，无法在编译期做死代码消除~~ →
+  **在统一方案下已不成立**。CompileTime 模式的 assert 走证明管道，编译期已知的 cond
+  → 擦除或编译错误（`assert(false)` → Never → 死代码）。
 - debug 模式下才能获取调用栈
 
 ## 方案 B：内置关键字（已被统一方案取代）
@@ -201,6 +213,7 @@ assert(1 + 1 == 2, "math is broken")
 ### 编译器改动
 
 需要改动 parser、AST、typecheck、IR gen：
+
 1. parser：新增 `Expr::Assert` 变体
 2. AST：新增 `Expr::Assert` 节点
 3. typecheck：校验参数类型
@@ -213,28 +226,30 @@ assert(1 + 1 == 2, "math is broken")
 
 ### 缺点
 
-| 缺点 | 影响 |
-|------|------|
-| 需要解析器改动 | 引入新语法节点，增加维护成本 |
-| 关键字不可扩展 | `assert_eq` 等变体仍需函数 |
-| 编译期优势不实际 | 见下文分析 |
+| 缺点             | 影响                         |
+| ---------------- | ---------------------------- |
+| 需要解析器改动   | 引入新语法节点，增加维护成本 |
+| 关键字不可扩展   | `assert_eq` 等变体仍需函数   |
+| 编译期优势不实际 | 见下文分析                   |
 
 ### 对比
 
-| 维度 | 方案 A（函数） | 方案 B（关键字） |
-|------|---------------|-----------------|
-| 实现成本 | ~20 行 | parser + AST + typecheck + IR gen |
-| 语法变更 | 无 | 新关键字 |
-| 可扩展性 | 函数重载 | 需要配套宏 |
-| 源码位置 | debug info | 编译期可得 |
-| 常量折叠 | 需 pass 支持 | 编译期可得 |
-| 运行时开销 | 函数调用 | 极小 |
+| 维度       | 方案 A（函数） | 方案 B（关键字）                  |
+| ---------- | -------------- | --------------------------------- |
+| 实现成本   | ~20 行         | parser + AST + typecheck + IR gen |
+| 语法变更   | 无             | 新关键字                          |
+| 可扩展性   | 函数重载       | 需要配套宏                        |
+| 源码位置   | debug info     | 编译期可得                        |
+| 常量折叠   | 需 pass 支持   | 编译期可得                        |
+| 运行时开销 | 函数调用       | 极小                              |
 
 ### 编译期分析的现实约束
 
-方案 B 的核心优势——编译期分析——需要 **常量折叠 pass** 才能生效。即编译器需要在编译期求值 `assert(false)` 中的 `false`，才能知道这是死代码。
+方案 B 的核心优势——编译期分析——需要 **常量折叠 pass** 才能生效。即编译器需要在编译期求值
+`assert(false)` 中的 `false`，才能知道这是死代码。
 
-YaoXiang 当前没有常量折叠 pass。即使采用方案 B，`assert(x > 0)` 这类常见写法在编译期仍然无法分析。只有 `assert(true)` / `assert(false)` 这种字面量才能被分析。
+YaoXiang 当前没有常量折叠 pass。即使采用方案 B，`assert(x > 0)`
+这类常见写法在编译期仍然无法分析。只有 `assert(true)` / `assert(false)` 这种字面量才能被分析。
 
 因此方案 B 的编译期优势**在当前阶段是理论性的，不是实际的**。
 
@@ -242,11 +257,16 @@ YaoXiang 当前没有常量折叠 pass。即使采用方案 B，`assert(x > 0)` 
 
 ## 开放问题
 
-- [x] ~~选择方案 A 还是方案 B？~~ → **统一方案：assert 是 Assert 的值引入子**。方案 A 和 B 的对立被 dispatch 分派管道消解——编译期已知走证明管道，运行时走 check。不需要"二选一"。
-- [x] ~~`assert` 是否需要支持不带 `message` 的简化形式 `assert(cond)` ？~~ → **支持。`assert(cond, ?msg)`，message 可选。**
+- [x] ~~选择方案 A 还是方案 B？~~ →
+      **统一方案：assert 是 Assert 的值引入子**。方案 A 和 B 的对立被 dispatch 分派管道消解——编译期已知走证明管道，运行时走 check。不需要"二选一"。
+- [x] ~~`assert` 是否需要支持不带 `message` 的简化形式 `assert(cond)` ？~~ →
+      **支持。`assert(cond, ?msg)`，message 可选。**
 - [x] ~~是否需要 `assert_eq`、`assert_ne` 等变体？~~ → **不需要。YAGNI。等测试框架成型再说。**
 - [x] ~~panic 输出是否包含源码位置？~~ → 方案 A 依赖 debug info（调用栈）。
-- [x] ~~assert / Assert 统一问题~~ → **已确定**。统一方案：`assert: (Bool) -> Assert(IsTrue(cond))`，一体两面，dispatch 自动分派。详见 [#156](https://github.com/ChenXu233/YaoXiang/issues/156)（已关闭）。`Never` 类型（⊥）作为 `assert(false)` 的返回类型内建。
+- [x] ~~assert / Assert 统一问题~~ →
+      **已确定**。统一方案：`assert: (Bool) -> Assert(IsTrue(cond))`，一体两面，dispatch 自动分派。详见
+      [#156](https://github.com/ChenXu233/YaoXiang/issues/156)（已关闭）。`Never` 类型（⊥）作为
+      `assert(false)` 的返回类型内建。
 
 ### 2026-07-05：选择方案 A（已被统一方案取代）
 
@@ -254,12 +274,14 @@ YaoXiang 当前没有常量折叠 pass。即使采用方案 B，`assert(x > 0)` 
 
 ### 2026-07-12：统一方案确定（取代 2026-07-11 的"完全独立"结论）
 
-**结论**：`assert` 和 `Assert` 不是两个独立机制。`assert: (Bool) -> Assert(IsTrue(cond))` ——由 dispatch 自动分派：
+**结论**：`assert` 和 `Assert` 不是两个独立机制。`assert: (Bool) -> Assert(IsTrue(cond))`
+——由 dispatch 自动分派：
 
 - 编译期已知 → 进证明管道（Proved 擦除 / Disproved 错误 / Unknown 要证明）
 - 运行时输入 → 插入 check + 注入 Γ 假设
 
-**模块结构**：`std.assert` 统一承载运行时断言（`assert`）和编译期精化类型（`Assert`、`IsTrue`）。不再"分开实现"，而是同一原语的两面。
+**模块结构**：`std.assert`
+统一承载运行时断言（`assert`）和编译期精化类型（`Assert`、`IsTrue`）。不再"分开实现"，而是同一原语的两面。
 
 ### 2026-07-11：assert 重载设计
 
@@ -267,27 +289,32 @@ YaoXiang 当前没有常量折叠 pass。即使采用方案 B，`assert(x > 0)` 
 
 **解答**：
 
-运行时 `assert()` 是 YaoXiang 唯一的用户态 panic 机制。`assert(false, "msg")` 等价于其他语言的 `raise`/`throw`。因此它需要覆盖三种场景：
+运行时 `assert()` 是 YaoXiang 唯一的用户态 panic 机制。`assert(false, "msg")` 等价于其他语言的
+`raise`/`throw`。因此它需要覆盖三种场景：
+
 1. 条件 + 简单消息：`assert(cond, "msg")`
 2. 条件 + 自定义 Error：`assert(cond, my_error)`
 3. Result 检查：`assert(result)` — 最简洁的 `if is_err { panic }`
 
-Result 重载的合理性在于：这是错误传播最短的路径——"Result 应当为 Ok，否则死"。不需要先 `.is_ok()` 再单独处理错误。
+Result 重载的合理性在于：这是错误传播最短的路径——"Result 应当为 Ok，否则死"。不需要先 `.is_ok()`
+再单独处理错误。
 
 ## 附录 B：设计决策记录
 
-| 决策 | 决定 | 日期 | 记录人 |
-|------|------|------|--------|
-| 选择方案 A 还是方案 B | **统一方案**：dispatch 分派管道消解 A/B 对立，assert 是 Assert 的值引入子 | 2026-07-12 | 晨煦 |
-| message 是否可选 | **是**：`assert(cond, ?msg)`，String 或 Error | 2026-07-11 | 晨煦 |
-| 是否需要 assert_eq 等变体 | **不需要**。YAGNI，等测试框架再说 | 2026-07-11 | 晨煦 |
-| 是否需要单独的 raise/throw 关键字 | **不需要**。`assert(false, msg)` 等价于 raise | 2026-07-11 | 晨煦 |
-| assert 和 Assert 的关系 | **一体两面**。`assert: (Bool) -> Assert(IsTrue(cond))`，dispatch 自动分派 | 2026-07-12 | 晨煦 |
+| 决策                              | 决定                                                                      | 日期       | 记录人 |
+| --------------------------------- | ------------------------------------------------------------------------- | ---------- | ------ |
+| 选择方案 A 还是方案 B             | **统一方案**：dispatch 分派管道消解 A/B 对立，assert 是 Assert 的值引入子 | 2026-07-12 | 晨煦   |
+| message 是否可选                  | **是**：`assert(cond, ?msg)`，String 或 Error                             | 2026-07-11 | 晨煦   |
+| 是否需要 assert_eq 等变体         | **不需要**。YAGNI，等测试框架再说                                         | 2026-07-11 | 晨煦   |
+| 是否需要单独的 raise/throw 关键字 | **不需要**。`assert(false, msg)` 等价于 raise                             | 2026-07-11 | 晨煦   |
+| assert 和 Assert 的关系           | **一体两面**。`assert: (Bool) -> Assert(IsTrue(cond))`，dispatch 自动分派 | 2026-07-12 | 晨煦   |
 
 ## 参考文献
 
 - [RFC-007: 函数定义语法统一方案](007-function-syntax-unification.md) — `name: type = value` 模型
 - [RFC-010: 统一类型语法](010-unified-type-syntax.md) — 类型系统基础
-- [RFC-011: 泛型系统设计 §4.3](../accepted/011-generic-type-system.md) — 编译期验证与 `Assert(C)` 条件类型
+- [RFC-011: 泛型系统设计 §4.3](../accepted/011-generic-type-system.md) — 编译期验证与 `Assert(C)`
+  条件类型
 - [RFC-026: FFI 核心机制](026-ffi-core-mechanism.md) — native 函数注册机制
-- [RFC-027: 编译期谓词与统一静态验证](../accepted/027-compile-time-evaluation-types.md) — 编译期求值系统
+- [RFC-027: 编译期谓词与统一静态验证](../accepted/027-compile-time-evaluation-types.md)
+  — 编译期求值系统

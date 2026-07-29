@@ -501,7 +501,7 @@ impl Repl {
     /// Format a value for display
     fn format_value(value: &RuntimeValue) -> String {
         match value {
-            RuntimeValue::Unit => "()".to_string(),
+            RuntimeValue::Void => "()".to_string(),
             RuntimeValue::Bool(b) => b.to_string(),
             RuntimeValue::Int(i) => i.to_string(),
             RuntimeValue::Float(f) => format!("{}", f),

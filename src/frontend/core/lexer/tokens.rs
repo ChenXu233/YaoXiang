@@ -55,14 +55,13 @@ impl LexError {
 /// Token kind
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
-    // Keywords (17 total - RFC-010: 'type' keyword removed, use `Name: Type = ...` syntax)
+    // Keywords (16 total - RFC-010: 'type' keyword removed, use `Name: Type = ...` syntax)
     KwPub,
     KwUse,
     KwSpawn,
     KwRef,
     KwMut,
     KwIf,
-    KwElif,
     KwElse,
     KwMatch,
     KwWhile,

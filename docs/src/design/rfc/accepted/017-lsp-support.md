@@ -1,11 +1,11 @@
 ---
-title: "RFC-017: 语言服务器协议（LSP）支持设计"
-status: "已实现"
-author: "晨煦"
-created: "2026-02-15"
-updated: "2026-07-05"
+title: 'RFC-017: 语言服务器协议（LSP）支持设计'
+status: '已实现'
+author: '晨煦'
+created: '2026-02-15'
+updated: '2026-07-05'
 
-issue: "#11"
+issue: '#11'
 ---
 
 # RFC-017: 语言服务器协议（LSP）支持设计
@@ -31,11 +31,13 @@ issue: "#11"
 **解决方案**：
 
 #### 1.1 错误收集模式
+
 - 修改 `src/frontend/typecheck/inference/` 模块，返回 `Result&lt;Type, Vec&lt;Error>>`
 - 不在遇到错误时立即返回，而是继续检查
 - 检查完成后统一返回所有错误
 
 #### 1.2 错误级别
+
 区分不同严重程度的错误：
 
 ```rust
@@ -50,11 +52,13 @@ enum ErrorKind {
 - 如果只有 `Warning`：继续编译，显示警告
 
 #### 1.3 Parser 错误恢复
+
 - 解析出错时，插入 **placeholder 节点**（如 `MissingExpression`）而不是放弃
 - 避免因 AST 不完整导致类型检查 panic
 - 示例：`let x = ;` → `let x = MissingExpression`
 
 #### 1.4 延迟报告 (Delayed Emission)
+
 - 某些错误可能是"级联"的（因为前面的错误导致）
 - 可以先收集，解析完 AST 后再过滤掉明显的级联错误
 - 或者简单处理：全部报告，让用户逐个修复
@@ -68,6 +72,7 @@ enum ErrorKind {
 **解决方案**：
 
 #### 2.1 文件缓存结构
+
 ```rust
 struct DocumentCache {
     version: u32,           // LSP 文档版本号
@@ -78,38 +83,42 @@ struct DocumentCache {
 ```
 
 #### 2.2 检测变化
+
 - 每次 `textDocument/didChange` 收到新内容
 - 计算新内容的哈希，与缓存的 `content_hash` 比较
 - **如果变化：重新解析整个文件**
 - **如果未变化：直接返回缓存结果**
 
 #### 2.3 重新解析策略
+
 - **文件级**：只重新解析当前文件，不是整个项目
 - 这是简化设计，不做函数级增量解析
 - 现代计算机解析单个几千行文件只需几毫秒
 
 #### 2.4 与 cargo check 的区别
-| | cargo check | YaoXiang LSP |
-|---|---|---|
-| 范围 | 整个项目 | 单个文件 |
-| 频率 | 手动触发 | 每次编辑 |
+
+|      | cargo check  | YaoXiang LSP |
+| ---- | ------------ | ------------ |
+| 范围 | 整个项目     | 单个文件     |
+| 频率 | 手动触发     | 每次编辑     |
 | 目标 | 完整编译检查 | 快速增量响应 |
 
 ### 与现有模块的集成
 
-| 现有模块 | LSP 集成方式 |
-|----------|-------------|
-| `util/span.rs` | ✅ 已有 `Position`/`Span`，直接映射到 LSP `Position` |
-| `util/diagnostic/collect.rs` | ⚠️ 需修改为「收集模式」，持续累积错误 |
-| `frontend/core/lexer/symbols.rs` | ⚠️ 需扩展，添加 `uri` + `span` 位置信息 |
-| `frontend/typecheck/mod.rs` | ⚠️ 需修改 `TypeResult`，返回所有错误 |
-| `frontend/core/parser/ast.rs` | ✅ 每个节点已有 `Span`，无需改动 |
+| 现有模块                         | LSP 集成方式                                         |
+| -------------------------------- | ---------------------------------------------------- |
+| `util/span.rs`                   | ✅ 已有 `Position`/`Span`，直接映射到 LSP `Position` |
+| `util/diagnostic/collect.rs`     | ⚠️ 需修改为「收集模式」，持续累积错误                |
+| `frontend/core/lexer/symbols.rs` | ⚠️ 需扩展，添加 `uri` + `span` 位置信息              |
+| `frontend/typecheck/mod.rs`      | ⚠️ 需修改 `TypeResult`，返回所有错误                 |
+| `frontend/core/parser/ast.rs`    | ✅ 每个节点已有 `Span`，无需改动                     |
 
 ---
 
 ## 摘要
 
-为 YaoXiang 添加 Language Server Protocol（LSP）支持，实现完整的语言服务器，使主流 IDE（VS Code、Neovim、Emacs 等）能够提供代码补全、跳转定义、诊断、引用搜索等开发工具功能。
+为 YaoXiang 添加 Language Server Protocol（LSP）支持，实现完整的语言服务器，使主流 IDE（VS
+Code、Neovim、Emacs 等）能够提供代码补全、跳转定义、诊断、引用搜索等开发工具功能。
 
 ## 动机
 
@@ -211,32 +220,35 @@ src/lsp/
 ### 编译世界（World）设计
 
 管理全局编译状态：
+
 - 文档缓存（版本、AST、符号表）
 - 全局符号索引
 - 错误收集器
 - 类型环境缓存
 
 核心方法：
+
 - `on_document_change`：处理增量变更
 - `incremental_reparse`：增量重解析
 - `collect_diagnostics`：收集所有错误（不阻断）
 
 ### 核心 LSP 方法支持
 
-| 类别 | 方法 | 说明 |
-|------|------|------|
+| 类别         | 方法                                               | 说明           |
+| ------------ | -------------------------------------------------- | -------------- |
 | **生命周期** | `initialize` / `initialized` / `shutdown` / `exit` | 服务端生命周期 |
-| **文档同步** | `didOpen` / `didChange` / `didClose` | 文档管理 |
-| **诊断** | `publishDiagnostics` | 发布诊断 |
-| **补全** | `completion` | 代码补全 |
-| **跳转** | `definition` | 跳转到定义 |
-| **引用** | `references` | 查找引用 |
-| **悬停** | `hover` | 悬停提示 |
-| **符号** | `workspace/symbol` | 工作区符号搜索 |
+| **文档同步** | `didOpen` / `didChange` / `didClose`               | 文档管理       |
+| **诊断**     | `publishDiagnostics`                               | 发布诊断       |
+| **补全**     | `completion`                                       | 代码补全       |
+| **跳转**     | `definition`                                       | 跳转到定义     |
+| **引用**     | `references`                                       | 查找引用       |
+| **悬停**     | `hover`                                            | 悬停提示       |
+| **符号**     | `workspace/symbol`                                 | 工作区符号搜索 |
 
 ### 文本文档同步机制
 
 使用增量同步策略：
+
 - 保留文档版本号
 - 应用增量变更（range + text）
 - 大变更时降级为全量替换
@@ -244,6 +256,7 @@ src/lsp/
 ### 符号索引构建
 
 利用现有的符号表系统，构建反向索引：
+
 - 需要扩展 `SymbolEntry`，添加 `location` 字段
 - 索引：名称 → 位置列表、文件 → 符号列表
 
@@ -271,11 +284,11 @@ src/lsp/
 
 ### 编译器改动
 
-| 组件 | 改动 |
-|------|------|
-| `frontend/events` | 扩展事件系统，支持 LSP 通知 |
-| `frontend/core/lexer/symbols` | 增强符号表，添加位置信息 |
-| 新增 `src/lsp/` | LSP 服务器实现 |
+| 组件                          | 改动                        |
+| ----------------------------- | --------------------------- |
+| `frontend/events`             | 扩展事件系统，支持 LSP 通知 |
+| `frontend/core/lexer/symbols` | 增强符号表，添加位置信息    |
+| 新增 `src/lsp/`               | LSP 服务器实现              |
 
 ### 向后兼容性
 
@@ -353,12 +366,12 @@ fn to_lsp_range(span: &Span) -> lsp_types::Range {
 
 ### 实现优先级
 
-| 特性 | 优先级 |
-|------|--------|
-| 常量值幽灵提示 | P0 |
-| 可变性提示 | P0 |
-| 所有权消费提示 | P1 |
-| 所有权可视化 | P2 |
+| 特性           | 优先级 |
+| -------------- | ------ |
+| 常量值幽灵提示 | P0     |
+| 可变性提示     | P0     |
+| 所有权消费提示 | P1     |
+| 所有权可视化   | P2     |
 
 ---
 
@@ -368,15 +381,16 @@ fn to_lsp_range(span: &Span) -> lsp_types::Range {
 
 支持三种模式：
 
-| 模式 | 用途 |
-|------|------|
-| stdio | 本地开发（默认）|
-| TCP Socket | 远程开发/调试 |
-| Unix Domain Socket | 高性能本地通信 |
+| 模式               | 用途             |
+| ------------------ | ---------------- |
+| stdio              | 本地开发（默认） |
+| TCP Socket         | 远程开发/调试    |
+| Unix Domain Socket | 高性能本地通信   |
 
 ### 远程调试
 
 基于 DAP（Debug Adapter Protocol）实现：
+
 - 支持行断点、函数断点、条件断点
 - YaoXiang 特有断点：变量被 move 时触发
 
@@ -400,6 +414,7 @@ yaoxiang-lsp --tcp --port 8765 --enable-debug
 **设计决策：单线程 + 异步事件循环**
 
 理由：
+
 - 编译器非线程安全，改造成本高
 - LSP 请求天然串行，无需并发
 - 单线程更简单、易调试
@@ -440,9 +455,9 @@ yaoxiang-lsp --test
 
 ## 替代方案
 
-| 方案 | 为什么不选择 |
-|------|--------------|
-| 仅提供语法高亮 | 无法满足现代开发需求 |
+| 方案             | 为什么不选择                 |
+| ---------------- | ---------------------------- |
+| 仅提供语法高亮   | 无法满足现代开发需求         |
 | 使用 Tree-sitter | 需要额外学习成本，且功能有限 |
 
 ## 实现策略
@@ -517,28 +532,28 @@ yaoxiang-lsp --test
 
 ### 附录B：设计决策记录
 
-| 决策 | 决定 | 日期 | 记录人 |
-|------|------|------|--------|
-| LSP 服务器架构 | 独立进程，通过 stdio 通信 | 2026-02-15 | 晨煦 |
-| 协议版本 | 支持 LSP 3.18（需要 Inlay Hints 等新特性） | 2026-02-22 | 晨煦 |
-| 错误收集模式 | 返回 `Result&lt;Type, Vec&lt;Error>>`，支持错误级别和错误恢复 | 2026-02-22 | 晨煦 |
-| 缓存策略 | 文件级缓存：版本 + 内容 + 哈希，整个文件重新解析 | 2026-02-22 | 晨煦 |
-| 通信模式 | 支持 stdio + TCP + UnixSocket | 2026-02-22 | 晨煦 |
-| 远程调试 | 基于 DAP 协议，与 LSP 共享传输层 | 2026-02-22 | 晨煦 |
-| 并发模型 | 单线程 + async 事件循环 | 2026-02-22 | 晨煦 |
-| 测试工具（可选）| JSON 测试用例 + 内置测试运行器 | 2026-02-22 | 晨煦 |
+| 决策             | 决定                                                          | 日期       | 记录人 |
+| ---------------- | ------------------------------------------------------------- | ---------- | ------ |
+| LSP 服务器架构   | 独立进程，通过 stdio 通信                                     | 2026-02-15 | 晨煦   |
+| 协议版本         | 支持 LSP 3.18（需要 Inlay Hints 等新特性）                    | 2026-02-22 | 晨煦   |
+| 错误收集模式     | 返回 `Result&lt;Type, Vec&lt;Error>>`，支持错误级别和错误恢复 | 2026-02-22 | 晨煦   |
+| 缓存策略         | 文件级缓存：版本 + 内容 + 哈希，整个文件重新解析              | 2026-02-22 | 晨煦   |
+| 通信模式         | 支持 stdio + TCP + UnixSocket                                 | 2026-02-22 | 晨煦   |
+| 远程调试         | 基于 DAP 协议，与 LSP 共享传输层                              | 2026-02-22 | 晨煦   |
+| 并发模型         | 单线程 + async 事件循环                                       | 2026-02-22 | 晨煦   |
+| 测试工具（可选） | JSON 测试用例 + 内置测试运行器                                | 2026-02-22 | 晨煦   |
 
 ### 附录C：术语表
 
-| 术语 | 定义 |
-|------|------|
-| LSP | Language Server Protocol，语言服务器协议 |
-| JSON-RCP | JSON-Remote Procedure Call，JSON 远程过程调用 |
-| DAP | Debug Adapter Protocol，调试适配协议 |
-| 符号索引 | 编译时构建的符号位置映射表 |
-| 编译世界 | 包含所有编译信息的上下文 |
-| 幽灵提示 | Inlay Hints，行内显示的提示信息 |
-| 所有权追踪 | Ownership Trace，变量所有权流动的可视化 |
+| 术语       | 定义                                          |
+| ---------- | --------------------------------------------- |
+| LSP        | Language Server Protocol，语言服务器协议      |
+| JSON-RCP   | JSON-Remote Procedure Call，JSON 远程过程调用 |
+| DAP        | Debug Adapter Protocol，调试适配协议          |
+| 符号索引   | 编译时构建的符号位置映射表                    |
+| 编译世界   | 包含所有编译信息的上下文                      |
+| 幽灵提示   | Inlay Hints，行内显示的提示信息               |
+| 所有权追踪 | Ownership Trace，变量所有权流动的可视化       |
 
 ---
 
@@ -582,12 +597,12 @@ RFC 有以下状态流转：
 
 ### 状态说明
 
-| 状态 | 位置 | 说明 |
-|------|------|------|
-| **草案** | `docs/design/rfc/draft/` | 作者草稿，等待提交审核 |
-| **审核中** | `docs/design/rfc/review/` | 开放社区讨论和反馈 |
-| **已接受** | `docs/design/accepted/` | 成为正式设计文档，进入实现阶段 |
-| **已拒绝** | `docs/design/rfc/` | 保留在 RFC 目录，更新状态 |
+| 状态       | 位置                      | 说明                           |
+| ---------- | ------------------------- | ------------------------------ |
+| **草案**   | `docs/design/rfc/draft/`  | 作者草稿，等待提交审核         |
+| **审核中** | `docs/design/rfc/review/` | 开放社区讨论和反馈             |
+| **已接受** | `docs/design/accepted/`   | 成为正式设计文档，进入实现阶段 |
+| **已拒绝** | `docs/design/rfc/`        | 保留在 RFC 目录，更新状态      |
 
 ### 接受后的操作
 

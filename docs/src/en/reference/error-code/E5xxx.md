@@ -1,6 +1,6 @@
-# E5xxx: Module and Import
+# E5xxx: Modules and Imports
 
-> Auto-generated from `src/util/diagnostic/codes/`
+> Automatically generated from `src/util/diagnostic/codes/`
 
 ## Error List
 

@@ -43,7 +43,7 @@ use crate::std::{NativeContext, NativeHandler};
 /// ```ignore
 /// let mut registry = FfiRegistry::new();
 /// registry.register("my_func", |args| {
-///     Ok(RuntimeValue::Unit)
+///     Ok(RuntimeValue::Void)
 /// });
 /// let result = registry.call("my_func", &[]);
 /// ```

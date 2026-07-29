@@ -1,0 +1,10 @@
+node_modules
+public
+.vitepress
+dist
+src/en
+src/ja
+src/ru
+src/archive
+src/design/rfc/deprecated
+src/design/rfc/rejected

@@ -1,15 +1,16 @@
 ---
-title: 構文チートシート
+title: 文法クイックリファレンス
 ---
 
-# 構文チートシート
+# 文法クイックリファレンス
 
-5分でYaoXiangの中核的な構文を理解できます。詳細な学習は[チュートリアル](/tutorial/)をご覧ください。
+5分で YaoXiang のコア文法を理解できます。詳細を学ぶには [チュートリアル](/tutorial/)
+をご覧ください。
 
 ## 変数
 
 ```yaoxiang
-x = 42                    // 不変（デフォルト）
+x = 42                    // 不可変（デフォルト）
 mut y = 0                 // 可変
 
 name: String = "hello"    // 明示的な型
@@ -20,13 +21,13 @@ pub version = "1.0"       // 公開エクスポート
 
 ## 関数
 
-すべてが `name: type = value` です。関数も値です。
+すべては `name: type = value`。関数も値です。
 
 ```yaoxiang
 // 式形式（直接値を返す）
 add: (a: Int, b: Int) -> Int = a + b
 
-// コードブロック形式（明示的なreturn）
+// コードブロック形式（明示的 return）
 factorial: (n: Int) -> Int = {
     if n <= 1 { return 1 }
     return n * factorial(n - 1)
@@ -35,16 +36,16 @@ factorial: (n: Int) -> Int = {
 // Lambda（シグネチャが完整时可省略引数名）
 double = (x) => x * 2
 add = (a, b) => a + b
-inc = x => x + 1            // 単一引数は括弧を省略可
+inc = x => x + 1            // 単引数では括弧を省略可
 
-// コードブロック内ではreturnが必要
+// コードブロック内では return が必要
 process: (x: Int) -> Int = {
     a = x * 2
     b = a + 1
     return b
 }
 
-// Void関数はreturnが不要
+// Void 関数では return が不要
 greet: (name: String) -> Void = {
     io.println("Hello, " + name)
 }
@@ -52,10 +53,10 @@ greet: (name: String) -> Void = {
 
 ## 型
 
-`type`、`struct`、`trait`、`impl`キーワードはありません。すべてを一つの宣言で済ます。
+`type`、`struct`、`trait`、`impl` キーワードはありません。统一された宣言で全てを記述します。
 
 ```yaoxiang
-// 記録型
+// 記録タイプ
 Point: Type = { x: Float, y: Float }
 p = Point(1.0, 2.0)            // 位置引数
 p = Point(x=1.0, y=2.0)        // 名前付き引数
@@ -65,26 +66,26 @@ Point: Type = { x: Float = 0, y: Float = 0 }
 Point()                        // OK: x=0, y=0
 Point(x=1.0)                   // OK: x=1.0, y=0
 
-// 値variant型（列挙型）
-Color: Type = { red | green | blue }
+// 変体タイプ（enum type）
+Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
-Option: (T: Type) -> Type = { some(T) | none }
-Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
+Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
+Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
-// インターフェース（フィールドがすべて関数型の記録型）
+// インターフェース（フィールドが全て関数型の記録タイプ）
 Drawable: Type = { draw: (Surface) -> Void }
 
 // インターフェース組合
 DrawableSerializable: Type = Drawable & Serializable
 
-// 型内でのインターフェース実装の宣言
+// 型内宣言でインターフェース実装
 Circle: Type = {
     radius: Float,
-    Drawable,              // Drawableインターフェースを実装
-    Serializable,          // Serializableインターフェースを実装
+    Drawable,              // Drawable インターフェースを実装
+    Serializable,          // Serializable インターフェースを実装
 }
 
-// ジェネリクス型
+// ジェネリック型
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
@@ -92,7 +93,7 @@ List: (T: Type) -> Type = {
     map: (R: Type) -> ((self: List(T), f: (T) -> R) -> List(R)),
 }
 
-// ジェネリクス制約
+// ジェネリック制約
 clone: (T: Clone)(value: T) -> T = value.clone()
 sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T)
 ```
@@ -100,28 +101,28 @@ sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T)
 ## メソッド
 
 ```yaoxiang
-// 名前空間関数（Type.methodは所属マーカーであり、バインディングではない）
+// 名前空間関数（Type.method は所属标记而非绑定）
 Point.distance: (a: &Point, b: &Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     return (dx * dx + dy * dy).sqrt()
 }
 
-// 明示的なバインディング後に.呼び出し構文が使用可能
+// 明示的バインディング後にのみ . 呼び出し構文が使用可能
 Point.distance = distance[0]
 // 以降 p1.distance(p2) → distance(p1, p2)
 
-// クイック定義 + バインディング
+// 快速定義 + バインディング
 Point.draw: (self: &Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
 ```
 
-## 制御フロー
+## 制御流
 
 ```yaoxiang
-// ifは式
-grade = if score >= 90 { "A" } elif score >= 60 { "B" } else { "C" }
+// if は式
+grade = if score >= 90 { "A" } else if score >= 60 { "B" } else { "C" }
 
 // match
 result = match value {
@@ -173,7 +174,7 @@ match t {
     (x, y) => "({x}, {y})",
 }
 
-// 分解代入
+// 解構代入
 a, b = (1, 2)              // a=1, b=2
 
 // ガード式
@@ -205,42 +206,42 @@ pub Point: Type = { x: Float, y: Float }
 ## 所有権
 
 ```yaoxiang
-// Move：デフォルトでは所有権が移動する
+// Move：デフォルトの所有権移転
 p1 = Point(1.0, 2.0)
-p2 = p1                   // p1は移動される
+p2 = p1                   // p1 は移動される
 
-// 借用 &：トークンを自動生成（手動での&は不要）
+// 借用 &：トークンは自動的に作成される（手動の & は不要）
 distance: (a: &Point, b: &Point) -> Float = ...
-d = distance(p1, p2)      // コンパイラが借用トークンを自動生成
+d = distance(p1, p2)      // コンパイラが自動的に借用トークンを作成
 
 // 可変借用 &mut
 update: (p: &mut Point, x: Float) -> Void = { p.x = x }
 
-// ref：共有所有（コンパイラが自動的にRc/Arcを選択）
+// ref：共有所有権（コンパイラが Rc/Arc を自動選択）
 shared = ref data
 
 // clone：明示的なディープコピー
 backup = data.clone()
 ```
 
-## 並行処理
+## 並行性
 
-spawnは唯一の並列プリミティブです。async/awaitはなく、Send/Syncもありません。
+spawn は唯一の並行プリミティブです。async/await も Send/Sync も不要です。
 
 ```yaoxiang
-// spawnブロック：部分式が自動的に並列実行
+// spawn ブロック：サブ式は自動的に並列化
 result = spawn {
     user = fetch_user(1)
     posts = fetch_posts()
     return (user, posts)
 }
 
-// spawn for：データ並列
+// spawn for：データ並列性
 results = spawn for item in items {
     return process(item)
 }
 
-// spawn + ref：タスク間での共有
+// spawn + ref：タスク間共有
 main = {
     shared = ref data
     result = spawn {

@@ -20,29 +20,29 @@
 
 ### 核心分支（Core Branches）
 
-| 分支名 | 用途 | 生命周期 | 保护级别 |
-|--------|------|----------|----------|
-| `main` | 生产环境代码 | 永久 | 严格保护 |
-| `dev` | 主开发分支 | 永久 | 中等保护 |
-| `master` | 主干分支（兼容） | 永久 | 严格保护 |
+| 分支名   | 用途             | 生命周期 | 保护级别 |
+| -------- | ---------------- | -------- | -------- |
+| `main`   | 生产环境代码     | 永久     | 严格保护 |
+| `dev`    | 主开发分支       | 永久     | 中等保护 |
+| `master` | 主干分支（兼容） | 永久     | 严格保护 |
 
 ### 功能分支（Feature Branches）
 
-| 前缀 | 用途 | 命名示例 | 合并目标 |
-|------|------|----------|----------|
-| `feature/` | 新功能开发 | `feature/type-inference`<br>`feature/ownership-model` | `dev` |
-| `bugfix/` | 修复已知缺陷 | `bugfix/memory-leak`<br>`bugfix/parser-error` | `dev` |
-| `hotfix/` | 紧急线上问题修复 | `hotfix/security-patch`<br>`hotfix/crash-bug` | `main` + `dev` |
-| `release/` | 发布准备分支 | `release/v0.8.0`<br>`release/v1.0.0` | `main` |
+| 前缀       | 用途             | 命名示例                                              | 合并目标       |
+| ---------- | ---------------- | ----------------------------------------------------- | -------------- |
+| `feature/` | 新功能开发       | `feature/type-inference`<br>`feature/ownership-model` | `dev`          |
+| `bugfix/`  | 修复已知缺陷     | `bugfix/memory-leak`<br>`bugfix/parser-error`         | `dev`          |
+| `hotfix/`  | 紧急线上问题修复 | `hotfix/security-patch`<br>`hotfix/crash-bug`         | `main` + `dev` |
+| `release/` | 发布准备分支     | `release/v0.8.0`<br>`release/v1.0.0`                  | `main`         |
 
 ### 辅助分支（Auxiliary Branches）
 
-| 前缀 | 用途 | 命名示例 | 合并目标 |
-|------|------|----------|----------|
-| `docs/` | 文档更新 | `docs/api-reference`<br>`docs/tutorial-update` | `dev` |
-| `ci/` | CI/CD 配置变更 | `ci/add-deploy-script`<br>`ci/optimize-build` | `dev` |
-| `refactor/` | 代码重构 | `refactor/lexer-optimization`<br>`refactor/memory-manager` | `dev` |
-| `test/` | 测试相关修改 | `test/add-integration`<br>`test/performance-bench` | `dev` |
+| 前缀        | 用途           | 命名示例                                                   | 合并目标 |
+| ----------- | -------------- | ---------------------------------------------------------- | -------- |
+| `docs/`     | 文档更新       | `docs/api-reference`<br>`docs/tutorial-update`             | `dev`    |
+| `ci/`       | CI/CD 配置变更 | `ci/add-deploy-script`<br>`ci/optimize-build`              | `dev`    |
+| `refactor/` | 代码重构       | `refactor/lexer-optimization`<br>`refactor/memory-manager` | `dev`    |
+| `test/`     | 测试相关修改   | `test/add-integration`<br>`test/performance-bench`         | `dev`    |
 
 ---
 
@@ -198,6 +198,7 @@ graph TD
 ### 主要分支保护
 
 **main 分支**
+
 - 禁止直接推送
 - 必须通过 PR 合并
 - 禁止强制推送
@@ -205,6 +206,7 @@ graph TD
 - 状态检查必须通过
 
 **dev 分支**
+
 - 禁止直接推送（开发成员）
 - 要求 PR 合并
 - 状态检查必须通过
@@ -212,12 +214,12 @@ graph TD
 
 ### 分支权限设置
 
-| 分支类型 | 开发者 | 维护者 | 管理员 |
-|----------|--------|--------|--------|
-| `main` | 仅 PR | 仅 PR | 审批 PR |
-| `dev` | PR 合并 | PR 合并 | 直接推送 |
+| 分支类型    | 开发者   | 维护者   | 管理员   |
+| ----------- | -------- | -------- | -------- |
+| `main`      | 仅 PR    | 仅 PR    | 审批 PR  |
+| `dev`       | PR 合并  | PR 合并  | 直接推送 |
 | `feature/*` | 完整权限 | 完整权限 | 完整权限 |
-| `hotfix/*` | 完整权限 | 完整权限 | 完整权限 |
+| `hotfix/*`  | 完整权限 | 完整权限 | 完整权限 |
 
 ---
 
@@ -265,6 +267,7 @@ graph TD
 ### Q1: 如何选择分支类型？
 
 **答：**
+
 - 新功能 → `feature/`
 - 已知缺陷修复 → `bugfix/`
 - 紧急线上修复 → `hotfix/`
@@ -274,8 +277,7 @@ graph TD
 
 ### Q2: feature 分支应该从哪个分支创建？
 
-**答：**
-始终从 `dev` 分支创建，确保功能基于最新的开发代码：
+**答：** 始终从 `dev` 分支创建，确保功能基于最新的开发代码：
 
 ```bash
 git checkout dev
@@ -286,6 +288,7 @@ git checkout -b feature/new-feature
 ### Q3: 什么时候创建 release 分支？
 
 **答：**
+
 - 准备发布新版本时
 - 需要冻结新功能添加时
 - 需要专门测试稳定版本时
@@ -293,6 +296,7 @@ git checkout -b feature/new-feature
 ### Q4: 如何处理分支冲突？
 
 **答：**
+
 1. 更新目标分支：`git checkout dev && git pull origin dev`
 2. 切换到功能分支：`git checkout feature/your-branch`
 3. 合并并解决冲突：`git rebase dev` 或 `git merge dev`
@@ -301,6 +305,7 @@ git checkout -b feature/new-feature
 ### Q5: hotfix 分支如何处理？
 
 **答：**
+
 1. 从 `main` 分支创建：`git checkout main && git checkout -b hotfix/urgent-fix`
 2. 修复问题并测试
 3. 同时创建 PR 到 `main` 和 `dev`
@@ -308,8 +313,7 @@ git checkout -b feature/new-feature
 
 ### Q6: 分支命名长度有限制吗？
 
-**答：**
-建议不超过 50 个字符，保持简洁明了。Git 本身支持更长的名称，但过长的名称会影响可读性。
+**答：** 建议不超过 50 个字符，保持简洁明了。Git 本身支持更长的名称，但过长的名称会影响可读性。
 
 ---
 

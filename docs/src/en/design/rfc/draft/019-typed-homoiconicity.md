@@ -1,40 +1,50 @@
 ---
-title: "RFC-019: Typed Homoiconicity - Syntax as Type"
-status: "Draft"
-author: "晨煦"
-created: "2026-02-20"
-updated: "YYYY-MM-DD"
+title: 'RFC-019: Type-Level Homoiconicity - Syntax as Type'
+status: 'Draft'
+author: 'Chen Xu'
+created: '2026-02-20'
+updated: 'YYYY-MM-DD'
 ---
 
-# RFC-019: Typed Homoiconicity - Syntax as Type
+# RFC-019: Type-Level Homoiconicity - Syntax as Type
 
 >
 
 >
 
+> **⚠️ Permanent Experimental Declaration**: This is an **exploratory experiment** to verify the
+> feasibility of the language design concept "syntax as type". **This RFC will never be merged**,
+> and will not enter the dev/main branch regardless of the outcome. The experimental branch will be
+> abandoned or archived upon completion.
 >
-> **⚠️ Permanent Experimental Declaration**: This is an **exploratory experiment** to verify the feasibility of the language design concept "syntax as type". **This RFC will never be merged**, and will not enter the dev/main branch regardless of the outcome. The experimental branch will be abandoned or archived upon completion.
+> - **Experiment Goal**: Verify the implementation difficulty and potential value of type-level
+>   homoiconicity
+> - **Stop Loss Line**: Abandon after 6 months without progress
+> - **Success Criteria**: Successfully run at least one user-defined keyword (complete parsing →
+>   compilation → execution)
 >
-> - **Experiment Goal**: Verify the implementation difficulty and potential value of typed homoiconicity
-> - **Stop Loss Line**: Abandon after 6 months of no progress
-> - **Success Criteria**: Successfully run at least one user-defined keyword (complete parsing → compilation → execution)
+> **No guarantee of merging into the main branch**, may be rejected or abandoned for various reasons
+> in the future. Do not use this feature in production environments.
 >
-> **No guarantee of merging into the main branch**, and it may be rejected or abandoned for various reasons in the future. Do not use this feature in production environments.
->
-> **⚠️ Positioning Note**: This RFC is a language design thought experiment and does not provide engineering solutions. For practical extensible parser patterns, see Rust `syn::Parse` or Haskell `parsec`.
+> **⚠️ Positioning Note**: This RFC is a language design thought experiment and does not provide
+> engineering solutions. For practical extensible parser patterns, see Rust `syn::Parse` or Haskell
+> `parsec`.
 
 ---
 
 ## Summary
 
-This RFC proposes a radical language design experiment: **making the syntactic structure of the language itself part of the type system**.
+This RFC proposes a radical language design experiment: **making the syntactic structure of a
+language itself part of the type system**.
 
-The core idea derives from Lisp's "code as data" (homoiconicity), but implemented through a **static type system**:
+The core idea derives from Lisp's "code as data" (homoiconicity), but implemented through a **static
+type system**:
+
 - Syntax trees (AST) are types
 - Keywords are predefined instances of types
 - Users can extend language syntax by defining types
 
-This means: the language itself becomes composable, extensible "building blocks".
+This means: the language itself becomes a composable, extensible set of "building blocks".
 
 ---
 
@@ -42,16 +52,20 @@ This means: the language itself becomes composable, extensible "building blocks"
 
 ### Why conduct this experiment?
 
-1. **Pursuit of Unity**: Eliminate the special syntactic element of "keywords", making everything types and functions
-2. **Language Extensibility**: Users can define new syntactic structures just like defining functions
-3. **Type-Safe Macros**: Traditional macros (text replacement) are dangerous; typed homoiconicity can provide compile-time checking
-4. **Learning Purpose**: Deeply understand the essence of language design
+1. **Pursuit of uniformity**: Eliminate the special syntactic element of "keywords", making
+   everything types and functions
+2. **Language extensibility**: Users can define new syntactic structures just like defining
+   functions
+3. **Type-safe macros**: Traditional macros (text replacement) are dangerous; type-level
+   homoiconicity can provide compile-time checking
+4. **Learning purpose**: Deeply understand the essence of language design
 
 ### Relationship with Lisp
 
 Lisp has long implemented "code as data":
+
 ```lisp
-; Lisp code itself is S-expression
+; Lisp code is itself an S-expression
 (if (> x 0) "positive" "negative")
 ```
 
@@ -97,7 +111,8 @@ compile_while: (node: While, ctx: CompileContext) -> IR = ...
 
 #### 3. Types Carry Parsing Rules (Core Innovation)
 
-This is the key to this experiment: **types not only describe data but also carry rules for parsing code**.
+This is the key to this experiment: **types not only describe data, but also carry rules for how to
+parse code**.
 
 ```yaoxiang
 // Syntax rule type
@@ -178,7 +193,7 @@ TimesLoop: SyntaxRule = {
         consume("{")
         body = parse_block(tokens)
         consume("}")
-        // Transform into while loop
+        // Transform into a while loop
         counter_var = gensym("i")
         return While(
             Less(Variable(counter_var), receiver),
@@ -240,53 +255,54 @@ match x {
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                   Source Code                        │
+│                    Source Code                      │
 └─────────────────┬───────────────────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────────────────┐
-│              Syntax Parser (Parser)                  │
+│              Parser                                 │
 │  - Recognize keywords                                │
-│  - Find corresponding SyntaxRule type               │
-│  - Call the type's parse method                      │
+│  - Find corresponding SyntaxRule type              │
+│  - Call type's parse method                         │
 └─────────────────┬───────────────────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────────────────┐
-│              AST (Type Instances)                    │
-│  If, While, Match, TimesLoop...                      │
+│              AST (Type Instances)                   │
+│  If, While, Match, TimesLoop...                     │
 └─────────────────┬───────────────────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────────────────┐
 │              Compiler/Interpreter                   │
-│  - Call type's compile/eval methods                  │
-│  - Generate target code or execute                   │
+│  - Call type's compile/eval method                  │
+│  - Generate target code or execute                 │
 └─────────────────────────────────────────────────────┘
 ```
 
 ### Key Technical Issues
 
-#### 1. Control Flow as Functions
+#### 1. Control Flow Functionalization
 
-Problem: `if` needs to evaluate only one branch, which cannot be done with regular function calls.
+Problem: `if` needs to evaluate only one branch, cannot use ordinary function calls.
 
-Solution: Pass thunks (lazy evaluation)
+Solution: Pass in thunks (delayed evaluation)
 
 ```yaoxiang
 // Internal representation after compilation
 If: Type = {
     condition: Expr,
-    then: () -> Value,  // thunk, lazy evaluation
+    then: () -> Value,  // thunk, delayed evaluation
     else: () -> Value
 }
 ```
 
 #### 2. Non-Local Return of `return`
 
-Problem: `return` needs to exit from multiple levels of function.
+Problem: `return` needs to exit from multiple function levels.
 
 Solution:
+
 - Option A: Compile-time CPS transformation
 - Option B: Use Result/Either monad
 - Option C: Limit the scope of return
@@ -296,6 +312,7 @@ Solution:
 Problem: How to distinguish whether `if(x > 0) { 1 }` is a function call or a keyword?
 
 Solution:
+
 - Keywords use special syntax (e.g., `if ... { } else { }`)
 - Or constrain through the type system
 
@@ -303,7 +320,7 @@ Solution:
 
 Problem: Users may define self-referential syntax rules.
 
-Solution: Compile-time detection of circular dependencies
+Solution: Detect circular dependencies at compile time
 
 ---
 
@@ -311,23 +328,23 @@ Solution: Compile-time detection of circular dependencies
 
 ### Relationship with RFC-010 (Unified Type Syntax)
 
-RFC-010 implements the unified syntax `name: type = value`; this RFC is its extension:
+RFC-010 implemented the unified syntax `name: type = value`; this RFC is its extension:
 
-| RFC-010 | This RFC |
-|----------|----------|
-| Variables, functions, types are all `name: type = value` | Keywords are also `name: type = value` |
-| Types are values | Syntax rules are also values |
-| `Type` is a meta type | `SyntaxRule` is the meta type of syntax |
+| RFC-010                                                  | This RFC                                |
+| -------------------------------------------------------- | --------------------------------------- |
+| Variables, functions, types are all `name: type = value` | Keywords are also `name: type = value`  |
+| Types are values                                         | Syntax rules are values                 |
+| `Type` is a meta type                                    | `SyntaxRule` is the meta type of syntax |
 
 ### Comparison with Lisp/Macros
 
-| Feature | Lisp Macros | This Experiment |
-|---------|-------------|-----------------|
-| Code representation | S-expression (lists) | Type instances |
-| Extension method | defmacro | Define SyntaxRule types |
-| Type safety | Weak (text replacement) | Strong (type checking) |
-| Parsing time | Runtime/compile-time | Compile-time |
-| IDE support | Weak | Strong (type information) |
+| Feature             | Lisp Macros             | This Experiment           |
+| ------------------- | ----------------------- | ------------------------- |
+| Code representation | S-expression (lists)    | Type instances            |
+| Extension method    | defmacro                | Define SyntaxRule types   |
+| Type safety         | Weak (text replacement) | Strong (type checking)    |
+| Parse timing        | Runtime/compile-time    | Compile-time              |
+| IDE support         | Weak                    | Strong (type information) |
 
 ---
 
@@ -341,6 +358,7 @@ Created from dev branch
 ```
 
 **Important**:
+
 - This is an **experimental branch** and will not be frequently merged with dev
 - May be developed independently for a long time
 - **No guarantee of merging into main**
@@ -348,17 +366,18 @@ Created from dev branch
 
 ### Development Phases
 
-> **⚠️ Experiment Time Limit: 6 Months**
+> **⚠️ Experiment Time Limit: 6 months**
 
-| Phase | Goal | Expected Time | Notes |
-|-------|------|---------------|-------|
-| Phase 1 | Proof of concept: implement AST types with existing syntax | 2 weeks | |
-| Phase 2 | Implement basic evaluator | 2 weeks | Key challenge: if/return control flow |
-| Phase 3 | Implement SyntaxRule type parsing rules | 3 weeks | |
-| Phase 4 | User-defined syntax extension | 3 weeks | Core goal: successfully run at least one custom keyword |
-| Phase 5 | Optimization and documentation | 2 weeks | Experiment ends |
+| Phase   | Goal                                                       | Expected Time | Notes                                      |
+| ------- | ---------------------------------------------------------- | ------------- | ------------------------------------------ |
+| Phase 1 | Proof of concept: Implement AST types with existing syntax | 2 weeks       |                                            |
+| Phase 2 | Implement basic evaluator                                  | 2 weeks       | Key challenge: if/return control flow      |
+| Phase 3 | Implement parsing rules for SyntaxRule types               | 3 weeks       |                                            |
+| Phase 4 | User-defined syntax extension                              | 3 weeks       | Core goal: run at least one custom keyword |
+| Phase 5 | Optimization and documentation                             | 2 weeks       | Experiment ends                            |
 
-**Timeout Handling**: If Phase 2 (control flow implementation) exceeds 4 weeks with no progress, consider abandoning.
+**Timeout Handling**: If Phase 2 (control flow implementation) exceeds 4 weeks without progress,
+consider abandoning.
 
 ---
 
@@ -366,17 +385,17 @@ Created from dev branch
 
 ### Advantages
 
-- **Ultimate Unity**: Eliminate the boundary between keywords and regular code
-- **Language Extensibility**: Users can define their own syntax
-- **Type Safety**: Safer than traditional macros
-- **Learning Value**: Deeply understand language fundamentals
+- **Ultimate uniformity**: Eliminate the boundary between keywords and ordinary code
+- **Language extensibility**: Users can define their own syntax
+- **Type safety**: Safer than traditional macros
+- **Learning value**: Deeply understand the essence of language
 
 ### Disadvantages
 
-- **Implementation Complexity**: Requires significant compiler modifications
-- **Performance Concerns**: Runtime interpretation may be slow
-- **Learning Curve**: Abstract concepts, requires understanding type systems
-- **Practicality Question**: May be over-engineered
+- **Implementation complexity**: Requires significant compiler modifications
+- **Performance concerns**: Runtime interpretation may be slow
+- **Learning curve**: Abstract concepts, requires understanding the type system
+- **Practicality questionable**: May be over-engineered
 
 ### Risks
 
@@ -388,8 +407,8 @@ Created from dev branch
 
 ## Open Questions
 
-- [ ] How to handle syntax conflicts (user-defined rules conflict with built-ins)?
-- [ ] Performance optimization strategies?
+- [ ] How to handle syntax conflicts (user-defined rules conflict with built-in ones)?
+- [ ] Performance optimization plan?
 - [ ] Is a syntax import/export mechanism needed?
 - [ ] How to integrate with the existing module system?
 
@@ -399,13 +418,13 @@ Created from dev branch
 
 ### Glossary
 
-| Term | Definition |
-|------|------------|
-| Homoiconicity | Code and data use the same representation |
-| AST (Abstract Syntax Tree) | Abstract representation of a program's syntax |
-| SyntaxRule | A type that carries syntax parsing rules |
-| Thunk | Function wrapper for lazy evaluation |
-| CPS (Continuation Passing Style) | Continuation Passing Style |
+| Term                             | Definition                                       |
+| -------------------------------- | ------------------------------------------------ |
+| Homoiconicity                    | Code and data use the same representation        |
+| AST (Abstract Syntax Tree)       | Abstract syntax tree representation of a program |
+| SyntaxRule                       | Type that carries syntax parsing rules           |
+| Thunk                            | Function wrapper for delayed evaluation          |
+| CPS (Continuation Passing Style) | Continuation Passing Style                       |
 
 ### References
 
@@ -415,7 +434,7 @@ Created from dev branch
 
 ---
 
-## Lifecycle and Destination
+## Lifecycle and Disposition
 
 ```
 ┌─────────────┐
@@ -430,7 +449,8 @@ Created from dev branch
        ├─► Failure → Abandon branch
        └─► Timeout → Give up and abandon
 
-       ⚠️ Regardless of outcome, this RFC will never merge
+       ⚠️ Regardless of outcome, this RFC will never be merged
 ```
 
-> **⚠️ Important Reminder**: This is an exploratory experiment, **will never be merged**. Please do not depend on this feature in production code.
+> **⚠️ Important Reminder**: This is an exploratory experiment and **will never be merged**. Please
+> do not depend on this feature in production code.

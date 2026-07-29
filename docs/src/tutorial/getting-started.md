@@ -2,7 +2,8 @@
 
 > 本指南帮助您快速上手 YaoXiang 编程语言。
 >
-> **注意**：本文档中的代码示例基于 YaoXiang 语言规范编写。如在实际运行中遇到语法差异，请参考 [语言规范](../reference/language-spec/index.md)。
+> **注意**：本文档中的代码示例基于 YaoXiang 语言规范编写。如在实际运行中遇到语法差异，请参考
+> [语言规范](../reference/language-spec/index.md)。
 
 ## 安装
 
@@ -29,6 +30,7 @@ cargo test
 ```
 
 **验证安装成功**：
+
 ```bash
 ./target/debug/yaoxiang --version
 # 应输出类似: yaoxiang x.y.z
@@ -207,10 +209,10 @@ d2 = p1.distance(p2)  // → distance(p1, p2)
 
 ```yaoxiang
 // 简单枚举
-Color: Type = { red | green | blue }
+Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
 // 带数据的枚举
-Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
+Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 // 使用泛型
 success: Result(Int, String) = ok(42)
@@ -238,7 +240,7 @@ StringList: Type = List(String)
 // 条件表达式
 if x > 0 {
     "positive"
-} elif x == 0 {
+} else if x == 0 {
     "zero"
 } else {
     "negative"
@@ -301,7 +303,8 @@ main: () -> Void = {
 }
 ```
 
-**核心规则**：`spawn` 修饰的表达式在后台执行，外层同步阻塞等待结果。无依赖的任务自动并行，由运行时 GMP 模型调度。
+**核心规则**：`spawn`
+修饰的表达式在后台执行，外层同步阻塞等待结果。无依赖的任务自动并行，由运行时 GMP 模型调度。
 
 ## 模块系统
 

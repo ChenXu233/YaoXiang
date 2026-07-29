@@ -650,18 +650,18 @@ impl StatementChecker {
             crate::frontend::core::parser::ast::StmtKind::If {
                 condition,
                 then_branch,
-                elif_branches,
+                else_if_branches,
                 else_branch,
                 span,
             } => {
-                let elif_refs: Vec<(&Expr, &Block)> = elif_branches
+                let else_if_refs: Vec<(&Expr, &Block)> = else_if_branches
                     .iter()
                     .map(|(e, b)| (e.as_ref(), b.as_ref()))
                     .collect();
                 self.check_if_stmt(
                     condition,
                     then_branch,
-                    &elif_refs,
+                    &else_if_refs,
                     else_branch.as_deref(),
                     *span,
                 )
@@ -1407,7 +1407,7 @@ impl StatementChecker {
         &mut self,
         condition: &Expr,
         then_branch: &Block,
-        elif_branches: &[(&Expr, &Block)],
+        else_if_branches: &[(&Expr, &Block)],
         else_branch: Option<&Block>,
         _stmt_span: crate::util::span::Span,
     ) -> Result<(), Box<Diagnostic>> {
@@ -1422,19 +1422,19 @@ impl StatementChecker {
 
         self.check_block(then_branch)?;
 
-        for (elif_cond, _) in elif_branches {
-            let elif_cond_ty = self.check_expr(elif_cond)?;
-            if elif_cond_ty != MonoType::Bool {
+        for (else_if_cond, _) in else_if_branches {
+            let else_if_cond_ty = self.check_expr(else_if_cond)?;
+            if else_if_cond_ty != MonoType::Bool {
                 return Err(Box::new(
-                    ErrorCodeDefinition::type_mismatch("bool", &format!("{}", elif_cond_ty))
+                    ErrorCodeDefinition::type_mismatch("bool", &format!("{}", else_if_cond_ty))
                         .at(_stmt_span)
                         .build(),
                 ));
             }
         }
 
-        for (_, elif_block) in elif_branches {
-            self.check_block(elif_block)?;
+        for (_, else_if_block) in else_if_branches {
+            self.check_block(else_if_block)?;
         }
 
         if let Some(else_block) = else_branch {

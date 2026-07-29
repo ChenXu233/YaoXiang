@@ -1,27 +1,27 @@
 ---
-title: "RFC Example: Enhanced Pattern Matching Syntax"
+title: 'RFC Example: Enhanced Pattern Matching Syntax'
 ---
 
 # RFC Example: Enhanced Pattern Matching Syntax
 
-> **Note**: This is an example RFC template, demonstrating how to write a complete RFC proposal.
+> **Note**: This is an RFC template example demonstrating how to write a complete RFC proposal.
 > Please refer to this template when writing your own RFC.
 >
 > **Status**: Example (for reference only)
 
-> **Author**: Chenxu (Example Author)
-> **Created**: 2025-01-05
-> **Last Updated**: 2026-02-12
+> **Author**: Chen Xu (example author) **Created**: 2025-01-05 **Last Updated**: 2026-02-12
 
 ## Summary
 
-Add more powerful pattern matching capabilities to YaoXiang, including nested patterns, guard expressions, and `let` pattern bindings.
+Add more powerful pattern matching capabilities to YaoXiang, including nested patterns, guard
+expressions, and `let` pattern bindings.
 
 ## Motivation
 
 ### Why is this feature needed?
 
-The current `match` expression has limited functionality and cannot handle the following common scenarios:
+The current `match` expression has limited functionality and cannot handle the following common
+scenarios:
 
 ```yaoxiang
 # Cannot destructure nested structures
@@ -37,7 +37,7 @@ match result {
 }
 ```
 
-### Current Problems
+### Current problems
 
 1. Nested pattern destructuring is not supported
 2. Guard expressions cannot be used in patterns
@@ -45,13 +45,13 @@ match result {
 
 ## Proposal
 
-### Core Design
+### Core design
 
-Extend the `match` expression syntax to support:
+Extend `match` expression syntax to support:
 
-1. **Nested pattern destructuring**: destructuring of structs at any depth
-2. **Guard expressions**: adding `if` conditions after a pattern
-3. **Pattern variable binding**: binding variables directly from patterns
+1. **Nested pattern destructuring**: Struct destructuring at arbitrary depth
+2. **Guard expressions**: Add `if` conditions after patterns
+3. **Pattern variable binding**: Bind variables directly from patterns
 
 ### Examples
 
@@ -84,20 +84,20 @@ match data {
 }
 ```
 
-### `let` Statement Pattern Matching
+### `let` statement pattern matching
 
 ```yaoxiang
 # New syntax
 let Point(x: 0, y: _) = point  # Bind only when x == 0
 let Ok(value) = result         # Destructuring Result
 
-# Multiple bindings
-let (a, b, c) = tuple          # Tuple destructuring
+# Multiple binding
+let (a, b, c) = tuple          # Destructuring tuple
 ```
 
 ## Detailed Design
 
-### Syntax Changes
+### Syntax changes
 
 ```
 MatchExpr   ::= 'match' Expr '{' MatchArm+ '}'
@@ -118,63 +118,63 @@ OrPattern     ::= Pattern '|' Pattern
 RestPattern   ::= '...'
 ```
 
-### Impact on the Type System
+### Type system impact
 
 - Type checking for pattern matching needs to be extended
-- Pattern variables receive the correct type upon a successful match
+- Pattern variables receive correct types on successful match
 
-### Compiler Changes
+### Compiler changes
 
-| Component | Change |
-|------|------|
-| lexer | Add pattern-related tokens |
-| parser | Add pattern parsing logic |
+| Component | Changes                            |
+| --------- | ---------------------------------- |
+| lexer     | Add new pattern-related tokens     |
+| parser    | Add new pattern parsing logic      |
 | typecheck | Pattern type inference and binding |
-| codegen | Pattern matching code generation |
+| codegen   | Pattern matching code generation   |
 
-### Backward Compatibility
+### Backward compatibility
 
 - ✅ Fully backward compatible
-- Only new syntax is added; the existing `match` syntax remains unchanged
+- Only new syntax added, original `match` syntax unchanged
 
-## Trade-offs
+## Tradeoffs
 
-### Advantages
+### Pros
 
 - More expressive syntax, more concise code
-- Consistency with pattern matching in mainstream languages (Rust, Scala, Elixir)
-- Fewer runtime errors; mismatches are caught early
+- Consistent with mainstream language pattern matching (Rust, Scala, Elixir)
+- Reduce runtime errors, catch mismatches earlier
 
-### Disadvantages
+### Cons
 
 - Increased compiler implementation complexity
-- A slightly steeper learning curve
+- Slightly steeper learning curve
 
-## Alternatives
+## Alternative Solutions
 
-| Alternative | Why not chosen |
-|------|--------------|
-| Support only top-level destructuring | Cannot handle common nested scenarios |
-| Use a functional style | Mixes awkwardly with imperative code |
-| Defer to v2.0 | Users already have strong demand |
+| Solution                             | Why not chosen                                |
+| ------------------------------------ | --------------------------------------------- |
+| Support only top-level destructuring | Cannot handle common nested scenarios         |
+| Use functional style                 | Does not blend naturally with imperative code |
+| Defer to v2.0                        | Users already have strong demand              |
 
 ## Implementation Strategy
 
 ### Dependencies
 
 - No external dependencies
-- Requires the basic type system to be completed first
+- Basic type system needs to be completed first
 
 ### Risks
 
-- Pattern compilation complexity may lead to performance issues
-- Excessively deep nesting may cause stack overflow
+- Pattern compilation complexity may cause performance issues
+- Deep nesting may cause stack overflow
 
 ## Open Questions
 
-1. [ ] Syntax for cycle patterns (`@` binding)?
-2. [ ] Support for compile-time exhaustiveness checking?
-3. [ ] Performance optimization strategies?
+1. [ ] What is the syntax for recursive patterns (`@` binding)?
+2. [ ] Should compile-time pattern exhaustiveness checking be supported?
+3. [ ] What are the performance optimization strategies?
 
 ## References
 

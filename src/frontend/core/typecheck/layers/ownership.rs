@@ -925,7 +925,7 @@ impl OwnershipChecker {
         &mut self,
         condition: &Expr,
         then_body: &[Stmt],
-        elifs: &[(&Expr, &[Stmt])],
+        else_ifs: &[(&Expr, &[Stmt])],
         else_body: Option<&[Stmt]>,
     ) -> Vec<ProofResult> {
         let split_node = self.current_node;
@@ -941,13 +941,14 @@ impl OwnershipChecker {
         self.cfg
             .add_edge(self.current_node, merge_node, EdgeKind::Normal);
 
-        // elif 分支 —— 路径条件 = elif_cond
-        for (elif_cond, elif_body) in elifs {
-            results.extend(self.walk_expr(elif_cond));
-            let elif_start = self.cfg.add_node(Some(format!("{:?}", elif_cond)));
-            self.cfg.add_edge(split_node, elif_start, EdgeKind::Normal);
-            self.current_node = elif_start;
-            results.extend(self.walk_stmts(elif_body));
+        // elif 分支 —— 路径条件 = else_if_cond
+        for (else_if_cond, else_if_body) in else_ifs {
+            results.extend(self.walk_expr(else_if_cond));
+            let else_if_start = self.cfg.add_node(Some(format!("{:?}", else_if_cond)));
+            self.cfg
+                .add_edge(split_node, else_if_start, EdgeKind::Normal);
+            self.current_node = else_if_start;
+            results.extend(self.walk_stmts(else_if_body));
             self.cfg
                 .add_edge(self.current_node, merge_node, EdgeKind::Normal);
         }
@@ -1240,16 +1241,16 @@ impl OwnershipChecker {
             Expr::If {
                 condition,
                 then_branch,
-                elif_branches,
+                else_if_branches,
                 else_branch,
                 ..
             } => {
-                let elifs: Vec<(&Expr, &[Stmt])> = elif_branches
+                let else_ifs: Vec<(&Expr, &[Stmt])> = else_if_branches
                     .iter()
                     .map(|(cond, body)| (cond.as_ref(), body.stmts.as_slice()))
                     .collect();
                 let else_body = else_branch.as_ref().map(|b| b.stmts.as_slice());
-                self.walk_if(condition, &then_branch.stmts, &elifs, else_body)
+                self.walk_if(condition, &then_branch.stmts, &else_ifs, else_body)
             }
 
             Expr::While {
@@ -1437,16 +1438,16 @@ impl OwnershipChecker {
             StmtKind::If {
                 condition,
                 then_branch,
-                elif_branches,
+                else_if_branches,
                 else_branch,
                 ..
             } => {
-                let elifs: Vec<(&Expr, &[Stmt])> = elif_branches
+                let else_ifs: Vec<(&Expr, &[Stmt])> = else_if_branches
                     .iter()
                     .map(|(cond, body)| (cond.as_ref(), body.stmts.as_slice()))
                     .collect();
                 let else_body = else_branch.as_ref().map(|b| b.stmts.as_slice());
-                self.walk_if(condition, &then_branch.stmts, &elifs, else_body)
+                self.walk_if(condition, &then_branch.stmts, &else_ifs, else_body)
             }
 
             StmtKind::For {

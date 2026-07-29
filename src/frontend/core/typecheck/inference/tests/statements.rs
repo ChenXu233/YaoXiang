@@ -143,7 +143,7 @@ fn test_check_if_stmt_bool_condition() {
     let stmt = make_stmt(StmtKind::If {
         condition: Box::new(Expr::Lit(Literal::Bool(true), Span::dummy())),
         then_branch: Box::new(make_block(vec![])),
-        elif_branches: vec![],
+        else_if_branches: vec![],
         else_branch: None,
         span: Span::dummy(),
     });
@@ -157,13 +157,13 @@ fn test_check_if_stmt_bool_condition() {
 
 /// §5.6: if 语句带 elif 和 else 分支 → Ok
 #[test]
-fn test_check_if_stmt_with_elif_and_else() {
+fn test_check_if_stmt_with_else_if_and_else() {
     // Arrange
     let mut checker = make_checker();
     let stmt = make_stmt(StmtKind::If {
         condition: Box::new(Expr::Lit(Literal::Bool(true), Span::dummy())),
         then_branch: Box::new(make_block(vec![])),
-        elif_branches: vec![(
+        else_if_branches: vec![(
             Box::new(Expr::Lit(Literal::Bool(false), Span::dummy())),
             Box::new(make_block(vec![])),
         )],
@@ -266,7 +266,7 @@ fn test_check_if_stmt_non_bool_condition() {
     let stmt = make_stmt(StmtKind::If {
         condition: Box::new(Expr::Lit(Literal::Int(42), Span::dummy())),
         then_branch: Box::new(make_block(vec![])),
-        elif_branches: vec![],
+        else_if_branches: vec![],
         else_branch: None,
         span: Span::dummy(),
     });
@@ -280,13 +280,13 @@ fn test_check_if_stmt_non_bool_condition() {
 
 /// §5.6: elif 条件非 Bool 类型 → Err
 #[test]
-fn test_check_if_stmt_non_bool_elif_condition() {
+fn test_check_if_stmt_non_bool_else_if_condition() {
     // Arrange
     let mut checker = make_checker();
     let stmt = make_stmt(StmtKind::If {
         condition: Box::new(Expr::Lit(Literal::Bool(true), Span::dummy())),
         then_branch: Box::new(make_block(vec![])),
-        elif_branches: vec![(
+        else_if_branches: vec![(
             Box::new(Expr::Lit(Literal::Int(1), Span::dummy())),
             Box::new(make_block(vec![])),
         )],

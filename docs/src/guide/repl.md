@@ -5,7 +5,8 @@ description: YaoXiang REPL 使用指南 - 交互式代码执行环境
 
 # REPL 交互式解释器
 
-YaoXiang REPL（Read-Eval-Print Loop）是一个交互式代码执行环境，允许您逐行输入和执行 YaoXiang 代码，非常适合学习、测试和调试。
+YaoXiang REPL（Read-Eval-Print
+Loop）是一个交互式代码执行环境，允许您逐行输入和执行 YaoXiang 代码，非常适合学习、测试和调试。
 
 ## 快速开始
 
@@ -236,7 +237,7 @@ REPL 支持多行代码输入。当检测到代码不完整时（如未闭合的
 ### 变体类型定义（枚举）
 
 ```yaoxiang
->> Color: Type = { red | green | blue }
+>> Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 ```
 
 ## 自动补全
@@ -377,6 +378,7 @@ A: 按 `Ctrl+C` 中断当前执行。
 ### Q: REPL 支持哪些数据类型？
 
 A: REPL 支持所有 YaoXiang 数据类型：
+
 - `Int`：整数
 - `Float`：浮点数
 - `String`：字符串
@@ -419,12 +421,12 @@ Total time: 2.34ms
 
 ## 相关命令
 
-| 命令 | 简写 | 功能 |
-|------|------|------|
-| `:help` | `:h` | 显示帮助信息 |
-| `:quit` | `:q` | 退出 REPL |
-| `:clear` | `:c` | 清除所有状态 |
-| `:type` | `:t` | 查看符号类型 |
-| `:symbols` | `:i` | 列出所有符号 |
+| 命令       | 简写    | 功能         |
+| ---------- | ------- | ------------ |
+| `:help`    | `:h`    | 显示帮助信息 |
+| `:quit`    | `:q`    | 退出 REPL    |
+| `:clear`   | `:c`    | 清除所有状态 |
+| `:type`    | `:t`    | 查看符号类型 |
+| `:symbols` | `:i`    | 列出所有符号 |
 | `:history` | `:hist` | 显示命令历史 |
-| `:stats` | - | 显示执行统计 |
+| `:stats`   | -       | 显示执行统计 |

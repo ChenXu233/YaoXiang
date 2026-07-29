@@ -1,0 +1,23 @@
+// 01-syntax/basics/logical_not.yx
+// 覆盖: 规范 §2.2 运算符优先级（not 运算符）
+// 验证: ! 逻辑非运算符对 Bool 值正确取反
+// 状态: ✅ 可运行
+//
+// 回归: ! 运算符在 IR 生成层曾直接编译为常量 Int(0)（issue #229），
+//       而非生成 UnaryOp::Not 指令。!true 和 !false 都恒返回 0。
+
+use std.assert
+
+main = {
+    // 基础取反
+    assert.assert(!true == false, "!true == false should be true")
+    assert.assert(!false == true, "!false == true should be true")
+
+    // 双重取反
+    assert.assert(!!true == true, "!!true == true should be true")
+    assert.assert(!!false == false, "!!false == false should be true")
+
+    // 与比较组合
+    assert.assert(!(true == false), "!(true == false) should be true")
+    assert.assert(!(true == true) == false, "!(true == true) == false should be true")
+}

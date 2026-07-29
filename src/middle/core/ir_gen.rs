@@ -184,6 +184,17 @@ struct LambdaBodyIR {
     mut_locals: std::collections::HashSet<usize>,
 }
 
+/// 一层 curry 签名
+///
+/// 由 `split_curry` 从嵌套的 `Type::Fn` 拆出。
+/// `params` 是这层的参数（带名字），从拍平的 `signature_params` 切出。
+/// `return_type` 是这层的返回类型：还有下一层时是 `Type::Fn`，最后一层是值类型。
+/// 一层 curry 签名
+struct CurryLayer {
+    params: Vec<ast::Param>,
+    return_type: ast::Type,
+}
+
 impl AstToIrGenerator {
     /// 创建新的 IR 生成器（带类型信息）
     pub fn new_with_type_result(type_result: &TypeCheckResult) -> Self {
@@ -212,6 +223,44 @@ impl AstToIrGenerator {
             release_plan: type_result.release_plan.drops.clone(),
             pending_env_vars: Vec::new(),
         }
+    }
+
+    /// 拆分 curry 签名为多层
+    ///
+    /// 输入：`type_annotation` 是 `Type::Fn` 的嵌套结构（如 `(N: Int) -> (n: N) -> Int`）
+    /// 输入：`signature_params` 是拍平的所有 curry 参数（如 `[N: Int, n: N]`）
+    /// 输出：按层切分的 `CurryLayer` 列表
+    ///
+    /// 非 curry 函数（如 `(a: Int, b: Int) -> Int`）返回 1 个 layer，
+    /// 其 `return_type` 不是 `Type::Fn`。
+    #[allow(clippy::while_let_loop)]
+    fn split_curry(
+        type_ann: &ast::Type,
+        signature_params: &[ast::Param],
+    ) -> Vec<CurryLayer> {
+        let mut layers = Vec::new();
+        let mut params_iter = signature_params.iter().cloned().peekable();
+        let mut current_type = type_ann.clone();
+
+        loop {
+            match current_type {
+                ast::Type::Fn {
+                    params: type_params,
+                    return_type,
+                } => {
+                    let layer_params: Vec<ast::Param> =
+                        (&mut params_iter).take(type_params.len()).collect();
+                    let ret_type = *return_type;
+                    current_type = ret_type.clone();
+                    layers.push(CurryLayer {
+                        params: layer_params,
+                        return_type: ret_type,
+                    });
+                }
+                _ => break,
+            }
+        }
+        layers
     }
 
     /// 进入新的作用域
@@ -618,14 +667,38 @@ impl AstToIrGenerator {
                     } else {
                         Some(generic_params.iter().map(|p| p.name.clone()).collect())
                     };
-                    self.generate_function_ir(
-                        &name,
-                        type_annotation.as_ref(),
-                        &params,
-                        &body,
-                        constants,
-                        generic_param_names,
-                    )
+                    // curry 分流：如果 return_type 是 Type::Fn，走 curry 生成路径
+                    // 注意：必须传 signature_params（所有层参数），而非 params（仅 Lambda 参数）
+                    if let Some(ast::Type::Fn { return_type, .. }) = type_annotation.as_ref() {
+                        if matches!(return_type.as_ref(), ast::Type::Fn { .. }) {
+                            self.generate_curry_function_ir(
+                                &name,
+                                type_annotation.as_ref().unwrap(),
+                                signature_params,
+                                &body,
+                                constants,
+                                generic_param_names,
+                            )
+                        } else {
+                            self.generate_function_ir(
+                                &name,
+                                type_annotation.as_ref(),
+                                &params,
+                                &body,
+                                constants,
+                                generic_param_names,
+                            )
+                        }
+                    } else {
+                        self.generate_function_ir(
+                            &name,
+                            type_annotation.as_ref(),
+                            &params,
+                            &body,
+                            constants,
+                            generic_param_names,
+                        )
+                    }
                 } else {
                     // 全局变量
                     self.generate_global_var_ir(
@@ -773,6 +846,7 @@ impl AstToIrGenerator {
         generic_params: Option<Vec<String>>,
     ) -> Result<Option<FunctionIR>, Diagnostic> {
         // 检测 native("symbol") 模式：函数体为空语句 + Native("...") 表达式
+        // 检测 native("symbol") 模式：函数体为空语句 + Native("...") 表达式
         // 形如: my_add: (a: Int, b: Int) -> Int = Native("my_add")
         //
         // 通过 name resolution 检测，不再硬编码 Var("Native") 字符串匹配。
@@ -804,12 +878,7 @@ impl AstToIrGenerator {
                 dst: Operand::Local(i),
                 src: Operand::Arg(i),
             });
-            // 存储到局部变量并注册
-            instructions.push(Instruction::Store {
-                dst: Operand::Local(i),
-                src: Operand::Local(i),
-                span: Span::dummy(),
-            });
+
             self.register_local(&param.name, i);
             // Only mut parameters are registered as mutable
             if param.is_mut {
@@ -942,6 +1011,238 @@ impl AstToIrGenerator {
         Ok(Some(func_ir))
     }
 
+    /// 生成 curry 中间层的 FunctionIR
+    ///
+    /// 中间层职责：LoadArg 本层参数 → MakeClosure 包装下一层 → Ret(闭包)
+    #[allow(clippy::too_many_arguments)]
+    fn generate_curry_intermediate_func(
+        &mut self,
+        func_name: &str,
+        layer: &CurryLayer,
+        env_count: usize,
+        next_func_name: &str,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<FunctionIR, Diagnostic> {
+        let _ = constants; // 中间层不生成常量
+        let mut instructions = Vec::new();
+
+        // 1. 本层参数先加载（用 Arg(env_count + i)）
+        for (i, param) in layer.params.iter().enumerate() {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(i),
+                src: Operand::Arg(env_count + i),
+            });
+            self.register_local(&param.name, i);
+        }
+
+        // 2. 外层参数后加载（用 Arg(i)）
+        let env_start = layer.params.len();
+        for i in 0..env_count {
+            let dst = env_start + i;
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(dst),
+                src: Operand::Arg(i),
+            });
+        }
+        self.next_temp = env_start + env_count;
+
+        // 3. MakeClosure：env = 外层 env + 本层参数
+        let mut full_env: Vec<Operand> = (env_start..env_start + env_count)
+            .map(Operand::Local)
+            .collect();
+        for i in 0..layer.params.len() {
+            full_env.push(Operand::Local(i));
+        }
+        let closure_dst = self.next_temp_reg();
+        instructions.push(Instruction::MakeClosure {
+            dst: Operand::Local(closure_dst),
+            func: next_func_name.to_string(),
+            env: full_env,
+        });
+
+        // 4. Ret(closure)
+        instructions.push(Instruction::Ret(Some(Operand::Local(closure_dst))));
+
+        // 5. 构建 FunctionIR
+        let param_types: Vec<MonoType> = layer
+            .params
+            .iter()
+            .filter_map(|p| p.ty.clone())
+            .map(MonoType::from)
+            .collect();
+        let return_type: MonoType = layer.return_type.clone().into();
+        let total_locals = self.next_temp;
+        let locals_types: Vec<MonoType> = vec![MonoType::Int(64); total_locals];
+
+        Ok(FunctionIR {
+            name: func_name.to_string(),
+            params: param_types,
+            return_type,
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: locals_types,
+            },
+        })
+    }
+
+    /// 生成 curry 最内层的 FunctionIR
+    ///
+    /// 最内层职责：LoadUpvalue 读所有外层参数 → LoadArg 本层参数 → 执行原 body → Ret
+    /// env_param_names：所有外层参数名（按累积顺序）
+    #[allow(clippy::too_many_arguments)]
+    fn generate_curry_innermost_func(
+        &mut self,
+        func_name: &str,
+        layer: &CurryLayer,
+        env_param_names: &[String],
+        body: &[ast::Stmt],
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<FunctionIR, Diagnostic> {
+        let mut instructions = Vec::new();
+        let env_count = env_param_names.len();
+
+        // 1. 本层参数先加载（用 Arg(env_count + i)，此时 slots[env_count + i] 还未被覆盖）
+        for (i, param) in layer.params.iter().enumerate() {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(i),
+                src: Operand::Arg(env_count + i),
+            });
+            self.register_local(&param.name, i);
+        }
+
+        // 2. 外层参数后加载（用 Arg(i) 读 slots[i]）
+        //    注意：必须在参数之后加载，因为 env 写入的 slots 位置可能与 arg 重叠
+        let env_start = layer.params.len();
+        for (i, name) in env_param_names.iter().enumerate() {
+            let dst = env_start + i;
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(dst),
+                src: Operand::Arg(i),
+            });
+            self.register_local(name, dst);
+        }
+
+        // 3. next_temp 起始 = 参数数 + env 数
+        self.next_temp = env_start + env_count;
+
+        // 4. 执行原 body（复用 generate_local_stmt_ir）
+        for stmt in body {
+            self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+        }
+        instructions.push(Instruction::Ret(None));
+
+        let param_types: Vec<MonoType> = layer
+            .params
+            .iter()
+            .filter_map(|p| p.ty.clone())
+            .map(MonoType::from)
+            .collect();
+        let return_type: MonoType = layer.return_type.clone().into();
+        let total_locals = self.next_temp;
+        let locals_types: Vec<MonoType> = vec![MonoType::Int(64); total_locals];
+
+        Ok(FunctionIR {
+            name: func_name.to_string(),
+            params: param_types,
+            return_type,
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: locals_types,
+            },
+        })
+    }
+
+    /// 生成 curry 函数的完整 IR 链
+    ///
+    /// 从外（layer 0）往内（layer N-1）遍历 layers，每层生成一个 FunctionIR。
+    /// 最外层用原名 `name`，内层用 `__{name}_l{index}`。
+    ///
+    /// env_param_names 在循环中累积：进入第 k 层时，它包含 layer 0..k-1 的所有参数名。
+    /// 中间层函数从 Arg(0..env_count) 加载外层参数作为 env，从 Arg(env_count..) 加载本层参数。
+    /// 最内层函数同理加载后执行原 body。
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn generate_curry_function_ir(
+        &mut self,
+        name: &str,
+        type_annotation: &ast::Type,
+        all_params: &[ast::Param],
+        body: &[ast::Stmt],
+        constants: &mut Vec<ConstValue>,
+        _generic_params: Option<Vec<String>>,
+    ) -> Result<Option<FunctionIR>, Diagnostic> {
+        let layers = Self::split_curry(type_annotation, all_params);
+
+        let mut layer_funcs: Vec<FunctionIR> = Vec::new();
+        let mut env_param_names: Vec<String> = Vec::new();
+
+        // 保存外层状态，避免污染
+        let saved_mut_locals = std::mem::take(&mut self.current_mut_locals);
+        let saved_local_names = std::mem::take(&mut self.current_local_names);
+        let saved_next_temp = self.next_temp;
+
+        for (i, layer) in layers.iter().enumerate() {
+            let is_innermost = i == layers.len() - 1;
+            let func_name = if i == 0 {
+                name.to_string()
+            } else {
+                format!("__{}_l{}", name, i - 1)
+            };
+
+            // 进入新作用域
+            self.enter_scope();
+            // 重置本层的临时寄存器（每层独立计数）
+            self.next_temp = 0;
+
+            let func = if is_innermost {
+                self.generate_curry_innermost_func(
+                    &func_name,
+                    layer,
+                    &env_param_names,
+                    body,
+                    constants,
+                )?
+            } else {
+                let next_name = format!("__{}_l{}", name, i);
+                self.generate_curry_intermediate_func(
+                    &func_name,
+                    layer,
+                    env_param_names.len(),
+                    &next_name,
+                    constants,
+                )?
+            };
+            self.exit_scope();
+
+            // 累积本层参数到 env 追踪（给 innermost_func 用）
+            for p in &layer.params {
+                env_param_names.push(p.name.clone());
+            }
+            layer_funcs.push(func);
+        }
+
+        // 恢复外层状态
+        self.current_mut_locals = saved_mut_locals;
+        self.current_local_names = saved_local_names;
+        self.next_temp = saved_next_temp;
+
+        // 内层函数加入 nested_functions，最外层返回给调用者
+        // 第 0 个是最外层，其余是内层
+        let outer = layer_funcs.remove(0);
+        self.nested_functions.extend(layer_funcs);
+        Ok(Some(outer))
+    }
     /// 尝试将表达式求值为编译时常量
     #[allow(clippy::only_used_in_recursion)]
     fn eval_const_expr(
@@ -1161,11 +1462,7 @@ impl AstToIrGenerator {
                 dst: Operand::Local(i),
                 src: Operand::Arg(i),
             });
-            instructions.push(Instruction::Store {
-                dst: Operand::Local(i),
-                src: Operand::Local(i),
-                span: Span::dummy(),
-            });
+
             self.register_local(&param.name, i);
             if param.is_mut {
                 self.current_mut_locals.insert(i);
@@ -1332,14 +1629,40 @@ impl AstToIrGenerator {
                     } else {
                         Some(generic_params.iter().map(|p| p.name.clone()).collect())
                     };
-                    match self.generate_function_ir(
-                        &name,
-                        type_annotation.as_ref(),
-                        &params,
-                        &body,
-                        constants,
-                        generic_param_names,
-                    ) {
+                    // curry 分流：如果 return_type 是 Type::Fn，走 curry 生成路径
+                    // 注意：必须传 signature_params（所有层参数），而非 params（仅 Lambda 参数）
+                    let func_result =
+                        if let Some(ast::Type::Fn { return_type, .. }) = type_annotation.as_ref() {
+                            if matches!(return_type.as_ref(), ast::Type::Fn { .. }) {
+                                self.generate_curry_function_ir(
+                                    &name,
+                                    type_annotation.as_ref().unwrap(),
+                                    signature_params,
+                                    &body,
+                                    constants,
+                                    generic_param_names,
+                                )
+                            } else {
+                                self.generate_function_ir(
+                                    &name,
+                                    type_annotation.as_ref(),
+                                    &params,
+                                    &body,
+                                    constants,
+                                    generic_param_names,
+                                )
+                            }
+                        } else {
+                            self.generate_function_ir(
+                                &name,
+                                type_annotation.as_ref(),
+                                &params,
+                                &body,
+                                constants,
+                                generic_param_names,
+                            )
+                        };
+                    match func_result {
                         Ok(Some(func_ir)) => {
                             self.nested_functions.push(func_ir);
                         }
@@ -1381,36 +1704,19 @@ impl AstToIrGenerator {
                     idx
                 };
                 if let Some(expr) = initializer {
-                    if let ast::Expr::Var(src_name, _) = expr {
-                        if let Some(src_idx) = self.lookup_local(src_name) {
-                            instructions.push(Instruction::Move {
-                                dst: Operand::Local(var_idx),
-                                src: Operand::Local(src_idx),
-                            });
-                        } else {
-                            self.generate_expr_ir(expr, var_idx, instructions, constants)?;
-                        }
-                    } else {
-                        self.generate_expr_ir(expr, var_idx, instructions, constants)?;
-                    }
+                    // 统一走 generate_expr_ir — 把 RHS 值直接放入 var_idx 槽
+                    self.generate_expr_ir(expr, var_idx, instructions, constants)?;
                 } else {
                     instructions.push(Instruction::Load {
                         dst: Operand::Local(var_idx),
                         src: Operand::Const(ConstValue::Int(0)),
                     });
                 }
-                if !matches!(initializer, Some(ast::Expr::Var(_, _))) {
-                    instructions.push(Instruction::Store {
-                        dst: Operand::Local(var_idx),
-                        src: Operand::Local(var_idx),
-                        span: stmt.span,
-                    });
-                }
             }
             ast::StmtKind::If {
                 condition,
                 then_branch,
-                elif_branches,
+                else_if_branches,
                 else_branch,
                 span: _,
             } => {
@@ -1418,7 +1724,7 @@ impl AstToIrGenerator {
                 self.generate_if_stmt_ir(
                     condition,
                     then_branch,
-                    elif_branches,
+                    else_if_branches,
                     else_branch.as_deref(),
                     instructions,
                     constants,
@@ -1454,12 +1760,6 @@ impl AstToIrGenerator {
                         if let Some(elem) = elems.get(i) {
                             self.generate_expr_ir(elem, var_idx, instructions, constants)?;
                         }
-
-                        instructions.push(Instruction::Store {
-                            dst: Operand::Local(var_idx),
-                            src: Operand::Local(var_idx),
-                            span: *span,
-                        });
                     }
                 } else {
                     // 非字面量元组：生成 RHS，然后通过 LoadIndex 提取
@@ -1480,12 +1780,6 @@ impl AstToIrGenerator {
                             dst: Operand::Local(var_idx),
                             src: Operand::Local(rhs_reg),
                             index: Operand::Local(index_reg),
-                            span: *span,
-                        });
-
-                        instructions.push(Instruction::Store {
-                            dst: Operand::Local(var_idx),
-                            src: Operand::Local(var_idx),
                             span: *span,
                         });
                     }
@@ -1512,7 +1806,7 @@ impl AstToIrGenerator {
         &mut self,
         condition: &ast::Expr,
         then_branch: &ast::Block,
-        elif_branches: &[(Box<ast::Expr>, Box<ast::Block>)],
+        else_if_branches: &[(Box<ast::Expr>, Box<ast::Block>)],
         else_branch: Option<&ast::Block>,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -1529,51 +1823,60 @@ impl AstToIrGenerator {
         instructions.push(Instruction::JmpIfNot(Operand::Local(condition_reg), 0)); // 占位符
 
         // 3. 生成 then 分支
-        self.generate_block_ir(then_branch, instructions, constants)?;
+        self.generate_block_ir(then_branch, None, instructions, constants)?;
 
         // 4. then 分支结束后，跳转到整个 if 语句的结束 (Jmp to end)
         let mut jump_to_end_indices = Vec::new();
-        // 只有当有 else/elif 时才需要跳过它们，否则这里已经是 end
-        if !elif_branches.is_empty() || else_branch.is_some() {
+        // 只有当有 else/else if 时才需要跳过它们，否则这里已经是 end
+        if !else_if_branches.is_empty() || else_branch.is_some() {
             let idx = instructions.len();
             instructions.push(Instruction::Jmp(0)); // 占位符
             jump_to_end_indices.push(idx);
         }
 
-        // 5. 修复条件跳转 (JmpIfNot)，使其指向 elif 或 else (即当前位置)
+        // 5. 修复条件跳转 (JmpIfNot)，使其指向 else if 或 else (即当前位置)
         let len = instructions.len();
         if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_to_next_branch_idx] {
             *target = len;
         }
 
-        // 6. 处理 elif 分支
-        for (elif_condition, elif_body) in elif_branches.iter() {
-            // 评估 elif 条件
-            let elif_condition_reg = self.next_temp_reg();
-            self.generate_expr_ir(elif_condition, elif_condition_reg, instructions, constants)?;
+        // 6. 处理 else if 分支
+        for (else_if_condition, else_if_body) in else_if_branches.iter() {
+            // 评估 else if 条件
+            let else_if_condition_reg = self.next_temp_reg();
+            self.generate_expr_ir(
+                else_if_condition,
+                else_if_condition_reg,
+                instructions,
+                constants,
+            )?;
 
             // 跳转到下一个分支 (JmpIfNot)
-            let jump_to_next_elif_idx = instructions.len();
-            instructions.push(Instruction::JmpIfNot(Operand::Local(elif_condition_reg), 0));
+            let jump_to_next_else_if_idx = instructions.len();
+            instructions.push(Instruction::JmpIfNot(
+                Operand::Local(else_if_condition_reg),
+                0,
+            ));
 
-            // 生成 elif 分支
-            self.generate_block_ir(elif_body, instructions, constants)?;
+            // 生成 else if 分支
+            self.generate_block_ir(else_if_body, None, instructions, constants)?;
 
-            // elif 分支结束后跳转到结束
+            // else if 分支结束后跳转到结束
             let idx = instructions.len();
             instructions.push(Instruction::Jmp(0)); // 占位符
             jump_to_end_indices.push(idx);
 
             // 修复条件跳转
             let len = instructions.len();
-            if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_to_next_elif_idx] {
+            if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_to_next_else_if_idx]
+            {
                 *target = len;
             }
         }
 
         // 7. 生成 else 分支
         if let Some(else_body) = else_branch {
-            self.generate_block_ir(else_body, instructions, constants)?;
+            self.generate_block_ir(else_body, None, instructions, constants)?;
         }
 
         // 8. 修复所有跳转到结束的指令
@@ -1596,7 +1899,7 @@ impl AstToIrGenerator {
         &mut self,
         condition: &ast::Expr,
         then_branch: &ast::Block,
-        elif_branches: &[(Box<ast::Expr>, Box<ast::Block>)],
+        else_if_branches: &[(Box<ast::Expr>, Box<ast::Block>)],
         else_branch: Option<&ast::Block>,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
@@ -1615,7 +1918,7 @@ impl AstToIrGenerator {
 
         // 3. then 分支
         let then_result_reg = self.next_temp_reg();
-        self.generate_block_expr_ir(then_branch, then_result_reg, instructions, constants)?;
+        self.generate_block_ir(then_branch, Some(then_result_reg), instructions, constants)?;
         instructions.push(Instruction::Move {
             dst: Operand::Local(result_reg),
             src: Operand::Local(then_result_reg),
@@ -1633,19 +1936,19 @@ impl AstToIrGenerator {
             *target = len;
         }
 
-        // 6. Elif 分支
-        for (elif_condition, elif_body) in elif_branches.iter() {
-            let elif_cond_reg = self.next_temp_reg();
-            self.generate_expr_ir(elif_condition, elif_cond_reg, instructions, constants)?;
+        // 6. else if 分支
+        for (else_if_condition, else_if_body) in else_if_branches.iter() {
+            let else_if_cond_reg = self.next_temp_reg();
+            self.generate_expr_ir(else_if_condition, else_if_cond_reg, instructions, constants)?;
 
             let jump_idx = instructions.len();
-            instructions.push(Instruction::JmpIfNot(Operand::Local(elif_cond_reg), 0));
+            instructions.push(Instruction::JmpIfNot(Operand::Local(else_if_cond_reg), 0));
 
-            let elif_res = self.next_temp_reg();
-            self.generate_block_expr_ir(elif_body, elif_res, instructions, constants)?;
+            let else_if_res = self.next_temp_reg();
+            self.generate_block_ir(else_if_body, Some(else_if_res), instructions, constants)?;
             instructions.push(Instruction::Move {
                 dst: Operand::Local(result_reg),
-                src: Operand::Local(elif_res),
+                src: Operand::Local(else_if_res),
             });
 
             let jmp_end_idx = instructions.len();
@@ -1660,7 +1963,7 @@ impl AstToIrGenerator {
         // 7. Else 分支
         if let Some(else_body) = else_branch {
             let else_res = self.next_temp_reg();
-            self.generate_block_expr_ir(else_body, else_res, instructions, constants)?;
+            self.generate_block_ir(else_body, Some(else_res), instructions, constants)?;
             instructions.push(Instruction::Move {
                 dst: Operand::Local(result_reg),
                 src: Operand::Local(else_res),
@@ -1679,44 +1982,60 @@ impl AstToIrGenerator {
         Ok(())
     }
 
-    /// 生成代码块的 IR（用于表达式）
+    /// 生成代码块的 IR
+    ///
+    /// 当 `result_reg` 为 `Some(reg)` 时，表示块作为表达式使用：
+    /// 块中最后一条语句如果是表达式（`StmtKind::Expr`），
+    /// 其值直接写入 `reg` 作为块的返回值。
+    /// 块中没有 return 也没有尾部表达式时，`reg` 保持默认（Void）。
+    ///
+    /// 当 `result_reg` 为 `None` 时，块作为语句序列执行，不关心返回值。
     fn generate_block_ir(
         &mut self,
         block: &ast::Block,
+        result_reg: Option<usize>,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
         // 进入新的作用域
         self.enter_scope();
 
-        // 生成语句
-        for stmt in &block.stmts {
+        let last_idx = block.stmts.len().checked_sub(1);
+        for (i, stmt) in block.stmts.iter().enumerate() {
+            let is_last = Some(i) == last_idx;
+            // 块作为表达式 + 最后一条语句是表达式 → 表达式的值写入 result_reg
+            if let (Some(reg), true) = (result_reg, is_last) {
+                match &stmt.kind {
+                    ast::StmtKind::Expr(expr) => {
+                        self.generate_expr_ir(expr, reg, instructions, constants)?;
+                        continue;
+                    }
+                    ast::StmtKind::If {
+                        condition,
+                        then_branch,
+                        else_if_branches,
+                        else_branch,
+                        ..
+                    } => {
+                        // 块里的 if 在表达式位置：按 if 表达式生成（值写入 reg）
+                        self.generate_if_expr_ir(
+                            condition,
+                            then_branch,
+                            else_if_branches,
+                            else_branch.as_deref(),
+                            reg,
+                            instructions,
+                            constants,
+                        )?;
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
+            // 其他情况正常生成语句
             self.generate_local_stmt_ir(stmt, instructions, constants)?;
         }
 
-        // 退出作用域
-        self.exit_scope();
-
-        Ok(())
-    }
-
-    /// 生成代码块的 IR（用于表达式）
-    fn generate_block_expr_ir(
-        &mut self,
-        block: &ast::Block,
-        _result_reg: usize,
-        instructions: &mut Vec<Instruction>,
-        constants: &mut Vec<ConstValue>,
-    ) -> Result<(), Diagnostic> {
-        // 进入新的作用域
-        self.enter_scope();
-
-        // 生成语句
-        for stmt in &block.stmts {
-            self.generate_local_stmt_ir(stmt, instructions, constants)?;
-        }
-
-        // 如果没有 return 语句，result_reg 保持默认值（Void）
         // 退出作用域
         self.exit_scope();
 
@@ -1744,7 +2063,7 @@ impl AstToIrGenerator {
         instructions.push(Instruction::JmpIfNot(Operand::Local(cond_reg), 0)); // Placeholder
 
         // Body
-        self.generate_block_ir(body, instructions, constants)?;
+        self.generate_block_ir(body, None, instructions, constants)?;
 
         // Jump back to start
         instructions.push(Instruction::Jmp(loop_start_idx));
@@ -1755,10 +2074,10 @@ impl AstToIrGenerator {
             *target = end_idx;
         }
 
-        // While loop returns void/unit (0)
+        // While loop returns void
         instructions.push(Instruction::Load {
             dst: Operand::Local(result_reg),
-            src: Operand::Const(ConstValue::Int(0)),
+            src: Operand::Const(ConstValue::Void),
         });
 
         Ok(())
@@ -1842,7 +2161,7 @@ impl AstToIrGenerator {
             // 4. 执行循环体
             // 循环体访问 i 时，会从 var_reg 读取
             // var_reg 在每次循环迭代前都会被更新为 current 的值
-            self.generate_block_ir(body, instructions, constants)?;
+            self.generate_block_ir(body, None, instructions, constants)?;
 
             // 5. 递增：current = current + 1
             let one_reg = self.next_temp_reg();
@@ -1874,11 +2193,11 @@ impl AstToIrGenerator {
 
             self.exit_scope();
 
-            // If expression, load unit
+            // If expression, load void
             if let Some(reg) = result_reg {
                 instructions.push(Instruction::Load {
                     dst: Operand::Local(reg),
-                    src: Operand::Const(ConstValue::Int(0)),
+                    src: Operand::Const(ConstValue::Void),
                 });
             }
 
@@ -1983,7 +2302,7 @@ impl AstToIrGenerator {
         });
 
         // 8. 执行循环体
-        self.generate_block_ir(body, instructions, constants)?;
+        self.generate_block_ir(body, None, instructions, constants)?;
 
         // 9. 跳转回循环开始
         instructions.push(Instruction::Jmp(loop_start_idx));
@@ -1997,9 +2316,10 @@ impl AstToIrGenerator {
         self.exit_scope();
 
         if let Some(reg) = result_reg {
+            // For loop returns void
             instructions.push(Instruction::Load {
                 dst: Operand::Local(reg),
-                src: Operand::Const(ConstValue::Int(0)),
+                src: Operand::Const(ConstValue::Void),
             });
         }
 
@@ -2441,7 +2761,7 @@ impl AstToIrGenerator {
                     Literal::Bool(b) => ConstValue::Bool(*b),
                     Literal::String(s) => ConstValue::String(s.clone()),
                     Literal::Char(c) => ConstValue::Char(*c),
-                    Literal::Void => ConstValue::Int(0),
+                    Literal::Void => ConstValue::Void,
                 };
                 // 添加到常量池
                 constants.push(const_val.clone());
@@ -2503,19 +2823,12 @@ impl AstToIrGenerator {
                                 self.local_var_types.insert(var_name.clone(), inferred);
                             }
 
-                            // 变量到变量的赋值生成 Move，值表达式生成 Store
-                            if let Expr::Var(_, _) = right.as_ref() {
-                                instructions.push(Instruction::Move {
-                                    dst: Operand::Local(local_idx),
-                                    src: Operand::Local(val_reg),
-                                });
-                            } else {
-                                instructions.push(Instruction::Store {
-                                    dst: Operand::Local(local_idx),
-                                    src: Operand::Local(val_reg),
-                                    span: *span,
-                                });
-                            }
+                            // 统一走 Store — 消除 Var→Var 走 Move 的特殊情况
+                            instructions.push(Instruction::Store {
+                                dst: Operand::Local(local_idx),
+                                src: Operand::Local(val_reg),
+                                span: *span,
+                            });
                             instructions.push(Instruction::Load {
                                 dst: Operand::Local(result_reg),
                                 src: Operand::Local(local_idx),
@@ -3331,7 +3644,7 @@ impl AstToIrGenerator {
             Expr::If {
                 condition,
                 then_branch,
-                elif_branches,
+                else_if_branches,
                 else_branch,
                 span: _,
             } => {
@@ -3339,7 +3652,7 @@ impl AstToIrGenerator {
                 self.generate_if_expr_ir(
                     condition,
                     then_branch,
-                    elif_branches,
+                    else_if_branches,
                     else_branch.as_deref(),
                     result_reg,
                     instructions,
@@ -3407,15 +3720,15 @@ impl AstToIrGenerator {
                 instructions.push(Instruction::UnsafeBlockStart);
 
                 // 生成块内语句的 IR
-                self.generate_block_ir(body, instructions, constants)?;
+                self.generate_block_ir(body, None, instructions, constants)?;
 
                 // 生成 UnsafeBlockEnd 指令
                 instructions.push(Instruction::UnsafeBlockEnd);
 
-                // unsafe 块作为表达式时返回 0
+                // unsafe 块作为表达式时返回 void
                 instructions.push(Instruction::Load {
                     dst: Operand::Local(result_reg),
-                    src: Operand::Const(ConstValue::Int(0)),
+                    src: Operand::Const(ConstValue::Void),
                 });
             }
             // spawn for 数据并行循环（RFC-024 §2.4）
@@ -3565,10 +3878,9 @@ impl AstToIrGenerator {
                         // 逻辑非：!x
                         let src_reg = self.next_temp_reg();
                         self.generate_expr_ir(expr, src_reg, instructions, constants)?;
-                        // 生成一个简单的取反操作
-                        instructions.push(Instruction::Load {
+                        instructions.push(Instruction::Not {
                             dst: Operand::Local(result_reg),
-                            src: Operand::Const(ConstValue::Int(0)),
+                            src: Operand::Local(src_reg),
                         });
                     }
                 }
@@ -3696,7 +4008,7 @@ impl AstToIrGenerator {
                                     ast::Literal::Bool(b) => ConstValue::Bool(*b),
                                     ast::Literal::String(s) => ConstValue::String(s.clone()),
                                     ast::Literal::Char(c) => ConstValue::Char(*c),
-                                    ast::Literal::Void => ConstValue::Int(0),
+                                    ast::Literal::Void => ConstValue::Void,
                                 };
                                 constants.push(const_val.clone());
                                 instructions.push(Instruction::Load {
@@ -3732,9 +4044,9 @@ impl AstToIrGenerator {
 
                     // 生成 arm body，结果放入 result_reg
                     let arm_result_reg = self.next_temp_reg();
-                    self.generate_block_expr_ir(
+                    self.generate_block_ir(
                         &arm.body,
-                        arm_result_reg,
+                        Some(arm_result_reg),
                         instructions,
                         constants,
                     )?;

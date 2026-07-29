@@ -211,27 +211,6 @@ fn test_from_ast_type_meta_type_nested() {
 // ===================================================================
 
 #[test]
-fn test_from_ast_type_enum_variant() {
-    use ast::VariantDef;
-    let ast_ty = ast::Type::Variant(vec![
-        VariantDef {
-            name: "red".to_string(),
-            name_span: Span::dummy(),
-            params: vec![],
-            span: Span::dummy(),
-        },
-        VariantDef {
-            name: "green".to_string(),
-            name_span: Span::dummy(),
-            params: vec![],
-            span: Span::dummy(),
-        },
-    ]);
-    let mono: MonoType = ast_ty.into();
-    assert!(matches!(mono, MonoType::Enum(e) if e.variants.len() == 2));
-}
-
-#[test]
 fn test_from_ast_type_sum() {
     let ast_ty = ast::Type::Sum(vec![ast::Type::Int(32), ast::Type::String]);
     let mono: MonoType = ast_ty.into();

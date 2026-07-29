@@ -14,7 +14,7 @@
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 use yaoxiang::package::commands::init::{exec_in, InitOptions};
-use yaoxiang::package::commands::{add, rm, install, list};
+use yaoxiang::package::commands::{add, rm, install, list, update};
 use yaoxiang::package::manifest::PackageManifest;
 use yaoxiang::package::error::PackageError;
 use yaoxiang::formatter::{format_source, FormatOptions, run_format_command};
@@ -396,6 +396,41 @@ fn test_remove_nonexistent_dependency_returns_not_found_error() {
     let result = rm::exec_in(&dir, "no_such_pkg", false);
     // Assert
     let err = result.expect_err("removing nonexistent dependency should fail");
+    assert!(
+        matches!(&err, PackageError::DependencyNotFound(name) if name == "no_such_pkg"),
+        "Expected DependencyNotFound(\"no_such_pkg\"), got: {:?}",
+        err
+    );
+}
+
+// ============================================================================
+// update 命令 — RFC-014 包管理：依赖更新
+// ============================================================================
+
+#[test]
+fn test_update_on_project_with_no_dependencies_is_noop() {
+    // Arrange
+    let tmp = temp_dir();
+    let dir = init_project(&tmp, "empty_update", false);
+    // Act
+    let result = update::exec_in(&dir);
+    // Assert
+    assert!(
+        result.is_ok(),
+        "update on empty project should succeed (noop), got: {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_update_nonexistent_package_returns_not_found_error() {
+    // Arrange
+    let tmp = temp_dir();
+    let dir = init_project(&tmp, "update_missing", false);
+    // Act
+    let result = update::exec_single_in(&dir, "no_such_pkg");
+    // Assert
+    let err = result.expect_err("updating nonexistent dependency should fail");
     assert!(
         matches!(&err, PackageError::DependencyNotFound(name) if name == "no_such_pkg"),
         "Expected DependencyNotFound(\"no_such_pkg\"), got: {:?}",

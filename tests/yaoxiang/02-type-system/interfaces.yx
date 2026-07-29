@@ -1,7 +1,6 @@
 // 02-type-system/interfaces.yx
-// [test:ignore]: Point.serialize() 运行时 String 返回值不等于 "point"
 // 验证: 接口/Trait 和结构子类型
-// 状态: ❌ 忽略-运行时 bug
+// 状态: ✅ 通过
 use std.assert
 
 Point: Type = { x: Float, y: Float }
@@ -9,11 +8,11 @@ Point: Type = { x: Float, y: Float }
 Point.draw: (self: &Point, surface: String) -> Void = {}
 
 Point.serialize: (self: &Point) -> String = {
-    "point"
+    return "point"
 }
 
 Point.get_x: (self: &Point) -> Float = {
-    self.x
+    return self.x
 }
 
 main = {

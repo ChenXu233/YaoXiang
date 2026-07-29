@@ -11,7 +11,8 @@ watch 模式下，任何文件变更都重新检查所有文件（全量重检�
 
 ## 解决方案
 
-使用 `CheckSession` 管理增量检查状态，利用 `ModuleDependencyGraph::affected_modules` 只重检查受影响的文件。
+使用 `CheckSession` 管理增量检查状态，利用 `ModuleDependencyGraph::affected_modules`
+只重检查受影响的文件。
 
 ## 实现流程
 

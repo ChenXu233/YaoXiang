@@ -197,13 +197,6 @@ impl TypeChecker {
                     }
                 }
             }
-            Type::Variant(variants) => {
-                for v in variants {
-                    for (_param_name, t) in &v.params {
-                        self.collect_type_tokens(file_path, t);
-                    }
-                }
-            }
             Type::Tuple(types) => {
                 for t in types {
                     self.collect_type_tokens(file_path, t);
@@ -728,20 +721,6 @@ impl TypeChecker {
                     // 类型定义体中的类型引用
                     self.collect_type_tokens(&fp, definition);
 
-                    // Variant constructors → EnumMember (定义)
-                    if let crate::frontend::core::parser::ast::Type::Variant(variants) = definition {
-                        for v in variants {
-                            self.semantic_db.add_token(
-                                &fp,
-                                SemanticToken {
-                                    name: v.name.clone(),
-                                    token_type: SemanticTokenType::EnumMember,
-                                    modifiers: vec![SemanticTokenModifier::Declaration],
-                                    span: v.name_span,
-                                },
-                            );
-                        }
-                    }
                 }
                 StmtKind::Return(expr_opt) => {
                     if let Some(expr) = expr_opt {
@@ -935,7 +914,7 @@ impl TypeChecker {
             StmtKind::If {
                 condition,
                 then_branch,
-                elif_branches,
+                else_if_branches,
                 else_branch,
                 ..
             } => {
@@ -960,25 +939,25 @@ impl TypeChecker {
                     );
                 }
 
-                for (elif_cond, elif_block) in elif_branches {
+                for (else_if_cond, else_if_block) in else_if_branches {
                     self.collect_expr_tokens(
                         file_path,
-                        elif_cond,
+                        else_if_cond,
                         scope_idx,
                         declared,
                         constructor_names,
                         imported_module_roots,
                     );
 
-                    let mut elif_roots = imported_module_roots.clone();
-                    for s in &elif_block.stmts {
+                    let mut else_if_roots = imported_module_roots.clone();
+                    for s in &else_if_block.stmts {
                         self.collect_stmt_tokens(
                             file_path,
                             s,
                             scope_idx,
                             declared,
                             constructor_names,
-                            &mut elif_roots,
+                            &mut else_if_roots,
                         );
                     }
                 }
@@ -1162,7 +1141,7 @@ impl TypeChecker {
             Expr::If {
                 condition,
                 then_branch,
-                elif_branches,
+                else_if_branches,
                 else_branch,
                 ..
             } => {
@@ -1185,7 +1164,7 @@ impl TypeChecker {
                         &mut then_roots,
                     );
                 }
-                for (cond, block) in elif_branches {
+                for (cond, block) in else_if_branches {
                     self.collect_expr_tokens(
                         file_path,
                         cond,
@@ -1194,7 +1173,7 @@ impl TypeChecker {
                         constructor_names,
                         imported_module_roots,
                     );
-                    let mut elif_roots = imported_module_roots.clone();
+                    let mut else_if_roots = imported_module_roots.clone();
                     for s in &block.stmts {
                         self.collect_stmt_tokens(
                             file_path,
@@ -1202,7 +1181,7 @@ impl TypeChecker {
                             scope_idx,
                             declared,
                             constructor_names,
-                            &mut elif_roots,
+                            &mut else_if_roots,
                         );
                     }
                 }

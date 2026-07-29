@@ -85,8 +85,8 @@ pub enum PtrKind {
 /// Represents the type of a runtime value, used for type checking and reflection.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ValueType {
-    /// Empty value
-    Unit,
+    /// Void value (empty)
+    Void,
     /// Boolean
     Bool,
     /// Integer with specific width
@@ -186,9 +186,9 @@ pub struct FunctionValue {
 /// - Handle-based storage for collections
 #[derive(Debug, Clone, Default)]
 pub enum RuntimeValue {
-    /// Empty value
+    /// Void value (empty)
     #[default]
-    Unit,
+    Void,
 
     /// Boolean (small object, stored directly)
     Bool(bool),
@@ -236,7 +236,7 @@ pub enum RuntimeValue {
         type_id: TypeId,
         /// Variant index
         variant_id: u32,
-        /// Variant payload (Unit if no payload)
+        /// Variant payload (Void if no payload)
         payload: Box<RuntimeValue>,
     },
 
@@ -278,7 +278,7 @@ impl RuntimeValue {
         heap: Option<&super::heap::Heap>,
     ) -> ValueType {
         match self {
-            RuntimeValue::Unit => ValueType::Unit,
+            RuntimeValue::Void => ValueType::Void,
             RuntimeValue::Bool(_) => ValueType::Bool,
             RuntimeValue::Int(_) => ValueType::Int(IntWidth::I64),
             RuntimeValue::Float(_) => ValueType::Float(FloatWidth::F64),
@@ -303,13 +303,13 @@ impl RuntimeValue {
                                 items
                                     .first()
                                     .map(|v| v.value_type(heap))
-                                    .unwrap_or(ValueType::Unit),
+                                    .unwrap_or(ValueType::Void),
                             ),
                         };
                     }
                 }
                 ValueType::Array {
-                    element: Box::new(ValueType::Unit),
+                    element: Box::new(ValueType::Void),
                 }
             }
             RuntimeValue::List(_) => ValueType::List,
@@ -318,7 +318,7 @@ impl RuntimeValue {
             RuntimeValue::Enum { type_id, .. } => ValueType::Enum(*type_id),
             RuntimeValue::Function(f) => ValueType::Function(f.func_id),
             RuntimeValue::Arc(inner) => ValueType::Arc(Box::new(inner.value_type(heap))),
-            RuntimeValue::Weak(_) => ValueType::Weak(Box::new(ValueType::Unit)),
+            RuntimeValue::Weak(_) => ValueType::Weak(Box::new(ValueType::Void)),
             RuntimeValue::Async(v) => ValueType::Async(Box::new(v.value_type.clone())),
             RuntimeValue::Ptr { kind, .. } => ValueType::Ptr(*kind),
             RuntimeValue::OpaqueHandle { .. } => ValueType::OpaqueHandle,
@@ -446,7 +446,7 @@ impl RuntimeValue {
     /// Clone: explicit copy
     pub fn explicit_clone(&self) -> Self {
         match self {
-            RuntimeValue::Unit => RuntimeValue::Unit,
+            RuntimeValue::Void => RuntimeValue::Void,
             RuntimeValue::Bool(b) => RuntimeValue::Bool(*b),
             RuntimeValue::Int(i) => RuntimeValue::Int(*i),
             RuntimeValue::Float(f) => RuntimeValue::Float(*f),
@@ -456,7 +456,7 @@ impl RuntimeValue {
             RuntimeValue::Tuple(_)
             | RuntimeValue::Array(_)
             | RuntimeValue::List(_)
-            | RuntimeValue::Dict(_) => RuntimeValue::Unit,
+            | RuntimeValue::Dict(_) => RuntimeValue::Void,
             RuntimeValue::Struct {
                 type_id,
                 fields,
@@ -501,7 +501,7 @@ impl RuntimeValue {
         heap: &mut super::heap::Heap,
     ) -> Self {
         match self {
-            RuntimeValue::Unit => RuntimeValue::Unit,
+            RuntimeValue::Void => RuntimeValue::Void,
             RuntimeValue::Bool(b) => RuntimeValue::Bool(*b),
             RuntimeValue::Int(i) => RuntimeValue::Int(*i),
             RuntimeValue::Float(f) => RuntimeValue::Float(*f),
@@ -628,7 +628,7 @@ impl RuntimeValue {
         if let RuntimeValue::Arc(inner) = arc {
             RuntimeValue::Weak(std::sync::Arc::downgrade(&inner))
         } else {
-            RuntimeValue::Unit
+            RuntimeValue::Void
         }
     }
 
@@ -651,7 +651,7 @@ impl RuntimeValue {
     /// Get memory layout for this value (for allocators)
     pub fn layout(&self) -> alloc::Layout {
         match self {
-            RuntimeValue::Unit => alloc::Layout::new::<()>(),
+            RuntimeValue::Void => alloc::Layout::new::<()>(),
             RuntimeValue::Bool(_) => alloc::Layout::new::<bool>(),
             RuntimeValue::Int(_) => alloc::Layout::new::<i64>(),
             RuntimeValue::Float(_) => alloc::Layout::new::<f64>(),
@@ -686,7 +686,7 @@ impl fmt::Display for RuntimeValue {
         f: &mut fmt::Formatter<'_>,
     ) -> fmt::Result {
         match self {
-            RuntimeValue::Unit => write!(f, "unit"),
+            RuntimeValue::Void => write!(f, "void"),
             RuntimeValue::Bool(b) => write!(f, "{}", b),
             RuntimeValue::Int(i) => write!(f, "{}", i),
             RuntimeValue::Float(fl) => write!(f, "{}", fl),
@@ -745,7 +745,7 @@ impl PartialEq for RuntimeValue {
         other: &Self,
     ) -> bool {
         match (self, other) {
-            (RuntimeValue::Unit, RuntimeValue::Unit) => true,
+            (RuntimeValue::Void, RuntimeValue::Void) => true,
             (RuntimeValue::Bool(a), RuntimeValue::Bool(b)) => a == b,
             (RuntimeValue::Int(a), RuntimeValue::Int(b)) => a == b,
             (RuntimeValue::Float(a), RuntimeValue::Float(b)) => a.to_bits() == b.to_bits(),
@@ -838,7 +838,7 @@ impl Hash for RuntimeValue {
     ) {
         core::mem::discriminant(self).hash(state);
         match self {
-            RuntimeValue::Unit => {}
+            RuntimeValue::Void => {}
             RuntimeValue::Bool(b) => b.hash(state),
             RuntimeValue::Int(i) => i.hash(state),
             RuntimeValue::Float(f) => f.to_bits().hash(state),

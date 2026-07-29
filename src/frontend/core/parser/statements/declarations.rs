@@ -262,8 +262,8 @@ fn parse_assign_after_target(
                 if let Expr::Var(name, _) = &target {
                     let saved = state.save_position();
                     if let Some(definition) = parse_type_definition(state) {
-                        // 只有 Struct/Variant 才是类型体；ConstExpr 等是表达式，走 Assign
-                        if matches!(&definition, Type::Struct { .. } | Type::Variant(..)) {
+                        // 只有 Struct 才是类型体；ConstExpr 等是表达式，走 Assign
+                        if matches!(&definition, Type::Struct { .. }) {
                             state.skip(&TokenKind::Semicolon);
                             return Some(Stmt {
                                 kind: StmtKind::TypeDefinition {
@@ -749,100 +749,6 @@ pub fn parse_identifier_stmt(
         kind: StmtKind::Expr(Box::new(target)),
         span,
     })
-}
-pub fn parse_constructor(state: &mut ParserState<'_>) -> Option<VariantDef> {
-    let name_span = state.span();
-    let name = match state.current().map(|t| &t.kind) {
-        Some(TokenKind::Identifier(n)) => n.clone(),
-        _ => {
-            state.error(
-                ErrorCodeDefinition::unexpected_token(&format!(
-                    "{:?}",
-                    state
-                        .current()
-                        .map(|t| t.kind.clone())
-                        .unwrap_or(TokenKind::Eof)
-                ))
-                .at(state.span())
-                .build(),
-            );
-            return None;
-        }
-    };
-    state.bump();
-
-    let params = if state.at(&TokenKind::LParen) {
-        parse_constructor_params(state)?
-    } else {
-        Vec::new()
-    };
-
-    Some(VariantDef {
-        name,
-        name_span,
-        params,
-        span: state.span(),
-    })
-}
-
-/// Parse constructor parameters: (x: Type, y: Type) or generic args: (Type1, Type2)
-fn parse_constructor_params(state: &mut ParserState<'_>) -> Option<Vec<(Option<String>, Type)>> {
-    if !state.expect(&TokenKind::LParen) {
-        return None;
-    }
-
-    let has_named_params = match state.current().map(|t| &t.kind) {
-        Some(TokenKind::Identifier(_)) => {
-            matches!(state.peek().map(|t| &t.kind), Some(TokenKind::Colon))
-        }
-        _ => false,
-    };
-
-    let mut params = Vec::new();
-
-    if has_named_params {
-        while !state.at(&TokenKind::RParen) && !state.at_end() {
-            let name = match state.current().map(|t| &t.kind) {
-                Some(TokenKind::Identifier(n)) => n.clone(),
-                _ => break,
-            };
-            state.bump();
-
-            if !state.expect(&TokenKind::Colon) {
-                return None;
-            }
-
-            let ty = match parse_type_annotation(state) {
-                Some(t) => t,
-                None => break,
-            };
-
-            params.push((Some(name), ty));
-
-            if !state.skip(&TokenKind::Comma) {
-                break;
-            }
-        }
-    } else {
-        while !state.at(&TokenKind::RParen) && !state.at_end() {
-            let ty = match parse_type_annotation(state) {
-                Some(t) => t,
-                None => break,
-            };
-
-            params.push((None, ty));
-
-            if !state.skip(&TokenKind::Comma) {
-                break;
-            }
-        }
-    }
-
-    if !state.expect(&TokenKind::RParen) {
-        return None;
-    }
-
-    Some(params)
 }
 
 /// Parse parenthesized tuple destructuring: `(a, b) = expr`

@@ -1,22 +1,25 @@
 ---
-title: "RFC-008：Runtime 并发模型与调度器脱耦设计"
-status: "已接受"
-author: "晨煦"
-created: "2025-01-05"
-updated: "2026-07-05（与 RFC-024 对齐，添加 Issue 关联）"
-issue: "#89"
+title: 'RFC-008：Runtime 并发模型与调度器脱耦设计'
+status: '已接受'
+author: '晨煦'
+created: '2025-01-05'
+updated: '2026-07-05（与 RFC-024 对齐，添加 Issue 关联）'
+issue: '#89'
 issues_impl:
-  - "#50"
-  - "#89"
+  - '#50'
+  - '#89'
 pr_impl:
-  - "#7"
+  - '#7'
 ---
 
 # RFC-008：Runtime 并发模型与调度器脱耦设计
 
-> **⚠️ 对齐说明**：本文档已与 [RFC-024 新并发模型](/reference/language-spec/concurrency.md) 对齐。旧的全程序 DAG 分析、`@block`/`@eager` 注解、L1/L2/L3 层级模型已被 `spawn {}` 块并行原语取代。DAG 分析现在仅作用于 `spawn {}` 块内部。
+> **⚠️ 对齐说明**：本文档已与 [RFC-024 新并发模型](/reference/language-spec/concurrency.md)
+> 对齐。旧的全程序 DAG 分析、`@block`/`@eager` 注解、L1/L2/L3 层级模型已被 `spawn {}`
+> 块并行原语取代。DAG 分析现在仅作用于 `spawn {}` 块内部。
 
 > **参考**:
+>
 > - [RFC-011: 泛型系统设计](./011-generic-type-system.md)
 > - [并发模型规范（RFC-024）](/reference/language-spec/concurrency.md)
 
@@ -45,11 +48,11 @@ VM 是开发工具，不是运行时本质。跟 Go 的 go run vs go build 一�
 
 ### 核心矛盾
 
-| 矛盾 | 描述 |
-|------|------|
-| 透明性 vs 可控性 | spawn 块提供显式并发控制，普通代码顺序执行 |
-| 核心 vs 可选 | spawn 是核心并行原语，WorkStealing 是 num_workers>1 的高级特性 |
-| 单线程 vs 并发 | 单线程模式下并发表现为异步，同步只是调度的特例 |
+| 矛盾             | 描述                                                           |
+| ---------------- | -------------------------------------------------------------- |
+| 透明性 vs 可控性 | spawn 块提供显式并发控制，普通代码顺序执行                     |
+| 核心 vs 可选     | spawn 是核心并行原语，WorkStealing 是 num_workers>1 的高级特性 |
+| 单线程 vs 并发   | 单线程模式下并发表现为异步，同步只是调度的特例                 |
 
 ---
 
@@ -76,19 +79,20 @@ VM 是开发工具，不是运行时本质。跟 Go 的 go run vs go build 一�
 └──────────────────┘ └───────────────┘ └──────────────────┘
 ```
 
-| 阶段 | Embedded | Standard | Full |
-|------|----------|----------|------|
-| 编译 | 相同 | 相同 | 相同 |
-| 执行模式 | 同步 | spawn 块内并发 | 并行 |
-| 内存占用 | 低 | 中 | 高 |
-| 并发能力 | 无 | spawn 块内 | spawn 块内 + 并行 |
-| spawn 支持 | ❌ | ✅ | ✅ |
-| DAG 分析 | 无 | spawn 块内 | spawn 块内 |
-| WorkStealer | 无 | 无 | ✅ |
+| 阶段        | Embedded | Standard       | Full              |
+| ----------- | -------- | -------------- | ----------------- |
+| 编译        | 相同     | 相同           | 相同              |
+| 执行模式    | 同步     | spawn 块内并发 | 并行              |
+| 内存占用    | 低       | 中             | 高                |
+| 并发能力    | 无       | spawn 块内     | spawn 块内 + 并行 |
+| spawn 支持  | ❌       | ✅             | ✅                |
+| DAG 分析    | 无       | spawn 块内     | spawn 块内        |
+| WorkStealer | 无       | 无             | ✅                |
 
 **Embedded Runtime**：目标 WASM/游戏脚本/规则引擎。即时执行器，无 spawn 支持，高性能低占用。
 
-**Standard Runtime**：目标 Web 服务/数据管道。支持 `spawn {}` 块，在 spawn 块内进行 DAG 分析和自动并发。num_workers=1 即单线程异步。
+**Standard Runtime**：目标 Web 服务/数据管道。支持 `spawn {}`
+块，在 spawn 块内进行 DAG 分析和自动并发。num_workers=1 即单线程异步。
 
 **Full Runtime**：目标科学计算/大规模并行。Standard + WorkStealer 负载均衡。
 
@@ -131,6 +135,7 @@ create_vm: [S: Scheduler](scheduler: S) -> VM = (scheduler) => {
 ```
 
 **核心要点**：
+
 - 编译期多态，零运行时开销
 - 无需 Trait 对象
 - 泛型类型约束 `[S: Scheduler]` 已在 RFC-011 中定义
@@ -149,13 +154,14 @@ num_workers > 1 → 多线程并行调度
 
 ### 4. DAG 的地位
 
-> **重要变更**：DAG 分析不再作用于全程序，仅在 `spawn {}` 块内部进行。普通代码（spawn 块外部）是顺序执行的，无需 DAG 分析。
+> **重要变更**：DAG 分析不再作用于全程序，仅在 `spawn {}`
+> 块内部进行。普通代码（spawn 块外部）是顺序执行的，无需 DAG 分析。
 
-| 层级 | spawn 支持 | DAG 分析范围 | 说明 |
-|------|-----------|-------------|------|
-| Core Runtime | ✅ | spawn 块内 | 并发核心 |
-| Standard Runtime | ✅ | spawn 块内 | spawn + DAG 调度 |
-| Embedded Runtime | ❌ | 无 | 即时执行，无并发 |
+| 层级             | spawn 支持 | DAG 分析范围 | 说明             |
+| ---------------- | ---------- | ------------ | ---------------- |
+| Core Runtime     | ✅         | spawn 块内   | 并发核心         |
+| Standard Runtime | ✅         | spawn 块内   | spawn + DAG 调度 |
+| Embedded Runtime | ❌         | 无           | 即时执行，无并发 |
 
 ### 5. 自底向上执行模型（spawn 块内）
 
@@ -181,6 +187,7 @@ num_workers > 1 → 多线程并行调度
 ```
 
 **核心要点**：
+
 - 自底向上依赖分析仅限于 `spawn {}` 块内部
 - spawn 块内无依赖的任务并行执行
 - spawn 块外的代码按顺序执行，等待 spawn 块完成
@@ -248,13 +255,13 @@ num_workers > 1 → 多线程并行调度
 
 对比：
 
-| 语言 | Java | Go | YaoXiang |
-|------|------|-----|-----------|
-| 编译产物 | 字节码 | 原生代码 | 原生代码 |
-| 执行方式 | JVM 解释/JIT | 直接执行 | 直接执行 |
-| 运行时大小 | ~200MB（JVM） | ~1-2MB（含 GC） | **~200-500KB（无 GC）** |
-| 内存管理 | GC | GC | **RAII（确定）** |
-| 反射 | 常驻内存 | 常驻内存 | **exe 中储存，按需加载** |
+| 语言       | Java          | Go              | YaoXiang                 |
+| ---------- | ------------- | --------------- | ------------------------ |
+| 编译产物   | 字节码        | 原生代码        | 原生代码                 |
+| 执行方式   | JVM 解释/JIT  | 直接执行        | 直接执行                 |
+| 运行时大小 | ~200MB（JVM） | ~1-2MB（含 GC） | **~200-500KB（无 GC）**  |
+| 内存管理   | GC            | GC              | **RAII（确定）**         |
+| 反射       | 常驻内存      | 常驻内存        | **exe 中储存，按需加载** |
 
 #### 6.3 为什么调度器性能恒定
 
@@ -362,16 +369,16 @@ src/
 
 **目录映射说明**（旧 → 新）：
 
-| 旧目录 | 新位置 | 说明 |
-|--------|--------|------|
+| 旧目录          | 新位置                                       | 说明                                |
+| --------------- | -------------------------------------------- | ----------------------------------- |
 | `frontend/dag/` | `frontend/core/typecheck/spawn_placement.rs` | spawn 块内 DAG 分析已整合进类型检查 |
-| `codegen/` | `middle/passes/codegen/` | 代码生成移入中间端 pass |
-| `embedded/` | `backends/interpreter/` | 树遍历解释器 |
-| `runtime/` | `backends/runtime/` | 编译型 VM 运行时 |
-| `vm/` | `backends/interpreter/` | 与 embedded 合并 |
-| `full/` | （未实现） | Full Runtime + 工作窃取，待后续版本 |
-| `reflect/` | （未实现） | 反射元数据，待后续版本 |
-| `core/` | `backends/common/` | 共享值/堆/操作码 |
+| `codegen/`      | `middle/passes/codegen/`                     | 代码生成移入中间端 pass             |
+| `embedded/`     | `backends/interpreter/`                      | 树遍历解释器                        |
+| `runtime/`      | `backends/runtime/`                          | 编译型 VM 运行时                    |
+| `vm/`           | `backends/interpreter/`                      | 与 embedded 合并                    |
+| `full/`         | （未实现）                                   | Full Runtime + 工作窃取，待后续版本 |
+| `reflect/`      | （未实现）                                   | 反射元数据，待后续版本              |
+| `core/`         | `backends/common/`                           | 共享值/堆/操作码                    |
 
 ---
 
@@ -394,23 +401,23 @@ src/
 
 ## 设计决策记录
 
-| 决策 | 决定 | 日期 |
-|------|------|------|
-| 调度器脱耦方案 | 泛型 + 注入 | 2025-01-05 |
-| 单线程模式 | 同步是调度的特例 | 2025-01-05 |
-| 异步实现 | DAG 天然支持 | 2025-01-05 |
-| WorkStealer | Full Runtime 高级特性 | 2025-01-05 |
-| 嵌入式设计 | 即时执行，无 DAG 调度 | 2025-01-05 |
-| 编译阶段 | 所有运行时共享同一套前端 | 2025-01-05 |
-| 运行时分层 | Embedded / Standard / Full | 2025-01-05 |
-| 类型约束 | RFC-011 已定义 | 2025-01-25 |
-| 依赖图构建 | 静态依赖图，编译期确定 | 2025-01-05 |
-| 双后端模型 | VM（开发调试）+ LLVM AOT（生产），行为一致 | 2026-05-11 |
-| 调度器形态 | 静态库链接进 exe，~200-500KB，无 GC | 2026-05-11 |
-| 反射元数据 | 编译进 exe 独立段，mmap 按需加载 | 2026-05-11 |
-| 调度器性能 | 编译期完成 DAG 分析，运行时仅执行 | 2026-05-11 |
-| DAG 范围对齐 | DAG 分析仅限 spawn 块内，对齐 RFC-024 | 2026-06-05 |
-| 三层架构更新 | Embedded 无 spawn，Standard 支持 spawn | 2026-06-05 |
+| 决策           | 决定                                       | 日期       |
+| -------------- | ------------------------------------------ | ---------- |
+| 调度器脱耦方案 | 泛型 + 注入                                | 2025-01-05 |
+| 单线程模式     | 同步是调度的特例                           | 2025-01-05 |
+| 异步实现       | DAG 天然支持                               | 2025-01-05 |
+| WorkStealer    | Full Runtime 高级特性                      | 2025-01-05 |
+| 嵌入式设计     | 即时执行，无 DAG 调度                      | 2025-01-05 |
+| 编译阶段       | 所有运行时共享同一套前端                   | 2025-01-05 |
+| 运行时分层     | Embedded / Standard / Full                 | 2025-01-05 |
+| 类型约束       | RFC-011 已定义                             | 2025-01-25 |
+| 依赖图构建     | 静态依赖图，编译期确定                     | 2025-01-05 |
+| 双后端模型     | VM（开发调试）+ LLVM AOT（生产），行为一致 | 2026-05-11 |
+| 调度器形态     | 静态库链接进 exe，~200-500KB，无 GC        | 2026-05-11 |
+| 反射元数据     | 编译进 exe 独立段，mmap 按需加载           | 2026-05-11 |
+| 调度器性能     | 编译期完成 DAG 分析，运行时仅执行          | 2026-05-11 |
+| DAG 范围对齐   | DAG 分析仅限 spawn 块内，对齐 RFC-024      | 2026-06-05 |
+| 三层架构更新   | Embedded 无 spawn，Standard 支持 spawn     | 2026-06-05 |
 
 ---
 
@@ -425,9 +432,9 @@ src/
 
 ## 生命周期与归宿
 
-| 状态 | 位置 | 说明 |
-|------|------|------|
-| **草案** | `docs/design/rfc/` | 作者草稿 |
-| **审核中** | `docs/design/rfc/` | 开放社区讨论 |
-| **已接受** | `docs/design/accepted/` | 正式设计文档 |
-| **已拒绝** | `docs/design/rfc/` | 保留在 RFC 目录 |
+| 状态       | 位置                    | 说明            |
+| ---------- | ----------------------- | --------------- |
+| **草案**   | `docs/design/rfc/`      | 作者草稿        |
+| **审核中** | `docs/design/rfc/`      | 开放社区讨论    |
+| **已接受** | `docs/design/accepted/` | 正式设计文档    |
+| **已拒绝** | `docs/design/rfc/`      | 保留在 RFC 目录 |

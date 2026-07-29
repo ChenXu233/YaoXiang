@@ -4,7 +4,7 @@
 
 ## Error List
 
-## E0001: Invalid Character
+## E0001: Invalid character
 
 **Category**: Lexer
 
@@ -14,7 +14,7 @@
 
 ---
 
-## E0002: Invalid Number Literal
+## E0002: Invalid number literal
 
 **Category**: Lexer
 
@@ -24,7 +24,7 @@
 
 ---
 
-## E0003: Unterminated String
+## E0003: Unterminated string
 
 **Category**: Lexer
 
@@ -34,7 +34,7 @@
 
 ---
 
-## E0004: Invalid Character Literal
+## E0004: Invalid character literal
 
 **Category**: Lexer
 
@@ -44,7 +44,7 @@
 
 ---
 
-## E0010: Expected Token
+## E0010: Expected token
 
 **Category**: Parser
 
@@ -54,7 +54,7 @@
 
 ---
 
-## E0011: Unexpected Token
+## E0011: Unexpected token
 
 **Category**: Parser
 
@@ -64,7 +64,7 @@
 
 ---
 
-## E0012: Invalid Syntax
+## E0012: Invalid syntax
 
 **Category**: Parser
 
@@ -74,7 +74,7 @@
 
 ---
 
-## E0013: Mismatched Brackets
+## E0013: Mismatched brackets
 
 **Category**: Parser
 
@@ -84,7 +84,7 @@
 
 ---
 
-## E0014: Missing Semicolon
+## E0014: Missing semicolon
 
 **Category**: Parser
 

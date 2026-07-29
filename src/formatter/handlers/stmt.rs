@@ -46,13 +46,13 @@ pub fn format_stmt(
         StmtKind::If {
             condition,
             then_branch,
-            elif_branches,
+            else_if_branches,
             else_branch,
             span: _,
         } => super::common::format_if(
             condition,
             then_branch,
-            elif_branches,
+            else_if_branches,
             else_branch,
             ctx,
             source_map,

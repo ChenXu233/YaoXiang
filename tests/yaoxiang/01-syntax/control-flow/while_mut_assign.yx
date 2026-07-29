@@ -1,0 +1,34 @@
+// 01-syntax/control-flow/while_mut_assign.yx
+// 覆盖: 规范 §3.8 while 语句 + §3.2 变量声明（mut 重新赋值）
+// 验证: while 循环内对 mut 变量重新赋值生效（issue #223 回归测试）
+// 规范来源: docs/src/reference/language-spec/syntax.md §3.8 WhileStmt
+// 状态: ✅ 可运行
+
+use std.assert
+
+main = {
+    // 经典 fib 迭代 — 规范 §3.8 WhileStmt ::= 'while' Expr Block
+    // 每次 while 体内对 a/b/temp 的赋值必须写回外层 mut 绑定
+    mut a = 0
+    mut b = 1
+    mut j = 0
+    while j < 5 {
+        mut temp = a + b
+        a = b
+        b = temp
+        j = j + 1
+    }
+    // b 序列: 1, 2, 3, 5, 8 → 最终 b = 8, a = 5
+    assert.assert(b == 8, "fib iter: b should be 8 after 5 iters")
+    assert.assert(a == 5, "fib iter: a should be 5 after 5 iters")
+    assert.assert(j == 5, "loop counter should be 5")
+
+    // 累加求和 — 验证 mut 在 while 体内的累加写回
+    mut sum = 0
+    mut n = 1
+    while n <= 10 {
+        sum = sum + n
+        n = n + 1
+    }
+    assert.assert(sum == 55, "sum 1..10 should be 55")
+}

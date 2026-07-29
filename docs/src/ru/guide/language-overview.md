@@ -1,50 +1,51 @@
 ---
-title: Шпаргалка по синтаксису
+title: Краткий справочник по синтаксису
 ---
 
-# Шпаргалка по синтаксису
+# Краткий справочник по синтаксису
 
-Освойте основной синтаксис YaoXiang за 5 минут. Для углублённого изучения посетите [учебник](/tutorial/).
+Основные концепции YaoXiang за 5 минут. Для углублённого изучения посетите
+[руководство](/tutorial/).
 
 ## Переменные
 
 ```yaoxiang
-x = 42                    // неизменяемая (по умолчанию)
-mut y = 0                 // мутабельная
+x = 42                    // Неизменяемые (по умолчанию)
+mut y = 0                 // Изменяемые
 
-name: String = "hello"    // явный тип
-count: Int = 100          // аннотация типа
+name: String = "hello"    // Явный тип
+count: Int = 100          // Аннотация типа
 
-pub version = "1.0"       // публичный экспорт
+pub version = "1.0"       // Публичный экспорт
 ```
 
 ## Функции
 
-Всё есть `name: type = value`. Функция — тоже значение.
+Всё есть `name: type = value`. Функции тоже являются значениями.
 
 ```yaoxiang
-// Форма выражения (возвращает значение напрямую)
+// Выражение (возвращает значение напрямую)
 add: (a: Int, b: Int) -> Int = a + b
 
-// Форма блока кода (явный return)
+// Блок кода (явный return)
 factorial: (n: Int) -> Int = {
     if n <= 1 { return 1 }
     return n * factorial(n - 1)
 }
 
-// Лямбда (при полной сигнатуре имена параметров можно опустить)
+// Lambda (имя параметра можно опустить при полной сигнатуре)
 double = (x) => x * 2
 add = (a, b) => a + b
-inc = x => x + 1            // для одного параметра скобки можно опустить
+inc = x => x + 1            // Однопараметрный можно без скобок
 
-// Внутри блока кода нужен return
+// В блоке кода нужен return
 process: (x: Int) -> Int = {
     a = x * 2
     b = a + 1
     return b
 }
 
-// Функции с Void не требуют return
+// Void функции не нуждаются в return
 greet: (name: String) -> Void = {
     io.println("Hello, " + name)
 }
@@ -52,13 +53,13 @@ greet: (name: String) -> Void = {
 
 ## Типы
 
-Никаких ключевых слов `type`, `struct`, `trait`, `impl`. Одно универсальное объявление на все случаи.
+Нет ключевых слов `type`, `struct`, `trait`, `impl`. Всё решается единым объявлением.
 
 ```yaoxiang
 // Тип записи
 Point: Type = { x: Float, y: Float }
-p = Point(1.0, 2.0)            // позиционные параметры
-p = Point(x=1.0, y=2.0)        // именованные параметры
+p = Point(1.0, 2.0)            // Позиционные аргументы
+p = Point(x=1.0, y=2.0)        // Именованные аргументы
 
 // Поля со значениями по умолчанию
 Point: Type = { x: Float = 0, y: Float = 0 }
@@ -66,12 +67,12 @@ Point()                        // OK: x=0, y=0
 Point(x=1.0)                   // OK: x=1.0, y=0
 
 // Вариантный тип (перечисление)
-Color: Type = { red | green | blue }
+Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
-Option: (T: Type) -> Type = { some(T) | none }
-Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
+Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
+Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
-// Интерфейс (тип записи, все поля которой имеют функциональный тип)
+// Интерфейс (тип записи, где все поля — функции)
 Drawable: Type = { draw: (Surface) -> Void }
 
 // Композиция интерфейсов
@@ -80,11 +81,11 @@ DrawableSerializable: Type = Drawable & Serializable
 // Объявление реализации интерфейса внутри типа
 Circle: Type = {
     radius: Float,
-    Drawable,              // реализует интерфейс Drawable
-    Serializable,          // реализует интерфейс Serializable
+    Drawable,              // Реализует интерфейс Drawable
+    Serializable,          // Реализует интерфейс Serializable
 }
 
-// Дженерики
+// Обобщённый тип
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
@@ -92,7 +93,7 @@ List: (T: Type) -> Type = {
     map: (R: Type) -> ((self: List(T), f: (T) -> R) -> List(R)),
 }
 
-// Ограничения дженериков
+// Обобщённые ограничения
 clone: (T: Clone)(value: T) -> T = value.clone()
 sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T)
 ```
@@ -100,18 +101,18 @@ sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T)
 ## Методы
 
 ```yaoxiang
-// Функция в пространстве имён (Type.method — лишь метка принадлежности, а не привязка)
+// Namespace-функция (Type.method — лишь маркер принадлежности, не связывание)
 Point.distance: (a: &Point, b: &Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     return (dx * dx + dy * dy).sqrt()
 }
 
-// Синтаксис вызова через . появляется только после явной привязки
+// После явного связывания появляется синтаксис .
 Point.distance = distance[0]
-// После этого p1.distance(p2) → distance(p1, p2)
+// Теперь p1.distance(p2) → distance(p1, p2)
 
-// Быстрое определение + привязка
+// Быстрое определение + связывание
 Point.draw: (self: &Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
@@ -120,8 +121,8 @@ Point.draw: (self: &Point, surface: Surface) -> Void = {
 ## Управление потоком
 
 ```yaoxiang
-// if — это выражение
-grade = if score >= 90 { "A" } elif score >= 60 { "B" } else { "C" }
+// if — выражение
+grade = if score >= 90 { "A" } else if score >= 60 { "B" } else { "C" }
 
 // match
 result = match value {
@@ -149,12 +150,12 @@ first = nums[0]           // 1
 scores = {"Alice": 90, "Bob": 85}
 a = scores["Alice"]       // 90
 
-// Генератор списка
+// List comprehension
 evens = [x for x in nums if x % 2 == 0]
 doubled = [x * 2 for x in nums]
 ```
 
-## Сопоставление с образцом
+## Pattern matching
 
 ```yaoxiang
 match shape {
@@ -163,7 +164,7 @@ match shape {
     point => 0,
 }
 
-// Образцы структур / кортежей
+// Структурный/кортежный паттерны
 match p {
     { x: 0, y: 0 } => "origin",
     { x, y } => "({x}, {y})",
@@ -176,7 +177,7 @@ match t {
 // Деструктурирующее присваивание
 a, b = (1, 2)              // a=1, b=2
 
-// Защитные выражения
+// Guard-выражение
 match age {
     n if n >= 18 => true,
     _ => false,
@@ -205,42 +206,42 @@ pub Point: Type = { x: Float, y: Float }
 ## Владение
 
 ```yaoxiang
-// Move: по умолчанию — передача владения
+// Move: семантика передачи по умолчанию
 p1 = Point(1.0, 2.0)
 p2 = p1                   // p1 перемещён
 
-// Заимствование &: токен создаётся автоматически (& указывать вручную не нужно)
+// Заимствование &: автоматическое создание токена (без ручного &)
 distance: (a: &Point, b: &Point) -> Float = ...
-d = distance(p1, p2)      // компилятор автоматически создаёт токен заимствования
+d = distance(p1, p2)      // Компилятор автоматически создаёт токен заимствования
 
-// Мутабельное заимствование &mut
+// Изменяемое заимствование &mut
 update: (p: &mut Point, x: Float) -> Void = { p.x = x }
 
-// ref: разделяемое владение (компилятор сам выбирает Rc/Arc)
+// ref: разделяемое владение (компилятор автоматически выбирает Rc/Arc)
 shared = ref data
 
 // clone: явное глубокое копирование
 backup = data.clone()
 ```
 
-## Конкурентность
+## Параллелизм
 
-spawn — единственный примитив параллелизма. Никаких async/await, никаких Send/Sync.
+Spawn — единственный примитив параллелизма. Нет async/await, нет Send/Sync.
 
 ```yaoxiang
-// spawn-блок: подвыражения выполняются параллельно автоматически
+// Spawn-блок: подвыражения автоматически параллельны
 result = spawn {
     user = fetch_user(1)
     posts = fetch_posts()
     return (user, posts)
 }
 
-// spawn for: параллелизм по данным
+// Spawn for: данные параллельны
 results = spawn for item in items {
     return process(item)
 }
 
-// spawn + ref: разделение данных между задачами
+// Spawn + ref: разделяемые данные между задачами
 main = {
     shared = ref data
     result = spawn {

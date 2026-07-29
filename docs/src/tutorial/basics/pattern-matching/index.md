@@ -4,7 +4,8 @@ title: 模式匹配
 
 # 模式匹配
 
-在 [match 基础](../control-flow/match.md) 中，你学会了 `match` 的基本用法——字面量、标识符、通配符。现在我们深入探索 YaoXiang 模式匹配的全部能力。
+在 [match 基础](../control-flow/match.md) 中，你学会了 `match`
+的基本用法——字面量、标识符、通配符。现在我们深入探索 YaoXiang 模式匹配的全部能力。
 
 ## 完整模式类型
 
@@ -30,7 +31,7 @@ Pattern     ::= Literal       # 字面量模式：42, "hello"
 
 ```yaoxiang
 // 定义 Result 类型
-Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
+Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 // 函数使用 match 处理 Result
 handle: (result: Result(Int, String)) -> String = match result {
@@ -49,7 +50,7 @@ print(handle(b))  // 出错啦: 连接超时
 
 ```yaoxiang
 // 使用 Option 避免 null
-// 内置类型: Option: (T: Type) -> Type = some(T) | none
+// 内置类型: Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 
 describe: (opt: Option(Int)) -> String = match opt {
     some(n) => "有值: {n}",
@@ -64,7 +65,7 @@ print(describe(none))       // 什么也没有
 
 ```yaoxiang
 // 定义颜色枚举
-Color: Type = { red | green | blue | rgb(Int, Int, Int) }
+Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color, rgb: (Int, Int, Int) -> Color }
 
 to_hex: (c: Color) -> String = match c {
     red => "#FF0000",
@@ -96,7 +97,8 @@ r = Rect(0.0, 0.0, 10.0, 20.0)
 print(area(r))  // 200.0
 ```
 
-`{ width: w, height: h }` 意味着"从记录中取出 `width` 字段绑定到变量 `w`，取出 `height` 字段绑定到变量 `h`"。`x: _` 和 `y: _` 表示"这些字段存在但不关心值"。
+`{ width: w, height: h }` 意味着"从记录中取出 `width` 字段绑定到变量 `w`，取出 `height`
+字段绑定到变量 `h`"。`x: _` 和 `y: _` 表示"这些字段存在但不关心值"。
 
 **简化写法**：当字段名和变量名相同时，可以缩写——编译器自动解构成同名变量：
 
@@ -135,7 +137,7 @@ print(second(p))  // "hello"
 用 `|` 将多个模式组合在一起，匹配其中任意一个：
 
 ```yaoxiang
-Token: Type = { number(Int) | plus | minus | times | divide | eof }
+Token: Type = { number: (Int) -> Token, plus: () -> Token, minus: () -> Token, times: () -> Token, divide: () -> Token, eof: () -> Token }
 
 // 将多个变体组合为"运算符"类
 is_operator: (t: Token) -> Bool = match t {
@@ -152,7 +154,7 @@ print(is_operator(number(5))) // false
 在一个匹配臂后面加 `if 条件`，让匹配只在模式匹配**且**条件满足时才生效：
 
 ```yaoxiang
-Age: Type = { adult(Int) | child(Int) }
+Age: Type = { adult: (Int) -> Age, child: (Int) -> Age }
 
 // 卫表达式附加额外条件
 can_drive: (a: Age) -> Bool = match a {
@@ -172,7 +174,7 @@ print(can_drive(adult(16)))  // false
 YaoXiang 编译器确保 `match` 覆盖了所有可能的情况。如果遗漏分支，编译器会报错：
 
 ```yaoxiang
-Direction: Type = { north | south | east | west }
+Direction: Type = { north: () -> Direction, south: () -> Direction, east: () -> Direction, west: () -> Direction }
 
 // ✅ 正确：四个方向全部覆盖
 turn: (d: Direction) -> Direction = match d {
@@ -198,7 +200,7 @@ turn: (d: Direction) -> Direction = match d {
 模式的真正威力来自**嵌套**——你可以在一个模式里嵌套另一个模式：
 
 ```yaoxiang
-Expr: Type = { literal(Int) | add(Expr, Expr) | mul(Expr, Expr) }
+Expr: Type = { literal: (Int) -> Expr, add: (Expr, Expr) -> Expr, mul: (Expr, Expr) -> Expr }
 
 // 嵌套模式：在 add 内部再匹配 literal
 simplify: (e: Expr) -> Expr = match e {
@@ -213,19 +215,20 @@ e = add(literal(0), literal(5))
 print(simplify(e))  // literal(5)
 ```
 
-`add(literal(0), right)` 中，外层是 `add` 枚举模式，内层是 `literal(0)` 字面量模式——两层嵌套，一次匹配。
+`add(literal(0), right)` 中，外层是 `add` 枚举模式，内层是 `literal(0)`
+字面量模式——两层嵌套，一次匹配。
 
 ## 小结
 
-| 模式类型 | 语法 | 用途 |
-|----------|------|------|
-| 字面量 | `42`, `"hi"` | 精确匹配值 |
-| 标识符 | `x` | 捕获匹配的值 |
-| 通配符 | `_` | 兜底匹配 |
-| 枚举 | `ok(value)` | 解构枚举变体 |
-| 结构体 | `{ x, y }` | 解构记录字段 |
-| 元组 | `(a, b)` | 解构元组元素 |
-| 或 | `a \| b \| c` | 多选一匹配 |
+| 模式类型 | 语法              | 用途         |
+| -------- | ----------------- | ------------ |
+| 字面量   | `42`, `"hi"`      | 精确匹配值   |
+| 标识符   | `x`               | 捕获匹配的值 |
+| 通配符   | `_`               | 兜底匹配     |
+| 枚举     | `ok(value)`       | 解构枚举变体 |
+| 结构体   | `{ x, y }`        | 解构记录字段 |
+| 元组     | `(a, b)`          | 解构元组元素 |
+| 或       | `a \| b \| c`     | 多选一匹配   |
 | 卫表达式 | `pattern if cond` | 附加条件判断 |
 
 `match` + 模式匹配 = YaoXiang 中最强的控制流工具。掌握它，你将写出更安全、更清晰的代码。

@@ -4,63 +4,72 @@ title: Function Definition and Calling
 
 # Function Definition and Calling
 
-In the previous chapter, you learned how to declare variables. This chapter will walk you through the core of YaoXiang—functions. YaoXiang's function syntax shares the same `name: type = value` model with variable declarations, so it should feel familiar.
+In the previous chapter, you learned how to declare variables. This chapter will take you through
+the core of YaoXiang—functions. YaoXiang's function syntax shares the same `name: type = value`
+model as variable declarations, so it should feel familiar.
 
-## Functions Are Lambdas
+## Functions are Lambdas
 
-Let's start with the most important concept: **In YaoXiang, functions are essentially lambda expressions**. There's no special `fn` keyword, no complex ceremony. To define a function is to give a name to a lambda.
+Let's start with the most important concept: **In YaoXiang, a function is essentially a lambda
+expression**. No special `fn` keyword, no complex ceremony. Defining a function is simply giving a
+lambda a name.
 
 ```
 # Any function is essentially a combination of these four things:
 name: (params) -> Return = body
  ^       ^        ^        ^
- |       |        |        +-- function body (lambda expression or code block)
- |       |        +-- return type
- |       +-- parameter list (signature)
- +-- function name
+ |       |        |        +-- Function body (lambda expression or code block)
+ |       |        +-- Return type
+ |       +-- Parameter list (signature)
+ +-- Function name
 ```
 
-This is exactly the same as the `name: type = value` you learned in the previous chapter—just that the "type" here happens to be a function type.
+This is completely consistent with the `name: type = value` you learned in the previous
+chapter—except here the "type" happens to be a function type.
 
 ---
 
-## Expression Form: Direct Return Value
+## Expression Form: Returning Values Directly
 
-The simplest function doesn't need the `return` keyword. When the function body is a single expression, it serves directly as the return value:
+The simplest functions don't need a `return` keyword. When the function body is a single expression,
+it serves directly as the return value:
 
 ```yaoxiang
-// Expression form—return value directly, no return needed
+// Expression form - return value directly, no return needed
 add: (a: Int, b: Int) -> Int = a + b
 square: (x: Int) -> Int = x * x
 greet: (name: String) -> String = "Hello, " + name
 ```
 
-Call them:
+Calling them:
 
 ```yaoxiang
 sum = add(3, 5)          // sum = 8
 sq = square(4)           // sq = 16
-msg = greet("world")     // msg = "Hello, world"
+msg = greet("World")     // msg = "Hello, World"
 ```
 
-This is called the **expression form**. When the function body is an expression (not a `{ }` code block), its value serves directly as the function's return value. There's no need to write `return`, and writing it would actually be wrong.
+This is called **expression form**. When the function body is an expression (not a `{ }` code
+block), its value is used directly as the function's return value. No need to write `return`, and
+writing it would actually be an error.
 
 ```yaoxiang
-// Correct: the expression serves directly as the return value
+// Correct: expression used directly as return value
 double: (x: Int) -> Int = x * 2
 
-// Wrong: writing return in expression form is a syntax error
+// Wrong: return in expression form is a syntax error
 // double: (x: Int) -> Int = return x * 2   // ❌
 ```
 
 ---
 
-## Code Block Form: Explicit `return`
+## Code Block Form: Explicit return
 
-When a function contains multiple steps of computation, wrap the function body in `{ }`. **In a code block, you must use the `return` statement to return a value**:
+When a function contains multi-step calculations, wrap the function body in a `{ }` code block. **In
+code blocks, you must use `return` statements to return values**:
 
 ```yaoxiang
-// Code block form—must use return to return a value
+// Code block form - must use return to return value
 factorial: (n: Int) -> Int = {
     if n <= 1 {
         return 1
@@ -68,19 +77,21 @@ factorial: (n: Int) -> Int = {
     return n * factorial(n - 1)
 }
 
-// Compute the result
+// Compute result
 f5 = factorial(5)        // f5 = 120
 ```
 
-The rule is simple: **the expression form returns directly; the code block form requires an explicit `return`**. If you forget to write `return` in a code block, the function defaults to returning `Void`.
+The rule is simple: **expression form returns value directly; code block form must explicitly
+`return`**. If you forget to write `return` in a code block, the function defaults to returning
+`Void`.
 
 ```yaoxiang
 // Note: this function has a bug
 // bad_add: (a: Int, b: Int) -> Int = {
-//     a + b   // No return! The block defaults to returning Void, but the signature requires Int → type error
+//     a + b   // No return! Block defaults to Void, but signature requires Int → type error
 // }
 
-// Correct form
+// Correct写法
 good_add: (a: Int, b: Int) -> Int = {
     return a + b
 }
@@ -88,80 +99,84 @@ good_add: (a: Int, b: Int) -> Int = {
 
 Summary:
 
-| Form | Syntax | How to Return |
-|------|------|------------|
-| Expression form | `name: ... = expr` | The expression value serves directly as the return value |
-| Code block form | `name: ... = { ... }` | Must use `return` to return explicitly |
+| Form       | Syntax                | Return value method          |
+| ---------- | --------------------- | ---------------------------- |
+| Expression | `name: ... = expr`    | Expression value as return   |
+| Code block | `name: ... = { ... }` | Must use `return` explicitly |
 
 ---
 
-## Parameter Definition
+## Parameter Definitions
 
 ### Basic Parameters
 
-Parameters are written in the function signature, and each parameter can be type-annotated:
+Parameters are written in the function signature, and each parameter can have a type annotation:
 
 ```yaoxiang
-// Two parameters, both type-annotated
+// Two parameters, both with type annotations
 multiply: (a: Int, b: Int) -> Int = a * b
 ```
 
-### Parameter Types Must Be Annotated in Either the Signature or the Lambda Header
+### Parameter Types Must Appear in Either Signature or Lambda Head
 
-YaoXiang's rule is: **when there are input parameters, the parameter types must appear explicitly in either the signature or the lambda header**. Omitting them in both places will be rejected by the compiler.
+YaoXiang's rule is: **when there are input parameters, the parameter types must appear explicitly in
+either the signature or the lambda head**. Omitting types from both sides will be rejected by the
+compiler.
 
 ```yaoxiang
-// Way 1: parameter types written in the signature (omit the lambda header)
+// Method 1: Parameter types in signature (omit lambda head)
 add: (a: Int, b: Int) -> Int = a + b
 
-// Way 2: parameter types written in the lambda header (omit the signature)
+// Method 2: Parameter types in lambda head (omit signature)
 add = (a: Int, b: Int) => a + b
 
-// Way 3: complete form (both signature and lambda header present)
+// Method 3: Complete form (both signature and lambda head present)
 add: (a: Int, b: Int) -> Int = (a, b) => a + b
 
-// Wrong: types omitted in both places
-// add = (a, b) => a + b   // ❌ The compiler cannot infer the parameter types
+// Wrong: no types written on either side
+// add = (a, b) => a + b   // ❌ Compiler cannot infer parameter types
 ```
 
-**The recommended way is Way 1**—write the parameter types in the signature and omit the lambda header. This is the most concise and clearest way to write.
+**Method 1 is recommended**—parameter types in the signature, lambda head omitted. This is the most
+concise and clearest style.
 
 ---
 
-## Return Value
+## Return Values
 
-The function's return type is written after `->`. `->` is the marker of a function type and cannot be omitted (omitting it would be parsed as another type).
+The function's return type is written after `->`. `->` is the function type marker and cannot be
+omitted (omitting it will be parsed as a different type).
 
 ```yaoxiang
-// Return Int
+// Returns Int
 add_one: (x: Int) -> Int = x + 1
 
-// Return String
+// Returns String
 to_string: (n: Int) -> String = n.to_string()
 
-// Return Void (no return value)
+// Returns Void (no return value)
 log: (msg: String) -> Void = {
-    print(msg)    // No return, defaults to returning Void
+    print(msg)    // No return, defaults to Void
 }
 ```
 
-The return type can also be omitted, letting HM type inference handle it:
+Return types can also be omitted, letting HM type inference handle it:
 
 ```yaoxiang
-// The compiler infers the return type as Int
+// Compiler infers return type as Int
 add = (a: Int, b: Int) => a + b
 
-// The compiler infers the return type as String
+// Compiler infers return type as String
 greet = (name: String) => "Hello, " + name
 ```
 
 ---
 
-## Function Calling
+## Function Calls
 
 ### Positional Arguments
 
-The most basic way to call—by passing arguments in order:
+The most basic calling method—pass arguments in order:
 
 ```yaoxiang
 add: (a: Int, b: Int) -> Int = a + b
@@ -169,24 +184,26 @@ add: (a: Int, b: Int) -> Int = a + b
 result = add(1, 2)        // result = 3
 ```
 
-The grammar's form definition for function calling is:
+The function call form in the syntax specification is defined as:
 
 ```
 Expr '(' ArgList? ')'
 ```
 
-In everyday language: an expression followed by a pair of parentheses, with an optional argument list inside.
+Translated to everyday language: an expression followed by a pair of parentheses, with an argument
+list inside the parentheses.
 
 ### Named Arguments
 
-In addition to passing arguments by position, YaoXiang also supports **named arguments**—specify the value by parameter name, with no restriction on order:
+In addition to positional arguments, YaoXiang also supports **named arguments**—specifying values
+using parameter names, order doesn't matter:
 
 ```yaoxiang
-// Named arguments—the parameter name is followed by a colon, then the value
+// Named arguments - parameter name followed by colon, then value
 result = add(a: 3, b: 5)     // result = 8
-result = add(b: 5, a: 3)     // Order doesn't matter, same result
+result = add(b: 5, a: 3)     // Any order, same result
 
-// Can be mixed with positional arguments, but positional arguments must come first
+// Can mix with positional arguments, but positional must come first
 result = add(3, b: 5)        // OK
 ```
 
@@ -195,7 +212,7 @@ Named arguments make calls more readable, especially useful when there are many 
 ```yaoxiang
 // Function signature
 send: (to: String, title: String, body: String) -> Void = {
-    print("Send to: " + to)
+    print("Sent to: " + to)
     print("Title: " + title)
     print("Body: " + body)
 }
@@ -204,13 +221,13 @@ send: (to: String, title: String, body: String) -> Void = {
 send(
     to: "alice@example.com",
     title: "Meeting Notice",
-    body: "Meeting tomorrow at 3 PM"
+    body: "Meeting at 3 PM tomorrow"
 )
 ```
 
 ---
 
-## Parameterless Functions
+## Functions with No Parameters
 
 Functions that don't need parameters can omit the parameter list:
 
@@ -220,16 +237,16 @@ hello: () -> Void = {
     print("Hello!")
 }
 
-// Shortest form: omit the signature, the compiler automatically infers it as () -> Void
+// Simplest form: omit signature, compiler infers () -> Void
 hello = {
     print("Hello!")
 }
 
-// Call a parameterless function
+// Call function with no parameters
 hello()
 ```
 
-The `main` function is the most common parameterless function:
+The `main` function is the most common no-parameter function:
 
 ```yaoxiang
 // Several ways to write the main function
@@ -239,7 +256,7 @@ main: () -> Void = {
     print("Hello, YaoXiang!")
 }
 
-// Shortest form (recommended)
+// Simplest form (recommended)
 main = {
     print("Hello, YaoXiang!")
 }
@@ -249,16 +266,17 @@ main = {
 
 ## Multi-line Functions
 
-When the function logic is more complex, use the code block form to organize the code. YaoXiang enforces 4-space indentation:
+When function logic is more complex, use the code block form to organize code. YaoXiang mandates 4
+spaces for indentation:
 
 ```yaoxiang
-// Multi-step computation
+// Multi-step calculation
 calculate_stats: (numbers: List(Int)) -> Float = {
     // Declare local variables
     mut total = 0
     mut count = 0
 
-    // Loop to accumulate
+    // Loop and accumulate
     for n in numbers {
         total = total + n
         count = count + 1
@@ -269,26 +287,29 @@ calculate_stats: (numbers: List(Int)) -> Float = {
         return 0.0
     }
 
-    // Return the average
+    // Return average
     return total:as(Float) / count:as(Float)
 }
 ```
 
-In multi-line functions, you can use `#` to write comments, declare `mut` local variables, and use `for` and `if` to build logic.
+You can use `#` for comments in multi-line functions, declare `mut` local variables, and use `for`
+and `if` to build logic.
 
 ---
 
-## `pub` and Automatic Binding
+## pub and Auto-binding
 
-In a module, functions declared with the `pub` keyword can be imported and used by other modules. Even more interestingly, **`pub` functions are automatically bound to types defined in the same file**, allowing you to call them in an OOP style.
+In modules, functions declared with the `pub` keyword can be imported and used by other modules.
+More interestingly, **`pub` functions are automatically bound to types defined in the same file**,
+allowing you to call them in OOP style.
 
 ```yaoxiang
 // point.yx
 
-// Define a type
+// Define type
 Point: Type = { x: Float, y: Float }
 
-// pub function: the compiler automatically binds it as Point.distance
+// pub function: compiler automatically binds it as Point.distance
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
@@ -299,11 +320,13 @@ pub distance: (p1: Point, p2: Point) -> Float = {
 p1 = Point(3.0, 4.0)
 p2 = Point(1.0, 2.0)
 
-d1 = distance(p1, p2)       // Functional call
-d2 = p1.distance(p2)        // OOP-style call (syntactic sugar)
+d1 = distance(p1, p2)       // Functional style call
+d2 = p1.distance(p2)        // OOP style call (syntax sugar)
 ```
 
-When the compiler sees `pub distance(p1: Point, p2: Point)`, and finds that `Point` is defined in the same file, it automatically creates the `Point.distance` binding. You don't need to write any extra `impl` code.
+When the compiler sees `pub distance(p1: Point, p2: Point)`, it finds that `Point` is defined in the
+same file and automatically creates a binding for `Point.distance`. You don't need to write any
+additional `impl` code.
 
 ---
 
@@ -321,19 +344,19 @@ factorial: (n: Int) -> Int = {
     return n * factorial(n - 1)
 }
 
-// Parameterless function (shortest)
+// No parameters (simplest)
 main = { print("Hello!") }
 
-// With parameters—omit signature
+// With parameters - omit signature
 double = (x: Int) => x * 2
 
-// With parameters—omit lambda header (recommended)
+// With parameters - omit lambda head (recommended)
 triple: (x: Int) -> Int = x * 3
 
-// pub export + automatic binding
+// pub export + auto-binding
 pub add: (a: Int, b: Int) -> Int = a + b
 
-// ── Calling Syntax ──
+// ── Call Syntax ──
 
 result = add(1, 2)          // Positional arguments
 result = add(a: 1, b: 2)    // Named arguments
@@ -344,14 +367,19 @@ result = add(1, b: 2)       // Mixed (positional first)
 
 ## Summary
 
-You've now mastered the core knowledge of YaoXiang functions:
+You've mastered the core knowledge of YaoXiang functions:
 
-- **Unified syntax**: `name: (params) -> Return = body`, sharing the same origin as the `name: type = value` variable declaration
-- **Expression form**: `= expr`, the expression value serves directly as the return value, no `return` needed
-- **Code block form**: `= { ...; return expr }`, must use `return` explicitly inside the block
-- **Parameter type annotation**: types must be written in at least one of the signature or lambda header; recommended to write them in the signature
-- **Calling**: positional arguments or named arguments; named arguments can be in any order
-- **`pub` automatic binding**: `pub` functions are automatically bound to types in the same file, supporting `obj.method()` calls
-- **Shortest parameterless form**: `name = { ... }`, the compiler automatically infers it as `() -> Void`
+- **Unified syntax**: `name: (params) -> Return = body`, derived from variable declaration's
+  `name: type = value`
+- **Expression form**: `= expr`, expression value is used directly as return value, no `return`
+  needed
+- **Code block form**: `= { ...; return expr }`, must use `return` explicitly within blocks
+- **Parameter type annotations**: types must appear in either signature or lambda head, recommended
+  in signature
+- **Calling**: positional or named arguments, named arguments can be in any order
+- **pub auto-binding**: `pub` functions automatically bind to types in the same file, supporting
+  `obj.method()` calls
+- **Simplest no-parameter form**: `name = { ... }`, compiler infers `() -> Void` automatically
 
-Next, you can continue to the [Control Flow](./control-flow.md) chapter to learn how to use `if`, `for`, and `while` in functions.
+Next, you can continue to the [Control Flow](./control-flow.md) chapter to learn how to use `if`,
+`for`, and `while` in functions.

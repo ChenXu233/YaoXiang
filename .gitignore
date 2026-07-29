@@ -37,6 +37,9 @@ node_modules/
 cache/
 dist/
 
+benches/shootout/bench/out/
+benches/shootout/out/
+
 superpowers/
 .superpowers
 
@@ -70,3 +73,10 @@ __pycache__/
 *.pyc
 # omp AI assistant
 .omp/
+*.pdb
+
+.pi
+
+docs/plans
+
+.pi-subagents

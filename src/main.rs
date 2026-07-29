@@ -236,17 +236,6 @@ enum Commands {
         lib: bool,
     },
 
-    /// Create a new YaoXiang project directory
-    New {
-        /// Project name
-        #[arg(value_name = "NAME")]
-        name: String,
-
-        /// Create a library project instead of a binary project
-        #[arg(long)]
-        lib: bool,
-    },
-
     /// Add a dependency to the current project
     Add {
         /// Dependency name
@@ -544,10 +533,6 @@ fn main() -> Result<()> {
                         .context("Failed to initialize project")?;
                 }
             }
-        }
-        Commands::New { name, lib } => {
-            let options = package::commands::init::InitOptions { lib };
-            package::commands::init::exec(&options, &name).context("Failed to create project")?;
         }
         Commands::Add { dep, version, dev } => {
             package::commands::add::exec(&dep, version.as_deref(), dev)

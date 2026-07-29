@@ -4,44 +4,47 @@ title: Pattern Matching
 
 # Pattern Matching
 
-In [match basics](../control-flow/match.md), you learned the basic usage of `match` — literals, identifiers, and wildcards. Now we dive deep into the full capabilities of YaoXiang pattern matching.
+In [match basics](../control-flow/match.md), you learned the fundamentals of `match` — literals,
+identifiers, and wildcards. Now let's dive deep into the full power of YaoXiang's pattern matching.
 
 ## Complete Pattern Types
 
-According to the grammar specification, the full definition of `Pattern` is:
+According to the grammar specification, the complete definition of `Pattern` is:
 
 ```
-Pattern     ::= Literal       # Literal pattern: 42, "hello"
-            | Identifier      # Identifier pattern: capture value
+Pattern     ::= Literal       # Literal Pattern: 42, "hello"
+            | Identifier      # Identifier Pattern: capture value
             | Wildcard        # Wildcard: _
-            | StructPattern   # Struct pattern: destructure record
-            | TuplePattern    # Tuple pattern: destructure tuple
-            | EnumPattern     # Enum pattern: destructure variant
-            | OrPattern       # Or pattern: pattern1 | pattern2
+            | StructPattern   # Struct Pattern: destructure records
+            | TuplePattern    # Tuple Pattern: destructure tuples
+            | EnumPattern     # Enum Pattern: destructure variants
+            | OrPattern       # Or Pattern: pattern1 | pattern2
 ```
 
-You have already learned the first three basic patterns in the previous chapter. This chapter focuses on the four advanced patterns.
+You already learned the first three basic patterns in the previous chapter. This chapter focuses on
+the latter four advanced patterns.
 
-## Enum Pattern
+## Enum Patterns
 
-Enum pattern is the most commonly used advanced feature of `match`. It can destructure enum variants and extract internal data.
+Enum patterns are the most commonly used advanced feature of `match`. They can destructure enum
+variants and extract internal data.
 
 ### Basic Enum Matching
 
 ```yaoxiang
 // Define Result type
-Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
+Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 // Function uses match to handle Result
 handle: (result: Result(Int, String)) -> String = match result {
-    ok(value) => "Success! The value is: {value}",
+    ok(value) => "Success! Got value: {value}",
     err(msg) => "Error: {msg}",
 }
 
 a = ok(42)
 b = err("Connection timeout")
 
-print(handle(a))  // Success! The value is: 42
+print(handle(a))  // Success! Got value: 42
 print(handle(b))  // Error: Connection timeout
 ```
 
@@ -49,22 +52,22 @@ print(handle(b))  // Error: Connection timeout
 
 ```yaoxiang
 // Use Option to avoid null
-// Builtin type: Option: (T: Type) -> Type = some(T) | none
+// Built-in type: Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 
 describe: (opt: Option(Int)) -> String = match opt {
     some(n) => "Has value: {n}",
-    none => "Nothing",
+    none => "Nothing here",
 }
 
 print(describe(some(100)))  // Has value: 100
-print(describe(none))       // Nothing
+print(describe(none))       // Nothing here
 ```
 
 ### Custom Enums
 
 ```yaoxiang
 // Define Color enum
-Color: Type = { red | green | blue | rgb(Int, Int, Int) }
+Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color, rgb: (Int, Int, Int) -> Color }
 
 to_hex: (c: Color) -> String = match c {
     red => "#FF0000",
@@ -77,11 +80,12 @@ print(to_hex(red))                // #FF0000
 print(to_hex(rgb(128, 128, 128))) // #808080
 ```
 
-The `r`, `g`, `b` in `rgb(r, g, b)` are identifier patterns — they capture the three values inside the `rgb` variant.
+In `rgb(r, g, b)`, `r`, `g`, `b` are identifier patterns — they capture the three values inside the
+`rgb` variant.
 
-## Struct Pattern (Record Destructuring)
+## Struct Patterns (Record Destructuring)
 
-Struct pattern lets you extract fields of interest directly from a struct:
+Struct patterns let you directly extract fields you're interested in from a struct:
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
@@ -96,23 +100,26 @@ r = Rect(0.0, 0.0, 10.0, 20.0)
 print(area(r))  // 200.0
 ```
 
-`{ width: w, height: h }` means "take the `width` field from the record and bind it to variable `w`, take the `height` field and bind it to variable `h`". `x: _` and `y: _` mean "these fields exist but we don't care about their values".
+`{ width: w, height: h }` means "extract the `width` field from the record and bind it to variable
+`w`, extract the `height` field and bind it to variable `h`". `x: _` and `y: _` mean "these fields
+exist but we don't care about their values".
 
-**Simplified syntax**: When the field name and variable name are the same, you can abbreviate — the compiler automatically destructures into a variable of the same name:
+**Shorthand syntax**: When field name and variable name are the same, you can abbreviate — the
+compiler automatically destructures into a variable of the same name:
 
 ```yaoxiang
 describe_point: (p: Point) -> String = match p {
     { x: 0.0, y: 0.0 } => "Origin",
-    { x, y } => "Coordinates ({x}, {y})",
+    { x, y } => "Point ({x}, {y})",
 }
 
 print(describe_point(Point(0.0, 0.0)))  // Origin
-print(describe_point(Point(3.0, 4.0)))  // Coordinates (3.0, 4.0)
+print(describe_point(Point(3.0, 4.0)))  // Point (3.0, 4.0)
 ```
 
-## Tuple Pattern
+## Tuple Patterns
 
-Tuple pattern destructures individual elements of a tuple:
+Tuple patterns destructure each element of a tuple:
 
 ```yaoxiang
 Pair: Type = (Int, String)
@@ -130,14 +137,14 @@ print(first(p))   // 42
 print(second(p))  // "hello"
 ```
 
-## Or Pattern
+## Or Patterns
 
-Use `|` to combine multiple patterns, matching any one of them:
+Combine multiple patterns with `|` to match any one of them:
 
 ```yaoxiang
-Token: Type = { number(Int) | plus | minus | times | divide | eof }
+Token: Type = { number: (Int) -> Token, plus: () -> Token, minus: () -> Token, times: () -> Token, divide: () -> Token, eof: () -> Token }
 
-// Combine multiple variants into the "operator" class
+// Combine multiple variants into an "operator" category
 is_operator: (t: Token) -> Bool = match t {
     plus | minus | times | divide => true,
     _ => false,
@@ -147,12 +154,13 @@ print(is_operator(plus))      // true
 print(is_operator(number(5))) // false
 ```
 
-## Guard Expressions (if guard)
+## Guard Expressions (if guards)
 
-Add `if condition` after a match arm so the match only takes effect when the pattern matches **and** the condition is satisfied:
+Add `if condition` after a match arm so the match only succeeds when the pattern matches **and** the
+condition is true:
 
 ```yaoxiang
-Age: Type = { adult(Int) | child(Int) }
+Age: Type = { adult: (Int) -> Age, child: (Int) -> Age }
 
 // Guard expressions add extra conditions
 can_drive: (a: Age) -> Bool = match a {
@@ -165,16 +173,18 @@ print(can_drive(adult(20)))  // true
 print(can_drive(adult(16)))  // false
 ```
 
-Variables in the guard expression come from the preceding pattern — `adult(n) if n >= 18` first uses `n` to capture the value, then checks `n >= 18`.
+Variables in guard expressions come from the preceding pattern — `adult(n) if n >= 18` first uses
+`n` to capture the value, then checks `n >= 18`.
 
-## Exhaustiveness Check
+## Exhaustiveness Checking
 
-The YaoXiang compiler ensures that `match` covers all possible cases. If a branch is missing, the compiler will report an error:
+The YaoXiang compiler ensures `match` covers all possible cases. If you miss a branch, the compiler
+will report an error:
 
 ```yaoxiang
-Direction: Type = { north | south | east | west }
+Direction: Type = { north: () -> Direction, south: () -> Direction, east: () -> Direction, west: () -> Direction }
 
-// ✅ Correct: all four directions are covered
+// ✅ Correct: all four directions covered
 turn: (d: Direction) -> Direction = match d {
     north => east,
     east => south,
@@ -182,23 +192,24 @@ turn: (d: Direction) -> Direction = match d {
     west => north,
 }
 
-// ❌ Compilation error: west is missing
+// ❌ Compile error: missing west
 // broken: (d: Direction) -> Direction = match d {
 //     north => east,
 //     east => south,
 //     south => west,
-//     // west not handled → compilation error
+//     // west not handled → compile error
 // }
 ```
 
-This is an important mechanism in YaoXiang for preventing runtime surprises — once a new variant is added, the compiler will remind you to update all `match` sites.
+This is an important mechanism in YaoXiang to prevent runtime surprises — once you add a new
+variant, the compiler will remind you at every `match` site to update your code.
 
 ## Nested Patterns
 
 The real power of patterns comes from **nesting** — you can nest one pattern inside another:
 
 ```yaoxiang
-Expr: Type = { literal(Int) | add(Expr, Expr) | mul(Expr, Expr) }
+Expr: Type = { literal: (Int) -> Expr, add: (Expr, Expr) -> Expr, mul: (Expr, Expr) -> Expr }
 
 // Nested pattern: match literal inside add
 simplify: (e: Expr) -> Expr = match e {
@@ -213,19 +224,21 @@ e = add(literal(0), literal(5))
 print(simplify(e))  // literal(5)
 ```
 
-In `add(literal(0), right)`, the outer layer is an `add` enum pattern, and the inner layer is a `literal(0)` literal pattern — two layers of nesting, matched in one go.
+In `add(literal(0), right)`, the outer layer is an `add` enum pattern, and the inner layer is a
+`literal(0)` literal pattern — two levels of nesting, matched at once.
 
 ## Summary
 
-| Pattern Type | Syntax | Use |
-|----------|------|------|
-| Literal | `42`, `"hi"` | Match exact values |
-| Identifier | `x` | Capture the matched value |
-| Wildcard | `_` | Fallback match |
-| Enum | `ok(value)` | Destructure enum variants |
-| Struct | `{ x, y }` | Destructure record fields |
-| Tuple | `(a, b)` | Destructure tuple elements |
-| Or | `a \| b \| c` | Match one of multiple |
-| Guard | `pattern if cond` | Attach extra condition |
+| Pattern Type | Syntax            | Purpose                       |
+| ------------ | ----------------- | ----------------------------- |
+| Literal      | `42`, `"hi"`      | Match values exactly          |
+| Identifier   | `x`               | Capture matched values        |
+| Wildcard     | `_`               | Fallback match                |
+| Enum         | `ok(value)`       | Destructure enum variants     |
+| Struct       | `{ x, y }`        | Destructure record fields     |
+| Tuple        | `(a, b)`          | Destructure tuple elements    |
+| Or           | `a \| b \| c`     | Match any one of multiple     |
+| Guard        | `pattern if cond` | Additional condition checking |
 
-`match` + pattern matching = the most powerful control flow tool in YaoXiang. Master it, and you'll write safer, clearer code.
+`match` + pattern matching = the most powerful control flow tool in YaoXiang. Master it, and you'll
+write safer, clearer code.

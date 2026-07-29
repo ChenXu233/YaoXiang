@@ -1,22 +1,24 @@
 ---
-title: "RFC-026a: 可扩展 FFI 机制体系"
-status: "审核中"
-issue: "#135"
-author: "晨煦"
-created: "2026-06-05"
-updated: "2026-07-05"
-group: "rfc-026"
+title: 'RFC-026a: 可扩展 FFI 机制体系'
+status: '审核中'
+issue: '#135'
+author: '晨煦'
+created: '2026-06-05'
+updated: '2026-07-05'
+group: 'rfc-026'
 ---
 
 # RFC-026a: 可扩展 FFI 机制体系
 
 > **父 RFC**: [RFC-026: FFI 核心机制](../accepted/026-ffi-core-mechanism.md)
 >
-> 本 RFC 定义 RFC-026 的可扩展性部分——如何把 C ABI 之外的 FFI 机制（Wasm、Python、自定义 ABI）作为插件接入，以及动态加载模式。
+> 本 RFC 定义 RFC-026 的可扩展性部分——如何把 C
+> ABI 之外的 FFI 机制（Wasm、Python、自定义 ABI）作为插件接入，以及动态加载模式。
 
 ## 摘要
 
-RFC-026 定义了 FFI 核心机制，`Native.c("lib")` 走内置 C ABI。本 RFC 把 ABI 机制抽象为可插拔的 `FfiMechanism`，让核心不硬编码任何具体 ABI：
+RFC-026 定义了 FFI 核心机制，`Native.c("lib")` 走内置 C ABI。本 RFC 把 ABI 机制抽象为可插拔的
+`FfiMechanism`，让核心不硬编码任何具体 ABI：
 
 1. **`FfiMechanism` 抽象**：定义机制必须实现的四个操作（加载库、解析符号、编组、调用）
 2. **机制标签即机制选择**：`Native.c` / `Native.wasm` / `Native.python` 分别选择注册的机制
@@ -26,11 +28,13 @@ RFC-026 定义了 FFI 核心机制，`Native.c("lib")` 走内置 C ABI。本 RFC
 ## 动机
 
 RFC-026 只内置 C ABI（`Native.c`）。但 YaoXiang 未来可能需要：
+
 - 调用 Wasm 模块（`Native.wasm`）
 - 嵌入 Python 扩展（`Native.python`）
 - 用户自定义 ABI（专有硬件、RPC 桥接）
 
-与其在编译器里硬编码这些 ABI，不如把"如何加载库、如何解析符号、如何编组、如何调用"抽象成一个 trait，每种机制作为插件实现。核心只认识 `FfiMechanism`，不认识任何具体 ABI。
+与其在编译器里硬编码这些 ABI，不如把"如何加载库、如何解析符号、如何编组、如何调用"抽象成一个 trait，每种机制作为插件实现。核心只认识
+`FfiMechanism`，不认识任何具体 ABI。
 
 ### 设计约束
 
@@ -71,7 +75,8 @@ trait FfiMechanism {
 }
 ```
 
-**关键**：`invoke` 的实现必须遵守 RFC-026 §3——入参复制到临时区、返回 memcpy、借用限定单次调用。机制可以选择自己的 ABI 细节，但**不能违反安全边界**。这是插件的义务。
+**关键**：`invoke` 的实现必须遵守 RFC-026
+§3——入参复制到临时区、返回 memcpy、借用限定单次调用。机制可以选择自己的 ABI 细节，但**不能违反安全边界**。这是插件的义务。
 
 ### 2. 机制标签即机制选择
 
@@ -88,7 +93,8 @@ process: (input: String) -> String = wasm_mod("process")
 np = Native.python("numpy")
 ```
 
-`Native.c` / `Native.wasm` 中的 `.c` / `.wasm` 是**机制标签**，选择用哪个注册的 `FfiMechanism`。核心内置 `.c` 作为参考实现；其他由插件提供。
+`Native.c` / `Native.wasm` 中的 `.c` / `.wasm` 是**机制标签**，选择用哪个注册的
+`FfiMechanism`。核心内置 `.c` 作为参考实现；其他由插件提供。
 
 ### 3. 机制注册与编译期校验
 
@@ -107,16 +113,17 @@ Native.foo("x")            // ❌ 编译错误: Unknown FFI mechanism 'foo'
                            //    Try: `use yx_foo_ffi`
 ```
 
-编译期机制注册表**只存机制标签**（字符串）+ 对应的 `FfiMechanism` 实例指针。编译 `Native.xxx(...)` 时查表，标签不存在则编译错误。
+编译期机制注册表**只存机制标签**（字符串）+ 对应的 `FfiMechanism` 实例指针。编译 `Native.xxx(...)`
+时查表，标签不存在则编译错误。
 
 ### 4. 静态 vs 动态加载
 
 `load_library` 的实现决定加载时机，两种模式都保持 RFC-026 的安全边界：
 
-| 模式 | `load_library` 行为 | 符号验证 | 类型 |
-|------|-------------------|---------|------|
-| **静态**（默认，C ABI） | 编译期 `-llib`，库进符号表 | 编译期读符号表 | 完全实 |
-| **动态** | 运行期首次调用时 dlopen/实例化 | 首次加载时验证，缺失 fail-fast | 声明可信，加载即验 |
+| 模式                    | `load_library` 行为            | 符号验证                       | 类型               |
+| ----------------------- | ------------------------------ | ------------------------------ | ------------------ |
+| **静态**（默认，C ABI） | 编译期 `-llib`，库进符号表     | 编译期读符号表                 | 完全实             |
+| **动态**                | 运行期首次调用时 dlopen/实例化 | 首次加载时验证，缺失 fail-fast | 声明可信，加载即验 |
 
 ```yaoxiang
 // 静态：C 库编译期链入
@@ -126,7 +133,8 @@ sqlite3 = Native.c("libsqlite3")           // 编译期 -lsqlite3
 plugin = Native.c.dynamic("./plugins/foo.so")   // 运行期 dlopen
 ```
 
-无论静态还是动态，编组都走 RFC-026 §3 的临时区隔离。动态模式下符号缺失是**干净的运行期错误**（fail-fast），不是崩溃。
+无论静态还是动态，编组都走 RFC-026
+§3 的临时区隔离。动态模式下符号缺失是**干净的运行期错误**（fail-fast），不是崩溃。
 
 ### 5. 完整信息流
 
@@ -164,7 +172,8 @@ mechanisms["wasm"] = wasm_mechanism
 // Native.c("lib") → mechanisms["c"].load_library("lib")
 ```
 
-Rust 期用 trait object（`Box<dyn FfiMechanism>`），自举后用 YaoXiang 接口（RFC-011a）。接口一致：加载、解析、编组、调用。
+Rust 期用 trait
+object（`Box<dyn FfiMechanism>`），自举后用 YaoXiang 接口（RFC-011a）。接口一致：加载、解析、编组、调用。
 
 ---
 
@@ -212,19 +221,19 @@ Rust 期用 trait object（`Box<dyn FfiMechanism>`），自举后用 YaoXiang �
 
 ## 设计决策记录
 
-| 决策 | 决定 | 原因 | 日期 |
-|------|------|------|------|
-| 机制抽象 | `FfiMechanism` trait，四操作 | 核心不硬编码 ABI，只认接口 | 2026-07-03 |
-| 机制义务 | 插件必须遵守 RFC-026 编组规则 | 安全边界不因机制不同而破坏 | 2026-07-03 |
-| 机制标签校验 | 编译期查注册表 | 未注册机制编译期报错 | 2026-07-03 |
-| 静态/动态 | `load_library` 实现决定 | 时机是机制细节，安全边界不变 | 2026-07-03 |
-| 自举退化 | trait → YaoXiang 接口（RFC-011a） | 不做宿主语言过度抽象 | 2026-07-03 |
+| 决策         | 决定                              | 原因                         | 日期       |
+| ------------ | --------------------------------- | ---------------------------- | ---------- |
+| 机制抽象     | `FfiMechanism` trait，四操作      | 核心不硬编码 ABI，只认接口   | 2026-07-03 |
+| 机制义务     | 插件必须遵守 RFC-026 编组规则     | 安全边界不因机制不同而破坏   | 2026-07-03 |
+| 机制标签校验 | 编译期查注册表                    | 未注册机制编译期报错         | 2026-07-03 |
+| 静态/动态    | `load_library` 实现决定           | 时机是机制细节，安全边界不变 | 2026-07-03 |
+| 自举退化     | trait → YaoXiang 接口（RFC-011a） | 不做宿主语言过度抽象         | 2026-07-03 |
 
 ---
 
 ## 生命周期与归宿
 
-| 状态 | 位置 | 说明 |
-|------|------|------|
-| **审核中** | `docs/design/rfc/review/` | 开放社区讨论 |
+| 状态       | 位置                        | 说明         |
+| ---------- | --------------------------- | ------------ |
+| **审核中** | `docs/design/rfc/review/`   | 开放社区讨论 |
 | **已接受** | `docs/design/rfc/accepted/` | 正式设计文档 |

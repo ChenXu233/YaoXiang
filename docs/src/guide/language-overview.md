@@ -66,10 +66,10 @@ Point()                        // OK: x=0, y=0
 Point(x=1.0)                   // OK: x=1.0, y=0
 
 // 变体类型（枚举）
-Color: Type = { red | green | blue }
+Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
-Option: (T: Type) -> Type = { some(T) | none }
-Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
+Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
+Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 // 接口（字段全为函数类型的记录类型）
 Drawable: Type = { draw: (Surface) -> Void }
@@ -121,7 +121,7 @@ Point.draw: (self: &Point, surface: Surface) -> Void = {
 
 ```yaoxiang
 // if 是表达式
-grade = if score >= 90 { "A" } elif score >= 60 { "B" } else { "C" }
+grade = if score >= 90 { "A" } else if score >= 60 { "B" } else { "C" }
 
 // match
 result = match value {

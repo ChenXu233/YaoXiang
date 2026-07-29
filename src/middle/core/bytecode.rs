@@ -10,8 +10,6 @@
 //! - Can be interpreted or compiled further
 
 use std::collections::HashMap;
-use crate::tlog;
-use crate::util::i18n::MSG;
 use crate::backends::common::Opcode;
 
 // Re-export types for conversion
@@ -882,18 +880,10 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                 }
                             }
                             Opcode::I64Add => {
-                                tlog!(
-                                    debug,
-                                    MSG::BytecodeDecodeI64Add,
-                                    &instr.operands.len().to_string()
-                                );
-                                if instr.operands.len() >= 6 {
-                                    let dst =
-                                        u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
-                                    let lhs =
-                                        u16::from_le_bytes([instr.operands[2], instr.operands[3]]);
-                                    let rhs =
-                                        u16::from_le_bytes([instr.operands[4], instr.operands[5]]);
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
                                     decoded_instructions.push(BytecodeInstr::BinaryOp {
                                         op: BinaryOp::Add,
                                         dst: Reg(dst),
@@ -901,7 +891,7 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                         rhs: Reg(rhs),
                                     });
                                 } else {
-                                    tlog!(warn, MSG::BytecodeDecodeI64AddTooShort);
+                                    decoded_instructions.push(BytecodeInstr::Nop);
                                 }
                             }
                             Opcode::I64Sub => {
@@ -1272,6 +1262,34 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                         symbol,
                                         args,
                                     });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::CallDyn => {
+                                // CallDyn: dst(1) + obj(1) + name_idx(2) + args(N) + arg_count(1)
+                                if instr.operands.len() >= 5 {
+                                    let dst = instr.operands[0] as u16;
+                                    let obj = instr.operands[1] as u16;
+                                    let _name_idx =
+                                        u16::from_le_bytes([instr.operands[2], instr.operands[3]]);
+                                    let arg_count =
+                                        instr.operands[instr.operands.len() - 1] as usize;
+                                    let mut args = Vec::with_capacity(arg_count);
+                                    for i in 0..arg_count {
+                                        let idx = 4 + i;
+                                        if idx < instr.operands.len() - 1 {
+                                            args.push(Reg(instr.operands[idx] as u16));
+                                        }
+                                    }
+                                    let dst_reg = Some(Reg(dst));
+                                    let call_instr = BytecodeInstr::CallDyn {
+                                        dst: dst_reg,
+                                        obj: Reg(obj),
+                                        name_idx: _name_idx,
+                                        args,
+                                    };
+                                    decoded_instructions.push(call_instr);
                                 } else {
                                     decoded_instructions.push(BytecodeInstr::Nop);
                                 }

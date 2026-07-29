@@ -1,10 +1,10 @@
 ---
-title: "RFC-014a: Registry 协议规范"
-status: "审核中"
-author: "晨煦"
-created: "2026-06-11"
-updated: "2026-07-05"
-group: "rfc-014"
+title: 'RFC-014a: Registry 协议规范'
+status: '审核中'
+author: '晨煦'
+created: '2026-06-11'
+updated: '2026-07-05'
+group: 'rfc-014'
 ---
 
 # RFC-014a: Registry 协议规范
@@ -21,7 +21,8 @@ RFC-014 总纲定义了包管理系统的整体架构，但 Registry 部分仅�
 
 ### 当前的问题
 
-- `RegistrySource` 是桩代码（`source/mod.rs:150-203`），`resolve` 直接返回声明版本，`download` 返回空路径
+- `RegistrySource` 是桩代码（`source/mod.rs:150-203`），`resolve` 直接返回声明版本，`download`
+  返回空路径
 - 没有 HTTP 客户端（无 `reqwest` 依赖）
 - 没有包发布机制
 - 没有认证/授权
@@ -68,9 +69,11 @@ pub trait Source: Send + Sync {
 }
 ```
 
-所有实现（`LocalSource`、`GitSource`、`RegistrySource`）统一改为 async。CLI 入口通过 `#[tokio::main]` 或 `Runtime::block_on` 驱动。
+所有实现（`LocalSource`、`GitSource`、`RegistrySource`）统一改为 async。CLI 入口通过
+`#[tokio::main]` 或 `Runtime::block_on` 驱动。
 
 **理由：**
+
 - Registry 需要 HTTP 请求，阻塞会卡死整个安装流程
 - 多依赖并行下载（`join_all`）显著提升安装速度
 - Git clone 也是 I/O 操作，async 更自然
@@ -108,19 +111,19 @@ trait Registry: Send + Sync {
 
 `yaoxiang add foo`（无 flag）时的默认查找顺序：
 
-| 优先级 | 查找 | 说明 |
-|--------|------|------|
-| 1 | 全局缓存 | `~/.yaoxiang/cache/registry/foo-<ver>/` |
-| 2 | 官方 Registry | 查询版本 → 下载 |
-| 3 | 失败 | 报错，提示用户检查包名或网络 |
+| 优先级 | 查找          | 说明                                    |
+| ------ | ------------- | --------------------------------------- |
+| 1      | 全局缓存      | `~/.yaoxiang/cache/registry/foo-<ver>/` |
+| 2      | 官方 Registry | 查询版本 → 下载                         |
+| 3      | 失败          | 报错，提示用户检查包名或网络            |
 
 **显式覆盖（不走默认链）：**
 
-| flag | 行为 |
-|------|------|
-| `--git <url>` | 跳过 Registry，直接 Git clone（优先 Release assets → fallback 到 tag/branch） |
-| `--path <dir>` | 跳过 Registry，直接用本地路径 |
-| `--registry <url>` | 跳过官方 Registry，用指定 Registry |
+| flag               | 行为                                                                          |
+| ------------------ | ----------------------------------------------------------------------------- |
+| `--git <url>`      | 跳过 Registry，直接 Git clone（优先 Release assets → fallback 到 tag/branch） |
+| `--path <dir>`     | 跳过 Registry，直接用本地路径                                                 |
+| `--registry <url>` | 跳过官方 Registry，用指定 Registry                                            |
 
 ### 官方 Registry
 
@@ -128,15 +131,15 @@ trait Registry: Send + Sync {
 
 **API 端点：**
 
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/v1/packages/{name}` | GET | 查询包信息 |
-| `/api/v1/packages/{name}/versions` | GET | 查询版本列表 |
-| `/api/v1/packages/{name}/{version}` | GET | 下载包 |
-| `/api/v1/packages` | PUT | 发布包 |
-| `/api/v1/packages/{name}/{version}/yank` | DELETE | 撤回版本 |
-| `/api/v1/search?q={query}` | GET | 搜索包 |
-| `/api/v1/login` | POST | 认证 |
+| 端点                                     | 方法   | 说明         |
+| ---------------------------------------- | ------ | ------------ |
+| `/api/v1/packages/{name}`                | GET    | 查询包信息   |
+| `/api/v1/packages/{name}/versions`       | GET    | 查询版本列表 |
+| `/api/v1/packages/{name}/{version}`      | GET    | 下载包       |
+| `/api/v1/packages`                       | PUT    | 发布包       |
+| `/api/v1/packages/{name}/{version}/yank` | DELETE | 撤回版本     |
+| `/api/v1/search?q={query}`               | GET    | 搜索包       |
+| `/api/v1/login`                          | POST   | 认证         |
 
 ### GitHub 集成
 
@@ -194,6 +197,7 @@ yaoxiang publish --dry-run
 ```
 
 发布前校验：
+
 1. `yaoxiang.toml` 必须有 `name`、`version`、`description`
 2. 版本号不能已存在
 3. 运行测试（可选，`--no-test` 跳过）
@@ -226,15 +230,16 @@ url = "https://yxreg.my-company.com"
 token = "xxx"
 ```
 
-**映射规则：** `yaoxiang login --registry <url>` 按 URL 匹配 `[registries.*]` 中的 `url` 字段。如果没有匹配，新建一个条目（自动生成名称，如 `reg-1`）。
+**映射规则：** `yaoxiang login --registry <url>` 按 URL 匹配 `[registries.*]` 中的 `url`
+字段。如果没有匹配，新建一个条目（自动生成名称，如 `reg-1`）。
 
 **优先级：** 环境变量 > 配置文件
 
-| 环境变量 | 用途 |
-|----------|------|
-| `$YX_GITHUB_TOKEN` | GitHub 认证 |
+| 环境变量             | 用途                               |
+| -------------------- | ---------------------------------- |
+| `$YX_GITHUB_TOKEN`   | GitHub 认证                        |
 | `$YX_REGISTRY_TOKEN` | Registry 认证（用于默认 Registry） |
-| `$YX_REGISTRY_URL` | 默认 Registry 地址 |
+| `$YX_REGISTRY_URL`   | 默认 Registry 地址                 |
 
 **CLI 命令：**
 
@@ -245,6 +250,7 @@ yaoxiang logout --registry https://yxreg.example.com   # 删除匹配的条目
 ```
 
 **安全约束：**
+
 - Token 永远不写入 `yaoxiang.toml` 或 `yaoxiang.lock`
 - `credentials.toml` 文件权限 600
 - CI 场景用环境变量，开发场景用文件
@@ -298,12 +304,12 @@ impl Source for RegistrySource {
 
 ### 依赖项
 
-| crate | 用途 |
-|-------|------|
-| `reqwest` | HTTP 客户端 |
-| `sha2` | SHA-256 校验 |
-| `flate2` + `tar` | 包格式处理 |
-| `async-trait` | async trait 支持 |
+| crate            | 用途             |
+| ---------------- | ---------------- |
+| `reqwest`        | HTTP 客户端      |
+| `sha2`           | SHA-256 校验     |
+| `flate2` + `tar` | 包格式处理       |
+| `async-trait`    | async trait 支持 |
 
 ### 错误类型
 
@@ -350,23 +356,23 @@ pub enum RegistryError {
 
 ## 替代方案
 
-| 方案 | 为什么没选 |
-|------|-----------|
-| 仅支持 GitHub | 受限于 GitHub 生态，无法自建 Registry |
-| Cargo 风格 crates.io | 过于复杂，YaoXiang 生态初期不需要 |
-| npm 风格 yank（仅标记） | 安全风险，已知供应链攻击案例 |
+| 方案                    | 为什么没选                            |
+| ----------------------- | ------------------------------------- |
+| 仅支持 GitHub           | 受限于 GitHub 生态，无法自建 Registry |
+| Cargo 风格 crates.io    | 过于复杂，YaoXiang 生态初期不需要     |
+| npm 风格 yank（仅标记） | 安全风险，已知供应链攻击案例          |
 
 ## 实现策略
 
 ### 阶段划分
 
-| 阶段 | 内容 |
-|------|------|
+| 阶段      | 内容                                               |
+| --------- | -------------------------------------------------- |
 | Phase 3.5 | Source trait 改 async + async-trait + 所有实现迁移 |
-| Phase 4a | Registry trait + reqwest 集成 + 本地 Registry mock |
-| Phase 4b | GitHub Release 适配 |
-| Phase 4c | publish 命令 + 包格式打包 |
-| Phase 4d | 认证 + yank |
+| Phase 4a  | Registry trait + reqwest 集成 + 本地 Registry mock |
+| Phase 4b  | GitHub Release 适配                                |
+| Phase 4c  | publish 命令 + 包格式打包                          |
+| Phase 4d  | 认证 + yank                                        |
 
 ### 依赖关系
 

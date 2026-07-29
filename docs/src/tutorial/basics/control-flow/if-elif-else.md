@@ -1,20 +1,22 @@
 ---
-title: if-elif-else
+title: if-else-if-else
 ---
 
-# if-elif-else
+# if-else-if-else
 
-`if-elif-else` 是编程中最基本的决策工具。它的逻辑非常直观——**如果条件成立，就执行某段代码；否则，检查下一个条件；都不成立，走默认路径**。
+`if-else-if-else`
+是编程中最基本的决策工具。它的逻辑非常直观——**如果条件成立，就执行某段代码；否则，检查下一个条件；都不成立，走默认路径**。
 
 ## 基本语法
 
 语法规范中 `if` 表达式和 `if` 语句的定义完全一致：
 
 ```
-if Expr Block ('elif' Expr Block)* ('else' Block)?
+if Expr Block ('else' 'if' Expr Block)* ('else' Block)?
 ```
 
-用日常语言翻译：`if` 开头，后面跟一个条件表达式和一个代码块，之后可以接零到多个 `elif 条件 代码块`，最后可以有一个可选的 `else 代码块`。
+用日常语言翻译：`if` 开头，后面跟一个条件表达式和一个代码块，之后可以接零到多个
+`else if 条件 代码块`，最后可以有一个可选的 `else 代码块`。
 
 最简单的形式——只有 `if`：
 
@@ -34,23 +36,21 @@ if is_raining {
 }
 ```
 
-多个条件用 `elif`：
+多个条件用 `else if`：
 
 ```yaoxiang
 score = 85
 
 if score >= 90 {
     print("优秀")
-} elif score >= 80 {
+} else if score >= 80 {
     print("良好")
-} elif score >= 60 {
+} else if score >= 60 {
     print("及格")
 } else {
     print("需要努力")
 }
 ```
-
-注意 YaoXiang 的关键字是 `elif`，不是 `else if`。这是语言刻意保持关键字精简的一个体现。
 
 ## if 是表达式
 
@@ -60,7 +60,7 @@ if score >= 90 {
 // if 表达式：各分支的值会赋给 result
 result = if x > 0 {
     "正数"
-} elif x < 0 {
+} else if x < 0 {
     "负数"
 } else {
     "零"
@@ -76,9 +76,9 @@ score = 88
 // 所有分支都返回 String，类型一致，没问题
 grade = if score >= 90 {
     "A"
-} elif score >= 80 {
+} else if score >= 80 {
     "B"
-} elif score >= 60 {
+} else if score >= 60 {
     "C"
 } else {
     "D"
@@ -86,7 +86,8 @@ grade = if score >= 90 {
 print(grade)  // "B"
 ```
 
-在每个分支的代码块中，**最后一个表达式的值就是该分支的返回值**。你也可以用 `return` 显式返回，但在分支中通常直接写表达式就够了。
+在每个分支的代码块中，**最后一个表达式的值就是该分支的返回值**。你也可以用 `return`
+显式返回，但在分支中通常直接写表达式就够了。
 
 ```yaoxiang
 // 直接写表达式——推荐
@@ -121,7 +122,8 @@ if age >= 18 {
 }
 ```
 
-当表达式嵌套时，YaoXiang 没有 C 语言那样的"悬空 else"歧义——每个 `else` 始终归属于最近的尚未配对的 `if`。
+当表达式嵌套时，YaoXiang 没有 C 语言那样的"悬空 else"歧义——每个 `else` 始终归属于最近的尚未配对的
+`if`。
 
 ## 使用布尔运算符组合条件
 
@@ -156,13 +158,13 @@ if (age >= 18 and age <= 60) or is_vip {
 
 ## 小结
 
-| 要点 | 说明 |
-|------|------|
-| 基本结构 | `if 条件 { ... } elif 条件 { ... } else { ... }` |
-| elif | YaoXiang 用 `elif`，不是 `else if` |
-| 表达式 | `if` 可以返回值，所有分支类型必须一致 |
-| 分支返回值 | 分支块中最后一个表达式的值即为返回值 |
-| 嵌套 | `if` 内可以再写 `if`，没有悬空 else 歧义 |
-| 布尔运算 | `and`、`or`、`not` 组合条件 |
+| 要点       | 说明                                                |
+| ---------- | --------------------------------------------------- |
+| 基本结构   | `if 条件 { ... } else if 条件 { ... } else { ... }` |
+| else if    | YaoXiang 用 `else if` 实现多路分支                  |
+| 表达式     | `if` 可以返回值，所有分支类型必须一致               |
+| 分支返回值 | 分支块中最后一个表达式的值即为返回值                |
+| 嵌套       | `if` 内可以再写 `if`，没有悬空 else 歧义            |
+| 布尔运算   | `and`、`or`、`not` 组合条件                         |
 
 下一章你将学习 `for` 循环——遍历集合和范围的标准方式。

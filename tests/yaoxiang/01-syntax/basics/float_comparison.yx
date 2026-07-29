@@ -1,0 +1,31 @@
+// 01-syntax/basics/float_comparison.yx
+// 覆盖: 规范 §2.2 运算符优先级（比较运算符）, RFC-011 Float 类型
+// 验证: Float 类型的 6 个比较运算符（== != < <= > >=）正确工作
+// 状态: ✅ 可运行
+//
+// 回归: Float 比较在 VM exec_compare 中曾全缺（issue #226 的真实根因，
+//       非 issue 描述的 generate_method_ir Ret(None)）。Float 比较落到
+//       _ => RuntimeValue::Bool(false) 通配分支，所有 Float 比较恒返回 false。
+
+use std.assert
+
+main = {
+    // 等于 / 不等于
+    assert.assert(1.0 == 1.0, "1.0 == 1.0 should be true")
+    assert.assert(1.0 != 2.0, "1.0 != 2.0 should be true")
+
+    // 小于 / 小于等于
+    assert.assert(1.0 < 2.0, "1.0 < 2.0 should be true")
+    assert.assert(1.0 <= 1.0, "1.0 <= 1.0 should be true")
+
+    // 大于 / 大于等于
+    assert.assert(2.0 > 1.0, "2.0 > 1.0 should be true")
+    assert.assert(1.0 >= 1.0, "1.0 >= 1.0 should be true")
+
+    // 边界：0、负数、小数
+    assert.assert(0.0 == 0.0, "0.0 == 0.0 should be true")
+    assert.assert(-1.0 < 0.0, "-1.0 < 0.0 should be true")
+    assert.assert(-1.0 != 1.0, "-1.0 != 1.0 should be true")
+    assert.assert(3.14 > 3.0, "3.14 > 3.0 should be true")
+    assert.assert(3.0 < 3.14, "3.0 < 3.14 should be true")
+}

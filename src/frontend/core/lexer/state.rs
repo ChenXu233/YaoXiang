@@ -35,7 +35,6 @@ impl LexerState {
 
             // Control flow keywords
             "if" => Some(TokenKind::KwIf),
-            "elif" => Some(TokenKind::KwElif),
             "else" => Some(TokenKind::KwElse),
             "match" => Some(TokenKind::KwMatch),
             "while" => Some(TokenKind::KwWhile),

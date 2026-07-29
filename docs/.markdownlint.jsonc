@@ -1,0 +1,61 @@
+{
+  "$schema": "https://raw.githubusercontent.com/DavidAnson/markdownlint/main/schema/markdownlint-config-schema.json",
+  "default": true,
+
+  // 行长度 - 技术文档中不可避免，prettier 已处理换行
+  "MD013": false,
+
+  // 内联 HTML - VitePress 中允许
+  "MD033": false,
+
+  // 标题风格 - 允许混合 atx/setext
+  "MD003": false,
+
+  // 链接片段 - 中文锚点不兼容 Markdown 渲染，关闭
+  "MD051": false,
+
+  // 强调用作文档标题 - 部分文档使用风格，关闭
+  "MD036": false,
+
+  // 重复标题 - 长文档中常见，关闭
+  "MD024": false,
+
+  // 多个顶级标题 - RFC 文档必有 # RFC-XXX + # 章节，关闭
+  "MD025": false,
+
+  // 首行应为顶级标题 - 文档片段允许
+  "MD041": false,
+
+  // 文件末尾应有空行
+  "MD047": true,
+
+  // 强调应使用 * 而非 _
+  "MD049": true,
+  "MD050": true,
+
+  // 代码块语言 - 文档中大量代码块未标注，关闭
+  "MD040": false,
+
+  // 列表缩进
+  "MD007": {
+    "indent": 2
+  },
+
+  // 允许 bare URL
+  "MD034": false,
+
+  // 有序列表前缀 - 允许语义化编号
+  "MD029": false,
+
+  // blockquote 内部空行 - RFC 元数据区块使用
+  "MD028": false,
+
+  // 标题末尾标点 - 中文标题允许
+  "MD026": false,
+
+  // 内联代码中空格 - 展示语法时不可避免
+  "MD038": false,
+
+  // 表格列样式 - 对齐问题不影响语义
+  "MD060": false
+}

@@ -131,7 +131,7 @@ fn native_print(
     {
         print!("{}", output);
     }
-    Ok(RuntimeValue::Unit)
+    Ok(RuntimeValue::Void)
 }
 
 /// Native implementation: println (with newline)
@@ -153,7 +153,7 @@ fn native_println(
     {
         println!("{}", output);
     }
-    Ok(RuntimeValue::Unit)
+    Ok(RuntimeValue::Void)
 }
 
 /// Format a runtime value, resolving heap references for List/Dict/Tuple
@@ -182,7 +182,7 @@ pub(crate) fn format_value_with_prefix(
     };
 
     match val {
-        RuntimeValue::Unit => prefix_fn("unit"),
+        RuntimeValue::Void => prefix_fn("void"),
         RuntimeValue::Bool(b) => prefix_fn(&b.to_string()),
         RuntimeValue::Int(i) => prefix_fn(&i.to_string()),
         RuntimeValue::Float(f) => {

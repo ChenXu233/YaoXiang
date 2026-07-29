@@ -187,7 +187,7 @@ impl Interpreter {
             shared: std::ptr::null(),
             current_frame_info: None,
             called_func: false,
-            last_return_value: RuntimeValue::Unit,
+            last_return_value: RuntimeValue::Void,
         }
     }
 
@@ -243,7 +243,7 @@ impl Interpreter {
             shared: std::ptr::null(),
             current_frame_info: None,
             called_func: false,
-            last_return_value: RuntimeValue::Unit,
+            last_return_value: RuntimeValue::Void,
         }
     }
 
@@ -331,6 +331,48 @@ impl Interpreter {
         self.execute_function(&func, args)
     }
 
+    /// Call a closure function with env as upvalues.
+    /// Unlike call_function_by_id which passes env as regular args,
+    /// this method sets the env as the new frame's upvalues so that
+    /// LoadUpvalue instructions can read them.
+    pub fn call_closure(
+        &mut self,
+        func_id: crate::backends::common::value::FunctionId,
+        args: &[RuntimeValue],
+        upvalues: &[RuntimeValue],
+    ) -> Result<RuntimeValue, ExecutorError> {
+        let idx = func_id.0 as usize;
+        if idx >= self.functions_by_id.len() {
+            let stack = self.capture_stack();
+            return Err(ExecutorError::function_not_found(
+                format!(
+                    "Function with id {} not found (total functions: {})",
+                    idx,
+                    self.functions_by_id.len()
+                ),
+                stack,
+            ));
+        }
+        let func = self.functions_by_id[idx].clone();
+        let mut frame = crate::backends::interpreter::Frame::with_args(func.clone(), args);
+        frame.set_entry_ip(0);
+        // Set upvalues from closure env (for LoadUpvalue instructions)
+        *frame.upvalues_mut() = upvalues.to_vec();
+        self.push_frame(frame)?;
+
+        loop {
+            match self.step_one()? {
+                super::debug::StepOutcome::Continue => {}
+                super::debug::StepOutcome::Returned => {
+                    return Ok(std::mem::replace(
+                        &mut self.last_return_value,
+                        RuntimeValue::Void,
+                    ))
+                }
+            }
+        }
+    }
+
     /// Push a frame onto the call stack
     pub(super) fn push_frame(
         &mut self,
@@ -397,7 +439,7 @@ impl Interpreter {
         self.constants
             .get(idx as usize)
             .map(|c| match c {
-                ConstValue::Void => RuntimeValue::Unit,
+                ConstValue::Void => RuntimeValue::Void,
                 ConstValue::Bool(b) => RuntimeValue::Bool(*b),
                 ConstValue::Int(i) => RuntimeValue::Int((*i) as i64),
                 ConstValue::Float(f) => RuntimeValue::Float(*f),
@@ -415,7 +457,7 @@ impl Interpreter {
     ) -> RuntimeValue {
         RuntimeValue::Async(Box::new(AsyncValue {
             state: Box::new(AsyncState::Pending(task_id)),
-            value_type: ValueType::Unit,
+            value_type: ValueType::Void,
         }))
     }
 
@@ -639,7 +681,7 @@ impl Interpreter {
                         let rv = payload
                             .downcast_ref::<RuntimeValue>()
                             .cloned()
-                            .unwrap_or(RuntimeValue::Unit);
+                            .unwrap_or(RuntimeValue::Void);
                         *value = rv;
                         Ok(())
                     }
@@ -662,16 +704,16 @@ impl Interpreter {
         }
     }
 
-    pub(super) fn force_register(
+    pub(super) fn force_slot(
         &mut self,
         frame: &mut Frame,
         reg: Reg,
     ) -> ExecutorResult<RuntimeValue> {
-        if let Some(v) = frame.registers.get_mut(reg.0 as usize) {
+        if let Some(v) = frame.get_slot_mut(reg.0 as usize) {
             self.force_value_in_place(v)?;
             Ok(v.clone())
         } else {
-            Ok(RuntimeValue::Unit)
+            Ok(RuntimeValue::Void)
         }
     }
 
@@ -801,12 +843,12 @@ impl Interpreter {
         tlog!(
             debug,
             MSG::DebugRegisters,
-            &frame.registers.len(),
+            &frame.local_count(),
             &(lhs.0 as usize),
             &(rhs.0 as usize)
         );
-        let a = self.force_register(frame, lhs)?;
-        let b = self.force_register(frame, rhs)?;
+        let a = self.force_slot(frame, lhs)?;
+        let b = self.force_slot(frame, rhs)?;
 
         tlog!(debug, MSG::DebugBinaryOp, &a, &b);
 
@@ -892,7 +934,7 @@ impl Interpreter {
             }
         };
 
-        frame.set_register(dst.0 as usize, result);
+        frame.set_slot(dst.0 as usize, result);
         Ok(())
     }
 
@@ -905,8 +947,8 @@ impl Interpreter {
         cmp: CompareOp,
         frame: &mut Frame,
     ) -> ExecutorResult<()> {
-        let a = self.force_register(frame, lhs)?;
-        let b = self.force_register(frame, rhs)?;
+        let a = self.force_slot(frame, lhs)?;
+        let b = self.force_slot(frame, rhs)?;
 
         let result = match (cmp, &a, &b) {
             // Integer comparison
@@ -926,6 +968,44 @@ impl Interpreter {
                 RuntimeValue::Bool(l > r)
             }
             (CompareOp::Ge, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Bool(l >= r)
+            }
+            // Float comparison
+            (CompareOp::Eq, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Bool(l == r)
+            }
+            (CompareOp::Ne, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Bool(l != r)
+            }
+            (CompareOp::Lt, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Bool(l < r)
+            }
+            (CompareOp::Le, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Bool(l <= r)
+            }
+            (CompareOp::Gt, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Bool(l > r)
+            }
+            (CompareOp::Ge, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Bool(l >= r)
+            }
+            // Bool comparison
+            (CompareOp::Eq, RuntimeValue::Bool(l), RuntimeValue::Bool(r)) => {
+                RuntimeValue::Bool(l == r)
+            }
+            (CompareOp::Ne, RuntimeValue::Bool(l), RuntimeValue::Bool(r)) => {
+                RuntimeValue::Bool(l != r)
+            }
+            (CompareOp::Lt, RuntimeValue::Bool(l), RuntimeValue::Bool(r)) => {
+                RuntimeValue::Bool(l < r)
+            }
+            (CompareOp::Le, RuntimeValue::Bool(l), RuntimeValue::Bool(r)) => {
+                RuntimeValue::Bool(l <= r)
+            }
+            (CompareOp::Gt, RuntimeValue::Bool(l), RuntimeValue::Bool(r)) => {
+                RuntimeValue::Bool(l > r)
+            }
+            (CompareOp::Ge, RuntimeValue::Bool(l), RuntimeValue::Bool(r)) => {
                 RuntimeValue::Bool(l >= r)
             }
             // String comparison
@@ -950,7 +1030,7 @@ impl Interpreter {
             _ => RuntimeValue::Bool(false),
         };
 
-        frame.set_register(dst.0 as usize, result);
+        frame.set_slot(dst.0 as usize, result);
         Ok(())
     }
 }

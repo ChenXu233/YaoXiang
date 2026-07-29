@@ -128,8 +128,8 @@
   "bytecode_func_local_count": "  局部变量数：{0}",
   "bytecode_func_instr_count": "  指令数：{0}",
   "bytecode_func_code": "  代码：",
-  "bytecode_instr_index": "    [{0:04}] {1}",
-  "bytecode_unknown_opcode": "    [{0:04}] 未知操作码：0x{1:02x}",
+  "bytecode_instr_index": "    [{0:04}] {1:14} {2}",
+  "bytecode_unknown_opcode": "    [{0:04}] 未知操作码：0x{1:02x}  ({2})",
 
   "repl_welcome": "YaoXiang REPL v0.3.0",
   "repl_help": "输入 :help 查看可用命令，:quit 退出。",
@@ -146,11 +146,7 @@
   "debug_binary_op": "调试：左值={0:?}, 右值={1:?}",
   "debug_registers": "调试：寄存器.len={0}, 左索引={1}, 右索引={2}",
   "debug_match": "调试：匹配二元操作！",
-
   "formatter_not_implemented": "格式化器尚未实现",
-
-  "bytecode_decode_i64add": "调试解码：I64Add 操作数.len = {0}",
-  "bytecode_decode_i64add_too_short": "调试解码：I64Add 操作数太短，跳过",
 
   "ir_gen_enter_scope": "调试 IR 生成：进入作用域，符号栈深度之前：{0}",
   "ir_gen_exit_scope": "调试 IR 生成：退出作用域，符号栈深度：{0}",

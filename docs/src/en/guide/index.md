@@ -1,6 +1,7 @@
 # Guide
 
-YaoXiang Language User Guide, helping you quickly get started and master the core features of the YaoXiang language.
+YaoXiang Language User Guide, helping you quickly get started and master the core features of the
+YaoXiang language.
 
 ## Table of Contents
 

@@ -1,6 +1,6 @@
 // 01-syntax/control-flow/if_else.yx
 // 覆盖: 规范 §4.7 条件表达式, §5.6 if 语句
-// 验证: if-elif-else 条件分支
+// 验证: if-else-if-else 条件分支
 // 状态: ✅ 可运行
 
 use std.assert
@@ -21,14 +21,14 @@ main = {
     }
     assert.assert(r2 == "false_branch", "if-else branch")
 
-    // if-elif-else
+    // if-else-if-else
     score = 85
     mut grade = ""
     if score >= 90 {
         grade = "A"
-    } elif score >= 80 {
+    } else if score >= 80 {
         grade = "B"
-    } elif score >= 70 {
+    } else if score >= 70 {
         grade = "C"
     } else {
         grade = "D"

@@ -595,11 +595,6 @@ impl From<ast::Type> for MonoType {
                 name: String::new(),
                 variants,
             }),
-            // New variant type: `type Color = red | green | blue`
-            ast::Type::Variant(variants) => MonoType::Enum(EnumType {
-                name: String::new(),
-                variants: variants.into_iter().map(|v| v.name).collect(),
-            }),
             ast::Type::Tuple(types) => {
                 MonoType::Tuple(types.into_iter().map(MonoType::from).collect())
             }

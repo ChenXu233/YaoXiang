@@ -1,10 +1,10 @@
 ---
-title: "RFC-015: YaoXiang 配置系统设计"
-status: "已接受"
-author: "晨煦"
-created: "2026-02-12"
-updated: "2026-02-15"
-issue: "#133"
+title: 'RFC-015: YaoXiang 配置系统设计'
+status: '已接受'
+author: '晨煦'
+created: '2026-02-12'
+updated: '2026-02-15'
+issue: '#133'
 ---
 
 # RFC-015: YaoXiang 配置系统设计
@@ -22,6 +22,7 @@ issue: "#133"
 ### 为什么需要这个特性/变更？
 
 YaoXiang 工具链包含多个组件：
+
 - 包管理器（读取依赖配置）
 - 编译器前端（读取 i18n 配置）
 - REPL（读取交互配置）
@@ -41,6 +42,7 @@ YaoXiang 工具链包含多个组件：
 ### 核心设计
 
 **分层架构**：
+
 ```
 配置优先级（高 → 低）：
 ┌─────────────────────────────────────────────┐
@@ -56,27 +58,28 @@ YaoXiang 工具链包含多个组件：
 
 ### 配置层级限制
 
-| 配置节 | 用户级 | 项目级 | 消费方 |
-|--------|--------|--------|--------|
-| `[package].*` | ❌ | ✅ | 包管理器 |
-| `[yaoxiang]` | ❌ | ✅ | 编译器 |
-| `[dependencies]` | ❌ | ✅ | 包管理器 |
-| `[dev-dependencies]` | ❌ | ✅ | 包管理器 |
-| `[bin]` | ❌ | ✅ | 包管理器 |
-| `[lib]` | ❌ | ✅ | 包管理器 |
-| `[build]` | ✅ | ✅ | 构建系统 |
-| `[profile.*]` | ✅ | ✅ | 构建系统 |
-| `[install]` | ✅ | ❌ | 包管理器 |
-| `[i18n]` | ✅ | ✅ | 编译器 |
-| `[repl]` | ✅ | ✅ | REPL |
-| `[fmt]` | ✅ | ✅ | LSP |
-| `[lint]` | ✅ | ✅ | LSP |
-| `[test]` | ✅ | ✅ | LSP |
-| `[tasks]` | ✅ | ✅ | CLI |
+| 配置节               | 用户级 | 项目级 | 消费方   |
+| -------------------- | ------ | ------ | -------- |
+| `[package].*`        | ❌     | ✅     | 包管理器 |
+| `[yaoxiang]`         | ❌     | ✅     | 编译器   |
+| `[dependencies]`     | ❌     | ✅     | 包管理器 |
+| `[dev-dependencies]` | ❌     | ✅     | 包管理器 |
+| `[bin]`              | ❌     | ✅     | 包管理器 |
+| `[lib]`              | ❌     | ✅     | 包管理器 |
+| `[build]`            | ✅     | ✅     | 构建系统 |
+| `[profile.*]`        | ✅     | ✅     | 构建系统 |
+| `[install]`          | ✅     | ❌     | 包管理器 |
+| `[i18n]`             | ✅     | ✅     | 编译器   |
+| `[repl]`             | ✅     | ✅     | REPL     |
+| `[fmt]`              | ✅     | ✅     | LSP      |
+| `[lint]`             | ✅     | ✅     | LSP      |
+| `[test]`             | ✅     | ✅     | LSP      |
+| `[tasks]`            | ✅     | ✅     | CLI      |
 
 ### 示例
 
 **项目级配置**：
+
 ```toml
 # yaoxiang.toml
 [package]
@@ -98,6 +101,7 @@ test = "yaoxiang test"
 ```
 
 **用户级配置**：
+
 ```toml
 # ~/.config/yaoxiang/config.toml
 [install]
@@ -180,23 +184,23 @@ dir = "~/.local/share/yaoxiang"
 
 ### 两者皆可的配置
 
-| 字段 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `[i18n].lang` | String | "en" | 语言 |
-| `[i18n].fallback` | String | "en" | 回退语言 |
-| `[repl].history-size` | Number | 1000 | 历史条数 |
-| `[repl].history-file` | Path | ~ | 历史文件 |
-| `[repl].prompt` | String | "yx> " | 提示符 |
-| `[repl].colors` | Boolean | true | 语法高亮 |
-| `[repl].auto-imports` | [String] | [] | 自动导入 |
-| `[fmt].line-width` | Number | 120 | 行宽 |
-| `[fmt].indent-width` | Number | 4 | 缩进 |
-| `[fmt].use-tabs` | Boolean | false | Tab 缩进 |
-| `[fmt].single-quote` | Boolean | false | 单引号 |
-| `[lint].rules` | [String] | ["recommended"] | 规则集 |
-| `[lint].strict` | Boolean | false | 严格模式 |
-| `[test].report` | String | "console" | 测试报告 |
-| `[build].output` | String | "dist/" | 输出目录 |
+| 字段                  | 类型     | 默认值          | 说明     |
+| --------------------- | -------- | --------------- | -------- |
+| `[i18n].lang`         | String   | "en"            | 语言     |
+| `[i18n].fallback`     | String   | "en"            | 回退语言 |
+| `[repl].history-size` | Number   | 1000            | 历史条数 |
+| `[repl].history-file` | Path     | ~               | 历史文件 |
+| `[repl].prompt`       | String   | "yx> "          | 提示符   |
+| `[repl].colors`       | Boolean  | true            | 语法高亮 |
+| `[repl].auto-imports` | [String] | []              | 自动导入 |
+| `[fmt].line-width`    | Number   | 120             | 行宽     |
+| `[fmt].indent-width`  | Number   | 4               | 缩进     |
+| `[fmt].use-tabs`      | Boolean  | false           | Tab 缩进 |
+| `[fmt].single-quote`  | Boolean  | false           | 单引号   |
+| `[lint].rules`        | [String] | ["recommended"] | 规则集   |
+| `[lint].strict`       | Boolean  | false           | 严格模式 |
+| `[test].report`       | String   | "console"       | 测试报告 |
+| `[build].output`      | String   | "dist/"         | 输出目录 |
 
 ### 命令行与环境变量覆盖
 
@@ -233,9 +237,11 @@ yaoxiang config show --source
 yaoxiang config reset
 ```
 
-**首次运行**：用户首次运行任何 `yaoxiang` 命令时，自动检测用户级配置是否存在。若不存在，按默认选项自动生成。
+**首次运行**：用户首次运行任何 `yaoxiang`
+命令时，自动检测用户级配置是否存在。若不存在，按默认选项自动生成。
 
 **配置文件位置**：
+
 - 项目级：`./yaoxiang.toml`（项目根目录）
 - 用户级：`~/.config/yaoxiang/config.toml`
 
@@ -243,13 +249,14 @@ yaoxiang config reset
 
 不同层级的配置按以下规则合并：
 
-| 类型 | 策略 | 说明 |
-|------|------|------|
-| 标量 (String/Number/Boolean) | 替换 | 项目级覆盖用户级 |
-| 数组 (Array) | 替换 | 项目级完全替换用户级 |
-| 对象 (Object) | 深度合并 | 逐字段合并，未定义字段继承下层 |
+| 类型                         | 策略     | 说明                           |
+| ---------------------------- | -------- | ------------------------------ |
+| 标量 (String/Number/Boolean) | 替换     | 项目级覆盖用户级               |
+| 数组 (Array)                 | 替换     | 项目级完全替换用户级           |
+| 对象 (Object)                | 深度合并 | 逐字段合并，未定义字段继承下层 |
 
 **示例 - 对象深度合并**：
+
 ```toml
 # 用户级
 [lint]
@@ -290,21 +297,21 @@ strict = true             # 来自项目级
 
 ## 替代方案
 
-| 方案 | 为什么没选 |
-|------|-----------|
-| 各组件独立配置 | 重复代码，用户体验割裂 |
-| 仅支持命令行参数 | 无法持久化用户偏好 |
-| 仅支持环境变量 | 项目配置难以版本控制 |
+| 方案             | 为什么没选             |
+| ---------------- | ---------------------- |
+| 各组件独立配置   | 重复代码，用户体验割裂 |
+| 仅支持命令行参数 | 无法持久化用户偏好     |
+| 仅支持环境变量   | 项目配置难以版本控制   |
 
 ## 实现策略
 
 ### 阶段划分
 
-| 阶段 | 内容 |
-|------|------|
+| 阶段        | 内容                                                          |
+| ----------- | ------------------------------------------------------------- |
 | **Phase 1** | 基础配置解析器、toml 支持、项目级配置、`yaoxiang config init` |
-| **Phase 2** | 用户级配置、配置合并逻辑、`yaoxiang config edit/show` |
-| **Phase 3** | 命令行/环境变量覆盖、`platform` 平台约束、`[tool.*]` 扩展 |
+| **Phase 2** | 用户级配置、配置合并逻辑、`yaoxiang config edit/show`         |
+| **Phase 3** | 命令行/环境变量覆盖、`platform` 平台约束、`[tool.*]` 扩展     |
 
 ### 依赖关系
 
@@ -312,10 +319,10 @@ strict = true             # 来自项目级
 
 ### 风险
 
-| 风险 | 缓解措施 |
-|------|----------|
+| 风险       | 缓解措施                 |
+| ---------- | ------------------------ |
 | 配置项过多 | 提供合理默认值，用户无感 |
-| 解析器复杂 | 使用现有 toml 库 |
+| 解析器复杂 | 使用现有 toml 库         |
 
 ## 开放问题
 
@@ -326,7 +333,8 @@ strict = true             # 来自项目级
 
 #### `platform` 平台约束
 
-> **注意**：以下语法用于 `yaoxiang.toml` **配置文件**，**不是** YaoXiang 源代码 (`.yx` 文件) 中的语法。用户无需在代码中写 `cfg(...)`。
+> **注意**：以下语法用于 `yaoxiang.toml` **配置文件**，**不是** YaoXiang 源代码 (`.yx`
+> 文件) 中的语法。用户无需在代码中写 `cfg(...)`。
 
 支持基于目标操作系统/架构的平台特定配置：
 
@@ -346,11 +354,13 @@ rustflags = ["-C target-cpu=native"]
 **语法**：`[target.'<条件>'.<配置节>]`
 
 **说明**：
+
 - 此语法仅出现在 `yaoxiang.toml` 配置文件中
 - 构建时根据 `--target` 参数选择对应的配置
 - 用户在 `.yx` 源代码中**无需**、**也不应该**写 `cfg(...)` 语法
 
 **支持的条件**：
+
 - `cfg(os = "windows")` - Windows 系统
 - `cfg(os = "linux")` - Linux 系统
 - `cfg(os = "macos")` - macOS 系统
@@ -372,6 +382,7 @@ singleQuote = true
 ```
 
 **行为**：
+
 - YaoXiang 忽略未知的 `[tool.*]` 节，但会保留在配置文件中
 - 第三方工具可通过 `yaoxiang tool run <名称>` 集成或直接访问
 - 工具特定配置不进行验证

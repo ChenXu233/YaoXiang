@@ -5,7 +5,7 @@ use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{
     self, BindingKind, BinOp, Block, Expr, FStringSegment, GenericParam, GenericParamKind,
     MatchArm, Param, Pattern, SpannedIdent, Stmt, StmtKind, StructField, Type, TypeBodyBinding,
-    UnOp, VariantDef, is_meta_type,
+    UnOp, is_meta_type,
 };
 use crate::util::span::Span;
 
@@ -99,7 +99,7 @@ fn test_expr_if() {
             stmts: vec![],
             span: Span::dummy(),
         }),
-        elif_branches: vec![],
+        else_if_branches: vec![],
         else_branch: None,
         span: Span::dummy(),
     };
@@ -471,29 +471,6 @@ fn test_type_generic() {
 }
 
 #[test]
-fn test_type_variant() {
-    let t = Type::Variant(vec![
-        VariantDef {
-            name: "red".into(),
-            name_span: Span::dummy(),
-            params: vec![],
-            span: Span::dummy(),
-        },
-        VariantDef {
-            name: "green".into(),
-            name_span: Span::dummy(),
-            params: vec![],
-            span: Span::dummy(),
-        },
-    ]);
-    if let Type::Variant(variants) = &t {
-        assert_eq!(variants.len(), 2);
-    } else {
-        panic!("Expected Type::Variant");
-    }
-}
-
-#[test]
 fn test_type_meta_type_nested() {
     let inner = Type::MetaType {
         name_span: Span::dummy(),
@@ -616,63 +593,6 @@ fn test_type_definition_variant() {
         assert!(
             matches!(definition, Type::Struct { .. }),
             "definition 应为 Struct"
-        );
-    } else {
-        panic!("Expected StmtKind::TypeDefinition");
-    }
-}
-
-#[test]
-fn test_type_definition_generic() {
-    let stmt = Stmt {
-        kind: StmtKind::TypeDefinition {
-            name: "Option".into(),
-            signature_params: vec![Param {
-                name: "T".into(),
-                ty: Some(Type::MetaType {
-                    name_span: Span::dummy(),
-                    args: vec![],
-                }),
-                is_mut: false,
-                span: Span::dummy(),
-            }],
-            definition: Type::Variant(vec![
-                VariantDef {
-                    name: "some".into(),
-                    name_span: Span::dummy(),
-                    params: vec![(
-                        None,
-                        Type::Name {
-                            name: "T".into(),
-                            span: Span::dummy(),
-                        },
-                    )],
-                    span: Span::dummy(),
-                },
-                VariantDef {
-                    name: "none".into(),
-                    name_span: Span::dummy(),
-                    params: vec![],
-                    span: Span::dummy(),
-                },
-            ]),
-            is_pub: false,
-        },
-        span: Span::dummy(),
-    };
-    if let StmtKind::TypeDefinition {
-        name,
-        signature_params,
-        definition,
-        ..
-    } = &stmt.kind
-    {
-        assert_eq!(name, "Option", "类型名应为 Option");
-        assert_eq!(signature_params.len(), 1, "应有 1 个泛型参数");
-        assert_eq!(signature_params[0].name, "T", "泛型参数名应为 T");
-        assert!(
-            matches!(definition, Type::Variant(_)),
-            "definition 应为 Variant"
         );
     } else {
         panic!("Expected StmtKind::TypeDefinition");
@@ -807,33 +727,6 @@ fn test_type_body_binding() {
         },
     };
     assert_eq!(tbb.name, "distance");
-}
-
-// ============================================================================
-// VariantDef
-// ============================================================================
-
-#[test]
-fn test_variant_def_no_params() {
-    let vd = VariantDef {
-        name: "red".into(),
-        name_span: Span::dummy(),
-        params: vec![],
-        span: Span::dummy(),
-    };
-    assert_eq!(vd.name, "red");
-    assert!(vd.params.is_empty(), "变体无参数时 params 应为空");
-}
-
-#[test]
-fn test_variant_def_with_params() {
-    let vd = VariantDef {
-        name: "ok".into(),
-        name_span: Span::dummy(),
-        params: vec![(Some("value".into()), Type::Int(64))],
-        span: Span::dummy(),
-    };
-    assert_eq!(vd.params.len(), 1);
 }
 
 // ============================================================================

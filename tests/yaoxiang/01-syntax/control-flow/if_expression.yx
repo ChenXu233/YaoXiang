@@ -1,0 +1,47 @@
+// 01-syntax/control-flow/if_expression.yx
+// 覆盖: 规范 §2.7 条件表达式, §2.9 块表达式（尾随表达式语义）
+// 验证: if 表达式作为值绑定时返回分支值；嵌套与多分支传递
+// 状态: ✅ 可运行
+
+use std.assert
+
+main = {
+    // §2.7 单 if-else 表达式值绑定
+    a = if true { 42 } else { 0 }
+    assert.assert(a == 42, "if true 分支应返回 42")
+
+    // §2.7 if-else 表达式值绑定（false 走 else）
+    b = if false { 100 } else { 200 }
+    assert.assert(b == 200, "if false 分支应返回 200")
+
+    // §2.9 块多语句 + 尾随表达式作为块的值
+    c = if true {
+        x = 10
+        y = 20
+        x + y
+    } else {
+        0
+    }
+    assert.assert(c == 30, "块内多语句 + 尾随表达式应作为块的值")
+
+    // §2.7 嵌套 if 表达式（issue #228 衍生场景）
+    d = if true {
+        if false { 1 } else { 2 }
+    } else {
+        3
+    }
+    assert.assert(d == 2, "嵌套 if 表达式应正确传递值")
+
+    // §2.7 多分支（用 else if 链式覆盖；直接 elif 形式见 issue #236）
+    score = 85
+    grade = if score >= 90 {
+        "A"
+    } else if score >= 80 {
+        "B"
+    } else if score >= 70 {
+        "C"
+    } else {
+        "D"
+    }
+    assert.assert(grade == "B", "score 85 对应 B 等级")
+}

@@ -1,3 +1,4 @@
+fail_fast: true
 repos:
   - repo: local
     hooks:
@@ -41,6 +42,13 @@ repos:
         name: cargo audit
         entry: cargo audit
         language: system
+        pass_filenames: false
+
+      - id: markdownlint
+        name: markdownlint docs
+        entry: markdownlint "docs/**/*.md" --fix --config docs/.markdownlint.jsonc --ignore-path docs/.markdownlintignore
+        language: system
+        types: [text]
         pass_filenames: false
 
       - id: check-commit-msg

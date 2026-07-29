@@ -223,7 +223,7 @@ impl TerminationChecker {
             StmtKind::If {
                 condition,
                 then_branch,
-                elif_branches,
+                else_if_branches,
                 else_branch,
                 ..
             } => {
@@ -231,7 +231,7 @@ impl TerminationChecker {
                 for s in &then_branch.stmts {
                     self.check_stmt(s, is_never);
                 }
-                for (cond, body) in elif_branches {
+                for (cond, body) in else_if_branches {
                     self.check_expr(cond, is_never);
                     for s in &body.stmts {
                         self.check_stmt(s, is_never);
@@ -305,7 +305,7 @@ impl TerminationChecker {
             Expr::If {
                 condition,
                 then_branch,
-                elif_branches,
+                else_if_branches,
                 else_branch,
                 ..
             } => {
@@ -313,7 +313,7 @@ impl TerminationChecker {
                 for s in &then_branch.stmts {
                     self.check_stmt(s, is_never);
                 }
-                for (cond, body) in elif_branches {
+                for (cond, body) in else_if_branches {
                     self.check_expr(cond, is_never);
                     for s in &body.stmts {
                         self.check_stmt(s, is_never);
@@ -529,14 +529,14 @@ impl TerminationChecker {
             }
             StmtKind::If {
                 then_branch,
-                elif_branches,
+                else_if_branches,
                 else_branch,
                 ..
             } => {
                 for s in &then_branch.stmts {
                     self.collect_assignments_from_stmt(s, assignments);
                 }
-                for (_, body) in elif_branches {
+                for (_, body) in else_if_branches {
                     for s in &body.stmts {
                         self.collect_assignments_from_stmt(s, assignments);
                     }

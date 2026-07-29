@@ -22,8 +22,7 @@
 
 ## 提交格式
 
-**非常重要！！！！！！不可以忘记！！！**
-所有提交消息遵循以下格式：
+**非常重要！！！！！！不可以忘记！！！** 所有提交消息遵循以下格式：
 
 ```
 :emoji代码: type(scope): 主题（中文）
@@ -34,36 +33,36 @@
 ```
 
 > ⚠️ **重要**: 必须使用 **emoji 代码**（如 `:sparkles:`）而非直接输入 emoji 字符。
-> 
+>
 > **推荐使用中文提交信息**，保持团队沟通一致性。
 
 ### 组成部分
 
-| 部分 | 说明 | 必填 |
-|------|------|------|
-| emoji代码 | 表情符号标识提交类型 | ✅ |
-| type | 提交类型 | ✅ |
-| scope | 影响范围 | ✅ |
-| subject | 简短描述（中文，不超过50字符） | ✅ |
-| body | 详细说明（可选） | ❌ |
-| footer | 破坏性变更或关闭问题（可选） | ❌ |
+| 部分      | 说明                           | 必填 |
+| --------- | ------------------------------ | ---- |
+| emoji代码 | 表情符号标识提交类型           | ✅   |
+| type      | 提交类型                       | ✅   |
+| scope     | 影响范围                       | ✅   |
+| subject   | 简短描述（中文，不超过50字符） | ✅   |
+| body      | 详细说明（可选）               | ❌   |
+| footer    | 破坏性变更或关闭问题（可选）   | ❌   |
 
 ---
 
 ## 提交类型
 
-| emoji代码 | type | 说明 |
-|-----------|------|------|
-| :sparkles: | feat | 新功能 |
-| :bug: | fix | 修复 bug |
-| :memo: | docs | 仅文档变更 |
-| :lipstick: | style | 代码格式（不影响功能） |
-| :recycle: | refactor | 重构代码 |
-| :zap: | perf | 性能优化 |
-| :white_check_mark: | test | 添加或修改测试 |
-| :wrench: | chore | 构建工具、辅助工具变更 |
-| :building_construction: | build | 构建系统变更 |
-| :rocket: | ci | CI 配置变更 |
+| emoji代码               | type     | 说明                   |
+| ----------------------- | -------- | ---------------------- |
+| :sparkles:              | feat     | 新功能                 |
+| :bug:                   | fix      | 修复 bug               |
+| :memo:                  | docs     | 仅文档变更             |
+| :lipstick:              | style    | 代码格式（不影响功能） |
+| :recycle:               | refactor | 重构代码               |
+| :zap:                   | perf     | 性能优化               |
+| :white_check_mark:      | test     | 添加或修改测试         |
+| :wrench:                | chore    | 构建工具、辅助工具变更 |
+| :building_construction: | build    | 构建系统变更           |
+| :rocket:                | ci       | CI 配置变更            |
 
 ---
 
@@ -71,67 +70,67 @@
 
 以下是与 gitmoji 项目一致的完整 emoji 列表，可根据提交内容选择合适的 emoji：
 
-| emoji | emoji 代码 | commit 说明 |
-| :---- | :---------------------------- | :--------------------------- |
-| 🎨 | `:art:` | 改进代码结构/代码格式 |
-| ⚡️ | `:zap:` / `:racehorse:` | 提升性能 |
-| 🔥 | `:fire:` | 移除代码或文件 |
-| 🐛 | `:bug:` | 修复 bug |
-| 🚑 | `:ambulance:` | 重要补丁 |
-| ✨ | `:sparkles:` | 引入新功能 |
-| 📝 | `:memo:` | 撰写文档 |
-| 🚀 | `:rocket:` | 部署功能 |
-| 💄 | `:lipstick:` | 更新 UI 和样式文件 |
-| 🎉 | `:tada:` | 初次提交 |
-| ✅ | `:white_check_mark:` | 增加测试 |
-| 🔒 | `:lock:` | 修复安全问题 |
-| 🍎 | `:apple:` | 修复 macOS 下的内容 |
-| 🐧 | `:penguin:` | 修复 Linux 下的内容 |
-| 🏁 | `:checkered_flag:` | 修复 Windows 下的内容 |
-| 🤖 | `:robot:` | 修复 Android 上的某些内容 |
-| 🍏 | `:green_apple:` | 解决 iOS 上的某些问题 |
-| 🔖 | `:bookmark:` | 发行/版本标签 |
-| 🚨 | `:rotating_light:` | 移除 linter 警告 |
-| 🚧 | `:construction:` | 工作进行中 |
-| 💚 | `:green_heart:` | 修复 CI 构建问题 |
-| ⬇️ | `:arrow_down:` | 降级依赖 |
-| ⬆️ | `:arrow_up:` | 升级依赖 |
-| 📌 | `:pushpin:` | 将依赖关系固定到特定版本 |
-| 👷 | `:construction_worker:` | 添加 CI 构建系统 |
-| 📈 | `:chart_with_upwards_trend:` | 添加分析或跟踪代码 |
-| ♻️ | `:recycle:` | 重构代码 |
-| 🔨 | `:hammer:` | 重大重构 |
-| ➖ | `:heavy_minus_sign:` | 减少一个依赖 |
-| 🐳 | `:whale:` | Docker 相关工作 |
-| ➕ | `:heavy_plus_sign:` | 增加一个依赖 |
-| 🔧 | `:wrench:` | 修改配置文件 |
-| 🌐 | `:globe_with_meridians:` | 国际化与本地化 |
-| ✏️ | `:pencil2:` | 修复 typo |
-| 💩 | `:hankey:` | 编写需要改进的错误代码 |
-| ⏪️ | `:rewind:` | 恢复更改 |
-| 🔀 | `:twisted_rightwards_arrows:` | 合并分支 |
-| 📦 | `:package:` | 更新编译的文件或包 |
-| 👽 | `:alien:` | 由于外部 API 更改而更新代码 |
-| 🚚 | `:truck:` | 移动或重命名文件 |
-| 📄 | `:page_facing_up:` | 添加或更新许可证 |
-| 💥 | `:boom:` | 引入突破性变化 |
-| 🍱 | `:bento:` | 添加或更新资产 |
-| 👌 | `:ok_hand:` | 由于代码审查更改而更新代码 |
-| ♿️ | `:wheelchair:` | 提高可访问性 |
-| 💡 | `:bulb:` | 记录源代码 |
-| 🍻 | `:beers:` | 醉生梦死的写代码 |
-| 💬 | `:speech_balloon:` | 更新文本和文字 |
-| 🗃️ | `:card_file_box:` | 执行与数据库相关的更改 |
-| 🔊 | `:loud_sound:` | 添加日志 |
-| 🔇 | `:mute:` | 删除日志 |
-| 👥 | `:busts_in_silhouette:` | 添加贡献者 |
-| 🚸 | `:children_crossing:` | 改善用户体验/可用性 |
-| 🏗️ | `:building_construction:` | 进行架构更改 |
-| 📱 | `:iphone:` | 致力于响应式设计 |
-| 🤡 | `:clown_face:` | 嘲笑事物 |
-| 🥚 | `:egg:` | 添加一个复活节彩蛋 |
-| 🙈 | `:see_no_evil:` | 添加或更新 .gitignore 文件 |
-| 📸 | `:camera_flash:` | 添加或更新快照 |
+| emoji | emoji 代码                    | commit 说明                 |
+| :---- | :---------------------------- | :-------------------------- |
+| 🎨    | `:art:`                       | 改进代码结构/代码格式       |
+| ⚡️    | `:zap:` / `:racehorse:`       | 提升性能                    |
+| 🔥    | `:fire:`                      | 移除代码或文件              |
+| 🐛    | `:bug:`                       | 修复 bug                    |
+| 🚑    | `:ambulance:`                 | 重要补丁                    |
+| ✨    | `:sparkles:`                  | 引入新功能                  |
+| 📝    | `:memo:`                      | 撰写文档                    |
+| 🚀    | `:rocket:`                    | 部署功能                    |
+| 💄    | `:lipstick:`                  | 更新 UI 和样式文件          |
+| 🎉    | `:tada:`                      | 初次提交                    |
+| ✅    | `:white_check_mark:`          | 增加测试                    |
+| 🔒    | `:lock:`                      | 修复安全问题                |
+| 🍎    | `:apple:`                     | 修复 macOS 下的内容         |
+| 🐧    | `:penguin:`                   | 修复 Linux 下的内容         |
+| 🏁    | `:checkered_flag:`            | 修复 Windows 下的内容       |
+| 🤖    | `:robot:`                     | 修复 Android 上的某些内容   |
+| 🍏    | `:green_apple:`               | 解决 iOS 上的某些问题       |
+| 🔖    | `:bookmark:`                  | 发行/版本标签               |
+| 🚨    | `:rotating_light:`            | 移除 linter 警告            |
+| 🚧    | `:construction:`              | 工作进行中                  |
+| 💚    | `:green_heart:`               | 修复 CI 构建问题            |
+| ⬇️    | `:arrow_down:`                | 降级依赖                    |
+| ⬆️    | `:arrow_up:`                  | 升级依赖                    |
+| 📌    | `:pushpin:`                   | 将依赖关系固定到特定版本    |
+| 👷    | `:construction_worker:`       | 添加 CI 构建系统            |
+| 📈    | `:chart_with_upwards_trend:`  | 添加分析或跟踪代码          |
+| ♻️    | `:recycle:`                   | 重构代码                    |
+| 🔨    | `:hammer:`                    | 重大重构                    |
+| ➖    | `:heavy_minus_sign:`          | 减少一个依赖                |
+| 🐳    | `:whale:`                     | Docker 相关工作             |
+| ➕    | `:heavy_plus_sign:`           | 增加一个依赖                |
+| 🔧    | `:wrench:`                    | 修改配置文件                |
+| 🌐    | `:globe_with_meridians:`      | 国际化与本地化              |
+| ✏️    | `:pencil2:`                   | 修复 typo                   |
+| 💩    | `:hankey:`                    | 编写需要改进的错误代码      |
+| ⏪️    | `:rewind:`                    | 恢复更改                    |
+| 🔀    | `:twisted_rightwards_arrows:` | 合并分支                    |
+| 📦    | `:package:`                   | 更新编译的文件或包          |
+| 👽    | `:alien:`                     | 由于外部 API 更改而更新代码 |
+| 🚚    | `:truck:`                     | 移动或重命名文件            |
+| 📄    | `:page_facing_up:`            | 添加或更新许可证            |
+| 💥    | `:boom:`                      | 引入突破性变化              |
+| 🍱    | `:bento:`                     | 添加或更新资产              |
+| 👌    | `:ok_hand:`                   | 由于代码审查更改而更新代码  |
+| ♿️    | `:wheelchair:`                | 提高可访问性                |
+| 💡    | `:bulb:`                      | 记录源代码                  |
+| 🍻    | `:beers:`                     | 醉生梦死的写代码            |
+| 💬    | `:speech_balloon:`            | 更新文本和文字              |
+| 🗃️    | `:card_file_box:`             | 执行与数据库相关的更改      |
+| 🔊    | `:loud_sound:`                | 添加日志                    |
+| 🔇    | `:mute:`                      | 删除日志                    |
+| 👥    | `:busts_in_silhouette:`       | 添加贡献者                  |
+| 🚸    | `:children_crossing:`         | 改善用户体验/可用性         |
+| 🏗️    | `:building_construction:`     | 进行架构更改                |
+| 📱    | `:iphone:`                    | 致力于响应式设计            |
+| 🤡    | `:clown_face:`                | 嘲笑事物                    |
+| 🥚    | `:egg:`                       | 添加一个复活节彩蛋          |
+| 🙈    | `:see_no_evil:`               | 添加或更新 .gitignore 文件  |
+| 📸    | `:camera_flash:`              | 添加或更新快照              |
 
 ---
 
@@ -141,59 +140,59 @@
 
 ### 顶层模块
 
-| 作用域 | 对应目录 | 说明 |
-|--------|----------|------|
-| `frontend` | `src/frontend/` | 前端：词法分析、语法解析、类型检查 |
-| `middle` | `src/middle/` | 中间层：IR、优化、单态化 |
-| `backends` | `src/backends/` | 后端：解释器、运行时、REPL |
-| `std` | `src/std/` | 标准库 |
-| `formatter` | `src/formatter/` | 代码格式化器 |
-| `lsp` | `src/lsp/` | 语言服务器协议 |
-| `package` | `src/package/` | 包管理器 |
-| `util` | `src/util/` | 工具库：诊断、缓存、i18n |
+| 作用域      | 对应目录         | 说明                               |
+| ----------- | ---------------- | ---------------------------------- |
+| `frontend`  | `src/frontend/`  | 前端：词法分析、语法解析、类型检查 |
+| `middle`    | `src/middle/`    | 中间层：IR、优化、单态化           |
+| `backends`  | `src/backends/`  | 后端：解释器、运行时、REPL         |
+| `std`       | `src/std/`       | 标准库                             |
+| `formatter` | `src/formatter/` | 代码格式化器                       |
+| `lsp`       | `src/lsp/`       | 语言服务器协议                     |
+| `package`   | `src/package/`   | 包管理器                           |
+| `util`      | `src/util/`      | 工具库：诊断、缓存、i18n           |
 
 ### 前端子模块
 
-| 作用域 | 对应目录 | 说明 |
-|--------|----------|------|
-| `parser` | `src/frontend/core/parser/` | 语法解析器 |
-| `lexer` | `src/frontend/core/lexer/` | 词法分析器 |
-| `typecheck` | `src/frontend/core/typecheck/` | 类型检查 |
-| `types` | `src/frontend/core/types/` | 类型系统定义 |
+| 作用域      | 对应目录                       | 说明         |
+| ----------- | ------------------------------ | ------------ |
+| `parser`    | `src/frontend/core/parser/`    | 语法解析器   |
+| `lexer`     | `src/frontend/core/lexer/`     | 词法分析器   |
+| `typecheck` | `src/frontend/core/typecheck/` | 类型检查     |
+| `types`     | `src/frontend/core/types/`     | 类型系统定义 |
 
 ### 中间层子模块
 
-| 作用域 | 对应目录 | 说明 |
-|--------|----------|------|
-| `codegen` | `src/middle/passes/codegen/` | 代码生成（字节码） |
-| `monomorphize` | `src/middle/passes/monomorphize/` | 单态化处理 |
-| `lifetime` | `src/middle/passes/lifetime/` | 生命周期分析 |
+| 作用域         | 对应目录                          | 说明               |
+| -------------- | --------------------------------- | ------------------ |
+| `codegen`      | `src/middle/passes/codegen/`      | 代码生成（字节码） |
+| `monomorphize` | `src/middle/passes/monomorphize/` | 单态化处理         |
+| `lifetime`     | `src/middle/passes/lifetime/`     | 生命周期分析       |
 
 ### 后端子模块
 
-| 作用域 | 对应目录 | 说明 |
-|--------|----------|------|
-| `repl` | `src/backends/dev/repl/` | REPL 交互式命令行 |
-| `shell` | `src/backends/dev/shell.rs` | Shell 命令处理 |
-| `runtime` | `src/backends/runtime/` | 运行时执行引擎 |
+| 作用域    | 对应目录                    | 说明              |
+| --------- | --------------------------- | ----------------- |
+| `repl`    | `src/backends/dev/repl/`    | REPL 交互式命令行 |
+| `shell`   | `src/backends/dev/shell.rs` | Shell 命令处理    |
+| `runtime` | `src/backends/runtime/`     | 运行时执行引擎    |
 
 ### 文档作用域
 
-| 作用域 | 说明 |
-|--------|------|
-| `docs` | 通用文档更新 |
+| 作用域   | 说明                |
+| -------- | ------------------- |
+| `docs`   | 通用文档更新        |
 | `design` | 语言设计规范（RFC） |
-| `plan` | 实现计划文档 |
+| `plan`   | 实现计划文档        |
 
 ### 其他作用域
 
-| 作用域 | 说明 |
-|--------|------|
-| `build` | 构建系统、Cargo 配置 |
-| `ci` | CI/CD 配置（GitHub Actions） |
-| `test` | 测试相关 |
-| `release` | 发版相关 |
-| `meta` | 项目元配置（.claude, .gitignore 等） |
+| 作用域    | 说明                                 |
+| --------- | ------------------------------------ |
+| `build`   | 构建系统、Cargo 配置                 |
+| `ci`      | CI/CD 配置（GitHub Actions）         |
+| `test`    | 测试相关                             |
+| `release` | 发版相关                             |
+| `meta`    | 项目元配置（.claude, .gitignore 等） |
 
 ---
 
@@ -210,13 +209,14 @@ version = "0.7.2"
 
 采用语义化版本 `MAJOR.MINOR.PATCH`：
 
-| 版本类型 | 说明 | 示例 |
-|----------|------|------|
+| 版本类型  | 说明                        | 示例          |
+| --------- | --------------------------- | ------------- |
 | **major** | 重大更新，不兼容的 API 变更 | 0.7.2 → 1.0.0 |
-| **minor** | 新功能，向后兼容 | 0.7.2 → 0.8.0 |
-| **patch** | 修复 bug，向后兼容 | 0.7.2 → 0.7.3 |
+| **minor** | 新功能，向后兼容            | 0.7.2 → 0.8.0 |
+| **patch** | 修复 bug，向后兼容          | 0.7.2 → 0.7.3 |
 
-> ⚠️ 发版时 **在 dev 分支更新 `Cargo.toml` 版本号**，通过 PR 合并到 main 后由 CI 自动创建 tag 和 Release。**不要手动推 tag**，否则 CI 会跳过 release 流程。
+> ⚠️ 发版时 **在 dev 分支更新 `Cargo.toml`
+> 版本号**，通过 PR 合并到 main 后由 CI 自动创建 tag 和 Release。**不要手动推 tag**，否则 CI 会跳过 release 流程。
 
 ---
 
@@ -243,12 +243,12 @@ version = "0.7.2"
 
 ### 关键规则
 
-| 规则 | 说明 |
-|------|------|
-| **不要手动推 tag** | CI 根据 tag 是否存在决定是否发布，手动推 tag 会导致 CI 跳过 |
-| **版本在 dev 上 bump** | 发版 commit 在 dev 上完成，通过 PR 合并到 main |
+| 规则                               | 说明                                                                |
+| ---------------------------------- | ------------------------------------------------------------------- |
+| **不要手动推 tag**                 | CI 根据 tag 是否存在决定是否发布，手动推 tag 会导致 CI 跳过         |
+| **版本在 dev 上 bump**             | 发版 commit 在 dev 上完成，通过 PR 合并到 main                      |
 | **发版 commit 包含完整 changelog** | commit message 需包含本次发版的所有变更内容，因为它是 PR 的描述来源 |
-| **不要合并 main 回 dev** | PR 合并后 dev 会自动同步，无需反向合并 |
+| **不要合并 main 回 dev**           | PR 合并后 dev 会自动同步，无需反向合并                              |
 
 ---
 

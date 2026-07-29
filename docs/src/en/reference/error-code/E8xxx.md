@@ -4,7 +4,7 @@
 
 ## Error List
 
-## E8001: Internal compiler error
+## E8001: Internal Compiler Error
 
 **Category**: Internal
 
@@ -14,7 +14,7 @@
 
 ---
 
-## E8002: Unexpected panic
+## E8002: Unexpected Panic
 
 **Category**: Internal
 
@@ -24,7 +24,7 @@
 
 ---
 
-## E8003: Compiler phase error
+## E8003: Compiler Phase Error
 
 **Category**: Internal
 

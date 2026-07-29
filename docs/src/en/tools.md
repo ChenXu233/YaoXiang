@@ -1,8 +1,7 @@
-```yaml
 ---
 layout: page
 sidebar: false
-title: "Tools"
+title: 'Tools'
 permalink: /tools/
 ---
 
@@ -18,7 +17,7 @@ permalink: /tools/
 
 <div style="padding: 1.5rem 2rem; background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%); border-radius: 8px; border: 1px solid #6366f1; box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.2);">
   <span style="color: #6366f1; font-weight: 600;">←</span>
-  <a href='javascript:history.back();' style="color: #4f46e5; text-decoration: none; font-weight: 600; margin-left: 0.5rem; transition: color 0.2s ease;">Back to previous page</a>
+  <a href='javascript:history.back();' style="color: #4f46e5; text-decoration: none; font-weight: 600; margin-left: 0.5rem; transition: color 0.2s ease;">Go Back</a>
 </div>
 
 </div>
@@ -31,4 +30,3 @@ a:hover {
   text-decoration: underline !important;
 }
 </style>
-```

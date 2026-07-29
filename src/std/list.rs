@@ -184,7 +184,7 @@ fn native_push(
             ))
         }
     };
-    let item = args.get(1).cloned().unwrap_or(RuntimeValue::Unit);
+    let item = args.get(1).cloned().unwrap_or(RuntimeValue::Void);
 
     let mut items = match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => items.clone(),
@@ -222,7 +222,7 @@ fn native_pop(
         }
     };
 
-    Ok(items.pop().unwrap_or(RuntimeValue::Unit))
+    Ok(items.pop().unwrap_or(RuntimeValue::Void))
 }
 
 /// Native implementation: append - alias for push
@@ -246,7 +246,7 @@ fn native_prepend(
             ))
         }
     };
-    let item = args.get(1).cloned().unwrap_or(RuntimeValue::Unit);
+    let item = args.get(1).cloned().unwrap_or(RuntimeValue::Void);
 
     let mut items = match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => items.clone(),
@@ -458,7 +458,7 @@ fn native_reduce(
     let func_value = args.get(1).cloned().ok_or_else(|| {
         ExecutorError::type_only("reduce expects a function as second argument".to_string())
     })?;
-    let mut accumulator = args.get(2).cloned().unwrap_or(RuntimeValue::Unit);
+    let mut accumulator = args.get(2).cloned().unwrap_or(RuntimeValue::Void);
 
     let items = match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => items.clone(),
@@ -524,8 +524,8 @@ fn native_get(
     let index = args.get(1).and_then(|v| v.to_int()).unwrap_or(0) as usize;
 
     match ctx.heap.get(list_handle) {
-        Some(HeapValue::List(items)) => Ok(items.get(index).cloned().unwrap_or(RuntimeValue::Unit)),
-        _ => Ok(RuntimeValue::Unit),
+        Some(HeapValue::List(items)) => Ok(items.get(index).cloned().unwrap_or(RuntimeValue::Void)),
+        _ => Ok(RuntimeValue::Void),
     }
 }
 
@@ -543,7 +543,7 @@ fn native_set(
         }
     };
     let index = args.get(1).and_then(|v| v.to_int()).unwrap_or(0) as usize;
-    let value = args.get(2).cloned().unwrap_or(RuntimeValue::Unit);
+    let value = args.get(2).cloned().unwrap_or(RuntimeValue::Void);
 
     let mut items = match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => items.clone(),
@@ -576,8 +576,8 @@ fn native_first(
     };
 
     match ctx.heap.get(list_handle) {
-        Some(HeapValue::List(items)) => Ok(items.first().cloned().unwrap_or(RuntimeValue::Unit)),
-        _ => Ok(RuntimeValue::Unit),
+        Some(HeapValue::List(items)) => Ok(items.first().cloned().unwrap_or(RuntimeValue::Void)),
+        _ => Ok(RuntimeValue::Void),
     }
 }
 
@@ -596,8 +596,8 @@ fn native_last(
     };
 
     match ctx.heap.get(list_handle) {
-        Some(HeapValue::List(items)) => Ok(items.last().cloned().unwrap_or(RuntimeValue::Unit)),
-        _ => Ok(RuntimeValue::Unit),
+        Some(HeapValue::List(items)) => Ok(items.last().cloned().unwrap_or(RuntimeValue::Void)),
+        _ => Ok(RuntimeValue::Void),
     }
 }
 
@@ -642,7 +642,7 @@ fn native_contains(
         Some(RuntimeValue::List(h)) => *h,
         _ => return Ok(RuntimeValue::Bool(false)),
     };
-    let target = args.get(1).cloned().unwrap_or(RuntimeValue::Unit);
+    let target = args.get(1).cloned().unwrap_or(RuntimeValue::Void);
 
     match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => Ok(RuntimeValue::Bool(items.contains(&target))),
@@ -659,7 +659,7 @@ fn native_find_index(
         Some(RuntimeValue::List(h)) => *h,
         _ => return Ok(RuntimeValue::Int(-1)),
     };
-    let target = args.get(1).cloned().unwrap_or(RuntimeValue::Unit);
+    let target = args.get(1).cloned().unwrap_or(RuntimeValue::Void);
 
     match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => match items.iter().position(|item| item == &target) {
@@ -705,28 +705,28 @@ fn native_next(
 ) -> Result<RuntimeValue, ExecutorError> {
     let iter_handle = match args.first() {
         Some(RuntimeValue::Tuple(h)) => *h,
-        _ => return Ok(RuntimeValue::Unit),
+        _ => return Ok(RuntimeValue::Void),
     };
 
     let iterator_items = match ctx.heap.get(iter_handle) {
         Some(HeapValue::Tuple(items)) => items.clone(),
-        _ => return Ok(RuntimeValue::Unit),
+        _ => return Ok(RuntimeValue::Void),
     };
 
     // 获取原始列表和当前索引
     let list_handle = match iterator_items.first() {
         Some(RuntimeValue::List(h)) => *h,
-        _ => return Ok(RuntimeValue::Unit),
+        _ => return Ok(RuntimeValue::Void),
     };
     let current_idx = match iterator_items.get(1) {
         Some(RuntimeValue::Int(idx)) => *idx as usize,
-        _ => return Ok(RuntimeValue::Unit),
+        _ => return Ok(RuntimeValue::Void),
     };
 
     // 获取元素
     let element = match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) if current_idx < items.len() => items[current_idx].clone(),
-        _ => RuntimeValue::Unit,
+        _ => RuntimeValue::Void,
     };
 
     // 更新索引

@@ -220,9 +220,6 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
     let bytecode_file: crate::middle::passes::codegen::bytecode::BytecodeFile = ctx
         .generate()
         .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
-
-    // Dump header information
-    tracing::info!("{}", t_cur_simple(MSG::BytecodeFileHeader));
     tracing::info!(
         "{}",
         t_cur(MSG::BytecodeMagic, Some(&[&bytecode_file.header.magic]))
@@ -526,17 +523,34 @@ fn dump_params_detail(params: &[crate::frontend::core::typecheck::MonoType]) -> 
     }
 }
 
+/// Format operands as hex string for display
+fn format_operands(operands: &[u8]) -> String {
+    if operands.is_empty() {
+        String::new()
+    } else {
+        operands
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
 /// Dump instructions in a readable format with opcode names
 fn dump_instructions(
     instructions: &[crate::middle::passes::codegen::bytecode::BytecodeInstruction]
 ) {
     for (instr_idx, instr) in instructions.iter().enumerate() {
         // Try to decode the opcode
+        let ops_str = format_operands(&instr.operands);
         match Opcode::try_from(instr.opcode) {
             Ok(opcode) => {
                 tracing::info!(
                     "{}",
-                    t_cur(MSG::BytecodeInstrIndex, Some(&[&instr_idx, &opcode]))
+                    t_cur(
+                        MSG::BytecodeInstrIndex,
+                        Some(&[&instr_idx, &opcode, &ops_str])
+                    )
                 );
             }
             Err(_) => {
@@ -544,7 +558,7 @@ fn dump_instructions(
                     "{}",
                     t_cur(
                         MSG::BytecodeUnknownOpcode,
-                        Some(&[&instr_idx, &instr.opcode])
+                        Some(&[&instr_idx, &instr.opcode, &ops_str])
                     )
                 );
             }

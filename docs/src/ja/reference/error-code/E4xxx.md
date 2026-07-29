@@ -1,4 +1,4 @@
-# E4xxx：泛型とtrait
+# E4xxx：泛型と特質
 
 > `src/util/diagnostic/codes/` から自動生成
 
@@ -6,38 +6,38 @@
 
 ## E4001：Generic constraint violated
 
-**カテゴリー**: Generic
+**カテゴリ**: Generic
 
-**メッセージ**: Type does not satisfy the generic constraint
+**メッセージ**: 型がジェネリック制約を満たしていません
 
-**ヘルプ**: Ensure the type satisfies all required trait bounds
+**ヘルプ**: 型が必要なすべてのtrait境界を満たすことを確認してください
 
 ---
 
 ## E4002：Trait not found
 
-**カテゴリー**: Generic
+**カテゴリ**: Generic
 
-**メッセージ**: Referenced trait does not exist
+**メッセージ**: 参照されたtraitが存在しません
 
-**ヘルプ**: Check the trait name or import the correct trait
+**ヘルプ**: trait名を確認するか、正しいtraitをインポートしてください
 
 ---
 
 ## E4003：Trait implementation missing
 
-**カテゴリー**: Generic
+**カテゴリ**: Generic
 
-**メッセージ**: Type does not implement the required trait
+**メッセージ**: 型が必要なtraitを実装していません
 
-**ヘルプ**: Add a trait implementation for this type
+**ヘルプ**: この型にtrait実装を追加してください
 
 ---
 
 ## E4004：Conflicting trait implementations
 
-**カテゴリー**: Generic
+**カテゴリ**: Generic
 
-**メッセージ**: Multiple trait implementations conflict
+**メッセージ**: 複数のtrait実装が競合しています
 
-**ヘルプ**: Resolve the conflicting implementations
+**ヘルプ**: 競合する実装を解決してください

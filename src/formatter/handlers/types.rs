@@ -38,30 +38,6 @@ pub fn format_type(
             items.join(" | ")
         }
         Type::Enum(variants) => variants.join(" | "),
-        Type::Variant(defs) => {
-            let items: Vec<String> = defs
-                .iter()
-                .map(|v| {
-                    if v.params.is_empty() {
-                        v.name.clone()
-                    } else {
-                        let params: Vec<String> = v
-                            .params
-                            .iter()
-                            .map(|(name, ty)| {
-                                if let Some(n) = name {
-                                    format!("{}: {}", n, format_type(ty, ctx, source_map))
-                                } else {
-                                    format_type(ty, ctx, source_map)
-                                }
-                            })
-                            .collect();
-                        format!("{}({})", v.name, params.join(", "))
-                    }
-                })
-                .collect();
-            items.join(" | ")
-        }
         Type::Tuple(types) => {
             let items: Vec<String> = types
                 .iter()
