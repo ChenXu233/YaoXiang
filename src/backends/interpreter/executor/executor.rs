@@ -167,7 +167,6 @@ impl Interpreter {
         let rt = Runtime::new(RuntimeConfig {
             mode: runtime_config.runtime,
             workers: runtime_config.workers,
-            work_stealing: runtime_config.work_stealing,
         })
         .unwrap_or_else(|_| Runtime::new(RuntimeConfig::default()).unwrap());
 
@@ -256,7 +255,6 @@ impl Interpreter {
         self.rt = Runtime::new(RuntimeConfig {
             mode: self.runtime_config.runtime,
             workers: self.runtime_config.workers,
-            work_stealing: self.runtime_config.work_stealing,
         })
         .unwrap_or_else(|_| Runtime::new(RuntimeConfig::default()).unwrap());
     }

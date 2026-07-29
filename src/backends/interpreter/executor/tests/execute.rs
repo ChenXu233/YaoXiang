@@ -317,7 +317,6 @@ fn spawn_concurrent_standard_mode() {
     interp.set_runtime_config(InterpreterRuntimeConfig {
         runtime: RuntimeMode::Standard,
         workers: 1,
-        work_stealing: false,
     });
     // 重建 Runtime facade（set_runtime_config 只更新配置，需要 reset 重建 rt）
     interp.reset();

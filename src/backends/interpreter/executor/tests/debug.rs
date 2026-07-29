@@ -47,7 +47,6 @@ fn embedded_interpreter() -> Interpreter {
     interp.set_runtime_config(InterpreterRuntimeConfig {
         runtime: RuntimeMode::Embedded,
         workers: 1,
-        work_stealing: false,
     });
     interp
 }

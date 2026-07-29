@@ -103,7 +103,6 @@ impl Executor for Interpreter {
         self.rt = Runtime::new(RuntimeConfig {
             mode: self.runtime_config.runtime,
             workers: self.runtime_config.workers,
-            work_stealing: self.runtime_config.work_stealing,
         })
         .unwrap_or_else(|_| Runtime::new(RuntimeConfig::default()).unwrap());
     }

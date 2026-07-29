@@ -222,7 +222,8 @@ pub fn run_file_with_diagnostics(
         let mut interp = crate::backends::interpreter::Interpreter::new();
         let rt_mode = match runtime_mode {
             "standard" => crate::backends::runtime::RuntimeMode::Standard,
-            "full" => crate::backends::runtime::RuntimeMode::Full,
+            // "full" 历史上等价于 Standard（work-stealing 从未实现），保留别名以兼容 CLI。
+            "full" => crate::backends::runtime::RuntimeMode::Standard,
             _ => crate::backends::runtime::RuntimeMode::Embedded,
         };
         let effective_workers = if workers > 0 {
@@ -236,7 +237,6 @@ pub fn run_file_with_diagnostics(
             crate::backends::interpreter::runtime::InterpreterRuntimeConfig {
                 runtime: rt_mode,
                 workers: effective_workers,
-                work_stealing: false,
             },
         );
         let mut executor: Box<dyn crate::backends::Executor> = Box::new(interp);
@@ -283,7 +283,8 @@ pub fn run_file_with_diagnostics(
             let mut interp = Interpreter::new();
             let rt_mode = match runtime_mode {
                 "standard" => crate::backends::runtime::RuntimeMode::Standard,
-                "full" => crate::backends::runtime::RuntimeMode::Full,
+                // "full" 历史上等价于 Standard（work-stealing 从未实现），保留别名以兼容 CLI。
+                "full" => crate::backends::runtime::RuntimeMode::Standard,
                 _ => crate::backends::runtime::RuntimeMode::Embedded,
             };
             let effective_workers = if workers > 0 {
@@ -297,7 +298,6 @@ pub fn run_file_with_diagnostics(
                 crate::backends::interpreter::runtime::InterpreterRuntimeConfig {
                     runtime: rt_mode,
                     workers: effective_workers,
-                    work_stealing: false,
                 },
             );
             let mut executor: Box<dyn Executor> = Box::new(interp);
