@@ -198,6 +198,15 @@ def validate_rfc(frontmatter, filepath, dirname):
         if 'issue' not in frontmatter or not frontmatter['issue']:
             msg = f"{filepath}: 旧 RFC（创建于 {created_str}）缺少 'issue' 字段"
             errors.append(('WARNING', msg))
+
+    # 检查 accepted RFC 是否包含文档更新 PR
+    if dirname == "accepted":
+        pr_impl = frontmatter.get('pr_impl', [])
+        docs_impl = frontmatter.get('docs_impl', [])
+        if pr_impl and not docs_impl:
+            msg = f"{filepath}: 已接受 RFC 有实现 PR ({', '.join(pr_impl)}) 但缺少 'docs_impl' 字段"
+            errors.append(('WARNING', msg))
+
     return errors
 
 # ── 扫描 ─────────────────────────────────────────────────────────────────
@@ -254,6 +263,7 @@ def scan_rfcs(rfc_root=None):
                 'issue': frontmatter.get('issue', ''),
                 'issues_impl': frontmatter.get('issues_impl', []),
                 'pr_impl': frontmatter.get('pr_impl', []),
+                'docs_impl': frontmatter.get('docs_impl', []),
                 '_frontmatter': frontmatter,
             }
             records.append(record)
@@ -278,8 +288,8 @@ def generate_tracking_md(records):
     lines = []
     lines.append("# RFC 追踪表")
     lines.append("")
-    lines.append("| 编号 | 标题 | 状态 | 文件 | Issue | 实现 Issues | 实现 PRs |")
-    lines.append("| --- | --- | --- | --- | --- | --- | --- |")
+    lines.append("| 编号 | 标题 | 状态 | 文件 | Issue | 实现 Issues | 实现 PRs | 文档 PRs |")
+    lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
 
     for r in records:
         filename = r['filename']
@@ -290,9 +300,10 @@ def generate_tracking_md(records):
 
         issues_impl = ', '.join(r['issues_impl']) if r['issues_impl'] else '--'
         pr_impl = ', '.join(r['pr_impl']) if r['pr_impl'] else '--'
+        docs_impl = ', '.join(r['docs_impl']) if r['docs_impl'] else '--'
 
         relpath = r.get('relpath', filename)
-        lines.append(f"| {filename} | {title} | {state} | {relpath} | {issue} | {issues_impl} | {pr_impl} |")
+        lines.append(f"| {filename} | {title} | {state} | {relpath} | {issue} | {issues_impl} | {pr_impl} | {docs_impl} |")
 
     lines.append("")
     lines.append("> 此文件由 check-rfc-tracking.py 自动生成，请勿手动修改。")

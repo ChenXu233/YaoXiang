@@ -156,6 +156,15 @@ Draft (草案) → Review (审核中) → Accepted (已接受) → accepted/
 See [RFC Lifecycle](docs/design/rfc/RFC_TEMPLATE.md#lifecycle) for details.
 详见 [RFC 生命周期](docs/design/rfc/RFC_TEMPLATE.md#生命周期与归宿)。
 
+### RFC 实现与文档更新
+
+> **每个被 accepted 的 RFC，其实现 PR 必须包含文档更新。**
+
+- 实现 PR 的 PR template 必须勾选"影响文档，我已更新相关文档"
+- 如果实现 PR 不包含文档更新，必须在 PR 描述中明确说明"不影响文档"并给出理由
+- `scripts/rfc/check_tracking.py` 会自动检查：RFC 的 accepted 状态 + 对应实现 PR 是否包含文档变更
+- 文档更新范围包括：tutorial（如果 RFC 引入新功能）、reference/language-spec（语言规范）、reference/error-code（新增错误码）等
+
 ---
 
 ## Code Standards / 代码规范
@@ -181,6 +190,48 @@ See [RFC Lifecycle](docs/design/rfc/RFC_TEMPLATE.md#lifecycle) for details.
 - Ensure all tests pass / 确保所有测试通过
 
 ---
+
+## Documentation Checklist / 文档更新检查清单
+
+> 每个 PR 在提交前必须问自己一个问题：**"这个改动是否需要更新文档？"**
+>
+> 以下判断标准帮助你快速决策。AI reviewer 会自动检查 PR 的文档影响评估。
+
+### 需要更新文档的情况
+
+| 情形 | 说明 |
+|:----|:-----|
+| 新增/修改了公开 API | 函数签名、类型定义、trait 等对外接口发生变化 |
+| 改变了 CLI 行为 | 新增/删除/修改了命令行参数、子命令、输出格式 |
+| 修改了配置格式或默认值 | `yaoxiang.toml` 等配置文件字段变化 |
+| 新增/删除了功能 | 语言特性、编译器功能、工具链功能的变化 |
+| 修复了文档与行为不一致的 bug | 文档描述与实际行为不符，修复后需同步更新文档 |
+| 新增了错误码或警告码 | 必须更新 `docs/src/reference/error-code/` 或 `warning-code/` |
+
+### 不需要更新文档的情况
+
+| 情形 | 说明 |
+|:----|:-----|
+| 纯 bugfix（不涉及行为描述变更） | 修复了内部逻辑错误，不改变用户可见行为 |
+| 纯重构（不改变外部行为） | 代码重组、性能优化，对外接口不变 |
+| 纯测试补充 | 新增测试用例、修复测试，不涉及文档描述的功能 |
+| 文档自身更新 | 直接修改文档内容，不需要额外说明 |
+| CI/构建工具链变更 | 修改 CI 配置、构建脚本、依赖版本 |
+
+### 自查流程
+
+```
+我的 PR 改了代码
+  ├─ 是否改变了用户可见的行为？
+  │   ├─ 是 → 需要更新文档 → 在 PR template 勾选"已更新"
+  │   └─ 否 → 进入下一步
+  ├─ 是否新增了公开 API？
+  │   ├─ 是 → 需要更新文档 → 在 PR template 勾选"已更新"
+  │   └─ 否 → 进入下一步
+  └─ 以上都不符合 → 在 PR template 勾选"不影响文档"
+```
+
+> **注意**：如果选择了"影响文档但未更新"，CI 会 block 并要求补充理由。
 
 ## Contributor License Agreement / 贡献者许可协议
 
@@ -209,7 +260,7 @@ CLA Assistant bot 会自动在你的 PR 下留言，引导你完成签署。
 | Code is functionally correct | 代码功能正确 |
 | Follows code standards | 符合代码规范 |
 | Has appropriate tests | 有适当的测试 |
-| Documentation is updated | 文档已更新 |
+| Documentation is updated (see [Documentation Checklist](#documentation-checklist--文档更新检查清单)) | 文档已更新（参见[文档更新检查清单](#documentation-checklist--文档更新检查清单)） |
 | No performance regression | 没有引入性能回退 |
 
 ### Responding to Feedback / 响应反馈
