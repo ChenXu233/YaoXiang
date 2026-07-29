@@ -33,7 +33,6 @@ title: 'RFC 索引'
 | -------- | ---------------------------------------------------------------------------------------------------- | --------- | ---------- | ---------------- |
 | RFC-019  | [RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型](./draft/019-typed-homoiconicity.md)       | 晨煦      | 2026-02-20 | 草案             |
 | RFC-028  | [RFC-028：JIT 编译器 — VM 内多级执行引擎](./draft/028-jit-compiler.md)                               | 晨煦      | 2026-06-11 | 草案             |
-| RFC-029  | [RFC-029: 模块语义系统](./draft/029-module-semantics.md)                                             | 晨煦      | 2026-06-13 | 草案             |
 | RFC-031  | [RFC-031：优化级别与 Pass 管理器](./draft/031-optimization-levels.md)                                | 晨煦      | 2026-06-16 | 草案             |
 | RFC-002  | [RFC-002：基于 libuv 的资源类型 IO 实现层](./draft/002-cross-platform-io-libuv.md)                   | 晨煦      | 2025-01-05 | 草案（重新审核） |
 | RFC-026b | [RFC-026b: yx-bindgen 工具链](./draft/026b-yx-bindgen.md)                                            | 晨煦      | 2026-07-03 | 草案             |
@@ -79,6 +78,7 @@ title: 'RFC 索引'
 | RFC-026    | [RFC-026: FFI 核心机制](./accepted/026-ffi-core-mechanism.md)                             | 晨煦    | 2026-06-05 | 已接受    |
 | RFC-027    | [RFC-027：编译期谓词与统一静态验证](./accepted/027-compile-time-evaluation-types.md)      | 晨煦    | 2026-06-07 | 已接受    |
 | RFC-030    | [RFC-030: assert 断言机制](./accepted/030-assert-mechanism.md)                            | 晨煦    | 2026-06-15 | 已接受    |
+| RFC-029    | [RFC-029: 模块语义系统](./accepted/029-module-semantics.md)                               | 晨煦    | 2026-06-13 | 已接受    |
 
 ---
 

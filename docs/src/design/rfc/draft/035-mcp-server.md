@@ -113,7 +113,7 @@ World，AST 改写工具独立新加。
 | `find_references`    | `query: String`, `workspace_root?: String`                                                      | `{locations: Location[]}`                                    | 复用 `lsp::handlers::references`（按 `query` 而非位置）       | v0.8.x      |
 | `typecheck`          | `file_paths: String[]`, `project_root: String`                                                  | `{diagnostics: Diagnostic[], summary: Counts}`               | 复用 `lsp::world::typecheck_full`                             | v0.8.x      |
 | `explain_diagnostic` | `code: String`（如 `E0001`），`lang?: String`                                                   | `{code, category, title, description, example, help}`        | **直接调** `util::diagnostic::command::render_explain_output` | **v0.9.x**  |
-| `list_imports`       | `file_path: String`, `project_root?: String`                                                    | `{imports: [{module, items, is_public}]}`                    | 复用 `middle::passes::module::ModuleGraph::validate_imports`  | **v0.9.x**  |
+| `list_imports`       | `file_path: String`, `project_root?: String`                                                    | `{imports: [{module, items, source_file}]}`                    | 复用 `middle::passes::module::ModuleGraph::validate_imports`  | **v0.9.x**  |
 | `rename_symbol`      | `source: String`, `old_name: String`, `new_name: String`, `scope?: "module" \| "function:name"` | `{source: String, edits: Edit[], diagnostics: Diagnostic[]}` | **新加** `src/middle/rename.rs`（AST 改写）                   | **v0.10.x** |
 
 **8 个工具的边界**：
