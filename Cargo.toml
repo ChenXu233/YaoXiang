@@ -20,7 +20,7 @@ debug = []
 wasm = []
 cli = [
     "tokio", "rustyline", "notify", "lsp-server",
-    "walkdir", "tempfile", "clap", "crossbeam", "rayon",
+    "tempfile", "clap", "crossbeam",
     "tracing-subscriber",
 ]
 
@@ -53,26 +53,16 @@ tracing = { version = "0.1", default-features = false, features = ["std"] }
 tracing-subscriber = { version = "0.3", optional = true }
 
 # 并发和线程安全
-parking_lot = "0.12"
 crossbeam = { version = "0.8", optional = true }
-rayon = { version = "1.12", optional = true }
-
-# 随机数
-rand = "0.10.1"
 
 # 数据结构
-indexmap = "2.14.0"
-hashbrown = "0.17.1"
-smallvec = "1.15.1"
+# ponytail: std::collections covers HashMap/HashSet; indexmap, hashbrown, smallvec unused
 
 # 字符串处理
-regex = "1"
 libloading = "0.9"
-unicode-ident = "1.0.24"
 urlencoding = "2"
 
 # 文件系统
-walkdir = { version = "2", optional = true }
 tempfile = { version = "3.27.0", optional = true }
 notify = { version = "8.2.0", optional = true }
 
@@ -87,8 +77,6 @@ thiserror = "2.0.18"
 
 # 命令行解析
 clap = { version = "4.6.1", features = ["derive"], optional = true }
-
-owo-colors = "4.3.0"
 
 # REPL - 交互式编辑
 rustyline = { version = "18.0.0", features = ["with-file-history", "with-dirs"], optional = true }
@@ -117,8 +105,5 @@ debug = true
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"
 
-# rand → getrandom 在 wasm32 target 上需要 wasm_js feature
-# web-time 用于 wasm32 上替代 std::time::Instant
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { version = "0.4", features = ["wasm_js"] }
 web-time = "1"
