@@ -897,6 +897,7 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             local_names: original_module.local_names.clone(),
             ffi_libs: original_module.ffi_libs.clone(),
             ffi_bindings: original_module.ffi_bindings.clone(),
+            entry_function: original_module.entry_function.clone(),
         }
     }
 }

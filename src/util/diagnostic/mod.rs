@@ -200,6 +200,18 @@ fn format_runtime_stack_trace(
 /// # 返回
 /// 成功返回 `()`，失败返回错误
 #[cfg(feature = "cli")]
+/// RFC-029: 判断文件是否位于一个 yaoxiang 项目内（沿目录向上查找 yaoxiang.toml）。
+fn in_yaoxiang_project(file: &std::path::Path) -> bool {
+    let mut dir = file.parent();
+    while let Some(d) = dir {
+        if d.join("yaoxiang.toml").exists() {
+            return true;
+        }
+        dir = d.parent();
+    }
+    false
+}
+
 pub fn run_file_with_diagnostics(
     file: &std::path::PathBuf,
     debug_info: bool,
@@ -268,8 +280,18 @@ pub fn run_file_with_diagnostics(
         .get(entry_file_id)
         .ok_or_else(|| anyhow::anyhow!("Failed to load source file"))?;
 
-    let mut compiler = Compiler::new();
-    match compiler.compile(&source_file.name, &source_file.content) {
+    // RFC-029: 位于 yaoxiang 项目内的文件走多文件编排器（发现同项目 .yx、构建共享
+    // Registry、逐文件 typecheck、整体编译）；否则按单文件编译。两者都产出 ModuleIR，
+    // 复用下方同一套 codegen + 执行路径（保留 runtime/workers/debug_info 配置）。
+    let module_result: Result<crate::middle::ModuleIR, crate::frontend::CompileError> =
+        if in_yaoxiang_project(file) {
+            crate::frontend::module::orchestrator::compile_project(file)
+                .map_err(|e| crate::frontend::CompileError::Internal(format!("{}", e)))
+        } else {
+            Compiler::new().compile(&source_file.name, &source_file.content)
+        };
+
+    match module_result {
         Ok(module) => {
             // Generate bytecode
             let mut ctx = CodegenContext::new(module);

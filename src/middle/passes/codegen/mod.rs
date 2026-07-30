@@ -200,7 +200,20 @@ impl CodegenContext {
     }
 
     /// 查找入口点
+    ///
+    /// RFC-029：多文件模式下函数名带模块限定名（如 `main.main`），由编排器
+    /// 在 `entry_function` 里给出精确名字；单文件为 None，回退到查找裸名 `main`。
     fn find_entry_point(&self) -> usize {
+        if let Some(ref entry_name) = self.module.entry_function {
+            if let Some(idx) = self
+                .module
+                .functions
+                .iter()
+                .position(|func| &func.name == entry_name)
+            {
+                return idx;
+            }
+        }
         for (idx, func) in self.module.functions.iter().enumerate() {
             if func.name == "main" {
                 return idx;

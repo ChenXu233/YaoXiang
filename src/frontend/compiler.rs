@@ -101,7 +101,13 @@ impl Compiler {
         debug!("{}", t_cur(MSG::CompilingSource, Some(&[&source_len])));
 
         let result = self.pipeline.run(source_name, source);
+        Self::map_pipeline_result(result)
+    }
 
+    /// 将管线结果映射为编译结果（错误分类）。
+    fn map_pipeline_result(
+        result: super::pipeline::CompilationResult
+    ) -> Result<middle::ModuleIR, CompileError> {
         if result.is_success() {
             Ok(result.ir.unwrap())
         } else {

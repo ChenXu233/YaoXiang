@@ -193,6 +193,33 @@ impl TypeChecker {
         self.check_module_impl(module, true)
     }
 
+    /// 仅收集模块的顶层签名（RFC-029 多文件编排）。
+    ///
+    /// 跑 pass1（类型定义）+ pass2（函数/绑定签名），**不检查函数体**。
+    /// 用于在构建 Registry 时提取每个文件顶层绑定的真实 `MonoType`。
+    /// 函数体里的跨文件引用留到完整三遍（pass3）才检查，彼时 Registry 已就绪。
+    pub fn collect_signatures(
+        &mut self,
+        module: &Module,
+    ) {
+        // pass1: 类型定义
+        for stmt in &module.items {
+            if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
+                name,
+                signature_params,
+                definition,
+                ..
+            } = &stmt.kind
+            {
+                self.add_type_definition(name, definition, signature_params, stmt.span);
+            }
+        }
+        // pass2: 函数/绑定签名（使其可被前向引用）
+        for stmt in &module.items {
+            self.collect_function_signature(stmt);
+        }
+    }
+
     /// 检查整个模块的内部实现
     fn check_module_impl(
         &mut self,
@@ -1004,6 +1031,28 @@ impl TypeChecker {
     }
 
     /// 将模块注册为 Struct 类型（包含所有导出作为字段）
+    /// native/未知导出的宽松类型占位（fresh var -> Void）。
+    ///
+    /// ponytail: std native FFI 边界本就丢类型精度，用宽松占位是诚实的永久状态，
+    /// 不是临时 hack。用户模块走 export.mono_type 的完整真实类型。
+    fn loose_native_type(&mut self) -> MonoType {
+        MonoType::Fn {
+            params: vec![self.env.solver().new_var()],
+            return_type: Box::new(MonoType::Void),
+        }
+    }
+
+    /// 导出的注册类型：有真实类型用真实的（用户模块），否则走宽松占位（native）。
+    fn export_register_type(
+        &mut self,
+        export: &crate::frontend::module::Export,
+    ) -> MonoType {
+        export
+            .mono_type
+            .clone()
+            .unwrap_or_else(|| self.loose_native_type())
+    }
+
     fn register_module_as_struct(
         &mut self,
         _module_path: &str,
@@ -1011,12 +1060,9 @@ impl TypeChecker {
         module: &crate::frontend::module::ModuleInfo,
     ) {
         let mut fields = Vec::new();
-        for field_name in module.exports.keys() {
-            let field_ty = MonoType::Fn {
-                params: vec![self.env.solver().new_var()],
-                return_type: Box::new(MonoType::Void),
-            };
-            fields.push((field_name.clone(), field_ty));
+        for export in module.exports.values() {
+            let field_ty = self.export_register_type(export);
+            fields.push((export.name.clone(), field_ty));
         }
         let module_ty = MonoType::Struct(crate::frontend::core::types::mono::StructType {
             name: module_alias.to_string(),
@@ -1050,12 +1096,9 @@ impl TypeChecker {
                 let sub_module_path = export.full_path.clone();
                 let mut fields = Vec::new();
                 if let Some(sub_module) = self.env.module_registry.get(&sub_module_path).cloned() {
-                    for field_name in sub_module.exports.keys() {
-                        let field_ty = MonoType::Fn {
-                            params: vec![self.env.solver().new_var()],
-                            return_type: Box::new(MonoType::Void),
-                        };
-                        fields.push((field_name.clone(), field_ty));
+                    for sub_export in sub_module.exports.values() {
+                        let field_ty = self.export_register_type(sub_export);
+                        fields.push((sub_export.name.clone(), field_ty));
                     }
                 }
                 let module_ty = MonoType::Struct(crate::frontend::core::types::mono::StructType {
@@ -1068,16 +1111,24 @@ impl TypeChecker {
                 });
                 self.env.add_var(register_name, PolyType::mono(module_ty));
             }
+            crate::frontend::module::ExportKind::Type => {
+                // 类型导出：镜像本地类型定义，同时注册到类型空间与值空间，
+                // 使构造（Point(...)）与字段访问（p.x）能解析结构体。
+                if self.env.get_var(&register_name).is_some() {
+                    return;
+                }
+                let ty = self.export_register_type(export);
+                let poly = PolyType::mono(ty);
+                self.env.add_type(register_name.clone(), poly.clone());
+                self.env.add_var(register_name, poly);
+            }
             _ => {
                 // 如果变量已存在（比如已经是 Struct 类型），则跳过
                 if self.env.get_var(&register_name).is_some() {
                     return;
                 }
-                let fn_ty = MonoType::Fn {
-                    params: vec![self.env.solver().new_var()],
-                    return_type: Box::new(MonoType::Void),
-                };
-                self.env.add_var(register_name, PolyType::mono(fn_ty));
+                let ty = self.export_register_type(export);
+                self.env.add_var(register_name, PolyType::mono(ty));
             }
         }
     }

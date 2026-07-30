@@ -497,7 +497,78 @@ impl AstToIrGenerator {
             local_names: std::mem::take(&mut self.module_local_names),
             ffi_libs: std::mem::take(&mut self.ffi_libs),
             ffi_bindings: std::mem::take(&mut self.ffi_bindings),
+            entry_function: None,
         })
+    }
+
+    /// RFC-029 多文件编排：预注册其他文件的类型上下文（结构体字段布局 + 方法绑定），
+    /// 使本文件 IR 生成能解析跨文件的字段索引与方法调用重排。
+    ///
+    /// 仅注册类型上下文，**不生成函数 IR**——各文件的函数与匿名绑定 IR 由
+    /// 各自的 `generate_module_ir` 生成，链接后按名字解析。镜像 `generate_stmt_ir`
+    /// 中 `TypeDefinition` 的结构体上下文注册逻辑。
+    pub fn seed_cross_file_types(
+        &mut self,
+        modules: &[&ast::Module],
+    ) {
+        for module in modules {
+            for stmt in &module.items {
+                if let ast::StmtKind::TypeDefinition {
+                    name, definition, ..
+                } = &stmt.kind
+                {
+                    match definition {
+                        ast::Type::NamedStruct {
+                            name: struct_name,
+                            fields,
+                            ..
+                        } => {
+                            self.struct_definitions
+                                .insert(struct_name.clone(), fields.clone());
+                        }
+                        ast::Type::Struct { body } => {
+                            let fields: Vec<ast::StructField> = body
+                                .iter()
+                                .filter_map(|it| {
+                                    if let ast::TypeBodyItem::Field(f) = it {
+                                        Some(f.clone())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+                            let bindings: Vec<ast::TypeBodyBinding> = body
+                                .iter()
+                                .filter_map(|it| {
+                                    if let ast::TypeBodyItem::Binding(b) = it {
+                                        Some(b.clone())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+                            self.struct_definitions.insert(name.clone(), fields);
+                            self.register_type_bindings(name, &bindings);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    /// RFC-029 多文件编排：登记其他文件定义的全局变量名，使本文件中对跨文件全局的
+    /// 裸名引用解析为 `Call(访问器函数)`，而非误判为未定义（`Load 0`）。
+    ///
+    /// 不生成访问器函数 IR——那由定义该全局的文件各自的 `generate_module_ir` 生成。
+    /// `lookup_global` 只按名字匹配，故 `init_value` 留 `None`。
+    pub fn seed_cross_file_globals(
+        &mut self,
+        globals: &[(String, MonoType)],
+    ) {
+        for (name, ty) in globals {
+            self.global_vars.push((name.clone(), ty.clone(), None));
+        }
     }
 
     /// 生成语句的 IR
@@ -4159,5 +4230,22 @@ pub fn generate_ir(
     result: &crate::frontend::core::typecheck::TypeCheckResult,
 ) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
     let mut generator = AstToIrGenerator::new_with_type_result(result);
+    generator.generate_module_ir(ast)
+}
+
+/// RFC-029 多文件编排：在跨文件上下文下为单个文件生成 IR。
+///
+/// 预注册其他文件的类型布局（`cross_file_types`）与全局变量名（`cross_file_globals`），
+/// 使本文件的跨文件字段访问、方法调用与全局引用能正确解析；随后仅对 `ast`
+/// 这一个文件生成 IR。各文件产出的 `ModuleIR` 由编排器在 IR 层链接。
+pub fn generate_ir_with_context(
+    ast: &crate::frontend::core::parser::ast::Module,
+    result: &crate::frontend::core::typecheck::TypeCheckResult,
+    cross_file_types: &[&crate::frontend::core::parser::ast::Module],
+    cross_file_globals: &[(String, MonoType)],
+) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
+    let mut generator = AstToIrGenerator::new_with_type_result(result);
+    generator.seed_cross_file_types(cross_file_types);
+    generator.seed_cross_file_globals(cross_file_globals);
     generator.generate_module_ir(ast)
 }

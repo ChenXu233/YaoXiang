@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 
 use super::{Export, ExportKind, ModuleError, ModuleInfo, ModuleSource};
+use crate::frontend::core::types::mono::MonoType;
 
 /// 模块注册表
 ///
@@ -62,6 +63,15 @@ impl ModuleRegistry {
         path: &str,
     ) -> Option<&HashMap<String, Export>> {
         self.modules.get(path).map(|m| &m.exports)
+    }
+
+    /// 获取所有模块的方法绑定（RFC-029 跨文件方法调用）。
+    pub fn all_method_bindings(&self) -> HashMap<String, MonoType> {
+        let mut bindings = HashMap::new();
+        for module in self.modules.values() {
+            bindings.extend(module.method_bindings.clone());
+        }
+        bindings
     }
 
     /// 解析模块路径，查找指定的导出项
@@ -200,6 +210,7 @@ impl ModuleRegistry {
                 full_path: module_info.path.clone(),
                 kind: ExportKind::SubModule,
                 signature: "Module".to_string(),
+                mono_type: None,
             });
 
             // 注册模块信息

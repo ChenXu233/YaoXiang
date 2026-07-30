@@ -230,6 +230,7 @@ pub trait StdModule {
                 full_path: export.native_name.to_string(),
                 kind,
                 signature: export.signature.to_string(),
+                mono_type: None,
             });
         }
 
@@ -240,6 +241,7 @@ pub trait StdModule {
                 full_path: format!("{}.{}", self.module_path(), export.name),
                 kind: ExportKind::Type,
                 signature: format!("({}) -> Type", export.params.join(", ")),
+                mono_type: None,
             });
         }
 

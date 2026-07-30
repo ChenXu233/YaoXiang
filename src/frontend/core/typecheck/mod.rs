@@ -108,6 +108,8 @@ fn check_module_inner(
         for (name, poly) in &ext_env.types {
             checker.env().add_type(name.clone(), poly.clone());
         }
+        // RFC-029: 继承外部环境的模块注册表（多文件编排预构建的用户模块）
+        checker.env().module_registry = ext_env.module_registry.clone();
     }
 
     // 执行模块检查

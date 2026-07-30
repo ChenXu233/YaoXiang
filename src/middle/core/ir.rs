@@ -601,4 +601,6 @@ pub struct ModuleIR {
     pub ffi_libs: Vec<FfiLibBinding>,
     /// FFI 绑定 — 不透明类型或外部函数
     pub ffi_bindings: Vec<FfiBinding>,
+    /// RFC-029: 入口函数的完整限定名（多文件模式）。None 时回退到查找 "main"。
+    pub entry_function: Option<String>,
 }

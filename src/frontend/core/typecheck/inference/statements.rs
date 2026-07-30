@@ -278,6 +278,7 @@ impl StatementChecker {
                 .get(&export.full_path)
                 .cloned()
                 .or_else(|| self.native_signatures.get(&export.name).cloned())
+                .or_else(|| export.mono_type.clone())
                 .unwrap_or_else(|| self.default_callable_type()),
         }
     }
