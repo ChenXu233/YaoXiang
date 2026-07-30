@@ -1,4 +1,4 @@
-//! Type annotation parsing and extension trait
+//! Type annotation parsing
 //!
 //! Implements parsing for:
 //! - Type annotations: `name: Type`
@@ -8,9 +8,6 @@
 //! - Named struct types: `Name(x: Type, y: Type)`
 //! - Constructor types: `Name(Type1, Type2)` — the ONLY generic application syntax
 //! - Meta types: `Type`
-//!
-//! Also provides `TypeStatementParser` trait so callers can use
-//! `state.parse_type_annotation()` instead of the free function.
 
 use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::ast::*;
@@ -19,14 +16,9 @@ use crate::frontend::core::parser::{ParserState, BP_LOWEST};
 use crate::frontend::core::parser::parse_msg;
 use crate::util::span::Span;
 
-/// Extension trait providing `.parse_type_annotation()` on ParserState.
-pub trait TypeStatementParser {
+impl ParserState<'_> {
     /// Parse a type annotation
-    fn parse_type_annotation(&mut self) -> Option<Type>;
-}
-
-impl TypeStatementParser for ParserState<'_> {
-    fn parse_type_annotation(&mut self) -> Option<Type> {
+    pub fn parse_type_annotation(&mut self) -> Option<Type> {
         parse_type_annotation(self)
     }
 }

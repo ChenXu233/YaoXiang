@@ -155,6 +155,7 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::KwBreak) => parse_break_stmt(self, ss),
             Some(TokenKind::KwContinue) => parse_continue_stmt(self, ss),
             Some(TokenKind::KwFor) => parse_for_stmt(self, ss),
+            Some(TokenKind::KwWhile) => parse_while_stmt(self, ss),
             Some(TokenKind::KwIf) => parse_if_stmt(self, ss),
             Some(TokenKind::LBrace) => parse_block_stmt(self, ss),
             Some(TokenKind::KwMut) => parse_var_stmt(self, ss),

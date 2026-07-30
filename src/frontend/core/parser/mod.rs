@@ -9,7 +9,6 @@ pub mod statements;
 pub mod tests;
 
 pub use parser_state::{ParserState, parse_msg};
-pub use statements::StatementParser;
 pub use pratt::*;
 pub use ast::*;
 pub use crate::frontend::core::lexer::tokens::*;

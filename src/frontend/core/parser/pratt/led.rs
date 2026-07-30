@@ -7,20 +7,10 @@ use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::parser::{ParserState};
 use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::frontend::core::parser::pratt::precedence::*;
-use crate::frontend::core::parser::statements::TypeStatementParser;
 
-/// Extension trait for infix parsing
-pub trait InfixParser {
+impl<'a> ParserState<'a> {
     /// Parse infix expression with given left binding power
-    fn parse_infix(
-        &mut self,
-        lhs: Expr,
-        bp: u8,
-    ) -> Option<Expr>;
-}
-
-impl<'a> InfixParser for ParserState<'a> {
-    fn parse_infix(
+    pub fn parse_infix(
         &mut self,
         lhs: Expr,
         bp: u8,

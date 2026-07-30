@@ -9,14 +9,9 @@ use crate::frontend::core::parser::pratt::precedence::*;
 use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::span::Span;
 
-/// Extension trait for prefix parsing
-pub trait PrefixParser {
+impl<'a> ParserState<'a> {
     /// Parse prefix expression at current position
-    fn parse_prefix(&mut self) -> Option<Expr>;
-}
-
-impl<'a> PrefixParser for ParserState<'a> {
-    fn parse_prefix(&mut self) -> Option<Expr> {
+    pub fn parse_prefix(&mut self) -> Option<Expr> {
         self.prefix_info().and_then(|(_bp, parser_fn)| {
             // For now, just call the parser function directly
             parser_fn(self)
