@@ -252,7 +252,6 @@ fn standard_runtime_nested_spawn() {
     let mut rt = Runtime::new(RuntimeConfig {
         mode: RuntimeMode::Standard,
         workers: 2,
-        ..RuntimeConfig::default()
     })
     .unwrap();
 

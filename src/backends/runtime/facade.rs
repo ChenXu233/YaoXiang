@@ -141,7 +141,7 @@ pub struct Runtime {
 enum RuntimeInner {
     Embedded(EmbeddedRuntime),
     #[cfg(not(target_arch = "wasm32"))]
-    Standard(StandardRuntime),
+    Standard(Box<StandardRuntime>),
 }
 
 impl Runtime {
@@ -153,7 +153,7 @@ impl Runtime {
                 if config.workers == 0 {
                     return Err(RuntimeFacadeError::InvalidConfig("workers must be >= 1"));
                 }
-                RuntimeInner::Standard(StandardRuntime::new(config.workers)?)
+                RuntimeInner::Standard(Box::new(StandardRuntime::new(config.workers)?))
             }
             #[cfg(target_arch = "wasm32")]
             _ => {
