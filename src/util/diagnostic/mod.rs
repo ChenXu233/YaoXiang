@@ -39,7 +39,7 @@ pub use command::render_explain_output;
 pub use command::{run_check_command_once, run_check_watch_command};
 pub use emitter::{TextEmitter, JsonEmitter, EmitterConfig};
 pub use error::{Diagnostic, Severity};
-pub use result::{Result, ResultExt};
+pub use result::Result;
 pub use suggest::SuggestionEngine;
 
 // 渲染器

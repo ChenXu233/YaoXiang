@@ -24,16 +24,6 @@ pub enum TypeLevelValue {
     Type(MonoType),
 }
 
-/// 类型级运算 trait
-pub trait TypeLevelOps {
-    /// 执行运算
-    fn op(
-        &self,
-        lhs: &TypeLevelValue,
-        rhs: Option<&TypeLevelValue>,
-    ) -> Option<TypeLevelValue>;
-}
-
 /// 预定义的类型级常量
 pub mod constants {
     use super::*;

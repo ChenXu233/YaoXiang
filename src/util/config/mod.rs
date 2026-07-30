@@ -277,8 +277,6 @@ pub fn load_user_config() -> Result<UserConfig, ConfigError> {
 pub enum ConfigError {
     IoError(std::io::Error),
     ParseError(toml::de::Error),
-    SerializeError(toml::ser::Error),
-    NoConfigDir,
 }
 
 impl std::fmt::Display for ConfigError {
@@ -289,8 +287,6 @@ impl std::fmt::Display for ConfigError {
         match self {
             ConfigError::IoError(e) => write!(f, "IO error: {}", e),
             ConfigError::ParseError(e) => write!(f, "Config parse error: {}", e),
-            ConfigError::SerializeError(e) => write!(f, "Config serialize error: {}", e),
-            ConfigError::NoConfigDir => write!(f, "Cannot determine config directory"),
         }
     }
 }

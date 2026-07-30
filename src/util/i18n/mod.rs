@@ -74,30 +74,6 @@ pub fn get_i18n_config() -> &'static ConfigI18n {
 /// Translation table loaded from JSON
 type TranslationMap = HashMap<String, String>;
 
-/// Load translations from a specific JSON file
-#[allow(dead_code)]
-/// 加载翻译文件（容错：跳过非 string 值）
-fn load_translation_file(path: &std::path::Path) -> TranslationMap {
-    match std::fs::read_to_string(path) {
-        Ok(content) => {
-            let raw: HashMap<String, serde_json::Value> =
-                serde_json::from_str(&content).unwrap_or_default();
-
-            // 只保留 string 类型的值
-            raw.into_iter()
-                .filter_map(|(k, v)| {
-                    if let serde_json::Value::String(s) = v {
-                        Some((k, s))
-                    } else {
-                        None // 跳过 _meta 等非 string 值
-                    }
-                })
-                .collect()
-        }
-        Err(_) => HashMap::new(),
-    }
-}
-
 /// Load translations from a JSON string (used for compile-time embedded locales)
 /// 从 JSON 字符串加载翻译（用于编译期嵌入的 locale）
 #[allow(clippy::collapsible_match)]

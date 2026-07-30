@@ -198,15 +198,6 @@ impl CompilationResult {
     }
 }
 
-/// 编译进度回调
-pub trait ProgressCallback: Send + Sync {
-    fn on_progress(
-        &self,
-        state: PipelineState,
-        progress: f64,
-    );
-}
-
 use std::fmt;
 
 /// 编译流水线
