@@ -8,7 +8,9 @@ use std::fmt;
 use std::sync::Arc;
 use crate::backends::{Executor, ExecutorResult, ExecutorError, ExecutionState, ExecutorConfig};
 use crate::backends::common::{RuntimeValue, Heap, HeapValue};
-use crate::backends::common::value::{AsyncState, AsyncValue, FunctionValue, TaskId, ValueType};
+use crate::backends::common::value::{
+    AsyncState, AsyncValue, FunctionId, FunctionValue, TaskId, ValueType,
+};
 use crate::middle::bytecode::{BytecodeFunction, Reg, Label, BinaryOp, CompareOp, ConstValue};
 use crate::backends::interpreter::Frame;
 use crate::backends::interpreter::ffi::FfiRegistry;
@@ -30,7 +32,6 @@ const DEFAULT_MAX_STACK_DEPTH: usize = 1024;
 /// Safety: `drive_until` blocks until all tasks complete, so the data outlives all tasks.
 /// Data is read-only after creation, so no data races.
 pub(super) struct SharedState {
-    pub functions: HashMap<String, BytecodeFunction>,
     pub functions_by_id: Vec<BytecodeFunction>,
     pub constants: Vec<ConstValue>,
     pub type_table: Vec<crate::middle::core::ir::Type>,
@@ -66,7 +67,7 @@ unsafe impl Sync for SendPtr {}
 #[derive(Debug)]
 pub enum InterpreterTask {
     Static {
-        func_name: String,
+        func_id: FunctionId,
         args: Vec<RuntimeValue>,
     },
     Native {
@@ -93,9 +94,7 @@ pub struct Interpreter {
     pub(super) call_stack: Vec<Frame>,
     /// Constant pool (shared across modules)
     pub(super) constants: Vec<ConstValue>,
-    /// Function table (name -> function)
-    pub(super) functions: HashMap<String, BytecodeFunction>,
-    /// Function table by index (for closure calls via func_id)
+    /// 函数表（按索引分发：CallStatic / MakeClosure / CallDyn 全部走这里）
     pub(super) functions_by_id: Vec<BytecodeFunction>,
     /// 类型 vtable 缓存（type_name → 方法表）。每类型的 vtable 只构建一次，
     /// 消除「每次 CreateStruct 都 O(n) 扫函数表 + 向 functions_by_id 重复追加」的浪费与泄漏。
@@ -136,7 +135,6 @@ impl fmt::Debug for Interpreter {
             .field("heap", &self.heap)
             .field("call_stack", &self.call_stack)
             .field("constants", &self.constants)
-            .field("functions", &self.functions)
             .field("functions_by_id", &self.functions_by_id)
             .field("type_table", &self.type_table)
             .field("state", &self.state)
@@ -176,7 +174,6 @@ impl Interpreter {
             heap: Heap::new(),
             call_stack: Vec::with_capacity(DEFAULT_MAX_STACK_DEPTH),
             constants: Vec::new(),
-            functions: HashMap::new(),
             functions_by_id: Vec::new(),
             vtable_cache: HashMap::new(),
             type_table: Vec::new(),
@@ -208,33 +205,29 @@ impl Interpreter {
         // 主解释器通过 drive_until 阻塞直到所有任务完成，保证数据在任务期间有效。
         // 数据在创建后只读，无数据竞争。
         // 如果 shared 为空（例如 execute_module 未调用），使用空数据。
-        let (constants, functions, functions_by_id, type_table, vtable_cache, ffi) =
-            if shared.is_null() {
-                (
-                    Vec::new(),
-                    HashMap::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    HashMap::new(),
-                    FfiRegistry::new(),
-                )
-            } else {
-                let shared_ref = unsafe { &*shared };
-                (
-                    shared_ref.constants.clone(),
-                    shared_ref.functions.clone(),
-                    shared_ref.functions_by_id.clone(),
-                    shared_ref.type_table.clone(),
-                    shared_ref.vtable_cache.clone(),
-                    shared_ref.ffi.clone(),
-                )
-            };
+        let (constants, functions_by_id, type_table, vtable_cache, ffi) = if shared.is_null() {
+            (
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                HashMap::new(),
+                FfiRegistry::new(),
+            )
+        } else {
+            let shared_ref = unsafe { &*shared };
+            (
+                shared_ref.constants.clone(),
+                shared_ref.functions_by_id.clone(),
+                shared_ref.type_table.clone(),
+                shared_ref.vtable_cache.clone(),
+                shared_ref.ffi.clone(),
+            )
+        };
 
         Self {
             heap: Heap::new(),
             call_stack: Vec::with_capacity(DEFAULT_MAX_STACK_DEPTH),
             constants,
-            functions,
             functions_by_id,
             vtable_cache,
             type_table,
@@ -494,9 +487,7 @@ impl Interpreter {
         task: InterpreterTask,
     ) -> TaskResult {
         let exec_result = match task {
-            InterpreterTask::Static { func_name, args } => {
-                self.call_static_by_name(&func_name, &args)
-            }
+            InterpreterTask::Static { func_id, args } => self.call_static_by_id(func_id, &args),
             InterpreterTask::Native { func_name, args } => {
                 self.call_native_by_name(&func_name, &args)
             }
@@ -782,29 +773,17 @@ impl Interpreter {
             .map_err(|e| e.with_stack(stack))
     }
 
-    pub(super) fn call_static_by_name(
+    /// 按函数表索引调用字节码函数（CallStatic 的唯一分发路径）。
+    pub(super) fn call_static_by_id(
         &mut self,
-        func_name: &str,
+        func_id: FunctionId,
         call_args: &[RuntimeValue],
     ) -> ExecutorResult<RuntimeValue> {
         let mut resolved = Vec::with_capacity(call_args.len());
         for arg in call_args {
             resolved.push(self.force_value_clone(arg)?);
         }
-
-        if self.ffi.has(func_name) {
-            return self.call_native_by_name(func_name, &resolved);
-        }
-
-        if let Some(target_func) = self.functions.get(func_name).cloned() {
-            self.execute_function(&target_func, &resolved)
-        } else {
-            let stack = self.capture_stack();
-            Err(ExecutorError::function_not_found(
-                func_name.to_string(),
-                stack,
-            ))
-        }
+        self.call_function_by_id(func_id, &resolved)
     }
 
     /// Execute a binary operation

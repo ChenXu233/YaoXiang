@@ -29,14 +29,19 @@ impl Executor for Interpreter {
             tlog!(debug, MSG::DebugLoadingFunction, &func.name);
             let func_id = FunctionId(self.functions_by_id.len() as u32);
             name_to_id.insert(func.name.clone(), func_id);
-            self.functions.insert(func.name.clone(), func.clone());
             self.functions_by_id.push(func.clone());
         }
-        tlog!(debug, MSG::DebugTotalFunctions, &self.functions.len());
+        tlog!(debug, MSG::DebugTotalFunctions, &self.functions_by_id.len());
         tlog!(
             debug,
             MSG::DebugAvailableFunctions,
-            &format!("{:?}", self.functions.keys().collect::<Vec<_>>())
+            &format!(
+                "{:?}",
+                self.functions_by_id
+                    .iter()
+                    .map(|f| &f.name)
+                    .collect::<Vec<_>>()
+            )
         );
 
         // 从字节码的编译期 vtables 段构建 vtable 缓存：type_name → [(裸方法名, FunctionValue)]。
@@ -67,7 +72,6 @@ impl Executor for Interpreter {
 
         // Create shared state for parallel task execution
         let shared = Box::new(SharedState {
-            functions: self.functions.clone(),
             functions_by_id: self.functions_by_id.clone(),
             constants: self.constants.clone(),
             type_table: self.type_table.clone(),

@@ -8,7 +8,7 @@
 //! - MonoType::Ref -> IrType::Void conversion
 
 use crate::middle::core::bytecode::{
-    BinaryOp, BytecodeInstr, BytecodeModule, CompareOp, FunctionRef, Label, Reg, UnaryOp,
+    BinaryOp, BytecodeInstr, BytecodeModule, CompareOp, Label, Reg, UnaryOp,
 };
 use crate::middle::core::ir::{ConstValue, Type as IrType};
 use crate::backends::common::Opcode;

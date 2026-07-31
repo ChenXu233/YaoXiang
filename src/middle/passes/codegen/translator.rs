@@ -13,7 +13,7 @@ use crate::middle::passes::codegen::operand::OperandResolver;
 use crate::middle::passes::codegen::{BytecodeInstruction};
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::{DebugSpan, FileId, Span};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 /// FFI 函数元数据 — 机制/库/符号
 #[derive(Debug, Clone)]
@@ -37,8 +37,6 @@ pub struct Translator {
     operand_resolver: OperandResolver,
     /// 当前函数
     current_function: Option<FunctionIR>,
-    /// 已注册的 native 函数名集合
-    native_functions: HashSet<String>,
     /// 闭包函数的索引偏移量（用于计算闭包函数在模块中的正确索引）
     closure_function_offset: Option<usize>,
     /// 函数名到索引的映射
@@ -56,13 +54,10 @@ pub struct Translator {
 impl Translator {
     /// 创建新的翻译器
     pub fn new() -> Self {
-        let native_functions = HashSet::new();
-
         Translator {
             emitter: Emitter::new(),
             operand_resolver: OperandResolver::new(),
             current_function: None,
-            native_functions,
             ffi_func_meta: HashMap::new(),
             closure_function_offset: None,
             function_name_to_idx: None,
@@ -85,22 +80,6 @@ impl Translator {
         self.source_file_id = file_id;
     }
 
-    /// 注册一个 native 函数名
-    pub fn register_native(
-        &mut self,
-        name: &str,
-    ) {
-        self.native_functions.insert(name.to_string());
-    }
-
-    /// 检查函数是否是 native 函数
-    pub fn is_native(
-        &self,
-        name: &str,
-    ) -> bool {
-        self.native_functions.contains(name)
-    }
-
     /// 添加常量（用于测试）
     pub fn test_add_constant(
         &mut self,
@@ -114,7 +93,7 @@ impl Translator {
         &mut self,
         module: &ModuleIR,
     ) -> Result<TranslatorOutput, Diagnostic> {
-        // 消费 FFI 函数绑定 — 注册 native 函数名并存储元数据
+        // 消费 FFI 函数绑定 — 存储 mechanism/lib/symbol 元数据
         for binding in &module.ffi_bindings {
             if let crate::middle::core::ir::FfiBinding::FuncBinding {
                 func_name,
@@ -122,7 +101,6 @@ impl Translator {
                 symbol,
             } = binding
             {
-                self.register_native(func_name);
                 if let Some(lib) = module.ffi_libs.get(*lib_id) {
                     self.ffi_func_meta.insert(
                         func_name.clone(),
@@ -681,26 +659,40 @@ impl Translator {
             0
         };
 
-        // 检查是否是 native 函数调用
         let func_name = match func {
             Operand::Const(ConstValue::String(name)) => Some(name.clone()),
             _ => None,
         };
 
-        // 命名空间解析：如果函数名不是已知的 native 函数，
-        // 尝试通过短名称映射获取完整名称
-        let is_native = func_name
+        // 三类调用目标：
+        // 1. ExternRef FFI（ffi_func_meta 携带 mechanism/lib/symbol）→ CallNative 带元数据
+        // 2. 字节码函数（function_name_to_idx 命中）→ CallStatic 携带函数表索引
+        // 3. std 原生/外部名 → CallNative 无元数据（解释器按名走 FFI 注册表）
+        let ffi_meta = func_name
             .as_ref()
-            .map(|n| self.is_native(n))
-            .unwrap_or(false);
+            .and_then(|n| self.ffi_func_meta.get(n).cloned());
+        let bytecode_idx = func_name.as_ref().and_then(|n| {
+            self.function_name_to_idx
+                .as_ref()
+                .and_then(|m| m.get(n).copied())
+        });
 
-        let func_id = match func {
-            Operand::Const(ConstValue::Int(i)) => *i as u32,
-            Operand::Const(ConstValue::String(name)) => {
-                let const_idx = self.emitter.add_constant(ConstValue::String(name.clone()));
-                const_idx as u32
+        let (opcode, func_id) = if ffi_meta.is_some() {
+            let const_idx = self
+                .emitter
+                .add_constant(ConstValue::String(func_name.clone().unwrap()));
+            (Opcode::CallNative, const_idx as u32)
+        } else if let Some(idx) = bytecode_idx {
+            (Opcode::CallStatic, idx as u32)
+        } else {
+            match func {
+                Operand::Const(ConstValue::Int(i)) => (Opcode::CallStatic, *i as u32),
+                Operand::Const(ConstValue::String(name)) => {
+                    let const_idx = self.emitter.add_constant(ConstValue::String(name.clone()));
+                    (Opcode::CallNative, const_idx as u32)
+                }
+                _ => (Opcode::CallStatic, 0),
             }
-            _ => 0,
         };
         let base_arg_reg = if let Some(first_arg) = args.first() {
             self.operand_resolver.to_reg(first_arg)?
@@ -711,7 +703,7 @@ impl Translator {
         operands.extend_from_slice(&func_id.to_le_bytes());
         operands.push(base_arg_reg);
         // 对 FFI 函数，在 func_name_idx 后追加 mechanism/lib/symbol 的常量池索引
-        if let Some(meta) = func_name.as_ref().and_then(|n| self.ffi_func_meta.get(n)) {
+        if let Some(meta) = &ffi_meta {
             let mech_idx = self
                 .emitter
                 .add_constant(ConstValue::String(meta.mechanism.clone()));
@@ -730,13 +722,6 @@ impl Translator {
             let arg_reg = self.operand_resolver.to_reg(arg)?;
             operands.extend_from_slice(&(arg_reg as u16).to_le_bytes());
         }
-
-        // 根据是否是 native 函数选择操作码
-        let opcode = if is_native {
-            Opcode::CallNative
-        } else {
-            Opcode::CallStatic
-        };
 
         Ok(BytecodeInstruction::new(opcode, operands))
     }

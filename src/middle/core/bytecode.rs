@@ -118,20 +118,6 @@ pub enum CompareOp {
     Ge,
 }
 
-/// Function reference
-#[derive(Debug, Clone)]
-pub enum FunctionRef {
-    /// Static function reference by name
-    Static {
-        /// Module name (empty for current module)
-        module: String,
-        /// Function name
-        name: String,
-    },
-    /// Reference by index (after linking)
-    Index(u32),
-}
-
 /// Bytecode instruction
 ///
 /// This is the low-level instruction format. Each instruction has:
@@ -373,7 +359,8 @@ pub enum BytecodeInstr {
     /// Static dispatch call
     CallStatic {
         dst: Option<Reg>,
-        func: FunctionRef,
+        /// 函数表索引（codegen 期解析，解释器按 functions_by_id 直接分发）
+        func: u32,
         args: Vec<Reg>,
     },
 
@@ -406,7 +393,8 @@ pub enum BytecodeInstr {
     /// Create closure
     MakeClosure {
         dst: Reg,
-        func: FunctionRef,
+        /// 函数表索引（codegen 期解析）
+        func: u32,
         env: Vec<Reg>,
     },
 
@@ -1132,9 +1120,6 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     let _base_arg_reg = instr.operands[5];
                                     let arg_count = instr.operands[6] as usize;
 
-                                    // Create function reference from func_id
-                                    let func_ref = FunctionRef::Index(func_id);
-
                                     // Parse arguments
                                     let mut args = Vec::new();
                                     for i in 0..arg_count {
@@ -1154,7 +1139,7 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     let dst_reg = Some(Reg(dst));
                                     let call_instr = BytecodeInstr::CallStatic {
                                         dst: dst_reg,
-                                        func: func_ref,
+                                        func: func_id,
                                         args,
                                     };
                                     decoded_instructions.push(call_instr);
@@ -1767,7 +1752,7 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
 
                                     decoded_instructions.push(BytecodeInstr::MakeClosure {
                                         dst: Reg(dst),
-                                        func: FunctionRef::Index(func_id),
+                                        func: func_id,
                                         env,
                                     });
                                 } else {

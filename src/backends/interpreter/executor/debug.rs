@@ -5,7 +5,8 @@
 
 use crate::backends::{DebuggableExecutor, ExecutorError, ExecutorResult};
 use crate::backends::common::RuntimeValue;
-use crate::middle::bytecode::{BytecodeInstr, FunctionRef, ConstValue, Label, Reg};
+use crate::middle::bytecode::{BytecodeInstr, ConstValue, Label, Reg};
+use crate::backends::common::value::FunctionId;
 use super::executor::Interpreter;
 use crate::backends::interpreter::Frame;
 
@@ -311,19 +312,15 @@ impl Interpreter {
             // ── Function calls ──────────────────────────────────
             BytecodeInstr::CallStatic {
                 dst,
-                func: func_ref,
+                func: func_idx,
                 args: arg_regs,
             } => {
-                let func_name = match func_ref {
-                    FunctionRef::Static { name, .. } => name.clone(),
-                    FunctionRef::Index(idx) => {
-                        if let Some(ConstValue::String(s)) = self.constants.get(*idx as usize) {
-                            s.clone()
-                        } else {
-                            format!("fn_{}", idx)
-                        }
-                    }
-                };
+                let func_id = FunctionId(*func_idx);
+                let func_label = self
+                    .functions_by_id
+                    .get(*func_idx as usize)
+                    .map(|f| f.name.clone())
+                    .unwrap_or_else(|| format!("fn_{}", func_idx));
 
                 let call_args: Vec<RuntimeValue> = arg_regs
                     .iter()
@@ -338,7 +335,7 @@ impl Interpreter {
                 let runtime = self.runtime_config.runtime;
 
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
-                    let result = self.call_static_by_name(&func_name, &call_args)?;
+                    let result = self.call_static_by_id(func_id, &call_args)?;
                     if let Some(dst_reg) = dst {
                         frame.set_slot(dst_reg.index() as usize, result);
                     }
@@ -349,30 +346,17 @@ impl Interpreter {
                 use crate::backends::runtime::engine::{ResourceKey, TaskMeta};
                 use std::sync::Arc;
 
-                let is_ffi = self.ffi.has(&func_name);
                 let deps = self.deps_from_args(&call_args);
-                let resources = if is_ffi {
-                    vec![ResourceKey::from("ffi")]
-                } else {
-                    Vec::new()
-                };
 
                 let task_id = self.schedule_task(
-                    if is_ffi {
-                        super::executor::InterpreterTask::Native {
-                            func_name: func_name.clone(),
-                            args: call_args.clone(),
-                        }
-                    } else {
-                        super::executor::InterpreterTask::Static {
-                            func_name: func_name.clone(),
-                            args: call_args.clone(),
-                        }
+                    super::executor::InterpreterTask::Static {
+                        func_id,
+                        args: call_args.clone(),
                     },
                     TaskMeta {
                         deps,
-                        resources,
-                        label: Some(Arc::<str>::from(func_name.as_str())),
+                        resources: Vec::<ResourceKey>::new(),
+                        label: Some(Arc::<str>::from(func_label.as_str())),
                     },
                 )?;
 
@@ -1070,42 +1054,18 @@ impl Interpreter {
             // ── Closures ────────────────────────────────────────
             BytecodeInstr::MakeClosure {
                 dst,
-                func: func_ref,
+                func: func_idx,
                 env,
             } => {
-                let func_id = match func_ref {
-                    FunctionRef::Static { name, .. } => {
-                        if let Some((idx, _)) = self
-                            .functions_by_id
-                            .iter()
-                            .enumerate()
-                            .find(|(_, f)| f.name == *name)
-                        {
-                            crate::backends::common::value::FunctionId(idx as u32)
-                        } else if let Some(func) = self.functions.get(name.as_str()) {
-                            let idx = self.functions_by_id.len();
-                            self.functions_by_id.push(func.clone());
-                            crate::backends::common::value::FunctionId(idx as u32)
-                        } else {
-                            eprintln!(
-                                "[warn] Closure: function '{}' not found, fallback to id 0",
-                                name
-                            );
-                            crate::backends::common::value::FunctionId(0)
-                        }
-                    }
-                    FunctionRef::Index(idx) => {
-                        if (*idx as usize) < self.functions_by_id.len() {
-                            crate::backends::common::value::FunctionId(*idx)
-                        } else {
-                            eprintln!(
-                                "[warn] Closure: function index {} out of range ({}), fallback to id 0",
-                                idx,
-                                self.functions_by_id.len()
-                            );
-                            crate::backends::common::value::FunctionId(0)
-                        }
-                    }
+                let func_id = if (*func_idx as usize) < self.functions_by_id.len() {
+                    FunctionId(*func_idx)
+                } else {
+                    eprintln!(
+                        "[warn] Closure: function index {} out of range ({}), fallback to id 0",
+                        func_idx,
+                        self.functions_by_id.len()
+                    );
+                    FunctionId(0)
                 };
                 let captured_env: Vec<RuntimeValue> = env
                     .iter()
