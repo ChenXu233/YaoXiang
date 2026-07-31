@@ -5,9 +5,10 @@
 //!
 //! # 模块结构
 //!
-//! - [`registry`] - 模块注册表
-//! - [`resolver`] - 模块路径解析
-//! - [`loader`] - 模块加载器
+//! - [`registry`] - 模块注册表（拥有项目级符号表）
+//! - [`symbol`] - DefId 符号表（绑定身份 + 静态 vtable）
+//! - [`resolver`] - 名字解析器（名字 → 限定名 → DefId 的唯一所有者）
+//! - [`orchestrator`] - 多文件编译编排
 //!
 //! # 设计目标
 //!
@@ -17,6 +18,7 @@
 
 pub mod orchestrator;
 pub mod registry;
+pub mod resolver;
 pub mod symbol;
 
 use std::collections::HashMap;
