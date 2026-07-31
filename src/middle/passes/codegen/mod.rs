@@ -164,6 +164,30 @@ impl CodegenContext {
         let type_count = type_table.len();
         debug!("{}", t(MSG::CodegenTypeTable, lang, Some(&[&type_count])));
 
+        // 3.5 编译期构建类型方法表（vtables）：按函数表顺序把方法分组到所属类型。
+        // 解释器加载期据此直接查表，删除运行时按 `{type}.` 前缀扫描函数表的开销。
+        let type_names: Vec<String> = self
+            .module
+            .functions
+            .iter()
+            .filter(|f| f.is_type_decl())
+            .map(|f| f.name.clone())
+            .collect();
+        let mut vtables: Vec<(String, Vec<String>)> = Vec::new();
+        for t in &type_names {
+            let prefix = format!("{}.", t);
+            let methods: Vec<String> = self
+                .module
+                .functions
+                .iter()
+                .filter(|f| !f.is_type_decl() && f.name.starts_with(&prefix))
+                .map(|f| f.name.clone())
+                .collect();
+            if !methods.is_empty() {
+                vtables.push((t.clone(), methods));
+            }
+        }
+
         // 4. 生成文件头
         let header = self.generate_header();
 
@@ -173,6 +197,7 @@ impl CodegenContext {
             type_table,
             const_pool,
             code_section: output.code_section,
+            vtables,
             debug_section: None,
         })
     }
@@ -286,4 +311,4 @@ pub use bytecode::FunctionCode;
 
 /// 常量定义
 pub const YAOXIANG_MAGIC: u32 = 0x59584243;
-pub const BYTECODE_VERSION: u32 = 3;
+pub const BYTECODE_VERSION: u32 = bytecode::VERSION;

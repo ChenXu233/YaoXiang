@@ -754,6 +754,9 @@ pub struct BytecodeModule {
     pub functions: Vec<BytecodeFunction>,
     /// Type table
     pub type_table: Vec<crate::middle::core::ir::Type>,
+    /// 编译期类型方法表（type_name → [method 函数全名]）。
+    /// 解释器加载期据此构建 vtable，删除运行时前缀扫描。
+    pub vtables: Vec<(String, Vec<String>)>,
     /// Global variables
     pub globals: Vec<GlobalInfo>,
     /// Entry point function index
@@ -781,6 +784,7 @@ impl BytecodeModule {
             constants: Vec::new(),
             functions: Vec::new(),
             type_table: Vec::new(),
+            vtables: Vec::new(),
             globals: Vec::new(),
             entry_point: None,
         }
@@ -1874,6 +1878,7 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
             constants: file.const_pool,
             functions,
             type_table: file.type_table.into_iter().map(|t| t.into()).collect(),
+            vtables: file.vtables,
             globals: Vec::new(), // Not stored in BytecodeFile yet
             entry_point,
         }

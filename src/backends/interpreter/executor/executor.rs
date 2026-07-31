@@ -8,9 +8,7 @@ use std::fmt;
 use std::sync::Arc;
 use crate::backends::{Executor, ExecutorResult, ExecutorError, ExecutionState, ExecutorConfig};
 use crate::backends::common::{RuntimeValue, Heap, HeapValue};
-use crate::backends::common::value::{
-    AsyncState, AsyncValue, FunctionValue, FunctionId, TaskId, ValueType,
-};
+use crate::backends::common::value::{AsyncState, AsyncValue, FunctionValue, TaskId, ValueType};
 use crate::middle::bytecode::{BytecodeFunction, Reg, Label, BinaryOp, CompareOp, ConstValue};
 use crate::backends::interpreter::Frame;
 use crate::backends::interpreter::ffi::FfiRegistry;
@@ -36,6 +34,7 @@ pub(super) struct SharedState {
     pub functions_by_id: Vec<BytecodeFunction>,
     pub constants: Vec<ConstValue>,
     pub type_table: Vec<crate::middle::core::ir::Type>,
+    pub vtable_cache: HashMap<String, Vec<(String, FunctionValue)>>,
     pub ffi: FfiRegistry,
 }
 
@@ -98,6 +97,9 @@ pub struct Interpreter {
     pub(super) functions: HashMap<String, BytecodeFunction>,
     /// Function table by index (for closure calls via func_id)
     pub(super) functions_by_id: Vec<BytecodeFunction>,
+    /// 类型 vtable 缓存（type_name → 方法表）。每类型的 vtable 只构建一次，
+    /// 消除「每次 CreateStruct 都 O(n) 扫函数表 + 向 functions_by_id 重复追加」的浪费与泄漏。
+    pub(super) vtable_cache: HashMap<String, Vec<(String, FunctionValue)>>,
     /// Type table
     pub(super) type_table: Vec<crate::middle::core::ir::Type>,
     /// Current execution state
@@ -176,6 +178,7 @@ impl Interpreter {
             constants: Vec::new(),
             functions: HashMap::new(),
             functions_by_id: Vec::new(),
+            vtable_cache: HashMap::new(),
             type_table: Vec::new(),
             state: ExecutionState::default(),
             config,
@@ -205,24 +208,27 @@ impl Interpreter {
         // 主解释器通过 drive_until 阻塞直到所有任务完成，保证数据在任务期间有效。
         // 数据在创建后只读，无数据竞争。
         // 如果 shared 为空（例如 execute_module 未调用），使用空数据。
-        let (constants, functions, functions_by_id, type_table, ffi) = if shared.is_null() {
-            (
-                Vec::new(),
-                HashMap::new(),
-                Vec::new(),
-                Vec::new(),
-                FfiRegistry::new(),
-            )
-        } else {
-            let shared_ref = unsafe { &*shared };
-            (
-                shared_ref.constants.clone(),
-                shared_ref.functions.clone(),
-                shared_ref.functions_by_id.clone(),
-                shared_ref.type_table.clone(),
-                shared_ref.ffi.clone(),
-            )
-        };
+        let (constants, functions, functions_by_id, type_table, vtable_cache, ffi) =
+            if shared.is_null() {
+                (
+                    Vec::new(),
+                    HashMap::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    HashMap::new(),
+                    FfiRegistry::new(),
+                )
+            } else {
+                let shared_ref = unsafe { &*shared };
+                (
+                    shared_ref.constants.clone(),
+                    shared_ref.functions.clone(),
+                    shared_ref.functions_by_id.clone(),
+                    shared_ref.type_table.clone(),
+                    shared_ref.vtable_cache.clone(),
+                    shared_ref.ffi.clone(),
+                )
+            };
 
         Self {
             heap: Heap::new(),
@@ -230,6 +236,7 @@ impl Interpreter {
             constants,
             functions,
             functions_by_id,
+            vtable_cache,
             type_table,
             state: ExecutionState::default(),
             config: ExecutorConfig::default(),
@@ -269,40 +276,19 @@ impl Interpreter {
         &self.ffi
     }
 
-    /// Build vtable for a struct type at runtime
+    /// 获取结构体类型的 vtable。
     ///
-    /// This method looks up methods in the function table by matching the type name prefix.
-    /// Functions are stored with keys like "TypeName.method_name".
+    /// vtable 在模块加载期由 `execute_module` 从字节码的编译期 vtables 段一次性构建
+    /// （存于 `vtable_cache`），此处仅查表返回——删除了原先每次 CreateStruct 都按
+    /// `{type}.` 前缀 O(n) 扫描函数表、并向 functions_by_id 重复追加方法字节码的开销与泄漏。
     pub(super) fn build_vtable(
-        &mut self,
+        &self,
         type_name: &str,
     ) -> Vec<(String, FunctionValue)> {
-        let mut vtable = Vec::new();
-        let method_prefix = format!("{}.", type_name);
-
-        // Find all functions that match the type name prefix
-        for (func_name, bytecode_func) in &self.functions {
-            if func_name.starts_with(&method_prefix) {
-                // Extract method name (everything after the prefix)
-                let method_name = func_name[method_prefix.len()..].to_string();
-
-                // Create a new function ID for this method
-                let func_id = FunctionId(self.functions_by_id.len() as u32);
-
-                // Add to functions_by_id for runtime lookup
-                self.functions_by_id.push(bytecode_func.clone());
-
-                vtable.push((
-                    method_name,
-                    FunctionValue {
-                        func_id,
-                        env: Vec::new(), // Methods don't need closure env
-                    },
-                ));
-            }
-        }
-
-        vtable
+        self.vtable_cache
+            .get(type_name)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Call a YaoXiang function by its FunctionId.

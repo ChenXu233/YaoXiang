@@ -13,8 +13,8 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 /// 0x59584243 = 'Y' 'X' 'B' 'C' = YaoXiang ByteCode
 /// 文件格式采用混合端序：魔数大端序（方便调试），其他数据小端序（性能优化）
 const MAGIC: u32 = 0x59584243;
-/// 版本号
-const VERSION: u32 = 3;
+/// 版本号（字节码格式的单一版本源；read_from 与 generate_header 均引用此常量）
+pub const VERSION: u32 = 4;
 
 const FLAG_DEBUG_INFO: u32 = 0x02;
 
@@ -32,6 +32,11 @@ pub struct BytecodeFile {
     pub const_pool: Vec<ConstValue>,
     /// 代码段
     pub code_section: CodeSection,
+
+    /// 编译期类型方法表（type_name → [method 函数全名]）。
+    /// codegen 从函数表按类型分组生成，解释器加载期据此构建 vtable，
+    /// 删除运行时按 `{type}.` 前缀扫描函数表的开销。
+    pub vtables: Vec<(String, Vec<String>)>,
 
     /// 可选调试信息段（用于离线 .42 调试/定位）
     pub debug_section: Option<DebugSection>,
@@ -306,6 +311,9 @@ impl BytecodeFile {
             writer.write_all(&(func.name.len() as u32).to_le_bytes())?;
             writer.write_all(func.name.as_bytes())?;
             writer.write_all(&(func.params.len() as u32).to_le_bytes())?;
+            for param in &func.params {
+                writer.write_all(&param.to_type_id().to_le_bytes())?;
+            }
             writer.write_all(&func.return_type.to_type_id().to_le_bytes())?;
             writer.write_all(&(func.local_count as u32).to_le_bytes())?;
             writer.write_all(&(func.instructions.len() as u32).to_le_bytes())?;
@@ -317,6 +325,18 @@ impl BytecodeFile {
         }
 
         writer.write_all(&[0u8; 4])?; // 跳转表
+
+        // vtables 段：编译期类型方法表（type_name → [method 函数全名]）
+        writer.write_all(&(self.vtables.len() as u32).to_le_bytes())?;
+        for (type_name, methods) in &self.vtables {
+            writer.write_all(&(type_name.len() as u32).to_le_bytes())?;
+            writer.write_all(type_name.as_bytes())?;
+            writer.write_all(&(methods.len() as u32).to_le_bytes())?;
+            for method in methods {
+                writer.write_all(&(method.len() as u32).to_le_bytes())?;
+                writer.write_all(method.as_bytes())?;
+            }
+        }
 
         if (header.flags & FLAG_DEBUG_INFO) != 0 {
             let Some(debug) = &self.debug_section else {
@@ -496,6 +516,19 @@ impl BytecodeFile {
         let mut jump_table = [0u8; 4];
         reader.read_exact(&mut jump_table)?;
 
+        // vtables 段：编译期类型方法表（type_name → [method 函数全名]）
+        let vtable_count = read_u32(reader)? as usize;
+        let mut vtables = Vec::with_capacity(vtable_count);
+        for _ in 0..vtable_count {
+            let type_name = read_string(reader)?;
+            let method_count = read_u32(reader)? as usize;
+            let mut methods = Vec::with_capacity(method_count);
+            for _ in 0..method_count {
+                methods.push(read_string(reader)?);
+            }
+            vtables.push((type_name, methods));
+        }
+
         // 可选的调试段（从文件尾向后读取）
         let debug_section = DebugSection::read_from_end(reader)?;
 
@@ -504,6 +537,7 @@ impl BytecodeFile {
             type_table,
             const_pool,
             code_section: CodeSection { functions },
+            vtables,
             debug_section,
         })
     }

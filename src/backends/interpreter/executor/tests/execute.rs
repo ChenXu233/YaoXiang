@@ -308,6 +308,7 @@ fn spawn_concurrent_standard_mode() {
         constants: vec![ConstValue::Int(10), ConstValue::Int(20)],
         functions: vec![task_a, task_b, main_func],
         type_table: vec![],
+        vtables: vec![],
         globals: vec![],
         entry_point: Some(2), // main 函数
     };

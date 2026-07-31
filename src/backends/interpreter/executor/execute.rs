@@ -2,8 +2,10 @@
 //!
 //! This module contains the Executor trait implementation with the main bytecode execution loop.
 
+use std::collections::HashMap;
 use crate::backends::{Executor, ExecutorResult, ExecutorError, ExecutionState};
 use crate::backends::common::{RuntimeValue, Heap};
+use crate::backends::common::value::{FunctionId, FunctionValue};
 use crate::middle::bytecode::{BytecodeModule, BytecodeFunction};
 use crate::backends::interpreter::Frame;
 use crate::backends::interpreter::frames::MAX_LOCALS;
@@ -22,8 +24,11 @@ impl Executor for Interpreter {
         self.constants.extend(module.constants.clone());
 
         // Add functions
+        let mut name_to_id: HashMap<String, FunctionId> = HashMap::new();
         for func in &module.functions {
             tlog!(debug, MSG::DebugLoadingFunction, &func.name);
+            let func_id = FunctionId(self.functions_by_id.len() as u32);
+            name_to_id.insert(func.name.clone(), func_id);
             self.functions.insert(func.name.clone(), func.clone());
             self.functions_by_id.push(func.clone());
         }
@@ -34,6 +39,29 @@ impl Executor for Interpreter {
             &format!("{:?}", self.functions.keys().collect::<Vec<_>>())
         );
 
+        // 从字节码的编译期 vtables 段构建 vtable 缓存：type_name → [(裸方法名, FunctionValue)]。
+        // 方法 func_id 取自 name_to_id（函数在 functions_by_id 中的下标），无需运行时扫描。
+        for (type_name, method_names) in &module.vtables {
+            let prefix = format!("{}.", type_name);
+            let mut vt = Vec::with_capacity(method_names.len());
+            for method_name in method_names {
+                let bare = method_name
+                    .strip_prefix(&prefix)
+                    .unwrap_or(method_name)
+                    .to_string();
+                if let Some(&func_id) = name_to_id.get(method_name) {
+                    vt.push((
+                        bare,
+                        FunctionValue {
+                            func_id,
+                            env: Vec::new(),
+                        },
+                    ));
+                }
+            }
+            self.vtable_cache.insert(type_name.clone(), vt);
+        }
+
         // Add types
         self.type_table.extend(module.type_table.clone());
 
@@ -43,6 +71,7 @@ impl Executor for Interpreter {
             functions_by_id: self.functions_by_id.clone(),
             constants: self.constants.clone(),
             type_table: self.type_table.clone(),
+            vtable_cache: self.vtable_cache.clone(),
             ffi: self.ffi.clone(),
         });
         self.shared = Box::into_raw(shared);
