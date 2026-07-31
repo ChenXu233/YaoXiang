@@ -154,3 +154,65 @@ main = {
 "#;
     run_project_ok(&[("a.yx", a), ("b.yx", b), ("main.yx", main)], "main.yx");
 }
+
+#[test]
+fn test_multifile_whole_module_namespace_call() {
+    // #243：`use lib`（整体导入）后 `lib.helper()` 限定调用。
+    // typecheck 把 `lib` 注册为模块 record 变量，IR 生成经 user_namespaces
+    // 识别为命名空间调用并解析为限定名 `lib.helper` / `lib.add`。
+    let lib = r#"
+helper: () -> Int = () => {
+    return 42
+}
+
+add: (a: Int, b: Int) -> Int = (a, b) => {
+    return a + b
+}
+"#;
+    let main = r#"
+use std.assert
+use lib
+
+main = {
+    assert.assert(lib.helper() == 42, "lib.helper should return 42")
+    assert.assert(lib.add(3, 4) == 7, "lib.add(3,4) should be 7")
+}
+"#;
+    run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+}
+
+#[test]
+fn test_multifile_same_type_name_coexist() {
+    // #244：两个文件各自定义同名类型 Point——module=record 语义下 a.Point / b.Point
+    // 是不同 record 的字段，限定名使构造器与 vtable 在扁平函数表中共存。
+    // 各自内部构造 Point(...) 必须解析到自己的限定构造器（限定前构造器撞名）。
+    // 注：把两个同名类型同时导入同一文件需要导入别名（#245，未实现），故这里
+    // 验证“各自文件内部使用同名类型”这条核心路径。
+    let a = r#"
+Point: Type = { x: Float, y: Float }
+
+make_a: () -> Float = () => {
+    p = Point(1.0, 2.0)
+    return p.x + p.y
+}
+"#;
+    let b = r#"
+Point: Type = { x: Float, z: Float }
+
+make_b: () -> Float = () => {
+    p = Point(3.0, 4.0)
+    return p.x + p.z
+}
+"#;
+    let main = r#"
+use std.assert
+use a.{make_a}
+use b.{make_b}
+
+main = {
+    assert.assert(make_a() == 3.0, "a.Point(1,2) x+y should be 3.0")
+    assert.assert(make_b() == 7.0, "b.Point(3,4) x+z should be 7.0")
+}
+"#;
+    run_project_ok(&[("a.yx", a), ("b.yx", b), ("main.yx", main)], "main.yx");
+}

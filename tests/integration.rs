@@ -25,6 +25,10 @@ mod interpreter;
 #[path = "integration/token_system.rs"]
 mod token_system;
 
+/// RFC-029 多文件模块编排端到端测试
+#[path = "integration/multifile.rs"]
+mod multifile;
+
 /// `yaoxiang` CLI 子命令集成测试
 #[path = "integration/cli.rs"]
 mod cli;

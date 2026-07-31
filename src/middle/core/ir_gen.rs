@@ -22,21 +22,33 @@ use crate::util::i18n::MSG;
 use crate::util::span::Span;
 use std::collections::HashMap;
 
-/// 检查是否是命名空间调用（如 std.io.println 或 io.println）
-fn is_namespace_call(expr: &ast::Expr) -> bool {
+/// 检查是否是命名空间调用（如 std.io.println 或 io.println 或 lib.helper）
+///
+/// `user_namespaces` 是 RFC-029 #243 的用户模块命名空间表（别名 → 模块限定键），
+/// 使 `use lib` 后的 `lib.helper()` 也被识别为命名空间调用。
+fn is_namespace_call(
+    expr: &ast::Expr,
+    user_namespaces: &HashMap<String, String>,
+) -> bool {
     match expr {
         ast::Expr::Var(name, _) => {
-            name == "std" || ModuleRegistry::with_std().is_std_submodule(name)
+            name == "std"
+                || ModuleRegistry::with_std().is_std_submodule(name)
+                || user_namespaces.contains_key(name)
         }
-        ast::Expr::FieldAccess { expr, .. } => is_namespace_call(expr),
+        ast::Expr::FieldAccess { expr, .. } => is_namespace_call(expr, user_namespaces),
         _ => false,
     }
 }
 
 /// 提取完整的命名空间路径（如 std.io.println 或 io.println -> std.io.println）
+///
+/// 用户模块命名空间变量（如 `use math.geometry` 后的 `geometry`）解析为模块限定键，
+/// 使 `geometry.foo` → `math.geometry.foo`（与 `qualify_module_ir` 的函数定义名契合）。
 fn extract_namespace_path(
     expr: &ast::Expr,
     field: &str,
+    user_namespaces: &HashMap<String, String>,
 ) -> String {
     match expr {
         ast::Expr::Var(name, _) => {
@@ -44,6 +56,8 @@ fn extract_namespace_path(
                 format!("std.{}", field)
             } else if ModuleRegistry::with_std().is_std_submodule(name) {
                 format!("std.{}.{}", name, field)
+            } else if let Some(module_key) = user_namespaces.get(name) {
+                format!("{}.{}", module_key, field)
             } else {
                 format!("{}.{}", name, field)
             }
@@ -53,7 +67,7 @@ fn extract_namespace_path(
             field: sub_field,
             ..
         } => {
-            let prefix = extract_namespace_path(expr, sub_field);
+            let prefix = extract_namespace_path(expr, sub_field, user_namespaces);
             format!("{}.{}", prefix, field)
         }
         _ => field.to_string(),
@@ -163,6 +177,11 @@ pub struct AstToIrGenerator {
     /// 待捕获的环境变量（由 spawn for 等设置，供下一个 Expr::Lambda 使用）
     /// 在生成闭包函数体时，这些变量的当前寄存器值会被捕获到闭包环境中。
     pending_env_vars: Vec<Operand>,
+    /// RFC-029 #243：用户模块命名空间变量（别名 → 模块限定键）。
+    /// 由 `use lib` / `use lib as l` 等整体导入填充，使 `lib.helper()` 在 IR 生成
+    /// 阶段被识别为命名空间调用并解析为限定名 `lib.helper`（与 `qualify_module_ir`
+    /// 产出的函数定义名天然契合）。std 命名空间走原有 `is_std_submodule` 分支，不在此表。
+    user_namespaces: HashMap<String, String>,
 }
 
 /// 绑定信息（用于 IR 生成阶段的方法调用转发）
@@ -222,6 +241,7 @@ impl AstToIrGenerator {
             function_param_types: HashMap::new(),
             release_plan: type_result.release_plan.drops.clone(),
             pending_env_vars: Vec::new(),
+            user_namespaces: HashMap::new(),
         }
     }
 
@@ -467,6 +487,10 @@ impl AstToIrGenerator {
         &mut self,
         module: &ast::Module,
     ) -> Result<ModuleIR, Vec<Diagnostic>> {
+        // RFC-029 #243：从整体导入（`use lib` / `use lib as l`）收集用户模块命名空间变量，
+        // 使 `lib.helper()` 被识别为命名空间调用并解析为限定名。镜像 typecheck 的别名规则。
+        self.collect_user_namespaces(module);
+
         let mut functions = Vec::new();
         let mut errors = Vec::new();
         let mut constants = Vec::new();
@@ -499,6 +523,41 @@ impl AstToIrGenerator {
             ffi_bindings: std::mem::take(&mut self.ffi_bindings),
             entry_function: None,
         })
+    }
+
+    /// RFC-029 #243：从整体导入收集用户模块命名空间变量（别名 → 模块限定键）。
+    ///
+    /// 镜像 typecheck `register_module_as_struct` 的别名规则：
+    /// - `use lib`         → 别名取 path 末段 `lib`，限定键 `lib`
+    /// - `use math.geom`   → 别名 `geom`，限定键 `math.geom`
+    /// - `use lib as l`    → 别名 `l`，限定键 `lib`
+    ///
+    /// std 路径（`std` / `std.*`）不入此表——它们走 `is_std_submodule` 原有分支。
+    /// 解构导入（`use lib.{x}`，items 为 Some）不产生命名空间变量，跳过。
+    fn collect_user_namespaces(
+        &mut self,
+        module: &ast::Module,
+    ) {
+        for stmt in &module.items {
+            if let ast::StmtKind::Use {
+                path, items, alias, ..
+            } = &stmt.kind
+            {
+                // 只有整体导入（无 items）才注册命名空间变量
+                if items.is_some() {
+                    continue;
+                }
+                // std 走原有机制
+                if path == "std" || path.starts_with("std.") {
+                    continue;
+                }
+                let ns_alias = match alias {
+                    Some(aliases) if aliases.len() == 1 => aliases[0].clone(),
+                    _ => path.split('.').next_back().unwrap_or(path).to_string(),
+                };
+                self.user_namespaces.insert(ns_alias, path.clone());
+            }
+        }
     }
 
     /// RFC-029 多文件编排：预注册其他文件的类型上下文（结构体字段布局 + 方法绑定），
@@ -2995,7 +3054,7 @@ impl AstToIrGenerator {
 
                     // 只有非命名空间调用才需要添加 self 参数
                     // 命名空间调用（如 std.io.println）不需要隐式参数
-                    if is_namespace_call(expr) {
+                    if is_namespace_call(expr, &self.user_namespaces) {
                         // 命名空间调用：不需要隐式参数
                         let mut arg_regs = Vec::new();
                         for arg in args.iter() {
@@ -3003,7 +3062,8 @@ impl AstToIrGenerator {
                             self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
                             arg_regs.push(Operand::Local(arg_reg));
                         }
-                        let method_function_name = extract_namespace_path(expr, field);
+                        let method_function_name =
+                            extract_namespace_path(expr, field, &self.user_namespaces);
                         instructions.push(Instruction::Call {
                             dst: Some(Operand::Local(result_reg)),
                             func: Operand::Const(ConstValue::String(
@@ -3148,10 +3208,10 @@ impl AstToIrGenerator {
                                     if let Some(type_name) = self.local_var_types.get(name) {
                                         format!("{}.{}", type_name, field)
                                     } else {
-                                        extract_namespace_path(expr, field)
+                                        extract_namespace_path(expr, field, &self.user_namespaces)
                                     }
                                 } else {
-                                    extract_namespace_path(expr, field)
+                                    extract_namespace_path(expr, field, &self.user_namespaces)
                                 };
 
                                 let final_args: Vec<Operand> = arg_regs.clone();
@@ -3478,7 +3538,7 @@ impl AstToIrGenerator {
                     }
                 } else {
                     // 提取完整的命名空间路径（如 std.math.PI）
-                    let full_path = extract_namespace_path(expr, field);
+                    let full_path = extract_namespace_path(expr, field, &self.user_namespaces);
 
                     // 检查是否是命名空间常量访问
                     if ModuleRegistry::with_std().is_native_name(&full_path) {
