@@ -37,6 +37,9 @@ pub struct TypeChecker {
     semantic_db: semantic_db::SemanticDB,
     /// 依赖类型环境（类型族注册与查找）
     pub dependent_type_env: DependentTypeEnv,
+    /// 用户模块命名空间别名表（别名 → 模块限定键），由 `use lib` / `use lib as l` 整体导入登记。
+    /// 模块解析归 typecheck 所有：IR 生成直接消费此表，不再自行从 AST 重新推导。
+    module_namespaces: HashMap<String, String>,
 }
 
 impl TypeChecker {
@@ -59,6 +62,7 @@ impl TypeChecker {
             body_checker: None,
             semantic_db: semantic_db::SemanticDB::new(),
             dependent_type_env,
+            module_namespaces: HashMap::new(),
         }
     }
 
@@ -424,6 +428,7 @@ impl TypeChecker {
             release_plan,
             escaped_refs,
             instantiation_requests,
+            module_namespaces: std::mem::take(&mut self.module_namespaces),
         }
     }
 
@@ -901,6 +906,11 @@ impl TypeChecker {
                         // use path (无 items，无 alias) → 提取 path 最后部分作为模块别名
                         (None, None) => {
                             let module_alias = path.split('.').next_back().unwrap_or(path);
+                            // 登记用户模块命名空间别名（std 走 is_std_submodule 机制，不入此表）
+                            if !(path == "std" || path.starts_with("std.")) {
+                                self.module_namespaces
+                                    .insert(module_alias.to_string(), path.clone());
+                            }
                             // 首先将模块本身注册为 Struct 类型（包含所有导出作为字段）
                             self.register_module_as_struct(path, module_alias, &module);
                             // 然后注册每个导出
@@ -911,6 +921,11 @@ impl TypeChecker {
                         // use path as alias → 整个模块用别名注册
                         (None, Some(aliases)) if aliases.len() == 1 => {
                             let alias_name = &aliases[0];
+                            // 登记用户模块命名空间别名（std 走 is_std_submodule 机制，不入此表）
+                            if !(path == "std" || path.starts_with("std.")) {
+                                self.module_namespaces
+                                    .insert(alias_name.clone(), path.clone());
+                            }
                             for export in exports_to_import {
                                 self.register_use_export(alias_name, export, true);
                             }

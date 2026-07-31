@@ -515,9 +515,11 @@ impl AstToIrGenerator {
         &mut self,
         module: &ast::Module,
     ) -> Result<ModuleIR, Vec<Diagnostic>> {
-        // RFC-029 #243：从整体导入（`use lib` / `use lib as l`）收集用户模块命名空间变量，
-        // 使 `lib.helper()` 被识别为命名空间调用并解析为限定名。镜像 typecheck 的别名规则。
-        self.collect_user_namespaces(module);
+        // RFC-029：用户模块命名空间别名（`use lib` / `use lib as l`）由 typecheck 登记
+        // （模块解析归 typecheck 所有），IR 生成直接消费，不再自行从 AST 重新推导。
+        if let Some(ref tr) = self.type_result {
+            self.user_namespaces = tr.module_namespaces.clone();
+        }
 
         let mut functions = Vec::new();
         let mut errors = Vec::new();
@@ -558,41 +560,6 @@ impl AstToIrGenerator {
             Self::qualify_names(&mut ir, key, &aliases);
         }
         Ok(ir)
-    }
-
-    /// RFC-029 #243：从整体导入收集用户模块命名空间变量（别名 → 模块限定键）。
-    ///
-    /// 镜像 typecheck `register_module_as_struct` 的别名规则：
-    /// - `use lib`         → 别名取 path 末段 `lib`，限定键 `lib`
-    /// - `use math.geom`   → 别名 `geom`，限定键 `math.geom`
-    /// - `use lib as l`    → 别名 `l`，限定键 `lib`
-    ///
-    /// std 路径（`std` / `std.*`）不入此表——它们走 `is_std_submodule` 原有分支。
-    /// 解构导入（`use lib.{x}`，items 为 Some）不产生命名空间变量，跳过。
-    fn collect_user_namespaces(
-        &mut self,
-        module: &ast::Module,
-    ) {
-        for stmt in &module.items {
-            if let ast::StmtKind::Use {
-                path, items, alias, ..
-            } = &stmt.kind
-            {
-                // 只有整体导入（无 items）才注册命名空间变量
-                if items.is_some() {
-                    continue;
-                }
-                // std 走原有机制
-                if path == "std" || path.starts_with("std.") {
-                    continue;
-                }
-                let ns_alias = match alias {
-                    Some(aliases) if aliases.len() == 1 => aliases[0].clone(),
-                    _ => path.split('.').next_back().unwrap_or(path).to_string(),
-                };
-                self.user_namespaces.insert(ns_alias, path.clone());
-            }
-        }
     }
 
     /// RFC-029 限定名：从一个文件的 `use` 语句构建导入别名表（本地短名 → 源模块限定名）。
