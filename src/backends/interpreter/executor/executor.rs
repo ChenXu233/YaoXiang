@@ -796,15 +796,7 @@ impl Interpreter {
             return self.call_native_by_name(func_name, &resolved);
         }
 
-        let mut lookup_name = func_name.to_string();
-        if !self.functions.contains_key(func_name) {
-            let constructor_name = format!("{}_constructor", func_name);
-            if self.functions.contains_key(&constructor_name) {
-                lookup_name = constructor_name;
-            }
-        }
-
-        if let Some(target_func) = self.functions.get(&lookup_name).cloned() {
+        if let Some(target_func) = self.functions.get(func_name).cloned() {
             self.execute_function(&target_func, &resolved)
         } else {
             let stack = self.capture_stack();
