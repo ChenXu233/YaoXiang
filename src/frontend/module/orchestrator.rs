@@ -32,6 +32,7 @@ use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::core::types::PolyType;
 use crate::frontend::module::registry::ModuleRegistry;
+use crate::frontend::module::symbol::SymbolTable;
 use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 use crate::middle::core::ir::{ConstValue, Instruction, Operand};
 use crate::middle::ModuleIR;
@@ -236,22 +237,23 @@ fn qualify_module_ir(
     }
 
     // 本文件要限定的函数：普通函数、TypeDecl、方法派生函数（前缀是本地类型）。
+    // 限定名统一经 SymbolTable::qualify 生成——全仓库限定名语法的唯一所有者。
     let mut rename: HashMap<String, String> = HashMap::new();
     for func in &ir.functions {
         let bare = &func.name;
         if func.is_type_decl() {
             // TypeDecl：Point → lib.Point
-            rename.insert(bare.clone(), format!("{}.{}", module_key, bare));
+            rename.insert(bare.clone(), SymbolTable::qualify(module_key, bare));
         } else if let Some(dot_pos) = bare.find('.') {
             // 带点名字：方法派生（Point.get_x）或外部限定名（std.io.println）。
             // 只有限定点是本地类型时才限定，避免误伤 std 等已限定名。
             let prefix = &bare[..dot_pos];
             if type_names.contains(prefix) {
-                rename.insert(bare.clone(), format!("{}.{}", module_key, bare));
+                rename.insert(bare.clone(), SymbolTable::qualify(module_key, bare));
             }
         } else {
             // 普通代码函数：distance → lib.distance
-            rename.insert(bare.clone(), format!("{}.{}", module_key, bare));
+            rename.insert(bare.clone(), SymbolTable::qualify(module_key, bare));
         }
     }
 
@@ -574,7 +576,7 @@ fn make_export(
 ) -> Export {
     Export {
         name: name.to_string(),
-        full_path: format!("{}.{}", module_key, name),
+        full_path: SymbolTable::qualify(module_key, name),
         kind,
         signature: String::new(),
         mono_type: Some(ty),

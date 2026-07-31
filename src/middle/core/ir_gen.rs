@@ -12,6 +12,7 @@
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{self, Expr};
 use crate::frontend::module::registry::ModuleRegistry;
+use crate::frontend::module::symbol::SymbolTable;
 use crate::frontend::core::typecheck::{MonoType, PolyType, TypeCheckResult};
 use crate::middle::core::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
@@ -57,9 +58,9 @@ fn extract_namespace_path(
             } else if ModuleRegistry::with_std().is_std_submodule(name) {
                 format!("std.{}.{}", name, field)
             } else if let Some(module_key) = user_namespaces.get(name) {
-                format!("{}.{}", module_key, field)
+                SymbolTable::qualify(module_key, field)
             } else {
-                format!("{}.{}", name, field)
+                SymbolTable::qualify(name, field)
             }
         }
         ast::Expr::FieldAccess {
@@ -68,7 +69,7 @@ fn extract_namespace_path(
             ..
         } => {
             let prefix = extract_namespace_path(expr, sub_field, user_namespaces);
-            format!("{}.{}", prefix, field)
+            SymbolTable::qualify(&prefix, field)
         }
         _ => field.to_string(),
     }
