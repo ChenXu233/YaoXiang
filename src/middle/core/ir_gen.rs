@@ -13,6 +13,7 @@ use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{self, Expr};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::symbol::SymbolTable;
+use crate::frontend::module::ExportKind;
 use crate::frontend::core::typecheck::{MonoType, PolyType, TypeCheckResult};
 use crate::middle::core::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
@@ -30,14 +31,13 @@ use std::collections::HashMap;
 fn is_namespace_call(
     expr: &ast::Expr,
     user_namespaces: &HashMap<String, String>,
+    registry: &ModuleRegistry,
 ) -> bool {
     match expr {
         ast::Expr::Var(name, _) => {
-            name == "std"
-                || ModuleRegistry::with_std().is_std_submodule(name)
-                || user_namespaces.contains_key(name)
+            name == "std" || registry.is_std_submodule(name) || user_namespaces.contains_key(name)
         }
-        ast::Expr::FieldAccess { expr, .. } => is_namespace_call(expr, user_namespaces),
+        ast::Expr::FieldAccess { expr, .. } => is_namespace_call(expr, user_namespaces, registry),
         _ => false,
     }
 }
@@ -50,12 +50,13 @@ fn extract_namespace_path(
     expr: &ast::Expr,
     field: &str,
     user_namespaces: &HashMap<String, String>,
+    registry: &ModuleRegistry,
 ) -> String {
     match expr {
         ast::Expr::Var(name, _) => {
             if name == "std" {
                 format!("std.{}", field)
-            } else if ModuleRegistry::with_std().is_std_submodule(name) {
+            } else if registry.is_std_submodule(name) {
                 format!("std.{}.{}", name, field)
             } else if let Some(module_key) = user_namespaces.get(name) {
                 SymbolTable::qualify(module_key, field)
@@ -68,7 +69,7 @@ fn extract_namespace_path(
             field: sub_field,
             ..
         } => {
-            let prefix = extract_namespace_path(expr, sub_field, user_namespaces);
+            let prefix = extract_namespace_path(expr, sub_field, user_namespaces, registry);
             SymbolTable::qualify(&prefix, field)
         }
         _ => field.to_string(),
@@ -183,6 +184,10 @@ pub struct AstToIrGenerator {
     /// 阶段被识别为命名空间调用并解析为限定名 `lib.helper`（与 `qualify_module_ir`
     /// 产出的函数定义名天然契合）。std 命名空间走原有 `is_std_submodule` 分支，不在此表。
     user_namespaces: HashMap<String, String>,
+    /// 本文件持有的模块注册表（std + 用户模块），取代生成期多处 `with_std()` 重建。
+    registry: ModuleRegistry,
+    /// 本文件的模块限定键（多文件模式 Some → 启用限定；单文件 None → 不限定）。
+    module_key: Option<String>,
 }
 
 /// 绑定信息（用于 IR 生成阶段的方法调用转发）
@@ -217,7 +222,11 @@ struct CurryLayer {
 
 impl AstToIrGenerator {
     /// 创建新的 IR 生成器（带类型信息）
-    pub fn new_with_type_result(type_result: &TypeCheckResult) -> Self {
+    pub fn new_with_type_result(
+        type_result: &TypeCheckResult,
+        registry: ModuleRegistry,
+        module_key: Option<String>,
+    ) -> Self {
         Self {
             symbols: vec![HashMap::new()],
             type_result: Some(Box::new(type_result.clone())),
@@ -243,6 +252,8 @@ impl AstToIrGenerator {
             release_plan: type_result.release_plan.drops.clone(),
             pending_env_vars: Vec::new(),
             user_namespaces: HashMap::new(),
+            registry,
+            module_key,
         }
     }
 
@@ -514,7 +525,7 @@ impl AstToIrGenerator {
         // RFC-004: 添加匿名函数绑定生成的 IR 到模块函数列表
         functions.extend(std::mem::take(&mut self.anon_function_irs));
 
-        Ok(ModuleIR {
+        let mut ir = ModuleIR {
             globals: Vec::new(),
             functions,
             mut_locals: std::mem::take(&mut self.module_mut_locals),
@@ -523,7 +534,14 @@ impl AstToIrGenerator {
             ffi_libs: std::mem::take(&mut self.ffi_libs),
             ffi_bindings: std::mem::take(&mut self.ffi_bindings),
             entry_function: None,
-        })
+        };
+        // RFC-029: 多文件模式下限定本文件的顶层函数名与调用引用。
+        // 单文件（module_key 为 None）不限定，保持原有行为。
+        if let Some(key) = &self.module_key {
+            let aliases = self.build_import_aliases(module);
+            Self::qualify_names(&mut ir, key, &aliases);
+        }
+        Ok(ir)
     }
 
     /// RFC-029 #243：从整体导入收集用户模块命名空间变量（别名 → 模块限定键）。
@@ -558,6 +576,149 @@ impl AstToIrGenerator {
                 };
                 self.user_namespaces.insert(ns_alias, path.clone());
             }
+        }
+    }
+
+    /// RFC-029 限定名：从一个文件的 `use` 语句构建导入别名表（本地短名 → 源模块限定名）。
+    ///
+    /// 供限定名重写解析跨文件调用目标。std 调用已由 IR 生成限定为 `std.*`，不在此表。
+    fn build_import_aliases(
+        &self,
+        module: &ast::Module,
+    ) -> HashMap<String, String> {
+        let mut aliases = HashMap::new();
+        for stmt in &module.items {
+            if let ast::StmtKind::Use { path, items, .. } = &stmt.kind {
+                let Some(exports) = self.registry.get_exports(path) else {
+                    continue;
+                };
+                if let Some(names) = items {
+                    for name in names {
+                        if let Some(export) = exports.get(name) {
+                            // #244：类型也限定——构造调用 `Point(...)` 与方法调用 `Point.get_x`
+                            // 都需把本地短名别名到源模块限定名才能解析。
+                            if matches!(
+                                export.kind,
+                                ExportKind::Function | ExportKind::Constant | ExportKind::Type
+                            ) {
+                                aliases.insert(name.clone(), export.full_path.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        aliases
+    }
+
+    /// RFC-029 限定名：把本文件 IR 里的顶层函数名重写为 `{module_key}.{name}`，
+    /// 并把函数体里对这些函数与导入函数的调用/闭包引用一并重写。
+    ///
+    /// module=record 语义：`a.helper` 与 `b.helper` 是两个 record 的不同字段，本就不冲突；
+    /// 解释器函数表是扁平 name→func，故用限定名作键使其共存。限定名统一经
+    /// [`SymbolTable::qualify`] 生成——全仓库限定名语法的唯一所有者。
+    fn qualify_names(
+        ir: &mut ModuleIR,
+        module_key: &str,
+        aliases: &HashMap<String, String>,
+    ) {
+        // 先收集本文件的类型名（TypeDecl），供方法派生函数前缀匹配。
+        let mut type_names: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for func in &ir.functions {
+            if func.is_type_decl() {
+                type_names.insert(func.name.clone());
+            }
+        }
+
+        // 本文件要限定的函数：TypeDecl、方法派生（前缀是本地类型）、普通函数。
+        let mut rename: HashMap<String, String> = HashMap::new();
+        for func in &ir.functions {
+            let bare = &func.name;
+            if func.is_type_decl() {
+                rename.insert(bare.clone(), SymbolTable::qualify(module_key, bare));
+            } else if let Some(dot_pos) = bare.find('.') {
+                // 带点名字：只有限定点是本地类型时才限定，避免误伤 std 等已限定名。
+                let prefix = &bare[..dot_pos];
+                if type_names.contains(prefix) {
+                    rename.insert(bare.clone(), SymbolTable::qualify(module_key, bare));
+                }
+            } else {
+                rename.insert(bare.clone(), SymbolTable::qualify(module_key, bare));
+            }
+        }
+
+        // 重写函数定义名，及按函数名索引的 per-function 映射。
+        for func in &mut ir.functions {
+            if let Some(q) = rename.get(&func.name) {
+                func.name = q.clone();
+            }
+        }
+        ir.mut_locals = Self::remap_keys(std::mem::take(&mut ir.mut_locals), &rename);
+        ir.loop_binding_locals =
+            Self::remap_keys(std::mem::take(&mut ir.loop_binding_locals), &rename);
+        ir.local_names = Self::remap_keys(std::mem::take(&mut ir.local_names), &rename);
+
+        // 重写调用/闭包引用：本文件函数（rename）+ 导入函数（aliases）。
+        for func in &mut ir.functions {
+            if func.is_type_decl() {
+                continue;
+            }
+            for block in func.blocks_mut() {
+                for instr in &mut block.instructions {
+                    Self::rewrite_call_names(instr, &rename, aliases);
+                }
+            }
+        }
+    }
+
+    /// 按重命名表替换一张以函数名为键的映射的键。
+    fn remap_keys<V>(
+        map: HashMap<String, V>,
+        rename: &HashMap<String, String>,
+    ) -> HashMap<String, V> {
+        map.into_iter()
+            .map(|(k, v)| (rename.get(&k).cloned().unwrap_or(k), v))
+            .collect()
+    }
+
+    /// 重写单条指令里的函数名引用（Call/TailCall 的字符串 func、MakeClosure 的 func）。
+    ///
+    /// 解析顺序：完全匹配 rename（本文件函数）→ 完全匹配 aliases（导入函数）→
+    /// 前缀匹配（方法调用 `Point.get_x` 经 `Point` 的 rename/alias 限定为 `lib.Point.get_x`）。
+    fn rewrite_call_names(
+        instr: &mut Instruction,
+        rename: &HashMap<String, String>,
+        aliases: &HashMap<String, String>,
+    ) {
+        let resolve = |name: &str| -> Option<String> {
+            rename
+                .get(name)
+                .cloned()
+                .or_else(|| aliases.get(name).cloned())
+                .or_else(|| {
+                    let dot_pos = name.find('.')?;
+                    let prefix = &name[..dot_pos];
+                    let suffix = &name[dot_pos..]; // 含点
+                    rename
+                        .get(prefix)
+                        .or_else(|| aliases.get(prefix))
+                        .map(|q| format!("{}{}", q, suffix))
+                })
+        };
+        match instr {
+            Instruction::Call { func, .. } | Instruction::TailCall { func, .. } => {
+                if let Operand::Const(ConstValue::String(name)) = func {
+                    if let Some(q) = resolve(name) {
+                        *name = q;
+                    }
+                }
+            }
+            Instruction::MakeClosure { func, .. } => {
+                if let Some(q) = resolve(func) {
+                    *func = q;
+                }
+            }
+            _ => {}
         }
     }
 
@@ -2711,12 +2872,9 @@ impl AstToIrGenerator {
         func: &ast::Expr,
     ) -> Result<Operand, Diagnostic> {
         if let Expr::Var(name, _) = func {
-            let resolved_name = if ModuleRegistry::with_std().is_native_name(name) {
+            let resolved_name = if self.registry.is_native_name(name) {
                 name.clone()
-            } else if let Some(qualified) = ModuleRegistry::with_std()
-                .short_to_qualified_map()
-                .get(name)
-            {
+            } else if let Some(qualified) = self.registry.short_to_qualified_map().get(name) {
                 qualified.clone()
             } else {
                 name.clone()
@@ -3055,7 +3213,7 @@ impl AstToIrGenerator {
 
                     // 只有非命名空间调用才需要添加 self 参数
                     // 命名空间调用（如 std.io.println）不需要隐式参数
-                    if is_namespace_call(expr, &self.user_namespaces) {
+                    if is_namespace_call(expr, &self.user_namespaces, &self.registry) {
                         // 命名空间调用：不需要隐式参数
                         let mut arg_regs = Vec::new();
                         for arg in args.iter() {
@@ -3063,8 +3221,12 @@ impl AstToIrGenerator {
                             self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
                             arg_regs.push(Operand::Local(arg_reg));
                         }
-                        let method_function_name =
-                            extract_namespace_path(expr, field, &self.user_namespaces);
+                        let method_function_name = extract_namespace_path(
+                            expr,
+                            field,
+                            &self.user_namespaces,
+                            &self.registry,
+                        );
                         instructions.push(Instruction::Call {
                             dst: Some(Operand::Local(result_reg)),
                             func: Operand::Const(ConstValue::String(
@@ -3116,7 +3278,8 @@ impl AstToIrGenerator {
                             }
 
                             // 解析函数名
-                            let func_name = if let Some(qualified) = ModuleRegistry::with_std()
+                            let func_name = if let Some(qualified) = self
+                                .registry
                                 .short_to_qualified_map()
                                 .get(&binding.function)
                             {
@@ -3209,10 +3372,20 @@ impl AstToIrGenerator {
                                     if let Some(type_name) = self.local_var_types.get(name) {
                                         format!("{}.{}", type_name, field)
                                     } else {
-                                        extract_namespace_path(expr, field, &self.user_namespaces)
+                                        extract_namespace_path(
+                                            expr,
+                                            field,
+                                            &self.user_namespaces,
+                                            &self.registry,
+                                        )
                                     }
                                 } else {
-                                    extract_namespace_path(expr, field, &self.user_namespaces)
+                                    extract_namespace_path(
+                                        expr,
+                                        field,
+                                        &self.user_namespaces,
+                                        &self.registry,
+                                    )
                                 };
 
                                 let final_args: Vec<Operand> = arg_regs.clone();
@@ -3389,9 +3562,8 @@ impl AstToIrGenerator {
                                     let print_func_name = if let Expr::Var(name, _) = func.as_ref()
                                     {
                                         if name == "print" || name == "println" {
-                                            if let Some(qualified) = ModuleRegistry::with_std()
-                                                .short_to_qualified_map()
-                                                .get(name)
+                                            if let Some(qualified) =
+                                                self.registry.short_to_qualified_map().get(name)
                                             {
                                                 qualified.clone()
                                             } else {
@@ -3442,9 +3614,8 @@ impl AstToIrGenerator {
                                     let print_func_name = if let Expr::Var(name, _) = func.as_ref()
                                     {
                                         if name == "print" || name == "println" {
-                                            if let Some(qualified) = ModuleRegistry::with_std()
-                                                .short_to_qualified_map()
-                                                .get(name)
+                                            if let Some(qualified) =
+                                                self.registry.short_to_qualified_map().get(name)
                                             {
                                                 qualified.clone()
                                             } else {
@@ -3495,7 +3666,7 @@ impl AstToIrGenerator {
                 // io 是通过 use std.{io} 导入的模块变量
                 if let Expr::Var(module_name, _) = expr.as_ref() {
                     if let Some(full_path) = {
-                        let reg = ModuleRegistry::with_std();
+                        let reg = &self.registry;
                         if reg.is_std_submodule(module_name) {
                             let path = format!("std.{}", field);
                             if reg.is_native_name(&path) {
@@ -3539,10 +3710,11 @@ impl AstToIrGenerator {
                     }
                 } else {
                     // 提取完整的命名空间路径（如 std.math.PI）
-                    let full_path = extract_namespace_path(expr, field, &self.user_namespaces);
+                    let full_path =
+                        extract_namespace_path(expr, field, &self.user_namespaces, &self.registry);
 
                     // 检查是否是命名空间常量访问
-                    if ModuleRegistry::with_std().is_native_name(&full_path) {
+                    if self.registry.is_native_name(&full_path) {
                         // 命名空间常量访问：生成零参数函数调用
                         instructions.push(Instruction::Call {
                             dst: Some(Operand::Local(result_reg)),
@@ -4290,7 +4462,9 @@ pub fn generate_ir(
     ast: &crate::frontend::core::parser::ast::Module,
     result: &crate::frontend::core::typecheck::TypeCheckResult,
 ) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
-    let mut generator = AstToIrGenerator::new_with_type_result(result);
+    // 单文件模式：仅 std 注册表，module_key 为 None → 不启用模块限定。
+    let mut generator =
+        AstToIrGenerator::new_with_type_result(result, ModuleRegistry::with_std(), None);
     generator.generate_module_ir(ast)
 }
 
@@ -4304,8 +4478,14 @@ pub fn generate_ir_with_context(
     result: &crate::frontend::core::typecheck::TypeCheckResult,
     cross_file_types: &[&crate::frontend::core::parser::ast::Module],
     cross_file_globals: &[(String, MonoType)],
+    registry: &ModuleRegistry,
+    module_key: &str,
 ) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
-    let mut generator = AstToIrGenerator::new_with_type_result(result);
+    let mut generator = AstToIrGenerator::new_with_type_result(
+        result,
+        registry.clone(),
+        Some(module_key.to_string()),
+    );
     generator.seed_cross_file_types(cross_file_types);
     generator.seed_cross_file_globals(cross_file_globals);
     generator.generate_module_ir(ast)

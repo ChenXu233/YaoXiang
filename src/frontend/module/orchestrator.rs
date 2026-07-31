@@ -34,7 +34,6 @@ use crate::frontend::core::types::PolyType;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::symbol::SymbolTable;
 use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
-use crate::middle::core::ir::{ConstValue, Instruction, Operand};
 use crate::middle::ModuleIR;
 
 /// 一个已发现的源文件：模块键 + 磁盘路径 + 源码
@@ -117,18 +116,22 @@ pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
     // 跨文件同名顶层函数因此天然共存，不再冲突。
     let mut module_irs: Vec<(String, ModuleIR)> = Vec::new();
     for ((key, path, ast), result) in asts.iter().zip(type_results.iter()) {
-        let mut ir =
-            crate::middle::generate_ir_with_context(ast, result, &all_ast_refs, &all_globals)
-                .map_err(|diags| OrchestratorError::Compile {
-                    path: path.display().to_string(),
-                    message: diags
-                        .iter()
-                        .map(|d| d.to_string())
-                        .collect::<Vec<_>>()
-                        .join("\n"),
-                })?;
-        let aliases = build_import_aliases(ast, &registry);
-        qualify_module_ir(&mut ir, key, &aliases);
+        let ir = crate::middle::generate_ir_with_context(
+            ast,
+            result,
+            &all_ast_refs,
+            &all_globals,
+            &registry,
+            key,
+        )
+        .map_err(|diags| OrchestratorError::Compile {
+            path: path.display().to_string(),
+            message: diags
+                .iter()
+                .map(|d| d.to_string())
+                .collect::<Vec<_>>()
+                .join("\n"),
+        })?;
         module_irs.push((path.display().to_string(), ir));
     }
 
@@ -213,159 +216,6 @@ fn link_module_irs(
     Ok(merged)
 }
 
-/// RFC-029 限定名：把一个文件 IR 里的顶层函数名重写为 `{module_key}.{name}`，
-/// 并把函数体里对这些函数与导入函数的调用/闭包引用一并重写。
-///
-/// module=record 语义：`a.helper` 与 `b.helper` 是两个 record 的不同字段，本就不冲突。
-/// 解释器函数表是扁平 name→func，故用限定名作键使其共存。
-///
-/// #244：TypeDecl 与方法派生函数也限定——`a.Point` 与 `b.Point` 是不同 record 的
-/// 不同字段，构造器/方法/vtable 随之共存。方法派生函数（`Point.get_x`）按本地类型
-/// 名前缀匹配限定为 `lib.Point.get_x`，与 codegen `CreateStruct.type_name` 及解释器
-/// `build_vtable` 的前缀查找天然契合。
-fn qualify_module_ir(
-    ir: &mut ModuleIR,
-    module_key: &str,
-    aliases: &HashMap<String, String>,
-) {
-    // 先收集本文件的类型名（TypeDecl），供方法派生函数前缀匹配。
-    let mut type_names: std::collections::HashSet<String> = std::collections::HashSet::new();
-    for func in &ir.functions {
-        if func.is_type_decl() {
-            type_names.insert(func.name.clone());
-        }
-    }
-
-    // 本文件要限定的函数：普通函数、TypeDecl、方法派生函数（前缀是本地类型）。
-    // 限定名统一经 SymbolTable::qualify 生成——全仓库限定名语法的唯一所有者。
-    let mut rename: HashMap<String, String> = HashMap::new();
-    for func in &ir.functions {
-        let bare = &func.name;
-        if func.is_type_decl() {
-            // TypeDecl：Point → lib.Point
-            rename.insert(bare.clone(), SymbolTable::qualify(module_key, bare));
-        } else if let Some(dot_pos) = bare.find('.') {
-            // 带点名字：方法派生（Point.get_x）或外部限定名（std.io.println）。
-            // 只有限定点是本地类型时才限定，避免误伤 std 等已限定名。
-            let prefix = &bare[..dot_pos];
-            if type_names.contains(prefix) {
-                rename.insert(bare.clone(), SymbolTable::qualify(module_key, bare));
-            }
-        } else {
-            // 普通代码函数：distance → lib.distance
-            rename.insert(bare.clone(), SymbolTable::qualify(module_key, bare));
-        }
-    }
-
-    // 重写函数定义名，及按函数名索引的 per-function 映射。
-    for func in &mut ir.functions {
-        if let Some(q) = rename.get(&func.name) {
-            func.name = q.clone();
-        }
-    }
-    ir.mut_locals = remap_keys(std::mem::take(&mut ir.mut_locals), &rename);
-    ir.loop_binding_locals = remap_keys(std::mem::take(&mut ir.loop_binding_locals), &rename);
-    ir.local_names = remap_keys(std::mem::take(&mut ir.local_names), &rename);
-
-    // 重写调用/闭包引用：本文件函数（rename）+ 导入函数（aliases）。
-    for func in &mut ir.functions {
-        if func.is_type_decl() {
-            continue;
-        }
-        for block in func.blocks_mut() {
-            for instr in &mut block.instructions {
-                rewrite_call_names(instr, &rename, aliases);
-            }
-        }
-    }
-}
-
-/// 按重命名表替换一张以函数名为键的映射的键。
-fn remap_keys<V>(
-    map: HashMap<String, V>,
-    rename: &HashMap<String, String>,
-) -> HashMap<String, V> {
-    map.into_iter()
-        .map(|(k, v)| (rename.get(&k).cloned().unwrap_or(k), v))
-        .collect()
-}
-
-/// 重写单条指令里的函数名引用（Call/TailCall 的字符串 func、MakeClosure 的 func）。
-///
-/// 解析顺序：完全匹配 rename（本文件函数）→ 完全匹配 aliases（导入函数）→
-/// 前缀匹配（方法调用 `Point.get_x` 经 `Point` 的 rename/alias 限定为 `lib.Point.get_x`，#244）。
-fn rewrite_call_names(
-    instr: &mut Instruction,
-    rename: &HashMap<String, String>,
-    aliases: &HashMap<String, String>,
-) {
-    let resolve = |name: &str| -> Option<String> {
-        rename
-            .get(name)
-            .cloned()
-            .or_else(|| aliases.get(name).cloned())
-            .or_else(|| {
-                // 方法调用前缀匹配：Point.get_x → lib.Point.get_x
-                let dot_pos = name.find('.')?;
-                let prefix = &name[..dot_pos];
-                let suffix = &name[dot_pos..]; // 含点
-                rename
-                    .get(prefix)
-                    .or_else(|| aliases.get(prefix))
-                    .map(|q| format!("{}{}", q, suffix))
-            })
-    };
-    match instr {
-        Instruction::Call { func, .. } | Instruction::TailCall { func, .. } => {
-            if let Operand::Const(ConstValue::String(name)) = func {
-                if let Some(q) = resolve(name) {
-                    *name = q;
-                }
-            }
-        }
-        Instruction::MakeClosure { func, .. } => {
-            if let Some(q) = resolve(func) {
-                *func = q;
-            }
-        }
-        _ => {}
-    }
-}
-
-/// 从一个文件的 `use` 语句构建导入别名表：本地短名 → 源模块限定名（registry full_path）。
-///
-/// 供限定名重写解析跨文件调用目标。std 调用已由 IR 生成限定为 `std.*`，不在此表。
-fn build_import_aliases(
-    ast: &Module,
-    registry: &ModuleRegistry,
-) -> HashMap<String, String> {
-    let mut aliases = HashMap::new();
-    for stmt in &ast.items {
-        if let StmtKind::Use { path, items, .. } = &stmt.kind {
-            let Some(exports) = registry.get_exports(path) else {
-                continue;
-            };
-            if let Some(names) = items {
-                for name in names {
-                    if let Some(export) = exports.get(name) {
-                        // 别名函数/常量/类型（调用目标）。#244 后类型也限定：构造调用
-                        // `Point(...)` 的函数名被限定为 `lib.Point`，导入方须把本地短名
-                        // `Point` 别名到 `lib.Point` 才能解析；方法调用 `Point.get_x` 经
-                        // rewrite_call_names 的前缀匹配同样受益于此别名。
-                        if matches!(
-                            export.kind,
-                            ExportKind::Function | ExportKind::Constant | ExportKind::Type
-                        ) {
-                            aliases.insert(name.clone(), export.full_path.clone());
-                        }
-                    }
-                }
-            }
-        }
-    }
-    aliases
-}
-
 /// 计算入口文件的模块键（与 `module_key_for` 一致：文件 stem，`mod.yx` 折叠为目录名）。
 fn entry_module_key(entry: &Path) -> String {
     let stem = entry
@@ -383,7 +233,6 @@ fn entry_module_key(entry: &Path) -> String {
     }
 }
 
-/// 构建预构建 Registry：std + 所有用户模块（含真实签名）。
 pub fn build_registry(entry: &Path) -> Result<ModuleRegistry, OrchestratorError> {
     let files = discover(entry)?;
     build_registry_from(&files)
