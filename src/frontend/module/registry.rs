@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 
+use super::symbol::{DefKind, SymbolTable};
 use super::{Export, ExportKind, ModuleError, ModuleInfo, ModuleSource};
 use crate::frontend::core::types::mono::MonoType;
 
@@ -12,10 +13,15 @@ use crate::frontend::core::types::mono::MonoType;
 ///
 /// 存储所有已注册的模块信息，支持按路径查询。
 /// 对外提供统一的模块发现接口。
+///
+/// 同时拥有项目级 [`SymbolTable`]：每个模块 `register` 时其顶层绑定（函数/类型/常量/方法）
+/// 被增量 intern 为唯一 DefId。注册表是「项目有哪些模块」的权威，也是「绑定身份」的权威。
 #[derive(Debug, Default, Clone)]
 pub struct ModuleRegistry {
     /// 模块映射（path -> ModuleInfo）
     modules: HashMap<String, ModuleInfo>,
+    /// 项目级符号表：所有已注册模块的顶层绑定身份，随 register 增量构建。
+    symbols: SymbolTable,
 }
 
 impl ModuleRegistry {
@@ -23,6 +29,7 @@ impl ModuleRegistry {
     pub fn new() -> Self {
         Self {
             modules: HashMap::new(),
+            symbols: SymbolTable::new(),
         }
     }
 
@@ -34,11 +41,44 @@ impl ModuleRegistry {
     }
 
     /// 注册一个模块
+    ///
+    /// 同时把该模块的顶层绑定（导出 + 方法）增量 intern 进项目符号表。
     pub fn register(
         &mut self,
         module: ModuleInfo,
     ) {
+        self.intern_module(&module);
         self.modules.insert(module.path.clone(), module);
+    }
+
+    /// 项目级符号表（所有已注册模块的绑定身份）。
+    pub fn symbols(&self) -> &SymbolTable {
+        &self.symbols
+    }
+
+    /// 把一个模块的导出与方法登记进项目符号表。
+    ///
+    /// 限定名直接采用 `export.full_path`（即 `{module_key}.{bare}`，与 SymbolTable::qualify 一致）。
+    /// 子模块不是绑定，跳过。方法从 `method_bindings`（键 `Type.method`）登记，
+    /// 链接到所属类型并构建静态 vtable。
+    fn intern_module(
+        &mut self,
+        module: &ModuleInfo,
+    ) {
+        for export in module.exports.values() {
+            let kind = match export.kind {
+                ExportKind::Function => DefKind::Function,
+                ExportKind::Type => DefKind::Type,
+                ExportKind::Constant => DefKind::Constant,
+                ExportKind::SubModule => continue,
+            };
+            self.symbols.intern_full(&export.full_path, kind);
+        }
+        for method_key in module.method_bindings.keys() {
+            if let Some((type_bare, method)) = method_key.split_once('.') {
+                self.symbols.intern_method(&module.path, type_bare, method);
+            }
+        }
     }
 
     /// 获取模块信息
@@ -219,5 +259,78 @@ impl ModuleRegistry {
 
         // 注册根 std 模块
         self.register(std_root);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::frontend::core::types::mono::MonoType;
+
+    fn export(
+        name: &str,
+        full_path: &str,
+        kind: ExportKind,
+    ) -> Export {
+        Export {
+            name: name.to_string(),
+            full_path: full_path.to_string(),
+            kind,
+            signature: String::new(),
+            mono_type: Some(MonoType::Int(64)),
+        }
+    }
+
+    #[test]
+    fn register_interns_exports_and_methods() {
+        let mut registry = ModuleRegistry::new();
+        let mut lib = ModuleInfo::new("lib".to_string(), ModuleSource::User);
+        lib.add_export(export("helper", "lib.helper", ExportKind::Function));
+        lib.add_export(export("Point", "lib.Point", ExportKind::Type));
+        lib.add_export(export("PI", "lib.PI", ExportKind::Constant));
+        // 方法绑定：Point.get_x / Point.get_y
+        lib.method_bindings
+            .insert("Point.get_x".to_string(), MonoType::Int(64));
+        lib.method_bindings
+            .insert("Point.get_y".to_string(), MonoType::Int(64));
+        registry.register(lib);
+
+        let symbols = registry.symbols();
+        // 导出按类别登记
+        let helper = symbols.def("lib.helper").expect("function interned");
+        let point = symbols.def("lib.Point").expect("type interned");
+        let pi = symbols.def("lib.PI").expect("constant interned");
+        assert_eq!(symbols.kind(helper), DefKind::Function);
+        assert_eq!(symbols.kind(point), DefKind::Type);
+        assert_eq!(symbols.kind(pi), DefKind::Constant);
+
+        // 方法登记并链接到类型，构建静态 vtable
+        let get_x = symbols.def("lib.Point.get_x").expect("method interned");
+        assert_eq!(symbols.kind(get_x), DefKind::Method);
+        assert_eq!(symbols.parent(get_x), Some(point));
+        let vt = symbols.vtable(point);
+        assert_eq!(vt.len(), 2);
+        assert!(vt.iter().any(|(n, d)| n == "get_x" && *d == get_x));
+    }
+
+    #[test]
+    fn register_is_idempotent_for_symbols() {
+        let mut registry = ModuleRegistry::new();
+        let mut lib = ModuleInfo::new("lib".to_string(), ModuleSource::User);
+        lib.add_export(export("helper", "lib.helper", ExportKind::Function));
+        registry.register(lib.clone());
+        registry.register(lib);
+        // 重复注册不产生重复 DefId
+        assert_eq!(registry.symbols().def("lib.helper").map(|d| d.0), Some(0));
+        assert_eq!(registry.symbols().len(), 1);
+    }
+
+    #[test]
+    fn with_std_interns_std_exports() {
+        let registry = ModuleRegistry::with_std();
+        // std.io.println 应被 intern 为函数
+        let println = registry.symbols().def("std.io.println");
+        assert!(println.is_some(), "std.io.println interned");
+        assert_eq!(registry.symbols().kind(println.unwrap()), DefKind::Function);
     }
 }

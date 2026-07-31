@@ -110,6 +110,18 @@ impl SymbolTable {
         self.alloc(qualified, DefKind::Function, None)
     }
 
+    /// 登记（或复用）一个**已限定**名并指定类别，无 parent。幂等。
+    ///
+    /// 与 [`intern_kind`](Self::intern_kind) 不同：此函数收的是完整限定名（如 `std.io.println`），
+    /// 不再经 `qualify` 拼接。供从注册表 `export.full_path` 批量登记使用。
+    pub fn intern_full(
+        &mut self,
+        qualified: &str,
+        kind: DefKind,
+    ) -> DefId {
+        self.alloc(qualified, kind, None)
+    }
+
     /// 登记 `{module}.{bare}` 并返回 DefId（等价 `intern(&qualify(module, bare))`）。
     pub fn intern_qualified(
         &mut self,
