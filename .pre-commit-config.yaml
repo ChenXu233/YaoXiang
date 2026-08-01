@@ -22,6 +22,9 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
+        # clippy-driver 产物指纹与 rustc 不同，会污染主 target 缓存导致 cargo test 全量重编
+        env:
+          CARGO_TARGET_DIR: target/clippy
 
       - id: cargo-test
         name: cargo test
