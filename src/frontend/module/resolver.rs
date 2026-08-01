@@ -16,15 +16,16 @@
 
 use std::collections::HashMap;
 
+use std::cell::Ref;
 use super::registry::ModuleRegistry;
 use super::symbol::{DefId, SymbolTable};
 
 /// 名字解析器：在给定文件上下文（模块键 + 用户命名空间）下把名字解析为限定名 / DefId。
 ///
-/// 全部字段借用，按解析上下文（通常一个文件）临时构造。
+/// 符号表经 `Ref` 借用（注册表内为 `Rc<RefCell>`），按解析上下文（通常一个文件）临时构造。
 pub struct Resolver<'a> {
     /// 项目级符号表（限定名 → DefId）
-    symbols: &'a SymbolTable,
+    symbols: Ref<'a, SymbolTable>,
     /// 模块注册表（用于判定 std 子模块）
     registry: &'a ModuleRegistry,
     /// 当前文件的模块限定键
@@ -35,7 +36,7 @@ pub struct Resolver<'a> {
 
 impl<'a> Resolver<'a> {
     pub fn new(
-        symbols: &'a SymbolTable,
+        symbols: Ref<'a, SymbolTable>,
         registry: &'a ModuleRegistry,
         module_key: &'a str,
         user_namespaces: &'a HashMap<String, String>,
@@ -120,7 +121,11 @@ mod tests {
     use super::*;
     use crate::frontend::module::symbol::DefKind;
 
-    fn ctx() -> (SymbolTable, ModuleRegistry, HashMap<String, String>) {
+    fn ctx() -> (
+        std::cell::RefCell<SymbolTable>,
+        ModuleRegistry,
+        HashMap<String, String>,
+    ) {
         let mut symbols = SymbolTable::new();
         // 本文件 lib 的顶层绑定与方法
         symbols.intern_kind("lib", "helper", DefKind::Function);
@@ -138,13 +143,13 @@ mod tests {
         user_namespaces.insert("geometry".to_string(), "std.math.geometry".to_string());
         user_namespaces.insert("other".to_string(), "other".to_string());
 
-        (symbols, registry, user_namespaces)
+        (std::cell::RefCell::new(symbols), registry, user_namespaces)
     }
 
     #[test]
     fn namespace_detection() {
         let (symbols, registry, un) = ctx();
-        let r = Resolver::new(&symbols, &registry, "lib", &un);
+        let r = Resolver::new(symbols.borrow(), &registry, "lib", &un);
         assert!(r.is_namespace("std"));
         assert!(r.is_namespace("io")); // std 子模块
         assert!(r.is_namespace("lib")); // 用户模块别名
@@ -156,7 +161,7 @@ mod tests {
     #[test]
     fn resolve_std_paths() {
         let (symbols, registry, un) = ctx();
-        let r = Resolver::new(&symbols, &registry, "lib", &un);
+        let r = Resolver::new(symbols.borrow(), &registry, "lib", &un);
         assert_eq!(
             r.resolve_namespace("std", &["io", "println"]),
             "std.io.println"
@@ -171,16 +176,16 @@ mod tests {
     #[test]
     fn resolve_namespace_to_def() {
         let (symbols, registry, un) = ctx();
-        let r = Resolver::new(&symbols, &registry, "lib", &un);
+        let r = Resolver::new(symbols.borrow(), &registry, "lib", &un);
         let d = r
             .resolve_namespace_def("io", &["println"])
             .expect("interned");
-        assert_eq!(symbols.name(d), "std.io.println");
+        assert_eq!(symbols.borrow().name(d), "std.io.println");
         // 跨文件用户模块命名空间
         let d2 = r
             .resolve_namespace_def("other", &["helper"])
             .expect("interned");
-        assert_eq!(symbols.name(d2), "other.helper");
+        assert_eq!(symbols.borrow().name(d2), "other.helper");
         // 未登记 → None（解析失败可在编译期报错，而非运行时 function not found）
         assert!(r.resolve_namespace_def("io", &["nope"]).is_none());
     }
@@ -188,12 +193,12 @@ mod tests {
     #[test]
     fn resolve_local_and_method() {
         let (symbols, registry, un) = ctx();
-        let r = Resolver::new(&symbols, &registry, "lib", &un);
+        let r = Resolver::new(symbols.borrow(), &registry, "lib", &un);
         let helper = r.resolve_local("helper").expect("local fn");
-        assert_eq!(symbols.name(helper), "lib.helper");
+        assert_eq!(symbols.borrow().name(helper), "lib.helper");
         let get_x = r.resolve_method("Point", "get_x").expect("method");
-        assert_eq!(symbols.name(get_x), "lib.Point.get_x");
-        assert_eq!(symbols.kind(get_x), DefKind::Method);
+        assert_eq!(symbols.borrow().name(get_x), "lib.Point.get_x");
+        assert_eq!(symbols.borrow().kind(get_x), DefKind::Method);
         // 不存在的方法
         assert!(r.resolve_method("Point", "get_y").is_none());
         assert!(r.resolve_local("missing").is_none());
@@ -202,7 +207,7 @@ mod tests {
     #[test]
     fn bare_prefix_falls_back_to_direct_qualify() {
         let (symbols, registry, un) = ctx();
-        let r = Resolver::new(&symbols, &registry, "lib", &un);
+        let r = Resolver::new(symbols.borrow(), &registry, "lib", &un);
         // 非命名空间头视为模块/类型前缀直接限定（与 extract_namespace_path else 分支一致）
         assert_eq!(r.resolve_namespace("Point", &["get_x"]), "Point.get_x");
     }

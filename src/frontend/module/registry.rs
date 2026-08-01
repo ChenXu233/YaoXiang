@@ -4,6 +4,8 @@
 //! 提供统一的模块发现接口，合并 std 模块和用户模块。
 
 use std::collections::HashMap;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use super::symbol::{DefKind, SymbolTable};
 use super::{Export, ExportKind, ModuleError, ModuleInfo, ModuleSource};
@@ -16,12 +18,18 @@ use crate::frontend::core::types::mono::MonoType;
 ///
 /// 同时拥有项目级 [`SymbolTable`]：每个模块 `register` 时其顶层绑定（函数/类型/常量/方法）
 /// 被增量 intern 为唯一 DefId。注册表是「项目有哪些模块」的权威，也是「绑定身份」的权威。
+/// 同时拥有项目级 [`SymbolTable`]：每个模块 `register` 时其顶层绑定（函数/类型/常量/方法）
+/// 被增量 intern 为唯一 DefId。注册表是「项目有哪些模块」的权威，也是「绑定身份」的权威。
+///
+/// 符号表经 `Rc<RefCell>` 共享：`clone()` 的注册表（如传入各文件 IR 生成器）共享同一张表，
+/// IR 生成期合成的闭包/匿名绑定 intern 进同一序号空间，DefId 全项目唯一。
 #[derive(Debug, Default, Clone)]
 pub struct ModuleRegistry {
     /// 模块映射（path -> ModuleInfo）
     modules: HashMap<String, ModuleInfo>,
     /// 项目级符号表：所有已注册模块的顶层绑定身份，随 register 增量构建。
-    symbols: SymbolTable,
+    /// `Rc<RefCell>`：克隆体共享同一表，生成期 intern 全项目唯一。
+    symbols: Rc<RefCell<SymbolTable>>,
 }
 
 impl ModuleRegistry {
@@ -29,7 +37,7 @@ impl ModuleRegistry {
     pub fn new() -> Self {
         Self {
             modules: HashMap::new(),
-            symbols: SymbolTable::new(),
+            symbols: Rc::new(RefCell::new(SymbolTable::new())),
         }
     }
 
@@ -52,8 +60,13 @@ impl ModuleRegistry {
     }
 
     /// 项目级符号表（所有已注册模块的绑定身份）。
-    pub fn symbols(&self) -> &SymbolTable {
-        &self.symbols
+    pub fn symbols(&self) -> std::cell::Ref<'_, SymbolTable> {
+        self.symbols.borrow()
+    }
+
+    /// 项目级符号表（可变）：IR 生成期合成的闭包/匿名绑定经此 intern。
+    pub fn symbols_mut(&self) -> std::cell::RefMut<'_, SymbolTable> {
+        self.symbols.borrow_mut()
     }
 
     /// 把一个模块的导出与方法登记进项目符号表。
@@ -72,11 +85,15 @@ impl ModuleRegistry {
                 ExportKind::Constant => DefKind::Constant,
                 ExportKind::SubModule => continue,
             };
-            self.symbols.intern_full(&export.full_path, kind);
+            self.symbols
+                .borrow_mut()
+                .intern_full(&export.full_path, kind);
         }
         for method_key in module.method_bindings.keys() {
             if let Some((type_bare, method)) = method_key.split_once('.') {
-                self.symbols.intern_method(&module.path, type_bare, method);
+                self.symbols
+                    .borrow_mut()
+                    .intern_method(&module.path, type_bare, method);
             }
         }
     }
