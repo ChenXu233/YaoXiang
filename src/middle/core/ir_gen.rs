@@ -559,7 +559,70 @@ impl AstToIrGenerator {
             let aliases = self.build_import_aliases(module);
             Self::qualify_names(&mut ir, key, &aliases);
         }
+        self.assign_defs(&mut ir);
         Ok(ir)
+    }
+
+    /// Stage 3 尾部 pass：为所有函数分配 DefId 并解析静态引用。
+    ///
+    /// 名字此时已是最终形态（多文件已限定、单文件保持裸名）：
+    /// - intern 规则：多文件直接用限定名；单文件用 `qualify("main", bare)`——与
+    ///   `module_key_or_main` 一致，保证 `FunctionIR.def` 与调用侧解析结果同源。
+    /// - 方法在单文件首次 intern 时类别退化为 `Function`（多文件已在 register 期以
+    ///   `Method` intern，幂等保留）；下游只查 def 不查 kind，无行为差异。
+    /// - 泛型函数经 mono 特化后重命名，def 随之失效——mono 路径保持按名分发（现状），
+    ///   codegen 对 def 未命中回退按名，两条路径都正确。
+    fn assign_defs(
+        &self,
+        ir: &mut ModuleIR,
+    ) {
+        let single_file = self.module_key.is_none();
+        let mut symbols = self.registry.symbols_mut();
+        for func in &mut ir.functions {
+            let intern_name = if single_file {
+                SymbolTable::qualify("main", &func.name)
+            } else {
+                func.name.clone()
+            };
+            let kind = if func.is_type_decl() {
+                crate::frontend::module::symbol::DefKind::Type
+            } else {
+                crate::frontend::module::symbol::DefKind::Function
+            };
+            func.def = Some(symbols.intern_full(&intern_name, kind));
+        }
+        // 解析静态引用：先直查（多文件限定名 / std 原生），单文件裸名回退 qualify("main", ·)。
+        // 所有函数已 intern 完毕，前向引用在此必然可解。
+        let resolve = |name: &str| {
+            symbols.def(name).or_else(|| {
+                if single_file {
+                    symbols.def(&SymbolTable::qualify("main", name))
+                } else {
+                    None
+                }
+            })
+        };
+        for func in &mut ir.functions {
+            if func.is_type_decl() {
+                continue; // TypeDecl 无指令体
+            }
+            for block in func.blocks_mut() {
+                for instr in &mut block.instructions {
+                    match instr {
+                        Instruction::Call { func, def, .. }
+                        | Instruction::TailCall { func, def, .. } => {
+                            if let Operand::Const(ConstValue::String(name)) = func {
+                                *def = resolve(name);
+                            }
+                        }
+                        Instruction::MakeClosure { func, def, .. } => {
+                            *def = resolve(func);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
     }
 
     /// RFC-029 限定名：从一个文件的 `use` 语句构建导入别名表（本地短名 → 源模块限定名）。
@@ -881,6 +944,7 @@ impl AstToIrGenerator {
                 }
 
                 Ok(Some(FunctionIR {
+                    def: None, // 由 generate_module_ir 尾部 assign_defs 填充
                     name: name.clone(),
                     params,
                     return_type,
@@ -1072,6 +1136,7 @@ impl AstToIrGenerator {
 
         // 构建函数 IR
         let func_ir = FunctionIR {
+            def: None, // 由 generate_module_ir 尾部 assign_defs 填充
             name: func_name.clone(),
             params: param_types.clone(),
             return_type,
@@ -1237,6 +1302,7 @@ impl AstToIrGenerator {
 
         // 构建函数 IR
         let func_ir = FunctionIR {
+            def: None, // 由 generate_module_ir 尾部 assign_defs 填充
             name: name.to_string(),
             params: params
                 .iter()
@@ -1333,6 +1399,7 @@ impl AstToIrGenerator {
             dst: Operand::Local(closure_dst),
             func: next_func_name.to_string(),
             env: full_env,
+            def: None,
         });
 
         // 4. Ret(closure)
@@ -1350,6 +1417,7 @@ impl AstToIrGenerator {
         let locals_types: Vec<MonoType> = vec![MonoType::Int(64); total_locals];
 
         Ok(FunctionIR {
+            def: None, // 由 generate_module_ir 尾部 assign_defs 填充
             name: func_name.to_string(),
             params: param_types,
             return_type,
@@ -1423,6 +1491,7 @@ impl AstToIrGenerator {
         let locals_types: Vec<MonoType> = vec![MonoType::Int(64); total_locals];
 
         Ok(FunctionIR {
+            def: None, // 由 generate_module_ir 尾部 assign_defs 填充
             name: func_name.to_string(),
             params: param_types,
             return_type,
@@ -1691,6 +1760,7 @@ impl AstToIrGenerator {
 
         // 为全局变量创建函数
         let func_ir = FunctionIR {
+            def: None, // 由 generate_module_ir 尾部 assign_defs 填充
             name: name.to_string(),
             params: Vec::new(),
             return_type: var_type,
@@ -1769,6 +1839,7 @@ impl AstToIrGenerator {
         let ret_type: MonoType = return_type.clone().into();
 
         let func_ir = FunctionIR {
+            def: None, // 由 generate_module_ir 尾部 assign_defs 填充
             name: name.to_string(),
             params: params
                 .iter()
@@ -2538,6 +2609,7 @@ impl AstToIrGenerator {
             func: Operand::Const(ConstValue::String("std.list.iter".to_string())),
             args: vec![Operand::Local(iterable_reg)],
             span: for_span,
+            def: None,
         });
 
         // 3. 注册循环变量
@@ -2555,6 +2627,7 @@ impl AstToIrGenerator {
             func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
             args: vec![Operand::Local(iterator_reg)],
             span: for_span,
+            def: None,
         });
 
         // 6. 如果没有更多元素，跳转到结束
@@ -2569,6 +2642,7 @@ impl AstToIrGenerator {
             func: Operand::Const(ConstValue::String("std.list.next".to_string())),
             args: vec![Operand::Local(iterator_reg)],
             span: for_span,
+            def: None,
         });
         instructions.push(Instruction::Store {
             dst: Operand::Local(var_reg),
@@ -2667,6 +2741,7 @@ impl AstToIrGenerator {
             func: Operand::Const(ConstValue::String("std.list.iter".to_string())),
             args: vec![Operand::Local(iterable_reg)],
             span,
+            def: None,
         });
 
         // 6. 注册循环变量
@@ -2687,6 +2762,7 @@ impl AstToIrGenerator {
             func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
             args: vec![Operand::Local(iterator_reg)],
             span,
+            def: None,
         });
 
         // 9. 如果没有更多元素，跳转到结束
@@ -2700,6 +2776,7 @@ impl AstToIrGenerator {
             func: Operand::Const(ConstValue::String("std.list.next".to_string())),
             args: vec![Operand::Local(iterator_reg)],
             span,
+            def: None,
         });
         instructions.push(Instruction::Store {
             dst: Operand::Local(var_reg),
@@ -2733,6 +2810,7 @@ impl AstToIrGenerator {
                 Operand::Local(closure_reg),
             ],
             span,
+            def: None,
         });
 
         // 13. 跳转回循环开始
@@ -3058,6 +3136,7 @@ impl AstToIrGenerator {
                         func: Operand::Const(ConstValue::String(func_name)),
                         args: vec![],
                         span: *var_span,
+                        def: None,
                     });
                 } else {
                     // 未找到变量，默认加载 0
@@ -3212,6 +3291,7 @@ impl AstToIrGenerator {
                             )),
                             args: arg_regs,
                             span: *span,
+                            def: None,
                         });
                     } else {
                         // 非命名空间调用：检查是否有绑定信息（RFC-004）
@@ -3271,6 +3351,7 @@ impl AstToIrGenerator {
                                 func: Operand::Const(ConstValue::String(func_name)),
                                 args: final_args,
                                 span: *span,
+                                def: None,
                             });
                         } else {
                             // 常规方法调用（无绑定）：obj.method(args) → method(obj, args)
@@ -3312,6 +3393,7 @@ impl AstToIrGenerator {
                                     func: Operand::Const(ConstValue::String(qualified_name)),
                                     args: final_args,
                                     span: *span,
+                                    def: None,
                                 });
                             } else if var_name.as_ref().is_some_and(|name| {
                                 // 检查变量的类型标注是否是约束类型（但具体类型未知）
@@ -3363,6 +3445,7 @@ impl AstToIrGenerator {
                                     func: Operand::Const(ConstValue::String(func_name)),
                                     args: final_args,
                                     span: *span,
+                                    def: None,
                                 });
                             }
                         }
@@ -3523,6 +3606,7 @@ impl AstToIrGenerator {
                                         func: Operand::Const(ConstValue::String(func_name)),
                                         args: arg_regs_for_method,
                                         span: *span,
+                                        def: None,
                                     });
 
                                     // 然后调用 std.io.print 输出字符串
@@ -3549,6 +3633,7 @@ impl AstToIrGenerator {
                                         func: Operand::Const(ConstValue::String(print_func_name)),
                                         args: vec![Operand::Local(to_string_reg)],
                                         span: *span,
+                                        def: None,
                                     });
                                 } else {
                                     // 兜底路径：类型未实现 Stringable，调用 std.io.print 输出类型信息
@@ -3576,6 +3661,7 @@ impl AstToIrGenerator {
                                             Operand::Const(ConstValue::String(type_name)),
                                         ],
                                         span: *span,
+                                        def: None,
                                     });
 
                                     // 然后调用 std.io.print 输出
@@ -3601,6 +3687,7 @@ impl AstToIrGenerator {
                                         func: Operand::Const(ConstValue::String(print_func_name)),
                                         args: vec![Operand::Local(fallback_reg)],
                                         span: *span,
+                                        def: None,
                                     });
                                 }
                             } else {
@@ -3611,6 +3698,7 @@ impl AstToIrGenerator {
                                     func: func_operand,
                                     args: arg_regs,
                                     span: *span,
+                                    def: None,
                                 });
                             }
                         } else {
@@ -3624,6 +3712,7 @@ impl AstToIrGenerator {
                                 func: func_operand,
                                 args: final_args,
                                 span: *span,
+                                def: None,
                             });
                         }
                     }
@@ -3655,6 +3744,7 @@ impl AstToIrGenerator {
                             func: Operand::Const(ConstValue::String(full_path)),
                             args: vec![],
                             span: *span,
+                            def: None,
                         });
                     } else {
                         // 普通字段访问
@@ -3688,6 +3778,7 @@ impl AstToIrGenerator {
                             func: Operand::Const(ConstValue::String(full_path)),
                             args: vec![],
                             span: *span,
+                            def: None,
                         });
                     } else {
                         // 普通字段访问
@@ -3746,6 +3837,7 @@ impl AstToIrGenerator {
                     func: Operand::Const(ConstValue::String("std.list.iter".to_string())),
                     args: vec![Operand::Local(iterable_reg)],
                     span: *span,
+                    def: None,
                 });
 
                 // 4. 注册循环变量
@@ -3762,6 +3854,7 @@ impl AstToIrGenerator {
                     func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
                     args: vec![Operand::Local(iterator_reg)],
                     span: *span,
+                    def: None,
                 });
 
                 let jump_end_idx = instructions.len();
@@ -3777,6 +3870,7 @@ impl AstToIrGenerator {
                     func: Operand::Const(ConstValue::String("std.list.next".to_string())),
                     args: vec![Operand::Local(iterator_reg)],
                     span: *span,
+                    def: None,
                 });
 
                 // 8. 存储到循环变量
@@ -3807,6 +3901,7 @@ impl AstToIrGenerator {
                         func: Operand::Const(ConstValue::String("std.list.push".to_string())),
                         args: vec![Operand::Local(result_reg), Operand::Local(comp_reg)],
                         span: *span,
+                        def: None,
                     });
 
                     // 修复条件跳转
@@ -3825,6 +3920,7 @@ impl AstToIrGenerator {
                         func: Operand::Const(ConstValue::String("std.list.push".to_string())),
                         args: vec![Operand::Local(result_reg), Operand::Local(comp_reg)],
                         span: *span,
+                        def: None,
                     });
                 }
 
@@ -4188,6 +4284,7 @@ impl AstToIrGenerator {
                     .collect();
 
                 let closure_func = FunctionIR {
+                    def: None, // 由 generate_module_ir 尾部 assign_defs 填充
                     name: closure_name.clone(),
                     params: param_types,
                     return_type,
@@ -4218,6 +4315,7 @@ impl AstToIrGenerator {
                     dst: Operand::Local(result_reg),
                     func: closure_name,
                     env: env_vars,
+                    def: None,
                 });
             }
             Expr::Borrow {
@@ -4409,6 +4507,7 @@ impl AstToIrGenerator {
                     func: Operand::Const(ConstValue::String("std.string.format".to_string())),
                     args: call_args,
                     span: *span,
+                    def: None,
                 });
             }
             _ => {

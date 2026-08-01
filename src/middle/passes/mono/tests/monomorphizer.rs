@@ -34,6 +34,7 @@ use crate::util::span::Span;
 fn make_identity_ir() -> FunctionIR {
     let param_type = MonoType::TypeVar(TypeVar::new(0));
     FunctionIR {
+        def: None,
         name: "identity".to_string(),
         params: vec![param_type.clone()],
         return_type: param_type.clone(),
@@ -61,6 +62,7 @@ fn make_identity_ir() -> FunctionIR {
 fn make_swap_ir() -> FunctionIR {
     let t = MonoType::TypeVar(TypeVar::new(0));
     FunctionIR {
+        def: None,
         name: "swap".to_string(),
         params: vec![t.clone(), t.clone()],
         return_type: MonoType::Tuple(vec![t.clone(), t.clone()]),
@@ -106,6 +108,7 @@ fn make_pair_type_ir(fields: &[&str]) -> FunctionIR {
         .collect();
 
     FunctionIR {
+        def: None,
         name: "Pair".to_string(),
         params: vec![MonoType::MetaType {
             universe_level: UniverseLevel::type1(),
@@ -254,6 +257,7 @@ fn test_specialize_non_generic_function_returns_none() {
     // Arrange
     let mut mono = Monomorphizer::new();
     let func = FunctionIR {
+        def: None,
         name: "add".to_string(),
         params: vec![MonoType::Int(64), MonoType::Int(64)],
         return_type: MonoType::Int(64),
@@ -293,6 +297,7 @@ fn test_specialize_with_generic_type_args_replaces_inner_types() {
     let list_t = MonoType::List(Box::new(t.clone()));
 
     let generic = FunctionIR {
+        def: None,
         name: "first".to_string(),
         params: vec![list_t],
         return_type: t,
@@ -335,6 +340,7 @@ fn test_scan_for_new_calls_no_generic_calls_leaves_queue_empty() {
     // Arrange
     let mut mono = Monomorphizer::new();
     let func = FunctionIR {
+        def: None,
         name: "simple".to_string(),
         params: vec![],
         return_type: MonoType::Void,
@@ -365,6 +371,7 @@ fn test_scan_for_new_calls_with_generic_call_enqueues_request() {
         .insert("identity".to_string(), make_identity_ir());
 
     let func = FunctionIR {
+        def: None,
         name: "wrapper(Int)".to_string(),
         params: vec![MonoType::Int(64)],
         return_type: MonoType::Int(64),
@@ -378,6 +385,7 @@ fn test_scan_for_new_calls_with_generic_call_enqueues_request() {
                         func: Operand::Const(ConstValue::String("identity".to_string())),
                         args: vec![Operand::Arg(0)],
                         span: Span::default(),
+                        def: None,
                     },
                     Instruction::Ret(Some(Operand::Local(0))),
                 ],
@@ -412,6 +420,7 @@ fn test_scan_for_new_calls_duplicate_prevented_by_processed_set() {
     ));
 
     let func = FunctionIR {
+        def: None,
         name: "dup_check".to_string(),
         params: vec![MonoType::Int(64)],
         return_type: MonoType::Int(64),
@@ -425,6 +434,7 @@ fn test_scan_for_new_calls_duplicate_prevented_by_processed_set() {
                         func: Operand::Const(ConstValue::String("identity".to_string())),
                         args: vec![Operand::Arg(0)],
                         span: Span::default(),
+                        def: None,
                     },
                     Instruction::Ret(Some(Operand::Local(0))),
                 ],
@@ -452,6 +462,7 @@ fn test_operand_to_type_hint_resolves_arg_local_and_const() {
     // Arrange
     let mono = Monomorphizer::new();
     let func = FunctionIR {
+        def: None,
         name: "test".to_string(),
         params: vec![MonoType::Int(64), MonoType::String],
         return_type: MonoType::Void,
@@ -510,6 +521,7 @@ fn test_replace_call_sites_replaces_generic_call_in_main() {
         .insert("identity".to_string(), make_identity_ir());
 
     let main_func = FunctionIR {
+        def: None,
         name: "main".to_string(),
         params: vec![],
         return_type: MonoType::Void,
@@ -523,6 +535,7 @@ fn test_replace_call_sites_replaces_generic_call_in_main() {
                         func: Operand::Const(ConstValue::String("identity".to_string())),
                         args: vec![Operand::Const(ConstValue::Int(42))],
                         span: Span::default(),
+                        def: None,
                     },
                     Instruction::Ret(Some(Operand::Local(0))),
                 ],
@@ -565,6 +578,7 @@ fn test_replace_call_sites_skips_generic_functions() {
     let mono = Monomorphizer::new();
 
     let wrapper_func = FunctionIR {
+        def: None,
         name: "wrapper".to_string(),
         params: vec![MonoType::TypeVar(TypeVar::new(0))],
         return_type: MonoType::TypeVar(TypeVar::new(0)),
@@ -578,6 +592,7 @@ fn test_replace_call_sites_skips_generic_functions() {
                         func: Operand::Const(ConstValue::String("identity".to_string())),
                         args: vec![Operand::Arg(0)],
                         span: Span::default(),
+                        def: None,
                     },
                     Instruction::Ret(Some(Operand::Local(0))),
                 ],
@@ -620,6 +635,7 @@ fn test_replace_call_sites_no_matching_request_does_not_replace() {
     let mono = Monomorphizer::new();
 
     let main_func = FunctionIR {
+        def: None,
         name: "main".to_string(),
         params: vec![],
         return_type: MonoType::Void,
@@ -632,6 +648,7 @@ fn test_replace_call_sites_no_matching_request_does_not_replace() {
                     func: Operand::Const(ConstValue::String("foo".to_string())),
                     args: vec![],
                     span: Span::default(),
+                    def: None,
                 }],
                 successors: Vec::new(),
             }],
@@ -674,6 +691,7 @@ fn test_monomorphize_end_to_end_specializes_and_replaces_calls() {
     let identity = make_identity_ir();
 
     let main_func = FunctionIR {
+        def: None,
         name: "main".to_string(),
         params: vec![],
         return_type: MonoType::Int(64),
@@ -687,6 +705,7 @@ fn test_monomorphize_end_to_end_specializes_and_replaces_calls() {
                         func: Operand::Const(ConstValue::String("identity".to_string())),
                         args: vec![Operand::Const(ConstValue::Int(42))],
                         span: Span::default(),
+                        def: None,
                     },
                     Instruction::Ret(Some(Operand::Local(0))),
                 ],
@@ -863,6 +882,7 @@ fn test_collect_generic_type_refs_nested_specialization() {
         is_mut: false,
     })];
     let type_def = FunctionIR {
+        def: None,
         name: "List".to_string(),
         params: vec![MonoType::MetaType {
             universe_level: UniverseLevel::type1(),
@@ -927,6 +947,7 @@ fn test_specialize_type_lowercase_param_name() {
     })];
 
     let type_def = FunctionIR {
+        def: None,
         name: "Small".to_string(),
         params: vec![MonoType::MetaType {
             universe_level: UniverseLevel::type1(),

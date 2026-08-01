@@ -2,6 +2,7 @@
 
 pub use crate::frontend::core::parser::ast::Type;
 use crate::frontend::core::typecheck::MonoType;
+use crate::frontend::module::symbol::DefId;
 use crate::util::span::Span;
 
 /// Instruction operand
@@ -167,6 +168,8 @@ pub enum Instruction {
         dst: Option<Operand>,
         func: Operand,
         args: Vec<Operand>,
+        /// 静态调用目标的绑定身份（字节码函数为 Some；std 原生/外部名为 None，按名走 FFI）
+        def: Option<DefId>,
         /// Source span for error reporting
         span: Span,
     },
@@ -198,6 +201,8 @@ pub enum Instruction {
     TailCall {
         func: Operand,
         args: Vec<Operand>,
+        /// 静态调用目标的绑定身份（同 `Call::def`）
+        def: Option<DefId>,
     },
     Ret(Option<Operand>),
     Alloc {
@@ -292,6 +297,8 @@ pub enum Instruction {
     MakeClosure {
         dst: Operand,
         func: String,
+        /// 闭包目标函数的绑定身份（生成期 intern，必有值；测试手工构造可为 None）
+        def: Option<DefId>,
         env: Vec<Operand>,
     },
     /// Drop a value (ownership-based cleanup)
@@ -408,6 +415,8 @@ pub enum FunctionBody {
 #[derive(Debug, Clone)]
 pub struct FunctionIR {
     pub name: String,
+    /// 绑定身份（生成期经 SymbolTable intern；测试手工构造可为 None）
+    pub def: Option<DefId>,
     pub params: Vec<MonoType>,
     pub return_type: MonoType,
     pub body: FunctionBody,

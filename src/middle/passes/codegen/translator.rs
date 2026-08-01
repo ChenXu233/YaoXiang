@@ -41,6 +41,8 @@ pub struct Translator {
     closure_function_offset: Option<usize>,
     /// 函数名到索引的映射
     function_name_to_idx: Option<HashMap<String, usize>>,
+    /// DefId 到函数表索引的映射（Stage 3：按 DefId 分发的主路径）
+    function_def_to_idx: HashMap<crate::frontend::module::symbol::DefId, usize>,
     /// FFI 函数元数据缓存: func_name → mechanism/lib/symbol
     ffi_func_meta: HashMap<String, FfiFuncMeta>,
 
@@ -59,6 +61,7 @@ impl Translator {
             operand_resolver: OperandResolver::new(),
             current_function: None,
             ffi_func_meta: HashMap::new(),
+            function_def_to_idx: HashMap::new(),
             closure_function_offset: None,
             function_name_to_idx: None,
             generate_debug_info: false,
@@ -119,6 +122,13 @@ impl Translator {
         for (idx, func) in module.functions.iter().enumerate() {
             function_name_to_idx.insert(func.name.clone(), idx);
         }
+        // 建立 DefId 到索引的映射（Stage 3 主路径；FunctionIR.def 由 ir_gen 尾部 assign_defs 填充）
+        self.function_def_to_idx = module
+            .functions
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, f)| f.def.map(|d| (d, idx)))
+            .collect();
 
         // 注册闭包函数的索引偏移量（闭包函数从 module.functions.len() 开始）
         // 这样 translate_make_closure 就可以正确计算闭包函数的索引
@@ -276,6 +286,8 @@ impl Translator {
 
         let temp_func = FunctionIR {
             name: struct_name.clone(),
+            // 构造器与类型同一绑定身份：调用 Point(...) 解析到类型的 DefId
+            def: type_func.def,
             params: param_types,
             return_type: type_func.return_type.clone(),
             generic_params: None,
@@ -402,8 +414,12 @@ impl Translator {
             Ret(value) => self.translate_ret(value),
 
             Call {
-                dst, func, args, ..
-            } => self.translate_call(dst, func, args),
+                dst,
+                func,
+                args,
+                def,
+                ..
+            } => self.translate_call(dst, func, args, *def),
             CallVirt {
                 dst,
                 obj,
@@ -414,7 +430,7 @@ impl Translator {
             CallDyn {
                 dst, func, args, ..
             } => self.translate_call_dyn(dst, func, args),
-            TailCall { func, args } => self.translate_tail_call(func, args),
+            TailCall { func, args, .. } => self.translate_tail_call(func, args),
 
             Alloc { dst, .. } => self.translate_alloc(dst),
             Free(_) => Ok(BytecodeInstruction::new(Opcode::Nop, vec![])),
@@ -450,7 +466,12 @@ impl Translator {
                 fields,
             } => self.translate_create_struct(dst, type_name, fields),
             NewDict { dst, keys, values } => self.translate_new_dict(dst, keys, values),
-            MakeClosure { dst, func, env } => self.translate_make_closure(dst, func, env),
+            MakeClosure {
+                dst,
+                func,
+                def,
+                env,
+            } => self.translate_make_closure(dst, func, *def, env),
             Drop(operand) => self.translate_drop(operand),
 
             Push(operand) => self.translate_push(operand),
@@ -652,6 +673,7 @@ impl Translator {
         dst: &Option<Operand>,
         func: &Operand,
         args: &[Operand],
+        def: Option<crate::frontend::module::symbol::DefId>,
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = if let Some(d) = dst {
             self.operand_resolver.to_reg(d)?
@@ -664,20 +686,24 @@ impl Translator {
             _ => None,
         };
 
-        // 三类调用目标：
+        // 四类调用目标（按优先级）：
+        // 0. DefId 命中（Stage 3 主路径：字节码函数含构造器）→ CallStatic 函数表索引
         // 1. ExternRef FFI（ffi_func_meta 携带 mechanism/lib/symbol）→ CallNative 带元数据
-        // 2. 字节码函数（function_name_to_idx 命中）→ CallStatic 携带函数表索引
-        // 3. std 原生/外部名 → CallNative 无元数据（解释器按名走 FFI 注册表）
+        // 2. 名字命中（测试手工构造 IR 无 def 的回退路径）→ CallStatic 函数表索引
+        // 3. std 原生/外部名（def 未命中函数表）→ CallNative 无元数据按名 FFI
         let ffi_meta = func_name
             .as_ref()
             .and_then(|n| self.ffi_func_meta.get(n).cloned());
+        let def_idx = def.and_then(|d| self.function_def_to_idx.get(&d).copied());
         let bytecode_idx = func_name.as_ref().and_then(|n| {
             self.function_name_to_idx
                 .as_ref()
                 .and_then(|m| m.get(n).copied())
         });
 
-        let (opcode, func_id) = if ffi_meta.is_some() {
+        let (opcode, func_id) = if let Some(idx) = def_idx {
+            (Opcode::CallStatic, idx as u32)
+        } else if ffi_meta.is_some() {
             let const_idx = self
                 .emitter
                 .add_constant(ConstValue::String(func_name.clone().unwrap()));
@@ -1066,22 +1092,28 @@ impl Translator {
         &mut self,
         dst: &Operand,
         func_name: &str,
+        def: Option<crate::frontend::module::symbol::DefId>,
         env: &[Operand],
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
-        let name_to_idx = self.function_name_to_idx.as_ref().ok_or_else(|| {
-            ErrorCodeDefinition::internal_error(
-                "translate_make_closure 调用时 function_name_to_idx 未初始化",
-            )
-            .build()
-        })?;
-        let func_id = name_to_idx.get(func_name).copied().ok_or_else(|| {
-            ErrorCodeDefinition::internal_error(&format!(
-                "闭包函数 '{}' 未在函数名映射表中注册",
-                func_name
-            ))
-            .build()
-        })? as u32;
+        // DefId 主路径（Stage 3）；名字路径为测试手工构造 IR 的回退
+        let func_id = if let Some(idx) = def.and_then(|d| self.function_def_to_idx.get(&d)) {
+            *idx as u32
+        } else {
+            let name_to_idx = self.function_name_to_idx.as_ref().ok_or_else(|| {
+                ErrorCodeDefinition::internal_error(
+                    "translate_make_closure 调用时 function_name_to_idx 未初始化",
+                )
+                .build()
+            })?;
+            name_to_idx.get(func_name).copied().ok_or_else(|| {
+                ErrorCodeDefinition::internal_error(&format!(
+                    "闭包函数 '{}' 未在函数名映射表中注册",
+                    func_name
+                ))
+                .build()
+            })? as u32
+        };
         let mut operands = vec![dst_reg];
         operands.extend_from_slice(&func_id.to_le_bytes());
         operands.push(env.len() as u8);

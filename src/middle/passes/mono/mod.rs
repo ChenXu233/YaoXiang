@@ -229,6 +229,8 @@ impl Monomorphizer {
         // 构建特化函数
         Some(FunctionIR {
             name: specialized_name,
+            // 特化实例不复用原 DefId——mono 路径保持按名分发
+            def: None,
             params: new_params,
             return_type: new_return_type,
             generic_params: None, // 清除泛型标记
@@ -291,6 +293,8 @@ impl Monomorphizer {
 
         Some(FunctionIR {
             name: specialized_name,
+            // 特化类型不复用原 DefId——mono 路径保持按名分发
+            def: None,
             params: new_params,
             return_type: new_return_type,
             generic_params: None,

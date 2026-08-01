@@ -3,3 +3,4 @@
 //! 包含 bytecode、ir 等核心模块的单元测试。
 
 pub mod bytecode;
+pub mod def_assign;

@@ -7,10 +7,8 @@
 //! - Borrow/Release round-trip encode-decode via `build_and_decode`
 //! - MonoType::Ref -> IrType::Void conversion
 
-use crate::middle::core::bytecode::{
-    BinaryOp, BytecodeInstr, BytecodeModule, CompareOp, Label, Reg, UnaryOp,
-};
-use crate::middle::core::ir::{ConstValue, Type as IrType};
+use crate::middle::core::bytecode::{BytecodeInstr, BytecodeModule, Label, Reg};
+use crate::middle::core::ir::Type as IrType;
 use crate::backends::common::Opcode;
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::passes::codegen::bytecode::BytecodeInstruction;
@@ -189,6 +187,7 @@ fn build_and_decode(instrs: Vec<BytecodeInstruction>) -> BytecodeModule {
         code_section: bcfile::CodeSection {
             functions: vec![func],
         },
+        vtables: vec![],
         debug_section: None,
     };
     BytecodeModule::from(file)
