@@ -7,6 +7,9 @@ pub mod git;
 pub mod module_resolver;
 pub mod resolver;
 
+#[cfg(test)]
+mod tests;
+
 use std::path::{Path, PathBuf};
 
 use crate::package::dependency::DependencySpec;
@@ -147,69 +150,15 @@ impl Source for LocalSource {
     }
 }
 
-/// 注册表来源（预留 Phase 3）
-///
-/// 目前仅保存版本信息到锁文件，不进行实际下载。
-#[derive(Debug)]
-pub struct RegistrySource;
-
-impl RegistrySource {
-    /// 创建注册表来源
-    pub fn new() -> Self {
-        RegistrySource
-    }
-}
-
-impl Default for RegistrySource {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Source for RegistrySource {
-    fn name(&self) -> &str {
-        "registry"
-    }
-
-    fn kind(&self) -> SourceKind {
-        SourceKind::Registry
-    }
-
-    fn resolve(
-        &self,
-        spec: &DependencySpec,
-    ) -> PackageResult<String> {
-        // Phase 3 将实现注册表版本查询
-        // 目前直接返回声明的版本
-        Ok(spec.version.clone())
-    }
-
-    fn download(
-        &self,
-        spec: &DependencySpec,
-        _dest: &Path,
-    ) -> PackageResult<ResolvedPackage> {
-        // Phase 3 将实现注册表下载
-        // 目前创建一个占位入口
-        Ok(ResolvedPackage {
-            name: spec.name.clone(),
-            version: spec.version.clone(),
-            source_kind: SourceKind::Registry,
-            source_url: "registry".to_string(),
-            local_path: PathBuf::new(),
-            checksum: None,
-        })
-    }
-}
-
 /// 根据依赖规格选择合适的来源
-pub fn select_source(spec: &DependencySpec) -> Box<dyn Source> {
+///
+/// 如果既没有 path 也没有 git 字段，返回 `None`（注册表来源尚未实现）。
+pub fn select_source(spec: &DependencySpec) -> Option<Box<dyn Source>> {
     if spec.path.is_some() {
-        Box::new(LocalSource::new())
+        Some(Box::new(LocalSource::new()))
     } else if spec.git.is_some() {
-        Box::new(git::GitSource::new())
+        Some(Box::new(git::GitSource::new()))
     } else {
-        // 注册表来源（Phase 3 完善）
-        Box::new(RegistrySource::new())
+        None
     }
 }

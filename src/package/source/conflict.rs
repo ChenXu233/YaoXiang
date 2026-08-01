@@ -13,17 +13,8 @@ use crate::package::source::resolver::VersionReq;
 pub struct ConflictInfo {
     /// 包名
     pub package_name: String,
-    /// 冲突的版本要求列表（来自不同依赖者）
-    pub requirements: Vec<ConflictRequirement>,
-}
-
-/// 单个冲突要求
-#[derive(Debug, Clone)]
-pub struct ConflictRequirement {
-    /// 来源（哪个依赖者需要这个版本）
-    pub from: String,
-    /// 版本要求字符串
-    pub version_req: String,
+    /// 冲突的版本要求列表（来自不同依赖者），元组为 (来源, 版本要求字符串)
+    pub requirements: Vec<(String, String)>,
 }
 
 impl std::fmt::Display for ConflictInfo {
@@ -32,8 +23,8 @@ impl std::fmt::Display for ConflictInfo {
         f: &mut std::fmt::Formatter<'_>,
     ) -> std::fmt::Result {
         writeln!(f, "包 '{}' 存在版本冲突:", self.package_name)?;
-        for req in &self.requirements {
-            writeln!(f, "  {} 要求: {}", req.from, req.version_req)?;
+        for (from, version_req) in &self.requirements {
+            writeln!(f, "  {} 要求: {}", from, version_req)?;
         }
         Ok(())
     }
@@ -91,10 +82,7 @@ pub fn detect_conflicts(
         if has_conflict {
             let requirements = reqs
                 .iter()
-                .map(|(from, req)| ConflictRequirement {
-                    from: from.clone(),
-                    version_req: req.to_string(),
-                })
+                .map(|(from, req)| (from.clone(), req.to_string()))
                 .collect();
 
             conflicts.push(ConflictInfo {

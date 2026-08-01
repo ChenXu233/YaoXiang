@@ -53,12 +53,11 @@ pub fn fetch_all(
 
         // 注册表依赖（无 git/path）在 Phase 3 前仅记录到锁文件
         if spec.git.is_none() && spec.path.is_none() {
-            let source = crate::package::source::select_source(spec);
-            let resolved_version = source
-                .resolve(spec)
-                .unwrap_or_else(|_| spec.version.clone());
-            lock.lock_dependency_full(&spec.name, &resolved_version, "registry", None);
-            result.skipped.push((spec.name.clone(), resolved_version));
+            // 注册表来源尚未实现 — 仅记录到锁文件
+            lock.lock_dependency_full(&spec.name, &spec.version, "registry", None);
+            result
+                .skipped
+                .push((spec.name.clone(), spec.version.clone()));
             continue;
         }
 
