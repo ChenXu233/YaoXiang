@@ -26,7 +26,7 @@ pub mod interpreter;
 pub mod runtime;
 
 use crate::middle::bytecode::{BytecodeModule, BytecodeFunction};
-use crate::backends::common::{RuntimeValue, Heap, Handle};
+use crate::backends::common::{RuntimeValue, Heap};
 
 /// Stack frame information for error reporting
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,12 +58,6 @@ pub enum ExecutorError {
     Type(String, Option<Vec<StackFrame>>),
     /// Stack overflow
     StackOverflow(Option<Vec<StackFrame>>),
-    /// Heap exhaustion
-    HeapExhausted,
-    /// Invalid opcode
-    InvalidOpcode(u8),
-    /// Invalid handle access
-    InvalidHandle(Handle),
     /// Division by zero
     DivisionByZero(Option<Vec<StackFrame>>),
     /// Index out of bounds
@@ -95,9 +89,6 @@ impl ExecutorError {
             ExecutorError::IndexOutOfBounds(stack) => stack.as_ref(),
             ExecutorError::FieldNotFound(_, stack) => stack.as_ref(),
             ExecutorError::FunctionNotFound(_, stack) => stack.as_ref(),
-            ExecutorError::HeapExhausted => None,
-            ExecutorError::InvalidOpcode(_) => None,
-            ExecutorError::InvalidHandle(_) => None,
         }
     }
 
@@ -174,10 +165,6 @@ impl ExecutorError {
             ExecutorError::FunctionNotFound(name, None) => {
                 ExecutorError::FunctionNotFound(name, Some(stack))
             }
-            // These don't support stack trace
-            ExecutorError::HeapExhausted => self,
-            ExecutorError::InvalidOpcode(op) => ExecutorError::InvalidOpcode(op),
-            ExecutorError::InvalidHandle(h) => ExecutorError::InvalidHandle(h),
         }
     }
 }
@@ -215,9 +202,6 @@ impl std::fmt::Display for ExecutorError {
                 }
                 Ok(())
             }
-            ExecutorError::HeapExhausted => write!(f, "Heap exhausted"),
-            ExecutorError::InvalidOpcode(op) => write!(f, "Invalid opcode: {:#x}", op),
-            ExecutorError::InvalidHandle(h) => write!(f, "Invalid handle: {}", h),
             ExecutorError::DivisionByZero(stack) => {
                 write!(f, "Division by zero")?;
                 if let Some(frames) = stack {
