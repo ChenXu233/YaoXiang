@@ -142,29 +142,6 @@ pub struct FmtConfig {
     pub sort_imports: Option<bool>,
 }
 
-/// Warning level for lints
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum WarningLevel {
-    /// Disable the warning
-    Off,
-    /// Show as warning (default)
-    #[default]
-    Warn,
-    /// Treat as error
-    Deny,
-}
-
-impl WarningLevel {
-    pub fn is_enabled(&self) -> bool {
-        !matches!(self, WarningLevel::Off)
-    }
-
-    pub fn is_deny(&self) -> bool {
-        matches!(self, WarningLevel::Deny)
-    }
-}
-
 /// Lint configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LintConfig {
@@ -174,9 +151,9 @@ pub struct LintConfig {
     /// Strict mode
     #[serde(default)]
     pub strict: bool,
-    /// Dead code analysis level
+    /// Dead code analysis enabled
     #[serde(default)]
-    pub dead_code: WarningLevel,
+    pub dead_code: bool,
 }
 
 fn default_lint_rules() -> Vec<String> {
@@ -188,7 +165,7 @@ impl Default for LintConfig {
         Self {
             rules: vec!["recommended".to_string()],
             strict: false,
-            dead_code: WarningLevel::default(),
+            dead_code: false,
         }
     }
 }

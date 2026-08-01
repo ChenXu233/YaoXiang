@@ -9,8 +9,7 @@ use yaoxiang::repl::Repl;
 use yaoxiang::formatter::run_format_command;
 use yaoxiang::{dump_bytecode, NAME, VERSION};
 use yaoxiang::util::diagnostic::{
-    render_explain_output, run_check_command_once, run_check_watch_command,
-    run_file_with_diagnostics,
+    render_explain_output, run_check_command_once, run_file_with_diagnostics,
 };
 use yaoxiang::util::i18n::set_lang_from_string;
 use yaoxiang::util::logger::LogLevel;
@@ -119,17 +118,13 @@ enum Commands {
         #[arg(value_name = "PATH", num_args = 0..)]
         paths: Vec<PathBuf>,
 
-        /// Exclude file(s) or directory path(s) from check and watch
+        /// Exclude file(s) or directory path(s) from check
         #[arg(long = "exclude", value_name = "PATH", num_args = 1..)]
         exclude: Vec<PathBuf>,
 
         /// Output diagnostics in JSON format
         #[arg(long)]
         json: bool,
-
-        /// Watch input paths and re-check on file changes
-        #[arg(short, long)]
-        watch: bool,
 
         /// Control color output (auto, always, never)
         #[arg(long, value_enum, default_value = "auto")]
@@ -374,7 +369,6 @@ fn main() -> Result<()> {
             paths,
             exclude,
             json,
-            watch,
             color,
             no_progress,
         } => {
@@ -384,22 +378,18 @@ fn main() -> Result<()> {
                 ColorChoice::Auto => std::io::stderr().is_terminal(),
             };
 
-            if watch {
-                run_check_watch_command(paths, exclude, json, use_colors, no_progress)?;
-            } else {
-                match run_check_command_once(&paths, &exclude, json, use_colors, no_progress) {
-                    Ok(error_count) => {
-                        if error_count > 0 {
-                            ::std::process::exit(1);
-                        }
+            match run_check_command_once(&paths, &exclude, json, use_colors, no_progress) {
+                Ok(error_count) => {
+                    if error_count > 0 {
+                        ::std::process::exit(1);
                     }
-                    Err(e) => {
-                        eprintln!("{}", e);
-                        if e.to_string().contains("No .yx files found") {
-                            ::std::process::exit(2);
-                        }
-                        return Err(e);
+                }
+                Err(e) => {
+                    eprintln!("{}", e);
+                    if e.to_string().contains("No .yx files found") {
+                        ::std::process::exit(2);
                     }
+                    return Err(e);
                 }
             }
         }

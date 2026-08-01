@@ -71,93 +71,6 @@ pub fn run_check_command_once(
     Ok(result.error_count)
 }
 
-#[cfg(feature = "cli")]
-pub fn run_check_watch_command(
-    paths: Vec<PathBuf>,
-    excludes: Vec<PathBuf>,
-    json: bool,
-    use_colors: bool,
-    no_progress: bool,
-) -> Result<()> {
-    use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
-    use std::sync::mpsc;
-    use std::time::{Duration, Instant};
-
-    let paths = normalize_check_paths(&paths)?;
-    let excludes = normalize_exclude_paths(&excludes)?;
-
-    run_check_command_once(&paths, &excludes, json, use_colors, no_progress)?;
-
-    if !no_progress {
-        eprintln!("Watching for changes... press Ctrl+C to stop");
-    }
-
-    let (tx, rx) = mpsc::channel();
-    let mut watcher = RecommendedWatcher::new(
-        move |res| {
-            let _ = tx.send(res);
-        },
-        Config::default().with_poll_interval(Duration::from_millis(200)),
-    )?;
-
-    for path in &paths {
-        if should_exclude_path(path, &excludes) {
-            continue;
-        }
-
-        let mode = if path.is_dir() {
-            RecursiveMode::Recursive
-        } else {
-            RecursiveMode::NonRecursive
-        };
-        watcher
-            .watch(path, mode)
-            .with_context(|| format!("Failed to watch path: {}", path.display()))?;
-    }
-
-    loop {
-        let event = match rx.recv() {
-            Ok(Ok(event)) => event,
-            Ok(Err(err)) => {
-                if !no_progress {
-                    eprintln!("watch error: {}", err);
-                }
-                continue;
-            }
-            Err(_) => break,
-        };
-
-        if !is_yx_event(&event, &excludes) {
-            continue;
-        }
-
-        // 简单防抖：窗口内持续接收事件，直到静默再触发一次检查。
-        let mut deadline = Instant::now() + Duration::from_millis(250);
-        while Instant::now() < deadline {
-            match rx.recv_timeout(Duration::from_millis(50)) {
-                Ok(Ok(next_event)) if is_yx_event(&next_event, &excludes) => {
-                    deadline = Instant::now() + Duration::from_millis(250);
-                }
-                Ok(Ok(_)) => {}
-                Ok(Err(_)) => {}
-                Err(mpsc::RecvTimeoutError::Timeout) => {}
-                Err(mpsc::RecvTimeoutError::Disconnected) => break,
-            }
-        }
-
-        if !json && !no_progress && use_colors {
-            eprint!("\x1B[2J\x1B[H");
-        }
-
-        let error_count = run_check_command_once(&paths, &excludes, json, use_colors, no_progress)?;
-        if !no_progress {
-            eprintln!("Last run: {} error(s)", error_count);
-        }
-    }
-
-    Ok(())
-}
-
 pub fn render_explain_output(
     code: &str,
     json: bool,
@@ -344,16 +257,6 @@ fn should_exclude_path(
     excludes
         .iter()
         .any(|excluded| absolute.starts_with(excluded))
-}
-
-#[cfg(feature = "cli")]
-fn is_yx_event(
-    event: &notify::Event,
-    excludes: &[PathBuf],
-) -> bool {
-    event.paths.iter().any(|p| {
-        p.extension().map(|ext| ext == "yx").unwrap_or(false) && !should_exclude_path(p, excludes)
-    })
 }
 
 #[derive(Serialize)]
