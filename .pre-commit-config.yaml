@@ -18,13 +18,12 @@ repos:
 
       - id: cargo-clippy
         name: cargo clippy
-        entry: cargo clippy --fix --allow-dirty --all-targets -- -D warnings
+        # clippy 逻辑在脚本中（独立 target 目录隔离缓存）；依赖 bash 在 PATH 中，
+        # Windows 用户需将 Git Bash 的 bin 目录加入 PATH，否则报 Executable 'bash' not found
+        entry: bash scripts/hooks/cargo-clippy.sh
         language: system
         types: [rust]
         pass_filenames: false
-        # clippy-driver 产物指纹与 rustc 不同，会污染主 target 缓存导致 cargo test 全量重编
-        env:
-          CARGO_TARGET_DIR: target/clippy
 
       - id: cargo-test
         name: cargo test
