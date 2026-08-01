@@ -107,18 +107,6 @@ pub struct AstToIrGenerator {
     type_result: Option<Box<TypeCheckResult>>,
     /// 下一个临时寄存器编号
     next_temp: usize,
-    /// 当前函数中可变局部变量的索引集合
-    current_mut_locals: std::collections::HashSet<usize>,
-    /// 模块级别的可变局部变量映射 (function_name -> set of mutable local indices)
-    module_mut_locals: HashMap<String, std::collections::HashSet<usize>>,
-    /// 当前函数中循环绑定变量的索引集合（这些变量的 Store 是绑定操作，不是修改）
-    current_loop_binding_locals: std::collections::HashSet<usize>,
-    /// 模块级别的循环绑定变量映射 (function_name -> set of loop binding local indices)
-    module_loop_binding_locals: HashMap<String, std::collections::HashSet<usize>>,
-    /// 当前函数的局部变量名列表（按索引顺序）
-    current_local_names: Vec<String>,
-    /// 模块级别的局部变量名映射 (function_name -> 变量名列表)
-    module_local_names: HashMap<String, Vec<String>>,
     /// 局部变量类型追踪（用于错误消息中显示实际类型）
     local_var_types: HashMap<String, String>,
     /// FFI 库绑定
@@ -179,8 +167,6 @@ struct BindingInfo {
 struct LambdaBodyIR {
     instructions: Vec<Instruction>,
     locals: Vec<MonoType>,
-    /// 闭包函数的可变局部变量索引集合
-    mut_locals: std::collections::HashSet<usize>,
 }
 
 /// 一层 curry 签名
@@ -205,12 +191,6 @@ impl AstToIrGenerator {
             symbols: vec![HashMap::new()],
             type_result: Some(Box::new(type_result.clone())),
             next_temp: 0,
-            current_mut_locals: std::collections::HashSet::new(),
-            module_mut_locals: HashMap::new(),
-            current_loop_binding_locals: std::collections::HashSet::new(),
-            module_loop_binding_locals: HashMap::new(),
-            current_local_names: Vec::new(),
-            module_local_names: HashMap::new(),
             local_var_types: HashMap::new(),
             ffi_libs: Vec::new(),
             ffi_bindings: Vec::new(),
@@ -350,13 +330,6 @@ impl AstToIrGenerator {
         if let Some(scope) = self.symbols.last_mut() {
             scope.insert(name.to_string(), SymbolEntry { local_idx });
         }
-        // 保存变量名到当前函数的局部变量名列表
-        // 确保向量长度足够（可能有空洞）
-        if local_idx >= self.current_local_names.len() {
-            self.current_local_names
-                .resize(local_idx + 1, String::new());
-        }
-        self.current_local_names[local_idx] = name.to_string();
     }
 
     /// 查找局部变量
@@ -546,9 +519,6 @@ impl AstToIrGenerator {
         let mut ir = ModuleIR {
             globals: Vec::new(),
             functions,
-            mut_locals: std::mem::take(&mut self.module_mut_locals),
-            loop_binding_locals: std::mem::take(&mut self.module_loop_binding_locals),
-            local_names: std::mem::take(&mut self.module_local_names),
             ffi_libs: std::mem::take(&mut self.ffi_libs),
             ffi_bindings: std::mem::take(&mut self.ffi_bindings),
             entry_function: None,
@@ -693,16 +663,12 @@ impl AstToIrGenerator {
             }
         }
 
-        // 重写函数定义名，及按函数名索引的 per-function 映射。
+        // 重写函数定义名。
         for func in &mut ir.functions {
             if let Some(q) = rename.get(&func.name) {
                 func.name = q.clone();
             }
         }
-        ir.mut_locals = Self::remap_keys(std::mem::take(&mut ir.mut_locals), &rename);
-        ir.loop_binding_locals =
-            Self::remap_keys(std::mem::take(&mut ir.loop_binding_locals), &rename);
-        ir.local_names = Self::remap_keys(std::mem::take(&mut ir.local_names), &rename);
 
         // 重写调用/闭包引用：本文件函数（rename）+ 导入函数（aliases）。
         for func in &mut ir.functions {
@@ -715,16 +681,6 @@ impl AstToIrGenerator {
                 }
             }
         }
-    }
-
-    /// 按重命名表替换一张以函数名为键的映射的键。
-    fn remap_keys<V>(
-        map: HashMap<String, V>,
-        rename: &HashMap<String, String>,
-    ) -> HashMap<String, V> {
-        map.into_iter()
-            .map(|(k, v)| (rename.get(&k).cloned().unwrap_or(k), v))
-            .collect()
     }
 
     /// 重写单条指令里的函数名引用（Call/TailCall 的字符串 func、MakeClosure 的 func）。
@@ -1062,11 +1018,6 @@ impl AstToIrGenerator {
         body: &[ast::Stmt],
         constants: &mut Vec<ConstValue>,
     ) -> Result<Option<FunctionIR>, Diagnostic> {
-        // 重置当前函数的可变局部变量追踪
-        self.current_mut_locals.clear();
-        // 重置当前函数的局部变量名列表
-        self.current_local_names.clear();
-
         // 命名空间机制：方法函数名 = Type.method
         // 例如：Point.get_x 生成函数名 "Point.get_x"
         // 调用时：p.get_x() -> Point.get_x(p)
@@ -1152,24 +1103,6 @@ impl AstToIrGenerator {
             },
         };
 
-        // 保存当前函数的可变局部变量信息到模块级别映射
-        if !self.current_mut_locals.is_empty() {
-            self.module_mut_locals
-                .insert(func_name.clone(), self.current_mut_locals.clone());
-        }
-
-        // 保存当前函数的循环绑定变量信息到模块级别映射
-        if !self.current_loop_binding_locals.is_empty() {
-            self.module_loop_binding_locals
-                .insert(func_name.clone(), self.current_loop_binding_locals.clone());
-        }
-
-        // 保存当前函数的局部变量名列表
-        self.module_local_names.insert(
-            func_name.clone(),
-            std::mem::take(&mut self.current_local_names),
-        );
-
         Ok(Some(func_ir))
     }
 
@@ -1195,10 +1128,6 @@ impl AstToIrGenerator {
             // 空函数体，无法检测 native 模式
         }
 
-        // 重置当前函数的可变局部变量追踪
-        self.current_mut_locals.clear();
-        // 重置当前函数的局部变量名列表
-        self.current_local_names.clear();
         // 阶段3修复：改进返回类型解析，更好地与类型检查集成
         let return_type = match type_annotation {
             Some(ast::Type::Fn { return_type, .. }) => (**return_type).clone().into(),
@@ -1220,10 +1149,6 @@ impl AstToIrGenerator {
             });
 
             self.register_local(&param.name, i);
-            // Only mut parameters are registered as mutable
-            if param.is_mut {
-                self.current_mut_locals.insert(i);
-            }
         }
 
         // 记录局部变量起始位置（在参数之后）
@@ -1330,24 +1255,6 @@ impl AstToIrGenerator {
             .collect();
         self.function_param_types
             .insert(name.to_string(), func_params);
-
-        // 保存当前函数的可变局部变量信息到模块级别映射
-        if !self.current_mut_locals.is_empty() {
-            self.module_mut_locals
-                .insert(name.to_string(), self.current_mut_locals.clone());
-        }
-
-        // 保存当前函数的循环绑定变量信息到模块级别映射
-        if !self.current_loop_binding_locals.is_empty() {
-            self.module_loop_binding_locals
-                .insert(name.to_string(), self.current_loop_binding_locals.clone());
-        }
-
-        // 保存当前函数的局部变量名列表
-        self.module_local_names.insert(
-            name.to_string(),
-            std::mem::take(&mut self.current_local_names),
-        );
 
         Ok(Some(func_ir))
     }
@@ -1532,8 +1439,6 @@ impl AstToIrGenerator {
         let mut env_param_names: Vec<String> = Vec::new();
 
         // 保存外层状态，避免污染
-        let saved_mut_locals = std::mem::take(&mut self.current_mut_locals);
-        let saved_local_names = std::mem::take(&mut self.current_local_names);
         let saved_next_temp = self.next_temp;
 
         for (i, layer) in layers.iter().enumerate() {
@@ -1577,8 +1482,6 @@ impl AstToIrGenerator {
         }
 
         // 恢复外层状态
-        self.current_mut_locals = saved_mut_locals;
-        self.current_local_names = saved_local_names;
         self.next_temp = saved_next_temp;
 
         // 内层函数加入 nested_functions，最外层返回给调用者
@@ -1792,8 +1695,6 @@ impl AstToIrGenerator {
         constants: &mut Vec<ConstValue>,
     ) -> Result<Option<FunctionIR>, Diagnostic> {
         // 保存父函数状态
-        let saved_mut_locals = std::mem::take(&mut self.current_mut_locals);
-        let saved_local_names = std::mem::take(&mut self.current_local_names);
         let saved_next_temp = self.next_temp;
 
         let mut instructions = Vec::new();
@@ -1809,9 +1710,6 @@ impl AstToIrGenerator {
             });
 
             self.register_local(&param.name, i);
-            if param.is_mut {
-                self.current_mut_locals.insert(i);
-            }
         }
 
         // 记录局部变量起始位置
@@ -1831,8 +1729,6 @@ impl AstToIrGenerator {
         let locals_types: Vec<MonoType> = (0..total_locals).map(|_| MonoType::Int(64)).collect();
 
         // 恢复父函数状态
-        self.current_mut_locals = saved_mut_locals;
-        self.current_local_names = saved_local_names;
         self.next_temp = saved_next_temp;
 
         // 解析返回类型
@@ -1944,7 +1840,6 @@ impl AstToIrGenerator {
                 type_annotation,
                 signature_params,
                 value,
-                is_mut,
                 ..
             } => {
                 use crate::frontend::core::parser::ast::Expr;
@@ -2044,9 +1939,6 @@ impl AstToIrGenerator {
                 } else {
                     let idx = self.next_temp_reg();
                     self.register_local(&name, idx);
-                    if *is_mut {
-                        self.current_mut_locals.insert(idx);
-                    }
                     idx
                 };
                 if let Some(expr) = initializer {
@@ -2469,15 +2361,6 @@ impl AstToIrGenerator {
             // 注册循环变量 - 让变量访问指向 var_reg
             self.register_local(var_name, var_reg);
 
-            // for 循环变量的 Store 是"绑定"操作，不是"修改"
-            // 将 var_reg 添加到循环绑定变量集合
-            self.current_loop_binding_locals.insert(var_reg);
-
-            // 如果使用 for mut，用户可以在循环体内修改变量
-            if var_mut {
-                self.current_mut_locals.insert(var_reg);
-            }
-
             // 1. 初始化：current = start, end = end
             self.generate_expr_ir(left, current_reg, instructions, constants)?;
             self.generate_expr_ir(right, end_reg, instructions, constants)?;
@@ -2692,7 +2575,8 @@ impl AstToIrGenerator {
     fn generate_spawn_for_ir(
         &mut self,
         var_name: &str,
-        var_mut: bool,
+        // ponytail: for-mut 的可变性由 typecheck 校验，ir_gen 无需追踪
+        _var_mut: bool,
         iterable: &ast::Expr,
         body: &ast::Block,
         result_reg: usize,
@@ -2728,7 +2612,6 @@ impl AstToIrGenerator {
             size: Operand::Const(ConstValue::Int(0)),
             elem_size: Operand::Const(ConstValue::Int(1)),
         });
-        self.current_mut_locals.insert(closures_list_reg);
 
         // 4. 计算可迭代对象
         let iterable_reg = self.next_temp_reg();
@@ -2747,10 +2630,6 @@ impl AstToIrGenerator {
         // 6. 注册循环变量
         let var_reg = self.next_temp_reg();
         self.register_local(var_name, var_reg);
-        self.current_loop_binding_locals.insert(var_reg);
-        if var_mut {
-            self.current_mut_locals.insert(var_reg);
-        }
 
         // 7. 循环开始
         let loop_start_idx = instructions.len();
@@ -3025,9 +2904,7 @@ impl AstToIrGenerator {
         body: &ast::Block,
         constants: &mut Vec<ConstValue>,
     ) -> Result<LambdaBodyIR, Diagnostic> {
-        // 保存父函数的可变局部变量和局部变量名信息
-        let saved_mut_locals = std::mem::take(&mut self.current_mut_locals);
-        let saved_local_names = std::mem::take(&mut self.current_local_names);
+        // 保存父函数的临时寄存器计数
         let saved_next_temp = self.next_temp;
 
         let mut instructions = Vec::new();
@@ -3048,10 +2925,6 @@ impl AstToIrGenerator {
                 span: Span::dummy(),
             });
             self.register_local(&param.name, i);
-            // Only mut parameters are registered as mutable
-            if param.is_mut {
-                self.current_mut_locals.insert(i);
-            }
         }
 
         // 记录局部变量起始位置
@@ -3078,18 +2951,12 @@ impl AstToIrGenerator {
         let total_locals = self.next_temp;
         let locals_types: Vec<MonoType> = (0..total_locals).map(|_| MonoType::Int(64)).collect();
 
-        // 保存当前闭包函数的可变局部变量信息
-        let mut_locals = std::mem::take(&mut self.current_mut_locals);
-
-        // 恢复父函数的可变局部变量和局部变量名信息
-        self.current_mut_locals = saved_mut_locals;
-        self.current_local_names = saved_local_names;
+        // 恢复父函数的临时寄存器计数
         self.next_temp = saved_next_temp;
 
         Ok(LambdaBodyIR {
             instructions,
             locals: locals_types,
-            mut_locals,
         })
     }
 
@@ -3823,9 +3690,6 @@ impl AstToIrGenerator {
                     elem_size: Operand::Const(ConstValue::Int(1)),
                 });
 
-                // 结果列表需要可变（因为 push 操作）
-                self.current_mut_locals.insert(result_reg);
-
                 // 2. 计算可迭代对象
                 let iterable_reg = self.next_temp_reg();
                 self.generate_expr_ir(iterable, iterable_reg, instructions, constants)?;
@@ -3940,9 +3804,6 @@ impl AstToIrGenerator {
                     size: Operand::Const(ConstValue::Int(elements.len() as i128)),
                     elem_size: Operand::Const(ConstValue::Int(1)),
                 });
-
-                // 列表构建需要多次 StoreIndex，因此需要标记为可变
-                self.current_mut_locals.insert(result_reg);
 
                 for (idx, element) in elements.iter().enumerate() {
                     let element_reg = self.next_temp_reg();
@@ -4302,12 +4163,6 @@ impl AstToIrGenerator {
 
                 // 7. 将闭包函数添加到嵌套函数列表
                 self.nested_functions.push(closure_func);
-
-                // 8. 保存闭包函数的可变局部变量信息
-                if !closure_body.mut_locals.is_empty() {
-                    self.module_mut_locals
-                        .insert(closure_name.clone(), closure_body.mut_locals);
-                }
 
                 // 9. 创建 MakeClosure 指令
                 // env 包含被捕获的外部变量的 Operand

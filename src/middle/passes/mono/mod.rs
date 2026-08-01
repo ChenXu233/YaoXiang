@@ -156,9 +156,6 @@ impl Monomorphizer {
         ModuleIR {
             globals: module.globals.clone(),
             functions,
-            mut_locals: module.mut_locals.clone(),
-            loop_binding_locals: module.loop_binding_locals.clone(),
-            local_names: module.local_names.clone(),
             ffi_libs: module.ffi_libs.clone(),
             ffi_bindings: module.ffi_bindings.clone(),
             entry_function: module.entry_function.clone(),

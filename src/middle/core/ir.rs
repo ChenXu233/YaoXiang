@@ -599,13 +599,6 @@ pub enum FfiBinding {
 pub struct ModuleIR {
     pub globals: Vec<(String, Type, Option<ConstValue>)>,
     pub functions: Vec<FunctionIR>,
-    /// 每个函数的可变局部变量索引映射 (function_name -> set of mutable local indices)
-    pub mut_locals: std::collections::HashMap<String, std::collections::HashSet<usize>>,
-    /// 每个函数的循环绑定变量索引映射 (function_name -> set of loop binding local indices)
-    /// 这些变量的 Store 是"绑定"操作，不是"修改"
-    pub loop_binding_locals: std::collections::HashMap<String, std::collections::HashSet<usize>>,
-    /// 每个函数的局部变量名列表 (function_name -> 变量名列表，按索引顺序)
-    pub local_names: std::collections::HashMap<String, Vec<String>>,
     /// FFI 库绑定 — 编译期链接的外部库
     pub ffi_libs: Vec<FfiLibBinding>,
     /// FFI 绑定 — 不透明类型或外部函数

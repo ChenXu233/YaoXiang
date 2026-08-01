@@ -894,9 +894,6 @@ impl FunctionMonomorphizer for super::Monomorphizer {
         ModuleIR {
             globals: original_module.globals.clone(),
             functions: output_funcs,
-            mut_locals: original_module.mut_locals.clone(),
-            loop_binding_locals: original_module.loop_binding_locals.clone(),
-            local_names: original_module.local_names.clone(),
             ffi_libs: original_module.ffi_libs.clone(),
             ffi_bindings: original_module.ffi_bindings.clone(),
             entry_function: original_module.entry_function.clone(),

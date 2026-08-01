@@ -197,9 +197,6 @@ fn link_module_irs(
     let mut merged = ModuleIR {
         globals: Vec::new(),
         functions: Vec::new(),
-        mut_locals: HashMap::new(),
-        loop_binding_locals: HashMap::new(),
-        local_names: HashMap::new(),
         ffi_libs: Vec::new(),
         ffi_bindings: Vec::new(),
         entry_function: Some(format!("{}.main", entry_key)),
@@ -207,9 +204,6 @@ fn link_module_irs(
     for (_, ir) in irs {
         merged.globals.extend(ir.globals);
         merged.functions.extend(ir.functions);
-        merged.mut_locals.extend(ir.mut_locals);
-        merged.loop_binding_locals.extend(ir.loop_binding_locals);
-        merged.local_names.extend(ir.local_names);
         merged.ffi_libs.extend(ir.ffi_libs);
         merged.ffi_bindings.extend(ir.ffi_bindings);
     }
