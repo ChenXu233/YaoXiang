@@ -69,13 +69,13 @@ main = {
     let bytecode_file = crate::middle::passes::codegen::BytecodeFile::load(&bytecode_path)
         .expect("load bytecode file");
 
-    // Assert：vtables 段经序列化往返后仍携带 Point.get_x
+    // Assert：vtables 段经序列化往返后仍携带 get_x（裸方法名 + 函数表索引）
     assert!(
         bytecode_file
             .vtables
             .iter()
-            .any(|(ty, methods)| ty == "Point" && methods.iter().any(|m| m == "Point.get_x")),
-        "vtables section should carry Point.get_x after roundtrip, got {:?}",
+            .any(|(ty, methods)| ty == "Point" && methods.iter().any(|(bare, _)| bare == "get_x")),
+        "vtables section should carry (get_x, func_idx) after roundtrip, got {:?}",
         bytecode_file.vtables
     );
 

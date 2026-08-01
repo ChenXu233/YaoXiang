@@ -33,10 +33,10 @@ pub struct BytecodeFile {
     /// 代码段
     pub code_section: CodeSection,
 
-    /// 编译期类型方法表（type_name → [method 函数全名]）。
-    /// codegen 从函数表按类型分组生成，解释器加载期据此构建 vtable，
-    /// 删除运行时按 `{type}.` 前缀扫描函数表的开销。
-    pub vtables: Vec<(String, Vec<String>)>,
+    /// 编译期类型方法表（type_name → [(裸方法名, 函数表索引)]）。
+    /// codegen 从函数表按类型分组生成，解释器加载期直建 vtable 缓存，
+    /// 分发全程按函数表索引，不按名解析。
+    pub vtables: Vec<(String, Vec<(String, u32)>)>,
 
     /// 可选调试信息段（用于离线 .42 调试/定位）
     pub debug_section: Option<DebugSection>,
@@ -326,15 +326,16 @@ impl BytecodeFile {
 
         writer.write_all(&[0u8; 4])?; // 跳转表
 
-        // vtables 段：编译期类型方法表（type_name → [method 函数全名]）
+        // vtables 段：编译期类型方法表（type_name → [(裸方法名, 函数表索引)]）
         writer.write_all(&(self.vtables.len() as u32).to_le_bytes())?;
         for (type_name, methods) in &self.vtables {
             writer.write_all(&(type_name.len() as u32).to_le_bytes())?;
             writer.write_all(type_name.as_bytes())?;
             writer.write_all(&(methods.len() as u32).to_le_bytes())?;
-            for method in methods {
-                writer.write_all(&(method.len() as u32).to_le_bytes())?;
-                writer.write_all(method.as_bytes())?;
+            for (bare_name, func_idx) in methods {
+                writer.write_all(&(bare_name.len() as u32).to_le_bytes())?;
+                writer.write_all(bare_name.as_bytes())?;
+                writer.write_all(&func_idx.to_le_bytes())?;
             }
         }
 
@@ -516,7 +517,7 @@ impl BytecodeFile {
         let mut jump_table = [0u8; 4];
         reader.read_exact(&mut jump_table)?;
 
-        // vtables 段：编译期类型方法表（type_name → [method 函数全名]）
+        // vtables 段：编译期类型方法表（type_name → [(裸方法名, 函数表索引)]）
         let vtable_count = read_u32(reader)? as usize;
         let mut vtables = Vec::with_capacity(vtable_count);
         for _ in 0..vtable_count {
@@ -524,7 +525,9 @@ impl BytecodeFile {
             let method_count = read_u32(reader)? as usize;
             let mut methods = Vec::with_capacity(method_count);
             for _ in 0..method_count {
-                methods.push(read_string(reader)?);
+                let bare_name = read_string(reader)?;
+                let func_idx = read_u32(reader)?;
+                methods.push((bare_name, func_idx));
             }
             vtables.push((type_name, methods));
         }

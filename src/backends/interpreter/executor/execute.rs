@@ -2,7 +2,6 @@
 //!
 //! This module contains the Executor trait implementation with the main bytecode execution loop.
 
-use std::collections::HashMap;
 use crate::backends::{Executor, ExecutorResult, ExecutorError, ExecutionState};
 use crate::backends::common::{RuntimeValue, Heap};
 use crate::backends::common::value::{FunctionId, FunctionValue};
@@ -24,11 +23,8 @@ impl Executor for Interpreter {
         self.constants.extend(module.constants.clone());
 
         // Add functions
-        let mut name_to_id: HashMap<String, FunctionId> = HashMap::new();
         for func in &module.functions {
             tlog!(debug, MSG::DebugLoadingFunction, &func.name);
-            let func_id = FunctionId(self.functions_by_id.len() as u32);
-            name_to_id.insert(func.name.clone(), func_id);
             self.functions_by_id.push(func.clone());
         }
         tlog!(debug, MSG::DebugTotalFunctions, &self.functions_by_id.len());
@@ -44,26 +40,21 @@ impl Executor for Interpreter {
             )
         );
 
-        // 从字节码的编译期 vtables 段构建 vtable 缓存：type_name → [(裸方法名, FunctionValue)]。
-        // 方法 func_id 取自 name_to_id（函数在 functions_by_id 中的下标），无需运行时扫描。
-        for (type_name, method_names) in &module.vtables {
-            let prefix = format!("{}.", type_name);
-            let mut vt = Vec::with_capacity(method_names.len());
-            for method_name in method_names {
-                let bare = method_name
-                    .strip_prefix(&prefix)
-                    .unwrap_or(method_name)
-                    .to_string();
-                if let Some(&func_id) = name_to_id.get(method_name) {
-                    vt.push((
-                        bare,
+        // 从字节码的编译期 vtables 段直建 vtable 缓存：type_name → [(裸方法名, FunctionValue)]。
+        // 方法 func_id 由 codegen 写入（函数表索引），加载期零解析。
+        for (type_name, methods) in &module.vtables {
+            let vt = methods
+                .iter()
+                .map(|(bare, func_idx)| {
+                    (
+                        bare.clone(),
                         FunctionValue {
-                            func_id,
+                            func_id: FunctionId(*func_idx),
                             env: Vec::new(),
                         },
-                    ));
-                }
-            }
+                    )
+                })
+                .collect();
             self.vtable_cache.insert(type_name.clone(), vt);
         }
 

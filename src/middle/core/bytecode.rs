@@ -742,9 +742,9 @@ pub struct BytecodeModule {
     pub functions: Vec<BytecodeFunction>,
     /// Type table
     pub type_table: Vec<crate::middle::core::ir::Type>,
-    /// 编译期类型方法表（type_name → [method 函数全名]）。
-    /// 解释器加载期据此构建 vtable，删除运行时前缀扫描。
-    pub vtables: Vec<(String, Vec<String>)>,
+    /// 编译期类型方法表（type_name → [(裸方法名, 函数表索引)]）。
+    /// 解释器加载期直建 vtable 缓存，分发全程按函数表索引。
+    pub vtables: Vec<(String, Vec<(String, u32)>)>,
     /// Global variables
     pub globals: Vec<GlobalInfo>,
     /// Entry point function index

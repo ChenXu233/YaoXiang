@@ -164,8 +164,8 @@ impl CodegenContext {
         let type_count = type_table.len();
         debug!("{}", t(MSG::CodegenTypeTable, lang, Some(&[&type_count])));
 
-        // 3.5 编译期构建类型方法表（vtables）：按函数表顺序把方法分组到所属类型。
-        // 解释器加载期据此直接查表，删除运行时按 `{type}.` 前缀扫描函数表的开销。
+        // 3.5 编译期构建类型方法表（vtables）：按函数表顺序把方法分组到所属类型，
+        // 直接携带函数表索引（裸方法名 + func_idx），解释器加载期直建缓存，无需按名解析。
         let type_names: Vec<String> = self
             .module
             .functions
@@ -173,15 +173,16 @@ impl CodegenContext {
             .filter(|f| f.is_type_decl())
             .map(|f| f.name.clone())
             .collect();
-        let mut vtables: Vec<(String, Vec<String>)> = Vec::new();
+        let mut vtables: Vec<(String, Vec<(String, u32)>)> = Vec::new();
         for t in &type_names {
             let prefix = format!("{}.", t);
-            let methods: Vec<String> = self
+            let methods: Vec<(String, u32)> = self
                 .module
                 .functions
                 .iter()
-                .filter(|f| !f.is_type_decl() && f.name.starts_with(&prefix))
-                .map(|f| f.name.clone())
+                .enumerate()
+                .filter(|(_, f)| !f.is_type_decl() && f.name.starts_with(&prefix))
+                .map(|(idx, f)| (f.name[prefix.len()..].to_string(), idx as u32))
                 .collect();
             if !methods.is_empty() {
                 vtables.push((t.clone(), methods));
