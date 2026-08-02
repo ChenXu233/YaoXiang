@@ -35,7 +35,7 @@ impl StdModule for ListModule {
             NativeExport::new(
                 "pop",
                 "std.list.pop",
-                "(list: List) -> Any",
+                "(list: &List) -> Any",
                 native_pop as NativeHandler,
             ),
             NativeExport::new(
@@ -53,55 +53,55 @@ impl StdModule for ListModule {
             NativeExport::new(
                 "remove_at",
                 "std.list.remove_at",
-                "(list: List, index: Int) -> Any",
+                "(list: &List, index: Int) -> Any",
                 native_remove_at as NativeHandler,
             ),
             NativeExport::new(
                 "reverse",
                 "std.list.reverse",
-                "(list: List) -> List",
+                "(list: &List) -> List",
                 native_reverse as NativeHandler,
             ),
             NativeExport::new(
                 "concat",
                 "std.list.concat",
-                "(a: List, b: List) -> List",
+                "(a: &List, b: &List) -> List",
                 native_concat as NativeHandler,
             ),
             NativeExport::new(
                 "map",
                 "std.list.map",
-                "[T](list: List<T>, fn: (item: T) -> T) -> List<T>",
+                "[T](list: &List<T>, fn: (item: T) -> T) -> List<T>",
                 native_map as NativeHandler,
             ),
             NativeExport::new(
                 "filter",
                 "std.list.filter",
-                "[T](list: List<T>, fn: (item: T) -> Bool) -> List<T>",
+                "[T](list: &List<T>, fn: (item: T) -> Bool) -> List<T>",
                 native_filter as NativeHandler,
             ),
             NativeExport::new(
                 "reduce",
                 "std.list.reduce",
-                "[T](list: List<T>, fn: (acc: Any, item: T) -> Any, init: Any) -> Any",
+                "[T](list: &List<T>, fn: (acc: Any, item: T) -> Any, init: Any) -> Any",
                 native_reduce as NativeHandler,
             ),
             NativeExport::new(
                 "len",
                 "std.list.len",
-                "(list: List) -> Int",
+                "(list: &List) -> Int",
                 native_len as NativeHandler,
             ),
             NativeExport::new(
                 "is_empty",
                 "std.list.is_empty",
-                "(list: List) -> Bool",
+                "(list: &List) -> Bool",
                 native_is_empty as NativeHandler,
             ),
             NativeExport::new(
                 "get",
                 "std.list.get",
-                "(list: List, index: Int) -> Any",
+                "(list: &List, index: Int) -> Any",
                 native_get as NativeHandler,
             ),
             NativeExport::new(
@@ -113,38 +113,38 @@ impl StdModule for ListModule {
             NativeExport::new(
                 "first",
                 "std.list.first",
-                "(list: List) -> Any",
+                "(list: &List) -> Any",
                 native_first as NativeHandler,
             ),
             NativeExport::new(
                 "last",
                 "std.list.last",
-                "(list: List) -> Any",
+                "(list: &List) -> Any",
                 native_last as NativeHandler,
             ),
             NativeExport::new(
                 "slice",
                 "std.list.slice",
-                "(list: List, start: Int, end: Int) -> List",
+                "(list: &List, start: Int, end: Int) -> List",
                 native_slice as NativeHandler,
             ),
             NativeExport::new(
                 "contains",
                 "std.list.contains",
-                "(list: List, item: Any) -> Bool",
+                "(list: &List, item: Any) -> Bool",
                 native_contains as NativeHandler,
             ),
             NativeExport::new(
                 "find_index",
                 "std.list.find_index",
-                "(list: List, item: Any) -> Int",
+                "(list: &List, item: Any) -> Int",
                 native_find_index as NativeHandler,
             ),
             // 迭代器协议函数
             NativeExport::new(
                 "iter",
                 "std.list.iter",
-                "(list: List) -> Tuple",
+                "(list: &List) -> Tuple",
                 native_iter as NativeHandler,
             ),
             NativeExport::new(

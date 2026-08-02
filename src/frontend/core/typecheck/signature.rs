@@ -190,6 +190,10 @@ fn bind_generic_vars(
         ),
         MonoType::Arc(inner) => MonoType::Arc(Box::new(bind_generic_vars(*inner, binders))),
         MonoType::Weak(inner) => MonoType::Weak(Box::new(bind_generic_vars(*inner, binders))),
+        MonoType::Ref { mutable, inner } => MonoType::Ref {
+            mutable,
+            inner: Box::new(bind_generic_vars(*inner, binders)),
+        },
         MonoType::Generic { name, args } => MonoType::Generic {
             name,
             args: args
@@ -272,6 +276,20 @@ fn hoist_implicit_generics(
         let t = type_str.trim();
         if t.is_empty() {
             return String::new();
+        }
+        // 引用类型 &T / &mut T：剥前缀递归，再拼回
+        if t.starts_with('&') {
+            let (mutable, rest) = if let Some(r) = t.strip_prefix("&mut ") {
+                (true, r)
+            } else {
+                (false, &t[1..])
+            };
+            let inner = hoist_type(rest, generic_params, names, gen);
+            return if mutable {
+                format!("&mut {inner}")
+            } else {
+                format!("&{inner}")
+            };
         }
         // 函数类型 `(...) -> ...`
         if t.starts_with('(') {
@@ -550,6 +568,21 @@ fn parse_type_str_with_generics(
     generic_params: &[String],
 ) -> MonoType {
     let type_str = type_str.trim();
+
+    // 引用类型：&T / &mut T（RFC-009 借用令牌）
+    // 只读操作 std 签名（如 `(list: &List) -> Int`）在调用点触发自动借用。
+    if let Some(inner) = type_str.strip_prefix("&mut ") {
+        return MonoType::Ref {
+            mutable: true,
+            inner: Box::new(parse_type_str_with_generics(inner, generic_params)),
+        };
+    }
+    if let Some(inner) = type_str.strip_prefix('&') {
+        return MonoType::Ref {
+            mutable: false,
+            inner: Box::new(parse_type_str_with_generics(inner, generic_params)),
+        };
+    }
 
     // 处理函数类型: (item: T) -> T 或元组类型: (String, Int) 或单位 ()
     if type_str.starts_with('(') {

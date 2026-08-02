@@ -36,7 +36,7 @@ impl StdModule for OsModule {
             NativeExport::new(
                 "open",
                 "std.os.open",
-                "(path: String, mode: String) -> File",
+                "(path: &String, mode: &String) -> File",
                 native_open,
             ),
             NativeExport::new(
@@ -74,69 +74,69 @@ impl StdModule for OsModule {
             NativeExport::new(
                 "mkdir",
                 "std.os.mkdir",
-                "(path: String) -> Bool",
+                "(path: &String) -> Bool",
                 native_mkdir,
             ),
             NativeExport::new(
                 "rmdir",
                 "std.os.rmdir",
-                "(path: String) -> Bool",
+                "(path: &String) -> Bool",
                 native_rmdir,
             ),
             NativeExport::new(
                 "read_dir",
                 "std.os.read_dir",
-                "(path: String) -> String",
+                "(path: &String) -> String",
                 native_read_dir,
             ),
             // File/Directory utilities
             NativeExport::new(
                 "remove",
                 "std.os.remove",
-                "(path: String) -> Bool",
+                "(path: &String) -> Bool",
                 native_remove,
             ),
             NativeExport::new(
                 "exists",
                 "std.os.exists",
-                "(path: String) -> Bool",
+                "(path: &String) -> Bool",
                 native_exists,
             ),
             NativeExport::new(
                 "is_file",
                 "std.os.is_file",
-                "(path: String) -> Bool",
+                "(path: &String) -> Bool",
                 native_is_file,
             ),
             NativeExport::new(
                 "is_dir",
                 "std.os.is_dir",
-                "(path: String) -> Bool",
+                "(path: &String) -> Bool",
                 native_is_dir,
             ),
             NativeExport::new(
                 "copy",
                 "std.os.copy",
-                "(src: String, dst: String) -> Bool",
+                "(src: &String, dst: &String) -> Bool",
                 native_copy,
             ),
             NativeExport::new(
                 "rename",
                 "std.os.rename",
-                "(old: String, new: String) -> Bool",
+                "(old: &String, new: &String) -> Bool",
                 native_rename,
             ),
             // Environment variables
             NativeExport::new(
                 "get_env",
                 "std.os.get_env",
-                "(name: String) -> String",
+                "(name: &String) -> String",
                 native_get_env,
             ),
             NativeExport::new(
                 "set_env",
                 "std.os.set_env",
-                "(name: String, value: String) -> Void",
+                "(name: &String, value: &String) -> Void",
                 native_set_env,
             ),
             // Process and working directory
@@ -144,14 +144,14 @@ impl StdModule for OsModule {
             NativeExport::new(
                 "chdir",
                 "std.os.chdir",
-                "(path: String) -> Bool",
+                "(path: &String) -> Bool",
                 native_chdir,
             ),
             NativeExport::new("getcwd", "std.os.getcwd", "() -> String", native_getcwd),
             NativeExport::new(
                 "append_file",
                 "std.os.append_file",
-                "(path: String, content: String) -> Bool",
+                "(path: &String, content: &String) -> Bool",
                 native_append_file,
             ),
         ]

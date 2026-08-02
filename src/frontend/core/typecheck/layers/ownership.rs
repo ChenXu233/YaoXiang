@@ -784,6 +784,18 @@ impl OwnershipChecker {
         }
     }
 
+    /// 提取完整调用路径（`list.len` / `len`），用于查调用目标签名。
+    /// 与 extract_var_name（最内层变量名）不同——后者用于借用令牌归属。
+    fn extract_call_path(expr: &Expr) -> Option<String> {
+        match expr {
+            Expr::Var(name, _) => Some(name.clone()),
+            Expr::FieldAccess {
+                expr: inner, field, ..
+            } => Self::extract_call_path(inner).map(|p| format!("{p}.{field}")),
+            _ => None,
+        }
+    }
+
     /// 从 TypeEnvironment 查询函数参数的所有权语义
     fn lookup_param_types(
         &self,
@@ -791,28 +803,36 @@ impl OwnershipChecker {
         arg_count: usize,
         env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
     ) -> Vec<ParamOwnership> {
-        let fn_type = env.get_var(func_name);
-        match fn_type {
-            Some(poly) => {
-                if let crate::frontend::core::types::MonoType::Fn { params, .. } = &poly.body {
-                    params
-                        .iter()
-                        .take(arg_count)
-                        .map(|p| match p {
-                            crate::frontend::core::types::MonoType::Ref {
-                                mutable: true, ..
-                            } => ParamOwnership::WriteBorrow,
-                            crate::frontend::core::types::MonoType::Ref {
-                                mutable: false, ..
-                            } => ParamOwnership::ReadBorrow,
-                            _ => ParamOwnership::Move,
-                        })
-                        .collect()
+        // ponytail: std 限定名回退（list.len → std.list.len）+ 短名兜底；
+        // 用户模块经 use 绑定为 Struct 时仍退化 Move，需 Resolver 才精确（罕见，暂不处理）
+        let fn_ty = env
+            .get_var(func_name)
+            .map(|p| p.body.clone())
+            .or_else(|| {
+                if func_name.contains('.') && !func_name.starts_with("std.") {
+                    env.native_signatures
+                        .get(&format!("std.{func_name}"))
+                        .cloned()
                 } else {
-                    vec![ParamOwnership::Move; arg_count]
+                    None
                 }
-            }
-            None => vec![ParamOwnership::Move; arg_count],
+            })
+            .or_else(|| env.native_signatures.get(func_name).cloned());
+        match fn_ty {
+            Some(crate::frontend::core::types::MonoType::Fn { params, .. }) => params
+                .iter()
+                .take(arg_count)
+                .map(|p| match p {
+                    crate::frontend::core::types::MonoType::Ref { mutable: true, .. } => {
+                        ParamOwnership::WriteBorrow
+                    }
+                    crate::frontend::core::types::MonoType::Ref { mutable: false, .. } => {
+                        ParamOwnership::ReadBorrow
+                    }
+                    _ => ParamOwnership::Move,
+                })
+                .collect(),
+            _ => vec![ParamOwnership::Move; arg_count],
         }
     }
 
@@ -1201,7 +1221,7 @@ impl OwnershipChecker {
             Expr::Call { func, args, .. } => {
                 let mut results = self.walk_expr(func);
                 // 确定调用目标名（用于查签名和捕获）
-                let func_name = Self::extract_var_name(func);
+                let func_name = Self::extract_call_path(func);
                 // 查询函数的参数签名（未知函数回退为全 Move）
                 let env: &crate::frontend::core::typecheck::environment::TypeEnvironment =
                     unsafe { &*self.env.unwrap() };

@@ -494,6 +494,7 @@ impl<'a> ExpressionInferrer<'a> {
                 }
             }
             MonoType::Arc(t) | MonoType::Weak(t) => Self::collect_type_var_indices(t, out),
+            MonoType::Ref { inner, .. } => Self::collect_type_var_indices(inner, out),
             MonoType::Struct(s) => {
                 for (_, field_ty) in &s.fields {
                     Self::collect_type_var_indices(field_ty, out);
