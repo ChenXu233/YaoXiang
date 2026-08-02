@@ -29,12 +29,12 @@
 | 019-typed-homoiconicity.md | RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型 | 草案 | draft\019-typed-homoiconicity.md | -- | -- | -- | -- |
 | 026b-yx-bindgen.md | RFC-026b: yx-bindgen 工具链 | 草案 | draft\026b-yx-bindgen.md | -- | -- | -- | -- |
 | 028-jit-compiler.md | RFC-028：JIT 编译器 — VM 内多级执行引擎 | 草案 | draft\028-jit-compiler.md | #101 | -- | -- | -- |
-| 029-module-semantics.md | RFC-029: 模块语义系统 | 草案 | draft\029-module-semantics.md | -- | -- | -- | -- |
+| 029-module-semantics.md | RFC-029: 模块语义系统 | 已接受 | accepted\029-module-semantics.md | #100 | #232, #243, #244, #245 | -- | -- |
 | 031-optimization-levels.md | RFC-031：优化级别与 Pass 管理器 | 草案 | draft\031-optimization-levels.md | -- | -- | -- | -- |
 | 033-reflection-operator.md | RFC-033: `^^` 反射运算符 | 草案 | draft\033-reflection-operator.md | #136 | -- | -- | -- |
 | 034-debug-toolchain.md | RFC-034: 统一调试工具链 | 草案 | draft\034-debug-toolchain.md | #164 | -- | -- | -- |
 | 035-mcp-server.md | RFC-035: MCP Server 支持（AI Agent 集成） | 草案 | draft\035-mcp-server.md | #154 | -- | -- | -- |
-| 036-test-framework.md | RFC-036: std.test 测试框架与 yaoxiang test 命令 | 草案 | draft\036-test-framework.md | #94, #95, #221 | -- | -- | -- |
+| 036-test-framework.md | RFC-036: std.test 测试框架与 yaoxiang test 命令 | 已接受 | accepted\036-test-framework.md | #94, #95, #221 | #94, #95 | -- | -- |
 | 037-industrial-packaging.md | RFC-037: 工业化分发方案 — 基于 cargo-dist 的编译器/工具链打包 | 草案 | draft\037-industrial-packaging.md | #230 | -- | -- | -- |
 | 003-version-planning.md | RFC-003：版本规划 | 已拒绝 | rejected\003-version-planning.md | -- | -- | -- | -- |
 | 005-automated-cve-scanning.md | RFC-005: 自动化CVE安全检查系统 | 已拒绝 | rejected\005-automated-cve-scanning.md | -- | -- | -- | -- |

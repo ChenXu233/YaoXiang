@@ -1,9 +1,10 @@
 ---
 title: 'RFC-036: std.test 测试框架与 yaoxiang test 命令'
-status: '草案'
+status: '已接受'
 author: '晨煦'
 created: '2026-07-26'
-updated: '2026-07-26'
+updated: '2026-08-02'
+accepted: '2026-08-02'
 issue: '#94, #95, #221'
 ---
 
@@ -143,25 +144,26 @@ patterns = ["tests/**/*.yx"]
 
 use std.assert
 
-assert_eq: (a: ?, b: ?) -> Void = (a, b) => {
+assert_eq = (a, b) => {
     assert.assert(a == b, f"Expected {b}, got {a}")
 }
 
-assert_ne: (a: ?, b: ?) -> Void = (a, b) => {
+assert_ne = (a, b) => {
     assert.assert(a != b, f"Expected not equal to {b}, got {a}")
 }
 
-assert_true: (cond: Bool) -> Void = (cond) => {
+assert_true = (cond: Bool) => {
     assert.assert(cond, f"Expected true, got {cond}")
 }
 
-assert_false: (cond: Bool) -> Void = (cond) => {
+assert_false = (cond: Bool) => {
     assert.assert(!cond, f"Expected false, got {cond}")
 }
 ```
 
 - 4 个断言函数，全部用 `f"..."` 做诊断信息
-- `assert_eq` / `assert_ne` 的 `?` 泛型参数依赖泛型系统
+- `assert_eq` / `assert_ne` 用**无标注参数**（`Any`）——2026-08-02 实证：`==`/`!=` 与 f-string
+  插值在 Any 上工作正常（Int/String 均验证通过），**不依赖泛型系统**。未来泛型就绪后可补标注
 - `std.test` 不依赖任何 native 代码，纯 YaoXiang 实现
 
 ### 4. 标准库加载机制（关键设计）
@@ -178,11 +180,16 @@ pub const STD_YX_FILES: &[(&str, &str)] = &[
 ];
 ```
 
-模块加载器解析 `use std.test` 时：
+模块系统（RFC-029，2026-08-02 已完整落地）提供接入点：Registry 同时持有 native 模块与源模块，
+orchestrator 负责多文件编排。`use std.test` 的解析顺序：
 
 1. 先查 Rust native 模块（现有机制，如 `std.assert`）
-2. 未命中，查嵌入的 `STD_YX_FILES`，找到 `std/test.yx` 的源代码
-3. 编译该源代码并注册到模块系统
+2. 未命中，查嵌入的 `STD_YX_FILES`——命中则以**虚拟路径**（如 `<std>/test.yx`）作为种子模块
+   注入 orchestrator，走正常前端管道（parse → typecheck → IR）
+3. 未命中，走文件系统发现（用户模块）
+
+嵌入源模块内部的 `use std.assert` 由 resolver 正常解析到 native registry——native 与源模块在
+Registry 中共存，跨种类依赖天然成立。嵌入模块**按需编译**：仅被 import 时进入管道。
 
 优势：
 
@@ -196,6 +203,12 @@ pub const STD_YX_FILES: &[(&str, &str)] = &[
 
 ### 5. 发现与执行
 
+**前置条件（2026-08-02 审核决议）**：CLI `run` 接入 orchestrator。现状 CLI `run` 走单文件管道
+（`run_file_with_diagnostics`），无法解析用户模块导入；而 `yaoxiang test` 的子进程模型继承
+CLI 能力，测试文件导入项目模块是核心场景。因此 Phase 1 先将 CLI `Run` 的源码分支委托给
+`run_project`（orchestrator，目录递归发现）；#247（沿 use 按需发现）之后作为纯性能优化叠加。
+无 import 的单文件经 orchestrator 行为等价，字节码分支不变。
+
 **发现阶段**：
 
 1. 如果指定了 `[PATHS]`，直接使用指定的路径
@@ -205,7 +218,8 @@ pub const STD_YX_FILES: &[(&str, &str)] = &[
 
 **执行阶段**：
 
-1. 对每个文件：`yaoxiang run <file>` 启动子进程
+1. 对每个文件：`yaoxiang run --debug-info <file>` 启动子进程
+   （`--debug-info` 使运行时错误带源码位置——2026-08-02 实证 stack trace 输出 `file:line:col`）
 2. 检查 exit code：0 为 PASS，非 0 为 FAIL
 3. 捕获 stdout/stderr 用于报告
 4. 仅串行执行（Phase 1），未来支持 `--parallel`
@@ -227,6 +241,7 @@ pub const STD_YX_FILES: &[(&str, &str)] = &[
 | Rust `#[test]`                                | 不动，编译器内部测试继续用 Rust   |
 | 现有 `.yx` 集成测试（`tests/yaoxiang/`）      | 被 `yaoxiang test` 发现并执行     |
 | `std.assert.assert(cond)`                     | 保留，`std.test` 底层依赖它       |
+| 模块系统（RFC-029）                            | 嵌入源模块经 Registry/orchestrator 接入；CLI `run` 接 orchestrator 是前置 |
 | `#200` 重构（`io.println` → `assert.assert`） | 与 `yaoxiang test` 完全一致的方向 |
 | `@` 注解                                      | 不使用，不引入 `@test`            |
 
@@ -236,12 +251,13 @@ pub const STD_YX_FILES: &[(&str, &str)] = &[
 
 改动范围：
 
+- `src/util/diagnostic/mod.rs` / `src/main.rs` — CLI `Run` 源码分支委托 `run_project`（多文件运行前置）
 - `src/main.rs` — 新增 `Test` 子命令
 - `src/std/test.yx` — 新增纯 YaoXiang 模块
 - `build.rs` — 嵌入 `std/*.yx` 到二进制
-- 模块加载器 — 支持从嵌入源加载 `.yx` 模块
+- orchestrator / Registry — 支持从嵌入源以虚拟路径加载 `.yx` 模块
 - RFC-015 配置解析 — `[tool.test]` 段
-- 子进程执行 + 报告
+- 子进程执行（`--debug-info`）+ 报告
 
 交付物：
 
@@ -267,17 +283,20 @@ pub const STD_YX_FILES: &[(&str, &str)] = &[
 
 | 风险                                    | 概率 | 缓解                                        |
 | --------------------------------------- | ---- | ------------------------------------------- |
-| `f"..."` 在泛型类型上插值失败           | 低   | 已在 `std.assert.assert` 中验证基础类型可用 |
+| `f"..."` 在 Any 上插值失败              | 无   | 2026-08-02 已实证（Int/String 均正常）      |
 | 子进程启动开销影响测试速度              | 中   | Phase 1 串行执行，可接受；Phase 3 并行缓解  |
 | `yaoxiang.toml` 配置解析不在当前 CLI 中 | 低   | 简单扩展，不影响核心功能                    |
-| 泛型 `?` 在 `std.test` 中不可用         | 低   | 可降级为 `Any` 类型或类型特化               |
+| CLI run 接 orchestrator 引入行为回归    | 低   | 无 import 单文件路径等价；集成测试已覆盖 orchestrator |
 | 嵌入 `.yx` 源文件到二进制增加体积       | 低   | `.yx` 源文件极小，可忽略                    |
 
 ## 开放问题
 
-- [ ] `std/test.yx` 中 `use std.assert`
-      的引用是否能在模块加载器中正确解析？需要验证嵌入源模块之间的依赖关系
-- [ ] 测试输出中 `f"..."` 的泛型 `to_string` 是否会引入新的类型约束？需要验证
+- [x] `std/test.yx` 中 `use std.assert` 的引用能否正确解析？——**已解决（2026-08-02）**。
+      模块系统（RFC-029）落地后 native 与源模块在 Registry 中共存，resolver 统一解析，跨种类依赖天然成立
+- [x] 测试输出中 `f"..."` 的泛型 `to_string` 是否引入新类型约束？——**已解决（2026-08-02）**。
+      实证无标注参数（Any）上 `==`/`!=` 与 f-string 插值均工作（Int/String 验证通过），不引入新约束
+- [x] `?` 泛型参数可行性？——**已解决（2026-08-02）**：`?` 类型语法当前不存在（且会被静默吞掉，
+      已单开 issue 跟踪），Phase 1 断言函数用无标注参数，不依赖泛型系统
 
 ## 设计决策记录
 
@@ -287,7 +306,9 @@ pub const STD_YX_FILES: &[(&str, &str)] = &[
 | 断言方式     | `std.test` 模块纯 YaoXiang 函数           | 2026-07-26 | 自举，无 native 代码       |
 | 测试执行模型 | 子进程 `yaoxiang run <file>` + exit code  | 2026-07-26 | 进程级隔离，零编译器改动   |
 | 标准库加载   | 当前嵌入二进制，未来文件系统              | 2026-07-26 | 版本绑定，单文件可用       |
-| 泛型断言     | 依赖 `?` 泛型参数                         | 2026-07-26 | 不引入特化，信任泛型系统   |
+| 断言参数类型 | 无标注参数（Any），不依赖泛型系统         | 2026-08-02 | `?` 类型语法不存在；Any 实证可比较、可插值 |
+| 多文件运行   | CLI `run` 委托 `run_project`（orchestrator）作为前置 | 2026-08-02 | 子进程模型继承 CLI 能力；#247 退化为纯性能优化 |
+| 报告源码位置 | 子进程带 `--debug-info`                   | 2026-08-02 | 实证 stack trace 输出 `file:line:col` |
 
 ## 参考文献
 
