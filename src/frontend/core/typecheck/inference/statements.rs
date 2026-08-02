@@ -322,6 +322,7 @@ impl StatementChecker {
         path: &str,
         items: &Option<Vec<String>>,
         alias: &Option<Vec<String>>,
+        item_aliases: &Option<Vec<Option<String>>>,
     ) {
         let Some(module) = self.module_registry.get(path).cloned() else {
             return;
@@ -358,27 +359,19 @@ impl StatementChecker {
                     crate::util::span::Span::default(),
                 );
             }
-            // use path.{a, b}
-            (Some(item_names), None) => {
-                for item_name in item_names {
+            // use path.{a, b} / use path.{a as x} / use path.{a, b} as x, y
+            // 本地名优先级：内联别名 > 位置别名（数量对齐时）> 原名（#245）
+            (Some(item_names), aliases) => {
+                let positional = aliases.filter(|v| v.len() == item_names.len());
+                for (i, item_name) in item_names.iter().enumerate() {
+                    let local_name = item_aliases
+                        .as_ref()
+                        .and_then(|v| v.get(i))
+                        .and_then(|a| a.as_ref())
+                        .or_else(|| positional.and_then(|v| v.get(i)))
+                        .unwrap_or(item_name);
                     if let Some(export) = module.exports.get(item_name).cloned() {
-                        self.import_binding(item_name, &export);
-                    }
-                }
-            }
-            // use path.{a, b} as aa, bb
-            (Some(item_names), Some(aliases)) if item_names.len() == aliases.len() => {
-                for (item_name, alias_name) in item_names.iter().zip(aliases.iter()) {
-                    if let Some(export) = module.exports.get(item_name).cloned() {
-                        self.import_binding(alias_name, &export);
-                    }
-                }
-            }
-            // 不合法别名数量：按原名导入
-            (Some(item_names), Some(_)) => {
-                for item_name in item_names {
-                    if let Some(export) = module.exports.get(item_name).cloned() {
-                        self.import_binding(item_name, &export);
+                        self.import_binding(local_name, &export);
                     }
                 }
             }
@@ -668,9 +661,13 @@ impl StatementChecker {
                 )
             }
             crate::frontend::core::parser::ast::StmtKind::Use {
-                path, items, alias, ..
+                path,
+                items,
+                alias,
+                item_aliases,
+                ..
             } => {
-                self.process_use_stmt(path, items, alias);
+                self.process_use_stmt(path, items, alias, item_aliases);
                 Ok(())
             }
             // 元组解构赋值

@@ -377,6 +377,7 @@ fn test_stmtkind_use() {
             ],
             items: Some(vec!["println".into()]),
             alias: None,
+            item_aliases: None,
         },
         span: Span::dummy(),
     };

@@ -42,3 +42,21 @@ fn test_eval_syntax_error() {
     let result = eval_code("print('unclosed string");
     assert!(result.is_err(), "语法错误时应返回错误而非 panic");
 }
+
+#[test]
+fn test_eval_use_item_inline_alias() {
+    // #245：单文件 std 条目别名——`use std.io.{println as say}` 后别名可调用。
+    assert!(
+        eval_code("use std.io.{println as say}\nmain = { say(\"hi\") }").is_ok(),
+        "std 条目内联别名应可编译执行"
+    );
+}
+
+#[test]
+fn test_eval_use_item_positional_alias() {
+    // #245：单文件位置式别名同样生效。
+    assert!(
+        eval_code("use std.io.{println} as say\nmain = { say(\"hi\") }").is_ok(),
+        "std 条目位置别名应可编译执行"
+    );
+}

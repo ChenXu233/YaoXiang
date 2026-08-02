@@ -146,6 +146,9 @@ pub struct AstToIrGenerator {
     /// 阶段被识别为命名空间调用并解析为限定名 `lib.helper`（与 `qualify_module_ir`
     /// 产出的函数定义名天然契合）。std 命名空间走原有 `is_std_submodule` 分支，不在此表。
     user_namespaces: HashMap<String, String>,
+    /// 本文件 use 导入的本地名 → 限定名（含 #245 条目别名）。
+    /// 生成期解析调用名时优先于 registry 的全局短名表（文件级精确）。
+    use_aliases: HashMap<String, String>,
     /// 本文件持有的模块注册表（std + 用户模块），取代生成期多处 `with_std()` 重建。
     registry: ModuleRegistry,
     /// 本文件的模块限定键（多文件模式 Some → 启用限定；单文件 None → 不限定）。
@@ -206,6 +209,7 @@ impl AstToIrGenerator {
             release_plan: type_result.release_plan.drops.clone(),
             pending_env_vars: Vec::new(),
             user_namespaces: HashMap::new(),
+            use_aliases: HashMap::new(),
             registry,
             module_key,
         }
@@ -493,6 +497,8 @@ impl AstToIrGenerator {
         if let Some(ref tr) = self.type_result {
             self.user_namespaces = tr.module_namespaces.clone();
         }
+        // use 导入别名表（含 #245 条目别名）：生成期解析调用名用。
+        self.use_aliases = self.build_import_aliases(module);
 
         let mut functions = Vec::new();
         let mut errors = Vec::new();
@@ -604,12 +610,21 @@ impl AstToIrGenerator {
     ) -> HashMap<String, String> {
         let mut aliases = HashMap::new();
         for stmt in &module.items {
-            if let ast::StmtKind::Use { path, items, .. } = &stmt.kind {
+            if let ast::StmtKind::Use {
+                path,
+                items,
+                alias,
+                item_aliases,
+                ..
+            } = &stmt.kind
+            {
                 let Some(exports) = self.registry.get_exports(path) else {
                     continue;
                 };
                 if let Some(names) = items {
-                    for name in names {
+                    // 本地名优先级：内联别名 > 位置别名（数量对齐时）> 原名（#245）
+                    let positional = alias.as_ref().filter(|v| v.len() == names.len());
+                    for (i, name) in names.iter().enumerate() {
                         if let Some(export) = exports.get(name) {
                             // #244：类型也限定——构造调用 `Point(...)` 与方法调用 `Point.get_x`
                             // 都需把本地短名别名到源模块限定名才能解析。
@@ -617,7 +632,13 @@ impl AstToIrGenerator {
                                 export.kind,
                                 ExportKind::Function | ExportKind::Constant | ExportKind::Type
                             ) {
-                                aliases.insert(name.clone(), export.full_path.clone());
+                                let local_name = item_aliases
+                                    .as_ref()
+                                    .and_then(|v| v.get(i))
+                                    .and_then(|a| a.as_ref())
+                                    .or_else(|| positional.and_then(|v| v.get(i)))
+                                    .unwrap_or(name);
+                                aliases.insert(local_name.clone(), export.full_path.clone());
                             }
                         }
                     }
@@ -2812,7 +2833,9 @@ impl AstToIrGenerator {
         func: &ast::Expr,
     ) -> Result<Operand, Diagnostic> {
         if let Expr::Var(name, _) = func {
-            let resolved_name = if self.registry.is_native_name(name) {
+            let resolved_name = if let Some(qualified) = self.use_aliases.get(name) {
+                qualified.clone()
+            } else if self.registry.is_native_name(name) {
                 name.clone()
             } else if let Some(qualified) = self.registry.short_to_qualified_map().get(name) {
                 qualified.clone()

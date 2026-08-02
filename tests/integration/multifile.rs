@@ -216,3 +216,82 @@ main = {
 "#;
     run_project_ok(&[("a.yx", a), ("b.yx", b), ("main.yx", main)], "main.yx");
 }
+
+#[test]
+fn test_multifile_use_item_inline_alias() {
+    // #245：`use lib.{helper as double}` 内联别名，别名参与限定调用。
+    let lib = r#"
+helper: (x: Int) -> Int = (x) => {
+    return x * 2
+}
+"#;
+    let main = r#"
+use std.assert
+use lib.{helper as double}
+
+main = {
+    assert.assert(double(21) == 42, "double(21) should be 42")
+}
+"#;
+    run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+}
+
+#[test]
+fn test_multifile_use_item_mixed_alias_and_plain() {
+    // #245：混合导入——带别名项与原名项共存。
+    let lib = r#"
+Point: Type = { x: Float }
+
+helper: (x: Int) -> Int = (x) => {
+    return x * 2
+}
+"#;
+    let main = r#"
+use std.assert
+use lib.{helper as double, Point}
+
+main = {
+    p = Point(3.0)
+    assert.assert(p.x == 3.0, "p.x should be 3")
+    assert.assert(double(21) == 42, "double(21) should be 42")
+}
+"#;
+    run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+}
+
+#[test]
+fn test_multifile_use_item_positional_alias() {
+    // #245：位置式别名 `use lib.{helper} as double` 同样生效。
+    let lib = r#"
+helper: (x: Int) -> Int = (x) => {
+    return x * 2
+}
+"#;
+    let main = r#"
+use std.assert
+use lib.{helper} as double
+
+main = {
+    assert.assert(double(21) == 42, "double(21) should be 42")
+}
+"#;
+    run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+}
+
+#[test]
+fn test_multifile_use_type_alias_constructor() {
+    // #245：类型别名——`use lib.{Point as P}` 后构造调用经别名解析。
+    let lib = r#"
+Point: Type = { x: Float }
+"#;
+    let main = r#"
+use std.assert
+use lib.{Point as P}
+
+main = {
+    p = P(3.0)
+    assert.assert(p.x == 3.0, "p.x should be 3")
+}
+"#;
+    run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+}

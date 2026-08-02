@@ -875,7 +875,11 @@ impl TypeChecker {
                 }
             }
             crate::frontend::core::parser::ast::StmtKind::Use {
-                path, items, alias, ..
+                path,
+                items,
+                alias,
+                item_aliases,
+                ..
             } => {
                 // 计算导入模式
                 // use std.io → register as "io.print"
@@ -930,19 +934,24 @@ impl TypeChecker {
                                 self.register_use_export(alias_name, export, true);
                             }
                         }
-                        // use path.{a, b} 无 alias → 展平注册
-                        (Some(item_names), None) => {
-                            for (item_name, export) in
-                                item_names.iter().zip(exports_to_import.iter())
-                            {
-                                self.register_use_export(item_name, export, false);
-                            }
-                        }
-                        // use path.{a, b} as alias1, alias2 → 嵌套注册
-                        (Some(item_names), Some(aliases)) if item_names.len() == aliases.len() => {
-                            for (alias_name, export) in aliases.iter().zip(exports_to_import.iter())
-                            {
-                                self.register_use_export(alias_name, export, true);
+                        // use path.{a, b} / use path.{a as x} / use path.{a, b} as x, y
+                        // 本地名优先级：内联别名 > 位置别名（数量对齐时）> 原名（#245）。
+                        // 按 item 名查导出——exports 是 HashMap 无序，zip 会错配。
+                        (Some(item_names), aliases_opt) => {
+                            let positional = aliases_opt.filter(|v| v.len() == item_names.len());
+                            for (i, item_name) in item_names.iter().enumerate() {
+                                let Some(export) = module.exports.get(item_name) else {
+                                    continue;
+                                };
+                                let local_name = item_aliases
+                                    .as_ref()
+                                    .and_then(|v| v.get(i))
+                                    .and_then(|a| a.as_ref())
+                                    .or_else(|| positional.and_then(|v| v.get(i)));
+                                match local_name {
+                                    Some(local) => self.register_use_export(local, export, true),
+                                    None => self.register_use_export(item_name, export, false),
+                                }
                             }
                         }
                         // 其他情况：报错或回退

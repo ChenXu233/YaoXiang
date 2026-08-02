@@ -254,6 +254,10 @@ pub enum StmtKind {
         path_parts: Vec<SpannedIdent>,
         items: Option<Vec<String>>,
         alias: Option<Vec<String>>,
+        /// 花括号内联别名（#245）：与 `items` 逐项对齐，`None` 表示该项无别名。
+        /// `use lib.{helper as h}` → items=["helper"], item_aliases=[Some("h")]。
+        /// 全项均无别名时为 `None`。
+        item_aliases: Option<Vec<Option<String>>>,
     },
     /// If statement: `if condition { then_branch } elif branches else_branch`
     If {
