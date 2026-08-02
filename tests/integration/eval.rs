@@ -51,12 +51,3 @@ fn test_eval_use_item_inline_alias() {
         "std 条目内联别名应可编译执行"
     );
 }
-
-#[test]
-fn test_eval_use_item_positional_alias() {
-    // #245：单文件位置式别名同样生效。
-    assert!(
-        eval_code("use std.io.{println} as say\nmain = { say(\"hi\") }").is_ok(),
-        "std 条目位置别名应可编译执行"
-    );
-}

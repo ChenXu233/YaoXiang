@@ -359,16 +359,13 @@ impl StatementChecker {
                     crate::util::span::Span::default(),
                 );
             }
-            // use path.{a, b} / use path.{a as x} / use path.{a, b} as x, y
-            // 本地名优先级：内联别名 > 位置别名（数量对齐时）> 原名（#245）
-            (Some(item_names), aliases) => {
-                let positional = aliases.filter(|v| v.len() == item_names.len());
+            // use path.{a, b} / use path.{a as x}（#245：仅内联别名）
+            (Some(item_names), _) => {
                 for (i, item_name) in item_names.iter().enumerate() {
                     let local_name = item_aliases
                         .as_ref()
                         .and_then(|v| v.get(i))
                         .and_then(|a| a.as_ref())
-                        .or_else(|| positional.and_then(|v| v.get(i)))
                         .unwrap_or(item_name);
                     if let Some(export) = module.exports.get(item_name).cloned() {
                         self.import_binding(local_name, &export);

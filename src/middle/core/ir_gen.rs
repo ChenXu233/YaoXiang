@@ -613,7 +613,6 @@ impl AstToIrGenerator {
             if let ast::StmtKind::Use {
                 path,
                 items,
-                alias,
                 item_aliases,
                 ..
             } = &stmt.kind
@@ -622,8 +621,7 @@ impl AstToIrGenerator {
                     continue;
                 };
                 if let Some(names) = items {
-                    // 本地名优先级：内联别名 > 位置别名（数量对齐时）> 原名（#245）
-                    let positional = alias.as_ref().filter(|v| v.len() == names.len());
+                    // 本地名：内联别名（#245）> 原名
                     for (i, name) in names.iter().enumerate() {
                         if let Some(export) = exports.get(name) {
                             // #244：类型也限定——构造调用 `Point(...)` 与方法调用 `Point.get_x`
@@ -636,7 +634,6 @@ impl AstToIrGenerator {
                                     .as_ref()
                                     .and_then(|v| v.get(i))
                                     .and_then(|a| a.as_ref())
-                                    .or_else(|| positional.and_then(|v| v.get(i)))
                                     .unwrap_or(name);
                                 aliases.insert(local_name.clone(), export.full_path.clone());
                             }

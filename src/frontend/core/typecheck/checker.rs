@@ -885,9 +885,8 @@ impl TypeChecker {
                 // use std.io → register as "io.print"
                 // use std.io as str → register as "str.print"
                 // use std.{print} → register as "print"
-                // use std.{print} as p → register as "p"
+                // use std.{print as p} → register as "p"（#245 内联别名）
                 // use std.{print, read} → register as "print", "read"
-                // use std.{print, read} as p, r → register as "p", "r"
                 let import_all = items.is_none();
                 let aliases = alias.as_ref();
 
@@ -934,11 +933,9 @@ impl TypeChecker {
                                 self.register_use_export(alias_name, export, true);
                             }
                         }
-                        // use path.{a, b} / use path.{a as x} / use path.{a, b} as x, y
-                        // 本地名优先级：内联别名 > 位置别名（数量对齐时）> 原名（#245）。
+                        // use path.{a, b} / use path.{a as x}（#245：仅内联别名）。
                         // 按 item 名查导出——exports 是 HashMap 无序，zip 会错配。
-                        (Some(item_names), aliases_opt) => {
-                            let positional = aliases_opt.filter(|v| v.len() == item_names.len());
+                        (Some(item_names), _) => {
                             for (i, item_name) in item_names.iter().enumerate() {
                                 let Some(export) = module.exports.get(item_name) else {
                                     continue;
@@ -946,8 +943,7 @@ impl TypeChecker {
                                 let local_name = item_aliases
                                     .as_ref()
                                     .and_then(|v| v.get(i))
-                                    .and_then(|a| a.as_ref())
-                                    .or_else(|| positional.and_then(|v| v.get(i)));
+                                    .and_then(|a| a.as_ref());
                                 match local_name {
                                     Some(local) => self.register_use_export(local, export, true),
                                     None => self.register_use_export(item_name, export, false),

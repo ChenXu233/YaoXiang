@@ -141,3 +141,15 @@ fn test_use_items_no_alias_gives_none_item_aliases() {
         panic!("Expected StmtKind::Use");
     }
 }
+
+#[test]
+fn test_use_positional_item_alias_rejected() {
+    // Arrange - 位置式条目别名不在 RFC-029 语法表内
+    let tokens = tokenize("use lib.{helper} as h").unwrap();
+
+    // Act
+    let result = parse(&tokens);
+
+    // Assert - 应报错并指向内联形式
+    assert!(result.has_errors, "位置式条目别名应被拒绝");
+}

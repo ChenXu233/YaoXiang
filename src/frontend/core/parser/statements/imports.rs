@@ -67,8 +67,19 @@ pub fn parse_use_stmt(
         (None, None)
     };
 
-    // Parse alias: use path as alias; or use path.{a, b} as alias1, alias2;
+    // Parse alias: use path as alias;
+    // 位置式条目别名 `use path.{a} as x` 不在 RFC-029 语法表内（仅四种形式），
+    // 拒绝并指向内联形式 `use path.{a as x}`。
     let alias = if state.skip(&TokenKind::KwAs) {
+        if items.is_some() {
+            state.error(
+                ErrorCodeDefinition::unexpected_token(
+                    "positional item alias is not supported; use inline form `use path.{item as alias}`",
+                )
+                .at(state.span())
+                .build(),
+            );
+        }
         let mut aliases = Vec::new();
         while let Some(TokenKind::Identifier(n)) = state.current().map(|t| &t.kind) {
             aliases.push(n.clone());

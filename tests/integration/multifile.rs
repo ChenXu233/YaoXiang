@@ -260,25 +260,6 @@ main = {
 }
 
 #[test]
-fn test_multifile_use_item_positional_alias() {
-    // #245：位置式别名 `use lib.{helper} as double` 同样生效。
-    let lib = r#"
-helper: (x: Int) -> Int = (x) => {
-    return x * 2
-}
-"#;
-    let main = r#"
-use std.assert
-use lib.{helper} as double
-
-main = {
-    assert.assert(double(21) == 42, "double(21) should be 42")
-}
-"#;
-    run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
-}
-
-#[test]
 fn test_multifile_use_type_alias_constructor() {
     // #245：类型别名——`use lib.{Point as P}` 后构造调用经别名解析。
     let lib = r#"

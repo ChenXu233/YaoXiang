@@ -245,7 +245,8 @@ pub enum StmtKind {
         /// 是否 pub
         is_pub: bool,
     },
-    /// Use statement: `use module.path` or `use module.{a, b} as c, d`
+    /// Use statement: `use module.path` / `use module.{a, b}` /
+    /// `use module as m` / `use module.{a as x}`（#245）
     Use {
         path: String,
         /// Module path span
