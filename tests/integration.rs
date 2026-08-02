@@ -22,6 +22,8 @@ mod feature_flags;
 mod fstring;
 #[path = "integration/interpreter.rs"]
 mod interpreter;
+#[path = "integration/test_command.rs"]
+mod test_command;
 #[path = "integration/token_system.rs"]
 mod token_system;
 

@@ -187,6 +187,37 @@ pub struct ProjectConfig {
     /// Runtime configuration
     #[serde(default)]
     pub runtime: RuntimeConfig,
+    /// Tool configuration ([tool.*] extension namespace, RFC-015)
+    #[serde(default)]
+    pub tool: ToolConfig,
+}
+
+/// [tool.*] 扩展命名空间（RFC-015）
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ToolConfig {
+    /// [tool.test] — yaoxiang test（RFC-036）
+    #[serde(default)]
+    pub test: TestConfig,
+}
+
+/// [tool.test] 配置（RFC-036）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestConfig {
+    /// 测试文件发现 pattern（字面路径或 `root/**/*.yx` 形式）
+    #[serde(default = "default_test_patterns")]
+    pub patterns: Vec<String>,
+}
+
+fn default_test_patterns() -> Vec<String> {
+    vec!["tests/**/*.yx".to_string()]
+}
+
+impl Default for TestConfig {
+    fn default() -> Self {
+        Self {
+            patterns: default_test_patterns(),
+        }
+    }
 }
 
 /// Runtime configuration

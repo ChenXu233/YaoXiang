@@ -135,6 +135,14 @@ enum Commands {
         no_progress: bool,
     },
 
+    /// Run project tests (RFC-036)
+    Test {
+        /// Test file(s) or directory path(s) to run
+        /// (default: [tool.test].patterns in yaoxiang.toml, else tests/**/*.yx)
+        #[arg(value_name = "PATH", num_args = 0..)]
+        paths: Vec<PathBuf>,
+    },
+
     /// Format source file
     Format {
         /// Source file or directory to format
@@ -355,6 +363,14 @@ fn main() -> Result<()> {
                 ::std::process::exit(1);
             }
         }
+        Commands::Test { paths } => match yaoxiang::util::test_runner::run_test_command(&paths) {
+            Ok(0) => {}
+            Ok(_) => ::std::process::exit(1),
+            Err(e) => {
+                eprintln!("{e}");
+                ::std::process::exit(1);
+            }
+        },
         Commands::Eval { code } => {
             let source = if code == "-" {
                 let mut buf = String::new();
