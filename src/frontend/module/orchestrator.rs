@@ -25,6 +25,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::frontend::core::parser::ast::{Expr, StmtKind};
+use crate::util::diagnostic::Diagnostic;
 use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::tokenize;
 use crate::frontend::core::typecheck::checker::TypeChecker;
@@ -54,9 +55,18 @@ pub enum OrchestratorError {
     #[error("解析 {path} 失败: {message}")]
     Parse { path: String, message: String },
     #[error("类型检查 {path} 失败:\n{message}")]
-    TypeCheck { path: String, message: String },
+    TypeCheck {
+        path: String,
+        message: String,
+        /// 结构化诊断（span 相对 path 文件），供 CLI 按源文件渲染
+        diagnostics: Vec<Diagnostic>,
+    },
     #[error("编译 {path} 失败: {message}")]
-    Compile { path: String, message: String },
+    Compile {
+        path: String,
+        message: String,
+        diagnostics: Vec<Diagnostic>,
+    },
     #[error("模块限定名冲突 `{name}`（{first} 与 {second}）；通常是模块路径歧义——如 foo/bar.yx 与 foo/bar/mod.yx 同被解析为 foo.bar，请删除其中一个")]
     Collision {
         name: String,
@@ -99,6 +109,7 @@ pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
             return Err(OrchestratorError::TypeCheck {
                 path: path.display().to_string(),
                 message: msg,
+                diagnostics: result.diagnostics,
             });
         }
         type_results.push(result);
@@ -124,13 +135,17 @@ pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
             &registry,
             key,
         )
-        .map_err(|diags| OrchestratorError::Compile {
-            path: path.display().to_string(),
-            message: diags
+        .map_err(|diags| {
+            let message = diags
                 .iter()
                 .map(|d| d.to_string())
                 .collect::<Vec<_>>()
-                .join("\n"),
+                .join("\n");
+            OrchestratorError::Compile {
+                path: path.display().to_string(),
+                message,
+                diagnostics: diags,
+            }
         })?;
         module_irs.push((path.display().to_string(), ir));
     }

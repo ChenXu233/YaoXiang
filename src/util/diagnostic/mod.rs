@@ -285,8 +285,14 @@ pub fn run_file_with_diagnostics(
     // 复用下方同一套 codegen + 执行路径（保留 runtime/workers/debug_info 配置）。
     let module_result: Result<crate::middle::ModuleIR, crate::frontend::CompileError> =
         if in_yaoxiang_project(file) {
-            crate::frontend::module::orchestrator::compile_project(file)
-                .map_err(|e| crate::frontend::CompileError::Internal(format!("{}", e)))
+            match crate::frontend::module::orchestrator::compile_project(file) {
+                Ok(m) => Ok(m),
+                Err(e) => {
+                    // 结构化诊断按其来源文件渲染，不再包成 E8001
+                    render_orchestrator_error(&e);
+                    return Err(anyhow::anyhow!("Compilation failed"));
+                }
+            }
         } else {
             Compiler::new().compile(&source_file.name, &source_file.content)
         };
@@ -340,6 +346,53 @@ pub fn run_file_with_diagnostics(
     }
 
     Ok(())
+}
+
+/// 渲染编排器错误：TypeCheck/Compile 携带结构化诊断（span 相对其来源文件），
+/// 按该文件内容渲染带源码高亮的错误；其余变体（Parse/Io/Collision）直接 Display。
+fn render_orchestrator_error(e: &crate::frontend::module::orchestrator::OrchestratorError) {
+    use crate::frontend::module::orchestrator::OrchestratorError;
+
+    let (path, diagnostics) = match e {
+        OrchestratorError::TypeCheck {
+            path, diagnostics, ..
+        }
+        | OrchestratorError::Compile {
+            path, diagnostics, ..
+        } => (path, diagnostics),
+        other => {
+            eprintln!();
+            eprintln!("{}", other);
+            return;
+        }
+    };
+
+    eprintln!();
+    match std::fs::read_to_string(path) {
+        Ok(content) => {
+            let mut sources = SourceMap::new();
+            let fid = sources.add_file(path.clone(), content);
+            match sources.get(fid) {
+                Some(source_file) => {
+                    for d in diagnostics {
+                        let output = render_compile_error(&d.message, source_file, Some(d));
+                        eprintln!("{}", output);
+                    }
+                }
+                None => {
+                    for d in diagnostics {
+                        eprintln!("{}", d);
+                    }
+                }
+            }
+        }
+        // 源文件读不到（极端情况）：退化纯文本，至少诊断不丢
+        Err(_) => {
+            for d in diagnostics {
+                eprintln!("{}", d);
+            }
+        }
+    }
 }
 
 /// 只进行类型检查，不执行代码
