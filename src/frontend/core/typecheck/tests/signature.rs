@@ -303,26 +303,26 @@ fn test_parse_signature_bracket_generic_prefix_binds_shared_var() {
 
 #[test]
 fn test_parse_signature_bracket_generic_args_arc_weak() {
-    // Arrange - 无泛型前缀的方括号实参（T 未绑定，保留 TypeRef 占位）
+    // Arrange - 无泛型前缀的方括号实参（T 作为隐式泛型提升，绑定为类型变量）
     let mut env = TypeEnvironment::new();
 
     // Act
     let result = parse_signature("(arc: Arc[T]) -> Weak[T]", &mut env);
 
-    // Assert - Arc/Weak 应结构化，内部 T 保持 TypeRef
+    // Assert - Arc/Weak 应结构化，T 被提升为隐式泛型（不再是裸 TypeRef）
     match result {
         MonoType::Fn {
             params,
             return_type,
         } => {
             assert!(
-                matches!(&params[0], MonoType::Arc(inner) if matches!(inner.as_ref(), MonoType::TypeRef(n) if n == "T")),
-                "参数应为 Arc[T]，实际: {:?}",
+                matches!(&params[0], MonoType::Arc(inner) if !matches!(inner.as_ref(), MonoType::TypeRef(n) if n == "T")),
+                "参数应为 Arc[绑定T]，实际: {:?}",
                 params[0]
             );
             assert!(
-                matches!(return_type.as_ref(), MonoType::Weak(inner) if matches!(inner.as_ref(), MonoType::TypeRef(n) if n == "T")),
-                "返回应为 Weak[T]，实际: {:?}",
+                matches!(return_type.as_ref(), MonoType::Weak(inner) if !matches!(inner.as_ref(), MonoType::TypeRef(n) if n == "T")),
+                "返回应为 Weak[绑定T]，实际: {:?}",
                 return_type
             );
         }
@@ -483,20 +483,21 @@ fn test_parse_signature_bare_containers() {
     // Act
     let result = parse_signature("(a: List, b: Dict) -> Tuple", &mut env);
 
-    // Assert - 裸 List/Dict 填 Any；裸 Tuple 保持 TypeRef（无开放元组表达）
+    // Assert - 裸 List/Dict 提升为隐式泛型（List(A)/Dict(A, B)，调用点推断）；
+    // 裸 Tuple 保持 TypeRef（无开放元组表达）
     match result {
         MonoType::Fn {
             params,
             return_type,
         } => {
             assert!(
-                matches!(&params[0], MonoType::List(inner) if matches!(inner.as_ref(), MonoType::TypeRef(n) if n == "Any")),
-                "裸 List 应为 List(Any)，实际: {:?}",
+                matches!(&params[0], MonoType::List(inner) if !matches!(inner.as_ref(), MonoType::TypeRef(n) if n == "Any")),
+                "裸 List 应为 List(隐式泛型)，实际: {:?}",
                 params[0]
             );
             assert!(
                 matches!(&params[1], MonoType::Dict(..)),
-                "裸 Dict 应为 Dict(Any, Any)，实际: {:?}",
+                "裸 Dict 应为 Dict(隐式泛型, 隐式泛型)，实际: {:?}",
                 params[1]
             );
             assert!(
