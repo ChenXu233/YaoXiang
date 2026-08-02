@@ -159,6 +159,8 @@ impl Monomorphizer {
             ffi_libs: module.ffi_libs.clone(),
             ffi_bindings: module.ffi_bindings.clone(),
             entry_function: module.entry_function.clone(),
+            source_files: module.source_files.clone(),
+            function_files: module.function_files.clone(),
         }
     }
 

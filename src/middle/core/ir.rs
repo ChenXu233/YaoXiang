@@ -1,6 +1,8 @@
 //! Intermediate Representation
 
 pub use crate::frontend::core::parser::ast::Type;
+use std::collections::HashMap;
+
 use crate::frontend::core::typecheck::MonoType;
 use crate::frontend::module::symbol::DefId;
 use crate::util::span::Span;
@@ -605,4 +607,10 @@ pub struct ModuleIR {
     pub ffi_bindings: Vec<FfiBinding>,
     /// RFC-029: 入口函数的完整限定名（多文件模式）。None 时回退到查找 "main"。
     pub entry_function: Option<String>,
+    /// 多文件模式：源文件路径列表（orchestrator 发现顺序），索引即 debug span 的
+    /// file_id。单文件模式为空（translator 固定 file_id 0，由 CLI 装入伤口）。
+    pub source_files: Vec<String>,
+    /// 多文件模式：函数名 → source_files 索引（链接时按来源模块记录，#252）。
+    /// mono 特化的新函数名不在表中，查询回退 0。
+    pub function_files: HashMap<String, usize>,
 }

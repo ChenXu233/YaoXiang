@@ -299,6 +299,16 @@ pub fn run_file_with_diagnostics(
 
     match module_result {
         Ok(module) => {
+            // 多文件模式（#252）：按 orchestrator 发现顺序重建 SourceMap，
+            // 使索引与 debug span 的 file_id 对齐。读不到文件也要占位，保持索引稳定。
+            if !module.source_files.is_empty() {
+                let mut multi = SourceMap::new();
+                for path in &module.source_files {
+                    let content = std::fs::read_to_string(path).unwrap_or_default();
+                    multi.add_file(path.clone(), content);
+                }
+                sources = multi;
+            }
             // Generate bytecode
             let mut ctx = CodegenContext::new(module);
             ctx.set_generate_debug_info(debug_info);

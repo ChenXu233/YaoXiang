@@ -348,8 +348,10 @@ fn main() -> Result<()> {
                 0 // 0 = auto-detect
             };
 
-            if run_file_with_diagnostics(&file, debug_info, &runtime_mode, workers).is_err() {
-                // Error already printed by run_file_with_diagnostics
+            if let Err(e) = run_file_with_diagnostics(&file, debug_info, &runtime_mode, workers) {
+                // 多数错误已被 run_file_with_diagnostics 渲染；anyhow 包装的路径
+                // （文件读取失败、codegen 失败）在此兜底，不再静默退出
+                eprintln!("{e}");
                 ::std::process::exit(1);
             }
         }

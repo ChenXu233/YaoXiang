@@ -215,7 +215,14 @@ fn link_module_irs(
         ffi_libs: Vec::new(),
         ffi_bindings: Vec::new(),
         entry_function: Some(format!("{}.main", entry_key)),
+        source_files: irs.iter().map(|(p, _)| p.clone()).collect(),
+        function_files: HashMap::new(),
     };
+    for (i, (_, ir)) in irs.iter().enumerate() {
+        for func in &ir.functions {
+            merged.function_files.insert(func.name.clone(), i);
+        }
+    }
     for (_, ir) in irs {
         merged.globals.extend(ir.globals);
         merged.functions.extend(ir.functions);

@@ -544,6 +544,8 @@ impl AstToIrGenerator {
             ffi_libs: std::mem::take(&mut self.ffi_libs),
             ffi_bindings: std::mem::take(&mut self.ffi_bindings),
             entry_function: None,
+            source_files: Vec::new(),
+            function_files: HashMap::new(),
         };
         // RFC-029: 多文件模式下限定本文件的顶层函数名与调用引用。
         // 单文件（module_key 为 None）不限定，保持原有行为。
