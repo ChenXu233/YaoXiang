@@ -1,7 +1,6 @@
 // 02-type-system/fn_const_generic.yx
 // 覆盖: RFC-011 §4.1 函数级 const 泛型 — curry 形式参数化
 // 验证: 函数级 const 泛型 (N: Int) 定义、调用，并在运行时正确传值和计算
-// [test:ignore]: const generic 运行时 curry 返回值不等于传入值
 
 use std.assert
 

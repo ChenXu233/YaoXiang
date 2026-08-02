@@ -284,15 +284,31 @@ impl AstToIrGenerator {
                         (&mut params_iter).take(type_params.len()).collect();
                     let ret_type = *return_type;
                     current_type = ret_type.clone();
-                    layers.push(CurryLayer {
-                        params: layer_params,
-                        return_type: ret_type,
-                    });
+                    // 类型参数层（如 `(T: Type)`）是编译期参数：不占运行时参数位，
+                    // 该层擦除（不生成运行时函数层）。调用点 T 由类型推断填充（RFC-011）。
+                    // ponytail: 仅处理纯类型参数层；类型/值参数混合同层视为值层（罕见，暂不拆）
+                    let is_type_layer =
+                        !type_params.is_empty() && type_params.iter().all(Self::is_type_param_ann);
+                    if !is_type_layer {
+                        layers.push(CurryLayer {
+                            params: layer_params,
+                            return_type: ret_type,
+                        });
+                    }
                 }
                 _ => break,
             }
         }
         layers
+    }
+
+    /// 该类型注解是否为 `Type`（元类型）——即类型参数，编译期擦除。
+    fn is_type_param_ann(ty: &ast::Type) -> bool {
+        match ty {
+            ast::Type::MetaType { .. } => true,
+            ast::Type::Name { name, .. } => name == "Type",
+            _ => false,
+        }
     }
 
     /// 进入新的作用域

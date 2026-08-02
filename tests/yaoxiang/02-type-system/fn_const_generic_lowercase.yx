@@ -1,7 +1,6 @@
 // 02-type-system/fn_const_generic_lowercase.yx
 // 覆盖: RFC-011 §4.1 函数级 const 泛型 — 大小写等价
 // 验证: 小写 m 作为 const 泛型参数，大小写不决定分类，与大写 N 版行为一致
-// [test:ignore]: const generic 运行时 curry 返回值不等于传入值
 
 use std.assert
 
