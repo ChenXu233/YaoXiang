@@ -16,12 +16,12 @@
 //! - 逐文件 IR 生成保持每个文件是独立编译单元；跨文件函数调用按名字在链接后解析
 //!   （解释器用扁平 name→func 表），跨文件字段/全局靠预注册的上下文解析。
 //!
-//! ponytail: 发现策略是"目录递归"而非"use 追踪"——简单且天然支持包内循环。
-//! 升级为按需 use 追踪是后续优化（子 RFC 029a）。
+//! 发现策略：沿 `use` 追踪（#247，RFC-036 隔离需求驱动）——从入口 BFS 可达模块，
+//! 双根解析（导入者目录优先，项目根兑底）。包内循环由 visited 集天然支持。
 //! ponytail: 函数名带模块限定名（module=record 语义，a.helper 与 b.helper 是不同
 //! record 的字段），在解释器扁平 name→func 表里天然共存，跨文件同名函数不冲突。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
 use crate::frontend::core::parser::ast::{Expr, StmtKind};
@@ -70,6 +70,12 @@ pub enum OrchestratorError {
     #[error("模块限定名冲突 `{name}`（{first} 与 {second}）；通常是模块路径歧义——如 foo/bar.yx 与 foo/bar/mod.yx 同被解析为 foo.bar，请删除其中一个")]
     Collision {
         name: String,
+        first: String,
+        second: String,
+    },
+    #[error("模块 `{key}` 解析歧义：{first} 与 {second}（导入者目录与项目根存在同名模块，请重命名其一）")]
+    Ambiguous {
+        key: String,
         first: String,
         second: String,
     },
@@ -232,7 +238,7 @@ fn link_module_irs(
     Ok(merged)
 }
 
-/// 计算入口文件的模块键（与 `module_key_for` 一致：文件 stem，`mod.yx` 折叠为目录名）。
+/// 计算入口文件的模块键（文件 stem，`mod.yx` 折叠为目录名）。
 fn entry_module_key(entry: &Path) -> String {
     let stem = entry
         .file_stem()
@@ -264,90 +270,133 @@ fn build_registry_from(files: &[DiscoveredFile]) -> Result<ModuleRegistry, Orche
     Ok(registry)
 }
 
-/// 从入口文件所在目录递归发现所有 `.yx` 文件。
+/// 从入口沿 `use` 追踪发现可达模块（#247/RFC-036：替代目录递归——
+/// 不相关文件的编译错误不再阻塞运行，测试文件的进程隔离才成立）。
+///
+/// 解析双根：`use a.b` 先按**导入者所在目录**解析，未命中再按**项目根**
+/// （最近的 yaoxiang.toml 祖先）解析。模块键 = use 路径，与解析自哪个根无关。
 fn discover(entry: &Path) -> Result<Vec<DiscoveredFile>, OrchestratorError> {
-    let base = entry
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .to_path_buf();
+    let project_root = find_project_root(entry);
+    let mut files: Vec<DiscoveredFile> = Vec::new();
+    let mut visited: HashSet<PathBuf> = HashSet::new();
+    let mut key_to_path: HashMap<String, PathBuf> = HashMap::new();
+    let mut queue: VecDeque<(PathBuf, String)> = VecDeque::new();
+    queue.push_back((entry.to_path_buf(), entry_module_key(entry)));
 
-    let mut paths: Vec<PathBuf> = Vec::new();
-    collect_yx_files(&base, &mut paths)?;
-    // 稳定顺序，保证编译/合并可复现
-    paths.sort();
-
-    let mut files = Vec::new();
-    for path in paths {
-        let module_key = module_key_for(&base, &path);
+    while let Some((path, key)) = queue.pop_front() {
+        let canon = path.canonicalize().unwrap_or_else(|_| path.clone());
+        if !visited.insert(canon) {
+            continue; // 包内循环导入：已处理过
+        }
+        if let Some(prev) = key_to_path.get(&key) {
+            // 同一模块键映射到两个不同文件：双根产生歧义，显式报错而非静默遮蔽
+            return Err(OrchestratorError::Ambiguous {
+                key: key.clone(),
+                first: prev.display().to_string(),
+                second: path.display().to_string(),
+            });
+        }
         let source = std::fs::read_to_string(&path).map_err(|e| OrchestratorError::Io {
             path: path.display().to_string(),
             reason: e.to_string(),
         })?;
+        key_to_path.insert(key.clone(), path.clone());
+
+        let importer_dir = path.parent().map(|p| p.to_path_buf());
+        for use_path in scan_use_paths(&source) {
+            // std 是 native 模块，不走文件解析
+            if use_path == "std" || use_path.starts_with("std.") {
+                continue;
+            }
+            // 未命中留给 typecheck 报「模块未找到」，发现阶段不判死
+            if let Some(resolved) =
+                resolve_module_path(&use_path, importer_dir.as_deref(), project_root.as_deref())
+            {
+                queue.push_back((resolved, use_path));
+            }
+        }
         files.push(DiscoveredFile {
-            module_key,
+            module_key: key,
             path,
             source,
         });
     }
+
+    // 稳定顺序，保证编译/合并可复现
+    files.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(files)
 }
 
-/// 递归收集目录下所有 `.yx` 文件。
-fn collect_yx_files(
-    dir: &Path,
-    out: &mut Vec<PathBuf>,
-) -> Result<(), OrchestratorError> {
-    let entries = std::fs::read_dir(dir).map_err(|e| OrchestratorError::Io {
-        path: dir.display().to_string(),
-        reason: e.to_string(),
-    })?;
-    for entry in entries {
-        let entry = entry.map_err(|e| OrchestratorError::Io {
-            path: dir.display().to_string(),
-            reason: e.to_string(),
-        })?;
-        let path = entry.path();
-        if path.is_dir() {
-            collect_yx_files(&path, out)?;
-        } else if path.extension().map(|e| e == "yx").unwrap_or(false) {
-            out.push(path);
+/// 从 entry 向上找最近的含 yaoxiang.toml 的目录（项目根）。
+fn find_project_root(entry: &Path) -> Option<PathBuf> {
+    let mut dir = entry.parent();
+    while let Some(d) = dir {
+        if d.join("yaoxiang.toml").exists() {
+            return Some(d.to_path_buf());
         }
+        dir = d.parent();
     }
-    Ok(())
+    None
 }
 
-/// 计算模块键：相对 base 的点分路径，去掉 `.yx`。`mod.yx` 折叠为所在目录名。
-///
-/// - `lib.yx` → `lib`
-/// - `math/geometry.yx` → `math.geometry`
-/// - `math/mod.yx` → `math`
-fn module_key_for(
-    base: &Path,
-    path: &Path,
-) -> String {
-    let rel = path.strip_prefix(base).unwrap_or(path);
-    let mut parts: Vec<String> = rel
-        .components()
-        .map(|c| c.as_os_str().to_string_lossy().to_string())
-        .collect();
-    // 去掉文件名扩展
-    if let Some(last) = parts.last_mut() {
-        if let Some(stem) = last.strip_suffix(".yx") {
-            *last = stem.to_string();
+/// 解析模块路径为文件：`a.b` → `<base>/a/b.yx` 或 `<base>/a/b/mod.yx`。
+/// 双根顺序：导入者目录优先，项目根兜底。
+fn resolve_module_path(
+    use_path: &str,
+    importer_dir: Option<&Path>,
+    project_root: Option<&Path>,
+) -> Option<PathBuf> {
+    let rel: PathBuf = use_path.split('.').collect();
+    for base in [importer_dir, project_root].into_iter().flatten() {
+        for cand in [
+            base.join(&rel).with_extension("yx"),
+            base.join(&rel).join("mod.yx"),
+        ] {
+            if cand.is_file() {
+                return Some(cand);
+            }
         }
     }
-    // mod.yx 折叠：移除末尾的 "mod"
-    if parts.last().map(|s| s.as_str()) == Some("mod") {
-        parts.pop();
+    None
+}
+
+/// 只读 use 行：词法级扫描源码中的模块路径（不解析函数体——RFC-029 发现协议）。
+/// 词法失败的文件返回空，真正的错误由后续 parse 阶段报告。
+fn scan_use_paths(source: &str) -> Vec<String> {
+    use crate::frontend::core::lexer::TokenKind;
+    let Ok(tokens) = tokenize(source) else {
+        return Vec::new();
+    };
+    let mut paths = Vec::new();
+    let mut i = 0;
+    while i < tokens.len() {
+        if !matches!(tokens[i].kind, TokenKind::KwUse) {
+            i += 1;
+            continue;
+        }
+        i += 1;
+        let mut segments: Vec<String> = Vec::new();
+        while let Some(TokenKind::Identifier(name)) = tokens.get(i).map(|t| &t.kind) {
+            segments.push(name.clone());
+            i += 1;
+            match tokens.get(i).map(|t| &t.kind) {
+                // `use lib.{x}`：模块路径到 { 为止
+                Some(TokenKind::Dot)
+                    if matches!(tokens.get(i + 1).map(|t| &t.kind), Some(TokenKind::LBrace)) =>
+                {
+                    break;
+                }
+                Some(TokenKind::Dot) => {
+                    i += 1;
+                }
+                _ => break,
+            }
+        }
+        if !segments.is_empty() {
+            paths.push(segments.join("."));
+        }
     }
-    if parts.is_empty() {
-        // 入口目录下的 mod.yx → 用目录名
-        base.file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "main".to_string())
-    } else {
-        parts.join(".")
-    }
+    paths
 }
 
 /// 解析单个文件为 AST。

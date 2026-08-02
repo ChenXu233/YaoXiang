@@ -2,18 +2,31 @@
 //!
 //! 验证跨文件 `use` 导入：本地模块的类型与函数能被另一个文件导入、构造、调用并正确执行。
 //! 正确性用语言内 `assert` 验证——断言失败会使 `run_project` 返回 Err。
+//! 发现语义（#247）：沿 use 追踪 + 双根解析（导入者目录优先，项目根兑底）。
 
-/// 在临时目录写入多文件项目并运行入口文件；任何编译/运行/断言失败都会 panic。
+/// 在临时目录写入多文件项目并运行入口文件，返回运行结果（错误为调试文本）。
+fn run_project(
+    files: &[(&str, &str)],
+    entry: &str,
+) -> Result<(), String> {
+    let dir = tempfile::tempdir().expect("create tempdir");
+    for (name, content) in files {
+        let path = dir.path().join(name);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("create parent dirs");
+        }
+        std::fs::write(&path, content).expect("write source file");
+    }
+    yaoxiang::run_project(&dir.path().join(entry)).map_err(|e| format!("{:?}", e))
+}
+
+/// 同 `run_project`，任何编译/运行/断言失败都会 panic（带项目内容上下文）。
 fn run_project_ok(
     files: &[(&str, &str)],
     entry: &str,
 ) {
-    let dir = tempfile::tempdir().expect("create tempdir");
-    for (name, content) in files {
-        std::fs::write(dir.path().join(name), content).expect("write source file");
-    }
-    let entry_path = dir.path().join(entry);
-    yaoxiang::run_project(&entry_path).unwrap_or_else(|e| panic!("run_project failed:\n{:?}", e));
+    run_project(files, entry)
+        .unwrap_or_else(|e| panic!("run_project failed for entry {entry}:\n{e}"));
 }
 
 #[test]
@@ -275,4 +288,163 @@ main = {
 }
 "#;
     run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+}
+
+#[test]
+fn test_multifile_subdir_entry_imports_project_root_module() {
+    // Arrange - 入口在 tests/ 子目录，lib 在项目根（yaoxiang.toml 标记项目根）
+    let toml = "[project]\nname = \"demo\"\n";
+    let lib = r#"
+helper: (x: Int) -> Int = (x) => {
+    return x * 2
+}
+"#;
+    let test = r#"
+use std.assert
+use lib.{helper}
+
+main = {
+    assert.assert(helper(21) == 42, "helper(21) should be 42")
+}
+"#;
+
+    // Act & Assert - 双根解析：导入者目录未命中，项目根兜底命中（RFC-036 测试场景）
+    run_project_ok(
+        &[
+            ("yaoxiang.toml", toml),
+            ("lib.yx", lib),
+            ("tests/math_test.yx", test),
+        ],
+        "tests/math_test.yx",
+    );
+}
+
+#[test]
+fn test_multifile_importer_dir_module_wins_over_project_root() {
+    // Arrange - tests/ 与项目根各有一个 lib.yx，helper 行为不同（*3 vs *2）以区分命中者
+    let toml = "[project]\nname = \"demo\"\n";
+    let root_lib = r#"
+helper: (x: Int) -> Int = (x) => {
+    return x * 2
+}
+"#;
+    let local_lib = r#"
+helper: (x: Int) -> Int = (x) => {
+    return x * 3
+}
+"#;
+    let test = r#"
+use std.assert
+use lib.{helper}
+
+main = {
+    assert.assert(helper(21) == 63, "importer-dir lib should win: helper(21) == 63")
+}
+"#;
+
+    // Act & Assert - 双根第一规则：导入者目录优先；根上的同名模块不可达即忽略
+    run_project_ok(
+        &[
+            ("yaoxiang.toml", toml),
+            ("lib.yx", root_lib),
+            ("tests/lib.yx", local_lib),
+            ("tests/math_test.yx", test),
+        ],
+        "tests/math_test.yx",
+    );
+}
+
+#[test]
+fn test_multifile_unrelated_broken_file_does_not_block_run() {
+    // Arrange - 项目中存在与入口无关的坏文件（目录递归时代会阻塞整个编译）
+    let main = r#"
+use std.assert
+
+main = {
+    assert.assert(1 + 1 == 2, "math still works")
+}
+"#;
+    let broken = "this is not valid yaoxiang (((";
+
+    // Act & Assert - use 追踪下不可达文件不参与编译（#247）
+    run_project_ok(&[("main.yx", main), ("broken.yx", broken)], "main.yx");
+}
+
+#[test]
+fn test_multifile_transitive_imports_discovered() {
+    // Arrange - main → a → b 传递依赖链
+    let b = r#"
+fb: () -> Int = () => {
+    return 42
+}
+"#;
+    let a = r#"
+use b.{fb}
+
+fa: () -> Int = () => {
+    return fb()
+}
+"#;
+    let main = r#"
+use std.assert
+use a.{fa}
+
+main = {
+    assert.assert(fa() == 42, "transitive fa() should be 42")
+}
+"#;
+
+    // Act & Assert - BFS 沿 use 逐层发现
+    run_project_ok(&[("main.yx", main), ("a.yx", a), ("b.yx", b)], "main.yx");
+}
+
+#[test]
+fn test_multifile_same_module_key_from_two_roots_is_ambiguity_error() {
+    // Arrange - main 命中项目根的 lib；sub/consumer 按导入者目录命中 sub/lib——
+    // 两个不同文件得到同一模块键 "lib"
+    let toml = "[project]\nname = \"demo\"\n";
+    let main = r#"
+use lib.{helper}
+use sub.consumer
+
+main = {
+    println(helper(1))
+}
+"#;
+    let root_lib = r#"
+helper: (x: Int) -> Int = (x) => {
+    return x * 2
+}
+"#;
+    let consumer = r#"
+use lib.{helper}
+
+consume: (x: Int) -> Int = (x) => {
+    return helper(x)
+}
+"#;
+    let sub_lib = r#"
+helper: (x: Int) -> Int = (x) => {
+    return x * 3
+}
+"#;
+
+    // Act
+    let result = run_project(
+        &[
+            ("yaoxiang.toml", toml),
+            ("main.yx", main),
+            ("lib.yx", root_lib),
+            ("sub/consumer.yx", consumer),
+            ("sub/lib.yx", sub_lib),
+        ],
+        "main.yx",
+    );
+
+    // Assert - 歧义必须显式报错，而非静默遮蔽其一
+    let err = result.expect_err("同名模块键来自两个根，应报歧义错误");
+    assert!(
+        err.contains("歧义") || err.contains("Ambigu"),
+        "错误应说明模块键歧义，实际: {err}"
+    );
 }

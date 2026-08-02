@@ -143,12 +143,13 @@ distance = math.geometry.distance
 use math.geometry.{Point}
 ```
 
-查找顺序（唯一规则）：
+查找顺序：
 
 1. **Registry 已注册模块**：`math.geometry` 已在 Registry 中 → 直接使用
 2. **标准库**：`std` 或 `std.*` → 内置模块
-3. **项目 src 目录**：`<project_root>/src/math/geometry.yx`
-4. **vendor 目录**：`.yaoxiang/vendor/<pkg>-*/src/`（将来）
+3. **导入者所在目录**：`<importer_dir>/math/geometry.yx`（本地模块优先）
+4. **项目根**（最近的 `yaoxiang.toml` 祖先）：`<project_root>/math/geometry.yx`
+5. **vendor 目录**：`.yaoxiang/vendor/<pkg>-*/src/`（将来）
 
 文件定位尝试顺序：
 
@@ -165,6 +166,15 @@ base/name/mod.yx
   src/math/geometry/mod.yx
 请删除其中一个。
 ```
+
+同一模块键在**两个根**各命中一个文件且都被引用（如 `tests/lib.yx` 与 `<root>/lib.yx`
+分别被 tests/ 入口与根入口引用）→ 同样报歧义错，而非静默遮蔽。
+
+> 2026-08-03 修订（#247 / RFC-036 驱动）：发现与解析按实现落地。发现沿 `use` 追踪
+> （本 RFC §5 既定协议），替代初版实现的目录递归——不相关文件的编译错误不再阻塞运行，
+> `yaoxiang test` 的测试文件隔离才成立。双根规则中「导入者目录优先」保证同目录项目行为
+> 不变；「项目根兑底」使子目录入口（如 `tests/foo_test.yx`）能导入项目根模块。
+> `src/` 布局（RFC-014 包）落地时在 vendor 层一并处理，不影响本地双根。
 
 #### mod.yx = 目录入口（约定）
 
