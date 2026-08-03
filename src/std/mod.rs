@@ -20,6 +20,7 @@ pub mod string;
 pub mod time;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod weak;
+pub mod yx_sources;
 
 use crate::backends::interpreter::ffi::FfiRegistry;
 use crate::backends::common::{RuntimeValue, Heap, HeapValue};

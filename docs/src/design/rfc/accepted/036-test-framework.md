@@ -157,13 +157,15 @@ assert_true = (cond: Bool) => {
 }
 
 assert_false = (cond: Bool) => {
-    assert.assert(!cond, f"Expected false, got {cond}")
+    assert.assert(cond == false, f"Expected false, got {cond}")
 }
 ```
 
 - 4 个断言函数，全部用 `f"..."` 做诊断信息
 - `assert_eq` / `assert_ne` 用**无标注参数**（`Any`）——2026-08-02 实证：`==`/`!=` 与 f-string
   插值在 Any 上工作正常（Int/String 均验证通过），**不依赖泛型系统**。未来泛型就绪后可补标注
+- `assert_true` / `assert_false` 参数标注 `Bool`；`assert_false` 用 `cond == false` 表达取反
+  （`not` 一元语法随 #251 权威化落地中，稳定后可迁移）
 - `std.test` 不依赖任何 native 代码，纯 YaoXiang 实现
 
 ### 4. 标准库加载机制（关键设计）

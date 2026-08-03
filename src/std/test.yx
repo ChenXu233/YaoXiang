@@ -1,0 +1,22 @@
+// std/test.yx — 纯 YaoXiang 测试断言库（RFC-036 §3）
+// 第一个 dogfooding 库：YaoXiang 的测试库用 YaoXiang 写。
+// 构建时经 include_str! 嵌入二进制（见 src/std/yx_sources.rs），
+// 运行时以虚拟路径作种子模块注入 orchestrator。
+
+use std.assert
+
+assert_eq = (a, b) => {
+    assert.assert(a == b, f"Expected {b}, got {a}")
+}
+
+assert_ne = (a, b) => {
+    assert.assert(a != b, f"Expected not equal to {b}, got {a}")
+}
+
+assert_true = (cond: Bool) => {
+    assert.assert(cond, f"Expected true, got {cond}")
+}
+
+assert_false = (cond: Bool) => {
+    assert.assert(cond == false, f"Expected false, got {cond}")
+}

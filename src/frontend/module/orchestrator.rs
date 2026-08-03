@@ -280,10 +280,11 @@ fn discover(entry: &Path) -> Result<Vec<DiscoveredFile>, OrchestratorError> {
     let mut files: Vec<DiscoveredFile> = Vec::new();
     let mut visited: HashSet<PathBuf> = HashSet::new();
     let mut key_to_path: HashMap<String, PathBuf> = HashMap::new();
-    let mut queue: VecDeque<(PathBuf, String)> = VecDeque::new();
-    queue.push_back((entry.to_path_buf(), entry_module_key(entry)));
+    // (路径, 模块键, 嵌入源)——嵌入 std 模块（std.test）的路径是虚拟的，源随身带
+    let mut queue: VecDeque<(PathBuf, String, Option<&'static str>)> = VecDeque::new();
+    queue.push_back((entry.to_path_buf(), entry_module_key(entry), None));
 
-    while let Some((path, key)) = queue.pop_front() {
+    while let Some((path, key, embedded)) = queue.pop_front() {
         let canon = path.canonicalize().unwrap_or_else(|_| path.clone());
         if !visited.insert(canon) {
             continue; // 包内循环导入：已处理过
@@ -296,23 +297,34 @@ fn discover(entry: &Path) -> Result<Vec<DiscoveredFile>, OrchestratorError> {
                 second: path.display().to_string(),
             });
         }
-        let source = std::fs::read_to_string(&path).map_err(|e| OrchestratorError::Io {
-            path: path.display().to_string(),
-            reason: e.to_string(),
-        })?;
+        let source = match embedded {
+            Some(src) => src.to_string(),
+            None => std::fs::read_to_string(&path).map_err(|e| OrchestratorError::Io {
+                path: path.display().to_string(),
+                reason: e.to_string(),
+            })?,
+        };
         key_to_path.insert(key.clone(), path.clone());
 
         let importer_dir = path.parent().map(|p| p.to_path_buf());
         for use_path in scan_use_paths(&source) {
-            // std 是 native 模块，不走文件解析
-            if use_path == "std" || use_path.starts_with("std.") {
+            // std 整体或 native std 模块不走文件解析
+            if use_path == "std" {
+                continue;
+            }
+            if use_path.starts_with("std.") {
+                // RFC-036 §4：native 未命中时查嵌入源（std.test 等纯 YaoXiang std）
+                if let Some(src) = crate::std::yx_sources::embedded_std_source(&use_path) {
+                    let virtual_path = PathBuf::from(format!("<{}>", use_path.replace('.', "/")));
+                    queue.push_back((virtual_path, use_path, Some(src)));
+                }
                 continue;
             }
             // 未命中留给 typecheck 报「模块未找到」，发现阶段不判死
             if let Some(resolved) =
                 resolve_module_path(&use_path, importer_dir.as_deref(), project_root.as_deref())
             {
-                queue.push_back((resolved, use_path));
+                queue.push_back((resolved, use_path, None));
             }
         }
         files.push(DiscoveredFile {
@@ -397,6 +409,51 @@ fn scan_use_paths(source: &str) -> Vec<String> {
         }
     }
     paths
+}
+
+/// 编译一个嵌入 std 模块（std.test 等纯 YaoXiang std，RFC-036 §4）为独立 ModuleIR。
+///
+/// 单文件模式（pipeline）在入口 IR 生成后调用，把嵌入模块的函数体合并进来——
+/// 入口调用经 `short_to_qualified_map` 命名成 `std.test.assert_eq`，合并后即可解析。
+/// `registry` 必须与入口 IR 生成共用（共享 SymbolTable），否则嵌入函数与入口调用点的
+/// DefId 分属两张表，数值撞车会导致字节码按 DefId 分发到错误函数（#94）。
+pub fn compile_embedded_module(
+    key: &str,
+    registry: &ModuleRegistry,
+) -> Result<ModuleIR, OrchestratorError> {
+    let source =
+        crate::std::yx_sources::embedded_std_source(key).ok_or_else(|| OrchestratorError::Io {
+            path: key.to_string(),
+            reason: format!("不是嵌入 std 模块: {key}"),
+        })?;
+    let ast = parse_file(Path::new(&format!("<{}>", key.replace('.', "/"))), source)?;
+    let mut checker = TypeChecker::new("<embedded>");
+    checker.env().module_registry = registry.clone();
+    let result = checker.check_module(&ast);
+    if !result.diagnostics.is_empty() {
+        let msg = result
+            .diagnostics
+            .iter()
+            .map(|d| d.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        return Err(OrchestratorError::TypeCheck {
+            path: format!("<{key}> (embedded std)"),
+            message: msg,
+            diagnostics: result.diagnostics,
+        });
+    }
+    crate::middle::generate_ir_with_context(&ast, &result, &[], &[], registry, key).map_err(
+        |diags| OrchestratorError::Compile {
+            path: format!("<{key}> (embedded std)"),
+            message: diags
+                .iter()
+                .map(|d| d.to_string())
+                .collect::<Vec<_>>()
+                .join("\n"),
+            diagnostics: diags,
+        },
+    )
 }
 
 /// 解析单个文件为 AST。

@@ -32,6 +32,11 @@ pub struct ModuleRegistry {
     symbols: Rc<RefCell<SymbolTable>>,
 }
 
+// 嵌入 std 注册的重入保护（embedded_std_module_info → TypeChecker::new → with_std 会再入）。
+thread_local! {
+    static REGISTERING_EMBEDDED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 impl ModuleRegistry {
     /// 创建新的注册表
     pub fn new() -> Self {
@@ -250,7 +255,6 @@ impl ModuleRegistry {
     fn register_std_modules(&mut self) {
         // 注册根 std 模块
         let mut std_root = ModuleInfo::new("std".to_string(), ModuleSource::Std);
-
         // 从 std 模块自动获取所有子模块信息
         for module_info in crate::std::all_module_infos() {
             // 提取子模块名称（从 "std.io" -> "io"）
@@ -272,6 +276,28 @@ impl ModuleRegistry {
 
             // 注册模块信息
             self.register(module_info);
+        }
+
+        // 嵌入的纯 YaoXiang std 模块（std.test 等，RFC-036 §4）：与 native 同级注册，
+        // 使 `use std.test` 在单文件模式下也能解析并得到限定名。
+        // 重入保护：embedded_std_module_info 内部会 TypeChecker::new → with_std()
+        // 再入本函数——重入时跳过嵌入注册（内层 registry 仅作签名收集环境，
+        // native 已就绪；std.test 自身无 native 依赖缺口）。
+        if !REGISTERING_EMBEDDED.with(|f| f.get()) {
+            REGISTERING_EMBEDDED.with(|f| f.set(true));
+            for (file, _) in crate::std::yx_sources::STD_YX_FILES {
+                let use_path = file.strip_suffix(".yx").unwrap_or(file).replace('/', ".");
+                if let Some(info) = crate::std::yx_sources::embedded_std_module_info(&use_path) {
+                    let submodule_name = info
+                        .path
+                        .strip_prefix("std.")
+                        .unwrap_or(&info.path)
+                        .to_string();
+                    std_root.add_submodule(submodule_name);
+                    self.register(info);
+                }
+            }
+            REGISTERING_EMBEDDED.with(|f| f.set(false));
         }
 
         // 注册根 std 模块
