@@ -1,0 +1,23 @@
+// 07-std/weak_ops.yx
+// 覆盖: std.weak 模块（#117）— Arc/Weak 泛型签名（#242 结构化统一）
+// 验证: ref 创建 Arc → weak.new 登记 → upgrade 存活 Arc 返回 some（调用不失败）
+// 状态: ✅
+// 注: upgrade 返回 Option[Arc[Int]]，变体消费（match some(v)）语法未落地，
+// 此测试验证泛型签名在调用点正确绑定（Arc[T]/Weak[T]/Option[Arc[T]]）与
+// 运行时 roundtrip 不 panic。弱引用释放（Arc 消亡 → none）待变体匹配
+// 语法就绪后补充。
+
+use std.weak
+
+main = {
+    // ref 创建 Arc[Int]
+    p = ref 42
+
+    // Arc → Weak 登记
+    w = weak.new(p)
+
+    // 存活 Arc 的 upgrade：返回 some 变体（不 panic）
+    u = weak.upgrade(w)
+
+    println("weak roundtrip ok")
+}

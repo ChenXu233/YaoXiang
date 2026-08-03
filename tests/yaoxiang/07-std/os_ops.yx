@@ -1,0 +1,31 @@
+// 07-std/os_ops.yx
+// 覆盖: std.os 模块（#117）— 只读无副作用子集
+// 验证: getcwd/args/get_env 进程信息 + exists/is_file/is_dir 路径判定
+// 状态: ✅
+// 注: 文件写操作（open/write/mkdir/remove 等）有真实文件系统副作用，
+// 集成测试规范 规则 9.2 禁止，不在此覆盖（走 Rust 集成测试或临时目录）
+
+use std.assert
+use std.string
+use std.os
+
+main = {
+    // 工作目录：非空
+    cwd = os.getcwd()
+    assert.assert(string.len(cwd) > 0, "getcwd should be non-empty")
+
+    // 进程参数：yaoxiang run <file> 至少有 argv[0]（非空）
+    argv = os.args()
+    assert.assert(string.len(argv) > 0, "args should contain at least the binary")
+
+    // 环境变量：PATH 在主流平台必存在
+    path = os.get_env("PATH")
+    assert.assert(string.len(path) > 0, "PATH env var should exist")
+
+    // 路径判定（cwd 为仓库根，07-std 目录相对路径稳定存在）
+    assert.assert(os.exists("tests/yaoxiang/07-std"), "exists: 07-std dir")
+    assert.assert(os.is_dir("tests/yaoxiang/07-std"), "is_dir: 07-std dir")
+    assert.assert(os.is_file("tests/yaoxiang/07-std/os_ops.yx"), "is_file: self")
+    assert.assert(!os.is_file("tests/yaoxiang/07-std"), "is_file false on dir")
+    assert.assert(!os.is_dir("tests/yaoxiang/07-std/os_ops.yx"), "is_dir false on file")
+}
