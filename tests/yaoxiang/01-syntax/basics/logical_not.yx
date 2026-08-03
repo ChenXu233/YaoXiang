@@ -1,22 +1,20 @@
 // 01-syntax/basics/logical_not.yx
-// 覆盖: SPEC §2.2 逻辑非 `not` 运算符（关键字，C 风格 ! 已删除）
-// 验证: not 对 Bool 取反、双重否定、SPEC 优先级（not 低于比较运算符）
-// 回归: 逻辑运算符在 IR 生成层曾静默编译为常量 Int(0)（issue #229 / #251）
-// 状态: ✅
+// 覆盖: SPEC §2.2 逻辑非 `!` 运算符（Zig 式：and/or 关键字 + ! 符号，紧绑定）
+// 验证: ! 对 Bool 取反、双重否定、紧绑定优先级（!a == b ≡ (!a) == b，只低于调用/成员）
 
 use std.assert
 
 main = {
     // 基本取反
-    assert.assert(not true == false, "not true == false")
-    assert.assert(not false == true, "not false == true")
+    assert.assert(!true == false, "!true == false")
+    assert.assert(!false == true, "!false == true")
 
     // 双重否定
-    assert.assert(not not true == true, "not not true == true")
-    assert.assert(not not false == false, "not not false == false")
+    assert.assert(!!true == true, "!!true == true")
+    assert.assert(!!false == false, "!!false == false")
 
-    // SPEC §2.2 优先级：not 低于比较 → not (true == false) ≡ true
-    assert.assert(not true == false, "not true == false ≡ not (true == false)")
-    assert.assert((not true) == false, "(not true) == false 显式括号")
-    assert.assert(not 1 == 2, "not binds looser than ==")
+    // 紧绑定（Zig 式）：! 高于 ==，!a == b ≡ (!a) == b
+    assert.assert((!true) == false, "(!true) == false")
+    assert.assert(!(true == false), "!(true == false) ≡ true")
+    assert.assert(!(1 == 2), "!(1 == 2) ≡ true（显式括号取反比较结果）")
 }

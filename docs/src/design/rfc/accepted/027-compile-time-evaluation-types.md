@@ -227,8 +227,8 @@ if y > 0 {
     // 验证条件：(y > 0) ⇒ (y > 0)
     // 证明管道判蕴含成立 → Proved
 } else {
-// 此分支假设：{ not (y > 0) }
-// 如果要调用 divide(x, y)，验证条件为 not (y > 0) ⇒ y > 0
+// 此分支假设：{ !(y > 0) }
+// 如果要调用 divide(x, y)，验证条件为 !(y > 0) ⇒ y > 0
     // 证明管道判不蕴含 → Disproved
 }
 ```
@@ -246,7 +246,7 @@ if y > 0 {
 
 编译器在分析控制流时，为每个基本块维护一个假设集合：
 
-- **if-guard**：`if y > 0` → true 分支压入 `y > 0`，false 分支压入 `not (y > 0)`（如果使用了 else）
+- **if-guard**：`if y > 0` → true 分支压入 `y > 0`，false 分支压入 `!(y > 0)`（如果使用了 else）
 - **match 模式**：`if let Some(v) = opt` → 分支内压入 `opt == Some(v)`
 - **逻辑连接**：`if x > 0 and y < 10` → 分支内压入 `x > 0` 和 `y < 10`
 - **函数前置条件**：调用 `divide(a, b)` 时，`b` 必须满足 `Positive`

@@ -226,13 +226,8 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     Some(self.make_token(TokenKind::Neq))
                 } else {
-                    // SPEC §2.2 / RFC-010: logical negation uses the keyword `not`; `!` was removed
-                    self.error = Some(crate::frontend::core::lexer::LexError::InvalidToken {
-                        position: format!("{}:{}", self.line, self.column),
-                        message: "logical negation uses keyword `not`; `!` was removed (SPEC §2.2)"
-                            .to_string(),
-                    });
-                    Some(self.make_token(TokenKind::Error("use `not` instead of `!`".to_string())))
+                    // Zig 式一元逻辑非（SPEC §2.2 / RFC-010）：`!` 紧绑定，与 and/or 关键字并存
+                    Some(self.make_token(TokenKind::Not))
                 }
             }
             '<' => {

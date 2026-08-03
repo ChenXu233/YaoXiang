@@ -323,14 +323,14 @@ fn format_unop(
         UnOp::Neg => format!("-{}", format_expr(inner, ctx, source_map)),
         UnOp::Pos => format!("+{}", format_expr(inner, ctx, source_map)),
         UnOp::Not => {
-            // 关键字运算符需空格；操作数是二元运算时加括号保形
-            //（否则 (not a) == b 重解析会变成 not (a == b)，SPEC §2.2 优先级）
+            // `!` 紧绑定；操作数是二元运算时仍需括号保形
+            //（否则 !(a == b) 重解析会变成 (!a) == b）
             let needs_paren = matches!(*inner, Expr::BinOp { .. });
             let inner_str = format_expr(inner, ctx, source_map);
             if needs_paren {
-                format!("not ({})", inner_str)
+                format!("!({})", inner_str)
             } else {
-                format!("not {}", inner_str)
+                format!("!{}", inner_str)
             }
         }
         UnOp::Deref => format!("*{}", format_expr(inner, ctx, source_map)),

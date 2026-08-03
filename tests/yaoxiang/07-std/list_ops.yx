@@ -16,9 +16,9 @@ main = {
     assert.assert(list.first(nums) == 1, "first == 1")
     assert.assert(list.last(nums) == 4, "last == 4")
     assert.assert(list.contains(nums, 3), "contains 3")
-    assert.assert(not list.contains(nums, 99), "not contains 99")
+    assert.assert(!list.contains(nums, 99), "not contains 99")
     assert.assert(list.find_index(nums, 3) == 2, "find_index 3 == 2")
-    assert.assert(not list.is_empty(nums), "not empty")
+    assert.assert(!list.is_empty(nums), "not empty")
 
     // reverse / concat（只读原列表，返回新列表）
     rev = list.reverse(nums)

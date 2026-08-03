@@ -50,11 +50,9 @@ impl LexerState {
             // System programming
             "unsafe" => Some(TokenKind::KwUnsafe),
 
-            // Logical operator keywords (SPEC §2.2 / RFC-010 authoritative definition: and/or/not;
-            // C-style &&/||/! were removed, lexer reports errors for them)
+            // 逻辑运算符关键字（SPEC §2.2 / RFC-010，Zig 式：and/or 关键字 + ! 符号一元非）
             "and" => Some(TokenKind::And),
             "or" => Some(TokenKind::Or),
-            "not" => Some(TokenKind::Not),
 
             // Boolean literals
             "true" => Some(TokenKind::BoolLiteral(true)),

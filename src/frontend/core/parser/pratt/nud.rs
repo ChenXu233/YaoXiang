@@ -219,14 +219,9 @@ impl<'a> ParserState<'a> {
         };
         self.bump();
 
-        // SPEC §2.2: `not` has lower precedence than comparison operators (not a == b ≡ not (a == b)),
-        // and higher than and/or; other unary operators (- + *) maintain tight binding
-        let operand_bp = if matches!(op, UnOp::Not) {
-            BP_LOGICAL_AND + 1
-        } else {
-            BP_UNARY + 1
-        };
-        let operand = self.parse_expression(operand_bp)?;
+        // Zig 式（SPEC §2.2 / RFC-010）：所有一元运算符（含 !）紧绑定，
+        // 高于比较/算术（!a == b ≡ (!a) == b），只低于调用与成员访问
+        let operand = self.parse_expression(BP_UNARY + 1)?;
 
         Some(Expr::UnOp {
             op,

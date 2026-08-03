@@ -44,7 +44,7 @@ pub enum Precedence {
     Term,
     /// Factor (*, /, %)
     Factor,
-    /// Unary operators (not, -, +)
+    /// Unary operators (!, -, +)
     Unary,
     /// Function calls, field access, indexing
     Call,

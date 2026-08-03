@@ -26,7 +26,7 @@ main = {
     // 清理
     removed = os.remove(p)
     assert.assert(removed, "os.remove ok")
-    assert.assert(not os.exists(p), "file gone after remove")
+    assert.assert(!os.exists(p), "file gone after remove")
 
     // os 只读查询（无副作用）
     cwd = os.getcwd()

@@ -11,14 +11,14 @@ main = {
     // 成功路径
     ok_r = string.parse_int("42")
     assert.assert(result.is_ok(ok_r), "ok: is_ok")
-    assert.assert(not result.is_err(ok_r), "ok: not is_err")
+    assert.assert(!result.is_err(ok_r), "ok: not is_err")
     assert.assert(result.unwrap(ok_r) == 42, "ok: unwrap == 42")
     assert.assert(result.unwrap_or(ok_r, -1) == 42, "ok: unwrap_or == 42")
 
     // 失败路径
     err_r = string.parse_int("oops")
     assert.assert(result.is_err(err_r), "err: is_err")
-    assert.assert(not result.is_ok(err_r), "err: not is_ok")
+    assert.assert(!result.is_ok(err_r), "err: not is_ok")
     assert.assert(result.unwrap_or(err_r, -1) == -1, "err: unwrap_or default")
 
     // 同类型多实例（单态化不串扰）

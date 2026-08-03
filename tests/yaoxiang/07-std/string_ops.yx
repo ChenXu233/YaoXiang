@@ -22,7 +22,7 @@ main = {
     assert.assert(string.index_of("hello", "ll") == 2, "index_of")
     assert.assert(string.substring("hello", 1, 4) == "ell", "substring")
     assert.assert(string.len("hello") == 5, "len")
-    assert.assert(not string.is_empty("x"), "not is_empty")
+    assert.assert(!string.is_empty("x"), "not is_empty")
     assert.assert(string.is_empty(""), "is_empty")
     assert.assert(string.concat("a", "b") == "ab", "concat")
     assert.assert(string.repeat("ab", 3) == "ababab", "repeat")

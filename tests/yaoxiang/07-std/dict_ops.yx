@@ -17,10 +17,10 @@ main = {
     assert.assert(dict.get(d2, "a") == 1, "get a == 1")
     assert.assert(dict.get(d2, "b") == 2, "get b == 2")
     assert.assert(dict.has(d2, "a"), "has a")
-    assert.assert(not dict.has(d2, "zzz"), "not has zzz")
+    assert.assert(!dict.has(d2, "zzz"), "not has zzz")
     assert.assert(dict.len(d2) == 2, "len == 2")
     assert.assert(dict.len(d2) == 2, "len reusable")
-    assert.assert(not dict.is_empty(d2), "not empty")
+    assert.assert(!dict.is_empty(d2), "not empty")
 
     // keys / values（只读）
     ks = dict.keys(d2)
@@ -38,5 +38,5 @@ main = {
 
     // delete 消费源 dict、返回新 dict（函数式线性变换）——放最后，d2 此后不再使用
     deleted = dict.delete(d2, "a")
-    assert.assert(not dict.has(deleted, "a"), "deleted has no a")
+    assert.assert(!dict.has(deleted, "a"), "deleted has no a")
 }
