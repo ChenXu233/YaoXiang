@@ -219,8 +219,14 @@ impl<'a> ParserState<'a> {
         };
         self.bump();
 
-        // Parse operand with higher binding power
-        let operand = self.parse_expression(BP_UNARY + 1)?;
+        // SPEC §2.2: `not` has lower precedence than comparison operators (not a == b ≡ not (a == b)),
+        // and higher than and/or; other unary operators (- + *) maintain tight binding
+        let operand_bp = if matches!(op, UnOp::Not) {
+            BP_LOGICAL_AND + 1
+        } else {
+            BP_UNARY + 1
+        };
+        let operand = self.parse_expression(operand_bp)?;
 
         Some(Expr::UnOp {
             op,

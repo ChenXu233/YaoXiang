@@ -1,0 +1,47 @@
+// 07-std/list_ops.yx
+// 覆盖: std.list 模块（#117）— RFC-009 §2.8 只读自动借用 + 泛型 map/filter/reduce
+// 验证: 正常路径（len/get/first/last/contains/reverse/concat/map/filter/reduce/push）+ 错误路径（越界 get / 空 pop 返回 Void）
+// 状态: ✅
+
+use std.assert
+use std.list
+
+main = {
+    nums = [1, 2, 3, 4]
+
+    // 只读操作可复用（&List 自动借用，不 move）
+    assert.assert(list.len(nums) == 4, "len == 4")
+    assert.assert(list.len(nums) == 4, "len reusable (not moved)")
+    assert.assert(list.get(nums, 1) == 2, "get(1) == 2")
+    assert.assert(list.first(nums) == 1, "first == 1")
+    assert.assert(list.last(nums) == 4, "last == 4")
+    assert.assert(list.contains(nums, 3), "contains 3")
+    assert.assert(not list.contains(nums, 99), "not contains 99")
+    assert.assert(list.find_index(nums, 3) == 2, "find_index 3 == 2")
+    assert.assert(not list.is_empty(nums), "not empty")
+
+    // reverse / concat（只读原列表，返回新列表）
+    rev = list.reverse(nums)
+    assert.assert(list.first(rev) == 4, "reverse first == 4")
+    joined = list.concat([1, 2], [3, 4])
+    assert.assert(list.len(joined) == 4, "concat len == 4")
+
+    // 泛型高阶函数（curry + 泛型 + &T 借用）
+    doubled = list.map(nums, x => x * 2)
+    assert.assert(list.get(doubled, 0) == 2, "map [0] == 2")
+    evens = list.filter(nums, x => x % 2 == 0)
+    assert.assert(list.len(evens) == 2, "filter evens len == 2")
+    total = list.reduce(nums, (acc, x) => acc + x, 0)
+    assert.assert(total == 10, "reduce sum == 10")
+
+    // 修改操作：函数式返回新列表
+    mut base = [1, 2]
+    extended = list.push(base, 3)
+    assert.assert(list.len(extended) == 3, "push returns new len 3")
+
+    // 错误路径：越界 / 空 pop 返回 Void（优雅处理，不 panic）
+    oob = list.get(nums, 99)
+    mut empty = []
+    gone = list.pop(empty)
+    assert.assert(list.is_empty(empty), "empty stays empty after pop")
+}

@@ -1,0 +1,38 @@
+// 07-std/math_ops.yx
+// 覆盖: std.math 模块（#117）— 纯值函数（Copy 语义，无借用）
+// 验证: 整数函数（abs/max/min/clamp）+ 浮点函数（fabs/sqrt/floor/ceil/round/pow）+ 三角函数 + 常量
+// 状态: ✅
+
+use std.assert
+use std.math
+use std.math.{PI, E, TAU}
+
+main = {
+    // 整数函数
+    assert.assert(math.abs(-5) == 5, "abs(-5) == 5")
+    assert.assert(math.max(3, 7) == 7, "max(3,7) == 7")
+    assert.assert(math.min(3, 7) == 3, "min(3,7) == 3")
+    assert.assert(math.clamp(15, 1, 10) == 10, "clamp high == 10")
+    assert.assert(math.clamp(-5, 1, 10) == 1, "clamp low == 1")
+    assert.assert(math.clamp(5, 1, 10) == 5, "clamp mid == 5")
+
+    // 浮点函数（精确值 / 范围判定避免浮点误差）
+    assert.assert(math.fabs(-2.5) == 2.5, "fabs(-2.5) == 2.5")
+    assert.assert(math.sqrt(4.0) == 2.0, "sqrt(4) == 2")
+    assert.assert(math.floor(3.7) == 3.0, "floor(3.7) == 3")
+    assert.assert(math.ceil(3.2) == 4.0, "ceil(3.2) == 4")
+    assert.assert(math.round(3.5) == 4.0, "round(3.5) == 4")
+    assert.assert(math.pow(2.0, 10.0) == 1024.0, "pow(2,10) == 1024")
+    assert.assert(math.fmax(1.5, 2.5) == 2.5, "fmax == 2.5")
+    assert.assert(math.fmin(1.5, 2.5) == 1.5, "fmin == 1.5")
+
+    // 三角函数（边界精确值）
+    assert.assert(math.sin(0.0) == 0.0, "sin(0) == 0")
+    assert.assert(math.cos(0.0) == 1.0, "cos(0) == 1")
+    assert.assert(math.tan(0.0) == 0.0, "tan(0) == 0")
+
+    // 常量（范围判定）
+    assert.assert(PI > 3.14  and  PI < 3.15, "PI in range")
+    assert.assert(E > 2.71  and  E < 2.72, "E in range")
+    assert.assert(TAU > 6.28  and  TAU < 6.29, "TAU in range")
+}

@@ -1,0 +1,46 @@
+// 01-syntax/basics/logical_ops.yx
+// 覆盖: SPEC §2.2 / RFC-010 逻辑运算符权威定义 — and/or 短路求值 + 优先级
+// 验证:
+//   - and/or 真值表
+//   - 优先级：not 低于比较（not a == b ≡ not (a == b)），and 高于 or
+//   - 短路求值：and 左假 / or 左真 时右侧不执行（io.write_file 副作用验证）
+//   - 旧符号 &&/||/! 已删除（lexer 报错，见 06-compile-errors）
+// 状态: ✅
+
+use std.assert
+use std.io
+use std.os
+
+main = {
+    // 真值表
+    assert.assert(true and true, "and tt")
+    assert.assert(not (true and false), "and tf")
+    assert.assert(not (false and true), "and ft")
+    assert.assert(not (false and false), "and ff")
+    assert.assert(true or false, "or tf")
+    assert.assert(false or true, "or ft")
+    assert.assert(true or true, "or tt")
+    assert.assert(not (false or false), "or ff")
+
+    // SPEC §2.2 优先级：not 低于比较运算符，and 高于 or
+    assert.assert(not 3 == 4, "not 3 == 4 ≡ not (3 == 4)")
+    assert.assert((not 3 == 3) == false, "not 3 == 3 ≡ false")
+    assert.assert(true or false and false, "and binds tighter than or")
+
+    // 短路：and 左侧 false → 右侧不执行
+    p = "__yx_short_circuit_test.txt"
+    r = false and io.write_file(p, "boom")
+    assert.assert(r == false, "false and _ == false")
+    assert.assert(not os.exists(p), "and short-circuit skipped rhs")
+
+    // 短路：or 左侧 true → 右侧不执行
+    r2 = true or io.write_file(p, "boom")
+    assert.assert(r2, "true or _ == true")
+    assert.assert(not os.exists(p), "or short-circuit skipped rhs")
+
+    // 对照组：左侧 true 时 and 右侧应执行
+    r3 = true and io.write_file(p, "ok")
+    assert.assert(r3, "true and write_file executed")
+    assert.assert(os.exists(p), "rhs executed when lhs true")
+    os.remove(p)
+}

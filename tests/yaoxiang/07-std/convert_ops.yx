@@ -1,0 +1,21 @@
+// 07-std/convert_ops.yx
+// 覆盖: std.convert 模块（#117）— 类型到字符串转换
+// 验证: to_string 对 Int/Bool/Float/List/Dict 的正常转换
+// 状态: ✅
+
+use std.assert
+use std.convert
+use std.string
+
+main = {
+    // 基本类型转换（精确值）
+    assert.assert(convert.to_string(42) == "42", "int to_string")
+    assert.assert(convert.to_string(true) == "true", "bool to_string")
+    assert.assert(convert.to_string(false) == "false", "bool false to_string")
+
+    // 复合类型转换（非空即有效，格式不断言以免脆弱）
+    s_list = convert.to_string([1, 2, 3])
+    assert.assert(string.len(s_list) > 0, "list to_string non-empty")
+    s_dict = convert.to_string({})
+    assert.assert(string.len(s_dict) > 0, "dict to_string non-empty")
+}

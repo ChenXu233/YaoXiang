@@ -3043,8 +3043,38 @@ impl AstToIrGenerator {
                         span: *var_span,
                         def: None,
                     });
+                } else if let Some(qualified) = self.use_aliases.get(var_name) {
+                    // 选择性导入的绑定（常量/函数）：按限定名调用 native handler 取值。
+                    // 例：use std.math.{PI} → PI 展开为 std.math.PI，调用 native_pi 返回真实常量。
+                    // 修复：此前常量引用掉进“静默 Load Int(0)”兜底，PI 运行时恒为 0（#251）。
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: Operand::Const(ConstValue::String(qualified.clone())),
+                        args: vec![],
+                        span: *var_span,
+                        def: None,
+                    });
+                } else if matches!(
+                    var_name.as_str(),
+                    "Int"
+                        | "Float"
+                        | "Bool"
+                        | "String"
+                        | "Char"
+                        | "Bytes"
+                        | "Type"
+                        | "Void"
+                        | "Never"
+                ) {
+                    // 内置类型名作为类型实参（如 SafeArray(Int, 3)）：类型宇宙的值，
+                    // 运行时无表示，加载 Void 占位（类型参数在编译期已被消费）
+                    instructions.push(Instruction::Load {
+                        dst: Operand::Local(result_reg),
+                        src: Operand::Const(ConstValue::Void),
+                    });
                 } else {
-                    // 未找到变量，默认加载 0
+                    // ponytail: 其余未解析变量仍走宽容占位（spawn 变量捕获等未完成路径依赖它，
+                    // 如 spawn_basic.yx；硬错误会连带误伤）。静默兜底清单见 #251 扫描记录。
                     instructions.push(Instruction::Load {
                         dst: Operand::Local(result_reg),
                         src: Operand::Const(ConstValue::Int(0)),
@@ -3089,6 +3119,43 @@ impl AstToIrGenerator {
                                 dst: Operand::Local(result_reg),
                                 src: Operand::Local(local_idx),
                             });
+                        }
+                        return Ok(());
+                    }
+                    ast::BinOp::And | ast::BinOp::Or => {
+                        // SPEC §2.2 / RFC-010 权威语义：and/or 短路求值
+                        // a and b ≡ if a { b } else { false }；a or b ≡ if a { true } else { b }
+                        let lhs_reg = self.next_temp_reg();
+                        self.generate_expr_ir(left, lhs_reg, instructions, constants)?;
+                        let is_and = matches!(op, ast::BinOp::And);
+                        let short_idx = instructions.len();
+                        if is_and {
+                            instructions.push(Instruction::JmpIfNot(Operand::Local(lhs_reg), 0));
+                        } else {
+                            instructions.push(Instruction::JmpIf(Operand::Local(lhs_reg), 0));
+                        }
+                        self.generate_expr_ir(right, result_reg, instructions, constants)?;
+                        let end_idx = instructions.len();
+                        instructions.push(Instruction::Jmp(0));
+                        // 短路值：and → false，or → true
+                        let sc_target = instructions.len();
+                        if let Instruction::JmpIf(_, ref mut t) = instructions[short_idx] {
+                            *t = sc_target;
+                        }
+                        if let Instruction::JmpIfNot(_, ref mut t) = instructions[short_idx] {
+                            *t = sc_target;
+                        }
+                        instructions.push(Instruction::Load {
+                            dst: Operand::Local(result_reg),
+                            src: Operand::Const(if is_and {
+                                ConstValue::Bool(false)
+                            } else {
+                                ConstValue::Bool(true)
+                            }),
+                        });
+                        let end_target = instructions.len();
+                        if let Instruction::Jmp(ref mut t) = instructions[end_idx] {
+                            *t = end_target;
                         }
                         return Ok(());
                     }
@@ -3156,12 +3223,15 @@ impl AstToIrGenerator {
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
                             },
-                            // ast::BinOp::Assign case is handled above checking left/right generation.
-                            // This placeholder is just to remove the old duplicated block.
-                            _ => Instruction::Move {
-                                dst: Operand::Local(result_reg),
-                                src: Operand::Const(ConstValue::Int(0)),
-                            },
+                            // Assign 在上方分支处理；And/Or 走短路求值；Range 仅限 for/切片上下文。
+                            // 剩余运算符到达此处即内部错误——禁止静默兜底（教训：&&/|| 曾静默编译为常量 0，#251）
+                            _ => {
+                                return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                                    "unhandled binary operator: {:?}",
+                                    op
+                                ))
+                                .build());
+                            }
                         }
                     }
                 };
@@ -4403,12 +4473,23 @@ impl AstToIrGenerator {
                     def: None,
                 });
             }
-            _ => {
-                // 默认返回 0
-                instructions.push(Instruction::Load {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Const(ConstValue::Int(0)),
-                });
+            Expr::Tuple(_, _) => {
+                // SPEC §3.6 元组字面量：尚未实现（此前静默编译为 0，#251 扫描暴露）。
+                // 需要专门的元组构造指令/opcode（与 List 的 HeapValue 变体不同），单独任务跟进。
+                return Err(ErrorCodeDefinition::ir_internal_error(
+                    "tuple literals are not implemented yet (SPEC §3.6)",
+                )
+                .at(Self::get_expr_span(expr))
+                .build());
+            }
+            other => {
+                // 未实现的表达式变体：硬错误，禁止静默归零（#251：&&/|| 曾被同类兜底吞掉）
+                return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                    "unhandled expression in IR generation: {:?}",
+                    std::mem::discriminant(other)
+                ))
+                .at(Self::get_expr_span(other))
+                .build());
             }
         }
         Ok(())

@@ -32,9 +32,9 @@ pub enum Precedence {
     Lowest,
     /// Assignment (=)
     Assignment,
-    /// Logical OR (||)
+    /// Logical OR (or)
     LogicalOr,
-    /// Logical AND (&&)
+    /// Logical AND (and)
     LogicalAnd,
     /// Equality (==, !=)
     Equality,
@@ -44,7 +44,7 @@ pub enum Precedence {
     Term,
     /// Factor (*, /, %)
     Factor,
-    /// Unary operators (!, -, +)
+    /// Unary operators (not, -, +)
     Unary,
     /// Function calls, field access, indexing
     Call,

@@ -159,14 +159,21 @@ fn test_substitute_through_fn() {
 
 #[test]
 fn test_substitute_through_option_result() {
+    // RFC-011 泛型语义：替换必须穿透 Option/Result 容器（#251：此前 fall-through
+    // 导致泛型 native 签名类型变量跨调用泄漏，已修复）
     let subber = Substituter::new();
     let mut sub = Substitution::new();
     sub.bind(TypeVar::new(0), MonoType::String);
-    // Option/Result not explicitly in substitute_internal → falls through
     let opt = MonoType::Option(Box::new(tv(0)));
-    assert_eq!(subber.substitute(&opt, &sub), opt);
+    assert_eq!(
+        subber.substitute(&opt, &sub),
+        MonoType::Option(Box::new(MonoType::String))
+    );
     let res = MonoType::Result(Box::new(tv(0)), Box::new(MonoType::Int(32)));
-    assert_eq!(subber.substitute(&res, &sub), res);
+    assert_eq!(
+        subber.substitute(&res, &sub),
+        MonoType::Result(Box::new(MonoType::String), Box::new(MonoType::Int(32)))
+    );
 }
 
 #[test]

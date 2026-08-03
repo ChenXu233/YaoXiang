@@ -1,23 +1,22 @@
 // 01-syntax/basics/logical_not.yx
-// 覆盖: 规范 §2.2 运算符优先级（not 运算符）
-// 验证: ! 逻辑非运算符对 Bool 值正确取反
-// 状态: ✅ 可运行
-//
-// 回归: ! 运算符在 IR 生成层曾直接编译为常量 Int(0)（issue #229），
-//       而非生成 UnaryOp::Not 指令。!true 和 !false 都恒返回 0。
+// 覆盖: SPEC §2.2 逻辑非 `not` 运算符（关键字，C 风格 ! 已删除）
+// 验证: not 对 Bool 取反、双重否定、SPEC 优先级（not 低于比较运算符）
+// 回归: 逻辑运算符在 IR 生成层曾静默编译为常量 Int(0)（issue #229 / #251）
+// 状态: ✅
 
 use std.assert
 
 main = {
-    // 基础取反
-    assert.assert(!true == false, "!true == false should be true")
-    assert.assert(!false == true, "!false == true should be true")
+    // 基本取反
+    assert.assert(not true == false, "not true == false")
+    assert.assert(not false == true, "not false == true")
 
-    // 双重取反
-    assert.assert(!!true == true, "!!true == true should be true")
-    assert.assert(!!false == false, "!!false == false should be true")
+    // 双重否定
+    assert.assert(not not true == true, "not not true == true")
+    assert.assert(not not false == false, "not not false == false")
 
-    // 与比较组合
-    assert.assert(!(true == false), "!(true == false) should be true")
-    assert.assert(!(true == true) == false, "!(true == true) == false should be true")
+    // SPEC §2.2 优先级：not 低于比较 → not (true == false) ≡ true
+    assert.assert(not true == false, "not true == false ≡ not (true == false)")
+    assert.assert((not true) == false, "(not true) == false 显式括号")
+    assert.assert(not 1 == 2, "not binds looser than ==")
 }

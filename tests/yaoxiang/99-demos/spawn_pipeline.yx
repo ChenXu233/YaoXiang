@@ -1,4 +1,5 @@
 // 99-demos/spawn_pipeline.yx
+// [test:ignore]: 依赖元组字面量 (t1, t2, t3)，其 codegen 未实现（#251 扫描：此前静默编译为 0）
 // 验证: spawn 作为并行管道
 // 论文价值: 无需 Send/Sync/async/await
 

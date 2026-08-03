@@ -1,6 +1,7 @@
 // 99-demos/closure_concurrency.yx
 // 验证: spawn + 数据共享混合模式
 // 论文价值: spawn 内直接访问外层变量，无需 Send/Sync
+// [test:ignore]: 依赖元组字面量 (double, triple)，其 codegen 未实现（#251 扫描：此前静默编译为 0）
 
 use std.{assert, io}
 

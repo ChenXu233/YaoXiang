@@ -147,8 +147,13 @@ fn test_list_comp() {
 }
 
 #[test]
-fn test_tuple() {
-    assert_run_ok("main = { mut t = (1, \"one\") }");
+fn test_tuple_literal_not_implemented() {
+    // SPEC §3.6 元组字面量未实现：必须清晰报错，而非静默编译为 0（#251 静默 bug 扫描修复）
+    let result = run("main = { mut t = (1, \"one\") }");
+    assert!(
+        result.is_err(),
+        "tuple literals are not implemented; expected a clear error"
+    );
 }
 
 #[test]
