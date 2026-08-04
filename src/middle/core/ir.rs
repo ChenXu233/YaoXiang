@@ -296,6 +296,12 @@ pub enum Instruction {
         keys: Vec<Operand>,
         values: Vec<Operand>,
     },
+    /// 创建元组实例（SPEC §3.6）
+    /// items: 各元素的操作数列表（按元素顺序）
+    NewTuple {
+        dst: Operand,
+        items: Vec<Operand>,
+    },
     MakeClosure {
         dst: Operand,
         func: String,

@@ -715,6 +715,22 @@ impl Interpreter {
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
+            BytecodeInstr::NewTuple { dst, items } => {
+                let mut tuple_items = Vec::with_capacity(items.len());
+                for item_reg in items {
+                    let item = frame
+                        .get_slot(item_reg.0 as usize)
+                        .cloned()
+                        .unwrap_or(RuntimeValue::Void);
+                    tuple_items.push(item);
+                }
+                let handle = self
+                    .heap
+                    .allocate(crate::backends::common::HeapValue::Tuple(tuple_items));
+                frame.set_slot(dst.0 as usize, RuntimeValue::Tuple(handle));
+                frame.advance();
+                Ok(StepOutcome::Continue)
+            }
             BytecodeInstr::LoadElement { dst, array, index } => {
                 let arr = self.force_slot(frame, *array)?;
                 let idx_value = self.force_slot(frame, *index)?;

@@ -470,6 +470,7 @@ impl Translator {
                 fields,
             } => self.translate_create_struct(dst, type_name, fields),
             NewDict { dst, keys, values } => self.translate_new_dict(dst, keys, values),
+            NewTuple { dst, items } => self.translate_new_tuple(dst, items),
             MakeClosure {
                 dst,
                 func,
@@ -1090,6 +1091,28 @@ impl Translator {
             operands.extend_from_slice(&(val_reg as u16).to_le_bytes());
         }
         Ok(BytecodeInstruction::new(Opcode::NewDict, operands))
+    }
+
+    /// 翻译 NewTuple 指令
+    /// 格式: dst(2) + item_count(4) + items(2*count)
+    fn translate_new_tuple(
+        &mut self,
+        dst: &Operand,
+        items: &[Operand],
+    ) -> Result<BytecodeInstruction, Diagnostic> {
+        let dst_reg = self.operand_resolver.to_reg(dst)?;
+        let item_count = items.len() as u32;
+        let mut operands = Vec::new();
+        // dst (2 bytes LE)
+        operands.extend_from_slice(&(dst_reg as u16).to_le_bytes());
+        // item_count (4 bytes LE)
+        operands.extend_from_slice(&item_count.to_le_bytes());
+        // item registers (2 bytes LE each)
+        for item in items {
+            let item_reg = self.operand_resolver.to_reg(item)?;
+            operands.extend_from_slice(&(item_reg as u16).to_le_bytes());
+        }
+        Ok(BytecodeInstruction::new(Opcode::NewTuple, operands))
     }
 
     fn translate_make_closure(

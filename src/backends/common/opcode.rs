@@ -244,6 +244,9 @@ pub enum Opcode {
     /// Create Rc (non-atomic reference count)
     RcNew = 0x89,
 
+    /// Create tuple instance (SPEC §3.6)
+    NewTuple = 0x8A,
+
     // =====================
     // String Operations (0x90-0x9F)
     // =====================
@@ -397,6 +400,7 @@ impl Opcode {
             Opcode::CloseUpvalue => "CloseUpvalue",
             Opcode::CallNative => "CallNative",
             Opcode::NewDict => "NewDict",
+            Opcode::NewTuple => "NewTuple",
             Opcode::StringLength => "StringLength",
             Opcode::StringConcat => "StringConcat",
             Opcode::StringEqual => "StringEqual",
@@ -485,6 +489,7 @@ impl TryFrom<u8> for Opcode {
             0x87 => Ok(Opcode::CallNative),
             0x88 => Ok(Opcode::NewDict),
             0x89 => Ok(Opcode::RcNew),
+            0x8A => Ok(Opcode::NewTuple),
             0x90 => Ok(Opcode::StringLength),
             0x91 => Ok(Opcode::StringConcat),
             0x92 => Ok(Opcode::StringEqual),

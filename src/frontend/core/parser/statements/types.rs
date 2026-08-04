@@ -445,18 +445,32 @@ pub fn parse_fn_type_with_names(
     // parse_type_annotation 会丢参数名，故自行检测 curry 组并递归收集带名参数。
     // all_params = 第一组 + 后续各组（拍平带名），供 signature_params 存全部 curry 组参数名。
     // return_type 保持嵌套 Type::Fn（纯类型），供 type_annotation 构建正确嵌套结构。
+    // 注意：必须前瞻到 `)` 之后确认是 `->` 才算 curry 组——
+    // 返回类型本身可能是元组类型 (T, U)（#253），否则会把元组误判为 curry 参数组。
     let saved = state.save_position();
     let is_named_curry = if state.at(&TokenKind::LParen) {
         state.bump();
-        let result = if let Some(TokenKind::Identifier(_)) = state.current().map(|t| &t.kind) {
-            let next = state.peek().map(|t| &t.kind);
-            matches!(next, Some(TokenKind::Colon))
-                || matches!(next, Some(TokenKind::Comma) | Some(TokenKind::RParen))
-        } else {
-            false
-        };
+        let starts_with_name =
+            if let Some(TokenKind::Identifier(_)) = state.current().map(|t| &t.kind) {
+                let next = state.peek().map(|t| &t.kind);
+                matches!(next, Some(TokenKind::Colon))
+                    || matches!(next, Some(TokenKind::Comma) | Some(TokenKind::RParen))
+            } else {
+                false
+            };
+        // 扫描括号内容，确认 `)` 后跟 `->`
+        let mut paren_depth = 1;
+        while paren_depth > 0 && !state.at_end() {
+            if state.at(&TokenKind::LParen) {
+                paren_depth += 1;
+            } else if state.at(&TokenKind::RParen) {
+                paren_depth -= 1;
+            }
+            state.bump();
+        }
+        let after_is_arrow = state.at(&TokenKind::Arrow);
         state.restore_position(saved);
-        result
+        starts_with_name && after_is_arrow
     } else {
         false
     };

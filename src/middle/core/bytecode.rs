@@ -310,6 +310,12 @@ pub enum BytecodeInstr {
         values: Vec<Reg>,
     },
 
+    /// 创建元组实例（SPEC §3.6）
+    NewTuple {
+        dst: Reg,
+        items: Vec<Reg>,
+    },
+
     // =====================
     // Arc Operations
     // =====================
@@ -539,6 +545,7 @@ impl BytecodeInstr {
             BytecodeInstr::NewListWithCap { .. } => Opcode::NewListWithCap,
             BytecodeInstr::CreateStruct { .. } => Opcode::CreateStruct,
             BytecodeInstr::NewDict { .. } => Opcode::NewDict,
+            BytecodeInstr::NewTuple { .. } => Opcode::NewTuple,
             BytecodeInstr::ArcNew { .. } => Opcode::ArcNew,
             BytecodeInstr::RcNew { .. } => Opcode::RcNew,
             BytecodeInstr::ArcClone { .. } => Opcode::ArcClone,
@@ -649,6 +656,10 @@ impl BytecodeInstr {
             BytecodeInstr::NewDict { keys, .. } => {
                 // dst(2) + pair_count(4) + keys(2*count) + values(2*count)
                 6 + keys.len() * 4
+            }
+            BytecodeInstr::NewTuple { items, .. } => {
+                // dst(2) + item_count(4) + items(2*count)
+                6 + items.len() * 2
             }
             BytecodeInstr::ArcNew { .. } => 4,
             BytecodeInstr::RcNew { .. } => 4,
@@ -1707,6 +1718,39 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                         dst: Reg(dst),
                                         keys,
                                         values,
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::NewTuple => {
+                                // NewTuple: dst(2) + item_count(4) + items(2*count)
+                                if instr.operands.len() >= 6 {
+                                    let dst =
+                                        u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
+                                    let item_count = u32::from_le_bytes([
+                                        instr.operands[2],
+                                        instr.operands[3],
+                                        instr.operands[4],
+                                        instr.operands[5],
+                                    ])
+                                        as usize;
+
+                                    let mut items = Vec::with_capacity(item_count);
+                                    for i in 0..item_count {
+                                        let item_offset = 6 + i * 2;
+                                        if item_offset + 1 < instr.operands.len() {
+                                            let item_reg = u16::from_le_bytes([
+                                                instr.operands[item_offset],
+                                                instr.operands[item_offset + 1],
+                                            ]);
+                                            items.push(Reg(item_reg));
+                                        }
+                                    }
+
+                                    decoded_instructions.push(BytecodeInstr::NewTuple {
+                                        dst: Reg(dst),
+                                        items,
                                     });
                                 } else {
                                     decoded_instructions.push(BytecodeInstr::Nop);

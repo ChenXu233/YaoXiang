@@ -1,7 +1,6 @@
 // 02-type-system/tuples.yx
 // 覆盖: 规范 §3.6 元组类型
 // 验证: 元组字面量
-// [test:ignore]: 元组字面量 codegen 未实现（#251 扫描暴露：此前静默编译为 0，现报 E3005）
 
 use std.assert
 

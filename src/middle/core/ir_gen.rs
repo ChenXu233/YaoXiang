@@ -4473,14 +4473,18 @@ impl AstToIrGenerator {
                     def: None,
                 });
             }
-            Expr::Tuple(_, _) => {
-                // SPEC §3.6 元组字面量：尚未实现（此前静默编译为 0，#251 扫描暴露）。
-                // 需要专门的元组构造指令/opcode（与 List 的 HeapValue 变体不同），单独任务跟进。
-                return Err(ErrorCodeDefinition::ir_internal_error(
-                    "tuple literals are not implemented yet (SPEC §3.6)",
-                )
-                .at(Self::get_expr_span(expr))
-                .build());
+            Expr::Tuple(items, _span) => {
+                // SPEC §3.6 元组字面量：逐个求值元素，用 NewTuple 一次性构造
+                let mut item_regs = Vec::with_capacity(items.len());
+                for item_expr in items {
+                    let item_reg = self.next_temp_reg();
+                    self.generate_expr_ir(item_expr, item_reg, instructions, constants)?;
+                    item_regs.push(Operand::Local(item_reg));
+                }
+                instructions.push(Instruction::NewTuple {
+                    dst: Operand::Local(result_reg),
+                    items: item_regs,
+                });
             }
             other => {
                 // 未实现的表达式变体：硬错误，禁止静默归零（#251：&&/|| 曾被同类兜底吞掉）
