@@ -9,8 +9,8 @@ use super::{config::CompileConfig, core::typecheck};
 /// 管道错误类型
 #[derive(Debug, Clone)]
 pub enum PipelineError {
-    /// 词法/解析错误
-    LexParse(String),
+    /// 词法/解析错误（携带原始诊断，保留错误码与 span）
+    LexParse(Diagnostic),
     /// 类型检查错误
     TypeCheck(Diagnostic),
     /// IR 生成错误
@@ -36,6 +36,7 @@ impl PipelineError {
     /// 获取诊断信息（如果是类型检查错误）
     pub fn diagnostic(&self) -> Option<Diagnostic> {
         match self {
+            PipelineError::LexParse(err) => Some(err.clone()),
             PipelineError::TypeCheck(err) => Some(err.clone()),
             PipelineError::ProofExecution(err) => Some(err.clone()),
             _ => None,
@@ -360,7 +361,7 @@ impl Pipeline {
                 let duration = start.elapsed().as_millis() as u64;
                 phase_durations.push((CompilationPhase::Lexing, duration));
 
-                return LexResult::failed(vec![e.to_string()]);
+                return LexResult::failed(vec![e.to_diagnostic()]);
             }
         };
 
@@ -385,12 +386,11 @@ impl Pipeline {
                 let duration = start.elapsed().as_millis() as u64;
                 phase_durations.push((CompilationPhase::Parsing, duration));
 
-                let error_msg = result
-                    .errors
-                    .into_iter()
-                    .next()
-                    .map(|e| e.to_string())
-                    .unwrap_or_else(|| "Unknown parse error".to_string());
+                let error_msg = result.errors.into_iter().next().unwrap_or_else(|| {
+                    crate::util::diagnostic::ErrorCodeDefinition::unexpected_token("unknown")
+                        .at(crate::util::span::Span::dummy())
+                        .build()
+                });
 
                 return ParseResult::failed(vec![error_msg]);
             }
@@ -822,7 +822,7 @@ pub(crate) fn execute_single_proof_fn(
 /// 词法分析结果
 struct LexResult {
     tokens: Vec<super::core::lexer::Token>,
-    errors: Vec<String>,
+    errors: Vec<Diagnostic>,
 }
 
 impl LexResult {
@@ -833,7 +833,7 @@ impl LexResult {
         }
     }
 
-    fn failed(errors: Vec<String>) -> Self {
+    fn failed(errors: Vec<Diagnostic>) -> Self {
         Self {
             tokens: Vec::new(),
             errors,
@@ -848,7 +848,7 @@ impl LexResult {
 /// 语法分析结果
 struct ParseResult {
     ast: super::core::parser::Module,
-    errors: Vec<String>,
+    errors: Vec<Diagnostic>,
 }
 
 impl ParseResult {
@@ -859,7 +859,7 @@ impl ParseResult {
         }
     }
 
-    fn failed(errors: Vec<String>) -> Self {
+    fn failed(errors: Vec<Diagnostic>) -> Self {
         Self {
             ast: super::core::parser::Module::default(),
             errors,

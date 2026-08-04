@@ -123,13 +123,9 @@ impl Compiler {
             // 根据管道错误类型映射到合适的编译错误变体
             let compilation_error = match first_error {
                 Some(err) => match err {
-                    super::pipeline::PipelineError::LexParse(_) => {
-                        let diagnostic =
-                            crate::util::diagnostic::ErrorCodeDefinition::internal_error(
-                                &error_message,
-                            )
-                            .build();
-                        CompileError::Parse(diagnostic)
+                    super::pipeline::PipelineError::LexParse(diag) => {
+                        // 直接透传词法/解析诊断，保留原始错误码与 span（而非包装成 E8001 ICE）
+                        CompileError::Parse(diag.clone())
                     }
                     super::pipeline::PipelineError::TypeCheck(diag) => {
                         CompileError::TypeError(error_message, Some(Box::new(diag.clone())))
