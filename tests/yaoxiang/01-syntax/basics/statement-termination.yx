@@ -1,0 +1,43 @@
+// 01-syntax/basics/statement-termination.yx
+// 覆盖: RFC-038 语句终止与换行规则
+// 验证: 换行终止语句、行首 ( [ 不并入上一行、括号内换行续行、
+//       行尾运算符续行、行首 . 链式续行（Swift 式）
+// 注: 每个变量仅使用一次以绕开 #260（原语被误 move）
+
+use std.io
+use std.assert
+
+// 链式续行测试用结构体
+Point: Type = { x: Int, y: Int }
+
+// 括号内换行续行（RFC-038 例外 1）：参数跨行
+mk: (Int, Int) -> Int = (x, y) => x + y
+
+main = {
+    // 行尾运算符续行（RFC-038 例外 2）
+    sum = 1 +
+        2 + 3
+    assert.assert(sum == 6, "line-end operator continuation")
+
+    // 括号内换行续行：调用参数跨行
+    r = mk(1,
+           2)
+    assert.assert(r == 3, "paren continuation in call args")
+
+    // 换行终止语句 + 行首 `(` 不并入上一行（#258 核心修复）：
+    // io.println(1) 结束后换行，(c, d) 是独立解构语句，不是调用参数
+    io.println(1)
+    (c, d) = (3, 4)
+    assert.assert(c == 3 and d == 4, "destructure after newline not swallowed")
+
+    // 行首 `[` 不并入上一行：独立列表表达式语句
+    io.println(10)
+    [1, 2, 3]
+    io.println(10)
+
+    // 行首 `.` 链式续行（RFC-038 例外 3，Swift 式字段访问）
+    p = Point(x=6, y=2)
+    v = p
+        .x
+    assert.assert(v == 6, "leading-dot chained field access")
+}

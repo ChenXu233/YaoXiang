@@ -282,7 +282,11 @@ fn hoist_implicit_generics(
             let (mutable, rest) = if let Some(r) = t.strip_prefix("&mut ") {
                 (true, r)
             } else {
-                (false, &t[1..])
+                // 上面已确认 t.starts_with('&')，此处前缀必然存在
+                (
+                    false,
+                    t.strip_prefix('&').expect("prefix '&' checked above"),
+                )
             };
             let inner = hoist_type(rest, generic_params, names, gen);
             return if mutable {
