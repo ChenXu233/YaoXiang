@@ -710,6 +710,8 @@ pub struct OwnershipChecker {
     env: Option<*const crate::frontend::core::typecheck::environment::TypeEnvironment>,
     /// ref 创建的变量（Expr::Ref 的赋值目标）
     ref_vars: HashSet<String>,
+    /// 持有 `&mut` 写入令牌的变量（#257：Linear，赋值复制被拒绝）
+    mut_token_vars: HashSet<String>,
     /// spawn 体内使用的 ref 变量（逃逸 → 选 Arc）
     escaped_refs: HashSet<String>,
     /// 当前是否在 spawn 体内
@@ -745,6 +747,7 @@ impl OwnershipChecker {
             scope_drops: Vec::new(),
             env: None,
             ref_vars: HashSet::new(),
+            mut_token_vars: HashSet::new(),
             escaped_refs: HashSet::new(),
             inside_spawn: false,
             inside_unsafe: false,
@@ -765,6 +768,7 @@ impl OwnershipChecker {
         self.scope_vars.clear();
         self.scope_drops.clear();
         self.ref_vars.clear();
+        self.mut_token_vars.clear();
         self.escaped_refs.clear();
         self.inside_spawn = false;
         self.inside_unsafe = false;
@@ -932,6 +936,32 @@ impl OwnershipChecker {
             Some(VarState::Moved) => emit_move_predicate(name, true, span),
             Some(VarState::Dropped) => emit_drop_predicate(name, true, span),
             _ => ProofResult::Proved,
+        }
+    }
+
+    /// #257：检查 `&mut` 写入令牌的赋值复制。
+    ///
+    /// SPEC §11.2：`&mut T` 是 Linear（零大小写入令牌，独占，不可复制）。
+    /// `m2 = m`（m 持有 `&mut` 令牌）= 复制 Linear 令牌 → 拒绝（E2003）。
+    fn check_mut_token_copy(
+        &self,
+        src_name: &str,
+    ) -> Option<ProofResult> {
+        if self.mut_token_vars.contains(src_name) {
+            Some(ProofResult::Disproved(
+                super::super::proof::verdict::DisproofModel {
+                    kind: super::super::proof::verdict::DisproofKind::LinearTokenCopy,
+                    assignments: vec![("variable".into(), src_name.into())],
+                    constraint: format!(
+                        "`{}` 持有 `&mut` 写入令牌：SPEC §11.2 规定 &mut T 是 Linear（独占、非 Dup），不能复制。请在需要的地方重新创建 `&mut` 借用",
+                        src_name
+                    ),
+                    span: Some(self.current_span),
+                    predicate_span: None,
+                },
+            ))
+        } else {
+            None
         }
     }
 
@@ -1143,6 +1173,14 @@ impl OwnershipChecker {
                 op, left, right, ..
             } => {
                 if *op == crate::frontend::core::parser::ast::BinOp::Assign {
+                    // #257：表达式层赋值同样拒绝 `&mut` 令牌复制
+                    if let Expr::Var(src_name, _) = right.as_ref() {
+                        if let Some(err) = self.check_mut_token_copy(src_name) {
+                            let mut r = vec![err];
+                            r.extend(self.walk_expr(right));
+                            return r;
+                        }
+                    }
                     if let Expr::Var(name, _) = left.as_ref() {
                         // 仅在变量已存在且已记录可变性时检查（重赋值场景）
                         if let Some(&is_mut) = self.var_mutability.get(name) {
@@ -1361,7 +1399,16 @@ impl OwnershipChecker {
                 use crate::frontend::core::parser::ast::Expr;
                 let name = match target.as_ref() {
                     Expr::Var(n, _) => n.clone(),
-                    _ => return Vec::new(),
+                    // 非变量目标（字段写入 `m.x = v`、解构等）：仍须遍历 target 与
+                    // value，让内部变量的 Move/Drop 状态被检查（#257：此前直接
+                    // 返回导致已 move 的 `&mut` 令牌可经字段写入继续使用）。
+                    _ => {
+                        let mut results = self.walk_expr(target);
+                        if let Some(v) = value.as_deref() {
+                            results.extend(self.walk_expr(v));
+                        }
+                        return results;
+                    }
                 };
                 let initializer = value.as_deref();
                 let mut results = Vec::new();
@@ -1399,6 +1446,10 @@ impl OwnershipChecker {
                     if matches!(init, Expr::Ref { .. }) {
                         self.ref_vars.insert(name.clone());
                     }
+                    // #257：记录持有 `&mut` 写入令牌的变量
+                    if matches!(init, Expr::Borrow { mutable: true, .. }) {
+                        self.mut_token_vars.insert(name.clone());
+                    }
                 }
                 if let Some(init) = initializer {
                     if let Expr::BinOp {
@@ -1417,6 +1468,11 @@ impl OwnershipChecker {
                     }
                     results.extend(self.walk_expr(init));
                     if let Expr::Var(src_name, _) = init {
+                        // #257：`&mut` 写入令牌是 Linear（SPEC §11.2），赋值复制直接拒绝
+                        if let Some(err) = self.check_mut_token_copy(src_name) {
+                            results.push(err);
+                            return results;
+                        }
                         if !self.ref_vars.contains(src_name) {
                             self.var_state.insert(src_name.clone(), VarState::Moved);
                         }
