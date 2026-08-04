@@ -1,4 +1,10 @@
-//! Error recovery tests — parse_with_recovery
+//! 错误恢复与类型语法错误测试
+//!
+//! 规范来源：
+//! - 类型系统规范 §1.1 TypeExpr：合法类型表达式文法，`?`（try 运算符）不在其中
+//! - 标准库规范 §1.4 错误传播：`ErrorPropagate ::= Expr '?'`，`?` 仅用于表达式
+//! - RFC-010：统一赋值语法 `name: (param: Type, ...) -> Ret = body`
+//! - RFC-007：类型标注可选（HM 推断），省略标注即可，无需 `?` 占位
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
@@ -53,4 +59,25 @@ fn test_parse_errors_collected() {
     let tokens = tokenize("@").unwrap();
     let result = parse(&tokens);
     assert!(!result.errors.is_empty());
+}
+
+#[test]
+fn test_question_mark_as_param_type_reports_error() {
+    // Arrange: #250 复现 — `?` 不是合法类型（类型系统规范 §1.1），必须是 try 运算符（标准库规范 §1.4）
+    let source =
+        "f: (a: ?) -> Void = (a) => { println(\"defined\") }\nmain = { println(\"main only\") }";
+    let tokens = tokenize(source).unwrap();
+
+    // Act
+    let result = parse(&tokens);
+
+    // Assert: 解析器必须在定义处（`?` 所在行）报 E0012 无效语法
+    assert!(result.has_errors, "`?` 作为参数类型必须产生解析错误");
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| { e.code == "E0012" && e.span.is_some_and(|s| s.start.line == 1) }),
+        "错误必须指向定义处第 1 行的 `?`，而非调用点"
+    );
 }

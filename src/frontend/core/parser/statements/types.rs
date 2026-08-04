@@ -14,6 +14,7 @@ use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::parser::ast::StructField;
 use crate::frontend::core::parser::{ParserState, BP_LOWEST};
 use crate::frontend::core::parser::parse_msg;
+use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::span::Span;
 
 impl ParserState<'_> {
@@ -230,6 +231,20 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
                  Use RFC-010 syntax: '(T: Type, U: Type) -> ((params) -> Ret)'"
                     .to_string(),
             ));
+            None
+        }
+        // `?` 是 try 运算符（表达式级），不能作为类型起始（#250）
+        Some(TokenKind::Question) => {
+            let span = state.span();
+            state.bump(); // 消费掉 `?`，避免错误恢复在原地打转
+            state.error(
+                ErrorCodeDefinition::invalid_syntax(
+                    "'?' 是 try 运算符，不是合法的类型。\
+                     参数类型请使用类型名（如 Int、String、Any），或省略类型标注",
+                )
+                .at(span)
+                .build(),
+            );
             None
         }
         // 整数字面量类型：IsPositive(5) 中的 5
