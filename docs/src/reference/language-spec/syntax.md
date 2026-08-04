@@ -236,6 +236,9 @@ Pattern     ::= Literal
 Block       ::= '{' Stmt* Expr? '}'
 ```
 
+> **语句终止规则**：Stmt 之间的分隔与换行行为（`;` 显式分隔、换行终止、续行例外、行首 `(`/`[` 永不合并）
+> 由 [RFC-038](../design/rfc/draft/038-statement-termination.md) 定义。
+
 **统一语义**：所有 `{}` 块的 return 语义一致：
 
 | 块类型      | return 语义  | 默认返回 |

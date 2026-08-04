@@ -39,6 +39,7 @@ title: 'RFC 索引'
 | RFC-034  | [RFC-034: 统一调试工具链](./draft/034-debug-toolchain.md)                                            | 晨煦      | 2026-07-06 | 草案             |
 | RFC-035  | [RFC-035: MCP Server 支持（AI Agent 集成）](./draft/035-mcp-server.md)                               | Chen Xu   | 2026-07-11 | 草案             |
 | RFC-037  | [RFC-037: 工业化分发方案 — 基于 cargo-dist 的编译器/工具链打包](./draft/037-industrial-packaging.md) | ChenXu233 | 2026-07-26 | 草案             |
+| RFC-038  | [RFC-038: 语句终止与换行规则（Statement Termination & Newline Rules）](./accepted/038-statement-termination.md) | ChenXu233 | 2026-08-05 | 已接受           |
 
 ---
 
