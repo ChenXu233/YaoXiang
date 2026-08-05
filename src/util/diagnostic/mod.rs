@@ -442,13 +442,26 @@ pub fn check_files_with_diagnostics(files: &[std::path::PathBuf]) -> anyhow::Res
         match compiler.compile_with_source(&file.display().to_string(), &source) {
             Ok(_) => {}
             Err(e) if e.is_type_error() => {
-                result.diagnostics.push(CheckDiagnostic {
-                    file: file.display().to_string(),
-                    diagnostic: crate::util::diagnostic::ErrorCodeDefinition::internal_error(
-                        &format!("{}", e),
-                    )
-                    .build(),
-                });
+                // #268：透传原始类型诊断（保留 E1002 与 span），与 run 一致；
+                // 仅无原始诊断的 TypeError（如 IR 阶段）才用 E8001 兜底
+                match e.diagnostic() {
+                    Some(diag) => {
+                        result.diagnostics.push(CheckDiagnostic {
+                            file: file.display().to_string(),
+                            diagnostic: diag.clone(),
+                        });
+                    }
+                    None => {
+                        result.diagnostics.push(CheckDiagnostic {
+                            file: file.display().to_string(),
+                            diagnostic:
+                                crate::util::diagnostic::ErrorCodeDefinition::internal_error(
+                                    &format!("{}", e),
+                                )
+                                .build(),
+                        });
+                    }
+                }
                 result.error_count += 1;
             }
             Err(e) => {

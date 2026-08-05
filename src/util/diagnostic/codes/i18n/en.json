@@ -535,7 +535,7 @@
     "title": "Internal Compiler Error",
     "message": "An internal compiler error occurred",
     "template": "Internal compiler error: {message}",
-    "help": "Please report this error at https://github.com/yaoxiang/yaoxiang/issues",
+    "help": "Please report this error at https://github.com/ChenXu233/YaoXiang/issues/new",
     "example": "",
     "error_output": ""
   },

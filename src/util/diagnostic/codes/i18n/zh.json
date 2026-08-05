@@ -535,7 +535,7 @@
         "title": "内部编译器错误",
         "message": "编译器发生内部错误",
         "template": "内部编译器错误：{message}",
-        "help": "请在 https://github.com/yaoxiang/yaoxiang/issues 报告此错误",
+        "help": "请在 https://github.com/ChenXu233/YaoXiang/issues/new 报告此错误",
         "example": "",
         "error_output": ""
     },
