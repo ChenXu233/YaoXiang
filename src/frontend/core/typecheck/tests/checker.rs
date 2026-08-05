@@ -130,6 +130,62 @@ fn test_type_checker_reports_type_mismatch() {
 }
 
 #[test]
+fn test_type_mismatch_diagnostic_carries_source_span() {
+    // Arrange: x: String = 42 类型不匹配——#270：诊断必须携带源码定位
+    // 用非 dummy 的真实 span（line=3），验证 check_var_stmt 路径挂载 span
+    let mut checker = TypeChecker::new("test");
+    let real_span = Span::new(
+        crate::util::span::Position::new(3, 5),
+        crate::util::span::Position::new(3, 20),
+    );
+    let module = Module {
+        items: vec![Stmt {
+            kind: crate::frontend::core::parser::ast::StmtKind::Assign {
+                target: Box::new(Expr::Var("x".to_string(), real_span)),
+                type_annotation: Some(AstType::String),
+                signature_params: vec![],
+                value: Some(Box::new(Expr::Lit(
+                    crate::frontend::core::lexer::tokens::Literal::Int(42),
+                    real_span,
+                ))),
+                is_pub: false,
+                is_mut: false,
+                span: real_span,
+            },
+            span: real_span,
+        }],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let _ = checker.check_module(&module);
+
+    // Assert: 诊断应携带非 dummy 的源码定位（E1002 不再丢 span）
+    let with_span = checker
+        .errors()
+        .iter()
+        .filter(|d| d.code == "E1002")
+        .filter(|d| d.span.is_some() && !d.span.unwrap().is_dummy())
+        .count();
+    assert!(
+        with_span > 0,
+        "E1002 诊断应携带源码定位 span，实际 errors: {:?}",
+        checker
+            .errors()
+            .iter()
+            .map(|d| (&d.code, d.span))
+            .collect::<Vec<_>>()
+    );
+    let span = checker
+        .errors()
+        .iter()
+        .find(|d| d.code == "E1002")
+        .and_then(|d| d.span)
+        .expect("E1002 诊断存在且带 span");
+    assert_eq!(span.start.line, 3, "E1002 span 应指向语句所在行 3");
+}
+
+#[test]
 fn test_type_checker_reports_undefined_variable() {
     // Arrange
     let mut checker = TypeChecker::new("test");

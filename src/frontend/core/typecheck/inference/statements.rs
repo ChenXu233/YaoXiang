@@ -610,6 +610,7 @@ impl StatementChecker {
                                 &[],
                                 Some(v.as_ref()),
                                 *is_mut,
+                                *stmt_span,
                             );
                         }
                     }
@@ -620,6 +621,7 @@ impl StatementChecker {
                             &[],
                             None,
                             *is_mut,
+                            *stmt_span,
                         );
                     }
                 };
@@ -1173,6 +1175,7 @@ impl StatementChecker {
         prelude_stmts: &[Stmt],
         initializer: Option<&Expr>,
         is_mut: bool,
+        stmt_span: crate::util::span::Span,
     ) -> Result<(), Box<Diagnostic>> {
         // 处理 prelude 语句（编译期求值部分）
         for stmt in prelude_stmts {
@@ -1241,6 +1244,7 @@ impl StatementChecker {
                             &format!("{}", ann_ty),
                             &format!("{}", init_ty),
                         )
+                        .at(stmt_span)
                         .build(),
                     ));
                 }
@@ -1282,6 +1286,7 @@ impl StatementChecker {
                                     &format!("{}", ann_ty),
                                     &format!("{}", init_ty),
                                 )
+                                .at(stmt_span)
                                 .build(),
                             ));
                         }
