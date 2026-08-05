@@ -553,8 +553,8 @@ fn test_type_evaluator_nat_lt_symbolic_operands_stay_symbolic() {
 }
 
 #[test]
-fn test_type_evaluator_nat_eq_concrete_operands_decide() {
-    // Arrange: 两个可识别 Nat 字面量
+fn test_type_evaluator_nat_eq_same_operands_decide_true() {
+    // Arrange: 两个相同的可识别 Nat 字面量
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
@@ -562,28 +562,43 @@ fn test_type_evaluator_nat_eq_concrete_operands_decide() {
     let mut evaluator = make_evaluator(&env, &budget, &dep_env);
     let five_a = MonoType::TypeRef("Nat(5)".to_string());
     let five_b = MonoType::TypeRef("Nat(5)".to_string());
-    let three = MonoType::TypeRef("Nat(3)".to_string());
 
     // Act
-    let eq_same = evaluator.eval_nat("Eq", &[five_a.clone(), five_b]);
-    let eq_diff = evaluator.eval_nat("Eq", &[five_a, three]);
+    let result = evaluator.eval_nat("Eq", &[five_a, five_b]);
 
-    // Assert: 可判定操作数照常判定（修复不得破坏正常路径）
+    // Assert: 可判定操作数照常判真（修复不得破坏正常路径）
     assert_eq!(
-        eq_same.expect("Nat(Eq, 5, 5) 求值不应报错"),
+        result.expect("Nat(Eq, 5, 5) 求值不应报错"),
         MonoType::TypeRef("True".to_string()),
         "5 == 5 必须判 True"
     );
+}
+
+#[test]
+fn test_type_evaluator_nat_eq_diff_operands_decide_false() {
+    // Arrange: 两个不同的可识别 Nat 字面量
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut dep_env = DependentTypeEnv::new();
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
+    let mut evaluator = make_evaluator(&env, &budget, &dep_env);
+    let five = MonoType::TypeRef("Nat(5)".to_string());
+    let three = MonoType::TypeRef("Nat(3)".to_string());
+
+    // Act
+    let result = evaluator.eval_nat("Eq", &[five, three]);
+
+    // Assert: 可判定操作数照常判假（修复不得破坏正常路径）
     assert_eq!(
-        eq_diff.expect("Nat(Eq, 5, 3) 求值不应报错"),
+        result.expect("Nat(Eq, 5, 3) 求值不应报错"),
         MonoType::TypeRef("False".to_string()),
         "5 == 3 必须判 False"
     );
 }
 
 #[test]
-fn test_type_evaluator_nat_lt_concrete_operands_decide() {
-    // Arrange: 两个可识别 Nat 字面量
+fn test_type_evaluator_nat_lt_smaller_operands_decide_true() {
+    // Arrange: 左操作数小于右操作数
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
@@ -593,17 +608,33 @@ fn test_type_evaluator_nat_lt_concrete_operands_decide() {
     let five = MonoType::TypeRef("Nat(5)".to_string());
 
     // Act
-    let lt_true = evaluator.eval_nat("Lt", &[three, five.clone()]);
-    let lt_false = evaluator.eval_nat("Lt", &[five.clone(), five]);
+    let result = evaluator.eval_nat("Lt", &[three, five]);
 
     // Assert
     assert_eq!(
-        lt_true.expect("Nat(Lt, 3, 5) 求值不应报错"),
+        result.expect("Nat(Lt, 3, 5) 求值不应报错"),
         MonoType::TypeRef("True".to_string()),
         "3 < 5 必须判 True"
     );
+}
+
+#[test]
+fn test_type_evaluator_nat_lt_equal_operands_decide_false() {
+    // Arrange: 两个相等的可识别 Nat 字面量
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut dep_env = DependentTypeEnv::new();
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
+    let mut evaluator = make_evaluator(&env, &budget, &dep_env);
+    let five_a = MonoType::TypeRef("Nat(5)".to_string());
+    let five_b = MonoType::TypeRef("Nat(5)".to_string());
+
+    // Act
+    let result = evaluator.eval_nat("Lt", &[five_a, five_b]);
+
+    // Assert
     assert_eq!(
-        lt_false.expect("Nat(Lt, 5, 5) 求值不应报错"),
+        result.expect("Nat(Lt, 5, 5) 求值不应报错"),
         MonoType::TypeRef("False".to_string()),
         "5 < 5 必须判 False"
     );
@@ -634,8 +665,8 @@ fn test_type_evaluator_eval_if_undecidable_condition_reports_undecidable() {
 }
 
 #[test]
-fn test_type_evaluator_eval_if_concrete_condition_selects_branch() {
-    // Arrange: True/False 字面量条件
+fn test_type_evaluator_eval_if_true_condition_selects_then_branch() {
+    // Arrange: True 字面量条件
     let env = TypeEnvironment::new();
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
@@ -643,12 +674,31 @@ fn test_type_evaluator_eval_if_concrete_condition_selects_branch() {
     let mut evaluator = make_evaluator(&env, &budget, &dep_env);
 
     // Act
-    let then_r = evaluator.eval_if(
+    let result = evaluator.eval_if(
         &MonoType::TypeRef("True".to_string()),
         &MonoType::Int(32),
         &MonoType::String,
     );
-    let else_r = evaluator.eval_if(
+
+    // Assert
+    assert_eq!(
+        result.expect("True 条件求值不应报错"),
+        MonoType::Int(32),
+        "True 条件必须选真分支"
+    );
+}
+
+#[test]
+fn test_type_evaluator_eval_if_false_condition_selects_else_branch() {
+    // Arrange: False 字面量条件
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut dep_env = DependentTypeEnv::new();
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
+    let mut evaluator = make_evaluator(&env, &budget, &dep_env);
+
+    // Act
+    let result = evaluator.eval_if(
         &MonoType::TypeRef("False".to_string()),
         &MonoType::Int(32),
         &MonoType::String,
@@ -656,12 +706,7 @@ fn test_type_evaluator_eval_if_concrete_condition_selects_branch() {
 
     // Assert
     assert_eq!(
-        then_r.expect("True 条件求值不应报错"),
-        MonoType::Int(32),
-        "True 条件必须选真分支"
-    );
-    assert_eq!(
-        else_r.expect("False 条件求值不应报错"),
+        result.expect("False 条件求值不应报错"),
         MonoType::String,
         "False 条件必须选假分支"
     );
