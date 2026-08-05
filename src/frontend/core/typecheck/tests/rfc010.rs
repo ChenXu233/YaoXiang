@@ -697,17 +697,22 @@ fn test_semantic_dispatch_type_vs_value_base() {
 /// 方法定义臂语义分流：base 是值（非类型）→ 不当方法定义收集。
 #[test]
 fn test_method_def_arm_value_base_not_method() {
-    // f.handler = (x) => ... 其中 f 是实例（非类型）→ 不应登记 "f.handler" 方法
+    // Arrange: f.handler: (...) -> Int = ... 其中 f 是实例（非类型）→ 不应登记 "f.handler" 方法
+    // （RFC-010 方法定义臂：base 是值时走语义分流，不当方法收集）
     let src = r#"
         File: Type = { name: String }
         f: File = File("a")
         f.handler: (x: Int) -> Int = (x) => x
     "#;
     let tokens = tokenize(src).expect("tokenize failed");
+
+    // Act
     let r = parse(&tokens);
     assert!(!r.has_errors, "parse failed: {:?}", r.errors);
     let mut checker = TypeChecker::new("test");
     checker.check_module(&r.module);
+
+    // Assert
     assert!(
         !checker.env().method_bindings.contains_key("f.handler"),
         "值 base 的方法定义臂不应登记为方法"
