@@ -658,12 +658,25 @@ pub fn emit_mut_predicate(
 
 // ── 入口：ProofContext → ProofResult ──────────────────────
 
-/// 检查所有权无冲突（Layer 1）。
+/// 检查所有权无冲突（Layer 1 证明管线入口，RFC-009a）
 ///
-/// 由 checker.rs 在遍历函数体时调用核心逻辑
-/// （BrandTree + 快速通道 + 谓词）。
-pub fn check_ownership(_ctx: &ProofContext<'_>) -> ProofResult {
-    ProofResult::Proved
+/// #265：从无条件 Proved 的桩变为真入口——构造 OwnershipChecker 遍历函数体，
+/// 分支守卫在 walk_if/walk_while 中注入 `ctx.assumptions`（FlowSensitiveGamma
+/// 的首个消费者），后续系统谓词可携带路径条件送入验证。
+///
+/// 由 checker.rs 在遍历函数体时调用。
+pub fn check_ownership(
+    ctx: &mut ProofContext<'_>,
+    module: &Module,
+    env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
+    type_ledger: &HashMap<(usize, String), crate::frontend::core::types::PolyType>,
+) -> (Vec<ProofResult>, ReleasePlan, HashSet<String>) {
+    let mut checker = OwnershipChecker::new();
+    // #265：共享假设栈——walk_if/walk_while 的分支守卫注入 ctx.assumptions
+    std::mem::swap(&mut checker.gamma, &mut ctx.assumptions);
+    let result = checker.check_module(module, env, type_ledger);
+    std::mem::swap(&mut checker.gamma, &mut ctx.assumptions);
+    result
 }
 
 // ── OwnershipChecker：AST 遍历 ───────────────────────────
@@ -741,6 +754,8 @@ pub struct OwnershipChecker {
     current_spawn_refs: HashSet<String>,
     /// 字段赋值记录：(变量名, 字段名, 被赋值的变量名)
     field_assignments: Vec<(String, String, String)>,
+    /// #265：流敏感假设栈 Γ——分支守卫在 walk_if/walk_while 中 inject/exit_scope
+    gamma: crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma,
 }
 
 impl Default for OwnershipChecker {
@@ -773,7 +788,15 @@ impl OwnershipChecker {
             spawn_ref_graph: HashMap::new(),
             current_spawn_refs: HashSet::new(),
             field_assignments: Vec::new(),
+            gamma: crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma::new(),
         }
+    }
+
+    /// #265：假设栈只读访问器（测试观测分支守卫进出）
+    pub fn gamma(
+        &self
+    ) -> &crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma {
+        &self.gamma
     }
 
     /// 重置函数级状态
@@ -799,6 +822,29 @@ impl OwnershipChecker {
         self.field_assignments.clear();
         self.current_node = self.cfg.add_node(None); // 入口节点
         self.current_span = Span::dummy();
+        // #265：假设栈随函数重置（路径条件不跨函数）
+        self.gamma =
+            crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma::new();
+    }
+
+    /// #265：把分支/循环守卫表达式转为 ConstExpr（注入假设栈用）
+    ///
+    /// 复用 const_eval 的转换器；非常量表达式返回 None——守卫只是增强信息，
+    /// 无法转换时跳过 inject 而非中断检查（ponytail：不为此中断所有权检查）。
+    fn condition_as_const(
+        expr: &Expr
+    ) -> Option<crate::frontend::core::types::const_data::ConstExpr> {
+        crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)
+    }
+
+    /// #265：ConstExpr 取反（else 分支路径条件 = !condition）
+    fn negate_const(
+        expr: crate::frontend::core::types::const_data::ConstExpr
+    ) -> crate::frontend::core::types::const_data::ConstExpr {
+        crate::frontend::core::types::const_data::ConstExpr::UnOp {
+            op: crate::frontend::core::types::const_data::UnOp::Not,
+            expr: Box::new(expr),
+        }
     }
 
     /// 从表达式提取变量名（用于 Borrow/FieldAccess/Move 识别）
@@ -1059,11 +1105,16 @@ impl OwnershipChecker {
 
         let merge_node = self.cfg.add_node(None);
 
-        // then 分支 —— 路径条件 = condition
+        // then 分支 —— 路径条件 = condition（#265：守卫注入假设栈）
         let then_start = self.cfg.add_node(Some(format!("{:?}", condition)));
         self.cfg.add_edge(split_node, then_start, EdgeKind::Normal);
         self.current_node = then_start;
+        self.gamma.enter_scope();
+        if let Some(cond) = Self::condition_as_const(condition) {
+            self.gamma.inject(cond);
+        }
         results.extend(self.walk_stmts(then_body));
+        self.gamma.exit_scope();
         self.cfg
             .add_edge(self.current_node, merge_node, EdgeKind::Normal);
 
@@ -1074,7 +1125,12 @@ impl OwnershipChecker {
             self.cfg
                 .add_edge(split_node, else_if_start, EdgeKind::Normal);
             self.current_node = else_if_start;
+            self.gamma.enter_scope();
+            if let Some(cond) = Self::condition_as_const(else_if_cond) {
+                self.gamma.inject(cond);
+            }
             results.extend(self.walk_stmts(else_if_body));
+            self.gamma.exit_scope();
             self.cfg
                 .add_edge(self.current_node, merge_node, EdgeKind::Normal);
         }
@@ -1084,7 +1140,12 @@ impl OwnershipChecker {
             let else_start = self.cfg.add_node(Some(format!("!({:?})", condition)));
             self.cfg.add_edge(split_node, else_start, EdgeKind::Normal);
             self.current_node = else_start;
+            self.gamma.enter_scope();
+            if let Some(cond) = Self::condition_as_const(condition) {
+                self.gamma.inject(Self::negate_const(cond));
+            }
             results.extend(self.walk_stmts(else_body));
+            self.gamma.exit_scope();
             self.cfg
                 .add_edge(self.current_node, merge_node, EdgeKind::Normal);
         } else {
@@ -1113,7 +1174,13 @@ impl OwnershipChecker {
         let body_start = self.cfg.add_node(None);
         self.cfg.add_edge(head_node, body_start, EdgeKind::Normal);
         self.current_node = body_start;
+        // #265：循环守卫注入假设栈（循环体路径条件 = condition）
+        self.gamma.enter_scope();
+        if let Some(cond) = Self::condition_as_const(condition) {
+            self.gamma.inject(cond);
+        }
         results.extend(self.walk_stmts(body));
+        self.gamma.exit_scope();
 
         // 回边：body_end → head
         self.cfg

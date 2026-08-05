@@ -346,15 +346,21 @@ impl TypeChecker {
         // RFC-027: 所有权检查 — 在终止检查之后、约束求解之前运行
         // 分析借用令牌冲突、Move/Drop/Clone/Mut 语义（RFC-009a §系统谓词清单）
         // #256：类型账本从推断层移交，供 Move/Dup 分类
+        // #265：经证明管线入口 check_ownership，分支守卫注入假设栈
         let (release_plan, escaped_refs) = {
-            let mut ownership_checker = super::layers::ownership::OwnershipChecker::new();
             let ledger = self
                 .body_checker
                 .as_ref()
                 .map(|bc| bc.var_type_ledger().clone())
                 .unwrap_or_default();
-            let (ownership_results, plan, escaped_refs) =
-                ownership_checker.check_module(module, self.env(), &ledger);
+            let mut proof_ctx =
+                crate::frontend::core::typecheck::proof::context::ProofContext::new(&self.env);
+            let (ownership_results, plan, escaped_refs) = super::layers::ownership::check_ownership(
+                &mut proof_ctx,
+                module,
+                &self.env,
+                &ledger,
+            );
             for result in ownership_results {
                 match result {
                     ProofResult::Proved => {}

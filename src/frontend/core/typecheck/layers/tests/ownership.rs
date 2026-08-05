@@ -2078,3 +2078,129 @@ fn test_e2e_spawn_accesses_outer() {
         errors
     );
 }
+
+// ===================================================================
+// issue #265: 证明管线接线——分支守卫注入假设栈（FlowSensitiveGamma 首个消费者）
+// ===================================================================
+
+use crate::frontend::core::typecheck::proof::context::ProofContext;
+
+/// 辅助：构造 StmtKind::If 语句
+fn make_if_stmt(
+    condition: Expr,
+    then_stmts: Vec<Stmt>,
+    else_stmts: Option<Vec<Stmt>>,
+) -> Stmt {
+    Stmt {
+        kind: StmtKind::If {
+            condition: Box::new(condition),
+            then_branch: Box::new(make_block(then_stmts)),
+            else_if_branches: vec![],
+            else_branch: else_stmts.map(|s| Box::new(make_block(s))),
+            span: Span::default(),
+        },
+        span: Span::default(),
+    }
+}
+
+#[test]
+fn test_branch_guard_scope_balanced() {
+    // Arrange: if c { x = 1 } else { x = 2 }——分支守卫应注入并在退出时移除
+    let cond = Expr::Var("c".into(), Span::default());
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![make_if_stmt(
+            cond,
+            vec![make_var_stmt("x", make_lit(1))],
+            Some(vec![make_var_stmt("x", make_lit(2))]),
+        )],
+    )]);
+
+    // Act
+    let mut checker = OwnershipChecker::new();
+    let _ = checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+
+    // Assert: 守卫 enter/inject 与 exit_scope 配对——walk 完后假设栈为空
+    assert!(
+        checker.gamma().is_empty(),
+        "分支守卫应在 if 结束后被 exit_scope 清空（配对正确），实际残留: {:?}",
+        checker.gamma().current()
+    );
+}
+
+#[test]
+fn test_while_guard_scope_balanced() {
+    // Arrange: while i < 3 { ... }——循环守卫应注入并在退出时移除
+    let cond = Expr::BinOp {
+        op: BinOp::Lt,
+        left: Box::new(make_var("i")),
+        right: Box::new(make_lit(3)),
+        span: Span::default(),
+    };
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_mut_var_stmt("i", make_lit(0)),
+            make_expr_stmt(Expr::While {
+                condition: Box::new(cond),
+                body: Box::new(make_block(vec![])),
+                label: None,
+                span: Span::default(),
+            }),
+        ],
+    )]);
+
+    // Act
+    let mut checker = OwnershipChecker::new();
+    let _ = checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+
+    // Assert: 循环守卫进出配对——walk 完后假设栈为空
+    assert!(
+        checker.gamma().is_empty(),
+        "循环守卫应在 while 结束后被 exit_scope 清空（配对正确），实际残留: {:?}",
+        checker.gamma().current()
+    );
+}
+
+#[test]
+fn test_check_ownership_entry_shares_assumptions() {
+    // Arrange: 带 if 的模块——经证明管线入口 check_ownership 跑所有权检查
+    let cond = Expr::Var("c".into(), Span::default());
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![make_if_stmt(
+            cond,
+            vec![make_var_stmt("x", make_lit(1))],
+            None,
+        )],
+    )]);
+    let env = make_test_env();
+    let mut ctx = ProofContext::new(&env);
+
+    // Act: 经真入口（而非直调 OwnershipChecker::new）
+    let (results, _plan, _escaped) =
+        crate::frontend::core::typecheck::layers::ownership::check_ownership(
+            &mut ctx,
+            &module,
+            &env,
+            &std::collections::HashMap::new(),
+        );
+
+    // Assert 1: 管线返回结果（检查器真的跑了）
+    assert!(
+        results
+            .iter()
+            .all(|r| !matches!(r, ProofResult::Disproved { .. })),
+        "正常模块不应有所有权违例，实际: {:?}",
+        results
+    );
+    // Assert 2: ctx.assumptions 与检查器假设栈共享——守卫进出后回到空
+    assert!(
+        ctx.assumptions.is_empty(),
+        "共享假设栈应在 walk 完后清空（守卫进出配对），实际残留: {:?}",
+        ctx.assumptions.current()
+    );
+}
