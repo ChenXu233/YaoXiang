@@ -516,7 +516,7 @@ main = {
 }
 
 #[test]
-fn test_refined_proof_fn_arity_mismatch_reports_e1092() {
+fn test_refined_proof_fn_arity_mismatch_reports_e1093() {
     // Arrange: 单参数证明函数传两个实参
     let source = r#"
 IsSmall: (x: Int) -> Type = { x < 100 }
@@ -529,10 +529,10 @@ main = {
     // Act
     let result = check_source_for_refined(source);
 
-    // Assert: 实参个数不匹配必须报 E1092
+    // Assert: 实参个数不匹配必须报 E1093（结构化参数，不依赖自由文本）
     assert!(
-        result.diagnostics.iter().any(|d| d.code == "E1092"),
-        "实参个数不匹配必须报 E1092，实际诊断: {:?}",
+        result.diagnostics.iter().any(|d| d.code == "E1093"),
+        "实参个数不匹配必须报 E1093，实际诊断: {:?}",
         result
             .diagnostics
             .iter()
@@ -557,7 +557,7 @@ main = {
 
     // Assert: 合法实参不得产生 E1092
     assert!(
-        !result.diagnostics.iter().any(|d| d.code == "E1092"),
+        !result.diagnostics.iter().any(|d| d.code == "E1093"),
         "合法实参不应报 E1092，实际诊断: {:?}",
         result
             .diagnostics

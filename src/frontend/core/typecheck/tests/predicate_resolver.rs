@@ -5,7 +5,9 @@
 //! try_resolve 三值语义——未注册谓词返回 None，已注册但用法非法返回
 //! Some(Err)，精化约束绝不静默丢弃。
 
-use crate::frontend::core::typecheck::predicate_resolver::{PredicateDef, PredicateResolver};
+use crate::frontend::core::typecheck::predicate_resolver::{
+    PredicateDef, PredicateResolveError, PredicateResolver,
+};
 use crate::frontend::core::typecheck::TypeEnvironment;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 use crate::frontend::core::types::mono::MonoType;
@@ -126,8 +128,8 @@ fn test_resolve_registered_predicate_invalid_arg_errors() {
         .expect("已注册谓词必须被识别，不得返回 None（#263）")
         .expect_err("不可转换实参必须返回 Err（#263：约束不得静默丢弃）");
     assert!(
-        err.contains("字面量、变量或单参数类型应用"),
-        "错误原因应说明合法实参形态，实际: {}",
+        matches!(err, PredicateResolveError::ArgNotConst),
+        "不可转换实参应报 ArgNotConst（映射 E1092），实际: {:?}",
         err
     );
 }
@@ -147,8 +149,14 @@ fn test_resolve_registered_predicate_zero_args_errors() {
         .expect("已注册谓词必须被识别，不得返回 None（#263）")
         .expect_err("零实参必须返回 Err（#263：约束不得静默丢弃）");
     assert!(
-        err.contains("期望 1 个实参"),
-        "错误原因应说明期望实参个数，实际: {}",
+        matches!(
+            err,
+            PredicateResolveError::ArityMismatch {
+                expected: 1,
+                found: 0
+            }
+        ),
+        "零实参应报 ArityMismatch{{expected: 1, found: 0}}（映射 E1093），实际: {:?}",
         err
     );
 }
@@ -172,8 +180,14 @@ fn test_resolve_registered_predicate_extra_args_errors() {
         .expect("已注册谓词必须被识别，不得返回 None（#263）")
         .expect_err("多余实参必须返回 Err（#263：约束不得静默丢弃）");
     assert!(
-        err.contains("期望 1 个实参，实际 2 个"),
-        "错误原因应说明实参个数不匹配，实际: {}",
+        matches!(
+            err,
+            PredicateResolveError::ArityMismatch {
+                expected: 1,
+                found: 2
+            }
+        ),
+        "多余实参应报 ArityMismatch{{expected: 1, found: 2}}（映射 E1093），实际: {:?}",
         err
     );
 }

@@ -22,6 +22,17 @@ pub struct PredicateDef {
     pub constraint: ConstExpr,
 }
 
+/// 谓词/证明函数用法非法（结构化，供诊断选用错误码，#263）
+///
+/// 不携带自由文本——诊断文案由 i18n 模板生成，避免中英混排
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PredicateResolveError {
+    /// 实参个数与谓词参数不匹配（E1093）
+    ArityMismatch { expected: usize, found: usize },
+    /// 实参形态不可转换为编译期常量表达式（E1092）
+    ArgNotConst,
+}
+
 /// 编译期谓词解析器
 pub struct PredicateResolver;
 
@@ -32,19 +43,22 @@ impl PredicateResolver {
     /// - `Some(Ok(refined))`：正格化成功
     ///   - Positive(5)  → Refined { base: Int, constraint: Gt(Lit(Int(5)), Lit(Int(0))) }
     ///   - Positive(b)  → Refined { base: Int, constraint: Gt(NamedVar("b"), Lit(Int(0))) }
-    /// - `Some(Err(reason))`：是已注册谓词但用法非法（参数个数/实参形态）——
+    /// - `Some(Err(err))`：是已注册谓词但用法非法（参数个数/实参形态）——
     ///   调用方必须发诊断，绝不静默放行（#263：精化约束不得静默丢弃）
     pub fn try_resolve(
         env: &TypeEnvironment,
         predicate_name: &str,
         args: &[MonoType],
-    ) -> Option<Result<MonoType, String>> {
+    ) -> Option<Result<MonoType, PredicateResolveError>> {
         // 1. 查找谓词定义
         let def = env.predicate_defs.get(predicate_name)?;
 
         // 2. 阶段 1 谓词为单参数：个数不匹配是非法用法（#263）
         if args.len() != 1 {
-            return Some(Err(format!("期望 1 个实参，实际 {} 个", args.len())));
+            return Some(Err(PredicateResolveError::ArityMismatch {
+                expected: 1,
+                found: args.len(),
+            }));
         }
         let arg = &args[0];
 
@@ -52,12 +66,7 @@ impl PredicateResolver {
         let arg_expr = match Self::mono_type_to_const_expr(arg) {
             Some(expr) => expr,
             // #263：已注册谓词但实参形态不可转换——不得与「不是谓词」混淆
-            None => {
-                return Some(Err(format!(
-                    "实参必须是字面量、变量或单参数类型应用，实际: {:?}",
-                    arg
-                )))
-            }
+            None => return Some(Err(PredicateResolveError::ArgNotConst)),
         };
 
         // 4. 代入实参到约束体模板

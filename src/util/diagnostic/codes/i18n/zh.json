@@ -908,11 +908,19 @@
         "error_output": "error[E0022]: 枚举必须使用花括号语法\n --> example.yx:1:9\n  |\n1 | Color = red | green | blue\n  |         ^ 使用花括号语法：{ red | green | blue }"
     },
     "E1092": {
-        "title": "精化类型实参用法非法",
-        "message": "精化类型实参用法非法，约束无法生成",
-        "template": "'{name}' 精化类型实参用法非法：{reason}",
+        "title": "精化类型实参形态非法",
+        "message": "精化类型实参无法转换为编译期常量表达式",
+        "template": "'{name}' 要求编译期常量实参，但所给实参无法转换",
         "help": "谓词/证明函数实参必须是字面量、变量或单参数类型应用，否则精化约束无法生成",
         "example": "y: IsSmall(List(Int)) = 9999",
-        "error_output": "error[E1092]: 'IsSmall' 精化类型实参用法非法：实参无法转换为编译期常量表达式"
+        "error_output": "error[E1092]: 'IsSmall' 要求编译期常量实参，但所给实参无法转换"
+    },
+    "E1093": {
+        "title": "精化实参个数不匹配",
+        "message": "谓词/证明函数实参个数不匹配",
+        "template": "'{name}' 期望 {expected} 个实参，实际 {found} 个",
+        "help": "实参个数必须与谓词声明一致，否则精化约束无法生成",
+        "example": "y: IsSmall(1, 2) = 5",
+        "error_output": "error[E1093]: 'IsSmall' 期望 1 个实参，实际 2 个"
     }
 }

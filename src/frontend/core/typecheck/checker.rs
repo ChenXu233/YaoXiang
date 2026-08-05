@@ -1739,11 +1739,9 @@ impl TypeChecker {
                 // 尝试原有 PredicateResolver（三值结果，#263）
                 match PredicateResolver::try_resolve(&self.env, name, args) {
                     Some(Ok(refined)) => return refined,
-                    Some(Err(reason)) => {
+                    Some(Err(err)) => {
                         // #263：已注册谓词非法用法——汇入诊断，绝不静默放行
-                        diags.push(
-                            ErrorCodeDefinition::refined_arg_not_const(name, &reason).build(),
-                        );
+                        diags.push(Self::refined_usage_diagnostic(name, &err));
                         return ty.clone();
                     }
                     None => {} // 不是谓词——继续证明函数路径
@@ -1768,23 +1766,16 @@ impl TypeChecker {
                                 }
                             }
                             None => {
-                                // #263：证明函数实参不可转换——约束无法生成，汇入诊断，绝不静默放行
-                                diags.push(
-                                    ErrorCodeDefinition::refined_arg_not_const(
-                                        name,
-                                        "实参无法转换为编译期常量表达式（字面量、变量或单参数类型应用）",
-                                    )
-                                    .build(),
-                                );
+                                // #263：证明函数实参形态不可转换——约束无法生成，汇入诊断（E1092）
+                                diags
+                                    .push(ErrorCodeDefinition::refined_arg_not_const(name).build());
                                 ty.clone()
                             }
                         }
                     }
-                    Some(Err(reason)) => {
-                        // #263：证明函数实参个数不匹配——汇入诊断
-                        diags.push(
-                            ErrorCodeDefinition::refined_arg_not_const(name, &reason).build(),
-                        );
+                    Some(Err(err)) => {
+                        // #263：证明函数实参个数不匹配——汇入诊断（E1093）
+                        diags.push(Self::refined_usage_diagnostic(name, &err));
                         ty.clone()
                     }
                     None => ty.clone(), // 非证明函数——保持原样
@@ -1794,17 +1785,38 @@ impl TypeChecker {
         }
     }
 
+    /// 将谓词/证明函数用法非法映射为诊断（#263：结构化错误，i18n 文案不混排）
+    fn refined_usage_diagnostic(
+        name: &str,
+        err: &crate::frontend::core::typecheck::predicate_resolver::PredicateResolveError,
+    ) -> Diagnostic {
+        use crate::frontend::core::typecheck::predicate_resolver::PredicateResolveError;
+        match err {
+            PredicateResolveError::ArityMismatch { expected, found } => {
+                ErrorCodeDefinition::refined_arity_mismatch(name, *expected, *found).build()
+            }
+            PredicateResolveError::ArgNotConst => {
+                ErrorCodeDefinition::refined_arg_not_const(name).build()
+            }
+        }
+    }
+
     /// 查找证明函数的基类型（三值结果，#263）
     ///
     /// 检查 `name` 是否在环境中定义为返回 Type 的函数：
     /// - `None`：不是证明函数（调用方继续其他解析路径）
     /// - `Some(Ok(base))`：是证明函数，返回第一个参数的类型作为基类型
-    /// - `Some(Err(reason))`：是证明函数但实参个数不匹配（#263：不得静默放行）
+    /// - `Some(Err(err))`：是证明函数但实参个数不匹配（#263：不得静默放行）
     fn lookup_proof_fn_base_type(
         &self,
         name: &str,
         args: &[MonoType],
-    ) -> Option<Result<MonoType, String>> {
+    ) -> Option<
+        Result<
+            MonoType,
+            crate::frontend::core::typecheck::predicate_resolver::PredicateResolveError,
+        >,
+    > {
         // 查找函数定义
         let poly = self.env.get_var(name)?;
         let fn_ty = &poly.body;
@@ -1821,11 +1833,12 @@ impl TypeChecker {
             {
                 // #263：实参个数不匹配是非法用法，不得与「不是证明函数」混淆
                 if params.len() != args.len() {
-                    return Some(Err(format!(
-                        "期望 {} 个实参，实际 {} 个",
-                        params.len(),
-                        args.len()
-                    )));
+                    return Some(Err(
+                        crate::frontend::core::typecheck::predicate_resolver::PredicateResolveError::ArityMismatch {
+                            expected: params.len(),
+                            found: args.len(),
+                        },
+                    ));
                 }
                 // 返回第一个参数的类型作为基类型（此处 params 与 args 等长且非空）
                 return Some(Ok(params[0].clone()));

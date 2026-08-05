@@ -141,6 +141,11 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
         code: "E1092",
         category: ErrorCategory::TypeCheck,
     },
+    // E1093: 谓词/证明函数实参个数不匹配（#263）
+    ErrorCodeDefinition {
+        code: "E1093",
+        category: ErrorCategory::TypeCheck,
+    },
 ];
 
 // 快捷方法实现
@@ -353,13 +358,23 @@ impl ErrorCodeDefinition {
         def.builder().param("decl", decl)
     }
 
-    /// E1092 精化类型实参非编译期常量形态（RFC-027，#263）
-    pub fn refined_arg_not_const(
-        name: &str,
-        reason: &str,
-    ) -> DiagnosticBuilder {
+    /// E1092 精化类型实参形态非法（RFC-027，#263）
+    pub fn refined_arg_not_const(name: &str) -> DiagnosticBuilder {
         let def = Self::find("E1092").unwrap();
-        def.builder().param("name", name).param("reason", reason)
+        def.builder().param("name", name)
+    }
+
+    /// E1093 精化类型实参个数不匹配（RFC-027，#263）
+    pub fn refined_arity_mismatch(
+        name: &str,
+        expected: usize,
+        found: usize,
+    ) -> DiagnosticBuilder {
+        let def = Self::find("E1093").unwrap();
+        def.builder()
+            .param("name", name)
+            .param("expected", expected.to_string())
+            .param("found", found.to_string())
     }
 
     /// E1090 彩蛋（返回占位符，由 i18n 的 zen_message 提供实际消息）
