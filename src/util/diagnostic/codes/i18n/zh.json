@@ -906,5 +906,13 @@
         "help": "用花括号和管道分隔符包裹枚举变体",
         "example": "Color = red | green | blue",
         "error_output": "error[E0022]: 枚举必须使用花括号语法\n --> example.yx:1:9\n  |\n1 | Color = red | green | blue\n  |         ^ 使用花括号语法：{ red | green | blue }"
+    },
+    "E1092": {
+        "title": "精化类型实参用法非法",
+        "message": "精化类型实参用法非法，约束无法生成",
+        "template": "'{name}' 精化类型实参用法非法：{reason}",
+        "help": "谓词/证明函数实参必须是字面量、变量或单参数类型应用，否则精化约束无法生成",
+        "example": "y: IsSmall(List(Int)) = 9999",
+        "error_output": "error[E1092]: 'IsSmall' 精化类型实参用法非法：实参无法转换为编译期常量表达式"
     }
 }

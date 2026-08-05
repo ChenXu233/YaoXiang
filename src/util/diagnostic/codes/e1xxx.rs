@@ -135,6 +135,12 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
         code: "E1091",
         category: ErrorCategory::TypeCheck,
     },
+    // === RFC-027: 精化类型实参 ===
+    // E1092: 谓词/证明函数实参非编译期常量形态（#263：约束不得静默丢弃）
+    ErrorCodeDefinition {
+        code: "E1092",
+        category: ErrorCategory::TypeCheck,
+    },
 ];
 
 // 快捷方法实现
@@ -345,6 +351,15 @@ impl ErrorCodeDefinition {
     pub fn invalid_generic_self_reference(decl: &str) -> DiagnosticBuilder {
         let def = Self::find("E1091").unwrap();
         def.builder().param("decl", decl)
+    }
+
+    /// E1092 精化类型实参非编译期常量形态（RFC-027，#263）
+    pub fn refined_arg_not_const(
+        name: &str,
+        reason: &str,
+    ) -> DiagnosticBuilder {
+        let def = Self::find("E1092").unwrap();
+        def.builder().param("name", name).param("reason", reason)
     }
 
     /// E1090 彩蛋（返回占位符，由 i18n 的 zen_message 提供实际消息）

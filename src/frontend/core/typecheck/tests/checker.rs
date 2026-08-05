@@ -460,3 +460,109 @@ fn test_type_checker_with_generic_type_binding() {
         "generic type definition and usage with all type params provided should pass"
     );
 }
+
+// ===================================================================
+// RFC-027 / issue #263: 精化类型实参校验（E1092）
+// ===================================================================
+//
+// 规范来源: RFC-027 §语法——谓词应用的实参必须是编译期常量形态；
+// 实参不可转换或个数不匹配报 E1092，精化约束绝不静默丢弃。
+
+use crate::frontend::core::lexer::tokenize;
+use crate::frontend::core::parser::parse;
+
+/// 辅助：源码 → 类型检查结果（语法必须正确，否则测试本身有错）
+fn check_source_for_refined(
+    source: &str
+) -> crate::frontend::core::typecheck::types::TypeCheckResult {
+    // Arrange（公共部分）：词法 + 语法解析
+    let tokens = tokenize(source).expect("测试源码词法不应失败");
+    let parse_result = parse(&tokens);
+    assert!(
+        !parse_result.has_errors,
+        "测试源码语法必须正确（否则无法区分 bug 与测试写错）: {:?}",
+        parse_result.errors
+    );
+
+    // Act
+    let mut checker = TypeChecker::new("test");
+    checker.check_module(&parse_result.module)
+}
+
+#[test]
+fn test_refined_proof_fn_invalid_arg_reports_e1092() {
+    // Arrange: 证明函数 IsSmall + 不可转换实参 List(Int)（#263 复现）
+    let source = r#"
+IsSmall: (x: Int) -> Type = { x < 100 }
+main = {
+    y: IsSmall(List(Int)) = 9999
+    y
+}
+"#;
+
+    // Act
+    let result = check_source_for_refined(source);
+
+    // Assert: 必须报 E1092——约束不得静默丢弃
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1092"),
+        "不可转换实参必须报 E1092，实际诊断: {:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| &d.code)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_refined_proof_fn_arity_mismatch_reports_e1092() {
+    // Arrange: 单参数证明函数传两个实参
+    let source = r#"
+IsSmall: (x: Int) -> Type = { x < 100 }
+main = {
+    y: IsSmall(1, 2) = 5
+    y
+}
+"#;
+
+    // Act
+    let result = check_source_for_refined(source);
+
+    // Assert: 实参个数不匹配必须报 E1092
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1092"),
+        "实参个数不匹配必须报 E1092，实际诊断: {:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| &d.code)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_refined_proof_fn_valid_arg_no_e1092() {
+    // Arrange: 合法字面量实参（正常路径对照）
+    let source = r#"
+IsSmall: (x: Int) -> Type = { x < 100 }
+main = {
+    y: IsSmall(5) = 5
+    y
+}
+"#;
+
+    // Act
+    let result = check_source_for_refined(source);
+
+    // Assert: 合法实参不得产生 E1092
+    assert!(
+        !result.diagnostics.iter().any(|d| d.code == "E1092"),
+        "合法实参不应报 E1092，实际诊断: {:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| &d.code)
+            .collect::<Vec<_>>()
+    );
+}

@@ -489,7 +489,8 @@ impl TypeChecker {
                         ),
                     };
 
-                    // RFC-027: 解析类型标注中的编译期谓词
+                    // RFC-027: 解析类型标注中的编译期谓词（#263：诊断汇入后上报）
+                    let mut refined_diags = Vec::new();
                     let fn_ty = match fn_ty {
                         MonoType::Fn {
                             params,
@@ -497,12 +498,15 @@ impl TypeChecker {
                         } => MonoType::Fn {
                             params: params
                                 .into_iter()
-                                .map(|p| self.resolve_type_annotation(&p))
+                                .map(|p| self.resolve_type_annotation(&p, &mut refined_diags))
                                 .collect(),
-                            return_type: Box::new(self.resolve_type_annotation(&return_type)),
+                            return_type: Box::new(
+                                self.resolve_type_annotation(&return_type, &mut refined_diags),
+                            ),
                         },
                         other => other,
                     };
+                    self.env.errors.extend_errors(refined_diags);
 
                     self.env.add_var(name.clone(), PolyType::mono(fn_ty));
                 }
@@ -531,21 +535,27 @@ impl TypeChecker {
                             };
 
                             // RFC-027: 解析类型标注中的编译期谓词
-                            let fn_ty = match fn_ty {
-                                MonoType::Fn {
-                                    params,
-                                    return_type,
-                                } => MonoType::Fn {
-                                    params: params
-                                        .into_iter()
-                                        .map(|p| self.resolve_type_annotation(&p))
-                                        .collect(),
-                                    return_type: Box::new(
-                                        self.resolve_type_annotation(&return_type),
-                                    ),
-                                },
-                                other => other,
-                            };
+                            let mut refined_diags = Vec::new();
+                            let fn_ty =
+                                match fn_ty {
+                                    MonoType::Fn {
+                                        params,
+                                        return_type,
+                                    } => MonoType::Fn {
+                                        params: params
+                                            .into_iter()
+                                            .map(|p| {
+                                                self.resolve_type_annotation(&p, &mut refined_diags)
+                                            })
+                                            .collect(),
+                                        return_type: Box::new(self.resolve_type_annotation(
+                                            &return_type,
+                                            &mut refined_diags,
+                                        )),
+                                    },
+                                    other => other,
+                                };
+                            self.env.errors.extend_errors(refined_diags);
 
                             self.env.add_var(name.clone(), PolyType::mono(fn_ty));
                         }
@@ -845,6 +855,7 @@ impl TypeChecker {
                 };
 
                 // RFC-027: 解析类型标注中的编译期谓词（如 Positive(5) -> Refined）
+                let mut refined_diags = Vec::new();
                 let fn_ty = match fn_ty {
                     MonoType::Fn {
                         params,
@@ -852,12 +863,15 @@ impl TypeChecker {
                     } => MonoType::Fn {
                         params: params
                             .into_iter()
-                            .map(|p| self.resolve_type_annotation(&p))
+                            .map(|p| self.resolve_type_annotation(&p, &mut refined_diags))
                             .collect(),
-                        return_type: Box::new(self.resolve_type_annotation(&return_type)),
+                        return_type: Box::new(
+                            self.resolve_type_annotation(&return_type, &mut refined_diags),
+                        ),
                     },
                     other => other,
                 };
+                self.env.errors.extend_errors(refined_diags);
 
                 // 如果有 type_name（显式方法绑定），使用 add_fn_binding
                 if type_name.is_some() {
@@ -1711,55 +1725,86 @@ impl TypeChecker {
 
     // ============ RFC-027 阶段 1：编译期谓词集成 ============
 
-    /// 解析类型标注：如果是编译期谓词调用，正格化为 Refined
+    /// 解析类型标注：如果是编译期谓词调用，正格化为 Refined（#263：非法用法写诊断汇入 diags，不静默）
     ///
     /// Generic("Positive", [arg]) -> 尝试 PredicateResolver::try_resolve
     /// 如果不是已知的编译期谓词，检查是否是证明函数
     fn resolve_type_annotation(
         &self,
         ty: &MonoType,
+        diags: &mut Vec<Diagnostic>,
     ) -> MonoType {
         match ty {
             MonoType::Generic { name, args } if !args.is_empty() => {
-                // 尝试原有 PredicateResolver
-                if let Some(refined) = PredicateResolver::try_resolve(&self.env, name, args) {
-                    return refined;
+                // 尝试原有 PredicateResolver（三值结果，#263）
+                match PredicateResolver::try_resolve(&self.env, name, args) {
+                    Some(Ok(refined)) => return refined,
+                    Some(Err(reason)) => {
+                        // #263：已注册谓词非法用法——汇入诊断，绝不静默放行
+                        diags.push(
+                            ErrorCodeDefinition::refined_arg_not_const(name, &reason).build(),
+                        );
+                        return ty.clone();
+                    }
+                    None => {} // 不是谓词——继续证明函数路径
                 }
                 // Phase 2.5: 检查是否是证明函数（源码定义的返回 Type 的函数）
-                if let Some(base) = self.lookup_proof_fn_base_type(name, args) {
-                    // 将参数转换为 ConstExpr，任何一个转换失败就跳过整个证明函数解析
-                    let const_args: Option<Vec<ConstExpr>> = args
-                        .iter()
-                        .map(|a| self.mono_type_to_const_expr(a))
-                        .collect();
-                    if let Some(const_args) = const_args {
-                        let constraint = ConstExpr::Call {
-                            func: name.clone(),
-                            args: const_args,
-                        };
-                        return MonoType::Refined {
-                            base: Box::new(base),
-                            constraint,
-                        };
+                match self.lookup_proof_fn_base_type(name, args) {
+                    Some(Ok(base)) => {
+                        // 将参数转换为 ConstExpr
+                        let const_args: Option<Vec<ConstExpr>> = args
+                            .iter()
+                            .map(|a| self.mono_type_to_const_expr(a))
+                            .collect();
+                        match const_args {
+                            Some(const_args) => {
+                                let constraint = ConstExpr::Call {
+                                    func: name.clone(),
+                                    args: const_args,
+                                };
+                                MonoType::Refined {
+                                    base: Box::new(base),
+                                    constraint,
+                                }
+                            }
+                            None => {
+                                // #263：证明函数实参不可转换——约束无法生成，汇入诊断，绝不静默放行
+                                diags.push(
+                                    ErrorCodeDefinition::refined_arg_not_const(
+                                        name,
+                                        "实参无法转换为编译期常量表达式（字面量、变量或单参数类型应用）",
+                                    )
+                                    .build(),
+                                );
+                                ty.clone()
+                            }
+                        }
                     }
-                    // 参数转换失败，不降级，直接返回原始类型
-                    return ty.clone();
+                    Some(Err(reason)) => {
+                        // #263：证明函数实参个数不匹配——汇入诊断
+                        diags.push(
+                            ErrorCodeDefinition::refined_arg_not_const(name, &reason).build(),
+                        );
+                        ty.clone()
+                    }
+                    None => ty.clone(), // 非证明函数——保持原样
                 }
-                ty.clone()
             }
             _ => ty.clone(),
         }
     }
 
-    /// 查找证明函数的基类型
+    /// 查找证明函数的基类型（三值结果，#263）
     ///
-    /// 检查 `name` 是否在环境中定义为返回 Type 的函数。
-    /// 如果是，返回第一个参数的类型作为基类型。
+    /// 检查 `name` 是否在环境中定义为返回 Type 的函数：
+    /// - `None`：不是证明函数（调用方继续其他解析路径）
+    /// - `Some(Ok(base))`：是证明函数，返回第一个参数的类型作为基类型
+    /// - `Some(Err(reason))`：是证明函数但实参个数不匹配（#263：不得静默放行）
     fn lookup_proof_fn_base_type(
         &self,
         name: &str,
         args: &[MonoType],
-    ) -> Option<MonoType> {
+    ) -> Option<Result<MonoType, String>> {
         // 查找函数定义
         let poly = self.env.get_var(name)?;
         let fn_ty = &poly.body;
@@ -1774,11 +1819,16 @@ impl TypeChecker {
             if matches!(return_type.as_ref(), MonoType::MetaType { .. })
                 || matches!(return_type.as_ref(), MonoType::TypeRef(ref name) if name == "Type")
             {
-                // 检查参数数量是否匹配
-                if params.len() == args.len() {
-                    // 返回第一个参数的类型作为基类型
-                    return params.first().cloned();
+                // #263：实参个数不匹配是非法用法，不得与「不是证明函数」混淆
+                if params.len() != args.len() {
+                    return Some(Err(format!(
+                        "期望 {} 个实参，实际 {} 个",
+                        params.len(),
+                        args.len()
+                    )));
                 }
+                // 返回第一个参数的类型作为基类型（此处 params 与 args 等长且非空）
+                return Some(Ok(params[0].clone()));
             }
         }
         None
@@ -1848,7 +1898,7 @@ impl TypeChecker {
     /// 阶段 1：遍历模块，构建 TypeDepGraph + 检查初始化绑定
     /// 阶段 2：遍历赋值点，查询依赖图，生成 VC
     fn collect_refined_binding_checks(
-        &self,
+        &mut self,
         module: &Module,
         proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
     ) {
@@ -1857,16 +1907,28 @@ impl TypeChecker {
         let mut dep_graph = TypeDepGraph::new();
         let mut shared_ctx =
             crate::frontend::core::typecheck::proof::context::ProofContext::new(&self.env);
+        // #263：shared_ctx 持有 &self.env，精化解析诊断先汇入 sink，
+        // 待 shared_ctx 释放后再写入 env.errors
+        let mut refined_diags = Vec::new();
 
         // 阶段 1：构建依赖图 + 初始绑定检查
         for stmt in &module.items {
-            self.build_dep_graph_and_check_init(stmt, &mut dep_graph, &mut shared_ctx, proof_calls);
+            self.build_dep_graph_and_check_init(
+                stmt,
+                &mut dep_graph,
+                &mut shared_ctx,
+                proof_calls,
+                &mut refined_diags,
+            );
         }
 
         // 阶段 2：遍历赋值点，生成 VC
         for stmt in &module.items {
             self.check_assignments_with_deps(stmt, &dep_graph, &mut shared_ctx, proof_calls);
         }
+
+        // #263：精化解析诊断汇入（shared_ctx 已不再被使用，借用结束）
+        self.env.errors.extend_errors(refined_diags);
     }
 
     /// 阶段 1：递归遍历语句树——构建依赖图 + 检查初始化绑定
@@ -1876,6 +1938,7 @@ impl TypeChecker {
         dep_graph: &mut crate::frontend::core::typecheck::proof::dep_graph::TypeDepGraph,
         shared_ctx: &mut crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
         proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
+        diags: &mut Vec<Diagnostic>,
     ) {
         use crate::frontend::core::parser::ast::StmtKind;
 
@@ -1891,7 +1954,7 @@ impl TypeChecker {
                     _ => return,
                 };
                 let mono_ty = MonoType::from(type_ann.clone());
-                let resolved_ty = self.resolve_type_annotation(&mono_ty);
+                let resolved_ty = self.resolve_type_annotation(&mono_ty, diags);
                 if let MonoType::Refined { constraint, .. } = &resolved_ty {
                     // RFC-027 Phase 2.5: Call 约束直接生成 proof call
                     if let crate::frontend::core::types::const_data::ConstExpr::Call {
@@ -1932,17 +1995,35 @@ impl TypeChecker {
                 if let crate::frontend::core::parser::ast::Expr::Lambda { body, .. } = expr.as_ref()
                 {
                     for s in &body.stmts {
-                        self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                        self.build_dep_graph_and_check_init(
+                            s,
+                            dep_graph,
+                            shared_ctx,
+                            proof_calls,
+                            diags,
+                        );
                     }
                 } else if let crate::frontend::core::parser::ast::Expr::Block(block) = expr.as_ref()
                 {
                     for s in &block.stmts {
-                        self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                        self.build_dep_graph_and_check_init(
+                            s,
+                            dep_graph,
+                            shared_ctx,
+                            proof_calls,
+                            diags,
+                        );
                     }
                 }
             }
             StmtKind::Expr(expr) => {
-                self.build_dep_graph_from_expr(expr.as_ref(), dep_graph, shared_ctx, proof_calls);
+                self.build_dep_graph_from_expr(
+                    expr.as_ref(),
+                    dep_graph,
+                    shared_ctx,
+                    proof_calls,
+                    diags,
+                );
             }
             StmtKind::If {
                 then_branch,
@@ -1951,22 +2032,46 @@ impl TypeChecker {
                 ..
             } => {
                 for s in &then_branch.stmts {
-                    self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                    self.build_dep_graph_and_check_init(
+                        s,
+                        dep_graph,
+                        shared_ctx,
+                        proof_calls,
+                        diags,
+                    );
                 }
                 for (_, body) in else_if_branches {
                     for s in &body.stmts {
-                        self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                        self.build_dep_graph_and_check_init(
+                            s,
+                            dep_graph,
+                            shared_ctx,
+                            proof_calls,
+                            diags,
+                        );
                     }
                 }
                 if let Some(else_body) = else_branch {
                     for s in &else_body.stmts {
-                        self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                        self.build_dep_graph_and_check_init(
+                            s,
+                            dep_graph,
+                            shared_ctx,
+                            proof_calls,
+                            diags,
+                        );
                     }
                 }
             }
             StmtKind::For { body, .. } => {
                 for s in &body.stmts {
-                    self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                    self.build_dep_graph_and_check_init(
+                        s,
+                        dep_graph,
+                        shared_ctx,
+                        proof_calls,
+                        diags,
+                    );
                 }
             }
             _ => {}
@@ -1980,21 +2085,40 @@ impl TypeChecker {
         dep_graph: &mut crate::frontend::core::typecheck::proof::dep_graph::TypeDepGraph,
         shared_ctx: &mut crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
         proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
+        diags: &mut Vec<Diagnostic>,
     ) {
         match expr {
             crate::frontend::core::parser::ast::Expr::Block(block) => {
                 for s in &block.stmts {
-                    self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                    self.build_dep_graph_and_check_init(
+                        s,
+                        dep_graph,
+                        shared_ctx,
+                        proof_calls,
+                        diags,
+                    );
                 }
             }
             crate::frontend::core::parser::ast::Expr::While { body, .. } => {
                 for s in &body.stmts {
-                    self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                    self.build_dep_graph_and_check_init(
+                        s,
+                        dep_graph,
+                        shared_ctx,
+                        proof_calls,
+                        diags,
+                    );
                 }
             }
             crate::frontend::core::parser::ast::Expr::For { body, .. } => {
                 for s in &body.stmts {
-                    self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                    self.build_dep_graph_and_check_init(
+                        s,
+                        dep_graph,
+                        shared_ctx,
+                        proof_calls,
+                        diags,
+                    );
                 }
             }
             crate::frontend::core::parser::ast::Expr::If {
@@ -2004,16 +2128,34 @@ impl TypeChecker {
                 ..
             } => {
                 for s in &then_branch.stmts {
-                    self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                    self.build_dep_graph_and_check_init(
+                        s,
+                        dep_graph,
+                        shared_ctx,
+                        proof_calls,
+                        diags,
+                    );
                 }
                 for (_, body) in else_if_branches {
                     for s in &body.stmts {
-                        self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                        self.build_dep_graph_and_check_init(
+                            s,
+                            dep_graph,
+                            shared_ctx,
+                            proof_calls,
+                            diags,
+                        );
                     }
                 }
                 if let Some(else_body) = else_branch {
                     for s in &else_body.stmts {
-                        self.build_dep_graph_and_check_init(s, dep_graph, shared_ctx, proof_calls);
+                        self.build_dep_graph_and_check_init(
+                            s,
+                            dep_graph,
+                            shared_ctx,
+                            proof_calls,
+                            diags,
+                        );
                     }
                 }
             }

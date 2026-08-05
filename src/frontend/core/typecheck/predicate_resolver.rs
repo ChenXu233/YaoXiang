@@ -26,24 +26,39 @@ pub struct PredicateDef {
 pub struct PredicateResolver;
 
 impl PredicateResolver {
-    /// 尝试将类型应用正格化为精化类型
+    /// 尝试将类型应用正格化为精化类型（三值结果，#263）
     ///
-    /// Positive(5)  → Refined { base: Int, constraint: Gt(Lit(Int(5)), Lit(Int(0))) }
-    /// Positive(b)  → Refined { base: Int, constraint: Gt(NamedVar("b"), Lit(Int(0))) }
-    /// 如果不是编译期谓词 → None
+    /// - `None`：`predicate_name` 不是已注册的编译期谓词（调用方继续其他解析路径）
+    /// - `Some(Ok(refined))`：正格化成功
+    ///   - Positive(5)  → Refined { base: Int, constraint: Gt(Lit(Int(5)), Lit(Int(0))) }
+    ///   - Positive(b)  → Refined { base: Int, constraint: Gt(NamedVar("b"), Lit(Int(0))) }
+    /// - `Some(Err(reason))`：是已注册谓词但用法非法（参数个数/实参形态）——
+    ///   调用方必须发诊断，绝不静默放行（#263：精化约束不得静默丢弃）
     pub fn try_resolve(
         env: &TypeEnvironment,
         predicate_name: &str,
         args: &[MonoType],
-    ) -> Option<MonoType> {
+    ) -> Option<Result<MonoType, String>> {
         // 1. 查找谓词定义
         let def = env.predicate_defs.get(predicate_name)?;
 
-        // 2. 提取实参（阶段 1 只支持单参数谓词）
-        let arg = args.first()?;
+        // 2. 阶段 1 谓词为单参数：个数不匹配是非法用法（#263）
+        if args.len() != 1 {
+            return Some(Err(format!("期望 1 个实参，实际 {} 个", args.len())));
+        }
+        let arg = &args[0];
 
         // 3. 将实参转换为 ConstExpr（用于代入约束体）
-        let arg_expr = Self::mono_type_to_const_expr(arg)?;
+        let arg_expr = match Self::mono_type_to_const_expr(arg) {
+            Some(expr) => expr,
+            // #263：已注册谓词但实参形态不可转换——不得与「不是谓词」混淆
+            None => {
+                return Some(Err(format!(
+                    "实参必须是字面量、变量或单参数类型应用，实际: {:?}",
+                    arg
+                )))
+            }
+        };
 
         // 4. 代入实参到约束体模板
         let mut bindings: HashMap<String, ConstExpr> = HashMap::new();
@@ -51,10 +66,10 @@ impl PredicateResolver {
         let constraint = Self::substitute_in_const_expr(&def.constraint, &bindings);
 
         // 5. 构建 Refined 类型
-        Some(MonoType::Refined {
+        Some(Ok(MonoType::Refined {
             base: Box::new(def.param_type.clone()),
             constraint,
-        })
+        }))
     }
 
     /// 将 MonoType 转为 ConstExpr（用于实参到约束体的代入）

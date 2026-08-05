@@ -72,6 +72,7 @@ fn test_e2e_positive_literal_proved() {
             value: ConstValue::Int(5),
         }],
     )
+    .expect("已注册谓词合法实参应解析成功（#263 三值语义）")
     .expect("Positive(5) 应该被解析");
 
     // 检查返回的是 Refined
@@ -105,6 +106,7 @@ fn test_e2e_positive_zero_disproved() {
             value: ConstValue::Int(0),
         }],
     )
+    .expect("已注册谓词合法实参应解析成功（#263 三值语义）")
     .expect("Positive(0) 应该被解析");
 
     let ctx = ProofContext::new(&env);
@@ -130,7 +132,8 @@ fn test_e2e_positive_with_binding_proved() {
 
     let resolved =
         PredicateResolver::try_resolve(&env, "Positive", &[MonoType::TypeRef("b".into())])
-            .expect("Positive(b) 应该被解析");
+            .expect("已注册谓词应被识别（#263 三值语义）")
+            .expect("合法实参应解析成功（#263 三值语义）");
 
     let ctx = ProofContext::new(&env);
     let mut bindings = HashMap::new();
@@ -151,7 +154,8 @@ fn test_e2e_positive_with_binding_disproved() {
 
     let resolved =
         PredicateResolver::try_resolve(&env, "Positive", &[MonoType::TypeRef("b".into())])
-            .expect("Positive(b) 应该被解析");
+            .expect("已注册谓词应被识别（#263 三值语义）")
+            .expect("合法实参应解析成功（#263 三值语义）");
 
     let ctx = ProofContext::new(&env);
     let mut bindings = HashMap::new();
@@ -317,6 +321,7 @@ fn test_multiple_predicates() {
             value: ConstValue::Int(3),
         }],
     )
+    .expect("已注册谓词合法实参应解析成功（#263 三值语义）")
     .expect("Positive(3) 应该被解析");
 
     let ctx = ProofContext::new(&env);

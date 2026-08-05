@@ -906,5 +906,13 @@
     "help": "Wrap enum variants with braces and pipe separators",
     "example": "Color = red | green | blue",
     "error_output": "error[E0022]: Enums must use brace syntax\n --> example.yx:1:9\n  |\n1 | Color = red | green | blue\n  |         ^ Use brace syntax: { red | green | blue }"
+  },
+  "E1092": {
+    "title": "Invalid refinement type argument",
+    "message": "Refinement type argument is invalid and the constraint cannot be generated",
+    "template": "'{name}' refinement type argument is invalid: {reason}",
+    "help": "Predicate/proof function arguments must be literals, variables, or single-argument type applications; otherwise the refinement constraint cannot be generated",
+    "example": "y: IsSmall(List(Int)) = 9999",
+    "error_output": "error[E1092]: 'IsSmall' refinement type argument is invalid: argument cannot be converted to a compile-time constant expression"
   }
 }
