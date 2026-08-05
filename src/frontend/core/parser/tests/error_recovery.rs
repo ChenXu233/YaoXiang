@@ -84,13 +84,15 @@ fn test_question_mark_as_param_type_reports_error() {
 
 #[test]
 fn test_fn_signature_with_tuple_return_type() {
-    // #253：返回类型为元组时（`(Int, Int) -> (Int, Int)`），
+    // Arrange: #253 — 返回类型为元组时（`(Int, Int) -> (Int, Int)`），
     // 解析器不得把返回元组误判为 curry 参数组（否则报 "Expected Arrow, found Eq"）。
     // 规范来源：类型系统规范 §3.4 TupleType `::= '(' TypeList? ')'` 可作为任意类型位置。
     let tokens = tokenize("mk: (Int, Int) -> (Int, Int) = (x, y) => x + y").unwrap();
+
+    // Act
     let result = parse(&tokens);
 
-    // 断言：签名解析成功，无错误
+    // Assert: 签名解析成功，无错误
     assert!(
         !result.has_errors,
         "tuple-returning fn signature should parse cleanly, got: {:?}",
