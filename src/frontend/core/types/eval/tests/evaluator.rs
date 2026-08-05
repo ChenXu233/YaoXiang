@@ -1,9 +1,11 @@
-//! 类型求值测试 — 基于语言规范 §3.11 & RFC-011 §4-5
+//! 类型求值测试 — 基于语言规范 §3.11 & RFC-011 §4-5 & RFC-027 §362
 //!
 //! §3.11: 编译期泛型
 //! RFC-011 §4: 编译期泛型
 //! RFC-011 §4.3: IsTrue / Assert 类型族归约
+//! RFC-027 §362: 不可判定回退原则（重构失败回退到 Unproven，不伪造）
 //! spec 2026-07-12-assert-refinement-unification-design.md §1.3: IsTrue 桥
+//! issue #262: nat_eq/nat_lt/eval_condition 族不可判定时不得伪造真
 
 use crate::frontend::core::types::eval::evaluator::{EvalConfig, Evaluator};
 use crate::frontend::core::types::MonoType;
@@ -488,5 +490,290 @@ fn test_eval_recursive_factorial_succ_zero() {
     assert_ne!(
         result_ty, ty,
         "factorial(Succ(Zero)) should reduce from input"
+    );
+}
+
+// ===================================================================
+// issue #262: 不可判定必须悬置，绝不伪造真
+// ===================================================================
+
+/// #262 回归辅助：创建一个注册了 std 类型族的求值器
+fn make_evaluator<'a>(
+    env: &'a TypeEnvironment,
+    budget: &'a BudgetTracker,
+    dep_env: &'a DependentTypeEnv,
+) -> Evaluator<'a> {
+    Evaluator::new(env, budget, dep_env)
+}
+
+#[test]
+fn test_type_evaluator_nat_eq_symbolic_operands_stay_symbolic() {
+    // Arrange: n 是未解析类型变量，Nat(3) 是字面量——比较不可判定
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut dep_env = DependentTypeEnv::new();
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
+    let mut evaluator = make_evaluator(&env, &budget, &dep_env);
+    let n = MonoType::TypeVar(crate::frontend::core::types::var::TypeVar::new(1));
+    let three = MonoType::TypeRef("Nat(3)".to_string());
+
+    // Act
+    let result = evaluator.eval_nat("Eq", &[n, three]);
+
+    // Assert: 符号项悬置，绝不伪造 True（#262）
+    let ty = result.expect("Nat(Eq) 求值不应报错");
+    assert!(
+        matches!(&ty, MonoType::TypeRef(name) if name.starts_with("Nat(Eq")),
+        "不可判定 Eq 必须保持符号项悬置，实际: {:?}",
+        ty
+    );
+}
+
+#[test]
+fn test_type_evaluator_nat_lt_symbolic_operands_stay_symbolic() {
+    // Arrange: 操作数含未解析类型变量——比较不可判定
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut dep_env = DependentTypeEnv::new();
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
+    let mut evaluator = make_evaluator(&env, &budget, &dep_env);
+    let n = MonoType::TypeVar(crate::frontend::core::types::var::TypeVar::new(1));
+    let five = MonoType::TypeRef("Nat(5)".to_string());
+
+    // Act
+    let result = evaluator.eval_nat("Lt", &[n, five]);
+
+    // Assert: 符号项悬置，绝不伪造 True（#262）
+    let ty = result.expect("Nat(Lt) 求值不应报错");
+    assert!(
+        matches!(&ty, MonoType::TypeRef(name) if name.starts_with("Nat(Lt")),
+        "不可判定 Lt 必须保持符号项悬置，实际: {:?}",
+        ty
+    );
+}
+
+#[test]
+fn test_type_evaluator_nat_eq_concrete_operands_decide() {
+    // Arrange: 两个可识别 Nat 字面量
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut dep_env = DependentTypeEnv::new();
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
+    let mut evaluator = make_evaluator(&env, &budget, &dep_env);
+    let five_a = MonoType::TypeRef("Nat(5)".to_string());
+    let five_b = MonoType::TypeRef("Nat(5)".to_string());
+    let three = MonoType::TypeRef("Nat(3)".to_string());
+
+    // Act
+    let eq_same = evaluator.eval_nat("Eq", &[five_a.clone(), five_b]);
+    let eq_diff = evaluator.eval_nat("Eq", &[five_a, three]);
+
+    // Assert: 可判定操作数照常判定（修复不得破坏正常路径）
+    assert_eq!(
+        eq_same.expect("Nat(Eq, 5, 5) 求值不应报错"),
+        MonoType::TypeRef("True".to_string()),
+        "5 == 5 必须判 True"
+    );
+    assert_eq!(
+        eq_diff.expect("Nat(Eq, 5, 3) 求值不应报错"),
+        MonoType::TypeRef("False".to_string()),
+        "5 == 3 必须判 False"
+    );
+}
+
+#[test]
+fn test_type_evaluator_nat_lt_concrete_operands_decide() {
+    // Arrange: 两个可识别 Nat 字面量
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut dep_env = DependentTypeEnv::new();
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
+    let mut evaluator = make_evaluator(&env, &budget, &dep_env);
+    let three = MonoType::TypeRef("Nat(3)".to_string());
+    let five = MonoType::TypeRef("Nat(5)".to_string());
+
+    // Act
+    let lt_true = evaluator.eval_nat("Lt", &[three, five.clone()]);
+    let lt_false = evaluator.eval_nat("Lt", &[five.clone(), five]);
+
+    // Assert
+    assert_eq!(
+        lt_true.expect("Nat(Lt, 3, 5) 求值不应报错"),
+        MonoType::TypeRef("True".to_string()),
+        "3 < 5 必须判 True"
+    );
+    assert_eq!(
+        lt_false.expect("Nat(Lt, 5, 5) 求值不应报错"),
+        MonoType::TypeRef("False".to_string()),
+        "5 < 5 必须判 False"
+    );
+}
+
+#[test]
+fn test_type_evaluator_eval_if_undecidable_condition_reports_undecidable() {
+    // Arrange: 条件是裸类型变量——不可判定
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut dep_env = DependentTypeEnv::new();
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
+    let mut evaluator = make_evaluator(&env, &budget, &dep_env);
+    let cond = MonoType::TypeVar(crate::frontend::core::types::var::TypeVar::new(1));
+
+    // Act
+    let result = evaluator.eval_if(&cond, &MonoType::Int(32), &MonoType::String);
+
+    // Assert: 报不可判定，绝不伪造分支选择（#262）
+    assert!(
+        matches!(
+            result,
+            Err(crate::frontend::core::types::eval::evaluator::EvalError::UndecidableCondition(_))
+        ),
+        "不可判定 If 条件必须报 UndecidableCondition，实际: {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_type_evaluator_eval_if_concrete_condition_selects_branch() {
+    // Arrange: True/False 字面量条件
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut dep_env = DependentTypeEnv::new();
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
+    let mut evaluator = make_evaluator(&env, &budget, &dep_env);
+
+    // Act
+    let then_r = evaluator.eval_if(
+        &MonoType::TypeRef("True".to_string()),
+        &MonoType::Int(32),
+        &MonoType::String,
+    );
+    let else_r = evaluator.eval_if(
+        &MonoType::TypeRef("False".to_string()),
+        &MonoType::Int(32),
+        &MonoType::String,
+    );
+
+    // Assert
+    assert_eq!(
+        then_r.expect("True 条件求值不应报错"),
+        MonoType::Int(32),
+        "True 条件必须选真分支"
+    );
+    assert_eq!(
+        else_r.expect("False 条件求值不应报错"),
+        MonoType::String,
+        "False 条件必须选假分支"
+    );
+}
+
+#[test]
+fn test_type_evaluator_and_condition_false_short_circuits_undecidable() {
+    // Arrange: And(False, n)——左假，右 n 不可判定；三值逻辑任一假即假
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut dep_env = DependentTypeEnv::new();
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
+    let mut evaluator = make_evaluator(&env, &budget, &dep_env);
+    let cond = MonoType::TypeRef("And(False, n)".to_string());
+
+    // Act
+    let result = evaluator.eval_if(&cond, &MonoType::Int(32), &MonoType::String);
+
+    // Assert: 短路判假 → 选假分支（不因 n 不可判定而悬置）
+    assert_eq!(
+        result.expect("And(False, n) 应短路判定为假"),
+        MonoType::String,
+        "And(False, n) 必须短路判假并选假分支"
+    );
+}
+
+#[test]
+fn test_type_evaluator_and_condition_true_with_undecidable_stays_undecidable() {
+    // Arrange: And(True, n)——左真不足以定整个合取，n 不可判定
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut dep_env = DependentTypeEnv::new();
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
+    let mut evaluator = make_evaluator(&env, &budget, &dep_env);
+    let cond = MonoType::TypeRef("And(True, n)".to_string());
+
+    // Act
+    let result = evaluator.eval_if(&cond, &MonoType::Int(32), &MonoType::String);
+
+    // Assert: 整个条件不可判定（#262：不得伪造真）
+    assert!(
+        matches!(
+            result,
+            Err(crate::frontend::core::types::eval::evaluator::EvalError::UndecidableCondition(_))
+        ),
+        "And(True, n) 必须悬置为不可判定，实际: {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_type_evaluator_eq_condition_symbolic_operand_stays_undecidable() {
+    // Arrange: Eq(n, Int)——n 无法归约为已判定值
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut dep_env = DependentTypeEnv::new();
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
+    let mut evaluator = make_evaluator(&env, &budget, &dep_env);
+    let cond = MonoType::TypeRef("Eq(n, Int)".to_string());
+
+    // Act
+    let result = evaluator.eval_if(&cond, &MonoType::Int(32), &MonoType::String);
+
+    // Assert: 符号操作数不可判定（#262：此前恒判真的洞）
+    assert!(
+        matches!(
+            result,
+            Err(crate::frontend::core::types::eval::evaluator::EvalError::UndecidableCondition(_))
+        ),
+        "Eq(n, Int) 必须悬置为不可判定，实际: {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_type_evaluator_eq_condition_concrete_operands_decide() {
+    // Arrange: Eq(Int, Int)——两侧都归约到已判定值
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut dep_env = DependentTypeEnv::new();
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
+    let mut evaluator = make_evaluator(&env, &budget, &dep_env);
+    let cond = MonoType::TypeRef("Eq(Int, Int)".to_string());
+
+    // Act
+    let result = evaluator.eval_if(&cond, &MonoType::Int(32), &MonoType::String);
+
+    // Assert: 判真选真分支（正常路径不受修复影响）
+    assert_eq!(
+        result.expect("Eq(Int, Int) 求值不应报错"),
+        MonoType::Int(32),
+        "Eq(Int, Int) 必须判真并选真分支"
+    );
+}
+
+#[test]
+fn test_type_evaluator_condition_reduces_nat_comparison_first() {
+    // Arrange: 条件本身是可归约的 Nat 比较——先归约再判定
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut dep_env = DependentTypeEnv::new();
+    crate::std::assert::AssertModule.register_type_families(&mut dep_env);
+    let mut evaluator = make_evaluator(&env, &budget, &dep_env);
+    let cond = MonoType::TypeRef("Nat(Eq, Nat(5), Nat(3))".to_string());
+
+    // Act
+    let result = evaluator.eval_if(&cond, &MonoType::Int(32), &MonoType::String);
+
+    // Assert: Nat(Eq, 5, 3) → False → 选假分支
+    assert_eq!(
+        result.expect("可归约 Nat 比较条件求值不应报错"),
+        MonoType::String,
+        "Nat(Eq, 5, 3) 归约为假后必须选假分支"
     );
 }

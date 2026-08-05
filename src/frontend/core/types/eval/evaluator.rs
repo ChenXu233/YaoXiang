@@ -30,6 +30,9 @@ pub enum EvalError {
     CycleDetected(String),
     ArithmeticError(String),
     TypeMismatch(String),
+    /// #262：条件/比较编译期不可判定——上层应悬置（Unproven/Stuck），
+    /// 而不是伪造真假
+    UndecidableCondition(String),
 }
 
 /// 求值配置
@@ -230,13 +233,15 @@ impl<'a> Evaluator<'a> {
     ) -> Result<MonoType, EvalError> {
         match ty {
             // 处理 If 条件类型
-            MonoType::TypeRef(name) if name == "If" => self.eval_if_type(ty, depth),
+            MonoType::TypeRef(name) if name.starts_with("If(") => self.eval_if_type(ty, depth),
 
             // 处理 Match 类型
-            MonoType::TypeRef(name) if name == "Match" => self.eval_match_type(ty, depth),
+            MonoType::TypeRef(name) if name.starts_with("Match(") => {
+                self.eval_match_type(ty, depth)
+            }
 
             // 处理 Nat 运算
-            MonoType::TypeRef(name) if name == "Nat" => self.eval_nat_type(ty, depth),
+            MonoType::TypeRef(name) if name.starts_with("Nat(") => self.eval_nat_type(ty, depth),
 
             // 处理类型引用
             MonoType::TypeRef(name) => self.eval_type_ref(name, depth),
@@ -272,14 +277,20 @@ impl<'a> Evaluator<'a> {
         let cond_result = self.eval_condition(&condition, depth);
 
         match cond_result {
-            Ok(true) => {
+            Ok(Some(true)) => {
                 // 条件为 true，求值 true 分支
                 self.eval_with_depth(&true_branch, depth + 1)
             }
-            Ok(false) => {
+            Ok(Some(false)) => {
                 // 条件为 false，求值 false 分支
                 self.eval_with_depth(&false_branch, depth + 1)
             }
+            // #262：条件不可判定不得伪造分支——报不可判定，由上层悬置
+            // （equivalence → Unproven，normalizer → Stuck）
+            Ok(None) => Err(EvalError::UndecidableCondition(format!(
+                "If 条件编译期不可判定: {:?}",
+                condition
+            ))),
             Err(e) => Err(e),
         }
     }
@@ -368,16 +379,24 @@ impl<'a> Evaluator<'a> {
         }
     }
 
-    /// 求值条件
+    /// 求值条件（三值：Some(true)/Some(false) 可判定，None 不可判定）
+    ///
+    /// #262：不可判定返回 None，由上层悬置——绝不伪造真
     fn eval_condition(
         &mut self,
         condition: &MonoType,
         depth: usize,
-    ) -> Result<bool, EvalError> {
+    ) -> Result<Option<bool>, EvalError> {
         match condition {
             // 布尔字面量
-            MonoType::TypeRef(name) if name == "True" => Ok(true),
-            MonoType::TypeRef(name) if name == "False" => Ok(false),
+            MonoType::TypeRef(name) if name == "True" => Ok(Some(true)),
+            MonoType::TypeRef(name) if name == "False" => Ok(Some(false)),
+
+            // 字面量布尔值
+            MonoType::Literal {
+                value: ConstValue::Bool(b),
+                ..
+            } => Ok(Some(*b)),
 
             // 等式条件: L == R
             MonoType::TypeRef(name) if name.starts_with("Eq(") => {
@@ -386,7 +405,7 @@ impl<'a> Evaluator<'a> {
 
             // 不等条件: L != R
             MonoType::TypeRef(name) if name.starts_with("Neq(") => {
-                self.eval_eq_condition(name, depth).map(|b| !b)
+                self.eval_eq_condition(name, depth).map(|b| b.map(|v| !v))
             }
 
             // 组合条件: And
@@ -402,104 +421,145 @@ impl<'a> Evaluator<'a> {
             // 否定条件: Not
             MonoType::TypeRef(name) if name.starts_with("Not(") => self
                 .eval_condition(&self.extract_inner_type(name), depth)
-                .map(|b| !b),
+                .map(|b| b.map(|v| !v)),
 
-            // 类型变量无法确定
-            MonoType::TypeVar(_) => Ok(true),
+            // 其他类型引用：先尝试归约（如 Nat(Eq, Nat(5), Nat(3)) → False）
+            MonoType::TypeRef(_) => {
+                let reduced = self.eval_with_depth(condition, depth + 1)?;
+                if &reduced != condition {
+                    self.eval_condition(&reduced, depth)
+                } else {
+                    Ok(None)
+                }
+            }
 
-            // 其他情况需要进一步检查
-            _ => Ok(true),
+            // 类型变量与其他类型：不可判定（#262）
+            _ => Ok(None),
         }
     }
 
-    /// 求值等式条件
+    /// 求值等式条件（三值：符号项不可判定，#262）
     fn eval_eq_condition(
         &mut self,
         name: &str,
         depth: usize,
-    ) -> Result<bool, EvalError> {
-        if let Some(args) = Self::parse_generic_args(name) {
-            if args.len() == 2 {
-                let left = self
-                    .parse_type(&args[0])
-                    .unwrap_or_else(|| MonoType::TypeRef(args[0].clone()));
-                let right = self
-                    .parse_type(&args[1])
-                    .unwrap_or_else(|| MonoType::TypeRef(args[1].clone()));
-
-                // 递归求值操作数
-                let left_eval = self.eval_with_depth(&left, depth + 1);
-                let right_eval = self.eval_with_depth(&right, depth + 1);
-
-                // 如果两边都已确定值
-                if let (Ok(l), Ok(r)) = (left_eval, right_eval) {
-                    return Ok(l == r);
-                }
-            }
+    ) -> Result<Option<bool>, EvalError> {
+        let Some(args) = Self::parse_generic_args(name) else {
+            return Ok(None);
+        };
+        if args.len() != 2 {
+            return Ok(None);
         }
-        Ok(true)
+        let left = self
+            .parse_type(&args[0])
+            .unwrap_or_else(|| MonoType::TypeRef(args[0].clone()));
+        let right = self
+            .parse_type(&args[1])
+            .unwrap_or_else(|| MonoType::TypeRef(args[1].clone()));
+
+        // 递归求值操作数（错误如实传播，不吞）
+        let l = self.eval_with_depth(&left, depth + 1)?;
+        let r = self.eval_with_depth(&right, depth + 1)?;
+
+        // #262：两侧都归约为「已判定」值才比较；符号项不可判定
+        if self.is_decided_value(&l) && self.is_decided_value(&r) {
+            Ok(Some(l == r))
+        } else {
+            Ok(None)
+        }
     }
 
-    /// 求值 And 条件
+    /// 类型是否归约到「已判定」值（结构相等比较有意义）
+    ///
+    /// 字面量值/原生类型/Nat 字面量是已判定的；TypeVar、函数/结构类型、
+    /// 未求值符号项（Nat(Add, ...) 等）不可判定（#262）
+    fn is_decided_value(
+        &self,
+        ty: &MonoType,
+    ) -> bool {
+        match ty {
+            MonoType::Literal { .. }
+            | MonoType::Int(_)
+            | MonoType::Float(_)
+            | MonoType::Bool
+            | MonoType::Char
+            | MonoType::String
+            | MonoType::Void
+            | MonoType::Never => true,
+            MonoType::TypeRef(name) => {
+                matches!(name.as_str(), "True" | "False")
+                    || Self::extract_nat_literal(name).is_some()
+            }
+            _ => false,
+        }
+    }
+
+    /// 求值 And 条件（三值逻辑：任一假 → 假；双真 → 真；其余不可判定）
     fn eval_and_condition(
         &mut self,
         name: &str,
         depth: usize,
-    ) -> Result<bool, EvalError> {
-        if let Some(args) = Self::parse_generic_args(name) {
-            if args.len() == 2 {
-                let left = self
-                    .parse_type(&args[0])
-                    .unwrap_or_else(|| MonoType::TypeRef(args[0].clone()));
-                let right = self
-                    .parse_type(&args[1])
-                    .unwrap_or_else(|| MonoType::TypeRef(args[1].clone()));
-
-                let left_eval = self.eval_condition(&left, depth + 1);
-                let right_eval = self.eval_condition(&right, depth + 1);
-
-                match (left_eval, right_eval) {
-                    (Ok(false), _) | (_, Ok(false)) => Ok(false),
-                    (Ok(true), Ok(true)) => Ok(true),
-                    (Err(e), _) | (_, Err(e)) => Err(e),
-                }
-            } else {
-                Ok(true)
-            }
-        } else {
-            Ok(true)
+    ) -> Result<Option<bool>, EvalError> {
+        let Some(args) = Self::parse_generic_args(name) else {
+            return Ok(None);
+        };
+        if args.len() != 2 {
+            return Ok(None);
         }
+        let left = self
+            .parse_type(&args[0])
+            .unwrap_or_else(|| MonoType::TypeRef(args[0].clone()));
+        let right = self
+            .parse_type(&args[1])
+            .unwrap_or_else(|| MonoType::TypeRef(args[1].clone()));
+
+        let l = self.eval_condition(&left, depth + 1)?;
+        // 短路：任一为假即判定整个合取为假
+        if l == Some(false) {
+            return Ok(Some(false));
+        }
+        let r = self.eval_condition(&right, depth + 1)?;
+        if r == Some(false) {
+            return Ok(Some(false));
+        }
+        Ok(match (l, r) {
+            (Some(true), Some(true)) => Some(true),
+            _ => None,
+        })
     }
 
-    /// 求值 Or 条件
+    /// 求值 Or 条件（三值逻辑：任一真 → 真；双假 → 假；其余不可判定）
     fn eval_or_condition(
         &mut self,
         name: &str,
         depth: usize,
-    ) -> Result<bool, EvalError> {
-        if let Some(args) = Self::parse_generic_args(name) {
-            if args.len() == 2 {
-                let left = self
-                    .parse_type(&args[0])
-                    .unwrap_or_else(|| MonoType::TypeRef(args[0].clone()));
-                let right = self
-                    .parse_type(&args[1])
-                    .unwrap_or_else(|| MonoType::TypeRef(args[1].clone()));
-
-                let left_eval = self.eval_condition(&left, depth + 1);
-                let right_eval = self.eval_condition(&right, depth + 1);
-
-                match (left_eval, right_eval) {
-                    (Ok(true), _) | (_, Ok(true)) => Ok(true),
-                    (Ok(false), Ok(false)) => Ok(false),
-                    (Err(e), _) | (_, Err(e)) => Err(e),
-                }
-            } else {
-                Ok(true)
-            }
-        } else {
-            Ok(true)
+    ) -> Result<Option<bool>, EvalError> {
+        let Some(args) = Self::parse_generic_args(name) else {
+            return Ok(None);
+        };
+        if args.len() != 2 {
+            return Ok(None);
         }
+        let left = self
+            .parse_type(&args[0])
+            .unwrap_or_else(|| MonoType::TypeRef(args[0].clone()));
+        let right = self
+            .parse_type(&args[1])
+            .unwrap_or_else(|| MonoType::TypeRef(args[1].clone()));
+
+        let l = self.eval_condition(&left, depth + 1)?;
+        // 短路：任一为真即判定整个析取为真
+        if l == Some(true) {
+            return Ok(Some(true));
+        }
+        let r = self.eval_condition(&right, depth + 1)?;
+        if r == Some(true) {
+            return Ok(Some(true));
+        }
+        Ok(match (l, r) {
+            (Some(false), Some(false)) => Some(false),
+            _ => None,
+        })
     }
 
     /// 从类型引用中提取内部类型
@@ -690,23 +750,11 @@ impl<'a> Evaluator<'a> {
             // 取模: Nat<Mod, a, b>
             "Mod" if eval_args.len() == 2 => self.nat_mod(&eval_args[0], &eval_args[1]),
 
-            // 比较: Nat<Eq, a, b> -> Bool
-            "Eq" if eval_args.len() == 2 => self.nat_eq(&eval_args[0], &eval_args[1]).map(|b| {
-                MonoType::TypeRef(if b {
-                    "True".to_string()
-                } else {
-                    "False".to_string()
-                })
-            }),
+            // 比较: Nat<Eq, a, b> -> Bool（不可判定时符号项悬置，#262）
+            "Eq" if eval_args.len() == 2 => self.nat_eq(&eval_args[0], &eval_args[1]),
 
-            // 小于: Nat<Lt, a, b> -> Bool
-            "Lt" if eval_args.len() == 2 => self.nat_lt(&eval_args[0], &eval_args[1]).map(|b| {
-                MonoType::TypeRef(if b {
-                    "True".to_string()
-                } else {
-                    "False".to_string()
-                })
-            }),
+            // 小于: Nat<Lt, a, b> -> Bool（不可判定时符号项悬置，#262）
+            "Lt" if eval_args.len() == 2 => self.nat_lt(&eval_args[0], &eval_args[1]),
 
             _ => Err(EvalError::ArithmeticError(format!(
                 "Unknown Nat operation: {}",
@@ -805,26 +853,39 @@ impl<'a> Evaluator<'a> {
     }
 
     /// Nat 相等比较
+    ///
+    /// #262：任一操作数非可识别 Nat 字面量 → 返回符号项悬置（照 nat_add~mod
+    /// 模式），绝不伪造「相等」
     fn nat_eq(
         &self,
         a: &MonoType,
         b: &MonoType,
-    ) -> Result<bool, EvalError> {
+    ) -> Result<MonoType, EvalError> {
         match (self.extract_nat_value(a), self.extract_nat_value(b)) {
-            (Some(na), Some(nb)) => Ok(na == nb),
-            _ => Ok(true),
+            (Some(na), Some(nb)) => Ok(MonoType::TypeRef(if na == nb {
+                "True".to_string()
+            } else {
+                "False".to_string()
+            })),
+            _ => Ok(MonoType::TypeRef(format!("Nat(Eq, {:?}, {:?})", a, b))),
         }
     }
 
     /// Nat 小于比较
+    ///
+    /// #262：符号悬置，同 nat_eq
     fn nat_lt(
         &self,
         a: &MonoType,
         b: &MonoType,
-    ) -> Result<bool, EvalError> {
+    ) -> Result<MonoType, EvalError> {
         match (self.extract_nat_value(a), self.extract_nat_value(b)) {
-            (Some(na), Some(nb)) => Ok(na < nb),
-            _ => Ok(true),
+            (Some(na), Some(nb)) => Ok(MonoType::TypeRef(if na < nb {
+                "True".to_string()
+            } else {
+                "False".to_string()
+            })),
+            _ => Ok(MonoType::TypeRef(format!("Nat(Lt, {:?}, {:?})", a, b))),
         }
     }
 
@@ -964,8 +1025,13 @@ impl<'a> Evaluator<'a> {
         let cond_result = self.eval_condition(condition, 0);
 
         match cond_result {
-            Ok(true) => self.eval(true_branch),
-            Ok(false) => self.eval(false_branch),
+            Ok(Some(true)) => self.eval(true_branch),
+            Ok(Some(false)) => self.eval(false_branch),
+            // #262：不可判定不得伪造分支（normalizer 将 Err 映射为 Stuck）
+            Ok(None) => Err(EvalError::UndecidableCondition(format!(
+                "If 条件编译期不可判定: {:?}",
+                condition
+            ))),
             Err(e) => Err(e),
         }
     }
