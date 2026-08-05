@@ -519,7 +519,7 @@
     "title": "内部コンパイルエラー",
     "message": "コンパイラーで内部エラーが発生しました",
     "template": "内部コンパイルエラー：{message}",
-    "help": "https://github.com/ChenXu233/YaoXiang/issues/new でこのエラーを報告してください",
+    "help": "このエラーを https://github.com/ChenXu233/YaoXiang/issues/new に報告してください",
     "example": "",
     "error_output": ""
   },

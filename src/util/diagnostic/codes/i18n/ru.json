@@ -519,7 +519,7 @@
     "title": "Внутренняя ошибка компилятора",
     "message": "Во время работы компилятора произошла внутренняя ошибка",
     "template": "Внутренняя ошибка компилятора: {message}",
-    "help": "Пожалуйста, сообщите об этой ошибке на https://github.com/ChenXu233/YaoXiang/issues/new",
+    "help": "Пожалуйста, сообщите об этой ошибке по адресу https://github.com/ChenXu233/YaoXiang/issues/new",
     "example": "",
     "error_output": ""
   },

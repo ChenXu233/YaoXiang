@@ -519,7 +519,7 @@
     "title": "编译器内部之误",
     "message": "编译器内部生误",
     "template": "编译器内部之误：{message}",
-    "help": "请于 https://github.com/ChenXu233/YaoXiang/issues/new 呈报此误",
+    "help": "请于 https://github.com/ChenXu233/YaoXiang/issues/new 报此错误",
     "example": "",
     "error_output": ""
   },
