@@ -1,0 +1,25 @@
+// 05-ownership/token_dup_copy.yx
+// 覆盖: SPEC type-system.md §11.2 Dup 语义（&T 读取令牌复制，两者均有效）
+// 验证: view2 = view 不是 move；原令牌与复制令牌随后可继续使用；
+//       令牌传参（Move 参数位置回退）后源令牌仍活跃（#256）
+
+use std.{assert, io}
+
+Point: Type = { x: Int, y: Int }
+
+read_x: (p: &Point) -> Int = (p) => p.x
+
+main = {
+    // 令牌复制：两份都活跃（SPEC §11.2 示例）
+    p = Point(1, 2)
+    view = &p
+    view2 = view        // Dup：复制令牌，不是 move
+    assert.assert(view.x == 1, "原令牌活跃")
+    assert.assert(view2.y == 2, "复制令牌活跃")
+
+    // 传参后源令牌仍可用
+    t = Point(7, 8)
+    v = &t
+    io.println(read_x(v))
+    assert.assert(v.y == 8, "传参后源令牌仍活跃")
+}

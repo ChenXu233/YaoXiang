@@ -712,6 +712,8 @@ pub struct OwnershipChecker {
     ref_vars: HashSet<String>,
     /// 持有 `&mut` 写入令牌的变量（#257：Linear，赋值复制被拒绝）
     mut_token_vars: HashSet<String>,
+    /// 持有 `&T` 读取令牌的变量（#256：Dup，赋值/传参复制，不 move）
+    read_token_vars: HashSet<String>,
     /// spawn 体内使用的 ref 变量（逃逸 → 选 Arc）
     escaped_refs: HashSet<String>,
     /// 当前是否在 spawn 体内
@@ -748,6 +750,7 @@ impl OwnershipChecker {
             env: None,
             ref_vars: HashSet::new(),
             mut_token_vars: HashSet::new(),
+            read_token_vars: HashSet::new(),
             escaped_refs: HashSet::new(),
             inside_spawn: false,
             inside_unsafe: false,
@@ -769,6 +772,7 @@ impl OwnershipChecker {
         self.scope_drops.clear();
         self.ref_vars.clear();
         self.mut_token_vars.clear();
+        self.read_token_vars.clear();
         self.escaped_refs.clear();
         self.inside_spawn = false;
         self.inside_unsafe = false;
@@ -857,7 +861,8 @@ impl OwnershipChecker {
     ) {
         match ownership {
             ParamOwnership::Move => {
-                if !self.ref_vars.contains(var_name) {
+                // ref T / &T 令牌是 Dup（SPEC §11.2）：传参复制，不 move（#256）
+                if !self.ref_vars.contains(var_name) && !self.read_token_vars.contains(var_name) {
                     self.var_state.insert(var_name.to_string(), VarState::Moved);
                 }
             }
@@ -1204,6 +1209,10 @@ impl OwnershipChecker {
                                 if self.ref_vars.contains(src_name) {
                                     self.ref_vars.insert(name.clone());
                                 }
+                                // #256：&T 令牌属性同样传播
+                                if self.read_token_vars.contains(src_name) {
+                                    self.read_token_vars.insert(name.clone());
+                                }
                             }
                             r
                         } else {
@@ -1219,6 +1228,10 @@ impl OwnershipChecker {
                             if let Expr::Var(src_name, _) = right.as_ref() {
                                 if self.ref_vars.contains(src_name) {
                                     self.ref_vars.insert(name.clone());
+                                }
+                                // #256：&T 令牌属性同样传播
+                                if self.read_token_vars.contains(src_name) {
+                                    self.read_token_vars.insert(name.clone());
                                 }
                             }
                             r
@@ -1294,7 +1307,8 @@ impl OwnershipChecker {
             Expr::Return(Some(inner), _) => {
                 let results = self.walk_expr(inner);
                 if let Expr::Var(name, _) = inner.as_ref() {
-                    if !self.ref_vars.contains(name) {
+                    // Dup 令牌（ref T / &T）返回不 move 源变量（#256）
+                    if !self.ref_vars.contains(name) && !self.read_token_vars.contains(name) {
                         self.var_state.insert(name.clone(), VarState::Moved);
                     }
                 }
@@ -1459,6 +1473,10 @@ impl OwnershipChecker {
                     if matches!(init, Expr::Borrow { mutable: true, .. }) {
                         self.mut_token_vars.insert(name.clone());
                     }
+                    // #256：记录持有 `&T` 读取令牌的变量（Dup：赋值复制不 move）
+                    if matches!(init, Expr::Borrow { mutable: false, .. }) {
+                        self.read_token_vars.insert(name.clone());
+                    }
                 }
                 if let Some(init) = initializer {
                     if let Expr::BinOp {
@@ -1482,11 +1500,17 @@ impl OwnershipChecker {
                             results.push(err);
                             return results;
                         }
-                        if !self.ref_vars.contains(src_name) {
+                        // Dup 类别（ref T / &T 令牌，SPEC §11.2）：复制不 move（#256）
+                        let is_dup = self.ref_vars.contains(src_name)
+                            || self.read_token_vars.contains(src_name);
+                        if !is_dup {
                             self.var_state.insert(src_name.clone(), VarState::Moved);
                         }
                         if self.ref_vars.contains(src_name) {
                             self.ref_vars.insert(name.clone());
+                        }
+                        if self.read_token_vars.contains(src_name) {
+                            self.read_token_vars.insert(name.clone());
                         }
                     }
                 }
@@ -1512,7 +1536,8 @@ impl OwnershipChecker {
             StmtKind::Return(Some(expr)) => {
                 let results = self.walk_expr(expr);
                 if let Expr::Var(name, _) = expr.as_ref() {
-                    if !self.ref_vars.contains(name) {
+                    // Dup 令牌（ref T / &T）返回不 move 源变量（#256）
+                    if !self.ref_vars.contains(name) && !self.read_token_vars.contains(name) {
                         self.var_state.insert(name.clone(), VarState::Moved);
                     }
                 }
