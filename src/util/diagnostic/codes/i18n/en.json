@@ -908,7 +908,7 @@
     "error_output": "error[E0022]: Enums must use brace syntax\n --> example.yx:1:9\n  |\n1 | Color = red | green | blue\n  |         ^ Use brace syntax: { red | green | blue }"
   },
   "E1092": {
-    "title": "Invalid refinement type argument",
+    "title": "Invalid refinement type argument form",
     "message": "Refinement type argument cannot be converted to a compile-time constant expression",
     "template": "'{name}' requires a compile-time constant argument, but the given argument cannot be converted",
     "help": "Predicate/proof function arguments must be literals, variables, or single-argument type applications; otherwise the refinement constraint cannot be generated",
@@ -918,9 +918,9 @@
   "E1093": {
     "title": "Refinement argument count mismatch",
     "message": "Predicate/proof function argument count mismatch",
-    "template": "'{name}' expects {expected} argument(s), found {found}",
-    "help": "Pass exactly the number of arguments the predicate declares; otherwise the refinement constraint cannot be generated",
+    "template": "'{name}' expected {expected} argument(s), found {found}",
+    "help": "The argument count must match the predicate declaration, otherwise the refinement constraint cannot be generated",
     "example": "y: IsSmall(1, 2) = 5",
-    "error_output": "error[E1093]: 'IsSmall' expects 1 argument(s), found 2"
+    "error_output": "error[E1093]: 'IsSmall' expected 1 argument, found 2"
   }
 }

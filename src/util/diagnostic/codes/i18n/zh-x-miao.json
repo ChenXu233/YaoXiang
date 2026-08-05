@@ -903,11 +903,19 @@
     "error_output": "warning[W1063]: const 泛型约束无法求值喵\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ 无法在编译期求值约束 `N > 0`喵"
   },
   "E1092": {
-    "title": "精化类型实参用法非法喵",
-    "message": "精化类型实参用法非法喵，约束无法生成喵",
-    "template": "'{name}' 精化类型实参用法非法喵：{reason}",
+    "title": "精化类型实参的形态非法喵~",
+    "message": "精化类型实参无法转换为编译期常量表达式喵",
+    "template": "'{name}' 要求编译期常量实参，但所给的实参无法转换喵~",
     "help": "谓词/证明函数实参必须是字面量、变量或单参数类型应用喵，否则精化约束无法生成喵",
     "example": "y: IsSmall(List(Int)) = 9999",
-    "error_output": "error[E1092]: 'IsSmall' 精化类型实参用法非法喵：实参无法转换为编译期常量表达式喵"
+    "error_output": "error[E1092]: 'IsSmall' 要求编译期常量实参，但所给的实参无法转换喵~"
+  },
+  "E1093": {
+    "title": "精化实参的个数不匹配喵~",
+    "message": "谓词/证明函数的实参个数不匹配喵",
+    "template": "'{name}' 期望 {expected} 个实参，但实际收到了 {found} 个喵~",
+    "help": "实参的个数必须与谓词声明保持一致，否则精化约束就无法生成喵~",
+    "example": "y: IsSmall(1, 2) = 5 喵~",
+    "error_output": "error[E1093]: 'IsSmall' 期望 1 个实参，但实际收到了 2 个喵~"
   }
 }

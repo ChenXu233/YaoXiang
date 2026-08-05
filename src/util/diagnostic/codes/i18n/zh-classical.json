@@ -911,11 +911,19 @@
     "error_output": "warning[W1063]: const 泛型约束不可求值\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ 不可于编译期求值约束 `N > 0`"
   },
   "E1092": {
-    "title": "精化类型实参用法违式",
-    "message": "精化类型实参用法违式，约束弗克生成",
-    "template": "'{name}' 精化类型实参用法违式：{reason}",
+    "title": "精化类型实参形制非法",
+    "message": "精化类型实参弗克转为编译期常量表达式",
+    "template": "'{name}' 须编译期常量实参，然所授实参弗克转换",
     "help": "谓词/证明函数之实参必为字面量、变量或单参类型之应用，否则精化约束弗克生成",
     "example": "y: IsSmall(List(Int)) = 9999",
-    "error_output": "error[E1092]: 'IsSmall' 精化类型实参用法违式：实参弗克转译为编译期常量表达式"
+    "error_output": "error[E1092]: 'IsSmall' 须编译期常量实参，然所授实参弗克转换"
+  },
+  "E1093": {
+    "title": "精化实参之数不协",
+    "message": "谓词或证明函数实参之数不协",
+    "template": "'{name}' 望 {expected} 实参，实得 {found} 枚",
+    "help": "实参之数须与谓词所陈相符，否则精化约束弗克生成",
+    "example": "y: IsSmall(1, 2) = 5",
+    "error_output": "error[E1093]: 'IsSmall' 望一实参，实得二枚"
   }
 }
