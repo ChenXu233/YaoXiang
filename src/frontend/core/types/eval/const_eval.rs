@@ -126,6 +126,10 @@ fn convert_ast_binop(op: &AstBinOp) -> Option<crate::frontend::core::types::cons
         AstBinOp::Le => Some(BinOp::Le),
         AstBinOp::Gt => Some(BinOp::Gt),
         AstBinOp::Ge => Some(BinOp::Ge),
+        // 下游 const_data::BinOp 与求值器均支持 And/Or，此前缺失导致
+        // `&&`/`||` 连接的精化约束整体转换失败被静默丢弃（审计发现）
+        AstBinOp::And => Some(BinOp::And),
+        AstBinOp::Or => Some(BinOp::Or),
         _ => None,
     }
 }
@@ -135,6 +139,8 @@ fn convert_ast_unop(op: &AstUnOp) -> Option<crate::frontend::core::types::const_
     match op {
         AstUnOp::Neg => Some(UnOp::Neg),
         AstUnOp::Not => Some(UnOp::Not),
+        // 下游支持 Pos（const_eval.rs:342），此前缺失同被静默丢弃
+        AstUnOp::Pos => Some(UnOp::Pos),
         _ => None,
     }
 }

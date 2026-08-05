@@ -1,0 +1,14 @@
+// 06-compile-errors/mut_index_borrow_alias_err.yx
+// 错误检测: `&mut arr[i]` 索引借用目标的别名可变借用（SPEC type-system.md §11.2 / RFC-009）
+// 预期: 编译错误（借用冲突）
+// 背景: 所有权检查器的 extract_var_name 此前对 Index/Deref 目标返回 None，
+//       整个借用令牌检查块被跳过，两个 &mut 令牌指向同一存储静默共存（审计发现）
+
+use std.io
+
+main = {
+    mut arr = [1, 2, 3]
+    a = &mut arr[0]
+    b = &mut arr[0]    // ❌ 与 a 冲突：同一底层存储的两个写入令牌
+    io.println("ALL TESTS PASSED")
+}

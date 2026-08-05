@@ -334,21 +334,18 @@ impl Monomorphizer {
                     None => continue,
                 };
 
-                // 从 args 中尝试推断类型参数
-                let arg_types: Vec<MonoType> = args
-                    .iter()
-                    .filter_map(|op| self.operand_to_type_hint(op, func))
-                    .collect();
-
-                // 如果无法推断任何参数类型，跳过
-                if arg_types.is_empty() {
-                    continue;
-                }
-
                 // 使用推断的参数类型创建实例化请求
-                // 简单启发式：使用第一个参数的类型作为泛型参数
+                // 简单启发式：使用第一个参数的类型作为泛型参数。
+                // 必须从 args[0] 直接推断：此前 filter_map 后再取 arg_types[0]，
+                // 当首参无法定型时索引错位（arg_types[0] 实为 args[1] 的类型）
+                // → 用错误类型生成特化（审计发现）
                 if type_params.len() == 1 {
-                    let type_arg = arg_types[0].clone();
+                    let Some(type_arg) = args
+                        .first()
+                        .and_then(|op| self.operand_to_type_hint(op, func))
+                    else {
+                        continue;
+                    };
                     let key = SpecializationKey::new(callee_name.clone(), vec![type_arg.clone()]);
 
                     if !self.processed.contains(&key) {

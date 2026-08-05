@@ -9,7 +9,7 @@ use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::parser::{ParserState, BP_LOWEST};
 use crate::util::span::Span;
 
-use super::types::parse_type_annotation;
+use super::types::parse_type_annotation_required;
 
 /// Parse function definition with already parsed name
 /// Handles: `[pub] name = (params) => body`
@@ -158,7 +158,7 @@ pub fn parse_fn_params(state: &mut ParserState<'_>) -> Option<Vec<Param>> {
         state.bump();
 
         let ty = if state.skip(&TokenKind::Colon) {
-            parse_type_annotation(state)
+            parse_type_annotation_required(state)
         } else {
             None
         };

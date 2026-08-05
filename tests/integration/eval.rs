@@ -24,7 +24,7 @@ fn test_eval_main_defined() {
 #[test]
 fn test_eval_use_no_main() {
     assert!(
-        eval_code("use std::io; println(\"hello from eval\")").is_ok(),
+        eval_code("use std; println(\"hello from eval\")").is_ok(),
         "eval 应支持 use 导入 + 无 main 场景"
     );
 }
@@ -32,7 +32,7 @@ fn test_eval_use_no_main() {
 #[test]
 fn test_eval_use_and_main_defined() {
     assert!(
-        eval_code("use std::fmt; main = { print(\"hi\") }").is_ok(),
+        eval_code("use std; main = { print(\"hi\") }").is_ok(),
         "eval 应支持 use 导入 + main 同时存在"
     );
 }

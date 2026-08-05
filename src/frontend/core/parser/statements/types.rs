@@ -22,6 +22,33 @@ impl ParserState<'_> {
     pub fn parse_type_annotation(&mut self) -> Option<Type> {
         parse_type_annotation(self)
     }
+
+    /// 严格版类型标注（`:`/`as` 之后类型必需的位置专用）
+    pub fn parse_type_annotation_required(&mut self) -> Option<Type> {
+        parse_type_annotation_required(self)
+    }
+}
+
+/// 严格变体：仅用于调用方已消费 `:` 或 `as` 的位置（类型必需）。
+/// 解析失败时报 E0010 并消费肇事 token，避免非法 token 掉进宽容版的
+/// `_ => None` 后静默吞掉整个标注/绑定（#250 残余缺口：当时只修了 `?`）。
+/// 探测型调用点（while-let / if-let / try_parse_typed_param_list）继续用宽容版。
+pub fn parse_type_annotation_required(state: &mut ParserState<'_>) -> Option<Type> {
+    if let Some(ty) = parse_type_annotation(state) {
+        return Some(ty);
+    }
+    let span = state.span();
+    let found = state
+        .current()
+        .map(|t| format!("{:?}", t.kind))
+        .unwrap_or_else(|| "EOF".to_string());
+    state.error(
+        ErrorCodeDefinition::expected_token("a type", &found)
+            .at(span)
+            .build(),
+    );
+    state.bump();
+    None
 }
 
 /// Parse type annotation
@@ -399,7 +426,9 @@ pub fn parse_fn_type_with_names(
                 // Parse type annotation
                 // Check if this is a literal type (const parameter reference)
                 // e.g., (n: n) where n is a const generic parameter
-                let parsed_type = parse_type_annotation(state)?;
+                // 冒号后类型必需：用严格版，非法 token 报 E0010 而非静默变无标注参数
+                // （#250 残余缺口：`(a: "hello")` 曾被静默吞掉）
+                let parsed_type = parse_type_annotation_required(state)?;
 
                 // Handle `+` constraint syntax: T: Clone + Add
                 // Collect all constraint types separated by `+`
@@ -487,7 +516,8 @@ pub fn parse_fn_type_with_names(
         }
         state.restore_position(saved);
     }
-    let return_type = Box::new(parse_type_annotation(state)?);
+    // `->` 后返回类型必需：严格版，非法 token 报错而非静默吞掉整个签名（审计发现）
+    let return_type = Box::new(parse_type_annotation_required(state)?);
     let all_params = params.clone();
     Some((params, all_params, return_type))
 }

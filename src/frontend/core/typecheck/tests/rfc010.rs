@@ -701,7 +701,7 @@ fn test_method_def_arm_value_base_not_method() {
     let src = r#"
         File: Type = { name: String }
         f: File = File("a")
-        f.handler = (x: Int) -> Int = (x) => x
+        f.handler: (x: Int) -> Int = (x) => x
     "#;
     let tokens = tokenize(src).expect("tokenize failed");
     let r = parse(&tokens);

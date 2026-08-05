@@ -82,7 +82,21 @@ fn parse_loop_label(state: &mut crate::frontend::core::parser::ParserState<'_>) 
             state.bump();
             Some(name)
         }
-        _ => None,
+        // `::` 后必须是标签标识符：此前返回 None 导致整个 break/continue
+        // 语句静默消失，残留 token 被当新语句解析（审计发现）
+        _ => {
+            let found = state
+                .current()
+                .map(|t| format!("{:?}", t.kind))
+                .unwrap_or_else(|| "EOF".to_string());
+            state.error(
+                ErrorCodeDefinition::expected_token("loop label after '::'", &found)
+                    .at(state.span())
+                    .build(),
+            );
+            state.bump();
+            None
+        }
     }
 }
 

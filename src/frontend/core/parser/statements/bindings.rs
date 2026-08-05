@@ -5,7 +5,7 @@ use crate::frontend::core::lexer::tokens::*;
 use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::parser::ParserState;
-use crate::frontend::core::parser::statements::types::parse_type_annotation;
+use crate::frontend::core::parser::statements::types::parse_type_annotation_required;
 use crate::frontend::core::parser::statements::functions::{parse_fn_params, parse_fn_body};
 use crate::util::span::Span;
 
@@ -35,7 +35,7 @@ pub fn parse_method_bind(
         return None;
     }
 
-    let method_type = parse_type_annotation(state)?;
+    let method_type = parse_type_annotation_required(state)?;
 
     if !state.expect(&TokenKind::Eq) {
         return None;

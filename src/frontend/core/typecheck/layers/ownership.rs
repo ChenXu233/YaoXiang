@@ -784,6 +784,15 @@ impl OwnershipChecker {
         match expr {
             Expr::Var(name, _) => Some(name.clone()),
             Expr::FieldAccess { expr: inner, .. } => Self::extract_var_name(inner),
+            // #257 审计：`&mut arr[i]` / `&*ptr` 的借用目标此前返回 None，
+            // 导致整个借用令牌块（可变性/冲突检测）被跳过——粗粒度归属到
+            // 底层变量，保守但 sound（宁可误报冲突，不可漏检别名）
+            Expr::Index { expr: inner, .. } => Self::extract_var_name(inner),
+            Expr::UnOp {
+                op: crate::frontend::core::parser::ast::UnOp::Deref,
+                expr: inner,
+                ..
+            } => Self::extract_var_name(inner),
             _ => None,
         }
     }
