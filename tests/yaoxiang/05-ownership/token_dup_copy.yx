@@ -9,6 +9,12 @@ Point: Type = { x: Int, y: Int }
 
 read_x: (p: &Point) -> Int = (p) => p.x
 
+// 参数位置的 &T 令牌同样是 Dup：函数体内复制不 move（#256 hole1）
+copy_use: (p: &Point) -> Int = (p) => {
+    q = p
+    return q.x + p.x
+}
+
 main = {
     // 令牌复制：两份都活跃（SPEC §11.2 示例）
     p = Point(1, 2)
@@ -22,4 +28,9 @@ main = {
     v = &t
     io.println(read_x(v))
     assert.assert(v.y == 8, "传参后源令牌仍活跃")
+
+    // 参数令牌在函数体内复制：两份都活跃（hole1 回归）
+    w = Point(3, 4)
+    r = copy_use(&w)
+    assert.assert(r == 6, "参数令牌复制后两份都活跃")
 }

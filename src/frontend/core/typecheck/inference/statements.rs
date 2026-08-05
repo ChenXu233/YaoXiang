@@ -396,6 +396,11 @@ impl StatementChecker {
         self.scope.add_var(name, poly, is_mut, definition_span);
     }
 
+    /// 变量类型账本（#256）：移交给所有权检查做 Move/Dup 分类
+    pub fn var_type_ledger(&self) -> &std::collections::HashMap<(usize, String), PolyType> {
+        self.scope.type_ledger()
+    }
+
     /// 获取变量（从最内层作用域开始查找）
     pub fn get_var(
         &self,
@@ -566,6 +571,8 @@ impl StatementChecker {
         &mut self,
         stmt: &Stmt,
     ) -> Result<(), Box<Diagnostic>> {
+        // 账本键：当前语句的 span（嵌套语句递归时逐层覆盖，#256）
+        self.scope.set_current_stmt(stmt.span);
         match &stmt.kind {
             crate::frontend::core::parser::ast::StmtKind::Expr(expr) => self.check_expr_stmt(expr),
             crate::frontend::core::parser::ast::StmtKind::Assign {

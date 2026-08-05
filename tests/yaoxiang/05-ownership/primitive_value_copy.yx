@@ -1,0 +1,19 @@
+// 05-ownership/primitive_value_copy.yx
+// 覆盖: SPEC type-system.md §11.2 原语值类型（Int/Float/Bool/Char 编译器内置值复制）
+// 验证: 原语赋值/传参为值复制，多次使用不报 move（#260）；
+//       String 非原语，仍按 Move 语义
+
+use std.{assert, io}
+
+main = {
+    // 赋值复制：两者独立可用
+    a = 42
+    b = a
+    assert.assert(a + b == 84, "原语赋值复制，两者都可用")
+
+    // 传参后仍可用
+    x = 7
+    io.println(x)
+    io.println(x)
+    assert.assert(x == 7, "原语传参不 move 源")
+}

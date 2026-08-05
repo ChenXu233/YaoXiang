@@ -670,6 +670,19 @@ pub fn check_ownership(_ctx: &ProofContext<'_>) -> ProofResult {
 
 use crate::frontend::core::parser::ast::{Expr, Module, Stmt, StmtKind};
 
+/// 赋值/传参/返回的复制语义（SPEC §11.2，#256）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CopySemantics {
+    /// Dup：&T / ref T——复制令牌，源存活
+    Dup,
+    /// Linear：&mut T——独占，复制被拒绝（#257）
+    Linear,
+    /// 原语值类型（Int/Float/Bool/Char）：编译器内置值复制
+    ValueCopy,
+    /// 默认：所有权转移
+    Move,
+}
+
 /// 函数内变量状态
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum VarState {
@@ -710,10 +723,12 @@ pub struct OwnershipChecker {
     env: Option<*const crate::frontend::core::typecheck::environment::TypeEnvironment>,
     /// ref 创建的变量（Expr::Ref 的赋值目标）
     ref_vars: HashSet<String>,
-    /// 持有 `&mut` 写入令牌的变量（#257：Linear，赋值复制被拒绝）
-    mut_token_vars: HashSet<String>,
-    /// 持有 `&T` 读取令牌的变量（#256：Dup，赋值/传参复制，不 move）
-    read_token_vars: HashSet<String>,
+    /// 变量类型账本（推断层移交）：(定义语句 span offset, 变量名) → 类型（#256）
+    type_ledger: HashMap<(usize, String), crate::frontend::core::types::PolyType>,
+    /// 变量名 → 定义语句键（镜像 scope_vars，随作用域 push/pop）
+    scope_keys: Vec<HashMap<String, usize>>,
+    /// 当前 walk 的语句键（span 起始 offset）
+    cur_stmt_key: usize,
     /// spawn 体内使用的 ref 变量（逃逸 → 选 Arc）
     escaped_refs: HashSet<String>,
     /// 当前是否在 spawn 体内
@@ -749,8 +764,9 @@ impl OwnershipChecker {
             scope_drops: Vec::new(),
             env: None,
             ref_vars: HashSet::new(),
-            mut_token_vars: HashSet::new(),
-            read_token_vars: HashSet::new(),
+            type_ledger: HashMap::new(),
+            scope_keys: vec![HashMap::new()],
+            cur_stmt_key: 0,
             escaped_refs: HashSet::new(),
             inside_spawn: false,
             inside_unsafe: false,
@@ -771,8 +787,10 @@ impl OwnershipChecker {
         self.scope_vars.clear();
         self.scope_drops.clear();
         self.ref_vars.clear();
-        self.mut_token_vars.clear();
-        self.read_token_vars.clear();
+        // 注：type_ledger 是模块级数据（check_module 注入），不随函数重置
+        self.scope_keys.clear();
+        self.scope_keys.push(HashMap::new());
+        self.cur_stmt_key = 0;
         self.escaped_refs.clear();
         self.inside_spawn = false;
         self.inside_unsafe = false;
@@ -861,9 +879,12 @@ impl OwnershipChecker {
     ) {
         match ownership {
             ParamOwnership::Move => {
-                // ref T / &T 令牌是 Dup（SPEC §11.2）：传参复制，不 move（#256）
-                if !self.ref_vars.contains(var_name) && !self.read_token_vars.contains(var_name) {
-                    self.var_state.insert(var_name.to_string(), VarState::Moved);
+                // #256：类型驱动——Dup/ValueCopy 传参是复制，不 move
+                match self.classify_var(var_name) {
+                    CopySemantics::Dup | CopySemantics::ValueCopy => {}
+                    _ => {
+                        self.var_state.insert(var_name.to_string(), VarState::Moved);
+                    }
                 }
             }
             ParamOwnership::ReadBorrow => {
@@ -953,30 +974,71 @@ impl OwnershipChecker {
         }
     }
 
-    /// #257：检查 `&mut` 写入令牌的赋值复制。
-    ///
-    /// SPEC §11.2：`&mut T` 是 Linear（零大小写入令牌，独占，不可复制）。
-    /// `m2 = m`（m 持有 `&mut` 令牌）= 复制 Linear 令牌 → 拒绝（E2003）。
-    fn check_mut_token_copy(
-        &self,
+    /// #257：Linear 令牌（&mut T）赋值复制的拒绝诊断（E2003）
+    fn linear_copy_error(
         src_name: &str,
-    ) -> Option<ProofResult> {
-        if self.mut_token_vars.contains(src_name) {
-            Some(ProofResult::Disproved(
-                super::super::proof::verdict::DisproofModel {
-                    kind: super::super::proof::verdict::DisproofKind::LinearTokenCopy,
-                    assignments: vec![("variable".into(), src_name.into())],
-                    constraint: format!(
-                        "`{}` 持有 `&mut` 写入令牌：SPEC §11.2 规定 &mut T 是 Linear（独占、非 Dup），不能复制。请在需要的地方重新创建 `&mut` 借用",
-                        src_name
-                    ),
-                    span: Some(self.current_span),
-                    predicate_span: None,
-                },
-            ))
-        } else {
-            None
+        span: Span,
+    ) -> ProofResult {
+        ProofResult::Disproved(super::super::proof::verdict::DisproofModel {
+            kind: super::super::proof::verdict::DisproofKind::LinearTokenCopy,
+            assignments: vec![("variable".into(), src_name.into())],
+            constraint: format!(
+                "`{}` 持有 `&mut` 写入令牌：SPEC §11.2 规定 &mut T 是 Linear（独占、非 Dup），不能复制。请在需要的地方重新创建 `&mut` 借用",
+                src_name
+            ),
+            span: Some(span),
+            predicate_span: None,
+        })
+    }
+
+    /// 记录绑定：变量名 → 当前语句键（镜像作用域栈，#256）
+    fn record_binding(
+        &mut self,
+        name: &str,
+    ) {
+        if let Some(scope) = self.scope_keys.last_mut() {
+            scope.insert(name.to_string(), self.cur_stmt_key);
         }
+    }
+
+    /// #256：类型驱动的复制语义分类（SPEC §11.2）
+    fn classify_mono(ty: &crate::frontend::core::types::MonoType) -> CopySemantics {
+        use crate::frontend::core::types::MonoType;
+        match ty {
+            MonoType::Ref { mutable: false, .. } => CopySemantics::Dup,
+            MonoType::Ref { mutable: true, .. } => CopySemantics::Linear,
+            MonoType::Arc(_) => CopySemantics::Dup,
+            MonoType::Int(_) | MonoType::Float(_) | MonoType::Bool | MonoType::Char => {
+                CopySemantics::ValueCopy
+            }
+            _ => CopySemantics::Move,
+        }
+    }
+
+    /// #256：变量语义分类——先查账本（作用域内层优先），再查 env（顶层/函数绑定），
+    /// 都查不到保守按 Move
+    fn classify_var(
+        &self,
+        name: &str,
+    ) -> CopySemantics {
+        for scope in self.scope_keys.iter().rev() {
+            if let Some(key) = scope.get(name) {
+                if let Some(poly) = self.type_ledger.get(&(*key, name.to_string())) {
+                    return Self::classify_mono(&poly.body);
+                }
+            }
+        }
+        if let Some(env_ptr) = self.env {
+            let env = unsafe { &*env_ptr };
+            if let Some(poly) = env.get_var(name) {
+                return Self::classify_mono(&poly.body);
+            }
+        }
+        // ref T（Arc/Rc）语法回退：账本/env 都查不到时保留 #251 的追踪结果
+        if self.ref_vars.contains(name) {
+            return CopySemantics::Dup;
+        }
+        CopySemantics::Move
     }
 
     // ── 控制流方法（walk_expr 和 walk_stmt 共用） ──────────
@@ -1077,6 +1139,7 @@ impl OwnershipChecker {
         let mut results = self.walk_expr(iterable);
         self.var_state.insert(var.to_string(), VarState::Alive);
         self.var_mutability.insert(var.to_string(), var_mut);
+        self.record_binding(var);
 
         let head_node = self.cfg.add_node(None);
         self.cfg
@@ -1187,10 +1250,10 @@ impl OwnershipChecker {
                 op, left, right, ..
             } => {
                 if *op == crate::frontend::core::parser::ast::BinOp::Assign {
-                    // #257：表达式层赋值同样拒绝 `&mut` 令牌复制
+                    // #257：表达式层赋值同样拒绝 Linear（&mut）令牌复制
                     if let Expr::Var(src_name, _) = right.as_ref() {
-                        if let Some(err) = self.check_mut_token_copy(src_name) {
-                            let mut r = vec![err];
+                        if self.classify_var(src_name) == CopySemantics::Linear {
+                            let mut r = vec![Self::linear_copy_error(src_name, self.current_span)];
                             r.extend(self.walk_expr(right));
                             return r;
                         }
@@ -1204,14 +1267,10 @@ impl OwnershipChecker {
                                 r.push(emit_mut_predicate(name, false, self.current_span));
                             }
                             self.add_consumer_for_var(name);
-                            // ref 属性传播：x = ref_var → x 也是 ref 变量
+                            // ref 属性传播：x = ref_var → x 也是 ref 变量（spawn/Arc 机制）
                             if let Expr::Var(src_name, _) = right.as_ref() {
                                 if self.ref_vars.contains(src_name) {
                                     self.ref_vars.insert(name.clone());
-                                }
-                                // #256：&T 令牌属性同样传播
-                                if self.read_token_vars.contains(src_name) {
-                                    self.read_token_vars.insert(name.clone());
                                 }
                             }
                             r
@@ -1224,14 +1283,10 @@ impl OwnershipChecker {
                             if let Some(scope) = self.scope_vars.last_mut() {
                                 scope.push(name.clone());
                             }
-                            // ref 属性传播
+                            // ref 属性传播（spawn/Arc 机制）
                             if let Expr::Var(src_name, _) = right.as_ref() {
                                 if self.ref_vars.contains(src_name) {
                                     self.ref_vars.insert(name.clone());
-                                }
-                                // #256：&T 令牌属性同样传播
-                                if self.read_token_vars.contains(src_name) {
-                                    self.read_token_vars.insert(name.clone());
                                 }
                             }
                             r
@@ -1307,9 +1362,12 @@ impl OwnershipChecker {
             Expr::Return(Some(inner), _) => {
                 let results = self.walk_expr(inner);
                 if let Expr::Var(name, _) = inner.as_ref() {
-                    // Dup 令牌（ref T / &T）返回不 move 源变量（#256）
-                    if !self.ref_vars.contains(name) && !self.read_token_vars.contains(name) {
-                        self.var_state.insert(name.clone(), VarState::Moved);
+                    // #256：Dup/ValueCopy 返回是复制；Move/Linear 转移所有权
+                    match self.classify_var(name) {
+                        CopySemantics::Dup | CopySemantics::ValueCopy => {}
+                        _ => {
+                            self.var_state.insert(name.clone(), VarState::Moved);
+                        }
                     }
                 }
                 results
@@ -1410,6 +1468,8 @@ impl OwnershipChecker {
         stmt: &Stmt,
     ) -> Vec<ProofResult> {
         self.current_span = stmt.span;
+        // 账本键与推断层对齐：当前语句的 span offset（#256）
+        self.cur_stmt_key = stmt.span.start.offset;
         let result = match &stmt.kind {
             StmtKind::Expr(expr) => self.walk_expr(expr),
 
@@ -1433,6 +1493,7 @@ impl OwnershipChecker {
                         return results;
                     }
                 };
+                self.record_binding(&name);
                 let initializer = value.as_deref();
                 let mut results = Vec::new();
                 let is_new = !self.var_state.contains_key(&name);
@@ -1469,14 +1530,6 @@ impl OwnershipChecker {
                     if matches!(init, Expr::Ref { .. }) {
                         self.ref_vars.insert(name.clone());
                     }
-                    // #257：记录持有 `&mut` 写入令牌的变量
-                    if matches!(init, Expr::Borrow { mutable: true, .. }) {
-                        self.mut_token_vars.insert(name.clone());
-                    }
-                    // #256：记录持有 `&T` 读取令牌的变量（Dup：赋值复制不 move）
-                    if matches!(init, Expr::Borrow { mutable: false, .. }) {
-                        self.read_token_vars.insert(name.clone());
-                    }
                 }
                 if let Some(init) = initializer {
                     if let Expr::BinOp {
@@ -1495,22 +1548,20 @@ impl OwnershipChecker {
                     }
                     results.extend(self.walk_expr(init));
                     if let Expr::Var(src_name, _) = init {
-                        // #257：`&mut` 写入令牌是 Linear（SPEC §11.2），赋值复制直接拒绝
-                        if let Some(err) = self.check_mut_token_copy(src_name) {
-                            results.push(err);
-                            return results;
+                        // #256/#257：类型驱动的复制语义（SPEC §11.2）
+                        match self.classify_var(src_name) {
+                            CopySemantics::Linear => {
+                                results.push(Self::linear_copy_error(src_name, self.current_span));
+                                return results;
+                            }
+                            CopySemantics::Dup | CopySemantics::ValueCopy => {}
+                            CopySemantics::Move => {
+                                self.var_state.insert(src_name.clone(), VarState::Moved);
+                            }
                         }
-                        // Dup 类别（ref T / &T 令牌，SPEC §11.2）：复制不 move（#256）
-                        let is_dup = self.ref_vars.contains(src_name)
-                            || self.read_token_vars.contains(src_name);
-                        if !is_dup {
-                            self.var_state.insert(src_name.clone(), VarState::Moved);
-                        }
+                        // ref 属性传播（spawn/Arc 机制）
                         if self.ref_vars.contains(src_name) {
                             self.ref_vars.insert(name.clone());
-                        }
-                        if self.read_token_vars.contains(src_name) {
-                            self.read_token_vars.insert(name.clone());
                         }
                     }
                 }
@@ -1521,6 +1572,7 @@ impl OwnershipChecker {
                             for param in params {
                                 self.var_state.insert(param.name.clone(), VarState::Alive);
                                 self.var_mutability.insert(param.name.clone(), param.is_mut);
+                                self.record_binding(&param.name);
                             }
                             results.extend(self.walk_stmts(&body.stmts));
                         }
@@ -1536,9 +1588,12 @@ impl OwnershipChecker {
             StmtKind::Return(Some(expr)) => {
                 let results = self.walk_expr(expr);
                 if let Expr::Var(name, _) = expr.as_ref() {
-                    // Dup 令牌（ref T / &T）返回不 move 源变量（#256）
-                    if !self.ref_vars.contains(name) && !self.read_token_vars.contains(name) {
-                        self.var_state.insert(name.clone(), VarState::Moved);
+                    // #256：Dup/ValueCopy 返回是复制；Move/Linear 转移所有权
+                    match self.classify_var(name) {
+                        CopySemantics::Dup | CopySemantics::ValueCopy => {}
+                        _ => {
+                            self.var_state.insert(name.clone(), VarState::Moved);
+                        }
                     }
                 }
                 results
@@ -1579,6 +1634,7 @@ impl OwnershipChecker {
         stmts: &[Stmt],
     ) -> Vec<ProofResult> {
         self.scope_vars.push(Vec::new());
+        self.scope_keys.push(HashMap::new());
         let mut results = Vec::new();
         for stmt in stmts {
             results.extend(self.walk_stmt(stmt));
@@ -1592,6 +1648,7 @@ impl OwnershipChecker {
                 }
             }
         }
+        self.scope_keys.pop();
         results
     }
 
@@ -1725,16 +1782,19 @@ impl OwnershipChecker {
         params: &[crate::frontend::core::parser::ast::Param],
         body: &[Stmt],
         env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
+        stmt_key: usize,
     ) -> (Vec<ProofResult>, ReleasePlan, HashSet<String>) {
         self.reset();
 
         // 设置类型环境引用（供 walk_expr 使用）
         self.env = Some(env as *const _);
 
-        // 标记参数为 Alive，记录可变性
+        // 标记参数为 Alive，记录可变性；参数键与推断层对齐（#256）
+        self.cur_stmt_key = stmt_key;
         for param in params {
             self.var_state.insert(param.name.clone(), VarState::Alive);
             self.var_mutability.insert(param.name.clone(), param.is_mut);
+            self.record_binding(&param.name);
         }
 
         // 一趟遍历：构建 CFG + 前向检查 + 收集待定写操作
@@ -1762,7 +1822,9 @@ impl OwnershipChecker {
         &mut self,
         module: &Module,
         _env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
+        type_ledger: &HashMap<(usize, String), crate::frontend::core::types::PolyType>,
     ) -> (Vec<ProofResult>, ReleasePlan, HashSet<String>) {
+        self.type_ledger = type_ledger.clone();
         let mut results = Vec::new();
         let mut merged_drops: HashMap<Span, Vec<String>> = HashMap::new();
         let mut merged_escaped: HashSet<String> = HashSet::new();
@@ -1789,7 +1851,7 @@ impl OwnershipChecker {
                     continue;
                 }
                 let (func_results, func_plan, escaped) =
-                    self.check_function(&name, &params, &body, _env);
+                    self.check_function(&name, &params, &body, _env, stmt.span.start.offset);
                 results.extend(func_results);
                 merged_drops.extend(func_plan.drops);
                 merged_escaped.extend(escaped);
