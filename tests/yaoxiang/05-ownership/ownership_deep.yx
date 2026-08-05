@@ -2,7 +2,7 @@
 // 覆盖: SPEC type-system.md §11 类型属性 / §12 借用令牌深水区（#251 P0-7）
 // [test:ignore]: #256/#260 已修（类型驱动分类，B1），第 1/2 节语义由
 // token_dup_copy.yx / primitive_value_copy.yx 覆盖；本文件剩余阻塞是
-// &mut 令牌运行时机制缺陷（实测，待立 issue）：
+// &mut 令牌运行时机制缺陷（#266，实测）：
 //   - q.shift(1,1) 自动借用方法调用不写回（stash 验证为 pre-existing）
 //   - m.shift(...) 显式令牌调方法报 Function not found: m.shift
 //   - m.x = 100 令牌字段写静默无效（soundness）
