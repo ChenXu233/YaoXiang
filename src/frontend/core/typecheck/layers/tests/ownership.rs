@@ -2165,8 +2165,8 @@ fn test_while_guard_scope_balanced() {
 }
 
 #[test]
-fn test_check_ownership_entry_shares_assumptions() {
-    // Arrange: 带 if 的模块——经证明管线入口 check_ownership 跑所有权检查
+fn test_check_ownership_entry_proves_valid_module() {
+    // Arrange: 带 if 的合法模块——经证明管线入口 check_ownership 检查
     let cond = Expr::Var("c".into(), Span::default());
     let module = make_module(vec![make_binding(
         "main",
@@ -2189,15 +2189,41 @@ fn test_check_ownership_entry_shares_assumptions() {
             &std::collections::HashMap::new(),
         );
 
-    // Assert 1: 管线返回结果（检查器真的跑了）
+    // Assert: 合法模块经管线入口不应产出所有权违例
     assert!(
         results
             .iter()
             .all(|r| !matches!(r, ProofResult::Disproved { .. })),
-        "正常模块不应有所有权违例，实际: {:?}",
+        "合法模块不应有所有权违例，实际: {:?}",
         results
     );
-    // Assert 2: ctx.assumptions 与检查器假设栈共享——守卫进出后回到空
+}
+
+#[test]
+fn test_check_ownership_entry_shares_guards_cleared() {
+    // Arrange: 带 if 的模块——分支守卫应注入检查器共享的 ctx.assumptions
+    let cond = Expr::Var("c".into(), Span::default());
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![make_if_stmt(
+            cond,
+            vec![make_var_stmt("x", make_lit(1))],
+            None,
+        )],
+    )]);
+    let env = make_test_env();
+    let mut ctx = ProofContext::new(&env);
+
+    // Act: 经真入口，守卫经 ctx.assumptions 进入并在分支退出后清空
+    let _results = crate::frontend::core::typecheck::layers::ownership::check_ownership(
+        &mut ctx,
+        &module,
+        &env,
+        &std::collections::HashMap::new(),
+    );
+
+    // Assert: 共享假设栈 walk 完后回到空（守卫进出配对）
     assert!(
         ctx.assumptions.is_empty(),
         "共享假设栈应在 walk 完后清空（守卫进出配对），实际残留: {:?}",
