@@ -5,6 +5,8 @@
 //! RFC-010: 统一类型语法
 //! RFC-011: 泛型系统设计
 
+use crate::frontend::core::lexer::tokenize;
+use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::types::{MonoType, PolyType};
 use crate::frontend::core::parser::ast::{Block, Module, Stmt, Expr, Type as AstType};
@@ -467,9 +469,6 @@ fn test_type_checker_with_generic_type_binding() {
 //
 // 规范来源: RFC-027 §语法——谓词应用的实参必须是编译期常量形态；
 // 实参不可转换或个数不匹配报 E1092，精化约束绝不静默丢弃。
-
-use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::parse;
 
 /// 辅助：源码 → 类型检查结果（语法必须正确，否则测试本身有错）
 fn check_source_for_refined(
