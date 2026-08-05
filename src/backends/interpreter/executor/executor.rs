@@ -982,7 +982,15 @@ impl Interpreter {
             (CompareOp::Ge, RuntimeValue::String(l), RuntimeValue::String(r)) => {
                 RuntimeValue::Bool(l >= r)
             }
-            _ => RuntimeValue::Bool(false),
+            // 类型不匹配的比较：硬错误，禁止静默返回 false
+            // （同函数算术分支已报错，保持一致；类型检查器应先拦截，此处为底线防御）
+            (op, l, r) => {
+                let stack = self.capture_stack();
+                return Err(ExecutorError::type_error(
+                    format!("type mismatch in comparison {:?}: {:?} vs {:?}", op, l, r),
+                    stack,
+                ));
+            }
         };
 
         frame.set_slot(dst.0 as usize, result);

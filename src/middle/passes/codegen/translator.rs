@@ -722,7 +722,14 @@ impl Translator {
                     let const_idx = self.emitter.add_constant(ConstValue::String(name.clone()));
                     (Opcode::CallNative, const_idx as u32)
                 }
-                _ => (Opcode::CallStatic, 0),
+                // 禁止静默回退到 0 号函数（#251 同类：兑底曾静默吞掉元组字面量）
+                other => {
+                    return Err(ErrorCodeDefinition::codegen_invalid_operand(&format!(
+                        "unresolvable call target in translate_call: {:?}",
+                        other
+                    ))
+                    .build());
+                }
             }
         };
         let base_arg_reg = if let Some(first_arg) = args.first() {

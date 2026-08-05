@@ -1039,7 +1039,18 @@ impl AstToIrGenerator {
                     )
                 }
             }
-            _ => Ok(None),
+            // 导入语句：解析在独立 pass 完成（build_import_aliases），不生成运行时代码
+            ast::StmtKind::Use { .. } => Ok(None),
+            _ => {
+                // 顶层只允许定义（绑定/类型/导入）；可执行语句必须在函数体内。
+                // 禁止静默丢弃（#251 同类：表达式级兑底曾静默归零）
+                Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                    "unhandled top-level statement in IR generation: {:?}",
+                    std::mem::discriminant(&stmt.kind)
+                ))
+                .at(stmt.span)
+                .build())
+            }
         }
     }
 
@@ -2069,8 +2080,19 @@ impl AstToIrGenerator {
                     instructions.push(Instruction::Ret(None));
                 }
             },
-            // 处理其他语句类型
-            _ => {}
+            // 合法不产生代码的语句：
+            // - Use：导入解析在独立 pass 完成，无运行时代码
+            // - Error：解析器恢复占位符；存在解析错误时编译已在此前终止
+            ast::StmtKind::Use { .. } | ast::StmtKind::Error(_) => {}
+            // 块内类型定义不受支持：此前被静默忽略（定义即无效，使用时才在远处报 E1001）
+            ast::StmtKind::TypeDefinition { name, .. } => {
+                return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                    "type definition `{}` inside a block is not supported; type definitions belong at the top level",
+                    name
+                ))
+                .at(stmt.span)
+                .build());
+            }
         }
         Ok(())
     }

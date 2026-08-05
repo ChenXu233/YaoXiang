@@ -151,7 +151,9 @@ fn test_list_comp() {
 
 #[test]
 fn test_tuple_literal() {
-    // Arrange: SPEC §3.6 元组字面量（此前静默编译为 0，已通过 NewTuple 指令实现）
+    // Arrange: SPEC §3.6 元组字面量。
+    // 历史：#251 之前曾掉进 generate_expr_ir 的 catch-all 被静默编译为 0（错误行为），
+    // #251 硬化为硬错误，#253 以 NewTuple 指令正确实现。本测试验证正向行为。
     let source = "main = { mut t = (1, \"one\") }";
 
     // Act
