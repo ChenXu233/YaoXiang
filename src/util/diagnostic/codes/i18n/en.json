@@ -908,11 +908,11 @@
     "error_output": "error[E0022]: Enums must use brace syntax\n --> example.yx:1:9\n  |\n1 | Color = red | green | blue\n  |         ^ Use brace syntax: { red | green | blue }"
   },
   "E1092": {
-    "title": "Invalid refinement type argument",
-    "message": "Refinement type argument is invalid and the constraint cannot be generated",
-    "template": "'{name}' refinement type argument is invalid: {reason}",
-    "help": "Predicate/proof function arguments must be literals, variables, or single-argument type applications; otherwise the refinement constraint cannot be generated",
+    "title": "illegal refinement type argument usage",
+    "message": "illegal refinement type argument usage, constraint cannot be generated",
+    "template": "illegal refinement type argument usage '{name}': {reason}",
+    "help": "predicate/proof function arguments must be literal, variable, or single-argument type application, otherwise refinement constraint cannot be generated",
     "example": "y: IsSmall(List(Int)) = 9999",
-    "error_output": "error[E1092]: 'IsSmall' refinement type argument is invalid: argument cannot be converted to a compile-time constant expression"
+    "error_output": "error[E1092]: illegal refinement type argument usage 'IsSmall': argument cannot be converted to compile-time constant expression"
   }
 }
