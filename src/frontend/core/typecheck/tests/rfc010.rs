@@ -796,3 +796,75 @@ fn test_rfc010_without_type_annotation_not_type_constructor() {
         "record syntax without `: Type` annotation should not be a type definition"
     );
 }
+
+/// 规范：#271#1 构造器参数个数检查
+///
+/// 预期行为：
+/// - `Point(5)` 缺参（y 无默认值）→ 编译错误（原静默填 0）
+/// - `Point(5, 6, 7)` 超参 → 编译错误（原静默丢弃）
+/// - `Point(5, 6)` 正常 → 通过
+/// - 命名参数 `Point(x=6)` 缺必需字段 y → 编译错误（原静默填 0）
+/// - 命名参数 `Point(x=6, y=2)` 完整 → 通过
+/// - 有默认值的字段可省略：`Config("localhost")` → 通过
+#[test]
+fn test_rfc010_ctor_argument_count_check() {
+    // Arrange - 6 个用例矩阵（缺参/超参/正常/命名缺字段/命名完整/默认值省略）
+    let cases = [
+        (
+            "Point(5)",
+            true,
+            "缺参应报错：Point(5) 少传 y（无默认值，原静默填 0）",
+        ),
+        (
+            "Point(5, 6, 7)",
+            true,
+            "超参应报错：Point(5,6,7) 多传第 3 个参数（原静默丢弃）",
+        ),
+        ("Point(5, 6)", false, "正常构造应通过：Point(5, 6)"),
+        (
+            "Point(x=6)",
+            true,
+            "命名参数缺必需字段应报错：Point(x=6) 缺 y",
+        ),
+        (
+            "Point(x=6, y=2)",
+            false,
+            "命名参数完整应通过：Point(x=6, y=2)",
+        ),
+        (
+            "Config(\"localhost\")",
+            false,
+            "默认值字段可省略应通过：Config(\"localhost\") 缺 port 但有默认值",
+        ),
+    ];
+
+    for (call, expect_error, msg) in cases {
+        let source = format!(
+            "Point: Type = {{ x: Int, y: Int }}\nConfig: Type = {{ host: String, port: Int = 8080 }}\nmain = {{\n    p = {}\n}}",
+            call
+        );
+
+        // Act
+        let result = check_source(&source);
+
+        // Assert
+        if expect_error {
+            assert!(
+                !result.diagnostics.is_empty(),
+                "{}（期望编译错误，实际通过）",
+                msg
+            );
+        } else {
+            assert!(
+                result.diagnostics.is_empty(),
+                "{}（期望通过，实际: {:?}）",
+                msg,
+                result
+                    .diagnostics
+                    .iter()
+                    .map(|d| d.message.clone())
+                    .collect::<Vec<_>>()
+            );
+        }
+    }
+}

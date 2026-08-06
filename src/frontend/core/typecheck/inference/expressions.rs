@@ -1007,7 +1007,11 @@ impl<'a> ExpressionInferrer<'a> {
 
             // 函数调用
             crate::frontend::core::parser::ast::Expr::Call {
-                func, args, span, ..
+                func,
+                args,
+                named_args,
+                span,
+                ..
             } => {
                 let func_ty = self.infer_expr(func)?;
 
@@ -1151,6 +1155,83 @@ impl<'a> ExpressionInferrer<'a> {
                         }
                     }
                 }
+                // #271#1：统一参数个数检查（构造器缺参/超参、函数缺参/超参）。
+                // 泛型类型构造器（List(1,2,3) 值构造）豁免——其参数语义是类型参数+值参数，
+                // 不适用字段计数（RFC-011），在 match 前拦下。
+                if let crate::frontend::core::parser::ast::Expr::Var(fn_name, _) = &**func {
+                    // 豁免：泛型类型构造器（List(1,2,3) 值构造是 RFC-011 语义，非字段计数）；
+                    // native 函数（std 可选参数 ?msg / 变参 ...args，签名 params.len() 不可靠，
+                    // assert(1>0) 合法但 params 有 2 项——原 Fn 分支对数量不等静默跳过，
+                    // 正是这种宽容路径）。
+                    if !self.generic_type_defs.contains_key(fn_name)
+                        && !self.native_signatures.contains_key(fn_name)
+                    {
+                        let provided = arg_types.len();
+                        match &mono_func_ty {
+                            MonoType::Struct(st) => {
+                                // 普通 struct 构造器：Point(1.0, 2.0)。
+                                // 有默认值的字段可省略 → 必需参数数 = 无默认值字段数。
+                                let total = st.fields.len();
+                                let required = st.field_has_default.iter().filter(|&&d| !d).count();
+                                if named_args.is_empty() {
+                                    // 位置参数：Point(5) 缺参 / Point(5,6,7) 超参
+                                    if provided < required || provided > total {
+                                        return Err(ErrorCodeDefinition::argument_count_mismatch(
+                                            &st.name, total, provided,
+                                        )
+                                        .at(*span)
+                                        .build());
+                                    }
+                                } else {
+                                    // 命名参数：Point(x=6) 缺必需字段 → 静默 0（#271#1）。
+                                    // 检查必需字段（无默认值）是否全部提供。
+                                    let provided_names: std::collections::HashSet<&str> =
+                                        named_args.iter().map(|(n, _)| n.as_str()).collect();
+                                    let missing: Vec<&str> = st
+                                        .fields
+                                        .iter()
+                                        .enumerate()
+                                        .filter(|(i, _)| !st.field_has_default[*i])
+                                        .map(|(_, (n, _))| n.as_str())
+                                        .filter(|n| !provided_names.contains(n))
+                                        .collect();
+                                    if !missing.is_empty() {
+                                        let msg = format!(
+                                            "{} constructor missing required field(s): {}",
+                                            st.name,
+                                            missing.join(", ")
+                                        );
+                                        return Err(ErrorCodeDefinition::type_mismatch(
+                                            &msg,
+                                            &format!("provided {}", provided_names.len()),
+                                        )
+                                        .at(*span)
+                                        .build());
+                                    }
+                                }
+                            }
+                            MonoType::Fn { params, .. }
+                                // 普通函数调用：add(5) 缺参 → E6007 运行时错（晚且误导）；
+                                // add(1,2,3) 超参静默丢弃。拦为编译期 E1010。
+                                // 仅当 params 非空时检查：lambda/块函数绑定（mk: (Int,Int)->Int
+                                // = (x,y)=>x+y）在 scope 里参数类型丢失（params 为空），
+                                // 计数不可靠，跳过避免误伤（#271 记 lambda 绑定参数丢失）。
+                                if named_args.is_empty()
+                                    && !params.is_empty()
+                                    && provided != params.len()
+                                => {
+                                    return Err(ErrorCodeDefinition::argument_count_mismatch(
+                                        fn_name,
+                                        params.len(),
+                                        provided,
+                                    )
+                                    .at(*span)
+                                    .build());
+                                }
+                            _ => {}
+                        }
+                    }
+                }
                 // 分发
                 match mono_func_ty {
                     MonoType::Fn {
@@ -1205,7 +1286,8 @@ impl<'a> ExpressionInferrer<'a> {
                         return Ok(resolved_ret);
                     }
                     MonoType::Struct(_) | MonoType::TypeRef(_) => {
-                        // 类型构造器：Point(1.0, 2.0) 或 List(Int) 单态化后的结果
+                        // 类型构造器：Point(1.0, 2.0) 或 List(Int) 单态化后的结果。
+                        // 参数个数检查已在 #271#1 前置块完成（泛型构造器豁免）。
                         return Ok(mono_func_ty);
                     }
                     _ => {}
