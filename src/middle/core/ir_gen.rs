@@ -1317,6 +1317,7 @@ impl AstToIrGenerator {
         env_count: usize,
         next_func_name: &str,
         constants: &mut Vec<ConstValue>,
+        generic_params: Option<Vec<String>>,
     ) -> Result<FunctionIR, Diagnostic> {
         let _ = constants; // 中间层不生成常量
         let mut instructions = Vec::new();
@@ -1375,7 +1376,7 @@ impl AstToIrGenerator {
             name: func_name.to_string(),
             params: param_types,
             return_type,
-            generic_params: None,
+            generic_params,
             body: FunctionBody::Code {
                 blocks: vec![BasicBlock {
                     label: 0,
@@ -1400,6 +1401,7 @@ impl AstToIrGenerator {
         env_param_names: &[String],
         body: &[ast::Stmt],
         constants: &mut Vec<ConstValue>,
+        generic_params: Option<Vec<String>>,
     ) -> Result<FunctionIR, Diagnostic> {
         let mut instructions = Vec::new();
         let env_count = env_param_names.len();
@@ -1449,7 +1451,7 @@ impl AstToIrGenerator {
             name: func_name.to_string(),
             params: param_types,
             return_type,
-            generic_params: None,
+            generic_params,
             body: FunctionBody::Code {
                 blocks: vec![BasicBlock {
                     label: 0,
@@ -1478,7 +1480,7 @@ impl AstToIrGenerator {
         all_params: &[ast::Param],
         body: &[ast::Stmt],
         constants: &mut Vec<ConstValue>,
-        _generic_params: Option<Vec<String>>,
+        generic_params: Option<Vec<String>>,
     ) -> Result<Option<FunctionIR>, Diagnostic> {
         let layers = Self::split_curry(type_annotation, all_params);
 
@@ -1490,10 +1492,18 @@ impl AstToIrGenerator {
 
         for (i, layer) in layers.iter().enumerate() {
             let is_innermost = i == layers.len() - 1;
+            let is_outermost = i == 0;
             let func_name = if i == 0 {
                 name.to_string()
             } else {
                 format!("__{}_l{}", name, i - 1)
+            };
+
+            // 只有最外层函数保留 generic_params（用于单态化）
+            let layer_generic_params = if is_outermost {
+                generic_params.clone()
+            } else {
+                None
             };
 
             // 进入新作用域
@@ -1508,6 +1518,7 @@ impl AstToIrGenerator {
                     &env_param_names,
                     body,
                     constants,
+                    layer_generic_params,
                 )?
             } else {
                 let next_name = format!("__{}_l{}", name, i);
@@ -1517,6 +1528,7 @@ impl AstToIrGenerator {
                     env_param_names.len(),
                     &next_name,
                     constants,
+                    layer_generic_params,
                 )?
             };
             self.exit_scope();

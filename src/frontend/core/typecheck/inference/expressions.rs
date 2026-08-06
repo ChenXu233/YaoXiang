@@ -649,7 +649,7 @@ impl<'a> ExpressionInferrer<'a> {
         &mut self,
         func_ty: &MonoType,
         func_expr: &crate::frontend::core::parser::ast::Expr,
-        arg_types: &[MonoType],
+        _arg_types: &[MonoType],
         mono_func_ty: &MonoType,
         call_span: crate::util::span::Span,
     ) {
@@ -662,11 +662,18 @@ impl<'a> ExpressionInferrer<'a> {
             return;
         };
 
-        // 检查原函数类型是否包含 TypeVar（即是否为泛型函数）
-        let mut var_indices = HashSet::new();
-        Self::collect_type_var_indices(func_ty, &mut var_indices);
-        if var_indices.is_empty() {
-            // 也检查 MetaType 参数（泛型类型构造器）
+        // 收集「参数位直接是 TypeVar」的位置（如 identity 的 x: T、twice 的 x: T）。
+        // 不能收集嵌套 TypeVar 的参数位：twice(f: (T) -> T, x: T) 的 f 位是 fn(T)->T，
+        // 解析后是 fn(int64)->int64，用它当 type_arg 会让 T 绑到错误类型（#255）。
+        let mut type_var_indices = HashSet::new();
+        for (i, param) in original_params.iter().enumerate() {
+            if matches!(self.solver.resolve_type(param), MonoType::TypeVar(_)) {
+                type_var_indices.insert(i);
+            }
+        }
+
+        // 没有 TypeVar → 不是泛型函数调用（除非是 MetaType 构造器，交给类型特化路径）
+        if type_var_indices.is_empty() {
             let has_meta = original_params
                 .iter()
                 .any(|p| matches!(p, MonoType::MetaType { .. }));
@@ -690,9 +697,23 @@ impl<'a> ExpressionInferrer<'a> {
             ..
         } = mono_func_ty
         {
-            // 收集所有的具体类型（从已解析的参数中提取去重后的类型）
-            let type_args: Vec<MonoType> =
-                self.extract_concrete_type_args(resolved_params, arg_types);
+            // 只收集 TypeVar 参数位对应的具体类型（去重）。
+            // 不能收集所有具体参数类型：twice(x => x+1, 5) 的参位含 fn(int64)->int64 与
+            // int64，但 T 只有一个（int64）——全收集会让 type_args 长度与 type_params 不匹配、
+            // 特化失败（#255）。
+            let mut type_args = Vec::new();
+            let mut seen = HashSet::new();
+            for &idx in &type_var_indices {
+                if let Some(resolved) = resolved_params.get(idx) {
+                    let resolved = self.solver.resolve_type(resolved);
+                    if !matches!(resolved, MonoType::TypeVar(_)) {
+                        let key = format!("{}", resolved);
+                        if seen.insert(key) {
+                            type_args.push(resolved);
+                        }
+                    }
+                }
+            }
 
             if !type_args.is_empty() {
                 let generic_id = if type_params.is_empty() {
@@ -738,29 +759,6 @@ impl<'a> ExpressionInferrer<'a> {
         }
 
         vec![]
-    }
-
-    /// 从已解析的参数类型和实参类型中提取具体的类型参数
-    fn extract_concrete_type_args(
-        &self,
-        resolved_params: &[MonoType],
-        _arg_types: &[MonoType],
-    ) -> Vec<MonoType> {
-        let mut type_args = Vec::new();
-        let mut seen = HashSet::new();
-
-        // 收集 params 中的具体类型（已解析的 TypeVar）
-        for param in resolved_params {
-            let resolved = self.solver.resolve_type(param);
-            if !matches!(resolved, MonoType::TypeVar(_)) {
-                let key = format!("{}", resolved);
-                if seen.insert(key) {
-                    type_args.push(resolved);
-                }
-            }
-        }
-
-        type_args
     }
 
     /// 推断表达式的类型

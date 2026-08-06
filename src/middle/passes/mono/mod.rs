@@ -145,7 +145,10 @@ impl Monomorphizer {
         let mut functions: Vec<FunctionIR> = module
             .functions
             .iter()
-            .filter(|f| f.generic_params.is_none())
+            // 删未特化的泛型代码函数；泛型 TypeDecl 构造器函数必须保留
+            // （typecheck 对构造器调用不生成 request，无 mono 时原样保留可用；
+            //  mono 启用时若删除则函数表缺 Entry → 运行时 E6006（#255））
+            .filter(|f| f.generic_params.is_none() || f.is_type_decl())
             .cloned()
             .collect();
 
@@ -505,8 +508,10 @@ impl Monomorphizer {
         for req in requests {
             let generic_name = req.generic_id().name().to_string();
 
-            // 只处理已知的泛型函数
-            if !self.generic_functions.contains_key(&generic_name) {
+            // 处理泛型函数和泛型类型（fix #255：泛型类型构造器也需要替换）
+            if !self.generic_functions.contains_key(&generic_name)
+                && !self.generic_types.contains_key(&generic_name)
+            {
                 continue;
             }
 

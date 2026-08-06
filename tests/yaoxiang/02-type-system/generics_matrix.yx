@@ -1,6 +1,5 @@
 // 02-type-system/generics_matrix.yx
 // 覆盖: SPEC type-system.md §4/§5 泛型矩阵扩展（#251 P0-3）
-// [test:ignore]: 泛型函数+泛型类型构造器同文件时构造器误路由（#255）
 // 验证:
 //   - 双参数泛型类型，不同实参（Entry(Int, String) / Entry(String, Bool)）
 //   - 泛型类型以容器为类型实参（Box(List(Int))）
