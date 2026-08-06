@@ -1552,6 +1552,72 @@ impl AstToIrGenerator {
                 ast::Literal::Char(c) => Some(ConstValue::Char(*c)),
                 ast::Literal::Void => None,
             },
+            // RFC-027: 常量表达式折叠（#261）。
+            // 仅折叠纯数值/字符串/布尔的算术与比较，避开除法（除 0）与 Range/Assign。
+            // 任一子表达式不能折时整条不折，与 RFC-027 §362「失败回退 Unproven」一致。
+            ast::Expr::BinOp {
+                op, left, right, ..
+            } => {
+                use ast::BinOp as B;
+                let l = self.eval_const_expr(left)?;
+                let r = self.eval_const_expr(right)?;
+                // ponytail: 二元折叠的穷举不含 Range/Assign，后者语义不允许初始化于常量
+                match (l, r) {
+                    (ConstValue::Int(a), ConstValue::Int(b)) => match op {
+                        B::Add => Some(ConstValue::Int(a.wrapping_add(b))),
+                        B::Sub => Some(ConstValue::Int(a.wrapping_sub(b))),
+                        B::Mul => Some(ConstValue::Int(a.wrapping_mul(b))),
+                        B::Mod => (b != 0).then(|| ConstValue::Int(a % b)),
+                        B::Eq => Some(ConstValue::Bool(a == b)),
+                        B::Neq => Some(ConstValue::Bool(a != b)),
+                        B::Lt => Some(ConstValue::Bool(a < b)),
+                        B::Le => Some(ConstValue::Bool(a <= b)),
+                        B::Gt => Some(ConstValue::Bool(a > b)),
+                        B::Ge => Some(ConstValue::Bool(a >= b)),
+                        B::And => Some(ConstValue::Bool(a != 0 && b != 0)),
+                        B::Or => Some(ConstValue::Bool(a != 0 || b != 0)),
+                        B::Div | B::Range | B::Assign => None,
+                    },
+                    (ConstValue::Float(a), ConstValue::Float(b)) => match op {
+                        B::Add => Some(ConstValue::Float(a + b)),
+                        B::Sub => Some(ConstValue::Float(a - b)),
+                        B::Mul => Some(ConstValue::Float(a * b)),
+                        B::Mod => Some(ConstValue::Float(a % b)),
+                        B::Eq => Some(ConstValue::Bool(a == b)),
+                        B::Neq => Some(ConstValue::Bool(a != b)),
+                        B::Lt => Some(ConstValue::Bool(a < b)),
+                        B::Le => Some(ConstValue::Bool(a <= b)),
+                        B::Gt => Some(ConstValue::Bool(a > b)),
+                        B::Ge => Some(ConstValue::Bool(a >= b)),
+                        B::Div | B::Range | B::Assign => None,
+                        B::And | B::Or => None,
+                    },
+                    (ConstValue::String(a), ConstValue::String(b)) => match op {
+                        B::Add => Some(ConstValue::String(format!("{a}{b}"))),
+                        B::Eq => Some(ConstValue::Bool(a == b)),
+                        B::Neq => Some(ConstValue::Bool(a != b)),
+                        _ => None,
+                    },
+                    (ConstValue::Bool(a), ConstValue::Bool(b)) => match op {
+                        B::And => Some(ConstValue::Bool(a && b)),
+                        B::Or => Some(ConstValue::Bool(a || b)),
+                        B::Eq => Some(ConstValue::Bool(a == b)),
+                        B::Neq => Some(ConstValue::Bool(a != b)),
+                        _ => None,
+                    },
+                    _ => None,
+                }
+            }
+            ast::Expr::UnOp { op, expr, .. } => {
+                use ast::UnOp as U;
+                let v = self.eval_const_expr(expr)?;
+                match (op, v) {
+                    (U::Neg, ConstValue::Int(n)) => Some(ConstValue::Int(n.wrapping_neg())),
+                    (U::Neg, ConstValue::Float(f)) => Some(ConstValue::Float(-f)),
+                    (U::Not, ConstValue::Bool(b)) => Some(ConstValue::Bool(!b)),
+                    _ => None,
+                }
+            }
             // RFC-012: F-string 常量求值
             ast::Expr::FString { segments, .. } => {
                 let mut result = String::new();
@@ -1689,17 +1755,17 @@ impl AstToIrGenerator {
             None
         };
 
-        // 注册到全局变量表
+        // 注册到全局变量表（init_value 由 init 表达式的常量折叠得；折叠不到的留 None）
+        // ponytail: 该字段由 #261+B PR 删除，本 PR 不动数据结构
         self.global_vars
             .push((name.to_string(), var_type.clone(), init_value.clone()));
 
-        // 生成返回常量值的函数
-        // x: Int = 42 => fn x() -> Int { return 42; }
+        // 零参访问器函数：函数体返回 init_value。
+        // 注：原实现曾硬编码 `LoadConst(Int(0)) + Ret`，对常量可折叠的表达式（`1+2+3`）静默丢值（#261）
+        // 修复范围：仅限于 eval_const_expr 能折叠得动的情形；其它（顶层 reassign / 块表达式 init /
+        // 调用 init）保留原 Int(0) 兜底，避免进入递归调用自我（顶层 mut binding 的语义需另行设计）。
         let result_reg = 0;
-        let src_operand = match &init_value {
-            Some(val) => Operand::Const(val.clone()),
-            None => Operand::Const(ConstValue::Int(0)),
-        };
+        let src_operand = Operand::Const(init_value.clone().unwrap_or(ConstValue::Int(0)));
         let instructions = vec![
             Instruction::Load {
                 dst: Operand::Local(result_reg),
