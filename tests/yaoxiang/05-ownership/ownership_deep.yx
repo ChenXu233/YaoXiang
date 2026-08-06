@@ -1,18 +1,12 @@
 // 05-ownership/ownership_deep.yx
-// 覆盖: SPEC type-system.md §11 类型属性 / §12 借用令牌深水区（#251 P0-7）
-// [test:ignore]: #256/#260 已修（类型驱动分类，B1），第 1/2 节语义由
-// token_dup_copy.yx / primitive_value_copy.yx 覆盖；本文件剩余阻塞是
-// &mut 令牌运行时机制缺陷（#266，实测）：
-//   - q.shift(1,1) 自动借用方法调用不写回（stash 验证为 pre-existing）
-//   - m.shift(...) 显式令牌调方法报 Function not found: m.shift
-//   - m.x = 100 令牌字段写静默无效（soundness）
+// 覆盖: SPEC type-system.md §11 类型属性 / §12 借用令牌深水区（#251 P0-7）；#266 &mut 令牌运行时写通路
 // 验证:
 //   - Dup 令牌复制：view2 = view，两份都活跃（§11.2）
 //   - 原语值复制独立于 move（§11.2）
 //   - 自动借用优先级：&T 读 → &mut 写 → 最后 Move（§12.4）
 //   - &mut 顺序复用（§12.5 good_seq）
 //   - 令牌字段 + 经令牌字段访问（§12.3/§12.6 派生品牌）
-// 状态: ✅
+// 状态: ✅ 可运行（#266 修复后第 3-5 节解锁）
 
 use std.assert
 

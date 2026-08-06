@@ -133,9 +133,6 @@ pub struct AstToIrGenerator {
     constraint_var_concrete_types: HashMap<String, String>,
     /// RFC-004: 匿名函数绑定生成的独立 FunctionIR 列表
     anon_function_irs: Vec<FunctionIR>,
-    /// 函数参数类型记录（函数名 -> 参数类型列表）
-    /// 用于在调用点决定是否需要发出 Borrow 指令（RFC-009 §2.8 自动借用）
-    function_param_types: HashMap<String, Vec<MonoType>>,
     /// NLL 精确释放计划（所有权检查器产出）
     release_plan: HashMap<Span, Vec<String>>,
     /// 待捕获的环境变量（由 spawn for 等设置，供下一个 Expr::Lambda 使用）
@@ -205,7 +202,6 @@ impl AstToIrGenerator {
             global_vars: Vec::new(),
             constraint_var_concrete_types: HashMap::new(),
             anon_function_irs: Vec::new(),
-            function_param_types: HashMap::new(),
             release_plan: type_result.release_plan.drops.clone(),
             pending_env_vars: Vec::new(),
             user_namespaces: HashMap::new(),
@@ -468,8 +464,10 @@ impl AstToIrGenerator {
                 }
                 // 从 IR 生成器追踪的类型查找
                 if let Some(type_name) = self.local_var_types.get(name) {
-                    if self.struct_definitions.contains_key(type_name) {
-                        return Some(type_name.clone());
+                    // #266: &mut 令牌穿透——"&mut Point" 取底层 "Point"
+                    let base = Self::strip_ref_prefix(type_name);
+                    if self.struct_definitions.contains_key(base) {
+                        return Some(base.to_string());
                     }
                 }
                 None
@@ -492,7 +490,23 @@ impl AstToIrGenerator {
         match mono_type {
             MonoType::TypeRef(name) => Some(name.clone()),
             MonoType::Struct(st) => Some(st.name.clone()),
+            // #266: &mut 令牌穿透——Ref 递归取 inner（m = &mut q 的类型是
+            // Ref { mutable, inner: Point }，方法派发应基于 Point）
+            MonoType::Ref { inner, .. } => Self::mono_type_to_struct_name(inner),
             _ => None,
+        }
+    }
+
+    /// #266: 穿透 `&` / `&mut` 引用前缀取底层类型名
+    /// `"&mut Point"` → `"Point"`；`"&Point"` → `"Point"`；无前缀原样返回
+    fn strip_ref_prefix(type_name: &str) -> &str {
+        let t = type_name.trim();
+        if let Some(rest) = t.strip_prefix("&mut ") {
+            rest
+        } else if let Some(rest) = t.strip_prefix('&') {
+            rest.trim_start()
+        } else {
+            t
         }
     }
 
@@ -1109,10 +1123,6 @@ impl AstToIrGenerator {
             self.register_local(&param.name, i);
         }
 
-        // 记录函数参数类型（用于调用点发出 Borrow 指令）
-        self.function_param_types
-            .insert(func_name.clone(), param_types.clone());
-
         // 记录局部变量起始位置（在参数之后）
         let local_var_start = params.len();
         self.next_temp = local_var_start;
@@ -1293,15 +1303,6 @@ impl AstToIrGenerator {
                 locals: locals_types,
             },
         };
-
-        // 记录函数参数类型（用于调用点发出 Borrow 指令）
-        let func_params: Vec<MonoType> = params
-            .iter()
-            .filter_map(|p| p.ty.clone())
-            .map(|t| t.into())
-            .collect();
-        self.function_param_types
-            .insert(name.to_string(), func_params);
 
         Ok(Some(func_ir))
     }
@@ -1965,12 +1966,58 @@ impl AstToIrGenerator {
                 type_annotation,
                 signature_params,
                 value,
+                span,
                 ..
             } => {
                 use crate::frontend::core::parser::ast::Expr;
+                // 字段赋值：q.x = v / m.x = v（m 是 &mut 令牌）。
+                // Struct 运行时值是堆句柄，StoreField 原地写共享对象——
+                // 令牌与自动借用天然写回，无需 copy-back（#266）。
+                if let Expr::FieldAccess {
+                    expr: obj_expr,
+                    field,
+                    ..
+                } = target.as_ref()
+                {
+                    let field_index =
+                        self.resolve_field_index(obj_expr, field).ok_or_else(|| {
+                            ErrorCodeDefinition::ir_internal_error(&format!(
+                                "无法解析字段索引: '{}'",
+                                field
+                            ))
+                            .at(Self::get_expr_span(obj_expr))
+                            .build()
+                        })?;
+                    let obj_reg = self.next_temp_reg();
+                    self.generate_expr_ir(obj_expr, obj_reg, instructions, constants)?;
+                    let val_reg = self.next_temp_reg();
+                    let value_expr = value.as_ref().ok_or_else(|| {
+                        ErrorCodeDefinition::ir_internal_error("字段赋值缺少右侧值")
+                            .at(*span)
+                            .build()
+                    })?;
+                    self.generate_expr_ir(value_expr, val_reg, instructions, constants)?;
+                    instructions.push(Instruction::StoreField {
+                        dst: Operand::Local(obj_reg),
+                        field: field_index,
+                        src: Operand::Local(val_reg),
+                        type_name: None,
+                        field_name: Some(field.clone()),
+                        span: *span,
+                    });
+                    return Ok(());
+                }
                 let name = match target.as_ref() {
                     Expr::Var(n, _) => n.clone(),
-                    _ => return Ok(()),
+                    // 不认识的赋值目标：显式报错，不静默吞掉（#266）
+                    _ => {
+                        return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                            "不支持的赋值目标: {:?}",
+                            target
+                        ))
+                        .at(Self::get_expr_span(target))
+                        .build())
+                    }
                 };
                 let (params, body): (Vec<_>, Vec<_>) = match value {
                     Some(v) => {
@@ -3505,7 +3552,10 @@ impl AstToIrGenerator {
                                 // → 函数名应为 "Node.is_greater" 而非 "a.is_greater"
                                 let func_name = if let Expr::Var(name, _) = expr.as_ref() {
                                     if let Some(type_name) = self.local_var_types.get(name) {
-                                        format!("{}.{}", type_name, field)
+                                        // #266: &mut 令牌穿透——变量类型可能是
+                                        // "&mut Point"，方法名应基于底层结构体 "Point"
+                                        let base = Self::strip_ref_prefix(type_name);
+                                        format!("{}.{}", base, field)
                                     } else {
                                         self.resolve_field_path(expr, field)
                                     }
@@ -4390,8 +4440,10 @@ impl AstToIrGenerator {
                 let inner_reg = self.next_temp_reg();
                 self.generate_expr_ir(expr, inner_reg, instructions, constants)?;
 
-                // 借用令牌是零大小类型，运行时等价于 Mov。
-                // 所有权验证已在 frontend 完成。
+                // 借用令牌（& / &mut）是编译期品牌，运行时零大小：
+                // Struct 值是堆句柄，传参/赋值复制的是句柄，共享同一对象——
+                // 因此字段写（StoreField）经令牌自然写回底层，无需额外指令（#266）。
+                // 所有权与借用合法性已在 typecheck 层验证（RFC-009a）。
                 instructions.push(Instruction::Move {
                     dst: Operand::Local(result_reg),
                     src: Operand::Local(inner_reg),

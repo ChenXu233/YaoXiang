@@ -1,0 +1,41 @@
+// 05-ownership/field_write_back.yx
+// 覆盖: SPEC §11.2/§12.5 写入令牌语义；#266 三缺陷回归
+// 验证: &mut 令牌与自动借用的字段写/方法调用真实写回底层对象（不再静默丢弃）
+// 状态: ✅ 可运行
+
+use std.assert
+
+Point: Type = { x: Int, y: Int }
+Point.sum: (self: &Point) -> Int = {
+    return self.x + self.y
+}
+Point.shift: (self: &mut Point, dx: Int, dy: Int) -> Void = {
+    self.x = self.x + dx
+    self.y = self.y + dy
+}
+
+main = {
+    // #266 缺陷 1：自动借用 &mut 方法调用写回
+    q = Point(3, 4)
+    q.shift(1, 1)
+    assert.assert(q.x == 4, "自动借用 shift 写回 x")
+    assert.assert(q.y == 5, "自动借用 shift 写回 y")
+
+    // #266 缺陷 2：显式令牌调方法派发（不再 E6006 m.shift）
+    mut r = Point(10, 20)
+    m = &mut r
+    m.shift(2, 3)
+    assert.assert(r.x == 12, "令牌方法派发写回 x")
+    assert.assert(r.y == 23, "令牌方法派发写回 y")
+
+    // #266 缺陷 3：令牌字段写（不再静默丢弃）
+    mut s = Point(1, 1)
+    n = &mut s
+    n.x = 100
+    assert.assert(s.x == 100, "令牌字段写生效")
+
+    // 普通字段写（非令牌路径，同根因）
+    mut t = Point(7, 8)
+    t.y = 99
+    assert.assert(t.y == 99, "普通字段写生效")
+}
