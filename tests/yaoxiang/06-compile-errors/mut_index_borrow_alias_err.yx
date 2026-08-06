@@ -1,4 +1,5 @@
 // 06-compile-errors/mut_index_borrow_alias_err.yx
+// [test:error]: `&mut arr[i]` 索引借用目标的别名可变借用（E2018）
 // 错误检测: `&mut arr[i]` 索引借用目标的别名可变借用（SPEC type-system.md §11.2 / RFC-009）
 // 预期: 编译错误（借用冲突）
 // 背景: 所有权检查器的 extract_var_name 此前对 Index/Deref 目标返回 None，

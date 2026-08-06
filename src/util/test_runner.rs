@@ -3,6 +3,11 @@
 //! 测试文件是普通 `.yx` 文件：发现 → 逐文件子进程 `yaoxiang run --debug-info` →
 //! exit code 判定 → 汇总报告。进程级隔离，零编译器改动。
 //!
+//! 标记约定（见 tests/yaoxiang/TEST_STANDARDS.md）：
+//! - `// [test:error]: <原因>` — 本文件应编译失败：run 退出码非 0 = PASS
+//!   （06-compile-errors 目录用，验证编译器正确报错）
+//! - 无标记 — run 退出码 0 = PASS
+//!
 //! 规范来源：docs/src/design/rfc/accepted/036-test-framework.md §1 CLI 设计 / §5 发现与执行
 
 use std::path::{Path, PathBuf};
@@ -40,6 +45,7 @@ pub fn run_test_command(paths: &[PathBuf]) -> anyhow::Result<usize> {
             .to_string();
 
         let start = Instant::now();
+        let expect_error = file_marks_expected_error(file);
         let output = Command::new(&exe)
             .arg("run")
             .arg(file)
@@ -48,6 +54,21 @@ pub fn run_test_command(paths: &[PathBuf]) -> anyhow::Result<usize> {
         let secs = start.elapsed().as_secs_f64();
 
         match output {
+            // [test:error] 标记文件：编译错误如预期 → PASS；
+            // 没报错（退出码 0）→ FAIL（该报错没报）
+            Ok(out) if expect_error && !out.status.success() => {
+                passed += 1;
+                println!("{:<50} PASS ({:.3}s)", display, secs);
+            }
+            Ok(out) if expect_error => {
+                failed += 1;
+                println!("{:<50} FAIL ({:.3}s)", display, secs);
+                println!("      [test:error] 标记文件但编译通过了（应报编译错误）");
+                let stderr = strip_ansi(&String::from_utf8_lossy(&out.stderr));
+                for line in stderr.trim().lines() {
+                    println!("      {}", line);
+                }
+            }
             Ok(out) if out.status.success() => {
                 passed += 1;
                 println!("{:<50} PASS ({:.3}s)", display, secs);
@@ -76,6 +97,16 @@ pub fn run_test_command(paths: &[PathBuf]) -> anyhow::Result<usize> {
         total_start.elapsed().as_secs_f64()
     );
     Ok(failed)
+}
+
+/// 检测文件头注释是否含 `[test:error]` 标记（前 16 行内）。
+/// 06-compile-errors 目录的文件声明“本文件应编译失败”，
+/// runner 据此反向判定（run 退出码非 0 = PASS）。
+fn file_marks_expected_error(path: &Path) -> bool {
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    content.lines().take(16).any(|l| l.contains("[test:error]"))
 }
 
 /// 发现测试文件：显式路径优先，否则读配置，最终按 pattern 展开并排序去重。

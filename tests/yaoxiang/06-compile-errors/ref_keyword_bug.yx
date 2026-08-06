@@ -1,4 +1,5 @@
 // Bug 验证: ref 关键字被静默吞掉
+// [test:error]: `ref = expr` 应报错，不得静默跳过
 // ref 是 YaoXiang 的关键字（创建 Arc），不是合法的变量名
 // 但解析器对 `ref = expr` 静默跳过，不报错
 //
