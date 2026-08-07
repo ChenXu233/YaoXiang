@@ -199,7 +199,6 @@ fn format_runtime_stack_trace(
 ///
 /// # 返回
 /// 成功返回 `()`，失败返回错误
-#[cfg(feature = "cli")]
 /// RFC-029: 判断文件是否位于一个 yaoxiang 项目内（沿目录向上查找 yaoxiang.toml）。
 fn in_yaoxiang_project(file: &std::path::Path) -> bool {
     let mut dir = file.parent();
