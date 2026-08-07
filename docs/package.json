@@ -32,22 +32,22 @@
     "@vueuse/core": "^14.4.0",
     "autoprefixer": "^10.5.4",
     "codemirror": "^6.0.0",
-    "daisyui": "^5.7.4",
+    "daisyui": "^5.7.15",
     "medium-zoom": "^1.1.0",
     "mermaid": "^11.15.0",
-    "postcss": "^8.5.24",
+    "postcss": "^8.5.25",
     "tailwindcss": "^4.3.3",
     "vitepress": "^1.6.4",
     "vitepress-mermaid-renderer": "^1.1.28",
     "vitepress-plugin-back-to-top": "^1.0.1",
-    "vitepress-plugin-group-icons": "^1.7.5",
+    "vitepress-plugin-group-icons": "^1.7.6",
     "vitepress-plugin-nprogress": "^0.1.1",
     "vitepress-plugin-tabs": "^0.9.1",
     "vitepress-sidebar": "^1.36.1",
     "vue": "^3.5.40"
   },
   "devDependencies": {
-    "@chenxu233/vitepress-ai-i18n": "^1.0.3",
+    "@chenxu233/vitepress-ai-i18n": "^1.1.0",
     "cd": "^0.3.3",
     "docs": "0.4.0"
   }
