@@ -350,6 +350,34 @@ pub struct CfgNode {
     pub predecessors: Vec<usize>,
     /// 该节点的路径条件（if guard / while cond / match pattern）
     pub path_condition: Option<String>,
+    /// 本节点的变量操作序列（#264：walk 阶段记录，数据流分析阶段消费）
+    pub ops: Vec<VarOp>,
+}
+
+/// 变量操作（#264 数据流分析的最小指令集）
+///
+/// walk 阶段把变量状态的变更/读取记录到 CFG 节点，walk 结束后
+/// `analyze_var_flow` 在 CFG 上做前向数据流（汇合 meet + 循环不动点），
+/// 对每个 Read 判定 Move/Drop 违例。
+#[derive(Debug, Clone)]
+pub enum VarOp {
+    /// 声明/重绑定 → Alive（覆盖旧状态，Python 风格重声明）
+    Declare { var: String },
+    /// move 转移 → Moved
+    Move { var: String },
+    /// 读取检查点（分析时判定 E2014/E2018）
+    Read { var: String, span: Span },
+    /// 作用域退出：Alive → Dropped（#264：Dropped 语义 = 作用域外不可见）
+    Drop { var: String, span: Span },
+}
+
+/// 变量状态格：Dropped(2) > Moved(1) > Alive(0)，汇合取 max（保守）
+/// 保守序：越不可用越保守；单方存在的变量保留原值（分支内新变量已被 Drop）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum VarState {
+    Alive,
+    Moved,
+    Dropped,
 }
 
 /// 函数体的控制流图
@@ -386,6 +414,7 @@ impl ControlFlowGraph {
             successors: Vec::new(),
             predecessors: Vec::new(),
             path_condition,
+            ops: Vec::new(),
         });
         id
     }
@@ -696,15 +725,6 @@ enum CopySemantics {
     Move,
 }
 
-/// 函数内变量状态
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum VarState {
-    Alive,
-    Moved,
-    /// 值已被释放（作用域退出时自动标记）
-    Dropped,
-}
-
 /// 待验证的写操作（遍历完成后排空）
 struct PendingWrite {
     token: BrandId,
@@ -716,7 +736,6 @@ struct PendingWrite {
 pub struct OwnershipChecker {
     brand_tree: BrandTree,
     cfg: ControlFlowGraph,
-    var_state: HashMap<String, VarState>,
     /// 变量是否声明为 mut（用于可变性违规检测）
     var_mutability: HashMap<String, bool>,
     pending_writes: Vec<PendingWrite>,
@@ -769,7 +788,6 @@ impl OwnershipChecker {
         Self {
             brand_tree: BrandTree::new(),
             cfg: ControlFlowGraph::new(),
-            var_state: HashMap::new(),
             var_mutability: HashMap::new(),
             pending_writes: Vec::new(),
             current_node: 0,
@@ -803,7 +821,6 @@ impl OwnershipChecker {
     fn reset(&mut self) {
         self.brand_tree = BrandTree::new();
         self.cfg = ControlFlowGraph::new();
-        self.var_state.clear();
         self.var_mutability.clear();
         self.pending_writes.clear();
         self.node_spans.clear();
@@ -929,7 +946,9 @@ impl OwnershipChecker {
                 match self.classify_var(var_name) {
                     CopySemantics::Dup | CopySemantics::ValueCopy => {}
                     _ => {
-                        self.var_state.insert(var_name.to_string(), VarState::Moved);
+                        self.push_var_op(VarOp::Move {
+                            var: var_name.to_string(),
+                        });
                     }
                 }
             }
@@ -1007,19 +1026,6 @@ impl OwnershipChecker {
         }
     }
 
-    /// 检查变量读取的 Move/Drop 状态（前向检查）
-    fn check_var_read(
-        &self,
-        name: &str,
-        span: Span,
-    ) -> ProofResult {
-        match self.var_state.get(name) {
-            Some(VarState::Moved) => emit_move_predicate(name, true, span),
-            Some(VarState::Dropped) => emit_drop_predicate(name, true, span),
-            _ => ProofResult::Proved,
-        }
-    }
-
     /// #257：Linear 令牌（&mut T）赋值复制的拒绝诊断（E2003）
     fn linear_copy_error(
         src_name: &str,
@@ -1045,6 +1051,29 @@ impl OwnershipChecker {
         if let Some(scope) = self.scope_keys.last_mut() {
             scope.insert(name.to_string(), self.cur_stmt_key);
         }
+    }
+
+    /// #264：把变量操作记录到当前 CFG 节点（数据流分析阶段消费）
+    fn push_var_op(
+        &mut self,
+        op: VarOp,
+    ) {
+        self.cfg.nodes[self.current_node].ops.push(op);
+    }
+
+    /// #264：检查点改记录 Read op——真正的 Move/Drop 判定延迟到
+    /// `analyze_var_flow`（per-node 状态 + 汇合 meet + 循环不动点）。
+    /// 返回 Proved 占位：walk 期不再即时判定。
+    fn check_var_read(
+        &mut self,
+        name: &str,
+        span: Span,
+    ) -> ProofResult {
+        self.push_var_op(VarOp::Read {
+            var: name.to_string(),
+            span,
+        });
+        ProofResult::Proved
     }
 
     /// #256：类型驱动的复制语义分类（SPEC §11.2）
@@ -1102,58 +1131,96 @@ impl OwnershipChecker {
     ) -> Vec<ProofResult> {
         let split_node = self.current_node;
         let mut results = self.walk_expr(condition);
+        // #264：字面量常量条件 → 不可达分支不建边不遍历（消除 move 泄漏误报）。
+        // 仅认字面量 Bool：不做 const_eval 传播（#262/#263 路径条件 soundness 未解决，
+        // 保守起见只裁剪编译期显然不可达的分支）。
+        let cond_value = Self::literal_bool(condition);
 
         let merge_node = self.cfg.add_node(None);
 
         // then 分支 —— 路径条件 = condition（#265：守卫注入假设栈）
+        let then_reachable = cond_value != Some(false);
         let then_start = self.cfg.add_node(Some(format!("{:?}", condition)));
-        self.cfg.add_edge(split_node, then_start, EdgeKind::Normal);
+        if then_reachable {
+            self.cfg.add_edge(split_node, then_start, EdgeKind::Normal);
+        }
         self.current_node = then_start;
         self.gamma.enter_scope();
         if let Some(cond) = Self::condition_as_const(condition) {
             self.gamma.inject(cond);
         }
-        results.extend(self.walk_stmts(then_body));
+        if then_reachable {
+            results.extend(self.walk_stmts(then_body));
+        }
         self.gamma.exit_scope();
-        self.cfg
-            .add_edge(self.current_node, merge_node, EdgeKind::Normal);
+        if then_reachable {
+            self.cfg
+                .add_edge(self.current_node, merge_node, EdgeKind::Normal);
+        }
 
         // elif 分支 —— 路径条件 = else_if_cond
+        let mut remaining_reachable = cond_value != Some(true);
         for (else_if_cond, else_if_body) in else_ifs {
             results.extend(self.walk_expr(else_if_cond));
             let else_if_start = self.cfg.add_node(Some(format!("{:?}", else_if_cond)));
-            self.cfg
-                .add_edge(split_node, else_if_start, EdgeKind::Normal);
+            let elif_reachable =
+                remaining_reachable && Self::literal_bool(else_if_cond) != Some(false);
+            if elif_reachable {
+                self.cfg
+                    .add_edge(split_node, else_if_start, EdgeKind::Normal);
+            }
             self.current_node = else_if_start;
             self.gamma.enter_scope();
             if let Some(cond) = Self::condition_as_const(else_if_cond) {
                 self.gamma.inject(cond);
             }
-            results.extend(self.walk_stmts(else_if_body));
+            if elif_reachable {
+                results.extend(self.walk_stmts(else_if_body));
+            }
             self.gamma.exit_scope();
-            self.cfg
-                .add_edge(self.current_node, merge_node, EdgeKind::Normal);
+            if elif_reachable {
+                self.cfg
+                    .add_edge(self.current_node, merge_node, EdgeKind::Normal);
+            }
+            remaining_reachable =
+                remaining_reachable && Self::literal_bool(else_if_cond) != Some(true);
         }
 
         // else 分支 —— 路径条件 = !condition
+        let else_reachable = remaining_reachable;
         if let Some(else_body) = else_body {
             let else_start = self.cfg.add_node(Some(format!("!({:?})", condition)));
-            self.cfg.add_edge(split_node, else_start, EdgeKind::Normal);
+            if else_reachable {
+                self.cfg.add_edge(split_node, else_start, EdgeKind::Normal);
+            }
             self.current_node = else_start;
             self.gamma.enter_scope();
             if let Some(cond) = Self::condition_as_const(condition) {
                 self.gamma.inject(Self::negate_const(cond));
             }
-            results.extend(self.walk_stmts(else_body));
+            if else_reachable {
+                results.extend(self.walk_stmts(else_body));
+            }
             self.gamma.exit_scope();
-            self.cfg
-                .add_edge(self.current_node, merge_node, EdgeKind::Normal);
-        } else {
+            if else_reachable {
+                self.cfg
+                    .add_edge(self.current_node, merge_node, EdgeKind::Normal);
+            }
+        } else if remaining_reachable {
             self.cfg.add_edge(split_node, merge_node, EdgeKind::Normal);
         }
 
         self.current_node = merge_node;
         results
+    }
+
+    /// #264：字面量 Bool 条件提取（仅认 `true`/`false` 字面量，
+    /// 不做 const_eval——路径条件 soundness 未解决前的保守裁剪）
+    fn literal_bool(expr: &Expr) -> Option<bool> {
+        match expr {
+            Expr::Lit(crate::frontend::core::parser::ast::Literal::Bool(b), _) => Some(*b),
+            _ => None,
+        }
     }
 
     /// walk_while：While 循环的控制流构建
@@ -1204,7 +1271,9 @@ impl OwnershipChecker {
         body: &[Stmt],
     ) -> Vec<ProofResult> {
         let mut results = self.walk_expr(iterable);
-        self.var_state.insert(var.to_string(), VarState::Alive);
+        self.push_var_op(VarOp::Declare {
+            var: var.to_string(),
+        });
         self.var_mutability.insert(var.to_string(), var_mut);
         self.record_binding(var);
 
@@ -1345,7 +1414,7 @@ impl OwnershipChecker {
                             // 变量未在 var_mutability 中 → 首次声明（非 StmtKind::Var 路径）
                             let mut r = self.walk_expr(right);
                             r.extend(self.walk_expr(left));
-                            self.var_state.insert(name.clone(), VarState::Alive);
+                            self.push_var_op(VarOp::Declare { var: name.clone() });
                             self.var_mutability.insert(name.clone(), false);
                             if let Some(scope) = self.scope_vars.last_mut() {
                                 scope.push(name.clone());
@@ -1433,7 +1502,7 @@ impl OwnershipChecker {
                     match self.classify_var(name) {
                         CopySemantics::Dup | CopySemantics::ValueCopy => {}
                         _ => {
-                            self.var_state.insert(name.clone(), VarState::Moved);
+                            self.push_var_op(VarOp::Move { var: name.clone() });
                         }
                     }
                 }
@@ -1560,11 +1629,13 @@ impl OwnershipChecker {
                         return results;
                     }
                 };
+                // #264：is_new 判断用作用域账本——必须在 record_binding 之前查
+                //（record_binding 会把 name 插入当前作用域，先查才能区分首声明/重绑定）
+                let is_new = !self.scope_keys.iter().any(|m| m.contains_key(&name));
                 self.record_binding(&name);
                 let initializer = value.as_deref();
                 let mut results = Vec::new();
-                let is_new = !self.var_state.contains_key(&name);
-                self.var_state.insert(name.clone(), VarState::Alive);
+                self.push_var_op(VarOp::Declare { var: name.clone() });
                 self.var_mutability.insert(name.clone(), *is_mut);
                 if is_new {
                     if let Some(scope) = self.scope_vars.last_mut() {
@@ -1623,7 +1694,9 @@ impl OwnershipChecker {
                             }
                             CopySemantics::Dup | CopySemantics::ValueCopy => {}
                             CopySemantics::Move => {
-                                self.var_state.insert(src_name.clone(), VarState::Moved);
+                                self.push_var_op(VarOp::Move {
+                                    var: src_name.clone(),
+                                });
                             }
                         }
                         // ref 属性传播（spawn/Arc 机制）
@@ -1637,7 +1710,9 @@ impl OwnershipChecker {
                     if let Expr::Lambda { params, body, .. } = init {
                         if !body.stmts.is_empty() {
                             for param in params {
-                                self.var_state.insert(param.name.clone(), VarState::Alive);
+                                self.push_var_op(VarOp::Declare {
+                                    var: param.name.clone(),
+                                });
                                 self.var_mutability.insert(param.name.clone(), param.is_mut);
                                 self.record_binding(&param.name);
                             }
@@ -1659,7 +1734,7 @@ impl OwnershipChecker {
                     match self.classify_var(name) {
                         CopySemantics::Dup | CopySemantics::ValueCopy => {}
                         _ => {
-                            self.var_state.insert(name.clone(), VarState::Moved);
+                            self.push_var_op(VarOp::Move { var: name.clone() });
                         }
                     }
                 }
@@ -1707,12 +1782,15 @@ impl OwnershipChecker {
             results.extend(self.walk_stmt(stmt));
         }
         // 作用域退出：将本作用域内声明且仍 Alive 的变量标记为 Dropped
+        // #264：判定延迟到数据流分析（Drop op 在分析时检查状态）；
+        // scope_drops（release plan 用）也由分析阶段收集。
         if let Some(scope) = self.scope_vars.pop() {
+            let span = self.current_span;
             for var in &scope {
-                if self.var_state.get(var) == Some(&VarState::Alive) {
-                    self.var_state.insert(var.clone(), VarState::Dropped);
-                    self.scope_drops.push((self.current_span, var.clone()));
-                }
+                self.push_var_op(VarOp::Drop {
+                    var: var.clone(),
+                    span,
+                });
             }
         }
         self.scope_keys.pop();
@@ -1842,6 +1920,116 @@ impl OwnershipChecker {
         ReleasePlan { drops }
     }
 
+    /// #264：前向数据流分析（NLL/Polonius 风格 move 分析）
+    ///
+    /// walk 阶段已把变量操作记录到各 CFG 节点。这里：
+    /// 1. 每节点 in/out 状态（HashMap<String, VarState>）
+    /// 2. 汇合 meet：所有前驱 out 取保守 max（Dropped > Moved > Alive）；
+    ///    单方存在的变量保留原值（分支内新变量已被 Drop op 标 Dropped，
+    ///    汇合后保持 Dropped = 作用域外不可见）
+    /// 3. 循环回边 → 迭代到不动点（状态格有限单调，必收敛）
+    /// 4. 检查：每节点按序执行 ops，Read 时按当前状态判 E2014/E2018；
+    ///    Drop 时 Alive → Dropped 并收集 scope_drops（release plan）
+    fn analyze_var_flow(&mut self) -> Vec<ProofResult> {
+        let n = self.cfg.nodes.len();
+        // in/out 状态（Vec 下标 = CFG 节点 id）
+        let mut ins: Vec<HashMap<String, VarState>> = vec![HashMap::new(); n];
+        let mut outs: Vec<HashMap<String, VarState>> = vec![HashMap::new(); n];
+
+        // 不动点迭代：直到所有节点 in/out 不再变化
+        loop {
+            let mut changed = false;
+            for i in 0..n {
+                // in = meet(所有前驱 out)
+                let mut new_in: HashMap<String, VarState> = HashMap::new();
+                for &pred in &self.cfg.nodes[i].predecessors {
+                    Self::meet_into(&mut new_in, &outs[pred]);
+                }
+                // transfer：顺序执行 ops
+                let mut new_out = new_in.clone();
+                for op in &self.cfg.nodes[i].ops {
+                    Self::apply_op_state(&mut new_out, op);
+                }
+                if new_in != ins[i] || new_out != outs[i] {
+                    ins[i] = new_in;
+                    outs[i] = new_out;
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+
+        // 检查阶段：每节点从 in 出发顺序执行，Read 判定 + Drop 收集
+        let mut results = Vec::new();
+        for i in 0..n {
+            let mut state = ins[i].clone();
+            for op in &self.cfg.nodes[i].ops {
+                match op {
+                    VarOp::Read { var, span } => match state.get(var) {
+                        Some(VarState::Moved) => {
+                            results.push(emit_move_predicate(var, true, *span));
+                        }
+                        Some(VarState::Dropped) => {
+                            results.push(emit_drop_predicate(var, true, *span));
+                        }
+                        _ => {}
+                    },
+                    VarOp::Drop { var, span } => {
+                        if state.get(var) == Some(&VarState::Alive) {
+                            state.insert(var.clone(), VarState::Dropped);
+                            self.scope_drops.push((*span, var.clone()));
+                        }
+                    }
+                    other => Self::apply_op_state(&mut state, other),
+                }
+            }
+        }
+        results
+    }
+
+    /// meet：把 other 合并进 acc（逐变量保守 max，单方存在保留原值）
+    fn meet_into(
+        acc: &mut HashMap<String, VarState>,
+        other: &HashMap<String, VarState>,
+    ) {
+        for (k, v) in other {
+            match acc.get(k) {
+                Some(cur) if v > cur => {
+                    acc.insert(k.clone(), *v);
+                }
+                None => {
+                    acc.insert(k.clone(), *v);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// transfer：单条 op 对状态的更新（Declare/Move/Drop；Read 不影响）
+    fn apply_op_state(
+        state: &mut HashMap<String, VarState>,
+        op: &VarOp,
+    ) {
+        match op {
+            VarOp::Declare { var } => {
+                state.insert(var.clone(), VarState::Alive);
+            }
+            VarOp::Move { var } => {
+                state.insert(var.clone(), VarState::Moved);
+            }
+            // #264：transfer 与检查阶段一致——Drop 把 Alive 降为 Dropped
+            //（scope_drops 收集只在检查阶段做一次，transfer 多轮迭代不重复）
+            VarOp::Drop { var, .. } => {
+                if state.get(var) == Some(&VarState::Alive) {
+                    state.insert(var.clone(), VarState::Dropped);
+                }
+            }
+            VarOp::Read { .. } => {}
+        }
+    }
+
     /// 检查单个函数体：重置状态 → 一趟遍历 → 排空待定写操作 → ReleasePlan
     fn check_function(
         &mut self,
@@ -1857,16 +2045,23 @@ impl OwnershipChecker {
         self.env = Some(env as *const _);
 
         // 标记参数为 Alive，记录可变性；参数键与推断层对齐（#256）
+        // #264：参数作为 entry 节点的 Declare op（数据流分析的初值）
         self.cur_stmt_key = stmt_key;
         for param in params {
-            self.var_state.insert(param.name.clone(), VarState::Alive);
+            self.push_var_op(VarOp::Declare {
+                var: param.name.clone(),
+            });
             self.var_mutability.insert(param.name.clone(), param.is_mut);
             self.record_binding(&param.name);
         }
 
-        // 一趟遍历：构建 CFG + 前向检查 + 收集待定写操作
+        // 一趟遍历：构建 CFG + 记录变量操作 + 收集待定写操作
         let mut results = self.walk_stmts(body);
         self.cfg.exit = self.current_node;
+
+        // #264：数据流分析——per-node 变量状态（汇合 meet + 循环不动点），
+        // 对每个 Read op 判定 Move/Drop 违例，并收集 scope_drops。
+        results.extend(self.analyze_var_flow());
 
         // 排空待定写操作：反向 BFS（CFG + BrandTree + 消费者此时全部完整）
         for pending in self.pending_writes.drain(..) {
