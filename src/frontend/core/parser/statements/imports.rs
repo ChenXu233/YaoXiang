@@ -20,14 +20,38 @@ pub fn parse_use_stmt(
 
     let (path, path_span, path_parts) = parse_use_path(state)?;
 
-    // Parse import items: use path.{item1, item2};
-    let items = if state.skip(&TokenKind::LBrace) {
+    // Parse import items: use path.{item1, item2}; 或带内联别名 use path.{item as alias}
+    let (items, item_aliases) = if state.skip(&TokenKind::LBrace) {
         let mut items = Vec::new();
+        let mut aliases = Vec::new();
+        let mut any_alias = false;
         while !state.at(&TokenKind::RBrace) && !state.at_end() {
             match state.current().map(|t| &t.kind) {
                 Some(TokenKind::Identifier(n)) => {
                     items.push(n.clone());
                     state.bump();
+                    // 内联别名：item as alias（#245）
+                    if state.skip(&TokenKind::KwAs) {
+                        match state.current().map(|t| &t.kind) {
+                            Some(TokenKind::Identifier(a)) => {
+                                aliases.push(Some(a.clone()));
+                                any_alias = true;
+                                state.bump();
+                            }
+                            _ => {
+                                state.error(
+                                    ErrorCodeDefinition::unexpected_token(
+                                        "expected alias after `as`",
+                                    )
+                                    .at(state.span())
+                                    .build(),
+                                );
+                                aliases.push(None);
+                            }
+                        }
+                    } else {
+                        aliases.push(None);
+                    }
                     state.skip(&TokenKind::Comma);
                 }
                 Some(TokenKind::KwPub) => {
@@ -38,13 +62,24 @@ pub fn parse_use_stmt(
             }
         }
         state.expect(&TokenKind::RBrace);
-        Some(items)
+        (Some(items), if any_alias { Some(aliases) } else { None })
     } else {
-        None
+        (None, None)
     };
 
-    // Parse alias: use path as alias; or use path.{a, b} as alias1, alias2;
+    // Parse alias: use path as alias;
+    // 位置式条目别名 `use path.{a} as x` 不在 RFC-029 语法表内（仅四种形式），
+    // 拒绝并指向内联形式 `use path.{a as x}`。
     let alias = if state.skip(&TokenKind::KwAs) {
+        if items.is_some() {
+            state.error(
+                ErrorCodeDefinition::unexpected_token(
+                    "positional item alias is not supported; use inline form `use path.{item as alias}`",
+                )
+                .at(state.span())
+                .build(),
+            );
+        }
         let mut aliases = Vec::new();
         while let Some(TokenKind::Identifier(n)) = state.current().map(|t| &t.kind) {
             aliases.push(n.clone());
@@ -72,6 +107,7 @@ pub fn parse_use_stmt(
             path_parts,
             items,
             alias,
+            item_aliases,
         },
         span,
     })

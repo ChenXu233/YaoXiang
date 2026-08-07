@@ -118,20 +118,6 @@ pub enum CompareOp {
     Ge,
 }
 
-/// Function reference
-#[derive(Debug, Clone)]
-pub enum FunctionRef {
-    /// Static function reference by name
-    Static {
-        /// Module name (empty for current module)
-        module: String,
-        /// Function name
-        name: String,
-    },
-    /// Reference by index (after linking)
-    Index(u32),
-}
-
 /// Bytecode instruction
 ///
 /// This is the low-level instruction format. Each instruction has:
@@ -324,6 +310,12 @@ pub enum BytecodeInstr {
         values: Vec<Reg>,
     },
 
+    /// 创建元组实例（SPEC §3.6）
+    NewTuple {
+        dst: Reg,
+        items: Vec<Reg>,
+    },
+
     // =====================
     // Arc Operations
     // =====================
@@ -373,7 +365,8 @@ pub enum BytecodeInstr {
     /// Static dispatch call
     CallStatic {
         dst: Option<Reg>,
-        func: FunctionRef,
+        /// 函数表索引（codegen 期解析，解释器按 functions_by_id 直接分发）
+        func: u32,
         args: Vec<Reg>,
     },
 
@@ -406,7 +399,8 @@ pub enum BytecodeInstr {
     /// Create closure
     MakeClosure {
         dst: Reg,
-        func: FunctionRef,
+        /// 函数表索引（codegen 期解析）
+        func: u32,
         env: Vec<Reg>,
     },
 
@@ -551,6 +545,7 @@ impl BytecodeInstr {
             BytecodeInstr::NewListWithCap { .. } => Opcode::NewListWithCap,
             BytecodeInstr::CreateStruct { .. } => Opcode::CreateStruct,
             BytecodeInstr::NewDict { .. } => Opcode::NewDict,
+            BytecodeInstr::NewTuple { .. } => Opcode::NewTuple,
             BytecodeInstr::ArcNew { .. } => Opcode::ArcNew,
             BytecodeInstr::RcNew { .. } => Opcode::RcNew,
             BytecodeInstr::ArcClone { .. } => Opcode::ArcClone,
@@ -662,6 +657,10 @@ impl BytecodeInstr {
                 // dst(2) + pair_count(4) + keys(2*count) + values(2*count)
                 6 + keys.len() * 4
             }
+            BytecodeInstr::NewTuple { items, .. } => {
+                // dst(2) + item_count(4) + items(2*count)
+                6 + items.len() * 2
+            }
             BytecodeInstr::ArcNew { .. } => 4,
             BytecodeInstr::RcNew { .. } => 4,
             BytecodeInstr::ArcClone { .. } => 4,
@@ -754,6 +753,9 @@ pub struct BytecodeModule {
     pub functions: Vec<BytecodeFunction>,
     /// Type table
     pub type_table: Vec<crate::middle::core::ir::Type>,
+    /// 编译期类型方法表（type_name → [(裸方法名, 函数表索引)]）。
+    /// 解释器加载期直建 vtable 缓存，分发全程按函数表索引。
+    pub vtables: Vec<(String, Vec<(String, u32)>)>,
     /// Global variables
     pub globals: Vec<GlobalInfo>,
     /// Entry point function index
@@ -781,6 +783,7 @@ impl BytecodeModule {
             constants: Vec::new(),
             functions: Vec::new(),
             type_table: Vec::new(),
+            vtables: Vec::new(),
             globals: Vec::new(),
             entry_point: None,
         }
@@ -1128,9 +1131,6 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     let _base_arg_reg = instr.operands[5];
                                     let arg_count = instr.operands[6] as usize;
 
-                                    // Create function reference from func_id
-                                    let func_ref = FunctionRef::Index(func_id);
-
                                     // Parse arguments
                                     let mut args = Vec::new();
                                     for i in 0..arg_count {
@@ -1150,7 +1150,7 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     let dst_reg = Some(Reg(dst));
                                     let call_instr = BytecodeInstr::CallStatic {
                                         dst: dst_reg,
-                                        func: func_ref,
+                                        func: func_id,
                                         args,
                                     };
                                     decoded_instructions.push(call_instr);
@@ -1723,6 +1723,39 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     decoded_instructions.push(BytecodeInstr::Nop);
                                 }
                             }
+                            Opcode::NewTuple => {
+                                // NewTuple: dst(2) + item_count(4) + items(2*count)
+                                if instr.operands.len() >= 6 {
+                                    let dst =
+                                        u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
+                                    let item_count = u32::from_le_bytes([
+                                        instr.operands[2],
+                                        instr.operands[3],
+                                        instr.operands[4],
+                                        instr.operands[5],
+                                    ])
+                                        as usize;
+
+                                    let mut items = Vec::with_capacity(item_count);
+                                    for i in 0..item_count {
+                                        let item_offset = 6 + i * 2;
+                                        if item_offset + 1 < instr.operands.len() {
+                                            let item_reg = u16::from_le_bytes([
+                                                instr.operands[item_offset],
+                                                instr.operands[item_offset + 1],
+                                            ]);
+                                            items.push(Reg(item_reg));
+                                        }
+                                    }
+
+                                    decoded_instructions.push(BytecodeInstr::NewTuple {
+                                        dst: Reg(dst),
+                                        items,
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
                             Opcode::StoreElement => {
                                 // StoreElement: array(1) + index(1) + value(1)
                                 if instr.operands.len() >= 3 {
@@ -1763,7 +1796,7 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
 
                                     decoded_instructions.push(BytecodeInstr::MakeClosure {
                                         dst: Reg(dst),
-                                        func: FunctionRef::Index(func_id),
+                                        func: func_id,
                                         env,
                                     });
                                 } else {
@@ -1874,6 +1907,7 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
             constants: file.const_pool,
             functions,
             type_table: file.type_table.into_iter().map(|t| t.into()).collect(),
+            vtables: file.vtables,
             globals: Vec::new(), // Not stored in BytecodeFile yet
             entry_point,
         }

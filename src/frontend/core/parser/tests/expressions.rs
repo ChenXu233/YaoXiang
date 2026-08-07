@@ -68,8 +68,24 @@ fn test_unary_neg() {
 
 #[test]
 fn test_unary_not() {
-    // not 表达式 — 至少能解析不 panic
-    let _ = parse_expr("not x");
+    // `!` 紧绑定一元表达式（Zig 式，SPEC §2.2）
+    let expr = parse_expr("!x");
+    assert!(matches!(expr, Expr::UnOp { op: UnOp::Not, .. }));
+
+    // 紧绑定：!a == b ≡ (!a) == b
+    let expr2 = parse_expr("!a == b");
+    match expr2 {
+        Expr::BinOp {
+            op: BinOp::Eq,
+            left,
+            right,
+            ..
+        } => {
+            assert!(matches!(*left, Expr::UnOp { op: UnOp::Not, .. }));
+            assert!(matches!(*right, Expr::Var(name, _) if name == "b"));
+        }
+        _ => panic!("!a == b should parse as (!a) == b"),
+    }
 }
 
 // ============================================================================

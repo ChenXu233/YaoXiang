@@ -1,0 +1,23 @@
+// 07-std/assert_ops.yx
+// 覆盖: std.assert 模块（#117）
+// 验证: assert.assert(cond, msg) 正常路径（真条件通过、消息不显示）
+// 状态: ✅
+// 错误路径（断言失败 → E6007 + exit 1）由 tests/integration/test_command.rs
+// FAIL_TEST 覆盖（子进程 exit code 判定）
+
+use std.assert
+
+main = {
+    // 基本断言：真条件通过
+    assert.assert(1 + 1 == 2, "basic equality")
+
+    // 字符串消息（失败时才展示）
+    assert.assert("abc" == "abc", "string equality")
+
+    // 布尔表达式
+    assert.assert(5 > 3 and 3 < 5, "logical and")
+    assert.assert(!false, "logical not")
+
+    // 泛型参数（Int / String 均可比较）
+    assert.assert(42 == 42, "int equality")
+}

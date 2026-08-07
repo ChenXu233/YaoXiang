@@ -101,7 +101,13 @@ impl Compiler {
         debug!("{}", t_cur(MSG::CompilingSource, Some(&[&source_len])));
 
         let result = self.pipeline.run(source_name, source);
+        Self::map_pipeline_result(result)
+    }
 
+    /// 将管线结果映射为编译结果（错误分类）。
+    fn map_pipeline_result(
+        result: super::pipeline::CompilationResult
+    ) -> Result<middle::ModuleIR, CompileError> {
         if result.is_success() {
             Ok(result.ir.unwrap())
         } else {
@@ -117,13 +123,9 @@ impl Compiler {
             // 根据管道错误类型映射到合适的编译错误变体
             let compilation_error = match first_error {
                 Some(err) => match err {
-                    super::pipeline::PipelineError::LexParse(_) => {
-                        let diagnostic =
-                            crate::util::diagnostic::ErrorCodeDefinition::internal_error(
-                                &error_message,
-                            )
-                            .build();
-                        CompileError::Parse(diagnostic)
+                    super::pipeline::PipelineError::LexParse(diag) => {
+                        // 直接透传词法/解析诊断，保留原始错误码与 span（而非包装成 E8001 ICE）
+                        CompileError::Parse(diag.clone())
                     }
                     super::pipeline::PipelineError::TypeCheck(diag) => {
                         CompileError::TypeError(error_message, Some(Box::new(diag.clone())))

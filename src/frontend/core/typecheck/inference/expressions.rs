@@ -494,6 +494,7 @@ impl<'a> ExpressionInferrer<'a> {
                 }
             }
             MonoType::Arc(t) | MonoType::Weak(t) => Self::collect_type_var_indices(t, out),
+            MonoType::Ref { inner, .. } => Self::collect_type_var_indices(inner, out),
             MonoType::Struct(s) => {
                 for (_, field_ty) in &s.fields {
                     Self::collect_type_var_indices(field_ty, out);
@@ -648,7 +649,7 @@ impl<'a> ExpressionInferrer<'a> {
         &mut self,
         func_ty: &MonoType,
         func_expr: &crate::frontend::core::parser::ast::Expr,
-        arg_types: &[MonoType],
+        _arg_types: &[MonoType],
         mono_func_ty: &MonoType,
         call_span: crate::util::span::Span,
     ) {
@@ -661,11 +662,18 @@ impl<'a> ExpressionInferrer<'a> {
             return;
         };
 
-        // 检查原函数类型是否包含 TypeVar（即是否为泛型函数）
-        let mut var_indices = HashSet::new();
-        Self::collect_type_var_indices(func_ty, &mut var_indices);
-        if var_indices.is_empty() {
-            // 也检查 MetaType 参数（泛型类型构造器）
+        // 收集「参数位直接是 TypeVar」的位置（如 identity 的 x: T、twice 的 x: T）。
+        // 不能收集嵌套 TypeVar 的参数位：twice(f: (T) -> T, x: T) 的 f 位是 fn(T)->T，
+        // 解析后是 fn(int64)->int64，用它当 type_arg 会让 T 绑到错误类型（#255）。
+        let mut type_var_indices = HashSet::new();
+        for (i, param) in original_params.iter().enumerate() {
+            if matches!(self.solver.resolve_type(param), MonoType::TypeVar(_)) {
+                type_var_indices.insert(i);
+            }
+        }
+
+        // 没有 TypeVar → 不是泛型函数调用（除非是 MetaType 构造器，交给类型特化路径）
+        if type_var_indices.is_empty() {
             let has_meta = original_params
                 .iter()
                 .any(|p| matches!(p, MonoType::MetaType { .. }));
@@ -689,9 +697,23 @@ impl<'a> ExpressionInferrer<'a> {
             ..
         } = mono_func_ty
         {
-            // 收集所有的具体类型（从已解析的参数中提取去重后的类型）
-            let type_args: Vec<MonoType> =
-                self.extract_concrete_type_args(resolved_params, arg_types);
+            // 只收集 TypeVar 参数位对应的具体类型（去重）。
+            // 不能收集所有具体参数类型：twice(x => x+1, 5) 的参位含 fn(int64)->int64 与
+            // int64，但 T 只有一个（int64）——全收集会让 type_args 长度与 type_params 不匹配、
+            // 特化失败（#255）。
+            let mut type_args = Vec::new();
+            let mut seen = HashSet::new();
+            for &idx in &type_var_indices {
+                if let Some(resolved) = resolved_params.get(idx) {
+                    let resolved = self.solver.resolve_type(resolved);
+                    if !matches!(resolved, MonoType::TypeVar(_)) {
+                        let key = format!("{}", resolved);
+                        if seen.insert(key) {
+                            type_args.push(resolved);
+                        }
+                    }
+                }
+            }
 
             if !type_args.is_empty() {
                 let generic_id = if type_params.is_empty() {
@@ -737,29 +759,6 @@ impl<'a> ExpressionInferrer<'a> {
         }
 
         vec![]
-    }
-
-    /// 从已解析的参数类型和实参类型中提取具体的类型参数
-    fn extract_concrete_type_args(
-        &self,
-        resolved_params: &[MonoType],
-        _arg_types: &[MonoType],
-    ) -> Vec<MonoType> {
-        let mut type_args = Vec::new();
-        let mut seen = HashSet::new();
-
-        // 收集 params 中的具体类型（已解析的 TypeVar）
-        for param in resolved_params {
-            let resolved = self.solver.resolve_type(param);
-            if !matches!(resolved, MonoType::TypeVar(_)) {
-                let key = format!("{}", resolved);
-                if seen.insert(key) {
-                    type_args.push(resolved);
-                }
-            }
-        }
-
-        type_args
     }
 
     /// 推断表达式的类型
@@ -1008,7 +1007,11 @@ impl<'a> ExpressionInferrer<'a> {
 
             // 函数调用
             crate::frontend::core::parser::ast::Expr::Call {
-                func, args, span, ..
+                func,
+                args,
+                named_args,
+                span,
+                ..
             } => {
                 let func_ty = self.infer_expr(func)?;
 
@@ -1152,6 +1155,83 @@ impl<'a> ExpressionInferrer<'a> {
                         }
                     }
                 }
+                // #271#1：统一参数个数检查（构造器缺参/超参、函数缺参/超参）。
+                // 泛型类型构造器（List(1,2,3) 值构造）豁免——其参数语义是类型参数+值参数，
+                // 不适用字段计数（RFC-011），在 match 前拦下。
+                if let crate::frontend::core::parser::ast::Expr::Var(fn_name, _) = &**func {
+                    // 豁免：泛型类型构造器（List(1,2,3) 值构造是 RFC-011 语义，非字段计数）；
+                    // native 函数（std 可选参数 ?msg / 变参 ...args，签名 params.len() 不可靠，
+                    // assert(1>0) 合法但 params 有 2 项——原 Fn 分支对数量不等静默跳过，
+                    // 正是这种宽容路径）。
+                    if !self.generic_type_defs.contains_key(fn_name)
+                        && !self.native_signatures.contains_key(fn_name)
+                    {
+                        let provided = arg_types.len();
+                        match &mono_func_ty {
+                            MonoType::Struct(st) => {
+                                // 普通 struct 构造器：Point(1.0, 2.0)。
+                                // 有默认值的字段可省略 → 必需参数数 = 无默认值字段数。
+                                let total = st.fields.len();
+                                let required = st.field_has_default.iter().filter(|&&d| !d).count();
+                                if named_args.is_empty() {
+                                    // 位置参数：Point(5) 缺参 / Point(5,6,7) 超参
+                                    if provided < required || provided > total {
+                                        return Err(ErrorCodeDefinition::argument_count_mismatch(
+                                            &st.name, total, provided,
+                                        )
+                                        .at(*span)
+                                        .build());
+                                    }
+                                } else {
+                                    // 命名参数：Point(x=6) 缺必需字段 → 静默 0（#271#1）。
+                                    // 检查必需字段（无默认值）是否全部提供。
+                                    let provided_names: std::collections::HashSet<&str> =
+                                        named_args.iter().map(|(n, _)| n.as_str()).collect();
+                                    let missing: Vec<&str> = st
+                                        .fields
+                                        .iter()
+                                        .enumerate()
+                                        .filter(|(i, _)| !st.field_has_default[*i])
+                                        .map(|(_, (n, _))| n.as_str())
+                                        .filter(|n| !provided_names.contains(n))
+                                        .collect();
+                                    if !missing.is_empty() {
+                                        let msg = format!(
+                                            "{} constructor missing required field(s): {}",
+                                            st.name,
+                                            missing.join(", ")
+                                        );
+                                        return Err(ErrorCodeDefinition::type_mismatch(
+                                            &msg,
+                                            &format!("provided {}", provided_names.len()),
+                                        )
+                                        .at(*span)
+                                        .build());
+                                    }
+                                }
+                            }
+                            MonoType::Fn { params, .. }
+                                // 普通函数调用：add(5) 缺参 → E6007 运行时错（晚且误导）；
+                                // add(1,2,3) 超参静默丢弃。拦为编译期 E1010。
+                                // 仅当 params 非空时检查：lambda/块函数绑定（mk: (Int,Int)->Int
+                                // = (x,y)=>x+y）在 scope 里参数类型丢失（params 为空），
+                                // 计数不可靠，跳过避免误伤（#271 记 lambda 绑定参数丢失）。
+                                if named_args.is_empty()
+                                    && !params.is_empty()
+                                    && provided != params.len()
+                                => {
+                                    return Err(ErrorCodeDefinition::argument_count_mismatch(
+                                        fn_name,
+                                        params.len(),
+                                        provided,
+                                    )
+                                    .at(*span)
+                                    .build());
+                                }
+                            _ => {}
+                        }
+                    }
+                }
                 // 分发
                 match mono_func_ty {
                     MonoType::Fn {
@@ -1206,7 +1286,8 @@ impl<'a> ExpressionInferrer<'a> {
                         return Ok(resolved_ret);
                     }
                     MonoType::Struct(_) | MonoType::TypeRef(_) => {
-                        // 类型构造器：Point(1.0, 2.0) 或 List(Int) 单态化后的结果
+                        // 类型构造器：Point(1.0, 2.0) 或 List(Int) 单态化后的结果。
+                        // 参数个数检查已在 #271#1 前置块完成（泛型构造器豁免）。
                         return Ok(mono_func_ty);
                     }
                     _ => {}

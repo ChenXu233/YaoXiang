@@ -38,6 +38,8 @@ pub enum DisproofKind {
     UnsafeViolation,
     /// spawn 内 ref 循环（ref 变量间形成环形引用）→ E2029
     SpawnCycleViolation,
+    /// 复制 Linear 令牌（`&mut T` 非 Dup，赋值复制被拒绝，#257）→ E2003
+    LinearTokenCopy,
 }
 
 /// 证明结果
@@ -183,6 +185,13 @@ impl DisproofModel {
             DisproofKind::SpawnCycleViolation => {
                 let cycle_info = self.constraint.clone();
                 let mut builder = ErrorCodeDefinition::spawn_ref_cycle(&cycle_info);
+                if let Some(span) = self.span {
+                    builder = builder.at(span);
+                }
+                builder.build()
+            }
+            DisproofKind::LinearTokenCopy => {
+                let mut builder = ErrorCodeDefinition::ownership_violation(&self.constraint);
                 if let Some(span) = self.span {
                     builder = builder.at(span);
                 }

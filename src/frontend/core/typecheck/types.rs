@@ -33,6 +33,9 @@ pub struct TypeCheckResult {
     pub escaped_refs: HashSet<String>,
     /// 实例化请求列表（单态化器使用）
     pub instantiation_requests: Vec<crate::middle::passes::mono::instance::InstantiationRequest>,
+    /// 用户模块命名空间别名表（别名 → 模块限定键）。
+    /// 模块解析归 typecheck 所有：由整体导入（`use lib` / `use lib as l`）登记，IR 生成直接消费。
+    pub module_namespaces: HashMap<String, String>,
 }
 
 /// 导入信息

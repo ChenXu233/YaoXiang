@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use parking_lot::Mutex;
+use std::sync::Mutex;
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
@@ -52,7 +52,7 @@ pub fn validate_source(source: &str) -> ValidateResult {
 
     // 缓存查询
     {
-        let cache = VALIDATE_CACHE.lock();
+        let cache = VALIDATE_CACHE.lock().unwrap();
         if let Some(cached) = cache.get(&hash) {
             return cached.as_ref().clone();
         }
@@ -72,7 +72,7 @@ pub fn validate_source(source: &str) -> ValidateResult {
                     )],
                     module: None,
                 };
-                let mut cache = VALIDATE_CACHE.lock();
+                let mut cache = VALIDATE_CACHE.lock().unwrap();
                 cache.insert(hash, Arc::new(result.clone()));
                 return result;
             }
@@ -85,7 +85,7 @@ pub fn validate_source(source: &str) -> ValidateResult {
                 diagnostics: parse_result.errors,
                 module: None,
             };
-            let mut cache = VALIDATE_CACHE.lock();
+            let mut cache = VALIDATE_CACHE.lock().unwrap();
             cache.insert(hash, Arc::new(result.clone()));
             return result;
         }
@@ -100,7 +100,7 @@ pub fn validate_source(source: &str) -> ValidateResult {
     };
 
     // 缓存结果
-    let mut cache = VALIDATE_CACHE.lock();
+    let mut cache = VALIDATE_CACHE.lock().unwrap();
     cache.insert(hash, Arc::new(result.clone()));
     result
 }

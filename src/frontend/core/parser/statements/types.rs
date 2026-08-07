@@ -1,4 +1,4 @@
-//! Type annotation parsing and extension trait
+//! Type annotation parsing
 //!
 //! Implements parsing for:
 //! - Type annotations: `name: Type`
@@ -8,27 +8,47 @@
 //! - Named struct types: `Name(x: Type, y: Type)`
 //! - Constructor types: `Name(Type1, Type2)` — the ONLY generic application syntax
 //! - Meta types: `Type`
-//!
-//! Also provides `TypeStatementParser` trait so callers can use
-//! `state.parse_type_annotation()` instead of the free function.
 
 use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::parser::ast::StructField;
 use crate::frontend::core::parser::{ParserState, BP_LOWEST};
 use crate::frontend::core::parser::parse_msg;
+use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::span::Span;
 
-/// Extension trait providing `.parse_type_annotation()` on ParserState.
-pub trait TypeStatementParser {
+impl ParserState<'_> {
     /// Parse a type annotation
-    fn parse_type_annotation(&mut self) -> Option<Type>;
-}
-
-impl TypeStatementParser for ParserState<'_> {
-    fn parse_type_annotation(&mut self) -> Option<Type> {
+    pub fn parse_type_annotation(&mut self) -> Option<Type> {
         parse_type_annotation(self)
     }
+
+    /// 严格版类型标注（`:`/`as` 之后类型必需的位置专用）
+    pub fn parse_type_annotation_required(&mut self) -> Option<Type> {
+        parse_type_annotation_required(self)
+    }
+}
+
+/// 严格变体：仅用于调用方已消费 `:` 或 `as` 的位置（类型必需）。
+/// 解析失败时报 E0010 并消费肇事 token，避免非法 token 掉进宽容版的
+/// `_ => None` 后静默吞掉整个标注/绑定（#250 残余缺口：当时只修了 `?`）。
+/// 探测型调用点（while-let / if-let / try_parse_typed_param_list）继续用宽容版。
+pub fn parse_type_annotation_required(state: &mut ParserState<'_>) -> Option<Type> {
+    if let Some(ty) = parse_type_annotation(state) {
+        return Some(ty);
+    }
+    let span = state.span();
+    let found = state
+        .current()
+        .map(|t| format!("{:?}", t.kind))
+        .unwrap_or_else(|| "EOF".to_string());
+    state.error(
+        ErrorCodeDefinition::expected_token("a type", &found)
+            .at(span)
+            .build(),
+    );
+    state.bump();
+    None
 }
 
 /// Parse type annotation
@@ -240,6 +260,20 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             ));
             None
         }
+        // `?` 是 try 运算符（表达式级），不能作为类型起始（#250）
+        Some(TokenKind::Question) => {
+            let span = state.span();
+            state.bump(); // 消费掉 `?`，避免错误恢复在原地打转
+            state.error(
+                ErrorCodeDefinition::invalid_syntax(
+                    "'?' 是 try 运算符，不是合法的类型。\
+                     参数类型请使用类型名（如 Int、String、Any），或省略类型标注",
+                )
+                .at(span)
+                .build(),
+            );
+            None
+        }
         // 整数字面量类型：IsPositive(5) 中的 5
         Some(TokenKind::IntLiteral(n)) => {
             let n = *n;
@@ -392,7 +426,9 @@ pub fn parse_fn_type_with_names(
                 // Parse type annotation
                 // Check if this is a literal type (const parameter reference)
                 // e.g., (n: n) where n is a const generic parameter
-                let parsed_type = parse_type_annotation(state)?;
+                // 冒号后类型必需：用严格版，非法 token 报 E0010 而非静默变无标注参数
+                // （#250 残余缺口：`(a: "hello")` 曾被静默吞掉）
+                let parsed_type = parse_type_annotation_required(state)?;
 
                 // Handle `+` constraint syntax: T: Clone + Add
                 // Collect all constraint types separated by `+`
@@ -438,18 +474,32 @@ pub fn parse_fn_type_with_names(
     // parse_type_annotation 会丢参数名，故自行检测 curry 组并递归收集带名参数。
     // all_params = 第一组 + 后续各组（拍平带名），供 signature_params 存全部 curry 组参数名。
     // return_type 保持嵌套 Type::Fn（纯类型），供 type_annotation 构建正确嵌套结构。
+    // 注意：必须前瞻到 `)` 之后确认是 `->` 才算 curry 组——
+    // 返回类型本身可能是元组类型 (T, U)（#253），否则会把元组误判为 curry 参数组。
     let saved = state.save_position();
     let is_named_curry = if state.at(&TokenKind::LParen) {
         state.bump();
-        let result = if let Some(TokenKind::Identifier(_)) = state.current().map(|t| &t.kind) {
-            let next = state.peek().map(|t| &t.kind);
-            matches!(next, Some(TokenKind::Colon))
-                || matches!(next, Some(TokenKind::Comma) | Some(TokenKind::RParen))
-        } else {
-            false
-        };
+        let starts_with_name =
+            if let Some(TokenKind::Identifier(_)) = state.current().map(|t| &t.kind) {
+                let next = state.peek().map(|t| &t.kind);
+                matches!(next, Some(TokenKind::Colon))
+                    || matches!(next, Some(TokenKind::Comma) | Some(TokenKind::RParen))
+            } else {
+                false
+            };
+        // 扫描括号内容，确认 `)` 后跟 `->`
+        let mut paren_depth = 1;
+        while paren_depth > 0 && !state.at_end() {
+            if state.at(&TokenKind::LParen) {
+                paren_depth += 1;
+            } else if state.at(&TokenKind::RParen) {
+                paren_depth -= 1;
+            }
+            state.bump();
+        }
+        let after_is_arrow = state.at(&TokenKind::Arrow);
         state.restore_position(saved);
-        result
+        starts_with_name && after_is_arrow
     } else {
         false
     };
@@ -466,7 +516,8 @@ pub fn parse_fn_type_with_names(
         }
         state.restore_position(saved);
     }
-    let return_type = Box::new(parse_type_annotation(state)?);
+    // `->` 后返回类型必需：严格版，非法 token 报错而非静默吞掉整个签名（审计发现）
+    let return_type = Box::new(parse_type_annotation_required(state)?);
     let all_params = params.clone();
     Some((params, all_params, return_type))
 }

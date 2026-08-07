@@ -234,7 +234,7 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                 }
             }
 
-            Instruction::TailCall { func: _, args } => {
+            Instruction::TailCall { func: _, args, .. } => {
                 let arg_types: Vec<MonoType> = args
                     .iter()
                     .filter_map(|a| self.operand_to_type(a))
@@ -453,6 +453,8 @@ impl FunctionMonomorphizer for super::Monomorphizer {
 
         FunctionIR {
             name: func_id.name().to_string(),
+            // 特化函数是泛型的新名字实例，不复用原 DefId——mono 路径保持按名分发
+            def: None,
             params: new_params,
             return_type: new_return_type,
             generic_params: None,
@@ -892,11 +894,11 @@ impl FunctionMonomorphizer for super::Monomorphizer {
         ModuleIR {
             globals: original_module.globals.clone(),
             functions: output_funcs,
-            mut_locals: original_module.mut_locals.clone(),
-            loop_binding_locals: original_module.loop_binding_locals.clone(),
-            local_names: original_module.local_names.clone(),
             ffi_libs: original_module.ffi_libs.clone(),
             ffi_bindings: original_module.ffi_bindings.clone(),
+            entry_function: original_module.entry_function.clone(),
+            source_files: original_module.source_files.clone(),
+            function_files: original_module.function_files.clone(),
         }
     }
 }

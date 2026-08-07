@@ -1,0 +1,62 @@
+// 05-ownership/ownership_deep.yx
+// 覆盖: SPEC type-system.md §11 类型属性 / §12 借用令牌深水区（#251 P0-7）；#266 &mut 令牌运行时写通路
+// 验证:
+//   - Dup 令牌复制：view2 = view，两份都活跃（§11.2）
+//   - 原语值复制独立于 move（§11.2）
+//   - 自动借用优先级：&T 读 → &mut 写 → 最后 Move（§12.4）
+//   - &mut 顺序复用（§12.5 good_seq）
+//   - 令牌字段 + 经令牌字段访问（§12.3/§12.6 派生品牌）
+// 状态: ✅ 可运行（#266 修复后第 3-5 节解锁）
+
+use std.assert
+
+Point: Type = { x: Int, y: Int }
+
+Point.sum: (self: &Point) -> Int = {
+    return self.x + self.y
+}
+
+Point.shift: (self: &mut Point, dx: Int, dy: Int) -> Void = {
+    self.x = self.x + dx
+    self.y = self.y + dy
+}
+
+Window: Type = {
+    view: &Point,
+}
+
+main = {
+    // 1. Dup 令牌复制：两份都活跃（§11.2 view/view2）
+    p = Point(1, 2)
+    view = &p
+    view2 = view        // Dup：复制令牌，不是 move
+    assert.assert(view.x == 1, "原令牌活跃")
+    assert.assert(view2.y == 2, "复制令牌活跃")
+
+    // 2. 原语值复制独立于 move（§11.2）
+    a = 42
+    b = a
+    assert.assert(a + b == 84, "原语值复制，两者都可用")
+
+    // 3. 自动借用优先级（§12.4）：&T 读 → &mut 写 → 读 → Move
+    q = Point(3, 4)
+    s1 = q.sum()            // &Point 自动借用
+    q.shift(1, 1)           // &mut Point 自动借用
+    s2 = q.sum()            // 上一令牌随调用结束释放，仍可用
+    assert.assert(s1 == 7, "变更前读 == 7")
+    assert.assert(s2 == 9, "变更后读 == 9")
+    q2 = q                  // 后续不再使用 → Move
+    assert.assert(q2.x == 4, "move 后值完整")
+
+    // 4. &mut 顺序复用（§12.5 good_seq）
+    r = Point(0, 0)
+    r.shift(1, 0)
+    r.shift(0, 1)
+    assert.assert(r.x == 1 and r.y == 1, "&mut 顺序调用")
+
+    // 5. 令牌字段 + 经令牌字段访问（§12.3/§12.6）
+    t = Point(5, 6)
+    w = Window(&t)
+    assert.assert(w.view.x == 5, "经令牌字段访问")
+    assert.assert(t.y == 6, "派生令牌后源仍可读")
+}

@@ -697,17 +697,22 @@ fn test_semantic_dispatch_type_vs_value_base() {
 /// 方法定义臂语义分流：base 是值（非类型）→ 不当方法定义收集。
 #[test]
 fn test_method_def_arm_value_base_not_method() {
-    // f.handler = (x) => ... 其中 f 是实例（非类型）→ 不应登记 "f.handler" 方法
+    // Arrange: f.handler: (...) -> Int = ... 其中 f 是实例（非类型）→ 不应登记 "f.handler" 方法
+    // （RFC-010 方法定义臂：base 是值时走语义分流，不当方法收集）
     let src = r#"
         File: Type = { name: String }
         f: File = File("a")
-        f.handler = (x: Int) -> Int = (x) => x
+        f.handler: (x: Int) -> Int = (x) => x
     "#;
     let tokens = tokenize(src).expect("tokenize failed");
+
+    // Act
     let r = parse(&tokens);
     assert!(!r.has_errors, "parse failed: {:?}", r.errors);
     let mut checker = TypeChecker::new("test");
     checker.check_module(&r.module);
+
+    // Assert
     assert!(
         !checker.env().method_bindings.contains_key("f.handler"),
         "值 base 的方法定义臂不应登记为方法"
@@ -790,4 +795,76 @@ fn test_rfc010_without_type_annotation_not_type_constructor() {
         !result.diagnostics.is_empty(),
         "record syntax without `: Type` annotation should not be a type definition"
     );
+}
+
+/// 规范：#271#1 构造器参数个数检查
+///
+/// 预期行为：
+/// - `Point(5)` 缺参（y 无默认值）→ 编译错误（原静默填 0）
+/// - `Point(5, 6, 7)` 超参 → 编译错误（原静默丢弃）
+/// - `Point(5, 6)` 正常 → 通过
+/// - 命名参数 `Point(x=6)` 缺必需字段 y → 编译错误（原静默填 0）
+/// - 命名参数 `Point(x=6, y=2)` 完整 → 通过
+/// - 有默认值的字段可省略：`Config("localhost")` → 通过
+#[test]
+fn test_rfc010_ctor_argument_count_check() {
+    // Arrange - 6 个用例矩阵（缺参/超参/正常/命名缺字段/命名完整/默认值省略）
+    let cases = [
+        (
+            "Point(5)",
+            true,
+            "缺参应报错：Point(5) 少传 y（无默认值，原静默填 0）",
+        ),
+        (
+            "Point(5, 6, 7)",
+            true,
+            "超参应报错：Point(5,6,7) 多传第 3 个参数（原静默丢弃）",
+        ),
+        ("Point(5, 6)", false, "正常构造应通过：Point(5, 6)"),
+        (
+            "Point(x=6)",
+            true,
+            "命名参数缺必需字段应报错：Point(x=6) 缺 y",
+        ),
+        (
+            "Point(x=6, y=2)",
+            false,
+            "命名参数完整应通过：Point(x=6, y=2)",
+        ),
+        (
+            "Config(\"localhost\")",
+            false,
+            "默认值字段可省略应通过：Config(\"localhost\") 缺 port 但有默认值",
+        ),
+    ];
+
+    for (call, expect_error, msg) in cases {
+        let source = format!(
+            "Point: Type = {{ x: Int, y: Int }}\nConfig: Type = {{ host: String, port: Int = 8080 }}\nmain = {{\n    p = {}\n}}",
+            call
+        );
+
+        // Act
+        let result = check_source(&source);
+
+        // Assert
+        if expect_error {
+            assert!(
+                !result.diagnostics.is_empty(),
+                "{}（期望编译错误，实际通过）",
+                msg
+            );
+        } else {
+            assert!(
+                result.diagnostics.is_empty(),
+                "{}（期望通过，实际: {:?}）",
+                msg,
+                result
+                    .diagnostics
+                    .iter()
+                    .map(|d| d.message.clone())
+                    .collect::<Vec<_>>()
+            );
+        }
+    }
 }

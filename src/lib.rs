@@ -139,6 +139,24 @@ pub fn run_file(path: &Path) -> Result<()> {
     run_with_source_name(&path_str, &source)
 }
 
+/// RFC-029: 以项目方式运行（多文件编排）。
+///
+/// 从入口文件发现同目录所有 `.yx` 文件，构建共享 Registry，逐文件编译并合并 IR 后执行。
+/// 入口文件的 `main` 函数为程序入口。
+#[cfg(not(target_arch = "wasm32"))]
+pub fn run_project(entry: &Path) -> Result<()> {
+    let module = frontend::module::orchestrator::compile_project(entry)
+        .map_err(|e| anyhow::anyhow!("Project compilation failed: {}", e))?;
+    let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);
+    let bytecode_file = ctx
+        .generate()
+        .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
+    let bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);
+    let mut interpreter = backends::interpreter::Interpreter::new();
+    interpreter.execute_module(&bytecode_module)?;
+    Ok(())
+}
+
 /// Build bytecode file (.42)
 #[cfg(not(target_arch = "wasm32"))]
 pub fn build_bytecode(
@@ -201,11 +219,20 @@ pub fn build_bytecode_with_options(
 /// Dump bytecode for debugging
 #[cfg(not(target_arch = "wasm32"))]
 pub fn dump_bytecode(path: &Path) -> Result<()> {
+    use crate::middle::passes::codegen::bytecode::BytecodeFile;
     use crate::middle::passes::codegen::CodegenContext;
 
     let path_str = path.display().to_string();
     tracing::info!("{}", t_cur(MSG::BytecodeDumpHeader, Some(&[&path_str])));
     tracing::info!("");
+
+    // 内容即身份：字节码文件直接加载 dump，源码文件编译后 dump（与 run 的分流一致）
+    if BytecodeFile::probe(path).unwrap_or(false) {
+        let bytecode_file = BytecodeFile::load(path)
+            .with_context(|| format!("Failed to load bytecode file: {}", path.display()))?;
+        dump_bytecode_file(&bytecode_file);
+        return Ok(());
+    }
 
     // Read source file
     let source = fs::read_to_string(path)
@@ -217,9 +244,16 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
 
     // Generate bytecode
     let mut ctx = CodegenContext::new(module);
-    let bytecode_file: crate::middle::passes::codegen::bytecode::BytecodeFile = ctx
+    let bytecode_file: BytecodeFile = ctx
         .generate()
         .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
+    dump_bytecode_file(&bytecode_file);
+
+    Ok(())
+}
+
+/// 打印 BytecodeFile 的完整结构（header / type table / constants / functions）
+fn dump_bytecode_file(bytecode_file: &crate::middle::passes::codegen::bytecode::BytecodeFile) {
     tracing::info!(
         "{}",
         t_cur(MSG::BytecodeMagic, Some(&[&bytecode_file.header.magic]))
@@ -333,8 +367,6 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
             dump_instructions(&func.instructions);
         }
     }
-
-    Ok(())
 }
 
 /// Dump type information in detail

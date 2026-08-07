@@ -226,6 +226,7 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     Some(self.make_token(TokenKind::Neq))
                 } else {
+                    // Zig 式一元逻辑非（SPEC §2.2 / RFC-010）：`!` 紧绑定，与 and/or 关键字并存
                     Some(self.make_token(TokenKind::Not))
                 }
             }
@@ -249,7 +250,14 @@ impl<'a> Lexer<'a> {
             '&' => {
                 if self.peek() == Some(&'&') {
                     self.advance();
-                    Some(self.make_token(TokenKind::And))
+                    // SPEC §2.2 / RFC-010: logical conjunction uses the keyword `and`; `&&` was removed
+                    self.error = Some(crate::frontend::core::lexer::LexError::InvalidToken {
+                        position: format!("{}:{}", self.line, self.column),
+                        message:
+                            "logical conjunction uses keyword `and`; `&&` was removed (SPEC §2.2)"
+                                .to_string(),
+                    });
+                    Some(self.make_token(TokenKind::Error("use `and` instead of `&&`".to_string())))
                 } else {
                     // Check for &mut: peek ahead 3 chars for 'm','u','t'
                     let mut ahead = self.chars_clone();
@@ -270,7 +278,14 @@ impl<'a> Lexer<'a> {
             '|' => {
                 if self.peek() == Some(&'|') {
                     self.advance();
-                    Some(self.make_token(TokenKind::Or))
+                    // SPEC §2.2 / RFC-010: logical disjunction uses the keyword `or`; `||` was removed
+                    self.error = Some(crate::frontend::core::lexer::LexError::InvalidToken {
+                        position: format!("{}:{}", self.line, self.column),
+                        message:
+                            "logical disjunction uses keyword `or`; `||` was removed (SPEC §2.2)"
+                                .to_string(),
+                    });
+                    Some(self.make_token(TokenKind::Error("use `or` instead of `||`".to_string())))
                 } else {
                     Some(self.make_token(TokenKind::Pipe))
                 }

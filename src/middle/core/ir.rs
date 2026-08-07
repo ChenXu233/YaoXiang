@@ -1,7 +1,10 @@
 //! Intermediate Representation
 
 pub use crate::frontend::core::parser::ast::Type;
+use std::collections::HashMap;
+
 use crate::frontend::core::typecheck::MonoType;
+use crate::frontend::module::symbol::DefId;
 use crate::util::span::Span;
 
 /// Instruction operand
@@ -167,6 +170,8 @@ pub enum Instruction {
         dst: Option<Operand>,
         func: Operand,
         args: Vec<Operand>,
+        /// 静态调用目标的绑定身份（字节码函数为 Some；std 原生/外部名为 None，按名走 FFI）
+        def: Option<DefId>,
         /// Source span for error reporting
         span: Span,
     },
@@ -198,6 +203,8 @@ pub enum Instruction {
     TailCall {
         func: Operand,
         args: Vec<Operand>,
+        /// 静态调用目标的绑定身份（同 `Call::def`）
+        def: Option<DefId>,
     },
     Ret(Option<Operand>),
     Alloc {
@@ -289,9 +296,17 @@ pub enum Instruction {
         keys: Vec<Operand>,
         values: Vec<Operand>,
     },
+    /// 创建元组实例（SPEC §3.6）
+    /// items: 各元素的操作数列表（按元素顺序）
+    NewTuple {
+        dst: Operand,
+        items: Vec<Operand>,
+    },
     MakeClosure {
         dst: Operand,
         func: String,
+        /// 闭包目标函数的绑定身份（生成期 intern，必有值；测试手工构造可为 None）
+        def: Option<DefId>,
         env: Vec<Operand>,
     },
     /// Drop a value (ownership-based cleanup)
@@ -408,6 +423,8 @@ pub enum FunctionBody {
 #[derive(Debug, Clone)]
 pub struct FunctionIR {
     pub name: String,
+    /// 绑定身份（生成期经 SymbolTable intern；测试手工构造可为 None）
+    pub def: Option<DefId>,
     pub params: Vec<MonoType>,
     pub return_type: MonoType,
     pub body: FunctionBody,
@@ -590,15 +607,16 @@ pub enum FfiBinding {
 pub struct ModuleIR {
     pub globals: Vec<(String, Type, Option<ConstValue>)>,
     pub functions: Vec<FunctionIR>,
-    /// 每个函数的可变局部变量索引映射 (function_name -> set of mutable local indices)
-    pub mut_locals: std::collections::HashMap<String, std::collections::HashSet<usize>>,
-    /// 每个函数的循环绑定变量索引映射 (function_name -> set of loop binding local indices)
-    /// 这些变量的 Store 是"绑定"操作，不是"修改"
-    pub loop_binding_locals: std::collections::HashMap<String, std::collections::HashSet<usize>>,
-    /// 每个函数的局部变量名列表 (function_name -> 变量名列表，按索引顺序)
-    pub local_names: std::collections::HashMap<String, Vec<String>>,
     /// FFI 库绑定 — 编译期链接的外部库
     pub ffi_libs: Vec<FfiLibBinding>,
     /// FFI 绑定 — 不透明类型或外部函数
     pub ffi_bindings: Vec<FfiBinding>,
+    /// RFC-029: 入口函数的完整限定名（多文件模式）。None 时回退到查找 "main"。
+    pub entry_function: Option<String>,
+    /// 多文件模式：源文件路径列表（orchestrator 发现顺序），索引即 debug span 的
+    /// file_id。单文件模式为空（translator 固定 file_id 0，由 CLI 装入伤口）。
+    pub source_files: Vec<String>,
+    /// 多文件模式：函数名 → source_files 索引（链接时按来源模块记录，#252）。
+    /// mono 特化的新函数名不在表中，查询回退 0。
+    pub function_files: HashMap<String, usize>,
 }

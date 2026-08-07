@@ -36,10 +36,10 @@ pub use codes::{ErrorCategory, ErrorCodeDefinition, I18nRegistry, DiagnosticBuil
 pub use collect::{ErrorCollector, Warning, ErrorFormatter};
 pub use command::render_explain_output;
 #[cfg(feature = "cli")]
-pub use command::{run_check_command_once, run_check_watch_command};
+pub use command::run_check_command_once;
 pub use emitter::{TextEmitter, JsonEmitter, EmitterConfig};
 pub use error::{Diagnostic, Severity};
-pub use result::{Result, ResultExt};
+pub use result::Result;
 pub use suggest::SuggestionEngine;
 
 // 渲染器
@@ -200,6 +200,18 @@ fn format_runtime_stack_trace(
 /// # 返回
 /// 成功返回 `()`，失败返回错误
 #[cfg(feature = "cli")]
+/// RFC-029: 判断文件是否位于一个 yaoxiang 项目内（沿目录向上查找 yaoxiang.toml）。
+fn in_yaoxiang_project(file: &std::path::Path) -> bool {
+    let mut dir = file.parent();
+    while let Some(d) = dir {
+        if d.join("yaoxiang.toml").exists() {
+            return true;
+        }
+        dir = d.parent();
+    }
+    false
+}
+
 pub fn run_file_with_diagnostics(
     file: &std::path::PathBuf,
     debug_info: bool,
@@ -222,7 +234,8 @@ pub fn run_file_with_diagnostics(
         let mut interp = crate::backends::interpreter::Interpreter::new();
         let rt_mode = match runtime_mode {
             "standard" => crate::backends::runtime::RuntimeMode::Standard,
-            "full" => crate::backends::runtime::RuntimeMode::Full,
+            // "full" 历史上等价于 Standard（work-stealing 从未实现），保留别名以兼容 CLI。
+            "full" => crate::backends::runtime::RuntimeMode::Standard,
             _ => crate::backends::runtime::RuntimeMode::Embedded,
         };
         let effective_workers = if workers > 0 {
@@ -236,7 +249,6 @@ pub fn run_file_with_diagnostics(
             crate::backends::interpreter::runtime::InterpreterRuntimeConfig {
                 runtime: rt_mode,
                 workers: effective_workers,
-                work_stealing: false,
             },
         );
         let mut executor: Box<dyn crate::backends::Executor> = Box::new(interp);
@@ -268,9 +280,35 @@ pub fn run_file_with_diagnostics(
         .get(entry_file_id)
         .ok_or_else(|| anyhow::anyhow!("Failed to load source file"))?;
 
-    let mut compiler = Compiler::new();
-    match compiler.compile(&source_file.name, &source_file.content) {
+    // RFC-029: 位于 yaoxiang 项目内的文件走多文件编排器（发现同项目 .yx、构建共享
+    // Registry、逐文件 typecheck、整体编译）；否则按单文件编译。两者都产出 ModuleIR，
+    // 复用下方同一套 codegen + 执行路径（保留 runtime/workers/debug_info 配置）。
+    let module_result: Result<crate::middle::ModuleIR, crate::frontend::CompileError> =
+        if in_yaoxiang_project(file) {
+            match crate::frontend::module::orchestrator::compile_project(file) {
+                Ok(m) => Ok(m),
+                Err(e) => {
+                    // 结构化诊断按其来源文件渲染，不再包成 E8001
+                    render_orchestrator_error(&e);
+                    return Err(anyhow::anyhow!("Compilation failed"));
+                }
+            }
+        } else {
+            Compiler::new().compile(&source_file.name, &source_file.content)
+        };
+
+    match module_result {
         Ok(module) => {
+            // 多文件模式（#252）：按 orchestrator 发现顺序重建 SourceMap，
+            // 使索引与 debug span 的 file_id 对齐。读不到文件也要占位，保持索引稳定。
+            if !module.source_files.is_empty() {
+                let mut multi = SourceMap::new();
+                for path in &module.source_files {
+                    let content = std::fs::read_to_string(path).unwrap_or_default();
+                    multi.add_file(path.clone(), content);
+                }
+                sources = multi;
+            }
             // Generate bytecode
             let mut ctx = CodegenContext::new(module);
             ctx.set_generate_debug_info(debug_info);
@@ -283,7 +321,8 @@ pub fn run_file_with_diagnostics(
             let mut interp = Interpreter::new();
             let rt_mode = match runtime_mode {
                 "standard" => crate::backends::runtime::RuntimeMode::Standard,
-                "full" => crate::backends::runtime::RuntimeMode::Full,
+                // "full" 历史上等价于 Standard（work-stealing 从未实现），保留别名以兼容 CLI。
+                "full" => crate::backends::runtime::RuntimeMode::Standard,
                 _ => crate::backends::runtime::RuntimeMode::Embedded,
             };
             let effective_workers = if workers > 0 {
@@ -297,7 +336,6 @@ pub fn run_file_with_diagnostics(
                 crate::backends::interpreter::runtime::InterpreterRuntimeConfig {
                     runtime: rt_mode,
                     workers: effective_workers,
-                    work_stealing: false,
                 },
             );
             let mut executor: Box<dyn Executor> = Box::new(interp);
@@ -318,6 +356,53 @@ pub fn run_file_with_diagnostics(
     }
 
     Ok(())
+}
+
+/// 渲染编排器错误：TypeCheck/Compile 携带结构化诊断（span 相对其来源文件），
+/// 按该文件内容渲染带源码高亮的错误；其余变体（Parse/Io/Collision）直接 Display。
+fn render_orchestrator_error(e: &crate::frontend::module::orchestrator::OrchestratorError) {
+    use crate::frontend::module::orchestrator::OrchestratorError;
+
+    let (path, diagnostics) = match e {
+        OrchestratorError::TypeCheck {
+            path, diagnostics, ..
+        }
+        | OrchestratorError::Compile {
+            path, diagnostics, ..
+        } => (path, diagnostics),
+        other => {
+            eprintln!();
+            eprintln!("{}", other);
+            return;
+        }
+    };
+
+    eprintln!();
+    match std::fs::read_to_string(path) {
+        Ok(content) => {
+            let mut sources = SourceMap::new();
+            let fid = sources.add_file(path.clone(), content);
+            match sources.get(fid) {
+                Some(source_file) => {
+                    for d in diagnostics {
+                        let output = render_compile_error(&d.message, source_file, Some(d));
+                        eprintln!("{}", output);
+                    }
+                }
+                None => {
+                    for d in diagnostics {
+                        eprintln!("{}", d);
+                    }
+                }
+            }
+        }
+        // 源文件读不到（极端情况）：退化纯文本，至少诊断不丢
+        Err(_) => {
+            for d in diagnostics {
+                eprintln!("{}", d);
+            }
+        }
+    }
 }
 
 /// 只进行类型检查，不执行代码
@@ -357,13 +442,26 @@ pub fn check_files_with_diagnostics(files: &[std::path::PathBuf]) -> anyhow::Res
         match compiler.compile_with_source(&file.display().to_string(), &source) {
             Ok(_) => {}
             Err(e) if e.is_type_error() => {
-                result.diagnostics.push(CheckDiagnostic {
-                    file: file.display().to_string(),
-                    diagnostic: crate::util::diagnostic::ErrorCodeDefinition::internal_error(
-                        &format!("{}", e),
-                    )
-                    .build(),
-                });
+                // #268：透传原始类型诊断（保留 E1002 与 span），与 run 一致；
+                // 仅无原始诊断的 TypeError（如 IR 阶段）才用 E8001 兜底
+                match e.diagnostic() {
+                    Some(diag) => {
+                        result.diagnostics.push(CheckDiagnostic {
+                            file: file.display().to_string(),
+                            diagnostic: diag.clone(),
+                        });
+                    }
+                    None => {
+                        result.diagnostics.push(CheckDiagnostic {
+                            file: file.display().to_string(),
+                            diagnostic:
+                                crate::util::diagnostic::ErrorCodeDefinition::internal_error(
+                                    &format!("{}", e),
+                                )
+                                .build(),
+                        });
+                    }
+                }
                 result.error_count += 1;
             }
             Err(e) => {

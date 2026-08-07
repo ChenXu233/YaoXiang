@@ -20,6 +20,7 @@ pub mod string;
 pub mod time;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod weak;
+pub mod yx_sources;
 
 use crate::backends::interpreter::ffi::FfiRegistry;
 use crate::backends::common::{RuntimeValue, Heap, HeapValue};
@@ -230,6 +231,7 @@ pub trait StdModule {
                 full_path: export.native_name.to_string(),
                 kind,
                 signature: export.signature.to_string(),
+                mono_type: None,
             });
         }
 
@@ -240,6 +242,7 @@ pub trait StdModule {
                 full_path: format!("{}.{}", self.module_path(), export.name),
                 kind: ExportKind::Type,
                 signature: format!("({}) -> Type", export.params.join(", ")),
+                mono_type: None,
             });
         }
 

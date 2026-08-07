@@ -165,7 +165,7 @@ REPL 可以执行任何有效的 YaoXiang 表达式：
 >> "Hello" + " " + "World"
 "Hello World"
 
->> true && false
+>> true and false
 false
 ```
 

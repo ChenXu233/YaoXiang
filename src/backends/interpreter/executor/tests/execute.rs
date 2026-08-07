@@ -220,7 +220,7 @@ fn test_borrow_then_release_preserves_value() {
 fn spawn_concurrent_standard_mode() {
     use crate::backends::runtime::RuntimeMode;
     use crate::backends::interpreter::runtime::InterpreterRuntimeConfig;
-    use crate::middle::bytecode::{BytecodeModule, BytecodeFunction, BytecodeInstr, FunctionRef};
+    use crate::middle::bytecode::{BytecodeModule, BytecodeFunction, BytecodeInstr};
 
     // task_a: 返回 Int(10)
     let task_a = BytecodeFunction {
@@ -272,13 +272,13 @@ fn spawn_concurrent_standard_mode() {
             // r0 = closure task_a
             BytecodeInstr::MakeClosure {
                 dst: Reg(0),
-                func: FunctionRef::Index(0),
+                func: 0,
                 env: vec![],
             },
             // r1 = closure task_b
             BytecodeInstr::MakeClosure {
                 dst: Reg(1),
-                func: FunctionRef::Index(1),
+                func: 1,
                 env: vec![],
             },
             // spawn [r0, r1] — 执行后 r0=task_a 结果, r1=task_b 结果
@@ -308,6 +308,7 @@ fn spawn_concurrent_standard_mode() {
         constants: vec![ConstValue::Int(10), ConstValue::Int(20)],
         functions: vec![task_a, task_b, main_func],
         type_table: vec![],
+        vtables: vec![],
         globals: vec![],
         entry_point: Some(2), // main 函数
     };
@@ -317,7 +318,6 @@ fn spawn_concurrent_standard_mode() {
     interp.set_runtime_config(InterpreterRuntimeConfig {
         runtime: RuntimeMode::Standard,
         workers: 1,
-        work_stealing: false,
     });
     // 重建 Runtime facade（set_runtime_config 只更新配置，需要 reset 重建 rt）
     interp.reset();

@@ -1,0 +1,27 @@
+// 07-std/net_ops.yx
+// 覆盖: std.net 模块（#117）— 纯函数子集
+// 验证: url_encode（百分号编码）、url_decode（解码 + 与 encode 往返一致）
+// 状态: ✅
+// 注: http_get/http_post 依赖网络（集成测试规范 规则 9.2 禁止），不在此覆盖
+
+use std.assert
+use std.net
+
+main = {
+    // 空格 → %20（标准 percent-encoding）
+    enc1 = net.url_encode("a b")
+    assert.assert(enc1 == "a%20b", "url_encode: space to %20")
+
+    // 保留字符转义
+    enc2 = net.url_encode("a&b=c?d")
+    assert.assert(enc2 == "a%26b%3Dc%3Fd", "url_encode: reserved chars escaped")
+
+    // 往返一致：decode(encode(x)) == x
+    orig = "hello world & friends"
+    rt = net.url_decode(net.url_encode(orig))
+    assert.assert(rt == orig, "url encode/decode roundtrip")
+
+    // 已编码输入直接解码
+    dec = net.url_decode("a%20b")
+    assert.assert(dec == "a b", "url_decode: %20 to space")
+}

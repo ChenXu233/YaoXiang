@@ -13,7 +13,7 @@ use crate::middle::passes::codegen::operand::OperandResolver;
 use crate::middle::passes::codegen::{BytecodeInstruction};
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::{DebugSpan, FileId, Span};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 /// FFI 函数元数据 — 机制/库/符号
 #[derive(Debug, Clone)]
@@ -37,12 +37,12 @@ pub struct Translator {
     operand_resolver: OperandResolver,
     /// 当前函数
     current_function: Option<FunctionIR>,
-    /// 已注册的 native 函数名集合
-    native_functions: HashSet<String>,
     /// 闭包函数的索引偏移量（用于计算闭包函数在模块中的正确索引）
     closure_function_offset: Option<usize>,
     /// 函数名到索引的映射
     function_name_to_idx: Option<HashMap<String, usize>>,
+    /// DefId 到函数表索引的映射（Stage 3：按 DefId 分发的主路径）
+    function_def_to_idx: HashMap<crate::frontend::module::symbol::DefId, usize>,
     /// FFI 函数元数据缓存: func_name → mechanism/lib/symbol
     ffi_func_meta: HashMap<String, FfiFuncMeta>,
 
@@ -56,14 +56,12 @@ pub struct Translator {
 impl Translator {
     /// 创建新的翻译器
     pub fn new() -> Self {
-        let native_functions = HashSet::new();
-
         Translator {
             emitter: Emitter::new(),
             operand_resolver: OperandResolver::new(),
             current_function: None,
-            native_functions,
             ffi_func_meta: HashMap::new(),
+            function_def_to_idx: HashMap::new(),
             closure_function_offset: None,
             function_name_to_idx: None,
             generate_debug_info: false,
@@ -85,22 +83,6 @@ impl Translator {
         self.source_file_id = file_id;
     }
 
-    /// 注册一个 native 函数名
-    pub fn register_native(
-        &mut self,
-        name: &str,
-    ) {
-        self.native_functions.insert(name.to_string());
-    }
-
-    /// 检查函数是否是 native 函数
-    pub fn is_native(
-        &self,
-        name: &str,
-    ) -> bool {
-        self.native_functions.contains(name)
-    }
-
     /// 添加常量（用于测试）
     pub fn test_add_constant(
         &mut self,
@@ -114,7 +96,7 @@ impl Translator {
         &mut self,
         module: &ModuleIR,
     ) -> Result<TranslatorOutput, Diagnostic> {
-        // 消费 FFI 函数绑定 — 注册 native 函数名并存储元数据
+        // 消费 FFI 函数绑定 — 存储 mechanism/lib/symbol 元数据
         for binding in &module.ffi_bindings {
             if let crate::middle::core::ir::FfiBinding::FuncBinding {
                 func_name,
@@ -122,7 +104,6 @@ impl Translator {
                 symbol,
             } = binding
             {
-                self.register_native(func_name);
                 if let Some(lib) = module.ffi_libs.get(*lib_id) {
                     self.ffi_func_meta.insert(
                         func_name.clone(),
@@ -141,6 +122,13 @@ impl Translator {
         for (idx, func) in module.functions.iter().enumerate() {
             function_name_to_idx.insert(func.name.clone(), idx);
         }
+        // 建立 DefId 到索引的映射（Stage 3 主路径；FunctionIR.def 由 ir_gen 尾部 assign_defs 填充）
+        self.function_def_to_idx = module
+            .functions
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, f)| f.def.map(|d| (d, idx)))
+            .collect();
 
         // 注册闭包函数的索引偏移量（闭包函数从 module.functions.len() 开始）
         // 这样 translate_make_closure 就可以正确计算闭包函数的索引
@@ -153,6 +141,10 @@ impl Translator {
         };
 
         for func in &module.functions {
+            // 多文件模式（#252）：按函数来源文件设置 debug span 的 file_id；
+            // 单文件/未记录（mono 特化新名）回退 0（CLI SourceMap 首条目）。
+            self.source_file_id =
+                module.function_files.get(&func.name).copied().unwrap_or(0) as FileId;
             match &func.body {
                 FunctionBody::TypeDecl { definition } => {
                     // 类型定义：从定义机械合成构造函数
@@ -298,6 +290,8 @@ impl Translator {
 
         let temp_func = FunctionIR {
             name: struct_name.clone(),
+            // 构造器与类型同一绑定身份：调用 Point(...) 解析到类型的 DefId
+            def: type_func.def,
             params: param_types,
             return_type: type_func.return_type.clone(),
             generic_params: None,
@@ -424,8 +418,12 @@ impl Translator {
             Ret(value) => self.translate_ret(value),
 
             Call {
-                dst, func, args, ..
-            } => self.translate_call(dst, func, args),
+                dst,
+                func,
+                args,
+                def,
+                ..
+            } => self.translate_call(dst, func, args, *def),
             CallVirt {
                 dst,
                 obj,
@@ -436,7 +434,7 @@ impl Translator {
             CallDyn {
                 dst, func, args, ..
             } => self.translate_call_dyn(dst, func, args),
-            TailCall { func, args } => self.translate_tail_call(func, args),
+            TailCall { func, args, .. } => self.translate_tail_call(func, args),
 
             Alloc { dst, .. } => self.translate_alloc(dst),
             Free(_) => Ok(BytecodeInstruction::new(Opcode::Nop, vec![])),
@@ -472,7 +470,13 @@ impl Translator {
                 fields,
             } => self.translate_create_struct(dst, type_name, fields),
             NewDict { dst, keys, values } => self.translate_new_dict(dst, keys, values),
-            MakeClosure { dst, func, env } => self.translate_make_closure(dst, func, env),
+            NewTuple { dst, items } => self.translate_new_tuple(dst, items),
+            MakeClosure {
+                dst,
+                func,
+                def,
+                env,
+            } => self.translate_make_closure(dst, func, *def, env),
             Drop(operand) => self.translate_drop(operand),
 
             Push(operand) => self.translate_push(operand),
@@ -674,6 +678,7 @@ impl Translator {
         dst: &Option<Operand>,
         func: &Operand,
         args: &[Operand],
+        def: Option<crate::frontend::module::symbol::DefId>,
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = if let Some(d) = dst {
             self.operand_resolver.to_reg(d)?
@@ -681,26 +686,51 @@ impl Translator {
             0
         };
 
-        // 检查是否是 native 函数调用
         let func_name = match func {
             Operand::Const(ConstValue::String(name)) => Some(name.clone()),
             _ => None,
         };
 
-        // 命名空间解析：如果函数名不是已知的 native 函数，
-        // 尝试通过短名称映射获取完整名称
-        let is_native = func_name
+        // 四类调用目标（按优先级）：
+        // 0. DefId 命中（Stage 3 主路径：字节码函数含构造器）→ CallStatic 函数表索引
+        // 1. ExternRef FFI（ffi_func_meta 携带 mechanism/lib/symbol）→ CallNative 带元数据
+        // 2. 名字命中（测试手工构造 IR 无 def 的回退路径）→ CallStatic 函数表索引
+        // 3. std 原生/外部名（def 未命中函数表）→ CallNative 无元数据按名 FFI
+        let ffi_meta = func_name
             .as_ref()
-            .map(|n| self.is_native(n))
-            .unwrap_or(false);
+            .and_then(|n| self.ffi_func_meta.get(n).cloned());
+        let def_idx = def.and_then(|d| self.function_def_to_idx.get(&d).copied());
+        let bytecode_idx = func_name.as_ref().and_then(|n| {
+            self.function_name_to_idx
+                .as_ref()
+                .and_then(|m| m.get(n).copied())
+        });
 
-        let func_id = match func {
-            Operand::Const(ConstValue::Int(i)) => *i as u32,
-            Operand::Const(ConstValue::String(name)) => {
-                let const_idx = self.emitter.add_constant(ConstValue::String(name.clone()));
-                const_idx as u32
+        let (opcode, func_id) = if let Some(idx) = def_idx {
+            (Opcode::CallStatic, idx as u32)
+        } else if ffi_meta.is_some() {
+            let const_idx = self
+                .emitter
+                .add_constant(ConstValue::String(func_name.clone().unwrap()));
+            (Opcode::CallNative, const_idx as u32)
+        } else if let Some(idx) = bytecode_idx {
+            (Opcode::CallStatic, idx as u32)
+        } else {
+            match func {
+                Operand::Const(ConstValue::Int(i)) => (Opcode::CallStatic, *i as u32),
+                Operand::Const(ConstValue::String(name)) => {
+                    let const_idx = self.emitter.add_constant(ConstValue::String(name.clone()));
+                    (Opcode::CallNative, const_idx as u32)
+                }
+                // 禁止静默回退到 0 号函数（#251 同类：兑底曾静默吞掉元组字面量）
+                other => {
+                    return Err(ErrorCodeDefinition::codegen_invalid_operand(&format!(
+                        "unresolvable call target in translate_call: {:?}",
+                        other
+                    ))
+                    .build());
+                }
             }
-            _ => 0,
         };
         let base_arg_reg = if let Some(first_arg) = args.first() {
             self.operand_resolver.to_reg(first_arg)?
@@ -711,7 +741,7 @@ impl Translator {
         operands.extend_from_slice(&func_id.to_le_bytes());
         operands.push(base_arg_reg);
         // 对 FFI 函数，在 func_name_idx 后追加 mechanism/lib/symbol 的常量池索引
-        if let Some(meta) = func_name.as_ref().and_then(|n| self.ffi_func_meta.get(n)) {
+        if let Some(meta) = &ffi_meta {
             let mech_idx = self
                 .emitter
                 .add_constant(ConstValue::String(meta.mechanism.clone()));
@@ -730,13 +760,6 @@ impl Translator {
             let arg_reg = self.operand_resolver.to_reg(arg)?;
             operands.extend_from_slice(&(arg_reg as u16).to_le_bytes());
         }
-
-        // 根据是否是 native 函数选择操作码
-        let opcode = if is_native {
-            Opcode::CallNative
-        } else {
-            Opcode::CallStatic
-        };
 
         Ok(BytecodeInstruction::new(opcode, operands))
     }
@@ -1077,26 +1100,54 @@ impl Translator {
         Ok(BytecodeInstruction::new(Opcode::NewDict, operands))
     }
 
+    /// 翻译 NewTuple 指令
+    /// 格式: dst(2) + item_count(4) + items(2*count)
+    fn translate_new_tuple(
+        &mut self,
+        dst: &Operand,
+        items: &[Operand],
+    ) -> Result<BytecodeInstruction, Diagnostic> {
+        let dst_reg = self.operand_resolver.to_reg(dst)?;
+        let item_count = items.len() as u32;
+        let mut operands = Vec::new();
+        // dst (2 bytes LE)
+        operands.extend_from_slice(&(dst_reg as u16).to_le_bytes());
+        // item_count (4 bytes LE)
+        operands.extend_from_slice(&item_count.to_le_bytes());
+        // item registers (2 bytes LE each)
+        for item in items {
+            let item_reg = self.operand_resolver.to_reg(item)?;
+            operands.extend_from_slice(&(item_reg as u16).to_le_bytes());
+        }
+        Ok(BytecodeInstruction::new(Opcode::NewTuple, operands))
+    }
+
     fn translate_make_closure(
         &mut self,
         dst: &Operand,
         func_name: &str,
+        def: Option<crate::frontend::module::symbol::DefId>,
         env: &[Operand],
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
-        let name_to_idx = self.function_name_to_idx.as_ref().ok_or_else(|| {
-            ErrorCodeDefinition::internal_error(
-                "translate_make_closure 调用时 function_name_to_idx 未初始化",
-            )
-            .build()
-        })?;
-        let func_id = name_to_idx.get(func_name).copied().ok_or_else(|| {
-            ErrorCodeDefinition::internal_error(&format!(
-                "闭包函数 '{}' 未在函数名映射表中注册",
-                func_name
-            ))
-            .build()
-        })? as u32;
+        // DefId 主路径（Stage 3）；名字路径为测试手工构造 IR 的回退
+        let func_id = if let Some(idx) = def.and_then(|d| self.function_def_to_idx.get(&d)) {
+            *idx as u32
+        } else {
+            let name_to_idx = self.function_name_to_idx.as_ref().ok_or_else(|| {
+                ErrorCodeDefinition::internal_error(
+                    "translate_make_closure 调用时 function_name_to_idx 未初始化",
+                )
+                .build()
+            })?;
+            name_to_idx.get(func_name).copied().ok_or_else(|| {
+                ErrorCodeDefinition::internal_error(&format!(
+                    "闭包函数 '{}' 未在函数名映射表中注册",
+                    func_name
+                ))
+                .build()
+            })? as u32
+        };
         let mut operands = vec![dst_reg];
         operands.extend_from_slice(&func_id.to_le_bytes());
         operands.push(env.len() as u8);

@@ -1,0 +1,15 @@
+// 06-compile-errors/mut_ref_copy_err.yx
+// [test:error]: 复制 &mut T 令牌（E2003）
+// 错误检测: 复制 &mut T 令牌（SPEC type-system.md §11.2 — &mut T 是 Linear，非 Dup）
+// 预期: 编译错误 E2003（#257 已修复：所有权检查器拒绝 &mut 令牌复制）（E2003 所有权约束违反）
+
+use std.io
+
+Point: Type = { x: Int, y: Int }
+
+main = {
+    mut p = Point(1, 2)
+    m = &mut p
+    m2 = m              // ❌ &mut 不是 Dup，不能复制
+    io.println("ALL TESTS PASSED")
+}

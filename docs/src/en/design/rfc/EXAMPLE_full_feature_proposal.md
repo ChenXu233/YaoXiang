@@ -4,12 +4,12 @@ title: 'RFC Example: Enhanced Pattern Matching Syntax'
 
 # RFC Example: Enhanced Pattern Matching Syntax
 
-> **Note**: This is an RFC template example demonstrating how to write a complete RFC proposal.
+> **Note**: This is an example RFC template, demonstrating how to write a complete RFC proposal.
 > Please refer to this template when writing your own RFC.
 >
 > **Status**: Example (for reference only)
 
-> **Author**: Chen Xu (example author) **Created**: 2025-01-05 **Last Updated**: 2026-02-12
+> **Author**: Chenxu (example author) **Creation Date**: 2025-01-05 **Last Updated**: 2026-02-12
 
 ## Summary
 
@@ -37,7 +37,7 @@ match result {
 }
 ```
 
-### Current problems
+### Current Problems
 
 1. Nested pattern destructuring is not supported
 2. Guard expressions cannot be used in patterns
@@ -45,11 +45,11 @@ match result {
 
 ## Proposal
 
-### Core design
+### Core Design
 
-Extend `match` expression syntax to support:
+Extend the `match` expression syntax to support:
 
-1. **Nested pattern destructuring**: Struct destructuring at arbitrary depth
+1. **Nested pattern destructuring**: Struct destructuring at any depth
 2. **Guard expressions**: Add `if` conditions after patterns
 3. **Pattern variable binding**: Bind variables directly from patterns
 
@@ -67,7 +67,7 @@ match person {
 
 # Guard expressions
 match n {
-    n if n > 0 && n < 10 => "1-9"
+    n if n > 0 and n < 10 => "1-9"
     n if n >= 10 => "10+"
     _ => "unknown"
 }
@@ -84,20 +84,20 @@ match data {
 }
 ```
 
-### `let` statement pattern matching
+### `let` Statement Pattern Matching
 
 ```yaoxiang
 # New syntax
-let Point(x: 0, y: _) = point  # Bind only when x == 0
-let Ok(value) = result         # Destructuring Result
+let Point(x: 0, y: _) = point  # Only binds when x == 0
+let Ok(value) = result         # Destructures Result
 
-# Multiple binding
-let (a, b, c) = tuple          # Destructuring tuple
+# Multiple bindings
+let (a, b, c) = tuple          # Destructures tuple
 ```
 
 ## Detailed Design
 
-### Syntax changes
+### Syntax Changes
 
 ```
 MatchExpr   ::= 'match' Expr '{' MatchArm+ '}'
@@ -118,52 +118,52 @@ OrPattern     ::= Pattern '|' Pattern
 RestPattern   ::= '...'
 ```
 
-### Type system impact
+### Type System Impact
 
 - Type checking for pattern matching needs to be extended
-- Pattern variables receive correct types on successful match
+- Pattern variables obtain the correct type when matching succeeds
 
-### Compiler changes
+### Compiler Changes
 
 | Component | Changes                            |
 | --------- | ---------------------------------- |
-| lexer     | Add new pattern-related tokens     |
-| parser    | Add new pattern parsing logic      |
+| lexer     | Add pattern-related tokens         |
+| parser    | Add pattern parsing logic          |
 | typecheck | Pattern type inference and binding |
 | codegen   | Pattern matching code generation   |
 
-### Backward compatibility
+### Backward Compatibility
 
 - ✅ Fully backward compatible
-- Only new syntax added, original `match` syntax unchanged
+- Only adds new syntax; existing `match` syntax remains unchanged
 
-## Tradeoffs
+## Trade-offs
 
-### Pros
+### Advantages
 
 - More expressive syntax, more concise code
 - Consistent with mainstream language pattern matching (Rust, Scala, Elixir)
-- Reduce runtime errors, catch mismatches earlier
+- Reduces runtime errors, catches mismatches earlier
 
-### Cons
+### Disadvantages
 
 - Increased compiler implementation complexity
-- Slightly steeper learning curve
+- Slight increase in learning curve
 
-## Alternative Solutions
+## Alternatives
 
-| Solution                             | Why not chosen                                |
-| ------------------------------------ | --------------------------------------------- |
-| Support only top-level destructuring | Cannot handle common nested scenarios         |
-| Use functional style                 | Does not blend naturally with imperative code |
-| Defer to v2.0                        | Users already have strong demand              |
+| Alternative                  | Why Not Chosen                        |
+| ---------------------------- | ------------------------------------- |
+| Top-level destructuring only | Cannot handle common nested scenarios |
+| Functional style             | Awkward to mix with imperative code   |
+| Defer to v2.0                | Users already have strong demand      |
 
 ## Implementation Strategy
 
 ### Dependencies
 
 - No external dependencies
-- Basic type system needs to be completed first
+- Requires the base type system to be completed first
 
 ### Risks
 
@@ -172,9 +172,9 @@ RestPattern   ::= '...'
 
 ## Open Questions
 
-1. [ ] What is the syntax for recursive patterns (`@` binding)?
-2. [ ] Should compile-time pattern exhaustiveness checking be supported?
-3. [ ] What are the performance optimization strategies?
+1. [ ] Syntax for circular patterns (`@` binding)?
+2. [ ] Support compile-time pattern exhaustiveness checking?
+3. [ ] Performance optimization strategy?
 
 ## References
 

@@ -1,4 +1,5 @@
 // 错误检测: Move 后使用原变量
+// [test:error]: Move 后使用原变量（E2014）
 // 预期: 编译错误
 
 use std.io

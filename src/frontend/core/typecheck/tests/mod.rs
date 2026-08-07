@@ -19,6 +19,7 @@
 mod checker;
 mod environment;
 mod gamma_assume_effect;
+mod predicate_resolver;
 mod rfc010;
 mod rfc011;
 mod rfc027_phase1_integration;

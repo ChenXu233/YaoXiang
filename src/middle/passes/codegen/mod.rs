@@ -164,6 +164,31 @@ impl CodegenContext {
         let type_count = type_table.len();
         debug!("{}", t(MSG::CodegenTypeTable, lang, Some(&[&type_count])));
 
+        // 3.5 编译期构建类型方法表（vtables）：按函数表顺序把方法分组到所属类型，
+        // 直接携带函数表索引（裸方法名 + func_idx），解释器加载期直建缓存，无需按名解析。
+        let type_names: Vec<String> = self
+            .module
+            .functions
+            .iter()
+            .filter(|f| f.is_type_decl())
+            .map(|f| f.name.clone())
+            .collect();
+        let mut vtables: Vec<(String, Vec<(String, u32)>)> = Vec::new();
+        for t in &type_names {
+            let prefix = format!("{}.", t);
+            let methods: Vec<(String, u32)> = self
+                .module
+                .functions
+                .iter()
+                .enumerate()
+                .filter(|(_, f)| !f.is_type_decl() && f.name.starts_with(&prefix))
+                .map(|(idx, f)| (f.name[prefix.len()..].to_string(), idx as u32))
+                .collect();
+            if !methods.is_empty() {
+                vtables.push((t.clone(), methods));
+            }
+        }
+
         // 4. 生成文件头
         let header = self.generate_header();
 
@@ -173,6 +198,7 @@ impl CodegenContext {
             type_table,
             const_pool,
             code_section: output.code_section,
+            vtables,
             debug_section: None,
         })
     }
@@ -200,7 +226,20 @@ impl CodegenContext {
     }
 
     /// 查找入口点
+    ///
+    /// RFC-029：多文件模式下函数名带模块限定名（如 `main.main`），由编排器
+    /// 在 `entry_function` 里给出精确名字；单文件为 None，回退到查找裸名 `main`。
     fn find_entry_point(&self) -> usize {
+        if let Some(ref entry_name) = self.module.entry_function {
+            if let Some(idx) = self
+                .module
+                .functions
+                .iter()
+                .position(|func| &func.name == entry_name)
+            {
+                return idx;
+            }
+        }
         for (idx, func) in self.module.functions.iter().enumerate() {
             if func.name == "main" {
                 return idx;
@@ -273,4 +312,4 @@ pub use bytecode::FunctionCode;
 
 /// 常量定义
 pub const YAOXIANG_MAGIC: u32 = 0x59584243;
-pub const BYTECODE_VERSION: u32 = 3;
+pub const BYTECODE_VERSION: u32 = bytecode::VERSION;

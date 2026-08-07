@@ -29,25 +29,25 @@ impl StdModule for NetModule {
             NativeExport::new(
                 "http_get",
                 "std.net.http_get",
-                "(url: String) -> String",
+                "(url: &String) -> String",
                 native_http_get,
             ),
             NativeExport::new(
                 "http_post",
                 "std.net.http_post",
-                "(url: String, body: String) -> String",
+                "(url: &String, body: &String) -> String",
                 native_http_post,
             ),
             NativeExport::new(
                 "url_encode",
                 "std.net.url_encode",
-                "(s: String) -> String",
+                "(s: &String) -> String",
                 native_url_encode,
             ),
             NativeExport::new(
                 "url_decode",
                 "std.net.url_decode",
-                "(s: String) -> String",
+                "(s: &String) -> String",
                 native_url_decode,
             ),
         ]

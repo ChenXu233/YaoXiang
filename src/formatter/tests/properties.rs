@@ -33,3 +33,46 @@ proptest! {
         }
     }
 }
+
+// ============================================================================
+// use 条目别名（#245）：格式化不得丢弃内联别名
+// ============================================================================
+
+#[test]
+fn test_format_preserves_inline_item_alias() {
+    // Arrange
+    let opts = default_options();
+    let source = "use std.io.{println as say}\nmain = {\n    say(\"hi\")\n}\n";
+
+    // Act
+    let formatted = format_source(source, &opts).expect("source should parse");
+
+    // Assert - 别名必须保留（丢失即代码损坏）
+    assert!(
+        formatted.contains("println as say"),
+        "格式化必须保留内联别名，实际输出:\n{}",
+        formatted
+    );
+}
+
+#[test]
+fn test_format_preserves_mixed_item_aliases() {
+    // Arrange - 带别名项与原名项混合
+    let opts = default_options();
+    let source = "use std.io.{println as say, print}\nmain = {\n    say(\"hi\")\n}\n";
+
+    // Act
+    let formatted = format_source(source, &opts).expect("source should parse");
+
+    // Assert
+    assert!(
+        formatted.contains("println as say"),
+        "格式化必须保留内联别名，实际输出:\n{}",
+        formatted
+    );
+    assert!(
+        formatted.contains("print"),
+        "格式化必须保留无别名项，实际输出:\n{}",
+        formatted
+    );
+}

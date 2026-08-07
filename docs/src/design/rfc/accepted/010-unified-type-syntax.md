@@ -667,7 +667,7 @@ List.push: (self: List(T), item: T) -> Void = {
 }
 
 List.get: (self: List(T), index: Int) -> Maybe(T) = {
-    if index >= 0 && index < self.length {
+    if index >= 0 and index < self.length {
         return Maybe.Just(self.data[index])
     } else {
         return Maybe.Nothing
@@ -1004,6 +1004,56 @@ Option: (T: Type) -> Type = {
 
 > **注**：和类型的语义属性（如 match 穷尽性检查、tagged union 内存布局）由 typecheck 层从
 > `Type::Struct` 结构推导，不依赖独立的 AST 节点。
+
+### 逻辑运算符：`and` / `or` / `!`（权威定义，Zig 式）
+
+> **定义声明（2026-08-03，issue #251 修订）**：逻辑运算符的权威形式是关键字 `and` / `or` + 符号一元 `!`
+> （与 SPEC `syntax.md` §2.2 优先级表一致）。本设计对齐 Zig：**短路控制流用关键字，纯一元运算用符号**。
+> 早期实现向 C 漂移的 `&&` / `||` 以及中间态的关键字 `not` 均已移除。
+
+**语义**：
+
+| 运算符 | 优先级（SPEC §2.2） | 结合性 | 语义           |
+| ------ | ----------------- | ------ | -------------- |
+| `!`    | 3（一元前缀，紧绑定） | 右到左 | 逻辑非（纯函数，无控制流） |
+| `and`  | 10                | 左到右 | 短路逻辑与     |
+| `or`   | 10                | 左到右 | 短路逻辑或     |
+
+```yaoxiang
+# 短路求值：and 左侧为 false / or 左侧为 true 时，右侧不执行
+if x != 0 and y / x > 1 { ... }   # x == 0 时不会除零
+
+# 紧绑定：!a == b ≡ (!a) == b（Zig 式；与 Python 的 not a == b ≡ not (a == b) 相反）
+!3 == 4          # false：(!3) == 4 → false
+!(3 == 4)        # true
+!x != 0          # ≡ (!x) != 0
+!list.is_empty(xs)   # ≡ !(list.is_empty(xs))，调用后取反
+```
+
+以下写法**不再支持**（lexer 报错并提示对应写法）：
+
+```
+x && y     # ❌ 已移除，用 x and y
+x || y     # ❌ 已移除，用 x or y
+not x      # ❌ 已移除，用 !x（not 恢复为普通标识符；!= 不受影响）
+```
+
+**设计理由**（对齐 Zig，ziglang/zig#272 / #6625）：
+
+1. **短路是控制流 → 关键字；纯函数是运算 → 符号**。`and` / `or` 改变求值顺序（右侧按需跳过），与 `if` 同性质，
+   用关键字；`!` 对已求值的操作数做纯取反，与 `-` `+` 同性质，用符号。YaoXiang 错误传播用 `?`（§2.11），`!` 无冲突。
+2. **紧绑定消除歧义**：`!` 视觉上“紧贴”操作数，高优先级一目了然；关键字 `not` 被迫与操作数留空格，
+   绑到哪边（`not a == b`）易引发脑内歧义。
+3. **消歧**：`&` 身兼两职——借用令牌（`&p` / `&mut p`，RFC-009）与位与（SPEC §2.2 优先级 8）。
+   再引入 `&&` 会让一个符号承载三种含义。`and` / `or` / `!` 使借用、位运算、逻辑三个概念在视觉上彻底分离。
+4. **先例**：Zig（同生态位现代系统语言）正是 `and` / `or` 关键字 + `!` 符号的组合；Python / Lua / Ada / SQL 用
+   全关键字（含 `not`），C 家族用全符号——YaoXiang 取 Zig 的混搭，两者皆得。
+5. **Curry-Howard 一致性**：类型即命题（见上文同构节），精化类型中的逻辑连接写作 `and` / `or`
+   （如 `{ 0 <= idx and idx < arr.len }`）是命题的自然表述；`!` 作为一元否定符号对应 ¬。
+
+> **实现**：`and` / `or` 在 IR 层展开为短路跳转序列（`a and b ≡ if a { b } else { false }`），
+> `!` 按一元紧绑定解析（操作数按 `BP_UNARY + 1`）。回归测试：
+> `tests/yaoxiang/01-syntax/basics/logical_ops.yx`、`logical_not.yx`。
 
 ## 语法设计说明：具名函数本质是 Lambda 的语法糖
 

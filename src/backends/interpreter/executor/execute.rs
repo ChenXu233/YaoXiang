@@ -4,6 +4,7 @@
 
 use crate::backends::{Executor, ExecutorResult, ExecutorError, ExecutionState};
 use crate::backends::common::{RuntimeValue, Heap};
+use crate::backends::common::value::{FunctionId, FunctionValue};
 use crate::middle::bytecode::{BytecodeModule, BytecodeFunction};
 use crate::backends::interpreter::Frame;
 use crate::backends::interpreter::frames::MAX_LOCALS;
@@ -24,25 +25,48 @@ impl Executor for Interpreter {
         // Add functions
         for func in &module.functions {
             tlog!(debug, MSG::DebugLoadingFunction, &func.name);
-            self.functions.insert(func.name.clone(), func.clone());
             self.functions_by_id.push(func.clone());
         }
-        tlog!(debug, MSG::DebugTotalFunctions, &self.functions.len());
+        tlog!(debug, MSG::DebugTotalFunctions, &self.functions_by_id.len());
         tlog!(
             debug,
             MSG::DebugAvailableFunctions,
-            &format!("{:?}", self.functions.keys().collect::<Vec<_>>())
+            &format!(
+                "{:?}",
+                self.functions_by_id
+                    .iter()
+                    .map(|f| &f.name)
+                    .collect::<Vec<_>>()
+            )
         );
+
+        // 从字节码的编译期 vtables 段直建 vtable 缓存：type_name → [(裸方法名, FunctionValue)]。
+        // 方法 func_id 由 codegen 写入（函数表索引），加载期零解析。
+        for (type_name, methods) in &module.vtables {
+            let vt = methods
+                .iter()
+                .map(|(bare, func_idx)| {
+                    (
+                        bare.clone(),
+                        FunctionValue {
+                            func_id: FunctionId(*func_idx),
+                            env: Vec::new(),
+                        },
+                    )
+                })
+                .collect();
+            self.vtable_cache.insert(type_name.clone(), vt);
+        }
 
         // Add types
         self.type_table.extend(module.type_table.clone());
 
         // Create shared state for parallel task execution
         let shared = Box::new(SharedState {
-            functions: self.functions.clone(),
             functions_by_id: self.functions_by_id.clone(),
             constants: self.constants.clone(),
             type_table: self.type_table.clone(),
+            vtable_cache: self.vtable_cache.clone(),
             ffi: self.ffi.clone(),
         });
         self.shared = Box::into_raw(shared);
@@ -103,7 +127,6 @@ impl Executor for Interpreter {
         self.rt = Runtime::new(RuntimeConfig {
             mode: self.runtime_config.runtime,
             workers: self.runtime_config.workers,
-            work_stealing: self.runtime_config.work_stealing,
         })
         .unwrap_or_else(|_| Runtime::new(RuntimeConfig::default()).unwrap());
     }

@@ -1,6 +1,5 @@
-//! 堆存储模块测试入口
+//! 堆存储测试
 //!
-//! 包含 allocator 和 heap 的测试模块。
+//! 包含 heap 的测试模块。
 
-mod allocator;
 mod heap;

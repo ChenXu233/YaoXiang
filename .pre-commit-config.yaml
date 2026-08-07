@@ -18,7 +18,8 @@ repos:
 
       - id: cargo-clippy
         name: cargo clippy
-        entry: cargo clippy --fix --allow-dirty --all-targets -- -D warnings
+        # clippy-driver 产物指纹与 rustc 不同，用独立 target 目录避免污染缓存导致 cargo test 全量重编
+        entry: cargo clippy --fix --allow-dirty --all-targets --target-dir target/clippy -- -D warnings
         language: system
         types: [rust]
         pass_filenames: false

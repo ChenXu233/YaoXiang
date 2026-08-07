@@ -268,8 +268,8 @@ fn test_float_ne_negative_returns_true() {
 fn test_float_gt_decimal_returns_true() {
     // Arrange
     // Act
-    let result = run_float_compare(CompareOp::Gt, 3.14, 3.0);
+    let result = run_float_compare(CompareOp::Gt, 3.5, 3.0);
 
     // Assert
-    assert!(result, "3.14 > 3.0 should be true");
+    assert!(result, "3.5 > 3.0 should be true");
 }

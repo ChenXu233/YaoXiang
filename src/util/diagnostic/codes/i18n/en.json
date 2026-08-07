@@ -535,7 +535,7 @@
     "title": "Internal Compiler Error",
     "message": "An internal compiler error occurred",
     "template": "Internal compiler error: {message}",
-    "help": "Please report this error at https://github.com/yaoxiang/yaoxiang/issues",
+    "help": "Please report this error at https://github.com/ChenXu233/YaoXiang/issues/new",
     "example": "",
     "error_output": ""
   },
@@ -906,5 +906,21 @@
     "help": "Wrap enum variants with braces and pipe separators",
     "example": "Color = red | green | blue",
     "error_output": "error[E0022]: Enums must use brace syntax\n --> example.yx:1:9\n  |\n1 | Color = red | green | blue\n  |         ^ Use brace syntax: { red | green | blue }"
+  },
+  "E1092": {
+    "title": "Invalid refinement type argument form",
+    "message": "Refinement type argument cannot be converted to a compile-time constant expression",
+    "template": "'{name}' requires a compile-time constant argument, but the given argument cannot be converted",
+    "help": "Predicate/proof function arguments must be literals, variables, or single-argument type applications; otherwise the refinement constraint cannot be generated",
+    "example": "y: IsSmall(List(Int)) = 9999",
+    "error_output": "error[E1092]: 'IsSmall' requires a compile-time constant argument, but the given argument cannot be converted"
+  },
+  "E1093": {
+    "title": "Refinement argument count mismatch",
+    "message": "Predicate/proof function argument count mismatch",
+    "template": "'{name}' expected {expected} argument(s), found {found}",
+    "help": "The argument count must match the predicate declaration, otherwise the refinement constraint cannot be generated",
+    "example": "y: IsSmall(1, 2) = 5",
+    "error_output": "error[E1093]: 'IsSmall' expected 1 argument, found 2"
   }
 }

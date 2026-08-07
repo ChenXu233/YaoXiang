@@ -21,7 +21,7 @@ use crate::frontend::core::parser::parse_msg;
 use crate::util::span::Span;
 
 // Import from sibling modules
-use super::types::{parse_type_annotation, parse_fn_type_with_names};
+use super::types::{parse_type_annotation_required, parse_fn_type_with_names};
 
 /// 判断 annotation 是否为类型参数标注（`Type` / `MetaType`）。纯结构，不看名字。
 fn is_type_param_annotation(ty: Option<&Type>) -> bool {
@@ -218,11 +218,11 @@ fn parse_assign_after_target(
                     return None;
                 }
 
-                let type_ann = parse_type_annotation(state)?;
+                let type_ann = parse_type_annotation_required(state)?;
                 (Some(type_ann), None)
             }
         } else {
-            let type_ann = parse_type_annotation(state)?;
+            let type_ann = parse_type_annotation_required(state)?;
             (Some(type_ann), None)
         }
     } else {
@@ -514,7 +514,7 @@ fn parse_assign_after_target(
 /// - Const parameters: `[N: Int]` - const generic with type annotation
 /// - Platform parameter: `[P: X86_64]` - RFC-011 platform specialization
 fn parse_type_definition(state: &mut ParserState<'_>) -> Option<Type> {
-    let first_type = parse_type_annotation(state)?;
+    let first_type = parse_type_annotation_required(state)?;
 
     // 检查是否有 | 符号（不允许使用不带花括号的枚举语法）
     if state.at(&TokenKind::Pipe) {
@@ -857,6 +857,17 @@ pub fn parse_expr_stmt(
             span,
         })
     } else {
+        // 表达式解析失败：报错而非静默吞掉 token（#258 审计：块内 `, 5` 等
+        // token 曾被 bump 静默吃掉，整条链无任何诊断）
+        let found = state
+            .current()
+            .map(|t| format!("{:?}", t.kind))
+            .unwrap_or_else(|| "EOF".to_string());
+        state.error(
+            ErrorCodeDefinition::unexpected_token(&found)
+                .at(state.span())
+                .build(),
+        );
         state.bump();
         None
     }

@@ -658,17 +658,43 @@ pub fn emit_mut_predicate(
 
 // ── 入口：ProofContext → ProofResult ──────────────────────
 
-/// 检查所有权无冲突（Layer 1）。
+/// 检查所有权无冲突（Layer 1 证明管线入口，RFC-009a）
 ///
-/// 由 checker.rs 在遍历函数体时调用核心逻辑
-/// （BrandTree + 快速通道 + 谓词）。
-pub fn check_ownership(_ctx: &ProofContext<'_>) -> ProofResult {
-    ProofResult::Proved
+/// #265：从无条件 Proved 的桩变为真入口——构造 OwnershipChecker 遍历函数体，
+/// 分支守卫在 walk_if/walk_while 中注入 `ctx.assumptions`（FlowSensitiveGamma
+/// 的首个消费者），后续系统谓词可携带路径条件送入验证。
+///
+/// 由 checker.rs 在遍历函数体时调用。
+pub fn check_ownership(
+    ctx: &mut ProofContext<'_>,
+    module: &Module,
+    env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
+    type_ledger: &HashMap<(usize, String), crate::frontend::core::types::PolyType>,
+) -> (Vec<ProofResult>, ReleasePlan, HashSet<String>) {
+    let mut checker = OwnershipChecker::new();
+    // #265：共享假设栈——walk_if/walk_while 的分支守卫注入 ctx.assumptions
+    std::mem::swap(&mut checker.gamma, &mut ctx.assumptions);
+    let result = checker.check_module(module, env, type_ledger);
+    std::mem::swap(&mut checker.gamma, &mut ctx.assumptions);
+    result
 }
 
 // ── OwnershipChecker：AST 遍历 ───────────────────────────
 
 use crate::frontend::core::parser::ast::{Expr, Module, Stmt, StmtKind};
+
+/// 赋值/传参/返回的复制语义（SPEC §11.2，#256）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CopySemantics {
+    /// Dup：&T / ref T——复制令牌，源存活
+    Dup,
+    /// Linear：&mut T——独占，复制被拒绝（#257）
+    Linear,
+    /// 原语值类型（Int/Float/Bool/Char）：编译器内置值复制
+    ValueCopy,
+    /// 默认：所有权转移
+    Move,
+}
 
 /// 函数内变量状态
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -710,6 +736,12 @@ pub struct OwnershipChecker {
     env: Option<*const crate::frontend::core::typecheck::environment::TypeEnvironment>,
     /// ref 创建的变量（Expr::Ref 的赋值目标）
     ref_vars: HashSet<String>,
+    /// 变量类型账本（推断层移交）：(定义语句 span offset, 变量名) → 类型（#256）
+    type_ledger: HashMap<(usize, String), crate::frontend::core::types::PolyType>,
+    /// 变量名 → 定义语句键（镜像 scope_vars，随作用域 push/pop）
+    scope_keys: Vec<HashMap<String, usize>>,
+    /// 当前 walk 的语句键（span 起始 offset）
+    cur_stmt_key: usize,
     /// spawn 体内使用的 ref 变量（逃逸 → 选 Arc）
     escaped_refs: HashSet<String>,
     /// 当前是否在 spawn 体内
@@ -722,6 +754,8 @@ pub struct OwnershipChecker {
     current_spawn_refs: HashSet<String>,
     /// 字段赋值记录：(变量名, 字段名, 被赋值的变量名)
     field_assignments: Vec<(String, String, String)>,
+    /// #265：流敏感假设栈 Γ——分支守卫在 walk_if/walk_while 中 inject/exit_scope
+    gamma: crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma,
 }
 
 impl Default for OwnershipChecker {
@@ -745,13 +779,24 @@ impl OwnershipChecker {
             scope_drops: Vec::new(),
             env: None,
             ref_vars: HashSet::new(),
+            type_ledger: HashMap::new(),
+            scope_keys: vec![HashMap::new()],
+            cur_stmt_key: 0,
             escaped_refs: HashSet::new(),
             inside_spawn: false,
             inside_unsafe: false,
             spawn_ref_graph: HashMap::new(),
             current_spawn_refs: HashSet::new(),
             field_assignments: Vec::new(),
+            gamma: crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma::new(),
         }
+    }
+
+    /// #265：假设栈只读访问器（测试观测分支守卫进出）
+    pub fn gamma(
+        &self
+    ) -> &crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma {
+        &self.gamma
     }
 
     /// 重置函数级状态
@@ -765,6 +810,10 @@ impl OwnershipChecker {
         self.scope_vars.clear();
         self.scope_drops.clear();
         self.ref_vars.clear();
+        // 注：type_ledger 是模块级数据（check_module 注入），不随函数重置
+        self.scope_keys.clear();
+        self.scope_keys.push(HashMap::new());
+        self.cur_stmt_key = 0;
         self.escaped_refs.clear();
         self.inside_spawn = false;
         self.inside_unsafe = false;
@@ -773,6 +822,29 @@ impl OwnershipChecker {
         self.field_assignments.clear();
         self.current_node = self.cfg.add_node(None); // 入口节点
         self.current_span = Span::dummy();
+        // #265：假设栈随函数重置（路径条件不跨函数）
+        self.gamma =
+            crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma::new();
+    }
+
+    /// #265：把分支/循环守卫表达式转为 ConstExpr（注入假设栈用）
+    ///
+    /// 复用 const_eval 的转换器；非常量表达式返回 None——守卫只是增强信息，
+    /// 无法转换时跳过 inject 而非中断检查（ponytail：不为此中断所有权检查）。
+    fn condition_as_const(
+        expr: &Expr
+    ) -> Option<crate::frontend::core::types::const_data::ConstExpr> {
+        crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)
+    }
+
+    /// #265：ConstExpr 取反（else 分支路径条件 = !condition）
+    fn negate_const(
+        expr: crate::frontend::core::types::const_data::ConstExpr
+    ) -> crate::frontend::core::types::const_data::ConstExpr {
+        crate::frontend::core::types::const_data::ConstExpr::UnOp {
+            op: crate::frontend::core::types::const_data::UnOp::Not,
+            expr: Box::new(expr),
+        }
     }
 
     /// 从表达式提取变量名（用于 Borrow/FieldAccess/Move 识别）
@@ -780,6 +852,27 @@ impl OwnershipChecker {
         match expr {
             Expr::Var(name, _) => Some(name.clone()),
             Expr::FieldAccess { expr: inner, .. } => Self::extract_var_name(inner),
+            // #257 审计：`&mut arr[i]` / `&*ptr` 的借用目标此前返回 None，
+            // 导致整个借用令牌块（可变性/冲突检测）被跳过——粗粒度归属到
+            // 底层变量，保守但 sound（宁可误报冲突，不可漏检别名）
+            Expr::Index { expr: inner, .. } => Self::extract_var_name(inner),
+            Expr::UnOp {
+                op: crate::frontend::core::parser::ast::UnOp::Deref,
+                expr: inner,
+                ..
+            } => Self::extract_var_name(inner),
+            _ => None,
+        }
+    }
+
+    /// 提取完整调用路径（`list.len` / `len`），用于查调用目标签名。
+    /// 与 extract_var_name（最内层变量名）不同——后者用于借用令牌归属。
+    fn extract_call_path(expr: &Expr) -> Option<String> {
+        match expr {
+            Expr::Var(name, _) => Some(name.clone()),
+            Expr::FieldAccess {
+                expr: inner, field, ..
+            } => Self::extract_call_path(inner).map(|p| format!("{p}.{field}")),
             _ => None,
         }
     }
@@ -791,28 +884,36 @@ impl OwnershipChecker {
         arg_count: usize,
         env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
     ) -> Vec<ParamOwnership> {
-        let fn_type = env.get_var(func_name);
-        match fn_type {
-            Some(poly) => {
-                if let crate::frontend::core::types::MonoType::Fn { params, .. } = &poly.body {
-                    params
-                        .iter()
-                        .take(arg_count)
-                        .map(|p| match p {
-                            crate::frontend::core::types::MonoType::Ref {
-                                mutable: true, ..
-                            } => ParamOwnership::WriteBorrow,
-                            crate::frontend::core::types::MonoType::Ref {
-                                mutable: false, ..
-                            } => ParamOwnership::ReadBorrow,
-                            _ => ParamOwnership::Move,
-                        })
-                        .collect()
+        // ponytail: std 限定名回退（list.len → std.list.len）+ 短名兜底；
+        // 用户模块经 use 绑定为 Struct 时仍退化 Move，需 Resolver 才精确（罕见，暂不处理）
+        let fn_ty = env
+            .get_var(func_name)
+            .map(|p| p.body.clone())
+            .or_else(|| {
+                if func_name.contains('.') && !func_name.starts_with("std.") {
+                    env.native_signatures
+                        .get(&format!("std.{func_name}"))
+                        .cloned()
                 } else {
-                    vec![ParamOwnership::Move; arg_count]
+                    None
                 }
-            }
-            None => vec![ParamOwnership::Move; arg_count],
+            })
+            .or_else(|| env.native_signatures.get(func_name).cloned());
+        match fn_ty {
+            Some(crate::frontend::core::types::MonoType::Fn { params, .. }) => params
+                .iter()
+                .take(arg_count)
+                .map(|p| match p {
+                    crate::frontend::core::types::MonoType::Ref { mutable: true, .. } => {
+                        ParamOwnership::WriteBorrow
+                    }
+                    crate::frontend::core::types::MonoType::Ref { mutable: false, .. } => {
+                        ParamOwnership::ReadBorrow
+                    }
+                    _ => ParamOwnership::Move,
+                })
+                .collect(),
+            _ => vec![ParamOwnership::Move; arg_count],
         }
     }
 
@@ -824,8 +925,12 @@ impl OwnershipChecker {
     ) {
         match ownership {
             ParamOwnership::Move => {
-                if !self.ref_vars.contains(var_name) {
-                    self.var_state.insert(var_name.to_string(), VarState::Moved);
+                // #256：类型驱动——Dup/ValueCopy 传参是复制，不 move
+                match self.classify_var(var_name) {
+                    CopySemantics::Dup | CopySemantics::ValueCopy => {}
+                    _ => {
+                        self.var_state.insert(var_name.to_string(), VarState::Moved);
+                    }
                 }
             }
             ParamOwnership::ReadBorrow => {
@@ -915,6 +1020,73 @@ impl OwnershipChecker {
         }
     }
 
+    /// #257：Linear 令牌（&mut T）赋值复制的拒绝诊断（E2003）
+    fn linear_copy_error(
+        src_name: &str,
+        span: Span,
+    ) -> ProofResult {
+        ProofResult::Disproved(super::super::proof::verdict::DisproofModel {
+            kind: super::super::proof::verdict::DisproofKind::LinearTokenCopy,
+            assignments: vec![("variable".into(), src_name.into())],
+            constraint: format!(
+                "`{}` 持有 `&mut` 写入令牌：SPEC §11.2 规定 &mut T 是 Linear（独占、非 Dup），不能复制。请在需要的地方重新创建 `&mut` 借用",
+                src_name
+            ),
+            span: Some(span),
+            predicate_span: None,
+        })
+    }
+
+    /// 记录绑定：变量名 → 当前语句键（镜像作用域栈，#256）
+    fn record_binding(
+        &mut self,
+        name: &str,
+    ) {
+        if let Some(scope) = self.scope_keys.last_mut() {
+            scope.insert(name.to_string(), self.cur_stmt_key);
+        }
+    }
+
+    /// #256：类型驱动的复制语义分类（SPEC §11.2）
+    fn classify_mono(ty: &crate::frontend::core::types::MonoType) -> CopySemantics {
+        use crate::frontend::core::types::MonoType;
+        match ty {
+            MonoType::Ref { mutable: false, .. } => CopySemantics::Dup,
+            MonoType::Ref { mutable: true, .. } => CopySemantics::Linear,
+            MonoType::Arc(_) => CopySemantics::Dup,
+            MonoType::Int(_) | MonoType::Float(_) | MonoType::Bool | MonoType::Char => {
+                CopySemantics::ValueCopy
+            }
+            _ => CopySemantics::Move,
+        }
+    }
+
+    /// #256：变量语义分类——先查账本（作用域内层优先），再查 env（顶层/函数绑定），
+    /// 都查不到保守按 Move
+    fn classify_var(
+        &self,
+        name: &str,
+    ) -> CopySemantics {
+        for scope in self.scope_keys.iter().rev() {
+            if let Some(key) = scope.get(name) {
+                if let Some(poly) = self.type_ledger.get(&(*key, name.to_string())) {
+                    return Self::classify_mono(&poly.body);
+                }
+            }
+        }
+        if let Some(env_ptr) = self.env {
+            let env = unsafe { &*env_ptr };
+            if let Some(poly) = env.get_var(name) {
+                return Self::classify_mono(&poly.body);
+            }
+        }
+        // ref T（Arc/Rc）语法回退：账本/env 都查不到时保留 #251 的追踪结果
+        if self.ref_vars.contains(name) {
+            return CopySemantics::Dup;
+        }
+        CopySemantics::Move
+    }
+
     // ── 控制流方法（walk_expr 和 walk_stmt 共用） ──────────
 
     /// walk_if：If 表达式/语句的控制流构建
@@ -933,11 +1105,16 @@ impl OwnershipChecker {
 
         let merge_node = self.cfg.add_node(None);
 
-        // then 分支 —— 路径条件 = condition
+        // then 分支 —— 路径条件 = condition（#265：守卫注入假设栈）
         let then_start = self.cfg.add_node(Some(format!("{:?}", condition)));
         self.cfg.add_edge(split_node, then_start, EdgeKind::Normal);
         self.current_node = then_start;
+        self.gamma.enter_scope();
+        if let Some(cond) = Self::condition_as_const(condition) {
+            self.gamma.inject(cond);
+        }
         results.extend(self.walk_stmts(then_body));
+        self.gamma.exit_scope();
         self.cfg
             .add_edge(self.current_node, merge_node, EdgeKind::Normal);
 
@@ -948,7 +1125,12 @@ impl OwnershipChecker {
             self.cfg
                 .add_edge(split_node, else_if_start, EdgeKind::Normal);
             self.current_node = else_if_start;
+            self.gamma.enter_scope();
+            if let Some(cond) = Self::condition_as_const(else_if_cond) {
+                self.gamma.inject(cond);
+            }
             results.extend(self.walk_stmts(else_if_body));
+            self.gamma.exit_scope();
             self.cfg
                 .add_edge(self.current_node, merge_node, EdgeKind::Normal);
         }
@@ -958,7 +1140,12 @@ impl OwnershipChecker {
             let else_start = self.cfg.add_node(Some(format!("!({:?})", condition)));
             self.cfg.add_edge(split_node, else_start, EdgeKind::Normal);
             self.current_node = else_start;
+            self.gamma.enter_scope();
+            if let Some(cond) = Self::condition_as_const(condition) {
+                self.gamma.inject(Self::negate_const(cond));
+            }
             results.extend(self.walk_stmts(else_body));
+            self.gamma.exit_scope();
             self.cfg
                 .add_edge(self.current_node, merge_node, EdgeKind::Normal);
         } else {
@@ -987,7 +1174,13 @@ impl OwnershipChecker {
         let body_start = self.cfg.add_node(None);
         self.cfg.add_edge(head_node, body_start, EdgeKind::Normal);
         self.current_node = body_start;
+        // #265：循环守卫注入假设栈（循环体路径条件 = condition）
+        self.gamma.enter_scope();
+        if let Some(cond) = Self::condition_as_const(condition) {
+            self.gamma.inject(cond);
+        }
         results.extend(self.walk_stmts(body));
+        self.gamma.exit_scope();
 
         // 回边：body_end → head
         self.cfg
@@ -1013,6 +1206,7 @@ impl OwnershipChecker {
         let mut results = self.walk_expr(iterable);
         self.var_state.insert(var.to_string(), VarState::Alive);
         self.var_mutability.insert(var.to_string(), var_mut);
+        self.record_binding(var);
 
         let head_node = self.cfg.add_node(None);
         self.cfg
@@ -1123,6 +1317,14 @@ impl OwnershipChecker {
                 op, left, right, ..
             } => {
                 if *op == crate::frontend::core::parser::ast::BinOp::Assign {
+                    // #257：表达式层赋值同样拒绝 Linear（&mut）令牌复制
+                    if let Expr::Var(src_name, _) = right.as_ref() {
+                        if self.classify_var(src_name) == CopySemantics::Linear {
+                            let mut r = vec![Self::linear_copy_error(src_name, self.current_span)];
+                            r.extend(self.walk_expr(right));
+                            return r;
+                        }
+                    }
                     if let Expr::Var(name, _) = left.as_ref() {
                         // 仅在变量已存在且已记录可变性时检查（重赋值场景）
                         if let Some(&is_mut) = self.var_mutability.get(name) {
@@ -1132,7 +1334,7 @@ impl OwnershipChecker {
                                 r.push(emit_mut_predicate(name, false, self.current_span));
                             }
                             self.add_consumer_for_var(name);
-                            // ref 属性传播：x = ref_var → x 也是 ref 变量
+                            // ref 属性传播：x = ref_var → x 也是 ref 变量（spawn/Arc 机制）
                             if let Expr::Var(src_name, _) = right.as_ref() {
                                 if self.ref_vars.contains(src_name) {
                                     self.ref_vars.insert(name.clone());
@@ -1148,7 +1350,7 @@ impl OwnershipChecker {
                             if let Some(scope) = self.scope_vars.last_mut() {
                                 scope.push(name.clone());
                             }
-                            // ref 属性传播
+                            // ref 属性传播（spawn/Arc 机制）
                             if let Expr::Var(src_name, _) = right.as_ref() {
                                 if self.ref_vars.contains(src_name) {
                                     self.ref_vars.insert(name.clone());
@@ -1201,7 +1403,7 @@ impl OwnershipChecker {
             Expr::Call { func, args, .. } => {
                 let mut results = self.walk_expr(func);
                 // 确定调用目标名（用于查签名和捕获）
-                let func_name = Self::extract_var_name(func);
+                let func_name = Self::extract_call_path(func);
                 // 查询函数的参数签名（未知函数回退为全 Move）
                 let env: &crate::frontend::core::typecheck::environment::TypeEnvironment =
                     unsafe { &*self.env.unwrap() };
@@ -1227,8 +1429,12 @@ impl OwnershipChecker {
             Expr::Return(Some(inner), _) => {
                 let results = self.walk_expr(inner);
                 if let Expr::Var(name, _) = inner.as_ref() {
-                    if !self.ref_vars.contains(name) {
-                        self.var_state.insert(name.clone(), VarState::Moved);
+                    // #256：Dup/ValueCopy 返回是复制；Move/Linear 转移所有权
+                    match self.classify_var(name) {
+                        CopySemantics::Dup | CopySemantics::ValueCopy => {}
+                        _ => {
+                            self.var_state.insert(name.clone(), VarState::Moved);
+                        }
                     }
                 }
                 results
@@ -1329,6 +1535,8 @@ impl OwnershipChecker {
         stmt: &Stmt,
     ) -> Vec<ProofResult> {
         self.current_span = stmt.span;
+        // 账本键与推断层对齐：当前语句的 span offset（#256）
+        self.cur_stmt_key = stmt.span.start.offset;
         let result = match &stmt.kind {
             StmtKind::Expr(expr) => self.walk_expr(expr),
 
@@ -1341,8 +1549,18 @@ impl OwnershipChecker {
                 use crate::frontend::core::parser::ast::Expr;
                 let name = match target.as_ref() {
                     Expr::Var(n, _) => n.clone(),
-                    _ => return Vec::new(),
+                    // 非变量目标（字段写入 `m.x = v`、解构等）：仍须遍历 target 与
+                    // value，让内部变量的 Move/Drop 状态被检查（#257：此前直接
+                    // 返回导致已 move 的 `&mut` 令牌可经字段写入继续使用）。
+                    _ => {
+                        let mut results = self.walk_expr(target);
+                        if let Some(v) = value.as_deref() {
+                            results.extend(self.walk_expr(v));
+                        }
+                        return results;
+                    }
                 };
+                self.record_binding(&name);
                 let initializer = value.as_deref();
                 let mut results = Vec::new();
                 let is_new = !self.var_state.contains_key(&name);
@@ -1397,9 +1615,18 @@ impl OwnershipChecker {
                     }
                     results.extend(self.walk_expr(init));
                     if let Expr::Var(src_name, _) = init {
-                        if !self.ref_vars.contains(src_name) {
-                            self.var_state.insert(src_name.clone(), VarState::Moved);
+                        // #256/#257：类型驱动的复制语义（SPEC §11.2）
+                        match self.classify_var(src_name) {
+                            CopySemantics::Linear => {
+                                results.push(Self::linear_copy_error(src_name, self.current_span));
+                                return results;
+                            }
+                            CopySemantics::Dup | CopySemantics::ValueCopy => {}
+                            CopySemantics::Move => {
+                                self.var_state.insert(src_name.clone(), VarState::Moved);
+                            }
                         }
+                        // ref 属性传播（spawn/Arc 机制）
                         if self.ref_vars.contains(src_name) {
                             self.ref_vars.insert(name.clone());
                         }
@@ -1412,6 +1639,7 @@ impl OwnershipChecker {
                             for param in params {
                                 self.var_state.insert(param.name.clone(), VarState::Alive);
                                 self.var_mutability.insert(param.name.clone(), param.is_mut);
+                                self.record_binding(&param.name);
                             }
                             results.extend(self.walk_stmts(&body.stmts));
                         }
@@ -1427,8 +1655,12 @@ impl OwnershipChecker {
             StmtKind::Return(Some(expr)) => {
                 let results = self.walk_expr(expr);
                 if let Expr::Var(name, _) = expr.as_ref() {
-                    if !self.ref_vars.contains(name) {
-                        self.var_state.insert(name.clone(), VarState::Moved);
+                    // #256：Dup/ValueCopy 返回是复制；Move/Linear 转移所有权
+                    match self.classify_var(name) {
+                        CopySemantics::Dup | CopySemantics::ValueCopy => {}
+                        _ => {
+                            self.var_state.insert(name.clone(), VarState::Moved);
+                        }
                     }
                 }
                 results
@@ -1469,6 +1701,7 @@ impl OwnershipChecker {
         stmts: &[Stmt],
     ) -> Vec<ProofResult> {
         self.scope_vars.push(Vec::new());
+        self.scope_keys.push(HashMap::new());
         let mut results = Vec::new();
         for stmt in stmts {
             results.extend(self.walk_stmt(stmt));
@@ -1482,6 +1715,7 @@ impl OwnershipChecker {
                 }
             }
         }
+        self.scope_keys.pop();
         results
     }
 
@@ -1615,16 +1849,19 @@ impl OwnershipChecker {
         params: &[crate::frontend::core::parser::ast::Param],
         body: &[Stmt],
         env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
+        stmt_key: usize,
     ) -> (Vec<ProofResult>, ReleasePlan, HashSet<String>) {
         self.reset();
 
         // 设置类型环境引用（供 walk_expr 使用）
         self.env = Some(env as *const _);
 
-        // 标记参数为 Alive，记录可变性
+        // 标记参数为 Alive，记录可变性；参数键与推断层对齐（#256）
+        self.cur_stmt_key = stmt_key;
         for param in params {
             self.var_state.insert(param.name.clone(), VarState::Alive);
             self.var_mutability.insert(param.name.clone(), param.is_mut);
+            self.record_binding(&param.name);
         }
 
         // 一趟遍历：构建 CFG + 前向检查 + 收集待定写操作
@@ -1652,7 +1889,9 @@ impl OwnershipChecker {
         &mut self,
         module: &Module,
         _env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
+        type_ledger: &HashMap<(usize, String), crate::frontend::core::types::PolyType>,
     ) -> (Vec<ProofResult>, ReleasePlan, HashSet<String>) {
+        self.type_ledger = type_ledger.clone();
         let mut results = Vec::new();
         let mut merged_drops: HashMap<Span, Vec<String>> = HashMap::new();
         let mut merged_escaped: HashSet<String> = HashSet::new();
@@ -1679,7 +1918,7 @@ impl OwnershipChecker {
                     continue;
                 }
                 let (func_results, func_plan, escaped) =
-                    self.check_function(&name, &params, &body, _env);
+                    self.check_function(&name, &params, &body, _env, stmt.span.start.offset);
                 results.extend(func_results);
                 merged_drops.extend(func_plan.drops);
                 merged_escaped.extend(escaped);

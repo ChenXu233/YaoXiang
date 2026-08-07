@@ -7,12 +7,10 @@ use crate::backends::runtime::RuntimeMode;
 /// Interpreter runtime configuration.
 #[derive(Debug, Clone)]
 pub struct InterpreterRuntimeConfig {
-    /// Runtime tier (Embedded / Standard / Full).
+    /// Runtime tier (Embedded / Standard).
     pub runtime: RuntimeMode,
-    /// Worker count (only meaningful for Full runtime).
+    /// Worker count (only meaningful for Standard runtime).
     pub workers: usize,
-    /// Work-stealing toggle (only meaningful for Full runtime).
-    pub work_stealing: bool,
 }
 
 impl Default for InterpreterRuntimeConfig {
@@ -25,7 +23,6 @@ impl Default for InterpreterRuntimeConfig {
                 .unwrap_or(4),
             #[cfg(target_arch = "wasm32")]
             workers: 1,
-            work_stealing: false,
         }
     }
 }

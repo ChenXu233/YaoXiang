@@ -142,29 +142,6 @@ pub struct FmtConfig {
     pub sort_imports: Option<bool>,
 }
 
-/// Warning level for lints
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum WarningLevel {
-    /// Disable the warning
-    Off,
-    /// Show as warning (default)
-    #[default]
-    Warn,
-    /// Treat as error
-    Deny,
-}
-
-impl WarningLevel {
-    pub fn is_enabled(&self) -> bool {
-        !matches!(self, WarningLevel::Off)
-    }
-
-    pub fn is_deny(&self) -> bool {
-        matches!(self, WarningLevel::Deny)
-    }
-}
-
 /// Lint configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LintConfig {
@@ -174,9 +151,9 @@ pub struct LintConfig {
     /// Strict mode
     #[serde(default)]
     pub strict: bool,
-    /// Dead code analysis level
+    /// Dead code analysis enabled
     #[serde(default)]
-    pub dead_code: WarningLevel,
+    pub dead_code: bool,
 }
 
 fn default_lint_rules() -> Vec<String> {
@@ -188,7 +165,7 @@ impl Default for LintConfig {
         Self {
             rules: vec!["recommended".to_string()],
             strict: false,
-            dead_code: WarningLevel::default(),
+            dead_code: false,
         }
     }
 }
@@ -210,6 +187,37 @@ pub struct ProjectConfig {
     /// Runtime configuration
     #[serde(default)]
     pub runtime: RuntimeConfig,
+    /// Tool configuration ([tool.*] extension namespace, RFC-015)
+    #[serde(default)]
+    pub tool: ToolConfig,
+}
+
+/// [tool.*] 扩展命名空间（RFC-015）
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ToolConfig {
+    /// [tool.test] — yaoxiang test（RFC-036）
+    #[serde(default)]
+    pub test: TestConfig,
+}
+
+/// [tool.test] 配置（RFC-036）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestConfig {
+    /// 测试文件发现 pattern（字面路径或 `root/**/*.yx` 形式）
+    #[serde(default = "default_test_patterns")]
+    pub patterns: Vec<String>,
+}
+
+fn default_test_patterns() -> Vec<String> {
+    vec!["tests/**/*.yx".to_string()]
+}
+
+impl Default for TestConfig {
+    fn default() -> Self {
+        Self {
+            patterns: default_test_patterns(),
+        }
+    }
 }
 
 /// Runtime configuration
@@ -277,8 +285,6 @@ pub fn load_user_config() -> Result<UserConfig, ConfigError> {
 pub enum ConfigError {
     IoError(std::io::Error),
     ParseError(toml::de::Error),
-    SerializeError(toml::ser::Error),
-    NoConfigDir,
 }
 
 impl std::fmt::Display for ConfigError {
@@ -289,8 +295,6 @@ impl std::fmt::Display for ConfigError {
         match self {
             ConfigError::IoError(e) => write!(f, "IO error: {}", e),
             ConfigError::ParseError(e) => write!(f, "Config parse error: {}", e),
-            ConfigError::SerializeError(e) => write!(f, "Config serialize error: {}", e),
-            ConfigError::NoConfigDir => write!(f, "Cannot determine config directory"),
         }
     }
 }

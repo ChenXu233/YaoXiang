@@ -9,7 +9,7 @@
 //! - `ConflictInfo` 的 Display 输出
 
 use crate::package::dependency::DependencySpec;
-use crate::package::source::conflict::{check_conflicts, detect_conflicts, ConflictInfo, ConflictRequirement};
+use crate::package::source::conflict::{check_conflicts, detect_conflicts, ConflictInfo};
 
 fn make_dep(
     name: &str,
@@ -76,14 +76,11 @@ fn test_conflict_info_display() {
     let info = ConflictInfo {
         package_name: "foo".to_string(),
         requirements: vec![
-            ConflictRequirement {
-                from: "dependencies".to_string(),
-                version_req: ">=1.0.0, <2.0.0".to_string(),
-            },
-            ConflictRequirement {
-                from: "dev-dependencies".to_string(),
-                version_req: ">=2.0.0, <3.0.0".to_string(),
-            },
+            ("dependencies".to_string(), ">=1.0.0, <2.0.0".to_string()),
+            (
+                "dev-dependencies".to_string(),
+                ">=2.0.0, <3.0.0".to_string(),
+            ),
         ],
     };
     let display = info.to_string();

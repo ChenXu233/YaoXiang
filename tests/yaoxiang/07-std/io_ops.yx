@@ -1,0 +1,35 @@
+// 07-std/io_ops.yx
+// 覆盖: std.io + std.os 模块（#117）— 文件 I/O 往返
+// 验证: write_file/read_file/append_file 往返 + os.remove/exists 清理
+// 状态: ✅
+
+use std.assert
+use std.io
+use std.os
+use std.string
+
+main = {
+    p = "__yx_io_ops_tmp.txt"
+
+    // 写入 → 读回
+    ok = io.write_file(p, "hello")
+    assert.assert(ok, "write_file ok")
+    assert.assert(os.exists(p), "file exists after write")
+    content = io.read_file(p)
+    assert.assert(content == "hello", "read_file roundtrip")
+
+    // 追加 → 读回
+    io.append_file(p, " world")
+    content2 = io.read_file(p)
+    assert.assert(content2 == "hello world", "append_file roundtrip")
+
+    // 清理
+    removed = os.remove(p)
+    assert.assert(removed, "os.remove ok")
+    assert.assert(!os.exists(p), "file gone after remove")
+
+    // os 只读查询（无副作用）
+    cwd = os.getcwd()
+    assert.assert(string.len(cwd) > 0, "getcwd non-empty")
+    assert.assert(os.is_dir("."), "cwd is_dir")
+}

@@ -1,0 +1,24 @@
+// 01-syntax/basics/top_level_init_expression.yx
+// 覆盖: 规范 §5.2 顶层绑定初始化；RFC-010 统一类型语法；RFC-029 模块 = record of bindings
+// 验证: 顶层 `name = expr` 的四种 init 形态（字面量/算术/字符串拼接/类型标注）求值后绑定，不丢值
+// 修复: #261 (顶层 binding 初始化表达式被编译成返回 0 的函数)
+// 状态: ✅ 可运行
+//
+// 限制：跨顶层 binding 引用（如 `other = sum + 100`）暂不测 — `eval_const_expr` 对
+// `Var(name)` 无分支，会被退回运行时 fallback（输出 0）。归因见 #271 静默归零清单 #2。
+
+use std.assert
+
+// Arrange — 四条顶层 binding，分别覆盖四种 init 形态。命名反映 #261 修复点。
+literal = 42                                // (1) 字面量（回归基线）
+arithmetic = 1 + 2 + 3                      // (2) 算术（#261 主修复：原 IR 硬编码 Int(0) → 修复后为 6）
+concat = "hello, " + "world"                // (3) 字符串拼接（同 #261 常量折叠路径）
+pi_anno: Float = 3.14                       // (4) 字面量 + 显式类型注解
+
+// Act + Assert — 每个 binding 恰好访问一次，期望值来自 §5.2 语义（name: type = value 求值后绑定）。
+main = {
+    assert.assert(literal == 42, "顶层字面量绑定 == 42")
+    assert.assert(arithmetic == 6, "顶层算术绑定 == 6（#261）")
+    assert.assert(concat == "hello, world", "顶层字符串拼接 == hello, world")
+    assert.assert(pi_anno == 3.14, "顶层类型标注绑定 == 3.14")
+}

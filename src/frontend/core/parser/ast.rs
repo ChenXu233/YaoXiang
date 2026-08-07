@@ -245,7 +245,8 @@ pub enum StmtKind {
         /// 是否 pub
         is_pub: bool,
     },
-    /// Use statement: `use module.path` or `use module.{a, b} as c, d`
+    /// Use statement: `use module.path` / `use module.{a, b}` /
+    /// `use module as m` / `use module.{a as x}`（#245）
     Use {
         path: String,
         /// Module path span
@@ -254,6 +255,10 @@ pub enum StmtKind {
         path_parts: Vec<SpannedIdent>,
         items: Option<Vec<String>>,
         alias: Option<Vec<String>>,
+        /// 花括号内联别名（#245）：与 `items` 逐项对齐，`None` 表示该项无别名。
+        /// `use lib.{helper as h}` → items=["helper"], item_aliases=[Some("h")]。
+        /// 全项均无别名时为 `None`。
+        item_aliases: Option<Vec<Option<String>>>,
     },
     /// If statement: `if condition { then_branch } elif branches else_branch`
     If {

@@ -100,7 +100,7 @@ fn test_clear_cache_empties_cache() {
     engine.find_similar("fuo"); // writes to cache
     engine.clear_cache();
     assert!(
-        engine.similarity_cache.read().is_empty(),
+        engine.similarity_cache.read().unwrap().is_empty(),
         "cache should be empty after clear"
     );
 }

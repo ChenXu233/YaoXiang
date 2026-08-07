@@ -278,6 +278,7 @@ impl StatementChecker {
                 .get(&export.full_path)
                 .cloned()
                 .or_else(|| self.native_signatures.get(&export.name).cloned())
+                .or_else(|| export.mono_type.clone())
                 .unwrap_or_else(|| self.default_callable_type()),
         }
     }
@@ -321,6 +322,7 @@ impl StatementChecker {
         path: &str,
         items: &Option<Vec<String>>,
         alias: &Option<Vec<String>>,
+        item_aliases: &Option<Vec<Option<String>>>,
     ) {
         let Some(module) = self.module_registry.get(path).cloned() else {
             return;
@@ -357,27 +359,16 @@ impl StatementChecker {
                     crate::util::span::Span::default(),
                 );
             }
-            // use path.{a, b}
-            (Some(item_names), None) => {
-                for item_name in item_names {
+            // use path.{a, b} / use path.{a as x}（#245：仅内联别名）
+            (Some(item_names), _) => {
+                for (i, item_name) in item_names.iter().enumerate() {
+                    let local_name = item_aliases
+                        .as_ref()
+                        .and_then(|v| v.get(i))
+                        .and_then(|a| a.as_ref())
+                        .unwrap_or(item_name);
                     if let Some(export) = module.exports.get(item_name).cloned() {
-                        self.import_binding(item_name, &export);
-                    }
-                }
-            }
-            // use path.{a, b} as aa, bb
-            (Some(item_names), Some(aliases)) if item_names.len() == aliases.len() => {
-                for (item_name, alias_name) in item_names.iter().zip(aliases.iter()) {
-                    if let Some(export) = module.exports.get(item_name).cloned() {
-                        self.import_binding(alias_name, &export);
-                    }
-                }
-            }
-            // 不合法别名数量：按原名导入
-            (Some(item_names), Some(_)) => {
-                for item_name in item_names {
-                    if let Some(export) = module.exports.get(item_name).cloned() {
-                        self.import_binding(item_name, &export);
+                        self.import_binding(local_name, &export);
                     }
                 }
             }
@@ -403,6 +394,11 @@ impl StatementChecker {
         definition_span: crate::util::span::Span,
     ) {
         self.scope.add_var(name, poly, is_mut, definition_span);
+    }
+
+    /// 变量类型账本（#256）：移交给所有权检查做 Move/Dup 分类
+    pub fn var_type_ledger(&self) -> &std::collections::HashMap<(usize, String), PolyType> {
+        self.scope.type_ledger()
     }
 
     /// 获取变量（从最内层作用域开始查找）
@@ -575,6 +571,8 @@ impl StatementChecker {
         &mut self,
         stmt: &Stmt,
     ) -> Result<(), Box<Diagnostic>> {
+        // 账本键：当前语句的 span（嵌套语句递归时逐层覆盖，#256）
+        self.scope.set_current_stmt(stmt.span);
         match &stmt.kind {
             crate::frontend::core::parser::ast::StmtKind::Expr(expr) => self.check_expr_stmt(expr),
             crate::frontend::core::parser::ast::StmtKind::Assign {
@@ -612,6 +610,7 @@ impl StatementChecker {
                                 &[],
                                 Some(v.as_ref()),
                                 *is_mut,
+                                *stmt_span,
                             );
                         }
                     }
@@ -622,6 +621,7 @@ impl StatementChecker {
                             &[],
                             None,
                             *is_mut,
+                            *stmt_span,
                         );
                     }
                 };
@@ -667,9 +667,13 @@ impl StatementChecker {
                 )
             }
             crate::frontend::core::parser::ast::StmtKind::Use {
-                path, items, alias, ..
+                path,
+                items,
+                alias,
+                item_aliases,
+                ..
             } => {
-                self.process_use_stmt(path, items, alias);
+                self.process_use_stmt(path, items, alias, item_aliases);
                 Ok(())
             }
             // 元组解构赋值
@@ -1171,6 +1175,7 @@ impl StatementChecker {
         prelude_stmts: &[Stmt],
         initializer: Option<&Expr>,
         is_mut: bool,
+        stmt_span: crate::util::span::Span,
     ) -> Result<(), Box<Diagnostic>> {
         // 处理 prelude 语句（编译期求值部分）
         for stmt in prelude_stmts {
@@ -1239,6 +1244,7 @@ impl StatementChecker {
                             &format!("{}", ann_ty),
                             &format!("{}", init_ty),
                         )
+                        .at(stmt_span)
                         .build(),
                     ));
                 }
@@ -1280,6 +1286,7 @@ impl StatementChecker {
                                     &format!("{}", ann_ty),
                                     &format!("{}", init_ty),
                                 )
+                                .at(stmt_span)
                                 .build(),
                             ));
                         }

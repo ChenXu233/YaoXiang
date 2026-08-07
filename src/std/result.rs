@@ -31,25 +31,25 @@ impl StdModule for ResultModule {
             NativeExport::new(
                 "is_ok",
                 "std.result.is_ok",
-                "(self: Result(T, E)) -> Bool",
+                "(self: &Result(T, E)) -> Bool",
                 native_result_is_ok,
             ),
             NativeExport::new(
                 "is_err",
                 "std.result.is_err",
-                "(self: Result(T, E)) -> Bool",
+                "(self: &Result(T, E)) -> Bool",
                 native_result_is_err,
             ),
             NativeExport::new(
                 "unwrap",
                 "std.result.unwrap",
-                "(self: Result(T, E)) -> T",
+                "(self: &Result(T, E)) -> T",
                 native_result_unwrap,
             ),
             NativeExport::new(
                 "unwrap_or",
                 "std.result.unwrap_or",
-                "(self: Result(T, E), default: T) -> T",
+                "(self: &Result(T, E), default: T) -> T",
                 native_result_unwrap_or,
             ),
         ]

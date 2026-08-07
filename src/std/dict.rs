@@ -29,7 +29,7 @@ impl StdModule for DictModule {
             NativeExport::new(
                 "get",
                 "std.dict.get",
-                "(dict: Dict, key: Any) -> Any",
+                "(dict: &Dict, key: Any) -> Any",
                 native_get as NativeHandler,
             ),
             NativeExport::new(
@@ -41,25 +41,25 @@ impl StdModule for DictModule {
             NativeExport::new(
                 "has",
                 "std.dict.has",
-                "(dict: Dict, key: Any) -> Bool",
+                "(dict: &Dict, key: Any) -> Bool",
                 native_has as NativeHandler,
             ),
             NativeExport::new(
                 "values",
                 "std.dict.values",
-                "(dict: Dict) -> List",
+                "(dict: &Dict) -> List",
                 native_values as NativeHandler,
             ),
             NativeExport::new(
                 "keys",
                 "std.dict.keys",
-                "(dict: Dict) -> List",
+                "(dict: &Dict) -> List",
                 native_keys as NativeHandler,
             ),
             NativeExport::new(
                 "entries",
                 "std.dict.entries",
-                "(dict: Dict) -> List",
+                "(dict: &Dict) -> List",
                 native_entries as NativeHandler,
             ),
             NativeExport::new(
@@ -71,19 +71,19 @@ impl StdModule for DictModule {
             NativeExport::new(
                 "len",
                 "std.dict.len",
-                "(dict: Dict) -> Int",
+                "(dict: &Dict) -> Int",
                 native_len as NativeHandler,
             ),
             NativeExport::new(
                 "is_empty",
                 "std.dict.is_empty",
-                "(dict: Dict) -> Bool",
+                "(dict: &Dict) -> Bool",
                 native_is_empty as NativeHandler,
             ),
             NativeExport::new(
                 "merge",
                 "std.dict.merge",
-                "(a: Dict, b: Dict) -> Dict",
+                "(a: &Dict, b: &Dict) -> Dict",
                 native_merge as NativeHandler,
             ),
         ]

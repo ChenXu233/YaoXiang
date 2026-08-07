@@ -1,0 +1,23 @@
+// 07-std/concurrent_ops.yx
+// 覆盖: std.concurrent 模块（#117）
+// 验证: sleep（毫秒休眠）、thread_id（非空标识）、yield_now（让出调度）
+// 状态: ✅
+
+use std.assert
+use std.string
+use std.concurrent
+
+main = {
+    // 零时长休眠：正常返回
+    concurrent.sleep(0)
+
+    // 短休眠：不阻塞太久，正常返回
+    concurrent.sleep(1)
+
+    // 让出调度：正常返回
+    concurrent.yield_now()
+
+    // 线程标识：非空（值随平台/线程变化，只验证存在性）
+    tid = concurrent.thread_id()
+    assert.assert(string.len(tid) > 0, "thread_id should be non-empty")
+}

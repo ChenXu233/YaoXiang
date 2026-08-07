@@ -1,0 +1,47 @@
+// 07-std/string_ops.yx
+// 覆盖: std.string 模块（#117）— RFC-009 §2.8 只读自动借用
+// 验证: 字符串操作复用（split/trim/upper/lower/replace/contains/...）+ parse 错误路径（Result err）
+// 状态: ✅
+
+use std.assert
+use std.string
+use std.list
+use std.result
+
+main = {
+    s = "  Hello World  "
+
+    // 只读操作可复用（&String 自动借用）
+    assert.assert(string.trim(s) == "Hello World", "trim")
+    assert.assert(string.upper("abc") == "ABC", "upper")
+    assert.assert(string.lower("ABC") == "abc", "lower")
+    assert.assert(string.replace("a-b-c", "-", "+") == "a+b+c", "replace")
+    assert.assert(string.contains("hello", "ell"), "contains")
+    assert.assert(string.starts_with("hello", "he"), "starts_with")
+    assert.assert(string.ends_with("hello", "lo"), "ends_with")
+    assert.assert(string.index_of("hello", "ll") == 2, "index_of")
+    assert.assert(string.substring("hello", 1, 4) == "ell", "substring")
+    assert.assert(string.len("hello") == 5, "len")
+    assert.assert(!string.is_empty("x"), "not is_empty")
+    assert.assert(string.is_empty(""), "is_empty")
+    assert.assert(string.concat("a", "b") == "ab", "concat")
+    assert.assert(string.repeat("ab", 3) == "ababab", "repeat")
+    assert.assert(string.reverse("abc") == "cba", "reverse")
+
+    // split 返回 List（只读 s 复用）
+    parts = string.split("x,y,z", ",")
+    assert.assert(list.len(parts) == 3, "split len 3")
+    assert.assert(list.get(parts, 0) == "x", "split[0] == x")
+
+    // chars 返回 List
+    cs = string.chars("ab")
+    assert.assert(list.len(cs) == 2, "chars len 2")
+
+    // 错误路径：parse 失败返回 Result err（优雅，不 panic）
+    ok_r = string.parse_int("42")
+    assert.assert(result.is_ok(ok_r), "parse_int ok")
+    err_r = string.parse_int("not_a_number")
+    assert.assert(result.is_err(err_r), "parse_int err on invalid")
+    err_f = string.parse_float("xxx")
+    assert.assert(result.is_err(err_f), "parse_float err on invalid")
+}

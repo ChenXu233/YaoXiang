@@ -36,6 +36,58 @@ fn test_run_bytecode_file_roundtrip() {
         .expect("execute bytecode module — roundtrip should succeed");
 }
 
+/// 带方法的类型经字节码序列化往返后，编译期 vtables 段应保留并驱动方法分发。
+///
+/// 回归保护：vtable 已不再由解释器运行时按 `{type}.` 前缀扫描构建，而由 codegen
+/// 写入字节码 vtables 段、加载期重建。若该段序列化丢失，方法调用会失败。
+#[test]
+fn test_run_bytecode_file_roundtrip_with_method_vtable() {
+    // Arrange：定义带方法的类型，main 中调用方法并断言结果
+    let dir = tempfile::TempDir::new().expect("create temp dir");
+    let source_path = dir.path().join("test.yx");
+    let bytecode_path = dir.path().join("test.42");
+    std::fs::write(
+        &source_path,
+        r#"
+Point: Type = { x: Float, y: Float }
+
+Point.get_x: (self: &Point) -> Float = {
+    return self.x
+}
+
+main = {
+    p = Point(3.0, 4.0)
+    print(p.get_x())
+}
+"#,
+    )
+    .expect("write source file");
+
+    // Act：编译为字节码 → 序列化落盘 → 反序列化加载
+    crate::build_bytecode_with_options(&source_path, &bytecode_path, false)
+        .expect("build bytecode");
+    let bytecode_file = crate::middle::passes::codegen::BytecodeFile::load(&bytecode_path)
+        .expect("load bytecode file");
+
+    // Assert：vtables 段经序列化往返后仍携带 get_x（裸方法名 + 函数表索引）
+    assert!(
+        bytecode_file
+            .vtables
+            .iter()
+            .any(|(ty, methods)| ty == "Point" && methods.iter().any(|(bare, _)| bare == "get_x")),
+        "vtables section should carry (get_x, func_idx) after roundtrip, got {:?}",
+        bytecode_file.vtables
+    );
+
+    // Assert：方法分发经 vtable 成功执行
+    let bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);
+    let interp = crate::backends::interpreter::Interpreter::new();
+    let mut executor: Box<dyn crate::backends::Executor> = Box::new(interp);
+    executor
+        .execute_module(&bytecode_module)
+        .expect("execute bytecode module — vtable method dispatch should survive roundtrip");
+}
+
 /// 无效魔数的 .42 文件应产生清晰的错误信息。
 #[test]
 fn test_run_bytecode_file_invalid_magic() {

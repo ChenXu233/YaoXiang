@@ -447,15 +447,19 @@ cross-task-cycle = "deny"    # 跨任务环在 CI 上直接拒绝
 #### 3.4 Weak：标准库提供
 
 ```yaoxiang
-use std.rc.Weak
+use std.weak
 
 # 高级用户显式选择
 a.next = ref b
-b.prev = Weak.new(a.next)        # 用户显式控制哪个方向是弱的
+b.prev = std.weak.new(a.next)   # 用户显式控制哪个方向是弱的
 ```
 
 **`Weak` 不是语言内置，是标准库类型。** 日常用 `ref` 就够了。需要精细控制内存的高级用户手动引入
 `Weak`。
+
+> 2026-08-03 修订：实现为独立 `std.weak` 模块（`std.rc` 不存在——`ref` 是语言关键字而非模块；
+> 模块路径统一为 `std.weak`，构造/升级入口为 `std.weak.new` / `std.weak.upgrade`）。
+> 初稿设想的 `std.rc.Weak` 未落地，以本修订为准。
 
 #### 3.5 借用令牌 vs ref
 

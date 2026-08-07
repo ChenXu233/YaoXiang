@@ -2,6 +2,9 @@
 //!
 //! Tests the full compilation pipeline for various YaoXiang programs.
 //! Verifies that source code compiles and executes without errors.
+//!
+//! 规范来源：docs/src/reference/language-spec/（语法/类型系统/语义各章节，
+//! 逐测试在注释中标注具体条款，如 SPEC §3.6 元组字面量）
 
 use yaoxiang::run;
 
@@ -147,8 +150,21 @@ fn test_list_comp() {
 }
 
 #[test]
-fn test_tuple() {
-    assert_run_ok("main = { mut t = (1, \"one\") }");
+fn test_tuple_literal() {
+    // Arrange: SPEC §3.6 元组字面量。
+    // 历史：#251 之前曾掉进 generate_expr_ir 的 catch-all 被静默编译为 0（错误行为），
+    // #251 硬化为硬错误，#253 以 NewTuple 指令正确实现。本测试验证正向行为。
+    let source = "main = { mut t = (1, \"one\") }";
+
+    // Act
+    let result = run(source);
+
+    // Assert
+    assert!(
+        result.is_ok(),
+        "tuple literal should run: {:?}",
+        result.err()
+    );
 }
 
 #[test]

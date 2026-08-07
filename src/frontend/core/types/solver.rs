@@ -520,6 +520,10 @@ impl TypeConstraintSolver {
             // Option 类型 unify
             (MonoType::Option(t1), MonoType::Option(t2)) => self.unify(t1, t2),
 
+            // Arc / Weak 类型 unify（#117：weak.new/upgrade 泛型签名调用点绑定）
+            (MonoType::Arc(t1), MonoType::Arc(t2)) => self.unify(t1, t2),
+            (MonoType::Weak(t1), MonoType::Weak(t2)) => self.unify(t1, t2),
+
             // Result 类型 unify
             (MonoType::Result(ok1, err1), MonoType::Result(ok2, err2)) => {
                 self.unify(ok1, ok2)?;

@@ -5,9 +5,10 @@
 //!
 //! # 模块结构
 //!
-//! - [`registry`] - 模块注册表
-//! - [`resolver`] - 模块路径解析
-//! - [`loader`] - 模块加载器
+//! - [`registry`] - 模块注册表（拥有项目级符号表）
+//! - [`symbol`] - DefId 符号表（绑定身份 + 静态 vtable）
+//! - [`resolver`] - 名字解析器（名字 → 限定名 → DefId 的唯一所有者）
+//! - [`orchestrator`] - 多文件编译编排
 //!
 //! # 设计目标
 //!
@@ -15,9 +16,14 @@
 //! 2. 支持模块搜索路径和缓存
 //! 3. 支持循环依赖检测
 
+pub mod orchestrator;
 pub mod registry;
+pub mod resolver;
+pub mod symbol;
 
 use std::collections::HashMap;
+
+use crate::frontend::core::types::mono::MonoType;
 
 /// 导出项类型
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,6 +51,10 @@ pub struct Export {
     pub kind: ExportKind,
     /// 函数签名描述（如 "(value: Any) -> Void"）
     pub signature: String,
+    /// 真实类型（用户模块由三遍机制提取；native std 为 None，走宽松类型）
+    ///
+    /// ponytail: std 精度提升是独立后续任务（见后续 issue），native FFI 边界本就丢精度。
+    pub mono_type: Option<MonoType>,
 }
 
 /// 模块源类型
@@ -69,6 +79,9 @@ pub struct ModuleInfo {
     pub source: ModuleSource,
     /// 导出项（name -> Export）
     pub exports: HashMap<String, Export>,
+    /// 方法绑定（"Type.method" -> 函数类型）。
+    /// RFC-029：跨文件方法调用解析——导入一个类型时也带来它的方法签名。
+    pub method_bindings: HashMap<String, MonoType>,
     /// 子模块名称列表
     pub submodules: Vec<String>,
 }
@@ -83,6 +96,7 @@ impl ModuleInfo {
             path,
             source,
             exports: HashMap::new(),
+            method_bindings: HashMap::new(),
             submodules: Vec::new(),
         }
     }

@@ -80,3 +80,8 @@ __pycache__/
 docs/plans
 
 .pi-subagents
+
+# auto-dev-night generated reports
+.omp/
+
+.playwright-mcp

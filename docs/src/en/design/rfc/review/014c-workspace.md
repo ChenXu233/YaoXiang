@@ -1,7 +1,7 @@
 ---
 title: 'RFC-014c: Workspace Support'
 status: 'Under Review'
-author: 'Chen Xu'
+author: 'Chenxu'
 created: '2026-06-11'
 updated: '2026-07-05'
 group: 'rfc-014'
@@ -14,21 +14,21 @@ issue: '#113'
 
 ## Summary
 
-Defines YaoXiang's workspace mechanism: dependency sharing, path references, unified lockfile, and
-Cargo workspace integration for developing multiple related packages together.
+Define YaoXiang's workspace mechanism: dependency sharing, path references, unified lockfile, and
+integration with Cargo workspace when multiple related packages are developed together.
 
 ## Motivation
 
 As projects grow, code needs to be split into multiple packages. These packages need:
 
-- Mutual references (path dependencies)
-- Shared external dependency versions (avoid version drift)
-- Unified lockfile (ensure build consistency)
-- Cargo workspace collaboration (FFI parts)
+- To reference each other (path dependency)
+- To share external dependency versions (avoid version drift)
+- A unified lockfile (ensure build consistency)
+- To collaborate with Cargo workspace (for FFI parts)
 
 ### Current Problems
 
-- Each project independently manages dependencies, cannot share
+- Each project independently manages dependencies, unable to share
 - No automatic replacement mechanism for path dependencies at publish time
 - No integration with Cargo workspace
 
@@ -50,11 +50,12 @@ app = "packages/app/yaoxiang.toml"
 
 **The root toml only does three things:**
 
-1. Declares member list (in dictionary form, key is member name, value is toml path)
-2. Provides shared lockfile (`yaoxiang.lock`)
-3. Provides shared vendor directory (`.yaoxiang/vendor/`)
+1. Declares the member list (in dictionary form, where the key is the member name and the value is
+   the toml path)
+2. Provides the shared lockfile (`yaoxiang.lock`)
+3. Provides the shared vendor directory (`.yaoxiang/vendor/`)
 
-**The root toml does not define dependencies.** Each member writes its own dependencies in its own
+**The root toml does not define dependencies.** Each member's dependencies are written in its own
 `yaoxiang.toml`.
 
 ### Member yaoxiang.toml
@@ -67,7 +68,7 @@ version = "0.1.0"
 
 [dependencies]
 json = "^2.0.0"
-utils = { workspace = "utils" }    # Reference workspace member
+utils = { workspace = "utils" }    # Reference a workspace member
 regex = "^1.0.0"
 ```
 
@@ -85,13 +86,13 @@ regex = "^1.0.0"
 
 ```
 my-workspace/
-├── yaoxiang.toml              # Workspace root config
+├── yaoxiang.toml              # Workspace root configuration
 ├── yaoxiang.lock              # Shared lockfile
 ├── .yaoxiang/
 │   └── vendor/                # Shared vendor directory
 ├── packages/
 │   ├── core/
-│   │   ├── yaoxiang.toml      # Member package config
+│   │   ├── yaoxiang.toml      # Member package configuration
 │   │   └── src/lib.yx
 │   ├── utils/
 │   │   ├── yaoxiang.toml
@@ -99,17 +100,17 @@ my-workspace/
 │   └── app/
 │       ├── yaoxiang.toml
 │       └── src/main.yx
-└── Cargo.toml                 # Optional: Shared Cargo workspace (FFI)
+└── Cargo.toml                 # Optional: shared Cargo workspace (FFI)
 ```
 
 ### Dependency Resolution
 
 - Each member reads its own `[dependencies]`
-- At resolution, merge all members' dependencies to generate a shared lockfile
-- Version conflicts are reported at lockfile generation time
-- The same package across different members must resolve to the same version
+- During resolution, dependencies from all members are merged to generate a single shared lockfile
+- Version conflicts are reported as errors when the lockfile is generated
+- The same package must resolve to the same version across different members
 
-### Workspace Dependency Reference
+### workspace Dependency Reference
 
 `{ workspace = "member-name" }` references the **key** of `[workspace.members]` (not the member's
 `[package].name`).
@@ -126,43 +127,43 @@ utils = "packages/utils/yaoxiang.toml"    # key = "utils"
 name = "app"
 
 [dependencies]
-utils = { workspace = "utils" }   # ✅ Reference key "utils"
-# Even if packages/utils/yaoxiang.toml has name = "my-utils"
+utils = { workspace = "utils" }   # ✅ References the key "utils"
+# Even if packages/utils/yaoxiang.toml says name = "my-utils"
 ```
 
 **Why use key instead of name:**
 
-- Key is controlled by workspace, stable and unique
-- `[package].name` is a public name, may change at publish time
-- Key is the BTreeMap key, naturally unique
-- At publish time, workspace references are replaced with version dependencies, key does not leak to
-  public API
+- The key is controlled by the workspace and is stable and unique
+- `[package].name` is a public name and may change when published
+- The key is the key of a BTreeMap, naturally unique
+- At publish time, workspace references are replaced with version dependencies, so the key does not
+  leak into the public API
 
-### Path Dependencies and Publishing
+### Path Dependency and Publish
 
-During development, use workspace references:
+Use workspace reference during development:
 
 ```toml
 [dependencies]
 utils = { workspace = "utils" }
 ```
 
-At publish time, automatically replace with version dependencies:
+Automatically replaced with a version dependency at publish time:
 
 ```toml
 [dependencies]
 utils = "^0.2.0"
 ```
 
-**Version source:** Read the `[package].version` of the depended member, add `^` prefix. Does not
-check Registry — the authoritative source of version is the member's `yaoxiang.toml`, Registry is
-just the distribution channel.
+**Version source:** Read the `[package].version` of the depended member, add the `^` prefix. The
+Registry is not consulted — the authoritative source of the version is the member's `yaoxiang.toml`;
+the Registry is only the distribution channel.
 
 The package manager automatically performs this replacement during `yaoxiang publish`.
 
-### Cargo Workspace Integration
+### Integration with Cargo Workspace
 
-If the workspace has FFI packages, you can also define a Cargo workspace:
+If the workspace contains FFI packages, a Cargo workspace can be defined at the same time:
 
 ```toml
 # Root Cargo.toml
@@ -187,27 +188,27 @@ my-workspace/
 │           └── src/lib.rs
 ```
 
-`yaoxiang build` automatically detects and calls `cargo build` to compile native parts.
+`yaoxiang build` automatically detects and invokes `cargo build` to compile the native parts.
 
 ### CLI Commands
 
-| Command                            | Function                                |
-| ---------------------------------- | --------------------------------------- |
-| `yaoxiang workspace list`          | List workspace members                  |
-| `yaoxiang workspace add <path>`    | Add a member                            |
-| `yaoxiang workspace remove <name>` | Remove a member                         |
-| `yaoxiang build`                   | Build all members (by dependency order) |
-| `yaoxiang build core`              | Build specific member                   |
-| `yaoxiang test`                    | Run tests for all members               |
+| Command                            | Function                                          |
+| ---------------------------------- | ------------------------------------------------- |
+| `yaoxiang workspace list`          | List workspace members                            |
+| `yaoxiang workspace add <path>`    | Add a member                                      |
+| `yaoxiang workspace remove <name>` | Remove a member                                   |
+| `yaoxiang build`                   | Build all members (sorted by dependency topology) |
+| `yaoxiang build core`              | Build a specified member                          |
+| `yaoxiang test`                    | Run tests for all members                         |
 
-**`yaoxiang build` behavior:** Build all members, sorted by dependency topology. If core → utils →
-app, build order is core → utils → app.
+**`yaoxiang build` behavior:** Builds all members, sorted by dependency topology. If core → utils →
+app, the build order is core → utils → app.
 
 ## Detailed Design
 
 ### WorkspaceManifest Structure
 
-The root toml uses a separate `WorkspaceManifest` type, not reusing `PackageManifest`:
+The root toml uses an independent `WorkspaceManifest` type and does not reuse `PackageManifest`:
 
 ```rust
 struct WorkspaceManifest {
@@ -226,76 +227,78 @@ struct Workspace {
 }
 
 struct WorkspaceMember {
-    name: String,           // Key of [workspace.members]
+    name: String,           // The key of [workspace.members]
     root: PathBuf,
     manifest: PackageManifest,
 }
 ```
 
-**Detection logic:** When loading toml, if there is a `[workspace]` section, parse as
-`WorkspaceManifest`, otherwise parse as `PackageManifest`.
+**Detection logic:** When loading a toml, if there is a `[workspace]` section, it is parsed as
+`WorkspaceManifest`; otherwise it is parsed as `PackageManifest`.
 
-### Workspace Dependency Reference
+### workspace Dependency Reference
 
-`{ workspace = "member-name" }` semantics:
+The semantics of `{ workspace = "member-name" }`:
 
 - References another workspace member in `dependencies`
-- Resolves to local path during development
-- Replaced with Registry version at publish time
-- Member name must exist in `[workspace.members]`
+- Resolves to a local path during development
+- Replaced with a Registry version at publish time
+- The member name must exist in `[workspace.members]`
 
-### Lockfile Sharing
+### Shared lockfile
 
-- Workspace has only one `yaoxiang.lock` (in root directory)
-- All members' dependencies are merged into the same lockfile
-- Version conflicts are reported at lockfile generation with conflict source information
+- The workspace has only one `yaoxiang.lock` (in the root directory)
+- Dependency resolution for all members is merged into the same lockfile
+- Version conflicts are reported as errors when the lockfile is generated, with information about
+  the source of the conflict
 
 ## Trade-offs
 
 ### Advantages
 
-- Unified management for multi-package projects
+- Unified management of multi-package projects
 - Shared lockfile ensures consistency
-- Good developer experience with path dependencies
+- Good developer experience for path dependencies
 - Seamless integration with Cargo workspace
 
 ### Disadvantages
 
 - All members must use the same external dependency versions (may be too strict)
-- Root toml cannot have its own dependencies (design constraint)
+- The root toml cannot have its own dependencies (design constraint)
 - Cargo workspace integration adds complexity
 
-## Alternative Solutions
+## Alternatives
 
-| Solution                                 | Why Not Chosen                                       |
+| Alternative                              | Why Not Chosen                                       |
 | ---------------------------------------- | ---------------------------------------------------- |
-| Independent projects + path dependencies | Lockfile not unified, version drift risk             |
-| Like npm workspaces                      | npm's workspace has many problems, not worth copying |
+| Independent projects + path dependencies | lockfiles are not unified, version drift risk        |
+| npm workspaces style                     | npm's workspace issues are many, not worth imitating |
 | Reuse Cargo workspace directly           | YaoXiang and Cargo are different package ecosystems  |
 
 ## Implementation Strategy
 
-### Phase Breakdown
+### Phase Division
 
-| Phase    | Content                                            |
-| -------- | -------------------------------------------------- |
-| Phase 6a | `[workspace.members]` parsing + WorkspaceManifest  |
-| Phase 6b | Shared lockfile + dependency merge resolution      |
-| Phase 6c | `{ workspace = "name" }` path dependency reference |
-| Phase 6d | Automatic path dependency replacement at publish   |
-| Phase 6e | Cargo workspace integration                        |
+| Phase    | Content                                               |
+| -------- | ----------------------------------------------------- |
+| Phase 6a | `[workspace.members]` parsing + WorkspaceManifest     |
+| Phase 6b | Shared lockfile + merged dependency resolution        |
+| Phase 6c | `{ workspace = "name" }` path dependency reference    |
+| Phase 6d | Automatic path dependency replacement at publish time |
+| Phase 6e | Cargo workspace integration                           |
 
 ### Dependencies
 
 - Depends on RFC-014 Phase 3 (global cache)
-- Optional dependency RFC-014b (build system, for native members)
+- Optional dependency on RFC-014b (build system, for native members)
 
 ## Open Questions
 
-- [ ] Should circular dependencies between members be allowed?
-- [ ] Should workspace-level `[build]` configuration be supported?
-- [ ] Can members have their own lockfile (override root lockfile)?
-- [ ] Should nested workspaces be supported?
+- [x] Are circular dependencies between members allowed? → **No.** Members are independent packages;
+      circular dependencies between packages are compilation errors. (RFC-029 decision, 2026-07-30)
+- [ ] Is workspace-level `[build]` configuration supported?
+- [ ] Can a member have its own lockfile (overriding the root lockfile)?
+- [ ] Is nested workspace supported?
 
 ---
 

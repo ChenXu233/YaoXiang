@@ -6,7 +6,6 @@
 //! - Heap storage
 //! - Memory allocators
 
-pub mod allocator;
 pub mod heap;
 pub mod opcode;
 pub mod value;
@@ -15,3 +14,6 @@ pub mod value;
 pub use opcode::Opcode;
 pub use value::RuntimeValue;
 pub use heap::{Handle, Heap, HeapValue};
+
+#[cfg(test)]
+mod tests;

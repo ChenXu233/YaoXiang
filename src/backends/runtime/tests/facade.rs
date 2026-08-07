@@ -2,7 +2,7 @@
 //!
 //! 测试覆盖内容：
 //! - Runtime 的创建和配置
-//! - 标准运行时和完整运行时的行为
+//! - 标准运行时的行为
 //! - 任务的并行执行
 //! - 资源序列化
 //! - 协作式时间片
@@ -18,59 +18,10 @@ fn ok_i32(v: i32) -> TaskResult {
 }
 
 #[test]
-fn standard_and_full_match_for_workers_1() {
-    let mut std_rt = Runtime::new(RuntimeConfig {
-        mode: RuntimeMode::Standard,
-        workers: 1,
-        ..RuntimeConfig::default()
-    })
-    .unwrap();
-    let mut full_rt = Runtime::new(RuntimeConfig {
-        mode: RuntimeMode::Full,
-        workers: 1,
-        work_stealing: false,
-    })
-    .unwrap();
-
-    let a1 = std_rt
-        .spawn(TaskMeta::default(), Box::new(|_h| ok_i32(1)))
-        .unwrap();
-    let b1 = std_rt
-        .spawn(
-            TaskMeta {
-                deps: vec![a1],
-                ..TaskMeta::default()
-            },
-            Box::new(|_h| ok_i32(2)),
-        )
-        .unwrap();
-
-    let a2 = full_rt
-        .spawn(TaskMeta::default(), Box::new(|_h| ok_i32(1)))
-        .unwrap();
-    let b2 = full_rt
-        .spawn(
-            TaskMeta {
-                deps: vec![a2],
-                ..TaskMeta::default()
-            },
-            Box::new(|_h| ok_i32(2)),
-        )
-        .unwrap();
-
-    std_rt.drive_until(Some(b1)).unwrap();
-    full_rt.drive_until(Some(b2)).unwrap();
-
-    assert!(matches!(std_rt.outcome(b1), Some(TaskOutcome::Ok(_))));
-    assert!(matches!(full_rt.outcome(b2), Some(TaskOutcome::Ok(_))));
-}
-
-#[test]
-fn full_runtime_runs_tasks_in_parallel_when_workers_gt_1() {
+fn standard_runtime_runs_tasks_in_parallel_when_workers_gt_1() {
     let mut rt = Runtime::new(RuntimeConfig {
-        mode: RuntimeMode::Full,
+        mode: RuntimeMode::Standard,
         workers: 2,
-        work_stealing: true,
     })
     .unwrap();
 
@@ -141,11 +92,10 @@ fn full_runtime_runs_tasks_in_parallel_when_workers_gt_1() {
 }
 
 #[test]
-fn full_runtime_serializes_tasks_with_same_resource_key() {
+fn standard_runtime_serializes_tasks_with_same_resource_key() {
     let mut rt = Runtime::new(RuntimeConfig {
-        mode: RuntimeMode::Full,
+        mode: RuntimeMode::Standard,
         workers: 2,
-        work_stealing: true,
     })
     .unwrap();
 
@@ -227,47 +177,10 @@ fn full_runtime_serializes_tasks_with_same_resource_key() {
 }
 
 #[test]
-fn work_stealing_toggle_does_not_change_correctness() {
-    fn run(work_stealing: bool) -> TaskOutcome {
-        let mut rt = Runtime::new(RuntimeConfig {
-            mode: RuntimeMode::Full,
-            workers: 2,
-            work_stealing,
-        })
-        .unwrap();
-
-        let a = rt
-            .spawn(TaskMeta::default(), Box::new(|_h| ok_i32(1)))
-            .unwrap();
-        let b = rt
-            .spawn(
-                TaskMeta {
-                    deps: vec![a],
-                    ..TaskMeta::default()
-                },
-                Box::new(|_h| ok_i32(2)),
-            )
-            .unwrap();
-        rt.await_task(b).unwrap()
-    }
-
-    let a = run(false);
-    let b = run(true);
-
-    match (a, b) {
-        (TaskOutcome::Ok(x), TaskOutcome::Ok(y)) => {
-            assert!(Arc::ptr_eq(&x, &y) || x.downcast_ref::<i32>() == y.downcast_ref::<i32>());
-        }
-        (oa, ob) => panic!("unexpected outcomes: {oa:?} vs {ob:?}"),
-    }
-}
-
-#[test]
 fn standard_runtime_coop_tasks_time_slice_fairly() {
     let mut rt = Runtime::new(RuntimeConfig {
         mode: RuntimeMode::Standard,
         workers: 1,
-        work_stealing: false,
     })
     .unwrap();
 
@@ -339,7 +252,6 @@ fn standard_runtime_nested_spawn() {
     let mut rt = Runtime::new(RuntimeConfig {
         mode: RuntimeMode::Standard,
         workers: 2,
-        ..RuntimeConfig::default()
     })
     .unwrap();
 

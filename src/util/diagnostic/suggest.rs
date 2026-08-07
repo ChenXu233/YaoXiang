@@ -4,7 +4,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::cmp::Ordering;
-use parking_lot::RwLock;
+use std::sync::RwLock;
 
 /// 相似度阈值
 const SIMILARITY_THRESHOLD: f64 = 0.5;
@@ -90,7 +90,7 @@ impl SuggestionEngine {
     ) -> Vec<(String, f64)> {
         // 检查缓存
         {
-            let cache = self.similarity_cache.read();
+            let cache = self.similarity_cache.read().unwrap();
             if let Some(cached) = cache.get(name) {
                 return cached.clone();
             }
@@ -110,6 +110,7 @@ impl SuggestionEngine {
         // 写入缓存
         self.similarity_cache
             .write()
+            .unwrap()
             .insert(name.to_string(), suggestions.clone());
         suggestions
     }
@@ -213,7 +214,7 @@ impl SuggestionEngine {
 
     /// 清空缓存
     pub fn clear_cache(&mut self) {
-        self.similarity_cache.write().clear();
+        self.similarity_cache.write().unwrap().clear();
     }
 
     /// 获取定义的名字数量

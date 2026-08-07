@@ -50,6 +50,10 @@ impl LexerState {
             // System programming
             "unsafe" => Some(TokenKind::KwUnsafe),
 
+            // 逻辑运算符关键字（SPEC §2.2 / RFC-010，Zig 式：and/or 关键字 + ! 符号一元非）
+            "and" => Some(TokenKind::And),
+            "or" => Some(TokenKind::Or),
+
             // Boolean literals
             "true" => Some(TokenKind::BoolLiteral(true)),
             "false" => Some(TokenKind::BoolLiteral(false)),

@@ -9,8 +9,8 @@ use super::{config::CompileConfig, core::typecheck};
 /// 管道错误类型
 #[derive(Debug, Clone)]
 pub enum PipelineError {
-    /// 词法/解析错误
-    LexParse(String),
+    /// 词法/解析错误（携带原始诊断，保留错误码与 span）
+    LexParse(Diagnostic),
     /// 类型检查错误
     TypeCheck(Diagnostic),
     /// IR 生成错误
@@ -36,6 +36,7 @@ impl PipelineError {
     /// 获取诊断信息（如果是类型检查错误）
     pub fn diagnostic(&self) -> Option<Diagnostic> {
         match self {
+            PipelineError::LexParse(err) => Some(err.clone()),
             PipelineError::TypeCheck(err) => Some(err.clone()),
             PipelineError::ProofExecution(err) => Some(err.clone()),
             _ => None,
@@ -196,15 +197,6 @@ impl CompilationResult {
     pub fn is_success(&self) -> bool {
         self.state == PipelineState::Completed && self.error_count == 0
     }
-}
-
-/// 编译进度回调
-pub trait ProgressCallback: Send + Sync {
-    fn on_progress(
-        &self,
-        state: PipelineState,
-        progress: f64,
-    );
 }
 
 use std::fmt;
@@ -369,7 +361,7 @@ impl Pipeline {
                 let duration = start.elapsed().as_millis() as u64;
                 phase_durations.push((CompilationPhase::Lexing, duration));
 
-                return LexResult::failed(vec![e.to_string()]);
+                return LexResult::failed(vec![e.to_diagnostic()]);
             }
         };
 
@@ -394,12 +386,11 @@ impl Pipeline {
                 let duration = start.elapsed().as_millis() as u64;
                 phase_durations.push((CompilationPhase::Parsing, duration));
 
-                let error_msg = result
-                    .errors
-                    .into_iter()
-                    .next()
-                    .map(|e| e.to_string())
-                    .unwrap_or_else(|| "Unknown parse error".to_string());
+                let error_msg = result.errors.into_iter().next().unwrap_or_else(|| {
+                    crate::util::diagnostic::ErrorCodeDefinition::unexpected_token("unknown")
+                        .at(crate::util::span::Span::dummy())
+                        .build()
+                });
 
                 return ParseResult::failed(vec![error_msg]);
             }
@@ -534,38 +525,114 @@ impl Pipeline {
         let start = crate::util::time_compat::Instant::now();
         self.state = PipelineState::IRGenerating;
 
-        match middle::generate_ir(ast, type_result) {
-            Ok(mut ir) => {
-                // 单态化（根据配置决定是否启用）
-                if self.config.mono.enabled && !type_result.instantiation_requests.is_empty() {
-                    let mut mono = middle::passes::mono::Monomorphizer::with_max_depth(
-                        self.config.mono.max_depth,
-                    );
-                    match mono.monomorphize(&ir, &type_result.instantiation_requests) {
-                        Ok(mono_ir) => ir = mono_ir,
-                        Err(diag) => return IRResult::failed(vec![diag]),
-                    }
-                }
-
-                let duration = start.elapsed().as_millis() as u64;
-                phase_durations.push((CompilationPhase::IRGeneration, duration));
-
-                IRResult::success(ir)
+        // 单文件模式：入口与嵌入 std 模块（std.test 等，RFC-036 §4）共用同一 registry
+        // （共享 SymbolTable），使嵌入函数的 DefId 与入口调用点解析到的一致，避免跨表
+        // DefId 撞车错分发（#94）。直接构造 generator 而非 middle::generate_ir 以复用 registry。
+        let registry = crate::frontend::module::registry::ModuleRegistry::with_std();
+        let mut ir = {
+            let mut generator = middle::core::ir_gen::AstToIrGenerator::new_with_type_result(
+                type_result,
+                registry.clone(),
+                None,
+            );
+            match generator.generate_module_ir(ast) {
+                Ok(ir) => ir,
+                Err(errors) => return IRResult::failed(errors),
             }
-            Err(errors) => {
-                let duration = start.elapsed().as_millis() as u64;
-                phase_durations.push((CompilationPhase::IRGeneration, duration));
-
-                // IR 生成错误被归类为类型检查错误（因为它们源于类型检查）
-                IRResult::failed(errors)
+        };
+        // 嵌入模块编译为独立 ModuleIR 并合并——入口调用按 `short_to_qualified_map`
+        // 命名成 `std.test.assert_eq`，合并后函数体可解析。
+        if let Err(e) = merge_embedded_std_ir(_source, &mut ir, &registry) {
+            return IRResult::failed(vec![e]);
+        }
+        // 单态化（根据配置决定是否启用）
+        if self.config.mono.enabled && !type_result.instantiation_requests.is_empty() {
+            let mut mono =
+                middle::passes::mono::Monomorphizer::with_max_depth(self.config.mono.max_depth);
+            match mono.monomorphize(&ir, &type_result.instantiation_requests) {
+                Ok(mono_ir) => ir = mono_ir,
+                Err(diag) => return IRResult::failed(vec![diag]),
             }
         }
+
+        let duration = start.elapsed().as_millis() as u64;
+        phase_durations.push((CompilationPhase::IRGeneration, duration));
+
+        IRResult::success(ir)
     }
 
     /// 重置流水线状态
     pub fn reset(&mut self) {
         self.state = PipelineState::Idle;
     }
+}
+
+/// 单文件模式：扫描入口源码中的 `use std.X`，把命中的嵌入 std 模块（std.test）
+/// 编译为独立 ModuleIR 并合并进入口 IR。
+///
+/// 词法扫描失败返回 Ok（真正的错误由 parse 阶段报告）。`registry` 与入口 IR 生成
+/// 共用（共享 SymbolTable），保证 DefId 一致（#94）。
+fn merge_embedded_std_ir(
+    source: &str,
+    ir: &mut crate::middle::ModuleIR,
+    registry: &crate::frontend::module::registry::ModuleRegistry,
+) -> Result<(), Diagnostic> {
+    use crate::frontend::core::lexer::TokenKind;
+    let Ok(tokens) = crate::frontend::core::tokenize(source) else {
+        return Ok(());
+    };
+    let mut i = 0;
+    while i < tokens.len() {
+        if !matches!(tokens[i].kind, TokenKind::KwUse) {
+            i += 1;
+            continue;
+        }
+        i += 1;
+        // 收集 `use std.a.b` 的模块路径（到 { 或非标识符为止）
+        let mut segments: Vec<String> = Vec::new();
+        while let Some(TokenKind::Identifier(name)) = tokens.get(i).map(|t| &t.kind) {
+            segments.push(name.clone());
+            i += 1;
+            match tokens.get(i).map(|t| &t.kind) {
+                Some(TokenKind::Dot)
+                    if matches!(tokens.get(i + 1).map(|t| &t.kind), Some(TokenKind::LBrace)) =>
+                {
+                    break;
+                }
+                Some(TokenKind::Dot) => {
+                    i += 1;
+                }
+                _ => break,
+            }
+        }
+        let use_path = segments.join(".");
+        if use_path == "std"
+            || !use_path.starts_with("std.")
+            || crate::std::yx_sources::embedded_std_source(&use_path).is_none()
+        {
+            continue;
+        }
+        // 嵌入 std 模块：编译独立 IR 并合并（去重——入口可能多处 use 同一模块）
+        let embedded = match crate::frontend::module::orchestrator::compile_embedded_module(
+            &use_path, registry,
+        ) {
+            Ok(m) => m,
+            Err(e) => {
+                return Err(Diagnostic::error(
+                    "E_INTERNAL".to_string(),
+                    format!("嵌入 std 模块 {use_path} 编译失败: {e}"),
+                    "This is a compiler bug".to_string(),
+                    None,
+                ));
+            }
+        };
+        for func in embedded.functions {
+            if !ir.functions.iter().any(|f| f.name == func.name) {
+                ir.functions.push(func);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// 执行单个证明函数（RFC-027 Phase 2.5）
@@ -688,7 +755,11 @@ pub(crate) fn execute_single_proof_fn(
     use crate::backends::Executor;
     use crate::middle;
 
-    let mut ir_gen = middle::core::ir_gen::AstToIrGenerator::new_with_type_result(type_result);
+    let mut ir_gen = middle::core::ir_gen::AstToIrGenerator::new_with_type_result(
+        type_result,
+        crate::frontend::module::registry::ModuleRegistry::with_std(),
+        None,
+    );
     let mut constants: Vec<middle::core::ir::ConstValue> = Vec::new();
     let func_ir = ir_gen
         .generate_function_ir(
@@ -751,7 +822,7 @@ pub(crate) fn execute_single_proof_fn(
 /// 词法分析结果
 struct LexResult {
     tokens: Vec<super::core::lexer::Token>,
-    errors: Vec<String>,
+    errors: Vec<Diagnostic>,
 }
 
 impl LexResult {
@@ -762,7 +833,7 @@ impl LexResult {
         }
     }
 
-    fn failed(errors: Vec<String>) -> Self {
+    fn failed(errors: Vec<Diagnostic>) -> Self {
         Self {
             tokens: Vec::new(),
             errors,
@@ -777,7 +848,7 @@ impl LexResult {
 /// 语法分析结果
 struct ParseResult {
     ast: super::core::parser::Module,
-    errors: Vec<String>,
+    errors: Vec<Diagnostic>,
 }
 
 impl ParseResult {
@@ -788,7 +859,7 @@ impl ParseResult {
         }
     }
 
-    fn failed(errors: Vec<String>) -> Self {
+    fn failed(errors: Vec<Diagnostic>) -> Self {
         Self {
             ast: super::core::parser::Module::default(),
             errors,

@@ -84,7 +84,7 @@ impl VendorManager {
     ) -> PackageResult<ResolvedPackage> {
         self.ensure_vendor_dir()?;
 
-        let source = source::select_source(spec);
+        let source = source::select_source(spec).expect("dependency must have git or path field");
 
         // 解析版本
         let resolved_version = source.resolve(spec)?;

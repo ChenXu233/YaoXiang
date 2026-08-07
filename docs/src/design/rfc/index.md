@@ -33,14 +33,13 @@ title: 'RFC 索引'
 | -------- | ---------------------------------------------------------------------------------------------------- | --------- | ---------- | ---------------- |
 | RFC-019  | [RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型](./draft/019-typed-homoiconicity.md)       | 晨煦      | 2026-02-20 | 草案             |
 | RFC-028  | [RFC-028：JIT 编译器 — VM 内多级执行引擎](./draft/028-jit-compiler.md)                               | 晨煦      | 2026-06-11 | 草案             |
-| RFC-029  | [RFC-029: 模块语义系统](./draft/029-module-semantics.md)                                             | 晨煦      | 2026-06-13 | 草案             |
 | RFC-031  | [RFC-031：优化级别与 Pass 管理器](./draft/031-optimization-levels.md)                                | 晨煦      | 2026-06-16 | 草案             |
 | RFC-002  | [RFC-002：基于 libuv 的资源类型 IO 实现层](./draft/002-cross-platform-io-libuv.md)                   | 晨煦      | 2025-01-05 | 草案（重新审核） |
 | RFC-026b | [RFC-026b: yx-bindgen 工具链](./draft/026b-yx-bindgen.md)                                            | 晨煦      | 2026-07-03 | 草案             |
 | RFC-034  | [RFC-034: 统一调试工具链](./draft/034-debug-toolchain.md)                                            | 晨煦      | 2026-07-06 | 草案             |
 | RFC-035  | [RFC-035: MCP Server 支持（AI Agent 集成）](./draft/035-mcp-server.md)                               | Chen Xu   | 2026-07-11 | 草案             |
-| RFC-036  | [RFC-036: std.test 测试框架与 yaoxiang test 命令](./draft/036-test-framework.md)                     | 晨煦      | 2026-07-25 | 草案             |
 | RFC-037  | [RFC-037: 工业化分发方案 — 基于 cargo-dist 的编译器/工具链打包](./draft/037-industrial-packaging.md) | ChenXu233 | 2026-07-26 | 草案             |
+| RFC-038  | [RFC-038: 语句终止与换行规则（Statement Termination & Newline Rules）](./accepted/038-statement-termination.md) | ChenXu233 | 2026-08-05 | 已接受           |
 
 ---
 
@@ -79,6 +78,8 @@ title: 'RFC 索引'
 | RFC-026    | [RFC-026: FFI 核心机制](./accepted/026-ffi-core-mechanism.md)                             | 晨煦    | 2026-06-05 | 已接受    |
 | RFC-027    | [RFC-027：编译期谓词与统一静态验证](./accepted/027-compile-time-evaluation-types.md)      | 晨煦    | 2026-06-07 | 已接受    |
 | RFC-030    | [RFC-030: assert 断言机制](./accepted/030-assert-mechanism.md)                            | 晨煦    | 2026-06-15 | 已接受    |
+| RFC-029    | [RFC-029: 模块语义系统](./accepted/029-module-semantics.md)                               | 晨煦    | 2026-06-13 | 已接受    |
+| RFC-036    | [RFC-036: std.test 测试框架与 yaoxiang test 命令](./accepted/036-test-framework.md)      | 晨煦    | 2026-08-02 | 已接受    |
 
 ---
 

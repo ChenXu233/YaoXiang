@@ -7,6 +7,9 @@ pub mod bytecode;
 pub mod ir;
 pub mod ir_gen;
 
+#[cfg(test)]
+mod tests;
+
 pub use ir::*;
 pub use bytecode::*;
 pub use ir_gen::*;

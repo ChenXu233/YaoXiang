@@ -1,7 +1,6 @@
 // 04-concurrency/test_destructure.yx
 // 覆盖: 元组解构赋值语法
 // 验证: `a, b = (1, 2)` 和 `(a, b) = (1, 2)` 两种形式
-// 状态: ✅ 可运行
 
 use std.assert
 main = {

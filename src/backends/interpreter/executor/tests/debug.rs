@@ -10,9 +10,7 @@
 
 use std::collections::HashMap;
 use crate::backends::DebuggableExecutor;
-use crate::middle::bytecode::{
-    BytecodeModule, BytecodeFunction, BytecodeInstr, Reg, FunctionRef, ConstValue,
-};
+use crate::middle::bytecode::{BytecodeModule, BytecodeFunction, BytecodeInstr, Reg, ConstValue};
 use crate::backends::interpreter::executor::Interpreter;
 use crate::backends::interpreter::runtime::InterpreterRuntimeConfig;
 use crate::backends::runtime::RuntimeMode;
@@ -47,7 +45,6 @@ fn embedded_interpreter() -> Interpreter {
     interp.set_runtime_config(InterpreterRuntimeConfig {
         runtime: RuntimeMode::Embedded,
         workers: 1,
-        work_stealing: false,
     });
     interp
 }
@@ -61,7 +58,6 @@ fn load_module_for_stepping(module: &BytecodeModule) -> Interpreter {
 
     // 加载函数
     for func in &module.functions {
-        interp.functions.insert(func.name.clone(), func.clone());
         interp.functions_by_id.push(func.clone());
     }
 
@@ -171,10 +167,7 @@ fn test_step_over_advances_past_call() {
         instructions: vec![
             BytecodeInstr::CallStatic {
                 dst: None,
-                func: FunctionRef::Static {
-                    name: "callee".to_string(),
-                    module: String::new(),
-                },
+                func: 0,
                 args: vec![],
             },
             BytecodeInstr::ReturnValue { value: Reg(0) },
@@ -251,10 +244,7 @@ fn test_step_out_returns_to_caller() {
         instructions: vec![
             BytecodeInstr::CallStatic {
                 dst: None,
-                func: FunctionRef::Static {
-                    name: "callee".to_string(),
-                    module: String::new(),
-                },
+                func: 0,
                 args: vec![],
             },
             BytecodeInstr::Nop,
@@ -270,7 +260,6 @@ fn test_step_out_returns_to_caller() {
     let mut interp = embedded_interpreter();
     interp.constants.extend(module.constants.clone());
     for func in &module.functions {
-        interp.functions.insert(func.name.clone(), func.clone());
         interp.functions_by_id.push(func.clone());
     }
     interp.type_table.extend(module.type_table.clone());

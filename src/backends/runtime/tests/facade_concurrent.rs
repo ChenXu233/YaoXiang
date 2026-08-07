@@ -13,7 +13,6 @@ fn standard_runtime_concurrent_execution() {
     let mut rt = Runtime::new(RuntimeConfig {
         mode: RuntimeMode::Standard,
         workers: 4,
-        work_stealing: false,
     })
     .unwrap();
 
@@ -51,7 +50,6 @@ fn standard_runtime_dependency_ordering() {
     let mut rt = Runtime::new(RuntimeConfig {
         mode: RuntimeMode::Standard,
         workers: 2,
-        work_stealing: false,
     })
     .unwrap();
 
@@ -87,7 +85,6 @@ fn standard_runtime_nested_spawn() {
     let mut rt = Runtime::new(RuntimeConfig {
         mode: RuntimeMode::Standard,
         workers: 4,
-        work_stealing: false,
     })
     .unwrap();
 

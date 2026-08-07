@@ -227,8 +227,8 @@ if y > 0 {
     // 验证条件：(y > 0) ⇒ (y > 0)
     // 证明管道判蕴含成立 → Proved
 } else {
-    // 此分支假设：{ !(y > 0) }
-    // 如果要调用 divide(x, y)，验证条件为 !(y > 0) ⇒ y > 0
+// 此分支假设：{ !(y > 0) }
+// 如果要调用 divide(x, y)，验证条件为 !(y > 0) ⇒ y > 0
     // 证明管道判不蕴含 → Disproved
 }
 ```
@@ -248,7 +248,7 @@ if y > 0 {
 
 - **if-guard**：`if y > 0` → true 分支压入 `y > 0`，false 分支压入 `!(y > 0)`（如果使用了 else）
 - **match 模式**：`if let Some(v) = opt` → 分支内压入 `opt == Some(v)`
-- **逻辑连接**：`if x > 0 && y < 10` → 分支内压入 `x > 0` 和 `y < 10`
+- **逻辑连接**：`if x > 0 and y < 10` → 分支内压入 `x > 0` 和 `y < 10`
 - **函数前置条件**：调用 `divide(a, b)` 时，`b` 必须满足 `Positive`
   的证据要么来自当前假设，要么来自实参自身的精化类型标注（`b` 已被标注为 `Positive` 则其类型携带
   `b > 0`）
@@ -698,7 +698,7 @@ SMT 求解器在传统语言中是外部工具（如 F\* 调用 Z3，Dafny 调�
 
 ```yaoxiang
 SortedNonEmpty: (T: Ord, arr: Array(T)) -> Type = {
-    Sorted(T, arr) && NonEmpty(arr)
+    Sorted(T, arr) and NonEmpty(arr)
 }
 ```
 
@@ -718,13 +718,13 @@ result = divide(10, 2)   # ✅ 编译器验证 Positive(2) = { 2 > 0 } → True
 #### 9.2 数组访问安全
 
 ```yaoxiang
-InBounds: (idx: Int, arr: Array(T)) -> Type = { 0 <= idx && idx < arr.len }
+InBounds: (idx: Int, arr: Array(T)) -> Type = { 0 <= idx and idx < arr.len }
 
 get: (arr: Array(T), idx: InBounds(idx, arr)) -> T = arr.data[idx]
 
 arr = Array(Int)(1, 2, 3)
-x = get(arr, 1)   # ✅ 编译器验证 InBounds(1, arr) = { 0 <= 1 && 1 < 3 } → True
-# y = get(arr, 5)  # ❌ 编译器验证 InBounds(5, arr) = { 0 <= 5 && 5 < 3 } → False
+x = get(arr, 1)   # ✅ 编译器验证 InBounds(1, arr) = { 0 <= 1 and 1 < 3 } → True
+# y = get(arr, 5)  # ❌ 编译器验证 InBounds(5, arr) = { 0 <= 5 and 5 < 3 } → False
 ```
 
 #### 9.3 排序正确性
@@ -822,6 +822,8 @@ witness（证明令牌）**——编译期已验证的证明项不产生运行�
 # 使用现有函数/类型语法，无需新增 BNF 规则
 predicate ::= identifier ':' params '->' 'Type' '=' '{' assertions '}'
 ```
+
+**谓词应用的实参必须是编译期常量形态**——字面量、变量（按名绑定）或单参数类型应用（递归提取）。实参形态不可转换为常量表达式报 **E1092**，实参个数与谓词参数不匹配报 **E1093**——精化约束**绝不静默丢弃**（#263：此前不可转换实参会导致约束无声消失，违反约束的绑定静默通过）。
 
 **新增语法概念：返回值形参**——`-> (name: Type)` 中 `name` 是返回值形参。
 

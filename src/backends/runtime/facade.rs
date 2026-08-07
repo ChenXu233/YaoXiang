@@ -25,18 +25,14 @@ pub enum RuntimeMode {
     Embedded,
     /// Single-thread DAG scheduling.
     Standard,
-    /// Multi-thread execution + (optional) work-stealing.
-    Full,
 }
 
 /// Runtime configuration.
 #[derive(Debug, Clone)]
 pub struct RuntimeConfig {
     pub mode: RuntimeMode,
-    /// Worker count for Standard and Full runtimes.
+    /// Worker count for Standard runtime.
     pub workers: usize,
-    /// Enable work-stealing for Full runtime.
-    pub work_stealing: bool,
 }
 
 impl Default for RuntimeConfig {
@@ -44,7 +40,6 @@ impl Default for RuntimeConfig {
         Self {
             mode: RuntimeMode::Embedded,
             workers: 1,
-            work_stealing: false,
         }
     }
 }
@@ -146,9 +141,7 @@ pub struct Runtime {
 enum RuntimeInner {
     Embedded(EmbeddedRuntime),
     #[cfg(not(target_arch = "wasm32"))]
-    Standard(StandardRuntime),
-    #[cfg(not(target_arch = "wasm32"))]
-    Full(FullRuntime),
+    Standard(Box<StandardRuntime>),
 }
 
 impl Runtime {
@@ -160,14 +153,7 @@ impl Runtime {
                 if config.workers == 0 {
                     return Err(RuntimeFacadeError::InvalidConfig("workers must be >= 1"));
                 }
-                RuntimeInner::Standard(StandardRuntime::new(config.workers)?)
-            }
-            #[cfg(not(target_arch = "wasm32"))]
-            RuntimeMode::Full => {
-                if config.workers == 0 {
-                    return Err(RuntimeFacadeError::InvalidConfig("workers must be >= 1"));
-                }
-                RuntimeInner::Full(FullRuntime::new(config.workers, config.work_stealing)?)
+                RuntimeInner::Standard(Box::new(StandardRuntime::new(config.workers)?))
             }
             #[cfg(target_arch = "wasm32")]
             _ => {
@@ -188,8 +174,6 @@ impl Runtime {
             RuntimeInner::Embedded(rt) => Ok(rt.spawn(meta, task)),
             #[cfg(not(target_arch = "wasm32"))]
             RuntimeInner::Standard(rt) => Ok(rt.spawn(meta, task)?),
-            #[cfg(not(target_arch = "wasm32"))]
-            RuntimeInner::Full(rt) => Ok(rt.spawn(meta, task)?),
         }
     }
 
@@ -204,7 +188,6 @@ impl Runtime {
                 "embedded runtime does not support cooperative tasks",
             )),
             RuntimeInner::Standard(rt) => Ok(rt.spawn_coop(meta, task)?),
-            RuntimeInner::Full(rt) => Ok(rt.spawn_coop(meta, task)?),
         }
     }
 
@@ -216,8 +199,6 @@ impl Runtime {
             RuntimeInner::Embedded(rt) => rt.cancel(task_id),
             #[cfg(not(target_arch = "wasm32"))]
             RuntimeInner::Standard(rt) => rt.cancel(task_id)?,
-            #[cfg(not(target_arch = "wasm32"))]
-            RuntimeInner::Full(rt) => rt.cancel(task_id)?,
         }
         Ok(())
     }
@@ -230,8 +211,6 @@ impl Runtime {
             RuntimeInner::Embedded(rt) => rt.outcome(task_id).cloned(),
             #[cfg(not(target_arch = "wasm32"))]
             RuntimeInner::Standard(rt) => rt.outcome(task_id).cloned(),
-            #[cfg(not(target_arch = "wasm32"))]
-            RuntimeInner::Full(rt) => rt.outcome(task_id).cloned(),
         }
     }
 
@@ -243,8 +222,6 @@ impl Runtime {
             RuntimeInner::Embedded(rt) => rt.is_complete(task_id),
             #[cfg(not(target_arch = "wasm32"))]
             RuntimeInner::Standard(rt) => rt.is_complete(task_id),
-            #[cfg(not(target_arch = "wasm32"))]
-            RuntimeInner::Full(rt) => rt.is_complete(task_id),
         }
     }
 
@@ -253,8 +230,6 @@ impl Runtime {
             RuntimeInner::Embedded(rt) => rt.stats(),
             #[cfg(not(target_arch = "wasm32"))]
             RuntimeInner::Standard(rt) => rt.stats(),
-            #[cfg(not(target_arch = "wasm32"))]
-            RuntimeInner::Full(rt) => rt.stats(),
         }
     }
 
@@ -267,8 +242,6 @@ impl Runtime {
             RuntimeInner::Embedded(rt) => rt.drive_until(target),
             #[cfg(not(target_arch = "wasm32"))]
             RuntimeInner::Standard(rt) => rt.drive_until(target)?,
-            #[cfg(not(target_arch = "wasm32"))]
-            RuntimeInner::Full(rt) => rt.drive_until(target)?,
         }
         Ok(())
     }
@@ -633,76 +606,6 @@ impl Drop for StandardRuntime {
         for t in self.threads.drain(..) {
             let _ = t.join();
         }
-    }
-}
-
-// ============================================================================
-// Full Runtime (delegates to StandardRuntime) — not available in wasm
-// ============================================================================
-
-#[cfg(not(target_arch = "wasm32"))]
-struct FullRuntime {
-    standard: StandardRuntime,
-    // TODO: WorkStealer for load balancing
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl FullRuntime {
-    fn new(
-        workers: usize,
-        _work_stealing: bool,
-    ) -> Result<Self, RuntimeFacadeError> {
-        Ok(Self {
-            standard: StandardRuntime::new(workers)?,
-        })
-    }
-
-    fn spawn(
-        &mut self,
-        meta: TaskMeta,
-        task: TaskFn,
-    ) -> Result<TaskId, RuntimeError> {
-        self.standard.spawn(meta, task)
-    }
-
-    fn cancel(
-        &mut self,
-        task_id: TaskId,
-    ) -> Result<(), RuntimeError> {
-        self.standard.cancel(task_id)
-    }
-
-    fn outcome(
-        &self,
-        task_id: TaskId,
-    ) -> Option<&TaskOutcome> {
-        self.standard.outcome(task_id)
-    }
-
-    fn is_complete(
-        &self,
-        task_id: TaskId,
-    ) -> bool {
-        self.standard.is_complete(task_id)
-    }
-
-    fn stats(&self) -> RuntimeStats {
-        self.standard.stats()
-    }
-
-    fn drive_until(
-        &mut self,
-        target: Option<TaskId>,
-    ) -> Result<(), RuntimeError> {
-        self.standard.drive_until(target)
-    }
-
-    fn spawn_coop(
-        &mut self,
-        meta: TaskMeta,
-        task: CoopTaskFn,
-    ) -> Result<TaskId, RuntimeError> {
-        self.standard.spawn_coop(meta, task)
     }
 }
 

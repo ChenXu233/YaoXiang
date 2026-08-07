@@ -108,8 +108,9 @@ pub fn exec_single_in(
     let spec = crate::package::dependency::DependencySpec::parse(name, dep_value);
     let source = crate::package::source::select_source(&spec);
     let resolved_version = source
-        .resolve(&spec)
-        .unwrap_or_else(|_| spec.version.clone());
+        .as_ref()
+        .map(|s| s.resolve(&spec).unwrap_or_else(|_| spec.version.clone()))
+        .unwrap_or_else(|| spec.version.clone());
 
     // 根据来源类型处理
     let lang = current_lang();
@@ -143,18 +144,14 @@ pub fn exec_single_in(
                 );
             }
         }
-    } else if spec.path.is_some() {
-        lock.lock_dependency_full(name, &resolved_version, "path", None);
-        println!(
-            "{}",
-            t(
-                MSG::PackageAlreadyUpToDate,
-                lang,
-                Some(&[&name.to_string(), &resolved_version.to_string()])
-            )
-        );
     } else {
-        lock.lock_dependency_full(name, &resolved_version, "registry", None);
+        // path 或 registry（纯 version）依赖 — 仅 lock
+        let kind = if spec.path.is_some() {
+            "path"
+        } else {
+            "registry"
+        };
+        lock.lock_dependency_full(name, &resolved_version, kind, None);
         println!(
             "{}",
             t(

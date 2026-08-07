@@ -1,7 +1,6 @@
 // 02-type-system/generics.yx
 // 验证: 泛型类型和函数
 // 状态: 待测试
-// [test:ignore]: curry 返回值不等于传入值
 use std.assert
 
 // 泛型类型定义

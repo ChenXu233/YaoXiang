@@ -229,6 +229,17 @@ impl Substituter {
             ),
             MonoType::Arc(t) => MonoType::Arc(Box::new(self.substitute_internal(t, lookup))),
             MonoType::Weak(t) => MonoType::Weak(Box::new(self.substitute_internal(t, lookup))),
+            MonoType::Ref { mutable, inner } => MonoType::Ref {
+                mutable: *mutable,
+                inner: Box::new(self.substitute_internal(inner, lookup)),
+            },
+            MonoType::Option(inner) => {
+                MonoType::Option(Box::new(self.substitute_internal(inner, lookup)))
+            }
+            MonoType::Result(ok, err) => MonoType::Result(
+                Box::new(self.substitute_internal(ok, lookup)),
+                Box::new(self.substitute_internal(err, lookup)),
+            ),
             MonoType::AssocType {
                 host_type,
                 assoc_name,

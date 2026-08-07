@@ -32,9 +32,9 @@ pub enum Precedence {
     Lowest,
     /// Assignment (=)
     Assignment,
-    /// Logical OR (||)
+    /// Logical OR (or)
     LogicalOr,
-    /// Logical AND (&&)
+    /// Logical AND (and)
     LogicalAnd,
     /// Equality (==, !=)
     Equality,

@@ -27,6 +27,11 @@ pub struct VarInfo {
 /// 整个类型检查流程共享同一个 ScopeManager 实例。
 pub struct ScopeManager {
     scopes: Vec<HashMap<String, VarInfo>>,
+    /// 当前正在检查的语句的键（span 起始 offset）——供 type_ledger 定位变量归属
+    current_stmt_key: usize,
+    /// 变量类型账本：(定义所在语句的 span offset, 变量名) → 推断类型。
+    /// 作用域 pop 后条目保留，供下游（所有权检查）按位置查询（#256）。
+    type_ledger: HashMap<(usize, String), PolyType>,
 }
 
 impl Default for ScopeManager {
@@ -40,7 +45,22 @@ impl ScopeManager {
     pub fn new() -> Self {
         Self {
             scopes: vec![HashMap::new()],
+            current_stmt_key: 0,
+            type_ledger: HashMap::new(),
         }
+    }
+
+    /// 设置当前正在检查的语句（账本键来源）——由 check_stmt 在入口调用
+    pub fn set_current_stmt(
+        &mut self,
+        span: Span,
+    ) {
+        self.current_stmt_key = span.start.offset;
+    }
+
+    /// 变量类型账本（只读）——所有权检查的 Move/Dup 分类用（#256）
+    pub fn type_ledger(&self) -> &HashMap<(usize, String), PolyType> {
+        &self.type_ledger
     }
 
     /// 进入新的作用域
@@ -63,6 +83,9 @@ impl ScopeManager {
         is_mut: bool,
         definition_span: Span,
     ) {
+        // 账本登记：作用域 pop 后仍可查（#256）
+        self.type_ledger
+            .insert((self.current_stmt_key, name.clone()), poly.clone());
         self.scopes.last_mut().unwrap().insert(
             name,
             VarInfo {
@@ -153,6 +176,9 @@ impl ScopeManager {
         name: &str,
         poly: PolyType,
     ) {
+        // 账本同步：普通赋值绑定（view = &p）经此路径，同样登记（#256）
+        self.type_ledger
+            .insert((self.current_stmt_key, name.to_string()), poly.clone());
         for scope in self.scopes.iter_mut().rev() {
             if let Some(info) = scope.get_mut(name) {
                 info.poly = poly;

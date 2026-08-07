@@ -19,6 +19,7 @@ fn make_use_stmt(path: &str) -> Stmt {
             path_parts: vec![],
             items: None,
             alias: None,
+            item_aliases: None,
         },
         span: Span::dummy(),
     }

@@ -5,7 +5,7 @@
 //! - Heap 的分配、访问、释放
 //! - HeapValue 的操作
 
-use crate::backends::common::heap::{Handle, Heap, HeapValue};
+use crate::backends::common::heap::{Heap, HeapValue};
 use crate::backends::common::RuntimeValue;
 
 #[test]

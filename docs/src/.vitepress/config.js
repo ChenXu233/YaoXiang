@@ -41,6 +41,9 @@ export default defineConfig({
   // 排除有问题文件的目录
   srcExclude: ["archive/**", "old/**", "**/*.backup.md"],
 
+  // 最后更新时间
+  lastUpdated: true,
+
   // 忽略死链接
   ignoreDeadLinks: true,
 

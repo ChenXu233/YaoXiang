@@ -9,8 +9,7 @@ use yaoxiang::repl::Repl;
 use yaoxiang::formatter::run_format_command;
 use yaoxiang::{dump_bytecode, NAME, VERSION};
 use yaoxiang::util::diagnostic::{
-    render_explain_output, run_check_command_once, run_check_watch_command,
-    run_file_with_diagnostics,
+    render_explain_output, run_check_command_once, run_file_with_diagnostics,
 };
 use yaoxiang::util::i18n::set_lang_from_string;
 use yaoxiang::util::logger::LogLevel;
@@ -119,17 +118,13 @@ enum Commands {
         #[arg(value_name = "PATH", num_args = 0..)]
         paths: Vec<PathBuf>,
 
-        /// Exclude file(s) or directory path(s) from check and watch
+        /// Exclude file(s) or directory path(s) from check
         #[arg(long = "exclude", value_name = "PATH", num_args = 1..)]
         exclude: Vec<PathBuf>,
 
         /// Output diagnostics in JSON format
         #[arg(long)]
         json: bool,
-
-        /// Watch input paths and re-check on file changes
-        #[arg(short, long)]
-        watch: bool,
 
         /// Control color output (auto, always, never)
         #[arg(long, value_enum, default_value = "auto")]
@@ -138,6 +133,14 @@ enum Commands {
         /// Suppress progress and summary messages
         #[arg(long)]
         no_progress: bool,
+    },
+
+    /// Run project tests (RFC-036)
+    Test {
+        /// Test file(s) or directory path(s) to run
+        /// (default: [tool.test].patterns in yaoxiang.toml, else tests/**/*.yx)
+        #[arg(value_name = "PATH", num_args = 0..)]
+        paths: Vec<PathBuf>,
     },
 
     /// Format source file
@@ -353,11 +356,21 @@ fn main() -> Result<()> {
                 0 // 0 = auto-detect
             };
 
-            if run_file_with_diagnostics(&file, debug_info, &runtime_mode, workers).is_err() {
-                // Error already printed by run_file_with_diagnostics
+            if let Err(e) = run_file_with_diagnostics(&file, debug_info, &runtime_mode, workers) {
+                // 多数错误已被 run_file_with_diagnostics 渲染；anyhow 包装的路径
+                // （文件读取失败、codegen 失败）在此兜底，不再静默退出
+                eprintln!("{e}");
                 ::std::process::exit(1);
             }
         }
+        Commands::Test { paths } => match yaoxiang::util::test_runner::run_test_command(&paths) {
+            Ok(0) => {}
+            Ok(_) => ::std::process::exit(1),
+            Err(e) => {
+                eprintln!("{e}");
+                ::std::process::exit(1);
+            }
+        },
         Commands::Eval { code } => {
             let source = if code == "-" {
                 let mut buf = String::new();
@@ -374,7 +387,6 @@ fn main() -> Result<()> {
             paths,
             exclude,
             json,
-            watch,
             color,
             no_progress,
         } => {
@@ -384,22 +396,18 @@ fn main() -> Result<()> {
                 ColorChoice::Auto => std::io::stderr().is_terminal(),
             };
 
-            if watch {
-                run_check_watch_command(paths, exclude, json, use_colors, no_progress)?;
-            } else {
-                match run_check_command_once(&paths, &exclude, json, use_colors, no_progress) {
-                    Ok(error_count) => {
-                        if error_count > 0 {
-                            ::std::process::exit(1);
-                        }
+            match run_check_command_once(&paths, &exclude, json, use_colors, no_progress) {
+                Ok(error_count) => {
+                    if error_count > 0 {
+                        ::std::process::exit(1);
                     }
-                    Err(e) => {
-                        eprintln!("{}", e);
-                        if e.to_string().contains("No .yx files found") {
-                            ::std::process::exit(2);
-                        }
-                        return Err(e);
+                }
+                Err(e) => {
+                    eprintln!("{}", e);
+                    if e.to_string().contains("No .yx files found") {
+                        ::std::process::exit(2);
                     }
+                    return Err(e);
                 }
             }
         }

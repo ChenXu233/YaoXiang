@@ -9,7 +9,7 @@ use std::sync::Arc;
 use crate::backends::{Executor, ExecutorResult, ExecutorError, ExecutionState, ExecutorConfig};
 use crate::backends::common::{RuntimeValue, Heap, HeapValue};
 use crate::backends::common::value::{
-    AsyncState, AsyncValue, FunctionValue, FunctionId, TaskId, ValueType,
+    AsyncState, AsyncValue, FunctionId, FunctionValue, TaskId, ValueType,
 };
 use crate::middle::bytecode::{BytecodeFunction, Reg, Label, BinaryOp, CompareOp, ConstValue};
 use crate::backends::interpreter::Frame;
@@ -32,10 +32,10 @@ const DEFAULT_MAX_STACK_DEPTH: usize = 1024;
 /// Safety: `drive_until` blocks until all tasks complete, so the data outlives all tasks.
 /// Data is read-only after creation, so no data races.
 pub(super) struct SharedState {
-    pub functions: HashMap<String, BytecodeFunction>,
     pub functions_by_id: Vec<BytecodeFunction>,
     pub constants: Vec<ConstValue>,
     pub type_table: Vec<crate::middle::core::ir::Type>,
+    pub vtable_cache: HashMap<String, Vec<(String, FunctionValue)>>,
     pub ffi: FfiRegistry,
 }
 
@@ -67,7 +67,7 @@ unsafe impl Sync for SendPtr {}
 #[derive(Debug)]
 pub enum InterpreterTask {
     Static {
-        func_name: String,
+        func_id: FunctionId,
         args: Vec<RuntimeValue>,
     },
     Native {
@@ -94,10 +94,11 @@ pub struct Interpreter {
     pub(super) call_stack: Vec<Frame>,
     /// Constant pool (shared across modules)
     pub(super) constants: Vec<ConstValue>,
-    /// Function table (name -> function)
-    pub(super) functions: HashMap<String, BytecodeFunction>,
-    /// Function table by index (for closure calls via func_id)
+    /// 函数表（按索引分发：CallStatic / MakeClosure / CallDyn 全部走这里）
     pub(super) functions_by_id: Vec<BytecodeFunction>,
+    /// 类型 vtable 缓存（type_name → 方法表）。每类型的 vtable 只构建一次，
+    /// 消除「每次 CreateStruct 都 O(n) 扫函数表 + 向 functions_by_id 重复追加」的浪费与泄漏。
+    pub(super) vtable_cache: HashMap<String, Vec<(String, FunctionValue)>>,
     /// Type table
     pub(super) type_table: Vec<crate::middle::core::ir::Type>,
     /// Current execution state
@@ -134,7 +135,6 @@ impl fmt::Debug for Interpreter {
             .field("heap", &self.heap)
             .field("call_stack", &self.call_stack)
             .field("constants", &self.constants)
-            .field("functions", &self.functions)
             .field("functions_by_id", &self.functions_by_id)
             .field("type_table", &self.type_table)
             .field("state", &self.state)
@@ -167,7 +167,6 @@ impl Interpreter {
         let rt = Runtime::new(RuntimeConfig {
             mode: runtime_config.runtime,
             workers: runtime_config.workers,
-            work_stealing: runtime_config.work_stealing,
         })
         .unwrap_or_else(|_| Runtime::new(RuntimeConfig::default()).unwrap());
 
@@ -175,8 +174,8 @@ impl Interpreter {
             heap: Heap::new(),
             call_stack: Vec::with_capacity(DEFAULT_MAX_STACK_DEPTH),
             constants: Vec::new(),
-            functions: HashMap::new(),
             functions_by_id: Vec::new(),
+            vtable_cache: HashMap::new(),
             type_table: Vec::new(),
             state: ExecutionState::default(),
             config,
@@ -206,21 +205,21 @@ impl Interpreter {
         // 主解释器通过 drive_until 阻塞直到所有任务完成，保证数据在任务期间有效。
         // 数据在创建后只读，无数据竞争。
         // 如果 shared 为空（例如 execute_module 未调用），使用空数据。
-        let (constants, functions, functions_by_id, type_table, ffi) = if shared.is_null() {
+        let (constants, functions_by_id, type_table, vtable_cache, ffi) = if shared.is_null() {
             (
                 Vec::new(),
+                Vec::new(),
+                Vec::new(),
                 HashMap::new(),
-                Vec::new(),
-                Vec::new(),
                 FfiRegistry::new(),
             )
         } else {
             let shared_ref = unsafe { &*shared };
             (
                 shared_ref.constants.clone(),
-                shared_ref.functions.clone(),
                 shared_ref.functions_by_id.clone(),
                 shared_ref.type_table.clone(),
+                shared_ref.vtable_cache.clone(),
                 shared_ref.ffi.clone(),
             )
         };
@@ -229,8 +228,8 @@ impl Interpreter {
             heap: Heap::new(),
             call_stack: Vec::with_capacity(DEFAULT_MAX_STACK_DEPTH),
             constants,
-            functions,
             functions_by_id,
+            vtable_cache,
             type_table,
             state: ExecutionState::default(),
             config: ExecutorConfig::default(),
@@ -256,7 +255,6 @@ impl Interpreter {
         self.rt = Runtime::new(RuntimeConfig {
             mode: self.runtime_config.runtime,
             workers: self.runtime_config.workers,
-            work_stealing: self.runtime_config.work_stealing,
         })
         .unwrap_or_else(|_| Runtime::new(RuntimeConfig::default()).unwrap());
     }
@@ -271,40 +269,19 @@ impl Interpreter {
         &self.ffi
     }
 
-    /// Build vtable for a struct type at runtime
+    /// 获取结构体类型的 vtable。
     ///
-    /// This method looks up methods in the function table by matching the type name prefix.
-    /// Functions are stored with keys like "TypeName.method_name".
+    /// vtable 在模块加载期由 `execute_module` 从字节码的编译期 vtables 段一次性构建
+    /// （存于 `vtable_cache`），此处仅查表返回——删除了原先每次 CreateStruct 都按
+    /// `{type}.` 前缀 O(n) 扫描函数表、并向 functions_by_id 重复追加方法字节码的开销与泄漏。
     pub(super) fn build_vtable(
-        &mut self,
+        &self,
         type_name: &str,
     ) -> Vec<(String, FunctionValue)> {
-        let mut vtable = Vec::new();
-        let method_prefix = format!("{}.", type_name);
-
-        // Find all functions that match the type name prefix
-        for (func_name, bytecode_func) in &self.functions {
-            if func_name.starts_with(&method_prefix) {
-                // Extract method name (everything after the prefix)
-                let method_name = func_name[method_prefix.len()..].to_string();
-
-                // Create a new function ID for this method
-                let func_id = FunctionId(self.functions_by_id.len() as u32);
-
-                // Add to functions_by_id for runtime lookup
-                self.functions_by_id.push(bytecode_func.clone());
-
-                vtable.push((
-                    method_name,
-                    FunctionValue {
-                        func_id,
-                        env: Vec::new(), // Methods don't need closure env
-                    },
-                ));
-            }
-        }
-
-        vtable
+        self.vtable_cache
+            .get(type_name)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Call a YaoXiang function by its FunctionId.
@@ -510,9 +487,7 @@ impl Interpreter {
         task: InterpreterTask,
     ) -> TaskResult {
         let exec_result = match task {
-            InterpreterTask::Static { func_name, args } => {
-                self.call_static_by_name(&func_name, &args)
-            }
+            InterpreterTask::Static { func_id, args } => self.call_static_by_id(func_id, &args),
             InterpreterTask::Native { func_name, args } => {
                 self.call_native_by_name(&func_name, &args)
             }
@@ -798,37 +773,17 @@ impl Interpreter {
             .map_err(|e| e.with_stack(stack))
     }
 
-    pub(super) fn call_static_by_name(
+    /// 按函数表索引调用字节码函数（CallStatic 的唯一分发路径）。
+    pub(super) fn call_static_by_id(
         &mut self,
-        func_name: &str,
+        func_id: FunctionId,
         call_args: &[RuntimeValue],
     ) -> ExecutorResult<RuntimeValue> {
         let mut resolved = Vec::with_capacity(call_args.len());
         for arg in call_args {
             resolved.push(self.force_value_clone(arg)?);
         }
-
-        if self.ffi.has(func_name) {
-            return self.call_native_by_name(func_name, &resolved);
-        }
-
-        let mut lookup_name = func_name.to_string();
-        if !self.functions.contains_key(func_name) {
-            let constructor_name = format!("{}_constructor", func_name);
-            if self.functions.contains_key(&constructor_name) {
-                lookup_name = constructor_name;
-            }
-        }
-
-        if let Some(target_func) = self.functions.get(&lookup_name).cloned() {
-            self.execute_function(&target_func, &resolved)
-        } else {
-            let stack = self.capture_stack();
-            Err(ExecutorError::function_not_found(
-                func_name.to_string(),
-                stack,
-            ))
-        }
+        self.call_function_by_id(func_id, &resolved)
     }
 
     /// Execute a binary operation
@@ -1027,7 +982,15 @@ impl Interpreter {
             (CompareOp::Ge, RuntimeValue::String(l), RuntimeValue::String(r)) => {
                 RuntimeValue::Bool(l >= r)
             }
-            _ => RuntimeValue::Bool(false),
+            // 类型不匹配的比较：硬错误，禁止静默返回 false
+            // （同函数算术分支已报错，保持一致；类型检查器应先拦截，此处为底线防御）
+            (op, l, r) => {
+                let stack = self.capture_stack();
+                return Err(ExecutorError::type_error(
+                    format!("type mismatch in comparison {:?}: {:?} vs {:?}", op, l, r),
+                    stack,
+                ));
+            }
         };
 
         frame.set_slot(dst.0 as usize, result);

@@ -24,18 +24,35 @@ pub fn format_stmt(
             label,
         } => super::common::format_for_loop(var, *var_mut, iterable, body, label, ctx, source_map),
         StmtKind::Use {
-            path, items, alias, ..
+            path,
+            items,
+            alias,
+            item_aliases,
+            ..
         } => {
             let mut result = format!("use {}", path);
             if let Some(items) = items {
-                if items.len() == 1 {
-                    result.push_str("::");
-                    result.push_str(&items[0]);
-                } else {
-                    result.push_str("::{ ");
-                    result.push_str(&items.join(", "));
-                    result.push_str(" }");
-                }
+                // 内联别名（#245）：item as alias。
+                // 统一输出 `path.{ item }` 点形式：双冒号 `path::item` 无法被
+                // parse_use_path 回解析（`::` 非路径分隔符），重解析会静默吞掉条目。
+                let render = |i: usize, name: &str| -> String {
+                    match item_aliases
+                        .as_ref()
+                        .and_then(|v| v.get(i))
+                        .and_then(|a| a.as_ref())
+                    {
+                        Some(a) => format!("{} as {}", name, a),
+                        None => name.to_string(),
+                    }
+                };
+                result.push_str(".{ ");
+                let rendered: Vec<String> = items
+                    .iter()
+                    .enumerate()
+                    .map(|(i, name)| render(i, name))
+                    .collect();
+                result.push_str(&rendered.join(", "));
+                result.push_str(" }");
             }
             if let Some(aliases) = alias {
                 result.push_str(" as ");

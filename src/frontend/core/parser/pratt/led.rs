@@ -7,20 +7,10 @@ use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::parser::{ParserState};
 use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::frontend::core::parser::pratt::precedence::*;
-use crate::frontend::core::parser::statements::TypeStatementParser;
 
-/// Extension trait for infix parsing
-pub trait InfixParser {
+impl<'a> ParserState<'a> {
     /// Parse infix expression with given left binding power
-    fn parse_infix(
-        &mut self,
-        lhs: Expr,
-        bp: u8,
-    ) -> Option<Expr>;
-}
-
-impl<'a> InfixParser for ParserState<'a> {
-    fn parse_infix(
+    pub fn parse_infix(
         &mut self,
         lhs: Expr,
         bp: u8,
@@ -281,7 +271,7 @@ impl<'a> ParserState<'a> {
         let span = self.span();
         self.bump(); // consume 'as'
 
-        let ty = self.parse_type_annotation()?;
+        let ty = self.parse_type_annotation_required()?;
 
         Some(Expr::Cast {
             expr: Box::new(lhs),
@@ -315,7 +305,21 @@ impl<'a> ParserState<'a> {
         self.bump(); // consume '=>'
 
         // Convert the left-hand side to lambda parameters
-        let params = self.expr_to_params(&lhs)?;
+        // 转换失败必须报错：此前 `?` 直接传播 None，整个表达式静默消失，
+        // 残留 token 只在远处变成误导诊断（如 `f(x) => x` 报 E1001 'x' 未定义）
+        let params = match self.expr_to_params(&lhs) {
+            Some(p) => p,
+            None => {
+                self.error(
+                    ErrorCodeDefinition::invalid_syntax(
+                        "invalid lambda parameter list: expected identifiers, e.g. `x => ...` or `(a, b) => ...`",
+                    )
+                    .at(span)
+                    .build(),
+                );
+                return None;
+            }
+        };
 
         // Parse the body - can be a block or an expression
         let body = if self.at(&TokenKind::LBrace) {

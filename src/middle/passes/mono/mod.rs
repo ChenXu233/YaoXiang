@@ -145,7 +145,10 @@ impl Monomorphizer {
         let mut functions: Vec<FunctionIR> = module
             .functions
             .iter()
-            .filter(|f| f.generic_params.is_none())
+            // 删未特化的泛型代码函数；泛型 TypeDecl 构造器函数必须保留
+            // （typecheck 对构造器调用不生成 request，无 mono 时原样保留可用；
+            //  mono 启用时若删除则函数表缺 Entry → 运行时 E6006（#255））
+            .filter(|f| f.generic_params.is_none() || f.is_type_decl())
             .cloned()
             .collect();
 
@@ -156,11 +159,11 @@ impl Monomorphizer {
         ModuleIR {
             globals: module.globals.clone(),
             functions,
-            mut_locals: module.mut_locals.clone(),
-            loop_binding_locals: module.loop_binding_locals.clone(),
-            local_names: module.local_names.clone(),
             ffi_libs: module.ffi_libs.clone(),
             ffi_bindings: module.ffi_bindings.clone(),
+            entry_function: module.entry_function.clone(),
+            source_files: module.source_files.clone(),
+            function_files: module.function_files.clone(),
         }
     }
 
@@ -228,6 +231,8 @@ impl Monomorphizer {
         // 构建特化函数
         Some(FunctionIR {
             name: specialized_name,
+            // 特化实例不复用原 DefId——mono 路径保持按名分发
+            def: None,
             params: new_params,
             return_type: new_return_type,
             generic_params: None, // 清除泛型标记
@@ -290,6 +295,8 @@ impl Monomorphizer {
 
         Some(FunctionIR {
             name: specialized_name,
+            // 特化类型不复用原 DefId——mono 路径保持按名分发
+            def: None,
             params: new_params,
             return_type: new_return_type,
             generic_params: None,
@@ -330,21 +337,18 @@ impl Monomorphizer {
                     None => continue,
                 };
 
-                // 从 args 中尝试推断类型参数
-                let arg_types: Vec<MonoType> = args
-                    .iter()
-                    .filter_map(|op| self.operand_to_type_hint(op, func))
-                    .collect();
-
-                // 如果无法推断任何参数类型，跳过
-                if arg_types.is_empty() {
-                    continue;
-                }
-
                 // 使用推断的参数类型创建实例化请求
-                // 简单启发式：使用第一个参数的类型作为泛型参数
+                // 简单启发式：使用第一个参数的类型作为泛型参数。
+                // 必须从 args[0] 直接推断：此前 filter_map 后再取 arg_types[0]，
+                // 当首参无法定型时索引错位（arg_types[0] 实为 args[1] 的类型）
+                // → 用错误类型生成特化（审计发现）
                 if type_params.len() == 1 {
-                    let type_arg = arg_types[0].clone();
+                    let Some(type_arg) = args
+                        .first()
+                        .and_then(|op| self.operand_to_type_hint(op, func))
+                    else {
+                        continue;
+                    };
                     let key = SpecializationKey::new(callee_name.clone(), vec![type_arg.clone()]);
 
                     if !self.processed.contains(&key) {
@@ -504,8 +508,10 @@ impl Monomorphizer {
         for req in requests {
             let generic_name = req.generic_id().name().to_string();
 
-            // 只处理已知的泛型函数
-            if !self.generic_functions.contains_key(&generic_name) {
+            // 处理泛型函数和泛型类型（fix #255：泛型类型构造器也需要替换）
+            if !self.generic_functions.contains_key(&generic_name)
+                && !self.generic_types.contains_key(&generic_name)
+            {
                 continue;
             }
 

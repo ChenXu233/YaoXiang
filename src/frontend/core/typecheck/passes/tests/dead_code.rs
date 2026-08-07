@@ -110,6 +110,7 @@ fn make_use(
             }],
             items,
             alias: None,
+            item_aliases: None,
         },
         span: Span::dummy(),
     }

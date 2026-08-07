@@ -21,5 +21,5 @@ main = {
 
     // 布尔字面量
     assert.assert(true, "bool true")
-    // assert.assert(!false, "not false") // !false 不是 Bool 类型
+    // assert.assert(!false, "!false") // 逻辑非见 logical_not.yx
 }

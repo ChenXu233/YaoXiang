@@ -1,0 +1,42 @@
+// 07-std/dict_ops.yx
+// 覆盖: std.dict 模块（#117）— RFC-009 §2.8 只读自动借用
+// 验证: 正常路径（set/get/has/keys/values/len/is_empty/merge/delete）+ 错误路径（缺失 key 返回 Void / has 为 false）
+// 状态: ✅
+
+use std.assert
+use std.dict
+
+main = {
+    d = {}
+
+    // set 返回新 dict（函数式），原 dict 复用
+    d1 = dict.set(d, "a", 1)
+    d2 = dict.set(d1, "b", 2)
+
+    // 只读操作可复用（&Dict 自动借用）
+    assert.assert(dict.get(d2, "a") == 1, "get a == 1")
+    assert.assert(dict.get(d2, "b") == 2, "get b == 2")
+    assert.assert(dict.has(d2, "a"), "has a")
+    assert.assert(!dict.has(d2, "zzz"), "not has zzz")
+    assert.assert(dict.len(d2) == 2, "len == 2")
+    assert.assert(dict.len(d2) == 2, "len reusable")
+    assert.assert(!dict.is_empty(d2), "not empty")
+
+    // keys / values（只读）
+    ks = dict.keys(d2)
+    vs = dict.values(d2)
+    assert.assert(dict.len(d2) == 2, "dict reusable after keys/values")
+
+    // merge（两个只读源，返回新 dict）
+    m = dict.merge(dict.set({}, "x", 10), dict.set({}, "y", 20))
+    assert.assert(dict.get(m, "x") == 10, "merge x == 10")
+    assert.assert(dict.get(m, "y") == 20, "merge y == 20")
+
+    // 错误路径：缺失 key 返回 Void（优雅，不 panic）
+    missing = dict.get(d2, "nope")
+    assert.assert(dict.len(d2) == 2, "dict intact after missing get")
+
+    // delete 消费源 dict、返回新 dict（函数式线性变换）——放最后，d2 此后不再使用
+    deleted = dict.delete(d2, "a")
+    assert.assert(!dict.has(deleted, "a"), "deleted has no a")
+}

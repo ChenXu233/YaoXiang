@@ -66,7 +66,8 @@ fn two_layer_curry_generates_closure_chain() {
             Instruction::MakeClosure {
                 dst: Operand::Local(1),
                 ref func,
-                ref env
+                ref env,
+                ..
             } if func == "__f_l0" && env == &[Operand::Local(0)]
         ),
         "第 1 条应为 MakeClosure 到 __f_l0, env=[Local(0)]，实际: {:?}",

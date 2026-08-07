@@ -1,9 +1,8 @@
 ---
-title: 'RFC-011: Generics System Design - Zero-Cost Abstraction and Macro Replacement'
+title: 'RFC-011: Generics System Design - Zero-Cost Abstractions and Macro Replacement'
 status: 'Accepted'
-author: 'Chen Xu'
-updated:
-  '2026-07-15 (type body code blocks + compile-time specifications + effect seeds implemented)'
+author: 'Chenxu'
+updated: '2026-07-15 (type body code blocks + compile-time constraints + effect seeds implemented)'
 issue: '#128'
 issues_impl:
   - '#45'
@@ -17,129 +16,128 @@ pr_impl:
   - '#122'
 ---
 
-# RFC-011: Generics System Design - Zero-Cost Abstraction and Macro Replacement
+# RFC-011: Generics System Design - Zero-Cost Abstractions and Macro Replacement
 
-## Summary
+## Abstract
 
-This document defines the **generics system design** for the YaoXiang language, achieving zero-cost
-abstraction through powerful generics capabilities, leveraging compile-time optimization to reduce
-dependence on macros, and providing dead code elimination mechanisms.
+This document defines the **generics system design** of the YaoXiang language. Through powerful
+generic capabilities, it achieves zero-cost abstractions, reduces dependence on macros via
+compile-time optimizations, and provides dead code elimination mechanisms.
 
 **Core Design**:
 
-- **Unified Signature Syntax**: `(T: Type, R: Type) -> ...` — generic parameters unified with
-  regular parameters
-- **Type Self-Description Mechanism**: `Type` is a language-level special entity; `Type` positions
-  in signatures can be automatically inferred and filled
-- **Type Constraints**: `T: Dup + Add` — multiple constraints, function type constraints
-- **Associated Types**:
+- **Unified Signature Syntax**: `(T: Type, R: Type) -> ...` generic parameters unified with regular
+  parameters
+- **Type Self-Describing Mechanism**: `Type` is a language-level special entity, and the `Type`
+  position in a signature can be automatically inferred and filled
+- **Type Constraint**: `T: Dup + Add` multiple constraints, function type constraints
+- **Associated Type**:
   `Iterator: (Item: Type) -> Type = { next: () -> Option(Item), has_next: () -> Bool }`
-- **Compile-Time Generics**: `N: Int` — generic value parameters, compile-time constant
-  instantiation
-- **Conditional Types**: `If: (C: Bool, T: Type, E: Type) -> Type` — type-level computation, type
-  families
+- **Compile-Time Generics**: `N: Int` generic value parameters, instantiated via compile-time
+  constants
+- **Conditional Type**: `If: (C: Bool, T: Type, E: Type) -> Type` type-level computation, type
+  family
 
 **Value**:
 
-- Zero-cost abstraction: Compile-time monomorphization, no runtime overhead
-- Dead code elimination: Instantiation graph analysis + LLVM optimization
-- Macro replacement: Generics replace 90% of macro usage scenarios
-- Type safety: Compile-time checking, IDE-friendly
-- **Explicit over Implicit**: `Type` self-description, compiler auto-inference
+- Zero-cost abstraction: compile-time monomorphization, no runtime overhead
+- Dead code elimination: instantiation graph analysis + LLVM optimization
+- Macro replacement: generics replace 90% of macro usage scenarios
+- Type safety: compile-time checking, IDE-friendly
+- **Explicit over implicit**: `Type` self-describing, compiler auto-inference
 
 ## Reference Documents
 
-The design in this document is based on the following documents:
+This document's design is based on the following documents:
 
-| Document                                                                                                   | Relationship              | Description                                                                        |
-| ---------------------------------------------------------------------------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------- |
-| [RFC-010: Unified Type Syntax](./010-unified-type-syntax.md)                                               | **Syntax Base**           | Generic syntax integrated with unified `name: type = value` model                  |
-| [RFC-010: Unified Type Syntax](./010-unified-type-syntax.md)                                               | **Call Syntax**           | Section 6: Generic call syntax — unified `()` application, `[]` completely removed |
-| [RFC-009: Ownership Model](./accepted/009-ownership-model.md)                                              | **Type System**           | Move semantics and natural combination with generics                               |
-| [RFC-024: Concurrency Runtime Semantics Based on spawn](./024-concurrency-model.md)                        | **Execution Model**       | DAG analysis and generic type checking                                             |
-| [RFC-008: Runtime Model](./accepted/008-runtime-concurrency-model.md)                                      | **Compiler Architecture** | Generic monomorphization and compile-time optimization strategy                    |
-| [Type Universe Philosophy](../reference/plan/ongoing/类型宇宙思想.md)                                      | **Theoretical Core**      | Type universe hierarchy model and value-dependent type design                      |
-| [RFC-027: Compile-Time Predicates and Unified Static Verification](./027-compile-time-evaluation-types.md) | **Termination Check**     | decreases specification and compile-time evaluation safety guarantees              |
+| Document                                                                                                   | Relationship              | Description                                                                      |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------- |
+| [RFC-010: Unified Type Syntax](./010-unified-type-syntax.md)                                               | **Syntax Base**           | Generic syntax integrated with the unified `name: type = value` model            |
+| [RFC-010: Unified Type Syntax](./010-unified-type-syntax.md)                                               | **Call Syntax**           | Section 6: Generic call syntax—unified `()` application, `[]` completely removed |
+| [RFC-009: Ownership Model](./accepted/009-ownership-model.md)                                              | **Type System**           | Natural combination of Move semantics and generics                               |
+| [RFC-024: Spawn-Based Concurrency Runtime Semantics](./024-concurrency-model.md)                           | **Execution Model**       | DAG analysis and generic type checking                                           |
+| [RFC-008: Runtime Model](./accepted/008-runtime-concurrency-model.md)                                      | **Compiler Architecture** | Generic monomorphization and compile-time optimization strategy                  |
+| [Type Universe Thought](../reference/plan/ongoing/类型宇宙思想.md)                                         | **Theoretical Core**      | Type universe hierarchy model and value-dependent type design                    |
+| [RFC-027: Compile-Time Predicates and Unified Static Verification](./027-compile-time-evaluation-types.md) | **Termination Check**     | Automatic metric synthesis and compile-time evaluation safety guarantee          |
 
-## Type Universe Philosophy and Value-Dependent Types
+## Type Universe Thought and Value-Dependent Types
 
-YaoXiang's generics system is built upon the **Type Universe Philosophy**, a mental model that
-unifies all concepts in the language into a layered structure, with the core innovation being the
-elevation of **value-dependent types** to first-class citizens in the Type2 layer.
+YaoXiang's generics system is built on the **Type Universe Thought**. This mental model unifies all
+language concepts into a hierarchical structure, and its core innovation elevates **value-dependent
+types** to first-class citizens at the Type2 layer.
 
-### What are Value-Dependent Types?
+### What Are Value-Dependent Types?
 
-A **value-dependent type** is a type that depends on one or more **values** (rather than only
-depending on other types). These values can be evaluated at compile time, thereby providing type
-safety guarantees at compile time.
+A **value-dependent type** is a type that depends on one or more **values** (not just on other
+types). These values can be evaluated at compile time, providing type safety guarantees during the
+compilation phase.
 
 ```yaoxiang
 # Traditional generics: type parameters
 List: (T: Type) -> Type
 
-# Value-dependent types: value parameters
+# Value-dependent type: value parameters
 Vec: (n: Int) -> Type  # Vector type depends on length value n
 Matrix: (T: Type, Rows: Int, Cols: Int) -> Type  # Matrix type depends on row and column counts
 ```
 
 ### Core Advantages of Value-Dependent Types
 
-Compared to traditional generics, YaoXiang's value-dependent types have the following core
+Compared to traditional generics, YaoXiang's value-dependent types offer the following core
 advantages:
 
-| Feature                 | Traditional Generics (C++/Rust)                | YaoXiang Value-Dependent Types                            |
-| ----------------------- | ---------------------------------------------- | --------------------------------------------------------- |
-| Type-dependent values   | Only depends on type parameters                | Can depend on any value, including function call results  |
-| Compile-time evaluation | C++ templates manual specialization, Rust none | Automatic compile-time evaluation, guaranteed termination |
-| Type-level computation  | Template metaprogramming (complex/dangerous)   | Unified type-level computation engine                     |
-| Type safety             | C++ none, Rust limited                         | Full type safety, compile-time checking                   |
-| Dimension verification  | Runtime check or manual specialization         | Compile-time dimension verification, no runtime overhead  |
+| Feature                 | Traditional Generics (C++/Rust)               | YaoXiang Value-Dependent Types                            |
+| ----------------------- | --------------------------------------------- | --------------------------------------------------------- |
+| Values types depend on  | Only type parameters                          | Any value, including function call results                |
+| Compile-time evaluation | C++ template manual specialization, Rust none | Automatic compile-time evaluation, guarantees termination |
+| Type-level computation  | Template metaprogramming (complex/dangerous)  | Unified type-level computation engine                     |
+| Type safety             | C++ none, Rust limited                        | Complete type safety, compile-time checking               |
+| Dimension validation    | Runtime checks or manual specialization       | Compile-time dimension validation, no runtime overhead    |
 
 ### Type Universe Hierarchy and Value-Dependent Types
 
-The type universe philosophy divides language concepts into different layers based on semantic
-roles, with value-dependent types located in the **Type2 layer**:
+The Type Universe Thought divides language concepts by semantic role into different layers.
+Value-dependent types reside at the **Type2 layer**:
 
-| Layer     | Role                                                  | Examples                                                                                             |
-| --------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Type-1    | Values                                                | `42`, `factorial(5)`, function bodies                                                                |
-| Type0     | Meta-type keyword                                     | `Type`                                                                                               |
-| Type1     | Concrete types                                        | `Int`, `String`, `Vec(3)`                                                                            |
-| **Type2** | **Functions/Type Constructors/Value-Dependent Types** | `add: (Int, Int) -> Int`, `Vec: (n: Int) -> Type`, `Matrix: (T: Type, Rows: Int, Cols: Int) -> Type` |
+| Layer     | Role                                                      | Examples                                                                                             |
+| --------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Type-1    | Values                                                    | `42`, `factorial(5)`, functions themselves                                                           |
+| Type0     | Meta-type keywords                                        | `Type`                                                                                               |
+| Type1     | Concrete types                                            | `Int`, `String`, `Vec(3)`                                                                            |
+| **Type2** | **Functions / Type Constructors / Value-Dependent Types** | `add: (Int, Int) -> Int`, `Vec: (n: Int) -> Type`, `Matrix: (T: Type, Rows: Int, Cols: Int) -> Type` |
 
-**Key Design**: Functions, type constructors, and value-dependent types in the Type2 layer share a
-**unified syntax**, all in the form of `(params) -> result`:
+**Key Design**: Functions, type constructors, and value-dependent types at the Type2 layer **share
+unified syntax**, all in the form `(params) -> result`:
 
-- Regular functions: `(Int, Int) -> Int` → return value is a value
-- Type constructors: `(T: Type) -> Type` → return value is a type
-- Value-dependent types: `(n: Int) -> Type` → return value is a type, but depends on value
-  parameters
+- Regular function: `(Int, Int) -> Int` → return value is a value
+- Type constructor: `(T: Type) -> Type` → return value is a type
+- Value-dependent type: `(n: Int) -> Type` → return value is a type, but depends on value parameters
 
-> **Curry-Howard Isomorphism**: This unification is not coincidental. The Curry-Howard isomorphism
-> states that "types are propositions, programs are proofs" — the function type `A → B` corresponds
-> to logical implication "if A then B", the generic `(T: Type) -> Type` corresponds to universal
-> quantification "for all types T", and the value-dependent type `(n: Int) -> Type` corresponds to
-> "for each integer n there exists a type". YaoXiang unifies functions, type constructors, and
-> value-dependent types into the Type2 layer, essentially unifying "proofs" and "computation" into a
-> single concept — **constructive proof**. This is a direct manifestation of the Curry-Howard
-> isomorphism in language design: one form (`(params) -> result`) carries both logical propositions
-> and computational processes simultaneously.
+> **Curry-Howard Isomorphism**: This unification is no coincidence. The Curry-Howard Isomorphism
+> states "types as propositions, programs as proofs"—the function type `A → B` corresponds to the
+> logical implication "if A then B", generics `(T: Type) -> Type` corresponds to universal
+> quantification "for all types T", and value-dependent types `(n: Int) -> Type` corresponds to "for
+> every integer n there exists a type". YaoXiang unifies functions, type constructors, and
+> value-dependent types at the Type2 layer, essentially unifying "proof" and "computation" into a
+> single concept—**constructive proof**. This is the direct embodiment of the Curry-Howard
+> Isomorphism in language design: a single form (`(params) -> result`) simultaneously carries
+> logical propositions and computational processes.
 
 ### Compile-Time Determinism Guarantee
 
-YaoXiang's type universe philosophy requires: **Everything in the Type layer is compile-time
-deterministic**.
+YaoXiang's Type Universe Thought requires: **Everything at the Type layer is determined at compile
+time**.
 
 ```yaoxiang
-# Compile-time dimension verification example
+# Compile-time dimension validation example
 Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
     data: Array(Array(T, Cols), Rows),
     # Compile-time check: dimensions must be positive
-    _assert: Assert[Rows > 0],
-    _assert: Assert[Cols > 0],
+    _assert: Assert(Rows > 0),
+    _assert: Assert(Cols > 0),
 }
 
-# Create 3x3 identity matrix - completed at compile time
+# Create a 3x3 identity matrix - completed at compile time
 identity: (T: Add + Zero + One, N: Int) -> ((size: N) -> Matrix(T, N, N)) = {
     matrix = Matrix(T, N, N)()
     # ...
@@ -149,19 +147,19 @@ identity: (T: Add + Zero + One, N: Int) -> ((size: N) -> Matrix(T, N, N)) = {
 vec: Vec(factorial(3)) = Vec(6)()
 ```
 
-The compiler automatically:
+The compiler will automatically:
 
-1. Detects function calls in type positions
-2. Verifies if the function has a `decreases` specification (see termination check mechanism below)
-3. Evaluates at compile time
-4. Embeds the result in the generated type
+1. Detect function calls at type positions
+2. Perform compile-time termination check on functions (see termination check mechanism below)
+3. Execute evaluation at compile time
+4. Embed the result into the generated type
 
 ### Application Scenarios for Value-Dependent Types
 
-#### Compile-Time Dimension Verification
+#### Compile-Time Dimension Validation
 
 ```yaoxiang
-# Matrix multiplication: compile-time verification of dimension matching
+# Matrix multiplication: compile-time dimension matching validation
 multiply: (T: Add + Multiply + Zero,
            Rows: Int, Cols: Int, M: Int) -> ((
     a: Matrix(T, Rows, Cols),
@@ -176,7 +174,7 @@ multiply: (T: Add + Multiply + Zero,
 # multiply(matrix_2x3, matrix_4x2)  # Compile error: 2 != 4
 ```
 
-#### Type-Safe Array Size
+#### Type-Safe Array Sizes
 
 ```yaoxiang
 # Array size is a compile-time constant
@@ -190,7 +188,7 @@ first_three: Array(Int, 3) = Array(Int, 3)(1, 2, 3)
 # first_three.length == 3 (known at compile time)
 ```
 
-#### Conditional Types
+#### Conditional Type
 
 ```yaoxiang
 # Type-level If
@@ -222,54 +220,77 @@ map: (T: Type, R: Type) -> (
     return result
 }
 
-# Usage is completely transparent, type auto-inferred
+# Completely transparent at usage, types auto-inferred
 numbers = List(1, 2, 3)
 doubled = map(numbers, (x) => x * 2)  # Inferred as map[Int, Int]
 ```
 
 ### Comparison with Other Languages
 
-| Feature                             | C++ Templates          | Rust Generics | Haskell GADT   | **YaoXiang**                        |
-| ----------------------------------- | ---------------------- | ------------- | -------------- | ----------------------------------- |
-| Type parameters                     | ✅                     | ✅            | ✅             | ✅                                  |
-| Value-dependent types               | ❌                     | ❌            | ✅             | ✅                                  |
-| Compile-time evaluation             | Template instantiation | ❌            | ✅             | ✅                                  |
-| Termination guarantee               | ❌                     | ❌            | ❌ (dangerous) | ✅ (decreases specification)        |
-| Type safety                         | ❌ (macro expansion)   | ✅            | ✅             | ✅                                  |
-| Unified syntax                      | ❌                     | ❌            | ❌             | ✅                                  |
-| Compile-time dimension verification | Manual specialization  | Runtime check | Type family    | Compile-time automatic verification |
-| decreases specification             | ❌                     | ❌            | ❌             | ✅                                  |
+| Feature                                                     | C++ Templates          | Rust Generics  | Haskell GADT   | **YaoXiang**                              |
+| ----------------------------------------------------------- | ---------------------- | -------------- | -------------- | ----------------------------------------- |
+| Type parameters                                             | ✅                     | ✅             | ✅             | ✅                                        |
+| Value-dependent types                                       | ❌                     | ❌             | ✅             | ✅                                        |
+| Compile-time evaluation                                     | Template instantiation | ❌             | ✅             | ✅                                        |
+| Termination guarantee                                       | ❌                     | ❌             | ❌ (dangerous) | ✅ (automatic metric synthesis, RFC-027)  |
+| Type safety                                                 | ❌ (macro expansion)   | ✅             | ✅             | ✅                                        |
+| Unified syntax                                              | ❌                     | ❌             | ❌             | ✅                                        |
+| Compile-time dimension validation                           | Manual specialization  | Runtime checks | Type families  | Automatic compile-time validation         |
+| Semi-automatic termination annotation (decreases/invariant) | ❌                     | ❌             | ❌             | ❌ (fully automatic at compile time only) |
 
-### Termination Check Mechanism (Integrated with RFC-022)
+### Termination Check Mechanism (Unified with RFC-027)
 
-Compile-time evaluation of value-dependent types must **guarantee termination**, otherwise the type
-system will fall into infinite loops. YaoXiang ensures this through **decreases specifications**,
-seamlessly integrated with RFC-022.
+The compile-time evaluation of value-dependent types must **guarantee termination**; otherwise the
+type system will fall into infinite loops. The termination check is performed **fully
+automatically** by the RFC-027 compile-time proof pipeline—the compiler automatically synthesizes
+metrics, and recursive/loop calls that can be proven pass, while those that cannot are reported as
+compile errors. **No semi-automatic annotations are allowed**: RFC-022's `//! decreases`,
+`/*! invariant !*/` have been deprecated along with RFC-022, and the specification is the type
+annotation itself.
 
-#### Termination Specifications for Recursive Functions
+#### Termination Check for Recursive Functions
+
+Before compile-time evaluation, the compiler checks whether the parameters of recursive calls
+strictly decrease on every recursive path (RFC-027 §6.7). No specification annotations required:
 
 ```yaoxiang
-# Compile-time factorial: must prove termination
+# Compile-time factorial: no //! requires/ensures/decreases, compiler auto-analyzes
 factorial: (n: Int) -> Int = {
-    //! requires: n >= 0
-    //! ensures: result == n!
-    //! decreases: n    # n strictly decreases on each recursion
     if n <= 1 { return 1 }
-    return n * factorial(n - 1)
+    return n * factorial(n - 1)  # Compiler analysis: n-1 < n → decreasing → terminates
 }
 
-# Usage: call in type position
-vec: Vec(factorial(5)) = Vec(120)()  # Compile-time evaluation factorial(5) = 120
+# Usage: called at a type position, compiler verifies termination before evaluation
+vec: Vec(factorial(5)) = Vec(120)()  # Compile-time evaluates factorial(5) = 120
 ```
 
-#### Termination Specifications for Loops
+| Scenario                                              | Behavior                    |
+| ----------------------------------------------------- | --------------------------- |
+| Compiler can analyze recursive decrease (e.g., `n-1`) | Compile-time evaluation     |
+| Not decreasing / cannot determine decrease            | Compile error               |
+| Runtime call (not at a type position)                 | No termination check needed |
+
+#### Termination Check for Loops
+
+Loops do not require `: Invariant(...)` or `: decreases(...)` annotations. Refined type annotations
+on variables (such as `UpTo(n)`) simultaneously provide loop invariants and metric bounds. The
+compiler tries four metric synthesis strategies in order of priority, stopping once one is found
+(RFC-027 §7):
+
+1. **Automatic linear rank function synthesis**—extract variable bounds from type annotations,
+   enumerate linear combinations, SMT verifies m ≥ 0 and all paths m' < m
+2. **Predicate violation count** (experimental)—extract violation_count from target type definition
+   (e.g., `Sorted`), covering adjacent swaps/moves
+3. **Bounded increment/decrement patterns**—`v += const` → metric `upper - v` (degenerate case of
+   strategy 1, fastest path)
+4. **Multiplicative scaling metric template**—`v *= const` (const > 1) → metric
+   `ceil(log_const(upper / v))`
 
 ```yaoxiang
 sum: (arr: Array(Int, n)) -> Int = {
-    s = 0; i = 0
-    while i < n {
-        /*! invariant: s == sum(arr[0..i]) && 0 <= i <= n !*/
-        /*! decreases: n - i !*/
+    mut i: UpTo(arr.len) = 0   # Type annotation gives upper bound arr.len and lower bound 0
+    while i < arr.len {
+        # Compiler auto-derives: metric arr.len - i, strictly decreases by 1 each iteration → termination proven
         s += arr[i]; i += 1
     }
     return s
@@ -281,24 +302,25 @@ sum: (arr: Array(Int, n)) -> Int = {
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Type Checking Phase                                        │
-│  Encounter function call in type position (e.g., Vec(factorial(5))) │
+│  Encounter function call at a type position (e.g. Vec(factorial(5))) │
 └─────────────────────────┬───────────────────────────────────┘
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  1. Check decreases specification                            │
-│     - Has decreases: verify decreasing condition holds on all recursion paths   │
-│     - No decreases but obviously terminable: evaluate directly│
-│     - No decreases and possibly non-terminating: compile error│
+│  1. Termination Check (RFC-027 proof pipeline, fully automatic) │
+│     - Recursive functions: check parameters strictly decrease on every recursive path │
+│     - Loops: four metric synthesis strategies (linear rank/violation count/bounded pattern/ │
+│       multiplicative scaling), SMT verifies decrease         │
+│     - Cannot prove → compile error (hard boundary, no semi-automatic annotation fallback) │
 └─────────────────────────┬───────────────────────────────────┘
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  2. Compile-time evaluation (executed by built-in interpreter)│
-│     - Pure function: evaluate directly                       │
+│  2. Compile-Time Evaluation (executed by built-in interpreter) │
+│     - Pure functions: direct evaluation                      │
 │     - Side effects: compile error (type positions must be side-effect free) │
 └─────────────────────────┬───────────────────────────────────┘
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  3. Embed result in type                                     │
+│  3. Result Embedded into Type                                │
 │     - Vec(factorial(5)) → Vec(120)                          │
 │     - Matrix(Float, 3, 3) → concrete type                   │
 └─────────────────────────────────────────────────────────────┘
@@ -306,11 +328,12 @@ sum: (arr: Array(Int, n)) -> Int = {
 
 #### Advantages
 
-- **Safety**: Ensures compile-time evaluation always terminates, avoiding infinite loops in the type
-  system
-- **Uniformity**: Termination checking and partial correctness verification share the same
-  specification mechanism
-- **Progressive Enhancement**: Can gradually transition from runtime checks to fully static proofs
+- **Safety**: Ensures compile-time evaluation necessarily terminates, preventing the type system
+  from falling into infinite loops
+- **Uniformity**: Termination check shares the same compile-time proof pipeline as correctness
+  verification (VC generation) (RFC-027), with no separate specification syntax
+- **Fully automatic**: Compiler automatically synthesizes metrics from type annotations. If it can
+  prove, it passes; if not, it errors—no reliance on programmers writing `decreases` manually
 
 ## Motivation
 
@@ -318,35 +341,36 @@ sum: (arr: Array(Int, n)) -> Int = {
 
 Current mainstream languages have limitations in generics:
 
-| Language     | Generics Capability       | Problem                                                                                    |
-| ------------ | ------------------------- | ------------------------------------------------------------------------------------------ |
-| Java         | Bounded types             | Compile-time monomorphization, no generic specialization                                   |
-| C#           | Generic constraints       | Runtime type checking, performance overhead                                                |
-| Rust         | Generics + Trait          | Complex trait system, steep learning curve                                                 |
-| C++          | Templates                 | Template specialization complex, poor error messages                                       |
-| **YaoXiang** | **Value-Dependent Types** | **Types can depend on values, compile-time dimension verification, termination guarantee** |
+| Language     | Generic Capability        | Problem                                                                                  |
+| ------------ | ------------------------- | ---------------------------------------------------------------------------------------- |
+| Java         | Bounded types             | Compile-time monomorphization, no generic specialization                                 |
+| C#           | Generic constraints       | Runtime type checking, performance overhead                                              |
+| Rust         | Generics + Trait          | Trait system is complex, steep learning curve                                            |
+| C++          | Templates                 | Complex template specialization, poor compile error messages                             |
+| **YaoXiang** | **Value-Dependent Types** | **Types can depend on values, compile-time dimension validation, termination guarantee** |
 
 ### Core Contradictions
 
 1. **Performance vs Flexibility**: Runtime flexibility vs compile-time optimization
-2. **Complexity vs Simplicity**: Powerful type system vs ease of use
+2. **Complex vs Simple**: Powerful type system vs ease of use
 3. **Macros vs Generics**: Macro code generation vs generic type safety
-4. **Value-Dependent vs Type Safety**: Traditional generics cannot verify dimensions at compile time
+4. **Value Dependence vs Type Safety**: Traditional generics cannot verify dimensions at compile
+   time
 
 ### Core Advantages of Value-Dependent Types
 
 YaoXiang's **value-dependent types** are the core advantage over traditional generics:
 
-| Advantage                   | Description                                                                                        |
-| --------------------------- | -------------------------------------------------------------------------------------------------- |
-| **Types depend on values**  | `Vec: (n: Int) -> Type` lets types depend on specific values                                       |
-| **Compile-time evaluation** | Function calls in type positions are evaluated at compile time, results directly embedded in types |
-| **Dimension verification**  | `Matrix(Float, 3, 3)` verifies matrix dimensions at compile time                                   |
-| **Type-level computation**  | `If`, `Match` and other conditional types support type-level computation                           |
-| **Termination guarantee**   | decreases specification ensures compile-time evaluation always terminates                          |
+| Advantage                   | Description                                                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Types depend on values**  | `Vec: (n: Int) -> Type` allows types to depend on concrete values                                                  |
+| **Compile-time evaluation** | Function calls at type positions are evaluated at compile time, with results directly embedded into types          |
+| **Dimension validation**    | `Matrix(Float, 3, 3)` validates matrix dimensions at compile time                                                  |
+| **Type-level computation**  | `If`, `Match` and other conditional types support type-level computation                                           |
+| **Termination guarantee**   | Compile-time termination check (automatic metric synthesis) ensures compile-time evaluation necessarily terminates |
 
 ```yaoxiang
-# Compile-time verification impossible in C++/Rust
+# Compile-time validation impossible in C++/Rust
 matrix: Matrix(Float, factorial(3), factorial(2)) = ...
 # Compile-time computation: factorial(3) = 6, factorial(2) = 2
 # Type is Matrix(Float, 6, 2)
@@ -359,8 +383,8 @@ identity: Matrix(Float, 3, 3) = ...
 ### Value of the Generics System
 
 ```yaoxiang
-# Example: Unified API Design
-# map operation for different container types
+# Example: Unified API design
+# map operations for different container types
 
 # Traditional approach: separate implementation for each type
 map_int_array: (array: Array(Int), f: Fn(Int) -> Int) -> Array(Int) = ...
@@ -368,7 +392,7 @@ map_string_array: (array: Array(String), f: Fn(String) -> String) -> Array(Strin
 map_int_list: (list: List(Int), f: Fn(Int) -> Int) -> List(Int) = ...
 map_string_list: (list: List(String), f: Fn(String) -> String) -> List(String) = ...
 
-# Generics approach: one generic function covers all types
+# Generic approach: one generic function covers all types
 map: (T: Type, R: Type)(container: Container(T), f: Fn(T) -> R) -> Container(R) = {
     for item in container {
         result.push(f(item))
@@ -381,25 +405,25 @@ map: (T: Type, R: Type)(container: Container(T), f: Fn(T) -> R) -> Container(R) 
 
 ### Core Goals
 
-1. **Zero-cost abstraction** - Generic calls equivalent to concrete type calls
-2. **Dead code elimination** - Compile-time analysis, only instantiate used generics
-3. **Macro replacement** - Generics replace 90% of macro usage scenarios
-4. **Type safety** - Compile-time checking, no runtime type overhead
-5. **IDE-friendly** - Intelligent hints, clear error messages
-6. **Value-dependent types** - Types can depend on values, support compile-time dimension
-   verification
-7. **Safe compile-time evaluation** - Guarantee compile-time evaluation terminates through decreases
-   specifications
+1. **Zero-Cost Abstraction** - Generic calls equivalent to concrete-type calls
+2. **Dead Code Elimination** - Compile-time analysis, only instantiate used generics
+3. **Macro Replacement** - Generics replace 90% of macro usage scenarios
+4. **Type Safety** - Compile-time checking, no runtime type overhead
+5. **IDE-Friendly** - Smart hints, clear error messages
+6. **Value-Dependent Types** - Types can depend on values, supporting compile-time dimension
+   validation
+7. **Compile-Time Evaluation Safety** - Guarantee compile-time evaluation termination via
+   compile-time termination check (RFC-027 automatic metric synthesis)
 
 ### Design Principles
 
-- **Compile-time determination**: Generic parameters determined at compile time
+- **Compile-time determined**: Generic parameters are determined at compile time
 - **Monomorphization first**: Generate concrete code, avoid virtual function calls
 - **Constraint-driven**: Type constraints guide instantiation
 - **Platform optimization**: Specialization supports platform-specific optimization
-- **Type universe unification**: Functions/type constructors/value-dependent types unified as Type2
+- **Type Universe unification**: Functions/type constructors/value-dependent types unified as Type2
   layer
-- **Termination guarantee**: Function calls in type positions must prove termination
+- **Termination guarantee**: Function calls at type positions must prove termination
 
 ## Proposal
 
@@ -410,10 +434,10 @@ map: (T: Type, R: Type)(container: Container(T), f: Fn(T) -> R) -> Container(R) 
 > **Key Rule**: Generic type definitions **must explicitly annotate `: Type`**, otherwise HM will
 > infer them as functions.
 >
-> | Syntax                            | Meaning                            |
-> | --------------------------------- | ---------------------------------- |
-> | `List: (T: Type) -> Type = {...}` | ✅ Type constructor                |
-> | `List = {...}`                    | ❌ HM infers as function, not type |
+> | Syntax                            | Meaning                              |
+> | --------------------------------- | ------------------------------------ |
+> | `List: (T: Type) -> Type = {...}` | ✅ Type constructor                  |
+> | `List = {...}`                    | ❌ HM infers as function, not a type |
 
 ```yaoxiang
 # Generic type definition (must have : Type)
@@ -442,7 +466,7 @@ map: (T: Type, R: Type) -> ((opt: Option(T), f: Fn(T) -> R) -> Option(R)) = {
     }
 }
 
-# Generic constraint (direct expression, return can be omitted for single-line)
+# Generic constraint (direct expression, return can be omitted for single line)
 clone: (T: Clone)(value: T) -> T = value.clone()
 
 # Multiple type parameters
@@ -454,23 +478,23 @@ combine: (T: Type, U: Type) -> ((a: T, b: U) -> (T, U)) = (a, b)
 #### 1.1 Unified Signature Syntax
 
 ```yaoxiang
-# Generic functions use unified (T: Type, R: Type) signature syntax
+# Generic functions use the unified (T: Type, R: Type) signature syntax
 map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R)) = ...
 
 # Multiple type parameters
 combine: (T: Type, U: Type) -> ((a: T, b: U) -> (T, U)) = (a, b)
 ```
 
-#### 1.2 Type Self-Description Mechanism
+#### 1.2 Type Self-Describing Mechanism
 
-`Type` is a language-level special entity; the compiler inherently recognizes `Type` positions in
-signatures and automatically infers and fills them from actual parameter types.
+`Type` is a language-level special entity. The compiler can naturally recognize `Type` positions in
+signatures and automatically infer and fill them from actual argument types.
 
 ```yaoxiang
-# Compiler auto-infers generic parameters
+# Compiler auto-inferring generic parameters
 numbers: List(Int) = List(Int)
 #         ^^^^^^^^   ^^^^^^
-#         type declaration   constructor call: Int fills T
+#         Type declaration   Constructor call: Int fills T
 
 # Function call inference
 numbers: List(Int) = List(Int)
@@ -491,7 +515,7 @@ map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R)) = {
     return result
 }
 
-# Usage sites
+# Use sites
 int_list: List(Int) = List(Int)
 doubled: List(Int) = map(int_list, (x: Int) => x * 2)  # Instantiate map[Int, Int]
 
@@ -516,14 +540,14 @@ map_String_String: (list: List(String), f: (String) -> String) -> List(String) =
 }
 ```
 
-#### 1.4 Explicit Fill (When Inference Fails)
+#### 1.4 Explicit Filling (When Inference Fails)
 
 ````yaoxiang
 # Omit Type parameters when inferable
 numbers: List(Int) = List(Int)
 strings: List(String) = map(numbers, (x: Int) => x.to_string())
 
-# Must explicitly fill when inference fails
+# Must explicitly fill when not inferable
 # map(numbers, (x) => x)  # ❌ Error: Cannot infer R
 
 ### 2. Type Constraint System
@@ -544,7 +568,7 @@ Debug: Type = {
     fmt: (Self, Formatter) -> Result,
 }
 
-# Using constraints: declare type constraints directly in signature
+# Using constraints: declare type constraints directly in the signature
 clone: (T: Clone) -> (value: T) -> T = value.clone()
 
 debug_print: (T: Debug)(value: T) -> Void = {
@@ -554,7 +578,7 @@ debug_print: (T: Debug)(value: T) -> Void = {
 }
 ````
 
-#### 2.2 Multiple Constraints
+#### 2.2 Multiple Constraint
 
 ```yaoxiang
 # Multiple constraint syntax
@@ -562,7 +586,7 @@ combine: (T: Clone + Add)(a: T, b: T) -> T = {
     a.clone() + b
 }
 
-# Sorting generic containers
+# Sorting a generic container
 sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T) = {
     # Implement sorting algorithm
     result: List(T) = list.clone()
@@ -583,7 +607,7 @@ map: (T: Type, R: FnMut(T))(array: Array(T), f: R) -> Array(R) = {
 doubled: Array(Int) = map(Array(1, 2, 3), (x: Int) => x * 2)  # Compiler infers
 ```
 
-#### 2.3 Function Type Constraints
+#### 2.3 Function Type Constraint
 
 ```yaoxiang
 # Higher-order function constraints
@@ -593,7 +617,7 @@ call_with_arg: (T: Type, U: Type, F: Fn(T) -> U)(arg: T, f: F) -> U = f(arg)
 
 compose: (A: Type, B: Type, C: Type, F: Fn(A) -> B, G: Fn(B) -> C)(a: A, f: F, g: G) -> C = g(f(a))
 
-# Usage example
+# Usage examples
 result: Int = call_with_arg(42, (x: Int) => x * 2)  # result = 84
 composed: String = compose(
     "hello",
@@ -602,67 +626,67 @@ composed: String = compose(
 )  # composed = "HELLO WORLD"
 ```
 
-#### 2.4 Built-in Marker Traits: Dup and Clone
+#### 2.4 Builtin Marker Trait: Dup and Clone
 
-**Three types of copy semantics**:
+**Three categories of copy semantics**:
 
-| Type                     | Meaning                                                               | Trigger                                   | Applicable Scenarios               |
-| ------------------------ | --------------------------------------------------------------------- | ----------------------------------------- | ---------------------------------- |
-| **Primitive value copy** | Automatic value copy on assignment, two values completely independent | Automatic on assignment/parameter passing | Int, Float, Bool, Char             |
-| **Dup**                  | Shallow copy: copy handle/token, underlying data shared               | Automatic on assignment/parameter passing | `&T` tokens, `ref T`, String/Bytes |
-| **Clone**                | Deep copy: create complete independent copy                           | `value.clone()`                           | Any type implementing Clone        |
+| Type                     | Meaning                                                          | Trigger                          | Applicable Scenarios               |
+| ------------------------ | ---------------------------------------------------------------- | -------------------------------- | ---------------------------------- |
+| **Primitive value copy** | Auto value copy on assignment, two values completely independent | Auto on assignment/param passing | Int, Float, Bool, Char             |
+| **Dup**                  | Shallow copy: copies handle/token, underlying data shared        | Auto on assignment/param passing | `&T` tokens, `ref T`, String/Bytes |
+| **Clone**                | Deep copy: creates a complete independent replica                | `value.clone()`                  | Any type implementing Clone        |
 
-**Dup semantics**: Types implementing Dup do not transfer ownership on assignment/parameter passing
-— the compiler copies the handle/token, and multiple holders point to the same underlying data. This
-complements the default Move semantics in RFC-009's ownership model.
+**Dup Semantics**: Types implementing Dup do not transfer ownership on assignment/param passing—the
+compiler copies the handle/token, and multiple holders point to the same underlying data. This
+complements the default Move semantics in the RFC-009 ownership model.
 
 **Dup and Clone are orthogonal concepts**:
 
 ```
-Dup = copy handle, shared data (modifications affect each other)
-Clone = copy data, independent copy (modifications don't affect each other)
+Dup = Copy handle, share data (modifications affect each other)
+Clone = Copy data, independent replica (modifications do not affect each other)
 ```
 
 **Rules**:
 
 ```
-1. Primitive value types (Int, Float, Bool, Char) — compiler built-in value copy, not Dup
-2. Dup — only applies to reference/token types and types with internal reference counting
+1. Primitive value types (Int, Float, Bool, Char) — compiler built-in value copy, not part of Dup
+2. Dup — only applies to reference/token types and internally reference-counted types
 3. Clone — explicit deep copy, any type can implement
 4. Default Move — other types maintain default Move semantics
 ```
 
 **Which types are Dup**:
 
-| Type                     | Dup     | Reason                                                       |
-| ------------------------ | ------- | ------------------------------------------------------------ |
-| `&T` (borrowed token)    | ✅      | Zero-size token, copying token = multiple views to same data |
-| `ref T`                  | ✅      | Rc/Arc copy = refcount +1, shared heap data                  |
-| String, Bytes            | ✅      | Internal refcount, copying handle shares underlying buffer   |
-| `&mut T` (mutable token) | ❌      | Linear exclusive, cannot copy                                |
-| struct                   | derived | All fields Dup → struct Dup                                  |
-| enum                     | derived | All fields of all variants Dup → enum Dup                    |
-| tuple                    | derived | All elements Dup → tuple Dup                                 |
-| Fn (closure)             | ❌      | Captured environment may not be Dup                          |
-| `*T` (raw pointer)       | ❌      | unsafe, not part of ownership system                         |
+| Type                     | Dup     | Reason                                                            |
+| ------------------------ | ------- | ----------------------------------------------------------------- |
+| `&T` (borrow token)      | ✅      | Zero-sized token, copying token = multiple views to same data     |
+| `ref T`                  | ✅      | Rc/Arc copy = reference count+1, shares heap data                 |
+| String, Bytes            | ✅      | Internal reference counting, copy handle shares underlying buffer |
+| `&mut T` (mutable token) | ❌      | Linearly exclusive, cannot copy                                   |
+| struct                   | Derived | All fields Dup → struct Dup                                       |
+| enum                     | Derived | All fields of all variants Dup → enum Dup                         |
+| tuple                    | Derived | All elements Dup → tuple Dup                                      |
+| Fn (closure)             | ❌      | Captured environment may be non-Dup                               |
+| `*T` (raw pointer)       | ❌      | unsafe, not part of ownership system                              |
 
-**Int/Float/Bool/Char are NOT Dup** — they are value types, and the compiler automatically performs
-value copy on assignment (two values completely independent). This is not "shallow copy"; it's
-built-in compiler handling of primitives, and should not be expressed through the Dup type
-attribute.
+**Int/Float/Bool/Char are not Dup**—they are value types, and the compiler auto-copies values on
+assignment (the two values are completely independent). This is not "shallow copy", but the
+compiler's built-in handling of primitives, which doesn't need and shouldn't be expressed through
+the Dup type property.
 
 ```yaoxiang
-# Primitive value types: compiler automatically value copy (not Dup)
+# Primitive value types: compiler auto value copy (not Dup)
 x: Int = 42
 y = x          # Value copy, x and y completely independent
 print(x)       # ✅
 
-# Dup: shallow copy, copy handle shared data
+# Dup: shallow copy, copy handle shares data
 view: &Point = &point
-view2 = view    # ✅ Dup: copy token, both point to same point
+view2 = view    # ✅ Dup: copy token, both point to the same point
 print(view.x)   # ✅
 
-# Clone: explicit deep copy, create independent copy
+# Clone: explicit deep copy, create independent replica
 backup = big_struct.clone()  # Explicit call
 
 # Generic constraints
@@ -670,11 +694,11 @@ dup_use: (T: Dup) -> T = x         # T: Dup → can shallow copy
 clone_use: (T: Clone) -> T = x.clone()  # T: Clone → can deep copy
 ```
 
-> **Note**: `Send`/`Sync` are not user-visible traits. Cross-task safety is guaranteed by the `ref`
-> keyword and fully automatic compiler handling — `ref` automatically chooses Rc or Arc, and users
-> don't need to understand Send/Sync.
+> **Note**: `Send`/`Sync` are not exposed as user-visible traits. Cross-task safety guarantees are
+> handled by the `ref` keyword and the compiler fully automatically—`ref` auto-selects Rc or Arc,
+> users don't need to understand Send/Sync.
 
-### 3. Associated Types
+### 3. Associated Type
 
 #### 3.1 Associated Type Definition
 
@@ -697,7 +721,7 @@ collect_all: (T: Type, I: Iterator(T))(iter: I) -> List(T) = {
     return result
 }
 
-# Array's Iterator implementation
+# Iterator implementation for Array
 # Using method syntax sugar: Array.Item, Array.next, Array.has_next
 Array.has_next: (T: Type)(self: Array(T)) -> Bool = {
     return self.index < self.length
@@ -718,16 +742,16 @@ Array.Item: (T: Type)(arr: Array(T)) -> T = {
 }
 ```
 
-#### 3.2 Generic Associated Types (GAT)
+#### 3.2 Generic Associated Type (GAT)
 
 ```yaoxiang
-# More complex associated types
+# More complex associated type
 Producer: (Item: Type) -> Type = {
     Item: T,
     produce: (Self) -> Option(Item),
 }
 
-# Associated types can be generic
+# Associated type can be generic
 Container: (Item: Type) -> Type = {
     Item: T,
     IteratorType: Iterator(Item),  # Associated type is also generic
@@ -744,16 +768,16 @@ process_container: (T: Type, C: Container(T))(container: C) -> List(T) = {
 
 #### 4.1 Compile-Time Constant Parameters
 
-**Core Design**: `Type` in generic signatures marks compile-time type parameters, and `Int` and
-other value parameters are compile-time determinable by default in generic contexts. No `const`
-keyword needed.
+**Core Design**: The `Type` marker in a generic signature marks a compile-time type parameter. Value
+parameters like `Int` are by default determinable at compile time in a generic context. No `const`
+keyword is needed.
 
 ```yaoxiang
 # ════════════════════════════════════════════════════════
-# Compile-time constant parameters: Int in generics defaults to compile-time determinable
+# Compile-time constant parameters: Int in generics is determined at compile time by default
 # ════════════════════════════════════════════════════════
 
-# Compile-time factorial: N must be a compile-time known literal
+# Compile-time factorial: N must be a compile-time-known literal
 factorial: (N: Int) -> (n: N) -> Int = {
     return match n {
         0 => 1,
@@ -765,10 +789,10 @@ factorial: (N: Int) -> (n: N) -> Int = {
 add: (a: Int, b: Int) -> (a: a, b: b) -> Int = a + b
 
 # ════════════════════════════════════════════════════════
-# Compile-time constant arrays
+# Compile-time constant array
 # ════════════════════════════════════════════════════════
 StaticArray: (T: Type, N: Int) -> Type = {
-    data: Array(T, N),  # Array with compile-time known size
+    data: Array(T, N),  # Array with compile-time-known size
     length: N,
 }
 
@@ -783,15 +807,15 @@ arr: StaticArray(Int, factorial(5))  # StaticArray(Int, 120), compiler computes 
 # Compile-time computation examples
 # ════════════════════════════════════════════════════════
 
-# Compiler evaluates function calls on literal types at compile time
-SIZE: Int = factorial(5)  # Compile-time value is 120
+# Compiler computes function calls on literal types at compile time
+SIZE: Int = factorial(5)  # Compile-time value 120
 
 # Matrix type usage
 Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
     data: Array(Array(T, Cols), Rows),
 }
 
-# Compile-time dimension verification
+# Compile-time dimension validation
 identity_matrix: (T: Add + Zero + One, N: Int)(size: N) -> Matrix(T, N, N) = {
     matrix: Matrix(T, N, N) = Matrix(T, N, N)()
     for i in 0..size {
@@ -810,71 +834,71 @@ identity_matrix: (T: Add + Zero + One, N: Int)(size: N) -> Matrix(T, N, N) = {
 identity_3x3: Matrix(Float, 3, 3) = identity_matrix(Float, 3)(3)
 ```
 
-### Never and Void: ⊥ and ⊤ in the Type System
+### Never and Void: ⊥ and ⊤ of the Type System
 
-YaoXiang's type system simultaneously has ⊥ (false/empty type) and ⊤ (true/Unit) in the Curry-Howard
-isomorphism, carried by two built-in type names: `Never` and `Void`:
+YaoXiang's type system simultaneously possesses ⊥ (false/empty type) and ⊤ (true/Unit) in the
+Curry-Howard Isomorphism, carried by the two builtin type names `Never` and `Void`:
 
-**Never (⊥)** — Three non-negotiable kernel properties:
+**Never (⊥)** — three non-negotiable core properties:
 
 1. **Zero constructors**: No literal or expression can produce a value of type `Never`. This is a
    meta-level property and must be built-in.
-2. **Principle of explosion**: `Never <: T` holds for any type `T`. A `Never` value can be used as
-   any type — this is why code after `assert(false)` still passes type checking (although it never
+2. **Explosion principle**: `Never <: T` holds for any type `T`. A `Never` value can be used as any
+   type—this is why code after `assert(false)` still passes type checking (though it never
    executes).
-3. **Divergence marker**: `f: (...) -> Never` indicates `f` guarantees not to return. The compiler
+3. **Divergence marker**: `f: (...) -> Never` means `f` is guaranteed not to return. The compiler
    uses this for dead code analysis.
 
-`Never` is a built-in type name, not a keyword, and the parser is unaware of it. Empty type literal
-syntax is not exposed to users.
+`Never` is a builtin type name, not a keyword, and the parser is unaware of it. No empty sum type or
+type literal syntax is exposed.
 
-**Void (⊤, i.e., Unit)** — Exactly one inhabitant (default void value), the carrier of the true
-proposition "always true". `Void` is the unit of zero-field product types, `Never` is the unit of
-zero-variant sum types — the two are dual. `x: Void = <default>` is valid, `x: Never = ...` has no
-right-hand side to write.
+**Void (⊤, i.e., Unit)** — has exactly one inhabitant (the default void value), the carrier of the
+true proposition "always true". `Void` is the unit of zero-field product types, `Never` is the unit
+of zero-variant sum types—the two are dual. `x: Void = <default>` is legal, `x: Never = ...` has no
+right-hand side possible.
 
-#### 4.3 Compile-Time Verification (Standard Library Implementation)
+#### 4.3 Compile-Time Validation (Standard Library Implementation)
 
 ```yaoxiang
 # ════════════════════════════════════════════════════════
-# Standard library implementation: using conditional types
+# Standard library implementation: utilizing conditional types
 # ════════════════════════════════════════════════════════
 
 # Standard library definition
-# IsTrue: bridge from value universe to type universe — Bool truth mapped to types
+# IsTrue: bridge from value universe to type universe—Bool truth value maps to a type
 IsTrue: (b: Bool) -> Type = match b {
-    true => Void,      # ⊤, has value, program continues
+    true => Void,      # ⊤, has a value, program continues
     false => Never,    # ⊥, no value, diverges
 }
 
-# Assert: compile-time refinement type primitive — type-level statement of Bool proposition
+# Assert: compile-time refinement type primitive—type-level statement of a Bool proposition
 Assert: (cond: Bool) -> Type = IsTrue(cond)
 #
-# cond is true   → Assert(true)  = Void    (always true, erased)
-# cond is false  → Assert(false) = Never   (always false, compile error/diverges)
-# cond undecidable → handled by proof pipeline in dispatch mode:
-#                  CompileTime → Unknown, requires prove
-#                  Runtime     → insert check, inject Γ assumption
+# cond is true  → Assert(true)  = Void    (tautology, erased)
+# cond is false → Assert(false) = Never   (contradiction, compile error/divergence)
+# cond undecidable → proof pipeline decides by dispatch mode:
+#                    CompileTime → Unknown, requires prove
+#                    Runtime     → insert check, inject Γ assumption
 
-# Usage method 1: as constraint in type definition
+# Usage 1: as a constraint in type definition
 Array: (T: Type, N: Int) -> Type = {
     data: Array(T, N),
     # Compile-time check: N must be greater than 0 (Assert in type position)
     length: Assert(N > 0),
 }
 
-# Usage method 2: in expressions
+# Usage 2: in expressions
 IntArray: (N: Int) -> Type = StaticArray(Int, N)
-# Verify: IntArray(10) size equals sizeof(Int) * 10
+# Validate: IntArray(10) size equals sizeof(Int) * 10
 Assert(size_of(IntArray(10)) == sizeof(Int) * 10)
 ```
 
 #### 4.4 Compile-Time Generic Specialization
 
 ```yaoxiang
-# Small array optimization: using function overloading to implement compile-time generic specialization
+# Small array optimization: use function overloading to implement compile-time generic specialization
 
-# General implementation
+# Generic implementation
 sum: (T: Type, N: Int) -> ((arr: Array(T, N)) -> T) = {
     result = Zero::zero()
     for item in arr.data {
@@ -896,13 +920,14 @@ sum: (T: Type, N: Int) -> ((arr: Array(T, N)) -> T) = {
 }
 ```
 
-### 5. Conditional Types
+### 5. Conditional Type
 
-> **Curry-Howard Isomorphism**: Conditional types, from a Curry-Howard perspective, are **case
-> analysis** in logic. The `Bool` type corresponds to a proposition with two possible values
-> (True/False), and `If` selects different results based on the truth of that proposition — this is
-> precisely case disjunction in logic. `match C { True => T, False => E }` actually expresses:
-> "Given proposition C is True, the conclusion is T; when C is False, the conclusion is E".
+> **Curry-Howard Isomorphism**: Conditional types are **case analysis** in logic from the
+> Curry-Howard perspective. The `Bool` type corresponds to a proposition with two possible values
+> (True/False), and `If` selects different results based on whether the proposition is true or
+> false—this is exactly case disjunction in logic. `match C { True => T, False => E }` is
+> essentially expressing: "given proposition C, the conclusion is T when C is True, and E when C is
+> False".
 
 #### 5.1 If Conditional Type
 
@@ -913,12 +938,12 @@ If: (C: Bool, T: Type, E: Type) -> Type = match C {
     False => E,
 }
 
-# Example: compile-time branching
+# Examples: compile-time branching
 NonEmpty: (T: Type) -> Type = If(T != Void, T, Never)
 
 Optional: (T: Type) -> Type = If(T != Void, T, Void)
 
-# Compile-time verification (unified with §4.3 Assert definition)
+# Compile-time validation (unified with the Assert definition in §4.3)
 # Assert: (cond: Bool) -> Type = IsTrue(cond)
 
 # Usage
@@ -926,15 +951,15 @@ Optional: (T: Type) -> Type = If(T != Void, T, Void)
 # Type computation: If(False, Int, String) => String
 ```
 
-#### 5.2 Type Families
+#### 5.2 Type Family
 
-> **Curry-Howard Isomorphism**: Type families are the most direct manifestation of "propositions as
+> **Curry-Howard Isomorphism**: Type families are the most direct embodiment of "propositions as
 > types". `Add: (A: Type, B: Type) -> Type` is not "writing an addition function at the type level",
 > but rather **constructing a proposition about natural number addition**. `(Zero, B) => B` says
-> "proposition Add(Zero, B) is equivalent to B", `(Succ(A'), B) => Succ(Add(A', B))` says "if
-> Add(A', B) holds, then Add(Succ(A'), B) also holds". This is the definition of addition from Peano
-> axioms itself. The type checker verifying this match expression passes is equivalent to verifying
-> the logical consistency of this definition.
+> "proposition Add(Zero, B) is equivalent to B", and `(Succ(A'), B) => Succ(Add(A', B))` says "if
+> Add(A', B) holds, then Add(Succ(A'), B) also holds". This is exactly the addition definition in
+> the Peano axioms. The type checker verifying that this match expression passes is equivalent to
+> verifying the logical consistency of this definition.
 
 ```yaoxiang
 # Compile-time type conversion
@@ -953,35 +978,35 @@ Length: (T: Type) -> Type = match T.length {
     _ => TooLong,
 }
 
-# Type-level addition (Curry-Howard: case analysis + recursive call, needs termination check for complete induction)
+# Type-level addition (Curry-Howard: case analysis + recursive call, requires termination check to be full induction)
 Add: (A: Type, B: Type) -> Type = match (A, B) {
     (Zero, B) => B,
     (Succ(A'), B) => Succ(Add(A', B)),
 }
 
-# Example: compile-time computation of 2 + 3
+# Example: compile-time compute 2 + 3
 Two: Type = Succ(Succ(Zero))
 Three: Type = Succ(Succ(Succ(Zero)))
 Five: Type = Add[Two, Three]  # Succ(Succ(Succ(Succ(Succ(Zero)))))
 ```
 
-### 6. Function Overloading Specialization
+### 6. Function Overload Specialization
 
 #### 6.1 Basic Specialization
 
 ```yaoxiang
-# Basic specialization: using function overloading (compiler auto-selects)
+# Basic specialization: use function overloading (compiler auto-selects)
 sum: (arr: Array(Int)) -> Int = {
-    # Compiled to more efficient code
+    # Compiled into more efficient code
     return native_sum_int(arr.data, arr.length)
 }
 
 sum: (arr: Array(Float)) -> Float = {
-    # Use SIMD instructions
+    # Uses SIMD instructions
     return simd_sum_float(arr.data, arr.length)
 }
 
-# General implementation
+# Generic implementation
 sum: (T: Type) -> ((arr: Array(T)) -> T) = {
     result = Zero::zero()
     for item in arr {
@@ -994,7 +1019,7 @@ sum: (T: Type) -> ((arr: Array(T)) -> T) = {
 #### 6.2 Conditional Specialization
 
 ```yaoxiang
-# Specialization fully compliant with RFC-010 syntax: function overloading
+# Fully compliant with RFC-010 syntax specialization method: function overloading
 
 # Concrete type specialization
 sum: (arr: Array(Int)) -> Int = {
@@ -1014,22 +1039,22 @@ sum: (T: Type) -> ((arr: Array(T)) -> T) = {
     return result
 }
 
-# Usage is completely transparent
+# Completely transparent at usage
 int_arr = Array(Int)(1, 2, 3)
 float_arr = Array(Float)(1.0, 2.0, 3.0)
 
 # Compiler auto-selects optimal specialization
-sum(int_arr)     # Select sum: (Array(Int)) -> Int
-sum(float_arr)    # Select sum: (Array(Float)) -> Float
+sum(int_arr)     # Selects sum: (Array(Int)) -> Int
+sum(float_arr)    # Selects sum: (Array(Float)) -> Float
 ```
 
 #### 6.3 Perfect Combination of Function Overloading and Inlining
 
-**Key Feature**: Function overloading and inlining optimization naturally combine to achieve
+**Key Feature**: Function overloading naturally combines with inlining optimization, achieving
 zero-cost abstraction.
 
 ```yaoxiang
-# ======== Source Code ========
+# ======== Source code ========
 sum: (arr: Array(Int)) -> Int = {
     return native_sum_int(arr.data, arr.length)
 }
@@ -1050,16 +1075,16 @@ sum: (T: Type) -> ((arr: Array(T)) -> T) = {
 int_arr = Array(Int)(1, 2, 3, 4, 5)
 result = sum(int_arr)
 
-# ======== After Compilation (Equivalent Code) ========
+# ======== After compilation (equivalent code) ========
 # Compiler auto-selects optimal specialization, then inlines
 result = native_sum_int(int_arr.data, int_arr.length)
 
-# Completely equivalent to hand-written optimized code, no function call overhead!
+# Completely equivalent to manually written optimized code, no function call overhead!
 ```
 
 **Core Advantages**:
 
-1. **Compiler Intelligent Selection**
+1. **Compiler intelligent selection**
 
    ```yaoxiang
    sum(int_arr)      # Auto-select sum: (Array(Int)) -> Int
@@ -1067,22 +1092,22 @@ result = native_sum_int(int_arr.data, int_arr.length)
    sum(custom_arr)  # Auto-select sum: (T: Type) -> ((arr: Array(T)) -> T)
    ```
 
-2. **Inlining Optimization**
-   - Small functions auto-inlined to call sites
+2. **Inlining optimization**
+   - Small functions auto-inlined at call site
    - Zero function call overhead
-   - Completely equivalent to hand-written optimized code
+   - Completely equivalent to manually written optimized code
 
-3. **Type Safety**
+3. **Type safety**
    - Compile-time type checking
    - Zero runtime overhead
-   - No virtual function tables
+   - No virtual function tables needed
 
-4. **Perfect Alignment with RFC-010**
+4. **Perfect fit with RFC-010**
 
    ```yaoxiang
    # Fully uses unified syntax
    name: type = value
-   # No new keywords like impl, where needed
+   # No need for impl, where, or other new keywords
    ```
 
 **Practical Application Examples**:
@@ -1101,17 +1126,19 @@ fibonacci: (n: Float) -> Float = {
 }
 
 # Compiler auto-selects and inlines
-fibonacci(10)      # Select Int version, fully inlined
-fibonacci(10.5)    # Select Float version, uses Binet's formula
+fibonacci(10)      # Selects Int version, fully inlined
+fibonacci(10.5)    # Selects Float version, uses Binet's formula
 ```
 
 **What Does This Mean?**
 
-- ✅ **Generic Specialization** → Naturally solved by function overloading
-- ✅ **Performance Optimization** → Auto-completed by inlining
-- ✅ **Code Reuse** → One function name, multiple implementations
-- ✅ **Zero-Cost Abstraction** → Compile-time polymorphism, zero runtime overhead
-- ✅ **No New Keywords Needed** → Perfectly aligns with RFC-010 unified syntax
+- ✅ **Generic specialization** → function overloading naturally solves it
+- ✅ **Performance optimization** → inlining auto-completed
+- ✅ **Code reuse** → one function name, multiple implementations
+- ✅ **Zero-cost abstraction** → compile-time polymorphism, zero runtime overhead
+- ✅ **No new keywords** → perfectly conforms to RFC-010 unified syntax
+
+````
 
 ### 7. Dead Code Elimination Mechanism
 
@@ -1150,26 +1177,26 @@ fn eliminate_dead_instantiations(graph: &InstantiationGraph) {
         }
     }
 }
-```
+````
 
-#### 7.2 Usage Site Analysis
+#### 7.2 Use-Site Analysis
 
 ```yaoxiang
 # Source code analysis
 map: (T: Type, R: Type)(list: List(T), f: Fn(T) -> R) -> List(R) = ...
 
-# Usage site 1: instantiate map(Int, Int)
+# Use site 1: instantiate map(Int, Int)
 int_list = List(1, 2, 3)
 doubled = map(int_list, (x) => x * 2)  # Needs map[Int, Int]
 
-# Usage site 2: instantiate map(String, String)
+# Use site 2: instantiate map(String, String)
 string_list = List("a", "b", "c")
 uppercased = map(string_list, (s) => s.to_uppercase())  # Needs map[String, String]
 
-# Unused: map[Float, Float] etc.
-# These generic instantiations will not be generated
+# Unused: map[Float, Float], etc.
+# These generic instances will not be generated
 
-# After compilation, only includes used instantiations
+# After compilation, only used instances are included
 map_Int_Int: (list: List(Int), f: Fn(Int) -> Int) -> List(Int) = ...
 map_String_String: (list: List(String), f: Fn(String) -> String) -> List(String) = ...
 ```
@@ -1186,11 +1213,11 @@ Array: (T: Type, N: Int) -> Type = {
 arr_10_int = Array(Int, 10)(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
 arr_100_int = Array(Int, 100)(...)
 
-# After compilation, only generates used Sizes
+# After compilation, only used Sizes are generated
 Array_Int_10: (Array(Int, 10)) = ...
 Array_Int_100: (Array(Int, 100)) = ...
 
-# Unused Sizes will not be generated
+# Unused Sizes are not generated
 # Array(Int, 50) will not be generated
 ```
 
@@ -1216,7 +1243,7 @@ uppercased = map(string_list, (s) => s.to_uppercase())  # Instantiate map(String
 # Compilation analysis:
 # - Module B uses map[Int, Int]
 # - Module C uses map[String, String]
-# - After compilation, binary only contains these two instantiations
+# - Compiled binary only contains these two instances
 ```
 
 #### 7.5 LLVM-Level DCE
@@ -1242,7 +1269,7 @@ fn optimize_ir(ir: &mut IR) {
     llvm_ir.add_pass(Passes::GLOBAL_DCE);
     llvm_ir.add_pass(Passes::MERGE_FUNC);
 
-    // 6. Run optimizations
+    // 6. Run optimization passes
     llvm_ir.run_optimization_passes();
 }
 ```
@@ -1263,8 +1290,8 @@ macro_rules! impl_debug {
     };
 }
 
-# ✅ Generics approach: automatic derivation
-# Using function overloading for automatic derivation
+# ✅ Generic approach: auto-derive
+# Use function overloading for auto-derive
 debug_fmt: (T: fields...) -> ((self: Point(T)) -> String) = {
     return "Point { x: " + self.x.to_string() + ", y: " + self.y.to_string() + " }"
 }
@@ -1289,7 +1316,7 @@ html! {
     </div>
 }
 
-# ✅ Generics approach: type-safe builder
+# ✅ Generic approach: type-safe builder
 Element: Type = {
     tag: String,
     attrs: HashMap(String, String),
@@ -1307,7 +1334,7 @@ with_class: [E: Element](elem: E, class: String) -> E = {
 }
 
 with_text: [E: Element](elem: E, text: String) -> E = {
-    return E { text: some(text), ..elem }
+    return E { text: Some(text), ..elem }
 }
 
 # Build DOM
@@ -1332,7 +1359,7 @@ macro_rules! add_types {
     };
 }
 
-# ✅ Generics approach: conditional types
+# ✅ Generic approach: conditional type
 Add: (A: Type, B: Type) -> Type = match (A, B) {
     (Int, Int) => Int,
     (Float, Float) => Float,
@@ -1341,7 +1368,7 @@ Add: (A: Type, B: Type) -> Type = match (A, B) {
     _ => TypeError,
 }
 
-# Compile-time verification
+# Compile-time validation
 AssertAddable: (A: Type, B: Type) -> Type = If(Add(A, B) != TypeError, (A, B), compile_error("Cannot add"))
 
 # Usage
@@ -1369,7 +1396,7 @@ List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
 
-    # Generic method (T automatically brought into scope by outer List(T))
+    # Generic method (T is auto-imported into scope by outer List(T))
     push: (self: List(T), item: T) -> Void,
     pop: (self: List(T)) -> Option(T),
     map: (R: Type) -> ((self: List(T), f: (T) -> R) -> List(R)),
@@ -1378,9 +1405,9 @@ List: (T: Type) -> Type = {
 }
 
 # ======== 2. Implement generic methods ========
-# Function definitions in List namespace (List. prefix = namespace ownership)
-# To make list.push(item) . call syntax work, need explicit binding: List.push = push[0]
-# self is just conventional parameter name, compiler looks at types not names
+# Function defined under List namespace (List. prefix = namespace ownership)
+# To make . call syntax like list.push(item) work, explicit binding needed: List.push = push[0]
+# self is just a conventional parameter name, compiler looks at type not name
 
 List.push: (T: Type) -> ((self: List(T), item: T) -> Void) = {
     if self.length >= self.data.length {
@@ -1430,7 +1457,7 @@ List.fold: (T: Type, U: Type) -> ((self: List(T), initial: U, f: (U, T) -> U) ->
     return result
 }
 
-# ======== 3. Using type constraints ========
+# ======== 3. Type constraint usage ========
 # Implement Clone for List
 List.clone: (T: Clone) -> ((self: List(T)) -> List(T)) = {
     result = List(T)()
@@ -1451,7 +1478,7 @@ numbers.push(3)
 doubled = numbers.map((x) => x * 2)
 evens = numbers.filter((x) => x % 2 == 0)
 
-# Use fold to compute
+# Use fold for computation
 sum = numbers.fold(0, (acc, x) => acc + x)  # sum = 6
 
 # Generic composition
@@ -1502,7 +1529,7 @@ quicksort: (T: Clone) -> ((array: Array(T), cmp: Comparator(T)) -> Array(T)) = {
 }
 
 # ======== 2. IntComparator implementation ========
-# Using function overloading for implementation
+# Implemented via function overloading
 compare: (a: Int, b: Int) -> Int = {
     if a < b {
         return -1
@@ -1518,7 +1545,7 @@ compare: (a: Int, b: Int) -> Int = {
 numbers = Array(Int)(3, 1, 4, 1, 5, 9, 2, 6)
 sorted = quicksort(numbers, Comparator(Int)())
 
-# Sort String array (needs StringComparator)
+# Sort String array (requires StringComparator)
 strings = Array(String)("hello", "world", "foo", "bar")
 sorted_strings = quicksort(strings, Comparator(String)())
 ```
@@ -1530,9 +1557,9 @@ sorted_strings = quicksort(strings, Comparator(String)())
 Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
     data: Array(Array(T, Cols), Rows),
 
-    # Compile-time dimension verification: using Assert standard library type
-    _assert: Assert[Rows > 0],  # Rows > 0, otherwise compile error
-    _assert: Assert[Cols > 0],  # Cols > 0, otherwise compile error
+    # Compile-time dimension validation: using the Assert standard library type
+    _assert: Assert(Rows > 0),  # Rows > 0, otherwise compile error
+    _assert: Assert(Cols > 0),  # Cols > 0, otherwise compile error
 
     # Matrix operations
     multiply: (M: Int) -> ((self: Matrix(T, Rows, Cols), other: Matrix(T, Cols, M)) -> Matrix(T, Rows, M)) = {
@@ -1566,7 +1593,7 @@ identity: (T: Add + Multiply + One, N: Int) -> ((size: N) -> Matrix(T, N, N)) = 
 }
 
 # ======== 3. Usage examples ========
-# Create matrix with compile-time known size
+# Create a matrix with compile-time-known size
 # 2x3 matrix
 matrix_2x3 = Matrix(Float, 2, 3)()
 matrix_2x3.data[0][0] = 1.0
@@ -1588,7 +1615,7 @@ matrix_3x2.data[2][1] = 12.0
 # Matrix multiplication: 2x3 * 3x2 = 2x2
 result = matrix_2x3.multiply(matrix_3x2)
 
-# Compile-time verification: result type is Matrix(Float, 2, 2)
+# Compile-time validation: result type is Matrix(Float, 2, 2)
 # 2x2 identity matrix
 identity_3x3 = identity(Float, 3)()
 
@@ -1600,104 +1627,104 @@ identity_3x3 = identity(Float, 3)()
 
 ### Advantages
 
-1. **Zero-cost abstraction**
+1. **Zero-Cost Abstraction**
    - Compile-time monomorphization, no runtime overhead
    - No virtual functions, no RTTI
 
-2. **Dead code elimination**
+2. **Dead Code Elimination**
    - Compile-time analysis, only instantiate used generics
-   - Code bloat controllable
+   - Controllable code bloat
 
-3. **Macro replacement**
+3. **Macro Replacement**
    - Type-safe code generation
    - IDE-friendly, clear error messages
 
-4. **Compile-time computation**
+4. **Compile-Time Computation**
    - Compile-time generics support compile-time computation
-   - Dimension verification and other features
+   - Dimension validation and other features
    - No `const` keyword needed, pure type constraints
 
 ### Disadvantages
 
-1. **Compilation time**
-   - Generic instantiation increases compilation time
+1. **Compile Time**
+   - Generic instantiation increases compile time
    - Constraint solving may be slow
 
-2. **Memory usage**
-   - Increased compiler memory usage
+2. **Memory Usage**
+   - Compiler memory usage increases
    - Caching mechanism requires memory
 
-3. **Implementation complexity**
+3. **Implementation Complexity**
    - Constraint solver is complex
    - Type-level computation engine is complex
 
-4. **Error diagnostics**
+4. **Error Diagnostics**
    - Generic errors may be complex
-   - Clear error hints needed
+   - Clear error messages needed
 
-### Mitigation Measures
+### Mitigations
 
-1. **Caching strategy**
+1. **Caching Strategy**
    - Cache instantiation results
-   - LRU cache to limit memory
+   - LRU cache limits memory
 
-2. **Incremental compilation**
+2. **Incremental Compilation**
    - Cache compilation results
    - Incremental instantiation
 
-3. **Error hints**
+3. **Error Messages**
    - Clear error messages
    - Generic parameter inference hints
 
-4. **Parallel compilation**
-   - Parallel instantiation of generics
+4. **Parallel Compilation**
+   - Parallel generic instantiation
    - Multi-threaded constraint solving
 
-## Alternative Approaches
+## Alternatives
 
-| Approach            | Why Not Chosen                      |
-| ------------------- | ----------------------------------- |
-| Basic generics only | Cannot replace complex macros       |
-| Pure macro system   | No type safety, poor error messages |
-| Constraint-only     | Insufficient flexibility            |
-| Runtime generics    | Performance overhead                |
+| Alternative                 | Why Not Chosen                      |
+| --------------------------- | ----------------------------------- |
+| Basic generics only         | Cannot replace complex macros       |
+| Pure macro system           | No type safety, poor error messages |
+| Dependency constraints only | Insufficient flexibility            |
+| Runtime generics            | Performance overhead                |
 
 ### Risks
 
 | Risk                          | Impact                     | Mitigation                    |
 | ----------------------------- | -------------------------- | ----------------------------- |
-| Constraint solving complexity | Prolonged compilation      | Incremental solving + caching |
-| Code bloat                    | Large binary files         | DCE + threshold control       |
+| Constraint solving complexity | Long compile time          | Incremental solving + caching |
+| Code bloat                    | Binary too large           | DCE + threshold control       |
 | Implementation complexity     | Extended development cycle | Phased implementation         |
 | Error diagnostics             | Poor user experience       | Detailed error messages       |
 
-## Open Issues
+## Open Questions
 
-### Pending Decisions
+### Issues to be Resolved
 
-| Topic                  | Description                     | Status           |
-| ---------------------- | ------------------------------- | ---------------- |
-| Instantiation strategy | Eager vs Lazy vs Threshold      | Under discussion |
-| Cache size             | LRU cache capacity setting      | Under discussion |
-| Error diagnostics      | Generic error message verbosity | Under discussion |
+| Topic                  | Description                               | Status     |
+| ---------------------- | ----------------------------------------- | ---------- |
+| Instantiation strategy | Eager vs Lazy vs Threshold                | To discuss |
+| Cache size             | LRU cache capacity setting                | To discuss |
+| Error diagnostics      | Level of detail in generic error messages | To discuss |
 
 ### Future Optimizations
 
-| Optimization                   | Value  | Difficulty |
-| ------------------------------ | ------ | ---------- |
-| Instantiation graph analysis   | High   | Medium     |
-| Type-level programming DSL     | Medium | High       |
-| Generic performance benchmarks | Medium | Low        |
+| Optimization                   | Value  | Implementation Difficulty |
+| ------------------------------ | ------ | ------------------------- |
+| Instantiation graph analysis   | High   | Medium                    |
+| Type-level programming DSL     | Medium | High                      |
+| Generic performance benchmarks | Medium | Low                       |
 
 ## Appendix
 
 ### Syntax BNF
 
 ```bnf
-# Generic parameters use unified () syntax, as part of function type
-# e.g., map: (T: Type, R: Type) -> ((list: List(T), f: (T) -> R) -> List(R))
+# Generic parameters use unified () syntax, as part of the function type
+# E.g. map: (T: Type, R: Type) -> ((list: List(T), f: (T) -> R) -> List(R))
 
-# Type bounds (in generic parameters)
+# Type constraint (in generic parameters)
 type_bound ::= identifier
              | identifier '+' identifier ('+' identifier)*
 
@@ -1707,18 +1734,18 @@ parameter ::= identifier ':' type
 parameters ::= parameter (',' parameter)*
 
 # Function declaration: name: type = expression
-# Generic parameters are the first parameter group in function type: (T: Type) -> ((params) -> return)
+# Generic parameters are the first parameter group in the function type: (T: Type) -> ((params) -> return)
 function ::= identifier ':' type '=' (expression | block)
 
 # Method declaration: Type.method: type = expression
 method ::= identifier '.' identifier ':' type '=' (expression | block)
 
 # Type definition (unified Binding syntax)
-# Generic types like List: (T: Type) -> Type = { ... }
+# Generic type e.g. List: (T: Type) -> Type = { ... }
 generic_type ::= identifier ':' type '=' type_expression
 
-# Type in generic parameters auto-filled by compiler from actual argument types
-# e.g., map(numbers, f), T extracted from numbers: List(Int), R extracted from f: (Int) -> String
+# Type in generic parameters is auto-filled by compiler from actual argument types
+# E.g. map(numbers, f), T is extracted from numbers: List(Int), R is extracted from f: (Int) -> String
 ```
 
 ## Lifecycle and Destination
@@ -1730,7 +1757,7 @@ generic_type ::= identifier ':' type '=' type_expression
        │
        ▼
 ┌─────────────┐
-│  Under Review │  ← Open for community discussion and feedback
+│  Reviewing  │  ← Open community discussion and feedback
 └──────┬──────┘
        │
        ├──────────────────┐
@@ -1742,7 +1769,7 @@ generic_type ::= identifier ':' type '=' type_expression
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
 │   accepted/ │    │    rfc/     │
-│ (official design) │    │ (preserved in place) │
+│ (Official)  │    │ (Preserved) │
 └─────────────┘    └─────────────┘
 ```
 
@@ -1756,7 +1783,7 @@ generic_type ::= identifier ':' type '=' type_expression
 - [RFC-009: Ownership Model](./accepted/009-ownership-model.md)
 - [RFC-001: spawn Model](./accepted/001-concurrent-model-error-handling.md)
 - [RFC-008: Runtime Model](./accepted/008-runtime-concurrency-model.md)
-- [tutorial/ Tutorials](../../../../../tutorial/)
+- [tutorial/](../../../../../tutorial/)
 
 ### External References
 

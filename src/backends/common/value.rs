@@ -6,7 +6,6 @@
 use std::sync::Arc;
 use std::collections::HashMap;
 use std::fmt;
-use std::alloc;
 use std::hash::{Hash, Hasher};
 
 /// Wrapper for `*mut c_void` that implements Send + Sync.
@@ -330,48 +329,6 @@ impl RuntimeValue {
         self.value_type(None)
     }
 
-    /// Check if value matches a type
-    pub fn is_type(
-        &self,
-        ty: &ValueType,
-    ) -> bool {
-        &self.value_type(None) == ty
-    }
-
-    /// Get enum variant ID
-    pub fn enum_variant_id(&self) -> Option<u32> {
-        match self {
-            RuntimeValue::Enum { variant_id, .. } => Some(*variant_id),
-            _ => None,
-        }
-    }
-
-    /// Get enum payload
-    pub fn enum_payload(&self) -> Option<&RuntimeValue> {
-        match self {
-            RuntimeValue::Enum { payload, .. } => Some(payload),
-            _ => None,
-        }
-    }
-
-    /// Get struct field by index with heap access
-    pub fn struct_field_with_heap<'a>(
-        &self,
-        index: usize,
-        heap: &'a super::heap::Heap,
-    ) -> Option<&'a RuntimeValue> {
-        match self {
-            RuntimeValue::Struct { fields, .. } => {
-                if let Some(super::heap::HeapValue::Tuple(items)) = heap.get(*fields) {
-                    items.get(index)
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
-    }
-
     /// Convert to bool
     pub fn to_bool(&self) -> Option<bool> {
         match self {
@@ -397,14 +354,6 @@ impl RuntimeValue {
         }
     }
 
-    /// Get Arc inner value
-    pub fn as_arc(&self) -> Option<&RuntimeValue> {
-        match self {
-            RuntimeValue::Arc(inner) => Some(inner),
-            _ => None,
-        }
-    }
-
     /// Check if this is an Arc (ref keyword)
     pub fn is_arc(&self) -> bool {
         matches!(self, RuntimeValue::Arc(_))
@@ -423,14 +372,6 @@ impl RuntimeValue {
             _ => None,
         }
     }
-
-    /// Get vtable reference for a struct
-    pub fn vtable(&self) -> Option<&Vec<(String, FunctionValue)>> {
-        match self {
-            RuntimeValue::Struct { vtable, .. } => Some(vtable),
-            _ => None,
-        }
-    }
 }
 
 // ============================================================================
@@ -438,11 +379,6 @@ impl RuntimeValue {
 // ============================================================================
 
 impl RuntimeValue {
-    /// Move: transfer ownership (zero-copy, just pointer move)
-    pub fn move_into(self) -> Self {
-        self
-    }
-
     /// Clone: explicit copy
     pub fn explicit_clone(&self) -> Self {
         match self {
@@ -635,44 +571,6 @@ impl RuntimeValue {
     /// Convert to Arc (ref keyword runtime representation)
     pub fn into_arc(self) -> Self {
         RuntimeValue::Arc(Arc::new(self))
-    }
-
-    /// Create Arc from a RuntimeValue
-    pub fn from_arc(arc: Arc<RuntimeValue>) -> Self {
-        RuntimeValue::Arc(arc)
-    }
-}
-
-// ============================================================================
-// Memory Layout
-// ============================================================================
-
-impl RuntimeValue {
-    /// Get memory layout for this value (for allocators)
-    pub fn layout(&self) -> alloc::Layout {
-        match self {
-            RuntimeValue::Void => alloc::Layout::new::<()>(),
-            RuntimeValue::Bool(_) => alloc::Layout::new::<bool>(),
-            RuntimeValue::Int(_) => alloc::Layout::new::<i64>(),
-            RuntimeValue::Float(_) => alloc::Layout::new::<f64>(),
-            RuntimeValue::Char(_) => alloc::Layout::new::<u32>(),
-            RuntimeValue::String(_) => alloc::Layout::new::<Arc<str>>(),
-            RuntimeValue::Bytes(_) => alloc::Layout::new::<Arc<[u8]>>(),
-            RuntimeValue::Tuple(_) | RuntimeValue::Array(_) | RuntimeValue::List(_) => {
-                alloc::Layout::new::<super::heap::Handle>()
-            }
-            RuntimeValue::Dict(_) => alloc::Layout::new::<super::heap::Handle>(),
-            RuntimeValue::Struct { .. } => alloc::Layout::new::<super::heap::Handle>(),
-            RuntimeValue::Enum { .. } => alloc::Layout::new::<(u32, Box<RuntimeValue>)>(),
-            RuntimeValue::Arc(_) => alloc::Layout::new::<Arc<RuntimeValue>>(),
-            RuntimeValue::Weak(_) => alloc::Layout::new::<std::sync::Weak<RuntimeValue>>(),
-            RuntimeValue::Async(_) => alloc::Layout::new::<AsyncState>(),
-            RuntimeValue::Ptr { .. } => alloc::Layout::new::<usize>(),
-            RuntimeValue::Function(_) => alloc::Layout::new::<FunctionValue>(),
-            RuntimeValue::OpaqueHandle { .. } => {
-                alloc::Layout::new::<(*const std::ffi::c_void, String)>()
-            }
-        }
     }
 }
 

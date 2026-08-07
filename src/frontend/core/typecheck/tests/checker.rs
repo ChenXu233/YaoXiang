@@ -5,6 +5,8 @@
 //! RFC-010: 统一类型语法
 //! RFC-011: 泛型系统设计
 
+use crate::frontend::core::lexer::tokenize;
+use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::types::{MonoType, PolyType};
 use crate::frontend::core::parser::ast::{Block, Module, Stmt, Expr, Type as AstType};
@@ -125,6 +127,62 @@ fn test_type_checker_reports_type_mismatch() {
             msg.contains("mismatch") || msg.contains("type")
         });
     assert!(has_type_error, "error should be related to type mismatch");
+}
+
+#[test]
+fn test_type_mismatch_diagnostic_carries_source_span() {
+    // Arrange: x: String = 42 类型不匹配——#270：诊断必须携带源码定位
+    // 用非 dummy 的真实 span（line=3），验证 check_var_stmt 路径挂载 span
+    let mut checker = TypeChecker::new("test");
+    let real_span = Span::new(
+        crate::util::span::Position::new(3, 5),
+        crate::util::span::Position::new(3, 20),
+    );
+    let module = Module {
+        items: vec![Stmt {
+            kind: crate::frontend::core::parser::ast::StmtKind::Assign {
+                target: Box::new(Expr::Var("x".to_string(), real_span)),
+                type_annotation: Some(AstType::String),
+                signature_params: vec![],
+                value: Some(Box::new(Expr::Lit(
+                    crate::frontend::core::lexer::tokens::Literal::Int(42),
+                    real_span,
+                ))),
+                is_pub: false,
+                is_mut: false,
+                span: real_span,
+            },
+            span: real_span,
+        }],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let _ = checker.check_module(&module);
+
+    // Assert: 诊断应携带非 dummy 的源码定位（E1002 不再丢 span）
+    let with_span = checker
+        .errors()
+        .iter()
+        .filter(|d| d.code == "E1002")
+        .filter(|d| d.span.is_some() && !d.span.unwrap().is_dummy())
+        .count();
+    assert!(
+        with_span > 0,
+        "E1002 诊断应携带源码定位 span，实际 errors: {:?}",
+        checker
+            .errors()
+            .iter()
+            .map(|d| (&d.code, d.span))
+            .collect::<Vec<_>>()
+    );
+    let span = checker
+        .errors()
+        .iter()
+        .find(|d| d.code == "E1002")
+        .and_then(|d| d.span)
+        .expect("E1002 诊断存在且带 span");
+    assert_eq!(span.start.line, 3, "E1002 span 应指向语句所在行 3");
 }
 
 #[test]
@@ -458,5 +516,108 @@ fn test_type_checker_with_generic_type_binding() {
     assert!(
         result.diagnostics.is_empty(),
         "generic type definition and usage with all type params provided should pass"
+    );
+}
+
+// ===================================================================
+// RFC-027 / issue #263: 精化类型实参校验（E1092）
+// ===================================================================
+//
+// 规范来源: RFC-027 §语法——谓词应用的实参必须是编译期常量形态；
+// 实参不可转换或个数不匹配报 E1092，精化约束绝不静默丢弃。
+
+/// 辅助：源码 → 类型检查结果（语法必须正确，否则测试本身有错）
+fn check_source_for_refined(
+    source: &str
+) -> crate::frontend::core::typecheck::types::TypeCheckResult {
+    // Arrange（公共部分）：词法 + 语法解析
+    let tokens = tokenize(source).expect("测试源码词法不应失败");
+    let parse_result = parse(&tokens);
+    assert!(
+        !parse_result.has_errors,
+        "测试源码语法必须正确（否则无法区分 bug 与测试写错）: {:?}",
+        parse_result.errors
+    );
+
+    // Act
+    let mut checker = TypeChecker::new("test");
+    checker.check_module(&parse_result.module)
+}
+
+#[test]
+fn test_refined_proof_fn_invalid_arg_reports_e1092() {
+    // Arrange: 证明函数 IsSmall + 不可转换实参 List(Int)（#263 复现）
+    let source = r#"
+IsSmall: (x: Int) -> Type = { x < 100 }
+main = {
+    y: IsSmall(List(Int)) = 9999
+    y
+}
+"#;
+
+    // Act
+    let result = check_source_for_refined(source);
+
+    // Assert: 必须报 E1092——约束不得静默丢弃
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1092"),
+        "不可转换实参必须报 E1092，实际诊断: {:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| &d.code)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_refined_proof_fn_arity_mismatch_reports_e1093() {
+    // Arrange: 单参数证明函数传两个实参
+    let source = r#"
+IsSmall: (x: Int) -> Type = { x < 100 }
+main = {
+    y: IsSmall(1, 2) = 5
+    y
+}
+"#;
+
+    // Act
+    let result = check_source_for_refined(source);
+
+    // Assert: 实参个数不匹配必须报 E1093（结构化参数，不依赖自由文本）
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1093"),
+        "实参个数不匹配必须报 E1093，实际诊断: {:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| &d.code)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_refined_proof_fn_valid_arg_no_e1092() {
+    // Arrange: 合法字面量实参（正常路径对照）
+    let source = r#"
+IsSmall: (x: Int) -> Type = { x < 100 }
+main = {
+    y: IsSmall(5) = 5
+    y
+}
+"#;
+
+    // Act
+    let result = check_source_for_refined(source);
+
+    // Assert: 合法实参不得产生 E1092
+    assert!(
+        !result.diagnostics.iter().any(|d| d.code == "E1093"),
+        "合法实参不应报 E1092，实际诊断: {:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| &d.code)
+            .collect::<Vec<_>>()
     );
 }

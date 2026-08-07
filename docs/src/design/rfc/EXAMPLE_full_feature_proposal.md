@@ -64,7 +64,7 @@ match person {
 
 # 卫表达式
 match n {
-    n if n > 0 && n < 10 => "1-9"
+    n if n > 0 and n < 10 => "1-9"
     n if n >= 10 => "10+"
     _ => "unknown"
 }

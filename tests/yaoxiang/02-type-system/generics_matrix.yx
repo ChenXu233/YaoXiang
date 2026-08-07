@@ -1,0 +1,59 @@
+// 02-type-system/generics_matrix.yx
+// 覆盖: SPEC type-system.md §4/§5 泛型矩阵扩展（#251 P0-3）
+// 验证:
+//   - 双参数泛型类型，不同实参（Entry(Int, String) / Entry(String, Bool)）
+//   - 泛型类型以容器为类型实参（Box(List(Int))）
+//   - 高阶泛型函数（函数参数，§5.3）
+//   - 泛型函数消费容器（move 语义穿透泛型）
+//   - 同一泛型多类型多次实例化（单态化不串扰）
+// 状态: ✅
+
+use std.assert
+use std.list
+
+// 双参数泛型类型
+Entry: (K: Type, V: Type) -> Type = {
+    key: K,
+    value: V,
+}
+
+// 泛型类型以容器为类型实参
+Box: (T: Type) -> Type = {
+    inner: T,
+}
+
+// 高阶泛型函数（§5.3）：应用 f 两次
+twice: (T: Type) -> (f: (T) -> T, x: T) -> T = (f, x) => f(f(x))
+
+// 泛型恒等：容器经泛型 move
+identity: (T: Type) -> (x: T) -> T = (x) => x
+
+main = {
+    // 1. 双参数泛型，不同实参
+    e: Entry(Int, String) = Entry(1, "one")
+    assert.assert(e.key == 1, "Entry(Int, String).key == 1")
+    assert.assert(e.value == "one", "Entry(Int, String).value == one")
+
+    e2: Entry(String, Bool) = Entry("flag", true)
+    assert.assert(e2.key == "flag", "Entry(String, Bool).key")
+    assert.assert(e2.value, "Entry(String, Bool).value == true")
+
+    // 2. 泛型类型以容器为类型实参
+    b: Box(List(Int)) = Box([1, 2, 3])
+    assert.assert(list.len(b.inner) == 3, "Box(List(Int)).inner len == 3")
+    assert.assert(list.first(b.inner) == 1, "Box.inner first == 1")
+
+    // 3. 高阶泛型函数（lambda 作泛型实参）
+    r = twice(x => x + 1, 5)
+    assert.assert(r == 7, "twice(x => x + 1, 5) == 7")
+
+    // 4. 泛型函数消费容器（move 穿透泛型）
+    nums = [9, 8]
+    moved = identity(nums)
+    assert.assert(list.len(moved) == 2, "identity([9, 8]) len == 2")
+
+    // 5. 同一泛型多类型实例化（单态化不串扰）
+    assert.assert(identity(1) == 1, "identity Int")
+    assert.assert(identity("s") == "s", "identity String")
+    assert.assert(identity(true), "identity Bool")
+}

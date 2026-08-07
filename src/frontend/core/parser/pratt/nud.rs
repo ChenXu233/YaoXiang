@@ -9,14 +9,9 @@ use crate::frontend::core::parser::pratt::precedence::*;
 use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::span::Span;
 
-/// Extension trait for prefix parsing
-pub trait PrefixParser {
+impl<'a> ParserState<'a> {
     /// Parse prefix expression at current position
-    fn parse_prefix(&mut self) -> Option<Expr>;
-}
-
-impl<'a> PrefixParser for ParserState<'a> {
-    fn parse_prefix(&mut self) -> Option<Expr> {
+    pub fn parse_prefix(&mut self) -> Option<Expr> {
         self.prefix_info().and_then(|(_bp, parser_fn)| {
             // For now, just call the parser function directly
             parser_fn(self)
@@ -224,7 +219,8 @@ impl<'a> ParserState<'a> {
         };
         self.bump();
 
-        // Parse operand with higher binding power
+        // Zig 式（SPEC §2.2 / RFC-010）：所有一元运算符（含 !）紧绑定，
+        // 高于比较/算术（!a == b ≡ (!a) == b），只低于调用与成员访问
         let operand = self.parse_expression(BP_UNARY + 1)?;
 
         Some(Expr::UnOp {
@@ -973,7 +969,7 @@ impl<'a> ParserState<'a> {
     /// Convert an expression to a pattern for match arms
     #[allow(clippy::only_used_in_recursion)]
     fn expr_to_pattern(
-        &self,
+        &mut self,
         expr: &Expr,
     ) -> Pattern {
         match expr {
@@ -1049,7 +1045,7 @@ impl<'a> ParserState<'a> {
     /// Supports: { x, mut y, x: pat, mut y: pat }
     #[allow(clippy::only_used_in_recursion)]
     fn parse_struct_pattern_fields(
-        &self,
+        &mut self,
         block: &Block,
     ) -> Vec<(String, bool, Box<Pattern>)> {
         let mut fields = Vec::new();
@@ -1063,12 +1059,16 @@ impl<'a> ParserState<'a> {
                             if let Some((name, is_mut, pattern)) = self.parse_pattern_field(element)
                             {
                                 fields.push((name, is_mut, Box::new(pattern)));
+                            } else {
+                                self.report_invalid_pattern_field(element);
                             }
                         }
                     }
                     _ => {
                         if let Some((name, is_mut, pattern)) = self.parse_pattern_field(expr) {
                             fields.push((name, is_mut, Box::new(pattern)));
+                        } else {
+                            self.report_invalid_pattern_field(expr);
                         }
                     }
                 }
@@ -1078,9 +1078,35 @@ impl<'a> ParserState<'a> {
         fields
     }
 
+    /// 结构模式字段非法时报错：此前静默剔除字段，模式变得比源码更宽，
+    /// 会匹配到不该匹配的值（审计发现）
+    fn report_invalid_pattern_field(
+        &mut self,
+        element: &Expr,
+    ) {
+        let span = match element {
+            Expr::Var(_, s) => *s,
+            Expr::Lit(_, s) => *s,
+            Expr::Tuple(_, s) => *s,
+            Expr::Call { span, .. } => *span,
+            Expr::UnOp { span, .. } => *span,
+            Expr::BinOp { span, .. } => *span,
+            Expr::FieldAccess { span, .. } => *span,
+            Expr::Index { span, .. } => *span,
+            _ => self.span(),
+        };
+        self.error(
+            ErrorCodeDefinition::invalid_syntax(
+                "invalid struct pattern field: expected `name`, `mut name` or `Variant(pattern)`",
+            )
+            .at(span)
+            .build(),
+        );
+    }
+
     /// Parse a single field in struct pattern: `x`, `mut y`, `x: pat`, `mut y: pat`
     fn parse_pattern_field(
-        &self,
+        &mut self,
         expr: &Expr,
     ) -> Option<(String, bool, Pattern)> {
         match expr {

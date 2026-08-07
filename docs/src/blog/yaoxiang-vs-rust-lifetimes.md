@@ -65,7 +65,7 @@ check_dimensions: (v: &Vec3) -> Bool = { ... }
 check_bounds: (v: &Vec3) -> Bool = { ... }
 
 v = Vec3(1.0, 2.0, 3.0)
-if check_dimensions(v) && check_bounds(v) {  # 每次都自动创建 &Vec3 令牌
+if check_dimensions(v) and check_bounds(v) {  # 每次都自动创建 &Vec3 令牌
     # v 仍然可用
 }
 ```
