@@ -50,6 +50,10 @@ jobs:
       - name: Install Dependencies
         working-directory: docs
         run: pnpm install
+        # ponytail: 只关 CI 的 24h 发布窗口检查；本地 pnpm-workspace.yaml 保持默认保护。
+        # pnpm 11 默认 minimumReleaseAge=1440min，新包(<24h)直接拒装，dependabot 一升级就挂。
+        env:
+          PNPM_CONFIG_MINIMUM_RELEASE_AGE: 0
 
       - name: Build Docs
         working-directory: docs
