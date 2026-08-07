@@ -513,8 +513,14 @@ impl Interpreter {
                                 stack,
                             ));
                         };
-                        let _result =
-                            self.call_function_by_id(func_value.func_id, &func_value.env)?;
+                        // #254：call_closure 设 upvalues（闭包体 LoadUpvalue 读 env），
+                        // env 同时作 args 前段（LoadArg 读）。call_function_by_id 不设
+                        // upvalues → 闭包捕获读 Void。
+                        let _result = self.call_closure(
+                            func_value.func_id,
+                            &func_value.env,
+                            &func_value.env,
+                        )?;
                         frame.set_slot(func_reg.0 as usize, _result);
                     }
                 } else {

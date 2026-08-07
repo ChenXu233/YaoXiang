@@ -138,6 +138,11 @@ pub struct AstToIrGenerator {
     /// 待捕获的环境变量（由 spawn for 等设置，供下一个 Expr::Lambda 使用）
     /// 在生成闭包函数体时，这些变量的当前寄存器值会被捕获到闭包环境中。
     pending_env_vars: Vec<Operand>,
+    /// #254：待捕获变量名（与 pending_env_vars 一一对应，供闭包体 Var 解析）
+    pending_env_names: Vec<String>,
+    /// #254：当前闭包体的捕获表（变量名 → env 槽位索引）。
+    /// 生成闭包体期间设置，闭包体内 Var 命中则生成 LoadUpvalue。
+    closure_captures: HashMap<String, usize>,
     /// RFC-029 #243：用户模块命名空间变量（别名 → 模块限定键）。
     /// 由 `use lib` / `use lib as l` 等整体导入填充，使 `lib.helper()` 在 IR 生成
     /// 阶段被识别为命名空间调用并解析为限定名 `lib.helper`（与 `qualify_module_ir`
@@ -204,6 +209,8 @@ impl AstToIrGenerator {
             anon_function_irs: Vec::new(),
             release_plan: type_result.release_plan.drops.clone(),
             pending_env_vars: Vec::new(),
+            pending_env_names: Vec::new(),
+            closure_captures: HashMap::new(),
             user_namespaces: HashMap::new(),
             use_aliases: HashMap::new(),
             registry,
@@ -3173,8 +3180,13 @@ impl AstToIrGenerator {
                 });
             }
             Expr::Var(var_name, var_span) => {
-                // 变量加载 - 首先查找局部变量，然后查找全局变量
-                if let Some(local_idx) = self.lookup_local(var_name) {
+                // #254：闭包体内——先查捕获表（外层变量经 env 捕获，LoadUpvalue 读）
+                if let Some(&env_idx) = self.closure_captures.get(var_name) {
+                    instructions.push(Instruction::LoadUpvalue {
+                        dst: Operand::Local(result_reg),
+                        upvalue_idx: env_idx,
+                    });
+                } else if let Some(local_idx) = self.lookup_local(var_name) {
                     // 局部变量：直接加载
                     instructions.push(Instruction::Load {
                         dst: Operand::Local(result_reg),
@@ -4275,6 +4287,19 @@ impl AstToIrGenerator {
                     }
 
                     // 将 RHS 包装为无参闭包：() => { rhs }
+                    // #254：捕获 task 读取的外层变量（RFC-024 §2.3 Move 值捕获）
+                    // 过滤：仅捕获能在当前作用域链解析的变量（spawn 内声明的由
+                    // 任务间依赖传递，不在此捕获）；task.reads 由 spawn analysis 提供。
+                    let mut env_ops = Vec::new();
+                    let mut env_names = Vec::new();
+                    for var in &task.reads {
+                        if let Some(local_idx) = self.lookup_local(var) {
+                            env_ops.push(Operand::Local(local_idx));
+                            env_names.push(var.clone());
+                        }
+                    }
+                    self.pending_env_vars = env_ops;
+                    self.pending_env_names = env_names;
                     let closure_reg = self.next_temp_reg();
                     let lambda = ast::Expr::Lambda {
                         params: Vec::new(),
@@ -4288,6 +4313,8 @@ impl AstToIrGenerator {
                         span: *span,
                     };
                     self.generate_expr_ir(&lambda, closure_reg, instructions, constants)?;
+                    self.pending_env_vars.clear();
+                    self.pending_env_names.clear();
                     closure_regs.push(Operand::Local(closure_reg));
                 }
 
@@ -4389,11 +4416,20 @@ impl AstToIrGenerator {
                 let _param_regs: Vec<usize> = (0..params.len()).collect();
 
                 let env_vars = std::mem::take(&mut self.pending_env_vars);
+                let env_names = std::mem::take(&mut self.pending_env_names);
+                // #254：捕获表（变量名 → env 槽位），供闭包体内 Var 解析 → LoadUpvalue
+                self.closure_captures = env_names
+                    .iter()
+                    .enumerate()
+                    .map(|(i, n)| (n.clone(), i))
+                    .collect();
 
                 // 5. 生成闭包函数体 IR
                 // 类似于 generate_function_ir 的逻辑，但针对 Lambda
                 let closure_body =
                     self.generate_lambda_body_ir(params, body.as_ref(), constants)?;
+                // #254：闭包体生成完毕，清除捕获表
+                self.closure_captures.clear();
 
                 // 6. 创建闭包函数 IR
                 let param_types: Vec<MonoType> = params

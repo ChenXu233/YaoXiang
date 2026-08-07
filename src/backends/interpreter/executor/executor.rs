@@ -499,9 +499,12 @@ impl Interpreter {
                         Err(e) => return Err(sv(RuntimeValue::String(format!("{e}").into()))),
                     }
                 }
+                // #254：闭包 env 同时作为 upvalues（LoadUpvalue 读）与 args 前段
+                // （LoadArg 读）。此前只传 args 不设 upvalues → 闭包体 LoadUpvalue
+                // 读到 Void → E6007。
                 let mut final_args = func.env.clone();
                 final_args.extend(resolved);
-                self.call_function_by_id(func.func_id, &final_args)
+                self.call_closure(func.func_id, &final_args, &func.env)
             }
         };
 

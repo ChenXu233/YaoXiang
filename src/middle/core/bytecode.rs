@@ -1803,6 +1803,34 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     decoded_instructions.push(BytecodeInstr::Nop);
                                 }
                             }
+                            // #254：LoadUpvalue/StoreUpvalue 解码（此前缺失 → 落 Nop 占位，
+                            // 闭包捕获在字节码层静默失效；curry 走 LoadArg 不经此路故未暴露）
+                            Opcode::LoadUpvalue => {
+                                // LoadUpvalue: dst(1) + upvalue_idx(1)
+                                if instr.operands.len() >= 2 {
+                                    let dst = instr.operands[0] as u16;
+                                    let upvalue_idx = instr.operands[1];
+                                    decoded_instructions.push(BytecodeInstr::LoadUpvalue {
+                                        dst: Reg(dst),
+                                        upvalue_idx,
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::StoreUpvalue => {
+                                // StoreUpvalue: src(1) + upvalue_idx(1)
+                                if instr.operands.len() >= 2 {
+                                    let src = instr.operands[0] as u16;
+                                    let upvalue_idx = instr.operands[1];
+                                    decoded_instructions.push(BytecodeInstr::StoreUpvalue {
+                                        src: Reg(src),
+                                        upvalue_idx,
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
                             Opcode::Borrow => {
                                 // Borrow: dst(2) + src(2) + mutable(1)
                                 if instr.operands.len() >= 5 {
