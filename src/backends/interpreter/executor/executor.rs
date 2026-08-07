@@ -805,7 +805,12 @@ impl Interpreter {
         let a = self.force_slot(frame, lhs)?;
         let b = self.force_slot(frame, rhs)?;
 
-        tlog!(debug, MSG::DebugBinaryOp, &a, &b);
+        tlog!(
+            debug,
+            MSG::DebugBinaryOp,
+            &format!("{:?}", a),
+            &format!("{:?}", b)
+        );
 
         tlog!(
             debug,

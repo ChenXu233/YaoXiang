@@ -256,7 +256,10 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
 fn dump_bytecode_file(bytecode_file: &crate::middle::passes::codegen::bytecode::BytecodeFile) {
     tracing::info!(
         "{}",
-        t_cur(MSG::BytecodeMagic, Some(&[&bytecode_file.header.magic]))
+        t_cur(
+            MSG::BytecodeMagic,
+            Some(&[&format!("{:08x}", bytecode_file.header.magic)])
+        )
     );
     tracing::info!(
         "{}",
@@ -264,7 +267,10 @@ fn dump_bytecode_file(bytecode_file: &crate::middle::passes::codegen::bytecode::
     );
     tracing::info!(
         "{}",
-        t_cur(MSG::BytecodeFlags, Some(&[&bytecode_file.header.flags]))
+        t_cur(
+            MSG::BytecodeFlags,
+            Some(&[&format!("{:08x}", bytecode_file.header.flags)])
+        )
     );
     tracing::info!(
         "{}",
@@ -581,7 +587,11 @@ fn dump_instructions(
                     "{}",
                     t_cur(
                         MSG::BytecodeInstrIndex,
-                        Some(&[&instr_idx, &opcode, &ops_str])
+                        Some(&[
+                            &format!("{:04}", instr_idx),
+                            &format!("{:<14}", opcode),
+                            &ops_str
+                        ])
                     )
                 );
             }
@@ -590,7 +600,11 @@ fn dump_instructions(
                     "{}",
                     t_cur(
                         MSG::BytecodeUnknownOpcode,
-                        Some(&[&instr_idx, &instr.opcode, &ops_str])
+                        Some(&[
+                            &format!("{:04}", instr_idx),
+                            &format!("{:02x}", instr.opcode),
+                            &ops_str
+                        ])
                     )
                 );
             }
