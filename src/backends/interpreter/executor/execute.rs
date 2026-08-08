@@ -125,7 +125,7 @@ impl Executor for Interpreter {
         self.current_frame_info = None;
         self.called_func = false;
         self.rt = Runtime::new(RuntimeConfig {
-            mode: self.runtime_config.runtime,
+            mode: self.runtime_config.mode,
             workers: self.runtime_config.workers,
         })
         .unwrap_or_else(|_| Runtime::new(RuntimeConfig::default()).unwrap());

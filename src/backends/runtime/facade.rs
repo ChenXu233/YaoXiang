@@ -39,6 +39,11 @@ impl Default for RuntimeConfig {
     fn default() -> Self {
         Self {
             mode: RuntimeMode::Embedded,
+            #[cfg(not(target_arch = "wasm32"))]
+            workers: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(4),
+            #[cfg(target_arch = "wasm32")]
             workers: 1,
         }
     }

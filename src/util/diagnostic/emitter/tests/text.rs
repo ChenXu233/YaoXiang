@@ -40,7 +40,6 @@ fn test_text_emitter_render_error_with_span() {
 fn test_text_emitter_config_disables_colors() {
     let config = EmitterConfig {
         use_colors: false,
-        show_help: true,
         ..Default::default()
     };
 

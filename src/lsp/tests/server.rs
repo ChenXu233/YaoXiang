@@ -19,7 +19,6 @@ use lsp_types::request::HoverRequest;
 use lsp_types::InitializeParams;
 
 use crate::lsp::handlers;
-use crate::lsp::protocol;
 use crate::lsp::server::{handle_request, handle_notification, publish_diagnostics_for_uri};
 use crate::lsp::session::{Session, SessionState};
 use crate::lsp::world::World;

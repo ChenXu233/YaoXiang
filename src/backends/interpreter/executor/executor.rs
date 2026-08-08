@@ -14,9 +14,7 @@ use crate::backends::common::value::{
 use crate::middle::bytecode::{BytecodeFunction, Reg, Label, BinaryOp, CompareOp, ConstValue};
 use crate::backends::interpreter::Frame;
 use crate::backends::interpreter::ffi::FfiRegistry;
-use crate::backends::interpreter::runtime::InterpreterRuntimeConfig;
-use crate::backends::runtime::Runtime;
-use crate::backends::runtime::facade::RuntimeConfig;
+use crate::backends::runtime::{Runtime, RuntimeConfig};
 use crate::backends::runtime::engine::{
     SyncValue, TaskCancelReason, TaskMeta, TaskOutcome, TaskResult, sv,
 };
@@ -110,7 +108,7 @@ pub struct Interpreter {
     /// FFI Registry for native function calls
     pub(super) ffi: FfiRegistry,
     /// Interpreter-side runtime configuration (defaults to current behavior).
-    pub(super) runtime_config: InterpreterRuntimeConfig,
+    pub(super) runtime_config: RuntimeConfig,
     /// Runtime facade used for task scheduling (Embedded / Standard / Full).
     pub(super) rt: Runtime,
     /// Read-only shared state, shared across threads via raw pointer.
@@ -163,9 +161,9 @@ impl Interpreter {
 
     /// Create an interpreter with custom configuration
     pub fn with_config(config: ExecutorConfig) -> Self {
-        let runtime_config = InterpreterRuntimeConfig::default();
+        let runtime_config = RuntimeConfig::default();
         let rt = Runtime::new(RuntimeConfig {
-            mode: runtime_config.runtime,
+            mode: runtime_config.mode,
             workers: runtime_config.workers,
         })
         .unwrap_or_else(|_| Runtime::new(RuntimeConfig::default()).unwrap());
@@ -190,7 +188,7 @@ impl Interpreter {
         }
     }
 
-    pub fn runtime_config(&self) -> &InterpreterRuntimeConfig {
+    pub fn runtime_config(&self) -> &RuntimeConfig {
         &self.runtime_config
     }
 
@@ -235,7 +233,7 @@ impl Interpreter {
             config: ExecutorConfig::default(),
             breakpoints: HashMap::new(),
             ffi,
-            runtime_config: InterpreterRuntimeConfig::default(),
+            runtime_config: RuntimeConfig::default(),
             rt,
             // 不设置 shared 字段，避免 Drop 时双重释放。
             // 共享数据已拷贝到上方的字段中。
@@ -248,12 +246,12 @@ impl Interpreter {
 
     pub fn set_runtime_config(
         &mut self,
-        runtime_config: InterpreterRuntimeConfig,
+        runtime_config: RuntimeConfig,
     ) {
         self.runtime_config = runtime_config;
         // Rebuild Runtime facade to match new config
         self.rt = Runtime::new(RuntimeConfig {
-            mode: self.runtime_config.runtime,
+            mode: self.runtime_config.mode,
             workers: self.runtime_config.workers,
         })
         .unwrap_or_else(|_| Runtime::new(RuntimeConfig::default()).unwrap());

@@ -11,7 +11,7 @@ use lsp_types::{InitializeParams, InitializeResult, ServerInfo};
 
 use crate::lsp::capabilities::server_capabilities;
 use crate::lsp::handlers::initialize::{handle_initialize, handle_initialized, handle_shutdown};
-use crate::lsp::protocol::{self, SERVER_NAME, SERVER_VERSION};
+
 use crate::lsp::session::{Session, SessionState};
 use crate::lsp::world::World;
 
@@ -46,7 +46,7 @@ fn test_handle_initialize() {
 
     // 验证返回了服务器信息
     let result: InitializeResult = serde_json::from_value(resp.result.unwrap()).unwrap();
-    assert_eq!(result.server_info.as_ref().unwrap().name, SERVER_NAME);
+    assert_eq!(result.server_info.as_ref().unwrap().name, "yaoxiang-lsp");
     assert!(result.server_info.unwrap().version.is_some());
 }
 

@@ -9,14 +9,6 @@ use crate::util::diagnostic::Severity;
 pub struct EmitterConfig {
     /// 是否启用颜色输出
     pub use_colors: bool,
-    /// 是否显示源码片段
-    pub show_source: bool,
-    /// 是否显示帮助信息
-    pub show_help: bool,
-    /// 是否显示相关诊断
-    pub show_related: bool,
-    /// 是否显示行号
-    pub show_line_numbers: bool,
     /// 是否使用 Unicode 字符
     pub unicode: bool,
     /// 是否使用符号模式
@@ -31,10 +23,6 @@ impl Default for EmitterConfig {
     fn default() -> Self {
         Self {
             use_colors: true,
-            show_source: true,
-            show_help: true,
-            show_related: true,
-            show_line_numbers: true,
             unicode: true,
             symbols: false,
             indicator: '^',
@@ -95,26 +83,20 @@ impl TextEmitter {
         output.push_str(&self.render_location(diagnostic, source_file));
 
         // 3. 渲染源码片段
-        if self.config.show_source {
-            if let Some(snippet) = self.render_source_snippet(diagnostic, source_file) {
-                output.push_str(&snippet);
-            }
+        if let Some(snippet) = self.render_source_snippet(diagnostic, source_file) {
+            output.push_str(&snippet);
         }
 
         // 4. 渲染帮助信息
-        if self.config.show_help {
-            if let Some(help) = self.render_help(diagnostic) {
-                output.push_str("help: ");
-                output.push_str(&help);
-                output.push('\n');
-            }
+        if let Some(help) = self.render_help(diagnostic) {
+            output.push_str("help: ");
+            output.push_str(&help);
+            output.push('\n');
         }
 
         // 5. 渲染相关诊断
-        if self.config.show_related {
-            for related in &diagnostic.related {
-                output.push_str(&self.render_internal(related, source_file, _indent + 1));
-            }
+        for related in &diagnostic.related {
+            output.push_str(&self.render_internal(related, source_file, _indent + 1));
         }
 
         output
@@ -198,11 +180,7 @@ impl TextEmitter {
         for i in 0..lines_to_show {
             let line_num = start_line + i;
             if let Some(line) = Self::get_source_line(source_file, line_num) {
-                if self.config.show_line_numbers {
-                    output.push_str(&format!("{:>4} {} ", line_num, self.vbar()));
-                } else {
-                    output.push_str(&format!("     {} ", self.vbar()));
-                }
+                output.push_str(&format!("{:>4} {} ", line_num, self.vbar()));
                 output.push_str(&line);
                 output.push('\n');
 

@@ -332,7 +332,7 @@ impl Interpreter {
                     })
                     .collect();
 
-                let runtime = self.runtime_config.runtime;
+                let runtime = self.runtime_config.mode;
 
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
                     let result = self.call_static_by_id(func_id, &call_args)?;
@@ -388,7 +388,7 @@ impl Interpreter {
                     })
                     .collect();
 
-                let runtime = self.runtime_config.runtime;
+                let runtime = self.runtime_config.mode;
 
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
                     let result = self
@@ -501,7 +501,7 @@ impl Interpreter {
                 let closures = closures.clone();
                 let task_deps = task_deps.clone();
                 let task_resources = task_resources.clone();
-                let runtime = self.runtime_config.runtime;
+                let runtime = self.runtime_config.mode;
 
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
                     for func_reg in closures.iter() {
@@ -613,7 +613,7 @@ impl Interpreter {
                     }
                 };
 
-                let runtime = self.runtime_config.runtime;
+                let runtime = self.runtime_config.mode;
 
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
                     for closure_val in closures.iter() {

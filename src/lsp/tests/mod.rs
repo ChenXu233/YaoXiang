@@ -9,6 +9,5 @@
 
 mod capabilities;
 mod locate;
-mod protocol;
 mod server;
 mod session;

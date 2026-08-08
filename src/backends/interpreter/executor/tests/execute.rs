@@ -219,7 +219,7 @@ fn test_borrow_then_release_preserves_value() {
 #[test]
 fn spawn_concurrent_standard_mode() {
     use crate::backends::runtime::RuntimeMode;
-    use crate::backends::interpreter::runtime::InterpreterRuntimeConfig;
+    use crate::backends::runtime::RuntimeConfig;
     use crate::middle::bytecode::{BytecodeModule, BytecodeFunction, BytecodeInstr};
 
     // task_a: 返回 Int(10)
@@ -315,8 +315,8 @@ fn spawn_concurrent_standard_mode() {
 
     // 配置 Standard 模式 + 1 worker（避免多线程并发问题）
     let mut interp = Interpreter::new();
-    interp.set_runtime_config(InterpreterRuntimeConfig {
-        runtime: RuntimeMode::Standard,
+    interp.set_runtime_config(RuntimeConfig {
+        mode: RuntimeMode::Standard,
         workers: 1,
     });
     // 重建 Runtime facade（set_runtime_config 只更新配置，需要 reset 重建 rt）
@@ -324,7 +324,7 @@ fn spawn_concurrent_standard_mode() {
 
     // 验证 Runtime facade 已配置为 Standard 模式
     assert_eq!(
-        interp.runtime_config().runtime,
+        interp.runtime_config().mode,
         RuntimeMode::Standard,
         "runtime_config 应为 Standard 模式"
     );
@@ -342,7 +342,7 @@ fn spawn_concurrent_standard_mode() {
 
     // 验证 Runtime facade 配置正确
     assert_eq!(
-        interp.runtime_config().runtime,
+        interp.runtime_config().mode,
         RuntimeMode::Standard,
         "runtime_config 应为 Standard 模式"
     );

@@ -7,7 +7,6 @@ use lsp_types::{InitializeParams, InitializeResult, ServerInfo};
 use tracing::info;
 
 use crate::lsp::capabilities::server_capabilities;
-use crate::lsp::protocol::{self, SERVER_NAME, SERVER_VERSION};
 use crate::lsp::session::{Session, SessionState};
 use crate::lsp::world::World;
 
@@ -49,12 +48,12 @@ pub fn handle_initialize(
     let result = InitializeResult {
         capabilities: server_capabilities(),
         server_info: Some(ServerInfo {
-            name: SERVER_NAME.to_string(),
-            version: Some(SERVER_VERSION.to_string()),
+            name: "yaoxiang-lsp".to_string(),
+            version: Some(env!("CARGO_PKG_VERSION").to_string()),
         }),
     };
 
-    protocol::ok_response(id, result)
+    Response::new_ok(id, result)
 }
 
 /// 处理 `initialized` 通知
@@ -80,5 +79,5 @@ pub fn handle_shutdown(
     session.document_store_mut().clear();
 
     // shutdown 请求返回 null
-    protocol::ok_response(id, serde_json::Value::Null)
+    Response::new_ok(id, serde_json::Value::Null)
 }

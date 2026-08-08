@@ -244,12 +244,10 @@ pub fn run_file_with_diagnostics(
                 .map(|n| n.get())
                 .unwrap_or(4)
         };
-        interp.set_runtime_config(
-            crate::backends::interpreter::runtime::InterpreterRuntimeConfig {
-                runtime: rt_mode,
-                workers: effective_workers,
-            },
-        );
+        interp.set_runtime_config(crate::backends::runtime::RuntimeConfig {
+            mode: rt_mode,
+            workers: effective_workers,
+        });
         let mut executor: Box<dyn crate::backends::Executor> = Box::new(interp);
         if let Err(e) = executor.execute_module(&bytecode_module) {
             eprintln!();
@@ -331,12 +329,10 @@ pub fn run_file_with_diagnostics(
                     .map(|n| n.get())
                     .unwrap_or(4)
             };
-            interp.set_runtime_config(
-                crate::backends::interpreter::runtime::InterpreterRuntimeConfig {
-                    runtime: rt_mode,
-                    workers: effective_workers,
-                },
-            );
+            interp.set_runtime_config(crate::backends::runtime::RuntimeConfig {
+                mode: rt_mode,
+                workers: effective_workers,
+            });
             let mut executor: Box<dyn Executor> = Box::new(interp);
             if let Err(e) = executor.execute_module(&bytecode_module) {
                 eprintln!();

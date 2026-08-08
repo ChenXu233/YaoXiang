@@ -9,7 +9,7 @@ use thiserror::Error;
 use tracing::debug;
 
 use super::config::CompileConfig;
-use super::pipeline::{Pipeline, PipelineState, CompilationPhase};
+use super::pipeline::Pipeline;
 
 /// 编译器
 ///
@@ -106,7 +106,7 @@ impl Compiler {
 
     /// 将管线结果映射为编译结果（错误分类）。
     fn map_pipeline_result(
-        result: super::pipeline::CompilationResult
+        result: crate::frontend::pipeline::CompilationResult
     ) -> Result<middle::ModuleIR, CompileError> {
         if result.is_success() {
             Ok(result.ir.unwrap())
@@ -192,18 +192,6 @@ impl Compiler {
     ) -> Result<middle::ModuleIR, Vec<Diagnostic>> {
         middle::generate_ir(ast, type_result)
     }
-
-    /// 获取当前编译状态
-    #[inline]
-    pub fn state(&self) -> PipelineState {
-        self.pipeline.state()
-    }
-
-    /// 重置编译器状态
-    #[inline]
-    pub fn reset(&mut self) {
-        self.pipeline.reset();
-    }
 }
 
 /// 编译错误
@@ -261,42 +249,6 @@ impl CompileError {
             CompileError::Parse(d) => Some(d),
             CompileError::TypeError(_, diag) => diag.as_deref(),
             _ => None,
-        }
-    }
-}
-
-/// 编译进度信息
-///
-/// 用于报告编译进度。
-#[derive(Debug, Clone)]
-pub struct CompileProgress {
-    /// 当前阶段
-    pub phase: CompilationPhase,
-    /// 进度百分比
-    pub percentage: f64,
-    /// 当前处理的行号
-    pub current_line: usize,
-    /// 总行数
-    pub total_lines: usize,
-    /// 状态消息
-    pub message: String,
-}
-
-impl CompileProgress {
-    /// 创建新的进度信息
-    pub fn new(
-        phase: CompilationPhase,
-        percentage: f64,
-        current_line: usize,
-        total_lines: usize,
-        message: impl Into<String>,
-    ) -> Self {
-        Self {
-            phase,
-            percentage,
-            current_line,
-            total_lines,
-            message: message.into(),
         }
     }
 }
