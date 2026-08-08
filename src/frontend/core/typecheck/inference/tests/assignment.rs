@@ -12,9 +12,7 @@ use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::util::span::Span;
 use std::collections::HashMap;
 
-// ===================================================================
 // 辅助函数
-// ===================================================================
 
 /// 创建测试用的 Span
 fn dummy_span() -> Span {
@@ -74,9 +72,7 @@ fn make_circle_implementing_drawable() -> MonoType {
     })
 }
 
-// ===================================================================
 // Happy path 测试
-// ===================================================================
 
 #[test]
 fn test_assignment_same_type() {
@@ -219,9 +215,7 @@ fn test_assignment_constraint_dynamic_via_empty_constraint() {
     }
 }
 
-// ===================================================================
 // Error path 测试
-// ===================================================================
 
 #[test]
 fn test_assignment_incompatible_types() {
@@ -285,9 +279,7 @@ fn test_assignment_constraint_missing_method() {
     );
 }
 
-// ===================================================================
 // Boundary 测试
-// ===================================================================
 
 #[test]
 fn test_assignment_fn_type_compatibility() {

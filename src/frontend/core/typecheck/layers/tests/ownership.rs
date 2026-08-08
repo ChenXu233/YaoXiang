@@ -2091,9 +2091,7 @@ fn test_e2e_spawn_accesses_outer() {
     );
 }
 
-// ===================================================================
 // issue #265: 证明管线接线——分支守卫注入假设栈（FlowSensitiveGamma 首个消费者）
-// ===================================================================
 
 use crate::frontend::core::typecheck::proof::context::ProofContext;
 

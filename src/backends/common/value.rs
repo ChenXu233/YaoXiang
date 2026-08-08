@@ -266,9 +266,7 @@ pub enum RuntimeValue {
     OpaqueHandle { type_name: String, ptr: OpaquePtr },
 }
 
-// ============================================================================
 // Type Query Methods
-// ============================================================================
 
 impl RuntimeValue {
     /// Get the static type of this value
@@ -374,9 +372,7 @@ impl RuntimeValue {
     }
 }
 
-// ============================================================================
 // Ownership Operations
-// ============================================================================
 
 impl RuntimeValue {
     /// Clone: explicit copy
@@ -574,9 +570,7 @@ impl RuntimeValue {
     }
 }
 
-// ============================================================================
 // Display Implementation
-// ============================================================================
 
 impl fmt::Display for RuntimeValue {
     fn fmt(
@@ -633,9 +627,7 @@ impl fmt::Display for RuntimeValue {
     }
 }
 
-// ============================================================================
 // PartialEq Implementation
-// ============================================================================
 
 impl PartialEq for RuntimeValue {
     fn eq(
@@ -706,9 +698,7 @@ impl PartialEq for RuntimeValue {
 
 impl Eq for RuntimeValue {}
 
-// ============================================================================
 // ConstValue → RuntimeValue 转换
-// ============================================================================
 
 use crate::frontend::core::types::const_data::ConstValue;
 
@@ -725,9 +715,7 @@ pub fn from_const_value(cv: &ConstValue) -> RuntimeValue {
     }
 }
 
-// ============================================================================
 // Hash Implementation
-// ============================================================================
 
 impl Hash for RuntimeValue {
     fn hash<H: Hasher>(

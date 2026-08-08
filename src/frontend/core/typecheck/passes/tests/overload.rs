@@ -6,9 +6,7 @@
 use crate::frontend::core::typecheck::passes::overload::{OverloadCandidate, OverloadResolver};
 use crate::frontend::core::types::{MonoType, TypeVar};
 
-// ===================================================================
 // Happy path 测试
-// ===================================================================
 
 #[test]
 fn test_overload_candidate_creation() {
@@ -207,9 +205,7 @@ fn test_overload_resolver_with_many_candidates() {
     );
 }
 
-// ===================================================================
 // Error path 测试
-// ===================================================================
 
 #[test]
 fn test_resolve_no_matching_candidate() {
@@ -320,9 +316,7 @@ fn test_resolve_empty_resolver() {
     );
 }
 
-// ===================================================================
 // Boundary 测试
-// ===================================================================
 
 #[test]
 fn test_resolve_selects_best_among_multiple_candidates() {

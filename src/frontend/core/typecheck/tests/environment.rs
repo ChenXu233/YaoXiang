@@ -7,9 +7,7 @@
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::types::{MonoType, PolyType};
 
-// ===================================================================
 // Happy path 测试
-// ===================================================================
 
 #[test]
 fn test_environment_new_creates_empty() {
@@ -71,9 +69,7 @@ fn test_environment_has_solver() {
     // 具体断言取决于 TypeConstraintSolver 的实现
 }
 
-// ===================================================================
 // Error path 测试
-// ===================================================================
 
 #[test]
 fn test_environment_duplicate_var_allowed() {
@@ -93,9 +89,7 @@ fn test_environment_duplicate_var_allowed() {
     );
 }
 
-// ===================================================================
 // Boundary 测试
-// ===================================================================
 
 #[test]
 fn test_environment_with_many_vars() {

@@ -340,9 +340,7 @@ pub trait StdModule {
     }
 }
 
-// ============================================================================
 // Built-in generic functions (replacing hardcoded interpreter special cases)
-// ============================================================================
 
 /// Built-in generic `len` function that works on List, Tuple, Array, Dict, String, Bytes.
 fn builtin_len(

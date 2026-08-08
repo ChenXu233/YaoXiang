@@ -6,18 +6,11 @@ use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
 use crate::std::{NativeContext, NativeExport, StdModule};
 
-// ============================================================================
 // MathModule - StdModule Implementation
-// ============================================================================
 
 /// Math module implementation.
+#[derive(Default)]
 pub struct MathModule;
-
-impl Default for MathModule {
-    fn default() -> Self {
-        Self
-    }
-}
 
 impl StdModule for MathModule {
     fn module_path(&self) -> &str {
@@ -85,9 +78,7 @@ impl StdModule for MathModule {
 /// Singleton instance for std.math module.
 pub const MATH_MODULE: MathModule = MathModule;
 
-// ============================================================================
 // Native function implementations
-// ============================================================================
 
 /// Native implementation: abs (integer)
 fn native_abs(

@@ -6,18 +6,11 @@ use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
 use crate::std::{NativeContext, NativeExport, StdModule};
 
-// ============================================================================
 // ConcurrentModule - StdModule Implementation
-// ============================================================================
 
 /// Concurrent module implementation.
+#[derive(Default)]
 pub struct ConcurrentModule;
-
-impl Default for ConcurrentModule {
-    fn default() -> Self {
-        Self
-    }
-}
 
 impl StdModule for ConcurrentModule {
     fn module_path(&self) -> &str {
@@ -51,9 +44,7 @@ impl StdModule for ConcurrentModule {
 /// Singleton instance for std.concurrent module.
 pub const CONCURRENT_MODULE: ConcurrentModule = ConcurrentModule;
 
-// ============================================================================
 // Native Function Implementations
-// ============================================================================
 
 /// Native implementation: sleep
 fn native_sleep(

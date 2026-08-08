@@ -10,9 +10,7 @@ use crate::frontend::core::typecheck::semantic_db::{
 use crate::frontend::core::parser::ast::{Block, Module, Stmt, StmtKind, Expr};
 use crate::util::span::Span;
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 /// 构造一个空模块
 fn empty_module() -> Module {
@@ -129,9 +127,7 @@ fn make_call_stmt(name: &str) -> Stmt {
     }
 }
 
-// ===================================================================
 // Happy path 测试
-// ===================================================================
 
 #[test]
 fn test_dead_code_analyzer_creation() {
@@ -263,9 +259,7 @@ fn test_compute_reachability_from_entry_point() {
     assert!(reachable.contains("helper"), "被 main 引用的 helper 应可达");
 }
 
-// ===================================================================
 // Error path 测试
-// ===================================================================
 
 #[test]
 fn test_detect_unused_exported_function() {
@@ -369,9 +363,7 @@ fn test_to_diagnostics_converts_warnings() {
     assert_eq!(diagnostics.len(), 1, "应将 1 个警告转换为 1 个诊断信息");
 }
 
-// ===================================================================
 // Boundary 测试
-// ===================================================================
 
 #[test]
 fn test_analyze_empty_module_boundary() {

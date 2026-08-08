@@ -8,18 +8,11 @@ use crate::backends::ExecutorError;
 use crate::std::io::format_value_with_prefix;
 use crate::std::{NativeContext, NativeExport, StdModule};
 
-// ============================================================================
 // ConvertModule - StdModule Implementation
-// ============================================================================
 
 /// Convert module implementation.
+#[derive(Default)]
 pub struct ConvertModule;
-
-impl Default for ConvertModule {
-    fn default() -> Self {
-        Self
-    }
-}
 
 impl StdModule for ConvertModule {
     fn module_path(&self) -> &str {
@@ -102,9 +95,7 @@ impl StdModule for ConvertModule {
 /// Singleton instance for std::convert module.
 pub const CONVERT_MODULE: ConvertModule = ConvertModule;
 
-// ============================================================================
 // Stringable Interface (YaoXiang source code)
-// ============================================================================
 
 /// Stringable interface definition - can be used in YaoXiang code
 /// Note: This is the interface definition that users can reference in their code.
@@ -118,9 +109,7 @@ Stringable: Type = {
 }
 "#;
 
-// ============================================================================
 // Native Function Implementations
-// ============================================================================
 
 /// Native implementation: to_string
 /// Tries to get custom string representation, falls back to type info

@@ -12,9 +12,7 @@ use crate::frontend::core::types::eval::conditional::{
 };
 use crate::frontend::core::types::eval::TypeLevelResult;
 
-// ===================================================================
 // §5.1: TypeCondition — 所有条件变体
-// ===================================================================
 
 #[test]
 fn test_condition_bool() {
@@ -121,9 +119,7 @@ fn test_condition_is_determined() {
     assert!(TypeCondition::Bool(false).is_determined());
 }
 
-// ===================================================================
 // §5.1: If[C, T, E] — 条件类型
-// ===================================================================
 
 #[test]
 fn test_if_true_selects_true_branch() {
@@ -167,9 +163,7 @@ fn test_if_getters() {
     assert_eq!(if_type.false_branch(), &MonoType::String);
 }
 
-// ===================================================================
 // §5.1: conditions 辅助函数
-// ===================================================================
 
 #[test]
 fn test_conditions_helper_bool() {
@@ -208,9 +202,7 @@ fn test_conditions_helper_logic() {
     assert_eq!(conditions::not(conditions::bool(true)).eval(), Some(false));
 }
 
-// ===================================================================
 // §5.1: TypeLevelResult
-// ===================================================================
 
 #[test]
 fn test_type_level_result_normalized() {
@@ -255,9 +247,7 @@ fn test_type_level_result_error_result() {
     assert!(err.result().is_err());
 }
 
-// ===================================================================
 // §5.1: MatchType (conditional_types) 补充测试
-// ===================================================================
 
 #[test]
 fn test_conditional_match_type_new_and_eval() {
@@ -309,9 +299,7 @@ fn test_conditional_type_match_variant() {
     assert!(ct.eval().is_normalized());
 }
 
-// ===================================================================
 // §5.2: MatchPattern — 模式匹配
-// ===================================================================
 
 #[test]
 fn test_match_pattern() {
@@ -379,9 +367,7 @@ fn test_match_pattern_constructor() {
     assert!(!pat.is_wildcard());
 }
 
-// ===================================================================
 // §5.2: PatternMatchArm
-// ===================================================================
 
 #[test]
 fn test_pattern_match_arm() {
@@ -406,9 +392,7 @@ fn test_pattern_match_arm_wildcard() {
     assert_eq!(arm.result, MonoType::String);
 }
 
-// ===================================================================
 // §5.2: MatchBinding
-// ===================================================================
 
 #[test]
 fn test_match_binding() {
@@ -441,9 +425,7 @@ fn test_match_binding_overwrite() {
     assert_eq!(b.get("x"), Some(&MonoType::String));
 }
 
-// ===================================================================
 // §5.2: PatternMatcher
-// ===================================================================
 
 #[test]
 fn test_pattern_matcher() {
@@ -495,9 +477,7 @@ fn test_pattern_matcher_tuple_arity() {
     ));
 }
 
-// ===================================================================
 // §5.2: PatternMatchType
-// ===================================================================
 
 #[test]
 fn test_pattern_match_type() {
@@ -545,9 +525,7 @@ fn test_pattern_match_type_with_wildcard() {
     assert_eq!(mt.arm_count(), 1);
 }
 
-// ===================================================================
 // §5.2: PatternBuilder
-// ===================================================================
 
 #[test]
 fn test_pattern_builder() {
@@ -577,9 +555,7 @@ fn test_pattern_builder_tuple() {
     assert!(matches!(pat, MatchPattern::Tuple(ref p) if p.len() == 2));
 }
 
-// ===================================================================
 // §5.2: nat_examples
-// ===================================================================
 
 #[test]
 fn test_nat_examples() {

@@ -277,9 +277,7 @@ fn test_write_file_missing_args() {
     assert!(result.is_err());
 }
 
-// =============================================================================
 // std.result 和 std.string.parse_int/parse_float 测试
-// =============================================================================
 
 use crate::std::result::{
     error_new, native_result_is_err, native_result_is_ok, native_result_unwrap,

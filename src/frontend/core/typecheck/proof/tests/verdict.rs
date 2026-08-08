@@ -10,9 +10,7 @@ use crate::frontend::core::typecheck::proof::verdict::{DisproofKind, DisproofMod
 use crate::util::diagnostic::Severity;
 use crate::util::span::{Position, Span};
 
-// ============================================================
 // ProofResult 基本行为
-// ============================================================
 
 #[test]
 fn test_proved_is_proved_returns_true() {
@@ -23,9 +21,7 @@ fn test_proved_is_proved_returns_true() {
     assert!(result.is_proved(), "Proved::is_proved() must return true");
 }
 
-// ============================================================
 // DisproofModel::into_diagnostic() — PredicateViolation
-// ============================================================
 
 #[test]
 fn test_into_diagnostic_predicate_violation_basic() {
@@ -156,9 +152,7 @@ fn test_into_diagnostic_predicate_violation_with_span() {
     );
 }
 
-// ============================================================
 // DisproofModel::into_diagnostic() — TypeMismatch
-// ============================================================
 
 #[test]
 fn test_into_diagnostic_type_mismatch_basic() {
@@ -247,9 +241,7 @@ fn test_into_diagnostic_type_mismatch_empty_assignments() {
     );
 }
 
-// ============================================================
 // ProofResult::into_result()
-// ============================================================
 
 #[test]
 fn test_into_result_proved_returns_ok() {

@@ -42,9 +42,7 @@ fn struct_ty(
     })
 }
 
-// ===================================================================
 // §3.2: 原类型统一
-// ===================================================================
 
 #[test]
 fn test_unify_primitives() {
@@ -84,9 +82,7 @@ fn test_unify_cross_kind_mismatch() {
     assert!(solver.unify(&MonoType::Char, &MonoType::Bytes).is_err());
 }
 
-// ===================================================================
 // §3.3: 结构体统一
-// ===================================================================
 
 #[test]
 fn test_unify_struct_same() {
@@ -146,9 +142,7 @@ fn test_unify_struct_with_var_field() {
     assert!(solver.unify(&a, &b).is_ok());
 }
 
-// ===================================================================
 // §3.4: 枚举统一
-// ===================================================================
 
 #[test]
 fn test_unify_enum_same() {
@@ -192,9 +186,7 @@ fn test_unify_enum_different_variants() {
     assert!(solver.unify(&a, &b).is_err());
 }
 
-// ===================================================================
 // §3.6: 元组统一
-// ===================================================================
 
 #[test]
 fn test_unify_tuple_structural() {
@@ -213,9 +205,7 @@ fn test_unify_tuple_with_var() {
     assert!(solver.unify(&a, &b).is_ok());
 }
 
-// ===================================================================
 // §3.7: 函数类型统一
-// ===================================================================
 
 #[test]
 fn test_unify_fn_params() {
@@ -260,9 +250,7 @@ fn test_unify_fn_with_vars() {
     assert!(solver.unify(&f1, &f2).is_ok());
 }
 
-// ===================================================================
 // §3.7: Option/Result 统一
-// ===================================================================
 
 #[test]
 fn test_unify_result_nested() {
@@ -273,9 +261,7 @@ fn test_unify_result_nested() {
     assert!(solver.unify(&r1, &r2).is_ok());
 }
 
-// ===================================================================
 // §3.13: 联合类型统一
-// ===================================================================
 
 #[test]
 fn test_unify_union_self() {
@@ -298,9 +284,7 @@ fn test_unify_union_with_unrelated() {
     assert!(solver.unify(&u, &MonoType::Bool).is_err());
 }
 
-// ===================================================================
 // §3.14: 交集类型统一
-// ===================================================================
 
 #[test]
 fn test_unify_intersection_self() {
@@ -332,9 +316,7 @@ fn test_unify_intersection_with_unrelated_fails() {
     assert!(solver.unify(&i, &MonoType::Int(32)).is_err());
 }
 
-// ===================================================================
 // §3.2: TypeRef 统一
-// ===================================================================
 
 #[test]
 fn test_unify_typeref_same_name() {
@@ -355,9 +337,7 @@ fn test_unify_typeref_different() {
         .is_err());
 }
 
-// ===================================================================
 // §3.8: 变量基础操作
-// ===================================================================
 
 #[test]
 fn test_new_var_sequence() {
@@ -423,9 +403,7 @@ fn test_reset_clears_everything() {
     assert_eq!(solver.new_var().type_var().unwrap().index(), 0);
 }
 
-// ===================================================================
 // §3.8: 泛型实例化和泛化
-// ===================================================================
 
 #[test]
 fn test_instantiate_poly_fresh_vars() {
@@ -481,9 +459,7 @@ fn test_generalize_already_bound_var() {
     assert_eq!(poly.body, MonoType::Int(64));
 }
 
-// ===================================================================
 // §3.8: Unification with variable binding
-// ===================================================================
 
 #[test]
 fn test_unify_var_twice_consistent() {
@@ -512,9 +488,7 @@ fn test_unify_var_link_chain() {
     assert_eq!(solver.resolve(&MonoType::TypeVar(v0)), MonoType::Int(32));
 }
 
-// ===================================================================
 // §3.8: contains_var
-// ===================================================================
 
 #[test]
 fn test_contains_var_nested() {
@@ -536,9 +510,7 @@ fn test_contains_var_nested() {
     ));
 }
 
-// ===================================================================
 // §3.8: solve
-// ===================================================================
 
 #[test]
 fn test_solve_simple_equality() {
@@ -557,9 +529,7 @@ fn test_solve_contradictory_constraints() {
     assert!(solver.solve().is_err());
 }
 
-// ===================================================================
 // §3.8: is_unconstrained / get_binding
-// ===================================================================
 
 #[test]
 fn test_is_unconstrained_after_bind() {
@@ -579,9 +549,7 @@ fn test_get_binding_and_get_binding_mut() {
     assert!(binding_mut.is_some());
 }
 
-// ===================================================================
 // §3.2: resolve_type for builtin type references
-// ===================================================================
 
 #[test]
 fn test_resolve_builtin_types() {
@@ -631,10 +599,8 @@ fn test_resolve_builtin_types() {
     assert_eq!(solver.resolve_type(&unknown), unknown);
 }
 
-// ===================================================================
 // expand_type — 通过所有容器类型的展开路径
 // §3.8: 绑定的类型变量通过 resolve_type 展开
-// ===================================================================
 
 #[test]
 fn test_expand_type_through_all_containers() {
@@ -730,9 +696,7 @@ fn test_expand_type_through_all_containers() {
     assert!(matches!(m, MonoType::MetaType { .. }));
 }
 
-// ===================================================================
 // expand_type_mut — 通过 resolve (mut) 展开
-// ===================================================================
 
 #[test]
 fn test_expand_mut_through_all_containers() {
@@ -762,9 +726,7 @@ fn test_expand_mut_through_all_containers() {
     assert!(matches!(solver.resolve(&union), MonoType::Union(_)));
 }
 
-// ===================================================================
 // contains_var — 各种容器
-// ===================================================================
 
 #[test]
 fn test_contains_var_in_containers() {
@@ -820,9 +782,7 @@ fn test_contains_var_in_containers() {
     ));
 }
 
-// ===================================================================
 // §3.7: Fn 参数数量不匹配
-// ===================================================================
 
 #[test]
 fn test_unify_fn_param_count_mismatch() {
@@ -841,9 +801,7 @@ fn test_unify_fn_param_count_mismatch() {
     );
 }
 
-// ===================================================================
 // §3.8: instantiate 包含 Result/Option 的 PolyType
-// ===================================================================
 
 #[test]
 fn test_instantiate_with_result_wrapped_types() {
@@ -872,9 +830,7 @@ fn test_instantiate_with_option_wrapped_types() {
     );
 }
 
-// ===================================================================
 // §3.8: generalize 包含 Arc/Weak 的类型
-// ===================================================================
 
 #[test]
 fn test_generalize_with_arc_wrapped_types() {
@@ -894,9 +850,7 @@ fn test_generalize_with_weak_wrapped_types() {
     assert!(!poly.is_mono(), "Weak with free var should generalize");
 }
 
-// ===================================================================
 // §3.8: contains_var 在 Option/Result/Fn 参数中
-// ===================================================================
 
 #[test]
 fn test_contains_var_in_option() {
@@ -936,9 +890,7 @@ fn test_contains_var_in_fn_params() {
     );
 }
 
-// ===================================================================
 // §3.8: 同一变量多个约束求解
-// ===================================================================
 
 #[test]
 fn test_solve_with_multiple_constraints_on_same_var() {
@@ -953,9 +905,7 @@ fn test_solve_with_multiple_constraints_on_same_var() {
     );
 }
 
-// ===================================================================
 // §3.8: List 类型统一
-// ===================================================================
 
 #[test]
 fn test_unify_list_same_element_type() {
@@ -991,9 +941,7 @@ fn test_unify_list_with_var() {
     );
 }
 
-// ===================================================================
 // fresh_substitution
-// ===================================================================
 
 #[test]
 fn test_fresh_substitution() {
@@ -1008,9 +956,7 @@ fn test_fresh_substitution() {
     }
 }
 
-// ===================================================================
 // generalize 收集自由变量
-// ===================================================================
 
 #[test]
 fn test_generalize_collects_free_vars() {
@@ -1039,9 +985,7 @@ fn test_generalize_no_free_vars() {
     assert!(poly.is_mono());
 }
 
-// ===================================================================
 // solve with constraints
-// ===================================================================
 
 #[test]
 fn test_solve_empty_constraints() {
@@ -1059,10 +1003,8 @@ fn test_solve_multiple_independent() {
     assert!(solver.solve().is_ok());
 }
 
-// ===================================================================
 // substitute_type — 通过 PolyType instantiate 覆盖所有容器变体的替换
 // 触发 solver 内部的 substitute_type 对 Struct/Tuple/Dict/Set/Fn/Union 等的递归
-// ===================================================================
 
 #[test]
 fn test_instantiate_poly_with_tuple() {
@@ -1149,9 +1091,7 @@ fn test_instantiate_poly_with_assoc_and_arc() {
     assert!(matches!(inst, MonoType::AssocType { .. }));
 }
 
-// ===================================================================
 // expand_type_mut — Struct/Tuple 等带绑定的容器
-// ===================================================================
 
 #[test]
 fn test_expand_mut_struct_with_bound_var() {
@@ -1183,9 +1123,7 @@ fn test_expand_mut_fn_with_bound_var() {
     assert!(matches!(resolved, MonoType::Fn { .. }));
 }
 
-// ===================================================================
 // unify with Union — unordered backtracking
-// ===================================================================
 
 #[test]
 fn test_unify_union_unordered_matching() {
@@ -1204,9 +1142,7 @@ fn test_unify_union_unordered_mismatch() {
     assert!(solver.unify(&u1, &u2).is_err());
 }
 
-// ===================================================================
 // generalize with nested containers — collect_generalizable_vars 路径
-// ===================================================================
 
 #[test]
 fn test_generalize_with_nested_containers() {

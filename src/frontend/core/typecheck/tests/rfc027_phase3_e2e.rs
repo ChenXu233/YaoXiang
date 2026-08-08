@@ -8,6 +8,7 @@
 //! - 假设蕴含链路（if-guard → divide 调用验证）
 //! - 依赖图构建 + 赋值触发 VC（完整 checker 流程）
 
+use crate::frontend::core::typecheck::test_util::{binop, refined_int};
 use std::collections::HashMap;
 
 use crate::frontend::core::typecheck::layers::predicate::check_predicate;
@@ -18,9 +19,7 @@ use crate::frontend::core::typecheck::TypeEnvironment;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 use crate::frontend::core::types::mono::MonoType;
 
-// ===================================================================
 // RFC-027 §4: 完整四级分派 E2E
-// ===================================================================
 
 /// E2E: Level 1 → Proved（绑定变量有具体值，直接求值）
 ///
@@ -28,15 +27,12 @@ use crate::frontend::core::types::mono::MonoType;
 #[test]
 fn test_e2e_level1_direct_eval_proved() {
     // Arrange
-    let constraint = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("x".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
-    let refined = MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint,
-    };
+    let constraint = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("x".into()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    );
+    let refined = refined_int(constraint);
     let mut bindings = HashMap::new();
     bindings.insert("x".into(), ConstValue::Int(5));
 
@@ -59,15 +55,12 @@ fn test_e2e_level1_direct_eval_proved() {
 #[test]
 fn test_e2e_level1_direct_eval_disproved() {
     // Arrange
-    let constraint = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("x".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
-    let refined = MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint,
-    };
+    let constraint = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("x".into()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    );
+    let refined = refined_int(constraint);
     let mut bindings = HashMap::new();
     bindings.insert("x".into(), ConstValue::Int(0));
 
@@ -90,21 +83,18 @@ fn test_e2e_level1_direct_eval_disproved() {
 #[test]
 fn test_e2e_level2a_exact_match_from_if_guard() {
     // Arrange
-    let constraint = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("y".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
-    let refined = MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint,
-    };
+    let constraint = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("y".into()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    );
+    let refined = refined_int(constraint);
     // 模拟 if y > 0 分支内的假设栈
-    let guard_assumption = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("y".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
+    let guard_assumption = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("y".into()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    );
 
     let env = TypeEnvironment::new();
     let mut ctx = ProofContext::new(&env);
@@ -126,21 +116,18 @@ fn test_e2e_level2a_exact_match_from_if_guard() {
 #[test]
 fn test_e2e_level2b_implication_from_if_guard() {
     // Arrange
-    let constraint = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("y".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
-    let refined = MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint,
-    };
+    let constraint = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("y".into()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    );
+    let refined = refined_int(constraint);
     // 模拟 if y >= 5 分支内
-    let guard = ConstExpr::BinOp {
-        op: BinOp::Ge,
-        left: Box::new(ConstExpr::NamedVar("y".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(5))),
-    };
+    let guard = binop(
+        BinOp::Ge,
+        ConstExpr::NamedVar("y".into()),
+        ConstExpr::Lit(ConstValue::Int(5)),
+    );
 
     let env = TypeEnvironment::new();
     let mut ctx = ProofContext::new(&env);
@@ -162,15 +149,12 @@ fn test_e2e_level2b_implication_from_if_guard() {
 #[test]
 fn test_e2e_level3_no_assumptions_finds_counterexample() {
     // Arrange
-    let constraint = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("y".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
-    let refined = MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint,
-    };
+    let constraint = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("y".into()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    );
+    let refined = refined_int(constraint);
 
     // 无假设栈 — 模拟无 if-guard 的直接调用
     let env = TypeEnvironment::new();
@@ -192,21 +176,18 @@ fn test_e2e_level3_no_assumptions_finds_counterexample() {
 #[test]
 fn test_e2e_level2b_fallback_to_level3() {
     // Arrange
-    let constraint = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("y".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
-    let refined = MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint,
-    };
+    let constraint = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("y".into()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    );
+    let refined = refined_int(constraint);
     // 无关假设
-    let irrelevant_guard = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("z".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
+    let irrelevant_guard = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("z".into()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    );
 
     let env = TypeEnvironment::new();
     let mut ctx = ProofContext::new(&env);
@@ -222,9 +203,7 @@ fn test_e2e_level2b_fallback_to_level3() {
     );
 }
 
-// ===================================================================
 // RFC-027 §6.1: TypeDepGraph 激活 E2E
-// ===================================================================
 
 /// E2E: TypeDepGraph 构建 + 赋值触发影响分析
 ///
@@ -277,23 +256,18 @@ fn test_e2e_combined_dependency_multiple_triggers() {
     assert_eq!(affected_by_j.len(), 1, "E2E: j 变更应只影响 t");
 }
 
-// ===================================================================
 // RFC-027 §4.2: Level 4 证明函数调用 + 错误路径验证
-// ===================================================================
 
 /// E2E: Disproved 反例包含具体变量赋值
 #[test]
 fn test_e2e_disproved_counterexample_contains_variable_values() {
     // Arrange
-    let constraint = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("y".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
-    let refined = MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint,
-    };
+    let constraint = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("y".into()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    );
+    let refined = refined_int(constraint);
     let env = TypeEnvironment::new();
     let ctx = ProofContext::new(&env);
 
@@ -350,24 +324,21 @@ fn test_e2e_unproven_reason_readable() {
 #[test]
 fn test_e2e_assumption_not_exact_still_triggers_implication_check() {
     // Arrange
-    let constraint = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("y".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(10))),
-    };
-    let refined = MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint,
-    };
+    let constraint = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("y".into()),
+        ConstExpr::Lit(ConstValue::Int(10)),
+    );
+    let refined = refined_int(constraint);
     // 假设 y > 5，约束 y > 10 —— contains() 不匹配，走 implication
     // y=6 满足 y>5 但不满足 y>10 → 不蕴含
     let env = TypeEnvironment::new();
     let mut ctx = ProofContext::new(&env);
-    ctx.assumptions.inject(ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("y".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(5))),
-    });
+    ctx.assumptions.inject(binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("y".into()),
+        ConstExpr::Lit(ConstValue::Int(5)),
+    ));
 
     // Act
     let result = check_predicate(&ctx, &refined, &HashMap::new());
@@ -383,22 +354,19 @@ fn test_e2e_assumption_not_exact_still_triggers_implication_check() {
 #[test]
 fn test_e2e_exact_equivalent_constraint_matched() {
     // Arrange
-    let constraint = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("y".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
-    let refined = MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint,
-    };
+    let constraint = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("y".into()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    );
+    let refined = refined_int(constraint);
     let env = TypeEnvironment::new();
     let mut ctx = ProofContext::new(&env);
-    ctx.assumptions.inject(ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("y".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    });
+    ctx.assumptions.inject(binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("y".into()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    ));
 
     // Act
     let result = check_predicate(&ctx, &refined, &HashMap::new());

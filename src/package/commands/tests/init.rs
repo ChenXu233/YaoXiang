@@ -38,9 +38,7 @@ fn lib_opts() -> InitOptions {
     InitOptions { lib: true }
 }
 
-// ===================================================================
 // exec_in 基础测试
-// ===================================================================
 
 #[test]
 fn test_init_creates_project_directory_and_files() {
@@ -137,9 +135,7 @@ fn test_init_existing_directory_returns_project_exists_error() {
     );
 }
 
-// ===================================================================
 // --lib 库项目测试
-// ===================================================================
 
 #[test]
 fn test_init_lib_creates_lib_yx_not_main_yx() {
@@ -184,9 +180,7 @@ fn test_init_lib_yx_contains_no_main_entry_point() {
     );
 }
 
-// ===================================================================
 // exec_here 当前目录初始化测试
-// ===================================================================
 
 #[test]
 fn test_init_here_creates_project_in_current_directory() {
@@ -270,9 +264,7 @@ fn test_init_here_preserves_preexisting_files() {
     );
 }
 
-// ===================================================================
 // new 和 init <name> 等价性测试
-// ===================================================================
 
 #[test]
 fn test_new_and_init_name_produce_identical_output() {

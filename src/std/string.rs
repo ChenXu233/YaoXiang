@@ -8,18 +8,11 @@ use crate::std::io::format_value_with_prefix;
 use crate::std::{NativeContext, NativeExport, StdModule};
 use crate::std::result::{error_new, result_err, result_ok};
 
-// ============================================================================
 // StringModule - StdModule Implementation
-// ============================================================================
 
 /// String module implementation.
+#[derive(Default)]
 pub struct StringModule;
-
-impl Default for StringModule {
-    fn default() -> Self {
-        Self
-    }
-}
 
 impl StdModule for StringModule {
     fn module_path(&self) -> &str {
@@ -144,9 +137,7 @@ impl StdModule for StringModule {
 /// Singleton instance for std.string module.
 pub const STRING_MODULE: StringModule = StringModule;
 
-// ============================================================================
 // Helper functions
-// ============================================================================
 
 /// Extract String from RuntimeValue
 fn extract_string(arg: &RuntimeValue) -> String {
@@ -161,9 +152,7 @@ fn extract_int(arg: &RuntimeValue) -> i64 {
     arg.to_int().unwrap_or(0)
 }
 
-// ============================================================================
 // Native function implementations
-// ============================================================================
 
 /// Native implementation: split - split string by separator
 /// Now uses ctx.heap to allocate a proper List
@@ -530,9 +519,7 @@ fn apply_format_spec(
     }
 }
 
-// ============================================================================
 // Native implementations: parse_int / parse_float
-// ============================================================================
 
 /// Native implementation: parse_int - parse string to Int
 pub(crate) fn native_parse_int(

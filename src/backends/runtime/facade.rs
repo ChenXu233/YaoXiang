@@ -61,9 +61,7 @@ pub type TaskFn = Box<dyn FnOnce(&SpawnHandle) -> TaskResult + Send + 'static>;
 #[cfg(not(target_arch = "wasm32"))]
 pub type CoopTaskFn = Box<dyn FnMut(bool) -> TaskPoll + Send + 'static>;
 
-// ============================================================================
 // SpawnHandle — wasm-compatible stub vs full crossbeam version
-// ============================================================================
 
 #[cfg(target_arch = "wasm32")]
 /// Handle passed to tasks for nested spawning (no-op in wasm).
@@ -262,9 +260,7 @@ impl Runtime {
     }
 }
 
-// ============================================================================
 // Embedded Runtime
-// ============================================================================
 
 #[derive(Debug, Default)]
 struct EmbeddedRuntime {
@@ -347,9 +343,7 @@ impl EmbeddedRuntime {
     }
 }
 
-// ============================================================================
 // Standard Runtime (thread pool DAG) — not available in wasm
-// ============================================================================
 
 #[cfg(not(target_arch = "wasm32"))]
 /// A work item to be processed by a worker thread.
@@ -604,9 +598,7 @@ impl Drop for StandardRuntime {
     }
 }
 
-// ============================================================================
 // Worker thread pool — not available in wasm
-// ============================================================================
 
 #[cfg(not(target_arch = "wasm32"))]
 fn spawn_worker_threads(

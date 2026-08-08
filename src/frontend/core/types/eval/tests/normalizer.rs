@@ -9,9 +9,7 @@ use crate::frontend::core::types::eval::normalizer::{
     EvaluationStrategy, NormalForm, NormalizationContext, ReductionConfig, TypeNormalizer,
 };
 
-// ===================================================================
 // ReductionConfig
-// ===================================================================
 
 #[test]
 fn test_reduction_config_default() {
@@ -35,9 +33,7 @@ fn test_reduction_config_custom() {
     assert_eq!(config.evaluation_strategy, EvaluationStrategy::Lazy);
 }
 
-// ===================================================================
 // TypeNormalizer
-// ===================================================================
 
 #[test]
 fn test_normalizer_normalize_primitives() {
@@ -129,9 +125,7 @@ fn test_normalizer_normalize_union_intersection() {
     assert_eq!(n.normalize(&inter), NormalForm::Normalized);
 }
 
-// ===================================================================
 // TypeNormalizer - normalize_internal 路径
-// ===================================================================
 
 #[test]
 fn test_normalizer_normalize_type_var() {
@@ -271,9 +265,7 @@ fn test_normalizer_normalize_meta_type() {
     assert_eq!(n.normalize(&meta), NormalForm::Normalized);
 }
 
-// ===================================================================
 // Evaluator 相关
-// ===================================================================
 
 #[test]
 fn test_normalizer_evaluator() {
@@ -287,9 +279,7 @@ fn test_normalizer_context() {
     let _ctx = n.context();
 }
 
-// ===================================================================
 // NormalizationContext
-// ===================================================================
 
 #[test]
 fn test_normalization_context_apply_no_change() {

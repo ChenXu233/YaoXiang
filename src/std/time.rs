@@ -8,18 +8,11 @@ use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
 use crate::std::{NativeContext, NativeExport, StdModule};
 
-// ============================================================================
 // TimeModule - StdModule Implementation
-// ============================================================================
 
 /// Time module implementation.
+#[derive(Default)]
 pub struct TimeModule;
-
-impl Default for TimeModule {
-    fn default() -> Self {
-        Self
-    }
-}
 
 impl StdModule for TimeModule {
     fn module_path(&self) -> &str {
@@ -115,9 +108,7 @@ impl StdModule for TimeModule {
 /// Singleton instance for std.time module.
 pub const TIME_MODULE: TimeModule = TimeModule;
 
-// ============================================================================
 // Helper Functions
-// ============================================================================
 
 /// Get current Unix timestamp in seconds.
 fn get_current_timestamp() -> u64 {
@@ -240,9 +231,7 @@ fn calculate_timestamp(
     days * 86400 + hour * 3600 + minute * 60 + second
 }
 
-// ============================================================================
 // Time Getting Functions
-// ============================================================================
 
 /// Native implementation: now
 fn native_now(
@@ -274,9 +263,7 @@ fn native_timestamp_ms(
     Ok(RuntimeValue::Int(timestamp))
 }
 
-// ============================================================================
 // Time Sleeping Function
-// ============================================================================
 
 /// Native implementation: sleep
 #[cfg(not(target_arch = "wasm32"))]
@@ -305,9 +292,7 @@ fn native_sleep(
     Ok(RuntimeValue::Void)
 }
 
-// ============================================================================
 // Time Formatting and Parsing Functions
-// ============================================================================
 
 /// Native implementation: format_time
 fn native_format_time(
@@ -420,9 +405,7 @@ fn native_parse_time(
     Ok(RuntimeValue::Int(timestamp))
 }
 
-// ============================================================================
 // DateTime Accessor Functions
-// ============================================================================
 
 /// Get field from timestamp.
 fn get_datetime_field(

@@ -20,9 +20,7 @@ use yaoxiang::package::error::PackageError;
 use yaoxiang::formatter::{format_source, FormatOptions, run_format_command};
 use yaoxiang::{run, run_file, build_bytecode, build_bytecode_with_options, eval_code};
 
-// ============================================================================
 // 辅助函数
-// ============================================================================
 
 fn temp_dir() -> TempDir {
     TempDir::new().expect("Failed to create temp dir")
@@ -49,9 +47,7 @@ fn init_project(
     dir
 }
 
-// ============================================================================
 // init 命令 — RFC-014 包管理：项目初始化
-// ============================================================================
 
 #[test]
 fn test_init_binary_project_creates_main_yx() {
@@ -115,9 +111,7 @@ fn test_init_on_existing_directory_returns_project_exists_error() {
     );
 }
 
-// ============================================================================
 // run 命令 — 执行 .yx 源文件
-// ============================================================================
 
 #[test]
 fn test_run_program_with_variable_declaration_and_print() {
@@ -152,8 +146,6 @@ fn test_run_nonexistent_file_returns_error() {
     assert!(result.is_err(), "run_file on nonexistent path should error");
 }
 
-// ============================================================================
-
 #[test]
 fn test_run_void_literal_in_variable_declaration() {
     // Act
@@ -187,7 +179,6 @@ fn test_run_file_compile_error_returns_error() {
     );
 }
 // build 命令 — 字节码编译
-// ============================================================================
 
 #[test]
 fn test_build_bytecode_produces_nonempty_output_file() {
@@ -234,9 +225,7 @@ fn test_build_nonexistent_source_returns_error() {
     assert!(result.is_err(), "build on nonexistent source should fail");
 }
 
-// ============================================================================
 // eval 命令 — 代码求值
-// ============================================================================
 
 #[test]
 fn test_eval_code_single_expression() {
@@ -262,9 +251,7 @@ fn test_eval_code_with_explicit_main_block() {
     );
 }
 
-// ============================================================================
 // format 命令 — RFC-010 代码格式化
-// ============================================================================
 
 #[test]
 fn test_format_source_adds_trailing_newline() {
@@ -324,9 +311,7 @@ fn test_format_invalid_path_returns_error() {
     assert!(result.is_err(), "format on nonexistent path should fail");
 }
 
-// ============================================================================
 // add / rm 命令 — RFC-014 包管理：依赖操作
-// ============================================================================
 
 #[test]
 fn test_add_and_remove_dependency_persists_manifest_changes() {
@@ -403,9 +388,7 @@ fn test_remove_nonexistent_dependency_returns_not_found_error() {
     );
 }
 
-// ============================================================================
 // update 命令 — RFC-014 包管理：依赖更新
-// ============================================================================
 
 #[test]
 fn test_update_on_project_with_no_dependencies_is_noop() {
@@ -438,9 +421,7 @@ fn test_update_nonexistent_package_returns_not_found_error() {
     );
 }
 
-// ============================================================================
 // install / list 命令 — RFC-014 包管理：依赖生命周期
-// ============================================================================
 
 #[test]
 fn test_install_on_project_with_no_dependencies_is_noop() {

@@ -48,7 +48,6 @@
 //! ```
 
 // 重新导出公共 API
-// =================
 
 // 核心模块（词法分析器、解析器、类型系统）
 pub mod core;
@@ -72,7 +71,6 @@ pub mod validate;
 pub mod compiler;
 
 // 重新导出类型
-// =============
 
 // 编译器
 pub use compiler::Compiler;

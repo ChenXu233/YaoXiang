@@ -70,9 +70,7 @@ fn test_substituter_substitute_with_map() {
     assert_eq!(result, MonoType::String);
 }
 
-// ===================================================================
 // 以下测试覆盖 substitute_internal 对所有容器类型的递归替换
-// ===================================================================
 
 fn tv(idx: usize) -> MonoType {
     MonoType::TypeVar(TypeVar::new(idx))
@@ -285,9 +283,7 @@ fn test_substitute_generic_params_too_few() {
     assert_eq!(result, MonoType::TypeVar(tv));
 }
 
-// ===================================================================
 // §3: 补充替换测试
-// ===================================================================
 
 #[test]
 fn test_substitute_through_list() {

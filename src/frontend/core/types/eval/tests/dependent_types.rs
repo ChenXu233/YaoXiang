@@ -93,9 +93,7 @@ fn test_dependent_type_env() {
         .is_none());
 }
 
-// ===================================================================
 // 补充测试: AssociatedTypeDef 扩展
-// ===================================================================
 
 #[test]
 fn test_associated_def_direct_into_type() {
@@ -131,9 +129,7 @@ fn test_associated_def_direct_substitute() {
     assert_eq!(result.into_type(), MonoType::Int(32));
 }
 
-// ===================================================================
 // 补充测试: TypeFamily 扩展
-// ===================================================================
 
 #[test]
 fn test_type_family_instantiate_no_args() {
@@ -202,9 +198,7 @@ fn test_type_family_instantiate_associated_type_not_found() {
         .is_none());
 }
 
-// ===================================================================
 // 补充测试: DependentTypeEnv 扩展
-// ===================================================================
 
 #[test]
 fn test_dependent_type_env_register_multiple() {
@@ -377,9 +371,7 @@ fn test_assert_type_family_instantiate() {
     );
 }
 
-// ===================================================================
 // Recursive 类型族测试
-// ===================================================================
 
 #[test]
 fn test_recursive_instantiate_zero() {
@@ -450,9 +442,7 @@ fn test_recursive_instantiate_succ() {
     );
 }
 
-// ===================================================================
 // Nat 解析/转换测试
-// ===================================================================
 
 #[test]
 fn test_parse_nat_from_type_zero() {
@@ -512,9 +502,7 @@ fn test_nat_to_type_roundtrip() {
     }
 }
 
-// ===================================================================
 // 结构性终止检查测试
-// ===================================================================
 
 #[test]
 fn test_structural_termination_ok() {

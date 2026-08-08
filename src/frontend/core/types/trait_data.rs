@@ -5,9 +5,7 @@
 use std::collections::HashMap;
 use crate::frontend::core::types::mono::MonoType;
 
-// ============================================================================
 // 数据结构
-// ============================================================================
 
 /// Trait 方法签名
 #[derive(Debug, Clone)]
@@ -46,9 +44,7 @@ pub struct TraitImplementation {
     pub methods: HashMap<String, MonoType>,
 }
 
-// ============================================================================
 // TraitTable
-// ============================================================================
 
 /// Trait 表 - 存储所有已解析的 Trait 定义和实现
 #[derive(Debug, Clone, Default)]

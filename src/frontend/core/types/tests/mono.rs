@@ -10,9 +10,7 @@ use crate::frontend::core::types::EnumType;
 use crate::util::span::Span;
 use std::collections::HashMap;
 
-// ===================================================================
 // §3.2-§3.17: From<ast::Type> 转换
-// ===================================================================
 
 #[test]
 fn test_from_ast_type_name() {
@@ -206,9 +204,7 @@ fn test_from_ast_type_meta_type_nested() {
     assert!(matches!(mono, MonoType::MetaType { .. }));
 }
 
-// ===================================================================
 // §3.4: EnumType
-// ===================================================================
 
 #[test]
 fn test_from_ast_type_sum() {
@@ -243,9 +239,7 @@ fn test_from_ast_type_literal() {
     );
 }
 
-// ===================================================================
 // §3.3: StructType PartialEq / Eq 完整测试
-// ===================================================================
 
 #[test]
 fn test_struct_type_eq_same_fields() {
@@ -289,9 +283,7 @@ fn test_struct_type_eq_different_fields() {
     assert_ne!(a, b);
 }
 
-// ===================================================================
 // §3.17: get_ast_type_universe_level 覆盖嵌套场景
-// ===================================================================
 
 #[test]
 fn test_get_ast_type_universe_level_nested() {
@@ -338,9 +330,7 @@ fn test_calculate_meta_type_level_args() {
     );
 }
 
-// ===================================================================
 // §3.13-3.14: 类型联合/交集 type_name 测试
-// ===================================================================
 
 #[test]
 fn test_type_name_dict_set_range() {
@@ -533,9 +523,7 @@ fn test_type_name_fn_with_async() {
     assert!(f.type_name().contains("fn("));
 }
 
-// ===================================================================
 // §3: MonoType 方法补充测试
-// ===================================================================
 
 #[test]
 fn test_mono_type_type_var_extraction() {

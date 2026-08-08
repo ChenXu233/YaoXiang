@@ -48,18 +48,11 @@ pub fn weak_upgrade(
     weak.upgrade()
 }
 
-// ============================================================================
 // WeakModule - StdModule Implementation
-// ============================================================================
 
 /// Weak module implementation.
+#[derive(Default)]
 pub struct WeakModule;
-
-impl Default for WeakModule {
-    fn default() -> Self {
-        Self
-    }
-}
 
 impl StdModule for WeakModule {
     fn module_path(&self) -> &str {
@@ -84,9 +77,7 @@ impl StdModule for WeakModule {
     }
 }
 
-// ============================================================================
 // Native Handler Wrappers
-// ============================================================================
 
 /// Native handler wrapper for weak_new.
 fn native_weak_new(

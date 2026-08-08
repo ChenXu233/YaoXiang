@@ -37,7 +37,8 @@ pub mod layers;
 pub mod passes;
 
 // ============ 测试模块 ============
-
+#[cfg(test)]
+mod test_util;
 #[cfg(test)]
 mod tests;
 

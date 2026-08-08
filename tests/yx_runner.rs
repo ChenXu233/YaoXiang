@@ -90,9 +90,7 @@ fn binary_name() -> String {
     path
 }
 
-// ============================================================================
 // Tests
-// ============================================================================
 
 /// Check if a .yx file has a `// [test:ignore]: reason` marker in its first 5 lines.
 /// If so, skip it in the test runner and print the reason.

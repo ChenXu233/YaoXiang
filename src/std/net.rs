@@ -6,18 +6,11 @@ use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
 use crate::std::{NativeContext, NativeExport, StdModule};
 
-// ============================================================================
 // NetModule - StdModule Implementation
-// ============================================================================
 
 /// Net module implementation.
+#[derive(Default)]
 pub struct NetModule;
-
-impl Default for NetModule {
-    fn default() -> Self {
-        Self
-    }
-}
 
 impl StdModule for NetModule {
     fn module_path(&self) -> &str {
@@ -57,9 +50,7 @@ impl StdModule for NetModule {
 /// Singleton instance for std.net module.
 pub const NET_MODULE: NetModule = NetModule;
 
-// ============================================================================
 // Network Functions
-// ============================================================================
 
 /// Native implementation: http_get
 fn native_http_get(

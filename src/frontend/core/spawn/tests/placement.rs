@@ -6,9 +6,7 @@ use crate::frontend::core::parser::ast::{Block, Expr, Module, Stmt, StmtKind};
 use crate::frontend::core::spawn::placement::check_spawn_placement;
 use crate::util::span::Span;
 
-// ============================================================================
 // 辅助函数
-// ============================================================================
 
 fn empty_module() -> Module {
     Module {
@@ -49,9 +47,7 @@ fn var_stmt(name: &str) -> Stmt {
     }
 }
 
-// ============================================================================
 // Happy path
-// ============================================================================
 
 #[test]
 fn test_empty_module_produces_no_diagnostics() {

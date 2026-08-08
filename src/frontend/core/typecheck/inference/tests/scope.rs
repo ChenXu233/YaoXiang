@@ -5,9 +5,7 @@
 use crate::frontend::core::typecheck::inference::scope::ScopeManager;
 use crate::frontend::core::types::{MonoType, PolyType};
 
-// ===================================================================
 // Happy path 测试
-// ===================================================================
 
 #[test]
 fn test_scope_manager_creation() {
@@ -54,9 +52,7 @@ fn test_scope_manager_get_var() {
     assert_eq!(*var.unwrap(), PolyType::mono(MonoType::Int(32)));
 }
 
-// ===================================================================
 // Error path 测试
-// ===================================================================
 
 #[test]
 fn test_scope_manager_get_undefined_var() {
@@ -70,9 +66,7 @@ fn test_scope_manager_get_undefined_var() {
     assert!(var.is_none(), "should return None for undefined variable");
 }
 
-// ===================================================================
 // Boundary 测试
-// ===================================================================
 
 #[test]
 fn test_scope_manager_with_many_vars() {

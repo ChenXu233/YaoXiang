@@ -7,9 +7,7 @@ use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::signature::parse_signature;
 use crate::frontend::core::types::MonoType;
 
-// ===================================================================
 // Happy path 测试
-// ===================================================================
 
 #[test]
 fn test_parse_signature_simple_function() {
@@ -71,9 +69,7 @@ fn test_parse_signature_with_params() {
     }
 }
 
-// ===================================================================
 // Error path 测试
-// ===================================================================
 
 #[test]
 fn test_parse_signature_invalid_syntax() {
@@ -122,9 +118,7 @@ fn test_parse_signature_unmatched_paren() {
     }
 }
 
-// ===================================================================
 // Boundary 测试
-// ===================================================================
 
 #[test]
 fn test_parse_signature_empty_params() {
@@ -240,9 +234,7 @@ fn test_parse_signature_nested_function_type() {
     }
 }
 
-// ===================================================================
 // issue #242：std 签名的真实模式覆盖
-// ===================================================================
 
 #[test]
 fn test_parse_signature_bracket_generic_prefix_binds_shared_var() {

@@ -25,9 +25,7 @@ fn assert_eval_eq(
     }
 }
 
-// ===================================================================
 // §4.1: ConstGenericResult
-// ===================================================================
 
 #[test]
 fn test_const_result_new_and_accessors() {
@@ -46,9 +44,7 @@ fn test_const_result_not_const() {
     assert_eq!(r.as_int(), None);
 }
 
-// ===================================================================
 // §4.1: 字面量求值
-// ===================================================================
 
 #[test]
 fn test_eval_int_literal() {
@@ -93,9 +89,7 @@ fn test_eval_float_literal() {
     assert!(e.eval(&ConstExpr::Lit(ConstValue::Float(-1.5))).is_ok());
 }
 
-// ===================================================================
 // §4.1: 二元运算求值
-// ===================================================================
 
 fn bin(
     op: BinOp,
@@ -183,9 +177,7 @@ fn test_eval_float_compare() {
     assert_eval_eq(e.eval(&flt), ConstValue::Bool(true));
 }
 
-// ===================================================================
 // §4.1: 一元运算
-// ===================================================================
 
 #[test]
 fn test_eval_neg() {
@@ -211,9 +203,7 @@ fn test_eval_not() {
     assert_eval_eq(e.eval(&not(false)), ConstValue::Bool(true));
 }
 
-// ===================================================================
 // §4.1: 变量绑定和求值
-// ===================================================================
 
 #[test]
 fn test_eval_var_bound() {
@@ -233,9 +223,7 @@ fn test_eval_var_unbound() {
         .is_err());
 }
 
-// ===================================================================
 // §4.1: If 条件求值
-// ===================================================================
 
 #[test]
 fn test_eval_if_true_false() {
@@ -249,9 +237,7 @@ fn test_eval_if_true_false() {
     assert_eval_eq(e.eval(&iff(false, 10, 20)), ConstValue::Int(20));
 }
 
-// ===================================================================
 // §4.2: 用户函数
-// ===================================================================
 
 #[test]
 fn test_eval_custom_function() {
@@ -296,9 +282,7 @@ fn test_eval_custom_function_arg_count_mismatch() {
         .is_err());
 }
 
-// ===================================================================
 // §4.2: 阶乘和斐波那契
-// ===================================================================
 
 #[test]
 fn test_eval_factorial() {
@@ -358,9 +342,7 @@ fn test_eval_fibonacci() {
     );
 }
 
-// ===================================================================
 // §4.2: 内置函数
-// ===================================================================
 
 #[test]
 fn test_eval_builtin_abs() {
@@ -435,9 +417,7 @@ fn test_eval_undefined_function() {
         .is_err());
 }
 
-// ===================================================================
 // §4.2: unsupported operation
-// ===================================================================
 
 #[test]
 fn test_eval_mismatched_types_in_binop() {
@@ -450,9 +430,7 @@ fn test_eval_mismatched_types_in_binop() {
     assert!(e.eval(&mixed).is_err());
 }
 
-// ===================================================================
 // §4.3: GenericSize
-// ===================================================================
 
 #[test]
 fn test_generic_size_primitives() {
@@ -517,9 +495,7 @@ fn test_generic_size_unknown_typeref_fails() {
         .is_err());
 }
 
-// ===================================================================
 // §4.3: SizeExpr
-// ===================================================================
 
 #[test]
 fn test_size_expr_const() {
@@ -538,9 +514,7 @@ fn test_size_expr_mul_add() {
     assert!(add.eval().unwrap().is_const);
 }
 
-// ===================================================================
 // §4.3: SizeResult
-// ===================================================================
 
 #[test]
 fn test_size_result() {
@@ -621,9 +595,7 @@ fn test_eval_neg_zero() {
     );
 }
 
-// ===================================================================
 // supplementary tests: more code paths
-// ===================================================================
 
 #[test]
 fn test_eval_if_non_boolean_condition() {
@@ -978,9 +950,7 @@ fn test_eval_multiple_if() {
     assert_eval_eq(e.eval(&nested_if), ConstValue::Int(2));
 }
 
-// ===================================================================
 // supplementary tests: more GenericSize paths
-// ===================================================================
 
 #[test]
 fn test_generic_size_type_ref_int() {
@@ -1123,9 +1093,7 @@ fn test_generic_size_intersection() {
         .is_err());
 }
 
-// ===================================================================
 // supplementary tests: SizeExpr extensions
-// ===================================================================
 
 #[test]
 fn test_size_expr_nested_mul_add() {
@@ -1151,9 +1119,7 @@ fn test_size_result_is_const() {
     assert!(!r2.is_const);
 }
 
-// ===================================================================
 // supplementary tests: ConstGenericResult extensions
-// ===================================================================
 
 #[test]
 fn test_const_result_float() {
@@ -1170,9 +1136,7 @@ fn test_const_result_debug() {
     assert!(debug.contains("ConstGenericResult"));
 }
 
-// ===================================================================
 // supplementary tests: ConstExpr extensions
-// ===================================================================
 
 #[test]
 fn test_const_expr_debug() {
@@ -1195,10 +1159,8 @@ fn test_const_un_op_debug() {
     assert!(debug.contains("Neg"));
 }
 
-// ===================================================================
 // AST Expr -> ConstExpr 转换测试
 // 基于 docs/superpowers/specs/2026-07-11-const-expr-constraint-design.md
-// ===================================================================
 
 #[test]
 fn test_convert_expr_to_const_expr_int_literal() {

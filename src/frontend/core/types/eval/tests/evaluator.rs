@@ -16,9 +16,7 @@ use crate::frontend::core::types::eval::dependent_types::{
 };
 use crate::std::StdModule;
 
-// ===================================================================
 // Happy path 测试
-// ===================================================================
 
 #[test]
 fn test_type_evaluator_creation() {
@@ -102,9 +100,7 @@ fn test_type_evaluator_eval_list_type() {
     assert!(result.is_ok(), "eval List type should return Value");
 }
 
-// ===================================================================
 // Error path 测试
-// ===================================================================
 
 #[test]
 fn test_type_evaluator_eval_nat_unknown_operation() {
@@ -237,9 +233,7 @@ fn test_type_evaluator_eval_match_no_matching_arm() {
     );
 }
 
-// ===================================================================
 // Boundary 测试
-// ===================================================================
 
 #[test]
 fn test_type_evaluator_eval_nested_type() {
@@ -289,7 +283,6 @@ fn test_type_evaluator_eval_void_type() {
     );
 }
 
-// ===================================================================
 // IsTrue/Assert 类型族测试
 #[test]
 fn test_istrue_true_evaluates_to_void() {
@@ -401,9 +394,7 @@ fn test_assert_false_evaluates_to_never() {
     );
 }
 
-// ===================================================================
 // 类型级递归测试
-// ===================================================================
 
 #[test]
 fn test_eval_recursive_factorial_zero() {
@@ -493,9 +484,7 @@ fn test_eval_recursive_factorial_succ_zero() {
     );
 }
 
-// ===================================================================
 // issue #262: 不可判定必须悬置，绝不伪造真
-// ===================================================================
 
 /// #262 回归辅助：创建一个注册了 std 类型族的求值器
 fn make_evaluator<'a>(

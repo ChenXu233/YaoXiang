@@ -11,13 +11,8 @@ use crate::frontend::core::types::eval::dependent_types::AssociatedTypeDef;
 use crate::frontend::core::types::mono::MonoType;
 use crate::std::{NativeContext, NativeExport, StdModule, TypeFamilyExport};
 
+#[derive(Default)]
 pub struct AssertModule;
-
-impl Default for AssertModule {
-    fn default() -> Self {
-        Self
-    }
-}
 
 impl StdModule for AssertModule {
     fn module_path(&self) -> &str {

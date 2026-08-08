@@ -6,18 +6,11 @@ use crate::backends::common::{RuntimeValue, HeapValue};
 use crate::backends::ExecutorError;
 use crate::std::{expect_dict, NativeContext, NativeExport, StdModule};
 
-// ============================================================================
 // DictModule - StdModule Implementation
-// ============================================================================
 
 /// Dict module implementation.
+#[derive(Default)]
 pub struct DictModule;
-
-impl Default for DictModule {
-    fn default() -> Self {
-        Self
-    }
-}
 
 impl StdModule for DictModule {
     fn module_path(&self) -> &str {
@@ -88,9 +81,7 @@ impl StdModule for DictModule {
 /// Singleton instance for std.dict module.
 pub const DICT_MODULE: DictModule = DictModule;
 
-// ============================================================================
 // Native function implementations
-// ============================================================================
 
 /// Native implementation: get - get value by key
 fn native_get(

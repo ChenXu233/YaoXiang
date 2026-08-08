@@ -3,6 +3,7 @@
 //! §3.2-3.3: 流敏感假设集 Γ — 路径条件收集与 kill set
 //! spec 2026-07-12-assert-refinement-unification-design.md §4.1-4.2: Γ 语义 + mut 失效
 
+use crate::frontend::core::typecheck::test_util::{binop};
 use crate::frontend::core::typecheck::proof::assumptions::{AssumptionStack, FlowSensitiveGamma};
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 
@@ -10,16 +11,14 @@ fn make_gt(
     var: &str,
     n: i128,
 ) -> ConstExpr {
-    ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar(var.into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(n))),
-    }
+    binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar(var.into()),
+        ConstExpr::Lit(ConstValue::Int(n)),
+    )
 }
 
-// ============================================================
 // 基本 push/pop 行为（向后兼容 API）
-// ============================================================
 
 #[test]
 fn test_push_pop() {
@@ -97,9 +96,7 @@ fn test_contains_empty_stack() {
     assert!(!result, "empty stack should not contain any assumption");
 }
 
-// ============================================================
 // FlowSensitiveGamma 新 API
-// ============================================================
 
 #[test]
 fn test_gamma_inject_and_current() {

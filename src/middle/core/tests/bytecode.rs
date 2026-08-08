@@ -13,9 +13,7 @@ use crate::backends::common::opcode;
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::passes::codegen::bytecode::BytecodeInstruction;
 
-// ========================
 // Instruction Size
-// ========================
 
 #[test]
 fn test_nop_size_is_one_byte() {
@@ -46,9 +44,7 @@ fn test_mov_size_is_five_bytes() {
     );
 }
 
-// ========================
 // Display Formatting
-// ========================
 
 #[test]
 fn test_reg_display_format() {
@@ -80,9 +76,7 @@ fn test_label_display_format() {
     );
 }
 
-// ========================
 // Borrow/Release Opcode Mapping
-// ========================
 
 #[test]
 fn test_borrow_immutable_opcode_is_borrow() {
@@ -164,9 +158,7 @@ fn test_release_size_is_three_bytes() {
     );
 }
 
-// ========================
 // Borrow/Release Round-trip Tests
-// ========================
 
 /// Helper: build a minimal BytecodeFile with one function containing
 /// the given raw BytecodeInstructions, then decode via `From<BytecodeFile>`.
@@ -327,9 +319,7 @@ fn test_borrow_release_combined_roundtrip() {
     assert_release_instr(&instrs[1], Reg(5));
 }
 
-// ========================
 // MonoType::Ref -> IrType Conversion
-// ========================
 
 #[test]
 fn test_ref_type_maps_to_void_ir_type() {

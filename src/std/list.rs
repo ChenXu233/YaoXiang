@@ -6,18 +6,11 @@ use crate::backends::common::{RuntimeValue, HeapValue};
 use crate::backends::ExecutorError;
 use crate::std::{expect_list, NativeContext, NativeExport, StdModule};
 
-// ============================================================================
 // ListModule - StdModule Implementation
-// ============================================================================
 
 /// List module implementation.
+#[derive(Default)]
 pub struct ListModule;
-
-impl Default for ListModule {
-    fn default() -> Self {
-        Self
-    }
-}
 
 impl StdModule for ListModule {
     fn module_path(&self) -> &str {
@@ -151,9 +144,7 @@ impl StdModule for ListModule {
 /// Singleton instance for std.list module.
 pub const LIST_MODULE: ListModule = ListModule;
 
-// ============================================================================
 // Native function implementations
-// ============================================================================
 
 /// Native implementation: push - add item to end of list
 /// Returns new list with item added
@@ -473,9 +464,7 @@ fn native_find_index(
     }
 }
 
-// ============================================================================
 // 迭代器协议实现
-// ============================================================================
 
 /// Native implementation: iter - 创建迭代器
 /// 返回一个 Tuple (原始列表, 当前索引)

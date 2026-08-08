@@ -11,9 +11,7 @@ use crate::backends::common::{RuntimeValue, HeapValue};
 use crate::backends::ExecutorError;
 use crate::std::{NativeContext, NativeExport, StdModule};
 
-// ============================================================================
 // Wasm output buffer — captures print output for browser Playground
-// ============================================================================
 
 #[cfg(target_arch = "wasm32")]
 pub mod wasm_output {
@@ -41,18 +39,11 @@ pub mod wasm_output {
     }
 }
 
-// ============================================================================
 // IoModule - StdModule Implementation
-// ============================================================================
 
 /// IO module implementation.
+#[derive(Default)]
 pub struct IoModule;
-
-impl Default for IoModule {
-    fn default() -> Self {
-        Self
-    }
-}
 
 impl StdModule for IoModule {
     fn module_path(&self) -> &str {
@@ -109,9 +100,7 @@ impl StdModule for IoModule {
 /// Singleton instance for std::io module.
 pub const IO_MODULE: IoModule = IoModule;
 
-// ============================================================================
 // Native Function Implementations
-// ============================================================================
 
 /// Native implementation: print (without newline)
 fn native_print(

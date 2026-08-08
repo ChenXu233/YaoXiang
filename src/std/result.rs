@@ -13,13 +13,8 @@ use crate::backends::common::{HeapValue, RuntimeValue};
 use crate::backends::ExecutorError;
 use crate::std::{NativeContext, NativeExport, StdModule};
 
+#[derive(Default)]
 pub struct ResultModule;
-
-impl Default for ResultModule {
-    fn default() -> Self {
-        ResultModule
-    }
-}
 
 impl StdModule for ResultModule {
     fn module_path(&self) -> &str {
@@ -58,9 +53,7 @@ impl StdModule for ResultModule {
 
 pub const RESULT_MODULE: ResultModule = ResultModule;
 
-// ============================================================================
 // 公共辅助函数（供 parse_int/parse_float 等复用）
-// ============================================================================
 
 /// 构造 Result.ok(value)，variant_id=0
 pub fn result_ok(value: RuntimeValue) -> RuntimeValue {
@@ -94,9 +87,7 @@ pub fn error_new(
     }
 }
 
-// ============================================================================
 // Result 方法 native 实现
-// ============================================================================
 
 pub(crate) fn native_result_is_ok(
     args: &[RuntimeValue],

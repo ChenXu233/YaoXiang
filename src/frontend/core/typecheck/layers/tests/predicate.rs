@@ -20,9 +20,7 @@ use crate::frontend::core::typecheck::TypeEnvironment;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 use crate::frontend::core::types::mono::MonoType;
 
-// ===================================================================
 // RFC-027 §4.1: Phase 1 — Evaluator 直接求值（Level 1）
-// ===================================================================
 
 /// RFC-027 §4.1 Level 1: 绑定变量有具体值 → Evaluator 直接求值 Proved
 #[test]
@@ -95,9 +93,7 @@ fn test_non_refined_type_passes_immediately() {
     assert!(result.is_proved(), "非 Refined 类型应直接返回 Proved");
 }
 
-// ===================================================================
 // RFC-027 §3.2: Phase 2A — 假设栈精确匹配（Level 2a）
-// ===================================================================
 
 /// RFC-027 §3.2 Level 2a: 约束正好在假设栈中 → 零开销直接 Proved
 #[test]
@@ -145,9 +141,7 @@ fn test_direct_eval_with_concrete_literals() {
     assert!(result.is_proved(), "5>0 纯字面量应直接求值为 Proved");
 }
 
-// ===================================================================
 // RFC-027 §3.2: Phase 3.2 — SMT 假设蕴含（Level 2b）
-// ===================================================================
 
 /// RFC-027 §3.2 Level 2b: 假设 y >= 5 蕴含约束 y > 0，SMT 判断 unsat → Proved
 #[test]

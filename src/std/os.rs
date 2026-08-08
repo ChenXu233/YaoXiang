@@ -12,18 +12,11 @@ use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
 use crate::std::{NativeContext, NativeExport, StdModule};
 
-// ============================================================================
 // OsModule - StdModule Implementation
-// ============================================================================
 
 /// OS module implementation.
+#[derive(Default)]
 pub struct OsModule;
-
-impl Default for OsModule {
-    fn default() -> Self {
-        Self
-    }
-}
 
 impl StdModule for OsModule {
     fn module_path(&self) -> &str {
@@ -161,9 +154,7 @@ impl StdModule for OsModule {
 /// Singleton instance for std.os module.
 pub const OS_MODULE: OsModule = OsModule;
 
-// ============================================================================
 // Global State
-// ============================================================================
 
 /// Global file handle storage for open files.
 static OPEN_FILES: LazyLock<Mutex<HashMap<i64, File>>> =
@@ -182,9 +173,7 @@ fn allocate_fd() -> i64 {
     }
 }
 
-// ============================================================================
 // File Operations
-// ============================================================================
 
 /// Native implementation: open
 fn native_open(
@@ -555,9 +544,7 @@ fn native_flush(
     }
 }
 
-// ============================================================================
 // Directory Operations
-// ============================================================================
 
 /// Native implementation: mkdir
 fn native_mkdir(
@@ -658,9 +645,7 @@ fn native_read_dir(
     }
 }
 
-// ============================================================================
 // File/Directory Utilities
-// ============================================================================
 
 /// Native implementation: remove
 fn native_remove(
@@ -844,9 +829,7 @@ fn native_rename(
     }
 }
 
-// ============================================================================
 // Environment Variables
-// ============================================================================
 
 /// Native implementation: get_env
 fn native_get_env(
@@ -910,9 +893,7 @@ fn native_set_env(
     Ok(RuntimeValue::Void)
 }
 
-// ============================================================================
 // Process and Working Directory
-// ============================================================================
 
 /// Native implementation: args
 fn native_args(

@@ -10,9 +10,7 @@ use crate::frontend::core::types::eval::reducer::{
 };
 use crate::frontend::core::types::eval::normalizer::ReductionConfig;
 
-// ===================================================================
 // TypeComputer
-// ===================================================================
 
 #[test]
 fn test_type_computer_new_and_with_config() {
@@ -95,9 +93,7 @@ fn test_type_computer_compute_fn() {
     let _ = result;
 }
 
-// ===================================================================
 // TypeReducer
-// ===================================================================
 
 #[test]
 fn test_reducer_stuck_on_primitives() {
@@ -368,9 +364,7 @@ fn test_reducer_reduce_type_ref_self_referential() {
     let _ = result;
 }
 
-// ===================================================================
 // TypeUnifier
-// ===================================================================
 
 #[test]
 fn test_unifier_new_and_reset() {
@@ -444,9 +438,7 @@ fn test_unifier_unify_different_composite() {
     assert!(!matches!(result, UnificationResult::Success(_)));
 }
 
-// ===================================================================
 // TypeUnifier - unify_internal 路径
-// ===================================================================
 
 #[test]
 fn test_unifier_unify_type_vars_same() {
@@ -576,9 +568,7 @@ fn test_unifier_unify_completely_different() {
     assert!(matches!(result, UnificationResult::Failure(_)));
 }
 
-// ===================================================================
 // TypeUnifier - 更多路径
-// ===================================================================
 
 #[test]
 fn test_unifier_unify_list_with_var() {
@@ -766,9 +756,7 @@ fn test_unifier_unify_struct_same() {
     let _ = u.unify(&s1, &s2);
 }
 
-// ===================================================================
 // ComputeConfig
-// ===================================================================
 
 #[test]
 fn test_compute_config() {
