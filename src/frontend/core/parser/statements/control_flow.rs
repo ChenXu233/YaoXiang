@@ -136,7 +136,6 @@ pub fn parse_for_stmt(
         return None;
     }
 
-    // Parse iterable expression
     let iterable = Box::new(state.parse_expression(crate::frontend::core::parser::BP_LOWEST)?);
 
     // Parse body
@@ -237,7 +236,6 @@ pub fn parse_while_stmt(
 ) -> Option<Stmt> {
     state.bump(); // consume 'while'
 
-    // Parse condition expression
     let condition = Box::new(state.parse_expression(crate::frontend::core::parser::BP_LOWEST)?);
 
     // Parse body block

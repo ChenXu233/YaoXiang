@@ -165,7 +165,6 @@ impl BindingParser {
             .build());
         }
 
-        // Parse value expression
         let value = state.parse_expression(crate::frontend::core::parser::BP_LOWEST);
 
         let value_span = state.span();

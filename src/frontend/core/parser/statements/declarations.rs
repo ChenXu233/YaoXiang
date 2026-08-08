@@ -709,7 +709,6 @@ pub fn parse_identifier_stmt(
     if state.at(&TokenKind::Eq) {
         state.bump(); // consume '='
 
-        // Parse value expression
         let value = match state.parse_expression(BP_LOWEST) {
             Some(expr) => expr,
             None => {
@@ -822,7 +821,6 @@ pub fn parse_paren_destructure_stmt(
     }
     state.bump(); // consume `=`
 
-    // Parse RHS expression
     let rhs = match state.parse_expression(BP_LOWEST) {
         Some(expr) => expr,
         None => {

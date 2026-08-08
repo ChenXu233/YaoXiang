@@ -831,7 +831,6 @@ impl<'a> ParserState<'a> {
         // Parse condition
         let condition = self.parse_expression(BP_LOWEST)?;
 
-        // Parse then branch
         let then_branch = self.parse_block_expr()?;
 
         // Parse optional else if / else branches (flat syntax)
