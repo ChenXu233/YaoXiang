@@ -25,11 +25,11 @@ impl StdModule for AssertModule {
     }
 
     fn exports(&self) -> Vec<NativeExport> {
-        vec![NativeExport::new(
+        vec![export!(
             "assert",
             "std.assert.assert",
             "(cond: Bool, ?msg: String) -> Void",
-            native_assert,
+            native_assert
         )]
     }
 

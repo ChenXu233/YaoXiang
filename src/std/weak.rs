@@ -6,7 +6,7 @@
 use crate::backends::common::value::TypeId;
 use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
-use crate::std::{NativeContext, NativeExport, NativeHandler, StdModule};
+use crate::std::{NativeContext, NativeExport, StdModule};
 /// `Weak[T]` - A weak reference type that doesn't increase reference count.
 ///
 /// # Example
@@ -68,17 +68,17 @@ impl StdModule for WeakModule {
 
     fn exports(&self) -> Vec<NativeExport> {
         vec![
-            NativeExport::new(
+            export!(
                 "new",
                 "std.weak.new",
                 "(arc: Arc[T]) -> Weak[T]",
-                native_weak_new as NativeHandler,
+                native_weak_new
             ),
-            NativeExport::new(
+            export!(
                 "upgrade",
                 "std.weak.upgrade",
                 "(weak: Weak[T]) -> Option[Arc[T]]",
-                native_weak_upgrade as NativeHandler,
+                native_weak_upgrade
             ),
         ]
     }

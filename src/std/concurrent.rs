@@ -26,23 +26,23 @@ impl StdModule for ConcurrentModule {
 
     fn exports(&self) -> Vec<NativeExport> {
         vec![
-            NativeExport::new(
+            export!(
                 "sleep",
                 "std.concurrent.sleep",
                 "(millis: Int) -> Void",
-                native_sleep,
+                native_sleep
             ),
-            NativeExport::new(
+            export!(
                 "thread_id",
                 "std.concurrent.thread_id",
                 "() -> String",
-                native_thread_id,
+                native_thread_id
             ),
-            NativeExport::new(
+            export!(
                 "yield_now",
                 "std.concurrent.yield_now",
                 "() -> Void",
-                native_yield_now,
+                native_yield_now
             ),
         ]
     }

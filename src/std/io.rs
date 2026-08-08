@@ -61,46 +61,46 @@ impl StdModule for IoModule {
 
     fn exports(&self) -> Vec<NativeExport> {
         vec![
-            NativeExport::new("print", "std.io.print", "(...args) -> ()", native_print),
-            NativeExport::new(
+            export!("print", "std.io.print", "(...args) -> ()", native_print),
+            export!(
                 "println",
                 "std.io.println",
                 "(...args) -> ()",
-                native_println,
+                native_println
             ),
             #[cfg(not(target_arch = "wasm32"))]
-            NativeExport::new(
+            export!(
                 "read_line",
                 "std.io.read_line",
                 "() -> String",
-                native_read_line,
+                native_read_line
             ),
             #[cfg(not(target_arch = "wasm32"))]
-            NativeExport::new(
+            export!(
                 "read_file",
                 "std.io.read_file",
                 "(path: &String) -> String",
-                native_read_file,
+                native_read_file
             ),
             #[cfg(not(target_arch = "wasm32"))]
-            NativeExport::new(
+            export!(
                 "write_file",
                 "std.io.write_file",
                 "(path: &String, content: &String) -> Bool",
-                native_write_file,
+                native_write_file
             ),
             #[cfg(not(target_arch = "wasm32"))]
-            NativeExport::new(
+            export!(
                 "append_file",
                 "std.io.append_file",
                 "(path: &String, content: &String) -> Bool",
-                native_append_file,
+                native_append_file
             ),
-            NativeExport::new(
+            export!(
                 "format_fallback",
                 "std.io.format_fallback",
                 "(value, type_name: &String) -> String",
-                native_format_fallback,
+                native_format_fallback
             ),
         ]
     }

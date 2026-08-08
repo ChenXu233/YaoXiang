@@ -2,6 +2,16 @@
 //!
 //! This module contains built-in functions and types.
 
+/// 一行声明一个 NativeExport（handler 版）
+macro_rules! export {
+    ($name:literal, $native:literal, $sig:literal, $handler:ident) => {
+        NativeExport::new($name, $native, $sig, $handler as $crate::std::NativeHandler)
+    };
+    ($name:literal, $native:literal, $sig:literal) => {
+        NativeExport::constant($name, $native, $sig)
+    };
+}
+
 pub mod assert;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod concurrent;
@@ -23,7 +33,7 @@ pub mod weak;
 pub mod yx_sources;
 
 use crate::backends::interpreter::ffi::FfiRegistry;
-use crate::backends::common::{RuntimeValue, Heap, HeapValue};
+use crate::backends::common::{Handle, RuntimeValue, Heap, HeapValue};
 use crate::backends::ExecutorError;
 use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 pub use crate::frontend::core::types::eval::dependent_types::{Effect, EffectSpec};
@@ -81,6 +91,86 @@ impl<'a> NativeContext<'a> {
                 "Cannot call YaoXiang functions from this native context".to_string(),
             ))
         }
+    }
+
+    /// 取堆中 List（克隆值，句柄无效或类型不符返回运行时错误）
+    pub fn heap_list(
+        &self,
+        handle: Handle,
+    ) -> Result<Vec<RuntimeValue>, ExecutorError> {
+        match self.heap.get(handle) {
+            Some(HeapValue::List(items)) => Ok(items.clone()),
+            _ => Err(ExecutorError::runtime_only(
+                "Invalid list handle".to_string(),
+            )),
+        }
+    }
+
+    /// 取堆中 List（可变借用）
+    pub fn heap_list_mut(
+        &mut self,
+        handle: Handle,
+    ) -> Result<&mut Vec<RuntimeValue>, ExecutorError> {
+        match self.heap.get_mut(handle) {
+            Some(HeapValue::List(items)) => Ok(items),
+            _ => Err(ExecutorError::runtime_only(
+                "Invalid list handle".to_string(),
+            )),
+        }
+    }
+
+    /// 取堆中 Dict（克隆值）
+    pub fn heap_dict(
+        &self,
+        handle: Handle,
+    ) -> Result<std::collections::HashMap<RuntimeValue, RuntimeValue>, ExecutorError> {
+        match self.heap.get(handle) {
+            Some(HeapValue::Dict(map)) => Ok(map.clone()),
+            _ => Err(ExecutorError::runtime_only(
+                "Invalid dict handle".to_string(),
+            )),
+        }
+    }
+
+    /// 取堆中 Dict（可变借用）
+    pub fn heap_dict_mut(
+        &mut self,
+        handle: Handle,
+    ) -> Result<&mut std::collections::HashMap<RuntimeValue, RuntimeValue>, ExecutorError> {
+        match self.heap.get_mut(handle) {
+            Some(HeapValue::Dict(map)) => Ok(map),
+            _ => Err(ExecutorError::runtime_only(
+                "Invalid dict handle".to_string(),
+            )),
+        }
+    }
+}
+
+/// 解构第一个参数为 List 句柄（类型不符返回 type_only 错误）
+pub(crate) fn expect_list(
+    args: &[RuntimeValue],
+    what: &str,
+) -> Result<Handle, ExecutorError> {
+    match args.first() {
+        Some(RuntimeValue::List(h)) => Ok(*h),
+        _ => Err(ExecutorError::type_only(format!(
+            "{} expects a List as first argument",
+            what
+        ))),
+    }
+}
+
+/// 解构第一个参数为 Dict 句柄（类型不符返回 type_only 错误）
+pub(crate) fn expect_dict(
+    args: &[RuntimeValue],
+    what: &str,
+) -> Result<Handle, ExecutorError> {
+    match args.first() {
+        Some(RuntimeValue::Dict(h)) => Ok(*h),
+        _ => Err(ExecutorError::type_only(format!(
+            "{} expects a Dict as first argument",
+            what
+        ))),
     }
 }
 

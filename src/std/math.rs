@@ -4,7 +4,7 @@
 
 use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
-use crate::std::{NativeContext, NativeExport, StdModule, NativeHandler};
+use crate::std::{NativeContext, NativeExport, StdModule};
 
 // ============================================================================
 // MathModule - StdModule Implementation
@@ -27,102 +27,57 @@ impl StdModule for MathModule {
     fn exports(&self) -> Vec<NativeExport> {
         vec![
             // Integer functions
-            NativeExport::new(
-                "abs",
-                "std.math.abs",
-                "(n: Int) -> Int",
-                native_abs as NativeHandler,
-            ),
-            NativeExport::new(
-                "max",
-                "std.math.max",
-                "(a: Int, b: Int) -> Int",
-                native_max as NativeHandler,
-            ),
-            NativeExport::new(
-                "min",
-                "std.math.min",
-                "(a: Int, b: Int) -> Int",
-                native_min as NativeHandler,
-            ),
-            NativeExport::new(
+            export!("abs", "std.math.abs", "(n: Int) -> Int", native_abs),
+            export!("max", "std.math.max", "(a: Int, b: Int) -> Int", native_max),
+            export!("min", "std.math.min", "(a: Int, b: Int) -> Int", native_min),
+            export!(
                 "clamp",
                 "std.math.clamp",
                 "(value: Int, min: Int, max: Int) -> Int",
-                native_clamp as NativeHandler,
+                native_clamp
             ),
             // Float functions
-            NativeExport::new(
-                "fabs",
-                "std.math.fabs",
-                "(n: Float) -> Float",
-                native_fabs as NativeHandler,
-            ),
-            NativeExport::new(
+            export!("fabs", "std.math.fabs", "(n: Float) -> Float", native_fabs),
+            export!(
                 "fmax",
                 "std.math.fmax",
                 "(a: Float, b: Float) -> Float",
-                native_fmax as NativeHandler,
+                native_fmax
             ),
-            NativeExport::new(
+            export!(
                 "fmin",
                 "std.math.fmin",
                 "(a: Float, b: Float) -> Float",
-                native_fmin as NativeHandler,
+                native_fmin
             ),
-            NativeExport::new(
+            export!(
                 "pow",
                 "std.math.pow",
                 "(base: Float, exp: Float) -> Float",
-                native_pow as NativeHandler,
+                native_pow
             ),
-            NativeExport::new(
-                "sqrt",
-                "std.math.sqrt",
-                "(n: Float) -> Float",
-                native_sqrt as NativeHandler,
-            ),
-            NativeExport::new(
+            export!("sqrt", "std.math.sqrt", "(n: Float) -> Float", native_sqrt),
+            export!(
                 "floor",
                 "std.math.floor",
                 "(n: Float) -> Float",
-                native_floor as NativeHandler,
+                native_floor
             ),
-            NativeExport::new(
-                "ceil",
-                "std.math.ceil",
-                "(n: Float) -> Float",
-                native_ceil as NativeHandler,
-            ),
-            NativeExport::new(
+            export!("ceil", "std.math.ceil", "(n: Float) -> Float", native_ceil),
+            export!(
                 "round",
                 "std.math.round",
                 "(n: Float) -> Float",
-                native_round as NativeHandler,
+                native_round
             ),
             // Trigonometric functions
-            NativeExport::new(
-                "sin",
-                "std.math.sin",
-                "(n: Float) -> Float",
-                native_sin as NativeHandler,
-            ),
-            NativeExport::new(
-                "cos",
-                "std.math.cos",
-                "(n: Float) -> Float",
-                native_cos as NativeHandler,
-            ),
-            NativeExport::new(
-                "tan",
-                "std.math.tan",
-                "(n: Float) -> Float",
-                native_tan as NativeHandler,
-            ),
+            export!("sin", "std.math.sin", "(n: Float) -> Float", native_sin),
+            export!("cos", "std.math.cos", "(n: Float) -> Float", native_cos),
+            export!("tan", "std.math.tan", "(n: Float) -> Float", native_tan),
             // Constants (still need handlers to return values)
-            NativeExport::new("PI", "std.math.PI", "Float", native_pi),
-            NativeExport::new("E", "std.math.E", "Float", native_e),
-            NativeExport::new("TAU", "std.math.TAU", "Float", native_tau),
+            export!("PI", "std.math.PI", "Float", native_pi),
+            export!("E", "std.math.E", "Float", native_e),
+            export!("TAU", "std.math.TAU", "Float", native_tau),
         ]
     }
 }

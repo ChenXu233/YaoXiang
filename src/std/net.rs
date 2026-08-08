@@ -26,29 +26,29 @@ impl StdModule for NetModule {
 
     fn exports(&self) -> Vec<NativeExport> {
         vec![
-            NativeExport::new(
+            export!(
                 "http_get",
                 "std.net.http_get",
                 "(url: &String) -> String",
-                native_http_get,
+                native_http_get
             ),
-            NativeExport::new(
+            export!(
                 "http_post",
                 "std.net.http_post",
                 "(url: &String, body: &String) -> String",
-                native_http_post,
+                native_http_post
             ),
-            NativeExport::new(
+            export!(
                 "url_encode",
                 "std.net.url_encode",
                 "(s: &String) -> String",
-                native_url_encode,
+                native_url_encode
             ),
-            NativeExport::new(
+            export!(
                 "url_decode",
                 "std.net.url_decode",
                 "(s: &String) -> String",
-                native_url_decode,
+                native_url_decode
             ),
         ]
     }

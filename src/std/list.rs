@@ -4,7 +4,7 @@
 
 use crate::backends::common::{RuntimeValue, HeapValue};
 use crate::backends::ExecutorError;
-use crate::std::{NativeContext, NativeExport, StdModule, NativeHandler};
+use crate::std::{expect_list, NativeContext, NativeExport, StdModule};
 
 // ============================================================================
 // ListModule - StdModule Implementation
@@ -26,138 +26,123 @@ impl StdModule for ListModule {
 
     fn exports(&self) -> Vec<NativeExport> {
         vec![
-            NativeExport::new(
+            export!(
                 "push",
                 "std.list.push",
                 "(list: List, item: Any) -> List",
-                native_push as NativeHandler,
+                native_push
             ),
-            NativeExport::new(
-                "pop",
-                "std.list.pop",
-                "(list: &List) -> Any",
-                native_pop as NativeHandler,
-            ),
-            NativeExport::new(
+            export!("pop", "std.list.pop", "(list: &List) -> Any", native_pop),
+            export!(
                 "append",
                 "std.list.append",
                 "(list: List, item: Any) -> List",
-                native_append as NativeHandler,
+                native_append
             ),
-            NativeExport::new(
+            export!(
                 "prepend",
                 "std.list.prepend",
                 "(list: List, item: Any) -> List",
-                native_prepend as NativeHandler,
+                native_prepend
             ),
-            NativeExport::new(
+            export!(
                 "remove_at",
                 "std.list.remove_at",
                 "(list: &List, index: Int) -> Any",
-                native_remove_at as NativeHandler,
+                native_remove_at
             ),
-            NativeExport::new(
+            export!(
                 "reverse",
                 "std.list.reverse",
                 "(list: &List) -> List",
-                native_reverse as NativeHandler,
+                native_reverse
             ),
-            NativeExport::new(
+            export!(
                 "concat",
                 "std.list.concat",
                 "(a: &List, b: &List) -> List",
-                native_concat as NativeHandler,
+                native_concat
             ),
-            NativeExport::new(
+            export!(
                 "map",
                 "std.list.map",
                 "[T](list: &List<T>, fn: (item: T) -> T) -> List<T>",
-                native_map as NativeHandler,
+                native_map
             ),
-            NativeExport::new(
+            export!(
                 "filter",
                 "std.list.filter",
                 "[T](list: &List<T>, fn: (item: T) -> Bool) -> List<T>",
-                native_filter as NativeHandler,
+                native_filter
             ),
-            NativeExport::new(
+            export!(
                 "reduce",
                 "std.list.reduce",
                 "[T](list: &List<T>, fn: (acc: Any, item: T) -> Any, init: Any) -> Any",
-                native_reduce as NativeHandler,
+                native_reduce
             ),
-            NativeExport::new(
-                "len",
-                "std.list.len",
-                "(list: &List) -> Int",
-                native_len as NativeHandler,
-            ),
-            NativeExport::new(
+            export!("len", "std.list.len", "(list: &List) -> Int", native_len),
+            export!(
                 "is_empty",
                 "std.list.is_empty",
                 "(list: &List) -> Bool",
-                native_is_empty as NativeHandler,
+                native_is_empty
             ),
-            NativeExport::new(
+            export!(
                 "get",
                 "std.list.get",
                 "(list: &List, index: Int) -> Any",
-                native_get as NativeHandler,
+                native_get
             ),
-            NativeExport::new(
+            export!(
                 "set",
                 "std.list.set",
                 "(list: List, index: Int, value: Any) -> List",
-                native_set as NativeHandler,
+                native_set
             ),
-            NativeExport::new(
+            export!(
                 "first",
                 "std.list.first",
                 "(list: &List) -> Any",
-                native_first as NativeHandler,
+                native_first
             ),
-            NativeExport::new(
-                "last",
-                "std.list.last",
-                "(list: &List) -> Any",
-                native_last as NativeHandler,
-            ),
-            NativeExport::new(
+            export!("last", "std.list.last", "(list: &List) -> Any", native_last),
+            export!(
                 "slice",
                 "std.list.slice",
                 "(list: &List, start: Int, end: Int) -> List",
-                native_slice as NativeHandler,
+                native_slice
             ),
-            NativeExport::new(
+            export!(
                 "contains",
                 "std.list.contains",
                 "(list: &List, item: Any) -> Bool",
-                native_contains as NativeHandler,
+                native_contains
             ),
-            NativeExport::new(
+            export!(
                 "find_index",
                 "std.list.find_index",
                 "(list: &List, item: Any) -> Int",
-                native_find_index as NativeHandler,
+                native_find_index
             ),
             // 迭代器协议函数
-            NativeExport::new(
+            export!(
                 "iter",
                 "std.list.iter",
                 "(list: &List) -> Tuple",
-                native_iter as NativeHandler,
+                native_iter
             ),
-            NativeExport::new(
+            export!(
                 "next",
                 "std.list.next",
                 "(iterator: Tuple) -> Any",
-                native_next as NativeHandler,
+                native_next
             ),
-            NativeExport::new(
+            export!(
                 "has_next",
                 "std.list.has_next",
                 "(iterator: Tuple) -> Bool",
-                native_has_next as NativeHandler,
+                native_has_next
             ),
         ]
     }
@@ -176,24 +161,10 @@ fn native_push(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.first() {
-        Some(RuntimeValue::List(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "push expects a List as first argument".to_string(),
-            ))
-        }
-    };
+    let list_handle = expect_list(args, "push")?;
     let item = args.get(1).cloned().unwrap_or(RuntimeValue::Void);
 
-    let mut items = match ctx.heap.get(list_handle) {
-        Some(HeapValue::List(items)) => items.clone(),
-        _ => {
-            return Err(ExecutorError::runtime_only(
-                "Invalid list handle".to_string(),
-            ))
-        }
-    };
+    let mut items = ctx.heap_list(list_handle)?;
     items.push(item);
     let new_handle = ctx.heap.allocate(HeapValue::List(items));
     Ok(RuntimeValue::List(new_handle))
@@ -204,23 +175,9 @@ fn native_pop(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.first() {
-        Some(RuntimeValue::List(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "pop expects a List as first argument".to_string(),
-            ))
-        }
-    };
+    let list_handle = expect_list(args, "pop")?;
 
-    let items = match ctx.heap.get_mut(list_handle) {
-        Some(HeapValue::List(items)) => items,
-        _ => {
-            return Err(ExecutorError::runtime_only(
-                "Invalid list handle".to_string(),
-            ))
-        }
-    };
+    let items = ctx.heap_list_mut(list_handle)?;
 
     Ok(items.pop().unwrap_or(RuntimeValue::Void))
 }
@@ -238,24 +195,10 @@ fn native_prepend(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.first() {
-        Some(RuntimeValue::List(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "prepend expects a List as first argument".to_string(),
-            ))
-        }
-    };
+    let list_handle = expect_list(args, "prepend")?;
     let item = args.get(1).cloned().unwrap_or(RuntimeValue::Void);
 
-    let mut items = match ctx.heap.get(list_handle) {
-        Some(HeapValue::List(items)) => items.clone(),
-        _ => {
-            return Err(ExecutorError::runtime_only(
-                "Invalid list handle".to_string(),
-            ))
-        }
-    };
+    let mut items = ctx.heap_list(list_handle)?;
     items.insert(0, item);
     let new_handle = ctx.heap.allocate(HeapValue::List(items));
     Ok(RuntimeValue::List(new_handle))
@@ -266,24 +209,10 @@ fn native_remove_at(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.first() {
-        Some(RuntimeValue::List(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "remove_at expects a List as first argument".to_string(),
-            ))
-        }
-    };
+    let list_handle = expect_list(args, "remove_at")?;
     let index = args.get(1).and_then(|v| v.to_int()).unwrap_or(0) as usize;
 
-    let items = match ctx.heap.get_mut(list_handle) {
-        Some(HeapValue::List(items)) => items,
-        _ => {
-            return Err(ExecutorError::runtime_only(
-                "Invalid list handle".to_string(),
-            ))
-        }
-    };
+    let items = ctx.heap_list_mut(list_handle)?;
 
     if index < items.len() {
         Ok(items.remove(index))
@@ -301,23 +230,9 @@ fn native_reverse(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.first() {
-        Some(RuntimeValue::List(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "reverse expects a List as first argument".to_string(),
-            ))
-        }
-    };
+    let list_handle = expect_list(args, "reverse")?;
 
-    let mut items = match ctx.heap.get(list_handle) {
-        Some(HeapValue::List(items)) => items.clone(),
-        _ => {
-            return Err(ExecutorError::runtime_only(
-                "Invalid list handle".to_string(),
-            ))
-        }
-    };
+    let mut items = ctx.heap_list(list_handle)?;
     items.reverse();
     let new_handle = ctx.heap.allocate(HeapValue::List(items));
     Ok(RuntimeValue::List(new_handle))
@@ -328,14 +243,7 @@ fn native_concat(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let handle_a = match args.first() {
-        Some(RuntimeValue::List(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "concat expects a List as first argument".to_string(),
-            ))
-        }
-    };
+    let handle_a = expect_list(args, "concat")?;
     let handle_b = match args.get(1) {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
@@ -345,22 +253,8 @@ fn native_concat(
         }
     };
 
-    let items_a = match ctx.heap.get(handle_a) {
-        Some(HeapValue::List(items)) => items.clone(),
-        _ => {
-            return Err(ExecutorError::runtime_only(
-                "Invalid list handle".to_string(),
-            ))
-        }
-    };
-    let items_b = match ctx.heap.get(handle_b) {
-        Some(HeapValue::List(items)) => items.clone(),
-        _ => {
-            return Err(ExecutorError::runtime_only(
-                "Invalid list handle".to_string(),
-            ))
-        }
-    };
+    let items_a = ctx.heap_list(handle_a)?;
+    let items_b = ctx.heap_list(handle_b)?;
 
     let mut merged = items_a;
     merged.extend(items_b);
@@ -373,26 +267,12 @@ fn native_map(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.first() {
-        Some(RuntimeValue::List(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "map expects a List as first argument".to_string(),
-            ))
-        }
-    };
+    let list_handle = expect_list(args, "map")?;
     let func_value = args.get(1).cloned().ok_or_else(|| {
         ExecutorError::type_only("map expects a function as second argument".to_string())
     })?;
 
-    let items = match ctx.heap.get(list_handle) {
-        Some(HeapValue::List(items)) => items.clone(),
-        _ => {
-            return Err(ExecutorError::runtime_only(
-                "Invalid list handle".to_string(),
-            ))
-        }
-    };
+    let items = ctx.heap_list(list_handle)?;
 
     let mut result_items = Vec::with_capacity(items.len());
     for item in items {
@@ -409,26 +289,12 @@ fn native_filter(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.first() {
-        Some(RuntimeValue::List(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "filter expects a List as first argument".to_string(),
-            ))
-        }
-    };
+    let list_handle = expect_list(args, "filter")?;
     let func_value = args.get(1).cloned().ok_or_else(|| {
         ExecutorError::type_only("filter expects a function as second argument".to_string())
     })?;
 
-    let items = match ctx.heap.get(list_handle) {
-        Some(HeapValue::List(items)) => items.clone(),
-        _ => {
-            return Err(ExecutorError::runtime_only(
-                "Invalid list handle".to_string(),
-            ))
-        }
-    };
+    let items = ctx.heap_list(list_handle)?;
 
     let mut result_items = Vec::new();
     for item in items {
@@ -447,27 +313,13 @@ fn native_reduce(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.first() {
-        Some(RuntimeValue::List(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "reduce expects a List as first argument".to_string(),
-            ))
-        }
-    };
+    let list_handle = expect_list(args, "reduce")?;
     let func_value = args.get(1).cloned().ok_or_else(|| {
         ExecutorError::type_only("reduce expects a function as second argument".to_string())
     })?;
     let mut accumulator = args.get(2).cloned().unwrap_or(RuntimeValue::Void);
 
-    let items = match ctx.heap.get(list_handle) {
-        Some(HeapValue::List(items)) => items.clone(),
-        _ => {
-            return Err(ExecutorError::runtime_only(
-                "Invalid list handle".to_string(),
-            ))
-        }
-    };
+    let items = ctx.heap_list(list_handle)?;
 
     for item in items {
         accumulator = ctx.call_function(&func_value, &[accumulator, item])?;
@@ -513,14 +365,7 @@ fn native_get(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.first() {
-        Some(RuntimeValue::List(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "get expects a List as first argument".to_string(),
-            ))
-        }
-    };
+    let list_handle = expect_list(args, "get")?;
     let index = args.get(1).and_then(|v| v.to_int()).unwrap_or(0) as usize;
 
     match ctx.heap.get(list_handle) {
@@ -534,25 +379,11 @@ fn native_set(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.first() {
-        Some(RuntimeValue::List(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "set expects a List as first argument".to_string(),
-            ))
-        }
-    };
+    let list_handle = expect_list(args, "set")?;
     let index = args.get(1).and_then(|v| v.to_int()).unwrap_or(0) as usize;
     let value = args.get(2).cloned().unwrap_or(RuntimeValue::Void);
 
-    let mut items = match ctx.heap.get(list_handle) {
-        Some(HeapValue::List(items)) => items.clone(),
-        _ => {
-            return Err(ExecutorError::runtime_only(
-                "Invalid list handle".to_string(),
-            ))
-        }
-    };
+    let mut items = ctx.heap_list(list_handle)?;
 
     if index < items.len() {
         items[index] = value;
@@ -566,14 +397,7 @@ fn native_first(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.first() {
-        Some(RuntimeValue::List(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "first expects a List as first argument".to_string(),
-            ))
-        }
-    };
+    let list_handle = expect_list(args, "first")?;
 
     match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => Ok(items.first().cloned().unwrap_or(RuntimeValue::Void)),
@@ -586,14 +410,7 @@ fn native_last(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.first() {
-        Some(RuntimeValue::List(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "last expects a List as first argument".to_string(),
-            ))
-        }
-    };
+    let list_handle = expect_list(args, "last")?;
 
     match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => Ok(items.last().cloned().unwrap_or(RuntimeValue::Void)),
@@ -606,25 +423,11 @@ fn native_slice(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.first() {
-        Some(RuntimeValue::List(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "slice expects a List as first argument".to_string(),
-            ))
-        }
-    };
+    let list_handle = expect_list(args, "slice")?;
     let start = args.get(1).and_then(|v| v.to_int()).unwrap_or(0) as usize;
     let end = args.get(2).and_then(|v| v.to_int()).unwrap_or(i64::MAX) as usize;
 
-    let items = match ctx.heap.get(list_handle) {
-        Some(HeapValue::List(items)) => items.clone(),
-        _ => {
-            return Err(ExecutorError::runtime_only(
-                "Invalid list handle".to_string(),
-            ))
-        }
-    };
+    let items = ctx.heap_list(list_handle)?;
 
     let end = end.min(items.len());
     let start = start.min(end);
@@ -681,14 +484,7 @@ fn native_iter(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.first() {
-        Some(RuntimeValue::List(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "iter expects a List as first argument".to_string(),
-            ))
-        }
-    };
+    let list_handle = expect_list(args, "iter")?;
 
     // 创建一个 Tuple 存储迭代器状态 (原始列表, 索引 0)
     let iterator_items = vec![RuntimeValue::List(list_handle), RuntimeValue::Int(0)];

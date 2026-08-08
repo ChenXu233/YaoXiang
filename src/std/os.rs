@@ -33,126 +33,126 @@ impl StdModule for OsModule {
     fn exports(&self) -> Vec<NativeExport> {
         vec![
             // File operations
-            NativeExport::new(
+            export!(
                 "open",
                 "std.os.open",
                 "(path: &String, mode: &String) -> File",
-                native_open,
+                native_open
             ),
-            NativeExport::new(
+            export!(
                 "close",
                 "std.os.close",
                 "(file: File) -> Void",
-                native_close,
+                native_close
             ),
-            NativeExport::new(
+            export!(
                 "read",
                 "std.os.read",
                 "(file: File, n: Int) -> String",
-                native_read,
+                native_read
             ),
-            NativeExport::new(
+            export!(
                 "write",
                 "std.os.write",
                 "(file: File, content: String) -> Int",
-                native_write,
+                native_write
             ),
-            NativeExport::new(
+            export!(
                 "seek",
                 "std.os.seek",
                 "(file: File, offset: Int) -> Bool",
-                native_seek,
+                native_seek
             ),
-            NativeExport::new("tell", "std.os.tell", "(file: File) -> Int", native_tell),
-            NativeExport::new(
+            export!("tell", "std.os.tell", "(file: File) -> Int", native_tell),
+            export!(
                 "flush",
                 "std.os.flush",
                 "(file: File) -> Void",
-                native_flush,
+                native_flush
             ),
             // Directory operations
-            NativeExport::new(
+            export!(
                 "mkdir",
                 "std.os.mkdir",
                 "(path: &String) -> Bool",
-                native_mkdir,
+                native_mkdir
             ),
-            NativeExport::new(
+            export!(
                 "rmdir",
                 "std.os.rmdir",
                 "(path: &String) -> Bool",
-                native_rmdir,
+                native_rmdir
             ),
-            NativeExport::new(
+            export!(
                 "read_dir",
                 "std.os.read_dir",
                 "(path: &String) -> String",
-                native_read_dir,
+                native_read_dir
             ),
             // File/Directory utilities
-            NativeExport::new(
+            export!(
                 "remove",
                 "std.os.remove",
                 "(path: &String) -> Bool",
-                native_remove,
+                native_remove
             ),
-            NativeExport::new(
+            export!(
                 "exists",
                 "std.os.exists",
                 "(path: &String) -> Bool",
-                native_exists,
+                native_exists
             ),
-            NativeExport::new(
+            export!(
                 "is_file",
                 "std.os.is_file",
                 "(path: &String) -> Bool",
-                native_is_file,
+                native_is_file
             ),
-            NativeExport::new(
+            export!(
                 "is_dir",
                 "std.os.is_dir",
                 "(path: &String) -> Bool",
-                native_is_dir,
+                native_is_dir
             ),
-            NativeExport::new(
+            export!(
                 "copy",
                 "std.os.copy",
                 "(src: &String, dst: &String) -> Bool",
-                native_copy,
+                native_copy
             ),
-            NativeExport::new(
+            export!(
                 "rename",
                 "std.os.rename",
                 "(old: &String, new: &String) -> Bool",
-                native_rename,
+                native_rename
             ),
             // Environment variables
-            NativeExport::new(
+            export!(
                 "get_env",
                 "std.os.get_env",
                 "(name: &String) -> String",
-                native_get_env,
+                native_get_env
             ),
-            NativeExport::new(
+            export!(
                 "set_env",
                 "std.os.set_env",
                 "(name: &String, value: &String) -> Void",
-                native_set_env,
+                native_set_env
             ),
             // Process and working directory
-            NativeExport::new("args", "std.os.args", "() -> String", native_args),
-            NativeExport::new(
+            export!("args", "std.os.args", "() -> String", native_args),
+            export!(
                 "chdir",
                 "std.os.chdir",
                 "(path: &String) -> Bool",
-                native_chdir,
+                native_chdir
             ),
-            NativeExport::new("getcwd", "std.os.getcwd", "() -> String", native_getcwd),
-            NativeExport::new(
+            export!("getcwd", "std.os.getcwd", "() -> String", native_getcwd),
+            export!(
                 "append_file",
                 "std.os.append_file",
                 "(path: &String, content: &String) -> Bool",
-                native_append_file,
+                native_append_file
             ),
         ]
     }

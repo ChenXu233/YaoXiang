@@ -28,29 +28,29 @@ impl StdModule for ResultModule {
 
     fn exports(&self) -> Vec<NativeExport> {
         vec![
-            NativeExport::new(
+            export!(
                 "is_ok",
                 "std.result.is_ok",
                 "(self: &Result(T, E)) -> Bool",
-                native_result_is_ok,
+                native_result_is_ok
             ),
-            NativeExport::new(
+            export!(
                 "is_err",
                 "std.result.is_err",
                 "(self: &Result(T, E)) -> Bool",
-                native_result_is_err,
+                native_result_is_err
             ),
-            NativeExport::new(
+            export!(
                 "unwrap",
                 "std.result.unwrap",
                 "(self: &Result(T, E)) -> T",
-                native_result_unwrap,
+                native_result_unwrap
             ),
-            NativeExport::new(
+            export!(
                 "unwrap_or",
                 "std.result.unwrap_or",
                 "(self: &Result(T, E), default: T) -> T",
-                native_result_unwrap_or,
+                native_result_unwrap_or
             ),
         ]
     }
