@@ -272,7 +272,7 @@ impl RuntimeValue {
     /// Get the static type of this value
     pub fn value_type(
         &self,
-        heap: Option<&super::heap::Heap>,
+        _heap: Option<&super::heap::Heap>,
     ) -> ValueType {
         match self {
             RuntimeValue::Void => ValueType::Void,
@@ -283,27 +283,21 @@ impl RuntimeValue {
             RuntimeValue::String(_) => ValueType::String,
             RuntimeValue::Bytes(_) => ValueType::Bytes,
             RuntimeValue::Tuple(handle) => {
-                if let Some(h) = heap {
-                    if let Some(super::heap::HeapValue::Tuple(items)) = h.get(*handle) {
-                        return ValueType::Tuple(
-                            items.iter().map(|v| v.value_type(heap)).collect(),
-                        );
-                    }
+                if let super::heap::HeapValue::Tuple(items) = &*handle.lock() {
+                    return ValueType::Tuple(items.iter().map(|v| v.value_type(None)).collect());
                 }
                 ValueType::Tuple(vec![])
             }
             RuntimeValue::Array(handle) => {
-                if let Some(h) = heap {
-                    if let Some(super::heap::HeapValue::Array(items)) = h.get(*handle) {
-                        return ValueType::Array {
-                            element: Box::new(
-                                items
-                                    .first()
-                                    .map(|v| v.value_type(heap))
-                                    .unwrap_or(ValueType::Void),
-                            ),
-                        };
-                    }
+                if let super::heap::HeapValue::Array(items) = &*handle.lock() {
+                    return ValueType::Array {
+                        element: Box::new(
+                            items
+                                .first()
+                                .map(|v| v.value_type(None))
+                                .unwrap_or(ValueType::Void),
+                        ),
+                    };
                 }
                 ValueType::Array {
                     element: Box::new(ValueType::Void),
@@ -314,7 +308,7 @@ impl RuntimeValue {
             RuntimeValue::Struct { type_id, .. } => ValueType::Struct(*type_id),
             RuntimeValue::Enum { type_id, .. } => ValueType::Enum(*type_id),
             RuntimeValue::Function(f) => ValueType::Function(f.func_id),
-            RuntimeValue::Arc(inner) => ValueType::Arc(Box::new(inner.value_type(heap))),
+            RuntimeValue::Arc(inner) => ValueType::Arc(Box::new(inner.value_type(_heap))),
             RuntimeValue::Weak(_) => ValueType::Weak(Box::new(ValueType::Void)),
             RuntimeValue::Async(v) => ValueType::Async(Box::new(v.value_type.clone())),
             RuntimeValue::Ptr { kind, .. } => ValueType::Ptr(*kind),
@@ -395,7 +389,7 @@ impl RuntimeValue {
                 vtable,
             } => RuntimeValue::Struct {
                 type_id: *type_id,
-                fields: *fields,
+                fields: fields.clone(),
                 vtable: vtable.clone(),
             },
             RuntimeValue::Enum {
@@ -442,7 +436,7 @@ impl RuntimeValue {
             RuntimeValue::Bytes(b) => RuntimeValue::Bytes(b.clone()),
             RuntimeValue::Tuple(handle) => {
                 let items_copy: Vec<RuntimeValue> =
-                    if let Some(super::heap::HeapValue::Tuple(items)) = heap.get(*handle) {
+                    if let super::heap::HeapValue::Tuple(items) = &*handle.lock() {
                         items.clone()
                     } else {
                         vec![]
@@ -455,7 +449,7 @@ impl RuntimeValue {
             }
             RuntimeValue::Array(handle) => {
                 let items_copy: Vec<RuntimeValue> =
-                    if let Some(super::heap::HeapValue::Array(items)) = heap.get(*handle) {
+                    if let super::heap::HeapValue::Array(items) = &*handle.lock() {
                         items.clone()
                     } else {
                         vec![]
@@ -468,7 +462,7 @@ impl RuntimeValue {
             }
             RuntimeValue::List(handle) => {
                 let items_copy: Vec<RuntimeValue> =
-                    if let Some(super::heap::HeapValue::List(items)) = heap.get(*handle) {
+                    if let super::heap::HeapValue::List(items) = &*handle.lock() {
                         items.clone()
                     } else {
                         vec![]
@@ -481,7 +475,7 @@ impl RuntimeValue {
             }
             RuntimeValue::Dict(handle) => {
                 let map_copy: HashMap<RuntimeValue, RuntimeValue> =
-                    if let Some(super::heap::HeapValue::Dict(map)) = heap.get(*handle) {
+                    if let super::heap::HeapValue::Dict(map) = &*handle.lock() {
                         map.clone()
                     } else {
                         HashMap::new()
@@ -503,7 +497,7 @@ impl RuntimeValue {
                 vtable,
             } => {
                 let items_copy: Vec<RuntimeValue> =
-                    if let Some(super::heap::HeapValue::Tuple(items)) = heap.get(*fields) {
+                    if let super::heap::HeapValue::Tuple(items) = &*fields.lock() {
                         items.clone()
                     } else {
                         vec![]

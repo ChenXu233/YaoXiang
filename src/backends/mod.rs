@@ -26,7 +26,7 @@ pub mod interpreter;
 pub mod runtime;
 
 use crate::middle::bytecode::{BytecodeModule, BytecodeFunction};
-use crate::backends::common::{RuntimeValue, Heap};
+use crate::backends::common::RuntimeValue;
 
 /// Stack frame information for error reporting
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -280,9 +280,6 @@ pub trait Executor {
 
     /// Get current execution state
     fn state(&self) -> &ExecutionState;
-
-    /// Get the heap for inspection
-    fn heap(&self) -> &Heap;
 }
 
 /// Debuggable executor - adds debugging capabilities

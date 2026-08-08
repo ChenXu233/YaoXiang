@@ -876,10 +876,10 @@ impl Interpreter {
             (BinaryOp::Add, RuntimeValue::List(lhs_handle), RuntimeValue::List(rhs_handle)) => {
                 let mut merged = Vec::new();
 
-                if let Some(HeapValue::List(items)) = self.heap.get(lhs_handle) {
+                if let HeapValue::List(items) = &*lhs_handle.lock() {
                     merged.extend(items.iter().cloned());
                 }
-                if let Some(HeapValue::List(items)) = self.heap.get(rhs_handle) {
+                if let HeapValue::List(items) = &*rhs_handle.lock() {
                     merged.extend(items.iter().cloned());
                 }
 

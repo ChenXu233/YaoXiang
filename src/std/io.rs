@@ -159,7 +159,7 @@ fn format_runtime_value(
 /// 如果 prefix 不为空，返回带前缀的表示（如 "int(123)"）
 pub(crate) fn format_value_with_prefix(
     val: &RuntimeValue,
-    heap: &crate::backends::common::Heap,
+    _heap: &crate::backends::common::Heap,
     prefix: &str,
 ) -> String {
     let prefix_fn = |s: &str| {
@@ -194,10 +194,10 @@ pub(crate) fn format_value_with_prefix(
         }
         RuntimeValue::Bytes(b) => prefix_fn(&format!("bytes[{}]", b.len())),
         RuntimeValue::Tuple(handle) => {
-            if let Some(HeapValue::Tuple(items)) = heap.get(*handle) {
+            if let HeapValue::Tuple(items) = &*handle.lock() {
                 let items_str: Vec<String> = items
                     .iter()
-                    .map(|item| format_value_with_prefix(item, heap, ""))
+                    .map(|item| format_value_with_prefix(item, _heap, ""))
                     .collect();
                 let s = format!("({})", items_str.join(", "));
                 prefix_fn(&s)
@@ -206,10 +206,10 @@ pub(crate) fn format_value_with_prefix(
             }
         }
         RuntimeValue::Array(handle) => {
-            if let Some(HeapValue::Array(arr)) = heap.get(*handle) {
+            if let HeapValue::Array(arr) = &*handle.lock() {
                 let items_str: Vec<String> = arr
                     .iter()
-                    .map(|item| format_value_with_prefix(item, heap, ""))
+                    .map(|item| format_value_with_prefix(item, _heap, ""))
                     .collect();
                 let s = format!("[{}]", items_str.join(", "));
                 prefix_fn(&s)
@@ -218,10 +218,10 @@ pub(crate) fn format_value_with_prefix(
             }
         }
         RuntimeValue::List(handle) => {
-            if let Some(HeapValue::List(items)) = heap.get(*handle) {
+            if let HeapValue::List(items) = &*handle.lock() {
                 let items_str: Vec<String> = items
                     .iter()
-                    .map(|item| format_value_with_prefix(item, heap, ""))
+                    .map(|item| format_value_with_prefix(item, _heap, ""))
                     .collect();
                 let s = format!("[{}]", items_str.join(", "));
                 prefix_fn(&s)
@@ -230,14 +230,14 @@ pub(crate) fn format_value_with_prefix(
             }
         }
         RuntimeValue::Dict(handle) => {
-            if let Some(HeapValue::Dict(entries)) = heap.get(*handle) {
+            if let HeapValue::Dict(entries) = &*handle.lock() {
                 let entries_str: Vec<String> = entries
                     .iter()
                     .map(|(k, v)| {
                         format!(
                             "{}: {}",
-                            format_value_with_prefix(k, heap, ""),
-                            format_value_with_prefix(v, heap, "")
+                            format_value_with_prefix(k, _heap, ""),
+                            format_value_with_prefix(v, _heap, "")
                         )
                     })
                     .collect();

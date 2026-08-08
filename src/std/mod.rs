@@ -32,6 +32,8 @@ pub mod time;
 pub mod weak;
 pub mod yx_sources;
 
+use std::sync::MutexGuard;
+
 use crate::backends::interpreter::ffi::FfiRegistry;
 use crate::backends::common::{Handle, RuntimeValue, Heap, HeapValue};
 use crate::backends::ExecutorError;
@@ -98,25 +100,27 @@ impl<'a> NativeContext<'a> {
         &self,
         handle: Handle,
     ) -> Result<Vec<RuntimeValue>, ExecutorError> {
-        match self.heap.get(handle) {
-            Some(HeapValue::List(items)) => Ok(items.clone()),
+        match &*handle.lock() {
+            HeapValue::List(items) => Ok(items.clone()),
             _ => Err(ExecutorError::runtime_only(
                 "Invalid list handle".to_string(),
             )),
         }
     }
 
-    /// 取堆中 List（可变借用）
-    pub fn heap_list_mut(
+    /// 取堆中 List（可变借用，guard 生命周期绑定调用方的句柄）
+    ///
+    /// 变体不符返回错误；调用方通过 `&mut *guard` 访问 Vec。
+    pub fn heap_list_mut<'h>(
         &mut self,
-        handle: Handle,
-    ) -> Result<&mut Vec<RuntimeValue>, ExecutorError> {
-        match self.heap.get_mut(handle) {
-            Some(HeapValue::List(items)) => Ok(items),
-            _ => Err(ExecutorError::runtime_only(
+        handle: &'h Handle,
+    ) -> Result<MutexGuard<'h, HeapValue>, ExecutorError> {
+        if !matches!(&*handle.lock(), HeapValue::List(_)) {
+            return Err(ExecutorError::runtime_only(
                 "Invalid list handle".to_string(),
-            )),
+            ));
         }
+        Ok(handle.lock())
     }
 
     /// 取堆中 Dict（克隆值）
@@ -124,25 +128,25 @@ impl<'a> NativeContext<'a> {
         &self,
         handle: Handle,
     ) -> Result<std::collections::HashMap<RuntimeValue, RuntimeValue>, ExecutorError> {
-        match self.heap.get(handle) {
-            Some(HeapValue::Dict(map)) => Ok(map.clone()),
+        match &*handle.lock() {
+            HeapValue::Dict(map) => Ok(map.clone()),
             _ => Err(ExecutorError::runtime_only(
                 "Invalid dict handle".to_string(),
             )),
         }
     }
 
-    /// 取堆中 Dict（可变借用）
-    pub fn heap_dict_mut(
+    /// 取堆中 Dict（可变借用，guard 生命周期绑定调用方的句柄）
+    pub fn heap_dict_mut<'h>(
         &mut self,
-        handle: Handle,
-    ) -> Result<&mut std::collections::HashMap<RuntimeValue, RuntimeValue>, ExecutorError> {
-        match self.heap.get_mut(handle) {
-            Some(HeapValue::Dict(map)) => Ok(map),
-            _ => Err(ExecutorError::runtime_only(
+        handle: &'h Handle,
+    ) -> Result<MutexGuard<'h, HeapValue>, ExecutorError> {
+        if !matches!(&*handle.lock(), HeapValue::Dict(_)) {
+            return Err(ExecutorError::runtime_only(
                 "Invalid dict handle".to_string(),
-            )),
+            ));
         }
+        Ok(handle.lock())
     }
 }
 
@@ -152,7 +156,7 @@ pub(crate) fn expect_list(
     what: &str,
 ) -> Result<Handle, ExecutorError> {
     match args.first() {
-        Some(RuntimeValue::List(h)) => Ok(*h),
+        Some(RuntimeValue::List(h)) => Ok(h.clone()),
         _ => Err(ExecutorError::type_only(format!(
             "{} expects a List as first argument",
             what
@@ -166,7 +170,7 @@ pub(crate) fn expect_dict(
     what: &str,
 ) -> Result<Handle, ExecutorError> {
     match args.first() {
-        Some(RuntimeValue::Dict(h)) => Ok(*h),
+        Some(RuntimeValue::Dict(h)) => Ok(h.clone()),
         _ => Err(ExecutorError::type_only(format!(
             "{} expects a Dict as first argument",
             what
@@ -345,7 +349,7 @@ pub trait StdModule {
 /// Built-in generic `len` function that works on List, Tuple, Array, Dict, String, Bytes.
 fn builtin_len(
     args: &[RuntimeValue],
-    ctx: &mut NativeContext<'_>,
+    _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.len() != 1 {
         return Err(ExecutorError::type_only(
@@ -356,11 +360,7 @@ fn builtin_len(
         RuntimeValue::List(handle)
         | RuntimeValue::Tuple(handle)
         | RuntimeValue::Array(handle)
-        | RuntimeValue::Dict(handle) => ctx
-            .heap
-            .get(*handle)
-            .map(|value| value.len() as i64)
-            .unwrap_or(0),
+        | RuntimeValue::Dict(handle) => handle.lock().len() as i64,
         RuntimeValue::String(s) => s.chars().count() as i64,
         RuntimeValue::Bytes(b) => b.len() as i64,
         _ => 0,
@@ -379,8 +379,8 @@ fn builtin_dict_keys(
         ));
     }
     let keys = match &args[0] {
-        RuntimeValue::Dict(handle) => match ctx.heap.get(*handle) {
-            Some(HeapValue::Dict(map)) => map.keys().cloned().collect::<Vec<_>>(),
+        RuntimeValue::Dict(handle) => match &*handle.lock() {
+            HeapValue::Dict(map) => map.keys().cloned().collect::<Vec<_>>(),
             _ => Vec::new(),
         },
         _ => {

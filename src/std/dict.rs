@@ -91,13 +91,14 @@ pub const DICT_MODULE: DictModule = DictModule;
 /// Native implementation: get - get value by key
 fn native_get(
     args: &[RuntimeValue],
-    ctx: &mut NativeContext<'_>,
+    _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     let dict_handle = expect_dict(args, "dict.get")?;
     let key = args.get(1).cloned().unwrap_or(RuntimeValue::Void);
 
-    match ctx.heap.get(dict_handle) {
-        Some(HeapValue::Dict(map)) => Ok(map.get(&key).cloned().unwrap_or(RuntimeValue::Void)),
+    let guard = dict_handle.lock();
+    match &*guard {
+        HeapValue::Dict(map) => Ok(map.get(&key).cloned().unwrap_or(RuntimeValue::Void)),
         _ => Ok(RuntimeValue::Void),
     }
 }
@@ -111,8 +112,8 @@ fn native_set(
     let key = args.get(1).cloned().unwrap_or(RuntimeValue::Void);
     let value = args.get(2).cloned().unwrap_or(RuntimeValue::Void);
 
-    let mut map = match ctx.heap.get(dict_handle) {
-        Some(HeapValue::Dict(map)) => map.clone(),
+    let mut map = match &*dict_handle.lock() {
+        HeapValue::Dict(map) => map.clone(),
         _ => return Err(ExecutorError::runtime_only("Invalid dict handle")),
     };
     map.insert(key, value);
@@ -123,10 +124,10 @@ fn native_set(
 /// Native implementation: has - check if key exists
 fn native_has(
     args: &[RuntimeValue],
-    ctx: &mut NativeContext<'_>,
+    _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     let dict_handle = match args.first() {
-        Some(RuntimeValue::Dict(h)) => *h,
+        Some(RuntimeValue::Dict(h)) => h.clone(),
         // #271 #5：参数类型错不再静默返回 false
         _ => {
             return Err(ExecutorError::type_only(
@@ -136,8 +137,9 @@ fn native_has(
     };
     let key = args.get(1).cloned().unwrap_or(RuntimeValue::Void);
 
-    match ctx.heap.get(dict_handle) {
-        Some(HeapValue::Dict(map)) => Ok(RuntimeValue::Bool(map.contains_key(&key))),
+    let guard = dict_handle.lock();
+    match &*guard {
+        HeapValue::Dict(map) => Ok(RuntimeValue::Bool(map.contains_key(&key))),
         _ => Err(ExecutorError::runtime_only(
             "internal: dangling dict handle in dict.has".to_string(),
         )),
@@ -151,8 +153,8 @@ fn native_values(
 ) -> Result<RuntimeValue, ExecutorError> {
     let dict_handle = expect_dict(args, "dict.values")?;
 
-    let values: Vec<RuntimeValue> = match ctx.heap.get(dict_handle) {
-        Some(HeapValue::Dict(map)) => map.values().cloned().collect(),
+    let values: Vec<RuntimeValue> = match &*dict_handle.lock() {
+        HeapValue::Dict(map) => map.values().cloned().collect(),
         _ => Vec::new(),
     };
     let list_handle = ctx.heap.allocate(HeapValue::List(values));
@@ -166,8 +168,8 @@ fn native_keys(
 ) -> Result<RuntimeValue, ExecutorError> {
     let dict_handle = expect_dict(args, "dict.keys")?;
 
-    let keys: Vec<RuntimeValue> = match ctx.heap.get(dict_handle) {
-        Some(HeapValue::Dict(map)) => map.keys().cloned().collect(),
+    let keys: Vec<RuntimeValue> = match &*dict_handle.lock() {
+        HeapValue::Dict(map) => map.keys().cloned().collect(),
         _ => Vec::new(),
     };
     let list_handle = ctx.heap.allocate(HeapValue::List(keys));
@@ -181,8 +183,8 @@ fn native_entries(
 ) -> Result<RuntimeValue, ExecutorError> {
     let dict_handle = expect_dict(args, "dict.entries")?;
 
-    let map = match ctx.heap.get(dict_handle) {
-        Some(HeapValue::Dict(map)) => map.clone(),
+    let map = match &*dict_handle.lock() {
+        HeapValue::Dict(map) => map.clone(),
         _ => {
             return Ok(RuntimeValue::List(
                 ctx.heap.allocate(HeapValue::List(Vec::new())),
@@ -212,8 +214,8 @@ fn native_delete(
     let dict_handle = expect_dict(args, "dict.delete")?;
     let key = args.get(1).cloned().unwrap_or(RuntimeValue::Void);
 
-    let mut map = match ctx.heap.get(dict_handle) {
-        Some(HeapValue::Dict(map)) => map.clone(),
+    let mut map = match &*dict_handle.lock() {
+        HeapValue::Dict(map) => map.clone(),
         _ => return Err(ExecutorError::runtime_only("Invalid dict handle")),
     };
     map.remove(&key);
@@ -224,10 +226,10 @@ fn native_delete(
 /// Native implementation: len - get number of entries
 fn native_len(
     args: &[RuntimeValue],
-    ctx: &mut NativeContext<'_>,
+    _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     let dict_handle = match args.first() {
-        Some(RuntimeValue::Dict(h)) => *h,
+        Some(RuntimeValue::Dict(h)) => h.clone(),
         // #271 #5：参数类型错不再静默返回 0
         _ => {
             return Err(ExecutorError::type_only(
@@ -236,8 +238,9 @@ fn native_len(
         }
     };
 
-    match ctx.heap.get(dict_handle) {
-        Some(HeapValue::Dict(map)) => Ok(RuntimeValue::Int(map.len() as i64)),
+    let guard = dict_handle.lock();
+    match &*guard {
+        HeapValue::Dict(map) => Ok(RuntimeValue::Int(map.len() as i64)),
         // #271 #5：悬垂句柄是内部错误，不再静默返回 0
         _ => Err(ExecutorError::runtime_only(
             "internal: dangling dict handle in dict.len".to_string(),
@@ -248,10 +251,10 @@ fn native_len(
 /// Native implementation: is_empty - check if dict is empty
 fn native_is_empty(
     args: &[RuntimeValue],
-    ctx: &mut NativeContext<'_>,
+    _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     let dict_handle = match args.first() {
-        Some(RuntimeValue::Dict(h)) => *h,
+        Some(RuntimeValue::Dict(h)) => h.clone(),
         // #271 #5：参数类型错不再静默返回 true
         _ => {
             return Err(ExecutorError::type_only(
@@ -260,8 +263,9 @@ fn native_is_empty(
         }
     };
 
-    match ctx.heap.get(dict_handle) {
-        Some(HeapValue::Dict(map)) => Ok(RuntimeValue::Bool(map.is_empty())),
+    let guard = dict_handle.lock();
+    match &*guard {
+        HeapValue::Dict(map) => Ok(RuntimeValue::Bool(map.is_empty())),
         _ => Err(ExecutorError::runtime_only(
             "internal: dangling dict handle in dict.is_empty".to_string(),
         )),
@@ -275,7 +279,7 @@ fn native_merge(
 ) -> Result<RuntimeValue, ExecutorError> {
     let handle_a = expect_dict(args, "dict.merge")?;
     let handle_b = match args.get(1) {
-        Some(RuntimeValue::Dict(h)) => *h,
+        Some(RuntimeValue::Dict(h)) => h.clone(),
         _ => {
             return Err(ExecutorError::type_only(
                 "dict.merge expects a Dict as second argument",
@@ -283,12 +287,12 @@ fn native_merge(
         }
     };
 
-    let map_a = match ctx.heap.get(handle_a) {
-        Some(HeapValue::Dict(map)) => map.clone(),
+    let map_a = match &*handle_a.lock() {
+        HeapValue::Dict(map) => map.clone(),
         _ => return Err(ExecutorError::runtime_only("Invalid dict handle")),
     };
-    let map_b = match ctx.heap.get(handle_b) {
-        Some(HeapValue::Dict(map)) => map.clone(),
+    let map_b = match &*handle_b.lock() {
+        HeapValue::Dict(map) => map.clone(),
         _ => return Err(ExecutorError::runtime_only("Invalid dict handle")),
     };
 

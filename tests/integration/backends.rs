@@ -3,7 +3,7 @@
 //! Tests for the new backend architecture including interpreter,
 //! common components, and executor functionality.
 
-use yaoxiang::backends::common::{RuntimeValue, Heap, Handle};
+use yaoxiang::backends::common::{RuntimeValue, Heap, Handle, heap::HeapValue};
 use yaoxiang::backends::{ExecutorConfig, ExecutionState};
 use yaoxiang::middle::bytecode::{BytecodeModule, BytecodeFunction};
 use yaoxiang::middle::{ConstValue, Type};
@@ -101,14 +101,14 @@ fn test_bytecode_module_add_function() {
 
 #[test]
 fn test_handle_creation() {
-    let handle = Handle::new(42);
-    assert_eq!(handle.raw(), 42);
+    let handle = Handle::new(HeapValue::List(vec![]));
+    assert!(handle.raw() != 0);
 }
 
 #[test]
 fn test_handle_display() {
-    let handle = Handle::new(42);
-    assert_eq!(format!("{}", handle), "handle@42");
+    let handle = Handle::new(HeapValue::List(vec![]));
+    assert!(format!("{}", handle).starts_with("handle@0x"));
 }
 
 #[test]

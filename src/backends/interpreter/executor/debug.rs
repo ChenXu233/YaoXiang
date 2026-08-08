@@ -594,8 +594,8 @@ impl Interpreter {
 
                 let list_val = self.force_slot(frame, closures_list)?;
                 let closures: Vec<RuntimeValue> = match list_val {
-                    RuntimeValue::List(handle) => match self.heap.get(handle) {
-                        Some(crate::backends::common::HeapValue::List(items)) => items.clone(),
+                    RuntimeValue::List(handle) => match &*handle.lock() {
+                        crate::backends::common::HeapValue::List(items) => items.clone(),
                         _ => {
                             let stack = self.capture_stack();
                             return Err(ExecutorError::type_error(
@@ -744,9 +744,7 @@ impl Interpreter {
                 match arr {
                     RuntimeValue::List(handle) => {
                         let idx = idx_value.to_int().unwrap_or(0) as usize;
-                        if let Some(crate::backends::common::HeapValue::List(items)) =
-                            self.heap.get(handle)
-                        {
+                        if let crate::backends::common::HeapValue::List(items) = &*handle.lock() {
                             if idx < items.len() {
                                 frame.set_slot(dst.0 as usize, items[idx].clone());
                             }
@@ -754,9 +752,7 @@ impl Interpreter {
                     }
                     RuntimeValue::Tuple(handle) => {
                         let idx = idx_value.to_int().unwrap_or(0) as usize;
-                        if let Some(crate::backends::common::HeapValue::Tuple(items)) =
-                            self.heap.get(handle)
-                        {
+                        if let crate::backends::common::HeapValue::Tuple(items) = &*handle.lock() {
                             if idx < items.len() {
                                 frame.set_slot(dst.0 as usize, items[idx].clone());
                             }
@@ -764,18 +760,14 @@ impl Interpreter {
                     }
                     RuntimeValue::Array(handle) => {
                         let idx = idx_value.to_int().unwrap_or(0) as usize;
-                        if let Some(crate::backends::common::HeapValue::Array(items)) =
-                            self.heap.get(handle)
-                        {
+                        if let crate::backends::common::HeapValue::Array(items) = &*handle.lock() {
                             if idx < items.len() {
                                 frame.set_slot(dst.0 as usize, items[idx].clone());
                             }
                         }
                     }
                     RuntimeValue::Dict(handle) => {
-                        if let Some(crate::backends::common::HeapValue::Dict(map)) =
-                            self.heap.get(handle)
-                        {
+                        if let crate::backends::common::HeapValue::Dict(map) = &*handle.lock() {
                             if let Some(value) = map.get(&idx_value) {
                                 frame.set_slot(dst.0 as usize, value.clone());
                             }
@@ -798,8 +790,7 @@ impl Interpreter {
                 match arr {
                     RuntimeValue::List(handle) => {
                         let idx = idx_value.to_int().unwrap_or(0) as usize;
-                        if let Some(crate::backends::common::HeapValue::List(items)) =
-                            self.heap.get_mut(handle)
+                        if let crate::backends::common::HeapValue::List(items) = &mut *handle.lock()
                         {
                             if idx < items.len() {
                                 items[idx] = val;
@@ -810,8 +801,8 @@ impl Interpreter {
                     }
                     RuntimeValue::Array(handle) => {
                         let idx = idx_value.to_int().unwrap_or(0) as usize;
-                        if let Some(crate::backends::common::HeapValue::Array(items)) =
-                            self.heap.get_mut(handle)
+                        if let crate::backends::common::HeapValue::Array(items) =
+                            &mut *handle.lock()
                         {
                             if idx < items.len() {
                                 items[idx] = val;
@@ -819,9 +810,7 @@ impl Interpreter {
                         }
                     }
                     RuntimeValue::Dict(handle) => {
-                        if let Some(crate::backends::common::HeapValue::Dict(map)) =
-                            self.heap.get_mut(handle)
-                        {
+                        if let crate::backends::common::HeapValue::Dict(map) = &mut *handle.lock() {
                             map.insert(idx_value, val);
                         }
                     }
@@ -837,9 +826,7 @@ impl Interpreter {
             } => {
                 let obj = self.force_slot(frame, *src)?;
                 if let RuntimeValue::Struct { fields, .. } = obj {
-                    if let Some(crate::backends::common::HeapValue::Tuple(items)) =
-                        self.heap.get(fields)
-                    {
+                    if let crate::backends::common::HeapValue::Tuple(items) = &*fields.lock() {
                         if (*field_idx as usize) < items.len() {
                             frame.set_slot(dst.0 as usize, items[*field_idx as usize].clone());
                         }
@@ -856,9 +843,7 @@ impl Interpreter {
                 let obj = self.force_slot(frame, *src)?;
                 let val = self.force_slot(frame, *value)?;
                 if let RuntimeValue::Struct { fields, .. } = obj {
-                    if let Some(crate::backends::common::HeapValue::Tuple(items)) =
-                        self.heap.get_mut(fields)
-                    {
+                    if let crate::backends::common::HeapValue::Tuple(items) = &mut *fields.lock() {
                         if (*field_idx as usize) < items.len() {
                             items[*field_idx as usize] = val;
                         }
@@ -899,11 +884,9 @@ impl Interpreter {
                 let idx = self.force_slot(frame, *index)?.to_int().unwrap_or(-1);
                 let len = match &arr {
                     RuntimeValue::List(h) | RuntimeValue::Tuple(h) | RuntimeValue::Array(h) => {
-                        match self.heap.get(*h) {
-                            Some(crate::backends::common::HeapValue::List(list)) => {
-                                list.len() as i64
-                            }
-                            Some(crate::backends::common::HeapValue::Tuple(t)) => t.len() as i64,
+                        match &*h.lock() {
+                            crate::backends::common::HeapValue::List(list) => list.len() as i64,
+                            crate::backends::common::HeapValue::Tuple(t) => t.len() as i64,
                             _ => -1,
                         }
                     }

@@ -1,27 +1,79 @@
 //! Heap storage with handle-based allocation
 //!
-//! This module provides a heap allocation system using handles (indices)
-//! to enable efficient in-place modification of collection types.
+//! This module provides a heap allocation system using handles.
+//!
+//! # 跨线程语义（#278）
+//!
+//! `Handle` 是 `Arc<Mutex<HeapValue>>` 的包装：句柄自包含数据，
+//! 拷贝句柄 = Arc 复制 O(1)。Standard 模式下 spawn 捕获的
+//! Struct/List 直接跨线程有效（写回可见），无需共享 Heap 本身。
+//!
+//! `Heap` 退化为分配注册表：追踪活句柄（`is_valid` / `len` / `deallocate` /
+//! `clear` 语义）。内存回收由 Arc 引用计数完成——最后一个句柄（含注册表
+//! 强引用）释放时数据即被回收。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 /// Handle to a value stored in the heap
 ///
-/// Handles are opaque references that allow mutation of heap-allocated
-/// values without cloning. Each handle uniquely identifies a value.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Handle(pub usize);
+/// Handles are self-contained references that allow mutation of heap-allocated
+/// values without cloning. Cloning a handle is O(1) (Arc copy) and is safe to
+/// send across threads.
+#[derive(Clone)]
+pub struct Handle(Arc<Mutex<HeapValue>>);
 
 impl Handle {
-    /// Create a new handle from a raw value
-    pub fn new(value: usize) -> Self {
-        Self(value)
+    /// Create a new handle wrapping a heap value
+    pub fn new(value: HeapValue) -> Self {
+        Self(Arc::new(Mutex::new(value)))
     }
 
-    /// Get the raw handle value
+    /// Lock the heap value for read or write access.
+    ///
+    /// Recovers from mutex poisoning (a panicking thread can never leave a
+    /// heap value in a state that corrupts the interpreter).
+    pub fn lock(&self) -> MutexGuard<'_, HeapValue> {
+        self.0.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Raw identity value (pointer address), for diagnostics only.
     pub fn raw(&self) -> usize {
-        self.0
+        Arc::as_ptr(&self.0) as usize
+    }
+}
+
+// 句柄相等/哈希按 Arc 指针身份（与旧 usize 索引语义一致：同一分配 ⇔ 相等）。
+// 不能按内容：两个内容相同的独立分配是不同对象。
+impl PartialEq for Handle {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for Handle {}
+
+impl std::hash::Hash for Handle {
+    fn hash<H: std::hash::Hasher>(
+        &self,
+        state: &mut H,
+    ) {
+        Arc::as_ptr(&self.0).hash(state);
+    }
+}
+
+impl fmt::Debug for Handle {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        f.debug_tuple("Handle")
+            .field(&(self.raw() as *const ()))
+            .finish()
     }
 }
 
@@ -30,28 +82,7 @@ impl fmt::Display for Handle {
         &self,
         f: &mut fmt::Formatter<'_>,
     ) -> fmt::Result {
-        write!(f, "handle@{}", self.0)
-    }
-}
-
-/// Heap allocation error
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum HeapError {
-    /// Attempted to access an invalid handle
-    InvalidHandle(Handle),
-    /// Handle allocation failed (out of handles)
-    OutOfHandles,
-}
-
-impl fmt::Display for HeapError {
-    fn fmt(
-        &self,
-        f: &mut fmt::Formatter<'_>,
-    ) -> fmt::Result {
-        match self {
-            HeapError::InvalidHandle(h) => write!(f, "invalid handle: {}", h),
-            HeapError::OutOfHandles => write!(f, "out of handle space"),
-        }
+        write!(f, "handle@{:#x}", self.raw())
     }
 }
 
@@ -68,59 +99,31 @@ pub enum HeapValue {
     List(Vec<super::value::RuntimeValue>),
     /// Dictionary storage
     Dict(HashMap<super::value::RuntimeValue, super::value::RuntimeValue>),
-    /// Struct storage (field values)
-    Struct(Vec<super::value::RuntimeValue>),
 }
 
 impl HeapValue {
     /// Get the number of elements in this collection
     pub fn len(&self) -> usize {
         match self {
-            HeapValue::Tuple(v)
-            | HeapValue::Array(v)
-            | HeapValue::List(v)
-            | HeapValue::Struct(v) => v.len(),
+            HeapValue::Tuple(v) | HeapValue::Array(v) | HeapValue::List(v) => v.len(),
             HeapValue::Dict(m) => m.len(),
         }
-    }
-
-    /// Check if this collection is empty
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 }
 
 /// Heap storage for runtime values
 ///
-/// The heap provides allocation, access, and management of runtime values
-/// using handles. This enables:
-/// - Efficient in-place modification of collections
-/// - Shared references via handle copying
-/// - Potential for future garbage collection
-#[derive(Debug, Clone)]
+/// 分配注册表：追踪活句柄。数据本体在 `Handle` 的 `Arc` 内。
+#[derive(Debug, Clone, Default)]
 pub struct Heap {
-    /// Handle generator for allocation
-    next_handle: usize,
-    /// Handle to value mapping
-    values: HashMap<Handle, HeapValue>,
-    /// Free list for handle reuse
-    free_list: Vec<Handle>,
-}
-
-impl Default for Heap {
-    fn default() -> Self {
-        Self::new()
-    }
+    /// Live handles (strong refs keep values alive until deallocate/clear)
+    allocated: HashSet<Handle>,
 }
 
 impl Heap {
     /// Create a new empty heap
     pub fn new() -> Self {
-        Self {
-            next_handle: 0usize,
-            values: HashMap::new(),
-            free_list: Vec::new(),
-        }
+        Self::default()
     }
 
     /// Allocate a heap value and return a handle
@@ -128,81 +131,37 @@ impl Heap {
         &mut self,
         value: HeapValue,
     ) -> Handle {
-        let handle = if let Some(h) = self.free_list.pop() {
-            h
-        } else {
-            let h = Handle(self.next_handle);
-            self.next_handle = self.next_handle.wrapping_add(1);
-            h
-        };
-        self.values.insert(handle, value);
+        let handle = Handle::new(value);
+        self.allocated.insert(handle.clone());
         handle
     }
 
-    /// Get an immutable reference to a heap value by handle
-    pub fn get(
-        &self,
-        handle: Handle,
-    ) -> Option<&HeapValue> {
-        self.values.get(&handle)
-    }
-
-    /// Get a mutable reference to a heap value by handle
-    pub fn get_mut(
-        &mut self,
-        handle: Handle,
-    ) -> Option<&mut HeapValue> {
-        self.values.get_mut(&handle)
-    }
-
-    /// Write a heap value to an existing handle
-    pub fn write(
-        &mut self,
-        handle: Handle,
-        value: HeapValue,
-    ) -> Result<(), HeapError> {
-        if let std::collections::hash_map::Entry::Occupied(mut e) = self.values.entry(handle) {
-            e.insert(value);
-            Ok(())
-        } else {
-            Err(HeapError::InvalidHandle(handle))
-        }
-    }
-
-    /// Deallocate a value by handle
+    /// Deallocate a value by handle.
+    ///
+    /// Removes the registry's strong reference; the underlying value is freed
+    /// once no other handles reference it.
     pub fn deallocate(
         &mut self,
-        handle: Handle,
-    ) -> Option<HeapValue> {
-        if self.values.remove(&handle).is_some() {
-            self.free_list.push(handle);
-            Some(HeapValue::List(vec![]))
-        } else {
-            None
-        }
+        handle: &Handle,
+    ) -> bool {
+        self.allocated.remove(handle)
     }
 
     /// Check if a handle is valid
     pub fn is_valid(
         &self,
-        handle: Handle,
+        handle: &Handle,
     ) -> bool {
-        self.values.contains_key(&handle)
+        self.allocated.contains(handle)
     }
 
     /// Get the number of allocated values
     pub fn len(&self) -> usize {
-        self.values.len()
-    }
-
-    /// Check if the heap is empty
-    pub fn is_empty(&self) -> bool {
-        self.values.is_empty()
+        self.allocated.len()
     }
 
     /// Clear all allocated values
     pub fn clear(&mut self) {
-        self.values.clear();
-        self.free_list.clear();
+        self.allocated.clear();
     }
 }
