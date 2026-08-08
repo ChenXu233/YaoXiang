@@ -186,65 +186,8 @@ pub fn t_cur_simple(id: MSG) -> String {
 /// Macro for translated logging with arguments (using current language)
 #[macro_export]
 macro_rules! tlog {
-    (debug, $id:expr) => {
-        tracing::debug!("{}", $crate::util::i18n::t_cur_simple($id));
-    };
-    (info, $id:expr) => {
-        tracing::info!("{}", $crate::util::i18n::t_cur_simple($id));
-    };
-    (warn, $id:expr) => {
-        tracing::warn!("{}", $crate::util::i18n::t_cur_simple($id));
-    };
-    (error, $id:expr) => {
-        tracing::error!("{}", $crate::util::i18n::t_cur_simple($id));
-    };
-    (debug, $id:expr, $arg1:expr) => {
-        tracing::debug!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1])));
-    };
-    (info, $id:expr, $arg1:expr) => {
-        tracing::info!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1])));
-    };
-    (warn, $id:expr, $arg1:expr) => {
-        tracing::warn!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1])));
-    };
-    (error, $id:expr, $arg1:expr) => {
-        tracing::error!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1])));
-    };
-    (debug, $id:expr, $arg1:expr, $arg2:expr) => {
-        tracing::debug!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2])));
-    };
-    (info, $id:expr, $arg1:expr, $arg2:expr) => {
-        tracing::info!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2])));
-    };
-    (warn, $id:expr, $arg1:expr, $arg2:expr) => {
-        tracing::warn!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2])));
-    };
-    (error, $id:expr, $arg1:expr, $arg2:expr) => {
-        tracing::error!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2])));
-    };
-    (debug, $id:expr, $arg1:expr, $arg2:expr, $arg3:expr) => {
-        tracing::debug!(
-            "{}",
-            $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2, $arg3]))
-        );
-    };
-    (info, $id:expr, $arg1:expr, $arg2:expr, $arg3:expr) => {
-        tracing::info!(
-            "{}",
-            $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2, $arg3]))
-        );
-    };
-    (warn, $id:expr, $arg1:expr, $arg2:expr, $arg3:expr) => {
-        tracing::warn!(
-            "{}",
-            $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2, $arg3]))
-        );
-    };
-    (error, $id:expr, $arg1:expr, $arg2:expr, $arg3:expr) => {
-        tracing::error!(
-            "{}",
-            $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2, $arg3]))
-        );
+    ($level:ident, $id:expr $(, $arg:expr)*) => {
+        tracing::$level!("{}", $crate::util::i18n::t_cur($id, Some(&[$($arg),*])));
     };
 }
 

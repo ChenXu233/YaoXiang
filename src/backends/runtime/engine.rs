@@ -149,6 +149,34 @@ pub struct RuntimeStats {
     pub avg_execution_time: Duration,
 }
 
+impl RuntimeStats {
+    /// 记账一次任务完成：计数 + 平均耗时
+    pub fn record(
+        &mut self,
+        outcome: &TaskOutcome,
+        total_exec_time: Duration,
+    ) {
+        self.total_spawned += 1;
+        match outcome {
+            TaskOutcome::Ok(_) => self.completed_count += 1,
+            TaskOutcome::Err(_) => self.failed_count += 1,
+            TaskOutcome::Cancelled(_) => self.cancelled_count += 1,
+        }
+        self.recompute_avg(total_exec_time);
+    }
+
+    /// 由完成计数重算平均耗时
+    pub fn recompute_avg(
+        &mut self,
+        total_exec_time: Duration,
+    ) {
+        let finished = self.completed_count + self.failed_count + self.cancelled_count;
+        if finished > 0 {
+            self.avg_execution_time = total_exec_time / (finished as u32);
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeError {
     #[error("Task not found: {0:?}")]
@@ -1003,11 +1031,7 @@ impl LocalRuntime {
         self.stats.failed_count = failed;
         self.stats.cancelled_count = cancelled;
         self.stats.total_spawned = self.stats.total_spawned.max(self.tasks.len());
-
-        let finished = completed + failed + cancelled;
-        if finished > 0 {
-            self.stats.avg_execution_time = self.total_exec_time / (finished as u32);
-        }
+        self.stats.recompute_avg(self.total_exec_time);
     }
 }
 

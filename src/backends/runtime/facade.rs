@@ -308,17 +308,7 @@ impl EmbeddedRuntime {
             Ok(v) => TaskOutcome::Ok(v),
             Err(e) => TaskOutcome::Err(e),
         };
-        match outcome {
-            TaskOutcome::Ok(_) => self.stats.completed_count += 1,
-            TaskOutcome::Err(_) => self.stats.failed_count += 1,
-            TaskOutcome::Cancelled(_) => self.stats.cancelled_count += 1,
-        }
-        self.stats.total_spawned += 1;
-        let finished =
-            self.stats.completed_count + self.stats.failed_count + self.stats.cancelled_count;
-        if finished > 0 {
-            self.stats.avg_execution_time = self.total_exec_time / (finished as u32);
-        }
+        self.stats.record(&outcome, self.total_exec_time);
 
         self.outcomes.insert(task_id, outcome);
         task_id

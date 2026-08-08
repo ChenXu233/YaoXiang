@@ -236,8 +236,8 @@ pub fn handle_completion(
     items.extend(reserved_word_items());
 
     // 2. 从 SemanticDB 获取可见符号
-    let line = params.text_document_position.position.line as usize + 1;
-    let col = params.text_document_position.position.character as usize + 1;
+    let (line, col) =
+        crate::lsp::locate::position_to_internal(&params.text_document_position.position);
     items.extend(semantic_db_items(world, &uri, line, col));
 
     // 3. 当前文档符号

@@ -46,13 +46,7 @@ pub fn format_module(
         let stmt_str = format_stmt(&stmt.kind, ctx, source_map);
         result.push_str(&stmt_str);
         result.push('\n');
-        if let Some(trailing) = source_map.trailing_comment_on_line(stmt.span.end.line) {
-            if trailing.span.start.offset > stmt.span.end.offset {
-                let last_newline = result.rfind('\n').unwrap_or(0);
-                result.truncate(last_newline);
-                result.push_str(&format!(" {}\n", trailing.content));
-            }
-        }
+        source_map.append_trailing_comment(&mut result, stmt.span.end.line, stmt.span.end.offset);
     }
 
     // Phase 2: 非导入语句 — prev_end_line 从 import 区域末尾开始
@@ -85,13 +79,7 @@ pub fn format_module(
         let stmt_str = format_stmt(&stmt.kind, ctx, source_map);
         result.push_str(&stmt_str);
         result.push('\n');
-        if let Some(trailing) = source_map.trailing_comment_on_line(stmt.span.end.line) {
-            if trailing.span.start.offset > stmt.span.end.offset {
-                let last_newline = result.rfind('\n').unwrap_or(0);
-                result.truncate(last_newline);
-                result.push_str(&format!(" {}\n", trailing.content));
-            }
-        }
+        source_map.append_trailing_comment(&mut result, stmt.span.end.line, stmt.span.end.offset);
         prev_end_line = match &stmt.kind {
             // Binding 的 span.end 只覆盖声明头，不包含 body 块
             // 实际输出到 `}` 所在行，需要从 body 最后一个语句计算

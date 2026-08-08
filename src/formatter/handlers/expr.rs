@@ -695,13 +695,7 @@ pub fn format_block(
         result.push('\n');
 
         // 处理行末注释
-        if let Some(trailing) = source_map.trailing_comment_on_line(stmt.span.end.line) {
-            if trailing.span.start.offset > stmt.span.end.offset {
-                let last_newline = result.rfind('\n').unwrap_or(0);
-                result.truncate(last_newline);
-                result.push_str(&format!(" {}\n", trailing.content));
-            }
-        }
+        source_map.append_trailing_comment(&mut result, stmt.span.end.line, stmt.span.end.offset);
     }
 
     result.push_str(&outer_indent);

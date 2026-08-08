@@ -11,7 +11,7 @@ use lsp_types::{Location, ReferenceParams, Uri};
 use std::str::FromStr;
 use tracing::debug;
 
-use crate::lsp::locate::{find_identifier_at_position, span_to_range};
+use crate::lsp::locate::{find_identifier_at_position, position_to_internal, span_to_range};
 use crate::lsp::session::Session;
 use crate::lsp::world::World;
 
@@ -44,8 +44,7 @@ pub fn handle_references(
     debug!("查找引用: {}", ident.name);
 
     let db = world.semantic_db();
-    let line = position.line as usize + 1;
-    let col = position.character as usize + 1;
+    let (line, col) = position_to_internal(position);
 
     // 先尝试通过引用找到定义
     let def = if let Some(def) = db.resolve_reference(&uri_str, line, col) {

@@ -3,7 +3,6 @@
 use std::path::Path;
 
 use crate::package::error::{PackageError, PackageResult};
-use crate::package::lock::LockFile;
 use crate::package::manifest::PackageManifest;
 use crate::util::i18n::{t, current_lang, MSG};
 
@@ -30,14 +29,7 @@ pub fn exec_in(
         return Err(PackageError::DependencyNotFound(name.to_string()));
     }
 
-    manifest.save(project_dir)?;
-
-    // Update lock file
-    let mut lock = LockFile::load(project_dir)?;
-    let mut all_deps = manifest.dependencies.clone();
-    all_deps.extend(manifest.dev_dependencies.clone());
-    lock.update_from_dependencies(&all_deps);
-    lock.save(project_dir)?;
+    super::save_manifest_and_update_lock(&manifest, project_dir)?;
 
     let lang = current_lang();
     if dev {
