@@ -1,7 +1,7 @@
 ---
 title: 'RFC 013: Error Code Specification'
 status: 'Accepted'
-author: 'Chen Xu'
+author: 'Chenxu'
 created: '2026-02-02'
 updated: '2026-02-12'
 issue: '#125'
@@ -18,28 +18,29 @@ pr_impl:
 
 ## Summary
 
-This RFC proposes a classification specification for YaoXiang compiler error codes, using a
-single-level numbering system similar to Rust, with JSON resource files for multi-language support,
-and a `yaoxiang explain` command to provide error explanations.
+This RFC proposes a classification specification for YaoXiang compiler error codes. It adopts a
+single-level numbering system similar to Rust, combined with JSON resource files to support
+multilingual support, and provides error explanation functionality through the `yaoxiang explain`
+command.
 
 ## Motivation
 
 ### Why do we need standardized error codes?
 
-1. **User experience**: Users can quickly identify the error type and severity by looking at the
+1. **User Experience**: Users can quickly determine the error type and severity when they see an
    error code
-2. **Documentation organization**: Grouping by category facilitates writing and maintaining error
+2. **Documentation Organization**: Grouping by category makes it easier to write and maintain error
    reference documentation
-3. **Tool integration**: IDE/LSP can provide quick fix suggestions and documentation links based on
+3. **Tool Integration**: IDE/LSP can provide quick-fix suggestions and documentation links based on
    error codes
-4. **Internationalization support**: Separating error messages from codes facilitates multi-language
-   translation
+4. **Internationalization Support**: Separation of error messages from codes facilitates
+   multilingual translation
 
 ### Design Goals
 
-- **Concise**: Single-level numbering, users don't need to memorize complex classification rules
-- **Friendly**: Error message format similar to Rust, with help information and examples
-- **Extensible**: Resource file-driven, easy to add new errors and new languages
+- **Concise**: Single-level numbering, no need for users to memorize complex classification rules
+- **Friendly**: Rust-like error message format with help information and examples
+- **Extensible**: Resource-file-driven, easy to add new errors and new languages
 - **Tool-friendly**: explain command + JSON output, supports IDE/LSP integration
 
 ---
@@ -48,30 +49,30 @@ and a `yaoxiang explain` command to provide error explanations.
 
 ### Core Design: Single-Level Numbering System
 
-Uses a four-digit numbering scheme, grouped by compilation stage:
+Adopt a four-digit numbering, grouped by compilation phase:
 
 ```
 Exxxx
 ││││
 │││└── Sequence number (000-999)
-││└─── Compilation stage (0-9)
+││└─── Compilation phase (0-9)
 └───── Fixed prefix 'E'
 ```
 
-### Stage Division
+### Phase Division
 
-| Stage | Range | Description                 |
-| ----- | ----- | --------------------------- |
-| **0** | E0xxx | Lexical and syntax analysis |
-| **1** | E1xxx | Type checking               |
-| **2** | E2xxx | Semantic analysis           |
-| **3** | E3xxx | Code generation             |
-| **4** | E4xxx | Generics and traits         |
-| **5** | E5xxx | Modules and imports         |
-| **6** | E6xxx | Runtime errors              |
-| **7** | E7xxx | I/O and system errors       |
-| **8** | E8xxx | Internal compiler errors    |
-| **9** | E9xxx | Reserved/experimental       |
+| Phase | Range | Description               |
+| ----- | ----- | ------------------------- |
+| **0** | E0xxx | Lexical & Syntax Analysis |
+| **1** | E1xxx | Type Check                |
+| **2** | E2xxx | Semantic Analysis         |
+| **3** | E3xxx | Code Generation           |
+| **4** | E4xxx | Generics & Traits         |
+| **5** | E5xxx | Module & Import           |
+| **6** | E6xxx | Runtime Error             |
+| **7** | E7xxx | I/O & System Error        |
+| **8** | E8xxx | Internal Compiler Error   |
+| **9** | E9xxx | Reserved / Experimental   |
 
 ### Error Category Enum
 
@@ -81,23 +82,24 @@ Exxxx
 pub enum ErrorCategory {
     Lexer,      // E0xxx: Lexical and syntax analysis
     Parser,     // E0xxx: Parser errors
-    TypeCheck,  // E1xxx: Type checking
+    TypeCheck,  // E1xxx: Type check
     Semantic,   // E2xxx: Semantic analysis
     Generic,    // E4xxx: Generics and traits
-    Module,     // E5xxx: Modules and imports
-    Runtime,    // E6xxx: Runtime errors
-    Io,         // E7xxx: I/O and system errors
-    Internal,   // E8xxx: Internal compiler errors
+    Module,     // E5xxx: Module and import
+    Runtime,    // E6xxx: Runtime error
+    Io,         // E7xxx: I/O and system error
+    Internal,   // E8xxx: Internal compiler error
 }
 ```
 
-### Error Code Definition and Universal Builder
+### Error Code Definition and Generic Builder
 
-**Core principle**: Separate error code definition from display text
+**Core Principle**: Error code definitions are separated from display text
 
 - `ErrorCodeDefinition`: Error code metadata (code, category, template), without display text
-- `i18n/*.json`: Display text for each language (title, message, help)
-- `DiagnosticBuilder`: Universal builder, replacing trait-per-error design
+- `locales/*.json`: Display text for each language (title, message, help, error code as nested
+  object)
+- `DiagnosticBuilder`: Generic builder, replacing the trait-per-error design
 
 #### Error Code Definition
 
@@ -107,7 +109,7 @@ pub enum ErrorCategory {
 use crate::util::span::Span;
 use crate::util::diagnostic::{Diagnostic, Severity};
 
-/// Error code definition (metadata only, display text in i18n files)
+/// Error code definition (metadata only; display text is in i18n files)
 #[derive(Debug, Clone, Copy)]
 pub struct ErrorCodeDefinition {
     pub code: &'static str,
@@ -115,7 +117,7 @@ pub struct ErrorCodeDefinition {
     pub message_template: &'static str,  // Message template, supports {param} placeholders
 }
 
-/// Universal diagnostic builder
+/// Generic diagnostic builder
 pub struct DiagnosticBuilder {
     code: &'static str,
     message_template: &'static str,
@@ -139,15 +141,15 @@ impl DiagnosticBuilder {
         self
     }
 
-    /// Set location
+    /// Set position
     pub fn at(mut self, span: Span) -> Self {
         self.span = Some(span);
         self
     }
 
-    /// Build Diagnostic (template rendering done at compile time)
+    /// Build Diagnostic (template rendering is completed at compile-time)
     pub fn build(&self, i18n: &I18nRegistry) -> Diagnostic {
-        // Check that all {key} in template have corresponding parameters
+        // Check that all {key} in the template have corresponding parameters
         self.validate_params();
 
         let message = i18n.render(self.message_template, &self.params);
@@ -165,7 +167,7 @@ impl DiagnosticBuilder {
 }
 ```
 
-#### Convenience Methods for Each Error Code
+#### Shortcut Methods for Each Error Code
 
 ```rust
 // diagnostic/codes/e1xxx.rs
@@ -188,7 +190,7 @@ impl ErrorCodeDefinition {
 }
 ```
 
-#### Usage Example
+#### Usage Examples
 
 ```rust
 // checking/mod.rs
@@ -208,7 +210,7 @@ return Err(ErrorCodeDefinition::find("E1001")
     .build(&i18n_registry));
 ```
 
-#### Error Code Definition Example
+#### Error Code Definition Examples
 
 ```rust
 // diagnostic/codes/e1xxx.rs
@@ -230,22 +232,22 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
 
 #### Design Advantages
 
-| Feature                   | Description                                            |
-| ------------------------- | ------------------------------------------------------ |
-| **Single Builder**        | One `DiagnosticBuilder` works for all error codes      |
-| **Type safe**             | Convenience methods ensure parameter correctness       |
-| **Self-documenting**      | `E1001::unknown_variable(name)` is self-explanatory    |
-| **Template separation**   | Message templates separated from code, easy for i18n   |
-| **Zero runtime overhead** | Compile-time rendering, AOT binary has no lookup table |
+| Feature                   | Description                                              |
+| ------------------------- | -------------------------------------------------------- |
+| **Single Builder**        | One `DiagnosticBuilder` for all error codes              |
+| **Type-safe**             | Shortcut methods ensure parameter correctness            |
+| **Self-documenting**      | `E1001::unknown_variable(name)` is self-evident          |
+| **Template Separation**   | Message templates are separated from code, easy for i18n |
+| **Zero Runtime Overhead** | Compile-time rendering, no lookup tables in AOT binary   |
 
 ---
 
 ### Error Macro Simplification
 
-#### error! Macro (Auto-inject Context)
+#### error! Macro (Automatically Injects Context)
 
 ```rust
-/// Macro that automatically retrieves span and i18n config at compile time
+/// Macro that automatically obtains span and i18n config at compile-time
 macro_rules! error {
     ($code:ident, $($key:ident = $value:expr),* $(,)?) => {
         $code()
@@ -255,7 +257,7 @@ macro_rules! error {
     };
 }
 
-/// Usage: just pass parameters, span and i18n are automatically injected
+/// Usage: Only pass parameters; span and i18n are automatically injected
 return Err(error!(E1001, name = var_name));
 return Err(error!(E1002, expected = "bool", found = cond_ty));
 ```
@@ -275,72 +277,72 @@ E1001::unknown_variable(&var_name)
 
 ### Error Code List
 
-#### E0xxx: Lexical and Syntax Analysis
+#### E0xxx: Lexical & Syntax Analysis
 
-| Code  | Error Type                | Description                                  |
-| ----- | ------------------------- | -------------------------------------------- |
-| E0001 | Invalid character         | Source code contains illegal character       |
-| E0002 | Invalid number literal    | Incorrect number literal format              |
-| E0003 | Unterminated string       | Multi-line string missing closing quote      |
-| E0004 | Invalid character literal | Incorrect character literal                  |
-| E0010 | Expected token            | Parser expected specific token               |
-| E0011 | Unexpected token          | Encountered unexpected token                 |
-| E0012 | Invalid syntax            | Expression/statement syntax error            |
-| E0013 | Mismatched brackets       | Parentheses, brackets, or braces don't match |
-| E0014 | Missing semicolon         | Missing semicolon at end of statement        |
+| Code  | Error Type                | Description                                                |
+| ----- | ------------------------- | ---------------------------------------------------------- |
+| E0001 | Invalid character         | Source code contains invalid characters                    |
+| E0002 | Invalid number literal    | Number literal format is incorrect                         |
+| E0003 | Unterminated string       | Multi-line string missing closing quote                    |
+| E0004 | Invalid character literal | Character literal is incorrect                             |
+| E0010 | Expected token            | Expected specific token during syntax analysis             |
+| E0011 | Unexpected token          | Encountered an unexpected token                            |
+| E0012 | Invalid syntax            | Expression/statement syntax error                          |
+| E0013 | Mismatched brackets       | Parentheses, square brackets, or curly brackets mismatched |
+| E0014 | Missing semicolon         | Statement missing semicolon at end                         |
 
-#### E1xxx: Type Checking
+#### E1xxx: Type Check
 
-| Code  | Error Type               | Description                                            |
-| ----- | ------------------------ | ------------------------------------------------------ |
-| E1001 | Unknown variable         | Referenced variable is not defined                     |
-| E1002 | Type mismatch            | Expected type doesn't match actual type                |
-| E1003 | Unknown type             | Referenced type doesn't exist                          |
-| E1010 | Parameter count mismatch | Function call parameter count doesn't match definition |
-| E1011 | Parameter type mismatch  | Parameter type checking failed                         |
-| E1012 | Return type mismatch     | Function return type error                             |
-| E1013 | Function not found       | Calling undefined function                             |
-| E1020 | Cannot infer type        | Cannot infer type from context                         |
-| E1021 | Type inference conflict  | Multiple constraints cause type contradiction          |
-| E1030 | Pattern non-exhaustive   | match expression doesn't cover all cases               |
-| E1031 | Unreachable pattern      | Pattern that can never match                           |
-| E1040 | Operation not supported  | Type doesn't support this operation                    |
-| E1041 | Index out of bounds      | Array/list index out of range                          |
-| E1042 | Field not found          | Accessing non-existent struct field                    |
+| Code  | Error Type               | Description                                             |
+| ----- | ------------------------ | ------------------------------------------------------- |
+| E1001 | Unknown variable         | Referenced variable is not defined                      |
+| E1002 | Type mismatch            | Expected type does not match actual type                |
+| E1003 | Unknown type             | Referenced type does not exist                          |
+| E1010 | Parameter count mismatch | Function call parameter count does not match definition |
+| E1011 | Parameter type mismatch  | Parameter type check failed                             |
+| E1012 | Return type mismatch     | Function return type is wrong                           |
+| E1013 | Function not found       | Calling an undefined function                           |
+| E1020 | Cannot infer type        | Context cannot infer the type                           |
+| E1021 | Type inference conflict  | Multiple constraints lead to type contradiction         |
+| E1030 | Pattern non-exhaustive   | match expression does not cover all cases               |
+| E1031 | Unreachable pattern      | Pattern that can never be matched                       |
+| E1040 | Operation not supported  | Type does not support this operation                    |
+| E1041 | Index out of bounds      | Array/list index out of range                           |
+| E1042 | Field not found          | Accessing a non-existent struct field                   |
 
 #### E2xxx: Semantic Analysis
 
-| Code  | Error Type           | Description                                  |
-| ----- | -------------------- | -------------------------------------------- |
-| E2001 | Scope error          | Variable not in current scope                |
-| E2002 | Duplicate definition | Duplicate definition in same scope           |
-| E2003 | Lifetime error       | Lifetime constraint not satisfied            |
-| E2010 | Immutable assignment | Attempting to modify immutable variable      |
-| E2011 | Uninitialized use    | Using uninitialized variable                 |
-| E2012 | Mutability conflict  | Using mutable reference in immutable context |
+| Code  | Error Type           | Description                                       |
+| ----- | -------------------- | ------------------------------------------------- |
+| E2001 | Scope error          | Variable is not in the current scope              |
+| E2002 | Duplicate definition | Duplicate definition within the same scope        |
+| E2003 | Lifetime error       | Lifetime constraint not satisfied                 |
+| E2010 | Immutable assignment | Attempting to modify an immutable variable        |
+| E2011 | Uninitialized use    | Using an uninitialized variable                   |
+| E2012 | Mutability conflict  | Using a mutable reference in an immutable context |
 
-#### E4xxx: Generics and Traits
+#### E4xxx: Generics & Traits
 
-| Code  | Error Type                     | Description                            |
-| ----- | ------------------------------ | -------------------------------------- |
-| E4001 | Generic parameter mismatch     | Generic parameter count/type mismatch  |
-| E4002 | Trait bound violated           | Trait constraint not satisfied         |
-| E4003 | Associated type error          | Associated type definition/use error   |
-| E4004 | Duplicate trait implementation | Duplicate implementation of same trait |
-| E4005 | Trait not found                | Required trait not found               |
-| E4006 | Sized bound violated           | Sized constraint not satisfied         |
+| Code  | Error Type                     | Description                                |
+| ----- | ------------------------------ | ------------------------------------------ |
+| E4001 | Generic parameter mismatch     | Generic parameter count/type mismatch      |
+| E4002 | Trait bound violated           | Trait constraint not satisfied             |
+| E4003 | Associated type error          | Associated type definition/usage error     |
+| E4004 | Duplicate trait implementation | Duplicate implementation of the same trait |
+| E4005 | Trait not found                | Cannot find the required trait             |
+| E4006 | Sized bound violated           | Sized constraint not satisfied             |
 
-#### E5xxx: Modules and Imports
+#### E5xxx: Module & Import
 
-| Code  | Error Type          | Description                              |
-| ----- | ------------------- | ---------------------------------------- |
-| E5001 | Module not found    | Imported module doesn't exist            |
-| E5002 | Cyclic import       | Circular dependency between modules      |
-| E5003 | Symbol not exported | Attempting to access non-exported symbol |
-| E5004 | Invalid module path | Incorrect module path format             |
-| E5005 | Private access      | Accessing private symbol                 |
+| Code  | Error Type          | Description                                        |
+| ----- | ------------------- | -------------------------------------------------- |
+| E5001 | Module not found    | Imported module does not exist                     |
+| E5002 | Cyclic import       | Cyclic dependency between modules                  |
+| E5003 | Symbol not exported | Attempting to access a symbol that is not exported |
+| E5004 | Invalid module path | Module path format is incorrect                    |
+| E5005 | Private access      | Accessing a private symbol                         |
 
-#### E6xxx: Runtime Errors
+#### E6xxx: Runtime Error
 
 | Code  | Error Type                  | Description                                  |
 | ----- | --------------------------- | -------------------------------------------- |
@@ -349,30 +351,30 @@ E1001::unknown_variable(&var_name)
 | E6003 | Arithmetic overflow         | Arithmetic operation overflow                |
 | E6004 | Stack overflow              | Stack space exhausted                        |
 | E6005 | Heap allocation failed      | Memory allocation failed                     |
-| E6006 | Runtime index out of bounds | Runtime index out of range                   |
+| E6006 | Runtime index out of bounds | Runtime index out of bounds                  |
 | E6007 | Type cast failed            | Attempting to cast type to incompatible type |
 
-#### E7xxx: I/O and System Errors
+#### E7xxx: I/O & System Error
 
-| Code  | Error Type        | Description                          |
-| ----- | ----------------- | ------------------------------------ |
-| E7001 | File not found    | Attempting to read non-existent file |
-| E7002 | Permission denied | Insufficient file permissions        |
-| E7003 | I/O error         | General I/O error                    |
-| E7004 | Network error     | Network operation failed             |
+| Code  | Error Type        | Description                            |
+| ----- | ----------------- | -------------------------------------- |
+| E7001 | File not found    | Attempting to read a non-existent file |
+| E7002 | Permission denied | Insufficient file permissions          |
+| E7003 | I/O error         | Generic I/O error                      |
+| E7004 | Network error     | Network operation failed               |
 
-#### E8xxx: Internal Compiler Errors
+#### E8xxx: Internal Compiler Error
 
-| Code  | Error Type              | Description                   |
-| ----- | ----------------------- | ----------------------------- |
-| E8001 | Internal compiler error | Compiler internal error       |
-| E8002 | Codegen error           | IR/bytecode generation failed |
-| E8003 | Unimplemented feature   | Using unimplemented feature   |
-| E8004 | Optimization error      | Compiler optimization error   |
+| Code  | Error Type              | Description                    |
+| ----- | ----------------------- | ------------------------------ |
+| E8001 | Internal compiler error | Internal compiler error        |
+| E8002 | Codegen error           | IR/bytecode generation failed  |
+| E8003 | Unimplemented feature   | Using an unimplemented feature |
+| E8004 | Optimization error      | Compiler optimization error    |
 
 ---
 
-### Multi-Language Resource Files
+### Multilingual Resource Files
 
 #### Resource File Format
 
@@ -423,15 +425,15 @@ E1001::unknown_variable(&var_name)
 #### I18nRegistry Implementation
 
 ```rust
-// locales/*.json（错误码对象）
+// locales/*.json (error code object)
 
-/// i18n display text registry (loaded from JSON at compile time, zero lookup at runtime)
+/// i18n display text registry (loaded from JSON at compile-time, zero lookup at runtime)
 pub struct I18nRegistry {
     /// Titles
     titles: HashMap<&'static str, &'static str>,
     /// Descriptions
     messages: HashMap<&'static str, &'static str>,
-    /// Help messages
+    /// Help information
     helps: HashMap<&'static str, &'static str>,
     /// Example code
     examples: HashMap<&'static str, &'static str>,
@@ -439,7 +441,7 @@ pub struct I18nRegistry {
     error_outputs: HashMap<&'static str, &'static str>,
 }
 
-/// Single error code information
+/// Information for a single error code
 #[derive(Clone, Copy)]
 pub struct ErrorInfo<'a> {
     pub title: &'a str,
@@ -469,7 +471,7 @@ impl I18nRegistry {
         })
     }
 
-    /// Render template (done at compile time, zero overhead at runtime)
+    /// Render template (completed at compile-time, zero overhead at runtime)
     pub fn render(&self, template: &'static str, params: &[(&str, String)]) -> String {
         let mut result = String::with_capacity(template.len() + 64);
         let mut chars = template.chars().peekable();
@@ -503,23 +505,23 @@ impl I18nRegistry {
 
 ##### Predefined Placeholders (Common)
 
-| Placeholder  | Purpose                                  | Example                             |
-| ------------ | ---------------------------------------- | ----------------------------------- |
-| `{name}`     | Variable/type/trait name etc. identifier | `Unknown variable: '{name}'`        |
-| `{expected}` | Expected type                            | `Expected type '{expected}'`        |
-| `{found}`    | Actual/found type                        | `, found type '{found}'`            |
-| `{method}`   | Method name                              | `Method {method} is not a function` |
-| `{trait}`    | Trait name                               | `Cannot find trait: {trait}`        |
-| `{path}`     | Module path                              | `Invalid path: {path}`              |
-| `{ty}`       | Type expression                          | `Invalid type: {ty}`                |
-| `{message}`  | Internal error message                   | `Internal error: {message}`         |
+| Placeholder  | Purpose                                    | Example                             |
+| ------------ | ------------------------------------------ | ----------------------------------- |
+| `{name}`     | Variable/type/trait name, etc. identifiers | `Unknown variable: '{name}'`        |
+| `{expected}` | Expected type                              | `Expected type '{expected}'`        |
+| `{found}`    | Actual/found type                          | `, found type '{found}'`            |
+| `{method}`   | Method name                                | `Method {method} is not a function` |
+| `{trait}`    | Trait name                                 | `Cannot find trait: {trait}`        |
+| `{path}`     | Module path                                | `Invalid path: {path}`              |
+| `{ty}`       | Type expression                            | `Invalid type: {ty}`                |
+| `{message}`  | Internal error message                     | `Internal error: {message}`         |
 
 ##### Arbitrary Key Support
 
-**params supports arbitrary keys, not limited to predefined**. Callers can pass any `key`:
+**params supports any key, not limited to predefined ones**. The caller can pass any `key`:
 
 ```rust
-// Using arbitrary key
+// Using arbitrary keys
 E1001::unknown_variable(&var_name)
     .param("location", "global scope")
     .param("hint", "try declaring it first")
@@ -530,8 +532,8 @@ E1001::unknown_variable(&var_name)
 "Unknown variable: '{name}' at {location}. {hint}"
 ```
 
-> **Note**: Not all error codes use placeholders. Some error codes (like E0001) are static messages
-> that don't need parameters.
+> **Note**: Not all error codes use placeholders. Some error codes (such as E0001) have static
+> messages and do not require parameters.
 
 #### Language Priority
 
@@ -567,51 +569,51 @@ default = "zh"
 #### Compile-Time Language Selection
 
 ```
-1. Read language.default from project-level yaoxiang.toml
+1. Read project-level yaoxiang.toml's language.default
 2. If not configured, read user-level ~/.yaoxiang/yaoxiang.toml
 3. If neither is configured, default to "en"
-4. Compiler creates I18nRegistry based on selected language (once)
-5. All errors use this I18nRegistry to render messages
+4. The compiler creates an I18nRegistry based on the selected language (once)
+5. All errors use that I18nRegistry to render messages
 ```
 
-#### Key to Zero Lookup Overhead
+#### The Key to Zero Lookup Overhead
 
-**Rendering happens when compiling the user's project, not at runtime.**
+**Rendering happens when compiling the user project, not at runtime.**
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  Stage 1: Rust compiles YaoXiang compiler                               │
+│  Phase 1: Rust compiles the YaoXiang compiler                           │
 │                                                                           │
-│  JSON packed into compiler binary                                        │
-│  Purpose: explain command can directly read i18n data                  │
+│  JSON is packaged into the compiler binary                              │
+│  Purpose: explain command can directly read i18n data                    │
 └─────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  Stage 2: YaoXiang compiles user's project (rendering happens here)     │
+│  Phase 2: YaoXiang compiles the user project (rendering happens here)   │
 │                                                                           │
 │  When error! macro is called:                                            │
-│  1. Read yaoxiang.toml to get language preference                        │
-│  2. Load corresponding language's i18n JSON from compiler binary        │
-│  3. template + params → render() → "Unknown variable: 'x'"              │
-│  4. Diagnostic.message = rendered string                                │
+│  1. Read yaoxiang.toml to get language preference                       │
+│  2. Load the corresponding language's i18n JSON from the compiler binary│
+│  3. Template + params → render() → "Unknown variable: 'x'"              │
+│  4. Diagnostic.message = rendered string                                 │
 │                                                                           │
-│  AOT binary stores final string directly, no template, no lookup table   │
+│  AOT binary directly stores the final string, no template, no lookup    │
 └─────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  Stage 3: User program runtime                                           │
+│  Phase 3: User program runtime                                          │
 │                                                                           │
-│  println!("{}", diagnostic.message)                                     │
-│  // Directly output final string, no lookup at all                       │
+│  println!("{}", diagnostic.message)                                      │
+│  // Directly outputs the final string, no lookups                        │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-| Component                    | Responsibility                      | Rendering Time                |
-| ---------------------------- | ----------------------------------- | ----------------------------- |
-| `I18nRegistry`               | Provides templates and display text | When compiling user's project |
-| `DiagnosticBuilder.render()` | template + params → final string    | When compiling user's project |
-| `Diagnostic.message`         | Rendered string                     | Stores final result           |
-| AOT binary                   | Contains final string               | Used directly at runtime      |
+| Component                    | Responsibility                      | Rendering Timing            |
+| ---------------------------- | ----------------------------------- | --------------------------- |
+| `I18nRegistry`               | Provides templates and display text | When compiling user project |
+| `DiagnosticBuilder.render()` | Template + params → final string    | When compiling user project |
+| `Diagnostic.message`         | Rendered string                     | Stores final result         |
+| AOT binary                   | Contains the final string           | Used directly at runtime    |
 
 ---
 
@@ -621,7 +623,7 @@ Error messages use the following format:
 
 ```
 error[E####]: <short description>
-  --> <file>:<line>:<column>
+  --> <file>:<line>:<col>
    <line> | <code snippet>
           ^^^<highlight>
 ```
@@ -640,23 +642,24 @@ error[E1001]: Unknown variable: x
 
 ### Severity Levels
 
-Error severity is managed through the `DiagnosticLevel` enum, decoupled from error code numbering:
+Error severity is managed through the `DiagnosticLevel` enum, decoupled from the error code
+numbering:
 
 ```rust
 pub enum DiagnosticLevel {
     Error,    // Causes compilation failure
-    Warning,  // Doesn't affect compilation, but recommended to fix
-    Note,     // Additional information
+    Warning,  // Does not affect compilation, but recommended to fix
+    Note,     // Supplementary information
     Help,     // Fix suggestion
 }
 ```
 
-| Level   | Prefix            | Description                |
-| ------- | ----------------- | -------------------------- |
-| Error   | `error[E####]:`   | Causes compilation failure |
-| Warning | `warning[E####]:` | Doesn't affect compilation |
-| Note    | `note[E####]:`    | Additional information     |
-| Help    | `help[E####]:`    | Fix suggestion             |
+| Level   | Prefix            | Description                 |
+| ------- | ----------------- | --------------------------- |
+| Error   | `error[E####]:`   | Causes compilation failure  |
+| Warning | `warning[E####]:` | Does not affect compilation |
+| Note    | `note[E####]:`    | Supplementary information   |
+| Help    | `help[E####]:`    | Fix suggestion              |
 
 ---
 
@@ -674,9 +677,9 @@ yaoxiang explain <ERROR_CODE> [OPTIONS]
 | --------------- | ---------------------------------------------- |
 | `--lang <code>` | Specify language (en-US, zh-CN, default en-US) |
 | `--json`        | JSON format output (for IDE/LSP use)           |
-| `--json-pretty` | Formatted JSON output                          |
+| `--json-pretty` | Pretty-formatted JSON output                   |
 | `--examples`    | Show only example code                         |
-| `--help`        | Display help information                       |
+| `--help`        | Show help information                          |
 
 #### Usage Examples
 
@@ -730,43 +733,43 @@ $ yaoxiang explain E1001 --json
 
 Since this RFC designs the error code system from scratch, there is no backward compatibility issue.
 
-**Future Migration Strategy** (for reference in subsequent versions):
+**Future Migration Strategy** (for reference in later versions):
 
-1. Maintain mapping from old error codes to new error codes
-2. Display both old and new codes during migration period
-3. Provide deprecation schedule
+1. Maintain a mapping from old error codes to new error codes
+2. Display both old and new codes during the migration period
+3. Provide a deprecation timeline
 
 ---
 
 ## Implementation Strategy
 
-### Phase One: Error Code Infrastructure
+### Phase 1: Error Code Infrastructure
 
-1. Create `src/diagnostics/` directory structure
-2. Implement `ErrorCode` enum
+1. Create the `src/diagnostics/` directory structure
+2. Implement the `ErrorCode` enum
 3. Implement `Diagnostic` and `DiagnosticLevel`
-4. Create resource file directory and sample JSON
+4. Create the resource file directory and sample JSON
 
-### Phase Two: explain Command
+### Phase 2: explain Command
 
-1. Implement `yaoxiang explain` CLI command
+1. Implement the `yaoxiang explain` CLI command
 2. Support `--lang` and `--json` options
 3. Integrate resource file loading
 4. Implement parameter template rendering
 
-### Phase Three: Compile-Time Integration
+### Phase 3: Compile-Time Integration
 
-1. Update all error reporting points to use new system
+1. Update all error reporting sites to use the new system
 2. Implement message template parameter injection
 3. Add language priority logic
 4. Unit test coverage
 
-### Phase Four: IDE/LSP Integration
+### Phase 4: IDE/LSP Integration
 
 1. LSP server integrates explain JSON output
 2. Display error code links in IDE
-3. Hover to show error explanation
-4. Quick fix suggestions
+3. Show error explanation on hover
+4. Quick-fix suggestions
 
 ---
 
@@ -774,25 +777,25 @@ Since this RFC designs the error code system from scratch, there is no backward 
 
 ### Complete Error Code Quick Reference
 
-| Range | Category                    |
-| ----- | --------------------------- |
-| E0xxx | Lexical and syntax analysis |
-| E1xxx | Type checking               |
-| E2xxx | Semantic analysis           |
-| E3xxx | Code generation             |
-| E4xxx | Generics and traits         |
-| E5xxx | Modules and imports         |
-| E6xxx | Runtime errors              |
-| E7xxx | I/O and system errors       |
-| E8xxx | Internal compiler errors    |
-| E9xxx | Reserved                    |
+| Range | Category                  |
+| ----- | ------------------------- |
+| E0xxx | Lexical & Syntax Analysis |
+| E1xxx | Type Check                |
+| E2xxx | Semantic Analysis         |
+| E3xxx | Code Generation           |
+| E4xxx | Generics & Traits         |
+| E5xxx | Module & Import           |
+| E6xxx | Runtime Error             |
+| E7xxx | I/O & System Error        |
+| E8xxx | Internal Compiler Error   |
+| E9xxx | Reserved                  |
 
 ### Supported Languages
 
-| Code  | Language           | Status  |
-| ----- | ------------------ | ------- |
-| en-US | English (US)       | Default |
-| zh-CN | Simplified Chinese | Planned |
+| Code  | Language     | Status  |
+| ----- | ------------ | ------- |
+| en-US | English (US) | Default |
+| zh-CN | 简体中文     | Planned |
 
 ### Error Message Example Comparison
 

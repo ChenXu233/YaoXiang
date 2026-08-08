@@ -1,7 +1,7 @@
 ---
-title: 'RFC-009a: Token Lifetime Analysis — Based on Hoare Proof Pipeline'
+title: 'RFC-009a: Token Lifetime Analysis - Hoare Proof Pipeline'
 status: 'Accepted'
-author: 'Chen Xu'
+author: 'Chenxu'
 created: '2026-06-13'
 updated: '2026-06-13'
 group: 'rfc-009'
@@ -11,29 +11,29 @@ issue: '#129'
 impl: 'partial'
 ---
 
-# RFC-009a: Token Lifetime Analysis — Based on Hoare Proof Pipeline
+# RFC-009a: Token Lifetime Analysis - Hoare Proof Pipeline
 
 > **Parent RFC**: [RFC-009: Ownership Model Design](../accepted/009-ownership-model.md)
 >
-> **Depends on**:
-> [RFC-027: Compile-Time Predicates and Unified Static Verification](../accepted/027-compile-time-evaluation-types.md)
+> **Dependency**:
+> [RFC-027: Compile-time Predicates and Unified Static Verification](../accepted/027-compile-time-evaluation-types.md)
 >
 > **Prerequisite**: RFC-027 has been accepted. All mechanisms in this RFC (proof pipeline, SMT
-> fallback, path condition collection) depend on RFC-027's implementation.
+> fallback, path condition collection) depend on the implementation of RFC-027.
 >
-> **This RFC amends and supersedes RFC-009 §"Token Conflict Detection: Flow-Sensitive Liveness
+> **This RFC corrects and replaces RFC-009 §"Token Conflict Detection: Flow-Sensitive Liveness
 > Analysis" (lines 663-684).**
 
 ## Summary
 
-RFC-009 line 684 claims that token conflict detection "doesn't need... NLL." The conclusion is
-correct; the reasoning is wrong.
+Line 684 of RFC-009 claims that token conflict detection "does not need... NLL". The conclusion is
+correct, but the argument is wrong.
 
-It's not "because tokens are values, linear tracking is sufficient." It's because: **token liveness
-is a Hoare logic proposition, not a specialized flow-sensitive analysis.**
+It is not "because tokens are values, linear tracking is enough". It is because: **token liveness is
+a Hoare logic proposition, not a special flow-sensitive analysis.**
 
-`{all conflicting_tokens dead} op {WriteToken safely acquired}` — the same `{P} op {Q}`, shared with
-type checking and predicate verification via the RFC-027 proof pipeline. No new analysis framework.
+`{conflicting_tokens all dead} op {WriteToken safely acquired}` -- the same `{P} op {Q}`, sharing
+RFC-027's proof pipeline with type checking and predicate verification. No new analysis framework.
 One pipeline, multiple propositions.
 
 ---
@@ -42,38 +42,37 @@ One pipeline, multiple propositions.
 
 ### The Confusion in RFC-009
 
-RFC-009 conflates two problems:
+RFC-009 conflates two issues:
 
-1. **Linear tracking** (unusable after Move) — `{v not moved} use(v) {type matches}`. Already in the
-   type checker.
-2. **Token lifetime interactions** (sub-token alive → parent token paused → sub-token dead → parent
-   token revived) — `{all conflicting_tokens dead} write(data) {safe}`. Requires **liveness
+1. **Linear Tracking** (unavailable after Move) -- `{v not moved} use(v) {type matches}`. The type
+   checker already has this.
+2. **Token Lifetime Interaction** (child token alive → parent token paused → child token dead →
+   parent token revived) -- `{conflicting_tokens all dead} write(data) {safe}`. Requires **liveness
    analysis**, not linear tracking.
 
-### Current Code Reality
+### Current Code State
 
-| Component                                  | Status                                                                           |
-| ------------------------------------------ | -------------------------------------------------------------------------------- |
-| `BorrowChecker`                            | Linear IR scan, passively responds to explicit `Borrow`/`Release` instructions   |
-| `ControlFlowAnalyzer::analyze_instruction` | Empty implementation (`control_flow.rs:145-153`)                                 |
-| `liveness_analysis`                        | Exists but only used for Drop insertion, not connected to token conflicts        |
-| Release insertion                          | Hardcoded after Call instructions — pure lexical scoping (`ir_gen.rs:2734-2736`) |
+| Component                                  | Status                                                                              |
+| ------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `BorrowChecker`                            | Linearly scans IR, passively responding to explicit `Borrow`/`Release` instructions |
+| `ControlFlowAnalyzer::analyze_instruction` | Empty implementation (`control_flow.rs:145-153`)                                    |
+| `liveness_analysis`                        | Exists but only used for Drop insertion, not connected to token conflicts           |
+| Release insertion                          | Hardcoded after Call instructions -- purely lexical scope (`ir_gen.rs:2734-2736`)   |
 
 **User-visible consequences**:
 
 ```yaoxiang
 data = vec![1, 2, 3]
-view = &data              # Create ReadToken
-x = view.total_count      # Last use of view
-data.push(4)              # ❌ Release(view) hasn't executed yet, ReadToken is "alive"
+view = &data              # 创建 ReadToken
+x = view.total_count      # view 的最后使用
+data.push(4)              # ❌ Release(view) 尚未执行，ReadToken "活着"
 ```
 
-### Why Rewriting is Needed
+### Why a Rewrite is Needed
 
-The previous version (009a v1) used the "DAG instead of NLL" narrative, introducing unnecessary new
-concepts (conservative branching rules, special loop handling). The core contradiction wasn't
-clearly stated: **borrow checking is not an independent system — it's one kind of Hoare
-proposition.**
+The previous version (009a v1) used the "DAG replaces NLL" narrative, introducing unnecessary new
+concepts (conservative branch rules, loop special handling). The core contradiction was not made
+clear: **borrow checking is not an independent system -- it is a kind of Hoare proposition.**
 
 ---
 
@@ -82,109 +81,110 @@ proposition.**
 ### Everything is Hoare
 
 ```
-Type checking:   { x: Int }        x + 1        { result: Int }
-Borrow checking: { view is dead }  data.push(4) { WriteToken acquired successfully }
-Predicate verify:{ y > 0 }         divide(x, y) { result: Int }
-Back-edge cut:   { i == n }        next loop     { cond == false }
+类型检查：  { x: Int }        x + 1        { result: Int }
+借用检查：  { view 已死 }     data.push(4)  { WriteToken 获取成功 }
+谓词验证：  { y > 0 }         divide(x, y)  { result: Int }
+回边切断：  { i == n }        下一轮循环     { cond == false }
 ```
 
-The same form `{P} op {Q}`. The compiler generates precondition P for each operation, feeds it to
-the proof pipeline for verification.
+The same form `{P} op {Q}`. The compiler generates a precondition proposition P for each operation
+and sends it to the proof pipeline for verification.
 
-**Borrow checking and user predicates share the same pipeline.** The only difference is who
-generates the proposition and what happens when it can't be proven.
+**Borrow checking and user predicates share the same pipeline.** The only differences are who
+generates the propositions and how to handle when the proof fails.
 
-### Two Types of Predicates, One Pipeline
+### Two Kinds of Predicates, One Pipeline
 
-|                        | User Predicates                  | System Predicates (Borrowing)                |
-| ---------------------- | -------------------------------- | -------------------------------------------- |
-| Proposition generation | Programmer (type annotations)    | Compiler (brand tree + ownership rules)      |
-| Proof supply           | Compiler + programmer            | **Compiler fully automatic**                 |
-| Can't prove            | Write proof function or refactor | Refactor code (door stays but rarely needed) |
-| Visibility             | Visible in signatures            | Implicit, doesn't pollute type signatures    |
-| Learning curve         | Learn when you want              | Zero                                         |
+|                        | User Predicate                   | System Predicate (Borrow)                        |
+| ---------------------- | -------------------------------- | ------------------------------------------------ |
+| Proposition generation | Programmer (type annotation)     | Compiler (brand tree + ownership rules)          |
+| Proof provision        | Compiler + Programmer            | **Compiler fully automatic**                     |
+| Cannot be proven       | Write proof function or refactor | Refactor code (door left open but rarely needed) |
+| Visibility             | Visible in signature             | Implicit, does not pollute type signature        |
+| Learning cost          | Learn only if you want to use it | Zero                                             |
 
-**System predicate proof doesn't open proof functions to programmers — fully compiler-automated.**
-When proof fails, users refactor code.
+**Proofs for system predicates do not open proof functions to programmers -- the compiler is fully
+automatic.** When proof fails, the user refactors the code.
 
-**Three failure modes, one verification engine.** Type proposition can't be proven → compile error
-(cannot bypass). Borrow proposition can't be proven → compile error, refactor code (cannot bypass).
-User predicate can't be proven → compile error, can write proof function (can bypass). Failure
-strategies differ, but the verification engine is the same — SMT solver + compiler internal
-inference rules. The only difference is "who is responsible for补证明 when it can't be proven" — the
-compiler refuses to write borrow proofs for programmers (borrow propositions use structural
-analysis + SMT as proof strategy, no programmer involvement needed), but accepts programmer-written
-user predicate proof functions. This isn't pipeline inconsistency — it's different responsibility
-boundaries for different proposition categories.
+**Three failure modes, one verification engine.** Type proposition cannot be proven → compile error
+(cannot be bypassed). Borrow proposition cannot be proven → compile error, refactor code (cannot be
+bypassed). User predicate cannot be proven → compile error, can write proof function (can be
+bypassed). The failure strategies differ, but the verification engine is the same -- SMT solver +
+compiler core inference rules. The only difference is "who is responsible for filling in the proof
+when it cannot be proven" -- the compiler refuses to write borrow proofs for the programmer (the
+proof strategy for borrow propositions is structural analysis + SMT, no programmer intervention
+needed), but accepts programmer-written user predicate proof functions. This is not pipeline
+inconsistency -- it is the responsibility boundary between different proposition categories.
 
-This differs from Rust `'a`: `'a` is required, proof functions are elective — the vast majority of
-users will never touch the elective course.
+This is different from Rust `'a`: `'a` is a required course, proof functions are elective -- the
+vast majority of users never touch the elective.
 
-### Borrow Propositions: Compiler-Generated Automatically
+### Borrow Propositions: Compiler Auto-generated
 
-User writes `data.push(4)`. Compiler automatically generates proposition:
+The user writes `data.push(4)`. The compiler automatically generates the proposition:
 
 ```
-WriteToken(data, node) acquirable
-  = forall t in conflicting_tokens(data): t is dead at node
+WriteToken(data, node) 可获取
+  = forall t in conflicting_tokens(data): t 在 node 处已死
   = forall t in brand_tree.children(data): forward_reachable(node) ∩ consumers(t) == ∅
 ```
 
 **Three rules, zero special cases:**
 
-1. **Brand tree** (RFC-009 §2.7) answers "who conflicts with whom": prefix matching, O(depth), depth
+1. **Brand Tree** (RFC-009 §2.7) answers "who conflicts with whom": prefix matching, O(depth), depth
    ≤ 3
-2. **Consumer list** (automatically collected during DAG construction) answers "who last consumed
-   the token"
-3. **Forward reachability** answers "can consumers still be reached": structural cut + logical cut
+2. **Consumer List** (automatically collected during DAG construction) answers "who consumed the
+   token last"
+3. **Forward Reachability** answers "can the consumer still be executed": structural cut + logical
+   cut
 
-### Forward Reachability: Walking Backward from Consumers
+### Forward Reachability: Reverse from Consumer
 
 For each consumer C of token T:
 
 ```
-From C, reverse BFS DAG.
-Edge is cut if:
-  1. It's a break (structural cut)
-  2. Path condition ⇒ !loop_cond is proven by SMT (logical cut, RFC-027 pipeline)
+从 C 出发，反向 BFS DAG。
+边被切断，如果：
+  1. 它是 break（结构切断）
+  2. 路径条件 ⇒ !loop_cond 被 SMT 证明为真（逻辑切断，RFC-027 管道）
 
-Reverse-propagate liveness along all uncut edges (including back-edges; back-edges propagate liveness to previous iteration).
-Mark all reachable nodes → unsafe.
+沿所有未切断的边反向传播（包括回边，回边将活性传播到前一轮迭代）。
+标记所有能到达的节点 → unsafe。
 ```
 
 Query: write operation at node W → W ∉ unsafe → safe.
 
-**No need to invent "conservative branching rules." No need for "loop conservative liveness." One
-reverse BFS + two cut rules.**
+**No need to invent "conservative branch rules". No "conservative loop liveness". One reverse BFS +
+two cut rules.**
 
 ### Proof Strategy: Fast Path First, SMT Fallback
 
 ```
-Each write operation needing a token
+每个需要令牌的写操作
   │
-  ├→ Fast path: DAG structural analysis (covers 95%+ of cases)
+  ├→ 快速通道：DAG 结构分析（覆盖 95%+ 场景）
   │     │
-  │     ├→ Brand tree prefix matching → find conflicting tokens (O(depth))
-  │     ├→ Reverse BFS, break cuts back-edges
-  │     └→ No back-edges traversable → directly determine Proved / Disproved
+  │     ├→ 品牌树前缀匹配 → 找出冲突令牌（O(depth)）
+  │     ├→ 反向 BFS，break 切断回边
+  │     └→ 无回边可穿越 → 直接判定 Proved / Disproved
   │
-  └→ Slow path: SMT logical cut (only when fast path encounters traversable back-edges)
+  └→ 慢速通道：SMT 逻辑切断（仅当快速通道遇到可穿越回边时）
         │
-        ├→ Back-edge start has path condition → SMT check path_cond ⇒ !loop_cond
-        │     ├→ Proved → logical cut → demote to fast path and continue
-        │     └→ Disproved / Unproven → back-edge traversable → mark unsafe
+        ├→ 回边起点有路径条件 → SMT 判 path_cond ⇒ !loop_cond
+        │     ├→ Proved → 逻辑切断 → 降级回快速通道继续
+        │     └→ Disproved / Unproven → 回边穿越 → 标记 unsafe
         │
-        └→ Back-edge start has no path condition → back-edge directly traversable
+        └→ 回边起点无路径条件 → 回边直接穿越
 ```
 
-**Fast path covers**: linear code, if/else, loop + break, while without path conditions. **Slow path
-covers**: while loop bodies, when path conditions imply loop will exit. **Not covered**: runtime
-conditions that cannot be statically proven → back-edge traversable → unsafe → compile error (user
-refactors).
+**Fast Path Coverage**: linear code, if/else, loop + break, while without path conditions. **Slow
+Path Coverage**: inside while loops, when there is a path condition suggesting the loop will exit.
+**Not Covered**: runtime conditions cannot be statically proven → cross back edge → unsafe → compile
+error (user refactors).
 
-SMT is not the main force — it's the safety net. Unlike RFC-027 user predicates: user predicates use
-SMT as main force; borrow system predicates use structural analysis as main force, SMT only fills in
-corners structural analysis can't reach.
+SMT is not the main force -- it is a safety net. Different from RFC-027's user predicates: user
+predicates use SMT as the main force; borrow system predicates use structural analysis as the main
+force, SMT only fills the corners that structural analysis cannot reach.
 
 ---
 
@@ -193,63 +193,69 @@ corners structural analysis can't reach.
 ### Linear Code
 
 ```yaoxiang
-data = vec![1, 2, 3]        # Node 1
-view = &data                # Node 2: consumes data, produces ReadToken(#1)
-x = view.total_count        # Node 3: consumes view (= last consumer of #1)
-data.push(4)                # Node 4: needs WriteToken(data)
+data = vec![1, 2, 3]        # 节点 1
+view = &data                # 节点 2：消费 data，生产 ReadToken(#1)
+x = view.total_count        # 节点 3：消费 view（= #1 的最后一个消费者）
+data.push(4)                # 节点 4：需要 WriteToken(data)
 ```
 
-Reverse BFS from `view.total_count` (node 3) → node 3 is #1's last consumer → node 4 > node 3 → node
-4 not in unsafe → ✅
+Reverse BFS starting from `view.total_count` (Node 3) → Node 3 is the last consumer of #1 → Node 4 >
+Node 3 → Node 4 is not in unsafe → ✅
 
 ### if/else: No Special Rules
 
 ```yaoxiang
 view = &data
 if cond {
-    use(view)               # then branch consumes view
+    use(view)               # then 分支消费 view
 } else {
-    do_something_else()     # doesn't touch view
+    do_something_else()     # 不碰 view
 }
-data.push(4)                # view's last consumer is in if → no consumers after if → ✅
+data.push(4)                # view 的最后消费者在 if 内 → if 之后无消费者 → ✅
 ```
 
-if/else is a composite node in the DAG. Internal consumption attributes to this node. No branch
-state merging. No conservative voting. **Whether there are consumers afterward, integer
-comparison.**
+if/else is a composite node of the DAG. Internal consumption is attributed to this node. No merging
+of branch states. No conservative voting. **Whether there is a consumer after, integer comparison.**
+
+> **Clarification (after #264)**: "No merging of branch states" only refers to **borrow liveness**
+> (brand consumer reverse BFS). **Move state** (variable ownership) is another analysis:
+> per-CFG-node forward data flow (#264, NLL/Polonius style), at branch merge **conservative meet**
+> (any branch Moved → merge Moved), literal unreachable branches (`if false`) do not participate.
+> The two are layered: borrow liveness looks at "is there a subsequent consumer", move analysis
+> looks at "may the variable have been transferred".
 
 ### if/else with Return Value Escape
 
 ```yaoxiang
 view = &data
 result = if cond {
-    view                     # view escapes to result
+    view                     # view 逃逸到 result
 } else {
     something_else
 }
-use(result)                  # indirectly consumes view
-data.push(4)                 # view still has consumers (use(result))
-                             # → push in unsafe → ❌ Correct error
+use(result)                  # 间接消费 view
+data.push(4)                 # view 仍有消费者（use(result)）
+                             # → push 在 unsafe → ❌ 正确报错
 ```
 
-view escapes via return value → `use(result)` is view's consumer → reverse walking from `push` can
-reach `use(result)` → unsafe.
+view escapes through return value → `use(result)` is a consumer of view → reverse walk from `push`
+can reach `use(result)` → unsafe.
 
-### Loop: Break Cuts Back-Edge
+### Loop: break Cuts Back Edge
 
 ```yaoxiang
 view = &data
 loop {
     use(view)                # consumer
     if is_last {
-        data.push(4)         # write operation
-        break                # ← structural cut
+        data.push(4)         # 写操作
+        break                # ← 结构切断
     }
 }
 ```
 
-Reverse BFS from `use(view)` → back-edge → forward to `data.push(4)` → encounter `break` → **cut** →
-`data.push(4)` not in unsafe → ✅
+Reverse BFS from `use(view)` → back edge → forward walk to `data.push(4)` → encounter `break` →
+**cut** → `data.push(4)` is not in unsafe → ✅
 
 Without break:
 
@@ -257,8 +263,8 @@ Without break:
 view = &data
 loop {
     use(view)
-    data.push(4)             # no break cut → back-edge traversable → next iteration's use(view) reachable
-                             # → push in unsafe → ❌ Correct error
+    data.push(4)             # 无 break 切断 → 回边可穿越 → 下一轮 use(view) 可达
+                             # → push 在 unsafe → ❌ 正确报错
 }
 ```
 
@@ -271,113 +277,114 @@ while i < n {
     use(view)                # consumer
     i += 1
     if i == n {
-        data.push(4)         # path condition: i == n
+        data.push(4)         # 路径条件：i == n
     }
 }
 ```
 
-Reverse BFS from `use(view)` → back-edge → to `data.push(4)` → check path condition `i == n` → SMT
-query: `i == n ⇒ !(i < n)`? → Proved → **logical cut** → `data.push(4)` not in unsafe → ✅
+Reverse BFS from `use(view)` → back edge → walk to `data.push(4)` → check path condition `i == n` →
+SMT query: `i == n ⇒ !(i < n)`? → Proved → **logical cut** → `data.push(4)` is not in unsafe → ✅
 
 ---
 
-## Essence: Brand ID is Just `'a`
+## Essence: Brand ID is `'a`
 
-Not saying "we don't need `'a`." Saying "`#42` is just `'42`."
+Not "we don't need `'a`". Say "`#42` is `'42`".
 
-| Rust                                    | YaoXiang                         | Equivalence                       |
-| --------------------------------------- | -------------------------------- | --------------------------------- |
-| `'a`                                    | `#42`                            | Compile-time lifetime identifier  |
-| `'a: 'b` outlives constraint            | `#42` is prefix of `#42.field_x` | String prefix = partial order     |
-| NLL liveness propagation (CFG fixpoint) | Reverse BFS (DAG)                | Both are reachability computation |
-| Polonius facts                          | SMT logical cut                  | Both are path condition reasoning |
-| Constraint system fixpoint              | Brand tree prefix matching + BFS | Different encodings, same problem |
+| Rust                                       | YaoXiang                             | Equivalence                              |
+| ------------------------------------------ | ------------------------------------ | ---------------------------------------- |
+| `'a`                                       | `#42`                                | Compile-time lifetime identifier         |
+| `'a: 'b` outlives constraint               | `#42` is the prefix of `#42.field_x` | String prefix comparison = partial order |
+| NLL liveness propagation (CFG fixed point) | Reverse BFS (DAG)                    | Both are reachability computations       |
+| Polonius facts                             | SMT logical cut                      | Both are path condition reasoning        |
+| Constraint system fixed point solving      | Brand tree prefix matching + BFS     | Different encoding, same problem         |
 
-**We haven't invented new analysis. We've just moved `'a` from the type signature layer to the proof
-layer.** Brand ID does exactly what `'a` does — marks borrow identity, tracks derivation
-relationships, determines conflicts. One difference: `'a` is in user-written type signatures; `#42`
-is inside the compiler.
+**We did not invent new analysis. We just moved `'a` from the type signature layer to the proof
+layer.** What brand ID does is exactly the same as `'a` -- marking borrow identity, tracking
+derivation relationships, judging conflicts. There is only one difference: `'a` is in the
+user-written type signature; `#42` is inside the compiler.
 
-This isn't shameful. Curry-Howard says types are propositions, programs are proofs. `'a` isn't part
-of the proposition — it's part of the proof strategy. Rust wrote the proof strategy into the
-proposition signature. We've put it back where it belongs.
+This is not embarrassing. Curry-Howard says types are propositions, programs are proofs. `'a` is not
+part of the proposition -- it is part of the proof strategy. Rust wrote the proof strategy into the
+proposition signature. We put it back where it should be.
 
-### What Language Design Constraints Eliminate
+### What the Language Design Constraints Eliminate
 
-| Source of Complexity                       | Avoided? | Reason                                                                 |
-| ------------------------------------------ | -------- | ---------------------------------------------------------------------- |
-| Variable shadowing                         | ✅       | Language forbids it — a name always refers to the same thing           |
-| for cross-iteration borrowing              | ✅       | Each iteration new binding — iterations naturally isolated             |
-| `'a` lifetime annotations                  | ✅       | Brand path = `#42.field_x`, compiler-derived                           |
-| Named lifetimes + constraint propagation   | ✅       | Brand path prefix comparison replaces explicit constraint sets         |
-| Borrow graph constraint solving (Polonius) | ✅       | Brand tree prefix matching + DAG consumer query                        |
-| Loop body borrow liveness propagation      | ❌       | Same as Rust needs to handle — using reverse BFS + logical cut         |
-| Conditional branch conservatism            | ❌       | Same as Rust — SMT covers provable cases, rest conservatively rejected |
+| Source of Complexity                       | Avoided? | Reason                                                             |
+| ------------------------------------------ | -------- | ------------------------------------------------------------------ |
+| Variable shadowing                         | ✅       | Language forbids -- a name always points to the same thing         |
+| for cross-iteration borrow                 | ✅       | New binding each iteration -- natural isolation between iterations |
+| `'a` lifetime annotation                   | ✅       | Brand path = `#42.field_x`, compiler infers                        |
+| Named lifetime + constraint propagation    | ✅       | Brand path prefix comparison replaces explicit constraint set      |
+| Borrow graph constraint solving (Polonius) | ✅       | Brand tree prefix matching + DAG consumer query                    |
+| Loop body borrow liveness propagation      | ❌       | Same as Rust, needs to be handled -- use reverse BFS + logical cut |
+| Conditional branch conservatism            | ❌       | Same as Rust -- SMT covers provable, rest conservatively rejected  |
 
-### Why DAG Works
+### Why DAG is Feasible
 
 YaoXiang's three language design constraints make DAG analysis feasible:
 
-- **No variable shadowing** — a name always refers to the same thing, no need to track across
-  rebindings
-- **for creates new binding each iteration** — iterations naturally isolated, no cross-iteration
-  borrowing
-- **Structured concurrency** — task boundaries clear, no cross-task liveness propagation
+- **No variable shadowing** -- a name always points to the same thing, no need to track across
+  rebinding
+- **for new binding each iteration** -- natural isolation between iterations, no cross-iteration
+  borrow
+- **Structured concurrency** -- clear task boundaries, no cross-task liveness propagation
 
-These constraints eliminate the main source of CFG fixpoint iteration complexity in Rust. It's not
-that DAG is "more advanced" than CFG — simpler language design allows simpler analysis.
+These constraints eliminate the main sources of complexity in Rust's CFG fixed point iteration. It
+is not that DAG is "more advanced" than CFG -- it is that a simpler language design allows simpler
+analysis.
 
 ---
 
 ## Detailed Design
 
-### System Predicate Checklist
+### System Predicate List
 
-Compiler automatically generates the following propositions and feeds them to RFC-027 proof
+The compiler automatically generates the following propositions and sends them to the RFC-027 proof
 pipeline:
 
-| System Predicate  | Trigger时机          | Proposition Form                              |
-| ----------------- | -------------------- | --------------------------------------------- |
-| `borrow_conflict` | Need WriteToken(v)   | `forall t ∈ conflicting(v): dead_at(t, node)` |
-| `use_after_move`  | Use variable v       | `¬moved(v)`                                   |
-| `use_after_drop`  | Use variable v       | `¬dropped(v)`                                 |
-| `double_drop`     | Drop(v)              | `¬dropped(v)`                                 |
-| `mut_violation`   | Write to immutable v | `is_mut(v)`                                   |
+| System Predicate  | Trigger Timing              | Proposition Form                              |
+| ----------------- | --------------------------- | --------------------------------------------- |
+| `borrow_conflict` | Needs WriteToken(v)         | `forall t ∈ conflicting(v): dead_at(t, node)` |
+| `use_after_move`  | Uses variable v             | `¬moved(v)`                                   |
+| `use_after_drop`  | Uses variable v             | `¬dropped(v)`                                 |
+| `double_drop`     | Drop(v)                     | `¬dropped(v)`                                 |
+| `mut_violation`   | Writes immutable variable v | `is_mut(v)`                                   |
 
-Existing `BorrowChecker`, `MoveChecker`, `DropChecker`, `MutChecker` **become proposition
-generators** — not gone, changed roles. They generate propositions, pipeline verifies propositions.
+The existing `BorrowChecker`, `MoveChecker`, `DropChecker`, `MutChecker` **become proposition
+generators** -- not disappearing, changing identity. They generate propositions, the pipeline
+verifies them.
 
 ### Brand Tree
 
-The brand mechanism from RFC-009 §2.7 is formalized as a brand tree.
+The brand mechanism of RFC-009 §2.7 is formalized as a brand tree.
 
-**Token semantics — freeze first, not copy first**:
+**Token Semantics -- Freeze First, Not Copy First**:
 
-The essential difference between `&T` and `&mut T` isn't "can it be copied", it's "does it allow
-concurrent writes":
-
-```
-ReadToken(T): Grants read-only permission, simultaneously freezes source data T — any WriteToken(T) is
-              not acquirable during this period. Freeze is the primary semantics of ReadToken. Dup
-              (copyable) is a corollary of freeze: because data is already frozen (no mutation possible),
-              multiple read-only views are naturally safe.
-
-WriteToken(T): Grants exclusive read-write permission. Because writes exist, no other tokens (read or
-               write) can coexist. Not implementing Dup (linear type) is a corollary of exclusivity.
-```
-
-**Causal relationship**:
+The essential difference between `&T` and `&mut T` is not "can they be copied", but "is simultaneous
+write allowed":
 
 ```
-ReadToken exists → source data frozen → multiple read-only safe → Dup
+ReadToken(T)： 授予只读权限，同时冻结源数据 T——任何 WriteToken(T) 在此期间
+              不可获取。冻结是 ReadToken 的首要语义。Dup（可复制）是冻结的推论：
+              因为数据已被冻结（无突变可能），多份只读视图天然安全。
+
+WriteToken(T)：授予独占读写权限。因为存在写，任何其他令牌（读或写）都不可共存。
+              不实现 Dup（线性类型）是独占的推论。
+```
+
+**Causal Relationship**:
+
+```
+ReadToken 存在 → 源数据冻结 → 多份只读安全 → Dup
                       ↓
-              WriteToken denied (borrow_conflict system predicate enforced)
+              WriteToken 被拒绝（borrow_conflict 系统谓词强制）
 ```
 
 Not:
 
 ```
-ReadToken has Dup → can have multiple → check conflicts incidentally  ← causal reversal
+ReadToken 有 Dup → 可以有多个 → 顺便检查冲突  ← 因果倒置
 ```
 
 ```
@@ -385,45 +392,45 @@ BrandTree:
   nodes: Map<BrandId, BrandNode>
 
 BrandNode:
-  id: BrandId               # "#42", "#42.field_x"
+  id: BrandId               # "#42"、"#42.field_x"
   kind: ReadToken | WriteToken
   source_var: Operand
-  parent: Option<BrandId>   # parent in derivation relationship
-  children: Set<BrandId>    # derived sub-tokens
-  consumers: Set<NodeId>     # DAG nodes consuming this token
-  ref_count: usize           # safe copy count during ReadToken freeze
+  parent: Option<BrandId>   # 派生关系的父节点
+  children: Set<BrandId>    # 派生子令牌
+  consumers: Set<NodeId>    # 消费该令牌的 DAG 节点
+  ref_count: usize          # ReadToken 冻结期间的安全副本数
 ```
 
-**Conflict determination — enforcement mechanism for freeze**:
+**Conflict Judgment -- Enforcement Mechanism of Freeze Guarantee**:
 
 ```rust
 fn conflicts(a: &BrandId, b: &BrandId) -> bool {
-    // Conflict condition: same source + at least one is write + brand path overlaps
-    // This means:
-    //   1. ReadToken vs ReadToken → no conflict (both read-only, no mutation)
-    //   2. WriteToken vs ReadToken → conflict (write breaks read's freeze guarantee)
-    //   3. WriteToken vs WriteToken → conflict (two writes cannot coexist)
+    // 冲突条件：同源 + 至少一方是写 + 品牌路径重叠
+    // 这意味着：
+    //   1. ReadToken vs ReadToken → 无冲突（都是只读，无突变）
+    //   2. WriteToken vs ReadToken → 冲突（写破坏了读的冻结保证）
+    //   3. WriteToken vs WriteToken → 冲突（两个写不可共存）
     a.source() == b.source()
         && (a.is_write() || b.is_write())
         && (a.is_prefix_of(b) || b.is_prefix_of(a))
 }
 ```
 
-O(depth) string prefix comparison, depth ≤ 3. Constant time.
+O(depth) string prefix comparison, depth ≤ 3. Constant level.
 
 ### Reverse BFS Liveness Analysis
 
 ```
-Algorithm: check_borrow(token, node, dag, brand_tree)
+算法：check_borrow(token, node, dag, brand_tree)
 
-Input:
-  token: WriteToken to check
-  node:  DAG node where write operation occurs
+输入：
+  token: 需要检查的 WriteToken
+  node:  写操作所在的 DAG 节点
 
-Output: Proved | Disproved
+输出：Proved | Disproved
 
-Algorithm:
-  # Fast path: reverse BFS
+算法：
+  # 快速通道：反向 BFS
   unsafe = empty_set
   queue = brand_tree.consumers(token)
 
@@ -432,27 +439,27 @@ Algorithm:
     unsafe.add(cur)
 
     for each pred in dag.predecessors(cur):
-      # Structural cut: break doesn't traverse
-      if pred is break edge:
+      # 结构切断：break 不穿越
+      if pred 是 break 边:
         continue
 
-      # Back-edge → check if SMT fallback needed
-      if pred is back-edge:
-        path_cond = path condition at pred
-        loop_cond = loop condition
-        # First check if structurally cuttable (corresponding break already cut path → won't reach here)
-        # Then check path condition
-        if path_cond not empty:
-          result = smt_fallback(path_cond, loop_cond)   # ← slow path
+      # 回边 → 检查是否需要 SMT fallback
+      if pred 是回边:
+        path_cond = pred 处路径条件
+        loop_cond = 循环条件
+        # 先看结构上能否切断（对应的 break 已切断路径 → 不会走到这）
+        # 再看路径条件
+        if path_cond 非空:
+          result = smt_fallback(path_cond, loop_cond)   # ← 慢速通道
           if result == Proved:
-            continue                    # logical cut
-        # No path condition or SMT can't prove → traverse back-edge
+            continue                    # 逻辑切断
+        # 无路径条件 或 SMT 证不出来 → 穿越回边
         # fall through
 
       if pred ∉ unsafe:
         queue.push(pred)
 
-  # Determination
+  # 判定
   if node ∈ unsafe:
     return Disproved
   else:
@@ -460,295 +467,289 @@ Algorithm:
 
 
 smt_fallback(path_cond, loop_cond):
-  # Called only when back-edge + path condition exists
-  # Uses RFC-027 proof pipeline, shares same SMT solver and budget
+  # 仅在回边 + 有路径条件时调用
+  # 使用 RFC-027 证明管道，共享同一 SMT 求解器、同一预算
   return smt.prove(path_cond ⇒ !loop_cond)
-  # Proved → logical cut
-  # Disproved / Unproven → don't cut, back-edge traversable
+  # Proved → 逻辑切断
+  # Disproved / Unproven → 不切断，回边穿越
 ```
 
-O(N), where SMT call count = back-edge count × proportion of back-edges with path conditions. In
-actual code, SMT calls are extremely rare — only triggered in while loop bodies with refined type
-variable path conditions.
+O(N), where the number of SMT calls = back edge count × proportion of back edges with path
+conditions. SMT calls are very rare in actual code -- only triggered inside `while` loops with path
+conditions on refined type variables.
 
 ### Path Condition Collection
 
-Provided by existing RFC-027 §3.2-3.3 mechanisms:
+Provided by existing mechanisms in RFC-027 §3.2-3.3:
 
-- **if guard**: `if y > 0` → push `y > 0` to true branch
-- **match pattern**: `if let Some(v) = opt` → push `opt == Some(v)` in branch
-- **Assignment**: `i += 1`, compiler maintains variable value domain info
-- **while cond**: push `cond == true` in loop body
+- **if guard**: `if y > 0` → true branch pushes `y > 0`
+- **match pattern**: `if let Some(v) = opt` → branch pushes `opt == Some(v)`
+- **Assignment**: `i += 1`, compiler maintains variable value range information
+- **while cond**: inside loop body pushes `cond == true`
 
-Each DAG node carries a path condition set. When reverse BFS encounters a back-edge, it takes the
-path condition at the back-edge start, and SMT determines whether it excludes the next iteration's
-entry condition.
+Each DAG node carries a path condition set. When reverse BFS encounters a back edge, take the path
+condition at the back edge's start, SMT judges whether to exclude the next loop entry condition.
 
 ### Interface with RFC-027
 
-Borrow system predicates and user predicates share the same proof pipeline — difference lies in
-**primary proof strategy**:
+Borrow system predicates and user predicates share the same proof pipeline -- the difference is in
+**main proof strategy**:
 
-| Query Type      | Proposition Source      | Primary Strategy                        | Fallback                  |
-| --------------- | ----------------------- | --------------------------------------- | ------------------------- |
-| Type equality   | Type checker            | Structural equivalence                  | —                         |
-| User predicate  | Programmer annotation   | SMT                                     | Programmer proof function |
-| Borrow conflict | Compiler auto-generated | **DAG structural analysis (fast path)** | SMT logical cut           |
+| Query Type      | Proposition Source         | Main Strategy                           | Fallback                  |
+| --------------- | -------------------------- | --------------------------------------- | ------------------------- |
+| Type equality   | Type checker               | Structural equivalence                  | —                         |
+| User predicate  | Programmer type annotation | SMT                                     | Programmer proof function |
+| Borrow conflict | Compiler auto-generated    | **DAG structural analysis (fast path)** | SMT logical cut           |
 
-Role of SMT solver in borrow checking: **not primary, safety net.** Only called when while back-edge
-needs logical cut. The vast majority of borrow checking completes in fast path — O(N) reverse BFS,
-zero SMT cost.
+SMT solver's role in borrow checking: **not the main force, is the safety net.** Only called when
+while back edge requires logical cut. The vast majority of borrow checking is done on the fast path
+-- O(N) reverse BFS, zero SMT overhead.
 
 ### Relationship with Existing Code
 
-| Existing Component           | Treatment                                                                     |
-| ---------------------------- | ----------------------------------------------------------------------------- |
-| `BorrowChecker`              | Becomes `BorrowPredicateEmitter` — generates Hoare propositions for borrowing |
-| `MoveChecker`                | Becomes `MovePredicateEmitter` — generates `¬moved(v)` propositions           |
-| `DropChecker`                | Same — generates Drop-related propositions                                    |
-| `MutChecker`                 | Same — generates `is_mut(v)` propositions                                     |
-| `ControlFlowAnalyzer`        | No longer needed — pipeline handles uniformly                                 |
-| `liveness_analysis`          | Kept — Drop insertion still needs variable liveness info                      |
-| `ir_gen.rs` Release hardcode | Deleted — Release positions driven by DAG consumer analysis                   |
+| Existing Component             | Handling                                                                       |
+| ------------------------------ | ------------------------------------------------------------------------------ |
+| `BorrowChecker`                | Becomes `BorrowPredicateEmitter` -- generates Hoare propositions for borrowing |
+| `MoveChecker`                  | Becomes `MovePredicateEmitter` -- generates `¬moved(v)` proposition            |
+| `DropChecker`                  | Same as above -- generates Drop-related propositions                           |
+| `MutChecker`                   | Same as above -- generates `is_mut(v)` proposition                             |
+| `ControlFlowAnalyzer`          | No longer needed -- pipeline handles uniformly                                 |
+| `liveness_analysis`            | Retained -- Drop insertion still needs variable liveness information           |
+| `ir_gen.rs` Release hardcoding | Removed -- Release position is driven by DAG consumer analysis                 |
 
 ### NLL and Iteration Boundaries
 
 **Token death time = last use point (NLL), not end of lexical scope.**
 
-This is the natural corollary of consumer analysis: the consumer's position defines the token's last
-use. `use(v)` is `v`'s consumer → `v` dies immediately after `use(v)`. No additional `{}` or
-`drop()` needed to end token lifetime early.
+This is a natural inference of consumer analysis: the consumer's position defines the token's last
+use. `use(v)` is a consumer of `v` → `v` dies immediately after `use(v)`. No need for additional
+`{}` or `drop()` to end the token's life early.
 
-**Loop iteration boundary is the death line for token copies.** Three rules:
+**Loop iteration boundary is the death line of token copies.** Three rules:
 
 ```
-Rule 1: Variables declared in loops auto-die at end of each iteration.
-        Each iteration of for is a new binding (language guarantee), same for loop.
+规则 1：循环内声明的变量在每次迭代结束时自动死亡。
+        for 的每次迭代是新绑定（语言设计保证），loop 同理。
 
-Rule 2: Brand tree ref_count at loop head only counts copies created outside loop.
-        New copies produced by Dup inside loop, ref_count resets at iteration boundary.
+规则 2：品牌树 ref_count 在循环头只计入循环外创建的副本。
+        循环内 Dup 产生的新副本，ref_count 在迭代边界清零。
 
-Rule 3: When reverse BFS traverses back-edge, it doesn't carry current iteration's liveness info.
-        Only carries ref_count at loop head (i.e., copies from outside loop).
+规则 3：反向 BFS 穿越回边时，不携带当前迭代的活性信息。
+        只携带循环头处的 ref_count（即：循环外的副本）。
 ```
 
 Example:
 
 ```yaoxiang
-view = &data                          # Loop head: ref_count = 1, consumer = use(view)
+view = &data                          # 循环头：ref_count = 1，consumer = use(view)
 loop {
-    v2: &Point = view                 # Dup inside loop → ref_count = 2
-    use(v2)                           # consumer: last use of v2 → v2 dies → ref_count = 1
-    data.push(4)                      # ✅ Safe! v2 is dead, only view remains (ref_count = 1, not write conflict)
-    # Iteration boundary: Rule 3 — don't carry v2 to next round. v2 recreated by new binding at next iteration start.
+    v2: &Point = view                 # 循环内 Dup → ref_count = 2
+    use(v2)                           # consumer：v2 的最后使用 → v2 死亡 → ref_count = 1
+    data.push(4)                      # ✅ 安全！v2 已死，只剩 view（ref_count = 1，非写冲突）
+    # 迭代边界：规则 3——不携带 v2 进入下一轮。下一轮迭代开始时 v2 被新绑定重新创建。
 }
 ```
 
-This design doesn't need additional "loop conservative liveness" rules. Reverse BFS starts from
-consumers, consumers are in loop body → liveness restricted to current iteration → back-edge doesn't
-traverse. Consistent with RFC-009a §Use Case Analysis loop examples.
+This design does not need additional "conservative loop liveness" rules. Reverse BFS starts from the
+consumer, the consumer is inside the loop body → liveness is restricted to the current iteration →
+back edge does not cross. Consistent with the loop example in RFC-009a §Use Case Analysis.
 
 ### `?` Error Propagation and Scope-Driven Release
 
-`?` is early return — one more exit path beyond the scope's normal exit. Tokens must be released on
-this path, wrong release order is UB.
+`?` is an early return -- an extra exit path beyond the scope's normal exit. Tokens must be released
+on this path, and incorrect release order is UB.
 
 **Release instructions are generated by scope analysis, not hardcoded after Call.**
 
-Compiler maintains exit point list for each scope:
+The compiler maintains a list of exit points for each scope:
 
-- `}` (scope ends normally)
+- `}` (scope normal end)
 - `?` (error propagation, early return)
 - Explicit `return`
 
-At each exit point, insert Release instructions for all active tokens in that scope, in reverse
-declaration order (LIFO). Brand tree parent-child relationships automatically handle cascading
+At each exit point, insert Release instructions for all active tokens in the scope in declaration
+reverse order (LIFO). The parent-child relationship of the brand tree automatically handles cascade
 release of derived tokens:
 
 ```yaoxiang
 Point.get_x: (self: &Point) -> (&Float, &Point) = {
-    return (&self.x, self)    # Returns sub-token &Float + parent token &Point
+    return (&self.x, self)    # 返回子令牌 &Float + 父令牌 &Point
 }
 
 fn use_case(p: Point) -> Result<(), Error> = {
-    (x_ref, p_ref) = p.get_x()?   # If ? propagates:
-    # Brand tree knows x_ref is derived from p_ref (#42.field_x is prefix of #42)
-    # Release order: x_ref (child) → p_ref (parent) → LIFO automatically satisfied
-    p.modify()                     # WriteToken — all ReadTokens released
+    (x_ref, p_ref) = p.get_x()?   # 如果 ? 传播：
+    # 品牌树知道 x_ref 是 p_ref 的派生（#42.field_x 是 #42 的前缀）
+    # 释放顺序：x_ref（子）→ p_ref（父）→ LIFO 自动满足
+    p.modify()                     # WriteToken——所有 ReadToken 已释放
     Ok(())
 }
 ```
 
-Implementation location: kept in `ir_gen.rs`, changed to scope-driven — no new compiler pass
+Implementation location: retained in `ir_gen.rs`, changed to scope-driven -- no new compiler pass
 introduced.
 
-| Operation                  | Complexity | Trigger Frequency                           |
-| -------------------------- | ---------- | ------------------------------------------- |
-| Brand tree conflict check  | O(1)       | Every token acquisition                     |
-| DAG consumer query         | O(1)       | Every token acquisition                     |
-| Reverse BFS (fast path)    | O(N)       | Every token acquisition, N = nodes in block |
-| SMT logical cut (fallback) | ~1ms       | **Extremely rare** — only while + path cond |
+| Operation                    | Complexity | Trigger Frequency                                         |
+| ---------------------------- | ---------- | --------------------------------------------------------- |
+| Brand tree conflict judgment | O(1)       | Each time a token is needed                               |
+| DAG consumer query           | O(1)       | Each time a token is needed                               |
+| Reverse BFS (fast path)      | O(N)       | Each time a token is needed, N = number of nodes in block |
+| SMT logical cut (fallback)   | ~1ms       | **Very rare** -- only while + path conditions             |
 
-**SMT fallback trigger conditions are extremely stringent**: must simultaneously satisfy (1) while
-loop (2) write operation in loop body (3) path condition after write operation that can determine
-loop termination (4) compiler needs this condition to cut back-edge. Actual code proportion is far
-below 1%. All other borrow checking completes in fast path.
+**The trigger conditions for SMT fallback are extremely strict**: simultaneously satisfy (1) while
+loop (2) write operation inside the loop body (3) path condition after the write operation that can
+determine loop termination (4) compiler needs to rely on this condition to cut the back edge. The
+proportion in actual code is far less than 1%. The rest of the borrow checking is all done on the
+fast path.
 
-Relationship with RFC-027 user predicates: user predicates use SMT as primary, borrow system
-predicates use structural analysis as primary. Both share same SMT solver and budget ceiling
-(RFC-027 §8), but borrow system predicates barely consume SMT budget.
+Relationship with RFC-027 user predicates: user predicates use SMT as the main force, borrow system
+predicates use structural analysis as the main force. The two share the same SMT solver and budget
+limit (RFC-027 §8), but borrow system predicates hardly consume SMT budget.
 
-Linear code → no back-edges → Tier 1 O(N) instant. Loops + path conditions → SMT call, linear
-arithmetic millisecond-level (RFC-027 budget 100ms). One BFS result can be cached for multiple
-queries of the same token.
+Linear code → no back edge → tier 1 O(N) instant. Loop + path condition → SMT call, linear
+arithmetic in milliseconds (RFC-027 budget 100ms). One BFS result can be cached for multiple queries
+on the same token.
 
 ### Error Message Design
 
-**Core principle: Error messages only contain symbols the user wrote.**
+**Core principle: error messages only contain symbols the user has written.**
 
-Rust and borrow-related errors fall into two categories:
+Rust's borrow-related errors are divided into two categories:
 
-**Variable-level errors**: E0597 (doesn't live long enough), E0502 (mutable and immutable borrow in
-scope), E0499 (cannot borrow as mutable more than once). Rust is already the benchmark — variable
-name + line number, no `'a` shown. YaoXiang precision matches. All info in brand tree: token
-creation point, consumer position, request point.
+**Variable-level errors**: E0597 (doesn't live long enough), E0502 (mutable+immutable simultaneous
+borrow), E0499 (multiple mutable borrows). Rust is already the benchmark -- variable name + line
+number, no `'a` appears. YaoXiang has equal precision. All information is in the brand tree: token
+creation point, consumer location, request point.
 
 **Signature-level errors**: E0623 (lifetime mismatch), E0106 (missing lifetime specifier), E0477
-(required lifetime not satisfied). Centered around `'a`. YaoXiang **doesn't have these errors** — no
-`'a` in signatures. Not "can't report them" — things users didn't write don't need reporting.
+(required lifetime not satisfied). Built around `'a`. YaoXiang **does not have such errors** -- no
+`'a` in signatures. Not "cannot report", but things the user did not write are not reported.
 
-Function-internal conflict example:
+Intra-function conflict example:
 
 ```
-Error: `data` is frozen, cannot acquire mutable permission
+错误：`data` 被冻结，不能获取可变权限
  --> src/main.yx:5:9
 2 |     view = &data
-  |            ----- `data` frozen (read-only token created here)
+  |            ----- `data` 被冻结（只读令牌创建在此处）
 4 |         use(view)
-  |             ---- `view` still in use here, freeze not lifted
+  |             ---- `view` 在此处仍在使用，冻结未解除
 5 |         data.push(4)
-  |         ^^^^ mutable permission needed here
+  |         ^^^^ 此处需要可变权限
 ```
 
-(Matches Rust E0499 precision — variable name + line number, no brand ID shown.)
+(Equal to Rust E0499 precision -- variable name + line number, no brand ID appears.)
 
-Cross-function escape example:
+Inter-function escape example:
 
 ```
-Error: one of `num`'s data sources (line 4) is `default_str` (line 3),
-but `default_str` is invalidated at line 6 while `num` is still being used at line 5.
+错误：`num`（第 4 行）持有的数据来源之一是 `default_str`（第 3 行），
+但 `default_str` 在第 6 行失效，`num` 在第 5 行仍在被使用。
 
-Consider: moving `default_str` declaration to caller, or using `ref default_str` for shared holding.
+考虑：将 `default_str` 的声明提前到调用方，或使用 `ref default_str` 共享持有。
 ```
 
-(Matches Rust E0597 precision. Brand summary knows `num` has two source paths — already in compiler,
-error wording can use them.)
+(Equal to Rust E0597 precision. The brand summary knows that `num` has two source paths -- already
+in the compiler, error wording is available.)
 
 ---
 
-## RFC-009 Body Amendments
+## RFC-009 Main Text Correction
 
 RFC-009 §"Token Conflict Detection: Flow-Sensitive Liveness Analysis" has been updated:
 
-1. Removed "unneeded things:... NLL" — not because conclusion is wrong, but because reasoning is
-   wrong ("tokens are values, linear tracking is sufficient")
-2. Tier 1/Tier 2 transition plan kept, complete plan points to this RFC
-3. Clarified: Brand ID (`#42`) is just `'a` — same information, different encoding. Not invented new
-   analysis — moved lifetimes from type layer to proof layer
+1. Delete "things not needed: ... NLL" -- not because the conclusion is wrong, but because the
+   reason is wrong ("tokens are values, linear tracking is enough")
+2. Tier 1/tier 2 transition plan retained, complete plan points to this RFC
+3. Clarify: brand ID (`#42`) is `'a` -- the information is exactly the same, the encoding is
+   different. Not inventing a new analysis -- moving lifetimes from the type layer to the proof
+   layer
 
 ---
 
-## Tradeoffs
+## Trade-offs
 
 ### Advantages
 
-1. **No lifetimes in type signatures**: `#42` is just `'42` — same information, encoded in brand
-   tree, not exposed in type signatures. This point is unfalsifiable: count how many `'a` parameters
-   a generic type with 3 reference parameters needs in Rust, versus YaoXiang. Answer: 3 vs 0.
-
-2. **Conceptual unification**: Borrow checking and user predicates share the same proof pipeline —
+1. **Type signatures do not contain lifetimes**: `#42` is `'42` -- the same information, encoded in
+   the brand tree, not exposed in the type signature. This point is irrefutable: count how many `'a`
+   parameters a Rust generic type with 3 reference parameters needs, and how many YaoXiang needs.
+   The answer is 3 vs 0.
+2. **Conceptual unification**: borrow checking and user predicates share the same proof pipeline --
    `{P} op {Q}`, pipeline verifies P. Curry-Howard consistent.
-
-3. **Zero new analysis framework**: No new analysis framework introduced. Users don't perceive the
-   existence of a "borrow checker" — just as users don't perceive the implementation details of the
-   "type checker."
-
-4. **Error messages only contain symbols user wrote**: One entire dimension of error categories
-   eliminated (E0623, E0106, E0477 — all centered around `'a`). Variable-level errors match Rust
-   precision.
-
-5. **Algorithm not conservative**: Reverse BFS + break cut + SMT logical cut. No "loop conservative
-   liveness" needed. No "branch conservative merge" needed.
+3. **Zero new analysis framework**: no new analysis framework introduced. Users do not perceive the
+   existence of the "borrow checker" -- just as users do not perceive the implementation details of
+   the "type checker".
+4. **Error messages only contain symbols the user wrote**: one entire dimension of error categories
+   is missing (E0623, E0106, E0477 -- all around `'a`). Variable-level errors have the same
+   precision as Rust.
+5. **Algorithm is not conservative**: reverse BFS + break cut + SMT logical cut. No need for
+   "conservative liveness inside loops". No need for "conservative branch merge".
 
 ### Disadvantages
 
-1. **Not a new invention**: Brand ID does exactly what `'a` does — compiler-internal constraint
-   solving complexity doesn't disappear, only encoding changes from "variable name + constraint set"
-   to "brand path + prefix matching." Difference to end users is only that signatures don't write
-   `'a`.
-
-2. **Brand new implementation**: Brand tree only exists as concept in code, needs implementation
-   from scratch. BorrowChecker, ControlFlowAnalyzer replaced.
-
-3. **SMT dependency**: Logical cut relies on Z3 (already introduced in RFC-027, no new
-   dependencies). But borrow checking barely triggers — only in while + path conditions.
-
-4. **Extremely rare patterns need refactoring**: Cross-branch borrowing that compiler can't
-   auto-prove requires user code refactoring. Unlike Rust `'a` fallback: Rust has `'a` as the pen
-   (annotate and pass); YaoXiang's fallback (proof functions) is not MVP.
+1. **Not a new invention**: what brand ID does is exactly the same as `'a` -- the constraint solving
+   complexity inside the compiler has not disappeared, only the encoding method has changed from
+   "variable name + constraint set" to "brand path + prefix matching". The difference for end users
+   is only that `'a` is not written in signatures.
+2. **Brand new implementation**: the brand tree only exists as a concept in the code, needs to be
+   implemented from scratch. BorrowChecker and ControlFlowAnalyzer are replaced.
+3. **SMT dependency**: logical cut depends on Z3 (already introduced in RFC-027, no new dependency).
+   But borrow checking is rarely triggered -- only called when while + path conditions.
+4. **Very few patterns require refactoring**: cross-branch borrows that the compiler's automatic
+   proof cannot cover require users to refactor code. Different from Rust `'a` fallback: Rust has
+   `'a` as a pen (annotate and pass); YaoXiang's fallback (proof functions) is not MVP.
 
 ---
 
-## Alternatives
+## Alternative Plans
 
-| Alternative                      | Why Not Chosen                                                                                                                         |
+| Plan                             | Why not chosen                                                                                                                         |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Implement full Rust NLL          | YaoXiang's design constraints (no shadowing, for new bindings) already eliminate NLL's main complexity source, CFG fixpoint not needed |
-| Keep current (hardcoded Release) | Insufficient — users must manually manage token scope                                                                                  |
-| Analysis only in spawn blocks    | Insufficient — non-spawn code token usage is the majority                                                                              |
-| GC instead of borrow checking    | Violates language design principle — YaoXiang has no GC                                                                                |
+| Implement complete Rust NLL      | YaoXiang's design constraints (no shadowing, for new binding) have eliminated main NLL complexity sources, no need for CFG fixed point |
+| Keep current (hardcoded Release) | Not enough -- users must manually manage token scopes                                                                                  |
+| Only analyze in spawn blocks     | Not enough -- token usage in non-spawn code is the majority                                                                            |
+| GC replaces borrow checking      | Violates language design principles -- YaoXiang has no GC                                                                              |
 
 ---
 
 ## Implementation Phases
 
-| Phase   | Content                                                           | Dependencies              |
-| ------- | ----------------------------------------------------------------- | ------------------------- |
-| Phase 1 | Brand tree data structure implementation                          | —                         |
-| Phase 2 | System predicate generators (Borrow/Move/Drop/Mut → propositions) | Phase 1                   |
-| Phase 3 | Reverse BFS liveness analysis + pipeline integration (Tier 1)     | Phase 2                   |
-| Phase 4 | Path condition collection + SMT logical cut (Tier 2)              | Phase 3 + RFC-027 Phase 2 |
-| Phase 5 | Release instructions changed to DAG consumer-driven               | Phase 3                   |
-| Phase 6 | Delete ControlFlowAnalyzer, refactor BorrowChecker                | Phase 4                   |
+| Phase   | Content                                                          | Dependency                |
+| ------- | ---------------------------------------------------------------- | ------------------------- |
+| Phase 1 | Brand tree data structure implementation                         | —                         |
+| Phase 2 | System predicate generator (Borrow/Move/Drop/Mut → propositions) | Phase 1                   |
+| Phase 3 | Reverse BFS liveness analysis + pipeline integration (tier 1)    | Phase 2                   |
+| Phase 4 | Path condition collection + SMT logical cut (tier 2)             | Phase 3 + RFC-027 Phase 2 |
+| Phase 5 | Release instructions changed to DAG consumer-driven              | Phase 3                   |
+| Phase 6 | Delete ControlFlowAnalyzer, refactor BorrowChecker               | Phase 4                   |
 
 ---
 
 ## Open Questions
 
-- [x] **Brand tree `ref_count` semantics across iterations during loop unrolling** — follow NLL:
-      token dies after last use. Copies bound inside loop die at iteration boundary, reverse BFS
-      doesn't carry cross-iteration liveness. See §NLL and Iteration Boundaries.
-- [x] **Token release order on `?` error propagation paths** — Release driven by scope analysis
-      (kept in ir_gen.rs). Each scope exit point (`}`, `?`, explicit return) releases active tokens
-      in LIFO order. Brand tree parent-child relationships automatically handle cascading release.
-      See §`?` Error Propagation and Scope-Driven Release.
-- [ ] Proof function syntax (far-term, not MVP — doesn't block any Phase)
+- [x] **Brand tree's `ref_count` cross-iteration semantics during loop unrolling** -- take NLL: the
+      token dies after the last use. Copies bound inside the loop die at the iteration boundary,
+      reverse BFS does not carry cross-iteration liveness. See §NLL and Iteration Boundaries.
+- [x] **Token release order on `?` error propagation path** -- Release is driven by scope analysis
+      (retained in ir_gen.rs). Each scope exit point (`}`, `?`, explicit return) releases active
+      tokens in LIFO. The brand tree parent-child relationship automatically handles cascade
+      release. See §`?` Error Propagation and Scope-Driven Release.
+- [ ] Proof function syntax (long-term, not MVP -- does not block any Phase)
 
 ---
 
 ## References
 
-- [RFC-009: Ownership Model Design](../accepted/009-ownership-model.md) — Parent RFC
-- [RFC-027: Compile-Time Predicates and Unified Static Verification](../accepted/027-compile-time-evaluation-types.md)
-  — Proof pipeline
-- [RFC-010: Unified Type Syntax](../accepted/010-unified-type-syntax.md) — `{}` semantics
-- [RFC-024: Concurrency Model Based on spawn Blocks](../accepted/024-concurrency-model.md) — spawn
-  DAG
+- [RFC-009: 所有权模型设计](../accepted/009-ownership-model.md) — Parent RFC
+- [RFC-027: 编译期谓词与统一静态验证](../accepted/027-compile-time-evaluation-types.md) — Proof
+  pipeline
+- [RFC-010: 统一类型语法](../accepted/010-unified-type-syntax.md) — `{}` semantics
+- [RFC-024: 基于 spawn 块的并发模型](../accepted/024-concurrency-model.md) — spawn DAG
 
 ---
 
-## Lifecycle and Disposition
+## Lifecycle and Destination
 
-| Status       | Location                    | Description               |
-| ------------ | --------------------------- | ------------------------- |
-| **Accepted** | `docs/design/rfc/accepted/` | Becomes formal design doc |
+| Status       | Location                    | Description                      |
+| ------------ | --------------------------- | -------------------------------- |
+| **Accepted** | `docs/design/rfc/accepted/` | Becomes official design document |
