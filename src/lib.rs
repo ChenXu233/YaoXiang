@@ -38,7 +38,7 @@ pub use thiserror::Error;
 
 // Backend re-exports
 pub use backends::{Executor, DebuggableExecutor, ExecutorError, ExecutorResult, ExecutorConfig};
-pub use backends::common::{RuntimeValue, Opcode, Heap, Handle};
+pub use backends::common::{RuntimeValue, Heap, Handle};
 pub use backends::interpreter::Interpreter;
 #[cfg(not(target_arch = "wasm32"))]
 pub use repl::Repl;
@@ -581,33 +581,31 @@ fn dump_instructions(
     for (instr_idx, instr) in instructions.iter().enumerate() {
         // Try to decode the opcode
         let ops_str = format_operands(&instr.operands);
-        match Opcode::try_from(instr.opcode) {
-            Ok(opcode) => {
-                tracing::info!(
-                    "{}",
-                    t_cur(
-                        MSG::BytecodeInstrIndex,
-                        Some(&[
-                            &format!("{:04}", instr_idx),
-                            &format!("{:<14}", opcode),
-                            &ops_str
-                        ])
-                    )
-                );
-            }
-            Err(_) => {
-                tracing::info!(
-                    "{}",
-                    t_cur(
-                        MSG::BytecodeUnknownOpcode,
-                        Some(&[
-                            &format!("{:04}", instr_idx),
-                            &format!("{:02x}", instr.opcode),
-                            &ops_str
-                        ])
-                    )
-                );
-            }
+        let name = crate::backends::common::opcode_name(instr.opcode);
+        if name != "Unknown" {
+            tracing::info!(
+                "{}",
+                t_cur(
+                    MSG::BytecodeInstrIndex,
+                    Some(&[
+                        &format!("{:04}", instr_idx),
+                        &format!("{:<14}", name),
+                        &ops_str
+                    ])
+                )
+            );
+        } else {
+            tracing::info!(
+                "{}",
+                t_cur(
+                    MSG::BytecodeUnknownOpcode,
+                    Some(&[
+                        &format!("{:04}", instr_idx),
+                        &format!("{:02x}", instr.opcode),
+                        &ops_str
+                    ])
+                )
+            );
         }
     }
 }

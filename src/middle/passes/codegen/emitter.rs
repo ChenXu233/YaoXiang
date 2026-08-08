@@ -2,7 +2,7 @@
 //!
 //! 负责字节码指令发射和跳转偏移回填。
 
-use crate::backends::common::Opcode;
+use crate::backends::common::opcode;
 use crate::middle::passes::codegen::buffer::BytecodeBuffer;
 use crate::middle::passes::codegen::BytecodeInstruction;
 use std::collections::HashMap;
@@ -15,7 +15,7 @@ struct PendingJump {
     /// 跳转目标的 IR 索引
     target_ir_idx: usize,
     /// 操作码类型（用于确定回填位置）
-    opcode: Opcode,
+    opcode: u8,
 }
 
 /// 字节码发射器
@@ -66,7 +66,7 @@ impl Emitter {
         instr: BytecodeInstruction,
         ir_index: usize,
         target_ir_idx: usize,
-        opcode: Opcode,
+        opcode: u8,
     ) {
         let bytecode_idx = self.buffer.bytecode().len();
 
@@ -103,13 +103,13 @@ impl Emitter {
                 let bytes = offset.to_le_bytes();
 
                 match pending.opcode {
-                    Opcode::Jmp => {
+                    opcode::JMP => {
                         bytecode[pending.instr_idx + 1] = bytes[0];
                         bytecode[pending.instr_idx + 2] = bytes[1];
                         bytecode[pending.instr_idx + 3] = bytes[2];
                         bytecode[pending.instr_idx + 4] = bytes[3];
                     }
-                    Opcode::JmpIf | Opcode::JmpIfNot => {
+                    opcode::JMP_IF | opcode::JMP_IF_NOT => {
                         bytecode[pending.instr_idx + 2] = bytes[0];
                         bytecode[pending.instr_idx + 3] = bytes[1];
                         bytecode[pending.instr_idx + 4] = bytes[2];

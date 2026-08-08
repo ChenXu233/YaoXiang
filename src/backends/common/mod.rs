@@ -11,7 +11,7 @@ pub mod opcode;
 pub mod value;
 
 // Re-exports for convenience
-pub use opcode::Opcode;
+pub use opcode::opcode_name;
 pub use value::RuntimeValue;
 pub use heap::{Handle, Heap, HeapValue};
 

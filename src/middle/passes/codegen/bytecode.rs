@@ -5,7 +5,6 @@
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::ConstValue;
 use crate::util::span::{DebugSpan, FileId, Position, SourceMap, Span};
-use crate::backends::common::Opcode;
 use std::collections::HashMap;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 
@@ -210,13 +209,10 @@ pub struct BytecodeInstruction {
 
 impl BytecodeInstruction {
     pub fn new(
-        opcode: Opcode,
+        opcode: u8,
         operands: Vec<u8>,
     ) -> Self {
-        Self {
-            opcode: opcode as u8,
-            operands,
-        }
+        Self { opcode, operands }
     }
 
     /// 编码为字节序列

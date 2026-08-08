@@ -5,7 +5,7 @@
 use yaoxiang::middle::codegen::CodegenContext;
 use yaoxiang::middle::ModuleIR;
 use yaoxiang::middle::bytecode::{BytecodeInstr, Reg, Label};
-use yaoxiang::backends::common::Opcode;
+use yaoxiang::backends::common::opcode;
 
 #[test]
 fn test_codegen_context_creation() {
@@ -39,16 +39,16 @@ fn test_bytecode_instruction_sizes() {
 fn test_bytecode_instruction_opcodes() {
     // Test that instructions have correct opcodes
     let nop = BytecodeInstr::Nop;
-    assert_eq!(nop.opcode(), Opcode::Nop);
+    assert_eq!(nop.opcode(), opcode::NOP);
 
     let ret = BytecodeInstr::Return;
-    assert_eq!(ret.opcode(), Opcode::Return);
+    assert_eq!(ret.opcode(), opcode::RETURN);
 
     let mov = BytecodeInstr::Mov {
         dst: Reg(0),
         src: Reg(1),
     };
-    assert_eq!(mov.opcode(), Opcode::Mov);
+    assert_eq!(mov.opcode(), opcode::MOV);
 }
 
 #[test]
