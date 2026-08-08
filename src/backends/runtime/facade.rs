@@ -363,6 +363,10 @@ struct StandardRuntime {
     msg_rx: Receiver<WorkerMessage>,
     threads: Vec<JoinHandle<()>>,
     workers: usize,
+    /// 在飞任务计数，跨 `drive_until` 调用持久。
+    /// 否则每轮 drive 返回后其余在飞任务的完成消息遗留 channel，
+    /// 下一轮 ready 空 + in_flight=0 会误判死锁（#278 实测暴露）。
+    in_flight: usize,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -380,6 +384,7 @@ impl StandardRuntime {
             msg_rx,
             threads,
             workers,
+            in_flight: 0,
         })
     }
 
@@ -444,8 +449,6 @@ impl StandardRuntime {
         &mut self,
         target: Option<TaskId>,
     ) -> Result<(), RuntimeError> {
-        let mut in_flight = 0usize;
-
         loop {
             if let Some(t) = target {
                 if self.graph.is_complete(t) {
@@ -455,7 +458,7 @@ impl StandardRuntime {
             }
 
             // Dispatch ready tasks to the thread pool.
-            while in_flight < self.workers {
+            while self.in_flight < self.workers {
                 let Some(next) = (match target {
                     Some(t) => self
                         .graph
@@ -508,10 +511,10 @@ impl StandardRuntime {
                         spawn_handle,
                     })
                     .map_err(|_| RuntimeError::DeadlockOrCycle(next))?;
-                in_flight += 1;
+                self.in_flight += 1;
             }
 
-            if in_flight == 0 {
+            if self.in_flight == 0 {
                 if let Some(t) = target {
                     if !self.graph.is_complete(t) {
                         return Err(RuntimeError::DeadlockOrCycle(t));
@@ -533,7 +536,7 @@ impl StandardRuntime {
                     result,
                     exec_time,
                 } => {
-                    in_flight = in_flight.saturating_sub(1);
+                    self.in_flight = self.in_flight.saturating_sub(1);
                     match result {
                         Ok(v) => self.graph.complete(id, TaskOutcome::Ok(v), exec_time)?,
                         Err(e) => self.graph.complete(id, TaskOutcome::Err(e), exec_time)?,
