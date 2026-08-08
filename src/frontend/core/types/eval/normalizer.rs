@@ -233,15 +233,9 @@ impl TypeNormalizer {
             | MonoType::Bytes => NormalForm::Normalized,
             MonoType::Int(_) | MonoType::Float(_) => NormalForm::Normalized,
             MonoType::TypeVar(_) => NormalForm::NeedsReduction,
-            MonoType::TypeRef(name) => {
-                // 检查是否是条件类型（If, Match 等）
-                if let Some(args) = self.parse_conditional_args(name) {
-                    self.eval_conditional(name, &args)
-                } else {
-                    NormalForm::Normalized
-                }
+            MonoType::Struct(_) | MonoType::Enum(_) | MonoType::TypeRef(_) => {
+                NormalForm::Normalized
             }
-            MonoType::Struct(_) | MonoType::Enum(_) => NormalForm::Normalized,
             MonoType::Tuple(types) => {
                 if types
                     .iter()
@@ -273,93 +267,6 @@ impl TypeNormalizer {
                     NormalForm::Normalized
                 } else {
                     NormalForm::NeedsReduction
-                }
-            }
-            _ => NormalForm::Normalized,
-        }
-    }
-
-    /// 解析条件类型参数
-    fn parse_conditional_args(
-        &self,
-        type_name: &str,
-    ) -> Option<Vec<String>> {
-        if !type_name.starts_with("If(") && !type_name.starts_with("Match(") {
-            return None;
-        }
-
-        let args_str = &type_name[type_name.find('(')? + 1..type_name.rfind(')')?];
-        Self::parse_type_args(args_str)
-    }
-
-    /// 解析类型参数字符串
-    fn parse_type_args(args_str: &str) -> Option<Vec<String>> {
-        let args = split_args_at_depth_zero(args_str).ok()?;
-        if args.is_empty() {
-            None
-        } else {
-            Some(args)
-        }
-    }
-
-    /// 求值条件类型
-    fn eval_conditional(
-        &mut self,
-        type_name: &str,
-        args: &[String],
-    ) -> NormalForm {
-        // 解析参数为 MonoType（使用不可变求值器解析）
-        let parsed_args: Vec<MonoType> = {
-            let evaluator = Evaluator::new(&self.env, &self.budget, &self.dep_env);
-            args.iter()
-                .filter_map(|arg| {
-                    evaluator
-                        .parse_type(arg)
-                        .or_else(|| Some(MonoType::TypeRef(arg.clone())))
-                })
-                .collect()
-        };
-
-        if parsed_args.len() < 2 {
-            return NormalForm::Normalized;
-        }
-
-        // 创建可变求值器进行实际求值
-        let mut evaluator = Evaluator::new(&self.env, &self.budget, &self.dep_env);
-
-        // 根据类型名称调用对应的求值方法
-        match type_name {
-            _ if type_name.starts_with("If(") => {
-                // If(Condition, TrueBranch, FalseBranch)
-                if parsed_args.len() >= 3 {
-                    let result =
-                        evaluator.eval_if(&parsed_args[0], &parsed_args[1], &parsed_args[2]);
-                    match result {
-                        Ok(_) => NormalForm::Normalized,
-                        Err(_) => NormalForm::Stuck,
-                    }
-                } else {
-                    NormalForm::Normalized
-                }
-            }
-            _ if type_name.starts_with("Match(") => {
-                // Match(Target, Arm1, Arm2, ...)
-                let target = &parsed_args[0];
-                let arms: Vec<(MonoType, MonoType)> = parsed_args[1..]
-                    .chunks(2)
-                    .filter_map(|chunk| {
-                        if chunk.len() == 2 {
-                            Some((chunk[0].clone(), chunk[1].clone()))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-
-                let result = evaluator.eval_match(target, arms);
-                match result {
-                    Ok(_) => NormalForm::Normalized,
-                    Err(_) => NormalForm::Stuck,
                 }
             }
             _ => NormalForm::Normalized,
