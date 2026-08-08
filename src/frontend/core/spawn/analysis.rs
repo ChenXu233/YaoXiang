@@ -80,6 +80,12 @@ pub fn analyze_spawn_body(
             continue;
         }
         if let StmtKind::Expr(expr) = &stmt.kind {
+            // return 是 spawn 块的结果表达式（RFC-010 语义，ir_gen 第 6 步单独处理），
+            // 不是并行任务。包装成闭包会在闭包作用域内引用块内局部变量（#271 #3
+            // 硬错误暴露：此前静默 Load 0 + 第 6 步重算覆盖，测试侥幸通过）。
+            if matches!(expr.as_ref(), Expr::Return(..)) {
+                continue;
+            }
             // 检查是否是赋值表达式：t1 = fetch(...)
             if let Expr::BinOp {
                 op: BinOp::Assign,

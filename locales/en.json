@@ -743,6 +743,16 @@
     "template": "IR generation error: {message}",
     "help": "This is an internal error. Please report this issue."
   },
+  "E3006": {
+    "title": "Unresolved Variable",
+    "template": "IR generation error: variable '{name}' could not be resolved",
+    "help": "A variable reference reached IR generation without being resolved by the type checker. This is a compiler internal consistency issue; please report it."
+  },
+  "E3007": {
+    "title": "Top-Level Initializer Must Be Constant",
+    "template": "Top-level binding '{name}' must be initialized with a compile-time constant expression",
+    "help": "Top-level bindings are compile-time constants (the accessor returns the folded value); runtime-computed initializers are not supported. Use a literal/constant expression, or move the computation inside a function."
+  },
   "E3014": {
     "title": "Register Overflow",
     "template": "Register overflow: {id} exceeds limit {limit}",

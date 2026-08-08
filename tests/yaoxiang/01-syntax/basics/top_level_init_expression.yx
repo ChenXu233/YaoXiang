@@ -3,9 +3,9 @@
 // 验证: 顶层 `name = expr` 的四种 init 形态（字面量/算术/字符串拼接/类型标注）求值后绑定，不丢值
 // 修复: #261 (顶层 binding 初始化表达式被编译成返回 0 的函数)
 // 状态: ✅ 可运行
-//
-// 限制：跨顶层 binding 引用（如 `other = sum + 100`）暂不测 — `eval_const_expr` 对
-// `Var(name)` 无分支，会被退回运行时 fallback（输出 0）。归因见 #271 静默归零清单 #2。
+// 限制：跨顶层 binding 引用（如 `other = sum + 100`）与调用 init（`sum = f()`）
+// 现在会报 E3007（#271 清单 #2：折叠不到 → 硬错误，不再静默输出 0），
+// 用例见 06-compile-errors/top_level_call_init.yx / top_level_cross_binding.yx。
 
 use std.assert
 

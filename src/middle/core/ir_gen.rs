@@ -1043,6 +1043,17 @@ impl AstToIrGenerator {
                             generic_param_names,
                         )
                     }
+                } else if name == "main" {
+                    // 空 main（`main = {}`）：入口点绑定，生成空函数而非全局变量。
+                    // #271 #2：空块不是"折叠不到的初始化"，硬错误会误伤合法空入口。
+                    self.generate_function_ir(
+                        &name,
+                        type_annotation.as_ref(),
+                        &params,
+                        &body,
+                        constants,
+                        None,
+                    )
                 } else {
                     // 全局变量
                     self.generate_global_var_ir(
@@ -1761,11 +1772,15 @@ impl AstToIrGenerator {
         // 尝试从 initializer 提取常量值
         // 这里返回 None 是正常的——表示初始值不是编译期常量表达式
         // （如 main = {} 这样的块表达式），需要运行时求值
-        let init_value = if let Some(expr) = initializer {
-            self.eval_const_expr(expr)
-        } else {
-            None
-        };
+        let init_value = initializer.and_then(|expr| self.eval_const_expr(expr));
+
+        // #271 #2：有 init 表达式但常量折叠不到 → 硬错误（不再静默填 0）。
+        // 无 init 的绑定保留零初始化语义（C 风格默认值，非静默兜底）。
+        if initializer.is_some() && init_value.is_none() {
+            return Err(ErrorCodeDefinition::top_level_init_not_const(name)
+                .at(Self::get_expr_span(initializer.expect("checked above")))
+                .build());
+        }
 
         // 注册到全局变量表（init_value 由 init 表达式的常量折叠得；折叠不到的留 None）
         // ponytail: 该字段由 #261+B PR 删除，本 PR 不动数据结构
@@ -1774,10 +1789,10 @@ impl AstToIrGenerator {
 
         // 零参访问器函数：函数体返回 init_value。
         // 注：原实现曾硬编码 `LoadConst(Int(0)) + Ret`，对常量可折叠的表达式（`1+2+3`）静默丢值（#261）
-        // 修复范围：仅限于 eval_const_expr 能折叠得动的情形；其它（顶层 reassign / 块表达式 init /
-        // 调用 init）保留原 Int(0) 兜底，避免进入递归调用自我（顶层 mut binding 的语义需另行设计）。
+        // #271 #2：折叠不到的 init 已在上面报 E3007；此处 init_value 非 None，
+        // 无 init 的绑定走零初始化（C 语义默认值，非静默兜底）。
         let result_reg = 0;
-        let src_operand = Operand::Const(init_value.clone().unwrap_or(ConstValue::Int(0)));
+        let src_operand = Operand::Const(init_value.unwrap_or(ConstValue::Int(0)));
         let instructions = vec![
             Instruction::Load {
                 dst: Operand::Local(result_reg),
@@ -3216,12 +3231,11 @@ impl AstToIrGenerator {
                         src: Operand::Const(ConstValue::Void),
                     });
                 } else {
-                    // ponytail: 其余未解析变量仍走宽容占位（spawn 变量捕获等未完成路径依赖它，
-                    // 如 spawn_basic.yx；硬错误会连带误伤）。静默兜底清单见 #251 扫描记录。
-                    instructions.push(Instruction::Load {
-                        dst: Operand::Local(result_reg),
-                        src: Operand::Const(ConstValue::Int(0)),
-                    });
+                    // #271 #3：未解析变量 → 硬错误（#254 spawn 捕获已落地，不再需要静默 Load 0 兜底）。
+                    // 走到这里说明 typecheck 漏网，属编译器内部一致性问题。
+                    return Err(ErrorCodeDefinition::unresolved_variable(var_name)
+                        .at(*var_span)
+                        .build());
                 }
             }
             Expr::BinOp {
