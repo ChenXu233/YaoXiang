@@ -570,6 +570,24 @@ results = spawn for item in items {
 }
 ```
 
+**spawn 块捕获外层变量**（RFC-024 §2.3，值捕获语义）：
+
+- 块体引用外层变量 = **Move 值捕获**：值在 spawn 创建点快照进闭包环境，
+  块体经 env 读取（LoadUpvalue）
+- **原语**（Int/Float/Bool/Char）值复制，外层变量不受影响
+- **句柄类型**（Struct/String/List 等）快照 = 句柄复制，共享底层对象；
+  Embedded 运行时（默认）同线程同堆，句柄有效
+- 多个任务间共享需显式 `ref`（§2.13，编译器自动选 Rc/Arc）
+- 块内 `return` 引用的外层变量同样捕获
+
+```yaoxiang
+t1 = 1 + 1
+t2 = 2 + 2
+result = spawn {
+    return t1 + t2    // t1/t2 值捕获，result == 6
+}
+```
+
 ---
 
 ## 附录：语法速查

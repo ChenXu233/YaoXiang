@@ -192,12 +192,6 @@ impl Diagnostic {
     }
 }
 
-impl crate::util::span::SpannedError for Diagnostic {
-    fn span(&self) -> crate::util::span::Span {
-        self.span.unwrap_or_default()
-    }
-}
-
 impl std::fmt::Display for Diagnostic {
     fn fmt(
         &self,

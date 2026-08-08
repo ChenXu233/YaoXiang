@@ -13,28 +13,15 @@ fn test_executor_config_default() {
     let config = ExecutorConfig::default();
 
     assert_eq!(config.max_stack_depth, 1024);
-    assert_eq!(config.initial_heap_size, 64 * 1024);
-    assert_eq!(config.max_heap_size, 64 * 1024 * 1024);
-    assert!(config.enable_checks);
-    assert!(config.enable_debug);
 }
 
 #[test]
 fn test_executor_config_custom() {
     let config = ExecutorConfig {
         max_stack_depth: 2048,
-        initial_heap_size: 128 * 1024,
-        max_heap_size: 128 * 1024 * 1024,
-        build_mode: yaoxiang::backends::BuildMode::Release,
-        enable_checks: false,
-        enable_debug: false,
     };
 
     assert_eq!(config.max_stack_depth, 2048);
-    assert_eq!(config.initial_heap_size, 128 * 1024);
-    assert_eq!(config.max_heap_size, 128 * 1024 * 1024);
-    assert!(!config.enable_checks);
-    assert!(!config.enable_debug);
 }
 
 #[test]
@@ -110,20 +97,6 @@ fn test_bytecode_module_add_function() {
     assert_eq!(idx, 0);
     assert_eq!(module.functions.len(), 1);
     assert_eq!(module.functions[0].name, "test_func");
-}
-
-#[test]
-fn test_build_mode_variants() {
-    use yaoxiang::backends::BuildMode;
-
-    let debug = BuildMode::Debug;
-    let release = BuildMode::Release;
-    let profile = BuildMode::Profile;
-
-    // Verify they are different variants
-    assert_ne!(debug, release);
-    assert_ne!(debug, profile);
-    assert_ne!(release, profile);
 }
 
 #[test]

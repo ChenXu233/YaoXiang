@@ -24,11 +24,11 @@ use crate::lsp::server::{handle_request, handle_notification, publish_diagnostic
 use crate::lsp::session::{Session, SessionState};
 use crate::lsp::world::World;
 
-use crossbeam::channel::unbounded;
+use crossbeam_channel::unbounded;
 use std::str::FromStr;
 
 /// 创建测试用的 Connection（不连接真实 IO）
-fn test_connection() -> (Connection, crossbeam::channel::Receiver<Message>) {
+fn test_connection() -> (Connection, crossbeam_channel::Receiver<Message>) {
     let (to_client_tx, to_client_rx) = unbounded();
     let (_to_server_tx, to_server_rx) = unbounded();
     let conn = Connection {

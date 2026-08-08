@@ -11,7 +11,7 @@ use super::passes::overload;
 use super::types::ImportInfo;
 
 /// 类型错误收集器
-pub type TypeErrorCollector = crate::util::diagnostic::ErrorCollector<super::Diagnostic>;
+pub type TypeErrorCollector = crate::util::diagnostic::ErrorCollector;
 
 /// 泛型类型定义模板
 ///

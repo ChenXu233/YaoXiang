@@ -37,12 +37,6 @@ pub enum Opcode {
     /// Switch/case dispatch
     Switch = 0x06,
 
-    /// Loop start (iterator elimination)
-    LoopStart = 0x07,
-
-    /// Loop increment
-    LoopInc = 0x08,
-
     /// Tail call (TCO)
     TailCall = 0x09,
 
@@ -99,52 +93,9 @@ pub enum Opcode {
     I64Shr = 0x2A,
     I64Neg = 0x2B,
 
-    /// I32 operations
-    I32Add = 0x30,
-    I32Sub = 0x31,
-    I32Mul = 0x32,
-    I32Div = 0x33,
-    I32Rem = 0x34,
-    I32And = 0x35,
-    I32Or = 0x36,
-    I32Xor = 0x37,
-    I32Shl = 0x38,
-    I32Sar = 0x39,
-    I32Shr = 0x3A,
-    I32Neg = 0x3B,
-
-    /// I64 constant load
-    I64Const = 0x2E,
-
-    /// I32 constant load
-    I32Const = 0x3E,
-
     // =====================
     // Float Operations (0x40-0x5F)
     // =====================
-    /// F64 operations
-    F64Add = 0x40,
-    F64Sub = 0x41,
-    F64Mul = 0x42,
-    F64Div = 0x43,
-    F64Rem = 0x44,
-    F64Sqrt = 0x45,
-    F64Neg = 0x46,
-
-    /// F64 constant load
-    F64Const = 0x49,
-
-    /// F32 operations
-    F32Add = 0x50,
-    F32Sub = 0x51,
-    F32Mul = 0x52,
-    F32Div = 0x53,
-    F32Rem = 0x54,
-    F32Sqrt = 0x55,
-    F32Neg = 0x56,
-
-    /// F32 constant load
-    F32Const = 0x59,
 
     // =====================
     // Comparison Operations (0x60-0x7F)
@@ -156,22 +107,6 @@ pub enum Opcode {
     I64Le = 0x63,
     I64Gt = 0x64,
     I64Ge = 0x65,
-
-    /// F64 comparisons
-    F64Eq = 0x66,
-    F64Ne = 0x67,
-    F64Lt = 0x68,
-    F64Le = 0x69,
-    F64Gt = 0x6A,
-    F64Ge = 0x6B,
-
-    /// F32 comparisons
-    F32Eq = 0x6C,
-    F32Ne = 0x6D,
-    F32Lt = 0x6E,
-    F32Le = 0x6F,
-    F32Gt = 0x70,
-    F32Ge = 0x71,
 
     // =====================
     // Memory & Object Operations (0x72-0x7F)
@@ -263,7 +198,6 @@ pub enum Opcode {
     TryBegin = 0xA0,
     TryEnd = 0xA1,
     Throw = 0xA2,
-    Rethrow = 0xA3,
 
     // =====================
     // Debug Operations (0xB0-0xBF)
@@ -280,15 +214,9 @@ pub enum Opcode {
     // Reflection (0xD0-0xDF)
     // =====================
     TypeOf = 0xD0,
-
     // =====================
     // Reserved (0xE0-0xFF)
     // =====================
-    Custom0 = 0xE0,
-    Custom1 = 0xE1,
-    Custom2 = 0xE2,
-    Custom3 = 0xE3,
-    Invalid = 0xFF,
 }
 
 impl Opcode {
@@ -302,8 +230,6 @@ impl Opcode {
             Opcode::JmpIf => "JmpIf",
             Opcode::JmpIfNot => "JmpIfNot",
             Opcode::Switch => "Switch",
-            Opcode::LoopStart => "LoopStart",
-            Opcode::LoopInc => "LoopInc",
             Opcode::TailCall => "TailCall",
             Opcode::Yield => "Yield",
             Opcode::Label => "Label",
@@ -328,54 +254,12 @@ impl Opcode {
             Opcode::I64Sar => "I64Sar",
             Opcode::I64Shr => "I64Shr",
             Opcode::I64Neg => "I64Neg",
-            Opcode::I32Add => "I32Add",
-            Opcode::I32Sub => "I32Sub",
-            Opcode::I32Mul => "I32Mul",
-            Opcode::I32Div => "I32Div",
-            Opcode::I32Rem => "I32Rem",
-            Opcode::I32And => "I32And",
-            Opcode::I32Or => "I32Or",
-            Opcode::I32Xor => "I32Xor",
-            Opcode::I32Shl => "I32Shl",
-            Opcode::I32Sar => "I32Sar",
-            Opcode::I32Shr => "I32Shr",
-            Opcode::I32Neg => "I32Neg",
-            Opcode::I64Const => "I64Const",
-            Opcode::I32Const => "I32Const",
-            Opcode::F64Add => "F64Add",
-            Opcode::F64Sub => "F64Sub",
-            Opcode::F64Mul => "F64Mul",
-            Opcode::F64Div => "F64Div",
-            Opcode::F64Rem => "F64Rem",
-            Opcode::F64Sqrt => "F64Sqrt",
-            Opcode::F64Neg => "F64Neg",
-            Opcode::F64Const => "F64Const",
-            Opcode::F32Add => "F32Add",
-            Opcode::F32Sub => "F32Sub",
-            Opcode::F32Mul => "F32Mul",
-            Opcode::F32Div => "F32Div",
-            Opcode::F32Rem => "F32Rem",
-            Opcode::F32Sqrt => "F32Sqrt",
-            Opcode::F32Neg => "F32Neg",
-            Opcode::F32Const => "F32Const",
             Opcode::I64Eq => "I64Eq",
             Opcode::I64Ne => "I64Ne",
             Opcode::I64Lt => "I64Lt",
             Opcode::I64Le => "I64Le",
             Opcode::I64Gt => "I64Gt",
             Opcode::I64Ge => "I64Ge",
-            Opcode::F64Eq => "F64Eq",
-            Opcode::F64Ne => "F64Ne",
-            Opcode::F64Lt => "F64Lt",
-            Opcode::F64Le => "F64Le",
-            Opcode::F64Gt => "F64Gt",
-            Opcode::F64Ge => "F64Ge",
-            Opcode::F32Eq => "F32Eq",
-            Opcode::F32Ne => "F32Ne",
-            Opcode::F32Lt => "F32Lt",
-            Opcode::F32Le => "F32Le",
-            Opcode::F32Gt => "F32Gt",
-            Opcode::F32Ge => "F32Ge",
             Opcode::StackAlloc => "StackAlloc",
             Opcode::HeapAlloc => "HeapAlloc",
             Opcode::Drop => "Drop",
@@ -410,16 +294,10 @@ impl Opcode {
             Opcode::TryBegin => "TryBegin",
             Opcode::TryEnd => "TryEnd",
             Opcode::Throw => "Throw",
-            Opcode::Rethrow => "Rethrow",
             Opcode::BoundsCheck => "BoundsCheck",
             Opcode::TypeCheck => "TypeCheck",
             Opcode::Cast => "Cast",
             Opcode::TypeOf => "TypeOf",
-            Opcode::Custom0 => "Custom0",
-            Opcode::Custom1 => "Custom1",
-            Opcode::Custom2 => "Custom2",
-            Opcode::Custom3 => "Custom3",
-            Opcode::Invalid => "Invalid",
         }
     }
 }
@@ -446,8 +324,6 @@ impl TryFrom<u8> for Opcode {
             0x04 => Ok(Opcode::JmpIf),
             0x05 => Ok(Opcode::JmpIfNot),
             0x06 => Ok(Opcode::Switch),
-            0x07 => Ok(Opcode::LoopStart),
-            0x08 => Ok(Opcode::LoopInc),
             0x09 => Ok(Opcode::TailCall),
             0x0A => Ok(Opcode::Yield),
             0x0B => Ok(Opcode::Label),
@@ -461,9 +337,6 @@ impl TryFrom<u8> for Opcode {
             0x15 => Ok(Opcode::Borrow),
             0x16 => Ok(Opcode::Release),
             0x20..=0x2B => Ok(unsafe { std::mem::transmute::<u8, Opcode>(value) }),
-            0x30..=0x3B => Ok(unsafe { std::mem::transmute::<u8, Opcode>(value) }),
-            0x40..=0x46 => Ok(unsafe { std::mem::transmute::<u8, Opcode>(value) }),
-            0x50..=0x56 => Ok(unsafe { std::mem::transmute::<u8, Opcode>(value) }),
             0x60..=0x71 => Ok(unsafe { std::mem::transmute::<u8, Opcode>(value) }),
             0x72 => Ok(Opcode::HeapAlloc),
             0x73 => Ok(Opcode::StackAlloc),
@@ -499,16 +372,10 @@ impl TryFrom<u8> for Opcode {
             0xA0 => Ok(Opcode::TryBegin),
             0xA1 => Ok(Opcode::TryEnd),
             0xA2 => Ok(Opcode::Throw),
-            0xA3 => Ok(Opcode::Rethrow),
             0xB0 => Ok(Opcode::BoundsCheck),
             0xC0 => Ok(Opcode::TypeCheck),
             0xC1 => Ok(Opcode::Cast),
             0xD0 => Ok(Opcode::TypeOf),
-            0xE0 => Ok(Opcode::Custom0),
-            0xE1 => Ok(Opcode::Custom1),
-            0xE2 => Ok(Opcode::Custom2),
-            0xE3 => Ok(Opcode::Custom3),
-            0xFF => Ok(Opcode::Invalid),
             _ => Err(()),
         }
     }

@@ -40,26 +40,10 @@ pub static E4XXX: &[ErrorCodeDefinition] = &[
         category: ErrorCategory::Generic,
     },
     ErrorCodeDefinition {
-        code: "E4013",
-        category: ErrorCategory::Generic,
-    },
-    ErrorCodeDefinition {
         code: "E4014",
         category: ErrorCategory::Generic,
     },
     // === E401x: 终止检查 ===
-    ErrorCodeDefinition {
-        code: "E4015",
-        category: ErrorCategory::Generic,
-    },
-    ErrorCodeDefinition {
-        code: "E4016",
-        category: ErrorCategory::Generic,
-    },
-    ErrorCodeDefinition {
-        code: "E4017",
-        category: ErrorCategory::Generic,
-    },
     // === E401x: 精化谓词证明 ===
     ErrorCodeDefinition {
         code: "E4018",
@@ -134,12 +118,6 @@ impl ErrorCodeDefinition {
         def.builder().param("limit", limit.to_string())
     }
 
-    /// E4013 非常量函数
-    pub fn const_non_const_function(func: &str) -> DiagnosticBuilder {
-        let def = Self::find("E4013").unwrap();
-        def.builder().param("func", func)
-    }
-
     /// E4014 常量求值失败
     pub fn const_eval_failed(reason: &str) -> DiagnosticBuilder {
         let def = Self::find("E4014").unwrap();
@@ -147,24 +125,6 @@ impl ErrorCodeDefinition {
     }
 
     // === 终止检查 ===
-
-    /// E4015 循环无法证明终止
-    pub fn loop_may_not_terminate() -> DiagnosticBuilder {
-        let def = Self::find("E4015").unwrap();
-        def.builder()
-    }
-
-    /// E4016 递归无法证明终止
-    pub fn recursion_may_not_terminate(func: &str) -> DiagnosticBuilder {
-        let def = Self::find("E4016").unwrap();
-        def.builder().param("func", func)
-    }
-
-    /// E4017 度量未严格递减
-    pub fn measure_not_decreasing(measure: &str) -> DiagnosticBuilder {
-        let def = Self::find("E4017").unwrap();
-        def.builder().param("measure", measure)
-    }
 
     // === 精化谓词证明 ===
 

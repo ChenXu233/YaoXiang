@@ -1963,8 +1963,8 @@ impl OwnershipChecker {
 
         // 检查阶段：每节点从 in 出发顺序执行，Read 判定 + Drop 收集
         let mut results = Vec::new();
-        for i in 0..n {
-            let mut state = ins[i].clone();
+        for (i, in_state) in ins.iter().enumerate() {
+            let mut state = in_state.clone();
             for op in &self.cfg.nodes[i].ops {
                 match op {
                     VarOp::Read { var, span } => match state.get(var) {

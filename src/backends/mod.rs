@@ -324,44 +324,17 @@ pub trait DebuggableExecutor: Executor {
     fn breakpoints(&self) -> Vec<usize>;
 }
 
-/// Build mode for the backend
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum BuildMode {
-    /// Debug mode with assertions and debugging info
-    #[default]
-    Debug,
-    /// Release mode with optimizations
-    Release,
-    /// Profile mode for performance analysis
-    Profile,
-}
-
 /// Configuration for an executor
 #[derive(Debug, Clone)]
 pub struct ExecutorConfig {
     /// Maximum call stack depth
     pub max_stack_depth: usize,
-    /// Initial heap capacity
-    pub initial_heap_size: usize,
-    /// Maximum heap size
-    pub max_heap_size: usize,
-    /// Build mode
-    pub build_mode: BuildMode,
-    /// Enable runtime checks (bounds, null, etc.)
-    pub enable_checks: bool,
-    /// Enable debugging features
-    pub enable_debug: bool,
 }
 
 impl Default for ExecutorConfig {
     fn default() -> Self {
         Self {
             max_stack_depth: 1024,
-            initial_heap_size: 64 * 1024,
-            max_heap_size: 64 * 1024 * 1024,
-            build_mode: BuildMode::Debug,
-            enable_checks: true,
-            enable_debug: true,
         }
     }
 }

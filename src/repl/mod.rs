@@ -46,8 +46,6 @@ pub struct ReplConfig {
     pub vi_mode: bool,
     /// History file path
     pub history_file: Option<PathBuf>,
-    /// Maximum history size
-    pub history_size: usize,
     /// Show execution time for :run
     pub show_timing: bool,
 }
@@ -63,7 +61,6 @@ impl Default for ReplConfig {
             continuation_prompt: ".. ".into(),
             vi_mode: false,
             history_file,
-            history_size: 1000,
             show_timing: true,
         }
     }

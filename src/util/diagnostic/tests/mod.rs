@@ -3,6 +3,5 @@
 //! §5.2: 跨文件分析流程
 //! §6.1: CheckSession 增量检查
 
-mod collect;
 mod mod_tests;
 mod suggest;

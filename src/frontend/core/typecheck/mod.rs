@@ -65,7 +65,7 @@ pub use crate::util::diagnostic::{Diagnostic, ErrorCollector, ErrorCodeDefinitio
 pub type TypeResult<T> = Result<T, Diagnostic>;
 
 /// 类型错误收集器
-pub type TypeErrorCollector = ErrorCollector<Diagnostic>;
+pub type TypeErrorCollector = ErrorCollector;
 
 // ============ 入口函数 ============
 

@@ -33,7 +33,7 @@ pub mod suggest;
 
 // 重新导出
 pub use codes::{ErrorCategory, ErrorCodeDefinition, I18nRegistry, DiagnosticBuilder, ErrorInfo};
-pub use collect::{ErrorCollector, Warning, ErrorFormatter};
+pub use collect::ErrorCollector;
 pub use command::render_explain_output;
 #[cfg(feature = "cli")]
 pub use command::run_check_command_once;

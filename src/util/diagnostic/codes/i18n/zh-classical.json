@@ -600,20 +600,10 @@
     "template": "'{name}' 已移，勿复用",
     "help": "此值已移于新主。若欲再用，宜用引用或克隆。"
   },
-  "E2015": {
-    "title": "移后借用",
-    "template": "移后不可借用 '{name}'",
-    "help": "值已被移。移前用引用，或克隆此值。"
-  },
   "E2016": {
     "title": "不可变赋值",
     "template": "不可变变量 '{name}' 不可赋值",
     "help": "宜用 `mut` 以允赋值。"
-  },
-  "E2017": {
-    "title": "多重可变借用",
-    "template": "不可同时多次可变借用 '{name}'",
-    "help": "确保同一时刻仅一可变引用。"
   },
   "E2018": {
     "title": "可变/不可变借用冲突",
@@ -630,65 +620,15 @@
     "template": "'{name}' 释后被用",
     "help": "于值释前用之，或重构其码。"
   },
-  "E2021": {
-    "title": "释已迁之值",
-    "template": "无法释 '{name}'：值已迁",
-    "help": "值已迁，弗可再释。"
-  },
-  "E2022": {
-    "title": "不可变变异",
-    "template": "无法以法 '{method}' 变不可变之变量 '{name}'",
-    "help": "用 `mut` 声明变量以允变异。"
-  },
-  "E2023": {
-    "title": "不可变字段赋值",
-    "template": "无法赋值于 '{struct_name}' 之不可变字段 '{field}'",
-    "help": "用 `mut` 声明字段以允赋值。"
-  },
-  "E2024": {
-    "title": "引用非所有者",
-    "template": "无法创对 '{name}' 之引用：值未被拥有",
-    "help": "值已迁或已释，务使值仍为其所有者所掌。"
-  },
-  "E2025": {
-    "title": "重赋值非空变量",
-    "template": "不可重赋值 '{name}'：变量未尝移动",
-    "help": "唯已移动之变量方方可重赋值。"
-  },
-  "E2026": {
-    "title": "消费未归",
-    "template": "参数 '{name}' 已消费而未归",
-    "help": "宜归已消费之值，或用引用。"
-  },
   "E2027": {
     "title": "unsafe 解引用",
     "template": "不得于 unsafe 块外解引用裸指针",
     "help": "当将解引用操作置于 `unsafe` 块之中。"
   },
-  "E2028": {
-    "title": "克隆已移动之值",
-    "template": "不可克隆 '{name}'：值已移动",
-    "help": "值已移动，若需多次使用，当于移动前先克隆之。"
-  },
   "E2029": {
     "title": "spawn ref 之循环",
     "template": "跨任务循环引用:{cycle}",
     "help": "spawn 块内之 ref 变量，构成循环引用。可用 Weak 破其循环，亦可于 unsafe 块中规避检测。"
-  },
-  "E3001": {
-    "title": "未实行之表达式（IR）",
-    "template": "未实行之表达式类型：{expr_type}",
-    "help": "此表达式类型于 IR 生成中尚未支持。"
-  },
-  "E3002": {
-    "title": "未实行之语句（IR）",
-    "template": "未实行之语句类型：{stmt_type}",
-    "help": "此语句类型于 IR 生成中尚未支持。"
-  },
-  "E3003": {
-    "title": "无效操作数（IR）",
-    "template": "无效操作数：{reason}",
-    "help": "当核操作数之类型与用法。"
   },
   "E3004": {
     "title": "迭代器不合其宜",
@@ -700,50 +640,15 @@
     "template": "IR生成之误：{message}",
     "help": "此乃内部之误，请告于吾。"
   },
-  "E3010": {
-    "title": "未实现之表达式（代码生成）",
-    "template": "代码生成：未实现之表达式类型：{expr_type}",
-    "help": "此表达式类型于代码生成中尚未支持。"
-  },
-  "E3011": {
-    "title": "未实现之语句（代码生成）",
-    "template": "代码生成：未实现之语句类型：{stmt_type}",
-    "help": "此语句类型于代码生成中尚未支持。"
-  },
-  "E3012": {
-    "title": "未实现之调用（代码生成）",
-    "template": "代码生成：未实现之调用类型：{call_type}",
-    "help": "此调用类型于代码生成中尚未支持。"
-  },
-  "E3013": {
-    "title": "符号未觅（代码生成）",
-    "template": "代码生成：符号未觅：'{name}'",
-    "help": "请确其符号已定且可及。"
-  },
   "E3014": {
     "title": "寄存器溢",
     "template": "寄存器溢：{id}逾其限 {limit}",
     "help": "减局部变量之数，或简化其式。"
   },
-  "E3015": {
-    "title": "无效赋值目标",
-    "template": "无效赋值目标：{reason}",
-    "help": "唯变量与字段可被赋值。"
-  },
-  "E3016": {
-    "title": "类型不匹配（代码生成）",
-    "template": "代码生成类型不匹配：期望 {expected}，实际 {found}",
-    "help": "此乃内部之误，请禀报此问题。"
-  },
   "E3017": {
     "title": "无效操作数（代码生成）",
     "template": "代码生成：无效操作数：{reason}",
     "help": "查验操作数之类型与用法。"
-  },
-  "E3018": {
-    "title": "翻译错误",
-    "template": "翻译错误：{message}",
-    "help": "此乃内部之误，请禀报此问题。"
   },
   "E4010": {
     "title": "常量除零",
@@ -760,30 +665,10 @@
     "template": "常量求值逾最大递归深度 {limit}",
     "help": "宜简常量表达式以减递归。"
   },
-  "E4013": {
-    "title": "非常量函数",
-    "template": "常量上下文中调用了非常量函数 '{func}'",
-    "help": "唯标注为常量者，方可用于常量表达式。"
-  },
   "E4014": {
     "title": "常量求值失败",
     "template": "常量表达式不可求值：{reason}",
     "help": "须确保表达式可于编译期求值。"
-  },
-  "E4015": {
-    "title": "循环无法证明终止",
-    "template": "循环无法证明终止：循环体中未检测到任何严格递减之度量",
-    "help": "宜确保循环变量向终止条件单调变化，如 while i < n { i += 1 }。"
-  },
-  "E4016": {
-    "title": "递归无法证明终止",
-    "template": "递归调用无法证明终止：函数 '{func}' 之参数于递归调用中未严格递减",
-    "help": "宜确保递归调用使用更小之参数，如 factorial(n-1)。"
-  },
-  "E4017": {
-    "title": "度量未严格递减",
-    "template": "度量 '{measure}' 未于所有循环路径上严格递减",
-    "help": "宜确保于循环体所有分支中，变量皆向终止条件变化。"
   },
   "E4018": {
     "title": "精化谓词违反",
@@ -827,14 +712,6 @@
     "template": "功能未竟：{feature}",
     "help": "此功能尚未成就。"
   },
-  "E0015": {
-    "title": "宜得标识符",
-    "message": "解析器宜得一标识符或名",
-    "template": "宜得标识符 '{name}'",
-    "help": "于此处置有效之标识符",
-    "example": "fn () {}",
-    "error_output": "error[E0015]: 宜得标识符\n --> example.yx:1:4\n  |\n1 | fn () {}\n  |    ^ 宜得函数名"
-  },
   "E0016": {
     "title": "宜得表达式",
     "message": "解析器宜得一表达式",
@@ -843,14 +720,6 @@
     "example": "x = ;",
     "error_output": "error[E0016]: 宜得表达式\n --> example.yx:1:5\n  |\n1 | x = ;\n  |     ^ 宜得 '=' 后之表达式"
   },
-  "E0017": {
-    "title": "旧辞已废",
-    "message": "旧辞不复支撑",
-    "template": "旧辞 '{old}' 已废，宜用 '{new}'",
-    "help": "循所示用新辞",
-    "example": "Type[T]",
-    "error_output": "error[E0017]: 古法已废\n --> example.yx:1:1\n  |\n1 | Type[T]\n  | ^^^^ 故法；请独用 'Type'"
-  },
   "E0018": {
     "title": "关键字为名",
     "message": "关键字不可为变量或表达式之名",
@@ -858,38 +727,6 @@
     "help": "另取异名以代关键字",
     "example": "if = 1;",
     "error_output": "error[E0018]: 关键字为名\n --> example.yx:1:1\n  |\n1 | if = 1;\n  | ^^ 'if' 乃关键字"
-  },
-  "E0019": {
-    "title": "参数之数不合",
-    "message": "函数参数之数不合",
-    "template": "参数之数不合：期 {expected}，得 {found}",
-    "help": "使参数之数与签名相合",
-    "example": "f: (a: Int) -> Int = (a, b) => a + b",
-    "error_output": "error[E0019]: 参数之数不合\n --> example.yx:1:20\n  |\n1 | f: (a: Int) -> Int = (a, b) => a + b\n  |                    ^ 期 1 参数，得 2"
-  },
-  "E0020": {
-    "title": "参数之名不合",
-    "message": "参数之名与签名不合",
-    "template": "参数之名不合（第 {position} 位）：期 '{expected}'，得 '{found}'",
-    "help": "用相合之参数名，或略去 lambda 头部",
-    "example": "f: (a: Int) -> Int = (b) => b",
-    "error_output": "error[E0020]: 参数之名不合\n --> example.yx:1:20\n  |\n1 | f: (a: Int) -> Int = (b) => b\n  |                    ^ 期 'a'，得 'b'"
-  },
-  "E0021": {
-    "title": "期望 token",
-    "message": "解析器期于特定语境后现特定token",
-    "template": "期于 {context} 后现 {token}",
-    "help": "于正处补交所期之token",
-    "example": "mut x Int",
-    "error_output": "error[E0021]: 期token\n --> example.yx:1:7\n  |\n1 | mut x Int\n  |       ^ 期 'mut' 后现 ':'"
-  },
-  "E0022": {
-    "title": "枚举须用花括号语法",
-    "message": "枚举变体须用花括号语法",
-    "template": "枚举变体须用花括号语法：{| variant1 | variant2 | ... }",
-    "help": "以花括号及管道符包裹枚举变体",
-    "example": "Color = red | green | blue",
-    "error_output": "error[E0022]: 枚举须用花括号语法\n --> example.yx:1:9\n  |\n1 | Color = red | green | blue\n  |         ^ 须用花括号语法：{ red | green | blue }"
   },
   "_meta": {
     "lastUpdated": "2026-06-13T07:57:03.576Z"

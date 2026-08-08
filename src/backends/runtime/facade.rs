@@ -10,7 +10,7 @@ use std::time::Duration;
 use crate::util::time_compat::Instant;
 
 #[cfg(not(target_arch = "wasm32"))]
-use crossbeam::channel::{Receiver, Sender};
+use crossbeam_channel::{Receiver, Sender};
 
 use crate::backends::common::value::TaskId;
 
@@ -103,7 +103,7 @@ impl SpawnHandle {
         meta: TaskMeta,
         task: TaskFn,
     ) -> Result<TaskId, RuntimeError> {
-        let (respond_tx, respond_rx) = crossbeam::channel::bounded(1);
+        let (respond_tx, respond_rx) = crossbeam_channel::bounded(1);
         self.tx
             .send(WorkerMessage::SpawnRequest {
                 meta,
@@ -117,7 +117,7 @@ impl SpawnHandle {
     }
 
     pub fn noop() -> Self {
-        let (tx, _rx) = crossbeam::channel::unbounded();
+        let (tx, _rx) = crossbeam_channel::unbounded();
         Self { tx }
     }
 }
@@ -379,7 +379,7 @@ struct StandardRuntime {
 #[cfg(not(target_arch = "wasm32"))]
 impl StandardRuntime {
     fn new(workers: usize) -> Result<Self, RuntimeFacadeError> {
-        let (msg_tx, msg_rx) = crossbeam::channel::unbounded::<WorkerMessage>();
+        let (msg_tx, msg_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
         let (work_tx, threads) = spawn_worker_threads(workers, msg_tx.clone());
 
         Ok(Self {
@@ -600,7 +600,7 @@ impl StandardRuntime {
 impl Drop for StandardRuntime {
     fn drop(&mut self) {
         // Close the work channel to signal workers to exit.
-        let (dummy_tx, _dummy_rx) = crossbeam::channel::unbounded::<WorkItem>();
+        let (dummy_tx, _dummy_rx) = crossbeam_channel::unbounded::<WorkItem>();
         let old = std::mem::replace(&mut self.work_tx, dummy_tx);
         drop(old);
         for t in self.threads.drain(..) {
@@ -618,7 +618,7 @@ fn spawn_worker_threads(
     workers: usize,
     msg_tx: Sender<WorkerMessage>,
 ) -> (Sender<WorkItem>, Vec<JoinHandle<()>>) {
-    let (work_tx, work_rx) = crossbeam::channel::unbounded::<WorkItem>();
+    let (work_tx, work_rx) = crossbeam_channel::unbounded::<WorkItem>();
     let mut threads = Vec::with_capacity(workers);
     for _ in 0..workers {
         let work_rx = work_rx.clone();

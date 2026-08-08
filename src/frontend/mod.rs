@@ -78,7 +78,7 @@ pub mod compiler;
 pub use compiler::Compiler;
 
 // 编译配置
-pub use config::{CompileConfig, OptLevel, DiagLevel, FeatureFlags, ErrorRecoveryStrategy};
+pub use config::{CompileConfig, DeadCodeConfig, MonoConfig};
 
 // 编译流水线
 pub use pipeline::{Pipeline, PipelineState, CompilationResult};

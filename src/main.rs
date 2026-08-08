@@ -219,14 +219,8 @@ enum Commands {
         lang: Option<LangArg>,
     },
 
-    /// Print version information
-    Version,
-
-    /// Start TUI REPL (default when no command is provided) (Experimental Feature)
-    Repl {
-        #[arg(short, long)]
-        tui: bool,
-    },
+    /// Start REPL (default when no command is provided)
+    Repl,
 
     /// Initialize a new YaoXiang project
     Init {
@@ -299,7 +293,7 @@ fn main() -> Result<()> {
     set_lang_from_string(lang);
 
     // 如果没有提供子命令，启动 TUI REPL
-    let command = args.command.unwrap_or(Commands::Repl { tui: false });
+    let command = args.command.unwrap_or(Commands::Repl);
 
     // Initialize logger
     // LSP 模式必须写 stderr，避免污染 stdout 的 JSON-RPC 通道
@@ -516,16 +510,7 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
         }
-        Commands::Version => {
-            info!("{} {}", NAME, VERSION);
-        }
-        Commands::Repl { tui } => {
-            if tui {
-                tracing::error!(
-                    "TUI REPL mode is not available. Use 'yaoxiang repl' for the standard REPL."
-                );
-                std::process::exit(1);
-            }
+        Commands::Repl => {
             let mut repl = Repl::new().context("Failed to initialize REPL")?;
             repl.run().context("REPL exited with error")?;
         }
