@@ -1,106 +1,106 @@
 {
-  "cmd_received": "喵~ 收到运行命令喵~",
-  "run_file": "运行文件喵~",
-  "reading_file": "正在读取文件喵~：{0}",
-  "build_bytecode": "构建字节码喵~",
-  "writing_bytecode": "正在写入字节码喵~：{0}",
-  "lex_start": "开始词法分析喵~",
-  "lex_complete_tokens": "词法分析完成喵~：{0} 个 token",
-  "lex_token_identifier": "词法分析喵~：标识符 {0}",
-  "lex_token_keyword": "词法分析喵~：关键字 {0}",
-  "lex_token_number": "词法分析喵~：数字 {0}",
-  "lex_token_string": "词法分析喵~：字符串 \"{0}\"",
-  "lex_token_char": "词法分析喵~：字符 '{0}'",
-  "lex_token_operator": "词法分析喵~：运算符 {0}",
-  "lex_token_punctuation": "词法分析喵~：标点 {0}",
-  "codegen_start": "开始代码生成喵~",
-  "codegen_complete": "代码生成完成喵~",
-  "codegen_functions": "代码生成完成喵~：{0} 个函数",
-  "codegen_const_pool": "正在生成常量池喵~：{0} 个常量",
-  "codegen_code_section": "正在生成代码段喵~：{0} 个函数",
-  "codegen_type_table": "正在生成类型表喵~：{0} 个类型",
-  "vm_start": "VM 喵呜开始执行",
+  "cmd_received": "喵~收到运行命令喵",
+  "run_file": "运行文件喵",
+  "reading_file": "喵~正在读取文件：{0}喵",
+  "build_bytecode": "构建字节码喵",
+  "writing_bytecode": "喵~正在写入字节码：{0}喵",
+  "lex_start": "开始词法分析喵",
+  "lex_complete_tokens": "词法分析完成：{0} 个 token 喵",
+  "lex_token_identifier": "词法分析：标识符 {0} 喵",
+  "lex_token_keyword": "词法分析：关键字 {0} 喵",
+  "lex_token_number": "词法分析：数字 {0} 喵",
+  "lex_token_string": "词法分析：字符串 \"{0}\" 喵",
+  "lex_token_char": "词法分析：字符 '{0}' 喵",
+  "lex_token_operator": "词法分析：运算符 {0} 喵",
+  "lex_token_punctuation": "词法分析：标点 {0} 喵",
+  "codegen_start": "开始代码生成喵",
+  "codegen_complete": "代码生成完成喵",
+  "codegen_functions": "代码生成完成：{0} 个函数喵",
+  "codegen_const_pool": "喵~正在生成常量池：{0} 个常量喵",
+  "codegen_code_section": "喵~正在生成代码段：{0} 个函数喵",
+  "codegen_type_table": "喵~正在生成类型表：{0} 个类型喵",
+  "vm_start": "VM 开始执行喵~",
   "vm_complete": "VM 执行完成喵~",
-  "vm_call_func": "喵用函数：{0}",
+  "vm_call_func": "调用函数喵：{0}",
   "vm_return_func": "函数返回喵~",
-  "vm_i64_add": "喵算 {0} + {1}",
-  "compilation_start": "开始喵译",
-  "compiling_source": "正在喵译源代码（{0} 字节）",
-  "debug_run_called": "run() 被喵用",
-  "debug_loading_function": "将函数 '{0}' 喵载到解释器",
-  "debug_total_functions": "已喵载函数总数：{0}",
-  "debug_available_functions": "可用函数：{0}喵",
-  "debug_exec_binary_op": "执行二元喵操作：左={0}, 右={1}, 操作={2}",
-  "debug_adding_numbers": "喵算 {0} + {1}",
-  "debug_generating_ir_binop": "为二元喵操作生成 IR {0}",
-  "bytecode_dump_header": "=== {0} 的字节码喵转储 ===",
-  "bytecode_dump_type_table": "=== 类型喵表（{0} 个类型） ===",
-  "bytecode_dump_constants": "=== 常喵量（{0} 项） ===",
-  "bytecode_dump_functions": "=== 喵函数（{0} 个函数） ===",
-  "bytecode_magic": "  魔喵数：0x{0}",
-  "bytecode_version": "  版本：{0}喵~",
+  "vm_i64_add": "计算 {0} + {1} 喵~",
+  "compilation_start": "开始编译喵~",
+  "compiling_source": "正在编译源代码喵（{0} 字节）",
+  "debug_run_called": "run() 被调用喵~",
+  "debug_loading_function": "将函数 '{0}' 加载到解释器喵~",
+  "debug_total_functions": "已加载函数总数喵：{0}",
+  "debug_available_functions": "可用函数喵：{0}",
+  "debug_exec_binary_op": "执行二元操作喵：左={0}, 右={1}, 操作={2}",
+  "debug_adding_numbers": "计算 {0} + {1} 喵~",
+  "debug_generating_ir_binop": "为二元操作生成 IR {0} 喵~",
+  "bytecode_dump_header": "=== {0} 的字节码转储喵 ===",
+  "bytecode_dump_type_table": "=== 类型表（{0} 个类型）喵 ===",
+  "bytecode_dump_constants": "=== 常量（{0} 项）喵 ===",
+  "bytecode_dump_functions": "=== 函数（{0} 个函数）喵 ===",
+  "bytecode_magic": "  魔数：0x{0} 喵~",
+  "bytecode_version": "  版本：{0} 喵~",
   "bytecode_flags": "  标志喵：0x{0}",
-  "bytecode_entry_point": "  入口点喵：{0}",
-  "bytecode_section_count": "  段数喵：{0}",
-  "bytecode_file_size": "  文件大小喵：{0} 字节",
-  "bytecode_func_params": "  参数喵：{0}",
-  "bytecode_func_return_type": "  返回类型喵：{0}",
-  "bytecode_func_local_count": "  局部变量数喵：{0}",
-  "bytecode_func_instr_count": "  指令数喵：{0}",
-  "bytecode_func_code": "  代码喵：",
-  "bytecode_instr_index": "    [{0}] {1} {2} 喵",
-  "bytecode_unknown_opcode": "    [{0}] 未知操作码喵：0x{1}  ({2})",
-  "shell_loaded": "已加载喵：{0}",
-  "debug_binary_op": "调试喵：左值={0}, 右值={1}",
-  "debug_registers": "调试喵：寄存器.len={0}, 左索引={1}, 右索引={2}",
-  "ir_gen_enter_scope": "调试 IR 生成喵：进入作用域，符号栈深度之前：{0}",
-  "ir_gen_exit_scope": "调试 IR 生成喵：退出作用域，符号栈深度：{0}",
-  "ir_gen_register_local": "调试 IR 生成喵：注册局部变量 '{0}'，local_idx={1}",
-  "ir_gen_lookup_local": "调试 IR 生成喵：查找局部变量 '{0}' -> local_idx={1}",
-  "ir_gen_lookup_local_not_found": "调试 IR 生成喵：查找局部变量 '{0}' -> None",
-  "ir_gen_before_process_stmt": "调试 IR 生成喵：处理语句前，符号深度={0}",
-  "ir_gen_after_process_stmt": "调喵 IR 生成：语句处理完毕喵，符号深度={0}",
-  "ir_gen_about_to_exit_scope": "调喵 IR 生成：作用域马上要跑路喵，符号深度={0}",
-  "ir_gen_after_exit_scope": "调喵 IR 生成：作用域已跑路喵，符号深度={0}",
+  "bytecode_entry_point": "  入口喵点：{0}",
+  "bytecode_section_count": "  段喵数：{0}",
+  "bytecode_file_size": "  喵件大小：{0} 字节喵",
+  "bytecode_func_params": "  喵参：{0}",
+  "bytecode_func_return_type": "  返回喵类型：{0}",
+  "bytecode_func_local_count": "  局部喵变量数：{0}",
+  "bytecode_func_instr_count": "  指令喵数：{0}",
+  "bytecode_func_code": "  喵码：",
+  "bytecode_instr_index": "    [喵{0}] {1} {2}",
+  "bytecode_unknown_opcode": "    [喵{0}] 未知喵操作码：0x{1}  ({2})",
+  "shell_loaded": "已喵载：{0}",
+  "debug_binary_op": "喵试：左喵值={0}, 右喵值={1}",
+  "debug_registers": "喵试：喵寄存器.len={0}, 左喵索引={1}, 右喵索引={2}",
+  "ir_gen_enter_scope": "喵试 IR 喵生成：进入喵作用域，喵符号喵栈喵深度之前：{0}",
+  "ir_gen_exit_scope": "喵试 IR 喵生成：退出喵作用域，喵符号喵栈喵深度：{0}",
+  "ir_gen_register_local": "喵试 IR 喵生成：注册喵局部喵变量 '{0}'，local_idx={1}",
+  "ir_gen_lookup_local": "喵试 IR 喵生成：喵查找局部喵变量 '{0}' -> local_idx={1}",
+  "ir_gen_lookup_local_not_found": "喵试 IR 喵生成：喵查找局部喵变量 '{0}' -> None",
+  "ir_gen_before_process_stmt": "喵试 IR 喵生成：喵处理喵语句前，喵符号喵深度={0}",
+  "ir_gen_after_process_stmt": "调试 IR 生成喵：处理语句后，符号深度={0}喵",
+  "ir_gen_about_to_exit_scope": "调试 IR 生成喵：即将退出作用域，符号深度={0}喵",
+  "ir_gen_after_exit_scope": "调试 IR 生成喵：退出作用域后，符号深度={0}喵",
   "parser_test_parsed_params": "解析参数喵：{0:?}",
   "parser_test_parsed_return_type": "解析返回类型喵：{0:?}",
-  "parser_test_parsed_as_var": "解析成变量了喵（才不是函数呢~）",
-  "parser_test_name": "名字喵：{0}",
+  "parser_test_parsed_as_var": "解析为变量而不是函数喵",
+  "parser_test_name": "名称喵：{0}",
   "parser_test_annotation": "注解喵：{0:?}",
-  "package_project_created_lib": "✓ 已创建库项目 '{0}' 喵",
-  "package_init_here": "✓ 已在当前目录初始化项目 '{0}' 喵",
-  "package_file_skipped": "  跳过已存在文件 '{0}' 喵",
+  "package_project_created_lib": "✓ 库项目 '{0}' 已搭好小窝啦 喵~",
+  "package_init_here": "✓ 已在当前窝里初始化好项目 '{0}' 喵~",
+  "package_file_skipped": "  跳过已在窝里的文件 '{0}' 喵~",
   "E0001": {
-    "title": "无效字符喵",
-    "message": "源代码包含非法字符喵",
-    "template": "无效字符：'{char}' 喵",
-    "help": "删除非法字符或使用有效的编码喵",
+    "title": "坏字符喵~",
+    "message": "源代码里藏着不乖的字符喵~",
+    "template": "坏字符喵：'{char}'",
+    "help": "把坏字符赶走喵，或者换种正确的编码喵~",
     "example": "x = ¥100;",
-    "error_output": "error[E0001]: 无效字符\n --> example.yx:1:5\n  |\n1 | x = ¥100;\n  |     ^ 非法字符 '¥' 喵"
+    "error_output": "error[E0001]: 坏字符喵~\n --> example.yx:1:5\n  |\n1 | x = ¥100;\n  |     ^ 坏字符 '¥' 喵~"
   },
   "E0002": {
-    "title": "无效数字字面量喵",
-    "message": "数字字面量格式不正确喵",
-    "template": "无效数字字面量：'{literal}' 喵",
-    "help": "检查数字字面量的格式喵",
+    "title": "坏数字字面量喵~",
+    "message": "数字字面量长得不对劲喵~",
+    "template": "坏数字字面量喵：'{literal}'",
+    "help": "检查一下数字字面量的格式喵~",
     "example": "x = 1_2_3_;",
-    "error_output": "error[E0002]: 无效数字字面量\n --> example.yx:1:5\n  |\n1 | x = 1_2_3_;\n  |     ^ 无效数字 喵"
+    "error_output": "error[E0002]: 坏数字字面量喵~\n --> example.yx:1:5\n  |\n1 | x = 1_2_3_;\n  |     ^ 坏数字 喵~"
   },
   "E0003": {
-    "title": "未终止的字符串喵",
+    "title": "没结束的字符串喵~",
     "message": "字符串字面量缺少闭合引号喵~",
     "template": "字符串从第 {line} 行开始未终止喵~",
     "help": "为字符串添加闭合引号喵~",
     "example": "x = \"hello world;",
-    "error_output": "error[E0003]: 未终止的字符串喵\n --> example.yx:1:5\n  |\n1 | x = \"hello world;\n  |     ^ 未终止的字符串喵"
+    "error_output": "error[E0003]: 未终止的字符串喵~\n --> example.yx:1:5\n  |\n1 | x = \"hello world;\n  |     ^ 未终止的字符串喵~"
   },
   "E0004": {
     "title": "无效字符字面量喵~",
     "message": "字符字面量不正确喵~",
-    "template": "无效字符字面量：'{literal}'喵~",
+    "template": "无效字符字面量喵~：'{literal}'",
     "help": "字符字面量只能包含一个字符喵~",
     "example": "x = 'ab';",
-    "error_output": "error[E0004]: 无效字符字面量喵\n --> example.yx:1:5\n  |\n1 | x = 'ab';\n  |     ^ 字符字面量包含多个字符喵"
+    "error_output": "error[E0004]: 无效字符字面量喵~\n --> example.yx:1:5\n  |\n1 | x = 'ab';\n  |     ^ 字符字面量包含多个字符喵~"
   },
   "E0010": {
     "title": "期望的令牌喵~",
@@ -108,741 +108,741 @@
     "template": "期望 {expected}，找到 {found} 喵~",
     "help": "检查语法并添加期望的令牌喵~",
     "example": "x = 1, 2;",
-    "error_output": "error[E0010]: 期望的令牌喵\n --> example.yx:1:7\n  |\n1 | x = 1, 2;\n  |       ^ 期望 ',' 或 ';' 喵~"
+    "error_output": "error[E0010]: 期望的令牌喵~\n --> example.yx:1:7\n  |\n1 | x = 1, 2;\n  |       ^ 期望 ',' 或 ';' 喵~"
   },
   "E0011": {
     "title": "意外的令牌喵~",
     "message": "遇到了意外的令牌喵~",
-    "template": "意外的令牌：'{token}'喵~",
-    "help": "喵~把那个奇怪的喵令删掉或换掉喵！",
+    "template": "意外的令牌喵~：'{token}'",
+    "help": "删除或替换这个意外的令牌喵",
     "example": "x = 1 @ 2;",
-    "error_output": "error[E0011]: 奇怪的喵令喵\n --> example.yx:1:7\n  |\n1 | x = 1 @ 2;\n  |       ^ 奇怪的喵令 '@' 喵"
+    "error_output": "error[E0011]: 意外的令牌喵\n --> example.yx:1:7\n  |\n1 | x = 1 @ 2;\n  |       ^ 意外的令牌喵 '@'"
   },
   "E0012": {
-    "title": "语法坏掉喵",
-    "message": "表达式或语句的语法出错了喵~",
-    "template": "语法坏掉喵：{reason}",
-    "help": "检查一下表达式或语句的语法喵~",
+    "title": "无效语法喵",
+    "message": "表达式或语句存在语法错误喵",
+    "template": "无效语法喵：{reason}",
+    "help": "检查一下表达式或语句的语法喵",
     "example": "if x { }",
-    "error_output": "error[E0012]: 语法坏掉喵\n --> example.yx:1:3\n  |\n1 | if x { }\n  |    ^ 缺少条件喵"
+    "error_output": "error[E0012]: 无效语法喵\n --> example.yx:1:3\n  |\n1 | if x { }\n  |    ^ 缺少条件喵"
   },
   "E0013": {
-    "title": "括号不配对喵",
-    "message": "圆括号、方括号或花括号都不配对喵~",
-    "template": "不配对的 {bracket_type} 喵：在第 {open_line} 行、第 {open_col} 列打开却没合上喵~",
-    "help": "要确保所有括号都正确合上喵~",
+    "title": "不匹配的括号喵",
+    "message": "圆括号、方括号或花括号不匹配喵",
+    "template": "不匹配的 {bracket_type}喵：在第 {open_line} 行、第 {open_col} 列打开，未闭合喵",
+    "help": "确保所有括号都正确闭合喵",
     "example": "x = (1 + 2;",
-    "error_output": "error[E0013]: 括号不配对喵\n --> example.yx:1:1\n  |\n1 | x = (1 + 2;\n  |     ^ 圆括号没合上喵"
+    "error_output": "error[E0013]: 不匹配的括号喵\n --> example.yx:1:1\n  |\n1 | x = (1 + 2;\n  |     ^ 未闭合的圆括号喵"
   },
   "E0014": {
-    "title": "少了个分号喵",
-    "message": "这个语句少了个分号喵~",
-    "template": "{statement} 后面少了个分号喵",
-    "help": "在语句末尾加上分号喵~",
+    "title": "缺少分号喵",
+    "message": "语句缺少分号喵",
+    "template": "{statement} 后缺少分号喵",
+    "help": "在语句末尾添加分号喵",
     "example": "x = 1\ny = 2",
-    "error_output": "error[E0014]: 缺少分号喵\n --> example.yx:1:5\n  |\n1 | x = 1\n  |       ^ 缺少分号喵"
+    "error_output": "error[E0014]: 喵～缺少分号喵\n --> example.yx:1:5\n  |\n1 | x = 1\n  |       ^ 喵呜～这里需要分号喵"
   },
   "E1001": {
     "title": "未知变量喵",
-    "message": "引用的变量未定义喵",
+    "message": "引用的变量未定义喵～",
     "template": "未知变量喵：'{name}'",
-    "help": "检查变量名是否拼写正确，或先定义它喵~",
+    "help": "检查变量名是否拼写正确喵，或先定义它喵",
     "example": "x = y + 1;",
-    "error_output": "error[E1001]: 未知变量喵\n --> example.yx:1:5\n  |\n1 | x = y + 1;\n  |       ^ 未定义的变量 'y' 喵"
+    "error_output": "error[E1001]: 未知变量喵\n --> example.yx:1:5\n  |\n1 | x = y + 1;\n  |       ^ 未定义的变量 'y' 喵～"
   },
   "E1002": {
     "title": "类型不匹配喵",
-    "message": "期望类型与实际类型不匹配喵",
-    "template": "期望类型 '{expected}'，实际类型 '{found}' 喵",
-    "help": "使用正确的类型或添加类型转换喵~",
+    "message": "期望类型与实际类型不匹配喵～",
+    "template": "期望类型 '{expected}' 喵，实际类型 '{found}' 喵",
+    "help": "使用正确的类型或添加类型转换喵",
     "example": "x: Int = \"hello\";",
-    "error_output": "error[E1002]: 类型不匹配喵\n --> example.yx:1:12\n  |\n1 | x: Int = \"hello\";\n  |            ^ 期望 'Int'，找到 'String' 喵"
+    "error_output": "error[E1002]: 类型不匹配喵\n --> example.yx:1:12\n  |\n1 | x: Int = \"hello\";\n  |            ^ 期望 'Int' 喵，找到 'String' 喵"
   },
   "E1003": {
     "title": "未知类型喵",
-    "message": "引用的类型不存在喵",
+    "message": "引用的类型不存在喵～",
     "template": "未知类型喵：'{type}'",
-    "help": "检查类型名是否拼写正确喵~",
+    "help": "检查类型名是否拼写正确喵",
     "example": "x: MyType = 1;",
-    "error_output": "error[E1003]: 未知类型喵\n --> example.yx:1:5\n  |\n1 | x: MyType = 1;\n  |     ^ 未定义的类型 'MyType' 喵"
+    "error_output": "error[E1003]: 未知类型喵\n --> example.yx:1:5\n  |\n1 | x: MyType = 1;\n  |     ^ 未定义的类型 'MyType' 喵～"
   },
   "E1010": {
     "title": "参数数量不匹配喵",
-    "message": "喵～函数调用参数和定义对不上号呢",
-    "template": "函数 '{func}' 想要 {expected} 个参数喵，你却给了 {found} 个",
-    "help": "检查一下函数调用时传了几个参数喵",
+    "message": "喵呜～函数调用的参数和定义对不上喵",
+    "template": "函数 '{func}' 期望 {expected} 个参数喵，可是只找到 {found} 个喵",
+    "help": "检查一下函数调用的参数数量喵",
     "example": "add(1, 2, 3);",
-    "error_output": "error[E1010]: 参数数量对不上喵\n --> example.yx:1:1\n  |\n1 | add(1, 2, 3);\n  |     ^ 函数想要 2 个参数喵，你却给了 3 个"
+    "error_output": "error[E1010]: 参数数量对不上喵\n --> example.yx:1:1\n  |\n1 | add(1, 2, 3);\n  |     ^ 函数期望 2 个参数喵，只找到 3 个喵"
   },
   "E1011": {
     "title": "参数类型对不上喵",
-    "message": "参数类型检查没过喵～",
-    "template": "参数类型对不上喵：想要 '{expected}'，你给的却是 '{found}'",
-    "help": "要让参数类型乖乖匹配函数签名喵",
+    "message": "参数类型检查失败喵",
+    "template": "参数类型对不上喵：期望 '{expected}'，实际 '{found}'",
+    "help": "要确保参数类型和函数签名匹配喵",
     "example": "add(\"hello\", 2);",
-    "error_output": "error[E1011]: 参数类型对不上喵\n --> example.yx:1:5\n  |\n1 | add(\"hello\", 2);\n  |     ^ 想要 'Int' 喵，你却给了 'String'"
+    "error_output": "error[E1011]: 参数类型对不上喵\n --> example.yx:1:5\n  |\n1 | add(\"hello\", 2);\n  |     ^ 期望 'Int'，找到 'String'"
   },
   "E1012": {
     "title": "返回类型对不上喵",
-    "message": "函数的返回类型不太对劲喵～",
-    "template": "返回类型对不上喵：想要 '{expected}'，你给的却是 '{found}'",
-    "help": "要让返回值乖乖匹配声明的返回类型喵",
+    "message": "函数返回类型不正确喵",
+    "template": "返回类型对不上喵：期望 '{expected}'，实际 '{found}'",
+    "help": "要确保返回值和声明的返回类型匹配喵",
     "example": "fn foo() -> Int { \"hello\" }",
-    "error_output": "error[E1012]: 返回类型对不上喵\n --> example.yx:1:19\n  |\n1 | fn foo() -> Int { \"hello\" }\n  |                   ^ 想要 'Int' 喵，你却给了 'String'"
+    "error_output": "error[E1012]: 返回类型对不上喵\n --> example.yx:1:19\n  |\n1 | fn foo() -> Int { \"hello\" }\n  |                   ^ 期望 'Int'，找到 'String'"
   },
   "E1013": {
-    "title": "函数找不到了喵",
-    "message": "调用了一个没定义的函数喵～",
-    "template": "函数 '{func}' 找不到了喵",
-    "help": "检查函数名是否拼写正确喵~",
+    "title": "函数找不到喵",
+    "message": "调用了一个不存在的函数喵",
+    "template": "函数找不到喵：'{func}'",
+    "help": "检查函数名是否拼写正确喵",
     "example": "unknown_fn();",
-    "error_output": "error[E1013]: 函数未找到喵~\n --> example.yx:1:1\n  |\n1 | unknown_fn();\n  | ^ 未定义的函数 'unknown_fn'喵~"
+    "error_output": "error[E1013]: 函数未找到喵\n --> example.yx:1:1\n  |\n1 | unknown_fn();\n  | ^ 未定义的函数 'unknown_fn'喵"
   },
   "E1020": {
-    "title": "无法推断类型喵~",
-    "message": "上下文无法推断类型喵~",
-    "template": "无法推断 '{expr}' 的类型喵~",
-    "help": "添加类型注解或显式类型参数喵~",
+    "title": "无法推断类型喵",
+    "message": "上下文无法推断类型喵",
+    "template": "无法推断 '{expr}' 的类型喵",
+    "help": "添加类型注解或显式类型参数喵",
     "example": "let x = nil;",
-    "error_output": "error[E1020]: 无法推断类型喵~\n --> example.yx:1:9\n  |\n1 | let x = nil;\n  |         ^ 无法从 'nil' 推断类型喵~"
+    "error_output": "error[E1020]: 无法推断类型喵\n --> example.yx:1:9\n  |\n1 | let x = nil;\n  |         ^ 无法从 'nil' 推断类型喵"
   },
   "E1021": {
-    "title": "类型推断冲突喵~",
-    "message": "多个约束导致类型矛盾喵~",
-    "template": "类型推断冲突：{reason}喵~",
-    "help": "检查类型注解的一致性喵~",
+    "title": "类型推断冲突喵",
+    "message": "多个约束导致类型矛盾喵",
+    "template": "类型推断冲突喵：{reason}",
+    "help": "检查类型注解的一致性喵",
     "example": "let x: Int = \"hello\";",
-    "error_output": "error[E1021]: 类型推断冲突喵~\n --> example.yx:1:11\n  |\n1 | let x: Int = \"hello\";\n  |           ^ 类型注解与推断类型冲突喵~"
+    "error_output": "error[E1021]: 类型推断冲突喵\n --> example.yx:1:11\n  |\n1 | let x: Int = \"hello\";\n  |           ^ 类型注解与推断类型冲突喵"
   },
   "E1030": {
-    "title": "模式不完整喵~",
-    "message": "match 表达式没有覆盖所有情况喵~",
-    "template": "模式不完整：缺少 {patterns}喵~",
-    "help": "为 match 表达式添加缺失的模式喵~",
+    "title": "模式不完整喵",
+    "message": "match 表达式没有覆盖所有情况喵",
+    "template": "模式不完整喵：缺少 {patterns}",
+    "help": "为 match 表达式添加缺失的模式喵",
     "example": "match x { Some(_) => 1 }",
-    "error_output": "error[E1030]: 模式不完整喵\n --> example.yx:1:1\n  |\n1 | match x { Some(_) => 1 }\n  |     ^ 模式 'None' 未覆盖喵"
+    "error_output": "error[E1030]: 喵式不完喵\n --> example.yx:1:1\n  |\n1 | match x { Some(_) => 1 }\n  |     ^ 喵式 'None' 未喵盖"
   },
   "E1031": {
-    "title": "不可达模式喵",
-    "message": "永远无法匹配的模式喵",
-    "template": "不可达模式喵：'{pattern}'",
-    "help": "删除或修改不可达的模式喵",
+    "title": "不可达喵式",
+    "message": "永远无法喵配的喵式",
+    "template": "不可达喵式：'{pattern}'",
+    "help": "删除或修改不可达的喵式",
     "example": "match x { 1 => \"one\", 1 => \"another\" }",
-    "error_output": "error[E1031]: 不可达模式喵\n --> example.yx:1:18\n  |\n1 | match x { 1 => \"one\", 1 => \"another\" }\n  |                  ^ 模式 '1' 已被覆盖喵"
+    "error_output": "error[E1031]: 不可达喵式\n --> example.yx:1:18\n  |\n1 | match x { 1 => \"one\", 1 => \"another\" }\n  |                  ^ 喵式 '1' 已被喵盖"
   },
   "E1040": {
-    "title": "操作不支持喵",
-    "message": "类型不支持该操作喵",
-    "template": "类型 '{type}' 不支持操作 '{op}' 喵",
-    "help": "检查该类型支持的操作喵",
+    "title": "操作不喵持",
+    "message": "类型不喵持该操作",
+    "template": "类型 '{type}' 不喵持操作 '{op}'",
+    "help": "喵查该类型喵持的操作",
     "example": "\"hello\" + 1;",
-    "error_output": "error[E1040]: 操作不支持喵\n --> example.yx:1:9\n  |\n1 | \"hello\" + 1;\n  |         ^ String 类型不支持 '+' 操作喵"
+    "error_output": "error[E1040]: 操作不喵持\n --> example.yx:1:9\n  |\n1 | \"hello\" + 1;\n  |         ^ String 类型不喵持 '+' 操作"
   },
   "E1041": {
-    "title": "索引越界喵",
-    "message": "数组/列表索引超出范围喵",
-    "template": "索引越界喵：有效范围是 0..{max}，找到 {index}",
-    "help": "确保索引在集合范围内喵",
+    "title": "索引越喵",
+    "message": "数组/喵表索引超出范围",
+    "template": "索引越喵：有喵范围是 0..{max}，找到 {index}",
+    "help": "喵保索引在集合喵围内",
     "example": "arr[10];",
-    "error_output": "error[E1041]: 索引越界喵\n --> example.yx:1:5\n  |\n1 | arr[10];\n  |     ^ 索引 10 超出数组长度 5 喵"
+    "error_output": "error[E1041]: 索引越喵\n --> example.yx:1:5\n  |\n1 | arr[10];\n  |     ^ 索引 10 喵出数组长度 5"
   },
   "E1042": {
-    "title": "字段未找到喵",
-    "message": "喵喵喵喵喵喵喵喵喵喵喵",
-    "template": "喵喵喵喵 '{struct}' 喵喵喵喵喵喵 '{field}'",
-    "help": "喵喵喵喵喵喵喵喵喵喵",
+    "title": "字段未喵到",
+    "message": "喵呜~ 访问了不存在的结构体字段喵",
+    "template": "喵~ 在结构体 '{struct}' 中找不到字段 '{field}' 喵",
+    "help": "喵~ 检查一下结构体的可用字段吧",
     "example": "point.z;",
-    "error_output": "error[E1042]: 喵喵喵喵喵\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ 喵喵喵喵 'Point' 喵喵喵喵喵喵 'z'"
+    "error_output": "error[E1042]: 喵呜~ 字段未找到\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ 喵~ 在结构体 'Point' 中找不到字段 'z'"
   },
   "E1050": {
-    "title": "喵喵喵喵喵喵喵",
-    "message": "喵喵喵喵喵喵喵喵喵喵喵",
-    "template": "喵喵喵喵喵喵喵喵喵喵喵，喵喵喵 '{left}' 喵 '{right}'",
-    "help": "喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵",
+    "title": "需要布尔操作数喵",
+    "message": "喵~ 逻辑运算需要布尔操作数喵",
+    "template": "喵~ 逻辑运算需要布尔操作数，实际为 '{left}' 和 '{right}' 喵",
+    "help": "喵~ 将操作数转换为布尔类型或使用其他运算符吧",
     "example": "let x = 1 && 2;",
-    "error_output": "error[E1050]: 喵喵喵喵喵喵喵\n --> example.yx:1:9\n  |\n1 | let x = 1 && 2;\n  |         ^ 喵喵喵喵喵喵喵喵喵喵喵"
+    "error_output": "error[E1050]: 喵呜~ 需要布尔操作数\n --> example.yx:1:9\n  |\n1 | let x = 1 && 2;\n  |         ^ 喵~ 逻辑运算需要布尔操作数"
   },
   "E1051": {
-    "title": "喵喵 NOT 喵喵喵喵喵喵喵",
-    "message": "喵喵 NOT 喵喵喵喵喵喵喵喵喵",
-    "template": "喵喵 NOT 喵喵喵喵喵喵喵，喵喵喵 '{type}'",
-    "help": "喵喵喵 NOT 喵喵喵喵喵喵喵喵喵喵喵喵",
+    "title": "逻辑 NOT 需要布尔操作数喵",
+    "message": "喵~ 逻辑 NOT 运算需要布尔操作数喵",
+    "template": "喵~ 逻辑 NOT 需要布尔操作数，实际为 '{type}' 喵",
+    "help": "喵~ 在应用 NOT 前将操作数转换为布尔类型吧",
     "example": "let x = !42;",
-    "error_output": "error[E1051]: 喵喵 NOT 喵喵喵喵喵喵喵\n --> example.yx:1:9\n  |\n1 | let x = !42;\n  |         ^ NOT 喵喵喵喵喵喵喵，喵喵喵 'Int'"
+    "error_output": "error[E1051]: 喵呜~ 逻辑 NOT 需要布尔操作数\n --> example.yx:1:9\n  |\n1 | let x = !42;\n  |         ^ 喵~ NOT 需要布尔操作数，实际为 'Int'"
   },
   "E1052": {
-    "title": "喵喵喵喵喵",
-    "message": "喵喵喵喵喵喵喵喵喵喵",
-    "template": "喵喵喵喵喵喵喵 '{type}'，喵喵喵喵喵喵",
-    "help": "只有指针类型才能解引用喵",
+    "title": "无效解引用喵",
+    "message": "喵~ 无法解引用非指针类型喵",
+    "template": "喵~ 无法解引用类型 '{type}'，期望指针类型 喵",
+    "help": "只有指针类型可以解引用喵~",
     "example": "let x = *42;",
-    "error_output": "error[E1052]: 无效解引用喵\n --> example.yx:1:9\n  |\n1 | let x = *42;\n  |         ^ 无法解引用 'Int' 喵"
+    "error_output": "error[E1052]: 无效解引用喵~\n --> example.yx:1:9\n  |\n1 | let x = *42;\n  |         ^ 无法解引用 'Int' 喵~"
   },
   "E1053": {
-    "title": "非结构体字段访问喵",
-    "message": "无法在非结构体类型上访问字段喵",
-    "template": "无法在非结构体类型 '{type}' 上访问字段喵",
-    "help": "字段访问仅适用于结构体类型喵",
+    "title": "非结构体字段访问喵~",
+    "message": "无法在非结构体类型上访问字段喵~",
+    "template": "无法在非结构体类型 '{type}' 上访问字段喵~",
+    "help": "字段访问仅适用于结构体类型喵~",
     "example": "let x = 42.field;",
-    "error_output": "error[E1053]: 非结构体字段访问喵\n --> example.yx:1:12\n  |\n1 | let x = 42.field;\n  |            ^ 无法在 'Int' 上访问字段喵"
+    "error_output": "error[E1053]: 非结构体字段访问喵~\n --> example.yx:1:12\n  |\n1 | let x = 42.field;\n  |            ^ 无法在 'Int' 上访问字段 喵~"
   },
   "E1054": {
-    "title": "条件类型不匹配喵",
-    "message": "条件表达式必须是布尔类型喵",
-    "template": "条件必须是布尔类型，实际为 '{type}' 喵",
-    "help": "使用布尔表达式或转换为布尔类型喵",
+    "title": "条件类型不匹配喵~",
+    "message": "条件表达式必须是布尔类型喵~",
+    "template": "条件必须是布尔类型，实际为 '{type}' 喵~",
+    "help": "使用布尔表达式或转换为布尔类型喵~",
     "example": "if 42 { }",
-    "error_output": "error[E1054]: 条件类型不匹配喵\n --> example.yx:1:4\n  |\n1 | if 42 { }\n  |    ^ 条件必须是布尔类型，实际为 'Int' 喵"
+    "error_output": "error[E1054]: 条件类型不匹配喵~\n --> example.yx:1:4\n  |\n1 | if 42 { }\n  |    ^ 条件必须是布尔类型，实际为 'Int' 喵~"
   },
   "E1055": {
-    "title": "约束在非泛型上下文中喵",
-    "message": "约束类型在非泛型上下文中使用喵",
-    "template": "约束类型 '{type}' 只能在泛型上下文中使用喵",
-    "help": "使用具体类型代替约束类型喵",
+    "title": "约束在非泛型上下文中喵~",
+    "message": "约束类型在非泛型上下文中使用喵~",
+    "template": "约束类型 '{type}' 只能在泛型上下文中使用喵~",
+    "help": "使用具体类型代替约束类型喵~",
     "example": "let x: Eq = 42;",
-    "error_output": "error[E1055]: 喵呜～约束在非泛型上下文中喵\n --> example.yx:1:8\n  |\n1 | let x: Eq = 42;\n  |        ^ 约束类型不能在此使用喵"
+    "error_output": "error[E1055]: 喵呜~约束在非泛型上下文中\n --> example.yx:1:8\n  |\n1 | let x: Eq = 42;\n  |        ^ 约束类型不能在此使用喵~"
   },
   "E1060": {
     "title": "类型参数数量不匹配喵",
-    "message": "提供的类型参数数量错误喵呜",
-    "template": "期望 {expected} 个类型参数，实际 {found} 个喵",
-    "help": "提供正确数量的类型参数喵～",
-    "example": "let x: Vec<Int, String> = vec![];",
-    "error_output": "error[E1060]: 类型参数数量不匹配喵\n --> example.yx:1:8\n  |\n1 | let x: Vec<Int, String> = vec![];\n  |        ^ 期望 1 个类型参数，找到 2 个喵"
+    "message": "提供的类型参数数量错误喵呜~",
+    "template": "期望 {expected} 个类型参数，实际 {found} 个喵~",
+    "help": "提供正确数量的类型参数喵~",
+    "example": "let x: Vec<Int, String> = vec![];  // 这样写就错啦喵",
+    "error_output": "error[E1060]: 类型参数数量不匹配喵\n --> example.yx:1:8\n  |\n1 | let x: Vec<Int, String> = vec![];\n  |        ^ 期望 1 个类型参数，找到 2 个喵呜~"
   },
   "E1061": {
-    "title": "无法实例化泛型喵呜",
+    "title": "无法实例化泛型喵~",
     "message": "泛型类型无法用给定参数实例化喵",
-    "template": "无法用给定参数实例化泛型类型喵～",
-    "help": "确保类型参数满足所有约束喵",
-    "example": "let x = Foo::<Int>();",
-    "error_output": "error[E1061]: 无法实例化泛型喵\n --> example.yx:1:9\n  |\n1 | let x = Foo::<Int>();\n  |         ^ 无法用给定参数实例化喵"
+    "template": "无法用给定参数实例化泛型类型喵呜~",
+    "help": "确保类型参数满足所有约束喵~",
+    "example": "let x = Foo::<Int>();  // 这样不行喵~",
+    "error_output": "error[E1061]: 无法实例化泛型喵\n --> example.yx:1:9\n  |\n1 | let x = Foo::<Int>();\n  |         ^ 无法用给定参数实例化喵呜~"
   },
   "E1070": {
     "title": "未知标签喵",
     "message": "引用的标签不存在喵",
     "template": "未知标签喵：'{label}'",
-    "help": "检查标签名或在循环上定义它喵",
-    "example": "break 'unknown;",
-    "error_output": "error[E1070]: 未知标签喵\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ 未知标签 'unknown'喵"
+    "help": "检查标签名或在循环上定义它喵~",
+    "example": "break 'unknown; 喵~",
+    "error_output": "error[E1070]: 未知标签喵\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ 未知标签 'unknown' 喵~"
   },
   "E1081": {
-    "title": "`?` 仅允许在返回 Result 的函数内使用喵",
-    "help": "请先将外层函数返回类型改为 `Result[T, E]`，再使用 `expr?` 进行错误传播喵。"
+    "title": "喵~ `?` 仅允许在返回 Result 的函数内使用",
+    "help": "喵~ 请先将外层函数返回类型改为 `Result[T, E]`，再使用 `expr?` 进行错误传播。"
   },
   "E1082": {
-    "title": "`?` 只能用于 Result 表达式喵",
-    "help": "请仅对类型为 `Result[T, E]` 的表达式使用 `?`喵。"
+    "title": "喵~ `?` 只能用于 Result 表达式",
+    "help": "喵~ 请仅对类型为 `Result[T, E]` 的表达式使用 `?`。"
   },
   "E1083": {
-    "title": "`?` 的错误类型不匹配喵",
-    "help": "请确保当前函数返回类型 `Result[_, E]` 的错误类型 `E` 与被解包的 `Result[_, E]` 的错误类型一致喵。"
+    "title": "喵~ `?` 的错误类型不匹配",
+    "help": "喵~ 请确保当前函数返回类型 `Result[_, E]` 的错误类型 `E` 与被解包的 `Result[_, E]` 的错误类型一致。"
   },
   "E2001": {
     "title": "作用域错误喵",
     "message": "变量不在当前作用域喵",
-    "template": "变量 '{name}' 不在作用域中喵",
-    "help": "检查喵一下变量的作用域喵，确保它在这里可以访问到喵~",
+    "template": "变量喵 '{name}' 不在作用域中",
+    "help": "喵查变量的作用域喵，确保它在这里可访问喵",
     "example": "fn foo() { x }",
-    "error_output": "error[E2001]: 作用域错误喵呜\n --> example.yx:1:8\n  |\n1 | fn foo() { x }\n  |        ^ 变量 'x' 不在作用域里喵"
+    "error_output": "error[E2001]: 作用域错误喵\n --> example.yx:1:8\n  |\n1 | fn foo() { x }\n  |        ^ 变量 'x' 不在作用域中喵"
   },
   "E2002": {
-    "title": "重复定义喵",
-    "message": "变量在同一个作用域里被定义了太多次喵！",
-    "template": "重复定义喵：'{name}' 已经在当前作用域里出现过了喵~",
-    "help": "重命名一下或者把重复的那个删掉喵",
+    "title": "喵～重复定义",
+    "message": "变量在喵一个作用域中定义了多次喵",
+    "template": "喵～重复定义：'{name}' 已在当前作用域中定义",
+    "help": "重命名喵或删除重复的定义喵",
     "example": "let x = 1; let x = 2;",
-    "error_output": "error[E2002]: 重复定义喵\n --> example.yx:1:11\n  |\n1 | let x = 1; let x = 2;\n  |           ^ 'x' 已经被定义过了喵"
+    "error_output": "error[E2002]: 重复定义喵\n --> example.yx:1:11\n  |\n1 | let x = 1; let x = 2;\n  |           ^ 'x' 已被定义喵"
   },
   "E2003": {
-    "title": "所有权错误喵",
-    "message": "所有权约束没有被满足喵呜",
-    "template": "所有权约束被违反喵：{reason}",
-    "help": "检查一下值的所有权语义喵~",
+    "title": "喵～所有权错误",
+    "message": "所有权约束喵未满足",
+    "template": "喵～所有权约束违反：{reason}",
+    "help": "喵查值的所有权语义喵",
     "example": "let a = vec![1, 2, 3]; let b = a;",
     "error_output": "error[E2003]: 所有权错误喵\n --> example.yx:1:19\n  |\n1 | let a = vec![1, 2, 3]; let b = a;\n  |                   ^ 值已经被移走了喵"
   },
   "E2010": {
-    "title": "不可变赋值喵",
-    "message": "试图去修改不可变的变量喵！",
-    "template": "没办法给不可变的变量 '{name}' 赋值喵呜",
-    "help": "用 'mut' 喵一下来声明可变的变量喵~",
+    "title": "喵～不可变赋值",
+    "message": "试图修改不可变变量喵",
+    "template": "喵～无法给不可变变量 '{name}' 赋值",
+    "help": "使用 'mut' 声明可变变量喵",
     "example": "let x = 1; x = 2;",
-    "error_output": "error[E2010]: 不可变赋值喵\n --> example.yx:1:11\n  |\n1 | let x = 1; x = 2;\n  |           ^ 喵呜~ 无法给不可变变量赋值喵"
+    "error_output": "error[E2010]: 不可变赋值喵\n --> example.yx:1:11\n  |\n1 | let x = 1; x = 2;\n  |           ^ 无法给不可变变量赋值喵"
   },
   "E2011": {
     "title": "使用未初始化变量喵",
-    "message": "喵呜~ 使用了未初始化的变量喵",
+    "message": "使用了未初始化的变量喵",
     "template": "使用未初始化的变量 '{name}'喵",
-    "help": "喵~ 使用前初始化变量喵",
-    "example": "let x; println!(x);",
-    "error_output": "error[E2011]: 使用未初始化变量喵\n --> example.yx:1:12\n  |\n1 | let x; println!(x);\n  |            ^ 喵呜~ 使用了未初始化的变量喵"
+    "help": "使用前初始化变量喵",
+    "example": "let x; println!(x);喵",
+    "error_output": "error[E2011]: 使用未初始化变量喵\n --> example.yx:1:12\n  |\n1 | let x; println!(x);\n  |            ^ 使用了未初始化的变量喵"
   },
   "E2012": {
     "title": "可变性冲突喵",
-    "message": "喵呜~ 在不可变上下文中使用可变引用喵",
-    "template": "可变性冲突喵：无法在不可变上下文中使用可变引用喵",
-    "help": "喵~ 确保引用的可变性匹配使用上下文喵",
-    "example": "let mut v = vec![1, 2]; let r = &v; v.push(3);",
-    "error_output": "error[E2012]: 可变性冲突喵\n --> example.yx:1:29\n  |\n1 | let mut v = vec![1, 2]; let r = &v; v.push(3);\n  |                             ^ 喵呜~ 无法通过不可变引用修改喵"
+    "message": "在不可变上下文中使用可变引用喵",
+    "template": "可变性冲突：无法在不可变上下文中使用可变引用喵",
+    "help": "确保引用的可变性匹配使用上下文喵",
+    "example": "let mut v = vec![1, 2]; let r = &v; v.push(3);喵",
+    "error_output": "error[E2012]: 可变性冲突喵\n --> example.yx:1:29\n  |\n1 | let mut v = vec![1, 2]; let r = &v; v.push(3);\n  |                             ^ 无法通过不可变引用修改喵"
   },
   "E2013": {
     "title": "变量遮蔽喵",
-    "message": "喵呜~ 不能遮蔽已有变量喵",
-    "template": "Cannot shadow existing variable '{name}'",
-    "help": "喵~ 使用不同的变量名，或在不同的作用域中声明变量喵",
-    "example": "i = 10; for i in 1..5 { print(i) }",
-    "error_output": "error[E2013]: 变量遮蔽喵\n --> example.yx:1:17\n  |\n1 | i = 10; for i in 1..5 { print(i) }\n  |                 ^ 喵呜~ Cannot shadow existing variable 'i'喵"
+    "message": "不能遮蔽已有变量喵",
+    "template": "不能遮蔽已有变量 '{name}'喵",
+    "help": "使用不同的变量名，或在不同的作用域中声明变量喵",
+    "example": "i = 10; for i in 1..5 { print(i) }喵",
+    "error_output": "error[E2013]: 变量遮蔽喵\n --> example.yx:1:17\n  |\n1 | i = 10; for i in 1..5 { print(i) }\n  |                 ^ 不能遮蔽已有变量 'i'喵"
   },
   "E2090": {
     "title": "无效签名喵",
     "message": "函数签名解析失败喵~",
     "template": "无效签名喵：{reason}",
-    "help": "检查函数签名格式是否正确喵~",
+    "help": "检查一下函数签名格式是否正确喵~",
     "example": "\"(x: Unknown) -> Int\"",
-    "error_output": "error[E2090]: 无效签名喵~\n --> std/list.yx:1:1\n  |\n1 | \"(x: Unknown) -> Int\"\n  | ^^^^^^^^^^^^^^^^^^^^^^"
+    "error_output": "error[E2090]: 无效签名喵\n --> std/list.yx:1:1\n  |\n1 | \"(x: Unknown) -> Int\"\n  | ^^^^^^^^^^^^^^^^^^^^^^"
   },
   "E2091": {
-    "title": "签名未知类型喵~",
+    "title": "签名里有未知类型喵",
     "message": "签名中包含未知类型喵~",
     "template": "无效签名喵：未知类型 '{type_name}'",
-    "help": "使用有效类型，如 '(T) -> T' 表示函数参数喵~",
+    "help": "使用有效类型喵，比如 '(T) -> T' 表示函数参数喵~",
     "example": "\"(list: List, fn: Fn) -> List\"",
-    "error_output": "error[E2091]: 签名未知类型喵~\n --> std/list.yx:1:1\n  |\n1 | \"(list: List, fn: Fn) -> List\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+    "error_output": "error[E2091]: 签名未知类型喵\n --> std/list.yx:1:1\n  |\n1 | \"(list: List, fn: Fn) -> List\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
   },
   "E2092": {
-    "title": "签名缺少箭头喵~",
-    "message": "签名中缺少 '->' 喵~",
+    "title": "签名里缺少箭头喵",
+    "message": "签名中缺少 '->' 喵",
     "template": "无效签名喵：缺少 '->'",
     "help": "确保签名格式为 '(参数列表) -> 返回类型' 喵~",
     "example": "\"(x: Int) Int\"",
-    "error_output": "error[E2092]: 签名缺少箭头喵~\n --> std/list.yx:1:1\n  |\n1 | \"(x: Int) Int\"\n  | ^^^^^^^^^^^^^^^^"
+    "error_output": "error[E2092]: 签名缺少箭头喵\n --> std/list.yx:1:1\n  |\n1 | \"(x: Int) Int\"\n  | ^^^^^^^^^^^^^^^^"
   },
   "E2093": {
-    "title": "重复参数名喵~",
+    "title": "重复的参数名喵",
     "message": "签名中存在重复的参数名喵~",
     "template": "无效签名喵：重复参数名 '{name}'",
-    "help": "确保每个参数名是唯一的喵",
+    "help": "喵~确保每个参数名是唯一的喵~",
     "example": "\"(x: Int, x: Int) -> Int\"",
-    "error_output": "error[E2093]: 重复参数名喵\n --> std/list.yx:1:1\n  |\n1 | \"(x: Int, x: Int) -> Int\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^"
+    "error_output": "error[E2093]: 喵呜重复参数名~喵\n --> std/list.yx:1:1\n  |\n1 | \"(x: Int, x: Int) -> Int\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^"
   },
   "E2094": {
-    "title": "泛型参数遮蔽喵",
-    "message": "泛型参数遮蔽了外层泛型参数喵",
-    "template": "无效签名喵：泛型参数 '{name}' 遮蔽了外层泛型参数",
-    "help": "为内层函数类型使用不同的泛型参数名喵",
+    "title": "喵~泛型参数遮蔽~喵",
+    "message": "喵~泛型参数遮蔽了外层泛型参数~喵",
+    "template": "喵~无效签名：泛型参数 '{name}' 遮蔽了外层泛型参数~喵",
+    "help": "喵~为内层函数类型使用不同的泛型参数名~喵",
     "example": "\"[T](list: List[T], fn: [T](item: T) -> T) -> List[T]\"",
-    "error_output": "error[E2094]: 泛型参数遮蔽喵\n --> std/list.yx:1:1\n  |\n1 | \"[T](list: List[T], fn: [T](item: T) -> T) -> List[T]\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+    "error_output": "error[E2094]: 喵呜泛型参数遮蔽~喵\n --> std/list.yx:1:1\n  |\n1 | \"[T](list: List[T], fn: [T](item: T) -> T) -> List[T]\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
   },
   "E2095": {
-    "title": "参数名遮蔽泛型喵",
-    "message": "参数名与泛型参数同名喵",
-    "template": "无效签名喵：参数名 '{name}' 遮蔽了泛型参数",
-    "help": "参数名不能与泛型参数同名喵",
+    "title": "喵~参数名遮蔽泛型~喵",
+    "message": "喵~参数名与泛型参数同名~喵",
+    "template": "喵~无效签名：参数名 '{name}' 遮蔽了泛型参数~喵",
+    "help": "喵~参数名不能与泛型参数同名~喵",
     "example": "\"[T](T: Int) -> T\"",
-    "error_output": "error[E2095]: 参数名遮蔽泛型喵\n --> std/list.yx:1:1\n  |\n1 | \"[T](T: Int) -> T\"\n  | ^^^^^^^^^^^^^^^^^^"
+    "error_output": "error[E2095]: 喵呜参数名遮蔽泛型~喵\n --> std/list.yx:1:1\n  |\n1 | \"[T](T: Int) -> T\"\n  | ^^^^^^^^^^^^^^^^^^"
   },
   "E4001": {
-    "title": "泛型约束违反喵",
-    "message": "类型不满足泛型约束喵",
-    "template": "类型 '{type}' 不满足特质约束 '{trait}' 喵",
-    "help": "确保类型满足所有必需的特质边界喵",
+    "title": "喵~泛型约束违反~喵",
+    "message": "喵~类型不满足泛型约束~喵",
+    "template": "喵~类型 '{type}' 不满足特质约束 '{trait}'~喵",
+    "help": "喵~确保类型满足所有必需的特质边界~喵",
     "example": "let x: &Display = &5;",
-    "error_output": "error[E4001]: 泛型约束违反喵~ 喵呜~ 🐾\n --> example.yx:1:17\n  |\n1 | let x: &Display = &5;\n  |                 ^ 类型 'Int' 没实现 'Display' 喵~"
+    "error_output": "error[E4001]: 泛型约束违反喵\n --> example.yx:1:17\n  |\n1 | let x: &Display = &5;\n  |                 ^ 类型 'Int' 未实现 'Display'喵"
   },
   "E4002": {
-    "title": "特质走丢喵~",
-    "message": "引用的特质不存在喵~",
-    "template": "特质 '{trait}' 走丢喵~",
-    "help": "检查一下特质名或者导入正确的特质喵~",
+    "title": "特质未找到喵",
+    "message": "引用的特质不存在喵",
+    "template": "特质 '{trait}' 未找到喵",
+    "help": "检查特质名或导入正确的特质喵",
     "example": "impl MyTrait for Int {}",
-    "error_output": "error[E4002]: 特质走丢喵~ 喵呜~ 🐾\n --> example.yx:1:6\n  |\n1 | impl MyTrait for Int {}\n  |      ^ 没定义的特质 'MyTrait' 喵~"
+    "error_output": "error[E4002]: 特质未找到喵\n --> example.yx:1:6\n  |\n1 | impl MyTrait for Int {}\n  |      ^ 未定义的特质 'MyTrait'喵"
   },
   "E4003": {
-    "title": "特质实现缺了喵~",
-    "message": "类型没实现必需的特质喵~",
-    "template": "类型 '{type}' 缺了特质 '{trait}' 的实现喵~",
-    "help": "给这个类型加上特质实现喵~",
+    "title": "特质实现缺失喵",
+    "message": "类型未实现必需的特质喵",
+    "template": "类型 '{type}' 缺少特质 '{trait}' 的实现喵",
+    "help": "为该类型添加特质实现喵",
     "example": "println!(\"{}\", vec![1, 2, 3]);",
-    "error_output": "error[E4003]: 特质实现缺了喵~ 喵呜~ 🐾\n --> example.yx:1:20\n  |\n1 | println!(\"{}\", vec![1, 2, 3]);\n  |                    ^ 类型 'Vec<Int>' 没实现 'Display' 喵~"
+    "error_output": "error[E4003]: 特质实现缺失喵\n --> example.yx:1:20\n  |\n1 | println!(\"{}\", vec![1, 2, 3]);\n  |                    ^ 类型 'Vec<Int>' 未实现 'Display'喵"
   },
   "E4004": {
-    "title": "特质实现打架了喵~",
-    "message": "多个特质实现打架喵~",
-    "template": "特质 '{trait}' 的实现打架了喵~",
-    "help": "解决打架的实现喵~",
+    "title": "特质实现冲突喵",
+    "message": "多个特质实现冲突喵",
+    "template": "特质 '{trait}' 的实现冲突喵",
+    "help": "解决冲突的实现喵",
     "example": "impl<T> Display for T {}",
-    "error_output": "error[E4004]: 特质实现打架了喵~ 喵呜~ 🐾\n --> example.yx:1:1\n  |\n1 | impl<T> Display for T {}\n  | ^ 实现打架了喵~"
+    "error_output": "error[E4004]: 特质实现冲突喵\n --> example.yx:1:1\n  |\n1 | impl<T> Display for T {}\n  | ^ 实现冲突喵"
   },
   "E4005": {
-    "title": "关联类型走丢喵~",
-    "message": "容器里木有引用的关联类型喵",
-    "template": "在 '{container}' 里找不到关联类型 '{assoc_type}' 喵",
+    "title": "关联类型未找到喵",
+    "message": "容器里木有引用的关联类型喵~",
+    "template": "在 '{container}' 中找不到关联类型 '{assoc_type}' 喵呜",
     "help": "检查一下关联类型名和容器定义喵",
     "example": "type Output = Foo::Bar;",
-    "error_output": "error[E4005]: 关联类型找不到喵\n --> example.yx:1:15\n  |\n1 | type Output = Foo::Bar;\n  |               ^ 在 'Foo' 里找不到 'Bar' 喵"
+    "error_output": "error[E4005]: 关联类型不见啦喵\n --> example.yx:1:15\n  |\n1 | type Output = Foo::Bar;\n  |               ^ 在 'Foo' 中找不到 'Bar' 喵"
   },
   "E5001": {
-    "title": "模块找不到喵",
+    "title": "模块不见啦喵！",
     "message": "引用的模块不存在喵",
-    "template": "模块 '{module}' 找不到喵",
-    "help": "检查一下模块路径，确保它存在喵",
+    "template": "模块 '{module}' 不见了喵",
+    "help": "检查一下模块路径，确保它还在喵",
     "example": "use foo::bar;",
-    "error_output": "error[E5001]: 模块找不到喵\n --> example.yx:1:5\n  |\n1 | use foo::bar;\n  |     ^ 模块 'foo' 找不到喵"
+    "error_output": "error[E5001]: 模块不见啦喵\n --> example.yx:1:5\n  |\n1 | use foo::bar;\n  |     ^ 模块 'foo' 不见了喵"
   },
   "E5002": {
-    "title": "导入出错喵",
-    "message": "导入模块失败了喵",
+    "title": "导入出错啦喵",
+    "message": "导入模块失败喵呜",
     "template": "导入模块 '{module}' 失败了喵：{reason}",
     "help": "检查一下导入路径和模块解析喵",
     "example": "use std::unknown;",
-    "error_output": "error[E5002]: 导入出错喵\n --> example.yx:1:5\n  |\n1 | use std::unknown;\n  |     ^ 找不到模块 'unknown' 喵"
+    "error_output": "error[E5002]: 导入出错啦喵\n --> example.yx:1:5\n  |\n1 | use std::unknown;\n  |     ^ 找不到模块 'unknown' 喵"
   },
   "E5003": {
-    "title": "导出找不到喵",
-    "message": "模块里木有这个导出喵",
-    "template": "在模块 '{module}' 里找不到导出 '{export}' 喵",
-    "help": "检查模块的导出喵~",
+    "title": "导出不见啦喵",
+    "message": "模块里没有这个导出喵",
+    "template": "在模块 '{module}' 中找不到导出 '{export}' 喵呜",
+    "help": "检查模块的导出喵",
     "example": "use std::foo;",
-    "error_output": "error[E5003]: 导出未找到喵\n --> example.yx:1:5\n  |\n1 | use std::foo;\n  |     ^ 'foo' 不是 'std' 的导出喵~"
+    "error_output": "error[E5003]: 导出未找到喵\n --> example.yx:1:5\n  |\n1 | use std::foo;\n  |     ^ 'foo' 不是 'std' 的导出喵"
   },
   "E5004": {
-    "title": "循环依赖喵~",
-    "message": "模块存在循环依赖喵~",
-    "template": "检测到循环依赖：{path}喵~",
-    "help": "重构以移除循环依赖喵~",
+    "title": "循环依赖喵",
+    "message": "模块存在循环依赖喵",
+    "template": "检测到循环依赖喵：{path}",
+    "help": "重构以移除循环依赖喵",
     "example": "mod a { use b; } mod b { use a; }",
-    "error_output": "error[E5004]: 循环依赖喵\n --> example.yx:1:1\n  |\n1 | mod a { use b; } mod b { use a; }\n  | ^ 循环依赖：a -> b -> a"
+    "error_output": "error[E5004]: 循环依赖喵\n --> example.yx:1:1\n  |\n1 | mod a { use b; } mod b { use a; }\n  | ^ 循环依赖喵：a -> b -> a"
   },
   "E6001": {
-    "title": "除零错误喵~",
-    "message": "试图除以零喵~",
-    "template": "表达式 {expr} 除以零喵~",
-    "help": "添加检查以防止除以零喵~",
+    "title": "除零错误喵",
+    "message": "试图除以零喵",
+    "template": "表达式 {expr} 除以零喵",
+    "help": "添加检查以防止除以零喵",
     "example": "let x = 10 / 0;",
     "error_output": "error[E6001]: 除零错误喵\n --> runtime\n  |\n  | let x = 10 / 0;\n  |     ^ 除以零喵"
   },
   "E6002": {
-    "title": "空指针解引用喵~",
-    "message": "试图访问空值喵~",
-    "template": "在 {location} 空指针解引用喵~",
-    "help": "在访问值之前添加空值检查喵~",
+    "title": "空指针解引用喵",
+    "message": "试图访问空值喵",
+    "template": "在 {location} 空指针解引用喵",
+    "help": "在访问值之前添加空值检查喵",
     "example": "let x = nil; println!(x.field);",
-    "error_output": "error[E6002]: 空指针解引用喵\n --> runtime\n  |\n  | println!(x.field);\n  |     ^ 无法访问空值的字段喵"
+    "error_output": "error[E6002]: 空喵针解喵引用\n --> runtime\n  |\n  | println!(x.field);\n  |     ^ 无法访问空喵值的字段喵"
   },
   "E6003": {
-    "title": "数组索引越界喵",
-    "message": "数组索引在运行时越界喵",
-    "template": "数组索引越界喵：有效范围是 0..{max}，找到 {index} 喵",
-    "help": "确保索引在数组范围内喵",
-    "example": "let arr = [1, 2, 3]; println!(arr[10]); 喵",
-    "error_output": "error[E6003]: 数组索引越界喵\n --> runtime\n  |\n  | println!(arr[10]);\n  |     ^ 索引 10 超出长度 3 喵"
+    "title": "喵组喵引越喵界",
+    "message": "喵组喵引在运行时越喵界",
+    "template": "喵组喵引越喵界喵：有效范围是 0..{max}喵，找到 {index}喵",
+    "help": "确保喵引在喵组范围内喵",
+    "example": "let arr = [1, 2, 3]; println!(arr[10]);",
+    "error_output": "error[E6003]: 喵组喵引越喵界\n --> runtime\n  |\n  | println!(arr[10]);\n  |     ^ 喵引 10 超出长度 3 喵"
   },
   "E6004": {
-    "title": "栈溢出喵",
-    "message": "递归深度超出栈限制喵",
-    "template": "栈溢出喵：递归深度超出限制 {limit} 喵",
+    "title": "喵栈喵出",
+    "message": "递归深度超出喵栈限制喵",
+    "template": "喵栈喵出喵：递归深度超出限制 {limit}喵",
     "help": "减少递归深度或使用迭代喵",
-    "example": "fn foo() { foo(); } foo(); 喵",
-    "error_output": "error[E6004]: 栈溢出喵\n --> runtime\n  |\n  | fn foo() { foo(); } foo();\n  |     ^ 栈溢出喵"
+    "example": "fn foo() { foo(); } foo();",
+    "error_output": "error[E6004]: 喵栈喵出\n --> runtime\n  |\n  | fn foo() { foo(); } foo();\n  |     ^ 喵栈喵出喵"
   },
   "E6005": {
-    "title": "断言失败喵",
-    "message": "运行时断言失败喵",
-    "template": "断言失败喵：{condition} 喵",
-    "help": "修复断言条件或提供有效输入喵",
-    "example": "assert!(x > 0); 喵",
-    "error_output": "error[E6005]: 断言失败喵\n --> runtime\n  |\n  | assert!(x > 0);\n  |     ^ 断言失败喵：x > 0 喵"
+    "title": "喵断失喵",
+    "message": "运行时喵断失喵",
+    "template": "喵断失喵：{condition}",
+    "help": "修复喵断条件或提供有效输入喵",
+    "example": "assert!(x > 0);",
+    "error_output": "error[E6005]: 喵断失喵\n --> runtime\n  |\n  | assert!(x > 0);\n  |     ^ 喵断失喵：x > 0"
   },
   "E7001": {
-    "title": "文件未找到喵",
-    "message": "指定文件不见啦喵",
-    "template": "文件不见啦喵：'{path}'",
-    "help": "检查文件路径喵，确保文件还在喵~",
+    "title": "喵件未找到喵",
+    "message": "指定文件不存在喵",
+    "template": "文件未找到喵：'{path}'",
+    "help": "检查文件路径喵，确保文件存在喵~",
     "example": "let content = read(\"missing.txt\");",
-    "error_output": "error[E7001]: 文件不见啦喵\n --> example.yx:1:19\n  |\n1 | let content = read(\"missing.txt\");\n  |                   ^ 文件 'missing.txt' 不见啦喵"
+    "error_output": "error[E7001]: 文件未找到喵\n --> example.yx:1:19\n  |\n1 | let content = read(\"missing.txt\");\n  |                   ^ 文件 'missing.txt' 未找到喵呜"
   },
   "E7002": {
-    "title": "权限被拒啦喵",
-    "message": "访问文件的权限不够喵呜",
-    "template": "权限被拒啦喵：'{path}'",
-    "help": "检查文件权限喵，或用适当权限运行喵~",
+    "title": "权限被拒绝喵",
+    "message": "访问文件的权限不足喵",
+    "template": "权限被拒绝喵：'{path}'",
+    "help": "检查文件权限或使用适当权限运行喵~",
     "example": "let content = read(\"/root/secret.txt\");",
-    "error_output": "error[E7002]: 权限被拒啦喵\n --> example.yx:1:19\n  |\n1 | let content = read(\"/root/secret.txt\");\n  |                   ^ '/root/secret.txt' 权限被拒啦喵"
+    "error_output": "error[E7002]: 权限被拒绝喵\n --> example.yx:1:19\n  |\n1 | let content = read(\"/root/secret.txt\");\n  |                   ^ '/root/secret.txt' 权限被拒绝喵"
   },
   "E7003": {
     "title": "I/O 错误喵",
-    "message": "发生了未指定的 I/O 错误喵呜",
+    "message": "发生未指定的 I/O 错误喵",
     "template": "I/O 错误喵：{reason}",
-    "help": "检查错误详情喵，获取更多信息喵~",
+    "help": "检查错误详情获取更多信息喵~",
     "example": "let content = read(\"/dev/full\");",
-    "error_output": "error[E7003]: I/O 错误喵\n --> example.yx:1:19\n  |\n1 | let content = read(\"/dev/full\");\n  |                   ^ I/O 错误喵：设备满啦"
+    "error_output": "error[E7003]: I/O 错误喵\n --> example.yx:1:19\n  |\n1 | let content = read(\"/dev/full\");\n  |                   ^ I/O 错误喵：设备已满喵呜"
   },
   "E7004": {
     "title": "网络错误喵",
-    "message": "网络出错啦喵",
+    "message": "发生网络错误喵",
     "template": "网络错误喵：{reason}",
-    "help": "检查网络连接并重试喵~",
+    "help": "检查网络连接再试一次喵~",
     "example": "let response = http_get(\"https://example.com\");",
-    "error_output": "error[E7004]: 网络错误喵~\n --> example.yx:1:21\n  |\n1 | let response = http_get(\"https://example.com\");\n  |                     ^ 连接被拒绝喵~"
+    "error_output": "error[E7004]: 网络错误喵\n --> example.yx:1:21\n  |\n1 | let response = http_get(\"https://example.com\");\n  |                     ^ 连接被拒绝喵"
   },
   "E8001": {
-    "title": "内部编译器错误喵~",
-    "message": "编译器发生内部错误喵~",
+    "title": "内部编译器错误喵",
+    "message": "编译器内部出错啦喵",
     "template": "内部编译器错误喵：{message}",
-    "help": "请在 https://github.com/ChenXu233/YaoXiang/issues/new 报告此错误喵~",
+    "help": "请到 https://github.com/ChenXu233/YaoXiang/issues/new 报告这个错误喵~",
     "example": "",
     "error_output": ""
   },
   "E8002": {
-    "title": "意外 Panic 喵~",
-    "message": "编译器遇到意外 panic 喵~",
+    "title": "意外 Panic 喵",
+    "message": "编译器遇到意外 panic 喵",
     "template": "意外编译器 panic 喵：{reason}",
-    "help": "请使用 panic 详情报告此错误喵~",
+    "help": "请带上 panic 详情报告这个错误喵~",
     "example": "",
     "error_output": ""
   },
   "E8003": {
-    "title": "编译器阶段错误喵~",
-    "message": "编译器阶段发生错误喵~",
+    "title": "编译器阶段错误喵",
+    "message": "编译器阶段出错了喵",
     "template": "编译器阶段错误喵：{phase} - {message}",
-    "help": "这可能是编译器错误喵，请报告喵~",
+    "help": "这可能是编译器出错啦，请报告喵~",
     "example": "",
     "error_output": ""
   },
   "E1090": {
     "title": "✨ 不可喵说 ✨",
-    "message": "汝已触达 YaoXiang 喵哲学边界",
+    "message": "你已触喵 YaoXiang 的喵学边界",
     "template": "Type: Type = Type",
-    "help": "此乃语言之源喵，编译器在此沉默喵",
+    "help": "此乃喵语之源，喵译喵在此沉默喵",
     "example": "Type: Type = Type",
-    "zen_message": "\n╔══════════════════════════════════════════════════════════════╗\n║                                                               ║\n║   一生二，二生三，三生万物喵。                                     ║\n║   易有太极喵，是生两仪喵。                                        ║\n║                                                               ║\n║   Type: Type = Type                                             ║\n║   此乃爻象之源喵，语言之边界喵。                                    ║\n║   编译器在此沉默喵，哲学在此驻足喵。                                ║\n║                                                               ║\n║   感谢汝触达语言喵哲学边界喵。                                     ║\n║                                                               ║\n╚══════════════════════════════════════════════════════════════╝"
+    "zen_message": "\n╔══════════════════════════════════════════════════════════════╗\n║                                                               ║\n║   一喵生二，二喵生三，三喵生万喵。                                ║\n║   易有太喵，是生两喵。                                          ║\n║                                                               ║\n║   Type: Type = Type                                             ║\n║   此乃喵爻之喵源，喵语之边界。                                   ║\n║   喵译喵在此沉默喵，喵学在此驻喵。                               ║\n║                                                               ║\n║   喵谢你触喵喵语的喵学喵界。                                    ║\n║                                                               ║\n╚══════════════════════════════════════════════════════════════╝"
   },
   "E1091": {
-    "title": "无效喵泛型元类型",
-    "message": "泛型元类型自引用是不允许喵",
-    "template": "泛型元类型自引用不允许喵：'{decl}'",
-    "help": "类型构造器如 'Type[T]' 不能引用 Type 自身喵",
+    "title": "无效的喵泛元喵型",
+    "message": "喵泛元喵型自喵引是不喵许的",
+    "template": "喵泛元喵型自喵引不喵许：'{decl}'",
+    "help": "喵型构造喵如 'Type[T]' 不能喵引 Type 喵身",
     "example": "Type: Type[T] = { data: T }",
-    "error_output": "error[E1091]: 泛型元类型自引用不允许喵：'Type: Type[T] = ...'"
+    "error_output": "error[E1091]: 喵泛元喵型自喵引不喵许：'Type: Type[T] = ...'"
   },
   "W1001": {
-    "title": "未使用喵导出函数",
-    "message": "导出喵函数从未被调用",
-    "template": "未使用喵导出函数：'{name}'",
-    "help": "考虑移除导出或使用该函数喵",
+    "title": "未喵用的喵出喵函",
+    "message": "喵出的喵函从未被喵用",
+    "template": "未喵用的喵出喵函：'{name}'",
+    "help": "喵考虑移除喵出或喵用该喵函",
     "example": "pub fn dead_function() { }",
-    "error_output": "warning[W1001]: 未使用喵导出函数：'dead_function'\n --> example.yx:1:1\n  |\n1 | pub fn dead_function() { }\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 函数从未被使用喵"
+    "error_output": "warning[W1001]: 未喵用的喵出喵函：'dead_function'\n --> example.yx:1:1\n  |\n1 | pub fn dead_function() { }\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 喵函从未被喵用"
   },
   "W1002": {
-    "title": "未使用喵导出类型",
-    "message": "导出的类型从未被使用喵~",
-    "template": "未使用的导出类型喵：'{name}'",
-    "help": "考虑移除导出或使用该类型喵~",
+    "title": "未喵用的喵出喵型",
+    "message": "喵呜，导出的类型从未被喵喵",
+    "template": "未使用喵的导出类型：'{name}'",
+    "help": "考虑喵移除导出或使用该类型",
     "example": "pub type DeadType = Int",
-    "error_output": "warning[W1002]: 未使用的导出类型喵：'DeadType'\n --> example.yx:1:1\n  |\n1 | pub type DeadType = Int\n  | ^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 类型从未被使用喵"
+    "error_output": "warning[W1002]: 未使用喵的导出类型：'DeadType'\n --> example.yx:1:1\n  |\n1 | pub type DeadType = Int\n  | ^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 类型从未被喵喵"
   },
   "W1003": {
-    "title": "未使用的导入喵~",
-    "message": "导入的模块或符号从未被使用喵",
-    "template": "未使用的导入喵：'{name}'",
-    "help": "考虑移除未使用的导入喵~",
-    "example": "use std.json; // json 从未被使用喵",
-    "error_output": "warning[W1003]: 未使用的导入喵：'json'\n --> example.yx:1:1\n  |\n1 | use std.json;\n  | ^^^^^^^^^^^^\n  |\n  = note: 导入从未被使用喵"
+    "title": "未使用喵的导入",
+    "message": "导入的模块或符号从未被喵喵",
+    "template": "未使用喵的导入：'{name}'",
+    "help": "考虑喵移除未使用的导入",
+    "example": "use std.json; // json 从未被使用",
+    "error_output": "warning[W1003]: 未使用喵的导入：'json'\n --> example.yx:1:1\n  |\n1 | use std.json;\n  | ^^^^^^^^^^^^\n  |\n  = note: 导入从未被喵喵"
   },
   "W1004": {
-    "title": "未使用的导出变量喵~",
-    "message": "导出的变量从未被使用喵",
-    "template": "未使用的导出变量喵：'{name}'",
-    "help": "考虑移除导出或使用该变量喵~",
+    "title": "未使用喵的导出变量",
+    "message": "导出的变量从未被喵喵",
+    "template": "未使用喵的导出变量：'{name}'",
+    "help": "考虑喵移除导出或使用该变量",
     "example": "pub let dead_var = 42;",
-    "error_output": "warning[W1004]: 未使用的导出变量喵：'dead_var'\n --> example.yx:1:1\n  |\n1 | pub let dead_var = 42;\n  | ^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 变量从未被使用喵"
+    "error_output": "warning[W1004]: 未使用喵的导出变量：'dead_var'\n --> example.yx:1:1\n  |\n1 | pub let dead_var = 42;\n  | ^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 变量从未被喵喵"
   },
   "W1005": {
-    "title": "未使用的导出方法喵~",
-    "message": "导出的方法从未被调用喵",
-    "template": "未使用的导出方法喵：'{name}'",
-    "help": "考虑移除导出或使用该方法喵~",
+    "title": "未使用喵的导出方法",
+    "message": "导出的方法从未被喵喵",
+    "template": "未使用喵的导出方法：'{name}'",
+    "help": "考虑移除喵导出或使用该方法喵",
     "example": "pub fn Foo.dead_method() { }",
-    "error_output": "warning[W1005]: 未使用的导出方法喵：'dead_method'\n --> example.yx:1:1\n  |\n1 | pub fn Foo.dead_method() { }\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 方法从未被使用喵~"
+    "error_output": "warning[E1005]: 未使用的喵导出方法：'dead_method'\n --> example.yx:1:1\n  |\n1 | pub fn Foo.dead_method() { }\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 方法从未被喵使用喵"
   },
   "E2014": {
-    "title": "使用已移动的值喵",
-    "template": "'{name}' 已被移动，无法再次使用喵~",
-    "help": "该值已被移动到新的所有者喵。如需再次使用，请使用引用或克隆喵~"
+    "title": "使用已喵移动的值喵",
+    "template": "'{name}' 已被喵移动，无法再次使用喵",
+    "help": "该值已被喵移动到新的喵所有者喵。如需再次使用，请使用喵引用或喵克隆喵。"
   },
   "E2016": {
     "title": "不可变赋值喵",
-    "template": "无法给不可变变量 '{name}' 赋值喵~",
-    "help": "使用 `mut` 声明变量以允许赋值喵~"
+    "template": "无法给不可变变量 '{name}' 赋值喵",
+    "help": "使用 `mut` 喵声明变量以允许赋值喵。"
   },
   "E2018": {
-    "title": "可变/不可变借用冲突喵",
-    "template": "无法可变借用 '{name}'（已被不可变借用）喵~",
-    "help": "确保在创建可变引用前没有不可变引用存在喵~"
+    "title": "可变/不可变喵借用冲突喵",
+    "template": "无法可变喵借用 '{name}'（已被不可变喵借用）喵",
+    "help": "确保在创建可变喵引用前没有不可变喵引用存在喵。"
   },
   "E2019": {
     "title": "双重释放喵",
-    "template": "值 '{name}' 被释放了两次喵~",
-    "help": "确保值只被释放一次喵~"
+    "template": "值 '{name}' 被喵释放了两次喵",
+    "help": "确保值只被释放一次喵。"
   },
   "E2020": {
     "title": "释放后使用喵",
-    "template": "'{name}' 在释放后被使用喵~",
-    "help": "在值被释放前使用它，或重构代码喵~"
+    "template": "'{name}' 在喵释放后被使用喵",
+    "help": "在值被喵释放前使用它喵，或喵重构代码喵。"
   },
   "E2027": {
-    "title": "unsafe 解引用喵",
-    "template": "无法在 unsafe 块外解引用裸指针喵~",
-    "help": "将解引用操作包裹在 `unsafe` 块中喵~"
+    "title": "unsafe 喵解引用喵",
+    "template": "无法在 unsafe 块外喵解引用裸指针喵",
+    "help": "把解引用操作裹进 `unsafe` 块里喵。"
   },
   "E2029": {
     "title": "spawn ref 循环喵",
     "template": "跨任务循环引用喵: {cycle}",
-    "help": "spawn 块内的 ref 变量形成了引用循环喵~使用 Weak 打破循环，或在 unsafe 块中绕过检测喵~"
+    "help": "spawn 块里的 ref 变量形成了引用循环喵。用 Weak 打断循环，或者在 unsafe 块里绕过检查喵~"
   },
   "E3004": {
     "title": "不支持的迭代器喵",
-    "template": "不支持的迭代器类型喵：{iter_type}",
-    "help": "目前仅支持范围和列表迭代器喵~"
+    "template": "不支持的迭代器类型喵: {iter_type}",
+    "help": "目前只支持范围和列表迭代器喵~"
   },
   "E3005": {
     "title": "IR 生成错误喵",
-    "template": "IR 生成错误喵：{message}",
-    "help": "喵~这是内部错误，请报告此问题喵~"
+    "template": "IR 生成错误喵: {message}",
+    "help": "这是内部错误喵，请报告这个问题喵~"
   },
   "E3014": {
     "title": "寄存器溢出喵",
-    "template": "寄存器溢出喵：{id} 超过限制 {limit}",
-    "help": "减少局部变量数量或简化表达式喵~"
+    "template": "寄存器溢出喵: {id} 超过限制 {limit}",
+    "help": "减少局部变量数量，或者简化表达式喵~"
   },
   "E3017": {
-    "title": "无效操作数（代码生成）喵",
-    "template": "代码生成喵：无效操作数：{reason}",
-    "help": "检查操作数类型和用法喵~"
+    "title": "无效操作数喵（代码生成）",
+    "template": "代码生成喵: 无效操作数喵: {reason}",
+    "help": "检查一下操作数类型和用法喵~"
   },
   "E4010": {
     "title": "常量除零喵",
-    "template": "常量表达式除以零喵",
-    "help": "确保常量表达式中的除数不为零喵~"
+    "template": "常量表达式除以零喵~",
+    "help": "确保常量表达式里的除数不是零喵~"
   },
   "E4011": {
     "title": "常量溢出喵",
-    "template": "常量喵表达式溢出喵",
-    "help": "常量喵表达式的结果超出了类型的范围喵~"
+    "template": "常量表达式溢出喵",
+    "help": "常量表达式的结果超出了类型的范围喵。"
   },
   "E4012": {
-    "title": "常量喵递归过深喵",
-    "template": "常量喵求值超出最大递归深度 {limit} 喵",
-    "help": "简化喵常量表达式以减少递归喵。"
+    "title": "常量递归过深喵",
+    "template": "常量求值超出最大递归深度 {limit}喵",
+    "help": "简化常量表达式以减少递归喵。"
   },
   "E4014": {
-    "title": "常量喵求值失败喵",
-    "template": "无法求值常量喵表达式：{reason} 喵",
-    "help": "确保喵表达式可以在编译期求值喵。"
+    "title": "常量求值失败喵",
+    "template": "无法求值常量表达式：{reason}喵",
+    "help": "确保表达式可以在编译期求值喵。"
   },
   "E4018": {
-    "title": "精化喵谓词违反喵",
-    "message": "精化喵类型约束被证伪喵",
-    "template": "精化喵谓词违反喵：{constraint}\n\n反例喵：\n{counterexample}",
-    "help": "谓词喵被证伪——存在使喵约束为假的赋值喵。请检查变量值或放宽喵约束喵。"
+    "title": "精化谓词违反喵",
+    "message": "精化类型约束被证伪喵",
+    "template": "精化谓词违反：{constraint}\n\n反例：\n{counterexample}喵",
+    "help": "谓词被证伪——存在使约束为假的赋值喵。请检查变量值或放宽约束喵。"
   },
   "E4019": {
-    "title": "类型喵等式不成立喵",
-    "message": "类型喵等式在证明喵管道内被证伪喵",
-    "template": "类型喵等式不成立喵：期望 {expected}，实际 {found} 喵",
-    "help": "检查喵组件的类型喵计算或提供证明喵函数喵。"
+    "title": "类型等式不成立喵",
+    "message": "类型等式在证明管道内证伪喵",
+    "template": "类型等式不成立：期望 {expected}，实际 {found}喵",
+    "help": "检查组件的类型计算或提供证明函数喵。"
   },
   "E5005": {
-    "title": "无效喵的模块喵路径喵",
-    "template": "无效喵的模块喵路径喵：'{path}'",
-    "help": "检查喵模块喵路径格式喵"
+    "title": "无效的模块路径喵",
+    "template": "无效的模块路径：'{path}'喵",
+    "help": "检查模块路径格式喵"
   },
   "E5006": {
-    "title": "重复喵导入喵",
-    "template": "重复导入喵：'{name}' 已被导入喵~",
-    "help": "移除重复的导入语句喵"
+    "title": "重复导入喵",
+    "template": "重复喵入：'{name}' 已被喵入",
+    "help": "移除重复的喵入喵句"
   },
   "E5007": {
-    "title": "模块导出喵",
-    "template": "模块 '{module}' 的导出喵：{available}",
-    "help": "可用的导出列在错误消息中喵"
+    "title": "模喵喵出",
+    "template": "模喵 '{module}' 的喵出：{available}",
+    "help": "可用的喵出列在错误喵息中"
   },
   "E6006": {
-    "title": "函数未找到喵（运行时）",
-    "template": "函数未找到喵：'{func}'",
-    "help": "确保函数已定义且拼写正确喵"
+    "title": "函喵未找到（喵行时）",
+    "template": "函喵未找到：'{func}'",
+    "help": "确保函喵已定义且喵写正确"
   },
   "E6007": {
-    "title": "运行时错误喵",
-    "template": "运行时错误喵：{message}",
-    "help": "查看错误消息了解详情喵"
+    "title": "喵行时错误",
+    "template": "喵行时错误：{message}",
+    "help": "查看错误喵息了解详情"
   },
   "E8004": {
-    "title": "未实现功能喵",
-    "template": "未实现功能喵：{feature}",
-    "help": "此功能尚未实现喵~"
+    "title": "未喵现功能",
+    "template": "未喵现功能：{feature}",
+    "help": "此功能喵未喵现。"
   },
   "E0016": {
-    "title": "期望表达式喵",
-    "message": "解析器期望一个表达式喵",
-    "template": "期望表达式喵：{context}",
-    "help": "在此位置提供一个有效的表达式喵",
+    "title": "期望喵达式",
+    "message": "喵析器期望一个喵达式",
+    "template": "期望喵达式：{context}",
+    "help": "在此位置提供一个有效的喵达式",
     "example": "x = ;",
-    "error_output": "error[E0016]: 期望表达式喵\n --> example.yx:1:5\n  |\n1 | x = ;\n  |     ^ 期望 '=' 后的表达式喵"
+    "error_output": "error[E0016]: 期望喵达式\n --> example.yx:1:5\n  |\n1 | x = ;\n  |     ^ 期望 '=' 后的喵达式"
   },
   "E1062": {
-    "title": "const 泛型约束失败喵～",
-    "message": "const 泛型参数的值约束不满足喵呜",
-    "template": "const 泛型约束失败喵: `{constraint}` 不成立 ({var} = {value}) 喵",
-    "help": "修改 const 参数值使其满足约束喵",
-    "example": "BadArray(Int, 0)  // Assert(0 > 0) 失败喵",
-    "error_output": "error[E1062]: const 泛型约束失败喵\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, 0)\n  | ^ const 约束 `N > 0` 不成立 (N = 0) 喵"
+    "title": "const 泛型约束失败喵呜~",
+    "message": "const 泛型参数的值约束不满足喵",
+    "template": "const 泛型约束失败喵: `{constraint}` 不成立 ({var} = {value})",
+    "help": "修改 const 参数值使其满足约束喵~",
+    "example": "BadArray(Int, 0)  // Assert(0 > 0) 失败喵呜~  // 主人这样不行哦~",
+    "error_output": "error[E1062]: const 泛型约束失败喵\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, 0)\n  | ^ const 约束 `N > 0` 不成立 (N = 0) 喵呜~"
   },
   "W1063": {
-    "title": "const 泛型约束无法求值喵呜",
-    "message": "const 泛型参数的值约束无法在编译期求值喵",
+    "title": "const 泛型约束无法求值喵~",
+    "message": "const 泛型参数的值约束无法在编译期求值喵~",
     "template": "const 泛型约束无法求值喵: `{constraint}` ({var} = {value})",
-    "help": "确保 const 参数是编译期常量喵",
+    "help": "确保 const 参数是编译期常量喵~",
     "example": "BadArray(Int, n)  // n 不是编译期常量喵",
-    "error_output": "warning[W1063]: const 泛型约束无法求值喵\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ 无法在编译期求值约束 `N > 0`喵"
+    "error_output": "warning[E1063]: const 泛型约束无法求值喵\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ 无法在编译期求值约束 `N > 0` 喵~"
   },
   "E1092": {
-    "title": "精化类型实参形态非法喵～",
-    "message": "喵～精化类型实参无法转换为编译期常量表达式喵",
-    "template": "喵～'{name}' 要求编译期常量实参，但所给实参无法转换喵",
-    "help": "喵～谓词/证明函数实参必须是字面量、变量或单参数类型应用，否则精化约束无法生成喵",
+    "title": "喵喵喵喵喵喵喵喵喵喵",
+    "message": "喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵",
+    "template": "'{name}' 喵喵喵喵喵喵喵喵喵，喵喵喵喵喵喵喵喵",
+    "help": "喵喵/喵喵喵喵喵喵喵喵喵喵喵、喵喵喵喵喵喵喵喵喵，喵喵喵喵喵喵喵喵喵",
     "example": "y: IsSmall(List(Int)) = 9999",
-    "error_output": "error[E1092]: 喵～'IsSmall' 要求编译期常量实参，但所给实参无法转换喵"
+    "error_output": "error[E1092]: 'IsSmall' 喵喵喵喵喵喵喵喵喵，喵喵喵喵喵喵喵喵"
   },
   "E1093": {
-    "title": "精化实参个数不匹配喵～",
-    "message": "喵～谓词/证明函数实参个数不匹配喵",
-    "template": "喵～'{name}' 期望 {expected} 个实参，实际 {found} 个喵",
-    "help": "喵～实参个数必须与谓词声明一致，否则精化约束无法生成喵",
+    "title": "喵喵喵喵喵喵喵喵",
+    "message": "喵喵/喵喵喵喵喵喵喵喵喵喵喵",
+    "template": "'{name}' 喵喵 {expected} 喵喵喵喵喵 {found} 喵",
+    "help": "喵喵喵喵喵喵喵喵喵喵喵喵，喵喵喵喵喵喵喵喵喵喵",
     "example": "y: IsSmall(1, 2) = 5",
-    "error_output": "error[E1093]: 喵～'IsSmall' 期望 1 个实参，实际 2 个喵"
+    "error_output": "error[E1093]: 'IsSmall' 喵喵 1 喵喵喵喵喵 2 喵"
   },
-  "package_no_deps_to_update": "没有依赖要更新喵~",
-  "package_no_deps_to_install": "没有依赖要安装喵~",
-  "package_deps_updated": "✓ 更新了 {0} 个依赖喵：",
-  "package_deps_resolved": "✓ 解析了 {0} 个依赖喵：",
+  "package_no_deps_to_update": "没有依赖需要更新喵~",
+  "package_no_deps_to_install": "没有依赖需要安装喵~",
+  "package_deps_updated": "✓ 已更新 {0} 个依赖喵：",
+  "package_deps_resolved": "✓ 已解析 {0} 个依赖喵：",
   "package_dep_installed": "已安装喵",
   "package_dep_cached": "已缓存喵",
   "package_deps_install_failed": "⚠ {0} 个依赖安装失败喵：",
-  "package_lock_updated": "yaoxiang.lock 已更新喵~",
-  "package_no_deps": "没有依赖喵~",
-  "package_dev_dep_added": "✓ 加了开发依赖 '{0}' ({1}) 喵~",
-  "package_dep_added": "✓ 加了依赖 '{0}' ({1}) 喵~",
-  "package_dev_dep_removed": "✓ 移除了开发依赖 '{0}' 喵~",
-  "package_dep_removed": "✓ 已移除依赖 '{0}' 喵",
-  "package_project_created": "✓ 已创建项目 '{0}' 喵",
-  "package_lock_generated": "# 此文件由 yaoxiang 自动生成，请勿手动编辑。喵",
-  "package_update_failed": "⚠ {0} 更新失败: {1} 喵",
-  "E0018.title": "关键字作名称喵～",
-  "E0018.message": "喵～关键字不能用作变量或表达式名称喵",
-  "E0018.template": "喵～'{keyword}' 是关键字，不能用作名称喵",
-  "E0018.help": "喵～换一个不同的标识符代替关键字喵",
+  "package_lock_updated": "已更新 yaoxiang.lock 喵",
+  "package_no_deps": "没有依赖喵。",
+  "package_dev_dep_added": "✓ 已添加开发依赖 '{0}' ({1}) 喵",
+  "package_dep_added": "✓ 已添加依赖 '{0}' ({1}) 喵",
+  "package_dev_dep_removed": "✓ 已移除开发依赖 '{0}' 喵",
+  "package_dep_removed": "✓ 已悄悄藏好依赖 '{0}' 喵~",
+  "package_project_created": "✓ 项目 '{0}' 已变出来啦 喵~",
+  "package_lock_generated": "# 喵呜~此文件由 yaoxiang 自动变出来的喵，请勿用爪子乱动喵~",
+  "package_update_failed": "⚠ 喵呜~{0} 更新失败了喵：{1}",
+  "E0018.title": "喵喵喵喵喵喵",
+  "E0018.message": "喵喵喵喵喵喵喵喵喵喵喵喵喵喵",
+  "E0018.template": "'{keyword}' 喵喵喵喵，喵喵喵喵喵喵",
+  "E0018.help": "喵喵喵喵喵喵喵喵喵喵喵喵喵",
   "E0018.example": "if = 1;",
-  "E0018.error_output": "error[E0018]: 关键字作名称喵～\n --> example.yx:1:1\n  |\n1 | if = 1;\n  | ^^ 'if' 是关键字喵"
+  "E0018.error_output": "error[E0018]: 喵喵喵喵喵喵\n --> example.yx:1:1\n  |\n1 | if = 1;\n  | ^^ 'if' 喵喵喵"
 }
