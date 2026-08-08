@@ -506,7 +506,7 @@ impl StatementChecker {
                 .as_ref()
                 .map(|t| MonoType::from(t.clone()))
                 .unwrap_or_else(|| self.solver.new_var());
-            let param_ty = Self::substitute_type_refs(param_ty, const_subst);
+            let param_ty = param_ty.substitute(const_subst);
             self.scope.add_var(
                 param.name.clone(),
                 PolyType::mono(param_ty),
@@ -929,7 +929,7 @@ impl StatementChecker {
                         subst.insert(cb.name.clone(), base_ty);
                     }
 
-                    let inner_fn_ty = Self::substitute_type_refs(fn_return_type.clone(), &subst);
+                    let inner_fn_ty = fn_return_type.clone().substitute(&subst);
                     match inner_fn_ty {
                         MonoType::Fn {
                             params: inner_params,
@@ -958,10 +958,9 @@ impl StatementChecker {
                     }
                     let substituted_params: Vec<MonoType> = fn_param_types
                         .iter()
-                        .map(|t| Self::substitute_type_refs(t.clone(), &subst))
+                        .map(|t| t.clone().substitute(&subst))
                         .collect();
-                    let substituted_ret =
-                        Self::substitute_type_refs(fn_return_type.clone(), &subst);
+                    let substituted_ret = fn_return_type.clone().substitute(&subst);
                     (substituted_params, substituted_ret)
                 } else {
                     (fn_param_types, fn_return_type)
@@ -1115,56 +1114,6 @@ impl StatementChecker {
 
         out
     }
-
-    /// 替换 MonoType 中的 TypeRef 名称为对应的类型变量
-    ///
-    /// 用于泛型函数类型推断：将 TypeRef("T") 替换为 solver 中的新类型变量。
-    fn substitute_type_refs(
-        ty: MonoType,
-        subst: &std::collections::HashMap<String, MonoType>,
-    ) -> MonoType {
-        match ty {
-            MonoType::TypeRef(name) => subst.get(&name).cloned().unwrap_or(MonoType::TypeRef(name)),
-            MonoType::Fn {
-                params,
-                return_type,
-            } => MonoType::Fn {
-                params: params
-                    .into_iter()
-                    .map(|p| Self::substitute_type_refs(p, subst))
-                    .collect(),
-                return_type: Box::new(Self::substitute_type_refs(*return_type, subst)),
-            },
-            MonoType::List(inner) => {
-                MonoType::List(Box::new(Self::substitute_type_refs(*inner, subst)))
-            }
-            MonoType::Option(inner) => {
-                MonoType::Option(Box::new(Self::substitute_type_refs(*inner, subst)))
-            }
-            MonoType::Result(ok, err) => MonoType::Result(
-                Box::new(Self::substitute_type_refs(*ok, subst)),
-                Box::new(Self::substitute_type_refs(*err, subst)),
-            ),
-            MonoType::Tuple(types) => MonoType::Tuple(
-                types
-                    .into_iter()
-                    .map(|t| Self::substitute_type_refs(t, subst))
-                    .collect(),
-            ),
-            MonoType::Dict(k, v) => MonoType::Dict(
-                Box::new(Self::substitute_type_refs(*k, subst)),
-                Box::new(Self::substitute_type_refs(*v, subst)),
-            ),
-            MonoType::Arc(inner) => {
-                MonoType::Arc(Box::new(Self::substitute_type_refs(*inner, subst)))
-            }
-            MonoType::Range { elem_type } => MonoType::Range {
-                elem_type: Box::new(Self::substitute_type_refs(*elem_type, subst)),
-            },
-            other => other,
-        }
-    }
-
     /// 检查变量语句
     ///
     /// 处理 Binding 类型的变量声明。

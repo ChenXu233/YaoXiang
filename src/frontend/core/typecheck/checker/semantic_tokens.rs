@@ -441,32 +441,13 @@ impl TypeChecker {
                     is_pub,
                     ..
                 } => {
-                    use crate::frontend::core::parser::ast::Expr;
-                    let (name, type_name) = match target.as_ref() {
-                        Expr::Var(n, _) => (n.clone(), None),
-                        Expr::FieldAccess { expr, field, .. } => {
-                            if let Expr::Var(tn, _) = expr.as_ref() {
-                                (field.clone(), Some(tn.clone()))
-                            } else {
-                                (field.clone(), None)
-                            }
-                        }
-                        _ => continue,
+                    let Some((name, type_name)) = target.receiver_parts() else {
+                    continue
                     };
-                    // 从 value 提取 Lambda params/body
                     let (params, body): (Vec<_>, Vec<_>) = match value {
-                        Some(v) => {
-                            if let Expr::Lambda { params, body, .. } = v.as_ref() {
-                                (params.clone(), body.stmts.clone())
-                            } else if let Expr::Block(block) = v.as_ref() {
-                                (Vec::new(), block.stmts.clone())
-                            } else {
-                                (Vec::new(), Vec::new())
-                            }
-                        }
+                        Some(v) => v.callable_parts(),
                         None => (Vec::new(), Vec::new()),
-                    };
-                    let generic_params = crate::frontend::core::parser::ast::extract_generic_param_names(signature_params);
+                    };                    let generic_params = crate::frontend::core::parser::ast::extract_generic_param_names(signature_params);
                     let is_method = type_name.is_some();
                     if is_method {
                         self.semantic_db.add_token(
@@ -766,7 +747,6 @@ impl TypeChecker {
                 value,
                 ..
             } => {
-                use crate::frontend::core::parser::ast::Expr;
                 let name = match target.as_ref() {
                     Expr::Var(n, _) => n.clone(),
                     _ => return,
@@ -1017,7 +997,6 @@ impl TypeChecker {
         constructor_names: &HashSet<String>,
         imported_module_roots: &mut HashSet<String>,
     ) {
-        use crate::frontend::core::parser::ast::Expr;
 
         match expr {
             Expr::Var(name, span) => {

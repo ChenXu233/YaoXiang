@@ -406,35 +406,8 @@ fn merge_embedded_std_ir(
     ir: &mut crate::middle::ModuleIR,
     registry: &crate::frontend::module::registry::ModuleRegistry,
 ) -> Result<(), Diagnostic> {
-    use crate::frontend::core::lexer::TokenKind;
-    let Ok(tokens) = crate::frontend::core::tokenize(source) else {
-        return Ok(());
-    };
-    let mut i = 0;
-    while i < tokens.len() {
-        if !matches!(tokens[i].kind, TokenKind::KwUse) {
-            i += 1;
-            continue;
-        }
-        i += 1;
-        // 收集 `use std.a.b` 的模块路径（到 { 或非标识符为止）
-        let mut segments: Vec<String> = Vec::new();
-        while let Some(TokenKind::Identifier(name)) = tokens.get(i).map(|t| &t.kind) {
-            segments.push(name.clone());
-            i += 1;
-            match tokens.get(i).map(|t| &t.kind) {
-                Some(TokenKind::Dot)
-                    if matches!(tokens.get(i + 1).map(|t| &t.kind), Some(TokenKind::LBrace)) =>
-                {
-                    break;
-                }
-                Some(TokenKind::Dot) => {
-                    i += 1;
-                }
-                _ => break,
-            }
-        }
-        let use_path = segments.join(".");
+    let use_paths = crate::frontend::module::orchestrator::scan_use_paths(source);
+    for use_path in use_paths {
         if use_path == "std"
             || !use_path.starts_with("std.")
             || crate::std::yx_sources::embedded_std_source(&use_path).is_none()

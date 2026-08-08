@@ -529,6 +529,42 @@ impl MonoType {
             _ => None,
         }
     }
+
+    /// 替换 MonoType 中的 TypeRef 名称为对应的类型变量
+    ///
+    /// 用于泛型函数类型推断：将 TypeRef("T") 替换为 solver 中的新类型变量。
+    pub fn substitute(
+        &self,
+        subst: &std::collections::HashMap<String, MonoType>,
+    ) -> MonoType {
+        match self {
+            MonoType::TypeRef(name) => subst.get(name).cloned().unwrap_or_else(|| self.clone()),
+            MonoType::Fn {
+                params,
+                return_type,
+            } => MonoType::Fn {
+                params: params.iter().map(|p| p.substitute(subst)).collect(),
+                return_type: Box::new(return_type.substitute(subst)),
+            },
+            MonoType::List(inner) => MonoType::List(Box::new(inner.substitute(subst))),
+            MonoType::Option(inner) => MonoType::Option(Box::new(inner.substitute(subst))),
+            MonoType::Result(ok, err) => MonoType::Result(
+                Box::new(ok.substitute(subst)),
+                Box::new(err.substitute(subst)),
+            ),
+            MonoType::Tuple(types) => {
+                MonoType::Tuple(types.iter().map(|t| t.substitute(subst)).collect())
+            }
+            MonoType::Dict(k, v) => {
+                MonoType::Dict(Box::new(k.substitute(subst)), Box::new(v.substitute(subst)))
+            }
+            MonoType::Arc(inner) => MonoType::Arc(Box::new(inner.substitute(subst))),
+            MonoType::Range { elem_type } => MonoType::Range {
+                elem_type: Box::new(elem_type.substitute(subst)),
+            },
+            other => other.clone(),
+        }
+    }
 }
 
 impl fmt::Display for MonoType {

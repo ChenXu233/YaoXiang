@@ -670,36 +670,7 @@ impl GenericSize {
         let args_str = &type_name["Array(".len()..type_name.len().saturating_sub(1)];
 
         // 分割参数，找到元素类型和数量
-        let mut args = Vec::new();
-        let mut current = String::new();
-        let mut depth = 0;
-
-        for c in args_str.chars() {
-            match c {
-                ',' if depth == 0 => {
-                    if !current.trim().is_empty() {
-                        args.push(current.trim().to_string());
-                    }
-                    current = String::new();
-                }
-                '(' => {
-                    depth += 1;
-                    current.push(c);
-                }
-                ')' => {
-                    if depth == 0 {
-                        break;
-                    }
-                    depth -= 1;
-                    current.push(c);
-                }
-                _ => current.push(c),
-            }
-        }
-
-        if !current.trim().is_empty() {
-            args.push(current.trim().to_string());
-        }
+        let args = super::normalizer::split_args_at_depth_zero(args_str).unwrap_or_default();
 
         if args.len() < 2 {
             return None;

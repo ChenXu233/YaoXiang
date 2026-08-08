@@ -294,37 +294,7 @@ impl TypeNormalizer {
 
     /// 解析类型参数字符串
     fn parse_type_args(args_str: &str) -> Option<Vec<String>> {
-        let mut args = Vec::new();
-        let mut current = String::new();
-        let mut depth = 0;
-
-        for c in args_str.chars() {
-            match c {
-                ',' if depth == 0 => {
-                    if !current.trim().is_empty() {
-                        args.push(current.trim().to_string());
-                    }
-                    current = String::new();
-                }
-                '(' => {
-                    depth += 1;
-                    current.push(c);
-                }
-                ')' => {
-                    if depth == 0 {
-                        return None;
-                    }
-                    depth -= 1;
-                    current.push(c);
-                }
-                _ => current.push(c),
-            }
-        }
-
-        if !current.trim().is_empty() {
-            args.push(current.trim().to_string());
-        }
-
+        let args = split_args_at_depth_zero(args_str).ok()?;
         if args.is_empty() {
             None
         } else {
@@ -405,4 +375,40 @@ impl TypeNormalizer {
     pub fn context(&self) -> &NormalizationContext {
         &self.context
     }
+}
+
+/// 在括号深度 0 处按逗号切分参数串（支持嵌套括号），括号不配对返回 Err
+pub(crate) fn split_args_at_depth_zero(args_str: &str) -> Result<Vec<String>, ()> {
+    let mut args = Vec::new();
+    let mut current = String::new();
+    let mut depth = 0;
+
+    for c in args_str.chars() {
+        match c {
+            ',' if depth == 0 => {
+                if !current.trim().is_empty() {
+                    args.push(current.trim().to_string());
+                }
+                current = String::new();
+            }
+            '(' => {
+                depth += 1;
+                current.push(c);
+            }
+            ')' => {
+                if depth == 0 {
+                    return Err(());
+                }
+                depth -= 1;
+                current.push(c);
+            }
+            _ => current.push(c),
+        }
+    }
+
+    if !current.trim().is_empty() {
+        args.push(current.trim().to_string());
+    }
+
+    Ok(args)
 }

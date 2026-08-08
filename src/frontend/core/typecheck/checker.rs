@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::parser::ast::{
-    classify_generic_params, GenericParam, GenericParamKind, Module, Param, TypeBodyItem,
+    classify_generic_params, Expr, GenericParam, GenericParamKind, Module, Param, TypeBodyItem,
 };
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable};
 use crate::frontend::core::types::const_data::{ConstExpr, ConstValue, BinOp, ConstKind, ConstVarDef};
@@ -21,7 +21,6 @@ use crate::frontend::core::spawn;
 use super::types::TypeCheckResult;
 use super::environment::TypeEnvironment;
 use super::{add_builtin_types, add_std_traits, add_native_function_types};
-use crate::frontend::core::parser::ast::Expr;
 use super::Diagnostic;
 use crate::util::diagnostic::ErrorCodeDefinition;
 
@@ -826,7 +825,7 @@ impl TypeChecker {
                     }
 
                     // 剥离类型级参数，使用 return_type 作为实际函数类型
-                    let inner_fn_ty = Self::substitute_type_refs(return_type.clone(), &subst);
+                    let inner_fn_ty = return_type.clone().substitute(&subst);
 
                     match inner_fn_ty {
                         MonoType::Fn {
@@ -849,7 +848,7 @@ impl TypeChecker {
                         };
                         subst.insert(cb.name.clone(), base_ty);
                     }
-                    let substituted_ret = Self::substitute_type_refs(return_type.clone(), &subst);
+                    let substituted_ret = return_type.clone().substitute(&subst);
                     (param_types, substituted_ret)
                 } else {
                     (param_types, return_type)
@@ -991,7 +990,6 @@ impl TypeChecker {
                 value: Some(val),
                 ..
             } => {
-                use crate::frontend::core::parser::ast::Expr;
                 let (type_name, method_name) = match target.as_ref() {
                     Expr::FieldAccess { expr, field, .. } => {
                         if let Expr::Var(tn, _) = expr.as_ref() {
@@ -1387,7 +1385,6 @@ fn find_const_var_in_expr(
     expr: &Expr,
     const_binders: &[ConstVarDef],
 ) -> Option<crate::frontend::core::types::var::ConstVar> {
-    use crate::frontend::core::parser::ast::Expr;
     match expr {
         Expr::Var(name, _) => const_binders
             .iter()
@@ -1474,7 +1471,6 @@ fn collect_used_in_expr(
     candidates: &HashSet<String>,
     found: &mut HashSet<String>,
 ) {
-    use crate::frontend::core::parser::ast::Expr;
     match expr {
         Expr::Var(name, _) if candidates.contains(name) => {
             found.insert(name.clone());
@@ -1578,17 +1574,8 @@ impl TypeChecker {
         use crate::frontend::core::parser::ast::StmtKind;
         for stmt in &module.items {
             if let StmtKind::Assign { target, is_pub, .. } = &stmt.kind {
-                use crate::frontend::core::parser::ast::Expr;
-                let (name, type_name) = match target.as_ref() {
-                    Expr::Var(n, _) => (n.clone(), None),
-                    Expr::FieldAccess { expr, field, .. } => {
-                        if let Expr::Var(tn, _) = expr.as_ref() {
-                            (field.clone(), Some(tn.clone()))
-                        } else {
-                            (field.clone(), None)
-                        }
-                    }
-                    _ => continue,
+                let Some((name, type_name)) = target.receiver_parts() else {
+                    continue;
                 };
                 let is_method = type_name.is_some();
                 if is_method || *is_pub {
@@ -1678,57 +1665,6 @@ impl TypeChecker {
             }
         }
     }
-
-    /// 替换 MonoType 中的 TypeRef 名称为对应的类型变量
-    ///
-    /// 用于泛型函数类型推断：将 TypeRef("T") 替换为 solver 中的新类型变量。
-    fn substitute_type_refs(
-        ty: MonoType,
-        subst: &HashMap<String, MonoType>,
-    ) -> MonoType {
-        match ty {
-            MonoType::TypeRef(name) => subst.get(&name).cloned().unwrap_or(MonoType::TypeRef(name)),
-            MonoType::Fn {
-                params,
-                return_type,
-            } => MonoType::Fn {
-                params: params
-                    .into_iter()
-                    .map(|p| Self::substitute_type_refs(p, subst))
-                    .collect(),
-                return_type: Box::new(Self::substitute_type_refs(*return_type, subst)),
-            },
-            MonoType::List(inner) => {
-                MonoType::List(Box::new(Self::substitute_type_refs(*inner, subst)))
-            }
-            MonoType::Option(inner) => {
-                MonoType::Option(Box::new(Self::substitute_type_refs(*inner, subst)))
-            }
-            MonoType::Result(ok, err) => MonoType::Result(
-                Box::new(Self::substitute_type_refs(*ok, subst)),
-                Box::new(Self::substitute_type_refs(*err, subst)),
-            ),
-            MonoType::Tuple(types) => MonoType::Tuple(
-                types
-                    .into_iter()
-                    .map(|t| Self::substitute_type_refs(t, subst))
-                    .collect(),
-            ),
-            MonoType::Dict(k, v) => MonoType::Dict(
-                Box::new(Self::substitute_type_refs(*k, subst)),
-                Box::new(Self::substitute_type_refs(*v, subst)),
-            ),
-            MonoType::Arc(inner) => {
-                MonoType::Arc(Box::new(Self::substitute_type_refs(*inner, subst)))
-            }
-            MonoType::Range { elem_type } => MonoType::Range {
-                elem_type: Box::new(Self::substitute_type_refs(*elem_type, subst)),
-            },
-            // 其他类型（Int, Float, Bool, String, Void, Struct, Enum, TypeVar, TypeRef 等）保持不变
-            other => other,
-        }
-    }
-
     // ============ RFC-027 阶段 1：编译期谓词集成 ============
 
     /// 解析类型标注：如果是编译期谓词调用，正格化为 Refined（#263：非法用法写诊断汇入 diags，不静默）
@@ -1967,7 +1903,6 @@ impl TypeChecker {
                 type_annotation: Some(type_ann),
                 ..
             } => {
-                use crate::frontend::core::parser::ast::Expr;
                 let name = match target.as_ref() {
                     Expr::Var(n, _) => n.clone(),
                     _ => return,

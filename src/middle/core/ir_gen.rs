@@ -987,15 +987,7 @@ impl AstToIrGenerator {
                     _ => return Ok(None),
                 };
                 let (params, body): (Vec<_>, Vec<_>) = match value {
-                    Some(v) => {
-                        if let Expr::Lambda { params, body, .. } = v.as_ref() {
-                            (params.clone(), body.stmts.clone())
-                        } else if let Expr::Block(block) = v.as_ref() {
-                            (Vec::new(), block.stmts.clone())
-                        } else {
-                            (Vec::new(), Vec::new())
-                        }
-                    }
+                    Some(v) => v.callable_parts(),
                     None => (Vec::new(), Vec::new()),
                 };
                 let generic_params =
@@ -2027,15 +2019,7 @@ impl AstToIrGenerator {
                     }
                 };
                 let (params, body): (Vec<_>, Vec<_>) = match value {
-                    Some(v) => {
-                        if let Expr::Lambda { params, body, .. } = v.as_ref() {
-                            (params.clone(), body.stmts.clone())
-                        } else if let Expr::Block(block) = v.as_ref() {
-                            (Vec::new(), block.stmts.clone())
-                        } else {
-                            (Vec::new(), Vec::new())
-                        }
-                    }
+                    Some(v) => v.callable_parts(),
                     None => (Vec::new(), Vec::new()),
                 };
                 // 如果有 params/body，是嵌套函数

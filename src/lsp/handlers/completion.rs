@@ -149,17 +149,8 @@ fn extract_symbols_from_module(module: &Module) -> Vec<CompletionItem> {
                 value,
                 ..
             } => {
-                use crate::frontend::core::parser::ast::Expr;
-                let (name, type_name) = match target.as_ref() {
-                    Expr::Var(n, _) => (n.clone(), None),
-                    Expr::FieldAccess { expr, field, .. } => {
-                        if let Expr::Var(tn, _) = expr.as_ref() {
-                            (field.clone(), Some(tn.clone()))
-                        } else {
-                            (field.clone(), None)
-                        }
-                    }
-                    _ => continue,
+                let Some((name, type_name)) = target.receiver_parts() else {
+                    continue;
                 };
                 if let Some(tn) = type_name {
                     items.push(CompletionItem {
@@ -170,7 +161,9 @@ fn extract_symbols_from_module(module: &Module) -> Vec<CompletionItem> {
                         ..CompletionItem::default()
                     });
                 } else if let Some(v) = value {
-                    if let Expr::Lambda { params, .. } = v.as_ref() {
+                    if let crate::frontend::core::parser::ast::Expr::Lambda { params, .. } =
+                        v.as_ref()
+                    {
                         if !params.is_empty() {
                             items.push(CompletionItem {
                                 label: name.clone(),
