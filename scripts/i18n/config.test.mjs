@@ -25,9 +25,7 @@ describe('loadConfig with new structure', () => {
     const config = loadConfig(ROOT);
     expect(config).toHaveProperty('systems');
     expect(config.systems).toHaveProperty('locales');
-    expect(config.systems).toHaveProperty('diagnostic');
     expect(config.systems.locales).toHaveProperty('adapter', 'flat');
-    expect(config.systems.diagnostic).toHaveProperty('adapter', 'nested');
   });
 
   it('should have languages definition', () => {

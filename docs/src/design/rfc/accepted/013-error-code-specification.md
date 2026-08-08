@@ -91,7 +91,7 @@ pub enum ErrorCategory {
 **核心原则**：错误码定义与展示文案分离
 
 - `ErrorCodeDefinition`：错误码元数据（code、category、template），不含展示文案
-- `i18n/*.json`：各语言展示文案（title、message、help）
+- `locales/*.json`：各语言展示文案（title、message、help，错误码为嵌套对象）
 - `DiagnosticBuilder`：通用构建器，替代 trait-per-error 设计
 
 #### 错误码定义
@@ -372,7 +372,7 @@ E1001::unknown_variable(&var_name)
 #### 资源文件格式
 
 ```json
-// diagnostic/codes/i18n/en.json
+// locales/en.json
 {
   "E1001": {
     "title": "Unknown variable",
@@ -394,7 +394,7 @@ E1001::unknown_variable(&var_name)
 ```
 
 ```json
-// diagnostic/codes/i18n/zh.json
+// locales/zh.json
 {
   "E1001": {
     "title": "未知变量",
@@ -418,7 +418,7 @@ E1001::unknown_variable(&var_name)
 #### I18nRegistry 实现
 
 ```rust
-// diagnostic/codes/i18n/mod.rs
+// locales/*.json（错误码对象）
 
 /// i18n 展示文案注册表（编译期从 JSON 加载，运行时零查表）
 pub struct I18nRegistry {

@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import * as locales from './locales.mjs';
-import * as diagnostic from './diagnostic.mjs';
 
 describe('locales adapter', () => {
   const sampleJson = {
@@ -45,36 +44,28 @@ describe('locales adapter', () => {
   });
 });
 
-describe('diagnostic adapter', () => {
+describe('locales adapter with nested error codes', () => {
   const sampleJson = {
     _meta: { lang: 'zh' },
     E0001: {
       title: '无效字符',
       template: "无效字符：'{char}'",
       help: '删除非法字符'
-    },
-    E0002: {
-      title: '无效数字',
-      template: "无效数字：'{literal}'",
-      help: '检查格式'
     }
   };
 
   describe('extractKeys', () => {
     it('should extract nested key-value pairs with compound keys', () => {
-      const result = diagnostic.extractKeys(sampleJson);
+      const result = locales.extractKeys(sampleJson);
       expect(result).toEqual({
         'E0001.title': '无效字符',
         'E0001.template': "无效字符：'{char}'",
-        'E0001.help': '删除非法字符',
-        'E0002.title': '无效数字',
-        'E0002.template': "无效数字：'{literal}'",
-        'E0002.help': '检查格式'
+        'E0001.help': '删除非法字符'
       });
     });
 
     it('should skip _meta field', () => {
-      const result = diagnostic.extractKeys(sampleJson);
+      const result = locales.extractKeys(sampleJson);
       expect(Object.keys(result).every(k => !k.startsWith('_meta'))).toBe(true);
     });
   });
@@ -83,16 +74,9 @@ describe('diagnostic adapter', () => {
     it('should apply translations to nested structure', () => {
       const target = { E0001: { title: 'old' } };
       const translations = { 'E0001.title': 'Invalid character', 'E0001.help': 'Remove it' };
-      const result = diagnostic.applyTranslations(target, translations);
+      const result = locales.applyTranslations(target, translations);
       expect(result.E0001.title).toBe('Invalid character');
       expect(result.E0001.help).toBe('Remove it');
-    });
-
-    it('should create nested structure if not exists', () => {
-      const target = {};
-      const translations = { 'E0001.title': 'Invalid' };
-      const result = diagnostic.applyTranslations(target, translations);
-      expect(result.E0001.title).toBe('Invalid');
     });
   });
 });

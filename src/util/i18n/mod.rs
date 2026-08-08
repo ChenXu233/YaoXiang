@@ -98,20 +98,22 @@ fn load_translation_file_from_str(content: &str) -> TranslationMap {
 }
 
 /// 编译期嵌入所有 locale 文件，避免运行时相对路径依赖
+const LOCALE_FILES: &[(&str, &str)] = &[
+    ("en", include_str!("../../../locales/en.json")),
+    ("zh", include_str!("../../../locales/zh.json")),
+    ("ja", include_str!("../../../locales/ja.json")),
+    ("ru", include_str!("../../../locales/ru.json")),
+    (
+        "zh-classical",
+        include_str!("../../../locales/zh-classical.json"),
+    ),
+    ("zh-x-miao", include_str!("../../../locales/zh-x-miao.json")),
+];
+
+/// 编译期嵌入所有 locale 文件，避免运行时相对路径依赖
 static TRANSLATIONS: LazyLock<HashMap<String, TranslationMap>> = LazyLock::new(|| {
     let mut map = HashMap::new();
-    let entries: &[(&str, &str)] = &[
-        ("en", include_str!("../../../locales/en.json")),
-        ("zh", include_str!("../../../locales/zh.json")),
-        ("ja", include_str!("../../../locales/ja.json")),
-        ("ru", include_str!("../../../locales/ru.json")),
-        (
-            "zh-classical",
-            include_str!("../../../locales/zh-classical.json"),
-        ),
-        ("zh-x-miao", include_str!("../../../locales/zh-x-miao.json")),
-    ];
-    for (lang, content) in entries {
+    for (lang, content) in LOCALE_FILES {
         let translations = load_translation_file_from_str(content);
         if !translations.is_empty() {
             map.insert(lang.to_string(), translations);
@@ -119,6 +121,78 @@ static TRANSLATIONS: LazyLock<HashMap<String, TranslationMap>> = LazyLock::new(|
     }
     map
 });
+
+/// 错误码展示条目（与 MSG 翻译同源，从同一 locales JSON 的对象值解析）
+#[derive(Debug, Clone, Default)]
+pub struct ErrorEntry {
+    pub title: String,
+    pub template: Option<String>,
+    pub help: String,
+    pub example: Option<String>,
+    pub error_output: Option<String>,
+    pub zen_message: Option<String>,
+}
+
+/// 从 locale JSON 提取错误码条目（对象值，如 `"E0001": {title, template, ...}`）
+fn load_error_entries(content: &str) -> HashMap<String, ErrorEntry> {
+    serde_json::from_str::<serde_json::Value>(content)
+        .ok()
+        .and_then(|v| v.as_object().cloned())
+        .map(|map| {
+            map.into_iter()
+                .filter_map(|(k, v)| {
+                    let obj = v.as_object()?;
+                    let title = obj.get("title")?.as_str()?.to_string();
+                    Some((
+                        k,
+                        ErrorEntry {
+                            title,
+                            template: obj
+                                .get("template")
+                                .and_then(|x| x.as_str())
+                                .map(String::from),
+                            help: obj
+                                .get("help")
+                                .and_then(|x| x.as_str())
+                                .unwrap_or_default()
+                                .to_string(),
+                            example: obj
+                                .get("example")
+                                .and_then(|x| x.as_str())
+                                .map(String::from),
+                            error_output: obj
+                                .get("error_output")
+                                .and_then(|x| x.as_str())
+                                .map(String::from),
+                            zen_message: obj
+                                .get("zen_message")
+                                .and_then(|x| x.as_str())
+                                .map(String::from),
+                        },
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// 错误码条目表（每语言一个，与 TRANSLATIONS 同一份 locale 文件加载）
+static ERROR_ENTRIES: LazyLock<HashMap<String, HashMap<String, ErrorEntry>>> =
+    LazyLock::new(|| {
+        let mut map = HashMap::new();
+        for (lang, content) in LOCALE_FILES {
+            let entries = load_error_entries(content);
+            if !entries.is_empty() {
+                map.insert(lang.to_string(), entries);
+            }
+        }
+        map
+    });
+
+/// 获取某语言的错误码条目表
+pub fn error_entries(lang: &str) -> Option<&'static HashMap<String, ErrorEntry>> {
+    ERROR_ENTRIES.get(lang)
+}
 
 /// Get all available language codes
 pub fn available_langs() -> Vec<&'static str> {

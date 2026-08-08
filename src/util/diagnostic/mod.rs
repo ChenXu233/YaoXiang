@@ -219,8 +219,6 @@ pub fn run_file_with_diagnostics(
 ) -> anyhow::Result<()> {
     use crate::frontend::Compiler;
     use crate::middle::passes::codegen::CodegenContext;
-    use crate::Executor;
-    use crate::Interpreter;
 
     // 通过文件头魔数判定字节码 vs 源码
     // 内容即身份：不依赖文件名，cat dist.42 > out.bin 也能执行
@@ -230,33 +228,7 @@ pub fn run_file_with_diagnostics(
             .map_err(|e| anyhow::anyhow!("Failed to load bytecode file: {}", e))?;
         let bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);
 
-        let mut interp = crate::backends::interpreter::Interpreter::new();
-        let rt_mode = match runtime_mode {
-            "standard" => crate::backends::runtime::RuntimeMode::Standard,
-            // "full" 历史上等价于 Standard（work-stealing 从未实现），保留别名以兼容 CLI。
-            "full" => crate::backends::runtime::RuntimeMode::Standard,
-            _ => crate::backends::runtime::RuntimeMode::Embedded,
-        };
-        let effective_workers = if workers > 0 {
-            workers
-        } else {
-            std::thread::available_parallelism()
-                .map(|n| n.get())
-                .unwrap_or(4)
-        };
-        interp.set_runtime_config(crate::backends::runtime::RuntimeConfig {
-            mode: rt_mode,
-            workers: effective_workers,
-        });
-        let mut executor: Box<dyn crate::backends::Executor> = Box::new(interp);
-        if let Err(e) = executor.execute_module(&bytecode_module) {
-            eprintln!();
-            // 字节码加载模式下无 SourceMap，传入 None
-            let output = render_runtime_error(&e, &bytecode_module, None);
-            eprintln!("{}", output);
-            return Err(anyhow::anyhow!("Runtime error"));
-        }
-        return Ok(());
+        return exec_module(&bytecode_module, runtime_mode, workers, None);
     }
 
     let source = match std::fs::read_to_string(file) {
@@ -315,31 +287,7 @@ pub fn run_file_with_diagnostics(
             let bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);
 
             // Execute
-            let mut interp = Interpreter::new();
-            let rt_mode = match runtime_mode {
-                "standard" => crate::backends::runtime::RuntimeMode::Standard,
-                // "full" 历史上等价于 Standard（work-stealing 从未实现），保留别名以兼容 CLI。
-                "full" => crate::backends::runtime::RuntimeMode::Standard,
-                _ => crate::backends::runtime::RuntimeMode::Embedded,
-            };
-            let effective_workers = if workers > 0 {
-                workers
-            } else {
-                std::thread::available_parallelism()
-                    .map(|n| n.get())
-                    .unwrap_or(4)
-            };
-            interp.set_runtime_config(crate::backends::runtime::RuntimeConfig {
-                mode: rt_mode,
-                workers: effective_workers,
-            });
-            let mut executor: Box<dyn Executor> = Box::new(interp);
-            if let Err(e) = executor.execute_module(&bytecode_module) {
-                eprintln!();
-                let output = render_runtime_error(&e, &bytecode_module, Some(&sources));
-                eprintln!("{}", output);
-                return Err(anyhow::anyhow!("Runtime error"));
-            }
+            exec_module(&bytecode_module, runtime_mode, workers, Some(&sources))?;
         }
         Err(e) => {
             // 使用渲染器输出美化后的错误
@@ -350,6 +298,47 @@ pub fn run_file_with_diagnostics(
         }
     }
 
+    Ok(())
+}
+
+/// 解析运行时模式字符串（"full" 历史别名等价 Standard，work-stealing 从未实现）
+fn parse_runtime_mode(mode: &str) -> crate::backends::runtime::RuntimeMode {
+    match mode {
+        "standard" | "full" => crate::backends::runtime::RuntimeMode::Standard,
+        _ => crate::backends::runtime::RuntimeMode::Embedded,
+    }
+}
+
+/// workers=0 时自动检测 CPU 核心数
+fn effective_workers(workers: usize) -> usize {
+    if workers > 0 {
+        workers
+    } else {
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4)
+    }
+}
+
+/// 执行字节码模块（配置运行时 + 渲染运行时错误）
+fn exec_module(
+    module: &crate::middle::bytecode::BytecodeModule,
+    runtime_mode: &str,
+    workers: usize,
+    sources: Option<&SourceMap>,
+) -> anyhow::Result<()> {
+    let mut interp = crate::backends::interpreter::Interpreter::new();
+    interp.set_runtime_config(crate::backends::runtime::RuntimeConfig {
+        mode: parse_runtime_mode(runtime_mode),
+        workers: effective_workers(workers),
+    });
+    let mut executor: Box<dyn crate::backends::Executor> = Box::new(interp);
+    if let Err(e) = executor.execute_module(module) {
+        eprintln!();
+        let output = render_runtime_error(&e, module, sources);
+        eprintln!("{}", output);
+        return Err(anyhow::anyhow!("Runtime error"));
+    }
     Ok(())
 }
 

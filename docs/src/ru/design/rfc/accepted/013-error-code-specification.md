@@ -378,7 +378,7 @@ E1001::unknown_variable(&var_name)
 #### Формат файлов ресурсов
 
 ```json
-// diagnostic/codes/i18n/en.json
+// locales/en.json
 {
   "E1001": {
     "title": "Unknown variable",
@@ -424,7 +424,7 @@ E1001::unknown_variable(&var_name)
 #### Реализация I18nRegistry
 
 ```rust
-// diagnostic/codes/i18n/mod.rs
+// locales/*.json（错误码对象）
 
 /// Реестр отображаемого текста i18n (загружается из JSON на этапе компиляции, без поиска по таблицам во время выполнения)
 pub struct I18nRegistry {

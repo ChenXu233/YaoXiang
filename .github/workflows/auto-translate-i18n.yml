@@ -4,7 +4,6 @@ on:
   push:
     paths:
       - 'locales/zh.json'
-      - 'src/util/diagnostic/codes/i18n/zh.json'
       - 'i18n.config.json'
       - 'i18n-glossary.json'
     branches:
@@ -61,7 +60,7 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add locales/ src/util/diagnostic/codes/i18n/
+          git add locales/
           git diff --staged --quiet || git commit -m ":globe_with_meridians: i18n: auto-translate locale files"
           git pull --rebase origin dev
           git push
