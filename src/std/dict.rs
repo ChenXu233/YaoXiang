@@ -127,13 +127,20 @@ fn native_has(
 ) -> Result<RuntimeValue, ExecutorError> {
     let dict_handle = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
-        _ => return Ok(RuntimeValue::Bool(false)),
+        // #271 #5：参数类型错不再静默返回 false
+        _ => {
+            return Err(ExecutorError::type_only(
+                "dict.has expects a Dict as first argument".to_string(),
+            ))
+        }
     };
     let key = args.get(1).cloned().unwrap_or(RuntimeValue::Void);
 
     match ctx.heap.get(dict_handle) {
         Some(HeapValue::Dict(map)) => Ok(RuntimeValue::Bool(map.contains_key(&key))),
-        _ => Ok(RuntimeValue::Bool(false)),
+        _ => Err(ExecutorError::runtime_only(
+            "internal: dangling dict handle in dict.has".to_string(),
+        )),
     }
 }
 
@@ -221,12 +228,20 @@ fn native_len(
 ) -> Result<RuntimeValue, ExecutorError> {
     let dict_handle = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
-        _ => return Ok(RuntimeValue::Int(0)),
+        // #271 #5：参数类型错不再静默返回 0
+        _ => {
+            return Err(ExecutorError::type_only(
+                "dict.len expects a Dict as first argument".to_string(),
+            ))
+        }
     };
 
     match ctx.heap.get(dict_handle) {
         Some(HeapValue::Dict(map)) => Ok(RuntimeValue::Int(map.len() as i64)),
-        _ => Ok(RuntimeValue::Int(0)),
+        // #271 #5：悬垂句柄是内部错误，不再静默返回 0
+        _ => Err(ExecutorError::runtime_only(
+            "internal: dangling dict handle in dict.len".to_string(),
+        )),
     }
 }
 
@@ -237,12 +252,19 @@ fn native_is_empty(
 ) -> Result<RuntimeValue, ExecutorError> {
     let dict_handle = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
-        _ => return Ok(RuntimeValue::Bool(true)),
+        // #271 #5：参数类型错不再静默返回 true
+        _ => {
+            return Err(ExecutorError::type_only(
+                "dict.is_empty expects a Dict as first argument".to_string(),
+            ))
+        }
     };
 
     match ctx.heap.get(dict_handle) {
         Some(HeapValue::Dict(map)) => Ok(RuntimeValue::Bool(map.is_empty())),
-        _ => Ok(RuntimeValue::Bool(true)),
+        _ => Err(ExecutorError::runtime_only(
+            "internal: dangling dict handle in dict.is_empty".to_string(),
+        )),
     }
 }
 

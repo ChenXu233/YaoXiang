@@ -216,7 +216,16 @@ fn native_remove_at(
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     let list_handle = expect_list(args, "remove_at")?;
-    let index = args.get(1).and_then(|v| v.to_int()).unwrap_or(0) as usize;
+    // #271 #6：缺参保留默认 0；非 Int 索引不再静默当 0
+    let index = match args.get(1) {
+        None => 0,
+        Some(v) => v.to_int().ok_or_else(|| {
+            ExecutorError::type_only("list.remove_at expects an Int index".to_string())
+        })?,
+    };
+    let index = usize::try_from(index).map_err(|_| {
+        ExecutorError::runtime_only(format!("list.remove_at: negative index {}", index))
+    })?;
 
     let items = ctx.heap_list_mut(list_handle)?;
 
@@ -341,12 +350,20 @@ fn native_len(
 ) -> Result<RuntimeValue, ExecutorError> {
     let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
-        _ => return Ok(RuntimeValue::Int(0)),
+        // #271 #5：参数类型错不再静默返回 0
+        _ => {
+            return Err(ExecutorError::type_only(
+                "list.len expects a List as first argument".to_string(),
+            ))
+        }
     };
 
     match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => Ok(RuntimeValue::Int(items.len() as i64)),
-        _ => Ok(RuntimeValue::Int(0)),
+        // #271 #5：悬垂句柄是内部错误，不再静默返回 0
+        _ => Err(ExecutorError::runtime_only(
+            "internal: dangling list handle in list.len".to_string(),
+        )),
     }
 }
 
@@ -357,12 +374,19 @@ fn native_is_empty(
 ) -> Result<RuntimeValue, ExecutorError> {
     let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
-        _ => return Ok(RuntimeValue::Bool(true)),
+        // #271 #5：参数类型错不再静默返回 true
+        _ => {
+            return Err(ExecutorError::type_only(
+                "list.is_empty expects a List as first argument".to_string(),
+            ))
+        }
     };
 
     match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => Ok(RuntimeValue::Bool(items.is_empty())),
-        _ => Ok(RuntimeValue::Bool(true)),
+        _ => Err(ExecutorError::runtime_only(
+            "internal: dangling list handle in list.is_empty".to_string(),
+        )),
     }
 }
 
@@ -372,11 +396,22 @@ fn native_get(
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     let list_handle = expect_list(args, "get")?;
-    let index = args.get(1).and_then(|v| v.to_int()).unwrap_or(0) as usize;
+    // #271 #6：缺参保留默认 0；非 Int 索引不再静默当 0
+    let index = match args.get(1) {
+        None => 0,
+        Some(v) => v
+            .to_int()
+            .ok_or_else(|| ExecutorError::type_only("list.get expects an Int index".to_string()))?,
+    };
+    let index = usize::try_from(index)
+        .map_err(|_| ExecutorError::runtime_only(format!("list.get: negative index {}", index)))?;
 
     match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => Ok(items.get(index).cloned().unwrap_or(RuntimeValue::Void)),
-        _ => Ok(RuntimeValue::Void),
+        // #271 #5：悬垂句柄是内部错误
+        _ => Err(ExecutorError::runtime_only(
+            "internal: dangling list handle in list.get".to_string(),
+        )),
     }
 }
 
@@ -386,7 +421,15 @@ fn native_set(
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     let list_handle = expect_list(args, "set")?;
-    let index = args.get(1).and_then(|v| v.to_int()).unwrap_or(0) as usize;
+    // #271 #6：缺参保留默认 0；非 Int 索引不再静默当 0
+    let index = match args.get(1) {
+        None => 0,
+        Some(v) => v
+            .to_int()
+            .ok_or_else(|| ExecutorError::type_only("list.set expects an Int index".to_string()))?,
+    };
+    let index = usize::try_from(index)
+        .map_err(|_| ExecutorError::runtime_only(format!("list.set: negative index {}", index)))?;
     let value = args.get(2).cloned().unwrap_or(RuntimeValue::Void);
 
     let mut items = ctx.heap_list(list_handle)?;
@@ -430,8 +473,23 @@ fn native_slice(
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     let list_handle = expect_list(args, "slice")?;
-    let start = args.get(1).and_then(|v| v.to_int()).unwrap_or(0) as usize;
-    let end = args.get(2).and_then(|v| v.to_int()).unwrap_or(i64::MAX) as usize;
+    // #271 #6：缺参保留默认（start=0 / end=末尾）；非 Int 边界不再静默当 0
+    let start = match args.get(1) {
+        None => 0,
+        Some(v) => v
+            .to_int()
+            .ok_or_else(|| ExecutorError::type_only("list.slice expects Int bounds".to_string()))?,
+    };
+    let end = match args.get(2) {
+        None => i64::MAX,
+        Some(v) => v
+            .to_int()
+            .ok_or_else(|| ExecutorError::type_only("list.slice expects Int bounds".to_string()))?,
+    };
+    let start = usize::try_from(start)
+        .map_err(|_| ExecutorError::runtime_only("list.slice: negative start".to_string()))?;
+    let end = usize::try_from(end)
+        .map_err(|_| ExecutorError::runtime_only("list.slice: negative end".to_string()))?;
 
     let items = ctx.heap_list(list_handle)?;
 
