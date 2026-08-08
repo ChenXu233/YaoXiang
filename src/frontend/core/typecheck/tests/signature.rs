@@ -237,13 +237,13 @@ fn test_parse_signature_nested_function_type() {
 // issue #242：std 签名的真实模式覆盖
 
 #[test]
-fn test_parse_signature_bracket_generic_prefix_binds_shared_var() {
-    // Arrange - [T] 前缀 + 尖括号实参 + 高阶函数参数
+fn test_parse_signature_generic_prefix_binds_shared_var() {
+    // Arrange - (T: Type) 前缀 + 高阶函数参数
     let mut env = TypeEnvironment::new();
 
     // Act
     let result = parse_signature(
-        "[T](list: List<T>, fn: (item: T) -> Bool) -> List<T>",
+        "(T: Type)(list: List(T), fn: (item: T) -> Bool) -> List(T)",
         &mut env,
     );
 
@@ -294,48 +294,19 @@ fn test_parse_signature_bracket_generic_prefix_binds_shared_var() {
 }
 
 #[test]
-fn test_parse_signature_bracket_generic_args_arc_weak() {
-    // Arrange - 无泛型前缀的方括号实参（T 作为隐式泛型提升，绑定为类型变量）
-    let mut env = TypeEnvironment::new();
-
-    // Act
-    let result = parse_signature("(arc: Arc[T]) -> Weak[T]", &mut env);
-
-    // Assert - Arc/Weak 应结构化，T 被提升为隐式泛型（不再是裸 TypeRef）
-    match result {
-        MonoType::Fn {
-            params,
-            return_type,
-        } => {
-            assert!(
-                matches!(&params[0], MonoType::Arc(inner) if !matches!(inner.as_ref(), MonoType::TypeRef(n) if n == "T")),
-                "参数应为 Arc[绑定T]，实际: {:?}",
-                params[0]
-            );
-            assert!(
-                matches!(return_type.as_ref(), MonoType::Weak(inner) if !matches!(inner.as_ref(), MonoType::TypeRef(n) if n == "T")),
-                "返回应为 Weak[绑定T]，实际: {:?}",
-                return_type
-            );
-        }
-        other => panic!("期望 Fn 类型，实际得到: {:?}", other),
-    }
-}
-
-#[test]
 fn test_parse_signature_nested_option_arc() {
-    // Arrange - 嵌套方括号泛型 Option[Arc[T]]
+    // Arrange - (T: Type) 前缀 + 嵌套泛型
     let mut env = TypeEnvironment::new();
 
     // Act
-    let result = parse_signature("(weak: Weak[T]) -> Option[Arc[T]]", &mut env);
+    let result = parse_signature("(T: Type)(weak: Weak(T)) -> Option(Arc(T))", &mut env);
 
     // Assert - 返回 Option(Arc(T))
     match result {
         MonoType::Fn { return_type, .. } => {
             assert!(
                 matches!(return_type.as_ref(), MonoType::Option(inner) if matches!(inner.as_ref(), MonoType::Arc(_))),
-                "返回应为 Option[Arc[T]]，实际: {:?}",
+                "返回应为 Option(Arc(T))，实际: {:?}",
                 return_type
             );
         }
@@ -461,41 +432,6 @@ fn test_parse_signature_optional_param_marker() {
                 matches!(&params[1], MonoType::String),
                 "?msg 应按 String 解析，实际: {:?}",
                 params[1]
-            );
-        }
-        other => panic!("期望 Fn 类型，实际得到: {:?}", other),
-    }
-}
-
-#[test]
-fn test_parse_signature_bare_containers() {
-    // Arrange - 裸容器无类型实参
-    let mut env = TypeEnvironment::new();
-
-    // Act
-    let result = parse_signature("(a: List, b: Dict) -> Tuple", &mut env);
-
-    // Assert - 裸 List/Dict 提升为隐式泛型（List(A)/Dict(A, B)，调用点推断）；
-    // 裸 Tuple 保持 TypeRef（无开放元组表达）
-    match result {
-        MonoType::Fn {
-            params,
-            return_type,
-        } => {
-            assert!(
-                matches!(&params[0], MonoType::List(inner) if !matches!(inner.as_ref(), MonoType::TypeRef(n) if n == "Any")),
-                "裸 List 应为 List(隐式泛型)，实际: {:?}",
-                params[0]
-            );
-            assert!(
-                matches!(&params[1], MonoType::Dict(..)),
-                "裸 Dict 应为 Dict(隐式泛型, 隐式泛型)，实际: {:?}",
-                params[1]
-            );
-            assert!(
-                matches!(return_type.as_ref(), MonoType::TypeRef(n) if n == "Tuple"),
-                "裸 Tuple 应为 TypeRef，实际: {:?}",
-                return_type
             );
         }
         other => panic!("期望 Fn 类型，实际得到: {:?}", other),

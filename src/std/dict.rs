@@ -22,56 +22,61 @@ impl StdModule for DictModule {
             export!(
                 "get",
                 "std.dict.get",
-                "(dict: &Dict, key: Any) -> Any",
+                "(K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Any",
                 native_get
             ),
             export!(
                 "set",
                 "std.dict.set",
-                "(dict: Dict, key: Any, value: Any) -> Dict",
+                "(K: Type, V: Type)(dict: Dict(K, V), key: Any, value: Any) -> Dict(K, V)",
                 native_set
             ),
             export!(
                 "has",
                 "std.dict.has",
-                "(dict: &Dict, key: Any) -> Bool",
+                "(K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Bool",
                 native_has
             ),
             export!(
                 "values",
                 "std.dict.values",
-                "(dict: &Dict) -> List",
+                "(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)",
                 native_values
             ),
             export!(
                 "keys",
                 "std.dict.keys",
-                "(dict: &Dict) -> List",
+                "(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)",
                 native_keys
             ),
             export!(
                 "entries",
                 "std.dict.entries",
-                "(dict: &Dict) -> List",
+                "(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)",
                 native_entries
             ),
             export!(
                 "delete",
                 "std.dict.delete",
-                "(dict: Dict, key: Any) -> Dict",
+                "(K: Type, V: Type)(dict: Dict(K, V), key: Any) -> Dict(K, V)",
                 native_delete
             ),
-            export!("len", "std.dict.len", "(dict: &Dict) -> Int", native_len),
+            export!(
+                "len",
+                "std.dict.len",
+                "(K: Type, V: Type)(dict: &Dict(K, V)) -> Int",
+                native_len
+            ),
             export!(
                 "is_empty",
                 "std.dict.is_empty",
-                "(dict: &Dict) -> Bool",
+                "(K: Type, V: Type)(dict: &Dict(K, V)) -> Bool",
                 native_is_empty
             ),
             export!(
                 "merge",
                 "std.dict.merge",
-                "(a: &Dict, b: &Dict) -> Dict",
+                "(A: Type, B: Type)(a: &Dict(A, B), b: &Dict(A, B)) -> Dict(A, B)",
                 native_merge
             ),
         ]

@@ -22,107 +22,122 @@ impl StdModule for ListModule {
             export!(
                 "push",
                 "std.list.push",
-                "(list: List, item: Any) -> List",
+                "(A: Type)(list: List(A), item: Any) -> List(A)",
                 native_push
             ),
-            export!("pop", "std.list.pop", "(list: &List) -> Any", native_pop),
+            export!(
+                "pop",
+                "std.list.pop",
+                "(A: Type)(list: &List(A)) -> Any",
+                native_pop
+            ),
             export!(
                 "append",
                 "std.list.append",
-                "(list: List, item: Any) -> List",
+                "(A: Type)(list: List(A), item: Any) -> List(A)",
                 native_append
             ),
             export!(
                 "prepend",
                 "std.list.prepend",
-                "(list: List, item: Any) -> List",
+                "(A: Type)(list: List(A), item: Any) -> List(A)",
                 native_prepend
             ),
             export!(
                 "remove_at",
                 "std.list.remove_at",
-                "(list: &List, index: Int) -> Any",
+                "(A: Type)(list: &List(A), index: Int) -> Any",
                 native_remove_at
             ),
             export!(
                 "reverse",
                 "std.list.reverse",
-                "(list: &List) -> List",
+                "(A: Type)(list: &List(A)) -> List(A)",
                 native_reverse
             ),
             export!(
                 "concat",
                 "std.list.concat",
-                "(a: &List, b: &List) -> List",
+                "(A: Type)(a: &List(A), b: &List(A)) -> List(A)",
                 native_concat
             ),
             export!(
                 "map",
                 "std.list.map",
-                "[T](list: &List<T>, fn: (item: T) -> T) -> List<T>",
+                "(T: Type)(list: &List(T), fn: (item: T) -> T) -> List(T)",
                 native_map
             ),
             export!(
                 "filter",
                 "std.list.filter",
-                "[T](list: &List<T>, fn: (item: T) -> Bool) -> List<T>",
+                "(T: Type)(list: &List(T), fn: (item: T) -> Bool) -> List(T)",
                 native_filter
             ),
             export!(
                 "reduce",
                 "std.list.reduce",
-                "[T](list: &List<T>, fn: (acc: Any, item: T) -> Any, init: Any) -> Any",
+                "(T: Type)(list: &List(T), fn: (acc: Any, item: T) -> Any, init: Any) -> Any",
                 native_reduce
             ),
-            export!("len", "std.list.len", "(list: &List) -> Int", native_len),
+            export!(
+                "len",
+                "std.list.len",
+                "(A: Type)(list: &List(A)) -> Int",
+                native_len
+            ),
             export!(
                 "is_empty",
                 "std.list.is_empty",
-                "(list: &List) -> Bool",
+                "(A: Type)(list: &List(A)) -> Bool",
                 native_is_empty
             ),
             export!(
                 "get",
                 "std.list.get",
-                "(list: &List, index: Int) -> Any",
+                "(A: Type)(list: &List(A), index: Int) -> Any",
                 native_get
             ),
             export!(
                 "set",
                 "std.list.set",
-                "(list: List, index: Int, value: Any) -> List",
+                "(A: Type)(list: List(A), index: Int, value: Any) -> List(A)",
                 native_set
             ),
             export!(
                 "first",
                 "std.list.first",
-                "(list: &List) -> Any",
+                "(A: Type)(list: &List(A)) -> Any",
                 native_first
             ),
-            export!("last", "std.list.last", "(list: &List) -> Any", native_last),
+            export!(
+                "last",
+                "std.list.last",
+                "(A: Type)(list: &List(A)) -> Any",
+                native_last
+            ),
             export!(
                 "slice",
                 "std.list.slice",
-                "(list: &List, start: Int, end: Int) -> List",
+                "(A: Type)(list: &List(A), start: Int, end: Int) -> List(A)",
                 native_slice
             ),
             export!(
                 "contains",
                 "std.list.contains",
-                "(list: &List, item: Any) -> Bool",
+                "(A: Type)(list: &List(A), item: Any) -> Bool",
                 native_contains
             ),
             export!(
                 "find_index",
                 "std.list.find_index",
-                "(list: &List, item: Any) -> Int",
+                "(A: Type)(list: &List(A), item: Any) -> Int",
                 native_find_index
             ),
             // 迭代器协议函数
             export!(
                 "iter",
                 "std.list.iter",
-                "(list: &List) -> Tuple",
+                "(A: Type)(list: &List(A)) -> Tuple",
                 native_iter
             ),
             export!(

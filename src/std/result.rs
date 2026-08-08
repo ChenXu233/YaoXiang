@@ -26,25 +26,25 @@ impl StdModule for ResultModule {
             export!(
                 "is_ok",
                 "std.result.is_ok",
-                "(self: &Result(T, E)) -> Bool",
+                "(T: Type, E: Type)(self: &Result(T, E)) -> Bool",
                 native_result_is_ok
             ),
             export!(
                 "is_err",
                 "std.result.is_err",
-                "(self: &Result(T, E)) -> Bool",
+                "(T: Type, E: Type)(self: &Result(T, E)) -> Bool",
                 native_result_is_err
             ),
             export!(
                 "unwrap",
                 "std.result.unwrap",
-                "(self: &Result(T, E)) -> T",
+                "(T: Type, E: Type)(self: &Result(T, E)) -> T",
                 native_result_unwrap
             ),
             export!(
                 "unwrap_or",
                 "std.result.unwrap_or",
-                "(self: &Result(T, E), default: T) -> T",
+                "(T: Type, E: Type)(self: &Result(T, E), default: T) -> T",
                 native_result_unwrap_or
             ),
         ]

@@ -52,7 +52,7 @@ impl StdModule for IoModule {
 
     fn exports(&self) -> Vec<NativeExport> {
         vec![
-            export!("print", "std.io.print", "(...args) -> ()", native_print),
+            export!("print", "std.io.print", "(...args) -> Void", native_print),
             export!(
                 "println",
                 "std.io.println",
