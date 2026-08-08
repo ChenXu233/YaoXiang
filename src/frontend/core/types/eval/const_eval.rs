@@ -300,14 +300,19 @@ impl ConstGenericEval {
                 if *b < 0 || *b >= 128 {
                     Err(ErrorCodeDefinition::const_overflow().build())
                 } else {
-                    Ok(ConstValue::Int(a.checked_shl(*b as u32).unwrap_or(0)))
+                    // #271 #7：checked_shl 失败（b >= 64 时 i64 溢出）不再静默归零
+                    a.checked_shl(*b as u32)
+                        .map(ConstValue::Int)
+                        .ok_or_else(|| ErrorCodeDefinition::const_overflow().build())
                 }
             }
             (BinOp::Shr, ConstValue::Int(a), ConstValue::Int(b)) => {
                 if *b < 0 || *b >= 128 {
                     Err(ErrorCodeDefinition::const_overflow().build())
                 } else {
-                    Ok(ConstValue::Int(a.checked_shr(*b as u32).unwrap_or(0)))
+                    a.checked_shr(*b as u32)
+                        .map(ConstValue::Int)
+                        .ok_or_else(|| ErrorCodeDefinition::const_overflow().build())
                 }
             }
 
