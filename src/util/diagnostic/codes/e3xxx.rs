@@ -29,34 +29,16 @@ pub static E3XXX: &[ErrorCodeDefinition] = &[
     },
 ];
 
-// E3xxx 快捷方法
+// 快捷方法（code_helpers! 生成）
 impl ErrorCodeDefinition {
+    code_helpers! {
     /// E3004 不支持的迭代器类型
-    pub fn ir_unsupported_iterator(iter_type: &str) -> DiagnosticBuilder {
-        let def = Self::find("E3004").unwrap();
-        def.builder().param("iter_type", iter_type)
-    }
-
+    ("E3004", ir_unsupported_iterator(iter_type: &str) => .param("iter_type", iter_type)),
     /// E3005 IR 内部错误
-    pub fn ir_internal_error(message: &str) -> DiagnosticBuilder {
-        let def = Self::find("E3005").unwrap();
-        def.builder().param("message", message)
-    }
-
-    // === 字节码生成 ===
-
+    ("E3005", ir_internal_error(message: &str) => .param("message", message)),
     /// E3014 寄存器溢出
-    pub fn register_overflow(
-        id: &str,
-        limit: &str,
-    ) -> DiagnosticBuilder {
-        let def = Self::find("E3014").unwrap();
-        def.builder().param("id", id).param("limit", limit)
-    }
-
+    ("E3014", register_overflow(id: &str, limit: &str) => .param("id", id).param("limit", limit)),
     /// E3017 无效操作数（代码生成）
-    pub fn codegen_invalid_operand(reason: &str) -> DiagnosticBuilder {
-        let def = Self::find("E3017").unwrap();
-        def.builder().param("reason", reason)
+    ("E3017", codegen_invalid_operand(reason: &str) => .param("reason", reason)),
     }
 }

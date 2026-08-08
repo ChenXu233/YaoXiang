@@ -29,34 +29,19 @@ pub static W1XXX: &[ErrorCodeDefinition] = &[
 ];
 
 // 快捷方法实现
+
+// 快捷方法（code_helpers! 生成）
 impl ErrorCodeDefinition {
+    code_helpers! {
     /// W1001 未使用的导出函数
-    pub fn unused_function(name: &str) -> DiagnosticBuilder {
-        let def = Self::find("W1001").unwrap();
-        def.builder().param("name", name)
-    }
-
+    ("W1001", unused_function(name: &str) => .param("name", name)),
     /// W1002 未使用的导出类型
-    pub fn unused_type(name: &str) -> DiagnosticBuilder {
-        let def = Self::find("W1002").unwrap();
-        def.builder().param("name", name)
-    }
-
+    ("W1002", unused_type(name: &str) => .param("name", name)),
     /// W1003 未使用的导入
-    pub fn unused_import(name: &str) -> DiagnosticBuilder {
-        let def = Self::find("W1003").unwrap();
-        def.builder().param("name", name)
-    }
-
+    ("W1003", unused_import(name: &str) => .param("name", name)),
     /// W1004 未使用的导出变量
-    pub fn unused_variable(name: &str) -> DiagnosticBuilder {
-        let def = Self::find("W1004").unwrap();
-        def.builder().param("name", name)
-    }
-
+    ("W1004", unused_variable(name: &str) => .param("name", name)),
     /// W1005 未使用的导出方法
-    pub fn unused_method(name: &str) -> DiagnosticBuilder {
-        let def = Self::find("W1005").unwrap();
-        def.builder().param("name", name)
+    ("W1005", unused_method(name: &str) => .param("name", name)),
     }
 }

@@ -2,6 +2,20 @@
 //!
 //! 提供所有编译器错误码的集中定义和管理
 
+macro_rules! code_helpers {
+    ($(
+        $(#[$doc:meta])*
+        ($code:expr, $name:ident($($p:ident: $t:ty),*) => $($chain:tt)*)
+    ),* $(,)?) => {
+        $(
+            $(#[$doc])*
+            pub fn $name($($p: $t),*) -> DiagnosticBuilder {
+                Self::find($code).unwrap().builder() $($chain)*
+            }
+        )*
+    };
+}
+
 pub mod e0xxx;
 pub mod e1xxx;
 pub mod e2xxx;

@@ -36,52 +36,22 @@ pub static E6XXX: &[ErrorCodeDefinition] = &[
     },
 ];
 
-// E6xxx 快捷方法
+// 快捷方法（code_helpers! 生成）
 impl ErrorCodeDefinition {
+    code_helpers! {
     /// E6001 除零错误
-    pub fn division_by_zero(expr: &str) -> DiagnosticBuilder {
-        let def = Self::find("E6001").unwrap();
-        def.builder().param("expr", expr)
-    }
-
+    ("E6001", division_by_zero(expr: &str) => .param("expr", expr)),
     /// E6002 空指针解引用
-    pub fn null_pointer_deref(location: &str) -> DiagnosticBuilder {
-        let def = Self::find("E6002").unwrap();
-        def.builder().param("location", location)
-    }
-
+    ("E6002", null_pointer_deref(location: &str) => .param("location", location)),
     /// E6003 数组索引越界（运行时）
-    pub fn runtime_index_out_of_bounds(
-        max: usize,
-        index: usize,
-    ) -> DiagnosticBuilder {
-        let def = Self::find("E6003").unwrap();
-        def.builder()
-            .param("max", max.to_string())
-            .param("index", index.to_string())
-    }
-
+    ("E6003", runtime_index_out_of_bounds(max: usize, index: usize) => .param("max", max.to_string()) .param("index", index.to_string())),
     /// E6004 栈溢出
-    pub fn stack_overflow(limit: usize) -> DiagnosticBuilder {
-        let def = Self::find("E6004").unwrap();
-        def.builder().param("limit", limit.to_string())
-    }
-
+    ("E6004", stack_overflow(limit: usize) => .param("limit", limit.to_string())),
     /// E6005 断言失败
-    pub fn assertion_failed(condition: &str) -> DiagnosticBuilder {
-        let def = Self::find("E6005").unwrap();
-        def.builder().param("condition", condition)
-    }
-
+    ("E6005", assertion_failed(condition: &str) => .param("condition", condition)),
     /// E6006 函数未找到（运行时）
-    pub fn runtime_function_not_found(func: &str) -> DiagnosticBuilder {
-        let def = Self::find("E6006").unwrap();
-        def.builder().param("func", func)
-    }
-
+    ("E6006", runtime_function_not_found(func: &str) => .param("func", func)),
     /// E6007 运行时错误（通用）
-    pub fn runtime_error(message: &str) -> DiagnosticBuilder {
-        let def = Self::find("E6007").unwrap();
-        def.builder().param("message", message)
+    ("E6007", runtime_error(message: &str) => .param("message", message)),
     }
 }
