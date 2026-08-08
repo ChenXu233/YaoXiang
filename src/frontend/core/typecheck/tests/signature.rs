@@ -1,6 +1,7 @@
-//! 签名解析测试 — 基于语言规范 §3.7 & RFC-010
+//! 签名解析测试 — 基于语言规范 §3.5/§4.1 & RFC-010
 //!
-//! §3.7: 函数类型
+//! §3.5: 函数类型
+//! §4.1: 泛型参数语法
 //! RFC-010: 统一类型语法
 
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
@@ -349,9 +350,9 @@ fn test_parse_signature_variadic_returns_void() {
     let mut env = TypeEnvironment::new();
 
     // Act
-    let result = parse_signature("(...args) -> ()", &mut env);
+    let result = parse_signature("(...args) -> Void", &mut env);
 
-    // Assert - 变参为 Any 占位，() 返回为 Void
+    // Assert - 变参为 Any 占位，Void 返回
     match result {
         MonoType::Fn {
             params,
@@ -370,7 +371,7 @@ fn test_parse_signature_variadic_returns_void() {
             );
             assert!(
                 matches!(return_type.as_ref(), MonoType::Void),
-                "() 返回应为 Void，实际: {:?}",
+                "Void 返回应为 MonoType::Void，实际: {:?}",
                 return_type
             );
         }
