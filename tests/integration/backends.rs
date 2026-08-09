@@ -101,14 +101,38 @@ fn test_bytecode_module_add_function() {
 
 #[test]
 fn test_handle_creation() {
+    // Arrange
     let handle = Handle::new(HeapValue::List(vec![]));
-    assert!(handle.raw() != 0);
+    let other = Handle::new(HeapValue::List(vec![]));
+
+    // Act
+    let raw = handle.raw();
+    let raw_other = other.raw();
+
+    // Assert：raw 返回唯一标识（Arc 指针地址），不同分配必须不同
+    assert!(
+        raw != 0,
+        "raw should return a non-zero identity for a live handle"
+    );
+    assert_ne!(
+        raw, raw_other,
+        "distinct handles should have distinct raw ids"
+    );
 }
 
 #[test]
 fn test_handle_display() {
+    // Arrange
     let handle = Handle::new(HeapValue::List(vec![]));
-    assert!(format!("{}", handle).starts_with("handle@0x"));
+
+    // Act
+    let rendered = format!("{}", handle);
+
+    // Assert：Display 以 handle@ 前缀输出指针地址
+    assert!(
+        rendered.starts_with("handle@0x"),
+        "Display should render as handle@0x..., got '{rendered}'"
+    );
 }
 
 #[test]

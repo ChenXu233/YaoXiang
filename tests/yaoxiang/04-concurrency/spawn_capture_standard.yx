@@ -1,5 +1,5 @@
 // 04-concurrency/spawn_capture_standard.yx
-// 覆盖: #278 Standard 模式（跨线程 DAG）spawn 捕获 Struct/List —— Heap 句柄 Arc 化
+// 覆盖: RFC-024 spawn 并发（跨线程 DAG 调度）+ #278 Heap 句柄 Arc 化
 // 验证: worker 独立 Heap 下句柄仍有效（读字段/元素）；捕获共享对象写回主线程可见
 // 状态: ✅ 可运行（#278 修复后；Embedded 模式同样通过）
 // [test:runtime]: standard
