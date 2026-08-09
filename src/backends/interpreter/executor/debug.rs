@@ -25,6 +25,18 @@ pub(super) enum StopReason {
     Completed,
 }
 
+/// #279：索引值 → usize；非 Int 报类型错误，负数报运行时错误（不再静默当 0）
+fn index_arg(
+    idx: &RuntimeValue,
+    what: &str,
+) -> ExecutorResult<usize> {
+    let i = idx
+        .to_int()
+        .ok_or_else(|| ExecutorError::type_only(format!("{what} index must be an Int")))?;
+    usize::try_from(i)
+        .map_err(|_| ExecutorError::runtime_only(format!("{what}: negative index {i}")))
+}
+
 impl Interpreter {
     /// Decode a Label into a signed offset for relative jumps.
     fn decode_label_offset(label: Label) -> i32 {
@@ -743,26 +755,44 @@ impl Interpreter {
 
                 match arr {
                     RuntimeValue::List(handle) => {
-                        let idx = idx_value.to_int().unwrap_or(0) as usize;
+                        let idx = index_arg(&idx_value, "list")?;
                         if let crate::backends::common::HeapValue::List(items) = &*handle.lock() {
                             if idx < items.len() {
                                 frame.set_slot(dst.0 as usize, items[idx].clone());
+                            } else {
+                                // #279：越界读不再静默返回 void
+                                return Err(ExecutorError::runtime_only(format!(
+                                    "Index {idx} out of bounds for list of length {}",
+                                    items.len()
+                                )));
                             }
                         }
                     }
                     RuntimeValue::Tuple(handle) => {
-                        let idx = idx_value.to_int().unwrap_or(0) as usize;
+                        let idx = index_arg(&idx_value, "tuple")?;
                         if let crate::backends::common::HeapValue::Tuple(items) = &*handle.lock() {
                             if idx < items.len() {
                                 frame.set_slot(dst.0 as usize, items[idx].clone());
+                            } else {
+                                // #279：越界读不再静默返回 void
+                                return Err(ExecutorError::runtime_only(format!(
+                                    "Index {idx} out of bounds for tuple of length {}",
+                                    items.len()
+                                )));
                             }
                         }
                     }
                     RuntimeValue::Array(handle) => {
-                        let idx = idx_value.to_int().unwrap_or(0) as usize;
+                        let idx = index_arg(&idx_value, "array")?;
                         if let crate::backends::common::HeapValue::Array(items) = &*handle.lock() {
                             if idx < items.len() {
                                 frame.set_slot(dst.0 as usize, items[idx].clone());
+                            } else {
+                                // #279：越界读不再静默返回 void
+                                return Err(ExecutorError::runtime_only(format!(
+                                    "Index {idx} out of bounds for array of length {}",
+                                    items.len()
+                                )));
                             }
                         }
                     }
@@ -789,23 +819,35 @@ impl Interpreter {
 
                 match arr {
                     RuntimeValue::List(handle) => {
-                        let idx = idx_value.to_int().unwrap_or(0) as usize;
+                        let idx = index_arg(&idx_value, "list")?;
                         if let crate::backends::common::HeapValue::List(items) = &mut *handle.lock()
                         {
                             if idx < items.len() {
                                 items[idx] = val;
                             } else if idx == items.len() {
                                 items.push(val);
+                            } else {
+                                // #279：越界写不再静默丢弃
+                                return Err(ExecutorError::runtime_only(format!(
+                                    "Index {idx} out of bounds for list of length {}",
+                                    items.len()
+                                )));
                             }
                         }
                     }
                     RuntimeValue::Array(handle) => {
-                        let idx = idx_value.to_int().unwrap_or(0) as usize;
+                        let idx = index_arg(&idx_value, "array")?;
                         if let crate::backends::common::HeapValue::Array(items) =
                             &mut *handle.lock()
                         {
                             if idx < items.len() {
                                 items[idx] = val;
+                            } else {
+                                // #279：越界写不再静默丢弃
+                                return Err(ExecutorError::runtime_only(format!(
+                                    "Index {idx} out of bounds for array of length {}",
+                                    items.len()
+                                )));
                             }
                         }
                     }

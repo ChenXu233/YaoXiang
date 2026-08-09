@@ -1,0 +1,12 @@
+// 06-compile-errors/index_oob_read.yx
+// [test:error]: 列表越界读取应报 E6007（#279：原静默返回 void、EXIT=0）
+// 覆盖: #279 List 越界读取 — LoadElement 越界静默跳过 → 硬错误
+// 验证: items[5] 在 length=3 的列表上报越界运行时错误
+// 状态: ❌ 应运行失败
+
+use std.io
+
+main = {
+    items = [1, 2, 3]
+    io.println(items[5])
+}
