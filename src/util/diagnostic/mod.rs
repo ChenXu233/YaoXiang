@@ -149,6 +149,13 @@ fn build_runtime_diagnostic(
         ExecutorError::Runtime(message, _) => ErrorCodeDefinition::runtime_error(message.as_str()),
         ExecutorError::Type(message, _) => ErrorCodeDefinition::runtime_error(message.as_str()),
         ExecutorError::StackOverflow(_) => ErrorCodeDefinition::stack_overflow(0),
+        // #280：专用变体映射专用码，不再落通用 E6007
+        ExecutorError::IndexOutOfBounds { max, index, .. } => {
+            ErrorCodeDefinition::runtime_index_out_of_bounds(*max, *index)
+        }
+        ExecutorError::AssertionFailed(msg, _) => {
+            ErrorCodeDefinition::assertion_failed(msg.as_str())
+        }
         other => ErrorCodeDefinition::runtime_error(&other.to_string()),
     };
 

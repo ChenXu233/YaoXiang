@@ -760,11 +760,12 @@ impl Interpreter {
                             if idx < items.len() {
                                 frame.set_slot(dst.0 as usize, items[idx].clone());
                             } else {
-                                // #279：越界读不再静默返回 void
-                                return Err(ExecutorError::runtime_only(format!(
-                                    "Index {idx} out of bounds for list of length {}",
-                                    items.len()
-                                )));
+                                // #279：越界读不再静默返回 void；#280：报专用码 E6003
+                                return Err(ExecutorError::index_out_of_bounds(
+                                    items.len(),
+                                    idx,
+                                    None,
+                                ));
                             }
                         }
                     }
@@ -774,11 +775,12 @@ impl Interpreter {
                             if idx < items.len() {
                                 frame.set_slot(dst.0 as usize, items[idx].clone());
                             } else {
-                                // #279：越界读不再静默返回 void
-                                return Err(ExecutorError::runtime_only(format!(
-                                    "Index {idx} out of bounds for tuple of length {}",
-                                    items.len()
-                                )));
+                                // #279：越界读不再静默返回 void；#280：报专用码 E6003
+                                return Err(ExecutorError::index_out_of_bounds(
+                                    items.len(),
+                                    idx,
+                                    None,
+                                ));
                             }
                         }
                     }
@@ -788,11 +790,12 @@ impl Interpreter {
                             if idx < items.len() {
                                 frame.set_slot(dst.0 as usize, items[idx].clone());
                             } else {
-                                // #279：越界读不再静默返回 void
-                                return Err(ExecutorError::runtime_only(format!(
-                                    "Index {idx} out of bounds for array of length {}",
-                                    items.len()
-                                )));
+                                // #279：越界读不再静默返回 void；#280：报专用码 E6003
+                                return Err(ExecutorError::index_out_of_bounds(
+                                    items.len(),
+                                    idx,
+                                    None,
+                                ));
                             }
                         }
                     }
@@ -827,11 +830,12 @@ impl Interpreter {
                             } else if idx == items.len() {
                                 items.push(val);
                             } else {
-                                // #279：越界写不再静默丢弃
-                                return Err(ExecutorError::runtime_only(format!(
-                                    "Index {idx} out of bounds for list of length {}",
-                                    items.len()
-                                )));
+                                // #279：越界写不再静默丢弃；#280：报专用码 E6003
+                                return Err(ExecutorError::index_out_of_bounds(
+                                    items.len(),
+                                    idx,
+                                    None,
+                                ));
                             }
                         }
                     }
@@ -843,11 +847,12 @@ impl Interpreter {
                             if idx < items.len() {
                                 items[idx] = val;
                             } else {
-                                // #279：越界写不再静默丢弃
-                                return Err(ExecutorError::runtime_only(format!(
-                                    "Index {idx} out of bounds for array of length {}",
-                                    items.len()
-                                )));
+                                // #279：越界写不再静默丢弃；#280：报专用码 E6003
+                                return Err(ExecutorError::index_out_of_bounds(
+                                    items.len(),
+                                    idx,
+                                    None,
+                                ));
                             }
                         }
                     }
@@ -936,9 +941,11 @@ impl Interpreter {
                 };
                 if idx < 0 || idx >= len {
                     let stack = self.capture_stack();
-                    return Err(ExecutorError::runtime(
-                        format!("Index {} out of bounds for length {}", idx, len),
-                        stack,
+                    // #280：越界用专用码 E6003（原 E6007 通用）
+                    return Err(ExecutorError::index_out_of_bounds(
+                        len.max(0) as usize,
+                        idx.max(0) as usize,
+                        Some(stack),
                     ));
                 }
                 frame.advance();

@@ -110,7 +110,6 @@ YaoXiang 编译器使用错误码标识不同类型的诊断信息。错误码�
 | 错误码 | 模板                                                                | 说明                 |
 | ------ | ------------------------------------------------------------------- | -------------------- |
 | E6001  | `Division by zero in expression: {expr}`                            | 除零错误             |
-| E6002  | `Null pointer dereference at {location}`                            | 空指针解引用         |
 | E6003  | `Array index out of bounds: valid range is 0..{max}, found {index}` | 数组索引越界         |
 | E6004  | `Stack overflow: recursion depth exceeded limit {limit}`            | 栈溢出               |
 | E6005  | `Assertion failed: {condition}`                                     | 断言失败             |

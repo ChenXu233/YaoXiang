@@ -60,8 +60,17 @@ pub enum ExecutorError {
     StackOverflow(Option<Vec<StackFrame>>),
     /// Division by zero
     DivisionByZero(Option<Vec<StackFrame>>),
-    /// Index out of bounds
-    IndexOutOfBounds(Option<Vec<StackFrame>>),
+    /// Index out of bounds（#280：携带 max/index 以映射 E6003）
+    IndexOutOfBounds {
+        /// 容器长度
+        max: usize,
+        /// 越界索引
+        index: usize,
+        /// 调用栈
+        stack: Option<Vec<StackFrame>>,
+    },
+    /// 断言失败（#280：映射 E6005）
+    AssertionFailed(String, Option<Vec<StackFrame>>),
     /// Field not found
     FieldNotFound(String, Option<Vec<StackFrame>>),
     /// Function not found
@@ -86,7 +95,8 @@ impl ExecutorError {
             ExecutorError::Type(_, stack) => stack.as_ref(),
             ExecutorError::StackOverflow(stack) => stack.as_ref(),
             ExecutorError::DivisionByZero(stack) => stack.as_ref(),
-            ExecutorError::IndexOutOfBounds(stack) => stack.as_ref(),
+            ExecutorError::IndexOutOfBounds { stack, .. } => stack.as_ref(),
+            ExecutorError::AssertionFailed(_, stack) => stack.as_ref(),
             ExecutorError::FieldNotFound(_, stack) => stack.as_ref(),
             ExecutorError::FunctionNotFound(_, stack) => stack.as_ref(),
         }
@@ -134,9 +144,21 @@ impl ExecutorError {
         ExecutorError::DivisionByZero(Some(stack))
     }
 
-    /// Create an index out of bounds error with stack trace
-    pub fn index_out_of_bounds(stack: Vec<StackFrame>) -> Self {
-        ExecutorError::IndexOutOfBounds(Some(stack))
+    /// Create an index out of bounds error
+    pub fn index_out_of_bounds(
+        max: usize,
+        index: usize,
+        stack: Option<Vec<StackFrame>>,
+    ) -> Self {
+        ExecutorError::IndexOutOfBounds { max, index, stack }
+    }
+
+    /// Create an assertion failed error
+    pub fn assertion_failed(
+        msg: impl Into<String>,
+        stack: Option<Vec<StackFrame>>,
+    ) -> Self {
+        ExecutorError::AssertionFailed(msg.into(), stack)
     }
 
     /// Add stack trace to an error if it doesn't have one
@@ -150,7 +172,8 @@ impl ExecutorError {
             ExecutorError::Type(_, Some(_)) => self,
             ExecutorError::StackOverflow(Some(_)) => self,
             ExecutorError::DivisionByZero(Some(_)) => self,
-            ExecutorError::IndexOutOfBounds(Some(_)) => self,
+            ExecutorError::IndexOutOfBounds { stack: Some(_), .. } => self,
+            ExecutorError::AssertionFailed(_, Some(_)) => self,
             ExecutorError::FieldNotFound(_, Some(_)) => self,
             ExecutorError::FunctionNotFound(_, Some(_)) => self,
             // Add stack trace
@@ -158,7 +181,18 @@ impl ExecutorError {
             ExecutorError::Type(msg, None) => ExecutorError::Type(msg, Some(stack)),
             ExecutorError::StackOverflow(None) => ExecutorError::StackOverflow(Some(stack)),
             ExecutorError::DivisionByZero(None) => ExecutorError::DivisionByZero(Some(stack)),
-            ExecutorError::IndexOutOfBounds(None) => ExecutorError::IndexOutOfBounds(Some(stack)),
+            ExecutorError::IndexOutOfBounds {
+                max,
+                index,
+                stack: None,
+            } => ExecutorError::IndexOutOfBounds {
+                max,
+                index,
+                stack: Some(stack),
+            },
+            ExecutorError::AssertionFailed(msg, None) => {
+                ExecutorError::AssertionFailed(msg, Some(stack))
+            }
             ExecutorError::FieldNotFound(name, None) => {
                 ExecutorError::FieldNotFound(name, Some(stack))
             }
@@ -211,8 +245,17 @@ impl std::fmt::Display for ExecutorError {
                 }
                 Ok(())
             }
-            ExecutorError::IndexOutOfBounds(stack) => {
-                write!(f, "Index out of bounds")?;
+            ExecutorError::IndexOutOfBounds { max, index, stack } => {
+                write!(f, "Index out of bounds: {index} (length {max})")?;
+                if let Some(frames) = stack {
+                    for frame in frames {
+                        writeln!(f, "{}", frame)?;
+                    }
+                }
+                Ok(())
+            }
+            ExecutorError::AssertionFailed(msg, stack) => {
+                write!(f, "Assertion failed: {}", msg)?;
                 if let Some(frames) = stack {
                     for frame in frames {
                         writeln!(f, "{}", frame)?;

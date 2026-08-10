@@ -41,8 +41,6 @@ impl ErrorCodeDefinition {
     code_helpers! {
     /// E6001 除零错误
     ("E6001", division_by_zero(expr: &str) => .param("expr", expr)),
-    /// E6002 空指针解引用
-    ("E6002", null_pointer_deref(location: &str) => .param("location", location)),
     /// E6003 数组索引越界（运行时）
     ("E6003", runtime_index_out_of_bounds(max: usize, index: usize) => .param("max", max.to_string()) .param("index", index.to_string())),
     /// E6004 栈溢出

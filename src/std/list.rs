@@ -240,11 +240,8 @@ fn native_remove_at(
     if index < items.len() {
         Ok(items.remove(index))
     } else {
-        Err(ExecutorError::runtime_only(format!(
-            "Index {} out of bounds for list of length {}",
-            index,
-            items.len()
-        )))
+        // #280：越界报专用码 E6003（原 E6007 通用）
+        Err(ExecutorError::index_out_of_bounds(items.len(), index, None))
     }
 }
 
@@ -447,6 +444,9 @@ fn native_set(
 
     if index < items.len() {
         items[index] = value;
+    } else {
+        // #279/#280：越界写不再静默丢弃，报专用码 E6003
+        return Err(ExecutorError::index_out_of_bounds(items.len(), index, None));
     }
     let new_handle = ctx.heap.allocate(HeapValue::List(items));
     Ok(RuntimeValue::List(new_handle))

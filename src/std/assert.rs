@@ -81,14 +81,15 @@ fn native_assert(
     if cond {
         Ok(RuntimeValue::Void)
     } else {
+        // #280：断言失败报专用码 E6005（渲染层模板自带 "Assertion failed: " 前缀）
         let msg = if args.len() >= 2 {
             match &args[1] {
-                RuntimeValue::String(s) => format!("Assertion failed: {}", s),
-                _ => "Assertion failed".to_string(),
+                RuntimeValue::String(s) => s.as_ref().to_string(),
+                _ => "assert condition is false".to_string(),
             }
         } else {
-            "Assertion failed".to_string()
+            "assert condition is false".to_string()
         };
-        Err(ExecutorError::runtime_only(msg))
+        Err(ExecutorError::assertion_failed(msg, None))
     }
 }

@@ -14,16 +14,6 @@
 
 ---
 
-## E6002：Null pointer dereference
-
-**类别**: Runtime
-
-**消息**: Attempted to access a null value
-
-**帮助**: Add a null check before accessing the value
-
----
-
 ## E6003：Array index out of bounds
 
 **类别**: Runtime
