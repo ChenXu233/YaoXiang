@@ -339,12 +339,12 @@ E1001::unknown_variable(&var_name)
 | コード | エラータイプ                | 説明                                 |
 | ------ | --------------------------- | ------------------------------------ |
 | E6001  | Division by zero            | 整数のゼロ除算                       |
-| E6002  | Assertion failed            | assert!マクロの失敗                  |
-| E6003  | Arithmetic overflow         | 算術演算のオーバーフロー             |
+| E6002  | ~~Assertion failed~~        | ~~予約（概念削除、#280）~~           |
+| E6003  | Runtime index out of bounds | 実行時のインデックス範囲外           |
 | E6004  | Stack overflow              | スタック領域の枯渇                   |
-| E6005  | Heap allocation failed      | メモリ割り当ての失敗                 |
-| E6006  | Runtime index out of bounds | 実行時のインデックス範囲外           |
-| E6007  | Type cast failed            | 型を非互換な型へキャストしようとした |
+| E6005  | Assertion failed            | アサーション失敗                     |
+| E6006  | Function not found          | 実行時の関数未検出                   |
+| E6007  | Runtime error (generic)     | 汎用実行時エラー                     |
 
 #### E7xxx：I/Oとシステムエラー
 

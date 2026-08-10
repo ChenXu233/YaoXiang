@@ -347,12 +347,12 @@ E1001::unknown_variable(&var_name)
 | Code  | Error Type                  | Description                                  |
 | ----- | --------------------------- | -------------------------------------------- |
 | E6001 | Division by zero            | Integer division by zero                     |
-| E6002 | Assertion failed            | assert! macro failed                         |
-| E6003 | Arithmetic overflow         | Arithmetic operation overflow                |
+| E6002 | ~~Assertion failed~~        | ~~Reserved (concept removed, #280)~~         |
+| E6003 | Runtime index out of bounds | Runtime index out of bounds                  |
 | E6004 | Stack overflow              | Stack space exhausted                        |
-| E6005 | Heap allocation failed      | Memory allocation failed                     |
-| E6006 | Runtime index out of bounds | Runtime index out of bounds                  |
-| E6007 | Type cast failed            | Attempting to cast type to incompatible type |
+| E6005 | Assertion failed            | assert failed                                |
+| E6006 | Function not found          | Function not found at runtime                |
+| E6007 | Runtime error (generic)     | Generic runtime error                        |
 
 #### E7xxx: I/O & System Error
 
