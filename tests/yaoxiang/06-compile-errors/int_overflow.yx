@@ -1,0 +1,13 @@
+// 06-compile-errors/int_overflow.yx
+// [test:error]: 运行时整数溢出应报 E6007（#281：原 release 静默 wrap、debug panic）
+// 覆盖: #281 运行时整数运算溢出 — checked_* 后报错（RFC-013 E6007 通用运行时错误）
+// 验证: i64::MAX + 1 报 integer overflow，不再输出 wrap 结果
+// 状态: ❌ 应运行失败
+
+use std.io
+
+main = {
+    a = 9223372036854775807
+    b = a + 1
+    io.println(b)
+}

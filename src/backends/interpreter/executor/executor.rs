@@ -397,6 +397,28 @@ impl Interpreter {
         stack
     }
 
+    /// #281：checked 整数运算——溢出报 E6007（不再静默 wrap / panic），正常路径写 dst 槽
+    fn int_op(
+        &mut self,
+        frame: &mut Frame,
+        dst: Reg,
+        op_name: &str,
+        l: i64,
+        r: i64,
+        f: impl FnOnce(i64, i64) -> Option<i64>,
+    ) -> ExecutorResult<()> {
+        match f(l, r) {
+            Some(v) => {
+                frame.set_slot(dst.0 as usize, RuntimeValue::Int(v));
+                Ok(())
+            }
+            None => Err(ExecutorError::runtime(
+                format!("integer overflow in `{l} {op_name} {r}`"),
+                self.capture_stack(),
+            )),
+        }
+    }
+
     /// Resolve a label to an instruction offset
     pub fn resolve_label(
         &mut self,
@@ -823,35 +845,42 @@ impl Interpreter {
             (BinaryOp::Add, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
                 tlog!(debug, MSG::DebugAddingNumbers, &l, &r);
                 tlog!(debug, MSG::VmI64Add, &l, &r);
-                RuntimeValue::Int(l + r)
+                // #281：溢出报 E6007，不再静默 wrap（debug 曾直接 panic）
+                return self.int_op(frame, dst, "+", l, r, i64::checked_add);
             }
-            (BinaryOp::Sub, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l - r),
-            (BinaryOp::Mul, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l * r),
+            (BinaryOp::Sub, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                return self.int_op(frame, dst, "-", l, r, i64::checked_sub)
+            }
+            (BinaryOp::Mul, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                return self.int_op(frame, dst, "*", l, r, i64::checked_mul)
+            }
             (BinaryOp::Div, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
                 if r == 0 {
                     let stack = self.capture_stack();
                     return Err(ExecutorError::division_by_zero(stack));
                 }
-                RuntimeValue::Int(l / r)
+                // #281：i64::MIN / -1 溢出（原 release 下 panic）
+                return self.int_op(frame, dst, "/", l, r, i64::checked_div);
             }
             (BinaryOp::Rem, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
                 if r == 0 {
                     let stack = self.capture_stack();
                     return Err(ExecutorError::division_by_zero(stack));
                 }
-                RuntimeValue::Int(l % r)
+                return self.int_op(frame, dst, "%", l, r, i64::checked_rem);
             }
             (BinaryOp::And, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l & r),
             (BinaryOp::Or, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l | r),
             (BinaryOp::Xor, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l ^ r),
             (BinaryOp::Shl, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
-                RuntimeValue::Int(l << r)
+                // #281：移位量 >= 64 原为 panic（Rust 语义），改报错
+                return self.int_op(frame, dst, "<<", l, r, |a, b| a.checked_shl(b as u32));
             }
             (BinaryOp::Sar, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
-                RuntimeValue::Int(l >> r)
+                return self.int_op(frame, dst, ">>", l, r, |a, b| a.checked_shr(b as u32));
             }
             (BinaryOp::Shr, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
-                RuntimeValue::Int(l >> r)
+                return self.int_op(frame, dst, ">>", l, r, |a, b| a.checked_shr(b as u32));
             }
             (BinaryOp::Add, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
                 RuntimeValue::Float(l + r)
