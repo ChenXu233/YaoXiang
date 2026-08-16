@@ -127,7 +127,7 @@ fn resolve_runtime_span(
 fn build_runtime_diagnostic(
     error: &crate::backends::ExecutorError,
     primary_span: Option<DebugSpan>,
-    source_file: Option<&SourceFile>,
+    _source_file: Option<&SourceFile>,
 ) -> Diagnostic {
     use crate::backends::ExecutorError;
 
@@ -135,15 +135,13 @@ fn build_runtime_diagnostic(
         ExecutorError::FunctionNotFound(name, _) => {
             ErrorCodeDefinition::runtime_function_not_found(name.as_str())
         }
-        ExecutorError::DivisionByZero(_) => {
-            let expr = primary_span
-                .and_then(|ds| {
-                    source_file
-                        .and_then(|sf| sf.source_text(ds.span))
-                        .map(|s| s.trim())
-                })
-                .filter(|s| !s.is_empty())
-                .unwrap_or("<unknown>");
+        ExecutorError::DivisionByZero(expr, _) => {
+            // #282：表达式由变体携带（原从 primary_span 提取，失败时 <unknown>）
+            let expr = if expr.is_empty() {
+                "<unknown>"
+            } else {
+                expr.as_str()
+            };
             ErrorCodeDefinition::division_by_zero(expr)
         }
         ExecutorError::Runtime(message, _) => ErrorCodeDefinition::runtime_error(message.as_str()),

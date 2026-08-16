@@ -58,8 +58,8 @@ pub enum ExecutorError {
     Type(String, Option<Vec<StackFrame>>),
     /// Stack overflow
     StackOverflow(Option<Vec<StackFrame>>),
-    /// Division by zero
-    DivisionByZero(Option<Vec<StackFrame>>),
+    /// Division by zero（#282：携带触发表达式，渲染层直接使用）
+    DivisionByZero(String, Option<Vec<StackFrame>>),
     /// Index out of bounds（#280：携带 max/index 以映射 E6003）
     IndexOutOfBounds {
         /// 容器长度
@@ -94,7 +94,7 @@ impl ExecutorError {
             ExecutorError::Runtime(_, stack) => stack.as_ref(),
             ExecutorError::Type(_, stack) => stack.as_ref(),
             ExecutorError::StackOverflow(stack) => stack.as_ref(),
-            ExecutorError::DivisionByZero(stack) => stack.as_ref(),
+            ExecutorError::DivisionByZero(_, stack) => stack.as_ref(),
             ExecutorError::IndexOutOfBounds { stack, .. } => stack.as_ref(),
             ExecutorError::AssertionFailed(_, stack) => stack.as_ref(),
             ExecutorError::FieldNotFound(_, stack) => stack.as_ref(),
@@ -140,8 +140,11 @@ impl ExecutorError {
     }
 
     /// Create a division by zero error with stack trace
-    pub fn division_by_zero(stack: Vec<StackFrame>) -> Self {
-        ExecutorError::DivisionByZero(Some(stack))
+    pub fn division_by_zero(
+        expr: impl Into<String>,
+        stack: Vec<StackFrame>,
+    ) -> Self {
+        ExecutorError::DivisionByZero(expr.into(), Some(stack))
     }
 
     /// Create an index out of bounds error
@@ -171,7 +174,7 @@ impl ExecutorError {
             ExecutorError::Runtime(_, Some(_)) => self,
             ExecutorError::Type(_, Some(_)) => self,
             ExecutorError::StackOverflow(Some(_)) => self,
-            ExecutorError::DivisionByZero(Some(_)) => self,
+            ExecutorError::DivisionByZero(_, Some(_)) => self,
             ExecutorError::IndexOutOfBounds { stack: Some(_), .. } => self,
             ExecutorError::AssertionFailed(_, Some(_)) => self,
             ExecutorError::FieldNotFound(_, Some(_)) => self,
@@ -180,7 +183,9 @@ impl ExecutorError {
             ExecutorError::Runtime(msg, None) => ExecutorError::Runtime(msg, Some(stack)),
             ExecutorError::Type(msg, None) => ExecutorError::Type(msg, Some(stack)),
             ExecutorError::StackOverflow(None) => ExecutorError::StackOverflow(Some(stack)),
-            ExecutorError::DivisionByZero(None) => ExecutorError::DivisionByZero(Some(stack)),
+            ExecutorError::DivisionByZero(expr, None) => {
+                ExecutorError::DivisionByZero(expr, Some(stack))
+            }
             ExecutorError::IndexOutOfBounds {
                 max,
                 index,
@@ -236,8 +241,9 @@ impl std::fmt::Display for ExecutorError {
                 }
                 Ok(())
             }
-            ExecutorError::DivisionByZero(stack) => {
-                write!(f, "Division by zero")?;
+            ExecutorError::DivisionByZero(expr, stack) => {
+                // #282：直接用变体携带的表达式（原 fallback `<unknown>`）
+                write!(f, "Division by zero: {}", expr)?;
                 if let Some(frames) = stack {
                     for frame in frames {
                         writeln!(f, "{}", frame)?;

@@ -857,7 +857,8 @@ impl Interpreter {
             (BinaryOp::Div, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
                 if r == 0 {
                     let stack = self.capture_stack();
-                    return Err(ExecutorError::division_by_zero(stack));
+                    // #282：携带触发表达式文本
+                    return Err(ExecutorError::division_by_zero(format!("{l} / {r}"), stack));
                 }
                 // #281：i64::MIN / -1 溢出（原 release 下 panic）
                 return self.int_op(frame, dst, "/", l, r, i64::checked_div);
@@ -865,7 +866,8 @@ impl Interpreter {
             (BinaryOp::Rem, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
                 if r == 0 {
                     let stack = self.capture_stack();
-                    return Err(ExecutorError::division_by_zero(stack));
+                    // #282：携带触发表达式文本
+                    return Err(ExecutorError::division_by_zero(format!("{l} % {r}"), stack));
                 }
                 return self.int_op(frame, dst, "%", l, r, i64::checked_rem);
             }
