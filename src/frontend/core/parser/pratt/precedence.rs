@@ -18,12 +18,15 @@ pub const BP_HIGHEST: u8 = 10;
 
 /// Additional binding power levels for infix operators
 pub const BP_RANGE: u8 = 1;
-pub const BP_OR: u8 = 2;
-pub const BP_AND: u8 = 3;
-pub const BP_EQ: u8 = 4;
-pub const BP_CMP: u8 = 5;
-pub const BP_ADD: u8 = 6;
-pub const BP_MUL: u8 = 7;
+pub const BP_OR: u8 = 1;
+pub const BP_AND: u8 = 2;
+pub const BP_EQ: u8 = 3;
+pub const BP_CMP: u8 = 4;
+// #285: SPEC §2.2 相对顺序 乘除(4) > 加减(5) > 移位(7) > 位运算(8) > 比较(9)
+pub const BP_BIT: u8 = 5;
+pub const BP_SHIFT: u8 = 6;
+pub const BP_ADD: u8 = 7;
+pub const BP_MUL: u8 = 8;
 
 /// Precedence rules for the Pratt parser
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -51,7 +54,6 @@ pub enum Precedence {
     /// Highest precedence
     Highest,
 }
-
 impl Precedence {
     /// Convert precedence to binding power
     pub fn to_bp(self) -> u8 {

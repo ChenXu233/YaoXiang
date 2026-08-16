@@ -185,6 +185,12 @@ pub enum BinOp {
     Or,
     Range,
     Assign,
+    // #285: 位运算/移位（SPEC §2.2 级 7/8）
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
 }
 
 /// Unary operators

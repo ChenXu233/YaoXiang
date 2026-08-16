@@ -418,6 +418,14 @@ impl<'a> ExpressionInferrer<'a> {
                     elem_type: Box::new(elem_ty),
                 })
             }
+            // #285: 位运算/移位仅限 Int（SPEC §2.2 级 7/8）
+            BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr => {
+                if let (MonoType::Int(_), MonoType::Int(_)) = (left, right) {
+                    Ok(left.clone())
+                } else {
+                    Err(ErrorCodeDefinition::type_mismatch("Int", &format!("{}", left)).build())
+                }
+            }
             BinOp::Assign => Ok(MonoType::Void),
         }
     }

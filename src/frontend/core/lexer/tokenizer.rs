@@ -290,6 +290,10 @@ impl<'a> Lexer<'a> {
                     Some(self.make_token(TokenKind::Pipe))
                 }
             }
+            '^' => {
+                // #285: 位异或（SPEC §2.2 级 8）
+                Some(self.make_token(TokenKind::Caret))
+            }
             ':' => {
                 if self.peek() == Some(&':') {
                     self.advance();

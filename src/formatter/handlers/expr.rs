@@ -275,6 +275,12 @@ pub(crate) fn format_binop(
         BinOp::Or => "or",
         BinOp::Range => "..",
         BinOp::Assign => "=",
+        // #285: 位运算/移位（SPEC §2.2 级 7/8）
+        BinOp::BitAnd => "&",
+        BinOp::BitOr => "|",
+        BinOp::BitXor => "^",
+        BinOp::Shl => "<<",
+        BinOp::Shr => ">>",
     };
 
     let left_str = format_expr(left, ctx, source_map);

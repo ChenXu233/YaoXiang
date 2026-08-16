@@ -1599,6 +1599,16 @@ impl AstToIrGenerator {
                         B::Ge => Some(ConstValue::Bool(a >= b)),
                         B::And => Some(ConstValue::Bool(a != 0 && b != 0)),
                         B::Or => Some(ConstValue::Bool(a != 0 || b != 0)),
+                        // #285: 位运算/移位常量折叠（与 const_eval 一致）
+                        B::BitAnd => Some(ConstValue::Int(a & b)),
+                        B::BitOr => Some(ConstValue::Int(a | b)),
+                        B::BitXor => Some(ConstValue::Int(a ^ b)),
+                        B::Shl => (0..=63)
+                            .contains(&b)
+                            .then(|| ConstValue::Int(a.wrapping_shl(b as u32))),
+                        B::Shr => (0..=63)
+                            .contains(&b)
+                            .then(|| ConstValue::Int(a.wrapping_shr(b as u32))),
                         B::Div | B::Range | B::Assign => None,
                     },
                     (ConstValue::Float(a), ConstValue::Float(b)) => match op {
@@ -1612,6 +1622,8 @@ impl AstToIrGenerator {
                         B::Le => Some(ConstValue::Bool(a <= b)),
                         B::Gt => Some(ConstValue::Bool(a > b)),
                         B::Ge => Some(ConstValue::Bool(a >= b)),
+                        // 位运算/移位仅限 Int：Float 折叠为 None（运行时同样受限）
+                        B::BitAnd | B::BitOr | B::BitXor | B::Shl | B::Shr => None,
                         B::Div | B::Range | B::Assign => None,
                         B::And | B::Or => None,
                     },
@@ -3349,6 +3361,32 @@ impl AstToIrGenerator {
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
                                 span: *span,
+                            },
+                            // #285: 位运算/移位（SPEC §2.2 级 7/8）
+                            ast::BinOp::BitAnd => Instruction::And {
+                                dst: Operand::Local(result_reg),
+                                lhs: Operand::Local(left_reg),
+                                rhs: Operand::Local(right_reg),
+                            },
+                            ast::BinOp::BitOr => Instruction::Or {
+                                dst: Operand::Local(result_reg),
+                                lhs: Operand::Local(left_reg),
+                                rhs: Operand::Local(right_reg),
+                            },
+                            ast::BinOp::BitXor => Instruction::Xor {
+                                dst: Operand::Local(result_reg),
+                                lhs: Operand::Local(left_reg),
+                                rhs: Operand::Local(right_reg),
+                            },
+                            ast::BinOp::Shl => Instruction::Shl {
+                                dst: Operand::Local(result_reg),
+                                lhs: Operand::Local(left_reg),
+                                rhs: Operand::Local(right_reg),
+                            },
+                            ast::BinOp::Shr => Instruction::Shr {
+                                dst: Operand::Local(result_reg),
+                                lhs: Operand::Local(left_reg),
+                                rhs: Operand::Local(right_reg),
                             },
                             ast::BinOp::Eq => Instruction::Eq {
                                 dst: Operand::Local(result_reg),
