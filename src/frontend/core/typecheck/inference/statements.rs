@@ -1222,10 +1222,16 @@ impl StatementChecker {
                         );
                         // 泛型类型构造：当 init 是泛型结构体（含 TypeRef 字段）且
                         // annotation 是实例化后的结构体时，跳过 unify 直接使用 annotation 类型
+                        // #286: 仅限字段仍含未解析泛型参数（TypeRef/TypeVar）的悬空实例；
+                        // 实参已确定具体类型而 unify 失败 = 真不匹配，不得豁免。
                         let is_generic_constructor = match (&resolved_init, &resolved_ann) {
                             (MonoType::Struct(s_init), MonoType::Struct(s_ann)) => {
                                 s_init.name == s_ann.name
                                     && self.generic_type_defs.contains_key(&s_init.name)
+                                    && s_init
+                                        .fields
+                                        .iter()
+                                        .any(|(_, fty)| contains_unresolved_param(fty))
                             }
                             _ => false,
                         };
@@ -1613,5 +1619,26 @@ fn innermost_return_type(
         innermost_return_type(return_type.as_ref())
     } else {
         ty
+    }
+}
+/// #286: 检查 MonoType 是否含未解析的泛型参数（TypeRef/TypeVar）。
+/// 用于区分「构造器推断的悬空泛型实例」（字段还是 TypeRef 占位，合法豁免）
+/// 与「实参已确定具体类型但 unify 失败」（真不匹配，必须报错）。
+fn contains_unresolved_param(t: &MonoType) -> bool {
+    match t {
+        MonoType::TypeRef(_) | MonoType::TypeVar(_) => true,
+        MonoType::Struct(s) => s.fields.iter().any(|(_, f)| contains_unresolved_param(f)),
+        MonoType::List(i) | MonoType::Option(i) | MonoType::Arc(i) | MonoType::Weak(i) => {
+            contains_unresolved_param(i)
+        }
+        MonoType::Result(a, b) => contains_unresolved_param(a) || contains_unresolved_param(b),
+        MonoType::Generic { args, .. } => args.iter().any(contains_unresolved_param),
+        MonoType::Fn {
+            params,
+            return_type,
+            ..
+        } => params.iter().any(contains_unresolved_param) || contains_unresolved_param(return_type),
+        MonoType::Union(v) | MonoType::Intersection(v) => v.iter().any(contains_unresolved_param),
+        _ => false,
     }
 }

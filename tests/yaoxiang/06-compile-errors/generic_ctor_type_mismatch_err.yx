@@ -1,0 +1,15 @@
+// 06-compile-errors/generic_ctor_type_mismatch_err.yx
+// [test:error]: 泛型构造器实参类型不匹配——Container("str") 推断 T=String，注解 Container(Int) 应报 E1002
+// 预期: 编译错误 E1002
+// 覆盖: #286 泛型构造器类型一致性检查（#251 P0-3 泛型错误路径）
+// 验证: 构造器调用实参已确定具体类型时，与注解单态化类型不一致必须编译失败
+// 状态: ❌ 应编译失败
+
+use std.io
+
+Container: (T: Type) -> Type = { value: T }
+
+main = {
+    a: Container(Int) = Container("str")
+    io.println(a.value)
+}
