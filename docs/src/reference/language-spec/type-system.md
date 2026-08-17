@@ -334,12 +334,65 @@ List: (T: Type) -> Type = {
 }
 ```
 
-### 4.3 类型推导
+### 4.3 泛型构造调用与类型推导
+
+泛型类型定义的字段列表**自动生成构造函数**：每个字段对应一个构造参数，
+字段名即参数名；有默认值的字段构造时可省略，无默认值的字段必填。
+函数类型字段（方法）不生成构造参数。
 
 ```yaoxiang
-// 编译器自动推导泛型参数
-numbers: List(Int) = List(1, 2, 3)  // 编译器推导 List(Int)
+// 类型定义
+Container: (T: Type) -> Type = {
+    value: T,        // 无默认值 → 构造参数必填
+    extra: T,
+}
+// 自动展开的完整形式（编译器内部视图，不要求用户手写）：
+// Container: (T: Type) -> (value: T, extra: T) -> Type = {
+//     value: T = value,
+//     extra: T = extra,
+// }
+
+// 调用：调用自动生成的构造函数
+c  = Container(42, 43)            // 构造参数按字段顺序填；T 从元素自动解包 = Int
+c2 = Container("a", "b")          // T = String
+c3 = Container(Int)(42, 43)       // 显式类型参数 + 位置式构造参数
+c4 = Container(Int)(extra=43, value=42)  // 字段名式，顺序任意
+c5 = Container(Int)()             // 空构造：字段取默认值/零值（数据事后赋值）
+
+// 字段默认值 → 构造参数可省略
+Point: (T: Type) -> Type = { x: T = 0, y: T = 0 }
+p  = Point(1.5, 2.5)              // T = Float，x←1.5, y←2.5
+p2 = Point(Int)()                 // x=0, y=0
 ```
+
+**调用规则**（单括号，按声明参数逐位匹配，自左向右）：
+
+1. 实参逐位尝试匹配类型声明参数：`Type` 位接受类型实参，编译期值参数位
+   （如 `Int`）接受编译期常量。
+2. 若存在编译期值参数位匹配成功（部分匹配），按类型构造处理：逐位检查
+   全部参数位，报错时按声明顺序**先报第一个不匹配/缺失的参数**。
+3. 若实参完全对应不上声明参数（全部是值、无编译期值参数位可匹配），
+   按构造参数处理：位置式按字段顺序填，类型参数从元素类型自动解包。
+
+```yaoxiang
+Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
+    _assert_rows: Assert(Rows > 0),
+    data: Array(Array(T, Cols), Rows),
+}
+
+m: Matrix(Int, 3, 4)              // 类型位置：一层类型构造
+m2 = Matrix(Int, 3, 4)(data=[[1,2,3,4],[5,6,7,8],[9,10,11,12]])  // 两层：类型 + 构造参数
+m3 = Matrix(Int, 3, 4)()          // 空构造（RFC-011 §9.3 模式，数据事后赋值）
+
+Matrix(42)    // ❌ 位0: T←42 不匹配（42 不是类型）；位1: Rows←42 匹配；
+              //    位2: Cols 缺失 → 先报第一个错误：T 期望 Type，找到 42
+Container(42) // ❌ 缺构造参数 extra
+Container(42, 43, 44)  // ❌ 构造参数超数
+```
+
+**类型推导**：泛型类型构造器的类型参数从构造参数元素自动解包
+（`Container(42, 43)` → T=Int）；泛型函数的类型参数从实参类型自动解包
+（`map(numbers, f)` → T=Int, R=String，见 §4.1）。无法解包时必须显式填充。
 
 ---
 
@@ -435,14 +488,17 @@ Container: (T: Type) -> Type = {
 
 ```
 LiteralType   ::= Identifier ':' Int          // 编译期常量
-CompileTimeFn ::= '(' Identifier ':' Int ')' '(' Identifier ')' '->' TypeExpr
 ```
 
-**核心设计**：用 `(n: Int)` 泛型参数 + `(n: n)` 值参数，区分编译期常量与运行时值。
+**术语**：标注非 `Type` 具体类型（如 `Int`）的泛型参数称为**编译期值参数**
+（compile-time value parameter），默认编译期确定，**无需 `const` 关键字**
+（实现内部曾用「const 泛型」指代，文档统一使用「编译期值参数」）。
+
+**核心设计**：用 `(n: Int)` 编译期值参数 + `(n: n)` 值参数，区分编译期常量与运行时值。
 
 ```yaoxiang
 // 编译期阶乘：参数必须是编译期已知的字面量
-factorial: (n: Int)(n: n) -> Int = {
+factorial: (n: Int) -> (n: n) -> Int = {
     match n {
         0 => 1,
         _ => n * factorial(n - 1)

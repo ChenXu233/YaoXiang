@@ -201,7 +201,10 @@ map: (T: Type, R: Type) -> (
 }
 
 # 使用时完全透明，类型自动推导
-numbers = List(1, 2, 3)
+numbers = List(Int)()   # 勘误：值构造两层形式（见 §9.1）；元素用 push 填充
+numbers.push(1)
+numbers.push(2)
+numbers.push(3)
 doubled = map(numbers, (x) => x * 2)  # 推导为 map[Int, Int]
 ```
 
@@ -452,12 +455,12 @@ combine: (T: Type, U: Type) -> ((a: T, b: U) -> (T, U)) = (a, b)
 
 ```yaoxiang
 # 编译器自动推断泛型参数
-numbers: List(Int) = List(Int)
-#         ^^^^^^^^   ^^^^^^
-#         类型声明   构造调用：Int 填充 T
+numbers: List(Int) = List(Int)()
+#         ^^^^^^^^   ^^^^^^^^
+#         类型声明   构造调用：Int 填充 T，() 值构造
 
 # 函数调用推断
-numbers: List(Int) = List(Int)
+numbers: List(Int) = List(Int)()
 f: (x: Int) -> String = (x) => x.to_string()
 strings: List(String) = map(numbers, f)
 # 编译器推断：T=Int, R=String
@@ -476,15 +479,15 @@ map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R)) = {
 }
 
 # 使用点
-int_list: List(Int) = List(Int)
+int_list: List(Int) = List(Int)()
 doubled: List(Int) = map(int_list, (x: Int) => x * 2)  # 实例化 map[Int, Int]
 
-string_list: List(String) = List(String)
+string_list: List(String) = List(String)()
 uppercased: List(String) = map(string_list, (s: String) => s.to_uppercase())  # 实例化 map[String, String]
 
 # 编译后（等价代码）
 map_Int_Int: (list: List(Int), f: (Int) -> Int) -> List(Int) = {
-    result: List(Int) = List(Int)
+    result: List(Int) = List(Int)()
     for x in list {
         result.push(f(x))
     }
@@ -504,7 +507,7 @@ map_String_String: (list: List(String), f: (String) -> String) -> List(String) =
 
 ````yaoxiang
 # 可推断时省略 Type 参数
-numbers: List(Int) = List(Int)
+numbers: List(Int) = List(Int)()
 strings: List(String) = map(numbers, (x: Int) => x.to_string())
 
 # 无法推断时必须显式填充
@@ -1129,11 +1132,17 @@ fn eliminate_dead_instantiations(graph: &InstantiationGraph) {
 map: (T: Type, R: Type)(list: List(T), f: Fn(T) -> R) -> List(R) = ...
 
 # 使用点1：实例化 map(Int, Int)
-int_list = List(1, 2, 3)
+int_list = List(Int)()
+int_list.push(1)
+int_list.push(2)
+int_list.push(3)
 doubled = map(int_list, (x) => x * 2)  # 需要 map[Int, Int]
 
 # 使用点2：实例化 map(String, String)
-string_list = List("a", "b", "c")
+string_list = List(String)()
+string_list.push("a")
+string_list.push("b")
+string_list.push("c")
 uppercased = map(string_list, (s) => s.to_uppercase())  # 需要 map[String, String]
 
 # 未使用：map[Float, Float] 等
@@ -1153,8 +1162,11 @@ Array: (T: Type, N: Int) -> Type = {
 }
 
 # 实际使用情况
-arr_10_int = Array(Int, 10)(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-arr_100_int = Array(Int, 100)(...)
+arr_10_int = Array(Int, 10)(data=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])  # 两层：类型参数 + 构造参数
+# 勘误：早期版本写作 Array(Int, 10)(1, 2, 3, ...)（元素直接铺开），
+# 与 §9.3 的权威模式（Type(参数)(字段构造参数)/空构造）不一致，
+# 统一为字段名式构造参数，见 SPEC type-system.md §4.3。
+arr_100_int = Array(Int, 100)()   # 空构造，数据事后赋值
 
 # 编译后只生成被使用的Size
 Array_Int_10: (Array(Int, 10)) = ...
@@ -1174,13 +1186,19 @@ pub map: (T: Type, R: Type)(list: List(T), f: Fn(T) -> R) -> List(R) = ...
 # 模块B
 # B.yx
 use A.{map}
-int_list = List(1, 2, 3)
+int_list = List(Int)()
+int_list.push(1)
+int_list.push(2)
+int_list.push(3)
 doubled = map(int_list, (x) => x * 2)  # 实例化 map(Int, Int)
 
 # 模块C
 # C.yx
 use A.{map}
-string_list = List("a", "b", "c")
+string_list = List(String)()
+string_list.push("a")
+string_list.push("b")
+string_list.push("c")
 uppercased = map(string_list, (s) => s.to_uppercase())  # 实例化 map(String, String)
 
 # 编译分析：
