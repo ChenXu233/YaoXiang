@@ -54,20 +54,22 @@ fn test_rfc011_generic_type_definition() {
 
 /// 规范：泛型参数推导
 ///
-/// `numbers: List(Int) = List(1, 2, 3)`
+/// `numbers: Container(Int) = Container(42)`
 ///
 /// 预期行为：
 /// - 编译器从右侧推导 T=Int
-/// - 等价于 `numbers: List(Int) = List[Int](1, 2, 3)`
+/// - 等价于显式传类型参数
+///
+/// 注：RFC 原文 `List(1, 2, 3)` 为 builtin 变长列表值构造语义；用户自定义
+/// 泛型 struct 值构造按字段赋值（#287）。
 #[test]
 fn test_rfc011_generic_type_inference() {
     // Arrange
     let source = r#"
-        List: (T: Type) -> Type = {
-            data: Array(T),
-            length: Int
+        Container: (T: Type) -> Type = {
+            value: T,
         }
-        numbers: List(Int) = List(1, 2, 3)  // 推导 T=Int
+        numbers: Container(Int) = Container(42)  // 推导 T=Int
     "#;
 
     // Act

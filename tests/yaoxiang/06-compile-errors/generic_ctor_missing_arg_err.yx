@@ -1,0 +1,12 @@
+// 06-compile-errors/generic_ctor_missing_arg_err.yx
+// [test:error]: 泛型构造器缺参——Container(42) 缺 extra 字段，此前静默填 0，应报 E1010
+// 预期: 编译错误 E1010
+// 覆盖: #287 泛型构造器参数个数检查——缺参方向（#251 P0-3 泛型错误路径）
+// 验证: 值构造实参数少于字段数必须编译失败，不得静默归零
+// 状态: ❌ 应编译失败
+
+Container: (T: Type) -> Type = { value: T, extra: T }
+
+main = {
+    a = Container(42)
+}

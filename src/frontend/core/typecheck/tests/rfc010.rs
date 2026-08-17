@@ -412,20 +412,24 @@ fn test_rfc010_generic_type_definition() {
 
 /// 规范：泛型类型实例化
 ///
-/// `numbers: List(Int) = List(1, 2, 3)`
+/// `numbers: Container(Int) = Container(42)`
 ///
 /// 预期行为：
 /// - 使用 () 语法填充类型参数
 /// - 编译器推导 T=Int
+///
+/// 注：RFC 原文示例 `numbers: List(Int) = List(1, 2, 3)` 中的 List 为
+/// builtin 变长列表值构造（等价 `[1, 2, 3]` 字面量）；用户自定义泛型 struct
+/// 按字段赋值语义（#287），字段数即实参数。
 #[test]
 fn test_rfc010_generic_type_instantiation() {
     // Arrange
     let source = r#"
-        List: (T: Type) -> Type = {
-            data: Array(T),
-            length: Int
+        Container: (T: Type) -> Type = {
+            value: T,
         }
-        numbers: List(Int) = List(1, 2, 3)
+        numbers: Container(Int) = Container(42)
+        texts: Container(String) = Container("str")
     "#;
 
     // Act
@@ -434,7 +438,7 @@ fn test_rfc010_generic_type_instantiation() {
     // Assert
     assert!(
         result.diagnostics.is_empty(),
-        "List(Int) instantiation should pass"
+        "Container(Int) instantiation should pass"
     );
 }
 

@@ -1103,43 +1103,124 @@ impl<'a> ExpressionInferrer<'a> {
                 );
 
                 // 泛型类型构造：当函数名在 generic_type_defs 中且 func_ty 是 Struct 时，
-                // 直接使用 arg_types 调用 instantiate_generic_type（Layer 1 + Layer 2）
+                // 分两条路径（#287）：
+                //   - 实参含 MetaType（类型级实参）→ 类型构造（SafeArray(Int, 3) / Container(Int)），
+                //     arity = 类型参数数 + const 参数数，保留原逻辑。
+                //   - 实参全是值 → 值构造（Container(42, 43)），arity = 字段数
+                //     （有默认值字段可省略），类型参数从字段值类型推断。
                 if let crate::frontend::core::parser::ast::Expr::Var(fn_name, _) = &**func {
                     if let Some(generic_def) = self.generic_type_defs.get(fn_name).cloned() {
-                        if let crate::frontend::core::types::MonoType::Struct(_) = &func_ty {
+                        if let crate::frontend::core::types::MonoType::Struct(struct_body) =
+                            &func_ty
+                        {
                             let type_param_count = generic_def.type_param_names.len();
                             let const_param_count = generic_def.poly.const_binders.len();
-                            let expected_arg_count = type_param_count + const_param_count;
+                            let has_meta_arg = arg_types
+                                .iter()
+                                .any(|a| matches!(a, MonoType::MetaType { .. }));
 
-                            if arg_types.len() == expected_arg_count {
-                                // const 参数需要 MonoType::Literal，而非 MonoType::Int
-                                let mut full_args = arg_types.clone();
-                                for (i, binder) in generic_def.poly.const_binders.iter().enumerate()
-                                {
-                                    let arg_idx = type_param_count + i;
-                                    if let Some(arg) = full_args.get_mut(arg_idx) {
-                                        if !matches!(arg, MonoType::Literal { .. }) {
-                                            // 尝试从表达式提取字面量值
-                                            if let Some(lit) = args.get(arg_idx) {
-                                                if let Some(value) =
-                                                    extract_const_value_from_expr(lit)
-                                                {
-                                                    *arg = MonoType::Literal {
-                                                        name: format!("{}", value),
-                                                        base_type: Box::new(arg.clone()),
-                                                        value,
-                                                    };
+                            if has_meta_arg {
+                                // === 类型构造：SafeArray(Int, 3) / Container(Int) ===
+                                let expected_arg_count = type_param_count + const_param_count;
+                                if arg_types.len() == expected_arg_count {
+                                    // const 参数需要 MonoType::Literal，而非 MonoType::Int
+                                    let mut full_args = arg_types.clone();
+                                    for (i, binder) in
+                                        generic_def.poly.const_binders.iter().enumerate()
+                                    {
+                                        let arg_idx = type_param_count + i;
+                                        if let Some(arg) = full_args.get_mut(arg_idx) {
+                                            if !matches!(arg, MonoType::Literal { .. }) {
+                                                // 尝试从表达式提取字面量值
+                                                if let Some(lit) = args.get(arg_idx) {
+                                                    if let Some(value) =
+                                                        extract_const_value_from_expr(lit)
+                                                    {
+                                                        *arg = MonoType::Literal {
+                                                            name: format!("{}", value),
+                                                            base_type: Box::new(arg.clone()),
+                                                            value,
+                                                        };
+                                                    }
                                                 }
                                             }
                                         }
+                                        let _ = binder; // 避免未使用警告
                                     }
-                                    let _ = binder; // 避免未使用警告
+                                    return crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(
+                                        &generic_def,
+                                        &full_args,
+                                    );
                                 }
+                                // 类型构造 arity 不匹配（#287 同模式：SafeArray(Int) 缺 N / 超参静默丢弃）
+                                return Err(ErrorCodeDefinition::argument_count_mismatch(
+                                    fn_name,
+                                    expected_arg_count,
+                                    arg_types.len(),
+                                )
+                                .at(*span)
+                                .build());
+                            }
+
+                            if const_param_count == 0 {
+                                // === 值构造：Container(42, 43) ===
+                                // #287：arity = 字段数（有默认值字段可省略），类型参数从字段值类型推断
+                                let total = struct_body.fields.len();
+                                let required = struct_body
+                                    .field_has_default
+                                    .iter()
+                                    .filter(|&&d| !d)
+                                    .count();
+                                let provided = arg_types.len();
+                                if provided < required || provided > total {
+                                    return Err(ErrorCodeDefinition::argument_count_mismatch(
+                                        fn_name, total, provided,
+                                    )
+                                    .at(*span)
+                                    .build());
+                                }
+
+                                // 类型参数推断：TypeRef(param) → 独立 fresh TypeVar（同一参数共享）
+                                // → unify 字段类型与实参类型 → resolve 出类型参数具体值。
+                                let mut param_vars: HashMap<String, MonoType> = HashMap::new();
+                                for pname in &generic_def.type_param_names {
+                                    param_vars.insert(pname.clone(), self.solver.new_var());
+                                }
+                                for (i, (_, field_ty)) in struct_body.fields.iter().enumerate() {
+                                    if i >= provided {
+                                        break;
+                                    }
+                                    let Some(arg_ty) = arg_types.get(i) else {
+                                        break;
+                                    };
+                                    let subst =
+                                        substitute_type_params_with_vars(field_ty, &param_vars);
+                                    if self.solver.unify(&subst, arg_ty).is_err() {
+                                        return Err(ErrorCodeDefinition::type_mismatch(
+                                            &format!("{}", subst),
+                                            &format!("{}", arg_ty),
+                                        )
+                                        .at(*span)
+                                        .build());
+                                    }
+                                }
+                                let type_args: Vec<MonoType> = generic_def
+                                    .type_param_names
+                                    .iter()
+                                    .map(|p| {
+                                        param_vars
+                                            .get(p)
+                                            .map(|v| self.solver.resolve_type(v))
+                                            .unwrap_or_else(|| MonoType::TypeRef(p.clone()))
+                                    })
+                                    .collect();
                                 return crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(
                                     &generic_def,
-                                    &full_args,
+                                    &type_args,
                                 );
                             }
+                            // const 泛型（const_param_count > 0）且实参全为值：const 参数须从
+                            // 目标注解推断，表达式层无法解析——保留旧路径（#287 不涉及，超纲）。
                         }
                     }
                 }
@@ -1965,4 +2046,83 @@ fn is_builtin_type_name(name: &str) -> bool {
             | "char"
             | "Type"
     )
+}
+
+/// #287: 将泛型构造器字段类型中的 TypeRef(类型参数名) 替换为对应 TypeVar，
+/// 供 unify 推断类型参数的具体值。非参数 TypeRef 原样保留。
+fn substitute_type_params_with_vars(
+    ty: &MonoType,
+    param_vars: &HashMap<String, MonoType>,
+) -> MonoType {
+    match ty {
+        MonoType::TypeRef(name) => param_vars.get(name).cloned().unwrap_or_else(|| ty.clone()),
+        MonoType::Struct(s) => MonoType::Struct(crate::frontend::core::types::mono::StructType {
+            fields: s
+                .fields
+                .iter()
+                .map(|(n, t)| (n.clone(), substitute_type_params_with_vars(t, param_vars)))
+                .collect(),
+            ..s.clone()
+        }),
+        MonoType::Generic { name, args } => MonoType::Generic {
+            name: name.clone(),
+            args: args
+                .iter()
+                .map(|a| substitute_type_params_with_vars(a, param_vars))
+                .collect(),
+        },
+        MonoType::List(i) => {
+            MonoType::List(Box::new(substitute_type_params_with_vars(i, param_vars)))
+        }
+        MonoType::Option(i) => {
+            MonoType::Option(Box::new(substitute_type_params_with_vars(i, param_vars)))
+        }
+        MonoType::Arc(i) => {
+            MonoType::Arc(Box::new(substitute_type_params_with_vars(i, param_vars)))
+        }
+        MonoType::Weak(i) => {
+            MonoType::Weak(Box::new(substitute_type_params_with_vars(i, param_vars)))
+        }
+        MonoType::Result(ok, err) => MonoType::Result(
+            Box::new(substitute_type_params_with_vars(ok, param_vars)),
+            Box::new(substitute_type_params_with_vars(err, param_vars)),
+        ),
+        MonoType::Fn {
+            params,
+            return_type,
+        } => MonoType::Fn {
+            params: params
+                .iter()
+                .map(|p| substitute_type_params_with_vars(p, param_vars))
+                .collect(),
+            return_type: Box::new(substitute_type_params_with_vars(return_type, param_vars)),
+        },
+        MonoType::Tuple(ts) => MonoType::Tuple(
+            ts.iter()
+                .map(|t| substitute_type_params_with_vars(t, param_vars))
+                .collect(),
+        ),
+        MonoType::Dict(k, v) => MonoType::Dict(
+            Box::new(substitute_type_params_with_vars(k, param_vars)),
+            Box::new(substitute_type_params_with_vars(v, param_vars)),
+        ),
+        MonoType::Set(i) => {
+            MonoType::Set(Box::new(substitute_type_params_with_vars(i, param_vars)))
+        }
+        MonoType::Ref { mutable, inner } => MonoType::Ref {
+            mutable: *mutable,
+            inner: Box::new(substitute_type_params_with_vars(inner, param_vars)),
+        },
+        MonoType::Union(v) => MonoType::Union(
+            v.iter()
+                .map(|t| substitute_type_params_with_vars(t, param_vars))
+                .collect(),
+        ),
+        MonoType::Intersection(v) => MonoType::Intersection(
+            v.iter()
+                .map(|t| substitute_type_params_with_vars(t, param_vars))
+                .collect(),
+        ),
+        _ => ty.clone(),
+    }
 }

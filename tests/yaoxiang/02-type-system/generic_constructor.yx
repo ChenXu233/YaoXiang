@@ -1,16 +1,26 @@
 // 02-type-system/generic_constructor.yx
-// 验证: 泛型类型构造器单态化
-// 状态: 待测试
+// 覆盖: SPEC type-system.md §4.3 泛型类型构造器值构造与类型推导（#251 P0-3 / #287）
+// 验证:
+//   - 值构造按字段赋值语义，实参数 = 字段数（共享类型参数 Pair(1, 2) → T=Int）
+//   - 同一泛型类型不同实参多次实例化（Pair(Int) / Pair(String) 单态化不串扰）
+//   - 注解类型与推导类型一致（Pair(Int) = Pair(1, 2)）
+// 状态: ✅
+// 注: RFC 原文 List(1, 2, 3) 为 builtin 变长列表值构造（等价 [1, 2, 3] 字面量）；
+//     用户自定义泛型 struct 按字段赋值，字段数即实参数（#287）。
 
 use std.assert
 
-List: (T: Type) -> Type = {
-    data: Array(T),
-    length: Int
+Pair: (T: Type) -> Type = {
+    first: T,
+    second: T,
 }
 
 main = {
-    // 泛型构造器：List(1, 2, 3) 应自动推导 T=Int
-    numbers: List(Int) = List(1, 2, 3)
-    assert.assert(true, "generic constructor compiled and ran")
+    p: Pair(Int) = Pair(1, 2)
+    assert.assert(p.first == 1, "Pair(Int) first == 1")
+    assert.assert(p.second == 2, "Pair(Int) second == 2")
+
+    s: Pair(String) = Pair("a", "b")
+    assert.assert(s.first == "a", "Pair(String) first == a")
+    assert.assert(s.second == "b", "Pair(String) second == b")
 }
