@@ -1,53 +1,45 @@
-# E6xxx：実行時エラー
+# E6xxx：ランタイムエラー
 
-> `src/util/diagnostic/codes/`から自動生成
+> `src/util/diagnostic/codes/` から自動生成
 
 ## エラー一覧
 
-## E6001：ゼロ除算
+## E6001：Division by zero
 
-**カテゴリ**: 実行時
+**カテゴリ**: ランタイム
 
-**メッセージ**: ゼロ除算を実行しようとしました
+**メッセージ**: Attempted to divide by zero
 
-**ヘルプ**: ゼロ除算を防ぐためのチェックを追加してください
-
----
-
-## E6002：nullポインタの逆参照
-
-**カテゴリ**: 実行時
-
-**メッセージ**: null値にアクセスしようとしました
-
-**ヘルプ**: 値にアクセスする前にnullチェックを追加してください
+**ヘルプ**: Add a check to prevent division by zero
 
 ---
 
-## E6003：配列インデックスが範囲外
+## E6003：Array index out of bounds
 
-**カテゴリ**: 実行時
+**カテゴリ**: ランタイム
 
-**メッセージ**: 実行時に配列インデックスが範囲外です
+**メッセージ**: Array index is out of bounds at runtime
 
-**ヘルプ**: インデックスが配列の範囲内であることを確認してください
-
----
-
-## E6004：スタックオーバーフロー
-
-**カテゴリ**: 実行時
-
-**メッセージ**: 再帰の深さがスタックの制限を超えました
-
-**ヘルプ**: 再帰の深さを減らすか、反復を使用してください
+**ヘルプ**: Ensure the index is within the array bounds
 
 ---
 
-## E6005：アサーション失敗
+## E6004：Stack overflow
 
-**カテゴリ**: 実行時
+**カテゴリ**: ランタイム
 
-**メッセージ**: 実行時にアサーションが失敗しました
+**メッセージ**: Recursion depth exceeded stack limit
 
-**ヘルプ**: アサーション条件を修正するか、有効な入力を提供してください
+**ヘルプ**: Reduce recursion depth or use iteration
+
+---
+
+## E6005：Assert failed
+
+**カテゴリ**: ランタイム
+
+**メッセージ**: Assertion failed at runtime
+
+**ヘルプ**: Fix the assertion condition or provide valid input
+
+---

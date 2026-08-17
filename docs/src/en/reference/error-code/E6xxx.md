@@ -14,16 +14,6 @@
 
 ---
 
-## E6002: Null pointer dereference
-
-**Category**: Runtime
-
-**Message**: Attempted to access a null value
-
-**Help**: Add a null check before accessing the value
-
----
-
 ## E6003: Array index out of bounds
 
 **Category**: Runtime
@@ -51,3 +41,5 @@
 **Message**: Assertion failed at runtime
 
 **Help**: Fix the assertion condition or provide valid input
+
+---
