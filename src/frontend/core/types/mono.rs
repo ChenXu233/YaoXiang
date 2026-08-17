@@ -669,6 +669,12 @@ impl From<ast::Type> for MonoType {
                 if name == "Set" && args.len() == 1 {
                     return MonoType::Set(Box::new(MonoType::from(args[0].clone())));
                 }
+                if name == "Arc" && args.len() == 1 {
+                    return MonoType::Arc(Box::new(MonoType::from(args[0].clone())));
+                }
+                if name == "Weak" && args.len() == 1 {
+                    return MonoType::Weak(Box::new(MonoType::from(args[0].clone())));
+                }
                 // 泛型类型，如 Option(T), List(Int)
                 MonoType::Generic {
                     name,
