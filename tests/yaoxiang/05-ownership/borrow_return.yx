@@ -1,0 +1,31 @@
+// 05-ownership/borrow_return.yx
+// 覆盖: SPEC type-system.md §12.3 令牌的作用域与传播 — 返回令牌（#251 P0-7 跨函数借用）
+// 验证:
+//   - get_x 返回 (&Float, &Point)：子令牌与父令牌随元组一起返回调用者
+//   - 元组解构后子令牌、父令牌仍活跃（令牌逃逸：随返回值传播）
+//   - 借用调用结束后原值经 &mut 继续使用（§12.5 good_seq 跨函数顺序复用）
+// 状态: ✅
+
+use std.assert
+
+Point: Type = { x: Float, y: Float }
+
+Point.get_x: (self: &Point) -> (&Float, &Point) = {
+    return (&self.x, self)
+}
+
+Point.shift: (self: &mut Point, dx: Float, dy: Float) -> Void = {
+    self.x = self.x + dx
+    self.y = self.y + dy
+}
+
+main = {
+    p = Point(1.0, 2.0)
+    (px_ref, p) = p.get_x()      // 令牌返回给调用者
+    assert.assert(px_ref == 1.0, "子令牌活跃")
+    assert.assert(p.y == 2.0, "父令牌返回后活跃")
+
+    // 上一批令牌随使用结束释放 → &mut 自动借用可复用
+    p.shift(0.5, 0.5)
+    assert.assert(p.x == 1.5, "&mut 复用写回")
+}

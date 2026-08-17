@@ -4738,6 +4738,11 @@ impl AstToIrGenerator {
                     items: item_regs,
                 });
             }
+            Expr::Block(block) => {
+                // 语句位置块表达式（SPEC §12.5 good_seq）：逐语句生成，
+                // 最后表达式值写入 result_reg（复用块 IR 生成）。
+                self.generate_block_ir(block, Some(result_reg), instructions, constants)?;
+            }
             other => {
                 // 未实现的表达式变体：硬错误，禁止静默归零（#251：&&/|| 曾被同类兜底吞掉）
                 return Err(ErrorCodeDefinition::ir_internal_error(&format!(

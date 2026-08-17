@@ -1,0 +1,16 @@
+// 06-compile-errors/use_after_move_field_err.yx
+// [test:error]: Move 后经字段访问原变量（E2014）
+// 预期: 编译错误 E2014 'p' has been moved and cannot be used again
+// 覆盖: #251 P0-7 use-after-move 编译期拦截 — 整体 move 后字段访问
+// 验证: q = p 整体 move 后，p.x 字段访问同样被拦截（E2014）
+// 状态: ❌ 应编译失败
+
+use std.io
+
+Point: Type = { x: Int, y: Int }
+
+main = {
+    p = Point(1, 2)
+    q = p
+    io.println(p.x)    // ❌ move 后字段访问
+}
