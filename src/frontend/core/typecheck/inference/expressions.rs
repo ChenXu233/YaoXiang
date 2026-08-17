@@ -1102,12 +1102,87 @@ impl<'a> ExpressionInferrer<'a> {
                     *span,
                 );
 
-                // 泛型类型构造：当函数名在 generic_type_defs 中且 func_ty 是 Struct 时，
-                // 分两条路径（#287）：
-                //   - 实参含 MetaType（类型级实参）→ 类型构造（SafeArray(Int, 3) / Container(Int)），
-                //     arity = 类型参数数 + const 参数数，保留原逻辑。
-                //   - 实参全是值 → 值构造（Container(42, 43)），arity = 字段数
-                //     （有默认值字段可省略），类型参数从字段值类型推断。
+                // 两层调用：Container(Int)(42, 43) —— func 是泛型类型构造调用，
+                // 内层已完成实例化（func_ty 是具体 Struct），外层实参是构造参数。
+                if let crate::frontend::core::parser::ast::Expr::Call {
+                    func: inner_func, ..
+                } = &**func
+                {
+                    if let crate::frontend::core::parser::ast::Expr::Var(inner_name, _) =
+                        &**inner_func
+                    {
+                        if self.generic_type_defs.contains_key(inner_name) {
+                            if let MonoType::Struct(st) = &func_ty {
+                                // 构造参数 arity（同普通 struct #271#1：有默认值字段可省略）
+                                let total = st.fields.len();
+                                let required = st.field_has_default.iter().filter(|&&d| !d).count();
+                                let provided = arg_types.len();
+                                // 空构造 X(参数)()：字段取默认值/零值（RFC §9.3 模式），合法
+                                if provided == 0 && named_args.is_empty() {
+                                    return Ok(func_ty.clone());
+                                }
+                                if named_args.is_empty() {
+                                    if provided < required || provided > total {
+                                        return Err(ErrorCodeDefinition::argument_count_mismatch(
+                                            inner_name, total, provided,
+                                        )
+                                        .at(*span)
+                                        .build());
+                                    }
+                                } else {
+                                    // 命名参数：必需字段（无默认值）必须全部提供
+                                    let provided_names: std::collections::HashSet<&str> =
+                                        named_args.iter().map(|(n, _)| n.as_str()).collect();
+                                    let missing: Vec<&str> = st
+                                        .fields
+                                        .iter()
+                                        .enumerate()
+                                        .filter(|(i, _)| !st.field_has_default[*i])
+                                        .map(|(_, (n, _))| n.as_str())
+                                        .filter(|n| !provided_names.contains(n))
+                                        .collect();
+                                    if !missing.is_empty() {
+                                        return Err(ErrorCodeDefinition::type_mismatch(
+                                            &format!(
+                                                "{} constructor missing required field(s): {}",
+                                                inner_name,
+                                                missing.join(", ")
+                                            ),
+                                            &format!("provided {}", provided_names.len()),
+                                        )
+                                        .at(*span)
+                                        .build());
+                                    }
+                                }
+                                // 位置实参与字段类型一致性（#286 同款：实例化后字段已具体）
+                                for (i, (_, field_ty)) in st.fields.iter().enumerate() {
+                                    if i >= provided {
+                                        break;
+                                    }
+                                    let Some(arg_ty) = arg_types.get(i) else {
+                                        break;
+                                    };
+                                    if self.solver.unify(field_ty, arg_ty).is_err() {
+                                        return Err(ErrorCodeDefinition::type_mismatch(
+                                            &format!("{}", field_ty),
+                                            &format!("{}", arg_ty),
+                                        )
+                                        .at(*span)
+                                        .build());
+                                    }
+                                }
+                                return Ok(func_ty.clone());
+                            }
+                        }
+                    }
+                }
+
+                // 泛型类型构造调用分派（SPEC type-system.md §4.3）：
+                // 实参自左向右逐位匹配类型声明参数（Type 位收类型实参，const 位收字面量）。
+                //   - 全匹配 → 类型构造实例化
+                //   - 部分匹配（至少一位匹配上）→ 按类型构造报错：逐位检查，先报第一个错误位
+                //   - 完全匹配不上 → 构造参数（自动生成的构造函数）：位置式按字段顺序填，
+                //     类型参数从元素类型自动解包；const 位无法自动解包时报错。
                 if let crate::frontend::core::parser::ast::Expr::Var(fn_name, _) = &**func {
                     if let Some(generic_def) = self.generic_type_defs.get(fn_name).cloned() {
                         if let crate::frontend::core::types::MonoType::Struct(struct_body) =
@@ -1115,56 +1190,131 @@ impl<'a> ExpressionInferrer<'a> {
                         {
                             let type_param_count = generic_def.type_param_names.len();
                             let const_param_count = generic_def.poly.const_binders.len();
-                            let has_meta_arg = arg_types
-                                .iter()
-                                .any(|a| matches!(a, MonoType::MetaType { .. }));
+                            let total_params = type_param_count + const_param_count;
 
-                            if has_meta_arg {
-                                // === 类型构造：SafeArray(Int, 3) / Container(Int) ===
-                                let expected_arg_count = type_param_count + const_param_count;
-                                if arg_types.len() == expected_arg_count {
-                                    // const 参数需要 MonoType::Literal，而非 MonoType::Int
-                                    let mut full_args = arg_types.clone();
-                                    for (i, binder) in
-                                        generic_def.poly.const_binders.iter().enumerate()
-                                    {
-                                        let arg_idx = type_param_count + i;
-                                        if let Some(arg) = full_args.get_mut(arg_idx) {
-                                            if !matches!(arg, MonoType::Literal { .. }) {
-                                                // 尝试从表达式提取字面量值
-                                                if let Some(lit) = args.get(arg_idx) {
-                                                    if let Some(value) =
-                                                        extract_const_value_from_expr(lit)
-                                                    {
-                                                        *arg = MonoType::Literal {
-                                                            name: format!("{}", value),
-                                                            base_type: Box::new(arg.clone()),
-                                                            value,
-                                                        };
-                                                    }
+                            // 位匹配判定：Type 位收 MetaType 实参，const 位收字面量实参。
+                            // 部分匹配 = 存在能填某个声明参数位的实参（MetaType 或
+                            // const 位可收的字面量）；全匹配 = 位置对齐逐位吻合。
+                            let meta_count = arg_types
+                                .iter()
+                                .filter(|a| matches!(a, MonoType::MetaType { .. }))
+                                .count();
+                            let lit_count = args
+                                .iter()
+                                .filter(|a| extract_const_value_from_expr(a).is_some())
+                                .count();
+                            let all_matched = args.len() == total_params
+                                && (0..type_param_count)
+                                    .all(|i| matches!(arg_types[i], MonoType::MetaType { .. }))
+                                && (type_param_count..total_params)
+                                    .all(|i| extract_const_value_from_expr(&args[i]).is_some());
+                            let any_matched =
+                                meta_count > 0 || (const_param_count > 0 && lit_count > 0);
+
+                            if all_matched {
+                                // === 类型构造（全匹配）：SafeArray(Int, 3) / Container(Int) ===
+                                let mut full_args = arg_types.clone();
+                                // 类型实参解包：表达式位置的类型名 infer 成 MetaType 空壳
+                                // （不存具体类型名），从 AST 实参名提取具体类型。
+                                for i in 0..type_param_count {
+                                    if matches!(full_args[i], MonoType::MetaType { .. }) {
+                                        if let Some(concrete) = concrete_type_from_expr_arg(
+                                            &args[i],
+                                            self.type_defs,
+                                            self.generic_type_defs,
+                                        ) {
+                                            full_args[i] = concrete;
+                                        }
+                                    }
+                                }
+                                // const 参数需要 MonoType::Literal，而非 MonoType::Int
+                                for (i, binder) in generic_def.poly.const_binders.iter().enumerate()
+                                {
+                                    let arg_idx = type_param_count + i;
+                                    if let Some(arg) = full_args.get_mut(arg_idx) {
+                                        if !matches!(arg, MonoType::Literal { .. }) {
+                                            // 尝试从表达式提取字面量值
+                                            if let Some(lit) = args.get(arg_idx) {
+                                                if let Some(value) =
+                                                    extract_const_value_from_expr(lit)
+                                                {
+                                                    *arg = MonoType::Literal {
+                                                        name: format!("{}", value),
+                                                        base_type: Box::new(arg.clone()),
+                                                        value,
+                                                    };
                                                 }
                                             }
                                         }
-                                        let _ = binder; // 避免未使用警告
                                     }
-                                    return crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(
-                                        &generic_def,
-                                        &full_args,
-                                    );
+                                    let _ = binder; // 避免未使用警告
                                 }
-                                // 类型构造 arity 不匹配（#287 同模式：SafeArray(Int) 缺 N / 超参静默丢弃）
+                                return crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(
+                                    &generic_def,
+                                    &full_args,
+                                );
+                            }
+
+                            if any_matched {
+                                // === 部分匹配 → 一层处理：逐位检查，先报第一个错误位 ===
+                                // （Matrix(42)：位0 T←42 不匹配 → 报位0，即使位1 Rows 可匹配）
+                                let check_len = total_params.min(args.len());
+                                for i in 0..check_len {
+                                    let ok = if i < type_param_count {
+                                        matches!(arg_types[i], MonoType::MetaType { .. })
+                                    } else {
+                                        extract_const_value_from_expr(&args[i]).is_some()
+                                    };
+                                    if !ok {
+                                        let pname = if i < type_param_count {
+                                            generic_def.type_param_names[i].clone()
+                                        } else {
+                                            generic_def.poly.const_binders[i - type_param_count]
+                                                .name
+                                                .clone()
+                                        };
+                                        let expected = if i < type_param_count {
+                                            "类型实参".to_string()
+                                        } else {
+                                            "编译期常量".to_string()
+                                        };
+                                        return Err(ErrorCodeDefinition::type_mismatch(
+                                            &format!("{}（{}）", pname, expected),
+                                            &format!("{}", arg_types[i]),
+                                        )
+                                        .at(*span)
+                                        .build());
+                                    }
+                                }
+                                // 已匹配的位全部正确：缺参或超参
                                 return Err(ErrorCodeDefinition::argument_count_mismatch(
                                     fn_name,
-                                    expected_arg_count,
-                                    arg_types.len(),
+                                    total_params,
+                                    args.len(),
                                 )
                                 .at(*span)
                                 .build());
                             }
 
-                            if const_param_count == 0 {
-                                // === 值构造：Container(42, 43) ===
-                                // #287：arity = 字段数（有默认值字段可省略），类型参数从字段值类型推断
+                            // === 完全匹配不上 → 构造参数（自动生成的构造函数）===
+                            // 位置式按字段顺序填；类型参数从元素自动解包。
+                            // const 位无法从元素解包 → 必须显式两层 Matrix(Int, 3, 4)(...)
+                            if const_param_count > 0 {
+                                return Err(ErrorCodeDefinition::type_mismatch(
+                                    &format!(
+                                        "{}（显式类型构造参数，如 {}(类型, ...)(构造参数)",
+                                        fn_name, fn_name
+                                    ),
+                                    "构造参数值（编译期值参数无法从元素自动解包）",
+                                )
+                                .at(*span)
+                                .build());
+                            }
+
+                            // === 值构造（二层，无 const）：Container(42, 43) ===
+                            // #287：arity = 构造参数数（有默认值字段可省略），
+                            // 类型参数从字段值类型推断。
+                            {
                                 let total = struct_body.fields.len();
                                 let required = struct_body
                                     .field_has_default
@@ -1219,8 +1369,6 @@ impl<'a> ExpressionInferrer<'a> {
                                     &type_args,
                                 );
                             }
-                            // const 泛型（const_param_count > 0）且实参全为值：const 参数须从
-                            // 目标注解推断，表达式层无法解析——保留旧路径（#287 不涉及，超纲）。
                         }
                     }
                 }
@@ -2124,5 +2272,32 @@ fn substitute_type_params_with_vars(
                 .collect(),
         ),
         _ => ty.clone(),
+    }
+}
+
+/// 从类型构造实参表达式提取具体类型：类型名在表达式位置 infer 成 MetaType 空壳
+/// （不存具体类型名），实例化泛型类型前需从 AST 名称解包成具体 MonoType。
+fn concrete_type_from_expr_arg(
+    expr: &crate::frontend::core::parser::ast::Expr,
+    type_defs: &HashMap<String, MonoType>,
+    generic_type_defs: &HashMap<
+        String,
+        crate::frontend::core::typecheck::environment::GenericTypeDef,
+    >,
+) -> Option<MonoType> {
+    match expr {
+        crate::frontend::core::parser::ast::Expr::Var(name, _) => {
+            if is_builtin_type_name(name) {
+                MonoType::from_builtin_name(name)
+            } else if let Some(def_ty) = type_defs.get(name) {
+                Some(def_ty.clone())
+            } else if generic_type_defs.contains_key(name) {
+                // 泛型类型名（未实例化引用，如 Container(Container) 的类型实参位）
+                Some(MonoType::TypeRef(name.clone()))
+            } else {
+                None
+            }
+        }
+        _ => None,
     }
 }

@@ -1,12 +1,13 @@
 // 02-type-system/generic_constructor.yx
-// 覆盖: SPEC type-system.md §4.3 泛型类型构造器值构造与类型推导（#251 P0-3 / #287）
+// 覆盖: SPEC type-system.md §4.3 泛型构造调用与类型推导（#251 P0-3 / #287 / #288）
 // 验证:
-//   - 值构造按字段赋值语义，实参数 = 字段数（共享类型参数 Pair(1, 2) → T=Int）
-//   - 同一泛型类型不同实参多次实例化（Pair(Int) / Pair(String) 单态化不串扰）
-//   - 注解类型与推导类型一致（Pair(Int) = Pair(1, 2)）
+//   - 构造参数自动生成：位置式按字段顺序填，类型参数从元素自动解包（Pair(1, 2) → T=Int）
+//   - 两层调用：显式类型参数 + 构造参数（Pair(Int)(1, 2)）
+//   - 空构造：Pair(Int)() 零值，数据事后赋值
+//   - 同一泛型类型不同实参多次实例化不串扰（Pair(Int) / Pair(String)）
 // 状态: ✅
-// 注: RFC 原文 List(1, 2, 3) 为 builtin 变长列表值构造（等价 [1, 2, 3] 字面量）；
-//     用户自定义泛型 struct 按字段赋值，字段数即实参数（#287）。
+// 注: 类型构造器实参必须匹配声明参数（Type 位收类型实参、编译期值参数位收字面量）；
+//     用户自定义泛型 struct 的字段列表自动生成构造函数（SPEC §4.3）。
 
 use std.assert
 
@@ -17,10 +18,17 @@ Pair: (T: Type) -> Type = {
 
 main = {
     p: Pair(Int) = Pair(1, 2)
-    assert.assert(p.first == 1, "Pair(Int) first == 1")
-    assert.assert(p.second == 2, "Pair(Int) second == 2")
+    assert.assert(p.first == 1, "Pair(1, 2) first == 1")
+    assert.assert(p.second == 2, "Pair(1, 2) second == 2")
 
-    s: Pair(String) = Pair("a", "b")
-    assert.assert(s.first == "a", "Pair(String) first == a")
-    assert.assert(s.second == "b", "Pair(String) second == b")
+    // 两层调用：显式 T=String + 位置式构造参数
+    s = Pair(String)("a", "b")
+    assert.assert(s.first == "a", "Pair(String)(a, b) first == a")
+    assert.assert(s.second == "b", "Pair(String)(a, b) second == b")
+
+    // 空构造：零值 + 事后赋值
+    z = Pair(Int)()
+    assert.assert(z.first == 0, "Pair(Int)() first == 0")
+    z.first = 7
+    assert.assert(z.first == 7, "Pair(Int)() first = 7 after assign")
 }

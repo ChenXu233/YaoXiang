@@ -60,8 +60,8 @@ fn test_rfc011_generic_type_definition() {
 /// - 编译器从右侧推导 T=Int
 /// - 等价于显式传类型参数
 ///
-/// 注：RFC 原文 `List(1, 2, 3)` 为 builtin 变长列表值构造语义；用户自定义
-/// 泛型 struct 值构造按字段赋值（#287）。
+/// 注：RFC 原文 `List(1, 2, 3)` 为 builtin 列表值构造语义；用户自定义
+/// 泛型 struct 的字段列表自动生成构造函数，实参为构造参数（SPEC §4.3）。
 #[test]
 fn test_rfc011_generic_type_inference() {
     // Arrange

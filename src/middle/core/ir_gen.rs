@@ -3023,6 +3023,20 @@ impl AstToIrGenerator {
                 name.clone()
             };
             Ok(Operand::Const(ConstValue::String(resolved_name)))
+        } else if let Expr::Call { func: inner, .. } = func {
+            // 两层调用 Container(Int)(42, 43)：内层类型实参运行期擦除，
+            // 按结构体构造器名生成（字段填充由调用点实参决定）。
+            if let Expr::Var(name, _) = inner.as_ref() {
+                if self.struct_definitions.contains_key(name) {
+                    return Ok(Operand::Const(ConstValue::String(name.clone())));
+                }
+            }
+            Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                "无法解析函数名：非结构体构造器调用 {:?}",
+                func
+            ))
+            .at(Self::get_expr_span(func))
+            .build())
         } else {
             Err(ErrorCodeDefinition::ir_internal_error(&format!(
                 "无法解析函数名：非变量表达式 {:?}",
@@ -3048,6 +3062,10 @@ impl AstToIrGenerator {
                 }
                 self.lookup_var_type(name).is_some()
             }
+            ast::Expr::Call { func: inner, .. } => match inner.as_ref() {
+                ast::Expr::Var(name, _) => self.struct_definitions.contains_key(name),
+                _ => false,
+            },
             _ => false,
         }
     }
@@ -3693,8 +3711,18 @@ impl AstToIrGenerator {
                     }
 
                     // 检查是否是结构体构造器调用，需要填充默认值
-                    if let Expr::Var(name, _) = func.as_ref() {
-                        if let Some(fields) = self.struct_definitions.get(name).cloned() {
+                    // 两层调用 X(类型参数)(构造参数)：func 是 Call{func: Var(name)}，
+                    // 内层类型实参运行期擦除，外层实参按字段位置填充。
+                    let struct_ctor_name: Option<String> = match func.as_ref() {
+                        Expr::Var(name, _) => Some(name.clone()),
+                        Expr::Call { func: inner, .. } => match inner.as_ref() {
+                            Expr::Var(name, _) => Some(name.clone()),
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+                    if let Some(name) = struct_ctor_name {
+                        if let Some(fields) = self.struct_definitions.get(&name).cloned() {
                             // 这是一个结构体构造器调用
                             // 如果提供的参数数少于字段数，用默认值填充
                             if arg_regs.len() < fields.len() {

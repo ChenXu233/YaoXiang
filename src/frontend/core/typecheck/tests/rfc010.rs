@@ -419,8 +419,8 @@ fn test_rfc010_generic_type_definition() {
 /// - 编译器推导 T=Int
 ///
 /// 注：RFC 原文示例 `numbers: List(Int) = List(1, 2, 3)` 中的 List 为
-/// builtin 变长列表值构造（等价 `[1, 2, 3]` 字面量）；用户自定义泛型 struct
-/// 按字段赋值语义（#287），字段数即实参数。
+/// builtin 列表；用户自定义泛型 struct 的字段列表自动生成构造函数
+/// （SPEC §4.3），实参为构造参数，类型参数从元素自动解包（#287）。
 #[test]
 fn test_rfc010_generic_type_instantiation() {
     // Arrange
