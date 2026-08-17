@@ -1,0 +1,16 @@
+// 06-compile-errors/option_annotation_mismatch_err.yx
+// [test:error]: Option 类型注解不匹配——u 是 Option(Arc(Int))，注解 Option(Int) 应报 E1002
+// 覆盖: #251 P0-5（Option(T) 泛型绑定）+ mono.rs Arc/Weak lower
+// 验证: Option 类型参数在注解与推断间精确匹配
+// 状态: ❌ 应编译失败
+
+use std.io
+use std.weak
+
+main = {
+    p = ref 42
+    w = weak.new(p)
+    u = weak.upgrade(w)
+    u2: Option(Int) = u
+    io.println("unreachable")
+}
