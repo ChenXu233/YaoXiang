@@ -833,14 +833,18 @@ Window: Type = {
 }
 ```
 
-**闭包捕获**——闭包捕获令牌就像捕获任何值：
+**闭包不捕获，上下文在创建点固化**——闭包只吃自己的参数，需要外层数据时通过柯里化在创建点把值固化进闭包：
 
 ```yaoxiang
-// ✅ 闭包捕获 &Float 令牌（Dup 类型，自由复制到闭包中）
-filter_by_threshold: (items: List(Point), threshold: &Float) -> List(Point) = {
-    items.filter(|p| p.x > threshold)
+// ✅ 上下文经柯里化固化：threshold 是参数，gt_point(threshold) 在创建点把值固化进闭包
+gt_point: (t: Float) -> (p: Point) -> Bool = (p) => p.x > t
+filter_by_threshold: (items: List(Point), threshold: Float) -> List(Point) = {
+    items.filter(gt_point(threshold))
 }
 ```
+
+> 注：闭包（函数值）逃逸后其定义处作用域可能已死，故不得隐式捕获外层变量；
+> 但调用点（创建点）作用域必然存活，上下文在该点固化为值进入闭包是安全的。
 
 ### 12.4 自动借用选择
 
@@ -861,7 +865,9 @@ p2 = p             // 后续不再使用 → Move
 
 ### 12.5 令牌冲突检测
 
-编译器对令牌值做**流敏感活性分析**，追踪每个令牌的状态（活跃/已移动）：
+令牌冲突检测是**借用霍尔命题**（RFC-009a），不是独立的流敏感分析。编译器自动生成借用命题
+（`borrow_conflict`/`use_after_move`/`use_after_drop`/`mut_violation`）送入证明管道验证；令牌活性是
+区间 `[created_at, last_use]`（见 RFC-009a §反向 BFS 活性分析）：
 
 ```yaoxiang
 // ❌ &mut 和派生的 &T 不能同时活跃
@@ -919,9 +925,12 @@ alias_bad(p, p)                  // ❌ p 同时派生 &mut 和 & 令牌
 | 做什么 | 看一眼/原地改                      | 共享持有                |
 | 范围   | 随令牌值的作用域                   | 跨作用域                |
 | 成本   | 零开销（零大小类型，编译后消失）   | Rc 或 Arc（编译器选）   |
-| 逃逸   | 可（令牌随返回值/结构体/闭包传播） | 本来就是用来逃逸的      |
+| 逃逸   | 可（令牌随返回值/结构体传播） | 本来就是用来逃逸的      |
 | 跨任务 | 不可（令牌未实现跨任务传递）       | 可（编译器自动选 Arc）  |
 | 环检测 | 不涉及                             | 任务内静默，跨任务 lint |
+
+> 注（未定义）：ref 创建后如何读内容（解引用/方法/自动）尚未在规范中定义，
+> 实现现状 `*a` 报 E1052。待定义后补入本节。
 
 ---
 
