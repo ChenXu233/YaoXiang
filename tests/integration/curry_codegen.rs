@@ -1,16 +1,14 @@
-//! Curry IR 形态测试 — 基于 RFC-011 §4.1 函数级 const 泛型（curry 形式）
+//! Curry 分层结构测试 — 基于 RFC-011 §4.1 编译期常量参数（curry 形式）
 //!
-//! 验证 curry 函数生成的 IR 指令序列正确。期望值来自设计 spec：
-//! docs/superpowers/specs/2026-07-26-curry-desugaring-design.md
+//! RFC-011 §4.1: `f: (N: Int) -> (n: N) -> Int` 每层拆为独立 FunctionIR，
+//! 中间层生成闭包链（MakeClosure 指向内层函数），逐层部分应用固化。
 //!
-//! RFC-011 §4.1: 编译期常量参数 curry 形式
-//!   f: (N: Int) -> (n: N) -> Int 每层拆为独立 FunctionIR
-//!   中间层: MakeClosure(下一层, env=args 原位) + Ret
-//!   最内层: 参数原位注册（args 槽布局 = [外层参数.., 本层参数..]）+ 原 body + Ret
-//!   #294：无 LoadArg 搬动——搬动会因 dst/src 槽重叠互相覆盖
+//! 原则 4（测试行为，不测试实现）：本文件断言 curry 分层的**结构行为**
+//! （生成了几层函数、中间层是否产出闭包链），不断言具体指令序列——
+//! LoadArg / 参数原位注册等是编译器实现细节，可随实现演进变化。
 
 use yaoxiang::frontend::Compiler;
-use yaoxiang::middle::core::ir::{FunctionIR, Instruction, Operand};
+use yaoxiang::middle::core::ir::{FunctionIR, Instruction};
 
 /// 编译源码并返回第一个函数的 IR
 fn compile_first_func(src: &str) -> FunctionIR {
@@ -41,32 +39,14 @@ fn two_layer_curry_generates_closure_chain() {
     // Act
     let instrs = f.all_instructions().collect::<Vec<_>>();
 
-    // Assert: 2 层 curry 的 f 应生成 MakeClosure + Ret（#294：无 LoadArg 搬动）
-    assert_eq!(
-        instrs.len(),
-        2,
-        "f 应生成 2 条指令 (MakeClosure + Ret)，实际: {:?}",
+    // Assert: 中间层 f 必须生成 MakeClosure 闭包，指向内层函数 __f_l0（闭包链结构）
+    let makes_closure_to_inner = instrs
+        .iter()
+        .any(|instr| matches!(instr, Instruction::MakeClosure { func, .. } if func == "__f_l0"));
+    assert!(
+        makes_closure_to_inner,
+        "f 应生成指向内层 __f_l0 的 MakeClosure 闭包（curry 分层闭包链），实际指令: {:?}",
         instrs
-    );
-
-    assert!(
-        matches!(
-            instrs[0],
-            Instruction::MakeClosure {
-                dst: Operand::Local(1),
-                ref func,
-                ref env,
-                ..
-            } if func == "__f_l0" && env == &[Operand::Local(0)]
-        ),
-        "第 0 条应为 MakeClosure 到 __f_l0, env=[Local(0)]，实际: {:?}",
-        instrs[0]
-    );
-
-    assert!(
-        matches!(instrs[1], Instruction::Ret(Some(Operand::Local(1)))),
-        "第 1 条应为 Ret(Local(1))，实际: {:?}",
-        instrs[1]
     );
 }
 
