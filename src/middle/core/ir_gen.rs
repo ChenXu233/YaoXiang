@@ -1333,33 +1333,11 @@ impl AstToIrGenerator {
         let _ = constants; // 中间层不生成常量
         let mut instructions = Vec::new();
 
-        // 1. 本层参数先加载（用 Arg(env_count + i)）
-        for (i, param) in layer.params.iter().enumerate() {
-            instructions.push(Instruction::Load {
-                dst: Operand::Local(i),
-                src: Operand::Arg(env_count + i),
-            });
-            self.register_local(&param.name, i);
-        }
-
-        // 2. 外层参数后加载（用 Arg(i)）
-        let env_start = layer.params.len();
-        for i in 0..env_count {
-            let dst = env_start + i;
-            instructions.push(Instruction::Load {
-                dst: Operand::Local(dst),
-                src: Operand::Arg(i),
-            });
-        }
-        self.next_temp = env_start + env_count;
-
-        // 3. MakeClosure：env = 外层 env + 本层参数
-        let mut full_env: Vec<Operand> = (env_start..env_start + env_count)
-            .map(Operand::Local)
-            .collect();
-        for i in 0..layer.params.len() {
-            full_env.push(Operand::Local(i));
-        }
+        // 无需 LoadArg 搬动：args 槽布局 = [外层 env(0..env_count), 本层参数(env_count..)]
+        // 正是下一层闭包 env 需要的顺序。搬动会因 dst/src 槽重叠互相覆盖（#294）。
+        let param_count = layer.params.len();
+        let full_env: Vec<Operand> = (0..env_count + param_count).map(Operand::Local).collect();
+        self.next_temp = env_count + param_count;
         let closure_dst = self.next_temp_reg();
         instructions.push(Instruction::MakeClosure {
             dst: Operand::Local(closure_dst),
@@ -1368,7 +1346,7 @@ impl AstToIrGenerator {
             def: None,
         });
 
-        // 4. Ret(closure)
+        // Ret(closure)
         instructions.push(Instruction::Ret(Some(Operand::Local(closure_dst))));
 
         // 5. 构建 FunctionIR
@@ -1417,31 +1395,20 @@ impl AstToIrGenerator {
         let mut instructions = Vec::new();
         let env_count = env_param_names.len();
 
-        // 1. 本层参数先加载（用 Arg(env_count + i)，此时 slots[env_count + i] 还未被覆盖）
-        for (i, param) in layer.params.iter().enumerate() {
-            instructions.push(Instruction::Load {
-                dst: Operand::Local(i),
-                src: Operand::Arg(env_count + i),
-            });
-            self.register_local(&param.name, i);
-        }
-
-        // 2. 外层参数后加载（用 Arg(i) 读 slots[i]）
-        //    注意：必须在参数之后加载，因为 env 写入的 slots 位置可能与 arg 重叠
-        let env_start = layer.params.len();
+        // 参数原位注册，不生成 LoadArg：args 槽布局 = [外层参数(0..env_count),
+        // 本层参数(env_count..)]，正是 body 需要的最终布局。LoadArg 搬动会因
+        // dst/src 槽重叠互相覆盖（#294：先写 slot[i] 再读 slot[i] 已坏）。
         for (i, name) in env_param_names.iter().enumerate() {
-            let dst = env_start + i;
-            instructions.push(Instruction::Load {
-                dst: Operand::Local(dst),
-                src: Operand::Arg(i),
-            });
-            self.register_local(name, dst);
+            self.register_local(name, i);
+        }
+        for (i, param) in layer.params.iter().enumerate() {
+            self.register_local(&param.name, env_count + i);
         }
 
-        // 3. next_temp 起始 = 参数数 + env 数
-        self.next_temp = env_start + env_count;
+        // next_temp 起始 = 参数总数
+        self.next_temp = env_count + layer.params.len();
 
-        // 4. 执行原 body（复用 generate_local_stmt_ir）
+        // 执行原 body（复用 generate_local_stmt_ir）
         for stmt in body {
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
         }

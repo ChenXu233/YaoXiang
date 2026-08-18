@@ -5,8 +5,9 @@
 //!
 //! RFC-011 §4.1: 编译期常量参数 curry 形式
 //!   f: (N: Int) -> (n: N) -> Int 每层拆为独立 FunctionIR
-//!   中间层: MakeClosure(下一层) + Ret
-//!   最内层: LoadArg(env) + LoadArg(params) + 原 body + Ret
+//!   中间层: MakeClosure(下一层, env=args 原位) + Ret
+//!   最内层: 参数原位注册（args 槽布局 = [外层参数.., 本层参数..]）+ 原 body + Ret
+//!   #294：无 LoadArg 搬动——搬动会因 dst/src 槽重叠互相覆盖
 
 use yaoxiang::frontend::Compiler;
 use yaoxiang::middle::core::ir::{FunctionIR, Instruction, Operand};
@@ -40,29 +41,17 @@ fn two_layer_curry_generates_closure_chain() {
     // Act
     let instrs = f.all_instructions().collect::<Vec<_>>();
 
-    // Assert: 2 层 curry 的 f 应生成 LoadArg + MakeClosure + Ret
+    // Assert: 2 层 curry 的 f 应生成 MakeClosure + Ret（#294：无 LoadArg 搬动）
     assert_eq!(
         instrs.len(),
-        3,
-        "f 应生成 3 条指令 (LoadArg + MakeClosure + Ret)，实际: {:?}",
+        2,
+        "f 应生成 2 条指令 (MakeClosure + Ret)，实际: {:?}",
         instrs
     );
 
     assert!(
         matches!(
             instrs[0],
-            Instruction::Load {
-                dst: Operand::Local(0),
-                src: Operand::Arg(0)
-            }
-        ),
-        "第 0 条应为 Load Arg(0) → Local(0)，实际: {:?}",
-        instrs[0]
-    );
-
-    assert!(
-        matches!(
-            instrs[1],
             Instruction::MakeClosure {
                 dst: Operand::Local(1),
                 ref func,
@@ -70,14 +59,14 @@ fn two_layer_curry_generates_closure_chain() {
                 ..
             } if func == "__f_l0" && env == &[Operand::Local(0)]
         ),
-        "第 1 条应为 MakeClosure 到 __f_l0, env=[Local(0)]，实际: {:?}",
-        instrs[1]
+        "第 0 条应为 MakeClosure 到 __f_l0, env=[Local(0)]，实际: {:?}",
+        instrs[0]
     );
 
     assert!(
-        matches!(instrs[2], Instruction::Ret(Some(Operand::Local(1)))),
-        "第 2 条应为 Ret(Local(1))，实际: {:?}",
-        instrs[2]
+        matches!(instrs[1], Instruction::Ret(Some(Operand::Local(1)))),
+        "第 1 条应为 Ret(Local(1))，实际: {:?}",
+        instrs[1]
     );
 }
 

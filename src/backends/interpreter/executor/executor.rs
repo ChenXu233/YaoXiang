@@ -742,7 +742,11 @@ impl Interpreter {
             if let RuntimeValue::Function(fv) = func {
                 // SAFETY: The interpreter lives as long as the callback.
                 let interpreter = unsafe { &mut *interp_ptr };
-                interpreter.call_function_by_id(fv.func_id, args)
+                // #294：闭包 env 前置到实参——curry 最内层用 LoadArg 读外层参数，
+                // 与 CallDyn 指令路径一致（此前只传实参 → 外层参数读到 Void/错位）
+                let mut final_args = fv.env.clone();
+                final_args.extend_from_slice(args);
+                interpreter.call_function_by_id(fv.func_id, &final_args)
             } else {
                 Err(ExecutorError::type_error(
                     "Expected function value".to_string(),
@@ -782,7 +786,11 @@ impl Interpreter {
             if let RuntimeValue::Function(fv) = func {
                 // SAFETY: The interpreter lives as long as the callback.
                 let interpreter = unsafe { &mut *interp_ptr };
-                interpreter.call_function_by_id(fv.func_id, args)
+                // #294：闭包 env 前置到实参——curry 最内层用 LoadArg 读外层参数，
+                // 与 CallDyn 指令路径一致（此前只传实参 → 外层参数读到 Void/错位）
+                let mut final_args = fv.env.clone();
+                final_args.extend_from_slice(args);
+                interpreter.call_function_by_id(fv.func_id, &final_args)
             } else {
                 Err(ExecutorError::type_error(
                     "Expected function value".to_string(),
