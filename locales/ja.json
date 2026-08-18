@@ -345,6 +345,14 @@
     "example": "break 'unknown;",
     "error_output": "error[E1070]: 未知のラベル\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ 未知のラベル 'unknown'"
   },
+  "E1071": {
+    "title": "型定義はモジュールレベルでのみ許可",
+    "message": "型定義はモジュールのトップレベルにのみ置けます",
+    "template": "型定義 '{name}' はモジュールレベル（モジュールのトップレベル）でのみ使用できます",
+    "help": "型定義をモジュールのトップレベルに移動してください",
+    "example": "main = { Point: Type = { x: Int } }",
+    "error_output": "error[E1071]: 型定義はモジュールレベルでのみ許可\n --> example.yx:1:9\n  |\n1 | main = { Point: Type = { x: Int } }\n  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ 型定義 '{name}' はモジュールレベルでのみ使用できます"
+  },
   "E1081": {
     "title": "`?` は Result を返す関数内でのみ使用できます",
     "help": "まず外側の関数の戻り値の型を `Result[T, E]` に変更し、その後 `expr?` を使用してエラー伝播を行ってください。"

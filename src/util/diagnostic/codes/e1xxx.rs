@@ -111,6 +111,11 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
         code: "E1070",
         category: ErrorCategory::TypeCheck,
     },
+    // E1071: 类型定义只能在模块级（#295：函数体内 TypeDefinition 曾静默跳过）
+    ErrorCodeDefinition {
+        code: "E1071",
+        category: ErrorCategory::TypeCheck,
+    },
     // === RFC-001: Result/? 错误传播 ===
     ErrorCodeDefinition {
         code: "E1081",
@@ -199,6 +204,8 @@ impl ErrorCodeDefinition {
     ("E1061", cannot_instantiate_generic() => ),
     /// E1070 未知标签
     ("E1070", unknown_label(label: &str) => .param("label", label)),
+    /// E1071 类型定义只能在模块级
+    ("E1071", type_def_only_at_module_level(name: &str) => .param("name", name)),
     /// E1081 `?` 仅允许在返回 Result 的函数内使用
     ("E1081", try_only_allowed_in_result() => ),
     /// E1082 `?` 只能用于 Result 表达式

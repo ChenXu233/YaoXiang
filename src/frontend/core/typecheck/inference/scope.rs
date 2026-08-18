@@ -276,6 +276,11 @@ impl ScopeManager {
         self.get_var_info(name).is_some()
     }
 
+    /// 是否在模块级（三链全空 = 无函数边界、无块层，#295）
+    pub fn at_module_level(&self) -> bool {
+        self.local_scopes.is_empty() && self.param_scopes.is_empty()
+    }
+
     /// 获取所有非全局变量（局部 + 参数，内层覆盖外层）——
     /// 用于函数退出前的 function_local_vars 保存
     pub fn vars(&self) -> HashMap<String, PolyType> {

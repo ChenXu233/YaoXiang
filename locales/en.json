@@ -358,6 +358,14 @@
     "example": "break 'unknown;",
     "error_output": "error[E1070]: unknown label\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ unknown label 'unknown'"
   },
+  "E1071": {
+    "title": "Type definitions are only allowed at module level",
+    "message": "Type definitions can only appear at the top level of a module",
+    "template": "Type definition '{name}' can only appear at module level (top level of the module)",
+    "help": "Move the type definition to the top level of the module",
+    "example": "main = { Point: Type = { x: Int } }",
+    "error_output": "error[E1071]: type definition only at module level\n --> example.yx:1:9\n  |\n1 | main = { Point: Type = { x: Int } }\n  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ type definition '{name}' can only appear at module level"
+  },
   "E1081": {
     "title": "`?` can only be used within functions returning Result",
     "help": "Change the return type of the outer function to `Result[T, E]` first, then use `expr?` for error propagation."

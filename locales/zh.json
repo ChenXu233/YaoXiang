@@ -358,6 +358,14 @@
     "example": "break 'unknown;",
     "error_output": "error[E1070]: 未知标签\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ 未知标签 'unknown'"
   },
+  "E1071": {
+    "title": "类型定义只能在模块级",
+    "message": "类型定义只能出现在模块顶层",
+    "template": "类型定义 '{name}' 只能在模块级（模块顶层）",
+    "help": "将类型定义移到模块顶层",
+    "example": "main = { Point: Type = { x: Int } }",
+    "error_output": "error[E1071]: 类型定义只能在模块级\n --> example.yx:1:9\n  |\n1 | main = { Point: Type = { x: Int } }\n  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ 类型定义 '{name}' 只能在模块级（模块顶层）"
+  },
   "E1081": {
     "title": "`?` 仅允许在返回 Result 的函数内使用",
     "help": "请先将外层函数返回类型改为 `Result[T, E]`，再使用 `expr?` 进行错误传播。"

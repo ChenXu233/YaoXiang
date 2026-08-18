@@ -305,6 +305,14 @@
     "example": "break 'unknown;",
     "error_output": "error[E1070]：未知之标签\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ 未知之标签 'unknown'"
   },
+  "E1071": {
+    "title": "型之定义唯许于模块之顶层",
+    "message": "型之定义惟能见于模块之顶",
+    "template": "型之定义「{name}」惟许于模块之顶层",
+    "help": "移型之定义至模块之顶",
+    "example": "main = { Point: Type = { x: Int } }",
+    "error_output": "error[E1071]: 型之定义唯许于模块之顶层\n --> example.yx:1:9\n  |\n1 | main = { Point: Type = { x: Int } }\n  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ 型之定义「{name}」惟许于模块之顶层"
+  },
   "E1081": {
     "title": "`?`唯许于返Result之函数内用之",
     "help": "请先改外层函数之返类型为`Result[T, E]`，复用`expr?`以行错误传播。"

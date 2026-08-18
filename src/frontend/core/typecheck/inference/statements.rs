@@ -766,7 +766,20 @@ impl StatementChecker {
                 self.check_expr(expr).map(|_| ())
             }
             crate::frontend::core::parser::ast::StmtKind::Return(None) => Ok(()),
-            _ => Ok(()),
+            // 类型定义是模块级概念（checker.rs pass1 只扫 module.items 注册）——
+            // 模块级出现合法（pass1 已注册，此处无事可做）；函数体内出现此前
+            // 落 `_ => Ok(())` 静默跳过（#295），留下误导性「Unknown variable」错误。
+            crate::frontend::core::parser::ast::StmtKind::TypeDefinition { name, .. } => {
+                if self.scope.at_module_level() {
+                    Ok(())
+                } else {
+                    Err(Box::new(
+                        ErrorCodeDefinition::type_def_only_at_module_level(name)
+                            .at(stmt.span)
+                            .build(),
+                    ))
+                }
+            } // 全部变体已显式处理：无兜底（新 StmtKind 变体将编译期报非穷尽 match）
         }
     }
     /// 检查表达式语句
