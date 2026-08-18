@@ -155,7 +155,7 @@ fn test_var_is_mutable_searches_inner_to_outer() {
         false,
         crate::util::span::Span::default(),
     );
-    scope.enter_scope();
+    scope.enter_block();
     scope.add_var(
         "x".to_string(),
         PolyType::mono(MonoType::Bool),
@@ -183,7 +183,7 @@ fn test_current_scope_vars_only_returns_innermost() {
         false,
         crate::util::span::Span::default(),
     );
-    scope.enter_scope();
+    scope.enter_block();
     scope.add_var(
         "inner".to_string(),
         PolyType::mono(MonoType::Bool),
@@ -234,6 +234,8 @@ fn test_update_var_preserves_is_mut() {
 fn test_vars_with_mut_preserves_correct_info() {
     // Arrange
     let mut scope = ScopeManager::new();
+    // 三链模型（#295）：局部变量需在函数/块层内 add（否则进 globals，vars_with_mut 不返回）
+    scope.enter_block();
     scope.add_var(
         "a".to_string(),
         PolyType::mono(MonoType::Int(32)),

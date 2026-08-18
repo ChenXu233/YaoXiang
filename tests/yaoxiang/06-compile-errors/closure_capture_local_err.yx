@@ -1,0 +1,13 @@
+// 06-compile-errors/closure_capture_local_err.yx
+// [test:error]: 闭包（参数位置 lambda）引用外层局部变量 → E1001（闭包不捕获）
+// 预期: 编译错误 E1001 Unknown variable: 'n'
+// 覆盖: SPEC §12.3 闭包不捕获外层局部变量 + #295 三链作用域模型
+// 验证: 参数位置 lambda 体引用外层函数局部变量 n，必须报未定义（此前静默错绑）
+// 状态: ❌ 应编译失败
+
+use std.list
+
+main = {
+    n = 5
+    evens = list.filter([1, 6, 3, 8], x => x > n)   // ❌ n 是外层局部变量，闭包不捕获
+}

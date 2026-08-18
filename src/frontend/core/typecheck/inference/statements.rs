@@ -12,6 +12,7 @@ use crate::frontend::module::{Export, ExportKind, ModuleInfo};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable, TypeConstraintSolver};
 use crate::frontend::core::parser::ast::{classify_generic_params, Block, Expr, Param, Stmt};
+use crate::frontend::core::typecheck::scope::VarInfo;
 use crate::middle::passes::mono::instance::InstantiationRequest;
 
 use super::scope::ScopeManager;
@@ -396,6 +397,17 @@ impl StatementChecker {
         self.scope.add_var(name, poly, is_mut, definition_span);
     }
 
+    /// 添加参数（函数签名参数，lambda 体可继承）
+    pub fn add_param(
+        &mut self,
+        name: String,
+        poly: PolyType,
+        is_mut: bool,
+        definition_span: crate::util::span::Span,
+    ) {
+        self.scope.add_param(name, poly, is_mut, definition_span);
+    }
+
     /// 变量类型账本（#256）：移交给所有权检查做 Move/Dup 分类
     pub fn var_type_ledger(&self) -> &std::collections::HashMap<(usize, String), PolyType> {
         self.scope.type_ledger()
@@ -420,6 +432,11 @@ impl StatementChecker {
             }
         }
         result
+    }
+
+    /// 三链模型的全局绑定（模块级变量）——checker 收集 bindings 用（#295）
+    pub fn scope_globals(&self) -> &std::collections::HashMap<String, VarInfo> {
+        self.scope.globals()
     }
 
     /// 检查变量是否存在于任何作用域中
@@ -453,14 +470,14 @@ impl StatementChecker {
         self.scope.update_var(name, PolyType::mono(new_ty));
     }
 
-    /// 进入新的作用域
+    /// 进入新的块作用域（#295 三链模型：块不逃逸，局部变量穿透）
     pub fn enter_scope(&mut self) {
-        self.scope.enter_scope();
+        self.scope.enter_block();
     }
 
-    /// 退出当前作用域
+    /// 退出当前块作用域
     pub fn exit_scope(&mut self) {
-        self.scope.exit_scope();
+        self.scope.exit_block();
     }
 
     /// 检查函数定义
@@ -496,8 +513,8 @@ impl StatementChecker {
         let was_top_level = self.is_top_level;
         self.is_top_level = false;
 
-        // 创建函数作用域
-        self.scope.enter_scope();
+        // 创建函数作用域（#295 三链模型：参数层 + 新局部层，外层函数局部变量不可见）
+        self.scope.enter_fn();
 
         // 添加参数到函数作用域，const 泛型引用用 subst 替换
         for param in params {
@@ -507,13 +524,29 @@ impl StatementChecker {
                 .map(|t| MonoType::from(t.clone()))
                 .unwrap_or_else(|| self.solver.new_var());
             let param_ty = param_ty.substitute(const_subst);
-            self.scope.add_var(
+            self.add_param(
                 param.name.clone(),
                 PolyType::mono(param_ty),
                 param.is_mut,
                 crate::util::span::Span::default(),
             );
         }
+
+        // const 泛型参数（如 `gt: (t: Int) -> ...` 的 t）也进参数链：
+        // 函数体引用编译期常量参数合法（RFC-011 §4.1），类型为底层类型。
+        for (const_name, const_ty) in const_subst {
+            if !params.iter().any(|p| &p.name == const_name) {
+                self.add_param(
+                    const_name.clone(),
+                    PolyType::mono(const_ty.clone()),
+                    false,
+                    crate::util::span::Span::default(),
+                );
+            }
+        }
+
+        // #295：函数体推断期间，外层函数的局部变量不可见（函数不捕获外层局部变量），
+        // 本函数参数与全局可见（三链模型天然实现，无需额外标志）。
 
         if self.collect_all_errors {
             // 收集模式：收集所有错误，不短路
@@ -533,7 +566,7 @@ impl StatementChecker {
             }
 
             // 退出函数作用域
-            self.scope.exit_scope();
+            self.scope.exit_fn();
             self.is_top_level = was_top_level;
 
             match first_err {
@@ -556,7 +589,7 @@ impl StatementChecker {
             }
 
             // 退出函数作用域
-            self.scope.exit_scope();
+            self.scope.exit_fn();
             self.is_top_level = was_top_level;
 
             match err {
@@ -727,6 +760,12 @@ impl StatementChecker {
                     .at(*span)
                     .build(),
             )),
+            // #295：Return 语句此前落 _ => Ok(()) 静默跳过——lambda 体 `x + n` 的自由
+            // 变量从未被检查（ir_gen 才报 E3006 / 错绑）。此处检查返回表达式。
+            crate::frontend::core::parser::ast::StmtKind::Return(Some(expr)) => {
+                self.check_expr(expr).map(|_| ())
+            }
+            crate::frontend::core::parser::ast::StmtKind::Return(None) => Ok(()),
             _ => Ok(()),
         }
     }
@@ -1070,14 +1109,21 @@ impl StatementChecker {
             params
         };
 
-        // 补充 curry 后续组的值参数（如 `factorial: (N: Int) -> (n: N) -> Int` 的 `n`）
-        // signature_params 现含全部 curry 组带名参数；第一组已被 extract_generic_params 处理，
-        // 后续组值参数（不在 generic_params 名单）需补进 params 供 check_fn_def 绑定进作用域。
-        let generic_names: std::collections::HashSet<&str> =
-            generic_params.iter().map(|p| p.name.as_str()).collect();
+        // 补充 curry 后续组的值参数（如 `factorial: (N: Int) -> (n: N) -> Int` 的 `n`）。
+        // 跳过：Type 泛型参数（编译期擦除）、用途分析注册的 const 泛型参数（经 const_subst 注册）。
+        // 注（#295）：classify 为 Const 但用途分析未命中的参数（如 `gt: (t: Int) -> ...` 的 t
+        // 仅在 body 值位置引用）是普通值参数，必须补进 params——此前两头落空，
+        // body 引用报 Unknown variable。
+        let type_param_names: std::collections::HashSet<&str> = type_generic_params
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect();
+        let const_binder_names: std::collections::HashSet<&str> =
+            const_binders.iter().map(|cb| cb.name.as_str()).collect();
         let mut params: Vec<Param> = params.to_vec();
         for p in signature_params {
-            if !generic_names.contains(p.name.as_str())
+            if !type_param_names.contains(p.name.as_str())
+                && !const_binder_names.contains(p.name.as_str())
                 && !params.iter().any(|ep| ep.name == p.name)
             {
                 params.push(p.clone());
@@ -1316,11 +1362,11 @@ impl StatementChecker {
             _ => self.solver.new_var(),
         };
 
-        self.scope.enter_scope();
+        self.scope.enter_block();
 
         // 遮蔽检查
         if self.scope.var_in_any_scope(var) {
-            self.scope.exit_scope();
+            self.scope.exit_block();
             return Err(Box::new(
                 ErrorCodeDefinition::variable_shadowing(var).build(),
             ));
@@ -1343,7 +1389,7 @@ impl StatementChecker {
                     self.collect_error(*e);
                 }
             }
-            self.scope.exit_scope();
+            self.scope.exit_block();
             match first_err {
                 Some(e) => Err(e),
                 None => Ok(()),
@@ -1356,7 +1402,7 @@ impl StatementChecker {
                     break;
                 }
             }
-            self.scope.exit_scope();
+            self.scope.exit_block();
             match err {
                 Some(e) => Err(e),
                 None => Ok(()),
@@ -1413,7 +1459,7 @@ impl StatementChecker {
         &mut self,
         block: &Block,
     ) -> Result<(), Box<Diagnostic>> {
-        self.scope.enter_scope();
+        self.scope.enter_block();
 
         if self.collect_all_errors {
             let mut first_err = None;
@@ -1425,7 +1471,7 @@ impl StatementChecker {
                     self.collect_error(*e);
                 }
             }
-            self.scope.exit_scope();
+            self.scope.exit_block();
             match first_err {
                 Some(e) => Err(e),
                 None => Ok(()),
@@ -1438,7 +1484,7 @@ impl StatementChecker {
                     break;
                 }
             }
-            self.scope.exit_scope();
+            self.scope.exit_block();
             match err {
                 Some(e) => Err(e),
                 None => Ok(()),

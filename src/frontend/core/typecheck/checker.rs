@@ -394,7 +394,8 @@ impl TypeChecker {
         let mut bindings = self.env.vars.clone();
         let mut local_var_types = HashMap::new();
 
-        // 从 body_checker.vars 获取局部变量类型
+        // 从 body_checker.vars 获取局部变量类型，并合并三链模型的 globals（#295 重构：
+        // 模块级绑定（如 `result = id(42)`）在 ScopeManager.globals，不在 vars() 中）
         if let Some(ref bc) = self.body_checker {
             for (name, poly) in bc.vars() {
                 // 只添加 env.vars 中不存在的局部变量类型
@@ -403,6 +404,11 @@ impl TypeChecker {
                 }
                 // 收集局部变量的 MonoType（用于 IR 生成器错误消息）
                 local_var_types.insert(name, poly.body);
+            }
+            for (name, info) in bc.scope_globals() {
+                if !bindings.contains_key(name) {
+                    bindings.insert(name.clone(), info.poly.clone());
+                }
             }
         }
 

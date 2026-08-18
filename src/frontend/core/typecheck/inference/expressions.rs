@@ -215,6 +215,17 @@ impl<'a> ExpressionInferrer<'a> {
             .add_var(name, poly, is_mut, crate::util::span::Span::default());
     }
 
+    /// 添加参数（lambda 参数，lambda 体可继承）
+    pub fn add_param(
+        &mut self,
+        name: String,
+        poly: PolyType,
+        is_mut: bool,
+    ) {
+        self.scope
+            .add_param(name, poly, is_mut, crate::util::span::Span::default());
+    }
+
     /// 检查变量是否存在于任何作用域中
     pub fn var_exists_in_any_scope(
         &self,
@@ -282,7 +293,7 @@ impl<'a> ExpressionInferrer<'a> {
         let current_scope_vars = self.scope.current_scope_vars();
 
         // 退出当前 scope
-        self.scope.exit_scope();
+        self.scope.exit_block();
 
         // 将循环内声明的变量添加到外层 scope，保留可变性
         for (name, info) in current_scope_vars {
@@ -297,12 +308,12 @@ impl<'a> ExpressionInferrer<'a> {
 
     /// 进入新的作用域
     pub fn enter_scope(&mut self) {
-        self.scope.enter_scope();
+        self.scope.enter_block();
     }
 
     /// 退出当前作用域
     pub fn exit_scope(&mut self) {
-        self.scope.exit_scope();
+        self.scope.exit_block();
     }
 
     /// 获取当前作用域层级
@@ -1549,9 +1560,9 @@ impl<'a> ExpressionInferrer<'a> {
                     .build());
                 }
 
-                self.scope.enter_scope();
+                self.scope.enter_block();
                 let then_result = self.infer_block(then_branch, true, None);
-                self.scope.exit_scope();
+                self.scope.exit_block();
                 let _then_ty = then_result?;
 
                 for (else_if_cond, else_if_block) in else_if_branches {
@@ -1563,16 +1574,16 @@ impl<'a> ExpressionInferrer<'a> {
                         ))
                         .build());
                     }
-                    self.scope.enter_scope();
+                    self.scope.enter_block();
                     let else_if_result = self.infer_block(else_if_block, true, None);
-                    self.scope.exit_scope();
+                    self.scope.exit_block();
                     let _ = else_if_result?;
                 }
 
                 if let Some(else_block) = else_branch {
-                    self.scope.enter_scope();
+                    self.scope.enter_block();
                     let else_result = self.infer_block(else_block, true, None);
-                    self.scope.exit_scope();
+                    self.scope.exit_block();
                     else_result
                 } else {
                     Ok(MonoType::Void)
@@ -1597,7 +1608,7 @@ impl<'a> ExpressionInferrer<'a> {
 
                 self.enter_loop(label.as_deref());
 
-                self.scope.enter_scope();
+                self.scope.enter_block();
                 let result = self.infer_block(body, true, None);
                 // 退出循环作用域时，将内部变量提升到外层，避免变量丢失
                 self.promote_loop_vars_to_parent_scope();
@@ -1632,7 +1643,7 @@ impl<'a> ExpressionInferrer<'a> {
 
                 self.enter_loop(label.as_deref());
 
-                self.scope.enter_scope();
+                self.scope.enter_block();
                 let result = self
                     .try_add_var(var.clone(), PolyType::mono(element_type), *span, *var_mut)
                     .and_then(|_| self.infer_block(body, true, None));
@@ -1708,16 +1719,11 @@ impl<'a> ExpressionInferrer<'a> {
                 body,
                 ..
             } => {
-                self.scope.enter_scope();
+                self.scope.enter_fn();
                 let result: Result<()> = (|| {
                     for param in params {
                         let param_ty = self.solver.new_var();
-                        self.scope.add_var(
-                            param.name.clone(),
-                            PolyType::mono(param_ty),
-                            param.is_mut,
-                            crate::util::span::Span::default(),
-                        );
+                        self.add_param(param.name.clone(), PolyType::mono(param_ty), param.is_mut);
                     }
 
                     let ret_mono: MonoType =
@@ -1754,7 +1760,7 @@ impl<'a> ExpressionInferrer<'a> {
 
                     Ok(())
                 })();
-                self.scope.exit_scope();
+                self.scope.exit_fn();
                 result?;
 
                 let param_types: Vec<MonoType> =
@@ -1783,15 +1789,12 @@ impl<'a> ExpressionInferrer<'a> {
                 span: _span,
                 ..
             } => {
-                self.scope.enter_scope();
+                self.scope.enter_fn();
+                // #295：三链模型——enter_fn 推新局部层，外层函数局部变量不在链上（闭包不捕获），
+                // 参数链跨边界累积可见（柯里化固化）。
                 for param in params {
                     let param_ty = self.solver.new_var();
-                    self.scope.add_var(
-                        param.name.clone(),
-                        PolyType::mono(param_ty),
-                        param.is_mut,
-                        crate::util::span::Span::default(),
-                    );
+                    self.add_param(param.name.clone(), PolyType::mono(param_ty), param.is_mut);
                 }
 
                 // Lambda is a function boundary: it must not inherit outer `Result` context.
@@ -1804,7 +1807,7 @@ impl<'a> ExpressionInferrer<'a> {
                 self.expected_return_type = saved_expected_ret;
                 self.result_err = saved_result_err;
 
-                self.scope.exit_scope();
+                self.scope.exit_fn();
                 let body_ty = body_ty?;
 
                 let param_types: Vec<MonoType> =
@@ -1881,7 +1884,7 @@ impl<'a> ExpressionInferrer<'a> {
             } => {
                 let _iter_ty = self.infer_expr(iterable)?;
 
-                self.scope.enter_scope();
+                self.scope.enter_block();
                 self.scope.add_var(
                     var.clone(),
                     PolyType::mono(MonoType::Char),
@@ -1896,7 +1899,7 @@ impl<'a> ExpressionInferrer<'a> {
                     self.infer_expr(element)?
                 };
 
-                self.scope.exit_scope();
+                self.scope.exit_block();
 
                 Ok(MonoType::List(Box::new(elem_ty)))
             }
@@ -1964,7 +1967,7 @@ impl<'a> ExpressionInferrer<'a> {
 
                 // 2. 进入循环作用域，注册迭代变量
                 self.enter_loop(None);
-                self.scope.enter_scope();
+                self.scope.enter_block();
                 let body_ty = self
                     .try_add_var(var.clone(), PolyType::mono(element_type), *span, *var_mut)
                     .and_then(|_| self.infer_block(body, true, None));
