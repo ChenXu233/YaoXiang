@@ -484,35 +484,56 @@ Container: (T: Type) -> Type = {
 
 ## 第七章：编译期泛型
 
-### 7.1 编译期常量参数
+### 7.1 编译期值参数
 
 ```
-LiteralType   ::= Identifier ':' Int          // 编译期常量
+LiteralType   ::= Identifier ':' Int          // 编译期常量（候选）
 ```
 
-**术语**：标注非 `Type` 具体类型（如 `Int`）的泛型参数称为**编译期值参数**
-（compile-time value parameter），默认编译期确定，**无需 `const` 关键字**
+> **勘误（#296）**：原文称编译期值参数「默认编译期确定」，该表述**严格错误**——
+> `add: (a: Int, b: Int) -> Int = a + b` 中 `a`/`b` 是运行时值参数。只有**在类型位置
+> 被引用**的具体类型参数才是编译期值参数。正确定义见下。
+
+**术语**：标注非 `Type` 具体类型（如 `Int`）的泛型参数称为**编译期值参数候选**，
+是否成为编译期值参数取决于其值是否在类型位置被引用（值依赖）。**无需 `const` 关键字**
 （实现内部曾用「const 泛型」指代，文档统一使用「编译期值参数」）。
 
-**核心设计**：用 `(n: Int)` 编译期值参数 + `(n: n)` 值参数，区分编译期常量与运行时值。
+**判定规则（两步）**：
+
+1. **形态粗筛**：参数标注非 `Type` 的具体类型（`Int`/`Bool`/`Float`）→ 候选。
+2. **用途精筛**：候选名出现在**类型位置**（类型体字段类型、内层 `Fn` 参数类型、
+   `Assert` 谓词、`Array(T, N)` 类型构造实参位）→ 真编译期值参数；否则**运行时值参数**。
+
+| 写法 | 判定 | 原因 |
+| ---- | ---- | ---- |
+| `add: (a: Int, b: Int) -> Int = a + b` | a/b 运行时值参数 | 仅在值位置出现 |
+| `Array: (T: Type, N: Int) -> Type = { data: Array(T, N) }` | N 编译期值参数 | N 在类型构造实参位 |
+| `factorial: (N: Int) -> (k: N) -> Int` | N 编译期值参数 | N 作内层参数 k 的类型 |
+| `Foo: (T: Type, N: Int) -> Type = { x: T }` | N 落空→运行时值参数 | N 未在类型体引用 |
+
+**核心设计**：用 `(N: Int)` 编译期值参数 + `(k: N)` 值参数，区分编译期常量与运行时值。
+落空候选（形态是候选、用途未命中）退化为运行时值参数——函数级已按此处理，类型构造器
+路径见 [issue #297](https://github.com/ChenXu233/YaoXiang/issues/297)。
 
 ```yaoxiang
-// 编译期阶乘：参数必须是编译期已知的字面量
-factorial: (n: Int) -> (n: n) -> Int = {
-    match n {
-        0 => 1,
-        _ => n * factorial(n - 1)
-    }
-}
-
-// 编译期常量数组
+// 编译期值参数：N 在类型位置（Array 长度槽）被引用
 StaticArray: (T: Type, N: Int) -> Type = {
-    data: Array(T, N),      // 编译期已知大小的数组
+    data: Array(T, N),      // N 出现在类型构造实参位 → 编译期值参数
     length: N
 }
 
-// 使用方式
+// 使用方式：factorial(5) 在类型位置求值（编译期），结果 120 嵌入类型
 arr: StaticArray(Int, factorial(5))  // 编译器在编译期计算 factorial(5) = 120
+
+// 值依赖：N 作为内层参数 k 的类型
+// N 是编译期值参数（出现在 (k: N) 的类型位）；
+// k 是运行时值参数，其类型为字面量类型 N（单值类型）。
+factorial: (N: Int) -> (k: N) -> Int = {
+    match k {
+        0 => 1,
+        _ => k * factorial(k - 1)
+    }
+}
 ```
 
 ### 7.2 编译期常量数组
@@ -981,8 +1002,8 @@ combine: (T: Clone + Add)(a: T, b: T) -> T = body
 // 关联类型
 Iterator: (T: Type) -> Type = { Item: T, next: () -> Option(T) }
 
-// 编译期泛型
-factorial: (n: Int)(n: n) -> Int = { ... }
+// 编译期泛型：N 在类型位置 (k: N) 被引用 → 编译期值参数
+factorial: (N: Int)(k: N) -> Int = { ... }
 StaticArray: (T: Type, N: Int) -> Type = { data: Array(T, N), length: N }
 
 // 条件类型
