@@ -64,7 +64,7 @@ title: 'RFC 索引'
 | ↳ RFC-009a | [RFC-009a: 令牌生命期分析——基于霍尔证明管道](./accepted/009a-borrow-proof-pipeline.md)    | 晨煦    | 2026-06-13 | 已接受    |
 | RFC-010    | [RFC-010: 统一类型语法 - name: type = value 模型](./accepted/010-unified-type-syntax.md)  | 晨煦    | 2025-01-20 | 已接受    |
 | RFC-011    | [RFC-011: 泛型系统设计 - 零成本抽象与宏替代](./accepted/011-generic-type-system.md)       | 晨煦    | 2025-01-25 | 已接受    |
-| ↳ RFC-011a | [RFC-011a: 接口实现与动态分发](./review/011a-interface-implementation.md)                 | 晨煦    | 2026-06-14 | 审核中    |
+| ↳ RFC-011a | [RFC-011a: 接口实现与动态分发](./accepted/011a-interface-implementation.md)                 | 晨煦    | 2026-06-14 | 已接受    |
 | RFC-012    | [RFC 012: F-String 模板字符串](./accepted/012-f-string-template-strings.md)               | Chen Xu | 2025-01-27 | 已接受    |
 | RFC-013    | [RFC 013: 错误代码规范](./accepted/013-error-code-specification.md)                       | 晨煦    | 2026-02-02 | 已接受    |
 | RFC-014    | [RFC-014: 包管理系统设计](./accepted/014-package-manager.md)                              | 晨煦    | 2026-02-12 | 已接受    |
