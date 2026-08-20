@@ -3,7 +3,7 @@ title: 'RFC-011a: 接口实现与动态分发'
 status: '审核中'
 author: '晨煦'
 created: '2026-06-14'
-updated: '2026-07-05'
+updated: '2026-08-19'
 group: 'rfc-011'
 ---
 
@@ -17,7 +17,7 @@ group: 'rfc-011'
 
 RFC-011 定义了泛型系统，但没有详细说明接口实现机制。本文档补充：
 
-1. **接口声明**：类型定义中直接写接口名，不需要 `impl` 关键字
+1. **接口声明**：接口是参数化类型——`(Self: Type) -> Type`，实现时传入具体类型
 2. **方法实现**：内部声明和外部声明都支持
 3. **重载规则**：签名不同允许重载，签名相同报错（覆盖禁止）
 4. **默认值**：字段后直接写 `= value`
@@ -26,20 +26,20 @@ RFC-011 定义了泛型系统，但没有详细说明接口实现机制。本文
 **核心设计**：
 
 ```yaoxiang
-# 接口定义
-Animal: Type = {
-    speak: (Self) -> String,
+# 接口定义（参数化类型，Self 是显式类型参数）
+Animal: (Self: Type) -> Type = {
+    speak: (self: Self) -> String,
 }
 
 # 类型定义（内部声明）
 Dog: Type = {
     x: Int = 10,
-    Animal,  # 接口声明
-    speak: (Self) -> String = "Woof",
+    Animal(Dog),  # 接口实例化，Self ↦ Dog
+    speak: (self: Dog) -> String = "Woof",
 }
 
 # 外部声明（重载）
-Dog.speak: (Self, volume: Int) -> String = "WOOF"
+Dog.speak: (self: Dog, volume: Int) -> String = "WOOF"
 
 # 异构容器（动态分发）
 animals: List(Animal) = [Dog.new(), Cat.new()]
@@ -49,6 +49,7 @@ animals[0].speak()  # "Woof"
 **消除的复杂性**：
 
 - ❌ 无 `impl` 关键字
+- ❌ 无 `Self` 魔法关键字（`Self` 是显式类型参数，和 `T` 没区别）
 - ❌ 无 `dyn Trait + 'a` 标注
 - ❌ 无虚表（编译期类型收集 + 枚举包装）
 - ❌ 无覆盖（重载规则统一）
@@ -81,12 +82,13 @@ RFC-011 定义了泛型系统，但没有详细说明：
 
 | 特性     | Rust                          | YaoXiang                      |
 | -------- | ----------------------------- | ----------------------------- |
-| 接口声明 | `impl Animal for Dog { ... }` | `Dog: Type = { Animal, ... }` |
+| 接口声明 | `impl Animal for Dog { ... }` | `Dog: Type = { Animal(Dog), ... }` |
 | 方法实现 | 在 `impl` 块中                | 内部或外部                    |
 | 重载     | 不支持                        | 支持（签名不同）              |
 | 默认值   | 需要 `#[default]`             | 直接写 `= value`              |
 | 异构容器 | `Vec<Box<dyn Animal + 'a>>`   | `List(Animal)`                |
 | 动态分发 | 虚表查找                      | 编译期类型收集                |
+| Self 关键字 | 魔法关键字，隐式量化       | 显式类型参数，和 T 平等       |
 
 ---
 
@@ -94,40 +96,41 @@ RFC-011 定义了泛型系统，但没有详细说明：
 
 ### 1. 接口声明
 
-**核心规则**：在类型定义中直接写接口名，不需要 `impl` 关键字。
+**核心规则**：接口是参数化类型 `(Self: Type) -> Type`，`Self` 是显式类型参数，不是魔法关键字。实现时调用接口并传入具体类型。
 
 ```yaoxiang
-# 接口定义
-Animal: Type = {
-    speak: (Self) -> String,
+# 接口定义（与 RFC-011 泛型类型完全一致）
+Animal: (Self: Type) -> Type = {
+    speak: (self: Self) -> String,
 }
 
 # 类型声明实现接口
 Dog: Type = {
     x: Int,
-    Animal,  # 接口声明
+    Animal(Dog),  # 实例化接口，Self ↦ Dog
 }
 ```
 
 **编译器处理**：
 
-1. 识别 `Animal` 是接口类型
-2. 检查 `Dog` 是否有 `Animal` 要求的所有方法
-3. 如果通过 → 生成实现证明
-4. 如果失败 → 编译错误
+1. 识别 `Animal(Dog)` 是 `(Self: Type) -> Type` 的实例化调用
+2. 执行 `Self ↦ Dog` 替换：展开 `Animal(Dog)` → `{ speak: (self: Dog) -> String }`
+3. 检查 `Dog` 是否提供了所有要求的方法（签名匹配）
+4. 如果通过 → 生成实现证明
+5. 如果失败 → 编译错误
 
-**语法糖等价**：
+**展开等价**：
 
 ```yaoxiang
 Dog: Type = {
     x: Int,
-    Animal,  # 等价于展开 Animal 的方法，但保留来源标记
+    Animal(Dog),  # 展开为 Animal 的方法，保留来源标记
 }
 
-# 等价于（但保留来源信息）
+# 等价于（保留来源信息）
 Dog: Type = {
     x: Int,
-    speak: (Self) -> String,  # 来自 Animal
+    speak: (self: Dog) -> String,  # 来自 Animal，Self 已替换为 Dog
 }
 ```
 
@@ -136,6 +139,34 @@ Dog: Type = {
 - 直接展开会丢失来源信息
 - 来源标记用于生成实现证明
 - 运行时通过证明找到正确的方法
+
+#### 1.1 Self 类型参数与类型检查时机
+
+`Self` 是接口的显式类型参数，不是魔法关键字。`Animal: (Self: Type) -> Type` 和 `List: (T: Type) -> Type` 是同一种东西——`(Type) -> Type` 类型构造器。
+
+**类型检查时机**：
+
+- **接口定义时**：`{ speak: (self: Self) -> String }` 中的 `Self` 是抽象类型参数，只做语法检查。
+- **实例化点**：`Animal(Dog)` 时执行 `Self ↦ Dog`，展开后做完整类型检查（签名匹配、方法存在性）。
+
+这避免了 RFC-011 中 `Self` 作为隐式魔法关键字的问题——`Self` 不出现在类型定义中，它只在接口参数列表中出现一次，和 `T` 完全平等。
+
+#### 1.2 字段名与方法名的命名空间
+
+类型的字段名和方法名共享同一个命名空间。接口展开后，如果接口方法名与类型字段名冲突，**编译报错**：
+
+```yaoxiang
+Drawable: (Self: Type) -> Type = {
+    x: (self: Self) -> Int,    // 方法叫 x
+}
+
+Point: Type = {
+    x: Int,                     // 字段也叫 x
+    Drawable(Point),            // ❌ 编译错误：Drawable 要求方法 x，与字段 x 冲突
+}
+```
+
+字段访问 `point.x` 和方法调用 `point.x()` 在语法上无法区分。统一命名空间避免歧义。
 
 ### 2. 方法实现
 
@@ -146,8 +177,8 @@ Dog: Type = {
 ```yaoxiang
 Dog: Type = {
     x: Int = 10,
-    Animal,
-    speak: (Self) -> String = "Woof",  # 方法实现在内部
+    Animal(Dog),
+    speak: (self: Dog) -> String = "Woof",  # 方法实现在内部
 }
 ```
 
@@ -156,11 +187,11 @@ Dog: Type = {
 ```yaoxiang
 Dog: Type = {
     x: Int,
-    Animal,
+    Animal(Dog),
 }
 
 # 方法实现在外部
-Dog.speak: (Self) -> String = "Woof"
+Dog.speak: (self: Dog) -> String = "Woof"
 ```
 
 #### 2.3 混合声明
@@ -168,12 +199,12 @@ Dog.speak: (Self) -> String = "Woof"
 ```yaoxiang
 Dog: Type = {
     x: Int = 10,
-    Animal,
-    speak: (Self) -> String = "Woof",  # 部分方法在内部
+    Animal(Dog),
+    speak: (self: Dog) -> String = "Woof",  # 部分方法在内部
 }
 
 # 部分方法在外部
-Dog.play: (Self) -> Void = { ... }
+Dog.play: (self: Dog) -> Void = { ... }
 ```
 
 **编译器处理**：
@@ -195,31 +226,31 @@ Dog.play: (Self) -> Void = { ... }
 
 ```yaoxiang
 # 参数类型不同，允许重载
-Dog.speak: (Self) -> String = "Woof"
-Dog.speak: (Self, volume: Int) -> String = "WOOF"
+Dog.speak: (self: Dog) -> String = "Woof"
+Dog.speak: (self: Dog, volume: Int) -> String = "WOOF"
 ```
 
 #### 3.2 覆盖（禁止）
 
 ```yaoxiang
 # 签名完全相同，禁止覆盖
-Dog.speak: (Self) -> String = "Woof"
-Dog.speak: (Self) -> String = "Bark"  # ❌ 报错：覆盖不允许
+Dog.speak: (self: Dog) -> String = "Woof"
+Dog.speak: (self: Dog) -> String = "Bark"  # ❌ 报错：覆盖不允许
 ```
 
 **错误信息**：
 
 ```
-错误：Dog.speak(Self) -> String 重复定义
+错误：Dog.speak(self: Dog) -> String 重复定义
   --> 文件2:5:1
   |
-5 | Dog.speak: (Self) -> String = "Bark"
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 重复定义
+5 | Dog.speak: (self: Dog) -> String = "Bark"
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 重复定义
   |
   --> 文件1:3:1
   |
-3 | Dog.speak: (Self) -> String = "Woof"
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 第一个定义
+3 | Dog.speak: (self: Dog) -> String = "Woof"
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 第一个定义
 ```
 
 #### 3.3 规则统一
@@ -230,15 +261,15 @@ Dog.speak: (Self) -> String = "Bark"  # ❌ 报错：覆盖不允许
 # 内部声明
 Dog: Type = {
     x: Int,
-    Animal,
-    speak: (Self) -> String = "Woof",
+    Animal(Dog),
+    speak: (self: Dog) -> String = "Woof",
 }
 
 # 外部声明（重载，允许）
-Dog.speak: (Self, volume: Int) -> String = "WOOF"
+Dog.speak: (self: Dog, volume: Int) -> String = "WOOF"
 
 # 外部声明（覆盖，禁止）
-Dog.speak: (Self) -> String = "Bark"  # ❌ 报错
+Dog.speak: (self: Dog) -> String = "Bark"  # ❌ 报错
 ```
 
 ### 4. 默认值
@@ -249,7 +280,7 @@ Dog.speak: (Self) -> String = "Bark"  # ❌ 报错
 Dog: Type = {
     x: Int = 10,  # 默认值
     y: Int = 20,  # 默认值
-    Animal,
+    Animal(Dog),
 }
 ```
 
@@ -273,7 +304,7 @@ Dog.new: (x: Int, y: Int) -> Dog = { x: x, y: y }
 Dog: Type = {
     x: Int,
     y: Int,
-    Animal,
+    Animal(Dog),
 }
 
 # 外部声明默认值
@@ -291,6 +322,7 @@ Dog.y: Int = 20
 // 编译器内部：接口描述符
 struct InterfaceDescriptor {
     name: String,
+    self_param: TypeParam,     // Self 类型参数
     methods: Vec<MethodSignature>,
 }
 ```
@@ -302,12 +334,13 @@ struct InterfaceDescriptor {
 struct TypeDefinition {
     name: String,
     fields: Vec<Field>,
-    interface_implementations: Vec<InterfaceImplementation>,
+    interface_instantiations: Vec<InterfaceInstantiation>,
 }
 
-// 接口实现（保留来源信息）
-struct InterfaceImplementation {
+// 接口实例化（Self ↦ ConcreteType）
+struct InterfaceInstantiation {
     interface: InterfaceId,
+    self_type: TypeId,          // Self 被替换为的具体类型
     methods: HashMap<MethodId, FunctionBody>,
 }
 ```
@@ -326,13 +359,14 @@ struct ImplementationProof {
 #### 5.4 编译流程
 
 ```
-1. 解析类型定义，收集接口声明
-2. 收集所有方法定义（内部和外部）
-3. 按签名分组（重载）
-4. 检查覆盖（报错）
-5. 检查接口完整性
-6. 生成实现证明
-7. 运行时，值携带实现证明
+1. 解析类型定义，收集接口实例化声明（Animal(Dog)）
+2. 对每个接口实例化执行 Self ↦ ConcreteType 替换
+3. 展开接口方法签名，检查签名匹配
+4. 收集所有方法定义（内部和外部）
+5. 按签名分组（重载）
+6. 检查覆盖（报错）
+7. 检查接口完整性
+8. 生成实现证明
 ```
 
 ### 6. 动态分发
@@ -341,29 +375,39 @@ struct ImplementationProof {
 
 #### 6.1 异构容器
 
+`Animal` 是 `(Self: Type) -> Type`。`List(Animal)` 将未实例化的接口类型构造器用作**存在类型**（existential）：`∃S. Animal(S)`——"存在某个类型 S，S 实现了 Animal(S)"。
+
 ```yaoxiang
 # 接口定义
-Animal: Type = {
-    speak: (Self) -> String,
+Animal: (Self: Type) -> Type = {
+    speak: (self: Self) -> String,
 }
 
 # 类型定义
 Dog: Type = {
     x: Int,
-    Animal,
-    speak: (Self) -> String = "Woof",
+    Animal(Dog),
+    speak: (self: Dog) -> String = "Woof",
 }
 
 Cat: Type = {
     y: Int,
-    Animal,
-    speak: (Self) -> String = "Meow",
+    Animal(Cat),
+    speak: (self: Cat) -> String = "Meow",
 }
 
-# 异构容器
+# 异构容器 — Animal 未实例化 = 存在类型
 animals: List(Animal) = [Dog.new(), Cat.new()]
 animals[0].speak()  # "Woof"
 animals[1].speak()  # "Meow"
+```
+
+**所有权语义**：放入异构容器是 Move 语义（RFC-009）。`Dog.new()` 被移入 `AnimalGroup::Dog` 枚举变体，原始变量不再可用。
+
+```yaoxiang
+dog = Dog.new()
+animals: List(Animal) = [dog]
+# dog.speak()  ← ❌ 编译错误：dog 已被 move
 ```
 
 #### 6.2 编译期类型收集
@@ -382,10 +426,10 @@ animals.append(Bird.new())                 // 再扩展 { Dog, Cat, Bird }
 
 **编译器处理**（增量）：
 
-1. 遇到 `List(I)` 第一次被构造 → 生成初始枚举（当前编译单元内已知的所有构造类型）
+1. 遇到 `List(Animal)` 第一次被构造 → 生成初始枚举（当前编译单元内已知的所有构造类型）
 2. 每次 `append` / `push` / 索引赋值 → 检查值类型是否已在枚举中；不在则扩展枚举变体
 3. 为最终枚举生成单态化 `match` 分发代码
-4. 跨编译单元：链接时合并各单元的枚举变体集合
+4. 跨编译单元：依赖 LTO（链接时优化）合并枚举变体。`Animal` 作为存在类型在编译单元边界传递时，各单元生成部分枚举变体，链接阶段合并为完整枚举。
 
 **自动生成的枚举**：
 
@@ -409,7 +453,7 @@ AnimalGroup: Type = {
 plugin = load_plugin("bird.so")
 
 # 编译器检查：plugin.create_bird() 返回类型必须实现 Animal
-bird: Animal = plugin.create_bird()  # 编译期检查
+bird: Animal = plugin.create_bird()  # 编译期检查，存在类型
 
 # 放入异构容器 —— append 点触发枚举扩展
 animals: List(Animal) = [Dog.new(), Cat.new()]
@@ -438,12 +482,16 @@ animals[0].speak()
   }
 ```
 
+**品牌投影**（与 RFC-009a 的交互）：match 的模式绑定 `AnimalGroup.Dog(d)` 在品牌树中产生 `#animals[0].Dog` 子品牌，与字段投影（`#42.field_x`）等价。`d.speak()` 创建的 `ReadToken(d)` 品牌链为 `animals → animals[0] → d → ReadToken(d)`，借用检查器通过品牌树前缀匹配验证冲突。
+
+**下标访问的类型**：`animals[0]` 返回 `&AnimalGroup`（编译器生成的枚举类型），用户不能直接获取 `&mut Animal`。可变访问通过接口方法间接实现（如 `animals[0].mutate()` 内部展开为 `AnimalGroup::Dog(d) => d.mutate()`）。
+
 **与虚表的对比**：
 
 |                     | 虚表（Rust）          | 编译期枚举（YaoXiang）                     |
 | ------------------- | --------------------- | ------------------------------------------ |
 | 查找方式            | 虚表指针 → 方法指针   | 枚举 match → 直接调用                      |
-| 运行时开销          | 一次间接寻址          | 字符串比较/branch（可被 CPU 分支预测优化） |
+| 运行时开销          | 一次间接寻址          | branch（可被 CPU 分支预测优化）            |
 | 编译期生成          | 虚表                  | 枚举 + match                               |
 | 用户标注            | 需要 `dyn Trait + 'a` | 不需要                                     |
 | ImplementationProof | 不适用                | 编译期擦除，运行时不存在                   |
@@ -460,7 +508,7 @@ animals[0].speak()
 **当期内（单个编译单元）：** 完整支持。所有权追踪覆盖所有 `append`/构造点，枚举增量构建。
 
 **跨编译单元：**
-链接时合并各单元的枚举变体集合。设计与链接时单态化共用同一套机制（各单元生成部分枚举，链接器合并）。
+依赖 LTO（链接时优化）合并枚举变体。`Animal` 作为存在类型（`∃S. Animal(S)`）在编译单元边界传递。各单元生成部分枚举变体，链接阶段合并。
 
 **不支持：** 运行时动态类型（完全的鸭子类型）。类型集合在编译期完全已知。
 ---
@@ -471,15 +519,15 @@ animals[0].speak()
 
 ```yaoxiang
 # 接口定义
-Animal: Type = {
-    speak: (Self) -> String,
+Animal: (Self: Type) -> Type = {
+    speak: (self: Self) -> String,
 }
 
 # 类型定义
 Dog: Type = {
     x: Int = 10,
-    Animal,
-    speak: (Self) -> String = "Woof",
+    Animal(Dog),
+    speak: (self: Dog) -> String = "Woof",
 }
 
 # 使用
@@ -491,21 +539,21 @@ dog.speak()  # "Woof"
 
 ```yaoxiang
 # 多个接口
-Animal: Type = {
-    speak: (Self) -> String,
+Animal: (Self: Type) -> Type = {
+    speak: (self: Self) -> String,
 }
 
-Pet: Type = {
-    name: (Self) -> String,
+Pet: (Self: Type) -> Type = {
+    name: (self: Self) -> String,
 }
 
 # 类型实现多个接口
 Dog: Type = {
     x: Int = 10,
-    Animal,
-    Pet,
-    speak: (Self) -> String = "Woof",
-    name: (Self) -> String = "Buddy",
+    Animal(Dog),
+    Pet(Dog),
+    speak: (self: Dog) -> String = "Woof",
+    name: (self: Dog) -> String = "Buddy",
 }
 
 # 使用
@@ -518,7 +566,7 @@ dog.name()   # "Buddy"
 
 ```yaoxiang
 # 泛型接口
-Container: (T: Type) -> Type = {
+Container: (Self: Type, T: Type) -> Type = {
     add: (self: &mut Self, item: T) -> Void,
     get: (self: &Self, index: Int) -> T,
 }
@@ -526,9 +574,9 @@ Container: (T: Type) -> Type = {
 # 实现泛型接口
 IntList: Type = {
     data: Array(Int),
-    Container(Int),
-    add: (self: &mut Self, item: Int) -> Void = ...,
-    get: (self: &Self, index: Int) -> Int = ...,
+    Container(IntList, Int),
+    add: (self: &mut IntList, item: Int) -> Void = ...,
+    get: (self: &IntList, index: Int) -> Int = ...,
 }
 ```
 
@@ -536,21 +584,21 @@ IntList: Type = {
 
 ```yaoxiang
 # 接口定义
-Animal: Type = {
-    speak: (Self) -> String,
+Animal: (Self: Type) -> Type = {
+    speak: (self: Self) -> String,
 }
 
 # 类型定义
 Dog: Type = {
     x: Int,
-    Animal,
-    speak: (Self) -> String = "Woof",
+    Animal(Dog),
+    speak: (self: Dog) -> String = "Woof",
 }
 
 Cat: Type = {
     y: Int,
-    Animal,
-    speak: (Self) -> String = "Meow",
+    Animal(Cat),
+    speak: (self: Cat) -> String = "Meow",
 }
 
 # 异构容器
@@ -569,9 +617,9 @@ for animal in animals {
 
 ```yaoxiang
 # 接口定义
-Plugin: Type = {
-    name: (Self) -> String,
-    execute: (Self) -> Void,
+Plugin: (Self: Type) -> Type = {
+    name: (self: Self) -> String,
+    execute: (self: Self) -> Void,
 }
 
 # 主程序
@@ -644,62 +692,70 @@ main: () -> Void = {
 - 实现证明是编译期生成的，运行时零查找
 - 避免了 `dyn Trait + 'a` 的复杂性
 
+**异构容器的所有权**：
+
+- 放入 `List(Animal)` 是 Move 语义（RFC-009），原始变量不可再访问
+- 下标访问 `animals[0]` 返回 `&AnimalGroup`（编译器生成的枚举），品牌投影链为 `animals → animals[0] → enum_variant → field`
+- 可变访问通过接口方法间接实现，不暴露 `&mut AnimalGroup` 给用户
+
 ## 接口继承
 
 接口可以包含另一个接口。**不引入新语法**——和类型声明接口使用完全相同的语法位置：
 
 ```yaoxiang
-Animal: Type = {
-    speak: (Self) -> String,
+Animal: (Self: Type) -> Type = {
+    speak: (self: Self) -> String,
 }
 
-Pet: Type = {
-    Animal,                       # Pet 继承 Animal — 无新关键字
-    name: (Self) -> String,
+Pet: (Self: Type) -> Type = {
+    Animal(Self),                       # Pet 继承 Animal — 无新关键字
+    name: (self: Self) -> String,
 }
 
 # Dog 实现 Pet 时，必须同时满足 Animal 和 Pet 的所有方法
 Dog: Type = {
     x: Int,
-    Pet,
-    speak: (Self) -> String = "Woof",  # 来自 Animal
-    name: (Self) -> String = "Buddy",  # 来自 Pet
+    Pet(Dog),
+    speak: (self: Dog) -> String = "Woof",  # 来自 Animal
+    name: (self: Dog) -> String = "Buddy",  # 来自 Pet
 }
 ```
 
 **设计原则：**
-继承存在，但不鼓励滥用。主要组合方式是通过多个接口声明（`Dog: Type = { Animal, Pet, ... }`）。一个类型可以直接声明它满足的所有接口，不需要通过继承树来表达。接口继承仅在有明确"is-a"层级时使用。
+继承存在，但不鼓励滥用。主要组合方式是通过多个接口实例化（`Dog: Type = { Animal(Dog), Pet(Dog), ... }`）。一个类型可以直接声明它满足的所有接口，不需要通过继承树来表达。接口继承仅在有明确"is-a"层级时使用。
 
-**编译器处理：** 展开继承链。`Pet` 展开为 `{ Animal 的所有方法, name: ... }`。`Dog` 声明 `Pet`
-时，编译器验证 `Dog` 同时满足 `Animal` 和 `Pet` 的全部方法。
+**编译器处理：** 展开继承链。`Pet(Self)` 展开为 `{ Animal(Self) 的所有方法, name: ... }`。`Dog` 声明 `Pet(Dog)`
+时，`Self ↦ Dog`，编译器验证 `Dog` 同时满足 `Animal(Dog)` 和 `Pet(Dog)` 的全部方法。
+
+**接口继承中的 Self 替换**：`Pet: (Self: Type) -> Type = { Animal(Self), ... }` 中，`Animal(Self)` 的 `Self` 是 `Pet` 的 `Self` 参数——它会被延迟替换。当 `Dog` 实现 `Pet(Dog)` 时，`Self ↦ Dog`，`Animal(Self)` 变为 `Animal(Dog)`。这和泛型函数的参数传递语义完全一致。
 
 ## 默认方法实现
 
 接口可以提供方法的默认实现。实现类型可以选择覆盖或继承默认实现：
 
 ```yaoxiang
-fmt: Type = {
-    display: (Self) -> String,                      # 必须实现
-    debug: (Self) -> String = Self.display(),       # ✅ 引用同接口方法
-    summary: (Self) -> String = f"<{Self.name}>",   # ❌ 编译错误：Self.name 不在 fmt 里
+fmt: (Self: Type) -> Type = {
+    display: (self: Self) -> String,                      # 必须实现
+    debug: (self: Self) -> String = self.display(),       # ✅ 引用同接口方法
+    summary: (self: Self) -> String = f"<{self.name}>",  # ❌ 编译错误：self.name 不在 fmt 里
 }
 ```
 
 **核心约束：接口不能假设上级实现。**
 默认方法只能引用同一个接口中已声明的方法。具体类型的字段或其他接口的方法对默认方法不可见——接口是一个闭合的契约，不能伸手去摸实现类型的口袋。违反此约束在**接口定义时**直接报错。
 
-**继承可以假设下级实现：** 当接口 `Pet` 继承 `Animal` 时，`Pet` 的默认方法可以使用 `Animal`
+**继承可以假设下级实现：** 当接口 `Pet(Self)` 继承 `Animal(Self)` 时，`Pet` 的默认方法可以使用 `Animal`
 声明的方法——因为继承了，所以保证有。
 
 ```yaoxiang
-Animal: Type = {
-    speak: (Self) -> String,
+Animal: (Self: Type) -> Type = {
+    speak: (self: Self) -> String,
 }
 
-Pet: Type = {
-    Animal,                                              # 继承
-    name: (Self) -> String,
-    introduce: (Self) -> String = Self.name() + " says " + Self.speak(),  # ✅ speak 来自继承的 Animal
+Pet: (Self: Type) -> Type = {
+    Animal(Self),                                              # 继承
+    name: (self: Self) -> String,
+    introduce: (self: Self) -> String = self.name() + " says " + self.speak(),  # ✅ speak 来自继承的 Animal
 }
 ```
 
@@ -717,15 +773,16 @@ Pet: Type = {
 
 | 阶段    | 内容                    | 依赖    |
 | ------- | ----------------------- | ------- |
-| Phase 1 | 接口声明语法            | RFC-011 |
-| Phase 2 | 方法实现的内部/外部声明 | Phase 1 |
-| Phase 3 | 重载与覆盖规则          | Phase 2 |
-| Phase 4 | 默认值语法              | Phase 2 |
-| Phase 5 | 接口继承                | Phase 3 |
-| Phase 6 | 默认方法实现            | Phase 5 |
-| Phase 7 | 实现证明生成            | Phase 6 |
-| Phase 8 | 编译期类型收集          | Phase 7 |
-| Phase 9 | 动态分发实现            | Phase 8 |
+| Phase 1 | 接口声明语法（`(Self: Type) -> Type`） + Self 类型参数 | RFC-011 |
+| Phase 2 | 接口实例化（`Animal(Dog)`） + Self ↦ ConcreteType 替换 | Phase 1 |
+| Phase 3 | 方法实现的内部/外部声明 | Phase 2 |
+| Phase 4 | 重载与覆盖规则          | Phase 3 |
+| Phase 5 | 默认值语法              | Phase 3 |
+| Phase 6 | 接口继承                | Phase 4 |
+| Phase 7 | 默认方法实现            | Phase 6 |
+| Phase 8 | 实现证明生成            | Phase 7 |
+| Phase 9 | 编译期类型收集          | Phase 8 |
+| Phase 10| 动态分发实现            | Phase 9 |
 
 ---
 
@@ -733,24 +790,29 @@ Pet: Type = {
 
 | 决策                | 决定                                                 | 原因                                                                        | 日期       |
 | ------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------- | ---------- |
-| 接口声明语法        | 类型体内直接写接口名                                 | 消除 `impl` 关键字，接口声明是类型定义的自然组成部分                        | 2026-06-14 |
+| 接口声明语法        | 接口是参数化类型 `(Self: Type) -> Type`，实现时实例化 | 消除 `Self` 魔法关键字，与 RFC-011 泛型系统完全统一                         | 2026-06-14 |
+| Self 类型参数       | 显式类型参数，接口定义时仅语法检查，实例化点完整检查  | 避免 HM 推断中的自由类型变量                                                | 2026-06-14 |
 | 动态分发            | 编译期类型收集 + 自动枚举生成                        | 无虚表，零运行时查找，用户透明                                              | 2026-06-14 |
 | 外部方法声明        | 支持                                                 | 灵活性与内部声明等价，编译器负责跨文件收集                                  | 2026-06-14 |
 | 覆盖                | 禁止（同签名报错）                                   | 覆盖导致不可预测的行为，重载覆盖率所有情况                                  | 2026-06-14 |
-| 接口继承            | 支持，无新语法                                       | 和类型声明接口相同的语法位置。鼓励组合（多接口声明），不鼓励深层继承树      | 2026-07-03 |
+| 接口继承            | 支持，无新语法                                       | 和类型声明接口相同的语法位置。鼓励组合（多接口实例化），不鼓励深层继承树    | 2026-07-03 |
 | 默认方法实现        | 支持，类似 Copy/Clone 自动派生                       | 接口提供默认体，编译器在实现类型上内联；用户可覆盖。不引入 virtual/override | 2026-07-03 |
 | 默认方法约束        | 接口定义时验证：只能引用同接口方法，不可假设上级实现 | 接口是闭合契约。继承可以假设下级实现，但接口不能假设实现类型的字段/方法     | 2026-07-03 |
 | 类型收集策略        | 所有权追踪，增量构建——在每个 append/构造点收集       | 不是全局扫描所有实现者，是按所有权操作点增量扩展枚举                        | 2026-07-03 |
 | ImplementationProof | 纯编译期概念，运行时擦除                             | 运行时走枚举 match 分发，证明仅用于编译期验证                               | 2026-07-03 |
-| 跨编译单元          | 链接时合并各单元枚举变体                             | 与链接时单态化共用机制，各单元生成部分枚举，链接器合并                      | 2026-07-03 |
+| 跨编译单元          | LTO 合并枚举变体                                     | 存在类型在编译单元边界传递，各单元生成部分枚举，LTO 阶段合并                | 2026-07-03 |
+| 字段/方法命名空间   | 统一命名空间，冲突报错                               | 字段访问 `point.x` 和方法调用 `point.x()` 无法语法区分，统一避免歧义       | 2026-07-03 |
+| 异构容器所有权      | Move 语义，放入容器后原始变量不可用                  | 与 RFC-009 所有权模型一致                                                   | 2026-07-03 |
+| 品牌投影            | match 模式绑定产生子品牌，与字段投影等价             | 与 RFC-009a 品牌树机制一致，enum 变体投影是品牌树的合法路径                 | 2026-07-03 |
 
 ## 开放问题
 
-- [x] ~~接口继承（接口可以继承其他接口）~~ → 支持，无新语法。`Pet: Type = { Animal, ... }`
+- [x] ~~接口继承（接口可以继承其他接口）~~ → 支持，无新语法。`Pet: (Self: Type) -> Type = { Animal(Self), ... }`
 - [x] ~~默认方法实现（接口可以提供默认实现）~~
       → 支持，类似 Copy 自动派生。接口提供 body，编译器按需内联
-- [ ] 接口约束的高级用法（关联类型、GAT）
-- [ ] 与闭包的交互（闭包实现接口）
+- [x] ~~Self 作为隐式魔法关键字~~ → 消除。`Self` 是显式类型参数，接口即 `(Self: Type) -> Type`
+- [ ] 接口约束的高级用法（关联类型、GAT）—— 关联类型通过泛型接口参数实现（`Container: (Self: Type, T: Type) -> Type`），GAT 需要进一步设计
+- [ ] 与闭包的交互（闭包实现接口）—— 初始策略：闭包不支持直接实现接口，需要 wrapper 类型。匿名类型的接口实现留待后续 RFC
 
 ---
 
