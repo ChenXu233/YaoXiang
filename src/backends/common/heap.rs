@@ -109,6 +109,11 @@ impl HeapValue {
             HeapValue::Dict(m) => m.len(),
         }
     }
+
+    /// Whether this collection is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 /// Heap storage for runtime values
@@ -158,6 +163,11 @@ impl Heap {
     /// Get the number of allocated values
     pub fn len(&self) -> usize {
         self.allocated.len()
+    }
+
+    /// Whether no values are allocated
+    pub fn is_empty(&self) -> bool {
+        self.allocated.is_empty()
     }
 
     /// Clear all allocated values

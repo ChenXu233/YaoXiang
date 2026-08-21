@@ -16,6 +16,9 @@
 
 #![doc(html_root_url = "https://docs.rs/yaoxiang")]
 #![warn(rust_2018_idioms)]
+// ponytail: RuntimeValue 含 Arc<Mutex> 但作为 dict key 是有意设计（按值 Hash/Eq），
+// clippy 的 mutable_key_type 对本 crate 全是误报。
+#![allow(clippy::mutable_key_type)]
 
 // Public modules
 pub mod backends;

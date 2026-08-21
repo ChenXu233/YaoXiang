@@ -1755,10 +1755,12 @@ impl AstToIrGenerator {
 
         // #271 #2：有 init 表达式但常量折叠不到 → 硬错误（不再静默填 0）。
         // 无 init 的绑定保留零初始化语义（C 风格默认值，非静默兜底）。
-        if initializer.is_some() && init_value.is_none() {
-            return Err(ErrorCodeDefinition::top_level_init_not_const(name)
-                .at(Self::get_expr_span(initializer.expect("checked above")))
-                .build());
+        if let Some(init) = initializer {
+            if init_value.is_none() {
+                return Err(ErrorCodeDefinition::top_level_init_not_const(name)
+                    .at(Self::get_expr_span(init))
+                    .build());
+            }
         }
 
         // 注册到全局变量表（init_value 由 init 表达式的常量折叠得；折叠不到的留 None）

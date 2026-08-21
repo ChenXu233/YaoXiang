@@ -51,8 +51,6 @@ SpawnFor { var, var_mut, iterable, body, span },  // spawn for x in items { ... 
 
 `spawn <expr>`：`spawn` 修饰任意表达式。表达式的形状决定 DAG 如何分解任务。
 
-
-
 ### 用户心智模型
 
 `spawn` = "把这个表达式拿去做并发"。表达式的形状决定怎么拆：
