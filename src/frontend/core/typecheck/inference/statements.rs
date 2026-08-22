@@ -769,8 +769,40 @@ impl StatementChecker {
             // 类型定义是模块级概念（checker.rs pass1 只扫 module.items 注册）——
             // 模块级出现合法（pass1 已注册，此处无事可做）；函数体内出现此前
             // 落 `_ => Ok(())` 静默跳过（#295），留下误导性「Unknown variable」错误。
-            crate::frontend::core::parser::ast::StmtKind::TypeDefinition { name, .. } => {
+            crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
+                name,
+                definition,
+                ..
+            } => {
                 if self.scope.at_module_level() {
+                    // 字段默认值表达式检查：此前完全未检查，未绑定变量会漏到
+                    // IR 生成变成 E3006 内部错误（#297 探索发现）。典型误用：
+                    // 体内写方法 `get_x: (self: &T) -> R = { self.x }`——该形式被
+                    // parser 解析为带默认值的字段，默认值在构造点求值，self 不在作用域。
+                    // 方法应在顶层定义（`T.name: ... = ...`）或用 [positions] 绑定语法。
+                    match definition {
+                        crate::frontend::core::parser::ast::Type::Struct { body } => {
+                            for item in body {
+                                if let crate::frontend::core::parser::ast::TypeBodyItem::Field(f) =
+                                    item
+                                {
+                                    if let Some(default) = &f.default {
+                                        self.check_expr(default)?;
+                                    }
+                                }
+                            }
+                        }
+                        crate::frontend::core::parser::ast::Type::NamedStruct {
+                            fields, ..
+                        } => {
+                            for f in fields {
+                                if let Some(default) = &f.default {
+                                    self.check_expr(default)?;
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
                     Ok(())
                 } else {
                     Err(Box::new(
