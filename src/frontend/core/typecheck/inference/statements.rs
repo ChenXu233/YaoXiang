@@ -13,6 +13,7 @@ use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable, TypeConstraintSolver};
 use crate::frontend::core::parser::ast::{classify_generic_params, Block, Expr, Param, Stmt};
 use crate::frontend::core::typecheck::scope::VarInfo;
+use crate::frontend::core::typecheck::checker::collect_used_in_type;
 use crate::middle::passes::mono::instance::InstantiationRequest;
 
 use super::scope::ScopeManager;
@@ -896,8 +897,8 @@ impl StatementChecker {
             .collect();
 
         // === 函数 const 泛型判定（用途分析） ===
-        // 与 checker.rs 中 collect_function_signature 相同逻辑
-        let const_generic_params: Vec<_> = generic_params
+        // 精筛唯一实现在 const_param::resolve_const_candidates（RFC-011 §4.1）
+        let candidate_names: std::collections::HashSet<String> = generic_params
             .iter()
             .filter(|p| {
                 matches!(
@@ -905,17 +906,11 @@ impl StatementChecker {
                     crate::frontend::core::parser::ast::GenericParamKind::Const { .. }
                 )
             })
+            .map(|p| p.name.clone())
             .collect();
 
-        let mut const_binders: Vec<crate::frontend::core::types::const_data::ConstVarDef> =
-            Vec::new();
-        if !const_generic_params.is_empty() {
-            let candidate_names: std::collections::HashSet<String> = const_generic_params
-                .iter()
-                .map(|p| p.name.clone())
-                .collect();
-            let mut used_as_const = std::collections::HashSet::new();
-
+        let mut used_as_const: std::collections::HashSet<String> = std::collections::HashSet::new();
+        if !candidate_names.is_empty() {
             // 扫描内层 Fn 的 params 判断 const 用途
             if let Some(crate::frontend::core::parser::ast::Type::Fn { return_type, .. }) =
                 type_annotation
@@ -926,53 +921,21 @@ impl StatementChecker {
                 } = return_type.as_ref()
                 {
                     for p in inner_params {
-                        crate::frontend::core::typecheck::checker::collect_used_in_type(
-                            p,
-                            &candidate_names,
-                            &mut used_as_const,
-                        );
+                        collect_used_in_type(p, &candidate_names, &mut used_as_const);
                     }
                 }
-                crate::frontend::core::typecheck::checker::collect_used_in_type(
-                    return_type,
-                    &candidate_names,
-                    &mut used_as_const,
-                );
-            }
-
-            let type_param_names: Vec<String> =
-                type_generic_params.iter().map(|p| p.name.clone()).collect();
-            for (i, gp) in const_generic_params.iter().enumerate() {
-                if used_as_const.contains(&gp.name) {
-                    if let crate::frontend::core::parser::ast::GenericParamKind::Const {
-                        const_type,
-                    } = &gp.kind
-                    {
-                        let type_name = match const_type.as_ref() {
-                            crate::frontend::core::parser::ast::Type::Name { name, .. } => {
-                                name.clone()
-                            }
-                            crate::frontend::core::parser::ast::Type::Int(_) => "Int".to_string(),
-                            crate::frontend::core::parser::ast::Type::Float(_) => {
-                                "Float".to_string()
-                            }
-                            crate::frontend::core::parser::ast::Type::Bool => "Bool".to_string(),
-                            _ => "Int".to_string(),
-                        };
-                        let kind = crate::frontend::core::types::const_data::ConstKind::from_ast_type_name(&type_name)
-                            .unwrap_or(crate::frontend::core::types::const_data::ConstKind::Int(None));
-                        let idx = type_param_names.len() + i;
-                        const_binders.push(
-                            crate::frontend::core::types::const_data::ConstVarDef::new(
-                                gp.name.clone(),
-                                kind,
-                                idx,
-                            ),
-                        );
-                    }
-                }
+                collect_used_in_type(return_type, &candidate_names, &mut used_as_const);
             }
         }
+
+        let resolved = crate::frontend::core::typecheck::const_param::resolve_const_candidates(
+            &generic_params,
+            signature_params,
+            &used_as_const,
+            type_generic_params.len(),
+        );
+        let const_binders: Vec<crate::frontend::core::types::const_data::ConstVarDef> =
+            resolved.const_binders;
 
         // 将函数自身注册到变量环境中
         if let Some(type_ann) = type_annotation {

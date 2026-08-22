@@ -13,6 +13,9 @@ use crate::frontend::core::parser::ast::{Module, Expr};
 // 编译期谓词解析器
 pub mod predicate_resolver;
 
+// 编译期值参数判定（RFC-011 §4.1 两步判定的唯一实现）
+pub mod const_param;
+
 // 导入推断模块
 pub mod inference;
 

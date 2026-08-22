@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::parser::ast::{
-    classify_generic_params, Expr, GenericParam, GenericParamKind, Module, Param, TypeBodyItem,
+    classify_generic_params, Expr, GenericParamKind, Module, Param, TypeBodyItem,
 };
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable};
 use crate::frontend::core::types::const_data::{ConstExpr, ConstValue, BinOp, ConstKind, ConstVarDef};
@@ -737,10 +737,10 @@ impl TypeChecker {
                     .collect();
 
                 // === 函数 const 泛型判定（用途分析） ===
-                // 候选 = generic_params 中 annotation 为原始类型的参数（const 候选）。
+                // 候选 = generic_params 中 annotation 为具体类型的参数（形态粗筛产物）。
                 // 扫描 curry 后续组的类型标注（内层 Fn 的 params），
-                // 被引用的候选 → const。
-                let const_generic_params: Vec<_> = generic_params
+                // 被引用的候选 → const。精筛唯一实现在 const_param.rs（RFC-011 §4.1）。
+                let candidate_names: HashSet<String> = generic_params
                     .iter()
                     .filter(|p| {
                         matches!(
@@ -748,16 +748,11 @@ impl TypeChecker {
                             crate::frontend::core::parser::ast::GenericParamKind::Const { .. }
                         )
                     })
+                    .map(|p| p.name.clone())
                     .collect();
 
-                let mut const_binders: Vec<ConstVarDef> = Vec::new();
-                if !const_generic_params.is_empty() {
-                    let candidate_names: HashSet<String> = const_generic_params
-                        .iter()
-                        .map(|p| p.name.clone())
-                        .collect();
-                    let mut used_as_const = HashSet::new();
-
+                let mut used_as_const = HashSet::new();
+                if !candidate_names.is_empty() {
                     // 扫描内层 Fn 的 params：对于 (N: Int) -> (n: N) -> Int，
                     // type_annotation.return_type 是 Fn { params: [Type::Name("N")], ... }。
                     // N 出现在内层 params 中 → const。
@@ -777,38 +772,16 @@ impl TypeChecker {
                         // 也扫描 return_type 自身（深度嵌套场景）
                         collect_used_in_type(return_type, &candidate_names, &mut used_as_const);
                     }
-
-                    let type_param_names: Vec<String> =
-                        type_generic_params.iter().map(|p| p.name.clone()).collect();
-                    for (i, gp) in const_generic_params.iter().enumerate() {
-                        if used_as_const.contains(&gp.name) {
-                            if let crate::frontend::core::parser::ast::GenericParamKind::Const {
-                                const_type,
-                            } = &gp.kind
-                            {
-                                let type_name = match const_type.as_ref() {
-                                    crate::frontend::core::parser::ast::Type::Name {
-                                        name, ..
-                                    } => name.clone(),
-                                    crate::frontend::core::parser::ast::Type::Int(_) => {
-                                        "Int".to_string()
-                                    }
-                                    crate::frontend::core::parser::ast::Type::Float(_) => {
-                                        "Float".to_string()
-                                    }
-                                    crate::frontend::core::parser::ast::Type::Bool => {
-                                        "Bool".to_string()
-                                    }
-                                    _ => "Int".to_string(),
-                                };
-                                let kind = ConstKind::from_ast_type_name(&type_name)
-                                    .unwrap_or(ConstKind::Int(None));
-                                let idx = type_param_names.len() + i;
-                                const_binders.push(ConstVarDef::new(gp.name.clone(), kind, idx));
-                            }
-                        }
-                    }
                 }
+
+                let resolved_const =
+                    crate::frontend::core::typecheck::const_param::resolve_const_candidates(
+                        &generic_params,
+                        signature_params,
+                        &used_as_const,
+                        type_generic_params.len(),
+                    );
+                let const_binders: Vec<ConstVarDef> = resolved_const.const_binders;
 
                 let (final_param_types, final_return_type) = if !type_generic_params.is_empty()
                     && param_types.len() >= type_generic_params.len()
@@ -1288,61 +1261,34 @@ impl TypeChecker {
                 .map(|p| p.name.clone())
                 .collect();
 
-            // const 判定：用途分析是唯一裁判（取代名单+大小写猜测）。
-            // 候选 = generic_params 里 annotation 为具体类型的参数；
-            // 只有在类型体中被当编译期值/类型使用的候选，才认定为 const。
-            let const_candidates: Vec<(&GenericParam, ConstKind)> = generic_params
+            // const 判定：用途分析是唯一裁判（RFC-011 §4.1 精筛唯一实现在 const_param.rs）。
+            let candidate_names: HashSet<String> = generic_params
                 .iter()
-                .filter_map(|p| {
-                    if let GenericParamKind::Const { const_type } = &p.kind {
-                        let type_name = match const_type.as_ref() {
-                            crate::frontend::core::parser::ast::Type::Name { name, .. } => {
-                                name.clone()
-                            }
-                            crate::frontend::core::parser::ast::Type::Int(_) => "Int".to_string(),
-                            crate::frontend::core::parser::ast::Type::Float(_) => {
-                                "Float".to_string()
-                            }
-                            crate::frontend::core::parser::ast::Type::Bool => "Bool".to_string(),
-                            _ => "Int".to_string(),
-                        };
-                        let kind = ConstKind::from_ast_type_name(&type_name)
-                            .unwrap_or(ConstKind::Int(None));
-                        Some((p, kind))
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            let candidate_names: HashSet<String> = const_candidates
-                .iter()
-                .map(|(p, _)| p.name.clone())
+                .filter(|p| matches!(p.kind, GenericParamKind::Const { .. }))
+                .map(|p| p.name.clone())
                 .collect();
             let used_as_const = collect_used_const_names(&candidate_names, definition);
+
+            let resolved_const =
+                crate::frontend::core::typecheck::const_param::resolve_const_candidates(
+                    &generic_params,
+                    signature_params,
+                    &used_as_const,
+                    type_param_names.len(),
+                );
 
             // #297/F：落空 const 候选（标注具体类型但未在类型体任何类型位置引用）
             // 不能静默丢弃——否则实例化 arity 对不上，调用侧报风马牛不相及的 E1010。
             // 按 RFC-011 §4.1 勘误推荐：声明侧直接报错。
-            for (p, _) in &const_candidates {
-                if !used_as_const.contains(&p.name) {
-                    self.add_error(
-                        ErrorCodeDefinition::unused_const_param(&p.name, name)
-                            .at(span)
-                            .build(),
-                    );
-                }
+            for p in &resolved_const.fallen {
+                self.add_error(
+                    ErrorCodeDefinition::unused_const_param(&p.name, name)
+                        .at(span)
+                        .build(),
+                );
             }
 
-            let mut const_binders: Vec<ConstVarDef> = const_candidates
-                .iter()
-                .filter(|(p, _)| used_as_const.contains(&p.name))
-                .enumerate()
-                .map(|(i, (p, kind))| {
-                    let idx = type_param_names.len() + i;
-                    ConstVarDef::new(p.name.clone(), *kind, idx)
-                })
-                .collect();
+            let mut const_binders: Vec<ConstVarDef> = resolved_const.const_binders;
 
             // 从类型体收集待定证明义务到 const 参数
             if let crate::frontend::core::parser::ast::Type::Struct { body } = definition {

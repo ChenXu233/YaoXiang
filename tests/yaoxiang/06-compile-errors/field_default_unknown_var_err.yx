@@ -6,8 +6,6 @@
 //       变成 E3006 内部错误；方法应在顶层定义或用 [positions] 绑定语法
 // 状态: ❌ 应编译失败
 
-use std.assert
-
 Point: Type = {
     x: Float,
     y: Float,
