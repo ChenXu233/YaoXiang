@@ -818,6 +818,14 @@
     "example": "y: IsSmall(1, 2) = 5",
     "error_output": "error[E1093]: 'IsSmall' 冀 1 个实参，实有 2 个"
   },
+  "E1094": {
+    "title": "未用之編譯期值參",
+    "message": "編譯期值參未見引於類體",
+    "template": "'{param}' 宣為 '{type}' 之編譯期值參，然未見引於類體",
+    "help": "宜於類位（字段之型、內層 Fn 參之型、Assert/Array 之型實參）引之，或自宣中刪之",
+    "example": "Foo: (T: Type, N: Int) -> Type = { x: T }",
+    "error_output": "error[E1094]: '{param}' 宣為 '{type}' 之編譯期值參，然未見引於類體"
+  },
   "lex_token_identifier": "詞法分析：標識符 {0}",
   "lex_token_keyword": "詞法分析：關鍵字 {0}",
   "lex_token_number": "詞法分析：數字 {0}",

@@ -151,6 +151,10 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
         code: "E1093",
         category: ErrorCategory::TypeCheck,
     },
+    ErrorCodeDefinition {
+        code: "E1094",
+        category: ErrorCategory::TypeCheck,
+    },
 ];
 
 // 快捷方法实现
@@ -217,7 +221,10 @@ impl ErrorCodeDefinition {
     /// E1092 精化类型实参形态非法（RFC-027，#263）
     ("E1092", refined_arg_not_const(name: &str) => .param("name", name)),
     /// E1093 精化类型实参个数不匹配（RFC-027，#263）
+    /// E1093 精化类型参数数量不匹配
     ("E1093", refined_arity_mismatch(name: &str, expected: usize, found: usize) => .param("name", name) .param("expected", expected.to_string()) .param("found", found.to_string())),
+    /// E1094 编译期值参数未在类型体引用（#297/F）
+    ("E1094", unused_const_param(param: &str, type_: &str) => .param("param", param) .param("type", type_)),
     /// E1090 彩蛋（返回占位符，由 i18n 的 zen_message 提供实际消息）
     ("E1090", type_self_reference_easter_egg() => ),
     }

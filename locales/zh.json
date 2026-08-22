@@ -864,5 +864,13 @@
     "help": "实参个数必须与谓词声明一致，否则精化约束无法生成",
     "example": "y: IsSmall(1, 2) = 5",
     "error_output": "error[E1093]: 'IsSmall' 期望 1 个实参，实际 2 个"
+  },
+  "E1094": {
+    "title": "未使用的编译期值参数",
+    "message": "编译期值参数未在类型体中被引用",
+    "template": "'{param}' 声明为 '{type}' 的编译期值参数，但未在类型体中被引用",
+    "help": "请在类型位置（字段类型、内层 Fn 参数类型、Assert/Array 类型实参）引用该参数，或从声明中移除",
+    "example": "Foo: (T: Type, N: Int) -> Type = { x: T }",
+    "error_output": "error[E1094]: 'N' 声明为 'Foo' 的编译期值参数，但未在类型体中被引用"
   }
 }

@@ -1321,6 +1321,19 @@ impl TypeChecker {
                 .collect();
             let used_as_const = collect_used_const_names(&candidate_names, definition);
 
+            // #297/F：落空 const 候选（标注具体类型但未在类型体任何类型位置引用）
+            // 不能静默丢弃——否则实例化 arity 对不上，调用侧报风马牛不相及的 E1010。
+            // 按 RFC-011 §4.1 勘误推荐：声明侧直接报错。
+            for (p, _) in &const_candidates {
+                if !used_as_const.contains(&p.name) {
+                    self.add_error(
+                        ErrorCodeDefinition::unused_const_param(&p.name, name)
+                            .at(span)
+                            .build(),
+                    );
+                }
+            }
+
             let mut const_binders: Vec<ConstVarDef> = const_candidates
                 .iter()
                 .filter(|(p, _)| used_as_const.contains(&p.name))

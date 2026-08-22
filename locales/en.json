@@ -864,5 +864,13 @@
     "help": "The argument count must match the predicate declaration, otherwise the refinement constraint cannot be generated",
     "example": "y: IsSmall(1, 2) = 5",
     "error_output": "error[E1093]: 'IsSmall' expected 1 argument, found 2"
+  },
+  "E1094": {
+    "title": "Unused compile-time value parameter",
+    "message": "Compile-time value parameter is never referenced in the type body",
+    "template": "'{param}' is declared as a compile-time value parameter of '{type}' but never referenced in the type body",
+    "help": "Either reference the parameter in a type position (field type, inner Fn parameter type, Assert/Array type argument), or remove it from the declaration",
+    "example": "Foo: (T: Type, N: Int) -> Type = { x: T }",
+    "error_output": "error[E1094]: 'N' is declared as a compile-time value parameter of 'Foo' but never referenced in the type body"
   }
 }
