@@ -1140,11 +1140,30 @@ impl AstToIrGenerator {
         // 生成指令序列
         let mut instructions = Vec::new();
 
+        // #297/E 同类：尾表达式作为返回值（与 generate_function_ir 一致），
+        // 否则 `Point.getX: (&Point) -> Float = { self.x }` 返回 Void。
+        let (tail_expr, leading_stmts) = match body.split_last() {
+            Some((
+                ast::Stmt {
+                    kind: ast::StmtKind::Expr(expr),
+                    ..
+                },
+                rest,
+            )) if return_type != MonoType::Void => (Some(expr), rest),
+            _ => (None, body),
+        };
         // 生成语句 IR
-        for stmt in body {
+        for stmt in leading_stmts {
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
         }
-        instructions.push(Instruction::Ret(None));
+        match tail_expr {
+            Some(expr) => {
+                let result_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, result_reg, &mut instructions, constants)?;
+                instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+            }
+            None => instructions.push(Instruction::Ret(None)),
+        }
 
         // 退出作用域
         self.exit_scope();
@@ -1240,7 +1259,19 @@ impl AstToIrGenerator {
         }
 
         // 生成语句 IR
-        for stmt in body {
+        // #297/E：尾表达式作为返回值。解析器把 `f: (...) -> T = expr` / `= { expr }`
+        // 的函数体包成 Block[Expr]，此前尾表达式的值被丢弃，函数返回 Void。
+        let (tail_expr, leading_stmts) = match body.split_last() {
+            Some((
+                ast::Stmt {
+                    kind: ast::StmtKind::Expr(expr),
+                    ..
+                },
+                rest,
+            )) if return_type != MonoType::Void => (Some(expr), rest),
+            _ => (None, body),
+        };
+        for stmt in leading_stmts {
             tlog!(
                 debug,
                 MSG::IrGenBeforeProcessStmt,
@@ -1261,7 +1292,14 @@ impl AstToIrGenerator {
                 &self.symbols.len().to_string()
             );
         }
-        instructions.push(Instruction::Ret(None));
+        match tail_expr {
+            Some(expr) => {
+                let result_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, result_reg, &mut instructions, constants)?;
+                instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+            }
+            None => instructions.push(Instruction::Ret(None)),
+        }
 
         // 退出函数体作用域
         tlog!(
@@ -1408,11 +1446,32 @@ impl AstToIrGenerator {
         // next_temp 起始 = 参数总数
         self.next_temp = env_count + layer.params.len();
 
+        let return_type: MonoType = layer.return_type.clone().into();
+
+        // #297/E 同类：尾表达式作为返回值（与 generate_function_ir 一致），
+        // 否则 `f: (a: Int) -> (b: Int) -> Int = { a + b }` 返回 Void。
+        let (tail_expr, leading_stmts) = match body.split_last() {
+            Some((
+                ast::Stmt {
+                    kind: ast::StmtKind::Expr(expr),
+                    ..
+                },
+                rest,
+            )) if return_type != MonoType::Void => (Some(expr), rest),
+            _ => (None, body),
+        };
         // 执行原 body（复用 generate_local_stmt_ir）
-        for stmt in body {
+        for stmt in leading_stmts {
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
         }
-        instructions.push(Instruction::Ret(None));
+        match tail_expr {
+            Some(expr) => {
+                let result_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, result_reg, &mut instructions, constants)?;
+                instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+            }
+            None => instructions.push(Instruction::Ret(None)),
+        }
 
         let param_types: Vec<MonoType> = layer
             .params
@@ -1420,7 +1479,6 @@ impl AstToIrGenerator {
             .filter_map(|p| p.ty.clone())
             .map(MonoType::from)
             .collect();
-        let return_type: MonoType = layer.return_type.clone().into();
         let total_locals = self.next_temp;
         let locals_types: Vec<MonoType> = vec![MonoType::Int(64); total_locals];
 
