@@ -1,0 +1,20 @@
+// 02-type-system/method_block_tail_expr.yx
+// 覆盖: 顶层方法定义 + 块体尾表达式返回值（#297/E 同类，generate_method_ir）
+// 验证: 方法体尾表达式的值作为返回值，不再返回 Void
+// 状态: ✅ 可运行
+
+use std.assert
+
+Point: Type = { x: Float, y: Float }
+
+Point.get_x: (self: &Point) -> Float = {
+    self.x
+}
+
+main = {
+    // Arrange
+    p = Point(3.0, 4.0)
+    // Act / Assert
+    r = p.get_x()
+    assert.assert(r == 3.0, "get_x should be 3.0")
+}

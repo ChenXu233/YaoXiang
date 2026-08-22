@@ -1,0 +1,12 @@
+// 06-compile-errors/fallen_const_type_param_err.yx
+// [test:error]: 类型构造器的落空 const 候选必须报错，不得静默丢弃
+// 预期: 编译错误 E1094（N 声明为编译期值参数但未在类型体引用）
+// 覆盖: #297 Bug F——Foo 的 N 标注 Int 但未在类型体引用，此前被静默丢弃，
+//       实例化 arity 对不上，调用侧报风马牛不相及的 E1010
+// 状态: ❌ 应编译失败
+
+Foo: (T: Type, N: Int) -> Type = { x: T }
+
+main = {
+    a = Foo(Int)
+}

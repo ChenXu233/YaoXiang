@@ -1,0 +1,22 @@
+// 02-type-system/curry_tail_expr.yx
+// 覆盖: RFC-011 §4.1 函数级 const 泛型 / curry 函数尾表达式返回值（#297/E 同类）
+// 验证: curry 最内层函数体的尾表达式值作为返回值，不再返回 Void
+// 状态: ✅ 可运行
+
+use std.assert
+
+// 块体尾表达式
+f: (a: Int) -> (b: Int) -> Int = {
+    a + b
+}
+
+// 裸表达式值（解析器包成 Block[Expr]）
+g: (N: Int) -> (n: N) -> Int = n * 2
+
+main = {
+    r1 = f(10)(5)
+    assert.assert(r1 == 15, "f(10)(5) should be 15")
+
+    r2 = g(7)(4)
+    assert.assert(r2 == 8, "g(7)(4) should be 8")
+}

@@ -1,0 +1,15 @@
+// 02-type-system/fallen_const_value_param.yx
+// 落空 const 候选按运行时值参数处理（RFC-011 §4.1 勘误）
+// 预期: 编译并运行通过，g(99) 返回 42
+// 覆盖: #297 Bug E——`g: (N: Int) -> Int = 42` 的 N 未在类型位置引用，
+//       按运行时值参数处理；此前 codegen 尾表达式值被丢弃，函数返回 Void
+// 状态: ✅ 应编译运行通过
+
+use std.assert
+
+g: (N: Int) -> Int = 42
+
+main = {
+    a = g(99)
+    assert.assert(a == 42, "g(99) should return 42")
+}
