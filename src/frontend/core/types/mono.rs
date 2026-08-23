@@ -305,6 +305,101 @@ pub enum MonoType {
 }
 
 impl MonoType {
+    /// 判断是否为指定名称的泛型类型
+    pub fn is_generic_named(
+        &self,
+        name: &str,
+    ) -> bool {
+        matches!(self, MonoType::Generic { name: n, .. } if n == name)
+    }
+    pub fn is_list(&self) -> bool {
+        self.is_generic_named("List")
+    }
+    pub fn is_dict(&self) -> bool {
+        self.is_generic_named("Dict")
+    }
+    pub fn is_set(&self) -> bool {
+        self.is_generic_named("Set")
+    }
+    pub fn is_option(&self) -> bool {
+        self.is_generic_named("Option")
+    }
+    pub fn is_result(&self) -> bool {
+        self.is_generic_named("Result")
+    }
+    pub fn is_tuple(&self) -> bool {
+        self.is_generic_named("Tuple")
+    }
+    pub fn is_string(&self) -> bool {
+        self.is_generic_named("String")
+    }
+    pub fn is_bytes(&self) -> bool {
+        self.is_generic_named("Bytes")
+    }
+    pub fn is_array(&self) -> bool {
+        self.is_generic_named("Array")
+    }
+    pub fn is_range(&self) -> bool {
+        self.is_generic_named("Range")
+    }
+
+    /// 取泛型参数（List→[T], Dict→[K,V]），非泛型类型返回 None
+    pub fn generic_args(&self) -> Option<&[MonoType]> {
+        match self {
+            MonoType::Generic { args, .. } => Some(args),
+            _ => None,
+        }
+    }
+
+    /// 构造 List(T)
+    pub fn make_list(elem: MonoType) -> Self {
+        MonoType::Generic {
+            name: "List".into(),
+            args: vec![elem],
+        }
+    }
+    /// 构造 Dict(K,V)
+    pub fn make_dict(
+        k: MonoType,
+        v: MonoType,
+    ) -> Self {
+        MonoType::Generic {
+            name: "Dict".into(),
+            args: vec![k, v],
+        }
+    }
+    /// 构造 Option(T)
+    pub fn make_option(elem: MonoType) -> Self {
+        MonoType::Generic {
+            name: "Option".into(),
+            args: vec![elem],
+        }
+    }
+    /// 构造 Result(T,E)
+    pub fn make_result(
+        t: MonoType,
+        e: MonoType,
+    ) -> Self {
+        MonoType::Generic {
+            name: "Result".into(),
+            args: vec![t, e],
+        }
+    }
+    /// 构造 Tuple(...)
+    pub fn make_tuple(args: Vec<MonoType>) -> Self {
+        MonoType::Generic {
+            name: "Tuple".into(),
+            args,
+        }
+    }
+    /// 构造 String
+    pub fn make_string() -> Self {
+        MonoType::Generic {
+            name: "String".into(),
+            args: vec![],
+        }
+    }
+
     /// 检查是否是数值类型
     pub fn is_numeric(&self) -> bool {
         match self {
