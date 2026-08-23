@@ -801,12 +801,21 @@ impl Interpreter {
                     }
                     RuntimeValue::Dict(handle) => {
                         if let crate::backends::common::HeapValue::Dict(map) = &*handle.lock() {
-                            if let Some(value) = map.get(&idx_value) {
-                                frame.set_slot(dst.0 as usize, value.clone());
+                            match map.get(&idx_value) {
+                                Some(value) => frame.set_slot(dst.0 as usize, value.clone()),
+                                // #299：缺键不再静默返回 void（同 #279 方向）
+                                None => {
+                                    return Err(ExecutorError::runtime_only("dict: key not found"))
+                                }
                             }
                         }
                     }
-                    _ => {}
+                    // #299：不可索引类型（如 String）不再静默 void
+                    _ => {
+                        return Err(ExecutorError::type_only(
+                            "indexing not supported on this value type",
+                        ))
+                    }
                 }
                 frame.advance();
                 Ok(StepOutcome::Continue)
