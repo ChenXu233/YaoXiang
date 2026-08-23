@@ -316,6 +316,14 @@ pub enum BytecodeInstr {
         items: Vec<Reg>,
     },
 
+    /// 定长数组构造：分配 N 个元素、以默认值填充（#299 §2）
+    NewArray {
+        /// 目标寄存器
+        dst: Reg,
+        /// 元素数量
+        count: u32,
+    },
+
     // =====================
     // Arc Operations
     // =====================
@@ -546,6 +554,7 @@ impl BytecodeInstr {
             BytecodeInstr::CreateStruct { .. } => opcode::CREATE_STRUCT,
             BytecodeInstr::NewDict { .. } => opcode::NEW_DICT,
             BytecodeInstr::NewTuple { .. } => opcode::NEW_TUPLE,
+            BytecodeInstr::NewArray { .. } => opcode::NEW_ARRAY,
             BytecodeInstr::ArcNew { .. } => opcode::ARC_NEW,
             BytecodeInstr::RcNew { .. } => opcode::RC_NEW,
             BytecodeInstr::ArcClone { .. } => opcode::ARC_CLONE,
@@ -660,6 +669,10 @@ impl BytecodeInstr {
             BytecodeInstr::NewTuple { items, .. } => {
                 // dst(2) + item_count(4) + items(2*count)
                 6 + items.len() * 2
+            }
+            BytecodeInstr::NewArray { .. } => {
+                // dst(1) + count(4) = 5
+                5
             }
             BytecodeInstr::ArcNew { .. } => 4,
             BytecodeInstr::RcNew { .. } => 4,
@@ -1595,6 +1608,19 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                             decoded_instructions.push(BytecodeInstr::NewTuple {
                                 dst: Reg(dst),
                                 items,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::NEW_ARRAY => {
+                        // NewArray: dst(1) + count(4)
+                        if instr.operands.len() >= 5 {
+                            let dst = instr.operands[0] as u16;
+                            let count = op_u32(&instr.operands, 1).unwrap_or(0);
+                            decoded_instructions.push(BytecodeInstr::NewArray {
+                                dst: Reg(dst),
+                                count,
                             });
                         } else {
                             decoded_instructions.push(BytecodeInstr::Nop);

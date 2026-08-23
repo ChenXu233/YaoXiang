@@ -348,3 +348,97 @@ fn spawn_concurrent_standard_mode() {
     );
     assert_eq!(interp.runtime_config().workers, 1, "workers 应为 1");
 }
+
+/// #299 §2：NewArray 分配定长 Array，元素默认 Void 占位
+#[test]
+fn test_new_array_allocates_fixed_void_slots() {
+    let func = make_function(vec![
+        // r0 = Array(5)（全 Void 占位）
+        BytecodeInstr::NewArray {
+            dst: Reg(0),
+            count: 5,
+        },
+        // return r0
+        BytecodeInstr::ReturnValue { value: Reg(0) },
+    ]);
+
+    let mut interp = Interpreter::new();
+    let result = interp.execute_function(&func, &[]).unwrap();
+
+    match result {
+        RuntimeValue::Array(handle) => {
+            let guard = handle.lock();
+            match &*guard {
+                crate::backends::common::HeapValue::Array(items) => {
+                    assert_eq!(items.len(), 5, "Array 应有 5 个元素占位");
+                    assert!(
+                        items.iter().all(|v| matches!(v, RuntimeValue::Void)),
+                        "元素应默认 Void 占位"
+                    );
+                }
+                other => panic!("应产出 HeapValue::Array，实际: {other:?}"),
+            }
+        }
+        other => panic!("应返回 RuntimeValue::Array，实际: {other:?}"),
+    }
+}
+
+/// #299 §2：NewArray 指令经字节码序列化→解码往返后保持语义
+#[test]
+fn test_new_array_bytecode_roundtrip_decode() {
+    use crate::middle::passes::codegen::{
+        BytecodeFile, BytecodeInstruction, BytecodeHeader, CodeSection, FunctionCode,
+    };
+
+    // 构造原始编码：opcode(1) + dst(1) + count(4, 小端)
+    let mut operands = vec![0u8]; // dst = r0
+    operands.extend_from_slice(&5u32.to_le_bytes()); // count = 5
+    let raw_new_array =
+        BytecodeInstruction::new(crate::backends::common::opcode::NEW_ARRAY, operands);
+    // ReturnValue r0
+    let raw_return =
+        BytecodeInstruction::new(crate::backends::common::opcode::RETURN_VALUE, vec![0u8]);
+
+    let file = BytecodeFile {
+        header: BytecodeHeader {
+            entry_point: 0,
+            ..BytecodeHeader::default()
+        },
+        type_table: vec![],
+        const_pool: vec![],
+        code_section: CodeSection {
+            functions: vec![FunctionCode {
+                name: "main".to_string(),
+                params: vec![],
+                return_type: crate::frontend::core::types::MonoType::Void,
+                instructions: vec![raw_new_array, raw_return],
+                local_count: 1,
+                debug_map: std::collections::HashMap::new(),
+            }],
+        },
+        vtables: vec![],
+        debug_section: None,
+    };
+
+    let module = crate::middle::bytecode::BytecodeModule::from(file);
+    let func = &module.functions[0];
+    assert!(
+        matches!(
+            func.instructions.first(),
+            Some(BytecodeInstr::NewArray {
+                dst: Reg(0),
+                count: 5
+            })
+        ),
+        "第一条应为 NewArray: {:?}",
+        func.instructions
+    );
+
+    // 全链路：解码后执行，验证产出 Array
+    let mut interp = Interpreter::new();
+    let result = interp.execute_function(func, &[]).unwrap();
+    assert!(
+        matches!(result, RuntimeValue::Array(_)),
+        "往返后执行应产出 Array"
+    );
+}

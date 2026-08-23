@@ -77,6 +77,8 @@ pub const CALL_NATIVE: u8 = 0x87;
 pub const NEW_DICT: u8 = 0x88;
 pub const RC_NEW: u8 = 0x89;
 pub const NEW_TUPLE: u8 = 0x8A;
+/// 定长数组构造：分配 N 个元素、以默认值填充（#299 §2）
+pub const NEW_ARRAY: u8 = 0x8B;
 
 // String Operations (0x90-0x9F)
 pub const STRING_LENGTH: u8 = 0x90;
@@ -166,6 +168,7 @@ pub fn opcode_name(code: u8) -> &'static str {
         NEW_DICT => "NewDict",
         RC_NEW => "RcNew",
         NEW_TUPLE => "NewTuple",
+        NEW_ARRAY => "NewArray",
         STRING_LENGTH => "StringLength",
         STRING_CONCAT => "StringConcat",
         STRING_EQUAL => "StringEqual",

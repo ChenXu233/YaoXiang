@@ -713,6 +713,16 @@ impl Interpreter {
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
+            BytecodeInstr::NewArray { dst, count } => {
+                // #299 §2：定长数组——元素默认 Void 占位，后续由字面量/store 填充
+                let items = vec![RuntimeValue::Void; *count as usize];
+                let handle = self
+                    .heap
+                    .allocate(crate::backends::common::HeapValue::Array(items));
+                frame.set_slot(dst.0 as usize, RuntimeValue::Array(handle));
+                frame.advance();
+                Ok(StepOutcome::Continue)
+            }
             BytecodeInstr::NewDict { dst, keys, values } => {
                 let mut map = std::collections::HashMap::new();
                 for (key_reg, val_reg) in keys.iter().zip(values.iter()) {
