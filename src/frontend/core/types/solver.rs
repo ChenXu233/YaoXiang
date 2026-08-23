@@ -953,8 +953,6 @@ impl TypeConstraintSolver {
                 }
                 self.collect_generalizable_vars(return_type, seen, out);
             }
-            // #299：旧容器变体尚未从枚举移除（Task 1.7），统一走 Generic arm 处理
-            _ => {}
         }
     }
 }

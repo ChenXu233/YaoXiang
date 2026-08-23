@@ -342,7 +342,7 @@ fn test_ref_type_mutable_maps_to_void_ir_type() {
     // Arrange
     let ref_ty = MonoType::Ref {
         mutable: true,
-        inner: Box::new(MonoType::String),
+        inner: Box::new(MonoType::make_string()),
     };
     // Act
     let ir_type: IrType = ref_ty.into();

@@ -177,37 +177,16 @@ pub enum MonoType {
     Float(usize),
     /// 字符类型
     Char,
-    /// 字符串类型
-    String,
-    /// 字节数组
-    Bytes,
     /// 结构体类型
     Struct(StructType),
     /// 枚举类型
     Enum(EnumType),
-    /// 元组类型
-    Tuple(Vec<MonoType>),
-    /// 列表类型
-    List(Box<MonoType>),
-    /// 字典类型
-    Dict(Box<MonoType>, Box<MonoType>),
-    /// 集合类型
-    Set(Box<MonoType>),
     /// 函数类型
     Fn {
         /// 参数类型列表
         params: Vec<MonoType>,
         /// 返回类型
         return_type: Box<MonoType>,
-    },
-    /// `Option[T]`（RFC-001）
-    Option(Box<MonoType>),
-    /// Result[T, E]（RFC-001）
-    Result(Box<MonoType>, Box<MonoType>),
-    /// 范围类型 (start..end)
-    Range {
-        /// 元素类型
-        elem_type: Box<MonoType>,
     },
     /// 类型变量（推断中）
     TypeVar(TypeVar),
@@ -225,10 +204,6 @@ pub enum MonoType {
     Union(Vec<MonoType>),
     /// 交集类型 `T1 & T2`
     Intersection(Vec<MonoType>),
-    /// Arc 类型（原子引用计数）
-    Arc(Box<MonoType>),
-    /// Weak 类型（不增加引用计数）
-    Weak(Box<MonoType>),
     /// 借用引用类型：`&T`（不可变）或 `&mut T`（可变）
     /// 编译期零大小类型 — 无运行时表示
     Ref {
@@ -604,8 +579,6 @@ impl MonoType {
             } => {
                 format!("ExternRef({mechanism}, \"{lib}\", \"{symbol}\")")
             }
-            // #299 过渡：旧原生变体残留（Task 1.7 删变体后此 arm 移除）
-            _ => format!("{self:?}"),
         }
     }
 

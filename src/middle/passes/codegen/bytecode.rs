@@ -662,8 +662,6 @@ impl MonoTypeExt for MonoType {
             MonoType::DepFn { .. } => 30, // 依赖函数类型，与普通函数同ID
             MonoType::LibraryRef { .. } | MonoType::ExternRef { .. } => todo!(),
             MonoType::Never => 0, // Never 无运行时表示
-            // #299 过渡：旧容器变体残留（Task 1.7 删变体后此 arm 移除）
-            _ => 47,
         }
     }
 }

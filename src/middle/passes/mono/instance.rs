@@ -278,8 +278,6 @@ fn type_name_hash<H: Hasher>(
             lib.hash(state);
             symbol.hash(state);
         }
-        // #299 过渡：旧容器变体残留（Task 1.7 删变体后此 arm 移除）
-        _ => "legacy-container".hash(state),
     }
 }
 

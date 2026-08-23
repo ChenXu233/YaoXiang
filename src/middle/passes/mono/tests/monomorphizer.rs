@@ -241,7 +241,7 @@ fn test_specialize_type_args_mismatch_returns_none() {
 
     let req = InstantiationRequest::new(
         GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64), MonoType::String],
+        vec![MonoType::Int(64), MonoType::make_string()],
         Span::default(),
     );
 
@@ -853,7 +853,7 @@ fn test_type_specialization_arg_count_mismatch_returns_none() {
 
     let req = InstantiationRequest::new(
         GenericFunctionId::new("Pair".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64), MonoType::String],
+        vec![MonoType::Int(64), MonoType::make_string()],
         Span::default(),
     );
 

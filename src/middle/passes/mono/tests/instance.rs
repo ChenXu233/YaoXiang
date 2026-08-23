@@ -14,7 +14,7 @@ fn test_specialization_key_deduplication() {
     // Arrange
     let key_a = SpecializationKey::new("identity".to_string(), vec![MonoType::Int(64)]);
     let key_b = SpecializationKey::new("identity".to_string(), vec![MonoType::Int(64)]);
-    let key_c = SpecializationKey::new("identity".to_string(), vec![MonoType::String]);
+    let key_c = SpecializationKey::new("identity".to_string(), vec![MonoType::make_string()]);
 
     // Assert: 相同类型参数的 key 应相等
     assert_eq!(key_a, key_b, "相同类型参数的 SpecializationKey 应相等");
