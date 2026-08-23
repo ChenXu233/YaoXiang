@@ -57,11 +57,9 @@ fn type_implements_stringable(mono_type: &MonoType) -> bool {
         // 具体类型：检查方法表中是否有 to_string
         MonoType::Struct(struct_type) => struct_type.methods.contains_key("to_string"),
         // 基础类型默认都有字符串表示
-        MonoType::String
-        | MonoType::Int(_)
-        | MonoType::Float(_)
-        | MonoType::Bool
-        | MonoType::Char => true,
+        MonoType::Int(_) | MonoType::Float(_) | MonoType::Bool | MonoType::Char => true,
+        // #299：String/Bytes 现为 Generic，属可字符串化基础类型
+        MonoType::Generic { name, .. } if matches!(name.as_str(), "String" | "Bytes") => true,
         // 其他类型使用兜底实现
         _ => false,
     }
@@ -75,14 +73,17 @@ fn get_type_fallback_string(mono_type: &MonoType) -> String {
         MonoType::Int(_) => "int".to_string(),
         MonoType::Float(_) => "float".to_string(),
         MonoType::Char => "char".to_string(),
-        MonoType::String => "string".to_string(),
-        MonoType::Bytes => "bytes".to_string(),
         MonoType::Struct(s) => s.name.clone(),
         MonoType::Enum(e) => e.name.clone(),
-        MonoType::Tuple(_) => "tuple".to_string(),
-        MonoType::List(_) => "list".to_string(),
-        MonoType::Dict(_, _) => "dict".to_string(),
-        MonoType::Set(_) => "set".to_string(),
+        MonoType::Generic { name, .. } => match name.as_str() {
+            "Tuple" => "tuple".to_string(),
+            "List" => "list".to_string(),
+            "Dict" => "dict".to_string(),
+            "Set" => "set".to_string(),
+            "String" => "string".to_string(),
+            "Bytes" => "bytes".to_string(),
+            _ => "unknown".to_string(),
+        },
         MonoType::Fn { .. } => "function".to_string(),
         MonoType::TypeRef(name) => name.clone(),
         // 其他类型使用默认名称
@@ -2659,13 +2660,10 @@ impl AstToIrGenerator {
             }
 
             Ok(())
-        } else if let Some(
-            _iter_ty @ (MonoType::List(_)
-            | MonoType::Tuple(_)
-            | MonoType::Dict(_, _)
-            | MonoType::Range { .. }),
-        ) = self.get_expr_mono_type(iterable)
-        {
+        } else if let Some(_iter_ty) = self.get_expr_mono_type(iterable).filter(|t| {
+            // #299 去特殊化：List/Tuple/Dict 为 Generic，Range 仍为原生变体
+            t.is_list() || t.is_tuple() || t.is_dict() || t.is_range()
+        }) {
             // 使用迭代器协议的 For 循环
             self.generate_iterator_for_loop_ir(
                 var_name,
@@ -3116,8 +3114,9 @@ impl AstToIrGenerator {
                 } else {
                     MonoType::Int(64)
                 };
-                Some(MonoType::Range {
-                    elem_type: Box::new(elem_type),
+                Some(MonoType::Generic {
+                    name: "Range".into(),
+                    args: vec![elem_type],
                 })
             }
             ast::Expr::Var(name, _) => {
@@ -3130,15 +3129,12 @@ impl AstToIrGenerator {
                 self.lookup_var_type(name)
                     .map(|poly_type| poly_type.body.clone())
             }
-            ast::Expr::List(_, _) => Some(MonoType::List(Box::new(MonoType::Void))),
+            ast::Expr::List(_, _) => Some(MonoType::make_list(MonoType::Void)),
             ast::Expr::Tuple(items, _) => {
                 let elems = vec![MonoType::Void; items.len()];
-                Some(MonoType::Tuple(elems))
+                Some(MonoType::make_tuple(elems))
             }
-            ast::Expr::Dict(_, _) => Some(MonoType::Dict(
-                Box::new(MonoType::Void),
-                Box::new(MonoType::Void),
-            )),
+            ast::Expr::Dict(_, _) => Some(MonoType::make_dict(MonoType::Void, MonoType::Void)),
             _ => None,
         }
     }

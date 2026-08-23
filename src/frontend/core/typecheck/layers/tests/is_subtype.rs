@@ -23,8 +23,8 @@ fn no_int_to_float() {
 
 #[test]
 fn list_covariance() {
-    let sub = MonoType::List(Box::new(MonoType::Int(32)));
-    let sup = MonoType::List(Box::new(MonoType::Int(32)));
+    let sub = MonoType::make_list(MonoType::Int(32));
+    let sup = MonoType::make_list(MonoType::Int(32));
     assert!(is_subtype(&sub, &sup, None));
 }
 
@@ -42,7 +42,7 @@ fn test_never_is_subtype_of_any() {
     assert!(is_subtype(&MonoType::Never, &MonoType::Int(64), None));
     assert!(is_subtype(&MonoType::Never, &MonoType::Void, None));
     assert!(is_subtype(&MonoType::Never, &MonoType::Bool, None));
-    assert!(is_subtype(&MonoType::Never, &MonoType::String, None));
+    assert!(is_subtype(&MonoType::Never, &MonoType::make_string(), None));
     assert!(is_subtype(
         &MonoType::Never,
         &MonoType::Fn {

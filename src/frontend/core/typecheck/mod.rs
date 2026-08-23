@@ -163,8 +163,10 @@ pub fn add_builtin_types(env: &mut environment::TypeEnvironment) {
         .insert("float".to_string(), PolyType::mono(MonoType::Float(64)));
     env.types
         .insert("bool".to_string(), PolyType::mono(MonoType::Bool));
-    env.types
-        .insert("string".to_string(), PolyType::mono(MonoType::String));
+    env.types.insert(
+        "string".to_string(),
+        PolyType::mono(MonoType::make_string()),
+    );
     env.types
         .insert("void".to_string(), PolyType::mono(MonoType::Void));
     env.types
@@ -219,7 +221,7 @@ pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
     env.native_signatures.insert(
         "Native.c".to_string(),
         MonoType::Fn {
-            params: vec![MonoType::String],
+            params: vec![MonoType::make_string()],
             return_type: Box::new(MonoType::LibraryRef {
                 mechanism: "c".to_string(),
                 lib: String::new(), // placeholder, filled at IR gen compile-time
@@ -232,7 +234,7 @@ pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
     env.native_signatures.insert(
         "Native.rs".to_string(),
         MonoType::Fn {
-            params: vec![MonoType::String],
+            params: vec![MonoType::make_string()],
             return_type: Box::new(MonoType::ExternRef {
                 mechanism: "rs".to_string(),
                 lib: String::new(),    // placeholder
@@ -253,7 +255,7 @@ pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
                 (
                     "c".to_string(),
                     MonoType::Fn {
-                        params: vec![MonoType::String],
+                        params: vec![MonoType::make_string()],
                         return_type: Box::new(MonoType::LibraryRef {
                             mechanism: "c".to_string(),
                             lib: String::new(),
@@ -263,7 +265,7 @@ pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
                 (
                     "rs".to_string(),
                     MonoType::Fn {
-                        params: vec![MonoType::String],
+                        params: vec![MonoType::make_string()],
                         return_type: Box::new(MonoType::ExternRef {
                             mechanism: "rs".to_string(),
                             lib: String::new(),

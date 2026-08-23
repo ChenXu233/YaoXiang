@@ -438,7 +438,7 @@ fn test_generic_size_primitives() {
     assert_eq!(gs.size_of(&MonoType::Bool), Ok(1));
     assert_eq!(gs.size_of(&MonoType::Int(32)), Ok(8));
     assert_eq!(gs.size_of(&MonoType::Float(64)), Ok(8));
-    assert_eq!(gs.size_of(&MonoType::String), Ok(8));
+    assert_eq!(gs.size_of(&MonoType::make_string()), Ok(8));
     assert_eq!(gs.size_of(&MonoType::Void), Ok(0));
     assert_eq!(gs.size_of(&MonoType::TypeRef("Int".to_string())), Ok(8));
     assert_eq!(gs.size_of(&MonoType::TypeRef("Bool".to_string())), Ok(1));
@@ -448,7 +448,7 @@ fn test_generic_size_primitives() {
 fn test_generic_size_tuple() {
     let gs = GenericSize::new();
     assert_eq!(
-        gs.size_of(&MonoType::Tuple(vec![
+        gs.size_of(&MonoType::make_tuple(vec![
             MonoType::Bool,
             MonoType::Int(64),
             MonoType::Float(32)
@@ -460,9 +460,7 @@ fn test_generic_size_tuple() {
 #[test]
 fn test_generic_size_dynamic_list() {
     let gs = GenericSize::new();
-    assert!(gs
-        .size_of(&MonoType::List(Box::new(MonoType::Int(32))))
-        .is_err());
+    assert!(gs.size_of(&MonoType::make_list(MonoType::Int(32))).is_err());
 }
 
 #[test]
@@ -868,13 +866,16 @@ fn test_generic_size_struct() {
 #[test]
 fn test_generic_size_empty_tuple() {
     let gs = GenericSize::new();
-    assert_eq!(gs.size_of(&MonoType::Tuple(vec![])), Ok(0));
+    assert_eq!(gs.size_of(&MonoType::make_tuple(vec![])), Ok(0));
 }
 
 #[test]
 fn test_generic_size_single_element_tuple() {
     let gs = GenericSize::new();
-    assert_eq!(gs.size_of(&MonoType::Tuple(vec![MonoType::Int(32)])), Ok(8));
+    assert_eq!(
+        gs.size_of(&MonoType::make_tuple(vec![MonoType::Int(32)])),
+        Ok(8)
+    );
 }
 
 #[test]
@@ -1007,9 +1008,9 @@ fn test_generic_size_dict() {
     let gs = GenericSize::new();
     // Dict is not supported
     assert!(gs
-        .size_of(&MonoType::Dict(
-            Box::new(MonoType::String),
-            Box::new(MonoType::Int(32))
+        .size_of(&MonoType::make_dict(
+            MonoType::make_string(),
+            MonoType::Int(32),
         ))
         .is_err());
 }
@@ -1019,7 +1020,10 @@ fn test_generic_size_set() {
     let gs = GenericSize::new();
     // Set is not supported
     assert!(gs
-        .size_of(&MonoType::Set(Box::new(MonoType::Bool)))
+        .size_of(&MonoType::Generic {
+            name: "Set".into(),
+            args: vec![MonoType::Bool]
+        })
         .is_err());
 }
 
@@ -1028,8 +1032,9 @@ fn test_generic_size_range() {
     let gs = GenericSize::new();
     // Range is not supported
     assert!(gs
-        .size_of(&MonoType::Range {
-            elem_type: Box::new(MonoType::Int(64))
+        .size_of(&MonoType::Generic {
+            name: "Range".into(),
+            args: vec![MonoType::Int(64)]
         })
         .is_err());
 }
@@ -1039,7 +1044,10 @@ fn test_generic_size_arc() {
     let gs = GenericSize::new();
     // Arc is not supported
     assert!(gs
-        .size_of(&MonoType::Arc(Box::new(MonoType::Int(32))))
+        .size_of(&MonoType::Generic {
+            name: "Arc".into(),
+            args: vec![MonoType::Int(32)]
+        })
         .is_err());
 }
 
@@ -1048,7 +1056,10 @@ fn test_generic_size_weak() {
     let gs = GenericSize::new();
     // Weak is not supported
     assert!(gs
-        .size_of(&MonoType::Weak(Box::new(MonoType::String)))
+        .size_of(&MonoType::Generic {
+            name: "Weak".into(),
+            args: vec![MonoType::make_string()]
+        })
         .is_err());
 }
 
@@ -1057,7 +1068,7 @@ fn test_generic_size_option() {
     let gs = GenericSize::new();
     // Option is not supported
     assert!(gs
-        .size_of(&MonoType::Option(Box::new(MonoType::Int(32))))
+        .size_of(&MonoType::make_option(MonoType::Int(32)))
         .is_err());
 }
 
@@ -1066,9 +1077,9 @@ fn test_generic_size_result() {
     let gs = GenericSize::new();
     // Result is not supported
     assert!(gs
-        .size_of(&MonoType::Result(
-            Box::new(MonoType::Int(32)),
-            Box::new(MonoType::String)
+        .size_of(&MonoType::make_result(
+            MonoType::Int(32),
+            MonoType::make_string(),
         ))
         .is_err());
 }
@@ -1078,7 +1089,10 @@ fn test_generic_size_union() {
     let gs = GenericSize::new();
     // Union is not supported
     assert!(gs
-        .size_of(&MonoType::Union(vec![MonoType::Int(32), MonoType::String]))
+        .size_of(&MonoType::Union(vec![
+            MonoType::Int(32),
+            MonoType::make_string()
+        ]))
         .is_err());
 }
 

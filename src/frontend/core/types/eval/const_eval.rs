@@ -619,7 +619,7 @@ impl GenericSize {
                 .get("Float")
                 .cloned()
                 .ok_or("Float not found".to_string()),
-            MonoType::String => self
+            MonoType::Generic { name, .. } if name == "String" => self
                 .base_sizes
                 .get("String")
                 .cloned()
@@ -641,14 +641,14 @@ impl GenericSize {
                     .cloned()
                     .ok_or_else(|| format!("TypeRef {} not found", name))
             }
-            MonoType::Tuple(types) => {
+            MonoType::Generic { name, args } if name == "Tuple" => {
                 let mut total = 0;
-                for ty in types {
+                for ty in args {
                     total += self.size_of(ty)?;
                 }
                 Ok(total)
             }
-            MonoType::List(_elem_type) => {
+            MonoType::Generic { name, .. } if name == "List" => {
                 // List<T> 大小未知（动态大小），返回错误
                 Err("Cannot compute size of dynamic List type".to_string())
             }
@@ -969,8 +969,11 @@ pub fn ast_type_to_mono_type(ty: &Type) -> Option<MonoType> {
         Type::Int(n) => Some(MonoType::Int(*n)),
         Type::Float(n) => Some(MonoType::Float(*n)),
         Type::Char => Some(MonoType::Char),
-        Type::String => Some(MonoType::String),
-        Type::Bytes => Some(MonoType::Bytes),
+        Type::String => Some(MonoType::make_string()),
+        Type::Bytes => Some(MonoType::Generic {
+            name: "Bytes".into(),
+            args: vec![],
+        }),
         Type::Bool => Some(MonoType::Bool),
         Type::Void => Some(MonoType::Void),
         _ => None,

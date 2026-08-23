@@ -1082,7 +1082,7 @@ impl OwnershipChecker {
         match ty {
             MonoType::Ref { mutable: false, .. } => CopySemantics::Dup,
             MonoType::Ref { mutable: true, .. } => CopySemantics::Linear,
-            MonoType::Arc(_) => CopySemantics::Dup,
+            m if m.is_arc() => CopySemantics::Dup,
             MonoType::Int(_) | MonoType::Float(_) | MonoType::Bool | MonoType::Char => {
                 CopySemantics::ValueCopy
             }

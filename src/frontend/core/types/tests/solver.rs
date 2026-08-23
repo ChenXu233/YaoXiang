@@ -56,9 +56,15 @@ fn test_unify_primitives() {
         .unify(&MonoType::Float(64), &MonoType::Float(64))
         .is_ok());
     assert!(solver.unify(&MonoType::Bool, &MonoType::Bool).is_ok());
-    assert!(solver.unify(&MonoType::String, &MonoType::String).is_ok());
+    assert!(solver
+        .unify(&MonoType::make_string(), &MonoType::make_string())
+        .is_ok());
     assert!(solver.unify(&MonoType::Char, &MonoType::Char).is_ok());
-    assert!(solver.unify(&MonoType::Bytes, &MonoType::Bytes).is_ok());
+    let bytes = MonoType::Generic {
+        name: "Bytes".into(),
+        args: vec![],
+    };
+    assert!(solver.unify(&bytes, &bytes).is_ok());
     assert!(solver.unify(&MonoType::Void, &MonoType::Void).is_ok());
 }
 
@@ -76,10 +82,16 @@ fn test_unify_int_width_mismatch() {
 #[test]
 fn test_unify_cross_kind_mismatch() {
     let mut solver = s();
+    let bytes = MonoType::Generic {
+        name: "Bytes".into(),
+        args: vec![],
+    };
     assert!(solver.unify(&MonoType::Int(32), &MonoType::Bool).is_err());
-    assert!(solver.unify(&MonoType::String, &MonoType::Int(64)).is_err());
+    assert!(solver
+        .unify(&MonoType::make_string(), &MonoType::Int(64))
+        .is_err());
     assert!(solver.unify(&MonoType::Void, &MonoType::Bool).is_err());
-    assert!(solver.unify(&MonoType::Char, &MonoType::Bytes).is_err());
+    assert!(solver.unify(&MonoType::Char, &bytes).is_err());
 }
 
 // §3.3: 结构体统一
@@ -129,7 +141,7 @@ fn test_unify_struct_different_field_name() {
 fn test_unify_struct_different_field_type() {
     let mut solver = s();
     let a = struct_ty("P", vec![("v", MonoType::Int(32))]);
-    let b = struct_ty("P", vec![("v", MonoType::String)]);
+    let b = struct_ty("P", vec![("v", MonoType::make_string())]);
     assert!(solver.unify(&a, &b).is_err());
 }
 
@@ -191,8 +203,8 @@ fn test_unify_enum_different_variants() {
 #[test]
 fn test_unify_tuple_structural() {
     let mut solver = s();
-    let a = MonoType::Tuple(vec![MonoType::Int(32), MonoType::String]);
-    let b = MonoType::Tuple(vec![MonoType::Int(32), MonoType::String]);
+    let a = MonoType::make_tuple(vec![MonoType::Int(32), MonoType::make_string()]);
+    let b = MonoType::make_tuple(vec![MonoType::Int(32), MonoType::make_string()]);
     assert!(solver.unify(&a, &b).is_ok());
 }
 
@@ -200,8 +212,8 @@ fn test_unify_tuple_structural() {
 fn test_unify_tuple_with_var() {
     let mut solver = s();
     let v = solver.new_var();
-    let a = MonoType::Tuple(vec![MonoType::Int(32)]);
-    let b = MonoType::Tuple(vec![v]);
+    let a = MonoType::make_tuple(vec![MonoType::Int(32)]);
+    let b = MonoType::make_tuple(vec![v]);
     assert!(solver.unify(&a, &b).is_ok());
 }
 
@@ -212,11 +224,11 @@ fn test_unify_fn_params() {
     let mut solver = s();
     let f1 = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::Bool],
-        return_type: Box::new(MonoType::String),
+        return_type: Box::new(MonoType::make_string()),
     };
     let f2 = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::Bool],
-        return_type: Box::new(MonoType::String),
+        return_type: Box::new(MonoType::make_string()),
     };
     assert!(solver.unify(&f1, &f2).is_ok());
 }
@@ -245,7 +257,7 @@ fn test_unify_fn_with_vars() {
     };
     let f2 = MonoType::Fn {
         params: vec![MonoType::Int(32)],
-        return_type: Box::new(MonoType::String),
+        return_type: Box::new(MonoType::make_string()),
     };
     assert!(solver.unify(&f1, &f2).is_ok());
 }
@@ -256,8 +268,8 @@ fn test_unify_fn_with_vars() {
 fn test_unify_result_nested() {
     let mut solver = s();
     let v = solver.new_var();
-    let r1 = MonoType::Result(Box::new(MonoType::Int(32)), Box::new(MonoType::String));
-    let r2 = MonoType::Result(Box::new(v.clone()), Box::new(MonoType::String));
+    let r1 = MonoType::make_result(MonoType::Int(32), MonoType::make_string());
+    let r2 = MonoType::make_result(v.clone(), MonoType::make_string());
     assert!(solver.unify(&r1, &r2).is_ok());
 }
 
@@ -266,21 +278,21 @@ fn test_unify_result_nested() {
 #[test]
 fn test_unify_union_self() {
     let mut solver = s();
-    let u = MonoType::Union(vec![MonoType::Int(32), MonoType::String]);
+    let u = MonoType::Union(vec![MonoType::Int(32), MonoType::make_string()]);
     assert!(solver.unify(&u, &u).is_ok());
 }
 
 #[test]
 fn test_unify_union_with_concrete() {
     let mut solver = s();
-    let u = MonoType::Union(vec![MonoType::Int(32), MonoType::String]);
+    let u = MonoType::Union(vec![MonoType::Int(32), MonoType::make_string()]);
     assert!(solver.unify(&u, &MonoType::Int(32)).is_ok());
 }
 
 #[test]
 fn test_unify_union_with_unrelated() {
     let mut solver = s();
-    let u = MonoType::Union(vec![MonoType::Int(32), MonoType::String]);
+    let u = MonoType::Union(vec![MonoType::Int(32), MonoType::make_string()]);
     assert!(solver.unify(&u, &MonoType::Bool).is_err());
 }
 
@@ -375,11 +387,11 @@ fn test_bind_occurs_check_nested() {
     let v1 = solver.new_var().type_var().unwrap();
     // Bind v0 → List(v1)
     assert!(solver
-        .bind(v0, &MonoType::List(Box::new(MonoType::TypeVar(v1))))
+        .bind(v0, &MonoType::make_list(MonoType::TypeVar(v1)))
         .is_ok());
     // Bind v1 → List(v0) should fail (v1 appears inside v0 which contains v1)
     assert!(solver
-        .bind(v1, &MonoType::List(Box::new(MonoType::TypeVar(v0))))
+        .bind(v1, &MonoType::make_list(MonoType::TypeVar(v0)))
         .is_err());
 }
 
@@ -469,7 +481,7 @@ fn test_unify_var_twice_consistent() {
     // Second unify with same type is fine
     assert!(solver.unify(&v, &MonoType::Int(32)).is_ok());
     // Unify with conflicting type fails
-    assert!(solver.unify(&v, &MonoType::String).is_err());
+    assert!(solver.unify(&v, &MonoType::make_string()).is_err());
 }
 
 #[test]
@@ -497,10 +509,7 @@ fn test_contains_var_nested() {
     assert!(solver.contains_var(
         &MonoType::Struct(StructType {
             name: "W".to_string(),
-            fields: vec![(
-                "v".to_string(),
-                MonoType::List(Box::new(MonoType::TypeVar(tv)))
-            )],
+            fields: vec![("v".to_string(), MonoType::make_list(MonoType::TypeVar(tv)))],
             methods: std::collections::HashMap::new(),
             field_mutability: vec![false],
             field_has_default: vec![false],
@@ -525,7 +534,7 @@ fn test_solve_contradictory_constraints() {
     let mut solver = s();
     let v = solver.new_var();
     solver.add_constraint(v.clone(), MonoType::Int(32), Span::dummy());
-    solver.add_constraint(v, MonoType::String, Span::dummy());
+    solver.add_constraint(v, MonoType::make_string(), Span::dummy());
     assert!(solver.solve().is_err());
 }
 
@@ -580,11 +589,14 @@ fn test_resolve_builtin_types() {
     );
     assert_eq!(
         solver.resolve_type(&MonoType::TypeRef("String".to_string())),
-        MonoType::String
+        MonoType::make_string()
     );
     assert_eq!(
         solver.resolve_type(&MonoType::TypeRef("Bytes".to_string())),
-        MonoType::Bytes
+        MonoType::Generic {
+            name: "Bytes".into(),
+            args: vec![]
+        }
     );
     assert_eq!(
         solver.resolve_type(&MonoType::TypeRef("Void".to_string())),
@@ -607,58 +619,75 @@ fn test_expand_type_through_all_containers() {
     // Bind a var, then resolve a container that uses that var
     let mut solver = s();
     let v = solver.new_var().type_var().unwrap();
-    let _ = solver.bind(v, &MonoType::String);
+    let _ = solver.bind(v, &MonoType::make_string());
 
     // Dict with var key/value
-    let dict = MonoType::Dict(
-        Box::new(MonoType::TypeVar(v)),
-        Box::new(MonoType::TypeVar(v)),
-    );
+    let dict = MonoType::make_dict(MonoType::TypeVar(v), MonoType::TypeVar(v));
     let resolved = solver.resolve_type(&dict);
     assert_eq!(
         resolved,
-        MonoType::Dict(Box::new(MonoType::String), Box::new(MonoType::String))
+        MonoType::make_dict(MonoType::make_string(), MonoType::make_string())
     );
 
     // Set with var element
-    let set = MonoType::Set(Box::new(MonoType::TypeVar(v)));
+    let set = MonoType::Generic {
+        name: "Set".into(),
+        args: vec![MonoType::TypeVar(v)],
+    };
     assert_eq!(
         solver.resolve_type(&set),
-        MonoType::Set(Box::new(MonoType::String))
+        MonoType::Generic {
+            name: "Set".into(),
+            args: vec![MonoType::make_string()]
+        }
     );
 
     // Range with var elem_type
-    let range = MonoType::Range {
-        elem_type: Box::new(MonoType::TypeVar(v)),
+    let range = MonoType::Generic {
+        name: "Range".into(),
+        args: vec![MonoType::TypeVar(v)],
     };
     assert_eq!(
         solver.resolve_type(&range),
-        MonoType::Range {
-            elem_type: Box::new(MonoType::String)
+        MonoType::Generic {
+            name: "Range".into(),
+            args: vec![MonoType::make_string()]
         }
     );
 
     // Arc/Weak with var inner
     assert_eq!(
-        solver.resolve_type(&MonoType::Arc(Box::new(MonoType::TypeVar(v)))),
-        MonoType::Arc(Box::new(MonoType::String))
+        solver.resolve_type(&MonoType::Generic {
+            name: "Arc".into(),
+            args: vec![MonoType::TypeVar(v)]
+        }),
+        MonoType::Generic {
+            name: "Arc".into(),
+            args: vec![MonoType::make_string()]
+        }
     );
     assert_eq!(
-        solver.resolve_type(&MonoType::Weak(Box::new(MonoType::TypeVar(v)))),
-        MonoType::Weak(Box::new(MonoType::String))
+        solver.resolve_type(&MonoType::Generic {
+            name: "Weak".into(),
+            args: vec![MonoType::TypeVar(v)]
+        }),
+        MonoType::Generic {
+            name: "Weak".into(),
+            args: vec![MonoType::make_string()]
+        }
     );
 
     // Option with var inner
-    let opt = MonoType::Option(Box::new(MonoType::TypeVar(v)));
+    let opt = MonoType::make_option(MonoType::TypeVar(v));
     assert_eq!(
         solver.resolve_type(&opt),
-        MonoType::Option(Box::new(MonoType::String))
+        MonoType::make_option(MonoType::make_string())
     );
 
     // Result with var
-    let res = MonoType::Result(Box::new(MonoType::TypeVar(v)), Box::new(MonoType::Int(32)));
+    let res = MonoType::make_result(MonoType::TypeVar(v), MonoType::Int(32));
     let r = solver.resolve_type(&res);
-    assert!(matches!(r, MonoType::Result(..)));
+    assert!(matches!(r, MonoType::Generic { name, .. } if name == "Result"));
 
     // Fn with var
     let fn_t = MonoType::Fn {
@@ -674,7 +703,7 @@ fn test_expand_type_through_all_containers() {
     assert!(matches!(u, MonoType::Union(_)));
 
     // Intersection with var
-    let inter = MonoType::Intersection(vec![MonoType::TypeVar(v), MonoType::String]);
+    let inter = MonoType::Intersection(vec![MonoType::TypeVar(v), MonoType::make_string()]);
     let i = solver.resolve_type(&inter);
     assert!(matches!(i, MonoType::Intersection(_)));
 
@@ -705,22 +734,29 @@ fn test_expand_mut_through_all_containers() {
     let _ = solver.bind(v, &MonoType::Bool);
 
     // resolve (mut version) through various containers
-    let dict = MonoType::Dict(Box::new(MonoType::TypeVar(v)), Box::new(MonoType::Int(32)));
+    let dict = MonoType::make_dict(MonoType::TypeVar(v), MonoType::Int(32));
     assert_eq!(
         solver.resolve(&dict),
-        MonoType::Dict(Box::new(MonoType::Bool), Box::new(MonoType::Int(32)))
+        MonoType::make_dict(MonoType::Bool, MonoType::Int(32))
     );
 
-    let set = MonoType::Set(Box::new(MonoType::TypeVar(v)));
+    let set = MonoType::Generic {
+        name: "Set".into(),
+        args: vec![MonoType::TypeVar(v)],
+    };
     assert_eq!(
         solver.resolve(&set),
-        MonoType::Set(Box::new(MonoType::Bool))
+        MonoType::Generic {
+            name: "Set".into(),
+            args: vec![MonoType::Bool]
+        }
     );
 
-    let range = MonoType::Range {
-        elem_type: Box::new(MonoType::TypeVar(v)),
+    let range = MonoType::Generic {
+        name: "Range".into(),
+        args: vec![MonoType::TypeVar(v)],
     };
-    assert!(matches!(solver.resolve(&range), MonoType::Range { .. }));
+    assert!(matches!(solver.resolve(&range), MonoType::Generic { name, .. } if name == "Range"));
 
     let union = MonoType::Union(vec![MonoType::TypeVar(v)]);
     assert!(matches!(solver.resolve(&union), MonoType::Union(_)));
@@ -762,14 +798,21 @@ fn test_contains_var_in_containers() {
     assert!(solver.contains_var(&a, v));
 
     // Note: contains_var may not handle Weak - checking what's implemented
-    assert!(solver.contains_var(&MonoType::Arc(Box::new(MonoType::TypeVar(v))), v));
     assert!(solver.contains_var(
-        &MonoType::Range {
-            elem_type: Box::new(MonoType::TypeVar(v))
+        &MonoType::Generic {
+            name: "Arc".into(),
+            args: vec![MonoType::TypeVar(v)]
         },
         v
     ));
-    assert!(solver.contains_var(&MonoType::List(Box::new(MonoType::TypeVar(v))), v));
+    assert!(solver.contains_var(
+        &MonoType::Generic {
+            name: "Range".into(),
+            args: vec![MonoType::TypeVar(v)]
+        },
+        v
+    ));
+    assert!(solver.contains_var(&MonoType::make_list(MonoType::TypeVar(v)), v));
 
     // Negative cases
     assert!(!solver.contains_var(&MonoType::Int(32), v));
@@ -809,11 +852,11 @@ fn test_instantiate_with_result_wrapped_types() {
     let tv = TypeVar::new(0);
     let poly = PolyType::new(
         vec![tv],
-        MonoType::Result(Box::new(MonoType::TypeVar(tv)), Box::new(MonoType::String)),
+        MonoType::make_result(MonoType::TypeVar(tv), MonoType::make_string()),
     );
     let inst = solver.instantiate(&poly);
     assert!(
-        matches!(inst, MonoType::Result(..)),
+        matches!(inst, MonoType::Generic { name, .. } if name == "Result"),
         "should instantiate Result"
     );
 }
@@ -822,10 +865,10 @@ fn test_instantiate_with_result_wrapped_types() {
 fn test_instantiate_with_option_wrapped_types() {
     let mut solver = s();
     let tv = TypeVar::new(0);
-    let poly = PolyType::new(vec![tv], MonoType::Option(Box::new(MonoType::TypeVar(tv))));
+    let poly = PolyType::new(vec![tv], MonoType::make_option(MonoType::TypeVar(tv)));
     let inst = solver.instantiate(&poly);
     assert!(
-        matches!(inst, MonoType::Option(_)),
+        matches!(inst, MonoType::Generic { name, .. } if name == "Option"),
         "should instantiate Option"
     );
 }
@@ -836,7 +879,10 @@ fn test_instantiate_with_option_wrapped_types() {
 fn test_generalize_with_arc_wrapped_types() {
     let mut solver = s();
     let v = solver.new_var().type_var().unwrap();
-    let body = MonoType::Arc(Box::new(MonoType::TypeVar(v)));
+    let body = MonoType::Generic {
+        name: "Arc".into(),
+        args: vec![MonoType::TypeVar(v)],
+    };
     let poly = solver.generalize(&body);
     assert!(!poly.is_mono(), "Arc with free var should generalize");
 }
@@ -845,7 +891,10 @@ fn test_generalize_with_arc_wrapped_types() {
 fn test_generalize_with_weak_wrapped_types() {
     let mut solver = s();
     let v = solver.new_var().type_var().unwrap();
-    let body = MonoType::Weak(Box::new(MonoType::TypeVar(v)));
+    let body = MonoType::Generic {
+        name: "Weak".into(),
+        args: vec![MonoType::TypeVar(v)],
+    };
     let poly = solver.generalize(&body);
     assert!(!poly.is_mono(), "Weak with free var should generalize");
 }
@@ -856,11 +905,11 @@ fn test_generalize_with_weak_wrapped_types() {
 fn test_contains_var_in_option() {
     let mut solver = s();
     let v = solver.new_var().type_var().unwrap();
-    let opt = MonoType::Option(Box::new(MonoType::TypeVar(v)));
-    // Note: contains_var currently doesn't handle Option - falls through to _ => false
+    let opt = MonoType::make_option(MonoType::TypeVar(v));
+    // #299：Generic arm 递归查找，Option 能正确找到变量（不再 fall-through）
     assert!(
-        !solver.contains_var(&opt, v),
-        "Option is not handled by contains_var (falls through)"
+        solver.contains_var(&opt, v),
+        "Option 包含类型变量应返回 true（Generic 递归）"
     );
 }
 
@@ -868,11 +917,11 @@ fn test_contains_var_in_option() {
 fn test_contains_var_in_result() {
     let mut solver = s();
     let v = solver.new_var().type_var().unwrap();
-    let res = MonoType::Result(Box::new(MonoType::TypeVar(v)), Box::new(MonoType::String));
-    // Note: contains_var currently doesn't handle Result - falls through to _ => false
+    let res = MonoType::make_result(MonoType::TypeVar(v), MonoType::make_string());
+    // #299：Generic arm 递归查找，Result 能正确找到变量（不再 fall-through）
     assert!(
-        !solver.contains_var(&res, v),
-        "Result is not handled by contains_var (falls through)"
+        solver.contains_var(&res, v),
+        "Result 包含类型变量应返回 true（Generic 递归）"
     );
 }
 
@@ -910,8 +959,8 @@ fn test_solve_with_multiple_constraints_on_same_var() {
 #[test]
 fn test_unify_list_same_element_type() {
     let mut solver = s();
-    let a = MonoType::List(Box::new(MonoType::Int(32)));
-    let b = MonoType::List(Box::new(MonoType::Int(32)));
+    let a = MonoType::make_list(MonoType::Int(32));
+    let b = MonoType::make_list(MonoType::Int(32));
     assert!(
         solver.unify(&a, &b).is_ok(),
         "List(T) should unify with List(T)"
@@ -921,8 +970,8 @@ fn test_unify_list_same_element_type() {
 #[test]
 fn test_unify_list_different_element_type() {
     let mut solver = s();
-    let a = MonoType::List(Box::new(MonoType::Int(32)));
-    let b = MonoType::List(Box::new(MonoType::Float(64)));
+    let a = MonoType::make_list(MonoType::Int(32));
+    let b = MonoType::make_list(MonoType::Float(64));
     assert!(
         solver.unify(&a, &b).is_err(),
         "List(Int) should not unify with List(Float)"
@@ -933,8 +982,8 @@ fn test_unify_list_different_element_type() {
 fn test_unify_list_with_var() {
     let mut solver = s();
     let v = solver.new_var();
-    let a = MonoType::List(Box::new(MonoType::Int(32)));
-    let b = MonoType::List(Box::new(v));
+    let a = MonoType::make_list(MonoType::Int(32));
+    let b = MonoType::make_list(v);
     assert!(
         solver.unify(&a, &b).is_ok(),
         "List(Int) should unify with List(var)"
@@ -967,7 +1016,7 @@ fn test_generalize_collects_free_vars() {
     // Type with multiple free vars
     let body = MonoType::Fn {
         params: vec![MonoType::TypeVar(v0)],
-        return_type: Box::new(MonoType::Tuple(vec![
+        return_type: Box::new(MonoType::make_tuple(vec![
             MonoType::TypeVar(v0),
             MonoType::TypeVar(v1),
         ])),
@@ -999,7 +1048,7 @@ fn test_solve_multiple_independent() {
     let v1 = solver.new_var();
     let v2 = solver.new_var();
     solver.add_constraint(v1, MonoType::Int(32), Span::dummy());
-    solver.add_constraint(v2, MonoType::String, Span::dummy());
+    solver.add_constraint(v2, MonoType::make_string(), Span::dummy());
     assert!(solver.solve().is_ok());
 }
 
@@ -1013,14 +1062,17 @@ fn test_instantiate_poly_with_tuple() {
     // PolyType where body is Tuple([T, Int(32)])
     let poly = PolyType::new(
         vec![tv],
-        MonoType::Tuple(vec![MonoType::TypeVar(tv), MonoType::Int(32)]),
+        MonoType::make_tuple(vec![MonoType::TypeVar(tv), MonoType::Int(32)]),
     );
     let inst = solver.instantiate(&poly);
-    assert!(matches!(inst, MonoType::Tuple(ref ts) if ts.len() == 2));
+    assert!(
+        matches!(inst, MonoType::Generic { ref name, ref args } if name == "Tuple" && args.len() == 2)
+    );
     // The first element should be a fresh TypeVar (not the original tv)
-    if let MonoType::Tuple(ts) = inst {
-        assert!(matches!(ts[0], MonoType::TypeVar(_)));
-        assert_eq!(ts[1], MonoType::Int(32));
+    if let MonoType::Generic { name, args } = inst {
+        assert!(name == "Tuple");
+        assert!(matches!(args[0], MonoType::TypeVar(_)));
+        assert_eq!(args[1], MonoType::Int(32));
     }
 }
 
@@ -1030,13 +1082,10 @@ fn test_instantiate_poly_with_dict() {
     let tv = TypeVar::new(0);
     let poly = PolyType::new(
         vec![tv],
-        MonoType::Dict(
-            Box::new(MonoType::TypeVar(tv)),
-            Box::new(MonoType::TypeVar(tv)),
-        ),
+        MonoType::make_dict(MonoType::TypeVar(tv), MonoType::TypeVar(tv)),
     );
     let inst = solver.instantiate(&poly);
-    assert!(matches!(inst, MonoType::Dict(..)));
+    assert!(matches!(inst, MonoType::Generic { name, .. } if name == "Dict"));
 }
 
 #[test]
@@ -1066,8 +1115,9 @@ fn test_instantiate_poly_with_union_and_range() {
         vec![tv],
         MonoType::Union(vec![
             MonoType::TypeVar(tv),
-            MonoType::Range {
-                elem_type: Box::new(MonoType::TypeVar(tv)),
+            MonoType::Generic {
+                name: "Range".into(),
+                args: vec![MonoType::TypeVar(tv)],
             },
         ]),
     );
@@ -1082,7 +1132,10 @@ fn test_instantiate_poly_with_assoc_and_arc() {
     let poly = PolyType::new(
         vec![tv],
         MonoType::AssocType {
-            host_type: Box::new(MonoType::Arc(Box::new(MonoType::TypeVar(tv)))),
+            host_type: Box::new(MonoType::Generic {
+                name: "Arc".into(),
+                args: vec![MonoType::TypeVar(tv)],
+            }),
             assoc_name: "Item".to_string(),
             assoc_args: vec![MonoType::TypeVar(tv)],
         },
@@ -1129,15 +1182,23 @@ fn test_expand_mut_fn_with_bound_var() {
 fn test_unify_union_unordered_matching() {
     let mut solver = s();
     // Two unions with same elements in different order
-    let u1 = MonoType::Union(vec![MonoType::Int(32), MonoType::String, MonoType::Bool]);
-    let u2 = MonoType::Union(vec![MonoType::String, MonoType::Bool, MonoType::Int(32)]);
+    let u1 = MonoType::Union(vec![
+        MonoType::Int(32),
+        MonoType::make_string(),
+        MonoType::Bool,
+    ]);
+    let u2 = MonoType::Union(vec![
+        MonoType::make_string(),
+        MonoType::Bool,
+        MonoType::Int(32),
+    ]);
     assert!(solver.unify(&u1, &u2).is_ok());
 }
 
 #[test]
 fn test_unify_union_unordered_mismatch() {
     let mut solver = s();
-    let u1 = MonoType::Union(vec![MonoType::Int(32), MonoType::String]);
+    let u1 = MonoType::Union(vec![MonoType::Int(32), MonoType::make_string()]);
     let u2 = MonoType::Union(vec![MonoType::Int(32), MonoType::Bool]);
     assert!(solver.unify(&u1, &u2).is_err());
 }
@@ -1153,7 +1214,7 @@ fn test_generalize_with_nested_containers() {
         name: "Outer".to_string(),
         fields: vec![(
             "inner".to_string(),
-            MonoType::Tuple(vec![MonoType::List(Box::new(MonoType::TypeVar(v)))]),
+            MonoType::make_tuple(vec![MonoType::make_list(MonoType::TypeVar(v))]),
         )],
         methods: std::collections::HashMap::new(),
         field_mutability: vec![false],

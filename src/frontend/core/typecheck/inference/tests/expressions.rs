@@ -95,7 +95,7 @@ fn test_infer_string_literal() {
     assert!(result.is_ok(), "should infer string literal");
     assert_eq!(
         result.unwrap(),
-        MonoType::String,
+        MonoType::make_string(),
         "string literal should be String"
     );
 }

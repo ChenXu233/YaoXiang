@@ -37,7 +37,7 @@ fn make_nonempty_def() -> PredicateDef {
     // 实际上 len(s) 需要函数调用，但阶段 1 我们只测基础路径
     PredicateDef {
         param_name: "s".into(),
-        param_type: MonoType::String,
+        param_type: MonoType::make_string(),
         constraint: binop(
             BinOp::Gt,
             ConstExpr::NamedVar("s".into()),

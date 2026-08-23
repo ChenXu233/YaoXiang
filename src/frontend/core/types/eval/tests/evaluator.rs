@@ -56,7 +56,7 @@ fn test_type_evaluator_eval_fn_type() {
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
     let fn_type = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::Float(64)],
-        return_type: Box::new(MonoType::String),
+        return_type: Box::new(MonoType::make_string()),
     };
 
     // Act
@@ -74,7 +74,11 @@ fn test_type_evaluator_eval_tuple_type() {
     let mut dep_env = DependentTypeEnv::new();
     crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
-    let tuple_type = MonoType::Tuple(vec![MonoType::Int(32), MonoType::Bool, MonoType::String]);
+    let tuple_type = MonoType::make_tuple(vec![
+        MonoType::Int(32),
+        MonoType::Bool,
+        MonoType::make_string(),
+    ]);
 
     // Act
     let result = evaluator.eval(&tuple_type);
@@ -91,7 +95,7 @@ fn test_type_evaluator_eval_list_type() {
     let mut dep_env = DependentTypeEnv::new();
     crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
-    let list_type = MonoType::List(Box::new(MonoType::Float(64)));
+    let list_type = MonoType::make_list(MonoType::Float(64));
 
     // Act
     let result = evaluator.eval(&list_type);
@@ -119,7 +123,7 @@ fn test_type_evaluator_eval_max_depth_exceeded() {
             params: vec![MonoType::Int(32)],
             return_type: Box::new(MonoType::Float(64)),
         }],
-        return_type: Box::new(MonoType::String),
+        return_type: Box::new(MonoType::make_string()),
     };
 
     // Act
@@ -143,14 +147,14 @@ fn test_type_evaluator_eval_nested_type() {
     crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
     let nested_type = MonoType::Fn {
-        params: vec![MonoType::Tuple(vec![
-            MonoType::List(Box::new(MonoType::Int(32))),
+        params: vec![MonoType::make_tuple(vec![
+            MonoType::make_list(MonoType::Int(32)),
             MonoType::Fn {
                 params: vec![MonoType::Bool],
-                return_type: Box::new(MonoType::String),
+                return_type: Box::new(MonoType::make_string()),
             },
         ])],
-        return_type: Box::new(MonoType::List(Box::new(MonoType::Float(64)))),
+        return_type: Box::new(MonoType::make_list(MonoType::Float(64))),
     };
 
     // Act

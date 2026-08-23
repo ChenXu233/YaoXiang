@@ -348,35 +348,6 @@ impl TypeEnvironment {
                     interfaces: s.interfaces.clone(),
                 })
             }
-            MonoType::List(elem) => {
-                let new_elem = Self::replace_type_params(elem, param_names, args);
-                MonoType::List(Box::new(new_elem))
-            }
-            MonoType::Option(elem) => {
-                let new_elem = Self::replace_type_params(elem, param_names, args);
-                MonoType::Option(Box::new(new_elem))
-            }
-            MonoType::Result(ok, err) => {
-                let new_ok = Self::replace_type_params(ok, param_names, args);
-                let new_err = Self::replace_type_params(err, param_names, args);
-                MonoType::Result(Box::new(new_ok), Box::new(new_err))
-            }
-            MonoType::Tuple(elems) => {
-                let new_elems: Vec<MonoType> = elems
-                    .iter()
-                    .map(|e| Self::replace_type_params(e, param_names, args))
-                    .collect();
-                MonoType::Tuple(new_elems)
-            }
-            MonoType::Dict(k, v) => {
-                let new_k = Self::replace_type_params(k, param_names, args);
-                let new_v = Self::replace_type_params(v, param_names, args);
-                MonoType::Dict(Box::new(new_k), Box::new(new_v))
-            }
-            MonoType::Set(elem) => {
-                let new_elem = Self::replace_type_params(elem, param_names, args);
-                MonoType::Set(Box::new(new_elem))
-            }
             MonoType::Fn {
                 params,
                 return_type,
@@ -391,14 +362,11 @@ impl TypeEnvironment {
                     return_type: Box::new(new_ret),
                 }
             }
-            MonoType::Arc(elem) => {
-                let new_elem = Self::replace_type_params(elem, param_names, args);
-                MonoType::Arc(Box::new(new_elem))
-            }
-            MonoType::Range { elem_type } => {
-                let new_elem = Self::replace_type_params(elem_type, param_names, args);
-                MonoType::Range {
-                    elem_type: Box::new(new_elem),
+            MonoType::Generic { name, args } if name == "Range" && args.len() == 1 => {
+                let new_elem = Self::replace_type_params(&args[0], param_names, args);
+                MonoType::Generic {
+                    name: "Range".into(),
+                    args: vec![new_elem],
                 }
             }
             MonoType::Generic {
@@ -440,20 +408,6 @@ impl TypeEnvironment {
                     interfaces: s.interfaces.clone(),
                 })
             }
-            MonoType::List(elem) => MonoType::List(Box::new(Self::resolve_type_refs(elem))),
-            MonoType::Option(elem) => MonoType::Option(Box::new(Self::resolve_type_refs(elem))),
-            MonoType::Result(ok, err) => MonoType::Result(
-                Box::new(Self::resolve_type_refs(ok)),
-                Box::new(Self::resolve_type_refs(err)),
-            ),
-            MonoType::Tuple(elems) => {
-                MonoType::Tuple(elems.iter().map(Self::resolve_type_refs).collect())
-            }
-            MonoType::Dict(k, v) => MonoType::Dict(
-                Box::new(Self::resolve_type_refs(k)),
-                Box::new(Self::resolve_type_refs(v)),
-            ),
-            MonoType::Set(elem) => MonoType::Set(Box::new(Self::resolve_type_refs(elem))),
             MonoType::Generic { name, args } => {
                 let new_args = args.iter().map(Self::resolve_type_refs).collect();
                 MonoType::Generic {

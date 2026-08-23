@@ -232,10 +232,10 @@ fn test_duck_type_multiple_methods() {
     let serializable = create_interface(
         "Serializable",
         vec![
-            ("serialize", fn_type(vec![], MonoType::String)),
+            ("serialize", fn_type(vec![], MonoType::make_string())),
             (
                 "deserialize",
-                fn_type(vec![MonoType::String], MonoType::Bool),
+                fn_type(vec![MonoType::make_string()], MonoType::Bool),
             ),
         ],
     );
@@ -247,13 +247,16 @@ fn test_duck_type_multiple_methods() {
                 "serialize",
                 fn_type(
                     vec![MonoType::TypeRef("Data".to_string())],
-                    MonoType::String,
+                    MonoType::make_string(),
                 ),
             ),
             (
                 "deserialize",
                 fn_type(
-                    vec![MonoType::TypeRef("Data".to_string()), MonoType::String],
+                    vec![
+                        MonoType::TypeRef("Data".to_string()),
+                        MonoType::make_string(),
+                    ],
                     MonoType::Bool,
                 ),
             ),
@@ -283,7 +286,7 @@ fn test_duck_type_field_methods() {
     let handler = MonoType::Struct(StructType {
         name: "Handler".to_string(),
         fields: vec![
-            ("name".to_string(), MonoType::String),
+            ("name".to_string(), MonoType::make_string()),
             (
                 "call".to_string(),
                 fn_type(vec![MonoType::Int(64)], MonoType::Bool),
@@ -362,7 +365,7 @@ fn test_interface_intersection_satisfied() {
     );
     let serializable = create_interface(
         "Serializable",
-        vec![("serialize", fn_type(vec![], MonoType::String))],
+        vec![("serialize", fn_type(vec![], MonoType::make_string()))],
     );
     let intersection = MonoType::Intersection(vec![drawable, serializable]);
     let (point, env) = create_struct(
@@ -383,7 +386,7 @@ fn test_interface_intersection_satisfied() {
                 "serialize",
                 fn_type(
                     vec![MonoType::TypeRef("Point".to_string())],
-                    MonoType::String,
+                    MonoType::make_string(),
                 ),
             ),
         ],
@@ -417,7 +420,7 @@ fn test_interface_intersection_missing_one() {
     );
     let serializable = create_interface(
         "Serializable",
-        vec![("serialize", fn_type(vec![], MonoType::String))],
+        vec![("serialize", fn_type(vec![], MonoType::make_string()))],
     );
     let intersection = MonoType::Intersection(vec![drawable, serializable]);
     let (point, env) = create_struct(
@@ -452,8 +455,8 @@ fn test_duck_typing_with_multiple_matching_methods() {
     let display = create_interface(
         "Display",
         vec![
-            ("fmt", fn_type(vec![], MonoType::String)),
-            ("debug", fn_type(vec![], MonoType::String)),
+            ("fmt", fn_type(vec![], MonoType::make_string())),
+            ("debug", fn_type(vec![], MonoType::make_string())),
         ],
     );
     let (data, env) = create_struct(
@@ -464,14 +467,14 @@ fn test_duck_typing_with_multiple_matching_methods() {
                 "fmt",
                 fn_type(
                     vec![MonoType::TypeRef("Data".to_string())],
-                    MonoType::String,
+                    MonoType::make_string(),
                 ),
             ),
             (
                 "debug",
                 fn_type(
                     vec![MonoType::TypeRef("Data".to_string())],
-                    MonoType::String,
+                    MonoType::make_string(),
                 ),
             ),
         ],

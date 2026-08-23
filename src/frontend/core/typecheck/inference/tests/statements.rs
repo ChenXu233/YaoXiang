@@ -432,7 +432,7 @@ fn test_check_scope_level_queries() {
     let mut checker = make_checker();
     checker.add_var(
         "global".to_string(),
-        PolyType::mono(MonoType::String),
+        PolyType::mono(MonoType::make_string()),
         false,
         crate::util::span::Span::default(),
     );

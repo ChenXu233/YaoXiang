@@ -154,18 +154,6 @@ fn bind_generic_vars(
             .find(|(n, _)| n == name)
             .map(|(_, var)| var.clone())
             .unwrap_or(ty),
-        MonoType::List(inner) => MonoType::List(Box::new(bind_generic_vars(*inner, binders))),
-        MonoType::Dict(k, v) => MonoType::Dict(
-            Box::new(bind_generic_vars(*k, binders)),
-            Box::new(bind_generic_vars(*v, binders)),
-        ),
-        MonoType::Set(inner) => MonoType::Set(Box::new(bind_generic_vars(*inner, binders))),
-        MonoType::Tuple(elems) => MonoType::Tuple(
-            elems
-                .into_iter()
-                .map(|t| bind_generic_vars(t, binders))
-                .collect(),
-        ),
         MonoType::Fn {
             params,
             return_type,
@@ -176,13 +164,6 @@ fn bind_generic_vars(
                 .collect(),
             return_type: Box::new(bind_generic_vars(*return_type, binders)),
         },
-        MonoType::Option(inner) => MonoType::Option(Box::new(bind_generic_vars(*inner, binders))),
-        MonoType::Result(ok, err) => MonoType::Result(
-            Box::new(bind_generic_vars(*ok, binders)),
-            Box::new(bind_generic_vars(*err, binders)),
-        ),
-        MonoType::Arc(inner) => MonoType::Arc(Box::new(bind_generic_vars(*inner, binders))),
-        MonoType::Weak(inner) => MonoType::Weak(Box::new(bind_generic_vars(*inner, binders))),
         MonoType::Ref { mutable, inner } => MonoType::Ref {
             mutable,
             inner: Box::new(bind_generic_vars(*inner, binders)),
@@ -386,7 +367,7 @@ fn parse_type_str_with_generics(
                     .iter()
                     .map(|s| parse_type_str_with_generics(s, generic_params))
                     .collect();
-                return MonoType::Tuple(tuple_types);
+                return MonoType::make_tuple(tuple_types);
             }
         }
     }
@@ -401,24 +382,11 @@ fn parse_type_str_with_generics(
                 .iter()
                 .map(|s| parse_type_str_with_generics(s, generic_params))
                 .collect();
-            let arg = |i: usize| args.get(i).cloned().unwrap_or_else(any);
-            match base {
-                "List" => return MonoType::List(Box::new(arg(0))),
-                "Dict" => return MonoType::Dict(Box::new(arg(0)), Box::new(arg(1))),
-                "Set" => return MonoType::Set(Box::new(arg(0))),
-                "Option" => return MonoType::Option(Box::new(arg(0))),
-                "Result" => return MonoType::Result(Box::new(arg(0)), Box::new(arg(1))),
-                "Arc" => return MonoType::Arc(Box::new(arg(0))),
-                "Weak" => return MonoType::Weak(Box::new(arg(0))),
-                "Tuple" => return MonoType::Tuple(args),
-                _ => {
-                    if !args.is_empty() {
-                        return MonoType::Generic {
-                            name: base.to_string(),
-                            args,
-                        };
-                    }
-                }
+            if !args.is_empty() {
+                return MonoType::Generic {
+                    name: base.to_string(),
+                    args,
+                };
             }
         }
     }
@@ -437,8 +405,11 @@ fn parse_type_str_with_generics(
         "Int" => MonoType::Int(64),
         "Float" => MonoType::Float(64),
         "Char" => MonoType::Char,
-        "String" => MonoType::String,
-        "Bytes" => MonoType::Bytes,
+        "String" => MonoType::make_string(),
+        "Bytes" => MonoType::Generic {
+            name: "Bytes".into(),
+            args: vec![],
+        },
         "Any" => any(),
         _ => {
             // 未知类型 → 创建 TypeRef（可能是自定义类型，如 File/DateTime/Error/Tuple）

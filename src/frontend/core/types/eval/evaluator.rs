@@ -287,7 +287,7 @@ impl<'a> Evaluator<'a> {
             "Int" => Some(MonoType::Int(64)),
             "Float" => Some(MonoType::Float(64)),
             "Char" => Some(MonoType::Char),
-            "String" => Some(MonoType::String),
+            "String" => Some(MonoType::make_string()),
             "Never" => Some(MonoType::Never),
             "True" => Some(MonoType::TypeRef("True".to_string())),
             "False" => Some(MonoType::TypeRef("False".to_string())),

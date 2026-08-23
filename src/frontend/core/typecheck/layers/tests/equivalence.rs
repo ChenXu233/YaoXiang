@@ -31,29 +31,29 @@ fn test_structurally_not_equal_different_types() {
 
 #[test]
 fn test_structurally_equal_list() {
-    let l1 = MonoType::List(Box::new(MonoType::Int(64)));
-    let l2 = MonoType::List(Box::new(MonoType::Int(64)));
+    let l1 = MonoType::make_list(MonoType::Int(64));
+    let l2 = MonoType::make_list(MonoType::Int(64));
     assert!(structurally_equal(&l1, &l2));
 }
 
 #[test]
 fn test_structurally_not_equal_list() {
-    let l1 = MonoType::List(Box::new(MonoType::Int(64)));
-    let l2 = MonoType::List(Box::new(MonoType::Bool));
+    let l1 = MonoType::make_list(MonoType::Int(64));
+    let l2 = MonoType::make_list(MonoType::Bool);
     assert!(!structurally_equal(&l1, &l2));
 }
 
 #[test]
 fn test_structurally_equal_tuple() {
-    let t1 = MonoType::Tuple(vec![MonoType::Int(64), MonoType::Bool]);
-    let t2 = MonoType::Tuple(vec![MonoType::Int(64), MonoType::Bool]);
+    let t1 = MonoType::make_tuple(vec![MonoType::Int(64), MonoType::Bool]);
+    let t2 = MonoType::make_tuple(vec![MonoType::Int(64), MonoType::Bool]);
     assert!(structurally_equal(&t1, &t2));
 }
 
 #[test]
 fn test_structurally_not_equal_tuple_different_length() {
-    let t1 = MonoType::Tuple(vec![MonoType::Int(64)]);
-    let t2 = MonoType::Tuple(vec![MonoType::Int(64), MonoType::Bool]);
+    let t1 = MonoType::make_tuple(vec![MonoType::Int(64)]);
+    let t2 = MonoType::make_tuple(vec![MonoType::Int(64), MonoType::Bool]);
     assert!(!structurally_equal(&t1, &t2));
 }
 

@@ -387,44 +387,11 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
         crate::frontend::core::typecheck::MonoType::Int(n) => format!("i{}", n),
         crate::frontend::core::typecheck::MonoType::Float(n) => format!("f{}", n),
         crate::frontend::core::typecheck::MonoType::Char => "char".to_string(),
-        crate::frontend::core::typecheck::MonoType::String => "String".to_string(),
-        crate::frontend::core::typecheck::MonoType::Bytes => "bytes".to_string(),
         crate::frontend::core::typecheck::MonoType::Struct(struct_type) => {
             format!("struct {:?}", struct_type)
         }
         crate::frontend::core::typecheck::MonoType::Enum(enum_type) => {
             format!("enum {:?}", enum_type)
-        }
-        crate::frontend::core::typecheck::MonoType::Tuple(types) => {
-            let inner = types
-                .iter()
-                .map(dump_type_detail)
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("({})", inner)
-        }
-        crate::frontend::core::typecheck::MonoType::List(elem) => {
-            format!("List({})", dump_type_detail(elem))
-        }
-        crate::frontend::core::typecheck::MonoType::Dict(key, value) => {
-            format!(
-                "Dict({}, {})",
-                dump_type_detail(key),
-                dump_type_detail(value)
-            )
-        }
-        crate::frontend::core::typecheck::MonoType::Set(elem) => {
-            format!("{{{}}}", dump_type_detail(elem))
-        }
-        crate::frontend::core::typecheck::MonoType::Option(inner) => {
-            format!("Option({})", dump_type_detail(inner))
-        }
-        crate::frontend::core::typecheck::MonoType::Result(ok, err) => {
-            format!(
-                "Result({}, {})",
-                dump_type_detail(ok),
-                dump_type_detail(err)
-            )
         }
         crate::frontend::core::typecheck::MonoType::Fn {
             params,
@@ -440,9 +407,6 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
         }
         crate::frontend::core::typecheck::MonoType::TypeRef(name) => name.clone(),
         crate::frontend::core::typecheck::MonoType::TypeVar(var) => format!("T{:?}", var),
-        crate::frontend::core::typecheck::MonoType::Range { elem_type } => {
-            format!("{}..", dump_type_detail(elem_type))
-        }
         crate::frontend::core::typecheck::MonoType::Union(types) => {
             let inner = types
                 .iter()
@@ -458,12 +422,6 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
                 .collect::<Vec<_>>()
                 .join(" & ");
             format!("({})", inner)
-        }
-        crate::frontend::core::typecheck::MonoType::Arc(inner) => {
-            format!("Arc({})", dump_type_detail(inner))
-        }
-        crate::frontend::core::typecheck::MonoType::Weak(inner) => {
-            format!("Weak({})", dump_type_detail(inner))
         }
         crate::frontend::core::typecheck::MonoType::Ref { mutable, inner } => {
             if *mutable {
@@ -514,10 +472,42 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
                 format!("Type{}({})", universe_level, params_str.join(", "))
             }
         }
-        crate::frontend::core::typecheck::MonoType::Generic { name, args } => {
-            let args_str: Vec<String> = args.iter().map(dump_type_detail).collect();
-            format!("{}({})", name, args_str.join(", "))
-        }
+        // #299：容器/复合类型统一走 Generic（保持旧变体输出格式）
+        crate::frontend::core::typecheck::MonoType::Generic { name, args } => match name.as_str() {
+            "String" => "String".to_string(),
+            "Bytes" => "bytes".to_string(),
+            "Tuple" => format!(
+                "({})",
+                args.iter()
+                    .map(dump_type_detail)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            "List" => format!("List({})", dump_type_detail(&args[0])),
+            "Dict" => format!(
+                "Dict({}, {})",
+                dump_type_detail(&args[0]),
+                dump_type_detail(&args[1])
+            ),
+            "Set" => format!("{{{}}}", dump_type_detail(&args[0])),
+            "Option" => format!("Option({})", dump_type_detail(&args[0])),
+            "Result" => format!(
+                "Result({}, {})",
+                dump_type_detail(&args[0]),
+                dump_type_detail(&args[1])
+            ),
+            "Range" => format!("{}..", dump_type_detail(&args[0])),
+            "Arc" => format!("Arc({})", dump_type_detail(&args[0])),
+            "Weak" => format!("Weak({})", dump_type_detail(&args[0])),
+            other => format!(
+                "{}({})",
+                other,
+                args.iter()
+                    .map(dump_type_detail)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        },
         crate::frontend::core::typecheck::MonoType::Refined { base, constraint } => {
             format!("{} {{{}}}", dump_type_detail(base), constraint)
         }
@@ -535,8 +525,7 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
                 dump_type_detail(return_type)
             )
         }
-        crate::frontend::core::typecheck::MonoType::LibraryRef { .. }
-        | crate::frontend::core::typecheck::MonoType::ExternRef { .. } => todo!(),
+        _ => todo!(),
     }
 }
 

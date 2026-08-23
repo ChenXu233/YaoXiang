@@ -219,11 +219,11 @@ fn test_update_var_preserves_is_mut() {
     );
 
     // Act
-    scope.update_var("x", PolyType::mono(MonoType::String));
+    scope.update_var("x", PolyType::mono(MonoType::make_string()));
 
     // Assert
     let poly = scope.get_var("x").unwrap();
-    assert_eq!(*poly, PolyType::mono(MonoType::String));
+    assert_eq!(*poly, PolyType::mono(MonoType::make_string()));
     assert!(
         scope.var_is_mutable("x").unwrap(),
         "update_var should preserve existing is_mut"

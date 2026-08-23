@@ -52,7 +52,7 @@ impl PatternInferrer {
                     crate::frontend::core::lexer::tokens::Literal::Bool(_) => Ok(MonoType::Bool),
                     crate::frontend::core::lexer::tokens::Literal::Char(_) => Ok(MonoType::Char),
                     crate::frontend::core::lexer::tokens::Literal::String(_) => {
-                        Ok(MonoType::String)
+                        Ok(MonoType::make_string())
                     }
                     crate::frontend::core::lexer::tokens::Literal::Void => Ok(MonoType::Void),
                 }
@@ -69,7 +69,7 @@ impl PatternInferrer {
                     let ty = self.infer_pattern(pattern)?;
                     element_types.push(ty);
                 }
-                Ok(MonoType::Tuple(element_types))
+                Ok(MonoType::make_tuple(element_types))
             }
             ast::Pattern::Struct { name, fields } => {
                 // 结构体模式：推断字段类型

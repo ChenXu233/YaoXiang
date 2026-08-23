@@ -339,6 +339,12 @@ impl MonoType {
     pub fn is_array(&self) -> bool {
         self.is_generic_named("Array")
     }
+    pub fn is_arc(&self) -> bool {
+        self.is_generic_named("Arc")
+    }
+    pub fn is_weak(&self) -> bool {
+        self.is_generic_named("Weak")
+    }
     pub fn is_range(&self) -> bool {
         self.is_generic_named("Range")
     }
@@ -411,13 +417,11 @@ impl MonoType {
 
     /// 检查是否是可索引类型
     pub fn is_indexable(&self) -> bool {
-        match self {
-            MonoType::List(_) | MonoType::Dict(_, _) | MonoType::String | MonoType::Tuple(_) => {
-                true
-            }
-            MonoType::Refined { base, .. } => base.is_indexable(),
-            _ => false,
-        }
+        self.is_list()
+            || self.is_dict()
+            || self.is_string()
+            || self.is_tuple()
+            || matches!(self, MonoType::Refined { base, .. } if base.is_indexable())
     }
 
     /// 判断是否是约束类型（所有字段都是函数类型）
@@ -464,23 +468,26 @@ impl MonoType {
             MonoType::Int(n) => format!("int{}", n),
             MonoType::Float(n) => format!("float{}", n),
             MonoType::Char => "char".to_string(),
-            MonoType::String => "string".to_string(),
-            MonoType::Bytes => "bytes".to_string(),
+            MonoType::Generic { name, args } if name == "String" => "string".to_string(),
+            MonoType::Generic { name, args } if name == "Bytes" => "bytes".to_string(),
             MonoType::Struct(s) => s.name.clone(),
             MonoType::Enum(e) => e.name.clone(),
-            MonoType::Tuple(types) => {
-                format!(
-                    "({})",
-                    types
-                        .iter()
-                        .map(|t| t.type_name())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
+            MonoType::Generic { name, args } if name == "Tuple" && !args.is_empty() => format!(
+                "({})",
+                args.iter()
+                    .map(|t| t.type_name())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            MonoType::Generic { name, args } if name == "Tuple" && args.is_empty() => {
+                "()".to_string()
             }
-            MonoType::List(t) => format!("List({})", t.type_name()),
-            MonoType::Dict(k, v) => format!("Dict({}, {})", k.type_name(), v.type_name()),
-            MonoType::Set(t) => format!("Set({})", t.type_name()),
+            MonoType::Generic { name, args } if name == "Option" && !args.is_empty() => {
+                format!("{}?", args[0].type_name())
+            }
+            MonoType::Generic { name, args } if name == "Result" && args.len() == 2 => {
+                format!("Result({}, {})", args[0].type_name(), args[1].type_name())
+            }
             MonoType::Fn {
                 params,
                 return_type,
@@ -492,23 +499,11 @@ impl MonoType {
                     .join(", ");
                 format!("fn({}) -> {}", params_str, return_type.type_name())
             }
-            MonoType::Option(inner) => format!("{}?", inner.type_name()),
-            MonoType::Result(ok, err) => {
-                format!("Result({}, {})", ok.type_name(), err.type_name())
-            }
             MonoType::TypeVar(v) => format!("{}", v),
             MonoType::TypeRef(name) => name.clone(),
-            MonoType::Generic { name, args } => {
-                format!(
-                    "{}({})",
-                    name,
-                    args.iter()
-                        .map(|t| t.type_name())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
+            MonoType::Generic { name, args } if name == "Range" && !args.is_empty() => {
+                format!("Range({})", args[0].type_name())
             }
-            MonoType::Range { elem_type } => format!("Range({})", elem_type.type_name()),
             MonoType::Union(types) => {
                 format!(
                     "({})",
@@ -529,8 +524,22 @@ impl MonoType {
                         .join(" & ")
                 )
             }
-            MonoType::Arc(t) => format!("Arc({})", t.type_name()),
-            MonoType::Weak(t) => format!("Weak({})", t.type_name()),
+            MonoType::Generic { name, args } if name == "Arc" && !args.is_empty() => {
+                format!("Arc({})", args[0].type_name())
+            }
+            MonoType::Generic { name, args } if name == "Weak" && !args.is_empty() => {
+                format!("Weak({})", args[0].type_name())
+            }
+            MonoType::Generic { name, args } => {
+                format!(
+                    "{}({})",
+                    name,
+                    args.iter()
+                        .map(|t| t.type_name())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
             MonoType::Ref { mutable, inner } => {
                 if *mutable {
                     format!("&mut {}", inner.type_name())
@@ -595,6 +604,8 @@ impl MonoType {
             } => {
                 format!("ExternRef({mechanism}, \"{lib}\", \"{symbol}\")")
             }
+            // #299 过渡：旧原生变体残留（Task 1.7 删变体后此 arm 移除）
+            _ => format!("{self:?}"),
         }
     }
 
@@ -617,8 +628,11 @@ impl MonoType {
             "Float32" | "float32" | "f32" => Some(MonoType::Float(32)),
             "Bool" | "bool" => Some(MonoType::Bool),
             "Char" | "char" => Some(MonoType::Char),
-            "String" | "string" | "str" => Some(MonoType::String),
-            "Bytes" | "bytes" => Some(MonoType::Bytes),
+            "String" | "string" | "str" => Some(MonoType::make_string()),
+            "Bytes" | "bytes" => Some(MonoType::Generic {
+                name: "Bytes".into(),
+                args: vec![],
+            }),
             "Void" | "void" | "()" => Some(MonoType::Void),
             "Never" | "never" => Some(MonoType::Never),
             _ => None,
@@ -641,21 +655,9 @@ impl MonoType {
                 params: params.iter().map(|p| p.substitute(subst)).collect(),
                 return_type: Box::new(return_type.substitute(subst)),
             },
-            MonoType::List(inner) => MonoType::List(Box::new(inner.substitute(subst))),
-            MonoType::Option(inner) => MonoType::Option(Box::new(inner.substitute(subst))),
-            MonoType::Result(ok, err) => MonoType::Result(
-                Box::new(ok.substitute(subst)),
-                Box::new(err.substitute(subst)),
-            ),
-            MonoType::Tuple(types) => {
-                MonoType::Tuple(types.iter().map(|t| t.substitute(subst)).collect())
-            }
-            MonoType::Dict(k, v) => {
-                MonoType::Dict(Box::new(k.substitute(subst)), Box::new(v.substitute(subst)))
-            }
-            MonoType::Arc(inner) => MonoType::Arc(Box::new(inner.substitute(subst))),
-            MonoType::Range { elem_type } => MonoType::Range {
-                elem_type: Box::new(elem_type.substitute(subst)),
+            MonoType::Generic { name, args } => MonoType::Generic {
+                name: name.clone(),
+                args: args.iter().map(|t| t.substitute(subst)).collect(),
             },
             other => other.clone(),
         }
@@ -680,8 +682,11 @@ impl From<ast::Type> for MonoType {
             ast::Type::Int(n) => MonoType::Int(n),
             ast::Type::Float(n) => MonoType::Float(n),
             ast::Type::Char => MonoType::Char,
-            ast::Type::String => MonoType::String,
-            ast::Type::Bytes => MonoType::Bytes,
+            ast::Type::String => MonoType::make_string(),
+            ast::Type::Bytes => MonoType::Generic {
+                name: "Bytes".into(),
+                args: vec![],
+            },
             ast::Type::Bool => MonoType::Bool,
             ast::Type::Void => MonoType::Void,
             ast::Type::Struct { body } => {
@@ -727,7 +732,7 @@ impl From<ast::Type> for MonoType {
                 variants,
             }),
             ast::Type::Tuple(types) => {
-                MonoType::Tuple(types.into_iter().map(MonoType::from).collect())
+                MonoType::make_tuple(types.into_iter().map(MonoType::from).collect())
             }
             ast::Type::Fn {
                 params,
@@ -736,41 +741,12 @@ impl From<ast::Type> for MonoType {
                 params: params.into_iter().map(MonoType::from).collect(),
                 return_type: Box::new(MonoType::from(*return_type)),
             },
-            ast::Type::Option(t) => MonoType::Option(Box::new(MonoType::from(*t))),
-            ast::Type::Result(ok, err) => MonoType::Result(
-                Box::new(MonoType::from(*ok)),
-                Box::new(MonoType::from(*err)),
-            ),
+            ast::Type::Option(t) => MonoType::make_option(MonoType::from(*t)),
+            ast::Type::Result(ok, err) => {
+                MonoType::make_result(MonoType::from(*ok), MonoType::from(*err))
+            }
             ast::Type::Generic { name, args, .. } => {
-                // RFC-001: lower well-known generics.
-                if name == "Option" && args.len() == 1 {
-                    return MonoType::Option(Box::new(MonoType::from(args[0].clone())));
-                }
-                if name == "Result" && args.len() == 2 {
-                    return MonoType::Result(
-                        Box::new(MonoType::from(args[0].clone())),
-                        Box::new(MonoType::from(args[1].clone())),
-                    );
-                }
-                if name == "List" && args.len() == 1 {
-                    return MonoType::List(Box::new(MonoType::from(args[0].clone())));
-                }
-                if name == "Dict" && args.len() == 2 {
-                    return MonoType::Dict(
-                        Box::new(MonoType::from(args[0].clone())),
-                        Box::new(MonoType::from(args[1].clone())),
-                    );
-                }
-                if name == "Set" && args.len() == 1 {
-                    return MonoType::Set(Box::new(MonoType::from(args[0].clone())));
-                }
-                if name == "Arc" && args.len() == 1 {
-                    return MonoType::Arc(Box::new(MonoType::from(args[0].clone())));
-                }
-                if name == "Weak" && args.len() == 1 {
-                    return MonoType::Weak(Box::new(MonoType::from(args[0].clone())));
-                }
-                // 泛型类型，如 Option(T), List(Int)
+                // #299：不再对 Option/Result/List/Dict/Set/Arc/Weak lower 成原生变体，统一走 Generic
                 MonoType::Generic {
                     name,
                     args: args.into_iter().map(MonoType::from).collect(),

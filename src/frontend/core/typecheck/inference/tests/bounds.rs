@@ -114,7 +114,7 @@ fn test_check_constraint_empty_constraint() {
 fn test_check_trait_bounds_not_satisfied() {
     // Arrange
     let checker = BoundsChecker::new();
-    let ty = MonoType::List(Box::new(MonoType::Int(32)));
+    let ty = MonoType::make_list(MonoType::Int(32));
     let bounds = vec!["Clone".to_string()];
 
     // Act
@@ -265,7 +265,7 @@ fn test_check_trait_bounds_dup_struct_auto_derive() {
     let struct_type = MonoType::Struct(StructType {
         name: "View".to_string(),
         fields: vec![
-            ("name".to_string(), MonoType::String),
+            ("name".to_string(), MonoType::make_string()),
             (
                 "ref_field".to_string(),
                 MonoType::Ref {
@@ -296,10 +296,7 @@ fn test_check_trait_bounds_dup_struct_auto_derive_fails() {
     let struct_type = MonoType::Struct(StructType {
         name: "Buffer".to_string(),
         fields: vec![
-            (
-                "data".to_string(),
-                MonoType::List(Box::new(MonoType::Int(64))),
-            ),
+            ("data".to_string(), MonoType::make_list(MonoType::Int(64))),
             ("len".to_string(), MonoType::Int(64)),
         ],
         methods: HashMap::new(),
@@ -324,7 +321,7 @@ fn test_bounds_checker_dup_struct_passes() {
     let struct_type = MonoType::Struct(StructType {
         name: "View".to_string(),
         fields: vec![
-            ("name".to_string(), MonoType::String),
+            ("name".to_string(), MonoType::make_string()),
             (
                 "ref_field".to_string(),
                 MonoType::Ref {
@@ -359,10 +356,7 @@ fn test_bounds_checker_dup_struct_fails() {
     let struct_type = MonoType::Struct(StructType {
         name: "Buffer".to_string(),
         fields: vec![
-            (
-                "data".to_string(),
-                MonoType::List(Box::new(MonoType::Int(64))),
-            ),
+            ("data".to_string(), MonoType::make_list(MonoType::Int(64))),
             ("len".to_string(), MonoType::Int(64)),
         ],
         methods: HashMap::new(),
@@ -391,7 +385,7 @@ fn test_bounds_checker_dup_nested_struct_passes() {
     let view_type = MonoType::Struct(StructType {
         name: "View".to_string(),
         fields: vec![
-            ("name".to_string(), MonoType::String),
+            ("name".to_string(), MonoType::make_string()),
             (
                 "ref_field".to_string(),
                 MonoType::Ref {

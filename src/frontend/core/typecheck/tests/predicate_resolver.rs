@@ -119,7 +119,7 @@ fn test_resolve_registered_predicate_invalid_arg_errors() {
     let mut env = TypeEnvironment::new();
     env.predicate_defs
         .insert("Positive".into(), make_positive_def());
-    let tuple_arg = MonoType::Tuple(vec![MonoType::Int(64), MonoType::Int(64)]);
+    let tuple_arg = MonoType::make_tuple(vec![MonoType::Int(64), MonoType::Int(64)]);
 
     // Act
     let result = PredicateResolver::try_resolve(&env, "Positive", &[tuple_arg]);

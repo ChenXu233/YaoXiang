@@ -22,8 +22,8 @@ fn test_associated_type() {
     );
     assert_eq!(at.name, "Item");
     assert_eq!(
-        AssociatedTypeDef::Direct(MonoType::String).into_type(),
-        MonoType::String
+        AssociatedTypeDef::Direct(MonoType::make_string()).into_type(),
+        MonoType::make_string()
     );
 }
 
@@ -49,7 +49,7 @@ fn test_type_family() {
         "AsString".to_string(),
         vec!["T".to_string()],
         vec![],
-        AssociatedTypeDef::Direct(MonoType::String),
+        AssociatedTypeDef::Direct(MonoType::make_string()),
     );
     assert_eq!(family.name, "AsString");
     assert_eq!(family.type_params().len(), 1);
@@ -71,7 +71,7 @@ fn test_type_family_associated_types() {
     assert!(family.get_associated_type("Item").is_some());
     assert!(family.get_associated_type("X").is_none());
     assert!(family
-        .instantiate_associated_type("Item", &[MonoType::String])
+        .instantiate_associated_type("Item", &[MonoType::make_string()])
         .is_some());
 }
 
@@ -123,7 +123,7 @@ fn test_associated_def_substitute_no_match() {
 fn test_associated_def_direct_substitute() {
     let def = AssociatedTypeDef::Direct(MonoType::Int(32));
     let mut subs = HashMap::new();
-    subs.insert("T".to_string(), MonoType::String);
+    subs.insert("T".to_string(), MonoType::make_string());
     // Direct type is not affected by substitution
     let result = def.substitute(&subs);
     assert_eq!(result.into_type(), MonoType::Int(32));
@@ -164,13 +164,13 @@ fn test_type_family_multiple_params() {
         "Pair".to_string(),
         vec!["A".to_string(), "B".to_string()],
         vec![],
-        AssociatedTypeDef::Direct(MonoType::Tuple(vec![
+        AssociatedTypeDef::Direct(MonoType::make_tuple(vec![
             MonoType::TypeRef("A".to_string()),
             MonoType::TypeRef("B".to_string()),
         ])),
     );
     assert_eq!(family.type_params().len(), 2);
-    let result = family.instantiate(&[MonoType::Int(32), MonoType::String]);
+    let result = family.instantiate(&[MonoType::Int(32), MonoType::make_string()]);
     assert!(result.is_some());
 }
 
@@ -213,7 +213,7 @@ fn test_dependent_type_env_register_multiple() {
         "F2".to_string(),
         vec![],
         vec![],
-        AssociatedTypeDef::Direct(MonoType::String),
+        AssociatedTypeDef::Direct(MonoType::make_string()),
     );
     env.register_type_family(f1);
     env.register_type_family(f2);
@@ -235,7 +235,7 @@ fn test_dependent_type_env_overwrite() {
         "F".to_string(),
         vec![],
         vec![],
-        AssociatedTypeDef::Direct(MonoType::String),
+        AssociatedTypeDef::Direct(MonoType::make_string()),
     );
     env.register_type_family(f1);
     env.register_type_family(f2);
@@ -243,7 +243,7 @@ fn test_dependent_type_env_overwrite() {
     let family = env.get_type_family("F").unwrap();
     assert_eq!(
         family.instantiate(&[]).unwrap().into_type(),
-        MonoType::String
+        MonoType::make_string()
     );
 }
 
@@ -332,7 +332,7 @@ fn test_istrue_type_family_instantiate() {
     );
 
     // Act & Assert — IsTrue(unknown) => None（无匹配 arm，保留不归约）
-    let result = istrue.instantiate(&[MonoType::String]);
+    let result = istrue.instantiate(&[MonoType::make_string()]);
     assert!(
         result.is_none(),
         "IsTrue(String) should not match any arm and return None"

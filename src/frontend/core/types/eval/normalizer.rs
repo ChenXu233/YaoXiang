@@ -226,18 +226,17 @@ impl TypeNormalizer {
     ) -> NormalForm {
         match ty {
             // 基本类型已经是范式
-            MonoType::Void
-            | MonoType::Bool
-            | MonoType::Char
-            | MonoType::String
-            | MonoType::Bytes => NormalForm::Normalized,
+            MonoType::Void | MonoType::Bool | MonoType::Char => NormalForm::Normalized,
+            MonoType::Generic { name, .. } if name == "String" || name == "Bytes" => {
+                NormalForm::Normalized
+            }
             MonoType::Int(_) | MonoType::Float(_) => NormalForm::Normalized,
             MonoType::TypeVar(_) => NormalForm::NeedsReduction,
             MonoType::Struct(_) | MonoType::Enum(_) | MonoType::TypeRef(_) => {
                 NormalForm::Normalized
             }
-            MonoType::Tuple(types) => {
-                if types
+            MonoType::Generic { name, args } if name == "Tuple" => {
+                if args
                     .iter()
                     .all(|t| matches!(self.normalize(t), NormalForm::Normalized))
                 {
@@ -246,8 +245,8 @@ impl TypeNormalizer {
                     NormalForm::NeedsReduction
                 }
             }
-            MonoType::List(t) => {
-                if matches!(self.normalize(t), NormalForm::Normalized) {
+            MonoType::Generic { name, args } if name == "List" && args.len() == 1 => {
+                if matches!(self.normalize(&args[0]), NormalForm::Normalized) {
                     NormalForm::Normalized
                 } else {
                     NormalForm::NeedsReduction

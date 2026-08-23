@@ -88,7 +88,11 @@ fn test_pattern_infer_string_literal() {
         .unwrap();
 
     // Assert
-    assert_eq!(result, MonoType::String, "String 字面量模式应返回 String");
+    assert_eq!(
+        result,
+        MonoType::make_string(),
+        "String 字面量模式应返回 String"
+    );
 }
 
 #[test]
@@ -136,7 +140,7 @@ fn test_pattern_infer_tuple() {
     let result = inferrer.infer_pattern(&tuple_pattern).unwrap();
 
     // Assert
-    let expected = MonoType::Tuple(vec![MonoType::Int(64), MonoType::String]);
+    let expected = MonoType::make_tuple(vec![MonoType::Int(64), MonoType::make_string()]);
     assert_eq!(
         result, expected,
         "Tuple([Int, String]) 应返回 Tuple([Int(64), String])"
@@ -228,6 +232,6 @@ fn test_pattern_infer_nested_tuple() {
     let result = inferrer.infer_pattern(&nested).unwrap();
 
     // Assert
-    let expected = MonoType::Tuple(vec![MonoType::Tuple(vec![MonoType::Int(64)])]);
+    let expected = MonoType::make_tuple(vec![MonoType::make_tuple(vec![MonoType::Int(64)])]);
     assert_eq!(result, expected, "嵌套 Tuple 应递归推断内部类型");
 }

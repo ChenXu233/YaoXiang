@@ -719,7 +719,8 @@ impl StatementChecker {
                 let rhs_ty = self.check_expr(rhs)?;
                 let resolved_ty = self.solver.resolve_type(&rhs_ty);
                 match &resolved_ty {
-                    MonoType::Tuple(elem_types) => {
+                    MonoType::Generic { name, args } if name == "Tuple" => {
+                        let elem_types = args;
                         if elem_types.len() != names.len() {
                             return Err(Box::new(
                                 ErrorCodeDefinition::type_mismatch(
@@ -1064,7 +1065,10 @@ impl StatementChecker {
 
         // Result 错误类型（用于 `?` 运算符检查）
         let fn_result_err = innermost_ret.as_ref().and_then(|ret| match ret {
-            MonoType::Result(_, err) => Some((**err).clone()),
+            m if m.is_result() => {
+                let args = m.generic_args().unwrap();
+                Some(args[1].clone())
+            }
             _ => None,
         });
         self.result_err_stack.push(fn_result_err);
@@ -1362,11 +1366,16 @@ impl StatementChecker {
     ) -> Result<(), Box<Diagnostic>> {
         let iter_ty = self.check_expr(iterable)?;
         let elem_ty = match iter_ty {
-            MonoType::List(elem) => *elem,
-            MonoType::Range { elem_type } => *elem_type,
-            MonoType::String => MonoType::Char,
-            MonoType::Dict(key_ty, value_ty) => MonoType::Tuple(vec![*key_ty, *value_ty]),
-            MonoType::Tuple(_) => self.solver.new_var(),
+            m if m.is_list() => m.generic_args().unwrap()[0].clone(),
+            m if m.is_range() && m.generic_args().map(|a| a.len() == 1).unwrap_or(false) => {
+                m.generic_args().unwrap()[0].clone()
+            }
+            m if m.is_string() => MonoType::Char,
+            m if m.is_dict() => {
+                let args = m.generic_args().unwrap();
+                MonoType::make_tuple(vec![args[0].clone(), args[1].clone()])
+            }
+            m if m.is_tuple() => self.solver.new_var(),
             _ => self.solver.new_var(),
         };
 
@@ -1527,7 +1536,7 @@ impl StatementChecker {
             Expr::List(elems, _) => {
                 if elems.is_empty() {
                     let elem_ty = self.solver.new_var();
-                    Ok(MonoType::List(Box::new(elem_ty)))
+                    Ok(MonoType::make_list(elem_ty))
                 } else {
                     let mut iter = elems.iter();
                     let first = iter.next().expect("non-empty list");
@@ -1537,7 +1546,7 @@ impl StatementChecker {
                         let _ = self.solver.unify(&elem_ty, &ty);
                         elem_ty = self.solver.resolve_type(&elem_ty);
                     }
-                    Ok(MonoType::List(Box::new(elem_ty)))
+                    Ok(MonoType::make_list(elem_ty))
                 }
             }
             // 二元运算 = 赋值：直接处理
@@ -1568,14 +1577,14 @@ impl StatementChecker {
                             (&left_ty, &right_ty)
                         {
                             Ok(left_ty)
-                        } else if let (MonoType::String, MonoType::String) = (&left_ty, &right_ty) {
-                            Ok(MonoType::String)
-                        } else if let (MonoType::List(left_elem), MonoType::List(right_elem)) =
-                            (&left_ty, &right_ty)
-                        {
+                        } else if left_ty.is_string() && right_ty.is_string() {
+                            Ok(MonoType::make_string())
+                        } else if left_ty.is_list() && right_ty.is_list() {
+                            let left_elem = &left_ty.generic_args().expect("List args")[0];
+                            let right_elem = &right_ty.generic_args().expect("List args")[0];
                             let _ = self.solver.unify(left_elem, right_elem);
                             let elem_ty = self.solver.resolve_type(left_elem);
-                            Ok(MonoType::List(Box::new(elem_ty)))
+                            Ok(MonoType::make_list(elem_ty))
                         } else {
                             Ok(self.solver.new_var())
                         }
@@ -1587,8 +1596,9 @@ impl StatementChecker {
                             let _ = self.solver.unify(&left_ty, &right_ty);
                             left_ty
                         };
-                        Ok(MonoType::Range {
-                            elem_type: Box::new(elem_ty),
+                        Ok(MonoType::Generic {
+                            name: "Range".into(),
+                            args: vec![elem_ty],
                         })
                     }
                     _ => {
@@ -1682,10 +1692,6 @@ fn contains_unresolved_param(t: &MonoType) -> bool {
     match t {
         MonoType::TypeRef(_) | MonoType::TypeVar(_) => true,
         MonoType::Struct(s) => s.fields.iter().any(|(_, f)| contains_unresolved_param(f)),
-        MonoType::List(i) | MonoType::Option(i) | MonoType::Arc(i) | MonoType::Weak(i) => {
-            contains_unresolved_param(i)
-        }
-        MonoType::Result(a, b) => contains_unresolved_param(a) || contains_unresolved_param(b),
         MonoType::Generic { args, .. } => args.iter().any(contains_unresolved_param),
         MonoType::Fn {
             params,

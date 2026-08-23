@@ -24,7 +24,7 @@ fn float_type() -> MonoType {
 }
 
 fn string_type() -> MonoType {
-    MonoType::String
+    MonoType::make_string()
 }
 
 #[test]

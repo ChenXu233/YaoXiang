@@ -321,7 +321,7 @@ pub mod functions {
         TypeFunction::new(
             "swap".to_string(),
             vec!["T".to_string(), "U".to_string()],
-            MonoType::Tuple(vec![
+            MonoType::make_tuple(vec![
                 MonoType::TypeVar(TypeVar::new(1)),
                 MonoType::TypeVar(TypeVar::new(0)),
             ]),
@@ -605,7 +605,16 @@ impl TypeUnifier {
             _ if ty1 == ty2 => UnificationResult::Success(self.substitution.clone()),
 
             // 元组统一
-            (MonoType::Tuple(types1), MonoType::Tuple(types2)) => {
+            (
+                MonoType::Generic {
+                    name: n1,
+                    args: types1,
+                },
+                MonoType::Generic {
+                    name: n2,
+                    args: types2,
+                },
+            ) if n1 == "Tuple" && n2 == "Tuple" => {
                 if types1.len() != types2.len() {
                     return UnificationResult::Failure("Tuple arity mismatch".to_string());
                 }
@@ -621,7 +630,12 @@ impl TypeUnifier {
             }
 
             // 列表统一
-            (MonoType::List(t1), MonoType::List(t2)) => self.unify_internal(t1, t2),
+            (
+                MonoType::Generic { name: n1, args: a1 },
+                MonoType::Generic { name: n2, args: a2 },
+            ) if n1 == "List" && n2 == "List" && a1.len() == 1 && a2.len() == 1 => {
+                self.unify_internal(&a1[0], &a2[0])
+            }
 
             // 函数统一
             (

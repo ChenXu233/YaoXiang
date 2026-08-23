@@ -294,18 +294,8 @@ impl OverloadResolver {
             }
         }
 
-        // 容器类型匹配
+        // 容器类型匹配（List/Dict/Set/Tuple 现为 Generic，由下方 Generic arm 统一处理）
         match (param, arg) {
-            (MonoType::List(p), MonoType::List(a)) => 0.9 * self.type_match_score(p, a),
-            (MonoType::Dict(pk, pv), MonoType::Dict(ak, av)) => {
-                0.9 * self.type_match_score(pk, ak) * self.type_match_score(pv, av)
-            }
-            (MonoType::Set(p), MonoType::Set(a)) => 0.9 * self.type_match_score(p, a),
-            (MonoType::Tuple(ps), MonoType::Tuple(as_)) if ps.len() == as_.len() => ps
-                .iter()
-                .zip(as_.iter())
-                .map(|(p, a)| self.type_match_score(p, a))
-                .product(),
             (
                 MonoType::Fn {
                     params: pp,
@@ -592,22 +582,6 @@ fn substitute_return_type(
             }
             ty.clone()
         }
-        MonoType::List(inner) => {
-            MonoType::List(Box::new(substitute_return_type(inner, substitutions)))
-        }
-        MonoType::Dict(k, v) => MonoType::Dict(
-            Box::new(substitute_return_type(k, substitutions)),
-            Box::new(substitute_return_type(v, substitutions)),
-        ),
-        MonoType::Tuple(types) => MonoType::Tuple(
-            types
-                .iter()
-                .map(|t| substitute_return_type(t, substitutions))
-                .collect(),
-        ),
-        MonoType::Set(inner) => {
-            MonoType::Set(Box::new(substitute_return_type(inner, substitutions)))
-        }
         MonoType::Fn {
             params,
             return_type,
@@ -631,9 +605,12 @@ fn substitute_return_type(
             interfaces: s.interfaces.clone(),
         }),
         MonoType::Enum(e) => MonoType::Enum(e.clone()),
-        MonoType::Range { elem_type } => MonoType::Range {
-            elem_type: Box::new(substitute_return_type(elem_type, substitutions)),
-        },
+        MonoType::Generic { name, args } if name == "Range" && args.len() == 1 => {
+            MonoType::Generic {
+                name: "Range".into(),
+                args: vec![substitute_return_type(&args[0], substitutions)],
+            }
+        }
         MonoType::Union(types) | MonoType::Intersection(types) => {
             let new_types = types
                 .iter()
@@ -644,12 +621,6 @@ fn substitute_return_type(
             } else {
                 MonoType::Intersection(new_types)
             }
-        }
-        MonoType::Arc(inner) => {
-            MonoType::Arc(Box::new(substitute_return_type(inner, substitutions)))
-        }
-        MonoType::Weak(inner) => {
-            MonoType::Weak(Box::new(substitute_return_type(inner, substitutions)))
         }
         MonoType::AssocType {
             host_type,

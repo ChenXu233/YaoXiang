@@ -105,12 +105,6 @@ impl FunctionMonomorphizer for super::Monomorphizer {
     ) -> bool {
         match ty {
             MonoType::TypeVar(_) => true,
-            MonoType::List(elem) => self.contains_type_var(elem),
-            MonoType::Dict(key, value) => {
-                self.contains_type_var(key) || self.contains_type_var(value)
-            }
-            MonoType::Set(elem) => self.contains_type_var(elem),
-            MonoType::Tuple(types) => types.iter().any(|t| self.contains_type_var(t)),
             MonoType::Fn {
                 params,
                 return_type,
@@ -249,22 +243,6 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                 .get(&tv.index())
                 .cloned()
                 .unwrap_or_else(|| ty.clone()),
-            MonoType::List(elem) => {
-                MonoType::List(Box::new(self.substitute_single_type(elem, type_map)))
-            }
-            MonoType::Dict(key, value) => MonoType::Dict(
-                Box::new(self.substitute_single_type(key, type_map)),
-                Box::new(self.substitute_single_type(value, type_map)),
-            ),
-            MonoType::Set(elem) => {
-                MonoType::Set(Box::new(self.substitute_single_type(elem, type_map)))
-            }
-            MonoType::Tuple(types) => MonoType::Tuple(
-                types
-                    .iter()
-                    .map(|t| self.substitute_single_type(t, type_map))
-                    .collect(),
-            ),
             MonoType::Fn {
                 params,
                 return_type,
@@ -508,13 +486,15 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                 MonoType::Int(n) => AstType::Int(*n),
                 MonoType::Float(n) => AstType::Float(*n),
                 MonoType::Bool => AstType::Bool,
-                MonoType::String => AstType::String,
                 MonoType::Char => AstType::Char,
                 MonoType::Void => AstType::Void,
                 MonoType::TypeRef(name) => AstType::Name {
                     name: name.clone(),
                     span,
                 },
+                // #299：String/Bytes 等容器类型现为 Generic，经 type_name 反解回 AstType
+                MonoType::Generic { name, .. } if name == "String" => AstType::String,
+                MonoType::Generic { name, .. } if name == "Bytes" => AstType::Bytes,
                 _ => AstType::Name {
                     name: mono.type_name(),
                     span,

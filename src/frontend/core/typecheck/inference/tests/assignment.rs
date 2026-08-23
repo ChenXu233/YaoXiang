@@ -222,7 +222,7 @@ fn test_assignment_incompatible_types() {
     // Arrange — Int(32) 和 String 无子类型关系
     let mut checker = AssignmentChecker::new();
     let lhs = MonoType::Int(32);
-    let rhs = MonoType::String;
+    let rhs = MonoType::make_string();
     let span = dummy_span();
 
     // Act
@@ -287,7 +287,7 @@ fn test_assignment_fn_type_compatibility() {
     let mut checker = AssignmentChecker::new();
     let fn_type = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::Bool],
-        return_type: Box::new(MonoType::String),
+        return_type: Box::new(MonoType::make_string()),
     };
     let lhs = fn_type.clone();
     let rhs = fn_type.clone();

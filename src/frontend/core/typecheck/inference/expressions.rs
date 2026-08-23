@@ -361,7 +361,7 @@ impl<'a> ExpressionInferrer<'a> {
             crate::frontend::core::lexer::tokens::Literal::Float(_) => MonoType::Float(64),
             crate::frontend::core::lexer::tokens::Literal::Bool(_) => MonoType::Bool,
             crate::frontend::core::lexer::tokens::Literal::Char(_) => MonoType::Char,
-            crate::frontend::core::lexer::tokens::Literal::String(_) => MonoType::String,
+            crate::frontend::core::lexer::tokens::Literal::String(_) => MonoType::make_string(),
             crate::frontend::core::lexer::tokens::Literal::Void => MonoType::Void,
         };
         Ok(ty)
@@ -380,14 +380,14 @@ impl<'a> ExpressionInferrer<'a> {
                     Ok(left.clone())
                 } else if let (MonoType::Float(_), MonoType::Float(_)) = (left, right) {
                     Ok(left.clone())
-                } else if let (MonoType::String, MonoType::String) = (left, right) {
-                    Ok(MonoType::String)
-                } else if let (MonoType::List(left_elem), MonoType::List(right_elem)) =
-                    (left, right)
-                {
+                } else if left.is_string() && right.is_string() {
+                    Ok(MonoType::make_string())
+                } else if left.is_list() && right.is_list() {
+                    let left_elem = &left.generic_args().expect("List args")[0];
+                    let right_elem = &right.generic_args().expect("List args")[0];
                     let _ = self.solver.unify(left_elem, right_elem);
                     let elem_ty = self.solver.resolve_type(left_elem);
-                    Ok(MonoType::List(Box::new(elem_ty)))
+                    Ok(MonoType::make_list(elem_ty))
                 } else {
                     let var = self.solver.new_var();
                     Ok(var)
@@ -425,8 +425,9 @@ impl<'a> ExpressionInferrer<'a> {
                     let _ = self.solver.unify(left, right);
                     left.clone()
                 };
-                Ok(MonoType::Range {
-                    elem_type: Box::new(elem_ty),
+                Ok(MonoType::Generic {
+                    name: "Range".into(),
+                    args: vec![elem_ty],
                 })
             }
             // #285: 位运算/移位仅限 Int（SPEC §2.2 级 7/8）
@@ -480,17 +481,6 @@ impl<'a> ExpressionInferrer<'a> {
             MonoType::TypeVar(tv) => {
                 out.insert(tv.index());
             }
-            MonoType::List(inner) => Self::collect_type_var_indices(inner, out),
-            MonoType::Tuple(types) => {
-                for t in types {
-                    Self::collect_type_var_indices(t, out);
-                }
-            }
-            MonoType::Dict(k, v) => {
-                Self::collect_type_var_indices(k, out);
-                Self::collect_type_var_indices(v, out);
-            }
-            MonoType::Set(t) => Self::collect_type_var_indices(t, out),
             MonoType::Fn {
                 params,
                 return_type,
@@ -501,18 +491,14 @@ impl<'a> ExpressionInferrer<'a> {
                 }
                 Self::collect_type_var_indices(return_type, out);
             }
-            MonoType::Option(inner) => Self::collect_type_var_indices(inner, out),
-            MonoType::Result(ok, err) => {
-                Self::collect_type_var_indices(ok, out);
-                Self::collect_type_var_indices(err, out);
+            MonoType::Generic { name, args } if name == "Range" && args.len() == 1 => {
+                Self::collect_type_var_indices(&args[0], out)
             }
-            MonoType::Range { elem_type } => Self::collect_type_var_indices(elem_type, out),
             MonoType::Union(types) | MonoType::Intersection(types) => {
                 for t in types {
                     Self::collect_type_var_indices(t, out);
                 }
             }
-            MonoType::Arc(t) | MonoType::Weak(t) => Self::collect_type_var_indices(t, out),
             MonoType::Ref { inner, .. } => Self::collect_type_var_indices(inner, out),
             MonoType::Struct(s) => {
                 for (_, field_ty) in &s.fields {
@@ -840,14 +826,14 @@ impl<'a> ExpressionInferrer<'a> {
             // 元组
             crate::frontend::core::parser::ast::Expr::Tuple(elems, _) => {
                 let types: Result<Vec<_>> = elems.iter().map(|e| self.infer_expr(e)).collect();
-                Ok(MonoType::Tuple(types?))
+                Ok(MonoType::make_tuple(types?))
             }
 
             // 列表
             crate::frontend::core::parser::ast::Expr::List(elems, _) => {
                 if elems.is_empty() {
                     let elem_ty = self.solver.new_var();
-                    Ok(MonoType::List(Box::new(elem_ty)))
+                    Ok(MonoType::make_list(elem_ty))
                 } else {
                     let mut iter = elems.iter();
                     let first = iter.next().expect("non-empty list must have first element");
@@ -857,7 +843,7 @@ impl<'a> ExpressionInferrer<'a> {
                         let _ = self.solver.unify(&elem_ty, &ty);
                         elem_ty = self.solver.resolve_type(&elem_ty);
                     }
-                    Ok(MonoType::List(Box::new(elem_ty)))
+                    Ok(MonoType::make_list(elem_ty))
                 }
             }
 
@@ -866,7 +852,7 @@ impl<'a> ExpressionInferrer<'a> {
                 if pairs.is_empty() {
                     let key_ty = self.solver.new_var();
                     let value_ty = self.solver.new_var();
-                    Ok(MonoType::Dict(Box::new(key_ty), Box::new(value_ty)))
+                    Ok(MonoType::make_dict(key_ty, value_ty))
                 } else {
                     let mut key_ty = None;
                     let mut value_ty = None;
@@ -880,9 +866,9 @@ impl<'a> ExpressionInferrer<'a> {
                             value_ty = Some(v_type);
                         }
                     }
-                    Ok(MonoType::Dict(
-                        Box::new(key_ty.unwrap_or_else(|| self.solver.new_var())),
-                        Box::new(value_ty.unwrap_or_else(|| self.solver.new_var())),
+                    Ok(MonoType::make_dict(
+                        key_ty.unwrap_or_else(|| self.solver.new_var()),
+                        value_ty.unwrap_or_else(|| self.solver.new_var()),
                     ))
                 }
             }
@@ -895,19 +881,19 @@ impl<'a> ExpressionInferrer<'a> {
             } => {
                 let container_ty = self.infer_expr(container)?;
                 match container_ty {
-                    MonoType::List(elem_ty) => Ok(*elem_ty),
-                    MonoType::Dict(_key_ty, value_ty) => Ok(*value_ty),
-                    MonoType::Tuple(types) => {
+                    MonoType::Generic { name, args } if name == "List" => Ok(args[0].clone()),
+                    MonoType::Generic { name, args } if name == "Dict" => Ok(args[1].clone()),
+                    MonoType::Generic { name, args } if name == "Tuple" => {
                         if let crate::frontend::core::parser::ast::Expr::Lit(
                             crate::frontend::core::lexer::tokens::Literal::Int(i),
                             _,
                         ) = index.as_ref()
                         {
-                            if *i >= 0 && (*i as usize) < types.len() {
-                                Ok(types[*i as usize].clone())
+                            if *i >= 0 && (*i as usize) < args.len() {
+                                Ok(args[*i as usize].clone())
                             } else {
                                 Err(ErrorCodeDefinition::index_out_of_bounds(
-                                    types.len(),
+                                    args.len(),
                                     *i as usize,
                                 )
                                 .build())
@@ -1631,12 +1617,14 @@ impl<'a> ExpressionInferrer<'a> {
                 let iter_ty = self.infer_expr(iterable)?;
 
                 let element_type = match &iter_ty {
-                    MonoType::List(elem_ty) => *elem_ty.clone(),
-                    MonoType::Range { elem_type } => *elem_type.clone(),
-                    MonoType::String => MonoType::Char,
-                    MonoType::Tuple(_elems) => self.solver.new_var(),
-                    MonoType::Dict(key_ty, value_ty) => {
-                        MonoType::Tuple(vec![*key_ty.clone(), *value_ty.clone()])
+                    MonoType::Generic { name, args } if name == "List" => args[0].clone(),
+                    MonoType::Generic { name, args } if name == "Range" && args.len() == 1 => {
+                        args[0].clone()
+                    }
+                    MonoType::Generic { name, .. } if name == "String" => MonoType::Char,
+                    MonoType::Generic { name, .. } if name == "Tuple" => self.solver.new_var(),
+                    MonoType::Generic { name, args } if name == "Dict" => {
+                        MonoType::make_tuple(vec![args[0].clone(), args[1].clone()])
                     }
                     _ => self.solver.new_var(),
                 };
@@ -1731,14 +1719,20 @@ impl<'a> ExpressionInferrer<'a> {
                     // RFC-001: Result-returning functions implicitly wrap the final value in Ok(...),
                     // so the body type is the Ok type (not Result[T, E]).
                     let expected_body_ty = match &ret_mono {
-                        MonoType::Result(ok, _) => (**ok).clone(),
+                        m if m.is_result() => {
+                            let args = m.generic_args().unwrap();
+                            args[0].clone()
+                        }
                         _ => ret_mono.clone(),
                     };
 
                     // Enter a new `Result` context for this function body.
                     let saved_result_err = self.result_err.take();
                     self.result_err = match &ret_mono {
-                        MonoType::Result(_, err) => Some((**err).clone()),
+                        m if m.is_result() => {
+                            let args = m.generic_args().unwrap();
+                            Some(args[1].clone())
+                        }
                         _ => None,
                     };
 
@@ -1835,12 +1829,12 @@ impl<'a> ExpressionInferrer<'a> {
 
                 let inner_ty = self.infer_expr(expr)?;
                 let ok_ty = self.solver.new_var();
-                let expected_result =
-                    MonoType::Result(Box::new(ok_ty.clone()), Box::new(expected_err.clone()));
+                let expected_result = MonoType::make_result(ok_ty.clone(), expected_err.clone());
 
                 if let Err(_e) = self.solver.unify(&inner_ty, &expected_result) {
                     let resolved = self.solver.resolve_type(&inner_ty);
-                    if let MonoType::Result(_, err) = resolved {
+                    if resolved.is_result() {
+                        let err = &resolved.generic_args().expect("Result args")[1];
                         return Err(ErrorCodeDefinition::try_error_type_mismatch(
                             &expected_err.to_string(),
                             &err.to_string(),
@@ -1861,7 +1855,10 @@ impl<'a> ExpressionInferrer<'a> {
             // Ref 表达式
             crate::frontend::core::parser::ast::Expr::Ref { expr, .. } => {
                 let expr_ty = self.infer_expr(expr)?;
-                Ok(MonoType::Arc(Box::new(expr_ty)))
+                Ok(MonoType::Generic {
+                    name: "Arc".into(),
+                    args: vec![expr_ty],
+                })
             }
 
             // Unsafe 块
@@ -1901,7 +1898,7 @@ impl<'a> ExpressionInferrer<'a> {
 
                 self.scope.exit_block();
 
-                Ok(MonoType::List(Box::new(elem_ty)))
+                Ok(MonoType::make_list(elem_ty))
             }
 
             // RFC-012: F-string 类型推断
@@ -1918,7 +1915,7 @@ impl<'a> ExpressionInferrer<'a> {
                         // 所有类型都支持转换为 String（通过 format()）
                     }
                 }
-                Ok(MonoType::String)
+                Ok(MonoType::make_string())
             }
 
             // 错误恢复占位符：返回新类型变量，不会导致 panic
@@ -1955,12 +1952,14 @@ impl<'a> ExpressionInferrer<'a> {
                 let iter_ty = self.infer_expr(iterable)?;
 
                 let element_type = match &iter_ty {
-                    MonoType::List(elem_ty) => *elem_ty.clone(),
-                    MonoType::Range { elem_type } => *elem_type.clone(),
-                    MonoType::String => MonoType::Char,
-                    MonoType::Tuple(_elems) => self.solver.new_var(),
-                    MonoType::Dict(key_ty, value_ty) => {
-                        MonoType::Tuple(vec![*key_ty.clone(), *value_ty.clone()])
+                    MonoType::Generic { name, args } if name == "List" => args[0].clone(),
+                    MonoType::Generic { name, args } if name == "Range" && args.len() == 1 => {
+                        args[0].clone()
+                    }
+                    MonoType::Generic { name, .. } if name == "String" => MonoType::Char,
+                    MonoType::Generic { name, .. } if name == "Tuple" => self.solver.new_var(),
+                    MonoType::Generic { name, args } if name == "Dict" => {
+                        MonoType::make_tuple(vec![args[0].clone(), args[1].clone()])
                     }
                     _ => self.solver.new_var(),
                 };
@@ -1978,9 +1977,9 @@ impl<'a> ExpressionInferrer<'a> {
                     Ok(ty) => {
                         // spawn for 返回 List(T)，T 是循环体返回类型
                         if matches!(ty, MonoType::Void) {
-                            Ok(MonoType::List(Box::new(MonoType::Void)))
+                            Ok(MonoType::make_list(MonoType::Void))
                         } else {
-                            Ok(MonoType::List(Box::new(ty)))
+                            Ok(MonoType::make_list(ty))
                         }
                     }
                     Err(e) => Err(e),
@@ -2222,22 +2221,6 @@ fn substitute_type_params_with_vars(
                 .map(|a| substitute_type_params_with_vars(a, param_vars))
                 .collect(),
         },
-        MonoType::List(i) => {
-            MonoType::List(Box::new(substitute_type_params_with_vars(i, param_vars)))
-        }
-        MonoType::Option(i) => {
-            MonoType::Option(Box::new(substitute_type_params_with_vars(i, param_vars)))
-        }
-        MonoType::Arc(i) => {
-            MonoType::Arc(Box::new(substitute_type_params_with_vars(i, param_vars)))
-        }
-        MonoType::Weak(i) => {
-            MonoType::Weak(Box::new(substitute_type_params_with_vars(i, param_vars)))
-        }
-        MonoType::Result(ok, err) => MonoType::Result(
-            Box::new(substitute_type_params_with_vars(ok, param_vars)),
-            Box::new(substitute_type_params_with_vars(err, param_vars)),
-        ),
         MonoType::Fn {
             params,
             return_type,
@@ -2248,18 +2231,6 @@ fn substitute_type_params_with_vars(
                 .collect(),
             return_type: Box::new(substitute_type_params_with_vars(return_type, param_vars)),
         },
-        MonoType::Tuple(ts) => MonoType::Tuple(
-            ts.iter()
-                .map(|t| substitute_type_params_with_vars(t, param_vars))
-                .collect(),
-        ),
-        MonoType::Dict(k, v) => MonoType::Dict(
-            Box::new(substitute_type_params_with_vars(k, param_vars)),
-            Box::new(substitute_type_params_with_vars(v, param_vars)),
-        ),
-        MonoType::Set(i) => {
-            MonoType::Set(Box::new(substitute_type_params_with_vars(i, param_vars)))
-        }
         MonoType::Ref { mutable, inner } => MonoType::Ref {
             mutable: *mutable,
             inner: Box::new(substitute_type_params_with_vars(inner, param_vars)),

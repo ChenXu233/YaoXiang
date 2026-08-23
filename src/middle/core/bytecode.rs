@@ -1774,10 +1774,7 @@ impl From<crate::frontend::core::typecheck::MonoType> for IrType {
             MonoType::Float(w) => IrType::Float(w),
             MonoType::Bool => IrType::Bool,
             MonoType::Char => IrType::Char,
-            MonoType::String => IrType::String,
-            MonoType::Bytes => IrType::Bytes,
             MonoType::Void => IrType::Void,
-            MonoType::Tuple(types) => IrType::Tuple(types.into_iter().map(|t| t.into()).collect()),
             MonoType::Fn {
                 params,
                 return_type,
@@ -1786,21 +1783,23 @@ impl From<crate::frontend::core::typecheck::MonoType> for IrType {
                 params: params.into_iter().map(|t| t.into()).collect(),
                 return_type: Box::new((*return_type).into()),
             },
-            // List, Dict, Set, Option, Result, Range, Struct, Enum,
-            // Arc, Weak — no direct IR counterpart or different shape
-            MonoType::List(_)
-            | MonoType::Dict(_, _)
-            | MonoType::Set(_)
-            | MonoType::Option(_)
-            | MonoType::Result(_, _)
-            | MonoType::Range { .. }
-            | MonoType::Struct(_)
+            // #299：String/Bytes/Tuple/List/Dict/Option/Result/Range/Arc/Weak 现为 Generic 表示
+            MonoType::Generic { name, args } => match name.as_str() {
+                "String" => IrType::String,
+                "Bytes" => IrType::Bytes,
+                "Tuple" => IrType::Tuple(args.clone().into_iter().map(|t| t.into()).collect()),
+                _ => IrType::Void,
+            },
+            // Struct, Enum, Ref, TypeVar, TypeRef, Union, Intersection, AssocType — unresolved or no IR form
+            MonoType::Struct(_)
             | MonoType::Enum(_)
-            | MonoType::Arc(_)
-            | MonoType::Weak(_) => IrType::Void,
-            // Ref is ZST, no runtime representation
-            MonoType::Ref { .. } => IrType::Void,
-            // TypeVar, TypeRef, Union, Intersection, AssocType — unresolved or no IR form
+            | MonoType::Ref { .. }
+            | MonoType::TypeVar(_)
+            | MonoType::TypeRef(_)
+            | MonoType::Union(_)
+            | MonoType::Intersection(_)
+            | MonoType::AssocType { .. } => IrType::Void,
+            // 残留旧变体（Task 1.7 删除枚举变体前的过渡分支）
             _ => IrType::Void,
         }
     }

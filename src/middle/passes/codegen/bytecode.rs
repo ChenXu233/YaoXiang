@@ -572,8 +572,11 @@ fn type_id_to_monotype(id: u32) -> MonoType {
         2..=5 => MonoType::Int(((id - 2) * 8 + 8) as usize),
         6..=9 => MonoType::Float(((id - 6) * 8 + 8) as usize),
         10 => MonoType::Char,
-        11 => MonoType::String,
-        12 => MonoType::Bytes,
+        11 => MonoType::make_string(),
+        12 => MonoType::Generic {
+            name: "Bytes".into(),
+            args: vec![],
+        },
         _ => MonoType::TypeRef("_".to_string()),
     }
 }
@@ -629,34 +632,38 @@ impl MonoTypeExt for MonoType {
             MonoType::Int(n) => 2 + (*n as u32 / 8 - 1),
             MonoType::Float(n) => 6 + (*n as u32 / 8 - 1),
             MonoType::Char => 10,
-            MonoType::String => 11,
-            MonoType::Bytes => 12,
             MonoType::Struct(_) => 20,
             MonoType::Enum(_) => 21,
-            MonoType::Option(_) => 21,
-            MonoType::Result(_, _) => 21,
-            MonoType::Tuple(_) => 22,
-            MonoType::List(_) => 23,
-            MonoType::Dict(_, _) => 24,
-            MonoType::Set(_) => 25,
             MonoType::Fn { .. } => 30,
             MonoType::TypeRef(_) => 40,
             MonoType::TypeVar(_) => 50,
-            MonoType::Range { .. } => 26,
             // 联合类型和交集类型暂时使用 TypeRef 的 ID
             MonoType::Union(_) => 40,
             MonoType::Intersection(_) => 40,
-            MonoType::Arc(_) => 45,
-            MonoType::Weak(_) => 46,
             MonoType::Ref { .. } => 49,       // 借用引用类型
             MonoType::AssocType { .. } => 47, // 使用新的类型ID
             MonoType::Literal { .. } => 48,   // 字面量类型
             MonoType::MetaType { .. } => 0,   // 元类型无运行时表示
-            MonoType::Generic { .. } => 47,   // 泛型实例化，使用结构体类型ID
+            // #299：容器/复合类型统一走 Generic，映射到原编号保持序列化稳定
+            MonoType::Generic { name, .. } => match name.as_str() {
+                "String" => 11,
+                "Bytes" => 12,
+                "Option" | "Result" => 21,
+                "Tuple" => 22,
+                "List" => 23,
+                "Dict" => 24,
+                "Set" => 25,
+                "Range" => 26,
+                "Arc" => 45,
+                "Weak" => 46,
+                _ => 47, // 泛型实例化，使用结构体类型ID
+            },
             MonoType::Refined { base, .. } => base.to_type_id(),
             MonoType::DepFn { .. } => 30, // 依赖函数类型，与普通函数同ID
             MonoType::LibraryRef { .. } | MonoType::ExternRef { .. } => todo!(),
             MonoType::Never => 0, // Never 无运行时表示
+            // #299 过渡：旧容器变体残留（Task 1.7 删变体后此 arm 移除）
+            _ => 47,
         }
     }
 }
