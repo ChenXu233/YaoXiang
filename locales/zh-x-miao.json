@@ -546,6 +546,12 @@
     "example": "let arr = [1, 2, 3]; println!(arr[10]);",
     "error_output": "error[E6003]: 数组索引越界喵\n --> runtime\n  |\n  | println!(arr[10]);\n  |     ^ 索引 10 超出长度 3喵"
   },
+  "E6008": {
+    "title": "Key not found",
+    "message": "Dictionary key was not found at runtime",
+    "template": "Key not found: {key}",
+    "help": "Use dict.has to check key existence before indexing"
+  },
   "E6004": {
     "title": "栈溢出喵",
     "message": "递归深度超出栈限制喵",

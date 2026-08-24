@@ -578,6 +578,12 @@
     "example": "let arr = [1, 2, 3]; println!(arr[10]);",
     "error_output": "error[E6003]: array index out of bounds\n --> runtime\n  |\n  | println!(arr[10]);\n  |     ^ index 10 is out of bounds for length 3"
   },
+  "E6008": {
+    "title": "Key not found",
+    "message": "Dictionary key was not found at runtime",
+    "template": "Key not found: {key}",
+    "help": "Use dict.has to check key existence before indexing"
+  },
   "E6004": {
     "title": "Stack overflow",
     "message": "Recursion depth exceeds stack limit",

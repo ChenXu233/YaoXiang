@@ -862,7 +862,7 @@ impl Interpreter {
                                 // #299：缺键不再静默返回 void（同 #279 方向）
                                 None => {
                                     return Err(ExecutorError::KeyNotFound {
-                                        key: format!("{:?}", idx_value),
+                                        key: format!("{}", idx_value),
                                         stack: None,
                                     });
                                 }

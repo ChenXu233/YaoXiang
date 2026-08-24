@@ -1,0 +1,14 @@
+// 06-compile-errors/dict_missing_key_e6008.yx
+// [test:error]: #299 §4 Dict 缺键必须显式报 E6008（曾静默返回 void；
+//              曾因 locale 缺失渲染成 "Internal error: missing i18n template"）
+// 注意: 本文件是【运行时】错误而非编译错误——runner 对 06 目录反向判定
+//       （退出码非 0 = PASS），编译通过但运行时报错同样满足判定。
+// 预期: 运行时错误 E6008 Key not found
+// 覆盖: #299 §4 错误码归并——缺键与索引越界语义不同类，独立成码
+// 验证: 缺键访问不得静默 void、不得渲染 internal error，必须是带文案的 E6008
+// 状态: ❌ 应运行时失败
+
+main = {
+    d = {"a": 1}
+    v = d["nope"]
+}

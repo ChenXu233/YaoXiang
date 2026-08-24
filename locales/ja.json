@@ -565,6 +565,12 @@
     "example": "let arr = [1, 2, 3]; println!(arr[10]);",
     "error_output": "error[E6003]: 配列インデックスが範囲外\n --> runtime\n  |\n  | println!(arr[10]);\n  |     ^ インデックス 10 は長さ 3 を超えています"
   },
+  "E6008": {
+    "title": "Key not found",
+    "message": "Dictionary key was not found at runtime",
+    "template": "Key not found: {key}",
+    "help": "Use dict.has to check key existence before indexing"
+  },
   "E6004": {
     "title": "スタックオーバーフロー",
     "message": "再帰の深さがスタックの制限を超えています",

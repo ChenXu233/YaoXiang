@@ -578,6 +578,12 @@
     "example": "let arr = [1, 2, 3]; println!(arr[10]);",
     "error_output": "error[E6003]: 数组索引越界\n --> runtime\n  |\n  | println!(arr[10]);\n  |     ^ 索引 10 超出长度 3"
   },
+  "E6008": {
+    "title": "键不存在",
+    "message": "字典在运行时找不到该键",
+    "template": "键不存在：{key}",
+    "help": "索引前先用 dict.has 检查键是否存在"
+  },
   "E6004": {
     "title": "栈溢出",
     "message": "递归深度超出栈限制",

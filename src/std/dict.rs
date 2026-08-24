@@ -102,7 +102,7 @@ fn native_get(
         HeapValue::Dict(map) => match map.get(&key) {
             Some(v) => Ok(v.clone()),
             None => Err(ExecutorError::KeyNotFound {
-                key: format!("{:?}", key),
+                key: format!("{}", key),
                 stack: None,
             }),
         },
