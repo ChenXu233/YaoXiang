@@ -217,6 +217,13 @@ pub enum Instruction {
         size: Operand,
         elem_size: Operand,
     },
+    /// 定长数组构造（#299 §2）：分配 N 个 Void 占位元素，
+    /// 由字面量上下文落点生成——仅当 Array(T,N) 注解直接作用于 List 字面量
+    AllocFixedArray {
+        dst: Operand,
+        count: usize,
+        span: Span,
+    },
     LoadField {
         dst: Operand,
         src: Operand,

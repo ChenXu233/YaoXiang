@@ -439,6 +439,20 @@ impl Translator {
             Alloc { dst, .. } => self.translate_alloc(dst),
             Free(_) => Ok(BytecodeInstruction::new(opcode::NOP, vec![])),
             AllocArray { dst, .. } => self.translate_alloc_array(dst),
+            AllocFixedArray { dst, count, .. } => {
+                // #299 §2：定长数组构造——NEW_ARRAY(dst, count)
+                let dst_reg = self.operand_resolver.to_reg(dst)?;
+                Ok(BytecodeInstruction::new(
+                    opcode::NEW_ARRAY,
+                    vec![
+                        dst_reg,
+                        *count as u8,
+                        (*count >> 8) as u8,
+                        (*count >> 16) as u8,
+                        (*count >> 24) as u8,
+                    ],
+                ))
+            }
 
             LoadField {
                 dst, src, field, ..

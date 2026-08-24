@@ -1271,8 +1271,15 @@ impl StatementChecker {
                     (MonoType::Float(_), MonoType::Int(_))
                 );
                 if !is_int_to_float {
+                    // #299 §2：字面量种子——Array 注解直接作用于 List 字面量时，
+                    // 跳过 List/Array unify（字面量落点由上下文决定，ir_gen 按 Array 生成）
+                    let is_array_literal_seed = resolved_ann.is_array()
+                        && matches!(
+                            initializer,
+                            Some(crate::frontend::core::parser::ast::Expr::List(_, _))
+                        );
                     let unify_result = self.solver.unify(&resolved_init, &resolved_ann);
-                    if unify_result.is_err() {
+                    if unify_result.is_err() && !is_array_literal_seed {
                         // Unify failed — check structural subtyping (interface assignment)
                         let is_structural_subtype = matches!(
                             (&resolved_init, &resolved_ann),

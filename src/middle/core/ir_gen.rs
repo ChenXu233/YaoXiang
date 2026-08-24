@@ -2160,6 +2160,38 @@ impl AstToIrGenerator {
                     idx
                 };
                 if let Some(expr) = initializer {
+                    // #299 §2：字面量上下文落点——Array 注解直接作用于 List 字面量时，
+                    // 生成定长数组构造而非 List。禁止隐式 List→Array 转换：仅字面量种子直接落 Array。
+                    if let (Some(ann), ast::Expr::List(elems, lit_span)) = (type_annotation, expr) {
+                        let mono: MonoType = ann.clone().into();
+                        if mono.is_array() {
+                            let mut elem_regs = Vec::with_capacity(elems.len());
+                            for elem in elems {
+                                let reg = self.next_temp_reg();
+                                self.generate_expr_ir(elem, reg, instructions, constants)?;
+                                elem_regs.push(reg);
+                            }
+                            instructions.push(Instruction::AllocFixedArray {
+                                dst: Operand::Local(var_idx),
+                                count: elems.len(),
+                                span: *lit_span,
+                            });
+                            for (i, reg) in elem_regs.iter().enumerate() {
+                                let idx_reg = self.next_temp_reg();
+                                instructions.push(Instruction::Load {
+                                    dst: Operand::Local(idx_reg),
+                                    src: Operand::Const(ConstValue::Int(i as i128)),
+                                });
+                                instructions.push(Instruction::StoreIndex {
+                                    dst: Operand::Local(var_idx),
+                                    index: Operand::Local(idx_reg),
+                                    src: Operand::Local(*reg),
+                                    span: *lit_span,
+                                });
+                            }
+                            return Ok(());
+                        }
+                    }
                     // 统一走 generate_expr_ir — 把 RHS 值直接放入 var_idx 槽
                     self.generate_expr_ir(expr, var_idx, instructions, constants)?;
                 } else {
