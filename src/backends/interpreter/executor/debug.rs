@@ -33,8 +33,14 @@ fn index_arg(
     let i = idx
         .to_int()
         .ok_or_else(|| ExecutorError::type_only(format!("{what} index must be an Int")))?;
-    usize::try_from(i)
-        .map_err(|_| ExecutorError::runtime_only(format!("{what}: negative index {i}")))
+    usize::try_from(i).map_err(|_| {
+        // #299 §4: 负索引归并到 IndexOutOfBounds（E6003），不再落通用 E6007
+        ExecutorError::IndexOutOfBounds {
+            max: 0,
+            index: (-i) as usize,
+            stack: None,
+        }
+    })
 }
 
 impl Interpreter {
@@ -855,7 +861,10 @@ impl Interpreter {
                                 Some(value) => frame.set_slot(dst.0 as usize, value.clone()),
                                 // #299：缺键不再静默返回 void（同 #279 方向）
                                 None => {
-                                    return Err(ExecutorError::runtime_only("dict: key not found"))
+                                    return Err(ExecutorError::KeyNotFound {
+                                        key: format!("{:?}", idx_value),
+                                        stack: None,
+                                    });
                                 }
                             }
                         }

@@ -101,7 +101,10 @@ fn native_get(
         // #299：缺键不再静默返回 void（与 `[]` 运算符、#279 方向一致）
         HeapValue::Dict(map) => match map.get(&key) {
             Some(v) => Ok(v.clone()),
-            None => Err(ExecutorError::runtime_only("dict.get: key not found")),
+            None => Err(ExecutorError::KeyNotFound {
+                key: format!("{:?}", key),
+                stack: None,
+            }),
         },
         _ => Ok(RuntimeValue::Void),
     }

@@ -34,6 +34,11 @@ pub static E6XXX: &[ErrorCodeDefinition] = &[
         code: "E6007",
         category: ErrorCategory::Runtime,
     },
+    // #299 §4: Dict 键缺失（与索引越界语义不同类，独立码）
+    ErrorCodeDefinition {
+        code: "E6008",
+        category: ErrorCategory::Runtime,
+    },
 ];
 
 // 快捷方法（code_helpers! 生成）
@@ -51,5 +56,7 @@ impl ErrorCodeDefinition {
     ("E6006", runtime_function_not_found(func: &str) => .param("func", func)),
     /// E6007 运行时错误（通用）
     ("E6007", runtime_error(message: &str) => .param("message", message)),
+    /// E6008 键缺失（#299 §4）
+    ("E6008", key_not_found(key: &str) => .param("key", key)),
     }
 }

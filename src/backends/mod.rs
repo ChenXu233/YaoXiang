@@ -73,6 +73,11 @@ pub enum ExecutorError {
     AssertionFailed(String, Option<Vec<StackFrame>>),
     /// Field not found
     FieldNotFound(String, Option<Vec<StackFrame>>),
+    /// Dict 键缺失（#299 §4：与索引越界区分——语义不同的契约失败，映射 E6008）
+    KeyNotFound {
+        key: String,
+        stack: Option<Vec<StackFrame>>,
+    },
     /// Function not found
     FunctionNotFound(String, Option<Vec<StackFrame>>),
 }
@@ -98,6 +103,7 @@ impl ExecutorError {
             ExecutorError::IndexOutOfBounds { stack, .. } => stack.as_ref(),
             ExecutorError::AssertionFailed(_, stack) => stack.as_ref(),
             ExecutorError::FieldNotFound(_, stack) => stack.as_ref(),
+            ExecutorError::KeyNotFound { stack, .. } => stack.as_ref(),
             ExecutorError::FunctionNotFound(_, stack) => stack.as_ref(),
         }
     }
@@ -127,6 +133,16 @@ impl ExecutorError {
     }
 
     /// Create a new field not found error with stack trace
+    /// #299 §4: Dict 键缺失专用构造器（E6008）
+    pub fn key_not_found(
+        key: impl Into<String>,
+        stack: Vec<StackFrame>,
+    ) -> Self {
+        ExecutorError::KeyNotFound {
+            key: key.into(),
+            stack: Some(stack),
+        }
+    }
     pub fn field_not_found(
         name: impl Into<String>,
         stack: Vec<StackFrame>,
@@ -171,6 +187,7 @@ impl ExecutorError {
     ) -> Self {
         match self {
             // Already has stack trace
+            ExecutorError::KeyNotFound { stack: Some(_), .. } => self,
             ExecutorError::Runtime(_, Some(_)) => self,
             ExecutorError::Type(_, Some(_)) => self,
             ExecutorError::StackOverflow(Some(_)) => self,
@@ -201,6 +218,10 @@ impl ExecutorError {
             ExecutorError::FieldNotFound(name, None) => {
                 ExecutorError::FieldNotFound(name, Some(stack))
             }
+            ExecutorError::KeyNotFound { key, stack: None } => ExecutorError::KeyNotFound {
+                key,
+                stack: Some(stack),
+            },
             ExecutorError::FunctionNotFound(name, None) => {
                 ExecutorError::FunctionNotFound(name, Some(stack))
             }
@@ -262,6 +283,15 @@ impl std::fmt::Display for ExecutorError {
             }
             ExecutorError::AssertionFailed(msg, stack) => {
                 write!(f, "Assertion failed: {}", msg)?;
+                if let Some(frames) = stack {
+                    for frame in frames {
+                        writeln!(f, "{}", frame)?;
+                    }
+                }
+                Ok(())
+            }
+            ExecutorError::KeyNotFound { key, stack } => {
+                write!(f, "Key not found: {}", key)?;
                 if let Some(frames) = stack {
                     for frame in frames {
                         writeln!(f, "{}", frame)?;

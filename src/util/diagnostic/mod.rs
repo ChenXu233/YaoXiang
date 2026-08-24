@@ -151,6 +151,8 @@ fn build_runtime_diagnostic(
         ExecutorError::IndexOutOfBounds { max, index, .. } => {
             ErrorCodeDefinition::runtime_index_out_of_bounds(*max, *index)
         }
+        // #299 §4: 键缺失映射专用码 E6008
+        ExecutorError::KeyNotFound { key, .. } => ErrorCodeDefinition::key_not_found(key.as_str()),
         ExecutorError::AssertionFailed(msg, _) => {
             ErrorCodeDefinition::assertion_failed(msg.as_str())
         }
