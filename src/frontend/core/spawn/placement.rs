@@ -188,6 +188,13 @@ impl SpawnPlacementChecker {
                 self.check_expr(expr);
                 self.check_expr(index);
             }
+            Expr::In {
+                elem, container, ..
+            } => {
+                self.check_expr(elem);
+                self.check_expr(container);
+            }
+
             Expr::FieldAccess { expr, .. } => self.check_expr(expr),
             Expr::Try { expr, .. } => self.check_expr(expr),
             Expr::Ref { expr, .. } => self.check_expr(expr),

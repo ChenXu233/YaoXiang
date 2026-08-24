@@ -59,6 +59,7 @@ fn expr_end_line(expr: &Expr) -> usize {
         Expr::List(_, s) => *s,
         Expr::ListComp { span, .. } => *span,
         Expr::Dict(_, s) => *s,
+        Expr::In { span, .. } => *span,
         Expr::Index { span, .. } => *span,
         Expr::FieldAccess { span, .. } => *span,
         Expr::Try { span, .. } => *span,

@@ -322,6 +322,7 @@ impl Translator {
             Instruction::Store { span, .. } => Some(*span),
             Instruction::StoreField { span, .. } => Some(*span),
             Instruction::StoreIndex { span, .. } => Some(*span),
+            Instruction::Contains { span, .. } => Some(*span),
             Instruction::Div { span, .. } => Some(*span),
             Instruction::Mod { span, .. } => Some(*span),
             Instruction::LoadField { span, .. } => Some(*span),
@@ -466,6 +467,21 @@ impl Translator {
             StoreIndex {
                 dst, index, src, ..
             } => self.translate_store_index(dst, index, src),
+            Contains {
+                dst,
+                elem,
+                container,
+                ..
+            } => {
+                // #299 §3: membership 谓词 → CONTAINS
+                let dst_reg = self.operand_resolver.to_reg(dst)?;
+                let elem_reg = self.operand_resolver.to_reg(elem)?;
+                let container_reg = self.operand_resolver.to_reg(container)?;
+                Ok(BytecodeInstruction::new(
+                    opcode::CONTAINS,
+                    vec![dst_reg, elem_reg, container_reg],
+                ))
+            }
 
             Cast { dst, src, .. } => self.translate_cast(dst, src),
             TypeTest(_, _) => Ok(BytecodeInstruction::new(opcode::TYPE_CHECK, vec![0, 0, 0])),

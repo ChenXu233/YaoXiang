@@ -256,6 +256,15 @@ pub enum Instruction {
         /// Source span for error reporting
         span: Span,
     },
+    /// membership 谓词（#299 §3）：`dst = elem in container` → Bool
+    /// 容器：List/Array/Tuple 线性扫、Dict 键查、String 子串；
+    /// Range 不走此指令——ir_gen 直接脱糖成比较链
+    Contains {
+        dst: Operand,
+        elem: Operand,
+        container: Operand,
+        span: Span,
+    },
     // 注意：迭代器协议已通过 Call 指令实现，无需独立的 IR 指令
     Cast {
         dst: Operand,

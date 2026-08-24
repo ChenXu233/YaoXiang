@@ -1,0 +1,20 @@
+// 01-syntax/operators/in_operator.yx
+// 覆盖: #299 §3 membership 谓词 `in`——一等霍尔谓词
+// 验证: List/Dict(键)/Tuple/Range 区间全覆盖；命中 true 未命中 false，不报错（问 vs 断言）
+// 状态: ✅ 可运行
+
+use std.assert
+
+main = {
+    assert.assert(2 in [1, 2, 3], "list in")
+    assert.assert(!(9 in [1, 2, 3]), "list not in")
+    assert.assert("a" in {"a": 1}, "dict key in")
+    assert.assert(!("x" in {"a": 1}), "dict key not in")
+    assert.assert(2 in (1, 2, 3), "tuple in")
+    assert.assert(5 in 1..10, "range in")
+    assert.assert(!(11 in 1..10), "range not in")
+
+    // 与逻辑运算组合（关系级绑定力）
+    ok = 5 in [5] and 3 in [3]
+    assert.assert(ok, "in composes with &&")
+}

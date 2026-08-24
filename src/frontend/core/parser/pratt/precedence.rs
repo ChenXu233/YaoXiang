@@ -17,7 +17,9 @@ pub const BP_CALL: u8 = 9;
 pub const BP_HIGHEST: u8 = 10;
 
 /// Additional binding power levels for infix operators
-pub const BP_RANGE: u8 = 1;
+// #299 §3: Range 提到高绑定力——'x in 1..10' 中 range 需作为整体成为 in 的右操作数，
+// 且高于逻辑/比较层级（数学惯例：区间是紧绑定构造）
+pub const BP_RANGE: u8 = 7;
 pub const BP_OR: u8 = 1;
 pub const BP_AND: u8 = 2;
 pub const BP_EQ: u8 = 3;

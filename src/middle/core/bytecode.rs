@@ -323,6 +323,12 @@ pub enum BytecodeInstr {
         /// 元素数量
         count: u32,
     },
+    /// membership 谓词（#299 §3）：dst = elem in container → Bool
+    Contains {
+        dst: Reg,
+        elem: Reg,
+        container: Reg,
+    },
 
     // =====================
     // Arc Operations
@@ -555,6 +561,7 @@ impl BytecodeInstr {
             BytecodeInstr::NewDict { .. } => opcode::NEW_DICT,
             BytecodeInstr::NewTuple { .. } => opcode::NEW_TUPLE,
             BytecodeInstr::NewArray { .. } => opcode::NEW_ARRAY,
+            BytecodeInstr::Contains { .. } => opcode::CONTAINS,
             BytecodeInstr::ArcNew { .. } => opcode::ARC_NEW,
             BytecodeInstr::RcNew { .. } => opcode::RC_NEW,
             BytecodeInstr::ArcClone { .. } => opcode::ARC_CLONE,
@@ -673,6 +680,10 @@ impl BytecodeInstr {
             BytecodeInstr::NewArray { .. } => {
                 // dst(1) + count(4) = 5
                 5
+            }
+            BytecodeInstr::Contains { .. } => {
+                // dst(1) + elem(1) + container(1) = 3
+                3
             }
             BytecodeInstr::ArcNew { .. } => 4,
             BytecodeInstr::RcNew { .. } => 4,
@@ -1621,6 +1632,18 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                             decoded_instructions.push(BytecodeInstr::NewArray {
                                 dst: Reg(dst),
                                 count,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::CONTAINS => {
+                        // Contains: dst(1) + elem(1) + container(1)
+                        if instr.operands.len() >= 3 {
+                            decoded_instructions.push(BytecodeInstr::Contains {
+                                dst: Reg(instr.operands[0] as u16),
+                                elem: Reg(instr.operands[1] as u16),
+                                container: Reg(instr.operands[2] as u16),
                             });
                         } else {
                             decoded_instructions.push(BytecodeInstr::Nop);

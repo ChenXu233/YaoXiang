@@ -79,6 +79,8 @@ pub const RC_NEW: u8 = 0x89;
 pub const NEW_TUPLE: u8 = 0x8A;
 /// 定长数组构造：分配 N 个元素、以默认值填充（#299 §2）
 pub const NEW_ARRAY: u8 = 0x8B;
+/// membership 谓词（#299 §3）：dst = elem in container
+pub const CONTAINS: u8 = 0x8C;
 
 // String Operations (0x90-0x9F)
 pub const STRING_LENGTH: u8 = 0x90;
@@ -169,6 +171,7 @@ pub fn opcode_name(code: u8) -> &'static str {
         RC_NEW => "RcNew",
         NEW_TUPLE => "NewTuple",
         NEW_ARRAY => "NewArray",
+        CONTAINS => "Contains",
         STRING_LENGTH => "StringLength",
         STRING_CONCAT => "StringConcat",
         STRING_EQUAL => "StringEqual",

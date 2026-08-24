@@ -874,6 +874,27 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // 下标访问
+            // #299 §3: membership 谓词 `elem in container` → Bool
+            // 右操作数：List/Array/Dict(键)/Set/Tuple/String 子串/Range 区间
+            crate::frontend::core::parser::ast::Expr::In {
+                elem, container, ..
+            } => {
+                let _elem_ty = self.infer_expr(elem)?;
+                let container_ty = self.infer_expr(container)?;
+                // Range 字面量（1..10）类型是 Generic{"Range"}，区间检查合法
+                match &container_ty {
+                    MonoType::Generic { name, .. }
+                        if matches!(
+                            name.as_str(),
+                            "List" | "Array" | "Dict" | "Set" | "Tuple" | "Range"
+                        ) =>
+                    {
+                        Ok(MonoType::Bool)
+                    }
+                    MonoType::Generic { name, .. } if name == "String" => Ok(MonoType::Bool),
+                    _ => Ok(MonoType::Bool),
+                }
+            }
             crate::frontend::core::parser::ast::Expr::Index {
                 expr: container,
                 index,

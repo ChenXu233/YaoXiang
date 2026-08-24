@@ -759,6 +759,46 @@ impl Interpreter {
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
+            // #299 §3: membership 谓词——命中 true / 未命中 false，不报错（问 vs 断言）
+            BytecodeInstr::Contains {
+                dst,
+                elem,
+                container,
+            } => {
+                let e = self.force_slot(frame, *elem)?;
+                let cval = self.force_slot(frame, *container)?;
+                let found = match &cval {
+                    RuntimeValue::List(h) => matches!(
+                        &*h.lock(),
+                        crate::backends::common::HeapValue::List(items)
+                            if items.contains(&e)
+                    ),
+                    RuntimeValue::Array(h) => matches!(
+                        &*h.lock(),
+                        crate::backends::common::HeapValue::Array(items)
+                            if items.contains(&e)
+                    ),
+                    RuntimeValue::Tuple(h) => matches!(
+                        &*h.lock(),
+                        crate::backends::common::HeapValue::Tuple(items)
+                            if items.contains(&e)
+                    ),
+                    RuntimeValue::Dict(h) => matches!(
+                        &*h.lock(),
+                        crate::backends::common::HeapValue::Dict(map)
+                            if map.contains_key(&e)
+                    ),
+                    RuntimeValue::String(s) => match &e {
+                        RuntimeValue::String(sub) => s.contains(sub.as_ref()),
+                        RuntimeValue::Char(ch) => s.contains(char::from_u32(*ch).unwrap_or(' ')),
+                        _ => false,
+                    },
+                    _ => false,
+                };
+                frame.set_slot(dst.0 as usize, RuntimeValue::Bool(found));
+                frame.advance();
+                Ok(StepOutcome::Continue)
+            }
             BytecodeInstr::LoadElement { dst, array, index } => {
                 let arr = self.force_slot(frame, *array)?;
                 let idx_value = self.force_slot(frame, *index)?;

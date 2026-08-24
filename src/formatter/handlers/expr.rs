@@ -20,6 +20,15 @@ pub fn format_expr(
             right,
             span: _,
         } => format_binop(op, left, right, ctx, source_map),
+        Expr::In {
+            elem,
+            container,
+            span: _,
+        } => format!(
+            "{} in {}",
+            format_expr(elem, ctx, source_map),
+            format_expr(container, ctx, source_map)
+        ),
         Expr::UnOp {
             op,
             expr: inner,

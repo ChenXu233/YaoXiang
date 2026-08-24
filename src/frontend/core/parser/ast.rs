@@ -92,6 +92,13 @@ pub enum Expr {
         span: Span,
     },
     Dict(Vec<(Expr, Expr)>, Span),
+    /// membership 谓词（#299 §3）：`elem in container` → Bool
+    /// 一等霍尔谓词：精化类型阶段作为编译期可证命题的基底
+    In {
+        elem: Box<Expr>,
+        container: Box<Expr>,
+        span: Span,
+    },
     Index {
         expr: Box<Expr>,
         index: Box<Expr>,

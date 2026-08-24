@@ -56,6 +56,8 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Lt | TokenKind::Le | TokenKind::Gt | TokenKind::Ge) => {
                 Some((BP_CMP, BP_CMP + 1, Self::parse_binary))
             }
+            // #299 §3: membership 谓词 `elem in container`（关系级，返 Bool）
+            Some(TokenKind::KwIn) => Some((BP_CMP, BP_CMP + 1, Self::parse_in)),
             // Addition/Subtraction
             Some(TokenKind::Plus | TokenKind::Minus) => {
                 Some((BP_ADD, BP_ADD + 1, Self::parse_binary))
@@ -135,6 +137,24 @@ impl<'a> ParserState<'a> {
             op,
             left: Box::new(lhs),
             right: Box::new(rhs),
+            span,
+        })
+    }
+
+    /// #299 §3: membership 谓词 `elem in container`
+    fn parse_in(
+        &mut self,
+        lhs: Expr,
+        _left_bp: u8,
+    ) -> Option<Expr> {
+        let span = self.span();
+        self.bump(); // 消费 'in'
+                     // 右操作数按关系级解析：BP_RANGE 已提到高绑定力，1..10 可整体成为容器，
+                     // 且 and/or（低绑定力）不会被吞进容器
+        let container = self.parse_expression(_left_bp)?;
+        Some(Expr::In {
+            elem: Box::new(lhs),
+            container: Box::new(container),
             span,
         })
     }

@@ -595,6 +595,27 @@ fn collect_reads_writes(
             }
         }
 
+        // #299 §3: membership 谓词——两侧都是读
+        Expr::In {
+            elem, container, ..
+        } => {
+            collect_reads_writes(
+                elem,
+                reads,
+                writes,
+                resource_vars,
+                trait_table,
+                local_var_types,
+            );
+            collect_reads_writes(
+                container,
+                reads,
+                writes,
+                resource_vars,
+                trait_table,
+                local_var_types,
+            );
+        }
         // 字典
         Expr::Dict(pairs, _) => {
             for (k, v) in pairs {

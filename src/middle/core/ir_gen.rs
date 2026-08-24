@@ -3021,6 +3021,7 @@ impl AstToIrGenerator {
             ast::Expr::FString { span, .. } => *span,
             ast::Expr::Error(span) => *span,
             ast::Expr::Borrow { span, .. } => *span,
+            ast::Expr::In { span, .. } => *span,
         }
     }
 
@@ -4243,6 +4244,59 @@ impl AstToIrGenerator {
                     index: Operand::Local(index_reg),
                     span: *span,
                 });
+            }
+            // #299 §3: membership 谓词 `elem in container`
+            // Range 字面量脱糖成比较链（left >= start && left < end），无需 Range 运行时值；
+            // 其余容器发 Contains 指令
+            Expr::In {
+                elem,
+                container,
+                span,
+            } => {
+                if let Expr::BinOp {
+                    op: ast::BinOp::Range,
+                    left: start,
+                    right: end,
+                    ..
+                } = container.as_ref()
+                {
+                    // 区间检查：elem >= start && elem < end
+                    let elem_reg = self.next_temp_reg();
+                    let start_reg = self.next_temp_reg();
+                    let end_reg = self.next_temp_reg();
+                    self.generate_expr_ir(elem, elem_reg, instructions, constants)?;
+                    self.generate_expr_ir(start, start_reg, instructions, constants)?;
+                    self.generate_expr_ir(end, end_reg, instructions, constants)?;
+                    instructions.push(Instruction::Ge {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(elem_reg),
+                        rhs: Operand::Local(start_reg),
+                    });
+                    // Ge 为 false → 跳过 Lt（result 已是 false）；否则 Lt 结果即最终值
+                    let short_idx = instructions.len();
+                    instructions.push(Instruction::JmpIfNot(Operand::Local(result_reg), 0));
+                    instructions.push(Instruction::Lt {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(elem_reg),
+                        rhs: Operand::Local(end_reg),
+                    });
+                    // JmpIfNot 目标 = Lt 之后（无尾随 Jmp，避免跳转回指令 0 死循环）
+                    let end_target = instructions.len();
+                    if let Instruction::JmpIfNot(_, t) = &mut instructions[short_idx] {
+                        *t = end_target;
+                    }
+                } else {
+                    let elem_reg = self.next_temp_reg();
+                    let container_reg = self.next_temp_reg();
+                    self.generate_expr_ir(elem, elem_reg, instructions, constants)?;
+                    self.generate_expr_ir(container, container_reg, instructions, constants)?;
+                    instructions.push(Instruction::Contains {
+                        dst: Operand::Local(result_reg),
+                        elem: Operand::Local(elem_reg),
+                        container: Operand::Local(container_reg),
+                        span: *span,
+                    });
+                }
             }
             Expr::Return(expr, _) => {
                 // 生成返回指令
