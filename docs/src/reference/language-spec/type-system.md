@@ -304,7 +304,33 @@ TypeBound       ::= Identifier
 ```yaoxiang
 List: (T: Type) -> Type = { ... }
 Map: (K: Type, V: Type) -> Type = { ... }
-```
+``
+
+### 4.1.1 容器类型（#299）
+
+容器类型是泛型类型构造器，不是内置原语——与用户自定义泛型同一待遇，
+经由统一的泛型实例化路径处理：
+
+| 类型 | 语义 | 底座 |
+| --- | --- | --- |
+| `List(T)` | 可增长列表 | `HeapValue::List` |
+| `Array(T, N)` | 定长数组（const 泛型 N）| `HeapValue::Array` |
+| `Dict(K, V)` | 键值映射 | `HeapValue::Dict` |
+| `Set(T)` | 集合（无字面量，用 `std.set` 构造）| — |
+
+关键规则：
+
+- **字面量落点由上下文决定**：`[...]` 裸字面量与 `List(T)` 注解落可增长
+  列表；`Array(T, N)` 注解直接作用于字面量时落定长数组。
+- **禁止隐式 List→Array 转换**：定长性由类型层保证——push 只接受
+  `List(A)` receiver。
+- **索引失败契约**（运行时报错为过渡态，目标态编译期精化覆盖，
+  走值依赖类型）：
+  - 索引越界（含负索引）→ `E6003`
+  - Dict 缺键 → `E6008`
+- **membership `in` 谓词**：返回 `Bool` 不报错，右操作数覆盖
+  List/Array/Dict(键)/Set/Tuple/String/Range。一等霍尔谓词，
+  是精化类型编译期可证命题的基底。`
 
 泛型函数中，类型参数同样在签名中声明，编译器自动从实参推断：
 

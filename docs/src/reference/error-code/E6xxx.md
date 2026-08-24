@@ -43,3 +43,16 @@
 **帮助**: Fix the assertion condition or provide valid input
 
 ---
+
+## E6008：Key not found
+
+**类别**: Runtime
+
+**消息**: Key not found
+
+**帮助**: Use dict.has to check key existence before indexing
+
+---
+
+> #299 §4：Dict 缺键与索引越界（E6003）语义不同类——键不存在 vs 序号超界，
+> 独立成码保留诊断信息。安全访问用 `dict.has` 先判再取。

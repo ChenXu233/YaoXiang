@@ -111,8 +111,13 @@ Unicode     ::= 'u' '{' HexDigit+ '}'
 ```
 List        ::= '[' Expr (',' Expr)* ']'
 Dict        ::= '{' String ':' Expr (',' String ':' Expr)* '}'
-Set         ::= '{' Expr (',' Expr)* '}'
+Array       ::= '[' Expr (',' Expr)* ']'   // 目标类型注解为 Array(T, N) 时字面量落定长数组
 ```
+
+> #299：Set 无字面量文法——集合用 `std.set` 构造。
+> List/Dict 字面量的落点由上下文类型注解决定：裸字面量与 `List(T)` 注解
+> 落可增长列表；`Array(T, N)` 注解直接作用于字面量时落定长数组。
+> 禁止隐式 List→Array 转换。
 
 #### 1.6.5 列表推导式
 
@@ -125,6 +130,12 @@ ListComp    ::= '[' Expr 'for' Identifier 'in' Expr (',' Expr)* ('if' Expr)? ']'
 ```
 Membership  ::= Expr 'in' Expr
 ```
+
+> #299 §3：`in` 是二元关系运算符，返回 `Bool`——命中 `true`、未命中
+> `false`，不报错。语义切分：`[]` 是断言存在并取值（失败报错），
+> `in` 是询问是否存在（未命中是正常 `false`）。
+> 右操作数覆盖：List / Array / Dict(键集) / Set / Tuple / String(子串) /
+> Range(区间)。`in` 是一等霍尔谓词，精化类型阶段作为编译期可证命题的基底。
 
 ### 1.7 注释
 
