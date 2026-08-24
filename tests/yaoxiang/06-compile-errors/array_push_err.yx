@@ -1,0 +1,12 @@
+// 06-compile-errors/array_push_err.yx
+// [test:error]: #299 §2 Array 定长规则——push 拒收 Array receiver
+// 预期: 编译错误 E1002（std.list.push 签名要求 List(A)，Array 不 unify）
+// 验证: 定长性由类型层保证（Generic 路径天然区分），非运行时
+// 状态: ❌ 应编译失败
+
+use std.list
+
+main = {
+    b: Array(Int, 3) = [40, 50, 60]
+    b2 = list.push(b, 70)
+}
