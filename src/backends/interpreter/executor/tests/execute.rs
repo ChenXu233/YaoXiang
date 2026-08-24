@@ -3,6 +3,7 @@
 //! 测试覆盖内容：
 //! - Borrow/Release 字节码指令的执行
 //! - 借用令牌（ZST）的拷贝、释放及边界行为
+//! - #299 §2: NewArray 定长数组指令——分配、Void 占位、字节码编解码往返
 
 use crate::backends::Executor;
 use crate::backends::common::RuntimeValue;
@@ -352,6 +353,7 @@ fn spawn_concurrent_standard_mode() {
 /// #299 §2：NewArray 分配定长 Array，元素默认 Void 占位
 #[test]
 fn test_new_array_allocates_fixed_void_slots() {
+    // Arrange — 含 NewArray(count=5) + ReturnValue 的字节码函数
     let func = make_function(vec![
         // r0 = Array(5)（全 Void 占位）
         BytecodeInstr::NewArray {
@@ -362,9 +364,11 @@ fn test_new_array_allocates_fixed_void_slots() {
         BytecodeInstr::ReturnValue { value: Reg(0) },
     ]);
 
+    // Act — 执行并取返回值
     let mut interp = Interpreter::new();
     let result = interp.execute_function(&func, &[]).unwrap();
 
+    // Assert — 返回 RuntimeValue::Array，长度 5 且全为 Void 占位
     match result {
         RuntimeValue::Array(handle) => {
             let guard = handle.lock();
@@ -390,7 +394,7 @@ fn test_new_array_bytecode_roundtrip_decode() {
         BytecodeFile, BytecodeInstruction, BytecodeHeader, CodeSection, FunctionCode,
     };
 
-    // 构造原始编码：opcode(1) + dst(1) + count(4, 小端)
+    // Arrange — 构造原始编码：opcode(1) + dst(1) + count(4, 小端)
     let mut operands = vec![0u8]; // dst = r0
     operands.extend_from_slice(&5u32.to_le_bytes()); // count = 5
     let raw_new_array =
@@ -420,8 +424,11 @@ fn test_new_array_bytecode_roundtrip_decode() {
         debug_section: None,
     };
 
+    // Act — 字节码反序列化 → 解码
     let module = crate::middle::bytecode::BytecodeModule::from(file);
     let func = &module.functions[0];
+
+    // Assert — 解码结果保持 NewArray 语义，执行产出 Array
     assert!(
         matches!(
             func.instructions.first(),
