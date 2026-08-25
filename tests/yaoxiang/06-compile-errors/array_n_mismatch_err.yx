@@ -1,0 +1,9 @@
+// 06-compile-errors/array_n_mismatch_err.yx
+// [test:error]: #300 维度1——Array(T,N) 字面量个数与 N 不符必须编译期拒绝
+// 预期: 编译错误 E1002（注解 Array(Int, 5)，字面量实际 3 元素）
+// 验证: 静态类型声称的定长 N 与运行时布局一致，类型承诺不再是摆设
+// 状态: ❌ 应编译失败
+
+main = {
+    b: Array(Int, 5) = [1, 2, 3]
+}
