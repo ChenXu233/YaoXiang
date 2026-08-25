@@ -882,11 +882,13 @@ impl<'a> ExpressionInferrer<'a> {
                 let _elem_ty = self.infer_expr(elem)?;
                 let container_ty = self.infer_expr(container)?;
                 // Range 字面量（1..10）类型是 Generic{"Range"}，区间检查合法
+                // #300 决策4：Set 除名——无运行时表示（HeapValue/std.set 均不存在），
+                // 待真实需求出现时照 Dict 模式补全
                 match &container_ty {
                     MonoType::Generic { name, .. }
                         if matches!(
                             name.as_str(),
-                            "List" | "Array" | "Dict" | "Set" | "Tuple" | "Range"
+                            "List" | "Array" | "Dict" | "Tuple" | "Range"
                         ) =>
                     {
                         Ok(MonoType::Bool)
