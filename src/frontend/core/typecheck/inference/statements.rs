@@ -1271,44 +1271,86 @@ impl StatementChecker {
                     (MonoType::Float(_), MonoType::Int(_))
                 );
                 if !is_int_to_float {
-                    // #299 §2：字面量种子——Array 注解直接作用于 List 字面量时，
-                    // 跳过 List/Array unify（字面量落点由上下文决定，ir_gen 按 Array 生成）
-                    let is_array_literal_seed = resolved_ann.is_array()
-                        && matches!(
-                            initializer,
-                            Some(crate::frontend::core::parser::ast::Expr::List(_, _))
-                        );
-                    let unify_result = self.solver.unify(&resolved_init, &resolved_ann);
-                    if unify_result.is_err() && !is_array_literal_seed {
-                        // Unify failed — check structural subtyping (interface assignment)
-                        let is_structural_subtype = matches!(
-                            (&resolved_init, &resolved_ann),
-                            (MonoType::Struct(s), MonoType::TypeRef(iface)) if s.interfaces.contains(iface)
-                        );
-                        // 泛型类型构造：当 init 是泛型结构体（含 TypeRef 字段）且
-                        // annotation 是实例化后的结构体时，跳过 unify 直接使用 annotation 类型
-                        // #286: 仅限字段仍含未解析泛型参数（TypeRef/TypeVar）的悬空实例；
-                        // 实参已确定具体类型而 unify 失败 = 真不匹配，不得豁免。
-                        let is_generic_constructor = match (&resolved_init, &resolved_ann) {
-                            (MonoType::Struct(s_init), MonoType::Struct(s_ann)) => {
-                                s_init.name == s_ann.name
-                                    && self.generic_type_defs.contains_key(&s_init.name)
-                                    && s_init
-                                        .fields
-                                        .iter()
-                                        .any(|(_, fty)| contains_unresolved_param(fty))
+                    // #300：Array 字面量落点校验——替代 #299 的整段 unify 豁免。
+                    // 豁免曾同时跳过元素类型与个数校验（维度1/2/3 裸奔）；
+                    // 此处显式校验：逐元素 unify(T)，N 为具体字面量时比对个数，
+                    // N 为符号常量（TypeRef，RFC-011 const 参数形态）时推迟个数校验。
+                    let array_seed_elems = if resolved_ann.is_array() {
+                        match initializer {
+                            Some(crate::frontend::core::parser::ast::Expr::List(elems, _)) => {
+                                Some(elems)
                             }
-                            _ => false,
-                        };
-                        if !is_structural_subtype && !is_generic_constructor {
-                            return Err(Box::new(
-                                ErrorCodeDefinition::type_mismatch(
-                                    &format!("{}", ann_ty),
-                                    &format!("{}", init_ty),
-                                )
-                                .at(stmt_span)
-                                .build(),
-                            ));
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    };
+                    if let (Some(elems), MonoType::Generic { args, .. }) =
+                        (array_seed_elems, &resolved_ann)
+                    {
+                        let elem_ann = &args[0];
+                        for elem in elems.iter() {
+                            let elem_ty = self.check_expr(elem)?;
+                            if self.solver.unify(&elem_ty, elem_ann).is_err() {
+                                return Err(Box::new(
+                                    ErrorCodeDefinition::type_mismatch(
+                                        &format!("{}", elem_ann),
+                                        &format!("{}", elem_ty),
+                                    )
+                                    .at(stmt_span)
+                                    .build(),
+                                ));
+                            }
+                        }
+                        if let Some(MonoType::Literal {
+                            value: crate::frontend::core::types::const_data::ConstValue::Int(n),
+                            ..
+                        }) = args.get(1)
+                        {
+                            if *n != elems.len() as i128 {
+                                return Err(Box::new(
+                                    ErrorCodeDefinition::type_mismatch(
+                                        &format!("{}", ann_ty),
+                                        &format!("Array({}, {})", elem_ann, elems.len()),
+                                    )
+                                    .at(stmt_span)
+                                    .build(),
+                                ));
+                            }
+                        }
+                    } else {
+                        let unify_result = self.solver.unify(&resolved_init, &resolved_ann);
+                        if unify_result.is_err() {
+                            // Unify failed — check structural subtyping (interface assignment)
+                            let is_structural_subtype = matches!(
+                                (&resolved_init, &resolved_ann),
+                                (MonoType::Struct(s), MonoType::TypeRef(iface)) if s.interfaces.contains(iface)
+                            );
+                            // 泛型类型构造：当 init 是泛型结构体（含 TypeRef 字段）且
+                            // annotation 是实例化后的结构体时，跳过 unify 直接使用 annotation 类型
+                            // #286: 仅限字段仍含未解析泛型参数（TypeRef/TypeVar）的悬空实例；
+                            // 实参已确定具体类型而 unify 失败 = 真不匹配，不得豁免。
+                            let is_generic_constructor = match (&resolved_init, &resolved_ann) {
+                                (MonoType::Struct(s_init), MonoType::Struct(s_ann)) => {
+                                    s_init.name == s_ann.name
+                                        && self.generic_type_defs.contains_key(&s_init.name)
+                                        && s_init
+                                            .fields
+                                            .iter()
+                                            .any(|(_, fty)| contains_unresolved_param(fty))
+                                }
+                                _ => false,
+                            };
+                            if !is_structural_subtype && !is_generic_constructor {
+                                return Err(Box::new(
+                                    ErrorCodeDefinition::type_mismatch(
+                                        &format!("{}", ann_ty),
+                                        &format!("{}", init_ty),
+                                    )
+                                    .at(stmt_span)
+                                    .build(),
+                                ));
+                            }
                         }
                     }
                 }

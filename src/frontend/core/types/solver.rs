@@ -460,6 +460,19 @@ impl TypeConstraintSolver {
             (MonoType::Float(n1), MonoType::Float(n2)) if n1 == n2 => Ok(()),
             (MonoType::Char, MonoType::Char) => Ok(()),
 
+            // #300：字面量类型 unify——const 泛型实参（Array(T, N) 的 N）按值比较。
+            // 缺失本臂时相同 Literal 落 catch-all，Array(Int,3) 无法跨函数边界。
+            (MonoType::Literal { value: v1, .. }, MonoType::Literal { value: v2, .. }) => {
+                if v1 == v2 {
+                    Ok(())
+                } else {
+                    Err(
+                        ErrorCodeDefinition::type_mismatch(&t1.type_name(), &t2.type_name())
+                            .build(),
+                    )
+                }
+            }
+
             // 函数类型 unify
             (
                 MonoType::Fn {
