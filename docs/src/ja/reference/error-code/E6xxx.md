@@ -6,40 +6,54 @@
 
 ## E6001：Division by zero
 
-**カテゴリ**: ランタイム
+**カテゴリ**: Runtime
 
-**メッセージ**: Attempted to divide by zero
+**メッセージ**: ゼロによる除算を試みました
 
-**ヘルプ**: Add a check to prevent division by zero
+**ヘルプ**: ゼロ除算を防ぐためのチェックを追加してください
 
 ---
 
 ## E6003：Array index out of bounds
 
-**カテゴリ**: ランタイム
+**カテゴリ**: Runtime
 
-**メッセージ**: Array index is out of bounds at runtime
+**メッセージ**: 実行時に配列インデックスが範囲外です
 
-**ヘルプ**: Ensure the index is within the array bounds
+**ヘルプ**: インデックスが配列の範囲内であることを確認してください
 
 ---
 
 ## E6004：Stack overflow
 
-**カテゴリ**: ランタイム
+**カテゴリ**: Runtime
 
-**メッセージ**: Recursion depth exceeded stack limit
+**メッセージ**: 再帰の深さがスタックの上限を超えました
 
-**ヘルプ**: Reduce recursion depth or use iteration
+**ヘルプ**: 再帰の深さを減らすか、反復を使用してください
 
 ---
 
 ## E6005：Assert failed
 
-**カテゴリ**: ランタイム
+**カテゴリ**: Runtime
 
-**メッセージ**: Assertion failed at runtime
+**メッセージ**: 実行時にアサーションが失敗しました
 
-**ヘルプ**: Fix the assertion condition or provide valid input
+**ヘルプ**: アサーション条件を修正するか、有効な入力を提供してください
 
 ---
+
+## E6008：Key not found
+
+**カテゴリ**: Runtime
+
+**メッセージ**: キーが見つかりません
+
+**ヘルプ**: インデックス操作の前に `dict.has` を使用してキーの存在を確認してください
+
+---
+
+> #299
+> §4：Dict のキー欠落とインデックス範囲外（E6003）はセマンティクスが異なります——キー不存在 vs 序数超界、診断情報を保持するために別々のコードとして独立させます。安全なアクセスには
+> `dict.has` で先に判定してから取得してください。
