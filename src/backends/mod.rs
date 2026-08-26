@@ -64,8 +64,8 @@ pub enum ExecutorError {
     IndexOutOfBounds {
         /// 容器长度
         max: usize,
-        /// 越界索引
-        index: usize,
+        /// 越界索引（#300 D 项：i64 保真——负索引保留原始值，不再是 max=0 哨兵）
+        index: i64,
         /// 调用栈
         stack: Option<Vec<StackFrame>>,
     },
@@ -166,7 +166,7 @@ impl ExecutorError {
     /// Create an index out of bounds error
     pub fn index_out_of_bounds(
         max: usize,
-        index: usize,
+        index: i64,
         stack: Option<Vec<StackFrame>>,
     ) -> Self {
         ExecutorError::IndexOutOfBounds { max, index, stack }

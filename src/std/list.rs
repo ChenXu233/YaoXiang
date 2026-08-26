@@ -227,8 +227,15 @@ fn native_remove_at(
             ExecutorError::type_only("list.remove_at expects an Int index".to_string())
         })?,
     };
-    let index = usize::try_from(index).map_err(|_| {
-        ExecutorError::runtime_only(format!("list.remove_at: negative index {}", index))
+    // #300 D 项：负索引归并 E6003，诊断保真（原始 i64），与 l[-1] 下标路径一致
+    let list_len = ctx
+        .heap_list(list_handle.clone())
+        .map(|i| i.len())
+        .unwrap_or(0);
+    let index = usize::try_from(index).map_err(|_| ExecutorError::IndexOutOfBounds {
+        max: list_len,
+        index,
+        stack: None,
     })?;
 
     let mut guard = ctx.heap_list_mut(&list_handle)?;
@@ -241,7 +248,11 @@ fn native_remove_at(
         Ok(items.remove(index))
     } else {
         // #280：越界报专用码 E6003（原 E6007 通用）
-        Err(ExecutorError::index_out_of_bounds(items.len(), index, None))
+        Err(ExecutorError::index_out_of_bounds(
+            items.len(),
+            index as i64,
+            None,
+        ))
     }
 }
 
@@ -436,8 +447,18 @@ fn native_set(
             .to_int()
             .ok_or_else(|| ExecutorError::type_only("list.set expects an Int index".to_string()))?,
     };
-    let index = usize::try_from(index)
-        .map_err(|_| ExecutorError::runtime_only(format!("list.set: negative index {}", index)))?;
+    let list_len = ctx
+        .heap_list(list_handle.clone())
+        .map(|i| i.len())
+        .unwrap_or(0);
+    let index = usize::try_from(index).map_err(|_| {
+        // #300 D 项：负索引归并 E6003，诊断保真（原始 i64）
+        ExecutorError::IndexOutOfBounds {
+            max: list_len,
+            index,
+            stack: None,
+        }
+    })?;
     let value = args.get(2).cloned().unwrap_or(RuntimeValue::Void);
 
     let mut items = ctx.heap_list(list_handle)?;
@@ -446,7 +467,11 @@ fn native_set(
         items[index] = value;
     } else {
         // #279/#280：越界写不再静默丢弃，报专用码 E6003
-        return Err(ExecutorError::index_out_of_bounds(items.len(), index, None));
+        return Err(ExecutorError::index_out_of_bounds(
+            items.len(),
+            index as i64,
+            None,
+        ));
     }
     let new_handle = ctx.heap.allocate(HeapValue::List(items));
     Ok(RuntimeValue::List(new_handle))

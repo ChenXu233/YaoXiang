@@ -341,7 +341,7 @@ Iterator: (T: Type) -> Type = {
 ### 6.2 迭代器适配器
 
 ```yaoxiang
-// 范围迭代器
+// 范围迭代器（#300 I 项：Range 是一等值，step 为第三分量）
 Range: Type = {
     start: Int,
     end: Int,
@@ -354,10 +354,15 @@ for i in 0..10 {
     print(i)
 }
 
-for i in 0..10 step 2 {
+// step 形态（双点，无新关键词）
+for i in 0..10..2 {
     print(i)
 }
 ```
+
+> **#300 I 项**：Range 是一等值——`r = 1..10` 合法，`x in r` 成员判断、
+> `for i in r` 迭代均按静态类型脱糖。step=0 字面量编译期拒绝，
+> 动态 step=0 运行时错误（未来错误系统落地后升格 Result，#301）。
 
 ---
 

@@ -47,7 +47,7 @@ impl ErrorCodeDefinition {
     /// E6001 除零错误
     ("E6001", division_by_zero(expr: &str) => .param("expr", expr)),
     /// E6003 数组索引越界（运行时）
-    ("E6003", runtime_index_out_of_bounds(max: usize, index: usize) => .param("max", max.to_string()) .param("index", index.to_string())),
+    ("E6003", runtime_index_out_of_bounds(max: usize, index: i64) => .param("max", max.to_string()) .param("index", index.to_string())),
     /// E6004 栈溢出
     ("E6004", stack_overflow(limit: usize) => .param("limit", limit.to_string())),
     /// E6005 断言失败

@@ -367,6 +367,67 @@ impl<'a> ExpressionInferrer<'a> {
         Ok(ty)
     }
 
+    /// #300 I 项：Range 构造的类型推断（表达式级，能看到嵌套与字面量）
+    ///
+    /// - `a..b`：Range(Int)，元素类型必须是 Int（for 逐次 +1、in 界推理都要求整数域）
+    /// - `(a..b)..c`：step 形态，c 必须是 Int；字面量 0 编译期拒绝（Never 不可居留）；
+    ///   动态 step 的零检查在 ir_gen 生成运行时断言（未来错误系统落地后升格 Result，#301）
+    /// - 左操作数已是 Range 而右侧再嵌套 Range（`a..b..c..d`）：拒绝，区间是三分量构造
+    fn infer_range_expr(
+        &mut self,
+        left: &crate::frontend::core::parser::ast::Expr,
+        right: &crate::frontend::core::parser::ast::Expr,
+        span: crate::util::span::Span,
+    ) -> Result<MonoType> {
+        use crate::frontend::core::lexer::tokens::Literal;
+        use crate::frontend::core::parser::ast::Expr;
+
+        let left_ty = self.infer_expr(left)?;
+        let right_ty = self.infer_expr(right)?;
+
+        if left_ty.is_range() {
+            // step 形态：右侧是步长
+            if right_ty.is_range() {
+                return Err(ErrorCodeDefinition::type_mismatch(
+                    "Int (range step)",
+                    &format!("{right_ty}"),
+                )
+                .at(span)
+                .build());
+            }
+            if let Expr::Lit(Literal::Int(0), _) = right {
+                return Err(ErrorCodeDefinition::type_mismatch(
+                    "non-zero Int (range step)",
+                    "int64::0",
+                )
+                .at(span)
+                .build());
+            }
+            return match right_ty {
+                MonoType::Int(_) => Ok(left_ty),
+                _ => Err(
+                    ErrorCodeDefinition::type_mismatch("Int", &format!("{right_ty}"))
+                        .at(span)
+                        .build(),
+                ),
+            };
+        }
+
+        // 基础形态：两端必须 Int
+        match (left_ty, right_ty) {
+            (MonoType::Int(_), MonoType::Int(_)) => Ok(MonoType::Generic {
+                name: "Range".into(),
+                args: vec![MonoType::Int(64)],
+            }),
+            (l, r) => Err(ErrorCodeDefinition::type_mismatch(
+                "Int range bounds",
+                &format!("{l}..{r}"),
+            )
+            .at(span)
+            .build()),
+        }
+    }
+
     /// 推断二元操作符表达式类型
     pub fn infer_binary(
         &mut self,
@@ -419,6 +480,8 @@ impl<'a> ExpressionInferrer<'a> {
                 }
             }
             BinOp::Range => {
+                // #300 I 项：表达式级入口（infer_expr BinOp 臂）已拦截，此处仅为
+                // 直接调用 infer_binary 的路径兜底——无表达式形状可查，按基础形态处理
                 let elem_ty = if left == right {
                     left.clone()
                 } else {
@@ -799,8 +862,15 @@ impl<'a> ExpressionInferrer<'a> {
 
             // 二元运算
             crate::frontend::core::parser::ast::Expr::BinOp {
-                op, left, right, ..
+                op,
+                left,
+                right,
+                span,
             } => {
+                // #300 I 项：Range 构造在表达式层拦截（需要看表达式形状，不只是类型）
+                if matches!(op, BinOp::Range) {
+                    return self.infer_range_expr(left, right, *span);
+                }
                 let right_ty = self.infer_expr(right)?;
 
                 if matches!(op, BinOp::Assign) {
@@ -875,26 +945,52 @@ impl<'a> ExpressionInferrer<'a> {
 
             // 下标访问
             // #299 §3: membership 谓词 `elem in container` → Bool
-            // 右操作数：List/Array/Dict(键)/Set/Tuple/String 子串/Range 区间
+            // 右操作数：List/Array/Dict(键)/Tuple/String 子串/Range 区间
             crate::frontend::core::parser::ast::Expr::In {
-                elem, container, ..
+                elem,
+                container,
+                span,
             } => {
-                let _elem_ty = self.infer_expr(elem)?;
+                let elem_ty = self.infer_expr(elem)?;
                 let container_ty = self.infer_expr(container)?;
+                // #300 A 项：真校验替代三臂同返 Bool 的摆设 match。
+                // 元素-容器兼容性："a" in [1,2,3]（String 探 Int 列表）编译期拒绝。
                 // Range 字面量（1..10）类型是 Generic{"Range"}，区间检查合法
                 // #300 决策4：Set 除名——无运行时表示（HeapValue/std.set 均不存在），
                 // 待真实需求出现时照 Dict 模式补全
-                match &container_ty {
-                    MonoType::Generic { name, .. }
-                        if matches!(
-                            name.as_str(),
-                            "List" | "Array" | "Dict" | "Tuple" | "Range"
-                        ) =>
-                    {
+                let member_ty: Option<MonoType> = match &container_ty {
+                    MonoType::Generic { name, args, .. } => match name.as_str() {
+                        "List" | "Array" | "Dict" => args.first().cloned(),
+                        // ponytail: Tuple 异构成员，精确检查需逐成员回退试探，
+                        // 真实误报面极小，需要时再加
+                        "Tuple" => return Ok(MonoType::Bool),
+                        "Range" => Some(MonoType::Int(64)),
+                        "String" => Some(MonoType::make_string()),
+                        // 其他泛型（Struct 实例化等）不是容器
+                        _ => None,
+                    },
+                    // 未解析类型变量：推迟到后续绑定，不拦
+                    MonoType::TypeVar(_) => return Ok(MonoType::Bool),
+                    _ => None,
+                };
+                match member_ty {
+                    Some(member) => {
+                        if self.solver.unify(&elem_ty, &member).is_err() {
+                            return Err(ErrorCodeDefinition::type_mismatch(
+                                &format!("{}", member),
+                                &format!("{}", elem_ty),
+                            )
+                            .at(*span)
+                            .build());
+                        }
                         Ok(MonoType::Bool)
                     }
-                    MonoType::Generic { name, .. } if name == "String" => Ok(MonoType::Bool),
-                    _ => Ok(MonoType::Bool),
+                    None => Err(ErrorCodeDefinition::type_mismatch(
+                        "List/Array/Dict/Tuple/String/Range",
+                        &format!("{}", container_ty),
+                    )
+                    .at(*span)
+                    .build()),
                 }
             }
             crate::frontend::core::parser::ast::Expr::Index {
@@ -915,11 +1011,10 @@ impl<'a> ExpressionInferrer<'a> {
                             if *i >= 0 && (*i as usize) < args.len() {
                                 Ok(args[*i as usize].clone())
                             } else {
-                                Err(ErrorCodeDefinition::index_out_of_bounds(
-                                    args.len(),
-                                    *i as usize,
+                                Err(
+                                    ErrorCodeDefinition::index_out_of_bounds(args.len(), *i as i64)
+                                        .build(),
                                 )
-                                .build())
                             }
                         } else {
                             Ok(self.solver.new_var())

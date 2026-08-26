@@ -32,7 +32,12 @@ impl<'a> ParserState<'a> {
             // Assignment
             Some(TokenKind::Eq) => Some((BP_ASSIGN, BP_ASSIGN + 1, Self::parse_assign)),
             // Range
-            Some(TokenKind::DotDot) => Some((BP_RANGE, BP_RANGE + 1, Self::parse_binary)),
+            // #300 F/I 项：`..` 绑定力 (6, 7)——左 6 低于加法（7），右 7 吞加法不吞同级 `..`。
+            // `0..n+2` → 0..(n+2)（上界是算术表达式）；
+            // `a..b..c` → (a..b)..c（step 形态，左结合）；
+            // `x in 1..10` → x in (1..10)（区间整体作为 in 右操作数）；
+            // `a == b..c` → a == (b..c)（直觉语义，`..` 高于比较级）。
+            Some(TokenKind::DotDot) => Some((6, 7, Self::parse_binary)),
             // Logical OR
             Some(TokenKind::Or) => Some((BP_OR, BP_OR + 1, Self::parse_binary)),
             // Logical AND
@@ -149,9 +154,10 @@ impl<'a> ParserState<'a> {
     ) -> Option<Expr> {
         let span = self.span();
         self.bump(); // 消费 'in'
-                     // 右操作数按关系级解析：BP_RANGE 已提到高绑定力，1..10 可整体成为容器，
-                     // 且 and/or（低绑定力）不会被吞进容器
-        let container = self.parse_expression(_left_bp)?;
+                     // 右操作数按比较级以下解析：BP_RANGE(7) 高于 BP_CMP(4)，
+                     // `x in 1..10` 中区间整体作为容器；但 `x in 0..10..2` 中第二个 `..`
+                     // 必须留给外层 step 形态，故用 BP_CMP（4）截断——#300 I 项
+        let container = self.parse_expression(BP_CMP)?;
         Some(Expr::In {
             elem: Box::new(lhs),
             container: Box::new(container),

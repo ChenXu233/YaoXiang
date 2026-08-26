@@ -26,9 +26,11 @@ pub(super) enum StopReason {
 }
 
 /// #279：索引值 → usize；非 Int 报类型错误，负数报运行时错误（不再静默当 0）
+/// #300 D 项：len 为真实容器长度，负索引诊断携带原始 i64（不再是 max=0 哨兵）
 fn index_arg(
     idx: &RuntimeValue,
     what: &str,
+    len: usize,
 ) -> ExecutorResult<usize> {
     let i = idx
         .to_int()
@@ -36,8 +38,8 @@ fn index_arg(
     usize::try_from(i).map_err(|_| {
         // #299 §4: 负索引归并到 IndexOutOfBounds（E6003），不再落通用 E6007
         ExecutorError::IndexOutOfBounds {
-            max: 0,
-            index: (-i) as usize,
+            max: len,
+            index: i,
             stack: None,
         }
     })
@@ -796,10 +798,29 @@ impl Interpreter {
                     ),
                     RuntimeValue::String(s) => match &e {
                         RuntimeValue::String(sub) => s.contains(sub.as_ref()),
-                        RuntimeValue::Char(ch) => s.contains(char::from_u32(*ch).unwrap_or(' ')),
-                        _ => false,
+                        RuntimeValue::Char(ch) => match char::from_u32(*ch) {
+                            Some(c) => s.contains(c),
+                            // 无效码点不可能存在于合法 Char 值，落到即运行时数据损坏
+                            None => {
+                                return Err(ExecutorError::runtime_only(format!(
+                                    "internal: invalid Char code point {ch} in 'in' check"
+                                )))
+                            }
+                        },
+                        // #300 B 项：非 String/Char 探 String 是类型层漏拦，不静默 false
+                        _ => {
+                            return Err(ExecutorError::runtime_only(format!(
+                                "internal: 'in' on String with non-string element ({e}) — typecheck missed this"
+                            )))
+                        }
                     },
-                    _ => false,
+                    // #300 B 项：非容器落到这里是类型层漏拦（白名单已拦），
+                    // 静默 false 是 #279 同款疾病，改为内部错误
+                    _ => {
+                        return Err(ExecutorError::runtime_only(format!(
+                            "internal: 'in' on non-container value ({cval}) — typecheck missed this"
+                        )))
+                    }
                 };
                 frame.set_slot(dst.0 as usize, RuntimeValue::Bool(found));
                 frame.advance();
@@ -811,7 +832,8 @@ impl Interpreter {
 
                 match arr {
                     RuntimeValue::List(handle) => {
-                        let idx = index_arg(&idx_value, "list")?;
+                        let len = handle.lock().len();
+                        let idx = index_arg(&idx_value, "list", len)?;
                         if let crate::backends::common::HeapValue::List(items) = &*handle.lock() {
                             if idx < items.len() {
                                 frame.set_slot(dst.0 as usize, items[idx].clone());
@@ -819,14 +841,15 @@ impl Interpreter {
                                 // #279：越界读不再静默返回 void；#280：报专用码 E6003
                                 return Err(ExecutorError::index_out_of_bounds(
                                     items.len(),
-                                    idx,
+                                    idx as i64,
                                     None,
                                 ));
                             }
                         }
                     }
                     RuntimeValue::Tuple(handle) => {
-                        let idx = index_arg(&idx_value, "tuple")?;
+                        let len = handle.lock().len();
+                        let idx = index_arg(&idx_value, "tuple", len)?;
                         if let crate::backends::common::HeapValue::Tuple(items) = &*handle.lock() {
                             if idx < items.len() {
                                 frame.set_slot(dst.0 as usize, items[idx].clone());
@@ -834,14 +857,15 @@ impl Interpreter {
                                 // #279：越界读不再静默返回 void；#280：报专用码 E6003
                                 return Err(ExecutorError::index_out_of_bounds(
                                     items.len(),
-                                    idx,
+                                    idx as i64,
                                     None,
                                 ));
                             }
                         }
                     }
                     RuntimeValue::Array(handle) => {
-                        let idx = index_arg(&idx_value, "array")?;
+                        let len = handle.lock().len();
+                        let idx = index_arg(&idx_value, "array", len)?;
                         if let crate::backends::common::HeapValue::Array(items) = &*handle.lock() {
                             if idx < items.len() {
                                 frame.set_slot(dst.0 as usize, items[idx].clone());
@@ -849,7 +873,7 @@ impl Interpreter {
                                 // #279：越界读不再静默返回 void；#280：报专用码 E6003
                                 return Err(ExecutorError::index_out_of_bounds(
                                     items.len(),
-                                    idx,
+                                    idx as i64,
                                     None,
                                 ));
                             }
@@ -890,7 +914,8 @@ impl Interpreter {
 
                 match arr {
                     RuntimeValue::List(handle) => {
-                        let idx = index_arg(&idx_value, "list")?;
+                        let len = handle.lock().len();
+                        let idx = index_arg(&idx_value, "list", len)?;
                         if let crate::backends::common::HeapValue::List(items) = &mut *handle.lock()
                         {
                             if idx < items.len() {
@@ -901,14 +926,15 @@ impl Interpreter {
                                 // #279：越界写不再静默丢弃；#280：报专用码 E6003
                                 return Err(ExecutorError::index_out_of_bounds(
                                     items.len(),
-                                    idx,
+                                    idx as i64,
                                     None,
                                 ));
                             }
                         }
                     }
                     RuntimeValue::Array(handle) => {
-                        let idx = index_arg(&idx_value, "array")?;
+                        let len = handle.lock().len();
+                        let idx = index_arg(&idx_value, "array", len)?;
                         if let crate::backends::common::HeapValue::Array(items) =
                             &mut *handle.lock()
                         {
@@ -918,7 +944,7 @@ impl Interpreter {
                                 // #279：越界写不再静默丢弃；#280：报专用码 E6003
                                 return Err(ExecutorError::index_out_of_bounds(
                                     items.len(),
-                                    idx,
+                                    idx as i64,
                                     None,
                                 ));
                             }
@@ -1012,7 +1038,7 @@ impl Interpreter {
                     // #280：越界用专用码 E6003（原 E6007 通用）
                     return Err(ExecutorError::index_out_of_bounds(
                         len.max(0) as usize,
-                        idx.max(0) as usize,
+                        idx,
                         Some(stack),
                     ));
                 }

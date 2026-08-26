@@ -187,7 +187,7 @@ impl ErrorCodeDefinition {
     /// E1040 不支持的操作
     ("E1040", unsupported_operation(op: &str, type_: &str) => .param("op", op).param("type", type_)),
     /// E1041 数组越界
-    ("E1041", index_out_of_bounds(max: usize, index: usize) => .param("max", max.to_string()) .param("index", index.to_string())),
+    ("E1041", index_out_of_bounds(max: usize, index: i64) => .param("max", max.to_string()) .param("index", index.to_string())),
     /// E1042 字段未找到
     ("E1042", field_not_found(field: &str, struct_: &str) => .param("field", field).param("struct", struct_)),
     /// E1050 逻辑运算需要布尔操作数

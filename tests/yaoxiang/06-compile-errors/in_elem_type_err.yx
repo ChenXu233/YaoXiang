@@ -1,0 +1,9 @@
+// 06-compile-errors/in_elem_type_err.yx
+// [test:error]: #300 A 项——in 谓词元素-容器类型兼容性校验
+// 预期: 编译错误 E1002（String 探 Int 列表，元素类型不兼容）
+// 验证: in 不再是三臂同返 Bool 的摆设检查，类型层真正拦截
+// 状态: ❌ 应编译失败
+
+main = {
+    bad = "a" in [1, 2, 3]
+}

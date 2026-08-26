@@ -1,0 +1,19 @@
+// 01-syntax/operators/range_compound_bound.yx
+// 覆盖: #300 F 项——Range 非对称绑定力（左 7 右 5）
+// 验证: 复合上界 `0..n+2` 解析为 0..(n+2)（for 循环可用）；
+//       `x in 1..10` 区间仍整体作为 in 右操作数
+// 状态: ✅ 可运行
+
+use std.assert
+
+main = {
+    n = 3
+    mut count = 0
+    for i in 0..n+2 {
+        count = count + 1
+    }
+    assert.assert(count == 5, "0..(n+2) yields 5 iterations")
+
+    assert.assert(5 in 1..10, "range stays whole as in-rhs")
+    assert.assert(!(11 in 1..10), "range not in")
+}

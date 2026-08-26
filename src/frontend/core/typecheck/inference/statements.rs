@@ -1638,18 +1638,9 @@ impl StatementChecker {
                             Ok(self.solver.new_var())
                         }
                     }
-                    BinOp::Range => {
-                        let elem_ty = if left_ty == right_ty {
-                            left_ty
-                        } else {
-                            let _ = self.solver.unify(&left_ty, &right_ty);
-                            left_ty
-                        };
-                        Ok(MonoType::Generic {
-                            name: "Range".into(),
-                            args: vec![elem_ty],
-                        })
-                    }
+                    // #300 I 项：Range 已移到 ExpressionInferrer::infer_range_expr
+                    // （表达式级拦截，能看到 step 形态与字面量零）。此处删除 fast path，
+                    // 落到 `_` 委托分支，保证语义唯一来源。
                     _ => {
                         // 其他操作符委托给 ExpressionInferrer
                         let current_result_err = self.current_result_err();
