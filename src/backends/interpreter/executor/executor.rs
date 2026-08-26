@@ -1027,6 +1027,19 @@ impl Interpreter {
             (CompareOp::Ge, RuntimeValue::String(l), RuntimeValue::String(r)) => {
                 RuntimeValue::Bool(l >= r)
             }
+            // #304：vec 类容器（Tuple/List/Array）Eq/Ne 结构相等——
+            // Handle 的 PartialEq 是 Arc 身份，容器的 == 需要按内容递归。
+            // Range 借 Tuple 载体后 `r == r2` 是用户可写形态，不能落兜底类型错误。
+            (
+                CompareOp::Eq,
+                RuntimeValue::Tuple(_) | RuntimeValue::List(_) | RuntimeValue::Array(_),
+                RuntimeValue::Tuple(_) | RuntimeValue::List(_) | RuntimeValue::Array(_),
+            ) => RuntimeValue::Bool(Self::runtime_value_deep_eq(&a, &b)),
+            (
+                CompareOp::Ne,
+                RuntimeValue::Tuple(_) | RuntimeValue::List(_) | RuntimeValue::Array(_),
+                RuntimeValue::Tuple(_) | RuntimeValue::List(_) | RuntimeValue::Array(_),
+            ) => RuntimeValue::Bool(!Self::runtime_value_deep_eq(&a, &b)),
             // 类型不匹配的比较：硬错误，禁止静默返回 false
             // （同函数算术分支已报错，保持一致；类型检查器应先拦截，此处为底线防御）
             (op, l, r) => {
@@ -1040,6 +1053,56 @@ impl Interpreter {
 
         frame.set_slot(dst.0 as usize, result);
         Ok(())
+    }
+
+    /// #304：递归结构相等——vec 类容器（Tuple/List/Array）按内容逐元素比较，
+    /// 其余变体走既有 PartialEq（Handle 身份、标量值等）。
+    // ponytail: 递归无环检查——自引用容器（经 Arc/Weak 回指）会栈溢出，
+    // 真实代码罕见；需要时加 visited 集合。
+    pub(super) fn runtime_value_deep_eq(
+        a: &RuntimeValue,
+        b: &RuntimeValue,
+    ) -> bool {
+        fn items_eq(
+            a: &crate::backends::common::heap::Handle,
+            b: &crate::backends::common::heap::Handle,
+        ) -> Option<bool> {
+            // 同一分配快速路径
+            if a == b {
+                return Some(true);
+            }
+            let (ga, gb) = (a.lock(), b.lock());
+            let (ia, ib) = (
+                match &*ga {
+                    crate::backends::common::HeapValue::Tuple(v)
+                    | crate::backends::common::HeapValue::List(v)
+                    | crate::backends::common::HeapValue::Array(v) => v,
+                    _ => return None,
+                },
+                match &*gb {
+                    crate::backends::common::HeapValue::Tuple(v)
+                    | crate::backends::common::HeapValue::List(v)
+                    | crate::backends::common::HeapValue::Array(v) => v,
+                    _ => return None,
+                },
+            );
+            if ia.len() != ib.len() {
+                return Some(false);
+            }
+            Some(
+                ia.iter()
+                    .zip(ib.iter())
+                    .all(|(x, y)| Interpreter::runtime_value_deep_eq(x, y)),
+            )
+        }
+        match (a, b) {
+            (RuntimeValue::Tuple(x), RuntimeValue::Tuple(y))
+            | (RuntimeValue::List(x), RuntimeValue::List(y))
+            | (RuntimeValue::Array(x), RuntimeValue::Array(y)) => {
+                items_eq(x, y).unwrap_or_else(|| a == b)
+            }
+            _ => a == b,
+        }
     }
 }
 

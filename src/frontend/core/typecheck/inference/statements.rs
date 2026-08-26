@@ -1440,10 +1440,15 @@ impl StatementChecker {
 
         self.scope.add_var(
             var.to_string(),
-            PolyType::mono(elem_ty),
+            PolyType::mono(elem_ty.clone()),
             var_mut,
             crate::util::span::Span::default(),
         );
+        // #303：循环变量类型同步进 function_local_vars——块作用域 exit 即销毁，
+        // 活不到函数退出时的统一保存，ir_gen 的 get_expr_mono_type(Var) 会查不到。
+        // 同名嵌套循环内层覆盖外层（与块作用域遮蔽语义一致）。
+        self.function_local_vars
+            .insert(var.to_string(), PolyType::mono(elem_ty));
 
         if self.collect_all_errors {
             let mut first_err = None;
