@@ -44,94 +44,15 @@ impl PipelineError {
     }
 }
 
-/// 编译阶段
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CompilationPhase {
-    /// 词法分析
-    Lexing,
-    /// 语法分析
-    Parsing,
-    /// 类型检查
-    TypeChecking,
-    /// IR 生成
-    IRGeneration,
-    /// 证明函数执行（RFC-027 Phase 2.5）
-    ProofExecution,
-    /// 完整编译
-    Full,
-}
-
-impl std::fmt::Display for CompilationPhase {
-    fn fmt(
-        &self,
-        f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
-        match self {
-            CompilationPhase::Lexing => write!(f, "lexing"),
-            CompilationPhase::Parsing => write!(f, "parsing"),
-            CompilationPhase::TypeChecking => write!(f, "type checking"),
-            CompilationPhase::IRGeneration => write!(f, "IR generation"),
-            CompilationPhase::ProofExecution => write!(f, "proof execution"),
-            CompilationPhase::Full => write!(f, "full compilation"),
-        }
-    }
-}
-
-/// 流水线状态
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PipelineState {
-    /// 空闲状态
-    Idle,
-    /// 词法分析中
-    Lexing,
-    /// 语法分析中
-    Parsing,
-    /// 类型检查中
-    TypeChecking,
-    /// 证明函数执行中（RFC-027 Phase 2.5）
-    ProofExecuting,
-    /// IR 生成中
-    IRGenerating,
-    /// 编译完成
-    Completed,
-    /// 编译失败
-    Failed,
-    /// 被取消
-    Cancelled,
-}
-
-impl std::fmt::Display for PipelineState {
-    fn fmt(
-        &self,
-        f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
-        match self {
-            PipelineState::Idle => write!(f, "idle"),
-            PipelineState::Lexing => write!(f, "lexing"),
-            PipelineState::Parsing => write!(f, "parsing"),
-            PipelineState::TypeChecking => write!(f, "type checking"),
-            PipelineState::ProofExecuting => write!(f, "proof executing"),
-            PipelineState::IRGenerating => write!(f, "IR generating"),
-            PipelineState::Completed => write!(f, "completed"),
-            PipelineState::Failed => write!(f, "failed"),
-            PipelineState::Cancelled => write!(f, "cancelled"),
-        }
-    }
-}
-
 /// 编译结果
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CompilationResult {
-    /// 最终状态
-    pub state: PipelineState,
     /// 生成的 IR
     pub ir: Option<middle::ModuleIR>,
     /// 错误数量
     pub error_count: usize,
     /// 警告数量
     pub warning_count: usize,
-    /// 各阶段耗时（毫秒）
-    pub phase_durations: Vec<(CompilationPhase, u64)>,
     /// 总耗时（毫秒）
     pub total_duration_ms: u64,
     /// 错误
@@ -140,35 +61,17 @@ pub struct CompilationResult {
     pub warnings: Vec<String>,
 }
 
-impl Default for CompilationResult {
-    fn default() -> Self {
-        Self {
-            state: PipelineState::Idle,
-            ir: None,
-            error_count: 0,
-            warning_count: 0,
-            phase_durations: Vec::new(),
-            total_duration_ms: 0,
-            errors: Vec::new(),
-            warnings: Vec::new(),
-        }
-    }
-}
-
 impl CompilationResult {
     /// 创建成功结果
     pub fn success(
         ir: middle::ModuleIR,
-        durations: Vec<(CompilationPhase, u64)>,
         total_ms: u64,
         warnings: Vec<String>,
     ) -> Self {
         Self {
-            state: PipelineState::Completed,
             ir: Some(ir),
             error_count: 0,
             warning_count: warnings.len(),
-            phase_durations: durations,
             total_duration_ms: total_ms,
             errors: Vec::new(),
             warnings,
@@ -178,15 +81,12 @@ impl CompilationResult {
     /// 创建失败结果
     pub fn failed(
         errors: Vec<PipelineError>,
-        durations: Vec<(CompilationPhase, u64)>,
         total_ms: u64,
     ) -> Self {
         Self {
-            state: PipelineState::Failed,
             ir: None,
             error_count: errors.len(),
             warning_count: 0,
-            phase_durations: durations,
             total_duration_ms: total_ms,
             errors,
             warnings: Vec::new(),
@@ -195,7 +95,7 @@ impl CompilationResult {
 
     /// 是否成功
     pub fn is_success(&self) -> bool {
-        self.state == PipelineState::Completed && self.error_count == 0
+        self.error_count == 0 && self.ir.is_some()
     }
 }
 
@@ -203,8 +103,6 @@ use std::fmt;
 
 /// 编译流水线
 pub struct Pipeline {
-    /// 当前状态
-    state: PipelineState,
     /// 配置
     config: CompileConfig,
 }
@@ -221,7 +119,6 @@ impl fmt::Debug for Pipeline {
         f: &mut fmt::Formatter<'_>,
     ) -> fmt::Result {
         f.debug_struct("Pipeline")
-            .field("state", &self.state)
             .field("config", &self.config)
             .finish()
     }
@@ -230,16 +127,7 @@ impl fmt::Debug for Pipeline {
 impl Pipeline {
     /// 创建新流水线
     pub fn new(config: CompileConfig) -> Self {
-        Self {
-            state: PipelineState::Idle,
-            config,
-        }
-    }
-
-    /// 获取当前状态
-    #[inline]
-    pub fn state(&self) -> PipelineState {
-        self.state
+        Self { config }
     }
 
     /// 获取配置
@@ -255,10 +143,9 @@ impl Pipeline {
         source: &str,
     ) -> CompilationResult {
         let start_time = crate::util::time_compat::Instant::now();
-        let mut phase_durations = Vec::new();
 
         // 执行各阶段
-        let lex_result = self.run_lexing(source_name, source, &mut phase_durations);
+        let lex_result = self.run_lexing(source_name, source);
         if !lex_result.is_success() {
             return CompilationResult::failed(
                 lex_result
@@ -266,12 +153,11 @@ impl Pipeline {
                     .into_iter()
                     .map(PipelineError::LexParse)
                     .collect(),
-                phase_durations,
                 start_time.elapsed().as_millis() as u64,
             );
         }
 
-        let parse_result = self.run_parsing(source_name, &lex_result.tokens, &mut phase_durations);
+        let parse_result = self.run_parsing(source_name, &lex_result.tokens);
         if !parse_result.is_success() {
             return CompilationResult::failed(
                 parse_result
@@ -279,13 +165,11 @@ impl Pipeline {
                     .into_iter()
                     .map(PipelineError::LexParse)
                     .collect(),
-                phase_durations,
                 start_time.elapsed().as_millis() as u64,
             );
         }
 
-        let typecheck_result =
-            self.run_typecheck(source_name, source, &parse_result.ast, &mut phase_durations);
+        let typecheck_result = self.run_typecheck(source_name, source, &parse_result.ast);
         if !typecheck_result.is_success() {
             return CompilationResult::failed(
                 typecheck_result
@@ -293,7 +177,6 @@ impl Pipeline {
                     .into_iter()
                     .map(PipelineError::TypeCheck)
                     .collect(),
-                phase_durations,
                 start_time.elapsed().as_millis() as u64,
             );
         }
@@ -305,7 +188,6 @@ impl Pipeline {
                 &typecheck_result.type_result.proof_calls,
                 &parse_result.ast,
                 &typecheck_result.type_result,
-                &mut phase_durations,
             );
             if !proof_result.is_success() {
                 return CompilationResult::failed(
@@ -314,7 +196,6 @@ impl Pipeline {
                         .into_iter()
                         .map(PipelineError::ProofExecution)
                         .collect(),
-                    phase_durations,
                     start_time.elapsed().as_millis() as u64,
                 );
             }
@@ -325,7 +206,6 @@ impl Pipeline {
             source,
             &parse_result.ast,
             &typecheck_result.type_result,
-            &mut phase_durations,
         );
 
         let total_ms = start_time.elapsed().as_millis() as u64;
@@ -333,7 +213,7 @@ impl Pipeline {
         if ir_result.is_success() {
             // 收集所有警告（来自 typecheck 阶段）
             let warnings = typecheck_result.warnings;
-            CompilationResult::success(ir_result.ir.unwrap(), phase_durations, total_ms, warnings)
+            CompilationResult::success(ir_result.ir.unwrap(), total_ms, warnings)
         } else {
             // IR 生成错误被归类为类型检查错误
             let pipeline_errors: Vec<PipelineError> = ir_result
@@ -341,7 +221,7 @@ impl Pipeline {
                 .into_iter()
                 .map(PipelineError::TypeCheck)
                 .collect();
-            CompilationResult::failed(pipeline_errors, phase_durations, total_ms)
+            CompilationResult::failed(pipeline_errors, total_ms)
         }
     }
 
@@ -350,25 +230,11 @@ impl Pipeline {
         &mut self,
         _source_name: &str,
         source: &str,
-        phase_durations: &mut Vec<(CompilationPhase, u64)>,
     ) -> LexResult {
-        let start = crate::util::time_compat::Instant::now();
-        self.state = PipelineState::Lexing;
-
-        let tokens = match super::core::lexer::tokenize(source) {
-            Ok(tokens) => tokens,
-            Err(e) => {
-                let duration = start.elapsed().as_millis() as u64;
-                phase_durations.push((CompilationPhase::Lexing, duration));
-
-                return LexResult::failed(vec![e.to_diagnostic()]);
-            }
-        };
-
-        let duration = start.elapsed().as_millis() as u64;
-        phase_durations.push((CompilationPhase::Lexing, duration));
-
-        LexResult::success(tokens)
+        match super::core::lexer::tokenize(source) {
+            Ok(tokens) => LexResult::success(tokens),
+            Err(e) => LexResult::failed(vec![e.to_diagnostic()]),
+        }
     }
 
     /// 语法分析阶段
@@ -376,31 +242,19 @@ impl Pipeline {
         &mut self,
         _source_name: &str,
         tokens: &[super::core::lexer::Token],
-        phase_durations: &mut Vec<(CompilationPhase, u64)>,
     ) -> ParseResult {
-        let start = crate::util::time_compat::Instant::now();
-        self.state = PipelineState::Parsing;
-
-        let ast = match super::core::parser::parse(tokens) {
+        match super::core::parser::parse(tokens) {
             result if result.has_errors => {
-                let duration = start.elapsed().as_millis() as u64;
-                phase_durations.push((CompilationPhase::Parsing, duration));
-
                 let error_msg = result.errors.into_iter().next().unwrap_or_else(|| {
                     crate::util::diagnostic::ErrorCodeDefinition::unexpected_token("unknown")
                         .at(crate::util::span::Span::dummy())
                         .build()
                 });
 
-                return ParseResult::failed(vec![error_msg]);
+                ParseResult::failed(vec![error_msg])
             }
-            result => result.module,
-        };
-
-        let duration = start.elapsed().as_millis() as u64;
-        phase_durations.push((CompilationPhase::Parsing, duration));
-
-        ParseResult::success(ast)
+            result => ParseResult::success(result.module),
+        }
     }
 
     /// 类型检查阶段
@@ -409,14 +263,8 @@ impl Pipeline {
         source_name: &str,
         _source: &str,
         ast: &super::core::parser::Module,
-        phase_durations: &mut Vec<(CompilationPhase, u64)>,
     ) -> TypecheckResult {
-        let start = crate::util::time_compat::Instant::now();
-        self.state = PipelineState::TypeChecking;
-
         let mut type_result = typecheck::check_module(ast, &mut None);
-        let duration = start.elapsed().as_millis() as u64;
-        phase_durations.push((CompilationPhase::TypeChecking, duration));
         let has_errors = !type_result.diagnostics.is_empty();
         let errors = std::mem::take(&mut type_result.diagnostics);
 
@@ -463,11 +311,7 @@ impl Pipeline {
         proof_calls: &[typecheck::proof::verdict::ProofFunctionCall],
         ast: &super::core::parser::ast::Module,
         type_result: &typecheck::TypeCheckResult,
-        phase_durations: &mut Vec<(CompilationPhase, u64)>,
     ) -> ProofExecResult {
-        let start = crate::util::time_compat::Instant::now();
-        self.state = PipelineState::ProofExecuting;
-
         let mut failed_proofs = Vec::new();
         let mut errors = Vec::new();
 
@@ -503,9 +347,6 @@ impl Pipeline {
             }
         }
 
-        let duration = start.elapsed().as_millis() as u64;
-        phase_durations.push((CompilationPhase::ProofExecution, duration));
-
         if failed_proofs.is_empty() {
             ProofExecResult::success()
         } else {
@@ -520,11 +361,7 @@ impl Pipeline {
         _source: &str,
         ast: &super::core::parser::Module,
         type_result: &typecheck::TypeCheckResult,
-        phase_durations: &mut Vec<(CompilationPhase, u64)>,
     ) -> IRResult {
-        let start = crate::util::time_compat::Instant::now();
-        self.state = PipelineState::IRGenerating;
-
         // 单文件模式：入口与嵌入 std 模块（std.test 等，RFC-036 §4）共用同一 registry
         // （共享 SymbolTable），使嵌入函数的 DefId 与入口调用点解析到的一致，避免跨表
         // DefId 撞车错分发（#94）。直接构造 generator 而非 middle::generate_ir 以复用 registry。
@@ -555,15 +392,7 @@ impl Pipeline {
             }
         }
 
-        let duration = start.elapsed().as_millis() as u64;
-        phase_durations.push((CompilationPhase::IRGeneration, duration));
-
         IRResult::success(ir)
-    }
-
-    /// 重置流水线状态
-    pub fn reset(&mut self) {
-        self.state = PipelineState::Idle;
     }
 }
 
@@ -577,35 +406,8 @@ fn merge_embedded_std_ir(
     ir: &mut crate::middle::ModuleIR,
     registry: &crate::frontend::module::registry::ModuleRegistry,
 ) -> Result<(), Diagnostic> {
-    use crate::frontend::core::lexer::TokenKind;
-    let Ok(tokens) = crate::frontend::core::tokenize(source) else {
-        return Ok(());
-    };
-    let mut i = 0;
-    while i < tokens.len() {
-        if !matches!(tokens[i].kind, TokenKind::KwUse) {
-            i += 1;
-            continue;
-        }
-        i += 1;
-        // 收集 `use std.a.b` 的模块路径（到 { 或非标识符为止）
-        let mut segments: Vec<String> = Vec::new();
-        while let Some(TokenKind::Identifier(name)) = tokens.get(i).map(|t| &t.kind) {
-            segments.push(name.clone());
-            i += 1;
-            match tokens.get(i).map(|t| &t.kind) {
-                Some(TokenKind::Dot)
-                    if matches!(tokens.get(i + 1).map(|t| &t.kind), Some(TokenKind::LBrace)) =>
-                {
-                    break;
-                }
-                Some(TokenKind::Dot) => {
-                    i += 1;
-                }
-                _ => break,
-            }
-        }
-        let use_path = segments.join(".");
+    let use_paths = crate::frontend::module::orchestrator::scan_use_paths(source);
+    for use_path in use_paths {
         if use_path == "std"
             || !use_path.starts_with("std.")
             || crate::std::yx_sources::embedded_std_source(&use_path).is_none()

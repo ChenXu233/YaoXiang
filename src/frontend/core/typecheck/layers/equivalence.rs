@@ -34,8 +34,15 @@ pub fn structurally_equal(
         (MonoType::Int(a), MonoType::Int(b)) => a == b,
         (MonoType::Float(a), MonoType::Float(b)) => a == b,
         (MonoType::Char, MonoType::Char) => true,
-        (MonoType::String, MonoType::String) => true,
-        (MonoType::Bytes, MonoType::Bytes) => true,
+        // 容器/复合类型：同名前提下逐参结构等价（#299 去特殊化：List/Dict/Option/Result/Arc/Weak/Tuple/String 均为 Generic）
+        (MonoType::Generic { name: na, args: aa }, MonoType::Generic { name: nb, args: ab }) => {
+            na == nb
+                && aa.len() == ab.len()
+                && aa
+                    .iter()
+                    .zip(ab.iter())
+                    .all(|(x, y)| structurally_equal(x, y))
+        }
         // 类型引用
         (MonoType::TypeRef(a), MonoType::TypeRef(b)) => a == b,
         // 函数类型
@@ -55,15 +62,6 @@ pub fn structurally_equal(
                     .zip(pb.iter())
                     .all(|(a, b)| structurally_equal(a, b))
                 && structurally_equal(ra, rb)
-        }
-        // 容器类型
-        (MonoType::List(a), MonoType::List(b)) => structurally_equal(a, b),
-        (MonoType::Option(a), MonoType::Option(b)) => structurally_equal(a, b),
-        (MonoType::Tuple(a), MonoType::Tuple(b)) => {
-            a.len() == b.len()
-                && a.iter()
-                    .zip(b.iter())
-                    .all(|(x, y)| structurally_equal(x, y))
         }
         // Refined 只比较基类型（约束可能不同但基类型相同的视为结构等价）
         (MonoType::Refined { base: ba, .. }, MonoType::Refined { base: bb, .. }) => {
@@ -109,8 +107,12 @@ pub fn is_subtype(
                 universe_level: lb, ..
             },
         ) => la.le(lb),
-        // List 协变
-        (MonoType::List(a), MonoType::List(b)) => is_subtype(a, b, env),
+        // 容器协变（同名 Generic：List/Option 等；#299 List(a) <: List(b) 当 a <: b）
+        (MonoType::Generic { name: na, args: aa }, MonoType::Generic { name: nb, args: ab })
+            if na == nb && aa.len() == ab.len() && aa.len() == 1 =>
+        {
+            is_subtype(&aa[0], &ab[0], env)
+        }
         // 函数：参数逆变 + 返回值协变
         (
             MonoType::Fn {

@@ -52,10 +52,8 @@ fn run_yx(
     (code, stdout, stderr)
 }
 
-// ============================================================================
 // run 命令 — 退出码契约：成功 0，编译/运行错误 1
 // 规范来源：language-spec.md 执行章节
-// ============================================================================
 
 #[test]
 fn test_e2e_run_valid_program_exits_zero() {
@@ -103,10 +101,8 @@ fn test_e2e_run_nonexistent_file_exits_nonzero() {
     assert_ne!(code, 0, "missing file should exit non-zero");
 }
 
-// ============================================================================
 // run 命令 + .42 字节码文件
 // 规范来源：design spec — 魔数探针判定字节码 vs 源码 (issue #231)
-// ============================================================================
 
 #[test]
 fn test_e2e_run_42_file() {
@@ -189,10 +185,8 @@ fn test_e2e_run_non_42_binary_file_exits_nonzero() {
     );
 }
 
-// ============================================================================
 // build 命令 — 退出码契约 + 输出文件存在性
 // 规范来源：language-spec.md 编译章节
-// ============================================================================
 
 #[test]
 fn test_e2e_build_valid_source_produces_bytecode_file() {
@@ -237,10 +231,8 @@ fn test_e2e_build_compile_error_exits_nonzero() {
     );
 }
 
-// ============================================================================
 // check 命令 — 退出码契约：无错 0，有错 1，无 .yx 文件 2
 // 规范来源：language-spec.md 类型检查章节
-// ============================================================================
 
 #[test]
 fn test_e2e_check_valid_file_exits_zero() {
@@ -284,10 +276,8 @@ fn test_e2e_check_nonexistent_file_exits_nonzero() {
     assert_ne!(code, 0, "check on missing file should exit non-zero");
 }
 
-// ============================================================================
 // init 命令 — 目录结构契约 + 退出码
 // 规范来源：RFC-014 包管理系统 — 项目初始化
-// ============================================================================
 
 #[test]
 fn test_e2e_init_binary_project_creates_expected_files() {

@@ -48,7 +48,6 @@
 //! ```
 
 // 重新导出公共 API
-// =================
 
 // 核心模块（词法分析器、解析器、类型系统）
 pub mod core;
@@ -72,16 +71,15 @@ pub mod validate;
 pub mod compiler;
 
 // 重新导出类型
-// =============
 
 // 编译器
 pub use compiler::Compiler;
 
 // 编译配置
-pub use config::{CompileConfig, OptLevel, DiagLevel, FeatureFlags, ErrorRecoveryStrategy};
+pub use config::{CompileConfig, DeadCodeConfig, MonoConfig};
 
 // 编译流水线
-pub use pipeline::{Pipeline, PipelineState, CompilationResult};
+pub use pipeline::{Pipeline, CompilationResult};
 
 // 编译结果
 pub use compiler::CompileError;

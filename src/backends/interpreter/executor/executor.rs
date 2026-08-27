@@ -14,9 +14,7 @@ use crate::backends::common::value::{
 use crate::middle::bytecode::{BytecodeFunction, Reg, Label, BinaryOp, CompareOp, ConstValue};
 use crate::backends::interpreter::Frame;
 use crate::backends::interpreter::ffi::FfiRegistry;
-use crate::backends::interpreter::runtime::InterpreterRuntimeConfig;
-use crate::backends::runtime::Runtime;
-use crate::backends::runtime::facade::RuntimeConfig;
+use crate::backends::runtime::{Runtime, RuntimeConfig};
 use crate::backends::runtime::engine::{
     SyncValue, TaskCancelReason, TaskMeta, TaskOutcome, TaskResult, sv,
 };
@@ -110,7 +108,7 @@ pub struct Interpreter {
     /// FFI Registry for native function calls
     pub(super) ffi: FfiRegistry,
     /// Interpreter-side runtime configuration (defaults to current behavior).
-    pub(super) runtime_config: InterpreterRuntimeConfig,
+    pub(super) runtime_config: RuntimeConfig,
     /// Runtime facade used for task scheduling (Embedded / Standard / Full).
     pub(super) rt: Runtime,
     /// Read-only shared state, shared across threads via raw pointer.
@@ -163,9 +161,9 @@ impl Interpreter {
 
     /// Create an interpreter with custom configuration
     pub fn with_config(config: ExecutorConfig) -> Self {
-        let runtime_config = InterpreterRuntimeConfig::default();
+        let runtime_config = RuntimeConfig::default();
         let rt = Runtime::new(RuntimeConfig {
-            mode: runtime_config.runtime,
+            mode: runtime_config.mode,
             workers: runtime_config.workers,
         })
         .unwrap_or_else(|_| Runtime::new(RuntimeConfig::default()).unwrap());
@@ -190,7 +188,7 @@ impl Interpreter {
         }
     }
 
-    pub fn runtime_config(&self) -> &InterpreterRuntimeConfig {
+    pub fn runtime_config(&self) -> &RuntimeConfig {
         &self.runtime_config
     }
 
@@ -235,7 +233,7 @@ impl Interpreter {
             config: ExecutorConfig::default(),
             breakpoints: HashMap::new(),
             ffi,
-            runtime_config: InterpreterRuntimeConfig::default(),
+            runtime_config: RuntimeConfig::default(),
             rt,
             // 不设置 shared 字段，避免 Drop 时双重释放。
             // 共享数据已拷贝到上方的字段中。
@@ -248,12 +246,12 @@ impl Interpreter {
 
     pub fn set_runtime_config(
         &mut self,
-        runtime_config: InterpreterRuntimeConfig,
+        runtime_config: RuntimeConfig,
     ) {
         self.runtime_config = runtime_config;
         // Rebuild Runtime facade to match new config
         self.rt = Runtime::new(RuntimeConfig {
-            mode: self.runtime_config.runtime,
+            mode: self.runtime_config.mode,
             workers: self.runtime_config.workers,
         })
         .unwrap_or_else(|_| Runtime::new(RuntimeConfig::default()).unwrap());
@@ -399,6 +397,28 @@ impl Interpreter {
         stack
     }
 
+    /// #281：checked 整数运算——溢出报 E6007（不再静默 wrap / panic），正常路径写 dst 槽
+    fn int_op(
+        &mut self,
+        frame: &mut Frame,
+        dst: Reg,
+        op_name: &str,
+        l: i64,
+        r: i64,
+        f: impl FnOnce(i64, i64) -> Option<i64>,
+    ) -> ExecutorResult<()> {
+        match f(l, r) {
+            Some(v) => {
+                frame.set_slot(dst.0 as usize, RuntimeValue::Int(v));
+                Ok(())
+            }
+            None => Err(ExecutorError::runtime(
+                format!("integer overflow in `{l} {op_name} {r}`"),
+                self.capture_stack(),
+            )),
+        }
+    }
+
     /// Resolve a label to an instruction offset
     pub fn resolve_label(
         &mut self,
@@ -499,9 +519,12 @@ impl Interpreter {
                         Err(e) => return Err(sv(RuntimeValue::String(format!("{e}").into()))),
                     }
                 }
+                // #254：闭包 env 同时作为 upvalues（LoadUpvalue 读）与 args 前段
+                // （LoadArg 读）。此前只传 args 不设 upvalues → 闭包体 LoadUpvalue
+                // 读到 Void → E6007。
                 let mut final_args = func.env.clone();
                 final_args.extend(resolved);
-                self.call_function_by_id(func.func_id, &final_args)
+                self.call_closure(func.func_id, &final_args, &func.env)
             }
         };
 
@@ -719,7 +742,11 @@ impl Interpreter {
             if let RuntimeValue::Function(fv) = func {
                 // SAFETY: The interpreter lives as long as the callback.
                 let interpreter = unsafe { &mut *interp_ptr };
-                interpreter.call_function_by_id(fv.func_id, args)
+                // #294：闭包 env 前置到实参——curry 最内层用 LoadArg 读外层参数，
+                // 与 CallDyn 指令路径一致（此前只传实参 → 外层参数读到 Void/错位）
+                let mut final_args = fv.env.clone();
+                final_args.extend_from_slice(args);
+                interpreter.call_function_by_id(fv.func_id, &final_args)
             } else {
                 Err(ExecutorError::type_error(
                     "Expected function value".to_string(),
@@ -759,7 +786,11 @@ impl Interpreter {
             if let RuntimeValue::Function(fv) = func {
                 // SAFETY: The interpreter lives as long as the callback.
                 let interpreter = unsafe { &mut *interp_ptr };
-                interpreter.call_function_by_id(fv.func_id, args)
+                // #294：闭包 env 前置到实参——curry 最内层用 LoadArg 读外层参数，
+                // 与 CallDyn 指令路径一致（此前只传实参 → 外层参数读到 Void/错位）
+                let mut final_args = fv.env.clone();
+                final_args.extend_from_slice(args);
+                interpreter.call_function_by_id(fv.func_id, &final_args)
             } else {
                 Err(ExecutorError::type_error(
                     "Expected function value".to_string(),
@@ -805,7 +836,12 @@ impl Interpreter {
         let a = self.force_slot(frame, lhs)?;
         let b = self.force_slot(frame, rhs)?;
 
-        tlog!(debug, MSG::DebugBinaryOp, &a, &b);
+        tlog!(
+            debug,
+            MSG::DebugBinaryOp,
+            &format!("{:?}", a),
+            &format!("{:?}", b)
+        );
 
         tlog!(
             debug,
@@ -817,35 +853,44 @@ impl Interpreter {
             (BinaryOp::Add, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
                 tlog!(debug, MSG::DebugAddingNumbers, &l, &r);
                 tlog!(debug, MSG::VmI64Add, &l, &r);
-                RuntimeValue::Int(l + r)
+                // #281：溢出报 E6007，不再静默 wrap（debug 曾直接 panic）
+                return self.int_op(frame, dst, "+", l, r, i64::checked_add);
             }
-            (BinaryOp::Sub, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l - r),
-            (BinaryOp::Mul, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l * r),
+            (BinaryOp::Sub, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                return self.int_op(frame, dst, "-", l, r, i64::checked_sub)
+            }
+            (BinaryOp::Mul, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                return self.int_op(frame, dst, "*", l, r, i64::checked_mul)
+            }
             (BinaryOp::Div, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
                 if r == 0 {
                     let stack = self.capture_stack();
-                    return Err(ExecutorError::division_by_zero(stack));
+                    // #282：携带触发表达式文本
+                    return Err(ExecutorError::division_by_zero(format!("{l} / {r}"), stack));
                 }
-                RuntimeValue::Int(l / r)
+                // #281：i64::MIN / -1 溢出（原 release 下 panic）
+                return self.int_op(frame, dst, "/", l, r, i64::checked_div);
             }
             (BinaryOp::Rem, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
                 if r == 0 {
                     let stack = self.capture_stack();
-                    return Err(ExecutorError::division_by_zero(stack));
+                    // #282：携带触发表达式文本
+                    return Err(ExecutorError::division_by_zero(format!("{l} % {r}"), stack));
                 }
-                RuntimeValue::Int(l % r)
+                return self.int_op(frame, dst, "%", l, r, i64::checked_rem);
             }
             (BinaryOp::And, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l & r),
             (BinaryOp::Or, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l | r),
             (BinaryOp::Xor, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l ^ r),
             (BinaryOp::Shl, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
-                RuntimeValue::Int(l << r)
+                // #281：移位量 >= 64 原为 panic（Rust 语义），改报错
+                return self.int_op(frame, dst, "<<", l, r, |a, b| a.checked_shl(b as u32));
             }
             (BinaryOp::Sar, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
-                RuntimeValue::Int(l >> r)
+                return self.int_op(frame, dst, ">>", l, r, |a, b| a.checked_shr(b as u32));
             }
             (BinaryOp::Shr, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
-                RuntimeValue::Int(l >> r)
+                return self.int_op(frame, dst, ">>", l, r, |a, b| a.checked_shr(b as u32));
             }
             (BinaryOp::Add, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
                 RuntimeValue::Float(l + r)
@@ -870,10 +915,10 @@ impl Interpreter {
             (BinaryOp::Add, RuntimeValue::List(lhs_handle), RuntimeValue::List(rhs_handle)) => {
                 let mut merged = Vec::new();
 
-                if let Some(HeapValue::List(items)) = self.heap.get(lhs_handle) {
+                if let HeapValue::List(items) = &*lhs_handle.lock() {
                     merged.extend(items.iter().cloned());
                 }
-                if let Some(HeapValue::List(items)) = self.heap.get(rhs_handle) {
+                if let HeapValue::List(items) = &*rhs_handle.lock() {
                     merged.extend(items.iter().cloned());
                 }
 
@@ -982,6 +1027,19 @@ impl Interpreter {
             (CompareOp::Ge, RuntimeValue::String(l), RuntimeValue::String(r)) => {
                 RuntimeValue::Bool(l >= r)
             }
+            // #304：vec 类容器（Tuple/List/Array）Eq/Ne 结构相等——
+            // Handle 的 PartialEq 是 Arc 身份，容器的 == 需要按内容递归。
+            // Range 借 Tuple 载体后 `r == r2` 是用户可写形态，不能落兜底类型错误。
+            (
+                CompareOp::Eq,
+                RuntimeValue::Tuple(_) | RuntimeValue::List(_) | RuntimeValue::Array(_),
+                RuntimeValue::Tuple(_) | RuntimeValue::List(_) | RuntimeValue::Array(_),
+            ) => RuntimeValue::Bool(Self::runtime_value_deep_eq(&a, &b)),
+            (
+                CompareOp::Ne,
+                RuntimeValue::Tuple(_) | RuntimeValue::List(_) | RuntimeValue::Array(_),
+                RuntimeValue::Tuple(_) | RuntimeValue::List(_) | RuntimeValue::Array(_),
+            ) => RuntimeValue::Bool(!Self::runtime_value_deep_eq(&a, &b)),
             // 类型不匹配的比较：硬错误，禁止静默返回 false
             // （同函数算术分支已报错，保持一致；类型检查器应先拦截，此处为底线防御）
             (op, l, r) => {
@@ -995,6 +1053,56 @@ impl Interpreter {
 
         frame.set_slot(dst.0 as usize, result);
         Ok(())
+    }
+
+    /// #304：递归结构相等——vec 类容器（Tuple/List/Array）按内容逐元素比较，
+    /// 其余变体走既有 PartialEq（Handle 身份、标量值等）。
+    // ponytail: 递归无环检查——自引用容器（经 Arc/Weak 回指）会栈溢出，
+    // 真实代码罕见；需要时加 visited 集合。
+    pub(super) fn runtime_value_deep_eq(
+        a: &RuntimeValue,
+        b: &RuntimeValue,
+    ) -> bool {
+        fn items_eq(
+            a: &crate::backends::common::heap::Handle,
+            b: &crate::backends::common::heap::Handle,
+        ) -> Option<bool> {
+            // 同一分配快速路径
+            if a == b {
+                return Some(true);
+            }
+            let (ga, gb) = (a.lock(), b.lock());
+            let (ia, ib) = (
+                match &*ga {
+                    crate::backends::common::HeapValue::Tuple(v)
+                    | crate::backends::common::HeapValue::List(v)
+                    | crate::backends::common::HeapValue::Array(v) => v,
+                    _ => return None,
+                },
+                match &*gb {
+                    crate::backends::common::HeapValue::Tuple(v)
+                    | crate::backends::common::HeapValue::List(v)
+                    | crate::backends::common::HeapValue::Array(v) => v,
+                    _ => return None,
+                },
+            );
+            if ia.len() != ib.len() {
+                return Some(false);
+            }
+            Some(
+                ia.iter()
+                    .zip(ib.iter())
+                    .all(|(x, y)| Interpreter::runtime_value_deep_eq(x, y)),
+            )
+        }
+        match (a, b) {
+            (RuntimeValue::Tuple(x), RuntimeValue::Tuple(y))
+            | (RuntimeValue::List(x), RuntimeValue::List(y))
+            | (RuntimeValue::Array(x), RuntimeValue::Array(y)) => {
+                items_eq(x, y).unwrap_or_else(|| a == b)
+            }
+            _ => a == b,
+        }
     }
 }
 

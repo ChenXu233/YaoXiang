@@ -65,7 +65,7 @@ fn make_swap_ir() -> FunctionIR {
         def: None,
         name: "swap".to_string(),
         params: vec![t.clone(), t.clone()],
-        return_type: MonoType::Tuple(vec![t.clone(), t.clone()]),
+        return_type: MonoType::make_tuple(vec![t.clone(), t.clone()]),
         generic_params: Some(vec!["T".to_string()]),
         body: FunctionBody::Code {
             blocks: vec![BasicBlock {
@@ -169,7 +169,7 @@ fn test_specialize_identity_with_string() {
 
     let req = InstantiationRequest::new(
         GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
-        vec![MonoType::String],
+        vec![MonoType::make_string()],
         Span::default(),
     );
 
@@ -180,8 +180,8 @@ fn test_specialize_identity_with_string() {
     assert!(result.is_some(), "特化应该成功");
     let func = result.unwrap();
     assert_eq!(func.name, "identity(string)");
-    assert_eq!(func.params[0], MonoType::String);
-    assert_eq!(func.return_type, MonoType::String);
+    assert_eq!(func.params[0], MonoType::make_string());
+    assert_eq!(func.return_type, MonoType::make_string());
     assert!(func.generic_params.is_none());
 }
 
@@ -210,7 +210,7 @@ fn test_specialize_swap_with_float() {
     assert_eq!(func.params[1], MonoType::Float(64));
     assert_eq!(
         func.return_type,
-        MonoType::Tuple(vec![MonoType::Float(64), MonoType::Float(64)])
+        MonoType::make_tuple(vec![MonoType::Float(64), MonoType::Float(64)])
     );
     assert!(func.generic_params.is_none());
 }
@@ -241,7 +241,7 @@ fn test_specialize_type_args_mismatch_returns_none() {
 
     let req = InstantiationRequest::new(
         GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64), MonoType::String],
+        vec![MonoType::Int(64), MonoType::make_string()],
         Span::default(),
     );
 
@@ -294,7 +294,7 @@ fn test_specialize_non_generic_function_returns_none() {
 fn test_specialize_with_generic_type_args_replaces_inner_types() {
     // Arrange
     let t = MonoType::TypeVar(TypeVar::new(0));
-    let list_t = MonoType::List(Box::new(t.clone()));
+    let list_t = MonoType::make_list(t.clone());
 
     let generic = FunctionIR {
         def: None,
@@ -309,7 +309,7 @@ fn test_specialize_with_generic_type_args_replaces_inner_types() {
                 successors: Vec::new(),
             }],
             entry: 0,
-            locals: vec![MonoType::List(Box::new(MonoType::TypeVar(TypeVar::new(0))))],
+            locals: vec![MonoType::make_list(MonoType::TypeVar(TypeVar::new(0)))],
         },
     };
 
@@ -318,7 +318,7 @@ fn test_specialize_with_generic_type_args_replaces_inner_types() {
 
     let req = InstantiationRequest::new(
         GenericFunctionId::new("first".to_string(), vec!["T".to_string()]),
-        vec![MonoType::String],
+        vec![MonoType::make_string()],
         Span::default(),
     );
 
@@ -328,9 +328,12 @@ fn test_specialize_with_generic_type_args_replaces_inner_types() {
     // Assert
     assert!(result.is_some(), "特化应该成功");
     let func = result.unwrap();
-    assert_eq!(func.params[0], MonoType::List(Box::new(MonoType::String)));
-    assert_eq!(func.return_type, MonoType::String);
-    assert_eq!(func.locals()[0], MonoType::List(Box::new(MonoType::String)));
+    assert_eq!(func.params[0], MonoType::make_list(MonoType::make_string()));
+    assert_eq!(func.return_type, MonoType::make_string());
+    assert_eq!(
+        func.locals()[0],
+        MonoType::make_list(MonoType::make_string())
+    );
 }
 
 // ==================== scan_for_new_calls 测试 ====================
@@ -464,7 +467,7 @@ fn test_operand_to_type_hint_resolves_arg_local_and_const() {
     let func = FunctionIR {
         def: None,
         name: "test".to_string(),
-        params: vec![MonoType::Int(64), MonoType::String],
+        params: vec![MonoType::Int(64), MonoType::make_string()],
         return_type: MonoType::Void,
         generic_params: None,
         body: FunctionBody::Code {
@@ -483,7 +486,7 @@ fn test_operand_to_type_hint_resolves_arg_local_and_const() {
     // Assert: Arg(1) -> String
     assert_eq!(
         mono.operand_to_type_hint(&Operand::Arg(1), &func),
-        Some(MonoType::String)
+        Some(MonoType::make_string())
     );
 
     // Assert: Arg(99) -> None (越界)
@@ -507,7 +510,7 @@ fn test_operand_to_type_hint_resolves_arg_local_and_const() {
             &Operand::Const(ConstValue::String("hello".to_string())),
             &func,
         ),
-        Some(MonoType::String)
+        Some(MonoType::make_string())
     );
 }
 
@@ -850,7 +853,7 @@ fn test_type_specialization_arg_count_mismatch_returns_none() {
 
     let req = InstantiationRequest::new(
         GenericFunctionId::new("Pair".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64), MonoType::String],
+        vec![MonoType::Int(64), MonoType::make_string()],
         Span::default(),
     );
 
@@ -967,7 +970,7 @@ fn test_specialize_type_lowercase_param_name() {
 
     let req = InstantiationRequest::new(
         GenericFunctionId::new("Small".to_string(), vec!["t".to_string()]),
-        vec![MonoType::String],
+        vec![MonoType::make_string()],
         Span::default(),
     );
 

@@ -4,12 +4,9 @@
 
 use crate::frontend::core::parser::ast::Type as AstType;
 use crate::frontend::core::typecheck::MonoType;
-use crate::middle::core::ir::{
-    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
-};
-use crate::middle::passes::mono::instance::{FunctionId, GenericFunctionId, InstantiationRequest};
-use crate::util::diagnostic::Diagnostic;
-use std::collections::{HashMap, HashSet};
+use crate::middle::core::ir::{BasicBlock, FunctionBody, FunctionIR, Instruction, ModuleIR};
+use crate::middle::passes::mono::instance::{FunctionId, InstantiationRequest};
+use std::collections::HashMap;
 
 /// 函数单态化相关trait
 pub trait FunctionMonomorphizer {
@@ -30,52 +27,6 @@ pub trait FunctionMonomorphizer {
         &self,
         func: &FunctionIR,
     ) -> Vec<String>;
-
-    /// 收集所有实例化请求
-    fn collect_instantiation_requests(
-        &mut self,
-        module: &ModuleIR,
-    );
-
-    /// 从指令中收集函数调用类型
-    fn collect_instruction_types(
-        &self,
-        instr: &Instruction,
-        all_call_type_names: &mut HashSet<String>,
-        all_generic_calls: &mut Vec<(String, Vec<MonoType>)>,
-    );
-
-    /// 将类型列表转换为唯一键字符串
-    fn types_to_key(types: &[MonoType]) -> String;
-
-    /// 从类型名字符串解析回MonoType列表
-    fn parse_type_names(key: &str) -> Vec<MonoType>;
-
-    /// 将类型名转换为MonoType
-    fn type_name_to_mono_type(name: &str) -> Option<MonoType>;
-
-    /// 将操作数转换为类型
-    fn operand_to_type(
-        &self,
-        operand: &Operand,
-    ) -> Option<MonoType>;
-
-    /// 根据收集到的类型参数为泛型函数排队实例化请求
-    fn queue_instantiations_for_types(
-        &mut self,
-        type_args: &[MonoType],
-        generic_calls: &[(String, Vec<MonoType>)],
-    );
-
-    /// 添加实例化请求
-    fn add_instantiation_request(
-        &mut self,
-        generic_id: GenericFunctionId,
-        type_args: Vec<MonoType>,
-    );
-
-    /// 处理实例化队列
-    fn process_instantiation_queue(&mut self) -> Result<(), Diagnostic>;
 
     /// 实例化单个函数
     fn instantiate_function(
@@ -154,12 +105,6 @@ impl FunctionMonomorphizer for super::Monomorphizer {
     ) -> bool {
         match ty {
             MonoType::TypeVar(_) => true,
-            MonoType::List(elem) => self.contains_type_var(elem),
-            MonoType::Dict(key, value) => {
-                self.contains_type_var(key) || self.contains_type_var(value)
-            }
-            MonoType::Set(elem) => self.contains_type_var(elem),
-            MonoType::Tuple(types) => types.iter().any(|t| self.contains_type_var(t)),
             MonoType::Fn {
                 params,
                 return_type,
@@ -177,185 +122,6 @@ impl FunctionMonomorphizer for super::Monomorphizer {
         func: &FunctionIR,
     ) -> Vec<String> {
         func.generic_params.clone().unwrap_or_default()
-    }
-
-    fn collect_instantiation_requests(
-        &mut self,
-        module: &ModuleIR,
-    ) {
-        let mut all_call_type_names: HashSet<String> = HashSet::new();
-        let mut all_generic_calls: Vec<(String, Vec<MonoType>)> = Vec::new();
-
-        for func in &module.functions {
-            let blocks: Vec<&BasicBlock> = match &func.body {
-                FunctionBody::Code { blocks, .. } => blocks.iter().collect(),
-                _ => Vec::new(),
-            };
-            for block in blocks {
-                for instr in &block.instructions {
-                    self.collect_instruction_types(
-                        instr,
-                        &mut all_call_type_names,
-                        &mut all_generic_calls,
-                    );
-                }
-            }
-        }
-
-        for type_names in &all_call_type_names {
-            let type_args = Self::parse_type_names(type_names);
-            self.queue_instantiations_for_types(&type_args, &all_generic_calls);
-        }
-    }
-
-    fn collect_instruction_types(
-        &self,
-        instr: &Instruction,
-        all_call_type_names: &mut HashSet<String>,
-        all_generic_calls: &mut Vec<(String, Vec<MonoType>)>,
-    ) {
-        match instr {
-            Instruction::Call { func, args, .. } => {
-                let arg_types: Vec<MonoType> = args
-                    .iter()
-                    .filter_map(|a| self.operand_to_type(a))
-                    .collect();
-
-                if !arg_types.is_empty() {
-                    let type_key = Self::types_to_key(&arg_types);
-                    all_call_type_names.insert(type_key);
-
-                    if let Operand::Global(func_idx) = func {
-                        let func_name = format!("func_{}", func_idx);
-                        all_generic_calls.push((func_name, arg_types));
-                    } else if let Operand::Const(ConstValue::String(name)) = func {
-                        all_generic_calls.push((name.clone(), arg_types));
-                    }
-                }
-            }
-
-            Instruction::TailCall { func: _, args, .. } => {
-                let arg_types: Vec<MonoType> = args
-                    .iter()
-                    .filter_map(|a| self.operand_to_type(a))
-                    .collect();
-                if !arg_types.is_empty() {
-                    let type_key = Self::types_to_key(&arg_types);
-                    all_call_type_names.insert(type_key);
-                }
-            }
-
-            Instruction::Ret(Some(operand)) => {
-                if let Some(ty) = self.operand_to_type(operand) {
-                    let type_key = Self::types_to_key(&[ty]);
-                    all_call_type_names.insert(type_key);
-                }
-            }
-            Instruction::Ret(None) => {}
-
-            Instruction::Move { dst, src } => {
-                if let (Some(dst_ty), Some(src_ty)) =
-                    (self.operand_to_type(dst), self.operand_to_type(src))
-                {
-                    if dst_ty != src_ty {
-                        let type_key = Self::types_to_key(&[dst_ty]);
-                        all_call_type_names.insert(type_key);
-                    }
-                }
-            }
-
-            Instruction::Load { dst, .. } => {
-                if let Some(ty) = self.operand_to_type(dst) {
-                    let type_key = Self::types_to_key(&[ty]);
-                    all_call_type_names.insert(type_key);
-                }
-            }
-
-            Instruction::Alloc { dst, .. } => {
-                if let Some(ty) = self.operand_to_type(dst) {
-                    let type_key = Self::types_to_key(&[ty]);
-                    all_call_type_names.insert(type_key);
-                }
-            }
-
-            _ => {}
-        }
-    }
-
-    fn types_to_key(types: &[MonoType]) -> String {
-        types
-            .iter()
-            .map(|t| t.type_name())
-            .collect::<Vec<_>>()
-            .join(",")
-    }
-
-    fn parse_type_names(key: &str) -> Vec<MonoType> {
-        if key.is_empty() {
-            return Vec::new();
-        }
-        key.split(',')
-            .filter_map(Self::type_name_to_mono_type)
-            .collect()
-    }
-
-    fn type_name_to_mono_type(name: &str) -> Option<MonoType> {
-        match name {
-            "Void" => Some(MonoType::Void),
-            "Bool" => Some(MonoType::Bool),
-            "Int64" => Some(MonoType::Int(64)),
-            "Int32" => Some(MonoType::Int(32)),
-            "Int16" => Some(MonoType::Int(16)),
-            "Int8" => Some(MonoType::Int(8)),
-            "Float64" => Some(MonoType::Float(64)),
-            "Float32" => Some(MonoType::Float(32)),
-            "Char" => Some(MonoType::Char),
-            "String" => Some(MonoType::String),
-            "Bytes" => Some(MonoType::Bytes),
-            _ => None,
-        }
-    }
-
-    fn operand_to_type(
-        &self,
-        operand: &Operand,
-    ) -> Option<MonoType> {
-        match operand {
-            Operand::Local(_id) => Some(MonoType::Int(64)),
-            Operand::Temp(_id) => Some(MonoType::Int(64)),
-            Operand::Arg(_id) => Some(MonoType::Int(64)),
-            Operand::Global(_id) => Some(MonoType::Int(64)),
-            Operand::Const(ConstValue::Int(_)) => Some(MonoType::Int(64)),
-            Operand::Const(ConstValue::Float(_)) => Some(MonoType::Float(64)),
-            Operand::Const(ConstValue::Bool(_)) => Some(MonoType::Bool),
-            Operand::Const(ConstValue::String(_)) => Some(MonoType::String),
-            Operand::Const(ConstValue::Char(_)) => Some(MonoType::Char),
-            Operand::Const(ConstValue::Void) => Some(MonoType::Void),
-            _ => None,
-        }
-    }
-
-    fn queue_instantiations_for_types(
-        &mut self,
-        _type_args: &[MonoType],
-        _generic_calls: &[(String, Vec<MonoType>)],
-    ) {
-        // 在新的队列驱动结构中，这个方法主要用于兼容旧接口
-        // 实际的队列操作在 monomorphize 方法中完成
-    }
-
-    fn add_instantiation_request(
-        &mut self,
-        generic_id: GenericFunctionId,
-        type_args: Vec<MonoType>,
-    ) {
-        let request =
-            InstantiationRequest::new(generic_id, type_args, crate::util::span::Span::default());
-        self.pending_queue.push_back(request);
-    }
-
-    fn process_instantiation_queue(&mut self) -> Result<(), Diagnostic> {
-        self.process_queue()
     }
 
     fn instantiate_function(
@@ -477,22 +243,6 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                 .get(&tv.index())
                 .cloned()
                 .unwrap_or_else(|| ty.clone()),
-            MonoType::List(elem) => {
-                MonoType::List(Box::new(self.substitute_single_type(elem, type_map)))
-            }
-            MonoType::Dict(key, value) => MonoType::Dict(
-                Box::new(self.substitute_single_type(key, type_map)),
-                Box::new(self.substitute_single_type(value, type_map)),
-            ),
-            MonoType::Set(elem) => {
-                MonoType::Set(Box::new(self.substitute_single_type(elem, type_map)))
-            }
-            MonoType::Tuple(types) => MonoType::Tuple(
-                types
-                    .iter()
-                    .map(|t| self.substitute_single_type(t, type_map))
-                    .collect(),
-            ),
             MonoType::Fn {
                 params,
                 return_type,
@@ -736,13 +486,15 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                 MonoType::Int(n) => AstType::Int(*n),
                 MonoType::Float(n) => AstType::Float(*n),
                 MonoType::Bool => AstType::Bool,
-                MonoType::String => AstType::String,
                 MonoType::Char => AstType::Char,
                 MonoType::Void => AstType::Void,
                 MonoType::TypeRef(name) => AstType::Name {
                     name: name.clone(),
                     span,
                 },
+                // #299：String/Bytes 等容器类型现为 Generic，经 type_name 反解回 AstType
+                MonoType::Generic { name, .. } if name == "String" => AstType::String,
+                MonoType::Generic { name, .. } if name == "Bytes" => AstType::Bytes,
                 _ => AstType::Name {
                     name: mono.type_name(),
                     span,

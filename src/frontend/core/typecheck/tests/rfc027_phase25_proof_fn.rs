@@ -8,6 +8,7 @@
 //!   3. Z3 SMT 求解（Phase 2B）
 //!   4. **证明函数调用（Phase 2.5）** ← 本文件覆盖
 
+use crate::frontend::core::typecheck::test_util::{binop};
 use std::collections::HashMap;
 
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
@@ -68,11 +69,11 @@ fn test_literal_constraint_does_not_produce_proof_call() {
     // Arrange: 纯字面量 5 > 0
     let refined = MonoType::Refined {
         base: Box::new(MonoType::Int(64)),
-        constraint: ConstExpr::BinOp {
-            op: BinOp::Gt,
-            left: Box::new(ConstExpr::Lit(ConstValue::Int(5))),
-            right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-        },
+        constraint: binop(
+            BinOp::Gt,
+            ConstExpr::Lit(ConstValue::Int(5)),
+            ConstExpr::Lit(ConstValue::Int(0)),
+        ),
     };
     let env = TypeEnvironment::new();
     let ctx = ProofContext::new(&env);
@@ -93,11 +94,11 @@ fn test_non_call_unproven_has_empty_proof_calls() {
     // Arrange: 含未绑定变量 -> eval_expr 失败 -> SMT Unknown -> Unproven
     let refined = MonoType::Refined {
         base: Box::new(MonoType::Int(64)),
-        constraint: ConstExpr::BinOp {
-            op: BinOp::Gt,
-            left: Box::new(ConstExpr::NamedVar("unknown".into())),
-            right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-        },
+        constraint: binop(
+            BinOp::Gt,
+            ConstExpr::NamedVar("unknown".into()),
+            ConstExpr::Lit(ConstValue::Int(0)),
+        ),
     };
     let env = TypeEnvironment::new();
     let ctx = ProofContext::new(&env);

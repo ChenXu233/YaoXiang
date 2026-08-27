@@ -6,7 +6,7 @@ use crate::frontend::core::typecheck::MonoType;
 use crate::middle::passes::codegen::bytecode::{
     BytecodeFile, BytecodeInstruction, CodeSection, DebugSection, FileHeader, FunctionCode,
 };
-use crate::backends::common::Opcode;
+use crate::backends::common::opcode;
 use crate::util::span::{DebugSpan, Position, SourceMap, Span};
 use std::collections::HashMap;
 use std::io;
@@ -26,7 +26,7 @@ fn test_debug_section_round_trip() {
         name: "main".to_string(),
         params: Vec::new(),
         return_type: MonoType::Void,
-        instructions: vec![BytecodeInstruction::new(Opcode::Nop, vec![])],
+        instructions: vec![BytecodeInstruction::new(opcode::NOP, vec![])],
         local_count: 0,
         debug_map: HashMap::from([(0usize, debug_span)]),
     };

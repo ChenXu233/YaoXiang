@@ -41,7 +41,7 @@
 | 005-automated-cve-scanning.md | RFC-005: 自动化CVE安全检查系统 | 已拒绝 | rejected\005-automated-cve-scanning.md | -- | -- | -- | -- |
 | 016-quantum-native-support.md | RFC 016: 量子原生支持与多重后端集成 | 已拒绝 | rejected\016-quantum-native-support.md | -- | -- | -- | -- |
 | 025-primitive-extension.md | RFC-025: 可扩展原语类型机制 | 已拒绝 | rejected\025-primitive-extension.md | -- | -- | -- | -- |
-| 011a-interface-implementation.md | RFC-011a: 接口实现与动态分发 | 审核中 | review\011a-interface-implementation.md | -- | -- | -- | -- |
+| 011a-interface-implementation.md | RFC-011a: 接口实现与动态分发 | 已接受 | accepted\011a-interface-implementation.md | -- | -- | -- | -- |
 | 014a-registry-protocol.md | RFC-014a: Registry 协议规范 | 审核中 | review\014a-registry-protocol.md | -- | -- | -- | -- |
 | 014b-build-system.md | RFC-014b: 构建系统与二进制分发 | 审核中 | review\014b-build-system.md | #91 | -- | -- | -- |
 | 014c-workspace.md | RFC-014c: 工作空间支持 | 审核中 | review\014c-workspace.md | #113 | -- | -- | -- |

@@ -1,0 +1,22 @@
+// 01-syntax/basics/shift_ops.yx
+// 覆盖: 规范 §2.2 运算符优先级（级 7：`<<` `>>`）+ #285
+// 验证: 移位运算符字面量/变量操作数、左结合、与位运算/比较的优先级关系
+// 状态: ✅ 可运行
+
+use std.io
+use std.assert
+
+main = {
+    a = 1024
+    // 字面量与变量操作数
+    assert.assert((a << 2) == 4096, "左移字面量")
+    assert.assert((a >> 2) == 256, "右移字面量")
+    shift = 3
+    assert.assert((a << shift) == 8192, "左移变量")
+    assert.assert((a >> shift) == 128, "右移变量")
+    // 左结合
+    assert.assert((a >> 2 >> 2) == 64, "链式移位左结合")
+    // 优先级：移位(7) > 位运算(8) > 比较(9)
+    assert.assert((a >> 2) == 256, "移位与比较")
+    io.println("SHIFT_OPS_OK")
+}

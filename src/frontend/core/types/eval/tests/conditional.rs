@@ -12,9 +12,7 @@ use crate::frontend::core::types::eval::conditional::{
 };
 use crate::frontend::core::types::eval::TypeLevelResult;
 
-// ===================================================================
 // §5.1: TypeCondition — 所有条件变体
-// ===================================================================
 
 #[test]
 fn test_condition_bool() {
@@ -27,7 +25,10 @@ fn test_condition_bool() {
 fn test_condition_eq() {
     let eq = |a, b| TypeCondition::Eq(Box::new(a), Box::new(b));
     assert_eq!(eq(MonoType::Int(32), MonoType::Int(32)).eval(), Some(true));
-    assert_eq!(eq(MonoType::Int(32), MonoType::String).eval(), Some(false));
+    assert_eq!(
+        eq(MonoType::Int(32), MonoType::make_string()).eval(),
+        Some(false)
+    );
     assert_eq!(eq(MonoType::Bool, MonoType::Bool).eval(), Some(true));
     assert_eq!(eq(MonoType::Void, MonoType::Bool).eval(), Some(false));
 }
@@ -35,7 +36,10 @@ fn test_condition_eq() {
 #[test]
 fn test_condition_neq() {
     let nq = |a, b| TypeCondition::Neq(Box::new(a), Box::new(b));
-    assert_eq!(nq(MonoType::Int(32), MonoType::String).eval(), Some(true));
+    assert_eq!(
+        nq(MonoType::Int(32), MonoType::make_string()).eval(),
+        Some(true)
+    );
     assert_eq!(nq(MonoType::Int(32), MonoType::Int(32)).eval(), Some(false));
 }
 
@@ -44,7 +48,7 @@ fn test_condition_is_void() {
     let iv = |t| TypeCondition::IsVoid(Box::new(t));
     assert_eq!(iv(MonoType::Void).eval(), Some(true));
     assert_eq!(iv(MonoType::Int(32)).eval(), Some(false));
-    assert_eq!(iv(MonoType::String).eval(), Some(false));
+    assert_eq!(iv(MonoType::make_string()).eval(), Some(false));
 }
 
 #[test]
@@ -70,7 +74,10 @@ fn test_is_never_monotype() {
 fn test_condition_is_type() {
     let it = |t, e| TypeCondition::IsType(Box::new(t), Box::new(e));
     assert_eq!(it(MonoType::Int(32), MonoType::Int(32)).eval(), Some(true));
-    assert_eq!(it(MonoType::Int(32), MonoType::String).eval(), Some(false));
+    assert_eq!(
+        it(MonoType::Int(32), MonoType::make_string()).eval(),
+        Some(false)
+    );
 }
 
 #[test]
@@ -121,16 +128,14 @@ fn test_condition_is_determined() {
     assert!(TypeCondition::Bool(false).is_determined());
 }
 
-// ===================================================================
 // §5.1: If[C, T, E] — 条件类型
-// ===================================================================
 
 #[test]
 fn test_if_true_selects_true_branch() {
     let if_type = If::new(
         TypeCondition::Bool(true),
         MonoType::Int(32),
-        MonoType::String,
+        MonoType::make_string(),
     );
     let result = if_type.eval();
     assert!(result.is_normalized());
@@ -142,10 +147,10 @@ fn test_if_false_selects_false_branch() {
     let if_type = If::new(
         TypeCondition::Bool(false),
         MonoType::Int(32),
-        MonoType::String,
+        MonoType::make_string(),
     );
     let result = if_type.eval();
-    assert_eq!(result.ok(), Some(MonoType::String));
+    assert_eq!(result.ok(), Some(MonoType::make_string()));
 }
 
 #[test]
@@ -160,16 +165,14 @@ fn test_if_getters() {
     let if_type = If::new(
         TypeCondition::Bool(true),
         MonoType::Int(32),
-        MonoType::String,
+        MonoType::make_string(),
     );
     assert_eq!(if_type.condition(), &TypeCondition::Bool(true));
     assert_eq!(if_type.true_branch(), &MonoType::Int(32));
-    assert_eq!(if_type.false_branch(), &MonoType::String);
+    assert_eq!(if_type.false_branch(), &MonoType::make_string());
 }
 
-// ===================================================================
 // §5.1: conditions 辅助函数
-// ===================================================================
 
 #[test]
 fn test_conditions_helper_bool() {
@@ -184,7 +187,7 @@ fn test_conditions_helper_eq_and_neq() {
         Some(true)
     );
     assert_eq!(
-        conditions::neq(MonoType::Int(32), MonoType::String).eval(),
+        conditions::neq(MonoType::Int(32), MonoType::make_string()).eval(),
         Some(true)
     );
 }
@@ -208,9 +211,7 @@ fn test_conditions_helper_logic() {
     assert_eq!(conditions::not(conditions::bool(true)).eval(), Some(false));
 }
 
-// ===================================================================
 // §5.1: TypeLevelResult
-// ===================================================================
 
 #[test]
 fn test_type_level_result_normalized() {
@@ -255,9 +256,7 @@ fn test_type_level_result_error_result() {
     assert!(err.result().is_err());
 }
 
-// ===================================================================
 // §5.1: MatchType (conditional_types) 补充测试
-// ===================================================================
 
 #[test]
 fn test_conditional_match_type_new_and_eval() {
@@ -266,12 +265,12 @@ fn test_conditional_match_type_new_and_eval() {
         MonoType::Int(32),
         vec![MatchArm {
             pattern: MonoType::TypeRef("_".to_string()),
-            result: MonoType::String,
+            result: MonoType::make_string(),
         }],
     );
     let result = mt.eval();
     assert!(result.is_normalized());
-    assert_eq!(result.ok(), Some(MonoType::String));
+    assert_eq!(result.ok(), Some(MonoType::make_string()));
 }
 
 #[test]
@@ -283,7 +282,7 @@ fn test_conditional_match_type_with_wildcard() {
 #[test]
 fn test_conditional_match_type_add_arm() {
     let mut mt = MatchType::new(MonoType::Int(32), vec![]);
-    mt.add_arm(MonoType::Int(32), MonoType::String);
+    mt.add_arm(MonoType::Int(32), MonoType::make_string());
     assert_eq!(mt.arms.len(), 1);
 }
 
@@ -295,7 +294,7 @@ fn test_conditional_match_type_var_pattern_no_match() {
         MonoType::Int(32),
         vec![MatchArm {
             pattern: MonoType::TypeVar(TypeVar::new(0)),
-            result: MonoType::String,
+            result: MonoType::make_string(),
         }],
     );
     let result = mt.eval();
@@ -309,9 +308,7 @@ fn test_conditional_type_match_variant() {
     assert!(ct.eval().is_normalized());
 }
 
-// ===================================================================
 // §5.2: MatchPattern — 模式匹配
-// ===================================================================
 
 #[test]
 fn test_match_pattern() {
@@ -379,16 +376,14 @@ fn test_match_pattern_constructor() {
     assert!(!pat.is_wildcard());
 }
 
-// ===================================================================
 // §5.2: PatternMatchArm
-// ===================================================================
 
 #[test]
 fn test_pattern_match_arm() {
     let arm = PatternMatchArm::new(MatchPattern::wildcard(), MonoType::Int(32));
     assert!(arm.pattern.is_wildcard());
     assert_eq!(arm.result, MonoType::Int(32));
-    let wc = PatternMatchArm::wildcard(MonoType::String);
+    let wc = PatternMatchArm::wildcard(MonoType::make_string());
     assert!(wc.pattern.is_wildcard());
 }
 
@@ -401,14 +396,12 @@ fn test_pattern_match_arm_new() {
 
 #[test]
 fn test_pattern_match_arm_wildcard() {
-    let arm = PatternMatchArm::wildcard(MonoType::String);
+    let arm = PatternMatchArm::wildcard(MonoType::make_string());
     assert!(arm.pattern.is_wildcard());
-    assert_eq!(arm.result, MonoType::String);
+    assert_eq!(arm.result, MonoType::make_string());
 }
 
-// ===================================================================
 // §5.2: MatchBinding
-// ===================================================================
 
 #[test]
 fn test_match_binding() {
@@ -416,12 +409,12 @@ fn test_match_binding() {
     assert_eq!(b.get("x"), None);
     b.bind("x", MonoType::Int(32));
     assert_eq!(b.get("x"), Some(&MonoType::Int(32)));
-    b.bind("x", MonoType::String);
-    assert_eq!(b.get("x"), Some(&MonoType::String));
+    b.bind("x", MonoType::make_string());
+    assert_eq!(b.get("x"), Some(&MonoType::make_string()));
     let mut c = MatchBinding::new();
     c.bind("y", MonoType::Bool);
     let merged = b.merge(&c);
-    assert_eq!(merged.get("x"), Some(&MonoType::String));
+    assert_eq!(merged.get("x"), Some(&MonoType::make_string()));
     assert_eq!(merged.get("y"), Some(&MonoType::Bool));
 }
 
@@ -437,24 +430,22 @@ fn test_match_binding_bind_and_get() {
 fn test_match_binding_overwrite() {
     let mut b = MatchBinding::new();
     b.bind("x", MonoType::Int(32));
-    b.bind("x", MonoType::String);
-    assert_eq!(b.get("x"), Some(&MonoType::String));
+    b.bind("x", MonoType::make_string());
+    assert_eq!(b.get("x"), Some(&MonoType::make_string()));
 }
 
-// ===================================================================
 // §5.2: PatternMatcher
-// ===================================================================
 
 #[test]
 fn test_pattern_matcher() {
     let m = PatternMatcher::new();
     assert!(m.matches(&MonoType::Int(32), &MatchPattern::wildcard()));
     assert!(m.matches(
-        &MonoType::Tuple(vec![MonoType::Int(32)]),
+        &MonoType::make_tuple(vec![MonoType::Int(32)]),
         &MatchPattern::tuple(vec![MatchPattern::wildcard()])
     ));
     assert!(!m.matches(
-        &MonoType::Tuple(vec![MonoType::Int(32)]),
+        &MonoType::make_tuple(vec![MonoType::Int(32)]),
         &MatchPattern::tuple(vec![MatchPattern::wildcard(), MatchPattern::wildcard()])
     ));
 }
@@ -466,7 +457,7 @@ fn test_pattern_matcher_named() {
     assert!(!m.matches(&MonoType::Int(32), &MatchPattern::named("x")));
     // MatchPattern::wildcard_named creates a Wildcard pattern - matches anything
     assert!(m.matches(&MonoType::Int(32), &MatchPattern::wildcard_named("x")));
-    assert!(m.matches(&MonoType::String, &MatchPattern::wildcard_named("x")));
+    assert!(m.matches(&MonoType::make_string(), &MatchPattern::wildcard_named("x")));
 }
 
 #[test]
@@ -486,18 +477,16 @@ fn test_pattern_matcher_literal() {
 fn test_pattern_matcher_tuple_arity() {
     let m = PatternMatcher::new();
     assert!(m.matches(
-        &MonoType::Tuple(vec![MonoType::Int(32), MonoType::String]),
+        &MonoType::make_tuple(vec![MonoType::Int(32), MonoType::make_string()]),
         &MatchPattern::tuple(vec![MatchPattern::wildcard(), MatchPattern::wildcard()])
     ));
     assert!(!m.matches(
-        &MonoType::Tuple(vec![MonoType::Int(32)]),
+        &MonoType::make_tuple(vec![MonoType::Int(32)]),
         &MatchPattern::tuple(vec![MatchPattern::wildcard(), MatchPattern::wildcard()])
     ));
 }
 
-// ===================================================================
 // §5.2: PatternMatchType
-// ===================================================================
 
 #[test]
 fn test_pattern_match_type() {
@@ -521,7 +510,7 @@ fn test_pattern_match_type_on_creates_match() {
         MonoType::TypeRef("Zero".to_string()),
         vec![
             PatternMatchArm::new(MatchPattern::named("Zero"), MonoType::Int(32)),
-            PatternMatchArm::wildcard(MonoType::String),
+            PatternMatchArm::wildcard(MonoType::make_string()),
         ],
     );
     assert_eq!(mt.arm_count(), 2);
@@ -532,7 +521,7 @@ fn test_pattern_match_type_on_creates_match() {
 fn test_pattern_match_type_add_arm() {
     let mut mt = PatternMatchType::on(MonoType::Int(32), vec![]);
     assert_eq!(mt.arm_count(), 0);
-    mt.add_arm(MatchPattern::wildcard(), MonoType::String);
+    mt.add_arm(MatchPattern::wildcard(), MonoType::make_string());
     assert_eq!(mt.arm_count(), 1);
 }
 
@@ -540,14 +529,12 @@ fn test_pattern_match_type_add_arm() {
 fn test_pattern_match_type_with_wildcard() {
     let mut mt = PatternMatchType::on(MonoType::Int(32), vec![]);
     assert!(!mt.has_wildcard());
-    mt.with_wildcard(MonoType::String);
+    mt.with_wildcard(MonoType::make_string());
     assert!(mt.has_wildcard());
     assert_eq!(mt.arm_count(), 1);
 }
 
-// ===================================================================
 // §5.2: PatternBuilder
-// ===================================================================
 
 #[test]
 fn test_pattern_builder() {
@@ -577,9 +564,7 @@ fn test_pattern_builder_tuple() {
     assert!(matches!(pat, MatchPattern::Tuple(ref p) if p.len() == 2));
 }
 
-// ===================================================================
 // §5.2: nat_examples
-// ===================================================================
 
 #[test]
 fn test_nat_examples() {

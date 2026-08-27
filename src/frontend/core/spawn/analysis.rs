@@ -16,9 +16,7 @@ use crate::frontend::core::parser::ast::{BinOp, Block, Expr, FStringSegment, Stm
 use crate::frontend::core::types::{MonoType, TraitTable};
 use crate::middle::core::ir::{ExecutionPlan, TaskGroup};
 
-// ============================================================================
 // 公共 API
-// ============================================================================
 
 /// 单个任务的分析结果
 pub struct TaskInfo {
@@ -82,6 +80,12 @@ pub fn analyze_spawn_body(
             continue;
         }
         if let StmtKind::Expr(expr) = &stmt.kind {
+            // return 是 spawn 块的结果表达式（RFC-010 语义，ir_gen 第 6 步单独处理），
+            // 不是并行任务。包装成闭包会在闭包作用域内引用块内局部变量（#271 #3
+            // 硬错误暴露：此前静默 Load 0 + 第 6 步重算覆盖，测试侥幸通过）。
+            if matches!(expr.as_ref(), Expr::Return(..)) {
+                continue;
+            }
             // 检查是否是赋值表达式：t1 = fetch(...)
             if let Expr::BinOp {
                 op: BinOp::Assign,
@@ -169,9 +173,7 @@ pub fn analyze_spawn_for(
     }
 }
 
-// ============================================================================
 // 读写集分析（核心）
-// ============================================================================
 
 /// 分析表达式的变量读写集和 Resource 变量集
 ///
@@ -593,6 +595,27 @@ fn collect_reads_writes(
             }
         }
 
+        // #299 §3: membership 谓词——两侧都是读
+        Expr::In {
+            elem, container, ..
+        } => {
+            collect_reads_writes(
+                elem,
+                reads,
+                writes,
+                resource_vars,
+                trait_table,
+                local_var_types,
+            );
+            collect_reads_writes(
+                container,
+                reads,
+                writes,
+                resource_vars,
+                trait_table,
+                local_var_types,
+            );
+        }
         // 字典
         Expr::Dict(pairs, _) => {
             for (k, v) in pairs {
@@ -916,9 +939,7 @@ fn collect_reads_writes(
     }
 }
 
-// ============================================================================
 // 依赖 DAG 构建
-// ============================================================================
 
 /// 构建依赖 DAG，拓扑排序生成执行计划
 ///

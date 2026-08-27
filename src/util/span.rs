@@ -269,8 +269,3 @@ impl SourceMap {
         &self.files
     }
 }
-
-pub trait SpannedError {
-    /// 获取错误对应的源代码位置
-    fn span(&self) -> Span;
-}

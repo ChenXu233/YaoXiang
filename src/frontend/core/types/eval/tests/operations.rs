@@ -79,7 +79,7 @@ fn test_comparison() {
         Some(TypeLevelValue::Bool(true))
     );
     assert!(c.types_equal(&MonoType::Int(32), &MonoType::Int(32)));
-    assert!(!c.types_equal(&MonoType::Int(32), &MonoType::String));
+    assert!(!c.types_equal(&MonoType::Int(32), &MonoType::make_string()));
 }
 
 #[test]

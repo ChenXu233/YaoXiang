@@ -1,0 +1,17 @@
+// 02-type-system/array_literal.yx
+// 覆盖: #299 §2 字面量上下文决定落点——Array 注解直接作用于 List 字面量
+// 验证: b: Array(Int, 3) = [...] 生成 NewArray（定长数组），裸字面量保持 List；
+//       两种底座索引语义一致
+// 状态: ✅ 可运行
+
+use std.assert
+
+main = {
+    a = [10, 20, 30]
+    assert.assert(a[0] == 10, "bare literal stays List")
+    assert.assert(a[2] == 30, "bare literal List index")
+
+    b: Array(Int, 3) = [40, 50, 60]
+    assert.assert(b[1] == 50, "annotated literal becomes Array")
+    assert.assert(b[0] == 40, "Array index read")
+}

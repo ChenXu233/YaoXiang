@@ -9,13 +9,11 @@
 
 use crate::middle::core::bytecode::{BytecodeInstr, BytecodeModule, Label, Reg};
 use crate::middle::core::ir::Type as IrType;
-use crate::backends::common::Opcode;
+use crate::backends::common::opcode;
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::passes::codegen::bytecode::BytecodeInstruction;
 
-// ========================
 // Instruction Size
-// ========================
 
 #[test]
 fn test_nop_size_is_one_byte() {
@@ -46,9 +44,7 @@ fn test_mov_size_is_five_bytes() {
     );
 }
 
-// ========================
 // Display Formatting
-// ========================
 
 #[test]
 fn test_reg_display_format() {
@@ -80,9 +76,7 @@ fn test_label_display_format() {
     );
 }
 
-// ========================
 // Borrow/Release Opcode Mapping
-// ========================
 
 #[test]
 fn test_borrow_immutable_opcode_is_borrow() {
@@ -97,8 +91,8 @@ fn test_borrow_immutable_opcode_is_borrow() {
     // Assert
     assert_eq!(
         opcode,
-        Opcode::Borrow,
-        "Immutable Borrow should map to Opcode::Borrow"
+        opcode::BORROW,
+        "Immutable Borrow should map to opcode::BORROW"
     );
 }
 
@@ -115,8 +109,8 @@ fn test_borrow_mutable_opcode_is_borrow() {
     // Assert
     assert_eq!(
         opcode,
-        Opcode::Borrow,
-        "Mutable Borrow should map to Opcode::Borrow"
+        opcode::BORROW,
+        "Mutable Borrow should map to opcode::BORROW"
     );
 }
 
@@ -146,8 +140,8 @@ fn test_release_opcode_is_release() {
     // Assert
     assert_eq!(
         opcode,
-        Opcode::Release,
-        "Release should map to Opcode::Release"
+        opcode::RELEASE,
+        "Release should map to opcode::RELEASE"
     );
 }
 
@@ -164,9 +158,7 @@ fn test_release_size_is_three_bytes() {
     );
 }
 
-// ========================
 // Borrow/Release Round-trip Tests
-// ========================
 
 /// Helper: build a minimal BytecodeFile with one function containing
 /// the given raw BytecodeInstructions, then decode via `From<BytecodeFile>`.
@@ -245,7 +237,7 @@ fn assert_release_instr(
 fn test_borrow_roundtrip_immutable() {
     // Arrange: encode Borrow dst=1, src=2, mutable=false
     let encoded = BytecodeInstruction::new(
-        Opcode::Borrow,
+        opcode::BORROW,
         vec![1, 0, 2, 0, 0], // dst=1 LE, src=2 LE, mutable=false
     );
     // Act
@@ -269,7 +261,7 @@ fn test_borrow_roundtrip_immutable() {
 fn test_borrow_roundtrip_mutable() {
     // Arrange: encode Borrow dst=1, src=2, mutable=true
     let encoded = BytecodeInstruction::new(
-        Opcode::Borrow,
+        opcode::BORROW,
         vec![1, 0, 2, 0, 1], // dst=1 LE, src=2 LE, mutable=true
     );
     // Act
@@ -288,7 +280,7 @@ fn test_borrow_roundtrip_mutable() {
 fn test_release_roundtrip() {
     // Arrange: encode Release src=3
     let encoded = BytecodeInstruction::new(
-        Opcode::Release,
+        opcode::RELEASE,
         vec![3, 0], // src=3 LE
     );
     // Act
@@ -307,11 +299,11 @@ fn test_release_roundtrip() {
 fn test_borrow_release_combined_roundtrip() {
     // Arrange: Borrow(dst=5, src=10, mutable=true) followed by Release(src=5)
     let borrow_instr = BytecodeInstruction::new(
-        Opcode::Borrow,
+        opcode::BORROW,
         vec![5, 0, 10, 0, 1], // dst=5, src=10, mutable=true
     );
     let release_instr = BytecodeInstruction::new(
-        Opcode::Release,
+        opcode::RELEASE,
         vec![5, 0], // src=5
     );
     // Act
@@ -327,9 +319,7 @@ fn test_borrow_release_combined_roundtrip() {
     assert_release_instr(&instrs[1], Reg(5));
 }
 
-// ========================
 // MonoType::Ref -> IrType Conversion
-// ========================
 
 #[test]
 fn test_ref_type_maps_to_void_ir_type() {
@@ -352,7 +342,7 @@ fn test_ref_type_mutable_maps_to_void_ir_type() {
     // Arrange
     let ref_ty = MonoType::Ref {
         mutable: true,
-        inner: Box::new(MonoType::String),
+        inner: Box::new(MonoType::make_string()),
     };
     // Act
     let ir_type: IrType = ref_ty.into();

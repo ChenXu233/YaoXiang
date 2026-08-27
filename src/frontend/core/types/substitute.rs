@@ -163,20 +163,13 @@ impl Substituter {
                     ty.clone()
                 }
             }
-            MonoType::List(inner) => {
-                MonoType::List(Box::new(self.substitute_internal(inner, lookup)))
-            }
-            MonoType::Tuple(types) => MonoType::Tuple(
-                types
+            MonoType::Generic { name, args } => MonoType::Generic {
+                name: name.clone(),
+                args: args
                     .iter()
                     .map(|t| self.substitute_internal(t, lookup))
                     .collect(),
-            ),
-            MonoType::Dict(k, v) => MonoType::Dict(
-                Box::new(self.substitute_internal(k, lookup)),
-                Box::new(self.substitute_internal(v, lookup)),
-            ),
-            MonoType::Set(t) => MonoType::Set(Box::new(self.substitute_internal(t, lookup))),
+            },
             MonoType::Fn {
                 params,
                 return_type,
@@ -212,9 +205,6 @@ impl Substituter {
                 name: e.name.clone(),
                 variants: e.variants.clone(),
             }),
-            MonoType::Range { elem_type } => MonoType::Range {
-                elem_type: Box::new(self.substitute_internal(elem_type, lookup)),
-            },
             MonoType::Union(types) => MonoType::Union(
                 types
                     .iter()
@@ -227,19 +217,10 @@ impl Substituter {
                     .map(|t| self.substitute_internal(t, lookup))
                     .collect(),
             ),
-            MonoType::Arc(t) => MonoType::Arc(Box::new(self.substitute_internal(t, lookup))),
-            MonoType::Weak(t) => MonoType::Weak(Box::new(self.substitute_internal(t, lookup))),
             MonoType::Ref { mutable, inner } => MonoType::Ref {
                 mutable: *mutable,
                 inner: Box::new(self.substitute_internal(inner, lookup)),
             },
-            MonoType::Option(inner) => {
-                MonoType::Option(Box::new(self.substitute_internal(inner, lookup)))
-            }
-            MonoType::Result(ok, err) => MonoType::Result(
-                Box::new(self.substitute_internal(ok, lookup)),
-                Box::new(self.substitute_internal(err, lookup)),
-            ),
             MonoType::AssocType {
                 host_type,
                 assoc_name,
@@ -262,10 +243,7 @@ impl Substituter {
 pub fn contains_type_vars(ty: &MonoType) -> bool {
     match ty {
         MonoType::TypeVar(_) => true,
-        MonoType::List(inner) => contains_type_vars(inner),
-        MonoType::Tuple(types) => types.iter().any(contains_type_vars),
-        MonoType::Dict(k, v) => contains_type_vars(k) || contains_type_vars(v),
-        MonoType::Set(t) => contains_type_vars(t),
+        MonoType::Generic { name: _, args } => args.iter().any(contains_type_vars),
         MonoType::Fn {
             params,
             return_type,
@@ -275,12 +253,9 @@ pub fn contains_type_vars(ty: &MonoType) -> bool {
             .fields
             .iter()
             .any(|(_, field_ty)| contains_type_vars(field_ty)),
-        MonoType::Range { elem_type } => contains_type_vars(elem_type),
         MonoType::Union(types) | MonoType::Intersection(types) => {
             types.iter().any(contains_type_vars)
         }
-        MonoType::Arc(t) => contains_type_vars(t),
-        MonoType::Weak(t) => contains_type_vars(t),
         MonoType::AssocType {
             host_type,
             assoc_args,

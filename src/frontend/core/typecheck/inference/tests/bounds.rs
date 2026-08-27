@@ -14,9 +14,7 @@ use crate::frontend::core::types::const_data::ConstVarDef;
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use std::collections::HashMap;
 
-// ===================================================================
 // Happy path 测试
-// ===================================================================
 
 #[test]
 fn test_bounds_checker_creation() {
@@ -109,16 +107,14 @@ fn test_check_constraint_empty_constraint() {
     );
 }
 
-// ===================================================================
 // Error path 测试
-// ===================================================================
 
 /// List 类型不实现 Clone（泛型容器需显式实现）
 #[test]
 fn test_check_trait_bounds_not_satisfied() {
     // Arrange
     let checker = BoundsChecker::new();
-    let ty = MonoType::List(Box::new(MonoType::Int(32)));
+    let ty = MonoType::make_list(MonoType::Int(32));
     let bounds = vec!["Clone".to_string()];
 
     // Act
@@ -204,9 +200,7 @@ fn test_check_constraint_signature_mismatch() {
     assert!(result.is_err(), "should report signature mismatch");
 }
 
-// ===================================================================
 // Boundary 测试
-// ===================================================================
 
 /// §3.5 + §10: 通过方法绑定满足接口约束
 #[test]
@@ -260,9 +254,7 @@ fn test_check_constraint_with_method_binding() {
     );
 }
 
-// ===================================================================
 // Dup trait bound with auto-derive tests
-// ===================================================================
 
 /// 结构体所有字段均为 Dup 类型时，TraitTable 应通过 Dup 检查
 #[test]
@@ -273,7 +265,7 @@ fn test_check_trait_bounds_dup_struct_auto_derive() {
     let struct_type = MonoType::Struct(StructType {
         name: "View".to_string(),
         fields: vec![
-            ("name".to_string(), MonoType::String),
+            ("name".to_string(), MonoType::make_string()),
             (
                 "ref_field".to_string(),
                 MonoType::Ref {
@@ -304,10 +296,7 @@ fn test_check_trait_bounds_dup_struct_auto_derive_fails() {
     let struct_type = MonoType::Struct(StructType {
         name: "Buffer".to_string(),
         fields: vec![
-            (
-                "data".to_string(),
-                MonoType::List(Box::new(MonoType::Int(64))),
-            ),
+            ("data".to_string(), MonoType::make_list(MonoType::Int(64))),
             ("len".to_string(), MonoType::Int(64)),
         ],
         methods: HashMap::new(),
@@ -332,7 +321,7 @@ fn test_bounds_checker_dup_struct_passes() {
     let struct_type = MonoType::Struct(StructType {
         name: "View".to_string(),
         fields: vec![
-            ("name".to_string(), MonoType::String),
+            ("name".to_string(), MonoType::make_string()),
             (
                 "ref_field".to_string(),
                 MonoType::Ref {
@@ -367,10 +356,7 @@ fn test_bounds_checker_dup_struct_fails() {
     let struct_type = MonoType::Struct(StructType {
         name: "Buffer".to_string(),
         fields: vec![
-            (
-                "data".to_string(),
-                MonoType::List(Box::new(MonoType::Int(64))),
-            ),
+            ("data".to_string(), MonoType::make_list(MonoType::Int(64))),
             ("len".to_string(), MonoType::Int(64)),
         ],
         methods: HashMap::new(),
@@ -399,7 +385,7 @@ fn test_bounds_checker_dup_nested_struct_passes() {
     let view_type = MonoType::Struct(StructType {
         name: "View".to_string(),
         fields: vec![
-            ("name".to_string(), MonoType::String),
+            ("name".to_string(), MonoType::make_string()),
             (
                 "ref_field".to_string(),
                 MonoType::Ref {
@@ -437,9 +423,7 @@ fn test_bounds_checker_dup_nested_struct_passes() {
     );
 }
 
-// ===================================================================
 // validate_const_args 测试
-// ===================================================================
 
 #[test]
 fn test_validate_const_args_int_matches() {
@@ -614,10 +598,8 @@ fn test_check_const_bounds_layer2_constraint_violated() {
     );
 }
 
-// ===================================================================
 // Const 约束 Layer 2 端到端测试
 // 基于 docs/superpowers/specs/2026-07-11-const-expr-constraint-design.md
-// ===================================================================
 
 #[test]
 fn test_check_const_bounds_layer2_real_constraint_satisfied() {

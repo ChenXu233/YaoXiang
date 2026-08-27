@@ -1,0 +1,9 @@
+// 06-compile-errors/in_non_container_err.yx
+// [test:error]: #300 A 项——in 右操作数必须是容器类型
+// 预期: 编译错误 E1002（Int 不是 List/Array/Dict/Tuple/String/Range）
+// 验证: 非容器右操作数不再静默放行（原兜底臂 Ok(Bool)）
+// 状态: ❌ 应编译失败
+
+main = {
+    bad = 1 in 42
+}

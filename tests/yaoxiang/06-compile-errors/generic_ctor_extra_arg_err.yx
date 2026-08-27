@@ -1,0 +1,12 @@
+// 06-compile-errors/generic_ctor_extra_arg_err.yx
+// [test:error]: 泛型构造器超参——Container(42, 43, 44) 第三个实参此前静默丢弃，应报 E1010
+// 预期: 编译错误 E1010
+// 覆盖: #287 泛型构造器参数个数检查——超参方向（#251 P0-3 泛型错误路径）
+// 验证: 值构造实参数多于字段数必须编译失败，不得静默丢弃
+// 状态: ❌ 应编译失败
+
+Container: (T: Type) -> Type = { value: T, extra: T }
+
+main = {
+    b = Container(42, 43, 44)
+}

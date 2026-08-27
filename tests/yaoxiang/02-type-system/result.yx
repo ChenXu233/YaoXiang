@@ -1,7 +1,30 @@
 // 02-type-system/result.yx
-// 覆盖: 规范 §9.1 Result 类型
-// 验证: Result 的基本使用
-// 状态: 🔴 未实现 - Result 类型在运行时未完全支持
+// 覆盖: SPEC type-system.md §4.2 泛型类型定义（Result 记录类型）+ #251 P0-5（Result(T,E) 方法泛型反推）
+// 验证:
+//   - parse_int 构造 Result(Int, Error)，result.unwrap/unwrap_or/is_ok/is_err 泛型反推
+//   - 成功/失败双路径
+//   - 同类型多实例（单态化不串扰）
+// 状态: ✅
+
+use std.assert
+use std.string
+use std.result
 
 main = {
+    // 成功路径：T=Int 从实参反推
+    ok_r = string.parse_int("42")
+    assert.assert(result.is_ok(ok_r), "ok: is_ok")
+    assert.assert(!result.is_err(ok_r), "ok: not is_err")
+    assert.assert(result.unwrap(ok_r) == 42, "ok: unwrap == 42")
+    assert.assert(result.unwrap_or(ok_r, -1) == 42, "ok: unwrap_or == 42")
+
+    // 失败路径：E=Error 反推，unwrap_or 走默认值
+    err_r = string.parse_int("oops")
+    assert.assert(result.is_err(err_r), "err: is_err")
+    assert.assert(!result.is_ok(err_r), "err: not is_ok")
+    assert.assert(result.unwrap_or(err_r, -1) == -1, "err: unwrap_or default")
+
+    // 同类型多实例（单态化不串扰）
+    r2 = string.parse_int("7")
+    assert.assert(result.unwrap(r2) == 7, "second instance unwrap == 7")
 }

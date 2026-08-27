@@ -3,7 +3,7 @@
 //! This module contains the Executor trait implementation with the main bytecode execution loop.
 
 use crate::backends::{Executor, ExecutorResult, ExecutorError, ExecutionState};
-use crate::backends::common::{RuntimeValue, Heap};
+use crate::backends::common::RuntimeValue;
 use crate::backends::common::value::{FunctionId, FunctionValue};
 use crate::middle::bytecode::{BytecodeModule, BytecodeFunction};
 use crate::backends::interpreter::Frame;
@@ -125,7 +125,7 @@ impl Executor for Interpreter {
         self.current_frame_info = None;
         self.called_func = false;
         self.rt = Runtime::new(RuntimeConfig {
-            mode: self.runtime_config.runtime,
+            mode: self.runtime_config.mode,
             workers: self.runtime_config.workers,
         })
         .unwrap_or_else(|_| Runtime::new(RuntimeConfig::default()).unwrap());
@@ -133,9 +133,5 @@ impl Executor for Interpreter {
 
     fn state(&self) -> &ExecutionState {
         &self.state
-    }
-
-    fn heap(&self) -> &Heap {
-        &self.heap
     }
 }

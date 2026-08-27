@@ -3,6 +3,7 @@
 //! 验证从类型标注到证明结果的完整数据流：
 //! PredicateResolver → Refined → check_predicate → ProofResult
 
+use crate::frontend::core::typecheck::test_util::{binop};
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
@@ -13,9 +14,7 @@ use crate::frontend::core::typecheck::layers::equivalence::check_type_equivalenc
 use crate::frontend::core::typecheck::layers::predicate::check_predicate;
 use std::collections::HashMap;
 
-// ===================================================================
 // 辅助函数
-// ===================================================================
 
 /// 创建一个简单的 Positive 谓词定义
 /// Positive(x): x > 0
@@ -23,11 +22,11 @@ fn make_positive_def() -> PredicateDef {
     PredicateDef {
         param_name: "x".into(),
         param_type: MonoType::Int(64),
-        constraint: ConstExpr::BinOp {
-            op: BinOp::Gt,
-            left: Box::new(ConstExpr::NamedVar("x".into())),
-            right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-        },
+        constraint: binop(
+            BinOp::Gt,
+            ConstExpr::NamedVar("x".into()),
+            ConstExpr::Lit(ConstValue::Int(0)),
+        ),
     }
 }
 
@@ -38,18 +37,16 @@ fn make_nonempty_def() -> PredicateDef {
     // 实际上 len(s) 需要函数调用，但阶段 1 我们只测基础路径
     PredicateDef {
         param_name: "s".into(),
-        param_type: MonoType::String,
-        constraint: ConstExpr::BinOp {
-            op: BinOp::Gt,
-            left: Box::new(ConstExpr::NamedVar("s".into())),
-            right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-        },
+        param_type: MonoType::make_string(),
+        constraint: binop(
+            BinOp::Gt,
+            ConstExpr::NamedVar("s".into()),
+            ConstExpr::Lit(ConstValue::Int(0)),
+        ),
     }
 }
 
-// ===================================================================
 // 数据流测试：PredicateResolver → ProofResult
-// ===================================================================
 
 /// 端到端：Positive(5) → Refined → eval_expr → Proved
 ///
@@ -200,9 +197,7 @@ fn test_e2e_non_refined_always_proved() {
     assert!(result.is_proved());
 }
 
-// ===================================================================
 // Layer 0: 类型等式测试
-// ===================================================================
 
 /// 端到端：类型等式——结构等价
 #[test]
@@ -235,21 +230,21 @@ fn test_e2e_refined_same_base_structural_equivalent() {
     // Refined { base: Int, constraint: 5 > 0 }
     let refined_a = MonoType::Refined {
         base: Box::new(MonoType::Int(64)),
-        constraint: ConstExpr::BinOp {
-            op: BinOp::Gt,
-            left: Box::new(ConstExpr::Lit(ConstValue::Int(5))),
-            right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-        },
+        constraint: binop(
+            BinOp::Gt,
+            ConstExpr::Lit(ConstValue::Int(5)),
+            ConstExpr::Lit(ConstValue::Int(0)),
+        ),
     };
 
     // Refined { base: Int, constraint: 3 > 0 }  -- 不同约束但相同基类型
     let refined_b = MonoType::Refined {
         base: Box::new(MonoType::Int(64)),
-        constraint: ConstExpr::BinOp {
-            op: BinOp::Gt,
-            left: Box::new(ConstExpr::Lit(ConstValue::Int(3))),
-            right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-        },
+        constraint: binop(
+            BinOp::Gt,
+            ConstExpr::Lit(ConstValue::Int(3)),
+            ConstExpr::Lit(ConstValue::Int(0)),
+        ),
     };
 
     // 结构等价只看基类型
@@ -257,9 +252,7 @@ fn test_e2e_refined_same_base_structural_equivalent() {
     assert!(result.is_proved(), "相同基类型的 Refined 应结构等价");
 }
 
-// ===================================================================
 // 回归测试：MonoType 基础操作不受影响
-// ===================================================================
 
 /// 普通类型检查不变（回归测试）
 #[test]
@@ -298,9 +291,7 @@ fn test_type_environment_predicate_defs() {
     assert!(env.predicate_defs.contains_key("Test"));
 }
 
-// ===================================================================
 // 多谓词场景
-// ===================================================================
 
 /// 多个不同谓词共存
 #[test]

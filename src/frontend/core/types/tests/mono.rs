@@ -10,9 +10,7 @@ use crate::frontend::core::types::EnumType;
 use crate::util::span::Span;
 use std::collections::HashMap;
 
-// ===================================================================
 // §3.2-§3.17: From<ast::Type> 转换
-// ===================================================================
 
 #[test]
 fn test_from_ast_type_name() {
@@ -30,8 +28,14 @@ fn test_from_ast_type_primitives() {
     assert_eq!(MonoType::from(ast::Type::Int(64)), MonoType::Int(64));
     assert_eq!(MonoType::from(ast::Type::Float(64)), MonoType::Float(64));
     assert_eq!(MonoType::from(ast::Type::Char), MonoType::Char);
-    assert_eq!(MonoType::from(ast::Type::String), MonoType::String);
-    assert_eq!(MonoType::from(ast::Type::Bytes), MonoType::Bytes);
+    assert_eq!(MonoType::from(ast::Type::String), MonoType::make_string());
+    assert_eq!(
+        MonoType::from(ast::Type::Bytes),
+        MonoType::Generic {
+            name: "Bytes".into(),
+            args: vec![]
+        }
+    );
     assert_eq!(MonoType::from(ast::Type::Bool), MonoType::Bool);
     assert_eq!(MonoType::from(ast::Type::Void), MonoType::Void);
 }
@@ -114,7 +118,7 @@ fn test_from_ast_type_union() {
 fn test_from_ast_type_tuple() {
     let ast_ty = ast::Type::Tuple(vec![ast::Type::Int(32), ast::Type::String]);
     let mono: MonoType = ast_ty.into();
-    assert!(matches!(mono, MonoType::Tuple(t) if t.len() == 2));
+    assert!(matches!(mono, MonoType::Generic { name, args } if name == "Tuple" && args.len() == 2));
 }
 
 #[test]
@@ -131,14 +135,16 @@ fn test_from_ast_type_fn() {
 fn test_from_ast_type_option() {
     let ast_ty = ast::Type::Option(Box::new(ast::Type::Int(32)));
     let mono: MonoType = ast_ty.into();
-    assert!(matches!(mono, MonoType::Option(t) if *t == MonoType::Int(32)));
+    assert!(
+        matches!(mono, MonoType::Generic { name, args } if name == "Option" && args[0] == MonoType::Int(32))
+    );
 }
 
 #[test]
 fn test_from_ast_type_result() {
     let ast_ty = ast::Type::Result(Box::new(ast::Type::Int(32)), Box::new(ast::Type::String));
     let mono: MonoType = ast_ty.into();
-    assert!(matches!(mono, MonoType::Result(..)));
+    assert!(matches!(mono, MonoType::Generic { name, .. } if name == "Result"));
 }
 
 #[test]
@@ -149,8 +155,8 @@ fn test_from_ast_type_generic() {
         args: vec![ast::Type::Int(32)],
     };
     let mono: MonoType = ast_ty.into();
-    // Known generic "Option" is converted to MonoType::Option
-    assert!(matches!(mono, MonoType::Option(_)));
+    // #299：泛型不再 lower 成原生变体，保持 Generic
+    assert!(matches!(mono, MonoType::Generic { name, .. } if name == "Option"));
 }
 
 #[test]
@@ -161,8 +167,10 @@ fn test_from_ast_type_generic_custom() {
         args: vec![ast::Type::Int(32)],
     };
     let mono: MonoType = ast_ty.into();
-    // List(Int(32)) becomes MonoType::List(Box(Int(32)))
-    assert!(matches!(mono, MonoType::List(inner) if *inner == MonoType::Int(32)));
+    // #299：泛型不再 lower 成原生变体，保持 Generic
+    assert!(
+        matches!(mono, MonoType::Generic { name, args } if name == "List" && args[0] == MonoType::Int(32))
+    );
 }
 
 #[test]
@@ -206,9 +214,7 @@ fn test_from_ast_type_meta_type_nested() {
     assert!(matches!(mono, MonoType::MetaType { .. }));
 }
 
-// ===================================================================
 // §3.4: EnumType
-// ===================================================================
 
 #[test]
 fn test_from_ast_type_sum() {
@@ -243,9 +249,7 @@ fn test_from_ast_type_literal() {
     );
 }
 
-// ===================================================================
 // §3.3: StructType PartialEq / Eq 完整测试
-// ===================================================================
 
 #[test]
 fn test_struct_type_eq_same_fields() {
@@ -289,9 +293,7 @@ fn test_struct_type_eq_different_fields() {
     assert_ne!(a, b);
 }
 
-// ===================================================================
 // §3.17: get_ast_type_universe_level 覆盖嵌套场景
-// ===================================================================
 
 #[test]
 fn test_get_ast_type_universe_level_nested() {
@@ -338,27 +340,35 @@ fn test_calculate_meta_type_level_args() {
     );
 }
 
-// ===================================================================
 // §3.13-3.14: 类型联合/交集 type_name 测试
-// ===================================================================
 
 #[test]
 fn test_type_name_dict_set_range() {
-    let d = MonoType::Dict(Box::new(MonoType::String), Box::new(MonoType::Int(32)));
+    let d = MonoType::make_dict(MonoType::make_string(), MonoType::Int(32));
     assert_eq!(d.type_name(), "Dict(string, int32)");
-    let s = MonoType::Set(Box::new(MonoType::Bool));
+    let s = MonoType::Generic {
+        name: "Set".into(),
+        args: vec![MonoType::Bool],
+    };
     assert_eq!(s.type_name(), "Set(bool)");
-    let r = MonoType::Range {
-        elem_type: Box::new(MonoType::Int(64)),
+    let r = MonoType::Generic {
+        name: "Range".into(),
+        args: vec![MonoType::Int(64)],
     };
     assert_eq!(r.type_name(), "Range(int64)");
 }
 
 #[test]
 fn test_type_name_arc_weak_assoc() {
-    let a = MonoType::Arc(Box::new(MonoType::Int(32)));
+    let a = MonoType::Generic {
+        name: "Arc".into(),
+        args: vec![MonoType::Int(32)],
+    };
     assert_eq!(a.type_name(), "Arc(int32)");
-    let w = MonoType::Weak(Box::new(MonoType::String));
+    let w = MonoType::Generic {
+        name: "Weak".into(),
+        args: vec![MonoType::make_string()],
+    };
     assert_eq!(w.type_name(), "Weak(string)");
     let at = MonoType::AssocType {
         host_type: Box::new(MonoType::TypeRef("Iter".to_string())),
@@ -370,7 +380,11 @@ fn test_type_name_arc_weak_assoc() {
 
 #[test]
 fn test_type_name_union_intersection_multi() {
-    let u = MonoType::Union(vec![MonoType::Int(32), MonoType::String, MonoType::Bool]);
+    let u = MonoType::Union(vec![
+        MonoType::Int(32),
+        MonoType::make_string(),
+        MonoType::Bool,
+    ]);
     let un = u.type_name();
     assert!(un.contains("int32") && un.contains("string") && un.contains("bool"));
 
@@ -511,7 +525,7 @@ fn test_universe_level_max() {
 
 #[test]
 fn test_poly_type_display_and_name() {
-    let poly = PolyType::mono(MonoType::String);
+    let poly = PolyType::mono(MonoType::make_string());
     assert_eq!(poly.type_name(), "string");
     assert_eq!(format!("{}", poly), "string");
     assert!(PolyType::mono(MonoType::Int(32)).is_mono());
@@ -520,7 +534,7 @@ fn test_poly_type_display_and_name() {
 
 #[test]
 fn test_type_name_result() {
-    let r = MonoType::Result(Box::new(MonoType::Int(32)), Box::new(MonoType::String));
+    let r = MonoType::make_result(MonoType::Int(32), MonoType::make_string());
     assert!(r.type_name().contains("Result"));
 }
 
@@ -533,9 +547,7 @@ fn test_type_name_fn_with_async() {
     assert!(f.type_name().contains("fn("));
 }
 
-// ===================================================================
 // §3: MonoType 方法补充测试
-// ===================================================================
 
 #[test]
 fn test_mono_type_type_var_extraction() {
@@ -548,7 +560,7 @@ fn test_mono_type_type_var_extraction() {
 fn test_mono_type_type_var_none() {
     assert_eq!(MonoType::Int(32).type_var(), None, "Int should return None");
     assert_eq!(
-        MonoType::String.type_var(),
+        MonoType::make_string().type_var(),
         None,
         "String should return None"
     );
@@ -557,7 +569,7 @@ fn test_mono_type_type_var_none() {
 
 #[test]
 fn test_mono_type_list_variant() {
-    let list = MonoType::List(Box::new(MonoType::Int(32)));
+    let list = MonoType::make_list(MonoType::Int(32));
     assert!(
         list.type_name().contains("List"),
         "List type_name should contain 'List'"
@@ -618,11 +630,11 @@ fn test_mono_type_fn_async_flag() {
 fn test_mono_type_is_indexable() {
     // Array types should be indexable
     assert!(
-        MonoType::List(Box::new(MonoType::Int(32))).is_indexable(),
+        MonoType::make_list(MonoType::Int(32)).is_indexable(),
         "List should be indexable"
     );
     assert!(
-        MonoType::String.is_indexable(),
+        MonoType::make_string().is_indexable(),
         "String should be indexable"
     );
     // Non-indexable types
@@ -651,7 +663,7 @@ fn test_mono_type_ptr_variant() {
 
 #[test]
 fn test_mono_type_option_variant() {
-    let opt = MonoType::Option(Box::new(MonoType::Int(32)));
+    let opt = MonoType::make_option(MonoType::Int(32));
     // Option type_name returns "{inner}?" format
     assert!(
         opt.type_name().contains("?"),
@@ -665,7 +677,7 @@ fn test_mono_type_option_variant() {
 
 #[test]
 fn test_mono_type_result_variant() {
-    let res = MonoType::Result(Box::new(MonoType::Int(32)), Box::new(MonoType::String));
+    let res = MonoType::make_result(MonoType::Int(32), MonoType::make_string());
     assert!(
         res.type_name().contains("Result"),
         "Result type_name should contain 'Result'"

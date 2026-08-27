@@ -51,9 +51,7 @@ fn check_source(source: &str) -> crate::frontend::core::typecheck::types::TypeCh
     checker.check_module(&module)
 }
 
-// ===================================================================
 // RFC-010 §3.1: 变量声明
-// ===================================================================
 
 /// 规范：`x: Int = 42` 应该类型检查通过，x 的类型为 Int
 ///
@@ -135,9 +133,7 @@ fn test_rfc010_type_inference_int() {
     );
 }
 
-// ===================================================================
 // RFC-010 §3.2: 函数定义
-// ===================================================================
 
 /// 规范：`add: (a: Int, b: Int) -> Int = { return a + b }` 应该类型检查通过
 ///
@@ -208,9 +204,7 @@ fn test_rfc010_function_return_type() {
     );
 }
 
-// ===================================================================
 // RFC-010 §3.3: 记录类型
-// ===================================================================
 
 /// 规范：`Point: Type = { x: Float, y: Float }` 应该类型检查通过
 ///
@@ -288,9 +282,7 @@ fn test_rfc010_record_type_default_values() {
     assert!(result.diagnostics.is_empty(), "default values should pass");
 }
 
-// ===================================================================
 // RFC-010 §3.4: 接口类型
-// ===================================================================
 
 /// 规范：接口是字段全为函数的记录类型
 ///
@@ -389,9 +381,7 @@ fn test_rfc010_interface_assignment() {
     );
 }
 
-// ===================================================================
 // RFC-010 §3.5: 泛型类型
-// ===================================================================
 
 /// 规范：泛型类型定义
 ///
@@ -422,20 +412,24 @@ fn test_rfc010_generic_type_definition() {
 
 /// 规范：泛型类型实例化
 ///
-/// `numbers: List(Int) = List(1, 2, 3)`
+/// `numbers: Container(Int) = Container(42)`
 ///
 /// 预期行为：
 /// - 使用 () 语法填充类型参数
 /// - 编译器推导 T=Int
+///
+/// 注：RFC 原文示例 `numbers: List(Int) = List(1, 2, 3)` 中的 List 为
+/// builtin 列表；用户自定义泛型 struct 的字段列表自动生成构造函数
+/// （SPEC §4.3），实参为构造参数，类型参数从元素自动解包（#287）。
 #[test]
 fn test_rfc010_generic_type_instantiation() {
     // Arrange
     let source = r#"
-        List: (T: Type) -> Type = {
-            data: Array(T),
-            length: Int
+        Container: (T: Type) -> Type = {
+            value: T,
         }
-        numbers: List(Int) = List(1, 2, 3)
+        numbers: Container(Int) = Container(42)
+        texts: Container(String) = Container("str")
     "#;
 
     // Act
@@ -444,13 +438,11 @@ fn test_rfc010_generic_type_instantiation() {
     // Assert
     assert!(
         result.diagnostics.is_empty(),
-        "List(Int) instantiation should pass"
+        "Container(Int) instantiation should pass"
     );
 }
 
-// ===================================================================
 // RFC-010 §3.6: 方法定义
-// ===================================================================
 
 /// 规范：类型方法定义
 ///
@@ -516,9 +508,7 @@ fn test_rfc010_method_call_syntax_sugar() {
     );
 }
 
-// ===================================================================
 // RFC-010: Type 元类型关键字
-// ===================================================================
 
 /// 规范：Type 是语言中唯一的元类型关键字
 ///
@@ -742,9 +732,7 @@ fn test_rfc010_interface_assignment_rejected_when_not_implemented() {
     );
 }
 
-// ===================================================================
 // RFC-010: Error path — 返回类型不匹配 & 非 Type 注解
-// ===================================================================
 
 /// 规范：函数返回类型不匹配应报错（§6.3.2）
 ///

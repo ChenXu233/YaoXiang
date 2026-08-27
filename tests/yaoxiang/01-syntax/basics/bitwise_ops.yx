@@ -1,0 +1,18 @@
+// 01-syntax/basics/bitwise_ops.yx
+// 覆盖: 规范 §2.2 运算符优先级（级 8：`&` `|` `^`）+ #285
+// 验证: 位运算结果正确（#285：`&` 曾静默吞右操作数，6 & 2 错误输出 6）、优先级低于移位与加减
+// 状态: ✅ 可运行
+
+use std.io
+use std.assert
+
+main = {
+    a = 6
+    assert.assert((a & 2) == 2, "位与")
+    assert.assert((a | 2) == 6, "位或")
+    assert.assert((a ^ 2) == 4, "位异或")
+    // 优先级：加减(5) > 移位(7) > 位运算(8)
+    assert.assert((1024 & 2 + 4) == 0, "位与低于加减")
+    assert.assert((16 >> 1 & 3) == 0, "移位高于位与")
+    io.println("BITWISE_OPS_OK")
+}

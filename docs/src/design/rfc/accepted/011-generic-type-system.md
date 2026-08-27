@@ -168,6 +168,22 @@ first_three: Array(Int, 3) = Array(Int, 3)(1, 2, 3)
 # first_three.length == 3（编译期已知）
 ```
 
+#### 边界失败的编译期覆盖目标（#299 方向锚）
+
+> **实现状态说明**（#299）：容器类型已去特殊化——`Array(T, N)` 是
+> const 泛型构造器，字面量上下文落点、`in` membership 谓词均已落地。
+> （#300）：`Array(T, N)` 字面量落点的 N 与元素类型已由编译期校验强制
+> （E1002），**N 已可信**——本节目的机制可建立在「注解 N == 运行时长」之上。
+> 当前 `[]` 索引越界（E6003）与 Dict 缺键（E6008）为**运行时报错过渡态**；
+> 本节值依赖类型是把这些边界失败压到**编译期**的目标机制：
+>
+> - const 索引：`a[5]`（5 为编译期常量）当 `a: Array(Int, 3)` 时直接编译期拒绝；
+> - 值索引：`a[i]` 要求前置条件 `i < len(a)`，由值依赖类型契约证明；
+> - `in` 谓词是霍尔逻辑前置条件的基底：`n in 1..10`、`x in some_set`
+>   均为编译期可证命题。
+>
+> 精化类型的完整设计在落地时另行补充本节。
+
 #### 条件类型
 
 ```yaoxiang
@@ -201,7 +217,10 @@ map: (T: Type, R: Type) -> (
 }
 
 # 使用时完全透明，类型自动推导
-numbers = List(1, 2, 3)
+numbers = List(Int)()   # 勘误：值构造两层形式（见 §9.1）；元素用 push 填充
+numbers.push(1)
+numbers.push(2)
+numbers.push(3)
 doubled = map(numbers, (x) => x * 2)  # 推导为 map[Int, Int]
 ```
 
@@ -452,12 +471,12 @@ combine: (T: Type, U: Type) -> ((a: T, b: U) -> (T, U)) = (a, b)
 
 ```yaoxiang
 # 编译器自动推断泛型参数
-numbers: List(Int) = List(Int)
-#         ^^^^^^^^   ^^^^^^
-#         类型声明   构造调用：Int 填充 T
+numbers: List(Int) = List(Int)()
+#         ^^^^^^^^   ^^^^^^^^
+#         类型声明   构造调用：Int 填充 T，() 值构造
 
 # 函数调用推断
-numbers: List(Int) = List(Int)
+numbers: List(Int) = List(Int)()
 f: (x: Int) -> String = (x) => x.to_string()
 strings: List(String) = map(numbers, f)
 # 编译器推断：T=Int, R=String
@@ -476,15 +495,15 @@ map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R)) = {
 }
 
 # 使用点
-int_list: List(Int) = List(Int)
+int_list: List(Int) = List(Int)()
 doubled: List(Int) = map(int_list, (x: Int) => x * 2)  # 实例化 map[Int, Int]
 
-string_list: List(String) = List(String)
+string_list: List(String) = List(String)()
 uppercased: List(String) = map(string_list, (s: String) => s.to_uppercase())  # 实例化 map[String, String]
 
 # 编译后（等价代码）
 map_Int_Int: (list: List(Int), f: (Int) -> Int) -> List(Int) = {
-    result: List(Int) = List(Int)
+    result: List(Int) = List(Int)()
     for x in list {
         result.push(f(x))
     }
@@ -504,7 +523,7 @@ map_String_String: (list: List(String), f: (String) -> String) -> List(String) =
 
 ````yaoxiang
 # 可推断时省略 Type 参数
-numbers: List(Int) = List(Int)
+numbers: List(Int) = List(Int)()
 strings: List(String) = map(numbers, (x: Int) => x.to_string())
 
 # 无法推断时必须显式填充
@@ -720,38 +739,65 @@ process_container: (T: Type, C: Container(T))(container: C) -> List(T) = {
 
 ### 4. 编译期泛型
 
-#### 4.1 编译期常量参数
+#### 4.1 编译期值参数
 
-**核心设计**：泛型签名中的 `Type` 标记编译期类型参数，`Int`
-等值参数在泛型上下文中默认编译期可确定。无需 `const` 关键字。
+> **勘误（#296）**：原文作「`Int` 等值参数在泛型上下文中默认编译期可确定」，
+> 该表述**严格错误**——`add: (a: Int, b: Int) -> Int = a + b` 中 `a`/`b` 是运行时值参数。
+> 只有**在类型位置被引用**的具体类型参数才是编译期值参数。正确定义见下。
+
+**核心设计**：泛型签名中的 `Type` 标记类型参数；标注具体类型（`Int`/`Bool`/`Float` 等）
+的参数列为**编译期值参数候选**，是否成为编译期值参数取决于其值是否**在类型位置被引用**
+（值依赖）。无需 `const` 关键字。
+
+**判定规则（两步）**：
+
+1. **形态粗筛**：参数标注为非 `Type` 的具体类型（如 `Int`）→ 列为候选。
+2. **用途精筛**：候选名出现在**类型位置**（类型体字段类型、内层 `Fn` 参数类型、
+   `Assert` 谓词、`Array(T, N)` 等类型构造实参位）→ 确认为编译期值参数；
+   否则视为**运行时值参数**。
+
+| 写法                                                  | 判定               | 原因                                              |
+| ----------------------------------------------------- | ------------------ | ------------------------------------------------- |
+| `add: (a: Int, b: Int) -> Int = a + b`               | a/b 运行时值参数   | 仅在值位置出现，不参与类型构造                    |
+| `Array: (T: Type, N: Int) -> Type = { data: Array(T, N) }` | N 编译期值参数     | N 出现在 `Array(T, N)` 的类型构造实参位           |
+| `factorial: (N: Int) -> (k: N) -> Int`               | N 编译期值参数     | N 作为内层参数 `k` 的类型                         |
+| `Foo: (T: Type, N: Int) -> Type = { x: T }`          | N 落空（见下）     | N 未在类型体引用，退化为运行时值参数              |
+
+> **值依赖本质**：编译期值参数即值依赖类型——只有当值被用来**构造类型**时，
+> 才需要编译期确定。形态（`: Int`）只决定候选资格，用途（类型位置露头）决定其
+> 是否为编译期值参数。这与 §「编译期确定性保证」中「类型位置上的函数调用在编译期求值」
+> 是同一根判据。
 
 ```yaoxiang
 # ════════════════════════════════════════════════════════
-# 编译期常量参数：泛型中的 Int 默认编译期确定
-# ════════════════════════════════════════════════════════
-
-# 编译期阶乘：N 必须是编译期已知的字面量
-factorial: (N: Int) -> (n: N) -> Int = {
-    return match n {
-        0 => 1,
-        _ => n * factorial(n - 1)
-    }
-}
-
-# 编译期加法
-add: (a: Int, b: Int) -> (a: a, b: b) -> Int = a + b
-
-# ════════════════════════════════════════════════════════
-# 编译期常量数组
+# 编译期值参数：N 在类型位置（Array 长度槽）被引用
 # ════════════════════════════════════════════════════════
 StaticArray: (T: Type, N: Int) -> Type = {
-    data: Array(T, N),  # 编译期已知大小的数组
+    data: Array(T, N),  # N 出现在类型构造实参位 → 编译期值参数
     length: N,
 }
 
-# 使用方式
-arr: StaticArray(Int, factorial(5))  # StaticArray(Int, 120)，编译器在编译期计算
+# 使用方式：factorial(5) 在类型位置求值（编译期），结果 120 嵌入类型
+arr: StaticArray(Int, factorial(5))  # StaticArray(Int, 120)
+
+# ════════════════════════════════════════════════════════
+# 值依赖：N 作为内层参数 k 的类型
+# ════════════════════════════════════════════════════════
+# N 是编译期值参数（出现在 (k: N) 的类型位）；
+# k 是运行时值参数，其类型为字面量类型 N（单值类型）。
+factorial: (N: Int) -> (k: N) -> Int = {
+    return match k {
+        0 => 1,
+        _ => k * factorial(k - 1)
+    }
+}
 ```
+
+> **落空候选的处理**：标注具体类型但未在类型位置引用的候选（如上表 `Foo` 的 `N`）
+> 退化为运行时值参数（函数级路径）。类型构造器路径的落空候选无法占运行时槽位
+> （类型构造器在编译期求值），声明侧直接报错 [E1094]：
+> 「N 声明为编译期值参数但未在类型体引用」——此前静默丢弃导致实例化 arity 不一致，
+> 见 issue [#297](https://github.com/ChenXu233/YaoXiang/issues/297)。
 
 #### 4.2 编译期计算
 
@@ -1129,11 +1175,17 @@ fn eliminate_dead_instantiations(graph: &InstantiationGraph) {
 map: (T: Type, R: Type)(list: List(T), f: Fn(T) -> R) -> List(R) = ...
 
 # 使用点1：实例化 map(Int, Int)
-int_list = List(1, 2, 3)
+int_list = List(Int)()
+int_list.push(1)
+int_list.push(2)
+int_list.push(3)
 doubled = map(int_list, (x) => x * 2)  # 需要 map[Int, Int]
 
 # 使用点2：实例化 map(String, String)
-string_list = List("a", "b", "c")
+string_list = List(String)()
+string_list.push("a")
+string_list.push("b")
+string_list.push("c")
 uppercased = map(string_list, (s) => s.to_uppercase())  # 需要 map[String, String]
 
 # 未使用：map[Float, Float] 等
@@ -1153,8 +1205,11 @@ Array: (T: Type, N: Int) -> Type = {
 }
 
 # 实际使用情况
-arr_10_int = Array(Int, 10)(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-arr_100_int = Array(Int, 100)(...)
+arr_10_int = Array(Int, 10)(data=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])  # 两层：类型参数 + 构造参数
+# 勘误：早期版本写作 Array(Int, 10)(1, 2, 3, ...)（元素直接铺开），
+# 与 §9.3 的权威模式（Type(参数)(字段构造参数)/空构造）不一致，
+# 统一为字段名式构造参数，见 SPEC type-system.md §4.3。
+arr_100_int = Array(Int, 100)()   # 空构造，数据事后赋值
 
 # 编译后只生成被使用的Size
 Array_Int_10: (Array(Int, 10)) = ...
@@ -1174,13 +1229,19 @@ pub map: (T: Type, R: Type)(list: List(T), f: Fn(T) -> R) -> List(R) = ...
 # 模块B
 # B.yx
 use A.{map}
-int_list = List(1, 2, 3)
+int_list = List(Int)()
+int_list.push(1)
+int_list.push(2)
+int_list.push(3)
 doubled = map(int_list, (x) => x * 2)  # 实例化 map(Int, Int)
 
 # 模块C
 # C.yx
 use A.{map}
-string_list = List("a", "b", "c")
+string_list = List(String)()
+string_list.push("a")
+string_list.push("b")
+string_list.push("c")
 uppercased = map(string_list, (s) => s.to_uppercase())  # 实例化 map(String, String)
 
 # 编译分析：

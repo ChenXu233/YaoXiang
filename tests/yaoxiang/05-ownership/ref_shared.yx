@@ -1,0 +1,25 @@
+// 05-ownership/ref_shared.yx
+// 覆盖: SPEC type-system.md §12.8 借用令牌 vs ref — ref 共享持有（#251 P0-7 ref 共享）
+// 验证:
+//   - ref 创建 Arc 后跨函数传参（Arc 是 Dup，自由复制共享持有）
+//   - 复制后的 Arc 与原件共享同一对象（weak 升级存活）
+//   - 与 &T 的区别：ref 本来就是用来逃逸的（跨作用域）
+// 注: Option 变体消费语法未落地（match some(v)），存活验证为
+//     编译期注解 Option(Arc(Int)) 绑定 + roundtrip 不 panic。
+// 状态: ✅
+
+use std.weak
+
+pass_arc: (a: Arc(Int)) -> Arc(Int) = {
+    return a
+}
+
+main = {
+    p = ref 42
+    q = pass_arc(p)             // Arc Dup 复制，共享持有
+    w = weak.new(q)             // 复制件登记 weak
+    u = weak.upgrade(w)
+    u2: Option(Arc(Int)) = u    // 编译期泛型绑定验证
+
+    println("ref shared ok")
+}

@@ -6,9 +6,7 @@
 use crate::frontend::core::typecheck::types::{TypeCheckResult, ImportInfo};
 use crate::frontend::core::types::{MonoType, PolyType};
 
-// ===================================================================
 // Happy path 测试
-// ===================================================================
 
 #[test]
 fn test_type_check_result_default() {
@@ -73,9 +71,7 @@ fn test_import_info_with_alias() {
     assert_eq!(import.alias.unwrap(), "io");
 }
 
-// ===================================================================
 // Boundary 测试
-// ===================================================================
 
 #[test]
 fn test_type_check_result_with_many_bindings() {

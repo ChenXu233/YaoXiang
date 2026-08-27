@@ -14,9 +14,7 @@ use crate::middle::passes::codegen::CodegenContext;
 
 use super::backend::{EvalResult, ExecutionStats, REPLBackend, SymbolInfo};
 
-// =============================================================================
 // REPL Context
-// =============================================================================
 
 /// Variable info stored in context
 #[derive(Debug, Clone)]
@@ -176,9 +174,7 @@ impl REPLContext {
     }
 }
 
-// =============================================================================
 // Evaluator
-// =============================================================================
 
 /// Evaluation Engine
 ///

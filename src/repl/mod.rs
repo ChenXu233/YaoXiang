@@ -31,9 +31,7 @@ pub use eval::{Evaluator, REPLContext};
 
 use crate::backends::common::RuntimeValue;
 
-// =============================================================================
 // Configuration
-// =============================================================================
 
 /// REPL configuration
 #[derive(Debug, Clone)]
@@ -46,8 +44,6 @@ pub struct ReplConfig {
     pub vi_mode: bool,
     /// History file path
     pub history_file: Option<PathBuf>,
-    /// Maximum history size
-    pub history_size: usize,
     /// Show execution time for :run
     pub show_timing: bool,
 }
@@ -63,15 +59,12 @@ impl Default for ReplConfig {
             continuation_prompt: ".. ".into(),
             vi_mode: false,
             history_file,
-            history_size: 1000,
             show_timing: true,
         }
     }
 }
 
-// =============================================================================
 // Command Result
-// =============================================================================
 
 /// Result of a command
 enum CommandResult {
@@ -83,9 +76,7 @@ enum CommandResult {
     Output(String),
 }
 
-// =============================================================================
 // Repl
-// =============================================================================
 
 /// Unified REPL for YaoXiang
 ///

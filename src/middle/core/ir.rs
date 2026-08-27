@@ -217,6 +217,13 @@ pub enum Instruction {
         size: Operand,
         elem_size: Operand,
     },
+    /// 定长数组构造（#299 §2）：分配 N 个 Void 占位元素，
+    /// 由字面量上下文落点生成——仅当 Array(T,N) 注解直接作用于 List 字面量
+    AllocFixedArray {
+        dst: Operand,
+        count: usize,
+        span: Span,
+    },
     LoadField {
         dst: Operand,
         src: Operand,
@@ -247,6 +254,15 @@ pub enum Instruction {
         index: Operand,
         src: Operand,
         /// Source span for error reporting
+        span: Span,
+    },
+    /// membership 谓词（#299 §3）：`dst = elem in container` → Bool
+    /// 容器：List/Array/Tuple 线性扫、Dict 键查、String 子串；
+    /// Range 不走此指令——ir_gen 直接脱糖成比较链
+    Contains {
+        dst: Operand,
+        elem: Operand,
+        container: Operand,
         span: Span,
     },
     // 注意：迭代器协议已通过 Call 指令实现，无需独立的 IR 指令

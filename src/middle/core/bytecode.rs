@@ -10,7 +10,7 @@
 //! - Can be interpreted or compiled further
 
 use std::collections::HashMap;
-use crate::backends::common::Opcode;
+use crate::backends::common::opcode;
 
 // Re-export types for conversion
 pub use crate::middle::core::ir::{Type as IrType, ConstValue};
@@ -316,6 +316,20 @@ pub enum BytecodeInstr {
         items: Vec<Reg>,
     },
 
+    /// 定长数组构造：分配 N 个元素、以默认值填充（#299 §2）
+    NewArray {
+        /// 目标寄存器
+        dst: Reg,
+        /// 元素数量
+        count: u32,
+    },
+    /// membership 谓词（#299 §3）：dst = elem in container → Bool
+    Contains {
+        dst: Reg,
+        elem: Reg,
+        container: Reg,
+    },
+
     // =====================
     // Arc Operations
     // =====================
@@ -496,85 +510,87 @@ pub enum BytecodeInstr {
 
 impl BytecodeInstr {
     /// Get the opcode for this instruction
-    pub fn opcode(&self) -> Opcode {
+    pub fn opcode(&self) -> u8 {
         match self {
-            BytecodeInstr::Nop => Opcode::Nop,
-            BytecodeInstr::Return => Opcode::Return,
-            BytecodeInstr::ReturnValue { .. } => Opcode::ReturnValue,
-            BytecodeInstr::Yield => Opcode::Yield,
-            BytecodeInstr::Spawn { .. } => Opcode::Spawn,
-            BytecodeInstr::SpawnFromList { .. } => Opcode::SpawnFromList,
-            BytecodeInstr::Jmp { .. } => Opcode::Jmp,
-            BytecodeInstr::JmpIf { .. } => Opcode::JmpIf,
-            BytecodeInstr::JmpIfNot { .. } => Opcode::JmpIfNot,
-            BytecodeInstr::Switch { .. } => Opcode::Switch,
-            BytecodeInstr::Mov { .. } => Opcode::Mov,
-            BytecodeInstr::LoadConst { .. } => Opcode::LoadConst,
-            BytecodeInstr::LoadLocal { .. } => Opcode::LoadLocal,
-            BytecodeInstr::StoreLocal { .. } => Opcode::StoreLocal,
-            BytecodeInstr::LoadArg { .. } => Opcode::LoadArg,
+            BytecodeInstr::Nop => opcode::NOP,
+            BytecodeInstr::Return => opcode::RETURN,
+            BytecodeInstr::ReturnValue { .. } => opcode::RETURN_VALUE,
+            BytecodeInstr::Yield => opcode::YIELD,
+            BytecodeInstr::Spawn { .. } => opcode::SPAWN,
+            BytecodeInstr::SpawnFromList { .. } => opcode::SPAWN_FROM_LIST,
+            BytecodeInstr::Jmp { .. } => opcode::JMP,
+            BytecodeInstr::JmpIf { .. } => opcode::JMP_IF,
+            BytecodeInstr::JmpIfNot { .. } => opcode::JMP_IF_NOT,
+            BytecodeInstr::Switch { .. } => opcode::SWITCH,
+            BytecodeInstr::Mov { .. } => opcode::MOV,
+            BytecodeInstr::LoadConst { .. } => opcode::LOAD_CONST,
+            BytecodeInstr::LoadLocal { .. } => opcode::LOAD_LOCAL,
+            BytecodeInstr::StoreLocal { .. } => opcode::STORE_LOCAL,
+            BytecodeInstr::LoadArg { .. } => opcode::LOAD_ARG,
             BytecodeInstr::BinaryOp { op, .. } => match op {
-                BinaryOp::Add => Opcode::I64Add,
-                BinaryOp::Sub => Opcode::I64Sub,
-                BinaryOp::Mul => Opcode::I64Mul,
-                BinaryOp::Div => Opcode::I64Div,
-                BinaryOp::Rem => Opcode::I64Rem,
-                BinaryOp::And => Opcode::I64And,
-                BinaryOp::Or => Opcode::I64Or,
-                BinaryOp::Xor => Opcode::I64Xor,
-                BinaryOp::Shl => Opcode::I64Shl,
-                BinaryOp::Sar => Opcode::I64Sar,
-                BinaryOp::Shr => Opcode::I64Shr,
+                BinaryOp::Add => opcode::I64_ADD,
+                BinaryOp::Sub => opcode::I64_SUB,
+                BinaryOp::Mul => opcode::I64_MUL,
+                BinaryOp::Div => opcode::I64_DIV,
+                BinaryOp::Rem => opcode::I64_REM,
+                BinaryOp::And => opcode::I64_AND,
+                BinaryOp::Or => opcode::I64_OR,
+                BinaryOp::Xor => opcode::I64_XOR,
+                BinaryOp::Shl => opcode::I64_SHL,
+                BinaryOp::Sar => opcode::I64_SAR,
+                BinaryOp::Shr => opcode::I64_SHR,
             },
-            BytecodeInstr::UnaryOp { .. } => Opcode::I64Neg,
+            BytecodeInstr::UnaryOp { .. } => opcode::I64_NEG,
             BytecodeInstr::Compare { cmp, .. } => match cmp {
-                CompareOp::Eq => Opcode::I64Eq,
-                CompareOp::Ne => Opcode::I64Ne,
-                CompareOp::Lt => Opcode::I64Lt,
-                CompareOp::Le => Opcode::I64Le,
-                CompareOp::Gt => Opcode::I64Gt,
-                CompareOp::Ge => Opcode::I64Ge,
+                CompareOp::Eq => opcode::I64_EQ,
+                CompareOp::Ne => opcode::I64_NE,
+                CompareOp::Lt => opcode::I64_LT,
+                CompareOp::Le => opcode::I64_LE,
+                CompareOp::Gt => opcode::I64_GT,
+                CompareOp::Ge => opcode::I64_GE,
             },
-            BytecodeInstr::StackAlloc { .. } => Opcode::StackAlloc,
-            BytecodeInstr::HeapAlloc { .. } => Opcode::HeapAlloc,
-            BytecodeInstr::Drop { .. } => Opcode::Drop,
-            BytecodeInstr::GetField { .. } => Opcode::GetField,
-            BytecodeInstr::SetField { .. } => Opcode::SetField,
-            BytecodeInstr::LoadElement { .. } => Opcode::LoadElement,
-            BytecodeInstr::StoreElement { .. } => Opcode::StoreElement,
-            BytecodeInstr::NewListWithCap { .. } => Opcode::NewListWithCap,
-            BytecodeInstr::CreateStruct { .. } => Opcode::CreateStruct,
-            BytecodeInstr::NewDict { .. } => Opcode::NewDict,
-            BytecodeInstr::NewTuple { .. } => Opcode::NewTuple,
-            BytecodeInstr::ArcNew { .. } => Opcode::ArcNew,
-            BytecodeInstr::RcNew { .. } => Opcode::RcNew,
-            BytecodeInstr::ArcClone { .. } => Opcode::ArcClone,
-            BytecodeInstr::ArcDrop { .. } => Opcode::ArcDrop,
-            BytecodeInstr::WeakNew { .. } => Opcode::WeakNew,
-            BytecodeInstr::WeakUpgrade { .. } => Opcode::WeakUpgrade,
-            BytecodeInstr::Borrow { .. } => Opcode::Borrow,
-            BytecodeInstr::Release { .. } => Opcode::Release,
-            BytecodeInstr::CallStatic { .. } => Opcode::CallStatic,
-            BytecodeInstr::CallNative { .. } => Opcode::CallNative,
-            BytecodeInstr::CallVirt { .. } => Opcode::CallVirt,
-            BytecodeInstr::CallDyn { .. } => Opcode::CallDyn,
-            BytecodeInstr::MakeClosure { .. } => Opcode::MakeClosure,
-            BytecodeInstr::LoadUpvalue { .. } => Opcode::LoadUpvalue,
-            BytecodeInstr::StoreUpvalue { .. } => Opcode::StoreUpvalue,
-            BytecodeInstr::CloseUpvalue { .. } => Opcode::CloseUpvalue,
-            BytecodeInstr::StringLength { .. } => Opcode::StringLength,
-            BytecodeInstr::StringConcat { .. } => Opcode::StringConcat,
-            BytecodeInstr::StringEqual { .. } => Opcode::StringEqual,
-            BytecodeInstr::StringGetChar { .. } => Opcode::StringGetChar,
-            BytecodeInstr::StringFromInt { .. } => Opcode::StringFromInt,
-            BytecodeInstr::StringFromFloat { .. } => Opcode::StringFromFloat,
-            BytecodeInstr::TryBegin { .. } => Opcode::TryBegin,
-            BytecodeInstr::TryEnd => Opcode::TryEnd,
-            BytecodeInstr::Throw { .. } => Opcode::Throw,
-            BytecodeInstr::BoundsCheck { .. } => Opcode::BoundsCheck,
-            BytecodeInstr::TypeCheck { .. } => Opcode::TypeCheck,
-            BytecodeInstr::Cast { .. } => Opcode::Cast,
-            BytecodeInstr::TypeOf { .. } => Opcode::TypeOf,
+            BytecodeInstr::StackAlloc { .. } => opcode::STACK_ALLOC,
+            BytecodeInstr::HeapAlloc { .. } => opcode::HEAP_ALLOC,
+            BytecodeInstr::Drop { .. } => opcode::DROP,
+            BytecodeInstr::GetField { .. } => opcode::GET_FIELD,
+            BytecodeInstr::SetField { .. } => opcode::SET_FIELD,
+            BytecodeInstr::LoadElement { .. } => opcode::LOAD_ELEMENT,
+            BytecodeInstr::StoreElement { .. } => opcode::STORE_ELEMENT,
+            BytecodeInstr::NewListWithCap { .. } => opcode::NEW_LIST_WITH_CAP,
+            BytecodeInstr::CreateStruct { .. } => opcode::CREATE_STRUCT,
+            BytecodeInstr::NewDict { .. } => opcode::NEW_DICT,
+            BytecodeInstr::NewTuple { .. } => opcode::NEW_TUPLE,
+            BytecodeInstr::NewArray { .. } => opcode::NEW_ARRAY,
+            BytecodeInstr::Contains { .. } => opcode::CONTAINS,
+            BytecodeInstr::ArcNew { .. } => opcode::ARC_NEW,
+            BytecodeInstr::RcNew { .. } => opcode::RC_NEW,
+            BytecodeInstr::ArcClone { .. } => opcode::ARC_CLONE,
+            BytecodeInstr::ArcDrop { .. } => opcode::ARC_DROP,
+            BytecodeInstr::WeakNew { .. } => opcode::WEAK_NEW,
+            BytecodeInstr::WeakUpgrade { .. } => opcode::WEAK_UPGRADE,
+            BytecodeInstr::Borrow { .. } => opcode::BORROW,
+            BytecodeInstr::Release { .. } => opcode::RELEASE,
+            BytecodeInstr::CallStatic { .. } => opcode::CALL_STATIC,
+            BytecodeInstr::CallNative { .. } => opcode::CALL_NATIVE,
+            BytecodeInstr::CallVirt { .. } => opcode::CALL_VIRT,
+            BytecodeInstr::CallDyn { .. } => opcode::CALL_DYN,
+            BytecodeInstr::MakeClosure { .. } => opcode::MAKE_CLOSURE,
+            BytecodeInstr::LoadUpvalue { .. } => opcode::LOAD_UPVALUE,
+            BytecodeInstr::StoreUpvalue { .. } => opcode::STORE_UPVALUE,
+            BytecodeInstr::CloseUpvalue { .. } => opcode::CLOSE_UPVALUE,
+            BytecodeInstr::StringLength { .. } => opcode::STRING_LENGTH,
+            BytecodeInstr::StringConcat { .. } => opcode::STRING_CONCAT,
+            BytecodeInstr::StringEqual { .. } => opcode::STRING_EQUAL,
+            BytecodeInstr::StringGetChar { .. } => opcode::STRING_GET_CHAR,
+            BytecodeInstr::StringFromInt { .. } => opcode::STRING_FROM_INT,
+            BytecodeInstr::StringFromFloat { .. } => opcode::STRING_FROM_FLOAT,
+            BytecodeInstr::TryBegin { .. } => opcode::TRY_BEGIN,
+            BytecodeInstr::TryEnd => opcode::TRY_END,
+            BytecodeInstr::Throw { .. } => opcode::THROW,
+            BytecodeInstr::BoundsCheck { .. } => opcode::BOUNDS_CHECK,
+            BytecodeInstr::TypeCheck { .. } => opcode::TYPE_CHECK,
+            BytecodeInstr::Cast { .. } => opcode::CAST,
+            BytecodeInstr::TypeOf { .. } => opcode::TYPE_OF,
         }
     }
 
@@ -660,6 +676,14 @@ impl BytecodeInstr {
             BytecodeInstr::NewTuple { items, .. } => {
                 // dst(2) + item_count(4) + items(2*count)
                 6 + items.len() * 2
+            }
+            BytecodeInstr::NewArray { .. } => {
+                // dst(1) + count(4) = 5
+                5
+            }
+            BytecodeInstr::Contains { .. } => {
+                // dst(1) + elem(1) + container(1) = 3
+                3
             }
             BytecodeInstr::ArcNew { .. } => 4,
             BytecodeInstr::RcNew { .. } => 4,
@@ -810,6 +834,24 @@ impl BytecodeModule {
     }
 }
 
+/// 从操作数流读取 u16（小端），不足返回 None
+fn op_u16(
+    operands: &[u8],
+    off: usize,
+) -> Option<u16> {
+    let b = operands.get(off..off + 2)?;
+    Some(u16::from_le_bytes([b[0], b[1]]))
+}
+
+/// 从操作数流读取 u32（小端），不足返回 None
+fn op_u32(
+    operands: &[u8],
+    off: usize,
+) -> Option<u32> {
+    let b = operands.get(off..off + 4)?;
+    Some(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+}
+
 impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeModule {
     fn from(file: crate::middle::passes::codegen::bytecode::BytecodeFile) -> Self {
         let name = "main".to_string(); // Default module name
@@ -825,1052 +867,910 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
             while ip < func.instructions.len() {
                 let instr = &func.instructions[ip];
                 // Decode the instruction based on opcode
-                match Opcode::try_from(instr.opcode) {
-                    Ok(opcode) => {
-                        match opcode {
-                            Opcode::Label => {
-                                if !instr.operands.is_empty() {
-                                    let label = u32::from_le_bytes([
-                                        instr.operands[0],
-                                        *instr.operands.get(1).unwrap_or(&0),
-                                        *instr.operands.get(2).unwrap_or(&0),
-                                        *instr.operands.get(3).unwrap_or(&0),
-                                    ]);
-                                    labels.insert(Label(label), decoded_instructions.len());
-                                }
-                            }
-                            Opcode::Jmp => {
-                                if !instr.operands.is_empty() {
-                                    let target = u32::from_le_bytes([
-                                        instr.operands[0],
-                                        *instr.operands.get(1).unwrap_or(&0),
-                                        *instr.operands.get(2).unwrap_or(&0),
-                                        *instr.operands.get(3).unwrap_or(&0),
-                                    ]);
-                                    decoded_instructions.push(BytecodeInstr::Jmp {
-                                        target: Label(target),
-                                    });
-                                }
-                            }
-                            Opcode::JmpIf => {
-                                if instr.operands.len() >= 5 {
-                                    let cond = instr.operands[0] as u16;
-                                    let target = u32::from_le_bytes([
-                                        instr.operands[1],
-                                        instr.operands[2],
-                                        instr.operands[3],
-                                        instr.operands[4],
-                                    ]);
-                                    decoded_instructions.push(BytecodeInstr::JmpIf {
-                                        cond: Reg(cond),
-                                        target: Label(target),
-                                    });
-                                }
-                            }
-                            Opcode::JmpIfNot => {
-                                if instr.operands.len() >= 5 {
-                                    let cond = instr.operands[0] as u16;
-                                    let target = u32::from_le_bytes([
-                                        instr.operands[1],
-                                        instr.operands[2],
-                                        instr.operands[3],
-                                        instr.operands[4],
-                                    ]);
-                                    decoded_instructions.push(BytecodeInstr::JmpIfNot {
-                                        cond: Reg(cond),
-                                        target: Label(target),
-                                    });
-                                }
-                            }
-                            Opcode::I64Add => {
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let lhs = instr.operands[1] as u16;
-                                    let rhs = instr.operands[2] as u16;
-                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
-                                        op: BinaryOp::Add,
-                                        dst: Reg(dst),
-                                        lhs: Reg(lhs),
-                                        rhs: Reg(rhs),
-                                    });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::I64Sub => {
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let lhs = instr.operands[1] as u16;
-                                    let rhs = instr.operands[2] as u16;
-                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
-                                        op: BinaryOp::Sub,
-                                        dst: Reg(dst),
-                                        lhs: Reg(lhs),
-                                        rhs: Reg(rhs),
-                                    });
-                                }
-                            }
-                            Opcode::I64Mul => {
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let lhs = instr.operands[1] as u16;
-                                    let rhs = instr.operands[2] as u16;
-                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
-                                        op: BinaryOp::Mul,
-                                        dst: Reg(dst),
-                                        lhs: Reg(lhs),
-                                        rhs: Reg(rhs),
-                                    });
-                                }
-                            }
-                            Opcode::I64Div => {
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let lhs = instr.operands[1] as u16;
-                                    let rhs = instr.operands[2] as u16;
-                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
-                                        op: BinaryOp::Div,
-                                        dst: Reg(dst),
-                                        lhs: Reg(lhs),
-                                        rhs: Reg(rhs),
-                                    });
-                                }
-                            }
-                            Opcode::I64Rem => {
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let lhs = instr.operands[1] as u16;
-                                    let rhs = instr.operands[2] as u16;
-                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
-                                        op: BinaryOp::Rem,
-                                        dst: Reg(dst),
-                                        lhs: Reg(lhs),
-                                        rhs: Reg(rhs),
-                                    });
-                                }
-                            }
-                            Opcode::I64And => {
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let lhs = instr.operands[1] as u16;
-                                    let rhs = instr.operands[2] as u16;
-                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
-                                        op: BinaryOp::And,
-                                        dst: Reg(dst),
-                                        lhs: Reg(lhs),
-                                        rhs: Reg(rhs),
-                                    });
-                                }
-                            }
-                            Opcode::I64Or => {
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let lhs = instr.operands[1] as u16;
-                                    let rhs = instr.operands[2] as u16;
-                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
-                                        op: BinaryOp::Or,
-                                        dst: Reg(dst),
-                                        lhs: Reg(lhs),
-                                        rhs: Reg(rhs),
-                                    });
-                                }
-                            }
-                            Opcode::I64Xor => {
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let lhs = instr.operands[1] as u16;
-                                    let rhs = instr.operands[2] as u16;
-                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
-                                        op: BinaryOp::Xor,
-                                        dst: Reg(dst),
-                                        lhs: Reg(lhs),
-                                        rhs: Reg(rhs),
-                                    });
-                                }
-                            }
-                            Opcode::I64Shl => {
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let lhs = instr.operands[1] as u16;
-                                    let rhs = instr.operands[2] as u16;
-                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
-                                        op: BinaryOp::Shl,
-                                        dst: Reg(dst),
-                                        lhs: Reg(lhs),
-                                        rhs: Reg(rhs),
-                                    });
-                                }
-                            }
-                            Opcode::I64Sar => {
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let lhs = instr.operands[1] as u16;
-                                    let rhs = instr.operands[2] as u16;
-                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
-                                        op: BinaryOp::Sar,
-                                        dst: Reg(dst),
-                                        lhs: Reg(lhs),
-                                        rhs: Reg(rhs),
-                                    });
-                                }
-                            }
-                            Opcode::I64Shr => {
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let lhs = instr.operands[1] as u16;
-                                    let rhs = instr.operands[2] as u16;
-                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
-                                        op: BinaryOp::Shr,
-                                        dst: Reg(dst),
-                                        lhs: Reg(lhs),
-                                        rhs: Reg(rhs),
-                                    });
-                                }
-                            }
-                            Opcode::I64Lt => {
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let lhs = instr.operands[1] as u16;
-                                    let rhs = instr.operands[2] as u16;
-                                    decoded_instructions.push(BytecodeInstr::Compare {
-                                        cmp: CompareOp::Lt,
-                                        dst: Reg(dst),
-                                        lhs: Reg(lhs),
-                                        rhs: Reg(rhs),
-                                    });
-                                }
-                            }
-                            Opcode::I64Le => {
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let lhs = instr.operands[1] as u16;
-                                    let rhs = instr.operands[2] as u16;
-                                    decoded_instructions.push(BytecodeInstr::Compare {
-                                        cmp: CompareOp::Le,
-                                        dst: Reg(dst),
-                                        lhs: Reg(lhs),
-                                        rhs: Reg(rhs),
-                                    });
-                                }
-                            }
-                            Opcode::I64Gt => {
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let lhs = instr.operands[1] as u16;
-                                    let rhs = instr.operands[2] as u16;
-                                    decoded_instructions.push(BytecodeInstr::Compare {
-                                        cmp: CompareOp::Gt,
-                                        dst: Reg(dst),
-                                        lhs: Reg(lhs),
-                                        rhs: Reg(rhs),
-                                    });
-                                }
-                            }
-                            Opcode::I64Ge => {
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let lhs = instr.operands[1] as u16;
-                                    let rhs = instr.operands[2] as u16;
-                                    decoded_instructions.push(BytecodeInstr::Compare {
-                                        cmp: CompareOp::Ge,
-                                        dst: Reg(dst),
-                                        lhs: Reg(lhs),
-                                        rhs: Reg(rhs),
-                                    });
-                                }
-                            }
-                            Opcode::I64Ne => {
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let lhs = instr.operands[1] as u16;
-                                    let rhs = instr.operands[2] as u16;
-                                    decoded_instructions.push(BytecodeInstr::Compare {
-                                        cmp: CompareOp::Ne,
-                                        dst: Reg(dst),
-                                        lhs: Reg(lhs),
-                                        rhs: Reg(rhs),
-                                    });
-                                }
-                            }
-                            Opcode::I64Eq => {
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let lhs = instr.operands[1] as u16;
-                                    let rhs = instr.operands[2] as u16;
-                                    decoded_instructions.push(BytecodeInstr::Compare {
-                                        cmp: CompareOp::Eq,
-                                        dst: Reg(dst),
-                                        lhs: Reg(lhs),
-                                        rhs: Reg(rhs),
-                                    });
-                                }
-                            }
-                            Opcode::I64Neg => {
-                                // Unary negation: -x
-                                // Operands: dst(1) + src(1)
-                                if instr.operands.len() >= 2 {
-                                    let dst = instr.operands[0] as u16;
-                                    let src = instr.operands[1] as u16;
-                                    decoded_instructions.push(BytecodeInstr::UnaryOp {
-                                        dst: Reg(dst),
-                                        src: Reg(src),
-                                        op: UnaryOp::Neg,
-                                    });
-                                }
-                            }
-                            Opcode::CallStatic => {
-                                // CallStatic: dst(1) + func_id(4) + base_arg_reg(1) + arg_count(1) + args(2*count)
-                                if instr.operands.len() >= 7 {
-                                    let dst = instr.operands[0] as u16;
-                                    let func_id = u32::from_le_bytes([
-                                        instr.operands[1],
-                                        instr.operands[2],
-                                        instr.operands[3],
-                                        instr.operands[4],
-                                    ]);
-                                    let _base_arg_reg = instr.operands[5];
-                                    let arg_count = instr.operands[6] as usize;
-
-                                    // Parse arguments
-                                    let mut args = Vec::new();
-                                    for i in 0..arg_count {
-                                        if 7 + i * 2 + 1 < instr.operands.len() {
-                                            let arg_reg = u16::from_le_bytes([
-                                                instr.operands[7 + i * 2],
-                                                instr.operands[7 + i * 2 + 1],
-                                            ]);
-                                            args.push(Reg(arg_reg));
-                                        }
-                                    }
-
-                                    // Create CallStatic instruction
-                                    // Note: dst=0 is a valid register (reg 0), not None
-                                    // The distinction between "has return value" and "no return value"
-                                    // should be determined by the function signature, not the dst register
-                                    let dst_reg = Some(Reg(dst));
-                                    let call_instr = BytecodeInstr::CallStatic {
-                                        dst: dst_reg,
-                                        func: func_id,
-                                        args,
-                                    };
-                                    decoded_instructions.push(call_instr);
-                                } else {
-                                    // Fallback: push Nop
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::CallNative => {
-                                // CallNative decode: supports old and FFI format
-                                // Old:  dst(1) + func_name_idx(4) + base(1) + count(1) + args(2*count)
-                                // FFI:  dst(1) + func_name_idx(4) + mech(4) + lib(4) + sym(4) + base(1) + count(1) + args(2*count)
-                                if instr.operands.len() >= 7 {
-                                    let dst = instr.operands[0] as u16;
-                                    let func_name_idx = u32::from_le_bytes([
-                                        instr.operands[1],
-                                        instr.operands[2],
-                                        instr.operands[3],
-                                        instr.operands[4],
-                                    ]);
-
-                                    // Resolve function name from constant pool
-                                    let func_name = if let Some(ConstValue::String(s)) =
-                                        file.const_pool.get(func_name_idx as usize)
-                                    {
-                                        s.clone()
-                                    } else {
-                                        format!("native_{}", func_name_idx)
-                                    };
-
-                                    // 检查是否有 FFI 元数据（mechanism/lib/symbol 索引）
-                                    // 如果 operands[6] 作为 arg_count 算出的总量不匹配，说明有额外字段
-                                    let arg_count_try = instr.operands[6] as usize;
-                                    let has_ffi_meta =
-                                        7 + 2 * arg_count_try != instr.operands.len();
-
-                                    let (
-                                        mechanism,
-                                        lib,
-                                        symbol,
-                                        _base_arg_reg,
-                                        arg_count,
-                                        args_start,
-                                    ) = if has_ffi_meta {
-                                        let mech_idx = u32::from_le_bytes([
-                                            instr.operands[5],
-                                            instr.operands[6],
-                                            instr.operands[7],
-                                            instr.operands[8],
-                                        ]);
-                                        let lib_idx = u32::from_le_bytes([
-                                            instr.operands[9],
-                                            instr.operands[10],
-                                            instr.operands[11],
-                                            instr.operands[12],
-                                        ]);
-                                        let sym_idx = u32::from_le_bytes([
-                                            instr.operands[13],
-                                            instr.operands[14],
-                                            instr.operands[15],
-                                            instr.operands[16],
-                                        ]);
-                                        let mechanism = resolve_const_string(
-                                            &file.const_pool,
-                                            mech_idx as usize,
-                                        );
-                                        let lib = resolve_const_string(
-                                            &file.const_pool,
-                                            lib_idx as usize,
-                                        );
-                                        let symbol = resolve_const_string(
-                                            &file.const_pool,
-                                            sym_idx as usize,
-                                        );
-                                        let _base_arg_reg = instr.operands[17];
-                                        let arg_count = instr.operands[18] as usize;
-                                        (mechanism, lib, symbol, _base_arg_reg, arg_count, 19)
-                                    } else {
-                                        let _base_arg_reg = instr.operands[5];
-                                        let arg_count = arg_count_try;
-                                        (
-                                            String::new(),
-                                            String::new(),
-                                            func_name.clone(),
-                                            _base_arg_reg,
-                                            arg_count,
-                                            7,
-                                        )
-                                    };
-
-                                    // Parse arguments
-                                    let mut args = Vec::new();
-                                    for i in 0..arg_count {
-                                        if args_start + i * 2 + 1 < instr.operands.len() {
-                                            let arg_reg = u16::from_le_bytes([
-                                                instr.operands[args_start + i * 2],
-                                                instr.operands[args_start + i * 2 + 1],
-                                            ]);
-                                            args.push(Reg(arg_reg));
-                                        }
-                                    }
-
-                                    let dst_reg = Some(Reg(dst));
-                                    decoded_instructions.push(BytecodeInstr::CallNative {
-                                        dst: dst_reg,
-                                        func_name,
-                                        mechanism,
-                                        lib,
-                                        symbol,
-                                        args,
-                                    });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::CallDyn => {
-                                // CallDyn: dst(1) + obj(1) + name_idx(2) + args(N) + arg_count(1)
-                                if instr.operands.len() >= 5 {
-                                    let dst = instr.operands[0] as u16;
-                                    let obj = instr.operands[1] as u16;
-                                    let _name_idx =
-                                        u16::from_le_bytes([instr.operands[2], instr.operands[3]]);
-                                    let arg_count =
-                                        instr.operands[instr.operands.len() - 1] as usize;
-                                    let mut args = Vec::with_capacity(arg_count);
-                                    for i in 0..arg_count {
-                                        let idx = 4 + i;
-                                        if idx < instr.operands.len() - 1 {
-                                            args.push(Reg(instr.operands[idx] as u16));
-                                        }
-                                    }
-                                    let dst_reg = Some(Reg(dst));
-                                    let call_instr = BytecodeInstr::CallDyn {
-                                        dst: dst_reg,
-                                        obj: Reg(obj),
-                                        name_idx: _name_idx,
-                                        args,
-                                    };
-                                    decoded_instructions.push(call_instr);
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::Return => {
-                                decoded_instructions.push(BytecodeInstr::Return);
-                            }
-                            Opcode::Yield => {
-                                decoded_instructions.push(BytecodeInstr::Yield);
-                            }
-                            Opcode::Spawn => {
-                                // Spawn: dst(2) + closures.len(4) + closures(2*len)
-                                // + task_deps.len(4) + for each task: deps.len(4) + deps(4*each)
-                                // + task_resources.len(4) + for each task: res.len(4) + for each res: str.len(4) + str_bytes
-                                if instr.operands.len() >= 8 {
-                                    let dst =
-                                        u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
-                                    let closures_count = u32::from_le_bytes([
-                                        instr.operands[2],
-                                        instr.operands[3],
-                                        instr.operands[4],
-                                        instr.operands[5],
-                                    ])
-                                        as usize;
-                                    let mut closures = Vec::with_capacity(closures_count);
-                                    for i in 0..closures_count {
-                                        let offset = 6 + i * 2;
-                                        if offset + 1 < instr.operands.len() {
-                                            let reg = u16::from_le_bytes([
-                                                instr.operands[offset],
-                                                instr.operands[offset + 1],
-                                            ]);
-                                            closures.push(Reg(reg));
-                                        }
-                                    }
-                                    let mut pos = 6 + closures_count * 2;
-                                    // Read task_deps
-                                    let mut task_deps: Vec<Vec<u32>> = Vec::new();
-                                    if pos + 3 < instr.operands.len() {
-                                        let deps_len = u32::from_le_bytes([
-                                            instr.operands[pos],
-                                            instr.operands[pos + 1],
-                                            instr.operands[pos + 2],
-                                            instr.operands[pos + 3],
-                                        ])
-                                            as usize;
-                                        pos += 4;
-                                        task_deps.reserve(deps_len);
-                                        for _ in 0..deps_len {
-                                            if pos + 3 < instr.operands.len() {
-                                                let dep_count = u32::from_le_bytes([
-                                                    instr.operands[pos],
-                                                    instr.operands[pos + 1],
-                                                    instr.operands[pos + 2],
-                                                    instr.operands[pos + 3],
-                                                ])
-                                                    as usize;
-                                                pos += 4;
-                                                let mut deps = Vec::with_capacity(dep_count);
-                                                for _ in 0..dep_count {
-                                                    if pos + 3 < instr.operands.len() {
-                                                        let dep = u32::from_le_bytes([
-                                                            instr.operands[pos],
-                                                            instr.operands[pos + 1],
-                                                            instr.operands[pos + 2],
-                                                            instr.operands[pos + 3],
-                                                        ]);
-                                                        deps.push(dep);
-                                                        pos += 4;
-                                                    }
-                                                }
-                                                task_deps.push(deps);
-                                            }
-                                        }
-                                    }
-                                    // Read task_resources
-                                    let mut task_resources: Vec<Vec<String>> = Vec::new();
-                                    if pos + 3 < instr.operands.len() {
-                                        let res_len = u32::from_le_bytes([
-                                            instr.operands[pos],
-                                            instr.operands[pos + 1],
-                                            instr.operands[pos + 2],
-                                            instr.operands[pos + 3],
-                                        ])
-                                            as usize;
-                                        pos += 4;
-                                        task_resources.reserve(res_len);
-                                        for _ in 0..res_len {
-                                            if pos + 3 < instr.operands.len() {
-                                                let str_count = u32::from_le_bytes([
-                                                    instr.operands[pos],
-                                                    instr.operands[pos + 1],
-                                                    instr.operands[pos + 2],
-                                                    instr.operands[pos + 3],
-                                                ])
-                                                    as usize;
-                                                pos += 4;
-                                                let mut resources = Vec::with_capacity(str_count);
-                                                for _ in 0..str_count {
-                                                    if pos + 3 < instr.operands.len() {
-                                                        let str_len = u32::from_le_bytes([
-                                                            instr.operands[pos],
-                                                            instr.operands[pos + 1],
-                                                            instr.operands[pos + 2],
-                                                            instr.operands[pos + 3],
-                                                        ])
-                                                            as usize;
-                                                        pos += 4;
-                                                        if pos + str_len <= instr.operands.len() {
-                                                            let s = String::from_utf8_lossy(
-                                                                &instr.operands[pos..pos + str_len],
-                                                            )
-                                                            .to_string();
-                                                            resources.push(s);
-                                                            pos += str_len;
-                                                        }
-                                                    }
-                                                }
-                                                task_resources.push(resources);
-                                            }
-                                        }
-                                    }
-                                    decoded_instructions.push(BytecodeInstr::Spawn {
-                                        dst: Reg(dst),
-                                        closures,
-                                        task_deps,
-                                        task_resources,
-                                    });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::SpawnFromList => {
-                                // SpawnFromList: dst(2) + closures_list(2)
-                                // + task_deps.len(4) + for each task: deps.len(4) + deps(4*each)
-                                // + task_resources.len(4) + for each task: res.len(4) + for each res: str.len(4) + str_bytes
-                                if instr.operands.len() >= 4 {
-                                    let dst =
-                                        u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
-                                    let closures_list =
-                                        u16::from_le_bytes([instr.operands[2], instr.operands[3]]);
-                                    let mut pos = 4;
-                                    // Read task_deps
-                                    let mut task_deps: Vec<Vec<u32>> = Vec::new();
-                                    if pos + 3 < instr.operands.len() {
-                                        let deps_len = u32::from_le_bytes([
-                                            instr.operands[pos],
-                                            instr.operands[pos + 1],
-                                            instr.operands[pos + 2],
-                                            instr.operands[pos + 3],
-                                        ])
-                                            as usize;
-                                        pos += 4;
-                                        task_deps.reserve(deps_len);
-                                        for _ in 0..deps_len {
-                                            if pos + 3 < instr.operands.len() {
-                                                let dep_count = u32::from_le_bytes([
-                                                    instr.operands[pos],
-                                                    instr.operands[pos + 1],
-                                                    instr.operands[pos + 2],
-                                                    instr.operands[pos + 3],
-                                                ])
-                                                    as usize;
-                                                pos += 4;
-                                                let mut deps = Vec::with_capacity(dep_count);
-                                                for _ in 0..dep_count {
-                                                    if pos + 3 < instr.operands.len() {
-                                                        let dep = u32::from_le_bytes([
-                                                            instr.operands[pos],
-                                                            instr.operands[pos + 1],
-                                                            instr.operands[pos + 2],
-                                                            instr.operands[pos + 3],
-                                                        ]);
-                                                        deps.push(dep);
-                                                        pos += 4;
-                                                    }
-                                                }
-                                                task_deps.push(deps);
-                                            }
-                                        }
-                                    }
-                                    // Read task_resources
-                                    let mut task_resources: Vec<Vec<String>> = Vec::new();
-                                    if pos + 3 < instr.operands.len() {
-                                        let res_len = u32::from_le_bytes([
-                                            instr.operands[pos],
-                                            instr.operands[pos + 1],
-                                            instr.operands[pos + 2],
-                                            instr.operands[pos + 3],
-                                        ])
-                                            as usize;
-                                        pos += 4;
-                                        task_resources.reserve(res_len);
-                                        for _ in 0..res_len {
-                                            if pos + 3 < instr.operands.len() {
-                                                let str_count = u32::from_le_bytes([
-                                                    instr.operands[pos],
-                                                    instr.operands[pos + 1],
-                                                    instr.operands[pos + 2],
-                                                    instr.operands[pos + 3],
-                                                ])
-                                                    as usize;
-                                                pos += 4;
-                                                let mut resources = Vec::with_capacity(str_count);
-                                                for _ in 0..str_count {
-                                                    if pos + 3 < instr.operands.len() {
-                                                        let str_len = u32::from_le_bytes([
-                                                            instr.operands[pos],
-                                                            instr.operands[pos + 1],
-                                                            instr.operands[pos + 2],
-                                                            instr.operands[pos + 3],
-                                                        ])
-                                                            as usize;
-                                                        pos += 4;
-                                                        if pos + str_len <= instr.operands.len() {
-                                                            let s = String::from_utf8_lossy(
-                                                                &instr.operands[pos..pos + str_len],
-                                                            )
-                                                            .to_string();
-                                                            resources.push(s);
-                                                            pos += str_len;
-                                                        }
-                                                    }
-                                                }
-                                                task_resources.push(resources);
-                                            }
-                                        }
-                                    }
-                                    decoded_instructions.push(BytecodeInstr::SpawnFromList {
-                                        dst: Reg(dst),
-                                        closures_list: Reg(closures_list),
-                                        task_deps,
-                                        task_resources,
-                                    });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::LoadConst => {
-                                // LoadConst: dst(1) + const_idx(2)
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let const_idx =
-                                        u16::from_le_bytes([instr.operands[1], instr.operands[2]]);
-                                    decoded_instructions.push(BytecodeInstr::LoadConst {
-                                        dst: Reg(dst),
-                                        const_idx,
-                                    });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::Mov => {
-                                // Mov: dst(1) + src(1)
-                                if instr.operands.len() >= 2 {
-                                    let dst = instr.operands[0] as u16;
-                                    let src = instr.operands[1] as u16;
-                                    decoded_instructions.push(BytecodeInstr::Mov {
-                                        dst: Reg(dst),
-                                        src: Reg(src),
-                                    });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::LoadLocal => {
-                                // LoadLocal: dst(1) + local_idx(1)
-                                if instr.operands.len() >= 2 {
-                                    let dst = instr.operands[0] as u16;
-                                    let local_idx = instr.operands[1];
-                                    decoded_instructions.push(BytecodeInstr::LoadLocal {
-                                        dst: Reg(dst),
-                                        local_idx,
-                                    });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::StoreLocal => {
-                                // StoreLocal: local_idx(1) + src(1)
-                                if instr.operands.len() >= 2 {
-                                    let local_idx = instr.operands[0];
-                                    let src = instr.operands[1] as u16;
-                                    decoded_instructions.push(BytecodeInstr::StoreLocal {
-                                        local_idx,
-                                        src: Reg(src),
-                                    });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::LoadArg => {
-                                // LoadArg: dst(1) + arg_idx(1)
-                                if instr.operands.len() >= 2 {
-                                    let dst = instr.operands[0] as u16;
-                                    let arg_idx = instr.operands[1];
-                                    decoded_instructions.push(BytecodeInstr::LoadArg {
-                                        dst: Reg(dst),
-                                        arg_idx,
-                                    });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::ReturnValue => {
-                                // ReturnValue: value(1) [legacy], or value(2)
-                                if instr.operands.len() >= 2 {
-                                    let value =
-                                        u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
-                                    decoded_instructions
-                                        .push(BytecodeInstr::ReturnValue { value: Reg(value) });
-                                } else if instr.operands.len() == 1 {
-                                    let value = instr.operands[0] as u16;
-                                    decoded_instructions
-                                        .push(BytecodeInstr::ReturnValue { value: Reg(value) });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Return);
-                                }
-                            }
-                            Opcode::NewListWithCap => {
-                                // NewListWithCap: dst(1) + capacity(2)
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let capacity =
-                                        u16::from_le_bytes([instr.operands[1], instr.operands[2]]);
-                                    decoded_instructions.push(BytecodeInstr::NewListWithCap {
-                                        dst: Reg(dst),
-                                        capacity,
-                                    });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::LoadElement => {
-                                // LoadElement: dst(1) + array(1) + index(1)
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let array = instr.operands[1] as u16;
-                                    let index = instr.operands[2] as u16;
-                                    decoded_instructions.push(BytecodeInstr::LoadElement {
-                                        dst: Reg(dst),
-                                        array: Reg(array),
-                                        index: Reg(index),
-                                    });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::CreateStruct => {
-                                // CreateStruct: dst(1) + type_name_idx(4) + field_count(1) + fields(2*count)
-                                if instr.operands.len() >= 6 {
-                                    let dst = instr.operands[0] as u16;
-                                    let type_name_idx = u32::from_le_bytes([
-                                        instr.operands[1],
-                                        instr.operands[2],
-                                        instr.operands[3],
-                                        instr.operands[4],
-                                    ]);
-                                    let field_count = instr.operands[5] as usize;
-
-                                    // Resolve type name from constant pool
-                                    let type_name = if let Some(ConstValue::String(s)) =
-                                        file.const_pool.get(type_name_idx as usize)
-                                    {
-                                        s.clone()
-                                    } else {
-                                        format!("struct_{}", type_name_idx)
-                                    };
-
-                                    // Parse field registers
-                                    let mut fields = Vec::new();
-                                    for i in 0..field_count {
-                                        if 6 + i * 2 + 1 < instr.operands.len() {
-                                            let field_reg = u16::from_le_bytes([
-                                                instr.operands[6 + i * 2],
-                                                instr.operands[6 + i * 2 + 1],
-                                            ]);
-                                            fields.push(Reg(field_reg));
-                                        }
-                                    }
-
-                                    decoded_instructions.push(BytecodeInstr::CreateStruct {
-                                        dst: Reg(dst),
-                                        type_name,
-                                        fields,
-                                    });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::NewDict => {
-                                // NewDict: dst(2) + pair_count(4) + keys(2*count) + values(2*count)
-                                if instr.operands.len() >= 6 {
-                                    let dst =
-                                        u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
-                                    let pair_count = u32::from_le_bytes([
-                                        instr.operands[2],
-                                        instr.operands[3],
-                                        instr.operands[4],
-                                        instr.operands[5],
-                                    ])
-                                        as usize;
-
-                                    let mut keys = Vec::with_capacity(pair_count);
-                                    let mut values = Vec::with_capacity(pair_count);
-                                    for i in 0..pair_count {
-                                        let key_offset = 6 + i * 2;
-                                        let val_offset = 6 + pair_count * 2 + i * 2;
-                                        if key_offset + 1 < instr.operands.len() {
-                                            let key_reg = u16::from_le_bytes([
-                                                instr.operands[key_offset],
-                                                instr.operands[key_offset + 1],
-                                            ]);
-                                            keys.push(Reg(key_reg));
-                                        }
-                                        if val_offset + 1 < instr.operands.len() {
-                                            let val_reg = u16::from_le_bytes([
-                                                instr.operands[val_offset],
-                                                instr.operands[val_offset + 1],
-                                            ]);
-                                            values.push(Reg(val_reg));
-                                        }
-                                    }
-
-                                    decoded_instructions.push(BytecodeInstr::NewDict {
-                                        dst: Reg(dst),
-                                        keys,
-                                        values,
-                                    });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::NewTuple => {
-                                // NewTuple: dst(2) + item_count(4) + items(2*count)
-                                if instr.operands.len() >= 6 {
-                                    let dst =
-                                        u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
-                                    let item_count = u32::from_le_bytes([
-                                        instr.operands[2],
-                                        instr.operands[3],
-                                        instr.operands[4],
-                                        instr.operands[5],
-                                    ])
-                                        as usize;
-
-                                    let mut items = Vec::with_capacity(item_count);
-                                    for i in 0..item_count {
-                                        let item_offset = 6 + i * 2;
-                                        if item_offset + 1 < instr.operands.len() {
-                                            let item_reg = u16::from_le_bytes([
-                                                instr.operands[item_offset],
-                                                instr.operands[item_offset + 1],
-                                            ]);
-                                            items.push(Reg(item_reg));
-                                        }
-                                    }
-
-                                    decoded_instructions.push(BytecodeInstr::NewTuple {
-                                        dst: Reg(dst),
-                                        items,
-                                    });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::StoreElement => {
-                                // StoreElement: array(1) + index(1) + value(1)
-                                if instr.operands.len() >= 3 {
-                                    let array = instr.operands[0] as u16;
-                                    let index = instr.operands[1] as u16;
-                                    let value = instr.operands[2] as u16;
-                                    decoded_instructions.push(BytecodeInstr::StoreElement {
-                                        array: Reg(array),
-                                        index: Reg(index),
-                                        value: Reg(value),
-                                    });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::MakeClosure => {
-                                // MakeClosure: dst(1) + func_id(4) + env_count(1) + env_regs(2*count)
-                                if instr.operands.len() >= 6 {
-                                    let dst = instr.operands[0] as u16;
-                                    let func_id = u32::from_le_bytes([
-                                        instr.operands[1],
-                                        instr.operands[2],
-                                        instr.operands[3],
-                                        instr.operands[4],
-                                    ]);
-                                    let env_count = instr.operands[5] as usize;
-
-                                    let mut env = Vec::new();
-                                    for i in 0..env_count {
-                                        if 6 + i * 2 + 1 < instr.operands.len() {
-                                            let env_reg = u16::from_le_bytes([
-                                                instr.operands[6 + i * 2],
-                                                instr.operands[6 + i * 2 + 1],
-                                            ]);
-                                            env.push(Reg(env_reg));
-                                        }
-                                    }
-
-                                    decoded_instructions.push(BytecodeInstr::MakeClosure {
-                                        dst: Reg(dst),
-                                        func: func_id,
-                                        env,
-                                    });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::Borrow => {
-                                // Borrow: dst(2) + src(2) + mutable(1)
-                                if instr.operands.len() >= 5 {
-                                    let dst =
-                                        u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
-                                    let src =
-                                        u16::from_le_bytes([instr.operands[2], instr.operands[3]]);
-                                    let mutable = instr.operands[4] != 0;
-                                    decoded_instructions.push(BytecodeInstr::Borrow {
-                                        dst: Reg(dst),
-                                        src: Reg(src),
-                                        mutable,
-                                    });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::Release => {
-                                // Release: src(2)
-                                if instr.operands.len() >= 2 {
-                                    let src =
-                                        u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
-                                    decoded_instructions
-                                        .push(BytecodeInstr::Release { src: Reg(src) });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::GetField => {
-                                // GetField: dst(1) + src(1) + field_idx(2)
-                                if instr.operands.len() >= 4 {
-                                    let dst = instr.operands[0] as u16;
-                                    let src = instr.operands[1] as u16;
-                                    let field_idx =
-                                        u16::from_le_bytes([instr.operands[2], instr.operands[3]]);
-                                    decoded_instructions.push(BytecodeInstr::GetField {
-                                        dst: Reg(dst),
-                                        src: Reg(src),
-                                        field_idx,
-                                    });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::SetField => {
-                                // SetField: src(1) + field_idx(2) + value(1)
-                                if instr.operands.len() >= 4 {
-                                    let src = instr.operands[0] as u16;
-                                    let field_idx =
-                                        u16::from_le_bytes([instr.operands[1], instr.operands[2]]);
-                                    let value = instr.operands[3] as u16;
-                                    decoded_instructions.push(BytecodeInstr::SetField {
-                                        src: Reg(src),
-                                        field_idx,
-                                        value: Reg(value),
-                                    });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            _ => {
-                                // For other opcodes, we need to implement decoding
-                                // For now, just use Nop as placeholder
-                                decoded_instructions.push(BytecodeInstr::Nop);
-                            }
+                match instr.opcode {
+                    opcode::LABEL => {
+                        if !instr.operands.is_empty() {
+                            let label = op_u32(&instr.operands, 0).unwrap_or(0);
+                            labels.insert(Label(label), decoded_instructions.len());
                         }
                     }
-                    Err(_) => {
+                    opcode::JMP => {
+                        if !instr.operands.is_empty() {
+                            let target = op_u32(&instr.operands, 0).unwrap_or(0);
+                            decoded_instructions.push(BytecodeInstr::Jmp {
+                                target: Label(target),
+                            });
+                        }
+                    }
+                    opcode::JMP_IF => {
+                        if instr.operands.len() >= 5 {
+                            let cond = instr.operands[0] as u16;
+                            let target = op_u32(&instr.operands, 1).unwrap_or(0);
+                            decoded_instructions.push(BytecodeInstr::JmpIf {
+                                cond: Reg(cond),
+                                target: Label(target),
+                            });
+                        }
+                    }
+                    opcode::JMP_IF_NOT => {
+                        if instr.operands.len() >= 5 {
+                            let cond = instr.operands[0] as u16;
+                            let target = op_u32(&instr.operands, 1).unwrap_or(0);
+                            decoded_instructions.push(BytecodeInstr::JmpIfNot {
+                                cond: Reg(cond),
+                                target: Label(target),
+                            });
+                        }
+                    }
+                    opcode::I64_ADD => {
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let lhs = instr.operands[1] as u16;
+                            let rhs = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                op: BinaryOp::Add,
+                                dst: Reg(dst),
+                                lhs: Reg(lhs),
+                                rhs: Reg(rhs),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::I64_SUB => {
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let lhs = instr.operands[1] as u16;
+                            let rhs = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                op: BinaryOp::Sub,
+                                dst: Reg(dst),
+                                lhs: Reg(lhs),
+                                rhs: Reg(rhs),
+                            });
+                        }
+                    }
+                    opcode::I64_MUL => {
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let lhs = instr.operands[1] as u16;
+                            let rhs = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                op: BinaryOp::Mul,
+                                dst: Reg(dst),
+                                lhs: Reg(lhs),
+                                rhs: Reg(rhs),
+                            });
+                        }
+                    }
+                    opcode::I64_DIV => {
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let lhs = instr.operands[1] as u16;
+                            let rhs = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                op: BinaryOp::Div,
+                                dst: Reg(dst),
+                                lhs: Reg(lhs),
+                                rhs: Reg(rhs),
+                            });
+                        }
+                    }
+                    opcode::I64_REM => {
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let lhs = instr.operands[1] as u16;
+                            let rhs = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                op: BinaryOp::Rem,
+                                dst: Reg(dst),
+                                lhs: Reg(lhs),
+                                rhs: Reg(rhs),
+                            });
+                        }
+                    }
+                    opcode::I64_AND => {
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let lhs = instr.operands[1] as u16;
+                            let rhs = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                op: BinaryOp::And,
+                                dst: Reg(dst),
+                                lhs: Reg(lhs),
+                                rhs: Reg(rhs),
+                            });
+                        }
+                    }
+                    opcode::I64_OR => {
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let lhs = instr.operands[1] as u16;
+                            let rhs = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                op: BinaryOp::Or,
+                                dst: Reg(dst),
+                                lhs: Reg(lhs),
+                                rhs: Reg(rhs),
+                            });
+                        }
+                    }
+                    opcode::I64_XOR => {
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let lhs = instr.operands[1] as u16;
+                            let rhs = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                op: BinaryOp::Xor,
+                                dst: Reg(dst),
+                                lhs: Reg(lhs),
+                                rhs: Reg(rhs),
+                            });
+                        }
+                    }
+                    opcode::I64_SHL => {
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let lhs = instr.operands[1] as u16;
+                            let rhs = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                op: BinaryOp::Shl,
+                                dst: Reg(dst),
+                                lhs: Reg(lhs),
+                                rhs: Reg(rhs),
+                            });
+                        }
+                    }
+                    opcode::I64_SAR => {
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let lhs = instr.operands[1] as u16;
+                            let rhs = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                op: BinaryOp::Sar,
+                                dst: Reg(dst),
+                                lhs: Reg(lhs),
+                                rhs: Reg(rhs),
+                            });
+                        }
+                    }
+                    opcode::I64_SHR => {
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let lhs = instr.operands[1] as u16;
+                            let rhs = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                op: BinaryOp::Shr,
+                                dst: Reg(dst),
+                                lhs: Reg(lhs),
+                                rhs: Reg(rhs),
+                            });
+                        }
+                    }
+                    opcode::I64_LT => {
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let lhs = instr.operands[1] as u16;
+                            let rhs = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::Compare {
+                                cmp: CompareOp::Lt,
+                                dst: Reg(dst),
+                                lhs: Reg(lhs),
+                                rhs: Reg(rhs),
+                            });
+                        }
+                    }
+                    opcode::I64_LE => {
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let lhs = instr.operands[1] as u16;
+                            let rhs = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::Compare {
+                                cmp: CompareOp::Le,
+                                dst: Reg(dst),
+                                lhs: Reg(lhs),
+                                rhs: Reg(rhs),
+                            });
+                        }
+                    }
+                    opcode::I64_GT => {
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let lhs = instr.operands[1] as u16;
+                            let rhs = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::Compare {
+                                cmp: CompareOp::Gt,
+                                dst: Reg(dst),
+                                lhs: Reg(lhs),
+                                rhs: Reg(rhs),
+                            });
+                        }
+                    }
+                    opcode::I64_GE => {
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let lhs = instr.operands[1] as u16;
+                            let rhs = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::Compare {
+                                cmp: CompareOp::Ge,
+                                dst: Reg(dst),
+                                lhs: Reg(lhs),
+                                rhs: Reg(rhs),
+                            });
+                        }
+                    }
+                    opcode::I64_NE => {
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let lhs = instr.operands[1] as u16;
+                            let rhs = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::Compare {
+                                cmp: CompareOp::Ne,
+                                dst: Reg(dst),
+                                lhs: Reg(lhs),
+                                rhs: Reg(rhs),
+                            });
+                        }
+                    }
+                    opcode::I64_EQ => {
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let lhs = instr.operands[1] as u16;
+                            let rhs = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::Compare {
+                                cmp: CompareOp::Eq,
+                                dst: Reg(dst),
+                                lhs: Reg(lhs),
+                                rhs: Reg(rhs),
+                            });
+                        }
+                    }
+                    opcode::I64_NEG => {
+                        // Unary negation: -x
+                        // Operands: dst(1) + src(1)
+                        if instr.operands.len() >= 2 {
+                            let dst = instr.operands[0] as u16;
+                            let src = instr.operands[1] as u16;
+                            decoded_instructions.push(BytecodeInstr::UnaryOp {
+                                dst: Reg(dst),
+                                src: Reg(src),
+                                op: UnaryOp::Neg,
+                            });
+                        }
+                    }
+                    opcode::CALL_STATIC => {
+                        // CallStatic: dst(1) + func_id(4) + base_arg_reg(1) + arg_count(1) + args(2*count)
+                        if instr.operands.len() >= 7 {
+                            let dst = instr.operands[0] as u16;
+                            let func_id = op_u32(&instr.operands, 1).unwrap_or(0);
+                            let _base_arg_reg = instr.operands[5];
+                            let arg_count = instr.operands[6] as usize;
+
+                            // Parse arguments
+                            let mut args = Vec::new();
+                            for i in 0..arg_count {
+                                if 7 + i * 2 + 1 < instr.operands.len() {
+                                    let arg_reg = op_u16(&instr.operands, 7 + i * 2).unwrap_or(0);
+                                    args.push(Reg(arg_reg));
+                                }
+                            }
+
+                            // Create CallStatic instruction
+                            // Note: dst=0 is a valid register (reg 0), not None
+                            // The distinction between "has return value" and "no return value"
+                            // should be determined by the function signature, not the dst register
+                            let dst_reg = Some(Reg(dst));
+                            let call_instr = BytecodeInstr::CallStatic {
+                                dst: dst_reg,
+                                func: func_id,
+                                args,
+                            };
+                            decoded_instructions.push(call_instr);
+                        } else {
+                            // Fallback: push Nop
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::CALL_NATIVE => {
+                        // CallNative decode: supports old and FFI format
+                        // Old:  dst(1) + func_name_idx(4) + base(1) + count(1) + args(2*count)
+                        // FFI:  dst(1) + func_name_idx(4) + mech(4) + lib(4) + sym(4) + base(1) + count(1) + args(2*count)
+                        if instr.operands.len() >= 7 {
+                            let dst = instr.operands[0] as u16;
+                            let func_name_idx = op_u32(&instr.operands, 1).unwrap_or(0);
+
+                            // Resolve function name from constant pool
+                            let func_name = if let Some(ConstValue::String(s)) =
+                                file.const_pool.get(func_name_idx as usize)
+                            {
+                                s.clone()
+                            } else {
+                                format!("native_{}", func_name_idx)
+                            };
+
+                            // 检查是否有 FFI 元数据（mechanism/lib/symbol 索引）
+                            // 如果 operands[6] 作为 arg_count 算出的总量不匹配，说明有额外字段
+                            let arg_count_try = instr.operands[6] as usize;
+                            let has_ffi_meta = 7 + 2 * arg_count_try != instr.operands.len();
+
+                            let (mechanism, lib, symbol, _base_arg_reg, arg_count, args_start) =
+                                if has_ffi_meta {
+                                    let mech_idx = op_u32(&instr.operands, 5).unwrap_or(0);
+                                    let lib_idx = op_u32(&instr.operands, 9).unwrap_or(0);
+                                    let sym_idx = op_u32(&instr.operands, 13).unwrap_or(0);
+                                    let mechanism =
+                                        resolve_const_string(&file.const_pool, mech_idx as usize);
+                                    let lib =
+                                        resolve_const_string(&file.const_pool, lib_idx as usize);
+                                    let symbol =
+                                        resolve_const_string(&file.const_pool, sym_idx as usize);
+                                    let _base_arg_reg = instr.operands[17];
+                                    let arg_count = instr.operands[18] as usize;
+                                    (mechanism, lib, symbol, _base_arg_reg, arg_count, 19)
+                                } else {
+                                    let _base_arg_reg = instr.operands[5];
+                                    let arg_count = arg_count_try;
+                                    (
+                                        String::new(),
+                                        String::new(),
+                                        func_name.clone(),
+                                        _base_arg_reg,
+                                        arg_count,
+                                        7,
+                                    )
+                                };
+
+                            // Parse arguments
+                            let mut args = Vec::new();
+                            for i in 0..arg_count {
+                                if args_start + i * 2 + 1 < instr.operands.len() {
+                                    let arg_reg =
+                                        op_u16(&instr.operands, args_start + i * 2).unwrap_or(0);
+                                    args.push(Reg(arg_reg));
+                                }
+                            }
+
+                            let dst_reg = Some(Reg(dst));
+                            decoded_instructions.push(BytecodeInstr::CallNative {
+                                dst: dst_reg,
+                                func_name,
+                                mechanism,
+                                lib,
+                                symbol,
+                                args,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::CALL_DYN => {
+                        // CallDyn: dst(1) + obj(1) + name_idx(2) + args(N) + arg_count(1)
+                        if instr.operands.len() >= 5 {
+                            let dst = instr.operands[0] as u16;
+                            let obj = instr.operands[1] as u16;
+                            let _name_idx = op_u16(&instr.operands, 2).unwrap_or(0);
+                            let arg_count = instr.operands[instr.operands.len() - 1] as usize;
+                            let mut args = Vec::with_capacity(arg_count);
+                            for i in 0..arg_count {
+                                let idx = 4 + i;
+                                if idx < instr.operands.len() - 1 {
+                                    args.push(Reg(instr.operands[idx] as u16));
+                                }
+                            }
+                            let dst_reg = Some(Reg(dst));
+                            let call_instr = BytecodeInstr::CallDyn {
+                                dst: dst_reg,
+                                obj: Reg(obj),
+                                name_idx: _name_idx,
+                                args,
+                            };
+                            decoded_instructions.push(call_instr);
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::RETURN => {
+                        decoded_instructions.push(BytecodeInstr::Return);
+                    }
+                    opcode::YIELD => {
+                        decoded_instructions.push(BytecodeInstr::Yield);
+                    }
+                    opcode::SPAWN => {
+                        // Spawn: dst(2) + closures.len(4) + closures(2*len)
+                        // + task_deps.len(4) + for each task: deps.len(4) + deps(4*each)
+                        // + task_resources.len(4) + for each task: res.len(4) + for each res: str.len(4) + str_bytes
+                        if instr.operands.len() >= 8 {
+                            let dst = op_u16(&instr.operands, 0).unwrap_or(0);
+                            let closures_count = op_u32(&instr.operands, 2).unwrap_or(0) as usize;
+                            let mut closures = Vec::with_capacity(closures_count);
+                            for i in 0..closures_count {
+                                let offset = 6 + i * 2;
+                                if offset + 1 < instr.operands.len() {
+                                    let reg = op_u16(&instr.operands, offset).unwrap_or(0);
+                                    closures.push(Reg(reg));
+                                }
+                            }
+                            let mut pos = 6 + closures_count * 2;
+                            // Read task_deps
+                            let mut task_deps: Vec<Vec<u32>> = Vec::new();
+                            if pos + 3 < instr.operands.len() {
+                                let deps_len = op_u32(&instr.operands, pos).unwrap_or(0) as usize;
+                                pos += 4;
+                                task_deps.reserve(deps_len);
+                                for _ in 0..deps_len {
+                                    if pos + 3 < instr.operands.len() {
+                                        let dep_count =
+                                            op_u32(&instr.operands, pos).unwrap_or(0) as usize;
+                                        pos += 4;
+                                        let mut deps = Vec::with_capacity(dep_count);
+                                        for _ in 0..dep_count {
+                                            if pos + 3 < instr.operands.len() {
+                                                let dep = op_u32(&instr.operands, pos).unwrap_or(0);
+                                                deps.push(dep);
+                                                pos += 4;
+                                            }
+                                        }
+                                        task_deps.push(deps);
+                                    }
+                                }
+                            }
+                            // Read task_resources
+                            let mut task_resources: Vec<Vec<String>> = Vec::new();
+                            if pos + 3 < instr.operands.len() {
+                                let res_len = op_u32(&instr.operands, pos).unwrap_or(0) as usize;
+                                pos += 4;
+                                task_resources.reserve(res_len);
+                                for _ in 0..res_len {
+                                    if pos + 3 < instr.operands.len() {
+                                        let str_count =
+                                            op_u32(&instr.operands, pos).unwrap_or(0) as usize;
+                                        pos += 4;
+                                        let mut resources = Vec::with_capacity(str_count);
+                                        for _ in 0..str_count {
+                                            if pos + 3 < instr.operands.len() {
+                                                let str_len = op_u32(&instr.operands, pos)
+                                                    .unwrap_or(0)
+                                                    as usize;
+                                                pos += 4;
+                                                if pos + str_len <= instr.operands.len() {
+                                                    let s = String::from_utf8_lossy(
+                                                        &instr.operands[pos..pos + str_len],
+                                                    )
+                                                    .to_string();
+                                                    resources.push(s);
+                                                    pos += str_len;
+                                                }
+                                            }
+                                        }
+                                        task_resources.push(resources);
+                                    }
+                                }
+                            }
+                            decoded_instructions.push(BytecodeInstr::Spawn {
+                                dst: Reg(dst),
+                                closures,
+                                task_deps,
+                                task_resources,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::SPAWN_FROM_LIST => {
+                        // SpawnFromList: dst(2) + closures_list(2)
+                        // + task_deps.len(4) + for each task: deps.len(4) + deps(4*each)
+                        // + task_resources.len(4) + for each task: res.len(4) + for each res: str.len(4) + str_bytes
+                        if instr.operands.len() >= 4 {
+                            let dst = op_u16(&instr.operands, 0).unwrap_or(0);
+                            let closures_list = op_u16(&instr.operands, 2).unwrap_or(0);
+                            let mut pos = 4;
+                            // Read task_deps
+                            let mut task_deps: Vec<Vec<u32>> = Vec::new();
+                            if pos + 3 < instr.operands.len() {
+                                let deps_len = op_u32(&instr.operands, pos).unwrap_or(0) as usize;
+                                pos += 4;
+                                task_deps.reserve(deps_len);
+                                for _ in 0..deps_len {
+                                    if pos + 3 < instr.operands.len() {
+                                        let dep_count =
+                                            op_u32(&instr.operands, pos).unwrap_or(0) as usize;
+                                        pos += 4;
+                                        let mut deps = Vec::with_capacity(dep_count);
+                                        for _ in 0..dep_count {
+                                            if pos + 3 < instr.operands.len() {
+                                                let dep = op_u32(&instr.operands, pos).unwrap_or(0);
+                                                deps.push(dep);
+                                                pos += 4;
+                                            }
+                                        }
+                                        task_deps.push(deps);
+                                    }
+                                }
+                            }
+                            // Read task_resources
+                            let mut task_resources: Vec<Vec<String>> = Vec::new();
+                            if pos + 3 < instr.operands.len() {
+                                let res_len = op_u32(&instr.operands, pos).unwrap_or(0) as usize;
+                                pos += 4;
+                                task_resources.reserve(res_len);
+                                for _ in 0..res_len {
+                                    if pos + 3 < instr.operands.len() {
+                                        let str_count =
+                                            op_u32(&instr.operands, pos).unwrap_or(0) as usize;
+                                        pos += 4;
+                                        let mut resources = Vec::with_capacity(str_count);
+                                        for _ in 0..str_count {
+                                            if pos + 3 < instr.operands.len() {
+                                                let str_len = op_u32(&instr.operands, pos)
+                                                    .unwrap_or(0)
+                                                    as usize;
+                                                pos += 4;
+                                                if pos + str_len <= instr.operands.len() {
+                                                    let s = String::from_utf8_lossy(
+                                                        &instr.operands[pos..pos + str_len],
+                                                    )
+                                                    .to_string();
+                                                    resources.push(s);
+                                                    pos += str_len;
+                                                }
+                                            }
+                                        }
+                                        task_resources.push(resources);
+                                    }
+                                }
+                            }
+                            decoded_instructions.push(BytecodeInstr::SpawnFromList {
+                                dst: Reg(dst),
+                                closures_list: Reg(closures_list),
+                                task_deps,
+                                task_resources,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::LOAD_CONST => {
+                        // LoadConst: dst(1) + const_idx(2)
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let const_idx = op_u16(&instr.operands, 1).unwrap_or(0);
+                            decoded_instructions.push(BytecodeInstr::LoadConst {
+                                dst: Reg(dst),
+                                const_idx,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::MOV => {
+                        // Mov: dst(1) + src(1)
+                        if instr.operands.len() >= 2 {
+                            let dst = instr.operands[0] as u16;
+                            let src = instr.operands[1] as u16;
+                            decoded_instructions.push(BytecodeInstr::Mov {
+                                dst: Reg(dst),
+                                src: Reg(src),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::LOAD_LOCAL => {
+                        // LoadLocal: dst(1) + local_idx(1)
+                        if instr.operands.len() >= 2 {
+                            let dst = instr.operands[0] as u16;
+                            let local_idx = instr.operands[1];
+                            decoded_instructions.push(BytecodeInstr::LoadLocal {
+                                dst: Reg(dst),
+                                local_idx,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::STORE_LOCAL => {
+                        // StoreLocal: local_idx(1) + src(1)
+                        if instr.operands.len() >= 2 {
+                            let local_idx = instr.operands[0];
+                            let src = instr.operands[1] as u16;
+                            decoded_instructions.push(BytecodeInstr::StoreLocal {
+                                local_idx,
+                                src: Reg(src),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::LOAD_ARG => {
+                        // LoadArg: dst(1) + arg_idx(1)
+                        if instr.operands.len() >= 2 {
+                            let dst = instr.operands[0] as u16;
+                            let arg_idx = instr.operands[1];
+                            decoded_instructions.push(BytecodeInstr::LoadArg {
+                                dst: Reg(dst),
+                                arg_idx,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::RETURN_VALUE => {
+                        // ReturnValue: value(1) [legacy], or value(2)
+                        if instr.operands.len() >= 2 {
+                            let value = op_u16(&instr.operands, 0).unwrap_or(0);
+                            decoded_instructions
+                                .push(BytecodeInstr::ReturnValue { value: Reg(value) });
+                        } else if instr.operands.len() == 1 {
+                            let value = instr.operands[0] as u16;
+                            decoded_instructions
+                                .push(BytecodeInstr::ReturnValue { value: Reg(value) });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Return);
+                        }
+                    }
+                    opcode::NEW_LIST_WITH_CAP => {
+                        // NewListWithCap: dst(1) + capacity(2)
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let capacity = op_u16(&instr.operands, 1).unwrap_or(0);
+                            decoded_instructions.push(BytecodeInstr::NewListWithCap {
+                                dst: Reg(dst),
+                                capacity,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::LOAD_ELEMENT => {
+                        // LoadElement: dst(1) + array(1) + index(1)
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let array = instr.operands[1] as u16;
+                            let index = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::LoadElement {
+                                dst: Reg(dst),
+                                array: Reg(array),
+                                index: Reg(index),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::CREATE_STRUCT => {
+                        // CreateStruct: dst(1) + type_name_idx(4) + field_count(1) + fields(2*count)
+                        if instr.operands.len() >= 6 {
+                            let dst = instr.operands[0] as u16;
+                            let type_name_idx = op_u32(&instr.operands, 1).unwrap_or(0);
+                            let field_count = instr.operands[5] as usize;
+
+                            // Resolve type name from constant pool
+                            let type_name = if let Some(ConstValue::String(s)) =
+                                file.const_pool.get(type_name_idx as usize)
+                            {
+                                s.clone()
+                            } else {
+                                format!("struct_{}", type_name_idx)
+                            };
+
+                            // Parse field registers
+                            let mut fields = Vec::new();
+                            for i in 0..field_count {
+                                if 6 + i * 2 + 1 < instr.operands.len() {
+                                    let field_reg = op_u16(&instr.operands, 6 + i * 2).unwrap_or(0);
+                                    fields.push(Reg(field_reg));
+                                }
+                            }
+
+                            decoded_instructions.push(BytecodeInstr::CreateStruct {
+                                dst: Reg(dst),
+                                type_name,
+                                fields,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::NEW_DICT => {
+                        // NewDict: dst(2) + pair_count(4) + keys(2*count) + values(2*count)
+                        if instr.operands.len() >= 6 {
+                            let dst = op_u16(&instr.operands, 0).unwrap_or(0);
+                            let pair_count = op_u32(&instr.operands, 2).unwrap_or(0) as usize;
+
+                            let mut keys = Vec::with_capacity(pair_count);
+                            let mut values = Vec::with_capacity(pair_count);
+                            for i in 0..pair_count {
+                                let key_offset = 6 + i * 2;
+                                let val_offset = 6 + pair_count * 2 + i * 2;
+                                if key_offset + 1 < instr.operands.len() {
+                                    let key_reg = op_u16(&instr.operands, key_offset).unwrap_or(0);
+                                    keys.push(Reg(key_reg));
+                                }
+                                if val_offset + 1 < instr.operands.len() {
+                                    let val_reg = op_u16(&instr.operands, val_offset).unwrap_or(0);
+                                    values.push(Reg(val_reg));
+                                }
+                            }
+
+                            decoded_instructions.push(BytecodeInstr::NewDict {
+                                dst: Reg(dst),
+                                keys,
+                                values,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::NEW_TUPLE => {
+                        // NewTuple: dst(2) + item_count(4) + items(2*count)
+                        if instr.operands.len() >= 6 {
+                            let dst = op_u16(&instr.operands, 0).unwrap_or(0);
+                            let item_count = op_u32(&instr.operands, 2).unwrap_or(0) as usize;
+
+                            let mut items = Vec::with_capacity(item_count);
+                            for i in 0..item_count {
+                                let item_offset = 6 + i * 2;
+                                if item_offset + 1 < instr.operands.len() {
+                                    let item_reg =
+                                        op_u16(&instr.operands, item_offset).unwrap_or(0);
+                                    items.push(Reg(item_reg));
+                                }
+                            }
+
+                            decoded_instructions.push(BytecodeInstr::NewTuple {
+                                dst: Reg(dst),
+                                items,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::NEW_ARRAY => {
+                        // NewArray: dst(1) + count(4)
+                        if instr.operands.len() >= 5 {
+                            let dst = instr.operands[0] as u16;
+                            let count = op_u32(&instr.operands, 1).unwrap_or(0);
+                            decoded_instructions.push(BytecodeInstr::NewArray {
+                                dst: Reg(dst),
+                                count,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::CONTAINS => {
+                        // Contains: dst(1) + elem(1) + container(1)
+                        if instr.operands.len() >= 3 {
+                            decoded_instructions.push(BytecodeInstr::Contains {
+                                dst: Reg(instr.operands[0] as u16),
+                                elem: Reg(instr.operands[1] as u16),
+                                container: Reg(instr.operands[2] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::STORE_ELEMENT => {
+                        // StoreElement: array(1) + index(1) + value(1)
+                        if instr.operands.len() >= 3 {
+                            let array = instr.operands[0] as u16;
+                            let index = instr.operands[1] as u16;
+                            let value = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::StoreElement {
+                                array: Reg(array),
+                                index: Reg(index),
+                                value: Reg(value),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::MAKE_CLOSURE => {
+                        // MakeClosure: dst(1) + func_id(4) + env_count(1) + env_regs(2*count)
+                        if instr.operands.len() >= 6 {
+                            let dst = instr.operands[0] as u16;
+                            let func_id = op_u32(&instr.operands, 1).unwrap_or(0);
+                            let env_count = instr.operands[5] as usize;
+
+                            let mut env = Vec::new();
+                            for i in 0..env_count {
+                                if 6 + i * 2 + 1 < instr.operands.len() {
+                                    let env_reg = op_u16(&instr.operands, 6 + i * 2).unwrap_or(0);
+                                    env.push(Reg(env_reg));
+                                }
+                            }
+
+                            decoded_instructions.push(BytecodeInstr::MakeClosure {
+                                dst: Reg(dst),
+                                func: func_id,
+                                env,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    // #254：LoadUpvalue/StoreUpvalue 解码（此前缺失 → 落 Nop 占位，
+                    // 闭包捕获在字节码层静默失效；curry 走 LoadArg 不经此路故未暴露）
+                    opcode::LOAD_UPVALUE => {
+                        // LoadUpvalue: dst(1) + upvalue_idx(1)
+                        if instr.operands.len() >= 2 {
+                            let dst = instr.operands[0] as u16;
+                            let upvalue_idx = instr.operands[1];
+                            decoded_instructions.push(BytecodeInstr::LoadUpvalue {
+                                dst: Reg(dst),
+                                upvalue_idx,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::STORE_UPVALUE => {
+                        // StoreUpvalue: src(1) + upvalue_idx(1)
+                        if instr.operands.len() >= 2 {
+                            let src = instr.operands[0] as u16;
+                            let upvalue_idx = instr.operands[1];
+                            decoded_instructions.push(BytecodeInstr::StoreUpvalue {
+                                src: Reg(src),
+                                upvalue_idx,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::BORROW => {
+                        // Borrow: dst(2) + src(2) + mutable(1)
+                        if instr.operands.len() >= 5 {
+                            let dst = op_u16(&instr.operands, 0).unwrap_or(0);
+                            let src = op_u16(&instr.operands, 2).unwrap_or(0);
+                            let mutable = instr.operands[4] != 0;
+                            decoded_instructions.push(BytecodeInstr::Borrow {
+                                dst: Reg(dst),
+                                src: Reg(src),
+                                mutable,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::RELEASE => {
+                        // Release: src(2)
+                        if instr.operands.len() >= 2 {
+                            let src = op_u16(&instr.operands, 0).unwrap_or(0);
+                            decoded_instructions.push(BytecodeInstr::Release { src: Reg(src) });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::GET_FIELD => {
+                        // GetField: dst(1) + src(1) + field_idx(2)
+                        if instr.operands.len() >= 4 {
+                            let dst = instr.operands[0] as u16;
+                            let src = instr.operands[1] as u16;
+                            let field_idx = op_u16(&instr.operands, 2).unwrap_or(0);
+                            decoded_instructions.push(BytecodeInstr::GetField {
+                                dst: Reg(dst),
+                                src: Reg(src),
+                                field_idx,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::SET_FIELD => {
+                        // SetField: src(1) + field_idx(2) + value(1)
+                        if instr.operands.len() >= 4 {
+                            let src = instr.operands[0] as u16;
+                            let field_idx = op_u16(&instr.operands, 1).unwrap_or(0);
+                            let value = instr.operands[3] as u16;
+                            decoded_instructions.push(BytecodeInstr::SetField {
+                                src: Reg(src),
+                                field_idx,
+                                value: Reg(value),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    _ => {
                         // Unknown opcode, use Nop
                         decoded_instructions.push(BytecodeInstr::Nop);
                     }
@@ -1885,7 +1785,7 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                 local_count: func.local_count,
                 upvalue_count: 0, // Not stored in BytecodeFile
                 instructions: decoded_instructions,
-                labels,                         // Populated from Opcode::Label
+                labels,                         // Populated from opcode::LABEL
                 exception_handlers: Vec::new(), // Not implemented yet
                 debug_map,
             };
@@ -1923,10 +1823,7 @@ impl From<crate::frontend::core::typecheck::MonoType> for IrType {
             MonoType::Float(w) => IrType::Float(w),
             MonoType::Bool => IrType::Bool,
             MonoType::Char => IrType::Char,
-            MonoType::String => IrType::String,
-            MonoType::Bytes => IrType::Bytes,
             MonoType::Void => IrType::Void,
-            MonoType::Tuple(types) => IrType::Tuple(types.into_iter().map(|t| t.into()).collect()),
             MonoType::Fn {
                 params,
                 return_type,
@@ -1935,21 +1832,23 @@ impl From<crate::frontend::core::typecheck::MonoType> for IrType {
                 params: params.into_iter().map(|t| t.into()).collect(),
                 return_type: Box::new((*return_type).into()),
             },
-            // List, Dict, Set, Option, Result, Range, Struct, Enum,
-            // Arc, Weak — no direct IR counterpart or different shape
-            MonoType::List(_)
-            | MonoType::Dict(_, _)
-            | MonoType::Set(_)
-            | MonoType::Option(_)
-            | MonoType::Result(_, _)
-            | MonoType::Range { .. }
-            | MonoType::Struct(_)
+            // #299：String/Bytes/Tuple/List/Dict/Option/Result/Range/Arc/Weak 现为 Generic 表示
+            MonoType::Generic { name, args } => match name.as_str() {
+                "String" => IrType::String,
+                "Bytes" => IrType::Bytes,
+                "Tuple" => IrType::Tuple(args.clone().into_iter().map(|t| t.into()).collect()),
+                _ => IrType::Void,
+            },
+            // Struct, Enum, Ref, TypeVar, TypeRef, Union, Intersection, AssocType — unresolved or no IR form
+            MonoType::Struct(_)
             | MonoType::Enum(_)
-            | MonoType::Arc(_)
-            | MonoType::Weak(_) => IrType::Void,
-            // Ref is ZST, no runtime representation
-            MonoType::Ref { .. } => IrType::Void,
-            // TypeVar, TypeRef, Union, Intersection, AssocType — unresolved or no IR form
+            | MonoType::Ref { .. }
+            | MonoType::TypeVar(_)
+            | MonoType::TypeRef(_)
+            | MonoType::Union(_)
+            | MonoType::Intersection(_)
+            | MonoType::AssocType { .. } => IrType::Void,
+            // 残留旧变体（Task 1.7 删除枚举变体前的过渡分支）
             _ => IrType::Void,
         }
     }

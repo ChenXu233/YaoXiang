@@ -13,6 +13,9 @@ use crate::frontend::core::parser::ast::{Module, Expr};
 // 编译期谓词解析器
 pub mod predicate_resolver;
 
+// 编译期值参数判定（RFC-011 §4.1 两步判定的唯一实现）
+pub mod const_param;
+
 // 导入推断模块
 pub mod inference;
 
@@ -37,7 +40,8 @@ pub mod layers;
 pub mod passes;
 
 // ============ 测试模块 ============
-
+#[cfg(test)]
+mod test_util;
 #[cfg(test)]
 mod tests;
 
@@ -65,7 +69,7 @@ pub use crate::util::diagnostic::{Diagnostic, ErrorCollector, ErrorCodeDefinitio
 pub type TypeResult<T> = Result<T, Diagnostic>;
 
 /// 类型错误收集器
-pub type TypeErrorCollector = ErrorCollector<Diagnostic>;
+pub type TypeErrorCollector = ErrorCollector;
 
 // ============ 入口函数 ============
 
@@ -159,8 +163,10 @@ pub fn add_builtin_types(env: &mut environment::TypeEnvironment) {
         .insert("float".to_string(), PolyType::mono(MonoType::Float(64)));
     env.types
         .insert("bool".to_string(), PolyType::mono(MonoType::Bool));
-    env.types
-        .insert("string".to_string(), PolyType::mono(MonoType::String));
+    env.types.insert(
+        "string".to_string(),
+        PolyType::mono(MonoType::make_string()),
+    );
     env.types
         .insert("void".to_string(), PolyType::mono(MonoType::Void));
     env.types
@@ -215,7 +221,7 @@ pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
     env.native_signatures.insert(
         "Native.c".to_string(),
         MonoType::Fn {
-            params: vec![MonoType::String],
+            params: vec![MonoType::make_string()],
             return_type: Box::new(MonoType::LibraryRef {
                 mechanism: "c".to_string(),
                 lib: String::new(), // placeholder, filled at IR gen compile-time
@@ -228,7 +234,7 @@ pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
     env.native_signatures.insert(
         "Native.rs".to_string(),
         MonoType::Fn {
-            params: vec![MonoType::String],
+            params: vec![MonoType::make_string()],
             return_type: Box::new(MonoType::ExternRef {
                 mechanism: "rs".to_string(),
                 lib: String::new(),    // placeholder
@@ -249,7 +255,7 @@ pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
                 (
                     "c".to_string(),
                     MonoType::Fn {
-                        params: vec![MonoType::String],
+                        params: vec![MonoType::make_string()],
                         return_type: Box::new(MonoType::LibraryRef {
                             mechanism: "c".to_string(),
                             lib: String::new(),
@@ -259,7 +265,7 @@ pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
                 (
                     "rs".to_string(),
                     MonoType::Fn {
-                        params: vec![MonoType::String],
+                        params: vec![MonoType::make_string()],
                         return_type: Box::new(MonoType::ExternRef {
                             mechanism: "rs".to_string(),
                             lib: String::new(),

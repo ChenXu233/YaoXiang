@@ -1,0 +1,11 @@
+// 06-compile-errors/array_neg_index_err.yx
+// [test:error]: #300 D 项——负索引诊断保真
+// 预期: 运行时错误 E6003，消息含真实长度（0..3）与原始负值（found -1），
+//       不再是 max=0 哨兵渲染的 "valid range is 0..0, found 1"
+// 验证: IndexOutOfBounds.index 为 i64，负索引诊断不失真
+// 状态: ❌ 应运行失败
+
+main = {
+    l = [1, 2, 3]
+    x = l[-1]
+}

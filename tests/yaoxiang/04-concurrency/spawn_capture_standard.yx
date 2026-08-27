@@ -1,0 +1,42 @@
+// 04-concurrency/spawn_capture_standard.yx
+// 覆盖: RFC-024 spawn 并发（跨线程 DAG 调度）+ #278 Heap 句柄 Arc 化
+// 验证: worker 独立 Heap 下句柄仍有效（读字段/元素）；捕获共享对象写回主线程可见
+// 状态: ✅ 可运行（#278 修复后；Embedded 模式同样通过）
+// [test:runtime]: standard
+
+use std.assert
+
+Point: Type = { x: Int, y: Int }
+
+main = {
+    // 1. Struct 捕获：worker 独立堆中按句柄读字段（#278 复现：此前读错值/崩溃）
+    p = Point(3, 4)
+    r1 = spawn {
+        return p.x + p.y
+    }
+    assert.assert(r1 == 7, "Standard spawn 捕获 Struct 字段 p.x+p.y == 7")
+
+    // 2. List 捕获：worker 独立堆中按句柄读元素
+    items = [1, 2, 3]
+    r2 = spawn {
+        return items[1]
+    }
+    assert.assert(r2 == 2, "Standard spawn 捕获 List 元素 items[1] == 2")
+
+    // 3. Dict 捕获：worker 独立堆中按句柄读键值
+    m = { "a": 10, "b": 20 }
+    r3 = spawn {
+        return m["a"]
+    }
+    assert.assert(r3 == 10, "Standard spawn 捕获 Dict m[\"a\"] == 10")
+
+    // 4. 写回共享可见：worker 改捕获 Struct 字段，主线程随后读到（Arc 共享语义）
+    q = Point(0, 0)
+    spawned = spawn {
+        q.x = 5
+        q.y = 7
+        return q.x + q.y
+    }
+    assert.assert(spawned == 12, "Standard spawn 内写 q.x+q.y == 12")
+    assert.assert(q.x == 5 and q.y == 7, "Standard spawn 写回共享 Struct 可见")
+}

@@ -1,0 +1,15 @@
+// 06-compile-errors/generic_ctor_const_infer_err.yx
+// [test:error]: 编译期值参数泛型构造器——Matrix(42) 位0 T 期望类型实参，先报位0 错误（#288）
+// 预期: 编译错误 E1002（T 期望类型实参，找到 int64）
+// 覆盖: SPEC §4.3 泛型构造调用逐位匹配报错顺序（先报第一个错误位）
+// 验证: 单括号实参存在编译期值参数位可匹配时按类型构造逐位检查，不得静默位置填充
+// 状态: ❌ 应编译失败
+
+Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
+    _assert_rows: Assert(Rows > 0),
+    data: Array(Array(T, Cols), Rows),
+}
+
+main = {
+    m = Matrix(42)
+}

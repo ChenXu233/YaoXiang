@@ -19,16 +19,15 @@ use lsp_types::request::HoverRequest;
 use lsp_types::InitializeParams;
 
 use crate::lsp::handlers;
-use crate::lsp::protocol;
 use crate::lsp::server::{handle_request, handle_notification, publish_diagnostics_for_uri};
 use crate::lsp::session::{Session, SessionState};
 use crate::lsp::world::World;
 
-use crossbeam::channel::unbounded;
+use crossbeam_channel::unbounded;
 use std::str::FromStr;
 
 /// 创建测试用的 Connection（不连接真实 IO）
-fn test_connection() -> (Connection, crossbeam::channel::Receiver<Message>) {
+fn test_connection() -> (Connection, crossbeam_channel::Receiver<Message>) {
     let (to_client_tx, to_client_rx) = unbounded();
     let (_to_server_tx, to_server_rx) = unbounded();
     let conn = Connection {

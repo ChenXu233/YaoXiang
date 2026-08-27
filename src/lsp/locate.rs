@@ -18,6 +18,11 @@ pub struct IdentAtPosition {
     pub span: Span,
 }
 
+/// LSP 0-indexed Position → 内部 1-indexed (line, col)
+pub fn position_to_internal(position: &LspPosition) -> (usize, usize) {
+    (position.line as usize + 1, position.character as usize + 1)
+}
+
 /// 在源码中查找光标位置处的标识符
 ///
 /// LSP Position 是 0-indexed，内部 Span 是 1-indexed，此函数负责转换。

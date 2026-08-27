@@ -374,7 +374,7 @@ fn resolve_module_path(
 
 /// 只读 use 行：词法级扫描源码中的模块路径（不解析函数体——RFC-029 发现协议）。
 /// 词法失败的文件返回空，真正的错误由后续 parse 阶段报告。
-fn scan_use_paths(source: &str) -> Vec<String> {
+pub(crate) fn scan_use_paths(source: &str) -> Vec<String> {
     use crate::frontend::core::lexer::TokenKind;
     let Ok(tokens) = tokenize(source) else {
         return Vec::new();

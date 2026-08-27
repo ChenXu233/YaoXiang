@@ -12,9 +12,7 @@ use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::util::span::Span;
 use std::collections::HashMap;
 
-// ===================================================================
 // 辅助函数
-// ===================================================================
 
 /// 创建测试用的 Span
 fn dummy_span() -> Span {
@@ -74,9 +72,7 @@ fn make_circle_implementing_drawable() -> MonoType {
     })
 }
 
-// ===================================================================
 // Happy path 测试
-// ===================================================================
 
 #[test]
 fn test_assignment_same_type() {
@@ -219,16 +215,14 @@ fn test_assignment_constraint_dynamic_via_empty_constraint() {
     }
 }
 
-// ===================================================================
 // Error path 测试
-// ===================================================================
 
 #[test]
 fn test_assignment_incompatible_types() {
     // Arrange — Int(32) 和 String 无子类型关系
     let mut checker = AssignmentChecker::new();
     let lhs = MonoType::Int(32);
-    let rhs = MonoType::String;
+    let rhs = MonoType::make_string();
     let span = dummy_span();
 
     // Act
@@ -285,9 +279,7 @@ fn test_assignment_constraint_missing_method() {
     );
 }
 
-// ===================================================================
 // Boundary 测试
-// ===================================================================
 
 #[test]
 fn test_assignment_fn_type_compatibility() {
@@ -295,7 +287,7 @@ fn test_assignment_fn_type_compatibility() {
     let mut checker = AssignmentChecker::new();
     let fn_type = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::Bool],
-        return_type: Box::new(MonoType::String),
+        return_type: Box::new(MonoType::make_string()),
     };
     let lhs = fn_type.clone();
     let rhs = fn_type.clone();

@@ -304,7 +304,37 @@ TypeBound       ::= Identifier
 ```yaoxiang
 List: (T: Type) -> Type = { ... }
 Map: (K: Type, V: Type) -> Type = { ... }
-```
+``
+
+### 4.1.1 容器类型（#299）
+
+容器类型是泛型类型构造器，不是内置原语——与用户自定义泛型同一待遇，
+经由统一的泛型实例化路径处理：
+
+| 类型 | 语义 | 底座 |
+| --- | --- | --- |
+| `List(T)` | 可增长列表 | `HeapValue::List` |
+| `Array(T, N)` | 定长数组（const 泛型 N）| `HeapValue::Array` |
+| `Dict(K, V)` | 键值映射 | `HeapValue::Dict` |
+
+> Set(T) 已除名（#300 决策4）：无字面量、无运行时表示、无 std.set。
+> 需求出现时照 Dict 模式补全。
+
+关键规则：
+
+- **字面量落点由上下文决定**：`[...]` 裸字面量与 `List(T)` 注解落可增长
+  列表；`Array(T, N)` 注解直接作用于字面量时落定长数组。
+  落点校验（#300）：元素个数 == N、元素类型兼容 T，不符编译期 E1002；
+  N 为符号常量（const 参数）时个数校验推迟到精化类型阶段。
+- **禁止隐式 List→Array 转换**：定长性由类型层保证——push 只接受
+  `List(A)` receiver。
+- **索引失败契约**（运行时报错为过渡态，目标态编译期精化覆盖，
+  走值依赖类型）：
+  - 索引越界（含负索引）→ `E6003`
+  - Dict 缺键 → `E6008`
+- **membership `in` 谓词**：返回 `Bool` 不报错，右操作数覆盖
+  List/Array/Dict(键)/Tuple/String/Range。一等霍尔谓词，
+  是精化类型编译期可证命题的基底。`
 
 泛型函数中，类型参数同样在签名中声明，编译器自动从实参推断：
 
@@ -334,12 +364,65 @@ List: (T: Type) -> Type = {
 }
 ```
 
-### 4.3 类型推导
+### 4.3 泛型构造调用与类型推导
+
+泛型类型定义的字段列表**自动生成构造函数**：每个字段对应一个构造参数，
+字段名即参数名；有默认值的字段构造时可省略，无默认值的字段必填。
+函数类型字段（方法）不生成构造参数。
 
 ```yaoxiang
-// 编译器自动推导泛型参数
-numbers: List(Int) = List(1, 2, 3)  // 编译器推导 List(Int)
+// 类型定义
+Container: (T: Type) -> Type = {
+    value: T,        // 无默认值 → 构造参数必填
+    extra: T,
+}
+// 自动展开的完整形式（编译器内部视图，不要求用户手写）：
+// Container: (T: Type) -> (value: T, extra: T) -> Type = {
+//     value: T = value,
+//     extra: T = extra,
+// }
+
+// 调用：调用自动生成的构造函数
+c  = Container(42, 43)            // 构造参数按字段顺序填；T 从元素自动解包 = Int
+c2 = Container("a", "b")          // T = String
+c3 = Container(Int)(42, 43)       // 显式类型参数 + 位置式构造参数
+c4 = Container(Int)(extra=43, value=42)  // 字段名式，顺序任意
+c5 = Container(Int)()             // 空构造：字段取默认值/零值（数据事后赋值）
+
+// 字段默认值 → 构造参数可省略
+Point: (T: Type) -> Type = { x: T = 0, y: T = 0 }
+p  = Point(1.5, 2.5)              // T = Float，x←1.5, y←2.5
+p2 = Point(Int)()                 // x=0, y=0
 ```
+
+**调用规则**（单括号，按声明参数逐位匹配，自左向右）：
+
+1. 实参逐位尝试匹配类型声明参数：`Type` 位接受类型实参，编译期值参数位
+   （如 `Int`）接受编译期常量。
+2. 若存在编译期值参数位匹配成功（部分匹配），按类型构造处理：逐位检查
+   全部参数位，报错时按声明顺序**先报第一个不匹配/缺失的参数**。
+3. 若实参完全对应不上声明参数（全部是值、无编译期值参数位可匹配），
+   按构造参数处理：位置式按字段顺序填，类型参数从元素类型自动解包。
+
+```yaoxiang
+Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
+    _assert_rows: Assert(Rows > 0),
+    data: Array(Array(T, Cols), Rows),
+}
+
+m: Matrix(Int, 3, 4)              // 类型位置：一层类型构造
+m2 = Matrix(Int, 3, 4)(data=[[1,2,3,4],[5,6,7,8],[9,10,11,12]])  // 两层：类型 + 构造参数
+m3 = Matrix(Int, 3, 4)()          // 空构造（RFC-011 §9.3 模式，数据事后赋值）
+
+Matrix(42)    // ❌ 位0: T←42 不匹配（42 不是类型）；位1: Rows←42 匹配；
+              //    位2: Cols 缺失 → 先报第一个错误：T 期望 Type，找到 42
+Container(42) // ❌ 缺构造参数 extra
+Container(42, 43, 44)  // ❌ 构造参数超数
+```
+
+**类型推导**：泛型类型构造器的类型参数从构造参数元素自动解包
+（`Container(42, 43)` → T=Int）；泛型函数的类型参数从实参类型自动解包
+（`map(numbers, f)` → T=Int, R=String，见 §4.1）。无法解包时必须显式填充。
 
 ---
 
@@ -431,32 +514,56 @@ Container: (T: Type) -> Type = {
 
 ## 第七章：编译期泛型
 
-### 7.1 编译期常量参数
+### 7.1 编译期值参数
 
 ```
-LiteralType   ::= Identifier ':' Int          // 编译期常量
-CompileTimeFn ::= '(' Identifier ':' Int ')' '(' Identifier ')' '->' TypeExpr
+LiteralType   ::= Identifier ':' Int          // 编译期常量（候选）
 ```
 
-**核心设计**：用 `(n: Int)` 泛型参数 + `(n: n)` 值参数，区分编译期常量与运行时值。
+> **勘误（#296）**：原文称编译期值参数「默认编译期确定」，该表述**严格错误**——
+> `add: (a: Int, b: Int) -> Int = a + b` 中 `a`/`b` 是运行时值参数。只有**在类型位置
+> 被引用**的具体类型参数才是编译期值参数。正确定义见下。
+
+**术语**：标注非 `Type` 具体类型（如 `Int`）的泛型参数称为**编译期值参数候选**，
+是否成为编译期值参数取决于其值是否在类型位置被引用（值依赖）。**无需 `const` 关键字**
+（实现内部曾用「const 泛型」指代，文档统一使用「编译期值参数」）。
+
+**判定规则（两步）**：
+
+1. **形态粗筛**：参数标注非 `Type` 的具体类型（`Int`/`Bool`/`Float`）→ 候选。
+2. **用途精筛**：候选名出现在**类型位置**（类型体字段类型、内层 `Fn` 参数类型、
+   `Assert` 谓词、`Array(T, N)` 类型构造实参位）→ 真编译期值参数；否则**运行时值参数**。
+
+| 写法 | 判定 | 原因 |
+| ---- | ---- | ---- |
+| `add: (a: Int, b: Int) -> Int = a + b` | a/b 运行时值参数 | 仅在值位置出现 |
+| `Array: (T: Type, N: Int) -> Type = { data: Array(T, N) }` | N 编译期值参数 | N 在类型构造实参位 |
+| `factorial: (N: Int) -> (k: N) -> Int` | N 编译期值参数 | N 作内层参数 k 的类型 |
+| `Foo: (T: Type, N: Int) -> Type = { x: T }` | N 落空→运行时值参数 | N 未在类型体引用 |
+
+**核心设计**：用 `(N: Int)` 编译期值参数 + `(k: N)` 值参数，区分编译期常量与运行时值。
+落空候选（形态是候选、用途未命中）退化为运行时值参数——函数级已按此处理，类型构造器
+路径见 [issue #297](https://github.com/ChenXu233/YaoXiang/issues/297)。
 
 ```yaoxiang
-// 编译期阶乘：参数必须是编译期已知的字面量
-factorial: (n: Int)(n: n) -> Int = {
-    match n {
-        0 => 1,
-        _ => n * factorial(n - 1)
-    }
-}
-
-// 编译期常量数组
+// 编译期值参数：N 在类型位置（Array 长度槽）被引用
 StaticArray: (T: Type, N: Int) -> Type = {
-    data: Array(T, N),      // 编译期已知大小的数组
+    data: Array(T, N),      // N 出现在类型构造实参位 → 编译期值参数
     length: N
 }
 
-// 使用方式
+// 使用方式：factorial(5) 在类型位置求值（编译期），结果 120 嵌入类型
 arr: StaticArray(Int, factorial(5))  // 编译器在编译期计算 factorial(5) = 120
+
+// 值依赖：N 作为内层参数 k 的类型
+// N 是编译期值参数（出现在 (k: N) 的类型位）；
+// k 是运行时值参数，其类型为字面量类型 N（单值类型）。
+factorial: (N: Int) -> (k: N) -> Int = {
+    match k {
+        0 => 1,
+        _ => k * factorial(k - 1)
+    }
+}
 ```
 
 ### 7.2 编译期常量数组
@@ -777,14 +884,18 @@ Window: Type = {
 }
 ```
 
-**闭包捕获**——闭包捕获令牌就像捕获任何值：
+**闭包不捕获，上下文在创建点固化**——闭包只吃自己的参数，需要外层数据时通过柯里化在创建点把值固化进闭包：
 
 ```yaoxiang
-// ✅ 闭包捕获 &Float 令牌（Dup 类型，自由复制到闭包中）
-filter_by_threshold: (items: List(Point), threshold: &Float) -> List(Point) = {
-    items.filter(|p| p.x > threshold)
+// ✅ 上下文经柯里化固化：threshold 是参数，gt_point(threshold) 在创建点把值固化进闭包
+gt_point: (t: Float) -> (p: Point) -> Bool = (p) => p.x > t
+filter_by_threshold: (items: List(Point), threshold: Float) -> List(Point) = {
+    items.filter(gt_point(threshold))
 }
 ```
+
+> 注：闭包（函数值）逃逸后其定义处作用域可能已死，故不得隐式捕获外层变量；
+> 但调用点（创建点）作用域必然存活，上下文在该点固化为值进入闭包是安全的。
 
 ### 12.4 自动借用选择
 
@@ -805,7 +916,9 @@ p2 = p             // 后续不再使用 → Move
 
 ### 12.5 令牌冲突检测
 
-编译器对令牌值做**流敏感活性分析**，追踪每个令牌的状态（活跃/已移动）：
+令牌冲突检测是**借用霍尔命题**（RFC-009a），不是独立的流敏感分析。编译器自动生成借用命题
+（`borrow_conflict`/`use_after_move`/`use_after_drop`/`mut_violation`）送入证明管道验证；令牌活性是
+区间 `[created_at, last_use]`（见 RFC-009a §反向 BFS 活性分析）：
 
 ```yaoxiang
 // ❌ &mut 和派生的 &T 不能同时活跃
@@ -863,9 +976,12 @@ alias_bad(p, p)                  // ❌ p 同时派生 &mut 和 & 令牌
 | 做什么 | 看一眼/原地改                      | 共享持有                |
 | 范围   | 随令牌值的作用域                   | 跨作用域                |
 | 成本   | 零开销（零大小类型，编译后消失）   | Rc 或 Arc（编译器选）   |
-| 逃逸   | 可（令牌随返回值/结构体/闭包传播） | 本来就是用来逃逸的      |
+| 逃逸   | 可（令牌随返回值/结构体传播） | 本来就是用来逃逸的      |
 | 跨任务 | 不可（令牌未实现跨任务传递）       | 可（编译器自动选 Arc）  |
 | 环检测 | 不涉及                             | 任务内静默，跨任务 lint |
+
+> 注（未定义）：ref 创建后如何读内容（解引用/方法/自动）尚未在规范中定义，
+> 实现现状 `*a` 报 E1052。待定义后补入本节。
 
 ---
 
@@ -916,8 +1032,8 @@ combine: (T: Clone + Add)(a: T, b: T) -> T = body
 // 关联类型
 Iterator: (T: Type) -> Type = { Item: T, next: () -> Option(T) }
 
-// 编译期泛型
-factorial: (n: Int)(n: n) -> Int = { ... }
+// 编译期泛型：N 在类型位置 (k: N) 被引用 → 编译期值参数
+factorial: (N: Int)(k: N) -> Int = { ... }
 StaticArray: (T: Type, N: Int) -> Type = { data: Array(T, N), length: N }
 
 // 条件类型

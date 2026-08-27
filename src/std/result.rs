@@ -13,13 +13,8 @@ use crate::backends::common::{HeapValue, RuntimeValue};
 use crate::backends::ExecutorError;
 use crate::std::{NativeContext, NativeExport, StdModule};
 
+#[derive(Default)]
 pub struct ResultModule;
-
-impl Default for ResultModule {
-    fn default() -> Self {
-        ResultModule
-    }
-}
 
 impl StdModule for ResultModule {
     fn module_path(&self) -> &str {
@@ -28,29 +23,29 @@ impl StdModule for ResultModule {
 
     fn exports(&self) -> Vec<NativeExport> {
         vec![
-            NativeExport::new(
+            export!(
                 "is_ok",
                 "std.result.is_ok",
-                "(self: &Result(T, E)) -> Bool",
-                native_result_is_ok,
+                "(T: Type, E: Type)(self: &Result(T, E)) -> Bool",
+                native_result_is_ok
             ),
-            NativeExport::new(
+            export!(
                 "is_err",
                 "std.result.is_err",
-                "(self: &Result(T, E)) -> Bool",
-                native_result_is_err,
+                "(T: Type, E: Type)(self: &Result(T, E)) -> Bool",
+                native_result_is_err
             ),
-            NativeExport::new(
+            export!(
                 "unwrap",
                 "std.result.unwrap",
-                "(self: &Result(T, E)) -> T",
-                native_result_unwrap,
+                "(T: Type, E: Type)(self: &Result(T, E)) -> T",
+                native_result_unwrap
             ),
-            NativeExport::new(
+            export!(
                 "unwrap_or",
                 "std.result.unwrap_or",
-                "(self: &Result(T, E), default: T) -> T",
-                native_result_unwrap_or,
+                "(T: Type, E: Type)(self: &Result(T, E), default: T) -> T",
+                native_result_unwrap_or
             ),
         ]
     }
@@ -58,9 +53,7 @@ impl StdModule for ResultModule {
 
 pub const RESULT_MODULE: ResultModule = ResultModule;
 
-// ============================================================================
 // 公共辅助函数（供 parse_int/parse_float 等复用）
-// ============================================================================
 
 /// 构造 Result.ok(value)，variant_id=0
 pub fn result_ok(value: RuntimeValue) -> RuntimeValue {
@@ -94,9 +87,7 @@ pub fn error_new(
     }
 }
 
-// ============================================================================
 // Result 方法 native 实现
-// ============================================================================
 
 pub(crate) fn native_result_is_ok(
     args: &[RuntimeValue],

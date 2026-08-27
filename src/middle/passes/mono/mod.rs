@@ -410,17 +410,6 @@ impl Monomorphizer {
                     self.collect_generic_type_refs(arg);
                 }
             }
-            MonoType::List(elem) => self.collect_generic_type_refs(elem),
-            MonoType::Dict(k, v) => {
-                self.collect_generic_type_refs(k);
-                self.collect_generic_type_refs(v);
-            }
-            MonoType::Set(elem) => self.collect_generic_type_refs(elem),
-            MonoType::Tuple(types) => {
-                for t in types {
-                    self.collect_generic_type_refs(t);
-                }
-            }
             MonoType::Fn {
                 params,
                 return_type,
@@ -429,11 +418,6 @@ impl Monomorphizer {
                     self.collect_generic_type_refs(t);
                 }
                 self.collect_generic_type_refs(return_type);
-            }
-            MonoType::Option(t) => self.collect_generic_type_refs(t),
-            MonoType::Result(ok, err) => {
-                self.collect_generic_type_refs(ok);
-                self.collect_generic_type_refs(err);
             }
             _ => {}
         }
@@ -472,7 +456,7 @@ impl Monomorphizer {
                 ConstValue::Int(_) => Some(MonoType::Int(64)),
                 ConstValue::Float(_) => Some(MonoType::Float(64)),
                 ConstValue::Bool(_) => Some(MonoType::Bool),
-                ConstValue::String(_) => Some(MonoType::String),
+                ConstValue::String(_) => Some(MonoType::make_string()),
                 ConstValue::Char(_) => Some(MonoType::Char),
                 ConstValue::Void => Some(MonoType::Void),
                 _ => None,

@@ -23,10 +23,11 @@ impl TypeSystem {
         iter_ty: &MonoType,
     ) -> MonoType {
         match iter_ty {
-            MonoType::List(elem) => *elem.clone(),
-            MonoType::String => MonoType::Char,
-            MonoType::Dict(key_ty, value_ty) => {
-                MonoType::Tuple(vec![*key_ty.clone(), *value_ty.clone()])
+            m if m.is_list() => m.generic_args().unwrap()[0].clone(),
+            m if m.is_string() => MonoType::Char,
+            m if m.is_dict() => {
+                let args = m.generic_args().unwrap();
+                MonoType::make_tuple(vec![args[0].clone(), args[1].clone()])
             }
             _ => solver.new_var(),
         }
@@ -34,14 +35,11 @@ impl TypeSystem {
 
     /// 构造列表类型
     pub fn make_list_type(elem_ty: MonoType) -> MonoType {
-        MonoType::List(Box::new(elem_ty))
+        MonoType::make_list(elem_ty)
     }
 
     /// 检查类型是否可迭代
     pub fn is_iterable(ty: &MonoType) -> bool {
-        matches!(
-            ty,
-            MonoType::List(_) | MonoType::String | MonoType::Dict(_, _) | MonoType::Tuple(_)
-        )
+        ty.is_list() || ty.is_string() || ty.is_dict() || ty.is_tuple()
     }
 }

@@ -9,6 +9,7 @@
 //! `x > 0` 注入流敏感 Γ。assert 通过 scope 内的 Fn 变量注册，
 //! dep_env 注册 GammaAssume { predicate_arg: 0 }。
 
+use crate::frontend::core::typecheck::test_util::{binop};
 use std::collections::HashMap;
 
 use crate::frontend::core::parser::ast::{BinOp as AstBinOp, Expr};
@@ -116,11 +117,11 @@ fn test_assert_call_injects_predicate_into_gamma() {
         "Γ 应恰好包含 1 条假设，实际: {:?}",
         current
     );
-    let expected = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("x".to_string())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
+    let expected = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("x".to_string()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    );
     assert!(
         current.contains(&expected),
         "Γ 应包含完整谓词 (x > 0)，实际: {:?}",

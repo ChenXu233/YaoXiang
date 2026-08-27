@@ -165,7 +165,6 @@ impl BindingParser {
             .build());
         }
 
-        // Parse value expression
         let value = state.parse_expression(crate::frontend::core::parser::BP_LOWEST);
 
         let value_span = state.span();
@@ -202,18 +201,10 @@ impl BindingPositionValidator {
         &self,
         positions: &[i32],
     ) -> Result<(), String> {
-        for &pos in positions {
-            if pos < 0 {
-                return Err(format!("Negative position index: {}", pos));
-            }
-            if pos as usize >= self.max_positions {
-                return Err(format!(
-                    "Position index {} exceeds maximum allowed positions {}",
-                    pos, self.max_positions
-                ));
-            }
-        }
-        Ok(())
+        crate::frontend::core::lexer::symbols::validate_position_indices(
+            positions,
+            self.max_positions,
+        )
     }
 
     pub fn validate_binding_syntax(

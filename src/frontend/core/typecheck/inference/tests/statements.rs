@@ -9,9 +9,7 @@ use crate::frontend::core::parser::ast::{self, Stmt, StmtKind, Expr, BinOp, Bloc
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::util::span::Span;
 
-// ===================================================================
 // 辅助函数
-// ===================================================================
 
 /// 从 StmtKind 构造 Stmt，使用 dummy span
 fn make_stmt(kind: StmtKind) -> Stmt {
@@ -55,9 +53,7 @@ fn make_checker_with_var(
     checker
 }
 
-// ===================================================================
 // Happy path 测试
-// ===================================================================
 
 /// §5.1: 基础创建 → Ok，StatementChecker::new 不 panic
 #[test]
@@ -254,9 +250,7 @@ fn test_check_for_stmt_range() {
     );
 }
 
-// ===================================================================
 // Error path 测试
-// ===================================================================
 
 /// §5.6: if 条件非 Bool 类型 → Err（§5.6 条件必须是 Bool）
 #[test]
@@ -367,9 +361,7 @@ fn test_check_for_stmt_shadowing() {
     );
 }
 
-// ===================================================================
 // Boundary 测试
-// ===================================================================
 
 /// §5.2: 嵌套作用域：内层变量对外层不可见
 #[test]
@@ -440,7 +432,7 @@ fn test_check_scope_level_queries() {
     let mut checker = make_checker();
     checker.add_var(
         "global".to_string(),
-        PolyType::mono(MonoType::String),
+        PolyType::mono(MonoType::make_string()),
         false,
         crate::util::span::Span::default(),
     );

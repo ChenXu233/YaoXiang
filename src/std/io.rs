@@ -11,9 +11,7 @@ use crate::backends::common::{RuntimeValue, HeapValue};
 use crate::backends::ExecutorError;
 use crate::std::{NativeContext, NativeExport, StdModule};
 
-// ============================================================================
 // Wasm output buffer — captures print output for browser Playground
-// ============================================================================
 
 #[cfg(target_arch = "wasm32")]
 pub mod wasm_output {
@@ -41,18 +39,11 @@ pub mod wasm_output {
     }
 }
 
-// ============================================================================
 // IoModule - StdModule Implementation
-// ============================================================================
 
 /// IO module implementation.
+#[derive(Default)]
 pub struct IoModule;
-
-impl Default for IoModule {
-    fn default() -> Self {
-        Self
-    }
-}
 
 impl StdModule for IoModule {
     fn module_path(&self) -> &str {
@@ -61,46 +52,46 @@ impl StdModule for IoModule {
 
     fn exports(&self) -> Vec<NativeExport> {
         vec![
-            NativeExport::new("print", "std.io.print", "(...args) -> ()", native_print),
-            NativeExport::new(
+            export!("print", "std.io.print", "(...args) -> Void", native_print),
+            export!(
                 "println",
                 "std.io.println",
                 "(...args) -> ()",
-                native_println,
+                native_println
             ),
             #[cfg(not(target_arch = "wasm32"))]
-            NativeExport::new(
+            export!(
                 "read_line",
                 "std.io.read_line",
                 "() -> String",
-                native_read_line,
+                native_read_line
             ),
             #[cfg(not(target_arch = "wasm32"))]
-            NativeExport::new(
+            export!(
                 "read_file",
                 "std.io.read_file",
                 "(path: &String) -> String",
-                native_read_file,
+                native_read_file
             ),
             #[cfg(not(target_arch = "wasm32"))]
-            NativeExport::new(
+            export!(
                 "write_file",
                 "std.io.write_file",
                 "(path: &String, content: &String) -> Bool",
-                native_write_file,
+                native_write_file
             ),
             #[cfg(not(target_arch = "wasm32"))]
-            NativeExport::new(
+            export!(
                 "append_file",
                 "std.io.append_file",
                 "(path: &String, content: &String) -> Bool",
-                native_append_file,
+                native_append_file
             ),
-            NativeExport::new(
+            export!(
                 "format_fallback",
                 "std.io.format_fallback",
                 "(value, type_name: &String) -> String",
-                native_format_fallback,
+                native_format_fallback
             ),
         ]
     }
@@ -109,9 +100,7 @@ impl StdModule for IoModule {
 /// Singleton instance for std::io module.
 pub const IO_MODULE: IoModule = IoModule;
 
-// ============================================================================
 // Native Function Implementations
-// ============================================================================
 
 /// Native implementation: print (without newline)
 fn native_print(
@@ -170,7 +159,7 @@ fn format_runtime_value(
 /// 如果 prefix 不为空，返回带前缀的表示（如 "int(123)"）
 pub(crate) fn format_value_with_prefix(
     val: &RuntimeValue,
-    heap: &crate::backends::common::Heap,
+    _heap: &crate::backends::common::Heap,
     prefix: &str,
 ) -> String {
     let prefix_fn = |s: &str| {
@@ -205,10 +194,10 @@ pub(crate) fn format_value_with_prefix(
         }
         RuntimeValue::Bytes(b) => prefix_fn(&format!("bytes[{}]", b.len())),
         RuntimeValue::Tuple(handle) => {
-            if let Some(HeapValue::Tuple(items)) = heap.get(*handle) {
+            if let HeapValue::Tuple(items) = &*handle.lock() {
                 let items_str: Vec<String> = items
                     .iter()
-                    .map(|item| format_value_with_prefix(item, heap, ""))
+                    .map(|item| format_value_with_prefix(item, _heap, ""))
                     .collect();
                 let s = format!("({})", items_str.join(", "));
                 prefix_fn(&s)
@@ -217,10 +206,10 @@ pub(crate) fn format_value_with_prefix(
             }
         }
         RuntimeValue::Array(handle) => {
-            if let Some(HeapValue::Array(arr)) = heap.get(*handle) {
+            if let HeapValue::Array(arr) = &*handle.lock() {
                 let items_str: Vec<String> = arr
                     .iter()
-                    .map(|item| format_value_with_prefix(item, heap, ""))
+                    .map(|item| format_value_with_prefix(item, _heap, ""))
                     .collect();
                 let s = format!("[{}]", items_str.join(", "));
                 prefix_fn(&s)
@@ -229,10 +218,10 @@ pub(crate) fn format_value_with_prefix(
             }
         }
         RuntimeValue::List(handle) => {
-            if let Some(HeapValue::List(items)) = heap.get(*handle) {
+            if let HeapValue::List(items) = &*handle.lock() {
                 let items_str: Vec<String> = items
                     .iter()
-                    .map(|item| format_value_with_prefix(item, heap, ""))
+                    .map(|item| format_value_with_prefix(item, _heap, ""))
                     .collect();
                 let s = format!("[{}]", items_str.join(", "));
                 prefix_fn(&s)
@@ -241,14 +230,14 @@ pub(crate) fn format_value_with_prefix(
             }
         }
         RuntimeValue::Dict(handle) => {
-            if let Some(HeapValue::Dict(entries)) = heap.get(*handle) {
+            if let HeapValue::Dict(entries) = &*handle.lock() {
                 let entries_str: Vec<String> = entries
                     .iter()
                     .map(|(k, v)| {
                         format!(
                             "{}: {}",
-                            format_value_with_prefix(k, heap, ""),
-                            format_value_with_prefix(v, heap, "")
+                            format_value_with_prefix(k, _heap, ""),
+                            format_value_with_prefix(v, _heap, "")
                         )
                     })
                     .collect();

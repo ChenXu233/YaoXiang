@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use crate::backends::DebuggableExecutor;
 use crate::middle::bytecode::{BytecodeModule, BytecodeFunction, BytecodeInstr, Reg, ConstValue};
 use crate::backends::interpreter::executor::Interpreter;
-use crate::backends::interpreter::runtime::InterpreterRuntimeConfig;
+use crate::backends::runtime::RuntimeConfig;
 use crate::backends::runtime::RuntimeMode;
 
 // ── 辅助函数 ──────────────────────────────────────────────────
@@ -42,8 +42,8 @@ fn make_module(
 /// 创建 Embedded 模式的解释器
 fn embedded_interpreter() -> Interpreter {
     let mut interp = Interpreter::new();
-    interp.set_runtime_config(InterpreterRuntimeConfig {
-        runtime: RuntimeMode::Embedded,
+    interp.set_runtime_config(RuntimeConfig {
+        mode: RuntimeMode::Embedded,
         workers: 1,
     });
     interp

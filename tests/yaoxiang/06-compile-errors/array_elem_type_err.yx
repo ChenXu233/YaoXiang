@@ -1,0 +1,9 @@
+// 06-compile-errors/array_elem_type_err.yx
+// [test:error]: #300 维度2——Array(T,N) 字面量元素类型与 T 不符必须编译期拒绝
+// 预期: 编译错误 E1002（注解元素类型 String，字面量元素为 Int）
+// 验证: 元素类型约束对 Array 字面量落点路径生效，Int 不能塞进 String 数组
+// 状态: ❌ 应编译失败
+
+main = {
+    b: Array(String, 2) = [1, 2]
+}

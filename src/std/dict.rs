@@ -4,20 +4,13 @@
 
 use crate::backends::common::{RuntimeValue, HeapValue};
 use crate::backends::ExecutorError;
-use crate::std::{NativeContext, NativeExport, StdModule, NativeHandler};
+use crate::std::{expect_dict, NativeContext, NativeExport, StdModule};
 
-// ============================================================================
 // DictModule - StdModule Implementation
-// ============================================================================
 
 /// Dict module implementation.
+#[derive(Default)]
 pub struct DictModule;
-
-impl Default for DictModule {
-    fn default() -> Self {
-        Self
-    }
-}
 
 impl StdModule for DictModule {
     fn module_path(&self) -> &str {
@@ -26,65 +19,65 @@ impl StdModule for DictModule {
 
     fn exports(&self) -> Vec<NativeExport> {
         vec![
-            NativeExport::new(
+            export!(
                 "get",
                 "std.dict.get",
-                "(dict: &Dict, key: Any) -> Any",
-                native_get as NativeHandler,
+                "(K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Any",
+                native_get
             ),
-            NativeExport::new(
+            export!(
                 "set",
                 "std.dict.set",
-                "(dict: Dict, key: Any, value: Any) -> Dict",
-                native_set as NativeHandler,
+                "(K: Type, V: Type)(dict: Dict(K, V), key: Any, value: Any) -> Dict(K, V)",
+                native_set
             ),
-            NativeExport::new(
+            export!(
                 "has",
                 "std.dict.has",
-                "(dict: &Dict, key: Any) -> Bool",
-                native_has as NativeHandler,
+                "(K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Bool",
+                native_has
             ),
-            NativeExport::new(
+            export!(
                 "values",
                 "std.dict.values",
-                "(dict: &Dict) -> List",
-                native_values as NativeHandler,
+                "(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)",
+                native_values
             ),
-            NativeExport::new(
+            export!(
                 "keys",
                 "std.dict.keys",
-                "(dict: &Dict) -> List",
-                native_keys as NativeHandler,
+                "(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)",
+                native_keys
             ),
-            NativeExport::new(
+            export!(
                 "entries",
                 "std.dict.entries",
-                "(dict: &Dict) -> List",
-                native_entries as NativeHandler,
+                "(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)",
+                native_entries
             ),
-            NativeExport::new(
+            export!(
                 "delete",
                 "std.dict.delete",
-                "(dict: Dict, key: Any) -> Dict",
-                native_delete as NativeHandler,
+                "(K: Type, V: Type)(dict: Dict(K, V), key: Any) -> Dict(K, V)",
+                native_delete
             ),
-            NativeExport::new(
+            export!(
                 "len",
                 "std.dict.len",
-                "(dict: &Dict) -> Int",
-                native_len as NativeHandler,
+                "(K: Type, V: Type)(dict: &Dict(K, V)) -> Int",
+                native_len
             ),
-            NativeExport::new(
+            export!(
                 "is_empty",
                 "std.dict.is_empty",
-                "(dict: &Dict) -> Bool",
-                native_is_empty as NativeHandler,
+                "(K: Type, V: Type)(dict: &Dict(K, V)) -> Bool",
+                native_is_empty
             ),
-            NativeExport::new(
+            export!(
                 "merge",
                 "std.dict.merge",
-                "(a: &Dict, b: &Dict) -> Dict",
-                native_merge as NativeHandler,
+                "(A: Type, B: Type)(a: &Dict(A, B), b: &Dict(A, B)) -> Dict(A, B)",
+                native_merge
             ),
         ]
     }
@@ -93,27 +86,26 @@ impl StdModule for DictModule {
 /// Singleton instance for std.dict module.
 pub const DICT_MODULE: DictModule = DictModule;
 
-// ============================================================================
 // Native function implementations
-// ============================================================================
 
 /// Native implementation: get - get value by key
 fn native_get(
     args: &[RuntimeValue],
-    ctx: &mut NativeContext<'_>,
+    _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let dict_handle = match args.first() {
-        Some(RuntimeValue::Dict(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "dict.get expects a Dict as first argument",
-            ))
-        }
-    };
+    let dict_handle = expect_dict(args, "dict.get")?;
     let key = args.get(1).cloned().unwrap_or(RuntimeValue::Void);
 
-    match ctx.heap.get(dict_handle) {
-        Some(HeapValue::Dict(map)) => Ok(map.get(&key).cloned().unwrap_or(RuntimeValue::Void)),
+    let guard = dict_handle.lock();
+    match &*guard {
+        // #299：缺键不再静默返回 void（与 `[]` 运算符、#279 方向一致）
+        HeapValue::Dict(map) => match map.get(&key) {
+            Some(v) => Ok(v.clone()),
+            None => Err(ExecutorError::KeyNotFound {
+                key: format!("{}", key),
+                stack: None,
+            }),
+        },
         _ => Ok(RuntimeValue::Void),
     }
 }
@@ -123,19 +115,12 @@ fn native_set(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let dict_handle = match args.first() {
-        Some(RuntimeValue::Dict(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "dict.set expects a Dict as first argument",
-            ))
-        }
-    };
+    let dict_handle = expect_dict(args, "dict.set")?;
     let key = args.get(1).cloned().unwrap_or(RuntimeValue::Void);
     let value = args.get(2).cloned().unwrap_or(RuntimeValue::Void);
 
-    let mut map = match ctx.heap.get(dict_handle) {
-        Some(HeapValue::Dict(map)) => map.clone(),
+    let mut map = match &*dict_handle.lock() {
+        HeapValue::Dict(map) => map.clone(),
         _ => return Err(ExecutorError::runtime_only("Invalid dict handle")),
     };
     map.insert(key, value);
@@ -146,17 +131,25 @@ fn native_set(
 /// Native implementation: has - check if key exists
 fn native_has(
     args: &[RuntimeValue],
-    ctx: &mut NativeContext<'_>,
+    _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     let dict_handle = match args.first() {
-        Some(RuntimeValue::Dict(h)) => *h,
-        _ => return Ok(RuntimeValue::Bool(false)),
+        Some(RuntimeValue::Dict(h)) => h.clone(),
+        // #271 #5：参数类型错不再静默返回 false
+        _ => {
+            return Err(ExecutorError::type_only(
+                "dict.has expects a Dict as first argument".to_string(),
+            ))
+        }
     };
     let key = args.get(1).cloned().unwrap_or(RuntimeValue::Void);
 
-    match ctx.heap.get(dict_handle) {
-        Some(HeapValue::Dict(map)) => Ok(RuntimeValue::Bool(map.contains_key(&key))),
-        _ => Ok(RuntimeValue::Bool(false)),
+    let guard = dict_handle.lock();
+    match &*guard {
+        HeapValue::Dict(map) => Ok(RuntimeValue::Bool(map.contains_key(&key))),
+        _ => Err(ExecutorError::runtime_only(
+            "internal: dangling dict handle in dict.has".to_string(),
+        )),
     }
 }
 
@@ -165,17 +158,10 @@ fn native_values(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let dict_handle = match args.first() {
-        Some(RuntimeValue::Dict(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "dict.values expects a Dict as first argument",
-            ))
-        }
-    };
+    let dict_handle = expect_dict(args, "dict.values")?;
 
-    let values: Vec<RuntimeValue> = match ctx.heap.get(dict_handle) {
-        Some(HeapValue::Dict(map)) => map.values().cloned().collect(),
+    let values: Vec<RuntimeValue> = match &*dict_handle.lock() {
+        HeapValue::Dict(map) => map.values().cloned().collect(),
         _ => Vec::new(),
     };
     let list_handle = ctx.heap.allocate(HeapValue::List(values));
@@ -187,17 +173,10 @@ fn native_keys(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let dict_handle = match args.first() {
-        Some(RuntimeValue::Dict(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "dict.keys expects a Dict as first argument",
-            ))
-        }
-    };
+    let dict_handle = expect_dict(args, "dict.keys")?;
 
-    let keys: Vec<RuntimeValue> = match ctx.heap.get(dict_handle) {
-        Some(HeapValue::Dict(map)) => map.keys().cloned().collect(),
+    let keys: Vec<RuntimeValue> = match &*dict_handle.lock() {
+        HeapValue::Dict(map) => map.keys().cloned().collect(),
         _ => Vec::new(),
     };
     let list_handle = ctx.heap.allocate(HeapValue::List(keys));
@@ -209,17 +188,10 @@ fn native_entries(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let dict_handle = match args.first() {
-        Some(RuntimeValue::Dict(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "dict.entries expects a Dict as first argument",
-            ))
-        }
-    };
+    let dict_handle = expect_dict(args, "dict.entries")?;
 
-    let map = match ctx.heap.get(dict_handle) {
-        Some(HeapValue::Dict(map)) => map.clone(),
+    let map = match &*dict_handle.lock() {
+        HeapValue::Dict(map) => map.clone(),
         _ => {
             return Ok(RuntimeValue::List(
                 ctx.heap.allocate(HeapValue::List(Vec::new())),
@@ -246,18 +218,11 @@ fn native_delete(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let dict_handle = match args.first() {
-        Some(RuntimeValue::Dict(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "dict.delete expects a Dict as first argument",
-            ))
-        }
-    };
+    let dict_handle = expect_dict(args, "dict.delete")?;
     let key = args.get(1).cloned().unwrap_or(RuntimeValue::Void);
 
-    let mut map = match ctx.heap.get(dict_handle) {
-        Some(HeapValue::Dict(map)) => map.clone(),
+    let mut map = match &*dict_handle.lock() {
+        HeapValue::Dict(map) => map.clone(),
         _ => return Err(ExecutorError::runtime_only("Invalid dict handle")),
     };
     map.remove(&key);
@@ -268,32 +233,49 @@ fn native_delete(
 /// Native implementation: len - get number of entries
 fn native_len(
     args: &[RuntimeValue],
-    ctx: &mut NativeContext<'_>,
+    _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     let dict_handle = match args.first() {
-        Some(RuntimeValue::Dict(h)) => *h,
-        _ => return Ok(RuntimeValue::Int(0)),
+        Some(RuntimeValue::Dict(h)) => h.clone(),
+        // #271 #5：参数类型错不再静默返回 0
+        _ => {
+            return Err(ExecutorError::type_only(
+                "dict.len expects a Dict as first argument".to_string(),
+            ))
+        }
     };
 
-    match ctx.heap.get(dict_handle) {
-        Some(HeapValue::Dict(map)) => Ok(RuntimeValue::Int(map.len() as i64)),
-        _ => Ok(RuntimeValue::Int(0)),
+    let guard = dict_handle.lock();
+    match &*guard {
+        HeapValue::Dict(map) => Ok(RuntimeValue::Int(map.len() as i64)),
+        // #271 #5：悬垂句柄是内部错误，不再静默返回 0
+        _ => Err(ExecutorError::runtime_only(
+            "internal: dangling dict handle in dict.len".to_string(),
+        )),
     }
 }
 
 /// Native implementation: is_empty - check if dict is empty
 fn native_is_empty(
     args: &[RuntimeValue],
-    ctx: &mut NativeContext<'_>,
+    _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     let dict_handle = match args.first() {
-        Some(RuntimeValue::Dict(h)) => *h,
-        _ => return Ok(RuntimeValue::Bool(true)),
+        Some(RuntimeValue::Dict(h)) => h.clone(),
+        // #271 #5：参数类型错不再静默返回 true
+        _ => {
+            return Err(ExecutorError::type_only(
+                "dict.is_empty expects a Dict as first argument".to_string(),
+            ))
+        }
     };
 
-    match ctx.heap.get(dict_handle) {
-        Some(HeapValue::Dict(map)) => Ok(RuntimeValue::Bool(map.is_empty())),
-        _ => Ok(RuntimeValue::Bool(true)),
+    let guard = dict_handle.lock();
+    match &*guard {
+        HeapValue::Dict(map) => Ok(RuntimeValue::Bool(map.is_empty())),
+        _ => Err(ExecutorError::runtime_only(
+            "internal: dangling dict handle in dict.is_empty".to_string(),
+        )),
     }
 }
 
@@ -302,16 +284,9 @@ fn native_merge(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let handle_a = match args.first() {
-        Some(RuntimeValue::Dict(h)) => *h,
-        _ => {
-            return Err(ExecutorError::type_only(
-                "dict.merge expects a Dict as first argument",
-            ))
-        }
-    };
+    let handle_a = expect_dict(args, "dict.merge")?;
     let handle_b = match args.get(1) {
-        Some(RuntimeValue::Dict(h)) => *h,
+        Some(RuntimeValue::Dict(h)) => h.clone(),
         _ => {
             return Err(ExecutorError::type_only(
                 "dict.merge expects a Dict as second argument",
@@ -319,12 +294,12 @@ fn native_merge(
         }
     };
 
-    let map_a = match ctx.heap.get(handle_a) {
-        Some(HeapValue::Dict(map)) => map.clone(),
+    let map_a = match &*handle_a.lock() {
+        HeapValue::Dict(map) => map.clone(),
         _ => return Err(ExecutorError::runtime_only("Invalid dict handle")),
     };
-    let map_b = match ctx.heap.get(handle_b) {
-        Some(HeapValue::Dict(map)) => map.clone(),
+    let map_b = match &*handle_b.lock() {
+        HeapValue::Dict(map) => map.clone(),
         _ => return Err(ExecutorError::runtime_only("Invalid dict handle")),
     };
 

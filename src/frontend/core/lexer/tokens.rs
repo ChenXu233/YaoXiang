@@ -106,6 +106,8 @@ pub enum TokenKind {
     Not,
     Ampersand,
     MutRef,
+    // #285: 位异或（SPEC §2.2 级 8）
+    Caret,
     ColonColon,
     DotDotDot,
     DotDot,

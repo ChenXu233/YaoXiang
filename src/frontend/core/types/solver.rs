@@ -183,19 +183,14 @@ impl TypeConstraintSolver {
                 name: e.name.clone(),
                 variants: e.variants.clone(),
             }),
-            MonoType::Tuple(ts) => {
-                MonoType::Tuple(ts.iter().map(|t| self.expand_type(t)).collect())
+            MonoType::Union(types) => {
+                MonoType::Union(types.iter().map(|t| self.expand_type(t)).collect())
             }
-            MonoType::List(t) => MonoType::List(Box::new(self.expand_type(t))),
-            MonoType::Dict(k, v) => {
-                MonoType::Dict(Box::new(self.expand_type(k)), Box::new(self.expand_type(v)))
+            // 交集类型展开
+            MonoType::Intersection(types) => {
+                MonoType::Intersection(types.iter().map(|t| self.expand_type(t)).collect())
             }
-            MonoType::Set(t) => MonoType::Set(Box::new(self.expand_type(t))),
-            MonoType::Range { elem_type } => MonoType::Range {
-                elem_type: Box::new(self.expand_type(elem_type)),
-            },
-            MonoType::Arc(inner) => MonoType::Arc(Box::new(self.expand_type(inner))),
-            MonoType::Weak(inner) => MonoType::Weak(Box::new(self.expand_type(inner))),
+            // 关联类型（真实变体，保留）
             MonoType::AssocType {
                 host_type,
                 assoc_name,
@@ -205,6 +200,7 @@ impl TypeConstraintSolver {
                 assoc_name: assoc_name.clone(),
                 assoc_args: assoc_args.iter().map(|t| self.expand_type(t)).collect(),
             },
+            // 函数类型（真实变体，保留）
             MonoType::Fn {
                 params,
                 return_type,
@@ -212,19 +208,6 @@ impl TypeConstraintSolver {
                 params: params.iter().map(|t| self.expand_type(t)).collect(),
                 return_type: Box::new(self.expand_type(return_type)),
             },
-            MonoType::Option(inner) => MonoType::Option(Box::new(self.expand_type(inner))),
-            MonoType::Result(ok, err) => MonoType::Result(
-                Box::new(self.expand_type(ok)),
-                Box::new(self.expand_type(err)),
-            ),
-            // 联合类型展开
-            MonoType::Union(types) => {
-                MonoType::Union(types.iter().map(|t| self.expand_type(t)).collect())
-            }
-            // 交集类型展开
-            MonoType::Intersection(types) => {
-                MonoType::Intersection(types.iter().map(|t| self.expand_type(t)).collect())
-            }
             MonoType::MetaType {
                 universe_level,
                 type_params,
@@ -353,20 +336,13 @@ impl TypeConstraintSolver {
                 name: e.name.clone(),
                 variants: e.variants.clone(),
             }),
-            MonoType::Tuple(ts) => {
-                MonoType::Tuple(ts.iter().map(|t| self.expand_type_mut(t)).collect())
+            MonoType::Union(types) => {
+                MonoType::Union(types.iter().map(|t| self.expand_type_mut(t)).collect())
             }
-            MonoType::List(t) => MonoType::List(Box::new(self.expand_type_mut(t))),
-            MonoType::Dict(k, v) => MonoType::Dict(
-                Box::new(self.expand_type_mut(k)),
-                Box::new(self.expand_type_mut(v)),
-            ),
-            MonoType::Set(t) => MonoType::Set(Box::new(self.expand_type_mut(t))),
-            MonoType::Range { elem_type } => MonoType::Range {
-                elem_type: Box::new(self.expand_type_mut(elem_type)),
-            },
-            MonoType::Arc(inner) => MonoType::Arc(Box::new(self.expand_type_mut(inner))),
-            MonoType::Weak(inner) => MonoType::Weak(Box::new(self.expand_type_mut(inner))),
+            MonoType::Intersection(types) => {
+                MonoType::Intersection(types.iter().map(|t| self.expand_type_mut(t)).collect())
+            }
+            // 关联类型（真实变体，保留）
             MonoType::AssocType {
                 host_type,
                 assoc_name,
@@ -376,6 +352,7 @@ impl TypeConstraintSolver {
                 assoc_name: assoc_name.clone(),
                 assoc_args: assoc_args.iter().map(|t| self.expand_type_mut(t)).collect(),
             },
+            // 函数类型（真实变体，保留）
             MonoType::Fn {
                 params,
                 return_type,
@@ -383,17 +360,6 @@ impl TypeConstraintSolver {
                 params: params.iter().map(|t| self.expand_type_mut(t)).collect(),
                 return_type: Box::new(self.expand_type_mut(return_type)),
             },
-            MonoType::Option(inner) => MonoType::Option(Box::new(self.expand_type_mut(inner))),
-            MonoType::Result(ok, err) => MonoType::Result(
-                Box::new(self.expand_type_mut(ok)),
-                Box::new(self.expand_type_mut(err)),
-            ),
-            MonoType::Union(types) => {
-                MonoType::Union(types.iter().map(|t| self.expand_type_mut(t)).collect())
-            }
-            MonoType::Intersection(types) => {
-                MonoType::Intersection(types.iter().map(|t| self.expand_type_mut(t)).collect())
-            }
             MonoType::MetaType {
                 universe_level,
                 type_params,
@@ -416,6 +382,11 @@ impl TypeConstraintSolver {
             MonoType::Ref { mutable, inner } => MonoType::Ref {
                 mutable: *mutable,
                 inner: Box::new(self.expand_type_mut(inner)),
+            },
+            // #299：容器/复合类型统一走 Generic 递归展开
+            MonoType::Generic { name, args } => MonoType::Generic {
+                name: name.clone(),
+                args: args.iter().map(|t| self.expand_type_mut(t)).collect(),
             },
             _ => ty.clone(),
         }
@@ -488,8 +459,19 @@ impl TypeConstraintSolver {
             (MonoType::Int(n1), MonoType::Int(n2)) if n1 == n2 => Ok(()),
             (MonoType::Float(n1), MonoType::Float(n2)) if n1 == n2 => Ok(()),
             (MonoType::Char, MonoType::Char) => Ok(()),
-            (MonoType::String, MonoType::String) => Ok(()),
-            (MonoType::Bytes, MonoType::Bytes) => Ok(()),
+
+            // #300：字面量类型 unify——const 泛型实参（Array(T, N) 的 N）按值比较。
+            // 缺失本臂时相同 Literal 落 catch-all，Array(Int,3) 无法跨函数边界。
+            (MonoType::Literal { value: v1, .. }, MonoType::Literal { value: v2, .. }) => {
+                if v1 == v2 {
+                    Ok(())
+                } else {
+                    Err(
+                        ErrorCodeDefinition::type_mismatch(&t1.type_name(), &t2.type_name())
+                            .build(),
+                    )
+                }
+            }
 
             // 函数类型 unify
             (
@@ -514,20 +496,6 @@ impl TypeConstraintSolver {
                     self.unify(p1, p2)?;
                 }
                 self.unify(r1, r2)?;
-                Ok(())
-            }
-
-            // Option 类型 unify
-            (MonoType::Option(t1), MonoType::Option(t2)) => self.unify(t1, t2),
-
-            // Arc / Weak 类型 unify（#117：weak.new/upgrade 泛型签名调用点绑定）
-            (MonoType::Arc(t1), MonoType::Arc(t2)) => self.unify(t1, t2),
-            (MonoType::Weak(t1), MonoType::Weak(t2)) => self.unify(t1, t2),
-
-            // Result 类型 unify
-            (MonoType::Result(ok1, err1), MonoType::Result(ok2, err2)) => {
-                self.unify(ok1, ok2)?;
-                self.unify(err1, err2)?;
                 Ok(())
             }
 
@@ -568,21 +536,6 @@ impl TypeConstraintSolver {
                 Ok(())
             }
 
-            // 元组类型 unify
-            (MonoType::Tuple(ts1), MonoType::Tuple(ts2)) => {
-                if ts1.len() != ts2.len() {
-                    return Err(ErrorCodeDefinition::type_mismatch(
-                        &t1.type_name(),
-                        &t2.type_name(),
-                    )
-                    .build());
-                }
-                for (t1, t2) in ts1.iter().zip(ts2.iter()) {
-                    self.unify(t1, t2)?;
-                }
-                Ok(())
-            }
-
             // 泛型类型 unify
             (
                 MonoType::Generic { name: n1, args: a1 },
@@ -600,19 +553,6 @@ impl TypeConstraintSolver {
                 }
                 Ok(())
             }
-
-            // 列表类型 unify
-            (MonoType::List(t1), MonoType::List(t2)) => self.unify(t1, t2),
-
-            // 字典类型 unify
-            (MonoType::Dict(k1, v1), MonoType::Dict(k2, v2)) => {
-                self.unify(k1, k2)?;
-                self.unify(v1, v2)?;
-                Ok(())
-            }
-
-            // 集合类型 unify
-            (MonoType::Set(t1), MonoType::Set(t2)) => self.unify(t1, t2),
 
             // 类型引用 unify（仅比较名称）
             (MonoType::TypeRef(n1), MonoType::TypeRef(n2)) if n1 == n2 => Ok(()),
@@ -747,17 +687,6 @@ impl TypeConstraintSolver {
                 name: e.name.clone(),
                 variants: e.variants.clone(),
             }),
-            MonoType::Tuple(ts) => MonoType::Tuple(
-                ts.iter()
-                    .map(|t| self.substitute_type(t, substitution))
-                    .collect(),
-            ),
-            MonoType::List(t) => MonoType::List(Box::new(self.substitute_type(t, substitution))),
-            MonoType::Dict(k, v) => MonoType::Dict(
-                Box::new(self.substitute_type(k, substitution)),
-                Box::new(self.substitute_type(v, substitution)),
-            ),
-            MonoType::Set(t) => MonoType::Set(Box::new(self.substitute_type(t, substitution))),
             MonoType::Fn {
                 params,
                 return_type,
@@ -768,21 +697,6 @@ impl TypeConstraintSolver {
                     .collect(),
                 return_type: Box::new(self.substitute_type(return_type, substitution)),
             },
-            MonoType::Option(inner) => {
-                MonoType::Option(Box::new(self.substitute_type(inner, substitution)))
-            }
-            MonoType::Result(ok, err) => MonoType::Result(
-                Box::new(self.substitute_type(ok, substitution)),
-                Box::new(self.substitute_type(err, substitution)),
-            ),
-            // 范围类型替换
-            MonoType::Range { elem_type } => MonoType::Range {
-                elem_type: Box::new(self.substitute_type(elem_type, substitution)),
-            },
-            // Arc 类型替换
-            MonoType::Arc(inner) => {
-                MonoType::Arc(Box::new(self.substitute_type(inner, substitution)))
-            }
             // 关联类型替换
             MonoType::AssocType {
                 host_type,
@@ -792,6 +706,14 @@ impl TypeConstraintSolver {
                 host_type: Box::new(self.substitute_type(host_type, substitution)),
                 assoc_name: assoc_name.clone(),
                 assoc_args: assoc_args
+                    .iter()
+                    .map(|t| self.substitute_type(t, substitution))
+                    .collect(),
+            },
+            // #299：容器/复合类型统一走 Generic 递归替换
+            MonoType::Generic { name, args } => MonoType::Generic {
+                name: name.clone(),
+                args: args
                     .iter()
                     .map(|t| self.substitute_type(t, substitution))
                     .collect(),
@@ -839,10 +761,6 @@ impl TypeConstraintSolver {
             MonoType::TypeVar(v) => *v == var,
             MonoType::Struct(s) => s.fields.iter().any(|(_, t)| self.contains_var(t, var)),
             MonoType::Enum(_) => false, // 枚举变体名不包含类型变量
-            MonoType::Tuple(types) => types.iter().any(|t| self.contains_var(t, var)),
-            MonoType::List(t) => self.contains_var(t, var),
-            MonoType::Dict(k, v) => self.contains_var(k, var) || self.contains_var(v, var),
-            MonoType::Set(t) => self.contains_var(t, var),
             MonoType::Fn {
                 params,
                 return_type,
@@ -851,8 +769,6 @@ impl TypeConstraintSolver {
                 params.iter().any(|t| self.contains_var(t, var))
                     || self.contains_var(return_type, var)
             }
-            MonoType::Range { elem_type } => self.contains_var(elem_type, var),
-            MonoType::Arc(inner) => self.contains_var(inner, var),
             MonoType::AssocType {
                 host_type,
                 assoc_args,
@@ -864,6 +780,8 @@ impl TypeConstraintSolver {
             MonoType::Union(types) | MonoType::Intersection(types) => {
                 types.iter().any(|t| self.contains_var(t, var))
             }
+            // #299：容器/复合类型（List/Dict/Set/Tuple/Range/Arc/Weak/Option/Result/String/Bytes）统一走 Generic
+            MonoType::Generic { args, .. } => args.iter().any(|t| self.contains_var(t, var)),
             // 基本类型和类型引用不包含类型变量
             _ => false,
         }
@@ -986,28 +904,12 @@ impl TypeConstraintSolver {
                     self.collect_generalizable_vars(field_ty, seen, out);
                 }
             }
-            MonoType::Tuple(types) | MonoType::Union(types) | MonoType::Intersection(types) => {
+            MonoType::Union(types) | MonoType::Intersection(types) => {
                 for t in types {
                     self.collect_generalizable_vars(t, seen, out);
                 }
             }
-            MonoType::List(t)
-            | MonoType::Set(t)
-            | MonoType::Arc(t)
-            | MonoType::Weak(t)
-            | MonoType::Option(t) => self.collect_generalizable_vars(t, seen, out),
             MonoType::Ref { inner, .. } => self.collect_generalizable_vars(inner, seen, out),
-            MonoType::Range { elem_type } => {
-                self.collect_generalizable_vars(elem_type, seen, out);
-            }
-            MonoType::Dict(k, v) => {
-                self.collect_generalizable_vars(k, seen, out);
-                self.collect_generalizable_vars(v, seen, out);
-            }
-            MonoType::Result(ok, err) => {
-                self.collect_generalizable_vars(ok, seen, out);
-                self.collect_generalizable_vars(err, seen, out);
-            }
             MonoType::Fn {
                 params,
                 return_type,
@@ -1044,8 +946,6 @@ impl TypeConstraintSolver {
             | MonoType::Int(_)
             | MonoType::Float(_)
             | MonoType::Char
-            | MonoType::String
-            | MonoType::Bytes
             | MonoType::LibraryRef { .. }
             | MonoType::ExternRef { .. } => {}
             MonoType::Generic { args, .. } => {

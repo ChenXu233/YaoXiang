@@ -17,9 +17,7 @@ use crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma;
 use crate::frontend::core::typecheck::proof::context::ProofContext;
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 
-// ===================================================================
 // 辅助函数
-// ===================================================================
 
 /// 构造 x > val 约束
 fn make_gt(
@@ -33,9 +31,7 @@ fn make_gt(
     }
 }
 
-// ===================================================================
 // extract_free_vars
-// ===================================================================
 
 /// 自由变量提取：NamedVar
 #[test]
@@ -71,9 +67,7 @@ fn test_extract_free_vars_multi_vars() {
     );
 }
 
-// ===================================================================
 // dispatch — 分派模式判断
-// ===================================================================
 
 /// 所有变量都在 bindings 中 → CompileTime
 #[test]
@@ -156,9 +150,7 @@ fn test_dispatch_partial_bindings_runtime() {
     assert_eq!(mode, DispatchMode::Runtime, "partial bindings → Runtime");
 }
 
-// ===================================================================
 // dispatch_runtime — Γ 注入
-// ===================================================================
 
 /// Runtime 路径注入 Γ 并返回 InsertCheck
 #[test]
@@ -198,9 +190,7 @@ fn test_dispatch_runtime_multiple_injects() {
     assert!(current.contains(&c2), "Γ 应包含二次注入的约束 c2");
 }
 
-// ===================================================================
 // dispatch_pipeline — 完整管道
-// ===================================================================
 
 /// Runtime 路径 → dispatch_pipeline 返回 Runtime(InsertCheck)
 #[test]
@@ -268,9 +258,7 @@ fn test_dispatch_pipeline_compiletime_with_bindings() {
     }
 }
 
-// ===================================================================
 // FlowSensitiveGamma — kill 行为验证
-// ===================================================================
 
 /// gamma.kill：mut 变量重新赋值后，相关假设被标记为 dead
 #[test]
@@ -314,9 +302,7 @@ fn test_gamma_kill_empty_gamma() {
     assert!(gamma.current().is_empty(), "为空 Γ 执行 kill 后应仍为空");
 }
 
-// ===================================================================
 // 完整的 dispatch → Runtime → Γ inject 链路
-// ===================================================================
 
 /// dispatch → dispatch_runtime → gamma.current() 包含约束
 #[test]

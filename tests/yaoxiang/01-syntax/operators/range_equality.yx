@@ -1,0 +1,32 @@
+// 01-syntax/operators/range_equality.yx
+// 覆盖: #304——vec 类容器（Tuple/List/Array）结构相等
+// 验证: Range（借 Tuple 载体）== 逐槽比较；Tuple/List 结构相等；
+//       嵌套容器递归比较；跨容器类型返回 false 而非类型错误
+// 状态: ✅ 可运行
+
+use std.assert
+
+main = {
+    // Range 相等（修复前 E6007 type mismatch in comparison Eq）
+    r = 1..10
+    r2 = 1..10
+    r3 = 1..11
+    assert.assert(r == r2, "range structural equality")
+    assert.assert(r != r3, "range inequality on end")
+    assert.assert(r != 1..10..2, "range inequality on step")
+
+    // Tuple 结构相等
+    assert.assert((1, "a") == (1, "a"), "tuple equality")
+    assert.assert((1, "a") != (1, "b"), "tuple inequality")
+
+    // List 结构相等
+    assert.assert([1, 2] == [1, 2], "list equality")
+    assert.assert([1, 2] != [1, 3], "list inequality")
+    assert.assert([1, 2] != [1, 2, 3], "list length inequality")
+
+    // 嵌套递归
+    assert.assert([(1, 2), (3, 4)] == [(1, 2), (3, 4)], "nested structural equality")
+
+    // 跨容器类型：false 而非类型错误
+    assert.assert(!((1, 2) == [1, 2]), "tuple vs list is false, not error")
+}

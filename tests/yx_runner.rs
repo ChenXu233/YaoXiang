@@ -90,9 +90,7 @@ fn binary_name() -> String {
     path
 }
 
-// ============================================================================
 // Tests
-// ============================================================================
 
 /// Check if a .yx file has a `// [test:ignore]: reason` marker in its first 5 lines.
 /// If so, skip it in the test runner and print the reason.
@@ -107,6 +105,22 @@ fn is_ignored(path: &Path) -> Option<String> {
             } else {
                 reason.to_string()
             });
+        }
+    }
+    None
+}
+
+/// Check if a .yx file requests a specific runtime mode via
+/// `// [test:runtime]: standard` marker in its first 5 lines.
+fn requested_runtime(path: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok()?;
+    for line in content.lines().take(5) {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("// [test:runtime]:") {
+            let mode = rest.trim();
+            if matches!(mode, "embedded" | "standard" | "full") {
+                return Some(mode.to_string());
+            }
         }
     }
     None
@@ -132,9 +146,13 @@ fn test_all_yx_files_pass() {
             continue;
         }
 
-        let output = Command::new(&binary)
-            .arg("run")
-            .arg(file)
+        let mut cmd = Command::new(&binary);
+        cmd.arg("run");
+        if let Some(mode) = requested_runtime(file) {
+            cmd.arg("--runtime").arg(mode);
+        }
+        cmd.arg(file);
+        let output = cmd
             .output()
             .unwrap_or_else(|e| panic!("Failed to run {binary} for {relative}: {e}"));
 

@@ -1,0 +1,20 @@
+// 06-compile-errors/use_after_move_branch_err.yx
+// [test:error]: 双分支均 move 后使用原变量（E2014）
+// 预期: 编译错误 E2014 'p' has been moved and cannot be used again
+// 覆盖: #251 P0-7 use-after-move 编译期拦截 — 分支路径 move 合并（#264 修复回归：
+//       单分支 move 不再误报泄漏，双分支都 move 则分支外使用必须拦截）
+// 验证: if/else 两个分支分别把 p move 给 q/r，分支合并后 p 不可用
+// 状态: ❌ 应编译失败
+
+use std.io
+
+Point: Type = { x: Int, y: Int }
+
+main = {
+    p = Point(1, 2)
+    q = Point(3, 4)
+    r = Point(5, 6)
+    flag = true
+    if flag { p = q } else { r = p }   // 两个分支都 move p
+    io.println(p.x)                     // ❌ use-after-move
+}

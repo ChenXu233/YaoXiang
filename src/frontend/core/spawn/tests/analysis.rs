@@ -17,9 +17,7 @@ use crate::frontend::core::types::{MonoType, TraitTable};
 use crate::util::span::Span;
 use std::collections::{HashMap, HashSet};
 
-// ============================================================================
 // 辅助函数
-// ============================================================================
 
 fn dummy_span() -> Span {
     Span::dummy()
@@ -95,9 +93,7 @@ fn spawn_body(stmts: Vec<Stmt>) -> Block {
     }
 }
 
-// ============================================================================
 // is_direct_child
-// ============================================================================
 
 #[test]
 fn test_is_direct_child_with_expr_stmt() {
@@ -142,9 +138,7 @@ fn test_is_direct_child_with_var_decl_is_false() {
     assert!(!result, "StmtKind::Var 不应被视为直接子表达式");
 }
 
-// ============================================================================
 // analyze_reads_writes — 基础
-// ============================================================================
 
 #[test]
 fn test_reads_writes_var_reference() {
@@ -192,9 +186,7 @@ fn test_reads_writes_call_args() {
     assert!(reads.contains("y"), "第二个参数应被记入 reads");
 }
 
-// ============================================================================
 // analyze_reads_writes — 表达式覆盖
-// ============================================================================
 
 #[test]
 fn test_reads_writes_list_elements() {
@@ -355,9 +347,7 @@ fn test_reads_writes_fstring_interpolation() {
     assert!(reads.contains("name"), "f-string 插值变量应被记入 reads");
 }
 
-// ============================================================================
 // build_execution_plan
-// ============================================================================
 
 #[test]
 fn test_plan_independent_tasks_single_group() {
@@ -497,9 +487,7 @@ fn test_plan_non_resource_read_read_allows_parallel() {
     );
 }
 
-// ============================================================================
 // analyze_spawn_body 端到端
-// ============================================================================
 
 #[test]
 fn test_spawn_body_independent_tasks() {
@@ -590,9 +578,7 @@ fn test_spawn_body_task_info_exposes_reads_writes() {
     assert!(task.writes.contains("t1"), "任务 writes 应包含赋值目标 t1");
 }
 
-// ============================================================================
 // analyze_spawn_for
-// ============================================================================
 
 #[test]
 fn test_spawn_for_reads_writes() {
@@ -628,9 +614,7 @@ fn test_spawn_for_reads_writes() {
     );
 }
 
-// ============================================================================
 // 补充边界测试
-// ============================================================================
 
 #[test]
 fn test_spawn_body_mixed_children_and_non_children() {
@@ -790,9 +774,7 @@ fn test_spawn_for_reads_outer_variable() {
     );
 }
 
-// ============================================================================
 // spawn for 端到端测试
-// ============================================================================
 
 #[test]
 fn test_spawn_for_end_to_end_independent_iterations() {

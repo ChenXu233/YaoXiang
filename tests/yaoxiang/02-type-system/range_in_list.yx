@@ -1,0 +1,31 @@
+// 02-type-system/range_in_list.yx
+// 覆盖: #303——for 循环变量类型流入 local_var_types
+// 验证: List(Range(Int)) / List(List(Int)) / List(Tuple) 元素
+//       作为循环变量可再迭代/索引（修复前 E3004 Unsupported iterator type）
+// 状态: ✅ 可运行
+
+use std.assert
+
+main = {
+    // Range 元素嵌套迭代（#303 复现用例）
+    ranges = [0..3, 10..13]
+    mut total = 0
+    for rg in ranges {
+        for i in rg { total = total + 1 }
+    }
+    assert.assert(total == 6, "nested range iteration")
+
+    // 同类缺陷：List(List(Int)) 嵌套迭代
+    lists = [[1, 2], [3, 4]]
+    mut sum = 0
+    for inner in lists {
+        for x in inner { sum = sum + x }
+    }
+    assert.assert(sum == 10, "nested list iteration")
+
+    // 同类缺陷：List(Tuple) 元素索引
+    pairs = [(1, "a"), (2, "b")]
+    for p in pairs {
+        assert.assert(p[0] > 0, "tuple element index via loop var")
+    }
+}

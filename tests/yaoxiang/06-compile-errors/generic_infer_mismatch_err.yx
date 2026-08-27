@@ -1,0 +1,15 @@
+// 06-compile-errors/generic_infer_mismatch_err.yx
+// [test:error]: 泛型函数推断失败——identity(42) 推断 T=Int，赋 String 应报 E1002
+// 预期: 编译错误 E1002
+// 覆盖: #251 P0-3 泛型测试矩阵错误路径
+// 验证: 泛型实参类型从调用点推断，向不兼容目标类型赋值编译失败
+// 状态: ❌ 应编译失败
+
+use std.io
+
+identity: (T: Type) -> (x: T) -> T = (x) => x
+
+main = {
+    s: String = identity(42)
+    io.println(s)
+}

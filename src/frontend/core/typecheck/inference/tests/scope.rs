@@ -5,9 +5,7 @@
 use crate::frontend::core::typecheck::inference::scope::ScopeManager;
 use crate::frontend::core::types::{MonoType, PolyType};
 
-// ===================================================================
 // Happy path 测试
-// ===================================================================
 
 #[test]
 fn test_scope_manager_creation() {
@@ -54,9 +52,7 @@ fn test_scope_manager_get_var() {
     assert_eq!(*var.unwrap(), PolyType::mono(MonoType::Int(32)));
 }
 
-// ===================================================================
 // Error path 测试
-// ===================================================================
 
 #[test]
 fn test_scope_manager_get_undefined_var() {
@@ -70,9 +66,7 @@ fn test_scope_manager_get_undefined_var() {
     assert!(var.is_none(), "should return None for undefined variable");
 }
 
-// ===================================================================
 // Boundary 测试
-// ===================================================================
 
 #[test]
 fn test_scope_manager_with_many_vars() {
@@ -161,7 +155,7 @@ fn test_var_is_mutable_searches_inner_to_outer() {
         false,
         crate::util::span::Span::default(),
     );
-    scope.enter_scope();
+    scope.enter_block();
     scope.add_var(
         "x".to_string(),
         PolyType::mono(MonoType::Bool),
@@ -189,7 +183,7 @@ fn test_current_scope_vars_only_returns_innermost() {
         false,
         crate::util::span::Span::default(),
     );
-    scope.enter_scope();
+    scope.enter_block();
     scope.add_var(
         "inner".to_string(),
         PolyType::mono(MonoType::Bool),
@@ -225,11 +219,11 @@ fn test_update_var_preserves_is_mut() {
     );
 
     // Act
-    scope.update_var("x", PolyType::mono(MonoType::String));
+    scope.update_var("x", PolyType::mono(MonoType::make_string()));
 
     // Assert
     let poly = scope.get_var("x").unwrap();
-    assert_eq!(*poly, PolyType::mono(MonoType::String));
+    assert_eq!(*poly, PolyType::mono(MonoType::make_string()));
     assert!(
         scope.var_is_mutable("x").unwrap(),
         "update_var should preserve existing is_mut"
@@ -240,6 +234,8 @@ fn test_update_var_preserves_is_mut() {
 fn test_vars_with_mut_preserves_correct_info() {
     // Arrange
     let mut scope = ScopeManager::new();
+    // 三链模型（#295）：局部变量需在函数/块层内 add（否则进 globals，vars_with_mut 不返回）
+    scope.enter_block();
     scope.add_var(
         "a".to_string(),
         PolyType::mono(MonoType::Int(32)),

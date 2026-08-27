@@ -5,6 +5,7 @@
 //! try_resolve 三值语义——未注册谓词返回 None，已注册但用法非法返回
 //! Some(Err)，精化约束绝不静默丢弃。
 
+use crate::frontend::core::typecheck::test_util::{binop};
 use crate::frontend::core::typecheck::predicate_resolver::{
     PredicateDef, PredicateResolveError, PredicateResolver,
 };
@@ -16,11 +17,11 @@ fn make_positive_def() -> PredicateDef {
     PredicateDef {
         param_name: "x".into(),
         param_type: MonoType::Int(64),
-        constraint: ConstExpr::BinOp {
-            op: BinOp::Gt,
-            left: Box::new(ConstExpr::NamedVar("x".into())),
-            right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-        },
+        constraint: binop(
+            BinOp::Gt,
+            ConstExpr::NamedVar("x".into()),
+            ConstExpr::Lit(ConstValue::Int(0)),
+        ),
     }
 }
 
@@ -118,7 +119,7 @@ fn test_resolve_registered_predicate_invalid_arg_errors() {
     let mut env = TypeEnvironment::new();
     env.predicate_defs
         .insert("Positive".into(), make_positive_def());
-    let tuple_arg = MonoType::Tuple(vec![MonoType::Int(64), MonoType::Int(64)]);
+    let tuple_arg = MonoType::make_tuple(vec![MonoType::Int(64), MonoType::Int(64)]);
 
     // Act
     let result = PredicateResolver::try_resolve(&env, "Positive", &[tuple_arg]);

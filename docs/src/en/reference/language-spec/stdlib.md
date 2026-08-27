@@ -26,17 +26,17 @@ The standard library provides implementations for the following basic types:
 Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 ```
 
-**Variant constructors**:
+**Variant Constructors**:
 
 | Variant       | Syntax               | Description |
 | ------------- | -------------------- | ----------- |
 | `Option.some` | `Option.some(value)` | Has value   |
 | `Option.none` | `Option.none()`      | No value    |
 
-**Common methods**:
+**Common Methods**:
 
 ```yaoxiang
-// Check if has value
+// Check whether a value is present
 is_some: (self: Option(T)) -> Bool
 is_none: (self: Option(T)) -> Bool
 
@@ -56,17 +56,17 @@ map: (R: Type) -> ((self: Option(T), f: (T) -> R) -> Option(R))
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 ```
 
-**Variant constructors**:
+**Variant Constructors**:
 
-| Variant      | Syntax              | Description |
-| ------------ | ------------------- | ----------- |
-| `Result.ok`  | `Result.ok(value)`  | Success     |
-| `Result.err` | `Result.err(error)` | Error       |
+| Variant      | Syntax              | Description   |
+| ------------ | ------------------- | ------------- |
+| `Result.ok`  | `Result.ok(value)`  | Success value |
+| `Result.err` | `Result.err(error)` | Error value   |
 
-**Common methods**:
+**Common Methods**:
 
 ```yaoxiang
-// Check if success
+// Check whether it succeeded
 is_ok: (self: Result(T, E)) -> Bool
 is_err: (self: Result(T, E)) -> Bool
 
@@ -89,10 +89,10 @@ map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ErrorPropagate ::= Expr '?'
 ```
 
-The `?` operator automatically propagates errors of Result type:
+The `?` operator automatically propagates the error of a `Result` type:
 
 ```
-// Returns value on success, returns err upward on failure
+// Returns the value on success, propagates err upward on failure
 data = fetch_data()?
 
 // Equivalent to
@@ -102,42 +102,42 @@ data = match fetch_data() {
 }
 ```
 
-### 1.5 Assertions (std.assert)
+### 1.5 Assertion (`std.assert`)
 
-The `std.assert` module provides a unified assertion mechanism — runtime `assert` and compile-time
-refinement type `Assert` are two sides of the same primitive.
+The `std.assert` module provides a unified assertion mechanism — the runtime `assert` and the
+compile-time refinement type `Assert` are two sides of the same primitive.
 
 ```yaoxiang
-// IsTrue: bridging function from value to type
+// IsTrue: the bridge function from value to type
 IsTrue: (b: Bool) -> Type = match b {
     true => Void,      // ⊤, program continues
     false => Never,    // ⊥, diverges
 }
 
-// Assert: compile-time refinement type primitive
+// Assert: the compile-time refinement type primitive
 Assert: (cond: Bool) -> Type = IsTrue(cond)
 
-// assert: runtime assertion (value introduction form for Assert)
+// assert: runtime assertion (value introducer of Assert)
 assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))
 
 // Result overload
 assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 ```
 
-**Dispatch rules**:
+**Dispatch**:
 
-| Condition                                        | Behavior                                                     |
-| ------------------------------------------------ | ------------------------------------------------------------ |
-| All free variables of cond known at compile-time | Compiler evaluates, true → erase, false → compile error      |
-| Runtime free variables exist                     | Insert runtime check, inject flow-sensitive assumption set Γ |
+| Condition                                              | Behavior                                                         |
+| ------------------------------------------------------ | ---------------------------------------------------------------- |
+| All free variables of `cond` are known at compile time | Compiler evaluates; `true` → erase, `false` → compile error      |
+| A runtime free variable is present                     | Insert a runtime check, inject a flow-sensitive assumption set Γ |
 
-`assert(false, "msg")` is equivalent to raise — no separate throw/raise keyword needed.
+`assert(false, "msg")` is equivalent to `raise` — no separate `throw`/`raise` keyword is needed.
 
 ---
 
 ## Chapter 2: IO Library
 
-### 2.1 Standard Input and Output
+### 2.1 Standard Input/Output
 
 ```yaoxiang
 // Standard output
@@ -195,17 +195,17 @@ delete_dir: (path: String) -> Result(Void, Error)
 abs: (x: Int) -> Int
 abs: (x: Float) -> Float
 
-// Maximum and minimum
+// Max and min
 max: (a: Int, b: Int) -> Int
 min: (a: Int, b: Int) -> Int
 max: (a: Float, b: Float) -> Float
 min: (a: Float, b: Float) -> Float
 
-// Power operations
+// Power
 pow: (base: Float, exp: Float) -> Float
 sqrt: (x: Float) -> Float
 
-// Logarithms
+// Logarithm
 log: (x: Float) -> Float
 log2: (x: Float) -> Float
 log10: (x: Float) -> Float
@@ -229,7 +229,7 @@ atan2: (y: Float, x: Float) -> Float
 ### 3.3 Constants
 
 ```yaoxiang
-// Mathematical constants
+// Math constants
 pi: Float = 3.141592653589793
 e: Float = 2.718281828459045
 ```
@@ -250,7 +250,7 @@ concat: (a: String, b: String) -> String
 // String splitting
 split: (s: String, delimiter: String) -> List(String)
 
-// String searching
+// String search
 find: (s: String, pattern: String) -> Option(Int)
 contains: (s: String, pattern: String) -> Bool
 
@@ -324,7 +324,7 @@ Map: (K: Type, V: Type) -> Type = {
 
 ## Chapter 6: Iterator Library
 
-### 6.1 Iterator trait
+### 6.1 Iterator Trait
 
 ```yaoxiang
 // Iterator trait
@@ -343,7 +343,7 @@ Iterator: (T: Type) -> Type = {
 ### 6.2 Iterator Adapters
 
 ```yaoxiang
-// Range iterator
+// Range iterator (#300 Item I: Range is a first-class value, step is the third component)
 Range: Type = {
     start: Int,
     end: Int,
@@ -356,24 +356,30 @@ for i in 0..10 {
     print(i)
 }
 
-for i in 0..10 step 2 {
+// Step form (double dot, no new keyword)
+for i in 0..10..2 {
     print(i)
 }
 ```
+
+> **#300 Item I**: Range is a first-class value — `r = 1..10` is legal, `x in r` membership check
+> and `for i in r` iteration are both desugared according to the static type. A literal `step=0` is
+> rejected at compile time; a dynamic `step=0` raises a runtime error (once the future error system
+> lands, it will be promoted to `Result`, #301).
 
 ---
 
 ## Appendix: Standard Library Module Index
 
-| Module           | Description                                                           |
-| ---------------- | --------------------------------------------------------------------- |
-| `std.assert`     | Assertion mechanism — runtime assert + compile-time Assert refinement |
-| `std.option`     | Option type                                                           |
-| `std.result`     | Result type                                                           |
-| `std.collection` | Collection types like List, Map                                       |
-| `std.string`     | String operations                                                     |
-| `std.array`      | Array operations                                                      |
-| `std.iterator`   | Iterator                                                              |
+| Module           | Description                                                                    |
+| ---------------- | ------------------------------------------------------------------------------ |
+| `std.assert`     | Assertion mechanism — runtime `assert` + compile-time `Assert` refinement type |
+| `std.option`     | `Option` type                                                                  |
+| `std.result`     | `Result` type                                                                  |
+| `std.collection` | Collection types such as `List`, `Map`                                         |
+| `std.string`     | String operations                                                              |
+| `std.array`      | Array operations                                                               |
+| `std.iterator`   | Iterator                                                                       |
 
 ### A.2 IO Modules
 
@@ -389,7 +395,7 @@ for i in 0..10 step 2 {
 | --------------- | ----------------------- |
 | `std.math`      | Math functions          |
 | `std.math.trig` | Trigonometric functions |
-| `std.math.log`  | Logarithmic functions   |
+| `std.math.log`  | Logarithm functions     |
 
 ### A.4 Utility Modules
 
@@ -398,4 +404,4 @@ for i in 0..10 step 2 {
 | `std.random` | Random number generation                                               |
 | `std.time`   | Time and date                                                          |
 | `std.assert` | Unified compile-time `Assert(C)` and runtime `assert(x > 0)` (RFC-030) |
-| `std.regex`  | Regular expressions                                                    |
+| `std.regex`  | Regular expression                                                     |

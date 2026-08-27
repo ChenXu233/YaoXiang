@@ -1,0 +1,44 @@
+// 01-syntax/operators/range_value.yx
+// 覆盖: #300 I 项——Range 是一等值
+// 验证: `r = 1..10` 合法；`x in r` 成员判断；`for i in r` 迭代；
+//       step 形态 `0..10..2`（含变量 step）；负 step 递减
+// 状态: ✅ 可运行
+
+use std.assert
+
+main = {
+    // Range 值绑定
+    r = 1..10
+    assert.assert(5 in r, "5 in r")
+    assert.assert(!(11 in r), "11 not in r")
+    mut count = 0
+    for i in r {
+        count = count + 1
+    }
+    assert.assert(count == 9, "1..10 yields 9 iterations")
+
+    // step 形态（字面量）
+    mut count2 = 0
+    for i in 0..10..2 {
+        count2 = count2 + 1
+    }
+    assert.assert(count2 == 5, "0,2,4,6,8 = 5 iterations")
+    assert.assert(4 in 0..10..2, "4 is aligned")
+    assert.assert(!(5 in 0..10..2), "5 is not aligned")
+
+    // 负 step 递减
+    mut count3 = 0
+    for i in 10..0..(-2) {
+        count3 = count3 + 1
+    }
+    assert.assert(count3 == 5, "10,8,6,4,2 = 5 iterations")
+
+    // 变量 step
+    k = 3
+    mut count4 = 0
+    for i in 0..9..k {
+        count4 = count4 + 1
+    }
+    assert.assert(count4 == 3, "0,3,6 = 3 iterations")
+    assert.assert(6 in 0..9..k, "6 in stepped range with var step")
+}

@@ -10,9 +10,7 @@ use crate::frontend::core::types::eval::reducer::{
 };
 use crate::frontend::core::types::eval::normalizer::ReductionConfig;
 
-// ===================================================================
 // TypeComputer
-// ===================================================================
 
 #[test]
 fn test_type_computer_new_and_with_config() {
@@ -71,7 +69,7 @@ fn test_type_computer_compute_type_var() {
 #[test]
 fn test_type_computer_compute_list() {
     let mut c = TypeComputer::new();
-    let list = MonoType::List(Box::new(MonoType::Int(32)));
+    let list = MonoType::make_list(MonoType::Int(32));
     let result = c.compute(&list);
     let _ = result;
 }
@@ -79,7 +77,7 @@ fn test_type_computer_compute_list() {
 #[test]
 fn test_type_computer_compute_tuple() {
     let mut c = TypeComputer::new();
-    let tuple = MonoType::Tuple(vec![MonoType::Int(32), MonoType::String]);
+    let tuple = MonoType::make_tuple(vec![MonoType::Int(32), MonoType::make_string()]);
     let result = c.compute(&tuple);
     let _ = result;
 }
@@ -89,15 +87,13 @@ fn test_type_computer_compute_fn() {
     let mut c = TypeComputer::new();
     let f = MonoType::Fn {
         params: vec![MonoType::Int(32)],
-        return_type: Box::new(MonoType::String),
+        return_type: Box::new(MonoType::make_string()),
     };
     let result = c.compute(&f);
     let _ = result;
 }
 
-// ===================================================================
 // TypeReducer
-// ===================================================================
 
 #[test]
 fn test_reducer_stuck_on_primitives() {
@@ -140,7 +136,7 @@ fn test_reducer_with_config() {
 fn test_reducer_register_alias() {
     let mut r = TypeReducer::new();
     r.register_alias("A".to_string(), MonoType::Int(32));
-    r.register_alias("B".to_string(), MonoType::String);
+    r.register_alias("B".to_string(), MonoType::make_string());
     // Both aliases should be registered
     let result_a = r.reduce(&MonoType::TypeRef("A".to_string()));
     let result_b = r.reduce(&MonoType::TypeRef("B".to_string()));
@@ -191,7 +187,7 @@ fn test_reducer_reduce_function_type() {
     let mut r = TypeReducer::new();
     let f = MonoType::Fn {
         params: vec![MonoType::Int(32)],
-        return_type: Box::new(MonoType::String),
+        return_type: Box::new(MonoType::make_string()),
     };
     let result = r.reduce(&f);
     // Function types should be Stuck (no eta reduction implemented)
@@ -222,7 +218,7 @@ fn test_reducer_step_count_after_reduce() {
 #[test]
 fn test_reducer_reduce_list_type() {
     let mut r = TypeReducer::new();
-    let list = MonoType::List(Box::new(MonoType::Int(32)));
+    let list = MonoType::make_list(MonoType::Int(32));
     let result = r.reduce(&list);
     // List types should be Stuck
     assert!(matches!(result, ReductionResult::Stuck));
@@ -231,7 +227,7 @@ fn test_reducer_reduce_list_type() {
 #[test]
 fn test_reducer_reduce_tuple_type() {
     let mut r = TypeReducer::new();
-    let tuple = MonoType::Tuple(vec![MonoType::Int(32), MonoType::String]);
+    let tuple = MonoType::make_tuple(vec![MonoType::Int(32), MonoType::make_string()]);
     let result = r.reduce(&tuple);
     // Tuple types should be Stuck
     assert!(matches!(result, ReductionResult::Stuck));
@@ -240,7 +236,7 @@ fn test_reducer_reduce_tuple_type() {
 #[test]
 fn test_reducer_reduce_dict_type() {
     let mut r = TypeReducer::new();
-    let dict = MonoType::Dict(Box::new(MonoType::String), Box::new(MonoType::Int(32)));
+    let dict = MonoType::make_dict(MonoType::make_string(), MonoType::Int(32));
     let result = r.reduce(&dict);
     assert!(matches!(result, ReductionResult::Stuck));
 }
@@ -248,7 +244,10 @@ fn test_reducer_reduce_dict_type() {
 #[test]
 fn test_reducer_reduce_set_type() {
     let mut r = TypeReducer::new();
-    let set = MonoType::Set(Box::new(MonoType::Bool));
+    let set = MonoType::Generic {
+        name: "Set".into(),
+        args: vec![MonoType::Bool],
+    };
     let result = r.reduce(&set);
     assert!(matches!(result, ReductionResult::Stuck));
 }
@@ -256,8 +255,9 @@ fn test_reducer_reduce_set_type() {
 #[test]
 fn test_reducer_reduce_range_type() {
     let mut r = TypeReducer::new();
-    let range = MonoType::Range {
-        elem_type: Box::new(MonoType::Int(64)),
+    let range = MonoType::Generic {
+        name: "Range".into(),
+        args: vec![MonoType::Int(64)],
     };
     let result = r.reduce(&range);
     assert!(matches!(result, ReductionResult::Stuck));
@@ -266,7 +266,10 @@ fn test_reducer_reduce_range_type() {
 #[test]
 fn test_reducer_reduce_arc_type() {
     let mut r = TypeReducer::new();
-    let arc = MonoType::Arc(Box::new(MonoType::Int(32)));
+    let arc = MonoType::Generic {
+        name: "Arc".into(),
+        args: vec![MonoType::Int(32)],
+    };
     let result = r.reduce(&arc);
     assert!(matches!(result, ReductionResult::Stuck));
 }
@@ -274,7 +277,10 @@ fn test_reducer_reduce_arc_type() {
 #[test]
 fn test_reducer_reduce_weak_type() {
     let mut r = TypeReducer::new();
-    let weak = MonoType::Weak(Box::new(MonoType::String));
+    let weak = MonoType::Generic {
+        name: "Weak".into(),
+        args: vec![MonoType::make_string()],
+    };
     let result = r.reduce(&weak);
     assert!(matches!(result, ReductionResult::Stuck));
 }
@@ -282,7 +288,7 @@ fn test_reducer_reduce_weak_type() {
 #[test]
 fn test_reducer_reduce_option_type() {
     let mut r = TypeReducer::new();
-    let opt = MonoType::Option(Box::new(MonoType::Int(32)));
+    let opt = MonoType::make_option(MonoType::Int(32));
     let result = r.reduce(&opt);
     assert!(matches!(result, ReductionResult::Stuck));
 }
@@ -290,7 +296,7 @@ fn test_reducer_reduce_option_type() {
 #[test]
 fn test_reducer_reduce_result_type() {
     let mut r = TypeReducer::new();
-    let res = MonoType::Result(Box::new(MonoType::Int(32)), Box::new(MonoType::String));
+    let res = MonoType::make_result(MonoType::Int(32), MonoType::make_string());
     let result = r.reduce(&res);
     assert!(matches!(result, ReductionResult::Stuck));
 }
@@ -298,7 +304,7 @@ fn test_reducer_reduce_result_type() {
 #[test]
 fn test_reducer_reduce_union_type() {
     let mut r = TypeReducer::new();
-    let union = MonoType::Union(vec![MonoType::Int(32), MonoType::String]);
+    let union = MonoType::Union(vec![MonoType::Int(32), MonoType::make_string()]);
     let result = r.reduce(&union);
     assert!(matches!(result, ReductionResult::Stuck));
 }
@@ -368,9 +374,7 @@ fn test_reducer_reduce_type_ref_self_referential() {
     let _ = result;
 }
 
-// ===================================================================
 // TypeUnifier
-// ===================================================================
 
 #[test]
 fn test_unifier_new_and_reset() {
@@ -388,7 +392,7 @@ fn test_unifier_same_types() {
         UnificationResult::Success(_)
     ));
     assert!(matches!(
-        u.unify(&MonoType::String, &MonoType::String),
+        u.unify(&MonoType::make_string(), &MonoType::make_string()),
         UnificationResult::Success(_)
     ));
 }
@@ -396,7 +400,7 @@ fn test_unifier_same_types() {
 #[test]
 fn test_unifier_different_types() {
     let mut u = TypeUnifier::new();
-    match u.unify(&MonoType::Int(32), &MonoType::String) {
+    match u.unify(&MonoType::Int(32), &MonoType::make_string()) {
         UnificationResult::Success(_) => {}
         UnificationResult::Failure(_) => {}
         UnificationResult::NeedReduction(..) => {}
@@ -426,8 +430,8 @@ fn test_unifier_substitution_after_unify() {
 #[test]
 fn test_unifier_unify_composite_types() {
     let mut u = TypeUnifier::new();
-    let list1 = MonoType::List(Box::new(MonoType::Int(32)));
-    let list2 = MonoType::List(Box::new(MonoType::Int(32)));
+    let list1 = MonoType::make_list(MonoType::Int(32));
+    let list2 = MonoType::make_list(MonoType::Int(32));
     assert!(matches!(
         u.unify(&list1, &list2),
         UnificationResult::Success(_)
@@ -437,16 +441,14 @@ fn test_unifier_unify_composite_types() {
 #[test]
 fn test_unifier_unify_different_composite() {
     let mut u = TypeUnifier::new();
-    let list1 = MonoType::List(Box::new(MonoType::Int(32)));
-    let list2 = MonoType::List(Box::new(MonoType::String));
+    let list1 = MonoType::make_list(MonoType::Int(32));
+    let list2 = MonoType::make_list(MonoType::make_string());
     let result = u.unify(&list1, &list2);
     // Should be Failure or NeedReduction
     assert!(!matches!(result, UnificationResult::Success(_)));
 }
 
-// ===================================================================
 // TypeUnifier - unify_internal 路径
-// ===================================================================
 
 #[test]
 fn test_unifier_unify_type_vars_same() {
@@ -491,39 +493,39 @@ fn test_unifier_unify_same_concrete() {
 #[test]
 fn test_unifier_unify_different_concrete() {
     let mut u = TypeUnifier::new();
-    let result = u.unify(&MonoType::Int(32), &MonoType::String);
+    let result = u.unify(&MonoType::Int(32), &MonoType::make_string());
     assert!(matches!(result, UnificationResult::Failure(_)));
 }
 
 #[test]
 fn test_unifier_unify_tuples_same_length() {
     let mut u = TypeUnifier::new();
-    let t1 = MonoType::Tuple(vec![MonoType::Int(32), MonoType::String]);
-    let t2 = MonoType::Tuple(vec![MonoType::Int(32), MonoType::String]);
+    let t1 = MonoType::make_tuple(vec![MonoType::Int(32), MonoType::make_string()]);
+    let t2 = MonoType::make_tuple(vec![MonoType::Int(32), MonoType::make_string()]);
     assert!(matches!(u.unify(&t1, &t2), UnificationResult::Success(_)));
 }
 
 #[test]
 fn test_unifier_unify_tuples_different_length() {
     let mut u = TypeUnifier::new();
-    let t1 = MonoType::Tuple(vec![MonoType::Int(32)]);
-    let t2 = MonoType::Tuple(vec![MonoType::Int(32), MonoType::String]);
+    let t1 = MonoType::make_tuple(vec![MonoType::Int(32)]);
+    let t2 = MonoType::make_tuple(vec![MonoType::Int(32), MonoType::make_string()]);
     assert!(matches!(u.unify(&t1, &t2), UnificationResult::Failure(_)));
 }
 
 #[test]
 fn test_unifier_unify_lists_same() {
     let mut u = TypeUnifier::new();
-    let l1 = MonoType::List(Box::new(MonoType::Int(32)));
-    let l2 = MonoType::List(Box::new(MonoType::Int(32)));
+    let l1 = MonoType::make_list(MonoType::Int(32));
+    let l2 = MonoType::make_list(MonoType::Int(32));
     assert!(matches!(u.unify(&l1, &l2), UnificationResult::Success(_)));
 }
 
 #[test]
 fn test_unifier_unify_lists_different() {
     let mut u = TypeUnifier::new();
-    let l1 = MonoType::List(Box::new(MonoType::Int(32)));
-    let l2 = MonoType::List(Box::new(MonoType::String));
+    let l1 = MonoType::make_list(MonoType::Int(32));
+    let l2 = MonoType::make_list(MonoType::make_string());
     assert!(matches!(u.unify(&l1, &l2), UnificationResult::Failure(_)));
 }
 
@@ -532,11 +534,11 @@ fn test_unifier_unify_fns_same() {
     let mut u = TypeUnifier::new();
     let f1 = MonoType::Fn {
         params: vec![MonoType::Int(32)],
-        return_type: Box::new(MonoType::String),
+        return_type: Box::new(MonoType::make_string()),
     };
     let f2 = MonoType::Fn {
         params: vec![MonoType::Int(32)],
-        return_type: Box::new(MonoType::String),
+        return_type: Box::new(MonoType::make_string()),
     };
     assert!(matches!(u.unify(&f1, &f2), UnificationResult::Success(_)));
 }
@@ -546,11 +548,11 @@ fn test_unifier_unify_fns_different_arity() {
     let mut u = TypeUnifier::new();
     let f1 = MonoType::Fn {
         params: vec![MonoType::Int(32)],
-        return_type: Box::new(MonoType::String),
+        return_type: Box::new(MonoType::make_string()),
     };
     let f2 = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::Bool],
-        return_type: Box::new(MonoType::String),
+        return_type: Box::new(MonoType::make_string()),
     };
     assert!(matches!(u.unify(&f1, &f2), UnificationResult::Failure(_)));
 }
@@ -564,7 +566,7 @@ fn test_unifier_unify_fns_different_return() {
     };
     let f2 = MonoType::Fn {
         params: vec![],
-        return_type: Box::new(MonoType::String),
+        return_type: Box::new(MonoType::make_string()),
     };
     assert!(matches!(u.unify(&f1, &f2), UnificationResult::Failure(_)));
 }
@@ -572,20 +574,21 @@ fn test_unifier_unify_fns_different_return() {
 #[test]
 fn test_unifier_unify_completely_different() {
     let mut u = TypeUnifier::new();
-    let result = u.unify(&MonoType::Int(32), &MonoType::Tuple(vec![MonoType::Bool]));
+    let result = u.unify(
+        &MonoType::Int(32),
+        &MonoType::make_tuple(vec![MonoType::Bool]),
+    );
     assert!(matches!(result, UnificationResult::Failure(_)));
 }
 
-// ===================================================================
 // TypeUnifier - 更多路径
-// ===================================================================
 
 #[test]
 fn test_unifier_unify_list_with_var() {
     let mut u = TypeUnifier::new();
     let tv = crate::frontend::core::types::TypeVar::new(0);
-    let l1 = MonoType::List(Box::new(MonoType::Int(32)));
-    let l2 = MonoType::List(Box::new(MonoType::TypeVar(tv)));
+    let l1 = MonoType::make_list(MonoType::Int(32));
+    let l2 = MonoType::make_list(MonoType::TypeVar(tv));
     assert!(matches!(u.unify(&l1, &l2), UnificationResult::Success(_)));
 }
 
@@ -593,8 +596,8 @@ fn test_unifier_unify_list_with_var() {
 fn test_unifier_unify_tuple_with_var() {
     let mut u = TypeUnifier::new();
     let tv = crate::frontend::core::types::TypeVar::new(0);
-    let t1 = MonoType::Tuple(vec![MonoType::Int(32), MonoType::String]);
-    let t2 = MonoType::Tuple(vec![MonoType::TypeVar(tv), MonoType::String]);
+    let t1 = MonoType::make_tuple(vec![MonoType::Int(32), MonoType::make_string()]);
+    let t2 = MonoType::make_tuple(vec![MonoType::TypeVar(tv), MonoType::make_string()]);
     assert!(matches!(u.unify(&t1, &t2), UnificationResult::Success(_)));
 }
 
@@ -604,11 +607,11 @@ fn test_unifier_unify_fn_with_var() {
     let tv = crate::frontend::core::types::TypeVar::new(0);
     let f1 = MonoType::Fn {
         params: vec![MonoType::Int(32)],
-        return_type: Box::new(MonoType::String),
+        return_type: Box::new(MonoType::make_string()),
     };
     let f2 = MonoType::Fn {
         params: vec![MonoType::TypeVar(tv)],
-        return_type: Box::new(MonoType::String),
+        return_type: Box::new(MonoType::make_string()),
     };
     assert!(matches!(u.unify(&f1, &f2), UnificationResult::Success(_)));
 }
@@ -617,7 +620,7 @@ fn test_unifier_unify_fn_with_var() {
 fn test_unifier_unify_var_with_list() {
     let mut u = TypeUnifier::new();
     let tv = crate::frontend::core::types::TypeVar::new(0);
-    let l = MonoType::List(Box::new(MonoType::Int(32)));
+    let l = MonoType::make_list(MonoType::Int(32));
     assert!(matches!(
         u.unify(&MonoType::TypeVar(tv), &l),
         UnificationResult::Success(_)
@@ -655,17 +658,18 @@ fn test_unifier_unify_char_with_char() {
 #[test]
 fn test_unifier_unify_bytes_with_bytes() {
     let mut u = TypeUnifier::new();
-    assert!(matches!(
-        u.unify(&MonoType::Bytes, &MonoType::Bytes),
-        UnificationResult::Success(_)
-    ));
+    let b = MonoType::Generic {
+        name: "Bytes".into(),
+        args: vec![],
+    };
+    assert!(matches!(u.unify(&b, &b), UnificationResult::Success(_)));
 }
 
 #[test]
 fn test_unifier_unify_option_same() {
     let mut u = TypeUnifier::new();
-    let o1 = MonoType::Option(Box::new(MonoType::Int(32)));
-    let o2 = MonoType::Option(Box::new(MonoType::Int(32)));
+    let o1 = MonoType::make_option(MonoType::Int(32));
+    let o2 = MonoType::make_option(MonoType::Int(32));
     // Option unification may fail (not handled) or succeed
     let _ = u.unify(&o1, &o2);
 }
@@ -673,8 +677,8 @@ fn test_unifier_unify_option_same() {
 #[test]
 fn test_unifier_unify_result_same() {
     let mut u = TypeUnifier::new();
-    let r1 = MonoType::Result(Box::new(MonoType::Int(32)), Box::new(MonoType::String));
-    let r2 = MonoType::Result(Box::new(MonoType::Int(32)), Box::new(MonoType::String));
+    let r1 = MonoType::make_result(MonoType::Int(32), MonoType::make_string());
+    let r2 = MonoType::make_result(MonoType::Int(32), MonoType::make_string());
     // Result unification may fail (not handled) or succeed
     let _ = u.unify(&r1, &r2);
 }
@@ -682,8 +686,8 @@ fn test_unifier_unify_result_same() {
 #[test]
 fn test_unifier_unify_dict_same() {
     let mut u = TypeUnifier::new();
-    let d1 = MonoType::Dict(Box::new(MonoType::String), Box::new(MonoType::Int(32)));
-    let d2 = MonoType::Dict(Box::new(MonoType::String), Box::new(MonoType::Int(32)));
+    let d1 = MonoType::make_dict(MonoType::make_string(), MonoType::Int(32));
+    let d2 = MonoType::make_dict(MonoType::make_string(), MonoType::Int(32));
     // Dict unification may fail (not handled) or succeed
     let _ = u.unify(&d1, &d2);
 }
@@ -691,8 +695,14 @@ fn test_unifier_unify_dict_same() {
 #[test]
 fn test_unifier_unify_set_same() {
     let mut u = TypeUnifier::new();
-    let s1 = MonoType::Set(Box::new(MonoType::Bool));
-    let s2 = MonoType::Set(Box::new(MonoType::Bool));
+    let s1 = MonoType::Generic {
+        name: "Set".into(),
+        args: vec![MonoType::Bool],
+    };
+    let s2 = MonoType::Generic {
+        name: "Set".into(),
+        args: vec![MonoType::Bool],
+    };
     // Set unification may fail (not handled) or succeed
     let _ = u.unify(&s1, &s2);
 }
@@ -700,11 +710,13 @@ fn test_unifier_unify_set_same() {
 #[test]
 fn test_unifier_unify_range_same() {
     let mut u = TypeUnifier::new();
-    let r1 = MonoType::Range {
-        elem_type: Box::new(MonoType::Int(64)),
+    let r1 = MonoType::Generic {
+        name: "Range".into(),
+        args: vec![MonoType::Int(64)],
     };
-    let r2 = MonoType::Range {
-        elem_type: Box::new(MonoType::Int(64)),
+    let r2 = MonoType::Generic {
+        name: "Range".into(),
+        args: vec![MonoType::Int(64)],
     };
     // Range unification may fail (not handled) or succeed
     let _ = u.unify(&r1, &r2);
@@ -713,8 +725,14 @@ fn test_unifier_unify_range_same() {
 #[test]
 fn test_unifier_unify_arc_same() {
     let mut u = TypeUnifier::new();
-    let a1 = MonoType::Arc(Box::new(MonoType::Int(32)));
-    let a2 = MonoType::Arc(Box::new(MonoType::Int(32)));
+    let a1 = MonoType::Generic {
+        name: "Arc".into(),
+        args: vec![MonoType::Int(32)],
+    };
+    let a2 = MonoType::Generic {
+        name: "Arc".into(),
+        args: vec![MonoType::Int(32)],
+    };
     // Arc unification may fail (not handled) or succeed
     let _ = u.unify(&a1, &a2);
 }
@@ -722,8 +740,14 @@ fn test_unifier_unify_arc_same() {
 #[test]
 fn test_unifier_unify_weak_same() {
     let mut u = TypeUnifier::new();
-    let w1 = MonoType::Weak(Box::new(MonoType::String));
-    let w2 = MonoType::Weak(Box::new(MonoType::String));
+    let w1 = MonoType::Generic {
+        name: "Weak".into(),
+        args: vec![MonoType::make_string()],
+    };
+    let w2 = MonoType::Generic {
+        name: "Weak".into(),
+        args: vec![MonoType::make_string()],
+    };
     // Weak unification may fail (not handled) or succeed
     let _ = u.unify(&w1, &w2);
 }
@@ -766,9 +790,7 @@ fn test_unifier_unify_struct_same() {
     let _ = u.unify(&s1, &s2);
 }
 
-// ===================================================================
 // ComputeConfig
-// ===================================================================
 
 #[test]
 fn test_compute_config() {

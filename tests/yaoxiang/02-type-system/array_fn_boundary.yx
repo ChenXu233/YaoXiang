@@ -1,0 +1,15 @@
+// 02-type-system/array_fn_boundary.yx
+// 覆盖: #300 探针1——Array(T,N) 跨函数边界传参（solver Literal unify 臂）
+// 验证: 相同 const 泛型实参的 Array 类型可正常 unify，函数传参/返回值可用
+// 状态: ✅ 可运行
+
+use std.assert
+
+head_of: (a: Array(Int, 3)) -> Int = {
+    return a[0]
+}
+
+main = {
+    b: Array(Int, 3) = [10, 20, 30]
+    assert.assert(head_of(b) == 10, "Array(Int,3) passed to Array(Int,3) param")
+}

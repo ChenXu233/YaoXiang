@@ -38,12 +38,6 @@ pub struct UserConfig {
     /// Format settings
     #[serde(default)]
     pub fmt: FmtConfig,
-    /// Lint settings
-    #[serde(default)]
-    pub lint: LintConfig,
-    /// Install settings
-    #[serde(default)]
-    pub install: InstallConfig,
 }
 
 /// I18n configuration
@@ -81,9 +75,6 @@ impl Default for I18nConfig {
 /// REPL configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReplConfig {
-    /// History size
-    #[serde(default = "default_history_size")]
-    pub history_size: usize,
     /// History file path
     #[serde(default)]
     pub history_file: Option<PathBuf>,
@@ -98,10 +89,6 @@ pub struct ReplConfig {
     pub auto_imports: Vec<String>,
 }
 
-fn default_history_size() -> usize {
-    1000
-}
-
 fn default_prompt() -> String {
     "yx> ".to_string()
 }
@@ -113,7 +100,6 @@ fn default_colors() -> bool {
 impl Default for ReplConfig {
     fn default() -> Self {
         Self {
-            history_size: 1000,
             history_file: None,
             prompt: "yx> ".to_string(),
             colors: true,
@@ -140,42 +126,6 @@ pub struct FmtConfig {
     /// Sort import statements
     #[serde(default)]
     pub sort_imports: Option<bool>,
-}
-
-/// Lint configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LintConfig {
-    /// Rule sets
-    #[serde(default = "default_lint_rules")]
-    pub rules: Vec<String>,
-    /// Strict mode
-    #[serde(default)]
-    pub strict: bool,
-    /// Dead code analysis enabled
-    #[serde(default)]
-    pub dead_code: bool,
-}
-
-fn default_lint_rules() -> Vec<String> {
-    vec!["recommended".to_string()]
-}
-
-impl Default for LintConfig {
-    fn default() -> Self {
-        Self {
-            rules: vec!["recommended".to_string()],
-            strict: false,
-            dead_code: false,
-        }
-    }
-}
-
-/// Install configuration
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct InstallConfig {
-    /// Global install directory
-    #[serde(default)]
-    pub dir: Option<PathBuf>,
 }
 
 /// Project-level configuration (yaoxiang.toml)

@@ -1,9 +1,9 @@
 ---
-title: 'RFC-009a: Token Lifetime Analysis — Based on Hoare Proof Pipeline'
+title: 'RFC-009a: Token Lifetime Analysis — Hoare Proof Pipeline'
 status: 'Accepted'
-author: 'Chen Xu'
+author: 'Chenxu'
 created: '2026-06-13'
-updated: '2026-06-13'
+updated: '2026-08-17'
 group: 'rfc-009'
 
 issue: '#129'
@@ -11,30 +11,30 @@ issue: '#129'
 impl: 'partial'
 ---
 
-# RFC-009a: Token Lifetime Analysis — Based on Hoare Proof Pipeline
+# RFC-009a: Token Lifetime Analysis — Hoare Proof Pipeline
 
 > **Parent RFC**: [RFC-009: Ownership Model Design](../accepted/009-ownership-model.md)
 >
-> **Depends on**:
-> [RFC-027: Compile-Time Predicates and Unified Static Verification](../accepted/027-compile-time-evaluation-types.md)
+> **Dependency**:
+> [RFC-027: Compile-time Predicates and Unified Static Verification](../accepted/027-compile-time-evaluation-types.md)
 >
-> **Prerequisite**: RFC-027 has been accepted. All mechanisms in this RFC (proof pipeline, SMT
+> **Prerequisite**: RFC-027 must be accepted. All mechanisms in this RFC (proof pipeline, SMT
 > fallback, path condition collection) depend on RFC-027's implementation.
 >
-> **This RFC amends and supersedes RFC-009 §"Token Conflict Detection: Flow-Sensitive Liveness
+> **This RFC revises and supersedes RFC-009 §"Token Conflict Detection: Flow-Sensitive Liveness
 > Analysis" (lines 663-684).**
 
 ## Summary
 
-RFC-009 line 684 claims that token conflict detection "doesn't need... NLL." The conclusion is
-correct; the reasoning is wrong.
+Line 684 of RFC-009 claims that token conflict detection "does not require...NLL." The conclusion is
+correct, the reasoning is wrong.
 
-It's not "because tokens are values, linear tracking is sufficient." It's because: **token liveness
-is a Hoare logic proposition, not a specialized flow-sensitive analysis.**
+It is not "because tokens are values, linear tracking suffices." It is because: **token liveness is
+a Hoare logic proposition, not a specialized flow-sensitive analysis.**
 
-`{all conflicting_tokens dead} op {WriteToken safely acquired}` — the same `{P} op {Q}`, shared with
-type checking and predicate verification via the RFC-027 proof pipeline. No new analysis framework.
-One pipeline, multiple propositions.
+`{all conflicting_tokens dead} op {WriteToken safely acquired}` — the same `{P} op {Q}`, sharing
+RFC-027's proof pipeline with type checking and predicate verification. No new analysis framework.
+One pipeline, many propositions.
 
 ---
 
@@ -44,20 +44,20 @@ One pipeline, multiple propositions.
 
 RFC-009 conflates two problems:
 
-1. **Linear tracking** (unusable after Move) — `{v not moved} use(v) {type matches}`. Already in the
-   type checker.
-2. **Token lifetime interactions** (sub-token alive → parent token paused → sub-token dead → parent
-   token revived) — `{all conflicting_tokens dead} write(data) {safe}`. Requires **liveness
-   analysis**, not linear tracking.
+1. **Linear tracking** (unavailable after Move) — `{v not moved} use(v) {type matches}`. The type
+   checker already has it.
+2. **Token lifetime interaction** (child token alive → parent token paused → child token dies →
+   parent token revived) — `{all conflicting_tokens dead} write(data) {safe}`. This requires
+   **liveness analysis**, not linear tracking.
 
 ### Current Code Reality
 
-| Component                                  | Status                                                                           |
-| ------------------------------------------ | -------------------------------------------------------------------------------- |
-| `BorrowChecker`                            | Linear IR scan, passively responds to explicit `Borrow`/`Release` instructions   |
-| `ControlFlowAnalyzer::analyze_instruction` | Empty implementation (`control_flow.rs:145-153`)                                 |
-| `liveness_analysis`                        | Exists but only used for Drop insertion, not connected to token conflicts        |
-| Release insertion                          | Hardcoded after Call instructions — pure lexical scoping (`ir_gen.rs:2734-2736`) |
+| Component                                  | Status                                                                            |
+| ------------------------------------------ | --------------------------------------------------------------------------------- |
+| `BorrowChecker`                            | Linearly scans IR, passively responds to explicit `Borrow`/`Release` instructions |
+| `ControlFlowAnalyzer::analyze_instruction` | Empty implementation (`control_flow.rs:145-153`)                                  |
+| `liveness_analysis`                        | Exists but only used for Drop insertion, not connected to token conflicts         |
+| Release insertion                          | Hardcoded after Call instructions — purely lexical scope (`ir_gen.rs:2734-2736`)  |
 
 **User-visible consequences**:
 
@@ -65,15 +65,14 @@ RFC-009 conflates two problems:
 data = vec![1, 2, 3]
 view = &data              # Create ReadToken
 x = view.total_count      # Last use of view
-data.push(4)              # ❌ Release(view) hasn't executed yet, ReadToken is "alive"
+data.push(4)              # ❌ Release(view) not yet executed, ReadToken "alive"
 ```
 
-### Why Rewriting is Needed
+### Why a Rewrite is Needed
 
-The previous version (009a v1) used the "DAG instead of NLL" narrative, introducing unnecessary new
-concepts (conservative branching rules, special loop handling). The core contradiction wasn't
-clearly stated: **borrow checking is not an independent system — it's one kind of Hoare
-proposition.**
+The previous version (009a v1) used a "DAG replacing NLL" narrative, introducing unnecessary new
+concepts (conservative branching rules, special loop handling). The core contradiction was not made
+clear: **borrow checking is not an independent system — it is a kind of Hoare proposition.**
 
 ---
 
@@ -82,51 +81,51 @@ proposition.**
 ### Everything is Hoare
 
 ```
-Type checking:   { x: Int }        x + 1        { result: Int }
-Borrow checking: { view is dead }  data.push(4) { WriteToken acquired successfully }
-Predicate verify:{ y > 0 }         divide(x, y) { result: Int }
-Back-edge cut:   { i == n }        next loop     { cond == false }
+Type checking:    { x: Int }        x + 1        { result: Int }
+Borrow checking:  { view dead }     data.push(4)  { WriteToken acquired }
+Predicate check:  { y > 0 }         divide(x, y)  { result: Int }
+Backedge cut:     { i == n }        next loop     { cond == false }
 ```
 
-The same form `{P} op {Q}`. The compiler generates precondition P for each operation, feeds it to
-the proof pipeline for verification.
+The same form `{P} op {Q}`. The compiler generates a precondition P for each operation and feeds it
+into the proof pipeline for verification.
 
-**Borrow checking and user predicates share the same pipeline.** The only difference is who
-generates the proposition and what happens when it can't be proven.
+**Borrow checking and user predicates share the same pipeline.** The difference is only in who
+generates the proposition and what happens when it fails to prove.
 
-### Two Types of Predicates, One Pipeline
+### Two Kinds of Predicates, One Pipeline
 
-|                        | User Predicates                  | System Predicates (Borrowing)                |
-| ---------------------- | -------------------------------- | -------------------------------------------- |
-| Proposition generation | Programmer (type annotations)    | Compiler (brand tree + ownership rules)      |
-| Proof supply           | Compiler + programmer            | **Compiler fully automatic**                 |
-| Can't prove            | Write proof function or refactor | Refactor code (door stays but rarely needed) |
-| Visibility             | Visible in signatures            | Implicit, doesn't pollute type signatures    |
-| Learning curve         | Learn when you want              | Zero                                         |
+|                        | User predicate                     | System predicate (borrow)                      |
+| ---------------------- | ---------------------------------- | ---------------------------------------------- |
+| Proposition generation | Programmer (type annotations)      | Compiler (brand tree + ownership rules)        |
+| Proof provision        | Compiler + programmer              | **Fully automatic compiler**                   |
+| Failure to prove       | Write proof function or refactor   | Refactor code (gates remain but rarely needed) |
+| Visibility             | Visible in signature               | Implicit, does not pollute type signatures     |
+| Learning cost          | Learned only if you want to use it | Zero                                           |
 
-**System predicate proof doesn't open proof functions to programmers — fully compiler-automated.**
-When proof fails, users refactor code.
+**Proofs for system predicates don't open proof functions for the programmer — the compiler is fully
+automatic.** When a proof fails, the user refactors code.
 
-**Three failure modes, one verification engine.** Type proposition can't be proven → compile error
-(cannot bypass). Borrow proposition can't be proven → compile error, refactor code (cannot bypass).
-User predicate can't be proven → compile error, can write proof function (can bypass). Failure
-strategies differ, but the verification engine is the same — SMT solver + compiler internal
-inference rules. The only difference is "who is responsible for补证明 when it can't be proven" — the
-compiler refuses to write borrow proofs for programmers (borrow propositions use structural
-analysis + SMT as proof strategy, no programmer involvement needed), but accepts programmer-written
-user predicate proof functions. This isn't pipeline inconsistency — it's different responsibility
-boundaries for different proposition categories.
+**Three failure modes, one verification engine.** Type propositions fail to prove → compile error
+(cannot bypass). Borrow propositions fail to prove → compile error, refactor (cannot bypass). User
+predicates fail to prove → compile error, may write proof function (bypassable). Failure strategies
+differ, but the verification engine is the same — SMT solver + compiler core inference rules. The
+only difference is "who is responsible for filling the proof when it fails to prove" — the compiler
+refuses to write borrow proofs for the programmer (the proof strategy for borrow propositions is
+structural analysis + SMT, no programmer intervention needed), but accepts programmer-written proof
+functions for user predicates. This is not pipeline inconsistency — it is a different responsibility
+boundary for different proposition categories.
 
-This differs from Rust `'a`: `'a` is required, proof functions are elective — the vast majority of
-users will never touch the elective course.
+This differs from Rust `'a`: `'a` is required coursework, proof functions are elective — the vast
+majority of users never touch the elective door in their lifetime.
 
-### Borrow Propositions: Compiler-Generated Automatically
+### Borrow Propositions: Auto-Generated by the Compiler
 
-User writes `data.push(4)`. Compiler automatically generates proposition:
+The user writes `data.push(4)`. The compiler auto-generates the proposition:
 
 ```
 WriteToken(data, node) acquirable
-  = forall t in conflicting_tokens(data): t is dead at node
+  = forall t in conflicting_tokens(data): t dead at node
   = forall t in brand_tree.children(data): forward_reachable(node) ∩ consumers(t) == ∅
 ```
 
@@ -134,57 +133,67 @@ WriteToken(data, node) acquirable
 
 1. **Brand tree** (RFC-009 §2.7) answers "who conflicts with whom": prefix matching, O(depth), depth
    ≤ 3
-2. **Consumer list** (automatically collected during DAG construction) answers "who last consumed
+2. **Consumer list** (auto-collected during DAG construction) answers "who was the last consumer of
    the token"
-3. **Forward reachability** answers "can consumers still be reached": structural cut + logical cut
+3. **Forward reachability** answers "can the consumer still be executed": structural cut + logical
+   cut
 
-### Forward Reachability: Walking Backward from Consumers
+### Forward Reachability: Reverse-Walk from the Consumer
 
 For each consumer C of token T:
 
 ```
-From C, reverse BFS DAG.
-Edge is cut if:
-  1. It's a break (structural cut)
-  2. Path condition ⇒ !loop_cond is proven by SMT (logical cut, RFC-027 pipeline)
+Start from C, reverse BFS the DAG.
+An edge is cut if:
+  1. It is a break (structural cut)
+  2. path_condition ⇒ !loop_cond is proven true by SMT (logical cut, RFC-027 pipeline)
 
-Reverse-propagate liveness along all uncut edges (including back-edges; back-edges propagate liveness to previous iteration).
+Propagate backwards along all uncut edges (including backedges; backedges propagate liveness to the previous iteration).
 Mark all reachable nodes → unsafe.
 ```
 
 Query: write operation at node W → W ∉ unsafe → safe.
 
-**No need to invent "conservative branching rules." No need for "loop conservative liveness." One
-reverse BFS + two cut rules.**
+**No need to invent "conservative branching rules." No "conservative loop survival." One reverse
+BFS + two cut rules.**
 
-### Proof Strategy: Fast Path First, SMT Fallback
+### Proof Strategy: Fast Path First, SMT as Safety Net
 
 ```
-Each write operation needing a token
+Every write operation that requires a token
   │
   ├→ Fast path: DAG structural analysis (covers 95%+ of cases)
   │     │
-  │     ├→ Brand tree prefix matching → find conflicting tokens (O(depth))
-  │     ├→ Reverse BFS, break cuts back-edges
-  │     └→ No back-edges traversable → directly determine Proved / Disproved
+  │     ├→ Brand tree prefix match → find conflicting tokens (O(depth))
+  │     ├→ Reverse BFS, break cuts backedges
+  │     └→ No backedge traversable → directly determine Proved / Disproved
   │
-  └→ Slow path: SMT logical cut (only when fast path encounters traversable back-edges)
+  └→ Slow path: SMT logical cut (only when fast path encounters a traversable backedge)
         │
-        ├→ Back-edge start has path condition → SMT check path_cond ⇒ !loop_cond
-        │     ├→ Proved → logical cut → demote to fast path and continue
-        │     └→ Disproved / Unproven → back-edge traversable → mark unsafe
+        ├→ Backedge source has path condition → SMT judges path_cond ⇒ !loop_cond
+        │     ├→ Proved → logical cut → downgrade to fast path to continue
+        │     └→ Disproved / Unproven → backedge traversed → mark unsafe
         │
-        └→ Back-edge start has no path condition → back-edge directly traversable
+        └→ Backedge source has no path condition → backedge traversed directly
 ```
 
-**Fast path covers**: linear code, if/else, loop + break, while without path conditions. **Slow path
-covers**: while loop bodies, when path conditions imply loop will exit. **Not covered**: runtime
-conditions that cannot be statically proven → back-edge traversable → unsafe → compile error (user
+**Fast path coverage**: linear code, if/else, loop + break, while without path conditions. **Slow
+path coverage**: while loop bodies, cases where path conditions imply loop exit. **Not covered**:
+runtime conditions not statically provable → backedge traversed → unsafe → compile error (user
 refactors).
 
-SMT is not the main force — it's the safety net. Unlike RFC-027 user predicates: user predicates use
-SMT as main force; borrow system predicates use structural analysis as main force, SMT only fills in
-corners structural analysis can't reach.
+SMT is not the main force — it is the safety net. Unlike RFC-027's user predicates, where SMT is the
+main force, the borrow system predicates use structural analysis as the main force; SMT only fills
+the corners where structural analysis is insufficient.
+
+> **Errata (2026-08-17, SMT positioning correction)**: SMT is a **precision layer, not a soundness
+> dependency**. The sound judgment of borrow system predicates is fully carried by the fast path
+> (interval + reverse BFS + break cut); SMT logical cut only determines "whether legal programs at
+> loop boundaries can pass." When SMT is unavailable / times out / not yet implemented (RFC-027
+> impl: in_progress), fallback = backedge traversed = conservative rejection, and what should be
+> rejected is still rejected. **The conservatism without SMT = reject all borrow+write inside loops,
+> at the same level as Rust NLL** (Rust's production-grade borrow checker also has no SMT). SMT
+> landing is pure precision gain, not blocking the delivery of the sound mainline.
 
 ---
 
@@ -194,13 +203,13 @@ corners structural analysis can't reach.
 
 ```yaoxiang
 data = vec![1, 2, 3]        # Node 1
-view = &data                # Node 2: consumes data, produces ReadToken(#1)
-x = view.total_count        # Node 3: consumes view (= last consumer of #1)
-data.push(4)                # Node 4: needs WriteToken(data)
+view = &data                # Node 2: consume data, produce ReadToken(#1)
+x = view.total_count        # Node 3: consume view (= last consumer of #1)
+data.push(4)                # Node 4: requires WriteToken(data)
 ```
 
-Reverse BFS from `view.total_count` (node 3) → node 3 is #1's last consumer → node 4 > node 3 → node
-4 not in unsafe → ✅
+Reverse BFS starts from `view.total_count` (node 3) → node 3 is the last consumer of #1 → node 4 >
+node 3 → node 4 not in unsafe → ✅
 
 ### if/else: No Special Rules
 
@@ -211,12 +220,18 @@ if cond {
 } else {
     do_something_else()     # doesn't touch view
 }
-data.push(4)                # view's last consumer is in if → no consumers after if → ✅
+data.push(4)                # last consumer of view is inside if → no consumer after if → ✅
 ```
 
-if/else is a composite node in the DAG. Internal consumption attributes to this node. No branch
-state merging. No conservative voting. **Whether there are consumers afterward, integer
-comparison.**
+if/else is a compound node in the DAG. Internal consumption is attributed to that node. No branch
+state merging. No conservative vote. **Whether there is a subsequent consumer, integer comparison.**
+
+> **Clarification (after #264)**: "No branch state merging" only refers to **borrow liveness**
+> (reverse BFS over brand consumers). **move state** (variable ownership) is a separate analysis:
+> per-CFG-node forward dataflow (#264, NLL/Polonius style), branch join performs **conservative
+> meet** (any branch Moved → join Moved), unreachable branches (literal `if false`) do not
+> participate. The two are layered: borrow liveness asks "are there subsequent consumers", move
+> analysis asks "could the variable have been transferred".
 
 ### if/else with Return Value Escape
 
@@ -227,15 +242,15 @@ result = if cond {
 } else {
     something_else
 }
-use(result)                  # indirectly consumes view
-data.push(4)                 # view still has consumers (use(result))
-                             # → push in unsafe → ❌ Correct error
+use(result)                  # indirect consumption of view
+data.push(4)                 # view still has a consumer (use(result))
+                             # → push is in unsafe → ❌ correct error
 ```
 
-view escapes via return value → `use(result)` is view's consumer → reverse walking from `push` can
-reach `use(result)` → unsafe.
+view escapes through the return value → `use(result)` is a consumer of view → reverse-walking from
+`push` can reach `use(result)` → unsafe.
 
-### Loop: Break Cuts Back-Edge
+### Loop: break Cuts Backedge
 
 ```yaoxiang
 view = &data
@@ -248,7 +263,7 @@ loop {
 }
 ```
 
-Reverse BFS from `use(view)` → back-edge → forward to `data.push(4)` → encounter `break` → **cut** →
+Reverse BFS from `use(view)` → backedge → walk forward to `data.push(4)` → hit `break` → **cut** →
 `data.push(4)` not in unsafe → ✅
 
 Without break:
@@ -257,8 +272,8 @@ Without break:
 view = &data
 loop {
     use(view)
-    data.push(4)             # no break cut → back-edge traversable → next iteration's use(view) reachable
-                             # → push in unsafe → ❌ Correct error
+    data.push(4)             # no break cut → backedge traversable → next round's use(view) reachable
+                             # → push is in unsafe → ❌ correct error
 }
 ```
 
@@ -276,76 +291,82 @@ while i < n {
 }
 ```
 
-Reverse BFS from `use(view)` → back-edge → to `data.push(4)` → check path condition `i == n` → SMT
-query: `i == n ⇒ !(i < n)`? → Proved → **logical cut** → `data.push(4)` not in unsafe → ✅
+Reverse BFS from `use(view)` → backedge → walk to `data.push(4)` → check path condition `i == n` →
+SMT query: `i == n ⇒ !(i < n)`? → Proved → **logical cut** → `data.push(4)` not in unsafe → ✅
+
+> Errata (2026-08-17): `i == n` is the path condition of the write node itself (the `data.push(4)`
+> inside the if branch), the judgment target is the write node (see §Path Condition Collection
+> Errata Rule 1).
 
 ---
 
-## Essence: Brand ID is Just `'a`
+## Essence: Brand ID is `'a`
 
-Not saying "we don't need `'a`." Saying "`#42` is just `'42`."
+Don't say "we don't need `'a`." Say "`#42` is `'42`."
 
-| Rust                                    | YaoXiang                         | Equivalence                       |
-| --------------------------------------- | -------------------------------- | --------------------------------- |
-| `'a`                                    | `#42`                            | Compile-time lifetime identifier  |
-| `'a: 'b` outlives constraint            | `#42` is prefix of `#42.field_x` | String prefix = partial order     |
-| NLL liveness propagation (CFG fixpoint) | Reverse BFS (DAG)                | Both are reachability computation |
-| Polonius facts                          | SMT logical cut                  | Both are path condition reasoning |
-| Constraint system fixpoint              | Brand tree prefix matching + BFS | Different encodings, same problem |
+| Rust                                       | YaoXiang                         | Equivalence                              |
+| ------------------------------------------ | -------------------------------- | ---------------------------------------- |
+| `'a`                                       | `#42`                            | Compile-time lifetime identifier         |
+| `'a: 'b` outlives constraint               | `#42` is prefix of `#42.field_x` | String prefix comparison = partial order |
+| NLL liveness propagation (CFG fixed point) | Reverse BFS (DAG)                | Both are reachability computation        |
+| Polonius facts                             | SMT logical cut                  | Both are path condition reasoning        |
+| Constraint system fixed point solver       | Brand tree prefix match + BFS    | Different encoding, same problem         |
 
-**We haven't invented new analysis. We've just moved `'a` from the type signature layer to the proof
-layer.** Brand ID does exactly what `'a` does — marks borrow identity, tracks derivation
-relationships, determines conflicts. One difference: `'a` is in user-written type signatures; `#42`
-is inside the compiler.
+**We didn't invent a new analysis. We just moved `'a` from the type signature layer to the proof
+layer.** Brand ID does exactly the same thing as `'a` — marking borrow identity, tracking derivation
+relationships, judging conflicts. There is only one difference: `'a` is in the type signature the
+user writes; `#42` is inside the compiler.
 
-This isn't shameful. Curry-Howard says types are propositions, programs are proofs. `'a` isn't part
-of the proposition — it's part of the proof strategy. Rust wrote the proof strategy into the
-proposition signature. We've put it back where it belongs.
+This is nothing to be ashamed of. Curry-Howard says types are propositions, programs are proofs.
+`'a` is not part of the proposition — it is part of the proof strategy. Rust writes the proof
+strategy into the proposition signature. We put it back where it belongs.
 
 ### What Language Design Constraints Eliminate
 
-| Source of Complexity                       | Avoided? | Reason                                                                 |
+| Source of complexity                       | Avoided? | Reason                                                                 |
 | ------------------------------------------ | -------- | ---------------------------------------------------------------------- |
-| Variable shadowing                         | ✅       | Language forbids it — a name always refers to the same thing           |
-| for cross-iteration borrowing              | ✅       | Each iteration new binding — iterations naturally isolated             |
-| `'a` lifetime annotations                  | ✅       | Brand path = `#42.field_x`, compiler-derived                           |
-| Named lifetimes + constraint propagation   | ✅       | Brand path prefix comparison replaces explicit constraint sets         |
-| Borrow graph constraint solving (Polonius) | ✅       | Brand tree prefix matching + DAG consumer query                        |
-| Loop body borrow liveness propagation      | ❌       | Same as Rust needs to handle — using reverse BFS + logical cut         |
+| Variable shadowing                         | ✅       | Language forbids it — one name always points to the same thing         |
+| Cross-iteration borrowing in for           | ✅       | Each iteration is a new binding — iterations are naturally isolated    |
+| `'a` lifetime annotation                   | ✅       | Brand path = `#42.field_x`, compiler-inferred                          |
+| Named lifetime + constraint propagation    | ✅       | Brand path prefix comparison replaces explicit constraint sets         |
+| Borrow graph constraint solving (Polonius) | ✅       | Brand tree prefix match + DAG consumer query                           |
+| Loop body borrow liveness propagation      | ❌       | Same as Rust — handled by reverse BFS + logical cut                    |
 | Conditional branch conservatism            | ❌       | Same as Rust — SMT covers provable cases, rest conservatively rejected |
 
-### Why DAG Works
+### Why DAG is Feasible
 
-YaoXiang's three language design constraints make DAG analysis feasible:
+Three language design constraints of YaoXiang make DAG analysis feasible:
 
-- **No variable shadowing** — a name always refers to the same thing, no need to track across
+- **No variable shadowing** — one name always points to the same thing, no need to track across
   rebindings
-- **for creates new binding each iteration** — iterations naturally isolated, no cross-iteration
-  borrowing
-- **Structured concurrency** — task boundaries clear, no cross-task liveness propagation
+- **for creates new bindings each iteration** — iterations are naturally isolated, no
+  cross-iteration borrowing
+- **Structured concurrency** — task boundaries are clear, no cross-task liveness propagation
 
-These constraints eliminate the main source of CFG fixpoint iteration complexity in Rust. It's not
-that DAG is "more advanced" than CFG — simpler language design allows simpler analysis.
+These constraints eliminate the main sources of complexity in Rust's CFG fixed-point iteration. It's
+not that DAG is "more advanced" than CFG — it's that a simpler language design allows a simpler
+analysis.
 
 ---
 
 ## Detailed Design
 
-### System Predicate Checklist
+### System Predicate List
 
-Compiler automatically generates the following propositions and feeds them to RFC-027 proof
+The compiler auto-generates the following propositions and feeds them into the RFC-027 proof
 pipeline:
 
-| System Predicate  | Trigger时机          | Proposition Form                              |
-| ----------------- | -------------------- | --------------------------------------------- |
-| `borrow_conflict` | Need WriteToken(v)   | `forall t ∈ conflicting(v): dead_at(t, node)` |
-| `use_after_move`  | Use variable v       | `¬moved(v)`                                   |
-| `use_after_drop`  | Use variable v       | `¬dropped(v)`                                 |
-| `double_drop`     | Drop(v)              | `¬dropped(v)`                                 |
-| `mut_violation`   | Write to immutable v | `is_mut(v)`                                   |
+| System predicate  | Trigger timing                 | Proposition form                              |
+| ----------------- | ------------------------------ | --------------------------------------------- |
+| `borrow_conflict` | Requires WriteToken(v)         | `forall t ∈ conflicting(v): dead_at(t, node)` |
+| `use_after_move`  | Uses variable v                | `¬moved(v)`                                   |
+| `use_after_drop`  | Uses variable v                | `¬dropped(v)`                                 |
+| `double_drop`     | Drop(v)                        | `¬dropped(v)`                                 |
+| `mut_violation`   | Writes to immutable variable v | `is_mut(v)`                                   |
 
-Existing `BorrowChecker`, `MoveChecker`, `DropChecker`, `MutChecker` **become proposition
-generators** — not gone, changed roles. They generate propositions, pipeline verifies propositions.
+The existing `BorrowChecker`, `MoveChecker`, `DropChecker`, `MutChecker` **become proposition
+generators** — not deleted, but change identity. They generate propositions, the pipeline verifies
+propositions.
 
 ### Brand Tree
 
@@ -353,31 +374,33 @@ The brand mechanism from RFC-009 §2.7 is formalized as a brand tree.
 
 **Token semantics — freeze first, not copy first**:
 
-The essential difference between `&T` and `&mut T` isn't "can it be copied", it's "does it allow
-concurrent writes":
+The essential difference between `&T` and `&mut T` is not "whether it can be copied", but "whether
+concurrent writes are allowed":
 
 ```
-ReadToken(T): Grants read-only permission, simultaneously freezes source data T — any WriteToken(T) is
-              not acquirable during this period. Freeze is the primary semantics of ReadToken. Dup
-              (copyable) is a corollary of freeze: because data is already frozen (no mutation possible),
-              multiple read-only views are naturally safe.
+ReadToken(T):  Grants read-only permission, while freezing the source data T — any
+              WriteToken(T) is unacquirable during this period. Freezing is the
+              primary semantics of ReadToken. Dup (copyable) is a corollary of freezing:
+              because the data is frozen (no mutation possible), multiple read-only
+              views are naturally safe.
 
-WriteToken(T): Grants exclusive read-write permission. Because writes exist, no other tokens (read or
-               write) can coexist. Not implementing Dup (linear type) is a corollary of exclusivity.
+WriteToken(T): Grants exclusive read-write permission. Because writes exist, no other
+              token (read or write) can coexist. No Dup (linear type) is a corollary
+              of exclusivity.
 ```
 
 **Causal relationship**:
 
 ```
-ReadToken exists → source data frozen → multiple read-only safe → Dup
+ReadToken exists → source data frozen → multiple read-only copies safe → Dup
                       ↓
-              WriteToken denied (borrow_conflict system predicate enforced)
+              WriteToken rejected (enforced by borrow_conflict system predicate)
 ```
 
 Not:
 
 ```
-ReadToken has Dup → can have multiple → check conflicts incidentally  ← causal reversal
+ReadToken has Dup → can have multiple → incidentally check conflict  ← Causal inversion
 ```
 
 ```
@@ -388,17 +411,17 @@ BrandNode:
   id: BrandId               # "#42", "#42.field_x"
   kind: ReadToken | WriteToken
   source_var: Operand
-  parent: Option<BrandId>   # parent in derivation relationship
-  children: Set<BrandId>    # derived sub-tokens
-  consumers: Set<NodeId>     # DAG nodes consuming this token
-  ref_count: usize           # safe copy count during ReadToken freeze
+  parent: Option<BrandId>   # Parent node of the derivation relationship
+  children: Set<BrandId>    # Derived child tokens
+  consumers: Set<NodeId>    # DAG nodes that consume this token
+  ref_count: usize          # Safe copy count during ReadToken freeze
 ```
 
-**Conflict determination — enforcement mechanism for freeze**:
+**Conflict judgment** — the execution mechanism guaranteed by freezing:
 
 ```rust
 fn conflicts(a: &BrandId, b: &BrandId) -> bool {
-    // Conflict condition: same source + at least one is write + brand path overlaps
+    // Conflict conditions: same source + at least one is a write + brand paths overlap
     // This means:
     //   1. ReadToken vs ReadToken → no conflict (both read-only, no mutation)
     //   2. WriteToken vs ReadToken → conflict (write breaks read's freeze guarantee)
@@ -409,16 +432,23 @@ fn conflicts(a: &BrandId, b: &BrandId) -> bool {
 }
 ```
 
-O(depth) string prefix comparison, depth ≤ 3. Constant time.
+O(depth) string prefix comparison, depth ≤ 3. Constant level.
 
 ### Reverse BFS Liveness Analysis
+
+> **Errata (2026-08-17, #251 P0-6 audit)**: The following algorithm adds the "token creation time"
+> dimension. The original text relied on the DAG node total order implicitly assuming "borrow before
+> write", not covering the legal order of "write first, borrow after" (§2.4 semantics: parameter
+> token released when call ends) — the audit measured this scenario as falsely reported (#290).
+> Token liveness is an **interval** `[created_at, last_use]`, not a reverse reachability set; a
+> write operation only constitutes a conflict within the token's liveness interval.
 
 ```
 Algorithm: check_borrow(token, node, dag, brand_tree)
 
 Input:
   token: WriteToken to check
-  node:  DAG node where write operation occurs
+  node:  DAG node where the write operation resides
 
 Output: Proved | Disproved
 
@@ -432,142 +462,177 @@ Algorithm:
     unsafe.add(cur)
 
     for each pred in dag.predecessors(cur):
-      # Structural cut: break doesn't traverse
-      if pred is break edge:
+      # Structural cut: break is not traversed
+      if pred is a break edge:
         continue
 
-      # Back-edge → check if SMT fallback needed
-      if pred is back-edge:
-        path_cond = path condition at pred
+      # Backedge → check if SMT fallback is needed
+      if pred is a backedge:
+        path_cond = path condition of write node node   # Errata: judgment target is write node's own condition
         loop_cond = loop condition
-        # First check if structurally cuttable (corresponding break already cut path → won't reach here)
+        # First check structurally whether it can be cut (the corresponding break has already cut the path → won't reach here)
         # Then check path condition
-        if path_cond not empty:
+        if path_cond is non-empty:
           result = smt_fallback(path_cond, loop_cond)   # ← slow path
           if result == Proved:
             continue                    # logical cut
-        # No path condition or SMT can't prove → traverse back-edge
+        # No path condition or SMT fails to prove → traverse backedge
         # fall through
 
       if pred ∉ unsafe:
         queue.push(pred)
 
-  # Determination
-  if node ∈ unsafe:
+  # Judgment (errata: add creation time interval)
+  # Write first, borrow after: node < created_at(token) → token doesn't exist when write happens → Safe
+  if node ∈ unsafe and created_at(token) ≤ node:
     return Disproved
   else:
     return Proved
 
 
 smt_fallback(path_cond, loop_cond):
-  # Called only when back-edge + path condition exists
-  # Uses RFC-027 proof pipeline, shares same SMT solver and budget
+  # Only called on backedge + with path condition
+  # Uses the RFC-027 proof pipeline, sharing the same SMT solver and budget
   return smt.prove(path_cond ⇒ !loop_cond)
   # Proved → logical cut
-  # Disproved / Unproven → don't cut, back-edge traversable
+  # Disproved / Unproven → no cut, backedge traversed (conservative rejection)
+  # Errata (2026-08-17): SMT unavailable/timeout/not implemented = Disproved branch —
+  # SMT only affects precision (whether legal programs can pass), not soundness (what should be rejected is rejected);
+  # conservatism without SMT = reject all borrow+write inside loops, at the same level as Rust NLL.
 ```
 
-O(N), where SMT call count = back-edge count × proportion of back-edges with path conditions. In
-actual code, SMT calls are extremely rare — only triggered in while loop bodies with refined type
-variable path conditions.
+BrandNode adds a field (errata):
+
+```
+BrandNode:
+  ...
+  created_at: NodeId         # Token creation node (errata: left endpoint of borrow interval)
+```
+
+O(N), where SMT call count = number of backedges × proportion of backedges with path conditions. In
+actual code, SMT calls are extremely rare — only triggered when a `while` loop body has a refined
+type variable's path condition.
 
 ### Path Condition Collection
 
-Provided by existing RFC-027 §3.2-3.3 mechanisms:
+Provided by RFC-027 §3.2-3.3 existing mechanisms:
 
-- **if guard**: `if y > 0` → push `y > 0` to true branch
-- **match pattern**: `if let Some(v) = opt` → push `opt == Some(v)` in branch
-- **Assignment**: `i += 1`, compiler maintains variable value domain info
-- **while cond**: push `cond == true` in loop body
+- **if guard**: `if y > 0` → true branch pushes `y > 0`
+- **match pattern**: `if let Some(v) = opt` → branch pushes `opt == Some(v)`
+- **Assignment**: `i += 1`, compiler maintains variable value range information
+- **while cond**: loop body pushes `cond == true`
 
-Each DAG node carries a path condition set. When reverse BFS encounters a back-edge, it takes the
-path condition at the back-edge start, and SMT determines whether it excludes the next iteration's
-entry condition.
+Each DAG node carries a path condition set. When reverse BFS hits a backedge, take the path
+condition of the backedge source, SMT determines whether it excludes the next loop entry condition.
+
+> **Errata (2026-08-17, propagation rule completion)**: The original text didn't define how path
+> conditions propagate to the backedge source, and the use case "while + SMT logical cut"'s `i == n`
+> is not reproducible under the original algorithm. Added rules:
+>
+> 1. **Path condition attaches to the write node itself**: a write operation W inside a branch
+>    carries its branch condition (`if i == n { W }` → path_cond(W) = `i == n`). When reverse BFS
+>    traverses a backedge, SMT judges `path_cond(W) ⇒ !loop_cond` (the path to W must exit the loop
+>    → next round's consumer is unreachable → cut), not the path condition of the backedge node.
+> 2. **join conservatively empties**: if/else join points do not carry inside-branch path conditions
+>    (after disjunction the two branch conditions usually can't be determined, so empty directly).
+>    Write operations after the join have empty path_cond → backedge traversed.
+> 3. **Path condition semantization**: path_cond is a ConstExpr (RFC-027 §3.2 semantics), not source
+>    text; smt_cut translates it into SMT constraints before solving.
+> 4. **No path condition → backedge traversed directly** (unsafe), no SMT call.
 
 ### Interface with RFC-027
 
-Borrow system predicates and user predicates share the same proof pipeline — difference lies in
-**primary proof strategy**:
+Borrow system predicates and user predicates share the same proof pipeline — the difference is in
+the **main proof strategy**:
 
-| Query Type      | Proposition Source      | Primary Strategy                        | Fallback                  |
-| --------------- | ----------------------- | --------------------------------------- | ------------------------- |
-| Type equality   | Type checker            | Structural equivalence                  | —                         |
-| User predicate  | Programmer annotation   | SMT                                     | Programmer proof function |
-| Borrow conflict | Compiler auto-generated | **DAG structural analysis (fast path)** | SMT logical cut           |
+| Query type      | Proposition source         | Main strategy                           | Fallback                  |
+| --------------- | -------------------------- | --------------------------------------- | ------------------------- |
+| Type equality   | Type checker               | Structural equivalence                  | —                         |
+| User predicate  | Programmer type annotation | SMT                                     | Programmer proof function |
+| Borrow conflict | Compiler auto-generated    | **DAG structural analysis (fast path)** | SMT logical cut           |
 
-Role of SMT solver in borrow checking: **not primary, safety net.** Only called when while back-edge
-needs logical cut. The vast majority of borrow checking completes in fast path — O(N) reverse BFS,
-zero SMT cost.
+The SMT solver's role in borrow checking: **not the main force, but the safety net.** Only called
+when a while backedge needs logical cut. The vast majority of borrow checking completes on the fast
+path — O(N) reverse BFS, zero SMT overhead.
 
-### Relationship with Existing Code
+### Relationship to Existing Code
 
-| Existing Component           | Treatment                                                                     |
-| ---------------------------- | ----------------------------------------------------------------------------- |
-| `BorrowChecker`              | Becomes `BorrowPredicateEmitter` — generates Hoare propositions for borrowing |
-| `MoveChecker`                | Becomes `MovePredicateEmitter` — generates `¬moved(v)` propositions           |
-| `DropChecker`                | Same — generates Drop-related propositions                                    |
-| `MutChecker`                 | Same — generates `is_mut(v)` propositions                                     |
-| `ControlFlowAnalyzer`        | No longer needed — pipeline handles uniformly                                 |
-| `liveness_analysis`          | Kept — Drop insertion still needs variable liveness info                      |
-| `ir_gen.rs` Release hardcode | Deleted — Release positions driven by DAG consumer analysis                   |
+| Existing component             | Handling                                                                    |
+| ------------------------------ | --------------------------------------------------------------------------- |
+| `BorrowChecker`                | Becomes `BorrowPredicateEmitter` — generates Hoare propositions for borrows |
+| `MoveChecker`                  | Becomes `MovePredicateEmitter` — generates `¬moved(v)` propositions         |
+| `DropChecker`                  | Same — generates Drop-related propositions                                  |
+| `MutChecker`                   | Same — generates `is_mut(v)` propositions                                   |
+| `ControlFlowAnalyzer`          | No longer needed — pipeline handles uniformly                               |
+| `liveness_analysis`            | Kept — Drop insertion still needs variable liveness information             |
+| `ir_gen.rs` Release hardcoding | Removed — Release position is driven by DAG consumer analysis               |
 
 ### NLL and Iteration Boundaries
 
-**Token death time = last use point (NLL), not end of lexical scope.**
+> **Errata (2026-08-17, interval model completion)**: Token liveness is an **interval**
+> `[created_at, last_use]`, not a reverse reachability set. `created_at` = token creation node;
+> `last_use` = maximum consumer node from consumer analysis. Sufficient and necessary condition for
+> write operation W conflicting with token T: `conflicts(T, W) ∧ created_at(T) ≤ node(W)`
+> `∧ node(W) can forward-reach last_use(T)` (judged by reverse BFS). The legal order of "write
+> first, borrow after" (§2.4: parameter token released when call ends) is directly excluded by
+> `created_at(T) ≤ node(W)`, no special rules needed. This model makes the §Trade-offs Advantage 5
+> "algorithm not conservative" claim hold under all orderings.
 
-This is the natural corollary of consumer analysis: the consumer's position defines the token's last
-use. `use(v)` is `v`'s consumer → `v` dies immediately after `use(v)`. No additional `{}` or
-`drop()` needed to end token lifetime early.
+**Token death moment = last use point (NLL), not lexical scope end.**
+
+This is a natural consequence of consumer analysis: the consumer's position defines the last use of
+the token. `use(v)` is a consumer of `v` → `v` dies immediately after `use(v)`. No additional `{}`
+or `drop()` needed to end token life early.
 
 **Loop iteration boundary is the death line for token copies.** Three rules:
 
 ```
-Rule 1: Variables declared in loops auto-die at end of each iteration.
-        Each iteration of for is a new binding (language guarantee), same for loop.
+Rule 1: Variables declared inside a loop die automatically at the end of each iteration.
+        Each for iteration is a new binding (guaranteed by language design), loop is the same.
 
-Rule 2: Brand tree ref_count at loop head only counts copies created outside loop.
-        New copies produced by Dup inside loop, ref_count resets at iteration boundary.
+Rule 2: Brand tree ref_count at loop header only counts copies created outside the loop.
+        New copies produced by Dup inside the loop have ref_count cleared at iteration boundaries.
 
-Rule 3: When reverse BFS traverses back-edge, it doesn't carry current iteration's liveness info.
-        Only carries ref_count at loop head (i.e., copies from outside loop).
+Rule 3: When reverse BFS traverses a backedge, it does not carry the current iteration's liveness information.
+        It only carries the ref_count at the loop header (i.e.: copies from outside the loop).
 ```
 
 Example:
 
 ```yaoxiang
-view = &data                          # Loop head: ref_count = 1, consumer = use(view)
+view = &data                          # loop header: ref_count = 1, consumer = use(view)
 loop {
     v2: &Point = view                 # Dup inside loop → ref_count = 2
     use(v2)                           # consumer: last use of v2 → v2 dies → ref_count = 1
-    data.push(4)                      # ✅ Safe! v2 is dead, only view remains (ref_count = 1, not write conflict)
-    # Iteration boundary: Rule 3 — don't carry v2 to next round. v2 recreated by new binding at next iteration start.
+    data.push(4)                      # ✅ safe! v2 is dead, only view remains (ref_count = 1, not a write conflict)
+    # iteration boundary: rule 3 — v2 is not carried into the next round. At the start of the next iteration v2 is recreated by new binding.
 }
 ```
 
-This design doesn't need additional "loop conservative liveness" rules. Reverse BFS starts from
-consumers, consumers are in loop body → liveness restricted to current iteration → back-edge doesn't
-traverse. Consistent with RFC-009a §Use Case Analysis loop examples.
+This design doesn't need additional "conservative loop survival" rules. Reverse BFS starts from
+consumers; consumers inside the loop body → liveness is confined to the current iteration → backedge
+not traversed. Fully consistent with the loop examples in RFC-009a §Use Case Analysis.
 
 ### `?` Error Propagation and Scope-Driven Release
 
-`?` is early return — one more exit path beyond the scope's normal exit. Tokens must be released on
-this path, wrong release order is UB.
+`?` is an early return — beyond the normal exit of the scope, there's an additional exit path. The
+token must be released on this path; incorrect release order is UB.
 
 **Release instructions are generated by scope analysis, not hardcoded after Call.**
 
-Compiler maintains exit point list for each scope:
+The compiler maintains an exit point list for each scope:
 
-- `}` (scope ends normally)
+- `}` (normal scope end)
 - `?` (error propagation, early return)
 - Explicit `return`
 
-At each exit point, insert Release instructions for all active tokens in that scope, in reverse
-declaration order (LIFO). Brand tree parent-child relationships automatically handle cascading
-release of derived tokens:
+At each exit point, Release instructions are inserted in declaration reverse order (LIFO) for all
+active tokens in that scope. The parent-child relationship of the brand tree automatically handles
+cascading release of derived tokens:
 
 ```yaoxiang
 Point.get_x: (self: &Point) -> (&Float, &Point) = {
-    return (&self.x, self)    # Returns sub-token &Float + parent token &Point
+    return (&self.x, self)    # return child token &Float + parent token &Point
 }
 
 fn use_case(p: Point) -> Result<(), Error> = {
@@ -582,173 +647,176 @@ fn use_case(p: Point) -> Result<(), Error> = {
 Implementation location: kept in `ir_gen.rs`, changed to scope-driven — no new compiler pass
 introduced.
 
-| Operation                  | Complexity | Trigger Frequency                           |
-| -------------------------- | ---------- | ------------------------------------------- |
-| Brand tree conflict check  | O(1)       | Every token acquisition                     |
-| DAG consumer query         | O(1)       | Every token acquisition                     |
-| Reverse BFS (fast path)    | O(N)       | Every token acquisition, N = nodes in block |
-| SMT logical cut (fallback) | ~1ms       | **Extremely rare** — only while + path cond |
+| Conflict judgment | O(1) | Each token request | | DAG consumer query | O(1) | Each token request |
+| Reverse BFS (fast path) | O(N) | Each token request, N = nodes in block | | SMT logical cut
+(fallback) | ~1ms | **Extremely rare** — only while + path conditions |
 
-**SMT fallback trigger conditions are extremely stringent**: must simultaneously satisfy (1) while
-loop (2) write operation in loop body (3) path condition after write operation that can determine
-loop termination (4) compiler needs this condition to cut back-edge. Actual code proportion is far
-below 1%. All other borrow checking completes in fast path.
+> Errata (2026-08-17): The complexity in the table above is a design estimate, not measured; "~1ms"
+> and "extremely rare" should be treated as order-of-magnitude expectations rather than measured
+> values, to be calibrated with observability data after implementation lands.
 
-Relationship with RFC-027 user predicates: user predicates use SMT as primary, borrow system
-predicates use structural analysis as primary. Both share same SMT solver and budget ceiling
-(RFC-027 §8), but borrow system predicates barely consume SMT budget.
+**The trigger conditions for SMT fallback are extremely stringent**: must simultaneously satisfy (1)
+while loop (2) write operation inside the loop body (3) write operation has a path condition that
+can judge loop termination (4) compiler needs to rely on that condition to cut the backedge. In
+actual code, the proportion is far less than 1%. All other borrow checking completes on the fast
+path.
 
-Linear code → no back-edges → Tier 1 O(N) instant. Loops + path conditions → SMT call, linear
-arithmetic millisecond-level (RFC-027 budget 100ms). One BFS result can be cached for multiple
-queries of the same token.
+Relationship to RFC-027 user predicates: user predicates use SMT as the main force, borrow system
+predicates use structural analysis as the main force. Both share the same SMT solver and budget cap
+(RFC-027 §8), but borrow system predicates almost don't consume SMT budget.
+
+Linear code → no backedge → layer 1 O(N) in seconds. Loop + path condition → SMT call, linear
+arithmetic millisecond level (RFC-027 budget 100ms). One BFS result is cacheable for reuse across
+multiple queries for the same token.
 
 ### Error Message Design
 
-**Core principle: Error messages only contain symbols the user wrote.**
+**Core principle: error messages only contain symbols the user has written.**
 
-Rust and borrow-related errors fall into two categories:
+Rust has two categories of borrow-related errors:
 
-**Variable-level errors**: E0597 (doesn't live long enough), E0502 (mutable and immutable borrow in
-scope), E0499 (cannot borrow as mutable more than once). Rust is already the benchmark — variable
-name + line number, no `'a` shown. YaoXiang precision matches. All info in brand tree: token
-creation point, consumer position, request point.
+**Variable-level errors**: E0597 (doesn't live long enough), E0502 (mutable + immutable borrow
+simultaneously), E0499 (multiple mutable borrows). Rust is already the benchmark — variable name +
+line number, no `'a` appears. YaoXiang precision is on par. All information is in the brand tree:
+token creation point, consumer location, request point.
 
 **Signature-level errors**: E0623 (lifetime mismatch), E0106 (missing lifetime specifier), E0477
-(required lifetime not satisfied). Centered around `'a`. YaoXiang **doesn't have these errors** — no
-`'a` in signatures. Not "can't report them" — things users didn't write don't need reporting.
+(required lifetime not satisfied). Centered on `'a`. YaoXiang **has no such errors** — no `'a` in
+signatures. Not "can't report", but don't report things the user hasn't written.
 
-Function-internal conflict example:
+Example: conflict within a function:
 
 ```
 Error: `data` is frozen, cannot acquire mutable permission
  --> src/main.yx:5:9
 2 |     view = &data
-  |            ----- `data` frozen (read-only token created here)
+  |            ----- `data` is frozen (read-only token created here)
 4 |         use(view)
-  |             ---- `view` still in use here, freeze not lifted
+  |             ---- `view` is still in use here, freeze not released
 5 |         data.push(4)
-  |         ^^^^ mutable permission needed here
+  |         ^^^^ mutable permission required here
 ```
 
-(Matches Rust E0499 precision — variable name + line number, no brand ID shown.)
+(On par with Rust E0499 precision — variable name + line number, no brand ID appears.)
 
-Cross-function escape example:
+Example: escape between functions:
 
 ```
-Error: one of `num`'s data sources (line 4) is `default_str` (line 3),
-but `default_str` is invalidated at line 6 while `num` is still being used at line 5.
+Error: `num` (line 4) holds data from one source being `default_str` (line 3),
+but `default_str` becomes invalid at line 6, and `num` is still in use at line 5.
 
-Consider: moving `default_str` declaration to caller, or using `ref default_str` for shared holding.
+Consider: move the `default_str` declaration up to the caller, or use `ref default_str` to share holding.
 ```
 
-(Matches Rust E0597 precision. Brand summary knows `num` has two source paths — already in compiler,
-error wording can use them.)
+(On par with Rust E0597 precision. The brand digest knows `num` has two source paths — already in
+the compiler, the wording can be used.)
 
 ---
 
-## RFC-009 Body Amendments
+## RFC-009 Main Text Revision
 
 RFC-009 §"Token Conflict Detection: Flow-Sensitive Liveness Analysis" has been updated:
 
-1. Removed "unneeded things:... NLL" — not because conclusion is wrong, but because reasoning is
-   wrong ("tokens are values, linear tracking is sufficient")
-2. Tier 1/Tier 2 transition plan kept, complete plan points to this RFC
-3. Clarified: Brand ID (`#42`) is just `'a` — same information, different encoding. Not invented new
-   analysis — moved lifetimes from type layer to proof layer
+1. Delete "Things not needed: ...NLL" — not because the conclusion is wrong, but because the
+   reasoning is wrong ("tokens are values, linear tracking is enough")
+2. Layer 1 / Layer 2 transition plan kept, complete plan points to this RFC
+3. Clarify: brand ID (`#42`) is `'a` — completely the same information, different encoding. Not
+   inventing a new analysis — moving lifetime from the type layer to the proof layer
 
 ---
 
-## Tradeoffs
+## Trade-offs
 
 ### Advantages
 
-1. **No lifetimes in type signatures**: `#42` is just `'42` — same information, encoded in brand
-   tree, not exposed in type signatures. This point is unfalsifiable: count how many `'a` parameters
-   a generic type with 3 reference parameters needs in Rust, versus YaoXiang. Answer: 3 vs 0.
+1. **Type signatures contain no lifetime**: `#42` is `'42` — the same information, encoded in the
+   brand tree, not exposed in the type signature. This is unfalsifiable: count how many `'a`
+   parameters a generic type with 3 reference parameters needs in Rust vs. how many YaoXiang needs.
+   The answer is 3 vs 0.
 
-2. **Conceptual unification**: Borrow checking and user predicates share the same proof pipeline —
+2. **Conceptual unity**: borrow checking and user predicates share the same proof pipeline —
    `{P} op {Q}`, pipeline verifies P. Curry-Howard consistent.
 
-3. **Zero new analysis framework**: No new analysis framework introduced. Users don't perceive the
-   existence of a "borrow checker" — just as users don't perceive the implementation details of the
-   "type checker."
+3. **Zero new analysis framework**: no new analysis framework introduced. The user doesn't perceive
+   the existence of a "borrow checker" — just as the user doesn't perceive implementation details of
+   the "type checker".
 
-4. **Error messages only contain symbols user wrote**: One entire dimension of error categories
-   eliminated (E0623, E0106, E0477 — all centered around `'a`). Variable-level errors match Rust
-   precision.
+4. **Error messages only contain symbols the user has written**: an entire dimension of error
+   categories removed (E0623, E0106, E0477 — all around `'a`). Variable-level errors on par with
+   Rust precision.
 
-5. **Algorithm not conservative**: Reverse BFS + break cut + SMT logical cut. No "loop conservative
-   liveness" needed. No "branch conservative merge" needed.
+5. **Algorithm not conservative**: reverse BFS + break cut + SMT logical cut. No need for
+   "conservative survival inside loops". No need for "conservative branch merging".
 
 ### Disadvantages
 
-1. **Not a new invention**: Brand ID does exactly what `'a` does — compiler-internal constraint
-   solving complexity doesn't disappear, only encoding changes from "variable name + constraint set"
-   to "brand path + prefix matching." Difference to end users is only that signatures don't write
-   `'a`.
+1. **Not a new invention**: brand ID does exactly the same thing as `'a` — the constraint solving
+   complexity inside the compiler hasn't disappeared, only the encoding has changed from "variable
+   name + constraint set" to "brand path + prefix match". The difference to the end user is only
+   that `'a` is not written in the signature.
 
-2. **Brand new implementation**: Brand tree only exists as concept in code, needs implementation
-   from scratch. BorrowChecker, ControlFlowAnalyzer replaced.
+2. **Brand new implementation**: the brand tree only exists as a concept in the code, needs to be
+   implemented from scratch. BorrowChecker, ControlFlowAnalyzer are replaced.
 
-3. **SMT dependency**: Logical cut relies on Z3 (already introduced in RFC-027, no new
-   dependencies). But borrow checking barely triggers — only in while + path conditions.
+3. **SMT dependency**: logical cut depends on Z3 (already introduced by RFC-027, no new dependency).
+   But borrow checking almost never triggers it — only called on while + path conditions.
 
-4. **Extremely rare patterns need refactoring**: Cross-branch borrowing that compiler can't
-   auto-prove requires user code refactoring. Unlike Rust `'a` fallback: Rust has `'a` as the pen
-   (annotate and pass); YaoXiang's fallback (proof functions) is not MVP.
+4. **A very small number of patterns need refactoring**: borrow system predicates the compiler
+   cannot auto-prove across branches, the user needs to refactor code. Different from Rust `'a`'s
+   fallback: Rust has `'a` as a tool (annotate and it passes); YaoXiang's fallback (proof function)
+   is not MVP.
 
 ---
 
 ## Alternatives
 
-| Alternative                      | Why Not Chosen                                                                                                                         |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Implement full Rust NLL          | YaoXiang's design constraints (no shadowing, for new bindings) already eliminate NLL's main complexity source, CFG fixpoint not needed |
-| Keep current (hardcoded Release) | Insufficient — users must manually manage token scope                                                                                  |
-| Analysis only in spawn blocks    | Insufficient — non-spawn code token usage is the majority                                                                              |
-| GC instead of borrow checking    | Violates language design principle — YaoXiang has no GC                                                                                |
+| Alternative                      | Why not chosen                                                                                                                               |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Implement full Rust NLL          | YaoXiang's design constraints (no shadowing, for rebinds) have already eliminated NLL's main complexity sources, no need for CFG fixed point |
+| Keep current (hardcoded Release) | Insufficient — users must manually manage token scopes                                                                                       |
+| Only analyze inside spawn blocks | Insufficient — token use in non-spawn code is the majority                                                                                   |
+| GC instead of borrow checking    | Violates language design principles — YaoXiang has no GC                                                                                     |
 
 ---
 
 ## Implementation Phases
 
-| Phase   | Content                                                           | Dependencies              |
+| Phase   | Content                                                           | Dependency                |
 | ------- | ----------------------------------------------------------------- | ------------------------- |
 | Phase 1 | Brand tree data structure implementation                          | —                         |
 | Phase 2 | System predicate generators (Borrow/Move/Drop/Mut → propositions) | Phase 1                   |
-| Phase 3 | Reverse BFS liveness analysis + pipeline integration (Tier 1)     | Phase 2                   |
-| Phase 4 | Path condition collection + SMT logical cut (Tier 2)              | Phase 3 + RFC-027 Phase 2 |
-| Phase 5 | Release instructions changed to DAG consumer-driven               | Phase 3                   |
-| Phase 6 | Delete ControlFlowAnalyzer, refactor BorrowChecker                | Phase 4                   |
+| Phase 3 | Reverse BFS liveness analysis + pipeline integration (layer 1)    | Phase 2                   |
+| Phase 4 | Path condition collection + SMT logical cut (layer 2)             | Phase 3 + RFC-027 Phase 2 |
+| Phase 5 | Release instructions changed to DAG-consumer-driven               | Phase 3                   |
+| Phase 6 | Remove ControlFlowAnalyzer, refactor BorrowChecker                | Phase 4                   |
 
 ---
 
 ## Open Questions
 
-- [x] **Brand tree `ref_count` semantics across iterations during loop unrolling** — follow NLL:
-      token dies after last use. Copies bound inside loop die at iteration boundary, reverse BFS
-      doesn't carry cross-iteration liveness. See §NLL and Iteration Boundaries.
-- [x] **Token release order on `?` error propagation paths** — Release driven by scope analysis
+- [x] **Brand tree `ref_count` cross-iteration semantics during loop unrolling** — Go NLL: the token
+      dies after last use. Copies bound inside the loop die at iteration boundaries, reverse BFS
+      does not carry liveness across iterations. See §NLL and Iteration Boundaries.
+- [x] **Token release order on `?` error propagation path** — Release is driven by scope analysis
       (kept in ir_gen.rs). Each scope exit point (`}`, `?`, explicit return) releases active tokens
-      in LIFO order. Brand tree parent-child relationships automatically handle cascading release.
-      See §`?` Error Propagation and Scope-Driven Release.
-- [ ] Proof function syntax (far-term, not MVP — doesn't block any Phase)
+      in LIFO. Brand tree parent-child relationships automatically handle cascading release. See
+      §`?` Error Propagation and Scope-Driven Release.
+- [ ] Proof function syntax (long-term, not MVP — does not block any Phase)
 
 ---
 
 ## References
 
 - [RFC-009: Ownership Model Design](../accepted/009-ownership-model.md) — Parent RFC
-- [RFC-027: Compile-Time Predicates and Unified Static Verification](../accepted/027-compile-time-evaluation-types.md)
+- [RFC-027: Compile-time Predicates and Unified Static Verification](../accepted/027-compile-time-evaluation-types.md)
   — Proof pipeline
 - [RFC-010: Unified Type Syntax](../accepted/010-unified-type-syntax.md) — `{}` semantics
-- [RFC-024: Concurrency Model Based on spawn Blocks](../accepted/024-concurrency-model.md) — spawn
-  DAG
+- [RFC-024: spawn Block-Based Concurrency Model](../accepted/024-concurrency-model.md) — spawn DAG
 
 ---
 
-## Lifecycle and Disposition
+## Lifecycle and Destination
 
-| Status       | Location                    | Description               |
-| ------------ | --------------------------- | ------------------------- |
-| **Accepted** | `docs/design/rfc/accepted/` | Becomes formal design doc |
+| Status       | Location                    | Description                      |
+| ------------ | --------------------------- | -------------------------------- |
+| **Accepted** | `docs/design/rfc/accepted/` | Becomes a formal design document |

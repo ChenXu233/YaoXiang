@@ -26,7 +26,7 @@ pub mod interpreter;
 pub mod runtime;
 
 use crate::middle::bytecode::{BytecodeModule, BytecodeFunction};
-use crate::backends::common::{RuntimeValue, Heap};
+use crate::backends::common::RuntimeValue;
 
 /// Stack frame information for error reporting
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,12 +58,26 @@ pub enum ExecutorError {
     Type(String, Option<Vec<StackFrame>>),
     /// Stack overflow
     StackOverflow(Option<Vec<StackFrame>>),
-    /// Division by zero
-    DivisionByZero(Option<Vec<StackFrame>>),
-    /// Index out of bounds
-    IndexOutOfBounds(Option<Vec<StackFrame>>),
+    /// Division by zero（#282：携带触发表达式，渲染层直接使用）
+    DivisionByZero(String, Option<Vec<StackFrame>>),
+    /// Index out of bounds（#280：携带 max/index 以映射 E6003）
+    IndexOutOfBounds {
+        /// 容器长度
+        max: usize,
+        /// 越界索引（#300 D 项：i64 保真——负索引保留原始值，不再是 max=0 哨兵）
+        index: i64,
+        /// 调用栈
+        stack: Option<Vec<StackFrame>>,
+    },
+    /// 断言失败（#280：映射 E6005）
+    AssertionFailed(String, Option<Vec<StackFrame>>),
     /// Field not found
     FieldNotFound(String, Option<Vec<StackFrame>>),
+    /// Dict 键缺失（#299 §4：与索引越界区分——语义不同的契约失败，映射 E6008）
+    KeyNotFound {
+        key: String,
+        stack: Option<Vec<StackFrame>>,
+    },
     /// Function not found
     FunctionNotFound(String, Option<Vec<StackFrame>>),
 }
@@ -85,9 +99,11 @@ impl ExecutorError {
             ExecutorError::Runtime(_, stack) => stack.as_ref(),
             ExecutorError::Type(_, stack) => stack.as_ref(),
             ExecutorError::StackOverflow(stack) => stack.as_ref(),
-            ExecutorError::DivisionByZero(stack) => stack.as_ref(),
-            ExecutorError::IndexOutOfBounds(stack) => stack.as_ref(),
+            ExecutorError::DivisionByZero(_, stack) => stack.as_ref(),
+            ExecutorError::IndexOutOfBounds { stack, .. } => stack.as_ref(),
+            ExecutorError::AssertionFailed(_, stack) => stack.as_ref(),
             ExecutorError::FieldNotFound(_, stack) => stack.as_ref(),
+            ExecutorError::KeyNotFound { stack, .. } => stack.as_ref(),
             ExecutorError::FunctionNotFound(_, stack) => stack.as_ref(),
         }
     }
@@ -117,6 +133,16 @@ impl ExecutorError {
     }
 
     /// Create a new field not found error with stack trace
+    /// #299 §4: Dict 键缺失专用构造器（E6008）
+    pub fn key_not_found(
+        key: impl Into<String>,
+        stack: Vec<StackFrame>,
+    ) -> Self {
+        ExecutorError::KeyNotFound {
+            key: key.into(),
+            stack: Some(stack),
+        }
+    }
     pub fn field_not_found(
         name: impl Into<String>,
         stack: Vec<StackFrame>,
@@ -130,13 +156,28 @@ impl ExecutorError {
     }
 
     /// Create a division by zero error with stack trace
-    pub fn division_by_zero(stack: Vec<StackFrame>) -> Self {
-        ExecutorError::DivisionByZero(Some(stack))
+    pub fn division_by_zero(
+        expr: impl Into<String>,
+        stack: Vec<StackFrame>,
+    ) -> Self {
+        ExecutorError::DivisionByZero(expr.into(), Some(stack))
     }
 
-    /// Create an index out of bounds error with stack trace
-    pub fn index_out_of_bounds(stack: Vec<StackFrame>) -> Self {
-        ExecutorError::IndexOutOfBounds(Some(stack))
+    /// Create an index out of bounds error
+    pub fn index_out_of_bounds(
+        max: usize,
+        index: i64,
+        stack: Option<Vec<StackFrame>>,
+    ) -> Self {
+        ExecutorError::IndexOutOfBounds { max, index, stack }
+    }
+
+    /// Create an assertion failed error
+    pub fn assertion_failed(
+        msg: impl Into<String>,
+        stack: Option<Vec<StackFrame>>,
+    ) -> Self {
+        ExecutorError::AssertionFailed(msg.into(), stack)
     }
 
     /// Add stack trace to an error if it doesn't have one
@@ -146,22 +187,41 @@ impl ExecutorError {
     ) -> Self {
         match self {
             // Already has stack trace
+            ExecutorError::KeyNotFound { stack: Some(_), .. } => self,
             ExecutorError::Runtime(_, Some(_)) => self,
             ExecutorError::Type(_, Some(_)) => self,
             ExecutorError::StackOverflow(Some(_)) => self,
-            ExecutorError::DivisionByZero(Some(_)) => self,
-            ExecutorError::IndexOutOfBounds(Some(_)) => self,
+            ExecutorError::DivisionByZero(_, Some(_)) => self,
+            ExecutorError::IndexOutOfBounds { stack: Some(_), .. } => self,
+            ExecutorError::AssertionFailed(_, Some(_)) => self,
             ExecutorError::FieldNotFound(_, Some(_)) => self,
             ExecutorError::FunctionNotFound(_, Some(_)) => self,
             // Add stack trace
             ExecutorError::Runtime(msg, None) => ExecutorError::Runtime(msg, Some(stack)),
             ExecutorError::Type(msg, None) => ExecutorError::Type(msg, Some(stack)),
             ExecutorError::StackOverflow(None) => ExecutorError::StackOverflow(Some(stack)),
-            ExecutorError::DivisionByZero(None) => ExecutorError::DivisionByZero(Some(stack)),
-            ExecutorError::IndexOutOfBounds(None) => ExecutorError::IndexOutOfBounds(Some(stack)),
+            ExecutorError::DivisionByZero(expr, None) => {
+                ExecutorError::DivisionByZero(expr, Some(stack))
+            }
+            ExecutorError::IndexOutOfBounds {
+                max,
+                index,
+                stack: None,
+            } => ExecutorError::IndexOutOfBounds {
+                max,
+                index,
+                stack: Some(stack),
+            },
+            ExecutorError::AssertionFailed(msg, None) => {
+                ExecutorError::AssertionFailed(msg, Some(stack))
+            }
             ExecutorError::FieldNotFound(name, None) => {
                 ExecutorError::FieldNotFound(name, Some(stack))
             }
+            ExecutorError::KeyNotFound { key, stack: None } => ExecutorError::KeyNotFound {
+                key,
+                stack: Some(stack),
+            },
             ExecutorError::FunctionNotFound(name, None) => {
                 ExecutorError::FunctionNotFound(name, Some(stack))
             }
@@ -202,8 +262,9 @@ impl std::fmt::Display for ExecutorError {
                 }
                 Ok(())
             }
-            ExecutorError::DivisionByZero(stack) => {
-                write!(f, "Division by zero")?;
+            ExecutorError::DivisionByZero(expr, stack) => {
+                // #282：直接用变体携带的表达式（原 fallback `<unknown>`）
+                write!(f, "Division by zero: {}", expr)?;
                 if let Some(frames) = stack {
                     for frame in frames {
                         writeln!(f, "{}", frame)?;
@@ -211,8 +272,26 @@ impl std::fmt::Display for ExecutorError {
                 }
                 Ok(())
             }
-            ExecutorError::IndexOutOfBounds(stack) => {
-                write!(f, "Index out of bounds")?;
+            ExecutorError::IndexOutOfBounds { max, index, stack } => {
+                write!(f, "Index out of bounds: {index} (length {max})")?;
+                if let Some(frames) = stack {
+                    for frame in frames {
+                        writeln!(f, "{}", frame)?;
+                    }
+                }
+                Ok(())
+            }
+            ExecutorError::AssertionFailed(msg, stack) => {
+                write!(f, "Assertion failed: {}", msg)?;
+                if let Some(frames) = stack {
+                    for frame in frames {
+                        writeln!(f, "{}", frame)?;
+                    }
+                }
+                Ok(())
+            }
+            ExecutorError::KeyNotFound { key, stack } => {
+                write!(f, "Key not found: {}", key)?;
                 if let Some(frames) = stack {
                     for frame in frames {
                         writeln!(f, "{}", frame)?;
@@ -280,9 +359,6 @@ pub trait Executor {
 
     /// Get current execution state
     fn state(&self) -> &ExecutionState;
-
-    /// Get the heap for inspection
-    fn heap(&self) -> &Heap;
 }
 
 /// Debuggable executor - adds debugging capabilities
@@ -324,44 +400,17 @@ pub trait DebuggableExecutor: Executor {
     fn breakpoints(&self) -> Vec<usize>;
 }
 
-/// Build mode for the backend
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum BuildMode {
-    /// Debug mode with assertions and debugging info
-    #[default]
-    Debug,
-    /// Release mode with optimizations
-    Release,
-    /// Profile mode for performance analysis
-    Profile,
-}
-
 /// Configuration for an executor
 #[derive(Debug, Clone)]
 pub struct ExecutorConfig {
     /// Maximum call stack depth
     pub max_stack_depth: usize,
-    /// Initial heap capacity
-    pub initial_heap_size: usize,
-    /// Maximum heap size
-    pub max_heap_size: usize,
-    /// Build mode
-    pub build_mode: BuildMode,
-    /// Enable runtime checks (bounds, null, etc.)
-    pub enable_checks: bool,
-    /// Enable debugging features
-    pub enable_debug: bool,
 }
 
 impl Default for ExecutorConfig {
     fn default() -> Self {
         Self {
             max_stack_depth: 1024,
-            initial_heap_size: 64 * 1024,
-            max_heap_size: 64 * 1024 * 1024,
-            build_mode: BuildMode::Debug,
-            enable_checks: true,
-            enable_debug: true,
         }
     }
 }

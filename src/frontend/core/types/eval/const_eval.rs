@@ -62,9 +62,7 @@ impl ConstGenericResult {
     }
 }
 
-// ====================================================================
 // ConstGenericEval
-// ====================================================================
 /// RFC-011 Const泛型求值
 ///
 /// 实现Const泛型的编译期求值。
@@ -302,14 +300,19 @@ impl ConstGenericEval {
                 if *b < 0 || *b >= 128 {
                     Err(ErrorCodeDefinition::const_overflow().build())
                 } else {
-                    Ok(ConstValue::Int(a.checked_shl(*b as u32).unwrap_or(0)))
+                    // #271 #7：checked_shl 失败（b >= 64 时 i64 溢出）不再静默归零
+                    a.checked_shl(*b as u32)
+                        .map(ConstValue::Int)
+                        .ok_or_else(|| ErrorCodeDefinition::const_overflow().build())
                 }
             }
             (BinOp::Shr, ConstValue::Int(a), ConstValue::Int(b)) => {
                 if *b < 0 || *b >= 128 {
                     Err(ErrorCodeDefinition::const_overflow().build())
                 } else {
-                    Ok(ConstValue::Int(a.checked_shr(*b as u32).unwrap_or(0)))
+                    a.checked_shr(*b as u32)
+                        .map(ConstValue::Int)
+                        .ok_or_else(|| ErrorCodeDefinition::const_overflow().build())
                 }
             }
 
@@ -566,9 +569,7 @@ pub mod functions {
     }
 }
 
-// ====================================================================
 // GenericSize
-// ====================================================================
 /// RFC-011 泛型尺寸计算
 ///
 /// 实现泛型类型的尺寸计算，用于Const泛型和数组类型。
@@ -618,7 +619,7 @@ impl GenericSize {
                 .get("Float")
                 .cloned()
                 .ok_or("Float not found".to_string()),
-            MonoType::String => self
+            MonoType::Generic { name, .. } if name == "String" => self
                 .base_sizes
                 .get("String")
                 .cloned()
@@ -640,14 +641,14 @@ impl GenericSize {
                     .cloned()
                     .ok_or_else(|| format!("TypeRef {} not found", name))
             }
-            MonoType::Tuple(types) => {
+            MonoType::Generic { name, args } if name == "Tuple" => {
                 let mut total = 0;
-                for ty in types {
+                for ty in args {
                     total += self.size_of(ty)?;
                 }
                 Ok(total)
             }
-            MonoType::List(_elem_type) => {
+            MonoType::Generic { name, .. } if name == "List" => {
                 // List<T> 大小未知（动态大小），返回错误
                 Err("Cannot compute size of dynamic List type".to_string())
             }
@@ -670,36 +671,7 @@ impl GenericSize {
         let args_str = &type_name["Array(".len()..type_name.len().saturating_sub(1)];
 
         // 分割参数，找到元素类型和数量
-        let mut args = Vec::new();
-        let mut current = String::new();
-        let mut depth = 0;
-
-        for c in args_str.chars() {
-            match c {
-                ',' if depth == 0 => {
-                    if !current.trim().is_empty() {
-                        args.push(current.trim().to_string());
-                    }
-                    current = String::new();
-                }
-                '(' => {
-                    depth += 1;
-                    current.push(c);
-                }
-                ')' => {
-                    if depth == 0 {
-                        break;
-                    }
-                    depth -= 1;
-                    current.push(c);
-                }
-                _ => current.push(c),
-            }
-        }
-
-        if !current.trim().is_empty() {
-            args.push(current.trim().to_string());
-        }
+        let args = super::normalizer::split_args_at_depth_zero(args_str).unwrap_or_default();
 
         if args.len() < 2 {
             return None;
@@ -815,9 +787,7 @@ pub mod predefined_sizes {
     }
 }
 
-// ====================================================================
 // LiteralTypeValidator
-// ====================================================================
 /// 字面量类型验证
 ///
 /// 实现 Const 泛型的字面量类型验证和类型检查。
@@ -999,8 +969,11 @@ pub fn ast_type_to_mono_type(ty: &Type) -> Option<MonoType> {
         Type::Int(n) => Some(MonoType::Int(*n)),
         Type::Float(n) => Some(MonoType::Float(*n)),
         Type::Char => Some(MonoType::Char),
-        Type::String => Some(MonoType::String),
-        Type::Bytes => Some(MonoType::Bytes),
+        Type::String => Some(MonoType::make_string()),
+        Type::Bytes => Some(MonoType::Generic {
+            name: "Bytes".into(),
+            args: vec![],
+        }),
         Type::Bool => Some(MonoType::Bool),
         Type::Void => Some(MonoType::Void),
         _ => None,

@@ -1,0 +1,19 @@
+// 06-compile-errors/field_default_unknown_var_err.yx
+// [test:error]: 类型体内误写方法定义——该形式被解析为带默认值的字段，
+//               默认值表达式引用不在作用域的 self，必须报 E1001 而非 E3006 内部错误
+// 预期: 编译错误 E1001（Unknown variable: 'self'）
+// 覆盖: #297 探索发现——字段默认值表达式此前完全未检查，未绑定变量漏到 IR 生成
+//       变成 E3006 内部错误；方法应在顶层定义或用 [positions] 绑定语法
+// 状态: ❌ 应编译失败
+
+Point: Type = {
+    x: Float,
+    y: Float,
+    get_x: (self: &Point) -> Float = {
+        self.x
+    }
+}
+
+main = {
+    p = Point(3.0, 4.0)
+}

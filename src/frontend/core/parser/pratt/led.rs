@@ -32,7 +32,12 @@ impl<'a> ParserState<'a> {
             // Assignment
             Some(TokenKind::Eq) => Some((BP_ASSIGN, BP_ASSIGN + 1, Self::parse_assign)),
             // Range
-            Some(TokenKind::DotDot) => Some((BP_RANGE, BP_RANGE + 1, Self::parse_binary)),
+            // #300 F/I 项：`..` 绑定力 (6, 7)——左 6 低于加法（7），右 7 吞加法不吞同级 `..`。
+            // `0..n+2` → 0..(n+2)（上界是算术表达式）；
+            // `a..b..c` → (a..b)..c（step 形态，左结合）；
+            // `x in 1..10` → x in (1..10)（区间整体作为 in 右操作数）；
+            // `a == b..c` → a == (b..c)（直觉语义，`..` 高于比较级）。
+            Some(TokenKind::DotDot) => Some((6, 7, Self::parse_binary)),
             // Logical OR
             Some(TokenKind::Or) => Some((BP_OR, BP_OR + 1, Self::parse_binary)),
             // Logical AND
@@ -41,10 +46,23 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::EqEq) | Some(TokenKind::Neq) => {
                 Some((BP_EQ, BP_EQ + 1, Self::parse_binary))
             }
+            // #285: 移位 << >>（SPEC §2.2 级 7）——parser 层 peek 合成，token 流保持无歧义（泛型嵌套 >> 不受影响）
+            Some(TokenKind::Lt) if self.peek_kind(TokenKind::Lt) => {
+                Some((BP_SHIFT, BP_SHIFT + 1, Self::parse_shift))
+            }
+            Some(TokenKind::Gt) if self.peek_kind(TokenKind::Gt) => {
+                Some((BP_SHIFT, BP_SHIFT + 1, Self::parse_shift))
+            }
+            // #285: 位运算 & | ^（SPEC §2.2 级 8）
+            Some(TokenKind::Ampersand | TokenKind::Pipe | TokenKind::Caret) => {
+                Some((BP_BIT, BP_BIT + 1, Self::parse_binary))
+            }
             // Comparison
             Some(TokenKind::Lt | TokenKind::Le | TokenKind::Gt | TokenKind::Ge) => {
                 Some((BP_CMP, BP_CMP + 1, Self::parse_binary))
             }
+            // #299 §3: membership 谓词 `elem in container`（关系级，返 Bool）
+            Some(TokenKind::KwIn) => Some((BP_CMP, BP_CMP + 1, Self::parse_in)),
             // Addition/Subtraction
             Some(TokenKind::Plus | TokenKind::Minus) => {
                 Some((BP_ADD, BP_ADD + 1, Self::parse_binary))
@@ -109,6 +127,10 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Ge) => BinOp::Ge,
             Some(TokenKind::And) => BinOp::And,
             Some(TokenKind::Or) => BinOp::Or,
+            // #285: 位运算（SPEC §2.2 级 8）
+            Some(TokenKind::Ampersand) => BinOp::BitAnd,
+            Some(TokenKind::Pipe) => BinOp::BitOr,
+            Some(TokenKind::Caret) => BinOp::BitXor,
             Some(TokenKind::DotDot) => BinOp::Range,
             _ => return None,
         };
@@ -122,6 +144,62 @@ impl<'a> ParserState<'a> {
             right: Box::new(rhs),
             span,
         })
+    }
+
+    /// #299 §3: membership 谓词 `elem in container`
+    fn parse_in(
+        &mut self,
+        lhs: Expr,
+        _left_bp: u8,
+    ) -> Option<Expr> {
+        let span = self.span();
+        self.bump(); // 消费 'in'
+                     // 右操作数按比较级以下解析：BP_RANGE(7) 高于 BP_CMP(4)，
+                     // `x in 1..10` 中区间整体作为容器；但 `x in 0..10..2` 中第二个 `..`
+                     // 必须留给外层 step 形态，故用 BP_CMP（4）截断——#300 I 项
+        let container = self.parse_expression(BP_CMP)?;
+        Some(Expr::In {
+            elem: Box::new(lhs),
+            container: Box::new(container),
+            span,
+        })
+    }
+
+    /// Parse shift operation (`<<` / `>>`, #285)
+    ///
+    /// `<<`/`>>` 在 parser 层由两个相邻 Lt/Gt token peek 合成，避免泛型嵌套 `List<List<Int>>`
+    /// 的 `>>` 被词法层合并（token 流保持无歧义）。
+    pub(crate) fn parse_shift(
+        &mut self,
+        lhs: Expr,
+        _left_bp: u8,
+    ) -> Option<Expr> {
+        let span = self.span();
+        let op = match self.current().map(|t| &t.kind) {
+            Some(TokenKind::Lt) => BinOp::Shl,
+            Some(TokenKind::Gt) => BinOp::Shr,
+            _ => return None,
+        };
+        // 消费两个相邻 token（`<<` 或 `>>`）
+        self.bump();
+        self.bump();
+
+        let rhs = self.parse_expression(_left_bp)?;
+
+        Some(Expr::BinOp {
+            op,
+            left: Box::new(lhs),
+            right: Box::new(rhs),
+            span,
+        })
+    }
+
+    /// Check if the token after current matches the given kind (without consuming)
+    fn peek_kind(
+        &self,
+        kind: TokenKind,
+    ) -> bool {
+        matches!(self.peek().map(|t| &t.kind), Some(k) if *k == kind)
     }
 
     /// Parse function call expression

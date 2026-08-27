@@ -5,9 +5,7 @@
 use std::collections::HashMap;
 use crate::frontend::core::types::mono::MonoType;
 
-// ============================================================================
 // 数据结构
-// ============================================================================
 
 /// Trait 方法签名
 #[derive(Debug, Clone)]
@@ -46,9 +44,7 @@ pub struct TraitImplementation {
     pub methods: HashMap<String, MonoType>,
 }
 
-// ============================================================================
 // TraitTable
-// ============================================================================
 
 /// Trait 表 - 存储所有已解析的 Trait 定义和实现
 #[derive(Debug, Clone, Default)]
@@ -71,8 +67,8 @@ impl TraitTable {
             MonoType::Float(_) => "Float".to_string(),
             MonoType::Bool => "Bool".to_string(),
             MonoType::Char => "Char".to_string(),
-            MonoType::String => "String".to_string(),
-            MonoType::Bytes => "Bytes".to_string(),
+            MonoType::Generic { name, args } if name == "String" => "String".to_string(),
+            MonoType::Generic { name, args } if name == "Bytes" => "Bytes".to_string(),
             MonoType::Void => "Void".to_string(),
             MonoType::Never => "Never".to_string(),
             _ => ty.type_name(),
@@ -179,21 +175,23 @@ impl TraitTable {
             | MonoType::Float(_)
             | MonoType::Bool
             | MonoType::Char
-            | MonoType::String
-            | MonoType::Bytes
             | MonoType::Void => false,
+
+            MonoType::Generic { name, .. } if name == "String" || name == "Bytes" => false,
+            // 元组：所有元素都满足 → 元组满足（原 MonoType::Tuple 语义迁移）
+            MonoType::Generic { name, args } if name == "Tuple" => {
+                args.iter().all(|e| self.satisfies(trait_name, e))
+            }
+            // Arc：引用计数，Clone/Dup 自动满足（原 MonoType::Arc 语义迁移）
+            MonoType::Generic { name, .. } if name == "Arc" => {
+                matches!(trait_name, "Clone" | "Dup")
+            }
 
             // 结构体：所有字段都满足
             MonoType::Struct(s) => s.fields.iter().all(|(_, f)| self.satisfies(trait_name, f)),
 
             // 枚举：变体仅含名称（无关联数据），视为满足
             MonoType::Enum(_) => true,
-
-            // 元组：所有元素都满足 → 元组满足
-            MonoType::Tuple(elems) => elems.iter().all(|e| self.satisfies(trait_name, e)),
-
-            // Arc：引用计数，Clone/Dup 自动满足
-            MonoType::Arc(_) => matches!(trait_name, "Clone" | "Dup"),
 
             // &T（不可变引用令牌）：Dup 和 Clone 都满足
             MonoType::Ref { mutable: false, .. } => matches!(trait_name, "Clone" | "Dup"),

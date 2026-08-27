@@ -20,28 +20,14 @@ pub static E8XXX: &[ErrorCodeDefinition] = &[
     },
 ];
 
-// E8xxx 快捷方法
+// 快捷方法（code_helpers! 生成）
 impl ErrorCodeDefinition {
+    code_helpers! {
     /// E8001 内部编译器错误
-    pub fn internal_error(message: &str) -> DiagnosticBuilder {
-        let def = Self::find("E8001").unwrap();
-        def.builder().param("message", message)
-    }
-
+    ("E8001", internal_error(message: &str) => .param("message", message)),
     /// E8002 意外 panic
-    pub fn unexpected_panic(reason: &str) -> DiagnosticBuilder {
-        let def = Self::find("E8002").unwrap();
-        def.builder().param("reason", reason)
-    }
-
+    ("E8002", unexpected_panic(reason: &str) => .param("reason", reason)),
     /// E8003 编译器阶段错误
-    pub fn compiler_phase_error(
-        phase: &str,
-        message: &str,
-    ) -> DiagnosticBuilder {
-        let def = Self::find("E8003").unwrap();
-        def.builder()
-            .param("phase", phase)
-            .param("message", message)
+    ("E8003", compiler_phase_error(phase: &str, message: &str) => .param("phase", phase) .param("message", message)),
     }
 }

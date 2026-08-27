@@ -1,0 +1,14 @@
+// 06-compile-errors/div_zero.yx
+// [test:error]: 除零应报运行时错误（#282：错误消息携带触发表达式，不再显示 <unknown>）
+// 覆盖: RFC-013 错误码规范（Division by zero 条目）+ #282
+// 验证: 除零路径 EXIT=1；消息含 "1 / 0" 表达式文本（CLI 实测）
+// 状态: ❌ 应运行失败
+
+use std.io
+
+main = {
+    a = 1
+    b = 0
+    c = a / b
+    io.println(c)
+}

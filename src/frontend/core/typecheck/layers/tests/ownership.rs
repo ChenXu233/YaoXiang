@@ -476,6 +476,17 @@ fn make_bool_lit(b: bool) -> Expr {
     Expr::Lit(Literal::Bool(b), Span::default())
 }
 
+fn make_field_access(
+    target: &str,
+    field: &str,
+) -> Expr {
+    Expr::FieldAccess {
+        expr: Box::new(make_var(target)),
+        field: field.to_string(),
+        span: Span::default(),
+    }
+}
+
 #[test]
 fn test_e2e_use_after_move_detected() {
     // Arrange: { x = 42; y = x; use(x) }
@@ -1011,15 +1022,16 @@ fn test_e2e_move_then_borrow_rejected() {
 #[test]
 fn test_e2e_borrow_in_if_both_branches() {
     // Arrange: { mut x = 42; if cond { &mut x } else { &mut x }; use(x) }
-    // 注：当前单趟遍历不建模分支互斥性，两个 &mut x 会被保守地报冲突。
-    // 这是已知限制（NLL without fixpoint），不是 bug。
+    // 注：条件用运行时变量 cond（非字面量）——#264 后字面量条件分支会裁剪，
+    // `if true` 的 else 不可达不再报冲突（更正确）；此处保留双分支可达的保守场景。
     let module = make_module(vec![make_binding(
         "main",
         vec![],
         vec![
             make_mut_var_stmt("x", make_lit(42)),
+            make_var_stmt("cond", make_bool_lit(true)),
             make_expr_stmt(Expr::If {
-                condition: Box::new(make_bool_lit(true)),
+                condition: Box::new(make_var("cond")),
                 then_branch: Box::new(make_block(vec![make_var_stmt(
                     "y",
                     Expr::Borrow {
@@ -2079,9 +2091,7 @@ fn test_e2e_spawn_accesses_outer() {
     );
 }
 
-// ===================================================================
 // issue #265: 证明管线接线——分支守卫注入假设栈（FlowSensitiveGamma 首个消费者）
-// ===================================================================
 
 use crate::frontend::core::typecheck::proof::context::ProofContext;
 
@@ -2228,5 +2238,172 @@ fn test_check_ownership_entry_shares_guards_cleared() {
         ctx.assumptions.is_empty(),
         "共享假设栈应在 walk 完后清空（守卫进出配对），实际残留: {:?}",
         ctx.assumptions.current()
+    );
+}
+
+// ── #264 CFG 数据流 move 分析回归 ────────────────────────
+// 场景：不可达分支裁剪 / 汇合保守 meet / 循环不动点 / 分支内新变量不泄漏
+
+#[test]
+fn test_e2e_move_not_leak_from_unreachable_branch() {
+    // Arrange: { p = Point(1,2); if false { q = p }; use(p.y) }
+    // #264：`if false` 分支不可达 → then 内 move 不污染 p → use(p) 合法
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("p", make_call("Point", vec![make_lit(1), make_lit(2)])),
+            make_expr_stmt(Expr::If {
+                condition: Box::new(make_bool_lit(false)),
+                then_branch: Box::new(make_block(vec![make_var_stmt("q", make_var("p"))])),
+                else_if_branches: vec![],
+                else_branch: None,
+                span: Span::default(),
+            }),
+            make_expr_stmt(make_field_access("p", "y")),
+        ],
+    )]);
+
+    // Act
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan, _escaped) =
+        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+
+    // Assert: 不可达分支的 move 不泄漏，无 UseAfterMove
+    let move_errors: Vec<_> = results
+        .iter()
+        .filter(|r| {
+            matches!(r, ProofResult::Disproved(model)
+                if matches!(model.kind, DisproofKind::UseAfterMove))
+        })
+        .collect();
+    assert!(
+        move_errors.is_empty(),
+        "if false 分支的 move 不应泄漏，得: {:?}",
+        move_errors
+    );
+}
+
+#[test]
+fn test_e2e_move_conservative_at_merge() {
+    // Arrange: { p = Point(1,2); if cond { q = p } else { r = p }; use(p.y) }
+    // #264：两分支都 move p → 汇合 meet = Moved → use(p) 报 UseAfterMove（保守正确）
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("p", make_call("Point", vec![make_lit(1), make_lit(2)])),
+            make_var_stmt("cond", make_bool_lit(true)),
+            make_expr_stmt(Expr::If {
+                condition: Box::new(make_var("cond")),
+                then_branch: Box::new(make_block(vec![make_var_stmt("q", make_var("p"))])),
+                else_if_branches: vec![],
+                else_branch: Some(Box::new(make_block(vec![make_var_stmt(
+                    "r",
+                    make_var("p"),
+                )]))),
+                span: Span::default(),
+            }),
+            make_expr_stmt(make_field_access("p", "y")),
+        ],
+    )]);
+
+    // Act
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan, _escaped) =
+        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+
+    // Assert: 任意分支可达的 move → 汇合后 p 仍视为 Moved
+    let move_errors: Vec<_> = results
+        .iter()
+        .filter(|r| {
+            matches!(r, ProofResult::Disproved(model)
+                if matches!(model.kind, DisproofKind::UseAfterMove))
+        })
+        .collect();
+    assert!(
+        !move_errors.is_empty(),
+        "双分支 move 后汇合使用应报 UseAfterMove，得: {:?}",
+        results
+    );
+}
+
+#[test]
+fn test_e2e_move_in_loop_body_persists() {
+    // Arrange: { p = Point(1,2); while cond { q = p }; use(p.y) }
+    // #264：循环体 move p → 不动点收敛后 p = Moved（循环可能执行）→ 报 UseAfterMove
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("p", make_call("Point", vec![make_lit(1), make_lit(2)])),
+            make_var_stmt("cond", make_bool_lit(true)),
+            make_expr_stmt(Expr::While {
+                condition: Box::new(make_var("cond")),
+                body: Box::new(make_block(vec![make_var_stmt("q", make_var("p"))])),
+                label: None,
+                span: Span::default(),
+            }),
+            make_expr_stmt(make_field_access("p", "y")),
+        ],
+    )]);
+
+    // Act
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan, _escaped) =
+        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+
+    // Assert: 循环体 move 影响循环后使用
+    let move_errors: Vec<_> = results
+        .iter()
+        .filter(|r| {
+            matches!(r, ProofResult::Disproved(model)
+                if matches!(model.kind, DisproofKind::UseAfterMove))
+        })
+        .collect();
+    assert!(
+        !move_errors.is_empty(),
+        "循环体 move 后循环外使用应报 UseAfterMove，得: {:?}",
+        results
+    );
+}
+
+#[test]
+fn test_e2e_branch_local_var_dropped_at_merge() {
+    // Arrange: { if cond { q = 1 } else { q = 2 }; use(q) }
+    // #264：分支内新声明 q 汇合后保持 Dropped（作用域外不可见）→ 读 q 报 UseAfterDrop
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_var_stmt("cond", make_bool_lit(true)),
+            make_expr_stmt(Expr::If {
+                condition: Box::new(make_var("cond")),
+                then_branch: Box::new(make_block(vec![make_var_stmt("q", make_lit(1))])),
+                else_if_branches: vec![],
+                else_branch: Some(Box::new(make_block(vec![make_var_stmt("q", make_lit(2))]))),
+                span: Span::default(),
+            }),
+            make_expr_stmt(make_var("q")),
+        ],
+    )]);
+
+    // Act
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan, _escaped) =
+        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+
+    // Assert: 分支内声明 q 在汇合后 Dropped → 使用报 UseAfterDrop
+    let drop_errors: Vec<_> = results
+        .iter()
+        .filter(|r| {
+            matches!(r, ProofResult::Disproved(model)
+                if matches!(model.kind, DisproofKind::UseAfterDrop))
+        })
+        .collect();
+    assert!(
+        !drop_errors.is_empty(),
+        "分支内声明变量汇合后使用应报 UseAfterDrop，得: {:?}",
+        results
     );
 }

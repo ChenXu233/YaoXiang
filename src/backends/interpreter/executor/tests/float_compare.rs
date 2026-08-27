@@ -76,9 +76,7 @@ fn run_float_compare(
     }
 }
 
-// ============================================================================
 // Eq (==) — 规范 §2.2 第 8 级
-// ============================================================================
 
 #[test]
 fn test_float_eq_returns_true_when_values_equal() {
@@ -100,9 +98,7 @@ fn test_float_eq_returns_false_when_values_differ() {
     assert!(!result, "1.0 == 2.0 should be false");
 }
 
-// ============================================================================
 // Ne (!=) — 规范 §2.2 第 8 级
-// ============================================================================
 
 #[test]
 fn test_float_ne_returns_true_when_values_differ() {
@@ -124,9 +120,7 @@ fn test_float_ne_returns_false_when_values_equal() {
     assert!(!result, "1.0 != 1.0 should be false");
 }
 
-// ============================================================================
 // Lt (<) — 规范 §2.2 第 8 级
-// ============================================================================
 
 #[test]
 fn test_float_lt_returns_true_when_lhs_smaller() {
@@ -158,9 +152,7 @@ fn test_float_lt_returns_false_when_values_equal() {
     assert!(!result, "1.0 < 1.0 should be false");
 }
 
-// ============================================================================
 // Le (<=) — 规范 §2.2 第 8 级
-// ============================================================================
 
 #[test]
 fn test_float_le_returns_true_when_lhs_smaller() {
@@ -182,9 +174,7 @@ fn test_float_le_returns_true_when_values_equal() {
     assert!(result, "1.0 <= 1.0 should be true");
 }
 
-// ============================================================================
 // Gt (>) — 规范 §2.2 第 8 级
-// ============================================================================
 
 #[test]
 fn test_float_gt_returns_true_when_lhs_greater() {
@@ -206,9 +196,7 @@ fn test_float_gt_returns_false_when_lhs_smaller() {
     assert!(!result, "1.0 > 2.0 should be false");
 }
 
-// ============================================================================
 // Ge (>=) — 规范 §2.2 第 8 级
-// ============================================================================
 
 #[test]
 fn test_float_ge_returns_true_when_values_equal() {
@@ -230,9 +218,7 @@ fn test_float_ge_returns_true_when_lhs_greater() {
     assert!(result, "2.0 >= 1.0 should be true");
 }
 
-// ============================================================================
 // 边界：负数、零、小数（规范未特殊处理，应与正数一致）
-// ============================================================================
 
 #[test]
 fn test_float_eq_zero_returns_true() {

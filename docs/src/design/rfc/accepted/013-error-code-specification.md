@@ -91,7 +91,7 @@ pub enum ErrorCategory {
 **核心原则**：错误码定义与展示文案分离
 
 - `ErrorCodeDefinition`：错误码元数据（code、category、template），不含展示文案
-- `i18n/*.json`：各语言展示文案（title、message、help）
+- `locales/*.json`：各语言展示文案（title、message、help，错误码为嵌套对象）
 - `DiagnosticBuilder`：通用构建器，替代 trait-per-error 设计
 
 #### 错误码定义
@@ -340,12 +340,22 @@ E1001::unknown_variable(&var_name)
 | 代码  | 错误类型                    | 说明                       |
 | ----- | --------------------------- | -------------------------- |
 | E6001 | Division by zero            | 整数除以零                 |
-| E6002 | Assertion failed            | assert! 宏失败             |
-| E6003 | Arithmetic overflow         | 算术运算溢出               |
+| E6002 | ~~Assertion failed~~        | ~~保留位（无语言概念，已删）~~ |
+| E6003 | Runtime index out of bounds | 运行时索引越界（#280 接线）|
 | E6004 | Stack overflow              | 栈空间耗尽                 |
-| E6005 | Heap allocation failed      | 内存分配失败               |
-| E6006 | Runtime index out of bounds | 运行时索引越界             |
-| E6007 | Type cast failed            | 尝试将类型断言为不兼容类型 |
+| E6005 | Assertion failed            | assert 失败（#280 接线）   |
+| E6006 | Function not found          | 运行时函数未找到           |
+| E6007 | Runtime error (generic)     | 通用运行时错误             |
+
+> **#280 修订（2026-08-09）**：码表原按 Rust 语义草案（Assertion failed/Arithmetic overflow/Heap
+> allocation failed/Type cast failed）定义，与实现实际需求不符。YaoXiang 无空指针/堆分配失败/类型
+> 转换概念（值语义 + Rust 内存安全），运行时溢出路径未实现检测。校准后：
+>
+> - E6002 删除（原 Assertion failed 移至 E6005；原空指针语义无语言概念）
+> - E6003 从 Arithmetic overflow 改为 Runtime index out of bounds（真实触发面，#279/#271）
+> - E6005 从 Heap allocation failed 改为 Assertion failed（std.assert 真实路径）
+> - E6006 从 Runtime index out of bounds 改为 Function not found（实现早已如此，#255）
+> - E6007 从 Type cast failed 改为通用 Runtime error（ExecutorError 未映射变体统一落点）
 
 #### E7xxx：I/O 与系统错误
 
@@ -372,7 +382,7 @@ E1001::unknown_variable(&var_name)
 #### 资源文件格式
 
 ```json
-// diagnostic/codes/i18n/en.json
+// locales/en.json
 {
   "E1001": {
     "title": "Unknown variable",
@@ -394,7 +404,7 @@ E1001::unknown_variable(&var_name)
 ```
 
 ```json
-// diagnostic/codes/i18n/zh.json
+// locales/zh.json
 {
   "E1001": {
     "title": "未知变量",
@@ -418,7 +428,7 @@ E1001::unknown_variable(&var_name)
 #### I18nRegistry 实现
 
 ```rust
-// diagnostic/codes/i18n/mod.rs
+// locales/*.json（错误码对象）
 
 /// i18n 展示文案注册表（编译期从 JSON 加载，运行时零查表）
 pub struct I18nRegistry {

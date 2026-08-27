@@ -25,8 +25,8 @@ fn standard_runtime_runs_tasks_in_parallel_when_workers_gt_1() {
     })
     .unwrap();
 
-    let (started_tx, started_rx) = crossbeam::channel::unbounded::<std::thread::ThreadId>();
-    let (cont_tx, cont_rx) = crossbeam::channel::unbounded::<()>();
+    let (started_tx, started_rx) = crossbeam_channel::unbounded::<std::thread::ThreadId>();
+    let (cont_tx, cont_rx) = crossbeam_channel::unbounded::<()>();
 
     let _t1 = rt
         .spawn(
@@ -99,8 +99,8 @@ fn standard_runtime_serializes_tasks_with_same_resource_key() {
     })
     .unwrap();
 
-    let (started_tx, started_rx) = crossbeam::channel::unbounded::<TaskId>();
-    let (cont_tx, cont_rx) = crossbeam::channel::unbounded::<()>();
+    let (started_tx, started_rx) = crossbeam_channel::unbounded::<TaskId>();
+    let (cont_tx, cont_rx) = crossbeam_channel::unbounded::<()>();
 
     let _t1 = rt
         .spawn(

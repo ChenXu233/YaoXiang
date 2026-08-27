@@ -73,7 +73,7 @@ fn test_scope_nesting() {
         "b".to_string(),
         Symbol {
             name: "b".to_string(),
-            ty: MonoType::String,
+            ty: MonoType::make_string(),
             storage: Storage::Local(1),
             is_mut: true,
             scope_level: 1,

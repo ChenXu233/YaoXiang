@@ -92,6 +92,13 @@ pub enum Expr {
         span: Span,
     },
     Dict(Vec<(Expr, Expr)>, Span),
+    /// membership 谓词（#299 §3）：`elem in container` → Bool
+    /// 一等霍尔谓词：精化类型阶段作为编译期可证命题的基底
+    In {
+        elem: Box<Expr>,
+        container: Box<Expr>,
+        span: Span,
+    },
     Index {
         expr: Box<Expr>,
         index: Box<Expr>,
@@ -185,6 +192,12 @@ pub enum BinOp {
     Or,
     Range,
     Assign,
+    // #285: 位运算/移位（SPEC §2.2 级 7/8）
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
 }
 
 /// Unary operators
@@ -711,4 +724,30 @@ pub fn classify_generic_params(
             }
         })
         .collect()
+}
+
+impl Expr {
+    /// 解构 Assign 目标：`x` → (x, None)；`Type.field` → (field, Some(Type))；其他 → None
+    pub fn receiver_parts(&self) -> Option<(String, Option<String>)> {
+        match self {
+            Expr::Var(n, _) => Some((n.clone(), None)),
+            Expr::FieldAccess { expr, field, .. } => {
+                if let Expr::Var(tn, _) = expr.as_ref() {
+                    Some((field.clone(), Some(tn.clone())))
+                } else {
+                    Some((field.clone(), None))
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// 解构函数值：Lambda → (params, body)；Block → (空, body)；其他 → (空, 空)
+    pub fn callable_parts(&self) -> (Vec<Param>, Vec<Stmt>) {
+        match self {
+            Expr::Lambda { params, body, .. } => (params.clone(), body.stmts.clone()),
+            Expr::Block(block) => (Vec::new(), block.stmts.clone()),
+            _ => (Vec::new(), Vec::new()),
+        }
+    }
 }

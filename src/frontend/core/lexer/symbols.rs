@@ -307,18 +307,7 @@ impl BindingValidator {
         &self,
         positions: &[i32],
     ) -> Result<(), String> {
-        for &pos in positions {
-            if pos < 0 {
-                return Err(format!("Negative position index: {}", pos));
-            }
-            if pos as usize >= self.max_positions {
-                return Err(format!(
-                    "Position index {} exceeds maximum allowed positions {}",
-                    pos, self.max_positions
-                ));
-            }
-        }
-        Ok(())
+        validate_position_indices(positions, self.max_positions)
     }
 
     /// Validate binding syntax
@@ -350,6 +339,25 @@ impl BindingValidator {
 
         Ok(())
     }
+}
+
+/// 校验绑定位置索引：负数或越界拒绝
+pub(crate) fn validate_position_indices(
+    positions: &[i32],
+    max_positions: usize,
+) -> Result<(), String> {
+    for &pos in positions {
+        if pos < 0 {
+            return Err(format!("Negative position index: {}", pos));
+        }
+        if pos as usize >= max_positions {
+            return Err(format!(
+                "Position index {} exceeds maximum allowed positions {}",
+                pos, max_positions
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// RFC-010: Generic parameter validator

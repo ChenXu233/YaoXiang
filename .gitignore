@@ -85,3 +85,5 @@ docs/plans
 .omp/
 
 .playwright-mcp
+# 构建产物：翻译缓存
+locales/.i18n-cache.json

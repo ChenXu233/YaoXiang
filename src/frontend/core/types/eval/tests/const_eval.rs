@@ -25,9 +25,7 @@ fn assert_eval_eq(
     }
 }
 
-// ===================================================================
 // §4.1: ConstGenericResult
-// ===================================================================
 
 #[test]
 fn test_const_result_new_and_accessors() {
@@ -46,9 +44,7 @@ fn test_const_result_not_const() {
     assert_eq!(r.as_int(), None);
 }
 
-// ===================================================================
 // §4.1: 字面量求值
-// ===================================================================
 
 #[test]
 fn test_eval_int_literal() {
@@ -93,9 +89,7 @@ fn test_eval_float_literal() {
     assert!(e.eval(&ConstExpr::Lit(ConstValue::Float(-1.5))).is_ok());
 }
 
-// ===================================================================
 // §4.1: 二元运算求值
-// ===================================================================
 
 fn bin(
     op: BinOp,
@@ -183,9 +177,7 @@ fn test_eval_float_compare() {
     assert_eval_eq(e.eval(&flt), ConstValue::Bool(true));
 }
 
-// ===================================================================
 // §4.1: 一元运算
-// ===================================================================
 
 #[test]
 fn test_eval_neg() {
@@ -211,9 +203,7 @@ fn test_eval_not() {
     assert_eval_eq(e.eval(&not(false)), ConstValue::Bool(true));
 }
 
-// ===================================================================
 // §4.1: 变量绑定和求值
-// ===================================================================
 
 #[test]
 fn test_eval_var_bound() {
@@ -233,9 +223,7 @@ fn test_eval_var_unbound() {
         .is_err());
 }
 
-// ===================================================================
 // §4.1: If 条件求值
-// ===================================================================
 
 #[test]
 fn test_eval_if_true_false() {
@@ -249,9 +237,7 @@ fn test_eval_if_true_false() {
     assert_eval_eq(e.eval(&iff(false, 10, 20)), ConstValue::Int(20));
 }
 
-// ===================================================================
 // §4.2: 用户函数
-// ===================================================================
 
 #[test]
 fn test_eval_custom_function() {
@@ -296,9 +282,7 @@ fn test_eval_custom_function_arg_count_mismatch() {
         .is_err());
 }
 
-// ===================================================================
 // §4.2: 阶乘和斐波那契
-// ===================================================================
 
 #[test]
 fn test_eval_factorial() {
@@ -358,9 +342,7 @@ fn test_eval_fibonacci() {
     );
 }
 
-// ===================================================================
 // §4.2: 内置函数
-// ===================================================================
 
 #[test]
 fn test_eval_builtin_abs() {
@@ -435,9 +417,7 @@ fn test_eval_undefined_function() {
         .is_err());
 }
 
-// ===================================================================
 // §4.2: unsupported operation
-// ===================================================================
 
 #[test]
 fn test_eval_mismatched_types_in_binop() {
@@ -450,9 +430,7 @@ fn test_eval_mismatched_types_in_binop() {
     assert!(e.eval(&mixed).is_err());
 }
 
-// ===================================================================
 // §4.3: GenericSize
-// ===================================================================
 
 #[test]
 fn test_generic_size_primitives() {
@@ -460,7 +438,7 @@ fn test_generic_size_primitives() {
     assert_eq!(gs.size_of(&MonoType::Bool), Ok(1));
     assert_eq!(gs.size_of(&MonoType::Int(32)), Ok(8));
     assert_eq!(gs.size_of(&MonoType::Float(64)), Ok(8));
-    assert_eq!(gs.size_of(&MonoType::String), Ok(8));
+    assert_eq!(gs.size_of(&MonoType::make_string()), Ok(8));
     assert_eq!(gs.size_of(&MonoType::Void), Ok(0));
     assert_eq!(gs.size_of(&MonoType::TypeRef("Int".to_string())), Ok(8));
     assert_eq!(gs.size_of(&MonoType::TypeRef("Bool".to_string())), Ok(1));
@@ -470,7 +448,7 @@ fn test_generic_size_primitives() {
 fn test_generic_size_tuple() {
     let gs = GenericSize::new();
     assert_eq!(
-        gs.size_of(&MonoType::Tuple(vec![
+        gs.size_of(&MonoType::make_tuple(vec![
             MonoType::Bool,
             MonoType::Int(64),
             MonoType::Float(32)
@@ -482,9 +460,7 @@ fn test_generic_size_tuple() {
 #[test]
 fn test_generic_size_dynamic_list() {
     let gs = GenericSize::new();
-    assert!(gs
-        .size_of(&MonoType::List(Box::new(MonoType::Int(32))))
-        .is_err());
+    assert!(gs.size_of(&MonoType::make_list(MonoType::Int(32))).is_err());
 }
 
 #[test]
@@ -517,9 +493,7 @@ fn test_generic_size_unknown_typeref_fails() {
         .is_err());
 }
 
-// ===================================================================
 // §4.3: SizeExpr
-// ===================================================================
 
 #[test]
 fn test_size_expr_const() {
@@ -538,9 +512,7 @@ fn test_size_expr_mul_add() {
     assert!(add.eval().unwrap().is_const);
 }
 
-// ===================================================================
 // §4.3: SizeResult
-// ===================================================================
 
 #[test]
 fn test_size_result() {
@@ -621,9 +593,7 @@ fn test_eval_neg_zero() {
     );
 }
 
-// ===================================================================
 // supplementary tests: more code paths
-// ===================================================================
 
 #[test]
 fn test_eval_if_non_boolean_condition() {
@@ -896,13 +866,16 @@ fn test_generic_size_struct() {
 #[test]
 fn test_generic_size_empty_tuple() {
     let gs = GenericSize::new();
-    assert_eq!(gs.size_of(&MonoType::Tuple(vec![])), Ok(0));
+    assert_eq!(gs.size_of(&MonoType::make_tuple(vec![])), Ok(0));
 }
 
 #[test]
 fn test_generic_size_single_element_tuple() {
     let gs = GenericSize::new();
-    assert_eq!(gs.size_of(&MonoType::Tuple(vec![MonoType::Int(32)])), Ok(8));
+    assert_eq!(
+        gs.size_of(&MonoType::make_tuple(vec![MonoType::Int(32)])),
+        Ok(8)
+    );
 }
 
 #[test]
@@ -978,9 +951,7 @@ fn test_eval_multiple_if() {
     assert_eval_eq(e.eval(&nested_if), ConstValue::Int(2));
 }
 
-// ===================================================================
 // supplementary tests: more GenericSize paths
-// ===================================================================
 
 #[test]
 fn test_generic_size_type_ref_int() {
@@ -1037,9 +1008,9 @@ fn test_generic_size_dict() {
     let gs = GenericSize::new();
     // Dict is not supported
     assert!(gs
-        .size_of(&MonoType::Dict(
-            Box::new(MonoType::String),
-            Box::new(MonoType::Int(32))
+        .size_of(&MonoType::make_dict(
+            MonoType::make_string(),
+            MonoType::Int(32),
         ))
         .is_err());
 }
@@ -1049,7 +1020,10 @@ fn test_generic_size_set() {
     let gs = GenericSize::new();
     // Set is not supported
     assert!(gs
-        .size_of(&MonoType::Set(Box::new(MonoType::Bool)))
+        .size_of(&MonoType::Generic {
+            name: "Set".into(),
+            args: vec![MonoType::Bool]
+        })
         .is_err());
 }
 
@@ -1058,8 +1032,9 @@ fn test_generic_size_range() {
     let gs = GenericSize::new();
     // Range is not supported
     assert!(gs
-        .size_of(&MonoType::Range {
-            elem_type: Box::new(MonoType::Int(64))
+        .size_of(&MonoType::Generic {
+            name: "Range".into(),
+            args: vec![MonoType::Int(64)]
         })
         .is_err());
 }
@@ -1069,7 +1044,10 @@ fn test_generic_size_arc() {
     let gs = GenericSize::new();
     // Arc is not supported
     assert!(gs
-        .size_of(&MonoType::Arc(Box::new(MonoType::Int(32))))
+        .size_of(&MonoType::Generic {
+            name: "Arc".into(),
+            args: vec![MonoType::Int(32)]
+        })
         .is_err());
 }
 
@@ -1078,7 +1056,10 @@ fn test_generic_size_weak() {
     let gs = GenericSize::new();
     // Weak is not supported
     assert!(gs
-        .size_of(&MonoType::Weak(Box::new(MonoType::String)))
+        .size_of(&MonoType::Generic {
+            name: "Weak".into(),
+            args: vec![MonoType::make_string()]
+        })
         .is_err());
 }
 
@@ -1087,7 +1068,7 @@ fn test_generic_size_option() {
     let gs = GenericSize::new();
     // Option is not supported
     assert!(gs
-        .size_of(&MonoType::Option(Box::new(MonoType::Int(32))))
+        .size_of(&MonoType::make_option(MonoType::Int(32)))
         .is_err());
 }
 
@@ -1096,9 +1077,9 @@ fn test_generic_size_result() {
     let gs = GenericSize::new();
     // Result is not supported
     assert!(gs
-        .size_of(&MonoType::Result(
-            Box::new(MonoType::Int(32)),
-            Box::new(MonoType::String)
+        .size_of(&MonoType::make_result(
+            MonoType::Int(32),
+            MonoType::make_string(),
         ))
         .is_err());
 }
@@ -1108,7 +1089,10 @@ fn test_generic_size_union() {
     let gs = GenericSize::new();
     // Union is not supported
     assert!(gs
-        .size_of(&MonoType::Union(vec![MonoType::Int(32), MonoType::String]))
+        .size_of(&MonoType::Union(vec![
+            MonoType::Int(32),
+            MonoType::make_string()
+        ]))
         .is_err());
 }
 
@@ -1123,9 +1107,7 @@ fn test_generic_size_intersection() {
         .is_err());
 }
 
-// ===================================================================
 // supplementary tests: SizeExpr extensions
-// ===================================================================
 
 #[test]
 fn test_size_expr_nested_mul_add() {
@@ -1151,9 +1133,7 @@ fn test_size_result_is_const() {
     assert!(!r2.is_const);
 }
 
-// ===================================================================
 // supplementary tests: ConstGenericResult extensions
-// ===================================================================
 
 #[test]
 fn test_const_result_float() {
@@ -1170,9 +1150,7 @@ fn test_const_result_debug() {
     assert!(debug.contains("ConstGenericResult"));
 }
 
-// ===================================================================
 // supplementary tests: ConstExpr extensions
-// ===================================================================
 
 #[test]
 fn test_const_expr_debug() {
@@ -1195,10 +1173,8 @@ fn test_const_un_op_debug() {
     assert!(debug.contains("Neg"));
 }
 
-// ===================================================================
 // AST Expr -> ConstExpr 转换测试
 // 基于 docs/superpowers/specs/2026-07-11-const-expr-constraint-design.md
-// ===================================================================
 
 #[test]
 fn test_convert_expr_to_const_expr_int_literal() {

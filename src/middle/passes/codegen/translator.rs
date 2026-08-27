@@ -2,7 +2,7 @@
 //!
 //! 将中间表示（IR）翻译为字节码指令。
 
-use crate::backends::common::Opcode;
+use crate::backends::common::opcode;
 use crate::middle::core::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
 };
@@ -177,7 +177,7 @@ impl Translator {
         let mut instructions = Vec::new();
         let mut debug_map = HashMap::new();
         let mut ir_to_bytecode_map = HashMap::new();
-        let mut pending_jumps: Vec<(usize, usize, Opcode)> = Vec::new(); // (bytecode_idx, target_ir_idx, opcode)
+        let mut pending_jumps: Vec<(usize, usize, u8)> = Vec::new(); // (bytecode_idx, target_ir_idx, opcode)
         let mut global_ir_index = 0;
 
         let (blocks_ref, locals_len) = match &func.body {
@@ -322,6 +322,7 @@ impl Translator {
             Instruction::Store { span, .. } => Some(*span),
             Instruction::StoreField { span, .. } => Some(*span),
             Instruction::StoreIndex { span, .. } => Some(*span),
+            Instruction::Contains { span, .. } => Some(*span),
             Instruction::Div { span, .. } => Some(*span),
             Instruction::Mod { span, .. } => Some(*span),
             Instruction::LoadField { span, .. } => Some(*span),
@@ -331,11 +332,11 @@ impl Translator {
     }
 
     /// 从指令中提取跳转目标（如果是跳转指令）
-    fn get_jump_target(instr: &Instruction) -> Option<(usize, Opcode)> {
+    fn get_jump_target(instr: &Instruction) -> Option<(usize, u8)> {
         match instr {
-            Instruction::Jmp(target) => Some((*target, Opcode::Jmp)),
-            Instruction::JmpIf(_, target) => Some((*target, Opcode::JmpIf)),
-            Instruction::JmpIfNot(_, target) => Some((*target, Opcode::JmpIfNot)),
+            Instruction::Jmp(target) => Some((*target, opcode::JMP)),
+            Instruction::JmpIf(_, target) => Some((*target, opcode::JMP_IF)),
+            Instruction::JmpIfNot(_, target) => Some((*target, opcode::JMP_IF_NOT)),
             _ => None,
         }
     }
@@ -344,7 +345,7 @@ impl Translator {
     fn backfill_jumps_impl(
         instructions: &mut [BytecodeInstruction],
         ir_to_bytecode_map: &HashMap<usize, usize>,
-        pending_jumps: &[(usize, usize, Opcode)],
+        pending_jumps: &[(usize, usize, u8)],
     ) {
         for (bytecode_idx, target_ir_idx, opcode) in pending_jumps {
             if let Some(&target_bytecode_idx) = ir_to_bytecode_map.get(target_ir_idx) {
@@ -353,15 +354,15 @@ impl Translator {
                 let bytes = offset.to_le_bytes();
 
                 let instr = &mut instructions[*bytecode_idx];
-                match opcode {
-                    Opcode::Jmp => {
+                match *opcode {
+                    opcode::JMP => {
                         // Jmp 操作数: [offset: i32]
                         instr.operands[0] = bytes[0];
                         instr.operands[1] = bytes[1];
                         instr.operands[2] = bytes[2];
                         instr.operands[3] = bytes[3];
                     }
-                    Opcode::JmpIf | Opcode::JmpIfNot => {
+                    opcode::JMP_IF | opcode::JMP_IF_NOT => {
                         // JmpIf/JmpIfNot 操作数: [cond_reg: u8, offset: i32]
                         instr.operands[1] = bytes[0];
                         instr.operands[2] = bytes[1];
@@ -386,31 +387,31 @@ impl Translator {
             Load { dst, src } => self.translate_load(dst, src),
             Store { dst, src, .. } => self.translate_store(dst, src),
 
-            Add { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Add, dst, lhs, rhs),
-            Sub { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Sub, dst, lhs, rhs),
-            Mul { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Mul, dst, lhs, rhs),
-            Div { dst, lhs, rhs, .. } => self.translate_binary_op(Opcode::I64Div, dst, lhs, rhs),
-            Mod { dst, lhs, rhs, .. } => self.translate_binary_op(Opcode::I64Rem, dst, lhs, rhs),
+            Add { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_ADD, dst, lhs, rhs),
+            Sub { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_SUB, dst, lhs, rhs),
+            Mul { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_MUL, dst, lhs, rhs),
+            Div { dst, lhs, rhs, .. } => self.translate_binary_op(opcode::I64_DIV, dst, lhs, rhs),
+            Mod { dst, lhs, rhs, .. } => self.translate_binary_op(opcode::I64_REM, dst, lhs, rhs),
 
-            And { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64And, dst, lhs, rhs),
-            Or { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Or, dst, lhs, rhs),
-            Xor { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Xor, dst, lhs, rhs),
-            Shl { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Shl, dst, lhs, rhs),
-            Shr { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Shr, dst, lhs, rhs),
-            Sar { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Sar, dst, lhs, rhs),
-            Neg { dst, src } => self.translate_unary_op(Opcode::I64Neg, dst, src),
-            Not { dst, src } => self.translate_unary_op(Opcode::I64Neg, dst, src),
+            And { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_AND, dst, lhs, rhs),
+            Or { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_OR, dst, lhs, rhs),
+            Xor { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_XOR, dst, lhs, rhs),
+            Shl { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_SHL, dst, lhs, rhs),
+            Shr { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_SHR, dst, lhs, rhs),
+            Sar { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_SAR, dst, lhs, rhs),
+            Neg { dst, src } => self.translate_unary_op(opcode::I64_NEG, dst, src),
+            Not { dst, src } => self.translate_unary_op(opcode::I64_NEG, dst, src),
 
             Eq { dst, lhs, rhs } => {
-                self.translate_compare(Opcode::I64Eq, Opcode::I64Ne, dst, lhs, rhs)
+                self.translate_compare(opcode::I64_EQ, opcode::I64_NE, dst, lhs, rhs)
             }
             Ne { dst, lhs, rhs } => {
-                self.translate_compare(Opcode::I64Ne, Opcode::I64Eq, dst, lhs, rhs)
+                self.translate_compare(opcode::I64_NE, opcode::I64_EQ, dst, lhs, rhs)
             }
-            Lt { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Lt, dst, lhs, rhs),
-            Le { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Le, dst, lhs, rhs),
-            Gt { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Gt, dst, lhs, rhs),
-            Ge { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Ge, dst, lhs, rhs),
+            Lt { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_LT, dst, lhs, rhs),
+            Le { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_LE, dst, lhs, rhs),
+            Gt { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_GT, dst, lhs, rhs),
+            Ge { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_GE, dst, lhs, rhs),
 
             Jmp(target) => self.translate_jmp(*target),
             JmpIf(cond, target) => self.translate_jmp_if(cond, *target),
@@ -437,8 +438,22 @@ impl Translator {
             TailCall { func, args, .. } => self.translate_tail_call(func, args),
 
             Alloc { dst, .. } => self.translate_alloc(dst),
-            Free(_) => Ok(BytecodeInstruction::new(Opcode::Nop, vec![])),
+            Free(_) => Ok(BytecodeInstruction::new(opcode::NOP, vec![])),
             AllocArray { dst, .. } => self.translate_alloc_array(dst),
+            AllocFixedArray { dst, count, .. } => {
+                // #299 §2：定长数组构造——NEW_ARRAY(dst, count)
+                let dst_reg = self.operand_resolver.to_reg(dst)?;
+                Ok(BytecodeInstruction::new(
+                    opcode::NEW_ARRAY,
+                    vec![
+                        dst_reg,
+                        *count as u8,
+                        (*count >> 8) as u8,
+                        (*count >> 16) as u8,
+                        (*count >> 24) as u8,
+                    ],
+                ))
+            }
 
             LoadField {
                 dst, src, field, ..
@@ -452,16 +467,31 @@ impl Translator {
             StoreIndex {
                 dst, index, src, ..
             } => self.translate_store_index(dst, index, src),
+            Contains {
+                dst,
+                elem,
+                container,
+                ..
+            } => {
+                // #299 §3: membership 谓词 → CONTAINS
+                let dst_reg = self.operand_resolver.to_reg(dst)?;
+                let elem_reg = self.operand_resolver.to_reg(elem)?;
+                let container_reg = self.operand_resolver.to_reg(container)?;
+                Ok(BytecodeInstruction::new(
+                    opcode::CONTAINS,
+                    vec![dst_reg, elem_reg, container_reg],
+                ))
+            }
 
             Cast { dst, src, .. } => self.translate_cast(dst, src),
-            TypeTest(_, _) => Ok(BytecodeInstruction::new(Opcode::TypeCheck, vec![0, 0, 0])),
+            TypeTest(_, _) => Ok(BytecodeInstruction::new(opcode::TYPE_CHECK, vec![0, 0, 0])),
 
             Spawn {
                 closures,
                 plan,
                 result,
             } => self.translate_spawn_multi(closures, plan, result),
-            Yield => Ok(BytecodeInstruction::new(Opcode::Yield, vec![])),
+            Yield => Ok(BytecodeInstruction::new(opcode::YIELD, vec![])),
 
             HeapAlloc { dst, .. } => self.translate_heap_alloc(dst),
             CreateStruct {
@@ -481,8 +511,8 @@ impl Translator {
 
             Push(operand) => self.translate_push(operand),
             Pop(operand) => self.translate_pop(operand),
-            Dup => Ok(BytecodeInstruction::new(Opcode::Nop, vec![])),
-            Swap => Ok(BytecodeInstruction::new(Opcode::Nop, vec![])),
+            Dup => Ok(BytecodeInstruction::new(opcode::NOP, vec![])),
+            Swap => Ok(BytecodeInstruction::new(opcode::NOP, vec![])),
 
             ArcNew { dst, src } => self.translate_arc_new(dst, src),
             RcNew { dst, src } => self.translate_rc_new(dst, src),
@@ -499,9 +529,9 @@ impl Translator {
             StoreUpvalue { src, upvalue_idx } => self.translate_store_upvalue(src, *upvalue_idx),
 
             // unsafe 块和指针操作（暂不支持，跳过）
-            UnsafeBlockStart | UnsafeBlockEnd => Ok(BytecodeInstruction::new(Opcode::Nop, vec![])),
+            UnsafeBlockStart | UnsafeBlockEnd => Ok(BytecodeInstruction::new(opcode::NOP, vec![])),
             PtrFromRef { .. } | PtrDeref { .. } | PtrStore { .. } | PtrLoad { .. } => {
-                Ok(BytecodeInstruction::new(Opcode::Nop, vec![]))
+                Ok(BytecodeInstruction::new(opcode::NOP, vec![]))
             }
 
             CloseUpvalue(operand) => self.translate_close_upvalue(operand),
@@ -527,14 +557,14 @@ impl Translator {
         if let Operand::Local(local_idx) = dst {
             let src_reg = self.operand_resolver.to_reg(src)?;
             return Ok(BytecodeInstruction::new(
-                Opcode::StoreLocal,
+                opcode::STORE_LOCAL,
                 vec![*local_idx as u8, src_reg],
             ));
         }
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
-            Opcode::Mov,
+            opcode::MOV,
             vec![dst_reg, src_reg],
         ))
     }
@@ -549,22 +579,22 @@ impl Translator {
             Operand::Const(const_val) => {
                 let const_idx = self.emitter.add_constant(const_val.clone());
                 Ok(BytecodeInstruction::new(
-                    Opcode::LoadConst,
+                    opcode::LOAD_CONST,
                     vec![dst_reg, (const_idx as u16) as u8, (const_idx >> 8) as u8],
                 ))
             }
             Operand::Local(local_idx) => Ok(BytecodeInstruction::new(
-                Opcode::LoadLocal,
+                opcode::LOAD_LOCAL,
                 vec![dst_reg, *local_idx as u8],
             )),
             Operand::Arg(arg_idx) => Ok(BytecodeInstruction::new(
-                Opcode::LoadArg,
+                opcode::LOAD_ARG,
                 vec![dst_reg, *arg_idx as u8],
             )),
             _ => {
                 let src_reg = self.operand_resolver.to_reg(src)?;
                 Ok(BytecodeInstruction::new(
-                    Opcode::Mov,
+                    opcode::MOV,
                     vec![dst_reg, src_reg],
                 ))
             }
@@ -579,7 +609,7 @@ impl Translator {
         if let Operand::Local(local_idx) = dst {
             let src_reg = self.operand_resolver.to_reg(src)?;
             Ok(BytecodeInstruction::new(
-                Opcode::StoreLocal,
+                opcode::STORE_LOCAL,
                 vec![*local_idx as u8, src_reg],
             ))
         } else {
@@ -589,7 +619,7 @@ impl Translator {
 
     fn translate_binary_op(
         &mut self,
-        opcode: Opcode,
+        opcode: u8,
         dst: &Operand,
         lhs: &Operand,
         rhs: &Operand,
@@ -608,8 +638,8 @@ impl Translator {
     /// 注意：实际类型检查在运行时通过 executor.rs 的 exec_compare 完成
     fn translate_compare(
         &mut self,
-        eq_opcode: Opcode,
-        _ne_opcode: Opcode,
+        eq_opcode: u8,
+        _ne_opcode: u8,
         dst: &Operand,
         lhs: &Operand,
         rhs: &Operand,
@@ -620,7 +650,7 @@ impl Translator {
 
     fn translate_unary_op(
         &mut self,
-        opcode: Opcode,
+        opcode: u8,
         dst: &Operand,
         src: &Operand,
     ) -> Result<BytecodeInstruction, Diagnostic> {
@@ -633,7 +663,7 @@ impl Translator {
         &mut self,
         _target: usize,
     ) -> Result<BytecodeInstruction, Diagnostic> {
-        Ok(BytecodeInstruction::new(Opcode::Jmp, vec![0, 0, 0, 0]))
+        Ok(BytecodeInstruction::new(opcode::JMP, vec![0, 0, 0, 0]))
     }
 
     fn translate_jmp_if(
@@ -643,7 +673,7 @@ impl Translator {
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let cond_reg = self.operand_resolver.to_reg(cond)?;
         Ok(BytecodeInstruction::new(
-            Opcode::JmpIf,
+            opcode::JMP_IF,
             vec![cond_reg, 0, 0, 0, 0],
         ))
     }
@@ -655,7 +685,7 @@ impl Translator {
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let cond_reg = self.operand_resolver.to_reg(cond)?;
         Ok(BytecodeInstruction::new(
-            Opcode::JmpIfNot,
+            opcode::JMP_IF_NOT,
             vec![cond_reg, 0, 0, 0, 0],
         ))
     }
@@ -667,9 +697,9 @@ impl Translator {
         match value {
             Some(v) => {
                 let reg = self.operand_resolver.to_reg(v)?;
-                Ok(BytecodeInstruction::new(Opcode::ReturnValue, vec![reg]))
+                Ok(BytecodeInstruction::new(opcode::RETURN_VALUE, vec![reg]))
             }
-            None => Ok(BytecodeInstruction::new(Opcode::Return, vec![])),
+            None => Ok(BytecodeInstruction::new(opcode::RETURN, vec![])),
         }
     }
 
@@ -707,20 +737,20 @@ impl Translator {
         });
 
         let (opcode, func_id) = if let Some(idx) = def_idx {
-            (Opcode::CallStatic, idx as u32)
+            (opcode::CALL_STATIC, idx as u32)
         } else if ffi_meta.is_some() {
             let const_idx = self
                 .emitter
                 .add_constant(ConstValue::String(func_name.clone().unwrap()));
-            (Opcode::CallNative, const_idx as u32)
+            (opcode::CALL_NATIVE, const_idx as u32)
         } else if let Some(idx) = bytecode_idx {
-            (Opcode::CallStatic, idx as u32)
+            (opcode::CALL_STATIC, idx as u32)
         } else {
             match func {
-                Operand::Const(ConstValue::Int(i)) => (Opcode::CallStatic, *i as u32),
+                Operand::Const(ConstValue::Int(i)) => (opcode::CALL_STATIC, *i as u32),
                 Operand::Const(ConstValue::String(name)) => {
                     let const_idx = self.emitter.add_constant(ConstValue::String(name.clone()));
-                    (Opcode::CallNative, const_idx as u32)
+                    (opcode::CALL_NATIVE, const_idx as u32)
                 }
                 // 禁止静默回退到 0 号函数（#251 同类：兑底曾静默吞掉元组字面量）
                 other => {
@@ -815,7 +845,7 @@ impl Translator {
             }
         }
 
-        Ok(BytecodeInstruction::new(Opcode::Spawn, operands))
+        Ok(BytecodeInstruction::new(opcode::SPAWN, operands))
     }
 
     fn translate_spawn_from_list(
@@ -859,7 +889,7 @@ impl Translator {
             }
         }
 
-        Ok(BytecodeInstruction::new(Opcode::SpawnFromList, operands))
+        Ok(BytecodeInstruction::new(opcode::SPAWN_FROM_LIST, operands))
     }
 
     fn translate_call_virt(
@@ -887,7 +917,7 @@ impl Translator {
         operands.extend_from_slice(&name_idx.to_le_bytes());
         operands.push(base_arg_reg);
         operands.push(args.len() as u8);
-        Ok(BytecodeInstruction::new(Opcode::CallVirt, operands))
+        Ok(BytecodeInstruction::new(opcode::CALL_VIRT, operands))
     }
 
     fn translate_call_dyn(
@@ -913,7 +943,7 @@ impl Translator {
             operands.push(reg.0 as u8);
         }
         operands.push(arg_regs.len() as u8);
-        Ok(BytecodeInstruction::new(Opcode::CallDyn, operands))
+        Ok(BytecodeInstruction::new(opcode::CALL_DYN, operands))
     }
 
     fn translate_tail_call(
@@ -934,7 +964,7 @@ impl Translator {
         operands.extend_from_slice(&func_id.to_le_bytes());
         operands.push(base_arg_reg);
         operands.push(args.len() as u8);
-        Ok(BytecodeInstruction::new(Opcode::TailCall, operands))
+        Ok(BytecodeInstruction::new(opcode::TAIL_CALL, operands))
     }
 
     fn translate_alloc(
@@ -942,7 +972,7 @@ impl Translator {
         dst: &Operand,
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
-        Ok(BytecodeInstruction::new(Opcode::StackAlloc, vec![dst_reg]))
+        Ok(BytecodeInstruction::new(opcode::STACK_ALLOC, vec![dst_reg]))
     }
 
     fn translate_alloc_array(
@@ -951,7 +981,7 @@ impl Translator {
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         Ok(BytecodeInstruction::new(
-            Opcode::NewListWithCap,
+            opcode::NEW_LIST_WITH_CAP,
             vec![dst_reg, 0, 0],
         ))
     }
@@ -966,7 +996,7 @@ impl Translator {
         let src_reg = self.operand_resolver.to_reg(src)?;
         let field_offset = field as u16;
         Ok(BytecodeInstruction::new(
-            Opcode::GetField,
+            opcode::GET_FIELD,
             vec![
                 dst_reg,
                 src_reg,
@@ -986,7 +1016,7 @@ impl Translator {
         let src_reg = self.operand_resolver.to_reg(src)?;
         let field_offset = field as u16;
         Ok(BytecodeInstruction::new(
-            Opcode::SetField,
+            opcode::SET_FIELD,
             vec![
                 dst_reg,
                 (field_offset & 0xFF) as u8,
@@ -1006,7 +1036,7 @@ impl Translator {
         let src_reg = self.operand_resolver.to_reg(src)?;
         let index_reg = self.operand_resolver.to_reg(index)?;
         Ok(BytecodeInstruction::new(
-            Opcode::LoadElement,
+            opcode::LOAD_ELEMENT,
             vec![dst_reg, src_reg, index_reg],
         ))
     }
@@ -1021,7 +1051,7 @@ impl Translator {
         let index_reg = self.operand_resolver.to_reg(index)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
-            Opcode::StoreElement,
+            opcode::STORE_ELEMENT,
             vec![dst_reg, index_reg, src_reg],
         ))
     }
@@ -1034,7 +1064,7 @@ impl Translator {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
-            Opcode::Cast,
+            opcode::CAST,
             vec![dst_reg, src_reg, 0, 0],
         ))
     }
@@ -1045,7 +1075,7 @@ impl Translator {
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         Ok(BytecodeInstruction::new(
-            Opcode::HeapAlloc,
+            opcode::HEAP_ALLOC,
             vec![dst_reg, 0, 0],
         ))
     }
@@ -1069,7 +1099,7 @@ impl Translator {
             let field_reg = self.operand_resolver.to_reg(field)?;
             operands.extend_from_slice(&(field_reg as u16).to_le_bytes());
         }
-        Ok(BytecodeInstruction::new(Opcode::CreateStruct, operands))
+        Ok(BytecodeInstruction::new(opcode::CREATE_STRUCT, operands))
     }
 
     /// 翻译 NewDict 指令
@@ -1097,7 +1127,7 @@ impl Translator {
             let val_reg = self.operand_resolver.to_reg(val)?;
             operands.extend_from_slice(&(val_reg as u16).to_le_bytes());
         }
-        Ok(BytecodeInstruction::new(Opcode::NewDict, operands))
+        Ok(BytecodeInstruction::new(opcode::NEW_DICT, operands))
     }
 
     /// 翻译 NewTuple 指令
@@ -1119,7 +1149,7 @@ impl Translator {
             let item_reg = self.operand_resolver.to_reg(item)?;
             operands.extend_from_slice(&(item_reg as u16).to_le_bytes());
         }
-        Ok(BytecodeInstruction::new(Opcode::NewTuple, operands))
+        Ok(BytecodeInstruction::new(opcode::NEW_TUPLE, operands))
     }
 
     fn translate_make_closure(
@@ -1155,7 +1185,7 @@ impl Translator {
             let reg = self.operand_resolver.to_reg(op)?;
             operands.extend_from_slice(&(reg as u16).to_le_bytes());
         }
-        Ok(BytecodeInstruction::new(Opcode::MakeClosure, operands))
+        Ok(BytecodeInstruction::new(opcode::MAKE_CLOSURE, operands))
     }
 
     fn translate_drop(
@@ -1163,7 +1193,7 @@ impl Translator {
         operand: &Operand,
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let reg = self.operand_resolver.to_reg(operand)?;
-        Ok(BytecodeInstruction::new(Opcode::Drop, vec![reg]))
+        Ok(BytecodeInstruction::new(opcode::DROP, vec![reg]))
     }
 
     fn translate_push(
@@ -1171,7 +1201,7 @@ impl Translator {
         operand: &Operand,
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let reg = self.operand_resolver.to_reg(operand)?;
-        Ok(BytecodeInstruction::new(Opcode::Mov, vec![reg]))
+        Ok(BytecodeInstruction::new(opcode::MOV, vec![reg]))
     }
 
     fn translate_pop(
@@ -1179,7 +1209,7 @@ impl Translator {
         operand: &Operand,
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let reg = self.operand_resolver.to_reg(operand)?;
-        Ok(BytecodeInstruction::new(Opcode::Mov, vec![reg]))
+        Ok(BytecodeInstruction::new(opcode::MOV, vec![reg]))
     }
 
     fn translate_arc_new(
@@ -1190,7 +1220,7 @@ impl Translator {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
-            Opcode::ArcNew,
+            opcode::ARC_NEW,
             vec![dst_reg, src_reg],
         ))
     }
@@ -1203,7 +1233,7 @@ impl Translator {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
-            Opcode::RcNew,
+            opcode::RC_NEW,
             vec![dst_reg, src_reg],
         ))
     }
@@ -1216,7 +1246,7 @@ impl Translator {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
-            Opcode::ArcClone,
+            opcode::ARC_CLONE,
             vec![dst_reg, src_reg],
         ))
     }
@@ -1226,7 +1256,7 @@ impl Translator {
         operand: &Operand,
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let reg = self.operand_resolver.to_reg(operand)?;
-        Ok(BytecodeInstruction::new(Opcode::ArcDrop, vec![reg]))
+        Ok(BytecodeInstruction::new(opcode::ARC_DROP, vec![reg]))
     }
 
     fn translate_string_length(
@@ -1237,7 +1267,7 @@ impl Translator {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
-            Opcode::StringLength,
+            opcode::STRING_LENGTH,
             vec![dst_reg, src_reg],
         ))
     }
@@ -1252,7 +1282,7 @@ impl Translator {
         let lhs_reg = self.operand_resolver.to_reg(lhs)?;
         let rhs_reg = self.operand_resolver.to_reg(rhs)?;
         Ok(BytecodeInstruction::new(
-            Opcode::StringConcat,
+            opcode::STRING_CONCAT,
             vec![dst_reg, lhs_reg, rhs_reg],
         ))
     }
@@ -1267,7 +1297,7 @@ impl Translator {
         let src_reg = self.operand_resolver.to_reg(src)?;
         let index_reg = self.operand_resolver.to_reg(index)?;
         Ok(BytecodeInstruction::new(
-            Opcode::StringGetChar,
+            opcode::STRING_GET_CHAR,
             vec![dst_reg, src_reg, index_reg],
         ))
     }
@@ -1280,7 +1310,7 @@ impl Translator {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
-            Opcode::StringFromInt,
+            opcode::STRING_FROM_INT,
             vec![dst_reg, src_reg],
         ))
     }
@@ -1293,7 +1323,7 @@ impl Translator {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
-            Opcode::StringFromFloat,
+            opcode::STRING_FROM_FLOAT,
             vec![dst_reg, src_reg],
         ))
     }
@@ -1305,7 +1335,7 @@ impl Translator {
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         Ok(BytecodeInstruction::new(
-            Opcode::LoadUpvalue,
+            opcode::LOAD_UPVALUE,
             vec![dst_reg, upvalue_idx as u8],
         ))
     }
@@ -1317,7 +1347,7 @@ impl Translator {
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
-            Opcode::StoreUpvalue,
+            opcode::STORE_UPVALUE,
             vec![src_reg, upvalue_idx as u8],
         ))
     }
@@ -1327,7 +1357,7 @@ impl Translator {
         operand: &Operand,
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let reg = self.operand_resolver.to_reg(operand)?;
-        Ok(BytecodeInstruction::new(Opcode::CloseUpvalue, vec![reg]))
+        Ok(BytecodeInstruction::new(opcode::CLOSE_UPVALUE, vec![reg]))
     }
 }
 

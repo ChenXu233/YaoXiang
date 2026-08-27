@@ -25,6 +25,26 @@ pub(super) enum StopReason {
     Completed,
 }
 
+/// #279：索引值 → usize；非 Int 报类型错误，负数报运行时错误（不再静默当 0）
+/// #300 D 项：len 为真实容器长度，负索引诊断携带原始 i64（不再是 max=0 哨兵）
+fn index_arg(
+    idx: &RuntimeValue,
+    what: &str,
+    len: usize,
+) -> ExecutorResult<usize> {
+    let i = idx
+        .to_int()
+        .ok_or_else(|| ExecutorError::type_only(format!("{what} index must be an Int")))?;
+    usize::try_from(i).map_err(|_| {
+        // #299 §4: 负索引归并到 IndexOutOfBounds（E6003），不再落通用 E6007
+        ExecutorError::IndexOutOfBounds {
+            max: len,
+            index: i,
+            stack: None,
+        }
+    })
+}
+
 impl Interpreter {
     /// Decode a Label into a signed offset for relative jumps.
     fn decode_label_offset(label: Label) -> i32 {
@@ -332,7 +352,7 @@ impl Interpreter {
                     })
                     .collect();
 
-                let runtime = self.runtime_config.runtime;
+                let runtime = self.runtime_config.mode;
 
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
                     let result = self.call_static_by_id(func_id, &call_args)?;
@@ -388,7 +408,7 @@ impl Interpreter {
                     })
                     .collect();
 
-                let runtime = self.runtime_config.runtime;
+                let runtime = self.runtime_config.mode;
 
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
                     let result = self
@@ -501,7 +521,7 @@ impl Interpreter {
                 let closures = closures.clone();
                 let task_deps = task_deps.clone();
                 let task_resources = task_resources.clone();
-                let runtime = self.runtime_config.runtime;
+                let runtime = self.runtime_config.mode;
 
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
                     for func_reg in closures.iter() {
@@ -513,8 +533,14 @@ impl Interpreter {
                                 stack,
                             ));
                         };
-                        let _result =
-                            self.call_function_by_id(func_value.func_id, &func_value.env)?;
+                        // #254：call_closure 设 upvalues（闭包体 LoadUpvalue 读 env），
+                        // env 同时作 args 前段（LoadArg 读）。call_function_by_id 不设
+                        // upvalues → 闭包捕获读 Void。
+                        let _result = self.call_closure(
+                            func_value.func_id,
+                            &func_value.env,
+                            &func_value.env,
+                        )?;
                         frame.set_slot(func_reg.0 as usize, _result);
                     }
                 } else {
@@ -588,8 +614,8 @@ impl Interpreter {
 
                 let list_val = self.force_slot(frame, closures_list)?;
                 let closures: Vec<RuntimeValue> = match list_val {
-                    RuntimeValue::List(handle) => match self.heap.get(handle) {
-                        Some(crate::backends::common::HeapValue::List(items)) => items.clone(),
+                    RuntimeValue::List(handle) => match &*handle.lock() {
+                        crate::backends::common::HeapValue::List(items) => items.clone(),
                         _ => {
                             let stack = self.capture_stack();
                             return Err(ExecutorError::type_error(
@@ -607,7 +633,7 @@ impl Interpreter {
                     }
                 };
 
-                let runtime = self.runtime_config.runtime;
+                let runtime = self.runtime_config.mode;
 
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
                     for closure_val in closures.iter() {
@@ -695,6 +721,16 @@ impl Interpreter {
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
+            BytecodeInstr::NewArray { dst, count } => {
+                // #299 §2：定长数组——元素默认 Void 占位，后续由字面量/store 填充
+                let items = vec![RuntimeValue::Void; *count as usize];
+                let handle = self
+                    .heap
+                    .allocate(crate::backends::common::HeapValue::Array(items));
+                frame.set_slot(dst.0 as usize, RuntimeValue::Array(handle));
+                frame.advance();
+                Ok(StepOutcome::Continue)
+            }
             BytecodeInstr::NewDict { dst, keys, values } => {
                 let mut map = std::collections::HashMap::new();
                 for (key_reg, val_reg) in keys.iter().zip(values.iter()) {
@@ -731,51 +767,138 @@ impl Interpreter {
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
+            // #299 §3: membership 谓词——命中 true / 未命中 false，不报错（问 vs 断言）
+            BytecodeInstr::Contains {
+                dst,
+                elem,
+                container,
+            } => {
+                let e = self.force_slot(frame, *elem)?;
+                let cval = self.force_slot(frame, *container)?;
+                let found = match &cval {
+                    RuntimeValue::List(h) => matches!(
+                        &*h.lock(),
+                        crate::backends::common::HeapValue::List(items)
+                            if items.contains(&e)
+                    ),
+                    RuntimeValue::Array(h) => matches!(
+                        &*h.lock(),
+                        crate::backends::common::HeapValue::Array(items)
+                            if items.contains(&e)
+                    ),
+                    RuntimeValue::Tuple(h) => matches!(
+                        &*h.lock(),
+                        crate::backends::common::HeapValue::Tuple(items)
+                            if items.contains(&e)
+                    ),
+                    RuntimeValue::Dict(h) => matches!(
+                        &*h.lock(),
+                        crate::backends::common::HeapValue::Dict(map)
+                            if map.contains_key(&e)
+                    ),
+                    RuntimeValue::String(s) => match &e {
+                        RuntimeValue::String(sub) => s.contains(sub.as_ref()),
+                        RuntimeValue::Char(ch) => match char::from_u32(*ch) {
+                            Some(c) => s.contains(c),
+                            // 无效码点不可能存在于合法 Char 值，落到即运行时数据损坏
+                            None => {
+                                return Err(ExecutorError::runtime_only(format!(
+                                    "internal: invalid Char code point {ch} in 'in' check"
+                                )))
+                            }
+                        },
+                        // #300 B 项：非 String/Char 探 String 是类型层漏拦，不静默 false
+                        _ => {
+                            return Err(ExecutorError::runtime_only(format!(
+                                "internal: 'in' on String with non-string element ({e}) — typecheck missed this"
+                            )))
+                        }
+                    },
+                    // #300 B 项：非容器落到这里是类型层漏拦（白名单已拦），
+                    // 静默 false 是 #279 同款疾病，改为内部错误
+                    _ => {
+                        return Err(ExecutorError::runtime_only(format!(
+                            "internal: 'in' on non-container value ({cval}) — typecheck missed this"
+                        )))
+                    }
+                };
+                frame.set_slot(dst.0 as usize, RuntimeValue::Bool(found));
+                frame.advance();
+                Ok(StepOutcome::Continue)
+            }
             BytecodeInstr::LoadElement { dst, array, index } => {
                 let arr = self.force_slot(frame, *array)?;
                 let idx_value = self.force_slot(frame, *index)?;
 
                 match arr {
                     RuntimeValue::List(handle) => {
-                        let idx = idx_value.to_int().unwrap_or(0) as usize;
-                        if let Some(crate::backends::common::HeapValue::List(items)) =
-                            self.heap.get(handle)
-                        {
+                        let len = handle.lock().len();
+                        let idx = index_arg(&idx_value, "list", len)?;
+                        if let crate::backends::common::HeapValue::List(items) = &*handle.lock() {
                             if idx < items.len() {
                                 frame.set_slot(dst.0 as usize, items[idx].clone());
+                            } else {
+                                // #279：越界读不再静默返回 void；#280：报专用码 E6003
+                                return Err(ExecutorError::index_out_of_bounds(
+                                    items.len(),
+                                    idx as i64,
+                                    None,
+                                ));
                             }
                         }
                     }
                     RuntimeValue::Tuple(handle) => {
-                        let idx = idx_value.to_int().unwrap_or(0) as usize;
-                        if let Some(crate::backends::common::HeapValue::Tuple(items)) =
-                            self.heap.get(handle)
-                        {
+                        let len = handle.lock().len();
+                        let idx = index_arg(&idx_value, "tuple", len)?;
+                        if let crate::backends::common::HeapValue::Tuple(items) = &*handle.lock() {
                             if idx < items.len() {
                                 frame.set_slot(dst.0 as usize, items[idx].clone());
+                            } else {
+                                // #279：越界读不再静默返回 void；#280：报专用码 E6003
+                                return Err(ExecutorError::index_out_of_bounds(
+                                    items.len(),
+                                    idx as i64,
+                                    None,
+                                ));
                             }
                         }
                     }
                     RuntimeValue::Array(handle) => {
-                        let idx = idx_value.to_int().unwrap_or(0) as usize;
-                        if let Some(crate::backends::common::HeapValue::Array(items)) =
-                            self.heap.get(handle)
-                        {
+                        let len = handle.lock().len();
+                        let idx = index_arg(&idx_value, "array", len)?;
+                        if let crate::backends::common::HeapValue::Array(items) = &*handle.lock() {
                             if idx < items.len() {
                                 frame.set_slot(dst.0 as usize, items[idx].clone());
+                            } else {
+                                // #279：越界读不再静默返回 void；#280：报专用码 E6003
+                                return Err(ExecutorError::index_out_of_bounds(
+                                    items.len(),
+                                    idx as i64,
+                                    None,
+                                ));
                             }
                         }
                     }
                     RuntimeValue::Dict(handle) => {
-                        if let Some(crate::backends::common::HeapValue::Dict(map)) =
-                            self.heap.get(handle)
-                        {
-                            if let Some(value) = map.get(&idx_value) {
-                                frame.set_slot(dst.0 as usize, value.clone());
+                        if let crate::backends::common::HeapValue::Dict(map) = &*handle.lock() {
+                            match map.get(&idx_value) {
+                                Some(value) => frame.set_slot(dst.0 as usize, value.clone()),
+                                // #299：缺键不再静默返回 void（同 #279 方向）
+                                None => {
+                                    return Err(ExecutorError::KeyNotFound {
+                                        key: format!("{}", idx_value),
+                                        stack: None,
+                                    });
+                                }
                             }
                         }
                     }
-                    _ => {}
+                    // #299：不可索引类型（如 String）不再静默 void
+                    _ => {
+                        return Err(ExecutorError::type_only(
+                            "indexing not supported on this value type",
+                        ))
+                    }
                 }
                 frame.advance();
                 Ok(StepOutcome::Continue)
@@ -791,31 +914,44 @@ impl Interpreter {
 
                 match arr {
                     RuntimeValue::List(handle) => {
-                        let idx = idx_value.to_int().unwrap_or(0) as usize;
-                        if let Some(crate::backends::common::HeapValue::List(items)) =
-                            self.heap.get_mut(handle)
+                        let len = handle.lock().len();
+                        let idx = index_arg(&idx_value, "list", len)?;
+                        if let crate::backends::common::HeapValue::List(items) = &mut *handle.lock()
                         {
                             if idx < items.len() {
                                 items[idx] = val;
                             } else if idx == items.len() {
                                 items.push(val);
+                            } else {
+                                // #279：越界写不再静默丢弃；#280：报专用码 E6003
+                                return Err(ExecutorError::index_out_of_bounds(
+                                    items.len(),
+                                    idx as i64,
+                                    None,
+                                ));
                             }
                         }
                     }
                     RuntimeValue::Array(handle) => {
-                        let idx = idx_value.to_int().unwrap_or(0) as usize;
-                        if let Some(crate::backends::common::HeapValue::Array(items)) =
-                            self.heap.get_mut(handle)
+                        let len = handle.lock().len();
+                        let idx = index_arg(&idx_value, "array", len)?;
+                        if let crate::backends::common::HeapValue::Array(items) =
+                            &mut *handle.lock()
                         {
                             if idx < items.len() {
                                 items[idx] = val;
+                            } else {
+                                // #279：越界写不再静默丢弃；#280：报专用码 E6003
+                                return Err(ExecutorError::index_out_of_bounds(
+                                    items.len(),
+                                    idx as i64,
+                                    None,
+                                ));
                             }
                         }
                     }
                     RuntimeValue::Dict(handle) => {
-                        if let Some(crate::backends::common::HeapValue::Dict(map)) =
-                            self.heap.get_mut(handle)
-                        {
+                        if let crate::backends::common::HeapValue::Dict(map) = &mut *handle.lock() {
                             map.insert(idx_value, val);
                         }
                     }
@@ -831,9 +967,7 @@ impl Interpreter {
             } => {
                 let obj = self.force_slot(frame, *src)?;
                 if let RuntimeValue::Struct { fields, .. } = obj {
-                    if let Some(crate::backends::common::HeapValue::Tuple(items)) =
-                        self.heap.get(fields)
-                    {
+                    if let crate::backends::common::HeapValue::Tuple(items) = &*fields.lock() {
                         if (*field_idx as usize) < items.len() {
                             frame.set_slot(dst.0 as usize, items[*field_idx as usize].clone());
                         }
@@ -850,9 +984,7 @@ impl Interpreter {
                 let obj = self.force_slot(frame, *src)?;
                 let val = self.force_slot(frame, *value)?;
                 if let RuntimeValue::Struct { fields, .. } = obj {
-                    if let Some(crate::backends::common::HeapValue::Tuple(items)) =
-                        self.heap.get_mut(fields)
-                    {
+                    if let crate::backends::common::HeapValue::Tuple(items) = &mut *fields.lock() {
                         if (*field_idx as usize) < items.len() {
                             items[*field_idx as usize] = val;
                         }
@@ -893,11 +1025,9 @@ impl Interpreter {
                 let idx = self.force_slot(frame, *index)?.to_int().unwrap_or(-1);
                 let len = match &arr {
                     RuntimeValue::List(h) | RuntimeValue::Tuple(h) | RuntimeValue::Array(h) => {
-                        match self.heap.get(*h) {
-                            Some(crate::backends::common::HeapValue::List(list)) => {
-                                list.len() as i64
-                            }
-                            Some(crate::backends::common::HeapValue::Tuple(t)) => t.len() as i64,
+                        match &*h.lock() {
+                            crate::backends::common::HeapValue::List(list) => list.len() as i64,
+                            crate::backends::common::HeapValue::Tuple(t) => t.len() as i64,
                             _ => -1,
                         }
                     }
@@ -905,9 +1035,11 @@ impl Interpreter {
                 };
                 if idx < 0 || idx >= len {
                     let stack = self.capture_stack();
-                    return Err(ExecutorError::runtime(
-                        format!("Index {} out of bounds for length {}", idx, len),
-                        stack,
+                    // #280：越界用专用码 E6003（原 E6007 通用）
+                    return Err(ExecutorError::index_out_of_bounds(
+                        len.max(0) as usize,
+                        idx,
+                        Some(stack),
                     ));
                 }
                 frame.advance();

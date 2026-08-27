@@ -14,16 +14,6 @@
 
 ---
 
-## E6002：Null pointer dereference
-
-**类别**: Runtime
-
-**消息**: Attempted to access a null value
-
-**帮助**: Add a null check before accessing the value
-
----
-
 ## E6003：Array index out of bounds
 
 **类别**: Runtime
@@ -53,3 +43,16 @@
 **帮助**: Fix the assertion condition or provide valid input
 
 ---
+
+## E6008：Key not found
+
+**类别**: Runtime
+
+**消息**: Key not found
+
+**帮助**: Use dict.has to check key existence before indexing
+
+---
+
+> #299 §4：Dict 缺键与索引越界（E6003）语义不同类——键不存在 vs 序号超界，
+> 独立成码保留诊断信息。安全访问用 `dict.has` 先判再取。

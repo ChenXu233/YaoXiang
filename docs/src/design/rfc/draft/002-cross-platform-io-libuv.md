@@ -2,7 +2,7 @@
 title: 'RFC-002：基于 libuv 的资源类型 IO 实现层'
 status: '草案'
 author: '晨煦'
-created: '2025-01-05'
+created: '2026-01-05'
 updated: '2026-07-05'
 issue: '#102'
 ---

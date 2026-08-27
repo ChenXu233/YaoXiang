@@ -1,0 +1,13 @@
+// 06-compile-errors/closure_capture_fn_body_err.yx
+// [test:error]: 函数定义 body 引用外层局部变量 → E1001（函数不捕获外层局部变量）
+// 预期: 编译错误 E1001 Unknown variable: 'n'
+// 覆盖: SPEC §12.3 闭包不捕获 + #295（check_stmt Return 分支修复：此前静默跳过
+//       函数体自由变量检查，ir_gen 才报 E3006/错绑）
+// 验证: `f = x => x + n` 无签名函数定义的 body 引用外层局部变量 n 必须报错
+// 状态: ❌ 应编译失败
+
+main = {
+    n = 5
+    f = x => x + n   // ❌ f 的函数体引用外层局部变量 n
+    print(f(3))
+}

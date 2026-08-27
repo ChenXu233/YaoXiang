@@ -5,21 +5,14 @@
 use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
 use crate::std::io::format_value_with_prefix;
-use crate::std::{NativeContext, NativeExport, StdModule, NativeHandler};
+use crate::std::{NativeContext, NativeExport, StdModule};
 use crate::std::result::{error_new, result_err, result_ok};
 
-// ============================================================================
 // StringModule - StdModule Implementation
-// ============================================================================
 
 /// String module implementation.
+#[derive(Default)]
 pub struct StringModule;
-
-impl Default for StringModule {
-    fn default() -> Self {
-        Self
-    }
-}
 
 impl StdModule for StringModule {
     fn module_path(&self) -> &str {
@@ -28,119 +21,114 @@ impl StdModule for StringModule {
 
     fn exports(&self) -> Vec<NativeExport> {
         vec![
-            NativeExport::new(
+            export!(
                 "split",
                 "std.string.split",
                 "(s: &String, sep: &String) -> List(String)",
-                native_split as NativeHandler,
+                native_split
             ),
-            NativeExport::new(
+            export!(
                 "trim",
                 "std.string.trim",
                 "(s: &String) -> String",
-                native_trim as NativeHandler,
+                native_trim
             ),
-            NativeExport::new(
+            export!(
                 "upper",
                 "std.string.upper",
                 "(s: &String) -> String",
-                native_upper as NativeHandler,
+                native_upper
             ),
-            NativeExport::new(
+            export!(
                 "lower",
                 "std.string.lower",
                 "(s: &String) -> String",
-                native_lower as NativeHandler,
+                native_lower
             ),
-            NativeExport::new(
+            export!(
                 "replace",
                 "std.string.replace",
                 "(s: &String, old: &String, new: &String) -> String",
-                native_replace as NativeHandler,
+                native_replace
             ),
-            NativeExport::new(
+            export!(
                 "contains",
                 "std.string.contains",
                 "(s: &String, sub: &String) -> Bool",
-                native_contains as NativeHandler,
+                native_contains
             ),
-            NativeExport::new(
+            export!(
                 "starts_with",
                 "std.string.starts_with",
                 "(s: &String, prefix: &String) -> Bool",
-                native_starts_with as NativeHandler,
+                native_starts_with
             ),
-            NativeExport::new(
+            export!(
                 "ends_with",
                 "std.string.ends_with",
                 "(s: &String, suffix: &String) -> Bool",
-                native_ends_with as NativeHandler,
+                native_ends_with
             ),
-            NativeExport::new(
+            export!(
                 "index_of",
                 "std.string.index_of",
                 "(s: &String, sub: &String) -> Int",
-                native_index_of as NativeHandler,
+                native_index_of
             ),
-            NativeExport::new(
+            export!(
                 "substring",
                 "std.string.substring",
                 "(s: &String, start: Int, end: Int) -> String",
-                native_substring as NativeHandler,
+                native_substring
             ),
-            NativeExport::new(
+            export!(
                 "is_empty",
                 "std.string.is_empty",
                 "(s: &String) -> Bool",
-                native_is_empty as NativeHandler,
+                native_is_empty
             ),
-            NativeExport::new(
-                "len",
-                "std.string.len",
-                "(s: &String) -> Int",
-                native_len as NativeHandler,
-            ),
-            NativeExport::new(
+            export!("len", "std.string.len", "(s: &String) -> Int", native_len),
+            export!(
                 "chars",
                 "std.string.chars",
                 "(s: &String) -> List(String)",
-                native_chars as NativeHandler,
+                native_chars
             ),
-            NativeExport::new(
+            export!(
                 "concat",
                 "std.string.concat",
                 "(s1: &String, s2: &String) -> String",
-                native_concat as NativeHandler,
+                native_concat
             ),
-            NativeExport::new(
+            export!(
                 "repeat",
                 "std.string.repeat",
                 "(s: &String, n: Int) -> String",
-                native_repeat as NativeHandler,
+                native_repeat
             ),
-            NativeExport::new(
+            export!(
                 "reverse",
                 "std.string.reverse",
                 "(s: &String) -> String",
-                native_reverse as NativeHandler,
+                native_reverse
             ),
-            NativeExport::new(
+            export!(
                 "format",
                 "std.string.format",
                 "(format: &String, ...args) -> String",
-                native_format as NativeHandler,
+                native_format
             ),
-            NativeExport::new(
+            export!(
                 "parse_int",
                 "std.string.parse_int",
                 "(s: &String) -> Result(Int, Error)",
-                native_parse_int as NativeHandler,
+                native_parse_int
             ),
-            NativeExport::new(
+            export!(
                 "parse_float",
                 "std.string.parse_float",
                 "(s: &String) -> Result(Float, Error)",
-                native_parse_float as NativeHandler,
+                native_parse_float
             ),
         ]
     }
@@ -149,9 +137,7 @@ impl StdModule for StringModule {
 /// Singleton instance for std.string module.
 pub const STRING_MODULE: StringModule = StringModule;
 
-// ============================================================================
 // Helper functions
-// ============================================================================
 
 /// Extract String from RuntimeValue
 fn extract_string(arg: &RuntimeValue) -> String {
@@ -166,9 +152,7 @@ fn extract_int(arg: &RuntimeValue) -> i64 {
     arg.to_int().unwrap_or(0)
 }
 
-// ============================================================================
 // Native function implementations
-// ============================================================================
 
 /// Native implementation: split - split string by separator
 /// Now uses ctx.heap to allocate a proper List
@@ -535,9 +519,7 @@ fn apply_format_spec(
     }
 }
 
-// ============================================================================
 // Native implementations: parse_int / parse_float
-// ============================================================================
 
 /// Native implementation: parse_int - parse string to Int
 pub(crate) fn native_parse_int(

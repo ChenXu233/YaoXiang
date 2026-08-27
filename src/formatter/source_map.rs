@@ -298,6 +298,22 @@ impl SourceMap {
             .collect()
     }
 
+    /// 把行末注释追加到已渲染语句后（截断到行尾，注释接在语句后面）
+    pub fn append_trailing_comment(
+        &self,
+        result: &mut String,
+        end_line: usize,
+        end_offset: usize,
+    ) {
+        if let Some(trailing) = self.trailing_comment_on_line(end_line) {
+            if trailing.span.start.offset > end_offset {
+                let last_newline = result.rfind('\n').unwrap_or(0);
+                result.truncate(last_newline);
+                result.push_str(&format!(" {}\n", trailing.content));
+            }
+        }
+    }
+
     /// 获取行末注释（与代码在同一行）
     pub fn trailing_comment_on_line(
         &self,

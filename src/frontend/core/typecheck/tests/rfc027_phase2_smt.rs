@@ -5,10 +5,10 @@
 //!   §3.2: 假设栈蕴含（Phase 2A）
 //!   §8:   Z3 SMT 求解（Phase 2B）
 
+use crate::frontend::core::typecheck::test_util::{binop, refined_int};
 use std::collections::HashMap;
 
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
-use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::core::typecheck::layers::predicate::check_predicate;
 use crate::frontend::core::typecheck::proof::context::ProofContext;
 use crate::frontend::core::typecheck::proof::verdict::ProofResult;
@@ -19,30 +19,23 @@ fn constraint_gt(
     var: &str,
     n: i128,
 ) -> ConstExpr {
-    ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar(var.into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(n))),
-    }
+    binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar(var.into()),
+        ConstExpr::Lit(ConstValue::Int(n)),
+    )
 }
 
 /// 辅助：构造 Refined 类型
-fn refined_int(constraint: ConstExpr) -> MonoType {
-    MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint,
-    }
-}
-
 // =========== §4.1: Evaluator 直接求值（Phase 1 回归） ===========
 
 #[test]
 fn test_direct_eval_proved_for_true_literal_comparison() {
-    let refined = refined_int(ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::Lit(ConstValue::Int(5))),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    });
+    let refined = refined_int(binop(
+        BinOp::Gt,
+        ConstExpr::Lit(ConstValue::Int(5)),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    ));
 
     let env = TypeEnvironment::new();
     let ctx = ProofContext::new(&env);
@@ -52,11 +45,11 @@ fn test_direct_eval_proved_for_true_literal_comparison() {
 
 #[test]
 fn test_direct_eval_disproved_for_false_literal_comparison() {
-    let refined = refined_int(ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    });
+    let refined = refined_int(binop(
+        BinOp::Gt,
+        ConstExpr::Lit(ConstValue::Int(0)),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    ));
 
     let env = TypeEnvironment::new();
     let ctx = ProofContext::new(&env);
@@ -147,11 +140,11 @@ fn test_smt_linear_arithmetic_with_concrete_binding() {
     let constraint = ConstExpr::BinOp {
         op: BinOp::And,
         left: Box::new(constraint_gt("x", 0)),
-        right: Box::new(ConstExpr::BinOp {
-            op: BinOp::Lt,
-            left: Box::new(ConstExpr::NamedVar("x".into())),
-            right: Box::new(ConstExpr::Lit(ConstValue::Int(10))),
-        }),
+        right: Box::new(binop(
+            BinOp::Lt,
+            ConstExpr::NamedVar("x".into()),
+            ConstExpr::Lit(ConstValue::Int(10)),
+        )),
     };
     let refined = refined_int(constraint);
 

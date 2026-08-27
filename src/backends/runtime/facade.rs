@@ -10,7 +10,7 @@ use std::time::Duration;
 use crate::util::time_compat::Instant;
 
 #[cfg(not(target_arch = "wasm32"))]
-use crossbeam::channel::{Receiver, Sender};
+use crossbeam_channel::{Receiver, Sender};
 
 use crate::backends::common::value::TaskId;
 
@@ -39,6 +39,11 @@ impl Default for RuntimeConfig {
     fn default() -> Self {
         Self {
             mode: RuntimeMode::Embedded,
+            #[cfg(not(target_arch = "wasm32"))]
+            workers: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(4),
+            #[cfg(target_arch = "wasm32")]
             workers: 1,
         }
     }
@@ -56,9 +61,7 @@ pub type TaskFn = Box<dyn FnOnce(&SpawnHandle) -> TaskResult + Send + 'static>;
 #[cfg(not(target_arch = "wasm32"))]
 pub type CoopTaskFn = Box<dyn FnMut(bool) -> TaskPoll + Send + 'static>;
 
-// ============================================================================
 // SpawnHandle — wasm-compatible stub vs full crossbeam version
-// ============================================================================
 
 #[cfg(target_arch = "wasm32")]
 /// Handle passed to tasks for nested spawning (no-op in wasm).
@@ -103,7 +106,7 @@ impl SpawnHandle {
         meta: TaskMeta,
         task: TaskFn,
     ) -> Result<TaskId, RuntimeError> {
-        let (respond_tx, respond_rx) = crossbeam::channel::bounded(1);
+        let (respond_tx, respond_rx) = crossbeam_channel::bounded(1);
         self.tx
             .send(WorkerMessage::SpawnRequest {
                 meta,
@@ -117,7 +120,7 @@ impl SpawnHandle {
     }
 
     pub fn noop() -> Self {
-        let (tx, _rx) = crossbeam::channel::unbounded();
+        let (tx, _rx) = crossbeam_channel::unbounded();
         Self { tx }
     }
 }
@@ -257,9 +260,7 @@ impl Runtime {
     }
 }
 
-// ============================================================================
 // Embedded Runtime
-// ============================================================================
 
 #[derive(Debug, Default)]
 struct EmbeddedRuntime {
@@ -303,17 +304,7 @@ impl EmbeddedRuntime {
             Ok(v) => TaskOutcome::Ok(v),
             Err(e) => TaskOutcome::Err(e),
         };
-        match outcome {
-            TaskOutcome::Ok(_) => self.stats.completed_count += 1,
-            TaskOutcome::Err(_) => self.stats.failed_count += 1,
-            TaskOutcome::Cancelled(_) => self.stats.cancelled_count += 1,
-        }
-        self.stats.total_spawned += 1;
-        let finished =
-            self.stats.completed_count + self.stats.failed_count + self.stats.cancelled_count;
-        if finished > 0 {
-            self.stats.avg_execution_time = self.total_exec_time / (finished as u32);
-        }
+        self.stats.record(&outcome, self.total_exec_time);
 
         self.outcomes.insert(task_id, outcome);
         task_id
@@ -352,9 +343,7 @@ impl EmbeddedRuntime {
     }
 }
 
-// ============================================================================
 // Standard Runtime (thread pool DAG) — not available in wasm
-// ============================================================================
 
 #[cfg(not(target_arch = "wasm32"))]
 /// A work item to be processed by a worker thread.
@@ -374,12 +363,16 @@ struct StandardRuntime {
     msg_rx: Receiver<WorkerMessage>,
     threads: Vec<JoinHandle<()>>,
     workers: usize,
+    /// 在飞任务计数，跨 `drive_until` 调用持久。
+    /// 否则每轮 drive 返回后其余在飞任务的完成消息遗留 channel，
+    /// 下一轮 ready 空 + in_flight=0 会误判死锁（#278 实测暴露）。
+    in_flight: usize,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl StandardRuntime {
     fn new(workers: usize) -> Result<Self, RuntimeFacadeError> {
-        let (msg_tx, msg_rx) = crossbeam::channel::unbounded::<WorkerMessage>();
+        let (msg_tx, msg_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
         let (work_tx, threads) = spawn_worker_threads(workers, msg_tx.clone());
 
         Ok(Self {
@@ -391,6 +384,7 @@ impl StandardRuntime {
             msg_rx,
             threads,
             workers,
+            in_flight: 0,
         })
     }
 
@@ -455,8 +449,6 @@ impl StandardRuntime {
         &mut self,
         target: Option<TaskId>,
     ) -> Result<(), RuntimeError> {
-        let mut in_flight = 0usize;
-
         loop {
             if let Some(t) = target {
                 if self.graph.is_complete(t) {
@@ -466,7 +458,7 @@ impl StandardRuntime {
             }
 
             // Dispatch ready tasks to the thread pool.
-            while in_flight < self.workers {
+            while self.in_flight < self.workers {
                 let Some(next) = (match target {
                     Some(t) => self
                         .graph
@@ -519,10 +511,10 @@ impl StandardRuntime {
                         spawn_handle,
                     })
                     .map_err(|_| RuntimeError::DeadlockOrCycle(next))?;
-                in_flight += 1;
+                self.in_flight += 1;
             }
 
-            if in_flight == 0 {
+            if self.in_flight == 0 {
                 if let Some(t) = target {
                     if !self.graph.is_complete(t) {
                         return Err(RuntimeError::DeadlockOrCycle(t));
@@ -544,7 +536,7 @@ impl StandardRuntime {
                     result,
                     exec_time,
                 } => {
-                    in_flight = in_flight.saturating_sub(1);
+                    self.in_flight = self.in_flight.saturating_sub(1);
                     match result {
                         Ok(v) => self.graph.complete(id, TaskOutcome::Ok(v), exec_time)?,
                         Err(e) => self.graph.complete(id, TaskOutcome::Err(e), exec_time)?,
@@ -600,7 +592,7 @@ impl StandardRuntime {
 impl Drop for StandardRuntime {
     fn drop(&mut self) {
         // Close the work channel to signal workers to exit.
-        let (dummy_tx, _dummy_rx) = crossbeam::channel::unbounded::<WorkItem>();
+        let (dummy_tx, _dummy_rx) = crossbeam_channel::unbounded::<WorkItem>();
         let old = std::mem::replace(&mut self.work_tx, dummy_tx);
         drop(old);
         for t in self.threads.drain(..) {
@@ -609,16 +601,14 @@ impl Drop for StandardRuntime {
     }
 }
 
-// ============================================================================
 // Worker thread pool — not available in wasm
-// ============================================================================
 
 #[cfg(not(target_arch = "wasm32"))]
 fn spawn_worker_threads(
     workers: usize,
     msg_tx: Sender<WorkerMessage>,
 ) -> (Sender<WorkItem>, Vec<JoinHandle<()>>) {
-    let (work_tx, work_rx) = crossbeam::channel::unbounded::<WorkItem>();
+    let (work_tx, work_rx) = crossbeam_channel::unbounded::<WorkItem>();
     let mut threads = Vec::with_capacity(workers);
     for _ in 0..workers {
         let work_rx = work_rx.clone();

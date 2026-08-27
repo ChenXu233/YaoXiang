@@ -164,43 +164,9 @@ fn type_name_hash<H: Hasher>(
         MonoType::Int(n) => format!("int{}", n).hash(state),
         MonoType::Float(n) => format!("float{}", n).hash(state),
         MonoType::Char => "char".hash(state),
-        MonoType::String => "string".hash(state),
-        MonoType::Bytes => "bytes".hash(state),
         MonoType::Struct(s) => s.name.hash(state),
         MonoType::Enum(e) => e.name.hash(state),
-        MonoType::Tuple(ts) => {
-            "tuple".hash(state);
-            for t in ts {
-                type_name_hash(t, state);
-            }
-        }
-        MonoType::List(t) => {
-            "list".hash(state);
-            type_name_hash(t, state);
-        }
-        MonoType::Dict(k, v) => {
-            "dict".hash(state);
-            type_name_hash(k, state);
-            type_name_hash(v, state);
-        }
-        MonoType::Set(t) => {
-            "set".hash(state);
-            type_name_hash(t, state);
-        }
-        MonoType::Option(t) => {
-            "option".hash(state);
-            type_name_hash(t, state);
-        }
-        MonoType::Result(ok, err) => {
-            "result".hash(state);
-            type_name_hash(ok, state);
-            type_name_hash(err, state);
-        }
         MonoType::Fn { .. } => "fn".hash(state),
-        MonoType::Range { elem_type } => {
-            "range".hash(state);
-            type_name_hash(elem_type, state);
-        }
         MonoType::TypeVar(v) => format!("var{}", v.index()).hash(state),
         MonoType::TypeRef(n) => n.hash(state),
         // 联合类型和交集类型使用 TypeRef 的哈希方式
@@ -215,14 +181,6 @@ fn type_name_hash<H: Hasher>(
             for t in types {
                 type_name_hash(t, state);
             }
-        }
-        MonoType::Arc(t) => {
-            "arc".hash(state);
-            type_name_hash(t, state);
-        }
-        MonoType::Weak(t) => {
-            "weak".hash(state);
-            type_name_hash(t, state);
         }
         MonoType::Ref { mutable, inner } => {
             "ref".hash(state);

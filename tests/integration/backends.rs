@@ -3,7 +3,7 @@
 //! Tests for the new backend architecture including interpreter,
 //! common components, and executor functionality.
 
-use yaoxiang::backends::common::{RuntimeValue, Heap, Handle};
+use yaoxiang::backends::common::{RuntimeValue, Heap, Handle, heap::HeapValue};
 use yaoxiang::backends::{ExecutorConfig, ExecutionState};
 use yaoxiang::middle::bytecode::{BytecodeModule, BytecodeFunction};
 use yaoxiang::middle::{ConstValue, Type};
@@ -13,28 +13,15 @@ fn test_executor_config_default() {
     let config = ExecutorConfig::default();
 
     assert_eq!(config.max_stack_depth, 1024);
-    assert_eq!(config.initial_heap_size, 64 * 1024);
-    assert_eq!(config.max_heap_size, 64 * 1024 * 1024);
-    assert!(config.enable_checks);
-    assert!(config.enable_debug);
 }
 
 #[test]
 fn test_executor_config_custom() {
     let config = ExecutorConfig {
         max_stack_depth: 2048,
-        initial_heap_size: 128 * 1024,
-        max_heap_size: 128 * 1024 * 1024,
-        build_mode: yaoxiang::backends::BuildMode::Release,
-        enable_checks: false,
-        enable_debug: false,
     };
 
     assert_eq!(config.max_stack_depth, 2048);
-    assert_eq!(config.initial_heap_size, 128 * 1024);
-    assert_eq!(config.max_heap_size, 128 * 1024 * 1024);
-    assert!(!config.enable_checks);
-    assert!(!config.enable_debug);
 }
 
 #[test]
@@ -113,29 +100,39 @@ fn test_bytecode_module_add_function() {
 }
 
 #[test]
-fn test_build_mode_variants() {
-    use yaoxiang::backends::BuildMode;
-
-    let debug = BuildMode::Debug;
-    let release = BuildMode::Release;
-    let profile = BuildMode::Profile;
-
-    // Verify they are different variants
-    assert_ne!(debug, release);
-    assert_ne!(debug, profile);
-    assert_ne!(release, profile);
-}
-
-#[test]
 fn test_handle_creation() {
-    let handle = Handle::new(42);
-    assert_eq!(handle.raw(), 42);
+    // Arrange
+    let handle = Handle::new(HeapValue::List(vec![]));
+    let other = Handle::new(HeapValue::List(vec![]));
+
+    // Act
+    let raw = handle.raw();
+    let raw_other = other.raw();
+
+    // Assert：raw 返回唯一标识（Arc 指针地址），不同分配必须不同
+    assert!(
+        raw != 0,
+        "raw should return a non-zero identity for a live handle"
+    );
+    assert_ne!(
+        raw, raw_other,
+        "distinct handles should have distinct raw ids"
+    );
 }
 
 #[test]
 fn test_handle_display() {
-    let handle = Handle::new(42);
-    assert_eq!(format!("{}", handle), "handle@42");
+    // Arrange
+    let handle = Handle::new(HeapValue::List(vec![]));
+
+    // Act
+    let rendered = format!("{}", handle);
+
+    // Assert：Display 以 handle@ 前缀输出指针地址
+    assert!(
+        rendered.starts_with("handle@0x"),
+        "Display should render as handle@0x..., got '{rendered}'"
+    );
 }
 
 #[test]

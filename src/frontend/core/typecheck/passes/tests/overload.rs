@@ -6,9 +6,7 @@
 use crate::frontend::core::typecheck::passes::overload::{OverloadCandidate, OverloadResolver};
 use crate::frontend::core::types::{MonoType, TypeVar};
 
-// ===================================================================
 // Happy path 测试
-// ===================================================================
 
 #[test]
 fn test_overload_candidate_creation() {
@@ -207,9 +205,7 @@ fn test_overload_resolver_with_many_candidates() {
     );
 }
 
-// ===================================================================
 // Error path 测试
-// ===================================================================
 
 #[test]
 fn test_resolve_no_matching_candidate() {
@@ -223,7 +219,7 @@ fn test_resolve_no_matching_candidate() {
     ));
 
     // Act: 用 String 类型调用
-    let result = resolver.resolve("add", &[MonoType::String, MonoType::String]);
+    let result = resolver.resolve("add", &[MonoType::make_string(), MonoType::make_string()]);
 
     // Assert: 应返回 NoMatchingDefinition 错误
     assert!(result.is_err(), "不兼容类型调用应返回错误");
@@ -320,9 +316,7 @@ fn test_resolve_empty_resolver() {
     );
 }
 
-// ===================================================================
 // Boundary 测试
-// ===================================================================
 
 #[test]
 fn test_resolve_selects_best_among_multiple_candidates() {
@@ -421,7 +415,7 @@ fn test_param_count_matches_boundary() {
     let candidate = OverloadCandidate::new(
         "f".to_string(),
         vec![MonoType::Int(32), MonoType::Float(64)],
-        MonoType::String,
+        MonoType::make_string(),
         vec![],
     );
 
@@ -439,7 +433,7 @@ fn test_resolve_single_candidate_perfect_match() {
     resolver.add_candidate(OverloadCandidate::new(
         "to_string".to_string(),
         vec![MonoType::Int(32)],
-        MonoType::String,
+        MonoType::make_string(),
         vec![],
     ));
 
@@ -451,7 +445,7 @@ fn test_resolve_single_candidate_perfect_match() {
     let candidate = result.unwrap();
     assert_eq!(
         candidate.return_type,
-        MonoType::String,
+        MonoType::make_string(),
         "返回类型应为 String"
     );
     assert_eq!(candidate.name, "to_string", "候选名称应为 'to_string'");
@@ -464,12 +458,12 @@ fn test_resolve_mixed_exact_and_incompatible() {
     resolver.add_candidate(OverloadCandidate::new(
         "convert".to_string(),
         vec![MonoType::Int(32)],
-        MonoType::String,
+        MonoType::make_string(),
         vec![],
     ));
     resolver.add_candidate(OverloadCandidate::new(
         "convert".to_string(),
-        vec![MonoType::String],
+        vec![MonoType::make_string()],
         MonoType::Int(32),
         vec![],
     ));
@@ -482,7 +476,7 @@ fn test_resolve_mixed_exact_and_incompatible() {
     let candidate = result.unwrap();
     assert_eq!(
         candidate.return_type,
-        MonoType::String,
+        MonoType::make_string(),
         "应匹配返回类型为 String 的 Int->String 候选"
     );
 }

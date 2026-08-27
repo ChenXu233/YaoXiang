@@ -149,17 +149,8 @@ fn extract_symbols_from_module(module: &Module) -> Vec<CompletionItem> {
                 value,
                 ..
             } => {
-                use crate::frontend::core::parser::ast::Expr;
-                let (name, type_name) = match target.as_ref() {
-                    Expr::Var(n, _) => (n.clone(), None),
-                    Expr::FieldAccess { expr, field, .. } => {
-                        if let Expr::Var(tn, _) = expr.as_ref() {
-                            (field.clone(), Some(tn.clone()))
-                        } else {
-                            (field.clone(), None)
-                        }
-                    }
-                    _ => continue,
+                let Some((name, type_name)) = target.receiver_parts() else {
+                    continue;
                 };
                 if let Some(tn) = type_name {
                     items.push(CompletionItem {
@@ -170,7 +161,9 @@ fn extract_symbols_from_module(module: &Module) -> Vec<CompletionItem> {
                         ..CompletionItem::default()
                     });
                 } else if let Some(v) = value {
-                    if let Expr::Lambda { params, .. } = v.as_ref() {
+                    if let crate::frontend::core::parser::ast::Expr::Lambda { params, .. } =
+                        v.as_ref()
+                    {
                         if !params.is_empty() {
                             items.push(CompletionItem {
                                 label: name.clone(),
@@ -243,8 +236,8 @@ pub fn handle_completion(
     items.extend(reserved_word_items());
 
     // 2. 从 SemanticDB 获取可见符号
-    let line = params.text_document_position.position.line as usize + 1;
-    let col = params.text_document_position.position.character as usize + 1;
+    let (line, col) =
+        crate::lsp::locate::position_to_internal(&params.text_document_position.position);
     items.extend(semantic_db_items(world, &uri, line, col));
 
     // 3. 当前文档符号

@@ -9,9 +9,7 @@ use crate::frontend::core::types::eval::normalizer::{
     EvaluationStrategy, NormalForm, NormalizationContext, ReductionConfig, TypeNormalizer,
 };
 
-// ===================================================================
 // ReductionConfig
-// ===================================================================
 
 #[test]
 fn test_reduction_config_default() {
@@ -35,26 +33,27 @@ fn test_reduction_config_custom() {
     assert_eq!(config.evaluation_strategy, EvaluationStrategy::Lazy);
 }
 
-// ===================================================================
 // TypeNormalizer
-// ===================================================================
 
 #[test]
 fn test_normalizer_normalize_primitives() {
     let mut n = TypeNormalizer::new();
     assert_eq!(n.normalize(&MonoType::Int(32)), NormalForm::Normalized);
     assert_eq!(n.normalize(&MonoType::Bool), NormalForm::Normalized);
-    assert_eq!(n.normalize(&MonoType::String), NormalForm::Normalized);
+    assert_eq!(
+        n.normalize(&MonoType::make_string()),
+        NormalForm::Normalized
+    );
     assert_eq!(n.normalize(&MonoType::Void), NormalForm::Normalized);
 }
 
 #[test]
 fn test_normalizer_normalize_composite() {
     let mut n = TypeNormalizer::new();
-    let list = MonoType::List(Box::new(MonoType::Int(32)));
+    let list = MonoType::make_list(MonoType::Int(32));
     assert_eq!(n.normalize(&list), NormalForm::Normalized);
 
-    let tuple = MonoType::Tuple(vec![MonoType::Int(32), MonoType::Bool]);
+    let tuple = MonoType::make_tuple(vec![MonoType::Int(32), MonoType::Bool]);
     assert_eq!(n.normalize(&tuple), NormalForm::Normalized);
 
     let fn_type = MonoType::Fn {
@@ -88,22 +87,26 @@ fn test_normalizer_normalize_struct() {
 #[test]
 fn test_normalizer_normalize_dict() {
     let mut n = TypeNormalizer::new();
-    let dict = MonoType::Dict(Box::new(MonoType::String), Box::new(MonoType::Int(32)));
+    let dict = MonoType::make_dict(MonoType::make_string(), MonoType::Int(32));
     assert_eq!(n.normalize(&dict), NormalForm::Normalized);
 }
 
 #[test]
 fn test_normalizer_normalize_set() {
     let mut n = TypeNormalizer::new();
-    let set = MonoType::Set(Box::new(MonoType::Bool));
+    let set = MonoType::Generic {
+        name: "Set".into(),
+        args: vec![MonoType::Bool],
+    };
     assert_eq!(n.normalize(&set), NormalForm::Normalized);
 }
 
 #[test]
 fn test_normalizer_normalize_range() {
     let mut n = TypeNormalizer::new();
-    let range = MonoType::Range {
-        elem_type: Box::new(MonoType::Int(64)),
+    let range = MonoType::Generic {
+        name: "Range".into(),
+        args: vec![MonoType::Int(64)],
     };
     assert_eq!(n.normalize(&range), NormalForm::Normalized);
 }
@@ -111,16 +114,22 @@ fn test_normalizer_normalize_range() {
 #[test]
 fn test_normalizer_normalize_arc_weak() {
     let mut n = TypeNormalizer::new();
-    let arc = MonoType::Arc(Box::new(MonoType::Int(32)));
+    let arc = MonoType::Generic {
+        name: "Arc".into(),
+        args: vec![MonoType::Int(32)],
+    };
     assert_eq!(n.normalize(&arc), NormalForm::Normalized);
-    let weak = MonoType::Weak(Box::new(MonoType::String));
+    let weak = MonoType::Generic {
+        name: "Weak".into(),
+        args: vec![MonoType::make_string()],
+    };
     assert_eq!(n.normalize(&weak), NormalForm::Normalized);
 }
 
 #[test]
 fn test_normalizer_normalize_union_intersection() {
     let mut n = TypeNormalizer::new();
-    let union = MonoType::Union(vec![MonoType::Int(32), MonoType::String]);
+    let union = MonoType::Union(vec![MonoType::Int(32), MonoType::make_string()]);
     assert_eq!(n.normalize(&union), NormalForm::Normalized);
     let inter = MonoType::Intersection(vec![
         MonoType::TypeRef("Clone".to_string()),
@@ -129,9 +138,7 @@ fn test_normalizer_normalize_union_intersection() {
     assert_eq!(n.normalize(&inter), NormalForm::Normalized);
 }
 
-// ===================================================================
 // TypeNormalizer - normalize_internal 路径
-// ===================================================================
 
 #[test]
 fn test_normalizer_normalize_type_var() {
@@ -151,14 +158,14 @@ fn test_normalizer_normalize_type_ref() {
 fn test_normalizer_normalize_tuple_elements() {
     let mut n = TypeNormalizer::new();
     // All normalized elements
-    let tuple = MonoType::Tuple(vec![MonoType::Int(32), MonoType::String]);
+    let tuple = MonoType::make_tuple(vec![MonoType::Int(32), MonoType::make_string()]);
     assert_eq!(n.normalize(&tuple), NormalForm::Normalized);
 }
 
 #[test]
 fn test_normalizer_normalize_list_element() {
     let mut n = TypeNormalizer::new();
-    let list = MonoType::List(Box::new(MonoType::Int(32)));
+    let list = MonoType::make_list(MonoType::Int(32));
     assert_eq!(n.normalize(&list), NormalForm::Normalized);
 }
 
@@ -167,7 +174,7 @@ fn test_normalizer_normalize_fn_params() {
     let mut n = TypeNormalizer::new();
     let f = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::Bool],
-        return_type: Box::new(MonoType::String),
+        return_type: Box::new(MonoType::make_string()),
     };
     assert_eq!(n.normalize(&f), NormalForm::Normalized);
 }
@@ -185,36 +192,40 @@ fn test_normalizer_normalize_enum() {
 #[test]
 fn test_normalizer_normalize_option() {
     let mut n = TypeNormalizer::new();
-    let opt = MonoType::Option(Box::new(MonoType::Int(32)));
+    let opt = MonoType::make_option(MonoType::Int(32));
     assert_eq!(n.normalize(&opt), NormalForm::Normalized);
 }
 
 #[test]
 fn test_normalizer_normalize_result() {
     let mut n = TypeNormalizer::new();
-    let res = MonoType::Result(Box::new(MonoType::Int(32)), Box::new(MonoType::String));
+    let res = MonoType::make_result(MonoType::Int(32), MonoType::make_string());
     assert_eq!(n.normalize(&res), NormalForm::Normalized);
 }
 
 #[test]
 fn test_normalizer_normalize_dict_type() {
     let mut n = TypeNormalizer::new();
-    let dict = MonoType::Dict(Box::new(MonoType::String), Box::new(MonoType::Int(32)));
+    let dict = MonoType::make_dict(MonoType::make_string(), MonoType::Int(32));
     assert_eq!(n.normalize(&dict), NormalForm::Normalized);
 }
 
 #[test]
 fn test_normalizer_normalize_set_type() {
     let mut n = TypeNormalizer::new();
-    let set = MonoType::Set(Box::new(MonoType::Bool));
+    let set = MonoType::Generic {
+        name: "Set".into(),
+        args: vec![MonoType::Bool],
+    };
     assert_eq!(n.normalize(&set), NormalForm::Normalized);
 }
 
 #[test]
 fn test_normalizer_normalize_range_type() {
     let mut n = TypeNormalizer::new();
-    let range = MonoType::Range {
-        elem_type: Box::new(MonoType::Int(64)),
+    let range = MonoType::Generic {
+        name: "Range".into(),
+        args: vec![MonoType::Int(64)],
     };
     assert_eq!(n.normalize(&range), NormalForm::Normalized);
 }
@@ -222,21 +233,27 @@ fn test_normalizer_normalize_range_type() {
 #[test]
 fn test_normalizer_normalize_arc_type() {
     let mut n = TypeNormalizer::new();
-    let arc = MonoType::Arc(Box::new(MonoType::Int(32)));
+    let arc = MonoType::Generic {
+        name: "Arc".into(),
+        args: vec![MonoType::Int(32)],
+    };
     assert_eq!(n.normalize(&arc), NormalForm::Normalized);
 }
 
 #[test]
 fn test_normalizer_normalize_weak_type() {
     let mut n = TypeNormalizer::new();
-    let weak = MonoType::Weak(Box::new(MonoType::String));
+    let weak = MonoType::Generic {
+        name: "Weak".into(),
+        args: vec![MonoType::make_string()],
+    };
     assert_eq!(n.normalize(&weak), NormalForm::Normalized);
 }
 
 #[test]
 fn test_normalizer_normalize_union_type() {
     let mut n = TypeNormalizer::new();
-    let union = MonoType::Union(vec![MonoType::Int(32), MonoType::String]);
+    let union = MonoType::Union(vec![MonoType::Int(32), MonoType::make_string()]);
     assert_eq!(n.normalize(&union), NormalForm::Normalized);
 }
 
@@ -271,9 +288,7 @@ fn test_normalizer_normalize_meta_type() {
     assert_eq!(n.normalize(&meta), NormalForm::Normalized);
 }
 
-// ===================================================================
 // Evaluator 相关
-// ===================================================================
 
 #[test]
 fn test_normalizer_evaluator() {
@@ -287,9 +302,7 @@ fn test_normalizer_context() {
     let _ctx = n.context();
 }
 
-// ===================================================================
 // NormalizationContext
-// ===================================================================
 
 #[test]
 fn test_normalization_context_apply_no_change() {
@@ -338,7 +351,7 @@ fn test_normalization_context_add_substitutions() {
     let mut ctx = NormalizationContext::new();
     let mut subs = std::collections::HashMap::new();
     subs.insert(0, MonoType::Int(32));
-    subs.insert(1, MonoType::String);
+    subs.insert(1, MonoType::make_string());
     ctx.add_substitutions(subs);
     assert_eq!(
         ctx.apply_substitution(&MonoType::TypeVar(
@@ -350,7 +363,7 @@ fn test_normalization_context_add_substitutions() {
         ctx.apply_substitution(&MonoType::TypeVar(
             crate::frontend::core::types::TypeVar::new(1)
         )),
-        MonoType::String
+        MonoType::make_string()
     );
 }
 
@@ -380,21 +393,21 @@ fn test_normalization_context_apply_through_struct() {
 fn test_normalization_context_apply_through_tuple() {
     let mut ctx = NormalizationContext::new();
     ctx.add_substitution(0, MonoType::Bool);
-    let tuple = MonoType::Tuple(vec![
+    let tuple = MonoType::make_tuple(vec![
         MonoType::TypeVar(crate::frontend::core::types::TypeVar::new(0)),
         MonoType::Int(32),
     ]);
     let result = ctx.apply_substitution(&tuple);
     assert_eq!(
         result,
-        MonoType::Tuple(vec![MonoType::Bool, MonoType::Int(32)])
+        MonoType::make_tuple(vec![MonoType::Bool, MonoType::Int(32)])
     );
 }
 
 #[test]
 fn test_normalization_context_apply_through_fn() {
     let mut ctx = NormalizationContext::new();
-    ctx.add_substitution(0, MonoType::String);
+    ctx.add_substitution(0, MonoType::make_string());
     let f = MonoType::Fn {
         params: vec![MonoType::TypeVar(
             crate::frontend::core::types::TypeVar::new(0),
@@ -410,8 +423,8 @@ fn test_normalization_context_apply_through_fn() {
             return_type,
             ..
         } => {
-            assert_eq!(params[0], MonoType::String);
-            assert_eq!(*return_type, MonoType::String);
+            assert_eq!(params[0], MonoType::make_string());
+            assert_eq!(*return_type, MonoType::make_string());
         }
         _ => panic!("Expected Fn"),
     }
@@ -421,27 +434,25 @@ fn test_normalization_context_apply_through_fn() {
 fn test_normalization_context_apply_through_list() {
     let mut ctx = NormalizationContext::new();
     ctx.add_substitution(0, MonoType::Float(64));
-    let list = MonoType::List(Box::new(MonoType::TypeVar(
+    let list = MonoType::make_list(MonoType::TypeVar(
         crate::frontend::core::types::TypeVar::new(0),
-    )));
+    ));
     let result = ctx.apply_substitution(&list);
-    assert_eq!(result, MonoType::List(Box::new(MonoType::Float(64))));
+    assert_eq!(result, MonoType::make_list(MonoType::Float(64)));
 }
 
 #[test]
 fn test_normalization_context_apply_through_dict() {
     let mut ctx = NormalizationContext::new();
-    ctx.add_substitution(0, MonoType::String);
-    let dict = MonoType::Dict(
-        Box::new(MonoType::TypeVar(
-            crate::frontend::core::types::TypeVar::new(0),
-        )),
-        Box::new(MonoType::Int(32)),
+    ctx.add_substitution(0, MonoType::make_string());
+    let dict = MonoType::make_dict(
+        MonoType::TypeVar(crate::frontend::core::types::TypeVar::new(0)),
+        MonoType::Int(32),
     );
     let result = ctx.apply_substitution(&dict);
     assert_eq!(
         result,
-        MonoType::Dict(Box::new(MonoType::String), Box::new(MonoType::Int(32)))
+        MonoType::make_dict(MonoType::make_string(), MonoType::Int(32))
     );
 }
 
@@ -449,11 +460,20 @@ fn test_normalization_context_apply_through_dict() {
 fn test_normalization_context_apply_through_arc() {
     let mut ctx = NormalizationContext::new();
     ctx.add_substitution(0, MonoType::Bool);
-    let arc = MonoType::Arc(Box::new(MonoType::TypeVar(
-        crate::frontend::core::types::TypeVar::new(0),
-    )));
+    let arc = MonoType::Generic {
+        name: "Arc".into(),
+        args: vec![MonoType::TypeVar(
+            crate::frontend::core::types::TypeVar::new(0),
+        )],
+    };
     let result = ctx.apply_substitution(&arc);
-    assert_eq!(result, MonoType::Arc(Box::new(MonoType::Bool)));
+    assert_eq!(
+        result,
+        MonoType::Generic {
+            name: "Arc".into(),
+            args: vec![MonoType::Bool]
+        }
+    );
 }
 
 #[test]
@@ -462,12 +482,12 @@ fn test_normalization_context_apply_through_union() {
     ctx.add_substitution(0, MonoType::Int(64));
     let union = MonoType::Union(vec![
         MonoType::TypeVar(crate::frontend::core::types::TypeVar::new(0)),
-        MonoType::String,
+        MonoType::make_string(),
     ]);
     let result = ctx.apply_substitution(&union);
     assert_eq!(
         result,
-        MonoType::Union(vec![MonoType::Int(64), MonoType::String])
+        MonoType::Union(vec![MonoType::Int(64), MonoType::make_string()])
     );
 }
 
@@ -489,38 +509,58 @@ fn test_normalization_context_cache_ref() {
 fn test_normalization_context_apply_through_weak() {
     let mut ctx = NormalizationContext::new();
     ctx.add_substitution(0, MonoType::Bool);
-    let weak = MonoType::Weak(Box::new(MonoType::TypeVar(
-        crate::frontend::core::types::TypeVar::new(0),
-    )));
+    let weak = MonoType::Generic {
+        name: "Weak".into(),
+        args: vec![MonoType::TypeVar(
+            crate::frontend::core::types::TypeVar::new(0),
+        )],
+    };
     let result = ctx.apply_substitution(&weak);
-    assert_eq!(result, MonoType::Weak(Box::new(MonoType::Bool)));
+    assert_eq!(
+        result,
+        MonoType::Generic {
+            name: "Weak".into(),
+            args: vec![MonoType::Bool]
+        }
+    );
 }
 
 #[test]
 fn test_normalization_context_apply_through_set() {
     let mut ctx = NormalizationContext::new();
     ctx.add_substitution(0, MonoType::Int(32));
-    let set = MonoType::Set(Box::new(MonoType::TypeVar(
-        crate::frontend::core::types::TypeVar::new(0),
-    )));
+    let set = MonoType::Generic {
+        name: "Set".into(),
+        args: vec![MonoType::TypeVar(
+            crate::frontend::core::types::TypeVar::new(0),
+        )],
+    };
     let result = ctx.apply_substitution(&set);
-    assert_eq!(result, MonoType::Set(Box::new(MonoType::Int(32))));
+    assert_eq!(
+        result,
+        MonoType::Generic {
+            name: "Set".into(),
+            args: vec![MonoType::Int(32)]
+        }
+    );
 }
 
 #[test]
 fn test_normalization_context_apply_through_range() {
     let mut ctx = NormalizationContext::new();
     ctx.add_substitution(0, MonoType::Float(64));
-    let range = MonoType::Range {
-        elem_type: Box::new(MonoType::TypeVar(
+    let range = MonoType::Generic {
+        name: "Range".into(),
+        args: vec![MonoType::TypeVar(
             crate::frontend::core::types::TypeVar::new(0),
-        )),
+        )],
     };
     let result = ctx.apply_substitution(&range);
     assert_eq!(
         result,
-        MonoType::Range {
-            elem_type: Box::new(MonoType::Float(64))
+        MonoType::Generic {
+            name: "Range".into(),
+            args: vec![MonoType::Float(64)]
         }
     );
 }

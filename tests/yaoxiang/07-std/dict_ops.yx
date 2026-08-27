@@ -1,6 +1,6 @@
 // 07-std/dict_ops.yx
 // 覆盖: std.dict 模块（#117）— RFC-009 §2.8 只读自动借用
-// 验证: 正常路径（set/get/has/keys/values/len/is_empty/merge/delete）+ 错误路径（缺失 key 返回 Void / has 为 false）
+// 验证: 正常路径（set/get/has/keys/values/len/is_empty/merge/delete）+ 错误路径（缺失 key 报错 E6007 / has 为 false）
 // 状态: ✅
 
 use std.assert
@@ -32,9 +32,12 @@ main = {
     assert.assert(dict.get(m, "x") == 10, "merge x == 10")
     assert.assert(dict.get(m, "y") == 20, "merge y == 20")
 
-    // 错误路径：缺失 key 返回 Void（优雅，不 panic）
-    missing = dict.get(d2, "nope")
-    assert.assert(dict.len(d2) == 2, "dict intact after missing get")
+    // 错误路径：缺失 key 现报错（#299，同 #279 方向），用 has 先判再取
+    assert.assert(!dict.has(d2, "nope"), "not has nope")
+    if dict.has(d2, "a") {
+        assert.assert(dict.get(d2, "a") == 1, "guarded get a == 1")
+    }
+    assert.assert(dict.len(d2) == 2, "dict intact after missing-get check")
 
     // delete 消费源 dict、返回新 dict（函数式线性变换）——放最后，d2 此后不再使用
     deleted = dict.delete(d2, "a")

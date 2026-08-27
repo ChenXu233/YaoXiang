@@ -98,20 +98,22 @@ fn load_translation_file_from_str(content: &str) -> TranslationMap {
 }
 
 /// 编译期嵌入所有 locale 文件，避免运行时相对路径依赖
+const LOCALE_FILES: &[(&str, &str)] = &[
+    ("en", include_str!("../../../locales/en.json")),
+    ("zh", include_str!("../../../locales/zh.json")),
+    ("ja", include_str!("../../../locales/ja.json")),
+    ("ru", include_str!("../../../locales/ru.json")),
+    (
+        "zh-classical",
+        include_str!("../../../locales/zh-classical.json"),
+    ),
+    ("zh-x-miao", include_str!("../../../locales/zh-x-miao.json")),
+];
+
+/// 编译期嵌入所有 locale 文件，避免运行时相对路径依赖
 static TRANSLATIONS: LazyLock<HashMap<String, TranslationMap>> = LazyLock::new(|| {
     let mut map = HashMap::new();
-    let entries: &[(&str, &str)] = &[
-        ("en", include_str!("../../../locales/en.json")),
-        ("zh", include_str!("../../../locales/zh.json")),
-        ("ja", include_str!("../../../locales/ja.json")),
-        ("ru", include_str!("../../../locales/ru.json")),
-        (
-            "zh-classical",
-            include_str!("../../../locales/zh-classical.json"),
-        ),
-        ("zh-x-miao", include_str!("../../../locales/zh-x-miao.json")),
-    ];
-    for (lang, content) in entries {
+    for (lang, content) in LOCALE_FILES {
         let translations = load_translation_file_from_str(content);
         if !translations.is_empty() {
             map.insert(lang.to_string(), translations);
@@ -119,6 +121,78 @@ static TRANSLATIONS: LazyLock<HashMap<String, TranslationMap>> = LazyLock::new(|
     }
     map
 });
+
+/// 错误码展示条目（与 MSG 翻译同源，从同一 locales JSON 的对象值解析）
+#[derive(Debug, Clone, Default)]
+pub struct ErrorEntry {
+    pub title: String,
+    pub template: Option<String>,
+    pub help: String,
+    pub example: Option<String>,
+    pub error_output: Option<String>,
+    pub zen_message: Option<String>,
+}
+
+/// 从 locale JSON 提取错误码条目（对象值，如 `"E0001": {title, template, ...}`）
+fn load_error_entries(content: &str) -> HashMap<String, ErrorEntry> {
+    serde_json::from_str::<serde_json::Value>(content)
+        .ok()
+        .and_then(|v| v.as_object().cloned())
+        .map(|map| {
+            map.into_iter()
+                .filter_map(|(k, v)| {
+                    let obj = v.as_object()?;
+                    let title = obj.get("title")?.as_str()?.to_string();
+                    Some((
+                        k,
+                        ErrorEntry {
+                            title,
+                            template: obj
+                                .get("template")
+                                .and_then(|x| x.as_str())
+                                .map(String::from),
+                            help: obj
+                                .get("help")
+                                .and_then(|x| x.as_str())
+                                .unwrap_or_default()
+                                .to_string(),
+                            example: obj
+                                .get("example")
+                                .and_then(|x| x.as_str())
+                                .map(String::from),
+                            error_output: obj
+                                .get("error_output")
+                                .and_then(|x| x.as_str())
+                                .map(String::from),
+                            zen_message: obj
+                                .get("zen_message")
+                                .and_then(|x| x.as_str())
+                                .map(String::from),
+                        },
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// 错误码条目表（每语言一个，与 TRANSLATIONS 同一份 locale 文件加载）
+static ERROR_ENTRIES: LazyLock<HashMap<String, HashMap<String, ErrorEntry>>> =
+    LazyLock::new(|| {
+        let mut map = HashMap::new();
+        for (lang, content) in LOCALE_FILES {
+            let entries = load_error_entries(content);
+            if !entries.is_empty() {
+                map.insert(lang.to_string(), entries);
+            }
+        }
+        map
+    });
+
+/// 获取某语言的错误码条目表
+pub fn error_entries(lang: &str) -> Option<&'static HashMap<String, ErrorEntry>> {
+    ERROR_ENTRIES.get(lang)
+}
 
 /// Get all available language codes
 pub fn available_langs() -> Vec<&'static str> {
@@ -186,65 +260,8 @@ pub fn t_cur_simple(id: MSG) -> String {
 /// Macro for translated logging with arguments (using current language)
 #[macro_export]
 macro_rules! tlog {
-    (debug, $id:expr) => {
-        tracing::debug!("{}", $crate::util::i18n::t_cur_simple($id));
-    };
-    (info, $id:expr) => {
-        tracing::info!("{}", $crate::util::i18n::t_cur_simple($id));
-    };
-    (warn, $id:expr) => {
-        tracing::warn!("{}", $crate::util::i18n::t_cur_simple($id));
-    };
-    (error, $id:expr) => {
-        tracing::error!("{}", $crate::util::i18n::t_cur_simple($id));
-    };
-    (debug, $id:expr, $arg1:expr) => {
-        tracing::debug!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1])));
-    };
-    (info, $id:expr, $arg1:expr) => {
-        tracing::info!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1])));
-    };
-    (warn, $id:expr, $arg1:expr) => {
-        tracing::warn!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1])));
-    };
-    (error, $id:expr, $arg1:expr) => {
-        tracing::error!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1])));
-    };
-    (debug, $id:expr, $arg1:expr, $arg2:expr) => {
-        tracing::debug!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2])));
-    };
-    (info, $id:expr, $arg1:expr, $arg2:expr) => {
-        tracing::info!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2])));
-    };
-    (warn, $id:expr, $arg1:expr, $arg2:expr) => {
-        tracing::warn!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2])));
-    };
-    (error, $id:expr, $arg1:expr, $arg2:expr) => {
-        tracing::error!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2])));
-    };
-    (debug, $id:expr, $arg1:expr, $arg2:expr, $arg3:expr) => {
-        tracing::debug!(
-            "{}",
-            $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2, $arg3]))
-        );
-    };
-    (info, $id:expr, $arg1:expr, $arg2:expr, $arg3:expr) => {
-        tracing::info!(
-            "{}",
-            $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2, $arg3]))
-        );
-    };
-    (warn, $id:expr, $arg1:expr, $arg2:expr, $arg3:expr) => {
-        tracing::warn!(
-            "{}",
-            $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2, $arg3]))
-        );
-    };
-    (error, $id:expr, $arg1:expr, $arg2:expr, $arg3:expr) => {
-        tracing::error!(
-            "{}",
-            $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2, $arg3]))
-        );
+    ($level:ident, $id:expr $(, $arg:expr)*) => {
+        tracing::$level!("{}", $crate::util::i18n::t_cur($id, Some(&[$($arg),*])));
     };
 }
 
@@ -346,7 +363,6 @@ pub enum MSG {
 
     // Lexer
     LexStart,
-    LexComplete,
     LexCompleteWithTokens,
     LexTokenIdentifier,
     LexTokenKeyword,
@@ -356,34 +372,6 @@ pub enum MSG {
     LexTokenOperator,
     LexTokenPunctuation,
 
-    // Parser
-    ParserStart,
-    ParserComplete,
-    ParserCompleteWithItems,
-    ParserParseStmt,
-    ParserParseExpr,
-    ParserParseFnDef,
-    ParserParseLet,
-    ParserParseReturn,
-    ParserParseIf,
-    ParserParseLoop,
-    ParserParseBlock,
-
-    // TypeCheck
-    TypeCheckStart,
-    TypeCheckComplete,
-    TypeCheckProcessFn,
-    TypeCheckHasAnnotation,
-    TypeCheckAnnotation,
-    TypeCheckAnnotated,
-    TypeCheckAddError,
-    TypeCheckCallFnDef,
-    TypeCheckInferExpr,
-    TypeCheckInferFn,
-    TypeCheckAddConstraint,
-    TypeCheckSolveConstraints,
-    TypeCheckVarBinding,
-
     // Codegen
     CodegenStart,
     CodegenComplete,
@@ -391,11 +379,6 @@ pub enum MSG {
     CodegenConstPool,
     CodegenCodeSection,
     CodegenTypeTable,
-    CodegenGenFn,
-    CodegenGenBlock,
-    CodegenGenInstr,
-    CodegenRegAlloc,
-    CodegenAddConst,
 
     // VM
     VmStart,
@@ -414,139 +397,31 @@ pub enum MSG {
     IrGenAboutToExitScope,
     IrGenAfterExitScope,
 
-    // REPL
-    ReplWelcome,
-    ReplHelp,
-    ReplError,
-    ReplUnknownCommand,
-    ReplAvailableCommands,
-    ReplExitCommand,
-    ReplHelpCommand,
-    ReplHistoryCommand,
-    ReplClearCommand,
-
-    // Shell
-    ShellWelcome,
-    ShellHelp,
-    ShellExiting,
-    ShellError,
-    ShellAvailableCommands,
-    ShellExitCommand,
-    ShellClearCommand,
-    ShellCdCommand,
-    ShellPwdCommand,
-    ShellLsCommand,
-    ShellCodeCommands,
-    ShellRunCommand,
-    ShellLoadCommand,
-    ShellDebugCommand,
-    ShellBreakCommand,
-    ShellReplCommand,
-    ShellOtherInput,
-
-    // Debugger
-    DebuggerAtLocation,
-    DebuggerLocals,
-    DebuggerCallStack,
-
-    // Parser Tests
-    ParserTestParsedParams,
-    ParserTestParsedReturnType,
-    ParserTestParsedAsVar,
-    ParserTestName,
-    ParserTestAnnotation,
-
-    // REPL Additional
-    ReplValue,
-    ReplPrompt,
-    ReplHistoryEntry,
-
-    // Shell Additional
-    ShellExecTime,
-    ShellLoaded,
-    ShellDebugStart,
-    ShellDebugCmd,
-
-    // VM Additional
-    VmExecuteFn,
-    VmExecInstruction,
-    VmCallStack,
-    VmPushFrame,
-    VmPopFrame,
-    VmLoadLocal,
-    VmStoreLocal,
-    VmLoadArg,
-    VmRegRead,
-    VmRegWrite,
-    VmPushStack,
-    VmPopStack,
-    VmCallFunc,
-    VmReturnFunc,
-    VmBinaryOp,
     VmI64Add,
-    VmExecutingFunction,
-    VmFunctionReturned,
-    VmStoringResult,
-    VmRegistersAfter,
 
     // General
     CompilationStart,
     CompilingSource,
     DebugRunCalled,
 
-    // Debug logging
-    DebugCheckingStmt,
-    DebugStmtExpr,
-    DebugStmtFn,
-    DebugCheckingType,
-    DebugStructType,
-    DebugNonStructType,
     DebugLoadingFunction,
     DebugTotalFunctions,
     DebugAvailableFunctions,
-    DebugFunctionLookup,
-    DebugFunctionFound,
-    DebugFunctionCall,
-    DebugFunctionReturn,
     DebugExecBinaryOp,
     DebugAddingNumbers,
-    DebugStructTypeConstructorCall,
-    DebugTranslatingInstr,
     DebugGeneratingIRBinOp,
-
-    // Error messages
-    ErrorUnknownVariable,
-    ErrorUnknownType,
-    ErrorTypeMismatch,
-    ErrorArityMismatch,
-    ErrorIndexOutOfBounds,
-    ErrorUnknownField,
-    ErrorRecursiveType,
-    ErrorUnsupportedOp,
-    ErrorNonExhaustivePatterns,
-    ErrorImportError,
-    ErrorInferenceFailed,
-    ErrorCannotInferParamType,
-    HelpDidYouMean,
-    HelpSimilarVariables,
-    HelpInScope,
 
     // Bytecode dump messages
     BytecodeDumpHeader,
     BytecodeDumpTypeTable,
     BytecodeDumpConstants,
     BytecodeDumpFunctions,
-    BytecodeFileHeader,
     BytecodeMagic,
     BytecodeVersion,
     BytecodeFlags,
     BytecodeEntryPoint,
     BytecodeSectionCount,
     BytecodeFileSize,
-    BytecodeTypeCount,
-    BytecodeConstCount,
-    BytecodeFuncCount,
-    BytecodeFuncName,
     BytecodeFuncParams,
     BytecodeFuncReturnType,
     BytecodeFuncLocalCount,
@@ -558,19 +433,6 @@ pub enum MSG {
     // Debug messages
     DebugBinaryOp,
     DebugRegisters,
-    DebugMatch,
-
-    // Other messages
-    FormatterNotImplemented,
-
-    // Package manager - errors
-    PackageErrorAlreadyExists,
-    PackageErrorNotProject,
-    PackageErrorDepNotFound,
-    PackageErrorDepAlreadyExists,
-    PackageErrorInvalidManifest,
-    PackageErrorIoError,
-    PackageErrorTomlParseError,
 
     // Package manager - commands
     PackageNoDepsToUpdate,
@@ -594,13 +456,8 @@ pub enum MSG {
     // Package manager - lock file
     PackageLockGenerated,
 
-    // Package manager - source resolver
-    PackageInvalidVersion,
-    PackageInvalidMajorVersion,
-
     // Package manager - update messages
     PackageUpdateFailed,
-    PackageAlreadyUpToDate,
 }
 
 impl MSG {
@@ -613,7 +470,6 @@ impl MSG {
             MSG::BuildBytecode => "build_bytecode",
             MSG::WritingBytecode => "writing_bytecode",
             MSG::LexStart => "lex_start",
-            MSG::LexComplete => "lex_complete",
             MSG::LexCompleteWithTokens => "lex_complete_tokens",
             MSG::LexTokenIdentifier => "lex_token_identifier",
             MSG::LexTokenKeyword => "lex_token_keyword",
@@ -622,118 +478,40 @@ impl MSG {
             MSG::LexTokenChar => "lex_token_char",
             MSG::LexTokenOperator => "lex_token_operator",
             MSG::LexTokenPunctuation => "lex_token_punctuation",
-            MSG::ParserStart => "parser_start",
-            MSG::ParserComplete => "parser_complete",
-            MSG::ParserCompleteWithItems => "parser_complete_items",
-            MSG::ParserParseStmt => "parser_parse_stmt",
-            MSG::ParserParseExpr => "parser_parse_expr",
-            MSG::ParserParseFnDef => "parser_parse_fn_def",
-            MSG::ParserParseLet => "parser_parse_let",
-            MSG::ParserParseReturn => "parser_parse_return",
-            MSG::ParserParseIf => "parser_parse_if",
-            MSG::ParserParseLoop => "parser_parse_loop",
-            MSG::ParserParseBlock => "parser_parse_block",
-            MSG::TypeCheckStart => "typecheck_start",
-            MSG::TypeCheckComplete => "typecheck_complete",
-            MSG::TypeCheckProcessFn => "typecheck_process_fn",
-            MSG::TypeCheckHasAnnotation => "typecheck_has_annotation",
-            MSG::TypeCheckAnnotation => "typecheck_annotation",
-            MSG::TypeCheckAnnotated => "typecheck_annotated",
-            MSG::TypeCheckAddError => "typecheck_add_error",
-            MSG::TypeCheckCallFnDef => "typecheck_call_fndef",
-            MSG::TypeCheckInferExpr => "typecheck_infer_expr",
-            MSG::TypeCheckInferFn => "typecheck_infer_fn",
-            MSG::TypeCheckAddConstraint => "typecheck_add_constraint",
-            MSG::TypeCheckSolveConstraints => "typecheck_solve_constraints",
-            MSG::TypeCheckVarBinding => "typecheck_var_binding",
             MSG::CodegenStart => "codegen_start",
             MSG::CodegenComplete => "codegen_complete",
             MSG::CodegenFunctions => "codegen_functions",
             MSG::CodegenConstPool => "codegen_const_pool",
             MSG::CodegenCodeSection => "codegen_code_section",
             MSG::CodegenTypeTable => "codegen_type_table",
-            MSG::CodegenGenFn => "codegen_gen_fn",
-            MSG::CodegenGenBlock => "codegen_gen_block",
-            MSG::CodegenGenInstr => "codegen_gen_instr",
-            MSG::CodegenRegAlloc => "codegen_reg_alloc",
-            MSG::CodegenAddConst => "codegen_add_const",
             MSG::VmStart => "vm_start",
             MSG::VmComplete => "vm_complete",
-            MSG::VmExecuteFn => "vm_execute_fn",
-            MSG::VmExecInstruction => "vm_exec_instruction",
-            MSG::VmCallStack => "vm_call_stack",
-            MSG::VmPushFrame => "vm_push_frame",
-            MSG::VmPopFrame => "vm_pop_frame",
-            MSG::VmLoadLocal => "vm_load_local",
-            MSG::VmStoreLocal => "vm_store_local",
-            MSG::VmLoadArg => "vm_load_arg",
-            MSG::VmRegRead => "vm_reg_read",
-            MSG::VmRegWrite => "vm_reg_write",
-            MSG::VmPushStack => "vm_push_stack",
-            MSG::VmPopStack => "vm_pop_stack",
-            MSG::VmBinaryOp => "vm_binary_op",
             MSG::VmI64Add => "vm_i64_add",
-            MSG::VmExecutingFunction => "vm_executing_function",
-            MSG::VmFunctionReturned => "vm_function_returned",
-            MSG::VmStoringResult => "vm_storing_result",
-            MSG::VmRegistersAfter => "vm_registers_after",
             MSG::CompilationStart => "compilation_start",
             MSG::CompilingSource => "compiling_source",
             MSG::DebugRunCalled => "debug_run_called",
 
             // Debug logging
-            MSG::DebugCheckingStmt => "debug_checking_stmt",
-            MSG::DebugStmtExpr => "debug_stmt_expr",
-            MSG::DebugStmtFn => "debug_stmt_fn",
-            MSG::DebugCheckingType => "debug_checking_type",
-            MSG::DebugStructType => "debug_struct_type",
-            MSG::DebugNonStructType => "debug_non_struct_type",
             MSG::DebugLoadingFunction => "debug_loading_function",
             MSG::DebugTotalFunctions => "debug_total_functions",
             MSG::DebugAvailableFunctions => "debug_available_functions",
-            MSG::DebugFunctionLookup => "debug_function_lookup",
-            MSG::DebugFunctionFound => "debug_function_found",
-            MSG::DebugFunctionCall => "debug_function_call",
-            MSG::DebugFunctionReturn => "debug_function_return",
             MSG::DebugExecBinaryOp => "debug_exec_binary_op",
             MSG::DebugAddingNumbers => "debug_adding_numbers",
-            MSG::DebugStructTypeConstructorCall => "debug_struct_type_constructor_call",
-            MSG::DebugTranslatingInstr => "debug_translating_instr",
             MSG::DebugGeneratingIRBinOp => "debug_generating_ir_binop",
 
             // Error messages
-            MSG::ErrorUnknownVariable => "error_unknown_variable",
-            MSG::ErrorUnknownType => "error_unknown_type",
-            MSG::ErrorTypeMismatch => "error_type_mismatch",
-            MSG::ErrorArityMismatch => "error_arity_mismatch",
-            MSG::ErrorIndexOutOfBounds => "error_index_out_of_bounds",
-            MSG::ErrorUnknownField => "error_unknown_field",
-            MSG::ErrorRecursiveType => "error_recursive_type",
-            MSG::ErrorUnsupportedOp => "error_unsupported_op",
-            MSG::ErrorNonExhaustivePatterns => "error_non_exhaustive_patterns",
-            MSG::ErrorImportError => "error_import_error",
-            MSG::ErrorInferenceFailed => "error_inference_failed",
-            MSG::ErrorCannotInferParamType => "error_cannot_infer_param_type",
-            MSG::HelpDidYouMean => "help_did_you_mean",
-            MSG::HelpSimilarVariables => "help_similar_variables",
-            MSG::HelpInScope => "help_in_scope",
 
             // Bytecode dump messages
             MSG::BytecodeDumpHeader => "bytecode_dump_header",
             MSG::BytecodeDumpTypeTable => "bytecode_dump_type_table",
             MSG::BytecodeDumpConstants => "bytecode_dump_constants",
             MSG::BytecodeDumpFunctions => "bytecode_dump_functions",
-            MSG::BytecodeFileHeader => "bytecode_file_header",
             MSG::BytecodeMagic => "bytecode_magic",
             MSG::BytecodeVersion => "bytecode_version",
             MSG::BytecodeFlags => "bytecode_flags",
             MSG::BytecodeEntryPoint => "bytecode_entry_point",
             MSG::BytecodeSectionCount => "bytecode_section_count",
             MSG::BytecodeFileSize => "bytecode_file_size",
-            MSG::BytecodeTypeCount => "bytecode_type_count",
-            MSG::BytecodeConstCount => "bytecode_const_count",
-            MSG::BytecodeFuncCount => "bytecode_func_count",
-            MSG::BytecodeFuncName => "bytecode_func_name",
             MSG::BytecodeFuncParams => "bytecode_func_params",
             MSG::BytecodeFuncReturnType => "bytecode_func_return_type",
             MSG::BytecodeFuncLocalCount => "bytecode_func_local_count",
@@ -743,64 +521,20 @@ impl MSG {
             MSG::BytecodeUnknownOpcode => "bytecode_unknown_opcode",
 
             // REPL and Shell messages
-            MSG::ShellExecTime => "shell_exec_time",
 
             // Debugger messages
-            MSG::DebuggerAtLocation => "debugger_at_location",
-            MSG::DebuggerLocals => "debugger_locals",
-            MSG::DebuggerCallStack => "debugger_call_stack",
 
             // REPL messages
-            MSG::ReplWelcome => "repl_welcome",
-            MSG::ReplHelp => "repl_help",
-            MSG::ReplError => "repl_error",
-            MSG::ReplUnknownCommand => "repl_unknown_command",
-            MSG::ReplAvailableCommands => "repl_available_commands",
-            MSG::ReplExitCommand => "repl_exit_command",
-            MSG::ReplHelpCommand => "repl_help_command",
-            MSG::ReplHistoryCommand => "repl_history_command",
-            MSG::ReplClearCommand => "repl_clear_command",
-            MSG::ReplValue => "repl_value",
-            MSG::ReplPrompt => "repl_prompt",
-            MSG::ReplHistoryEntry => "repl_history_entry",
 
             // Shell messages
-            MSG::ShellWelcome => "shell_welcome",
-            MSG::ShellHelp => "shell_help",
-            MSG::ShellExiting => "shell_exiting",
-            MSG::ShellError => "shell_error",
-            MSG::ShellAvailableCommands => "shell_available_commands",
-            MSG::ShellExitCommand => "shell_exit_command",
-            MSG::ShellClearCommand => "shell_clear_command",
-            MSG::ShellCdCommand => "shell_cd_command",
-            MSG::ShellPwdCommand => "shell_pwd_command",
-            MSG::ShellLsCommand => "shell_ls_command",
-            MSG::ShellCodeCommands => "shell_code_commands",
-            MSG::ShellRunCommand => "shell_run_command",
-            MSG::ShellLoadCommand => "shell_load_command",
-            MSG::ShellDebugCommand => "shell_debug_command",
-            MSG::ShellBreakCommand => "shell_break_command",
-            MSG::ShellReplCommand => "shell_repl_command",
-            MSG::ShellOtherInput => "shell_other_input",
-            MSG::ShellDebugStart => "shell_debug_start",
-            MSG::ShellDebugCmd => "shell_debug_cmd",
 
             // Debug messages
             MSG::DebugBinaryOp => "debug_binary_op",
             MSG::DebugRegisters => "debug_registers",
-            MSG::DebugMatch => "debug_match",
 
             // Other messages
-            MSG::FormatterNotImplemented => "formatter_not_implemented",
 
             // Package manager - errors
-            MSG::PackageErrorAlreadyExists => "package_error_already_exists",
-            MSG::PackageErrorNotProject => "package_error_not_project",
-            MSG::PackageErrorDepNotFound => "package_error_dep_not_found",
-            MSG::PackageErrorDepAlreadyExists => "package_error_dep_already_exists",
-            MSG::PackageErrorInvalidManifest => "package_error_invalid_manifest",
-            MSG::PackageErrorIoError => "package_error_io_error",
-            MSG::PackageErrorTomlParseError => "package_error_toml_parse_error",
 
             // Package manager - commands
             MSG::PackageNoDepsToUpdate => "package_no_deps_to_update",
@@ -825,12 +559,9 @@ impl MSG {
             MSG::PackageLockGenerated => "package_lock_generated",
 
             // Package manager - source resolver
-            MSG::PackageInvalidVersion => "package_invalid_version",
-            MSG::PackageInvalidMajorVersion => "package_invalid_major_version",
 
             // Package manager - update messages
             MSG::PackageUpdateFailed => "package_update_failed",
-            MSG::PackageAlreadyUpToDate => "package_already_up_to_date",
 
             _ => "unknown_message",
         }

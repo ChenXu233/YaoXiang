@@ -17,6 +17,7 @@
 //! - rfc011: RFC-011 泛型系统测试
 
 mod checker;
+mod const_param;
 mod environment;
 mod gamma_assume_effect;
 mod predicate_resolver;

@@ -4,7 +4,7 @@ import path from 'path';
 import os from 'os';
 import { loadCache, saveCache, getKeysToTranslate, updateCache, computeHash } from './cache.mjs';
 import * as localesAdapter from './adapters/locales.mjs';
-import * as diagnosticAdapter from './adapters/diagnostic.mjs';
+import * as localesAdapter from './adapters/locales.mjs';
 
 describe('E2E: Translation workflow', () => {
   const tmpDir = path.join(os.tmpdir(), 'i18n-e2e-test');
@@ -72,7 +72,7 @@ describe('E2E: Translation workflow', () => {
     let cache = loadCache(cachePath);
 
     // 提取 keys
-    const sourceKeys = diagnosticAdapter.extractKeys(source);
+    const sourceKeys = localesAdapter.extractKeys(source);
     expect(sourceKeys).toEqual({
       'E0001.title': '无效字符',
       'E0001.template': "无效字符：'{char}'"
@@ -88,8 +88,8 @@ describe('E2E: Translation workflow', () => {
       'E0001.template': "Invalid character: '{char}'"
     };
 
-    let target = {};
-    target = diagnosticAdapter.applyTranslations(target, translations);
+    let target = { E0001: {} };
+    target = localesAdapter.applyTranslations(target, translations);
     expect(target.E0001.title).toBe('Invalid character');
     expect(target.E0001.template).toBe("Invalid character: '{char}'");
 

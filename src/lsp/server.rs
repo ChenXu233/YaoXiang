@@ -11,7 +11,7 @@
 //! ```
 
 use anyhow::Result;
-use lsp_server::{Connection, Message, Notification, Request};
+use lsp_server::{Connection, ErrorCode, Message, Notification, Request, Response};
 use lsp_types::notification::{
     DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, Exit, Initialized,
     PublishDiagnostics,
@@ -30,7 +30,6 @@ use tracing::{debug, info, warn};
 use std::sync::atomic::{AtomicI32, Ordering};
 
 use crate::lsp::handlers;
-use crate::lsp::protocol;
 use crate::lsp::session::Session;
 use crate::lsp::world::World;
 
@@ -41,7 +40,7 @@ use crate::lsp::world::World;
 /// 2. 进入主消息循环
 /// 3. 收到 `shutdown` 后等待 `exit`
 pub fn run_lsp_server() -> Result<()> {
-    info!("启动 YaoXiang LSP 服务器 v{}", protocol::SERVER_VERSION);
+    info!("启动 YaoXiang LSP 服务器 v{}", env!("CARGO_PKG_VERSION"));
 
     // 创建 stdio 连接
     let (connection, io_threads) = Connection::stdio();
@@ -92,9 +91,9 @@ fn main_loop(
                 if session.is_shutting_down() {
                     // shutdown 后只接受 exit 通知，忽略其他请求
                     warn!("shutdown 后收到请求，忽略: {}", req.method);
-                    let resp = protocol::error_response(
+                    let resp = Response::new_err(
                         req.id,
-                        lsp_server::ErrorCode::InvalidRequest,
+                        ErrorCode::InvalidRequest as i32,
                         "服务器正在关闭".to_string(),
                     );
                     connection.sender.send(Message::Response(resp))?;
@@ -151,12 +150,13 @@ fn handle_request(
             match serde_json::from_value::<lsp_types::CompletionParams>(req.params) {
                 Ok(params) => {
                     let result = handlers::completion::handle_completion(session, world, params);
-                    Some(protocol::ok_response(req.id, result))
+                    Some(Response::new_ok(req.id, result))
                 }
                 Err(e) => {
                     warn!("补全请求参数解析失败: {}", e);
-                    Some(protocol::internal_error(
+                    Some(Response::new_err(
                         req.id,
+                        ErrorCode::InternalError as i32,
                         format!("参数解析失败: {}", e),
                     ))
                 }
@@ -168,12 +168,13 @@ fn handle_request(
             match serde_json::from_value(req.params) {
                 Ok(params) => {
                     let result = handlers::definition::handle_definition(session, world, params);
-                    Some(protocol::ok_response(req.id, result))
+                    Some(Response::new_ok(req.id, result))
                 }
                 Err(e) => {
                     warn!("跳转定义请求参数解析失败: {}", e);
-                    Some(protocol::internal_error(
+                    Some(Response::new_err(
                         req.id,
+                        ErrorCode::InternalError as i32,
                         format!("参数解析失败: {}", e),
                     ))
                 }
@@ -185,12 +186,13 @@ fn handle_request(
             match serde_json::from_value(req.params) {
                 Ok(params) => {
                     let result = handlers::references::handle_references(session, world, params);
-                    Some(protocol::ok_response(req.id, result))
+                    Some(Response::new_ok(req.id, result))
                 }
                 Err(e) => {
                     warn!("查找引用请求参数解析失败: {}", e);
-                    Some(protocol::internal_error(
+                    Some(Response::new_err(
                         req.id,
+                        ErrorCode::InternalError as i32,
                         format!("参数解析失败: {}", e),
                     ))
                 }
@@ -202,12 +204,13 @@ fn handle_request(
             match serde_json::from_value(req.params) {
                 Ok(params) => {
                     let result = handlers::rename::handle_rename(session, world, params);
-                    Some(protocol::ok_response(req.id, result))
+                    Some(Response::new_ok(req.id, result))
                 }
                 Err(e) => {
                     warn!("重命名请求参数解析失败: {}", e);
-                    Some(protocol::internal_error(
+                    Some(Response::new_err(
                         req.id,
+                        ErrorCode::InternalError as i32,
                         format!("参数解析失败: {}", e),
                     ))
                 }
@@ -226,12 +229,13 @@ fn handle_request(
                         .map(|d| d.content())
                         .unwrap_or_default();
                     let result = handlers::code_action::handle_code_action(params, content);
-                    Some(protocol::ok_response(req.id, result))
+                    Some(Response::new_ok(req.id, result))
                 }
                 Err(e) => {
                     warn!("Code action 请求参数解析失败: {}", e);
-                    Some(protocol::internal_error(
+                    Some(Response::new_err(
                         req.id,
+                        ErrorCode::InternalError as i32,
                         format!("参数解析失败: {}", e),
                     ))
                 }
@@ -243,12 +247,13 @@ fn handle_request(
             match serde_json::from_value(req.params) {
                 Ok(params) => {
                     let result = handlers::hover::handle_hover(session, world, params);
-                    Some(protocol::ok_response(req.id, result))
+                    Some(Response::new_ok(req.id, result))
                 }
                 Err(e) => {
                     warn!("悬停提示请求参数解析失败: {}", e);
-                    Some(protocol::internal_error(
+                    Some(Response::new_err(
                         req.id,
+                        ErrorCode::InternalError as i32,
                         format!("参数解析失败: {}", e),
                     ))
                 }
@@ -268,12 +273,13 @@ fn handle_request(
                         document_text,
                         params,
                     );
-                    Some(protocol::ok_response(req.id, result))
+                    Some(Response::new_ok(req.id, result))
                 }
                 Err(e) => {
                     warn!("语义 tokens 请求参数解析失败: {}", e);
-                    Some(protocol::internal_error(
+                    Some(Response::new_err(
                         req.id,
+                        ErrorCode::InternalError as i32,
                         format!("参数解析失败: {}", e),
                     ))
                 }
@@ -293,12 +299,13 @@ fn handle_request(
                         document_text,
                         params,
                     );
-                    Some(protocol::ok_response(req.id, result))
+                    Some(Response::new_ok(req.id, result))
                 }
                 Err(e) => {
                     warn!("语义 tokens delta 请求参数解析失败: {}", e);
-                    Some(protocol::internal_error(
+                    Some(Response::new_err(
                         req.id,
+                        ErrorCode::InternalError as i32,
                         format!("参数解析失败: {}", e),
                     ))
                 }
@@ -310,12 +317,13 @@ fn handle_request(
             match serde_json::from_value(req.params) {
                 Ok(params) => {
                     let result = handlers::formatting::handle_formatting(session, params);
-                    Some(protocol::ok_response(req.id, result))
+                    Some(Response::new_ok(req.id, result))
                 }
                 Err(e) => {
                     warn!("格式化请求参数解析失败: {}", e);
-                    Some(protocol::internal_error(
+                    Some(Response::new_err(
                         req.id,
+                        ErrorCode::InternalError as i32,
                         format!("参数解析失败: {}", e),
                     ))
                 }
@@ -327,12 +335,13 @@ fn handle_request(
             match serde_json::from_value(req.params) {
                 Ok(params) => {
                     let result = handlers::formatting::handle_range_formatting(session, params);
-                    Some(protocol::ok_response(req.id, result))
+                    Some(Response::new_ok(req.id, result))
                 }
                 Err(e) => {
                     warn!("范围格式化请求参数解析失败: {}", e);
-                    Some(protocol::internal_error(
+                    Some(Response::new_err(
                         req.id,
+                        ErrorCode::InternalError as i32,
                         format!("参数解析失败: {}", e),
                     ))
                 }
@@ -344,12 +353,13 @@ fn handle_request(
             match serde_json::from_value(req.params) {
                 Ok(params) => {
                     let result = handlers::inlay_hint::handle_inlay_hint(session, params);
-                    Some(protocol::ok_response(req.id, result))
+                    Some(Response::new_ok(req.id, result))
                 }
                 Err(e) => {
                     warn!("InlayHint请求参数解析失败: {}", e);
-                    Some(protocol::internal_error(
+                    Some(Response::new_err(
                         req.id,
+                        ErrorCode::InternalError as i32,
                         format!("参数解析失败: {}", e),
                     ))
                 }
@@ -360,12 +370,13 @@ fn handle_request(
         "workspace/symbol" => match serde_json::from_value(req.params) {
             Ok(params) => {
                 let result = handlers::workspace_symbol::handle_workspace_symbol(world, params);
-                Some(protocol::ok_response(req.id, result))
+                Some(Response::new_ok(req.id, result))
             }
             Err(e) => {
                 warn!("工作区符号搜索请求参数解析失败: {}", e);
-                Some(protocol::internal_error(
+                Some(Response::new_err(
                     req.id,
+                    ErrorCode::InternalError as i32,
                     format!("参数解析失败: {}", e),
                 ))
             }
@@ -374,7 +385,11 @@ fn handle_request(
         // 未实现的方法
         _ => {
             warn!("未处理的请求方法: {}", method);
-            Some(protocol::method_not_found(req.id, method))
+            Some(Response::new_err(
+                req.id,
+                ErrorCode::MethodNotFound as i32,
+                format!("方法未实现: {}", method),
+            ))
         }
     }
 }
@@ -433,7 +448,7 @@ fn handle_notification(
                 world.remove_file_symbols(&uri);
                 // 清除关闭文档的诊断
                 let clear_params = handlers::diagnostics::clear_diagnostics(&uri);
-                let not = protocol::notification::<PublishDiagnostics>(clear_params);
+                let not = publish_diagnostics(clear_params);
                 if let Err(e) = connection.sender.send(Message::Notification(not)) {
                     warn!("发送清除诊断失败: {}", e);
                 }
@@ -489,7 +504,7 @@ fn publish_diagnostics_for_uri(
         let params = handlers::diagnostics::run_diagnostics(uri, doc.content());
         let diag_count = params.diagnostics.len();
 
-        let not = protocol::notification::<PublishDiagnostics>(params);
+        let not = publish_diagnostics(params);
         if let Err(e) = connection.sender.send(Message::Notification(not)) {
             warn!("发送诊断失败: {}", e);
         }
@@ -497,5 +512,13 @@ fn publish_diagnostics_for_uri(
         debug!("已发布 {} 条诊断: {}", diag_count, uri);
     } else {
         warn!("文档未找到，跳过诊断: {}", uri);
+    }
+}
+
+/// 构建发布诊断通知
+fn publish_diagnostics(params: lsp_types::PublishDiagnosticsParams) -> Notification {
+    Notification {
+        method: <PublishDiagnostics as lsp_types::notification::Notification>::METHOD.to_string(),
+        params: serde_json::to_value(params).unwrap(),
     }
 }

@@ -353,9 +353,7 @@ pub mod conditions {
     }
 }
 
-// ============================================================================
 // From type_match.rs — 模式匹配引擎
-// ============================================================================
 
 /// 类型级模式
 ///
@@ -650,10 +648,11 @@ impl PatternMatcher {
         patterns: &[MatchPattern],
     ) -> bool {
         match target {
-            MonoType::Tuple(elements) if elements.len() == patterns.len() => elements
-                .iter()
-                .zip(patterns.iter())
-                .all(|(elem, pat)| self.matches(elem, pat)),
+            MonoType::Generic { name, args } if name == "Tuple" && args.len() == patterns.len() => {
+                args.iter()
+                    .zip(patterns.iter())
+                    .all(|(elem, pat)| self.matches(elem, pat))
+            }
             _ => false,
         }
     }
@@ -834,7 +833,7 @@ pub mod nat_examples {
         b: MonoType,
     ) -> PatternMatchType {
         PatternMatchType::new(
-            MonoType::Tuple(vec![a, b]),
+            MonoType::make_tuple(vec![a, b]),
             vec![
                 // (Zero, B) => B
                 PatternMatchArm::new(

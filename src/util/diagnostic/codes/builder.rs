@@ -208,30 +208,13 @@ pub struct I18nRegistry {
     zen_messages: HashMap<&'static str, &'static str>,
 }
 
-/// JSON 结构（与 i18n/*.json 对应）
-#[derive(serde::Deserialize)]
-struct ErrorInfoJson {
-    #[serde(default)]
-    title: Option<String>,
-    #[serde(default)]
-    template: Option<String>,
-    #[serde(default)]
-    help: Option<String>,
-    example: Option<String>,
-    error_output: Option<String>,
-    #[serde(default)]
-    zen_message: Option<String>,
-}
-
 /// 将 String 转换为 &'static str
 fn to_static_string(s: String) -> &'static str {
     Box::leak(s.into_boxed_str())
 }
 
-/// 加载 i18n 数据
-fn load_i18n_data(json: &str) -> I18nRegistry {
-    let data: HashMap<String, ErrorInfoJson> = serde_json::from_str(json).unwrap();
-
+/// 加载 i18n 数据（从统一 locale 加载器的 ErrorEntry 构建）
+fn build_registry(lang: &str) -> I18nRegistry {
     let mut templates = HashMap::new();
     let mut titles = HashMap::new();
     let mut helps = HashMap::new();
@@ -239,26 +222,24 @@ fn load_i18n_data(json: &str) -> I18nRegistry {
     let mut error_outputs = HashMap::new();
     let mut zen_messages = HashMap::new();
 
-    for (code, info) in data {
-        // 跳过 _meta 等非错误码条目（没有 title 的条目）
-        let Some(title) = info.title else {
-            continue;
-        };
-        let code_static: &'static str = to_static_string(code);
-        if let Some(tmpl) = info.template {
-            templates.insert(code_static, to_static_string(tmpl));
-        }
-        titles.insert(code_static, to_static_string(title));
-        helps.insert(code_static, to_static_string(info.help.unwrap_or_default()));
+    if let Some(entries) = crate::util::i18n::error_entries(lang) {
+        for (code, info) in entries {
+            let code_static: &'static str = to_static_string(code.clone());
+            if let Some(tmpl) = &info.template {
+                templates.insert(code_static, to_static_string(tmpl.clone()));
+            }
+            titles.insert(code_static, to_static_string(info.title.clone()));
+            helps.insert(code_static, to_static_string(info.help.clone()));
 
-        if let Some(ex) = info.example {
-            examples.insert(code_static, to_static_string(ex));
-        }
-        if let Some(out) = info.error_output {
-            error_outputs.insert(code_static, to_static_string(out));
-        }
-        if let Some(zen) = info.zen_message {
-            zen_messages.insert(code_static, to_static_string(zen));
+            if let Some(ex) = &info.example {
+                examples.insert(code_static, to_static_string(ex.clone()));
+            }
+            if let Some(out) = &info.error_output {
+                error_outputs.insert(code_static, to_static_string(out.clone()));
+            }
+            if let Some(zen) = &info.zen_message {
+                zen_messages.insert(code_static, to_static_string(zen.clone()));
+            }
         }
     }
 
@@ -273,23 +254,15 @@ fn load_i18n_data(json: &str) -> I18nRegistry {
 }
 
 impl I18nRegistry {
-    /// 根据语言代码获取注册表（动态加载）
+    /// 根据语言代码获取注册表（从统一 locale 加载器读取，与 MSG 翻译同源）
     pub fn new(lang: &str) -> &'static Self {
         use std::sync::LazyLock;
         use std::collections::HashMap;
 
         static REGISTRIES: LazyLock<HashMap<String, I18nRegistry>> = LazyLock::new(|| {
             let mut map = HashMap::new();
-            let entries: &[(&str, &str)] = &[
-                ("en", include_str!("i18n/en.json")),
-                ("zh", include_str!("i18n/zh.json")),
-                ("ja", include_str!("i18n/ja.json")),
-                ("ru", include_str!("i18n/ru.json")),
-                ("zh-classical", include_str!("i18n/zh-classical.json")),
-                ("zh-x-miao", include_str!("i18n/zh-x-miao.json")),
-            ];
-            for (lang, content) in entries {
-                let registry = load_i18n_data(content);
+            for lang in crate::util::i18n::available_langs() {
+                let registry = build_registry(lang);
                 map.insert(lang.to_string(), registry);
             }
             map

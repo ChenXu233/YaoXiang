@@ -700,7 +700,18 @@ impl<'a> ParserState<'a> {
         elements: Vec<Expr>,
     ) -> Option<Expr> {
         // Parse pattern: `x`
-        let pattern = self.parse_expression(BP_LOWEST)?;
+        // #299 §3: 'in' 已注册为中缀运算符，pattern 不能走完整 pratt
+        // （否则 `x` 会把 `in items` 吃成 membership 表达式）；迭代变量只可能是裸标识符
+        let pattern = {
+            let tok = self.current()?;
+            if let TokenKind::Identifier(name) = tok.kind.clone() {
+                let s = self.span();
+                self.bump();
+                Expr::Var(name, s)
+            } else {
+                return None;
+            }
+        };
 
         self.expect(&TokenKind::KwIn);
 
@@ -831,7 +842,6 @@ impl<'a> ParserState<'a> {
         // Parse condition
         let condition = self.parse_expression(BP_LOWEST)?;
 
-        // Parse then branch
         let then_branch = self.parse_block_expr()?;
 
         // Parse optional else if / else branches (flat syntax)

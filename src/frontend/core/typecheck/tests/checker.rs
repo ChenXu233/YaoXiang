@@ -12,9 +12,7 @@ use crate::frontend::core::types::{MonoType, PolyType};
 use crate::frontend::core::parser::ast::{Block, Module, Stmt, Expr, Type as AstType};
 use crate::util::span::Span;
 
-// ===================================================================
 // Happy path 测试
-// ===================================================================
 
 #[test]
 fn test_type_checker_new_creates_with_module_name() {
@@ -84,9 +82,7 @@ fn test_type_checker_check_empty_module() {
     );
 }
 
-// ===================================================================
 // Error path 测试
-// ===================================================================
 
 #[test]
 fn test_type_checker_reports_type_mismatch() {
@@ -276,9 +272,7 @@ fn test_type_checker_reports_fn_param_type_mismatch() {
     );
 }
 
-// ===================================================================
 // Boundary 测试
-// ===================================================================
 
 #[test]
 fn test_type_checker_with_large_module() {
@@ -519,9 +513,7 @@ fn test_type_checker_with_generic_type_binding() {
     );
 }
 
-// ===================================================================
 // RFC-027 / issue #263: 精化类型实参校验（E1092）
-// ===================================================================
 //
 // 规范来源: RFC-027 §语法——谓词应用的实参必须是编译期常量形态；
 // 实参不可转换或个数不匹配报 E1092，精化约束绝不静默丢弃。

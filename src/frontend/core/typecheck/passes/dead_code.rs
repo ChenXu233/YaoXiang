@@ -107,28 +107,11 @@ impl DeadCodeAnalyzer {
                     is_pub,
                     ..
                 } => {
-                    use crate::frontend::core::parser::ast::Expr;
-                    let (name, type_name) = match target.as_ref() {
-                        Expr::Var(n, _) => (n.clone(), None),
-                        Expr::FieldAccess { expr, field, .. } => {
-                            if let Expr::Var(tn, _) = expr.as_ref() {
-                                (field.clone(), Some(tn.clone()))
-                            } else {
-                                (field.clone(), None)
-                            }
-                        }
-                        _ => continue,
+                    let Some((name, type_name)) = target.receiver_parts() else {
+                        continue;
                     };
                     let (params, body): (Vec<_>, Vec<_>) = match value {
-                        Some(v) => {
-                            if let Expr::Lambda { params, body, .. } = v.as_ref() {
-                                (params.clone(), body.stmts.clone())
-                            } else if let Expr::Block(block) = v.as_ref() {
-                                (Vec::new(), block.stmts.clone())
-                            } else {
-                                (Vec::new(), Vec::new())
-                            }
-                        }
+                        Some(v) => v.callable_parts(),
                         None => (Vec::new(), Vec::new()),
                     };
                     let is_method = type_name.is_some();
@@ -385,7 +368,6 @@ impl DeadCodeAnalyzer {
                     collect_from_expr(expr, referenced);
                 }
                 StmtKind::Assign { value, target, .. } => {
-                    use crate::frontend::core::parser::ast::Expr;
                     if let Some(expr) = value {
                         collect_from_expr(expr, referenced);
                     }

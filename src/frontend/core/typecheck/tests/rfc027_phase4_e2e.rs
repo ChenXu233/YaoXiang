@@ -9,6 +9,7 @@
 //! - into_result() 端到端路由
 //! - SMT 反例模型完整性（通过新 DisproofModel 字段透传）
 
+use crate::frontend::core::typecheck::test_util::{binop, refined_int};
 use std::collections::HashMap;
 
 use crate::frontend::core::typecheck::layers::equivalence::check_type_equivalence;
@@ -20,9 +21,7 @@ use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 use crate::frontend::core::types::mono::MonoType;
 use crate::util::span::{Position, Span};
 
-// ===================================================================
 // RFC-027 §4 & Phase 4.1: PredicateViolation E2E
-// ===================================================================
 
 /// E2E: Level 1 Disproved → DisproofModel.kind = PredicateViolation
 ///
@@ -30,15 +29,12 @@ use crate::util::span::{Position, Span};
 #[test]
 fn test_e2e_phase4_level1_disproved_has_predicate_violation_kind() {
     // Arrange
-    let constraint = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("x".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
-    let refined = MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint,
-    };
+    let constraint = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("x".into()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    );
+    let refined = refined_int(constraint);
     let mut bindings = HashMap::new();
     bindings.insert("x".into(), ConstValue::Int(0));
     let env = TypeEnvironment::new();
@@ -65,15 +61,12 @@ fn test_e2e_phase4_level1_disproved_has_predicate_violation_kind() {
 #[test]
 fn test_e2e_phase4_disproved_model_has_constraint_text() {
     // Arrange
-    let constraint = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("x".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
-    let refined = MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint,
-    };
+    let constraint = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("x".into()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    );
+    let refined = refined_int(constraint);
     let mut bindings = HashMap::new();
     bindings.insert("x".into(), ConstValue::Int(0));
     let env = TypeEnvironment::new();
@@ -100,15 +93,12 @@ fn test_e2e_phase4_disproved_model_has_constraint_text() {
 #[test]
 fn test_e2e_phase4_smt_disproved_preserves_assignments() {
     // Arrange
-    let constraint = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("y".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
-    let refined = MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint,
-    };
+    let constraint = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("y".into()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    );
+    let refined = refined_int(constraint);
     let env = TypeEnvironment::new();
     let ctx = ProofContext::new(&env);
 
@@ -135,15 +125,12 @@ fn test_e2e_phase4_smt_disproved_preserves_assignments() {
 #[test]
 fn test_e2e_phase4_into_diagnostic_predicate_violation_e4018() {
     // Arrange
-    let constraint = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("x".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
-    let refined = MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint,
-    };
+    let constraint = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("x".into()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    );
+    let refined = refined_int(constraint);
     let mut bindings = HashMap::new();
     bindings.insert("x".into(), ConstValue::Int(0));
     let env = TypeEnvironment::new();
@@ -182,15 +169,12 @@ fn test_e2e_phase4_into_diagnostic_predicate_violation_e4018() {
 #[test]
 fn test_e2e_phase4_into_diagnostic_with_span() {
     // Arrange
-    let constraint = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("x".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
-    let refined = MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint,
-    };
+    let constraint = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("x".into()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    );
+    let refined = refined_int(constraint);
     let mut bindings = HashMap::new();
     bindings.insert("x".into(), ConstValue::Int(0));
     let env = TypeEnvironment::new();
@@ -226,15 +210,12 @@ fn test_e2e_phase4_into_diagnostic_with_span() {
 #[test]
 fn test_e2e_phase4_into_result_disproved_to_err() {
     // Arrange
-    let constraint = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("x".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
-    let refined = MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint,
-    };
+    let constraint = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("x".into()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    );
+    let refined = refined_int(constraint);
     let mut bindings = HashMap::new();
     bindings.insert("x".into(), ConstValue::Int(0));
     let env = TypeEnvironment::new();
@@ -262,9 +243,7 @@ fn test_e2e_phase4_into_result_disproved_to_err() {
     );
 }
 
-// ===================================================================
 // RFC-027 §4 & Phase 4.1: TypeMismatch E2E
-// ===================================================================
 
 /// E2E: check_type_equivalence → TypeMismatch
 ///
@@ -319,9 +298,7 @@ fn test_e2e_phase4_type_equivalence_same_type_proved() {
     );
 }
 
-// ===================================================================
 // RFC-027 §4: 多变量反例 + 假设蕴含 E2E
-// ===================================================================
 
 /// E2E: 多变量约束 Disproved → 所有变量都出现在反例中
 #[test]
@@ -330,17 +307,14 @@ fn test_e2e_phase4_multivariable_constraint_disproved() {
     // 约束: x + y > 0，无假设 → SMT 可找 x=-1, y=0
     let constraint = ConstExpr::BinOp {
         op: BinOp::Gt,
-        left: Box::new(ConstExpr::BinOp {
-            op: BinOp::Add,
-            left: Box::new(ConstExpr::NamedVar("x".into())),
-            right: Box::new(ConstExpr::NamedVar("y".into())),
-        }),
+        left: Box::new(binop(
+            BinOp::Add,
+            ConstExpr::NamedVar("x".into()),
+            ConstExpr::NamedVar("y".into()),
+        )),
         right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
     };
-    let refined = MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint,
-    };
+    let refined = refined_int(constraint);
     let env = TypeEnvironment::new();
     let ctx = ProofContext::new(&env);
 
@@ -371,11 +345,11 @@ fn test_e2e_phase4_multivariable_constraint_disproved() {
 #[test]
 fn test_e2e_phase4_multiple_disproved_models_independent() {
     // Arrange — 两个独立的约束
-    let constraint1 = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("a".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
+    let constraint1 = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("a".into()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    );
     let refined1 = MonoType::Refined {
         base: Box::new(MonoType::Int(64)),
         constraint: constraint1,
@@ -383,11 +357,11 @@ fn test_e2e_phase4_multiple_disproved_models_independent() {
     let mut bindings1 = HashMap::new();
     bindings1.insert("a".into(), ConstValue::Int(0));
 
-    let constraint2 = ConstExpr::BinOp {
-        op: BinOp::Lt,
-        left: Box::new(ConstExpr::NamedVar("b".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(10))),
-    };
+    let constraint2 = binop(
+        BinOp::Lt,
+        ConstExpr::NamedVar("b".into()),
+        ConstExpr::Lit(ConstValue::Int(10)),
+    );
     let refined2 = MonoType::Refined {
         base: Box::new(MonoType::Int(64)),
         constraint: constraint2,
@@ -432,15 +406,12 @@ fn test_e2e_phase4_multiple_disproved_models_independent() {
 #[test]
 fn test_e2e_phase4_proved_into_result_ok() {
     // Arrange
-    let constraint = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(ConstExpr::NamedVar("x".into())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
-    let refined = MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint,
-    };
+    let constraint = binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("x".into()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    );
+    let refined = refined_int(constraint);
     let mut bindings = HashMap::new();
     bindings.insert("x".into(), ConstValue::Int(5));
     let env = TypeEnvironment::new();

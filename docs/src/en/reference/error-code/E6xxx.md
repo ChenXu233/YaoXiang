@@ -14,16 +14,6 @@
 
 ---
 
-## E6002: Null pointer dereference
-
-**Category**: Runtime
-
-**Message**: Attempted to access a null value
-
-**Help**: Add a null check before accessing the value
-
----
-
 ## E6003: Array index out of bounds
 
 **Category**: Runtime
@@ -51,3 +41,19 @@
 **Message**: Assertion failed at runtime
 
 **Help**: Fix the assertion condition or provide valid input
+
+---
+
+## E6008: Key not found
+
+**Category**: Runtime
+
+**Message**: Key not found
+
+**Help**: Use `dict.has` to check key existence before indexing
+
+---
+
+> #299 §4: Missing dict keys (E6008) and out-of-bounds indexing (E6003) belong to different semantic
+> categories—key absence vs. ordinal out-of-range—so they are kept as separate codes to preserve
+> diagnostic information. For safe access, use `dict.has` to check first, then retrieve.

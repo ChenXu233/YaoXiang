@@ -3,6 +3,7 @@
 //! 测试覆盖内容：
 //! - Borrow/Release 字节码指令的执行
 //! - 借用令牌（ZST）的拷贝、释放及边界行为
+//! - #299 §2: NewArray 定长数组指令——分配、Void 占位、字节码编解码往返
 
 use crate::backends::Executor;
 use crate::backends::common::RuntimeValue;
@@ -219,7 +220,7 @@ fn test_borrow_then_release_preserves_value() {
 #[test]
 fn spawn_concurrent_standard_mode() {
     use crate::backends::runtime::RuntimeMode;
-    use crate::backends::interpreter::runtime::InterpreterRuntimeConfig;
+    use crate::backends::runtime::RuntimeConfig;
     use crate::middle::bytecode::{BytecodeModule, BytecodeFunction, BytecodeInstr};
 
     // task_a: 返回 Int(10)
@@ -315,8 +316,8 @@ fn spawn_concurrent_standard_mode() {
 
     // 配置 Standard 模式 + 1 worker（避免多线程并发问题）
     let mut interp = Interpreter::new();
-    interp.set_runtime_config(InterpreterRuntimeConfig {
-        runtime: RuntimeMode::Standard,
+    interp.set_runtime_config(RuntimeConfig {
+        mode: RuntimeMode::Standard,
         workers: 1,
     });
     // 重建 Runtime facade（set_runtime_config 只更新配置，需要 reset 重建 rt）
@@ -324,7 +325,7 @@ fn spawn_concurrent_standard_mode() {
 
     // 验证 Runtime facade 已配置为 Standard 模式
     assert_eq!(
-        interp.runtime_config().runtime,
+        interp.runtime_config().mode,
         RuntimeMode::Standard,
         "runtime_config 应为 Standard 模式"
     );
@@ -342,9 +343,109 @@ fn spawn_concurrent_standard_mode() {
 
     // 验证 Runtime facade 配置正确
     assert_eq!(
-        interp.runtime_config().runtime,
+        interp.runtime_config().mode,
         RuntimeMode::Standard,
         "runtime_config 应为 Standard 模式"
     );
     assert_eq!(interp.runtime_config().workers, 1, "workers 应为 1");
+}
+
+/// #299 §2：NewArray 分配定长 Array，元素默认 Void 占位
+#[test]
+fn test_new_array_allocates_fixed_void_slots() {
+    // Arrange — 含 NewArray(count=5) + ReturnValue 的字节码函数
+    let func = make_function(vec![
+        // r0 = Array(5)（全 Void 占位）
+        BytecodeInstr::NewArray {
+            dst: Reg(0),
+            count: 5,
+        },
+        // return r0
+        BytecodeInstr::ReturnValue { value: Reg(0) },
+    ]);
+
+    // Act — 执行并取返回值
+    let mut interp = Interpreter::new();
+    let result = interp.execute_function(&func, &[]).unwrap();
+
+    // Assert — 返回 RuntimeValue::Array，长度 5 且全为 Void 占位
+    match result {
+        RuntimeValue::Array(handle) => {
+            let guard = handle.lock();
+            match &*guard {
+                crate::backends::common::HeapValue::Array(items) => {
+                    assert_eq!(items.len(), 5, "Array 应有 5 个元素占位");
+                    assert!(
+                        items.iter().all(|v| matches!(v, RuntimeValue::Void)),
+                        "元素应默认 Void 占位"
+                    );
+                }
+                other => panic!("应产出 HeapValue::Array，实际: {other:?}"),
+            }
+        }
+        other => panic!("应返回 RuntimeValue::Array，实际: {other:?}"),
+    }
+}
+
+/// #299 §2：NewArray 指令经字节码序列化→解码往返后保持语义
+#[test]
+fn test_new_array_bytecode_roundtrip_decode() {
+    use crate::middle::passes::codegen::{
+        BytecodeFile, BytecodeInstruction, BytecodeHeader, CodeSection, FunctionCode,
+    };
+
+    // Arrange — 构造原始编码：opcode(1) + dst(1) + count(4, 小端)
+    let mut operands = vec![0u8]; // dst = r0
+    operands.extend_from_slice(&5u32.to_le_bytes()); // count = 5
+    let raw_new_array =
+        BytecodeInstruction::new(crate::backends::common::opcode::NEW_ARRAY, operands);
+    // ReturnValue r0
+    let raw_return =
+        BytecodeInstruction::new(crate::backends::common::opcode::RETURN_VALUE, vec![0u8]);
+
+    let file = BytecodeFile {
+        header: BytecodeHeader {
+            entry_point: 0,
+            ..BytecodeHeader::default()
+        },
+        type_table: vec![],
+        const_pool: vec![],
+        code_section: CodeSection {
+            functions: vec![FunctionCode {
+                name: "main".to_string(),
+                params: vec![],
+                return_type: crate::frontend::core::types::MonoType::Void,
+                instructions: vec![raw_new_array, raw_return],
+                local_count: 1,
+                debug_map: std::collections::HashMap::new(),
+            }],
+        },
+        vtables: vec![],
+        debug_section: None,
+    };
+
+    // Act — 字节码反序列化 → 解码
+    let module = crate::middle::bytecode::BytecodeModule::from(file);
+    let func = &module.functions[0];
+
+    // Assert — 解码结果保持 NewArray 语义，执行产出 Array
+    assert!(
+        matches!(
+            func.instructions.first(),
+            Some(BytecodeInstr::NewArray {
+                dst: Reg(0),
+                count: 5
+            })
+        ),
+        "第一条应为 NewArray: {:?}",
+        func.instructions
+    );
+
+    // 全链路：解码后执行，验证产出 Array
+    let mut interp = Interpreter::new();
+    let result = interp.execute_function(func, &[]).unwrap();
+    assert!(
+        matches!(result, RuntimeValue::Array(_)),
+        "往返后执行应产出 Array"
+    );
 }

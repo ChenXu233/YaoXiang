@@ -8,18 +8,11 @@ use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
 use crate::std::{NativeContext, NativeExport, StdModule};
 
-// ============================================================================
 // TimeModule - StdModule Implementation
-// ============================================================================
 
 /// Time module implementation.
+#[derive(Default)]
 pub struct TimeModule;
-
-impl Default for TimeModule {
-    fn default() -> Self {
-        Self
-    }
-}
 
 impl StdModule for TimeModule {
     fn module_path(&self) -> &str {
@@ -28,85 +21,85 @@ impl StdModule for TimeModule {
 
     fn exports(&self) -> Vec<NativeExport> {
         vec![
-            NativeExport::new("now", "std.time.now", "() -> DateTime", native_now),
-            NativeExport::new(
+            export!("now", "std.time.now", "() -> DateTime", native_now),
+            export!(
                 "timestamp",
                 "std.time.timestamp",
                 "() -> Int",
-                native_timestamp,
+                native_timestamp
             ),
-            NativeExport::new(
+            export!(
                 "timestamp_ms",
                 "std.time.timestamp_ms",
                 "() -> Int",
-                native_timestamp_ms,
+                native_timestamp_ms
             ),
             #[cfg(not(target_arch = "wasm32"))]
-            NativeExport::new(
+            export!(
                 "sleep",
                 "std.time.sleep",
                 "(seconds: Float) -> Void",
-                native_sleep,
+                native_sleep
             ),
-            NativeExport::new(
+            export!(
                 "format_time",
                 "std.time.format_time",
                 "(dt: Int, fmt: String) -> String",
-                native_format_time,
+                native_format_time
             ),
-            NativeExport::new(
+            export!(
                 "parse_time",
                 "std.time.parse_time",
                 "(fmt: String, s: String) -> DateTime",
-                native_parse_time,
+                native_parse_time
             ),
-            NativeExport::new(
+            export!(
                 "DateTime::year",
                 "std.time.DateTime.year",
                 "(dt: Int) -> Int",
-                native_datetime_year,
+                native_datetime_year
             ),
-            NativeExport::new(
+            export!(
                 "DateTime::month",
                 "std.time.DateTime.month",
                 "(dt: Int) -> Int",
-                native_datetime_month,
+                native_datetime_month
             ),
-            NativeExport::new(
+            export!(
                 "DateTime::day",
                 "std.time.DateTime.day",
                 "(dt: Int) -> Int",
-                native_datetime_day,
+                native_datetime_day
             ),
-            NativeExport::new(
+            export!(
                 "DateTime::hour",
                 "std.time.DateTime.hour",
                 "(dt: Int) -> Int",
-                native_datetime_hour,
+                native_datetime_hour
             ),
-            NativeExport::new(
+            export!(
                 "DateTime::minute",
                 "std.time.DateTime.minute",
                 "(dt: Int) -> Int",
-                native_datetime_minute,
+                native_datetime_minute
             ),
-            NativeExport::new(
+            export!(
                 "DateTime::second",
                 "std.time.DateTime.second",
                 "(dt: Int) -> Int",
-                native_datetime_second,
+                native_datetime_second
             ),
-            NativeExport::new(
+            export!(
                 "DateTime::weekday",
                 "std.time.DateTime.weekday",
                 "(dt: Int) -> Int",
-                native_datetime_weekday,
+                native_datetime_weekday
             ),
-            NativeExport::new(
+            export!(
                 "DateTime::to_string",
                 "std.time.DateTime.to_string",
                 "(dt: Int) -> String",
-                native_datetime_to_string,
+                native_datetime_to_string
             ),
         ]
     }
@@ -115,9 +108,7 @@ impl StdModule for TimeModule {
 /// Singleton instance for std.time module.
 pub const TIME_MODULE: TimeModule = TimeModule;
 
-// ============================================================================
 // Helper Functions
-// ============================================================================
 
 /// Get current Unix timestamp in seconds.
 fn get_current_timestamp() -> u64 {
@@ -240,9 +231,7 @@ fn calculate_timestamp(
     days * 86400 + hour * 3600 + minute * 60 + second
 }
 
-// ============================================================================
 // Time Getting Functions
-// ============================================================================
 
 /// Native implementation: now
 fn native_now(
@@ -274,9 +263,7 @@ fn native_timestamp_ms(
     Ok(RuntimeValue::Int(timestamp))
 }
 
-// ============================================================================
 // Time Sleeping Function
-// ============================================================================
 
 /// Native implementation: sleep
 #[cfg(not(target_arch = "wasm32"))]
@@ -305,9 +292,7 @@ fn native_sleep(
     Ok(RuntimeValue::Void)
 }
 
-// ============================================================================
 // Time Formatting and Parsing Functions
-// ============================================================================
 
 /// Native implementation: format_time
 fn native_format_time(
@@ -420,9 +405,7 @@ fn native_parse_time(
     Ok(RuntimeValue::Int(timestamp))
 }
 
-// ============================================================================
 // DateTime Accessor Functions
-// ============================================================================
 
 /// Get field from timestamp.
 fn get_datetime_field(

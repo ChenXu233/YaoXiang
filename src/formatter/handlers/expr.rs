@@ -20,6 +20,15 @@ pub fn format_expr(
             right,
             span: _,
         } => format_binop(op, left, right, ctx, source_map),
+        Expr::In {
+            elem,
+            container,
+            span: _,
+        } => format!(
+            "{} in {}",
+            format_expr(elem, ctx, source_map),
+            format_expr(container, ctx, source_map)
+        ),
         Expr::UnOp {
             op,
             expr: inner,
@@ -275,6 +284,12 @@ pub(crate) fn format_binop(
         BinOp::Or => "or",
         BinOp::Range => "..",
         BinOp::Assign => "=",
+        // #285: 位运算/移位（SPEC §2.2 级 7/8）
+        BinOp::BitAnd => "&",
+        BinOp::BitOr => "|",
+        BinOp::BitXor => "^",
+        BinOp::Shl => "<<",
+        BinOp::Shr => ">>",
     };
 
     let left_str = format_expr(left, ctx, source_map);
@@ -695,13 +710,7 @@ pub fn format_block(
         result.push('\n');
 
         // 处理行末注释
-        if let Some(trailing) = source_map.trailing_comment_on_line(stmt.span.end.line) {
-            if trailing.span.start.offset > stmt.span.end.offset {
-                let last_newline = result.rfind('\n').unwrap_or(0);
-                result.truncate(last_newline);
-                result.push_str(&format!(" {}\n", trailing.content));
-            }
-        }
+        source_map.append_trailing_comment(&mut result, stmt.span.end.line, stmt.span.end.offset);
     }
 
     result.push_str(&outer_indent);

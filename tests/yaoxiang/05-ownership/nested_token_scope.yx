@@ -1,0 +1,28 @@
+// 05-ownership/nested_token_scope.yx
+// 覆盖: SPEC type-system.md §12.5 令牌冲突检测 good_seq + §12.3 存结构体（#251 P0-7 令牌嵌套）
+// 验证:
+//   - 嵌套块表达式语句：内部作用域读后释放，外层 &mut 继续（§12.5 good_seq 原文形式）
+//   - 三层嵌套令牌：struct 内 struct 内 &T 字段，经派生品牌链访问（§12.6）
+// 状态: ✅
+
+use std.assert
+use std.io
+
+Point: Type = { x: Int, y: Int }
+
+Inner: Type = { view: &Point }
+Outer: Type = { inner: Inner }
+
+main = {
+    // 1. 嵌套块 good_seq：块内读释放后 &mut 写继续（§12.5）
+    p = Point(1, 2)
+    { io.println(p.x) }        // 块表达式语句：内部作用域读
+    p.x = 10                   // 读令牌已随块释放，写合法
+    assert.assert(p.x == 10, "good_seq 嵌套块后写")
+
+    // 2. 三层嵌套令牌（§12.3/§12.6）：Outer(Inner(&p)) 派生品牌链
+    t = Point(5, 6)
+    o = Outer(Inner(&t))
+    assert.assert(o.inner.view.y == 6, "三层嵌套令牌访问")
+    assert.assert(t.x == 5, "派生令牌后源仍可读")
+}

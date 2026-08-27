@@ -16,6 +16,9 @@
 
 #![doc(html_root_url = "https://docs.rs/yaoxiang")]
 #![warn(rust_2018_idioms)]
+// ponytail: RuntimeValue 含 Arc<Mutex> 但作为 dict key 是有意设计（按值 Hash/Eq），
+// clippy 的 mutable_key_type 对本 crate 全是误报。
+#![allow(clippy::mutable_key_type)]
 
 // Public modules
 pub mod backends;
@@ -38,7 +41,7 @@ pub use thiserror::Error;
 
 // Backend re-exports
 pub use backends::{Executor, DebuggableExecutor, ExecutorError, ExecutorResult, ExecutorConfig};
-pub use backends::common::{RuntimeValue, Opcode, Heap, Handle};
+pub use backends::common::{RuntimeValue, Heap, Handle};
 pub use backends::interpreter::Interpreter;
 #[cfg(not(target_arch = "wasm32"))]
 pub use repl::Repl;
@@ -256,7 +259,10 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
 fn dump_bytecode_file(bytecode_file: &crate::middle::passes::codegen::bytecode::BytecodeFile) {
     tracing::info!(
         "{}",
-        t_cur(MSG::BytecodeMagic, Some(&[&bytecode_file.header.magic]))
+        t_cur(
+            MSG::BytecodeMagic,
+            Some(&[&format!("{:08x}", bytecode_file.header.magic)])
+        )
     );
     tracing::info!(
         "{}",
@@ -264,7 +270,10 @@ fn dump_bytecode_file(bytecode_file: &crate::middle::passes::codegen::bytecode::
     );
     tracing::info!(
         "{}",
-        t_cur(MSG::BytecodeFlags, Some(&[&bytecode_file.header.flags]))
+        t_cur(
+            MSG::BytecodeFlags,
+            Some(&[&format!("{:08x}", bytecode_file.header.flags)])
+        )
     );
     tracing::info!(
         "{}",
@@ -378,44 +387,11 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
         crate::frontend::core::typecheck::MonoType::Int(n) => format!("i{}", n),
         crate::frontend::core::typecheck::MonoType::Float(n) => format!("f{}", n),
         crate::frontend::core::typecheck::MonoType::Char => "char".to_string(),
-        crate::frontend::core::typecheck::MonoType::String => "String".to_string(),
-        crate::frontend::core::typecheck::MonoType::Bytes => "bytes".to_string(),
         crate::frontend::core::typecheck::MonoType::Struct(struct_type) => {
             format!("struct {:?}", struct_type)
         }
         crate::frontend::core::typecheck::MonoType::Enum(enum_type) => {
             format!("enum {:?}", enum_type)
-        }
-        crate::frontend::core::typecheck::MonoType::Tuple(types) => {
-            let inner = types
-                .iter()
-                .map(dump_type_detail)
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("({})", inner)
-        }
-        crate::frontend::core::typecheck::MonoType::List(elem) => {
-            format!("List({})", dump_type_detail(elem))
-        }
-        crate::frontend::core::typecheck::MonoType::Dict(key, value) => {
-            format!(
-                "Dict({}, {})",
-                dump_type_detail(key),
-                dump_type_detail(value)
-            )
-        }
-        crate::frontend::core::typecheck::MonoType::Set(elem) => {
-            format!("{{{}}}", dump_type_detail(elem))
-        }
-        crate::frontend::core::typecheck::MonoType::Option(inner) => {
-            format!("Option({})", dump_type_detail(inner))
-        }
-        crate::frontend::core::typecheck::MonoType::Result(ok, err) => {
-            format!(
-                "Result({}, {})",
-                dump_type_detail(ok),
-                dump_type_detail(err)
-            )
         }
         crate::frontend::core::typecheck::MonoType::Fn {
             params,
@@ -431,9 +407,6 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
         }
         crate::frontend::core::typecheck::MonoType::TypeRef(name) => name.clone(),
         crate::frontend::core::typecheck::MonoType::TypeVar(var) => format!("T{:?}", var),
-        crate::frontend::core::typecheck::MonoType::Range { elem_type } => {
-            format!("{}..", dump_type_detail(elem_type))
-        }
         crate::frontend::core::typecheck::MonoType::Union(types) => {
             let inner = types
                 .iter()
@@ -449,12 +422,6 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
                 .collect::<Vec<_>>()
                 .join(" & ");
             format!("({})", inner)
-        }
-        crate::frontend::core::typecheck::MonoType::Arc(inner) => {
-            format!("Arc({})", dump_type_detail(inner))
-        }
-        crate::frontend::core::typecheck::MonoType::Weak(inner) => {
-            format!("Weak({})", dump_type_detail(inner))
         }
         crate::frontend::core::typecheck::MonoType::Ref { mutable, inner } => {
             if *mutable {
@@ -505,10 +472,42 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
                 format!("Type{}({})", universe_level, params_str.join(", "))
             }
         }
-        crate::frontend::core::typecheck::MonoType::Generic { name, args } => {
-            let args_str: Vec<String> = args.iter().map(dump_type_detail).collect();
-            format!("{}({})", name, args_str.join(", "))
-        }
+        // #299：容器/复合类型统一走 Generic（保持旧变体输出格式）
+        crate::frontend::core::typecheck::MonoType::Generic { name, args } => match name.as_str() {
+            "String" => "String".to_string(),
+            "Bytes" => "bytes".to_string(),
+            "Tuple" => format!(
+                "({})",
+                args.iter()
+                    .map(dump_type_detail)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            "List" => format!("List({})", dump_type_detail(&args[0])),
+            "Dict" => format!(
+                "Dict({}, {})",
+                dump_type_detail(&args[0]),
+                dump_type_detail(&args[1])
+            ),
+            "Set" => format!("{{{}}}", dump_type_detail(&args[0])),
+            "Option" => format!("Option({})", dump_type_detail(&args[0])),
+            "Result" => format!(
+                "Result({}, {})",
+                dump_type_detail(&args[0]),
+                dump_type_detail(&args[1])
+            ),
+            "Range" => format!("{}..", dump_type_detail(&args[0])),
+            "Arc" => format!("Arc({})", dump_type_detail(&args[0])),
+            "Weak" => format!("Weak({})", dump_type_detail(&args[0])),
+            other => format!(
+                "{}({})",
+                other,
+                args.iter()
+                    .map(dump_type_detail)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        },
         crate::frontend::core::typecheck::MonoType::Refined { base, constraint } => {
             format!("{} {{{}}}", dump_type_detail(base), constraint)
         }
@@ -526,8 +525,7 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
                 dump_type_detail(return_type)
             )
         }
-        crate::frontend::core::typecheck::MonoType::LibraryRef { .. }
-        | crate::frontend::core::typecheck::MonoType::ExternRef { .. } => todo!(),
+        _ => todo!(),
     }
 }
 
@@ -575,32 +573,36 @@ fn dump_instructions(
     for (instr_idx, instr) in instructions.iter().enumerate() {
         // Try to decode the opcode
         let ops_str = format_operands(&instr.operands);
-        match Opcode::try_from(instr.opcode) {
-            Ok(opcode) => {
-                tracing::info!(
-                    "{}",
-                    t_cur(
-                        MSG::BytecodeInstrIndex,
-                        Some(&[&instr_idx, &opcode, &ops_str])
-                    )
-                );
-            }
-            Err(_) => {
-                tracing::info!(
-                    "{}",
-                    t_cur(
-                        MSG::BytecodeUnknownOpcode,
-                        Some(&[&instr_idx, &instr.opcode, &ops_str])
-                    )
-                );
-            }
+        let name = crate::backends::common::opcode_name(instr.opcode);
+        if name != "Unknown" {
+            tracing::info!(
+                "{}",
+                t_cur(
+                    MSG::BytecodeInstrIndex,
+                    Some(&[
+                        &format!("{:04}", instr_idx),
+                        &format!("{:<14}", name),
+                        &ops_str
+                    ])
+                )
+            );
+        } else {
+            tracing::info!(
+                "{}",
+                t_cur(
+                    MSG::BytecodeUnknownOpcode,
+                    Some(&[
+                        &format!("{:04}", instr_idx),
+                        &format!("{:02x}", instr.opcode),
+                        &ops_str
+                    ])
+                )
+            );
         }
     }
 }
 
-// =============================================================================
 // FFI End-to-End Tests
-// =============================================================================
 
 #[cfg(test)]
 mod tests;

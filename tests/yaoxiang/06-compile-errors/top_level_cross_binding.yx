@@ -1,0 +1,10 @@
+// 06-compile-errors/top_level_cross_binding.yx
+// [test:error]: 顶层绑定 init 引用另一 binding → E3007（#271 清单 #2，跨绑定引用折叠不到）
+// 验证: eval_const_expr 只折叠字面量/算术，Var 引用退回运行时 → 硬错误而非静默 0
+// 状态: 待测试
+
+a = 1
+b = a + 1
+
+main = {
+}

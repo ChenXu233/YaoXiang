@@ -6,16 +6,16 @@
 use crate::backends::common::value::TypeId;
 use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
-use crate::std::{NativeContext, NativeExport, NativeHandler, StdModule};
-/// `Weak[T]` - A weak reference type that doesn't increase reference count.
+use crate::std::{NativeContext, NativeExport, StdModule};
+/// `Weak(T)` - A weak reference type that doesn't increase reference count.
 ///
 /// # Example
 /// ```yaoxiang
 /// use std.weak.Weak
 ///
 /// # let node = Node { value: 42, next: None }
-/// let arc: Arc[Node] = ref node
-/// let weak: Weak[Node] = Weak.new(arc)
+/// let arc: Arc(Node) = ref node
+/// let weak: Weak(Node) = Weak.new(arc)
 ///
 /// # if let Some(arc2) = weak.upgrade() {
 /// #     use(arc2)
@@ -23,8 +23,8 @@ use crate::std::{NativeContext, NativeExport, NativeHandler, StdModule};
 /// ```
 ///
 /// # Methods
-/// - `Weak.new(arc: Arc[T]) -> Weak[T]` - Create weak reference from Arc
-/// - `weak.upgrade() -> Option[Arc[T]]` - Upgrade to Arc if still alive
+/// - `Weak.new(arc: Arc(T)) -> Weak(T)` - Create weak reference from Arc
+/// - `weak.upgrade() -> Option[Arc(T)]` - Upgrade to Arc if still alive
 ///
 /// Create a new Weak reference from an Arc
 ///
@@ -40,7 +40,7 @@ pub fn weak_new(
 
 /// Upgrade a Weak reference to an Arc
 ///
-/// Returns `Some(Arc[T])` if the value is still alive,
+/// Returns `Some(Arc(T))` if the value is still alive,
 /// or `None` if the value has been dropped.
 pub fn weak_upgrade(
     weak: &crate::backends::common::value::RuntimeValue
@@ -48,18 +48,11 @@ pub fn weak_upgrade(
     weak.upgrade()
 }
 
-// ============================================================================
 // WeakModule - StdModule Implementation
-// ============================================================================
 
 /// Weak module implementation.
+#[derive(Default)]
 pub struct WeakModule;
-
-impl Default for WeakModule {
-    fn default() -> Self {
-        Self
-    }
-}
 
 impl StdModule for WeakModule {
     fn module_path(&self) -> &str {
@@ -68,25 +61,23 @@ impl StdModule for WeakModule {
 
     fn exports(&self) -> Vec<NativeExport> {
         vec![
-            NativeExport::new(
+            export!(
                 "new",
                 "std.weak.new",
-                "(arc: Arc[T]) -> Weak[T]",
-                native_weak_new as NativeHandler,
+                "(T: Type)(arc: Arc(T)) -> Weak(T)",
+                native_weak_new
             ),
-            NativeExport::new(
+            export!(
                 "upgrade",
                 "std.weak.upgrade",
-                "(weak: Weak[T]) -> Option[Arc[T]]",
-                native_weak_upgrade as NativeHandler,
+                "(T: Type)(weak: Weak(T)) -> Option(Arc(T))",
+                native_weak_upgrade
             ),
         ]
     }
 }
 
-// ============================================================================
 // Native Handler Wrappers
-// ============================================================================
 
 /// Native handler wrapper for weak_new.
 fn native_weak_new(
@@ -95,7 +86,7 @@ fn native_weak_new(
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::runtime_only(
-            "std.weak.new expects 1 argument (arc: Arc[T])".to_string(),
+            "std.weak.new expects 1 argument (arc: Arc(T))".to_string(),
         ));
     }
     Ok(weak_new(&args[0]))
@@ -103,7 +94,7 @@ fn native_weak_new(
 
 /// Native handler wrapper for weak_upgrade.
 ///
-/// Returns Option[Arc[T]] as a RuntimeValue::Enum:
+/// Returns Option[Arc(T)] as a RuntimeValue::Enum:
 /// - Some(arc): Enum { type_id: ENUM, variant_id: 0, payload: arc }
 /// - None:      Enum { type_id: ENUM, variant_id: 1, payload: Void }
 fn native_weak_upgrade(
@@ -112,7 +103,7 @@ fn native_weak_upgrade(
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::runtime_only(
-            "std.weak.upgrade expects 1 argument (weak: Weak[T])".to_string(),
+            "std.weak.upgrade expects 1 argument (weak: Weak(T))".to_string(),
         ));
     }
     match weak_upgrade(&args[0]) {

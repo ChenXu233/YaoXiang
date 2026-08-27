@@ -1,0 +1,21 @@
+// 05-ownership/borrow_capture.yx
+// 覆盖: SPEC type-system.md §12.3 令牌的作用域与传播 — 闭包捕获（#251 P0-7 跨函数借用）
+// 验证:
+//   - 闭包捕获外部值（threshold）在 list.filter 中自由使用
+//   - 捕获后原变量仍活跃（值捕获为 Dup 复制语义）
+// 注: 闭包捕获 &T 令牌（§12.3 filter_by_threshold 形式）待闭包捕获令牌
+//     类型检查完整落地后补充。
+// 状态: ✅
+
+use std.assert
+use std.list
+
+threshold = 5
+
+main = {
+    nums = [1, 6, 3, 8]
+    big = list.filter(nums, x => x > threshold)
+    assert.assert(list.len(big) == 2, "闭包捕获外部值 filter")
+
+    assert.assert(threshold == 5, "捕获后原值仍可用")
+}
