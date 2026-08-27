@@ -2,7 +2,7 @@
 
 > This document is under construction...
 
-YaoXiang is currently in the **experimental validation stage**, with the standard library and API
+YaoXiang is currently in the **experimental verification phase**, with the standard library and API
 being gradually improved.
 
 ## Language Specification
@@ -18,15 +18,15 @@ being gradually improved.
 
 ## Current Status
 
-| Module           | Status         | Description            |
-| ---------------- | -------------- | ---------------------- |
-| `std.io`         | 🔨 In progress | Input/Output           |
-| `std.string`     | 🔨 In progress | String operations      |
-| `std.list`       | 🔨 In progress | List operations        |
-| `std.dict`       | ✅ Implemented | Dictionary operations  |
-| `std.math`       | 🔨 In progress | Math functions         |
-| `std.net`        | 📋 Planned     | Network operations     |
-| `std.concurrent` | 📋 Planned     | Concurrency primitives |
+| Module           | Status                | Description            |
+| ---------------- | --------------------- | ---------------------- |
+| `std.io`         | 🔨 Under Construction | Input/Output           |
+| `std.string`     | 🔨 Under Construction | String operations      |
+| `std.list`       | 🔨 Under Construction | List operations        |
+| `std.dict`       | ✅ Implemented        | Dictionary operations  |
+| `std.math`       | 🔨 Under Construction | Mathematical functions |
+| `std.net`        | 📋 Planned            | Network operations     |
+| `std.concurrent` | 📋 Planned            | Concurrency primitives |
 
 ## Built-in Types
 
@@ -37,33 +37,33 @@ being gradually improved.
 | `Void`   | Void / no return value | `()`            |
 | `Bool`   | Boolean value          | `true`, `false` |
 | `Int`    | Integer                | `42`, `-10`     |
-| `Float`  | Floating-point number  | `3.14`, `-0.5`  |
+| `Float`  | Float                  | `3.14`, `-0.5`  |
 | `Char`   | Character              | `'a'`, `'中'`   |
 | `String` | String                 | `"hello"`       |
 
 ### Composite Types
 
-| Type                 | Description         | Example        |
-| -------------------- | ------------------- | -------------- |
-| `Tuple(T1, T2, ...)` | Heterogeneous tuple | `(1, "hello")` |
-| `(Args) -> Ret`      | Function type       | `(Int) -> Int` |
+| Type                 | Description                 | Example        |
+| -------------------- | --------------------------- | -------------- |
+| `Tuple(T1, T2, ...)` | Heterogeneous element tuple | `(1, "hello")` |
+| `(Args) -> Ret`      | Function type               | `(Int) -> Int` |
 
-> #299: Container types (`List(T)` / `Array(T, N)` / `Dict(K, V)` / `Set(T)`) are NOT built-in
-> primitives—they are generic type constructors, treated the same as user-defined generics, and
-> handled through the unified generic instantiation path. Literal syntax (`[...]` / `{...}`) is
-> retained in the core, with the resolution target determined by context annotations. See the
-> [Language Specification](language-spec/syntax.md) for details.
+> #299: Container types (`List(T)` / `Array(T, N)` / `Dict(K, V)`) are not built-in primitives —
+> they are generic type constructors, treated the same as user-defined generics, and processed
+> through a unified generic instantiation path. Literal syntax (`[...]` / `{...}`) is reserved in
+> the core, with the landing point determined by context annotations. Set has been removed (#300),
+> see [Language Specification](language-spec/syntax.md).
 
 ### User-defined Types
 
 ```yaoxiang
-// Record type (struct)
+// 记录类型（结构体）
 Point: Type = { x: Float, y: Float }
 
-// Enum type
+// 枚举类型
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
-// Interface type (all fields are functions)
+// 接口类型（所有字段为函数）
 Callable: Type = { call: (String) -> Void }
 ```
 
@@ -72,50 +72,50 @@ Callable: Type = { call: (String) -> Void }
 ### Output
 
 ```yaoxiang
-print(value)           // Print, no newline
-println(value)         // Print, with newline
+print(value)           // 打印，无换行
+println(value)         // 打印，有换行
 ```
 
 ### Conversion
 
 ```yaoxiang
-to_string(value)       // Convert to string
-to_int(value)          // Convert to integer
-to_float(value)        // Convert to float
+to_string(value)       // 转换为字符串
+to_int(value)          // 转换为整数
+to_float(value)        // 转换为浮点数
 ```
 
 ### Type Checking
 
 ```yaoxiang
-typeof(value)         // Return the type name
-is_type(value, type)  // Check the type
+typeof(value)         // 返回类型名称
+is_type(value, type)  // 检查类型
 ```
 
 ## Keywords
 
-| Keyword                   | Description           |
-| ------------------------- | --------------------- |
-| `Type`                    | Meta type             |
-| `spawn`                   | Mark a spawn function |
-| `spawn for`               | Parallel loop         |
-| `spawn {}`                | spawn block           |
-| `if` / `else if` / `else` | Conditional branches  |
-| `match`                   | Pattern matching      |
-| `while` / `for`           | Loops                 |
-| `return`                  | Return a value        |
-| `ref`                     | Create a reference    |
-| `mut`                     | Mutability marker     |
+| Keyword                   | Description         |
+| ------------------------- | ------------------- |
+| `Type`                    | Meta type           |
+| `spawn`                   | Mark spawn function |
+| `spawn for`               | Parallel loop       |
+| `spawn {}`                | Spawn block         |
+| `if` / `else if` / `else` | Conditional branch  |
+| `match`                   | Pattern matching    |
+| `while` / `for`           | Loop                |
+| `return`                  | Return value        |
+| `ref`                     | Create reference    |
+| `mut`                     | Mutable marker      |
 
 ## Syntax Cheatsheet
 
 ### Variable Declaration
 
 ```yaoxiang
-// Immutable variable (default)
+// 不可变变量（默认）
 x: Int = 42
-y = 42                 // Type inference
+y = 42                 // 类型推断
 
-// Mutable variable
+// 可变变量
 mut count: Int = 0
 count = count + 1
 ```
@@ -123,20 +123,20 @@ count = count + 1
 ### Function Definition
 
 ```yaoxiang
-// Ordinary function
+// 普通函数
 add: (a: Int, b: Int) -> Int = a + b
 
-// spawn function (automatically concurrent)
+// 并作函数（自动并发）
 fetch: (url: String) -> JSON spawn = HTTP.get(url).json()
 
-// Generic function
+// 泛型函数
 identity: [T](x: T) -> T = x
 ```
 
 ### Control Flow
 
 ```yaoxiang
-// Conditional
+// 条件
 if x > 0 {
     print("positive")
 } else if x < 0 {
@@ -145,13 +145,13 @@ if x > 0 {
     print("zero")
 }
 
-// Pattern matching
+// 模式匹配
 match result {
     ok(value) => print("success: " + value),
     err(error) => print("error: " + error),
 }
 
-// Loop
+// 循环
 for i in 0..10 {
     print(i)
 }
@@ -160,37 +160,37 @@ for i in 0..10 {
 ### Error Handling
 
 ```yaoxiang
-// ? operator propagates errors
+// ? 运算符传播错误
 data = fetch_file(path)?
 ```
 
 ## Operator Precedence
 
-| Precedence | Operator                       |
-| ---------- | ------------------------------ |
-| Highest    | `( )` function call            |
-|            | `.` field access               |
-|            | `[ ]` index                    |
-|            | `unary -` unary minus          |
-|            | `* / %` multiply/divide/modulo |
-|            | `+ -` add/subtract             |
-|            | `== != < > <= >=` comparison   |
-|            | `and or` logical operations    |
-| Lowest     | `=` assignment                 |
+| Precedence | Operator                     |
+| ---------- | ---------------------------- |
+| Highest    | `( )` Function call          |
+|            | `.` Field access             |
+|            | `[ ]` Index                  |
+|            | `unary -` Unary minus        |
+|            | `* / %` Mul, Div, Mod        |
+|            | `+ -` Add, Subtract          |
+|            | `== != < > <= >=` Comparison |
+|            | `and or` Logical operations  |
+| Lowest     | `=` Assignment               |
 
 ## Standard Library Usage Examples
 
 ```yaoxiang
-// Import standard library
+// 导入标准库
 use std.io.{print, println}
 
-// List operations
+// 列表操作
 use std.list.{list_push, list_pop, list_len}
 
-// Math functions
+// 数学函数
 use std.math.{sqrt, sin, cos, PI}
 
-// Usage
+// 使用
 println("Hello, YaoXiang!")
 result = sqrt(16.0)  // 4.0
 ```
@@ -198,30 +198,30 @@ result = sqrt(16.0)  // 4.0
 ## Command Line Tool
 
 ```bash
-# Run a script
+# 运行脚本
 yaoxiang run hello.yx
 
-# Build bytecode
+# 构建字节码
 yaoxiang build hello.yx -o hello.42
 
-# Interpret execution
+# 解释执行
 yaoxiang eval 'println("Hello")'
 
-# View help
+# 查看帮助
 yaoxiang --help
 ```
 
 ## Complete Example
 
 ```yaoxiang
-// Compute the Fibonacci sequence
+// 计算斐波那契数列
 fib: (n: Int) -> Int = if n <= 1 {
     n
 } else {
     fib(n - 1) + fib(n - 2)
 }
 
-// Main function
+// 主函数
 main: () -> Void = {
     print("Fibonacci(10) = " + fib(10).to_string())
 }
@@ -229,15 +229,15 @@ main: () -> Void = {
 
 ## Related Resources
 
-- [Tutorial](../tutorial/) - Learn YaoXiang
+- [Tutorials](../tutorial/) - Learn YaoXiang
 - [Design Documents](../design/) - Language design decisions
 - [GitHub](https://github.com/ChenXu233/YaoXiang)
 
 ## Contribution Guide
 
-The standard library is under construction—contributions are welcome!
+The standard library is under construction, contributions are welcome!
 
-1. Choose a module (e.g., `std.io`, `std.net`)
-2. Implement the functions in `src/std/`
+1. Choose a module (e.g. `std.io`, `std.net`)
+2. Implement functions in `src/std/`
 3. Add documentation comments
-4. Submit a PR
+4. Submit PR
