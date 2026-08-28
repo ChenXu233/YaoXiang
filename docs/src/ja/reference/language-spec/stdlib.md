@@ -1,10 +1,10 @@
 # 標準ライブラリ仕様
 
-本ドキュメントはYaoXiangプログラミング言語の標準ライブラリ仕様を定義する。コアライブラリ、IOライブラリ、数学ライブラリを含む。
+本文書は YaoXiang プログラミング言語の標準ライブラリ仕様を定義する。コアライブラリ、IO ライブラリ、数学ライブラリを含む。
 
 ---
 
-## 第1章：コアライブラリ
+## 第一章：コアライブラリ
 
 ### 1.1 基本型
 
@@ -12,7 +12,7 @@
 
 | 型             | モジュール       | 説明           |
 | -------------- | ---------------- | -------------- |
-| `Option(T)`    | `std.option`     | オプション値型 |
+| `Option(T)`    | `std.option`     | オプション型   |
 | `Result(T, E)` | `std.result`     | エラー処理型   |
 | `List(T)`      | `std.collection` | 動的配列       |
 | `Map(K, V)`    | `std.collection` | ハッシュマップ |
@@ -32,20 +32,20 @@ Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 | `Option.some` | `Option.some(value)` | 値あり |
 | `Option.none` | `Option.none()`      | 値なし |
 
-**よく使われるメソッド**：
+**一般的なメソッド**：
 
 ```yaoxiang
-// 检查是否有值
+// 値があるかチェック
 is_some: (self: Option(T)) -> Bool
 is_none: (self: Option(T)) -> Bool
 
-// 获取值（可能 panic）
+// 値を取得（panic する可能性あり）
 unwrap: (self: Option(T)) -> T
 
-// 获取值或默认值
+// 値またはデフォルト値を取得
 unwrap_or: (self: Option(T), default: T) -> T
 
-// 映射值
+// 値をマップ
 map: (R: Type) -> ((self: Option(T), f: (T) -> R) -> Option(R))
 ```
 
@@ -62,23 +62,23 @@ Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Resu
 | `Result.ok`  | `Result.ok(value)`  | 成功値   |
 | `Result.err` | `Result.err(error)` | エラー値 |
 
-**よく使われるメソッド**：
+**一般的なメソッド**：
 
 ```yaoxiang
-// 检查是否成功
+// 成功したかチェック
 is_ok: (self: Result(T, E)) -> Bool
 is_err: (self: Result(T, E)) -> Bool
 
-// 获取值（可能 panic）
+// 値を取得（panic する可能性あり）
 unwrap: (self: Result(T, E)) -> T
 
-// 获取值或默认值
+// 値またはデフォルト値を取得
 unwrap_or: (self: Result(T, E), default: T) -> T
 
-// 映射成功值
+// 成功値をマップ
 map: (R: Type) -> ((self: Result(T, E), f: (T) -> R) -> Result(R, E))
 
-// 映射错误值
+// エラー値をマップ
 map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ```
 
@@ -88,13 +88,13 @@ map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ErrorPropagate ::= Expr '?'
 ```
 
-`?`演算子はResult型のエラーを自動的に伝播する：
+`?` 演算子は Result 型のエラーを自動的に伝播する：
 
 ```
-// 成功时返回值，失败时向上返回 err
+// 成功時は値を返し、失敗時は err を上に返す
 data = fetch_data()?
 
-// 等价于
+// 以下と等価
 data = match fetch_data() {
     ok(v) => v
     err(e) => return err(e)
@@ -103,46 +103,47 @@ data = match fetch_data() {
 
 ### 1.5 アサーション（std.assert）
 
-`std.assert`モジュールは統一されたアサーションメカニズムを提供する。実行時の`assert`とコンパイル時の精緻化型`Assert`は同じ原始の二つの側面である。
+`std.assert` モジュールは統一されたアサーションメカニズムを提供する——ランタイム `assert`
+とコンパイル時の精化型 `Assert` は同じプリミティブの二面である。
 
 ```yaoxiang
-// IsTrue：值到类型的桥接函数
+// IsTrue: 値から型へのブリッジ関数
 IsTrue: (b: Bool) -> Type = match b {
-    true => Void,      // ⊤，程序继续
-    false => Never,    // ⊥，发散
+    true => Void,      // ⊤，プログラムは継続
+    false => Never,    // ⊥，発散
 }
 
-// Assert：编译期精化类型原语
+// Assert: コンパイル時精化型プリミティブ
 Assert: (cond: Bool) -> Type = IsTrue(cond)
 
-// assert：运行时断言（Assert 的值引入子）
+// assert: ランタイムアサーション（Assert の値イントロデューサ）
 assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))
 
-// Result 重载
+// Result オーバーロード
 assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 ```
 
-**dispatchディスパッチ**：
+**dispatch ディスパッチ**：
 
-| 条件                                     | 動作                                                    |
-| ---------------------------------------- | ------------------------------------------------------- |
-| condのすべての自由変数がコンパイル時既知 | コンパイラが評価、true → 消去、false → コンパイルエラー |
-| 実行時自由変数が存在する                 | 実行時checkを挿入し、フロー敏感仮定集合Γを注入する      |
+| 条件                                        | 動作                                                     |
+| ------------------------------------------- | -------------------------------------------------------- |
+| cond のすべての自由変数がコンパイル時に既知 | コンパイラが評価、true → 消去、false → コンパイルエラー  |
+| ランタイム自由変数が存在                    | ランタイム check を挿入し、フロー依存の仮定集合 Γ を注入 |
 
-`assert(false, "msg")`はraiseと等価である。個別のthrow/raiseキーワードは不要。
+`assert(false, "msg")` は raise と等価である——独立した throw/raise キーワードは不要。
 
 ---
 
-## 第2章：IOライブラリ
+## 第二章：IO ライブラリ
 
 ### 2.1 標準入出力
 
 ```yaoxiang
-// 标准输出
+// 標準出力
 print: (msg: String) -> Void
 println: (msg: String) -> Void
 
-// 标准输入
+// 標準入力
 read_line: () -> String
 read_char: () -> Char
 ```
@@ -150,7 +151,7 @@ read_char: () -> Char
 ### 2.2 ファイル操作
 
 ```yaoxiang
-// 文件类型
+// ファイル型
 File: Type = {
     path: String,
     read: (self: File) -> Result(String, Error),
@@ -159,7 +160,7 @@ File: Type = {
     close: (self: File) -> Void
 }
 
-// 文件操作
+// ファイル操作
 open: (path: String) -> Result(File, Error)
 create: (path: String) -> Result(File, Error)
 delete: (path: String) -> Result(Void, Error)
@@ -168,7 +169,7 @@ delete: (path: String) -> Result(Void, Error)
 ### 2.3 ディレクトリ操作
 
 ```yaoxiang
-// 目录类型
+// ディレクトリ型
 Dir: Type = {
     path: String,
     entries: (self: Dir) -> Result(List(String), Error),
@@ -176,7 +177,7 @@ Dir: Type = {
     delete: (self: Dir) -> Result(Void, Error)
 }
 
-// 目录操作
+// ディレクトリ操作
 read_dir: (path: String) -> Result(Dir, Error)
 create_dir: (path: String) -> Result(Void, Error)
 delete_dir: (path: String) -> Result(Void, Error)
@@ -184,26 +185,26 @@ delete_dir: (path: String) -> Result(Void, Error)
 
 ---
 
-## 第3章：数学ライブラリ
+## 第三章：数学ライブラリ
 
 ### 3.1 基本数学関数
 
 ```yaoxiang
-// 绝对值
+// 絶対値
 abs: (x: Int) -> Int
 abs: (x: Float) -> Float
 
-// 最大最小值
+// 最大値と最小値
 max: (a: Int, b: Int) -> Int
 min: (a: Int, b: Int) -> Int
 max: (a: Float, b: Float) -> Float
 min: (a: Float, b: Float) -> Float
 
-// 幂运算
+// べき乗
 pow: (base: Float, exp: Float) -> Float
 sqrt: (x: Float) -> Float
 
-// 对数
+// 対数
 log: (x: Float) -> Float
 log2: (x: Float) -> Float
 log10: (x: Float) -> Float
@@ -212,12 +213,12 @@ log10: (x: Float) -> Float
 ### 3.2 三角関数
 
 ```yaoxiang
-// 三角函数
+// 三角関数
 sin: (x: Float) -> Float
 cos: (x: Float) -> Float
 tan: (x: Float) -> Float
 
-// 反三角函数
+// 逆三角関数
 asin: (x: Float) -> Float
 acos: (x: Float) -> Float
 atan: (x: Float) -> Float
@@ -227,35 +228,35 @@ atan2: (y: Float, x: Float) -> Float
 ### 3.3 定数
 
 ```yaoxiang
-// 数学常量
+// 数学定数
 pi: Float = 3.141592653589793
 e: Float = 2.718281828459045
 ```
 
 ---
 
-## 第4章：文字列ライブラリ
+## 第四章：文字列ライブラリ
 
 ### 4.1 文字列操作
 
 ```yaoxiang
-// 字符串长度
+// 文字列長
 length: (s: String) -> Int
 
-// 字符串拼接
+// 文字列連結
 concat: (a: String, b: String) -> String
 
-// 字符串分割
+// 文字列分割
 split: (s: String, delimiter: String) -> List(String)
 
-// 字符串查找
+// 文字列検索
 find: (s: String, pattern: String) -> Option(Int)
 contains: (s: String, pattern: String) -> Bool
 
-// 字符串替换
+// 文字列置換
 replace: (s: String, old: String, new: String) -> String
 
-// 字符串修剪
+// 文字列トリム
 trim: (s: String) -> String
 trim_left: (s: String) -> String
 trim_right: (s: String) -> String
@@ -264,24 +265,24 @@ trim_right: (s: String) -> String
 ### 4.2 文字列変換
 
 ```yaoxiang
-// 类型转换
+// 型変換
 to_string: (x: Int) -> String
 to_string: (x: Float) -> String
 to_string: (x: Bool) -> String
 
-// 解析
+// パース
 parse_int: (s: String) -> Result(Int, Error)
 parse_float: (s: String) -> Result(Float, Error)
 ```
 
 ---
 
-## 第5章：コレクションライブラリ
+## 第五章：コレクションライブラリ
 
 ### 5.1 List 型
 
 ```yaoxiang
-// List 类型
+// List 型
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
@@ -304,7 +305,7 @@ List: (T: Type) -> Type = {
 ### 5.2 Map 型
 
 ```yaoxiang
-// Map 类型
+// Map 型
 Map: (K: Type, V: Type) -> Type = {
     data: Array((K, V)),
     length: Int,
@@ -320,7 +321,7 @@ Map: (K: Type, V: Type) -> Type = {
 
 ---
 
-## 第6章：イテレータライブラリ
+## 第六章：イテレータライブラリ
 
 ### 6.1 Iterator trait
 
@@ -341,7 +342,8 @@ Iterator: (T: Type) -> Type = {
 ### 6.2 イテレータアダプタ
 
 ```yaoxiang
-// 范围迭代器（#300 I 项：Range 是一等值，step 为第三分量）
+// 範囲イテレータ（#302: Range は正式な型であり、ランタイムの身分は三スカラー不変レコード。
+// Tuple の殻を借用しない; `1..10` / `1..10..2` を出力し、構造的に等価、名前付きフィールド）
 Range: Type = {
     start: Int,
     end: Int,
@@ -349,35 +351,39 @@ Range: Type = {
     Iterator(Int)
 }
 
-// 使用
+// 使用（イテレータプロトコル: std.range.iter/has_next/next、for は静的型ディスパッチを経る）
 for i in 0..10 {
     print(i)
 }
 
-// step 形态（双点，无新关键词）
+// step 形式（ダブルドット、新規キーワードなし）
 for i in 0..10..2 {
     print(i)
 }
 ```
 
-> **#300
-> I項**：Rangeは第一級値である——`r = 1..10`は合法であり、`x in r`のメンバ判定、`for i in r`のイテレーションはいずれも静的型で脱糖される。step=0リテラルはコンパイル時に拒否され、動的step=0は実行時エラー（将来のエラーシステム実装後にResultに格上げ、#301）。
+> **#302**：`Range(Int)` は正式に実装された——名前付きフィールド `r.start`/`r.end`/`r.step`
+> がアクセス可能； `x in r` はランタイムに
+> `std.range.contains`（境界チェック + ステップ整合）を経由し、証明パイプラインが区間命題として認識する
+> `x >= r.start && x < r.end && (x - r.start) % r.step == 0`（区間は区間を保持し、実体化しない）。step=0 リテラルはコンパイル時に拒否、動的 step=0 はランタイムエラー（将来のエラーシステム実装後に Result に昇格、#301）。インターフェースの実体化（型本体
+> `Iterator(Int)` 宣言）は RFC-011a 実装待ち（#307）、現在プロトコル面は std.range が提供。
 
 ---
 
 ## 付録：標準ライブラリモジュール索引
 
-| モジュール       | 説明                                                              |
-| ---------------- | ----------------------------------------------------------------- |
-| `std.assert`     | アサーションメカニズム——実行時assert + コンパイル時Assert精緻化型 |
-| `std.option`     | Option型                                                          |
-| `std.result`     | Result型                                                          |
-| `std.collection` | List、Map等のコレクション型                                       |
-| `std.string`     | 文字列操作                                                        |
-| `std.array`      | 配列操作                                                          |
-| `std.iterator`   | イテレータ                                                        |
+| モジュール       | 説明                                                                   |
+| ---------------- | ---------------------------------------------------------------------- |
+| `std.assert`     | アサーションメカニズム——ランタイム assert + コンパイル時 Assert 精化型 |
+| `std.option`     | Option 型                                                              |
+| `std.result`     | Result 型                                                              |
+| `std.collection` | List、Map などのコレクション型                                         |
+| `std.string`     | 文字列操作                                                             |
+| `std.array`      | 配列操作                                                               |
+| `std.iterator`   | イテレータ（プロトコル面は現在 `std.range` が提供、#302）              |
+| `std.range`      | Range イテレータと区間述語、アダプタ（#302）                           |
 
-### A.2 IOモジュール
+### A.2 IO モジュール
 
 | モジュール | 説明             |
 | ---------- | ---------------- |
@@ -393,11 +399,11 @@ for i in 0..10..2 {
 | `std.math.trig` | 三角関数 |
 | `std.math.log`  | 対数関数 |
 
-### A.4 ユーティリティモジュール
+### A.4 ツールモジュール
 
-| モジュール   | 説明                                                            |
-| ------------ | --------------------------------------------------------------- |
-| `std.random` | 乱数生成                                                        |
-| `std.time`   | 日時                                                            |
-| `std.assert` | コンパイル時`Assert(C)`と実行時`assert(x > 0)`の統一（RFC-030） |
-| `std.regex`  | 正規表現                                                        |
+| モジュール   | 説明                                                                    |
+| ------------ | ----------------------------------------------------------------------- |
+| `std.random` | 乱数生成                                                                |
+| `std.time`   | 日時                                                                    |
+| `std.assert` | コンパイル時 `Assert(C)` とランタイム `assert(x > 0)` の統一（RFC-030） |
+| `std.regex`  | 正規表現                                                                |
