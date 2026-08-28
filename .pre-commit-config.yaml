@@ -39,12 +39,6 @@ repos:
         types: [rust]
         pass_filenames: false
 
-      - id: cargo-audit
-        name: cargo audit
-        entry: cargo audit
-        language: system
-        pass_filenames: false
-
       - id: sync-version-badge
         name: sync version badge to README
         entry: python scripts/hooks/sync-version-badge.py
@@ -65,3 +59,9 @@ repos:
         language: system
         stages: [commit-msg]
         always_run: true
+
+      - id: cargo-audit
+        name: cargo audit
+        entry: cargo audit
+        language: system
+        pass_filenames: false
