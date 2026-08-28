@@ -341,7 +341,8 @@ Iterator: (T: Type) -> Type = {
 ### 6.2 迭代器适配器
 
 ```yaoxiang
-// 范围迭代器（#300 I 项：Range 是一等值，step 为第三分量）
+// 范围迭代器（#302：Range 是正式类型，运行时身份为三标量不可变记录，
+// 不再借 Tuple 外壳；打印 `1..10` / `1..10..2`，结构相等，具名字段）
 Range: Type = {
     start: Int,
     end: Int,
@@ -349,7 +350,7 @@ Range: Type = {
     Iterator(Int)
 }
 
-// 使用
+// 使用（迭代器协议：std.range.iter/has_next/next，for 经静态类型派发）
 for i in 0..10 {
     print(i)
 }
@@ -360,9 +361,11 @@ for i in 0..10..2 {
 }
 ```
 
-> **#300 I 项**：Range 是一等值——`r = 1..10` 合法，`x in r` 成员判断、
-> `for i in r` 迭代均按静态类型脱糖。step=0 字面量编译期拒绝，
-> 动态 step=0 运行时错误（未来错误系统落地后升格 Result，#301）。
+> **#302**：`Range(Int)` 已正式落地——具名字段 `r.start`/`r.end`/`r.step` 可访问；
+> `x in r` 运行时走 `std.range.contains`（界检查 + 步长对齐），证明管道识别为区间命题
+> `x >= r.start && x < r.end && (x - r.start) % r.step == 0`（区间保持区间，不物化）。
+> step=0 字面量编译期拒绝，动态 step=0 运行时错误（未来错误系统落地后升格 Result，#301）。
+> 接口实例化（类型体 `Iterator(Int)` 声明）待 RFC-011a 落地（#307），当前协议面由 std.range 提供。
 
 ---
 
@@ -376,7 +379,8 @@ for i in 0..10..2 {
 | `std.collection` | List、Map 等集合类型                             |
 | `std.string`     | 字符串操作                                       |
 | `std.array`      | 数组操作                                         |
-| `std.iterator`   | 迭代器                                           |
+| `std.iterator`   | 迭代器（协议面当前由 `std.range` 提供，#302）   |
+| `std.range`      | Range 迭代器与区间谓词、适配器（#302）           |
 
 ### A.2 IO 模块
 
