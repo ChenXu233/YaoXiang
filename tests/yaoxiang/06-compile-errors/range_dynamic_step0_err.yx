@@ -1,0 +1,14 @@
+// 06-compile-errors/range_dynamic_step0_err.yx
+// [test:error]: #302——动态 step=0 运行时错误
+// 预期: 字面量 step=0 被 typecheck 拒绝（#300 既有）；动态 step=0 在协议面
+//       std.range.iter 显式报错（旧 ir_gen 除零陷阱迁移后由 native 接管）
+// 验证: for 循环不会因 step=0 死循环——迭代器创建即失败
+// 状态: ❌ 应运行失败
+
+main = {
+    n = 0
+    r = 1..10..n
+    for i in r {
+        print(i)
+    }
+}

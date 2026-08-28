@@ -1,0 +1,44 @@
+// 02-type-system/range_identity.yx
+// 覆盖: stdlib.md §6.2（#302 Range 正式运行时身份）
+// 验证: Range 不再是 Tuple 外壳——打印为区间字面量形态、结构相等、
+//       具名字段 start/end/step、值语义（Copy 不 Move）、负 step 循环
+// 状态: ✅ 可运行
+
+use std.assert
+use std.range
+
+main = {
+    // 构造与字段访问
+    r = 1..10
+    assert.assert(r.start == 1, "field start")
+    assert.assert(r.end == 10, "field end")
+    r2 = 1..10..3
+    assert.assert(r2.step == 3, "field step")
+
+    // 结构相等（#304 同款值语义；不再借 Tuple 相等）
+    assert.assert(r == 1..10, "range structural eq")
+    assert.assert(r != 1..9, "range structural neq")
+
+    // 值语义：Range 是不可变三标量记录，消费后源仍可用（不 Move）
+    assert.assert(range.contains(r, 5), "consume r via contains")
+    assert.assert(r == 1..10, "range survives value use")
+    it2 = range.iter(r)
+    assert.assert(range.next(it2) == 1, "range survives iterator creation")
+
+    // for 协议迁移后语义不变（负 step 递减）
+    mut last = 0
+    for i in 5..0..-1 {
+        last = i
+    }
+    assert.assert(last == 1, "descending for ends at 1")
+
+    // 嵌套迭代（#303 回归覆盖）
+    ranges = [0..3, 10..13]
+    mut total = 0
+    for rg in ranges {
+        for i in rg {
+            total = total + 1
+        }
+    }
+    assert.assert(total == 6, "nested range iteration")
+}
