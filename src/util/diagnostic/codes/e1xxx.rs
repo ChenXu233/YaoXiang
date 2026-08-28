@@ -106,6 +106,12 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
         code: "W1063",
         category: ErrorCategory::TypeCheck,
     },
+    // === RFC-004 方法绑定 ===
+    // E1064: 绑定位置索引无效（越界或归一化后仍为负）
+    ErrorCodeDefinition {
+        code: "E1064",
+        category: ErrorCategory::TypeCheck,
+    },
     // === 控制流 ===
     ErrorCodeDefinition {
         code: "E1070",
@@ -153,6 +159,37 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
     },
     ErrorCodeDefinition {
         code: "E1094",
+        category: ErrorCategory::TypeCheck,
+    },
+    // === RFC-011a: 接口实例化 ===
+    // E1095: 未知接口（类型体引用的名字不是已注册的类型构造器）
+    ErrorCodeDefinition {
+        code: "E1095",
+        category: ErrorCategory::TypeCheck,
+    },
+    // E1096: 接口实例化类型实参个数不匹配
+    ErrorCodeDefinition {
+        code: "E1096",
+        category: ErrorCategory::TypeCheck,
+    },
+    // E1097: 接口成员与类型已有字段/方法共享命名空间（§1.2）
+    ErrorCodeDefinition {
+        code: "E1097",
+        category: ErrorCategory::TypeCheck,
+    },
+    // E1098: 接口方法未实现（完整性检查失败）
+    ErrorCodeDefinition {
+        code: "E1098",
+        category: ErrorCategory::TypeCheck,
+    },
+    // E1099: 接口方法签名与实现签名不匹配
+    ErrorCodeDefinition {
+        code: "E1099",
+        category: ErrorCategory::TypeCheck,
+    },
+    // E1100: 同签名接口方法重复实现（覆盖，§3 禁止）
+    ErrorCodeDefinition {
+        code: "E1100",
         category: ErrorCategory::TypeCheck,
     },
 ];
@@ -227,5 +264,19 @@ impl ErrorCodeDefinition {
     ("E1094", unused_const_param(param: &str, type_: &str) => .param("param", param) .param("type", type_)),
     /// E1090 彩蛋（返回占位符，由 i18n 的 zen_message 提供实际消息）
     ("E1090", type_self_reference_easter_egg() => ),
+    /// E1064 绑定位置索引无效（RFC-004）
+    ("E1064", invalid_binding_position(positions: &str, total: usize) => .param("positions", positions) .param("total", total.to_string())),
+    /// E1095 未知接口（RFC-011a）
+    ("E1095", unknown_interface(name: &str) => .param("name", name)),
+    /// E1096 接口实例化类型实参个数不匹配（RFC-011a）
+    ("E1096", interface_arity_mismatch(name: &str, expected: usize, found: usize) => .param("name", name) .param("expected", expected.to_string()) .param("found", found.to_string())),
+    /// E1097 接口成员与类型已有字段共享命名空间（RFC-011a §1.2）
+    ("E1097", interface_member_conflict(type_: &str, member: &str) => .param("type", type_) .param("member", member)),
+    /// E1098 接口方法未实现（RFC-011a 完整性检查）
+    ("E1098", interface_method_missing(type_: &str, interface: &str, method: &str) => .param("type", type_) .param("interface", interface) .param("method", method)),
+    /// E1099 接口方法签名不匹配（RFC-011a）
+    ("E1099", interface_method_mismatch(type_: &str, method: &str, expected: &str, found: &str) => .param("type", type_) .param("method", method) .param("expected", expected) .param("found", found)),
+    /// E1100 同签名接口方法重复实现（RFC-011a §3 覆盖禁止）
+    ("E1100", interface_method_duplicate(type_: &str, method: &str) => .param("type", type_) .param("method", method)),
     }
 }

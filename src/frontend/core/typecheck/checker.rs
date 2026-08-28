@@ -39,6 +39,14 @@ pub struct TypeChecker {
     /// 用户模块命名空间别名表（别名 → 模块限定键），由 `use lib` / `use lib as l` 整体导入登记。
     /// 模块解析归 typecheck 所有：IR 生成直接消费此表，不再自行从 AST 重新推导。
     module_namespaces: HashMap<String, String>,
+    /// RFC-004: 类型体绑定的待登记队列（类型名, 绑定, span）。
+    /// pass1 收集类型定义，此时被绑函数可能尚未注册（pass2 收集签名），
+    /// 故 External/DefaultExternal 延迟到 pass2 之后统一登记。
+    pending_body_bindings: Vec<(
+        String,
+        crate::frontend::core::parser::ast::TypeBodyBinding,
+        crate::util::span::Span,
+    )>,
 }
 
 impl TypeChecker {
@@ -62,6 +70,7 @@ impl TypeChecker {
             semantic_db: semantic_db::SemanticDB::new(),
             dependent_type_env,
             module_namespaces: HashMap::new(),
+            pending_body_bindings: Vec::new(),
         }
     }
 
@@ -221,6 +230,8 @@ impl TypeChecker {
         for stmt in &module.items {
             self.collect_function_signature(stmt);
         }
+        // RFC-004: 函数签名就位后登记类型体绑定
+        self.flush_pending_body_bindings();
     }
 
     /// 检查整个模块的内部实现
@@ -246,6 +257,9 @@ impl TypeChecker {
         for stmt in &module.items {
             self.collect_function_signature(stmt);
         }
+
+        // RFC-004: 函数签名就位后登记类型体绑定
+        self.flush_pending_body_bindings();
 
         // 收集所有导出项
         self.collect_exports(module);
@@ -967,6 +981,7 @@ impl TypeChecker {
             crate::frontend::core::parser::ast::StmtKind::Assign {
                 target,
                 value: Some(val),
+                span,
                 ..
             } => {
                 let (type_name, method_name) = match target.as_ref() {
@@ -1004,53 +1019,143 @@ impl TypeChecker {
                     _ => return,
                 };
                 if let Some(poly) = self.env.get_var(&func_name) {
-                    let method_ty = if positions.len() <= 1 {
-                        poly.body.clone()
-                    } else {
-                        match &poly.body {
-                            MonoType::Fn {
-                                params,
-                                return_type,
-                            } => {
-                                let mut new_params: Vec<MonoType> = Vec::new();
-                                for (i, p) in params.iter().enumerate() {
-                                    if !positions.contains(&(i as i64)) {
-                                        new_params.push(p.clone());
-                                    }
-                                }
-                                MonoType::Fn {
-                                    params: new_params,
-                                    return_type: return_type.clone(),
-                                }
-                            }
-                            other => other.clone(),
-                        }
+                    let total = match &poly.body {
+                        MonoType::Fn { params, .. } => params.len(),
+                        _ => 0,
                     };
-                    self.env
-                        .add_method_binding(&type_name, &method_name, method_ty);
+                    let fn_ty = poly.body.clone();
+                    if let Some(positions) =
+                        self.normalize_binding_positions(&positions, total, *span)
+                    {
+                        let method_ty = Self::method_type_after_binding(&fn_ty, &positions);
+                        self.env
+                            .add_method_binding(&type_name, &method_name, method_ty);
+                    }
                 }
             }
             _ => {}
         }
     }
 
+    /// RFC-004: 归一化绑定位置（负索引从末尾计数，[-1] = 最后一个参数）并校验有效性。
+    /// total 为被绑函数参数个数；未知（0）时跳过归一化与校验。无效位置报 E1064。
+    fn normalize_binding_positions(
+        &mut self,
+        positions: &[i64],
+        total: usize,
+        span: crate::util::span::Span,
+    ) -> Option<Vec<i64>> {
+        if total == 0 {
+            return Some(positions.to_vec());
+        }
+        let total_i = total as i64;
+        let normalized: Vec<i64> = positions
+            .iter()
+            .map(|&p| if p < 0 { p + total_i } else { p })
+            .collect();
+        if normalized.iter().any(|&p| p < 0 || p >= total_i) {
+            self.add_error(
+                ErrorCodeDefinition::invalid_binding_position(&format!("{:?}", positions), total)
+                    .at(span)
+                    .build(),
+            );
+            return None;
+        }
+        Some(normalized)
+    }
+
+    /// RFC-004: 绑定后的方法类型——单位绑定时保留全签名（实例占住绑定参数位），
+    /// 多位绑定时挖掉被绑参数，剩余参数由调用点填充。
+    fn method_type_after_binding(
+        fn_ty: &MonoType,
+        positions: &[i64],
+    ) -> MonoType {
+        if positions.len() <= 1 {
+            return fn_ty.clone();
+        }
+        match fn_ty {
+            MonoType::Fn {
+                params,
+                return_type,
+            } => {
+                let new_params: Vec<MonoType> = params
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| !positions.contains(&(*i as i64)))
+                    .map(|(_, p)| p.clone())
+                    .collect();
+                MonoType::Fn {
+                    params: new_params,
+                    return_type: return_type.clone(),
+                }
+            }
+            other => other.clone(),
+        }
+    }
+
+    /// RFC-004: 登记类型体绑定的待处理队列（须在函数签名收集 pass2 之后调用）。
+    pub fn flush_pending_body_bindings(&mut self) {
+        let pending = std::mem::take(&mut self.pending_body_bindings);
+        for (type_name, binding, span) in pending {
+            match &binding.kind {
+                crate::frontend::core::parser::ast::BindingKind::External {
+                    function,
+                    positions,
+                } => {
+                    self.register_external_method_binding(
+                        &type_name,
+                        &binding.name,
+                        function,
+                        positions,
+                        span,
+                    );
+                }
+                crate::frontend::core::parser::ast::BindingKind::DefaultExternal { function } => {
+                    self.register_external_method_binding(
+                        &type_name,
+                        &binding.name,
+                        function,
+                        &[0],
+                        span,
+                    );
+                }
+                crate::frontend::core::parser::ast::BindingKind::Anonymous { .. } => {}
+            }
+        }
+    }
+
+    /// RFC-004: 将 `Type.method = fn[pos]` 形态的绑定登记到 method_bindings。
+    /// 函数尚未注册（前向引用）时静默跳过——与既有宽松行为一致。
+    fn register_external_method_binding(
+        &mut self,
+        type_name: &str,
+        method_name: &str,
+        func_name: &str,
+        positions: &[i64],
+        span: crate::util::span::Span,
+    ) {
+        let found = self.env.get_var(func_name).map(|poly| {
+            (
+                match &poly.body {
+                    MonoType::Fn { params, .. } => params.len(),
+                    _ => 0,
+                },
+                poly.body.clone(),
+            )
+        });
+        let Some((total, fn_ty)) = found else {
+            return;
+        };
+        if let Some(positions) = self.normalize_binding_positions(positions, total, span) {
+            let method_ty = Self::method_type_after_binding(&fn_ty, &positions);
+            self.env
+                .add_method_binding(type_name, method_name, method_ty);
+        }
+    }
+
     /// 从 Index 表达式的 index 部分提取位置列表
     fn extract_positions(index: &crate::frontend::core::parser::ast::Expr) -> Vec<i64> {
-        use crate::frontend::core::lexer::tokens::Literal;
-        match index {
-            Expr::Lit(Literal::Int(n), _) => vec![*n as i64],
-            Expr::Tuple(items, _) => items
-                .iter()
-                .filter_map(|e| {
-                    if let Expr::Lit(Literal::Int(n), _) = e {
-                        Some(*n as i64)
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
-            _ => vec![0],
-        }
+        crate::frontend::core::parser::ast::Expr::extract_binding_positions(index)
     }
 
     /// 将模块注册为 Struct 类型（包含所有导出作为字段）
@@ -1221,6 +1326,47 @@ impl TypeChecker {
         self.env.add_type(name.to_string(), poly.clone());
         // 同时注册到 vars，使类型名可以在表达式中使用（如 Point(1.0, 2.0) 构造器调用）
         self.env.add_var(name.to_string(), poly.clone());
+
+        // RFC-004: 类型体内的方法绑定登记到 method_bindings（与语句级 Type.method = fn[pos]
+        // 同一语义）。此前类型体 Binding 项只有 IR 侧登记，方法调用在类型检查层报 E1042。
+        if let crate::frontend::core::parser::ast::Type::Struct { body } = definition {
+            for item in body {
+                if let crate::frontend::core::parser::ast::TypeBodyItem::Binding(b) = item {
+                    match &b.kind {
+                        crate::frontend::core::parser::ast::BindingKind::External { .. }
+                        | crate::frontend::core::parser::ast::BindingKind::DefaultExternal {
+                            ..
+                        } => {
+                            // 被绑函数可能在其后定义，延迟到 pass2 之后登记
+                            self.pending_body_bindings
+                                .push((name.to_string(), b.clone(), span));
+                        }
+                        crate::frontend::core::parser::ast::BindingKind::Anonymous {
+                            params,
+                            return_type,
+                            positions,
+                            ..
+                        } => {
+                            // 匿名绑定：函数类型来自内置声明的注解
+                            let fn_ty = MonoType::Fn {
+                                params: params
+                                    .iter()
+                                    .filter_map(|p| p.ty.as_ref())
+                                    .map(|t| MonoType::from(t.clone()))
+                                    .collect(),
+                                return_type: Box::new(MonoType::from((**return_type).clone())),
+                            };
+                            if let Some(positions) =
+                                self.normalize_binding_positions(positions, params.len(), span)
+                            {
+                                let method_ty = Self::method_type_after_binding(&fn_ty, &positions);
+                                self.env.add_method_binding(name, &b.name, method_ty);
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         // RFC-027 Phase 2.5: 带约束表达式的类型定义同时注册为 proof 函数
         // IsPositive: (x: Int) -> Type = { x > 0 }

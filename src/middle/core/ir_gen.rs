@@ -1011,6 +1011,31 @@ impl AstToIrGenerator {
                         signature_params,
                     );
                 if let Some(type_name) = type_name {
+                    // RFC-004 外部重绑定：`Type.method = fn` / `Type.method = fn[pos]`
+                    // 只登记 type_bindings（方法调用时参数重排），不生成新函数 IR。
+                    let rebind = match value.as_deref() {
+                        Some(Expr::Var(fn_name, _)) => Some((fn_name.clone(), vec![0i64])),
+                        Some(Expr::Index { expr, index, .. }) => match expr.as_ref() {
+                            Expr::Var(fn_name, _) => {
+                                Some((fn_name.clone(), ast::Expr::extract_binding_positions(index)))
+                            }
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+                    if let Some((function, positions)) = rebind {
+                        self.register_type_bindings(
+                            &type_name,
+                            &[ast::TypeBodyBinding {
+                                name: name.clone(),
+                                kind: ast::BindingKind::External {
+                                    function,
+                                    positions,
+                                },
+                            }],
+                        );
+                        return Ok(None);
+                    }
                     // MethodBind
                     self.generate_method_ir(
                         &type_name,
@@ -3610,13 +3635,20 @@ impl AstToIrGenerator {
                                 method_arg_regs.push(Operand::Local(arg_reg));
                             }
 
-                            // 按绑定位置重排参数
+                            // 按绑定位置重排参数。
+                            // total_params = 绑定位数 + 方法实参数 = 被绑函数元数（调用方
+                            // 恰好提供剩余参数），负索引据此归一化（[-1] = 最后一个参数）。
                             let total_params = binding.positions.len() + method_arg_regs.len();
+                            let positions: Vec<i64> = binding
+                                .positions
+                                .iter()
+                                .map(|&p| if p < 0 { p + total_params as i64 } else { p })
+                                .collect();
                             let mut final_args: Vec<Operand> = Vec::with_capacity(total_params);
                             let mut method_arg_iter = method_arg_regs.into_iter();
 
                             for pos in 0..total_params {
-                                if binding.positions.contains(&(pos as i64)) {
+                                if positions.contains(&(pos as i64)) {
                                     final_args.push(Operand::Local(obj_reg));
                                 } else if let Some(arg_reg) = method_arg_iter.next() {
                                     final_args.push(arg_reg);
