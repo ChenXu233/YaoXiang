@@ -767,6 +767,31 @@ impl Interpreter {
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
+            BytecodeInstr::NewRange {
+                dst,
+                start,
+                end,
+                step,
+            } => {
+                // #302：三标量内联记录，构造点已拦 step=0（字面量）；动态零走 std.range.contains 显式错误
+                let read = |r: &Reg| -> i64 {
+                    match frame.get_slot(r.0 as usize) {
+                        Some(RuntimeValue::Int(n)) => *n,
+                        _ => 0,
+                    }
+                };
+                let (s, e, p) = (read(start), read(end), read(step));
+                frame.set_slot(
+                    dst.0 as usize,
+                    RuntimeValue::Range {
+                        start: s,
+                        end: e,
+                        step: p,
+                    },
+                );
+                frame.advance();
+                Ok(StepOutcome::Continue)
+            }
             // #299 §3: membership 谓词——命中 true / 未命中 false，不报错（问 vs 断言）
             BytecodeInstr::Contains {
                 dst,
@@ -972,6 +997,14 @@ impl Interpreter {
                             frame.set_slot(dst.0 as usize, items[*field_idx as usize].clone());
                         }
                     }
+                } else if let RuntimeValue::Range { start, end, step } = obj {
+                    // #302：Range 具名字段（start=0, end=1, step=2）
+                    let v = match field_idx {
+                        0 => start,
+                        1 => end,
+                        _ => step,
+                    };
+                    frame.set_slot(dst.0 as usize, RuntimeValue::Int(v));
                 }
                 frame.advance();
                 Ok(StepOutcome::Continue)
@@ -1246,6 +1279,7 @@ impl Interpreter {
                     RuntimeValue::String(_) => "String",
                     RuntimeValue::Bytes(_) => "Bytes",
                     RuntimeValue::Tuple(_) => "Tuple",
+                    RuntimeValue::Range { .. } => "Range",
                     RuntimeValue::Array(_) => "Array",
                     RuntimeValue::List(_) => "List",
                     RuntimeValue::Dict(_) => "Dict",

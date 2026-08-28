@@ -81,6 +81,8 @@ pub const NEW_TUPLE: u8 = 0x8A;
 pub const NEW_ARRAY: u8 = 0x8B;
 /// membership 谓词（#299 §3）：dst = elem in container
 pub const CONTAINS: u8 = 0x8C;
+/// Range 值构造（#302）：dst + start + end + step 三标量记录
+pub const NEW_RANGE: u8 = 0x8D;
 
 // String Operations (0x90-0x9F)
 pub const STRING_LENGTH: u8 = 0x90;
@@ -170,6 +172,7 @@ pub fn opcode_name(code: u8) -> &'static str {
         NEW_DICT => "NewDict",
         RC_NEW => "RcNew",
         NEW_TUPLE => "NewTuple",
+        NEW_RANGE => "NewRange",
         NEW_ARRAY => "NewArray",
         CONTAINS => "Contains",
         STRING_LENGTH => "StringLength",

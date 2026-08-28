@@ -1075,6 +1075,19 @@ impl<'a> ExpressionInferrer<'a> {
                 }
 
                 match resolved {
+                    // #302：Range 具名字段（start/end/step）
+                    MonoType::Generic { ref name, .. } if name == "Range" => {
+                        if matches!(field.as_str(), "start" | "end" | "step") {
+                            Ok(MonoType::Int(64))
+                        } else {
+                            // 回退方法查找（std.range 协议面）
+                            let method_key = format!("Range.{}", field);
+                            if let Some(method_ty) = self.method_bindings.get(&method_key) {
+                                return Ok(method_ty.clone());
+                            }
+                            Err(ErrorCodeDefinition::field_not_found(field, "Range").build())
+                        }
+                    }
                     MonoType::Struct(struct_type) => {
                         for (field_name, field_ty) in &struct_type.fields {
                             if field_name == field {

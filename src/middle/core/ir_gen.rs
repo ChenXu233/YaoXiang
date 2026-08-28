@@ -82,6 +82,7 @@ fn get_type_fallback_string(mono_type: &MonoType) -> String {
             "Set" => "set".to_string(),
             "String" => "string".to_string(),
             "Bytes" => "bytes".to_string(),
+            "Range" => "Range".to_string(),
             _ => "unknown".to_string(),
         },
         MonoType::Fn { .. } => "function".to_string(),
@@ -426,6 +427,20 @@ impl AstToIrGenerator {
         expr: &ast::Expr,
         field_name: &str,
     ) -> Option<usize> {
+        // 0. #302：Range 具名字段（start=0, end=1, step=2）
+        if matches!(field_name, "start" | "end" | "step")
+            && self
+                .get_expr_mono_type(expr)
+                .map(|t| t.is_range())
+                .unwrap_or(false)
+        {
+            return match field_name {
+                "start" => Some(0),
+                "end" => Some(1),
+                _ => Some(2),
+            };
+        }
+
         // 1. 尝试从表达式类型推导结构体名，精确查找
         if let Some(type_name) = self.get_expr_struct_type_name(expr) {
             if let Some(fields) = self.struct_definitions.get(&type_name) {
@@ -2582,7 +2597,7 @@ impl AstToIrGenerator {
         Ok(())
     }
 
-    /// Generate For loop IR (simplified range loop)
+    /// Generate For loop IR
     #[allow(clippy::too_many_arguments)]
     fn generate_for_loop_ir(
         &mut self,
@@ -2595,179 +2610,9 @@ impl AstToIrGenerator {
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
-        // Check for range loop: var in start..end
-        if let ast::Expr::BinOp {
-            op: ast::BinOp::Range,
-            left,
-            right,
-            ..
-        } = iterable
-        {
-            // #300 I 项：内联 step 形态 `for i in 0..n..2`——左操作数仍是 Range 构造
-            if let ast::Expr::BinOp {
-                op: ast::BinOp::Range,
-                left: inner_start,
-                right: inner_end,
-                ..
-            } = left.as_ref()
-            {
-                let start_reg = self.next_temp_reg();
-                let end_reg = self.next_temp_reg();
-                let step_reg = self.next_temp_reg();
-                self.generate_expr_ir(inner_start, start_reg, instructions, constants)?;
-                self.generate_expr_ir(inner_end, end_reg, instructions, constants)?;
-                self.generate_expr_ir(right, step_reg, instructions, constants)?;
-                // 动态 step 零检查（字面量零已被 typecheck 拒绝）
-                let zero_reg = self.next_temp_reg();
-                let is_zero = self.next_temp_reg();
-                instructions.push(Instruction::Load {
-                    dst: Operand::Local(zero_reg),
-                    src: Operand::Const(ConstValue::Int(0)),
-                });
-                instructions.push(Instruction::Eq {
-                    dst: Operand::Local(is_zero),
-                    lhs: Operand::Local(step_reg),
-                    rhs: Operand::Local(zero_reg),
-                });
-                let skip_check = instructions.len();
-                instructions.push(Instruction::JmpIfNot(Operand::Local(is_zero), 0));
-                let one_reg = self.next_temp_reg();
-                let trap_reg = self.next_temp_reg();
-                instructions.push(Instruction::Load {
-                    dst: Operand::Local(one_reg),
-                    src: Operand::Const(ConstValue::Int(1)),
-                });
-                instructions.push(Instruction::Div {
-                    dst: Operand::Local(trap_reg),
-                    lhs: Operand::Local(one_reg),
-                    rhs: Operand::Local(step_reg),
-                    span: for_span,
-                });
-                let after_check = instructions.len();
-                if let Instruction::JmpIfNot(_, ref mut t) = instructions[skip_check] {
-                    *t = after_check;
-                }
-                return self.generate_range_loop_ir(
-                    var_name,
-                    start_reg,
-                    end_reg,
-                    step_reg,
-                    body,
-                    result_reg,
-                    for_span,
-                    instructions,
-                    constants,
-                );
-            }
-            // Desugar to iterator-based loop (每次迭代从迭代器获取新值，不是递增)
-            // for i in 1..5 等价于：
-            // current = 1
-            // end = 5
-            // while current < end {
-            //     // 将 current 值存储到循环变量的 slot
-            //     body 中访问 i 时，从这个 slot 读取
-            //     current = current + 1
-            // }
-            self.enter_scope();
-
-            // 0. 创建迭代器状态结构
-            let current_reg = self.next_temp_reg(); // 当前迭代值
-            let end_reg = self.next_temp_reg(); // 结束值
-            let var_reg = self.next_temp_reg(); // 循环变量的存储位置
-
-            // 注册循环变量 - 让变量访问指向 var_reg
-            self.register_local(var_name, var_reg);
-
-            // 1. 初始化：current = start, end = end
-            self.generate_expr_ir(left, current_reg, instructions, constants)?;
-            self.generate_expr_ir(right, end_reg, instructions, constants)?;
-
-            // 将初始值存储到循环变量的 slot
-            instructions.push(Instruction::Store {
-                dst: Operand::Local(var_reg),
-                src: Operand::Local(current_reg),
-                span: for_span,
-            });
-
-            // Loop start label
-            let loop_start_idx = instructions.len();
-
-            // 2. Condition check: current < end
-            let cond_reg = self.next_temp_reg();
-            instructions.push(Instruction::Lt {
-                dst: Operand::Local(cond_reg),
-                lhs: Operand::Local(current_reg),
-                rhs: Operand::Local(end_reg),
-            });
-
-            // 3. Jump to end if current >= end
-            let jump_end_idx = instructions.len();
-            instructions.push(Instruction::JmpIfNot(Operand::Local(cond_reg), 0));
-
-            // 4. 执行循环体
-            // 循环体访问 i 时，会从 var_reg 读取
-            // var_reg 在每次循环迭代前都会被更新为 current 的值
-            self.generate_block_ir(body, None, instructions, constants)?;
-
-            // 5. 递增：current = current + 1
-            let one_reg = self.next_temp_reg();
-            instructions.push(Instruction::Load {
-                dst: Operand::Local(one_reg),
-                src: Operand::Const(ConstValue::Int(1)),
-            });
-            instructions.push(Instruction::Add {
-                dst: Operand::Local(current_reg),
-                lhs: Operand::Local(current_reg),
-                rhs: Operand::Local(one_reg),
-            });
-
-            // 6. 将新的 current 值存储到循环变量的 slot
-            instructions.push(Instruction::Store {
-                dst: Operand::Local(var_reg),
-                src: Operand::Local(current_reg),
-                span: for_span,
-            });
-
-            // 7. 跳转回循环开始
-            instructions.push(Instruction::Jmp(loop_start_idx));
-
-            // 8. Fix jump
-            let end_idx = instructions.len();
-            if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_end_idx] {
-                *target = end_idx;
-            }
-
-            self.exit_scope();
-
-            // If expression, load void
-            if let Some(reg) = result_reg {
-                instructions.push(Instruction::Load {
-                    dst: Operand::Local(reg),
-                    src: Operand::Const(ConstValue::Void),
-                });
-            }
-
-            Ok(())
-        } else if let Some(_iter_ty) = self.get_expr_mono_type(iterable).filter(|t| t.is_range()) {
-            // #300 I 项：Range 值变量形态——读三槽后走通用 range 循环，
-            // 不走迭代器协议（载体是 Tuple 外壳，iter() 会错解为三元素）
-            let range_reg = self.next_temp_reg();
-            self.generate_expr_ir(iterable, range_reg, instructions, constants)?;
-            let start_reg = self.generate_range_slot_load(range_reg, 0, for_span, instructions);
-            let end_reg = self.generate_range_slot_load(range_reg, 1, for_span, instructions);
-            let step_reg = self.generate_range_slot_load(range_reg, 2, for_span, instructions);
-            self.generate_range_loop_ir(
-                var_name,
-                start_reg,
-                end_reg,
-                step_reg,
-                body,
-                result_reg,
-                for_span,
-                instructions,
-                constants,
-            )
-        } else if let Some(_iter_ty) = self.get_expr_mono_type(iterable).filter(|t| {
+        // #302：Range 特判已删——`for i in 0..10` / `for i in r` 统一走迭代器协议
+        // （std.range.iter/has_next/next，由下方按静态类型派发）
+        if let Some(_iter_ty) = self.get_expr_mono_type(iterable).filter(|t| {
             // #299 去特殊化：List/Tuple/Dict 为 Generic，Range 仍为原生变体
             t.is_list() || t.is_tuple() || t.is_dict() || t.is_range()
         }) {
@@ -2801,16 +2646,15 @@ impl AstToIrGenerator {
     /// #300 I 项：Range 值构造——三槽 [start, end, step]
     ///
     /// `(a..b)..c` 是 step 形态（左操作数已是 Range 构造）；否则 step 默认 1。
-    /// 动态 step 的零检查：step==0 → 运行时除零错误（E6001 家族）。
-    // ponytail: step=0 的偏性未来升格为 Result(Range(Int), Error)，见 #301 错误系统；
-    // 当前用「恒假除法」触发既有除零通道，零新指令零新错误码。
+    /// #302：动态 step=0 不在构造点拦截——消费点（std.range.iter/contains）显式报错；
+    /// step=0 的偏性未来升格为 Result(Range(Int), Error)，见 #301 错误系统。
     #[allow(clippy::too_many_arguments)]
     fn generate_range_construction_ir(
         &mut self,
         left: &ast::Expr,
         right: &ast::Expr,
         result_reg: usize,
-        span: Span,
+        _span: Span,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -2841,187 +2685,23 @@ impl AstToIrGenerator {
             });
         }
 
-        // 动态 step 零检查：step==0 时 1/step 触发除零（字面量零已被 typecheck 拒绝）
-        let zero_reg = self.next_temp_reg();
-        let is_zero = self.next_temp_reg();
-        instructions.push(Instruction::Load {
-            dst: Operand::Local(zero_reg),
-            src: Operand::Const(ConstValue::Int(0)),
-        });
-        instructions.push(Instruction::Eq {
-            dst: Operand::Local(is_zero),
-            lhs: Operand::Local(step_reg),
-            rhs: Operand::Local(zero_reg),
-        });
-        let skip_check = instructions.len();
-        instructions.push(Instruction::JmpIfNot(Operand::Local(is_zero), 0));
-        let one_reg = self.next_temp_reg();
-        let trap_reg = self.next_temp_reg();
-        instructions.push(Instruction::Load {
-            dst: Operand::Local(one_reg),
-            src: Operand::Const(ConstValue::Int(1)),
-        });
-        instructions.push(Instruction::Div {
-            dst: Operand::Local(trap_reg),
-            lhs: Operand::Local(one_reg),
-            rhs: Operand::Local(step_reg),
-            span,
-        });
-        let after_check = instructions.len();
-        if let Instruction::JmpIfNot(_, ref mut t) = instructions[skip_check] {
-            *t = after_check;
-        }
+        // #302：动态 step=0 不在构造点拦截——消费点（std.range.iter/contains）
+        // 显式运行时报错，构造出的 Range 值本身无观察者时无害；
+        // 字面量零已被 typecheck 拒绝；Result 化挂 #301
 
-        instructions.push(Instruction::NewTuple {
+        // #302：正式运行时身份——不再借 Tuple 外壳
+        instructions.push(Instruction::NewRange {
             dst: Operand::Local(result_reg),
-            items: vec![
-                Operand::Local(start_reg),
-                Operand::Local(end_reg),
-                Operand::Local(step_reg),
-            ],
+            start: Operand::Local(start_reg),
+            end: Operand::Local(end_reg),
+            step: Operand::Local(step_reg),
         });
         Ok(())
     }
 
-    /// #300 I 项：从 Range 值寄存器读槽位（0=start, 1=end, 2=step）
-    fn generate_range_slot_load(
-        &mut self,
-        range_reg: usize,
-        slot: usize,
-        span: Span,
-        instructions: &mut Vec<Instruction>,
-    ) -> usize {
-        let idx_reg = self.next_temp_reg();
-        let dst_reg = self.next_temp_reg();
-        instructions.push(Instruction::Load {
-            dst: Operand::Local(idx_reg),
-            src: Operand::Const(ConstValue::Int(slot as i128)),
-        });
-        instructions.push(Instruction::LoadIndex {
-            dst: Operand::Local(dst_reg),
-            src: Operand::Local(range_reg),
-            index: Operand::Local(idx_reg),
-            span,
-        });
-        dst_reg
-    }
-
-    /// #300 I 项：通用 range 循环（step 已知为寄存器值，符号动态派发）
+    /// `elem in container` 的 IR 生成
     ///
-    /// cond = (step > 0 && current < end) || (step <= 0 && current > end)
-    /// step=0 在构造点已拦截，这里 <=0 分支只覆盖负数。
-    #[allow(clippy::too_many_arguments)]
-    fn generate_range_loop_ir(
-        &mut self,
-        var_name: &str,
-        start_reg: usize,
-        end_reg: usize,
-        step_reg: usize,
-        body: &ast::Block,
-        result_reg: Option<usize>,
-        for_span: Span,
-        instructions: &mut Vec<Instruction>,
-        constants: &mut Vec<ConstValue>,
-    ) -> Result<(), Diagnostic> {
-        self.enter_scope();
-
-        let current_reg = self.next_temp_reg();
-        let var_reg = self.next_temp_reg();
-        self.register_local(var_name, var_reg);
-
-        // current = start；var = current
-        instructions.push(Instruction::Load {
-            dst: Operand::Local(current_reg),
-            src: Operand::Local(start_reg),
-        });
-        instructions.push(Instruction::Store {
-            dst: Operand::Local(var_reg),
-            src: Operand::Local(current_reg),
-            span: for_span,
-        });
-
-        let loop_start = instructions.len();
-
-        // pos = step > 0；cond = pos ? (current < end) : (current > end)
-        // ponytail: Instruction::And/Or 是位运算（I64_AND），不是逻辑与；
-        // Bool 逻辑运算用 JmpIfNot 短路脱糖（与上层 and/or 语义一致）
-        let zero_reg = self.next_temp_reg();
-        let pos_reg = self.next_temp_reg();
-        instructions.push(Instruction::Load {
-            dst: Operand::Local(zero_reg),
-            src: Operand::Const(ConstValue::Int(0)),
-        });
-        instructions.push(Instruction::Gt {
-            dst: Operand::Local(pos_reg),
-            lhs: Operand::Local(step_reg),
-            rhs: Operand::Local(zero_reg),
-        });
-        let cond_reg = self.next_temp_reg();
-        let jump_else = instructions.len();
-        instructions.push(Instruction::JmpIfNot(Operand::Local(pos_reg), 0));
-        // pos 分支：cond = current < end
-        instructions.push(Instruction::Lt {
-            dst: Operand::Local(cond_reg),
-            lhs: Operand::Local(current_reg),
-            rhs: Operand::Local(end_reg),
-        });
-        let jump_end = instructions.len();
-        instructions.push(Instruction::Jmp(0));
-        // neg 分支：cond = current > end
-        let else_target = instructions.len();
-        instructions.push(Instruction::Gt {
-            dst: Operand::Local(cond_reg),
-            lhs: Operand::Local(current_reg),
-            rhs: Operand::Local(end_reg),
-        });
-        let end_target = instructions.len();
-        if let Instruction::JmpIfNot(_, ref mut t) = instructions[jump_else] {
-            *t = else_target;
-        }
-        if let Instruction::Jmp(ref mut t) = instructions[jump_end] {
-            *t = end_target;
-        }
-
-        let jump_end_idx = instructions.len();
-        instructions.push(Instruction::JmpIfNot(Operand::Local(cond_reg), 0));
-
-        // 循环体
-        self.generate_block_ir(body, None, instructions, constants)?;
-
-        // current = current + step；var = current
-        instructions.push(Instruction::Add {
-            dst: Operand::Local(current_reg),
-            lhs: Operand::Local(current_reg),
-            rhs: Operand::Local(step_reg),
-        });
-        instructions.push(Instruction::Store {
-            dst: Operand::Local(var_reg),
-            src: Operand::Local(current_reg),
-            span: for_span,
-        });
-        instructions.push(Instruction::Jmp(loop_start));
-
-        let end_idx = instructions.len();
-        if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_end_idx] {
-            *target = end_idx;
-        }
-
-        self.exit_scope();
-
-        if let Some(reg) = result_reg {
-            instructions.push(Instruction::Load {
-                dst: Operand::Local(reg),
-                src: Operand::Const(ConstValue::Void),
-            });
-        }
-        Ok(())
-    }
-
-    /// #300 I 项：`elem in container` 的 IR 生成
-    ///
-    /// - Range 内联基础形态（x in 1..10）：双比较脱糖（step=1，对齐检查恒真，省略）
-    /// - Range 内联 step 形态 / 变量形态：界检查（符号派发） + 步长对齐
-    /// - 其他容器：Contains 指令（List/Array/Tuple/Dict/String）
+    /// #302：Range 容器走 std.range.contains 调用；其余容器走 Contains 指令
     #[allow(clippy::too_many_arguments)]
     fn generate_in_ir(
         &mut self,
@@ -3032,52 +2712,32 @@ impl AstToIrGenerator {
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
-        // Range 容器取 (start, end, step Option)：内联直接生成，变量读三槽
-        let range_parts: Option<(usize, usize, Option<usize>)> = match container {
-            Expr::BinOp {
-                op: ast::BinOp::Range,
-                left,
-                right,
-                ..
-            } => match left.as_ref() {
-                Expr::BinOp {
-                    op: ast::BinOp::Range,
-                    left: inner_start,
-                    right: inner_end,
-                    ..
-                } => {
-                    let s = self.next_temp_reg();
-                    let e = self.next_temp_reg();
-                    let st = self.next_temp_reg();
-                    self.generate_expr_ir(inner_start, s, instructions, constants)?;
-                    self.generate_expr_ir(inner_end, e, instructions, constants)?;
-                    self.generate_expr_ir(right, st, instructions, constants)?;
-                    Some((s, e, Some(st)))
-                }
-                _ => {
-                    let s = self.next_temp_reg();
-                    let e = self.next_temp_reg();
-                    self.generate_expr_ir(left, s, instructions, constants)?;
-                    self.generate_expr_ir(right, e, instructions, constants)?;
-                    Some((s, e, None))
-                }
-            },
-            _ if self
-                .get_expr_mono_type(container)
-                .map(|t| t.is_range())
-                .unwrap_or(false) =>
-            {
-                let r = self.next_temp_reg();
-                self.generate_expr_ir(container, r, instructions, constants)?;
-                let s = self.generate_range_slot_load(r, 0, span, instructions);
-                let e = self.generate_range_slot_load(r, 1, span, instructions);
-                let st = self.generate_range_slot_load(r, 2, span, instructions);
-                Some((s, e, Some(st)))
-            }
-            _ => None,
-        };
+        let _ = span; // contains 调用的 span 经 Instruction::Call 携带
+                      // #302：Range 臂迁移——`x in r` 运行时路径走 std.range.contains
+                      // （界检查符号派发 + 步长对齐；动态 step=0 显式运行时错误）。
+                      // AST 形态保持 Expr::In 一等谓词不变——精化/SMT 管道直接识别区间命题，
+                      // 区间保持区间，不物化（#299 §3 同款定位）。
+        if self
+            .get_expr_mono_type(container)
+            .map(|t| t.is_range())
+            .unwrap_or(false)
+        {
+            let elem_reg = self.next_temp_reg();
+            let container_reg = self.next_temp_reg();
+            self.generate_expr_ir(elem, elem_reg, instructions, constants)?;
+            self.generate_expr_ir(container, container_reg, instructions, constants)?;
+            instructions.push(Instruction::Call {
+                dst: Some(Operand::Local(result_reg)),
+                func: Operand::Const(ConstValue::String("std.range.contains".to_string())),
+                args: vec![Operand::Local(container_reg), Operand::Local(elem_reg)],
+                span,
+                def: None,
+            });
+            return Ok(());
+        }
 
-        let Some((start_reg, end_reg, step)) = range_parts else {
+        // 其余容器：Contains 指令（List/Array/Tuple/Dict/String）
+        {
             let elem_reg = self.next_temp_reg();
             let container_reg = self.next_temp_reg();
             self.generate_expr_ir(elem, elem_reg, instructions, constants)?;
@@ -3088,134 +2748,6 @@ impl AstToIrGenerator {
                 container: Operand::Local(container_reg),
                 span,
             });
-            return Ok(());
-        };
-
-        let elem_reg = self.next_temp_reg();
-        self.generate_expr_ir(elem, elem_reg, instructions, constants)?;
-
-        let x = Operand::Local(elem_reg);
-        let s = Operand::Local(start_reg);
-        let n = Operand::Local(end_reg);
-        match step {
-            // step=1 已知：elem >= start && elem < end（原脱糖，零开销）
-            None => {
-                instructions.push(Instruction::Ge {
-                    dst: Operand::Local(result_reg),
-                    lhs: Operand::Local(elem_reg),
-                    rhs: Operand::Local(start_reg),
-                });
-                let short_idx = instructions.len();
-                instructions.push(Instruction::JmpIfNot(Operand::Local(result_reg), 0));
-                instructions.push(Instruction::Lt {
-                    dst: Operand::Local(result_reg),
-                    lhs: x,
-                    rhs: n,
-                });
-                let end_target = instructions.len();
-                if let Instruction::JmpIfNot(_, t) = &mut instructions[short_idx] {
-                    *t = end_target;
-                }
-            }
-            // 通用：in_bounds && aligned，全短路脱糖（Bool 不能用位运算 And/Or）
-            Some(st) => {
-                let st = Operand::Local(st);
-                let zero = self.next_temp_reg();
-                instructions.push(Instruction::Load {
-                    dst: Operand::Local(zero),
-                    src: Operand::Const(ConstValue::Int(0)),
-                });
-                let pos = self.next_temp_reg();
-                instructions.push(Instruction::Gt {
-                    dst: Operand::Local(pos),
-                    lhs: st.clone(),
-                    rhs: Operand::Local(zero),
-                });
-                // in_bounds = pos ? (x >= start && x < end) : (x <= start && x > end)
-                let in_bounds = self.next_temp_reg();
-                let jump_else = instructions.len();
-                instructions.push(Instruction::JmpIfNot(Operand::Local(pos), 0));
-                // pos 分支：x >= start && x < end（短路）
-                instructions.push(Instruction::Ge {
-                    dst: Operand::Local(in_bounds),
-                    lhs: x.clone(),
-                    rhs: s.clone(),
-                });
-                let skip_lt = instructions.len();
-                instructions.push(Instruction::JmpIfNot(Operand::Local(in_bounds), 0));
-                instructions.push(Instruction::Lt {
-                    dst: Operand::Local(in_bounds),
-                    lhs: x.clone(),
-                    rhs: n.clone(),
-                });
-                let lt_done = instructions.len();
-                if let Instruction::JmpIfNot(_, t) = &mut instructions[skip_lt] {
-                    *t = lt_done;
-                }
-                let jump_end = instructions.len();
-                instructions.push(Instruction::Jmp(0));
-                // neg 分支：x <= start && x > end（短路）
-                let else_target = instructions.len();
-                instructions.push(Instruction::Le {
-                    dst: Operand::Local(in_bounds),
-                    lhs: x.clone(),
-                    rhs: s.clone(),
-                });
-                let skip_gt = instructions.len();
-                instructions.push(Instruction::JmpIfNot(Operand::Local(in_bounds), 0));
-                instructions.push(Instruction::Gt {
-                    dst: Operand::Local(in_bounds),
-                    lhs: x.clone(),
-                    rhs: n.clone(),
-                });
-                let gt_done = instructions.len();
-                if let Instruction::JmpIfNot(_, t) = &mut instructions[skip_gt] {
-                    *t = gt_done;
-                }
-                let end_target = instructions.len();
-                if let Instruction::JmpIfNot(_, t) = &mut instructions[jump_else] {
-                    *t = else_target;
-                }
-                if let Instruction::Jmp(t) = &mut instructions[jump_end] {
-                    *t = end_target;
-                }
-
-                // aligned = (x - start) % step == 0（构造点已拦 step=0，取模安全）
-                let diff = self.next_temp_reg();
-                let rem = self.next_temp_reg();
-                let aligned = self.next_temp_reg();
-                instructions.push(Instruction::Sub {
-                    dst: Operand::Local(diff),
-                    lhs: x,
-                    rhs: s,
-                });
-                instructions.push(Instruction::Mod {
-                    dst: Operand::Local(rem),
-                    lhs: Operand::Local(diff),
-                    rhs: st,
-                    span,
-                });
-                instructions.push(Instruction::Eq {
-                    dst: Operand::Local(aligned),
-                    lhs: Operand::Local(rem),
-                    rhs: Operand::Local(zero),
-                });
-                // result = in_bounds && aligned（短路）
-                instructions.push(Instruction::Load {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Local(in_bounds),
-                });
-                let skip_aligned = instructions.len();
-                instructions.push(Instruction::JmpIfNot(Operand::Local(result_reg), 0));
-                instructions.push(Instruction::Load {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Local(aligned),
-                });
-                let done = instructions.len();
-                if let Instruction::JmpIfNot(_, t) = &mut instructions[skip_aligned] {
-                    *t = done;
-                }
-            }
         }
         Ok(())
     }
@@ -3239,12 +2771,24 @@ impl AstToIrGenerator {
         let iterable_reg = self.next_temp_reg();
         self.generate_expr_ir(iterable, iterable_reg, instructions, constants)?;
 
+        // 1.5 #302：按静态类型派发协议函数名（Range → std.range.*，其余 → std.list.*）
+        let (iter_fn, has_next_fn, next_fn) = {
+            let is_range = self
+                .get_expr_mono_type(iterable)
+                .map(|t| t.is_range())
+                .unwrap_or(false);
+            if is_range {
+                ("std.range.iter", "std.range.has_next", "std.range.next")
+            } else {
+                ("std.list.iter", "std.list.has_next", "std.list.next")
+            }
+        };
+
         // 2. 创建迭代器: iterator = iter(iterable)
-        // 使用 Call 指令调用 std.list.iter 函数
         let iterator_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
             dst: Some(Operand::Local(iterator_reg)),
-            func: Operand::Const(ConstValue::String("std.list.iter".to_string())),
+            func: Operand::Const(ConstValue::String(iter_fn.to_string())),
             args: vec![Operand::Local(iterable_reg)],
             span: for_span,
             def: None,
@@ -3258,11 +2802,10 @@ impl AstToIrGenerator {
         let loop_start_idx = instructions.len();
 
         // 5. 检查是否有更多元素: has_more = has_next(iterator)
-        // 使用 Call 指令调用 std.list.has_next 函数
         let has_more_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
             dst: Some(Operand::Local(has_more_reg)),
-            func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
+            func: Operand::Const(ConstValue::String(has_next_fn.to_string())),
             args: vec![Operand::Local(iterator_reg)],
             span: for_span,
             def: None,
@@ -3273,11 +2816,10 @@ impl AstToIrGenerator {
         instructions.push(Instruction::JmpIfNot(Operand::Local(has_more_reg), 0));
 
         // 7. 获取下一个元素: var = next(iterator)
-        // 使用 Call 指令调用 std.list.next 函数
         let element_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
             dst: Some(Operand::Local(element_reg)),
-            func: Operand::Const(ConstValue::String("std.list.next".to_string())),
+            func: Operand::Const(ConstValue::String(next_fn.to_string())),
             args: vec![Operand::Local(iterator_reg)],
             span: for_span,
             def: None,
@@ -4409,6 +3951,13 @@ impl AstToIrGenerator {
                                     )?;
 
                                     // 调用 format_fallback 获取类型信息字符串
+                                    // 类型名常量先 Load 进寄存器——Call 参数必须寄存器态
+                                    // （Const 直传会被 codegen to_reg 拒收，老 bug，tuple 同款）
+                                    let type_name_reg = self.next_temp_reg();
+                                    instructions.push(Instruction::Load {
+                                        dst: Operand::Local(type_name_reg),
+                                        src: Operand::Const(ConstValue::String(type_name.clone())),
+                                    });
                                     let fallback_reg = self.next_temp_reg();
                                     instructions.push(Instruction::Call {
                                         dst: Some(Operand::Local(fallback_reg)),
@@ -4417,7 +3966,7 @@ impl AstToIrGenerator {
                                         )),
                                         args: vec![
                                             Operand::Local(arg_reg),
-                                            Operand::Const(ConstValue::String(type_name)),
+                                            Operand::Local(type_name_reg),
                                         ],
                                         span: *span,
                                         def: None,

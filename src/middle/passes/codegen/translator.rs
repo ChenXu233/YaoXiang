@@ -501,6 +501,12 @@ impl Translator {
             } => self.translate_create_struct(dst, type_name, fields),
             NewDict { dst, keys, values } => self.translate_new_dict(dst, keys, values),
             NewTuple { dst, items } => self.translate_new_tuple(dst, items),
+            NewRange {
+                dst,
+                start,
+                end,
+                step,
+            } => self.translate_new_range(dst, start, end, step),
             MakeClosure {
                 dst,
                 func,
@@ -1150,6 +1156,26 @@ impl Translator {
             operands.extend_from_slice(&(item_reg as u16).to_le_bytes());
         }
         Ok(BytecodeInstruction::new(opcode::NEW_TUPLE, operands))
+    }
+
+    /// 翻译 NewRange 指令（#302）
+    /// 格式: dst(2) + start(2) + end(2) + step(2)
+    fn translate_new_range(
+        &mut self,
+        dst: &Operand,
+        start: &Operand,
+        end: &Operand,
+        step: &Operand,
+    ) -> Result<BytecodeInstruction, Diagnostic> {
+        let dst_reg = self.operand_resolver.to_reg(dst)?;
+        let start_reg = self.operand_resolver.to_reg(start)?;
+        let end_reg = self.operand_resolver.to_reg(end)?;
+        let step_reg = self.operand_resolver.to_reg(step)?;
+        let mut operands = Vec::new();
+        for r in [dst_reg, start_reg, end_reg, step_reg] {
+            operands.extend_from_slice(&(r as u16).to_le_bytes());
+        }
+        Ok(BytecodeInstruction::new(opcode::NEW_RANGE, operands))
     }
 
     fn translate_make_closure(

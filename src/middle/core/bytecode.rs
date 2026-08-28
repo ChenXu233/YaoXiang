@@ -316,6 +316,14 @@ pub enum BytecodeInstr {
         items: Vec<Reg>,
     },
 
+    /// 创建 Range 值（#302）：dst(2) + start(2) + end(2) + step(2)
+    NewRange {
+        dst: Reg,
+        start: Reg,
+        end: Reg,
+        step: Reg,
+    },
+
     /// 定长数组构造：分配 N 个元素、以默认值填充（#299 §2）
     NewArray {
         /// 目标寄存器
@@ -560,6 +568,7 @@ impl BytecodeInstr {
             BytecodeInstr::CreateStruct { .. } => opcode::CREATE_STRUCT,
             BytecodeInstr::NewDict { .. } => opcode::NEW_DICT,
             BytecodeInstr::NewTuple { .. } => opcode::NEW_TUPLE,
+            BytecodeInstr::NewRange { .. } => opcode::NEW_RANGE,
             BytecodeInstr::NewArray { .. } => opcode::NEW_ARRAY,
             BytecodeInstr::Contains { .. } => opcode::CONTAINS,
             BytecodeInstr::ArcNew { .. } => opcode::ARC_NEW,
@@ -676,6 +685,10 @@ impl BytecodeInstr {
             BytecodeInstr::NewTuple { items, .. } => {
                 // dst(2) + item_count(4) + items(2*count)
                 6 + items.len() * 2
+            }
+            BytecodeInstr::NewRange { .. } => {
+                // dst(2) + start(2) + end(2) + step(2)
+                8
             }
             BytecodeInstr::NewArray { .. } => {
                 // dst(1) + count(4) = 5
@@ -1619,6 +1632,23 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                             decoded_instructions.push(BytecodeInstr::NewTuple {
                                 dst: Reg(dst),
                                 items,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::NEW_RANGE => {
+                        // NewRange: dst(2) + start(2) + end(2) + step(2)
+                        if instr.operands.len() >= 8 {
+                            let dst = op_u16(&instr.operands, 0).unwrap_or(0);
+                            let start = op_u16(&instr.operands, 2).unwrap_or(0);
+                            let end = op_u16(&instr.operands, 4).unwrap_or(0);
+                            let step = op_u16(&instr.operands, 6).unwrap_or(0);
+                            decoded_instructions.push(BytecodeInstr::NewRange {
+                                dst: Reg(dst),
+                                start: Reg(start),
+                                end: Reg(end),
+                                step: Reg(step),
                             });
                         } else {
                             decoded_instructions.push(BytecodeInstr::Nop);

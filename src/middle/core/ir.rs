@@ -318,6 +318,13 @@ pub enum Instruction {
         dst: Operand,
         items: Vec<Operand>,
     },
+    /// 创建 Range 值（#302）：三标量不可变记录，正式运行时身份
+    NewRange {
+        dst: Operand,
+        start: Operand,
+        end: Operand,
+        step: Operand,
+    },
     MakeClosure {
         dst: Operand,
         func: String,

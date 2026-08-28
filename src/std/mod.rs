@@ -25,6 +25,7 @@ pub mod math;
 pub mod net;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod os;
+pub mod range;
 pub mod result;
 pub mod string;
 pub mod time;
@@ -411,6 +412,7 @@ pub fn register_all(
     #[cfg(not(target_arch = "wasm32"))]
     net::NetModule.register_ffi(registry);
     result::RESULT_MODULE.register_ffi(registry);
+    range::RANGE_MODULE.register_ffi(registry);
     string::StringModule.register_ffi(registry);
     time::TimeModule.register_ffi(registry);
     #[cfg(not(target_arch = "wasm32"))]
@@ -456,6 +458,7 @@ pub fn all_module_infos() -> Vec<ModuleInfo> {
         net::NetModule.to_module_info(),
         string::StringModule.to_module_info(),
         result::ResultModule.to_module_info(),
+        range::RangeModule.to_module_info(),
         time::TimeModule.to_module_info(),
         #[cfg(not(target_arch = "wasm32"))]
         os::OsModule.to_module_info(),

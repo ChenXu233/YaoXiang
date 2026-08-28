@@ -100,6 +100,8 @@ pub enum ValueType {
     Bytes,
     /// Tuple with element types
     Tuple(Vec<ValueType>),
+    /// Range 值类型（#302）
+    Range,
     /// Fixed-size array
     Array {
         /// Element type
@@ -210,6 +212,10 @@ pub enum RuntimeValue {
     /// Tuple (stored on heap via handle for efficient cloning)
     Tuple(super::heap::Handle),
 
+    /// Range 值（#302）：三标量不可变记录，内联不进堆——
+    /// 正式运行时身份（打印/相等/类型查询不再是 Tuple 外壳）
+    Range { start: i64, end: i64, step: i64 },
+
     /// Fixed-size array (stored on heap via handle)
     Array(super::heap::Handle),
 
@@ -304,6 +310,7 @@ impl RuntimeValue {
                 }
             }
             RuntimeValue::List(_) => ValueType::List,
+            RuntimeValue::Range { .. } => ValueType::Range,
             RuntimeValue::Dict(_) => ValueType::Dict,
             RuntimeValue::Struct { type_id, .. } => ValueType::Struct(*type_id),
             RuntimeValue::Enum { type_id, .. } => ValueType::Enum(*type_id),
@@ -383,6 +390,11 @@ impl RuntimeValue {
             | RuntimeValue::Array(_)
             | RuntimeValue::List(_)
             | RuntimeValue::Dict(_) => RuntimeValue::Void,
+            RuntimeValue::Range { start, end, step } => RuntimeValue::Range {
+                start: *start,
+                end: *end,
+                step: *step,
+            },
             RuntimeValue::Struct {
                 type_id,
                 fields,
@@ -434,6 +446,11 @@ impl RuntimeValue {
             RuntimeValue::Char(c) => RuntimeValue::Char(*c),
             RuntimeValue::String(s) => RuntimeValue::String(s.clone()),
             RuntimeValue::Bytes(b) => RuntimeValue::Bytes(b.clone()),
+            RuntimeValue::Range { start, end, step } => RuntimeValue::Range {
+                start: *start,
+                end: *end,
+                step: *step,
+            },
             RuntimeValue::Tuple(handle) => {
                 let items_copy: Vec<RuntimeValue> =
                     if let super::heap::HeapValue::Tuple(items) = &*handle.lock() {
@@ -588,6 +605,14 @@ impl fmt::Display for RuntimeValue {
             RuntimeValue::Tuple(handle) => {
                 write!(f, "tuple@{}", handle.raw())
             }
+            RuntimeValue::Range { start, end, step } => {
+                // #302：与源码字面量同构（同 io.rs 格式化）
+                if *step == 1 {
+                    write!(f, "{}..{}", start, end)
+                } else {
+                    write!(f, "{}..{}..{}", start, end, step)
+                }
+            }
             RuntimeValue::Array(handle) => {
                 write!(f, "array@{}", handle.raw())
             }
@@ -637,6 +662,18 @@ impl PartialEq for RuntimeValue {
             (RuntimeValue::String(a), RuntimeValue::String(b)) => a.as_ref() == b.as_ref(),
             (RuntimeValue::Bytes(a), RuntimeValue::Bytes(b)) => a.as_ref() == b.as_ref(),
             (RuntimeValue::Tuple(a), RuntimeValue::Tuple(b)) => a == b,
+            (
+                RuntimeValue::Range {
+                    start: s1,
+                    end: e1,
+                    step: p1,
+                },
+                RuntimeValue::Range {
+                    start: s2,
+                    end: e2,
+                    step: p2,
+                },
+            ) => s1 == s2 && e1 == e2 && p1 == p2,
             (RuntimeValue::Array(a), RuntimeValue::Array(b)) => a == b,
             (RuntimeValue::List(a), RuntimeValue::List(b)) => a == b,
             (RuntimeValue::Dict(a), RuntimeValue::Dict(b)) => a == b,
@@ -726,6 +763,11 @@ impl Hash for RuntimeValue {
             RuntimeValue::String(s) => s.as_ref().hash(state),
             RuntimeValue::Bytes(b) => b.as_ref().hash(state),
             RuntimeValue::Tuple(handle) => handle.hash(state),
+            RuntimeValue::Range { start, end, step } => {
+                start.hash(state);
+                end.hash(state);
+                step.hash(state);
+            }
             RuntimeValue::Array(handle) => handle.hash(state),
             RuntimeValue::List(handle) => handle.hash(state),
             RuntimeValue::Dict(handle) => handle.hash(state),

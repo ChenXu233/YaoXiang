@@ -1040,6 +1040,13 @@ impl Interpreter {
                 RuntimeValue::Tuple(_) | RuntimeValue::List(_) | RuntimeValue::Array(_),
                 RuntimeValue::Tuple(_) | RuntimeValue::List(_) | RuntimeValue::Array(_),
             ) => RuntimeValue::Bool(!Self::runtime_value_deep_eq(&a, &b)),
+            // #302：Range 结构相等（三标量按值比较，PartialEq 已实现）
+            (CompareOp::Eq, RuntimeValue::Range { .. }, RuntimeValue::Range { .. }) => {
+                RuntimeValue::Bool(a == b)
+            }
+            (CompareOp::Ne, RuntimeValue::Range { .. }, RuntimeValue::Range { .. }) => {
+                RuntimeValue::Bool(a != b)
+            }
             // 类型不匹配的比较：硬错误，禁止静默返回 false
             // （同函数算术分支已报错，保持一致；类型检查器应先拦截，此处为底线防御）
             (op, l, r) => {

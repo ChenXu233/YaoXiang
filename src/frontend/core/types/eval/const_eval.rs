@@ -106,6 +106,78 @@ pub fn convert_expr_to_const_expr(
                 expr: Box::new(convert_expr_to_const_expr(expr)?),
             })
         }
+        Expr::In {
+            elem, container, ..
+        } => {
+            // #302：区间命题识别——保持区间，不物化（#299 §3 同款定位）。
+            // 字面量形态纯语法可识别：
+            //   x in a..b     ⟺ x >= a && x < b
+            //   x in a..b..c  ⟺ x >= a && x < b && (x - a) % c == 0
+            // 变量容器（x in r）需类型信息判定 Range，本层拿不到 → None（同现状降级，
+            // 调用方守卫转换失败只减信息不中断）；变量形态留 RFC-027 管道方向锚。
+            let x = convert_expr_to_const_expr(elem)?;
+            match container.as_ref() {
+                Expr::BinOp {
+                    op: AstBinOp::Range,
+                    left,
+                    right,
+                    ..
+                } => {
+                    // 解构 step 形态：左操作数本身是 Range 构造（与 ir_gen 同构）
+                    let (s_expr, e_expr, step_expr) = match left.as_ref() {
+                        Expr::BinOp {
+                            op: AstBinOp::Range,
+                            left: a,
+                            right: b,
+                            ..
+                        } => (a.as_ref(), b.as_ref(), Some(right.as_ref())),
+                        other => (other, right.as_ref(), None),
+                    };
+                    let s = convert_expr_to_const_expr(s_expr)?;
+                    let e = convert_expr_to_const_expr(e_expr)?;
+                    // bounds = x >= s && x < e
+                    let bounds = CE::BinOp {
+                        op: crate::frontend::core::types::const_data::BinOp::And,
+                        left: Box::new(CE::BinOp {
+                            op: crate::frontend::core::types::const_data::BinOp::Ge,
+                            left: Box::new(x.clone()),
+                            right: Box::new(s.clone()),
+                        }),
+                        right: Box::new(CE::BinOp {
+                            op: crate::frontend::core::types::const_data::BinOp::Lt,
+                            left: Box::new(x.clone()),
+                            right: Box::new(e),
+                        }),
+                    };
+                    match step_expr {
+                        None => Some(bounds),
+                        Some(c_expr) => {
+                            let c = convert_expr_to_const_expr(c_expr)?;
+                            // aligned = (x - s) % c == 0（Z3 mod 负除数可用：整除性与符号无关）
+                            let aligned = CE::BinOp {
+                                op: crate::frontend::core::types::const_data::BinOp::Eq,
+                                left: Box::new(CE::BinOp {
+                                    op: crate::frontend::core::types::const_data::BinOp::Mod,
+                                    left: Box::new(CE::BinOp {
+                                        op: crate::frontend::core::types::const_data::BinOp::Sub,
+                                        left: Box::new(x),
+                                        right: Box::new(s),
+                                    }),
+                                    right: Box::new(c),
+                                }),
+                                right: Box::new(CE::Lit(ConstValue::Int(0))),
+                            };
+                            Some(CE::BinOp {
+                                op: crate::frontend::core::types::const_data::BinOp::And,
+                                left: Box::new(bounds),
+                                right: Box::new(aligned),
+                            })
+                        }
+                    }
+                }
+                _ => None,
+            }
+        }
         _ => None,
     }
 }
@@ -977,5 +1049,77 @@ pub fn ast_type_to_mono_type(ty: &Type) -> Option<MonoType> {
         Type::Bool => Some(MonoType::Bool),
         Type::Void => Some(MonoType::Void),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::frontend::core::parser::ast::{BinOp as AB, Expr};
+    use crate::util::span::Span;
+
+    fn test_span() -> Span {
+        Span::default()
+    }
+
+    fn var(name: &str) -> Expr {
+        Expr::Var(name.into(), test_span())
+    }
+
+    fn int(n: i128) -> Expr {
+        Expr::Lit(Literal::Int(n), test_span())
+    }
+
+    fn range(
+        left: Expr,
+        right: Expr,
+    ) -> Expr {
+        Expr::BinOp {
+            op: AB::Range,
+            left: Box::new(left),
+            right: Box::new(right),
+            span: test_span(),
+        }
+    }
+
+    fn in_expr(
+        elem: Expr,
+        container: Expr,
+    ) -> Expr {
+        Expr::In {
+            elem: Box::new(elem),
+            container: Box::new(container),
+            span: test_span(),
+        }
+    }
+
+    #[test]
+    fn in_range_literal_recognized_as_bounds() {
+        // x in 1..10 → 界合取（x >= 1 && x < 10）
+        let e = in_expr(var("x"), range(int(1), int(10)));
+        let ce = convert_expr_to_const_expr(&e);
+        assert!(ce.is_some(), "range literal in-proposition must convert");
+        let s = format!("{}", ce.unwrap());
+        assert!(s.contains(">=") && s.contains("<"), "bounds missing: {s}");
+    }
+
+    #[test]
+    fn in_range_step_recognized_with_alignment() {
+        // x in 0..10..2 → 界合取 + 对齐 (x - 0) % 2 == 0
+        let e = in_expr(var("x"), range(range(int(0), int(10)), int(2)));
+        let ce = convert_expr_to_const_expr(&e);
+        assert!(ce.is_some(), "step form must convert");
+        let s = format!("{}", ce.unwrap());
+        assert!(
+            s.contains("mod") || s.contains("%"),
+            "alignment missing: {s}"
+        );
+    }
+
+    #[test]
+    fn in_non_range_container_not_converted() {
+        // 变量容器需类型信息判定 Range，语法层不猜 → None（守卫降级，不中断）
+        let e = in_expr(var("x"), var("ys"));
+        assert!(convert_expr_to_const_expr(&e).is_none());
     }
 }

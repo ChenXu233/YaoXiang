@@ -1086,6 +1086,8 @@ impl OwnershipChecker {
             MonoType::Int(_) | MonoType::Float(_) | MonoType::Bool | MonoType::Char => {
                 CopySemantics::ValueCopy
             }
+            // #302：Range 是不可变三标量记录（运行时内联值），值语义
+            m if m.is_range() => CopySemantics::ValueCopy,
             _ => CopySemantics::Move,
         }
     }
