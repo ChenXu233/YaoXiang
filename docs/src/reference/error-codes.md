@@ -55,6 +55,13 @@ YaoXiang 编译器使用错误码标识不同类型的诊断信息。错误码�
 | E1090  | `Type: Type = Type`                                                            | 不可言说（彩蛋）                     |
 | E1091  | `Generic meta-type self-reference is not allowed: '{decl}'`                    | 无效的泛型元类型                     |
 | E1062  | `Const generic constraint violation: {reason}`                                 | const泛型约束违反                    |
+| E1064  | `Invalid binding position(s) {positions} for function with {total} parameter(s)` | 绑定位置索引无效（RFC-004）          |
+| E1095  | `Unknown interface: '{name}'`                                                  | 未知接口（RFC-011a）                 |
+| E1096  | `Interface '{name}' expects {expected} type argument(s), found {found}`        | 接口实例化实参个数不符               |
+| E1097  | `Interface member '{member}' conflicts with field of type '{type}'`            | 接口成员与字段命名冲突               |
+| E1098  | `Type '{type}' does not implement '{interface}.{method}'`                      | 接口方法未实现                       |
+| E1099  | `Signature mismatch for '{type}.{method}': expected '{expected}', found '{found}'` | 接口方法签名不匹配               |
+| E1100  | `Duplicate implementation of '{type}.{method}' (override is not allowed)`      | 同签名方法重复实现（覆盖禁止）       |
 
 ## E2xxx -- 语义分析
 

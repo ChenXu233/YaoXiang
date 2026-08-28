@@ -1,0 +1,28 @@
+// 06-compile-errors/interface_duplicate_impl.yx
+// [test:error]: 同签名接口方法重复实现——签名完全相同的覆盖禁止（RFC-011a §3）
+// 验证: 重复实现 → E1100
+// 状态: ✅
+
+use std.assert
+
+Animal: (Self: Type) -> Type = {
+    speak: (self: Self) -> String,
+}
+
+Dog: Type = {
+    name: String,
+    Animal(Dog),
+}
+
+Dog.speak: (self: Dog) -> String = {
+    return "Woof"
+}
+
+Dog.speak: (self: Dog) -> String = {
+    return "Bark"
+}
+
+main = {
+    d = Dog("Rex")
+    assert.assert(d.speak() == "Woof", "duplicate impl must not compile")
+}

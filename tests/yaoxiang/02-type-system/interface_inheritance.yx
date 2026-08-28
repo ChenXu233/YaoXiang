@@ -1,0 +1,38 @@
+// 02-type-system/interface_inheritance.yx
+// 覆盖: SPEC type-system.md §6 接口继承（RFC-011a，#307 阶段2）
+// 验证:
+//   - 接口继承无新语法：Pet 体内实例化 Animal(Self)，Self 延迟替换
+//   - Pet(Dog) 递归展开为 Animal(Dog) + Pet 自有成员
+//   - 实现类型须同时提供继承链上全部接口方法
+// 状态: ✅
+
+use std.assert
+
+Animal: (Self: Type) -> Type = {
+    speak: (self: Self) -> String,
+}
+
+// 接口继承：体内实例化 Animal(Self)，Pet(Dog) 时 Self ↦ Dog 再展开 Animal(Dog)
+Pet: (Self: Type) -> Type = {
+    Animal(Self),
+    fetch: (self: Self) -> String,
+}
+
+Dog: Type = {
+    name: String,
+    Pet(Dog),
+}
+
+Dog.speak: (self: Dog) -> String = {
+    return "Woof"
+}
+
+Dog.fetch: (self: Dog) -> String = {
+    return self.name + " fetches"
+}
+
+main = {
+    d = Dog("Rex")
+    assert.assert(d.speak() == "Woof", "inherited Animal.speak dispatches")
+    assert.assert(d.fetch() == "Rex fetches", "own Pet.fetch dispatches")
+}
