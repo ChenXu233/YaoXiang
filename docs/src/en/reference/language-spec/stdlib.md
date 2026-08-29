@@ -9,7 +9,7 @@ including the core library, IO library, and math library.
 
 ### 1.1 Basic Types
 
-The standard library provides implementations for the following basic types:
+The standard library provides implementations of the following basic types:
 
 | Type           | Module           | Description         |
 | -------------- | ---------------- | ------------------- |
@@ -36,17 +36,17 @@ Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 **Common Methods**:
 
 ```yaoxiang
-// Check whether there is a value
+// Check if has a value
 is_some: (self: Option(T)) -> Bool
 is_none: (self: Option(T)) -> Bool
 
-// Get the value (may panic)
+// Get value (may panic)
 unwrap: (self: Option(T)) -> T
 
-// Get the value or a default
+// Get value or default
 unwrap_or: (self: Option(T), default: T) -> T
 
-// Map the value
+// Map value
 map: (R: Type) -> ((self: Option(T), f: (T) -> R) -> Option(R))
 ```
 
@@ -66,20 +66,20 @@ Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Resu
 **Common Methods**:
 
 ```yaoxiang
-// Check whether it succeeded
+// Check if successful
 is_ok: (self: Result(T, E)) -> Bool
 is_err: (self: Result(T, E)) -> Bool
 
-// Get the value (may panic)
+// Get value (may panic)
 unwrap: (self: Result(T, E)) -> T
 
-// Get the value or a default
+// Get value or default
 unwrap_or: (self: Result(T, E), default: T) -> T
 
-// Map the success value
+// Map success value
 map: (R: Type) -> ((self: Result(T, E), f: (T) -> R) -> Result(R, E))
 
-// Map the error value
+// Map error value
 map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ```
 
@@ -89,10 +89,10 @@ map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ErrorPropagate ::= Expr '?'
 ```
 
-The `?` operator automatically propagates errors from the Result type:
+The `?` operator automatically propagates errors of `Result` type:
 
 ```
-// Returns the value on success, propagates err on failure
+// Return value on success, propagate err on failure
 data = fetch_data()?
 
 // Equivalent to
@@ -102,19 +102,19 @@ data = match fetch_data() {
 }
 ```
 
-### 1.5 Assertions (std.assert)
+### 1.5 Assertions (`std.assert`)
 
 The `std.assert` module provides a unified assertion mechanism—the runtime `assert` and the
-compile-time refinement type `Assert` are two sides of the same primitive.
+compile-time refinement type `Assert` are two faces of the same primitive.
 
 ```yaoxiang
-// IsTrue: the bridge function from value to type
+// IsTrue: bridge function from value to type
 IsTrue: (b: Bool) -> Type = match b {
     true => Void,      // ⊤, program continues
     false => Never,    // ⊥, diverges
 }
 
-// Assert: the compile-time refinement type primitive
+// Assert: compile-time refinement type primitive
 Assert: (cond: Bool) -> Type = IsTrue(cond)
 
 // assert: runtime assertion (value introducer of Assert)
@@ -126,10 +126,10 @@ assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 
 **Dispatch**:
 
-| Condition                                              | Behavior                                                     |
-| ------------------------------------------------------ | ------------------------------------------------------------ |
-| All free variables of `cond` are known at compile time | Compiler evaluates; `true` → erased, `false` → compile error |
-| Runtime free variables exist                           | Insert runtime check; inject flow-sensitive assumption set Γ |
+| Condition                                          | Behavior                                                     |
+| -------------------------------------------------- | ------------------------------------------------------------ |
+| All free variables of `cond` known at compile-time | Compiler evaluates; true → erased, false → compile error     |
+| Runtime free variables exist                       | Insert runtime check, inject flow-sensitive assumption set Γ |
 
 `assert(false, "msg")` is equivalent to `raise`—no separate `throw`/`raise` keyword is needed.
 
@@ -137,7 +137,7 @@ assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 
 ## Chapter 2: IO Library
 
-### 2.1 Standard Input and Output
+### 2.1 Standard Input/Output
 
 ```yaoxiang
 // Standard output
@@ -201,7 +201,7 @@ min: (a: Int, b: Int) -> Int
 max: (a: Float, b: Float) -> Float
 min: (a: Float, b: Float) -> Float
 
-// Power
+// Power operations
 pow: (base: Float, exp: Float) -> Float
 sqrt: (x: Float) -> Float
 
@@ -343,9 +343,9 @@ Iterator: (T: Type) -> Type = {
 ### 6.2 Iterator Adapters
 
 ```yaoxiang
-// Range iterator (#302: Range is now an official type; at runtime its identity is a
-// three-scalar immutable record, no longer borrowing the Tuple shell; prints
-// `1..10` / `1..10..2`, structurally equal, named fields)
+// Range iterator (#302: Range is a formal type, runtime identity is a three-scalar
+// immutable record, no longer borrowing Tuple shell; prints `1..10` / `1..10..2`,
+// structural equality, named fields)
 Range: Type = {
     start: Int,
     end: Int,
@@ -353,25 +353,29 @@ Range: Type = {
     Iterator(Int)
 }
 
-// Usage (iterator protocol: std.range.iter/has_next/next; for dispatches via static types)
+// Usage (iterator protocol: std.range.iter/has_next/next, for dispatches via static type)
 for i in 0..10 {
     print(i)
 }
 
-// Step form (double-dot, no new keyword)
+// Step form (double dot, no new keyword)
 for i in 0..10..2 {
     print(i)
 }
 ```
 
-> **#302**: `Range(Int)` is now officially landed—the named fields `r.start` / `r.end` / `r.step`
-> are accessible; `x in r` at runtime goes through `std.range.contains` (bound check + step
-> alignment), and the proof pipeline recognizes it as the interval proposition
-> `x >= r.start && x < r.end && (x - r.start) % r.step == 0` (interval stays an interval, no
-> materialization). The `step=0` literal is rejected at compile time; a dynamic `step=0` is a
-> runtime error (will be promoted to `Result` once the future error system lands, #301). Interface
-> instantiation (the `Iterator(Int)` declaration in the type body) is pending RFC-011a (#307); the
-> current protocol surface is provided by `std.range`.
+> **#302**: `Range(Int)` has been formally landed—named fields `r.start` / `r.end` / `r.step` are
+> accessible; `x in r` at runtime goes through `std.range.contains` (bound check + step alignment),
+> the proof pipeline recognizes it as the interval proposition
+> `x >= r.start && x < r.end && (x - r.start) % r.step == 0` (intervals remain intervals, no
+> materialization). Literal `step=0` is rejected at compile-time, dynamic `step=0` produces a
+> runtime error (to be escalated to `Result` after the future error system lands, #301). Interface
+> instantiation (the `Iterator(Int)` declaration in the type body) syntax for type-body application
+> items and static dispatch have landed with RFC-011a stages 1-2 (#307): The type-body application
+> item `Iterator(Int)` triggers `Self ↦ Range` substitution expansion and completeness check,
+> generating an implementation proof upon success. The runtime protocol surface of the `std.range`
+> module is still provided by native methods; migration to interface dispatch belongs to #307
+> stage 3.
 
 ---
 
@@ -382,19 +386,19 @@ for i in 0..10..2 {
 | `std.assert`     | Assertion mechanism—runtime `assert` + compile-time `Assert` refinement type |
 | `std.option`     | Option type                                                                  |
 | `std.result`     | Result type                                                                  |
-| `std.collection` | Collection types such as List, Map                                           |
+| `std.collection` | Collection types: List, Map, etc.                                            |
 | `std.string`     | String operations                                                            |
 | `std.array`      | Array operations                                                             |
-| `std.iterator`   | Iterator (the protocol surface is currently provided by `std.range`, #302)   |
+| `std.iterator`   | Iterator (protocol surface currently provided by `std.range`, #302)          |
 | `std.range`      | Range iterator and interval predicates, adapters (#302)                      |
 
 ### A.2 IO Modules
 
-| Module     | Description               |
-| ---------- | ------------------------- |
-| `std.io`   | Standard input and output |
-| `std.file` | File operations           |
-| `std.dir`  | Directory operations      |
+| Module     | Description           |
+| ---------- | --------------------- |
+| `std.io`   | Standard input/output |
+| `std.file` | File operations       |
+| `std.dir`  | Directory operations  |
 
 ### A.3 Math Modules
 
@@ -402,13 +406,13 @@ for i in 0..10..2 {
 | --------------- | ----------------------- |
 | `std.math`      | Math functions          |
 | `std.math.trig` | Trigonometric functions |
-| `std.math.log`  | Logarithmic functions   |
+| `std.math.log`  | Logarithm functions     |
 
 ### A.4 Utility Modules
 
-| Module       | Description                                                             |
-| ------------ | ----------------------------------------------------------------------- |
-| `std.random` | Random number generation                                                |
-| `std.time`   | Time and date                                                           |
-| `std.assert` | Compile-time `Assert(C)` unified with runtime `assert(x > 0)` (RFC-030) |
-| `std.regex`  | Regular expressions                                                     |
+| Module       | Description                                                                   |
+| ------------ | ----------------------------------------------------------------------------- |
+| `std.random` | Random number generation                                                      |
+| `std.time`   | Time and date                                                                 |
+| `std.assert` | Unification of compile-time `Assert(C)` and runtime `assert(x > 0)` (RFC-030) |
+| `std.regex`  | Regular expressions                                                           |

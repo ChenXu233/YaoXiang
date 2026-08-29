@@ -1,6 +1,6 @@
 # 標準ライブラリ仕様
 
-本文書は YaoXiang プログラミング言語の標準ライブラリ仕様を定義する。コアライブラリ、IO ライブラリ、数学ライブラリを含む。
+本文書はYaoXiangプログラミング言語の標準ライブラリ仕様を定義する。コアライブラリ、IOライブラリ、数学ライブラリを含む。
 
 ---
 
@@ -17,29 +17,29 @@
 | `List(T)`      | `std.collection` | 動的配列       |
 | `Map(K, V)`    | `std.collection` | ハッシュマップ |
 | `String`       | `std.string`     | 文字列型       |
-| `Array(T, N)`  | `std.array`      | 固定サイズ配列 |
+| `Array(T, N)`  | `std.array`      | 固定長配列     |
 
-### 1.2 Option 型
+### 1.2 Option型
 
 ```
 Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 ```
 
-**バリアント構築**：
+**バリアントコンストラクタ**：
 
 | バリアント    | 構文                 | 説明   |
 | ------------- | -------------------- | ------ |
 | `Option.some` | `Option.some(value)` | 値あり |
 | `Option.none` | `Option.none()`      | 値なし |
 
-**一般的なメソッド**：
+**主なメソッド**：
 
 ```yaoxiang
-// 値があるかチェック
+// 値の有無を確認
 is_some: (self: Option(T)) -> Bool
 is_none: (self: Option(T)) -> Bool
 
-// 値を取得（panic する可能性あり）
+// 値を取得（panicの可能性あり）
 unwrap: (self: Option(T)) -> T
 
 // 値またはデフォルト値を取得
@@ -49,27 +49,27 @@ unwrap_or: (self: Option(T), default: T) -> T
 map: (R: Type) -> ((self: Option(T), f: (T) -> R) -> Option(R))
 ```
 
-### 1.3 Result 型
+### 1.3 Result型
 
 ```
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 ```
 
-**バリアント構築**：
+**バリアントコンストラクタ**：
 
 | バリアント   | 構文                | 説明     |
 | ------------ | ------------------- | -------- |
 | `Result.ok`  | `Result.ok(value)`  | 成功値   |
 | `Result.err` | `Result.err(error)` | エラー値 |
 
-**一般的なメソッド**：
+**主なメソッド**：
 
 ```yaoxiang
-// 成功したかチェック
+// 成功かを確認
 is_ok: (self: Result(T, E)) -> Bool
 is_err: (self: Result(T, E)) -> Bool
 
-// 値を取得（panic する可能性あり）
+// 値を取得（panicの可能性あり）
 unwrap: (self: Result(T, E)) -> T
 
 // 値またはデフォルト値を取得
@@ -88,10 +88,10 @@ map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ErrorPropagate ::= Expr '?'
 ```
 
-`?` 演算子は Result 型のエラーを自動的に伝播する：
+`?` 演算子はResult型のエラーを自動伝播する：
 
 ```
-// 成功時は値を返し、失敗時は err を上に返す
+// 成功時は値を返し、失敗時はerrを上に返す
 data = fetch_data()?
 
 // 以下と等価
@@ -103,38 +103,38 @@ data = match fetch_data() {
 
 ### 1.5 アサーション（std.assert）
 
-`std.assert` モジュールは統一されたアサーションメカニズムを提供する——ランタイム `assert`
-とコンパイル時の精化型 `Assert` は同じプリミティブの二面である。
+`std.assert` モジュールは統一されたアサーション機構を提供する。ランタイムの `assert`
+とコンパイル時の精緻化型 `Assert` は同じ原始語の両面である。
 
 ```yaoxiang
-// IsTrue: 値から型へのブリッジ関数
+// IsTrue：値から型へのブリッジ関数
 IsTrue: (b: Bool) -> Type = match b {
-    true => Void,      // ⊤，プログラムは継続
-    false => Never,    // ⊥，発散
+    true => Void,      // ⊤、プログラム続行
+    false => Never,    // ⊥、発散
 }
 
-// Assert: コンパイル時精化型プリミティブ
+// Assert：コンパイル時精緻化型プリミティブ
 Assert: (cond: Bool) -> Type = IsTrue(cond)
 
-// assert: ランタイムアサーション（Assert の値イントロデューサ）
+// assert：ランタイムアサーション（Assertの値導入子）
 assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))
 
-// Result オーバーロード
+// Resultオーバーロード
 assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 ```
 
-**dispatch ディスパッチ**：
+**dispatch分配**：
 
-| 条件                                        | 動作                                                     |
-| ------------------------------------------- | -------------------------------------------------------- |
-| cond のすべての自由変数がコンパイル時に既知 | コンパイラが評価、true → 消去、false → コンパイルエラー  |
-| ランタイム自由変数が存在                    | ランタイム check を挿入し、フロー依存の仮定集合 Γ を注入 |
+| 条件                                     | 動作                                                    |
+| ---------------------------------------- | ------------------------------------------------------- |
+| condのすべての自由変数がコンパイル時既知 | コンパイラが評価、true → 消去、false → コンパイルエラー |
+| ランタイムの自由変数が存在               | ランタイムcheckを挿入し、フロー敏感仮定集合 Γ を注入    |
 
-`assert(false, "msg")` は raise と等価である——独立した throw/raise キーワードは不要。
+`assert(false, "msg")` は raise と等価である。別途の throw/raise キーワードは不要。
 
 ---
 
-## 第二章：IO ライブラリ
+## 第二章：IOライブラリ
 
 ### 2.1 標準入出力
 
@@ -194,13 +194,13 @@ delete_dir: (path: String) -> Result(Void, Error)
 abs: (x: Int) -> Int
 abs: (x: Float) -> Float
 
-// 最大値と最小値
+// 最大値・最小値
 max: (a: Int, b: Int) -> Int
 min: (a: Int, b: Int) -> Int
 max: (a: Float, b: Float) -> Float
 min: (a: Float, b: Float) -> Float
 
-// べき乗
+// べき乗演算
 pow: (base: Float, exp: Float) -> Float
 sqrt: (x: Float) -> Float
 
@@ -256,7 +256,7 @@ contains: (s: String, pattern: String) -> Bool
 // 文字列置換
 replace: (s: String, old: String, new: String) -> String
 
-// 文字列トリム
+// 文字列トリミング
 trim: (s: String) -> String
 trim_left: (s: String) -> String
 trim_right: (s: String) -> String
@@ -279,10 +279,10 @@ parse_float: (s: String) -> Result(Float, Error)
 
 ## 第五章：コレクションライブラリ
 
-### 5.1 List 型
+### 5.1 List型
 
 ```yaoxiang
-// List 型
+// List型
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
@@ -302,10 +302,10 @@ List: (T: Type) -> Type = {
 }
 ```
 
-### 5.2 Map 型
+### 5.2 Map型
 
 ```yaoxiang
-// Map 型
+// Map型
 Map: (K: Type, V: Type) -> Type = {
     data: Array((K, V)),
     length: Int,
@@ -342,8 +342,8 @@ Iterator: (T: Type) -> Type = {
 ### 6.2 イテレータアダプタ
 
 ```yaoxiang
-// 範囲イテレータ（#302: Range は正式な型であり、ランタイムの身分は三スカラー不変レコード。
-// Tuple の殻を借用しない; `1..10` / `1..10..2` を出力し、構造的に等価、名前付きフィールド）
+// 範囲イテレータ（#302：Rangeは正式型。ランタイム身分は三スカラー不変record。
+// Tupleの殻を借用しない。`1..10` / `1..10..2` と表示、構造等価、名前付きフィールド）
 Range: Type = {
     start: Int,
     end: Int,
@@ -351,39 +351,43 @@ Range: Type = {
     Iterator(Int)
 }
 
-// 使用（イテレータプロトコル: std.range.iter/has_next/next、for は静的型ディスパッチを経る）
+// 使用法（イテレータプロトコル：std.range.iter/has_next/next、forは静的型ディスパッチ）
 for i in 0..10 {
     print(i)
 }
 
-// step 形式（ダブルドット、新規キーワードなし）
+// step形式（ダブルドット、新規キーワードなし）
 for i in 0..10..2 {
     print(i)
 }
 ```
 
-> **#302**：`Range(Int)` は正式に実装された——名前付きフィールド `r.start`/`r.end`/`r.step`
-> がアクセス可能； `x in r` はランタイムに
-> `std.range.contains`（境界チェック + ステップ整合）を経由し、証明パイプラインが区間命題として認識する
-> `x >= r.start && x < r.end && (x - r.start) % r.step == 0`（区間は区間を保持し、実体化しない）。step=0 リテラルはコンパイル時に拒否、動的 step=0 はランタイムエラー（将来のエラーシステム実装後に Result に昇格、#301）。インターフェースの実体化（型本体
-> `Iterator(Int)` 宣言）は RFC-011a 実装待ち（#307）、現在プロトコル面は std.range が提供。
+> **#302**：`Range(Int)` が正式に導入された。名前付きフィールド `r.start`/`r.end`/`r.step`
+> にアクセス可能。 `x in r` のランタイムは `std.range.contains`
+> を経由し（境界チェック + ステップ整列）、証明パイプラインが区間命題
+> `x >= r.start && x < r.end && (x - r.start) % r.step == 0`
+> として認識する（区間は区間を保持し、物化しない）。step=0のリテラルはコンパイル時拒否、動的step=0はランタイムエラー（将来のエラーシステム導入後、Result格上げ、#301）。インターフェースの実体化（型本体
+> `Iterator(Int)`
+> 宣言）の型構文と静的ディスパッチはRFC-011aフェーズ1-2で導入された（#307）：型本体の適用項目
+> `Iterator(Int)` が `Self ↦ Range`
+> 置換展開と完全性チェックを起動し、通過後に実装証明を生成する。std.rangeモジュールのランタイムプロトコル面は暫定的にネイティブメソッドで提供され、インターフェースディスパッチへの移行は#307フェーズ3に属する。
 
 ---
 
 ## 付録：標準ライブラリモジュール索引
 
-| モジュール       | 説明                                                                   |
-| ---------------- | ---------------------------------------------------------------------- |
-| `std.assert`     | アサーションメカニズム——ランタイム assert + コンパイル時 Assert 精化型 |
-| `std.option`     | Option 型                                                              |
-| `std.result`     | Result 型                                                              |
-| `std.collection` | List、Map などのコレクション型                                         |
-| `std.string`     | 文字列操作                                                             |
-| `std.array`      | 配列操作                                                               |
-| `std.iterator`   | イテレータ（プロトコル面は現在 `std.range` が提供、#302）              |
-| `std.range`      | Range イテレータと区間述語、アダプタ（#302）                           |
+| モジュール       | 説明                                                            |
+| ---------------- | --------------------------------------------------------------- |
+| `std.assert`     | アサーション機構——ランタイムassert + コンパイル時Assert精緻化型 |
+| `std.option`     | Option型                                                        |
+| `std.result`     | Result型                                                        |
+| `std.collection` | List、Mapなどのコレクション型                                   |
+| `std.string`     | 文字列操作                                                      |
+| `std.array`      | 配列操作                                                        |
+| `std.iterator`   | イテレータ（プロトコル面は現在 `std.range` で提供、#302）       |
+| `std.range`      | Rangeイテレータと区間述語、アダプタ（#302）                     |
 
-### A.2 IO モジュール
+### A.2 IOモジュール
 
 | モジュール | 説明             |
 | ---------- | ---------------- |
@@ -399,7 +403,7 @@ for i in 0..10..2 {
 | `std.math.trig` | 三角関数 |
 | `std.math.log`  | 対数関数 |
 
-### A.4 ツールモジュール
+### A.4 ユーティリティモジュール
 
 | モジュール   | 説明                                                                    |
 | ------------ | ----------------------------------------------------------------------- |
