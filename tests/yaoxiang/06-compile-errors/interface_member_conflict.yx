@@ -1,0 +1,24 @@
+// 06-compile-errors/interface_member_conflict.yx
+// [test:error]: 接口方法与类型已有字段共享命名空间（RFC-011a §1.2）
+// 验证: point.x 与 point.x() 语法不可区分 → 接口方法名撞字段名 → E1097
+// 状态: ✅
+
+use std.assert
+
+Animal: (Self: Type) -> Type = {
+    name: (self: Self) -> String,
+}
+
+Dog: Type = {
+    name: String,
+    Animal(Dog),
+}
+
+Dog.name: (self: Dog) -> String = {
+    return self.name
+}
+
+main = {
+    d = Dog("Rex")
+    assert.assert(d.name == "Rex", "member/field conflict must not compile")
+}

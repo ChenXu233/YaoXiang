@@ -750,4 +750,35 @@ impl Expr {
             _ => (Vec::new(), Vec::new()),
         }
     }
+
+    /// RFC-004: 从绑定语句 `Type.method = fn[pos]` 的 index 部分提取位置列表。
+    /// 支持单个整数与整数元组；负索引（`-1` 从末尾计数）原样保留，
+    /// 由调用方按被绑函数元数归一化。无法识别时回退 `[0]`（与既有行为一致）。
+    pub fn extract_binding_positions(index: &Expr) -> Vec<i64> {
+        fn one(e: &Expr) -> Option<i64> {
+            match e {
+                Expr::Lit(Literal::Int(n), _) => Some(*n as i64),
+                Expr::UnOp {
+                    op: UnOp::Neg,
+                    expr,
+                    ..
+                } => match expr.as_ref() {
+                    Expr::Lit(Literal::Int(n), _) => Some(-(*n as i64)),
+                    _ => None,
+                },
+                _ => None,
+            }
+        }
+        match index {
+            Expr::Tuple(items, _) => {
+                let parsed: Vec<i64> = items.iter().filter_map(one).collect();
+                if parsed.is_empty() {
+                    vec![0]
+                } else {
+                    parsed
+                }
+            }
+            other => one(other).map(|p| vec![p]).unwrap_or_else(|| vec![0]),
+        }
+    }
 }

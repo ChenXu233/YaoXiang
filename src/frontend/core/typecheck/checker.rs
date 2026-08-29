@@ -20,6 +20,7 @@ use super::semantic_db;
 use crate::frontend::core::spawn;
 use super::types::TypeCheckResult;
 use super::environment::TypeEnvironment;
+use super::environment::ImplementationProof;
 use super::{add_builtin_types, add_std_traits, add_native_function_types};
 use super::Diagnostic;
 use crate::util::diagnostic::ErrorCodeDefinition;
@@ -39,6 +40,30 @@ pub struct TypeChecker {
     /// 用户模块命名空间别名表（别名 → 模块限定键），由 `use lib` / `use lib as l` 整体导入登记。
     /// 模块解析归 typecheck 所有：IR 生成直接消费此表，不再自行从 AST 重新推导。
     module_namespaces: HashMap<String, String>,
+    /// RFC-004: 类型体绑定的待登记队列（类型名, 绑定, span）。
+    /// pass1 收集类型定义，此时被绑函数可能尚未注册（pass2 收集签名），
+    /// 故 External/DefaultExternal 延迟到 pass2 之后统一登记。
+    pending_body_bindings: Vec<(
+        String,
+        crate::frontend::core::parser::ast::TypeBodyBinding,
+        crate::util::span::Span,
+    )>,
+    /// RFC-011a: 已注册类型定义的 AST 体项（接口展开需要原始应用项；
+    /// MonoType 转换会丢弃 Expr/Binding 项，故单独留存）。
+    type_definition_bodies: HashMap<String, Vec<crate::frontend::core::parser::ast::TypeBodyItem>>,
+    /// RFC-011a: 类型体中的接口实例化待决记录（阶段 2 延迟完整性检查）。
+    pending_interface_instantiations: Vec<PendingInterfaceInstantiation>,
+    /// RFC-011a §3: 已声明方法签名 (类型名, 方法名) -> 签名。
+    /// 同签名重复声明 = 覆盖 → E1100；不同签名 = 重载 → 放行。
+    declared_methods: HashMap<(String, String), MonoType>,
+}
+
+/// RFC-011a: 类型体应用项 `Animal(Dog)` 的待决接口实例化。
+struct PendingInterfaceInstantiation {
+    impl_type: String,
+    interface_name: String,
+    args: Vec<crate::frontend::core::parser::ast::Type>,
+    span: crate::util::span::Span,
 }
 
 impl TypeChecker {
@@ -62,7 +87,17 @@ impl TypeChecker {
             semantic_db: semantic_db::SemanticDB::new(),
             dependent_type_env,
             module_namespaces: HashMap::new(),
+            pending_body_bindings: Vec::new(),
+            type_definition_bodies: HashMap::new(),
+            pending_interface_instantiations: Vec::new(),
+            declared_methods: HashMap::new(),
         }
+    }
+
+    /// RFC-011a: 已通过的接口实现证明（编译期，运行时擦除）。
+    /// LSP/阶段 3 动态分发的类型收集据此枚举某接口的全部实现类型。
+    pub fn implementation_proofs(&self) -> &[ImplementationProof] {
+        &self.env.implementation_proofs
     }
 
     /// 注册预定义的 const 函数
@@ -221,6 +256,8 @@ impl TypeChecker {
         for stmt in &module.items {
             self.collect_function_signature(stmt);
         }
+        // RFC-004: 函数签名就位后登记类型体绑定
+        self.flush_pending_body_bindings();
     }
 
     /// 检查整个模块的内部实现
@@ -246,6 +283,12 @@ impl TypeChecker {
         for stmt in &module.items {
             self.collect_function_signature(stmt);
         }
+
+        // RFC-004: 函数签名就位后登记类型体绑定
+        self.flush_pending_body_bindings();
+
+        // RFC-011a 阶段2: 接口实例化完整性检查（Self 替换 + 签名匹配 + 实现证明）
+        self.finalize_interface_instantiations();
 
         // 收集所有导出项
         self.collect_exports(module);
@@ -859,6 +902,19 @@ impl TypeChecker {
 
                 // 如果有 type_name（显式方法绑定），使用 add_fn_binding
                 if type_name.is_some() {
+                    // RFC-011a §3: 同签名重复声明 = 覆盖 → E1100；不同签名 = 重载 → 放行
+                    let tn = type_name.as_deref().unwrap_or_default();
+                    let key = (tn.to_string(), name.clone());
+                    if let Some(prev) = self.declared_methods.get(&key) {
+                        if *prev == fn_ty {
+                            self.add_error(
+                                ErrorCodeDefinition::interface_method_duplicate(tn, &name)
+                                    .at(stmt.span)
+                                    .build(),
+                            );
+                        }
+                    }
+                    self.declared_methods.insert(key, fn_ty.clone());
                     self.env
                         .add_fn_binding(&name, type_name.as_deref(), fn_ty.clone());
                 } else {
@@ -967,6 +1023,7 @@ impl TypeChecker {
             crate::frontend::core::parser::ast::StmtKind::Assign {
                 target,
                 value: Some(val),
+                span,
                 ..
             } => {
                 let (type_name, method_name) = match target.as_ref() {
@@ -1004,53 +1061,382 @@ impl TypeChecker {
                     _ => return,
                 };
                 if let Some(poly) = self.env.get_var(&func_name) {
-                    let method_ty = if positions.len() <= 1 {
-                        poly.body.clone()
-                    } else {
-                        match &poly.body {
-                            MonoType::Fn {
-                                params,
-                                return_type,
-                            } => {
-                                let mut new_params: Vec<MonoType> = Vec::new();
-                                for (i, p) in params.iter().enumerate() {
-                                    if !positions.contains(&(i as i64)) {
-                                        new_params.push(p.clone());
-                                    }
-                                }
-                                MonoType::Fn {
-                                    params: new_params,
-                                    return_type: return_type.clone(),
-                                }
-                            }
-                            other => other.clone(),
-                        }
+                    let total = match &poly.body {
+                        MonoType::Fn { params, .. } => params.len(),
+                        _ => 0,
                     };
-                    self.env
-                        .add_method_binding(&type_name, &method_name, method_ty);
+                    let fn_ty = poly.body.clone();
+                    if let Some(positions) =
+                        self.normalize_binding_positions(&positions, total, *span)
+                    {
+                        let method_ty = Self::method_type_after_binding(&fn_ty, &positions);
+                        self.env
+                            .add_method_binding(&type_name, &method_name, method_ty);
+                    }
                 }
             }
             _ => {}
         }
     }
 
+    /// RFC-004: 归一化绑定位置（负索引从末尾计数，[-1] = 最后一个参数）并校验有效性。
+    /// total 为被绑函数参数个数；未知（0）时跳过归一化与校验。无效位置报 E1064。
+    fn normalize_binding_positions(
+        &mut self,
+        positions: &[i64],
+        total: usize,
+        span: crate::util::span::Span,
+    ) -> Option<Vec<i64>> {
+        if total == 0 {
+            return Some(positions.to_vec());
+        }
+        let total_i = total as i64;
+        let normalized: Vec<i64> = positions
+            .iter()
+            .map(|&p| if p < 0 { p + total_i } else { p })
+            .collect();
+        if normalized.iter().any(|&p| p < 0 || p >= total_i) {
+            self.add_error(
+                ErrorCodeDefinition::invalid_binding_position(&format!("{:?}", positions), total)
+                    .at(span)
+                    .build(),
+            );
+            return None;
+        }
+        Some(normalized)
+    }
+
+    /// RFC-004: 绑定后的方法类型——单位绑定时保留全签名（实例占住绑定参数位），
+    /// 多位绑定时挖掉被绑参数，剩余参数由调用点填充。
+    fn method_type_after_binding(
+        fn_ty: &MonoType,
+        positions: &[i64],
+    ) -> MonoType {
+        if positions.len() <= 1 {
+            return fn_ty.clone();
+        }
+        match fn_ty {
+            MonoType::Fn {
+                params,
+                return_type,
+            } => {
+                let new_params: Vec<MonoType> = params
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| !positions.contains(&(*i as i64)))
+                    .map(|(_, p)| p.clone())
+                    .collect();
+                MonoType::Fn {
+                    params: new_params,
+                    return_type: return_type.clone(),
+                }
+            }
+            other => other.clone(),
+        }
+    }
+
+    /// RFC-004: 登记类型体绑定的待处理队列（须在函数签名收集 pass2 之后调用）。
+    pub fn flush_pending_body_bindings(&mut self) {
+        let pending = std::mem::take(&mut self.pending_body_bindings);
+        for (type_name, binding, span) in pending {
+            match &binding.kind {
+                crate::frontend::core::parser::ast::BindingKind::External {
+                    function,
+                    positions,
+                } => {
+                    self.register_external_method_binding(
+                        &type_name,
+                        &binding.name,
+                        function,
+                        positions,
+                        span,
+                    );
+                }
+                crate::frontend::core::parser::ast::BindingKind::DefaultExternal { function } => {
+                    self.register_external_method_binding(
+                        &type_name,
+                        &binding.name,
+                        function,
+                        &[0],
+                        span,
+                    );
+                }
+                crate::frontend::core::parser::ast::BindingKind::Anonymous { .. } => {}
+            }
+        }
+    }
+
+    /// RFC-011a 阶段1: 判断类型体应用项是否为接口实例化形态——
+    /// head 命中已注册类型构造器（generic_type_defs）且实参全为类型形态。
+    fn is_interface_application(
+        &self,
+        ty: &crate::frontend::core::parser::ast::Type,
+    ) -> bool {
+        use crate::frontend::core::parser::ast::Type;
+        if let Type::Generic {
+            name: head, args, ..
+        } = ty
+        {
+            let all_type_args = args.iter().all(|a| {
+                matches!(
+                    a,
+                    Type::Name { .. }
+                        | Type::Generic { .. }
+                        | Type::MetaType { .. }
+                        | Type::Ref { .. }
+                )
+            });
+            return all_type_args && self.env.generic_type_defs.contains_key(head);
+        }
+        false
+    }
+
+    /// RFC-011a: 类型实参是否引用给定参数名（抽象引用 → 继承链接，不记待决实例化）
+    fn type_arg_references(
+        ty: &crate::frontend::core::parser::ast::Type,
+        params: &[String],
+    ) -> bool {
+        use crate::frontend::core::parser::ast::Type;
+        match ty {
+            Type::Name { name, .. } => params.contains(name),
+            Type::Generic { args, .. } => args.iter().any(|a| Self::type_arg_references(a, params)),
+            Type::Ref { inner, .. } => Self::type_arg_references(inner, params),
+            _ => false,
+        }
+    }
+
+    /// RFC-011a 阶段2: 接口实例化完整性检查（须在 pass2 与类型体绑定登记之后调用）。
+    /// 五步流程（§1）：识别（pass1 已记录）→ Self 替换展开 → 签名匹配 →
+    /// 通过则登记 ImplementationProof → 失败报编译错误。
+    pub fn finalize_interface_instantiations(&mut self) {
+        let pending = std::mem::take(&mut self.pending_interface_instantiations);
+        for inst in pending {
+            let args: Vec<MonoType> = inst
+                .args
+                .iter()
+                .map(|a| MonoType::from(a.clone()))
+                .collect();
+            let _ = self.check_interface_instantiation(
+                &inst.impl_type,
+                &inst.interface_name,
+                &args,
+                inst.span,
+            );
+        }
+    }
+
+    /// RFC-011a: 展开接口成员列表（递归支持接口继承，Self 延迟替换）。
+    /// 返回 (方法名, 替换后签名)；同名成员后者覆盖前者。
+    fn expand_interface_members(
+        &mut self,
+        interface_name: &str,
+        args: &[MonoType],
+        visiting: &mut Vec<String>,
+        span: crate::util::span::Span,
+    ) -> Result<Vec<(String, MonoType)>, ()> {
+        use crate::frontend::core::parser::ast::Type;
+        if visiting.iter().any(|v| v == interface_name) {
+            // 循环继承：终止该分支展开
+            return Ok(Vec::new());
+        }
+        visiting.push(interface_name.to_string());
+
+        let Some(param_names) = self
+            .env
+            .generic_type_defs
+            .get(interface_name)
+            .map(|d| d.type_param_names.clone())
+        else {
+            self.add_error(
+                ErrorCodeDefinition::unknown_interface(interface_name)
+                    .at(span)
+                    .build(),
+            );
+            return Err(());
+        };
+        if param_names.len() != args.len() {
+            self.add_error(
+                ErrorCodeDefinition::interface_arity_mismatch(
+                    interface_name,
+                    param_names.len(),
+                    args.len(),
+                )
+                .at(span)
+                .build(),
+            );
+            return Err(());
+        }
+        let Some(body) = self.type_definition_bodies.get(interface_name).cloned() else {
+            visiting.pop();
+            return Ok(Vec::new());
+        };
+
+        let mut members: Vec<(String, MonoType)> = Vec::new();
+        for item in &body {
+            match item {
+                TypeBodyItem::Field(f) => {
+                    let ty = MonoType::from(f.ty.clone());
+                    let ty = TypeEnvironment::replace_type_params(&ty, &param_names, args);
+                    if !matches!(ty, MonoType::Fn { .. }) {
+                        // RFC-011a §1: 接口成员必须是方法（函数类型字段）
+                        self.add_error(
+                            ErrorCodeDefinition::interface_method_mismatch(
+                                interface_name,
+                                &f.name,
+                                "函数类型",
+                                &ty.to_string(),
+                            )
+                            .at(span)
+                            .build(),
+                        );
+                        return Err(());
+                    }
+                    members.push((f.name.clone(), ty));
+                }
+                TypeBodyItem::Expr(Type::Generic {
+                    name: head,
+                    args: nested_args,
+                    ..
+                }) => {
+                    // 接口继承：先替换当前接口类型参数再递归展开（Self 延迟替换）
+                    let nested: Vec<MonoType> = nested_args
+                        .iter()
+                        .map(|a| {
+                            let m = MonoType::from(a.clone());
+                            TypeEnvironment::replace_type_params(&m, &param_names, args)
+                        })
+                        .collect();
+                    match self.expand_interface_members(head, &nested, visiting, span) {
+                        Ok(sub) => members.extend(sub),
+                        Err(()) => return Err(()),
+                    }
+                }
+                _ => {}
+            }
+        }
+        visiting.pop();
+        Ok(members)
+    }
+
+    /// RFC-011a 阶段2: 对单个接口实例化做完整性检查并登记实现证明。
+    fn check_interface_instantiation(
+        &mut self,
+        impl_type: &str,
+        interface_name: &str,
+        args: &[MonoType],
+        span: crate::util::span::Span,
+    ) -> Result<(), ()> {
+        let mut visiting = Vec::new();
+        let members = self.expand_interface_members(interface_name, args, &mut visiting, span)?;
+
+        // §1.2 命名空间共享：接口方法名与实现类型已有字段同名 → 冲突
+        let impl_field_names: Vec<String> = match self.env.types.get(impl_type) {
+            Some(poly) => match &poly.body {
+                MonoType::Struct(s) => s.fields.iter().map(|(n, _)| n.clone()).collect(),
+                _ => Vec::new(),
+            },
+            None => Vec::new(),
+        };
+        for (member, _) in &members {
+            if impl_field_names.contains(member) {
+                self.add_error(
+                    ErrorCodeDefinition::interface_member_conflict(impl_type, member)
+                        .at(span)
+                        .build(),
+                );
+                return Err(());
+            }
+        }
+
+        // 完整性检查：每个接口成员须有同名实现且 Self 替换后签名一致
+        let mut methods: Vec<String> = Vec::new();
+        for (member, expected) in &members {
+            let Some(found) = self.env.get_method_binding(impl_type, member).cloned() else {
+                self.add_error(
+                    ErrorCodeDefinition::interface_method_missing(
+                        impl_type,
+                        interface_name,
+                        member,
+                    )
+                    .at(span)
+                    .build(),
+                );
+                return Err(());
+            };
+            if &found != expected {
+                self.add_error(
+                    ErrorCodeDefinition::interface_method_mismatch(
+                        impl_type,
+                        member,
+                        &expected.to_string(),
+                        &found.to_string(),
+                    )
+                    .at(span)
+                    .build(),
+                );
+                return Err(());
+            }
+            methods.push(member.clone());
+        }
+
+        // 通过 → 生成实现证明（纯编译期概念，运行时擦除，§5.3/§6.4）
+        self.env.implementation_proofs.push(ImplementationProof {
+            type_name: impl_type.to_string(),
+            interface_name: interface_name.to_string(),
+            methods,
+        });
+
+        // 接口名追加进实现类型的 interfaces 面（LSP/阶段3 类型收集消费）
+        let poly = self.env.types.get(impl_type);
+        if let Some(poly) = poly {
+            if let MonoType::Struct(s) = &poly.body {
+                let mut s = s.clone();
+                if !s.interfaces.iter().any(|i| i == interface_name) {
+                    s.interfaces.push(interface_name.to_string());
+                    let updated = PolyType {
+                        type_binders: poly.type_binders.clone(),
+                        const_binders: poly.const_binders.clone(),
+                        body: MonoType::Struct(s),
+                    };
+                    self.env.types.insert(impl_type.to_string(), updated);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// RFC-004: 将 `Type.method = fn[pos]` 形态的绑定登记到 method_bindings。
+    /// 函数尚未注册（前向引用）时静默跳过——与既有宽松行为一致。
+    fn register_external_method_binding(
+        &mut self,
+        type_name: &str,
+        method_name: &str,
+        func_name: &str,
+        positions: &[i64],
+        span: crate::util::span::Span,
+    ) {
+        let found = self.env.get_var(func_name).map(|poly| {
+            (
+                match &poly.body {
+                    MonoType::Fn { params, .. } => params.len(),
+                    _ => 0,
+                },
+                poly.body.clone(),
+            )
+        });
+        let Some((total, fn_ty)) = found else {
+            return;
+        };
+        if let Some(positions) = self.normalize_binding_positions(positions, total, span) {
+            let method_ty = Self::method_type_after_binding(&fn_ty, &positions);
+            self.env
+                .add_method_binding(type_name, method_name, method_ty);
+        }
+    }
+
     /// 从 Index 表达式的 index 部分提取位置列表
     fn extract_positions(index: &crate::frontend::core::parser::ast::Expr) -> Vec<i64> {
-        use crate::frontend::core::lexer::tokens::Literal;
-        match index {
-            Expr::Lit(Literal::Int(n), _) => vec![*n as i64],
-            Expr::Tuple(items, _) => items
-                .iter()
-                .filter_map(|e| {
-                    if let Expr::Lit(Literal::Int(n), _) = e {
-                        Some(*n as i64)
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
-            _ => vec![0],
-        }
+        crate::frontend::core::parser::ast::Expr::extract_binding_positions(index)
     }
 
     /// 将模块注册为 Struct 类型（包含所有导出作为字段）
@@ -1222,6 +1608,47 @@ impl TypeChecker {
         // 同时注册到 vars，使类型名可以在表达式中使用（如 Point(1.0, 2.0) 构造器调用）
         self.env.add_var(name.to_string(), poly.clone());
 
+        // RFC-004: 类型体内的方法绑定登记到 method_bindings（与语句级 Type.method = fn[pos]
+        // 同一语义）。此前类型体 Binding 项只有 IR 侧登记，方法调用在类型检查层报 E1042。
+        if let crate::frontend::core::parser::ast::Type::Struct { body } = definition {
+            for item in body {
+                if let crate::frontend::core::parser::ast::TypeBodyItem::Binding(b) = item {
+                    match &b.kind {
+                        crate::frontend::core::parser::ast::BindingKind::External { .. }
+                        | crate::frontend::core::parser::ast::BindingKind::DefaultExternal {
+                            ..
+                        } => {
+                            // 被绑函数可能在其后定义，延迟到 pass2 之后登记
+                            self.pending_body_bindings
+                                .push((name.to_string(), b.clone(), span));
+                        }
+                        crate::frontend::core::parser::ast::BindingKind::Anonymous {
+                            params,
+                            return_type,
+                            positions,
+                            ..
+                        } => {
+                            // 匿名绑定：函数类型来自内置声明的注解
+                            let fn_ty = MonoType::Fn {
+                                params: params
+                                    .iter()
+                                    .filter_map(|p| p.ty.as_ref())
+                                    .map(|t| MonoType::from(t.clone()))
+                                    .collect(),
+                                return_type: Box::new(MonoType::from((**return_type).clone())),
+                            };
+                            if let Some(positions) =
+                                self.normalize_binding_positions(positions, params.len(), span)
+                            {
+                                let method_ty = Self::method_type_after_binding(&fn_ty, &positions);
+                                self.env.add_method_binding(name, &b.name, method_ty);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // RFC-027 Phase 2.5: 带约束表达式的类型定义同时注册为 proof 函数
         // IsPositive: (x: Int) -> Type = { x > 0 }
         // → 注册 `IsPositive` 为 `Fn { params: [Int], return_type: MetaType }`
@@ -1247,6 +1674,48 @@ impl TypeChecker {
                     }),
                 };
                 self.env.add_var(name.to_string(), PolyType::mono(fn_ty));
+            }
+        }
+
+        // RFC-011a 阶段1: 类型体 AST 项留存（接口展开需要原始应用项，MonoType 转换会丢弃）
+        if let crate::frontend::core::parser::ast::Type::Struct { body } = definition {
+            self.type_definition_bodies
+                .insert(name.to_string(), body.clone());
+        }
+
+        // RFC-011a 阶段1: 类型体应用项语义改判。
+        // `Name(args)`（Expr(Generic)）命中已注册类型构造器且实参全为类型 → 接口实例化，
+        // 记入待决队列，阶段 2 统一做 Self 替换 + 完整性检查；实参引用本声明的类型参数
+        // （如接口继承体内的 Animal(Self)）为抽象链接，不记待检查（展开时延迟替换）。
+        // 其余应用项维持 const 约束路径（Assert(N > 0) 等），行为不变。
+        if let crate::frontend::core::parser::ast::Type::Struct { body } = definition {
+            let enclosing_params: Vec<String> =
+                generic_params.iter().map(|p| p.name.clone()).collect();
+            for item in body {
+                if let crate::frontend::core::parser::ast::TypeBodyItem::Expr(ty) = item {
+                    if self.is_interface_application(ty) {
+                        if let crate::frontend::core::parser::ast::Type::Generic {
+                            name: head,
+                            args,
+                            ..
+                        } = ty
+                        {
+                            let abstract_ref = args
+                                .iter()
+                                .any(|a| Self::type_arg_references(a, &enclosing_params));
+                            if !abstract_ref {
+                                self.pending_interface_instantiations.push(
+                                    PendingInterfaceInstantiation {
+                                        impl_type: name.to_string(),
+                                        interface_name: head.clone(),
+                                        args: args.clone(),
+                                        span,
+                                    },
+                                );
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -1291,12 +1760,14 @@ impl TypeChecker {
             let mut const_binders: Vec<ConstVarDef> = resolved_const.const_binders;
 
             // 从类型体收集待定证明义务到 const 参数
+            // （接口实例化应用项已被分流，不走 const 约束路径）
             if let crate::frontend::core::parser::ast::Type::Struct { body } = definition {
                 for item in body {
                     match item {
-                        TypeBodyItem::Expr(ty) => {
+                        TypeBodyItem::Expr(ty) if !self.is_interface_application(ty) => {
                             process_body_expr_item(ty, &mut const_binders);
                         }
+                        TypeBodyItem::Expr(_) => {}
                         TypeBodyItem::Field(f) => {
                             process_body_expr_item(&f.ty, &mut const_binders);
                         }

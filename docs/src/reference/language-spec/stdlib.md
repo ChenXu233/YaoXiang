@@ -365,7 +365,9 @@ for i in 0..10..2 {
 > `x in r` 运行时走 `std.range.contains`（界检查 + 步长对齐），证明管道识别为区间命题
 > `x >= r.start && x < r.end && (x - r.start) % r.step == 0`（区间保持区间，不物化）。
 > step=0 字面量编译期拒绝，动态 step=0 运行时错误（未来错误系统落地后升格 Result，#301）。
-> 接口实例化（类型体 `Iterator(Int)` 声明）待 RFC-011a 落地（#307），当前协议面由 std.range 提供。
+> 接口实例化（类型体 `Iterator(Int)` 声明）的类型语法与静态分发已随 RFC-011a 阶段 1-2 落地（#307）：
+> 类型体应用项 `Iterator(Int)` 触发 `Self ↦ Range` 替换展开与完整性检查，通过后生成实现证明。
+> std.range 模块的运行时协议面暂仍由原生方法提供，迁移到接口分发属 #307 阶段 3。
 
 ---
 
