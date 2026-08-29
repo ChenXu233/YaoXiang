@@ -192,6 +192,11 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
         code: "E1100",
         category: ErrorCategory::TypeCheck,
     },
+    // E1101: 具体类型未实现目标接口（存在类型成员检查，§6.3）
+    ErrorCodeDefinition {
+        code: "E1101",
+        category: ErrorCategory::TypeCheck,
+    },
 ];
 
 // 快捷方法实现
@@ -278,5 +283,7 @@ impl ErrorCodeDefinition {
     ("E1099", interface_method_mismatch(type_: &str, method: &str, expected: &str, found: &str) => .param("type", type_) .param("method", method) .param("expected", expected) .param("found", found)),
     /// E1100 同签名接口方法重复实现（RFC-011a §3 覆盖禁止）
     ("E1100", interface_method_duplicate(type_: &str, method: &str) => .param("type", type_) .param("method", method)),
+    /// E1101 具体类型未实现目标接口（RFC-011a §6.3 存在类型成员检查）
+    ("E1101", type_does_not_implement_interface(type_: &str, interface: &str) => .param("type", type_) .param("interface", interface)),
     }
 }

@@ -68,6 +68,8 @@ pub struct StatementChecker {
     type_defs: HashMap<String, MonoType>,
     /// 实例化请求（收集所有泛型函数实例化需求）
     pub instantiation_requests: Vec<InstantiationRequest>,
+    /// RFC-011a §6 存在类型强制点（具体→存在包装点，ir_gen 按 span 查表注入包装）
+    pub existential_coercions: Vec<super::existential::ExistentialCoercion>,
     /// 流敏感假设集 Γ（可选 — None 在测试或未启用证明管道时使用）
     gamma: Option<crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma>,
     /// 依赖类型环境（类型族注册与查找）
@@ -103,6 +105,7 @@ impl StatementChecker {
             method_bindings: HashMap::new(),
             type_defs: HashMap::new(),
             instantiation_requests: Vec::new(),
+            existential_coercions: Vec::new(),
             gamma,
             dep_env,
             trait_table,
@@ -1354,6 +1357,22 @@ impl StatementChecker {
                         }
                     }
                 }
+                // RFC-011a §6: 存在类型强制点收集——具体值进入存在类型位置
+                //（含列表字面量逐元素成员检查，主 unify 只作用首个元素）
+                {
+                    let (mut coercions, errors) = super::existential::collect_existential_coercions(
+                        &self.solver,
+                        &self.scope,
+                        &self.type_defs,
+                        &self.generic_type_defs,
+                        init_expr,
+                        &resolved_ann,
+                    );
+                    if let Some(err) = errors.into_iter().next() {
+                        return Err(Box::new(err));
+                    }
+                    self.existential_coercions.append(&mut coercions);
+                }
                 // 类型构造器：当 type_ann 是 Type(MetaType) 且 init_ty 是 Struct 时，
                 // 存 Struct 类型而不是 MetaType，使 Point(1.0, 2.0) 自然工作
                 if matches!(ann_ty, MonoType::MetaType { .. })
@@ -1667,6 +1686,8 @@ impl StatementChecker {
                         let result = inferrer.infer_expr(expr).map_err(Box::new);
                         self.instantiation_requests
                             .extend(inferrer.instantiation_requests);
+                        self.existential_coercions
+                            .extend(inferrer.existential_coercions);
                         result
                     }
                 }
@@ -1692,6 +1713,8 @@ impl StatementChecker {
                 let result = inferrer.infer_expr(expr).map_err(Box::new);
                 self.instantiation_requests
                     .extend(inferrer.instantiation_requests);
+                self.existential_coercions
+                    .extend(inferrer.existential_coercions);
                 result
             }
         }

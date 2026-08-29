@@ -24,6 +24,7 @@ mod predicate_resolver;
 mod rfc010;
 mod rfc011;
 mod rfc011a;
+pub(crate) mod rfc011a_dispatch;
 mod rfc027_phase1_integration;
 mod rfc027_phase25_proof_fn;
 mod rfc027_phase2_smt;

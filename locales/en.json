@@ -878,5 +878,47 @@
     "help": "Either reference the parameter in a type position (field type, inner Fn parameter type, Assert/Array type argument), or remove it from the declaration",
     "example": "Foo: (T: Type, N: Int) -> Type = { x: T }",
     "error_output": "error[E1094]: 'N' is declared as a compile-time value parameter of 'Foo' but never referenced in the type body"
+  },
+  "E1095": {
+    "title": "Unknown interface",
+    "message": "Unknown interface",
+    "template": "Unknown interface: '{name}' (the name referenced in the type body is not a registered type constructor)",
+    "help": "Check the spelling, or declare the interface first with `Iface: (Self: Type) -> Type = {{ ... }}`"
+  },
+  "E1096": {
+    "title": "Interface arity mismatch",
+    "message": "Interface arity mismatch",
+    "template": "Interface '{name}' expects {expected} type arguments, found {found}",
+    "help": "Provide one argument per declared type parameter of the interface"
+  },
+  "E1097": {
+    "title": "Interface member name conflict",
+    "message": "Interface member name conflict",
+    "template": "Member '{member}' of type '{type}' conflicts with an interface member (fields and methods share one namespace, §1.2)",
+    "help": "Rename the field or the interface member"
+  },
+  "E1098": {
+    "title": "Interface method not implemented",
+    "message": "Interface method not implemented",
+    "template": "Type '{type}' does not implement method '{method}' of interface '{interface}'",
+    "help": "Declare the method via `Type.method: signature = ...` or provide a binding in the type body"
+  },
+  "E1099": {
+    "title": "Interface method signature mismatch",
+    "message": "Interface method signature mismatch",
+    "template": "Method '{method}' of type '{type}' does not match the interface signature: expected {expected}, found {found}",
+    "help": "Make the implementation signature exactly match the interface member (§3 forbids overriding; overloading is allowed)"
+  },
+  "E1100": {
+    "title": "Duplicate interface method implementation",
+    "message": "Duplicate interface method implementation",
+    "template": "Method '{method}' of type '{type}' is implemented more than once (same-signature overriding is forbidden, §3)",
+    "help": "Remove the duplicate implementation, keep one"
+  },
+  "E1101": {
+    "title": "Type does not implement interface",
+    "message": "Type does not implement interface",
+    "template": "Type '{type}' does not implement interface '{interface}' and cannot enter this existential position",
+    "help": "Instantiate the interface in the type body (`Animal(Dog)`) and implement all its members"
   }
 }
