@@ -62,6 +62,7 @@ YaoXiang 编译器使用错误码标识不同类型的诊断信息。错误码�
 | E1098  | `Type '{type}' does not implement '{interface}.{method}'`                      | 接口方法未实现                       |
 | E1099  | `Signature mismatch for '{type}.{method}': expected '{expected}', found '{found}'` | 接口方法签名不匹配               |
 | E1100  | `Duplicate implementation of '{type}.{method}' (override is not allowed)`      | 同签名方法重复实现（覆盖禁止）       |
+| E1101  | `Type '{type}' does not implement interface '{interface}' and cannot enter this existential position` | 类型未实现接口（存在类型成员检查）   |
 
 ## E2xxx -- 语义分析
 

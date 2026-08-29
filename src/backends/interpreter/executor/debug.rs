@@ -7,6 +7,7 @@ use crate::backends::{DebuggableExecutor, ExecutorError, ExecutorResult};
 use crate::backends::common::RuntimeValue;
 use crate::middle::bytecode::{BytecodeInstr, ConstValue, Label, Reg};
 use crate::backends::common::value::FunctionId;
+use crate::backends::common::value::TypeId;
 use super::executor::Interpreter;
 use crate::backends::interpreter::Frame;
 
@@ -46,6 +47,23 @@ fn index_arg(
 }
 
 impl Interpreter {
+    /// 从常量池解析字符串（变体组名等）
+    fn const_string(
+        &self,
+        idx: u16,
+    ) -> String {
+        self.constants
+            .get(idx as usize)
+            .and_then(|c| {
+                if let ConstValue::String(s) = c {
+                    Some(s.clone())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_default()
+    }
+
     /// Decode a Label into a signed offset for relative jumps.
     fn decode_label_offset(label: Label) -> i32 {
         i32::from_le_bytes([
@@ -476,9 +494,14 @@ impl Interpreter {
                         frame.set_slot(dst_reg.index() as usize, result);
                     }
                 } else {
-                    if let Some(dst_reg) = dst {
-                        frame.set_slot(dst_reg.index() as usize, RuntimeValue::Void);
-                    }
+                    // RFC-011a 阶段3 加固：vtable 缺方法不再静默写 Void——
+                    // 静默路径曾把「分发错位」掩盖成空值（错误数据类别）。
+                    // 与存在类型 VariantTag/VariantPayload 的运行时守卫对称。
+                    let obj_desc = format!("{:?}", obj_val.value_type_simple());
+                    return Err(ExecutorError::runtime_only(format!(
+                        "虚表分发找不到方法 '{}'（接收者类型 {}）",
+                        method_name, obj_desc
+                    )));
                 }
                 frame.advance();
                 Ok(StepOutcome::Continue)
@@ -789,6 +812,72 @@ impl Interpreter {
                         step: p,
                     },
                 );
+                frame.advance();
+                Ok(StepOutcome::Continue)
+            }
+            // RFC-011a §6: 包装具体值为存在类型变体（Animal$Group.Dog(payload)）
+            BytecodeInstr::CreateVariant {
+                dst,
+                group_idx,
+                variant,
+                payload,
+            } => {
+                let payload_val = self.force_slot(frame, *payload)?;
+                let group = self.const_string(*group_idx);
+                let _ = group;
+                frame.set_slot(
+                    dst.0 as usize,
+                    RuntimeValue::Enum {
+                        type_id: TypeId::ENUM,
+                        variant_id: *variant,
+                        payload: Box::new(payload_val),
+                    },
+                );
+                frame.advance();
+                Ok(StepOutcome::Continue)
+            }
+            // RFC-011a §6: 变体号提取。守卫：obj 必须是变体值——漏包装在此显式
+            // 报错（四层防御第③层），绝不静默产出错误数据
+            BytecodeInstr::VariantTag {
+                dst,
+                obj,
+                group_idx,
+            } => {
+                let obj_val = self.force_slot(frame, *obj)?;
+                let group = self.const_string(*group_idx);
+                let tag = match &obj_val {
+                    RuntimeValue::Enum { variant_id, .. } => *variant_id as i64,
+                    other => {
+                        let actual = format!("{:?}", other.value_type_simple());
+                        return Err(ExecutorError::runtime_only(format!(
+                            "存在类型分发收到未包装的值（期望 {} 的变体，实际是 {}）——                             值未经包装进入存在类型位置，属编译器包装点遗漏",
+                            group, actual
+                        )));
+                    }
+                };
+                frame.set_slot(dst.0 as usize, RuntimeValue::Int(tag));
+                frame.advance();
+                Ok(StepOutcome::Continue)
+            }
+            // RFC-011a §6: 变体负载提取（守卫同 VariantTag）
+            BytecodeInstr::VariantPayload {
+                dst,
+                obj,
+                group_idx,
+            } => {
+                let obj_val = self.force_slot(frame, *obj)?;
+                let group = self.const_string(*group_idx);
+                let payload = match obj_val {
+                    RuntimeValue::Enum { payload, .. } => *payload,
+                    other => {
+                        let actual = format!("{:?}", other.value_type_simple());
+                        return Err(ExecutorError::runtime_only(format!(
+                            "存在类型分发收到未包装的值（期望 {} 的变体，实际是 {}）——                             值未经包装进入存在类型位置，属编译器包装点遗漏",
+                            group, actual
+                        )));
+                    }
+                };
+                frame.set_slot(dst.0 as usize, payload);
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }

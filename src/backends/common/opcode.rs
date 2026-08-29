@@ -107,6 +107,11 @@ pub const CAST: u8 = 0xC1;
 // Reflection (0xD0-0xDF)
 pub const TYPE_OF: u8 = 0xD0;
 
+// Variant Operations (0xE0-0xEF) — RFC-011a §6 存在类型变体
+pub const CREATE_VARIANT: u8 = 0xE0;
+pub const VARIANT_TAG: u8 = 0xE1;
+pub const VARIANT_PAYLOAD: u8 = 0xE2;
+
 /// 操作码名称（调试/转储用）
 pub fn opcode_name(code: u8) -> &'static str {
     match code {
@@ -188,6 +193,9 @@ pub fn opcode_name(code: u8) -> &'static str {
         TYPE_CHECK => "TypeCheck",
         CAST => "Cast",
         TYPE_OF => "TypeOf",
+        CREATE_VARIANT => "CreateVariant",
+        VARIANT_TAG => "VariantTag",
+        VARIANT_PAYLOAD => "VariantPayload",
         _ => "Unknown",
     }
 }

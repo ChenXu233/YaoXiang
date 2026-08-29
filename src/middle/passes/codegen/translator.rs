@@ -507,6 +507,19 @@ impl Translator {
                 end,
                 step,
             } => self.translate_new_range(dst, start, end, step),
+            CreateVariant {
+                dst,
+                group,
+                variant,
+                payload,
+                ..
+            } => self.translate_create_variant(dst, group, *variant, payload),
+            VariantTag {
+                dst, obj, group, ..
+            } => self.translate_variant_access(opcode::VARIANT_TAG, dst, obj, group),
+            VariantPayload {
+                dst, obj, group, ..
+            } => self.translate_variant_access(opcode::VARIANT_PAYLOAD, dst, obj, group),
             MakeClosure {
                 dst,
                 func,
@@ -1176,6 +1189,47 @@ impl Translator {
             operands.extend_from_slice(&(r as u16).to_le_bytes());
         }
         Ok(BytecodeInstruction::new(opcode::NEW_RANGE, operands))
+    }
+
+    /// RFC-011a §6: 包装具体值为存在类型变体
+    fn translate_create_variant(
+        &mut self,
+        dst: &Operand,
+        group: &str,
+        variant: u32,
+        payload: &Operand,
+    ) -> Result<BytecodeInstruction, Diagnostic> {
+        let dst_reg = self.operand_resolver.to_reg(dst)?;
+        let payload_reg = self.operand_resolver.to_reg(payload)?;
+        let group_idx = self
+            .emitter
+            .add_constant(ConstValue::String(group.to_owned())) as u16;
+        let mut operands = Vec::new();
+        operands.extend_from_slice(&(dst_reg as u16).to_le_bytes());
+        operands.extend_from_slice(&group_idx.to_le_bytes());
+        operands.extend_from_slice(&variant.to_le_bytes());
+        operands.extend_from_slice(&(payload_reg as u16).to_le_bytes());
+        Ok(BytecodeInstruction::new(opcode::CREATE_VARIANT, operands))
+    }
+
+    /// RFC-011a §6: 变体号/负载提取（守卫在解释器执行臂）
+    fn translate_variant_access(
+        &mut self,
+        op: u8,
+        dst: &Operand,
+        obj: &Operand,
+        group: &str,
+    ) -> Result<BytecodeInstruction, Diagnostic> {
+        let dst_reg = self.operand_resolver.to_reg(dst)?;
+        let obj_reg = self.operand_resolver.to_reg(obj)?;
+        let group_idx = self
+            .emitter
+            .add_constant(ConstValue::String(group.to_owned())) as u16;
+        let mut operands = Vec::new();
+        operands.extend_from_slice(&(dst_reg as u16).to_le_bytes());
+        operands.extend_from_slice(&(obj_reg as u16).to_le_bytes());
+        operands.extend_from_slice(&group_idx.to_le_bytes());
+        Ok(BytecodeInstruction::new(op, operands))
     }
 
     fn translate_make_closure(
