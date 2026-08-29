@@ -87,3 +87,7 @@ docs/plans
 .playwright-mcp
 # 构建产物：翻译缓存
 locales/.i18n-cache.json
+
+.zcode
+
+.dsh
