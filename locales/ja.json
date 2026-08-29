@@ -12,27 +12,27 @@
   "lex_token_string": "字句解析：文字列 \"{0}\"",
   "lex_token_char": "字句解析：文字 '{0}'",
   "lex_token_operator": "字句解析：演算子 {0}",
-  "lex_token_punctuation": "字句解析：句読点 {0}",
+  "lex_token_punctuation": "字句解析：区切り記号 {0}",
   "codegen_start": "コード生成を開始",
   "codegen_complete": "コード生成完了",
   "codegen_functions": "コード生成完了：{0} 個の関数",
-  "codegen_const_pool": "定数プール生成中：{0} 個の定数",
-  "codegen_code_section": "コードセクション生成中：{0} 個の関数",
-  "codegen_type_table": "型テーブル生成中：{0} 個の型",
-  "vm_start": "VM実行開始",
-  "vm_complete": "VM実行完了",
+  "codegen_const_pool": "定数プールを生成中：{0} 個の定数",
+  "codegen_code_section": "コードセクションを生成中：{0} 個の関数",
+  "codegen_type_table": "型テーブルを生成中：{0} 個の型",
+  "vm_start": "VM 実行開始",
+  "vm_complete": "VM 実行完了",
   "vm_call_func": "関数呼び出し：{0}",
   "vm_return_func": "関数から戻る",
   "vm_i64_add": "{0} + {1} を計算",
   "compilation_start": "コンパイル開始",
   "compiling_source": "ソースコードをコンパイル中（{0} バイト）",
-  "debug_run_called": "run() が呼び出された",
-  "debug_loading_function": "関数 '{0}' をインタプリタに読み込み中",
-  "debug_total_functions": "読み込まれた関数の総数：{0}",
+  "debug_run_called": "run() が呼び出されました",
+  "debug_loading_function": "関数 '{0}' をインタープリタにロード",
+  "debug_total_functions": "ロード済み関数の総数：{0}",
   "debug_available_functions": "利用可能な関数：{0}",
-  "debug_exec_binary_op": "二項演算を実行：左={0}, 右={1}, 操作={2}",
+  "debug_exec_binary_op": "二項演算実行：左={0}, 右={1}, 操作={2}",
   "debug_adding_numbers": "{0} + {1} を計算",
-  "debug_generating_ir_binop": "二項演算の IR {0} を生成中",
+  "debug_generating_ir_binop": "二項演算の IR {0} を生成",
   "bytecode_dump_header": "=== {0} のバイトコードダンプ ===",
   "bytecode_dump_type_table": "=== 型テーブル（{0} 個の型）===",
   "bytecode_dump_constants": "=== 定数（{0} 項目）===",
@@ -40,49 +40,49 @@
   "bytecode_magic": "  マジックナンバー：0x{0}",
   "bytecode_version": "  バージョン：{0}",
   "bytecode_flags": "  フラグ：0x{0}",
-  "bytecode_entry_point": "  エントリーポイント：{0}",
+  "bytecode_entry_point": "  エントリポイント：{0}",
   "bytecode_section_count": "  セクション数：{0}",
   "bytecode_file_size": "  ファイルサイズ：{0} バイト",
   "bytecode_func_params": "  パラメータ：{0}",
-  "bytecode_func_return_type": "  戻り値の型：{0}",
+  "bytecode_func_return_type": "  戻り型：{0}",
   "bytecode_func_local_count": "  ローカル変数数：{0}",
   "bytecode_func_instr_count": "  命令数：{0}",
   "bytecode_func_code": "  コード：",
   "bytecode_instr_index": "    [{0}] {1} {2}",
-  "bytecode_unknown_opcode": "    [{0}] 不明なオペコード：0x{1}  ({2})",
-  "shell_loaded": "ロード済み：{0}",
-  "debug_binary_op": "デバッグ：左辺={0}, 右辺={1}",
+  "bytecode_unknown_opcode": "    [{0}] 未知のオペコード：0x{1}  ({2})",
+  "shell_loaded": "読み込み済み：{0}",
+  "debug_binary_op": "デバッグ：左値={0}, 右値={1}",
   "debug_registers": "デバッグ：レジスタ.len={0}, 左インデックス={1}, 右インデックス={2}",
-  "ir_gen_enter_scope": "IR生成デバッグ：スコープに入る、記号スタック深さ変更前：{0}",
-  "ir_gen_exit_scope": "IR生成デバッグ：スコープを抜ける、記号スタック深さ：{0}",
-  "ir_gen_register_local": "IR生成デバッグ：ローカル変数 '{0}' を登録、local_idx={1}",
-  "ir_gen_lookup_local": "IR生成デバッグ：ローカル変数 '{0}' を検索 -> local_idx={1}",
-  "ir_gen_lookup_local_not_found": "IR生成デバッグ：ローカル変数 '{0}' を検索 -> None",
-  "ir_gen_before_process_stmt": "IR生成デバッグ：文を処理する前、記号深さ={0}",
-  "ir_gen_after_process_stmt": "IR 生成のデバッグ：文を処理した後、シンボル深度={0}",
-  "ir_gen_about_to_exit_scope": "IR 生成のデバッグ：スコープを終了しようとしています、シンボル深度={0}",
-  "ir_gen_after_exit_scope": "IR 生成のデバッグ：スコープ終了後、シンボル深度={0}",
-  "parser_test_parsed_params": "引数の解析：{0:?}",
-  "parser_test_parsed_return_type": "戻り値の型の解析：{0:?}",
+  "ir_gen_enter_scope": "デバッグ IR 生成：スコープに入る、記号スタック深度の前：{0}",
+  "ir_gen_exit_scope": "デバッグ IR 生成：スコープを出る、記号スタック深度：{0}",
+  "ir_gen_register_local": "デバッグ IR 生成：ローカル変数 '{0}' を登録、local_idx={1}",
+  "ir_gen_lookup_local": "デバッグ IR 生成：ローカル変数 '{0}' を検索 -> local_idx={1}",
+  "ir_gen_lookup_local_not_found": "デバッグ IR 生成：ローカル変数 '{0}' を検索 -> None",
+  "ir_gen_before_process_stmt": "デバッグ IR 生成：文を処理する前、記号深度={0}",
+  "ir_gen_after_process_stmt": "IR 生成のデバッグ：ステートメント処理後、記号の深さ={0}",
+  "ir_gen_about_to_exit_scope": "IR 生成のデバッグ：スコープ退出直前、記号の深さ={0}",
+  "ir_gen_after_exit_scope": "IR 生成のデバッグ：スコープ退出後、記号の深さ={0}",
+  "parser_test_parsed_params": "解析されたパラメータ：{0:?}",
+  "parser_test_parsed_return_type": "解析された戻り値の型：{0:?}",
   "parser_test_parsed_as_var": "関数ではなく変数として解析",
   "parser_test_name": "名前：{0}",
   "parser_test_annotation": "アノテーション：{0:?}",
-  "package_no_deps_to_update": "更新する依存関係はありません。",
-  "package_no_deps_to_install": "インストールする依存関係はありません。",
-  "package_deps_updated": "✓ {0} 個の依存関係を更新しました：",
-  "package_deps_resolved": "✓ {0} 個の依存関係を解析しました：",
+  "package_no_deps_to_update": "更新が必要な依存関係はありません。",
+  "package_no_deps_to_install": "インストールが必要な依存関係はありません。",
+  "package_deps_updated": "✓ {0} 個の依存関係を更新しました:",
+  "package_deps_resolved": "✓ {0} 個の依存関係を解決しました:",
   "package_dep_installed": "インストール済み",
   "package_dep_cached": "キャッシュ済み",
-  "package_deps_install_failed": "⚠ {0} 個の依存関係のインストールに失敗しました：",
+  "package_deps_install_failed": "⚠ {0} 個の依存関係のインストールに失敗しました:",
   "package_lock_updated": "yaoxiang.lock を更新しました",
-  "package_no_deps": "依存関係がありません。",
+  "package_no_deps": "依存関係はありません。",
   "package_dev_dep_added": "✓ 開発依存関係 '{0}' ({1}) を追加しました",
   "package_dep_added": "✓ 依存関係 '{0}' ({1}) を追加しました",
   "package_dev_dep_removed": "✓ 開発依存関係 '{0}' を削除しました",
   "package_dep_removed": "✓ 依存関係 '{0}' を削除しました",
   "package_project_created": "✓ プロジェクト '{0}' を作成しました",
   "package_project_created_lib": "✓ ライブラリプロジェクト '{0}' を作成しました",
-  "package_init_here": "✓ 現在のディレクトリにプロジェクト '{0}' を初期化しました",
+  "package_init_here": "✓ 現在のディレクトリでプロジェクト '{0}' を初期化しました",
   "package_file_skipped": "  既存ファイル '{0}' をスキップしました",
   "package_lock_generated": "# このファイルは yaoxiang によって自動生成されています。手動で編集しないでください。",
   "package_update_failed": "⚠ {0} の更新に失敗しました: {1}",
@@ -93,7 +93,7 @@
     "title": "無効な文字",
     "message": "ソースコードに不正な文字が含まれています",
     "template": "無効な文字：'{char}'",
-    "help": "不正な文字を削除するか、有効なエンコードを使用してください",
+    "help": "不正な文字を削除するか、有効なエンコーディングを使用してください",
     "example": "x = ¥100;",
     "error_output": "error[E0001]: 無効な文字\n --> example.yx:1:5\n  |\n1 | x = ¥100;\n  |     ^ 不正な文字 '¥'"
   },
@@ -106,9 +106,9 @@
     "error_output": "error[E0002]: 無効な数値リテラル\n --> example.yx:1:5\n  |\n1 | x = 1_2_3_;\n  |     ^ 無効な数値"
   },
   "E0003": {
-    "title": "終端されていない文字列",
-    "message": "文字列リテラルに閉じ引用符がない",
-    "template": "文字列が第{line}行から終端されていない",
+    "title": "未終端の文字列",
+    "message": "文字列リテラルに閉じ引用符がありません",
+    "template": "{line}行目から始まる文字列が終端されていません",
     "help": "文字列に閉じ引用符を追加してください",
     "example": "x = \"hello world;",
     "error_output": "error[E0003]: 終端されていない文字列\n --> example.yx:1:5\n  |\n1 | x = \"hello world;\n  |     ^ 終端されていない文字列"
@@ -117,23 +117,23 @@
     "title": "無効な文字リテラル",
     "message": "文字リテラルが正しくありません",
     "template": "無効な文字リテラル：'{literal}'",
-    "help": "文字リテラルは1つの文字のみを含むことができます",
+    "help": "文字リテラルには1文字しか含めることができません",
     "example": "x = 'ab';",
     "error_output": "error[E0004]: 無効な文字リテラル\n --> example.yx:1:5\n  |\n1 | x = 'ab';\n  |     ^ 文字リテラルに複数の文字が含まれています"
   },
   "E0010": {
-    "title": "期待されるトークン",
-    "message": "パーサーが特定のトークンを期待しています",
-    "template": "{expected}を期待しましたが、{found}が見つかりました",
-    "help": "構文を確認して、期待されるトークンを追加してください",
+    "title": "予期されるトークン",
+    "message": "パーサーが特定のトークンを予期しています",
+    "template": "{expected}を予期しましたが、{found}が見つかりました",
+    "help": "構文を確認して予期されるトークンを追加してください",
     "example": "x = 1, 2;",
-    "error_output": "error[E0010]: 期待されるトークン\n --> example.yx:1:7\n  |\n1 | x = 1, 2;\n  |       ^ ',' または ';' を期待"
+    "error_output": "error[E0010]: 予期されるトークン\n --> example.yx:1:7\n  |\n1 | x = 1, 2;\n  |       ^ ',' または ';' を予期しました"
   },
   "E0011": {
     "title": "予期しないトークン",
     "message": "予期しないトークンに遭遇しました",
     "template": "予期しないトークン：'{token}'",
-    "help": "予期しないトークンを削除または置換する",
+    "help": "予期しないトークンを削除または置換してください",
     "example": "x = 1 @ 2;",
     "error_output": "error[E0011]: 予期しないトークン\n --> example.yx:1:7\n  |\n1 | x = 1 @ 2;\n  |       ^ 予期しないトークン '@'"
   },
@@ -141,23 +141,23 @@
     "title": "無効な構文",
     "message": "式または文に構文エラーがあります",
     "template": "無効な構文：{reason}",
-    "help": "式または文の構文を確認する",
+    "help": "式または文の構文を確認してください",
     "example": "if x { }",
     "error_output": "error[E0012]: 無効な構文\n --> example.yx:1:3\n  |\n1 | if x { }\n  |    ^ 条件がありません"
   },
   "E0013": {
     "title": "一致しない括弧",
     "message": "丸括弧、角括弧、または波括弧が一致しません",
-    "template": "一致しない {bracket_type}：第 {open_line} 行、第 {open_col} 列で開かれ、閉じられていません",
-    "help": "すべての括弧が正しく閉じられていることを確認する",
+    "template": "一致しない {bracket_type}：{open_line}行目、{open_col}列目で開かれ、閉じられていません",
+    "help": "すべての括弧が正しく閉じられていることを確認してください",
     "example": "x = (1 + 2;",
     "error_output": "error[E0013]: 一致しない括弧\n --> example.yx:1:1\n  |\n1 | x = (1 + 2;\n  |     ^ 閉じられていない丸括弧"
   },
   "E0014": {
-    "title": "セミコロンの欠落",
+    "title": "セミコロンがありません",
     "message": "文にセミコロンがありません",
     "template": "{statement} の後にセミコロンがありません",
-    "help": "文の末尾にセミコロンを追加する",
+    "help": "文の末尾にセミコロンを追加してください",
     "example": "x = 1\ny = 2",
     "error_output": "error[E0014]: セミコロンがありません\n --> example.yx:1:5\n  |\n1 | x = 1\n  |       ^ セミコロンがありません"
   },
@@ -175,7 +175,7 @@
     "template": "期待される型 '{expected}'、実際の型 '{found}'",
     "help": "正しい型を使用するか、型変換を追加してください",
     "example": "x: Int = \"hello\";",
-    "error_output": "error[E1002]: 型が一致しません\n --> example.yx:1:12\n  |\n1 | x: Int = \"hello\";\n  |            ^ 'Int' を期待、'String' が見つかりました"
+    "error_output": "error[E1002]: 型が一致しません\n --> example.yx:1:12\n  |\n1 | x: Int = \"hello\";\n  |            ^ 'Int' を期待、'String' を検出"
   },
   "E1003": {
     "title": "未知の型",
@@ -188,26 +188,26 @@
   "E1010": {
     "title": "引数の数が一致しません",
     "message": "関数呼び出しの引数が定義と一致しません",
-    "template": "関数 '{func}' は {expected} 個の引数を期待しますが、{found} 個見つかりました",
+    "template": "関数 '{func}' は {expected} 個の引数を期待していますが、見つかったのは {found} 個です",
     "help": "関数呼び出しの引数の数を確認してください",
     "example": "add(1, 2, 3);",
-    "error_output": "error[E1010]: 引数の数が一致しません\n --> example.yx:1:1\n  |\n1 | add(1, 2, 3);\n  |     ^ 関数は 2 個の引数を期待しますが、3 個見つかりました"
+    "error_output": "error[E1010]: 引数の数が一致しません\n --> example.yx:1:1\n  |\n1 | add(1, 2, 3);\n  |     ^ 関数は 2 個の引数を期待していますが、見つかったのは 3 個です"
   },
   "E1011": {
     "title": "引数の型が一致しません",
     "message": "引数の型チェックに失敗しました",
-    "template": "引数の型が一致しません：'{expected}' を期待、'{found}' を受け取りました",
-    "help": "引数の型が関数シグネチャと一致することを確認してください",
+    "template": "引数の型が一致しません：'{expected}' を期待していますが '{found}' が見つかりました",
+    "help": "引数の型が関数シグネチャと一致していることを確認してください",
     "example": "add(\"hello\", 2);",
-    "error_output": "error[E1011]: 引数の型が一致しません\n --> example.yx:1:5\n  |\n1 | add(\"hello\", 2);\n  |     ^ 'Int' を期待、'String' が見つかりました"
+    "error_output": "error[E1011]: 引数の型が一致しません\n --> example.yx:1:5\n  |\n1 | add(\"hello\", 2);\n  |     ^ 'Int' を期待していますが 'String' が見つかりました"
   },
   "E1012": {
     "title": "戻り値の型が一致しません",
     "message": "関数の戻り値の型が正しくありません",
-    "template": "戻り値の型が一致しません：'{expected}' を期待、'{found}' を受け取りました",
-    "help": "戻り値が宣言された戻り値の型と一致することを確認してください",
+    "template": "戻り値の型が一致しません：'{expected}' を期待していますが '{found}' が見つかりました",
+    "help": "戻り値が宣言された戻り値の型と一致していることを確認してください",
     "example": "fn foo() -> Int { \"hello\" }",
-    "error_output": "error[E1012]: 戻り値の型が一致しません\n --> example.yx:1:19\n  |\n1 | fn foo() -> Int { \"hello\" }\n  |                   ^ 'Int' を期待、'String' が見つかりました"
+    "error_output": "error[E1012]: 戻り値の型が一致しません\n --> example.yx:1:19\n  |\n1 | fn foo() -> Int { \"hello\" }\n  |                   ^ 'Int' を期待していますが 'String' が見つかりました"
   },
   "E1013": {
     "title": "関数が見つかりません",
@@ -235,17 +235,17 @@
   },
   "E1030": {
     "title": "パターンが不完全です",
-    "message": "match 式がすべてのパターンを網羅していません",
+    "message": "match 式がすべての場合をカバーしていません",
     "template": "パターンが不完全です：{patterns} が不足しています",
     "help": "match 式に不足しているパターンを追加する",
     "example": "match x { Some(_) => 1 }",
-    "error_output": "error[E1030]: パターンが不完全です\n --> example.yx:1:1\n  |\n1 | match x { Some(_) => 1 }\n  |     ^ パターン 'None' がカバーされていません"
+    "error_output": "error[E1030]: パターンが網羅的ではありません\n --> example.yx:1:1\n  |\n1 | match x { Some(_) => 1 }\n  |     ^ パターン 'None' がカバーされていません"
   },
   "E1031": {
     "title": "到達不能パターン",
     "message": "決してマッチしないパターン",
     "template": "到達不能パターン：'{pattern}'",
-    "help": "到達不能なパターンを削除または修正してください",
+    "help": "到達不能パターンを削除または修正してください",
     "example": "match x { 1 => \"one\", 1 => \"another\" }",
     "error_output": "error[E1031]: 到達不能パターン\n --> example.yx:1:18\n  |\n1 | match x { 1 => \"one\", 1 => \"another\" }\n  |                  ^ パターン '1' はすでにカバーされています"
   },
@@ -253,17 +253,17 @@
     "title": "操作はサポートされていません",
     "message": "型はこの操作をサポートしていません",
     "template": "型 '{type}' は操作 '{op}' をサポートしていません",
-    "help": "型がサポートする操作を確認してください",
+    "help": "その型でサポートされている操作を確認してください",
     "example": "\"hello\" + 1;",
     "error_output": "error[E1040]: 操作はサポートされていません\n --> example.yx:1:9\n  |\n1 | \"hello\" + 1;\n  |         ^ String 型は '+' 操作をサポートしていません"
   },
   "E1041": {
-    "title": "インデックスが範囲外",
+    "title": "インデックスが範囲外です",
     "message": "配列/リストのインデックスが範囲外です",
     "template": "インデックスが範囲外：有効範囲は 0..{max}、{index} が見つかりました",
     "help": "インデックスがコレクションの範囲内であることを確認してください",
     "example": "arr[10];",
-    "error_output": "error[E1041]: インデックスが範囲外\n --> example.yx:1:5\n  |\n1 | arr[10];\n  |     ^ インデックス 10 は配列の長さ 5 を超えています"
+    "error_output": "error[E1041]: インデックスが範囲外です\n --> example.yx:1:5\n  |\n1 | arr[10];\n  |     ^ インデックス 10 は配列長 5 を超えています"
   },
   "E1042": {
     "title": "フィールドが見つかりません",
@@ -274,96 +274,96 @@
     "error_output": "error[E1042]: フィールドが見つかりません\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ 構造体 'Point' にフィールド 'z' が見つかりません"
   },
   "E1050": {
-    "title": "ブールオペランドが必要です",
-    "message": "論理演算にはブールオペランドが必要です",
-    "template": "論理演算にはブールオペランドが必要です。実際は '{left}' と '{right}' です",
+    "title": "ブール型のオペランドが必要",
+    "message": "論理演算にはブール型のオペランドが必要です",
+    "template": "論理演算にはブール型のオペランドが必要ですが、実際は '{left}' と '{right}' です",
     "help": "オペランドをブール型に変換するか、他の演算子を使用してください",
     "example": "let x = 1 && 2;",
-    "error_output": "error[E1050]: ブールオペランドが必要です\n --> example.yx:1:9\n  |\n1 | let x = 1 && 2;\n  |         ^ 論理演算にはブールオペランドが必要です"
+    "error_output": "error[E1050]: ブール型のオペランドが必要\n --> example.yx:1:9\n  |\n1 | let x = 1 && 2;\n  |         ^ 論理演算にはブール型のオペランドが必要です"
   },
   "E1051": {
-    "title": "論理 NOT にはブールオペランドが必要です",
-    "message": "論理 NOT 演算にはブールオペランドが必要です",
-    "template": "論理 NOT にはブールオペランドが必要です。実際は '{type}' です",
+    "title": "論理 NOT にはブール型のオペランドが必要",
+    "message": "論理 NOT 演算にはブール型のオペランドが必要です",
+    "template": "論理 NOT にはブール型のオペランドが必要ですが、実際は '{type}' です",
     "help": "NOT を適用する前にオペランドをブール型に変換してください",
     "example": "let x = !42;",
-    "error_output": "error[E1051]: 論理 NOT にはブールオペランドが必要です\n --> example.yx:1:9\n  |\n1 | let x = !42;\n  |         ^ NOT にはブールオペランドが必要です。実際は 'Int' です"
+    "error_output": "error[E1051]: 論理 NOT にはブール型のオペランドが必要\n --> example.yx:1:9\n  |\n1 | let x = !42;\n  |         ^ NOT にはブール型のオペランドが必要ですが、実際は 'Int' です"
   },
   "E1052": {
-    "title": "無効な参照外しです",
-    "message": "ポインタ以外の型を参照外しできません",
-    "template": "型 '{type}' を参照外しできません。ポインタ型が必要です",
-    "help": "ポインタ型のみがデリファレンスできます",
+    "title": "無効なデリファレンス",
+    "message": "ポインタ型以外の値をデリファレンスできません",
+    "template": "型 '{type}' をデリファレンスできません。ポインタ型が必要です",
+    "help": "ポインタ型のみが逆参照可能です",
     "example": "let x = *42;",
-    "error_output": "error[E1052]: 無効なデリファレンス\n --> example.yx:1:9\n  |\n1 | let x = *42;\n  |         ^ 'Int' をデリファレンスできません"
+    "error_output": "error[E1052]: 無効な逆参照\n --> example.yx:1:9\n  |\n1 | let x = *42;\n  |         ^ 'Int' を逆参照できません"
   },
   "E1053": {
-    "title": "非構造体フィールドアクセス",
-    "message": "非構造体型でフィールドにアクセスできません",
-    "template": "非構造体型 '{type}' でフィールドにアクセスできません",
+    "title": "非構造体のフィールドアクセス",
+    "message": "非構造体型ではフィールドにアクセスできません",
+    "template": "非構造体型 '{type}' ではフィールドにアクセスできません",
     "help": "フィールドアクセスは構造体型にのみ適用されます",
     "example": "let x = 42.field;",
-    "error_output": "error[E1053]: 非構造体フィールドアクセス\n --> example.yx:1:12\n  |\n1 | let x = 42.field;\n  |            ^ 'Int' でフィールドにアクセスできません"
+    "error_output": "error[E1053]: 非構造体のフィールドアクセス\n --> example.yx:1:12\n  |\n1 | let x = 42.field;\n  |            ^ 'Int' でフィールドにアクセスできません"
   },
   "E1054": {
     "title": "条件型の不一致",
     "message": "条件式はブール型である必要があります",
-    "template": "条件はブール型である必要があります。実際は '{type}' 型です",
+    "template": "条件はブール型である必要がありますが、実際には '{type}' です",
     "help": "ブール式を使用するか、ブール型に変換してください",
     "example": "if 42 { }",
-    "error_output": "error[E1054]: 条件型の不一致\n --> example.yx:1:4\n  |\n1 | if 42 { }\n  |    ^ 条件はブール型である必要があります。実際は 'Int' 型です"
+    "error_output": "error[E1054]: 条件型の不一致\n --> example.yx:1:4\n  |\n1 | if 42 { }\n  |    ^ 条件はブール型である必要がありますが、実際には 'Int' です"
   },
   "E1055": {
     "title": "非ジェネリックコンテキストでの制約",
     "message": "制約型が非ジェネリックコンテキストで使用されています",
     "template": "制約型 '{type}' はジェネリックコンテキストでのみ使用できます",
-    "help": "制約型の代わりに具象型を使用してください",
+    "help": "制約型の代わりに具体的な型を使用してください",
     "example": "let x: Eq = 42;",
     "error_output": "error[E1055]: 非ジェネリックコンテキストでの制約\n --> example.yx:1:8\n  |\n1 | let x: Eq = 42;\n  |        ^ 制約型はここでは使用できません"
   },
   "E1060": {
-    "title": "型パラメータの数が一致しません",
-    "message": "提供された型パラメータの数が正しくありません",
-    "template": "{expected} 個の型パラメータを期待しましたが、{found} 個でした",
-    "help": "正しい数の型パラメータを指定してください",
+    "title": "型引数の数が一致しません",
+    "message": "指定された型引数の数が正しくありません",
+    "template": "期待 {expected} 個の型引数、実際 {found} 個",
+    "help": "正しい数の型引数を指定してください",
     "example": "let x: Vec<Int, String> = vec![];",
-    "error_output": "error[E1060]: 型パラメータの数が一致しません\n --> example.yx:1:8\n  |\n1 | let x: Vec<Int, String> = vec![];\n  |        ^ 1 個の型パラメータを期待しましたが、2 個見つかりました"
+    "error_output": "error[E1060]: 型引数の数が一致しません\n --> example.yx:1:8\n  |\n1 | let x: Vec<Int, String> = vec![];\n  |        ^ 期待される型引数は 1 個ですが、2 個見つかりました"
   },
   "E1061": {
-    "title": "ジェネリックをインスタンス化できません",
+    "title": "ジェネリック型をインスタンス化できません",
     "message": "ジェネリック型は指定された引数でインスタンス化できません",
     "template": "指定された引数でジェネリック型をインスタンス化できません",
-    "help": "型パラメータがすべての制約を満たしていることを確認してください",
+    "help": "型引数がすべての制約を満たすことを確認してください",
     "example": "let x = Foo::<Int>();",
-    "error_output": "error[E1061]: ジェネリックをインスタンス化できません\n --> example.yx:1:9\n  |\n1 | let x = Foo::<Int>();\n  |         ^ 指定された引数でインスタンス化できません"
+    "error_output": "error[E1061]: ジェネリック型をインスタンス化できません\n --> example.yx:1:9\n  |\n1 | let x = Foo::<Int>();\n  |         ^ 指定された引数でインスタンス化できません"
   },
   "E1070": {
     "title": "未知のラベル",
     "message": "参照されたラベルが存在しません",
-    "template": "未知のラベル：'{label}'",
-    "help": "ラベル名を確認するか、ループ上に定義してください",
+    "template": "未知のラベル: '{label}'",
+    "help": "ラベル名を確認するか、ループ上で定義してください",
     "example": "break 'unknown;",
     "error_output": "error[E1070]: 未知のラベル\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ 未知のラベル 'unknown'"
   },
   "E1071": {
     "title": "型定義はモジュールレベルでのみ可能",
     "message": "型定義はモジュールのトップレベルにのみ記述できます",
-    "template": "型定義 '{name}' はモジュールレベル（モジュールのトップレベル）にのみ記述できます",
+    "template": "型定義 '{name}' はモジュールレベル（モジュールのトップレベル）でのみ可能",
     "help": "型定義をモジュールのトップレベルに移動してください",
     "example": "main = { Point: Type = { x: Int } }",
-    "error_output": "error[E1071]: 型定義はモジュールレベルでのみ可能\n --> example.yx:1:9\n  |\n1 | main = { Point: Type = { x: Int } }\n  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ 型定義 '{name}' はモジュールレベル（モジュールのトップレベル）にのみ記述できます"
+    "error_output": "error[E1071]: 型定義はモジュールレベルでのみ可能\n --> example.yx:1:9\n  |\n1 | main = { Point: Type = { x: Int } }\n  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ 型定義 '{name}' はモジュールレベル（モジュールのトップレベル）でのみ可能"
   },
   "E1081": {
-    "title": "`?` は Result を返す関数内でのみ使用可能",
-    "help": "まず外側関数の戻り値の型を `Result[T, E]` に変更し、`expr?` を使用してエラー伝播を行ってください。"
+    "title": "`?` は Result を返す関数内でのみ使用できます",
+    "help": "まず外側の関数の戻り値の型を `Result[T, E]` に変更し、その後 `expr?` を使用してエラーを伝播してください。"
   },
   "E1082": {
-    "title": "`?` は Result 式にのみ使用可能",
-    "help": "`?` は `Result[T, E]` 型の式に対してのみ使用してください。"
+    "title": "`?` は Result 式にのみ使用できます",
+    "help": "型が `Result[T, E]` の式にのみ `?` を使用してください。"
   },
   "E1083": {
     "title": "`?` のエラー型が一致しません",
-    "help": "現在の関数の戻り値の型 `Result[_, E]` のエラー型 `E` が、展開される `Result[_, E]` のエラー型と一致することを確認してください。"
+    "help": "現在の関数の戻り型 `Result[_, E]` のエラー型 `E` が、展開される `Result[_, E]` のエラー型と一致していることを確認してください。"
   },
   "E2001": {
     "title": "スコープエラー",
@@ -383,43 +383,43 @@
   },
   "E2003": {
     "title": "所有権エラー",
-    "message": "所有権の制約が満たされていません",
+    "message": "所有権制約が満たされていません",
     "template": "所有権制約違反：{reason}",
-    "help": "値の所有権のセマンティクスを確認してください",
+    "help": "値の所有権セマンティクスを確認してください",
     "example": "let a = vec![1, 2, 3]; let b = a;",
-    "error_output": "error[E2003]: 所有権エラー\n --> example.yx:1:19\n  |\n1 | let a = vec![1, 2, 3]; let b = a;\n  |                   ^ 値は既に移動されています"
+    "error_output": "error[E2003]: 所有権エラー\n --> example.yx:1:19\n  |\n1 | let a = vec![1, 2, 3]; let b = a;\n  |                   ^ 値は移動されました"
   },
   "E2010": {
     "title": "不変代入",
     "message": "不変変数の変更を試みました",
     "template": "不変変数 '{name}' に代入できません",
-    "help": "'mut' を使用して可変変数を宣言してください",
+    "help": "'mut' を使用して可変変数を宣言します",
     "example": "let x = 1; x = 2;",
     "error_output": "error[E2010]: 不変代入\n --> example.yx:1:11\n  |\n1 | let x = 1; x = 2;\n  |           ^ 不変変数に代入できません"
   },
   "E2011": {
     "title": "未初期化変数の使用",
-    "message": "未初期化の変数を使用しました",
-    "template": "未初期化の変数 '{name}' を使用しました",
-    "help": "使用前に変数を初期化してください",
+    "message": "未初期化の変数が使用されました",
+    "template": "未初期化の変数 '{name}' が使用されました",
+    "help": "使用前に変数を初期化します",
     "example": "let x; println!(x);",
-    "error_output": "error[E2011]: 未初期化変数の使用\n --> example.yx:1:12\n  |\n1 | let x; println!(x);\n  |            ^ 未初期化の変数を使用"
+    "error_output": "error[E2011]: 未初期化変数の使用\n --> example.yx:1:12\n  |\n1 | let x; println!(x);\n  |            ^ 未初期化の変数が使用されました"
   },
   "E2012": {
-    "title": "可変性の衝突",
+    "title": "可変性の競合",
     "message": "不変コンテキストで可変参照を使用しています",
-    "template": "可変性の衝突：不変コンテキストで可変参照を使用できません",
+    "template": "可変性の競合：不変コンテキストで可変参照を使用できません",
     "help": "参照の可変性が使用コンテキストと一致することを確認してください",
     "example": "let mut v = vec![1, 2]; let r = &v; v.push(3);",
-    "error_output": "error[E2012]: 可変性の衝突\n --> example.yx:1:29\n  |\n1 | let mut v = vec![1, 2]; let r = &v; v.push(3);\n  |                             ^ 不変参照を介して変更できません"
+    "error_output": "error[E2012]: 可変性の競合\n --> example.yx:1:29\n  |\n1 | let mut v = vec![1, 2]; let r = &v; v.push(3);\n  |                             ^ 不変参照を介しては変更できません"
   },
   "E2013": {
-    "title": "変数のシャドーイング",
+    "title": "変数のシャドウイング",
     "message": "既存の変数をシャドウできません",
-    "template": "Cannot shadow existing variable '{name}'",
+    "template": "既存の変数 '{name}' をシャドウできません",
     "help": "別の変数名を使用するか、別のスコープで変数を宣言してください",
     "example": "i = 10; for i in 1..5 { print(i) }",
-    "error_output": "error[E2013]: 変数のシャドウ\n --> example.yx:1:17\n  |\n1 | i = 10; for i in 1..5 { print(i) }\n  |                 ^ Cannot shadow existing variable 'i'"
+    "error_output": "error[E2013]: 変数のシャドウ\n --> example.yx:1:17\n  |\n1 | i = 10; for i in 1..5 { print(i) }\n  |                 ^ 既存の変数 'i' をシャドウできません"
   },
   "E2090": {
     "title": "無効なシグネチャ",
@@ -430,12 +430,12 @@
     "error_output": "error[E2090]: 無効なシグネチャ\n --> std/list.yx:1:1\n  |\n1 | \"(x: Unknown) -> Int\"\n  | ^^^^^^^^^^^^^^^^^^^^^^"
   },
   "E2091": {
-    "title": "シグネチャの不明な型",
-    "message": "シグネチャに不明な型が含まれています",
-    "template": "無効なシグネチャ：不明な型 '{type_name}'",
-    "help": "関数パラメータには '(T) -> T' などの有効な型を使用してください",
+    "title": "シグネチャに未知の型",
+    "message": "シグネチャに未知の型が含まれています",
+    "template": "無効なシグネチャ：未知の型 '{type_name}'",
+    "help": "有効な型を使用してください（例：関数引数は '(T) -> T'）",
     "example": "\"(list: List, fn: Fn) -> List\"",
-    "error_output": "error[E2091]: シグネチャの不明な型\n --> std/list.yx:1:1\n  |\n1 | \"(list: List, fn: Fn) -> List\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+    "error_output": "error[E2091]: シグネチャに未知の型\n --> std/list.yx:1:1\n  |\n1 | \"(list: List, fn: Fn) -> List\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
   },
   "E2092": {
     "title": "シグネチャに矢印がありません",
@@ -447,35 +447,35 @@
   },
   "E2093": {
     "title": "引数名の重複",
-    "message": "シグネチャに重複した引数名が存在します",
+    "message": "シグネチャに重複する引数名が存在します",
     "template": "無効なシグネチャ：引数名 '{name}' が重複しています",
     "help": "各引数名が一意であることを確認してください",
     "example": "\"(x: Int, x: Int) -> Int\"",
-    "error_output": "error[E2093]: 引数名が重複しています\n --> std/list.yx:1:1\n  |\n1 | \"(x: Int, x: Int) -> Int\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^"
+    "error_output": "error[E2093]: 引数名の重複\n --> std/list.yx:1:1\n  |\n1 | \"(x: Int, x: Int) -> Int\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^"
   },
   "E2094": {
-    "title": "ジェネリック引数のシャドウイング",
-    "message": "ジェネリック引数が外側のジェネリック引数をシャドウイングしています",
-    "template": "無効なシグネチャ：ジェネリック引数 '{name}' が外側のジェネリック引数をシャドウイングしています",
-    "help": "内側の関数型には異なるジェネリック引数名を使用してください",
+    "title": "ジェネリックパラメータのシャドウイング",
+    "message": "ジェネリックパラメータが外側のジェネリックパラメータをシャドウイングしています",
+    "template": "無効なシグネチャ：ジェネリックパラメータ '{name}' が外側のジェネリックパラメータをシャドウイングしています",
+    "help": "内側の関数型には異なるジェネリックパラメータ名を使用してください",
     "example": "\"[T](list: List[T], fn: [T](item: T) -> T) -> List[T]\"",
-    "error_output": "error[E2094]: ジェネリック引数のシャドウイング\n --> std/list.yx:1:1\n  |\n1 | \"[T](list: List[T], fn: [T](item: T) -> T) -> List[T]\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+    "error_output": "error[E2094]: ジェネリックパラメータのシャドウイング\n --> std/list.yx:1:1\n  |\n1 | \"[T](list: List[T], fn: [T](item: T) -> T) -> List[T]\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
   },
   "E2095": {
     "title": "引数名によるジェネリックのシャドウイング",
-    "message": "引数名がジェネリック引数と同じ名前です",
-    "template": "無効なシグネチャ：引数名 '{name}' がジェネリック引数をシャドウイングしています",
-    "help": "引数名はジェネリック引数と同じ名前にできません",
+    "message": "引数名がジェネリックパラメータと同じ名前です",
+    "template": "無効なシグネチャ：引数名 '{name}' がジェネリックパラメータをシャドウイングしています",
+    "help": "引数名はジェネリックパラメータと同じ名前にできません",
     "example": "\"[T](T: Int) -> T\"",
-    "error_output": "error[E2095]: パラメータ名がジェネリクスをシャドウしています\n --> std/list.yx:1:1\n  |\n1 | \"[T](T: Int) -> T\"\n  | ^^^^^^^^^^^^^^^^^^"
+    "error_output": "error[E2095]: 引数名がジェネリックをシャドウしています\n --> std/list.yx:1:1\n  |\n1 | \"[T](T: Int) -> T\"\n  | ^^^^^^^^^^^^^^^^^^"
   },
   "E4001": {
-    "title": "ジェネリクス制約違反",
-    "message": "型がジェネリクス制約を満たしていません",
-    "template": "型 '{type}' はトレイト制約 '{trait}' を満たしていません",
-    "help": "型が必要なすべてのトレイト境界を満たすことを確認してください",
+    "title": "ジェネリック制約違反",
+    "message": "型がジェネリック制約を満たしていません",
+    "template": "型 '{type}' がトレイト制約 '{trait}' を満たしていません",
+    "help": "型が必要なすべてのトレイト境界を満たすようにしてください",
     "example": "let x: &Display = &5;",
-    "error_output": "error[E4001]: ジェネリクス制約違反\n --> example.yx:1:17\n  |\n1 | let x: &Display = &5;\n  |                 ^ 型 'Int' は 'Display' を実装していません"
+    "error_output": "error[E4001]: ジェネリック制約違反\n --> example.yx:1:17\n  |\n1 | let x: &Display = &5;\n  |                 ^ 型 'Int' は 'Display' を実装していません"
   },
   "E4002": {
     "title": "トレイトが見つかりません",
@@ -486,20 +486,20 @@
     "error_output": "error[E4002]: トレイトが見つかりません\n --> example.yx:1:6\n  |\n1 | impl MyTrait for Int {}\n  |      ^ 未定義のトレイト 'MyTrait'"
   },
   "E4003": {
-    "title": "トレイト実装の欠落",
+    "title": "トレイト実装の欠如",
     "message": "型が必要なトレイトを実装していません",
-    "template": "型 '{type}' にトレイト '{trait}' の実装がありません",
+    "template": "型 '{type}' にはトレイト '{trait}' の実装がありません",
     "help": "その型にトレイト実装を追加してください",
     "example": "println!(\"{}\", vec![1, 2, 3]);",
-    "error_output": "error[E4003]: トレイト実装の欠落\n --> example.yx:1:20\n  |\n1 | println!(\"{}\", vec![1, 2, 3]);\n  |                    ^ 型 'Vec<Int>' は 'Display' を実装していません"
+    "error_output": "error[E4003]: トレイト実装の欠如\n --> example.yx:1:20\n  |\n1 | println!(\"{}\", vec![1, 2, 3]);\n  |                    ^ 型 'Vec<Int>' は 'Display' を実装していません"
   },
   "E4004": {
     "title": "トレイト実装の衝突",
-    "message": "複数のtrait実装が衝突しています",
-    "template": "trait '{trait}' の実装が衝突しています",
-    "help": "衝突する実装を解決してください",
+    "message": "複数のトレイト実装が競合しています",
+    "template": "トレイト '{trait}' の実装が競合しています",
+    "help": "競合する実装を解決してください",
     "example": "impl<T> Display for T {}",
-    "error_output": "error[E4004]: trait実装の衝突\n --> example.yx:1:1\n  |\n1 | impl<T> Display for T {}\n  | ^ 実装が衝突しています"
+    "error_output": "error[E4004]: トレイト実装が競合しています\n --> example.yx:1:1\n  |\n1 | impl<T> Display for T {}\n  | ^ 実装が競合しています"
   },
   "E4005": {
     "title": "関連型が見つかりません",
@@ -513,7 +513,7 @@
     "title": "モジュールが見つかりません",
     "message": "参照されたモジュールが存在しません",
     "template": "モジュール '{module}' が見つかりません",
-    "help": "モジュールパスを確認し、存在することを確かめてください",
+    "help": "モジュールパスを確認し、存在することを確認してください",
     "example": "use foo::bar;",
     "error_output": "error[E5001]: モジュールが見つかりません\n --> example.yx:1:5\n  |\n1 | use foo::bar;\n  |     ^ モジュール 'foo' が見つかりません"
   },
@@ -527,7 +527,7 @@
   },
   "E5003": {
     "title": "エクスポートが見つかりません",
-    "message": "モジュールに存在しないエクスポートです",
+    "message": "モジュールに存在しないエクスポート",
     "template": "モジュール '{module}' にエクスポート '{export}' が見つかりません",
     "help": "モジュールのエクスポートを確認する",
     "example": "use std::foo;",
@@ -537,45 +537,45 @@
     "title": "循環依存",
     "message": "モジュールに循環依存が存在します",
     "template": "循環依存が検出されました：{path}",
-    "help": "循環依存を除去するためにリファクタリングする",
+    "help": "循環依存を除去するためにリファクタリングしてください",
     "example": "mod a { use b; } mod b { use a; }",
     "error_output": "error[E5004]: 循環依存\n --> example.yx:1:1\n  |\n1 | mod a { use b; } mod b { use a; }\n  | ^ 循環依存：a -> b -> a"
   },
   "E6001": {
     "title": "ゼロ除算エラー",
     "message": "ゼロで除算しようとしました",
-    "template": "式 {expr} をゼロで除算しました",
-    "help": "ゼロ除算を防ぐためのチェックを追加する",
+    "template": "式 {expr} がゼロで除算されています",
+    "help": "ゼロ除算を防ぐためのチェックを追加してください",
     "example": "let x = 10 / 0;",
-    "error_output": "error[E6001]: ゼロ除算エラー\n --> runtime\n  |\n  | let x = 10 / 0;\n  |     ^ ゼロで除算しています"
+    "error_output": "error[E6001]: ゼロ除算エラー\n --> ランタイム\n  |\n  | let x = 10 / 0;\n  |     ^ ゼロで除算"
   },
   "E6002": {
-    "title": "nullポインタ参照",
-    "message": "空の値にアクセスしようとしました",
-    "template": "{location} で nullポインタ参照",
-    "help": "値にアクセスする前に空値チェックを追加してください",
+    "title": "ヌルポインタのデリファレンス",
+    "message": "null値へのアクセスを試行しました",
+    "template": "{location} でヌルポインタのデリファレンスが発生しました",
+    "help": "値にアクセスする前にnullチェックを追加してください",
     "example": "let x = nil; println!(x.field);",
-    "error_output": "error[E6002]: nullポインタ参照\n --> runtime\n  |\n  | println!(x.field);\n  |     ^ 空の値のフィールドにアクセスできません"
+    "error_output": "error[E6002]: ヌルポインタのデリファレンス\n --> ランタイム\n  |\n  | println!(x.field);\n  |     ^ null値のフィールドにアクセスできません"
   },
   "E6003": {
-    "title": "配列インデックス範囲外",
-    "message": "実行時に配列インデックスが範囲外です",
-    "template": "配列インデックス範囲外：有効範囲は 0..{max}、見つかったインデックスは {index}",
+    "title": "配列インデックスが範囲外です",
+    "message": "配列インデックスがランタイムで範囲外です",
+    "template": "配列インデックスが範囲外です：有効範囲は 0..{max}、見つかったインデックスは {index} です",
     "help": "インデックスが配列の範囲内であることを確認してください",
     "example": "let arr = [1, 2, 3]; println!(arr[10]);",
-    "error_output": "error[E6003]: 配列インデックス範囲外\n --> runtime\n  |\n  | println!(arr[10]);\n  |     ^ インデックス 10 は長さ 3 を超えています"
+    "error_output": "error[E6003]: 配列インデックスが範囲外です\n --> ランタイム\n  |\n  | println!(arr[10]);\n  |     ^ インデックス 10 は長さ 3 を超えています"
   },
   "E6008": {
     "title": "キーが存在しません",
-    "message": "実行時に辞書でキーが見つかりません",
+    "message": "辞書でランタイム時にキーが見つかりません",
     "template": "キーが存在しません：{key}",
     "help": "インデックス前に dict.has でキーの存在を確認してください"
   },
   "E6004": {
     "title": "スタックオーバーフロー",
-    "message": "再帰の深さがスタックの制限を超えました",
-    "template": "スタックオーバーフロー：再帰の深さが制限 {limit} を超えました",
-    "help": "再帰の深さを減らすか、反復を使用してください",
+    "message": "再帰の深さがスタックの制限を超えています",
+    "template": "スタックオーバーフロー：再帰の深さが制限 {limit} を超えています",
+    "help": "再帰の深さを減らすか、反復を使用する",
     "example": "fn foo() { foo(); } foo();",
     "error_output": "error[E6004]: スタックオーバーフロー\n --> runtime\n  |\n  | fn foo() { foo(); } foo();\n  |     ^ スタックオーバーフロー"
   },
@@ -583,7 +583,7 @@
     "title": "アサーション失敗",
     "message": "ランタイムアサーション失敗",
     "template": "アサーション失敗：{condition}",
-    "help": "アサーション条件を修正するか、有効な入力を提供してください",
+    "help": "アサーション条件を修正するか有効な入力を提供する",
     "example": "assert!(x > 0);",
     "error_output": "error[E6005]: アサーション失敗\n --> runtime\n  |\n  | assert!(x > 0);\n  |     ^ アサーション失敗：x > 0"
   },
@@ -591,25 +591,25 @@
     "title": "ファイルが見つかりません",
     "message": "指定されたファイルが存在しません",
     "template": "ファイルが見つかりません：'{path}'",
-    "help": "ファイルパスを確認し、ファイルが存在することを確認してください",
+    "help": "ファイルパスを確認し、ファイルが存在することを確認する",
     "example": "let content = read(\"missing.txt\");",
     "error_output": "error[E7001]: ファイルが見つかりません\n --> example.yx:1:19\n  |\n1 | let content = read(\"missing.txt\");\n  |                   ^ ファイル 'missing.txt' が見つかりません"
   },
   "E7002": {
-    "title": "アクセス権限が拒否されました",
+    "title": "権限が拒否されました",
     "message": "ファイルへのアクセス権限が不足しています",
-    "template": "アクセス権限が拒否されました：'{path}'",
-    "help": "ファイル権限を確認するか、適切な権限で実行してください",
+    "template": "権限が拒否されました：'{path}'",
+    "help": "ファイルの権限を確認するか、適切な権限で実行する",
     "example": "let content = read(\"/root/secret.txt\");",
     "error_output": "error[E7002]: 権限が拒否されました\n --> example.yx:1:19\n  |\n1 | let content = read(\"/root/secret.txt\");\n  |                   ^ '/root/secret.txt' の権限が拒否されました"
   },
   "E7003": {
     "title": "I/O エラー",
-    "message": "未特定の I/O エラーが発生しました",
+    "message": "指定されていない I/O エラーが発生しました",
     "template": "I/O エラー：{reason}",
-    "help": "詳細情報についてはエラー情報を確認してください",
+    "help": "エラーの詳細を確認して詳細情報を取得してください",
     "example": "let content = read(\"/dev/full\");",
-    "error_output": "error[E7003]: I/O エラー\n --> example.yx:1:19\n  |\n1 | let content = read(\"/dev/full\");\n  |                   ^ I/O エラー：デバイスが一杯です"
+    "error_output": "error[E7003]: I/O エラー\n --> example.yx:1:19\n  |\n1 | let content = read(\"/dev/full\");\n  |                   ^ I/O エラー：デバイスの容量がいっぱいです"
   },
   "E7004": {
     "title": "ネットワークエラー",
@@ -623,15 +623,15 @@
     "title": "内部コンパイラエラー",
     "message": "コンパイラで内部エラーが発生しました",
     "template": "内部コンパイラエラー：{message}",
-    "help": "このエラーを https://github.com/ChenXu233/YaoXiang/issues/new に報告してください",
+    "help": "https://github.com/ChenXu233/YaoXiang/issues/new でこのエラーを報告してください",
     "example": "",
     "error_output": ""
   },
   "E8002": {
     "title": "予期しないパニック",
-    "message": "コンパイラが予期しない panic を検出しました",
-    "template": "コンパイラの予期しない panic：{reason}",
-    "help": "このエラーを panic の詳細とともに報告してください",
+    "message": "コンパイラが予期しないパニックに遭遇しました",
+    "template": "予期しないコンパイラパニック：{reason}",
+    "help": "パニックの詳細を添えてこのエラーを報告してください",
     "example": "",
     "error_output": ""
   },
@@ -639,70 +639,70 @@
     "title": "コンパイラフェーズエラー",
     "message": "コンパイラフェーズでエラーが発生しました",
     "template": "コンパイラフェーズエラー：{phase} - {message}",
-    "help": "これはコンパイラのバグである可能性があります。報告してください",
+    "help": "これはコンパイラのバグの可能性があるので、報告してください",
     "example": "",
     "error_output": ""
   },
   "E1090": {
-    "title": "✨ 言葉にし得ない ✨",
+    "title": "✨ 不可説 ✨",
     "message": "YaoXiang の哲学的限界に到達しました",
     "template": "Type: Type = Type",
-    "help": "これは言語の根源なり。コンパイラは此処に沈黙す。",
+    "help": "これは言語の源であり、コンパイラはここで沈黙します",
     "example": "Type: Type = Type",
-    "zen_message": "\n╔══════════════════════════════════════════════════════════════╗\n║                                                               ║\n║   一から二、二から三、三より万物を生ず。                          ║\n║   易に太極あり、両儀を生ず。                                    ║\n║                                                               ║\n║   Type: Type = Type                                             ║\n║   これ爻象の源、言語の境界なり。                                ║\n║   コンパイラ此処に沈黙、哲学此処に足止す。                       ║\n║                                                               ║\n║   言語の哲学的限界に触れられたことを感謝す。                      ║\n║                                                               ║\n╚══════════════════════════════════════════════════════════════╝"
+    "zen_message": "\n╔══════════════════════════════════════════════════════════════╗\n║                                                               ║\n║   一より二を生じ、二より三を生じ、三より万物を生ず。             ║\n║   易に太極あり、是より両儀を生ず。                              ║\n║                                                               ║\n║   Type: Type = Type                                             ║\n║   此は爻象の源、言語の境界なり。                                 ║\n║   コンパイラは此に沈黙し、哲学は此に留まる。                     ║\n║                                                               ║\n║   言語の哲学的限界に触れていただき、感謝します。                 ║\n║                                                               ║\n╚══════════════════════════════════════════════════════════════╝"
   },
   "E1091": {
     "title": "無効なジェネリックメタタイプ",
     "message": "ジェネリックメタタイプの自己参照は許可されていません",
     "template": "ジェネリックメタタイプの自己参照は許可されていません：'{decl}'",
-    "help": "型コンストラクタ（'Type[T]' など）は Type 自身を参照できません",
+    "help": "「Type[T]」のような型コンストラクタは Type 自身を参照できません",
     "example": "Type: Type[T] = { data: T }",
-    "error_output": "error[E1091]: ジェネリックメタタイプの自己参照は許可されていません：'Type: Type[T] = ...'"
+    "error_output": "error[E1091]: ジェネリックメタ型の自己参照は許可されていません：'Type: Type[T] = ...'"
   },
   "W1001": {
     "title": "未使用のエクスポート関数",
-    "message": "エクスポートされた関数が一度も呼び出されていません",
+    "message": "エクスポートされた関数は一度も呼び出されていません",
     "template": "未使用のエクスポート関数：'{name}'",
-    "help": "エクスポートを削除するか、その関数を使用することを検討してください",
+    "help": "エクスポートを削除するか、関数を使用することを検討してください",
     "example": "pub fn dead_function() { }",
     "error_output": "warning[W1001]: 未使用のエクスポート関数：'dead_function'\n --> example.yx:1:1\n  |\n1 | pub fn dead_function() { }\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 関数は一度も使用されていません"
   },
   "W1002": {
     "title": "未使用のエクスポート型",
-    "message": "エクスポートされた型が一度も使用されていません",
+    "message": "エクスポートされた型は一度も使用されていません",
     "template": "未使用のエクスポート型：'{name}'",
-    "help": "エクスポートを削除するか、その型を使用することを検討してください",
+    "help": "エクスポートを削除するか、型を使用することを検討してください",
     "example": "pub type DeadType = Int",
     "error_output": "warning[W1002]: 未使用のエクスポート型：'DeadType'\n --> example.yx:1:1\n  |\n1 | pub type DeadType = Int\n  | ^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 型は一度も使用されていません"
   },
   "W1003": {
     "title": "未使用のインポート",
-    "message": "インポートされたモジュールまたはシンボルが一度も使用されていません",
+    "message": "インポートされたモジュールまたはシンボルは一度も使用されていません",
     "template": "未使用のインポート：'{name}'",
-    "help": "未使用のインポートを削除することを検討してください",
+    "help": "未使用のインポートの削除を検討してください",
     "example": "use std.json; // json は一度も使用されていません",
-    "error_output": "warning[W1003]: 未使用のインポート：'json'\n --> example.yx:1:1\n  |\n1 | use std.json;\n  | ^^^^^^^^^^^^\n  |\n  = note: インポートは使用されていません"
+    "error_output": "warning[W1003]: 未使用のインポート: 'json'\n --> example.yx:1:1\n  |\n1 | use std.json;\n  | ^^^^^^^^^^^^\n  |\n  = note: インポートは一度も使用されていません"
   },
   "W1004": {
     "title": "未使用のエクスポート変数",
-    "message": "エクスポートされた変数は使用されていません",
-    "template": "未使用のエクスポート変数：'{name}'",
+    "message": "エクスポートされた変数は一度も使用されていません",
+    "template": "未使用のエクスポート変数: '{name}'",
     "help": "エクスポートを削除するか、変数を使用することを検討してください",
     "example": "pub let dead_var = 42;",
-    "error_output": "warning[W1004]: 未使用のエクスポート変数：'dead_var'\n --> example.yx:1:1\n  |\n1 | pub let dead_var = 42;\n  | ^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 変数は使用されていません"
+    "error_output": "warning[W1004]: 未使用のエクスポート変数: 'dead_var'\n --> example.yx:1:1\n  |\n1 | pub let dead_var = 42;\n  | ^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 変数は一度も使用されていません"
   },
   "W1005": {
     "title": "未使用のエクスポートメソッド",
-    "message": "エクスポートされたメソッドは呼び出されていません",
-    "template": "未使用のエクスポートメソッド：'{name}'",
+    "message": "エクスポートされたメソッドは一度も呼び出されていません",
+    "template": "未使用のエクスポートメソッド: '{name}'",
     "help": "エクスポートを削除するか、メソッドを使用することを検討してください",
     "example": "pub fn Foo.dead_method() { }",
-    "error_output": "warning[W1005]: 未使用のエクスポートメソッド：'dead_method'\n --> example.yx:1:1\n  |\n1 | pub fn Foo.dead_method() { }\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: メソッドは使用されていません"
+    "error_output": "warning[W1005]: 未使用のエクスポートメソッド: 'dead_method'\n --> example.yx:1:1\n  |\n1 | pub fn Foo.dead_method() { }\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: メソッドは一度も使用されていません"
   },
   "E2014": {
     "title": "移動済みの値を使用",
-    "template": "'{name}' は移動済みのため、再度使用できません",
-    "help": "値は新しい所有者に移動されています。再度使用するには、参照またはクローンを使用してください。"
+    "template": "'{name}' は移動済みで、再度使用できません",
+    "help": "値は新しい所有者に移動されました。再度使用するには、参照またはクローンを使用してください。"
   },
   "E2016": {
     "title": "不変変数への代入",
@@ -721,7 +721,7 @@
   },
   "E2020": {
     "title": "解放後使用",
-    "template": "'{name}' が解放後に使用されています",
+    "template": "'{name}' は解放後に使用されています",
     "help": "値が解放される前に使用するか、コードをリファクタリングしてください。"
   },
   "E2027": {
@@ -731,13 +731,13 @@
   },
   "E2029": {
     "title": "spawn ref 循環",
-    "template": "タスク間循環参照: {cycle}",
-    "help": "spawn ブロック内の ref 変数が循環参照を形成しています。Weak を使用して循環を断ち切るか、unsafe ブロックで検出を回避してください。"
+    "template": "タスクをまたがる循環参照: {cycle}",
+    "help": "spawn ブロック内の ref 変数が参照循環を形成しています。Weak を使用して循環を断ち切るか、unsafe ブロックで検出を回避してください。"
   },
   "E3004": {
     "title": "サポートされていないイテレータ",
     "template": "サポートされていないイテレータ型：{iter_type}",
-    "help": "現在、範囲イテレータとリストイテレータのみがサポートされています。"
+    "help": "現在、範囲とリストのイテレータのみサポートされています。"
   },
   "E3005": {
     "title": "IR 生成エラー",
@@ -746,18 +746,18 @@
   },
   "E3014": {
     "title": "レジスタオーバーフロー",
-    "template": "レジスタオーバーフロー：{id} が制限 {limit} を超えています",
+    "template": "レジスタオーバーフロー:{id} が制限 {limit} を超えています",
     "help": "ローカル変数の数を減らすか、式を簡略化してください。"
   },
   "E3017": {
     "title": "無効なオペランド（コード生成）",
-    "template": "コード生成：無効なオペランド：{reason}",
+    "template": "コード生成:無効なオペランド:{reason}",
     "help": "オペランドの型と使用法を確認してください。"
   },
   "E4010": {
     "title": "定数のゼロ除算",
-    "template": "定数式をゼロで除算しています",
-    "help": "定数式内の除数がゼロでないことを確認してください。"
+    "template": "定数式をゼロで除算しました",
+    "help": "定数式内の除数がゼロにならないようにしてください。"
   },
   "E4011": {
     "title": "定数オーバーフロー",
@@ -770,19 +770,19 @@
     "help": "定数式を簡略化して再帰を減らしてください。"
   },
   "E4014": {
-    "title": "定数評価に失敗しました",
+    "title": "定数評価失敗",
     "template": "定数式を評価できません：{reason}",
-    "help": "式がコンパイル時に評価できることを確認してください。"
+    "help": "式がコンパイル時に評価可能であることを確認してください。"
   },
   "E4018": {
     "title": "精化述語違反",
-    "message": "精化型制約が反証されました",
+    "message": "精化型制約が反証された",
     "template": "精化述語違反：{constraint}\n\n反例：\n{counterexample}",
-    "help": "述語が反証されました。制約を偽とする代入が存在します。変数の値を確認するか、制約を緩和してください。"
+    "help": "述語が反証されました——制約を偽とする代入が存在します。変数の値を確認するか、制約を緩和してください。"
   },
   "E4019": {
-    "title": "型等式が成立しません",
-    "message": "型等式が証明パイプライン内で反証されました",
+    "title": "型等式が成立しない",
+    "message": "型等式が証明パイプライン内で反証された",
     "template": "型等式が成立しません：期待 {expected}、実際 {found}",
     "help": "コンポーネントの型計算を確認するか、証明関数を提供してください。"
   },
@@ -794,21 +794,21 @@
   "E5006": {
     "title": "重複インポート",
     "template": "重複インポート：'{name}' は既にインポートされています",
-    "help": "重複するインポート文を削除してください"
+    "help": "重複したインポート文を削除してください"
   },
   "E5007": {
     "title": "モジュールエクスポート",
     "template": "モジュール '{module}' のエクスポート：{available}",
-    "help": "利用可能なエクスポートがエラーメッセージにリストされています"
+    "help": "利用可能なエクスポートはエラーメッセージにリストされています"
   },
   "E6006": {
-    "title": "関数が見つかりません（ランタイム）",
+    "title": "関数が見つかりません（実行時）",
     "template": "関数が見つかりません：'{func}'",
     "help": "関数が定義されており、スペルが正しいことを確認してください"
   },
   "E6007": {
-    "title": "ランタイムエラー",
-    "template": "ランタイムエラー：{message}",
+    "title": "実行時エラー",
+    "template": "実行時エラー：{message}",
     "help": "エラーメッセージで詳細を確認してください"
   },
   "E8004": {
@@ -822,7 +822,7 @@
     "template": "式が必要です：{context}",
     "help": "この位置に有効な式を指定してください",
     "example": "x = ;",
-    "error_output": "error[E0016]: 式が必要です\n --> example.yx:1:5\n  |\n1 | x = ;\n  |     ^ '=' の後に式が必要です"
+    "error_output": "error[E0016]: 式が必要です\n --> example.yx:1:5\n  |\n1 | x = ;\n  |     ^ '=' の後の式が必要です"
   },
   "E0018": {
     "title": "キーワードが名前として使用されています",
@@ -837,30 +837,30 @@
     "message": "const ジェネリック引数の値制約が満たされていません",
     "template": "const ジェネリック制約の失敗: `{constraint}` が成立しません ({var} = {value})",
     "help": "制約を満たすように const 引数の値を変更してください",
-    "example": "BadArray(Int, 0)  // Assert(0 > 0) が失敗します",
+    "example": "BadArray(Int, 0)  // Assert(0 > 0) 失敗",
     "error_output": "error[E1062]: const ジェネリック制約の失敗\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, 0)\n  | ^ const 制約 `N > 0` が成立しません (N = 0)"
   },
   "W1063": {
     "title": "const ジェネリック制約を評価できません",
-    "message": "const ジェネリックパラメータの値制約はコンパイル時に評価できません",
+    "message": "const ジェネリック引数の値制約はコンパイル時に評価できません",
     "template": "const ジェネリック制約を評価できません: `{constraint}` ({var} = {value})",
-    "help": "const パラメータがコンパイル時定数であることを確認してください",
+    "help": "const 引数がコンパイル時定数であることを確認してください",
     "example": "BadArray(Int, n)  // n はコンパイル時定数ではありません",
-    "error_output": "warning[W1063]: const ジェネリック制約を評価できません\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ コンパイル時に制約 `N > 0` を評価できません"
+    "error_output": "warning[W1063]: const ジェネリック制約を評価できません\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ 制約 `N > 0` はコンパイル時に評価できません"
   },
   "E1092": {
     "title": "精化型引数の形式が不正です",
     "message": "精化型引数をコンパイル時定数式に変換できません",
-    "template": "'{name}' はコンパイル時定数引数を要求しますが、指定された引数は変換できません",
-    "help": "述語/証明関数の引数はリテラル、変数、または単一引数の型適用である必要があります。そうでない場合、精化制約を生成できません",
+    "template": "'{name}' はコンパイル時定数引数を要求しますが、与えられた引数は変換できません",
+    "help": "述語/証明関数の引数はリテラル、変数、または単一引数の型適用でなければなりません。そうでない場合、精化制約を生成できません",
     "example": "y: IsSmall(List(Int)) = 9999",
-    "error_output": "error[E1092]: 'IsSmall' はコンパイル時定数引数を要求しますが、指定された引数は変換できません"
+    "error_output": "error[E1092]: 'IsSmall' はコンパイル時定数引数を要求しますが、与えられた引数は変換できません"
   },
   "E1093": {
     "title": "精化引数の数が一致しません",
     "message": "述語/証明関数の引数の数が一致しません",
     "template": "'{name}' は {expected} 個の引数を期待しますが、実際には {found} 個です",
-    "help": "引数の数は述語宣言と一致する必要があります。そうでない場合、精化制約を生成できません",
+    "help": "引数の数は述語の宣言と一致する必要があります。そうでない場合、精化制約を生成できません",
     "example": "y: IsSmall(1, 2) = 5",
     "error_output": "error[E1093]: 'IsSmall' は 1 個の引数を期待しますが、実際には 2 個です"
   },
@@ -868,56 +868,56 @@
     "title": "未使用のコンパイル時値パラメータ",
     "message": "コンパイル時値パラメータが型本体で参照されていません",
     "template": "'{param}' は '{type}' のコンパイル時値パラメータとして宣言されていますが、型本体で参照されていません",
-    "help": "型位置（フィールド型、内側の Fn 引数型、Assert/Array 型引数）でこのパラメータを参照するか、宣言から削除してください",
+    "help": "型位置（フィールド型、内部 Fn 引数型、Assert/Array 型引数）でこのパラメータを参照するか、宣言から削除してください",
     "example": "Foo: (T: Type, N: Int) -> Type = { x: T }",
     "error_output": "error[E1094]: 'N' は 'Foo' のコンパイル時値パラメータとして宣言されていますが、型本体で参照されていません"
   },
   "E3006.title": "未解決の変数",
-  "E3006.template": "IR 生成内部エラー：変数 '{name}' が解決できません",
-  "E3006.help": "変数参照が IR 生成段階でまだ解決されていないということは、型チェッカーで捕捉されなかったことを意味します。これはコンパイラの内部一貫性の問題であるため、この問題を報告してください。",
+  "E3006.template": "IR生成内部エラー:変数 '{name}' が解決できませんでした",
+  "E3006.help": "変数参照がIR生成段階でも未解決の場合、型検査器の見落としを示しています。これはコンパイラの内部一貫性の問題なので、この問題を報告してください。",
   "E3007.title": "トップレベルバインディングの初期化は定数でなければならない",
   "E3007.template": "トップレベルバインディング '{name}' の初期化はコンパイル時定数式である必要があります",
-  "E3007.help": "トップレベルバインディングはコンパイル時定数です（アクセサ関数は畳み込み値を直接返します）。実行時に計算される初期化はサポートされていません。計算をリテラル/定数演算に変更するか、関数本体内へ移動してください。",
+  "E3007.help": "トップレベルバインディングはコンパイル時定数（アクセサ関数は折りたたまれた値を直接返す）であり、ランタイム計算による初期化はサポートされていません。計算をリテラル/定数演算に変更するか、関数本体内へ移動してください。",
   "E1095": {
-    "title": "不明なインターフェース",
-    "message": "不明なインターフェース",
-    "template": "不明なインターフェース: '{name}'（型ボディで参照された名前は登録された型コンストラクタではありません）",
-    "help": "綴りを確認するか、`Iface: (Self: Type) -> Type = {{ ... }}` で先に宣言してください"
+    "title": "未知のインターフェース",
+    "message": "未知のインターフェース",
+    "template": "未知のインターフェース：'{name}'（型本体が参照する名前は登録済みの型コンストラクタではありません）",
+    "help": "名前のスペルを確認するか、先に `Iface: (Self: Type) -> Type = {{ ... }}` でインターフェースを宣言してください"
   },
   "E1096": {
-    "title": "インターフェースのアリティ不一致",
-    "message": "インターフェースのアリティ不一致",
-    "template": "インターフェース '{name}' は型引数を {expected} 個期待しますが、{found} 個見つかりました",
-    "help": "宣言された型パラメータの数だけ引数を渡してください"
+    "title": "インターフェース引数の数が一致しません",
+    "message": "インターフェース引数の数が一致しません",
+    "template": "インターフェース '{name}' は {expected} 個の型引数を期待していますが、{found} 個見つかりました",
+    "help": "インターフェース宣言の型引数の数に合わせて実引数を提供してください"
   },
   "E1097": {
-    "title": "インターフェースメンバー名の衝突",
-    "message": "インターフェースメンバー名の衝突",
-    "template": "型 '{type}' のメンバー '{member}' がインターフェースメンバーと衝突します（§1.2）",
-    "help": "フィールドかインターフェースメンバーの名前を変更してください"
+    "title": "インターフェースメンバーの名前が衝突しています",
+    "message": "インターフェースメンバーの名前が衝突しています",
+    "template": "型 '{type}' のメンバー '{member}' がインターフェースメンバーと衝突しています（フィールドとメソッドは名前空間を共有します、§1.2）",
+    "help": "フィールドまたはインターフェースメンバーの名前を変更してください"
   },
   "E1098": {
-    "title": "インターフェースメソッド未実装",
-    "message": "インターフェースメソッド未実装",
+    "title": "インターフェースメソッドが実装されていません",
+    "message": "インターフェースメソッドが実装されていません",
     "template": "型 '{type}' はインターフェース '{interface}' のメソッド '{method}' を実装していません",
-    "help": "`Type.method: シグネチャ = ...` で宣言するか、型ボディ内でバインディングを提供してください"
+    "help": "`Type.method: シグネチャ = ...` でメソッドを宣言するか、型本体内にバインディングを提供してください"
   },
   "E1099": {
-    "title": "インターフェースメソッドのシグネチャ不一致",
-    "message": "インターフェースメソッドのシグネチャ不一致",
-    "template": "型 '{type}' のメソッド '{method}' がインターフェースのシグネチャと一致しません：期待 {expected}、実際 {found}",
-    "help": "実装のシグネチャをインターフェースメンバーと完全に一致させてください（§3）"
+    "title": "インターフェースメソッドのシグネチャが一致しません",
+    "message": "インターフェースメソッドのシグネチャが一致しません",
+    "template": "型 '{type}' のメソッド '{method}' はインターフェースシグネチャと一致しません：期待 {expected}、実際 {found}",
+    "help": "実装のシグネチャをインターフェースメンバーのシグネチャと完全に一致させてください（§3 ではオーバーライドは禁止され、オーバーロードは許可されています）"
   },
   "E1100": {
-    "title": "インターフェースメソッドの重複実装",
-    "message": "インターフェースメソッドの重複実装",
-    "template": "型 '{type}' のメソッド '{method}' が重複実装されています（§3）",
-    "help": "重複した実装を削除し、1 つだけ残してください"
+    "title": "インタフェースメソッドの重複実装",
+    "message": "インタフェースメソッドの重複実装",
+    "template": "型 '{type}' のメソッド '{method}' が重複実装されています（同シグネチャの上書きは禁止されています、§3）",
+    "help": "重複実装を削除し、一つだけ残してください"
   },
   "E1101": {
-    "title": "型がインターフェースを実装していません",
-    "message": "型がインターフェースを実装していません",
-    "template": "型 '{type}' はインターフェース '{interface}' を実装していないため、この存在型の位置に入れません",
-    "help": "型ボディでインターフェースをインスタンス化し（`Animal(Dog)`）、全メンバーを実装してください"
+    "title": "型がインタフェースを実装していません",
+    "message": "型がインタフェースを実装していません",
+    "template": "型 '{type}' はインタフェース '{interface}' を実装していないため、その存在型位置に入ることはできません",
+    "help": "型本体内でインタフェースをインスタンス化し（`Animal(Dog)`）、全メンバーを実装してください"
   }
 }
