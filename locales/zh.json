@@ -878,5 +878,47 @@
     "help": "请在类型位置（字段类型、内层 Fn 参数类型、Assert/Array 类型实参）引用该参数，或从声明中移除",
     "example": "Foo: (T: Type, N: Int) -> Type = { x: T }",
     "error_output": "error[E1094]: 'N' 声明为 'Foo' 的编译期值参数，但未在类型体中被引用"
+  },
+  "E1095": {
+    "title": "未知接口",
+    "message": "未知接口",
+    "template": "未知接口：'{name}'（类型体引用的名字不是已注册的类型构造器）",
+    "help": "检查名字拼写，或先以 `Iface: (Self: Type) -> Type = {{ ... }}` 声明接口"
+  },
+  "E1096": {
+    "title": "接口参数数量不匹配",
+    "message": "接口参数数量不匹配",
+    "template": "接口 '{name}' 期望 {expected} 个类型参数，找到 {found} 个",
+    "help": "按接口声明的类型参数个数提供实参"
+  },
+  "E1097": {
+    "title": "接口成员命名冲突",
+    "message": "接口成员命名冲突",
+    "template": "类型 '{type}' 的成员 '{member}' 与接口成员冲突（字段与方法共享命名空间，§1.2）",
+    "help": "重命名字段或接口成员"
+  },
+  "E1098": {
+    "title": "接口方法未实现",
+    "message": "接口方法未实现",
+    "template": "类型 '{type}' 未实现接口 '{interface}' 的方法 '{method}'",
+    "help": "以 `Type.method: 签名 = ...` 声明该方法，或在类型体内提供绑定"
+  },
+  "E1099": {
+    "title": "接口方法签名不匹配",
+    "message": "接口方法签名不匹配",
+    "template": "类型 '{type}' 的方法 '{method}' 与接口签名不符：期望 {expected}，实际 {found}",
+    "help": "让实现签名与接口成员签名完全一致（§3 禁止覆盖，允许重载）"
+  },
+  "E1100": {
+    "title": "接口方法重复实现",
+    "message": "接口方法重复实现",
+    "template": "类型 '{type}' 的方法 '{method}' 被重复实现（同签名覆盖被禁止，§3）",
+    "help": "删除重复实现，保留一份"
+  },
+  "E1101": {
+    "title": "类型未实现接口",
+    "message": "类型未实现接口",
+    "template": "类型 '{type}' 未实现接口 '{interface}'，不能进入该存在类型位置",
+    "help": "在类型体内实例化接口（`Animal(Dog)`）并实现其全部成员"
   }
 }

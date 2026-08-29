@@ -477,6 +477,13 @@ impl TypeChecker {
             Vec::new()
         };
 
+        // RFC-011a §6: 从 body_checker 收集存在类型强制点（ir_gen 包装注入用）
+        let existential_coercions = if let Some(ref bc) = self.body_checker {
+            bc.existential_coercions.clone()
+        } else {
+            Vec::new()
+        };
+
         TypeCheckResult {
             module_name: self.env.module_name.clone(),
             diagnostics,
@@ -488,6 +495,8 @@ impl TypeChecker {
             release_plan,
             escaped_refs,
             instantiation_requests,
+            existential_coercions,
+            implementation_proofs: self.env.implementation_proofs.clone(),
             module_namespaces: std::mem::take(&mut self.module_namespaces),
         }
     }
@@ -1386,7 +1395,10 @@ impl TypeChecker {
             methods,
         });
 
-        // 接口名追加进实现类型的 interfaces 面（LSP/阶段3 类型收集消费）
+        // 接口名追加进实现类型的 interfaces 面（LSP/阶段3 类型收集消费）。
+        // types 与 vars 必须同步：构造器调用（Dog("Rex")）返回的是 vars 里的
+        // StructType，只改 types 会让 structured-subtyping 臂（solver.rs:626）
+        // 拿到空 interfaces，List(Animal)/标量存在类型赋值全部 E1002。
         let poly = self.env.types.get(impl_type);
         if let Some(poly) = poly {
             if let MonoType::Struct(s) = &poly.body {
@@ -1398,7 +1410,10 @@ impl TypeChecker {
                         const_binders: poly.const_binders.clone(),
                         body: MonoType::Struct(s),
                     };
-                    self.env.types.insert(impl_type.to_string(), updated);
+                    self.env
+                        .types
+                        .insert(impl_type.to_string(), updated.clone());
+                    self.env.vars.insert(impl_type.to_string(), updated);
                 }
             }
         }

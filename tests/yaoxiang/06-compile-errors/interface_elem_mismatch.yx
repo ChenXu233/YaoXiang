@@ -1,0 +1,24 @@
+// 06-compile-errors/interface_elem_mismatch.yx
+// 预期: 编译错误 E1101（RFC-011a §6.3 存在类型成员检查——字面量元素未实现接口）
+// 说明: List(Animal) 字面量主 unify 只作用于首个元素（List(Dog) vs List(Animal)），
+//       第二个元素 Stone 未实现 Animal 由定向走查兜住。
+
+use std.assert
+
+Animal: (Self: Type) -> Type = {
+    speak: (self: Self) -> String,
+}
+
+Dog: Type = {
+    name: String,
+    Animal(Dog),
+}
+Dog.speak: (self: Dog) -> String = { return "Woof" }
+
+Stone: Type = {
+    weight: Int,
+}
+
+main = {
+    animals: List(Animal) = [Dog("Rex"), Stone(2)]
+}

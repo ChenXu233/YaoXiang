@@ -1,0 +1,62 @@
+// 02-type-system/interface_dynamic_dispatch.yx
+// 覆盖: RFC-011a §6 动态分发——List(Animal) 存在类型异构容器
+// 验证: 接口未实例化用作存在类型;异构字面量包装;元素方法按实际类型分发;
+//       二段式取元素;接口形参多态;带实参方法分发;std.list.append 成员检查
+// 状态: ✅
+
+use std.assert
+use std.list
+
+Animal: (Self: Type) -> Type = {
+    speak: (self: Self) -> String,
+    age: (self: Self) -> Int,
+    age_up: (self: Self, years: Int) -> Int,
+}
+
+Dog: Type = {
+    name: String,
+    age_years: Int,
+    Animal(Dog),
+}
+Dog.speak: (self: Dog) -> String = { return "Woof" }
+Dog.age: (self: Dog) -> Int = { return self.age_years }
+Dog.age_up: (self: Dog, years: Int) -> Int = { return self.age_years + years }
+
+Cat: Type = {
+    lives: Int,
+    Animal(Cat),
+}
+Cat.speak: (self: Cat) -> String = { return "Meow" }
+Cat.age: (self: Cat) -> Int = { return self.lives * 3 }
+Cat.age_up: (self: Cat, years: Int) -> Int = { return self.lives * 3 + years }
+
+describe: (a: Animal) -> String = {
+    return a.speak()
+}
+
+main = {
+    // 异构字面量:具体值进入存在类型位置自动包装
+    animals: List(Animal) = [Dog("Rex", 3), Cat(9)]
+
+    // 元素方法按实际类型分发
+    s0 = animals[0].speak()
+    assert.assert(s0 == "Woof", "Dog element dispatches speak -> Woof")
+    s1 = animals[1].speak()
+    assert.assert(s1 == "Meow", "Cat element dispatches speak -> Meow")
+
+    // 带实参的方法分发:负载在 self 位,实参随后
+    a1 = animals[1].age_up(1)
+    assert.assert(a1 == 28, "Cat age_up(1) dispatches with argument (27+1)")
+
+    // 二段式:元素取出后仍是存在类型,再调用同样分发
+    d = animals[0]
+    assert.assert(d.speak() == "Woof", "two-step element dispatch")
+
+    // 接口形参多态:同一函数吃不同实现
+    assert.assert(describe(animals[0]) == "Woof", "fn param polymorphism (Dog)")
+    assert.assert(describe(animals[1]) == "Meow", "fn param polymorphism (Cat)")
+
+    // append:未实现接口的类型被编译期拒绝,实现了的可以进
+    animals2 = list.append(animals, Dog("Bella", 5))
+    assert.assert(animals2[2].speak() == "Woof", "append implements-member then dispatch")
+}

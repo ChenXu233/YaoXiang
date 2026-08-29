@@ -33,6 +33,10 @@ pub struct TypeCheckResult {
     pub escaped_refs: HashSet<String>,
     /// 实例化请求列表（单态化器使用）
     pub instantiation_requests: Vec<crate::middle::passes::mono::instance::InstantiationRequest>,
+    /// RFC-011a §6 存在类型强制点（具体→存在包装点，ir_gen 按 span 注入 CreateVariant）
+    pub existential_coercions: Vec<super::inference::existential::ExistentialCoercion>,
+    /// RFC-011a §5.3 实现证明（编译期擦除；阶段3 ir_gen 由此得每接口的变体集合）
+    pub implementation_proofs: Vec<super::environment::ImplementationProof>,
     /// 用户模块命名空间别名表（别名 → 模块限定键）。
     /// 模块解析归 typecheck 所有：由整体导入（`use lib` / `use lib as l`）登记，IR 生成直接消费。
     pub module_namespaces: HashMap<String, String>,

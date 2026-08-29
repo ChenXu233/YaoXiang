@@ -18,7 +18,7 @@ use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 
 /// 辅助函数：解析源代码并类型检查，同时返回 checker 以检查实现证明
-fn check_source_with_checker(
+pub(crate) fn check_source_with_checker(
     source: &str
 ) -> (
     crate::frontend::core::typecheck::types::TypeCheckResult,

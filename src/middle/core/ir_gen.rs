@@ -157,6 +157,12 @@ pub struct AstToIrGenerator {
     registry: ModuleRegistry,
     /// 本文件的模块限定键（多文件模式 Some → 启用限定；单文件 None → 不限定）。
     module_key: Option<String>,
+    /// RFC-011a §6: 存在类型包装点（span → 接口名），来自 typecheck 强制点收集。
+    /// generate_expr_ir 入口查表命中 → 值生成后包 CreateVariant。
+    existential_wraps: HashMap<Span, String>,
+    /// RFC-011a §6.2: 编译期类型收集——接口 → 实现类型列表（ImplementationProof
+    /// 按类型名定序），变体分发与包装定序共用。
+    interface_variants: HashMap<String, Vec<String>>,
 }
 
 /// 绑定信息（用于 IR 生成阶段的方法调用转发）
@@ -217,6 +223,24 @@ impl AstToIrGenerator {
             use_aliases: HashMap::new(),
             registry,
             module_key,
+            existential_wraps: type_result
+                .existential_coercions
+                .iter()
+                .map(|c| (c.span, c.interface.clone()))
+                .collect(),
+            interface_variants: {
+                let mut map: HashMap<String, Vec<String>> = HashMap::new();
+                for proof in &type_result.implementation_proofs {
+                    let entry = map.entry(proof.interface_name.clone()).or_default();
+                    if !entry.contains(&proof.type_name) {
+                        entry.push(proof.type_name.clone());
+                    }
+                }
+                for list in map.values_mut() {
+                    list.sort();
+                }
+                map
+            },
         }
     }
 
@@ -3218,6 +3242,19 @@ impl AstToIrGenerator {
                 self.lookup_var_type(name)
                     .map(|poly_type| poly_type.body.clone())
             }
+            // RFC-011a §6: 索引表达式——列表/数组元素的静态类型（存在类型
+            // 接收者解析依赖此臂：animals[0] → 元素类型 TypeRef(接口)）
+            ast::Expr::Index { expr: base, .. } => {
+                let base_ty = self.get_expr_mono_type(base);
+                match base_ty {
+                    Some(MonoType::Generic { name, args })
+                        if (name == "List" || name == "Array") && args.len() == 1 =>
+                    {
+                        Some(args[0].clone())
+                    }
+                    _ => None,
+                }
+            }
             ast::Expr::List(_, _) => Some(MonoType::make_list(MonoType::Void)),
             ast::Expr::Tuple(items, _) => {
                 let elems = vec![MonoType::Void; items.len()];
@@ -3293,9 +3330,322 @@ impl AstToIrGenerator {
         })
     }
 
-    /// 生成表达式 IR
-    #[allow(clippy::only_used_in_recursion)]
+    // ==================== RFC-011a §6 存在类型变体分发 ====================
+
+    /// 接收者表达式是否为存在类型（接口构造器名）→ 接口名。
+    /// 支持 Var 与 Index（animals[0]；二段式 d = animals[0] 的 d 是 Var）。
+    fn existential_receiver_interface(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<String> {
+        match expr {
+            ast::Expr::Var(_, _) => {
+                let mono = self.get_expr_mono_type(expr);
+                if let Some(t) = mono.and_then(|t| self.existential_interface_of(&t)) {
+                    return Some(t);
+                }
+                // MonoType 表缺失时回退字符串类型名表（带注解 let 填充）
+                let var = Self::var_name(expr)?;
+                let name = self.local_var_types.get(&var)?;
+                self.interface_from_name(Self::strip_ref_prefix(name))
+            }
+            ast::Expr::Index { expr: base, .. } => {
+                let base_ty = self.receiver_base_mono_type(base)?;
+                match base_ty {
+                    MonoType::Generic { name, args }
+                        if (name == "List" || name == "Array") && args.len() == 1 =>
+                    {
+                        self.existential_interface_of(&args[0])
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn var_name(expr: &ast::Expr) -> Option<String> {
+        match expr {
+            ast::Expr::Var(n, _) => Some(n.clone()),
+            _ => None,
+        }
+    }
+
+    /// Index 链基底的静态类型（嵌套 Index 递归取元素类型）
+    fn receiver_base_mono_type(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<MonoType> {
+        match expr {
+            ast::Expr::Index { expr: base, .. } => self.receiver_base_mono_type(base),
+            other => self.get_expr_mono_type(other),
+        }
+    }
+
+    /// MonoType 是否为 RFC-011a 存在类型 → 接口名。
+    /// 判据：接口构造器在 bindings 中注册为全函数字段的记录（is_constraint）。
+    /// 遗留 trait 约束同样满足 is_constraint，但由调用方以 interface_variants
+    /// 成员性门控隔离（无 ImplementationProof 的约束类型不走变体分发）。
+    fn existential_interface_of(
+        &self,
+        ty: &MonoType,
+    ) -> Option<String> {
+        match ty {
+            MonoType::TypeRef(n) => self.interface_from_name(n),
+            MonoType::Struct(s) if !s.name.is_empty() && Self::is_constraint_struct(s) => {
+                self.interface_from_name(&s.name)
+            }
+            _ => None,
+        }
+    }
+
+    /// 按名字查接口构造器（bindings），确认是约束记录形态
+    fn interface_from_name(
+        &self,
+        name: &str,
+    ) -> Option<String> {
+        let body = self.type_result.as_ref()?.bindings.get(name)?.body.clone();
+        match body {
+            MonoType::Struct(s) if Self::is_constraint_struct(&s) => Some(name.to_string()),
+            _ => None,
+        }
+    }
+
+    /// mono.rs `MonoType::is_constraint` 的 Struct 臂本地镜像（该方法在
+    /// MonoType 上，这里只有 &StructType）
+    fn is_constraint_struct(s: &crate::frontend::core::types::mono::StructType) -> bool {
+        s.fields
+            .iter()
+            .all(|(_, ty)| matches!(ty, MonoType::Fn { .. }))
+    }
+
+    /// RFC-011a §6.4: 生成变体分发的 IR——
+    ///   tag = VariantTag(obj)
+    ///   逐变体: tag == i → payload = VariantPayload(obj) → Call 具体方法
+    /// 调用目标解析复用 RFC-004 绑定表（声明形式与 `Type.method = fn[n]`
+    /// 重绑定形式都支持），无绑定时静态 `Type.method`。
+    #[allow(clippy::too_many_arguments)]
+    fn emit_variant_dispatch(
+        &mut self,
+        iface: &str,
+        method: &str,
+        obj_reg: usize,
+        method_args: &[Operand],
+        result_reg: usize,
+        span: Span,
+        instructions: &mut Vec<Instruction>,
+        _constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        let variants = self
+            .interface_variants
+            .get(iface)
+            .cloned()
+            .unwrap_or_default();
+        if variants.is_empty() {
+            // 编译期响亮失败：无实现收集（典型于跨模块存在类型——v1 边界）
+            return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                "接口 {} 在本编译单元无实现证明，无法生成变体分发",
+                iface
+            ))
+            .build());
+        }
+        let group = format!("{}$Group", iface);
+
+        let tag_reg = self.next_temp_reg();
+        instructions.push(Instruction::VariantTag {
+            dst: Operand::Local(tag_reg),
+            obj: Operand::Local(obj_reg),
+            group: group.clone(),
+            span,
+        });
+
+        let mut end_jumps: Vec<usize> = Vec::new();
+        for (i, impl_type) in variants.iter().enumerate() {
+            // tag == i ?
+            let const_reg = self.next_temp_reg();
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(const_reg),
+                src: Operand::Const(ConstValue::Int(i as i128)),
+            });
+            let eq_reg = self.next_temp_reg();
+            instructions.push(Instruction::Eq {
+                dst: Operand::Local(eq_reg),
+                lhs: Operand::Local(tag_reg),
+                rhs: Operand::Local(const_reg),
+            });
+            let next_idx = instructions.len();
+            instructions.push(Instruction::JmpIfNot(Operand::Local(eq_reg), 0));
+
+            // 解包负载
+            let payload_reg = self.next_temp_reg();
+            instructions.push(Instruction::VariantPayload {
+                dst: Operand::Local(payload_reg),
+                obj: Operand::Local(obj_reg),
+                group: group.clone(),
+                span,
+            });
+
+            // 调用目标：RFC-004 绑定重排优先，回退静态 Type.method
+            let binding = self
+                .type_bindings
+                .get(impl_type)
+                .and_then(|b| b.get(method).cloned());
+            match binding {
+                Some(b) => {
+                    let total = b.positions.len() + method_args.len();
+                    let positions: Vec<i64> = b
+                        .positions
+                        .iter()
+                        .map(|&p| if p < 0 { p + total as i64 } else { p })
+                        .collect();
+                    let mut final_args: Vec<Operand> = Vec::with_capacity(total);
+                    let mut extra = method_args.iter().cloned();
+                    for pos in 0..total {
+                        if positions.contains(&(pos as i64)) {
+                            final_args.push(Operand::Local(payload_reg));
+                        } else if let Some(a) = extra.next() {
+                            final_args.push(a);
+                        }
+                    }
+                    let func_name = self
+                        .registry
+                        .short_to_qualified_map()
+                        .get(&b.function)
+                        .cloned()
+                        .unwrap_or_else(|| b.function.clone());
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: Operand::Const(ConstValue::String(func_name)),
+                        args: final_args,
+                        span,
+                        def: None,
+                    });
+                }
+                None => {
+                    let mut final_args = vec![Operand::Local(payload_reg)];
+                    final_args.extend(method_args.iter().cloned());
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: Operand::Const(ConstValue::String(format!(
+                            "{}.{}",
+                            impl_type, method
+                        ))),
+                        args: final_args,
+                        span,
+                        def: None,
+                    });
+                }
+            }
+
+            let end_idx = instructions.len();
+            instructions.push(Instruction::Jmp(0));
+            end_jumps.push(end_idx);
+
+            // 回填：tag != i → 下一变体臂
+            let next_target = instructions.len();
+            if let Instruction::JmpIfNot(_, ref mut target) = instructions[next_idx] {
+                *target = next_target;
+            }
+        }
+
+        // 汇合点（VariantTag 守卫保证 tag 恒在集合内）
+        let end = instructions.len();
+        for idx in end_jumps {
+            if let Instruction::Jmp(ref mut target) = instructions[idx] {
+                *target = end;
+            }
+        }
+        Ok(())
+    }
+
+    /// 生成表达式 IR（入口分发器）
+    ///
+    /// RFC-011a §6: 查存在类型包装点表——命中则先生成裸值到临时寄存器，
+    /// 再包 CreateVariant。包装点由 typecheck 强制点收集产出（let 注解/实参/
+    /// return/字面量元素），span 键与 AST 节点一一对应。
     fn generate_expr_ir(
+        &mut self,
+        expr: &ast::Expr,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        if let Some(iface) = self.lookup_existential_wrap(expr) {
+            let group = format!("{}$Group", iface);
+            let concrete = self.get_expr_struct_type_name(expr).ok_or_else(|| {
+                ErrorCodeDefinition::ir_internal_error(&format!(
+                    "存在类型 {} 的包装点无法确定实参具体类型（span {:?}）",
+                    iface,
+                    Self::expr_span(expr)
+                ))
+                .build()
+            })?;
+            let variant = self
+                .interface_variants
+                .get(&iface)
+                .and_then(|v| v.iter().position(|t| *t == concrete))
+                .ok_or_else(|| {
+                    ErrorCodeDefinition::ir_internal_error(&format!(
+                        "类型 {} 不在接口 {} 的实现收集表中",
+                        concrete, iface
+                    ))
+                    .build()
+                })? as u32;
+            let payload_reg = self.next_temp_reg();
+            self.generate_expr_ir_inner(expr, payload_reg, instructions, constants)?;
+            instructions.push(Instruction::CreateVariant {
+                dst: Operand::Local(result_reg),
+                group,
+                variant,
+                payload: Operand::Local(payload_reg),
+                span: Self::expr_span(expr),
+            });
+            return Ok(());
+        }
+        self.generate_expr_ir_inner(expr, result_reg, instructions, constants)
+    }
+
+    /// span → 接口名查表
+    fn lookup_existential_wrap(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<String> {
+        let span = Self::expr_span(expr);
+        self.existential_wraps.get(&span).cloned()
+    }
+
+    /// 从表达式提取源码 span（无法定位的形态返回 dummy——dummy 永远查不中
+    /// 包装表，安全方向失败）
+    fn expr_span(expr: &ast::Expr) -> Span {
+        match expr {
+            ast::Expr::Lit(_, s)
+            | ast::Expr::Var(_, s)
+            | ast::Expr::Return(_, s)
+            | ast::Expr::Break(_, s)
+            | ast::Expr::Continue(_, s) => *s,
+            ast::Expr::BinOp { span, .. }
+            | ast::Expr::UnOp { span, .. }
+            | ast::Expr::Call { span, .. }
+            | ast::Expr::FnDef { span, .. }
+            | ast::Expr::If { span, .. }
+            | ast::Expr::Match { span, .. }
+            | ast::Expr::While { span, .. }
+            | ast::Expr::For { span, .. }
+            | ast::Expr::SpawnFor { span, .. }
+            | ast::Expr::Borrow { span, .. }
+            | ast::Expr::FieldAccess { span, .. }
+            | ast::Expr::Index { span, .. }
+            | ast::Expr::Tuple(_, span)
+            | ast::Expr::List(_, span)
+            | ast::Expr::Cast { span, .. }
+            | ast::Expr::Try { span, .. } => *span,
+            ast::Expr::Block(block) => block.span,
+            _ => Span::dummy(),
+        }
+    }
+
+    #[allow(clippy::only_used_in_recursion)]
+    fn generate_expr_ir_inner(
         &mut self,
         expr: &ast::Expr,
         result_reg: usize,
@@ -3688,6 +4038,25 @@ impl AstToIrGenerator {
                                 let arg_reg = self.next_temp_reg();
                                 self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
                                 arg_regs.push(Operand::Local(arg_reg));
+                            }
+
+                            // RFC-011a §6.4: 存在类型接收者 → 编译期变体分发。
+                            // 门控：接口须有本单元实现证明（隔离遗留 trait 约束路径）
+                            if let Some(iface) = self.existential_receiver_interface(expr) {
+                                if self.interface_variants.contains_key(&iface) {
+                                    let method_args: Vec<Operand> = arg_regs[1..].to_vec();
+                                    self.emit_variant_dispatch(
+                                        &iface,
+                                        field,
+                                        obj_reg,
+                                        &method_args,
+                                        result_reg,
+                                        *span,
+                                        instructions,
+                                        constants,
+                                    )?;
+                                    return Ok(());
+                                }
                             }
 
                             // 检查对象是否是约束变量（接口直接赋值优化）

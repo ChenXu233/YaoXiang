@@ -1,0 +1,27 @@
+// 06-compile-errors/interface_elem_not_impl.yx
+// 预期: 编译错误 E1101（RFC-011a §6.3 存在类型成员检查——append 实参未实现接口）
+// 说明: std.list.append 签名为 (A: Type)(list: List(A), item: A) -> List(A)，
+//       item 形参位是元素类型 A = Animal（存在类型），Stone 未实现 Animal，
+//       实参检查精确报 E1101 而非笼统类型不匹配。
+
+use std.assert
+use std.list
+
+Animal: (Self: Type) -> Type = {
+    speak: (self: Self) -> String,
+}
+
+Dog: Type = {
+    name: String,
+    Animal(Dog),
+}
+Dog.speak: (self: Dog) -> String = { return "Woof" }
+
+Stone: Type = {
+    weight: Int,
+}
+
+main = {
+    animals: List(Animal) = [Dog("Rex")]
+    animals2 = list.append(animals, Stone(2))
+}

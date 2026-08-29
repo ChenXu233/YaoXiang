@@ -53,6 +53,8 @@ pub struct ExpressionInferrer<'a> {
         &'a HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
     /// 实例化请求（收集遇到的所有泛型函数实例化需求）
     pub instantiation_requests: Vec<InstantiationRequest>,
+    /// RFC-011a §6 存在类型强制点（具体→存在包装点，ir_gen 按 span 查表注入包装）
+    pub existential_coercions: Vec<super::existential::ExistentialCoercion>,
     /// 依赖类型环境（效应查询）—— 由 StatementChecker 注入
     dep_env: Option<&'a crate::frontend::core::types::eval::dependent_types::DependentTypeEnv>,
     /// 流敏感假设集 Γ（效应注入）—— 由 StatementChecker 注入
@@ -78,6 +80,7 @@ impl<'a> ExpressionInferrer<'a> {
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
+            existential_coercions: Vec::new(),
             dep_env: None,
             gamma: None,
         }
@@ -102,6 +105,7 @@ impl<'a> ExpressionInferrer<'a> {
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
+            existential_coercions: Vec::new(),
             dep_env: None,
             gamma: None,
         }
@@ -127,6 +131,7 @@ impl<'a> ExpressionInferrer<'a> {
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
+            existential_coercions: Vec::new(),
             dep_env: None,
             gamma: None,
         }
@@ -154,6 +159,7 @@ impl<'a> ExpressionInferrer<'a> {
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
+            existential_coercions: Vec::new(),
             dep_env: None,
             gamma: None,
         }
@@ -162,6 +168,28 @@ impl<'a> ExpressionInferrer<'a> {
     /// 获取求解器引用（可变）
     pub fn solver(&mut self) -> &mut TypeConstraintSolver {
         self.solver
+    }
+
+    /// RFC-011a §6：在"具体→存在"兼容判定通过的位置收集包装点。
+    /// 成员违规（具体类型未实现接口）以 E1101 返回。
+    pub(crate) fn collect_existential_coercions(
+        &mut self,
+        expr: &crate::frontend::core::parser::ast::Expr,
+        expected: &MonoType,
+    ) -> Result<()> {
+        let (mut coercions, errors) = super::existential::collect_existential_coercions(
+            self.solver,
+            self.scope,
+            self.type_defs,
+            self.generic_type_defs,
+            expr,
+            expected,
+        );
+        if let Some(err) = errors.into_iter().next() {
+            return Err(err);
+        }
+        self.existential_coercions.append(&mut coercions);
+        Ok(())
     }
 
     /// 设置方法绑定表
@@ -1606,7 +1634,9 @@ impl<'a> ExpressionInferrer<'a> {
                     } => {
                         // 值级函数调用
                         if arg_types.len() == params.len() {
-                            for (arg_ty, param_ty) in arg_types.iter().zip(params.iter()) {
+                            for (arg_expr, (arg_ty, param_ty)) in
+                                args.iter().zip(arg_types.iter().zip(params.iter()))
+                            {
                                 // 自动借用：当参数签名要求 &T 且实参是值类型时，
                                 // 编译器自动创建令牌（RFC-009 §2.8）
                                 let actual_arg = match (param_ty, arg_ty) {
@@ -1629,21 +1659,50 @@ impl<'a> ExpressionInferrer<'a> {
                                 ) {
                                     continue;
                                 }
+                                // RFC-011a §6.3: 接口构造器形参（存在类型位）不做 type_defs
+                                // 替换——交给 solver 的结构化子型臂按 interfaces 面判定，
+                                // 替换成构造器 Struct 反而会与具体实参 Struct 撞名拒绝。
+                                let is_iface_param = matches!(
+                                    &resolved_param,
+                                    MonoType::TypeRef(n)
+                                        if self.generic_type_defs.contains_key(n)
+                                );
                                 // TypeRef: 先 solver.resolve 解析内置类型（Int/Float 等），
                                 // 再 type_defs 解析用户自定义类型；都不匹配则跳过
                                 if let MonoType::TypeRef(name) = &resolved_param {
-                                    resolved_param = match self.type_defs.get(name) {
-                                        Some(def_ty) => self.solver.resolve_type(def_ty),
-                                        None => continue,
-                                    };
+                                    if !is_iface_param {
+                                        resolved_param = match self.type_defs.get(name) {
+                                            Some(def_ty) => self.solver.resolve_type(def_ty),
+                                            None => continue,
+                                        };
+                                    }
                                 }
                                 if self.solver.unify(&actual_arg, &resolved_param).is_err() {
+                                    // RFC-011a §6.3: 接口形参收到未实现接口的具体类型
+                                    // → 精确报 E1101（成员检查），非笼统类型不匹配
+                                    if is_iface_param {
+                                        if let MonoType::Struct(s) =
+                                            self.solver.resolve_type(&actual_arg)
+                                        {
+                                            if let MonoType::TypeRef(iface) = &resolved_param {
+                                                return Err(ErrorCodeDefinition::type_does_not_implement_interface(
+                                                    &s.name, iface,
+                                                )
+                                                .at(*span)
+                                                .build());
+                                            }
+                                        }
+                                    }
                                     return Err(ErrorCodeDefinition::type_mismatch(
                                         &format!("{}", resolved_param),
                                         &format!("{}", arg_ty),
                                     )
                                     .at(*span)
                                     .build());
+                                }
+                                if is_iface_param {
+                                    // 具体值进入存在类型形参位 → 检查实现并记录包装点
+                                    self.collect_existential_coercions(arg_expr, &resolved_param)?;
                                 }
                             }
                         }
@@ -1780,7 +1839,8 @@ impl<'a> ExpressionInferrer<'a> {
                     let ret_ty = self.infer_expr(e)?;
                     // If we know the expected return type, check that the return
                     // expression type matches it via unification.
-                    if let Some(ref expected) = self.expected_return_type {
+                    let expected = self.expected_return_type.clone();
+                    if let Some(ref expected) = expected {
                         self.solver.unify(&ret_ty, expected).map_err(|_| {
                             ErrorCodeDefinition::type_mismatch(
                                 &format!("{}", expected),
@@ -1789,6 +1849,8 @@ impl<'a> ExpressionInferrer<'a> {
                             .at(*span)
                             .build()
                         })?;
+                        // RFC-011a §6: 具体值返回进存在类型返回位 → 检查实现并记录包装点
+                        self.collect_existential_coercions(e, expected)?;
                     }
                     Ok(ret_ty)
                 } else {

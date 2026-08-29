@@ -324,6 +324,28 @@ pub enum BytecodeInstr {
         step: Reg,
     },
 
+    /// RFC-011a §6: 包装具体值为存在类型变体
+    CreateVariant {
+        dst: Reg,
+        /// 合成变体类型名在常量池中的索引（"Animal$Group"）
+        group_idx: u16,
+        /// 变体号（编译期类型收集定序）
+        variant: u32,
+        payload: Reg,
+    },
+    /// RFC-011a §6: 提取存在类型值的变体号（守卫：非 group 变体值 → 运行时错误）
+    VariantTag {
+        dst: Reg,
+        obj: Reg,
+        group_idx: u16,
+    },
+    /// RFC-011a §6: 提取存在类型变体的负载（守卫同 VariantTag）
+    VariantPayload {
+        dst: Reg,
+        obj: Reg,
+        group_idx: u16,
+    },
+
     /// 定长数组构造：分配 N 个元素、以默认值填充（#299 §2）
     NewArray {
         /// 目标寄存器
@@ -569,6 +591,9 @@ impl BytecodeInstr {
             BytecodeInstr::NewDict { .. } => opcode::NEW_DICT,
             BytecodeInstr::NewTuple { .. } => opcode::NEW_TUPLE,
             BytecodeInstr::NewRange { .. } => opcode::NEW_RANGE,
+            BytecodeInstr::CreateVariant { .. } => opcode::CREATE_VARIANT,
+            BytecodeInstr::VariantTag { .. } => opcode::VARIANT_TAG,
+            BytecodeInstr::VariantPayload { .. } => opcode::VARIANT_PAYLOAD,
             BytecodeInstr::NewArray { .. } => opcode::NEW_ARRAY,
             BytecodeInstr::Contains { .. } => opcode::CONTAINS,
             BytecodeInstr::ArcNew { .. } => opcode::ARC_NEW,
@@ -690,6 +715,15 @@ impl BytecodeInstr {
                 // dst(2) + start(2) + end(2) + step(2)
                 8
             }
+            BytecodeInstr::CreateVariant { .. } => {
+                // dst(2) + group_idx(2) + variant(4) + payload(2)
+                10
+            }
+            BytecodeInstr::VariantTag { .. } => {
+                // dst(2) + obj(2) + group_idx(2)
+                6
+            }
+            BytecodeInstr::VariantPayload { .. } => 6,
             BytecodeInstr::NewArray { .. } => {
                 // dst(1) + count(4) = 5
                 5
@@ -1256,6 +1290,30 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                             decoded_instructions.push(BytecodeInstr::Nop);
                         }
                     }
+                    opcode::CALL_VIRT => {
+                        // CallVirt: dst(1) + obj(1) + method_name_idx(2) + args(1*count) + arg_count(1)
+                        if instr.operands.len() >= 5 {
+                            let dst = instr.operands[0] as u16;
+                            let obj = instr.operands[1] as u16;
+                            let method_idx = op_u16(&instr.operands, 2).unwrap_or(0);
+                            let arg_count = instr.operands[instr.operands.len() - 1] as usize;
+                            let mut args = Vec::with_capacity(arg_count);
+                            for i in 0..arg_count {
+                                let idx = 4 + i;
+                                if idx < instr.operands.len() - 1 {
+                                    args.push(Reg(instr.operands[idx] as u16));
+                                }
+                            }
+                            decoded_instructions.push(BytecodeInstr::CallVirt {
+                                dst: Some(Reg(dst)),
+                                obj: Reg(obj),
+                                method_idx,
+                                args,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
                     opcode::CALL_DYN => {
                         // CallDyn: dst(1) + obj(1) + name_idx(2) + args(N) + arg_count(1)
                         if instr.operands.len() >= 5 {
@@ -1649,6 +1707,47 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                 start: Reg(start),
                                 end: Reg(end),
                                 step: Reg(step),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::CREATE_VARIANT => {
+                        // CreateVariant: dst(2) + group_idx(2) + variant(4) + payload(2)
+                        if instr.operands.len() >= 10 {
+                            let dst = op_u16(&instr.operands, 0).unwrap_or(0);
+                            let group_idx = op_u16(&instr.operands, 2).unwrap_or(0);
+                            let variant = op_u32(&instr.operands, 4).unwrap_or(0);
+                            let payload = op_u16(&instr.operands, 8).unwrap_or(0);
+                            decoded_instructions.push(BytecodeInstr::CreateVariant {
+                                dst: Reg(dst),
+                                group_idx,
+                                variant,
+                                payload: Reg(payload),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::VARIANT_TAG => {
+                        // VariantTag: dst(2) + obj(2) + group_idx(2)
+                        if instr.operands.len() >= 6 {
+                            decoded_instructions.push(BytecodeInstr::VariantTag {
+                                dst: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                                obj: Reg(op_u16(&instr.operands, 2).unwrap_or(0)),
+                                group_idx: op_u16(&instr.operands, 4).unwrap_or(0),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::VARIANT_PAYLOAD => {
+                        // VariantPayload: dst(2) + obj(2) + group_idx(2)
+                        if instr.operands.len() >= 6 {
+                            decoded_instructions.push(BytecodeInstr::VariantPayload {
+                                dst: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                                obj: Reg(op_u16(&instr.operands, 2).unwrap_or(0)),
+                                group_idx: op_u16(&instr.operands, 4).unwrap_or(0),
                             });
                         } else {
                             decoded_instructions.push(BytecodeInstr::Nop);
