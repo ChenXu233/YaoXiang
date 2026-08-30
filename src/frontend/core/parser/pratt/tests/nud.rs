@@ -173,14 +173,20 @@ fn test_prefix_info_return() {
 fn test_prefix_info_break_removed() {
     let tokens = tokenize("break").unwrap();
     let state = ParserState::new(&tokens);
-    assert!(state.prefix_info().is_none());
+    assert!(
+        state.prefix_info().is_none(),
+        "break 不应注册为 pratt 前缀表达式（#314 仅语句位置）"
+    );
 }
 
 #[test]
 fn test_prefix_info_continue_removed() {
     let tokens = tokenize("continue").unwrap();
     let state = ParserState::new(&tokens);
-    assert!(state.prefix_info().is_none());
+    assert!(
+        state.prefix_info().is_none(),
+        "continue 不应注册为 pratt 前缀表达式（#314 仅语句位置）"
+    );
 }
 
 #[test]

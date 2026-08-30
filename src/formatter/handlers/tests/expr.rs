@@ -489,7 +489,7 @@ fn test_format_break_simple() {
     let ctx = default_ctx();
     let expr = Expr::Break(Span::dummy());
     let result = format_expr(&expr, &ctx, &default_source_map());
-    assert_eq!(result, "break");
+    assert_eq!(result, "break", "break 无标签应格式化为裸 break（#314）");
 }
 
 // === §5.8 Continue 语句 ===
@@ -499,7 +499,10 @@ fn test_format_continue_simple() {
     let ctx = default_ctx();
     let expr = Expr::Continue(Span::dummy());
     let result = format_expr(&expr, &ctx, &default_source_map());
-    assert_eq!(result, "continue");
+    assert_eq!(
+        result, "continue",
+        "continue 无标签应格式化为裸 continue（#314）"
+    );
 }
 
 // === §11.4 元组 ===
