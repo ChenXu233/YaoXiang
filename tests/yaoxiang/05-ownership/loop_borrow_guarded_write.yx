@@ -1,7 +1,8 @@
 // 05-ownership/loop_borrow_guarded_write.yx
-// 覆盖: RFC-009a §while：SMT 逻辑切断——写节点守卫（i == 3）⇒ !(i < 3) 成立 → 回边切断 → 放行（#312）
+// 覆盖: 规范 RFC-009a（docs/src/design/rfc/accepted/009a-borrow-proof-pipeline.md）§while：SMT 逻辑切断——写节点守卫（i == 3）⇒ !(i < 3) 成立 → 回边切断 → 放行（#312）
 // 验证: 循环内守卫下的 &mut 写与借用读共存，SMT 证明路径与循环重入不相容
-// 状态: ✅ 可运行（依赖 Z3；Z3 不可用时按 RFC-009a 勘误保守拒绝，本用例会被误报）
+// 依赖: Z3（build.rs 自动下载并静态链接）；Z3 不可用时按 RFC-009a 勘误保守拒绝，本用例会被误报
+// 状态: ✅ 可运行
 
 use std.assert
 

@@ -13,8 +13,9 @@
 
 use crate::frontend::core::typecheck::layers::ownership::{
     BrandId, BrandTree, ControlFlowGraph, EdgeKind, FastPathResult, emit_move_predicate,
-    emit_drop_predicate, emit_double_drop_predicate, emit_mut_predicate, fast_path_check,
+    emit_drop_predicate, emit_double_drop_predicate, emit_mut_predicate, fast_path_check, smt_cut,
 };
+use crate::frontend::core::types::const_data::{BinOp as CEBinOp, ConstExpr as CE, ConstValue};
 use crate::frontend::core::typecheck::proof::verdict::{DisproofKind, ProofResult};
 use crate::util::span::Span;
 
@@ -2413,8 +2414,6 @@ fn test_e2e_branch_local_var_dropped_at_merge() {
 // 查询 `写节点路径条件 ⇒ !loop_cond`：Unsat = 蕴含成立 = 切断；否则穿越（保守拒绝）。
 // 此前用 NamedVar 占位符 + 假设其为真 → 恒 Unsat → 恒切断 → 循环内借用写静默放行。
 
-use crate::frontend::core::types::const_data::{BinOp as CEBinOp, ConstExpr as CE, ConstValue};
-
 /// 构造 `name < n` 比较谓词
 fn lt_const(
     name: &str,
@@ -2448,7 +2447,7 @@ fn test_smt_cut_guarded_write_proves_loop_exit() {
     let loop_cond = lt_const("i", 3);
 
     // Act
-    let cut = crate::frontend::core::typecheck::layers::ownership::smt_cut(&path_cond, &loop_cond);
+    let cut = smt_cut(&path_cond, &loop_cond);
 
     // Assert
     assert!(
@@ -2465,7 +2464,7 @@ fn test_smt_cut_unguarded_write_traverses_back_edge() {
     let loop_cond = lt_const("i", 3);
 
     // Act
-    let cut = crate::frontend::core::typecheck::layers::ownership::smt_cut(&path_cond, &loop_cond);
+    let cut = smt_cut(&path_cond, &loop_cond);
 
     // Assert
     assert!(
