@@ -53,7 +53,6 @@
 | E1055 | `Constraint type '{type}' can only be used in generic context`                 | Ограничение вне контекста дженериков                   |
 | E1060 | `Expected {expected} type argument(s), found {found}`                          | Несоответствие количества аргументов типа              |
 | E1061 | `Cannot instantiate generic type with given arguments`                         | Невозможно инстанцировать дженерик                     |
-| E1070 | `Unknown label: '{label}'`                                                     | Неизвестная метка                                      |
 | E1081 | `` `?` is only allowed inside functions returning Result ``                    | `?` допускается только в функциях, возвращающих Result |
 | E1082 | `` `?` requires a Result expression, found '{type}' ``                         | `?` может использоваться только с выражением Result    |
 | E1083 | ``Result error type mismatch for `?`: expected '{expected}', found '{found}'`` | Несоответствие типа ошибки для `?`                     |

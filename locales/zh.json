@@ -350,14 +350,6 @@
     "example": "BadArray(Int, n)  // n 不是编译期常量",
     "error_output": "warning[W1063]: const 泛型约束无法求值\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ 无法在编译期求值约束 `N > 0`"
   },
-  "E1070": {
-    "title": "未知标签",
-    "message": "引用的标签不存在",
-    "template": "未知标签：'{label}'",
-    "help": "检查标签名或在循环上定义它",
-    "example": "break 'unknown;",
-    "error_output": "error[E1070]: 未知标签\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ 未知标签 'unknown'"
-  },
   "E1071": {
     "title": "类型定义只能在模块级",
     "message": "类型定义只能出现在模块顶层",

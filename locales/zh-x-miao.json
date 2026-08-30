@@ -318,14 +318,6 @@
     "example": "let x = Foo::<Int>();",
     "error_output": "error[E1061]: 无法实例化泛型喵\n --> example.yx:1:9\n  |\n1 | let x = Foo::<Int>();\n  |         ^ 无法用给定参数实例化喵"
   },
-  "E1070": {
-    "title": "未知标签喵~",
-    "message": "引用的标签不存在喵~",
-    "template": "未知标签喵：'{label}'",
-    "help": "检查标签名或在循环上定义它喵~",
-    "example": "break 'unknown;",
-    "error_output": "error[E1070]: 未知标签喵\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ 未知标签 'unknown' 喵"
-  },
   "E1071": {
     "title": "类型定义只能在模块级喵~",
     "message": "类型定义只能出现在模块顶层喵~",

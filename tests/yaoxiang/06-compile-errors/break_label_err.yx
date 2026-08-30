@@ -1,0 +1,18 @@
+// 06-compile-errors/break_label_err.yx
+// [test:error]: break/continue 标签语法已废弃（#314 Python 风格定案）——`break ::x` 必须编译报错，
+//   不得静默忽略标签按裸 break 执行（此前行为：包在 if 内时连 E1070 都不触发）
+// 预期: 编译错误 E0011
+// 覆盖: #314 break 无标签定案（SPEC §3.4 文法收敛为 BreakStmt ::= 'break'）
+// 验证: `break ::label` 在解析层被拒绝
+// 状态: ✅
+
+main = {
+    mut i = 0
+    while i < 3 {
+        i = i + 1
+        if i == 2 {
+            break ::outer
+        }
+    }
+    print(i)
+}

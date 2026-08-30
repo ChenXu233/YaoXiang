@@ -337,14 +337,6 @@
     "example": "let x = Foo::<Int>();",
     "error_output": "error[E1061]: ジェネリックをインスタンス化できません\n --> example.yx:1:9\n  |\n1 | let x = Foo::<Int>();\n  |         ^ 指定された引数でインスタンス化できません"
   },
-  "E1070": {
-    "title": "未知のラベル",
-    "message": "参照されたラベルが存在しません",
-    "template": "未知のラベル：'{label}'",
-    "help": "ラベル名を確認するか、ループ上に定義してください",
-    "example": "break 'unknown;",
-    "error_output": "error[E1070]: 未知のラベル\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ 未知のラベル 'unknown'"
-  },
   "E1071": {
     "title": "型定義はモジュールレベルでのみ可能",
     "message": "型定義はモジュールのトップレベルにのみ記述できます",

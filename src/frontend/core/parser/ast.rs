@@ -54,7 +54,6 @@ pub enum Expr {
     While {
         condition: Box<Expr>,
         body: Box<Block>,
-        label: Option<String>,
         span: Span,
     },
     For {
@@ -62,7 +61,6 @@ pub enum Expr {
         var_mut: bool, // 变量是否可变
         iterable: Box<Expr>,
         body: Box<Block>,
-        label: Option<String>,
         span: Span,
     },
     /// spawn for 数据并行循环（RFC-024 §2.4）
@@ -75,8 +73,10 @@ pub enum Expr {
     },
     Block(Block),
     Return(Option<Box<Expr>>, Span),
-    Break(Option<String>, Span),
-    Continue(Option<String>, Span),
+    /// break 语句（#314：Python 风格定案——裸 break，无标签，仅语句位置）
+    Break(Span),
+    /// continue 语句（#314：裸 continue，无标签）
+    Continue(Span),
     Cast {
         expr: Box<Expr>,
         target_type: Type,
@@ -244,7 +244,6 @@ pub enum StmtKind {
         var_mut: bool, // 变量是否可变
         iterable: Box<Expr>,
         body: Box<Block>,
-        label: Option<String>,
     },
     /// 类型定义：`Point: Type = { x: Float, y: Float }`
     /// 或泛型：`Option: (T: Type) -> Type = { some(T) | none }`

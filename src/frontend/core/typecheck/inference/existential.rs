@@ -47,8 +47,8 @@ fn expr_span(expr: &Expr) -> crate::util::span::Span {
         Expr::Lit(_, s)
         | Expr::Var(_, s)
         | Expr::Return(_, s)
-        | Expr::Break(_, s)
-        | Expr::Continue(_, s) => *s,
+        | Expr::Break(s)
+        | Expr::Continue(s) => *s,
         Expr::BinOp { span, .. }
         | Expr::UnOp { span, .. }
         | Expr::Call { span, .. }

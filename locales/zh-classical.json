@@ -297,14 +297,6 @@
     "example": "let x = Foo::<Int>();",
     "error_output": "error[E1061]: 泛型不可實例化\n --> example.yx:1:9\n  |\n1 | let x = Foo::<Int>();\n  |         ^ 不可以所給參數實例化"
   },
-  "E1070": {
-    "title": "未知標籤",
-    "message": "所引之標籤未嘗存焉",
-    "template": "未知標籤：'{label}'",
-    "help": "請核標籤名，或於循環上定義之",
-    "example": "break 'unknown;",
-    "error_output": "error[E1070]: 未知標籤\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ 未知標籤 'unknown'"
-  },
   "E1071": {
     "title": "類型定義惟可置於模組級",
     "message": "類型定義惟可現於模組之頂層",

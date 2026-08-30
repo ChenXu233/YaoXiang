@@ -480,13 +480,62 @@ ReturnStmt  ::= 'return' Expr?
 ### 3.4 break 语句
 
 ```
-BreakStmt   ::= 'break' Identifier?
+BreakStmt   ::= 'break'
+```
+
+**语义**：立即终止所在的最内层 `while`/`for` 循环，控制流转到该循环体之后。
+
+- **只出最近一层**：`break` 恒作用于包含它的最内层循环。嵌套循环中需要一次跳出多层时，
+  把内层循环提取为函数用 `return` 返回，或使用标志位（#314 定案：break/continue 不带标签；
+  若未来引入循环标签，将按循环声明侧语法走 RFC 流程，与证明管道的多出口设计一并裁决）
+- **仅限循环体内**：`break` 只能出现在 `while`/`for` 循环体内（含体内嵌套的块/if/match），
+  出现在循环外编译报错（E1102 `'break' outside of a loop`）
+- **不影响终止性证明**：`while` 循环仍须可证明终止（decreases 度量）；`break` 不参与
+  终止性论证，`while true { break }` 不会被接受
+- **借用语义**：break 的控制流边参与 RFC-009a 反向 BFS 活性分析的结构性切断
+  （跳出的迭代不参与回边活性推导）
+
+```yaoxiang
+mut i = 0
+while i < 10 {
+    i = i + 1
+    if i == 3 {
+        break              // 控制流转到循环之后，i == 3
+    }
+}
+
+// 嵌套循环：break 只出内层
+while j < 3 {
+    while k < 10 {
+        if k == 2 { break }    // 只终止内层循环
+    }
+    j = j + 1                  // 每轮外层迭代都会执行到这里
+}
 ```
 
 ### 3.5 continue 语句
 
 ```
 ContinueStmt::= 'continue'
+```
+
+**语义**：跳过本次迭代中剩余的语句，直接进入所在的最内层循环的下一轮——
+`while` 回到条件重判，`for` 取下一个元素。
+
+- **只作用最近一层**：与 `break` 相同，不带标签（#314）
+- **仅限循环体内**：出现在循环外编译报错（E1102）
+
+```yaoxiang
+mut sum = 0
+mut n = 0
+while n < 5 {
+    n = n + 1
+    if n == 3 {
+        continue           // 跳过下面的累加，n == 3 不计入
+    }
+    sum = sum + n
+}
+// sum == 12（1 + 2 + 4 + 5）
 ```
 
 ### 3.6 if 语句
@@ -656,6 +705,7 @@ if Expr Block (else if Expr Block)* (else Block)?
 match Expr { MatchArm+ }
 while Expr Block
 for 'mut'? Identifier 'in' Expr Block
+break | continue          // 仅循环体内（§3.4 / §3.5）
 ```
 
 ### A.2 错误处理

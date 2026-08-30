@@ -50,7 +50,6 @@ matching, generic instantiation, concurrency semantics, and error propagation.
 | E1055      | `Constraint type '{type}' can only be used in generic context`                 | Constraint used in non-generic context            |
 | E1060      | `Expected {expected} type argument(s), found {found}`                          | Type argument count mismatch                      |
 | E1061      | `Cannot instantiate generic type with given arguments`                         | Cannot instantiate generic                        |
-| E1070      | `Unknown label: '{label}'`                                                     | Unknown label                                     |
 | E1081      | `` `?` is only allowed inside functions returning Result ``                    | `?` is only allowed in functions returning Result |
 | E1082      | `` `?` requires a Result expression, found '{type}' ``                         | `?` can only be used on Result expressions        |
 | E1083      | ``Result error type mismatch for `?`: expected '{expected}', found '{found}'`` | `?` error type mismatch                           |

@@ -92,7 +92,6 @@ fn make_while(
             stmts: body_stmts,
             span: dummy_span(),
         }),
-        label: None,
         span: dummy_span(),
     })
 }
@@ -111,7 +110,6 @@ fn make_for(
             stmts: body_stmts,
             span: dummy_span(),
         }),
-        label: None,
         span: dummy_span(),
     })
 }
@@ -181,7 +179,6 @@ fn test_while_constant_condition_fails() {
             stmts: vec![*body_stmt],
             span: dummy_span(),
         }),
-        label: None,
         span: dummy_span(),
     });
 
@@ -304,7 +301,6 @@ fn test_nested_while_inner_fails() {
             stmts: vec![],
             span: dummy_span(),
         }),
-        label: None,
         span: dummy_span(),
     });
     let inner_stmt = Stmt {

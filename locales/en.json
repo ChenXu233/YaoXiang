@@ -350,14 +350,6 @@
     "example": "BadArray(Int, n)  // n is not a compile-time constant",
     "error_output": "warning[W1063]: const generic constraint cannot be evaluated\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ cannot evaluate constraint `N > 0` at compile-time"
   },
-  "E1070": {
-    "title": "Unknown label",
-    "message": "Referenced label does not exist",
-    "template": "Unknown label: '{label}'",
-    "help": "Check the label name or define it on the loop",
-    "example": "break 'unknown;",
-    "error_output": "error[E1070]: unknown label\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ unknown label 'unknown'"
-  },
   "E1071": {
     "title": "Type definitions are only allowed at module level",
     "message": "Type definitions can only appear at the top level of a module",

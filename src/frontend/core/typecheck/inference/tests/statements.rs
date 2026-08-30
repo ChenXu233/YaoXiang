@@ -283,7 +283,6 @@ fn test_check_for_stmt_range() {
             span: Span::dummy(),
         }),
         body: Box::new(make_block(vec![])),
-        label: None,
     });
 
     // Act
@@ -395,7 +394,6 @@ fn test_check_for_stmt_shadowing() {
             span: Span::dummy(),
         }),
         body: Box::new(make_block(vec![])),
-        label: None,
     });
 
     // Act

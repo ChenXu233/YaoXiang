@@ -487,17 +487,9 @@ fn test_format_return_expression() {
 #[test]
 fn test_format_break_simple() {
     let ctx = default_ctx();
-    let expr = Expr::Break(None, Span::dummy());
+    let expr = Expr::Break(Span::dummy());
     let result = format_expr(&expr, &ctx, &default_source_map());
     assert_eq!(result, "break");
-}
-
-#[test]
-fn test_format_break_with_label() {
-    let ctx = default_ctx();
-    let expr = Expr::Break(Some("outer".to_string()), Span::dummy());
-    let result = format_expr(&expr, &ctx, &default_source_map());
-    assert_eq!(result, "break outer");
 }
 
 // === §5.8 Continue 语句 ===
@@ -505,17 +497,9 @@ fn test_format_break_with_label() {
 #[test]
 fn test_format_continue_simple() {
     let ctx = default_ctx();
-    let expr = Expr::Continue(None, Span::dummy());
+    let expr = Expr::Continue(Span::dummy());
     let result = format_expr(&expr, &ctx, &default_source_map());
     assert_eq!(result, "continue");
-}
-
-#[test]
-fn test_format_continue_with_label() {
-    let ctx = default_ctx();
-    let expr = Expr::Continue(Some("outer".to_string()), Span::dummy());
-    let result = format_expr(&expr, &ctx, &default_source_map());
-    assert_eq!(result, "continue outer");
 }
 
 // === §11.4 元组 ===

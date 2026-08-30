@@ -2331,7 +2331,6 @@ impl AstToIrGenerator {
                 var_mut,
                 iterable,
                 body,
-                label: _,
             } => {
                 self.generate_for_loop_ir(
                     var,
@@ -3169,8 +3168,8 @@ impl AstToIrGenerator {
             ast::Expr::SpawnFor { span, .. } => *span,
             ast::Expr::Block(block) => block.span,
             ast::Expr::Return(_, span) => *span,
-            ast::Expr::Break(_, span) => *span,
-            ast::Expr::Continue(_, span) => *span,
+            ast::Expr::Break(span) => *span,
+            ast::Expr::Continue(span) => *span,
             ast::Expr::Cast { span, .. } => *span,
             ast::Expr::Tuple(_, span) => *span,
             ast::Expr::List(_, span) => *span,
@@ -3705,8 +3704,8 @@ impl AstToIrGenerator {
             ast::Expr::Lit(_, s)
             | ast::Expr::Var(_, s)
             | ast::Expr::Return(_, s)
-            | ast::Expr::Break(_, s)
-            | ast::Expr::Continue(_, s) => *s,
+            | ast::Expr::Break(s)
+            | ast::Expr::Continue(s) => *s,
             ast::Expr::BinOp { span, .. }
             | ast::Expr::UnOp { span, .. }
             | ast::Expr::Call { span, .. }
@@ -4800,12 +4799,10 @@ impl AstToIrGenerator {
                     instructions.push(Instruction::Ret(None));
                 }
             }
-            Expr::Break(label, span) => {
+            Expr::Break(span) => {
                 // #311: break → 跳出最近一层循环；出口生成期未知，占位后由
-                // exit_loop_targets 回填。带 ::label 的跨循环跳转不支持：parser 对
-                // while/for 硬编码 label: None，带标签的 break/continue 已被
-                // typecheck 的 E1070（unknown_label）拦截。
-                let _ = label;
+                // exit_loop_targets 回填。#314：标签语法已移除（Python 风格定案），
+                // break 恒指最近一层循环。
                 match self.loop_stack.last_mut() {
                     Some(top) => {
                         let fixup = instructions.len();
@@ -4822,9 +4819,8 @@ impl AstToIrGenerator {
                     }
                 }
             }
-            Expr::Continue(label, span) => {
+            Expr::Continue(span) => {
                 // #311: continue → 跳回最近一层循环的条件重判点（生成时即知）
-                let _ = label;
                 match self.loop_stack.last() {
                     Some(top) => {
                         let target = top.continue_target;
@@ -4865,7 +4861,6 @@ impl AstToIrGenerator {
             Expr::While {
                 condition,
                 body,
-                label: _,
                 span: _,
             } => {
                 self.generate_while_expr_ir(condition, body, result_reg, instructions, constants)?;
@@ -4875,7 +4870,6 @@ impl AstToIrGenerator {
                 var_mut,
                 iterable,
                 body,
-                label: _,
                 span: for_span,
             } => {
                 self.generate_for_loop_ir(

@@ -31,8 +31,6 @@ pub struct ExpressionInferrer<'a> {
     scope: &'a mut ScopeManager,
     /// 约束求解器
     solver: &'a mut TypeConstraintSolver,
-    /// 当前活跃的循环标签
-    loop_labels: Vec<String>,
     /// 循环嵌套深度（#311）：while/for 体内才允许 break/continue。
     /// 函数体（FnDef/Lambda）边界重置——闭包体不继承外层循环上下文；
     /// spawn for 体是逐元素闭包执行，不计入可 break 的循环上下文。
@@ -75,7 +73,6 @@ impl<'a> ExpressionInferrer<'a> {
         Self {
             scope,
             solver,
-            loop_labels: Vec::new(),
             loop_depth: 0,
             overload_candidates,
             native_signatures: &EMPTY_SIGNATURES,
@@ -101,7 +98,6 @@ impl<'a> ExpressionInferrer<'a> {
         Self {
             scope,
             solver,
-            loop_labels: Vec::new(),
             loop_depth: 0,
             overload_candidates,
             native_signatures,
@@ -128,7 +124,6 @@ impl<'a> ExpressionInferrer<'a> {
         Self {
             scope,
             solver,
-            loop_labels: Vec::new(),
             loop_depth: 0,
             overload_candidates,
             native_signatures,
@@ -157,7 +152,6 @@ impl<'a> ExpressionInferrer<'a> {
         Self {
             scope,
             solver,
-            loop_labels: Vec::new(),
             loop_depth: 0,
             overload_candidates,
             native_signatures,
@@ -377,36 +371,6 @@ impl<'a> ExpressionInferrer<'a> {
     /// 获取当前作用域层级
     pub fn scope_level(&self) -> usize {
         self.scope.scope_level()
-    }
-
-    /// 进入循环并注册标签
-    pub fn enter_loop(
-        &mut self,
-        label: Option<&str>,
-    ) {
-        if let Some(l) = label {
-            self.loop_labels.push(l.to_string());
-        }
-    }
-
-    /// 退出循环并移除标签
-    pub fn exit_loop(
-        &mut self,
-        label: Option<&str>,
-    ) {
-        if let Some(l) = label {
-            if let Some(pos) = self.loop_labels.iter().rposition(|x| x == l) {
-                self.loop_labels.remove(pos);
-            }
-        }
-    }
-
-    /// 检查标签是否存在
-    pub fn has_label(
-        &self,
-        label: &str,
-    ) -> bool {
-        self.loop_labels.contains(&label.to_string())
     }
 
     /// #311：语句检查器（StatementChecker）自己递归走 for 体，委托表达式检查时
@@ -1809,10 +1773,7 @@ impl<'a> ExpressionInferrer<'a> {
 
             // While 表达式
             crate::frontend::core::parser::ast::Expr::While {
-                condition,
-                body,
-                label,
-                ..
+                condition, body, ..
             } => {
                 let cond_ty = self.infer_expr(condition)?;
                 if cond_ty != MonoType::Bool {
@@ -1823,7 +1784,6 @@ impl<'a> ExpressionInferrer<'a> {
                     .build());
                 }
 
-                self.enter_loop(label.as_deref());
                 self.loop_depth += 1;
 
                 self.scope.enter_block();
@@ -1831,7 +1791,6 @@ impl<'a> ExpressionInferrer<'a> {
                 // 退出循环作用域时，将内部变量提升到外层，避免变量丢失
                 self.promote_loop_vars_to_parent_scope();
 
-                self.exit_loop(label.as_deref());
                 self.loop_depth -= 1;
 
                 result?;
@@ -1844,7 +1803,6 @@ impl<'a> ExpressionInferrer<'a> {
                 var_mut,
                 iterable,
                 body,
-                label,
                 span,
             } => {
                 let iter_ty = self.infer_expr(iterable)?;
@@ -1862,7 +1820,6 @@ impl<'a> ExpressionInferrer<'a> {
                     _ => self.solver.new_var(),
                 };
 
-                self.enter_loop(label.as_deref());
                 self.loop_depth += 1;
 
                 self.scope.enter_block();
@@ -1873,7 +1830,6 @@ impl<'a> ExpressionInferrer<'a> {
                 // 退出循环作用域时，将内部变量提升到外层，避免变量丢失
                 self.promote_loop_vars_to_parent_scope();
 
-                self.exit_loop(label.as_deref());
                 self.loop_depth -= 1;
                 result
             }
@@ -1904,12 +1860,7 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // Break 表达式
-            crate::frontend::core::parser::ast::Expr::Break(label, span) => {
-                if let Some(l) = label {
-                    if !self.has_label(l) {
-                        return Err(ErrorCodeDefinition::unknown_label(l).build());
-                    }
-                }
+            crate::frontend::core::parser::ast::Expr::Break(span) => {
                 // #311：循环控制流仅允许在 while/for 体内（spawn for 体在函数边界已重置深度）
                 if self.loop_depth == 0 {
                     return Err(ErrorCodeDefinition::break_outside_loop("break")
@@ -1920,12 +1871,7 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // Continue 表达式
-            crate::frontend::core::parser::ast::Expr::Continue(label, span) => {
-                if let Some(l) = label {
-                    if !self.has_label(l) {
-                        return Err(ErrorCodeDefinition::unknown_label(l).build());
-                    }
-                }
+            crate::frontend::core::parser::ast::Expr::Continue(span) => {
                 if self.loop_depth == 0 {
                     return Err(ErrorCodeDefinition::break_outside_loop("continue")
                         .at(*span)
@@ -2224,7 +2170,6 @@ impl<'a> ExpressionInferrer<'a> {
 
                 // 2. 进入循环作用域，注册迭代变量
                 // #311：spawn for 体是逐元素闭包执行，不是可 break/continue 的循环上下文
-                //（原 enter_loop(None) 对标签栈是 no-op，直接移除）
                 self.scope.enter_block();
                 let body_ty = self
                     .try_add_var(var.clone(), PolyType::mono(element_type), *span, *var_mut)

@@ -1,0 +1,10 @@
+// 06-compile-errors/break_expr_position_err.yx
+// [test:error]: break/continue 仅语句位置（#314 Python 风格定案）——不可用于表达式位置
+// 预期: 编译错误 E0012
+// 覆盖: #314 break 语句唯一性定案（pratt 前缀注册已移除）
+// 验证: `x = break` 作为表达式使用时在解析层被拒绝
+// 状态: ✅
+
+main = {
+    x = break
+}

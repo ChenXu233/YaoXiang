@@ -1114,7 +1114,6 @@ fn test_e2e_borrow_in_while_body() {
                         span: Span::default(),
                     }),
                 ])),
-                label: None,
                 span: Span::default(),
             }),
         ],
@@ -2157,7 +2156,6 @@ fn test_while_guard_scope_balanced() {
             make_expr_stmt(Expr::While {
                 condition: Box::new(cond),
                 body: Box::new(make_block(vec![])),
-                label: None,
                 span: Span::default(),
             }),
         ],
@@ -2342,7 +2340,6 @@ fn test_e2e_move_in_loop_body_persists() {
             make_expr_stmt(Expr::While {
                 condition: Box::new(make_var("cond")),
                 body: Box::new(make_block(vec![make_var_stmt("q", make_var("p"))])),
-                label: None,
                 span: Span::default(),
             }),
             make_expr_stmt(make_field_access("p", "y")),

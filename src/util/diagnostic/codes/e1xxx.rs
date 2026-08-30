@@ -113,10 +113,6 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
         category: ErrorCategory::TypeCheck,
     },
     // === 控制流 ===
-    ErrorCodeDefinition {
-        code: "E1070",
-        category: ErrorCategory::TypeCheck,
-    },
     // E1071: 类型定义只能在模块级（#295：函数体内 TypeDefinition 曾静默跳过）
     ErrorCodeDefinition {
         code: "E1071",
@@ -253,8 +249,7 @@ impl ErrorCodeDefinition {
     ("E1060", type_argument_count_mismatch(expected: usize, found: usize) => .param("expected", expected.to_string()) .param("found", found.to_string())),
     /// E1061 无法实例化泛型类型
     ("E1061", cannot_instantiate_generic() => ),
-    /// E1070 未知标签
-    ("E1070", unknown_label(label: &str) => .param("label", label)),
+    // E1070（unknown_label）已随 #314 移除：标签语法废弃，编号保留不复用
     /// E1071 类型定义只能在模块级
     ("E1071", type_def_only_at_module_level(name: &str) => .param("name", name)),
     /// E1081 `?` 仅允许在返回 Result 的函数内使用

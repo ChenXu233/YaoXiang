@@ -1,0 +1,18 @@
+// 06-compile-errors/continue_label_err.yx
+// [test:error]: continue 无标签（#314 Python 风格定案）——SPEC §3.5 原文法即无标签，
+//   实现此前却接受 `continue ::label` 并静默忽略
+// 预期: 编译错误 E0011
+// 覆盖: #314 continue 无标签定案（SPEC §3.5 文法不变，实现对齐）
+// 验证: `continue ::label` 在解析层被拒绝
+// 状态: ✅
+
+main = {
+    mut i = 0
+    while i < 3 {
+        i = i + 1
+        if i == 1 {
+            continue ::next
+        }
+    }
+    print(i)
+}

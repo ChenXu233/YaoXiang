@@ -48,7 +48,6 @@ YaoXiang 编译器使用错误码标识不同类型的诊断信息。错误码�
 | E1055  | `Constraint type '{type}' can only be used in generic context`                 | 约束在非泛型上下文中                 |
 | E1060  | `Expected {expected} type argument(s), found {found}`                          | 类型参数数量不匹配                   |
 | E1061  | `Cannot instantiate generic type with given arguments`                         | 无法实例化泛型                       |
-| E1070  | `Unknown label: '{label}'`                                                     | 未知标签                             |
 | E1081  | `` `?` is only allowed inside functions returning Result ``                    | `?` 仅允许在返回 Result 的函数内使用 |
 | E1082  | `` `?` requires a Result expression, found '{type}' ``                         | `?` 只能用于 Result 表达式           |
 | E1083  | ``Result error type mismatch for `?`: expected '{expected}', found '{found}'`` | `?` 的错误类型不匹配                 |

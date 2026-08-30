@@ -48,7 +48,6 @@ YaoXiang コンパイラは、エラーコードを用いてさまざまな種�
 | E1055        | `Constraint type '{type}' can only be used in generic context`                 | 制約が非 generics コンテキストで使用されている |
 | E1060        | `Expected {expected} type argument(s), found {found}`                          | 型引数の数が一致しない                         |
 | E1061        | `Cannot instantiate generic type with given arguments`                         | generics をインスタンス化できない              |
-| E1070        | `Unknown label: '{label}'`                                                     | 未知のラベル                                   |
 | E1081        | `` `?` is only allowed inside functions returning Result ``                    | `?` は Result を返す関数内でのみ使用可能       |
 | E1082        | `` `?` requires a Result expression, found '{type}' ``                         | `?` は Result 式にのみ使用可能                 |
 | E1083        | ``Result error type mismatch for `?`: expected '{expected}', found '{found}'`` | `?` のエラー型が一致しない                     |

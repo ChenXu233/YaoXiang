@@ -167,18 +167,20 @@ fn test_prefix_info_return() {
     assert!(state.prefix_info().is_some());
 }
 
+// #314：break/continue 仅语句位置（Python 风格定案），不再注册为 pratt 前缀表达式
+
 #[test]
-fn test_prefix_info_break() {
+fn test_prefix_info_break_removed() {
     let tokens = tokenize("break").unwrap();
     let state = ParserState::new(&tokens);
-    assert!(state.prefix_info().is_some());
+    assert!(state.prefix_info().is_none());
 }
 
 #[test]
-fn test_prefix_info_continue() {
+fn test_prefix_info_continue_removed() {
     let tokens = tokenize("continue").unwrap();
     let state = ParserState::new(&tokens);
-    assert!(state.prefix_info().is_some());
+    assert!(state.prefix_info().is_none());
 }
 
 #[test]
