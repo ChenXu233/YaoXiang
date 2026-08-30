@@ -15,7 +15,7 @@ use crate::util::span::Span;
 use super::super::proof::context::ProofContext;
 use super::super::proof::verdict::ProofResult;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
-use crate::frontend::core::types::const_data::ConstValue;
+
 use crate::frontend::core::typecheck::proof::smt::ast::{SMTSort, SMTResult};
 use crate::frontend::core::typecheck::proof::smt::translate::translate_constraint;
 #[cfg(not(target_arch = "wasm32"))]
@@ -348,8 +348,10 @@ pub struct CfgNode {
     pub successors: Vec<(usize, EdgeKind)>,
     /// 前驱节点（用于反向 BFS）
     pub predecessors: Vec<usize>,
-    /// 该节点的路径条件（if guard / while cond / match pattern）
-    pub path_condition: Option<String>,
+    /// 该节点的路径条件（if guard / while cond / match pattern）。
+    /// #312：存真实 ConstExpr（SMT 可消费）——此前存 AST Debug 文本，
+    /// 只能人读不能进 Z3，回边切断查询被迫用占位符恒切断。
+    pub path_condition: Option<ConstExpr>,
     /// 本节点的变量操作序列（#264：walk 阶段记录，数据流分析阶段消费）
     pub ops: Vec<VarOp>,
 }
@@ -406,7 +408,7 @@ impl ControlFlowGraph {
     /// 添加节点，返回节点索引
     pub fn add_node(
         &mut self,
-        path_condition: Option<String>,
+        path_condition: Option<ConstExpr>,
     ) -> usize {
         let id = self.nodes.len();
         self.nodes.push(CfgNode {
@@ -491,11 +493,14 @@ pub fn fast_path_check(
                 .any(|(succ, kind)| *succ == cur && *kind == EdgeKind::BackEdge);
 
             if is_back_edge {
-                if let (Some(ref path_cond), Some(ref loop_cond)) = (
-                    &cfg.nodes[pred].path_condition,
-                    &cfg.nodes[cur].path_condition,
-                ) {
-                    if smt_cut(path_cond, loop_cond) {
+                // #312：路径条件取写节点自身条件（RFC-009a 勘误 2026-08-17：
+                // 判定目标为写节点），与循环头条件做蕴含判定。
+                // 任一缺失（无守卫的循环体 / for 循环 / loop）或 SMT 无法证明
+                // 蕴含 → 回边穿越 → 保守拒绝（SMT 是精度层，不是 soundness 依赖）
+                let write_cond = cfg.nodes[write_node].path_condition.as_ref();
+                let loop_cond = cfg.nodes[cur].path_condition.as_ref();
+                if let (Some(pc), Some(lc)) = (write_cond, loop_cond) {
+                    if smt_cut(pc, lc) {
                         continue; // 逻辑切断
                     }
                 }
@@ -521,58 +526,140 @@ pub fn fast_path_check(
 
 // ── 慢速通道：SMT 逻辑切断（RFC-009a §慢速通道） ─────────
 
-/// SMT 逻辑切断：判定 `path_cond ⇒ !loop_cond`
+/// SMT 逻辑切断：判定 `write_path_cond ⇒ !loop_cond`
 ///
-/// 仅在回边 + 有路径条件时调用。
-/// 使用 RFC-027 的 Z3 后端（已实现）。
+/// 仅在回边 + 双侧路径条件（写节点自身条件 + 循环头条件）齐备时调用。
+/// RFC-009a 勘误（2026-08-17）：SMT 是精度层而非 soundness 依赖——
+/// 蕴含无法证明（Sat/Unknown/Z3 不可用）一律返回 false = 回边穿越 = 保守拒绝。
 ///
-/// 构造约束：!(path_cond ∧ loop_cond)
-/// unsat → 蕴含成立 → 切断成功
-/// sat   → 存在反例 → 不切断
-fn smt_cut(
-    _path_cond: &str,
-    _loop_cond: &str,
+/// 构造：目标 `!(path ∧ loop)`，Unsat = 蕴含成立 → 切断。
+/// #312：此前用 `NamedVar("path_cond")` 占位符并假设其为真 → 恒 Unsat →
+/// 恒切断 → 回边永不穿越 → 循环内借用写静默放行。现用真实 ConstExpr
+/// 条件构造查询，assumptions 为空。
+pub(crate) fn smt_cut(
+    path_cond: &ConstExpr,
+    loop_cond: &ConstExpr,
 ) -> bool {
-    // wasm 模式下 Z3 不可用，保守不切断
+    // wasm 模式下 Z3 不可用，保守不切断（回边穿越）
     #[cfg(target_arch = "wasm32")]
     return false;
 
     #[cfg(not(target_arch = "wasm32"))]
     {
+        let conj = ConstExpr::BinOp {
+            op: BinOp::And,
+            left: Box::new(path_cond.clone()),
+            right: Box::new(loop_cond.clone()),
+        };
+        // 目标：!(path ∧ loop)。Unsat = 在空假设下该蕴含恒成立 → 切断；
+        // Sat = 存在「写路径与循环重入共存」的模型 → 不切断。
         let constraint = ConstExpr::UnOp {
             op: UnOp::Not,
-            expr: Box::new(ConstExpr::BinOp {
-                op: BinOp::And,
-                left: Box::new(ConstExpr::NamedVar("path_cond".into())),
-                right: Box::new(ConstExpr::NamedVar("loop_cond".into())),
-            }),
+            expr: Box::new(conj.clone()),
         };
 
-        let path_assumption = ConstExpr::BinOp {
-            op: BinOp::Eq,
-            left: Box::new(ConstExpr::NamedVar("path_cond".into())),
-            right: Box::new(ConstExpr::Lit(ConstValue::Bool(true))),
-        };
-        let loop_assumption = ConstExpr::BinOp {
-            op: BinOp::Eq,
-            left: Box::new(ConstExpr::NamedVar("loop_cond".into())),
-            right: Box::new(ConstExpr::Lit(ConstValue::Bool(true))),
-        };
+        let mut var_sorts: HashMap<String, SMTSort> = HashMap::new();
+        collect_var_sorts(&conj, &mut var_sorts);
 
-        let assumptions = vec![path_assumption, loop_assumption];
-        let mut var_sorts = HashMap::new();
-        var_sorts.insert("path_cond".into(), SMTSort::Bool);
-        var_sorts.insert("loop_cond".into(), SMTSort::Bool);
-
-        let commands = translate_constraint(&constraint, &assumptions, &var_sorts);
+        let commands = translate_constraint(&constraint, &[], &var_sorts);
 
         let backend = match Z3Backend::new() {
             Ok(b) => b,
-            Err(_) => return false, // Z3 不可用 → 保守不切断
+            Err(_) => return false, // Z3 不可用 → 保守不切断（回边穿越）
         };
 
         matches!(backend.solve(&commands, 100), SMTResult::Unsat)
     } // cfg(not(target_arch = "wasm32"))
+}
+
+/// 收集 ConstExpr 中出现的 NamedVar 及其 SMT 排序。
+///
+/// 排序推断：算术/比较运算的操作数为数值（Int）；其余上下文默认 Bool。
+/// 判据保守——排序错误的查询会求解失败 → Unknown → 回边穿越（sound 方向）。
+fn collect_var_sorts(
+    expr: &ConstExpr,
+    sorts: &mut HashMap<String, SMTSort>,
+) {
+    const NUMERIC_OPS: &[BinOp] = &[
+        BinOp::Add,
+        BinOp::Sub,
+        BinOp::Mul,
+        BinOp::Div,
+        BinOp::Mod,
+        BinOp::Lt,
+        BinOp::Le,
+        BinOp::Gt,
+        BinOp::Ge,
+    ];
+
+    fn collect_numeric(
+        expr: &ConstExpr,
+        sorts: &mut HashMap<String, SMTSort>,
+    ) {
+        match expr {
+            ConstExpr::NamedVar(name) => {
+                sorts.insert(name.clone(), SMTSort::Int);
+            }
+            ConstExpr::BinOp { left, right, .. } => {
+                collect_numeric(left, sorts);
+                collect_numeric(right, sorts);
+            }
+            ConstExpr::UnOp { expr, .. } => collect_numeric(expr, sorts),
+            ConstExpr::Call { args, .. } => {
+                for arg in args {
+                    collect_numeric(arg, sorts);
+                }
+            }
+            ConstExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                collect_numeric(condition, sorts);
+                collect_numeric(then_branch, sorts);
+                collect_numeric(else_branch, sorts);
+            }
+            ConstExpr::Range { start, end } => {
+                collect_numeric(start, sorts);
+                collect_numeric(end, sorts);
+            }
+            _ => {}
+        }
+    }
+
+    match expr {
+        ConstExpr::NamedVar(_) => {}
+        ConstExpr::Lit(_) | ConstExpr::Var(_) => {}
+        ConstExpr::BinOp { op, left, right } => {
+            if NUMERIC_OPS.contains(op) {
+                collect_numeric(left, sorts);
+                collect_numeric(right, sorts);
+            } else {
+                collect_var_sorts(left, sorts);
+                collect_var_sorts(right, sorts);
+            }
+        }
+        ConstExpr::UnOp { expr, .. } => collect_var_sorts(expr, sorts),
+        ConstExpr::Call { args, .. } => {
+            for arg in args {
+                collect_var_sorts(arg, sorts);
+            }
+        }
+        ConstExpr::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            // 条件与两分支递归：两分支可能是数值或布尔，交给各自子树判据
+            collect_var_sorts(condition, sorts);
+            collect_var_sorts(then_branch, sorts);
+            collect_var_sorts(else_branch, sorts);
+        }
+        ConstExpr::Range { start, end } => {
+            collect_numeric(start, sorts);
+            collect_numeric(end, sorts);
+        }
+    }
 }
 
 // ── 系统谓词生成器（RFC-009a §系统谓词清单） ────────────
@@ -775,6 +862,16 @@ pub struct OwnershipChecker {
     field_assignments: Vec<(String, String, String)>,
     /// #265：流敏感假设栈 Γ——分支守卫在 walk_if/walk_while 中 inject/exit_scope
     gamma: crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma,
+    /// #312：WriteBorrow 实参遍历深度——>0 时 add_consumer_for_var 压制。
+    /// &mut 实参是对变量的独占写请求而非读取消费，把写节点注册成现有读令牌的
+    /// 消费者会让反向 BFS 以写节点为种子自我标记恒 unsafe，路径条件切断全部失效。
+    write_borrow_arg_depth: usize,
+    /// #312：引用变量 → 其持有的令牌（`view = &p` 把 view 绑到 p 的读令牌）。
+    /// 此前透过引用的使用（view.x）按 source_var 匹配不到令牌，消费者从未注册，
+    /// 借用活性对「通过引用使用」完全失明——反向 BFS 缺少最关键的种子。
+    ref_bindings: HashMap<String, BrandId>,
+    /// #312：最近一次 Borrow 表达式创建的令牌（Assign 臂捕获后绑到目标变量）
+    last_created_token: Option<BrandId>,
 }
 
 impl Default for OwnershipChecker {
@@ -792,6 +889,9 @@ impl OwnershipChecker {
             pending_writes: Vec::new(),
             current_node: 0,
             current_span: Span::dummy(),
+            write_borrow_arg_depth: 0,
+            ref_bindings: HashMap::new(),
+            last_created_token: None,
             node_spans: HashMap::new(),
             scope_vars: Vec::new(),
             scope_drops: Vec::new(),
@@ -837,6 +937,9 @@ impl OwnershipChecker {
         self.spawn_ref_graph.clear();
         self.current_spawn_refs.clear();
         self.field_assignments.clear();
+        self.write_borrow_arg_depth = 0;
+        self.ref_bindings.clear();
+        self.last_created_token = None;
         self.current_node = self.cfg.add_node(None); // 入口节点
         self.current_span = Span::dummy();
         // #265：假设栈随函数重置（路径条件不跨函数）
@@ -1010,6 +1113,10 @@ impl OwnershipChecker {
         &mut self,
         var_name: &str,
     ) {
+        // #312：WriteBorrow 实参遍历期间压制消费者注册（见字段文档）
+        if self.write_borrow_arg_depth > 0 {
+            return;
+        }
         let token_ids: Vec<BrandId> = self
             .brand_tree
             .root_tokens()
@@ -1023,6 +1130,12 @@ impl OwnershipChecker {
             .collect();
         for id in &token_ids {
             self.brand_tree.add_consumer(id, self.current_node);
+        }
+        // #312：引用变量的使用 = 其持有令牌的消费（view.x 消费 view 绑定的读令牌）。
+        // 令牌 source_var 是被借变量名，按名匹配不到引用变量——此前透过引用的
+        // 使用从未注册消费者，借用活性失明。
+        if let Some(tok) = self.ref_bindings.get(var_name) {
+            self.brand_tree.add_consumer(tok, self.current_node);
         }
     }
 
@@ -1141,8 +1254,9 @@ impl OwnershipChecker {
         let merge_node = self.cfg.add_node(None);
 
         // then 分支 —— 路径条件 = condition（#265：守卫注入假设栈）
+        // #312：CFG 节点存真实 ConstExpr（与 gamma 注入同一转换），供回边 SMT 查询消费
         let then_reachable = cond_value != Some(false);
-        let then_start = self.cfg.add_node(Some(format!("{:?}", condition)));
+        let then_start = self.cfg.add_node(Self::condition_as_const(condition));
         if then_reachable {
             self.cfg.add_edge(split_node, then_start, EdgeKind::Normal);
         }
@@ -1164,7 +1278,7 @@ impl OwnershipChecker {
         let mut remaining_reachable = cond_value != Some(true);
         for (else_if_cond, else_if_body) in else_ifs {
             results.extend(self.walk_expr(else_if_cond));
-            let else_if_start = self.cfg.add_node(Some(format!("{:?}", else_if_cond)));
+            let else_if_start = self.cfg.add_node(Self::condition_as_const(else_if_cond));
             let elif_reachable =
                 remaining_reachable && Self::literal_bool(else_if_cond) != Some(false);
             if elif_reachable {
@@ -1191,7 +1305,9 @@ impl OwnershipChecker {
         // else 分支 —— 路径条件 = !condition
         let else_reachable = remaining_reachable;
         if let Some(else_body) = else_body {
-            let else_start = self.cfg.add_node(Some(format!("!({:?})", condition)));
+            let else_start = self
+                .cfg
+                .add_node(Self::condition_as_const(condition).map(Self::negate_const));
             if else_reachable {
                 self.cfg.add_edge(split_node, else_start, EdgeKind::Normal);
             }
@@ -1234,7 +1350,8 @@ impl OwnershipChecker {
         condition: &Expr,
         body: &[Stmt],
     ) -> Vec<ProofResult> {
-        let head_node = self.cfg.add_node(Some(format!("{:?}", condition)));
+        // #312：循环头路径条件存真实 ConstExpr（loop_cond，回边 SMT 查询的右元）
+        let head_node = self.cfg.add_node(Self::condition_as_const(condition));
         self.cfg
             .add_edge(self.current_node, head_node, EdgeKind::Normal);
 
@@ -1343,6 +1460,9 @@ impl OwnershipChecker {
                         self.brand_tree.create_read_token(var_name)
                     };
                     self.brand_tree.add_consumer(&token, self.current_node);
+                    // #312：记录本 Borrow 创建的令牌，Assign 臂将其绑到目标变量
+                    //（view = &p → ref_bindings[view] = token），供 add_consumer_for_var 解析
+                    self.last_created_token = Some(token.clone());
 
                     // 检查品牌树中是否已有冲突令牌，有则送入反向 BFS 验证
                     if !self.brand_tree.conflicting_with(&token).is_empty() {
@@ -1400,7 +1520,14 @@ impl OwnershipChecker {
                         // 仅在变量已存在且已记录可变性时检查（重赋值场景）
                         if let Some(&is_mut) = self.var_mutability.get(name) {
                             let mut r = self.walk_expr(left);
+                            self.last_created_token = None;
                             r.extend(self.walk_expr(right));
+                            // #312：x = &y 重赋值 → 重新绑定引用令牌（&x 解析为 Borrow）
+                            if matches!(right.as_ref(), Expr::Borrow { .. }) {
+                                if let Some(tok) = self.last_created_token.take() {
+                                    self.ref_bindings.insert(name.clone(), tok);
+                                }
+                            }
                             if !is_mut {
                                 r.push(emit_mut_predicate(name, false, self.current_span));
                             }
@@ -1415,6 +1542,14 @@ impl OwnershipChecker {
                         } else {
                             // 变量未在 var_mutability 中 → 首次声明（非 StmtKind::Var 路径）
                             let mut r = self.walk_expr(right);
+                            // #312：view = &p 形式（Expr 赋值首声明）——捕获新建令牌
+                            // 绑定到目标变量，使透过引用的使用（view.x）能注册消费者
+                            //（&x 解析为 Expr::Borrow；Expr::Ref 是 `ref` 关键字，不建令牌）
+                            if matches!(right.as_ref(), Expr::Borrow { .. }) {
+                                if let Some(tok) = self.last_created_token.take() {
+                                    self.ref_bindings.insert(name.clone(), tok);
+                                }
+                            }
                             r.extend(self.walk_expr(left));
                             self.push_var_op(VarOp::Declare { var: name.clone() });
                             self.var_mutability.insert(name.clone(), false);
@@ -1484,14 +1619,26 @@ impl OwnershipChecker {
                     .unwrap_or_else(|| vec![ParamOwnership::Move; args.len()]);
                 // 处理显式参数
                 for (i, arg) in args.iter().enumerate() {
+                    let ownership = param_types.get(i).unwrap_or(&ParamOwnership::Move);
+                    let is_write_borrow = matches!(ownership, ParamOwnership::WriteBorrow);
+                    // #312：WriteBorrow 实参遍历期间压制消费者注册——Var 臂的
+                    // add_consumer_for_var 会把写节点注册成现有读令牌的消费者，
+                    // 反向 BFS 以写节点为种子自我标记恒 unsafe，路径条件切断全部失效
+                    if is_write_borrow {
+                        self.write_borrow_arg_depth += 1;
+                    }
                     results.extend(self.walk_expr(arg));
+                    if is_write_borrow {
+                        self.write_borrow_arg_depth -= 1;
+                    }
                     if let Expr::Var(name, _) = arg {
                         let check = self.check_var_read(name, self.current_span);
                         if !check.is_proved() {
                             results.push(check);
                         }
-                        self.add_consumer_for_var(name);
-                        let ownership = param_types.get(i).unwrap_or(&ParamOwnership::Move);
+                        if !is_write_borrow {
+                            self.add_consumer_for_var(name);
+                        }
                         self.apply_param_ownership(name, ownership);
                     }
                 }
@@ -1686,7 +1833,14 @@ impl OwnershipChecker {
                             }
                         }
                     }
+                    // #312：清空上次残留，walk 后若初值是 `&x`（Borrow）则捕获新建令牌
+                    self.last_created_token = None;
                     results.extend(self.walk_expr(init));
+                    if matches!(init, Expr::Borrow { .. }) {
+                        if let Some(tok) = self.last_created_token.take() {
+                            self.ref_bindings.insert(name.clone(), tok);
+                        }
+                    }
                     if let Expr::Var(src_name, _) = init {
                         // #256/#257：类型驱动的复制语义（SPEC §11.2）
                         match self.classify_var(src_name) {

@@ -1,0 +1,23 @@
+// 06-compile-errors/loop_borrow_write_err.yx
+// [test:error]: 循环体内 &mut 写与循环内借用读共存——此前 smt_cut 占位查询恒切断导致静默放行（#312），应报 E2018
+// 预期: 编译错误 E2018
+// 覆盖: RFC-009a §循环：无切断 → 回边可穿越 → 下一轮借用读可达 → 写不安全（#312 修复验证）
+// 验证: while 循环体内对已借用变量的 &mut 写必须编译失败报 E2018
+// 状态: ✅
+
+Point: Type = { x: Int, y: Int }
+
+bump: (pt: &mut Point) -> Void = {
+    pt.x = pt.x + 1
+}
+
+main = {
+    p = Point(1, 2)
+    view = &p
+    mut i = 0
+    while i < 3 {
+        x = view.x
+        i = i + 1
+        bump(p)
+    }
+}

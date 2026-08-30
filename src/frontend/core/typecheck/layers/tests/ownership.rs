@@ -2407,3 +2407,69 @@ fn test_e2e_branch_local_var_dropped_at_merge() {
         results
     );
 }
+
+// ── #312: smt_cut 真实路径条件查询 ─────────────────────
+// RFC-009a §慢速通道 + 勘误（2026-08-17）：SMT 是精度层非 soundness 依赖。
+// 查询 `写节点路径条件 ⇒ !loop_cond`：Unsat = 蕴含成立 = 切断；否则穿越（保守拒绝）。
+// 此前用 NamedVar 占位符 + 假设其为真 → 恒 Unsat → 恒切断 → 循环内借用写静默放行。
+
+use crate::frontend::core::types::const_data::{BinOp as CEBinOp, ConstExpr as CE, ConstValue};
+
+/// 构造 `name < n` 比较谓词
+fn lt_const(
+    name: &str,
+    n: i128,
+) -> CE {
+    CE::BinOp {
+        op: CEBinOp::Lt,
+        left: Box::new(CE::NamedVar(name.to_string())),
+        right: Box::new(CE::Lit(ConstValue::Int(n))),
+    }
+}
+
+/// 构造 `name == n` 等值谓词
+fn eq_const(
+    name: &str,
+    n: i128,
+) -> CE {
+    CE::BinOp {
+        op: CEBinOp::Eq,
+        left: Box::new(CE::NamedVar(name.to_string())),
+        right: Box::new(CE::Lit(ConstValue::Int(n))),
+    }
+}
+
+/// RFC-009a §while：SMT 逻辑切断用例——写节点守卫 `i == 3` 与循环条件 `i < 3`
+/// 不相容 → 蕴含成立 → Unsat → 逻辑切断
+#[test]
+fn test_smt_cut_guarded_write_proves_loop_exit() {
+    // Arrange
+    let path_cond = eq_const("i", 3);
+    let loop_cond = lt_const("i", 3);
+
+    // Act
+    let cut = crate::frontend::core::typecheck::layers::ownership::smt_cut(&path_cond, &loop_cond);
+
+    // Assert
+    assert!(
+        cut,
+        "i == 3 蕴含 !(i < 3)，回边应被逻辑切断（RFC-009a while 用例）"
+    );
+}
+
+/// 无守卫写：path 与 loop 相容（i < 3 可同时成立）→ Sat → 不切断（回边穿越，保守拒绝）
+#[test]
+fn test_smt_cut_unguarded_write_traverses_back_edge() {
+    // Arrange
+    let path_cond = lt_const("i", 3);
+    let loop_cond = lt_const("i", 3);
+
+    // Act
+    let cut = crate::frontend::core::typecheck::layers::ownership::smt_cut(&path_cond, &loop_cond);
+
+    // Assert
+    assert!(
+        !cut,
+        "path 与 loop 相容时应穿越回边（保守拒绝，sound 方向）"
+    );
+}
