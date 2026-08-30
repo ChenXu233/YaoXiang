@@ -163,6 +163,11 @@ pub struct AstToIrGenerator {
     /// RFC-011a §6.2: 编译期类型收集——接口 → 实现类型列表（ImplementationProof
     /// 按类型名定序），变体分发与包装定序共用。
     interface_variants: HashMap<String, Vec<String>>,
+    /// #311: 循环上下文栈——while/for 生成时进出栈。
+    /// break 跳到栈顶循环出口（占位 Jmp，出口确定后回填），continue 跳到栈顶条件重判点。
+    /// 嵌套函数体生成前保存并清空：闭包体不继承外层循环上下文（typecheck E1102 已拦截，
+    /// 此处为层间失联防御）。
+    loop_stack: Vec<LoopTargets>,
 }
 
 /// 绑定信息（用于 IR 生成阶段的方法调用转发）
@@ -180,6 +185,15 @@ struct BindingInfo {
 struct LambdaBodyIR {
     instructions: Vec<Instruction>,
     locals: Vec<MonoType>,
+}
+
+/// 循环上下文（#311）：一次 while/for 生成期内的跳转目标记录
+#[derive(Debug)]
+struct LoopTargets {
+    /// 条件重判点（continue 的跳转目标），生成时即知
+    continue_target: usize,
+    /// break 占位 Jmp 的指令下标，循环出口确定后回填
+    break_fixups: Vec<usize>,
 }
 
 /// 一层 curry 签名
@@ -241,6 +255,7 @@ impl AstToIrGenerator {
                 }
                 map
             },
+            loop_stack: Vec::new(),
         }
     }
 
@@ -1202,6 +1217,10 @@ impl AstToIrGenerator {
         let local_var_start = params.len();
         self.next_temp = local_var_start;
 
+        // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
+        //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
+        let saved_loop_stack = std::mem::take(&mut self.loop_stack);
+
         // 生成指令序列
         let mut instructions = Vec::new();
 
@@ -1254,6 +1273,9 @@ impl AstToIrGenerator {
             },
         };
 
+        // #311：恢复父函数的循环上下文
+        self.loop_stack = saved_loop_stack;
+
         Ok(Some(func_ir))
     }
 
@@ -1285,6 +1307,10 @@ impl AstToIrGenerator {
             Some(ty) => ty.clone().into(),
             None => MonoType::Void,
         };
+
+        // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
+        //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
+        let saved_loop_stack = std::mem::take(&mut self.loop_stack);
 
         // 生成函数体指令
         let mut instructions = Vec::new();
@@ -1417,6 +1443,9 @@ impl AstToIrGenerator {
             },
         };
 
+        // #311：恢复父函数的循环上下文
+        self.loop_stack = saved_loop_stack;
+
         Ok(Some(func_ir))
     }
 
@@ -1495,6 +1524,10 @@ impl AstToIrGenerator {
         constants: &mut Vec<ConstValue>,
         generic_params: Option<Vec<String>>,
     ) -> Result<FunctionIR, Diagnostic> {
+        // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
+        //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
+        let saved_loop_stack = std::mem::take(&mut self.loop_stack);
+
         let mut instructions = Vec::new();
         let env_count = env_param_names.len();
 
@@ -1546,6 +1579,9 @@ impl AstToIrGenerator {
             .collect();
         let total_locals = self.next_temp;
         let locals_types: Vec<MonoType> = vec![MonoType::Int(64); total_locals];
+
+        // #311：恢复父函数的循环上下文
+        self.loop_stack = saved_loop_stack;
 
         Ok(FunctionIR {
             def: None, // 由 generate_module_ir 尾部 assign_defs 填充
@@ -1941,6 +1977,10 @@ impl AstToIrGenerator {
         // 保存父函数状态
         let saved_next_temp = self.next_temp;
 
+        // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
+        //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
+        let saved_loop_stack = std::mem::take(&mut self.loop_stack);
+
         let mut instructions = Vec::new();
 
         // 进入匿名函数作用域
@@ -1998,6 +2038,9 @@ impl AstToIrGenerator {
                 locals: locals_types,
             },
         };
+
+        // #311：恢复父函数的循环上下文
+        self.loop_stack = saved_loop_stack;
 
         Ok(Some(func_ir))
     }
@@ -2605,6 +2648,32 @@ impl AstToIrGenerator {
         Ok(())
     }
 
+    /// 进入循环体生成：压入跳转目标上下文（#311）
+    fn enter_loop_targets(
+        &mut self,
+        loop_start_idx: usize,
+    ) {
+        self.loop_stack.push(LoopTargets {
+            continue_target: loop_start_idx,
+            break_fixups: Vec::new(),
+        });
+    }
+
+    /// 离开循环体生成：把循环体内 break 的占位 Jmp 回填到循环出口 `end_idx`（#311）
+    fn exit_loop_targets(
+        &mut self,
+        end_idx: usize,
+        instructions: &mut [Instruction],
+    ) {
+        if let Some(targets) = self.loop_stack.pop() {
+            for fixup in targets.break_fixups {
+                if let Instruction::Jmp(ref mut target) = instructions[fixup] {
+                    *target = end_idx;
+                }
+            }
+        }
+    }
+
     /// Generate While expression IR
     fn generate_while_expr_ir(
         &mut self,
@@ -2616,6 +2685,8 @@ impl AstToIrGenerator {
     ) -> Result<(), Diagnostic> {
         // Label: condition_check
         let loop_start_idx = instructions.len();
+        // #311：压入循环上下文——continue 跳回条件重判点，break 占位待出口回填
+        self.enter_loop_targets(loop_start_idx);
 
         // Evaluate condition
         let cond_reg = self.next_temp_reg();
@@ -2636,6 +2707,8 @@ impl AstToIrGenerator {
         if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_end_idx] {
             *target = end_idx;
         }
+        // #311：回填循环体内 break 的占位跳转到出口
+        self.exit_loop_targets(end_idx, instructions);
 
         // While loop returns void
         instructions.push(Instruction::Load {
@@ -2849,6 +2922,8 @@ impl AstToIrGenerator {
 
         // 4. 循环开始
         let loop_start_idx = instructions.len();
+        // #311：压入循环上下文——continue 跳回 has_next 检查点，break 占位待出口回填
+        self.enter_loop_targets(loop_start_idx);
 
         // 5. 检查是否有更多元素: has_more = has_next(iterator)
         let has_more_reg = self.next_temp_reg();
@@ -2890,6 +2965,8 @@ impl AstToIrGenerator {
         if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_end_idx] {
             *target = end_idx;
         }
+        // #311：回填循环体内 break 的占位跳转到出口
+        self.exit_loop_targets(end_idx, instructions);
 
         self.exit_scope();
 
@@ -3277,6 +3354,10 @@ impl AstToIrGenerator {
         // 保存父函数的临时寄存器计数
         let saved_next_temp = self.next_temp;
 
+        // #311：闭包体是独立指令流，循环栈属父函数——保存并清空
+        //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
+        let saved_loop_stack = std::mem::take(&mut self.loop_stack);
+
         let mut instructions = Vec::new();
 
         // 进入闭包函数体作用域
@@ -3323,6 +3404,9 @@ impl AstToIrGenerator {
 
         // 恢复父函数的临时寄存器计数
         self.next_temp = saved_next_temp;
+
+        // #311：恢复父函数的循环上下文
+        self.loop_stack = saved_loop_stack;
 
         Ok(LambdaBodyIR {
             instructions,
@@ -4714,6 +4798,45 @@ impl AstToIrGenerator {
                     instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
                 } else {
                     instructions.push(Instruction::Ret(None));
+                }
+            }
+            Expr::Break(label, span) => {
+                // #311: break → 跳出最近一层循环；出口生成期未知，占位后由
+                // exit_loop_targets 回填。带 ::label 的跨循环跳转不支持：parser 对
+                // while/for 硬编码 label: None，带标签的 break/continue 已被
+                // typecheck 的 E1070（unknown_label）拦截。
+                let _ = label;
+                match self.loop_stack.last_mut() {
+                    Some(top) => {
+                        let fixup = instructions.len();
+                        instructions.push(Instruction::Jmp(0));
+                        top.break_fixups.push(fixup);
+                    }
+                    None => {
+                        // 不变式：typecheck 已用 E1102 拦截循环外 break，走到这里说明层间失联
+                        return Err(ErrorCodeDefinition::ir_internal_error(
+                            "break reached IR generation without enclosing loop",
+                        )
+                        .at(*span)
+                        .build());
+                    }
+                }
+            }
+            Expr::Continue(label, span) => {
+                // #311: continue → 跳回最近一层循环的条件重判点（生成时即知）
+                let _ = label;
+                match self.loop_stack.last() {
+                    Some(top) => {
+                        let target = top.continue_target;
+                        instructions.push(Instruction::Jmp(target));
+                    }
+                    None => {
+                        return Err(ErrorCodeDefinition::ir_internal_error(
+                            "continue reached IR generation without enclosing loop",
+                        )
+                        .at(*span)
+                        .build());
+                    }
                 }
             }
             Expr::Try { expr, span: _ } => {

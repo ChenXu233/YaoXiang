@@ -925,5 +925,11 @@
     "message": "类型未实现接口",
     "template": "类型 '{type}' 未实现接口 '{interface}'，不得入此存在类型之位",
     "help": "于类型体内实例化接口（`Animal(Dog)`）并尽实现其成员"
+  },
+  "E1102": {
+    "title": "循環控制之語見於循環之外",
+    "message": "break/continue 唯可施於 while/for 循環體內",
+    "template": "'{keyword}' 見於循環之外",
+    "help": "徙 '{keyword}' 入 while/for 循環體內"
   }
 }

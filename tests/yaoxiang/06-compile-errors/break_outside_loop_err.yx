@@ -1,0 +1,10 @@
+// 06-compile-errors/break_outside_loop_err.yx
+// [test:error]: 顶层 break 无循环上下文——此前 typecheck 不拦截，由 ir_gen 以 E3005 ICE 兜底，应报 E1102
+// 预期: 编译错误 E1102
+// 覆盖: #311 break/continue 循环外拒绝（#292 前半；SPEC §3.4/§3.5 无循环上下文语义，缺口记 #291）
+// 验证: break/continue 仅允许出现在 while/for 体内，循环外必须编译失败且报 E1102
+// 状态: ✅
+
+main = {
+    break
+}

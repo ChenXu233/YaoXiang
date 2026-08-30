@@ -1,0 +1,69 @@
+// 01-syntax/control-flow/break_continue.yx
+// 覆盖: 规范 syntax.md §3.4 break 语句 / §3.5 continue 语句 + #311（#292 前半）
+// 验证: while/for 中的 break、continue、嵌套循环 break 只出最近一层
+// 状态: ✅ 可运行
+
+use std.assert
+
+main = {
+    // while + break
+    mut i = 0
+    while i < 10 {
+        i = i + 1
+        if i == 3 {
+            break
+        }
+    }
+    assert.assert(i == 3, "while break stops at i == 3")
+
+    // while + continue
+    mut sum = 0
+    mut n = 0
+    while n < 5 {
+        n = n + 1
+        if n == 3 {
+            continue
+        }
+        sum = sum + n
+    }
+    assert.assert(sum == 12, "while continue skips 3, sum 1+2+4+5 == 12")
+
+    // for + break
+    mut total = 0
+    for x in [1, 2, 3, 4, 5] {
+        if x == 4 {
+            break
+        }
+        total = total + x
+    }
+    assert.assert(total == 6, "for break at 4, total 1+2+3 == 6")
+
+    // for + continue
+    mut cnt = 0
+    for x in [1, 2, 3, 4, 5] {
+        if x == 2 {
+            continue
+        }
+        cnt = cnt + 1
+    }
+    assert.assert(cnt == 4, "for continue skips one element")
+
+    // 嵌套循环：break 只跳出最近一层（Boundary：嵌套深度）
+    mut outer = 0
+    mut inner_hits = 0
+    mut j = 0
+    while j < 3 {
+        j = j + 1
+        mut k = 0
+        while k < 10 {
+            k = k + 1
+            if k == 2 {
+                break
+            }
+            inner_hits = inner_hits + 1
+        }
+        outer = outer + 1
+    }
+    assert.assert(outer == 3, "outer loop survives inner break")
+    assert.assert(inner_hits == 3, "inner break fires once per outer iteration")
+}

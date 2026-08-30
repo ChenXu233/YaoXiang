@@ -1,0 +1,11 @@
+// 06-compile-errors/assign_type_change_err.yx
+// [test:error]: mut 局部变量重赋不同类型——此前赋值直接覆写类型（Int 变量可赋 String），漏到运行时 E6007 才爆，应报 E1002
+// 预期: 编译错误 E1002
+// 覆盖: 赋值类型统一（#311 工作流验证 Bug 1；syntax.md「找到则赋值」未授权类型可变）
+// 验证: mut 局部变量重赋不同类型必须编译失败报 E1002
+// 状态: ✅
+
+main = {
+    mut x = 1
+    x = "str"
+}

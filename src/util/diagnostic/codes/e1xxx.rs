@@ -197,6 +197,11 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
         code: "E1101",
         category: ErrorCategory::TypeCheck,
     },
+    // E1102: break/continue 出现在循环外（#311）
+    ErrorCodeDefinition {
+        code: "E1102",
+        category: ErrorCategory::TypeCheck,
+    },
 ];
 
 // 快捷方法实现
@@ -285,5 +290,7 @@ impl ErrorCodeDefinition {
     ("E1100", interface_method_duplicate(type_: &str, method: &str) => .param("type", type_) .param("method", method)),
     /// E1101 具体类型未实现目标接口（RFC-011a §6.3 存在类型成员检查）
     ("E1101", type_does_not_implement_interface(type_: &str, interface: &str) => .param("type", type_) .param("interface", interface)),
+    /// E1102 break/continue 出现在循环外（#311：仅 while/for 体内允许循环控制流）
+    ("E1102", break_outside_loop(keyword: &str) => .param("keyword", keyword)),
     }
 }

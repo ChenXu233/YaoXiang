@@ -33,6 +33,10 @@ pub struct ExpressionInferrer<'a> {
     solver: &'a mut TypeConstraintSolver,
     /// 当前活跃的循环标签
     loop_labels: Vec<String>,
+    /// 循环嵌套深度（#311）：while/for 体内才允许 break/continue。
+    /// 函数体（FnDef/Lambda）边界重置——闭包体不继承外层循环上下文；
+    /// spawn for 体是逐元素闭包执行，不计入可 break 的循环上下文。
+    loop_depth: usize,
     /// 重载候选存储引用
     overload_candidates: &'a HashMap<String, Vec<overload::OverloadCandidate>>,
     /// Native 函数签名引用
@@ -72,6 +76,7 @@ impl<'a> ExpressionInferrer<'a> {
             scope,
             solver,
             loop_labels: Vec::new(),
+            loop_depth: 0,
             overload_candidates,
             native_signatures: &EMPTY_SIGNATURES,
             result_err: None,
@@ -97,6 +102,7 @@ impl<'a> ExpressionInferrer<'a> {
             scope,
             solver,
             loop_labels: Vec::new(),
+            loop_depth: 0,
             overload_candidates,
             native_signatures,
             result_err: None,
@@ -123,6 +129,7 @@ impl<'a> ExpressionInferrer<'a> {
             scope,
             solver,
             loop_labels: Vec::new(),
+            loop_depth: 0,
             overload_candidates,
             native_signatures,
             result_err,
@@ -151,6 +158,7 @@ impl<'a> ExpressionInferrer<'a> {
             scope,
             solver,
             loop_labels: Vec::new(),
+            loop_depth: 0,
             overload_candidates,
             native_signatures,
             result_err,
@@ -303,15 +311,37 @@ impl<'a> ExpressionInferrer<'a> {
     /// 如果变量不存在，则创建新变量。
     /// 这是修复 for 循环等场景类型丢失的关键方法。
     /// 关键：直接使用右侧表达式的类型（new_ty），而不是依赖 solver.resolve()。
+    ///
+    /// `enforce_unify`：右值是否必须与变量当前类型统一（与带注解初值同口径，
+    /// 失败报 E1002）。`x = <右值>` 形式的重赋值必须为 true——此前直接覆写导致
+    /// 类型可变（Int 变量可赋 String），漏检到运行时 E6007 才爆（工作流验证 Bug 1）。
+    /// false 仅用于无初值注解绑定的占位覆写路径（顶层预注册占位类型随后被
+    /// 真实注解类型覆写，覆写是该流程的承重墙，见 rfc011 编译期求值测试）。
     pub fn assign_var(
         &mut self,
         name: &str,
         new_ty: crate::frontend::core::types::MonoType,
-    ) {
-        // 直接使用右侧表达式的类型更新变量
+        span: crate::util::span::Span,
+        enforce_unify: bool,
+    ) -> Result<()> {
+        if enforce_unify {
+            if let Some(poly) = self.scope.get_var(name) {
+                let declared = poly.body.clone();
+                if self.solver.unify(&new_ty, &declared).is_err() {
+                    return Err(ErrorCodeDefinition::type_mismatch(
+                        &format!("{}", declared),
+                        &format!("{}", new_ty),
+                    )
+                    .at(span)
+                    .build());
+                }
+            }
+        }
+        // 直接使用右侧表达式的类型更新变量（变量不存在则新建，保持原行为）
         // 注意：new_ty 已经是解析后的正确类型（如 List<Int>），不需要额外 resolve
         self.scope
             .update_var(name, crate::frontend::core::types::PolyType::mono(new_ty));
+        Ok(())
     }
 
     /// 退出循环作用域时，将内部声明的变量提升到外层作用域
@@ -377,6 +407,15 @@ impl<'a> ExpressionInferrer<'a> {
         label: &str,
     ) -> bool {
         self.loop_labels.contains(&label.to_string())
+    }
+
+    /// #311：语句检查器（StatementChecker）自己递归走 for 体，委托表达式检查时
+    /// 把 checker 侧循环深度传入，保证 E1102 判定跨两个 walker 一致
+    pub fn set_loop_depth(
+        &mut self,
+        depth: usize,
+    ) {
+        self.loop_depth = depth;
     }
 
     /// 推断字面量表达式类型
@@ -905,8 +944,10 @@ impl<'a> ExpressionInferrer<'a> {
                     if let crate::frontend::core::parser::ast::Expr::Var(var_name, _) =
                         left.as_ref()
                     {
-                        // 统一变量类型并写回 scope，确保后续类型推断正确
-                        self.assign_var(var_name, right_ty);
+                        // 局部程序变量重赋值强制统一（E1002）；仅全局（std/模块导出）
+                        // 撞名时保持旧覆写行为，见 assign_var 文档
+                        let enforce = self.scope.var_in_local_scopes(var_name);
+                        self.assign_var(var_name, right_ty, *span, enforce)?;
                     }
                     return Ok(MonoType::Void);
                 }
@@ -1783,6 +1824,7 @@ impl<'a> ExpressionInferrer<'a> {
                 }
 
                 self.enter_loop(label.as_deref());
+                self.loop_depth += 1;
 
                 self.scope.enter_block();
                 let result = self.infer_block(body, true, None);
@@ -1790,6 +1832,7 @@ impl<'a> ExpressionInferrer<'a> {
                 self.promote_loop_vars_to_parent_scope();
 
                 self.exit_loop(label.as_deref());
+                self.loop_depth -= 1;
 
                 result?;
                 Ok(MonoType::Void)
@@ -1820,6 +1863,7 @@ impl<'a> ExpressionInferrer<'a> {
                 };
 
                 self.enter_loop(label.as_deref());
+                self.loop_depth += 1;
 
                 self.scope.enter_block();
                 let result = self
@@ -1830,6 +1874,7 @@ impl<'a> ExpressionInferrer<'a> {
                 self.promote_loop_vars_to_parent_scope();
 
                 self.exit_loop(label.as_deref());
+                self.loop_depth -= 1;
                 result
             }
 
@@ -1859,21 +1904,32 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // Break 表达式
-            crate::frontend::core::parser::ast::Expr::Break(label, _) => {
+            crate::frontend::core::parser::ast::Expr::Break(label, span) => {
                 if let Some(l) = label {
                     if !self.has_label(l) {
                         return Err(ErrorCodeDefinition::unknown_label(l).build());
                     }
                 }
+                // #311：循环控制流仅允许在 while/for 体内（spawn for 体在函数边界已重置深度）
+                if self.loop_depth == 0 {
+                    return Err(ErrorCodeDefinition::break_outside_loop("break")
+                        .at(*span)
+                        .build());
+                }
                 Ok(MonoType::Void)
             }
 
             // Continue 表达式
-            crate::frontend::core::parser::ast::Expr::Continue(label, _) => {
+            crate::frontend::core::parser::ast::Expr::Continue(label, span) => {
                 if let Some(l) = label {
                     if !self.has_label(l) {
                         return Err(ErrorCodeDefinition::unknown_label(l).build());
                     }
+                }
+                if self.loop_depth == 0 {
+                    return Err(ErrorCodeDefinition::break_outside_loop("continue")
+                        .at(*span)
+                        .build());
                 }
                 Ok(MonoType::Void)
             }
@@ -1933,11 +1989,16 @@ impl<'a> ExpressionInferrer<'a> {
                     let saved_expected_ret = self.expected_return_type.take();
                     self.expected_return_type = Some(expected_body_ty.clone());
 
+                    // #311：函数体是循环上下文边界——外层循环的 break/continue 不可跨入
+                    let saved_loop_depth = self.loop_depth;
+                    self.loop_depth = 0;
+
                     let body_ty_res = self.infer_block(body, true, Some(&expected_body_ty));
 
                     // Restore outer contexts
                     self.expected_return_type = saved_expected_ret;
                     self.result_err = saved_result_err;
+                    self.loop_depth = saved_loop_depth;
 
                     let body_ty = body_ty_res?;
 
@@ -1990,7 +2051,11 @@ impl<'a> ExpressionInferrer<'a> {
                 // Lambda is also a return type boundary
                 let saved_expected_ret = self.expected_return_type.take();
                 self.expected_return_type = None;
+                // #311：函数体同样是循环上下文边界
+                let saved_loop_depth = self.loop_depth;
+                self.loop_depth = 0;
                 let body_ty = self.infer_block(body, true, None);
+                self.loop_depth = saved_loop_depth;
                 self.expected_return_type = saved_expected_ret;
                 self.result_err = saved_result_err;
 
@@ -2158,7 +2223,8 @@ impl<'a> ExpressionInferrer<'a> {
                 };
 
                 // 2. 进入循环作用域，注册迭代变量
-                self.enter_loop(None);
+                // #311：spawn for 体是逐元素闭包执行，不是可 break/continue 的循环上下文
+                //（原 enter_loop(None) 对标签栈是 no-op，直接移除）
                 self.scope.enter_block();
                 let body_ty = self
                     .try_add_var(var.clone(), PolyType::mono(element_type), *span, *var_mut)
@@ -2320,7 +2386,7 @@ impl<'a> ExpressionInferrer<'a> {
                                     .at(*stmt_span)
                                     .build());
                             }
-                            self.assign_var(&name, init_ty);
+                            self.assign_var(&name, init_ty, *stmt_span, true)?;
                             return Ok(());
                         }
                     }

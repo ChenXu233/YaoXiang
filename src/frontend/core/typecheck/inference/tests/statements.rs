@@ -201,11 +201,21 @@ fn test_check_expr_stmt_assignment_creates_var() {
     );
 }
 
-/// §5.3: 赋值给已有变量 → Ok，类型被更新
+/// §5.3: 赋值给已有局部变量（同类型）→ Ok，类型保持声明类型
+/// （赋值类型统一：右值必须与变量当前类型统一，见 assign_var 的 enforce_unify。
+///   场景是 main 块体内的局部变量，故先 enter_scope 再注册——globals 层是
+///   std/模块导出，撞名赋值走旧覆写行为，不在此测试范围）
 #[test]
-fn test_check_expr_stmt_reassignment_updates_type() {
+fn test_check_expr_stmt_reassignment_same_type_succeeds() {
     // Arrange
-    let mut checker = make_checker_with_var("x", MonoType::Int(32));
+    let mut checker = make_checker();
+    checker.enter_scope();
+    checker.add_var(
+        "x".to_string(),
+        PolyType::mono(MonoType::Int(64)),
+        true,
+        Span::dummy(),
+    );
     let stmt = make_stmt(StmtKind::Expr(Box::new(Expr::BinOp {
         op: BinOp::Assign,
         left: Box::new(Expr::Var("x".to_string(), Span::dummy())),
@@ -217,7 +227,44 @@ fn test_check_expr_stmt_reassignment_updates_type() {
     let result = checker.check_stmt(&stmt);
 
     // Assert
-    assert!(result.is_ok(), "重新赋值应成功: {:?}", result.err());
+    assert!(result.is_ok(), "同类型重赋值应成功: {:?}", result.err());
+    assert!(
+        matches!(checker.get_var("x"), Some(poly) if poly.body == MonoType::Int(64)),
+        "重赋值后变量类型应保持声明的 Int(64)"
+    );
+}
+
+/// §5.3: 赋值给已有局部变量（类型可变）→ Err E1002
+/// （工作流验证 Bug 1：此前赋值直接覆写类型，Int 变量可赋 String，
+/// 漏检到运行时 E6007 才爆——赋值必须与声明类型统一）
+#[test]
+fn test_check_expr_stmt_reassignment_type_change_rejected() {
+    // Arrange
+    let mut checker = make_checker();
+    checker.enter_scope();
+    checker.add_var(
+        "x".to_string(),
+        PolyType::mono(MonoType::Int(64)),
+        true,
+        Span::dummy(),
+    );
+    let stmt = make_stmt(StmtKind::Expr(Box::new(Expr::BinOp {
+        op: BinOp::Assign,
+        left: Box::new(Expr::Var("x".to_string(), Span::dummy())),
+        right: Box::new(Expr::Lit(Literal::String("str".to_string()), Span::dummy())),
+        span: Span::dummy(),
+    })));
+
+    // Act
+    let result = checker.check_stmt(&stmt);
+
+    // Assert
+    let err = result.expect_err("类型可变重赋值应被拒绝（E1002）");
+    assert!(
+        format!("{:?}", err).contains("E1002"),
+        "应报 E1002 type mismatch，实际: {:?}",
+        err
+    );
 }
 
 /// §5.9.2: for 循环遍历 Range → Ok

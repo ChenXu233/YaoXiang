@@ -189,6 +189,18 @@ impl ScopeManager {
         self.get_var_info(name).map(|info| info.is_mut)
     }
 
+    /// 变量是否在局部/参数作用域中（不含全局）。
+    /// 赋值统一判据用：局部程序变量的重赋值强制类型统一（E1002）；
+    /// 仅存在于全局（std/模块导出）的名字不走统一——全局导出是不可变导入，
+    /// 与其撞名的局部赋值（如 `first = xs[0]` 撞 std.list.first）保持旧覆写行为。
+    pub fn var_in_local_scopes(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.local_scopes.iter().any(|s| s.contains_key(name))
+            || self.param_scopes.iter().any(|s| s.contains_key(name))
+    }
+
     /// 标记变量为已移动（局部 → 参数 → 全局）
     pub fn mark_moved(
         &mut self,

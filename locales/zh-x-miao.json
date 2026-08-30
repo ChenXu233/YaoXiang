@@ -914,5 +914,11 @@
     "message": "类型未实现接口",
     "template": "类型 '{type}' 未实现接口 '{interface}'，不能进入该存在类型位置",
     "help": "在类型体内实例化接口（`Animal(Dog)`）并实现其全部成员"
+  },
+  "E1102": {
+    "title": "循环控制语句出现在循环外喵~",
+    "message": "break/continue 只能在 while/for 循环体内使用喵~",
+    "template": "'{keyword}' 出现在循环外喵",
+    "help": "把 '{keyword}' 移入 while/for 循环体内喵~"
   }
 }

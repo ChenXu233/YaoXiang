@@ -919,5 +919,11 @@
     "message": "型がインターフェースを実装していません",
     "template": "型 '{type}' はインターフェース '{interface}' を実装していないため、この存在型の位置に入れません",
     "help": "型ボディでインターフェースをインスタンス化し（`Animal(Dog)`）、全メンバーを実装してください"
+  },
+  "E1102": {
+    "title": "ループ外のループ制御文",
+    "message": "break/continue は while/for ループ本体内でのみ使用できます",
+    "template": "'{keyword}' がループの外にあります",
+    "help": "'{keyword}' を while/for ループ本体内に移動してください"
   }
 }

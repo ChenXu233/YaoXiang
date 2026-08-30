@@ -920,5 +920,11 @@
     "message": "Type does not implement interface",
     "template": "Type '{type}' does not implement interface '{interface}' and cannot enter this existential position",
     "help": "Instantiate the interface in the type body (`Animal(Dog)`) and implement all its members"
+  },
+  "E1102": {
+    "title": "Loop control statement outside of a loop",
+    "message": "break/continue are only allowed inside a while/for loop body",
+    "template": "'{keyword}' outside of a loop",
+    "help": "Move '{keyword}' into a while/for loop body"
   }
 }

@@ -78,6 +78,10 @@ pub struct StatementChecker {
     trait_table: TraitTable,
     /// 证明函数基类型表: "IsPositive" -> Int(64)（RFC-027 Phase 2.5）
     proof_fn_bases: HashMap<String, MonoType>,
+    /// 循环嵌套深度（#311）：语句级 for 由本 walker 递归走体，循环上下文在此追踪。
+    /// 委托表达式检查给 ExpressionInferrer 时经 set_loop_depth 传入，保证
+    /// E1102（break/continue 循环外）判定跨两个 walker 一致。
+    loop_depth: usize,
 }
 
 impl StatementChecker {
@@ -110,6 +114,7 @@ impl StatementChecker {
             dep_env,
             trait_table,
             proof_fn_bases: HashMap::new(),
+            loop_depth: 0,
         }
     }
 
@@ -464,14 +469,37 @@ impl StatementChecker {
     /// 统一变量类型并写回 scope，确保后续类型推断能获取最新类型。
     /// 修复了之前在当前作用域赋值时未写回导致 for 循环等场景类型丢失的问题。
     /// 关键：直接使用右侧表达式的类型（new_ty），而不是依赖 solver.resolve()。
+    ///
+    /// `enforce_unify`：右值是否必须与变量当前类型统一（与带注解初值同口径，
+    /// 失败报 E1002）。`x = <右值>` 形式的重赋值必须为 true——此前直接覆写导致
+    /// 类型可变（Int 变量可赋 String），漏检到运行时 E6007 才爆（工作流验证 Bug 1）。
+    /// false 仅用于无初值注解绑定的占位覆写路径（顶层预注册占位类型随后被
+    /// 真实注解类型覆写，覆写是该流程的承重墙，见 rfc011 编译期求值测试）。
     fn assign_var(
         &mut self,
         name: &str,
         new_ty: MonoType,
-    ) {
-        // 直接使用右侧表达式的类型更新变量
-        // 注意：new_ty 已经是解析后的正确类型（如 List<Int>），不需要额外 resolve
+        span: crate::util::span::Span,
+        enforce_unify: bool,
+    ) -> Result<(), Box<Diagnostic>> {
+        if enforce_unify {
+            if let Some(poly) = self.scope.get_var(name) {
+                let declared = poly.body.clone();
+                if self.solver.unify(&new_ty, &declared).is_err() {
+                    return Err(Box::new(
+                        ErrorCodeDefinition::type_mismatch(
+                            &format!("{}", declared),
+                            &format!("{}", new_ty),
+                        )
+                        .at(span)
+                        .build(),
+                    ));
+                }
+            }
+        }
+        // 直接使用右侧表达式的类型更新变量（变量不存在则新建，保持原行为）
         self.scope.update_var(name, PolyType::mono(new_ty));
+        Ok(())
     }
 
     /// 进入新的块作用域（#295 三链模型：块不逃逸，局部变量穿透）
@@ -516,6 +544,10 @@ impl StatementChecker {
         // 保存当前顶层状态，进入函数后不再是顶层
         let was_top_level = self.is_top_level;
         self.is_top_level = false;
+
+        // #311：函数体是循环上下文边界——外层循环的 break/continue 不可跨入
+        let saved_loop_depth = self.loop_depth;
+        self.loop_depth = 0;
 
         // 创建函数作用域（#295 三链模型：参数层 + 新局部层，外层函数局部变量不可见）
         self.scope.enter_fn();
@@ -572,6 +604,7 @@ impl StatementChecker {
             // 退出函数作用域
             self.scope.exit_fn();
             self.is_top_level = was_top_level;
+            self.loop_depth = saved_loop_depth;
 
             match first_err {
                 Some(e) => Err(e),
@@ -595,6 +628,7 @@ impl StatementChecker {
             // 退出函数作用域
             self.scope.exit_fn();
             self.is_top_level = was_top_level;
+            self.loop_depth = saved_loop_depth;
 
             match err {
                 Some(e) => Err(e),
@@ -835,14 +869,20 @@ impl StatementChecker {
                 op: crate::frontend::core::parser::ast::BinOp::Assign,
                 left,
                 right,
-                ..
+                span,
             } => {
                 let right_ty = self.check_expr(right)?;
 
                 if let Expr::Var(name, _) = left.as_ref() {
-                    if self.scope.var_in_any_scope(name) {
-                        // 统一变量类型并写回 scope，确保后续类型推断正确
-                        self.assign_var(name, right_ty);
+                    if self.scope.var_in_local_scopes(name) {
+                        // 局部程序变量的重赋值：强制与声明类型统一（E1002）
+                        self.assign_var(name, right_ty, *span, true)?;
+                    } else if self.scope.var_in_any_scope(name) {
+                        // 仅存在于全局（std/模块导出）的名字：保持旧覆写行为。
+                        // 全局导出是不可变导入，此处赋值的遮蔽/重赋语义未定案，
+                        // 强制统一会误伤 `first = xs[0]` 这类与 std 内建撞名的局部绑定
+                        //（first 撞 std.list.first，见集成测试 interpreter::test_list）。
+                        self.assign_var(name, right_ty, *span, false)?;
                     } else {
                         // 新变量：创建类型变量并统一
                         let ty = self.solver.new_var();
@@ -1397,8 +1437,9 @@ impl StatementChecker {
                     gamma.kill(name);
                 }
             }
-            // 统一变量类型并写回 scope，确保后续类型推断正确
-            self.assign_var(name, ty);
+            // 统一变量类型并写回 scope，确保后续类型推断正确。
+            // 无初值注解绑定走占位覆写（enforce=false），见 assign_var 文档。
+            self.assign_var(name, ty, stmt_span, initializer.is_some())?;
             return Ok(());
         }
 
@@ -1409,7 +1450,13 @@ impl StatementChecker {
                     gamma.kill(name);
                 }
             }
-            self.assign_var(name, ty);
+            // 仅全局（std/模块导出）撞名时不强制统一（保持旧覆写），见 assign_var 文档
+            self.assign_var(
+                name,
+                ty,
+                stmt_span,
+                initializer.is_some() && self.scope.var_in_local_scopes(name),
+            )?;
             return Ok(());
         }
 
@@ -1469,6 +1516,9 @@ impl StatementChecker {
         self.function_local_vars
             .insert(var.to_string(), PolyType::mono(elem_ty));
 
+        // #311：进入可 break/continue 的循环上下文（语句级 for 由本 walker 递归走体）
+        self.loop_depth += 1;
+
         if self.collect_all_errors {
             let mut first_err = None;
             for stmt in &body.stmts {
@@ -1480,6 +1530,7 @@ impl StatementChecker {
                 }
             }
             self.scope.exit_block();
+            self.loop_depth -= 1;
             match first_err {
                 Some(e) => Err(e),
                 None => Ok(()),
@@ -1493,6 +1544,7 @@ impl StatementChecker {
                 }
             }
             self.scope.exit_block();
+            self.loop_depth -= 1;
             match err {
                 Some(e) => Err(e),
                 None => Ok(()),
@@ -1627,14 +1679,14 @@ impl StatementChecker {
                 op,
                 left,
                 right,
-                span: _,
+                span,
             } => {
                 use crate::frontend::core::parser::ast::BinOp;
                 let right_ty = self.check_expr(right)?;
 
                 if matches!(op, BinOp::Assign) {
                     if let Expr::Var(var_name, _) = left.as_ref() {
-                        self.assign_var(var_name, right_ty);
+                        self.assign_var(var_name, right_ty, *span, true)?;
                     }
                     return Ok(MonoType::Void);
                 }
@@ -1680,6 +1732,8 @@ impl StatementChecker {
                         inferrer.set_type_defs(&self.type_defs);
                         inferrer.set_generic_type_defs(&self.generic_type_defs);
                         inferrer.set_dep_env(&self.dep_env);
+                        // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
+                        inferrer.set_loop_depth(self.loop_depth);
                         if let Some(gamma) = &mut self.gamma {
                             inferrer.set_gamma(gamma);
                         }
@@ -1707,6 +1761,8 @@ impl StatementChecker {
                 inferrer.set_type_defs(&self.type_defs);
                 inferrer.set_generic_type_defs(&self.generic_type_defs);
                 inferrer.set_dep_env(&self.dep_env);
+                // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
+                inferrer.set_loop_depth(self.loop_depth);
                 if let Some(gamma) = &mut self.gamma {
                     inferrer.set_gamma(gamma);
                 }
