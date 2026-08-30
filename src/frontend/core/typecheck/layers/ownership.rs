@@ -119,6 +119,11 @@ pub struct BrandNode {
     pub consumers: HashSet<usize>,
     /// ReadToken 冻结期间的活跃副本数。
     pub ref_count: usize,
+    /// 活性区间 [created_at, last_use] 的 created_at 端点（RFC-009a）：
+    /// 令牌出生的 CFG 节点。fast_path_check 反向 BFS 以此为屏障——出生之前
+    /// 令牌不存在，活性不得向更早蔓延（#290 F1：此前缺失，读令牌活性向过去
+    /// 无限延伸 → 后文取读令牌误伤前文已释放的 &mut，E2018 回溯误报）。
+    pub birth_node: usize,
 }
 
 impl BrandNode {
@@ -126,6 +131,7 @@ impl BrandNode {
         id: BrandId,
         kind: TokenKind,
         source_var: String,
+        birth_node: usize,
     ) -> Self {
         Self {
             id,
@@ -135,6 +141,7 @@ impl BrandNode {
             children: HashSet::new(),
             consumers: HashSet::new(),
             ref_count: 1,
+            birth_node,
         }
     }
 }
@@ -160,12 +167,13 @@ impl BrandTree {
     pub fn create_read_token(
         &mut self,
         source: String,
+        birth_node: usize,
     ) -> BrandId {
         let id = BrandId::root(self.next_id);
         self.next_id += 1;
         self.nodes.insert(
             id.clone(),
-            BrandNode::new(id.clone(), TokenKind::ReadToken, source),
+            BrandNode::new(id.clone(), TokenKind::ReadToken, source, birth_node),
         );
         id
     }
@@ -173,12 +181,13 @@ impl BrandTree {
     pub fn create_write_token(
         &mut self,
         source: String,
+        birth_node: usize,
     ) -> BrandId {
         let id = BrandId::root(self.next_id);
         self.next_id += 1;
         self.nodes.insert(
             id.clone(),
-            BrandNode::new(id.clone(), TokenKind::WriteToken, source),
+            BrandNode::new(id.clone(), TokenKind::WriteToken, source, birth_node),
         );
         id
     }
@@ -190,13 +199,14 @@ impl BrandTree {
         &mut self,
         parent_id: &BrandId,
         field: &str,
+        birth_node: usize,
     ) -> Option<BrandId> {
         let parent = self.nodes.get(parent_id)?;
         let child_id = parent_id.derive_field(field);
         let source_var = parent.source_var.clone();
         let kind = parent.kind;
 
-        let mut child = BrandNode::new(child_id.clone(), kind, source_var);
+        let mut child = BrandNode::new(child_id.clone(), kind, source_var, birth_node);
         child.parent = Some(parent_id.clone());
 
         self.nodes.insert(child_id.clone(), child);
@@ -465,51 +475,67 @@ pub fn fast_path_check(
     }
 
     let mut unsafe_nodes: HashSet<usize> = HashSet::new();
-    let mut queue: Vec<usize> = Vec::new();
 
+    // #290 F1：逐冲突令牌独立反向 BFS。活性区间 [created_at, last_use] 的
+    // created_at 端点 = birth_node 屏障——标记出生节点但不再向其前驱蔓延
+    //（出生之前令牌不存在）。此前无屏障，读令牌活性向过去无限延伸：
+    // 后文取读令牌会误伤前文已释放的 &mut（回溯误报 E2018）。
+    // 早期退出用局部 visited——跨令牌共享会因另一令牌先标记过某节点而
+    // 截断本令牌的蔓延，可能漏掉写点的真实冲突（假阴性）。
     for conflict_id in &conflicting {
-        for consumer in tree.consumers(conflict_id) {
-            if consumer < cfg.nodes.len() {
-                queue.push(consumer);
+        let birth = tree
+            .get(conflict_id)
+            .map(|n| n.birth_node)
+            .unwrap_or(usize::MAX);
+        let mut visited: HashSet<usize> = HashSet::new();
+        let mut queue: Vec<usize> = tree
+            .consumers(conflict_id)
+            .into_iter()
+            .filter(|c| *c < cfg.nodes.len())
+            .collect();
+
+        while let Some(cur) = queue.pop() {
+            if visited.contains(&cur) {
+                continue;
             }
-        }
-    }
+            visited.insert(cur);
+            if cur >= cfg.nodes.len() {
+                continue;
+            }
 
-    while let Some(cur) = queue.pop() {
-        if unsafe_nodes.contains(&cur) {
-            continue;
-        }
-        unsafe_nodes.insert(cur);
-        if cur >= cfg.nodes.len() {
-            continue;
-        }
+            // 出生屏障：该节点之后（更早方向）令牌尚未出生
+            if cur == birth {
+                continue;
+            }
 
-        for &pred in &cfg.nodes[cur].predecessors {
-            // 结构切断：break 边不会出现在 predecessors 中（add_edge 已过滤）
+            for &pred in &cfg.nodes[cur].predecessors {
+                // 结构切断：break 边不会出现在 predecessors 中（add_edge 已过滤）
 
-            let is_back_edge = cfg.nodes[pred]
-                .successors
-                .iter()
-                .any(|(succ, kind)| *succ == cur && *kind == EdgeKind::BackEdge);
+                let is_back_edge = cfg.nodes[pred]
+                    .successors
+                    .iter()
+                    .any(|(succ, kind)| *succ == cur && *kind == EdgeKind::BackEdge);
 
-            if is_back_edge {
-                // #312：路径条件取写节点自身条件（RFC-009a 勘误 2026-08-17：
-                // 判定目标为写节点），与循环头条件做蕴含判定。
-                // 任一缺失（无守卫的循环体 / for 循环 / loop）或 SMT 无法证明
-                // 蕴含 → 回边穿越 → 保守拒绝（SMT 是精度层，不是 soundness 依赖）
-                let write_cond = cfg.nodes[write_node].path_condition.as_ref();
-                let loop_cond = cfg.nodes[cur].path_condition.as_ref();
-                if let (Some(pc), Some(lc)) = (write_cond, loop_cond) {
-                    if smt_cut(pc, lc) {
-                        continue; // 逻辑切断
+                if is_back_edge {
+                    // #312：路径条件取写节点自身条件（RFC-009a 勘误 2026-08-17：
+                    // 判定目标为写节点），与循环头条件做蕴含判定。
+                    // 任一缺失（无守卫的循环体 / for 循环 / loop）或 SMT 无法证明
+                    // 蕴含 → 回边穿越 → 保守拒绝（SMT 是精度层，不是 soundness 依赖）
+                    let write_cond = cfg.nodes[write_node].path_condition.as_ref();
+                    let loop_cond = cfg.nodes[cur].path_condition.as_ref();
+                    if let (Some(pc), Some(lc)) = (write_cond, loop_cond) {
+                        if smt_cut(pc, lc) {
+                            continue; // 逻辑切断
+                        }
                     }
                 }
-            }
 
-            if !unsafe_nodes.contains(&pred) {
-                queue.push(pred);
+                if !visited.contains(&pred) {
+                    queue.push(pred);
+                }
             }
         }
+        unsafe_nodes.extend(visited);
     }
 
     if unsafe_nodes.contains(&write_node) {
@@ -828,6 +854,9 @@ pub struct OwnershipChecker {
     pending_writes: Vec<PendingWrite>,
     /// 当前 CFG 节点索引（walk 过程中推进）
     current_node: usize,
+    /// 当前继承的路径条件（#290 F1b：逐语句节点继承分支/循环守卫，
+    /// 守卫写（if 内字段写）的 SMT 切断依赖写节点携带条件）
+    current_condition: Option<ConstExpr>,
     /// 当前 AST 片段的源码位置（walk 过程中更新）
     current_span: Span,
     /// CFG 节点 → 源码 Span（build_release_plan 用）
@@ -888,6 +917,7 @@ impl OwnershipChecker {
             var_mutability: HashMap::new(),
             pending_writes: Vec::new(),
             current_node: 0,
+            current_condition: None,
             current_span: Span::dummy(),
             write_borrow_arg_depth: 0,
             ref_bindings: HashMap::new(),
@@ -1056,7 +1086,9 @@ impl OwnershipChecker {
                 }
             }
             ParamOwnership::ReadBorrow => {
-                let token = self.brand_tree.create_read_token(var_name.to_string());
+                let token = self
+                    .brand_tree
+                    .create_read_token(var_name.to_string(), self.current_node);
                 self.brand_tree.add_consumer(&token, self.current_node);
                 if !self.brand_tree.conflicting_with(&token).is_empty() {
                     self.pending_writes.push(PendingWrite {
@@ -1067,7 +1099,9 @@ impl OwnershipChecker {
                 }
             }
             ParamOwnership::WriteBorrow => {
-                let token = self.brand_tree.create_write_token(var_name.to_string());
+                let token = self
+                    .brand_tree
+                    .create_write_token(var_name.to_string(), self.current_node);
                 self.brand_tree.add_consumer(&token, self.current_node);
                 // WriteBorrow 总是进 pending_writes 检查冲突
                 self.pending_writes.push(PendingWrite {
@@ -1122,9 +1156,14 @@ impl OwnershipChecker {
             .root_tokens()
             .into_iter()
             .filter(|id| {
-                self.brand_tree
-                    .get(id)
-                    .is_some_and(|n| n.source_var == var_name)
+                self.brand_tree.get(id).is_some_and(|n| {
+                    // #290 F1：普通读不消费 WriteToken——写令牌的活性区间只覆盖
+                    // 其写操作本身（[birth, 写点]），读不延长它；把读节点挂上去
+                    // 会让反向 BFS 把写点之后的节点标成写令牌活跃区（回溯误报）。
+                    // 经 ref_bindings 的使用（w.x 透过 &mut）不受此限——那是
+                    // 引用本身的用法，属写令牌活性。
+                    n.source_var == var_name && n.kind.is_read()
+                })
             })
             .cloned()
             .collect();
@@ -1246,6 +1285,8 @@ impl OwnershipChecker {
     ) -> Vec<ProofResult> {
         let split_node = self.current_node;
         let mut results = self.walk_expr(condition);
+        // #290 F1b：整个 if 结构结束后恢复进入前的路径条件
+        let saved_condition = self.current_condition.clone();
         // #264：字面量常量条件 → 不可达分支不建边不遍历（消除 move 泄漏误报）。
         // 仅认字面量 Bool：不做 const_eval 传播（#262/#263 路径条件 soundness 未解决，
         // 保守起见只裁剪编译期显然不可达的分支）。
@@ -1261,6 +1302,8 @@ impl OwnershipChecker {
             self.cfg.add_edge(split_node, then_start, EdgeKind::Normal);
         }
         self.current_node = then_start;
+        // #290 F1b：分支内逐语句节点继承分支守卫
+        self.current_condition = Self::condition_as_const(condition);
         self.gamma.enter_scope();
         if let Some(cond) = Self::condition_as_const(condition) {
             self.gamma.inject(cond);
@@ -1286,6 +1329,8 @@ impl OwnershipChecker {
                     .add_edge(split_node, else_if_start, EdgeKind::Normal);
             }
             self.current_node = else_if_start;
+            // #290 F1b：分支内逐语句节点继承分支守卫
+            self.current_condition = Self::condition_as_const(else_if_cond);
             self.gamma.enter_scope();
             if let Some(cond) = Self::condition_as_const(else_if_cond) {
                 self.gamma.inject(cond);
@@ -1312,6 +1357,8 @@ impl OwnershipChecker {
                 self.cfg.add_edge(split_node, else_start, EdgeKind::Normal);
             }
             self.current_node = else_start;
+            // #290 F1b：分支内逐语句节点继承分支守卫
+            self.current_condition = Self::condition_as_const(condition).map(Self::negate_const);
             self.gamma.enter_scope();
             if let Some(cond) = Self::condition_as_const(condition) {
                 self.gamma.inject(Self::negate_const(cond));
@@ -1329,6 +1376,8 @@ impl OwnershipChecker {
         }
 
         self.current_node = merge_node;
+        // #290 F1b：恢复 if 之前的路径条件
+        self.current_condition = saved_condition;
         results
     }
 
@@ -1360,6 +1409,9 @@ impl OwnershipChecker {
         let body_start = self.cfg.add_node(None);
         self.cfg.add_edge(head_node, body_start, EdgeKind::Normal);
         self.current_node = body_start;
+        // #290 F1b：循环体语句不继承入边条件（与 body_start 无条件一致）；
+        // 守卫条件由体内 if 分支自行设置
+        let saved_condition = self.current_condition.take();
         // #265：循环守卫注入假设栈（循环体路径条件 = condition）
         self.gamma.enter_scope();
         if let Some(cond) = Self::condition_as_const(condition) {
@@ -1367,6 +1419,7 @@ impl OwnershipChecker {
         }
         results.extend(self.walk_stmts(body));
         self.gamma.exit_scope();
+        self.current_condition = saved_condition;
 
         // 回边：body_end → head
         self.cfg
@@ -1403,7 +1456,10 @@ impl OwnershipChecker {
         let body_start = self.cfg.add_node(None);
         self.cfg.add_edge(head_node, body_start, EdgeKind::Normal);
         self.current_node = body_start;
+        // #290 F1b：循环体语句不继承入边条件（与 body_start 无条件一致）
+        let saved_condition = self.current_condition.take();
         results.extend(self.walk_stmts(body));
+        self.current_condition = saved_condition;
 
         self.cfg
             .add_edge(self.current_node, head_node, EdgeKind::BackEdge);
@@ -1455,11 +1511,29 @@ impl OwnershipChecker {
                     }
 
                     let token = if *mutable {
-                        self.brand_tree.create_write_token(var_name)
+                        self.brand_tree
+                            .create_write_token(var_name.clone(), self.current_node)
                     } else {
-                        self.brand_tree.create_read_token(var_name)
+                        self.brand_tree
+                            .create_read_token(var_name.clone(), self.current_node)
                     };
                     self.brand_tree.add_consumer(&token, self.current_node);
+                    // #290 F1：可变借用的创建是对同源**写类**既有令牌的竞争声明
+                    //（var 绑定的写令牌活到作用域结束），把创建节点登记进它们的
+                    // 消费者，写-写冲突才有活性可判。读类令牌不登记——读不延长
+                    // 写令牌活性，也不被新写反向延长（读靠自身区间判定，R2 修复点）。
+                    if *mutable {
+                        let write_conflicts: Vec<BrandId> = self
+                            .brand_tree
+                            .conflicting_with(&token)
+                            .into_iter()
+                            .filter(|id| self.brand_tree.get(id).is_some_and(|n| n.kind.is_write()))
+                            .cloned()
+                            .collect();
+                        for c in &write_conflicts {
+                            self.brand_tree.add_consumer(c, self.current_node);
+                        }
+                    }
                     // #312：记录本 Borrow 创建的令牌，Assign 臂将其绑到目标变量
                     //（view = &p → ref_bindings[view] = token），供 add_consumer_for_var 解析
                     self.last_created_token = Some(token.clone());
@@ -1494,7 +1568,8 @@ impl OwnershipChecker {
                         .map(|id| (*id).clone())
                         .collect();
                     for parent_id in &parent_ids {
-                        self.brand_tree.derive_field(parent_id, field);
+                        self.brand_tree
+                            .derive_field(parent_id, field, self.current_node);
                     }
                 }
                 results
@@ -1935,6 +2010,14 @@ impl OwnershipChecker {
         self.scope_keys.push(HashMap::new());
         let mut results = Vec::new();
         for stmt in stmts {
+            // #290 F1b：语句级 CFG——每条语句独占节点并链接前驱。此前直线语句
+            // 全部挤在分支骨架的同一节点上，令牌出生/消费的语句顺序对活性不可见：
+            // 同节点内"先写后读"与"先读后写"无法区分（R2 直线回溯误报的根源）。
+            // 节点继承 current_condition（守卫写 #312 的 SMT 切断依赖它）。
+            let stmt_node = self.cfg.add_node(self.current_condition.clone());
+            self.cfg
+                .add_edge(self.current_node, stmt_node, EdgeKind::Normal);
+            self.current_node = stmt_node;
             results.extend(self.walk_stmt(stmt));
         }
         // 作用域退出：将本作用域内声明且仍 Alive 的变量标记为 Dropped
