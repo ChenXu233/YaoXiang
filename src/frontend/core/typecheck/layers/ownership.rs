@@ -1864,6 +1864,33 @@ impl OwnershipChecker {
                         if let Some(v) = value.as_deref() {
                             results.extend(self.walk_expr(v));
                         }
+                        // #290 F3：字段写创建 WriteToken（RFC-009 §2.7 同源
+                        // WriteToken 与派生 ReadToken 不能同时活跃）。此前字段写
+                        // 从不建令牌，派生读-写冲突静默放行（R1）。
+                        // 经 ref 绑定的目标（w.x = v，w = &mut p）不建新令牌——
+                        // 写经由 w 绑定的既有令牌，登记消费者延长其活性。
+                        if let Expr::FieldAccess { expr: inner, .. } = target.as_ref() {
+                            if let Some(root) = Self::extract_var_name(inner) {
+                                if let Some(bound) = self.ref_bindings.get(&root).cloned() {
+                                    self.brand_tree.add_consumer(&bound, self.current_node);
+                                } else {
+                                    let token = self
+                                        .brand_tree
+                                        .create_write_token(root.clone(), self.current_node);
+                                    self.brand_tree.add_consumer(&token, self.current_node);
+                                    // 字段写令牌是瞬态的（不绑定变量，活在本节点）：
+                                    // 不做写类竞争声明（那是 var 绑定令牌的语义），
+                                    // 顺序字段写 q.x = 5; q.y = 7 不构成冲突。
+                                    if !self.brand_tree.conflicting_with(&token).is_empty() {
+                                        self.pending_writes.push(PendingWrite {
+                                            token,
+                                            node_idx: self.current_node,
+                                            span: self.current_span,
+                                        });
+                                    }
+                                }
+                            }
+                        }
                         return results;
                     }
                 };

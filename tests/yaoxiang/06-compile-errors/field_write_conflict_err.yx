@@ -1,0 +1,20 @@
+// 06-compile-errors/field_write_conflict_err.yx
+// [test:error]: 派生读活跃时写字段——同源 WriteToken 与派生 ReadToken 同时活跃
+//   （RFC-009 §2.7 / SPEC §12.6）。此前字段写从不创建 WriteToken，静默放行（#290 复现 1）
+// 预期: 编译错误 E2018
+// 覆盖: #290 F3 字段写令牌生成（parent 级冲突，D1 裁决留档）
+// 验证: p.y = v + 1 在 v = &p.y 活跃期被拒绝
+// 状态: ✅
+
+Point: Type = { x: Int, y: Int }
+bad_alias: (p: &mut Point) -> Void = {
+    p.x = 10
+    v = &p.y
+    p.y = v + 1
+    print(p.y)
+}
+main = {
+    p = Point(1, 2)
+    bad_alias(p)
+    print("unreachable")
+}
