@@ -360,14 +360,20 @@
   },
   "E1081": {
     "title": "`?` can only be used within functions returning Result",
+    "message": "Encountered `expr?` but the enclosing function does not return Result",
+    "template": "`?` is only allowed inside functions returning Result",
     "help": "Change the return type of the outer function to `Result[T, E]` first, then use `expr?` for error propagation."
   },
   "E1082": {
     "title": "`?` can only be used with Result expressions",
+    "message": "The expression of `expr?` is not a Result",
+    "template": "`?` requires a Result expression, found '{type}'",
     "help": "Only use `?` on expressions of type `Result[T, E]`."
   },
   "E1083": {
     "title": "Error type mismatch for `?`",
+    "message": "The error type of `expr?` does not match the enclosing function return type",
+    "template": "Result error type mismatch for `?`: expected '{expected}', found '{found}'",
     "help": "Ensure the error type `E` in the current function's return type `Result[_, E]` matches the error type of the unwrapped `Result[_, E]`."
   },
   "E2001": {

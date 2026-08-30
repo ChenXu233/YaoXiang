@@ -1,0 +1,15 @@
+// 06-compile-errors/question_nonresult_expr_err.yx
+// [test:error]: `?` 只能用于 Result 表达式——对 Int 表达式使用 `?`
+// 预期: 编译错误 E1082
+// 覆盖: SPEC type-system.md §4.2 + #301 错误传播：`?` 的操作数必须是 Result(T, E)
+// 验证: 函数返回 Result 但 `?` 作用于非 Result 表达式被拒绝
+// 状态: ✅
+
+use std.result
+
+f: () -> Result(Int, Error) = {
+    return result.ok((1 + 1)?)
+}
+main = {
+    print("never")
+}

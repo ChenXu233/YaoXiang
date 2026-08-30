@@ -307,14 +307,20 @@
   },
   "E1081": {
     "title": "`?` 惟許用於返 Result 之函中",
+    "message": "遇 `expr?`，而外層函之返類型非 Result",
+    "template": "`?` 惟許用於返 Result 之函中",
     "help": "請先改外層函之返類型為 `Result[T, E]`，再用 `expr?` 行錯誤傳播。"
   },
   "E1082": {
     "title": "`?` 惟可用於 Result 表達式",
+    "message": "`expr?` 之表达式類型非 Result",
+    "template": "`?` 惟可用於 Result 表達式（實際類型 '{type}'）",
     "help": "请唯用 `?` 于类型为 `Result[T, E]` 之表达式。"
   },
   "E1083": {
     "title": "`?` 之错误类型不匹配",
+    "message": "`expr?` 之錯誤類型與外層函返類型不符",
+    "template": "`?` 之錯誤類型不符：期 '{expected}'、實 '{found}'",
     "help": "请确保当前函数返回类型 `Result[_, E]` 之错误类型 `E` 与所解包之 `Result[_, E]` 错误类型相符。"
   },
   "E2001": {

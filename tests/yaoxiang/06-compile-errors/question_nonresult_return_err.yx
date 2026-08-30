@@ -1,0 +1,16 @@
+// 06-compile-errors/question_nonresult_return_err.yx
+// [test:error]: `?` 仅允许在返回 Result 的函数内使用——函数返回 Int 却使用 `?`
+// 预期: 编译错误 E1081
+// 覆盖: SPEC type-system.md §4.2 + #301 错误传播：非 Result 返回类型编译拒绝
+// 验证: 外层函数返回类型非 Result 时 `expr?` 被拒绝
+// 状态: ✅
+
+use std.string
+
+f: () -> Int = {
+    n = string.parse_int("1")?
+    return n
+}
+main = {
+    print(f())
+}

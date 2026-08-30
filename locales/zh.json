@@ -360,14 +360,20 @@
   },
   "E1081": {
     "title": "`?` 仅允许在返回 Result 的函数内使用",
+    "message": "遇到了 `expr?`，但当前函数返回类型不是 Result",
+    "template": "`?` 仅允许在返回 Result 的函数内使用",
     "help": "请先将外层函数返回类型改为 `Result[T, E]`，再使用 `expr?` 进行错误传播。"
   },
   "E1082": {
     "title": "`?` 只能用于 Result 表达式",
+    "message": "`expr?` 的表达式类型不是 Result",
+    "template": "`?` 只能用于 Result 表达式，实际类型 '{type}'",
     "help": "请仅对类型为 `Result[T, E]` 的表达式使用 `?`。"
   },
   "E1083": {
     "title": "`?` 的错误类型不匹配",
+    "message": "`expr?` 的错误类型与外层函数返回类型不匹配",
+    "template": "`?` 的错误类型不匹配：期望 '{expected}'，实际 '{found}'",
     "help": "请确保当前函数返回类型 `Result[_, E]` 的错误类型 `E` 与被解包的 `Result[_, E]` 的错误类型一致。"
   },
   "E2001": {

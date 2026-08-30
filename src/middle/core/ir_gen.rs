@@ -4835,10 +4835,53 @@ impl AstToIrGenerator {
                     }
                 }
             }
-            Expr::Try { expr, span: _ } => {
-                // `expr?`：当前阶段仅作为错误传播标记，运行时等价于 `expr`。
-                // 错误的传播由解释器/Runtime 的错误通道处理（RFC-001）。
+            Expr::Try { expr, span } => {
+                // #301：`?` 真实语义——Result 解包 + Err 提前返回（错误
+                // 传播通道，type-system.md §4.2 Result(T, E)）。
+                // 求值 expr（Result(T, E)，运行时 Enum{variant 0=ok/1=err}）：
+                //   variant 0 → 表达式值为解包后的 T（payload）
+                //   variant 1 → 以整个 Enum 值提前 Ret 当前函数（沿调用栈传播）
+                // typecheck 侧已拦截：非 Result 表达式（E1082）、函数返回类型
+                // 非 Result（E1081）、错误类型不匹配（E1083）。
                 self.generate_expr_ir(expr, result_reg, instructions, constants)?;
+                let span = *span;
+                let tag_reg = self.next_temp_reg();
+                instructions.push(Instruction::VariantTag {
+                    dst: Operand::Local(tag_reg),
+                    obj: Operand::Local(result_reg),
+                    group: "Result".to_string(),
+                    span,
+                });
+                let ok_const = self.next_temp_reg();
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(ok_const),
+                    src: Operand::Const(ConstValue::Int(0)),
+                });
+                let eq_reg = self.next_temp_reg();
+                instructions.push(Instruction::Eq {
+                    dst: Operand::Local(eq_reg),
+                    lhs: Operand::Local(tag_reg),
+                    rhs: Operand::Local(ok_const),
+                });
+                // variant != 0（Err）→ 跳到提前返回
+                let is_err_idx = instructions.len();
+                instructions.push(Instruction::JmpIfNot(Operand::Local(eq_reg), 0));
+                // Ok 路径：解包 payload 作为表达式值
+                instructions.push(Instruction::VariantPayload {
+                    dst: Operand::Local(result_reg),
+                    obj: Operand::Local(result_reg),
+                    group: "Result".to_string(),
+                    span,
+                });
+                let end_idx = instructions.len();
+                instructions.push(Instruction::Jmp(0));
+                // Err 路径：以整个 Result 值提前返回（Err(e) 沿调用栈传播）
+                let err_target = instructions.len();
+                instructions[is_err_idx] =
+                    Instruction::JmpIfNot(Operand::Local(eq_reg), err_target);
+                instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                let end_target = instructions.len();
+                instructions[end_idx] = Instruction::Jmp(end_target);
             }
             Expr::If {
                 condition,
