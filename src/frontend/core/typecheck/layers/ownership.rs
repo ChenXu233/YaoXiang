@@ -1492,14 +1492,28 @@ impl OwnershipChecker {
             }
 
             Expr::Borrow { mutable, expr, .. } => {
+                // #290 F2：&mut 的取址走遍不注册消费者——写节点被挂到既有读令牌
+                // 的消费者集会让反向 BFS 自我播种（读令牌"消费"于写点 → 恒 unsafe，
+                // R5c 形态）。与 Call 臂 WriteBorrow 实参的压制同机制。
+                if *mutable {
+                    self.write_borrow_arg_depth += 1;
+                }
                 let mut results = self.walk_expr(expr);
+                if *mutable {
+                    self.write_borrow_arg_depth -= 1;
+                }
                 if let Some(var_name) = Self::extract_var_name(expr) {
                     // 变量本身被"使用"——检查 Move/Drop 状态
                     let check = self.check_var_read(&var_name, self.current_span);
                     if !check.is_proved() {
                         results.push(check);
                     }
-                    self.add_consumer_for_var(&var_name);
+                    // #290 F2：可变借用点不在既有令牌上登记消费者——读令牌的活性
+                    // 由自身区间判定（后置使用经反向 BFS 抵达写点才冲突），此处
+                    // 登记等于把写点伪造成读令牌的使用点，回溯误报复活。
+                    if !*mutable {
+                        self.add_consumer_for_var(&var_name);
+                    }
 
                     // 可变性检查：&mut 要求变量声明为 mut
                     if *mutable {

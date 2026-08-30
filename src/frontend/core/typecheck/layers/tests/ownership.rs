@@ -696,6 +696,7 @@ fn test_e2e_borrow_conflict_detected() {
                     span: Span::default(),
                 },
             ),
+            make_expr_stmt(make_call("print", vec![make_var("y")])),
         ],
     )]);
 
@@ -715,6 +716,55 @@ fn test_e2e_borrow_conflict_detected() {
     assert!(
         !borrow_errors.is_empty(),
         "应该检测到 &x 和 &mut x 的借用冲突，但结果为空"
+    );
+}
+
+#[test]
+fn test_e2e_unused_read_then_write_no_conflict() {
+    // Arrange: { mut x = 42; a = &x; b = &mut x } —— a 创建后从未使用。
+    // #290 F2 语义（D5，RFC-009a 区间 [created_at, last_use]）：last_use 停在
+    // 创建点，令牌已死 → NLL 语义不冲突。此前靠借用点自我播种误判为冲突。
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_mut_var_stmt("x", make_lit(42)),
+            make_var_stmt(
+                "a",
+                Expr::Borrow {
+                    mutable: false,
+                    expr: Box::new(make_var("x")),
+                    span: Span::default(),
+                },
+            ),
+            make_var_stmt(
+                "b",
+                Expr::Borrow {
+                    mutable: true,
+                    expr: Box::new(make_var("x")),
+                    span: Span::default(),
+                },
+            ),
+        ],
+    )]);
+
+    // Act
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan, _escaped) =
+        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+
+    // Assert
+    let borrow_errors: Vec<_> = results
+        .iter()
+        .filter(|r| {
+            matches!(r, ProofResult::Disproved(model)
+                if matches!(model.kind, DisproofKind::BorrowConflict))
+        })
+        .collect();
+    assert!(
+        borrow_errors.is_empty(),
+        "未使用的读令牌已死亡（区间语义），&mut 不应报冲突，得: {:?}",
+        results
     );
 }
 
@@ -1395,8 +1445,9 @@ fn test_e2e_three_read_borrows_no_conflict() {
 
 #[test]
 fn test_e2e_read_then_write_conflict() {
-    // Arrange: { mut x = 42; a = &x; b = &mut x }
-    // ReadToken 之后 WriteToken → 冲突
+    // Arrange: { mut x = 42; a = &x; b = &mut x; print(a) }
+    // #290 F2 语义（D5）：读令牌 a 在 &mut 之后仍被使用 → 活跃期覆盖写点 → 冲突。
+    //（a 若在 &mut 前已用完或从未使用 → NLL 语义不冲突，见下条测试）
     let module = make_module(vec![make_binding(
         "main",
         vec![],
@@ -1418,6 +1469,7 @@ fn test_e2e_read_then_write_conflict() {
                     span: Span::default(),
                 },
             ),
+            make_expr_stmt(make_call("print", vec![make_var("a")])),
         ],
     )]);
 
