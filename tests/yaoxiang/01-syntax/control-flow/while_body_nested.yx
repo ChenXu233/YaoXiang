@@ -1,0 +1,39 @@
+// 01-syntax/control-flow/while_body_nested.yx
+// 覆盖: 规范 syntax.md §3.4/§3.5 + #313 while 体逐语句检查的正向对照——
+//   循环体内嵌套 if/for/break/continue 的合法程序不受 #313 修复影响
+// 验证: while 体中 if/for 组合控制的运行时行为正确，无新增误报
+// 状态: ✅
+
+use std.assert
+
+main = {
+    // while 体嵌套 for + break/continue
+    mut total = 0
+    mut i = 0
+    while i < 3 {
+        i = i + 1
+        for x in [1, 2, 3, 4] {
+            if x == 2 {
+                continue
+            }
+            if x == 4 {
+                break
+            }
+            total = total + x
+        }
+    }
+    // 每轮内层累加 1 + 3 = 4，共 3 轮
+    assert.assert(total == 12, "while 嵌套 for 的 break/continue 语义")
+
+    // while 体嵌套 if 声明与类型注解（合法初始化）
+    mut found = 0
+    mut n = 0
+    while n < 5 {
+        n = n + 1
+        if n % 2 == 0 {
+            label: Int = n * 10
+            found = found + label
+        }
+    }
+    assert.assert(found == 60, "while 体 if 分支内带注解绑定（20 + 40）")
+}

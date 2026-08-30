@@ -1,0 +1,16 @@
+// 06-compile-errors/spawn_body_type_err.yx
+// [test:error]: spawn 体经 infer_block 走 infer_stmt，此前 If/For 语句被兜底臂
+//   静默跳过（#313）；注解 unify 校验在 inferrer 侧同样缺失
+// 预期: 编译错误 E1002
+// 覆盖: #313 infer_stmt 穷尽化 + Assign 臂注解 unify（镜像 checker 侧 enforce_unify）
+// 验证: spawn 体内嵌套 if 分支中的类型注解冲突被拒绝
+// 状态: ✅
+
+main = {
+    spawn {
+        if true {
+            t: Int = "bad"
+            print(t)
+        }
+    }
+}

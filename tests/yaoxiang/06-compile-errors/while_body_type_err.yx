@@ -1,0 +1,18 @@
+// 06-compile-errors/while_body_type_err.yx
+// [test:error]: 循环体内语句此前被 infer_stmt 兜底臂静默跳过——while 内 if 分支的
+//   `t: Int = "hello"` 编译通过并运行（#313），仅 IR 层内部错误兜底
+// 预期: 编译错误 E1002
+// 覆盖: #313 while 体逐语句类型检查（checker 接管 Expr::While，镜像 check_for_stmt）
+// 验证: while 体内嵌套 if 分支中的类型注解冲突与顶层同等被拒绝
+// 状态: ✅
+
+main = {
+    mut i = 0
+    while i < 2 {
+        i = i + 1
+        if i == 1 {
+            t: Int = "hello"
+            print(t)
+        }
+    }
+}

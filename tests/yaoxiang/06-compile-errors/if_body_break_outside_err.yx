@@ -1,0 +1,13 @@
+// 06-compile-errors/if_body_break_outside_err.yx
+// [test:error]: 循环外 break 包裹在 if 内——E1102 判定跨语句嵌套仍然有效
+//   （#313 前 while 体路径存在盲区，checker 接管 Expr::While 后全路径一致）
+// 预期: 编译错误 E1102
+// 覆盖: #313 E1102 在任意语句嵌套深度行为一致（#311 循环上下文跨 walker 同步）
+// 验证: 函数顶层 if 分支内的 break 被拒绝
+// 状态: ✅
+
+main = {
+    if true {
+        break
+    }
+}

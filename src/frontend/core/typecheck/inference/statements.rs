@@ -1746,6 +1746,46 @@ impl StatementChecker {
                     }
                 }
             }
+            // #313：while 体由本 walker 逐语句检查。此前 While 整体委托
+            // ExpressionInferrer，其 infer_stmt 兜底臂静默跳过 If/For/TypeDefinition
+            // 等语句种类，循环体内的类型错误编译通过（仅 IR 层内部错误兜底）。
+            // 语义镜像 check_for_stmt：条件 Bool 校验 + 循环上下文（E1102）+ 逐语句递归。
+            crate::frontend::core::parser::ast::Expr::While {
+                condition,
+                body,
+                span,
+            } => {
+                let cond_ty = self.check_expr(condition)?;
+                if cond_ty != MonoType::Bool {
+                    return Err(Box::new(
+                        ErrorCodeDefinition::type_mismatch("bool", &format!("{}", cond_ty))
+                            .at(*span)
+                            .build(),
+                    ));
+                }
+
+                self.scope.enter_block();
+                // #311：进入可 break/continue 的循环上下文
+                self.loop_depth += 1;
+                let mut first_err: Option<Box<Diagnostic>> = None;
+                for stmt in &body.stmts {
+                    if let Err(e) = self.check_stmt(stmt) {
+                        if first_err.is_none() {
+                            first_err = Some(e.clone());
+                        }
+                        if !self.collect_all_errors {
+                            break;
+                        }
+                        self.collect_error(*e);
+                    }
+                }
+                self.loop_depth -= 1;
+                self.scope.exit_block();
+                match first_err {
+                    Some(e) => Err(e),
+                    None => Ok(MonoType::Void),
+                }
+            }
             // 其他表达式：委托给 ExpressionInferrer
             _ => {
                 let current_result_err = self.current_result_err();
