@@ -1,0 +1,20 @@
+// 06-compile-errors/method_receiver_conflict_err.yx
+// [test:error]: 方法调用接收者签名不解析——&mut self 接收者从不产生借用令牌（#290 F4 / #315）
+//   此前 p.shift() 的接收者藏在 func（FieldAccess）里，lookup_param_types 按
+//   "p.shift" 查 env 落空 → 全 Move 回退，借用检查对方法调用整体静默放行
+// 预期: 编译错误 E2018
+// 覆盖: #315 方法接收者借用令牌（账本 + method_bindings 解析，RFC-009 §2.7）
+// 验证: v = &p.y 活跃期内 p.shift()（&mut self 接收者）被拒绝；自由函数形态
+//   shift(p) 此前已正确报错（对照见 borrow_conflict_basic.yx）
+// 状态: ✅
+
+Point: Type = { x: Int, y: Int }
+Point.shift: (self: &mut Point) -> Void = {
+    self.x = 5
+}
+main = {
+    p = Point(1, 2)
+    v = &p.y
+    p.shift()
+    print(p.y)
+}

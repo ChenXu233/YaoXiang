@@ -124,6 +124,12 @@ pub struct BrandNode {
     /// 令牌不存在，活性不得向更早蔓延（#290 F1：此前缺失，读令牌活性向过去
     /// 无限延伸 → 后文取读令牌误伤前文已释放的 &mut，E2018 回溯误报）。
     pub birth_node: usize,
+    /// #315：瞬态令牌——调用实参/方法接收者自动借用产生（§12.4"令牌随调用
+    /// 结束释放"）。瞬态令牌的消费者集只含其调用节点，不被后文同名变量的
+    /// 使用延长（add_consumer_for_var / 写类竞争声明均跳过）——否则后置读
+    /// 会把它区间拉长穿越中间的写点，伪造 E2018（§12.4 链 q.sum→q.shift→q.sum）。
+    /// var 绑定借用（v = &p）为 false，活到作用域结束（D5 裁决）。
+    pub transient: bool,
 }
 
 impl BrandNode {
@@ -132,6 +138,7 @@ impl BrandNode {
         kind: TokenKind,
         source_var: String,
         birth_node: usize,
+        transient: bool,
     ) -> Self {
         Self {
             id,
@@ -142,6 +149,7 @@ impl BrandNode {
             consumers: HashSet::new(),
             ref_count: 1,
             birth_node,
+            transient,
         }
     }
 }
@@ -168,12 +176,19 @@ impl BrandTree {
         &mut self,
         source: String,
         birth_node: usize,
+        transient: bool,
     ) -> BrandId {
         let id = BrandId::root(self.next_id);
         self.next_id += 1;
         self.nodes.insert(
             id.clone(),
-            BrandNode::new(id.clone(), TokenKind::ReadToken, source, birth_node),
+            BrandNode::new(
+                id.clone(),
+                TokenKind::ReadToken,
+                source,
+                birth_node,
+                transient,
+            ),
         );
         id
     }
@@ -182,12 +197,19 @@ impl BrandTree {
         &mut self,
         source: String,
         birth_node: usize,
+        transient: bool,
     ) -> BrandId {
         let id = BrandId::root(self.next_id);
         self.next_id += 1;
         self.nodes.insert(
             id.clone(),
-            BrandNode::new(id.clone(), TokenKind::WriteToken, source, birth_node),
+            BrandNode::new(
+                id.clone(),
+                TokenKind::WriteToken,
+                source,
+                birth_node,
+                transient,
+            ),
         );
         id
     }
@@ -205,8 +227,9 @@ impl BrandTree {
         let child_id = parent_id.derive_field(field);
         let source_var = parent.source_var.clone();
         let kind = parent.kind;
+        let transient = parent.transient;
 
-        let mut child = BrandNode::new(child_id.clone(), kind, source_var, birth_node);
+        let mut child = BrandNode::new(child_id.clone(), kind, source_var, birth_node, transient);
         child.parent = Some(parent_id.clone());
 
         self.nodes.insert(child_id.clone(), child);
@@ -228,6 +251,18 @@ impl BrandTree {
     ) {
         if let Some(node) = self.nodes.get_mut(id) {
             node.consumers.insert(node_idx);
+        }
+    }
+
+    /// #315：切换令牌的瞬态标记。`v = &p` 绑定到引用变量时由瞬态（借用表达式
+    /// 默认）转为 var 绑定（活到作用域结束，D5 裁决）。
+    pub fn set_transient(
+        &mut self,
+        id: &BrandId,
+        transient: bool,
+    ) {
+        if let Some(node) = self.nodes.get_mut(id) {
+            node.transient = transient;
         }
     }
 
@@ -1086,9 +1121,13 @@ impl OwnershipChecker {
                 }
             }
             ParamOwnership::ReadBorrow => {
-                let token = self
-                    .brand_tree
-                    .create_read_token(var_name.to_string(), self.current_node);
+                // transient=true：调用实参/方法接收者的读令牌随调用结束释放（§12.4），
+                // 不被后文同名变量使用延长（#315）
+                let token = self.brand_tree.create_read_token(
+                    var_name.to_string(),
+                    self.current_node,
+                    true,
+                );
                 self.brand_tree.add_consumer(&token, self.current_node);
                 if !self.brand_tree.conflicting_with(&token).is_empty() {
                     self.pending_writes.push(PendingWrite {
@@ -1099,9 +1138,13 @@ impl OwnershipChecker {
                 }
             }
             ParamOwnership::WriteBorrow => {
-                let token = self
-                    .brand_tree
-                    .create_write_token(var_name.to_string(), self.current_node);
+                // transient=true：同 ReadBorrow——写令牌也只活在其调用节点（§12.5
+                // 顺序复用的合法性正来自此：下一次 &mut 与已释放的上一次不冲突）
+                let token = self.brand_tree.create_write_token(
+                    var_name.to_string(),
+                    self.current_node,
+                    true,
+                );
                 self.brand_tree.add_consumer(&token, self.current_node);
                 // WriteBorrow 总是进 pending_writes 检查冲突
                 self.pending_writes.push(PendingWrite {
@@ -1162,7 +1205,9 @@ impl OwnershipChecker {
                     // 会让反向 BFS 把写点之后的节点标成写令牌活跃区（回溯误报）。
                     // 经 ref_bindings 的使用（w.x 透过 &mut）不受此限——那是
                     // 引用本身的用法，属写令牌活性。
-                    n.source_var == var_name && n.kind.is_read()
+                    // #315：瞬态令牌（调用实参/接收者自动借用）已随调用释放，
+                    // 后文同名变量的使用不得延长其区间（§12.4 链 q.sum→q.shift→q.sum）
+                    n.source_var == var_name && n.kind.is_read() && !n.transient
                 })
             })
             .cloned()
@@ -1268,6 +1313,78 @@ impl OwnershipChecker {
             return CopySemantics::Dup;
         }
         CopySemantics::Move
+    }
+
+    /// #315：查变量的推断类型——账本（作用域内层优先）优先，再查 env；
+    /// 供方法接收者签名解析定位 "Type.method" 的 Type 名
+    fn lookup_var_type(
+        &self,
+        name: &str,
+    ) -> Option<crate::frontend::core::types::MonoType> {
+        for scope in self.scope_keys.iter().rev() {
+            if let Some(key) = scope.get(name) {
+                if let Some(poly) = self.type_ledger.get(&(*key, name.to_string())) {
+                    return Some(poly.body.clone());
+                }
+            }
+        }
+        let env_ptr = self.env?;
+        let env = unsafe { &*env_ptr };
+        env.get_var(name).map(|p| p.body.clone())
+    }
+
+    /// #315：方法调用接收者签名解析（#290 F4 路线 A 最小管道）
+    ///
+    /// `p.shift(...)` 的接收者藏在 func（FieldAccess）里，lookup_param_types 按
+    /// "p.shift" 查 env 落空 → 全 Move 回退，&mut self 从不产生写令牌（漏报）。
+    /// 这里借账本把接收者变量解析到类型名，拼 "Type.method" 查 method_bindings，
+    /// 返回（接收者变量名，接收者所有权，显式实参所有权——对齐 params[1..]）。
+    /// 仅处理接收者为裸变量、类型可解析为具名 Struct/TypeRef 的形态；
+    /// 链式/泛型接收者/std native 方法回退原路径（#315 非目标）。
+    fn method_receiver_ownership(
+        &self,
+        func: &Expr,
+        arg_count: usize,
+        env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
+    ) -> Option<(String, ParamOwnership, Vec<ParamOwnership>)> {
+        let crate::frontend::core::parser::ast::Expr::FieldAccess {
+            expr: obj, field, ..
+        } = func
+        else {
+            return None;
+        };
+        let recv_name = Self::extract_var_name(obj)?;
+        let recv_ty = self.lookup_var_type(&recv_name)?;
+        let type_name = match &recv_ty {
+            crate::frontend::core::types::MonoType::Struct(st) => st.name.clone(),
+            crate::frontend::core::types::MonoType::TypeRef(n) => n.clone(),
+            _ => return None,
+        };
+        let method = env.get_method_binding(&type_name, field)?;
+        let crate::frontend::core::types::MonoType::Fn { params, .. } = method else {
+            return None;
+        };
+        // 接收者占 params[0]（RFC-004：Type.method 首参即接收者）。
+        // 仅显式 &self/&mut self（Ref 形）进令牌管线；Self 泛型（RFC-011a 接口
+        // 分发）与按值接收者的所有权语义属 #315 非目标，回退原路径（不建令牌）。
+        if !matches!(
+            params.first(),
+            Some(crate::frontend::core::types::MonoType::Ref { .. })
+        ) {
+            return None;
+        }
+        let own_of = |ty: &crate::frontend::core::types::MonoType| match ty {
+            crate::frontend::core::types::MonoType::Ref { mutable: true, .. } => {
+                ParamOwnership::WriteBorrow
+            }
+            crate::frontend::core::types::MonoType::Ref { mutable: false, .. } => {
+                ParamOwnership::ReadBorrow
+            }
+            _ => ParamOwnership::Move,
+        };
+        let recv_own = own_of(&params[0]);
+        let arg_owns = params.iter().skip(1).take(arg_count).map(own_of).collect();
+        Some((recv_name, recv_own, arg_owns))
     }
 
     // ── 控制流方法（walk_expr 和 walk_stmt 共用） ──────────
@@ -1524,12 +1641,18 @@ impl OwnershipChecker {
                         }
                     }
 
+                    // #315：借用表达式默认瞬态（调用实参等未绑定形态随语句释放，
+                    // §12.4）；Assign 绑定到引用变量时经 set_transient(false)
+                    // 转 var 绑定（活到作用域结束，D5 裁决）
                     let token = if *mutable {
-                        self.brand_tree
-                            .create_write_token(var_name.clone(), self.current_node)
+                        self.brand_tree.create_write_token(
+                            var_name.clone(),
+                            self.current_node,
+                            true,
+                        )
                     } else {
                         self.brand_tree
-                            .create_read_token(var_name.clone(), self.current_node)
+                            .create_read_token(var_name.clone(), self.current_node, true)
                     };
                     self.brand_tree.add_consumer(&token, self.current_node);
                     // #290 F1：可变借用的创建是对同源**写类**既有令牌的竞争声明
@@ -1541,7 +1664,13 @@ impl OwnershipChecker {
                             .brand_tree
                             .conflicting_with(&token)
                             .into_iter()
-                            .filter(|id| self.brand_tree.get(id).is_some_and(|n| n.kind.is_write()))
+                            .filter(|id| {
+                                self.brand_tree.get(id).is_some_and(|n| {
+                                    // #315：瞬态写令牌（调用实参）已随调用释放，
+                                    // 不参与竞争声明，登记只会伪造其活性
+                                    n.kind.is_write() && !n.transient
+                                })
+                            })
                             .cloned()
                             .collect();
                         for c in &write_conflicts {
@@ -1614,6 +1743,8 @@ impl OwnershipChecker {
                             // #312：x = &y 重赋值 → 重新绑定引用令牌（&x 解析为 Borrow）
                             if matches!(right.as_ref(), Expr::Borrow { .. }) {
                                 if let Some(tok) = self.last_created_token.take() {
+                                    // var 绑定：令牌活到作用域结束（D5），撤销瞬态
+                                    self.brand_tree.set_transient(&tok, false);
                                     self.ref_bindings.insert(name.clone(), tok);
                                 }
                             }
@@ -1636,6 +1767,8 @@ impl OwnershipChecker {
                             //（&x 解析为 Expr::Borrow；Expr::Ref 是 `ref` 关键字，不建令牌）
                             if matches!(right.as_ref(), Expr::Borrow { .. }) {
                                 if let Some(tok) = self.last_created_token.take() {
+                                    // var 绑定：令牌活到作用域结束（D5），撤销瞬态
+                                    self.brand_tree.set_transient(&tok, false);
                                     self.ref_bindings.insert(name.clone(), tok);
                                 }
                             }
@@ -1696,16 +1829,46 @@ impl OwnershipChecker {
             }
             Expr::Try { expr: inner, .. } => self.walk_expr(inner),
             Expr::Call { func, args, .. } => {
-                let mut results = self.walk_expr(func);
+                let mut results = Vec::new();
                 // 确定调用目标名（用于查签名和捕获）
                 let func_name = Self::extract_call_path(func);
                 // 查询函数的参数签名（未知函数回退为全 Move）
                 let env: &crate::frontend::core::typecheck::environment::TypeEnvironment =
                     unsafe { &*self.env.unwrap() };
-                let param_types = func_name
-                    .as_ref()
-                    .map(|n| self.lookup_param_types(n, args.len(), env))
-                    .unwrap_or_else(|| vec![ParamOwnership::Move; args.len()]);
+                // #315：方法调用（func = FieldAccess）接收者签名解析。命中时接收者
+                // 走与自由函数 &mut 实参同款管线（活性检查 + 借用令牌 + 冲突登记），
+                // 显式实参对齐方法签名 params[1..]；未命中（链式/泛型/std native）
+                // 回退原路径。
+                let method_sig = self.method_receiver_ownership(func, args.len(), env);
+                if let Some((recv_name, recv_own, _)) = &method_sig {
+                    let is_write = matches!(recv_own, ParamOwnership::WriteBorrow);
+                    // 同 #312：&mut 接收者遍历期间压制消费者注册，避免写节点
+                    // 被挂成既有读令牌的消费者后反向 BFS 自我标记恒 unsafe
+                    if is_write {
+                        self.write_borrow_arg_depth += 1;
+                    }
+                    results.extend(self.walk_expr(func));
+                    if is_write {
+                        self.write_borrow_arg_depth -= 1;
+                    }
+                    let check = self.check_var_read(recv_name, self.current_span);
+                    if !check.is_proved() {
+                        results.push(check);
+                    }
+                    if !is_write {
+                        self.add_consumer_for_var(recv_name);
+                    }
+                    self.apply_param_ownership(recv_name, recv_own);
+                } else {
+                    results.extend(self.walk_expr(func));
+                }
+                let param_types = match &method_sig {
+                    Some((_, _, arg_owns)) => arg_owns.clone(),
+                    None => func_name
+                        .as_ref()
+                        .map(|n| self.lookup_param_types(n, args.len(), env))
+                        .unwrap_or_else(|| vec![ParamOwnership::Move; args.len()]),
+                };
                 // 处理显式参数
                 for (i, arg) in args.iter().enumerate() {
                     let ownership = param_types.get(i).unwrap_or(&ParamOwnership::Move);
@@ -1874,9 +2037,11 @@ impl OwnershipChecker {
                                 if let Some(bound) = self.ref_bindings.get(&root).cloned() {
                                     self.brand_tree.add_consumer(&bound, self.current_node);
                                 } else {
-                                    let token = self
-                                        .brand_tree
-                                        .create_write_token(root.clone(), self.current_node);
+                                    let token = self.brand_tree.create_write_token(
+                                        root.clone(),
+                                        self.current_node,
+                                        true,
+                                    );
                                     self.brand_tree.add_consumer(&token, self.current_node);
                                     // 字段写令牌是瞬态的（不绑定变量，活在本节点）：
                                     // 不做写类竞争声明（那是 var 绑定令牌的语义），
@@ -1954,6 +2119,8 @@ impl OwnershipChecker {
                     results.extend(self.walk_expr(init));
                     if matches!(init, Expr::Borrow { .. }) {
                         if let Some(tok) = self.last_created_token.take() {
+                            // var 绑定：令牌活到作用域结束（D5），撤销瞬态
+                            self.brand_tree.set_transient(&tok, false);
                             self.ref_bindings.insert(name.clone(), tok);
                         }
                     }
