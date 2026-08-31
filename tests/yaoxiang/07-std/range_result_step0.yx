@@ -43,6 +43,4 @@ main = {
     // 4. 非 Result 上下文：result.unwrap 显式分流
     it = result.unwrap(range.iter(1..3))
     assert.assert(range.next(it) == 1, "unwrap 后迭代器可用")
-
-    print("RANGE_RESULT_OK")
 }
