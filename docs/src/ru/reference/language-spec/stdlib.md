@@ -5,7 +5,7 @@
 
 ---
 
-## Глава 1: Ядро
+## Глава 1: Ядро библиотеки
 
 ### 1.1 Базовые типы
 
@@ -14,7 +14,7 @@
 | Тип            | Модуль           | Описание                      |
 | -------------- | ---------------- | ----------------------------- |
 | `Option(T)`    | `std.option`     | Тип опционального значения    |
-| `Result(T, E)` | `std.result`     | Тип для обработки ошибок      |
+| `Result(T, E)` | `std.result`     | Тип обработки ошибок          |
 | `List(T)`      | `std.collection` | Динамический массив           |
 | `Map(K, V)`    | `std.collection` | Хеш-отображение               |
 | `String`       | `std.string`     | Строковый тип                 |
@@ -28,25 +28,25 @@ Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 
 **Конструкторы вариантов**:
 
-| Вариант       | Синтаксис            | Описание          |
-| ------------- | -------------------- | ----------------- |
-| `Option.some` | `Option.some(value)` | Содержит значение |
-| `Option.none` | `Option.none()`      | Пустое значение   |
+| Вариант       | Синтаксис            | Описание      |
+| ------------- | -------------------- | ------------- |
+| `Option.some` | `Option.some(value)` | Есть значение |
+| `Option.none` | `Option.none()`      | Нет значения  |
 
 **Основные методы**:
 
 ```yaoxiang
-// Проверка наличия значения
+// 检查是否有值
 is_some: (self: Option(T)) -> Bool
 is_none: (self: Option(T)) -> Bool
 
-// Получение значения (может вызвать panic)
+// 获取值（可能 panic）
 unwrap: (self: Option(T)) -> T
 
-// Получение значения или значения по умолчанию
+// 获取值或默认值
 unwrap_or: (self: Option(T), default: T) -> T
 
-// Отображение значения
+// 映射值
 map: (R: Type) -> ((self: Option(T), f: (T) -> R) -> Option(R))
 ```
 
@@ -66,24 +66,24 @@ Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Resu
 **Основные методы**:
 
 ```yaoxiang
-// Проверка успешности
+// 检查是否成功
 is_ok: (self: Result(T, E)) -> Bool
 is_err: (self: Result(T, E)) -> Bool
 
-// Получение значения (может вызвать panic)
+// 获取值（可能 panic）
 unwrap: (self: Result(T, E)) -> T
 
-// Получение значения или значения по умолчанию
+// 获取值或默认值
 unwrap_or: (self: Result(T, E), default: T) -> T
 
-// Отображение значения успеха
+// 映射成功值
 map: (R: Type) -> ((self: Result(T, E), f: (T) -> R) -> Result(R, E))
 
-// Отображение значения ошибки
+// 映射错误值
 map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ```
 
-### 1.4 Error propagation
+### 1.4 Распространение ошибок (error propagation)
 
 ```
 ErrorPropagate ::= Expr '?'
@@ -92,10 +92,10 @@ ErrorPropagate ::= Expr '?'
 Оператор `?` автоматически распространяет ошибки типа Result:
 
 ```
-// При успехе возвращает значение, при неудаче возвращает err вверх по стеку
+// 成功时返回值，失败时向上返回 err
 data = fetch_data()?
 
-// Эквивалентно
+// 等价于
 data = match fetch_data() {
     ok(v) => v
     err(e) => return err(e)
@@ -105,33 +105,33 @@ data = match fetch_data() {
 ### 1.5 Утверждения (std.assert)
 
 Модуль `std.assert` предоставляет унифицированный механизм утверждений — runtime `assert` и
-compile-time уточняющий тип `Assert` являются двумя сторонами одной и той же сущности.
+уточняющий compile-time тип `Assert` являются двумя сторонами одной примитивы.
 
 ```yaoxiang
-// IsTrue: мост от значения к типу
+// IsTrue：值到类型的桥接函数
 IsTrue: (b: Bool) -> Type = match b {
-    true => Void,      // ⊤, программа продолжается
-    false => Never,    // ⊥, расходится
+    true => Void,      // ⊤，程序继续
+    false => Never,    // ⊥，发散
 }
 
-// Assert: примитив уточняющего типа compile-time
+// Assert：编译期精化类型原语
 Assert: (cond: Bool) -> Type = IsTrue(cond)
 
-// assert: утверждение runtime (value introducer для Assert)
+// assert：运行时断言（Assert 的值引入子）
 assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))
 
-// Перегрузка для Result
+// Result 重载
 assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 ```
 
-**Диспетчеризация**:
+**Диспетчеризация (dispatch)**:
 
-| Условие                                             | Поведение                                                                     |
-| --------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Все свободные переменные cond известны compile-time | Компилятор вычисляет, true → стирается, false → ошибка компиляции             |
-| Существуют свободные переменные runtime             | Вставляется runtime check, инъектируется flow-sensitive набор предположений Γ |
+| Условие                                                      | Поведение                                                                                     |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| Все свободные переменные `cond` известны на этапе компиляции | Компилятор вычисляет: true → стирается, false → ошибка компиляции                             |
+| Присутствуют свободные переменные runtime                    | Вставляется runtime-проверка, инжектируется чувствительное к потоку множество предположений Γ |
 
-`assert(false, "msg")` эквивалентно raise — отдельные ключевые слова throw/raise не нужны.
+`assert(false, "msg")` эквивалентно raise — отдельное ключевое слово throw/raise не требуется.
 
 ---
 
@@ -140,11 +140,11 @@ assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 ### 2.1 Стандартный ввод-вывод
 
 ```yaoxiang
-// Стандартный вывод
+// 标准输出
 print: (msg: String) -> Void
 println: (msg: String) -> Void
 
-// Стандартный ввод
+// 标准输入
 read_line: () -> String
 read_char: () -> Char
 ```
@@ -152,7 +152,7 @@ read_char: () -> Char
 ### 2.2 Файловые операции
 
 ```yaoxiang
-// Тип файла
+// 文件类型
 File: Type = {
     path: String,
     read: (self: File) -> Result(String, Error),
@@ -161,7 +161,7 @@ File: Type = {
     close: (self: File) -> Void
 }
 
-// Файловые операции
+// 文件操作
 open: (path: String) -> Result(File, Error)
 create: (path: String) -> Result(File, Error)
 delete: (path: String) -> Result(Void, Error)
@@ -170,7 +170,7 @@ delete: (path: String) -> Result(Void, Error)
 ### 2.3 Операции с каталогами
 
 ```yaoxiang
-// Тип каталога
+// 目录类型
 Dir: Type = {
     path: String,
     entries: (self: Dir) -> Result(List(String), Error),
@@ -178,7 +178,7 @@ Dir: Type = {
     delete: (self: Dir) -> Result(Void, Error)
 }
 
-// Операции с каталогами
+// 目录操作
 read_dir: (path: String) -> Result(Dir, Error)
 create_dir: (path: String) -> Result(Void, Error)
 delete_dir: (path: String) -> Result(Void, Error)
@@ -191,21 +191,21 @@ delete_dir: (path: String) -> Result(Void, Error)
 ### 3.1 Основные математические функции
 
 ```yaoxiang
-// Абсолютное значение
+// 绝对值
 abs: (x: Int) -> Int
 abs: (x: Float) -> Float
 
-// Максимум и минимум
+// 最大最小值
 max: (a: Int, b: Int) -> Int
 min: (a: Int, b: Int) -> Int
 max: (a: Float, b: Float) -> Float
 min: (a: Float, b: Float) -> Float
 
-// Возведение в степень
+// 幂运算
 pow: (base: Float, exp: Float) -> Float
 sqrt: (x: Float) -> Float
 
-// Логарифмы
+// 对数
 log: (x: Float) -> Float
 log2: (x: Float) -> Float
 log10: (x: Float) -> Float
@@ -214,12 +214,12 @@ log10: (x: Float) -> Float
 ### 3.2 Тригонометрические функции
 
 ```yaoxiang
-// Тригонометрические функции
+// 三角函数
 sin: (x: Float) -> Float
 cos: (x: Float) -> Float
 tan: (x: Float) -> Float
 
-// Обратные тригонометрические функции
+// 反三角函数
 asin: (x: Float) -> Float
 acos: (x: Float) -> Float
 atan: (x: Float) -> Float
@@ -229,7 +229,7 @@ atan2: (y: Float, x: Float) -> Float
 ### 3.3 Константы
 
 ```yaoxiang
-// Математические константы
+// 数学常量
 pi: Float = 3.141592653589793
 e: Float = 2.718281828459045
 ```
@@ -241,23 +241,23 @@ e: Float = 2.718281828459045
 ### 4.1 Операции со строками
 
 ```yaoxiang
-// Длина строки
+// 字符串长度
 length: (s: String) -> Int
 
-// Конкатенация строк
+// 字符串拼接
 concat: (a: String, b: String) -> String
 
-// Разделение строки
+// 字符串分割
 split: (s: String, delimiter: String) -> List(String)
 
-// Поиск в строке
+// 字符串查找
 find: (s: String, pattern: String) -> Option(Int)
 contains: (s: String, pattern: String) -> Bool
 
-// Замена в строке
+// 字符串替换
 replace: (s: String, old: String, new: String) -> String
 
-// Обрезка строки
+// 字符串修剪
 trim: (s: String) -> String
 trim_left: (s: String) -> String
 trim_right: (s: String) -> String
@@ -266,12 +266,12 @@ trim_right: (s: String) -> String
 ### 4.2 Преобразование строк
 
 ```yaoxiang
-// Преобразование типов
+// 类型转换
 to_string: (x: Int) -> String
 to_string: (x: Float) -> String
 to_string: (x: Bool) -> String
 
-// Парсинг
+// 解析
 parse_int: (s: String) -> Result(Int, Error)
 parse_float: (s: String) -> Result(Float, Error)
 ```
@@ -283,7 +283,7 @@ parse_float: (s: String) -> Result(Float, Error)
 ### 5.1 Тип List
 
 ```yaoxiang
-// Тип List
+// List 类型
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
@@ -306,7 +306,7 @@ List: (T: Type) -> Type = {
 ### 5.2 Тип Map
 
 ```yaoxiang
-// Тип Map
+// Map 类型
 Map: (K: Type, V: Type) -> Type = {
     data: Array((K, V)),
     length: Int,
@@ -324,7 +324,7 @@ Map: (K: Type, V: Type) -> Type = {
 
 ## Глава 6: Библиотека итераторов
 
-### 6.1 Iterator trait
+### 6.1 Trait Iterator
 
 ```yaoxiang
 // Iterator trait
@@ -343,8 +343,8 @@ Iterator: (T: Type) -> Type = {
 ### 6.2 Адаптеры итераторов
 
 ```yaoxiang
-// Итератор по диапазону (#302: Range — официальный тип, runtime-идентичность — неизменяемая запись с тремя скалярами,
-// больше не использует оболочку Tuple; выводит `1..10` / `1..10..2`, структурное равенство, именованные поля)
+// 范围迭代器（#302：Range 是正式类型，运行时身份为三标量不可变记录，
+// 不再借 Tuple 外壳；打印 `1..10` / `1..10..2`，结构相等，具名字段）
 Range: Type = {
     start: Int,
     end: Int,
@@ -352,49 +352,53 @@ Range: Type = {
     Iterator(Int)
 }
 
-// Использование (протокол итератора: std.range.iter/has_next/next, for через статическую диспетчеризацию типов)
+// 使用（迭代器协议：std.range.iter/has_next/next，for 经静态类型派发）
 for i in 0..10 {
     print(i)
 }
 
-// Форма со step (две точки, без новых ключевых слов)
+// step 形态（双点，无新关键词）
 for i in 0..10..2 {
     print(i)
 }
 ```
 
-> **#302**: `Range(Int)` официально реализован — доступны именованные поля
-> `r.start`/`r.end`/`r.step`; `x in r` runtime идёт через `std.range.contains` (проверка границ +
-> выравнивание шага), что доказывает, что конвейер распознаёт предикат интервала
-> `x >= r.start && x < r.end && (x - r.start) % r.step == 0` (интервал остаётся интервалом, не
-> материализуется). Литерал step=0 отклоняется compile-time, динамический step=0 — runtime ошибка
-> (после внедрения будущей системы ошибок повышается до Result, #301). Инстанцирование интерфейса
-> (объявление тела типа `Iterator(Int)`) — синтаксис типа и статическая диспетчеризация реализованы
-> в рамках фаз 1-2 RFC-011a (#307): элемент применения типа `Iterator(Int)` в теле типа запускает
-> подстановку `Self ↦ Range` и проверку полноты, после прохождения которой генерируется
-> доказательство реализации. Динамическая диспетчеризация реализована в рамках фазы 3: если имя
-> интерфейса не инстанцировано, тип существует (`List(Animal)`), конкретные значения в позиции
-> экзистенциального типа автоматически оборачиваются в варианты, вызовы методов элементов
-> диспетчеризуются по фактическому типу (§6). Протокольная сторона runtime модуля `std.range` в
-> настоящее время обеспечивается нативными методами, миграция на диспетчеризацию интерфейса —
-> дальнейшая работа.
+> **#302**: `Range(Int)` официально введён — доступны именованные поля `r.start`/`r.end`/`r.step`;
+> `x in r` во время выполнения проходит через `std.range.contains` (проверка границ + выравнивание
+> шага), что подтверждает, что пайплайн распознаётся как интервальный предикат
+> `x >= r.start && x < r.end && (x - r.start) % r.step == 0` (интервал сохраняет интервал, не
+> материализуется). Литерал step=0 отвергается на этапе компиляции; динамический step=0 уже
+> преобразован в Result (#316, первая точка подключения #301): `std.range.iter` →
+> `Result(Iterator, Error)`, `std.range.contains` → `Result(Bool, Error)`, точки потребления
+> распространяются по стеку вызовов через `?` или явно разветвляются через `result.unwrap`; сахар
+> `for`/`in` понижается в ir_gen и распаковывается, ветвь Err (динамический step=0) явно завершается
+> неудачей (`abort_invalid_step`), никогда не входит в тихий бесконечный цикл. Инстанцирование
+> интерфейса (объявление `Iterator(Int)` в теле типа) — синтаксис типа и статическая диспетчеризация
+> реализованы согласно RFC-011a фазы 1-2 (#307): элемент применения типа `Iterator(Int)` запускает
+> подстановку `Self ↦ Range` и проверку полноты, после прохождения генерируется доказательство
+> реализации. Динамическая диспетчеризация реализована согласно фазе 3: интерфейс существует как
+> тип, даже если имя интерфейса не инстанцировано (`List(Animal)`); конкретные значения, попадающие
+> в экзистенциальную позицию типа, автоматически оборачиваются как variant value, вызовы методов
+> элемента диспетчеризируются по фактическому типу (§6). Протокол runtime модуля std.range
+> по-прежнему предоставляется нативными методами, миграция на диспетчеризацию через интерфейс
+> остаётся дальнейшей работой.
 
 ---
 
 ## Приложение: Указатель модулей стандартной библиотеки
 
-| Модуль           | Описание                                                                            |
-| ---------------- | ----------------------------------------------------------------------------------- |
-| `std.assert`     | Механизм утверждений — runtime assert + compile-time уточняющий тип Assert          |
-| `std.option`     | Тип Option                                                                          |
-| `std.result`     | Тип Result                                                                          |
-| `std.collection` | Коллекции List, Map и др.                                                           |
-| `std.string`     | Операции со строками                                                                |
-| `std.array`      | Операции с массивами                                                                |
-| `std.iterator`   | Итератор (протокольная сторона в настоящее время предоставляется `std.range`, #302) |
-| `std.range`      | Итератор Range и предикаты интервалов, адаптеры (#302)                              |
+| Модуль           | Описание                                                                   |
+| ---------------- | -------------------------------------------------------------------------- |
+| `std.assert`     | Механизм утверждений — runtime assert + уточняющий compile-time тип Assert |
+| `std.option`     | Тип Option                                                                 |
+| `std.result`     | Тип Result                                                                 |
+| `std.collection` | Коллекции: List, Map и др.                                                 |
+| `std.string`     | Операции со строками                                                       |
+| `std.array`      | Операции с массивами                                                       |
+| `std.iterator`   | Итератор (протокол в настоящее время предоставляется `std.range`, #302)    |
+| `std.range`      | Итератор Range, интервальные предикаты и адаптеры (#302)                   |
 
-### A.2 Модуль IO
+### A.2 Модули ввода-вывода
 
 | Модуль     | Описание               |
 | ---------- | ---------------------- |
@@ -412,9 +416,9 @@ for i in 0..10..2 {
 
 ### A.4 Утилитарные модули
 
-| Модуль       | Описание                                                            |
-| ------------ | ------------------------------------------------------------------- |
-| `std.random` | Генерация случайных чисел                                           |
-| `std.time`   | Время и дата                                                        |
-| `std.assert` | Единые compile-time `Assert(C)` и runtime `assert(x > 0)` (RFC-030) |
-| `std.regex`  | Регулярные выражения                                                |
+| Модуль       | Описание                                                                     |
+| ------------ | ---------------------------------------------------------------------------- |
+| `std.random` | Генерация случайных чисел                                                    |
+| `std.time`   | Время и дата                                                                 |
+| `std.assert` | Унифицированный compile-time `Assert(C)` и runtime `assert(x > 0)` (RFC-030) |
+| `std.regex`  | Регулярные выражения                                                         |
