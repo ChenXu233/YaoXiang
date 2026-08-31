@@ -4,6 +4,7 @@
 // 状态: ✅ 可运行
 
 use std.assert
+use std.result
 use std.range
 use std.list
 
@@ -23,41 +24,41 @@ main = {
     assert.assert(count == 5, "iterates 1..5")
 
     // has_next/next 单次调用形态
-    it = range.iter(1..3)
+    it = result.unwrap(range.iter(1..3))
     assert.assert(range.has_next(it), "fresh iterator has next")
-    it2 = range.iter(1..3)
+    it2 = result.unwrap(range.iter(1..3))
     assert.assert(range.next(it2) == 1, "next yields first element")
 
     // ── 负 step 协议 ──
-    desc = range.iter(3..0..-1)
+    desc = result.unwrap(range.iter(3..0..-1))
     assert.assert(range.next(desc) == 3, "descending first is 3")
     assert.assert(range.next(desc) == 2, "descending next is 2")
     assert.assert(range.has_next(desc), "descending still has 1")
 
     // ── contains：界 + 对齐 + 符号派发 ──
-    assert.assert(range.contains(1..10, 5), "5 in 1..10")
-    assert.assert(!range.contains(1..10, 10), "end excluded")
-    assert.assert(range.contains(0..10..2, 4), "aligned element")
-    assert.assert(!range.contains(0..10..2, 3), "unaligned element")
-    assert.assert(range.contains(10..0..-2, 6), "descending aligned")
-    assert.assert(!range.contains(10..0..-2, 5), "descending unaligned")
+    assert.assert(result.unwrap(range.contains(1..10, 5)), "5 in 1..10")
+    assert.assert(!result.unwrap(range.contains(1..10, 10)), "end excluded")
+    assert.assert(result.unwrap(range.contains(0..10..2, 4)), "aligned element")
+    assert.assert(!result.unwrap(range.contains(0..10..2, 3)), "unaligned element")
+    assert.assert(result.unwrap(range.contains(10..0..-2, 6)), "descending aligned")
+    assert.assert(!result.unwrap(range.contains(10..0..-2, 5)), "descending unaligned")
 
     // ── 适配器：map/filter 惰性 + collect ──
-    doubled = range.collect(range.map(range.iter(r), x => x * 2))
+    doubled = range.collect(range.map(result.unwrap(range.iter(r)), x => x * 2))
     assert.assert(list.len(doubled) == 5, "map+collect length")
     assert.assert(list.get(doubled, 0) == 2, "map first = 2")
     assert.assert(list.get(doubled, 4) == 10, "map last = 10")
 
-    big = range.collect(range.filter(range.iter(r), x => x > 3))
+    big = range.collect(range.filter(result.unwrap(range.iter(r)), x => x > 3))
     assert.assert(list.len(big) == 2, "filter keeps 4,5")
     assert.assert(list.get(big, 0) == 4, "filter first = 4")
 
     // ── 链式适配器 ──
-    chained = range.collect(range.map(range.filter(range.iter(r), x => x % 2 == 0), x => x * 10))
+    chained = range.collect(range.map(range.filter(result.unwrap(range.iter(r)), x => x % 2 == 0), x => x * 10))
     assert.assert(list.get(chained, 0) == 20, "chain even*10 first")
     assert.assert(list.get(chained, 1) == 40, "chain even*10 second")
 
     // ── reduce ──
-    total = range.reduce(range.iter(r), 0, (acc, x) => acc + x)
+    total = range.reduce(result.unwrap(range.iter(r)), 0, (acc, x) => acc + x)
     assert.assert(total == 15, "reduce sum 1..5 = 15")
 }

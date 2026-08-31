@@ -364,7 +364,10 @@ for i in 0..10..2 {
 > **#302**：`Range(Int)` 已正式落地——具名字段 `r.start`/`r.end`/`r.step` 可访问；
 > `x in r` 运行时走 `std.range.contains`（界检查 + 步长对齐），证明管道识别为区间命题
 > `x >= r.start && x < r.end && (x - r.start) % r.step == 0`（区间保持区间，不物化）。
-> step=0 字面量编译期拒绝，动态 step=0 运行时错误（未来错误系统落地后升格 Result，#301）。
+> step=0 字面量编译期拒绝；动态 step=0 已 Result 化（#316，#301 首个挂载点）：
+> `std.range.iter` → `Result(Iterator, Error)`、`std.range.contains` → `Result(Bool, Error)`，
+> 消费点用 `?` 沿调用栈传播或 `result.unwrap` 显式分流；`for`/`in` 糖降级在 ir_gen
+> 解包，Err 分支（动态 step=0）显式失败（`abort_invalid_step`），绝不静默死循环。
 > 接口实例化（类型体 `Iterator(Int)` 声明）的类型语法与静态分发已随 RFC-011a 阶段 1-2 落地（#307）：
 > 类型体应用项 `Iterator(Int)` 触发 `Self ↦ Range` 替换展开与完整性检查，通过后生成实现证明。
 > 动态分发已随阶段 3 落地：接口名未实例化即存在类型（`List(Animal)`），具体值进入存在类型

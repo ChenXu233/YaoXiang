@@ -7,7 +7,9 @@
 //! - 区间谓词：`contains`（`x in r` 的运行时求值路径；证明管道直接识别命题，不走此调用）
 //!
 //! 迭代器载体：4 元组 `(start, end, step, cur)`，`next` 原地推进（List 迭代器先例）。
-//! step=0：字面量编译期拒绝；动态零在 `contains` 显式运行时报错（Result 化挂 #301）。
+//! step=0：字面量编译期拒绝；动态零在 `iter`/`contains` 返回 `Err(Error)`
+//! （#316 Result 化——`?` 传播或 `result.unwrap` 分流；`for`/`in` 糖降级在
+//! ir_gen 解包，Err 分支走 `abort_invalid_step` 显式失败）。
 
 use crate::backends::common::{HeapValue, RuntimeValue};
 use crate::backends::ExecutorError;
@@ -29,7 +31,7 @@ impl StdModule for RangeModule {
             export!(
                 "iter",
                 "std.range.iter",
-                "(r: Range(Int)) -> Iterator(Any)",
+                "(r: Range(Int)) -> Result(Iterator(Any), Error)",
                 native_iter
             ),
             export!(
@@ -47,8 +49,14 @@ impl StdModule for RangeModule {
             export!(
                 "contains",
                 "std.range.contains",
-                "(r: Range(Int), x: Int) -> Bool",
+                "(r: Range(Int), x: Int) -> Result(Bool, Error)",
                 native_contains
+            ),
+            export!(
+                "abort_invalid_step",
+                "std.range.abort_invalid_step",
+                "(r: Range(Int)) -> Any",
+                native_abort_invalid_step
             ),
             export!(
                 "map",
@@ -186,6 +194,8 @@ fn adapter_fill(
 
 /// Native implementation: iter - 创建 Range 迭代器
 /// 返回 4 元组 (start, end, step, cur)，cur 初始 = start
+/// #316：签名 Result(Iterator(Any), Error)——动态 step=0 不再硬崩，
+/// 返回 Err(Error) 值，`?` 沿调用栈传播或 result.unwrap 显式分流
 fn native_iter(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
@@ -198,12 +208,10 @@ fn native_iter(
             ))
         }
     };
-    // #302：动态 step=0 显式运行时错误（旧 ir_gen 走除零陷阱，迁移后协议面接管；
-    // 字面量零已被 typecheck 拒绝；Result 化挂 #301）
+    // #316：动态 step=0 → Err(Error) 值（构造点已拦字面量零；旧运行时硬崩废除）
     if step == 0 {
-        return Err(ExecutorError::runtime_only(
-            "Range step must be non-zero (dynamic step=0)",
-        ));
+        let err = crate::std::result::error_new("Range step must be non-zero", ctx);
+        return Ok(crate::std::result::result_err(err));
     }
     let items = vec![
         RuntimeValue::Int(start),
@@ -212,7 +220,7 @@ fn native_iter(
         RuntimeValue::Int(start),
     ];
     let handle = ctx.heap.allocate(HeapValue::Tuple(items));
-    Ok(RuntimeValue::Tuple(handle))
+    Ok(crate::std::result::result_ok(RuntimeValue::Tuple(handle)))
 }
 
 /// Native implementation: has_next - 符号派发：pos → cur < end，neg → cur > end
@@ -308,10 +316,11 @@ fn native_next(
 ///
 /// 语义与 ir_gen 旧脱糖一致：界检查（符号派发）+ 步长对齐
 /// `x in r ⟺ x >= start && x < end && (x - start) % step == 0`（负 step 方向取反）。
-/// step=0：动态零在此显式报错（构造点已拦字面量零；Result 化挂 #301）。
+/// #316：签名 Result(Bool, Error)——动态 step=0 返回 Err(Error) 值（`x in r`
+/// 糖降级在 ir_gen 解包，Err 分支显式失败）；构造点已拦字面量零。
 fn native_contains(
     args: &[RuntimeValue],
-    _ctx: &mut NativeContext<'_>,
+    ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     let (start, end, step) = match args.first() {
         Some(RuntimeValue::Range { start, end, step }) => (*start, *end, *step),
@@ -330,10 +339,10 @@ fn native_contains(
         }
     };
 
+    // #316：动态 step=0 → Err(Error) 值
     if step == 0 {
-        return Err(ExecutorError::runtime_only(
-            "Range step must be non-zero (dynamic step=0)",
-        ));
+        let err = crate::std::result::error_new("Range step must be non-zero", ctx);
+        return Ok(crate::std::result::result_err(err));
     }
 
     // 界检查（符号派发）+ 步长对齐
@@ -343,7 +352,24 @@ fn native_contains(
         x <= start && x > end
     };
     let aligned = (x - start) % step == 0;
-    Ok(RuntimeValue::Bool(in_bounds && aligned))
+    Ok(crate::std::result::result_ok(RuntimeValue::Bool(
+        in_bounds && aligned,
+    )))
+}
+
+/// Native implementation: abort_invalid_step - `for`/`in` 糖降级的 Err 分支
+///
+/// #316：iter/contains Result 化后，语法糖形态（for 循环、`x in r` 谓词）
+/// 不产 Result 值可传播——隐式 `?` 对非 Result 函数是类型违约。糖降级统一
+/// 解包，Err 分支调用本 native 显式失败（替代此前 native 深处的硬崩，
+/// 失败点在用户代码的消费处，消息明确）。
+fn native_abort_invalid_step(
+    _args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    Err(ExecutorError::runtime_only(
+        "Range step must be non-zero (for/in consumption)",
+    ))
 }
 
 // 迭代器适配器（§6.2）：map/filter 惰性，collect/reduce/for_each 消费

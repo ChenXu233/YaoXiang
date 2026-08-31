@@ -2854,6 +2854,16 @@ impl AstToIrGenerator {
                 span,
                 def: None,
             });
+            // #316：contains 已 Result(Bool, Error) 化——`x in r` 糖降级统一解包，
+            // Err（动态 step=0）分支显式失败（Bool 谓词无可传播的 Result）
+            self.emit_result_unwrap_or_abort(
+                result_reg,
+                result_reg,
+                "std.range.abort_invalid_step",
+                Operand::Local(container_reg),
+                span,
+                instructions,
+            );
             return Ok(());
         }
 
@@ -2871,6 +2881,65 @@ impl AstToIrGenerator {
             });
         }
         Ok(())
+    }
+
+    /// #316：Result 解包，Err 分支转显式失败——`for`/`in` 糖消费 Result API 的统一降级
+    ///
+    /// IR 序列同 #301 `?`（VariantTag/Eq/JmpIfNot/VariantPayload），差别在 Err
+    /// 分支：糖形态不产 Result 值（for 循环无返回、`x in r` 是 Bool 谓词），
+    /// 隐式 `?` 对非 Result 函数是类型违约——改为调用 abort native 显式失败
+    /// （失败点在用户消费处，消息明确，绝不静默续跑/死循环）。
+    fn emit_result_unwrap_or_abort(
+        &mut self,
+        result_reg: usize,
+        dst_reg: usize,
+        abort_fn: &str,
+        abort_arg: Operand,
+        span: Span,
+        instructions: &mut Vec<Instruction>,
+    ) {
+        let tag_reg = self.next_temp_reg();
+        instructions.push(Instruction::VariantTag {
+            dst: Operand::Local(tag_reg),
+            obj: Operand::Local(result_reg),
+            group: "Result".to_string(),
+            span,
+        });
+        let ok_const = self.next_temp_reg();
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(ok_const),
+            src: Operand::Const(ConstValue::Int(0)),
+        });
+        let eq_reg = self.next_temp_reg();
+        instructions.push(Instruction::Eq {
+            dst: Operand::Local(eq_reg),
+            lhs: Operand::Local(tag_reg),
+            rhs: Operand::Local(ok_const),
+        });
+        // variant != 0（Err）→ 跳到显式失败
+        let is_err_idx = instructions.len();
+        instructions.push(Instruction::JmpIfNot(Operand::Local(eq_reg), 0));
+        // Ok 路径：payload 原地解包为消费值
+        instructions.push(Instruction::VariantPayload {
+            dst: Operand::Local(dst_reg),
+            obj: Operand::Local(result_reg),
+            group: "Result".to_string(),
+            span,
+        });
+        let end_idx = instructions.len();
+        instructions.push(Instruction::Jmp(0));
+        // Err 路径：abort native 必返 ExecutorError，后续指令不可达
+        let err_target = instructions.len();
+        instructions[is_err_idx] = Instruction::JmpIfNot(Operand::Local(eq_reg), err_target);
+        instructions.push(Instruction::Call {
+            dst: None,
+            func: Operand::Const(ConstValue::String(abort_fn.to_string())),
+            args: vec![abort_arg],
+            span,
+            def: None,
+        });
+        let end_target = instructions.len();
+        instructions[end_idx] = Instruction::Jmp(end_target);
     }
 
     /// 生成基于迭代器协议的 For 循环 IR
@@ -2893,16 +2962,14 @@ impl AstToIrGenerator {
         self.generate_expr_ir(iterable, iterable_reg, instructions, constants)?;
 
         // 1.5 #302：按静态类型派发协议函数名（Range → std.range.*，其余 → std.list.*）
-        let (iter_fn, has_next_fn, next_fn) = {
-            let is_range = self
-                .get_expr_mono_type(iterable)
-                .map(|t| t.is_range())
-                .unwrap_or(false);
-            if is_range {
-                ("std.range.iter", "std.range.has_next", "std.range.next")
-            } else {
-                ("std.list.iter", "std.list.has_next", "std.list.next")
-            }
+        let is_range = self
+            .get_expr_mono_type(iterable)
+            .map(|t| t.is_range())
+            .unwrap_or(false);
+        let (iter_fn, has_next_fn, next_fn) = if is_range {
+            ("std.range.iter", "std.range.has_next", "std.range.next")
+        } else {
+            ("std.list.iter", "std.list.has_next", "std.list.next")
         };
 
         // 2. 创建迭代器: iterator = iter(iterable)
@@ -2914,6 +2981,18 @@ impl AstToIrGenerator {
             span: for_span,
             def: None,
         });
+        // #316：Range 协议 iter 已 Result(Iterator, Error) 化——糖降级统一解包，
+        // Err（动态 step=0）分支显式失败（for 循环无可传播的 Result，且绝不死循环）
+        if is_range {
+            self.emit_result_unwrap_or_abort(
+                iterator_reg,
+                iterator_reg,
+                "std.range.abort_invalid_step",
+                Operand::Local(iterable_reg),
+                for_span,
+                instructions,
+            );
+        }
 
         // 3. 注册循环变量
         let var_reg = self.next_temp_reg();

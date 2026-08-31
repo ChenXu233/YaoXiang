@@ -1,7 +1,8 @@
 // 06-compile-errors/range_dynamic_step0_err.yx
-// [test:error]: #302——动态 step=0 运行时错误
-// 预期: 字面量 step=0 被 typecheck 拒绝（#300 既有）；动态 step=0 在协议面
-//       std.range.iter 显式报错（旧 ir_gen 除零陷阱迁移后由 native 接管）
+// [test:error]: #302/#316——动态 step=0 的 for 消费显式失败
+// 预期: 字面量 step=0 被 typecheck 拒绝（#300 既有）；动态 step=0 下
+//       std.range.iter 返回 Err(Error)（#316 Result 化），for 糖降级解包
+//       Err 分支调用 abort_invalid_step 显式失败——绝不静默死循环
 // 验证: for 循环不会因 step=0 死循环——迭代器创建即失败
 // 状态: ❌ 应运行失败
 

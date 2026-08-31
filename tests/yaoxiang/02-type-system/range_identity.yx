@@ -5,6 +5,7 @@
 // 状态: ✅ 可运行
 
 use std.assert
+use std.result
 use std.range
 
 main = {
@@ -20,9 +21,9 @@ main = {
     assert.assert(r != 1..9, "range structural neq")
 
     // 值语义：Range 是不可变三标量记录，消费后源仍可用（不 Move）
-    assert.assert(range.contains(r, 5), "consume r via contains")
+    assert.assert(result.unwrap(range.contains(r, 5)), "consume r via contains")
     assert.assert(r == 1..10, "range survives value use")
-    it2 = range.iter(r)
+    it2 = result.unwrap(range.iter(r))
     assert.assert(range.next(it2) == 1, "range survives iterator creation")
 
     // for 协议迁移后语义不变（负 step 递减）
