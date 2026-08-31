@@ -11,17 +11,11 @@
 //! §3.5: MetaType 统一 — UniverseLevel + type_params（RFC-027 §3.2）
 //! §3.8: 泛型实例化
 
-use crate::frontend::core::types::{
-    MonoType, PolyType, StructType, TypeConstraintSolver, TypeVar, UniverseLevel,
-};
+use crate::frontend::core::types::{MonoType, StructType, TypeConstraintSolver, UniverseLevel};
 use crate::util::span::Span;
 
 fn s() -> TypeConstraintSolver {
     TypeConstraintSolver::new()
-}
-
-fn tv(idx: usize) -> TypeVar {
-    TypeVar::new(idx)
 }
 
 fn struct_ty(
@@ -417,60 +411,6 @@ fn test_reset_clears_everything() {
 
 // §3.8: 泛型实例化和泛化
 
-#[test]
-fn test_instantiate_poly_fresh_vars() {
-    let mut solver = s();
-    let poly = PolyType::new(
-        vec![tv(0), tv(1)],
-        MonoType::Fn {
-            params: vec![MonoType::TypeVar(tv(0))],
-            return_type: Box::new(MonoType::TypeVar(tv(1))),
-        },
-    );
-    let inst = solver.instantiate(&poly);
-    match inst {
-        MonoType::Fn {
-            params,
-            return_type,
-            ..
-        } => {
-            assert!(matches!(&params[0], MonoType::TypeVar(_)));
-            assert!(matches!(&*return_type, MonoType::TypeVar(_)));
-            // Fresh vars should have different indices
-            assert_ne!(params[0], *return_type);
-        }
-        _ => panic!("Expected Fn"),
-    }
-}
-
-#[test]
-fn test_generalize_captures_free_vars() {
-    let mut solver = s();
-    let v0 = solver.new_var().type_var().unwrap();
-    let v1 = solver.new_var().type_var().unwrap();
-
-    let body = MonoType::Fn {
-        params: vec![MonoType::TypeVar(v0)],
-        return_type: Box::new(MonoType::TypeVar(v1)),
-    };
-    let poly = solver.generalize(&body);
-    assert!(!poly.is_mono());
-    // Should have type_binders for v0 and v1 (in some order)
-    // The exact count depends on collect_generalizable_vars
-    assert!(poly.type_binders.len() >= 2);
-}
-
-#[test]
-fn test_generalize_already_bound_var() {
-    let mut solver = s();
-    let v0 = solver.new_var().type_var().unwrap();
-    let _ = solver.bind(v0, &MonoType::Int(64));
-
-    let poly = solver.generalize(&MonoType::TypeVar(v0));
-    assert!(poly.is_mono());
-    assert_eq!(poly.body, MonoType::Int(64));
-}
-
 // §3.8: Unification with variable binding
 
 #[test]
@@ -539,15 +479,6 @@ fn test_solve_contradictory_constraints() {
 }
 
 // §3.8: is_unconstrained / get_binding
-
-#[test]
-fn test_is_unconstrained_after_bind() {
-    let mut solver = s();
-    let tv = solver.new_var().type_var().unwrap();
-    assert!(solver.is_unconstrained(tv));
-    let _ = solver.bind(tv, &MonoType::Bool);
-    assert!(!solver.is_unconstrained(tv));
-}
 
 #[test]
 fn test_get_binding_and_get_binding_mut() {
@@ -846,58 +777,7 @@ fn test_unify_fn_param_count_mismatch() {
 
 // §3.8: instantiate 包含 Result/Option 的 PolyType
 
-#[test]
-fn test_instantiate_with_result_wrapped_types() {
-    let mut solver = s();
-    let tv = TypeVar::new(0);
-    let poly = PolyType::new(
-        vec![tv],
-        MonoType::make_result(MonoType::TypeVar(tv), MonoType::make_string()),
-    );
-    let inst = solver.instantiate(&poly);
-    assert!(
-        matches!(inst, MonoType::Generic { name, .. } if name == "Result"),
-        "should instantiate Result"
-    );
-}
-
-#[test]
-fn test_instantiate_with_option_wrapped_types() {
-    let mut solver = s();
-    let tv = TypeVar::new(0);
-    let poly = PolyType::new(vec![tv], MonoType::make_option(MonoType::TypeVar(tv)));
-    let inst = solver.instantiate(&poly);
-    assert!(
-        matches!(inst, MonoType::Generic { name, .. } if name == "Option"),
-        "should instantiate Option"
-    );
-}
-
 // §3.8: generalize 包含 Arc/Weak 的类型
-
-#[test]
-fn test_generalize_with_arc_wrapped_types() {
-    let mut solver = s();
-    let v = solver.new_var().type_var().unwrap();
-    let body = MonoType::Generic {
-        name: "Arc".into(),
-        args: vec![MonoType::TypeVar(v)],
-    };
-    let poly = solver.generalize(&body);
-    assert!(!poly.is_mono(), "Arc with free var should generalize");
-}
-
-#[test]
-fn test_generalize_with_weak_wrapped_types() {
-    let mut solver = s();
-    let v = solver.new_var().type_var().unwrap();
-    let body = MonoType::Generic {
-        name: "Weak".into(),
-        args: vec![MonoType::TypeVar(v)],
-    };
-    let poly = solver.generalize(&body);
-    assert!(!poly.is_mono(), "Weak with free var should generalize");
-}
 
 // §3.8: contains_var 在 Option/Result/Fn 参数中
 
@@ -990,49 +870,7 @@ fn test_unify_list_with_var() {
     );
 }
 
-// fresh_substitution
-
-#[test]
-fn test_fresh_substitution() {
-    let mut solver = s();
-    let tv = TypeVar::new(0);
-    let sub = solver.fresh_substitution(&[tv]);
-    assert_eq!(sub.len(), 1);
-    assert!(sub.contains_key(&tv));
-    // The new var should be fresh
-    if let Some(new_ty) = sub.get(&tv) {
-        assert!(matches!(new_ty, MonoType::TypeVar(_)));
-    }
-}
-
 // generalize 收集自由变量
-
-#[test]
-fn test_generalize_collects_free_vars() {
-    let mut solver = s();
-    let v0 = solver.new_var().type_var().unwrap();
-    let v1 = solver.new_var().type_var().unwrap();
-
-    // Type with multiple free vars
-    let body = MonoType::Fn {
-        params: vec![MonoType::TypeVar(v0)],
-        return_type: Box::new(MonoType::make_tuple(vec![
-            MonoType::TypeVar(v0),
-            MonoType::TypeVar(v1),
-        ])),
-    };
-    let poly = solver.generalize(&body);
-    // Should generalize both v0 and v1
-    assert!(!poly.is_mono());
-    assert!(!poly.type_binders.is_empty());
-}
-
-#[test]
-fn test_generalize_no_free_vars() {
-    let mut solver = s();
-    let poly = solver.generalize(&MonoType::Int(32));
-    assert!(poly.is_mono());
-}
 
 // solve with constraints
 
@@ -1054,95 +892,6 @@ fn test_solve_multiple_independent() {
 
 // substitute_type — 通过 PolyType instantiate 覆盖所有容器变体的替换
 // 触发 solver 内部的 substitute_type 对 Struct/Tuple/Dict/Set/Fn/Union 等的递归
-
-#[test]
-fn test_instantiate_poly_with_tuple() {
-    let mut solver = s();
-    let tv = TypeVar::new(0);
-    // PolyType where body is Tuple([T, Int(32)])
-    let poly = PolyType::new(
-        vec![tv],
-        MonoType::make_tuple(vec![MonoType::TypeVar(tv), MonoType::Int(32)]),
-    );
-    let inst = solver.instantiate(&poly);
-    assert!(
-        matches!(inst, MonoType::Generic { ref name, ref args } if name == "Tuple" && args.len() == 2)
-    );
-    // The first element should be a fresh TypeVar (not the original tv)
-    if let MonoType::Generic { name, args } = inst {
-        assert!(name == "Tuple");
-        assert!(matches!(args[0], MonoType::TypeVar(_)));
-        assert_eq!(args[1], MonoType::Int(32));
-    }
-}
-
-#[test]
-fn test_instantiate_poly_with_dict() {
-    let mut solver = s();
-    let tv = TypeVar::new(0);
-    let poly = PolyType::new(
-        vec![tv],
-        MonoType::make_dict(MonoType::TypeVar(tv), MonoType::TypeVar(tv)),
-    );
-    let inst = solver.instantiate(&poly);
-    assert!(matches!(inst, MonoType::Generic { name, .. } if name == "Dict"));
-}
-
-#[test]
-fn test_instantiate_poly_with_struct() {
-    let mut solver = s();
-    let tv = TypeVar::new(0);
-    let poly = PolyType::new(
-        vec![tv],
-        MonoType::Struct(StructType {
-            name: "Wrap".to_string(),
-            fields: vec![("v".to_string(), MonoType::TypeVar(tv))],
-            methods: std::collections::HashMap::new(),
-            field_mutability: vec![false],
-            field_has_default: vec![false],
-            interfaces: vec![],
-        }),
-    );
-    let inst = solver.instantiate(&poly);
-    assert!(matches!(inst, MonoType::Struct(ref s) if s.fields.len() == 1));
-}
-
-#[test]
-fn test_instantiate_poly_with_union_and_range() {
-    let mut solver = s();
-    let tv = TypeVar::new(0);
-    let poly = PolyType::new(
-        vec![tv],
-        MonoType::Union(vec![
-            MonoType::TypeVar(tv),
-            MonoType::Generic {
-                name: "Range".into(),
-                args: vec![MonoType::TypeVar(tv)],
-            },
-        ]),
-    );
-    let inst = solver.instantiate(&poly);
-    assert!(matches!(inst, MonoType::Union(_)));
-}
-
-#[test]
-fn test_instantiate_poly_with_assoc_and_arc() {
-    let mut solver = s();
-    let tv = TypeVar::new(0);
-    let poly = PolyType::new(
-        vec![tv],
-        MonoType::AssocType {
-            host_type: Box::new(MonoType::Generic {
-                name: "Arc".into(),
-                args: vec![MonoType::TypeVar(tv)],
-            }),
-            assoc_name: "Item".to_string(),
-            assoc_args: vec![MonoType::TypeVar(tv)],
-        },
-    );
-    let inst = solver.instantiate(&poly);
-    assert!(matches!(inst, MonoType::AssocType { .. }));
-}
 
 // expand_type_mut — Struct/Tuple 等带绑定的容器
 
@@ -1204,27 +953,6 @@ fn test_unify_union_unordered_mismatch() {
 }
 
 // generalize with nested containers — collect_generalizable_vars 路径
-
-#[test]
-fn test_generalize_with_nested_containers() {
-    let mut solver = s();
-    let v = solver.new_var().type_var().unwrap();
-    // Type containing var inside Struct → Tuple → List
-    let body = MonoType::Struct(StructType {
-        name: "Outer".to_string(),
-        fields: vec![(
-            "inner".to_string(),
-            MonoType::make_tuple(vec![MonoType::make_list(MonoType::TypeVar(v))]),
-        )],
-        methods: std::collections::HashMap::new(),
-        field_mutability: vec![false],
-        field_has_default: vec![false],
-        interfaces: vec![],
-    });
-    let poly = solver.generalize(&body);
-    assert!(!poly.is_mono());
-    assert_eq!(poly.type_binders.len(), 1);
-}
 
 #[test]
 fn test_resolve_never_builtin() {

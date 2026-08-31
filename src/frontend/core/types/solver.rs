@@ -3,12 +3,12 @@
 //! 实现类型系统的核心求解算法：
 //! - TypeConstraintSolver: 类型约束求解器（union-find 实现）
 
-use crate::frontend::core::types::mono::{TypeBinding, MonoType, StructType, EnumType, PolyType};
+use crate::frontend::core::types::mono::{TypeBinding, MonoType, StructType, EnumType};
 use crate::frontend::core::types::constraint::TypeConstraint;
 use crate::frontend::core::types::error::TypeConstraintError;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::Span;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 /// 类型约束求解器（union-find 实现）
 ///
@@ -640,116 +640,6 @@ impl TypeConstraintSolver {
         }
     }
 
-    /// 实例化多态类型
-    ///
-    /// 将多态类型中的泛型变量替换为新类型变量
-    pub fn instantiate(
-        &mut self,
-        poly: &PolyType,
-    ) -> MonoType {
-        let substitution: HashMap<_, _> = poly
-            .type_binders
-            .iter()
-            .map(|var| (*var, self.new_var()))
-            .collect();
-
-        self.substitute_type(&poly.body, &substitution)
-    }
-
-    /// 替换类型中的变量
-    #[allow(clippy::only_used_in_recursion)]
-    fn substitute_type(
-        &self,
-        ty: &MonoType,
-        substitution: &HashMap<super::var::TypeVar, MonoType>,
-    ) -> MonoType {
-        match ty {
-            MonoType::TypeVar(v) => {
-                if let Some(new_ty) = substitution.get(v) {
-                    new_ty.clone()
-                } else {
-                    ty.clone()
-                }
-            }
-            MonoType::Struct(s) => MonoType::Struct(StructType {
-                name: s.name.clone(),
-                fields: s
-                    .fields
-                    .iter()
-                    .map(|(n, t)| (n.clone(), self.substitute_type(t, substitution)))
-                    .collect(),
-                methods: s.methods.clone(),
-                field_mutability: s.field_mutability.clone(),
-                field_has_default: s.field_has_default.clone(),
-                interfaces: s.interfaces.clone(),
-            }),
-            MonoType::Enum(e) => MonoType::Enum(EnumType {
-                name: e.name.clone(),
-                variants: e.variants.clone(),
-            }),
-            MonoType::Fn {
-                params,
-                return_type,
-            } => MonoType::Fn {
-                params: params
-                    .iter()
-                    .map(|t| self.substitute_type(t, substitution))
-                    .collect(),
-                return_type: Box::new(self.substitute_type(return_type, substitution)),
-            },
-            // 关联类型替换
-            MonoType::AssocType {
-                host_type,
-                assoc_name,
-                assoc_args,
-            } => MonoType::AssocType {
-                host_type: Box::new(self.substitute_type(host_type, substitution)),
-                assoc_name: assoc_name.clone(),
-                assoc_args: assoc_args
-                    .iter()
-                    .map(|t| self.substitute_type(t, substitution))
-                    .collect(),
-            },
-            // #299：容器/复合类型统一走 Generic 递归替换
-            MonoType::Generic { name, args } => MonoType::Generic {
-                name: name.clone(),
-                args: args
-                    .iter()
-                    .map(|t| self.substitute_type(t, substitution))
-                    .collect(),
-            },
-            // 联合类型替换
-            MonoType::Union(types) => MonoType::Union(
-                types
-                    .iter()
-                    .map(|t| self.substitute_type(t, substitution))
-                    .collect(),
-            ),
-            // 交集类型替换
-            MonoType::Intersection(types) => MonoType::Intersection(
-                types
-                    .iter()
-                    .map(|t| self.substitute_type(t, substitution))
-                    .collect(),
-            ),
-            // 基本类型不需要替换
-            _ => ty.clone(),
-        }
-    }
-
-    /// 生成新类型变量的替换映射（用于多态函数调用）
-    ///
-    /// 将泛型参数替换为新的类型变量
-    pub fn fresh_substitution(
-        &mut self,
-        type_binders: &[super::var::TypeVar],
-    ) -> HashMap<super::var::TypeVar, MonoType> {
-        type_binders
-            .iter()
-            .map(|var| (*var, self.new_var()))
-            .collect()
-    }
-
     /// 检查类型变量是否在作用域内
     #[allow(clippy::only_used_in_recursion)]
     pub fn contains_var(
@@ -784,30 +674,6 @@ impl TypeConstraintSolver {
             MonoType::Generic { args, .. } => args.iter().any(|t| self.contains_var(t, var)),
             // 基本类型和类型引用不包含类型变量
             _ => false,
-        }
-    }
-
-    /// 泛化类型
-    pub fn generalize(
-        &mut self,
-        mono_type: &MonoType,
-    ) -> PolyType {
-        let resolved = self.resolve(mono_type);
-        let mut seen = HashSet::new();
-        let mut free_vars = Vec::new();
-        self.collect_generalizable_vars(&resolved, &mut seen, &mut free_vars);
-        PolyType::new(free_vars, resolved)
-    }
-
-    /// 检查类型变量是否未受约束
-    pub fn is_unconstrained(
-        &self,
-        var: super::var::TypeVar,
-    ) -> bool {
-        if let Some(binding) = self.bindings.get(var.index()) {
-            matches!(binding, TypeBinding::Unbound)
-        } else {
-            true
         }
     }
 
@@ -875,97 +741,5 @@ impl TypeConstraintSolver {
         }
 
         false
-    }
-
-    fn collect_generalizable_vars(
-        &self,
-        ty: &MonoType,
-        seen: &mut HashSet<usize>,
-        out: &mut Vec<super::var::TypeVar>,
-    ) {
-        match ty {
-            MonoType::TypeVar(v) => {
-                let root = self.find_readonly(*v);
-                match self.bindings.get(root.index()) {
-                    Some(TypeBinding::Bound(bound)) => {
-                        self.collect_generalizable_vars(bound, seen, out);
-                    }
-                    _ => {
-                        if !self.generic_vars.contains_key(&root.index())
-                            && seen.insert(root.index())
-                        {
-                            out.push(root);
-                        }
-                    }
-                }
-            }
-            MonoType::Struct(s) => {
-                for (_, field_ty) in &s.fields {
-                    self.collect_generalizable_vars(field_ty, seen, out);
-                }
-            }
-            MonoType::Union(types) | MonoType::Intersection(types) => {
-                for t in types {
-                    self.collect_generalizable_vars(t, seen, out);
-                }
-            }
-            MonoType::Ref { inner, .. } => self.collect_generalizable_vars(inner, seen, out),
-            MonoType::Fn {
-                params,
-                return_type,
-                ..
-            } => {
-                for p in params {
-                    self.collect_generalizable_vars(p, seen, out);
-                }
-                self.collect_generalizable_vars(return_type, seen, out);
-            }
-            MonoType::AssocType {
-                host_type,
-                assoc_args,
-                ..
-            } => {
-                self.collect_generalizable_vars(host_type, seen, out);
-                for arg in assoc_args {
-                    self.collect_generalizable_vars(arg, seen, out);
-                }
-            }
-            MonoType::MetaType { type_params, .. } => {
-                for p in type_params {
-                    self.collect_generalizable_vars(p, seen, out);
-                }
-            }
-            MonoType::Literal { base_type, .. } => {
-                self.collect_generalizable_vars(base_type, seen, out);
-            }
-            MonoType::Enum(_)
-            | MonoType::TypeRef(_)
-            | MonoType::Void
-            | MonoType::Never
-            | MonoType::Bool
-            | MonoType::Int(_)
-            | MonoType::Float(_)
-            | MonoType::Char
-            | MonoType::LibraryRef { .. }
-            | MonoType::ExternRef { .. } => {}
-            MonoType::Generic { args, .. } => {
-                for a in args {
-                    self.collect_generalizable_vars(a, seen, out);
-                }
-            }
-            MonoType::Refined { base, .. } => {
-                self.collect_generalizable_vars(base, seen, out);
-            }
-            MonoType::DepFn {
-                params,
-                return_type,
-                ..
-            } => {
-                for p in params {
-                    self.collect_generalizable_vars(&p.ty, seen, out);
-                }
-                self.collect_generalizable_vars(return_type, seen, out);
-            }
-        }
     }
 }
