@@ -397,6 +397,13 @@ impl TypeEnvironment {
                     args: new_args,
                 }
             }
+            // RFC-011a §3：impl 签名 = 接口签名经 Self↦具体类型替换——替换必须
+            // 结构递归。此前 Ref 落入兜底原样克隆，接口 `speak: (self: &Self)` 与
+            // impl `(self: &Dog)` 比较时 expected 侧内层仍是不变元 → E1099 误报。
+            MonoType::Ref { mutable, inner } => MonoType::Ref {
+                mutable: *mutable,
+                inner: Box::new(Self::replace_type_params(inner, param_names, args)),
+            },
             _ => ty.clone(),
         }
     }

@@ -11,8 +11,8 @@ use std.assert
 
 // 接口：参数化类型，Self 是显式类型参数，成员为方法（函数类型字段）
 Animal: (Self: Type) -> Type = {
-    speak: (self: Self) -> String,
-    age: (self: Self) -> Int,
+    speak: (self: &Self) -> String,
+    age: (self: &Self) -> Int,
 }
 
 // 实现：类型体内接口实例化
@@ -22,11 +22,11 @@ Dog: Type = {
 }
 
 // 方法实现：外部声明，实例占住 self 参数位（类型内自动柯里化）
-Dog.speak: (self: Dog) -> String = {
+Dog.speak: (self: &Dog) -> String = {
     return "Woof"
 }
 
-Dog.age: (self: Dog) -> Int = {
+Dog.age: (self: &Dog) -> Int = {
     return 3
 }
 

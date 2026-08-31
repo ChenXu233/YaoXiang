@@ -9,13 +9,13 @@
 use std.assert
 
 Animal: (Self: Type) -> Type = {
-    speak: (self: Self) -> String,
+    speak: (self: &Self) -> String,
 }
 
 // 接口继承：体内实例化 Animal(Self)，Pet(Dog) 时 Self ↦ Dog 再展开 Animal(Dog)
 Pet: (Self: Type) -> Type = {
     Animal(Self),
-    fetch: (self: Self) -> String,
+    fetch: (self: &Self) -> String,
 }
 
 Dog: Type = {
@@ -23,11 +23,11 @@ Dog: Type = {
     Pet(Dog),
 }
 
-Dog.speak: (self: Dog) -> String = {
+Dog.speak: (self: &Dog) -> String = {
     return "Woof"
 }
 
-Dog.fetch: (self: Dog) -> String = {
+Dog.fetch: (self: &Dog) -> String = {
     return self.name + " fetches"
 }
 

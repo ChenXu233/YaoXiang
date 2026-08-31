@@ -8,9 +8,9 @@ use std.assert
 use std.list
 
 Animal: (Self: Type) -> Type = {
-    speak: (self: Self) -> String,
-    age: (self: Self) -> Int,
-    age_up: (self: Self, years: Int) -> Int,
+    speak: (self: &Self) -> String,
+    age: (self: &Self) -> Int,
+    age_up: (self: &Self, years: Int) -> Int,
 }
 
 Dog: Type = {
@@ -18,17 +18,17 @@ Dog: Type = {
     age_years: Int,
     Animal(Dog),
 }
-Dog.speak: (self: Dog) -> String = { return "Woof" }
-Dog.age: (self: Dog) -> Int = { return self.age_years }
-Dog.age_up: (self: Dog, years: Int) -> Int = { return self.age_years + years }
+Dog.speak: (self: &Dog) -> String = { return "Woof" }
+Dog.age: (self: &Dog) -> Int = { return self.age_years }
+Dog.age_up: (self: &Dog, years: Int) -> Int = { return self.age_years + years }
 
 Cat: Type = {
     lives: Int,
     Animal(Cat),
 }
-Cat.speak: (self: Cat) -> String = { return "Meow" }
-Cat.age: (self: Cat) -> Int = { return self.lives * 3 }
-Cat.age_up: (self: Cat, years: Int) -> Int = { return self.lives * 3 + years }
+Cat.speak: (self: &Cat) -> String = { return "Meow" }
+Cat.age: (self: &Cat) -> Int = { return self.lives * 3 }
+Cat.age_up: (self: &Cat, years: Int) -> Int = { return self.lives * 3 + years }
 
 describe: (a: Animal) -> String = {
     return a.speak()

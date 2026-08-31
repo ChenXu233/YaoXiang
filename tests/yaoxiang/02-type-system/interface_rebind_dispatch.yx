@@ -8,7 +8,7 @@ use std.assert
 use std.list
 
 Animal: (Self: Type) -> Type = {
-    speak: (self: Self) -> String,
+    speak: (self: &Self) -> String,
 }
 
 Bird: Type = {
@@ -18,7 +18,7 @@ Bird: Type = {
 }
 
 // 被绑函数（类型体内绑定允许前向引用）
-animal_speak: (self: Bird) -> String = { return "Tweet" }
+animal_speak: (self: &Bird) -> String = { return "Tweet" }
 
 main = {
     zoo: List(Animal) = [Bird("Kiwi")]

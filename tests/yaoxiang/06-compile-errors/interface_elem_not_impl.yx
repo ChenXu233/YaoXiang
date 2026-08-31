@@ -8,14 +8,14 @@ use std.assert
 use std.list
 
 Animal: (Self: Type) -> Type = {
-    speak: (self: Self) -> String,
+    speak: (self: &Self) -> String,
 }
 
 Dog: Type = {
     name: String,
     Animal(Dog),
 }
-Dog.speak: (self: Dog) -> String = { return "Woof" }
+Dog.speak: (self: &Dog) -> String = { return "Woof" }
 
 Stone: Type = {
     weight: Int,

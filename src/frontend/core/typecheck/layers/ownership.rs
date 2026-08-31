@@ -1365,14 +1365,10 @@ impl OwnershipChecker {
             return None;
         };
         // 接收者占 params[0]（RFC-004：Type.method 首参即接收者）。
-        // 仅显式 &self/&mut self（Ref 形）进令牌管线；Self 泛型（RFC-011a 接口
-        // 分发）与按值接收者的所有权语义属 #315 非目标，回退原路径（不建令牌）。
-        if !matches!(
-            params.first(),
-            Some(crate::frontend::core::types::MonoType::Ref { .. })
-        ) {
-            return None;
-        }
+        // 所有权语义完全跟随签名（RFC-009 默认，与自由函数实参一致）：
+        // &T→ReadBorrow，&mut T→WriteBorrow，按值→Move。
+        // 接口的借用接收者由接口作者显式声明 &Self（RFC-011a §3：impl 签名
+        // = 接口签名经 Self↦具体类型替换，拼写与语义在接口侧定死）。
         let own_of = |ty: &crate::frontend::core::types::MonoType| match ty {
             crate::frontend::core::types::MonoType::Ref { mutable: true, .. } => {
                 ParamOwnership::WriteBorrow

@@ -6,7 +6,7 @@
 use std.assert
 
 Animal: (Self: Type) -> Type = {
-    name: (self: Self) -> String,
+    name: (self: &Self) -> String,
 }
 
 Dog: Type = {
@@ -14,7 +14,7 @@ Dog: Type = {
     Animal(Dog),
 }
 
-Dog.name: (self: Dog) -> String = {
+Dog.name: (self: &Dog) -> String = {
     return self.name
 }
 

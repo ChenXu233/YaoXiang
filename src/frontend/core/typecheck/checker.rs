@@ -1372,6 +1372,10 @@ impl TypeChecker {
                 );
                 return Err(());
             };
+            // impl 签名中的 Self 是 impl 类型的别名（RFC-011a §3：impl 签名与接口
+            // 成员经 Self↦impl 类型替换后完全一致）——两侧用同一实参替换后再比较，
+            // impl 写 &Self 或 &Dog 均与接口 &Self 匹配
+            let found = TypeEnvironment::replace_type_params(&found, &["Self".to_string()], args);
             if &found != expected {
                 self.add_error(
                     ErrorCodeDefinition::interface_method_mismatch(
