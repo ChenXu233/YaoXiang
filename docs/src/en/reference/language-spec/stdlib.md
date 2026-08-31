@@ -1,6 +1,6 @@
 # Standard Library Specification
 
-This document defines the standard library specification of the YaoXiang programming language,
+This document defines the standard library specification for the YaoXiang programming language,
 including the core library, IO library, and math library.
 
 ---
@@ -9,7 +9,7 @@ including the core library, IO library, and math library.
 
 ### 1.1 Basic Types
 
-The standard library provides implementations of the following basic types:
+The standard library provides implementations for the following basic types:
 
 | Type           | Module           | Description         |
 | -------------- | ---------------- | ------------------- |
@@ -30,13 +30,13 @@ Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 
 | Variant       | Syntax               | Description |
 | ------------- | -------------------- | ----------- |
-| `Option.some` | `Option.some(value)` | Has a value |
+| `Option.some` | `Option.some(value)` | Has value   |
 | `Option.none` | `Option.none()`      | No value    |
 
 **Common Methods**:
 
 ```yaoxiang
-// Check if has a value
+// Check whether there is a value
 is_some: (self: Option(T)) -> Bool
 is_none: (self: Option(T)) -> Bool
 
@@ -66,7 +66,7 @@ Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Resu
 **Common Methods**:
 
 ```yaoxiang
-// Check if successful
+// Check whether successful
 is_ok: (self: Result(T, E)) -> Bool
 is_err: (self: Result(T, E)) -> Bool
 
@@ -89,10 +89,10 @@ map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ErrorPropagate ::= Expr '?'
 ```
 
-The `?` operator automatically propagates errors of `Result` type:
+The `?` operator automatically propagates errors from Result types:
 
 ```
-// Return value on success, propagate err on failure
+// Returns the value on success, propagates err on failure
 data = fetch_data()?
 
 // Equivalent to
@@ -102,9 +102,9 @@ data = match fetch_data() {
 }
 ```
 
-### 1.5 Assertions (`std.assert`)
+### 1.5 Assertions (std.assert)
 
-The `std.assert` module provides a unified assertion mechanism—the runtime `assert` and the
+The `std.assert` module provides a unified assertion mechanism — the runtime `assert` and the
 compile-time refinement type `Assert` are two faces of the same primitive.
 
 ```yaoxiang
@@ -126,12 +126,12 @@ assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 
 **Dispatch**:
 
-| Condition                                          | Behavior                                                     |
-| -------------------------------------------------- | ------------------------------------------------------------ |
-| All free variables of `cond` known at compile-time | Compiler evaluates; true → erased, false → compile error     |
-| Runtime free variables exist                       | Insert runtime check, inject flow-sensitive assumption set Γ |
+| Condition                                            | Behavior                                                     |
+| ---------------------------------------------------- | ------------------------------------------------------------ |
+| All free variables of cond are known at compile time | Compiler evaluates; true → erased, false → compile error     |
+| Runtime free variables exist                         | Insert runtime check, inject flow-sensitive assumption set Γ |
 
-`assert(false, "msg")` is equivalent to `raise`—no separate `throw`/`raise` keyword is needed.
+`assert(false, "msg")` is equivalent to raise — no separate throw/raise keyword is needed.
 
 ---
 
@@ -195,17 +195,17 @@ delete_dir: (path: String) -> Result(Void, Error)
 abs: (x: Int) -> Int
 abs: (x: Float) -> Float
 
-// Maximum and minimum
+// Max and min
 max: (a: Int, b: Int) -> Int
 min: (a: Int, b: Int) -> Int
 max: (a: Float, b: Float) -> Float
 min: (a: Float, b: Float) -> Float
 
-// Power operations
+// Power
 pow: (base: Float, exp: Float) -> Float
 sqrt: (x: Float) -> Float
 
-// Logarithms
+// Logarithm
 log: (x: Float) -> Float
 log2: (x: Float) -> Float
 log10: (x: Float) -> Float
@@ -247,7 +247,7 @@ length: (s: String) -> Int
 // String concatenation
 concat: (a: String, b: String) -> String
 
-// String splitting
+// String split
 split: (s: String, delimiter: String) -> List(String)
 
 // String search
@@ -257,7 +257,7 @@ contains: (s: String, pattern: String) -> Bool
 // String replacement
 replace: (s: String, old: String, new: String) -> String
 
-// String trimming
+// String trim
 trim: (s: String) -> String
 trim_left: (s: String) -> String
 trim_right: (s: String) -> String
@@ -343,8 +343,8 @@ Iterator: (T: Type) -> Type = {
 ### 6.2 Iterator Adapters
 
 ```yaoxiang
-// Range iterator (#302: Range is a formal type, runtime identity is a three-scalar
-// immutable record, no longer borrowing Tuple shell; prints `1..10` / `1..10..2`,
+// Range iterator (#302: Range is a formal type; its runtime identity is a three-scalar
+// immutable record, no longer borrowing a Tuple shell; prints `1..10` / `1..10..2`,
 // structural equality, named fields)
 Range: Type = {
     start: Int,
@@ -353,7 +353,7 @@ Range: Type = {
     Iterator(Int)
 }
 
-// Usage (iterator protocol: std.range.iter/has_next/next, for dispatches via static type)
+// Usage (iterator protocol: std.range.iter/has_next/next, for dispatches via static types)
 for i in 0..10 {
     print(i)
 }
@@ -364,33 +364,36 @@ for i in 0..10..2 {
 }
 ```
 
-> **#302**: `Range(Int)` has been formally landed—named fields `r.start` / `r.end` / `r.step` are
-> accessible; `x in r` at runtime goes through `std.range.contains` (bound check + step alignment),
-> the proof pipeline recognizes it as the interval proposition
-> `x >= r.start && x < r.end && (x - r.start) % r.step == 0` (intervals remain intervals, no
-> materialization). Literal `step=0` is rejected at compile-time, dynamic `step=0` produces a
-> runtime error (to be escalated to `Result` after the future error system lands, #301). Interface
-> instantiation (the `Iterator(Int)` declaration in the type body) syntax for type-body application
-> items and static dispatch have landed with RFC-011a stages 1-2 (#307): The type-body application
-> item `Iterator(Int)` triggers `Self ↦ Range` substitution expansion and completeness check,
-> generating an implementation proof upon success. The runtime protocol surface of the `std.range`
-> module is still provided by native methods; migration to interface dispatch belongs to #307
-> stage 3.
+> **#302**: `Range(Int)` has been formally established — the named fields `r.start`/`r.end`/`r.step`
+> are accessible; `x in r` goes through `std.range.contains` at runtime (bound check + step
+> alignment), and the proof pipeline recognizes it as the interval proposition
+> `x >= r.start && x < r.end && (x - r.start) % r.step == 0` (the interval stays an interval, no
+> materialization). A literal `step=0` is rejected at compile time; a dynamic `step=0` raises a
+> runtime error (to be promoted to a Result once the future error system lands, #301). The type
+> syntax for interface instantiation (the `Iterator(Int)` declaration in the type body) and static
+> dispatch have landed with RFC-011a phases 1–2 (#307): the type-body application item
+> `Iterator(Int)` triggers `Self ↦ Range` substitution expansion and completeness checks; once
+> passed, an implementation proof is generated. Dynamic dispatch has landed with phase 3: the
+> interface name exists as a type even when uninstantiated (`List(Animal)`); when a concrete value
+> enters an existential position it is automatically wrapped as a value variant, and method calls on
+> elements are dispatched by the actual type (§6). The runtime protocol surface of the `std.range`
+> module is still provided by native methods for now; migrating to interface dispatch is future
+> work.
 
 ---
 
 ## Appendix: Standard Library Module Index
 
-| Module           | Description                                                                  |
-| ---------------- | ---------------------------------------------------------------------------- |
-| `std.assert`     | Assertion mechanism—runtime `assert` + compile-time `Assert` refinement type |
-| `std.option`     | Option type                                                                  |
-| `std.result`     | Result type                                                                  |
-| `std.collection` | Collection types: List, Map, etc.                                            |
-| `std.string`     | String operations                                                            |
-| `std.array`      | Array operations                                                             |
-| `std.iterator`   | Iterator (protocol surface currently provided by `std.range`, #302)          |
-| `std.range`      | Range iterator and interval predicates, adapters (#302)                      |
+| Module           | Description                                                                 |
+| ---------------- | --------------------------------------------------------------------------- |
+| `std.assert`     | Assertion mechanism — runtime assert + compile-time Assert refinement type  |
+| `std.option`     | Option type                                                                 |
+| `std.result`     | Result type                                                                 |
+| `std.collection` | List, Map and other collection types                                        |
+| `std.string`     | String operations                                                           |
+| `std.array`      | Array operations                                                            |
+| `std.iterator`   | Iterators (the protocol surface is currently provided by `std.range`, #302) |
+| `std.range`      | Range iterator, interval predicates and adapters (#302)                     |
 
 ### A.2 IO Modules
 

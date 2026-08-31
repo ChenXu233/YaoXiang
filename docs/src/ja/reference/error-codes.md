@@ -1,6 +1,6 @@
 # エラーコードリファレンス
 
-YaoXiang コンパイラは、エラーコードを用いてさまざまな種類の診断情報を識別します。エラーコードは番号範囲ごとにグループ化されており、各コードは特定のエラーシナリオに対応します。
+YaoXiang コンパイラはエラーコードを使用してさまざまな種類の診断情報を識別します。エラーコードは番号範囲ごとにグループ化されており、各エラーコードは特定のエラーシナリオに対応します。
 
 ---
 
@@ -14,79 +14,87 @@ YaoXiang コンパイラは、エラーコードを用いてさまざまな種�
 | E0002        | `Invalid number literal: '{literal}'`                                                  | 無効な数値リテラル     |
 | E0003        | `Unterminated string starting at line {line}`                                          | 終端されていない文字列 |
 | E0004        | `Invalid character literal: '{literal}'`                                               | 無効な文字リテラル     |
-| E0010        | `Expected {expected}, found {found}`                                                   | 期待されたトークン     |
+| E0010        | `Expected {expected}, found {found}`                                                   | 予期されたトークン     |
 | E0011        | `Unexpected token: '{token}'`                                                          | 予期しないトークン     |
 | E0012        | `Invalid syntax: {reason}`                                                             | 無効な構文             |
 | E0013        | `Mismatched {bracket_type}: opened at line {open_line}, column {open_col}, not closed` | 一致しない括弧         |
 | E0014        | `Missing semicolon after {statement}`                                                  | セミコロンの欠落       |
 
-## E1xxx -- 型検査
+## E1xxx -- 型チェック
 
-型検査の段階で生成されるエラーで、変数の型、関数呼び出し、パターンマッチング、generics のインスタンス化、並行セマンティクス、エラー伝播などを網羅します。
+型チェック段階で生成されるエラー。変数の型、関数呼び出し、パターンマッチ、ジェネリックインスタンス化、並行セマンティクス、エラー伝播などを網羅します。
 
-| エラーコード | テンプレート                                                                   | 説明                                           |
-| ------------ | ------------------------------------------------------------------------------ | ---------------------------------------------- |
-| E1001        | `Unknown variable: '{name}'`                                                   | 未知の変数                                     |
-| E1002        | `Expected type '{expected}', found type '{found}'`                             | 型の不一致                                     |
-| E1003        | `Unknown type: '{type}'`                                                       | 未知の型                                       |
-| E1010        | `Function '{func}' expects {expected} arguments, found {found}`                | 引数の数が一致しない                           |
-| E1011        | `Parameter type mismatch: expected '{expected}', found '{found}'`              | 引数の型が一致しない                           |
-| E1012        | `Return type mismatch: expected '{expected}', found '{found}'`                 | 戻り値の型が一致しない                         |
-| E1013        | `Function not found: '{func}'`                                                 | 関数が見つからない                             |
-| E1020        | `Cannot infer type for '{expr}'`                                               | 型を推論できない                               |
-| E1021        | `Type inference conflict: {reason}`                                            | 型推論の競合                                   |
-| E1030        | `Pattern non-exhaustive: missing patterns {patterns}`                          | パターンが不完全                               |
-| E1031        | `Unreachable pattern: '{pattern}'`                                             | 到達不能なパターン                             |
-| E1040        | `Operation '{op}' is not supported for type '{type}'`                          | 操作がサポートされていない                     |
-| E1041        | `Index out of bounds: valid range is 0..{max}, found {index}`                  | インデックス範囲外                             |
-| E1042        | `Field '{field}' not found in struct '{struct}'`                               | フィールドが見つからない                       |
-| E1050        | `Logical operation requires boolean operands, found '{left}' and '{right}'`    | ブール型のオペランドが必要                     |
-| E1051        | `Logical NOT requires boolean operand, found '{type}'`                         | 論理 NOT はブール型のオペランドが必要          |
-| E1052        | `Cannot dereference type '{type}', expected pointer type`                      | 無効なデリファレンス                           |
-| E1053        | `Cannot access field on non-struct type '{type}'`                              | 非構造体のフィールドアクセス                   |
-| E1054        | `Condition must be boolean, found '{type}'`                                    | 条件の型が一致しない                           |
-| E1055        | `Constraint type '{type}' can only be used in generic context`                 | 制約が非 generics コンテキストで使用されている |
-| E1060        | `Expected {expected} type argument(s), found {found}`                          | 型引数の数が一致しない                         |
-| E1061        | `Cannot instantiate generic type with given arguments`                         | generics をインスタンス化できない              |
-| E1081        | `` `?` is only allowed inside functions returning Result ``                    | `?` は Result を返す関数内でのみ使用可能       |
-| E1082        | `` `?` requires a Result expression, found '{type}' ``                         | `?` は Result 式にのみ使用可能                 |
-| E1083        | ``Result error type mismatch for `?`: expected '{expected}', found '{found}'`` | `?` のエラー型が一致しない                     |
-| E1090        | `Type: Type = Type`                                                            | 言ってはいけない（イースターエッグ）           |
-| E1091        | `Generic meta-type self-reference is not allowed: '{decl}'`                    | 無効な generics メタ型                         |
-| E1062        | `Const generic constraint violation: {reason}`                                 | const generics 制約違反                        |
+| エラーコード | テンプレート                                                                                          | 説明                                                           |
+| ------------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| E1001        | `Unknown variable: '{name}'`                                                                          | 不明な変数                                                     |
+| E1002        | `Expected type '{expected}', found type '{found}'`                                                    | 型の不一致                                                     |
+| E1003        | `Unknown type: '{type}'`                                                                              | 不明な型                                                       |
+| E1010        | `Function '{func}' expects {expected} arguments, found {found}`                                       | 引数の数が一致しない                                           |
+| E1011        | `Parameter type mismatch: expected '{expected}', found '{found}'`                                     | 引数の型が一致しない                                           |
+| E1012        | `Return type mismatch: expected '{expected}', found '{found}'`                                        | 戻り値の型が一致しない                                         |
+| E1013        | `Function not found: '{func}'`                                                                        | 関数が見つからない                                             |
+| E1020        | `Cannot infer type for '{expr}'`                                                                      | 型を推論できない                                               |
+| E1021        | `Type inference conflict: {reason}`                                                                   | 型推論の競合                                                   |
+| E1030        | `Pattern non-exhaustive: missing patterns {patterns}`                                                 | パターンが網羅的でない                                         |
+| E1031        | `Unreachable pattern: '{pattern}'`                                                                    | 到達不能なパターン                                             |
+| E1040        | `Operation '{op}' is not supported for type '{type}'`                                                 | 操作がサポートされていない                                     |
+| E1041        | `Index out of bounds: valid range is 0..{max}, found {index}`                                         | インデックスが範囲外                                           |
+| E1042        | `Field '{field}' not found in struct '{struct}'`                                                      | フィールドが見つからない                                       |
+| E1050        | `Logical operation requires boolean operands, found '{left}' and '{right}'`                           | ブールオペランドが必要                                         |
+| E1051        | `Logical NOT requires boolean operand, found '{type}'`                                                | 論理 NOT はブールオペランドが必要                              |
+| E1052        | `Cannot dereference type '{type}', expected pointer type`                                             | 無効なデリファレンス                                           |
+| E1053        | `Cannot access field on non-struct type '{type}'`                                                     | 構造体以外の型に対するフィールドアクセス                       |
+| E1054        | `Condition must be boolean, found '{type}'`                                                           | 条件の型が一致しない                                           |
+| E1055        | `Constraint type '{type}' can only be used in generic context`                                        | 非ジェネリックコンテキストでの制約                             |
+| E1060        | `Expected {expected} type argument(s), found {found}`                                                 | 型引数の数が一致しない                                         |
+| E1061        | `Cannot instantiate generic type with given arguments`                                                | ジェネリックをインスタンス化できない                           |
+| E1081        | `` `?` is only allowed inside functions returning Result ``                                           | `?` は Result を返す関数内でのみ使用可能                       |
+| E1082        | `` `?` requires a Result expression, found '{type}' ``                                                | `?` は Result 式にのみ使用可能                                 |
+| E1083        | ``Result error type mismatch for `?`: expected '{expected}', found '{found}'``                        | `?` のエラー型が一致しない                                     |
+| E1090        | `Type: Type = Type`                                                                                   | 説明不可（イースターエッグ）                                   |
+| E1091        | `Generic meta-type self-reference is not allowed: '{decl}'`                                           | 無効なジェネリックメタ型                                       |
+| E1062        | `Const generic constraint violation: {reason}`                                                        | constジェネリック制約違反                                      |
+| E1064        | `Invalid binding position(s) {positions} for function with {total} parameter(s)`                      | バインディング位置インデックスが無効（RFC-004）                |
+| E1095        | `Unknown interface: '{name}'`                                                                         | 不明なインターフェース（RFC-011a）                             |
+| E1096        | `Interface '{name}' expects {expected} type argument(s), found {found}`                               | インターフェースインスタンス化の引数の数が一致しない           |
+| E1097        | `Interface member '{member}' conflicts with field of type '{type}'`                                   | インターフェースメンバーがフィールド名と衝突                   |
+| E1098        | `Type '{type}' does not implement '{interface}.{method}'`                                             | インターフェースメソッドが実装されていない                     |
+| E1099        | `Signature mismatch for '{type}.{method}': expected '{expected}', found '{found}'`                    | インターフェースメソッドのシグネチャが一致しない               |
+| E1100        | `Duplicate implementation of '{type}.{method}' (override is not allowed)`                             | 同シグネチャメソッドの重複実装（上書き禁止）                   |
+| E1101        | `Type '{type}' does not implement interface '{interface}' and cannot enter this existential position` | 型がインターフェースを実装していない（存在型メンバーチェック） |
 
-## E2xxx -- セマンティック解析
+## E2xxx -- 意味解析
 
-セマンティック解析の段階で生成されるエラーで、スープ、変数のライフタイム、所有権、関数シグネチャの解析などを網羅します。
+意味解析段階で生成されるエラー。スコープ、変数のライフタイム、所有権、関数シグネチャの解析などを網羅します。
 
-| エラーコード | テンプレート                                                             | 説明                                     |
-| ------------ | ------------------------------------------------------------------------ | ---------------------------------------- |
-| E2001        | `Variable '{name}' is not in scope`                                      | スープエラー                             |
-| E2002        | `Duplicate definition: '{name}' is already defined in this scope`        | 重複定義                                 |
-| E2003        | `Ownership constraint violated: {reason}`                                | 所有権エラー                             |
-| E2010        | `Cannot assign to immutable variable '{name}'`                           | 不変変数への代入                         |
-| E2011        | `Use of uninitialized variable '{name}'`                                 | 未初期化変数の使用                       |
-| E2012        | `Mutability conflict: cannot use mutable reference in immutable context` | 可変性の衝突                             |
-| E2013        | `Cannot shadow existing variable '{name}'`                               | 変数のシャドウィング                     |
-| E2014        | `'{name}' has been moved and cannot be used`                             | 移動済み変数の使用                       |
-| E2090        | `Invalid signature: {reason}`                                            | 無効なシグネチャ                         |
-| E2091        | `Invalid signature: unknown type '{type_name}'`                          | シグネチャに未知の型                     |
-| E2092        | `Invalid signature: missing '->'`                                        | シグネチャに矢印がない                   |
-| E2093        | `Invalid signature: duplicate parameter '{name}'`                        | 重複するパラメータ名                     |
-| E2094        | `Invalid signature: generic '{name}' shadows outer generic`              | generics パラメータのシャドウィング      |
-| E2095        | `Invalid signature: parameter '{name}' shadows generic`                  | パラメータ名が generics をシャドウィング |
+| エラーコード | テンプレート                                                             | 説明                                       |
+| ------------ | ------------------------------------------------------------------------ | ------------------------------------------ |
+| E2001        | `Variable '{name}' is not in scope`                                      | スコープエラー                             |
+| E2002        | `Duplicate definition: '{name}' is already defined in this scope`        | 重複定義                                   |
+| E2003        | `Ownership constraint violated: {reason}`                                | 所有権エラー                               |
+| E2010        | `Cannot assign to immutable variable '{name}'`                           | 不変変数への代入                           |
+| E2011        | `Use of uninitialized variable '{name}'`                                 | 未初期化変数の使用                         |
+| E2012        | `Mutability conflict: cannot use mutable reference in immutable context` | 可変性の競合                               |
+| E2013        | `Cannot shadow existing variable '{name}'`                               | 変数のシャドーイング                       |
+| E2014        | `'{name}' has been moved and cannot be used`                             | 移動済み変数の使用                         |
+| E2090        | `Invalid signature: {reason}`                                            | 無効なシグネチャ                           |
+| E2091        | `Invalid signature: unknown type '{type_name}'`                          | シグネチャの不明な型                       |
+| E2092        | `Invalid signature: missing '->'`                                        | シグネチャに矢印がない                     |
+| E2093        | `Invalid signature: duplicate parameter '{name}'`                        | 重複するパラメータ名                       |
+| E2094        | `Invalid signature: generic '{name}' shadows outer generic`              | ジェネリックパラメータのシャドーイング     |
+| E2095        | `Invalid signature: parameter '{name}' shadows generic`                  | パラメータ名がジェネリックをシャドーイング |
 
-## E4xxx -- generics と trait
+## E4xxx -- ジェネリックとトレイト
 
-generics 制約と trait システムに関連するエラーです。
+ジェネリック制約とトレイトシステムに関連するエラーです。
 
-| エラーコード | テンプレート                                                   | 説明                 |
-| ------------ | -------------------------------------------------------------- | -------------------- |
-| E4001        | `Type '{type}' does not satisfy the trait bound '{trait}'`     | generics 制約違反    |
-| E4002        | `Trait '{trait}' not found`                                    | trait が見つからない |
-| E4003        | `Missing implementation for trait '{trait}' for type '{type}'` | trait 実装の欠落     |
-| E4004        | `Conflicting trait implementations for '{trait}'`              | trait 実装の競合     |
-| E4005        | `Associated type '{assoc_type}' not found in '{container}'`    | 関連型が見つからない |
+| エラーコード | テンプレート                                                   | 説明                   |
+| ------------ | -------------------------------------------------------------- | ---------------------- |
+| E4001        | `Type '{type}' does not satisfy the trait bound '{trait}'`     | ジェネリック制約違反   |
+| E4002        | `Trait '{trait}' not found`                                    | トレイトが見つからない |
+| E4003        | `Missing implementation for trait '{trait}' for type '{type}'` | トレイト実装の欠落     |
+| E4004        | `Conflicting trait implementations for '{trait}'`              | トレイト実装の競合     |
+| E4005        | `Associated type '{assoc_type}' not found in '{container}'`    | 関連型が見つからない   |
 
 ## E5xxx -- モジュールとインポート
 
@@ -109,7 +117,7 @@ generics 制約と trait システムに関連するエラーです。
 | エラーコード | テンプレート                                                        | 説明                             |
 | ------------ | ------------------------------------------------------------------- | -------------------------------- |
 | E6001        | `Division by zero in expression: {expr}`                            | ゼロ除算エラー                   |
-| E6003        | `Array index out of bounds: valid range is 0..{max}, found {index}` | 配列のインデックス範囲外         |
+| E6003        | `Array index out of bounds: valid range is 0..{max}, found {index}` | 配列インデックスが範囲外         |
 | E6004        | `Stack overflow: recursion depth exceeded limit {limit}`            | スタックオーバーフロー           |
 | E6005        | `Assertion failed: {condition}`                                     | アサーション失敗                 |
 | E6006        | `Function not found: '{func}'`                                      | 関数が見つからない（ランタイム） |
@@ -119,27 +127,27 @@ generics 制約と trait システムに関連するエラーです。
 
 I/O 操作とシステムレベルのエラーです。
 
-| エラーコード | テンプレート                  | 説明                       |
-| ------------ | ----------------------------- | -------------------------- |
-| E7001        | `File not found: '{path}'`    | ファイルが見つからない     |
-| E7002        | `Permission denied: '{path}'` | アクセス権が拒否されました |
-| E7003        | `I/O error: {reason}`         | I/O エラー                 |
-| E7004        | `Network error: {reason}`     | ネットワークエラー         |
+| エラーコード | テンプレート                  | 説明                   |
+| ------------ | ----------------------------- | ---------------------- |
+| E7001        | `File not found: '{path}'`    | ファイルが見つからない |
+| E7002        | `Permission denied: '{path}'` | アクセス拒否           |
+| E7003        | `I/O error: {reason}`         | I/O エラー             |
+| E7004        | `Network error: {reason}`     | ネットワークエラー     |
 
 ## E8xxx -- 内部コンパイラエラー
 
-コンパイラの内部エラーで、通常はコンパイラ自体のバグを示します。このようなエラーが発生した場合は、
+コンパイラの内部エラー。通常はコンパイラ自体のバグを示します。この種のエラーに遭遇した場合は、
 [GitHub Issues](https://github.com/yaoxiang/yaoxiang/issues) で報告してください。
 
 | エラーコード | テンプレート                                | 説明                     |
 | ------------ | ------------------------------------------- | ------------------------ |
 | E8001        | `Internal compiler error: {message}`        | 内部コンパイラエラー     |
-| E8002        | `Unexpected compiler panic: {reason}`       | 予期しない Panic         |
+| E8002        | `Unexpected compiler panic: {reason}`       | 予期しないパニック       |
 | E8003        | `Compiler phase error: {phase} - {message}` | コンパイラフェーズエラー |
 
 ## W1xxx -- 警告
 
-デッドコード検出に関連する警告です。警告はコンパイルを停止させませんが、コードに問題がある可能性を示します。
+デッドコード検出に関連する警告です。警告はコンパイルを阻止しませんが、コードに潜在的な問題があることを示します。
 
 | エラーコード | テンプレート                         | 説明                         |
 | ------------ | ------------------------------------ | ---------------------------- |
@@ -149,8 +157,8 @@ I/O 操作とシステムレベルのエラーです。
 | W1004        | `Unused exported variable: '{name}'` | 未使用のエクスポート変数     |
 | W1005        | `Unused exported method: '{name}'`   | 未使用のエクスポートメソッド |
 
-| W1063 | `Const generic constraint not evaluable at compile time` | const
-generics 制約はコンパイル時に評価できない |
+| W1063 | `Const generic constraint not evaluable at compile time` |
+constジェネリック制約はコンパイル時に評価できない |
 
 ---
 
