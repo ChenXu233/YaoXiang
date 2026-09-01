@@ -5,7 +5,7 @@ author: '晨煦'
 created: '2026-07-26'
 updated: '2026-08-02'
 accepted: '2026-08-02'
-issue: '#94, #95, #221'
+issue: '#94, #95, #221, #319'
 ---
 
 # RFC-036: std.test 测试框架与 yaoxiang test 命令
