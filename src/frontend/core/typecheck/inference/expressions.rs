@@ -860,6 +860,97 @@ impl<'a> ExpressionInferrer<'a> {
         vec![]
     }
 
+    /// #317：FieldAccess 调用目标是否解析自 method_bindings（impl 方法绑定形态）
+    ///
+    /// 返回 Some(方法键) 时，签名 params[0] 是接收者占位，实参对应 params[1..]。
+    /// 判定链与字段访问推断臂同序：native 命名空间形态（assert.assert 等，
+    /// receiver-less）与结构体同名函数字段（记录形态，d.draw）均返回 None；
+    /// 动态分发/链式访问（obj 非局部变量）不在本检查范围，返回 None。
+    fn method_binding_call_key(
+        &self,
+        func: &crate::frontend::core::parser::ast::Expr,
+    ) -> Option<String> {
+        let crate::frontend::core::parser::ast::Expr::FieldAccess {
+            expr: obj, field, ..
+        } = func
+        else {
+            return None;
+        };
+        let crate::frontend::core::parser::ast::Expr::Var(obj_name, _) = &**obj else {
+            return None;
+        };
+
+        // native 命名空间形态优先（同推断臂顺序）：命中即非方法绑定
+        if let Some(ns_path) = extract_namespace_path(obj) {
+            let full_path = format!("{}.{}", ns_path, field);
+            if self.native_signatures.contains_key(&full_path)
+                || self
+                    .native_signatures
+                    .keys()
+                    .any(|k| k.starts_with(&full_path))
+            {
+                return None;
+            }
+        }
+
+        let Some(poly) = self.scope.get_var(obj_name) else {
+            return None;
+        };
+        let mut resolved = self.solver.resolve_type(&poly.body);
+        while let MonoType::Ref { inner, .. } = resolved {
+            resolved = *inner;
+        }
+        let resolved = self.solver.resolve_type(&resolved);
+
+        // 结构字段优先（同推断臂顺序）：同名函数字段是记录形态调用，非方法绑定
+        let (type_name, has_field) = match &resolved {
+            MonoType::Struct(s) => (s.name.clone(), s.fields.iter().any(|(n, _)| n == field)),
+            MonoType::TypeRef(n) => {
+                if let Some(def_ty) = self.type_defs.get(n) {
+                    let def_ty = self.solver.resolve_type(def_ty);
+                    if let MonoType::Struct(s) = def_ty {
+                        (s.name.clone(), s.fields.iter().any(|(f, _)| f == field))
+                    } else {
+                        (n.clone(), false)
+                    }
+                } else {
+                    (n.clone(), false)
+                }
+            }
+            MonoType::Generic { name, .. } => (name.clone(), false),
+            _ => return None,
+        };
+        if has_field {
+            return None;
+        }
+
+        let key = format!("{}.{}", type_name, field);
+        let binding = self.method_bindings.get(&key)?;
+        let MonoType::Fn { params, .. } = binding else {
+            return None;
+        };
+        // 接收者校验：params[0] 解包 Ref 后的类型名须等于接收者类型名或 "Self"，
+        // 确保首参确是接收者占位（auto_bind/显式 Type.method 两条注册路径的约定），
+        // 而非恰好首参为 TypeRef 的普通函数
+        let Some(recv_ty) = params.first() else {
+            return None;
+        };
+        let mut recv = self.solver.resolve_type(recv_ty);
+        while let MonoType::Ref { inner, .. } = recv {
+            recv = *inner;
+        }
+        let recv_name = match self.solver.resolve_type(&recv) {
+            MonoType::Struct(s) => s.name.clone(),
+            MonoType::TypeRef(n) => n.clone(),
+            MonoType::Generic { name, .. } => name.clone(),
+            _ => return None,
+        };
+        if recv_name != type_name && recv_name != "Self" {
+            return None;
+        }
+        Some(key)
+    }
+
     /// 推断表达式的类型
     #[allow(irrefutable_let_patterns)]
     pub fn infer_expr(
@@ -1061,22 +1152,6 @@ impl<'a> ExpressionInferrer<'a> {
             crate::frontend::core::parser::ast::Expr::FieldAccess {
                 expr: obj, field, ..
             } => {
-                fn extract_namespace_path(
-                    expr: &crate::frontend::core::parser::ast::Expr
-                ) -> Option<String> {
-                    match expr {
-                        crate::frontend::core::parser::ast::Expr::Var(name, _) => {
-                            Some(name.clone())
-                        }
-                        crate::frontend::core::parser::ast::Expr::FieldAccess {
-                            expr,
-                            field,
-                            ..
-                        } => extract_namespace_path(expr).map(|p| format!("{}.{}", p, field)),
-                        _ => None,
-                    }
-                }
-
                 let obj_ty = self.infer_expr(obj)?;
                 let obj_ty = self.solver.resolve_type(&obj_ty);
 
@@ -1262,6 +1337,11 @@ impl<'a> ExpressionInferrer<'a> {
                     &mono_func_ty,
                     *span,
                 );
+
+                // #317：FieldAccess 目标若解析自 method_bindings（impl 方法绑定），
+                // 接收者占签名 params[0]——arity 按「实参数+1==形参数」校验，
+                // 逐参 unify 对齐 params[1..]（下方分发臂）
+                let method_key = self.method_binding_call_key(func);
 
                 // 两层调用：Container(Int)(42, 43) —— func 是泛型类型构造调用，
                 // 内层已完成实例化（func_ty 是具体 Struct），外层实参是构造参数。
@@ -1630,6 +1710,25 @@ impl<'a> ExpressionInferrer<'a> {
                         }
                     }
                 }
+                // #317：方法调用 arity 检查——#271#1 的 Var 门槛覆盖不到 FieldAccess
+                // 形态。接收者占 params[0]，实参数须等于 params.len()-1；不符拦为
+                // 编译期 E1010（原先缺参拖到运行时 E6007、超参/类型错整体静默跳过，
+                // 超参仅因 3==params.len() 错位对齐意外报错）
+                if let Some(method_key) = &method_key {
+                    if named_args.is_empty() {
+                        if let MonoType::Fn { params, .. } = &mono_func_ty {
+                            if !params.is_empty() && arg_types.len() + 1 != params.len() {
+                                return Err(ErrorCodeDefinition::argument_count_mismatch(
+                                    method_key,
+                                    params.len() - 1,
+                                    arg_types.len(),
+                                )
+                                .at(*span)
+                                .build());
+                            }
+                        }
+                    }
+                }
                 // 分发
                 match mono_func_ty {
                     MonoType::Fn {
@@ -1637,10 +1736,13 @@ impl<'a> ExpressionInferrer<'a> {
                         return_type,
                         ..
                     } => {
-                        // 值级函数调用
-                        if arg_types.len() == params.len() {
+                        // 值级函数调用；方法调用（#317）实参对齐 params[1..]——
+                        // 接收者占 params[0]，不在实参列表中
+                        let recv_offset = usize::from(method_key.is_some() && !params.is_empty());
+                        let param_slice = &params[recv_offset..];
+                        if arg_types.len() == param_slice.len() {
                             for (arg_expr, (arg_ty, param_ty)) in
-                                args.iter().zip(arg_types.iter().zip(params.iter()))
+                                args.iter().zip(arg_types.iter().zip(param_slice.iter()))
                             {
                                 // 自动借用：当参数签名要求 &T 且实参是值类型时，
                                 // 编译器自动创建令牌（RFC-009 §2.8）
@@ -2481,6 +2583,18 @@ impl<'a> ExpressionInferrer<'a> {
 
 /// 向后兼容：ExprInferrer 是 ExpressionInferrer 的类型别名
 pub type ExprInferrer<'a> = ExpressionInferrer<'a>;
+
+/// 提取命名空间路径前缀：Var("io") → "io"，FieldAccess(FieldAccess(a,b),c) → "a.b.c"
+/// （FieldAccess 推断臂与 #317 方法调用探测共用）
+fn extract_namespace_path(expr: &crate::frontend::core::parser::ast::Expr) -> Option<String> {
+    match expr {
+        crate::frontend::core::parser::ast::Expr::Var(name, _) => Some(name.clone()),
+        crate::frontend::core::parser::ast::Expr::FieldAccess { expr, field, .. } => {
+            extract_namespace_path(expr).map(|p| format!("{}.{}", p, field))
+        }
+        _ => None,
+    }
+}
 
 /// Extract a string literal from an AST expression (compile-time evaluation helper)
 fn extract_string_literal_from_expr(
