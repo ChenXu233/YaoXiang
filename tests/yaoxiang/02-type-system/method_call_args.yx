@@ -1,0 +1,30 @@
+// 02-type-system/method_call_args.yx
+// 覆盖: #317 方法调用 arity/实参编译期检查（#271#1 的 FieldAccess 补全）
+// 验证: 正确实参数与实参类型的方法调用（&mut / & 接收者、多方法链）照常
+//       编译执行；缺参/超参/类型错的反向判定见 06-compile-errors/method_*_err.yx
+// 状态: ✅
+
+use std.assert
+
+Counter: Type = { n: Int, label: String }
+
+Counter.bump: (self: &mut Counter, by: Int) -> Void = {
+    self.n = self.n + by
+}
+
+Counter.rename: (self: &mut Counter, name: String) -> Void = {
+    self.label = name
+}
+
+Counter.value: (self: &Counter) -> Int = {
+    return self.n
+}
+
+main = {
+    c = Counter(10, "a")
+    c.bump(5)
+    assert.assert(c.value() == 15, "bump(5) should make value 15")
+    c.bump(1)
+    c.rename("b")
+    assert.assert(c.value() == 16, "second bump(1) should make value 16")
+}

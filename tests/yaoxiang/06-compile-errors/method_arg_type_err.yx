@@ -1,0 +1,18 @@
+// 06-compile-errors/method_arg_type_err.yx
+// [test:error]: 方法调用实参类型错——此前 FieldAccess 形态因
+//   arg_types.len() != params.len()（接收者占位）整体跳过逐参 unify，
+//   p.shift("a", "b") 编译静默放行（#317）
+// 预期: 编译错误 E1002
+// 覆盖: #317（#271#1 的 FieldAccess 补全）
+// 验证: p.shift("a", "b") 实参 String 撞形参 Int 在编译期报 E1002
+// 状态: ✅
+
+Point: Type = { x: Int, y: Int }
+Point.shift: (self: &mut Point, dx: Int, dy: Int) -> Void = {
+    self.x = self.x + dx
+    self.y = self.y + dy
+}
+main = {
+    p = Point(0, 0)
+    p.shift("a", "b")
+}

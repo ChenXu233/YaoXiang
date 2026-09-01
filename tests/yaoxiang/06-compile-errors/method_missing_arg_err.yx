@@ -1,0 +1,18 @@
+// 06-compile-errors/method_missing_arg_err.yx
+// [test:error]: 方法调用缺参——接收者占 params[0]，实参数须等于形参数-1（#317）
+//   此前 FieldAccess 调用目标不进 #271#1 arity 拦截，缺参编译静默放行，
+//   拖到运行时以实参错位撞 E6007（晚且误导）
+// 预期: 编译错误 E1010
+// 覆盖: #317（#271#1 的 FieldAccess 补全）
+// 验证: p.shift(1) 缺一参在编译期报 E1010
+// 状态: ✅
+
+Point: Type = { x: Int, y: Int }
+Point.shift: (self: &mut Point, dx: Int, dy: Int) -> Void = {
+    self.x = self.x + dx
+    self.y = self.y + dy
+}
+main = {
+    p = Point(0, 0)
+    p.shift(1)
+}

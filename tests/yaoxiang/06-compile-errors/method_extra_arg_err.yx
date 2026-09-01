@@ -1,0 +1,19 @@
+// 06-compile-errors/method_extra_arg_err.yx
+// [test:error]: 方法调用超参——实参数须等于形参数-1（#317）
+//   此前 3 == params.len()（含接收者）恰好触发逐参 unify，实参 args[0]=Int
+//   撞接收者槽 &mut Point 以错位方式意外报 E1002；对齐 params[1..] 后
+//   由 arity 拦截按同码 E1010 正常报出
+// 预期: 编译错误 E1010
+// 覆盖: #317（#271#1 的 FieldAccess 补全）
+// 验证: p.shift(1, 2, 3) 超一参在编译期报 E1010
+// 状态: ✅
+
+Point: Type = { x: Int, y: Int }
+Point.shift: (self: &mut Point, dx: Int, dy: Int) -> Void = {
+    self.x = self.x + dx
+    self.y = self.y + dy
+}
+main = {
+    p = Point(0, 0)
+    p.shift(1, 2, 3)
+}
