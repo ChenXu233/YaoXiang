@@ -13,9 +13,9 @@ issue: '#94, #95, #221, #319'
 ## 摘要
 
 为 YaoXiang 引入标准测试框架 `std.test` 模块和 `yaoxiang test` CLI 子命令。测试文件是普通的 `.yx`
-文件，通过 `std.assert.assert` + exit code 判断通过/失败。`std.test`
-模块用纯 YaoXiang 实现，是第一个 dogfooding 库。`yaoxiang test`
-是 CLI 工具，非编译器特性——不涉及 parser、IR、字节码或执行器的任何改动。
+文件，以子进程 exit code 判定整体通过/失败；文件内部支持多个测试函数——断言失败以 `Err`
+值表达（值语义），由套件收集 per-test 判定（§7）。`std.test` 模块用纯 YaoXiang 实现，是第一个
+dogfooding 库。`yaoxiang test` 是 CLI 工具，非编译器特性——不涉及 parser、IR、字节码或执行器的任何改动。
 
 ## 动机
 
@@ -61,8 +61,10 @@ issue: '#94, #95, #221, #319'
 1. **测试框架不是编译器特性，是 CLI 工具** — `yaoxiang run` 已经能"执行测试"了，`yaoxiang test`
    只是帮你去跑所有文件并给你看报告
 2. **零编译器改动** — 不引入 `@test` 注解扫描、字节码元数据段、执行器特殊入口
-3. **自举** — `std.test` 模块用纯 YaoXiang 实现，底层调用 `std.assert.assert`
-4. **测试文件是普通 `.yx` 文件** — 通过 exit code 判断通过/失败
+3. **自举** — `std.test` 模块用纯 YaoXiang 实现，底层能力来自 `std.assert` / `std.result`
+4. **测试文件是普通 `.yx` 文件** — 文件以子进程运行，exit code 判定整体通过/失败
+5. **断言失败是值，不是进程事件** — 测试函数返回 `Result`，断言失败以 `Err` 表达，
+   套件逐个收集 per-test 判定（§7）；进程级 abort 只属于运行时守卫，不用于测试断言
 
 ## 详细设计
 
@@ -85,18 +87,16 @@ Options:
 
 #### 输出格式
 
-**默认输出**：
+**默认输出**（per-test 判定来自文件内套件收集，见 §7）：
 
 ```
-Running 5 tests from 3 files...
+Running 3 test files...
 
 tests/math_test.yx ........................ PASS (0.002s)
-tests/list_test.yx ........................ PASS (0.001s)
-tests/string_test.yx ...................... FAIL (0.003s)
-  `-- Expected "hello", got "world"
-      at tests/string_test.yx:12:5
-
-Results: 2 passed, 1 failed, 0 skipped (0.006s)
+tests/list_test.yx ........................ FAIL (0.003s)
+  `-- [FAIL] push_grows_len: Expected 3, got 2
+  `-- [ ok ] pop_returns_last
+Results: 2 files passed, 1 file failed, 0 skipped (0.006s)
 ```
 
 **JSON 输出**（`--json`）：
@@ -104,14 +104,17 @@ Results: 2 passed, 1 failed, 0 skipped (0.006s)
 ```json
 {
   "summary": { "total": 3, "passed": 2, "failed": 1, "skipped": 0, "time_secs": 0.006 },
-  "tests": [
+  "files": [
     { "file": "tests/math_test.yx", "passed": true, "time_secs": 0.002 },
     {
-      "file": "tests/string_test.yx",
+      "file": "tests/list_test.yx",
       "passed": false,
       "time_secs": 0.003,
-      "error": "Expected \"hello\", got \"world\"",
-      "exit_code": 1
+      "exit_code": 1,
+      "tests": [
+        { "name": "push_grows_len", "passed": false, "error": "Expected 3, got 2" },
+        { "name": "pop_returns_last", "passed": true }
+      ]
     }
   ]
 }
@@ -142,30 +145,37 @@ patterns = ["tests/**/*.yx"]
 // std/test.yx — Pure YaoXiang test assertion library
 // First dogfooding library: YaoXiang's test library written in YaoXiang
 
-use std.assert
+use std.result
 
 assert_eq = (a, b) => {
-    assert.assert(a == b, f"Expected {b}, got {a}")
+    if a == b { result.ok(()) } else { result.err(f"Expected {b}, got {a}") }
 }
 
 assert_ne = (a, b) => {
-    assert.assert(a != b, f"Expected not equal to {b}, got {a}")
+    if a != b { result.ok(()) } else { result.err(f"Expected not equal to {b}, got {a}") }
 }
 
 assert_true = (cond: Bool) => {
-    assert.assert(cond, f"Expected true, got {cond}")
+    if cond { result.ok(()) } else { result.err(f"Expected true, got {cond}") }
 }
 
 assert_false = (cond: Bool) => {
-    assert.assert(cond == false, f"Expected false, got {cond}")
+    if cond == false { result.ok(()) } else { result.err(f"Expected false, got {cond}") }
 }
 ```
 
-- 4 个断言函数，全部用 `f"..."` 做诊断信息
-- `assert_eq` / `assert_ne` 用**无标注参数**（`Any`）——2026-08-02 实证：`==`/`!=` 与 f-string
-  插值在 Any 上工作正常（Int/String 均验证通过），**不依赖泛型系统**。未来泛型就绪后可补标注
-- `assert_true` / `assert_false` 参数标注 `Bool`；`assert_false` 用 `cond == false` 表达取反
-  （`not` 一元语法随 #251 权威化落地中，稳定后可迁移）
+- 断言函数为**值语义**：返回 `Result((), String)`，失败以 `Err(诊断信息)` 表达，
+  不 abort 进程——§7 套件据此收集 per-test 判定。`std.assert.assert` 的进程级
+  abort 语义保留给运行时守卫，不进入测试断言路径
+- 过渡说明：Phase 1 落地的 4 函数基于 `std.assert.assert`（abort 语义），是自举
+  过渡实现；值语义族为本 RFC 标准形态，落地后替换（#319）
+- `assert_eq` / `assert_ne` 用**无标注参数**（`Any`）——2026-08-02 实证：`==`/`!=` 与
+  f-string 插值在 Any 上工作正常（Int/String 均验证通过），**不依赖泛型系统**。
+  未来泛型就绪后可补标注
+- `assert_false` 用 `cond == false` 表达取反（`not` 一元语法未落地，稳定后可迁移；
+  `!assert` 一元形态同此依赖，见 §8.1）
+- 错误码断言（`assert(err.code == "E3017")`）依赖 `Error` 值携带机器可读 `code`
+  字段（§8.1）
 - `std.test` 不依赖任何 native 代码，纯 YaoXiang 实现
 
 ### 4. 标准库加载机制（关键设计）
@@ -236,13 +246,91 @@ CLI 能力，测试文件导入项目模块是核心场景。因此 Phase 1 先�
 - 一个测试文件的 panic 不会影响其他测试文件
 - 不需要额外的独立 Heap 上下文机制
 
+### 7. 套件与多测试（值化模型）
+
+一个测试文件可包含多个测试。文件内组织方式：
+
+```yaoxiang
+// tests/list_test.yx
+use std.test
+use std.list
+
+push_grows_len = () => {
+    xs = []
+    list.append(xs, 1)
+    test.assert_eq(list.len(xs), 1)
+}
+
+pop_returns_last = () => {
+    xs = [1, 2]
+    test.assert_eq(list.pop(xs), 2)
+}
+
+main = {
+    test.suite([
+        ("push_grows_len", push_grows_len),
+        ("pop_returns_last", pop_returns_last),
+    ])
+}
+```
+
+- 每个测试是返回 `Result((), String)` 的零参函数；断言失败以 `Err` 表达（§3 值语义
+  断言族），不中断进程——后续测试照常运行
+- `test.suite` 逐个调用并收集：某测试非 Ok 即打印该测试的名字与诊断信息，Ok 静默
+- 文件退出码：套件全 Ok → 0；任一 Err → 非 0（§5 执行阶段的 exit code 判定不变）
+- runner 只见文件，不做函数级扫描：per-test 判定完全来自套件内收集，文件内部结构
+  对 runner 透明——零编译器改动原则不受影响
+- 明确不采用：进程内 catch 边界（17 关键字铁律）；runner 逐函数入口调用（仅限
+  §8.2 编译失败等内部场景）
+- `test.suite` 的具体 API 形态（签名、重复名处理、`--filter` 与套件名的交互）是
+  实现细节，落地时在 #319 定案
+
+### 8. 负向测试（预期失败）三层设计
+
+负向测试按失败发生层拆分，各层归位：
+
+#### 8.1 值级反向（通用，面向用户）
+
+被测操作返回 `Result`，测试以普通断言表达预期失败：
+
+```yaoxiang
+r = range.iter(invalid_range)
+test.assert_err(r)
+test.assert_eq(result.err_code(r), "E3017")
+```
+
+- std.test 补 `assert_not` / `assert_err` 函数族；`!assert` 一元形态待 not 语法
+  落地后提供（与 `assert_false` 的 `cond == false` 同款约束）
+- 错误码断言依赖 `Error` 值扩展机器可读 `code` 字段：由 `Struct { message }` 增至
+  `{ code, message }`（native `error_new_with_code`，std 导出码常量），使
+  `err.code == "E3017"` 可断言
+- 随 Result 化推进（#301、#316），可失败的操作逐个返回 `Result`，语料中的文件级
+  负向标记随之迁为文件内断言
+
+#### 8.2 编译失败（仅限语言设计者内部使用）
+
+编译是全文件全有全无，无法在文件内表达"这行不该编译"。保留文件级特殊标记：
+
+- `[test:error]` 标记由 runner 读取并反向判定（run 退出码非 0 = PASS）
+- 标记升级为**结构化预期码**：runner 解析头部 `预期: 编译错误 EXXXX`，与编译器
+  stderr 输出的 `[EXXXX]` 实际比对，码不符 = FAIL（trybuild stderr 快照思想的
+  轻量版，零编译器改动）
+- **仅服务本仓库语料，不是用户测试框架的一部分**；实现侧需统一双 runner 判定
+  约定（目录约定 vs 头部标记），见 #319
+
+#### 8.3 运行时硬失败（归入 Result 化）
+
+不设独立机制——会失败的操作按语言方向返回 `Result`（#301、#316），测试统一走
+§8.1 表达。进程级 abort（如断言违例、运行时参数错位）随 Result 化逐步收敛为值，
+测试框架不为其提供专门语义。
+
 ## 与现有系统关系
 
 | 项目                                          | 关系                              |
 | --------------------------------------------- | --------------------------------- |
 | Rust `#[test]`                                | 不动，编译器内部测试继续用 Rust   |
 | 现有 `.yx` 集成测试（`tests/yaoxiang/`）      | 被 `yaoxiang test` 发现并执行     |
-| `std.assert.assert(cond)`                     | 保留，`std.test` 底层依赖它       |
+| `std.assert.assert(cond)`                     | 保留给运行时守卫；`std.test` 值语义断言族改基于 `std.result`（§3、§7） |
 | 模块系统（RFC-029）                            | 嵌入源模块经 Registry/orchestrator 接入；CLI `run` 接 orchestrator 是前置 |
 | `#200` 重构（`io.println` → `assert.assert`） | 与 `yaoxiang test` 完全一致的方向 |
 | `@` 注解                                      | 不使用，不引入 `@test`            |
@@ -286,10 +374,10 @@ CLI 能力，测试文件导入项目模块是核心场景。因此 Phase 1 先�
 | 风险                                    | 概率 | 缓解                                        |
 | --------------------------------------- | ---- | ------------------------------------------- |
 | `f"..."` 在 Any 上插值失败              | 无   | 2026-08-02 已实证（Int/String 均正常）      |
-| 子进程启动开销影响测试速度              | 中   | Phase 1 串行执行，可接受；Phase 3 并行缓解  |
 | `yaoxiang.toml` 配置解析不在当前 CLI 中 | 低   | 简单扩展，不影响核心功能                    |
 | CLI run 接 orchestrator 引入行为回归    | 低   | 无 import 单文件路径等价；集成测试已覆盖 orchestrator |
 | 嵌入 `.yx` 源文件到二进制增加体积       | 低   | `.yx` 源文件极小，可忽略                    |
+| 测试回路耗时随语料增长                  | 高   | 主项是每文件全量编译（185 文件实测 11.3s），非子进程启动；`--parallel` 只缓解进程侧，编译成本需测试回路缓存（#251/#293 切片） |
 
 ## 开放问题
 
@@ -310,57 +398,10 @@ CLI 能力，测试文件导入项目模块是核心场景。因此 Phase 1 先�
 | 标准库加载   | 当前嵌入二进制，未来文件系统              | 2026-07-26 | 版本绑定，单文件可用       |
 | 断言参数类型 | 无标注参数（Any），不依赖泛型系统         | 2026-08-02 | `?` 类型语法不存在；Any 实证可比较、可插值 |
 | 多文件运行   | CLI `run` 委托 `run_project`（orchestrator）作为前置 | 2026-08-02 | 子进程模型继承 CLI 能力；#247 退化为纯性能优化 |
-| 报告源码位置 | 子进程带 `--debug-info`                   | 2026-08-02 | 实证 stack trace 输出 `file:line:col` |
+| 报告源码位置 | 子进程带 `--debug-info`                   | 2026-08-02 | 实证 stack trace 输出 `file:line:col`；经嵌入模块（std.test）中转的帧归属不在此保证内，属 #289 + RFC-034 |
 | 负向测试分层 | 值级反向通用 / 编译失败 runner 结构化标记（仅内部）/ 硬失败归 Result 化 | 2026-09-02 | #319 定案；取代隐式 [test:error] 约定 |
 | 文件内多测试 | 值化标准模型：测试函数返回 Result，套件收集 per-test 判定 | 2026-09-02 | 无 catch、非入口调用（入口仅限内部场景） |
 | Error 码 | Error 增加机器可读 `code` 字段            | 2026-09-02 | 支撑错误码断言；编译期码走 runner 比对 |
-
-## 修订：测试模型定案（2026-09-02，#319）
-
-与维护者讨论定案以下四点。正文上文与本节冲突处，以本节为准。
-
-### R1. 负向测试三层定案（取代隐式 [test:error] 约定）
-
-负向测试（"预期失败"）按失败发生层拆分，各层归位：
-
-1. **值级反向（通用，面向用户）**：被测操作返回 `Result`，测试以普通断言表达预期失败
-   （`assert(r.is_err())`、错误码断言）。随 Result 化推进（#301、#316），语料中
-   `[test:error]` 文件逐步迁为文件内断言，文件头标记随之消亡。std.test 补
-   `assert_not` / `assert_err` 函数族先行（`!assert` 一元形态待 not 语法落地后提供，
-   现 `!` 前缀语法不存在——见 §3 `assert_false` 用 `cond == false` 的同款约束）。
-2. **编译失败（仅限语言设计者内部使用）**：编译是全文件全有全无，无法在文件内表达
-   "这行不该编译"。保留文件级特殊标记（`[test:error]`），由 runner 读取并反向判定，
-   仅服务本仓库语料，**不是用户测试框架的一部分**。标记升级为结构化预期码：runner
-   解析头部 `预期: 编译错误 EXXXX`，与编译器 stderr 输出的 `[EXXXX]` 实际比对，
-   码不符 = FAIL（trybuild stderr 快照思想的轻量版，零编译器改动）。
-3. **运行时硬失败（归入 Result 化，不设独立机制）**：会失败的操作按语言方向返回
-   `Result`（#301、#316），测试统一走第 1 层表达。
-
-### R2. 文件内多测试：值化标准模型
-
-一个测试文件可包含多个测试。标准模型为**值化**：测试函数返回 `Result`，断言失败以
-`Err` 值表达而非 abort 进程；套件逐个收集各测试的 `Result`，汇总报告 per-test 判定，
-任一非 Ok 则文件退出码非 0。`std.test` 断言族相应提供**值语义**形态（返回 Err 诊断
-信息，不 abort）；`std.assert.assert` 的进程级 abort 语义保留给运行时守卫，不用于
-测试断言。不采用 catch 边界（17 关键字铁律），不采用 runner 逐函数入口调用（仅限
-编译失败等内部场景，见 R1.2）。
-
-### R3. Error 值增加 code 字段
-
-支撑错误码断言：`Error` 由 `Struct { message }` 扩展为含机器可读 `code`
-（native `error_new_with_code`，std 导出码常量），使 `assert(err.code == "E3017")`
-成立。编译期错误的码校验不走此路径——编译失败进程未运行，由 R1.2 的 runner 比对
-承担（编译器 stderr 已含 `[EXXXX]`）。
-
-### R4. 报告与性能勘误
-
-- 输出示例中 "Running 5 tests from 3 files" 为旧模型残迹：文件级模型下一个文件 =
-  一个测试进程；R2 落地后 per-test 判定来自套件内收集，非 runner 扫描测试函数。
-- 性能主项是每文件全量编译（185 文件实测 11.3s），非子进程启动；Phase 3 `--parallel`
-  不解决编译成本，测试回路缓存见 #251 / #293 切片。
-- 断言失败定位穿透嵌入模块（实测 `at std.test.assert_eq (ip: 9)`，用户拿不到自己的
-  文件行号）不属于本 RFC——栈帧归属是 #289 体验问题 + RFC-034 调试元数据
-  （`get_frames`）的设计范围。
 
 ## 参考文献
 
