@@ -3,7 +3,7 @@ title: 'RFC 013: 错误代码规范'
 status: '已接受'
 author: '晨煦'
 created: '2026-02-02'
-updated: '2026-02-12'
+updated: '2026-09-03'
 issue: '#125'
 issues_impl:
   - '#125'
@@ -374,6 +374,41 @@ E1001::unknown_variable(&var_name)
 | E8002 | Codegen error           | IR/字节码生成失败 |
 | E8003 | Unimplemented feature   | 使用未实现的功能  |
 | E8004 | Optimization error      | 编译器优化错误    |
+
+---
+
+### 运行时错误值与码贯通
+
+> 本节由 #323（M4 运行时 Error 值带码，2026-09-03）引入。E6xxx/E7xxx 语义空间同时承载两个通道，码空间同一、呈现通道不同。
+
+#### 两个通道
+
+| 通道                         | 载体                                        | 呈现方式                     |
+| ---------------------------- | ------------------------------------------- | ---------------------------- |
+| 编译器/CLI 诊断通道          | `ExecutorError` 等宿主层硬错误              | stderr `error[E####]:`（#280/#281 已接线 E6003/E6005/E6007） |
+| 程序内错误值通道             | std 库 `Result(T, Error)` 的 Err 载体 `Error` | 语言值，由程序 match/比较消费 |
+
+#### Error 结构（v0.8 起，破坏性变更）
+
+```
+Error { code: String, message: String }
+```
+
+- `code` 复用本规范 E6xxx/E7xxx 编号，字符串形态（如 `"E6008"`）。
+- **稳定契约**：已分配的码跨版本语义不变；同一语义不复用已删码（E6002 先例）。
+- **消费面**：程序内 `e.code == "E6xxx"` 比较是唯一可编程判定契约；`yaoxiang explain E6xxx` 文档贯通；工具链（LSP / DAP，见 RFC-034）以码为 exceptionId。
+- **访问器**：`std.result.code(e)` / `std.result.message(e)`。
+- **用户自定义错误**：`Result(T, E)` 的 E 为泛型参数，认真建模走用户自定义类型；std `Error` 仅为便捷兜底载体，其码体系不约束用户 E 类型。
+
+#### 码分配规则
+
+1. 运行时错误值码与编译期诊断码共用 E6xxx/E7xxx 空间，新码按**真实触发面**分配，不为想象中的场景预留。
+2. 先注册后使用：新码进入权威注册表并经三方一致性校验（codes/*.rs ↔ locales ↔ 本文档码表）后方可发射。
+3. E7xxx 为 std.io / std.net 错误值预留段位（当前空挂，io/net Result 化时启用）。
+
+#### 演进路径（线 C，未实施）
+
+模式匹配完备化（RFC-039）落地后，`Error` 可升级为 `{ kind: ErrorKind, message: String }`，`code` 转为由 kind 派生的属性（变体定义处即码注册表）。演进期本节 code 稳定契约保持不变；该升级为独立决策，不构成本节承诺。
 
 ---
 
