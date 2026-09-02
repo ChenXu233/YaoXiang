@@ -57,8 +57,8 @@ pub struct CompilationResult {
     pub total_duration_ms: u64,
     /// 错误
     pub errors: Vec<PipelineError>,
-    /// 警告消息
-    pub warnings: Vec<String>,
+    /// 警告诊断（#321 M2 结构化，含 severity/code/span）
+    pub warnings: Vec<Diagnostic>,
 }
 
 impl CompilationResult {
@@ -66,7 +66,7 @@ impl CompilationResult {
     pub fn success(
         ir: middle::ModuleIR,
         total_ms: u64,
-        warnings: Vec<String>,
+        warnings: Vec<Diagnostic>,
     ) -> Self {
         Self {
             ir: Some(ir),
@@ -288,17 +288,14 @@ impl Pipeline {
         _source_name: &str,
         ast: &super::core::parser::Module,
         semantic_db: &typecheck::semantic_db::SemanticDB,
-    ) -> Vec<String> {
+    ) -> Vec<Diagnostic> {
         use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
 
         let mut analyzer = DeadCodeAnalyzer::new();
         let warnings = analyzer.analyze(ast, semantic_db);
 
-        // 渲染警告消息
-        warnings
-            .iter()
-            .map(|w| format!("warning [{}]: {} at {:?}", w.code, w.message, w.span))
-            .collect()
+        // 结构化警告诊断（severity 由 builder 按 W 前缀推导，#321 M2）
+        analyzer.to_diagnostics(&warnings)
     }
 
     /// 证明函数执行阶段（RFC-027 Phase 2.5）
@@ -677,7 +674,7 @@ impl ParseResult {
 struct TypecheckResult {
     type_result: typecheck::TypeCheckResult,
     errors: Vec<Diagnostic>,
-    warnings: Vec<String>,
+    warnings: Vec<Diagnostic>,
 }
 impl TypecheckResult {
     fn is_success(&self) -> bool {

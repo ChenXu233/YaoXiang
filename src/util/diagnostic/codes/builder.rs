@@ -113,8 +113,15 @@ impl DiagnosticBuilder {
         };
         let help = i18n.render_help(self.code, &self.params);
 
-        // 根据 severity 创建诊断
-        let mut diagnostic = match self.severity {
+        // 根据 severity 创建诊断（W 前缀警告码缺省 Warning，#321 M2）
+        let effective_severity = self.severity.or_else(|| {
+            if self.code.starts_with('W') {
+                Some(Severity::Warning)
+            } else {
+                None
+            }
+        });
+        let mut diagnostic = match effective_severity {
             Some(Severity::Warning) => {
                 Diagnostic::warning(self.code.to_string(), message, help, self.span)
             }
@@ -124,7 +131,7 @@ impl DiagnosticBuilder {
             Some(Severity::Hint) => {
                 Diagnostic::hint(self.code.to_string(), message, help, self.span)
             }
-            None | Some(Severity::Error) => {
+            Some(Severity::Error) | None => {
                 Diagnostic::error(self.code.to_string(), message, help, self.span)
             }
         };

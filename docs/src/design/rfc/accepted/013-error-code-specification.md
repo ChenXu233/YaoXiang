@@ -448,7 +448,12 @@ E1001::unknown_variable(&var_name)
 | W1005 | Unused exported method                     | 未使用的导出方法           |
 | W1063 | Const generic constraint cannot be evaluated | const 泛型约束无法求值   |
 
-> W 码位规则：与 E 码同构按阶段分组（W+阶段千位段），W1xxx = 类型检查阶段警告。警告经独立通道发射（非阻断编译），压制/升级机制见 #321（M2）。
+> W 码位规则：与 E 码同构按阶段分组（W+阶段千位段），W1xxx = 类型检查阶段警告。
+>
+> **发射通道（#321 M2）**：W 码诊断由 builder 按 W 前缀缺省标注 `Severity::Warning`（显式指定优先），
+> 收集与呈现与错误同轨（`warning[W####]` 前缀渲染），但不阻断编译、不影响成功退出码。
+> `yaoxiang check --deny-warnings` 将警告升级为失败（存在警告时以非零码退出），用于 CI 严格模式。
+> per-code 压制（allow 属性等）为后续扩展项。
 
 ---
 

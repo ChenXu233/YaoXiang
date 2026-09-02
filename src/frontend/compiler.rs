@@ -29,6 +29,8 @@ pub struct Compiler {
     config: CompileConfig,
     /// 编译流水线
     pipeline: Pipeline,
+    /// 最近一次编译产生的警告诊断（#321 M2）
+    last_warnings: Vec<Diagnostic>,
 }
 
 impl Default for Compiler {
@@ -48,7 +50,16 @@ impl Compiler {
     #[inline]
     pub fn with_config(config: CompileConfig) -> Self {
         let pipeline = Pipeline::new(config.clone());
-        Self { config, pipeline }
+        Self {
+            config,
+            pipeline,
+            last_warnings: Vec::new(),
+        }
+    }
+
+    /// 取走最近一次编译的警告诊断（#321 M2）
+    pub fn take_warnings(&mut self) -> Vec<Diagnostic> {
+        std::mem::take(&mut self.last_warnings)
     }
 
     /// 获取编译配置
@@ -101,6 +112,7 @@ impl Compiler {
         debug!("{}", t_cur(MSG::CompilingSource, Some(&[&source_len])));
 
         let result = self.pipeline.run(source_name, source);
+        self.last_warnings = result.warnings.clone();
         Self::map_pipeline_result(result)
     }
 

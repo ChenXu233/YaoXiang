@@ -133,6 +133,10 @@ enum Commands {
         /// Suppress progress and summary messages
         #[arg(long)]
         no_progress: bool,
+
+        /// Treat warnings as errors (non-zero exit if any warning, #321 M2)
+        #[arg(long)]
+        deny_warnings: bool,
     },
 
     /// Run project tests (RFC-036)
@@ -427,6 +431,7 @@ fn main() -> Result<()> {
             json,
             color,
             no_progress,
+            deny_warnings,
         } => {
             let use_colors = match color {
                 ColorChoice::Always => true,
@@ -435,8 +440,8 @@ fn main() -> Result<()> {
             };
 
             match run_check_command_once(&paths, &exclude, json, use_colors, no_progress) {
-                Ok(error_count) => {
-                    if error_count > 0 {
+                Ok((error_count, warning_count)) => {
+                    if error_count > 0 || (deny_warnings && warning_count > 0) {
                         ::std::process::exit(1);
                     }
                 }

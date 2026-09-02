@@ -520,12 +520,12 @@ impl DeadCodeAnalyzer {
         let mut warnings = Vec::new();
 
         for import in &self.imports {
+            // 整个模块导入（use std.io）：成员短名（print 等）的模块归属需要
+            // resolver 级信息，当前无法精确判定——宁漏报不误报，跳过（#321 M2，
+            // 后续由 resolver 提供成员→模块归属映射后恢复）
             let items = match &import.items {
                 Some(items) => items.clone(),
-                None => {
-                    // 整个模块导入，需要检查模块名是否被使用
-                    vec![import.path.clone()]
-                }
+                None => continue,
             };
 
             for item in items {

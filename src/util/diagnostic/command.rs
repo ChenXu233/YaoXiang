@@ -31,7 +31,7 @@ pub fn run_check_command_once(
     json: bool,
     use_colors: bool,
     no_progress: bool,
-) -> Result<usize> {
+) -> Result<(usize, usize)> {
     let paths = normalize_check_paths(paths)?;
     let files = collect_yx_files_from_paths(&paths, excludes)?;
     if files.is_empty() {
@@ -68,7 +68,7 @@ pub fn run_check_command_once(
         }
     }
 
-    Ok(result.error_count)
+    Ok((result.error_count, result.warning_count))
 }
 
 pub fn render_explain_output(

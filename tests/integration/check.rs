@@ -28,6 +28,8 @@ fn temp_dir() -> TempDir {
 #[allow(clippy::ptr_arg)]
 /// 辅助：对单个文件运行 check，返回 Ok(error_count) 或 Err
 fn check_file(path: &PathBuf) -> Result<usize, anyhow::Error> {
+    // #321 M2：run_check_command_once 返回 (error_count, warning_count)，
+    // 本辅助仅关心错误数
     run_check_command_once(
         std::slice::from_ref(path),
         &[],
@@ -35,6 +37,7 @@ fn check_file(path: &PathBuf) -> Result<usize, anyhow::Error> {
         false, // use_colors
         true,  // no_progress — 抑制进度输出
     )
+    .map(|(errors, _warnings)| errors)
 }
 
 // 正常路径：无错误的 .yx 文件

@@ -431,7 +431,17 @@ pub fn check_files_with_diagnostics(files: &[std::path::PathBuf]) -> anyhow::Res
 
         let mut compiler = crate::frontend::Compiler::new();
         match compiler.compile_with_source(&file.display().to_string(), &source) {
-            Ok(_) => {}
+            Ok(_) => {
+                // #321 M2：收割警告诊断（builder 按 W 前缀标注 Warning severity），
+                // 计入 warning_count，不阻断编译
+                for diag in compiler.take_warnings() {
+                    result.warning_count += 1;
+                    result.diagnostics.push(CheckDiagnostic {
+                        file: file.display().to_string(),
+                        diagnostic: diag,
+                    });
+                }
+            }
             Err(e) if e.is_type_error() => {
                 // #268：透传原始类型诊断（保留 E1002 与 span），与 run 一致；
                 // 仅无原始诊断的 TypeError（如 IR 阶段）才用 E8001 兜底
