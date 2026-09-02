@@ -893,9 +893,8 @@ impl<'a> ExpressionInferrer<'a> {
             }
         }
 
-        let Some(poly) = self.scope.get_var(obj_name) else {
-            return None;
-        };
+        // clippy manual_let_else：Option 上下文等价改写为 ?（CI Check 修复）
+        let poly = self.scope.get_var(obj_name)?;
         let mut resolved = self.solver.resolve_type(&poly.body);
         while let MonoType::Ref { inner, .. } = resolved {
             resolved = *inner;
@@ -932,9 +931,7 @@ impl<'a> ExpressionInferrer<'a> {
         // 接收者校验：params[0] 解包 Ref 后的类型名须等于接收者类型名或 "Self"，
         // 确保首参确是接收者占位（auto_bind/显式 Type.method 两条注册路径的约定），
         // 而非恰好首参为 TypeRef 的普通函数
-        let Some(recv_ty) = params.first() else {
-            return None;
-        };
+        let recv_ty = params.first()?;
         let mut recv = self.solver.resolve_type(recv_ty);
         while let MonoType::Ref { inner, .. } = recv {
             recv = *inner;
