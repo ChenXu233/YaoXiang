@@ -4,6 +4,8 @@
 //! §1 Phase 2：--filter / --fail-fast / --verbose / --list / --no-progress / --json
 //! §5 发现与执行：默认 tests/**/*.yx、[tool.test].patterns、显式路径优先、
 //!     exit code 判定、--filter 文件名包含
+//! §8.2 结构化预期码：[test:error] 文件的 `预期: EXXXX` 与输出 `[EXXXX]` 实际比对，
+//!     码不符 = FAIL；无码文件回退 exit≠0 判定
 //! 规则 9.1：happy path / error path / boundary 三条路径
 
 #![cfg(feature = "cli")]
@@ -450,5 +452,96 @@ fn test_test_command_json_empty_discovery_outputs_empty_report() {
         report["files"].as_array().map(Vec::len),
         Some(0),
         "files 应为空数组:\n{stdout}"
+    );
+}
+
+/// 编译错误正文（镜像语料 06-compile-errors/array_empty_n_err.yx 的 E1002 形态）
+const COMPILE_ERR_BODY: &str = r#"
+main = {
+    b: Array(Int, 3) = []
+}
+"#;
+
+#[test]
+fn test_test_command_expected_error_code_match_passes() {
+    // Arrange - [test:error] + 结构化预期码，编译器实际报同码（RFC-036 §8.2）
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!(
+        "// 临时语料\n// [test:error]: Array 字面量长度不符\n// 预期: 编译错误 E1002\n{COMPILE_ERR_BODY}"
+    );
+    write_file(dir.path(), "tests/code_match_err.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert - 预期码实际出现，反向判定成立
+    assert_eq!(code, 0, "预期码匹配应 PASS:\n{stdout}");
+    assert!(
+        stdout.contains("code_match_err.yx"),
+        "应执行该文件:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_expected_error_code_mismatch_fails() {
+    // Arrange - 篡改预期码为不会出现的 E9999（#251 gate 验收：能测出 FAIL）
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!(
+        "// 临时语料\n// [test:error]: Array 字面量长度不符\n// 预期: 编译错误 E9999\n{COMPILE_ERR_BODY}"
+    );
+    write_file(dir.path(), "tests/code_mismatch_err.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert - 码不符 = FAIL，报告指明预期与实际出现的码
+    assert_eq!(code, 1, "预期码不符应退出 1:\n{stdout}");
+    assert!(
+        stdout.contains("预期错误码 E9999"),
+        "应指明未出现的预期码:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("实际输出含: E1002"),
+        "应列出实际出现的错误码:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_expected_error_without_code_keeps_legacy_judgment() {
+    // Arrange - 边界：预期行无码（纯文字说明）→ 回退 exit≠0 反向判定
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!(
+        "// 临时语料\n// [test:error]: 无码形态\n// 预期: 编译错误（借用冲突）\n{COMPILE_ERR_BODY}"
+    );
+    write_file(dir.path(), "tests/code_absent_err.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert - 无码不做比对，编译失败即 PASS
+    assert_eq!(code, 0, "无码形态应回退 exit 判定:\n{stdout}");
+    assert!(stdout.contains("PASS"), "应标记 PASS:\n{stdout}");
+}
+
+#[test]
+fn test_test_command_json_expected_code_mismatch_carries_note() {
+    // Arrange - 与 mismatch 场景相同，走 --json 输出（CI 取证路径）
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!(
+        "// 临时语料\n// [test:error]: Array 字面量长度不符\n// 预期: 编译错误 E9999\n{COMPILE_ERR_BODY}"
+    );
+    write_file(dir.path(), "tests/code_mismatch_err.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--json"], dir.path());
+
+    // Assert - JSON stderr 字段携带码不符说明与实际码
+    assert_eq!(code, 1, "预期码不符应退出 1:\n{stdout}");
+    let report: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("stdout 应为合法 JSON");
+    let stderr = report["files"][0]["stderr"].as_str().unwrap_or("");
+    assert!(
+        stderr.contains("预期错误码 E9999") && stderr.contains("E1002"),
+        "JSON 应携带码不符说明:\n{stdout}"
     );
 }
