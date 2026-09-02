@@ -341,7 +341,7 @@ Iterator: (T: Type) -> Type = {
 ### 6.2 迭代器适配器
 
 ```yaoxiang
-// 范围迭代器（#302：Range 是正式类型，运行时身份为三标量不可变记录，
+// 范围迭代器（Range 是正式类型，运行时身份为三标量不可变记录，
 // 不再借 Tuple 外壳；打印 `1..10` / `1..10..2`，结构相等，具名字段）
 Range: Type = {
     start: Int,
@@ -361,14 +361,14 @@ for i in 0..10..2 {
 }
 ```
 
-> **#302**：`Range(Int)` 已正式落地——具名字段 `r.start`/`r.end`/`r.step` 可访问；
+> **`Range(Int)` 已正式落地**——具名字段 `r.start`/`r.end`/`r.step` 可访问；
 > `x in r` 运行时走 `std.range.contains`（界检查 + 步长对齐），证明管道识别为区间命题
 > `x >= r.start && x < r.end && (x - r.start) % r.step == 0`（区间保持区间，不物化）。
-> step=0 字面量编译期拒绝；动态 step=0 已 Result 化（#316，#301 首个挂载点）：
+> step=0 字面量编译期拒绝；动态 step=0 已 Result 化：
 > `std.range.iter` → `Result(Iterator, Error)`、`std.range.contains` → `Result(Bool, Error)`，
 > 消费点用 `?` 沿调用栈传播或 `result.unwrap` 显式分流；`for`/`in` 糖降级在 ir_gen
 > 解包，Err 分支（动态 step=0）显式失败（`abort_invalid_step`），绝不静默死循环。
-> 接口实例化（类型体 `Iterator(Int)` 声明）的类型语法与静态分发已随 RFC-011a 阶段 1-2 落地（#307）：
+> 接口实例化（类型体 `Iterator(Int)` 声明）的类型语法与静态分发已随 RFC-011a 阶段 1-2 落地：
 > 类型体应用项 `Iterator(Int)` 触发 `Self ↦ Range` 替换展开与完整性检查，通过后生成实现证明。
 > 动态分发已随阶段 3 落地：接口名未实例化即存在类型（`List(Animal)`），具体值进入存在类型
 > 位置自动包装为变体值，元素方法调用按实际类型分发（§6）。std.range 模块的运行时协议面
@@ -386,8 +386,8 @@ for i in 0..10..2 {
 | `std.collection` | List、Map 等集合类型                             |
 | `std.string`     | 字符串操作                                       |
 | `std.array`      | 数组操作                                         |
-| `std.iterator`   | 迭代器（协议面当前由 `std.range` 提供，#302）   |
-| `std.range`      | Range 迭代器与区间谓词、适配器（#302）           |
+| `std.iterator`   | 迭代器（协议面当前由 `std.range` 提供）         |
+| `std.range`      | Range 迭代器与区间谓词、适配器                  |
 
 ### A.2 IO 模块
 
