@@ -81,7 +81,7 @@ Options:
   --fail-fast         遇到第一个失败就停止
   --verbose, -v       显示每个测试的详细 stdout/stderr
   --list              只列出测试文件，不跑
-  --no-progress       不显示进度条（CI 场景）
+  --no-progress       不显示进度输出（表头与 PASS 行）；FAIL 明细与汇总保留（CI 场景）
   --json              输出 JSON 格式结果（CI 集成用）
 ```
 
@@ -111,6 +111,7 @@ Results: 2 files passed, 1 file failed, 0 skipped (0.006s)
       "passed": false,
       "time_secs": 0.003,
       "exit_code": 1,
+      "stderr": "error [E1024]: one is not two",
       "tests": [
         { "name": "push_grows_len", "passed": false, "error": "Expected 3, got 2" },
         { "name": "pop_returns_last", "passed": true }
@@ -119,6 +120,12 @@ Results: 2 files passed, 1 file failed, 0 skipped (0.006s)
   ]
 }
 ```
+
+- 失败文件额外携带 `exit_code` 与 `stderr`（ANSI 剥离后的子进程诊断，CI 取证用）；
+  `--verbose` 与 `--json` 组合时全部文件携带 `stdout` / `stderr`
+- `--no-progress` 只抑制进度输出（表头与 PASS 行）——FAIL 明细与汇总始终输出，
+  失败不可静默；`--list` 每行输出一个测试文件路径，不执行
+- 文件内 per-test `tests` 数组来自 §7 套件收集，随值化模型落地生效（#319）
 
 ### 2. yaoxiang.toml 配置
 
