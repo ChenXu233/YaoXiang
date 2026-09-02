@@ -141,6 +141,31 @@ enum Commands {
         /// (default: [tool.test].patterns in yaoxiang.toml, else tests/**/*.yx)
         #[arg(value_name = "PATH", num_args = 0..)]
         paths: Vec<PathBuf>,
+
+        /// Only run test files whose file name contains this substring
+        #[arg(long, value_name = "NAME")]
+        filter: Option<String>,
+
+        /// Stop after the first failing test file
+        #[arg(long)]
+        fail_fast: bool,
+
+        /// Show each test file's captured stdout/stderr
+        #[arg(short = 'v', long)]
+        verbose: bool,
+
+        /// Only list discovered test files, do not run them
+        #[arg(long)]
+        list: bool,
+
+        /// Suppress progress output (header and PASS lines); failures and the
+        /// summary are always shown
+        #[arg(long)]
+        no_progress: bool,
+
+        /// Output a JSON report (RFC-036 §1) instead of human-readable text
+        #[arg(long)]
+        json: bool,
     },
 
     /// Format source file
@@ -357,14 +382,33 @@ fn main() -> Result<()> {
                 ::std::process::exit(1);
             }
         }
-        Commands::Test { paths } => match yaoxiang::util::test_runner::run_test_command(&paths) {
-            Ok(0) => {}
-            Ok(_) => ::std::process::exit(1),
-            Err(e) => {
-                eprintln!("{e}");
-                ::std::process::exit(1);
+        Commands::Test {
+            paths,
+            filter,
+            fail_fast,
+            verbose,
+            list,
+            no_progress,
+            json,
+        } => {
+            let options = yaoxiang::util::test_runner::TestOptions {
+                paths,
+                filter,
+                fail_fast,
+                verbose,
+                list,
+                no_progress,
+                json,
+            };
+            match yaoxiang::util::test_runner::run_test_command(&options) {
+                Ok(0) => {}
+                Ok(_) => ::std::process::exit(1),
+                Err(e) => {
+                    eprintln!("{e}");
+                    ::std::process::exit(1);
+                }
             }
-        },
+        }
         Commands::Eval { code } => {
             let source = if code == "-" {
                 let mut buf = String::new();
