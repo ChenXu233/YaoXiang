@@ -337,7 +337,7 @@
   "E1062": {
     "title": "const 泛型约束失败",
     "message": "const 泛型参数的值约束不满足",
-    "template": "const 泛型约束失败: `{constraint}` 不成立 ({var} = {value})",
+    "template": "const 泛型约束失败: `{constraint}` 不成立",
     "help": "修改 const 参数值使其满足约束",
     "example": "BadArray(Int, 0)  // Assert(0 > 0) 失败",
     "error_output": "error[E1062]: const 泛型约束失败\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, 0)\n  | ^ const 约束 `N > 0` 不成立 (N = 0)"
@@ -911,5 +911,17 @@
     "title": "绑定位置索引无效",
     "template": "绑定位置索引无效：{positions}（函数共 {total} 个参数）",
     "help": "绑定位置必须落在被绑函数的参数范围内（越界或归一化后仍为负）。请检查方法绑定的位置编号。"
+  },
+  "E4020": {
+    "title": "需要证明函数",
+    "message": "约束无法在编译期证明，需要提供证明函数",
+    "template": "需要证明函数来验证约束",
+    "help": "添加证明函数或提供运行时检查"
+  },
+  "W1080": {
+    "title": "编译期证明降级",
+    "message": "约束无法在编译期证明，已降级为运行时检查",
+    "template": "编译期无法证明约束，已降级为运行时检查",
+    "help": "考虑添加证明函数以提高安全性"
   }
 }

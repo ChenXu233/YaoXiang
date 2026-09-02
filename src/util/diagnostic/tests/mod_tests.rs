@@ -196,6 +196,47 @@ main: () -> Void = {
 }
 
 #[test]
+fn test_type_error_message_no_solver_typevar_leak() {
+    // #322 M3：类型错误消息不得泄漏求解器内部 TypeVar 名（#287 锚定）。
+    // TypeVar 的 Display 形态为 t<N>（如 't62'），不得进入用户可见消息。
+    let dir = tempdir().expect("create temp dir");
+    let file = dir.path().join("leak.yx");
+    fs::write(
+        &file,
+        r#"main = {
+  x: Int = "hello"
+}
+"#,
+    )
+    .expect("write yx file");
+
+    let result = check_files_with_diagnostics(&[file]).expect("run check");
+    assert!(result.error_count > 0, "应有类型错误");
+    let joined = result
+        .diagnostics
+        .iter()
+        .map(|d| d.diagnostic.message.clone())
+        .collect::<Vec<_>>()
+        .join("\n");
+    // 检测 't<N>' 形态（引号包裹的 t+纯数字标识符）
+    let leak = joined.contains("'t") && {
+        // 排除合法以 't 开头的单词（如 'true'）——只标记 t 后紧跟数字者
+        let bytes = joined.as_bytes();
+        let mut found = false;
+        let mut i = 0;
+        while i + 2 < bytes.len() {
+            if bytes[i] == b'\'' && bytes[i + 1] == b't' && bytes[i + 2].is_ascii_digit() {
+                found = true;
+                break;
+            }
+            i += 1;
+        }
+        found
+    };
+    assert!(!leak, "求解器 TypeVar 名泄漏进用户消息: {joined}");
+}
+
+#[test]
 fn test_cross_file_reference() {
     // 注意：当前实现中 check_single_module 为每个文件创建独立的 Compiler，
     // 跨文件符号解析尚未完全实现。此测试验证多文件流水线能正常运行，

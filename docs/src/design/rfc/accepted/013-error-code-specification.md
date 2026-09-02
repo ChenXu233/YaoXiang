@@ -383,6 +383,7 @@ E1001::unknown_variable(&var_name)
 | E4014 | Constant evaluation failed     | 常量求值失败               |
 | E4018 | Refinement predicate violation | 精化谓词违反               |
 | E4019 | Type equality does not hold    | 类型等式不成立             |
+| E4020 | Proof function required        | 需要证明函数来验证约束     |
 
 #### E5xxx：模块与导入
 
@@ -447,6 +448,7 @@ E1001::unknown_variable(&var_name)
 | W1004 | Unused exported variable                   | 未使用的导出变量           |
 | W1005 | Unused exported method                     | 未使用的导出方法           |
 | W1063 | Const generic constraint cannot be evaluated | const 泛型约束无法求值   |
+| W1080 | Constraint demoted to runtime check | 编译期无法证明约束，已降级为运行时检查 |
 
 > W 码位规则：与 E 码同构按阶段分组（W+阶段千位段），W1xxx = 类型检查阶段警告。
 >
@@ -454,6 +456,16 @@ E1001::unknown_variable(&var_name)
 > 收集与呈现与错误同轨（`warning[W####]` 前缀渲染），但不阻断编译、不影响成功退出码。
 > `yaoxiang check --deny-warnings` 将警告升级为失败（存在警告时以非零码退出），用于 CI 严格模式。
 > per-code 压制（allow 属性等）为后续扩展项。
+
+### 消息质量规范
+
+> 本节由 #322（M3 消息单轨与质量，2026-09-03）引入。由 `scripts/audit_diagnostics.py` 在 CI 强制执行。
+
+1. **消息单轨**：所有用户可见诊断消息必须经权威注册表快捷方法 + locales 模板渲染，代码只传结构化参数。禁止绕过注册表直接构造 `Diagnostic::error(...)` 等原生值——该路径绕过码校验与 i18n。
+2. **码合法性**：禁止使用未注册码与伪码（如 `E_INTERNAL`）；使用点码字面量必须已在注册表定义。内部错误一律落 E8001（`internal_error`）。
+3. **类型显示**：类型 Display 必须区分实例化前后形态（#286：`Expected 'Container', found 'Container'` 裸名不可区分）。
+4. **求解器内部态隔离**：求解器中间态 TypeVar（Display 形态 `t<N>`）不得进入用户可见消息（#287）。测试锚定：`test_type_error_message_no_solver_typevar_leak`。
+5. **E8xxx 边界**：E8xxx 仅用于编译器内部一致性问题（ICE）。用户可修复的错误禁止使用 E8001 兜底；ICE 消息必须附最小复现指引。
 
 ---
 

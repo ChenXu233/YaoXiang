@@ -337,7 +337,7 @@
   "E1062": {
     "title": "const generic constraint failed",
     "message": "the value constraint of const generic parameter is not satisfied",
-    "template": "const generic constraint failed: `{constraint}` does not hold ({var} = {value})",
+    "template": "const generic constraint failed: `{constraint}` is not satisfied",
     "help": "modify the const parameter value to satisfy the constraint",
     "example": "BadArray(Int, 0)  // Assert(0 > 0) failed",
     "error_output": "error[E1062]: const generic constraint failed\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, 0)\n  | ^ const constraint `N > 0` does not hold (N = 0)"
@@ -785,7 +785,7 @@
   "E4018": {
     "title": "Refinement predicate violation",
     "message": "Refinement type constraint falsified",
-    "template": "Refinement predicate violation: {constraint}\n\nCounterexample:\n{counterexample}",
+    "template": "Refinement predicate violated: {constraint}\n\nCounterexample:\n{counterexample}",
     "help": "The predicate has been falsified — there exists an assignment that makes the constraint false. Check variable values or relax the constraint."
   },
   "E4019": {
@@ -911,5 +911,17 @@
     "title": "Invalid binding position",
     "template": "Invalid binding position: {positions} (function has {total} parameter(s))",
     "help": "Binding positions must fall within the parameter range of the bound function. Check the position numbers of the method binding."
+  },
+  "E4020": {
+    "title": "Proof function required",
+    "message": "The constraint cannot be proven at compile time",
+    "template": "A proof function is required to verify the constraint",
+    "help": "Add a proof function or provide a runtime check"
+  },
+  "W1080": {
+    "title": "Constraint demoted to runtime check",
+    "message": "The constraint cannot be proven at compile time",
+    "template": "Constraint cannot be proven at compile time; demoted to runtime check",
+    "help": "Consider adding a proof function for better safety"
   }
 }

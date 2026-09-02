@@ -31,6 +31,11 @@ pub static W1XXX: &[ErrorCodeDefinition] = &[
         code: "W1063",
         category: ErrorCategory::Warning,
     },
+    // W1080: 编译期约束证明降级为运行时检查（RFC-027，#322 收敛时新增）
+    ErrorCodeDefinition {
+        code: "W1080",
+        category: ErrorCategory::Warning,
+    },
 ];
 
 // 快捷方法实现
@@ -47,6 +52,7 @@ impl ErrorCodeDefinition {
     /// W1004 未使用的导出变量
     ("W1004", unused_variable(name: &str) => .param("name", name)),
     /// W1005 未使用的导出方法
-    ("W1005", unused_method(name: &str) => .param("name", name)),
+    /// W1080 编译期无法证明约束，已降级为运行时检查
+    ("W1080", constraint_demoted() => ),
     }
 }

@@ -247,7 +247,7 @@ impl TypeEnvironment {
         def: &GenericTypeDef,
         args: &[MonoType],
     ) -> Result<MonoType, crate::util::diagnostic::Diagnostic> {
-        use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
+        use crate::util::diagnostic::ErrorCodeDefinition;
 
         let type_arg_count = def.type_param_names.len();
         let const_arg_count = def.poly.const_binders.len();
@@ -297,12 +297,8 @@ impl TypeEnvironment {
                         })
                         .collect::<Vec<_>>()
                         .join(", ");
-                    return Err(Diagnostic::error(
-                        "E1062".to_string(),
-                        format!("const 泛型约束失败 ({})", var_info),
-                        "修改 const 参数值使其满足约束".to_string(),
-                        None,
-                    ));
+                    // #322 M3：走注册表快捷方法（i18n 模板渲染）
+                    return Err(ErrorCodeDefinition::const_constraint_failed(&var_info).build());
                 }
                 crate::frontend::core::typecheck::proof::verdict::ProofResult::Unproven {
                     ..

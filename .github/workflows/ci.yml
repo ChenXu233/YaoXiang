@@ -51,6 +51,9 @@ jobs:
       - name: Error code registry check
         run: python3 scripts/check_error_codes.py
 
+      - name: Diagnostics audit
+        run: python3 scripts/audit_diagnostics.py
+
   test:
     name: Test
     runs-on: ubuntu-latest

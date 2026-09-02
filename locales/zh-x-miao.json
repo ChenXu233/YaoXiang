@@ -743,7 +743,7 @@
   "E4018": {
     "title": "喵喵喵喵喵喵",
     "message": "喵喵喵喵喵喵喵喵喵",
-    "template": "喵喵喵喵喵喵喵{constraint}\n\n喵喵喵{counterexample}",
+    "template": "精化谓词违反了喵：{constraint}\n\n反例：\n{counterexample}",
     "help": "喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵喵"
   },
   "E4019": {
@@ -788,7 +788,7 @@
   "E1062": {
     "title": "const 泛型约束失败喵",
     "message": "const 泛型参数的值约束不满足喵",
-    "template": "const 泛型约束失败喵: `{constraint}` 不成立 ({var} = {value})",
+    "template": "const 泛型约束失败了喵：`{constraint}` 不成立喵",
     "help": "修改 const 参数值使其满足约束喵",
     "example": "BadArray(Int, 0)  // Assert(0 > 0) 失败喵",
     "error_output": "error[E1062]: const 泛型约束失败喵\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, 0)\n  | ^ const 约束 `N > 0` 不成立 (N = 0) 喵"
@@ -923,5 +923,17 @@
     "help": "换个别的标识符代替关键字喵",
     "example": "if = 1;",
     "error_output": "error[E0018]: 关键字当名字用啦喵\n --> example.yx:1:1\n  |\n1 | if = 1;\n  | ^^ 'if' 是关键字喵"
+  },
+  "E4020": {
+    "title": "需要证明函数喵",
+    "message": "约束在编译期证明不了喵，需要提供证明函数喵",
+    "template": "需要证明函数来验证约束喵",
+    "help": "添加证明函数或者用运行时检查喵"
+  },
+  "W1080": {
+    "title": "编译期证明降级喵",
+    "message": "约束在编译期证明不了喵，已经降级为运行时检查喵",
+    "template": "编译期无法证明约束，已经降级为运行时检查喵",
+    "help": "考虑添加证明函数提高安全性喵"
   }
 }

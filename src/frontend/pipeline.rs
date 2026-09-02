@@ -4,6 +4,7 @@
 
 use crate::middle;
 use crate::util::diagnostic::Diagnostic;
+use crate::util::diagnostic::ErrorCodeDefinition;
 use super::{config::CompileConfig, core::typecheck};
 
 /// 管道错误类型
@@ -319,26 +320,24 @@ impl Pipeline {
                 }
                 Ok(false) => {
                     failed_proofs.push(call.func_name.clone());
-                    let msg = format!(
-                        "证明函数 '{}' 返回 false，约束不满足（参数: {:?}）",
+                    // #322 M3：走注册表快捷方法（i18n 模板渲染）；
+                    // 证明函数返回 false 属"无具体反例"的证伪场景
+                    let diag = ErrorCodeDefinition::refinement_violated(&format!(
+                        "证明函数 '{}' 返回 false，约束不满足（参数: {:?}）；检查约束条件或修改传入值",
                         call.func_name, call.args,
-                    );
-                    let diag = Diagnostic::error(
-                        "E4018".to_string(),
-                        msg,
-                        "检查约束条件或修改传入值".to_string(),
-                        None,
-                    );
+                    ))
+                    .param("counterexample", "（证明函数返回 false，无具体反例）")
+                    .build();
                     errors.push(diag);
                 }
                 Err(e) => {
                     failed_proofs.push(call.func_name.clone());
-                    let diag = Diagnostic::error(
-                        "E4018".to_string(),
-                        format!("证明函数 '{}' 执行失败: {}", call.func_name, e),
-                        String::new(),
-                        None,
-                    );
+                    let diag = ErrorCodeDefinition::refinement_violated(&format!(
+                        "证明函数 '{}' 执行失败: {}",
+                        call.func_name, e
+                    ))
+                    .param("counterexample", "（证明函数执行出错，无具体反例）")
+                    .build();
                     errors.push(diag);
                 }
             }
@@ -417,12 +416,11 @@ fn merge_embedded_std_ir(
         ) {
             Ok(m) => m,
             Err(e) => {
-                return Err(Diagnostic::error(
-                    "E_INTERNAL".to_string(),
-                    format!("嵌入 std 模块 {use_path} 编译失败: {e}"),
-                    "This is a compiler bug".to_string(),
-                    None,
-                ));
+                // #322 M3：E_INTERNAL 伪码收敛为注册码 E8001
+                return Err(ErrorCodeDefinition::internal_error(&format!(
+                    "嵌入 std 模块 {use_path} 编译失败: {e}"
+                ))
+                .build());
             }
         };
         for func in embedded.functions {

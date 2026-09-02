@@ -722,7 +722,7 @@
   "E4018": {
     "title": "精化谓词违逆",
     "message": "精化类型之约束见证伪",
-    "template": "精化谓词违逆：{constraint}\n\n反例：\n{counterexample}",
+    "template": "精化谓词有违：{constraint}\n\n反例：\n{counterexample}",
     "help": "谓词已证伪——有赋值使约束为伪。宜检视变量之值，或宽其约束。"
   },
   "E4019": {
@@ -775,7 +775,7 @@
   "E1062": {
     "title": "const 泛型約束不立",
     "message": "const 泛型參數之值約束未合",
-    "template": "const 泛型約束不立：`{constraint}` 不成立（{var} = {value}）",
+    "template": "const 泛型约束不成：`{constraint}`",
     "help": "改 const 參數之值，俾合約束",
     "example": "BadArray(Int, 0)  // Assert(0 > 0) 敗",
     "error_output": "error[E1062]: const 泛型約束不立\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, 0)\n  | ^ const 約束 `N > 0` 不成立（N = 0）"
@@ -926,5 +926,17 @@
     "title": "顶层绑定之初始化必为常量",
     "template": "顶层绑定 '{name}' 之初始化必为编译期常量表达式",
     "help": "顶层绑定乃编译期常量（访问器函数径返折叠之值），运行时计算之初始化所不载。宜改为字面量或常量运算，或移入函数体。"
+  },
+  "E4020": {
+    "title": "需证明函数",
+    "message": "约束编译期不可证，需供证明函数",
+    "template": "验证约束，需证明函数",
+    "help": "宜增证明函数，或供运行时检查"
+  },
+  "W1080": {
+    "title": "编译期证明之降",
+    "message": "约束编译期不可证，已降为运行时检查",
+    "template": "约束编译期不可证，已降为运行时检查",
+    "help": "宜虑增证明函数以固安全"
   }
 }

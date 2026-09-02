@@ -53,6 +53,11 @@ pub static E4XXX: &[ErrorCodeDefinition] = &[
         code: "E4019",
         category: ErrorCategory::Generic,
     },
+    // E4020: 编译期证明需要证明函数（RFC-027，#322 收敛时新增）
+    ErrorCodeDefinition {
+        code: "E4020",
+        category: ErrorCategory::Generic,
+    },
 ];
 
 // 快捷方法（code_helpers! 生成）
@@ -80,5 +85,7 @@ impl ErrorCodeDefinition {
     ("E4018", refinement_violated(constraint: &str) => .param("constraint", constraint)),
     /// E4019 类型等式不成立（证明管道内）
     ("E4019", type_mismatch_in_proof(expected: &str, found: &str) => .param("expected", expected) .param("found", found)),
+    /// E4020 需要证明函数来验证约束
+    ("E4020", proof_function_required() => ),
     }
 }

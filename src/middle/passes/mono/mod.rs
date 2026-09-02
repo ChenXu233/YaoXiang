@@ -7,6 +7,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use crate::util::diagnostic::Diagnostic;
+use crate::util::diagnostic::ErrorCodeDefinition;
 
 pub mod function;
 pub mod instance;
@@ -103,15 +104,12 @@ impl Monomorphizer {
         let mut depth: usize = 0;
         while let Some(req) = self.pending_queue.pop_front() {
             if depth >= self.max_depth {
-                return Err(Diagnostic::error(
-                    "E3005".to_string(),
-                    format!(
-                        "单态化实例化深度超过最大限制 ({})，可能存在无限泛型递归",
-                        self.max_depth
-                    ),
-                    "检查泛型函数是否存在无限递归调用链".to_string(),
-                    None,
-                ));
+                // #322 M3：走注册表快捷方法（i18n 模板渲染）
+                return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                    "单态化实例化深度超过最大限制 ({})，可能存在无限泛型递归；检查泛型函数是否存在无限递归调用链",
+                    self.max_depth
+                ))
+                .build());
             }
 
             let key = req.specialization_key();

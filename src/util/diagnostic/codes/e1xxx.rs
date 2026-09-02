@@ -264,6 +264,8 @@ impl ErrorCodeDefinition {
     ("E1094", unused_const_param(param: &str, type_: &str) => .param("param", param) .param("type", type_)),
     /// E1090 彩蛋（返回占位符，由 i18n 的 zen_message 提供实际消息）
     ("E1090", type_self_reference_easter_egg() => ),
+    /// E1062 const 泛型约束失败
+    ("E1062", const_constraint_failed(constraint: &str) => .param("constraint", constraint)),
     /// E1064 绑定位置索引无效（RFC-004）
     ("E1064", invalid_binding_position(positions: &str, total: usize) => .param("positions", positions) .param("total", total.to_string())),
     /// E1095 未知接口（RFC-011a）

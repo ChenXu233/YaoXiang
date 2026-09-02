@@ -185,13 +185,11 @@ impl Translator {
                 (blocks.iter().collect::<Vec<_>>(), locals.len())
             }
             FunctionBody::TypeDecl { .. } => {
-                return Err(Diagnostic::error(
-                    "E_INTERNAL".to_string(),
-                    "translate_function called on TypeDecl — should be handled by synthesize_constructor"
-                        .to_string(),
-                    "This is a compiler bug".to_string(),
-                    None,
-                ));
+                // #322 M3：E_INTERNAL 伪码收敛为注册码 E8001
+                return Err(ErrorCodeDefinition::internal_error(
+                    "translate_function called on TypeDecl — should be handled by synthesize_constructor",
+                )
+                .build());
             }
         };
 
