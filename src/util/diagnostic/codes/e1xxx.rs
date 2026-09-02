@@ -101,11 +101,6 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
         code: "E1062",
         category: ErrorCategory::TypeCheck,
     },
-    // W1063: const 泛型约束无法求值（警告）
-    ErrorCodeDefinition {
-        code: "W1063",
-        category: ErrorCategory::TypeCheck,
-    },
     // === RFC-004 方法绑定 ===
     // E1064: 绑定位置索引无效（越界或归一化后仍为负）
     ErrorCodeDefinition {

@@ -528,14 +528,6 @@
     "example": "let x = 10 / 0;",
     "error_output": "error[E6001]: 喵~除零错误喵~\n --> runtime\n  |\n  | let x = 10 / 0;\n  |     ^ 喵~除以零了喵~"
   },
-  "E6002": {
-    "title": "喵~空指针解引用喵~",
-    "message": "喵~试图访问空值喵~",
-    "template": "在 {location} 喵~空指针解引用喵~",
-    "help": "喵~在访问值之前添加空值检查喵~",
-    "example": "let x = nil; println!(x.field);",
-    "error_output": "error[E6002]: 喵~空指针解引用喵~\n --> runtime\n  |\n  | println!(x.field);\n  |     ^ 喵~无法访问空值的字段喵~"
-  },
   "E6003": {
     "title": "喵~数组索引越界喵~",
     "message": "喵~数组索引在运行时越界喵~",
@@ -708,11 +700,6 @@
     "template": "无法在 unsafe 块外解引用裸指针喵呜~",
     "help": "将解引用操作包裹在 `unsafe` 块中喵~"
   },
-  "E2029": {
-    "title": "spawn ref 循环喵~",
-    "template": "跨任务循环引用喵: {cycle}",
-    "help": "spawn 块内的 ref 变量形成了引用循环喵~ 使用 Weak 打破循环，或在 unsafe 块中绕过检测喵~"
-  },
   "E3004": {
     "title": "不支持的迭代器喵~",
     "template": "不支持的迭代器类型喵：{iter_type}",
@@ -789,11 +776,6 @@
     "title": "运行时的错误喵",
     "template": "运行时的错误喵：{message}",
     "help": "看看错误消息就知道详情了喵~"
-  },
-  "E8004": {
-    "title": "还没做好的功能喵",
-    "template": "还没做好的功能喵：{feature}",
-    "help": "这个功能还没实现喵~"
   },
   "E0016": {
     "title": "喵要一个表达式",
@@ -918,5 +900,28 @@
     "message": "break/continue 只能在 while/for 循环体内使用喵~",
     "template": "'{keyword}' 出现在循环外喵",
     "help": "把 '{keyword}' 移入 while/for 循环体内喵~"
+  },
+  "E1064": {
+    "title": "绑定位置不太对喵",
+    "template": "绑定位置 {positions} 超出范围了喵（这个函数有 {total} 个参数喵）",
+    "help": "绑定位置要在被绑定函数的参数范围内喵，检查一下方法绑定的位置编号喵。"
+  },
+  "E3006": {
+    "title": "变量没解析出来喵",
+    "template": "IR 生成出内部问题了喵：变量 '{name}' 没能解析喵",
+    "help": "变量引用到 IR 生成阶段还没解析出来喵，可能是类型检查器漏掉了喵。这是编译器内部一致性问题，请上报此问题喵。"
+  },
+  "E3007": {
+    "title": "顶层绑定的初始化必须是常量喵",
+    "template": "顶层绑定 '{name}' 的初始化必须是编译期常量表达式喵",
+    "help": "顶层绑定是编译期常量喵（访问器函数直接返回折叠值喵），不支持运行时计算的初始化喵。把计算改成字面量或常量运算，或者移进函数体里喵。"
+  },
+  "E0018": {
+    "title": "关键字当名字用啦喵",
+    "message": "关键字不能当变量或表达式名字用喵",
+    "template": "'{keyword}' 是关键字，不能拿来当名字喵",
+    "help": "换个别的标识符代替关键字喵",
+    "example": "if = 1;",
+    "error_output": "error[E0018]: 关键字当名字用啦喵\n --> example.yx:1:1\n  |\n1 | if = 1;\n  | ^^ 'if' 是关键字喵"
   }
 }

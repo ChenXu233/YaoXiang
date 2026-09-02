@@ -48,6 +48,9 @@ jobs:
       - name: Build check
         run: cargo check --all-features
 
+      - name: Error code registry check
+        run: python3 scripts/check_error_codes.py
+
   test:
     name: Test
     runs-on: ubuntu-latest

@@ -11,10 +11,6 @@ pub static E6XXX: &[ErrorCodeDefinition] = &[
         category: ErrorCategory::Runtime,
     },
     ErrorCodeDefinition {
-        code: "E6002",
-        category: ErrorCategory::Runtime,
-    },
-    ErrorCodeDefinition {
         code: "E6003",
         category: ErrorCategory::Runtime,
     },

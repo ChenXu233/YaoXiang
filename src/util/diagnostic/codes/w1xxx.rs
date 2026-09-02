@@ -1,6 +1,6 @@
 //! 警告码定义
 //!
-//! W1xxx: 死代码相关警告
+//! W1xxx: 警告码（未使用导出、const 泛型约束等类型检查阶段警告）
 
 use super::{ErrorCategory, ErrorCodeDefinition, DiagnosticBuilder};
 
@@ -24,6 +24,11 @@ pub static W1XXX: &[ErrorCodeDefinition] = &[
     },
     ErrorCodeDefinition {
         code: "W1005",
+        category: ErrorCategory::Warning,
+    },
+    // W1063: const 泛型约束无法求值（警告）
+    ErrorCodeDefinition {
+        code: "W1063",
         category: ErrorCategory::Warning,
     },
 ];

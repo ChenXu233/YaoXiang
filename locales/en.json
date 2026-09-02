@@ -560,14 +560,6 @@
     "example": "let x = 10 / 0;",
     "error_output": "error[E6001]: division by zero\n --> runtime\n  |\n  | let x = 10 / 0;\n  |     ^ division by zero"
   },
-  "E6002": {
-    "title": "Null pointer dereference",
-    "message": "Attempted to access null value",
-    "template": "Null pointer dereference at {location}",
-    "help": "Add a null check before accessing the value",
-    "example": "let x = nil; println!(x.field);",
-    "error_output": "error[E6002]: null pointer dereference\n --> runtime\n  |\n  | println!(x.field);\n  |     ^ cannot access field of null value"
-  },
   "E6003": {
     "title": "Array index out of bounds",
     "message": "Array index out of bounds at runtime",
@@ -740,11 +732,6 @@
     "template": "Cannot dereference raw pointer outside of unsafe block",
     "help": "Wrap the dereference operation in an `unsafe` block."
   },
-  "E2029": {
-    "title": "spawn ref cycle",
-    "template": "cross-task circular reference: {cycle}",
-    "help": "ref variables within the spawn block form a reference cycle. Use Weak to break the cycle, or bypass detection in an unsafe block."
-  },
   "E3004": {
     "title": "Unsupported Iterator",
     "template": "Unsupported iterator type: {iter_type}",
@@ -831,11 +818,6 @@
     "title": "Runtime error",
     "template": "Runtime error: {message}",
     "help": "See the error message for details"
-  },
-  "E8004": {
-    "title": "Unimplemented Feature",
-    "template": "Unimplemented feature: {feature}",
-    "help": "This feature is not yet implemented."
   },
   "E0016": {
     "title": "Expected Expression",
@@ -924,5 +906,10 @@
     "message": "break/continue are only allowed inside a while/for loop body",
     "template": "'{keyword}' outside of a loop",
     "help": "Move '{keyword}' into a while/for loop body"
+  },
+  "E1064": {
+    "title": "Invalid binding position",
+    "template": "Invalid binding position: {positions} (function has {total} parameter(s))",
+    "help": "Binding positions must fall within the parameter range of the bound function. Check the position numbers of the method binding."
   }
 }

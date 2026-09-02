@@ -507,14 +507,6 @@
     "example": "let x = 10 / 0;",
     "error_output": "error[E6001]: 零除之误\n --> runtime\n  |\n  | let x = 10 / 0;\n  |     ^ 除以零"
   },
-  "E6002": {
-    "title": "空指针解引",
-    "message": "欲访空值",
-    "template": "{location} 处空指针解引",
-    "help": "访值之前先查空",
-    "example": "let x = nil; println!(x.field);",
-    "error_output": "error[E6002]: 空指针解引\n --> runtime\n  |\n  | println!(x.field);\n  |     ^ 不能访空值之字段"
-  },
   "E6003": {
     "title": "数组索引越界",
     "message": "数组索引于运行时越界",
@@ -687,11 +679,6 @@
     "template": "unsafe 块外弗能解引用裸指针",
     "help": "请将解引用操作裹于 `unsafe` 块中。"
   },
-  "E2029": {
-    "title": "spawn ref 循环",
-    "template": "跨任务循环引用：{cycle}",
-    "help": "spawn 块内之 ref 变量成引用之循环。以 Weak 破之，或于 unsafe 块中绕过检测。"
-  },
   "E3004": {
     "title": "未受支持之迭代器",
     "template": "未受支持之迭代器类型：{iter_type}",
@@ -768,11 +755,6 @@
     "title": "运行时之误",
     "template": "运行时之误：{message}",
     "help": "审错误信息以知其详"
-  },
-  "E8004": {
-    "title": "未成之功",
-    "template": "未成之功：{feature}",
-    "help": "此功尚未成焉。"
   },
   "E0016": {
     "title": "期有表达式",
@@ -929,5 +911,20 @@
     "message": "break/continue 唯可施於 while/for 循環體內",
     "template": "'{keyword}' 見於循環之外",
     "help": "徙 '{keyword}' 入 while/for 循環體內"
+  },
+  "E1064": {
+    "title": "绑定之位无稽",
+    "template": "绑定之位无稽：{positions}（其函数凡 {total} 参）",
+    "help": "绑定之位当在被绑函数参数之数内，宜察方法绑定之位号。"
+  },
+  "E3006": {
+    "title": "变量未解",
+    "template": "IR 生成之内疾：变量 '{name}' 迄未得解",
+    "help": "变量之引用至 IR 生成犹未得解，盖类型检查有所遗漏，此编译器内部之疾，幸报之。"
+  },
+  "E3007": {
+    "title": "顶层绑定之初始化必为常量",
+    "template": "顶层绑定 '{name}' 之初始化必为编译期常量表达式",
+    "help": "顶层绑定乃编译期常量（访问器函数径返折叠之值），运行时计算之初始化所不载。宜改为字面量或常量运算，或移入函数体。"
   }
 }

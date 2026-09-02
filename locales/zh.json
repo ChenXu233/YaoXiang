@@ -560,14 +560,6 @@
     "example": "let x = 10 / 0;",
     "error_output": "error[E6001]: 除零错误\n --> runtime\n  |\n  | let x = 10 / 0;\n  |     ^ 除以零"
   },
-  "E6002": {
-    "title": "空指针解引用",
-    "message": "试图访问空值",
-    "template": "在 {location} 空指针解引用",
-    "help": "在访问值之前添加空值检查",
-    "example": "let x = nil; println!(x.field);",
-    "error_output": "error[E6002]: 空指针解引用\n --> runtime\n  |\n  | println!(x.field);\n  |     ^ 无法访问空值的字段"
-  },
   "E6003": {
     "title": "数组索引越界",
     "message": "数组索引在运行时越界",
@@ -740,11 +732,6 @@
     "template": "无法在 unsafe 块外解引用裸指针",
     "help": "将解引用操作包裹在 `unsafe` 块中。"
   },
-  "E2029": {
-    "title": "spawn ref 循环",
-    "template": "跨任务循环引用: {cycle}",
-    "help": "spawn 块内的 ref 变量形成了引用循环。使用 Weak 打破循环，或在 unsafe 块中绕过检测。"
-  },
   "E3004": {
     "title": "不支持的迭代器",
     "template": "不支持的迭代器类型：{iter_type}",
@@ -831,11 +818,6 @@
     "title": "运行时错误",
     "template": "运行时错误：{message}",
     "help": "查看错误消息了解详情"
-  },
-  "E8004": {
-    "title": "未实现功能",
-    "template": "未实现功能：{feature}",
-    "help": "此功能尚未实现。"
   },
   "E0016": {
     "title": "期望表达式",
@@ -924,5 +906,10 @@
     "message": "break/continue 只能在 while/for 循环体内使用",
     "template": "'{keyword}' 出现在循环外",
     "help": "把 '{keyword}' 移入 while/for 循环体内"
+  },
+  "E1064": {
+    "title": "绑定位置索引无效",
+    "template": "绑定位置索引无效：{positions}（函数共 {total} 个参数）",
+    "help": "绑定位置必须落在被绑函数的参数范围内（越界或归一化后仍为负）。请检查方法绑定的位置编号。"
   }
 }

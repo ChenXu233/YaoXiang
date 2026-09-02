@@ -283,6 +283,8 @@ E1001::unknown_variable(&var_name)
 | E0012 | Invalid syntax            | 表达式/语句语法错误          |
 | E0013 | Mismatched brackets       | 圆括号、方括号、花括号不匹配 |
 | E0014 | Missing semicolon         | 语句末尾缺少分号             |
+| E0016 | Expected expression       | 期望表达式                   |
+| E0018 | Keyword as name           | 关键字不能用作名称           |
 
 #### E1xxx：类型检查
 
@@ -302,6 +304,33 @@ E1001::unknown_variable(&var_name)
 | E1040 | Operation not supported  | 类型不支持该操作           |
 | E1041 | Index out of bounds      | 数组/列表索引超出范围      |
 | E1042 | Field not found          | 访问不存在的结构体字段     |
+| E1050 | Boolean operand required | 需要布尔操作数             |
+| E1051 | Logical NOT requires boolean operand | 逻辑 NOT 需要布尔操作数 |
+| E1052 | Invalid dereference      | 无效解引用                 |
+| E1053 | Non-struct field access  | 非结构体字段访问           |
+| E1054 | Conditional type mismatch | 条件类型不匹配            |
+| E1055 | Constraint in non-generic context | 约束出现在非泛型上下文 |
+| E1060 | Type parameter count mismatch | 类型参数数量不匹配     |
+| E1061 | Cannot instantiate generic | 无法实例化泛型           |
+| E1062 | Const generic constraint failed | const 泛型约束失败   |
+| E1064 | Invalid binding position | 绑定位置索引无效（RFC-004） |
+| E1071 | Type definitions are only allowed at module level | 类型定义只能在模块级 |
+| E1081 | `?` can only be used within functions returning Result | `?` 仅允许在返回 Result 的函数内使用 |
+| E1082 | `?` can only be used with Result expressions | `?` 只能用于 Result 表达式 |
+| E1083 | Error type mismatch for `?` | `?` 的错误类型不匹配    |
+| E1090 | Type universe easter egg | Type: Type = Type 彩蛋（Note 级） |
+| E1091 | Invalid generic meta type | 无效的泛型元类型          |
+| E1092 | Invalid refinement type argument form | 精化类型实参形态非法 |
+| E1093 | Refinement argument count mismatch | 精化实参个数不匹配 |
+| E1094 | Unused compile-time value parameter | 未使用的编译期值参数 |
+| E1095 | Unknown interface        | 未知接口                   |
+| E1096 | Interface arity mismatch | 接口参数数量不匹配         |
+| E1097 | Interface member name conflict | 接口成员命名冲突     |
+| E1098 | Interface method not implemented | 接口方法未实现     |
+| E1099 | Interface method signature mismatch | 接口方法签名不匹配 |
+| E1100 | Duplicate interface method implementation | 接口方法重复实现 |
+| E1101 | Type does not implement interface | 类型未实现接口    |
+| E1102 | Loop control statement outside of a loop | 循环控制语句出现在循环外 |
 
 #### E2xxx：语义分析
 
@@ -313,6 +342,30 @@ E1001::unknown_variable(&var_name)
 | E2010 | Immutable assignment | 尝试修改不可变变量         |
 | E2011 | Uninitialized use    | 使用未初始化的变量         |
 | E2012 | Mutability conflict  | 不可变上下文中使用可变引用 |
+| E2013 | Variable shadowing   | 变量遮蔽                   |
+| E2014 | Use of moved value   | 使用已移动的值             |
+| E2016 | Immutable assignment | 不可变赋值                 |
+| E2018 | Mutable/immutable borrow conflict | 可变/不可变借用冲突 |
+| E2019 | Double free          | 双重释放                   |
+| E2020 | Use after free       | 释放后使用                 |
+| E2027 | Unsafe dereference   | unsafe 解引用              |
+| E2090 | Invalid signature    | 函数签名解析错误           |
+| E2091 | Unknown type in signature | 签名中出现未知类型    |
+| E2092 | Missing arrow in signature | 签名缺少返回箭头     |
+| E2093 | Duplicate parameter name | 重复参数名             |
+| E2094 | Generic parameter shadowing | 泛型参数遮蔽        |
+| E2095 | Parameter name shadows generic | 参数名遮蔽泛型    |
+
+#### E3xxx：代码生成
+
+| 代码  | 错误类型                        | 说明                       |
+| ----- | ------------------------------- | -------------------------- |
+| E3004 | Unsupported iterator            | 不支持的迭代器             |
+| E3005 | IR generation error             | IR 生成内部错误            |
+| E3006 | Unresolved variable             | 变量在 IR 生成阶段未解析   |
+| E3007 | Top-level initializer must be constant | 顶层绑定初始化必须为常量 |
+| E3014 | Register overflow               | 寄存器溢出                 |
+| E3017 | Invalid operand (code generation) | 无效操作数（代码生成）  |
 
 #### E4xxx：泛型与特质
 
@@ -323,7 +376,13 @@ E1001::unknown_variable(&var_name)
 | E4003 | Associated type error          | 关联类型定义/使用错误   |
 | E4004 | Duplicate trait implementation | 重复实现同一 trait      |
 | E4005 | Trait not found                | 找不到要求的 trait      |
-| E4006 | Sized bound violated           | Sized 约束不满足        |
+| E4006 | Sized bound violated           | Sized 约束不满足（预留，未实现） |
+| E4010 | Division by zero in constant expression | 常量表达式除零          |
+| E4011 | Constant overflow              | 常量溢出                   |
+| E4012 | Constant recursion too deep    | 常量递归过深               |
+| E4014 | Constant evaluation failed     | 常量求值失败               |
+| E4018 | Refinement predicate violation | 精化谓词违反               |
+| E4019 | Type equality does not hold    | 类型等式不成立             |
 
 #### E5xxx：模块与导入
 
@@ -334,6 +393,8 @@ E1001::unknown_variable(&var_name)
 | E5003 | Symbol not exported | 尝试访问未导出的符号 |
 | E5004 | Invalid module path | 模块路径格式错误     |
 | E5005 | Private access      | 访问私有符号         |
+| E5006 | Duplicate import    | 重复导入             |
+| E5007 | Module export listing | 模块导出列表（配套提示信息） |
 
 #### E6xxx：运行时错误
 
@@ -346,6 +407,7 @@ E1001::unknown_variable(&var_name)
 | E6005 | Assertion failed            | assert 失败（#280 接线）   |
 | E6006 | Function not found          | 运行时函数未找到           |
 | E6007 | Runtime error (generic)     | 通用运行时错误             |
+| E6008 | Key not found               | Dict 键缺失（#299 §4）     |
 
 > **#280 修订（2026-08-09）**：码表原按 Rust 语义草案（Assertion failed/Arithmetic overflow/Heap
 > allocation failed/Type cast failed）定义，与实现实际需求不符。YaoXiang 无空指针/堆分配失败/类型
@@ -373,7 +435,20 @@ E1001::unknown_variable(&var_name)
 | E8001 | Internal compiler error | 编译器内部错误    |
 | E8002 | Codegen error           | IR/字节码生成失败 |
 | E8003 | Unimplemented feature   | 使用未实现的功能  |
-| E8004 | Optimization error      | 编译器优化错误    |
+| E8004 | Optimization error      | 编译器优化错误（预留，未实现） |
+
+#### W1xxx：警告码
+
+| 代码  | 警告类型                                   | 说明                       |
+| ----- | ------------------------------------------ | -------------------------- |
+| W1001 | Unused exported function                   | 未使用的导出函数           |
+| W1002 | Unused exported type                       | 未使用的导出类型           |
+| W1003 | Unused import                              | 未使用的导入               |
+| W1004 | Unused exported variable                   | 未使用的导出变量           |
+| W1005 | Unused exported method                     | 未使用的导出方法           |
+| W1063 | Const generic constraint cannot be evaluated | const 泛型约束无法求值   |
+
+> W 码位规则：与 E 码同构按阶段分组（W+阶段千位段），W1xxx = 类型检查阶段警告。警告经独立通道发射（非阻断编译），压制/升级机制见 #321（M2）。
 
 ---
 
