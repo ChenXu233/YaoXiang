@@ -938,5 +938,23 @@
     "message": "约束编译期不可证，已降为运行时检查",
     "template": "约束编译期不可证，已降为运行时检查",
     "help": "宜虑增证明函数以固安全"
+  },
+  "E6009": {
+    "title": "Range 步长不合法",
+    "message": "Range 之步长必为非零",
+    "template": "Range 步长不合法：step = {step}",
+    "help": "iter/contains 之动态步长必非零，宜察步长表达式"
+  },
+  "E6010": {
+    "title": "整数解析不成",
+    "message": "此串不可解为整数",
+    "template": "整数解析不成：{input}",
+    "help": "宜察此串是否为合法整数（正负号可带）"
+  },
+  "E6011": {
+    "title": "浮点解析不成",
+    "message": "此串不可解为浮点数",
+    "template": "浮点解析不成：{input}",
+    "help": "宜察此串是否为合法浮点数"
   }
 }

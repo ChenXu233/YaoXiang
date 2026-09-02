@@ -535,7 +535,11 @@ pub(crate) fn native_parse_int(
         .unwrap_or_default();
     match s.trim().parse::<i64>() {
         Ok(n) => Ok(result_ok(RuntimeValue::Int(n))),
-        Err(e) => Ok(result_err(error_new(&format!("parse_int: {}", e), ctx))),
+        Err(e) => Ok(result_err(error_new(
+            "E6010",
+            &format!("parse_int: {}", e),
+            ctx,
+        ))),
     }
 }
 
@@ -557,11 +561,16 @@ pub(crate) fn native_parse_float(
                 Ok(result_ok(RuntimeValue::Float(f)))
             } else {
                 Ok(result_err(error_new(
+                    "E6011",
                     "parse_float: result is not finite",
                     ctx,
                 )))
             }
         }
-        Err(e) => Ok(result_err(error_new(&format!("parse_float: {}", e), ctx))),
+        Err(e) => Ok(result_err(error_new(
+            "E6011",
+            &format!("parse_float: {}", e),
+            ctx,
+        ))),
     }
 }

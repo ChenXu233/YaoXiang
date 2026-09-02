@@ -409,6 +409,9 @@ E1001::unknown_variable(&var_name)
 | E6006 | Function not found          | 运行时函数未找到           |
 | E6007 | Runtime error (generic)     | 通用运行时错误             |
 | E6008 | Key not found               | Dict 键缺失（#299 §4）     |
+| E6009 | Invalid range step          | Range 步长非法（step=0，std.range Result 化 #316） |
+| E6010 | Integer parse failed        | 整数解析失败（std.string.parse_int） |
+| E6011 | Float parse failed          | 浮点解析失败（std.string.parse_float） |
 
 > **#280 修订（2026-08-09）**：码表原按 Rust 语义草案（Assertion failed/Arithmetic overflow/Heap
 > allocation failed/Type cast failed）定义，与实现实际需求不符。YaoXiang 无空指针/堆分配失败/类型
@@ -494,9 +497,10 @@ Error { code: String, message: String }
 
 #### 码分配规则
 
-1. 运行时错误值码与编译期诊断码共用 E6xxx/E7xxx 空间，新码按**真实触发面**分配，不为想象中的场景预留。
-2. 先注册后使用：新码进入权威注册表并经三方一致性校验（codes/*.rs ↔ locales ↔ 本文档码表）后方可发射。
+1. 运行时错误值码与编译器诊断码共用 E6xxx/E7xxx 空间，新码按**真实触发面**分配，不为想象中的场景预留。
+2. 先注册后使用：新码进入权威注册表并经三方一致性校验（codes/*.rs ↔ locales ↔ 本文档码表）后方可发射。运行时错误值码的注册源为 `src/std/result.rs` 的 `RUNTIME_ERROR_CODES` 表（与诊断码同受 `scripts/check_error_codes.py` 校验）。
 3. E7xxx 为 std.io / std.net 错误值预留段位（当前空挂，io/net Result 化时启用）。
+4. 发射点（#323 M4）：std 各模块经 `error_new(code, message)` 构造 Error 值；消费侧 `std.result.unwrap_err` 取出 Err 载体，`std.result.code/message` 读取字段。
 
 #### 演进路径（线 C，未实施）
 

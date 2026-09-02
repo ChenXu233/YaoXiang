@@ -210,7 +210,7 @@ fn native_iter(
     };
     // #316：动态 step=0 → Err(Error) 值（构造点已拦字面量零；旧运行时硬崩废除）
     if step == 0 {
-        let err = crate::std::result::error_new("Range step must be non-zero", ctx);
+        let err = crate::std::result::error_new("E6009", "Range step must be non-zero", ctx);
         return Ok(crate::std::result::result_err(err));
     }
     let items = vec![
@@ -341,7 +341,7 @@ fn native_contains(
 
     // #316：动态 step=0 → Err(Error) 值
     if step == 0 {
-        let err = crate::std::result::error_new("Range step must be non-zero", ctx);
+        let err = crate::std::result::error_new("E6009", "Range step must be non-zero", ctx);
         return Ok(crate::std::result::result_err(err));
     }
 

@@ -310,7 +310,7 @@ fn test_result_err_unwrap_returns_error() {
     // Arrange
     let mut heap = Heap::new();
     let mut ctx = test_ctx(&mut heap);
-    let err = result_err(error_new("fail", &mut ctx));
+    let err = result_err(error_new("E6007", "fail", &mut ctx));
 
     // Act
     let result = native_result_unwrap(&[err], &mut ctx);
@@ -347,7 +347,7 @@ fn test_result_is_ok_on_err_returns_false() {
     // Arrange
     let mut heap = Heap::new();
     let mut ctx = test_ctx(&mut heap);
-    let err = result_err(error_new("x", &mut ctx));
+    let err = result_err(error_new("E6007", "x", &mut ctx));
 
     // Act
     let result = native_result_is_ok(&[err], &mut ctx).unwrap();
@@ -366,7 +366,7 @@ fn test_result_unwrap_or_with_err_returns_default() {
     // Arrange
     let mut heap = Heap::new();
     let mut ctx = test_ctx(&mut heap);
-    let err = result_err(error_new("x", &mut ctx));
+    let err = result_err(error_new("E6007", "x", &mut ctx));
 
     // Act
     let result = native_result_unwrap_or(&[err, RuntimeValue::Int(0)], &mut ctx).unwrap();

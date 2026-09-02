@@ -82,6 +82,42 @@ map: (R: Type) -> ((self: Result(T, E), f: (T) -> R) -> Result(R, E))
 map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ```
 
+**Error 载体与错误码（#323 M4）**：
+
+std 各模块的 Err 载体 `Error` 携带规范化错误码，码复用 RFC-013 的 E6xxx/E7xxx 段位（如
+E6009 = Range 步长非法），为跨版本稳定契约——程序可按码编程判定，`yaoxiang explain E6009`
+可查文档。码索引见 RFC-013「运行时错误值与码贯通」章节。
+
+```yaoxiang
+// Error 值形态：{ code: String, message: String }
+
+// 取出 Err 载体（Ok 时报运行时错误）
+unwrap_err: (T, E) -> ((self: Result(T, E)) -> E)
+
+// 读取错误码 / 消息
+code: (self: Error) -> String
+message: (self: Error) -> String
+```
+
+**按码判定示例**：
+
+```yaoxiang
+use std.range
+use std.result
+
+r = range.iter(1..10..0)      // step=0 → Err(Error)
+if result.is_err(r) {
+    e = result.unwrap_err(r)
+    if result.code(e) == "E6009" {
+        // 按 Range 步长非法分支处理
+        io.println(result.message(e))
+    }
+}
+```
+
+用户自定义错误建模走 `Result(T, E)` 的 E 泛型参数（自定义变体集），std `Error`
+是便捷兜底载体，其码体系不约束用户 E 类型。
+
 ### 1.4 错误传播
 
 ```

@@ -1,0 +1,55 @@
+// 07-std/error_codes.yx
+// 覆盖: stdlib.md §1.3 Error 载体与错误码（#323 M4，RFC-013 运行时错误值与码贯通）
+// 验证:
+//   - Error 值携带规范化错误码（unwrap_err 取载体，code/message 访问）
+//   - E6009（Range 步长非法，动态 step）/ E6010（整数解析失败）按码判定
+//   - `?` 传播后的 Err 载体携带原码
+//   - 字面量 step=0 走编译期精化（non-zero Int (range step)），不落运行时
+// 状态: ✅ 可运行
+
+use std.assert
+use std.range
+use std.result
+use std.string
+
+// Err 构造路径：动态 step=0（参数类型 Int 无精化，运行时才触发 E6009）
+mk_range: (n: Int) -> Result(Iterator(Any), Error) = {
+    r = 1..10..n
+    return range.iter(r)
+}
+
+// `?` 挂载点：Err 经传播到 Result 返回类型的函数，载体携带原码
+step0: (n: Int) -> Result(Any, Error) = {
+    r = 1..10..n
+    it = range.iter(r)?
+    return result.ok(range.next(it))
+}
+
+main = {
+    // 1. 动态 step=0 → E6009（Range 步长非法）
+    r = mk_range(0)
+    assert.assert(result.is_err(r), "step=0 → Err")
+    e = result.unwrap_err(r)
+    assert.assert(result.code(e) == "E6009", "code == E6009")
+    assert.assert(!(result.message(e) == ""), "message 非空")
+
+    // 2. 合法 step 路径不受影响
+    ok_r = mk_range(2)
+    assert.assert(result.is_ok(ok_r), "step=2 → Ok")
+
+    // 3. parse_int 失败 → E6010（整数解析失败）
+    bad = string.parse_int("oops")
+    assert.assert(result.is_err(bad), "parse_int 失败 → Err")
+    eb = result.unwrap_err(bad)
+    assert.assert(result.code(eb) == "E6010", "code == E6010")
+
+    // 4. parse_int 成功路径
+    good = string.parse_int("42")
+    assert.assert(result.unwrap(good) == 42, "parse_int 成功 == 42")
+
+    // 5. `?` 传播后的 Err 载体携带原码（E6009 不被改写）
+    p = step0(0)
+    assert.assert(result.is_err(p), "? 传播 → Err")
+    ep = result.unwrap_err(p)
+    assert.assert(result.code(ep) == "E6009", "? 传播携带 E6009")
+}

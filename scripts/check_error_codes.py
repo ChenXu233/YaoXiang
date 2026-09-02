@@ -34,24 +34,40 @@ RFC_TABLE_ROW_RE = re.compile(r"^\|\s*`?([EW]\d{4})`?\s*\|")
 RESERVED_MARKS = ("预留", "未接线", "已删")
 
 
-def collect_code_defs() -> tuple[dict[str, list[str]], list[str]]:
-    """返回 (码 -> 定义文件列表, 错误列表)。"""
+def load_registered_codes() -> tuple[dict[str, list[str]], list[str]]:
+    """返回 (码 -> 定义文件列表, 错误列表)。
+
+    两个注册源：
+    - 编译器诊断码：src/util/diagnostic/codes/*.rs 的 code: "..." 定义
+    - 运行时错误值码：src/std/result.rs 的 RUNTIME_ERROR_CODES 表（#323 M4）
+    """
     defs: dict[str, list[str]] = {}
     errors: list[str] = []
-    for path in sorted(CODES_DIR.glob("e*xxx.rs")) + sorted(CODES_DIR.glob("w*xxx.rs")):
+    sources = sorted(CODES_DIR.glob("e*xxx.rs")) + sorted(CODES_DIR.glob("w*xxx.rs"))
+    result_rs = REPO / "src" / "std" / "result.rs"
+    if result_rs.exists():
+        sources.append(result_rs)
+    for path in sources:
         seg = path.name[1]  # e1xxx.rs -> '1'
-        for m in CODE_RE.finditer(path.read_text(encoding="utf-8")):
+        text = path.read_text(encoding="utf-8")
+        if path == result_rs:
+            # RUNTIME_ERROR_CODES 表：("E60xx", "语义") 元组形态
+            for m in re.finditer(r'\("([EW]\d{4})",', text):
+                defs.setdefault(m.group(1), []).append(path.name)
+            continue
+        for m in CODE_RE.finditer(text):
             code = m.group(1)
             defs.setdefault(code, []).append(path.name)
-            # 段位合法性：E 码在 e 文件且千位一致；W 码只在 w 文件
-            if code.startswith("E"):
-                if not path.name.startswith("e"):
-                    errors.append(f"段位错误: {code} 定义在 {path.name}（E 码不得出现在 w* 文件）")
-                elif code[1] != seg:
-                    errors.append(f"段位错误: {code} 定义在 {path.name}（千位段不一致）")
-            else:  # W 码
-                if not path.name.startswith("w"):
-                    errors.append(f"段位错误: {code} 定义在 {path.name}（W 码不得出现在 e* 文件）")
+            if path.parent == CODES_DIR:
+                # 段位合法性仅约束诊断码文件（E 码在 e 文件且千位一致；W 码只在 w 文件）
+                if code.startswith("E"):
+                    if not path.name.startswith("e"):
+                        errors.append(f"段位错误: {code} 定义在 {path.name}（E 码不得出现在 w* 文件）")
+                    elif code[1] != seg:
+                        errors.append(f"段位错误: {code} 定义在 {path.name}（千位段不一致）")
+                else:  # W 码
+                    if not path.name.startswith("w"):
+                        errors.append(f"段位错误: {code} 定义在 {path.name}（W 码不得出现在 e* 文件）")
     for code, files in defs.items():
         if len(files) > 1:
             errors.append(f"重复定义: {code} 出现于 {', '.join(files)}")
@@ -111,7 +127,7 @@ def check_rfc013(defs: dict[str, list[str]]) -> list[str]:
 
 def main() -> int:
     report = "--report" in sys.argv
-    defs, errors = collect_code_defs()
+    defs, errors = load_registered_codes()
     errors += check_locales(defs)
     errors += check_rfc013(defs)
 

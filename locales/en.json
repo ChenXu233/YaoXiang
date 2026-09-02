@@ -923,5 +923,23 @@
     "message": "The constraint cannot be proven at compile time",
     "template": "Constraint cannot be proven at compile time; demoted to runtime check",
     "help": "Consider adding a proof function for better safety"
+  },
+  "E6009": {
+    "title": "Invalid range step",
+    "message": "The range step must be non-zero",
+    "template": "Invalid range step: step = {step}",
+    "help": "iter/contains require a non-zero dynamic step; check the step expression"
+  },
+  "E6010": {
+    "title": "Integer parse failed",
+    "message": "The string cannot be parsed as an integer",
+    "template": "Integer parse failed: {input}",
+    "help": "Check whether the string is a valid integer (optional sign)"
+  },
+  "E6011": {
+    "title": "Float parse failed",
+    "message": "The string cannot be parsed as a float",
+    "template": "Float parse failed: {input}",
+    "help": "Check whether the string is a valid float"
   }
 }
