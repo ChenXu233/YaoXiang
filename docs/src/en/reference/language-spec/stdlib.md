@@ -30,23 +30,23 @@ Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 
 | Variant       | Syntax               | Description |
 | ------------- | -------------------- | ----------- |
-| `Option.some` | `Option.some(value)` | Has a value |
+| `Option.some` | `Option.some(value)` | Has value   |
 | `Option.none` | `Option.none()`      | No value    |
 
 **Common Methods**:
 
 ```yaoxiang
-// Check whether there is a value
+// Check whether has a value
 is_some: (self: Option(T)) -> Bool
 is_none: (self: Option(T)) -> Bool
 
-// Get the value (may panic)
+// Get value (may panic)
 unwrap: (self: Option(T)) -> T
 
-// Get the value or a default
+// Get value or default
 unwrap_or: (self: Option(T), default: T) -> T
 
-// Map the value
+// Map value
 map: (R: Type) -> ((self: Option(T), f: (T) -> R) -> Option(R))
 ```
 
@@ -66,22 +66,60 @@ Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Resu
 **Common Methods**:
 
 ```yaoxiang
-// Check whether it is successful
+// Check whether successful
 is_ok: (self: Result(T, E)) -> Bool
 is_err: (self: Result(T, E)) -> Bool
 
-// Get the value (may panic)
+// Get value (may panic)
 unwrap: (self: Result(T, E)) -> T
 
-// Get the value or a default
+// Get value or default
 unwrap_or: (self: Result(T, E), default: T) -> T
 
-// Map the success value
+// Map success value
 map: (R: Type) -> ((self: Result(T, E), f: (T) -> R) -> Result(R, E))
 
-// Map the error value
+// Map error value
 map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ```
+
+**Error Carrier and Error Codes (#323 M4)**:
+
+The `Error` Err carrier of each std module carries normalized error codes, reusing the E6xxx/E7xxx
+segments from RFC-013 (e.g., E6009 = Range invalid step), as a cross-version stable
+contract—programs can branch by code, and `yaoxiang explain E6009` can look up documentation. See
+the "Runtime Error Values and Code Unification" chapter of RFC-013 for the code index.
+
+```yaoxiang
+// Error value shape: { code: String, message: String }
+
+// Extract Err carrier (runtime error on Ok)
+unwrap_err: (T, E) -> ((self: Result(T, E)) -> E)
+
+// Read error code / message
+code: (self: Error) -> String
+message: (self: Error) -> String
+```
+
+**Branching by Code Example**:
+
+```yaoxiang
+use std.range
+use std.result
+
+r = range.iter(1..10..0)      // step=0 → Err(Error)
+if result.is_err(r) {
+    e = result.unwrap_err(r)
+    if result.code(e) == "E6009" {
+        // Handle by Range invalid step branch
+        io.println(result.message(e))
+    }
+}
+```
+
+User-defined error modeling goes through the E generic parameter of `Result(T, E)` (custom variant
+set); the std `Error` is a convenient fallback carrier, and its code system does not constrain user
+E types.
 
 ### 1.4 Error Propagation
 
@@ -89,10 +127,10 @@ map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ErrorPropagate ::= Expr '?'
 ```
 
-The `?` operator automatically propagates errors from Result types:
+The `?` operator automatically propagates errors of the Result type:
 
 ```
-// Returns the value on success, returns err upward on failure
+// Return value on success, return err upward on failure
 data = fetch_data()?
 
 // Equivalent to
@@ -104,8 +142,8 @@ data = match fetch_data() {
 
 ### 1.5 Assertions (std.assert)
 
-The `std.assert` module provides a unified assertion mechanism — the runtime `assert` and the
-compile-time refinement type `Assert` are two sides of the same primitive.
+The `std.assert` module provides a unified assertion mechanism—runtime `assert` and compile-time
+refinement type `Assert` are two sides of the same primitive.
 
 ```yaoxiang
 // IsTrue: bridge function from value to type
@@ -124,14 +162,14 @@ assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))
 assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 ```
 
-**Dispatch**:
+**dispatch**:
 
-| Condition                                              | Behavior                                                           |
-| ------------------------------------------------------ | ------------------------------------------------------------------ |
-| All free variables of `cond` are known at compile time | Compiler evaluates; true → erased, false → compile error           |
-| Runtime free variables exist                           | Insert a runtime check; inject the flow-sensitive assumption set Γ |
+| Condition                                            | Behavior                                                     |
+| ---------------------------------------------------- | ------------------------------------------------------------ |
+| All free variables of cond are known at compile-time | Compiler evaluates; true → erased, false → compile error     |
+| Free variables exist at runtime                      | Insert runtime check, inject flow-sensitive assumption set Γ |
 
-`assert(false, "msg")` is equivalent to raise — no separate throw/raise keyword is needed.
+`assert(false, "msg")` is equivalent to raise—no separate throw/raise keyword is needed.
 
 ---
 
@@ -201,7 +239,7 @@ min: (a: Int, b: Int) -> Int
 max: (a: Float, b: Float) -> Float
 min: (a: Float, b: Float) -> Float
 
-// Power
+// Power operation
 pow: (base: Float, exp: Float) -> Float
 sqrt: (x: Float) -> Float
 
@@ -247,7 +285,7 @@ length: (s: String) -> Int
 // String concatenation
 concat: (a: String, b: String) -> String
 
-// String splitting
+// String split
 split: (s: String, delimiter: String) -> List(String)
 
 // String search
@@ -343,8 +381,8 @@ Iterator: (T: Type) -> Type = {
 ### 6.2 Iterator Adapters
 
 ```yaoxiang
-// Range iterator (Range is an official type; at runtime its identity is an immutable
-// record of three scalars, no longer borrowing a Tuple shell; prints `1..10` / `1..10..2`,
+// Range iterator (Range is an official type; its runtime identity is a three-scalar
+// immutable record, no longer borrowing the Tuple shell; prints `1..10` / `1..10..2`,
 // structural equality, named fields)
 Range: Type = {
     start: Int,
@@ -353,50 +391,49 @@ Range: Type = {
     Iterator(Int)
 }
 
-// Usage (iterator protocol: std.range.iter/has_next/next; for is dispatched via static typing)
+// Usage (iterator protocol: std.range.iter/has_next/next, for dispatches via static types)
 for i in 0..10 {
     print(i)
 }
 
-// Step form (double dot, no new keyword)
+// Step form (double-dot, no new keyword)
 for i in 0..10..2 {
     print(i)
 }
 ```
 
-> **`Range(Int)` is officially landed** — the named fields `r.start` / `r.end` / `r.step` are
-> accessible; at runtime `x in r` goes through `std.range.contains` (bound check + step alignment),
-> and the proof pipeline recognizes it as the interval proposition
-> `x >= r.start && x < r.end && (x - r.start) % r.step == 0` (interval is preserved as an interval,
-> not materialized). A `step=0` literal is rejected at compile time; dynamic `step=0` has been
-> turned into a `Result`: `std.range.iter` → `Result(Iterator, Error)`, `std.range.contains` →
-> `Result(Bool, Error)`, and the consumption point uses `?` to propagate up the call stack or
-> `result.unwrap` to branch explicitly; the `for` / `in` sugar is desugared in `ir_gen` to unwrap,
-> and the Err branch (dynamic `step=0`) fails explicitly (`abort_invalid_step`) — never silently
-> dead-loops. The interface instantiation (the `Iterator(Int)` declaration inside the type body)
-> type syntax and static dispatch have landed with RFC-011a phases 1-2: the type-body application
-> item `Iterator(Int)` triggers `Self ↦ Range` substitution expansion and completeness checking, and
-> an implementation proof is generated upon passing. Dynamic dispatch has landed with phase 3: when
-> the interface name is uninstantiated yet the type exists (`List(Animal)`), concrete values that
-> enter an existential-type position are automatically wrapped as a variant value, and element
-> method calls are dispatched by the actual type (§6). The runtime protocol surface of the
-> `std.range` module is still provided by native methods for now; migrating to interface-based
-> dispatch is future work.
+> **`Range(Int)` has officially landed**—the named fields `r.start`/`r.end`/`r.step` are accessible;
+> `x in r` at runtime goes through `std.range.contains` (bound check + step alignment), with the
+> proof pipeline recognizing it as the interval proposition
+> `x >= r.start && x < r.end && (x - r.start) % r.step == 0` (interval stays an interval, not
+> materialized). The `step=0` literal is rejected at compile-time; dynamic `step=0` has been
+> Result-ified: `std.range.iter` → `Result(Iterator, Error)`, `std.range.contains` →
+> `Result(Bool, Error)`; consumers use `?` to propagate along the call stack, or `result.unwrap` for
+> explicit branching; `for`/`in` sugar desugars and unwraps in ir_gen, and the Err branch (dynamic
+> step=0) fails explicitly (`abort_invalid_step`), never silently looping forever. The type syntax
+> for interface instantiation (type-body `Iterator(Int)` declaration) and static dispatch have
+> landed with RFC-011a phases 1-2: the type-body application item `Iterator(Int)` triggers
+> `Self ↦ Range` substitution and completeness check, and an implementation proof is generated upon
+> passing. Dynamic dispatch has landed with phase 3: when the interface name is un-instantiated, the
+> type exists (`List(Animal)`), and concrete values entering existential positions are automatically
+> wrapped as variant values, with method calls on elements dispatched by actual type (§6). The
+> runtime protocol surface of the `std.range` module is still provided by native methods for now,
+> and migration to interface dispatch is future work.
 
 ---
 
 ## Appendix: Standard Library Module Index
 
-| Module           | Description                                                                    |
-| ---------------- | ------------------------------------------------------------------------------ |
-| `std.assert`     | Assertion mechanism — runtime `assert` + compile-time `Assert` refinement type |
-| `std.option`     | Option type                                                                    |
-| `std.result`     | Result type                                                                    |
-| `std.collection` | Collection types such as List and Map                                          |
-| `std.string`     | String operations                                                              |
-| `std.array`      | Array operations                                                               |
-| `std.iterator`   | Iterator (the protocol surface is currently provided by `std.range`)           |
-| `std.range`      | Range iterator, interval predicates, and adapters                              |
+| Module           | Description                                                              |
+| ---------------- | ------------------------------------------------------------------------ |
+| `std.assert`     | Assertion mechanism—runtime assert + compile-time Assert refinement type |
+| `std.option`     | Option type                                                              |
+| `std.result`     | Result type                                                              |
+| `std.collection` | List, Map, and other collection types                                    |
+| `std.string`     | String operations                                                        |
+| `std.array`      | Array operations                                                         |
+| `std.iterator`   | Iterator (protocol surface currently provided by `std.range`)            |
+| `std.range`      | Range iterator and interval predicates, adapters                         |
 
 ### A.2 IO Modules
 
@@ -420,5 +457,5 @@ for i in 0..10..2 {
 | ------------ | ---------------------------------------------------------------------- |
 | `std.random` | Random number generation                                               |
 | `std.time`   | Time and date                                                          |
-| `std.assert` | Unified compile-time `Assert(C)` and runtime `assert(x > 0)` (RFC-030) |
+| `std.assert` | Compile-time `Assert(C)` and runtime `assert(x > 0)` unified (RFC-030) |
 | `std.regex`  | Regular expressions                                                    |
