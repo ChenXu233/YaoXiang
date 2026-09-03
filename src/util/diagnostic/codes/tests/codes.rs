@@ -35,7 +35,13 @@ fn test_error_code_registry_has_minimum_count() {
 #[test]
 fn test_i18n_registry_english_titles() {
     let en = I18nRegistry::new("en");
-    assert_eq!(en.get_title("E0001"), "Invalid Character");
+    // en 是 bot 翻译产物（zh 为源），措辞/大小写会随重翻变化——
+    // 只锚定结构：title 取到了且不是 code 回退串
+    let title = en.get_title("E0001");
+    assert!(
+        !title.is_empty() && title != "E0001",
+        "E0001 en title should come from locale, got: {title}"
+    );
     assert!(
         !en.get_help("E0001").is_empty(),
         "E0001 help text should not be empty"

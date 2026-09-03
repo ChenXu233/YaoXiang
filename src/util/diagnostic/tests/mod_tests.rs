@@ -39,8 +39,10 @@ main = () => {
     let clean_output = strip_ansi(&output);
 
     assert!(clean_output.contains("error [E1001]"), "{}", clean_output);
+    // 消息文本是 locales 产物（en 由 bot 维护），不断言精确措辞；
+    // 锚定"取到了真实标题"而非 i18n 缺失兜底串
     assert!(
-        clean_output.contains("Unknown variable"),
+        !clean_output.contains("missing i18n template"),
         "{}",
         clean_output
     );
