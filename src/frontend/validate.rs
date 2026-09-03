@@ -27,7 +27,6 @@ fn content_hash(content: &str) -> u64 {
     hash
 }
 use crate::util::diagnostic::Diagnostic;
-use crate::util::diagnostic::ErrorCodeDefinition;
 use std::sync::LazyLock;
 
 /// 前端验证结果
@@ -65,10 +64,8 @@ pub fn validate_source(source: &str) -> ValidateResult {
             Ok(tokens) => tokens,
             Err(err) => {
                 let result = ValidateResult {
-                    // #322 M3：走注册表快捷方法（i18n 模板渲染）
-                    diagnostics: vec![
-                        ErrorCodeDefinition::invalid_character(&err.to_string()).build()
-                    ],
+                    // #324：LexError 自带源码 span（to_diagnostic 内 .at）
+                    diagnostics: vec![err.to_diagnostic()],
                     module: None,
                 };
                 let mut cache = VALIDATE_CACHE.lock().unwrap();

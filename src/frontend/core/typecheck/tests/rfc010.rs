@@ -770,6 +770,8 @@ fn test_rfc010_function_return_type_mismatch() {
 /// - 应产生类型错误（类型注解缺失或语法错误）
 #[test]
 fn test_rfc010_without_type_annotation_not_type_constructor() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange - 无 `: Type` 的 record 语法不应被解析为类型定义
     let source = r#"
         Point = { x: Float, y: Float }

@@ -11,6 +11,8 @@ use crate::util::span::Span;
 
 #[test]
 fn test_w_prefix_codes_default_to_warning_severity() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // W 前缀码：builder 未显式指定 severity 时缺省 Warning（#321 M2）
     let diag = ErrorCodeDefinition::find("W1001")
         .expect("W1001 registered")
@@ -30,6 +32,8 @@ fn test_w_prefix_codes_default_to_warning_severity() {
 
 #[test]
 fn test_explicit_severity_overrides_w_prefix_default() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // 显式指定的 severity 优先于 W 前缀缺省推导
     let diag = ErrorCodeDefinition::find("W1001")
         .expect("W1001 registered")
@@ -42,6 +46,8 @@ fn test_explicit_severity_overrides_w_prefix_default() {
 
 #[test]
 fn test_error_collector_splits_errors_and_warnings() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     let mut collector = ErrorCollector::new();
 
     let warning = ErrorCodeDefinition::find("W1001")

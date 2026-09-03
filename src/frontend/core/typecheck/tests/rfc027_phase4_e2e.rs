@@ -124,6 +124,8 @@ fn test_e2e_phase4_smt_disproved_preserves_assignments() {
 /// 验证完整管道：check_predicate → Disproved → into_diagnostic → E4018
 #[test]
 fn test_e2e_phase4_into_diagnostic_predicate_violation_e4018() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange
     let constraint = binop(
         BinOp::Gt,
@@ -209,6 +211,8 @@ fn test_e2e_phase4_into_diagnostic_with_span() {
 /// 验证完整管道：check_predicate → into_result → Err(E4018)
 #[test]
 fn test_e2e_phase4_into_result_disproved_to_err() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange
     let constraint = binop(
         BinOp::Gt,
@@ -250,6 +254,8 @@ fn test_e2e_phase4_into_result_disproved_to_err() {
 /// 两个不同类型归约后不等 → Disproved(TypeMismatch)
 #[test]
 fn test_e2e_phase4_type_equivalence_type_mismatch() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange
     let lhs = MonoType::Int(64);
     let rhs = MonoType::Float(64);
@@ -303,6 +309,8 @@ fn test_e2e_phase4_type_equivalence_same_type_proved() {
 /// E2E: 多变量约束 Disproved → 所有变量都出现在反例中
 #[test]
 fn test_e2e_phase4_multivariable_constraint_disproved() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange
     // 约束: x + y > 0，无假设 → SMT 可找 x=-1, y=0
     let constraint = ConstExpr::BinOp {
@@ -344,6 +352,8 @@ fn test_e2e_phase4_multivariable_constraint_disproved() {
 /// E2E: 批量 DisproofModel — 多个证明结果各自独立转换
 #[test]
 fn test_e2e_phase4_multiple_disproved_models_independent() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange — 两个独立的约束
     let constraint1 = binop(
         BinOp::Gt,

@@ -25,6 +25,8 @@ fn test_proved_is_proved_returns_true() {
 
 #[test]
 fn test_into_diagnostic_predicate_violation_basic() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange
     let model = DisproofModel {
         kind: DisproofKind::PredicateViolation,
@@ -61,6 +63,8 @@ fn test_into_diagnostic_predicate_violation_basic() {
 
 #[test]
 fn test_into_diagnostic_predicate_violation_multiple_assignments() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange
     let model = DisproofModel {
         kind: DisproofKind::PredicateViolation,
@@ -93,6 +97,8 @@ fn test_into_diagnostic_predicate_violation_multiple_assignments() {
 
 #[test]
 fn test_into_diagnostic_predicate_violation_empty_assignments() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange
     let model = DisproofModel {
         kind: DisproofKind::PredicateViolation,
@@ -156,6 +162,8 @@ fn test_into_diagnostic_predicate_violation_with_span() {
 
 #[test]
 fn test_into_diagnostic_type_mismatch_basic() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange
     let model = DisproofModel {
         kind: DisproofKind::TypeMismatch,
@@ -196,6 +204,8 @@ fn test_into_diagnostic_type_mismatch_basic() {
 
 #[test]
 fn test_into_diagnostic_type_mismatch_single_assignment() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange
     let model = DisproofModel {
         kind: DisproofKind::TypeMismatch,
@@ -217,6 +227,8 @@ fn test_into_diagnostic_type_mismatch_single_assignment() {
 
 #[test]
 fn test_into_diagnostic_type_mismatch_empty_assignments() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange
     let model = DisproofModel {
         kind: DisproofKind::TypeMismatch,
@@ -257,6 +269,8 @@ fn test_into_result_proved_returns_ok() {
 
 #[test]
 fn test_into_result_disproved_returns_diagnostic_error() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange
     let model = DisproofModel {
         kind: DisproofKind::PredicateViolation,

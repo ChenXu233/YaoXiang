@@ -242,6 +242,8 @@ impl TypeChecker {
     ) {
         // pass1: 类型定义
         for stmt in &module.items {
+            // #324：模块级阶段挂当前语句 span，诊断自动获得位置
+            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
             if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
                 name,
                 signature_params,
@@ -254,6 +256,8 @@ impl TypeChecker {
         }
         // pass2: 函数/绑定签名（使其可被前向引用）
         for stmt in &module.items {
+            // #324：模块级阶段挂当前语句 span，诊断自动获得位置
+            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
             self.collect_function_signature(stmt);
         }
         // RFC-004: 函数签名就位后登记类型体绑定
@@ -268,6 +272,8 @@ impl TypeChecker {
     ) -> TypeCheckResult {
         // 第一遍：收集所有类型定义
         for stmt in &module.items {
+            // #324：模块级阶段挂当前语句 span，诊断自动获得位置
+            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
             if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
                 name,
                 signature_params,
@@ -281,6 +287,8 @@ impl TypeChecker {
 
         // 第二遍：收集所有函数签名（使其可被前向引用）
         for stmt in &module.items {
+            // #324：模块级阶段挂当前语句 span，诊断自动获得位置
+            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
             self.collect_function_signature(stmt);
         }
 
@@ -355,6 +363,8 @@ impl TypeChecker {
 
         // 第三遍：检查所有语句（包括函数体）
         for stmt in &module.items {
+            // #324：模块级阶段挂当前语句 span，诊断自动获得位置
+            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
             if let Err(e) = self.body_checker_mut().check_stmt(stmt) {
                 self.add_error(*e);
             }
@@ -2028,6 +2038,8 @@ impl TypeChecker {
     ) {
         use crate::frontend::core::parser::ast::StmtKind;
         for stmt in &module.items {
+            // #324：模块级阶段挂当前语句 span，诊断自动获得位置
+            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
             if let StmtKind::Assign { target, is_pub, .. } = &stmt.kind {
                 let Some((name, type_name)) = target.receiver_parts() else {
                     continue;
@@ -2323,6 +2335,8 @@ impl TypeChecker {
 
         // 阶段 1：构建依赖图 + 初始绑定检查
         for stmt in &module.items {
+            // #324：模块级阶段挂当前语句 span，诊断自动获得位置
+            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
             self.build_dep_graph_and_check_init(
                 stmt,
                 &mut dep_graph,
@@ -2334,6 +2348,8 @@ impl TypeChecker {
 
         // 阶段 2：遍历赋值点，生成 VC
         for stmt in &module.items {
+            // #324：模块级阶段挂当前语句 span，诊断自动获得位置
+            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
             self.check_assignments_with_deps(stmt, &dep_graph, &mut shared_ctx, proof_calls);
         }
 

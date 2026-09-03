@@ -209,6 +209,8 @@ fn test_overload_resolver_with_many_candidates() {
 
 #[test]
 fn test_resolve_no_matching_candidate() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange: 只添加 Int 候选
     let mut resolver = OverloadResolver::new();
     resolver.add_candidate(OverloadCandidate::new(
@@ -233,6 +235,8 @@ fn test_resolve_no_matching_candidate() {
 
 #[test]
 fn test_resolve_unknown_function() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange: 添加名为 "add" 的候选
     let mut resolver = OverloadResolver::new();
     resolver.add_candidate(OverloadCandidate::new(
@@ -257,6 +261,8 @@ fn test_resolve_unknown_function() {
 
 #[test]
 fn test_resolve_arg_count_mismatch_too_few() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange: 候选需要 2 个参数
     let mut resolver = OverloadResolver::new();
     resolver.add_candidate(OverloadCandidate::new(
@@ -277,6 +283,8 @@ fn test_resolve_arg_count_mismatch_too_few() {
 
 #[test]
 fn test_resolve_arg_count_mismatch_too_many() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange: 候选需要 1 个参数
     let mut resolver = OverloadResolver::new();
     resolver.add_candidate(OverloadCandidate::new(
@@ -300,6 +308,8 @@ fn test_resolve_arg_count_mismatch_too_many() {
 
 #[test]
 fn test_resolve_empty_resolver() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange: 空解析器
     let resolver = OverloadResolver::new();
 
@@ -356,6 +366,8 @@ fn test_resolve_selects_best_among_multiple_candidates() {
 
 #[test]
 fn test_resolve_ambiguous_same_score() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange: 两个同优先级的泛型候选
     let mut resolver = OverloadResolver::new();
     resolver.add_candidate(OverloadCandidate::new(

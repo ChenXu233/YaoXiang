@@ -33,6 +33,7 @@ pub mod suggest;
 
 // 重新导出
 pub use codes::{ErrorCategory, ErrorCodeDefinition, I18nRegistry, DiagnosticBuilder, ErrorInfo};
+pub use codes::builder::{current_span, push_current_span, SpanGuard};
 pub use collect::ErrorCollector;
 pub use command::render_explain_output;
 #[cfg(feature = "cli")]

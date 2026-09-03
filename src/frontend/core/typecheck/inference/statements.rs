@@ -642,6 +642,8 @@ impl StatementChecker {
         &mut self,
         stmt: &Stmt,
     ) -> Result<(), Box<Diagnostic>> {
+        // #324：挂当前节点 span，walk 内诊断构造自动获得位置
+        let _current_span = crate::util::diagnostic::push_current_span(stmt.span);
         // 账本键：当前语句的 span（嵌套语句递归时逐层覆盖，#256）
         self.scope.set_current_stmt(stmt.span);
         match &stmt.kind {

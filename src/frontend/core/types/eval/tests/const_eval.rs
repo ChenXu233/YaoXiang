@@ -115,6 +115,8 @@ fn test_eval_arithmetic_ops() {
 
 #[test]
 fn test_eval_division_by_zero() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     let e = ConstGenericEval::new();
     assert!(e.eval(&bin(BinOp::Div, 1, 0)).is_err());
     assert!(e.eval(&bin(BinOp::Mod, 1, 0)).is_err());
@@ -144,6 +146,8 @@ fn test_eval_bitwise_ops() {
 
 #[test]
 fn test_eval_shift_out_of_range() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     let e = ConstGenericEval::new();
     assert!(e.eval(&bin(BinOp::Shl, 1, 128)).is_err());
     assert!(e.eval(&bin(BinOp::Shr, 1, -1)).is_err());
@@ -217,6 +221,8 @@ fn test_eval_var_bound() {
 
 #[test]
 fn test_eval_var_unbound() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     let e = ConstGenericEval::new();
     assert!(e
         .eval(&ConstExpr::NamedVar("undefined".to_string()))
@@ -265,6 +271,8 @@ fn test_eval_custom_function() {
 
 #[test]
 fn test_eval_custom_function_arg_count_mismatch() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     let mut e = ConstGenericEval::new();
     e.register_function(
         "f".to_string(),
@@ -390,6 +398,8 @@ fn test_eval_builtin_min_max() {
 
 #[test]
 fn test_eval_builtin_sizeof() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     let e = ConstGenericEval::new();
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
@@ -408,6 +418,8 @@ fn test_eval_builtin_sizeof() {
 
 #[test]
 fn test_eval_undefined_function() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     let e = ConstGenericEval::new();
     assert!(e
         .eval(&ConstExpr::Call {
@@ -421,6 +433,8 @@ fn test_eval_undefined_function() {
 
 #[test]
 fn test_eval_mismatched_types_in_binop() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     let e = ConstGenericEval::new();
     let mixed = ConstExpr::BinOp {
         op: BinOp::Add,
@@ -571,6 +585,8 @@ fn test_generic_size_array_typeref() {
 
 #[test]
 fn test_eval_bool_plus_int_unsupported() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     let e = ConstGenericEval::new();
     let bad = ConstExpr::BinOp {
         op: BinOp::Add,
@@ -597,6 +613,8 @@ fn test_eval_neg_zero() {
 
 #[test]
 fn test_eval_if_non_boolean_condition() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     let e = ConstGenericEval::new();
     let iff = ConstExpr::If {
         condition: Box::new(ConstExpr::Lit(ConstValue::Int(1))), // Not a boolean
@@ -692,6 +710,8 @@ fn test_eval_builtin_sizeof_string() {
 
 #[test]
 fn test_eval_builtin_sizeof_non_var() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     let e = ConstGenericEval::new();
     assert!(e
         .eval(&ConstExpr::Call {
@@ -765,6 +785,8 @@ fn test_eval_builtin_max_same() {
 
 #[test]
 fn test_eval_neg_float() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     let e = ConstGenericEval::new();
     use crate::frontend::core::types::const_data::UnOp;
     let neg = ConstExpr::UnOp {
@@ -777,6 +799,8 @@ fn test_eval_neg_float() {
 
 #[test]
 fn test_eval_not_int() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     let e = ConstGenericEval::new();
     use crate::frontend::core::types::const_data::UnOp;
     let not = ConstExpr::UnOp {
@@ -789,6 +813,8 @@ fn test_eval_not_int() {
 
 #[test]
 fn test_eval_float_sub() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     let e = ConstGenericEval::new();
     let sub = ConstExpr::BinOp {
         op: BinOp::Sub,
@@ -801,6 +827,8 @@ fn test_eval_float_sub() {
 
 #[test]
 fn test_eval_float_div() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     let e = ConstGenericEval::new();
     let div = ConstExpr::BinOp {
         op: BinOp::Div,
@@ -835,6 +863,8 @@ fn test_eval_float_neq() {
 
 #[test]
 fn test_eval_float_div_by_zero() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     let e = ConstGenericEval::new();
     let div = ConstExpr::BinOp {
         op: BinOp::Div,

@@ -135,6 +135,12 @@ impl ErrorCodeDefinition {
         ERROR_CODES.iter().filter(move |c| c.category == category)
     }
 
+    /// 该码是否强制要求 span（#324）：豁免表之外一律要求，
+    /// 构造时既无显式 .at() 又无 walk 上下文即拒绝（debug panic / release E8001）
+    pub fn requires_span(&self) -> bool {
+        !SPAN_EXEMPT.contains(&self.code)
+    }
+
     /// 创建 DiagnosticBuilder
     pub fn builder(&self) -> DiagnosticBuilder {
         DiagnosticBuilder::new(self.code)
@@ -144,6 +150,27 @@ impl ErrorCodeDefinition {
     pub fn build(&self) -> Diagnostic {
         self.builder().build()
     }
+}
+
+/// span 豁免码：纯内部诊断，无用户源码位置可指。新增必须在下方注释理由（#324），
+/// 并优先考虑补 span——豁免是最后手段
+const SPAN_EXEMPT: &[&str] = &[
+    // E8001 ICE：内部一致性问题可能发生在无 AST 对应的任意阶段（如求解器深处）
+    "E8001",
+    // E4014 编译期常量求值失败：const 表达式经 convert_expr_to_const_expr 进入求值时
+    // 已剥离 AST 位置，发射点（ConstGenericEval）无用户位置可指；定位由触发求值的上层诊断承载
+    "E4014",
+    // E4018 精化谓词违反（证明函数执行场景）：ProofFunctionCall 未携带 span（RFC-027
+    // proof 管线无位置传递链）；verdict 的 Disproved 路径带模型 span 时仍照常 .at
+    "E4018",
+    // E6xxx 运行时错误族：span 来自可选的 --debug-info 帧信息，无 debug-info 时合法无位置
+    // （运行时错误的"位置"语义由运行时栈帧呈现，而非编译期诊断 span）
+    "E6001", "E6003", "E6004", "E6005", "E6006", "E6007", "E6008", "E6009", "E6010", "E6011",
+];
+
+/// 按码字符串判断是否强制要求 span（builder 内部使用，未知码从严要求）
+pub fn code_requires_span(code: &str) -> bool {
+    !SPAN_EXEMPT.contains(&code)
 }
 
 #[cfg(test)]

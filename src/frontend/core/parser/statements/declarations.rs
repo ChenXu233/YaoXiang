@@ -136,6 +136,7 @@ fn parse_assign_after_target(
         state.restore_position(saved);
         if is_old_syntax {
             state.error(parse_msg(
+                state,
                 "旧函数语法已不再支持，请使用新语法: name: (param: Type, ...) -> Ret = body"
                     .to_string(),
             ));
@@ -212,7 +213,7 @@ fn parse_assign_after_target(
                 state.restore_position(saved_check);
 
                 if is_old_fn_syntax {
-                    state.error(parse_msg("Old function syntax '(Type, Type) -> Ret' is no longer supported. \
+                    state.error(parse_msg(state, "Old function syntax '(Type, Type) -> Ret' is no longer supported. \
                              Use RFC-010 syntax with named parameters: '(param: Type, ...) -> Ret'. \
                              Example: 'add: (a: Int, b: Int) -> Int = a + b'".to_string()));
                     return None;
@@ -303,7 +304,7 @@ fn parse_assign_after_target(
 
                     if !value_params.is_empty() {
                         if lambda_params.len() != value_params.len() {
-                            state.error(parse_msg(format!(
+                            state.error(parse_msg(state, format!(
                             "Parameter count mismatch: signature has {} value parameters, lambda has {}",
                             value_params.len(),
                             lambda_params.len()
@@ -315,7 +316,7 @@ fn parse_assign_after_target(
                             value_params.iter().zip(lambda_params.iter()).enumerate()
                         {
                             if sig_param.name != lambda_param.name {
-                                state.error(parse_msg(format!(
+                                state.error(parse_msg(state, format!(
                                 "Parameter name mismatch at position {}: signature has '{}', lambda has '{}'.",
                                 i + 1,
                                 sig_param.name,
@@ -469,7 +470,10 @@ fn parse_assign_after_target(
         let initializer = match state.parse_expression(BP_LOWEST) {
             Some(expr) => expr,
             None => {
-                state.error(parse_msg("Expected expression after '='".to_string()));
+                state.error(parse_msg(
+                    state,
+                    "Expected expression after '='".to_string(),
+                ));
                 return None;
             }
         };
@@ -518,7 +522,7 @@ fn parse_type_definition(state: &mut ParserState<'_>) -> Option<Type> {
 
     // 检查是否有 | 符号（不允许使用不带花括号的枚举语法）
     if state.at(&TokenKind::Pipe) {
-        state.error(parse_msg(
+        state.error(parse_msg(state,
             "Enum variants must use brace syntax: `{ red | green | blue }` instead of `red | green | blue`".to_string(),
         ));
         return None;
@@ -585,6 +589,7 @@ pub fn parse_identifier_stmt(
     if let Some(TokenKind::LParen) = state.peek().map(|t| &t.kind) {
         if is_old_function_syntax(state) {
             state.error(parse_msg(
+                state,
                 "旧语法已弃用。请使用新语法: `name: (Types) -> ReturnType = (params) => body`"
                     .to_string(),
             ));
@@ -611,7 +616,10 @@ pub fn parse_identifier_stmt(
         None => {
             // 解析失败，可能是旧语法残留
             if is_pub || is_mut {
-                state.error(parse_msg("Expected expression after pub/mut".to_string()));
+                state.error(parse_msg(
+                    state,
+                    "Expected expression after pub/mut".to_string(),
+                ));
                 return None;
             }
             return parse_expr_stmt(state, span);
@@ -682,6 +690,7 @@ pub fn parse_identifier_stmt(
             Some(expr) => expr,
             None => {
                 state.error(parse_msg(
+                    state,
                     "Expected expression after '=' in tuple destructuring".to_string(),
                 ));
                 return None;
@@ -712,7 +721,10 @@ pub fn parse_identifier_stmt(
         let value = match state.parse_expression(BP_LOWEST) {
             Some(expr) => expr,
             None => {
-                state.error(parse_msg("Expected expression after '='".to_string()));
+                state.error(parse_msg(
+                    state,
+                    "Expected expression after '='".to_string(),
+                ));
                 return None;
             }
         };
@@ -739,6 +751,7 @@ pub fn parse_identifier_stmt(
     if is_pub || is_mut {
         // pub/mut 后面不是赋值或类型标注，报错
         state.error(parse_msg(
+            state,
             "Expected ':' or '=' after pub/mut identifier".to_string(),
         ));
         return None;
@@ -825,6 +838,7 @@ pub fn parse_paren_destructure_stmt(
         Some(expr) => expr,
         None => {
             state.error(parse_msg(
+                state,
                 "Expected expression after '=' in tuple destructuring".to_string(),
             ));
             return None;

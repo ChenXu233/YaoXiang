@@ -726,6 +726,43 @@ pub fn classify_generic_params(
 }
 
 impl Expr {
+    /// 表达式的源码 span（穷举变体，新增变体时编译器强制补全）
+    pub fn span(&self) -> Span {
+        match self {
+            Expr::Lit(_, s)
+            | Expr::Var(_, s)
+            | Expr::Return(_, s)
+            | Expr::Break(s)
+            | Expr::Continue(s) => *s,
+            Expr::BinOp { span, .. }
+            | Expr::UnOp { span, .. }
+            | Expr::Call { span, .. }
+            | Expr::FnDef { span, .. }
+            | Expr::If { span, .. }
+            | Expr::Match { span, .. }
+            | Expr::While { span, .. }
+            | Expr::For { span, .. }
+            | Expr::SpawnFor { span, .. }
+            | Expr::Borrow { span, .. }
+            | Expr::FieldAccess { span, .. }
+            | Expr::Index { span, .. }
+            | Expr::Tuple(_, span)
+            | Expr::List(_, span)
+            | Expr::Cast { span, .. }
+            | Expr::Try { span, .. } => *span,
+            Expr::Block(block) => block.span,
+            Expr::ListComp { span, .. }
+            | Expr::Dict(_, span)
+            | Expr::In { span, .. }
+            | Expr::Lambda { span, .. }
+            | Expr::Ref { span, .. }
+            | Expr::Unsafe { span, .. }
+            | Expr::Spawn { span, .. }
+            | Expr::FString { span, .. }
+            | Expr::Error(span) => *span,
+        }
+    }
+
     /// 解构 Assign 目标：`x` → (x, None)；`Type.field` → (field, Some(Type))；其他 → None
     pub fn receiver_parts(&self) -> Option<(String, Option<String>)> {
         match self {

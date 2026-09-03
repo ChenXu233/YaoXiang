@@ -249,6 +249,8 @@ fn test_rfc011_single_constraint() {
 /// 注意：多重约束的完整实现依赖约束求解器，当前仅验证 + 语法解析。
 #[test]
 fn test_rfc011_multiple_constraints() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange
     let source = r#"
         Clone: Type = { clone: (Self) -> Self }

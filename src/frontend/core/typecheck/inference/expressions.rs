@@ -954,6 +954,8 @@ impl<'a> ExpressionInferrer<'a> {
         &mut self,
         expr: &crate::frontend::core::parser::ast::Expr,
     ) -> Result<MonoType> {
+        // #324：挂当前节点 span，walk 内诊断构造自动获得位置
+        let _current_span = crate::util::diagnostic::push_current_span(expr.span());
         match expr {
             // 字面量
             crate::frontend::core::parser::ast::Expr::Lit(lit, _) => self.infer_literal(lit),
@@ -2376,6 +2378,8 @@ impl<'a> ExpressionInferrer<'a> {
         &mut self,
         stmt: &crate::frontend::core::parser::ast::Stmt,
     ) -> Result<()> {
+        // #324：挂当前节点 span，walk 内诊断构造自动获得位置
+        let _current_span = crate::util::diagnostic::push_current_span(stmt.span);
         match &stmt.kind {
             crate::frontend::core::parser::ast::StmtKind::Expr(expr) => {
                 self.infer_expr(expr)?;

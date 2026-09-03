@@ -7,45 +7,69 @@ use crate::util::span::Span;
 #[derive(Debug, thiserror::Error)]
 pub enum LexError {
     #[error("Invalid token at {position}: {message}")]
-    InvalidToken { position: String, message: String },
+    InvalidToken {
+        position: String,
+        message: String,
+        span: Span,
+    },
     #[error("Unterminated string starting at {position}")]
-    UnterminatedString { position: String },
+    UnterminatedString { position: String, span: Span },
     #[error("Invalid escape sequence: {sequence}")]
-    InvalidEscape { sequence: String },
+    InvalidEscape { sequence: String, span: Span },
     #[error("Invalid number literal: {0}")]
-    InvalidNumber(String),
+    InvalidNumber(String, Span),
     #[error("Unexpected character: '{ch}'")]
-    UnexpectedChar { ch: char },
+    UnexpectedChar { ch: char, span: Span },
     #[error("Unterminated f-string interpolation starting at {position}")]
-    UnterminatedFStringInterpolation { position: String },
+    UnterminatedFStringInterpolation { position: String, span: Span },
 }
 
 impl LexError {
+    /// 错误发生点的源码 span（#324：诊断位置由构造点提供）
+    pub fn span(&self) -> Span {
+        match self {
+            LexError::InvalidNumber(_, s) => *s,
+            LexError::InvalidToken { span, .. }
+            | LexError::UnterminatedString { span, .. }
+            | LexError::InvalidEscape { span, .. }
+            | LexError::UnexpectedChar { span, .. }
+            | LexError::UnterminatedFStringInterpolation { span, .. } => *span,
+        }
+    }
+
     /// Convert to Diagnostic for unified error system
     pub fn to_diagnostic(&self) -> Diagnostic {
+        let span = self.span();
         match self {
-            LexError::InvalidToken { message, .. } => {
-                ErrorCodeDefinition::invalid_syntax(message).build()
-            }
+            LexError::InvalidToken { message, .. } => ErrorCodeDefinition::invalid_syntax(message)
+                .at(span)
+                .build(),
             LexError::UnterminatedString { position, .. } => {
                 ErrorCodeDefinition::invalid_syntax(&format!("unterminated string at {}", position))
+                    .at(span)
                     .build()
             }
             LexError::InvalidEscape { sequence, .. } => {
                 ErrorCodeDefinition::invalid_syntax(&format!("invalid escape: {}", sequence))
+                    .at(span)
                     .build()
             }
-            LexError::InvalidNumber(literal) => {
-                ErrorCodeDefinition::invalid_number_literal(literal).build()
+            LexError::InvalidNumber(literal, _) => {
+                ErrorCodeDefinition::invalid_number_literal(literal)
+                    .at(span)
+                    .build()
             }
             LexError::UnexpectedChar { ch, .. } => {
-                ErrorCodeDefinition::invalid_character(&ch.to_string()).build()
+                ErrorCodeDefinition::invalid_character(&ch.to_string())
+                    .at(span)
+                    .build()
             }
             LexError::UnterminatedFStringInterpolation { position, .. } => {
                 ErrorCodeDefinition::invalid_syntax(&format!(
                     "unterminated f-string interpolation at {}",
                     position
                 ))
+                .at(span)
                 .build()
             }
         }

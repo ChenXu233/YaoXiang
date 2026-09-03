@@ -53,6 +53,8 @@ main = () => {
 
 #[test]
 fn test_render_error_without_source_file() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     let diagnostic = ErrorCodeDefinition::find("E0001")
         .unwrap()
         .builder()

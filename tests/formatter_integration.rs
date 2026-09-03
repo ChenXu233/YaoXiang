@@ -616,6 +616,9 @@ fn test_format_generic_type_definition_roundtrip() {
 
 #[test]
 fn test_format_generic_type_with_assert_constraint_roundtrip() {
+    // #324：生产运行于类型检查 walk 内，单测直调模拟 walk 上下文
+    let _walk_guard =
+        yaoxiang::util::diagnostic::push_current_span(yaoxiang::util::span::Span::dummy());
     // RFC-010 + RFC-011: 带 const 约束的泛型类型定义完整往返
     assert_format_eq(
         "SafeArray: (T: Type, N: Int) -> Type = { _assert: Assert(N > 0), data: Array(T, N) }",

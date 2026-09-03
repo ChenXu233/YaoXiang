@@ -538,6 +538,8 @@ fn check_source_for_refined(
 
 #[test]
 fn test_refined_proof_fn_invalid_arg_reports_e1092() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange: 证明函数 IsSmall + 不可转换实参 List(Int)（#263 复现）
     let source = r#"
 IsSmall: (x: Int) -> Type = { x < 100 }
@@ -564,6 +566,8 @@ main = {
 
 #[test]
 fn test_refined_proof_fn_arity_mismatch_reports_e1093() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange: 单参数证明函数传两个实参
     let source = r#"
 IsSmall: (x: Int) -> Type = { x < 100 }

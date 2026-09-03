@@ -112,6 +112,8 @@ fn test_check_constraint_empty_constraint() {
 /// List 类型不实现 Clone（泛型容器需显式实现）
 #[test]
 fn test_check_trait_bounds_not_satisfied() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange
     let checker = BoundsChecker::new();
     let ty = MonoType::make_list(MonoType::Int(32));
@@ -351,6 +353,8 @@ fn test_bounds_checker_dup_struct_passes() {
 /// check_dup_trait 返回 false，且无 trait_table 时无法走 auto-derive 路径
 #[test]
 fn test_bounds_checker_dup_struct_fails() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange
     let checker = BoundsChecker::new();
     let struct_type = MonoType::Struct(StructType {
@@ -443,6 +447,8 @@ fn test_validate_const_args_int_matches() {
 
 #[test]
 fn test_validate_const_args_type_mismatch() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
     use crate::frontend::core::types::MonoType;
     use crate::frontend::core::typecheck::inference::bounds::validate_const_args;
@@ -462,6 +468,8 @@ fn test_validate_const_args_type_mismatch() {
 
 #[test]
 fn test_validate_const_args_not_literal() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef};
     use crate::frontend::core::types::MonoType;
     use crate::frontend::core::typecheck::inference::bounds::validate_const_args;
@@ -520,6 +528,8 @@ fn test_check_const_bounds_fast_path_proved() {
 
 #[test]
 fn test_check_const_bounds_fast_path_disproved() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
     use crate::frontend::core::types::MonoType;
 
