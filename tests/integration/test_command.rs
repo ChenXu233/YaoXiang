@@ -545,3 +545,85 @@ fn test_test_command_json_expected_code_mismatch_carries_note() {
         "JSON 应携带码不符说明:\n{stdout}"
     );
 }
+
+#[test]
+fn test_test_command_ignored_file_skips_and_counts_skipped() {
+    // Arrange - [test:ignore] 文件不执行（RFC-036 §5 执行阶段 + TEST_STANDARDS §2.4）
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!("// 临时语料\n// [test:ignore]: 追踪 #999 示例原因\n{FAIL_TEST}");
+    write_file(dir.path(), "tests/skipped_test.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert - 不执行不计失败，汇总 skipped 计数
+    assert_eq!(code, 0, "被忽略文件不应导致失败:\n{stdout}");
+    assert!(!stdout.contains("FAIL"), "被忽略文件不应执行:\n{stdout}");
+    assert!(
+        stdout.contains("Results: 0 files passed, 0 files failed, 1 skipped"),
+        "汇总应计入 1 skipped:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_json_summary_counts_skipped() {
+    // Arrange - 同上场景走 --json
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!("// 临时语料\n// [test:ignore]: 追踪 #999 示例原因\n{FAIL_TEST}");
+    write_file(dir.path(), "tests/skipped_test.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--json"], dir.path());
+
+    // Assert - summary.skipped 为真实计数，files 数组不含被跳过文件
+    assert_eq!(code, 0, "被忽略文件不应导致失败:\n{stdout}");
+    let report: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("stdout 应为合法 JSON");
+    assert_eq!(
+        report["summary"]["skipped"], 1,
+        "summary.skipped 应为 1:\n{stdout}"
+    );
+    assert_eq!(
+        report["files"].as_array().map(Vec::len),
+        Some(0),
+        "被跳过文件不进 files 数组:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_runtime_marker_passes_mode_to_subprocess() {
+    // Arrange - [test:runtime]: standard 声明子进程运行时模式（TEST_STANDARDS §2.4）
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!("// 临时语料\n// [test:runtime]: standard\n{PASS_TEST}");
+    write_file(dir.path(), "tests/runtime_std_test.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert - 子进程带 --runtime standard 执行通过
+    assert_eq!(code, 0, "runtime 标记文件应通过:\n{stdout}");
+    assert!(stdout.contains("PASS"), "应标记 PASS:\n{stdout}");
+}
+
+#[test]
+fn test_test_command_list_excludes_ignored_files() {
+    // Arrange - 一个活跃文件一个被忽略文件
+    let dir = TempDir::new().expect("tempdir");
+    write_file(dir.path(), "tests/active_test.yx", PASS_TEST);
+    let content = format!("// 临时语料\n// [test:ignore]: 追踪 #999 示例原因\n{FAIL_TEST}");
+    write_file(dir.path(), "tests/ignored_test.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--list"], dir.path());
+
+    // Assert - 列表只含执行集（被忽略文件不列）
+    assert_eq!(code, 0, "列表应退出 0:\n{stdout}");
+    assert!(
+        stdout.contains("active_test.yx"),
+        "应列出活跃文件:\n{stdout}"
+    );
+    assert!(
+        !stdout.contains("ignored_test.yx"),
+        "被忽略文件不应列出:\n{stdout}"
+    );
+}

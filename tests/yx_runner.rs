@@ -3,6 +3,12 @@
 //! Discovers all `*.yx` files under `tests/yaoxiang/`, runs each through the
 //! `yaoxiang run` binary, and verifies the exit code (0 = pass, non-zero = fail).
 //!
+//! 判定约定与 `yaoxiang test` CLI 共用（RFC-036 §8.2，#319 收口）：
+//! 头部标记经 `yaoxiang::util::test_markers::TestFileSpec` 解析——
+//! `[test:error]` 反向判定（退出码非 0 = PASS）+ 结构化预期码比对，
+//! `[test:ignore]` 跳过，`[test:runtime]` 指定子进程运行时模式。
+//! 06-compile-errors 的目录约定已废弃。
+//!
 //! Directory structure (aligned with `docs/src/reference/language-spec/`):
 //!
 //! ```text
@@ -22,6 +28,8 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+use yaoxiang::util::test_markers::TestFileSpec;
 
 /// Find all `.yx` test files under `tests/yaoxiang/`, excluding `.skip` files.
 fn discover_yx_tests() -> Vec<PathBuf> {
@@ -92,40 +100,6 @@ fn binary_name() -> String {
 
 // Tests
 
-/// Check if a .yx file has a `// [test:ignore]: reason` marker in its first 5 lines.
-/// If so, skip it in the test runner and print the reason.
-fn is_ignored(path: &Path) -> Option<String> {
-    let content = std::fs::read_to_string(path).ok()?;
-    for line in content.lines().take(5) {
-        let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix("// [test:ignore]:") {
-            let reason = rest.trim();
-            return Some(if reason.is_empty() {
-                "no reason given".to_string()
-            } else {
-                reason.to_string()
-            });
-        }
-    }
-    None
-}
-
-/// Check if a .yx file requests a specific runtime mode via
-/// `// [test:runtime]: standard` marker in its first 5 lines.
-fn requested_runtime(path: &Path) -> Option<String> {
-    let content = std::fs::read_to_string(path).ok()?;
-    for line in content.lines().take(5) {
-        let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix("// [test:runtime]:") {
-            let mode = rest.trim();
-            if matches!(mode, "embedded" | "standard" | "full") {
-                return Some(mode.to_string());
-            }
-        }
-    }
-    None
-}
-
 #[test]
 fn test_all_yx_files_pass() {
     let files = discover_yx_tests();
@@ -140,15 +114,18 @@ fn test_all_yx_files_pass() {
             .display()
             .to_string();
 
+        // 头部标记经 TestFileSpec 统一解析（与 yaoxiang test CLI 同一实现）
+        let spec = TestFileSpec::parse(file);
+
         // Skip files with [test:ignore] annotation
-        if let Some(reason) = is_ignored(file) {
+        if let Some(reason) = &spec.ignore_reason {
             eprintln!("  [SKIP] {relative}: {reason}");
             continue;
         }
 
         let mut cmd = Command::new(&binary);
         cmd.arg("run");
-        if let Some(mode) = requested_runtime(file) {
+        if let Some(mode) = &spec.runtime_mode {
             cmd.arg("--runtime").arg(mode);
         }
         cmd.arg(file);
@@ -160,13 +137,15 @@ fn test_all_yx_files_pass() {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         let code = output.status.code().unwrap_or(-1);
 
-        let is_error_test = relative.contains("06-compile-errors");
-
-        if is_error_test {
+        // [test:error] 标记：反向判定 + 结构化预期码比对（RFC-036 §8.2）
+        if spec.expect_error {
             assert!(
                 code != 0,
                 "Error test should fail: {relative}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
             );
+            if let Err(note) = spec.check_expected_codes(&stderr) {
+                panic!("预期错误码比对失败: {relative}\n{note}\nSTDERR:\n{stderr}");
+            }
         } else {
             assert!(
                 code == 0,

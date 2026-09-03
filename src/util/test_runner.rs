@@ -3,10 +3,11 @@
 //! 测试文件是普通 `.yx` 文件：发现 → 逐文件子进程 `yaoxiang run --debug-info` →
 //! exit code 判定 → 汇总报告。进程级隔离，零编译器改动。
 //!
-//! 标记约定（见 tests/yaoxiang/TEST_STANDARDS.md）：
-//! - `// [test:error]: <原因>` — 本文件应编译失败：run 退出码非 0 = PASS
-//!   （06-compile-errors 目录用，验证编译器正确报错）；头部再带
-//!   `// 预期: 编译错误 EXXXX` 时进一步实际比对输出中的 `[EXXXX]`，码不符 = FAIL（§8.2）
+//! 标记约定（解析统一在 src/util/test_markers.rs，与 yx_runner 共用——#319 收口）：
+//! - `// [test:error]: <原因>` — 本文件应失败（编译/运行期）：run 退出码非 0 = PASS；
+//!   头部再带 `// 预期: 编译错误 EXXXX` 时实际比对输出中的 `[EXXXX]`，码不符 = FAIL（§8.2）
+//! - `// [test:ignore]: <原因>` — 跳过执行，计入 skipped
+//! - `// [test:runtime]: <模式>` — 子进程 `--runtime` 模式
 //! - 无标记 — run 退出码 0 = PASS
 //!
 //! 报告契约（RFC-036 §1）：
@@ -26,6 +27,7 @@ use serde::Serialize;
 
 use crate::util::config::ProjectConfig;
 use crate::util::diagnostic::emitter::ansi::strip_ansi;
+use crate::util::test_markers::TestFileSpec;
 
 /// `yaoxiang test` 选项 — RFC-036 §1 CLI 设计
 pub struct TestOptions {
@@ -110,6 +112,10 @@ pub fn run_test_command(options: &TestOptions) -> anyhow::Result<usize> {
 
     if options.list {
         for file in &files {
+            // [test:ignore] 文件不会执行，不在执行集清单中列出
+            if TestFileSpec::parse(file).ignore_reason.is_some() {
+                continue;
+            }
             println!("{}", display_path(file, &cwd));
         }
         return Ok(0);
@@ -124,24 +130,37 @@ pub fn run_test_command(options: &TestOptions) -> anyhow::Result<usize> {
 
     let total_start = Instant::now();
     let mut results: Vec<FileResult> = Vec::new();
+    let mut skipped = 0usize;
     let mut stopped_early = false;
 
     for file in &files {
+        let spec = TestFileSpec::parse(file);
+        // [test:ignore]：跳过执行，只计入 skipped（RFC-036 §1 汇总字段的真实来源）
+        if let Some(reason) = &spec.ignore_reason {
+            skipped += 1;
+            if !options.json && !options.no_progress {
+                let display = display_path(file, &cwd);
+                println!("{} {} SKIP ({reason})", display, progress_dots(&display));
+            }
+            continue;
+        }
         let display = display_path(file, &cwd);
-        let (expect_error, expected_codes) = expected_error_spec(file);
         let start = Instant::now();
-        let output = Command::new(&exe)
-            .arg("run")
-            .arg(file)
-            .arg("--debug-info")
-            .output();
+        let mut command = Command::new(&exe);
+        command.arg("run");
+        // [test:runtime]：语料声明的子进程运行时模式
+        if let Some(mode) = &spec.runtime_mode {
+            command.arg("--runtime").arg(mode);
+        }
+        command.arg(file).arg("--debug-info");
+        let output = command.output();
         let secs = start.elapsed().as_secs_f64();
 
         let result = match output {
             // [test:error] 标记文件：编译/运行错误如预期 → PASS；
             // 没报错（退出码 0）→ FAIL（该报错没报）
             Ok(out) => {
-                let passed = if expect_error {
+                let passed = if spec.expect_error {
                     !out.status.success()
                 } else {
                     out.status.success()
@@ -149,14 +168,15 @@ pub fn run_test_command(options: &TestOptions) -> anyhow::Result<usize> {
                 let stderr = String::from_utf8_lossy(&out.stderr).to_string();
                 // RFC-036 §8.2 结构化比对：带预期码的文件，码须实际出现在输出中，
                 // 不符 = FAIL（此前纯 exit≠0 判定——报错码不对也 PASS）
-                let (passed, stderr) = if expect_error && passed && !expected_codes.is_empty() {
-                    match check_expected_codes(&expected_codes, &stderr) {
-                        Ok(()) => (passed, stderr),
-                        Err(note) => (false, format!("{note}\n{stderr}")),
-                    }
-                } else {
-                    (passed, stderr)
-                };
+                let (passed, stderr) =
+                    if spec.expect_error && passed && !spec.expected_codes.is_empty() {
+                        match spec.check_expected_codes(&stderr) {
+                            Ok(()) => (passed, stderr),
+                            Err(note) => (false, format!("{note}\n{stderr}")),
+                        }
+                    } else {
+                        (passed, stderr)
+                    };
                 FileResult {
                     display,
                     passed,
@@ -197,7 +217,7 @@ pub fn run_test_command(options: &TestOptions) -> anyhow::Result<usize> {
                 total: results.len(),
                 passed,
                 failed,
-                skipped: 0,
+                skipped,
                 time_secs: round_secs(total_secs),
             },
             files: results
@@ -211,11 +231,12 @@ pub fn run_test_command(options: &TestOptions) -> anyhow::Result<usize> {
             println!("\nStopped by --fail-fast after first failure.");
         }
         println!(
-            "\nResults: {} {} passed, {} {} failed, 0 skipped ({:.3}s)",
+            "\nResults: {} {} passed, {} {} failed, {} skipped ({:.3}s)",
             passed,
             plural_files(passed),
             failed,
             plural_files(failed),
+            skipped,
             total_secs
         );
     }
@@ -333,89 +354,6 @@ fn display_path(
     cwd: &Path,
 ) -> String {
     path.strip_prefix(cwd).unwrap_or(path).display().to_string()
-}
-
-/// 解析文件头部（前 16 行）的负向测试标记（RFC-036 §8.2）。
-/// 返回 (是否 `[test:error]`，预期错误码列表)。预期行形态 `// 预期: 编译错误 EXXXX`
-/// 或 `// 预期: 运行时错误 EXXXX`（可带尾注）；无码文件回退 exit≠0 反向判定。
-fn expected_error_spec(path: &Path) -> (bool, Vec<String>) {
-    let Ok(content) = std::fs::read_to_string(path) else {
-        return (false, Vec::new());
-    };
-    let mut is_error_test = false;
-    let mut codes = Vec::new();
-    for line in content.lines().take(16) {
-        if line.contains("[test:error]") {
-            is_error_test = true;
-        }
-        if let Some(code) = extract_expected_code(line) {
-            if !codes.contains(&code) {
-                codes.push(code);
-            }
-        }
-    }
-    (is_error_test, codes)
-}
-
-/// 提取一行中 `预期:` 之后的首个 `EXXXX` 码（无码形态返回 None）。
-fn extract_expected_code(line: &str) -> Option<String> {
-    let rest = line.split_once("预期:")?.1;
-    let bytes = rest.as_bytes();
-    for i in 0..bytes.len().saturating_sub(4) {
-        if bytes[i] == b'E' && bytes[i + 1..i + 5].iter().all(|b| b.is_ascii_digit()) {
-            return Some(rest[i..i + 5].to_string());
-        }
-    }
-    None
-}
-
-/// RFC-036 §8.2 结构化预期码比对：每个预期码都须以 `[EXXXX]` 形态出现在
-/// 编译器/运行时输出中，任一缺失即判 FAIL，并附实际出现的码以便定位。
-fn check_expected_codes(
-    expected: &[String],
-    output: &str,
-) -> Result<(), String> {
-    let emitted = emitted_error_codes(&strip_ansi(output));
-    let missing: Vec<&String> = expected.iter().filter(|c| !emitted.contains(c)).collect();
-    if missing.is_empty() {
-        return Ok(());
-    }
-    let missing = missing
-        .iter()
-        .map(|s| s.as_str())
-        .collect::<Vec<_>>()
-        .join(", ");
-    let emitted_desc = if emitted.is_empty() {
-        "无".to_string()
-    } else {
-        emitted.join(", ")
-    };
-    Err(format!(
-        "[test:error] 预期错误码 {missing} 未在输出中出现（实际输出含: {emitted_desc}）"
-    ))
-}
-
-/// 扫描输出中全部 `[EXXXX]` 形态的错误码（保序去重）。
-fn emitted_error_codes(output: &str) -> Vec<String> {
-    let bytes = output.as_bytes();
-    let mut codes = Vec::new();
-    let mut i = 0;
-    while i + 7 <= bytes.len() {
-        if bytes[i] == b'['
-            && bytes[i + 1] == b'E'
-            && bytes[i + 2..i + 6].iter().all(|b| b.is_ascii_digit())
-            && bytes[i + 6] == b']'
-        {
-            let code = output[i + 1..i + 6].to_string();
-            if !codes.contains(&code) {
-                codes.push(code);
-            }
-            i += 7;
-        } else {
-            i += 1;
-        }
-    }
-    codes
 }
 
 /// 发现测试文件：显式路径优先，否则读配置，最终按 pattern 展开并排序去重。
