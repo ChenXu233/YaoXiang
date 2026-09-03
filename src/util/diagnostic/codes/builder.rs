@@ -260,7 +260,29 @@ fn build_registry(lang: &str) -> I18nRegistry {
     }
 }
 
+/// 沿回退链查找第一个命中的注册表（#325：bot 异步补齐窗口期输出仍可读）
+fn chain_lookup<'a, T>(
+    chain: &[&'a I18nRegistry],
+    f: impl Fn(&'a I18nRegistry) -> Option<T>,
+) -> Option<T> {
+    chain.iter().find_map(|r| f(r))
+}
+
 impl I18nRegistry {
+    /// key 级回退链：请求语言 → en → zh（zh 为构建期门槛保证齐全的人工源）
+    fn fallbacks(&self) -> Vec<&Self> {
+        let en = Self::new("en");
+        let zh = Self::new("zh");
+        let mut chain = vec![self];
+        if !std::ptr::eq(self, en) {
+            chain.push(en);
+        }
+        if !std::ptr::eq(self, zh) && !std::ptr::eq(en, zh) {
+            chain.push(zh);
+        }
+        chain
+    }
+
     /// 根据语言代码获取注册表（从统一 locale 加载器读取，与 MSG 翻译同源）
     pub fn new(lang: &str) -> &'static Self {
         use std::sync::LazyLock;
@@ -287,11 +309,14 @@ impl I18nRegistry {
         &self,
         code: &str,
     ) -> Option<ErrorInfo<'_>> {
-        Some(ErrorInfo {
-            title: self.titles.get(code)?,
-            help: self.helps.get(code).copied().unwrap_or(""),
-            example: self.examples.get(code).copied(),
-            error_output: self.error_outputs.get(code).copied(),
+        chain_lookup(&self.fallbacks(), |r| {
+            let title = r.titles.get(code)?;
+            Some(ErrorInfo {
+                title,
+                help: r.helps.get(code).copied().unwrap_or(""),
+                example: r.examples.get(code).copied(),
+                error_output: r.error_outputs.get(code).copied(),
+            })
         })
     }
 
@@ -300,7 +325,7 @@ impl I18nRegistry {
         &self,
         code: &str,
     ) -> Option<&'static str> {
-        self.templates.get(code).copied()
+        chain_lookup(&self.fallbacks(), |r| r.templates.get(code).copied())
     }
 
     /// 获取标题
@@ -308,8 +333,7 @@ impl I18nRegistry {
         &self,
         code: &str,
     ) -> String {
-        self.titles
-            .get(code)
+        chain_lookup(&self.fallbacks(), |r| r.titles.get(code).copied())
             .map(|s| s.to_string())
             .unwrap_or_else(|| code.to_string())
     }
@@ -319,8 +343,7 @@ impl I18nRegistry {
         &self,
         code: &str,
     ) -> String {
-        self.helps
-            .get(code)
+        chain_lookup(&self.fallbacks(), |r| r.helps.get(code).copied())
             .map(|s| s.to_string())
             .unwrap_or_default()
     }
@@ -330,7 +353,7 @@ impl I18nRegistry {
         &self,
         code: &str,
     ) -> Option<String> {
-        self.examples.get(code).map(|s| s.to_string())
+        chain_lookup(&self.fallbacks(), |r| r.examples.get(code).copied()).map(|s| s.to_string())
     }
 
     /// 获取错误输出示例
@@ -338,7 +361,8 @@ impl I18nRegistry {
         &self,
         code: &str,
     ) -> Option<String> {
-        self.error_outputs.get(code).map(|s| s.to_string())
+        chain_lookup(&self.fallbacks(), |r| r.error_outputs.get(code).copied())
+            .map(|s| s.to_string())
     }
 
     /// 获取禅意消息（用于 E1090 彩蛋）
@@ -391,10 +415,80 @@ impl I18nRegistry {
         code: &str,
         params: &[(&'static str, String)],
     ) -> String {
-        if let Some(help) = self.helps.get(code) {
+        if let Some(help) = chain_lookup(&self.fallbacks(), |r| r.helps.get(code).copied()) {
             self.render(help, params)
         } else {
             String::new()
         }
+    }
+}
+
+#[cfg(test)]
+mod fallback_tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    /// 构造仅含指定 (code, template) 条目的注册表（title 取 code 自身便于断言）
+    fn registry_with(entries: &[(&'static str, &'static str)]) -> I18nRegistry {
+        let mut templates = HashMap::new();
+        let mut titles = HashMap::new();
+        for (code, tpl) in entries {
+            templates.insert(*code, *tpl);
+            titles.insert(*code, *code);
+        }
+        I18nRegistry {
+            templates,
+            titles,
+            helps: HashMap::new(),
+            examples: HashMap::new(),
+            error_outputs: HashMap::new(),
+            zen_messages: HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn test_chain_lookup_falls_back_to_next_registry() {
+        let en = registry_with(&[("E9000", "en E9000")]);
+        let zh = registry_with(&[("E9000", "zh E9000"), ("E9001", "zh E9001")]);
+        let chain = [&en, &zh];
+
+        // 命中链首：不回退
+        assert_eq!(
+            chain_lookup(&chain, |r| r.templates.get("E9000").copied()),
+            Some("en E9000")
+        );
+        // 链首缺失：回退到下一级
+        assert_eq!(
+            chain_lookup(&chain, |r| r.templates.get("E9001").copied()),
+            Some("zh E9001")
+        );
+        // 全链缺失：None（上层决定缺省值）
+        assert_eq!(
+            chain_lookup(&chain, |r| r.templates.get("E9999").copied()),
+            None
+        );
+    }
+
+    #[test]
+    fn test_fallbacks_dedup_real_registries() {
+        // ja/ja 回退链 = [ja, en, zh] 三级
+        let ja = I18nRegistry::new("ja");
+        assert_eq!(ja.fallbacks().len(), 3);
+        // zh 自身即链尾，不重复入链
+        let zh = I18nRegistry::new("zh");
+        assert_eq!(zh.fallbacks().len(), 2);
+        // en 在链中只出现一次
+        let en = I18nRegistry::new("en");
+        assert_eq!(en.fallbacks().len(), 2);
+    }
+
+    #[test]
+    fn test_real_registry_fallback_template_readable() {
+        // 真实注册表：所有码在 zh 齐全（构建期门槛保证），任意语言查询都能取到模板
+        let ja = I18nRegistry::new("ja");
+        assert!(
+            ja.get_template("E1001").is_some(),
+            "E1001 模板经回退链应可读"
+        );
     }
 }

@@ -30,6 +30,14 @@ jobs:
         with:
           fetch-depth: 2
 
+      - name: Restore i18n translation cache
+        uses: actions/cache@v6
+        with:
+          path: locales/.i18n-cache.json
+          key: i18n-${{ hashFiles('locales/zh.json', 'i18n.config.json', 'i18n-glossary.json') }}
+          restore-keys: |
+            i18n-
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -62,5 +70,11 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git add locales/
           git diff --staged --quiet || git commit -m ":globe_with_meridians: i18n: auto-translate locale files"
+          # npm install 可能改写 package-lock.json 等非 locales 文件，未暂存改动会
+          # 令 pull --rebase 拒绝执行（#325 实证：2026-08-29 起连续失败、成果全弃）。
+          # 先隔离再 rebase，推送后恢复。
+          STASHED=0
+          if ! git diff --quiet; then git stash -u; STASHED=1; fi
           git pull --rebase origin dev
           git push
+          if [ "$STASHED" = "1" ]; then git stash pop || echo "::warning::stash pop 冲突，改动保留在 stash"; fi

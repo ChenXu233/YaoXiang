@@ -29,6 +29,9 @@ CODES_DIR = REPO / "src" / "util" / "diagnostic" / "codes"
 LOCALES_DIR = REPO / "locales"
 RFC013 = REPO / "docs" / "src" / "design" / "rfc" / "accepted" / "013-error-code-specification.md"
 
+# 人工翻译源（构建期 build.rs 门槛同步强制）；其余语言由 i18n bot 异步补齐（#325）
+HARD_LOCALES = {"zh"}
+
 CODE_RE = re.compile(r'code:\s*"([EW]\d{4})"')
 RFC_TABLE_ROW_RE = re.compile(r"^\|\s*`?([EW]\d{4})`?\s*\|")
 RESERVED_MARKS = ("预留", "未接线", "已删")
@@ -74,20 +77,32 @@ def load_registered_codes() -> tuple[dict[str, list[str]], list[str]]:
     return defs, errors
 
 
-def check_locales(defs: dict[str, list[str]]) -> list[str]:
+def check_locales(defs: dict[str, list[str]]) -> tuple[list[str], list[str]]:
+    """返回 (errors, warnings)。
+
+    分级（#325）：zh 是唯一人工翻译源（构建期门槛同步强制），缺失为 error；
+    其余语言由 i18n bot 异步补齐，缺失仅 warning（推送→bot 落地的窗口期不阻塞 CI）。
+    孤立 key（实现无定义）说明码被删但翻译残留，任何语言都是 error（bot 不会清理）。
+    """
     errors: list[str] = []
+    warnings: list[str] = []
     locale_files = sorted(LOCALES_DIR.glob("*.json"))
     if not locale_files:
-        return [f"未找到 locales 文件: {LOCALES_DIR}"]
+        return [f"未找到 locales 文件: {LOCALES_DIR}"], []
     for lf in locale_files:
+        lang = lf.stem
         keys = set(json.loads(lf.read_text(encoding="utf-8")).keys())
         for code in defs:
             if code not in keys:
-                errors.append(f"locales 缺失: {code} 未在 {lf.name} 定义消息模板")
+                msg = f"locales 缺失: {code} 未在 {lf.name} 定义消息模板"
+                if lang in HARD_LOCALES:
+                    errors.append(msg)
+                else:
+                    warnings.append(msg + "（bot 将异步补齐）")
         orphans = sorted(k for k in keys if re.fullmatch(r"[EW]\d{4}", k) and k not in defs)
         for k in orphans:
             errors.append(f"locales 孤立: {k} 在 {lf.name} 有模板但实现未定义")
-    return errors
+    return errors, warnings
 
 
 def collect_rfc013_codes() -> tuple[dict[str, str], list[str]]:
@@ -128,7 +143,8 @@ def check_rfc013(defs: dict[str, list[str]]) -> list[str]:
 def main() -> int:
     report = "--report" in sys.argv
     defs, errors = load_registered_codes()
-    errors += check_locales(defs)
+    locale_errors, locale_warnings = check_locales(defs)
+    errors += locale_errors
     errors += check_rfc013(defs)
 
     if report:
@@ -139,6 +155,11 @@ def main() -> int:
         print(f"注册表统计: 共 {len(defs)} 码")
         for prefix in sorted(by_prefix):
             print(f"  {prefix}xx: {by_prefix[prefix]}")
+
+    if locale_warnings:
+        print(f"\n警告（{len(locale_warnings)} 项，不阻塞——bot 异步补齐）:")
+        for w in locale_warnings:
+            print(f"  - {w}")
 
     if errors:
         print(f"\n错误码注册表校验失败（{len(errors)} 项）:", file=sys.stderr)

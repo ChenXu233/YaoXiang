@@ -10,6 +10,18 @@ use std::process::Command;
 const Z3_VERSION: &str = "4.16.0";
 
 fn main() {
+    // 重建触发面显式化：build.rs 只在这些路径（及自身/Cargo.toml）变化时重跑
+    println!("cargo:rerun-if-changed=locales/zh.json");
+    println!("cargo:rerun-if-changed=src/util/diagnostic/codes");
+    println!("cargo:rerun-if-changed=src/std/result.rs");
+
+    // #325：构建期翻译完备性门槛——注册码在 zh.json 缺失即拒绝编译。
+    // 只拦 zh（人工源）；其余语言由 i18n bot 异步补齐，渲染走 zh 回退链。
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    if let Err(msg) = check_zh_locale_completeness(Path::new(&manifest_dir)) {
+        panic!("{}", msg);
+    }
+
     // Skip Z3 linking for wasm targets
     let _target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
@@ -251,4 +263,107 @@ fn link_z3_wasm(z3_dir: &Path) {
     let lib_dir = z3_dir.join("lib");
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-lib=static=z3");
+}
+
+/// 扫描诊断码注册源，校验 zh.json 条目完备性（#325 构建期门槛）。
+///
+/// 注册源两处：
+/// - `src/util/diagnostic/codes/{e,w}?xxx.rs` 的 `code: "E6001"` 行
+/// - `src/std/result.rs` RUNTIME_ERROR_CODES 的 `("E6009", ...)` 元组行
+///
+/// zh.json 条目要求：键存在、title 非空、template 字段存在。
+fn check_zh_locale_completeness(root: &Path) -> Result<(), String> {
+    let mut codes: Vec<String> = Vec::new();
+
+    let codes_dir = root.join("src/util/diagnostic/codes");
+    let mut entries: Vec<_> = fs::read_dir(&codes_dir)
+        .map_err(|e| format!("读取 {} 失败: {}", codes_dir.display(), e))?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            p.extension().is_some_and(|x| x == "rs")
+                && p.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
+                    (n.starts_with('e') || n.starts_with('w')) && n.ends_with("xxx.rs")
+                })
+        })
+        .collect();
+    entries.sort();
+
+    for path in entries {
+        let content = fs::read_to_string(&path)
+            .map_err(|e| format!("读取 {} 失败: {}", path.display(), e))?;
+        for line in content.lines() {
+            if let Some(rest) = line.trim_start().strip_prefix("code:") {
+                if let Some(code) = extract_quoted(rest) {
+                    codes.push(code);
+                }
+            }
+        }
+    }
+
+    let result_rs = root.join("src/std/result.rs");
+    if result_rs.exists() {
+        let content = fs::read_to_string(&result_rs)
+            .map_err(|e| format!("读取 {} 失败: {}", result_rs.display(), e))?;
+        for line in content.lines() {
+            let t = line.trim_start();
+            if let Some(rest) = t.strip_prefix("(\"") {
+                // rest 形如 `E6009", "语义"`——首个引号即码的闭合引号
+                if let Some(code) = rest.split('"').next() {
+                    if !code.is_empty() {
+                        codes.push(code.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    let zh_path = root.join("locales/zh.json");
+    let zh_text = fs::read_to_string(&zh_path)
+        .map_err(|e| format!("读取 {} 失败: {}", zh_path.display(), e))?;
+    let zh: serde_json::Value = serde_json::from_str(&zh_text)
+        .map_err(|e| format!("解析 {} 失败: {}", zh_path.display(), e))?;
+
+    let mut missing = Vec::new();
+    for code in &codes {
+        match zh.get(code.as_str()) {
+            None => missing.push(format!("{}（缺条目）", code)),
+            Some(entry) => {
+                let title_ok = entry
+                    .get("title")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|s| !s.is_empty());
+                let has_template = entry.get("template").is_some();
+                if !title_ok || !has_template {
+                    missing.push(format!(
+                        "{}（{}）",
+                        code,
+                        if !title_ok {
+                            "title 缺失或为空"
+                        } else {
+                            "缺 template 字段"
+                        }
+                    ));
+                }
+            }
+        }
+    }
+
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "错误码翻译完备性校验失败：以下 {} 个码在 locales/zh.json 缺失或不完整。\n\
+             zh 是唯一人工翻译源（新增码请同步补 zh 条目），其余语言由 i18n bot 异步补齐：\n  {}",
+            missing.len(),
+            missing.join("\n  ")
+        ))
+    }
+}
+
+/// 从形如 `"E6001",` 的文本段提取第一个引号包裹的 token
+fn extract_quoted(s: &str) -> Option<String> {
+    let start = s.find('"')? + 1;
+    let end = s[start..].find('"')? + start;
+    Some(s[start..end].to_string())
 }
