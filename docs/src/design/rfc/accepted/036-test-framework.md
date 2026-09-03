@@ -238,11 +238,13 @@ CLI 能力，测试文件导入项目模块是核心场景。因此 Phase 1 先�
 **执行阶段**：
 
 1. 对每个文件：`yaoxiang run --debug-info <file>` 启动子进程
-   （`--debug-info` 使运行时错误带源码位置——2026-08-02 实证 stack trace 输出 `file:line:col`）
-2. 检查 exit code：0 为 PASS，非 0 为 FAIL
-3. 捕获 stdout/stderr 用于报告
-4. 仅串行执行（Phase 1），未来支持 `--parallel`
-5. 如果 `--fail-fast`，遇到第一个 FAIL 立即停止
+   （`--debug-info` 使运行时错误带源码位置——2026-08-02 实证 stack trace 输出 `file:line:col`）；
+   头部 `[test:runtime]` 声明子进程 `--runtime` 模式（2026-09-03 收口）
+2. 头部 `[test:ignore]: <原因>` 的文件跳过执行，计入报告的 skipped（2026-09-03 收口）
+3. 检查 exit code：0 为 PASS，非 0 为 FAIL；`[test:error]` 文件反向判定并按 §8.2 比对预期码
+4. 捕获 stdout/stderr 用于报告
+5. 仅串行执行（Phase 1），未来支持 `--parallel`
+6. 如果 `--fail-fast`，遇到第一个 FAIL 立即停止
 
 ### 6. 测试隔离
 
@@ -322,8 +324,10 @@ test.assert_eq(result.err_code(r), "E3017")
 - 标记升级为**结构化预期码**：runner 解析头部 `预期: 编译错误 EXXXX`，与编译器
   stderr 输出的 `[EXXXX]` 实际比对，码不符 = FAIL（trybuild stderr 快照思想的
   轻量版，零编译器改动）
-- **仅服务本仓库语料，不是用户测试框架的一部分**；实现侧需统一双 runner 判定
-  约定（目录约定 vs 头部标记），见 #319
+- **仅服务本仓库语料，不是用户测试框架的一部分**；双 runner 判定约定已收口
+  （2026-09-03，#319）：yx_runner（cargo test）与 `yaoxiang test` 共用
+  `src/util/test_markers.rs` 解析头部标记（`[test:error]`/`[test:ignore]`/
+  `[test:runtime]`/`预期: EXXXX`，前 16 行），06-compile-errors 的目录约定废弃
 
 #### 8.3 运行时硬失败（归入 Result 化）
 
