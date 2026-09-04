@@ -42,13 +42,13 @@
     ]
   },
   "dependencies": {
-    "vscode-languageclient": "^10.1.0"
+    "vscode-languageclient": "^10.1.1"
   },
   "overrides": {
     "brace-expansion": "5.0.9"
   },
   "devDependencies": {
-    "@types/node": "^26.3.0",
+    "@types/node": "^26.4.0",
     "@types/vscode": "^1.134.0",
     "typescript": "^7.0.2"
   }
