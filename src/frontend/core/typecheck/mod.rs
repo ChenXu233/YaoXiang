@@ -201,6 +201,12 @@ pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
                 // 使用签名字符串解析出正确的函数类型
                 let fn_ty = match export.kind {
                     ExportKind::Function | ExportKind::Constant => {
+                        if export.signature.is_empty() {
+                            // 嵌入 yx std 模块（RFC-036 §4，如 std.test）没有签名字符串契约，
+                            // 类型由 export.mono_type 承载；空串 parse 出的坏签名会以短名
+                            // 注册进 native_signatures，劫持消费者调用点（std.test 首次行使暴露）
+                            continue;
+                        }
                         signature::parse_signature(&export.signature, env)
                     }
                     _ => continue,
