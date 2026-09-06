@@ -1,4 +1,4 @@
-// 07-std/io_ops.yx
+// src/std/tests/io_ops.yx
 // 覆盖: std.io + std.os 模块（#117）— 文件 I/O 往返
 // 验证: write_file/read_file/append_file 往返 + os.remove/exists 清理
 // 状态: ✅

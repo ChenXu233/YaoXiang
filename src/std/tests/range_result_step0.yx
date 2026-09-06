@@ -1,4 +1,4 @@
-// 07-std/range_result_step0.yx
+// src/std/tests/range_result_step0.yx
 // 覆盖: stdlib.md §6.1 Range API Result 化（#316，#301 首个挂载点）
 // 验证: 动态 step=0 在 iter/contains 返回 Err(Error)——
 //   - `?` 沿调用栈传播到 Result 返回类型的函数（不再 E600x 硬崩）

@@ -1,4 +1,4 @@
-// 07-std/list_ops.yx
+// src/std/tests/list_ops.yx
 // 覆盖: std.list 模块（#117）— RFC-009 §2.8 只读自动借用 + 泛型 map/filter/reduce
 // 验证: 正常路径（len/get/first/last/contains/reverse/concat/map/filter/reduce/push）+ 错误路径（越界 get / 空 pop 返回 Void）
 // 状态: ✅

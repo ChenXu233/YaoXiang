@@ -1,4 +1,4 @@
-// 07-std/result_ops.yx
+// src/std/tests/result_ops.yx
 // 覆盖: std.result 模块 — RFC-011 泛型方法（此前 TypeRef-in-Ref 管线盲区，#249/#251 修复）
 // 验证: is_ok/is_err/unwrap/unwrap_or 对 parse_int 的成功与失败 Result
 // 状态: ✅

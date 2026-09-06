@@ -1,4 +1,4 @@
-// 07-std/math_ops.yx
+// src/std/tests/math_ops.yx
 // 覆盖: std.math 模块（#117）— 纯值函数（Copy 语义，无借用）
 // 验证: 整数函数（abs/max/min/clamp）+ 浮点函数（fabs/sqrt/floor/ceil/round/pow）+ 三角函数 + 常量
 // 状态: ✅

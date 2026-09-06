@@ -1,4 +1,4 @@
-// 07-std/test_assertions.yx
+// src/std/tests/test_assertions.yx
 // 覆盖: RFC-036 §3 std.test 值语义断言族（std.test 模块首次被语料行使）
 // 验证:
 //   - 值语义契约：断言失败以 Err(诊断) 表达不 abort，成功为 Ok(void)

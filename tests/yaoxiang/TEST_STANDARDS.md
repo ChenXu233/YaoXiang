@@ -65,6 +65,7 @@ tests/yaoxiang/
 │   └── control-flow/     #   控制流
 ├── 02-type-system/       # 类型系统（对应 type-system.md）
 ├── 03-modules/           # 模块系统（对应 modules.md）
+├── 03-semantics/         # 语义（return/尾表达式）
 ├── 04-concurrency/       # 并发模型（对应 concurrency.md）
 ├── 05-ownership/         # 所有权（独立章节）
 ├── 06-compile-errors/    # 编译期错误检测
@@ -174,10 +175,14 @@ main = {
 库的公开 API 契约测试写在**库自己的包里**，不进语言语料（RFC-036 §9）：
 
 - **位置**：std 的包即 `src/std/`，yx 级测试归 `src/std/tests/`，与实现体同处一地。
-  `std.test` 自身的测试也在其中（用 std.test 测 std.test，自举闭环）
+  `std.test` 自身的测试也在其中（用 std.test 测 std.test，自举闭环）。目录与
+  Rust 单元测试共存（文件类型不相交，互不干扰）。
+  **2026-09-06 已落地**：原 `tests/yaoxiang/07-std/` 的 19 个文件按甄别原则
+  整体迁入（被测对象均为 std 模块 API 契约），07-std 目录撤销
 - **未来用户包**：测试在包内，随包的 `[tool.test].patterns` 发现——std 是该惯例的
   预演（RFC-014）
-- **发现**：不进默认 patterns；经显式路径运行（`yaoxiang test src/std/tests`），
+- **发现**：不进默认 patterns；CLI 经显式路径运行（`yaoxiang test src/std/tests`），
+  cargo test 侧 yx_runner 双根发现（`tests/yaoxiang/` + `src/std/tests/`），
   CI 分层运行。标记系统与断言库与语料层完全共用
 - **甄别**：迁入时逐个判断被测对象——纯 API 行为的迁入；结论依赖编译器/运行时
   行为本身的（如 native `&T` 自动借用边界）留在语言语料并归入对应规范章节
@@ -251,7 +256,7 @@ cargo test
 # 语言语料 E2E 测试
 cargo test --test yx_runner
 
-# 库测试层（std 包内 yx 测试；布局迁移后生效，见 RFC-036 §9）
+# 库测试层（std 包内 yx 测试，2026-09-06 已迁移；yx_runner 同样双根发现）
 yaoxiang test src/std/tests
 
 # 集成测试

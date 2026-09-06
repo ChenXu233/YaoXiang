@@ -1,4 +1,4 @@
-// 07-std/assert_ops.yx
+// src/std/tests/assert_ops.yx
 // 覆盖: std.assert 模块（#117）
 // 验证: assert.assert(cond, msg) 正常路径（真条件通过、消息不显示）
 // 状态: ✅

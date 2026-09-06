@@ -1,4 +1,4 @@
-// 07-std/range_ops.yx
+// src/std/tests/range_ops.yx
 // 覆盖: stdlib.md §6.1-§6.2（#302）
 // 验证: std.range 迭代器协议（iter/has_next/next）、区间谓词 contains、适配器 map/filter/collect/reduce
 // 状态: ✅ 可运行

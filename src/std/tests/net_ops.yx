@@ -1,4 +1,4 @@
-// 07-std/net_ops.yx
+// src/std/tests/net_ops.yx
 // 覆盖: std.net 模块（#117）— 纯函数子集
 // 验证: url_encode（百分号编码）、url_decode（解码 + 与 encode 往返一致）
 // 状态: ✅

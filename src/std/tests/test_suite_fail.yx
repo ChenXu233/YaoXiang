@@ -1,4 +1,4 @@
-// 07-std/test_suite_fail.yx
+// src/std/tests/test_suite_fail.yx
 // 覆盖: RFC-036 §7 套件收集——失败路径（per-test 收集与文件退出码）
 // 验证:
 //   - 套件含一个必失败测试：收集到 Err 后其余测试照常运行（pop_returns_last 仍执行）

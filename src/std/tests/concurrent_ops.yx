@@ -1,4 +1,4 @@
-// 07-std/concurrent_ops.yx
+// src/std/tests/concurrent_ops.yx
 // 覆盖: std.concurrent 模块（#117）
 // 验证: sleep（毫秒休眠）、thread_id（非空标识）、yield_now（让出调度）
 // 状态: ✅

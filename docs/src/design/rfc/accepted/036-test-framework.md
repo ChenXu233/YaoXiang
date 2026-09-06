@@ -407,16 +407,18 @@ test.assert_err_code(r, "E6009")
 
 - 被测对象是**库的公开 API 契约**（如 `list.push` 行为、`result.code` 语义）
 - 测试写在**库自己的包里**：std 的包即 `src/std/`，其 yx 级测试归 `src/std/tests/`
-  （与实现体同处一地）；`std.test` 自身的测试也在其中（用 std.test 测 std.test，
-  自举闭环）
+  （与实现体同处一地；目录与 Rust 单元测试共存，文件类型不相交）；`std.test`
+  自身的测试也在其中（用 std.test 测 std.test，自举闭环）
 - 未来用户包沿用同一惯例：测试在包内，随包的 `[tool.test]` 发现（RFC-014 包管理
   的测试布局由此预演）
 - 发现不进默认 patterns（默认 `tests/**/*.yx` 只覆盖语言层）：库测试层经显式路径
   （`yaoxiang test src/std/tests`）或包配置发现；CI 分层运行
 
-迁移注记：现居 `tests/yaoxiang/07-std/` 的库测试按此模型迁往 `src/std/tests/`；
-迁移时逐个甄别——纯 API 行为的迁走，被测对象实为语言边界（如 native `&T` 自动
-借用）的留在语料层并归入对应规范章节。
+迁移注记：**已迁移（2026-09-06）**——原 `tests/yaoxiang/07-std/` 的 19 个文件
+逐个甄别后全部为库测试（被测对象均为 std 模块的 API 契约；`?` 传播、自动借用、
+泛型实例化等语言特性在其中的角色是载体而非被测对象），整体迁入 `src/std/tests/`
+并撤销 07-std 目录；yx_runner 改双根发现（`tests/yaoxiang/` + `src/std/tests/`），
+默认 patterns 不含库层（集成测试固化该契约）。语言语料自此零 std-API 测试。
 
 ## 与现有系统关系
 

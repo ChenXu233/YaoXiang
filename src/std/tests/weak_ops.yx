@@ -1,4 +1,4 @@
-// 07-std/weak_ops.yx
+// src/std/tests/weak_ops.yx
 // 覆盖: std.weak 模块（#117）— Arc/Weak 泛型签名（#242 结构化统一）
 // 验证: ref 创建 Arc → weak.new 登记 → upgrade 存活 Arc 返回 some（调用不失败）
 // 状态: ✅

@@ -1,4 +1,4 @@
-// 07-std/test_suite.yx
+// src/std/tests/test_suite.yx
 // 覆盖: RFC-036 §7 套件收集（test.suite 值化多测试模型）
 // 验证:
 //   - 文件内多测试：零参测试函数返回 Result(Void, String)，suite 逐个调用收集

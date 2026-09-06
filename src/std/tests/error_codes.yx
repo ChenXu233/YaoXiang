@@ -1,4 +1,4 @@
-// 07-std/error_codes.yx
+// src/std/tests/error_codes.yx
 // 覆盖: stdlib.md §1.3 Error 载体与错误码（#323 M4，RFC-013 运行时错误值与码贯通）
 // 验证:
 //   - Error 值携带规范化错误码（unwrap_err 取载体，code/message 访问）

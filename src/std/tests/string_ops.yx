@@ -1,4 +1,4 @@
-// 07-std/string_ops.yx
+// src/std/tests/string_ops.yx
 // 覆盖: std.string 模块（#117）— RFC-009 §2.8 只读自动借用
 // 验证: 字符串操作复用（split/trim/upper/lower/replace/contains/...）+ parse 错误路径（Result err）
 // 状态: ✅

@@ -1,4 +1,4 @@
-// 07-std/dict_ops.yx
+// src/std/tests/dict_ops.yx
 // 覆盖: std.dict 模块（#117）— RFC-009 §2.8 只读自动借用
 // 验证: 正常路径（set/get/has/keys/values/len/is_empty/merge/delete）+ 错误路径（缺失 key 报错 E6007 / has 为 false）
 // 状态: ✅

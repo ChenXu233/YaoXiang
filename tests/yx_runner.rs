@@ -1,7 +1,12 @@
 //! E2E Test Runner for YaoXiang (.yx) test files
 //!
-//! Discovers all `*.yx` files under `tests/yaoxiang/` and executes each against
-//! the `yaoxiang` binary with expectation-driven judgment.
+//! Discovers all `*.yx` test files across the two tiers (RFC-036 §9) and
+//! executes each against the `yaoxiang` binary with expectation-driven
+//! judgment:
+//!
+//! - 语言可用性语料：`tests/yaoxiang/`（被测对象是语言本身，目录对齐语言规范章节）
+//! - 库测试：`src/std/tests/`（被测对象是 std 的 API 契约，随库走；
+//!   CLI 侧经显式路径 `yaoxiang test src/std/tests` 发现，不混入默认扫描）
 //!
 //! 判定约定与 `yaoxiang test` CLI 共用（RFC-036 §8.2，#319 收口 + 2026-09-06
 //! 指令文法定案）：头部指令经 `yaoxiang::util::test_markers::TestFileSpec`
@@ -25,6 +30,7 @@
 //! │   └── control-flow/     #   控制流
 //! ├── 02-type-system/       # 类型系统（对应 type-system.md）
 //! ├── 03-modules/           # 模块系统（对应 modules.md）
+//! ├── 03-semantics/         # 语义（return/尾表达式）
 //! ├── 04-concurrency/       # 并发模型（对应 concurrency.md）
 //! ├── 05-ownership/         # 所有权（独立章节）
 //! ├── 06-compile-errors/    # 编译期错误检测
@@ -36,13 +42,14 @@ use std::process::Command;
 
 use yaoxiang::util::test_markers::{Expectation, TestFileSpec};
 
-/// Find all `.yx` test files under `tests/yaoxiang/`, excluding `.skip` files.
+/// Find all `.yx` test files across both tiers (RFC-036 §9), sorted.
 fn discover_yx_tests() -> Vec<PathBuf> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("yaoxiang");
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut files = Vec::new();
-    collect_yx_files(&root, &mut files);
+    // 第一层：语言可用性语料
+    collect_yx_files(&manifest.join("tests").join("yaoxiang"), &mut files);
+    // 第二层：库测试（std，随库走；目录与 Rust 单元测试共存，文件类型不相交）
+    collect_yx_files(&manifest.join("src").join("std").join("tests"), &mut files);
     files.sort();
     files
 }

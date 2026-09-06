@@ -740,6 +740,46 @@ fn test_test_command_list_excludes_skipped_files() {
 }
 
 #[test]
+fn test_test_command_library_tier_explicit_path_runs() {
+    // Arrange - RFC-036 §9 两级模型：库测试不混入默认扫描，经显式路径发现。
+    // 跑真实仓库库层（src/std/tests/），--filter 限定单文件控制耗时
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let tier = repo.join("src").join("std").join("tests");
+    assert!(tier.is_dir(), "库层目录应存在: {}", tier.display());
+
+    // Act - 显式路径 + filter，仅执行 result_ops.yx
+    let tier_path = tier.display().to_string();
+    let (code, stdout, _) = run_test_cmd(&[tier_path.as_str(), "--filter", "result_ops"], &repo);
+
+    // Assert - 显式路径发现库层文件并执行通过
+    assert_eq!(code, 0, "库层显式路径应执行通过:\n{stdout}");
+    assert!(
+        stdout.contains("result_ops.yx") && stdout.contains("PASS"),
+        "应执行库层文件并标记 PASS:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Results: 1 file passed, 0 files failed"),
+        "应只执行过滤后的 1 个文件:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_default_discovery_excludes_library_tier() {
+    // Arrange - RFC-036 §9：默认 patterns（tests/**/*.yx）不覆盖库层
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    // Act - 无显式路径 + 库层文件名过滤：默认发现集里没有 result_ops.yx
+    let (code, stdout, _) = run_test_cmd(&["--filter", "result_ops"], &repo);
+
+    // Assert - 默认扫描不含库层 → 过滤后零发现（若混入则会执行并 PASS）
+    assert_eq!(code, 0, "零发现应退出 0:\n{stdout}");
+    assert!(
+        stdout.contains("No tests found"),
+        "默认发现不应包含库层文件:\n{stdout}"
+    );
+}
+
+#[test]
 fn test_test_command_suite_all_pass_exits_zero() {
     // Arrange - RFC-036 §7 套件收集：多测试全 Ok 静默退出 0
     let dir = TempDir::new().expect("tempdir");
