@@ -1,6 +1,6 @@
 [workspace]
 members = ["benches/shootout/runner"]
-exclude = ["wasm"]
+exclude = ["wasm", "tools/setup-z3", "tools/code-tables"]
 resolver = "2"
 
 [package]
@@ -100,4 +100,4 @@ default-target = "x86_64-unknown-linux-gnu"
 web-time = "1"
 
 [build-dependencies]
-serde_json = "1.0.150"
+code-tables = { path = "tools/code-tables" }

@@ -941,5 +941,11 @@
     "message": "String cannot be parsed as float",
     "template": "Float parsing failed: {input}",
     "help": "Check if the string is a valid floating point number"
+  },
+  "E2029": {
+    "title": "Reference cycle in spawn",
+    "message": "A reference cycle was detected inside a spawn block",
+    "template": "Reference cycle in spawn: {cycle}",
+    "help": "Captured references in a spawn block must not form a cycle; check the capture list"
   }
 }

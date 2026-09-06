@@ -271,147 +271,155 @@ E1001::unknown_variable(&var_name)
 ### 错误代码列表
 
 #### E0xxx：词法与语法分析
-
-| 代码  | 错误类型                  | 说明                         |
-| ----- | ------------------------- | ---------------------------- |
-| E0001 | Invalid character         | 源代码包含非法字符           |
-| E0002 | Invalid number literal    | 数字字面量格式不正确         |
-| E0003 | Unterminated string       | 多行字符串缺少结束引号       |
-| E0004 | Invalid character literal | 字符字面量不正确             |
-| E0010 | Expected token            | 语法分析时期望特定 token     |
-| E0011 | Unexpected token          | 遇到意外的 token             |
-| E0012 | Invalid syntax            | 表达式/语句语法错误          |
-| E0013 | Mismatched brackets       | 圆括号、方括号、花括号不匹配 |
-| E0014 | Missing semicolon         | 语句末尾缺少分号             |
-| E0016 | Expected expression       | 期望表达式                   |
-| E0018 | Keyword as name           | 关键字不能用作名称           |
+<!-- code-table:E0xxx start -->
+| 代码  | 说明    |
+| ----- | ------- |
+| E0001 | 无效字符    |
+| E0002 | 无效数字字面量 |
+| E0003 | 未终止的字符串 |
+| E0004 | 无效字符字面量 |
+| E0010 | 期望的令牌   |
+| E0011 | 意外的令牌   |
+| E0012 | 无效语法    |
+| E0013 | 不匹配的括号  |
+| E0014 | 缺少分号    |
+| E0016 | 期望表达式   |
+| E0018 | 关键字作名称  |
+<!-- code-table:E0xxx end -->
 
 #### E1xxx：类型检查
-
-| 代码  | 错误类型                 | 说明                       |
-| ----- | ------------------------ | -------------------------- |
-| E1001 | Unknown variable         | 引用的变量未定义           |
-| E1002 | Type mismatch            | 期望类型与实际类型不符     |
-| E1003 | Unknown type             | 引用的类型不存在           |
-| E1010 | Parameter count mismatch | 函数调用参数数量与定义不符 |
-| E1011 | Parameter type mismatch  | 参数类型检查失败           |
-| E1012 | Return type mismatch     | 函数返回值类型错误         |
-| E1013 | Function not found       | 调用未定义的函数           |
-| E1020 | Cannot infer type        | 上下文无法推断类型         |
-| E1021 | Type inference conflict  | 多处约束导致类型矛盾       |
-| E1030 | Pattern non-exhaustive   | match 表达式未覆盖所有情况 |
-| E1031 | Unreachable pattern      | 永远无法匹配的模式         |
-| E1040 | Operation not supported  | 类型不支持该操作           |
-| E1041 | Index out of bounds      | 数组/列表索引超出范围      |
-| E1042 | Field not found          | 访问不存在的结构体字段     |
-| E1050 | Boolean operand required | 需要布尔操作数             |
-| E1051 | Logical NOT requires boolean operand | 逻辑 NOT 需要布尔操作数 |
-| E1052 | Invalid dereference      | 无效解引用                 |
-| E1053 | Non-struct field access  | 非结构体字段访问           |
-| E1054 | Conditional type mismatch | 条件类型不匹配            |
-| E1055 | Constraint in non-generic context | 约束出现在非泛型上下文 |
-| E1060 | Type parameter count mismatch | 类型参数数量不匹配     |
-| E1061 | Cannot instantiate generic | 无法实例化泛型           |
-| E1062 | Const generic constraint failed | const 泛型约束失败   |
-| E1064 | Invalid binding position | 绑定位置索引无效（RFC-004） |
-| E1071 | Type definitions are only allowed at module level | 类型定义只能在模块级 |
-| E1081 | `?` can only be used within functions returning Result | `?` 仅允许在返回 Result 的函数内使用 |
-| E1082 | `?` can only be used with Result expressions | `?` 只能用于 Result 表达式 |
-| E1083 | Error type mismatch for `?` | `?` 的错误类型不匹配    |
-| E1090 | Type universe easter egg | Type: Type = Type 彩蛋（Note 级） |
-| E1091 | Invalid generic meta type | 无效的泛型元类型          |
-| E1092 | Invalid refinement type argument form | 精化类型实参形态非法 |
-| E1093 | Refinement argument count mismatch | 精化实参个数不匹配 |
-| E1094 | Unused compile-time value parameter | 未使用的编译期值参数 |
-| E1095 | Unknown interface        | 未知接口                   |
-| E1096 | Interface arity mismatch | 接口参数数量不匹配         |
-| E1097 | Interface member name conflict | 接口成员命名冲突     |
-| E1098 | Interface method not implemented | 接口方法未实现     |
-| E1099 | Interface method signature mismatch | 接口方法签名不匹配 |
-| E1100 | Duplicate interface method implementation | 接口方法重复实现 |
-| E1101 | Type does not implement interface | 类型未实现接口    |
-| E1102 | Loop control statement outside of a loop | 循环控制语句出现在循环外 |
+<!-- code-table:E1xxx start -->
+| 代码  | 说明                     |
+| ----- | ------------------------ |
+| E1001 | 未知变量                     |
+| E1002 | 类型不匹配                    |
+| E1003 | 未知类型                     |
+| E1010 | 参数数量不匹配                  |
+| E1011 | 参数类型不匹配                  |
+| E1012 | 返回类型不匹配                  |
+| E1013 | 函数未找到                    |
+| E1020 | 无法推断类型                   |
+| E1021 | 类型推断冲突                   |
+| E1030 | 模式不完整                    |
+| E1031 | 不可达模式                    |
+| E1040 | 操作不支持                    |
+| E1041 | 索引越界                     |
+| E1042 | 字段未找到                    |
+| E1050 | 需要布尔操作数                  |
+| E1051 | 逻辑 NOT 需要布尔操作数           |
+| E1052 | 无效解引用                    |
+| E1053 | 非结构体字段访问                 |
+| E1054 | 条件类型不匹配                  |
+| E1055 | 约束在非泛型上下文中               |
+| E1060 | 类型参数数量不匹配                |
+| E1061 | 无法实例化泛型                  |
+| E1062 | const 泛型约束失败             |
+| E1064 | 绑定位置索引无效                 |
+| E1071 | 类型定义只能在模块级               |
+| E1081 | `?` 仅允许在返回 Result 的函数内使用 |
+| E1082 | `?` 只能用于 Result 表达式      |
+| E1083 | `?` 的错误类型不匹配             |
+| E1090 | ✨ 不可言说 ✨                 |
+| E1091 | 无效的泛型元类型                 |
+| E1092 | 精化类型实参形态非法               |
+| E1093 | 精化实参个数不匹配                |
+| E1094 | 未使用的编译期值参数               |
+| E1095 | 未知接口                     |
+| E1096 | 接口参数数量不匹配                |
+| E1097 | 接口成员命名冲突                 |
+| E1098 | 接口方法未实现                  |
+| E1099 | 接口方法签名不匹配                |
+| E1100 | 接口方法重复实现                 |
+| E1101 | 类型未实现接口                  |
+| E1102 | 循环控制语句出现在循环外             |
+<!-- code-table:E1xxx end -->
 
 #### E2xxx：语义分析
-
-| 代码  | 错误类型             | 说明                       |
-| ----- | -------------------- | -------------------------- |
-| E2001 | Scope error          | 变量不在当前作用域         |
-| E2002 | Duplicate definition | 同一作用域内重复定义       |
-| E2003 | Lifetime error       | 生命周期约束不满足         |
-| E2010 | Immutable assignment | 尝试修改不可变变量         |
-| E2011 | Uninitialized use    | 使用未初始化的变量         |
-| E2012 | Mutability conflict  | 不可变上下文中使用可变引用 |
-| E2013 | Variable shadowing   | 变量遮蔽                   |
-| E2014 | Use of moved value   | 使用已移动的值             |
-| E2016 | Immutable assignment | 不可变赋值                 |
-| E2018 | Mutable/immutable borrow conflict | 可变/不可变借用冲突 |
-| E2019 | Double free          | 双重释放                   |
-| E2020 | Use after free       | 释放后使用                 |
-| E2027 | Unsafe dereference   | unsafe 解引用              |
-| E2090 | Invalid signature    | 函数签名解析错误           |
-| E2091 | Unknown type in signature | 签名中出现未知类型    |
-| E2092 | Missing arrow in signature | 签名缺少返回箭头     |
-| E2093 | Duplicate parameter name | 重复参数名             |
-| E2094 | Generic parameter shadowing | 泛型参数遮蔽        |
-| E2095 | Parameter name shadows generic | 参数名遮蔽泛型    |
+<!-- code-table:E2xxx start -->
+| 代码  | 说明        |
+| ----- | ----------- |
+| E2001 | 作用域错误       |
+| E2002 | 重复定义        |
+| E2003 | 所有权错误       |
+| E2010 | 不可变赋值       |
+| E2011 | 使用未初始化变量    |
+| E2012 | 可变性冲突       |
+| E2013 | 变量遮蔽        |
+| E2014 | 使用已移动的值     |
+| E2016 | 不可变赋值       |
+| E2018 | 可变/不可变借用冲突  |
+| E2019 | 双重释放        |
+| E2020 | 释放后使用       |
+| E2027 | unsafe 解引用  |
+| E2029 | spawn 内引用循环 |
+| E2090 | 无效签名        |
+| E2091 | 签名未知类型      |
+| E2092 | 签名缺少箭头      |
+| E2093 | 重复参数名       |
+| E2094 | 泛型参数遮蔽      |
+| E2095 | 参数名遮蔽泛型     |
+<!-- code-table:E2xxx end -->
 
 #### E3xxx：代码生成
-
-| 代码  | 错误类型                        | 说明                       |
-| ----- | ------------------------------- | -------------------------- |
-| E3004 | Unsupported iterator            | 不支持的迭代器             |
-| E3005 | IR generation error             | IR 生成内部错误            |
-| E3006 | Unresolved variable             | 变量在 IR 生成阶段未解析   |
-| E3007 | Top-level initializer must be constant | 顶层绑定初始化必须为常量 |
-| E3014 | Register overflow               | 寄存器溢出                 |
-| E3017 | Invalid operand (code generation) | 无效操作数（代码生成）  |
+<!-- code-table:E3xxx start -->
+| 代码  | 说明         |
+| ----- | ------------ |
+| E3004 | 不支持的迭代器      |
+| E3005 | IR 生成错误      |
+| E3006 | 未解析变量        |
+| E3007 | 顶层绑定初始化必须为常量 |
+| E3014 | 寄存器溢出        |
+| E3017 | 无效操作数（代码生成）  |
+<!-- code-table:E3xxx end -->
 
 #### E4xxx：泛型与特质
+<!-- code-table:E4xxx start -->
+| 代码  | 说明    |
+| ----- | ------- |
+| E4001 | 泛型约束违反  |
+| E4002 | 特质未找到   |
+| E4003 | 特质实现缺失  |
+| E4004 | 特质实现冲突  |
+| E4005 | 关联类型未找到 |
+| E4010 | 常量除零    |
+| E4011 | 常量溢出    |
+| E4012 | 常量递归过深  |
+| E4014 | 常量求值失败  |
+| E4018 | 精化谓词违反  |
+| E4019 | 类型等式不成立 |
+| E4020 | 需要证明函数  |
+<!-- code-table:E4xxx end -->
 
-| 代码  | 错误类型                       | 说明                    |
-| ----- | ------------------------------ | ----------------------- |
-| E4001 | Generic parameter mismatch     | 泛型参数数量/类型不匹配 |
-| E4002 | Trait bound violated           | 不满足 trait 约束       |
-| E4003 | Associated type error          | 关联类型定义/使用错误   |
-| E4004 | Duplicate trait implementation | 重复实现同一 trait      |
-| E4005 | Trait not found                | 找不到要求的 trait      |
-| E4006 | Sized bound violated           | Sized 约束不满足（预留，未实现） |
-| E4010 | Division by zero in constant expression | 常量表达式除零          |
-| E4011 | Constant overflow              | 常量溢出                   |
-| E4012 | Constant recursion too deep    | 常量递归过深               |
-| E4014 | Constant evaluation failed     | 常量求值失败               |
-| E4018 | Refinement predicate violation | 精化谓词违反               |
-| E4019 | Type equality does not hold    | 类型等式不成立             |
-| E4020 | Proof function required        | 需要证明函数来验证约束     |
+> E4006/E8004 当前无发射点（预留码）：Sized 约束与优化错误路径待实现，实现时按真实触发面接线。
 
 #### E5xxx：模块与导入
-
-| 代码  | 错误类型            | 说明                 |
-| ----- | ------------------- | -------------------- |
-| E5001 | Module not found    | 导入的模块不存在     |
-| E5002 | Cyclic import       | 模块间循环依赖       |
-| E5003 | Symbol not exported | 尝试访问未导出的符号 |
-| E5004 | Invalid module path | 模块路径格式错误     |
-| E5005 | Private access      | 访问私有符号         |
-| E5006 | Duplicate import    | 重复导入             |
-| E5007 | Module export listing | 模块导出列表（配套提示信息） |
+<!-- code-table:E5xxx start -->
+| 代码  | 说明    |
+| ----- | ------- |
+| E5001 | 模块未找到   |
+| E5002 | 导入错误    |
+| E5003 | 导出未找到   |
+| E5004 | 循环依赖    |
+| E5005 | 无效的模块路径 |
+| E5006 | 重复导入    |
+| E5007 | 模块导出    |
+<!-- code-table:E5xxx end -->
 
 #### E6xxx：运行时错误
-
-| 代码  | 错误类型                    | 说明                       |
-| ----- | --------------------------- | -------------------------- |
-| E6001 | Division by zero            | 整数除以零                 |
-| E6002 | ~~Assertion failed~~        | ~~保留位（无语言概念，已删）~~ |
-| E6003 | Runtime index out of bounds | 运行时索引越界（#280 接线）|
-| E6004 | Stack overflow              | 栈空间耗尽                 |
-| E6005 | Assertion failed            | assert 失败（#280 接线）   |
-| E6006 | Function not found          | 运行时函数未找到           |
-| E6007 | Runtime error (generic)     | 通用运行时错误             |
-| E6008 | Key not found               | Dict 键缺失（#299 §4）     |
-| E6009 | Invalid range step          | Range 步长非法（step=0，std.range Result 化 #316） |
-| E6010 | Integer parse failed        | 整数解析失败（std.string.parse_int） |
-| E6011 | Float parse failed          | 浮点解析失败（std.string.parse_float） |
+<!-- code-table:E6xxx start -->
+| 代码  | 说明       |
+| ----- | ---------- |
+| E6001 | 除零错误       |
+| E6003 | 数组索引越界     |
+| E6004 | 栈溢出        |
+| E6005 | 断言失败       |
+| E6006 | 函数未找到（运行时） |
+| E6007 | 运行时错误      |
+| E6008 | 键不存在       |
+| E6009 | Range 步长非法 |
+| E6010 | 整数解析失败     |
+| E6011 | 浮点解析失败     |
+<!-- code-table:E6xxx end -->
 
 > **#280 修订（2026-08-09）**：码表原按 Rust 语义草案（Assertion failed/Arithmetic overflow/Heap
 > allocation failed/Type cast failed）定义，与实现实际需求不符。YaoXiang 无空指针/堆分配失败/类型
@@ -424,34 +432,36 @@ E1001::unknown_variable(&var_name)
 > - E6007 从 Type cast failed 改为通用 Runtime error（ExecutorError 未映射变体统一落点）
 
 #### E7xxx：I/O 与系统错误
-
-| 代码  | 错误类型          | 说明                 |
-| ----- | ----------------- | -------------------- |
-| E7001 | File not found    | 尝试读取不存在的文件 |
-| E7002 | Permission denied | 文件权限不足         |
-| E7003 | I/O error         | 通用 I/O 错误        |
-| E7004 | Network error     | 网络操作失败         |
+<!-- code-table:E7xxx start -->
+| 代码  | 说明   |
+| ----- | ------ |
+| E7001 | 文件未找到  |
+| E7002 | 权限被拒绝  |
+| E7003 | I/O 错误 |
+| E7004 | 网络错误   |
+<!-- code-table:E7xxx end -->
 
 #### E8xxx：内部编译器错误
-
-| 代码  | 错误类型                | 说明              |
-| ----- | ----------------------- | ----------------- |
-| E8001 | Internal compiler error | 编译器内部错误    |
-| E8002 | Codegen error           | IR/字节码生成失败 |
-| E8003 | Unimplemented feature   | 使用未实现的功能  |
-| E8004 | Optimization error      | 编译器优化错误（预留，未实现） |
+<!-- code-table:E8xxx start -->
+| 代码  | 说明     |
+| ----- | -------- |
+| E8001 | 内部编译器错误  |
+| E8002 | 意外 Panic |
+| E8003 | 编译器阶段错误  |
+<!-- code-table:E8xxx end -->
 
 #### W1xxx：警告码
-
-| 代码  | 警告类型                                   | 说明                       |
-| ----- | ------------------------------------------ | -------------------------- |
-| W1001 | Unused exported function                   | 未使用的导出函数           |
-| W1002 | Unused exported type                       | 未使用的导出类型           |
-| W1003 | Unused import                              | 未使用的导入               |
-| W1004 | Unused exported variable                   | 未使用的导出变量           |
-| W1005 | Unused exported method                     | 未使用的导出方法           |
-| W1063 | Const generic constraint cannot be evaluated | const 泛型约束无法求值   |
-| W1080 | Constraint demoted to runtime check | 编译期无法证明约束，已降级为运行时检查 |
+<!-- code-table:W1xxx start -->
+| 代码  | 说明           |
+| ----- | -------------- |
+| W1001 | 未使用的导出函数       |
+| W1002 | 未使用的导出类型       |
+| W1003 | 未使用的导入         |
+| W1004 | 未使用的导出变量       |
+| W1005 | 未使用的导出方法       |
+| W1063 | const 泛型约束无法求值 |
+| W1080 | 编译期证明降级        |
+<!-- code-table:W1xxx end -->
 
 > W 码位规则：与 E 码同构按阶段分组（W+阶段千位段），W1xxx = 类型检查阶段警告。
 >
@@ -498,7 +508,7 @@ Error { code: String, message: String }
 #### 码分配规则
 
 1. 运行时错误值码与编译器诊断码共用 E6xxx/E7xxx 空间，新码按**真实触发面**分配，不为想象中的场景预留。
-2. 先注册后使用：新码进入权威注册表并经三方一致性校验（codes/*.rs ↔ locales ↔ 本文档码表）后方可发射。运行时错误值码的注册源为 `src/std/result.rs` 的 `RUNTIME_ERROR_CODES` 表（与诊断码同受 `scripts/check_error_codes.py` 校验）。
+2. 先注册后使用：新码进入权威注册表并经三方一致性校验（codes/*.rs ↔ locales ↔ 本文档码表）后方可发射。运行时错误值码的注册源为 `src/std/result.rs` 的 `RUNTIME_ERROR_CODES` 表（与诊断码同受 `build.rs 构建期门槛 + `tools/code-tables`` 校验）。
 3. E7xxx 为 std.io / std.net 错误值预留段位（当前空挂，io/net Result 化时启用）。
 4. 发射点（#323 M4）：std 各模块经 `error_new(code, message)` 构造 Error 值；消费侧 `std.result.unwrap_err` 取出 Err 载体，`std.result.code/message` 读取字段。
 

@@ -953,5 +953,11 @@
     "message": "字符串喵法被解析为浮点数喵",
     "template": "浮点解析失败喵：{input}",
     "help": "检查字符串是否为合法浮点数喵~"
+  },
+  "E2029": {
+    "title": "spawn 里引用绕圈圈喵",
+    "message": "spawn 块里的引用形成了循环喵",
+    "template": "spawn 内引用循环喵：{cycle}",
+    "help": "spawn 捕获的引用不能绕圈圈喵，检查一下捕获列表喵"
   }
 }

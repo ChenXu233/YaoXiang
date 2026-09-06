@@ -941,5 +941,11 @@
     "message": "字符串无法解析为浮点数",
     "template": "浮点解析失败：{input}",
     "help": "检查字符串是否为合法浮点数"
+  },
+  "E2029": {
+    "title": "spawn 内引用循环",
+    "message": "spawn 块内检测到引用形成循环",
+    "template": "spawn 内引用循环: {cycle}",
+    "help": "spawn 捕获的引用不能形成循环依赖，请检查捕获列表"
   }
 }
