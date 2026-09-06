@@ -943,9 +943,9 @@
     "help": "Check if the string is a valid floating point number"
   },
   "E2029": {
-    "title": "Reference cycle in spawn",
-    "message": "A reference cycle was detected inside a spawn block",
-    "template": "Reference cycle in spawn: {cycle}",
-    "help": "Captured references in a spawn block must not form a cycle; check the capture list"
+    "title": "reference cycle in spawn",
+    "message": "reference cycle detected in spawn block",
+    "template": "reference cycle in spawn: {cycle}",
+    "help": "references captured by spawn cannot form cyclic dependencies, check the capture list"
   }
 }
