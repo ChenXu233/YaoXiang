@@ -149,40 +149,44 @@ patterns = ["tests/**/*.yx"]
 ### 3. std.test 模块（纯 YaoXiang）
 
 ```yaoxiang
-// std/test.yx — Pure YaoXiang test assertion library
-// First dogfooding library: YaoXiang's test library written in YaoXiang
+// std/test.yx — 纯 YaoXiang 测试断言库（值语义标准形态，2026-09-03 落地）
+// 第一个 dogfooding 库：YaoXiang 的测试库用 YaoXiang 写。
 
 use std.result
 
-assert_eq = (a, b) => {
-    if a == b { result.ok(()) } else { result.err(f"Expected {b}, got {a}") }
+assert_eq: (a: Any, b: Any) -> Result(Void, String) = (a, b) => {
+    if a == b { return result.ok(void) }
+    return result.err(f"Expected {b}, got {a}")
 }
 
-assert_ne = (a, b) => {
-    if a != b { result.ok(()) } else { result.err(f"Expected not equal to {b}, got {a}") }
+assert_ne: (a: Any, b: Any) -> Result(Void, String) = (a, b) => {
+    if a != b { return result.ok(void) }
+    return result.err(f"Expected not equal to {b}, got {a}")
 }
 
-assert_true = (cond: Bool) => {
-    if cond { result.ok(()) } else { result.err(f"Expected true, got {cond}") }
+assert_true: (cond: Bool) -> Result(Void, String) = (cond) => {
+    if cond { return result.ok(void) }
+    return result.err(f"Expected true, got {cond}")
 }
 
-assert_false = (cond: Bool) => {
-    if cond == false { result.ok(()) } else { result.err(f"Expected false, got {cond}") }
-}
+// assert_not 与 assert_false 同体；assert_err / assert_err_code 见 §8.1
 ```
 
-- 断言函数为**值语义**：返回 `Result((), String)`，失败以 `Err(诊断信息)` 表达，
+- 断言函数为**值语义**：返回 `Result(Void, String)`，失败以 `Err(诊断信息)` 表达，
   不 abort 进程——§7 套件据此收集 per-test 判定。`std.assert.assert` 的进程级
-  abort 语义保留给运行时守卫，不进入测试断言路径
-- 过渡说明：Phase 1 落地的 4 函数基于 `std.assert.assert`（abort 语义），是自举
-  过渡实现；值语义族为本 RFC 标准形态，落地后替换（#319）
-- `assert_eq` / `assert_ne` 用**无标注参数**（`Any`）——2026-08-02 实证：`==`/`!=` 与
-  f-string 插值在 Any 上工作正常（Int/String 均验证通过），**不依赖泛型系统**。
-  未来泛型就绪后可补标注
-- `assert_false` 用 `cond == false` 表达取反（`not` 一元语法未落地，稳定后可迁移；
-  `!assert` 一元形态同此依赖，见 §8.1）
-- 错误码断言（`assert(err.code == "E3017")`）依赖 `Error` 值携带机器可读 `code`
-  字段（§8.1）
+  abort 语义保留给运行时守卫，不进入测试断言路径。Ok 载荷为 `Void`
+  （type-system.md 规范 unit；`()` 是空 Tuple，两者不混用——2026-09-03 定案）
+- **函数族 7 个（2026-09-03 已交付，abort 过渡版删除）**：值化
+  `assert_eq` / `assert_ne` / `assert_true` / `assert_false` + `assert_not`
+  （与 assert_false 同体，为 `!assert` 换装预留）+ `assert_err`（§8.1）
+  - `assert_err_code`（§8.1 错误码断言）
+- `assert_eq` / `assert_ne` 用 **Any 标注参数**——`==`/`!=` 与 f-string 插值在
+  Any 上工作正常，不依赖泛型系统。注意参数**必须显式标注**：无标注参数
+  过不了 native 泛型 `&Result(T, E)` 的调用检查（R1 探针实证）
+- `assert_false` / `assert_not` 用 `cond == false` 表达取反（`not` 一元语法未落地，
+  稳定后可迁移；`!assert` 一元形态同此依赖，见 §8.1）
+- 块体 + 显式 `return` 形态：if 表达式的 then 臂类型在检查中被丢弃，
+  两臂 Result 的 if 表达式是检查盲区，实现规避之
 - `std.test` 不依赖任何 native 代码，纯 YaoXiang 实现
 
 ### 4. 标准库加载机制（关键设计）
@@ -283,7 +287,7 @@ main = {
 }
 ```
 
-- 每个测试是返回 `Result((), String)` 的零参函数；断言失败以 `Err` 表达（§3 值语义
+- 每个测试是返回 `Result(Void, String)` 的零参函数；断言失败以 `Err` 表达（§3 值语义
   断言族），不中断进程——后续测试照常运行
 - `test.suite` 逐个调用并收集：某测试非 Ok 即打印该测试的名字与诊断信息，Ok 静默
 - 文件退出码：套件全 Ok → 0；任一 Err → 非 0（§5 执行阶段的 exit code 判定不变）
@@ -305,14 +309,20 @@ main = {
 ```yaoxiang
 r = range.iter(invalid_range)
 test.assert_err(r)
-test.assert_eq(result.err_code(r), "E3017")
+e = result.unwrap_err(r)
+test.assert_eq(result.code(e), "E6009")
+// 或一句封装（码只存在于 std Error 载体上，E 钉死为 Error）：
+test.assert_err_code(r, "E6009")
 ```
 
-- std.test 补 `assert_not` / `assert_err` 函数族；`!assert` 一元形态待 not 语法
-  落地后提供（与 `assert_false` 的 `cond == false` 同款约束）
-- 错误码断言依赖 `Error` 值扩展机器可读 `code` 字段：由 `Struct { message }` 增至
-  `{ code, message }`（native `error_new_with_code`，std 导出码常量），使
-  `err.code == "E3017"` 可断言
+- `assert_not` / `assert_err` / `assert_err_code` 已随值语义族交付（2026-09-03，§3）；
+  `!assert` 一元形态待 not 语法落地后提供（与 `assert_false` 的 `cond == false`
+  同款约束）
+- 错误码断言依赖 `Error` 值携带机器可读 `code` 字段——已由 #323 M4 落地：
+  `Error = { code, message }`（native `error_new(code, message)`），读取走
+  `result.unwrap_err(r)` 取载体 + `result.code(e)` / `result.message(e)` 访问器
+  （设计阶段预估的 `error_new_with_code` 命名、码常量导出与 `err.code` 字段访问
+  均未采用——语言无 Struct 字段访问，码常量未导出）
 - 随 Result 化推进（#301、#316），可失败的操作逐个返回 `Result`，语料中的文件级
   负向标记随之迁为文件内断言
 
@@ -413,6 +423,7 @@ test.assert_eq(result.err_code(r), "E3017")
 | 负向测试分层 | 值级反向通用 / 编译失败 runner 结构化标记（仅内部）/ 硬失败归 Result 化 | 2026-09-02 | #319 定案；取代隐式 [test:error] 约定 |
 | 文件内多测试 | 值化标准模型：测试函数返回 Result，套件收集 per-test 判定 | 2026-09-02 | 无 catch、非入口调用（入口仅限内部场景） |
 | Error 码 | Error 增加机器可读 `code` 字段            | 2026-09-02 | 支撑错误码断言；编译期码走 runner 比对 |
+| 断言库形态 | 值语义族 7 函数落地，`Result(Void, String)` 契约；abort 过渡版删除 | 2026-09-03 | Void 是规范 unit（`()` 是空 Tuple 不混用）；嵌套位 Any 刚性、无标注参数过不了 native 泛型检查——参数必须显式标注（R1 探针实证） |
 
 ## 参考文献
 

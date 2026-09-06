@@ -424,6 +424,7 @@ for i in 0..10..2 {
 | `std.array`      | 数组操作                                         |
 | `std.iterator`   | 迭代器（协议面当前由 `std.range` 提供）         |
 | `std.range`      | Range 迭代器与区间谓词、适配器                  |
+| `std.test`       | 测试断言库（值语义，RFC-036 §3）——首个纯 YaoXiang dogfooding 模块 |
 
 ### A.2 IO 模块
 
