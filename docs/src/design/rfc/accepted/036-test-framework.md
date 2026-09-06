@@ -261,42 +261,48 @@ CLI 能力，测试文件导入项目模块是核心场景。因此 Phase 1 先�
 
 ### 7. 套件与多测试（值化模型）
 
-一个测试文件可包含多个测试。文件内组织方式：
+一个测试文件可包含多个测试。文件内组织方式（2026-09-03 已落地）：
 
 ```yaoxiang
 // tests/list_test.yx
-use std.test
 use std.list
+use std.result
+use std.test
 
-push_grows_len = () => {
-    xs = []
-    list.append(xs, 1)
-    test.assert_eq(list.len(xs), 1)
+push_grows_len: () -> Result(Void, String) = () => {
+    xs = [1]
+    extended = list.push(xs, 2)
+    test.assert_eq(list.len(extended), 2)
 }
 
-pop_returns_last = () => {
-    xs = [1, 2]
-    test.assert_eq(list.pop(xs), 2)
+pop_returns_last: () -> Result(Void, String) = () => {
+    mut xs = [1, 2]
+    last = list.pop(xs)
+    test.assert_eq(last, 2)
 }
 
 main = {
     test.suite([
-        ("push_grows_len", push_grows_len),
-        ("pop_returns_last", pop_returns_last),
+        ("push_grows_len", () => push_grows_len()),
+        ("pop_returns_last", () => pop_returns_last()),
     ])
 }
 ```
 
 - 每个测试是返回 `Result(Void, String)` 的零参函数；断言失败以 `Err` 表达（§3 值语义
   断言族），不中断进程——后续测试照常运行
-- `test.suite` 逐个调用并收集：某测试非 Ok 即打印该测试的名字与诊断信息，Ok 静默
-- 文件退出码：套件全 Ok → 0；任一 Err → 非 0（§5 执行阶段的 exit code 判定不变）
+- `test.suite` 逐个调用并收集：某测试非 Ok 即记录名字与诊断，Ok 静默；全部跑完后
+  任一 Err 即以 `std.assert.assert` 中止并附失败明细（`N of M test(s) failed` +
+  每项 `[FAIL] 名字: 诊断`）——文件退出码非 0（§5 判定不变）。这里的 abort 是
+  测试二进制的运行时守卫，不是断言路径；全 Ok 静默退出 0
+- 顶层测试函数以**闭包形式入列**（`("name", () => test_fn())`）：顶层函数名作为
+  值引用暂不支持（IR 层限制，`E3006`）——闭包体调用全局函数不受影响
 - runner 只见文件，不做函数级扫描：per-test 判定完全来自套件内收集，文件内部结构
   对 runner 透明——零编译器改动原则不受影响
 - 明确不采用：进程内 catch 边界（17 关键字铁律）；runner 逐函数入口调用（仅限
   §8.2 编译失败等内部场景）
-- `test.suite` 的具体 API 形态（签名、重复名处理、`--filter` 与套件名的交互）是
-  实现细节，落地时在 #319 定案
+- API 形态已定案（2026-09-03，#319）：`suite(tests: List((String, () -> Result(Void, String)))) -> Void`；
+  重名不检测（名字仅用于报告展示）；`--filter` 按文件名过滤、不感知套件内测试名
 
 ### 8. 负向测试（预期失败）三层设计
 
