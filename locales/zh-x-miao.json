@@ -955,9 +955,9 @@
     "help": "检查字符串是否为合法浮点数喵~"
   },
   "E2029": {
-    "title": "spawn 里引用绕圈圈喵",
-    "message": "spawn 块里的引用形成了循环喵",
-    "template": "spawn 内引用循环喵：{cycle}",
-    "help": "spawn 捕获的引用不能绕圈圈喵，检查一下捕获列表喵"
+    "title": "spawn 内引用循环喵",
+    "message": "spawn 块内检测到引用形成循环喵",
+    "template": "spawn 内引用循环喵: {cycle}",
+    "help": "spawn 捕获的引用不能形成循环依赖喵，请检查捕获列表喵"
   }
 }

@@ -958,9 +958,9 @@
     "help": "驗字符串是否為合法浮點數"
   },
   "E2029": {
-    "title": "spawn 之内引用成环",
-    "message": "spawn 块之内，引用相引成环",
-    "template": "spawn 内引用成环：{cycle}",
-    "help": "spawn 所捕之引用不得成环，宜察捕获之列"
+    "title": "spawn 内引用循环",
+    "message": "spawn 块内测得引用成循环",
+    "template": "spawn 内引用循环:{cycle}",
+    "help": "spawn 捕获之引用不得成循环依赖，请审捕获之表"
   }
 }
