@@ -179,8 +179,8 @@ fn test_parser() {
 - **库测试**（随库走）——被测对象是库的公开 API 契约；std 的 yx 级测试位于
   `src/std/tests/`，未来用户包的测试在包内随 `[tool.test]` 发现
 
-`.yx` 测试的文件头格式、标记（`[test:error]` / `[test:ignore]` / `[test:runtime]` /
-`预期: EXXXX`）与断言约定以 TEST_STANDARDS.md 为准；判定解析由双 runner 共用的
+`.yx` 测试的文件头格式、头部指令（`// expect:` / `// skip:` / `// mode:`，
+RFC-036 §8.2）与断言约定以 TEST_STANDARDS.md 为准；判定解析由双 runner 共用的
 `src/util/test_markers.rs` 实现（Rust 侧，受本规范约束）。
 
 ---

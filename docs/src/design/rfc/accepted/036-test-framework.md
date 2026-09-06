@@ -97,17 +97,19 @@ tests/list_test.yx ........................ FAIL (0.003s)
   `-- [FAIL] push_grows_len: Expected 3, got 2
   `-- [ ok ] pop_returns_last
 Results: 2 files passed, 1 file failed, 0 skipped (0.006s)
+Categories: 2 behavior, 0 compile-error, 0 runtime-error
 ```
 
 **JSON 输出**（`--json`）：
 
 ```json
 {
-  "summary": { "total": 3, "passed": 2, "failed": 1, "skipped": 0, "time_secs": 0.006 },
+  "summary": { "total": 3, "passed": 2, "failed": 1, "skipped": 0, "by_kind": { "behavior": 3, "compile-error": 0, "runtime-error": 0, "invalid": 0 }, "time_secs": 0.006 },
   "files": [
-    { "file": "tests/math_test.yx", "passed": true, "time_secs": 0.002 },
+    { "file": "tests/math_test.yx", "kind": "behavior", "passed": true, "time_secs": 0.002 },
     {
       "file": "tests/list_test.yx",
+      "kind": "behavior",
       "passed": false,
       "time_secs": 0.003,
       "exit_code": 1,
@@ -125,6 +127,9 @@ Results: 2 files passed, 1 file failed, 0 skipped (0.006s)
   `--verbose` 与 `--json` 组合时全部文件携带 `stdout` / `stderr`
 - `--no-progress` 只抑制进度输出（表头与 PASS 行）——FAIL 明细与汇总始终输出，
   失败不可静默；`--list` 每行输出一个测试文件路径，不执行
+- 每文件附 `kind`（behavior / compile-error / runtime-error / invalid，§8.2），
+  summary 附 `by_kind` 执行计数（固定四键，不含 skipped）；人类汇总附
+  `Categories:` 类别分布行
 - 文件内 per-test `tests` 数组来自 §7 套件收集，随值化模型落地生效（#319）
 
 ### 2. yaoxiang.toml 配置
@@ -243,11 +248,15 @@ CLI 能力，测试文件导入项目模块是核心场景。因此 Phase 1 先�
 
 **执行阶段**：
 
-1. 对每个文件：`yaoxiang run --debug-info <file>` 启动子进程
-   （`--debug-info` 使运行时错误带源码位置——2026-08-02 实证 stack trace 输出 `file:line:col`）；
-   头部 `[test:runtime]` 声明子进程 `--runtime` 模式（2026-09-03 收口）
-2. 头部 `[test:ignore]: <原因>` 的文件跳过执行，计入报告的 skipped（2026-09-03 收口）
-3. 检查 exit code：0 为 PASS，非 0 为 FAIL；`[test:error]` 文件反向判定并按 §8.2 比对预期码
+1. 对每个文件按头部指令分流执行（指令文法见 §8.2，经 `src/util/test_markers.rs`
+   解析，与 yx_runner 共用）：
+   - 行为测试：`yaoxiang run --debug-info <file>` 子进程
+     （`--debug-info` 使运行时错误带源码位置——2026-08-02 实证 stack trace 输出
+     `file:line:col`）；`// mode:` 声明子进程 `--runtime` 模式
+   - 编译期拒绝类：单步 `yaoxiang check <file>`
+   - 运行期失败类：`check`（必须通过）+ `run`（必须失败）两步
+2. `// skip: <原因>` 的文件跳过执行，计入报告的 skipped
+3. 判定与预期码比对按 §8.2 判定矩阵；指令解析失败不执行直接 FAIL（构造期拒绝）
 4. 捕获 stdout/stderr 用于报告
 5. 仅串行执行（Phase 1），未来支持 `--parallel`
 6. 如果 `--fail-fast`，遇到第一个 FAIL 立即停止
@@ -334,27 +343,45 @@ test.assert_err_code(r, "E6009")
 - 随 Result 化推进（#301、#316），可失败的操作逐个返回 `Result`，语料中的文件级
   负向标记随之迁为文件内断言
 
-#### 8.2 文件级负向标记（仅限语言设计者内部使用）
+#### 8.2 文件级负向指令（仅限语言设计者内部使用）
 
 编译是全文件全有全无，无法在文件内表达"这行不该编译"；运行期失败同样需要文件级
-表达（如套件含必失败测试）。保留文件级特殊标记，runner 按预期类别**分流判定**
-（2026-09-03 定案，落地待做）：
+表达（如套件含必失败测试）。文件头部以**结构化指令**声明期望，runner 按期望类别
+**分流判定**（2026-09-03 定案分流；2026-09-06 指令文法定案并落地）。
 
-- `[test:error]` 标记由 runner 读取；`预期: 编译错误 EXXXX` / `预期: 运行时错误 EXXXX`
-  行声明类别与期望码
-- **编译错误类**：runner 跑 `yaoxiang check`——必须失败且输出含 `[EXXXX]`；编译通过
-  = FAIL，拒绝但码不符 = FAIL。语法报错（E1xxx 解析段）与语义报错（E2xxx+）不设
-  独立类别——预期码本身钉死了阶段
-- **运行时错误类**：两步判定——`check` 必须**成功**（编译期无辜），`run` 必须失败
-  且输出含 `[EXXXX]`。编译期就炸 = FAIL（与编译错误类方向相反的关键判定，
-  防止「编译意外通过、运行侥幸失败」漏检）
-- 无 `预期:` 行的 `[test:error]` 回退 exit≠0 判定（未分类形态，新语料不鼓励）
+头部指令文法（`// key: value`，前 16 行内，严格 token 匹配）：
+
+```text
+// expect: compile-error E1002 [E1003 ...]   编译期拒绝测试
+// expect: runtime-error E6003 [...]         运行期失败测试
+// skip: <原因>                              跳过执行，计入 skipped
+// mode: embedded|standard|full              子进程 --runtime 模式（仅 run 步消费）
+```
+
+- 无 `expect:` 指令 = 行为测试。`expect:` 是期望的**唯一声明**——2026-09-06
+  定案弃用 `[test:error]` 布尔标记与中文 `预期:` 散文抠码：布尔标记与期望行是
+  两个松耦合事实，靠纪律保持一致必然漂移；英文严格 token 文法让 runner 机械
+  解析（kind + 码全为固定 token，码后跟任何多余 token 即解析失败），解析失败
+  = 不执行直接 FAIL——指令声明错误的静默退化通道不存在（构造期拒绝）
+- **编译错误类**：单步 `check`——必须失败且输出含全部 `[EXXXX]`；编译通过
+  = FAIL（该报的没报），拒绝但码不符 = FAIL。语法报错（E1xxx 解析段）与语义
+  报错（E2xxx+）不设独立类别——预期码本身钉死了阶段
+- **运行时错误类**：两步判定——`check` 必须**成功**（编译期无辜），`run` 必须
+  失败且输出含全部 `[EXXXX]`。编译期就炸 = FAIL（与编译错误类方向相反的关键
+  判定，防止「编译意外通过、运行侥幸失败」漏检）
+- 与业界同构：Rust compiletest `//~ ERROR`、Go `// ERROR "regexp"`、GCC
+  `dg-error`、Clang `expected-error` 均在 fixture 注释内声明期望并由 harness
+  双向比对；它们采用行级锚定是因为多诊断编译器需要区分同文件多期望，本编译器
+  首错即停、一文件一诊断，文件级即与编译器现实同构——错误恢复落地后可在文法
+  上追加行锚形态（Cranelift filetests 的文件头指令 + 函数级期望是同款混合形态）
+- 已知渲染债：parse 期诊断当前以 Debug 形态输出（`code: "E0012"` 而非
+  `[E0012]`），码扫描对两种形态都接受；诊断渲染统一后收回严格形态
 - **仅服务本仓库语料，不是用户测试框架的一部分**；双 runner 判定约定已收口
   （2026-09-03，#319）：yx_runner（cargo test）与 `yaoxiang test` 共用
-  `src/util/test_markers.rs` 解析头部标记（`[test:error]`/`[test:ignore]`/
-  `[test:runtime]`/`预期: EXXXX`，前 16 行），06-compile-errors 的目录约定废弃。
-  分流判定落地后，报告层同步给出类别计数
-  （behavior / compile-error / runtime-error / skipped）
+  `src/util/test_markers.rs` 解析头部指令，06-compile-errors 的目录约定废弃。
+  报告层给出类别计数：人类汇总附 `Categories:` 行，JSON summary 附
+  `by_kind`（behavior / compile-error / runtime-error / invalid，skipped 另计），
+  每文件附 `kind`
 
 #### 8.3 运行时硬失败（归入 Result 化）
 
@@ -471,7 +498,8 @@ test.assert_err_code(r, "E6009")
 | Error 码 | Error 增加机器可读 `code` 字段            | 2026-09-02 | 支撑错误码断言；编译期码走 runner 比对 |
 | 断言库形态 | 值语义族 7 函数落地，`Result(Void, String)` 契约；abort 过渡版删除 | 2026-09-03 | Void 是规范 unit（`()` 是空 Tuple 不混用）；嵌套位 Any 刚性、无标注参数过不了 native 泛型检查——参数必须显式标注（R1 探针实证） |
 | 测试体系分层 | 语言语料（`tests/yaoxiang/`）与库测试（随库走，std → `src/std/tests/`）分两层；std 在语料中只作断言工具 | 2026-09-03 | 被测对象决定归属与维护方；库测试随包布局为 RFC-014 预演 |
-| 负向标记分流判定 | `[test:error]` 按预期类别分流：编译错误类 `check` 必须失败、运行时错误类 `check` 必须过 + `run` 必须失败；报告给出类别计数 | 2026-09-03 | 类别混判会让「编译意外通过、运行侥幸失败」漏检；预期码钉死阶段，语法报错不单设类别 |
+| 负向标记分流判定 | 按期望类别分流：编译错误类 `check` 必须失败、运行时错误类 `check` 必须过 + `run` 必须失败；报告给出类别计数 | 2026-09-03（09-06 落地） | 类别混判会让「编译意外通过、运行侥幸失败」漏检；预期码钉死阶段，语法报错不单设类别 |
+| 头部指令文法 | 期望以英文结构化指令声明（`// expect:` / `// skip:` / `// mode:`，严格 token 文法，解析失败直接 FAIL）；弃用 `[test:error]` 布尔标记与中文 `预期:` 散文抠码 | 2026-09-06 | 期望是 fixture 内容的属性，in-fixture 声明与业界同构（compiletest / Go / GCC / Clang 均如此），中央清单必腐烂；布尔标记 + 期望行双事实靠纪律耦合是缺陷面；结构化文法让 runner 机械判定无人工参与 |
 
 ## 参考文献
 

@@ -82,13 +82,15 @@ tests/yaoxiang/
 
 | 类别 | 声明方式 | 判定契约 |
 | ---- | -------- | -------- |
-| 行为测试 | 无标记（默认） | 编译通过 + 运行退出 0 |
-| 编译期拒绝测试 | `[test:error]` + `预期: 编译错误 EXXXX` | `check` 必须失败且输出含 `[EXXXX]`；编译通过 = FAIL，码不符 = FAIL |
-| 运行期失败测试 | `[test:error]` + `预期: 运行时错误 EXXXX` | `check` 必须成功（编译期无辜）+ `run` 必须失败且输出含 `[EXXXX]` |
+| 行为测试 | 无指令（默认） | 编译通过 + 运行退出 0 |
+| 编译期拒绝测试 | `// expect: compile-error EXXXX` | `check` 必须失败且输出含 `[EXXXX]`；编译通过 = FAIL，码不符 = FAIL |
+| 运行期失败测试 | `// expect: runtime-error EXXXX` | `check` 必须成功（编译期无辜）+ `run` 必须失败且输出含 `[EXXXX]` |
 
 - 语法报错（E1xxx 解析段）与语义报错（E2xxx+）不设独立类别——预期码本身钉死阶段
-- 无 `预期:` 行的 `[test:error]` 回退 exit≠0 判定（未分类形态，新语料不鼓励）
-- 分流判定的 runner 落地状态见 RFC-036 §8.2（设计定案 2026-09-03）
+- 指令解析失败（unknown kind / 缺码 / 多余 token / 重复声明 / 非法 mode）=
+  不执行直接 FAIL——无静默退化通道（构造期拒绝）
+- 分流判定与指令文法已落地（RFC-036 §8.2，2026-09-06）；报告层给出类别计数
+  （`Categories:` 行与 JSON `by_kind`）
 
 ### 2.3 文件头格式
 
@@ -125,27 +127,29 @@ main = {
 文件内多测试用 `std.test` 套件收集（RFC-036 §7）：测试函数零参返回
 `Result(Void, String)`，以 `test.suite([("名字", () => test_fn())])` 收集。
 
-### 2.5 文件头标记
+### 2.5 文件头指令
 
 文件头注释可声明测试性质，`yaoxiang test` 与 cargo test 语料 runner（yx_runner）
 据此判定——两者共用同一解析实现（`src/util/test_markers.rs`，RFC-036 §8.2）。
-标记扫描窗口为**前 16 行**：
+指令扫描窗口为**前 16 行**，文法为 `// key: value` 严格 token 匹配：
 
 ```yaoxiang
-// [test:error]: <应失败的原因>
-// 预期: 编译错误 E2018
-// 预期: 运行时错误 E6008
-// [test:ignore]: <原因>
-// [test:runtime]: standard
+// expect: compile-error E2018
+// expect: runtime-error E6008
+// skip: <原因>
+// mode: standard
 ```
 
-- `[test:error]` — 本文件**应失败**（编译期或运行期），配合 `预期:` 行进入 §2.2
-  的分流判定：编译错误类验证编译器正确拒绝、运行时错误类验证编译无辜 + 运行期
-  正确失败；期望码与输出 `[EXXXX]` 实际比对，码不符 = FAIL 并指明实际出现的码
-- `[test:ignore]: <原因>` — 本文件被跳过，计入报告的 skipped（追踪 issue 编号，
+- `// expect: compile-error EXXXX` — 本文件应被编译期拒绝：runner 单步 `check`，
+  退出码非 0 且全部预期码实际出现 = PASS；编译通过 = FAIL（该报的没报），码不符
+  = FAIL 并指明实际出现的码。`expect:` 是期望的唯一声明（RFC-036 §8.2，
+  2026-09-06 定案弃用 `[test:error]` 布尔标记与中文 `预期:` 行）
+- `// expect: runtime-error EXXXX` — 编译期无辜 + 运行期正确失败：`check` 必须
+  通过，`run` 必须失败且码相符；check 就失败 = FAIL（语料分类错误必须暴露）
+- `// skip: <原因>` — 本文件被跳过，计入报告的 skipped（追踪 issue 编号，
   见提交检查清单）
-- `[test:runtime]: <模式>` — 子进程运行时模式（`standard` / `embedded` / `full`），
-  runner 透传 `--runtime`
+- `// mode: <模式>` — 子进程运行时模式（`standard` / `embedded` / `full`），
+  runner 透传 `--runtime`（仅 run 步消费；非法值 = 解析失败直接 FAIL）
 
 ### 2.6 已知 Bug 的处理
 
@@ -273,6 +277,6 @@ cargo run -- run tests/yaoxiang/01-syntax/basics/variables.yx
 - [ ] E2E 测试文件有正确的文件头（// 覆盖: + // 验证: + // 状态:）
 - [ ] 使用 `assert.assert` 而非 `io.println("ALL TESTS PASSED")`
 - [ ] 每个 `assert.assert` 有自定义错误消息
-- [ ] `[test:ignore]` 文件有追踪 issue 编号
-- [ ] `[test:error]` 文件带 `预期:` 类别行（编译错误 / 运行时错误）
+- [ ] `// skip:` 文件有追踪 issue 编号
+- [ ] 负向文件带 `// expect:` 指令（compile-error / runtime-error + 真实预期码）
 - [ ] 库的 API 行为测试放库包内（`src/std/tests/`），不进语言语料
