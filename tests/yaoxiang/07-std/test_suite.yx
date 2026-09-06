@@ -1,0 +1,39 @@
+// 07-std/test_suite.yx
+// 覆盖: RFC-036 §7 套件收集（test.suite 值化多测试模型）
+// 验证:
+//   - 文件内多测试：零参测试函数返回 Result(Void, String)，suite 逐个调用收集
+//   - 全 Ok 静默通过，文件退出码 0
+//   - 顶层测试函数以闭包形式入列（顶层函数名作值引用暂不支持——IR 层限制）
+// 状态: ✅ 可运行
+
+use std.list
+use std.result
+use std.string
+use std.test
+
+push_grows_len: () -> Result(Void, String) = () => {
+    xs = [1]
+    extended = list.push(xs, 2)
+    test.assert_eq(list.len(extended), 2)
+}
+
+pop_returns_last: () -> Result(Void, String) = () => {
+    mut xs = [1, 2]
+    last = list.pop(xs)
+    test.assert_eq(last, 2)
+    test.assert_eq(list.len(xs), 1)
+}
+
+parse_ok: () -> Result(Void, String) = () => {
+    p = string.parse_int("42")
+    v = result.unwrap(p)
+    test.assert_eq(v, 42)
+}
+
+main = {
+    test.suite([
+        ("push_grows_len", () => push_grows_len()),
+        ("pop_returns_last", () => pop_returns_last()),
+        ("parse_ok", () => parse_ok()),
+    ])
+}

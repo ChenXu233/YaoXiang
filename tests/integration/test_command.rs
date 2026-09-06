@@ -627,3 +627,84 @@ fn test_test_command_list_excludes_ignored_files() {
         "被忽略文件不应列出:\n{stdout}"
     );
 }
+
+#[test]
+fn test_test_command_suite_all_pass_exits_zero() {
+    // Arrange - RFC-036 §7 套件收集：多测试全 Ok 静默退出 0
+    let dir = TempDir::new().expect("tempdir");
+    write_file(
+        dir.path(),
+        "tests/suite_ok.yx",
+        r#"
+use std.test
+
+ok_one: () -> Result(Void, String) = () => {
+    test.assert_eq(1 + 1, 2)
+}
+
+ok_two: () -> Result(Void, String) = () => {
+    test.assert_true(1 < 2)
+}
+
+main = {
+    test.suite([
+        ("ok_one", () => ok_one()),
+        ("ok_two", () => ok_two()),
+    ])
+}
+"#,
+    );
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert - 套件全 Ok：退出 0，无失败明细
+    assert_eq!(code, 0, "套件全 Ok 应退出 0:\n{stdout}");
+    assert!(
+        !stdout.contains("[FAIL]"),
+        "全 Ok 套件不应有失败明细:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_suite_failure_collects_per_test_detail() {
+    // Arrange - RFC-036 §7：一失败一通过——失败收集后其余测试照常运行
+    let dir = TempDir::new().expect("tempdir");
+    write_file(
+        dir.path(),
+        "tests/suite_fail.yx",
+        r#"
+use std.test
+
+always_fails: () -> Result(Void, String) = () => {
+    test.assert_eq(1, 2)
+}
+
+still_runs: () -> Result(Void, String) = () => {
+    test.assert_true(1 < 2)
+}
+
+main = {
+    test.suite([
+        ("always_fails", () => always_fails()),
+        ("still_runs", () => still_runs()),
+    ])
+}
+"#,
+    );
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert - 退出非 0；失败明细（名字 + 诊断）经 abort 消息透传；
+    // still_runs 在失败测试之后仍被执行（收集语义，不中断）
+    assert_eq!(code, 1, "套件有失败应退出 1:\n{stdout}");
+    assert!(
+        stdout.contains("[FAIL] always_fails: Expected 2, got 1"),
+        "应透传失败测试的名字与诊断:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("1 of 2 test(s) failed"),
+        "汇总应计数失败占比:\n{stdout}"
+    );
+}

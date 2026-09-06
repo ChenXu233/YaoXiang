@@ -11,6 +11,7 @@
 // 注意：Result 参数位不能用 Result(Any, X) 标注（嵌套位 Any 是刚性类型，
 // 具体 Result 传不进来），泛型性由 const 类型参数组承担（R1 探针实证）。
 
+use std.assert
 use std.result
 
 assert_eq: (a: Any, b: Any) -> Result(Void, String) = (a, b) => {
@@ -70,4 +71,29 @@ assert_err_code: (T: Type) -> (r: Result(T, Error), want: String) -> Result(Void
         return result.err(f"Expected code {want}, got {c}")
     }
     return result.err("Expected Err, got Ok value")
+}
+
+// 套件收集（RFC-036 §7 值化模型）：逐个调用测试函数，收集 per-test 判定。
+//
+// - tests 元素为 (名字, 测试函数) 对；测试函数零参返回 Result(Void, String)，
+//   断言失败以 Err 表达，不中断进程——某测试失败后其余照常运行
+// - 顶层测试函数以闭包形式入列：`("name", () => test_fn())`（顶层函数名
+//   作为值引用暂不支持——IR 层限制）
+// - 全 Ok 静默，文件退出码 0；任一 Err：汇总失败明细（名字 + 诊断）并 abort，
+//   文件退出码非 0——abort 是测试二进制的运行时守卫，非断言路径
+suite: (tests: List((String, () -> Result(Void, String)))) -> Void = (tests) => {
+    mut failed = 0
+    mut total = 0
+    mut report = ""
+    for t in tests {
+        (name, f) = t
+        total = total + 1
+        r = f()
+        if result.is_err(r) {
+            failed = failed + 1
+            m = result.unwrap_err(r)
+            report = report + f"\n  [FAIL] {name}: {m}"
+        }
+    }
+    assert.assert(failed == 0, f"{failed} of {total} test(s) failed{report}")
 }
