@@ -1,6 +1,7 @@
 // 06-compile-errors/type_def_in_local_err.yx
-// [test:error]: 函数体内类型定义 → E1071（类型定义只能出现在模块顶层）
-// 预期: 编译错误 E1071 Type definition ... can only appear at module level
+// 函数体内类型定义 → E1071（类型定义只能出现在模块顶层）
+// expect: compile-error E1071
+// Type definition ... can only appear at module level
 // 覆盖: checker.rs 只扫 module.items 的类型定义（模块级概念）；
 //       #295：此前 check_stmt 落 _ => Ok(()) 静默跳过，留下误导性
 //       「Unknown variable: 'Point'」（E1001）

@@ -5,8 +5,8 @@
 //   - 失败明细（名字 + 诊断）进入 abort 消息，文件退出码非 0
 // 状态: ❌ 应运行失败（套件 1/2 失败是本文件的被测行为）
 
-// [test:error]: 套件含一个必失败测试——验证 per-test 收集与退出码非 0
-// 预期: 运行时错误 E6005
+// 套件含一个必失败测试——验证 per-test 收集与退出码非 0
+// expect: runtime-error E6005
 
 use std.list
 use std.result

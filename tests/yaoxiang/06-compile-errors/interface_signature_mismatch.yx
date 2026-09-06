@@ -1,5 +1,6 @@
 // 06-compile-errors/interface_signature_mismatch.yx
-// [test:error]: 接口方法签名不匹配——实现返回 Int 而接口（Self 替换后）要求 String
+// 接口方法签名不匹配——实现返回 Int 而接口（Self 替换后）要求 String
+// expect: compile-error E1099
 // 验证: 签名匹配失败 → E1099（RFC-011a §1 五步流程之第 4 步失败）
 // 状态: ✅
 

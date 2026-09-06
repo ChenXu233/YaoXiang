@@ -1,5 +1,6 @@
 // 06-compile-errors/interface_member_conflict.yx
-// [test:error]: 接口方法与类型已有字段共享命名空间（RFC-011a §1.2）
+// 接口方法与类型已有字段共享命名空间（RFC-011a §1.2）
+// expect: compile-error E1097
 // 验证: point.x 与 point.x() 语法不可区分 → 接口方法名撞字段名 → E1097
 // 状态: ✅
 

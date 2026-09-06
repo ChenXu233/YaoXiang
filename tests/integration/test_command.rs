@@ -3,9 +3,11 @@
 //! §1 CLI 设计：发现 → 子进程执行 → 报告
 //! §1 Phase 2：--filter / --fail-fast / --verbose / --list / --no-progress / --json
 //! §5 发现与执行：默认 tests/**/*.yx、[tool.test].patterns、显式路径优先、
-//!     exit code 判定、--filter 文件名包含
-//! §8.2 结构化预期码：[test:error] 文件的 `预期: EXXXX` 与输出 `[EXXXX]` 实际比对，
-//!     码不符 = FAIL；无码文件回退 exit≠0 判定
+//!     --filter 文件名包含
+//! §8.2 分流判定（2026-09-06 指令文法定案）：`// expect: compile-error|runtime-error`
+//! 严格文法驱动 check/run 两步判定，类别间双向判死（编译错误类 check 通过 = FAIL、
+//! 运行时类 check 失败 = FAIL）；指令解析失败不执行直接 FAIL（构造期拒绝）；
+//! 预期码与输出 `[EXXXX]`（及 parse 期 Debug 形态）实际比对
 //! 规则 9.1：happy path / error path / boundary 三条路径
 
 #![cfg(feature = "cli")]
@@ -90,6 +92,10 @@ fn test_test_command_passing_file_exits_zero() {
     assert!(
         stdout.contains("Results: 1 file passed, 0 files failed"),
         "汇总应计数 1 passed:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Categories: 1 behavior, 0 compile-error, 0 runtime-error"),
+        "汇总应附类别分布（RFC-036 §8.2）:\n{stdout}"
     );
 }
 
@@ -386,7 +392,7 @@ fn test_test_command_json_report_shape_on_pass() {
     // Act
     let (code, stdout, _) = run_test_cmd(&["--json"], dir.path());
 
-    // Assert - stdout 是合法 JSON：summary + files，通过文件仅 file/passed/time_secs
+    // Assert - stdout 是合法 JSON：summary + files，通过文件仅 file/kind/passed/time_secs
     assert_eq!(code, 0, "全部通过应退出 0:\n{stdout}");
     let report: serde_json::Value =
         serde_json::from_str(stdout.trim()).expect("stdout 应为合法 JSON");
@@ -396,6 +402,14 @@ fn test_test_command_json_report_shape_on_pass() {
     assert_eq!(
         report["files"][0]["passed"], true,
         "文件应标记通过:\n{stdout}"
+    );
+    assert_eq!(
+        report["files"][0]["kind"], "behavior",
+        "无 expect 指令的文件类别为 behavior:\n{stdout}"
+    );
+    assert_eq!(
+        report["summary"]["by_kind"]["behavior"], 1,
+        "by_kind 应计数 behavior:\n{stdout}"
     );
     assert!(
         report["files"][0]["file"]
@@ -453,6 +467,10 @@ fn test_test_command_json_empty_discovery_outputs_empty_report() {
         Some(0),
         "files 应为空数组:\n{stdout}"
     );
+    assert_eq!(
+        report["summary"]["by_kind"]["behavior"], 0,
+        "空报告 by_kind 仍含稳定四键:\n{stdout}"
+    );
 }
 
 /// 编译错误正文（镜像语料 06-compile-errors/array_empty_n_err.yx 的 E1002 形态）
@@ -462,23 +480,33 @@ main = {
 }
 "#;
 
+/// 运行期错误正文（除零，镜像语料 06-compile-errors/div_zero.yx 的 E6001 形态）
+const RUNTIME_ERR_BODY: &str = r#"
+main = {
+    x = 1 / 0
+    print(x)
+}
+"#;
+
 #[test]
 fn test_test_command_expected_error_code_match_passes() {
-    // Arrange - [test:error] + 结构化预期码，编译器实际报同码（RFC-036 §8.2）
+    // Arrange - expect compile-error + 结构化预期码，编译器实际报同码（RFC-036 §8.2）
     let dir = TempDir::new().expect("tempdir");
-    let content = format!(
-        "// 临时语料\n// [test:error]: Array 字面量长度不符\n// 预期: 编译错误 E1002\n{COMPILE_ERR_BODY}"
-    );
+    let content = format!("// 临时语料\n// expect: compile-error E1002\n{COMPILE_ERR_BODY}");
     write_file(dir.path(), "tests/code_match_err.yx", &content);
 
     // Act
     let (code, stdout, _) = run_test_cmd(&[], dir.path());
 
-    // Assert - 预期码实际出现，反向判定成立
+    // Assert - 预期码实际出现，编译期拒绝判定成立
     assert_eq!(code, 0, "预期码匹配应 PASS:\n{stdout}");
     assert!(
         stdout.contains("code_match_err.yx"),
         "应执行该文件:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Categories: 0 behavior, 1 compile-error, 0 runtime-error"),
+        "汇总类别分布应计 compile-error:\n{stdout}"
     );
 }
 
@@ -486,9 +514,7 @@ fn test_test_command_expected_error_code_match_passes() {
 fn test_test_command_expected_error_code_mismatch_fails() {
     // Arrange - 篡改预期码为不会出现的 E9999（#251 gate 验收：能测出 FAIL）
     let dir = TempDir::new().expect("tempdir");
-    let content = format!(
-        "// 临时语料\n// [test:error]: Array 字面量长度不符\n// 预期: 编译错误 E9999\n{COMPILE_ERR_BODY}"
-    );
+    let content = format!("// 临时语料\n// expect: compile-error E9999\n{COMPILE_ERR_BODY}");
     write_file(dir.path(), "tests/code_mismatch_err.yx", &content);
 
     // Act
@@ -507,29 +533,110 @@ fn test_test_command_expected_error_code_mismatch_fails() {
 }
 
 #[test]
-fn test_test_command_expected_error_without_code_keeps_legacy_judgment() {
-    // Arrange - 边界：预期行无码（纯文字说明）→ 回退 exit≠0 反向判定
+fn test_test_command_compile_error_class_that_compiles_fails() {
+    // Arrange - 误分类双向判死之一：声明编译期拒绝，但文件实际编译通过
+    // （RFC-036 §8.2：该报的没报 = FAIL，防负向测试静默失效）
     let dir = TempDir::new().expect("tempdir");
-    let content = format!(
-        "// 临时语料\n// [test:error]: 无码形态\n// 预期: 编译错误（借用冲突）\n{COMPILE_ERR_BODY}"
-    );
-    write_file(dir.path(), "tests/code_absent_err.yx", &content);
+    let content = format!("// 临时语料\n// expect: compile-error E1002\n{PASS_TEST}");
+    write_file(dir.path(), "tests/should_reject.yx", &content);
 
     // Act
     let (code, stdout, _) = run_test_cmd(&[], dir.path());
 
-    // Assert - 无码不做比对，编译失败即 PASS
-    assert_eq!(code, 0, "无码形态应回退 exit 判定:\n{stdout}");
-    assert!(stdout.contains("PASS"), "应标记 PASS:\n{stdout}");
+    // Assert
+    assert_eq!(code, 1, "该报不报应退出 1:\n{stdout}");
+    assert!(
+        stdout.contains("预期编译失败，但 check 通过"),
+        "应指明编译期拒绝未发生:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_runtime_error_class_passes_two_step() {
+    // Arrange - expect runtime-error：check 必须通过 + run 必须失败带码
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!("// 临时语料\n// expect: runtime-error E6001\n{RUNTIME_ERR_BODY}");
+    write_file(dir.path(), "tests/runtime_err.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert - 两步判定全过
+    assert_eq!(code, 0, "运行期失败类两步全过应 PASS:\n{stdout}");
+    assert!(
+        stdout.contains("Categories: 0 behavior, 0 compile-error, 1 runtime-error"),
+        "汇总类别分布应计 runtime-error:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_runtime_error_class_with_compile_failure_fails() {
+    // Arrange - 误分类双向判死之二：声明运行期失败，但文件在编译期就被拒
+    // （RFC-036 §8.2：语料分类错误必须暴露）
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!("// 临时语料\n// expect: runtime-error E6001\n{COMPILE_ERR_BODY}");
+    write_file(dir.path(), "tests/misclassified.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert
+    assert_eq!(code, 1, "分类错误应退出 1:\n{stdout}");
+    assert!(
+        stdout.contains("预期运行期失败，但编译被拒"),
+        "应指明运行期期望与编译期现实的冲突:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_runtime_error_class_that_runs_clean_fails() {
+    // Arrange - 误分类双向判死之三：声明运行期失败，但程序正常运行
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!("// 临时语料\n// expect: runtime-error E6001\n{PASS_TEST}");
+    write_file(dir.path(), "tests/should_crash.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert
+    assert_eq!(code, 1, "该崩不崩应退出 1:\n{stdout}");
+    assert!(
+        stdout.contains("预期运行期失败，但 run 成功退出"),
+        "应指明运行期失败未发生:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_invalid_expect_directive_fails_without_execution() {
+    // Arrange - 边界（构造期拒绝）：expect 指令缺码 = 语料缺陷，不执行直接 FAIL
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!("// 临时语料\n// expect: compile-error\n{COMPILE_ERR_BODY}");
+    write_file(dir.path(), "tests/bad_directive.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert - 无静默退化通道：解析失败可见地失败
+    assert_eq!(code, 1, "指令解析失败应退出 1:\n{stdout}");
+    assert!(
+        stdout.contains("无效的头部指令"),
+        "应报告指令解析失败:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("requires at least one EXXXX code"),
+        "应指明缺码:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Categories: 0 behavior, 0 compile-error, 0 runtime-error, 1 invalid"),
+        "invalid 应出现在类别分布:\n{stdout}"
+    );
 }
 
 #[test]
 fn test_test_command_json_expected_code_mismatch_carries_note() {
     // Arrange - 与 mismatch 场景相同，走 --json 输出（CI 取证路径）
     let dir = TempDir::new().expect("tempdir");
-    let content = format!(
-        "// 临时语料\n// [test:error]: Array 字面量长度不符\n// 预期: 编译错误 E9999\n{COMPILE_ERR_BODY}"
-    );
+    let content = format!("// 临时语料\n// expect: compile-error E9999\n{COMPILE_ERR_BODY}");
     write_file(dir.path(), "tests/code_mismatch_err.yx", &content);
 
     // Act
@@ -544,21 +651,25 @@ fn test_test_command_json_expected_code_mismatch_carries_note() {
         stderr.contains("预期错误码 E9999") && stderr.contains("E1002"),
         "JSON 应携带码不符说明:\n{stdout}"
     );
+    assert_eq!(
+        report["files"][0]["kind"], "compile-error",
+        "JSON 应携带文件类别:\n{stdout}"
+    );
 }
 
 #[test]
-fn test_test_command_ignored_file_skips_and_counts_skipped() {
-    // Arrange - [test:ignore] 文件不执行（RFC-036 §5 执行阶段 + TEST_STANDARDS §2.4）
+fn test_test_command_skipped_file_skips_and_counts_skipped() {
+    // Arrange - // skip: 文件不执行（RFC-036 §5 执行阶段 + TEST_STANDARDS §2.4）
     let dir = TempDir::new().expect("tempdir");
-    let content = format!("// 临时语料\n// [test:ignore]: 追踪 #999 示例原因\n{FAIL_TEST}");
+    let content = format!("// 临时语料\n// skip: 追踪 #999 示例原因\n{FAIL_TEST}");
     write_file(dir.path(), "tests/skipped_test.yx", &content);
 
     // Act
     let (code, stdout, _) = run_test_cmd(&[], dir.path());
 
     // Assert - 不执行不计失败，汇总 skipped 计数
-    assert_eq!(code, 0, "被忽略文件不应导致失败:\n{stdout}");
-    assert!(!stdout.contains("FAIL"), "被忽略文件不应执行:\n{stdout}");
+    assert_eq!(code, 0, "被跳过文件不应导致失败:\n{stdout}");
+    assert!(!stdout.contains("FAIL"), "被跳过文件不应执行:\n{stdout}");
     assert!(
         stdout.contains("Results: 0 files passed, 0 files failed, 1 skipped"),
         "汇总应计入 1 skipped:\n{stdout}"
@@ -569,14 +680,14 @@ fn test_test_command_ignored_file_skips_and_counts_skipped() {
 fn test_test_command_json_summary_counts_skipped() {
     // Arrange - 同上场景走 --json
     let dir = TempDir::new().expect("tempdir");
-    let content = format!("// 临时语料\n// [test:ignore]: 追踪 #999 示例原因\n{FAIL_TEST}");
+    let content = format!("// 临时语料\n// skip: 追踪 #999 示例原因\n{FAIL_TEST}");
     write_file(dir.path(), "tests/skipped_test.yx", &content);
 
     // Act
     let (code, stdout, _) = run_test_cmd(&["--json"], dir.path());
 
     // Assert - summary.skipped 为真实计数，files 数组不含被跳过文件
-    assert_eq!(code, 0, "被忽略文件不应导致失败:\n{stdout}");
+    assert_eq!(code, 0, "被跳过文件不应导致失败:\n{stdout}");
     let report: serde_json::Value =
         serde_json::from_str(stdout.trim()).expect("stdout 应为合法 JSON");
     assert_eq!(
@@ -591,32 +702,32 @@ fn test_test_command_json_summary_counts_skipped() {
 }
 
 #[test]
-fn test_test_command_runtime_marker_passes_mode_to_subprocess() {
-    // Arrange - [test:runtime]: standard 声明子进程运行时模式（TEST_STANDARDS §2.4）
+fn test_test_command_mode_directive_passes_mode_to_subprocess() {
+    // Arrange - // mode: standard 声明子进程运行时模式（TEST_STANDARDS §2.4）
     let dir = TempDir::new().expect("tempdir");
-    let content = format!("// 临时语料\n// [test:runtime]: standard\n{PASS_TEST}");
+    let content = format!("// 临时语料\n// mode: standard\n{PASS_TEST}");
     write_file(dir.path(), "tests/runtime_std_test.yx", &content);
 
     // Act
     let (code, stdout, _) = run_test_cmd(&[], dir.path());
 
     // Assert - 子进程带 --runtime standard 执行通过
-    assert_eq!(code, 0, "runtime 标记文件应通过:\n{stdout}");
+    assert_eq!(code, 0, "mode 声明文件应通过:\n{stdout}");
     assert!(stdout.contains("PASS"), "应标记 PASS:\n{stdout}");
 }
 
 #[test]
-fn test_test_command_list_excludes_ignored_files() {
-    // Arrange - 一个活跃文件一个被忽略文件
+fn test_test_command_list_excludes_skipped_files() {
+    // Arrange - 一个活跃文件一个被跳过文件
     let dir = TempDir::new().expect("tempdir");
     write_file(dir.path(), "tests/active_test.yx", PASS_TEST);
-    let content = format!("// 临时语料\n// [test:ignore]: 追踪 #999 示例原因\n{FAIL_TEST}");
+    let content = format!("// 临时语料\n// skip: 追踪 #999 示例原因\n{FAIL_TEST}");
     write_file(dir.path(), "tests/ignored_test.yx", &content);
 
     // Act
     let (code, stdout, _) = run_test_cmd(&["--list"], dir.path());
 
-    // Assert - 列表只含执行集（被忽略文件不列）
+    // Assert - 列表只含执行集（被跳过文件不列）
     assert_eq!(code, 0, "列表应退出 0:\n{stdout}");
     assert!(
         stdout.contains("active_test.yx"),
@@ -624,7 +735,7 @@ fn test_test_command_list_excludes_ignored_files() {
     );
     assert!(
         !stdout.contains("ignored_test.yx"),
-        "被忽略文件不应列出:\n{stdout}"
+        "被跳过文件不应列出:\n{stdout}"
     );
 }
 

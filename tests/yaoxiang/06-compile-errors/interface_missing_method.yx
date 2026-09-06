@@ -1,5 +1,6 @@
 // 06-compile-errors/interface_missing_method.yx
-// [test:error]: 接口方法未实现——Dog 实例化 Animal 却缺 speak 实现
+// 接口方法未实现——Dog 实例化 Animal 却缺 speak 实现
+// expect: compile-error E1098
 // 验证: 完整性检查失败 → E1098（RFC-011a §1 五步流程之第 5 步）
 // 状态: ✅
 
