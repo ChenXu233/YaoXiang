@@ -10,6 +10,7 @@
 | 009a-borrow-proof-pipeline.md | RFC-009a: 令牌生命期分析——基于霍尔证明管道 | 已接受 | accepted\009a-borrow-proof-pipeline.md | #129 | -- | -- | -- |
 | 010-unified-type-syntax.md | RFC-010: 统一类型语法 - name: type = value 模型 | 已接受 | accepted\010-unified-type-syntax.md | #127 | -- | -- | -- |
 | 011-generic-type-system.md | RFC-011: 泛型系统设计 - 零成本抽象与宏替代 | 已接受 | accepted\011-generic-type-system.md | #128 | #45, #46, #73, #90, #96, #40, #151 | #122 | -- |
+| 011a-interface-implementation.md | RFC-011a: 接口实现与动态分发 | 已接受 | accepted\011a-interface-implementation.md | -- | -- | -- | -- |
 | 012-f-string-template-strings.md | RFC 012: F-String 模板字符串 | 已接受 | accepted\012-f-string-template-strings.md | #124 | -- | -- | -- |
 | 013-error-code-specification.md | RFC 013: 错误代码规范 | 已接受 | accepted\013-error-code-specification.md | #125 | #125 | #7, #9, #29, #66 | -- |
 | 014-package-manager.md | RFC-014: 包管理系统设计 | 已接受 | accepted\014-package-manager.md | #88 | -- | -- | -- |
@@ -19,7 +20,10 @@
 | 024-concurrency-model.md | RFC-024：基于 spawn 的并发运行时语义 | 已接受 | accepted\024-concurrency-model.md | #89 | -- | -- | -- |
 | 026-ffi-core-mechanism.md | RFC-026：FFI 核心机制 | 已接受 | accepted\026-ffi-core-mechanism.md | #93 | -- | -- | -- |
 | 027-compile-time-evaluation-types.md | RFC-027：编译期谓词与统一静态验证 | 已接受 | accepted\027-compile-time-evaluation-types.md | #90 | -- | -- | -- |
+| 029-module-semantics.md | RFC-029: 模块语义系统 | 已接受 | accepted\029-module-semantics.md | #232 | -- | -- | -- |
 | 030-assert-mechanism.md | RFC-030: assert 断言机制 | 已接受 | accepted\030-assert-mechanism.md | #97 | #155, #157, #158, #159, #160, #161, #162, #169 | -- | -- |
+| 036-test-framework.md | RFC-036: std.test 测试框架与 yaoxiang test 命令 | 已接受 | accepted\036-test-framework.md | #94, #95, #221, #319 | -- | -- | -- |
+| 038-statement-termination.md | RFC-038: 语句终止与换行规则（Statement Termination & Newline Rules） | 已接受 | accepted\038-statement-termination.md | #258 | #, 2, 5, 8 | -- | -- |
 | 001-concurrent-model-error-handling.md | RFC-001：并作模型与错误处理系统 | 已废弃 | deprecated\001-concurrent-model-error-handling.md | -- | -- | -- | -- |
 | 020-dynamic-modules-ffi.md | RFC-020：动态模块与 FFI 集成 | 已废弃 | deprecated\020-dynamic-modules-ffi.md | -- | -- | -- | -- |
 | 021-library-driven-ffi-extension.md | RFC-021: 库驱动 FFI 扩展与跨语言调用支持 | 已废弃 | deprecated\021-library-driven-ffi-extension.md | -- | -- | -- | -- |
@@ -29,19 +33,17 @@
 | 019-typed-homoiconicity.md | RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型 | 草案 | draft\019-typed-homoiconicity.md | -- | -- | -- | -- |
 | 026b-yx-bindgen.md | RFC-026b: yx-bindgen 工具链 | 草案 | draft\026b-yx-bindgen.md | -- | -- | -- | -- |
 | 028-jit-compiler.md | RFC-028：JIT 编译器 — VM 内多级执行引擎 | 草案 | draft\028-jit-compiler.md | #101 | -- | -- | -- |
-| 029-module-semantics.md | RFC-029: 模块语义系统 | 已接受 | accepted\029-module-semantics.md | #100 | #232, #243, #244, #245 | -- | -- |
+| 029a-module-cache-incremental.md | RFC-029a: 模块缓存与增量重编译 | 草案 | draft\029a-module-cache-incremental.md | #293 | -- | -- | -- |
 | 031-optimization-levels.md | RFC-031：优化级别与 Pass 管理器 | 草案 | draft\031-optimization-levels.md | -- | -- | -- | -- |
 | 033-reflection-operator.md | RFC-033: `^^` 反射运算符 | 草案 | draft\033-reflection-operator.md | #136 | -- | -- | -- |
 | 034-debug-toolchain.md | RFC-034: 统一调试工具链 | 草案 | draft\034-debug-toolchain.md | #164 | -- | -- | -- |
 | 035-mcp-server.md | RFC-035: MCP Server 支持（AI Agent 集成） | 草案 | draft\035-mcp-server.md | #154 | -- | -- | -- |
-| 036-test-framework.md | RFC-036: std.test 测试框架与 yaoxiang test 命令 | 已接受 | accepted\036-test-framework.md | #94, #95, #221 | #94, #95 | -- | -- |
 | 037-industrial-packaging.md | RFC-037: 工业化分发方案 — 基于 cargo-dist 的编译器/工具链打包 | 草案 | draft\037-industrial-packaging.md | #230 | -- | -- | -- |
-| 038-statement-termination.md | RFC-038: 语句终止与换行规则（Statement Termination & Newline Rules） | 已接受 | accepted\038-statement-termination.md | #258 | #258 | -- | -- |
+| 039-pattern-matching-completeness.md | RFC-039: 模式匹配完备化 | 草案 | draft\039-pattern-matching-completeness.md | -- | -- | -- | -- |
 | 003-version-planning.md | RFC-003：版本规划 | 已拒绝 | rejected\003-version-planning.md | -- | -- | -- | -- |
 | 005-automated-cve-scanning.md | RFC-005: 自动化CVE安全检查系统 | 已拒绝 | rejected\005-automated-cve-scanning.md | -- | -- | -- | -- |
 | 016-quantum-native-support.md | RFC 016: 量子原生支持与多重后端集成 | 已拒绝 | rejected\016-quantum-native-support.md | -- | -- | -- | -- |
 | 025-primitive-extension.md | RFC-025: 可扩展原语类型机制 | 已拒绝 | rejected\025-primitive-extension.md | -- | -- | -- | -- |
-| 011a-interface-implementation.md | RFC-011a: 接口实现与动态分发 | 已接受 | accepted\011a-interface-implementation.md | -- | -- | -- | -- |
 | 014a-registry-protocol.md | RFC-014a: Registry 协议规范 | 审核中 | review\014a-registry-protocol.md | -- | -- | -- | -- |
 | 014b-build-system.md | RFC-014b: 构建系统与二进制分发 | 审核中 | review\014b-build-system.md | #91 | -- | -- | -- |
 | 014c-workspace.md | RFC-014c: 工作空间支持 | 审核中 | review\014c-workspace.md | #113 | -- | -- | -- |
