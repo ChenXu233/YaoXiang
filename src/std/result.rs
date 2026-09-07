@@ -171,8 +171,36 @@ pub(crate) fn native_result_unwrap(
             payload,
             ..
         }) => Ok((**payload).clone()),
-        _ => Err(ExecutorError::runtime_only("unwrap called on Err value")),
+        // #327：透传 Error 值的原始码与消息——用户在 unwrap 处就能看到失败原因，
+        // 不必再 unwrap_err 手查
+        _ => {
+            let detail = args
+                .first()
+                .and_then(|v| match v {
+                    RuntimeValue::Enum { payload, .. } => error_code_message(payload),
+                    _ => None,
+                })
+                .map(|(code, message)| format!("unwrap called on Err value ({code}: {message})"))
+                .unwrap_or_else(|| "unwrap called on Err value".to_string());
+            Err(ExecutorError::runtime_only(detail))
+        }
     }
+}
+
+/// 从 Error 值（Struct { fields: [code, message] }）提取 (code, message)；形态异常返回 None
+fn error_code_message(payload: &RuntimeValue) -> Option<(String, String)> {
+    if let RuntimeValue::Struct { fields, .. } = payload {
+        let value = fields.lock();
+        if let HeapValue::Tuple(v) = &*value {
+            if v.len() == 2 {
+                if let (RuntimeValue::String(code), RuntimeValue::String(message)) = (&v[0], &v[1])
+                {
+                    return Some((code.to_string(), message.to_string()));
+                }
+            }
+        }
+    }
+    None
 }
 
 pub(crate) fn native_result_unwrap_or(
