@@ -54,7 +54,6 @@ pub enum Expr {
     While {
         condition: Box<Expr>,
         body: Box<Block>,
-        label: Option<String>,
         span: Span,
     },
     For {
@@ -62,7 +61,6 @@ pub enum Expr {
         var_mut: bool, // 变量是否可变
         iterable: Box<Expr>,
         body: Box<Block>,
-        label: Option<String>,
         span: Span,
     },
     /// spawn for 数据并行循环（RFC-024 §2.4）
@@ -75,8 +73,10 @@ pub enum Expr {
     },
     Block(Block),
     Return(Option<Box<Expr>>, Span),
-    Break(Option<String>, Span),
-    Continue(Option<String>, Span),
+    /// break 语句（#314：Python 风格定案——裸 break，无标签，仅语句位置）
+    Break(Span),
+    /// continue 语句（#314：裸 continue，无标签）
+    Continue(Span),
     Cast {
         expr: Box<Expr>,
         target_type: Type,
@@ -244,7 +244,6 @@ pub enum StmtKind {
         var_mut: bool, // 变量是否可变
         iterable: Box<Expr>,
         body: Box<Block>,
-        label: Option<String>,
     },
     /// 类型定义：`Point: Type = { x: Float, y: Float }`
     /// 或泛型：`Option: (T: Type) -> Type = { some(T) | none }`
@@ -727,6 +726,43 @@ pub fn classify_generic_params(
 }
 
 impl Expr {
+    /// 表达式的源码 span（穷举变体，新增变体时编译器强制补全）
+    pub fn span(&self) -> Span {
+        match self {
+            Expr::Lit(_, s)
+            | Expr::Var(_, s)
+            | Expr::Return(_, s)
+            | Expr::Break(s)
+            | Expr::Continue(s) => *s,
+            Expr::BinOp { span, .. }
+            | Expr::UnOp { span, .. }
+            | Expr::Call { span, .. }
+            | Expr::FnDef { span, .. }
+            | Expr::If { span, .. }
+            | Expr::Match { span, .. }
+            | Expr::While { span, .. }
+            | Expr::For { span, .. }
+            | Expr::SpawnFor { span, .. }
+            | Expr::Borrow { span, .. }
+            | Expr::FieldAccess { span, .. }
+            | Expr::Index { span, .. }
+            | Expr::Tuple(_, span)
+            | Expr::List(_, span)
+            | Expr::Cast { span, .. }
+            | Expr::Try { span, .. } => *span,
+            Expr::Block(block) => block.span,
+            Expr::ListComp { span, .. }
+            | Expr::Dict(_, span)
+            | Expr::In { span, .. }
+            | Expr::Lambda { span, .. }
+            | Expr::Ref { span, .. }
+            | Expr::Unsafe { span, .. }
+            | Expr::Spawn { span, .. }
+            | Expr::FString { span, .. }
+            | Expr::Error(span) => *span,
+        }
+    }
+
     /// 解构 Assign 目标：`x` → (x, None)；`Type.field` → (field, Some(Type))；其他 → None
     pub fn receiver_parts(&self) -> Option<(String, Option<String>)> {
         match self {
@@ -748,6 +784,37 @@ impl Expr {
             Expr::Lambda { params, body, .. } => (params.clone(), body.stmts.clone()),
             Expr::Block(block) => (Vec::new(), block.stmts.clone()),
             _ => (Vec::new(), Vec::new()),
+        }
+    }
+
+    /// RFC-004: 从绑定语句 `Type.method = fn[pos]` 的 index 部分提取位置列表。
+    /// 支持单个整数与整数元组；负索引（`-1` 从末尾计数）原样保留，
+    /// 由调用方按被绑函数元数归一化。无法识别时回退 `[0]`（与既有行为一致）。
+    pub fn extract_binding_positions(index: &Expr) -> Vec<i64> {
+        fn one(e: &Expr) -> Option<i64> {
+            match e {
+                Expr::Lit(Literal::Int(n), _) => Some(*n as i64),
+                Expr::UnOp {
+                    op: UnOp::Neg,
+                    expr,
+                    ..
+                } => match expr.as_ref() {
+                    Expr::Lit(Literal::Int(n), _) => Some(-(*n as i64)),
+                    _ => None,
+                },
+                _ => None,
+            }
+        }
+        match index {
+            Expr::Tuple(items, _) => {
+                let parsed: Vec<i64> = items.iter().filter_map(one).collect();
+                if parsed.is_empty() {
+                    vec![0]
+                } else {
+                    parsed
+                }
+            }
+            other => one(other).map(|p| vec![p]).unwrap_or_else(|| vec![0]),
         }
     }
 }

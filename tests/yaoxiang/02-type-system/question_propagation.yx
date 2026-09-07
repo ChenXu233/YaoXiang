@@ -1,0 +1,40 @@
+// 02-type-system/question_propagation.yx
+// 覆盖: SPEC type-system.md §4.2 Result(T, E) + #301 `?` 真实语义与错误传播
+// 验证:
+//   - `?` Ok 路径解包（T 值参与后续运算）
+//   - `?` Err 路径提前返回，沿调用栈两层传播至顶层
+//   - result.ok/err 构造器重组 Result 值
+//   - 非 Result 返回类型 / 非 Result 表达式的编译拒绝见 06-compile-errors
+// 状态: ✅
+
+use std.string
+use std.result
+use std.assert
+
+parse_double: (s: &String) -> Result(Int, Error) = {
+    n = string.parse_int(s)?
+    return result.ok(n * 2)
+}
+
+parse_chain: (s: &String) -> Result(Int, Error) = {
+    d = parse_double(s)?
+    return result.ok(d + 1)
+}
+
+main = {
+    // 成功路径：21 → parse_int? 解包 21 → ok(42) → parse_double? 解包 42 → ok(43)
+    ok = parse_chain("21")
+    assert.assert(result.is_ok(ok), "chain ok: is_ok")
+    assert.assert(result.unwrap(ok) == 43, "chain ok: unwrap == 43")
+
+    // 错误路径："nope" 在最内层 parse_int 失败，Err 穿透两层 ? 冒泡到顶层
+    err = parse_chain("nope")
+    assert.assert(result.is_err(err), "chain err: is_err")
+    assert.assert(result.unwrap_or(err, -1) == -1, "chain err: unwrap_or default")
+
+    // 构造器直用
+    e = result.err("boom")
+    assert.assert(result.is_err(e), "result.err is_err")
+
+    print("question_propagation_ok")
+}

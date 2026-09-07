@@ -14,6 +14,7 @@ Review 中被要求修改。
 ## 目录
 
 - [总则](#总则)
+- [yx 语料与库测试层级](#yx-语料与库测试层级)
 - [单元测试规范](#单元测试规范)
 - [集成测试规范](#集成测试规范)
 - [基准测试规范](#基准测试规范)
@@ -164,6 +165,23 @@ fn test_parser() {
 :white_check_mark: test(parser): 添加 Pratt 解析器中缀表达式测试
 :white_check_mark: test(codegen): 补全 switch 语句 IR 生成测试
 ```
+
+---
+
+## yx 语料与库测试层级
+
+本规范约束 **Rust 侧测试代码**。YaoXiang 语言自身的测试（`.yx` 语料与库测试）按
+被测对象分两层，体系设计与判定契约归 RFC-036（§7 套件收集 / §8 负向三层 /
+§9 测试体系分层），语料编写细则归 `tests/yaoxiang/TEST_STANDARDS.md`：
+
+- **语言可用性语料**（`tests/yaoxiang/`）——被测对象是语言本身；std 只作断言工具。
+  语料内按失败发生层分三类判定：行为测试 / 编译期拒绝测试 / 运行期失败测试
+- **库测试**（随库走）——被测对象是库的公开 API 契约；std 的 yx 级测试位于
+  `src/std/tests/`，未来用户包的测试在包内随 `[tool.test]` 发现
+
+`.yx` 测试的文件头格式、头部指令（`// expect:` / `// skip:` / `// mode:`，
+RFC-036 §8.2）与断言约定以 TEST_STANDARDS.md 为准；判定解析由双 runner 共用的
+`src/util/test_markers.rs` 实现（Rust 侧，受本规范约束）。
 
 ---
 

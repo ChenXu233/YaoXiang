@@ -2,7 +2,7 @@
 // 覆盖: RFC-024 spawn 并发（跨线程 DAG 调度）+ #278 Heap 句柄 Arc 化
 // 验证: worker 独立 Heap 下句柄仍有效（读字段/元素）；捕获共享对象写回主线程可见
 // 状态: ✅ 可运行（#278 修复后；Embedded 模式同样通过）
-// [test:runtime]: standard
+// mode: standard
 
 use std.assert
 

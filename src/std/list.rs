@@ -22,7 +22,7 @@ impl StdModule for ListModule {
             export!(
                 "push",
                 "std.list.push",
-                "(A: Type)(list: List(A), item: Any) -> List(A)",
+                "(A: Type)(list: List(A), item: A) -> List(A)",
                 native_push
             ),
             export!(
@@ -34,13 +34,13 @@ impl StdModule for ListModule {
             export!(
                 "append",
                 "std.list.append",
-                "(A: Type)(list: List(A), item: Any) -> List(A)",
+                "(A: Type)(list: List(A), item: A) -> List(A)",
                 native_append
             ),
             export!(
                 "prepend",
                 "std.list.prepend",
-                "(A: Type)(list: List(A), item: Any) -> List(A)",
+                "(A: Type)(list: List(A), item: A) -> List(A)",
                 native_prepend
             ),
             export!(
@@ -100,7 +100,7 @@ impl StdModule for ListModule {
             export!(
                 "set",
                 "std.list.set",
-                "(A: Type)(list: List(A), index: Int, value: Any) -> List(A)",
+                "(A: Type)(list: List(A), index: Int, value: A) -> List(A)",
                 native_set
             ),
             export!(

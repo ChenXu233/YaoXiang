@@ -90,7 +90,7 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             if name == "Type" {
                 // Reject old Type[T] or Type<T> syntax
                 if state.at(&TokenKind::LBracket) || state.at(&TokenKind::Lt) {
-                    state.error(parse_msg(
+                    state.error(parse_msg(state,
                         "Old 'Type[...]' or 'Type<...>' syntax is no longer supported. \
                          Use 'Type' alone for the meta-type, or '(T: Type, ...) -> Type' for type constructors."
                             .to_string(),
@@ -107,7 +107,7 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             // This is OLD SYNTAX and should be rejected!
             // RFC-010 requires: (param: Type) -> ReturnType
             if state.at(&TokenKind::Arrow) {
-                state.error(parse_msg(format!(
+                state.error(parse_msg(state, format!(
                     "Old curried function syntax '{} -> ...' is no longer supported. \
                      Use RFC-010 syntax with named parameters: '(param: {}) -> ReturnType'. \
                      Example: 'inc: (x: Int) -> Int = x => x + 1' instead of 'inc: Int -> Int = ...'",
@@ -254,6 +254,7 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
         Some(TokenKind::LBracket) => {
             // RFC-010: `[T, U](params) -> Ret` syntax is removed.
             state.error(parse_msg(
+                state,
                 "Old generic function type syntax '[T, U](params) -> Ret' is no longer supported. \
                  Use RFC-010 syntax: '(T: Type, U: Type) -> ((params) -> Ret)'"
                     .to_string(),
@@ -632,10 +633,10 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                 let func_name = match state.current().map(|t| &t.kind) {
                     Some(TokenKind::Identifier(n)) => n.clone(),
                     _ => {
-                        state.error(parse_msg(format!(
-                            "Expected function name after '=' in binding '{}'",
-                            name
-                        )));
+                        state.error(parse_msg(
+                            state,
+                            format!("Expected function name after '=' in binding '{}'", name),
+                        ));
                         return None;
                     }
                 };
@@ -662,10 +663,10 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                 }
             } else if is_mut {
                 // mut 后面没有冒号是语法错误
-                state.error(parse_msg(format!(
-                    "Expected ':' after 'mut' in field '{}'",
-                    name
-                )));
+                state.error(parse_msg(
+                    state,
+                    format!("Expected ':' after 'mut' in field '{}'", name),
+                ));
                 return None;
             } else if matches!(
                 state.current().map(|t| &t.kind),
@@ -729,7 +730,10 @@ fn parse_optional_binding_positions(state: &mut ParserState<'_>) -> Option<Vec<i
 /// 解析位置绑定: `[0]` 或 `[0, 1]` 或 `[-1]`（必须存在）
 pub(crate) fn parse_binding_positions(state: &mut ParserState<'_>) -> Result<Vec<i64>, ()> {
     if !state.at(&TokenKind::LBracket) {
-        state.error(parse_msg("Expected '[' for binding position".to_string()));
+        state.error(parse_msg(
+            state,
+            "Expected '[' for binding position".to_string(),
+        ));
         return Err(());
     }
     state.bump(); // consume '['
@@ -751,6 +755,7 @@ pub(crate) fn parse_binding_positions(state: &mut ParserState<'_>) -> Result<Vec
             }
             _ => {
                 state.error(parse_msg(
+                    state,
                     "Expected integer position in binding".to_string(),
                 ));
                 return Err(());
@@ -760,6 +765,7 @@ pub(crate) fn parse_binding_positions(state: &mut ParserState<'_>) -> Result<Vec
 
     if !state.at(&TokenKind::RBracket) {
         state.error(parse_msg(
+            state,
             "Expected ']' after binding positions".to_string(),
         ));
         return Err(());

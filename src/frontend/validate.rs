@@ -64,12 +64,8 @@ pub fn validate_source(source: &str) -> ValidateResult {
             Ok(tokens) => tokens,
             Err(err) => {
                 let result = ValidateResult {
-                    diagnostics: vec![Diagnostic::error(
-                        "E0001".to_string(),
-                        err.to_string(),
-                        String::new(),
-                        None,
-                    )],
+                    // #324：LexError 自带源码 span（to_diagnostic 内 .at）
+                    diagnostics: vec![err.to_diagnostic()],
                     module: None,
                 };
                 let mut cache = VALIDATE_CACHE.lock().unwrap();

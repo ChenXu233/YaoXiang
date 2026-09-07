@@ -33,6 +33,7 @@ pub mod suggest;
 
 // 重新导出
 pub use codes::{ErrorCategory, ErrorCodeDefinition, I18nRegistry, DiagnosticBuilder, ErrorInfo};
+pub use codes::builder::{current_span, push_current_span, SpanGuard};
 pub use collect::ErrorCollector;
 pub use command::render_explain_output;
 #[cfg(feature = "cli")]
@@ -177,6 +178,7 @@ fn format_runtime_stack_trace(
 
     let mut out = String::from("stack trace:\n");
     for frame in stack {
+        // #327：用户面向输出不暴露字节码 ip（形态对齐编译期；字节码定位归 RFC-034 工具链）
         if let Some(ds) = resolve_runtime_span(module, frame).filter(|s| !s.is_dummy()) {
             let loc = match sources.and_then(|sm| sm.get(ds.file_id)) {
                 Some(sf) => format!(
@@ -185,15 +187,9 @@ fn format_runtime_stack_trace(
                 ),
                 None => format!("{}:{}", ds.span.start.line, ds.span.start.column),
             };
-            out.push_str(&format!(
-                "  at {} ({}) (ip: {})\n",
-                frame.function_name, loc, frame.ip
-            ));
+            out.push_str(&format!("  at {} ({})\n", frame.function_name, loc));
         } else {
-            out.push_str(&format!(
-                "  at {} (ip: {})\n",
-                frame.function_name, frame.ip
-            ));
+            out.push_str(&format!("  at {}\n", frame.function_name));
         }
     }
     out
@@ -220,7 +216,6 @@ fn in_yaoxiang_project(file: &std::path::Path) -> bool {
 
 pub fn run_file_with_diagnostics(
     file: &std::path::PathBuf,
-    debug_info: bool,
     runtime_mode: &str,
     workers: usize,
 ) -> anyhow::Result<()> {
@@ -235,7 +230,10 @@ pub fn run_file_with_diagnostics(
             .map_err(|e| anyhow::anyhow!("Failed to load bytecode file: {}", e))?;
         let bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);
 
-        return exec_module(&bytecode_module, runtime_mode, workers, None);
+        // #327：贯通 debug_section.sources——带 --debug-info 构建的 .42 直跑时
+        // 也能渲染栈帧源码上下文；无 DebugSection 时为 None，行为同前
+        let debug_sources = bytecode_module.debug_sources.as_ref();
+        return exec_module(&bytecode_module, runtime_mode, workers, debug_sources);
     }
 
     let source = match std::fs::read_to_string(file) {
@@ -258,7 +256,7 @@ pub fn run_file_with_diagnostics(
 
     // RFC-029: 位于 yaoxiang 项目内的文件走多文件编排器（发现同项目 .yx、构建共享
     // Registry、逐文件 typecheck、整体编译）；否则按单文件编译。两者都产出 ModuleIR，
-    // 复用下方同一套 codegen + 执行路径（保留 runtime/workers/debug_info 配置）。
+    // 复用下方同一套 codegen + 执行路径（保留 runtime/workers 配置）。
     let module_result: Result<crate::middle::ModuleIR, crate::frontend::CompileError> =
         if in_yaoxiang_project(file) {
             match crate::frontend::module::orchestrator::compile_project(file) {
@@ -280,14 +278,22 @@ pub fn run_file_with_diagnostics(
             if !module.source_files.is_empty() {
                 let mut multi = SourceMap::new();
                 for path in &module.source_files {
-                    let content = std::fs::read_to_string(path).unwrap_or_default();
+                    // #327：嵌入 std 虚拟路径（<std/test>）读盘必失败，回填嵌入源文本，
+                    // 使错误落在 std 模块内时也能渲染真实片段
+                    let content =
+                        match crate::std::yx_sources::embedded_source_by_virtual_path(path) {
+                            Some(src) => src.to_string(),
+                            None => std::fs::read_to_string(path).unwrap_or_default(),
+                        };
                     multi.add_file(path.clone(), content);
                 }
                 sources = multi;
             }
             // Generate bytecode
+            // #327：debug_map 默认生成——运行时错误默认携带栈帧与源码上下文，
+            // 不再有"无位置"的运行时错误形态
             let mut ctx = CodegenContext::new(module);
-            ctx.set_generate_debug_info(debug_info);
+            ctx.set_generate_debug_info(true);
             let bytecode_file = ctx
                 .generate()
                 .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
@@ -431,7 +437,17 @@ pub fn check_files_with_diagnostics(files: &[std::path::PathBuf]) -> anyhow::Res
 
         let mut compiler = crate::frontend::Compiler::new();
         match compiler.compile_with_source(&file.display().to_string(), &source) {
-            Ok(_) => {}
+            Ok(_) => {
+                // #321 M2：收割警告诊断（builder 按 W 前缀标注 Warning severity），
+                // 计入 warning_count，不阻断编译
+                for diag in compiler.take_warnings() {
+                    result.warning_count += 1;
+                    result.diagnostics.push(CheckDiagnostic {
+                        file: file.display().to_string(),
+                        diagnostic: diag,
+                    });
+                }
+            }
             Err(e) if e.is_type_error() => {
                 // #268：透传原始类型诊断（保留 E1002 与 span），与 run 一致；
                 // 仅无原始诊断的 TypeError（如 IR 阶段）才用 E8001 兜底

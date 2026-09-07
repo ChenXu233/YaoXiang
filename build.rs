@@ -10,6 +10,50 @@ use std::process::Command;
 const Z3_VERSION: &str = "4.16.0";
 
 fn main() {
+    // 重建触发面显式化：build.rs 只在这些路径（及自身/Cargo.toml）变化时重跑
+    println!("cargo:rerun-if-changed=locales/zh.json");
+    println!("cargo:rerun-if-changed=docs/src/design/rfc/accepted/013-error-code-specification.md");
+    println!("cargo:rerun-if-changed=src/util/diagnostic/codes");
+    println!("cargo:rerun-if-changed=src/std/result.rs");
+
+    // #325/#326：构建期权威校验（解析/校验/比对逻辑单一实现于 tools/code-tables lib）——
+    // 注册码唯一性、段位、zh 完备性、locales 孤立、RFC-013 码表区间一致性；
+    // 任一 error 即拒绝编译。bot 语言缺失降级为 cargo:warning。
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let root = Path::new(&manifest_dir);
+    let entries = code_tables::parse_registry(root).unwrap_or_else(|msg| panic!("{msg}"));
+    let report = code_tables::validate(root, &entries).unwrap_or_else(|msg| panic!("{msg}"));
+    for warning in &report.warnings {
+        println!("cargo:warning={warning}");
+    }
+    for error in &report.errors {
+        println!("cargo:warning={error}");
+    }
+    if !report.is_ok() {
+        panic!(
+            "错误码注册表校验失败（{} 项 error，见上方清单）。zh 是唯一人工翻译源：新增码请同步补 zh 条目。",
+            report.errors.len()
+        );
+    }
+
+    // RFC-013 码表区间一致性（漂移即拒绝编译；治愈：code-tables --fix）
+    let rfc_path = root.join(code_tables::RFC013_REL);
+    let doc = std::fs::read_to_string(&rfc_path)
+        .unwrap_or_else(|e| panic!("读取 {} 失败: {}", rfc_path.display(), e));
+    let zh = code_tables::load_locale(root, "zh").unwrap_or_else(|msg| panic!("{msg}"));
+    let mismatches = code_tables::check_rfc_tables(&doc, &entries, &zh);
+    if !mismatches.is_empty() {
+        panic!(
+            "RFC-013 码表区间与注册表不一致：
+  {}
+治愈：cargo run --manifest-path tools/code-tables/Cargo.toml -- --fix",
+            mismatches.join(
+                "
+  "
+            )
+        );
+    }
+
     // Skip Z3 linking for wasm targets
     let _target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();

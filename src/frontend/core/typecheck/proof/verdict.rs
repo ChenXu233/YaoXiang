@@ -232,12 +232,10 @@ impl ProofResult {
         match self {
             Self::Proved => Ok(()),
             Self::Disproved(model) => Err(model.into_diagnostic()),
-            Self::Unproven { reason, .. } => Err(Diagnostic::error(
-                "E8001".to_string(),
-                format!("无法证明: {:?}", reason),
-                String::new(),
-                None,
-            )),
+            Self::Unproven { reason, .. } => {
+                // #322 M3：走注册表快捷方法（i18n 模板渲染）
+                Err(ErrorCodeDefinition::internal_error(&format!("无法证明: {:?}", reason)).build())
+            }
         }
     }
 }

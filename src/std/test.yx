@@ -1,22 +1,114 @@
-// std/test.yx — 纯 YaoXiang 测试断言库（RFC-036 §3）
+// std/test.yx — 纯 YaoXiang 测试断言库（RFC-036 §3 值语义标准形态）
 // 第一个 dogfooding 库：YaoXiang 的测试库用 YaoXiang 写。
 // 构建时经 include_str! 嵌入二进制（见 src/std/yx_sources.rs），
 // 运行时以虚拟路径作种子模块注入 orchestrator。
+//
+// 值语义契约（RFC-036 §3/§7）：断言失败以 Err(诊断信息) 表达，不 abort 进程；
+// 套件（§7 test.suite，R3）据此收集 per-test 判定。Ok 载荷为 Void（type-system.md
+// 规范 unit）。assert 断言失败 ≠ 进程事件——进程级 abort 语义保留在 std.assert
+// （运行时守卫），不进入测试断言路径。
+//
+// 注意：Result 参数位不能用 Result(Any, X) 标注（嵌套位 Any 是刚性类型，
+// 具体 Result 传不进来），泛型性由 const 类型参数组承担（R1 探针实证）。
 
 use std.assert
+use std.math
+use std.result
 
-assert_eq = (a, b) => {
-    assert.assert(a == b, f"Expected {b}, got {a}")
+assert_eq: (a: Any, b: Any) -> Result(Void, String) = (a, b) => {
+    if a == b {
+        return result.ok(void)
+    }
+    return result.err(f"Expected {b}, got {a}")
 }
 
-assert_ne = (a, b) => {
-    assert.assert(a != b, f"Expected not equal to {b}, got {a}")
+assert_ne: (a: Any, b: Any) -> Result(Void, String) = (a, b) => {
+    if a != b {
+        return result.ok(void)
+    }
+    return result.err(f"Expected not equal to {b}, got {a}")
 }
 
-assert_true = (cond: Bool) => {
-    assert.assert(cond, f"Expected true, got {cond}")
+assert_true: (cond: Bool) -> Result(Void, String) = (cond) => {
+    if cond {
+        return result.ok(void)
+    }
+    return result.err(f"Expected true, got {cond}")
 }
 
-assert_false = (cond: Bool) => {
-    assert.assert(cond == false, f"Expected false, got {cond}")
+assert_false: (cond: Bool) -> Result(Void, String) = (cond) => {
+    if cond == false {
+        return result.ok(void)
+    }
+    return result.err(f"Expected false, got {cond}")
+}
+
+// 与 assert_false 同体：`!assert` 一元形态待 not 语法落地后换装（RFC-036 §8.1）
+assert_not: (cond: Bool) -> Result(Void, String) = (cond) => {
+    if cond == false {
+        return result.ok(void)
+    }
+    return result.err(f"Expected false, got {cond}")
+}
+
+// 判定 Result 为 Err（RFC-036 §8.1 值级反向）。T/E 由调用点实参推断。
+assert_err: (T: Type, E: Type) -> (r: Result(T, E)) -> Result(Void, String) = (r) => {
+    if result.is_err(r) {
+        return result.ok(void)
+    }
+    return result.err("Expected Err, got Ok value")
+}
+
+// 判定 Result 为 Err 且错误码等于预期（RFC-036 §8.1 错误码断言；
+// 依赖 #323 M4 的 Error{code, message} 载体与 result.code 访问器）。
+// E 钉死为 Error：码只存在于 std Error 载体上。
+assert_err_code: (T: Type) -> (r: Result(T, Error), want: String) -> Result(Void, String) = (r, want) => {
+    if result.is_err(r) {
+        e = result.unwrap_err(r)
+        c = result.code(e)
+        if c == want {
+            return result.ok(void)
+        }
+        return result.err(f"Expected code {want}, got {c}")
+    }
+    return result.err("Expected Err, got Ok value")
+}
+
+// Float 近似相等（RFC-036 Phase 3）：|a - b| <= eps 判定。eps 由调用方显式给出
+// ——容差是测试契约的一部分，不设隐藏默认值。NaN 恒 Err（NaN 减任何值为 NaN，
+// 比较恒 false）；负 eps 在声明处报错（不可能通过的契约不该等到断言失败才发现）。
+assert_approx_eq: (a: Float, b: Float, eps: Float) -> Result(Void, String) = (a, b, eps) => {
+    if eps < 0.0 {
+        return result.err(f"eps must be non-negative, got {eps}")
+    }
+    d = math.fabs(a - b)
+    if d <= eps {
+        return result.ok(void)
+    }
+    return result.err(f"Expected {b} (±{eps}), got {a} (diff {d})")
+}
+
+// 套件收集（RFC-036 §7 值化模型）：逐个调用测试函数，收集 per-test 判定。
+//
+// - tests 元素为 (名字, 测试函数) 对；测试函数零参返回 Result(Void, String)，
+//   断言失败以 Err 表达，不中断进程——某测试失败后其余照常运行
+// - 顶层测试函数以闭包形式入列：`("name", () => test_fn())`（顶层函数名
+//   作为值引用暂不支持——IR 层限制）
+// - 全 Ok 静默，文件退出码 0；任一 Err：汇总失败明细（名字 + 诊断）并 abort，
+//   文件退出码非 0——abort 是测试二进制的运行时守卫，非断言路径
+suite: (tests: List((String, () -> Result(Void, String)))) -> Void = (tests) => {
+    mut failed = 0
+    mut total = 0
+    mut report = ""
+    for t in tests {
+        (name, f) = t
+        total = total + 1
+        r = f()
+        if result.is_err(r) {
+            failed = failed + 1
+            m = result.unwrap_err(r)
+            report = report + f"\n  [FAIL] {name}: {m}"
+        }
+    }
+    assert.assert(failed == 0, f"{failed} of {total} test(s) failed{report}")
 }

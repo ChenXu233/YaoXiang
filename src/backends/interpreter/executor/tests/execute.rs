@@ -312,6 +312,7 @@ fn spawn_concurrent_standard_mode() {
         vtables: vec![],
         globals: vec![],
         entry_point: Some(2), // main 函数
+        debug_sources: None,
     };
 
     // 配置 Standard 模式 + 1 worker（避免多线程并发问题）

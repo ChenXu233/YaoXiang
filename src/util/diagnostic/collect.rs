@@ -35,14 +35,26 @@ impl ErrorCollector {
         self.errors.extend(errors);
     }
 
-    /// 检查是否有错误
+    /// 检查是否有错误（仅 Severity::Error，警告不阻断编译，#321 M2）
     pub fn has_errors(&self) -> bool {
-        !self.errors.is_empty()
+        self.errors
+            .iter()
+            .any(|d| d.severity == super::error::Severity::Error)
+    }
+
+    /// 检查是否有警告
+    pub fn has_warnings(&self) -> bool {
+        self.errors
+            .iter()
+            .any(|d| d.severity == super::error::Severity::Warning)
     }
 
     /// 获取错误数量
     pub fn error_count(&self) -> usize {
-        self.errors.len()
+        self.errors
+            .iter()
+            .filter(|d| d.severity == super::error::Severity::Error)
+            .count()
     }
 
     /// 获取所有错误

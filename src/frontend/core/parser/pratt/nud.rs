@@ -67,10 +67,9 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::KwUnsafe) => Some((BP_HIGHEST, Self::parse_unsafe)),
             // Spawn expression: spawn { ... } or spawn for ... in ... { ... }
             Some(TokenKind::KwSpawn) => Some((BP_HIGHEST, Self::parse_spawn)),
-            // Control flow expressions (return, break, continue)
+            // Control flow expressions (return)
+            // #314：break/continue 移出表达式位置——仅语句，Python 风格定案
             Some(TokenKind::KwReturn) => Some((BP_LOWEST, Self::parse_return_expr)),
-            Some(TokenKind::KwBreak) => Some((BP_LOWEST, Self::parse_break_expr)),
-            Some(TokenKind::KwContinue) => Some((BP_LOWEST, Self::parse_continue_expr)),
             _ => None,
         }
     }
@@ -265,54 +264,6 @@ impl<'a> ParserState<'a> {
             };
 
         Some(Expr::Return(value.map(Box::new), span))
-    }
-
-    /// Parse break expression: `break [label]`
-    fn parse_break_expr(&mut self) -> Option<Expr> {
-        let span = self.span();
-        self.bump(); // consume 'break'
-
-        let label =
-            if !self.at(&TokenKind::Semicolon) && !self.at(&TokenKind::RBrace) && !self.at_end() {
-                self.parse_expression(BP_LOWEST)
-            } else {
-                None
-            };
-
-        // Convert Expr to String label if present
-        let label_str = label.and_then(|expr| {
-            if let Expr::Var(name, _) = expr {
-                Some(name)
-            } else {
-                None
-            }
-        });
-
-        Some(Expr::Break(label_str, span))
-    }
-
-    /// Parse continue expression: `continue [label]`
-    fn parse_continue_expr(&mut self) -> Option<Expr> {
-        let span = self.span();
-        self.bump(); // consume 'continue'
-
-        let label =
-            if !self.at(&TokenKind::Semicolon) && !self.at(&TokenKind::RBrace) && !self.at_end() {
-                self.parse_expression(BP_LOWEST)
-            } else {
-                None
-            };
-
-        // Convert Expr to String label if present
-        let label_str = label.and_then(|expr| {
-            if let Expr::Var(name, _) = expr {
-                Some(name)
-            } else {
-                None
-            }
-        });
-
-        Some(Expr::Continue(label_str, span))
     }
 
     /// Parse identifier expression
@@ -933,7 +884,6 @@ impl<'a> ParserState<'a> {
         Some(Expr::While {
             condition: Box::new(condition),
             body: Box::new(body),
-            label: None, // No label for simple while expressions
             span,
         })
     }
@@ -958,7 +908,6 @@ impl<'a> ParserState<'a> {
             var_mut: false, // for 表达式不支持 mut 语法
             iterable: Box::new(iterable),
             body: Box::new(body),
-            label: None, // No label for simple for expressions
             span,
         })
     }

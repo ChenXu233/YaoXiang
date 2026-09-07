@@ -1,0 +1,16 @@
+[package]
+name = "code-tables"
+version = "0.1.0"
+edition = "2021"
+description = "Error-code registry parser/validator + RFC-013 code-table generator (single source, #326)"
+
+[lib]
+name = "code_tables"
+path = "src/lib.rs"
+
+[[bin]]
+name = "code-tables"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1.0.150"

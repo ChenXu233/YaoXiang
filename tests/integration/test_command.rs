@@ -1,7 +1,13 @@
 //! `yaoxiang test` 命令集成测试 — 基于 RFC-036（accepted/036-test-framework.md）
 //!
 //! §1 CLI 设计：发现 → 子进程执行 → 报告
-//! §5 发现与执行：默认 tests/**/*.yx、[tool.test].patterns、显式路径优先、exit code 判定
+//! §1 Phase 2：--filter / --fail-fast / --verbose / --list / --no-progress / --json
+//! §5 发现与执行：默认 tests/**/*.yx、[tool.test].patterns、显式路径优先、
+//!     --filter 文件名包含
+//! §8.2 分流判定（2026-09-06 指令文法定案）：`// expect: compile-error|runtime-error`
+//! 严格文法驱动 check/run 两步判定，类别间双向判死（编译错误类 check 通过 = FAIL、
+//! 运行时类 check 失败 = FAIL）；指令解析失败不执行直接 FAIL（构造期拒绝）；
+//! 预期码与输出 `[EXXXX]`（及 parse 期 Debug 形态）实际比对
 //! 规则 9.1：happy path / error path / boundary 三条路径
 
 #![cfg(feature = "cli")]
@@ -60,6 +66,16 @@ main = {
 }
 "#;
 
+/// 带 stdout 输出的通过用例（--verbose 显示测试 stdout 的观察对象）
+const NOISY_PASS_TEST: &str = r#"
+use std.io
+use std.assert
+main = {
+    io.println("noisy stdout marker")
+    assert.assert(1 + 1 == 2, "math works")
+}
+"#;
+
 #[test]
 fn test_test_command_passing_file_exits_zero() {
     // Arrange - 自包含通过用例（无 toml，单文件模式）
@@ -74,8 +90,12 @@ fn test_test_command_passing_file_exits_zero() {
     assert!(stdout.contains("ok_test.yx"), "报告应包含文件名:\n{stdout}");
     assert!(stdout.contains("PASS"), "报告应标记 PASS:\n{stdout}");
     assert!(
-        stdout.contains("Results: 1 passed, 0 failed"),
+        stdout.contains("Results: 1 file passed, 0 files failed"),
         "汇总应计数 1 passed:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Categories: 1 behavior, 0 compile-error, 0 runtime-error"),
+        "汇总应附类别分布（RFC-036 §8.2）:\n{stdout}"
     );
 }
 
@@ -96,7 +116,7 @@ fn test_test_command_failing_file_reports_fail_and_exits_nonzero() {
         "应透传子进程的断言消息:\n{stdout}"
     );
     assert!(
-        stdout.contains("Results: 0 passed, 1 failed"),
+        stdout.contains("Results: 0 files passed, 1 file failed"),
         "汇总应计数 1 failed:\n{stdout}"
     );
 }
@@ -114,7 +134,7 @@ fn test_test_command_mixed_results_summary_counts() {
     // Assert
     assert_eq!(code, 1, "混合结果应退出 1:\n{stdout}");
     assert!(
-        stdout.contains("Results: 1 passed, 1 failed"),
+        stdout.contains("Results: 1 file passed, 1 file failed"),
         "汇总应分别计数:\n{stdout}"
     );
 }
@@ -182,7 +202,7 @@ main = {
     // Assert - 子进程经 orchestrator 双根解析找到项目根模块
     assert_eq!(code, 0, "项目模块导入应通过:\n{stdout}");
     assert!(
-        stdout.contains("Results: 1 passed, 0 failed"),
+        stdout.contains("Results: 1 file passed, 0 files failed"),
         "项目测试应通过:\n{stdout}"
     );
 }
@@ -211,5 +231,761 @@ fn test_test_command_config_patterns_respected() {
     assert!(
         !stdout.contains("ignored_test.yx"),
         "默认 tests/ 不应再被发现:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_filter_runs_only_matching_files() {
+    // Arrange - alpha 通过，beta 失败；RFC-036 §5：--filter 按文件名包含过滤
+    let dir = TempDir::new().expect("tempdir");
+    write_file(dir.path(), "tests/alpha_test.yx", PASS_TEST);
+    write_file(dir.path(), "tests/beta_test.yx", FAIL_TEST);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--filter", "alpha"], dir.path());
+
+    // Assert
+    assert_eq!(code, 0, "过滤后只跑通过文件应退出 0:\n{stdout}");
+    assert!(
+        stdout.contains("alpha_test.yx"),
+        "应包含匹配文件:\n{stdout}"
+    );
+    assert!(
+        !stdout.contains("beta_test.yx"),
+        "不应包含不匹配文件:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_filter_without_match_reports_no_tests() {
+    // Arrange - 边界：过滤后零文件与零发现同语义（RFC-036 §5）
+    let dir = TempDir::new().expect("tempdir");
+    write_file(dir.path(), "tests/alpha_test.yx", PASS_TEST);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--filter", "zzz_no_match"], dir.path());
+
+    // Assert - 零匹配不算失败（与 cargo test 零测试一致）
+    assert_eq!(code, 0, "过滤后零文件应退出 0:\n{stdout}");
+    assert!(
+        stdout.contains("No tests found"),
+        "应提示未发现测试:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_list_prints_files_without_running() {
+    // Arrange - 通过与失败文件各一个；--list 只列出，不执行（RFC-036 §1）
+    let dir = TempDir::new().expect("tempdir");
+    write_file(dir.path(), "tests/alpha_test.yx", PASS_TEST);
+    write_file(dir.path(), "tests/beta_test.yx", FAIL_TEST);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--list"], dir.path());
+
+    // Assert - 失败文件也不触发执行，故退出码 0 且无 PASS/汇总
+    assert_eq!(code, 0, "列表模式不应执行测试:\n{stdout}");
+    assert!(
+        stdout.contains("alpha_test.yx") && stdout.contains("beta_test.yx"),
+        "应列出全部发现文件:\n{stdout}"
+    );
+    assert!(
+        !stdout.contains("Results:"),
+        "列表模式不应有汇总:\n{stdout}"
+    );
+    assert!(
+        !stdout.contains("PASS"),
+        "列表模式不应有执行结果:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_fail_fast_stops_after_first_failure() {
+    // Arrange - 字典序 a_test 失败在先；RFC-036 §5：--fail-fast 首个失败即停
+    let dir = TempDir::new().expect("tempdir");
+    write_file(dir.path(), "tests/a_test.yx", FAIL_TEST);
+    write_file(dir.path(), "tests/b_test.yx", PASS_TEST);
+    write_file(dir.path(), "tests/c_test.yx", PASS_TEST);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--fail-fast"], dir.path());
+
+    // Assert - 后续文件不执行，汇总只计已执行文件
+    assert_eq!(code, 1, "有失败应退出 1:\n{stdout}");
+    assert!(
+        stdout.contains("a_test.yx"),
+        "应执行并报告首个失败:\n{stdout}"
+    );
+    assert!(
+        !stdout.contains("b_test.yx") && !stdout.contains("c_test.yx"),
+        "首个失败后不应执行后续文件:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Stopped by --fail-fast"),
+        "应提示 fail-fast 提前停止:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Results: 0 files passed, 1 file failed"),
+        "汇总只计已执行文件:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_no_progress_suppresses_pass_lines_but_keeps_failures() {
+    // Arrange - 一通过一失败；RFC-036 §1：--no-progress 抑制进度，失败不可静默
+    let dir = TempDir::new().expect("tempdir");
+    write_file(dir.path(), "tests/ok_test.yx", PASS_TEST);
+    write_file(dir.path(), "tests/broken_test.yx", FAIL_TEST);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--no-progress"], dir.path());
+
+    // Assert - PASS 行被抑制；FAIL 行、诊断与汇总保留
+    assert_eq!(code, 1, "有失败应退出 1:\n{stdout}");
+    assert!(
+        !stdout.contains("ok_test.yx"),
+        "PASS 进度行应被抑制:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("broken_test.yx"),
+        "FAIL 行应保留:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("one is not two"),
+        "失败诊断应保留:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Results: 1 file passed, 1 file failed"),
+        "汇总应保留:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_verbose_shows_test_stdout() {
+    // Arrange - 通过文件带 stdout 输出；RFC-036 §1：--verbose 显示详细输出
+    let dir = TempDir::new().expect("tempdir");
+    write_file(dir.path(), "tests/noisy_test.yx", NOISY_PASS_TEST);
+
+    // Act - 同一文件分别以默认与 --verbose 运行
+    let (code, plain, _) = run_test_cmd(&[], dir.path());
+    let (code_verbose, verbose, _) = run_test_cmd(&["--verbose"], dir.path());
+
+    // Assert - 默认隐藏测试 stdout，--verbose 显示
+    assert_eq!(code, 0, "默认运行应通过:\n{plain}");
+    assert_eq!(code_verbose, 0, "--verbose 运行应通过:\n{verbose}");
+    assert!(
+        !plain.contains("noisy stdout marker"),
+        "默认应隐藏测试 stdout:\n{plain}"
+    );
+    assert!(
+        verbose.contains("noisy stdout marker"),
+        "--verbose 应显示测试 stdout:\n{verbose}"
+    );
+}
+
+#[test]
+fn test_test_command_json_report_shape_on_pass() {
+    // Arrange - 单个通过文件；RFC-036 §1 JSON 输出
+    let dir = TempDir::new().expect("tempdir");
+    write_file(dir.path(), "tests/ok_test.yx", PASS_TEST);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--json"], dir.path());
+
+    // Assert - stdout 是合法 JSON：summary + files，通过文件仅 file/kind/passed/time_secs
+    assert_eq!(code, 0, "全部通过应退出 0:\n{stdout}");
+    let report: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("stdout 应为合法 JSON");
+    assert_eq!(report["summary"]["total"], 1, "total 应为 1:\n{stdout}");
+    assert_eq!(report["summary"]["passed"], 1, "passed 应为 1:\n{stdout}");
+    assert_eq!(report["summary"]["failed"], 0, "failed 应为 0:\n{stdout}");
+    assert_eq!(
+        report["files"][0]["passed"], true,
+        "文件应标记通过:\n{stdout}"
+    );
+    assert_eq!(
+        report["files"][0]["kind"], "behavior",
+        "无 expect 指令的文件类别为 behavior:\n{stdout}"
+    );
+    assert_eq!(
+        report["summary"]["by_kind"]["behavior"], 1,
+        "by_kind 应计数 behavior:\n{stdout}"
+    );
+    assert!(
+        report["files"][0]["file"]
+            .as_str()
+            .unwrap_or("")
+            .contains("ok_test.yx"),
+        "文件名应保留:\n{stdout}"
+    );
+    assert!(
+        report["files"][0].get("exit_code").is_none(),
+        "通过文件不应有 exit_code 字段:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_json_report_includes_failure_detail() {
+    // Arrange - 单个失败文件；RFC-036 §1：失败文件附 exit_code 与 stderr
+    let dir = TempDir::new().expect("tempdir");
+    write_file(dir.path(), "tests/broken_test.yx", FAIL_TEST);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--json"], dir.path());
+
+    // Assert - CI 取证字段在位：exit_code 与断言诊断
+    assert_eq!(code, 1, "有失败应退出 1:\n{stdout}");
+    let report: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("stdout 应为合法 JSON");
+    assert_eq!(report["summary"]["failed"], 1, "failed 应为 1:\n{stdout}");
+    assert_eq!(
+        report["files"][0]["exit_code"], 1,
+        "失败文件应带 exit_code:\n{stdout}"
+    );
+    let stderr = report["files"][0]["stderr"].as_str().unwrap_or("");
+    assert!(
+        stderr.contains("one is not two"),
+        "JSON 应内嵌断言诊断:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_json_empty_discovery_outputs_empty_report() {
+    // Arrange - 边界：空目录的 --json 输出零报告（CI 消费者无需特判）
+    let dir = TempDir::new().expect("tempdir");
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--json"], dir.path());
+
+    // Assert - 合法 JSON、total 0、files 空数组、退出 0
+    assert_eq!(code, 0, "零发现应退出 0:\n{stdout}");
+    let report: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("stdout 应为合法 JSON");
+    assert_eq!(report["summary"]["total"], 0, "total 应为 0:\n{stdout}");
+    assert_eq!(
+        report["files"].as_array().map(Vec::len),
+        Some(0),
+        "files 应为空数组:\n{stdout}"
+    );
+    assert_eq!(
+        report["summary"]["by_kind"]["behavior"], 0,
+        "空报告 by_kind 仍含稳定四键:\n{stdout}"
+    );
+}
+
+/// 编译错误正文（镜像语料 06-compile-errors/array_empty_n_err.yx 的 E1002 形态）
+const COMPILE_ERR_BODY: &str = r#"
+main = {
+    b: Array(Int, 3) = []
+}
+"#;
+
+/// 运行期错误正文（除零，镜像语料 06-compile-errors/div_zero.yx 的 E6001 形态）
+const RUNTIME_ERR_BODY: &str = r#"
+main = {
+    x = 1 / 0
+    print(x)
+}
+"#;
+
+#[test]
+fn test_test_command_expected_error_code_match_passes() {
+    // Arrange - expect compile-error + 结构化预期码，编译器实际报同码（RFC-036 §8.2）
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!("// 临时语料\n// expect: compile-error E1002\n{COMPILE_ERR_BODY}");
+    write_file(dir.path(), "tests/code_match_err.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert - 预期码实际出现，编译期拒绝判定成立
+    assert_eq!(code, 0, "预期码匹配应 PASS:\n{stdout}");
+    assert!(
+        stdout.contains("code_match_err.yx"),
+        "应执行该文件:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Categories: 0 behavior, 1 compile-error, 0 runtime-error"),
+        "汇总类别分布应计 compile-error:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_expected_error_code_mismatch_fails() {
+    // Arrange - 篡改预期码为不会出现的 E9999（#251 gate 验收：能测出 FAIL）
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!("// 临时语料\n// expect: compile-error E9999\n{COMPILE_ERR_BODY}");
+    write_file(dir.path(), "tests/code_mismatch_err.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert - 码不符 = FAIL，报告指明预期与实际出现的码
+    assert_eq!(code, 1, "预期码不符应退出 1:\n{stdout}");
+    assert!(
+        stdout.contains("预期错误码 E9999"),
+        "应指明未出现的预期码:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("实际输出含: E1002"),
+        "应列出实际出现的错误码:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_compile_error_class_that_compiles_fails() {
+    // Arrange - 误分类双向判死之一：声明编译期拒绝，但文件实际编译通过
+    // （RFC-036 §8.2：该报的没报 = FAIL，防负向测试静默失效）
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!("// 临时语料\n// expect: compile-error E1002\n{PASS_TEST}");
+    write_file(dir.path(), "tests/should_reject.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert
+    assert_eq!(code, 1, "该报不报应退出 1:\n{stdout}");
+    assert!(
+        stdout.contains("预期编译失败，但 check 通过"),
+        "应指明编译期拒绝未发生:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_runtime_error_class_passes_two_step() {
+    // Arrange - expect runtime-error：check 必须通过 + run 必须失败带码
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!("// 临时语料\n// expect: runtime-error E6001\n{RUNTIME_ERR_BODY}");
+    write_file(dir.path(), "tests/runtime_err.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert - 两步判定全过
+    assert_eq!(code, 0, "运行期失败类两步全过应 PASS:\n{stdout}");
+    assert!(
+        stdout.contains("Categories: 0 behavior, 0 compile-error, 1 runtime-error"),
+        "汇总类别分布应计 runtime-error:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_runtime_error_class_with_compile_failure_fails() {
+    // Arrange - 误分类双向判死之二：声明运行期失败，但文件在编译期就被拒
+    // （RFC-036 §8.2：语料分类错误必须暴露）
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!("// 临时语料\n// expect: runtime-error E6001\n{COMPILE_ERR_BODY}");
+    write_file(dir.path(), "tests/misclassified.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert
+    assert_eq!(code, 1, "分类错误应退出 1:\n{stdout}");
+    assert!(
+        stdout.contains("预期运行期失败，但编译被拒"),
+        "应指明运行期期望与编译期现实的冲突:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_runtime_error_class_that_runs_clean_fails() {
+    // Arrange - 误分类双向判死之三：声明运行期失败，但程序正常运行
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!("// 临时语料\n// expect: runtime-error E6001\n{PASS_TEST}");
+    write_file(dir.path(), "tests/should_crash.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert
+    assert_eq!(code, 1, "该崩不崩应退出 1:\n{stdout}");
+    assert!(
+        stdout.contains("预期运行期失败，但 run 成功退出"),
+        "应指明运行期失败未发生:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_invalid_expect_directive_fails_without_execution() {
+    // Arrange - 边界（构造期拒绝）：expect 指令缺码 = 语料缺陷，不执行直接 FAIL
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!("// 临时语料\n// expect: compile-error\n{COMPILE_ERR_BODY}");
+    write_file(dir.path(), "tests/bad_directive.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert - 无静默退化通道：解析失败可见地失败
+    assert_eq!(code, 1, "指令解析失败应退出 1:\n{stdout}");
+    assert!(
+        stdout.contains("无效的头部指令"),
+        "应报告指令解析失败:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("requires at least one EXXXX code"),
+        "应指明缺码:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Categories: 0 behavior, 0 compile-error, 0 runtime-error, 1 invalid"),
+        "invalid 应出现在类别分布:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_json_expected_code_mismatch_carries_note() {
+    // Arrange - 与 mismatch 场景相同，走 --json 输出（CI 取证路径）
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!("// 临时语料\n// expect: compile-error E9999\n{COMPILE_ERR_BODY}");
+    write_file(dir.path(), "tests/code_mismatch_err.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--json"], dir.path());
+
+    // Assert - JSON stderr 字段携带码不符说明与实际码
+    assert_eq!(code, 1, "预期码不符应退出 1:\n{stdout}");
+    let report: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("stdout 应为合法 JSON");
+    let stderr = report["files"][0]["stderr"].as_str().unwrap_or("");
+    assert!(
+        stderr.contains("预期错误码 E9999") && stderr.contains("E1002"),
+        "JSON 应携带码不符说明:\n{stdout}"
+    );
+    assert_eq!(
+        report["files"][0]["kind"], "compile-error",
+        "JSON 应携带文件类别:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_skipped_file_skips_and_counts_skipped() {
+    // Arrange - // skip: 文件不执行（RFC-036 §5 执行阶段 + TEST_STANDARDS §2.4）
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!("// 临时语料\n// skip: 追踪 #999 示例原因\n{FAIL_TEST}");
+    write_file(dir.path(), "tests/skipped_test.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert - 不执行不计失败，汇总 skipped 计数
+    assert_eq!(code, 0, "被跳过文件不应导致失败:\n{stdout}");
+    assert!(!stdout.contains("FAIL"), "被跳过文件不应执行:\n{stdout}");
+    assert!(
+        stdout.contains("Results: 0 files passed, 0 files failed, 1 skipped"),
+        "汇总应计入 1 skipped:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_json_summary_counts_skipped() {
+    // Arrange - 同上场景走 --json
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!("// 临时语料\n// skip: 追踪 #999 示例原因\n{FAIL_TEST}");
+    write_file(dir.path(), "tests/skipped_test.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--json"], dir.path());
+
+    // Assert - summary.skipped 为真实计数，files 数组不含被跳过文件
+    assert_eq!(code, 0, "被跳过文件不应导致失败:\n{stdout}");
+    let report: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("stdout 应为合法 JSON");
+    assert_eq!(
+        report["summary"]["skipped"], 1,
+        "summary.skipped 应为 1:\n{stdout}"
+    );
+    assert_eq!(
+        report["files"].as_array().map(Vec::len),
+        Some(0),
+        "被跳过文件不进 files 数组:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_mode_directive_passes_mode_to_subprocess() {
+    // Arrange - // mode: standard 声明子进程运行时模式（TEST_STANDARDS §2.4）
+    let dir = TempDir::new().expect("tempdir");
+    let content = format!("// 临时语料\n// mode: standard\n{PASS_TEST}");
+    write_file(dir.path(), "tests/runtime_std_test.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert - 子进程带 --runtime standard 执行通过
+    assert_eq!(code, 0, "mode 声明文件应通过:\n{stdout}");
+    assert!(stdout.contains("PASS"), "应标记 PASS:\n{stdout}");
+}
+
+#[test]
+fn test_test_command_list_excludes_skipped_files() {
+    // Arrange - 一个活跃文件一个被跳过文件
+    let dir = TempDir::new().expect("tempdir");
+    write_file(dir.path(), "tests/active_test.yx", PASS_TEST);
+    let content = format!("// 临时语料\n// skip: 追踪 #999 示例原因\n{FAIL_TEST}");
+    write_file(dir.path(), "tests/ignored_test.yx", &content);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--list"], dir.path());
+
+    // Assert - 列表只含执行集（被跳过文件不列）
+    assert_eq!(code, 0, "列表应退出 0:\n{stdout}");
+    assert!(
+        stdout.contains("active_test.yx"),
+        "应列出活跃文件:\n{stdout}"
+    );
+    assert!(
+        !stdout.contains("ignored_test.yx"),
+        "被跳过文件不应列出:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_library_tier_explicit_path_runs() {
+    // Arrange - RFC-036 §9 两级模型：库测试不混入默认扫描，经显式路径发现。
+    // 跑真实仓库库层（src/std/tests/），--filter 限定单文件控制耗时
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let tier = repo.join("src").join("std").join("tests");
+    assert!(tier.is_dir(), "库层目录应存在: {}", tier.display());
+
+    // Act - 显式路径 + filter，仅执行 result_ops.yx
+    let tier_path = tier.display().to_string();
+    let (code, stdout, _) = run_test_cmd(&[tier_path.as_str(), "--filter", "result_ops"], &repo);
+
+    // Assert - 显式路径发现库层文件并执行通过
+    assert_eq!(code, 0, "库层显式路径应执行通过:\n{stdout}");
+    assert!(
+        stdout.contains("result_ops.yx") && stdout.contains("PASS"),
+        "应执行库层文件并标记 PASS:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Results: 1 file passed, 0 files failed"),
+        "应只执行过滤后的 1 个文件:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_default_discovery_excludes_library_tier() {
+    // Arrange - RFC-036 §9：默认 patterns（tests/**/*.yx）不覆盖库层
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    // Act - 无显式路径 + 库层文件名过滤：默认发现集里没有 result_ops.yx
+    let (code, stdout, _) = run_test_cmd(&["--filter", "result_ops"], &repo);
+
+    // Assert - 默认扫描不含库层 → 过滤后零发现（若混入则会执行并 PASS）
+    assert_eq!(code, 0, "零发现应退出 0:\n{stdout}");
+    assert!(
+        stdout.contains("No tests found"),
+        "默认发现不应包含库层文件:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_exclude_config_removes_files() {
+    // Arrange - RFC-036 Phase 3：[tool.test].exclude 命中的文件从发现集剔除
+    let dir = TempDir::new().expect("tempdir");
+    write_file(
+        dir.path(),
+        "yaoxiang.toml",
+        "[project]\nname = \"demo\"\n\n[tool.test]\nexclude = [\"tests/fixtures/**\"]\n",
+    );
+    write_file(dir.path(), "tests/ok_test.yx", PASS_TEST);
+    write_file(dir.path(), "tests/fixtures/broken.yx", FAIL_TEST);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert - excluded 意味着不是测试：不执行、不计失败
+    assert_eq!(code, 0, "排除目录中的失败文件不应被执行:\n{stdout}");
+    assert!(
+        stdout.contains("ok_test.yx"),
+        "未排除文件应照常执行:\n{stdout}"
+    );
+    assert!(
+        !stdout.contains("broken.yx"),
+        "被排除文件不应出现:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_exclude_applies_to_list_mode() {
+    // Arrange - 边界：--list 同样剔除 excluded（excluded 意味着不是测试）
+    let dir = TempDir::new().expect("tempdir");
+    write_file(
+        dir.path(),
+        "yaoxiang.toml",
+        "[project]\nname = \"demo\"\n\n[tool.test]\nexclude = [\"tests/fixtures\"]\n",
+    );
+    write_file(dir.path(), "tests/ok_test.yx", PASS_TEST);
+    write_file(dir.path(), "tests/fixtures/fixture.yx", PASS_TEST);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--list"], dir.path());
+
+    // Assert
+    assert_eq!(code, 0, "列表应退出 0:\n{stdout}");
+    assert!(
+        stdout.contains("ok_test.yx") && !stdout.contains("fixture.yx"),
+        "列表应剔除排除目录（目录前缀形态）:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_parallel_runs_all_files() {
+    // Arrange - RFC-036 Phase 3：--parallel 并行执行，全部结果计入
+    let dir = TempDir::new().expect("tempdir");
+    write_file(dir.path(), "tests/a_test.yx", PASS_TEST);
+    write_file(dir.path(), "tests/b_test.yx", PASS_TEST);
+    write_file(dir.path(), "tests/c_test.yx", FAIL_TEST);
+    write_file(dir.path(), "tests/d_test.yx", PASS_TEST);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--parallel"], dir.path());
+
+    // Assert - 四个文件全部执行并计数（完成序可能乱序，汇总确定）
+    assert_eq!(code, 1, "有失败应退出 1:\n{stdout}");
+    for name in ["a_test.yx", "b_test.yx", "c_test.yx", "d_test.yx"] {
+        assert!(stdout.contains(name), "应报告 {name}:\n{stdout}");
+    }
+    assert!(
+        stdout.contains("Results: 3 files passed, 1 file failed"),
+        "并行汇总应计满 4 个执行文件:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_parallel_fail_fast_stops_scheduling() {
+    // Arrange - --fail-fast + --parallel：首个失败后停止调度，在途文件跑完计入
+    let dir = TempDir::new().expect("tempdir");
+    write_file(dir.path(), "tests/a_test.yx", FAIL_TEST);
+    write_file(
+        dir.path(),
+        "tests/b_test.yx",
+        r#"
+use std.assert
+use std.concurrent
+main = {
+    concurrent.sleep(1500)
+    assert.assert(1 + 1 == 2, "math works")
+}
+"#,
+    );
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--parallel", "--fail-fast"], dir.path());
+
+    // Assert - a 失败可见、fail-fast 提示在位；b 在途与否不定（核数相关），
+    // 只断言确定子集
+    assert_eq!(code, 1, "有失败应退出 1:\n{stdout}");
+    assert!(
+        stdout.contains("a_test.yx") && stdout.contains("FAIL"),
+        "首个失败应可见:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Stopped by --fail-fast"),
+        "应提示 fail-fast 提前停止:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_config_parallel_enables_parallel() {
+    // Arrange - [tool.test].parallel = true 与 --parallel flag 取或
+    let dir = TempDir::new().expect("tempdir");
+    write_file(
+        dir.path(),
+        "yaoxiang.toml",
+        "[project]\nname = \"demo\"\n\n[tool.test]\nparallel = true\n",
+    );
+    write_file(dir.path(), "tests/ok_test.yx", PASS_TEST);
+    write_file(dir.path(), "tests/other_test.yx", PASS_TEST);
+
+    // Act - 不带 flag，配置生效
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert
+    assert_eq!(code, 0, "配置 parallel 应正常执行:\n{stdout}");
+    assert!(
+        stdout.contains("Results: 2 files passed, 0 files failed"),
+        "两个文件都应通过:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_suite_all_pass_exits_zero() {
+    // Arrange - RFC-036 §7 套件收集：多测试全 Ok 静默退出 0
+    let dir = TempDir::new().expect("tempdir");
+    write_file(
+        dir.path(),
+        "tests/suite_ok.yx",
+        r#"
+use std.test
+
+ok_one: () -> Result(Void, String) = () => {
+    test.assert_eq(1 + 1, 2)
+}
+
+ok_two: () -> Result(Void, String) = () => {
+    test.assert_true(1 < 2)
+}
+
+main = {
+    test.suite([
+        ("ok_one", () => ok_one()),
+        ("ok_two", () => ok_two()),
+    ])
+}
+"#,
+    );
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert - 套件全 Ok：退出 0，无失败明细
+    assert_eq!(code, 0, "套件全 Ok 应退出 0:\n{stdout}");
+    assert!(
+        !stdout.contains("[FAIL]"),
+        "全 Ok 套件不应有失败明细:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_suite_failure_collects_per_test_detail() {
+    // Arrange - RFC-036 §7：一失败一通过——失败收集后其余测试照常运行
+    let dir = TempDir::new().expect("tempdir");
+    write_file(
+        dir.path(),
+        "tests/suite_fail.yx",
+        r#"
+use std.test
+
+always_fails: () -> Result(Void, String) = () => {
+    test.assert_eq(1, 2)
+}
+
+still_runs: () -> Result(Void, String) = () => {
+    test.assert_true(1 < 2)
+}
+
+main = {
+    test.suite([
+        ("always_fails", () => always_fails()),
+        ("still_runs", () => still_runs()),
+    ])
+}
+"#,
+    );
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert - 退出非 0；失败明细（名字 + 诊断）经 abort 消息透传；
+    // still_runs 在失败测试之后仍被执行（收集语义，不中断）
+    assert_eq!(code, 1, "套件有失败应退出 1:\n{stdout}");
+    assert!(
+        stdout.contains("[FAIL] always_fails: Expected 2, got 1"),
+        "应透传失败测试的名字与诊断:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("1 of 2 test(s) failed"),
+        "汇总应计数失败占比:\n{stdout}"
     );
 }

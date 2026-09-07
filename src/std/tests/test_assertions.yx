@@ -1,0 +1,78 @@
+// src/std/tests/test_assertions.yx
+// 覆盖: RFC-036 §3 std.test 值语义断言族（std.test 模块首次被语料行使）
+// 验证:
+//   - 值语义契约：断言失败以 Err(诊断) 表达不 abort，成功为 Ok(void)
+//   - assert_eq/assert_ne 无标注（Any）实参上 ==/!= 与 f-string 诊断
+//   - assert_true/assert_false/assert_not 布尔反向
+//   - assert_err 判定 Result 为 Err；assert_err_code 按码判定（依赖 #323 M4 Error{code,message}）
+//   - 诊断信息可经 result.unwrap_err 取出检查
+// 状态: ✅ 可运行
+
+use std.assert
+use std.result
+use std.string
+use std.test
+
+main = {
+    // 值语义正向：成功返回 Ok(void)，不中断进程
+    r1 = test.assert_eq(1 + 1, 2)
+    assert.assert(result.is_ok(r1), "assert_eq equal is Ok")
+    r2 = test.assert_ne(1, 2)
+    assert.assert(result.is_ok(r2), "assert_ne unequal is Ok")
+    r3 = test.assert_true(1 < 2)
+    assert.assert(result.is_ok(r3), "assert_true is Ok")
+    r4 = test.assert_false(false)
+    assert.assert(result.is_ok(r4), "assert_false is Ok")
+    r5 = test.assert_not(1 == 2)
+    assert.assert(result.is_ok(r5), "assert_not is Ok")
+
+    // 值语义反向：失败返回 Err(诊断)，进程照常运行
+    f1 = test.assert_eq(1, 2)
+    assert.assert(result.is_err(f1), "assert_eq unequal is Err")
+    m1 = result.unwrap_err(f1)
+    assert.assert(m1 == "Expected 2, got 1", "assert_eq diagnostic text")
+    f2 = test.assert_ne(1, 1)
+    assert.assert(result.is_err(f2), "assert_ne equal is Err")
+    f3 = test.assert_true(1 == 2)
+    assert.assert(result.is_err(f3), "assert_true false cond is Err")
+    f4 = test.assert_false(true)
+    assert.assert(result.is_err(f4), "assert_false true cond is Err")
+    f5 = test.assert_not(1 == 1)
+    assert.assert(result.is_err(f5), "assert_not true cond is Err")
+
+    // Any 实参：字符串与不同类型组合（RFC-036 §3 无标注参数契约）
+    s1 = test.assert_eq("yx", "yx")
+    assert.assert(result.is_ok(s1), "assert_eq strings Ok")
+    s2 = test.assert_eq("yx", "yaoxiang")
+    assert.assert(result.is_err(s2), "assert_eq strings Err")
+
+    // 值级反向（RFC-036 §8.1）：assert_err 对 Result 化操作
+    bad_parse = string.parse_int("oops")
+    e1 = test.assert_err(bad_parse)
+    assert.assert(result.is_ok(e1), "assert_err on Err is Ok")
+    good_parse = string.parse_int("42")
+    e2 = test.assert_err(good_parse)
+    assert.assert(result.is_err(e2), "assert_err on Ok is Err")
+
+    // 错误码断言：assert_err_code 按码判定（E6010 整数解析失败）
+    bad2 = string.parse_int("nope")
+    c1 = test.assert_err_code(bad2, "E6010")
+    assert.assert(result.is_ok(c1), "assert_err_code match is Ok")
+    bad3 = string.parse_int("nope")
+    c2 = test.assert_err_code(bad3, "E9999")
+    assert.assert(result.is_err(c2), "assert_err_code mismatch is Err")
+    m2 = result.unwrap_err(c2)
+    assert.assert(m2 == "Expected code E9999, got E6010", "assert_err_code diagnostic names codes")
+
+    // Float 近似相等（RFC-036 Phase 3）：显式 eps 契约
+    a1 = test.assert_approx_eq(0.1 + 0.2, 0.3, 0.000000001)
+    assert.assert(result.is_ok(a1), "approx_eq within eps is Ok")
+    a2 = test.assert_approx_eq(1.0, 1.0, 0.0)
+    assert.assert(result.is_ok(a2), "approx_eq eps=0 degenerates to exact equality")
+    a3 = test.assert_approx_eq(1.0, 2.0, 0.5)
+    assert.assert(result.is_err(a3), "approx_eq beyond eps is Err")
+    m3 = result.unwrap_err(a3)
+    assert.assert(string.contains(m3, "Expected 2"), "approx_eq diagnostic names expected value")
+    a4 = test.assert_approx_eq(1.0, 2.0, -1.0)
+    assert.assert(result.is_err(a4), "approx_eq negative eps rejected at declaration")
+}

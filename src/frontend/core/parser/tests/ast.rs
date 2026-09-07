@@ -739,7 +739,6 @@ fn test_expr_while() {
             stmts: vec![],
             span: Span::dummy(),
         }),
-        label: None,
         span: Span::dummy(),
     };
     assert!(matches!(expr, Expr::While { .. }));
@@ -755,7 +754,6 @@ fn test_expr_for() {
             stmts: vec![],
             span: Span::dummy(),
         }),
-        label: None,
         span: Span::dummy(),
     };
     if let Expr::For { var, .. } = &expr {

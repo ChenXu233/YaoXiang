@@ -1,0 +1,21 @@
+// 05-ownership/loop_borrow_reuse.yx
+// 覆盖: RFC-009 §2.4 函数参数令牌调用结束即释放——循环内自动 &mut + 循环后取新读令牌
+//   此前被回溯误报 E2018 拒绝（读令牌活性向过去无限延伸，#290 复现 2 家族）
+// 验证: 循环内 good_seq(p) 与循环后 v = &p.y 顺序共存（出生屏障语义）
+// 状态: ✅
+
+Point: Type = { x: Int, y: Int }
+good_seq: (p: &mut Point) -> Void = {
+    p.x = 10
+}
+main = {
+    p = Point(1, 2)
+    mut i = 0
+    while i < 5 {
+        i = i + 1
+        good_seq(p)
+    }
+    v = &p.y
+    print(v)
+    print("loop_borrow_reuse_ok")
+}

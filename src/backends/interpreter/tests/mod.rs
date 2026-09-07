@@ -7,4 +7,5 @@ mod ffi;
 mod ffi_c_integration;
 mod frames;
 mod registers;
+mod variant_guard;
 mod weak;

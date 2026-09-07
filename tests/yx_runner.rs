@@ -1,7 +1,23 @@
 //! E2E Test Runner for YaoXiang (.yx) test files
 //!
-//! Discovers all `*.yx` files under `tests/yaoxiang/`, runs each through the
-//! `yaoxiang run` binary, and verifies the exit code (0 = pass, non-zero = fail).
+//! Discovers all `*.yx` test files across the two tiers (RFC-036 §9) and
+//! executes each against the `yaoxiang` binary with expectation-driven
+//! judgment:
+//!
+//! - 语言可用性语料：`tests/yaoxiang/`（被测对象是语言本身，目录对齐语言规范章节）
+//! - 库测试：`src/std/tests/`（被测对象是 std 的 API 契约，随库走；
+//!   CLI 侧经显式路径 `yaoxiang test src/std/tests` 发现，不混入默认扫描）
+//!
+//! 判定约定与 `yaoxiang test` CLI 共用（RFC-036 §8.2，#319 收口 + 2026-09-06
+//! 指令文法定案）：头部指令经 `yaoxiang::util::test_markers::TestFileSpec`
+//! 解析——
+//! - `// expect: compile-error EXXXX`：单步 `check`，退出码非 0 且全部预期码
+//!   出现 = PASS（run 不执行）
+//! - `// expect: runtime-error EXXXX`：`check` 必须通过 + `run` 必须失败且
+//!   全部预期码出现 = PASS
+//! - 无 expect 指令 = 行为测试：`run` 退出码 0 = PASS
+//! - 指令解析失败 = panic（构造期拒绝）
+//! - `// skip: <原因>` 跳过，`// mode: <模式>` 指定子进程运行时模式
 //!
 //! Directory structure (aligned with `docs/src/reference/language-spec/`):
 //!
@@ -14,6 +30,7 @@
 //! │   └── control-flow/     #   控制流
 //! ├── 02-type-system/       # 类型系统（对应 type-system.md）
 //! ├── 03-modules/           # 模块系统（对应 modules.md）
+//! ├── 03-semantics/         # 语义（return/尾表达式）
 //! ├── 04-concurrency/       # 并发模型（对应 concurrency.md）
 //! ├── 05-ownership/         # 所有权（独立章节）
 //! ├── 06-compile-errors/    # 编译期错误检测
@@ -23,13 +40,16 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Find all `.yx` test files under `tests/yaoxiang/`, excluding `.skip` files.
+use yaoxiang::util::test_markers::{Expectation, TestFileSpec};
+
+/// Find all `.yx` test files across both tiers (RFC-036 §9), sorted.
 fn discover_yx_tests() -> Vec<PathBuf> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("yaoxiang");
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut files = Vec::new();
-    collect_yx_files(&root, &mut files);
+    // 第一层：语言可用性语料
+    collect_yx_files(&manifest.join("tests").join("yaoxiang"), &mut files);
+    // 第二层：库测试（std，随库走；目录与 Rust 单元测试共存，文件类型不相交）
+    collect_yx_files(&manifest.join("src").join("std").join("tests"), &mut files);
     files.sort();
     files
 }
@@ -90,41 +110,36 @@ fn binary_name() -> String {
     path
 }
 
+/// `check` 单文件（编译期判定步）。
+fn spawn_check(
+    binary: &str,
+    file: &Path,
+) -> std::process::Output {
+    Command::new(binary)
+        .arg("check")
+        .arg(file)
+        .output()
+        .unwrap_or_else(|e| panic!("Failed to run {binary} check for {}: {e}", file.display()))
+}
+
+/// `run` 单文件（`// mode:` 透传 `--runtime`）。
+fn spawn_run(
+    binary: &str,
+    file: &Path,
+    mode: Option<&String>,
+) -> std::process::Output {
+    let mut command = Command::new(binary);
+    command.arg("run");
+    if let Some(mode) = mode {
+        command.arg("--runtime").arg(mode);
+    }
+    command.arg(file);
+    command
+        .output()
+        .unwrap_or_else(|e| panic!("Failed to run {binary} for {}: {e}", file.display()))
+}
+
 // Tests
-
-/// Check if a .yx file has a `// [test:ignore]: reason` marker in its first 5 lines.
-/// If so, skip it in the test runner and print the reason.
-fn is_ignored(path: &Path) -> Option<String> {
-    let content = std::fs::read_to_string(path).ok()?;
-    for line in content.lines().take(5) {
-        let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix("// [test:ignore]:") {
-            let reason = rest.trim();
-            return Some(if reason.is_empty() {
-                "no reason given".to_string()
-            } else {
-                reason.to_string()
-            });
-        }
-    }
-    None
-}
-
-/// Check if a .yx file requests a specific runtime mode via
-/// `// [test:runtime]: standard` marker in its first 5 lines.
-fn requested_runtime(path: &Path) -> Option<String> {
-    let content = std::fs::read_to_string(path).ok()?;
-    for line in content.lines().take(5) {
-        let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix("// [test:runtime]:") {
-            let mode = rest.trim();
-            if matches!(mode, "embedded" | "standard" | "full") {
-                return Some(mode.to_string());
-            }
-        }
-    }
-    None
-}
 
 #[test]
 fn test_all_yx_files_pass() {
@@ -140,38 +155,63 @@ fn test_all_yx_files_pass() {
             .display()
             .to_string();
 
-        // Skip files with [test:ignore] annotation
-        if let Some(reason) = is_ignored(file) {
+        // 头部指令经 TestFileSpec 统一解析（与 yaoxiang test CLI 同一实现）
+        let spec = TestFileSpec::parse(file);
+
+        // // skip: 文件跳过执行
+        if let Some(reason) = &spec.skip_reason {
             eprintln!("  [SKIP] {relative}: {reason}");
             continue;
         }
-
-        let mut cmd = Command::new(&binary);
-        cmd.arg("run");
-        if let Some(mode) = requested_runtime(file) {
-            cmd.arg("--runtime").arg(mode);
+        // 指令解析失败 = 语料缺陷，构造期拒绝（RFC-036 §8.2）
+        if let Some(reason) = &spec.invalid {
+            panic!("Invalid header directive: {relative}: {reason}");
         }
-        cmd.arg(file);
-        let output = cmd
-            .output()
-            .unwrap_or_else(|e| panic!("Failed to run {binary} for {relative}: {e}"));
 
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        let code = output.status.code().unwrap_or(-1);
-
-        let is_error_test = relative.contains("06-compile-errors");
-
-        if is_error_test {
-            assert!(
-                code != 0,
-                "Error test should fail: {relative}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
-            );
-        } else {
-            assert!(
-                code == 0,
-                "Test failed: {relative} (exit: {code})\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
-            );
+        match &spec.expectation {
+            Expectation::Behavior => {
+                let output = spawn_run(&binary, file, spec.mode.as_ref());
+                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                let code = output.status.code().unwrap_or(-1);
+                assert!(
+                    code == 0,
+                    "Test failed: {relative} (exit: {code})\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+                );
+            }
+            Expectation::CompileError(_) => {
+                let output = spawn_check(&binary, file);
+                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                let code = output.status.code().unwrap_or(-1);
+                assert!(
+                    code != 0,
+                    "Expected compile error, but check passed: {relative}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+                );
+                if let Err(note) = spec.check_expected_codes(&stderr) {
+                    panic!("预期错误码比对失败: {relative}\n{note}\nSTDERR:\n{stderr}");
+                }
+            }
+            Expectation::RuntimeError(_) => {
+                // 编译必须先通过——check 失败说明语料分类错了（编译期就该报）
+                let check = spawn_check(&binary, file);
+                let check_stderr = String::from_utf8_lossy(&check.stderr).to_string();
+                assert!(
+                    check.status.code().unwrap_or(-1) == 0,
+                    "Expected runtime error, but compilation rejected the file: {relative}\nSTDERR:\n{check_stderr}"
+                );
+                let output = spawn_run(&binary, file, spec.mode.as_ref());
+                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                let code = output.status.code().unwrap_or(-1);
+                assert!(
+                    code != 0,
+                    "Expected runtime error, but run exited successfully: {relative}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+                );
+                if let Err(note) = spec.check_expected_codes(&stderr) {
+                    panic!("预期错误码比对失败: {relative}\n{note}\nSTDERR:\n{stderr}");
+                }
+            }
         }
     }
 }

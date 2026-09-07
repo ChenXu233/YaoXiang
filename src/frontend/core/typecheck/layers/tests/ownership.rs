@@ -13,8 +13,9 @@
 
 use crate::frontend::core::typecheck::layers::ownership::{
     BrandId, BrandTree, ControlFlowGraph, EdgeKind, FastPathResult, emit_move_predicate,
-    emit_drop_predicate, emit_double_drop_predicate, emit_mut_predicate, fast_path_check,
+    emit_drop_predicate, emit_double_drop_predicate, emit_mut_predicate, fast_path_check, smt_cut,
 };
+use crate::frontend::core::types::const_data::{BinOp as CEBinOp, ConstExpr as CE, ConstValue};
 use crate::frontend::core::typecheck::proof::verdict::{DisproofKind, ProofResult};
 use crate::util::span::Span;
 
@@ -60,41 +61,41 @@ fn test_root_id_extraction() {
 #[test]
 fn test_read_vs_read_no_conflict() {
     let mut tree = BrandTree::new();
-    let r1 = tree.create_read_token("x".into());
-    let r2 = tree.create_read_token("x".into());
+    let r1 = tree.create_read_token("x".into(), 0, false);
+    let r2 = tree.create_read_token("x".into(), 0, false);
     assert!(!tree.conflicts(&r1, &r2), "两个 ReadToken 不应冲突");
 }
 
 #[test]
 fn test_read_vs_write_conflict() {
     let mut tree = BrandTree::new();
-    let r = tree.create_read_token("x".into());
-    let w = tree.create_write_token("x".into());
+    let r = tree.create_read_token("x".into(), 0, false);
+    let w = tree.create_write_token("x".into(), 0, false);
     assert!(tree.conflicts(&r, &w), "ReadToken 和 WriteToken 同源应冲突");
 }
 
 #[test]
 fn test_write_vs_write_conflict() {
     let mut tree = BrandTree::new();
-    let w1 = tree.create_write_token("x".into());
-    let w2 = tree.create_write_token("x".into());
+    let w1 = tree.create_write_token("x".into(), 0, false);
+    let w2 = tree.create_write_token("x".into(), 0, false);
     assert!(tree.conflicts(&w1, &w2), "两个 WriteToken 同源应冲突");
 }
 
 #[test]
 fn test_different_source_no_conflict() {
     let mut tree = BrandTree::new();
-    let r = tree.create_read_token("x".into());
-    let w = tree.create_write_token("y".into());
+    let r = tree.create_read_token("x".into(), 0, false);
+    let w = tree.create_write_token("y".into(), 0, false);
     assert!(!tree.conflicts(&r, &w), "不同 source_var 的令牌不应冲突");
 }
 
 #[test]
 fn test_derived_read_vs_write_root_conflict() {
     let mut tree = BrandTree::new();
-    let r = tree.create_read_token("x".into());
-    let r_field = tree.derive_field(&r, "field").unwrap();
-    let w = tree.create_write_token("x".into());
+    let r = tree.create_read_token("x".into(), 0, false);
+    let r_field = tree.derive_field(&r, "field", 0).unwrap();
+    let w = tree.create_write_token("x".into(), 0, false);
     // 同源 + 有写 = 冲突，与派生关系无关
     assert!(
         tree.conflicts(&r_field, &w),
@@ -105,9 +106,9 @@ fn test_derived_read_vs_write_root_conflict() {
 #[test]
 fn test_derived_read_vs_derived_read_no_conflict() {
     let mut tree = BrandTree::new();
-    let r = tree.create_read_token("x".into());
-    let rx = tree.derive_field(&r, "a").unwrap();
-    let ry = tree.derive_field(&r, "b").unwrap();
+    let r = tree.create_read_token("x".into(), 0, false);
+    let rx = tree.derive_field(&r, "a", 0).unwrap();
+    let ry = tree.derive_field(&r, "b", 0).unwrap();
     // 同源但都读 → 不冲突
     assert!(
         !tree.conflicts(&rx, &ry),
@@ -120,8 +121,8 @@ fn test_derived_read_vs_derived_read_no_conflict() {
 #[test]
 fn test_remove_cascades_to_children() {
     let mut tree = BrandTree::new();
-    let r = tree.create_read_token("x".into());
-    let r_field = tree.derive_field(&r, "field").unwrap();
+    let r = tree.create_read_token("x".into(), 0, false);
+    let r_field = tree.derive_field(&r, "field", 0).unwrap();
     assert!(tree.get(&r_field).is_some(), "remove 前 r_field 应存在");
 
     tree.remove(&r);
@@ -135,8 +136,8 @@ fn test_remove_cascades_to_children() {
 #[test]
 fn test_remove_cleans_up_parent_children_set() {
     let mut tree = BrandTree::new();
-    let r = tree.create_read_token("x".into());
-    let child = tree.derive_field(&r, "field").unwrap();
+    let r = tree.create_read_token("x".into(), 0, false);
+    let child = tree.derive_field(&r, "field", 0).unwrap();
     assert!(
         tree.get(&r).unwrap().children.contains(&child),
         "child 应在 r 的 children 中"
@@ -154,7 +155,7 @@ fn test_remove_cleans_up_parent_children_set() {
 #[test]
 fn test_consumer_tracking() {
     let mut tree = BrandTree::new();
-    let r = tree.create_read_token("x".into());
+    let r = tree.create_read_token("x".into(), 0, false);
     tree.add_consumer(&r, 3);
     tree.add_consumer(&r, 5);
 
@@ -178,9 +179,9 @@ fn test_consumer_unknown_token_returns_empty() {
 #[test]
 fn test_conflicting_with_returns_all_conflicts() {
     let mut tree = BrandTree::new();
-    let r = tree.create_read_token("x".into());
-    let _w1 = tree.create_write_token("x".into());
-    let _w2 = tree.create_write_token("x".into());
+    let r = tree.create_read_token("x".into(), 0, false);
+    let _w1 = tree.create_write_token("x".into(), 0, false);
+    let _w2 = tree.create_write_token("x".into(), 0, false);
 
     let conflicts = tree.conflicting_with(&r);
     assert_eq!(conflicts.len(), 2);
@@ -192,7 +193,7 @@ fn test_conflicting_with_returns_all_conflicts() {
 fn test_linear_code_read_then_write_no_conflict() {
     // Arrange: data = vec![...]; view = &data; x = view.total_count; data.push(4)
     let mut tree = BrandTree::new();
-    let read = tree.create_read_token("data".into());
+    let read = tree.create_read_token("data".into(), 0, false);
     tree.add_consumer(&read, 2);
 
     let mut cfg = ControlFlowGraph::new();
@@ -204,7 +205,7 @@ fn test_linear_code_read_then_write_no_conflict() {
     cfg.add_edge(2, 3, EdgeKind::Normal);
 
     // Act
-    let write = tree.create_write_token("data".into());
+    let write = tree.create_write_token("data".into(), 0, false);
     let result = fast_path_check(&tree, &cfg, &write, 3);
 
     // Assert: view 已在节点 2 被消费 → 写安全
@@ -218,7 +219,7 @@ fn test_linear_code_read_then_write_no_conflict() {
 fn test_read_and_write_conflict_when_consumer_not_executed() {
     // Arrange: 读令牌有消费者在节点 3，写操作在节点 2（消费者之前）
     let mut tree = BrandTree::new();
-    let read = tree.create_read_token("data".into());
+    let read = tree.create_read_token("data".into(), 0, false);
     tree.add_consumer(&read, 3);
 
     let mut cfg = ControlFlowGraph::new();
@@ -231,7 +232,7 @@ fn test_read_and_write_conflict_when_consumer_not_executed() {
     cfg.add_edge(3, 4, EdgeKind::Normal);
 
     // Act
-    let write = tree.create_write_token("data".into());
+    let write = tree.create_write_token("data".into(), 0, false);
     let result = fast_path_check(&tree, &cfg, &write, 2);
 
     // Assert: 从消费者(节点3)反向 BFS 可达节点 2
@@ -245,7 +246,7 @@ fn test_read_and_write_conflict_when_consumer_not_executed() {
 fn test_loop_with_break_cuts_back_edge() {
     // Arrange: loop { use(view); if is_last { push; break } }
     let mut tree = BrandTree::new();
-    let read = tree.create_read_token("data".into());
+    let read = tree.create_read_token("data".into(), 0, false);
     tree.add_consumer(&read, 2);
 
     let mut cfg = ControlFlowGraph::new();
@@ -260,7 +261,7 @@ fn test_loop_with_break_cuts_back_edge() {
     cfg.add_edge(3, 1, EdgeKind::BackEdge);
 
     // Act
-    let write = tree.create_write_token("data".into());
+    let write = tree.create_write_token("data".into(), 0, false);
     let result = fast_path_check(&tree, &cfg, &write, 4);
 
     // Assert: break 切断 → Safe
@@ -272,27 +273,122 @@ fn test_loop_with_break_cuts_back_edge() {
 
 #[test]
 fn test_loop_without_break_is_unsafe() {
-    // Arrange: loop { use(view); push } — 无 break
+    // Arrange: view = &data; loop { use(view); push } — 无 break。
+    // 读令牌出生于循环**前**（节点 0），跨迭代存活：环内写(节点 2)经回边
+    // 可达下一迭代的 use(节点 1) → 真实冲突。
+    //（#290 F1：出生屏障只切"出生之前"，回边环绕的跨迭代冲突必须保留）
     let mut tree = BrandTree::new();
-    let read = tree.create_read_token("data".into());
-    tree.add_consumer(&read, 0);
+    let read = tree.create_read_token("data".into(), 0, false);
+    tree.add_consumer(&read, 1);
 
     let mut cfg = ControlFlowGraph::new();
-    for _ in 0..3 {
+    for _ in 0..4 {
         cfg.add_node(None);
     }
     cfg.add_edge(0, 1, EdgeKind::Normal);
     cfg.add_edge(1, 2, EdgeKind::Normal);
-    cfg.add_edge(2, 0, EdgeKind::BackEdge);
+    cfg.add_edge(2, 1, EdgeKind::BackEdge);
+    cfg.add_edge(2, 3, EdgeKind::Normal);
 
     // Act
-    let write = tree.create_write_token("data".into());
-    let result = fast_path_check(&tree, &cfg, &write, 1);
+    let write = tree.create_write_token("data".into(), 2, false);
+    let result = fast_path_check(&tree, &cfg, &write, 2);
 
-    // Assert: 回边穿越 → write_node 在 unsafe
+    // Assert: 从 use(节点 1) 反向经回边前驱可达写节点 2 → Unsafe
     assert!(
         matches!(result, FastPathResult::Unsafe { .. }),
-        "无 break 时回边可达，应返回 Unsafe"
+        "跨迭代存活的读令牌与环内写冲突，应返回 Unsafe"
+    );
+}
+
+// ── 出生屏障（#290 F1：活性区间 [created_at, last_use] 的 created_at 端点） ──
+
+#[test]
+fn test_read_born_after_write_is_not_backtracked() {
+    // Arrange: R2 形态——节点 1 写（&mut 令牌出生并消费），节点 3 才取读令牌。
+    // 此前无出生屏障：反向 BFS 从读消费者(3)能走回节点 1 → E2018 回溯误报。
+    let mut tree = BrandTree::new();
+    let write = tree.create_write_token("p".into(), 1, false);
+    tree.add_consumer(&write, 1);
+    let read = tree.create_read_token("p".into(), 3, false);
+    tree.add_consumer(&read, 3);
+    tree.add_consumer(&read, 4);
+
+    let mut cfg = ControlFlowGraph::new();
+    for _ in 0..5 {
+        cfg.add_node(None);
+    }
+    for i in 0..4 {
+        cfg.add_edge(i, i + 1, EdgeKind::Normal);
+    }
+
+    // Act
+    let result = fast_path_check(&tree, &cfg, &write, 1);
+
+    // Assert: 读令牌出生于节点 3，节点 1 处尚不存在 → Safe
+    assert!(
+        matches!(result, FastPathResult::Safe),
+        "读令牌出生晚于写点，反向 BFS 不得穿越出生屏障，应返回 Safe"
+    );
+}
+
+#[test]
+fn test_read_alive_at_write_still_conflicts_despite_barrier() {
+    // Arrange: 读令牌出生(1)后仍活跃，写发生在节点 2（读的 last_use=3 之前）。
+    // 屏障不得把真实冲突也切掉——出生节点本身仍被标记。
+    let mut tree = BrandTree::new();
+    let read = tree.create_read_token("p".into(), 1, false);
+    tree.add_consumer(&read, 1);
+    tree.add_consumer(&read, 3);
+    let write = tree.create_write_token("p".into(), 2, false);
+    tree.add_consumer(&write, 2);
+
+    let mut cfg = ControlFlowGraph::new();
+    for _ in 0..5 {
+        cfg.add_node(None);
+    }
+    for i in 0..4 {
+        cfg.add_edge(i, i + 1, EdgeKind::Normal);
+    }
+
+    // Act
+    let result = fast_path_check(&tree, &cfg, &write, 2);
+
+    // Assert: 从消费者(3)反向可达节点 2，读令牌在写点活跃 → Unsafe
+    assert!(
+        matches!(result, FastPathResult::Unsafe { .. }),
+        "读令牌活跃期覆盖写点，应返回 Unsafe"
+    );
+}
+
+#[test]
+fn test_in_loop_read_write_conflict_survives_birth_barrier() {
+    // Arrange: 环内读(出生 2、消费 3)与环内写(节点 3)。屏障不得借回边绕过
+    // 语义漏判环内真实冲突——保守方向必须保留。
+    let mut tree = BrandTree::new();
+    let read = tree.create_read_token("p".into(), 2, false);
+    tree.add_consumer(&read, 2);
+    tree.add_consumer(&read, 3);
+    let write = tree.create_write_token("p".into(), 3, false);
+    tree.add_consumer(&write, 3);
+
+    let mut cfg = ControlFlowGraph::new();
+    for _ in 0..5 {
+        cfg.add_node(None);
+    }
+    cfg.add_edge(0, 1, EdgeKind::Normal);
+    cfg.add_edge(1, 2, EdgeKind::Normal);
+    cfg.add_edge(2, 3, EdgeKind::Normal);
+    cfg.add_edge(3, 4, EdgeKind::Normal);
+    cfg.add_edge(3, 1, EdgeKind::BackEdge);
+
+    // Act
+    let result = fast_path_check(&tree, &cfg, &write, 3);
+
+    // Assert: 写节点 3 是读令牌消费者 → Unsafe（与屏障无关，同节点冲突）
+    assert!(
+        matches!(result, FastPathResult::Unsafe { .. }),
+        "环内读活跃覆盖写点，应返回 Unsafe"
     );
 }
 
@@ -600,6 +696,7 @@ fn test_e2e_borrow_conflict_detected() {
                     span: Span::default(),
                 },
             ),
+            make_expr_stmt(make_call("print", vec![make_var("y")])),
         ],
     )]);
 
@@ -619,6 +716,55 @@ fn test_e2e_borrow_conflict_detected() {
     assert!(
         !borrow_errors.is_empty(),
         "应该检测到 &x 和 &mut x 的借用冲突，但结果为空"
+    );
+}
+
+#[test]
+fn test_e2e_unused_read_then_write_no_conflict() {
+    // Arrange: { mut x = 42; a = &x; b = &mut x } —— a 创建后从未使用。
+    // #290 F2 语义（D5，RFC-009a 区间 [created_at, last_use]）：last_use 停在
+    // 创建点，令牌已死 → NLL 语义不冲突。此前靠借用点自我播种误判为冲突。
+    let module = make_module(vec![make_binding(
+        "main",
+        vec![],
+        vec![
+            make_mut_var_stmt("x", make_lit(42)),
+            make_var_stmt(
+                "a",
+                Expr::Borrow {
+                    mutable: false,
+                    expr: Box::new(make_var("x")),
+                    span: Span::default(),
+                },
+            ),
+            make_var_stmt(
+                "b",
+                Expr::Borrow {
+                    mutable: true,
+                    expr: Box::new(make_var("x")),
+                    span: Span::default(),
+                },
+            ),
+        ],
+    )]);
+
+    // Act
+    let mut checker = OwnershipChecker::new();
+    let (results, _plan, _escaped) =
+        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+
+    // Assert
+    let borrow_errors: Vec<_> = results
+        .iter()
+        .filter(|r| {
+            matches!(r, ProofResult::Disproved(model)
+                if matches!(model.kind, DisproofKind::BorrowConflict))
+        })
+        .collect();
+    assert!(
+        borrow_errors.is_empty(),
+        "未使用的读令牌已死亡（区间语义），&mut 不应报冲突，得: {:?}",
+        results
     );
 }
 
@@ -1113,7 +1259,6 @@ fn test_e2e_borrow_in_while_body() {
                         span: Span::default(),
                     }),
                 ])),
-                label: None,
                 span: Span::default(),
             }),
         ],
@@ -1300,8 +1445,9 @@ fn test_e2e_three_read_borrows_no_conflict() {
 
 #[test]
 fn test_e2e_read_then_write_conflict() {
-    // Arrange: { mut x = 42; a = &x; b = &mut x }
-    // ReadToken 之后 WriteToken → 冲突
+    // Arrange: { mut x = 42; a = &x; b = &mut x; print(a) }
+    // #290 F2 语义（D5）：读令牌 a 在 &mut 之后仍被使用 → 活跃期覆盖写点 → 冲突。
+    //（a 若在 &mut 前已用完或从未使用 → NLL 语义不冲突，见下条测试）
     let module = make_module(vec![make_binding(
         "main",
         vec![],
@@ -1323,6 +1469,7 @@ fn test_e2e_read_then_write_conflict() {
                     span: Span::default(),
                 },
             ),
+            make_expr_stmt(make_call("print", vec![make_var("a")])),
         ],
     )]);
 
@@ -2156,7 +2303,6 @@ fn test_while_guard_scope_balanced() {
             make_expr_stmt(Expr::While {
                 condition: Box::new(cond),
                 body: Box::new(make_block(vec![])),
-                label: None,
                 span: Span::default(),
             }),
         ],
@@ -2341,7 +2487,6 @@ fn test_e2e_move_in_loop_body_persists() {
             make_expr_stmt(Expr::While {
                 condition: Box::new(make_var("cond")),
                 body: Box::new(make_block(vec![make_var_stmt("q", make_var("p"))])),
-                label: None,
                 span: Span::default(),
             }),
             make_expr_stmt(make_field_access("p", "y")),
@@ -2405,5 +2550,69 @@ fn test_e2e_branch_local_var_dropped_at_merge() {
         !drop_errors.is_empty(),
         "分支内声明变量汇合后使用应报 UseAfterDrop，得: {:?}",
         results
+    );
+}
+
+// ── #312: smt_cut 真实路径条件查询 ─────────────────────
+// RFC-009a §慢速通道 + 勘误（2026-08-17）：SMT 是精度层非 soundness 依赖。
+// 查询 `写节点路径条件 ⇒ !loop_cond`：Unsat = 蕴含成立 = 切断；否则穿越（保守拒绝）。
+// 此前用 NamedVar 占位符 + 假设其为真 → 恒 Unsat → 恒切断 → 循环内借用写静默放行。
+
+/// 构造 `name < n` 比较谓词
+fn lt_const(
+    name: &str,
+    n: i128,
+) -> CE {
+    CE::BinOp {
+        op: CEBinOp::Lt,
+        left: Box::new(CE::NamedVar(name.to_string())),
+        right: Box::new(CE::Lit(ConstValue::Int(n))),
+    }
+}
+
+/// 构造 `name == n` 等值谓词
+fn eq_const(
+    name: &str,
+    n: i128,
+) -> CE {
+    CE::BinOp {
+        op: CEBinOp::Eq,
+        left: Box::new(CE::NamedVar(name.to_string())),
+        right: Box::new(CE::Lit(ConstValue::Int(n))),
+    }
+}
+
+/// RFC-009a §while：SMT 逻辑切断用例——写节点守卫 `i == 3` 与循环条件 `i < 3`
+/// 不相容 → 蕴含成立 → Unsat → 逻辑切断
+#[test]
+fn test_smt_cut_guarded_write_proves_loop_exit() {
+    // Arrange
+    let path_cond = eq_const("i", 3);
+    let loop_cond = lt_const("i", 3);
+
+    // Act
+    let cut = smt_cut(&path_cond, &loop_cond);
+
+    // Assert
+    assert!(
+        cut,
+        "i == 3 蕴含 !(i < 3)，回边应被逻辑切断（RFC-009a while 用例）"
+    );
+}
+
+/// 无守卫写：path 与 loop 相容（i < 3 可同时成立）→ Sat → 不切断（回边穿越，保守拒绝）
+#[test]
+fn test_smt_cut_unguarded_write_traverses_back_edge() {
+    // Arrange
+    let path_cond = lt_const("i", 3);
+    let loop_cond = lt_const("i", 3);
+
+    // Act
+    let cut = smt_cut(&path_cond, &loop_cond);
+
+    // Assert
+    assert!(
+        !cut,
+        "path 与 loop 相容时应穿越回边（保守拒绝，sound 方向）"
     );
 }

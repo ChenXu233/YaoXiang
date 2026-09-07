@@ -5,7 +5,38 @@
 use crate::util::span::Span;
 use crate::util::diagnostic::{Diagnostic, Severity};
 use crate::util::i18n::error_lang;
+use std::cell::RefCell;
 use std::collections::HashMap;
+
+thread_local! {
+    /// 当前类型检查 walk 正在访问的节点 span（#324）
+    static CURRENT_SPAN: RefCell<Option<Span>> = const { RefCell::new(None) };
+}
+
+/// walk 入口挂当前节点 span；返回的 guard Drop 时恢复前值（嵌套安全、早退安全）。
+///
+/// builder 构造诊断时的 span 解析优先级：显式 `.at()` > 此处上下文自动填 >
+/// 都没有则按 `requires_span` 处理（debug panic / release 降级 E8001）。
+pub fn push_current_span(span: Span) -> SpanGuard {
+    let prev = CURRENT_SPAN.with(|cell| cell.replace(Some(span)));
+    SpanGuard { prev }
+}
+
+/// 取当前 walk 上下文 span（不在 walk 内时为 None）
+pub fn current_span() -> Option<Span> {
+    CURRENT_SPAN.with(|cell| *cell.borrow())
+}
+
+/// [`push_current_span`] 的作用域句柄
+pub struct SpanGuard {
+    prev: Option<Span>,
+}
+
+impl Drop for SpanGuard {
+    fn drop(&mut self) {
+        CURRENT_SPAN.with(|cell| *cell.borrow_mut() = self.prev);
+    }
+}
 
 /// 诊断构建器（支持模板参数）
 #[derive(Debug, Clone)]
@@ -113,19 +144,43 @@ impl DiagnosticBuilder {
         };
         let help = i18n.render_help(self.code, &self.params);
 
-        // 根据 severity 创建诊断
-        let mut diagnostic = match self.severity {
+        // #324：span 强制——显式 .at() > walk 上下文自动填 > 都没有则按模式处理
+        // （debug panic 拒绝构造；release 降级 E8001，与上方参数校验同策略）
+        let span = match self.effective_span() {
+            Ok(span) => span,
+            Err(violation) => {
+                if cfg!(debug_assertions) {
+                    panic!("{}", violation);
+                }
+                let mut diagnostic = Diagnostic::error(
+                    "E8001".to_string(),
+                    violation,
+                    "请在调用点补 .at(span)，或在类型检查 walk 上下文内构造".to_string(),
+                    None,
+                );
+                if !self.related.is_empty() {
+                    diagnostic = diagnostic.with_related(self.related.clone());
+                }
+                return diagnostic;
+            }
+        };
+
+        // 根据 severity 创建诊断（W 前缀警告码缺省 Warning，#321 M2）
+        let effective_severity = self.severity.or_else(|| {
+            if self.code.starts_with('W') {
+                Some(Severity::Warning)
+            } else {
+                None
+            }
+        });
+        let mut diagnostic = match effective_severity {
             Some(Severity::Warning) => {
-                Diagnostic::warning(self.code.to_string(), message, help, self.span)
+                Diagnostic::warning(self.code.to_string(), message, help, span)
             }
-            Some(Severity::Info) => {
-                Diagnostic::info(self.code.to_string(), message, help, self.span)
-            }
-            Some(Severity::Hint) => {
-                Diagnostic::hint(self.code.to_string(), message, help, self.span)
-            }
-            None | Some(Severity::Error) => {
-                Diagnostic::error(self.code.to_string(), message, help, self.span)
+            Some(Severity::Info) => Diagnostic::info(self.code.to_string(), message, help, span),
+            Some(Severity::Hint) => Diagnostic::hint(self.code.to_string(), message, help, span),
+            Some(Severity::Error) | None => {
+                Diagnostic::error(self.code.to_string(), message, help, span)
             }
         };
 
@@ -134,6 +189,24 @@ impl DiagnosticBuilder {
         }
 
         diagnostic
+    }
+
+    /// #324：span 解析——显式 `.at()` > walk 上下文自动填 > 都没有且要求 span 时 Err
+    fn effective_span(&self) -> Result<Option<Span>, String> {
+        if let Some(span) = self.span {
+            return Ok(Some(span));
+        }
+        if let Some(span) = current_span() {
+            return Ok(Some(span));
+        }
+        if super::code_requires_span(self.code) {
+            Err(format!(
+                "诊断 {} 缺少 span：调用点未 .at(span) 且不在类型检查 walk 上下文中（编译器 bug，见 #324）",
+                self.code
+            ))
+        } else {
+            Ok(None)
+        }
     }
 
     /// 查找模板中缺失的参数
@@ -253,7 +326,29 @@ fn build_registry(lang: &str) -> I18nRegistry {
     }
 }
 
+/// 沿回退链查找第一个命中的注册表（#325：bot 异步补齐窗口期输出仍可读）
+fn chain_lookup<'a, T>(
+    chain: &[&'a I18nRegistry],
+    f: impl Fn(&'a I18nRegistry) -> Option<T>,
+) -> Option<T> {
+    chain.iter().find_map(|r| f(r))
+}
+
 impl I18nRegistry {
+    /// key 级回退链：请求语言 → en → zh（zh 为构建期门槛保证齐全的人工源）
+    fn fallbacks(&self) -> Vec<&Self> {
+        let en = Self::new("en");
+        let zh = Self::new("zh");
+        let mut chain = vec![self];
+        if !std::ptr::eq(self, en) {
+            chain.push(en);
+        }
+        if !std::ptr::eq(self, zh) && !std::ptr::eq(en, zh) {
+            chain.push(zh);
+        }
+        chain
+    }
+
     /// 根据语言代码获取注册表（从统一 locale 加载器读取，与 MSG 翻译同源）
     pub fn new(lang: &str) -> &'static Self {
         use std::sync::LazyLock;
@@ -280,11 +375,14 @@ impl I18nRegistry {
         &self,
         code: &str,
     ) -> Option<ErrorInfo<'_>> {
-        Some(ErrorInfo {
-            title: self.titles.get(code)?,
-            help: self.helps.get(code).copied().unwrap_or(""),
-            example: self.examples.get(code).copied(),
-            error_output: self.error_outputs.get(code).copied(),
+        chain_lookup(&self.fallbacks(), |r| {
+            let title = r.titles.get(code)?;
+            Some(ErrorInfo {
+                title,
+                help: r.helps.get(code).copied().unwrap_or(""),
+                example: r.examples.get(code).copied(),
+                error_output: r.error_outputs.get(code).copied(),
+            })
         })
     }
 
@@ -293,7 +391,7 @@ impl I18nRegistry {
         &self,
         code: &str,
     ) -> Option<&'static str> {
-        self.templates.get(code).copied()
+        chain_lookup(&self.fallbacks(), |r| r.templates.get(code).copied())
     }
 
     /// 获取标题
@@ -301,8 +399,7 @@ impl I18nRegistry {
         &self,
         code: &str,
     ) -> String {
-        self.titles
-            .get(code)
+        chain_lookup(&self.fallbacks(), |r| r.titles.get(code).copied())
             .map(|s| s.to_string())
             .unwrap_or_else(|| code.to_string())
     }
@@ -312,8 +409,7 @@ impl I18nRegistry {
         &self,
         code: &str,
     ) -> String {
-        self.helps
-            .get(code)
+        chain_lookup(&self.fallbacks(), |r| r.helps.get(code).copied())
             .map(|s| s.to_string())
             .unwrap_or_default()
     }
@@ -323,7 +419,7 @@ impl I18nRegistry {
         &self,
         code: &str,
     ) -> Option<String> {
-        self.examples.get(code).map(|s| s.to_string())
+        chain_lookup(&self.fallbacks(), |r| r.examples.get(code).copied()).map(|s| s.to_string())
     }
 
     /// 获取错误输出示例
@@ -331,7 +427,8 @@ impl I18nRegistry {
         &self,
         code: &str,
     ) -> Option<String> {
-        self.error_outputs.get(code).map(|s| s.to_string())
+        chain_lookup(&self.fallbacks(), |r| r.error_outputs.get(code).copied())
+            .map(|s| s.to_string())
     }
 
     /// 获取禅意消息（用于 E1090 彩蛋）
@@ -384,10 +481,143 @@ impl I18nRegistry {
         code: &str,
         params: &[(&'static str, String)],
     ) -> String {
-        if let Some(help) = self.helps.get(code) {
+        if let Some(help) = chain_lookup(&self.fallbacks(), |r| r.helps.get(code).copied()) {
             self.render(help, params)
         } else {
             String::new()
         }
+    }
+}
+
+#[cfg(test)]
+mod fallback_tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    /// 构造仅含指定 (code, template) 条目的注册表（title 取 code 自身便于断言）
+    fn registry_with(entries: &[(&'static str, &'static str)]) -> I18nRegistry {
+        let mut templates = HashMap::new();
+        let mut titles = HashMap::new();
+        for (code, tpl) in entries {
+            templates.insert(*code, *tpl);
+            titles.insert(*code, *code);
+        }
+        I18nRegistry {
+            templates,
+            titles,
+            helps: HashMap::new(),
+            examples: HashMap::new(),
+            error_outputs: HashMap::new(),
+            zen_messages: HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn test_chain_lookup_falls_back_to_next_registry() {
+        let en = registry_with(&[("E9000", "en E9000")]);
+        let zh = registry_with(&[("E9000", "zh E9000"), ("E9001", "zh E9001")]);
+        let chain = [&en, &zh];
+
+        // 命中链首：不回退
+        assert_eq!(
+            chain_lookup(&chain, |r| r.templates.get("E9000").copied()),
+            Some("en E9000")
+        );
+        // 链首缺失：回退到下一级
+        assert_eq!(
+            chain_lookup(&chain, |r| r.templates.get("E9001").copied()),
+            Some("zh E9001")
+        );
+        // 全链缺失：None（上层决定缺省值）
+        assert_eq!(
+            chain_lookup(&chain, |r| r.templates.get("E9999").copied()),
+            None
+        );
+    }
+
+    #[test]
+    fn test_fallbacks_dedup_real_registries() {
+        // ja/ja 回退链 = [ja, en, zh] 三级
+        let ja = I18nRegistry::new("ja");
+        assert_eq!(ja.fallbacks().len(), 3);
+        // zh 自身即链尾，不重复入链
+        let zh = I18nRegistry::new("zh");
+        assert_eq!(zh.fallbacks().len(), 2);
+        // en 在链中只出现一次
+        let en = I18nRegistry::new("en");
+        assert_eq!(en.fallbacks().len(), 2);
+    }
+
+    #[test]
+    fn test_real_registry_fallback_template_readable() {
+        // 真实注册表：所有码在 zh 齐全（构建期门槛保证），任意语言查询都能取到模板
+        let ja = I18nRegistry::new("ja");
+        assert!(
+            ja.get_template("E1001").is_some(),
+            "E1001 模板经回退链应可读"
+        );
+    }
+}
+
+#[cfg(test)]
+mod span_enforcement_tests {
+    use super::*;
+    use crate::util::diagnostic::ErrorCodeDefinition;
+    use crate::util::span::Position;
+
+    fn test_span() -> Span {
+        Span::new(Position::new(1, 1), Position::new(1, 5))
+    }
+
+    #[test]
+    #[should_panic(expected = "缺少 span")]
+    fn test_required_span_panics_without_context() {
+        // E1002 非豁免码：无显式 .at() 且不在 walk 上下文 → 拒绝构造
+        let _ = ErrorCodeDefinition::type_mismatch("Int", "String").build();
+    }
+
+    #[test]
+    fn test_exempt_code_builds_without_span() {
+        // E8001 豁免：无上下文可直接构造
+        let diag = ErrorCodeDefinition::internal_error("boom").build();
+        assert!(diag.span.is_none());
+    }
+
+    #[test]
+    fn test_walk_context_autofills_span() {
+        let span = test_span();
+        let guard = push_current_span(span);
+        let diag = ErrorCodeDefinition::type_mismatch("Int", "String").build();
+        drop(guard);
+        assert_eq!(diag.span, Some(span), "walk 上下文应自动填入 span");
+    }
+
+    #[test]
+    fn test_explicit_at_overrides_context() {
+        let ctx_span = test_span();
+        let explicit = Span::new(Position::new(9, 9), Position::new(9, 12));
+        let guard = push_current_span(ctx_span);
+        let diag = ErrorCodeDefinition::type_mismatch("Int", "String")
+            .at(explicit)
+            .build();
+        drop(guard);
+        assert_eq!(diag.span, Some(explicit), "显式 .at() 应优先于上下文");
+    }
+
+    #[test]
+    fn test_guard_nesting_restores_previous() {
+        let outer = test_span();
+        let inner = Span::new(Position::new(5, 5), Position::new(5, 8));
+
+        let g1 = push_current_span(outer);
+        assert_eq!(current_span(), Some(outer));
+        {
+            let g2 = push_current_span(inner);
+            assert_eq!(current_span(), Some(inner));
+            drop(g2);
+        }
+        assert_eq!(current_span(), Some(outer), "内层 drop 应恢复外层");
+        drop(g1);
+        assert_eq!(current_span(), None, "最外层 drop 应清空上下文");
     }
 }

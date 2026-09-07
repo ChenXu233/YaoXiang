@@ -81,6 +81,8 @@ pub const NEW_TUPLE: u8 = 0x8A;
 pub const NEW_ARRAY: u8 = 0x8B;
 /// membership 谓词（#299 §3）：dst = elem in container
 pub const CONTAINS: u8 = 0x8C;
+/// Range 值构造（#302）：dst + start + end + step 三标量记录
+pub const NEW_RANGE: u8 = 0x8D;
 
 // String Operations (0x90-0x9F)
 pub const STRING_LENGTH: u8 = 0x90;
@@ -104,6 +106,11 @@ pub const CAST: u8 = 0xC1;
 
 // Reflection (0xD0-0xDF)
 pub const TYPE_OF: u8 = 0xD0;
+
+// Variant Operations (0xE0-0xEF) — RFC-011a §6 存在类型变体
+pub const CREATE_VARIANT: u8 = 0xE0;
+pub const VARIANT_TAG: u8 = 0xE1;
+pub const VARIANT_PAYLOAD: u8 = 0xE2;
 
 /// 操作码名称（调试/转储用）
 pub fn opcode_name(code: u8) -> &'static str {
@@ -170,6 +177,7 @@ pub fn opcode_name(code: u8) -> &'static str {
         NEW_DICT => "NewDict",
         RC_NEW => "RcNew",
         NEW_TUPLE => "NewTuple",
+        NEW_RANGE => "NewRange",
         NEW_ARRAY => "NewArray",
         CONTAINS => "Contains",
         STRING_LENGTH => "StringLength",
@@ -185,6 +193,9 @@ pub fn opcode_name(code: u8) -> &'static str {
         TYPE_CHECK => "TypeCheck",
         CAST => "Cast",
         TYPE_OF => "TypeOf",
+        CREATE_VARIANT => "CreateVariant",
+        VARIANT_TAG => "VariantTag",
+        VARIANT_PAYLOAD => "VariantPayload",
         _ => "Unknown",
     }
 }

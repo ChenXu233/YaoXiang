@@ -9,6 +9,8 @@ use crate::util::span::Span;
 
 #[test]
 fn test_text_emitter_render_basic_error() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     let diagnostic = ErrorCodeDefinition::invalid_character("@").build();
 
     let emitter = TextEmitter::new();
@@ -38,6 +40,8 @@ fn test_text_emitter_render_error_with_span() {
 
 #[test]
 fn test_text_emitter_config_disables_colors() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     let config = EmitterConfig {
         use_colors: false,
         ..Default::default()

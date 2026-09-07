@@ -106,7 +106,7 @@ fn test_skip_failure() {
 #[test]
 fn test_error_tracking() {
     with_state("x", |state| {
-        state.error(parse_msg("test error"));
+        state.error(parse_msg(state, "test error"));
         assert!(state.has_errors());
         assert_eq!(state.error_count(), 1);
     });
@@ -115,8 +115,8 @@ fn test_error_tracking() {
 #[test]
 fn test_take_errors() {
     with_state("x", |state| {
-        state.error(parse_msg("err1"));
-        state.error(parse_msg("err2"));
+        state.error(parse_msg(state, "err1"));
+        state.error(parse_msg(state, "err2"));
         let errors = state.take_errors();
         assert_eq!(errors.len(), 2);
         assert!(!state.has_errors());

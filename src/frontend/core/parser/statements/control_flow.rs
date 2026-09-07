@@ -30,74 +30,54 @@ pub fn parse_return_stmt(
     })
 }
 
-/// Parse break statement: `break;` or `break label;`
+/// Parse break statement: `break;`
+/// #314：Python 风格定案——裸 break，无标签；`break ::x` 在此明确报错
 pub fn parse_break_stmt(
     state: &mut crate::frontend::core::parser::ParserState<'_>,
     span: Span,
 ) -> Option<Stmt> {
     state.bump(); // consume 'break'
 
-    let label = if state.at(&TokenKind::ColonColon) {
-        Some(parse_loop_label(state)?)
-    } else {
-        None
-    };
+    if state.at(&TokenKind::ColonColon) {
+        state.error(
+            ErrorCodeDefinition::unexpected_token("::")
+                .at(state.span())
+                .build(),
+        );
+        return None;
+    }
 
     state.skip(&TokenKind::Semicolon);
 
     Some(Stmt {
-        kind: StmtKind::Expr(Box::new(Expr::Break(label, span))),
+        kind: StmtKind::Expr(Box::new(Expr::Break(span))),
         span,
     })
 }
 
-/// Parse continue statement: `continue;` or `continue label;`
+/// Parse continue statement: `continue;`
+/// #314：裸 continue，无标签；`continue ::x` 在此明确报错
 pub fn parse_continue_stmt(
     state: &mut crate::frontend::core::parser::ParserState<'_>,
     span: Span,
 ) -> Option<Stmt> {
     state.bump(); // consume 'continue'
 
-    let label = if state.at(&TokenKind::ColonColon) {
-        Some(parse_loop_label(state)?)
-    } else {
-        None
-    };
+    if state.at(&TokenKind::ColonColon) {
+        state.error(
+            ErrorCodeDefinition::unexpected_token("::")
+                .at(state.span())
+                .build(),
+        );
+        return None;
+    }
 
     state.skip(&TokenKind::Semicolon);
 
     Some(Stmt {
-        kind: StmtKind::Expr(Box::new(Expr::Continue(label, span))),
+        kind: StmtKind::Expr(Box::new(Expr::Continue(span))),
         span,
     })
-}
-
-/// Parse loop label (for break/continue)
-fn parse_loop_label(state: &mut crate::frontend::core::parser::ParserState<'_>) -> Option<String> {
-    state.bump(); // consume '::'
-
-    match state.current().map(|t| &t.kind) {
-        Some(TokenKind::Identifier(name)) => {
-            let name = name.clone();
-            state.bump();
-            Some(name)
-        }
-        // `::` 后必须是标签标识符：此前返回 None 导致整个 break/continue
-        // 语句静默消失，残留 token 被当新语句解析（审计发现）
-        _ => {
-            let found = state
-                .current()
-                .map(|t| format!("{:?}", t.kind))
-                .unwrap_or_else(|| "EOF".to_string());
-            state.error(
-                ErrorCodeDefinition::expected_token("loop label after '::'", &found)
-                    .at(state.span())
-                    .build(),
-            );
-            state.bump();
-            None
-        }
-    }
 }
 
 /// Parse for loop statement: `for [mut] item in iterable { body }`
@@ -162,7 +142,6 @@ pub fn parse_for_stmt(
             var_mut,
             iterable,
             body: Box::new(body),
-            label: None,
         },
         span,
     })
@@ -259,7 +238,6 @@ pub fn parse_while_stmt(
         kind: StmtKind::Expr(Box::new(Expr::While {
             condition,
             body: Box::new(body),
-            label: None,
             span,
         })),
         span,

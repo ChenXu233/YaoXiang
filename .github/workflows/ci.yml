@@ -75,10 +75,72 @@ jobs:
             test-${{ runner.os }}-cargo-
 
       - name: Run tests
-        run: cargo test --all-features --lib --bins
+        run: cargo test --all-features --lib --bins --test integration --test yx_runner
 
       - name: Doc tests
         run: cargo test --doc --all-features
+
+      - name: Build CLI
+        run: cargo build --all-features --bin yaoxiang
+
+      - name: YaoXiang test suites (JSON summary)
+        run: |
+          BIN=target/debug/yaoxiang
+          "$BIN" test --json --parallel > target/report-corpus.json || corpus_rc=$?
+          "$BIN" test --json --parallel src/std/tests > target/report-stdlib.json || stdlib_rc=$?
+          CORPUS_RC="${corpus_rc:-0}" STDLIB_RC="${stdlib_rc:-0}" python3 - <<'EOF'
+          import json
+          import os
+
+          suites = [
+              ("corpus", int(os.environ.get("CORPUS_RC", "0"))),
+              ("stdlib", int(os.environ.get("STDLIB_RC", "0"))),
+          ]
+          reports = {}
+          for name, _ in suites:
+              with open(f"target/report-{name}.json", encoding="utf-8") as f:
+                  reports[name] = json.load(f)
+
+          lines = [
+              "### yaoxiang test",
+              "",
+              "| suite | total | passed | failed | skipped | time (s) |",
+              "|---|---|---|---|---|---|",
+          ]
+          for name, _ in suites:
+              s = reports[name]["summary"]
+              lines.append(
+                  f"| {name} | {s['total']} | {s['passed']} | {s['failed']} "
+                  f"| {s['skipped']} | {s['time_secs']} |"
+              )
+          lines.append("")
+          for name, _ in suites:
+              by_kind = reports[name]["summary"]["by_kind"]
+              kind_text = ", ".join(f"{k}={v}" for k, v in by_kind.items())
+              lines.append(f"- {name} by kind: {kind_text}")
+          text = "\n".join(lines)
+          print(text)
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary_path:
+              with open(summary_path, "a", encoding="utf-8") as f:
+                  f.write(text + "\n")
+
+          failures = []
+          for name, _ in suites:
+              for entry in reports[name]["files"]:
+                  if not entry["passed"]:
+                      stderr = entry.get("stderr") or ""
+                      failures.append(
+                          f"[{name}] {entry['file']} [{entry['kind']}]"
+                          f" exit={entry.get('exit_code')}\n{stderr}"
+                      )
+          if failures:
+              print("\n".join(failures))
+          if failures or any(rc != 0 for _, rc in suites):
+              rc_text = " ".join(f"{name}_rc={rc}" for name, rc in suites)
+              print(f"::error::yaoxiang test failed ({rc_text})")
+              raise SystemExit(1)
+          EOF
 
   test-msrv:
     name: MSRV Check

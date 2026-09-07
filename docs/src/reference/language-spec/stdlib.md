@@ -82,6 +82,42 @@ map: (R: Type) -> ((self: Result(T, E), f: (T) -> R) -> Result(R, E))
 map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ```
 
+**Error 载体与错误码（#323 M4）**：
+
+std 各模块的 Err 载体 `Error` 携带规范化错误码，码复用 RFC-013 的 E6xxx/E7xxx 段位（如
+E6009 = Range 步长非法），为跨版本稳定契约——程序可按码编程判定，`yaoxiang explain E6009`
+可查文档。码索引见 RFC-013「运行时错误值与码贯通」章节。
+
+```yaoxiang
+// Error 值形态：{ code: String, message: String }
+
+// 取出 Err 载体（Ok 时报运行时错误）
+unwrap_err: (T, E) -> ((self: Result(T, E)) -> E)
+
+// 读取错误码 / 消息
+code: (self: Error) -> String
+message: (self: Error) -> String
+```
+
+**按码判定示例**：
+
+```yaoxiang
+use std.range
+use std.result
+
+r = range.iter(1..10..0)      // step=0 → Err(Error)
+if result.is_err(r) {
+    e = result.unwrap_err(r)
+    if result.code(e) == "E6009" {
+        // 按 Range 步长非法分支处理
+        io.println(result.message(e))
+    }
+}
+```
+
+用户自定义错误建模走 `Result(T, E)` 的 E 泛型参数（自定义变体集），std `Error`
+是便捷兜底载体，其码体系不约束用户 E 类型。
+
 ### 1.4 错误传播
 
 ```
@@ -341,7 +377,8 @@ Iterator: (T: Type) -> Type = {
 ### 6.2 迭代器适配器
 
 ```yaoxiang
-// 范围迭代器（#300 I 项：Range 是一等值，step 为第三分量）
+// 范围迭代器（Range 是正式类型，运行时身份为三标量不可变记录，
+// 不再借 Tuple 外壳；打印 `1..10` / `1..10..2`，结构相等，具名字段）
 Range: Type = {
     start: Int,
     end: Int,
@@ -349,7 +386,7 @@ Range: Type = {
     Iterator(Int)
 }
 
-// 使用
+// 使用（迭代器协议：std.range.iter/has_next/next，for 经静态类型派发）
 for i in 0..10 {
     print(i)
 }
@@ -360,9 +397,18 @@ for i in 0..10..2 {
 }
 ```
 
-> **#300 I 项**：Range 是一等值——`r = 1..10` 合法，`x in r` 成员判断、
-> `for i in r` 迭代均按静态类型脱糖。step=0 字面量编译期拒绝，
-> 动态 step=0 运行时错误（未来错误系统落地后升格 Result，#301）。
+> **`Range(Int)` 已正式落地**——具名字段 `r.start`/`r.end`/`r.step` 可访问；
+> `x in r` 运行时走 `std.range.contains`（界检查 + 步长对齐），证明管道识别为区间命题
+> `x >= r.start && x < r.end && (x - r.start) % r.step == 0`（区间保持区间，不物化）。
+> step=0 字面量编译期拒绝；动态 step=0 已 Result 化：
+> `std.range.iter` → `Result(Iterator, Error)`、`std.range.contains` → `Result(Bool, Error)`，
+> 消费点用 `?` 沿调用栈传播或 `result.unwrap` 显式分流；`for`/`in` 糖降级在 ir_gen
+> 解包，Err 分支（动态 step=0）显式失败（`abort_invalid_step`），绝不静默死循环。
+> 接口实例化（类型体 `Iterator(Int)` 声明）的类型语法与静态分发已随 RFC-011a 阶段 1-2 落地：
+> 类型体应用项 `Iterator(Int)` 触发 `Self ↦ Range` 替换展开与完整性检查，通过后生成实现证明。
+> 动态分发已随阶段 3 落地：接口名未实例化即存在类型（`List(Animal)`），具体值进入存在类型
+> 位置自动包装为变体值，元素方法调用按实际类型分发（§6）。std.range 模块的运行时协议面
+> 暂仍由原生方法提供，迁移到接口分发为后续工作。
 
 ---
 
@@ -376,7 +422,9 @@ for i in 0..10..2 {
 | `std.collection` | List、Map 等集合类型                             |
 | `std.string`     | 字符串操作                                       |
 | `std.array`      | 数组操作                                         |
-| `std.iterator`   | 迭代器                                           |
+| `std.iterator`   | 迭代器（协议面当前由 `std.range` 提供）         |
+| `std.range`      | Range 迭代器与区间谓词、适配器                  |
+| `std.test`       | 测试断言库（值语义，RFC-036 §3）——首个纯 YaoXiang dogfooding 模块 |
 
 ### A.2 IO 模块
 

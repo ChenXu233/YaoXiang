@@ -69,17 +69,15 @@ pub fn format_expr(
         Expr::While {
             condition,
             body,
-            label,
             span: _,
-        } => super::common::format_while_loop(condition, body, label, ctx, source_map),
+        } => super::common::format_while_loop(condition, body, ctx, source_map),
         Expr::For {
             var,
             var_mut,
             iterable,
             body,
-            label,
             span: _,
-        } => super::common::format_for_loop(var, *var_mut, iterable, body, label, ctx, source_map),
+        } => super::common::format_for_loop(var, *var_mut, iterable, body, ctx, source_map),
         Expr::Block(block) => format_block(block, ctx, source_map),
         Expr::Return(expr_opt, _span) => {
             if let Some(e) = expr_opt {
@@ -88,20 +86,8 @@ pub fn format_expr(
                 "return".to_string()
             }
         }
-        Expr::Break(label, _span) => {
-            if let Some(l) = label {
-                format!("break {}", l)
-            } else {
-                "break".to_string()
-            }
-        }
-        Expr::Continue(label, _span) => {
-            if let Some(l) = label {
-                format!("continue {}", l)
-            } else {
-                "continue".to_string()
-            }
-        }
+        Expr::Break(_span) => "break".to_string(),
+        Expr::Continue(_span) => "continue".to_string(),
         Expr::Cast {
             expr: inner,
             target_type,

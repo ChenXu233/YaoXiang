@@ -3,6 +3,7 @@
 //! 规范来源：
 //! - 类型系统规范 §1.1 TypeExpr：合法类型表达式文法，`?`（try 运算符）不在其中
 //! - 标准库规范 §1.4 错误传播：`ErrorPropagate ::= Expr '?'`，`?` 仅用于表达式
+//! - 语法规范 §3.4 break 语句：`BreakStmt ::= 'break'`，无标签（#314）
 //! - RFC-010：统一赋值语法 `name: (param: Type, ...) -> Ret = body`
 //! - RFC-007：类型标注可选（HM 推断），省略标注即可，无需 `?` 占位
 
@@ -122,9 +123,9 @@ fn test_invalid_token_as_param_type_reports_error() {
 }
 
 #[test]
-fn test_break_label_with_non_identifier_reports_error() {
-    // Arrange: `break ::` 后必须是标签标识符；此前非标识符导致整个
-    // break 语句静默消失，残留 token 在远处变错位诊断（语法规范 §6 循环控制）
+fn test_break_with_label_syntax_reports_error() {
+    // Arrange: #314 定案 Python 风格——break/continue 无标签，`break ::x`
+    // 必须明确报错而非静默忽略标签按裸 break 执行
     let source = "main = { while true { break ::123 } }";
     let tokens = tokenize(source).unwrap();
 
@@ -132,13 +133,13 @@ fn test_break_label_with_non_identifier_reports_error() {
     let result = parse(&tokens);
 
     // Assert
-    assert!(result.has_errors, "break :: 后非标识符必须报错");
+    assert!(result.has_errors, "break :: 必须报错（标签语法已移除）");
     assert!(
         result
             .errors
             .iter()
-            .any(|e| { e.code == "E0010" && e.span.is_some_and(|s| s.start.line == 1) }),
-        "必须报 E0010 且指向第 1 行的 `::123`"
+            .any(|e| { e.code == "E0011" && e.span.is_some_and(|s| s.start.line == 1) }),
+        "必须报 E0011（unexpected token '::'）且指向第 1 行"
     );
 }
 

@@ -15,6 +15,9 @@ pub mod bounds;
 
 pub mod patterns;
 
+// RFC-011a §6 存在类型强制点收集
+pub mod existential;
+
 // 重新导出核心类型
 pub use scope::ScopeManager;
 pub use types::TypeSystem;

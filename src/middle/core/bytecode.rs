@@ -316,6 +316,36 @@ pub enum BytecodeInstr {
         items: Vec<Reg>,
     },
 
+    /// 创建 Range 值（#302）：dst(2) + start(2) + end(2) + step(2)
+    NewRange {
+        dst: Reg,
+        start: Reg,
+        end: Reg,
+        step: Reg,
+    },
+
+    /// RFC-011a §6: 包装具体值为存在类型变体
+    CreateVariant {
+        dst: Reg,
+        /// 合成变体类型名在常量池中的索引（"Animal$Group"）
+        group_idx: u16,
+        /// 变体号（编译期类型收集定序）
+        variant: u32,
+        payload: Reg,
+    },
+    /// RFC-011a §6: 提取存在类型值的变体号（守卫：非 group 变体值 → 运行时错误）
+    VariantTag {
+        dst: Reg,
+        obj: Reg,
+        group_idx: u16,
+    },
+    /// RFC-011a §6: 提取存在类型变体的负载（守卫同 VariantTag）
+    VariantPayload {
+        dst: Reg,
+        obj: Reg,
+        group_idx: u16,
+    },
+
     /// 定长数组构造：分配 N 个元素、以默认值填充（#299 §2）
     NewArray {
         /// 目标寄存器
@@ -560,6 +590,10 @@ impl BytecodeInstr {
             BytecodeInstr::CreateStruct { .. } => opcode::CREATE_STRUCT,
             BytecodeInstr::NewDict { .. } => opcode::NEW_DICT,
             BytecodeInstr::NewTuple { .. } => opcode::NEW_TUPLE,
+            BytecodeInstr::NewRange { .. } => opcode::NEW_RANGE,
+            BytecodeInstr::CreateVariant { .. } => opcode::CREATE_VARIANT,
+            BytecodeInstr::VariantTag { .. } => opcode::VARIANT_TAG,
+            BytecodeInstr::VariantPayload { .. } => opcode::VARIANT_PAYLOAD,
             BytecodeInstr::NewArray { .. } => opcode::NEW_ARRAY,
             BytecodeInstr::Contains { .. } => opcode::CONTAINS,
             BytecodeInstr::ArcNew { .. } => opcode::ARC_NEW,
@@ -677,6 +711,19 @@ impl BytecodeInstr {
                 // dst(2) + item_count(4) + items(2*count)
                 6 + items.len() * 2
             }
+            BytecodeInstr::NewRange { .. } => {
+                // dst(2) + start(2) + end(2) + step(2)
+                8
+            }
+            BytecodeInstr::CreateVariant { .. } => {
+                // dst(2) + group_idx(2) + variant(4) + payload(2)
+                10
+            }
+            BytecodeInstr::VariantTag { .. } => {
+                // dst(2) + obj(2) + group_idx(2)
+                6
+            }
+            BytecodeInstr::VariantPayload { .. } => 6,
             BytecodeInstr::NewArray { .. } => {
                 // dst(1) + count(4) = 5
                 5
@@ -784,6 +831,9 @@ pub struct BytecodeModule {
     pub globals: Vec<GlobalInfo>,
     /// Entry point function index
     pub entry_point: Option<usize>,
+    /// Debug sources（#327）：带 DebugSection 的 .42 直跑时用于渲染栈帧源码上下文；
+    /// 无 DebugSection（构建未带 --debug-info）时为 None，渲染降级为无片段
+    pub debug_sources: Option<crate::util::span::SourceMap>,
 }
 
 /// Global variable information
@@ -810,6 +860,7 @@ impl BytecodeModule {
             vtables: Vec::new(),
             globals: Vec::new(),
             entry_point: None,
+            debug_sources: None,
         }
     }
 
@@ -856,13 +907,23 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
     fn from(file: crate::middle::passes::codegen::bytecode::BytecodeFile) -> Self {
         let name = "main".to_string(); // Default module name
 
+        // #327：.42 加载后 FunctionCode.debug_map 恒为空（序列化不落代码段），
+        // 真实映射在 debug_section.function_debug_maps 平行数组——按函数索引回填，
+        // 同时把 sources 贯通到 debug_sources 供运行时错误渲染
+        let debug_section = file.debug_section;
+        let debug_sources = debug_section.as_ref().map(|d| d.sources.clone());
+
         // Convert functions
         let mut functions = Vec::new();
-        for func in file.code_section.functions {
+        for (func_idx, func) in file.code_section.functions.into_iter().enumerate() {
             // Decode instructions from BytecodeInstruction to BytecodeInstr
             let mut decoded_instructions = Vec::new();
             let mut labels = std::collections::HashMap::new();
-            let debug_map = func.debug_map;
+            let debug_map = debug_section
+                .as_ref()
+                .and_then(|d| d.function_debug_maps.get(func_idx))
+                .cloned()
+                .unwrap_or(func.debug_map);
             let mut ip = 0;
             while ip < func.instructions.len() {
                 let instr = &func.instructions[ip];
@@ -1237,6 +1298,30 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                 mechanism,
                                 lib,
                                 symbol,
+                                args,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::CALL_VIRT => {
+                        // CallVirt: dst(1) + obj(1) + method_name_idx(2) + args(1*count) + arg_count(1)
+                        if instr.operands.len() >= 5 {
+                            let dst = instr.operands[0] as u16;
+                            let obj = instr.operands[1] as u16;
+                            let method_idx = op_u16(&instr.operands, 2).unwrap_or(0);
+                            let arg_count = instr.operands[instr.operands.len() - 1] as usize;
+                            let mut args = Vec::with_capacity(arg_count);
+                            for i in 0..arg_count {
+                                let idx = 4 + i;
+                                if idx < instr.operands.len() - 1 {
+                                    args.push(Reg(instr.operands[idx] as u16));
+                                }
+                            }
+                            decoded_instructions.push(BytecodeInstr::CallVirt {
+                                dst: Some(Reg(dst)),
+                                obj: Reg(obj),
+                                method_idx,
                                 args,
                             });
                         } else {
@@ -1624,6 +1709,64 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                             decoded_instructions.push(BytecodeInstr::Nop);
                         }
                     }
+                    opcode::NEW_RANGE => {
+                        // NewRange: dst(2) + start(2) + end(2) + step(2)
+                        if instr.operands.len() >= 8 {
+                            let dst = op_u16(&instr.operands, 0).unwrap_or(0);
+                            let start = op_u16(&instr.operands, 2).unwrap_or(0);
+                            let end = op_u16(&instr.operands, 4).unwrap_or(0);
+                            let step = op_u16(&instr.operands, 6).unwrap_or(0);
+                            decoded_instructions.push(BytecodeInstr::NewRange {
+                                dst: Reg(dst),
+                                start: Reg(start),
+                                end: Reg(end),
+                                step: Reg(step),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::CREATE_VARIANT => {
+                        // CreateVariant: dst(2) + group_idx(2) + variant(4) + payload(2)
+                        if instr.operands.len() >= 10 {
+                            let dst = op_u16(&instr.operands, 0).unwrap_or(0);
+                            let group_idx = op_u16(&instr.operands, 2).unwrap_or(0);
+                            let variant = op_u32(&instr.operands, 4).unwrap_or(0);
+                            let payload = op_u16(&instr.operands, 8).unwrap_or(0);
+                            decoded_instructions.push(BytecodeInstr::CreateVariant {
+                                dst: Reg(dst),
+                                group_idx,
+                                variant,
+                                payload: Reg(payload),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::VARIANT_TAG => {
+                        // VariantTag: dst(2) + obj(2) + group_idx(2)
+                        if instr.operands.len() >= 6 {
+                            decoded_instructions.push(BytecodeInstr::VariantTag {
+                                dst: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                                obj: Reg(op_u16(&instr.operands, 2).unwrap_or(0)),
+                                group_idx: op_u16(&instr.operands, 4).unwrap_or(0),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::VARIANT_PAYLOAD => {
+                        // VariantPayload: dst(2) + obj(2) + group_idx(2)
+                        if instr.operands.len() >= 6 {
+                            decoded_instructions.push(BytecodeInstr::VariantPayload {
+                                dst: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                                obj: Reg(op_u16(&instr.operands, 2).unwrap_or(0)),
+                                group_idx: op_u16(&instr.operands, 4).unwrap_or(0),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
                     opcode::NEW_ARRAY => {
                         // NewArray: dst(1) + count(4)
                         if instr.operands.len() >= 5 {
@@ -1810,6 +1953,8 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
             vtables: file.vtables,
             globals: Vec::new(), // Not stored in BytecodeFile yet
             entry_point,
+            // #327：贯通 DebugSection.sources——.42 直跑也能渲染栈帧源码上下文
+            debug_sources,
         }
     }
 }

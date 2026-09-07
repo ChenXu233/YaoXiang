@@ -92,10 +92,6 @@ enum Commands {
         #[arg(value_name = "FILE")]
         file: PathBuf,
 
-        /// Generate debug info for runtime errors (spans/source mapping)
-        #[arg(long)]
-        debug_info: bool,
-
         /// Runtime mode (embedded, standard, full)
         #[arg(long, default_value = "embedded")]
         runtime: String,
@@ -133,6 +129,10 @@ enum Commands {
         /// Suppress progress and summary messages
         #[arg(long)]
         no_progress: bool,
+
+        /// Treat warnings as errors (non-zero exit if any warning, #321 M2)
+        #[arg(long)]
+        deny_warnings: bool,
     },
 
     /// Run project tests (RFC-036)
@@ -141,6 +141,35 @@ enum Commands {
         /// (default: [tool.test].patterns in yaoxiang.toml, else tests/**/*.yx)
         #[arg(value_name = "PATH", num_args = 0..)]
         paths: Vec<PathBuf>,
+
+        /// Only run test files whose file name contains this substring
+        #[arg(long, value_name = "NAME")]
+        filter: Option<String>,
+
+        /// Stop after the first failing test file
+        #[arg(long)]
+        fail_fast: bool,
+
+        /// Show each test file's captured stdout/stderr
+        #[arg(short = 'v', long)]
+        verbose: bool,
+
+        /// Only list discovered test files, do not run them
+        #[arg(long)]
+        list: bool,
+
+        /// Suppress progress output (header and PASS lines); failures and the
+        /// summary are always shown
+        #[arg(long)]
+        no_progress: bool,
+
+        /// Output a JSON report (RFC-036 §1) instead of human-readable text
+        #[arg(long)]
+        json: bool,
+
+        /// Run test files in parallel (one worker per CPU core; RFC-036 Phase 3)
+        #[arg(long)]
+        parallel: bool,
     },
 
     /// Format source file
@@ -320,7 +349,6 @@ fn main() -> Result<()> {
     match command {
         Commands::Run {
             file,
-            debug_info,
             runtime,
             workers,
         } => {
@@ -350,21 +378,42 @@ fn main() -> Result<()> {
                 0 // 0 = auto-detect
             };
 
-            if let Err(e) = run_file_with_diagnostics(&file, debug_info, &runtime_mode, workers) {
+            if let Err(e) = run_file_with_diagnostics(&file, &runtime_mode, workers) {
                 // 多数错误已被 run_file_with_diagnostics 渲染；anyhow 包装的路径
                 // （文件读取失败、codegen 失败）在此兜底，不再静默退出
                 eprintln!("{e}");
                 ::std::process::exit(1);
             }
         }
-        Commands::Test { paths } => match yaoxiang::util::test_runner::run_test_command(&paths) {
-            Ok(0) => {}
-            Ok(_) => ::std::process::exit(1),
-            Err(e) => {
-                eprintln!("{e}");
-                ::std::process::exit(1);
+        Commands::Test {
+            paths,
+            filter,
+            fail_fast,
+            verbose,
+            list,
+            no_progress,
+            json,
+            parallel,
+        } => {
+            let options = yaoxiang::util::test_runner::TestOptions {
+                paths,
+                filter,
+                fail_fast,
+                verbose,
+                list,
+                no_progress,
+                json,
+                parallel,
+            };
+            match yaoxiang::util::test_runner::run_test_command(&options) {
+                Ok(0) => {}
+                Ok(_) => ::std::process::exit(1),
+                Err(e) => {
+                    eprintln!("{e}");
+                    ::std::process::exit(1);
+                }
             }
-        },
+        }
         Commands::Eval { code } => {
             let source = if code == "-" {
                 let mut buf = String::new();
@@ -383,6 +432,7 @@ fn main() -> Result<()> {
             json,
             color,
             no_progress,
+            deny_warnings,
         } => {
             let use_colors = match color {
                 ColorChoice::Always => true,
@@ -391,8 +441,8 @@ fn main() -> Result<()> {
             };
 
             match run_check_command_once(&paths, &exclude, json, use_colors, no_progress) {
-                Ok(error_count) => {
-                    if error_count > 0 {
+                Ok((error_count, warning_count)) => {
+                    if error_count > 0 || (deny_warnings && warning_count > 0) {
                         ::std::process::exit(1);
                     }
                 }

@@ -4,9 +4,14 @@ use crate::frontend::core::lexer::tokens::*;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::Span;
 
-/// Temporary: wrap string as E0012 diagnostic
-pub fn parse_msg(msg: impl Into<String>) -> Diagnostic {
-    ErrorCodeDefinition::invalid_syntax(&msg.into()).build()
+/// Temporary: wrap string as E0012 diagnostic（#324：挂当前 token 位置）
+pub fn parse_msg(
+    state: &ParserState<'_>,
+    msg: impl Into<String>,
+) -> Diagnostic {
+    ErrorCodeDefinition::invalid_syntax(&msg.into())
+        .at(state.span())
+        .build()
 }
 
 pub struct ParserState<'a> {
@@ -89,8 +94,12 @@ impl<'a> ParserState<'a> {
     }
     pub fn error(
         &mut self,
-        error: Diagnostic,
+        mut error: Diagnostic,
     ) {
+        // #324：parser 错误缺 span 时自动挂当前 token 位置（咽喉点，覆盖全部站点）
+        if error.span.is_none() {
+            error.span = Some(self.span());
+        }
         self.errors.push(error);
     }
     pub fn has_errors(&self) -> bool {

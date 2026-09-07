@@ -185,13 +185,11 @@ impl Translator {
                 (blocks.iter().collect::<Vec<_>>(), locals.len())
             }
             FunctionBody::TypeDecl { .. } => {
-                return Err(Diagnostic::error(
-                    "E_INTERNAL".to_string(),
-                    "translate_function called on TypeDecl — should be handled by synthesize_constructor"
-                        .to_string(),
-                    "This is a compiler bug".to_string(),
-                    None,
-                ));
+                // #322 M3：E_INTERNAL 伪码收敛为注册码 E8001
+                return Err(ErrorCodeDefinition::internal_error(
+                    "translate_function called on TypeDecl — should be handled by synthesize_constructor",
+                )
+                .build());
             }
         };
 
@@ -501,6 +499,25 @@ impl Translator {
             } => self.translate_create_struct(dst, type_name, fields),
             NewDict { dst, keys, values } => self.translate_new_dict(dst, keys, values),
             NewTuple { dst, items } => self.translate_new_tuple(dst, items),
+            NewRange {
+                dst,
+                start,
+                end,
+                step,
+            } => self.translate_new_range(dst, start, end, step),
+            CreateVariant {
+                dst,
+                group,
+                variant,
+                payload,
+                ..
+            } => self.translate_create_variant(dst, group, *variant, payload),
+            VariantTag {
+                dst, obj, group, ..
+            } => self.translate_variant_access(opcode::VARIANT_TAG, dst, obj, group),
+            VariantPayload {
+                dst, obj, group, ..
+            } => self.translate_variant_access(opcode::VARIANT_PAYLOAD, dst, obj, group),
             MakeClosure {
                 dst,
                 func,
@@ -1150,6 +1167,67 @@ impl Translator {
             operands.extend_from_slice(&(item_reg as u16).to_le_bytes());
         }
         Ok(BytecodeInstruction::new(opcode::NEW_TUPLE, operands))
+    }
+
+    /// 翻译 NewRange 指令（#302）
+    /// 格式: dst(2) + start(2) + end(2) + step(2)
+    fn translate_new_range(
+        &mut self,
+        dst: &Operand,
+        start: &Operand,
+        end: &Operand,
+        step: &Operand,
+    ) -> Result<BytecodeInstruction, Diagnostic> {
+        let dst_reg = self.operand_resolver.to_reg(dst)?;
+        let start_reg = self.operand_resolver.to_reg(start)?;
+        let end_reg = self.operand_resolver.to_reg(end)?;
+        let step_reg = self.operand_resolver.to_reg(step)?;
+        let mut operands = Vec::new();
+        for r in [dst_reg, start_reg, end_reg, step_reg] {
+            operands.extend_from_slice(&(r as u16).to_le_bytes());
+        }
+        Ok(BytecodeInstruction::new(opcode::NEW_RANGE, operands))
+    }
+
+    /// RFC-011a §6: 包装具体值为存在类型变体
+    fn translate_create_variant(
+        &mut self,
+        dst: &Operand,
+        group: &str,
+        variant: u32,
+        payload: &Operand,
+    ) -> Result<BytecodeInstruction, Diagnostic> {
+        let dst_reg = self.operand_resolver.to_reg(dst)?;
+        let payload_reg = self.operand_resolver.to_reg(payload)?;
+        let group_idx = self
+            .emitter
+            .add_constant(ConstValue::String(group.to_owned())) as u16;
+        let mut operands = Vec::new();
+        operands.extend_from_slice(&(dst_reg as u16).to_le_bytes());
+        operands.extend_from_slice(&group_idx.to_le_bytes());
+        operands.extend_from_slice(&variant.to_le_bytes());
+        operands.extend_from_slice(&(payload_reg as u16).to_le_bytes());
+        Ok(BytecodeInstruction::new(opcode::CREATE_VARIANT, operands))
+    }
+
+    /// RFC-011a §6: 变体号/负载提取（守卫在解释器执行臂）
+    fn translate_variant_access(
+        &mut self,
+        op: u8,
+        dst: &Operand,
+        obj: &Operand,
+        group: &str,
+    ) -> Result<BytecodeInstruction, Diagnostic> {
+        let dst_reg = self.operand_resolver.to_reg(dst)?;
+        let obj_reg = self.operand_resolver.to_reg(obj)?;
+        let group_idx = self
+            .emitter
+            .add_constant(ConstValue::String(group.to_owned())) as u16;
+        let mut operands = Vec::new();
+        operands.extend_from_slice(&(dst_reg as u16).to_le_bytes());
+        operands.extend_from_slice(&(obj_reg as u16).to_le_bytes());
+        operands.extend_from_slice(&group_idx.to_le_bytes());
+        Ok(BytecodeInstruction::new(op, operands))
     }
 
     fn translate_make_closure(

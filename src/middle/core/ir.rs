@@ -318,6 +318,37 @@ pub enum Instruction {
         dst: Operand,
         items: Vec<Operand>,
     },
+    /// 创建 Range 值（#302）：三标量不可变记录，正式运行时身份
+    NewRange {
+        dst: Operand,
+        start: Operand,
+        end: Operand,
+        step: Operand,
+    },
+    /// RFC-011a §6: 包装具体值为存在类型变体（Animal$Group.Dog(payload)）。
+    /// group: 合成变体类型名（接口名 + "$Group"）；variant: 编译期类型收集定序的变体号
+    CreateVariant {
+        dst: Operand,
+        group: String,
+        variant: u32,
+        payload: Operand,
+        span: Span,
+    },
+    /// RFC-011a §6: 提取存在类型值的变体号（Int）。守卫：obj 必须是 group 的
+    /// 变体值，否则运行时报错——漏包装在运行时守卫层显式暴露，绝不静默错数据
+    VariantTag {
+        dst: Operand,
+        obj: Operand,
+        group: String,
+        span: Span,
+    },
+    /// RFC-011a §6: 提取存在类型变体的负载（守卫同 VariantTag）
+    VariantPayload {
+        dst: Operand,
+        obj: Operand,
+        group: String,
+        span: Span,
+    },
     MakeClosure {
         dst: Operand,
         func: String,

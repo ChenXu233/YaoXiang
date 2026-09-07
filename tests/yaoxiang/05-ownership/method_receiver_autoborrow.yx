@@ -1,0 +1,49 @@
+// 05-ownership/method_receiver_autoborrow.yx
+// 覆盖: SPEC type-system.md §12.4 自动借用优先级 / §12.5 顺序复用——方法接收者形态（#315）
+//   接收者令牌随调用结束释放（transient）：调用产生的借用不活到作用域结束，
+//   后文同名变量的使用不再延长其区间
+// 验证:
+//   - &mut self 接收者写回源对象可见（自动借用 &mut Point）
+//   - §12.5：连续两次 &mut self 调用顺序复用不冲突（上一令牌已随调用释放）
+//   - §12.4 链：读接收者 → &mut 接收者 → 读接收者（q.sum → q.shift → q.sum）
+//   - 接收者借用期间显式派生读被拒后，源对象在释放后仍可用
+// 状态: ✅
+
+use std.assert
+
+Point: Type = { x: Int, y: Int }
+
+Point.sum: (self: &Point) -> Int = {
+    return self.x + self.y
+}
+
+Point.shift: (self: &mut Point, dx: Int, dy: Int) -> Void = {
+    self.x = self.x + dx
+    self.y = self.y + dy
+}
+
+main = {
+    // 1. &mut self 写回可见
+    p = Point(1, 2)
+    p.shift(10, 20)
+    assert.assert(p.x == 11 and p.y == 22, "&mut 接收者写回源对象")
+
+    // 2. §12.5 顺序复用：上一 &mut 令牌随调用结束释放
+    p.shift(1, 1)
+    assert.assert(p.x == 12 and p.y == 23, "连续 &mut 接收者顺序复用")
+
+    // 3. §12.4 自动借用优先级链（方法形态）
+    q = Point(3, 4)
+    s1 = q.sum()
+    q.shift(1, 1)
+    s2 = q.sum()
+    assert.assert(s1 == 7, "变更前读 == 7")
+    assert.assert(s2 == 9, "变更后读 == 9")
+
+    // 4. 读接收者与 var 绑定借用共存（读-读不冲突；var 绑定令牌活到作用域
+    // 结束——D5 裁决，其活跃期内的 &mut 接收者拒绝由 06 err 用例覆盖）
+    v = &q.y
+    assert.assert(v == 5, "var 绑定读令牌活跃")
+    s3 = q.sum()
+    assert.assert(s3 == 9, "读接收者与活跃 var 绑定借用共存")
+}

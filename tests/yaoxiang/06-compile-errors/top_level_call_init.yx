@@ -1,5 +1,6 @@
 // 06-compile-errors/top_level_call_init.yx
-// [test:error]: 顶层绑定 init 是函数调用 → E3007（#271 清单 #2，静默填 0 → 硬错误）
+// 顶层绑定 init 是函数调用 → E3007（#271 清单 #2，静默填 0 → 硬错误）
+// expect: compile-error E3007
 // 验证: 顶层绑定是编译期常量，不支持运行时计算的初始化
 // 状态: 待测试
 

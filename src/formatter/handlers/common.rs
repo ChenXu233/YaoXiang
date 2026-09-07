@@ -44,19 +44,12 @@ pub fn format_for_loop(
     var_mut: bool,
     iterable: &Expr,
     body: &Block,
-    label: &Option<String>,
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
-    let label_str = if let Some(l) = label {
-        format!("{}: ", l)
-    } else {
-        String::new()
-    };
     let mut_str = if var_mut { "mut " } else { "" };
     format!(
-        "{}for {}{} in {} {}",
-        label_str,
+        "for {}{} in {} {}",
         mut_str,
         var,
         format_expr(iterable, ctx, source_map),
@@ -68,18 +61,11 @@ pub fn format_for_loop(
 pub fn format_while_loop(
     condition: &Expr,
     body: &Block,
-    label: &Option<String>,
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
-    let label_str = if let Some(l) = label {
-        format!("{}: ", l)
-    } else {
-        String::new()
-    };
     format!(
-        "{}while {} {}",
-        label_str,
+        "while {} {}",
         format_expr(condition, ctx, source_map),
         format_block(body, ctx, source_map)
     )

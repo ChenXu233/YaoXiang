@@ -21,6 +21,7 @@ YaoXiang 目前处于 **实验验证阶段**，标准库和 API 正在逐步完�
 | `std.string`     | 🔨 施工中 | 字符串操作 |
 | `std.list`       | 🔨 施工中 | 列表操作   |
 | `std.dict`       | ✅ 已实现 | 字典操作   |
+| `std.range`      | ✅ 已实现 | 区间与迭代器（#302） |
 | `std.math`       | 🔨 施工中 | 数学函数   |
 | `std.net`        | 📋 计划中 | 网络操作   |
 | `std.concurrent` | 📋 计划中 | 并发原语   |

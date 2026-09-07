@@ -1,13 +1,13 @@
 ---
 title: 'RFC-030: assert アサート機構'
-status: '承認済み'
-author: 'chenxu'
+status: 'Accepted'
+author: '晨煦'
 created: '2026-06-15'
 updated: '2026-07-14'
 decision:
-  'assert と Assert は一体两面であり、dispatch が自動的に分派を行う。6 Phase をすべて実装（#157-#162
-  はクローズ済み）。std.assert モジュールで統一登録（#169 はクローズ済み）、assert ネイティブ関数 +
-  Assert/IsTrue 型族は同じパスに共存。'
+  'assert と Assert は表裏一体であり、dispatch が自動分派する。6 Phase すべて実装完了（#157-#162
+  クローズ済み）。std.assert モジュールに統一登録（#169 クローズ済み）、 assert native 関数 +
+  Assert/IsTrue 型族は同一経路。'
 issue: '#97'
 issues_impl:
   - '#155'
@@ -22,19 +22,18 @@ issues_impl:
 
 # RFC-030: assert アサート機構
 
-## 概要
+## 要約
 
-YaoXiang に `assert`
-アサート機構を導入し、テスト、前提条件チェック、実行時 panic に対応する。`assert`
-とコンパイル時精化型 `Assert(C)`（RFC-011
-§4.3 参照）は**同一个精化原語の両面**である——dispatchが「述語の自由変数がコンパイル時に到達可能か否か」に基づいて、コンパイル時証明または実行時チェックに自動的に分派する。`assert(false, "msg")`
-は `raise` と同等であり、別途 `throw`/`raise` キーワードは不要である。
+YaoXiang に `assert` アサート機構を導入し、テスト・事前条件チェック・runtime
+panicに使用する。`assert` と compile-time 精緻化型 `Assert(C)`（RFC-011 §4.3 参照）は
+**同じ精緻化プリミティブの二面であり**——「述語の自由変数が compile-time に到達可能か」に基づき dispatch が自動的に compile-time 証明と runtime チェックへ分派する。
+`assert(false, "msg")` は `raise` と等価であり、個別の `throw`/`raise` キーワードは不要。
 
 ## 動機
 
-### なぜこの機能が必要か？
+### なぜこの機能が必要か
 
-現在の YaoXiang の E2E テストは、`if` + `io.println` + `return` でアサーションを模擬する必要がある：
+現在の YaoXiang の E2E テストは `if` + `io.println` + `return` でアサートを模倣するしかない：
 
 ```yaoxiang
 val = some_func()
@@ -44,30 +43,31 @@ if val != 42 {
 }
 ```
 
-この写法には3つの問題がある：
+この記述には 3 つの問題がある：
 
-1. **ボイラープレートが多い**：各アサーションに4行必要で、テストファイルが肥大化する
-2. **エラーメッセージが弱い**：文字列を手動で連結するため、ソースコードの位置情報が欠落する
-3. **合成 불가능**：アサーションを一括登録できず、テストフレームワークにパラメータとして渡せない
+1. **ボイラープレートが多い**：アサートごとに 4 行必要で、テストファイルが肥大化する
+2. **エラーメッセージが弱い**：文字列を手動で連結し、ソースコードの位置情報がない
+3. **合成できない**：アサートを一括登録できず、テストフレームワークへ引数として渡せない
 
-### 現在の問題
+### 現状の問題
 
-- 統一されたアサーション機構が存在しない
-- テストコードに `if` + 印刷 + `return` のパターンが蔓延している
+- 統一されたアサート機構がない
+- テストコードに `if` + 出力 + `return` のパターンが氾濫する
 - バイトコード層には既に `Throw` 命令があるが、言語層では公開されていない
-- RFC-011 でコンパイル時の `Assert(C)` 条件型が定義されているが、実行時の `assert()` は未実装である
+- RFC-011 で compile-time `Assert(C)` conditional type は定義されているが、runtime `assert()`
+  は未実装
 
 ### 設計原則
 
-`assert` は YaoXiang 唯一のユーザー空間 panic 機構である。`assert(false, "msg")` は `raise`
-と同等であり、別途 `throw`/`raise` キーワードは不要である。`assert` 関数は本身就是 `if raise`
-の最適な封裝である。
+`assert` は YaoXiang で唯一のユーザーランド panic 機構である。`assert(false, "msg")` は `raise`
+と等価であり、個別の `throw`/`raise` キーワードは不要。`assert` 関数自体が `if raise`
+の最適なカプセル化である。
 
 **新しいキーワードを導入しない。新しい構文を導入しない。すべては関数呼び出しである。**
 
-## 案 A：ネイティブ関数
+## 案 A：native 関数
 
-native 関数として `assert` を実装し、新しいキーワードは導入しない。
+`assert` を native 関数として実装し、新しいキーワードを導入しない。
 
 ```yaoxiang
 use std.assert.assert
@@ -78,130 +78,130 @@ main = {
 }
 ```
 
-### オーバーロード署名
+### オーバーロードシグネチャ
 
-`assert` には2つのオーバーロードがある：
+`assert` には 2 つのオーバーロードがある：
 
 ```
-// 中核署名：assert は Assert の値宇宙導入子である
+// 中核シグネチャ：assert は Assert の値宇宙導入子
 assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))
 //                                       ^^^^^^^^^^^^^^^^^^^^^^^^
-//                                       Unit を返すのではなく、精化型を返す
+//                                       戻り値は精緻化型、() ではない
 //
-// IsTrue: Bool -> Type は真値から型への橋渡し：
+// IsTrue: Bool -> Type は真理値から型への橋渡し：
 //   IsTrue(true)  = Void   (⊤、プログラム続行)
-//   IsTrue(false) = Never  (⊥、発散/コンパイルエラー)
+//   IsTrue(false) = Never  (⊥、発散／コンパイルエラー)
 ```
 
-`assert` の実際の動作は dispatch 分派で决定される：
+`assert` の実際の挙動は dispatch 分派によって決定される：
 
-- すべての自由変数がコンパイル時に既知の場合 → **CompileTime**：コンパイラが cond を評価し、true →
-  Void に擦除、false → コンパイルエラー（Never は居住不可）
-- 実行時の自由変数が存在する場合 →
-  **Runtime**：チェックを挿入し、流敏感仮定セット Γ に精化事実を注入
+- すべての自由変数が compile-time 既知 → **CompileTime**：コンパイラが cond を評価、true →
+  Void として消去、false → コンパイルエラー（Never は居住不能）
+- runtime 自由変数が存在 → **Runtime**：check を挿入し、フロー敏感仮定集合 Γ に精緻化事実を注入
 
-任意のメッセージ `?msg`
-と Result オーバーロード（下記参照）は、実行時 raise ペイロードとして保持される。
+オプションメッセージ `?msg` および Result オーバーロード（後述）は runtime
+raise ペイロードとして保持する。
 
-#### オーバーロード 1：条件アサーション `(Bool, ?String | Error)`
+#### オーバーロード 1：条件アサート `(Bool, ?String | Error)`
 
-`Bool` + 任意のメッセージ。メッセージは `String` または `Error` 值：
+`Bool` + オプションメッセージ。メッセージは `String` または `Error` 値：
 
 ```yaoxiang
 assert(1 + 1 == 2)                    // メッセージなし、デフォルト panic メッセージ
-assert(1 + 1 == 2, "math is broken")   // 文字列メッセージ
-assert(x > 0, my_error)                // Error 値を直接スロー
+assert(1 + 1 == 2, "math is broken")  // 文字列メッセージ
+assert(x > 0, my_error)               // Error 値を直接スロー
 ```
 
-`assert(false, "msg")` は YaoXiang の `raise`/`throw` 同等物である——別途キーワードは不要。
+`assert(false, "msg")` は YaoXiang の `raise`/`throw` 等価体である——個別キーワードは不要。
 
-#### オーバーロード 2：Result アサーション `(Result)`
+#### オーバーロード 2：Result アサート `(Result)`
 
-単一の `Result` パラメータで、`Err` かを自動的にチェック：
+単一の `Result` 引数を取り、`Err` かどうかを自動チェックする：
 
 ### 利点
 
-- **構文変更ゼロ**：純粋な関数で、新しいキーワードが不要
-- **新しい概念ゼロ**：既存のネイティブ関数登録メカニズムを再利用
-- **高い拡張性**：関数のオーバーロードにより複数のシグネチャを自然にサポート
-- **自己文書化**：`std.assert` 名前空間本身就是ドキュメントである
+- **構文変更ゼロ**：純関数であり、新しいキーワード不要
+- **新概念ゼロ**：既存の native 関数登録機構を再利用
+- **高い拡張性**：関数オーバーロードにより複数シグネチャに自然対応
+- **自己文書化**：`std.assert` 名前空間自体がドキュメント
 
 ### 欠点
 
-- なし。assert の型シグネチャが正しければ、コンパイラは関数の到達可能性分析的死コード除去できる。追加の pass は不要。
+- なし。`assert`
+  の型シグネチャが正しければ、コンパイラは関数の到達可能性解析によりデッドコードを推論可能。追加 pass は不要。
 
-### 実行時動作
+### ランタイム挙動
 
-1. 最初のパラメータ `condition: Bool` を評価する
-2. `true` の場合、`Unit` を返す
-3. `false` の場合、実行時 panic をトリガー：
-   - `message` の內容を出力する（もしあれば）
-   - 呼び出しスタックを出力する（デバッグモードの場合）
-   - 現在の発信を终止する
+1. 第 1 引数 `condition: Bool` を評価
+2. `true` なら `Unit` を返す
+3. `false` なら runtime panic を発動：
+   - `message` の内容を出力（あれば）
+   - コールスタックを出力（デバッグモード時）
+   - 現在の実行を終了
 
-#### 各オーバーロードの失敗動作
+#### 各オーバーロードの失敗時挙動
 
-| シグネチャ                 | 失敗時の動作                     |
-| -------------------------- | -------------------------------- |
-| `assert(false)`            | デフォルト panic メッセージ      |
-| `assert(false, "msg")`     | 文字列メッセージを出力後に panic |
-| `assert(false, error_val)` | Error 値をスロー                 |
-| `assert(Err(x))`           | Err 内容を抽出して panic         |
+| シグネチャ                 | 失敗時挙動                     |
+| -------------------------- | ------------------------------ |
+| `assert(false)`            | デフォルト panic メッセージ    |
+| `assert(false, "msg")`     | 文字列メッセージ出力後に panic |
+| `assert(false, error_val)` | Error 値をスロー               |
+| `assert(Err(x))`           | Err 内容を抽出して panic       |
 
-### コンパイル時 Assert との関係
+### compile-time Assert との関係
 
-`assert` と `Assert`
-は**同一个精化原語の両面**である——dispatch 分派パイプが「述語の自由変数がコンパイル時に到達可能か否か」に基づいて自動的に選択する：
+`assert` と `Assert` は
+**同じ精緻化プリミティブの二面であり**——「述語の自由変数が compile-time に到達可能か」に基づき dispatch 分派パイプラインが自動的に選択する：
 
-| 条件                                 | 分派                     | 動作                                                            |
-| ------------------------------------ | ------------------------ | --------------------------------------------------------------- |
-| すべての自由変数がコンパイル時に既知 | CompileTime → 証明パイプ | Proved → 擦除、Disproved → コンパイルエラー、Unknown → 証明要求 |
-| 実行時の自由変数が存在               | Runtime → チェック挿入   | Bool チェック + 流敏感仮定セット Γ に精化事実を注入             |
+| 条件                                 | 分派                           | 挙動                                                            |
+| ------------------------------------ | ------------------------------ | --------------------------------------------------------------- |
+| すべての自由変数が compile-time 既知 | CompileTime → 証明パイプライン | Proved → 消去、Disproved → コンパイルエラー、Unknown → 証明要求 |
+| runtime 自由変数が存在               | Runtime → check 挿入           | Bool チェック + フロー敏感仮定集合 Γ への精緻化事実注入         |
 
 ```yaoxiang
 use std.assert
 
-# コンパイル時に既知（ジェネリックパラメータ）—— CompileTime をパスし、実行時オーバーヘッドゼロ
+# compile-time 既知（generics 引数）—— CompileTime 経路、runtime オーバーヘッドゼロ
 Array: (T: Type, N: Int) -> Type = {
     data: Array(T, N),
-    length: assert.Assert(N > 0),   # N はジェネリックパラメータで、コンパイル時に評価
+    length: assert.Assert(N > 0),   # N は generics 引数、compile-time 評価
 }
 
-# 実行時値 —— Runtime をパスし、Bool チェックを挿入
+# runtime 値 —— Runtime 経路、Bool チェックを挿入
 x = read_int()
-assert.assert(x > 0, "expected positive")  # 実行時チェック
+assert.assert(x > 0, "expected positive")  # runtime check
 ```
 
-> **2026-07-12 統一案**： 이전의「完全に独立」結論は取り消された。`assert()` は `Assert`
-> の値導入子であり、dispatch が自動的に分派を行う。
+> **2026-07-12 統一案**：従来の「完全独立」という結論は置き換えられた。`assert()` は `Assert`
+> の値導入子であり、dispatch が自動分派する。
 
-### コンパイラの改动
+### コンパイラ変更
 
-**parser、AST、型チェック、IR 生成の変更は不要である。**
+**parser、AST、typecheck、IR gen の変更は不要。**
 
-`src/std/` 以下にネイティブ関数を登録するだけでよい：
+`src/std/` 配下に native 関数を登録するだけでよい：
 
 1. `src/std/assert.rs` を新規追加
-2. `std.assert.assert` と `std.assert.Assert` を登録（後者はコンパイル時条件型、#155 参照）
-3. 内部的には既存の `BytecodeInstr::Throw` 命令を呼び出す
+2. `std.assert.assert` と `std.assert.Assert`（後者は compile-time conditional type）を登録
+3. 内部で既存の `BytecodeInstr::Throw` 命令を呼び出す
 
 ### 利点
 
-- **構文変更ゼロ**：純粋な関数で、新しいキーワードが不要
-- **新しい概念ゼロ**：既存のネイティブ関数登録メカニズムを再利用
-- **高い拡張性**：関数シグネチャは `assert_eq` などの变体にも拡張可能（将来）
-- **自己文書化**：`std.assert` 名前空間本身就是ドキュメントである
+- **構文変更ゼロ**：純関数であり、新しいキーワード不要
+- **新概念ゼロ**：既存の native 関数登録機構を再利用
+- **高い拡張性**：`assert_eq` など将来的な変種へ関数シグネチャを拡張可能
+- **自己文書化**：`std.assert` 名前空間自体がドキュメント
 
 ### 欠点
 
-- ~~コンパイル時に知れない：案 B（キーワード）と異なり、コンパイル時の死コード除去が行えない~~ →
-  **統一案では已经不成立**。CompileTime モードの assert は証明パイプをパスし、コンパイル時に既知の cond は擦除またはコンパイルエラーとなる（`assert(false)`
-  → Never → 死コード）。
-- デバッグモードでのみ呼び出しスタックを取得可能
+- ~~compile-time 非到達：案 B（キーワード）と異なり、compile-time でのデッドコード除去不可~~ →
+  **統一案により既に成立しない**。CompileTime モードの assert は証明パイプラインを通り、compile-time 既知の cond
+  → 消去またはコンパイルエラー（`assert(false)` → Never →デッドコード）。
+- デバッグモードでのみコールスタックを取得可能
 
-## 案 B：組込みキーワード（統一案に取代済み）
+## 案 B：組み込みキーワード（統一案により置き換え済み）
 
-> 弃却済み。案 A と案 B の対立は dispatch 分派パイプによって解消された——assert は Assert の値導入子であり、コンパイル時に既知の場合は証明パイプをパスし（実行時オーバーヘッドゼロ）、実行時はチェックをパスする。「関数」と「キーワード」の間で二者選択する必要がない。以下は歴史的記録である。
+> 棄却済み。案 A と B の対立は dispatch 分派パイプラインにより解消された——assert は Assert の値導入子であり、compile-time 既知なら証明パイプライン（runtime オーバーヘッドゼロ）、runtime なら check。「関数」と「キーワード」の二者択一は不要。以下は歴史的記録。
 
 ```yaoxiang
 assert(1 + 1 == 2, "math is broken")
@@ -209,121 +209,119 @@ assert(1 + 1 == 2, "math is broken")
 
 ### 型シグネチャ
 
-独立した型シグネチャはない——キーワードは parser が処理する。
+独立した型シグネチャなし——キーワードは parser が処理する。
 
-### 実行時動作
+### ランタイム挙動
 
 案 A と同じ。
 
-### コンパイラの改动
+### コンパイラ変更
 
-parser、AST、型チェック、IR 生成の変更が必要：
+parser、AST、typecheck、IR gen の変更が必要：
 
-1. parser：新しい `Expr::Assert` バリアントを追加
-2. AST：新しい `Expr::Assert` ノードを追加
-3. 型チェック：パラメータの型を検証
-4. IR 生成：`BytecodeInstr::Throw` を生成
+1. parser：`Expr::Assert` 変種を新規追加
+2. AST：`Expr::Assert` ノードを新規追加
+3. typecheck：引数の型を検証
+4. IR gen：`BytecodeInstr::Throw` を生成
 
 ### 利点
 
-- コンパイル時にソースコードの位置情報を持てる（デバッグ情報に依存しない）
-- コンパイル時に定数畳み込みが可能：`assert(true)` → 空操作、`assert(false)` → コンパイルエラー
+- compile-time にソースコード位置を取得可能（デバッグ情報に依存しない）
+- compile-time に定数畳み込み可能：`assert(true)` → 空操作、`assert(false)` → コンパイルエラー
 
 ### 欠点
 
-| 欠点                               | 影響                                         |
-| ---------------------------------- | -------------------------------------------- |
-| parser の改动が必要                | 新しい構文ノードを導入し、保守コストが増大   |
-| キーワードは拡張不可               | `assert_eq` などの变体は依然として関数が必要 |
-| コンパイル時の優位性は実用的でない | 下記分析参照                                 |
+| 欠点                            | 影響                                       |
+| ------------------------------- | ------------------------------------------ |
+| パーサー変更が必要              | 新規構文ノードを導入し、保守コストが増大   |
+| キーワードは拡張不可            | `assert_eq` 等の変種も依然として関数が必要 |
+| compile-time 上の利点は非実用的 | 後述の解析を参照                           |
 
 ### 比較
 
-| 次元                 | 案 A（関数）         | 案 B（キーワード）                  |
-| -------------------- | -------------------- | ----------------------------------- |
-| 実装コスト           | ~20 行               | parser + AST + 型チェック + IR 生成 |
-| 構文変更             | なし                 | 新しいキーワード                    |
-| 拡張性               | 関数のオーバーロード | 配套マクロが必要                    |
-| ソースコード位置     | デバッグ情報         | コンパイル時に取得可能              |
-| 定数畳み込み         | pass サポートが必要  | コンパイル時に取得可能              |
-| 実行時オーバーヘッド | 関数呼び出し         | 最小限                              |
+| 観点                   | 案 A（関数）       | 案 B（キーワード）                |
+| ---------------------- | ------------------ | --------------------------------- |
+| 実装コスト             | 約 20 行           | parser + AST + typecheck + IR gen |
+| 構文変更               | なし               | 新規キーワード                    |
+| 拡張性                 | 関数オーバーロード | 補助マクロが必要                  |
+| ソースコード位置       | デバッグ情報       | compile-time に取得可能           |
+| 定数畳み込み           | pass 支援が必要    | compile-time に取得可能           |
+| runtime オーバーヘッド | 関数呼び出し       | 極小                              |
 
-### コンパイル時分析の現実的制約
+### compile-time 解析の現実的制約
 
-案 B の核となる優位性——コンパイル時分析——生效するには **定数畳み込み pass**
-が必要である。つまり、コンパイラはコンパイル時に `assert(false)` の `false`
-を評価して、これが死コードであることを知る必要がある。
+案 B の中心的利点——compile-time 解析——は **定数畳み込み pass**
+がなければ機能しない。すなわち、コンパイラは `assert(false)` 中の `false`
+を compile-time に評価して、これがデッドコードであることを認識する必要がある。
 
-YaoXiang には现在定数畳み込み pass がない。即使采用案 B，`assert(x > 0)`
-这样的常见写法在编译时仍然无法分析。只有 `assert(true)` / `assert(false)` 这样的字面量才能被分析。
+YaoXiang には現在、定数畳み込み pass がない。仮に案 B を採用しても、`assert(x > 0)`
+のような一般的な記述は compile-time に解析できない。解析できるのは `assert(true)` / `assert(false)`
+のような literal のみである。
 
-因此案 B のコンパイル時の優位性は**現在の段階では理論的なものであり、実質的なものではない**。
+したがって案 B の compile-time 上の利点は **現時点では理論上のものであり、実用的ではない**。
 
 ---
 
-## 開放問題
+## 未解決問題
 
-- [x] ~~案 A と案 B のどちらを選択するか？~~ →
-      **統一案：assert は Assert の値導入子である**。案 A と案 B の対立は dispatch 分派パイプによって解消された——コンパイル時に既知の場合は証明パイプをパスし、実行時はチェックをパスする。「二者選択」は不要。
-- [x] ~~`assert` は `message` なしの簡略形 `assert(cond)` をサポートする必要があるか？~~ →
-      **サポートする。`assert(cond, ?msg)`、message は任意である。**
-- [x] ~~`assert_eq`、`assert_ne` などの变体が必要か？~~ →
-      **不要。YAGNI。テストフレームワークが形になってからの话说。**
-- [x] ~~panic 出力にソースコードの位置情報を含めるか？~~
-      → 案 A はデバッグ情報に依存（呼び出しスタック）。
+- [x] ~~案 A か案 B か？~~ →
+      **統一案：assert は Assert の値導入子**。案 A/B の対立は dispatch 分派パイプラインにより解消——compile-time 既知なら証明パイプライン、runtime なら check。「二者択一」は不要。
+- [x] ~~`assert` は `message` を伴わない簡略形 `assert(cond)` をサポートすべきか？~~ →
+      **サポートする。`assert(cond, ?msg)`、message は任意。**
+- [x] ~~`assert_eq`、`assert_ne` 等の変種は必要か？~~ →
+      **不要。YAGNI。テストフレームワーク確立後に再検討。**
+- [x] ~~panic 出力にソースコード位置を含めるか？~~ → 案 A はデバッグ情報（コールスタック）に依存。
 - [x] ~~assert / Assert 統一問題~~ →
-      **既に確定**。統一案：`assert: (Bool) -> Assert(IsTrue(cond))`、一体两面、dispatch が自動的に分派。詳細については
-      [#156](https://github.com/ChenXu233/YaoXiang/issues/156)（クローズ済み）を参照。`Never`
-      型（⊥）は `assert(false)` の返回型として組込み済み。
+      **確定済み**。統一案：`assert: (Bool) -> Assert(IsTrue(cond))`、表裏一体、dispatch 自動分派。`Never`
+      型（⊥）を `assert(false)` の戻り型として組み込む。
 
-### 2026-07-05：案 A を選択（統一案に取代済み）
+### 2026-07-05：案 A の選択（統一案により置き換え済み）
 
-案 A の 20 行実装は価値とコストの両面で勝利した。2026-07-12 の統一案確定後、案 A/B の対立は dispatch 分派パイプによって解消された——assert は Assert の値導入子であり、「関数」と「キーワード」の間で二者選択する必要がなくなった。
+案 A の 20 行実装が価値とコストの観点で優位。2026-07-12 に統一案が確定した後、案 A/B の対立は dispatch 分派パイプラインにより解消された——assert は Assert の値導入子であり、もはや「関数」と「キーワード」の二者択一は不要。
 
-### 2026-07-12：統一案が確定（2026-07-11 の「完全に独立」結論に取代）
+### 2026-07-12：統一案確定（2026-07-11 の「完全独立」結論を置き換え）
 
 **結論**：`assert` と `Assert`
-は2つの独立したメカニズムではない。`assert: (Bool) -> Assert(IsTrue(cond))`
-——dispatch が自動的に分派を行う：
+は 2 つの独立した機構ではない。`assert: (Bool) -> Assert(IsTrue(cond))`—— dispatch が自動分派する：
 
-- コンパイル時に既知 → 証明パイプに進む（Proved は擦除 / Disproved はエラー / Unknown は証明が必要）
-- 実行時入力 → チェックを挿入 + Γ 仮定を注入
+- compile-time 既知 → 証明パイプラインへ（Proved 消去 / Disproved エラー / Unknown 証明要求）
+- runtime 入力 → check 挿入 + Γ 仮定注入
 
 **モジュール構造**：`std.assert`
-は実行時アサーション（`assert`）とコンパイル時精化型（`Assert`、`IsTrue`）を统一的にサポートする。「分开实现」ではなく、同一原語の両面である。
+が runtime アサート（`assert`）と compile-time 精緻化型（`Assert`、`IsTrue`）を統一的に担う。「別実装」ではなく、同一プリミティブの二面である。
 
 ### 2026-07-11：assert オーバーロード設計
 
-**問題**：`assert` はなぜ2つのオーバーロードが必要で、統一的な `(Bool, ?String)` ではだめなのか？
+**問題**：なぜ `assert` は 2 つのオーバーロードを要し、統一 `(Bool, ?String)` ではダメなのか？
 
 **解答**：
 
-実行時の `assert()` は YaoXiang 唯一のユーザー空間 panic 機構である。`assert(false, "msg")`
-は他の言語の `raise`/`throw` と同等である。因此，它需要覆盖三种场景：
+runtime `assert()` は YaoXiang で唯一のユーザーランド panic 機構である。`assert(false, "msg")`
+は他言語の `raise`/`throw` と等価。したがって以下 3 つのシナリオをカバーする必要がある：
 
-1. 条件 + 简单消息：`assert(cond, "msg")`
-2. 条件 + 自定义 Error：`assert(cond, my_error)`
-3. Result 检查：`assert(result)` — 最も簡潔な `if is_err { panic }`
+1. 条件 + 簡易メッセージ：`assert(cond, "msg")`
+2. 条件 + カスタム Error：`assert(cond, my_error)`
+3. Result チェック：`assert(result)` — `if is_err { panic }` の最も簡潔な形
 
-Result オーバーロードの合理性は、これがエラー伝播の最短パスであるためである——「Result は Ok であるべき、そうでなければ死」。先に
-`.is_ok()` してから個別にエラーを処理する必要がない。
+Result オーバーロードの妥当性：これはエラー伝播の最短経路——「Result は Ok であるべき、さもなくば死」。
+`.is_ok()` を呼んでから別途エラーを処理する必要がない。
 
 ## 付録 B：設計意思決定記録
 
-| 意思決定                            | 決定                                                                            | 日付       | 記録者 |
-| ----------------------------------- | ------------------------------------------------------------------------------- | ---------- | ------ |
-| 案 A と案 B の選択                  | **統一案**：dispatch 分派パイプが A/B の対立を解消、assert は Assert の値導入子 | 2026-07-12 | chenxu |
-| message は任意か                    | **はい**：`assert(cond, ?msg)`、String または Error                             | 2026-07-11 | chenxu |
-| assert_eq などの变体が必要か        | **不要**。YAGNI、テストフレームワークを待つ                                     | 2026-07-11 | chenxu |
-| 別途 raise/throw キーワードが必要か | **不要**。`assert(false, msg)` は raise と同等                                  | 2026-07-11 | chenxu |
-| assert と Assert の関係             | **一体两面**。`assert: (Bool) -> Assert(IsTrue(cond))`、dispatch が自動的に分派 | 2026-07-12 | chenxu |
+| 意思決定                              | 決定                                                                                | 日付       | 記録者 |
+| ------------------------------------- | ----------------------------------------------------------------------------------- | ---------- | ------ |
+| 案 A か案 B か                        | **統一案**：dispatch 分派パイプラインが A/B 対立を解消、assert は Assert の値導入子 | 2026-07-12 | 晨煦   |
+| message の任意性                      | **可**：`assert(cond, ?msg)`、String または Error                                   | 2026-07-11 | 晨煦   |
+| assert_eq 等の変種の必要性            | **不要**。YAGNI、テストフレームワーク確立後に再検討                                 | 2026-07-11 | 晨煦   |
+| 個別の raise/throw キーワードの必要性 | **不要**。`assert(false, msg)` が raise と等価                                      | 2026-07-11 | 晨煦   |
+| assert と Assert の関係               | **表裏一体**。`assert: (Bool) -> Assert(IsTrue(cond))`、dispatch 自動分派           | 2026-07-12 | 晨煦   |
 
 ## 参考文献
 
 - [RFC-007: 関数定義構文統一案](007-function-syntax-unification.md) — `name: type = value` モデル
 - [RFC-010: 統一型構文](010-unified-type-syntax.md) — 型システム基礎
-- [RFC-011: ジェネリックシステム設計 §4.3](../accepted/011-generic-type-system.md)
-  —コンパイル時検証と `Assert(C)` 条件型
-- [RFC-026: FFI 中核メカニズム](026-ffi-core-mechanism.md) — ネイティブ関数登録メカニズム
-- [RFC-027: コンパイル時述語と統一静的検証](../accepted/027-compile-time-evaluation-types.md)
-  — コンパイル時評価システム
+- [RFC-011: generics システム設計 §4.3](../accepted/011-generic-type-system.md) —
+  compile-time 検証と `Assert(C)` conditional type
+- [RFC-026: FFI 中核機構](026-ffi-core-mechanism.md) — native 関数登録機構
+- [RFC-027: compile-time 述語と統一静的検証](../accepted/027-compile-time-evaluation-types.md) —
+  compile-time 評価システム

@@ -205,6 +205,15 @@ pub(crate) fn format_value_with_prefix(
                 prefix_fn(&format!("tuple@{}", handle.raw()))
             }
         }
+        RuntimeValue::Range { start, end, step } => {
+            // #302：与源码字面量同构——step==1 省略第三分量
+            let s = if *step == 1 {
+                format!("{}..{}", start, end)
+            } else {
+                format!("{}..{}..{}", start, end, step)
+            };
+            prefix_fn(&s)
+        }
         RuntimeValue::Array(handle) => {
             if let HeapValue::Array(arr) = &*handle.lock() {
                 let items_str: Vec<String> = arr

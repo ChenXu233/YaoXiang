@@ -28,6 +28,19 @@ pub struct GenericTypeDef {
     pub type_param_names: Vec<String>,
 }
 
+/// RFC-011a §5.3: 实现证明——某类型完整实现了某接口的编译期凭证。
+/// 纯编译期概念，运行时擦除（RFC-011a §6.4）；阶段 3 动态分发的类型收集
+/// 将以此为依据枚举某接口的全部实现类型。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImplementationProof {
+    /// 实现类型名（如 "Dog"）
+    pub type_name: String,
+    /// 接口名（如 "Animal"）
+    pub interface_name: String,
+    /// 已验证签名匹配的方法名列表
+    pub methods: Vec<String>,
+}
+
 /// 类型环境
 ///
 /// 存储类型检查过程中的所有状态信息：
@@ -68,6 +81,8 @@ pub struct TypeEnvironment {
     /// 方法绑定关系: "Type.method" -> FunctionType
     /// 用于存储显式绑定和 pub 自动绑定
     pub method_bindings: HashMap<String, MonoType>,
+    /// RFC-011a: 已通过的接口实现证明（编译期，运行时擦除）
+    pub implementation_proofs: Vec<ImplementationProof>,
     /// 模块名称
     pub module_name: String,
     /// 重载候选存储: 函数名 -> 多个重载版本
@@ -232,7 +247,7 @@ impl TypeEnvironment {
         def: &GenericTypeDef,
         args: &[MonoType],
     ) -> Result<MonoType, crate::util::diagnostic::Diagnostic> {
-        use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
+        use crate::util::diagnostic::ErrorCodeDefinition;
 
         let type_arg_count = def.type_param_names.len();
         let const_arg_count = def.poly.const_binders.len();
@@ -282,12 +297,8 @@ impl TypeEnvironment {
                         })
                         .collect::<Vec<_>>()
                         .join(", ");
-                    return Err(Diagnostic::error(
-                        "E1062".to_string(),
-                        format!("const 泛型约束失败 ({})", var_info),
-                        "修改 const 参数值使其满足约束".to_string(),
-                        None,
-                    ));
+                    // #322 M3：走注册表快捷方法（i18n 模板渲染）
+                    return Err(ErrorCodeDefinition::const_constraint_failed(&var_info).build());
                 }
                 crate::frontend::core::typecheck::proof::verdict::ProofResult::Unproven {
                     ..
@@ -313,7 +324,7 @@ impl TypeEnvironment {
     }
 
     /// 替换类型参数：将 TypeRef(param_name) 替换为具体的类型实参
-    fn replace_type_params(
+    pub(crate) fn replace_type_params(
         ty: &MonoType,
         param_names: &[String],
         args: &[MonoType],
@@ -382,6 +393,13 @@ impl TypeEnvironment {
                     args: new_args,
                 }
             }
+            // RFC-011a §3：impl 签名 = 接口签名经 Self↦具体类型替换——替换必须
+            // 结构递归。此前 Ref 落入兜底原样克隆，接口 `speak: (self: &Self)` 与
+            // impl `(self: &Dog)` 比较时 expected 侧内层仍是不变元 → E1099 误报。
+            MonoType::Ref { mutable, inner } => MonoType::Ref {
+                mutable: *mutable,
+                inner: Box::new(Self::replace_type_params(inner, param_names, args)),
+            },
             _ => ty.clone(),
         }
     }

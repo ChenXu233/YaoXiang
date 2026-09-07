@@ -28,23 +28,32 @@ RFC-011 定义了泛型系统，但没有详细说明接口实现机制。本文
 ```yaoxiang
 # 接口定义（参数化类型，Self 是显式类型参数）
 Animal: (Self: Type) -> Type = {
-    speak: (self: Self) -> String,
+    speak: (self: &Self) -> String,
 }
 
 # 类型定义（内部声明）
 Dog: Type = {
     x: Int = 10,
     Animal(Dog),  # 接口实例化，Self ↦ Dog
-    speak: (self: Dog) -> String = "Woof",
+    speak: (self: &Dog) -> String = "Woof",
 }
 
 # 外部声明（重载）
-Dog.speak: (self: Dog, volume: Int) -> String = "WOOF"
+Dog.speak: (self: &Dog, volume: Int) -> String = "WOOF"
 
 # 异构容器（动态分发）
 animals: List(Animal) = [Dog.new(), Cat.new()]
 animals[0].speak()  # "Woof"
 ```
+
+**接收者拼写约定**（勘误 2026-08-30，配合 RFC-009 所有权语义）：
+
+- 方法接收者跟随签名语义：`&Self` = 借用（接口的默认约定——方法调用不消费接收者），
+  `&mut Self` = 可变借用，按值 `Self` = 消费接收者（Move，RFC-009）。
+- impl 侧签名中的 `Self` 是 impl 类型的别名：接口 `speak: (self: &Self)` 与
+  impl `(self: &Dog)` / `(self: &Self)` 均匹配（Self↦impl 类型替换后完全一致，§3）。
+- 历史示例中的按值接收者拼写（`(self: Self)`）意为借用，本文档已统一迁移为
+  显式 `&Self`；按值拼写从此保留"消费"语义，不再混用。
 
 **消除的复杂性**：
 
@@ -101,7 +110,7 @@ RFC-011 定义了泛型系统，但没有详细说明：
 ```yaoxiang
 # 接口定义（与 RFC-011 泛型类型完全一致）
 Animal: (Self: Type) -> Type = {
-    speak: (self: Self) -> String,
+    speak: (self: &Self) -> String,
 }
 
 # 类型声明实现接口
@@ -114,7 +123,7 @@ Dog: Type = {
 **编译器处理**：
 
 1. 识别 `Animal(Dog)` 是 `(Self: Type) -> Type` 的实例化调用
-2. 执行 `Self ↦ Dog` 替换：展开 `Animal(Dog)` → `{ speak: (self: Dog) -> String }`
+2. 执行 `Self ↦ Dog` 替换：展开 `Animal(Dog)` → `{ speak: (self: &Dog) -> String }`
 3. 检查 `Dog` 是否提供了所有要求的方法（签名匹配）
 4. 如果通过 → 生成实现证明
 5. 如果失败 → 编译错误
@@ -130,7 +139,7 @@ Dog: Type = {
 # 等价于（保留来源信息）
 Dog: Type = {
     x: Int,
-    speak: (self: Dog) -> String,  # 来自 Animal，Self 已替换为 Dog
+    speak: (self: &Dog) -> String,  # 来自 Animal，Self 已替换为 Dog
 }
 ```
 
@@ -146,7 +155,7 @@ Dog: Type = {
 
 **类型检查时机**：
 
-- **接口定义时**：`{ speak: (self: Self) -> String }` 中的 `Self` 是抽象类型参数，只做语法检查。
+- **接口定义时**：`{ speak: (self: &Self) -> String }` 中的 `Self` 是抽象类型参数，只做语法检查。
 - **实例化点**：`Animal(Dog)` 时执行 `Self ↦ Dog`，展开后做完整类型检查（签名匹配、方法存在性）。
 
 这避免了 RFC-011 中 `Self` 作为隐式魔法关键字的问题——`Self` 不出现在类型定义中，它只在接口参数列表中出现一次，和 `T` 完全平等。
@@ -157,7 +166,7 @@ Dog: Type = {
 
 ```yaoxiang
 Drawable: (Self: Type) -> Type = {
-    x: (self: Self) -> Int,    // 方法叫 x
+    x: (self: &Self) -> Int,    // 方法叫 x
 }
 
 Point: Type = {
@@ -178,7 +187,7 @@ Point: Type = {
 Dog: Type = {
     x: Int = 10,
     Animal(Dog),
-    speak: (self: Dog) -> String = "Woof",  # 方法实现在内部
+    speak: (self: &Dog) -> String = "Woof",  # 方法实现在内部
 }
 ```
 
@@ -191,7 +200,7 @@ Dog: Type = {
 }
 
 # 方法实现在外部
-Dog.speak: (self: Dog) -> String = "Woof"
+Dog.speak: (self: &Dog) -> String = "Woof"
 ```
 
 #### 2.3 混合声明
@@ -200,11 +209,11 @@ Dog.speak: (self: Dog) -> String = "Woof"
 Dog: Type = {
     x: Int = 10,
     Animal(Dog),
-    speak: (self: Dog) -> String = "Woof",  # 部分方法在内部
+    speak: (self: &Dog) -> String = "Woof",  # 部分方法在内部
 }
 
 # 部分方法在外部
-Dog.play: (self: Dog) -> Void = { ... }
+Dog.play: (self: &Dog) -> Void = { ... }
 ```
 
 **编译器处理**：
@@ -226,30 +235,30 @@ Dog.play: (self: Dog) -> Void = { ... }
 
 ```yaoxiang
 # 参数类型不同，允许重载
-Dog.speak: (self: Dog) -> String = "Woof"
-Dog.speak: (self: Dog, volume: Int) -> String = "WOOF"
+Dog.speak: (self: &Dog) -> String = "Woof"
+Dog.speak: (self: &Dog, volume: Int) -> String = "WOOF"
 ```
 
 #### 3.2 覆盖（禁止）
 
 ```yaoxiang
 # 签名完全相同，禁止覆盖
-Dog.speak: (self: Dog) -> String = "Woof"
-Dog.speak: (self: Dog) -> String = "Bark"  # ❌ 报错：覆盖不允许
+Dog.speak: (self: &Dog) -> String = "Woof"
+Dog.speak: (self: &Dog) -> String = "Bark"  # ❌ 报错：覆盖不允许
 ```
 
 **错误信息**：
 
 ```
-错误：Dog.speak(self: Dog) -> String 重复定义
+错误：Dog.speak(self: &Dog) -> String 重复定义
   --> 文件2:5:1
   |
-5 | Dog.speak: (self: Dog) -> String = "Bark"
+5 | Dog.speak: (self: &Dog) -> String = "Bark"
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 重复定义
   |
   --> 文件1:3:1
   |
-3 | Dog.speak: (self: Dog) -> String = "Woof"
+3 | Dog.speak: (self: &Dog) -> String = "Woof"
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 第一个定义
 ```
 
@@ -262,14 +271,14 @@ Dog.speak: (self: Dog) -> String = "Bark"  # ❌ 报错：覆盖不允许
 Dog: Type = {
     x: Int,
     Animal(Dog),
-    speak: (self: Dog) -> String = "Woof",
+    speak: (self: &Dog) -> String = "Woof",
 }
 
 # 外部声明（重载，允许）
-Dog.speak: (self: Dog, volume: Int) -> String = "WOOF"
+Dog.speak: (self: &Dog, volume: Int) -> String = "WOOF"
 
 # 外部声明（覆盖，禁止）
-Dog.speak: (self: Dog) -> String = "Bark"  # ❌ 报错
+Dog.speak: (self: &Dog) -> String = "Bark"  # ❌ 报错
 ```
 
 ### 4. 默认值
@@ -380,20 +389,20 @@ struct ImplementationProof {
 ```yaoxiang
 # 接口定义
 Animal: (Self: Type) -> Type = {
-    speak: (self: Self) -> String,
+    speak: (self: &Self) -> String,
 }
 
 # 类型定义
 Dog: Type = {
     x: Int,
     Animal(Dog),
-    speak: (self: Dog) -> String = "Woof",
+    speak: (self: &Dog) -> String = "Woof",
 }
 
 Cat: Type = {
     y: Int,
     Animal(Cat),
-    speak: (self: Cat) -> String = "Meow",
+    speak: (self: &Cat) -> String = "Meow",
 }
 
 # 异构容器 — Animal 未实例化 = 存在类型
@@ -511,6 +520,31 @@ animals[0].speak()
 依赖 LTO（链接时优化）合并枚举变体。`Animal` 作为存在类型（`∃S. Animal(S)`）在编译单元边界传递。各单元生成部分枚举变体，链接阶段合并。
 
 **不支持：** 运行时动态类型（完全的鸭子类型）。类型集合在编译期完全已知。
+
+#### 6.6 实现注记（阶段 3，v1 已落地）
+
+§6 的语义（异构容器、编译期成员检查、按实际类型分发、类型集合编译期封闭）已全部落地，
+实现形态在机制层做了如下具体化：
+
+- **类型收集**：按 `ImplementationProof` 对整个编译单元一次性收集实现类型集，替代 §6.2 的
+  「逐所有权操作点增量收集」。单编译单元内两者语义等价（多出的死变体无害）；增量收集的
+  价值在跨单元场景，归入 v2（见下）。
+- **表示**：编译器合成 `Animal$Group` 变体类型，纯 IR/字节码/运行时工件（指令
+  `CreateVariant`/`VariantTag`/`VariantPayload`，运行时值 `RuntimeValue::Enum`），
+  MonoType 不感知——typecheck 层用户可见类型仍是接口名。每个进入存在类型位置的具体值
+  自动包装为变体值（统一不透明表示，§6.4 语义）。
+- **包装点**：typecheck 在「具体 vs 存在」判定的位置（带注解 let/调用实参/return/列表
+  字面量元素）做定向走查，产出 span 键强制表；IR 生成按 span 注入包装。漏包装由运行时
+  守卫响亮拒绝（`VariantTag`/`VariantPayload` 校验值必须是命名组的变体值），最坏情况是
+  测试期显式运行时错误，绝不静默产出错误数据。
+- **分发**：变体号比较跳转链，每臂解包负载后静态调用具体方法；RFC-004 重绑定形式
+  （`Type.method = fn[n]`）按绑定位置重排后同样参与分发。
+- **隔离**：遗留 trait 约束（`Drawable: Type = {..}` 式，无泛型参数）不经变体分发，行为不变。
+
+**v1 边界（后续阶段）**：跨单元 LTO 变体合并（§6.5）；对 Group 值的模式匹配（依赖
+match 对变体模式的 IR 支持）；反射交互；Move 进容器语义；`Any`/类型变量中转流与推断型
+lambda 边界（兜底 = 运行时守卫）。
+
 ---
 
 ## 用例分析
@@ -520,14 +554,14 @@ animals[0].speak()
 ```yaoxiang
 # 接口定义
 Animal: (Self: Type) -> Type = {
-    speak: (self: Self) -> String,
+    speak: (self: &Self) -> String,
 }
 
 # 类型定义
 Dog: Type = {
     x: Int = 10,
     Animal(Dog),
-    speak: (self: Dog) -> String = "Woof",
+    speak: (self: &Dog) -> String = "Woof",
 }
 
 # 使用
@@ -540,11 +574,11 @@ dog.speak()  # "Woof"
 ```yaoxiang
 # 多个接口
 Animal: (Self: Type) -> Type = {
-    speak: (self: Self) -> String,
+    speak: (self: &Self) -> String,
 }
 
 Pet: (Self: Type) -> Type = {
-    name: (self: Self) -> String,
+    name: (self: &Self) -> String,
 }
 
 # 类型实现多个接口
@@ -552,8 +586,8 @@ Dog: Type = {
     x: Int = 10,
     Animal(Dog),
     Pet(Dog),
-    speak: (self: Dog) -> String = "Woof",
-    name: (self: Dog) -> String = "Buddy",
+    speak: (self: &Dog) -> String = "Woof",
+    name: (self: &Dog) -> String = "Buddy",
 }
 
 # 使用
@@ -585,20 +619,20 @@ IntList: Type = {
 ```yaoxiang
 # 接口定义
 Animal: (Self: Type) -> Type = {
-    speak: (self: Self) -> String,
+    speak: (self: &Self) -> String,
 }
 
 # 类型定义
 Dog: Type = {
     x: Int,
     Animal(Dog),
-    speak: (self: Dog) -> String = "Woof",
+    speak: (self: &Dog) -> String = "Woof",
 }
 
 Cat: Type = {
     y: Int,
     Animal(Cat),
-    speak: (self: Cat) -> String = "Meow",
+    speak: (self: &Cat) -> String = "Meow",
 }
 
 # 异构容器
@@ -618,8 +652,8 @@ for animal in animals {
 ```yaoxiang
 # 接口定义
 Plugin: (Self: Type) -> Type = {
-    name: (self: Self) -> String,
-    execute: (self: Self) -> Void,
+    name: (self: &Self) -> String,
+    execute: (self: &Self) -> Void,
 }
 
 # 主程序
@@ -704,20 +738,20 @@ main: () -> Void = {
 
 ```yaoxiang
 Animal: (Self: Type) -> Type = {
-    speak: (self: Self) -> String,
+    speak: (self: &Self) -> String,
 }
 
 Pet: (Self: Type) -> Type = {
     Animal(Self),                       # Pet 继承 Animal — 无新关键字
-    name: (self: Self) -> String,
+    name: (self: &Self) -> String,
 }
 
 # Dog 实现 Pet 时，必须同时满足 Animal 和 Pet 的所有方法
 Dog: Type = {
     x: Int,
     Pet(Dog),
-    speak: (self: Dog) -> String = "Woof",  # 来自 Animal
-    name: (self: Dog) -> String = "Buddy",  # 来自 Pet
+    speak: (self: &Dog) -> String = "Woof",  # 来自 Animal
+    name: (self: &Dog) -> String = "Buddy",  # 来自 Pet
 }
 ```
 
@@ -735,9 +769,9 @@ Dog: Type = {
 
 ```yaoxiang
 fmt: (Self: Type) -> Type = {
-    display: (self: Self) -> String,                      # 必须实现
-    debug: (self: Self) -> String = self.display(),       # ✅ 引用同接口方法
-    summary: (self: Self) -> String = f"<{self.name}>",  # ❌ 编译错误：self.name 不在 fmt 里
+    display: (self: &Self) -> String,                      # 必须实现
+    debug: (self: &Self) -> String = self.display(),       # ✅ 引用同接口方法
+    summary: (self: &Self) -> String = f"<{self.name}>",  # ❌ 编译错误：self.name 不在 fmt 里
 }
 ```
 
@@ -749,13 +783,13 @@ fmt: (Self: Type) -> Type = {
 
 ```yaoxiang
 Animal: (Self: Type) -> Type = {
-    speak: (self: Self) -> String,
+    speak: (self: &Self) -> String,
 }
 
 Pet: (Self: Type) -> Type = {
     Animal(Self),                                              # 继承
-    name: (self: Self) -> String,
-    introduce: (self: Self) -> String = self.name() + " says " + self.speak(),  # ✅ speak 来自继承的 Animal
+    name: (self: &Self) -> String,
+    introduce: (self: &Self) -> String = self.name() + " says " + self.speak(),  # ✅ speak 来自继承的 Animal
 }
 ```
 
@@ -804,6 +838,7 @@ Pet: (Self: Type) -> Type = {
 | 字段/方法命名空间   | 统一命名空间，冲突报错                               | 字段访问 `point.x` 和方法调用 `point.x()` 无法语法区分，统一避免歧义       | 2026-07-03 |
 | 异构容器所有权      | Move 语义，放入容器后原始变量不可用                  | 与 RFC-009 所有权模型一致                                                   | 2026-07-03 |
 | 品牌投影            | match 模式绑定产生子品牌，与字段投影等价             | 与 RFC-009a 品牌树机制一致，enum 变体投影是品牌树的合法路径                 | 2026-07-03 |
+| 接收者拼写约定      | `&Self` 借用 / `&mut Self` 可变借用 / 按值 = Move    | 接收者跟随签名语义（RFC-009），接口默认借用；历史按值拼写迁移为 &Self       | 2026-08-30 |
 
 ## 开放问题
 

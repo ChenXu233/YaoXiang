@@ -1,11 +1,11 @@
 [workspace]
 members = ["benches/shootout/runner"]
-exclude = ["wasm"]
+exclude = ["wasm", "tools/setup-z3", "tools/code-tables"]
 resolver = "2"
 
 [package]
 name = "yaoxiang"
-version = "0.7.13"
+version = "0.7.14"
 edition = "2021"
 rust-version = "1.96"
 description = "YaoXiang (爻象) Programming Language - A high-performance language with type-as-everything philosophy"
@@ -98,3 +98,6 @@ default-target = "x86_64-unknown-linux-gnu"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-time = "1"
+
+[build-dependencies]
+code-tables = { path = "tools/code-tables" }

@@ -2,7 +2,9 @@
 //!
 //! 验证 `gen_interfaces` 模块从 `StdModule` trait 自动生成 `.yx` 接口文件的功能。
 
-use crate::std::gen_interfaces::{generate_all_interfaces, write_interfaces_to_dir, find_std_interface_file};
+use crate::std::gen_interfaces::{
+    generate_all_interfaces, write_interfaces_to_dir, find_std_interface_file,
+};
 
 #[test]
 fn test_generate_all_interfaces() {

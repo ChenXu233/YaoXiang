@@ -1,0 +1,30 @@
+// src/std/tests/test_suite_fail.yx
+// 覆盖: RFC-036 §7 套件收集——失败路径（per-test 收集与文件退出码）
+// 验证:
+//   - 套件含一个必失败测试：收集到 Err 后其余测试照常运行（pop_returns_last 仍执行）
+//   - 失败明细（名字 + 诊断）进入 abort 消息，文件退出码非 0
+// 状态: ❌ 应运行失败（套件 1/2 失败是本文件的被测行为）
+
+// 套件含一个必失败测试——验证 per-test 收集与退出码非 0
+// expect: runtime-error E6005
+
+use std.list
+use std.result
+use std.test
+
+always_fails: () -> Result(Void, String) = () => {
+    test.assert_eq(1, 2)
+}
+
+pop_still_runs: () -> Result(Void, String) = () => {
+    mut xs = [1, 2]
+    last = list.pop(xs)
+    test.assert_eq(last, 2)
+}
+
+main = {
+    test.suite([
+        ("always_fails", () => always_fails()),
+        ("pop_still_runs", () => pop_still_runs()),
+    ])
+}

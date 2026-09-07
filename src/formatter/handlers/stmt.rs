@@ -21,8 +21,7 @@ pub fn format_stmt(
             var_mut,
             iterable,
             body,
-            label,
-        } => super::common::format_for_loop(var, *var_mut, iterable, body, label, ctx, source_map),
+        } => super::common::format_for_loop(var, *var_mut, iterable, body, ctx, source_map),
         StmtKind::Use {
             path,
             items,

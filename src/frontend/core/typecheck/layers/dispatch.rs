@@ -15,6 +15,7 @@ use crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma;
 use crate::frontend::core::typecheck::proof::context::ProofContext;
 use crate::frontend::core::typecheck::proof::verdict::{ProofResult, UnprovenReason};
 use crate::util::diagnostic::Diagnostic;
+use crate::util::diagnostic::ErrorCodeDefinition;
 
 use super::predicate::check_predicate;
 
@@ -140,22 +141,14 @@ pub fn dispatch_compiletime(
             ..
         } => {
             // 需要证明函数 → RequiresProof 而非 Error
-            let diagnostic = Diagnostic::error(
-                "E8002".to_string(),
-                "需要证明函数来验证约束".to_string(),
-                "添加证明函数或提供运行时检查".to_string(),
-                None,
-            );
+            // #322 M3：原误挂 E8002（内部码），收敛为用户可修复码 E4020
+            let diagnostic = ErrorCodeDefinition::proof_function_required().build();
             CompileTimeOutcome::RequiresProof(diagnostic)
         }
         ProofResult::Unproven { reason, .. } => {
             // 超期预算/超出规则 → 错误
-            let diagnostic = Diagnostic::error(
-                "E8001".to_string(),
-                format!("无法证明: {:?}", reason),
-                String::new(),
-                None,
-            );
+            let diagnostic =
+                ErrorCodeDefinition::internal_error(&format!("无法证明: {:?}", reason)).build();
             CompileTimeOutcome::Error(diagnostic)
         }
     }
@@ -235,12 +228,8 @@ pub fn dispatch_pipeline(
                 CompileTimeOutcome::Error(_) => DispatchOutcome::CompileTime(outcome),
                 CompileTimeOutcome::RequiresProof(_) => {
                     // 编译期未证明 → 尝试注入运行时检查 + 警告
-                    let warning = Diagnostic::warning(
-                        "W8001".to_string(),
-                        "编译期无法证明约束，已降级为运行时检查".to_string(),
-                        "考虑添加证明函数以提高安全性".to_string(),
-                        None,
-                    );
+                    // #322 M3：原 W8001 为未注册伪码，收敛为注册警告码 W1080
+                    let warning = ErrorCodeDefinition::constraint_demoted().build();
                     dispatch_runtime(gamma, constraint);
                     DispatchOutcome::CompileTimeWithWarning { outcome, warning }
                 }

@@ -116,7 +116,6 @@ fn test_spawn_in_for_body_allowed() {
                 var_mut: false,
                 iterable: Box::new(Expr::Var("items".to_string(), Span::dummy())),
                 body: Box::new(make_block(vec![spawn_stmt(vec![])])),
-                label: None,
             },
             span: Span::dummy(),
         }],

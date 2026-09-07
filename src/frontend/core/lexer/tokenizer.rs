@@ -1,27 +1,42 @@
 //! Tokenizer implementation
+
 //! Main lexer structure and token generation logic
+
 //! Supports RFC-004 binding syntax and RFC-010/011 generic syntax
 
 use super::state::LexerState;
+
 use super::literals::{
     scan_number, scan_string, scan_char, scan_leading_dot, scan_fstring, is_identifier_start,
     is_identifier_char, is_digit,
 };
+
 use crate::frontend::core::lexer::tokens::*;
+
 use crate::util::span::{Position, Span};
+
 use std::iter::Peekable;
+
 use std::str::Chars;
 
 /// Main lexer structure
 pub struct Lexer<'a> {
     chars: Peekable<Chars<'a>>,
+
     offset: usize,
+
     line: usize,
+
     column: usize,
+
     start_offset: usize,
+
     start_line: usize,
+
     start_column: usize,
+
     pub error: Option<crate::frontend::core::lexer::LexError>,
+
     state: LexerState,
 }
 
@@ -30,13 +45,21 @@ impl<'a> Lexer<'a> {
     pub fn new(source: &'a str) -> Self {
         Self {
             chars: source.chars().peekable(),
+
             offset: 0,
+
             line: 1,
+
             column: 1,
+
             start_offset: 0,
+
             start_line: 1,
+
             start_column: 1,
+
             error: None,
+
             state: LexerState::new(),
         }
     }
@@ -61,15 +84,22 @@ impl<'a> Lexer<'a> {
         match self.chars.next() {
             Some('\n') => {
                 self.offset += 1;
+
                 self.line += 1;
+
                 self.column = 1;
+
                 Some('\n')
             }
+
             Some(c) => {
                 self.offset += c.len_utf8();
+
                 self.column += 1;
+
                 Some(c)
             }
+
             None => None,
         }
     }
@@ -116,30 +146,42 @@ impl<'a> Lexer<'a> {
                 ' ' | '\t' | '\r' | '\n' => {
                     self.advance();
                 }
+
                 '/' => {
                     // Check for comments
+
                     if self.peek_next() == Some('/') {
                         // Single line comment
+
                         self.advance();
+
                         self.advance();
+
                         while let Some(&c) = self.peek() {
                             if c == '\n' {
                                 break;
                             }
+
                             self.advance();
                         }
                     } else if self.peek_next() == Some('*') {
                         // Multi-line comment
+
                         self.advance();
+
                         self.advance();
+
                         let mut depth = 1;
+
                         while depth > 0 {
                             if let Some(c) = self.advance() {
                                 if c == '/' && self.peek() == Some(&'*') {
                                     self.advance();
+
                                     depth += 1;
                                 } else if c == '*' && self.peek() == Some(&'/') {
                                     self.advance();
+
                                     depth -= 1;
                                 }
                             } else {
@@ -150,6 +192,7 @@ impl<'a> Lexer<'a> {
                         break;
                     }
                 }
+
                 _ => break,
             }
         }
@@ -160,10 +203,13 @@ impl<'a> Lexer<'a> {
         self.skip_whitespace_and_comments();
 
         // Check if at end of file
+
         self.peek()?;
 
         self.start_offset = self.offset;
+
         self.start_line = self.line;
+
         self.start_column = self.column;
 
         let c = self.advance().unwrap();
@@ -171,157 +217,227 @@ impl<'a> Lexer<'a> {
         match c {
             '_' => {
                 // Check if next char is part of identifier (e.g., _foo)
+
                 // Only treat standalone _ as Underscore token
+
                 if self.peek().map(|&c| is_identifier_char(c)).unwrap_or(false) {
                     self.scan_identifier(c)
                 } else {
                     Some(self.make_token(TokenKind::Underscore))
                 }
             }
+
             c if is_identifier_start(c) => self.scan_identifier(c),
+
             c if is_digit(c) => scan_number(self, c),
+
             '"' => scan_string(self),
+
             '\'' => scan_char(self),
+
             '+' => Some(self.make_token(TokenKind::Plus)),
+
             '-' => {
                 if self.peek() == Some(&'>') {
                     self.advance();
+
                     Some(self.make_token(TokenKind::Arrow))
                 } else {
                     Some(self.make_token(TokenKind::Minus))
                 }
             }
+
             '*' => Some(self.make_token(TokenKind::Star)),
+
             '%' => Some(self.make_token(TokenKind::Percent)),
+
             ',' => Some(self.make_token(TokenKind::Comma)),
+
             ';' => Some(self.make_token(TokenKind::Semicolon)),
+
             '(' => Some(self.make_token(TokenKind::LParen)),
+
             ')' => Some(self.make_token(TokenKind::RParen)),
+
             '[' => {
                 // RFC-004: Binding syntax support
+
                 // Left bracket [ for binding positions
+
                 Some(self.make_token(TokenKind::LBracket))
             }
+
             ']' => {
                 // RFC-004: Binding syntax support
+
                 // Right bracket ] for binding positions
+
                 Some(self.make_token(TokenKind::RBracket))
             }
+
             '{' => Some(self.make_token(TokenKind::LBrace)),
+
             '}' => Some(self.make_token(TokenKind::RBrace)),
+
             '@' => Some(self.make_token(TokenKind::At)),
+
             '=' => {
                 if self.peek() == Some(&'>') {
                     self.advance();
+
                     Some(self.make_token(TokenKind::FatArrow))
                 } else if self.peek() == Some(&'=') {
                     self.advance();
+
                     Some(self.make_token(TokenKind::EqEq))
                 } else {
                     Some(self.make_token(TokenKind::Eq))
                 }
             }
+
             '!' => {
                 if self.peek() == Some(&'=') {
                     self.advance();
+
                     Some(self.make_token(TokenKind::Neq))
                 } else {
                     // Zig 式一元逻辑非（SPEC §2.2 / RFC-010）：`!` 紧绑定，与 and/or 关键字并存
+
                     Some(self.make_token(TokenKind::Not))
                 }
             }
+
             '<' => {
                 // RFC-010/011: Generic syntax support
+
                 if self.peek() == Some(&'=') {
                     self.advance();
+
                     Some(self.make_token(TokenKind::Le))
                 } else {
                     Some(self.make_token(TokenKind::Lt))
                 }
             }
+
             '>' => {
                 if self.peek() == Some(&'=') {
                     self.advance();
+
                     Some(self.make_token(TokenKind::Ge))
                 } else {
                     Some(self.make_token(TokenKind::Gt))
                 }
             }
+
             '&' => {
                 if self.peek() == Some(&'&') {
                     self.advance();
+
                     // SPEC §2.2 / RFC-010: logical conjunction uses the keyword `and`; `&&` was removed
+
                     self.error = Some(crate::frontend::core::lexer::LexError::InvalidToken {
                         position: format!("{}:{}", self.line, self.column),
+
+                        span: point(self),
+
                         message:
                             "logical conjunction uses keyword `and`; `&&` was removed (SPEC §2.2)"
                                 .to_string(),
                     });
+
                     Some(self.make_token(TokenKind::Error("use `and` instead of `&&`".to_string())))
                 } else {
                     // Check for &mut: peek ahead 3 chars for 'm','u','t'
+
                     let mut ahead = self.chars_clone();
+
                     if ahead.next() == Some('m')
                         && ahead.next() == Some('u')
                         && ahead.next() == Some('t')
                     {
                         // Consume 'm','u','t'
+
                         self.advance();
+
                         self.advance();
+
                         self.advance();
+
                         Some(self.make_token(TokenKind::MutRef))
                     } else {
                         Some(self.make_token(TokenKind::Ampersand))
                     }
                 }
             }
+
             '|' => {
                 if self.peek() == Some(&'|') {
                     self.advance();
+
                     // SPEC §2.2 / RFC-010: logical disjunction uses the keyword `or`; `||` was removed
+
                     self.error = Some(crate::frontend::core::lexer::LexError::InvalidToken {
                         position: format!("{}:{}", self.line, self.column),
+
+                        span: point(self),
+
                         message:
                             "logical disjunction uses keyword `or`; `||` was removed (SPEC §2.2)"
                                 .to_string(),
                     });
+
                     Some(self.make_token(TokenKind::Error("use `or` instead of `||`".to_string())))
                 } else {
                     Some(self.make_token(TokenKind::Pipe))
                 }
             }
+
             '^' => {
                 // #285: 位异或（SPEC §2.2 级 8）
+
                 Some(self.make_token(TokenKind::Caret))
             }
+
             ':' => {
                 if self.peek() == Some(&':') {
                     self.advance();
+
                     Some(self.make_token(TokenKind::ColonColon))
                 } else {
                     Some(self.make_token(TokenKind::Colon))
                 }
             }
+
             '.' => {
                 if self.peek() == Some(&'.') {
                     self.advance();
+
                     if self.peek() == Some(&'.') {
                         self.advance();
+
                         Some(self.make_token(TokenKind::DotDotDot))
                     } else {
                         Some(self.make_token(TokenKind::DotDot))
                     }
                 } else if self.peek().map(|c| is_digit(*c)).unwrap_or(false) {
                     // Leading decimal point: .5
+
                     scan_leading_dot(self)
                 } else {
                     Some(self.make_token(TokenKind::Dot))
                 }
             }
+
             '/' => Some(self.make_token(TokenKind::Slash)),
+
             '?' => Some(self.make_token(TokenKind::Question)),
+
             c => {
-                self.error = Some(crate::frontend::core::lexer::LexError::UnexpectedChar { ch: c });
+                self.error = Some(crate::frontend::core::lexer::LexError::UnexpectedChar {
+                    ch: c,
+                    span: point(self),
+                });
+
                 Some(self.make_token(TokenKind::Error(format!("Unexpected character: {}", c))))
             }
         }
@@ -330,15 +446,19 @@ impl<'a> Lexer<'a> {
     /// Scan identifier token
     fn scan_identifier(
         &mut self,
+
         first_char: char,
     ) -> Option<Token> {
         let mut value = String::new();
+
         value.push(first_char);
 
         // RFC-012: Check for f-string prefix: f"..."
+
         if first_char == 'f' {
             if let Some(&'"') = self.peek() {
                 self.advance(); // consume '"'
+
                 return scan_fstring(self);
             }
         }
@@ -346,6 +466,7 @@ impl<'a> Lexer<'a> {
         while let Some(&c) = self.peek() {
             if is_identifier_char(c) {
                 value.push(c);
+
                 self.advance();
             } else {
                 break;
@@ -355,13 +476,17 @@ impl<'a> Lexer<'a> {
         if let Some(kind) = self.state.keyword_from_str(&value) {
             Some(Token {
                 kind,
+
                 span: self.span(),
+
                 literal: None,
             })
         } else {
             Some(Token {
                 kind: TokenKind::Identifier(value.clone()),
+
                 span: self.span(),
+
                 literal: None,
             })
         }
@@ -370,12 +495,21 @@ impl<'a> Lexer<'a> {
     /// Create token with current span
     pub fn make_token(
         &self,
+
         kind: TokenKind,
     ) -> Token {
         Token {
             kind,
+
             span: self.span(),
+
             literal: None,
         }
     }
+}
+
+/// 错误点 span（当前位置，#324）
+fn point(lexer: &Lexer<'_>) -> Span {
+    let p = lexer.position();
+    Span::new(p, p)
 }
