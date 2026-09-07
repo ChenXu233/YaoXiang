@@ -134,6 +134,12 @@ Categories: 2 behavior, 0 compile-error, 0 runtime-error
 - `--parallel` 下人类进度行按**完成序**流式输出（整块不交错），JSON `files`
   按 `file` 路径排序保证输出稳定（CI diff 友好）
 - 文件内 per-test `tests` 数组来自 §7 套件收集，随值化模型落地生效（#319）
+- 官方 CI（`.github/workflows/ci.yml` test job）即按此消费：cargo 侧跑
+  `--test integration`（CLI 集成）与 `--test yx_runner`（双根语料守卫），随后
+  `yaoxiang test --json --parallel` 分层实跑——默认模式（语言语料）与显式
+  `src/std/tests`（库层）各产出一份报告；汇总表（total / passed / failed /
+  skipped / time_secs 与 by_kind）写入 job summary，失败文件打印 `kind` /
+  `exit_code` / `stderr` 取证，任一套件非零退出即判红
 
 ### 2. yaoxiang.toml 配置
 
