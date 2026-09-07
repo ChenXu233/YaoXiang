@@ -1,5 +1,5 @@
 ---
-title: 'RFC-029a: Module Cache and Incremental Recompilation'
+title: 'RFC-029a: Module Caching and Incremental Recompilation'
 status: 'Draft'
 author: 'Chenxu'
 created: '2026-09-07'
@@ -7,120 +7,174 @@ updated: '2026-09-07'
 issue: '#293'
 ---
 
-# RFC-029a: Module Cache and Incremental Recompilation
+# RFC-029a: Module Caching and Incremental Recompilation
 
 ## Summary
 
-Fulfills the 029a slot reserved in RFC-029 "Sub-RFC Planning": adding **layered caching and
-incremental recompilation** to the compiler on top of the now-stable orchestrator
-(`compile_project`). The core is a three-layer cache model—intra-process analysis results (L1),
-in-session module-level (L2), cross-process disk (L3)—paired with unified keying and invalidation
-principles and mandatory metrics hooks, converging the four currently disconnected cache silos
-(discovered in the #251 P0-6 audit).
+Fulfill the 029a slot reserved by RFC-029 "Sub-RFC Planning": on top of the now-stable orchestrator,
+define **layered caching and incremental recompilation semantics** — L1 in-process analysis results,
+L2 in-session module-level, L3 cross-process disk — with unified key definitions, invalidation
+rules, and mandatory measurement hooks, converging the currently disconnected cache scattered points
+(#251 P0-6 audit).
 
 ## Motivation
 
 ### Host and Boundary Basis
 
-RFC-029 (accepted) explicitly drew this topic out of its own scope and reserved a slot for this
+RFC-029 (accepted) explicitly scopes this topic out of itself, and reserves the slot for this
 sub-RFC:
 
-> **Out of scope**: caching, file watching, hot reload, incremental recompilation, cross-package
+> **Excludes**: caching, file watching, hot reload, incremental recompilation, cross-package
 > circular dependency handling. — RFC-029 §Core Principles
 
-| Sub-RFC | Capability                                 | Prerequisite        |
-| ------- | ------------------------------------------ | ------------------- |
-| 029a    | Module Cache and Incremental Recompilation | Orchestrator stable |
+| Sub-RFC | Capability                                   | Prerequisite        |
+| ------- | -------------------------------------------- | ------------------- |
+| 029a    | Module Caching and Incremental Recompilation | Orchestrator stable |
 
-The prerequisite "orchestrator stable" has been met: the orchestrator was delivered with RFC-029 and
-validated through #232/#243/#244/#245.
+The prerequisite "orchestrator stable" is met: the orchestrator landed with RFC-029 and was verified
+through deliveries #232/#243/#244/#245.
 
-### Current Problems (#251 P0-6 Audit + 2026-09-07 Empirical Evidence)
+### Current Problems
 
-**Cache silos are disconnected**:
+**Disconnected cache scattered points**:
 
-| Existing                                 | Layer         | Actual Consumer  | Problem                                                           |
-| ---------------------------------------- | ------------- | ---------------- | ----------------------------------------------------------------- |
-| `VALIDATE_CACHE` (validate.rs)           | Intra-process | formatter only   | CLI `check`/`run` and the orchestrator don't go through it        |
-| Z3Backend query cache                    | Check session | Proof pipeline   | No invalidation rules or budget design (one sentence in RFC-009a) |
-| `DocumentCache` (util/cache.rs, RFC-017) | LSP session   | LSP              | Completely disconnected from the CLI compilation face             |
-| `~/.yaoxiang/cache` (RFC-014)            | Disk          | Package download | Unrelated to compilation                                          |
-| Code cache (RFC-028)                     | Runtime       | JIT              | Not a compile-time layer                                          |
+| Existing                       | Layer         | Actual Consumer  | Problem                                                     |
+| ------------------------------ | ------------- | ---------------- | ----------------------------------------------------------- |
+| `VALIDATE_CACHE` (validate.rs) | In-process    | Formatter only   | CLI `check`/`run` and orchestrator don't go through it      |
+| Z3Backend query cache          | Check session | Proof pipeline   | No invalidation rules or budget design (RFC-009a one-liner) |
+| `DocumentCache` (RFC-017)      | LSP session   | LSP              | Completely disconnected from the CLI compilation face       |
+| `~/.yaoxiang/cache` (RFC-014)  | Disk          | Package download | Unrelated to compilation                                    |
+| Code cache (RFC-028)           | Runtime       | JIT              | Not a compile-time layer                                    |
 
-**Multi-entry repeated full pipeline (empirical)**:
+**Multi-entry duplicate full-pipeline (2026-09-07 empirical)**:
 
-- `check_files_with_diagnostics` loop **constructs a new `Compiler` per file**
-  (`src/util/diagnostic/mod.rs`): validating 19 library-layer files in the same process, the std
-  embedded chain gets re-typechecked 19 times;
-- runtime-error test files go through `check` + `run` as two sub-processes, the full pipeline runs
+- `check_files_with_diagnostics` loop creates a new `Compiler` for each file: when validating 19
+  library-layer files in the same process, the std embed chain is typechecked 19 times;
+- runtime-error test files go through the `check` and `run` sub-processes, the full pipeline runs
   twice;
-- borrow check `fast_path_check` does a full graph BFS independently on every write, with no result
-  cache (original #251 P0-6 audit finding; RFC-009a L611 only has the one sentence "a BFS result can
-  be cached for reuse by multiple queries of the same token", with no mechanism design).
+- borrow checking `fast_path_check` performs independent full-graph BFS for each write operation,
+  with no result cache (#251 P0-6 audit original finding; RFC-009a only has one sentence — "one BFS
+  result can be cached and reused for multiple queries of the same token" — with no mechanism
+  design).
 
-### Cost Dissection (--version Baseline Method, Measured 2026-09-07)
-
-| Probe                             | Time   | Difference Meaning                 |
-| --------------------------------- | ------ | ---------------------------------- |
-| `yaoxiang --version`              | ~50 ms | Process spawn + CLI initialization |
-| Bare file `check` (no std import) | ~60 ms | Frontend compile ≈ 10 ms           |
-| `std.test` chain file `check`     | ~80 ms | Embedded std chain ≈ +20 ms        |
-
-Measured 9.8 s ≈ 58 ms/file for 170 test-loop files: **~85% is process lifecycle cost, compilation
-itself is only ~10 ms, std chain +20 ms/file**. From this, the revenue battlefield of this RFC is
-located:
-
-1. **Same-process multi-entry reuse** (L1/L2) — eliminate repeated frontend pipelines and std chain
-   compilation;
-2. **Cross-process std chain elimination** (L3) — the only legitimate cache revenue channel under
-   the sub-process model;
-3. Process spawn's ~50 ms/file is **outside cache's range** — sub-process isolation is RFC-036 §6's
-   design choice, and this RFC does not overturn it (see Non-Goals).
+**Cost anatomy (--version baseline method)**: process spawn + CLI initialization ~50 ms; bare file
+`check` ~60 ms (frontend compilation ≈ 10 ms); `std.test` chain file ~80 ms (embed chain ≈ +20 ms).
+Test loop of 170 files measured 9.8 s ≈ 58 ms/file, **~85% is process lifecycle cost**. This
+determines this RFC's benefit positioning: eliminate multi-entry duplication and std chain duplicate
+compilation; process spawn cost is outside the cache's reach (sub-process isolation is a design
+choice in RFC-036 §6, see Non-Goals).
 
 ## Proposal
 
-### Core Design: Three-Layer Cache Model
+### 1. Three-Layer Cache Model
 
-#### L1 Intra-Process Analysis Result Cache (Lifetime = Single Check Session)
+Caching is layered by **lifecycle**, with each layer having a unique host and clear entries:
 
-- `validate_source` consolidated as the **sole frontend validation entry point**:
-  `check_files_with_diagnostics`, the orchestrator's per-file typecheck, and LSP diagnostics all go
-  through it (currently only the formatter consumes it);
-- Key = FNV-1a content hash (existing implementation in validate.rs), value = `ValidateResult`
-  (diagnostics + AST);
-- Borrow BFS unsafe-set cache: implements the design sentence from RFC-009a, lifetime = single
-  function check session, aligned with #290/#292 borrow check implementations;
-- Z3 query cache (RefCell + query hash) consolidated under the same principle, with invalidation and
-  budget specs added.
+| Layer | Lifecycle                                  | Host                               | Typical Entries                                                        |
+| ----- | ------------------------------------------ | ---------------------------------- | ---------------------------------------------------------------------- |
+| L1    | Single check session                       | `validate_source` / proof pipeline | Validation results (diagnostics + AST), borrow unsafe set, SMT queries |
+| L2    | Single orchestration (reusable in-process) | `CompileSession`                   | Registry, per-module validation results                                |
+| L3    | Cross-run                                  | Disk `cache/compile/`              | Module bytecode                                                        |
 
-#### L2 In-Session Module-Level Cache (Lifetime = Single Orchestration)
+Layering criterion: who consumes the entry, and with whom it invalidates. L1 entries are consumed by
+only a single check; L2 entries are consumed by multiple entries within one orchestration; L3
+entries are consumed across processes. No entry sharing across layers — the same semantic product is
+allowed to exist in multiple layers simultaneously, each layer hits and counts independently.
 
-- The orchestrator's Registry and each module's validation result are cached by **(module path,
-  content hash)**; the second `compile_project` in the same process hits directly;
-- std embedded source (`yx_sources` include_str!) has constant content → compiled once per process,
-  shared by N importing files;
-- Invalidation: invalidates when this module's source hash changes; dependency changes propagate
-  along the `use` graph (third-wave delivery).
+### 2. Cache Key: Content Hash Is Identity
 
-#### L3 Cross-Process Disk Cache (Lifetime = Across Runs)
+```rust
+struct CacheKey {
+    content_hash: u64,          // FNV-1a, validate.rs existing implementation
+    compiler_version: Option<Version>,   // Only carried by L3
+    config_fingerprint: Option<u64>,     // Only carried by L3: hash of config bits affecting semantics
+}
+```
 
-- Location `~/.yaoxiang/cache/compile/`, same root as RFC-014 download cache, different segment;
-- Key = **(content hash, compiler version, semantic config fingerprint)**; product is module
-  bytecode (reusing the `BytecodeFile` magic number format);
-- Version or fingerprint mismatch = total miss and recompile — **no cross-module invalidation
-  propagation** (conservative whole-key invalidation).
+- L1/L2 key = `content_hash`: source is identity, same content must hit, independent of path;
+- L3 key = the entire triple: any version or fingerprint mismatch is a miss, full-key recompile;
+- **Incomplete keys refuse to write**: L3 entries missing version or fingerprint are not written to
+  disk — better to miss than persist stale products, the same construct-time refusal principle as
+  diagnostics i18n missing translations refusing compilation.
 
-### Unified Keying and Invalidation Principles (#293 Gap 4)
+### 3. L1: validate_source Is the Only Frontend Entry
 
-- Key strength: content hash > structural hash > version number. L1/L2 use content hash (source is
-  identity); L3 adds compiler version and config fingerprint guards on top;
-- Invalidation propagation only exists inside the L2 dependency graph; L3 whole-key invalidation, no
-  module-to-module dependency tracking;
-- **Construction-time rejection**: an incomplete key (missing hash/missing version) is rejected from
-  write, prefer miss over stale product — same principle as refusing compilation when i18n
-  diagnostics lack translations.
+All components needing "source → (diagnostics, AST)" must go through `validate_source`; building a
+private frontend chain is not allowed. It already exists with a process-level cache, but only the
+formatter consumes it; this RFC folds in the three bypassers:
 
-### Metrics Hooks (#289 Alignment)
+| Consumer                        | Current State                                   | After Folding In                         |
+| ------------------------------- | ----------------------------------------------- | ---------------------------------------- |
+| `check_files_with_diagnostics`  | `Compiler::new()` per file                      | Look up / backfill via `validate_source` |
+| Orchestrator per-file typecheck | Self-built Registry with duplicate construction | Look up / backfill via `validate_source` |
+| LSP diagnostics                 | Independent DocumentCache system                | Via `validate_source` (third wave)       |
+
+Borrow analysis result cache is the second line of L1. Define **function check session** as the
+borrow cache's lifecycle unit:
+
+```rust
+struct FunctionCheckSession {
+    /// Full-graph BFS-derived unsafe set — built on function entry, dropped on function exit
+    unsafe_set: HashSet<TokenId>,
+    /// SMT query cache (linear arithmetic queries within RFC-027 budget)
+    smt_cache: HashMap<u64, SMTResult>,
+}
+```
+
+Multiple write operations of the same function share one BFS (realizing RFC-009a's design sentence);
+the SMT query cache is folded into the same session object and destroyed with the session. The
+session does not outlive the function — intra-function code invariance is guaranteed by the type
+checking process itself.
+
+### 4. L2: In-Session Module Cache
+
+The orchestration session is a first-class entity, no longer implicitly reconstructed each time:
+
+```rust
+pub struct CompileSession {
+    /// Key = (module path, content_hash); path distinguishes different files with same-name content
+    modules: HashMap<(PathBuf, u64), Arc<ModuleEntry>>,
+}
+
+struct ModuleEntry {
+    validated: Arc<ValidateResult>,
+}
+```
+
+- std embed source (`yx_sources` include_str!) content is constant, its hash computed once
+  in-process (`LazyLock` static table) — N import files share one compilation;
+- A second `compile_project` in the same process (e.g., the test loop's check + run, yx_runner
+  multi-file) looks up `CompileSession` per module; if content is unchanged, the whole module is
+  reused;
+- The session dies with the process: no disk persistence, no cross-process obligation.
+
+### 5. L3: Disk Bytecode Cache
+
+```text
+~/.yaoxiang/cache/compile/<content_hash>-<version>-<fp>.yxbc
+```
+
+- Product = existing `BytecodeFile` magic-number format (the `run` bytecode probe path consumes
+  as-is), no new serialization format invented;
+- Load = read file + verify that the filename triple matches the content; any mismatch is treated as
+  a miss and the bad entry is deleted;
+- The first batch caches only std modules: embed source content is stable, version-anchored, with a
+  constant hit rate; project module caching starts after the open questions are resolved.
+
+### 6. Invalidation Rules
+
+| Rule | Trigger                      | Action                                                                                          |
+| ---- | ---------------------------- | ----------------------------------------------------------------------------------------------- |
+| R1   | Source content change        | No active invalidation — key contains content hash, old entries are naturally unreachable       |
+| R2   | Dependent module change (L2) | Mark dirty downstream along the `use` graph, recompile only the dirty module and its downstream |
+| R3   | Compiler version change (L3) | Full miss (key contains version, no cross-version migration)                                    |
+| R4   | Incomplete key (L3)          | Refuse to write                                                                                 |
+
+Invalidation propagation only exists within the L2 dependency graph; L3 does not track inter-module
+dependencies — the version guard is the fallback, semantics never depend on an old product being
+"still valid by coincidence".
+
+### 7. Measurement: Caches Without Observability May Not Merge
 
 ```rust
 pub struct CacheStats {
@@ -130,85 +184,145 @@ pub struct CacheStats {
 }
 ```
 
-- `check --json` and `test --json` summary append a `cache` field (per-layer hit rate);
-- **Mandatory threshold: unobservable cache is not allowed to merge in** — prevents silent rot of
-  "cached but never hit".
+The `check --json` and `test --json` summaries attach a `cache` field:
 
-### Incremental Recompilation Boundary (#293 Gap 2)
+```json
+{
+  "cache": {
+    "l1": { "hits": 18, "misses": 1 },
+    "l2": { "hits": 0, "misses": 19 },
+    "l3": { "hits": 57, "misses": 3, "cached_bytes": 245760 }
+  }
+}
+```
 
-- **Start at file level**: dirty files determined along the `use` graph, only recompile dirty files
-  and their downstream; evolving in lockstep with RFC-017's LSP file-level cache (DocumentCache
-  migrates to be a consumer of L1+L2, not an independent system);
-- **Function-level increment explicitly not done** (RFC-017 already declared this simplification; a
-  few-millisecond full-file parse is not worth incrementalizing).
+Any cache entry PR merging to mainline must attach hit evidence for that field, preventing the
+silent rot of "cached but no one hits" (#289 observability alignment).
 
 ## Detailed Design
 
-### Integration with the RFC-029 Orchestration Flow
+### Type System Impact
 
-```text
-RFC-029 orchestration flow (delivered):
+None. This RFC introduces no language types, syntax, or semantic changes; cache entry types all
+reuse existing `ValidateResult` / `ModuleRegistry` / `BytecodeFile`.
 
-  discover source files → build Registry → per-file typecheck → whole compilation
+### Runtime Behavior
 
-This RFC insertion point:
+- `run`'s execution semantics are unchanged; an L3 hit is equivalent to "load bytecode from disk",
+  going through the existing `BytecodeFile::probe`/`load` path, byte-level isomorphic;
+- On a full cache miss, behavior is completely identical to today (the cache must be transparent —
+  this is an acceptance item, not a vision);
+- Observable changes are only two places: latency drops; `check`/`test`'s `--json` output adds a
+  `cache` field (purely additive, old consumers unaffected).
 
-  discover source files → [L2] query Registry/validation result cache by path + hash
-                              ├─ hit → reuse
-                              └─ miss → build (and backfill)
-  per-file typecheck → [L1] validate_source single entry point (content hash query/backfill)
-  whole compilation → product → [L3] serialize to disk (with version guard), loaded directly next process
-```
+### Compiler Changes
 
-### Test Loop Expected Gains (Quantified)
+| Component                                        | Change                                                                            |
+| ------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `src/frontend/validate.rs`                       | Becomes the only frontend entry (consumer folding, see Proposal §3)               |
+| `src/util/diagnostic/mod.rs`                     | `check_files_with_diagnostics` removes per-file `Compiler::new()`                 |
+| `src/frontend/module/orchestrator.rs`            | `compile_project` accepts `CompileSession` (L2)                                   |
+| `src/frontend/core/typecheck/proof/`             | `FunctionCheckSession` (L1 borrow/SMT cache)                                      |
+| `src/frontend/pipeline/compilation_cache.rs`     | New — L3 read/write and `CacheStats` (placeholder tests reserved)                 |
+| `src/frontend/pipeline/incremental_scheduler.rs` | New — dirty file determination along the `use` graph (placeholder tests reserved) |
+| `src/util/cache.rs`                              | `DocumentCache` migrates to be an L1 consumer (third wave, RFC-017 folding)       |
+| `src/main.rs` / `src/util/test_runner.rs`        | JSON report attaches `cache` field                                                |
 
-| Scenario                                          | Current              | After 029a            | Dependency Layer |
-| ------------------------------------------------- | -------------------- | --------------------- | ---------------- |
-| Same-process runner (yx_runner mode) 19 lib files | std chain 19×20 ms   | 1×20 ms + 19 hits     | L1+L2            |
-| Sub-process runner (`yaoxiang test`)              | std chain 20 ms/file | ≈ 0 after hit         | L3               |
-| Borrow check on large function                    | O(V²) BFS            | Reused within session | L1               |
-| Process spawn (~50 ms/file)                       | Unchanged            | Unchanged (non-goal)  | —                |
+### Backward Compatibility
 
-## Relationship with Existing Systems
+- ✅ Language face: zero change; CLI face: zero breakage; JSON field: purely additive;
+- ✅ The cache layer can be fully downgraded (clearing it returns to no-cache behavior), no
+  migration path burden;
+- L3 disk entries carry a version guard; after a version upgrade, old entries naturally miss, no
+  cleanup tool needed (the semantics of `yaoxiang cache clean` extend from the existing RFC-014
+  command to the `compile/` segment).
 
-- **RFC-029**: Host. 029a is the fulfillment of its "Sub-RFC Planning" table;
-- **RFC-009a**: Mechanization of the L611 design sentence (BFS cache, L1 layer);
-- **RFC-017**: DocumentCache consolidated as an L1+L2 consumer, single source of cache policy;
-- **RFC-014**: Disk directory division — `cache/` download segment vs. this RFC's `cache/compile/`
-  segment;
-- **RFC-028**: JIT code cache belongs to the runtime layer, not under this RFC's jurisdiction;
-- **RFC-031**: Optimization pass scheduling belongs to the Pass manager; this RFC caches the I/O of
-  the pass pipeline, the two are orthogonal;
-- **RFC-036**: Test sub-process isolation model remains unchanged; L3 is its only cross-process
-  revenue channel;
-- **#251/#290/#292**: Audit sources and borrow check implementations (BFS cache consumers);
-- **#289**: Metrics hooks observability alignment;
-- **#247**: `use` tracking discovery (on-demand discovery) layered on top of the L2 dependency
-  graph, purely a performance optimization.
+## Tradeoffs
+
+### Pros
+
+- Directly eliminates three measured wastes: in-process multi-entry duplicate full-pipeline, std
+  embed chain N-times duplicate compilation (19 files × 20 ms → 1 × 20 ms), and borrow checking
+  large-function O(V²) duplicate BFS;
+- Cache strategy single-sourced: key definitions, invalidation rules, and measurement calibration
+  are uniquely defined warehouse-wide, folding the five scattered points into the same set of
+  semantics;
+- The measurement mandate makes both cache benefits and rot visible.
+
+### Cons
+
+- L1 process-level cache introduces shared state: under `--parallel` it becomes a lock hotspot.
+  Mitigation: entries are `Arc`-immutable, keys are `u64`, lock granularity = single bucket;
+- L3 introduces a risk surface of "old products being loaded". Mitigation: version + fingerprint
+  double guard, better to miss than be wrong, and the bytecode carries its own magic-number check;
+- L2 makes the orchestrator from stateless to stateful, so the regression surface covers the full
+  #232/#243-245 scenarios.
+
+## Alternatives
+
+| Alternative                                             | Why Not Selected                                                                                                                                                                            |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Only L3 disk cache                                      | Measured 85% of cost is in process lifecycle, L3 only touches the std chain ~20 ms/file; doesn't solve multi-entry duplication                                                              |
+| Compilation daemon                                      | Highest benefit ceiling (also eats spawn cost), but introduces service lifecycle management and conflicts with RFC-036's sub-process isolation model; reserved for a future independent RFC |
+| Each scattered point evolves separately, no unification | i.e., the current state — three sets of key/invalidation calibration, exactly the gap #293 points out                                                                                       |
+| Test loop in-process runner                             | Belongs to RFC-036 isolation model adjudication; this RFC does not cross the line                                                                                                           |
 
 ## Implementation Strategy
 
-1. **First wave (lands and yields value immediately)**: `validate_source` unified entry (three
-   consumers wired in: check/orchestrator/LSP), borrow BFS session cache, minimal metrics hooks;
-2. **Second wave**: L2 session module cache (std embedded single-time compilation + Registry reuse);
-3. **Third wave**: L3 disk cache (std priority — embedded source content is stable, hit rate is
-   constant) + file-level incremental recompilation along the `use` graph + LSP cache unification.
+### Dependencies
+
+- Prerequisite: RFC-029 orchestrator (stable), RFC-009a proof pipeline (BFS cache host);
+- Parallel: #247 `use` tracking discovery — incremental recompilation's dependency graph accuracy
+  depends on it; before it lands, R2 dirty determination conservatively takes the full amount;
+- Consumers: #290/#292 borrow checking implementations.
+
+### Wave Division and Risk
+
+1. **First Wave (L1)**: `validate_source` folds in three consumers + `FunctionCheckSession` +
+   minimal `CacheStats`. Low risk — pure internal refactoring, full-miss behavior unchanged;
+2. **Second Wave (L2)**: `CompileSession` + std embed single compilation. Medium risk — orchestrator
+   becomes stateful, requires the full #232/#243-245 regression;
+3. **Third Wave (L3 + Incremental)**: Disk cache (std priority) + `incremental_scheduler` +
+   DocumentCache migration. High risk — cross-process product correctness depends entirely on the
+   version guard.
+
+## Open Questions
+
+- [ ] Whether L3 products include type environment serialization (determines whether `check`-type
+      consumers can hit L3, or only `run` can hit)
+- [ ] The semantic bit list for `config_fingerprint`: which configuration items change compilation
+      product semantics
+- [ ] DocumentCache migration goes with the third wave, or as an independent small step first
+- [ ] Hit rate attribution calibration: by call count or by deduplicated key count (affects the
+      interpretability of metrics)
 
 ## Non-Goals
 
-- Function-level incremental parsing (RFC-017's existing ruling);
-- JIT / runtime cache (RFC-028);
-- Overturning the test loop's sub-process isolation (RFC-036 §6 design choice);
+- Function-level incremental parsing (RFC-017's existing adjudication: full-file parsing is only a
+  few milliseconds, not worth incrementing);
+- JIT / runtime cache (RFC-028 jurisdiction);
+- Overturning the test loop's sub-process isolation (RFC-036 §6 design choice; the daemon scheme is
+  in Alternatives, separate RFC);
 - Cross-package invalidation propagation (outside RFC-029's boundary);
 - Process spawn cost optimization (not a cache topic).
 
-## Design Decision Log
+---
 
-| Decision                                          | Conclusion                                                               | Date       | Basis                                                    |
-| ------------------------------------------------- | ------------------------------------------------------------------------ | ---------- | -------------------------------------------------------- |
-| Host                                              | RFC-029's reserved 029a slot, no new top-level RFC                       | 2026-09-07 | RFC-029 §Sub-RFC Planning; user ruling                   |
-| Layered model                                     | L1 intra-process / L2 session module / L3 disk                           | 2026-09-07 | Cache silo inventory + cost dissection                   |
-| Revenue positioning                               | Main battlefield = multi-entry reuse + std chain elimination             | 2026-09-07 | --version baseline method: 85% cost in process lifecycle |
-| Sub-process isolation not overturned              | L3 is the only cross-process revenue channel under the sub-process model | 2026-09-07 | RFC-036 §6 + cost dissection                             |
-| L3 does not propagate invalidation across modules | Version guard whole-key invalidation                                     | 2026-09-07 | Construction-time rejection principle                    |
-| Metrics mandatory                                 | No metrics, no merge                                                     | 2026-09-07 | #289 observability alignment                             |
+### Appendix B: Design Decision Record
+
+| Decision                                    | Determination                                                         | Date       | Recorder |
+| ------------------------------------------- | --------------------------------------------------------------------- | ---------- | -------- |
+| Host                                        | 029a slot reserved by RFC-029, no new top-level RFC                   | 2026-09-07 | Chenxu   |
+| Layering model                              | L1 in-process / L2 in-session module-level / L3 disk                  | 2026-09-07 | Chenxu   |
+| Benefit positioning                         | Main battlefield = multi-entry reuse and std chain elimination        | 2026-09-07 | Chenxu   |
+| Sub-process isolation not overturned        | L3 is the only cross-process benefit channel in the sub-process model | 2026-09-07 | Chenxu   |
+| L3 no cross-module invalidation propagation | Full-key invalidation via version guard                               | 2026-09-07 | Chenxu   |
+| Measurement mandate                         | No metrics, no merge                                                  | 2026-09-07 | Chenxu   |
+
+## References
+
+- #293 (this RFC's issue); #251 P0-6 audit (borrow BFS no-cache finding)
+- RFC-029 §Core Principles (boundary declaration) and §Sub-RFC Planning (029a slot)
+- RFC-009a (borrow proof pipeline; BFS cache design sentence)
+- RFC-017 §2 (LSP DocumentCache and file-level simplification adjudication)
+- RFC-014 §Global Cache (disk directory); RFC-028 §Code Cache (runtime layer boundary)

@@ -503,9 +503,9 @@
   "src/design/rfc/accepted/029-module-semantics.md:en": "99eadf80b40a6b88e74a6633dc6b8f64",
   "src/design/rfc/accepted/029-module-semantics.md:ja": "99eadf80b40a6b88e74a6633dc6b8f64",
   "src/design/rfc/accepted/029-module-semantics.md:ru": "99eadf80b40a6b88e74a6633dc6b8f64",
-  "src/design/rfc/accepted/036-test-framework.md:en": "ae4c2ea9feef48b33561816ed313ad9e",
-  "src/design/rfc/accepted/036-test-framework.md:ja": "ae4c2ea9feef48b33561816ed313ad9e",
-  "src/design/rfc/accepted/036-test-framework.md:ru": "ae4c2ea9feef48b33561816ed313ad9e",
+  "src/design/rfc/accepted/036-test-framework.md:en": "bccf3ee8853179c8ebfbc56659aacb37",
+  "src/design/rfc/accepted/036-test-framework.md:ja": "bccf3ee8853179c8ebfbc56659aacb37",
+  "src/design/rfc/accepted/036-test-framework.md:ru": "bccf3ee8853179c8ebfbc56659aacb37",
   "src/design/rfc/accepted/038-statement-termination.md:en": "ba84cacc49d60c8589fa3794264ab416",
   "src/design/rfc/accepted/038-statement-termination.md:ja": "ba84cacc49d60c8589fa3794264ab416",
   "src/design/rfc/accepted/038-statement-termination.md:ru": "ba84cacc49d60c8589fa3794264ab416",
@@ -515,7 +515,7 @@
   "src/design/rfc/draft/039-pattern-matching-completeness.md:en": "cb8d44714d81159deee6d30b195ea24f",
   "src/design/rfc/draft/039-pattern-matching-completeness.md:ja": "cb8d44714d81159deee6d30b195ea24f",
   "src/design/rfc/draft/039-pattern-matching-completeness.md:ru": "cb8d44714d81159deee6d30b195ea24f",
-  "src/design/rfc/draft/029a-module-cache-incremental.md:en": "df90b9a7a93e80e585632332a3896e6f",
-  "src/design/rfc/draft/029a-module-cache-incremental.md:ru": "df90b9a7a93e80e585632332a3896e6f",
-  "src/design/rfc/draft/029a-module-cache-incremental.md:ja": "df90b9a7a93e80e585632332a3896e6f"
+  "src/design/rfc/draft/029a-module-cache-incremental.md:en": "8ad375f0bb12d14b40046331df375602",
+  "src/design/rfc/draft/029a-module-cache-incremental.md:ru": "8ad375f0bb12d14b40046331df375602",
+  "src/design/rfc/draft/029a-module-cache-incremental.md:ja": "8ad375f0bb12d14b40046331df375602"
 }
