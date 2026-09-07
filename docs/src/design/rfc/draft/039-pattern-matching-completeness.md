@@ -4,6 +4,7 @@ status: '草案'
 author: '晨煦'
 created: '2026-09-03'
 updated: '2026-09-03'
+issue: '#330'
 ---
 
 # RFC-039: 模式匹配完备化
