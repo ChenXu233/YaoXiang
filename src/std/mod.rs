@@ -33,6 +33,9 @@ pub mod time;
 pub mod weak;
 pub mod yx_sources;
 
+#[cfg(test)]
+mod tests;
+
 use std::sync::MutexGuard;
 
 use crate::backends::interpreter::ffi::FfiRegistry;

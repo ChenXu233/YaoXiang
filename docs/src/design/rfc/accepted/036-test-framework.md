@@ -264,9 +264,9 @@ CLI 能力，测试文件导入项目模块是核心场景。因此 Phase 1 先�
 
 1. 对每个文件按头部指令分流执行（指令文法见 §8.2，经 `src/util/test_markers.rs`
    解析，与 yx_runner 共用）：
-   - 行为测试：`yaoxiang run --debug-info <file>` 子进程
-     （`--debug-info` 使运行时错误带源码位置——2026-08-02 实证 stack trace 输出
-     `file:line:col`）；`// mode:` 声明子进程 `--runtime` 模式
+   - 行为测试：`yaoxiang run <file>` 子进程
+     （#327 起运行时错误默认携带源码位置与栈帧——debug_map 默认生成，
+     stack trace 输出 `file:line:col`）；`// mode:` 声明子进程 `--runtime` 模式
    - 编译期拒绝类：单步 `yaoxiang check <file>`
    - 运行期失败类：`check`（必须通过）+ `run`（必须失败）两步
 2. `// skip: <原因>` 的文件跳过执行，计入报告的 skipped
@@ -463,7 +463,7 @@ test.assert_err_code(r, "E6009")
 - `build.rs` — 嵌入 `std/*.yx` 到二进制
 - orchestrator / Registry — 支持从嵌入源以虚拟路径加载 `.yx` 模块
 - RFC-015 配置解析 — `[tool.test]` 段
-- 子进程执行（`--debug-info`）+ 报告
+- 子进程执行 + 报告
 
 交付物：
 
@@ -514,7 +514,7 @@ test.assert_err_code(r, "E6009")
 | 标准库加载   | 当前嵌入二进制，未来文件系统              | 2026-07-26 | 版本绑定，单文件可用       |
 | 断言参数类型 | 无标注参数（Any），不依赖泛型系统         | 2026-08-02 | `?` 类型语法不存在；Any 实证可比较、可插值 |
 | 多文件运行   | CLI `run` 委托 `run_project`（orchestrator）作为前置 | 2026-08-02 | 子进程模型继承 CLI 能力；#247 退化为纯性能优化 |
-| 报告源码位置 | 子进程带 `--debug-info`                   | 2026-08-02 | 实证 stack trace 输出 `file:line:col`；经嵌入模块（std.test）中转的帧归属不在此保证内，属 #289 + RFC-034 |
+| 报告源码位置 | 运行时错误默认携带（#327）                | 2026-09-07 | debug_map 默认生成，stack trace 输出 `file:line:col`；经嵌入模块（std.test）中转的帧归属不在此保证内，属 #289 + RFC-034 |
 | 负向测试分层 | 值级反向通用 / 编译失败 runner 结构化标记（仅内部）/ 硬失败归 Result 化 | 2026-09-02 | #319 定案；取代隐式 [test:error] 约定 |
 | 文件内多测试 | 值化标准模型：测试函数返回 Result，套件收集 per-test 判定 | 2026-09-02 | 无 catch、非入口调用（入口仅限内部场景） |
 | Error 码 | Error 增加机器可读 `code` 字段            | 2026-09-02 | 支撑错误码断言；编译期码走 runner 比对 |

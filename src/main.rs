@@ -92,10 +92,6 @@ enum Commands {
         #[arg(value_name = "FILE")]
         file: PathBuf,
 
-        /// Generate debug info for runtime errors (spans/source mapping)
-        #[arg(long)]
-        debug_info: bool,
-
         /// Runtime mode (embedded, standard, full)
         #[arg(long, default_value = "embedded")]
         runtime: String,
@@ -353,7 +349,6 @@ fn main() -> Result<()> {
     match command {
         Commands::Run {
             file,
-            debug_info,
             runtime,
             workers,
         } => {
@@ -383,7 +378,7 @@ fn main() -> Result<()> {
                 0 // 0 = auto-detect
             };
 
-            if let Err(e) = run_file_with_diagnostics(&file, debug_info, &runtime_mode, workers) {
+            if let Err(e) = run_file_with_diagnostics(&file, &runtime_mode, workers) {
                 // 多数错误已被 run_file_with_diagnostics 渲染；anyhow 包装的路径
                 // （文件读取失败、codegen 失败）在此兜底，不再静默退出
                 eprintln!("{e}");

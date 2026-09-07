@@ -831,6 +831,9 @@ pub struct BytecodeModule {
     pub globals: Vec<GlobalInfo>,
     /// Entry point function index
     pub entry_point: Option<usize>,
+    /// Debug sources（#327）：带 DebugSection 的 .42 直跑时用于渲染栈帧源码上下文；
+    /// 无 DebugSection（构建未带 --debug-info）时为 None，渲染降级为无片段
+    pub debug_sources: Option<crate::util::span::SourceMap>,
 }
 
 /// Global variable information
@@ -857,6 +860,7 @@ impl BytecodeModule {
             vtables: Vec::new(),
             globals: Vec::new(),
             entry_point: None,
+            debug_sources: None,
         }
     }
 
@@ -903,13 +907,23 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
     fn from(file: crate::middle::passes::codegen::bytecode::BytecodeFile) -> Self {
         let name = "main".to_string(); // Default module name
 
+        // #327：.42 加载后 FunctionCode.debug_map 恒为空（序列化不落代码段），
+        // 真实映射在 debug_section.function_debug_maps 平行数组——按函数索引回填，
+        // 同时把 sources 贯通到 debug_sources 供运行时错误渲染
+        let debug_section = file.debug_section;
+        let debug_sources = debug_section.as_ref().map(|d| d.sources.clone());
+
         // Convert functions
         let mut functions = Vec::new();
-        for func in file.code_section.functions {
+        for (func_idx, func) in file.code_section.functions.into_iter().enumerate() {
             // Decode instructions from BytecodeInstruction to BytecodeInstr
             let mut decoded_instructions = Vec::new();
             let mut labels = std::collections::HashMap::new();
-            let debug_map = func.debug_map;
+            let debug_map = debug_section
+                .as_ref()
+                .and_then(|d| d.function_debug_maps.get(func_idx))
+                .cloned()
+                .unwrap_or(func.debug_map);
             let mut ip = 0;
             while ip < func.instructions.len() {
                 let instr = &func.instructions[ip];
@@ -1939,6 +1953,8 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
             vtables: file.vtables,
             globals: Vec::new(), // Not stored in BytecodeFile yet
             entry_point,
+            // #327：贯通 DebugSection.sources——.42 直跑也能渲染栈帧源码上下文
+            debug_sources,
         }
     }
 }

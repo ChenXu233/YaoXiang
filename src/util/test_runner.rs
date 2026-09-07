@@ -422,6 +422,7 @@ fn spawn_check(
 }
 
 /// `run` 单文件（行为/运行期判定步；`// mode:` 透传 `--runtime`）。
+/// #327 起运行时错误默认携带 debug_map，无需再传旗标。
 fn spawn_run(
     exe: &Path,
     file: &Path,
@@ -432,7 +433,7 @@ fn spawn_run(
     if let Some(mode) = mode {
         command.arg("--runtime").arg(mode);
     }
-    command.arg(file).arg("--debug-info");
+    command.arg(file);
     command.output()
 }
 

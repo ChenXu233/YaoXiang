@@ -956,7 +956,7 @@ impl Interpreter {
                                 return Err(ExecutorError::index_out_of_bounds(
                                     items.len(),
                                     idx as i64,
-                                    None,
+                                    Some(self.capture_stack()),
                                 ));
                             }
                         }
@@ -972,7 +972,7 @@ impl Interpreter {
                                 return Err(ExecutorError::index_out_of_bounds(
                                     items.len(),
                                     idx as i64,
-                                    None,
+                                    Some(self.capture_stack()),
                                 ));
                             }
                         }
@@ -988,7 +988,7 @@ impl Interpreter {
                                 return Err(ExecutorError::index_out_of_bounds(
                                     items.len(),
                                     idx as i64,
-                                    None,
+                                    Some(self.capture_stack()),
                                 ));
                             }
                         }
@@ -1001,7 +1001,7 @@ impl Interpreter {
                                 None => {
                                     return Err(ExecutorError::KeyNotFound {
                                         key: format!("{}", idx_value),
-                                        stack: None,
+                                        stack: Some(self.capture_stack()),
                                     });
                                 }
                             }
@@ -1041,7 +1041,7 @@ impl Interpreter {
                                 return Err(ExecutorError::index_out_of_bounds(
                                     items.len(),
                                     idx as i64,
-                                    None,
+                                    Some(self.capture_stack()),
                                 ));
                             }
                         }
@@ -1059,7 +1059,7 @@ impl Interpreter {
                                 return Err(ExecutorError::index_out_of_bounds(
                                     items.len(),
                                     idx as i64,
-                                    None,
+                                    Some(self.capture_stack()),
                                 ));
                             }
                         }

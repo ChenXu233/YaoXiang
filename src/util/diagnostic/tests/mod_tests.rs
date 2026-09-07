@@ -152,10 +152,12 @@ fn test_render_runtime_function_not_found_with_span() {
     assert!(clean_output.contains("foo()"), "{}", clean_output);
     assert!(clean_output.contains("stack trace:"), "{}", clean_output);
     assert!(
-        clean_output.contains("at main (error.yx:2:3) (ip: 0)"),
+        clean_output.contains("at main (error.yx:2:3)"),
         "{}",
         clean_output
     );
+    // #327：用户面向输出不暴露字节码 ip
+    assert!(!clean_output.contains("(ip:"), "{}", clean_output);
 }
 
 #[test]

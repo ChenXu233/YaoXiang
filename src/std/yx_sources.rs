@@ -20,6 +20,13 @@ pub fn embedded_std_source(use_path: &str) -> Option<&'static str> {
         .map(|(_, src)| *src)
 }
 
+/// 虚拟路径（`<std/test>`，orchestrator 发现阶段构造的形态）查嵌入源文本。
+/// 运行时错误渲染回填 SourceMap 用（#327）：虚拟路径读盘必失败，源文本只能来自嵌入表。
+pub fn embedded_source_by_virtual_path(virtual_path: &str) -> Option<&'static str> {
+    let inner = virtual_path.strip_prefix('<')?.strip_suffix('>')?;
+    embedded_std_source(inner)
+}
+
 /// 编译嵌入 std 模块的签名，构造 ModuleInfo（供 Registry 注册）。
 ///
 /// `extract_module_info`（orchestrator）的嵌入版：解析源码 → 签名收集 → 按 AST 顶层

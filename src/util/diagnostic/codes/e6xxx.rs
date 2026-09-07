@@ -2,6 +2,10 @@
 
 use super::{ErrorCategory, ErrorCodeDefinition, DiagnosticBuilder};
 
+// E6xxx 族整体 span_exempt（第三段 true）：运行时诊断由 build_runtime_diagnostic
+// 按栈帧 debug_map 解析位置，解析失败（如无 DebugSection 的 .42、栈溢出无帧）时
+// 合法无位置——不能像编译期那样强制 .at（#324 裁决维持）。
+// #327 起 debug_map 默认生成，正常运行时错误默认携带位置。
 define_codes!(E6XXX, {
     // E6001 除零错误
     ("E6001", Runtime, true, division_by_zero(expr: &str) => .param("expr", expr)),

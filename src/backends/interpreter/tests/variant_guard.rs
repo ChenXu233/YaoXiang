@@ -117,6 +117,7 @@ fn test_variant_tag_guard_rejects_unwrapped_value() {
         vtables: vec![],
         globals: vec![],
         entry_point: Some(0),
+        debug_sources: None,
     };
 
     let interp = crate::backends::interpreter::Interpreter::new();
