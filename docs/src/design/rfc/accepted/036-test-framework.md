@@ -83,6 +83,7 @@ Options:
   --list              只列出测试文件，不跑
   --no-progress       不显示进度输出（表头与 PASS 行）；FAIL 明细与汇总保留（CI 场景）
   --json              输出 JSON 格式结果（CI 集成用）
+  --parallel          并行执行（每核一个 worker；与 [tool.test].parallel 取或）
 ```
 
 #### 输出格式
@@ -130,6 +131,8 @@ Categories: 2 behavior, 0 compile-error, 0 runtime-error
 - 每文件附 `kind`（behavior / compile-error / runtime-error / invalid，§8.2），
   summary 附 `by_kind` 执行计数（固定四键，不含 skipped）；人类汇总附
   `Categories:` 类别分布行
+- `--parallel` 下人类进度行按**完成序**流式输出（整块不交错），JSON `files`
+  按 `file` 路径排序保证输出稳定（CI diff 友好）
 - 文件内 per-test `tests` 数组来自 §7 套件收集，随值化模型落地生效（#319）
 
 ### 2. yaoxiang.toml 配置
@@ -142,13 +145,15 @@ name = "my-project"
 
 [tool.test]
 patterns = ["tests/**/*.yx"]
-# 未来可扩展:
-# exclude = ["tests/fixtures/**"]
-# parallel = true
+exclude = ["tests/fixtures/**"]   # 命中者从发现集剔除（--list 同样剔除）
+parallel = true                   # 并行执行（与 --parallel flag 取或）
 ```
 
 - 默认 `patterns = ["tests/**/*.yx"]` — 用户零配置开箱即用
-- 单文件模式（`yaoxiang test foo.yx`）直接跑，不读配置
+- `exclude` 与 `patterns` 同形态（字面路径或 `root/**…`，一律按路径前缀命中）；
+  excluded 意味着不是测试，需要运行时行为验证的夹具走 `yaoxiang run` 直跑
+- **单文件模式（`yaoxiang test foo.yx`）直接跑，不读配置**——显式 paths 下
+  `exclude`/`parallel` 配置键均不生效（flag 除外）
 - 未来可能拆成独立仓库（`[tool.test]` 位置不变）
 
 ### 3. std.test 模块（纯 YaoXiang）
@@ -185,6 +190,9 @@ assert_true: (cond: Bool) -> Result(Void, String) = (cond) => {
   `assert_eq` / `assert_ne` / `assert_true` / `assert_false` + `assert_not`
   （与 assert_false 同体，为 `!assert` 换装预留）+ `assert_err`（§8.1）
   - `assert_err_code`（§8.1 错误码断言）
+  - `assert_approx_eq(a: Float, b: Float, eps: Float)`（Phase 3，2026-09-07
+    交付）：`|a - b| <= eps` 判定，eps 由调用方**显式给出**——容差是测试契约的
+    一部分，不设隐藏默认值；负 eps 声明处即 Err，NaN 恒 Err
 - `assert_eq` / `assert_ne` 用 **Any 标注参数**——`==`/`!=` 与 f-string 插值在
   Any 上工作正常，不依赖泛型系统。注意参数**必须显式标注**：无标注参数
   过不了 native 泛型 `&Result(T, E)` 的调用检查（R1 探针实证）
@@ -258,8 +266,11 @@ CLI 能力，测试文件导入项目模块是核心场景。因此 Phase 1 先�
 2. `// skip: <原因>` 的文件跳过执行，计入报告的 skipped
 3. 判定与预期码比对按 §8.2 判定矩阵；指令解析失败不执行直接 FAIL（构造期拒绝）
 4. 捕获 stdout/stderr 用于报告
-5. 仅串行执行（Phase 1），未来支持 `--parallel`
-6. 如果 `--fail-fast`，遇到第一个 FAIL 立即停止
+5. 默认串行；`--parallel`（或 `[tool.test].parallel`）按可用核数起 worker 池，
+   每文件仍是一个独立子进程——skip/invalid 按发现序先行处理，执行结果按完成序
+   流式输出，JSON 按路径排序（Phase 3，2026-09-07 交付）
+6. 如果 `--fail-fast`，遇到第一个 FAIL 立即停止调度新文件；并行模式下在途文件
+   跑完并计入
 
 ### 6. 测试隔离
 
@@ -269,6 +280,9 @@ CLI 能力，测试文件导入项目模块是核心场景。因此 Phase 1 先�
 - 每个子进程有独立的 Heap、Frame、NativeContext
 - 一个测试文件的 panic 不会影响其他测试文件
 - 不需要额外的独立 Heap 上下文机制
+- **并行执行（Phase 3）不扩展隔离边界**：子进程间的工作目录（CWD）是共享的，
+  并行测试不得占用 CWD 内相同路径的文件——文件 I/O 类测试用独立文件名并在
+  结束时清理
 
 ### 7. 套件与多测试（值化模型）
 
@@ -459,11 +473,11 @@ test.assert_err_code(r, "E6009")
 - `--list` 选项
 - `--no-progress` 选项
 
-### Phase 3：进阶
+### Phase 3：进阶（2026-09-07 已交付）
 
-- `--parallel` 并行执行（依赖 spawn 并发模型完善）
-- `[tool.test].exclude` 配置
-- 更多断言函数（如 `assert_approx_eq` 用于 Float）
+- `--parallel` 并行执行（worker 池 + 每文件独立子进程；`[tool.test].parallel` 配置键同效）
+- `[tool.test].exclude` 配置（前缀命中剔除，`--list` 同样剔除）
+- `assert_approx_eq`（Float 显式 eps 断言，§3）
 
 ## 风险与缓解
 
@@ -502,6 +516,7 @@ test.assert_err_code(r, "E6009")
 | 测试体系分层 | 语言语料（`tests/yaoxiang/`）与库测试（随库走，std → `src/std/tests/`）分两层；std 在语料中只作断言工具 | 2026-09-03 | 被测对象决定归属与维护方；库测试随包布局为 RFC-014 预演 |
 | 负向标记分流判定 | 按期望类别分流：编译错误类 `check` 必须失败、运行时错误类 `check` 必须过 + `run` 必须失败；报告给出类别计数 | 2026-09-03（09-06 落地） | 类别混判会让「编译意外通过、运行侥幸失败」漏检；预期码钉死阶段，语法报错不单设类别 |
 | 头部指令文法 | 期望以英文结构化指令声明（`// expect:` / `// skip:` / `// mode:`，严格 token 文法，解析失败直接 FAIL）；弃用 `[test:error]` 布尔标记与中文 `预期:` 散文抠码 | 2026-09-06 | 期望是 fixture 内容的属性，in-fixture 声明与业界同构（compiletest / Go / GCC / Clang 均如此），中央清单必腐烂；布尔标记 + 期望行双事实靠纪律耦合是缺陷面；结构化文法让 runner 机械判定无人工参与 |
+| 并行执行模型 | `--parallel` 起每核 worker 池（每文件仍独立子进程），skip/invalid 先行按发现序处理、执行结果按完成序流式输出、JSON 按路径排序；`--fail-fast` 停止调度（在途跑完计入）；CWD 仍共享、不扩展隔离边界 | 2026-09-07 | 子进程模型下并行 = OS 线程调度 spawn，无需 yx 层并发；耗时主项是每文件全量编译（风险表），并行只缓解进程侧——#293 缓存切片才是主缓解 |
 
 ## 参考文献
 

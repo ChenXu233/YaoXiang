@@ -156,6 +156,13 @@ pub struct TestConfig {
     /// 测试文件发现 pattern（字面路径或 `root/**/*.yx` 形式）
     #[serde(default = "default_test_patterns")]
     pub patterns: Vec<String>,
+    /// 排除 pattern（同 patterns 形式），命中的文件从发现集剔除（RFC-036 Phase 3；
+    /// 显式路径模式不读配置，故 exclude 只作用于配置发现）
+    #[serde(default)]
+    pub exclude: Vec<String>,
+    /// 并行执行（与 CLI `--parallel` 取或；RFC-036 Phase 3）
+    #[serde(default)]
+    pub parallel: bool,
 }
 
 fn default_test_patterns() -> Vec<String> {
@@ -166,6 +173,8 @@ impl Default for TestConfig {
     fn default() -> Self {
         Self {
             patterns: default_test_patterns(),
+            exclude: Vec::new(),
+            parallel: false,
         }
     }
 }

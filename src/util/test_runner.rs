@@ -1,4 +1,4 @@
-//! `yaoxiang test` 运行器 — RFC-036 Phase 1 + Phase 2 + §8.2 分流判定
+//! `yaoxiang test` 运行器 — RFC-036 Phase 1 + Phase 2 + §8.2 分流判定 + Phase 3
 //!
 //! 测试文件是普通 `.yx` 文件：发现 → 按头部指令分流执行 → 汇总报告。
 //! 进程级隔离，零编译器改动。
@@ -14,6 +14,15 @@
 //! - `// skip: <原因>` — 跳过执行，计入 skipped
 //! - `// mode: embedded|standard|full` — 子进程 `--runtime` 模式（仅 run 步消费）
 //!
+//! 执行模型（Phase 3）：默认串行；`--parallel` 或 `[tool.test].parallel = true`
+//! 按可用核数起 worker 池（每文件仍是一个独立子进程）。skip/invalid 按发现序在
+//! 主线程先行处理；执行结果按完成序流式输出（人类模式），JSON `files` 按路径
+//! 排序保证稳定。`--fail-fast` 停止调度新文件，在途文件跑完并计入。
+//!
+//! 发现与排除：显式 paths 不读配置（RFC-036 §2）；配置模式下 `[tool.test].exclude`
+//! （与 patterns 同形态，前缀命中）把文件从发现集剔除——excluded 意味着不是测试，
+//! `--list` 同样剔除。
+//!
 //! 报告契约（RFC-036 §1）：
 //! - 默认输出 = 进度（表头 + per-file 行）+ 报告（FAIL 明细 + 汇总 + 类别分布）
 //! - `--no-progress` 只抑制进度；FAIL 明细与汇总始终输出——失败不可静默
@@ -28,17 +37,19 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Mutex};
 use std::time::Instant;
 
 use serde::Serialize;
 
-use crate::util::config::ProjectConfig;
+use crate::util::config::TestConfig;
 use crate::util::diagnostic::emitter::ansi::strip_ansi;
 use crate::util::test_markers::{Expectation, TestFileSpec};
 
 /// `yaoxiang test` 选项 — RFC-036 §1 CLI 设计
 pub struct TestOptions {
-    /// 显式路径（优先于配置发现，RFC-036 §5）
+    /// 显式路径（优先于配置发现，RFC-036 §5；此模式不读配置）
     pub paths: Vec<PathBuf>,
     /// `--filter <NAME>`：文件名包含 <NAME> 才执行
     pub filter: Option<String>,
@@ -52,6 +63,8 @@ pub struct TestOptions {
     pub no_progress: bool,
     /// `--json`：stdout 输出 JSON 报告（CI 集成）
     pub json: bool,
+    /// `--parallel`：并行执行（与 `[tool.test].parallel` 取或，RFC-036 Phase 3）
+    pub parallel: bool,
 }
 
 /// 单个测试文件的执行结果（人类报告与 JSON 报告共用）
@@ -101,17 +114,34 @@ struct JsonFile {
 
 /// 运行测试命令，返回失败数（0 = 全部通过或没有发现测试）。
 ///
-/// 发现顺序：显式 paths → `./yaoxiang.toml` 的 `[tool.test].patterns` → 默认
-/// `tests/**/*.yx`；之后应用 `--filter`（文件名包含，RFC-036 §5）。
+/// 发现顺序：显式 paths（不读配置）→ `./yaoxiang.toml` 的 `[tool.test]`；
+/// 之后应用 exclude（配置模式）与 `--filter`（文件名包含，RFC-036 §5）。
 pub fn run_test_command(options: &TestOptions) -> anyhow::Result<usize> {
     let cwd = std::env::current_dir().unwrap_or_default();
-    let mut files = discover(&options.paths);
+    let (mut files, exclude_patterns, config_parallel) = if options.paths.is_empty() {
+        let config = load_config();
+        (
+            discover_from(&config.patterns),
+            config.exclude,
+            config.parallel,
+        )
+    } else {
+        let patterns: Vec<String> = options
+            .paths
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect();
+        (discover_from(&patterns), Vec::new(), false)
+    };
+    // exclude：命中即从发现集剔除（--list 同样剔除——excluded 意味着不是测试）
+    files.retain(|f| !is_excluded(f, &exclude_patterns));
     if let Some(filter) = &options.filter {
         files.retain(|f| {
             f.file_name()
                 .is_some_and(|n| n.to_string_lossy().contains(filter.as_str()))
         });
     }
+    let parallel = options.parallel || config_parallel;
 
     if files.is_empty() {
         if options.json {
@@ -145,6 +175,9 @@ pub fn run_test_command(options: &TestOptions) -> anyhow::Result<usize> {
     let mut skipped = 0usize;
     let mut stopped_early = false;
 
+    // 调度：skip/invalid 按发现序在主线程处理（SKIP 行顺序确定、零进程开销），
+    // 可执行文件进入工作队列——串行 = 单 worker，`--parallel` = 核数 worker
+    let mut queue: Vec<(PathBuf, String, TestFileSpec)> = Vec::new();
     for file in &files {
         let spec = TestFileSpec::parse(file);
         // // skip: 跳过执行，只计入 skipped（RFC-036 §1 汇总字段的真实来源）
@@ -156,20 +189,75 @@ pub fn run_test_command(options: &TestOptions) -> anyhow::Result<usize> {
             }
             continue;
         }
-        let display = display_path(file, &cwd);
-        let start = Instant::now();
-        let result = execute_file(&exe, file, &spec, display, start);
-
-        if !options.json {
-            print_file_result(&result, options);
+        if let Some(reason) = &spec.invalid {
+            // 构造期拒绝：指令解析失败 = FAIL，不 spawn 子进程
+            let result = FileResult {
+                display: display_path(file, &cwd),
+                kind: "invalid",
+                passed: false,
+                secs: 0.0,
+                exit_code: None,
+                stdout: String::new(),
+                stderr: format!("无效的头部指令: {reason}"),
+            };
+            if !options.json {
+                print!("{}", format_file_result(&result, options));
+            }
+            let failed_now = !result.passed;
+            results.push(result);
+            if failed_now && options.fail_fast {
+                stopped_early = true;
+                break;
+            }
+            continue;
         }
-        let failed_now = !result.passed;
-        results.push(result);
-        if failed_now && options.fail_fast {
-            stopped_early = true;
-            break;
-        }
+        queue.push((file.clone(), display_path(file, &cwd), spec));
     }
+
+    let stop = AtomicBool::new(false);
+    let workers = if parallel {
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+    } else {
+        1
+    };
+    let workers = workers.min(queue.len()).max(1);
+    let (tx, rx) = mpsc::channel::<FileResult>();
+    let queue = Mutex::new(queue.into_iter());
+    std::thread::scope(|scope| {
+        for _ in 0..workers {
+            let queue = &queue;
+            let stop = &stop;
+            let tx = tx.clone();
+            let exe = &exe;
+            let options = &options;
+            scope.spawn(move || loop {
+                if stop.load(Ordering::Relaxed) {
+                    break;
+                }
+                let next = queue.lock().expect("test work queue").next();
+                let Some((file, display, spec)) = next else {
+                    break;
+                };
+                let result = execute_file(exe, &file, &spec, display, Instant::now());
+                let failed = !result.passed;
+                let _ = tx.send(result);
+                if failed && options.fail_fast {
+                    // 停止调度新文件；在途文件照常跑完并计入（RFC-036 §5）
+                    stop.store(true, Ordering::Relaxed);
+                }
+            });
+        }
+        drop(tx);
+        while let Ok(result) = rx.recv() {
+            if !options.json {
+                print!("{}", format_file_result(&result, options));
+            }
+            results.push(result);
+        }
+    });
+    let stopped_early = stopped_early || stop.load(Ordering::Relaxed);
 
     let passed = results.iter().filter(|r| r.passed).count();
     let failed = results.len() - passed;
@@ -177,6 +265,12 @@ pub fn run_test_command(options: &TestOptions) -> anyhow::Result<usize> {
     let by_kind = count_by_kind(&results);
 
     if options.json {
+        let mut files: Vec<JsonFile> = results
+            .iter()
+            .map(|r| json_file(r, options.verbose))
+            .collect();
+        // 并行完成序不确定——按路径排序保证 JSON 输出稳定（CI diff 友好）
+        files.sort_by(|a, b| a.file.cmp(&b.file));
         let report = JsonReport {
             summary: JsonSummary {
                 total: results.len(),
@@ -186,10 +280,7 @@ pub fn run_test_command(options: &TestOptions) -> anyhow::Result<usize> {
                 by_kind,
                 time_secs: round_secs(total_secs),
             },
-            files: results
-                .iter()
-                .map(|r| json_file(r, options.verbose))
-                .collect(),
+            files,
         };
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
@@ -216,7 +307,6 @@ pub fn run_test_command(options: &TestOptions) -> anyhow::Result<usize> {
 /// - CompileError：单步 check，退出码非 0 且全部预期码出现 = PASS（run 不执行）
 /// - RuntimeError：check 必须通过 + run 必须失败且全部预期码出现 = PASS；
 ///   check 就失败 = FAIL（语料分类错误：运行期失败不该在编译期被拒）
-/// - 指令解析失败：不执行，直接 FAIL——构造期拒绝（无静默退化通道）
 fn execute_file(
     exe: &Path,
     file: &Path,
@@ -225,17 +315,6 @@ fn execute_file(
     start: Instant,
 ) -> FileResult {
     let secs = || start.elapsed().as_secs_f64();
-    if let Some(reason) = &spec.invalid {
-        return FileResult {
-            display,
-            kind: "invalid",
-            passed: false,
-            secs: secs(),
-            exit_code: None,
-            stdout: String::new(),
-            stderr: format!("无效的头部指令: {reason}"),
-        };
-    }
     match &spec.expectation {
         Expectation::Behavior => match spawn_run(exe, file, spec.mode.as_ref()) {
             Ok(out) => FileResult {
@@ -357,6 +436,23 @@ fn spawn_run(
     command.output()
 }
 
+/// exclude pattern 匹配：与 patterns 同形态——字面路径（文件或目录）或
+/// `root/**…`，一律按路径前缀命中（组件级比较，跨平台分隔符安全）。
+/// `/**` 后无论有无后缀段（`root/**`、`root/**/*.yx`）都等价于排除 root 子树。
+fn is_excluded(
+    file: &Path,
+    patterns: &[String],
+) -> bool {
+    patterns.iter().any(|p| {
+        let p = p.trim_end_matches(['/', '\\', '*']);
+        let root = match p.split_once("/**") {
+            Some((root, _)) => root,
+            None => p,
+        };
+        file.strip_prefix(root).is_ok()
+    })
+}
+
 /// 执行集的类别计数（固定四键，schema 稳定供 CI 消费）。
 fn count_by_kind(results: &[FileResult]) -> BTreeMap<String, usize> {
     let mut by_kind: BTreeMap<String, usize> = BTreeMap::new();
@@ -384,19 +480,22 @@ fn categories_line(by_kind: &BTreeMap<String, usize>) -> String {
     format!("Categories: {}", parts.join(", "))
 }
 
-/// 输出单个文件的结果行与失败明细。
+/// RFC-036 §1 单文件结果块：进度行 + 失败明细（+ verbose 详情）。
 ///
+/// 整块拼成单个 String 一次输出——并行模式下不同文件的行不会交错。
 /// PASS 行受 `--no-progress` 抑制；FAIL 行与诊断明细始终输出——失败不可静默。
-/// `--verbose` 额外显示每个文件捕获的 stdout（PASS 文件的 stderr 一并显示）。
-fn print_file_result(
+fn format_file_result(
     result: &FileResult,
     options: &TestOptions,
-) {
+) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
     if result.passed && options.no_progress {
-        return;
+        return out;
     }
     let status = if result.passed { "PASS" } else { "FAIL" };
-    println!(
+    let _ = writeln!(
+        out,
         "{} {} {} ({:.3}s)",
         result.display,
         progress_dots(&result.display),
@@ -405,23 +504,24 @@ fn print_file_result(
     );
     if !result.passed && !result.stderr.trim().is_empty() {
         for line in strip_ansi(&result.stderr).trim().lines() {
-            println!("      {line}");
+            let _ = writeln!(out, "      {line}");
         }
     }
     if options.verbose {
         if !result.stdout.trim().is_empty() {
-            println!("      [stdout]");
+            let _ = writeln!(out, "      [stdout]");
             for line in strip_ansi(&result.stdout).trim().lines() {
-                println!("      {line}");
+                let _ = writeln!(out, "      {line}");
             }
         }
         if result.passed && !result.stderr.trim().is_empty() {
-            println!("      [stderr]");
+            let _ = writeln!(out, "      [stderr]");
             for line in strip_ansi(&result.stderr).trim().lines() {
-                println!("      {line}");
+                let _ = writeln!(out, "      {line}");
             }
         }
     }
+    out
 }
 
 /// RFC-036 §1 默认输出的点线填充：文件名 + 点线 + 结果对齐。
@@ -499,33 +599,27 @@ fn display_path(
     path.strip_prefix(cwd).unwrap_or(path).display().to_string()
 }
 
-/// 发现测试文件：显式路径优先，否则读配置，最终按 pattern 展开并排序去重。
-fn discover(paths: &[PathBuf]) -> Vec<PathBuf> {
-    let patterns: Vec<String> = if paths.is_empty() {
-        load_config_patterns()
-    } else {
-        paths.iter().map(|p| p.display().to_string()).collect()
-    };
+/// 读取 `./yaoxiang.toml` 的 `[tool.test]`，缺失或解析失败回退默认值。
+fn load_config() -> TestConfig {
+    let config_path = PathBuf::from("yaoxiang.toml");
+    if config_path.exists() {
+        let content = std::fs::read_to_string(&config_path).unwrap_or_default();
+        if let Ok(config) = toml::from_str::<crate::util::config::ProjectConfig>(&content) {
+            return config.tool.test;
+        }
+    }
+    TestConfig::default()
+}
 
+/// 按 pattern 集发现测试文件，排序去重。
+fn discover_from(patterns: &[String]) -> Vec<PathBuf> {
     let mut files = Vec::new();
-    for pattern in &patterns {
+    for pattern in patterns {
         collect_pattern(pattern, &mut files);
     }
     files.sort();
     files.dedup();
     files
-}
-
-/// 读取 `./yaoxiang.toml` 的 `[tool.test].patterns`，缺失或解析失败回退默认值。
-fn load_config_patterns() -> Vec<String> {
-    let config_path = PathBuf::from("yaoxiang.toml");
-    if config_path.exists() {
-        let content = std::fs::read_to_string(&config_path).unwrap_or_default();
-        if let Ok(config) = toml::from_str::<ProjectConfig>(&content) {
-            return config.tool.test.patterns;
-        }
-    }
-    crate::util::config::TestConfig::default().patterns
 }
 
 /// ponytail: pattern 只支持两种形式——字面路径（文件或目录）与 `root/**/*.yx`。

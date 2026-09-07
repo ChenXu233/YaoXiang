@@ -170,6 +170,10 @@ enum Commands {
         /// Output a JSON report (RFC-036 §1) instead of human-readable text
         #[arg(long)]
         json: bool,
+
+        /// Run test files in parallel (one worker per CPU core; RFC-036 Phase 3)
+        #[arg(long)]
+        parallel: bool,
     },
 
     /// Format source file
@@ -394,6 +398,7 @@ fn main() -> Result<()> {
             list,
             no_progress,
             json,
+            parallel,
         } => {
             let options = yaoxiang::util::test_runner::TestOptions {
                 paths,
@@ -403,6 +408,7 @@ fn main() -> Result<()> {
                 list,
                 no_progress,
                 json,
+                parallel,
             };
             match yaoxiang::util::test_runner::run_test_command(&options) {
                 Ok(0) => {}

@@ -780,6 +780,136 @@ fn test_test_command_default_discovery_excludes_library_tier() {
 }
 
 #[test]
+fn test_test_command_exclude_config_removes_files() {
+    // Arrange - RFC-036 Phase 3：[tool.test].exclude 命中的文件从发现集剔除
+    let dir = TempDir::new().expect("tempdir");
+    write_file(
+        dir.path(),
+        "yaoxiang.toml",
+        "[project]\nname = \"demo\"\n\n[tool.test]\nexclude = [\"tests/fixtures/**\"]\n",
+    );
+    write_file(dir.path(), "tests/ok_test.yx", PASS_TEST);
+    write_file(dir.path(), "tests/fixtures/broken.yx", FAIL_TEST);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert - excluded 意味着不是测试：不执行、不计失败
+    assert_eq!(code, 0, "排除目录中的失败文件不应被执行:\n{stdout}");
+    assert!(
+        stdout.contains("ok_test.yx"),
+        "未排除文件应照常执行:\n{stdout}"
+    );
+    assert!(
+        !stdout.contains("broken.yx"),
+        "被排除文件不应出现:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_exclude_applies_to_list_mode() {
+    // Arrange - 边界：--list 同样剔除 excluded（excluded 意味着不是测试）
+    let dir = TempDir::new().expect("tempdir");
+    write_file(
+        dir.path(),
+        "yaoxiang.toml",
+        "[project]\nname = \"demo\"\n\n[tool.test]\nexclude = [\"tests/fixtures\"]\n",
+    );
+    write_file(dir.path(), "tests/ok_test.yx", PASS_TEST);
+    write_file(dir.path(), "tests/fixtures/fixture.yx", PASS_TEST);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--list"], dir.path());
+
+    // Assert
+    assert_eq!(code, 0, "列表应退出 0:\n{stdout}");
+    assert!(
+        stdout.contains("ok_test.yx") && !stdout.contains("fixture.yx"),
+        "列表应剔除排除目录（目录前缀形态）:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_parallel_runs_all_files() {
+    // Arrange - RFC-036 Phase 3：--parallel 并行执行，全部结果计入
+    let dir = TempDir::new().expect("tempdir");
+    write_file(dir.path(), "tests/a_test.yx", PASS_TEST);
+    write_file(dir.path(), "tests/b_test.yx", PASS_TEST);
+    write_file(dir.path(), "tests/c_test.yx", FAIL_TEST);
+    write_file(dir.path(), "tests/d_test.yx", PASS_TEST);
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--parallel"], dir.path());
+
+    // Assert - 四个文件全部执行并计数（完成序可能乱序，汇总确定）
+    assert_eq!(code, 1, "有失败应退出 1:\n{stdout}");
+    for name in ["a_test.yx", "b_test.yx", "c_test.yx", "d_test.yx"] {
+        assert!(stdout.contains(name), "应报告 {name}:\n{stdout}");
+    }
+    assert!(
+        stdout.contains("Results: 3 files passed, 1 file failed"),
+        "并行汇总应计满 4 个执行文件:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_parallel_fail_fast_stops_scheduling() {
+    // Arrange - --fail-fast + --parallel：首个失败后停止调度，在途文件跑完计入
+    let dir = TempDir::new().expect("tempdir");
+    write_file(dir.path(), "tests/a_test.yx", FAIL_TEST);
+    write_file(
+        dir.path(),
+        "tests/b_test.yx",
+        r#"
+use std.assert
+use std.concurrent
+main = {
+    concurrent.sleep(1500)
+    assert.assert(1 + 1 == 2, "math works")
+}
+"#,
+    );
+
+    // Act
+    let (code, stdout, _) = run_test_cmd(&["--parallel", "--fail-fast"], dir.path());
+
+    // Assert - a 失败可见、fail-fast 提示在位；b 在途与否不定（核数相关），
+    // 只断言确定子集
+    assert_eq!(code, 1, "有失败应退出 1:\n{stdout}");
+    assert!(
+        stdout.contains("a_test.yx") && stdout.contains("FAIL"),
+        "首个失败应可见:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Stopped by --fail-fast"),
+        "应提示 fail-fast 提前停止:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_test_command_config_parallel_enables_parallel() {
+    // Arrange - [tool.test].parallel = true 与 --parallel flag 取或
+    let dir = TempDir::new().expect("tempdir");
+    write_file(
+        dir.path(),
+        "yaoxiang.toml",
+        "[project]\nname = \"demo\"\n\n[tool.test]\nparallel = true\n",
+    );
+    write_file(dir.path(), "tests/ok_test.yx", PASS_TEST);
+    write_file(dir.path(), "tests/other_test.yx", PASS_TEST);
+
+    // Act - 不带 flag，配置生效
+    let (code, stdout, _) = run_test_cmd(&[], dir.path());
+
+    // Assert
+    assert_eq!(code, 0, "配置 parallel 应正常执行:\n{stdout}");
+    assert!(
+        stdout.contains("Results: 2 files passed, 0 files failed"),
+        "两个文件都应通过:\n{stdout}"
+    );
+}
+
+#[test]
 fn test_test_command_suite_all_pass_exits_zero() {
     // Arrange - RFC-036 §7 套件收集：多测试全 Ok 静默退出 0
     let dir = TempDir::new().expect("tempdir");
