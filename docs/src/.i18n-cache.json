@@ -449,9 +449,9 @@
   "src/design/rfc/review/032-spawn-unified-expression.md:en": "6d9a392ffeb8b5a379b527de122643a7",
   "src/design/rfc/review/032-spawn-unified-expression.md:ja": "6d9a392ffeb8b5a379b527de122643a7",
   "src/design/rfc/review/032-spawn-unified-expression.md:ru": "6d9a392ffeb8b5a379b527de122643a7",
-  "src/design/rfc/TRACKING.md:en": "a3ed2261911e59339428b26069401752",
-  "src/design/rfc/TRACKING.md:ja": "a3ed2261911e59339428b26069401752",
-  "src/design/rfc/TRACKING.md:ru": "a3ed2261911e59339428b26069401752",
+  "src/design/rfc/TRACKING.md:en": "cfbb0833dd7fc089f4218e739513dce8",
+  "src/design/rfc/TRACKING.md:ja": "cfbb0833dd7fc089f4218e739513dce8",
+  "src/design/rfc/TRACKING.md:ru": "cfbb0833dd7fc089f4218e739513dce8",
   "src/design/rfc/draft/034-debug-toolchain.md:en": "0ba8d1715c4bd57653d3ebe4ea9aa438",
   "src/design/rfc/draft/034-debug-toolchain.md:ru": "0ba8d1715c4bd57653d3ebe4ea9aa438",
   "src/design/rfc/draft/035-mcp-server.md:en": "acfe215265cf2b2fa51870d881559636",
@@ -514,5 +514,8 @@
   "src/design/rfc/accepted/011a-interface-implementation.md:ru": "36e726aa51b232237446a68de19e39a5",
   "src/design/rfc/draft/039-pattern-matching-completeness.md:en": "cb8d44714d81159deee6d30b195ea24f",
   "src/design/rfc/draft/039-pattern-matching-completeness.md:ja": "cb8d44714d81159deee6d30b195ea24f",
-  "src/design/rfc/draft/039-pattern-matching-completeness.md:ru": "cb8d44714d81159deee6d30b195ea24f"
+  "src/design/rfc/draft/039-pattern-matching-completeness.md:ru": "cb8d44714d81159deee6d30b195ea24f",
+  "src/design/rfc/draft/029a-module-cache-incremental.md:en": "df90b9a7a93e80e585632332a3896e6f",
+  "src/design/rfc/draft/029a-module-cache-incremental.md:ru": "df90b9a7a93e80e585632332a3896e6f",
+  "src/design/rfc/draft/029a-module-cache-incremental.md:ja": "df90b9a7a93e80e585632332a3896e6f"
 }
