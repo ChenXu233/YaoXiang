@@ -1,7 +1,7 @@
 ---
 title: 'RFC-036: std.test Testing Framework and yaoxiang test Command'
 status: 'Accepted'
-author: '晨煦 (Chenxu)'
+author: 'Chenxu'
 created: '2026-07-26'
 updated: '2026-09-02'
 accepted: '2026-08-02'
@@ -12,33 +12,31 @@ issue: '#94, #95, #221, #319'
 
 ## Summary
 
-Introduce the standard testing framework `std.test` module and the `yaoxiang test` CLI subcommand
-for YaoXiang. Test files are ordinary `.yx` files, and the overall pass/fail is determined by the
-child process exit code; the file internally supports multiple test functions—assertion failures are
-expressed as `Err` values (value semantics), and the suite collects per-test judgments (§7). The
-`std.test` module is implemented in pure YaoXiang and is the first dogfooding library.
-`yaoxiang test` is a CLI tool, not a compiler feature—it involves no changes to the parser, IR,
-bytecode, or executor.
+Introduce the standard testing framework `std.test` module and `yaoxiang test` CLI subcommand for
+YaoXiang. Test files are ordinary `.yx` files, judged pass/fail overall by the child process exit
+code; files internally support multiple test functions—assertion failures are expressed as `Err`
+values (value semantics), collected by the suite as per-test judgments (§7). The `std.test` module
+is implemented in pure YaoXiang, making it the first dogfooding library. `yaoxiang test` is a CLI
+tool, not a compiler feature—it involves no changes to the parser, IR, bytecode, or executor.
 
 ## Motivation
 
-### Why Do We Need a Testing Framework?
+### Why is a testing framework needed?
 
-Currently, YaoXiang's test coverage relies on Rust-side `#[test]` and `tests/` integration tests.
-This means:
+Current YaoXiang test coverage depends on Rust-side `#[test]` and `tests/` integration tests. This
+means:
 
 1. Unit tests for the standard library (std.math / std.list / std.dict / std.convert / std.io)
    cannot be written in YaoXiang
-2. `#117 Unit test coverage for each std module` is blocked because no testing infrastructure is
+2. `#117 Unit test coverage for each std module` is blocked, because no testing infrastructure is
    available
-3. Regression tests for language features (such as the RFC-032 spawn semantics change) lack
-   automated means
+3. Regression tests for language features (e.g., RFC-032 spawn semantic changes) lack automation
 
-### Key Constraints
+### Key constraints
 
-- **The 17-Keyword Iron Rule**: do not introduce any new keywords or syntactic structures
-- **Zero Compiler Changes**: do not touch the parser, IR, bytecode, or executor
-- **Bootstrap First**: the test library is written in YaoXiang, the first dogfooding library
+- **17-keyword iron rule**: do not introduce any new keywords or syntactic structures
+- **Zero compiler changes**: do not touch the parser, IR, bytecode, or executor
+- **Self-hosting first**: the testing library is written in YaoXiang, the first dogfooding library
 
 ## Architecture
 
@@ -51,35 +49,35 @@ This means:
 │  Discovery:  read yaoxiang.toml → [tool.test] patterns       │
 │              default: tests/**/*.yx                          │
 │              │                                               │
-│  Execution:  per file: yaoxiang run <file>                   │
-│              check exit code → serial execution              │
+│  Execution:  for each file: yaoxiang run <file>              │
+│              check exit code → serial execution             │
 │              │                                               │
 │  Reporting:  PASS/FAIL → summary                             │
-│              supports --json / --verbose / --fail-fast       │
+│              supports --json / --verbose / --fail-fast        │
 │                                                              │
-│  Assertions: std.test (pure YaoXiang, self-bootstrapped)      │
-│              low-level: std.assert.assert                     │
+│  Assertion:  std.test (pure YaoXiang, self-hosted)           │
+│              lower layer: std.assert.assert                  │
 │              diagnostics: f"Expected {expected}, got {actual}"│
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### Core Principles
+### Core principles
 
-1. **The testing framework is not a compiler feature; it is a CLI tool** — `yaoxiang run` can
-   already "execute tests"; `yaoxiang test` simply helps you run all the files and show you a report
+1. **The testing framework is not a compiler feature, it's a CLI tool** — `yaoxiang run` already can
+   "execute tests"; `yaoxiang test` just helps you run all files and shows you the report
 2. **Zero compiler changes** — no `@test` annotation scanning, no bytecode metadata segments, no
-   special executor entry points
-3. **Self-bootstrapping** — the `std.test` module is implemented in pure YaoXiang, with low-level
+   executor special entry points
+3. **Self-hosting** — the `std.test` module is implemented in pure YaoXiang, with lower-layer
    capabilities from `std.assert` / `std.result`
-4. **Test files are ordinary `.yx` files** — the file is run as a child process, and the overall
-   pass/fail is determined by exit code
-5. **Assertion failure is a value, not a process event** — test functions return `Result`, assertion
-   failures are expressed as `Err`, and the suite collects per-test judgments one by one (§7);
-   process-level abort belongs only to runtime guards, not to test assertions
+4. **Test files are ordinary `.yx` files** — files run as child processes, exit code determines
+   overall pass/fail
+5. **Assertion failures are values, not process events** — test functions return `Result`, assertion
+   failures are expressed as `Err`, the suite collects per-test judgments one by one (§7);
+   process-level aborts belong only to runtime guards, not to test assertions
 
 ## Detailed Design
 
-### 1. CLI Design
+### 1. CLI design
 
 ```
 yaoxiang test [OPTIONS] [PATHS]
@@ -88,18 +86,18 @@ Arguments:
   [PATHS]...      Specify test files or directories (default: read from yaoxiang.toml, otherwise tests/)
 
 Options:
-  --filter <NAME>     Only run tests whose filename contains <NAME>
+  --filter <NAME>     Only run tests whose file name contains <NAME>
   --fail-fast         Stop on the first failure
   --verbose, -v       Show detailed stdout/stderr for each test
   --list              Only list test files, do not run
-  --no-progress       Do not show progress output (header and PASS lines); FAIL details and summary are retained (CI scenario)
-  --json              Output results in JSON format (for CI integration)
-  --parallel          Run in parallel (one worker per core; ORed with [tool.test].parallel)
+  --no-progress       Suppress progress output (header and PASS lines); FAIL details and summary are retained (CI scenario)
+  --json              Output JSON format results (for CI integration)
+  --parallel          Run in parallel (one worker per core; OR with [tool.test].parallel)
 ```
 
-#### Output Format
+#### Output format
 
-**Default output** (per-test judgments are collected from the in-file suite, see §7):
+**Default output** (per-test judgments come from in-file suite collection, see §7):
 
 ```
 Running 3 test files...
@@ -142,22 +140,26 @@ Categories: 2 behavior, 0 compile-error, 0 runtime-error
 }
 ```
 
-- Failed files additionally carry `exit_code` and `stderr` (child process diagnostics with ANSI
-  stripped, for CI forensics); when `--verbose` is combined with `--json`, all files carry `stdout`
-  / `stderr`
+- Failed files additionally carry `exit_code` and `stderr` (ANSI-stripped child process diagnostics,
+  for CI forensics); when `--verbose` is combined with `--json`, all files carry `stdout` / `stderr`
 - `--no-progress` only suppresses progress output (header and PASS lines) — FAIL details and summary
-  are always output; failures cannot be silenced; `--list` outputs one test file path per line and
-  does not execute
-- Each file is tagged with `kind` (behavior / compile-error / runtime-error / invalid, see §8.2);
-  the summary carries `by_kind` execution counts (fixed four keys, excluding skipped); the human
-  summary includes a `Categories:` distribution line
-- Under `--parallel`, human progress lines are streamed in **completion order** (without
-  interleaving per block); JSON `files` are sorted by `file` path to ensure stable output (CI
-  diff-friendly)
-- The per-test `tests` array inside files comes from the §7 suite collection, taking effect with the
-  value-model landing (#319)
+  are always output, failures cannot be silenced; `--list` outputs one test file path per line,
+  without execution
+- Each file carries `kind` (behavior / compile-error / runtime-error / invalid, §8.2), and the
+  summary carries `by_kind` execution counts (fixed four keys, not including skipped); the human
+  summary has an `Categories:` distribution line
+- Under `--parallel`, human progress lines stream in **completion order** (blocks not interleaved),
+  and JSON `files` are sorted by `file` path for stable output (CI diff friendly)
+- The in-file per-test `tests` array comes from the §7 suite collection, taking effect when the
+  value-typed model lands (#319)
+- The official CI (`.github/workflows/ci.yml` test job) consumes this: the cargo side runs
+  `--test integration` (CLI integration) and `--test yx_runner` (dual-root corpus guard), then
+  `yaoxiang test --json --parallel` runs hierarchically—the default mode (language corpus) and
+  explicit `src/std/tests` (library layer) each produce a report; the summary table (total / passed
+  / failed / skipped / time_secs and by_kind) is written to the job summary, failed files print
+  `kind` / `exit_code` / `stderr` for forensics, and any non-zero exit from any suite means red
 
-### 2. yaoxiang.toml Configuration
+### 2. yaoxiang.toml configuration
 
 Placed under `[tool.test]`, conforming to RFC-015's `[tool.*]` third-party extension convention:
 
@@ -167,24 +169,23 @@ name = "my-project"
 
 [tool.test]
 patterns = ["tests/**/*.yx"]
-exclude = ["tests/fixtures/**"]   # matches are removed from the discovery set (--list removes them as well)
-parallel = true                   # Run in parallel (ORed with the --parallel flag)
+exclude = ["tests/fixtures/**"]   # Matches are excluded from the discovery set (--list excludes them too)
+parallel = true                   # Parallel execution (OR with --parallel flag)
 ```
 
-- Default `patterns = ["tests/**/*.yx"]` — zero-config, out-of-the-box
-- `exclude` has the same shape as `patterns` (literal path or `root/**…`, always matched by path
-  prefix); excluded means not a test — fixtures that need runtime behavior verification are run
+- Default `patterns = ["tests/**/*.yx"]` — zero-config out of the box for users
+- `exclude` has the same shape as `patterns` (literal paths or `root/**…`, always matched by path
+  prefix); excluded means not a test, fixtures that need runtime behavior verification are run
   directly with `yaoxiang run`
-- **Single-file mode (`yaoxiang test foo.yx`) runs directly without reading config** — under
-  explicit paths, neither `exclude` nor `parallel` config keys take effect (except the flag)
-- May be split into a separate repository in the future (the `[tool.test]` position remains
-  unchanged)
+- **Single-file mode (`yaoxiang test foo.yx`) runs directly without reading configuration** — under
+  explicit paths, `exclude`/`parallel` configuration keys do not take effect (except flags)
+- May be split into a separate repository in the future (`[tool.test]` position remains unchanged)
 
-### 3. std.test Module (Pure YaoXiang)
+### 3. std.test module (pure YaoXiang)
 
 ```yaoxiang
-// std/test.yx — Pure YaoXiang test assertion library (value-semantics standard form, landed 2026-09-03)
-// The first dogfooding library: YaoXiang's test library is written in YaoXiang.
+// std/test.yx — Pure YaoXiang testing assertion library (value-semantics standard form, landed 2026-09-03)
+// First dogfooding library: YaoXiang's testing library is written in YaoXiang.
 
 use std.result
 
@@ -203,40 +204,40 @@ assert_true: (cond: Bool) -> Result(Void, String) = (cond) => {
     return result.err(f"Expected true, got {cond}")
 }
 
-// assert_not is the same body as assert_false; assert_err / assert_err_code see §8.1
+// assert_not and assert_false share the same body; assert_err / assert_err_code see §8.1
 ```
 
 - Assertion functions are **value-semantics**: they return `Result(Void, String)`, failures are
-  expressed as `Err(diagnostic info)`, and they do not abort the process — §7 suites collect
-  per-test judgments accordingly. The process-level abort semantics of `std.assert.assert` are
-  reserved for runtime guards and do not enter the test assertion path. The Ok payload is `Void`
-  (per type-system.md as the unit; `()` is an empty Tuple, and the two are not interchangeable —
-  decided 2026-09-03)
-- **Seven functions in the family (delivered 2026-09-03, abort transition version deleted)**:
-  value-semantic `assert_eq` / `assert_ne` / `assert_true` / `assert_false` + `assert_not` (same
-  body as assert_false, reserved for `!assert` packaging) + `assert_err` (§8.1)
+  expressed as `Err(diagnostic info)`, without aborting the process — the §7 suite collects per-test
+  judgments based on this. The process-level abort semantics of `std.assert.assert` are reserved for
+  runtime guards, not used in the test assertion path. The Ok payload is `Void` (the unit per the
+  type-system.md spec; `()` is an empty Tuple, the two are not mixed — decision on 2026-09-03)
+- **Function family of 7 (delivered on 2026-09-03, abort transitional version removed)**:
+  value-typed `assert_eq` / `assert_ne` / `assert_true` / `assert_false` + `assert_not` (shares body
+  with assert_false, reserved for `!assert` aliasing) + `assert_err` (§8.1)
   - `assert_err_code` (§8.1 error code assertion)
-  - `assert_approx_eq(a: Float, b: Float, eps: Float)` (Phase 3, delivered 2026-09-07): judges
-    `|a - b| <= eps`, with eps given **explicitly by the caller** — tolerance is part of the test
-    contract, no hidden default; negative eps is Err at the declaration site, NaN is always Err
-- `assert_eq` / `assert_ne` use **Any-typed parameters** — `==`/`!=` and f-string interpolation work
-  fine on Any, and they don't depend on the generics system. Note that parameters **must be
-  explicitly annotated**: unannotated parameters cannot pass the native generics `&Result(T, E)`
-  call check (verified by R1 probe)
-- `assert_false` / `assert_not` use `cond == false` to express negation (the `not` unary syntax is
-  not yet landed; it can migrate after stabilization; the `!assert` unary form has the same
-  dependency, see §8.1)
-- Block body + explicit `return` form: the then-arm type of the if expression is discarded during
-  checking, and the if expression with two Result arms is a checking blind spot — the implementation
-  works around this
-- `std.test` does not depend on any native code; it is implemented in pure YaoXiang
+  - `assert_approx_eq(a: Float, b: Float, eps: Float)` (Phase 3, delivered 2026-09-07 ):
+    `|a - b| <= eps` judgment, with eps **explicitly given by the caller** — tolerance is part of
+    the test contract, no hidden default; negative eps is Err at the declaration site, NaN is always
+    Err
+- `assert_eq` / `assert_ne` use **Any-annotated parameters** — `==`/`!=` and f-string interpolation
+  work normally on Any, not depending on the generics system. Note that parameters **must be
+  explicitly annotated**: unannotated parameters fail the native generics `&Result(T, E)` call check
+  (R1 probe verification)
+- `assert_false` / `assert_not` use `cond == false` to express negation (`not` unary syntax is not
+  yet landed, can be migrated after stabilization; the `!assert` unary form has the same dependency,
+  see §8.1)
+- Block body + explicit `return` form: the then-arm type of an if expression is discarded during
+  checking, the if expression of two Result arms is a checking blind spot, so the implementation
+  works around it
+- `std.test` does not depend on any native code, implemented in pure YaoXiang
 
-### 4. Standard Library Loading Mechanism (Key Design)
+### 4. Standard library loading mechanism (key design)
 
-**Phase 1: Embedded Binary**
+**Phase 1: Embedded binary**
 
-`std/test.yx` (and all future stdlib modules written in YaoXiang) is embedded into the binary at
-build time:
+`std/test.yx` (and all future std modules written in YaoXiang) are embedded into the binary at build
+time:
 
 ```rust
 // build.rs or build script, auto-generated
@@ -246,87 +247,87 @@ pub const STD_YX_FILES: &[(&str, &str)] = &[
 ];
 ```
 
-The module system (RFC-029, fully landed 2026-08-02) provides the entry point: the Registry holds
+The module system (RFC-029, fully landed on 2026-08-02) provides the entry point: the Registry holds
 both native modules and source modules, and the orchestrator handles multi-file orchestration. The
 resolution order for `use std.test`:
 
-1. First, look up Rust native modules (existing mechanism, such as `std.assert`)
-2. If not found, look up the embedded `STD_YX_FILES` — on a hit, inject the orchestrator with a
-   **virtual path** (e.g., `<std>/test.yx`) as the seed module, going through the normal frontend
-   pipeline (parse → typecheck → IR)
-3. If not found, fall back to file system discovery (user modules)
+1. First check the Rust native modules (existing mechanism, e.g., `std.assert`)
+2. If not found, check the embedded `STD_YX_FILES` — if matched, use a **virtual path** (e.g.,
+   `<std>/test.yx`) as the seed module to inject into the orchestrator, going through the normal
+   frontend pipeline (parse → typecheck → IR)
+3. If not found, fall through to file system discovery (user modules)
 
-`use std.assert` inside the embedded source module is resolved normally by the resolver to the
-native registry — native and source modules coexist in the Registry, and cross-kind dependencies
-work naturally. Embedded modules **are compiled on demand**: they only enter the pipeline when
+The `use std.assert` inside embedded source modules is normally resolved by the resolver to the
+native registry — native and source modules coexist in the Registry, so cross-kind dependencies
+naturally work. Embedded modules are **compiled on demand**: they only enter the pipeline when
 imported.
 
 Advantages:
 
 - `use std.test` works even in single-file mode
-- The standard library version is strictly bound to the binary, no version mismatch
-- Users do not need to configure the standard library path
+- The std version is strictly bound to the binary, no version mismatch
+- Users don't need to configure std paths
 
-**Future: File System Standard Library**
+**Future: file-system std**
 
-Once the YaoXiang project mode matures, the standard library will switch to a file system form. See
-the update in RFC-014 for details.
+Once YaoXiang's project mode matures, the std will switch to file-system form. See updates to
+RFC-014.
 
-### 5. Discovery and Execution
+### 5. Discovery and execution
 
-**Prerequisite (2026-08-02 review decision)**: CLI `run` must be wired into the orchestrator. The
-current CLI `run` uses a single-file pipeline (`run_file_with_diagnostics`) and cannot resolve user
-module imports; the `yaoxiang test` child process model inherits CLI capabilities, and test files
-importing project modules is a core scenario. So in Phase 1, the CLI `Run` source branch is first
-delegated to `run_project` (orchestrator, directory-recursive discovery); #247 (on-demand discovery
-along use) is then layered on as a pure performance optimization. Single files without imports
-behave equivalently through the orchestrator, and the bytecode branch is unchanged.
+**Prerequisite (decision on 2026-08-02)**: the CLI `run` hooks into the orchestrator. Currently the
+CLI `run` goes through a single-file pipeline (`run_file_with_diagnostics`), unable to resolve user
+module imports; and the child-process model of `yaoxiang test` inherits CLI capabilities, with test
+files importing project modules being a core scenario. Therefore Phase 1 first delegates the CLI
+`Run` source branch to `run_project` (orchestrator, directory-recursive discovery); #247 (on-demand
+discovery along use) comes later as a pure performance optimization. A single file with no imports
+behaves equivalently through the orchestrator, and the bytecode branch is unchanged.
 
 **Discovery phase**:
 
-1. If `[PATHS]` is specified, use the specified paths directly
-2. Otherwise, read `[tool.test].patterns` from `yaoxiang.toml`
-3. If not configured, default to `tests/**/*.yx`
-4. Apply `--filter` (filename contains)
-5. The discovery scope is the test layering (§9): default patterns only cover language-availability
-   corpora; library test layers (e.g., `src/std/tests/`) are discovered via explicit paths or
-   package configuration, and are not mixed into the default scan
+1. If `[PATHS]` are specified, use those paths directly
+2. Otherwise read `[tool.test].patterns` from `yaoxiang.toml`
+3. If no configuration, default to `tests/**/*.yx`
+4. Apply `--filter` (file name contains)
+5. The discovery scope is the test layer (§9): default patterns only cover language-availability
+   corpus; library test layers (e.g., `src/std/tests/`) are discovered via explicit paths or package
+   configuration, not mixed into the default scan
 
 **Execution phase**:
 
-1. For each file, branch and execute based on the header directive (directive grammar in §8.2,
-   parsed via `src/util/test_markers.rs`, shared with yx_runner):
+1. For each file, dispatch execution based on header directives (directive grammar in §8.2, parsed
+   by `src/util/test_markers.rs`, shared with yx_runner):
    - Behavior tests: `yaoxiang run --debug-info <file>` child process (`--debug-info` makes runtime
-     errors carry source locations — verified 2026-08-02 that stack trace outputs `file:line:col`);
-     `// mode:` declares the child process `--runtime` mode
-   - Compile-time rejection class: single-step `yaoxiang check <file>`
-   - Runtime-failure class: two-step `check` (must pass) + `run` (must fail)
-2. Files with `// skip: <reason>` skip execution and are counted as skipped in the report
+     errors carry source location — verified on 2026-08-02 that stack trace outputs
+     `file:line:col`); `// mode:` declares the child process `--runtime` mode
+   - Compile-time rejection kind: single step `yaoxiang check <file>`
+   - Runtime-failure kind: two steps — `check` (must pass) + `run` (must fail)
+2. Files with `// skip: <reason>` skip execution, counted as skipped in the report
 3. Judgment and expected code comparison follow the §8.2 judgment matrix; directive parse failure
-   means no execution and direct FAIL (construction-time rejection)
+   means no execution, direct FAIL (construction-time rejection)
 4. Capture stdout/stderr for the report
-5. Serial by default; `--parallel` (or `[tool.test].parallel`) spawns a worker pool sized to
-   available cores — each file is still an independent child process — skip/invalid are processed
-   first in discovery order, execution results are streamed in completion order, JSON is sorted by
-   path (Phase 3, delivered 2026-09-07)
-6. With `--fail-fast`, stop scheduling new files on the first FAIL; in parallel mode, in-flight
-   files run to completion and are counted
+5. Serial by default; `--parallel` (or `[tool.test].parallel`) spawns a worker pool by available
+   cores, each file is still an independent child process — skip/invalid are processed first in
+   discovery order, execution results stream in completion order, and JSON is sorted by path (Phase
+   3, delivered 2026-09-07)
+6. If `--fail-fast`, stop scheduling new files on the first FAIL; in parallel mode, in-flight files
+   finish and are counted
 
-### 6. Test Isolation
+### 6. Test isolation
 
 Test isolation is naturally achieved through process-level boundaries:
 
 - Each test file runs in an independent child process
-- Each child process has its own Heap, Frame, NativeContext
+- Each child process has independent Heap, Frame, and NativeContext
 - A panic in one test file does not affect other test files
-- No additional isolated Heap context mechanism is needed
-- **Parallel execution (Phase 3) does not expand the isolation boundary**: the working directory
-  (CWD) is shared between child processes; parallel tests must not occupy files with the same path
-  inside the CWD — file-I/O tests use independent file names and clean up on exit
+- No additional independent Heap context mechanism is needed
+- **Parallel execution (Phase 3) does not extend isolation boundaries**: child processes share the
+  working directory (CWD), so parallel tests must not occupy files at the same path in CWD — file
+  I/O tests should use independent file names and clean up on completion
 
-### 7. Suite and Multiple Tests (Value-Model)
+### 7. Suites and multiple tests (value-typed model)
 
-A test file may contain multiple tests. In-file organization (landed 2026-09-03):
+A test file may contain multiple tests. The in-file organization (landed on 2026-09-03):
 
 ```yaoxiang
 // tests/list_test.yx
@@ -354,34 +355,34 @@ main = {
 }
 ```
 
-- Each test is a zero-parameter function returning `Result(Void, String)`; assertion failures are
-  expressed as `Err` (the §3 value-semantic assertion family), and do not interrupt the process —
-  subsequent tests still run
-- `test.suite` invokes each one and collects: a test that is not Ok records the name and diagnostic,
-  Ok is silent; after all are done, if any Err exists, it aborts via `std.assert.assert` with
-  failure details (`N of M test(s) failed` + each `[FAIL] name: diagnostic`) — the file exit code is
-  non-zero (§5 judgment unchanged). The abort here is a runtime guard of the test binary, not an
-  assertion path; all Ok means silent exit 0
-- Top-level test functions are **enqueued in closure form** (`("name", () => test_fn())`): top-level
-  function names as value references are not yet supported (IR-level limitation, `E3006`) —
-  closure-body calls to global functions are unaffected
-- The runner only sees the file, and does not perform function-level scanning: per-test judgments
-  come entirely from in-suite collection, and the in-file structure is transparent to the runner —
-  the zero-compiler-change principle is preserved
-- Explicitly not adopted: in-process catch boundary (17-keyword iron rule); runner calling function
-  entry points one by one (limited to internal scenarios such as §8.2 compile failure)
-- The API form is decided (2026-09-03, #319):
-  `suite(tests: List((String, () -> Result(Void, String)))) -> Void`; duplicate names are not
-  detected (names are only used for report display); `--filter` filters by filename and is unaware
-  of in-suite test names
+- Each test is a zero-argument function returning `Result(Void, String)`; assertion failures are
+  expressed as `Err` (§3 value-semantics assertion family), without interrupting the process —
+  subsequent tests continue to run
+- `test.suite` calls them one by one and collects: a non-Ok test is recorded with name and
+  diagnostic, Ok is silent; after all have run, if any Err exists, abort with `std.assert.assert`
+  and attach failure details (`N of M test(s) failed` + each `[FAIL] name: diagnostic`) — the file's
+  exit code is non-zero (§5 judgment unchanged). This abort is a runtime guard of the test binary,
+  not part of the assertion path; all Ok exits silently with 0
+- Top-level test functions enter as **closures** (`("name", () => test_fn())`): using the top-level
+  function name as a value reference is not yet supported (IR-layer limitation, `E3006`) — closures
+  calling global functions are not affected
+- The runner only sees the file, no function-level scanning: per-test judgments come entirely from
+  the in-suite collection, the in-file structure is transparent to the runner — the
+  zero-compiler-change principle is unaffected
+- Explicitly not adopted: in-process catch boundaries (17-keyword iron rule); runner calling
+  functions one by one (only for internal scenarios like §8.2 compile failures)
+- API form decided (2026-09-03, #319):
+  `suite(tests: List((String, () -> Result(Void, String)))) -> Void`; no duplicate name detection
+  (names are only used for report display); `--filter` filters by file name, not aware of in-suite
+  test names
 
-### 8. Negative Testing (Expected Failure) Three-Layer Design
+### 8. Three-layer design for negative tests (expected failure)
 
-Negative tests are split by the layer where the failure occurs, each with its place:
+Negative tests are split by failure layer, with each layer in its proper place:
 
-#### 8.1 Value-Level Reverse (General, User-Facing)
+#### 8.1 Value-level reverse (general, user-facing)
 
-The operation under test returns `Result`, and the test expresses expected failure with ordinary
+The tested operation returns `Result`, and the test expresses the expected failure with ordinary
 assertions:
 
 ```yaoxiang
@@ -389,141 +390,140 @@ r = range.iter(invalid_range)
 test.assert_err(r)
 e = result.unwrap_err(r)
 test.assert_eq(result.code(e), "E6009")
-// or in one encapsulated form (the code only exists on the std Error carrier, E is nailed down to Error):
+// Or a one-line wrapper (the code only exists on the std Error carrier, E is nailed to Error):
 test.assert_err_code(r, "E6009")
 ```
 
-- `assert_not` / `assert_err` / `assert_err_code` have been delivered with the value-semantic family
-  (2026-09-03, §3); the `!assert` unary form will be provided after the `not` syntax lands (same
-  constraint as `assert_false`'s `cond == false`)
-- Error code assertion depends on the `Error` value carrying a machine-readable `code` field —
-  landed in #323 M4: `Error = { code, message }` (native `error_new(code, message)`), read via
-  `result.unwrap_err(r)` to get the carrier + `result.code(e)` / `result.message(e)` accessors (the
-  previously estimated `error_new_with_code` naming, exported code constants, and `err.code` field
-  access were all not adopted — the language has no Struct field access, and code constants are not
-  exported)
-- As the Result-ization progresses (#301, #316), operations that can fail return `Result` one by
-  one, and file-level negative markers in the corpus migrate to in-file assertions
+- `assert_not` / `assert_err` / `assert_err_code` were delivered with the value-semantics family
+  (2026-09-03, §3); the `!assert` unary form awaits the not syntax to land (same constraint as
+  `assert_false`'s `cond == false`)
+- Error code assertions depend on the `Error` value carrying a machine-readable `code` field —
+  already landed via #323 M4: `Error = { code, message }` (native `error_new(code, message)`), read
+  via `result.unwrap_err(r)` to get the carrier + `result.code(e)` / `result.message(e)` accessors
+  (the design-phase estimated `error_new_with_code` naming, code constant exports, and `err.code`
+  field access were all not adopted — the language has no Struct field access, code constants are
+  not exported)
+- As Result-ification progresses (#301, #316), operations that can fail return `Result` one by one,
+  and file-level negative markers in the corpus migrate to in-file assertions accordingly
 
-#### 8.2 File-Level Negative Directives (For Internal Use by Language Designers Only)
+#### 8.2 File-level negative directives (only for language designers, internal use)
 
-Compilation is all-or-nothing per file, so "this line should not compile" cannot be expressed within
-a file; runtime failure likewise needs file-level expression (e.g., a suite contains tests that must
-fail). The file header declares expectations with **structured directives**, and the runner
-**branches judgment** by expected category (branching decided 2026-09-03; directive grammar decided
-and landed 2026-09-06).
+Compilation is all-or-nothing for a whole file, so "this line should not compile" cannot be
+expressed in-file; runtime failure also needs file-level expression (e.g., a suite must contain a
+failing test). The file header declares expectations with **structured directives**, and the runner
+dispatches judgment by expected category (dispatch decision on 2026-09-03; directive grammar decided
+and landed on 2026-09-06).
 
-Header directive grammar (`// key: value`, within the first 16 lines, strict token matching):
+Header directive grammar (`// key: value`, within the first 16 lines, strict token match):
 
 ```text
 // expect: compile-error E1002 [E1003 ...]   Compile-time rejection test
 // expect: runtime-error E6003 [...]         Runtime-failure test
 // skip: <reason>                            Skip execution, counted as skipped
-// mode: embedded|standard|full              Child process --runtime mode (consumed by the run step only)
+// mode: embedded|standard|full              Child process --runtime mode (consumed only by the run step)
 ```
 
-- No `expect:` directive = behavior test. `expect:` is the **sole declaration of expectation** —
-  decided 2026-09-06 to deprecate the `[test:error]` boolean flag and the Chinese `预期:` prose
-  extraction: the boolean flag and the expectation line are two loosely-coupled facts, and
-  consistency by discipline is bound to drift; the strict English token grammar lets the runner
-  parse mechanically (kind + codes are all fixed tokens, and any extra token after a code makes the
-  parse fail), and parse failure = no execution, direct FAIL — there is no silent-degradation
-  channel for incorrect directive declarations (construction-time rejection)
-- **Compile-error class**: single-step `check` — must fail and output must contain all `[EXXXX]`;
-  compile pass = FAIL (the expected error was not reported), rejection but mismatching codes = FAIL.
-  Syntax errors (E1xxx parser phase) and semantic errors (E2xxx+) do not have separate categories —
-  the expected code itself nails down the phase
-- **Runtime-error class**: two-step judgment — `check` must **succeed** (compile is innocent), `run`
-  must fail and output must contain all `[EXXXX]`. Compile-time explosion = FAIL (the
-  opposite-direction key check versus the compile-error class, preventing leaks from "compile
-  accidentally passes, runtime luckily fails")
-- Convergent with industry: Rust compiletest `//~ ERROR`, Go `// ERROR "regexp"`, GCC `dg-error`,
-  Clang `expected-error` all declare expectations inside fixture comments and are compared
-  bidirectionally by the harness; they use line-level anchoring because multi-diagnostic compilers
-  need to distinguish multiple expectations within a file. This compiler stops at the first error,
-  with one diagnostic per file, so file-level is isomorphic to the compiler's reality — once error
-  recovery lands, line-anchor form can be added to the grammar (Cranelift filetests' file-header
-  directives + function-level expectations are the same hybrid form)
-- Known rendering debt: parse-phase diagnostics are currently output in Debug form (`code: "E0012"`
-  instead of `[E0012]`); code scanning accepts both forms; the strict form will be reinstated after
+- No `expect:` directive = behavior test. `expect:` is the **sole declaration** of expectations —
+  decided on 2026-09-06 to deprecate the `[test:error]` boolean marker and Chinese `预期:` prose
+  code-picking: boolean markers and expectation lines are two loosely-coupled facts, kept consistent
+  by discipline they will inevitably drift; the English strict token grammar lets the runner parse
+  mechanically (kind + codes are fixed tokens, any extra tokens after a code means parse failure),
+  parse failure = no execution, direct FAIL — no silent degradation channel for directive
+  declaration errors (construction-time rejection)
+- **Compile error kind**: single step `check` — must fail and output must contain all `[EXXXX]`;
+  compilation success = FAIL (what should have been reported wasn't), rejected but codes don't match
+  = FAIL. Syntax errors (E1xxx parse stage) and semantic errors (E2xxx+) are not given independent
+  categories — the expected code itself nails down the stage
+- **Runtime error kind**: two-step judgment — `check` must **succeed** (compile-time innocent),
+  `run` must fail and output must contain all `[EXXXX]`. Compile-time explosion = FAIL (the opposite
+  direction from the compile-error kind's key judgment, preventing "compile accidentally passes,
+  runtime coincidentally fails" missed detection)
+- Conforms to industry conventions: Rust compiletest `//~ ERROR`, Go `// ERROR "regexp"`, GCC
+  `dg-error`, Clang `expected-error` all declare expectations within fixture comments and the
+  harness bidirectionally compares; they use line-level anchoring because multi-diagnostic compilers
+  need to distinguish multiple expectations in the same file, while this compiler stops on first
+  error, one file one diagnostic, so file-level is isomorphic with compiler reality — after error
+  recovery lands, the grammar can be extended with line-anchor form (Cranelift filetests'
+  file-header directive + function-level expectation is the same mixed form)
+- Known rendering debt: parse-stage diagnostics are currently output in Debug form (`code: "E0012"`
+  rather than `[E0012]`), code scanning accepts both forms; strict form will be reinstated after
   diagnostic rendering is unified
-- **Only serves this repository's corpus; it is not part of the user-facing testing framework**; the
-  dual-runner judgment convention is closed (2026-09-03, #319): yx_runner (cargo test) and
-  `yaoxiang test` both use `src/util/test_markers.rs` to parse header directives, and the
-  06-compile-errors directory convention is deprecated. The report layer gives category counts:
-  human summary includes a `Categories:` line, JSON summary includes `by_kind` (behavior /
-  compile-error / runtime-error / invalid, skipped counted separately), and each file carries `kind`
+- **Only serves this repository's corpus, not part of the user testing framework**; the dual-runner
+  judgment convention is closed (2026-09-03, #319): yx_runner (cargo test) and `yaoxiang test` share
+  `src/util/test_markers.rs` to parse header directives, the 06-compile-errors directory convention
+  is deprecated. The report layer gives category counts: the human summary has a `Categories:` line,
+  JSON summary carries `by_kind` (behavior / compile-error / runtime-error / invalid, skipped
+  counted separately), each file carries `kind`
 
-#### 8.3 Runtime Hard Failures (Folded into Result-ization)
+#### 8.3 Runtime hard failures (folded into Result-ification)
 
-No independent mechanism is set up — operations that can fail return `Result` per the language
-direction (#301, #316), and tests uniformly follow §8.1 to express expectations. Process-level
-aborts (such as assertion violations, runtime parameter mismatches) gradually converge into values
-with Result-ization, and the testing framework does not provide special semantics for them. (Note:
-the "runtime-error class" marker judgment in §8.2 is the runner's file-level verification channel
-for **operations that cannot yet be Result-ized**, which is not contradictory to the semantic
-direction of this section — the latter is the destination, the former is the migration-period
-channel)
+No independent mechanism — operations that can fail return `Result` per the language direction
+(#301, #316), and tests uniformly go through §8.1. Process-level aborts (e.g., assertion violation,
+runtime parameter mismatch) converge to values as Result-ification progresses, and the testing
+framework provides no dedicated semantics for them. (Note: the "runtime error kind" marker judgment
+in §8.2 is the runner's file-level verification channel for **operations that cannot yet be
+Result-ified**, not contradicting the semantic direction of this section — the latter is the end
+state, the former is the migration-period channel)
 
-### 9. Test System Layering: Language Corpus and Library Tests (Decided 2026-09-03)
+### 9. Test system layering: language corpus and library tests (decided 2026-09-03)
 
-Tests are split into two layers by **the object under test**, each with its own owner and
-maintainer; the marker system (§8.2) and the assertion library (§3) are shared across both layers:
+Tests are divided into two layers by **the object under test**, each with its own ownership and
+maintainer; the marker system (§8.2) and assertion library (§3) are shared across both layers:
 
-**Layer 1: Language Availability Corpus (`tests/yaoxiang/`)**
+**Layer 1: Language-availability corpus (`tests/yaoxiang/`)**
 
 - The object under test is **the language itself** — parser, type system, modules, concurrency,
-  ownership, compile-time rejection, runtime semantics; directories are organized by language
-  specification chapters
-- std in the corpus acts only as an **assertion tool** (`std.assert` / `std.test`), and is never
-  tested — the library's API behavior does not belong to language availability
-- Within the corpus, per §8 it is branched into three judgment classes: behavior tests /
-  compile-time rejection tests / runtime-failure tests
+  ownership, compile-time rejection, runtime semantics; directories are organized by language spec
+  chapters
+- std in the corpus only serves as an **assertion tool** (`std.assert` / `std.test`), never tested —
+  library API behavior does not belong to language availability
+- The corpus is dispatched per §8 into three judgment kinds: behavior tests / compile-time rejection
+  tests / runtime-failure tests
 
-**Layer 2: Library Tests (Travel with the Library)**
+**Layer 2: Library tests (live with the library)**
 
 - The object under test is **the library's public API contract** (e.g., `list.push` behavior,
   `result.code` semantics)
-- Tests are written in **the library's own package**: the std package is `src/std/`, and its
-  yx-level tests go to `src/std/tests/` (co-located with the implementation; the directory coexists
-  with Rust unit tests, and the file types do not overlap); `std.test`'s own tests are also there
-  (using std.test to test std.test, closing the bootstrap loop)
-- Future user packages follow the same convention: tests inside the package, discovered via the
-  package's `[tool.test]` (the test layout of RFC-014 package management is previewed by this)
-- Discovery does not enter the default patterns (the default `tests/**/*.yx` only covers the
-  language layer): the library test layer is discovered via explicit paths
-  (`yaoxiang test src/std/tests`) or package configuration; CI runs in layers
+- Tests are written **in the library's own package**: std's package is `src/std/`, and its yx-level
+  tests go in `src/std/tests/` (co-located with the implementation; the directory coexists with Rust
+  unit tests, file types don't intersect); `std.test`'s own tests are also there (using std.test to
+  test std.test, self-hosting loop closure)
+- Future user packages follow the same convention: tests are in the package, discovered via the
+  package's `[tool.test]` (RFC-014 package management test layout is thus previewed)
+- Discovery does not enter default patterns (default `tests/**/*.yx` only covers the language
+  layer): library test layers are discovered via explicit paths (`yaoxiang test src/std/tests`) or
+  package configuration; CI runs in layers
 
-Migration note: **Already migrated (2026-09-06)** — the 19 files from the original
-`tests/yaoxiang/07-std/` were each assessed and all turned out to be library tests (the objects
-under test are all std module API contracts; language features like `?` propagation, automatic
-borrowing, and generic instantiation play a supporting role in them, not the object under test);
-they were migrated in their entirety to `src/std/tests/` and the 07-std directory was removed;
-yx_runner changed to dual-root discovery (`tests/yaoxiang/` + `src/std/tests/`), the default
-patterns do not include the library layer (integration tests solidify this contract). The language
-corpus has zero std-API tests from this point on.
+Migration notes: **Migrated (2026-09-06)** — the 19 files originally in `tests/yaoxiang/07-std/`
+were screened one by one and all turned out to be library tests (the objects under test are all std
+module API contracts; language features like `?` propagation, automatic borrowing, generics
+instantiation in them serve as carriers rather than the objects under test), and the whole directory
+was migrated into `src/std/tests/` and the 07-std directory removed; yx_runner changed to dual-root
+discovery (`tests/yaoxiang/` + `src/std/tests/`), default patterns don't include the library layer
+(integration tests cement this contract). The language corpus contains zero std-API tests from this
+point on.
 
-## Relationship with Existing Systems
+## Relationship with existing systems
 
-| Item                                                 | Relationship                                                                                                    |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Rust `#[test]`                                       | Untouched; compiler-internal tests continue to use Rust                                                         |
-| Existing `.yx` integration tests (`tests/yaoxiang/`) | Discovered and executed by `yaoxiang test`                                                                      |
-| `std.assert.assert(cond)`                            | Reserved for runtime guards; `std.test`'s value-semantic assertion family is now based on `std.result` (§3, §7) |
-| Module system (RFC-029)                              | Embedded source modules enter via Registry/orchestrator; CLI `run` wiring into orchestrator is a prerequisite   |
-| `#200` refactor (`io.println` → `assert.assert`)     | Same direction as `yaoxiang test`                                                                               |
-| `@` annotation                                       | Not used; `@test` is not introduced                                                                             |
+| Item                                                 | Relationship                                                                                                           |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Rust `#[test]`                                       | Untouched, compiler-internal tests continue to use Rust                                                                |
+| Existing `.yx` integration tests (`tests/yaoxiang/`) | Discovered and executed by `yaoxiang test`                                                                             |
+| `std.assert.assert(cond)`                            | Reserved for runtime guards; the `std.test` value-semantics assertion family is based on `std.result` (§3, §7)         |
+| Module system (RFC-029)                              | Embedded source modules are hooked in via Registry/orchestrator; CLI `run` hooking into orchestrator is a prerequisite |
+| `#200` refactor (`io.println` → `assert.assert`)     | Exactly the same direction as `yaoxiang test`                                                                          |
+| `@` annotation                                       | Not used, `@test` is not introduced                                                                                    |
 
-## Implementation Strategy
+## Implementation strategy
 
-### Phase 1: Core Functionality
+### Phase 1: Core functionality
 
 Scope of changes:
 
 - `src/util/diagnostic/mod.rs` / `src/main.rs` — CLI `Run` source branch delegates to `run_project`
   (multi-file run prerequisite)
-- `src/main.rs` — add the `Test` subcommand
-- `src/std/test.yx` — add the pure YaoXiang module
+- `src/main.rs` — add `Test` subcommand
+- `src/std/test.yx` — new pure YaoXiang module
 - `build.rs` — embed `std/*.yx` into the binary
 - orchestrator / Registry — support loading `.yx` modules from embedded sources via virtual paths
 - RFC-015 config parsing — `[tool.test]` section
@@ -536,69 +536,68 @@ Deliverables:
 - Default `tests/**/*.yx` discovery
 - Serial execution + default output format
 
-### Phase 2: Polish
+### Phase 2: Refinement
 
 - `--filter` / `--fail-fast` / `--verbose` parameters
-- `--json` output (CI integration)
+- `--json` output (for CI integration)
 - `--list` option
 - `--no-progress` option
 
-### Phase 3: Advanced (Delivered 2026-09-07)
+### Phase 3: Advanced (delivered 2026-09-07)
 
-- `--parallel` parallel execution (worker pool + per-file independent child process;
+- `--parallel` parallel execution (worker pool + independent child process per file;
   `[tool.test].parallel` config key has the same effect)
-- `[tool.test].exclude` config (prefix-match removal, `--list` removes them as well)
-- `assert_approx_eq` (Float with explicit eps assertion, §3)
+- `[tool.test].exclude` config (prefix-match exclusion, `--list` also excludes)
+- `assert_approx_eq` (Float explicit eps assertion, §3)
 
-## Risks and Mitigations
+## Risks and mitigations
 
-| Risk                                                          | Probability | Mitigation                                                                                                                                                                                                 |
-| ------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `f"..."` interpolation fails on Any                           | None        | Verified 2026-08-02 (Int/String both work)                                                                                                                                                                 |
-| `yaoxiang.toml` config parsing not in current CLI             | Low         | Simple extension, does not affect core functionality                                                                                                                                                       |
-| CLI run wiring to orchestrator introduces behavior regression | Low         | Single-file paths without imports are equivalent; integration tests cover orchestrator                                                                                                                     |
-| Embedding `.yx` source files into binary increases size       | Low         | `.yx` source files are tiny, negligible                                                                                                                                                                    |
-| Test loop time grows with corpus                              | High        | Main cost is full per-file compilation (185 files measured at 11.3s), not child process startup; `--parallel` only mitigates the process side; compilation cost needs test-loop caching (#251/#293 slices) |
+| Risk                                                             | Probability | Mitigation                                                                                                                                                                                                  |
+| ---------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `f"..."` interpolation on Any fails                              | None        | Verified on 2026-08-02 (Int/String work normally)                                                                                                                                                           |
+| `yaoxiang.toml` config parsing not in current CLI                | Low         | Simple extension, doesn't affect core functionality                                                                                                                                                         |
+| CLI run hooking into orchestrator introduces behavior regression | Low         | No-import single-file path is equivalent; integration tests cover the orchestrator                                                                                                                          |
+| Embedding `.yx` source files into binary increases size          | Low         | `.yx` source files are tiny, negligible                                                                                                                                                                     |
+| Test loop time grows with corpus                                 | High        | The main cost is full compilation per file (185 files measured at 11.3s), not subprocess startup; `--parallel` only mitigates the process side, compilation cost needs test loop caching (#251/#293 slices) |
 
-## Open Questions
+## Open questions
 
-- [x] Can `use std.assert` inside `std/test.yx` be resolved correctly? — **Resolved (2026-08-02)**.
-      After the module system (RFC-029) lands, native and source modules coexist in the Registry,
-      the resolver parses uniformly, and cross-kind dependencies work naturally
-- [x] Does the generic `to_string` of `f"..."` in test output introduce new type constraints? —
-      **Resolved (2026-08-02)**. Verified that `==`/`!=` and f-string interpolation on unannotated
-      parameters (Any) both work (verified for Int/String), no new constraints are introduced
-- [x] Feasibility of `?` generic parameters? — **Resolved (2026-08-02)**: the `?` type syntax does
-      not currently exist (and would be silently swallowed; a separate issue is tracking this);
-      Phase 1 assertion functions use unannotated parameters, and do not depend on the generics
-      system
+- [x] Can `use std.assert` in `std/test.yx` be resolved correctly? — **Resolved (2026-08-02)**.
+      After the module system (RFC-029) landed, native and source modules coexist in the Registry,
+      the resolver unifies resolution, cross-kind dependencies naturally work
+- [x] Does the generics `to_string` in `f"..."` in test output introduce new type constraints? —
+      **Resolved (2026-08-02)**. Verified that on unannotated parameters (Any) `==`/`!=` and
+      f-string interpolation both work (Int/String verified), no new constraints introduced
+- [x] `?` generics parameter feasibility? — **Resolved (2026-08-02)**: the `?` type syntax does not
+      currently exist (and is silently swallowed, tracked in a separate issue), Phase 1 assertion
+      functions use unannotated parameters, not depending on the generics system
 
-## Design Decision Record
+## Design decision log
 
-| Decision                           | Decision                                                                                                                                                                                                                                                                                                                                                                  | Date                      | Reason                                                                                                                                                                                                                                                                                                                                                   |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Test marking method                | Do not use `@test` annotations; test files are ordinary `.yx`                                                                                                                                                                                                                                                                                                             | 2026-07-26                | Zero compiler changes; child processes provide isolation                                                                                                                                                                                                                                                                                                 |
-| Assertion method                   | Pure YaoXiang functions in the `std.test` module                                                                                                                                                                                                                                                                                                                          | 2026-07-26                | Self-bootstrapping, no native code                                                                                                                                                                                                                                                                                                                       |
-| Test execution model               | Child process `yaoxiang run <file>` + exit code                                                                                                                                                                                                                                                                                                                           | 2026-07-26                | Process-level isolation, zero compiler changes                                                                                                                                                                                                                                                                                                           |
-| Standard library loading           | Currently embed in binary, file system in the future                                                                                                                                                                                                                                                                                                                      | 2026-07-26                | Version binding, single-file usability                                                                                                                                                                                                                                                                                                                   |
-| Assertion parameter type           | Unannotated parameters (Any), do not depend on the generics system                                                                                                                                                                                                                                                                                                        | 2026-08-02                | `?` type syntax does not exist; Any verified to be comparable and interpolatable                                                                                                                                                                                                                                                                         |
-| Multi-file run                     | CLI `run` delegates to `run_project` (orchestrator) as a prerequisite                                                                                                                                                                                                                                                                                                     | 2026-08-02                | Child process model inherits CLI capabilities; #247 degrades to pure performance optimization                                                                                                                                                                                                                                                            |
-| Reporting source location          | Child process carries `--debug-info`                                                                                                                                                                                                                                                                                                                                      | 2026-08-02                | Verified that stack trace outputs `file:line:col`; frames transitively attributable via embedded modules (std.test) are not guaranteed here, falling under #289 + RFC-034                                                                                                                                                                                |
-| Negative test layering             | Value-level reverse general / compile-failure runner structured marker (internal only) / hard failures folded into Result-ization                                                                                                                                                                                                                                         | 2026-09-02                | Decided by #319; supersedes the implicit [test:error] convention                                                                                                                                                                                                                                                                                         |
-| In-file multiple tests             | Value-model standard form: test functions return Result, suite collects per-test judgments                                                                                                                                                                                                                                                                                | 2026-09-02                | No catch, no entry-call (entry only for internal scenarios)                                                                                                                                                                                                                                                                                              |
-| Error code                         | Add a machine-readable `code` field to Error                                                                                                                                                                                                                                                                                                                              | 2026-09-02                | Supports error code assertion; compile-time codes go through runner comparison                                                                                                                                                                                                                                                                           |
-| Assertion library form             | 7 value-semantic functions landed, `Result(Void, String)` contract; abort transition version deleted                                                                                                                                                                                                                                                                      | 2026-09-03                | Void is the canonical unit (`()` is an empty Tuple, do not conflate); the nested slot is rigidly Any, unannotated parameters cannot pass the native generics check — parameters must be explicitly annotated (verified by R1 probe)                                                                                                                      |
-| Test system layering               | Language corpus (`tests/yaoxiang/`) and library tests (with the library, std → `src/std/tests/`) split into two layers; std in the corpus acts only as an assertion tool                                                                                                                                                                                                  | 2026-09-03                | The object under test determines ownership and maintainer; library tests with the package layout preview RFC-014                                                                                                                                                                                                                                         |
-| Negative marker branching judgment | Branch by expected category: compile-error class `check` must fail, runtime-error class `check` must pass + `run` must fail; report gives category counts                                                                                                                                                                                                                 | 2026-09-03 (landed 09-06) | Mixed category judgment would let "compile accidentally passes, runtime luckily fails" leaks slip through; expected codes nail down the phase, syntax errors do not get a separate category                                                                                                                                                              |
-| Header directive grammar           | Expectations declared with English structured directives (`// expect:` / `// skip:` / `// mode:`, strict token grammar, parse failure means direct FAIL); deprecate the `[test:error]` boolean flag and the Chinese `预期:` prose extraction                                                                                                                              | 2026-09-06                | Expectation is a property of fixture content, in-fixture declaration is convergent with industry (compiletest / Go / GCC / Clang all do this), a central list is bound to rot; a boolean flag + expectation line are two facts coupled by discipline — a defect surface; structured grammar lets the runner judge mechanically without human involvement |
-| Parallel execution model           | `--parallel` spawns a per-core worker pool (each file is still an independent child process), skip/invalid are processed first in discovery order, execution results are streamed in completion order, JSON is sorted by path; `--fail-fast` stops scheduling (in-flight files run to completion and are counted); CWD remains shared, isolation boundary is not expanded | 2026-09-07                | Under the child process model, parallelism = OS-thread-scheduled spawn, no yx-layer concurrency needed; the main time cost is per-file full compilation (risk table), parallelism only mitigates the process side — #293 caching slice is the main mitigation                                                                                            |
+| Decision                          | Decision                                                                                                                                                                                                                                                                                                                    | Date                      | Rationale                                                                                                                                                                                                                                                                                                                                                  |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Test marker style                 | No `@test` annotation, test files are ordinary `.yx`                                                                                                                                                                                                                                                                        | 2026-07-26                | Zero compiler changes, subprocess as isolation                                                                                                                                                                                                                                                                                                             |
+| Assertion style                   | `std.test` module of pure YaoXiang functions                                                                                                                                                                                                                                                                                | 2026-07-26                | Self-hosting, no native code                                                                                                                                                                                                                                                                                                                               |
+| Test execution model              | Subprocess `yaoxiang run <file>` + exit code                                                                                                                                                                                                                                                                                | 2026-07-26                | Process-level isolation, zero compiler changes                                                                                                                                                                                                                                                                                                             |
+| Std loading                       | Currently embed in binary, file system in the future                                                                                                                                                                                                                                                                        | 2026-07-26                | Version binding, single-file usable                                                                                                                                                                                                                                                                                                                        |
+| Assertion parameter type          | Unannotated parameters (Any), not depending on the generics system                                                                                                                                                                                                                                                          | 2026-08-02                | `?` type syntax doesn't exist; Any is verified to be comparable and interpolable                                                                                                                                                                                                                                                                           |
+| Multi-file run                    | CLI `run` delegates to `run_project` (orchestrator) as a prerequisite                                                                                                                                                                                                                                                       | 2026-08-02                | Subprocess model inherits CLI capabilities; #247 degrades to a pure performance optimization                                                                                                                                                                                                                                                               |
+| Reporting source location         | Subprocess carries `--debug-info`                                                                                                                                                                                                                                                                                           | 2026-08-02                | Verified stack trace outputs `file:line:col`; frame attribution relayed through embedded modules (std.test) is not guaranteed here, belongs to #289 + RFC-034                                                                                                                                                                                              |
+| Negative test layering            | Value-level reverse general / compile-failure runner structured marker (internal only) / hard failure folded into Result-ification                                                                                                                                                                                          | 2026-09-02                | #319 decided; replaces implicit [test:error] convention                                                                                                                                                                                                                                                                                                    |
+| In-file multiple tests            | Value-typed standard model: test functions return Result, suite collects per-test judgments                                                                                                                                                                                                                                 | 2026-09-02                | No catch, no entry-point calls (entries only for internal scenarios)                                                                                                                                                                                                                                                                                       |
+| Error code                        | Error adds machine-readable `code` field                                                                                                                                                                                                                                                                                    | 2026-09-02                | Supports error code assertion; compile-time codes go through runner comparison                                                                                                                                                                                                                                                                             |
+| Assertion library form            | Value-semantics family of 7 functions landed, `Result(Void, String)` contract; abort transitional version removed                                                                                                                                                                                                           | 2026-09-03                | Void is the spec'd unit (`()` is empty Tuple, not mixed); nesting is rigid Any, unannotated parameters fail native generics check — parameters must be explicitly annotated (R1 probe verified)                                                                                                                                                            |
+| Test system layering              | Language corpus (`tests/yaoxiang/`) and library tests (live with library, std → `src/std/tests/`) in two layers; std in the corpus only as an assertion tool                                                                                                                                                                | 2026-09-03                | Object under test determines ownership and maintainer; library tests living with the package previews RFC-014                                                                                                                                                                                                                                              |
+| Negative marker dispatch judgment | Dispatch by expected category: compile-error kind `check` must fail, runtime-error kind `check` must pass + `run` must fail; report gives category counts                                                                                                                                                                   | 2026-09-03 (landed 09-06) | Mixed-kind judgment lets "compile accidentally passes, runtime coincidentally fails" slip through; expected codes nail down the stage, syntax errors don't get a separate category                                                                                                                                                                         |
+| Header directive grammar          | Expectations declared with English structured directives (`// expect:` / `// skip:` / `// mode:`, strict token grammar, parse failure means direct FAIL); deprecate `[test:error]` boolean marker and Chinese `预期:` prose code-picking                                                                                    | 2026-09-06                | Expectations are properties of fixture content, in-fixture declaration is isomorphic with industry (compiletest / Go / GCC / Clang all do this), central lists inevitably rot; boolean marker + expectation line as two facts coupled by discipline is a defect surface; structured grammar lets the runner judge mechanically without human participation |
+| Parallel execution model          | `--parallel` spawns per-core worker pool (each file still an independent child process), skip/invalid processed first in discovery order, execution results stream in completion order, JSON sorted by path; `--fail-fast` stops scheduling (in-flight finish and count); CWD still shared, isolation boundary not extended | 2026-09-07                | Subprocess model parallelism = OS thread scheduling spawn, no need for yx-level concurrency; the main time cost is full compilation per file (risk table), parallel only mitigates the process side — #293 caching slicing is the main mitigation                                                                                                          |
 
 ## References
 
-- [RFC-014: Package Management System Design](../accepted/014-package-manager.md) — standard library
-  directory structure
-- [RFC-015: Configuration System](../accepted/015-configuration-system.md) — `[tool.test]`
-  configuration section
-- [RFC-030: assert Assertion Mechanism](../review/030-assert-mechanism.md) — low-level dependency
+- [RFC-014: Package management system design](../accepted/014-package-manager.md) — std directory
+  structure
+- [RFC-015: Configuration system](../accepted/015-configuration-system.md) — `[tool.test]` config
+  section
+- [RFC-030: assert mechanism](../review/030-assert-mechanism.md) — underlying dependency
 - [Rust `#[test]` mechanism](https://doc.rust-lang.org/book/ch11-01-writing-tests.html) — reference
   design
