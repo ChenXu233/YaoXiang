@@ -12,6 +12,7 @@
 // 具体 Result 传不进来），泛型性由 const 类型参数组承担（R1 探针实证）。
 
 use std.assert
+use std.math
 use std.result
 
 assert_eq: (a: Any, b: Any) -> Result(Void, String) = (a, b) => {
@@ -71,6 +72,20 @@ assert_err_code: (T: Type) -> (r: Result(T, Error), want: String) -> Result(Void
         return result.err(f"Expected code {want}, got {c}")
     }
     return result.err("Expected Err, got Ok value")
+}
+
+// Float 近似相等（RFC-036 Phase 3）：|a - b| <= eps 判定。eps 由调用方显式给出
+// ——容差是测试契约的一部分，不设隐藏默认值。NaN 恒 Err（NaN 减任何值为 NaN，
+// 比较恒 false）；负 eps 在声明处报错（不可能通过的契约不该等到断言失败才发现）。
+assert_approx_eq: (a: Float, b: Float, eps: Float) -> Result(Void, String) = (a, b, eps) => {
+    if eps < 0.0 {
+        return result.err(f"eps must be non-negative, got {eps}")
+    }
+    d = math.fabs(a - b)
+    if d <= eps {
+        return result.ok(void)
+    }
+    return result.err(f"Expected {b} (±{eps}), got {a} (diff {d})")
 }
 
 // 套件收集（RFC-036 §7 值化模型）：逐个调用测试函数，收集 per-test 判定。

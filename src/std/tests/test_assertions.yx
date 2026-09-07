@@ -63,4 +63,16 @@ main = {
     assert.assert(result.is_err(c2), "assert_err_code mismatch is Err")
     m2 = result.unwrap_err(c2)
     assert.assert(m2 == "Expected code E9999, got E6010", "assert_err_code diagnostic names codes")
+
+    // Float 近似相等（RFC-036 Phase 3）：显式 eps 契约
+    a1 = test.assert_approx_eq(0.1 + 0.2, 0.3, 0.000000001)
+    assert.assert(result.is_ok(a1), "approx_eq within eps is Ok")
+    a2 = test.assert_approx_eq(1.0, 1.0, 0.0)
+    assert.assert(result.is_ok(a2), "approx_eq eps=0 degenerates to exact equality")
+    a3 = test.assert_approx_eq(1.0, 2.0, 0.5)
+    assert.assert(result.is_err(a3), "approx_eq beyond eps is Err")
+    m3 = result.unwrap_err(a3)
+    assert.assert(string.contains(m3, "Expected 2"), "approx_eq diagnostic names expected value")
+    a4 = test.assert_approx_eq(1.0, 2.0, -1.0)
+    assert.assert(result.is_err(a4), "approx_eq negative eps rejected at declaration")
 }
