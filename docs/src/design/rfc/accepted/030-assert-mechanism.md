@@ -177,7 +177,7 @@ assert.assert(x > 0, "expected positive")  # 运行时 check
 仅需在 `src/std/` 下添加 native 函数注册：
 
 1. 新增 `src/std/assert.rs`
-2. 注册 `std.assert.assert` 和 `std.assert.Assert`（后者是编译期条件类型，见 #155）
+2. 注册 `std.assert.assert` 和 `std.assert.Assert`（后者是编译期条件类型）
 3. 内部调用已有的 `BytecodeInstr::Throw` 指令
 
 ### 优点
@@ -264,8 +264,7 @@ YaoXiang 当前没有常量折叠 pass。即使采用方案 B，`assert(x > 0)`
 - [x] ~~是否需要 `assert_eq`、`assert_ne` 等变体？~~ → **不需要。YAGNI。等测试框架成型再说。**
 - [x] ~~panic 输出是否包含源码位置？~~ → 方案 A 依赖 debug info（调用栈）。
 - [x] ~~assert / Assert 统一问题~~ →
-      **已确定**。统一方案：`assert: (Bool) -> Assert(IsTrue(cond))`，一体两面，dispatch 自动分派。详见
-      [#156](https://github.com/ChenXu233/YaoXiang/issues/156)（已关闭）。`Never` 类型（⊥）作为
+      **已确定**。统一方案：`assert: (Bool) -> Assert(IsTrue(cond))`，一体两面，dispatch 自动分派。`Never` 类型（⊥）作为
       `assert(false)` 的返回类型内建。
 
 ### 2026-07-05：选择方案 A（已被统一方案取代）

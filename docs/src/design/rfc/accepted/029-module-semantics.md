@@ -29,7 +29,7 @@ issue: '#232'
 ### 当前问题
 
 1. **编译器只支持单文件**：`Pipeline::run(name, source)` 接收一个字符串，无法处理跨文件依赖
-2. **`use` 只能解析 std 模块**：本地文件间的 `use` 全部报 "Unknown variable"（#232）
+2. **`use` 只能解析 std 模块**：本地文件间的 `use` 全部报 "Unknown variable"
 3. **模块解析器放错了位置**：唯一的路径解析逻辑在 `package/source/module_resolver.rs`，`frontend/module/resolver.rs` 实际是编译期谓词正格化（RFC-027）
 
 ### 设计目标
@@ -94,7 +94,7 @@ distance = math.geometry.distance
 
 - ~~`use path.*`~~：通配导入。不需要，显式列出绑定。
 - ~~`from path use item`~~：Python 式。不采用。
-- ~~`use path.{item as alias}`~~：花括号内别名。Phase 4 可选，不阻塞 #232。
+- ~~`use path.{item as alias}`~~：花括号内别名。Phase 4 可选，不阻塞主线路径。
 
 #### 导入冲突
 
@@ -170,7 +170,7 @@ base/name/mod.yx
 同一模块键在**两个根**各命中一个文件且都被引用（如 `tests/lib.yx` 与 `<root>/lib.yx`
 分别被 tests/ 入口与根入口引用）→ 同样报歧义错，而非静默遮蔽。
 
-> 2026-08-03 修订（#247 / RFC-036 驱动）：发现与解析按实现落地。发现沿 `use` 追踪
+> 2026-08-03 修订（RFC-036 驱动）：发现与解析按实现落地。发现沿 `use` 追踪
 > （本 RFC §5 既定协议），替代初版实现的目录递归——不相关文件的编译错误不再阻塞运行，
 > `yaoxiang test` 的测试文件隔离才成立。双根规则中「导入者目录优先」保证同目录项目行为
 > 不变；「项目根兑底」使子目录入口（如 `tests/foo_test.yx`）能导入项目根模块。
@@ -298,7 +298,7 @@ native 函数的特殊处理推迟到 IR gen / codegen 层。
 9. 导入冲突检测（同名报错）
 10. E2E 测试：多文件项目 `use` 本地模块
 
-### Phase 4（可选，不阻塞 #232）
+### Phase 4（可选，不阻塞主线）
 
 11. `use path.{item as alias}` 花括号内别名
 12. vendor 目录解析（配合 RFC-014）

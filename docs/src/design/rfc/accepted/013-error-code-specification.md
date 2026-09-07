@@ -421,14 +421,14 @@ E1001::unknown_variable(&var_name)
 | E6011 | 浮点解析失败     |
 <!-- code-table:E6xxx end -->
 
-> **#280 修订（2026-08-09）**：码表原按 Rust 语义草案（Assertion failed/Arithmetic overflow/Heap
+> **码表修订（2026-08-09）**：码表原按 Rust 语义草案（Assertion failed/Arithmetic overflow/Heap
 > allocation failed/Type cast failed）定义，与实现实际需求不符。YaoXiang 无空指针/堆分配失败/类型
 > 转换概念（值语义 + Rust 内存安全），运行时溢出路径未实现检测。校准后：
 >
 > - E6002 删除（原 Assertion failed 移至 E6005；原空指针语义无语言概念）
-> - E6003 从 Arithmetic overflow 改为 Runtime index out of bounds（真实触发面，#279/#271）
+> - E6003 从 Arithmetic overflow 改为 Runtime index out of bounds（真实触发面）
 > - E6005 从 Heap allocation failed 改为 Assertion failed（std.assert 真实路径）
-> - E6006 从 Runtime index out of bounds 改为 Function not found（实现早已如此，#255）
+> - E6006 从 Runtime index out of bounds 改为 Function not found（实现早已如此）
 > - E6007 从 Type cast failed 改为通用 Runtime error（ExecutorError 未映射变体统一落点）
 
 #### E7xxx：I/O 与系统错误
@@ -465,32 +465,32 @@ E1001::unknown_variable(&var_name)
 
 > W 码位规则：与 E 码同构按阶段分组（W+阶段千位段），W1xxx = 类型检查阶段警告。
 >
-> **发射通道（#321 M2）**：W 码诊断由 builder 按 W 前缀缺省标注 `Severity::Warning`（显式指定优先），
+> **发射通道**：W 码诊断由 builder 按 W 前缀缺省标注 `Severity::Warning`（显式指定优先），
 > 收集与呈现与错误同轨（`warning[W####]` 前缀渲染），但不阻断编译、不影响成功退出码。
 > `yaoxiang check --deny-warnings` 将警告升级为失败（存在警告时以非零码退出），用于 CI 严格模式。
 > per-code 压制（allow 属性等）为后续扩展项。
 
 ### 消息质量规范
 
-> 本节由 #322（M3 消息单轨与质量，2026-09-03）引入。由 `scripts/audit_diagnostics.py` 在 CI 强制执行。
+> 本节由消息单轨与质量修订（2026-09-03）引入。由 `scripts/audit_diagnostics.py` 在 CI 强制执行。
 
 1. **消息单轨**：所有用户可见诊断消息必须经权威注册表快捷方法 + locales 模板渲染，代码只传结构化参数。禁止绕过注册表直接构造 `Diagnostic::error(...)` 等原生值——该路径绕过码校验与 i18n。
 2. **码合法性**：禁止使用未注册码与伪码（如 `E_INTERNAL`）；使用点码字面量必须已在注册表定义。内部错误一律落 E8001（`internal_error`）。
-3. **类型显示**：类型 Display 必须区分实例化前后形态（#286：`Expected 'Container', found 'Container'` 裸名不可区分）。
-4. **求解器内部态隔离**：求解器中间态 TypeVar（Display 形态 `t<N>`）不得进入用户可见消息（#287）。测试锚定：`test_type_error_message_no_solver_typevar_leak`。
+3. **类型显示**：类型 Display 必须区分实例化前后形态（`Expected 'Container', found 'Container'` 裸名不可区分）。
+4. **求解器内部态隔离**：求解器中间态 TypeVar（Display 形态 `t<N>`）不得进入用户可见消息。测试锚定：`test_type_error_message_no_solver_typevar_leak`。
 5. **E8xxx 边界**：E8xxx 仅用于编译器内部一致性问题（ICE）。用户可修复的错误禁止使用 E8001 兜底；ICE 消息必须附最小复现指引。
 
 ---
 
 ### 运行时错误值与码贯通
 
-> 本节由 #323（M4 运行时 Error 值带码，2026-09-03）引入。E6xxx/E7xxx 语义空间同时承载两个通道，码空间同一、呈现通道不同。
+> 本节由运行时 Error 值带码修订（2026-09-03）引入。E6xxx/E7xxx 语义空间同时承载两个通道，码空间同一、呈现通道不同。
 
 #### 两个通道
 
 | 通道                         | 载体                                        | 呈现方式                     |
 | ---------------------------- | ------------------------------------------- | ---------------------------- |
-| 编译器/CLI 诊断通道          | `ExecutorError` 等宿主层硬错误              | stderr `error[E####]:`（#280/#281 已接线 E6003/E6005/E6007） |
+| 编译器/CLI 诊断通道          | `ExecutorError` 等宿主层硬错误              | stderr `error[E####]:`（已接线 E6003/E6005/E6007） |
 | 程序内错误值通道             | std 库 `Result(T, Error)` 的 Err 载体 `Error` | 语言值，由程序 match/比较消费 |
 
 #### Error 结构（v0.8 起，破坏性变更）
@@ -510,7 +510,7 @@ Error { code: String, message: String }
 1. 运行时错误值码与编译器诊断码共用 E6xxx/E7xxx 空间，新码按**真实触发面**分配，不为想象中的场景预留。
 2. 先注册后使用：新码进入权威注册表并经三方一致性校验（codes/*.rs ↔ locales ↔ 本文档码表）后方可发射。运行时错误值码的注册源为 `src/std/result.rs` 的 `RUNTIME_ERROR_CODES` 表（与诊断码同受 `build.rs 构建期门槛 + `tools/code-tables`` 校验）。
 3. E7xxx 为 std.io / std.net 错误值预留段位（当前空挂，io/net Result 化时启用）。
-4. 发射点（#323 M4）：std 各模块经 `error_new(code, message)` 构造 Error 值；消费侧 `std.result.unwrap_err` 取出 Err 载体，`std.result.code/message` 读取字段。
+4. 发射点：std 各模块经 `error_new(code, message)` 构造 Error 值；消费侧 `std.result.unwrap_err` 取出 Err 载体，`std.result.code/message` 读取字段。
 
 #### 演进路径（线 C，未实施）
 
