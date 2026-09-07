@@ -49,9 +49,16 @@ fn main() {
     if fix {
         match fix_rfc_tables(&doc, &entries, &zh) {
             Ok((new_doc, n)) => {
-                std::fs::write(&doc_path, new_doc)
-                    .unwrap_or_else(|e| panic!("写入 {} 失败: {}", doc_path.display(), e));
-                println!("已重写 {n} 个码表区间: {}", doc_path.display());
+                if new_doc == doc {
+                    println!(
+                        "RFC-013 码表区间已一致（{} 段），未改动",
+                        code_tables::RFC_SEGMENTS.len()
+                    );
+                } else {
+                    std::fs::write(&doc_path, new_doc)
+                        .unwrap_or_else(|e| panic!("写入 {} 失败: {}", doc_path.display(), e));
+                    println!("已重写 {n} 个码表区间: {}", doc_path.display());
+                }
             }
             Err(msg) => {
                 eprintln!("error: {msg}");
