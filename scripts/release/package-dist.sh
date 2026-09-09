@@ -59,10 +59,11 @@ fi
 cp "$Z3_SRC" "$STAGE/bin/"
 
 # ── 标准库目录 ───────────────────────────────────────────────────
-# native 模块：刚构建的引擎生成的接口视图（实现在二进制内）
-"$STAGE/bin/yaoxiang-rs$EXE_SUFFIX" gen-std --out-dir "$STAGE/lib/yaoxiang/std"
-# .yx 层：仓库真实源码原样复制（编译权威仍是 include_str! 内嵌，RFC-036）
-for f in src/std/*.yx; do
+# 全部为仓库静态复制，无运行时生成（RFC-037：gen-std 子命令已取消）：
+# native 模块 = src/std/interfaces/ 预生成接口视图（与 StdModule::exports()
+# 由 test_committed_interface_files_match_generation 测试门禁强制同步）；
+# .yx 层 = src/std/*.yx 真实源码（编译权威仍是 include_str! 内嵌，RFC-036）
+for f in src/std/interfaces/*.yx src/std/*.yx; do
   cp "$f" "$STAGE/lib/yaoxiang/std/"
 done
 

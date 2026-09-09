@@ -1,7 +1,6 @@
 //! Package management CLI commands
 
 pub mod add;
-pub mod gen_std;
 pub mod init;
 pub mod install;
 pub mod list;

@@ -1,0 +1,59 @@
+// time.yx - 标准库 std.time 模块接口
+// 仅供 LSP 跳转和类型查看，不参与实际执行
+
+now: () -> DateTime = {
+    ...
+}
+
+timestamp: () -> Int = {
+    ...
+}
+
+timestamp_ms: () -> Int = {
+    ...
+}
+
+sleep: (seconds: Float) -> Void = {
+    ...
+}
+
+format_time: (dt: Int, fmt: String) -> String = {
+    ...
+}
+
+parse_time: (fmt: String, s: String) -> DateTime = {
+    ...
+}
+
+DateTime::year: (dt: Int) -> Int = {
+    ...
+}
+
+DateTime::month: (dt: Int) -> Int = {
+    ...
+}
+
+DateTime::day: (dt: Int) -> Int = {
+    ...
+}
+
+DateTime::hour: (dt: Int) -> Int = {
+    ...
+}
+
+DateTime::minute: (dt: Int) -> Int = {
+    ...
+}
+
+DateTime::second: (dt: Int) -> Int = {
+    ...
+}
+
+DateTime::weekday: (dt: Int) -> Int = {
+    ...
+}
+
+DateTime::to_string: (dt: Int) -> String = {
+    ...
+}
+

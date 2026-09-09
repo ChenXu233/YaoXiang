@@ -1,0 +1,91 @@
+// list.yx - 标准库 std.list 模块接口
+// 仅供 LSP 跳转和类型查看，不参与实际执行
+
+push: (A: Type)(list: List(A), item: A) -> List(A) = {
+    ...
+}
+
+pop: (A: Type)(list: &List(A)) -> Any = {
+    ...
+}
+
+append: (A: Type)(list: List(A), item: A) -> List(A) = {
+    ...
+}
+
+prepend: (A: Type)(list: List(A), item: A) -> List(A) = {
+    ...
+}
+
+remove_at: (A: Type)(list: &List(A), index: Int) -> Any = {
+    ...
+}
+
+reverse: (A: Type)(list: &List(A)) -> List(A) = {
+    ...
+}
+
+concat: (A: Type)(a: &List(A), b: &List(A)) -> List(A) = {
+    ...
+}
+
+map: (T: Type)(list: &List(T), fn: (item: T) -> T) -> List(T) = {
+    ...
+}
+
+filter: (T: Type)(list: &List(T), fn: (item: T) -> Bool) -> List(T) = {
+    ...
+}
+
+reduce: (T: Type)(list: &List(T), fn: (acc: Any, item: T) -> Any, init: Any) -> Any = {
+    ...
+}
+
+len: (A: Type)(list: &List(A)) -> Int = {
+    ...
+}
+
+is_empty: (A: Type)(list: &List(A)) -> Bool = {
+    ...
+}
+
+get: (A: Type)(list: &List(A), index: Int) -> Any = {
+    ...
+}
+
+set: (A: Type)(list: List(A), index: Int, value: A) -> List(A) = {
+    ...
+}
+
+first: (A: Type)(list: &List(A)) -> Any = {
+    ...
+}
+
+last: (A: Type)(list: &List(A)) -> Any = {
+    ...
+}
+
+slice: (A: Type)(list: &List(A), start: Int, end: Int) -> List(A) = {
+    ...
+}
+
+contains: (A: Type)(list: &List(A), item: Any) -> Bool = {
+    ...
+}
+
+find_index: (A: Type)(list: &List(A), item: Any) -> Int = {
+    ...
+}
+
+iter: (A: Type)(list: &List(A)) -> Tuple = {
+    ...
+}
+
+next: (iterator: Tuple) -> Any = {
+    ...
+}
+
+has_next: (iterator: Tuple) -> Bool = {
+    ...
+}
+

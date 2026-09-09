@@ -84,7 +84,6 @@
   "package_project_created_lib": "✓ 已创建库项目 '{0}'",
   "package_init_here": "✓ 已在当前目录初始化项目 '{0}'",
   "package_file_skipped": "  跳过已存在文件 '{0}'",
-  "package_gen_std_done": "✓ 已生成 {0} 个标准库接口文件到 {1}",
   "package_lock_generated": "# 此文件由 yaoxiang 自动生成，请勿手动编辑。",
   "package_update_failed": "⚠ {0} 更新失败: {1}",
   "E0001": {

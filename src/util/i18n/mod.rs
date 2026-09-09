@@ -452,7 +452,6 @@ pub enum MSG {
     PackageProjectCreatedLib,
     PackageInitHere,
     PackageFileSkipped,
-    PackageGenStdDone,
 
     // Package manager - lock file
     PackageLockGenerated,
@@ -555,7 +554,6 @@ impl MSG {
             MSG::PackageProjectCreatedLib => "package_project_created_lib",
             MSG::PackageInitHere => "package_init_here",
             MSG::PackageFileSkipped => "package_file_skipped",
-            MSG::PackageGenStdDone => "package_gen_std_done",
 
             // Package manager - lock file
             MSG::PackageLockGenerated => "package_lock_generated",

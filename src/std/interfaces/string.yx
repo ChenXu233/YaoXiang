@@ -1,0 +1,79 @@
+// string.yx - 标准库 std.string 模块接口
+// 仅供 LSP 跳转和类型查看，不参与实际执行
+
+split: (s: &String, sep: &String) -> List(String) = {
+    ...
+}
+
+trim: (s: &String) -> String = {
+    ...
+}
+
+upper: (s: &String) -> String = {
+    ...
+}
+
+lower: (s: &String) -> String = {
+    ...
+}
+
+replace: (s: &String, old: &String, new: &String) -> String = {
+    ...
+}
+
+contains: (s: &String, sub: &String) -> Bool = {
+    ...
+}
+
+starts_with: (s: &String, prefix: &String) -> Bool = {
+    ...
+}
+
+ends_with: (s: &String, suffix: &String) -> Bool = {
+    ...
+}
+
+index_of: (s: &String, sub: &String) -> Int = {
+    ...
+}
+
+substring: (s: &String, start: Int, end: Int) -> String = {
+    ...
+}
+
+is_empty: (s: &String) -> Bool = {
+    ...
+}
+
+len: (s: &String) -> Int = {
+    ...
+}
+
+chars: (s: &String) -> List(String) = {
+    ...
+}
+
+concat: (s1: &String, s2: &String) -> String = {
+    ...
+}
+
+repeat: (s: &String, n: Int) -> String = {
+    ...
+}
+
+reverse: (s: &String) -> String = {
+    ...
+}
+
+format: (format: &String, ...args) -> String = {
+    ...
+}
+
+parse_int: (s: &String) -> Result(Int, Error) = {
+    ...
+}
+
+parse_float: (s: &String) -> Result(Float, Error) = {
+    ...
+}
+

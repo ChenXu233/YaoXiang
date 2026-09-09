@@ -2,7 +2,7 @@
 title: 'RFC-037: 工业化分发方案 — 基于 cargo-dist 的编译器/工具链打包'
 author: 'ChenXu233'
 created: '2026-07-26'
-updated: '2026-09-09'
+updated: '2026-09-10'
 accepted: '2026-09-09'
 issue: '#230'
 status: '已接受'
@@ -85,7 +85,7 @@ build.rs 继续负责:
 
 YaoXiang 自有脚本:
   ├── package-dist.sh — 重组包结构（bin/ + lib/）、附带共享库、
-  │   填充 std 目录（gen-std 接口视图 + .yx 层源码）、重算 checksum
+  │   填充 std 目录（仓库预生成接口视图 + .yx 层源码）、重算 checksum
   └── Inno Setup — Windows 安装向导（既有资产；铺设完整目录结构）
 
 命令模型（前门/引擎分离）:
@@ -115,7 +115,7 @@ yaoxiang-{version}-{target}.tar.gz / .zip     （便携即用：解压后 bin/ �
 ├── lib/
 │   └── yaoxiang/
 │       └── std/                      # 用户可直接阅读（Python Lib/ 模式）
-│           ├── io.yx                 # native 模块：gen-std 生成的接口视图
+│           ├── io.yx                 # native 模块：仓库预生成的接口视图
 │           ├── math.yx
 │           ├── test.yx               # .yx 层：仓库内真实源码原样复制
 │           └── ...
@@ -238,14 +238,14 @@ YaoXiang 采用双层模型：
 
 ### 标准库目录
 
-`lib/yaoxiang/std/` 的内容有两个来源：
+`lib/yaoxiang/std/` 的内容全部来自仓库静态文件，打包是**纯复制**，无运行时生成入口：
 
-| 层                        | 来源                                        | 性质                     |
-| ------------------------- | ------------------------------------------- | ------------------------ |
-| native 模块（io/math/…）  | `yaoxiang package gen-std`（打包期调用）    | 接口签名视图（实现在二进制内） |
-| .yx 层模块（test/…增长中）| 仓库 `src/std/*.yx` 原样复制                | 真实源码                 |
+| 层                        | 来源                                         | 性质                           |
+| ------------------------- | -------------------------------------------- | ------------------------------ |
+| native 模块（io/math/…）  | 仓库 `src/std/interfaces/*.yx` 预生成接口视图 | 接口签名视图（实现在二进制内） |
+| .yx 层模块（test/…增长中）| 仓库 `src/std/*.yx` 原样复制                 | 真实源码                       |
 
-子命令名：**`yaoxiang package gen-std`**（与现有 `package init`/`add`/`install` 在同一体系下）。当前 `src/std/gen_interfaces.rs` 已有完整实现（`generate_all_interfaces()`、`write_interfaces_to_dir()`），只需在 `main.rs` 新增子命令入口。
+预生成视图由 `StdModule::exports()` 派生（`src/std/gen_interfaces.rs` 的 `generate_all_interfaces()`），**不设运行时生成子命令**（2026-09-10 裁决：打包成型后，子命令是多余的接口面）。同步采用"生成物入库 + 测试门禁"模式（同 RFC-013 码表）：`test_committed_interface_files_match_generation` 逐字节比对预生成文件与当前生成，漂移即红；治愈走 bless 入口 `cargo test update_committed_interface_files -- --ignored`。生成逻辑依赖 crate 内部的 `StdModule` 实现，无法下沉到 build.rs，故门禁点在测试而非构建期。
 
 **运行时查找链**——`find_std_interface_file` 增补一级 exe 相对查找：
 
@@ -360,9 +360,8 @@ case "$TARGET" in
   aarch64-apple*)   cp ".z3/z3-$Z3_VERSION-arm64-osx-15.7.3/lib/libz3.dylib" "$PKG_ROOT/bin/" ;;
 esac
 
-# 标准库目录：gen-std（native 接口视图）+ .yx 层真实源码
-yaoxiang package gen-std --out-dir "$PKG_ROOT/lib/yaoxiang/std/"
-cp src/std/*.yx "$PKG_ROOT/lib/yaoxiang/std/"
+# 标准库目录：仓库预生成接口视图 + .yx 层真实源码（纯复制）
+cp src/std/interfaces/*.yx src/std/*.yx "$PKG_ROOT/lib/yaoxiang/std/"
 
 cp README.md LICENSE "$PKG_ROOT/"
 
@@ -463,7 +462,7 @@ fi
 ### 阶段一：语言侧改动（P0）
 
 1. `build.rs`：全平台统一动态链接 + rpath link-arg；`copy_dll()` 扩展为 `copy_shared_lib()`（so/dylib/dll）
-2. `main.rs` 新增 `yaoxiang package gen-std` 子命令（复用 `gen_interfaces.rs`）
+2. 仓库预生成 native 接口视图（`src/std/interfaces/`），测试门禁强制与 `StdModule::exports()` 同步（gen-std 子命令已裁决取消）
 3. `find_std_interface_file` 增补 exe 相对查找分支；`package init` 输出路径统一到 `.yaoxiang/vendor/std`
 
 ### 阶段二：cargo-dist 接入（P0）
@@ -509,7 +508,7 @@ fi
 以下问题在设计讨论中已解决：
 
 - ~~Windows 上 Z3 静态链接的可行性？~~ → **不做静态链接，全平台动态**（2026-09-09 复核维持）
-- ~~gen-std-interfaces 子命令命名？~~ → **`yaoxiang package gen-std`**
+- ~~gen-std-interfaces 子命令命名？~~ → **不设子命令**（2026-09-10 裁决：正常打包成型后子命令面多余；native 接口视图改为仓库预生成 `src/std/interfaces/` + 测试门禁同步，打包纯复制）
 - ~~是否保留 Inno Setup？~~ → **保留为 Windows 向导（附加渠道）**
 - ~~发行包结构是否物理携带标准库源码？~~ → **必须**（用户可读性对齐 Python `Lib/`，2026-09-09 裁决）
 - ~~cargo-dist 原生安装器（shell/powershell/homebrew/msi/npm）？~~ → **全部弃用**，安装器自有（扁平假设与 bin/+lib/ 冲突）

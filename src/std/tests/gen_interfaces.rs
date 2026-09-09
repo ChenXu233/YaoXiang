@@ -78,3 +78,54 @@ fn test_find_std_interface_file() {
     let result = find_std_interface_file(None, "nonexistent_module");
     assert!(result.is_none());
 }
+
+/// 仓库预生成接口目录（RFC-037：发行包 lib/yaoxiang/std 的 native 层来源，
+/// 打包时纯复制，不再有运行时生成入口）
+const COMMITTED_INTERFACES_DIR: &str = "src/std/interfaces";
+
+#[test]
+fn test_committed_interface_files_match_generation() {
+    // Arrange: 预生成目录与 StdModule::exports() 是"单一源 → 派生文件"关系
+    // （同 RFC-013 码表：漂移即红，治愈走 bless 入口）
+    let committed = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(COMMITTED_INTERFACES_DIR);
+    let expected = generate_all_interfaces();
+
+    // Act & Assert: 每个模块的预生成文件与当前生成逐字节一致
+    for (name, content) in &expected {
+        let path = committed.join(format!("{}.yx", name));
+        let on_disk = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+            panic!(
+                "预生成接口文件 {} 缺失: {}；治愈：cargo test update_committed_interface_files -- --ignored",
+                path.display(),
+                e
+            )
+        });
+        assert_eq!(
+            &on_disk, content,
+            "预生成接口 {} 与 StdModule::exports() 漂移；治愈：cargo test update_committed_interface_files -- --ignored",
+            name
+        );
+    }
+
+    // 反向：目录中不允许存在生成器不再产出的孤儿文件
+    let valid: Vec<String> = expected.iter().map(|(n, _)| format!("{}.yx", n)).collect();
+    for entry in std::fs::read_dir(&committed).unwrap() {
+        let file_name = entry.unwrap().file_name().to_string_lossy().to_string();
+        assert!(
+            valid.contains(&file_name),
+            "预生成目录存在孤儿文件 {}（生成器已不再产出）；治愈：删除后重跑 bless",
+            file_name
+        );
+    }
+}
+
+#[test]
+#[ignore = "bless 入口：std 接口变更后显式运行重写预生成文件（cargo test update_committed_interface_files -- --ignored）"]
+fn update_committed_interface_files() {
+    // Act: 以 StdModule::exports() 为唯一源重写仓库预生成目录
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(COMMITTED_INTERFACES_DIR);
+    let count = write_interfaces_to_dir(&dir).unwrap();
+
+    // Assert: 数量可感知（bless 不做内容断言，正确性由同步测试把关）
+    assert!(count > 0, "bless 应至少写出一个接口文件");
+}

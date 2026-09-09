@@ -1,0 +1,91 @@
+// os.yx - 标准库 std.os 模块接口
+// 仅供 LSP 跳转和类型查看，不参与实际执行
+
+open: (path: &String, mode: &String) -> File = {
+    ...
+}
+
+close: (file: File) -> Void = {
+    ...
+}
+
+read: (file: File, n: Int) -> String = {
+    ...
+}
+
+write: (file: File, content: String) -> Int = {
+    ...
+}
+
+seek: (file: File, offset: Int) -> Bool = {
+    ...
+}
+
+tell: (file: File) -> Int = {
+    ...
+}
+
+flush: (file: File) -> Void = {
+    ...
+}
+
+mkdir: (path: &String) -> Bool = {
+    ...
+}
+
+rmdir: (path: &String) -> Bool = {
+    ...
+}
+
+read_dir: (path: &String) -> String = {
+    ...
+}
+
+remove: (path: &String) -> Bool = {
+    ...
+}
+
+exists: (path: &String) -> Bool = {
+    ...
+}
+
+is_file: (path: &String) -> Bool = {
+    ...
+}
+
+is_dir: (path: &String) -> Bool = {
+    ...
+}
+
+copy: (src: &String, dst: &String) -> Bool = {
+    ...
+}
+
+rename: (old: &String, new: &String) -> Bool = {
+    ...
+}
+
+get_env: (name: &String) -> String = {
+    ...
+}
+
+set_env: (name: &String, value: &String) -> Void = {
+    ...
+}
+
+args: () -> String = {
+    ...
+}
+
+chdir: (path: &String) -> Bool = {
+    ...
+}
+
+getcwd: () -> String = {
+    ...
+}
+
+append_file: (path: &String, content: &String) -> Bool = {
+    ...
+}
+

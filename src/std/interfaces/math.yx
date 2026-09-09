@@ -1,0 +1,75 @@
+// math.yx - 标准库 std.math 模块接口
+// 仅供 LSP 跳转和类型查看，不参与实际执行
+
+abs: (n: Int) -> Int = {
+    ...
+}
+
+max: (a: Int, b: Int) -> Int = {
+    ...
+}
+
+min: (a: Int, b: Int) -> Int = {
+    ...
+}
+
+clamp: (value: Int, min: Int, max: Int) -> Int = {
+    ...
+}
+
+fabs: (n: Float) -> Float = {
+    ...
+}
+
+fmax: (a: Float, b: Float) -> Float = {
+    ...
+}
+
+fmin: (a: Float, b: Float) -> Float = {
+    ...
+}
+
+pow: (base: Float, exp: Float) -> Float = {
+    ...
+}
+
+sqrt: (n: Float) -> Float = {
+    ...
+}
+
+floor: (n: Float) -> Float = {
+    ...
+}
+
+ceil: (n: Float) -> Float = {
+    ...
+}
+
+round: (n: Float) -> Float = {
+    ...
+}
+
+sin: (n: Float) -> Float = {
+    ...
+}
+
+cos: (n: Float) -> Float = {
+    ...
+}
+
+tan: (n: Float) -> Float = {
+    ...
+}
+
+PI: Float = {
+    ...
+}
+
+E: Float = {
+    ...
+}
+
+TAU: Float = {
+    ...
+}
+
