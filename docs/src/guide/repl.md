@@ -15,7 +15,7 @@ Loop）是一个交互式代码执行环境，允许您逐行输入和执行 Yao
 在终端中运行以下命令启动 REPL：
 
 ```bash
-yaoxiang repl
+yx repl
 ```
 
 或者直接运行 `yaoxiang`（不带任何子命令）：

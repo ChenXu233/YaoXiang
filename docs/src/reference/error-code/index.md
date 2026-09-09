@@ -27,14 +27,14 @@ YaoXiang 编译器使用统一的错误码系统，每个错误码包含：
 
 ### CLI 命令
 
-使用 `yaoxiang explain` 命令查看错误详情：
+使用 `yx explain` 命令查看错误详情：
 
 ```bash
 # 查看错误详情
-yaoxiang explain E1001
+yx explain E1001
 
 # JSON 格式输出
-yaoxiang explain E1001 --json
+yx explain E1001 --json
 ```
 
 ### 在代码中

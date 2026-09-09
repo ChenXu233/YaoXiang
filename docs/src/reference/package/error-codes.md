@@ -35,7 +35,7 @@ Error: Not a YaoXiang project: yaoxiang.toml not found
 **处理方式**：
 
 1. 确保在项目目录内执行命令
-2. 使用 `yaoxiang init` 创建新项目
+2. 使用 `yx init` 创建新项目
 
 ---
 
@@ -50,7 +50,7 @@ Error: Dependency not found: <name>
 **处理方式**：
 
 1. 检查依赖名称拼写是否正确
-2. 使用 `yaoxiang list` 查看现有依赖
+2. 使用 `yx list` 查看现有依赖
 
 ---
 
@@ -64,7 +64,7 @@ Error: Dependency already exists: <name>
 
 **处理方式**：
 
-1. 如果需要更新版本，先用 `yaoxiang rm` 移除
+1. 如果需要更新版本，先用 `yx rm` 移除
 2. 或者直接使用现有依赖
 
 ---
@@ -128,7 +128,7 @@ Error: TOML parse error: <details>
 
 1. 检查网络连接
 2. 确认依赖名称和版本正确
-3. 尝试使用 `yaoxiang update` 刷新
+3. 尝试使用 `yx update` 刷新
 
 ### Q: 遇到版本冲突怎么办？
 
@@ -136,4 +136,4 @@ Error: TOML parse error: <details>
 
 ### Q: vendor 目录损坏怎么办？
 
-删除 `vendor` 目录后重新运行 `yaoxiang install`。
+删除 `vendor` 目录后重新运行 `yx install`。

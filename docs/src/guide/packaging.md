@@ -19,18 +19,18 @@ YaoXiang Package Manager (YPM) 采用声明式依赖管理：
 
 ```bash
 # 创建新项目
-yaoxiang init my-project
+yx init my-project
 cd my-project
 
 # 添加依赖
-yaoxiang add http
-yaoxiang add json
+yx add http
+yx add json
 
 # 安装依赖
-yaoxiang install
+yx install
 
 # 运行项目
-yaoxiang run src/main.yx
+yx run src/main.yx
 ```
 
 ## 项目结构
@@ -53,7 +53,7 @@ my-project/
 ### 用法
 
 ```bash
-yaoxiang init <name>
+yx init <name>
 ```
 
 ### 参数
@@ -77,7 +77,7 @@ yaoxiang init <name>
 
 ```bash
 # 在当前目录创建项目
-yaoxiang init my-project
+yx init my-project
 
 # 输出
 # ✨ 项目已创建：my-project
@@ -96,8 +96,8 @@ yaoxiang init my-project
 ### 用法
 
 ```bash
-yaoxiang add <name> [version]
-yaoxiang add <name> --dev
+yx add <name> [version]
+yx add <name> --dev
 ```
 
 ### 参数
@@ -132,8 +132,8 @@ yaoxiang add <name> --dev
 #### Registry（默认）
 
 ```bash
-yaoxiang add http
-yaoxiang add http 1.0.0
+yx add http
+yx add http 1.0.0
 ```
 
 #### Git 仓库
@@ -154,17 +154,17 @@ yaoxiang add http 1.0.0
 
 ```bash
 # 添加最新版本
-yaoxiang add http
+yx add http
 
 # 添加指定版本
-yaoxiang add http 1.0.0
+yx add http 1.0.0
 
 # 添加版本范围
-yaoxiang add json ">=2.0.0"
+yx add json ">=2.0.0"
 
 # 添加开发依赖
-yaoxiang add test-utils --dev
-yaoxiang add benchmark -D
+yx add test-utils --dev
+yx add benchmark -D
 ```
 
 ---
@@ -176,8 +176,8 @@ yaoxiang add benchmark -D
 ### 用法
 
 ```bash
-yaoxiang rm <name>
-yaoxiang rm <name> --dev
+yx rm <name>
+yx rm <name> --dev
 ```
 
 ### 参数
@@ -200,10 +200,10 @@ yaoxiang rm <name> --dev
 
 ```bash
 # 移除运行时依赖
-yaoxiang rm http
+yx rm http
 
 # 移除开发依赖
-yaoxiang rm test-utils --dev
+yx rm test-utils --dev
 ```
 
 ---
@@ -215,7 +215,7 @@ yaoxiang rm test-utils --dev
 ### 用法
 
 ```bash
-yaoxiang install
+yx install
 ```
 
 ### 描述
@@ -237,7 +237,7 @@ yaoxiang install
 
 ```bash
 # 安装所有依赖
-yaoxiang install
+yx install
 
 # 输出
 # 📦 正在解析依赖...
@@ -273,8 +273,8 @@ source = "registry"
 ### 用法
 
 ```bash
-yaoxiang update
-yaoxiang update <name>
+yx update
+yx update <name>
 ```
 
 ### 参数
@@ -307,7 +307,7 @@ yaoxiang update <name>
 
 ```bash
 # 更新所有依赖
-yaoxiang update
+yx update
 
 # 输出
 # 📦 正在更新依赖...
@@ -316,7 +316,7 @@ yaoxiang update
 # ✅ 已更新 2 个依赖，锁文件已更新
 
 # 更新单个依赖
-yaoxiang update http
+yx update http
 
 # 输出
 # ✅ 已更新 http (1.0.0 → 1.1.0)
@@ -331,7 +331,7 @@ yaoxiang update http
 ### 用法
 
 ```bash
-yaoxiang list
+yx list
 ```
 
 ### 描述
@@ -345,7 +345,7 @@ yaoxiang list
 ### 示例
 
 ```bash
-yaoxiang list
+yx list
 
 # 输出
 # 📦 项目依赖
@@ -426,7 +426,7 @@ source = "registry"
 
 依赖下载后存储在 `vendor` 目录：
 
-- 由 `yaoxiang install` 和 `yaoxiang update` 自动管理
+- 由 `yx install` 和 `yx update` 自动管理
 - 可以删除后重新运行 `install` 重建
 - 建议加入 `.gitignore`，不同团队成员独立管理
 
@@ -455,8 +455,8 @@ private-pkg = { version = "1.0.0", git = "https://github.com/org/private-pkg" }
 
 ### Q: vendor 目录可以删除吗？
 
-可以。删除后运行 `yaoxiang install` 会重新下载所有依赖。
+可以。删除后运行 `yx install` 会重新下载所有依赖。
 
 ### Q: 如何查看某个包的信息？
 
-使用 `yaoxiang list` 查看所有依赖，或查看 `yaoxiang.toml`。
+使用 `yx list` 查看所有依赖，或查看 `yaoxiang.toml`。

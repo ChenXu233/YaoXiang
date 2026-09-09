@@ -366,6 +366,7 @@ export default defineConfig({
               text: "指南",
               items: [
                 { text: "指南目录", link: "/guide/" },
+                { text: "安装 YaoXiang", link: "/guide/installation" },
                 { text: "语法速查", link: "/guide/language-overview" },
                 { text: "包管理系统", link: "/guide/packaging" },
                 { text: "CI 集成", link: "/guide/ci-integration" },

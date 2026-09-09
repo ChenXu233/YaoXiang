@@ -1,11 +1,11 @@
-# yaoxiang check
+# yx check
 
 对 YaoXiang 源码进行静态检查（类型检查、所有权检查），不生成任何代码。
 
 ## 用法
 
 ```
-yaoxiang check [OPTIONS] [PATH]...
+yx check [OPTIONS] [PATH]...
 ```
 
 ## 参数
@@ -34,7 +34,7 @@ yaoxiang check [OPTIONS] [PATH]...
 
 ## 跨文件分析
 
-`yaoxiang check` 支持跨文件类型检查。当检查多个文件时：
+`yx check` 支持跨文件类型检查。当检查多个文件时：
 
 1. 并行解析所有 `.yx` 文件
 2. 构建模块依赖图
@@ -44,10 +44,10 @@ yaoxiang check [OPTIONS] [PATH]...
 
 ```bash
 # 检查整个项目（自动检测跨文件引用）
-yaoxiang check src/
+yx check src/
 
 # 检查指定文件
-yaoxiang check src/main.yx src/lib.yx
+yx check src/main.yx src/lib.yx
 ```
 
 ## 增量检查（watch 模式）
@@ -55,7 +55,7 @@ yaoxiang check src/main.yx src/lib.yx
 使用 `-w` 或 `--watch` 启用文件监视模式。文件变更时自动重新检查。
 
 ```bash
-yaoxiang check --watch
+yx check --watch
 ```
 
 ## JSON 输出格式
@@ -86,22 +86,22 @@ yaoxiang check --watch
 
 ```bash
 # 检查当前项目
-yaoxiang check
+yx check
 
 # 检查指定文件
-yaoxiang check src/main.yx
+yx check src/main.yx
 
 # 检查目录并输出 JSON
-yaoxiang check src/ --json
+yx check src/ --json
 
 # 监视模式
-yaoxiang check --watch
+yx check --watch
 
 # CI 模式（无颜色、无进度）
-yaoxiang check --color never --no-progress
+yx check --color never --no-progress
 
 # 排除测试目录
-yaoxiang check src/ --exclude tests/
+yx check src/ --exclude tests/
 ```
 
 ## 与 CI 集成
@@ -109,14 +109,14 @@ yaoxiang check src/ --exclude tests/
 ```yaml
 # GitHub Actions
 - name: Type check
-  run: yaoxiang check --color never --no-progress
+  run: yx check --color never --no-progress
 ```
 
 详细 CI 配置请参阅 [CI 集成指南](../guide/ci-integration.md)。
 
 ## 另请参阅
 
-- [`yaoxiang format`](./format-command.md) -- 代码格式化
+- [`yx format`](./format-command.md) -- 代码格式化
 - [错误码参考](./error-codes.md) -- 完整错误码列表
 - [CI 集成指南](../guide/ci-integration.md) -- CI/CD 集成
 - [诊断系统设计](../design/check/diagnostic-system.md) -- 架构设计文档

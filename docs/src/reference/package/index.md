@@ -19,29 +19,29 @@ YaoXiang 包管理器（简称 YPM）采用类似 Cargo 的设计理念：
 
 ```bash
 # 1. 创建新项目
-yaoxiang init my-project
+yx init my-project
 
 # 2. 添加依赖
 cd my-project
-yaoxiang add http
+yx add http
 
 # 3. 安装依赖
-yaoxiang install
+yx install
 
 # 4. 运行项目
-yaoxiang run src/main.yx
+yx run src/main.yx
 ```
 
 ## 命令列表
 
 | 命令                                              | 说明         |
 | ------------------------------------------------- | ------------ |
-| [`yaoxiang init`](./commands#yaoxiang-init)       | 初始化新项目 |
-| [`yaoxiang add`](./commands#yaoxiang-add)         | 添加依赖     |
-| [`yaoxiang rm`](./commands#yaoxiang-rm)           | 移除依赖     |
-| [`yaoxiang install`](./commands#yaoxiang-install) | 安装依赖     |
-| [`yaoxiang update`](./commands#yaoxiang-update)   | 更新依赖     |
-| [`yaoxiang list`](./commands#yaoxiang-list)       | 列出依赖     |
+| [`yx init`](./commands#yx-init)       | 初始化新项目 |
+| [`yx add`](./commands#yx-add)         | 添加依赖     |
+| [`yx rm`](./commands#yx-rm)           | 移除依赖     |
+| [`yx install`](./commands#yx-install) | 安装依赖     |
+| [`yx update`](./commands#yx-update)   | 更新依赖     |
+| [`yx list`](./commands#yx-list)       | 列出依赖     |
 
 ## 项目结构
 

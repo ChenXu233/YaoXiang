@@ -85,7 +85,7 @@ map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 **Error 载体与错误码（#323 M4）**：
 
 std 各模块的 Err 载体 `Error` 携带规范化错误码，码复用 RFC-013 的 E6xxx/E7xxx 段位（如
-E6009 = Range 步长非法），为跨版本稳定契约——程序可按码编程判定，`yaoxiang explain E6009`
+E6009 = Range 步长非法），为跨版本稳定契约——程序可按码编程判定，`yx explain E6009`
 可查文档。码索引见 RFC-013「运行时错误值与码贯通」章节。
 
 ```yaoxiang

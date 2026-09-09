@@ -5,14 +5,14 @@ description: 包管理器所有命令详细说明
 
 # 命令行接口
 
-## yaoxiang init
+## yx init
 
 初始化一个新的 YaoXiang 项目。
 
 ### 用法
 
 ```bash
-yaoxiang init <项目名称>
+yx init <项目名称>
 ```
 
 ### 参数
@@ -31,7 +31,7 @@ yaoxiang init <项目名称>
 
 ```bash
 # 创建新项目
-yaoxiang init my-project
+yx init my-project
 
 # 结果：
 # ✨ 项目已创建：my-project
@@ -43,15 +43,15 @@ yaoxiang init my-project
 
 ---
 
-## yaoxiang add
+## yx add
 
 添加依赖到项目。
 
 ### 用法
 
 ```bash
-yaoxiang add <包名> [版本]
-yaoxiang add <包名> --dev
+yx add <包名> [版本]
+yx add <包名> --dev
 ```
 
 ### 参数
@@ -71,30 +71,30 @@ yaoxiang add <包名> --dev
 
 ```bash
 # 添加最新版本
-yaoxiang add http
+yx add http
 
 # 添加指定版本
-yaoxiang add http 1.0.0
+yx add http 1.0.0
 
 # 添加版本范围
-yaoxiang add json ">=2.0.0"
+yx add json ">=2.0.0"
 
 # 添加开发依赖
-yaoxiang add test-utils --dev
-yaoxiang add benchmark -D
+yx add test-utils --dev
+yx add benchmark -D
 ```
 
 ---
 
-## yaoxiang rm
+## yx rm
 
 从项目中移除依赖。
 
 ### 用法
 
 ```bash
-yaoxiang rm <包名>
-yaoxiang rm <包名> --dev
+yx rm <包名>
+yx rm <包名> --dev
 ```
 
 ### 参数
@@ -113,22 +113,22 @@ yaoxiang rm <包名> --dev
 
 ```bash
 # 移除普通依赖
-yaoxiang rm http
+yx rm http
 
 # 移除开发依赖
-yaoxiang rm test-utils --dev
+yx rm test-utils --dev
 ```
 
 ---
 
-## yaoxiang install
+## yx install
 
 安装项目依赖。
 
 ### 用法
 
 ```bash
-yaoxiang install
+yx install
 ```
 
 ### 说明
@@ -142,7 +142,7 @@ yaoxiang install
 
 ```bash
 # 安装所有依赖
-yaoxiang install
+yx install
 
 # 输出示例：
 # 📦 正在解析依赖...
@@ -153,15 +153,15 @@ yaoxiang install
 
 ---
 
-## yaoxiang update
+## yx update
 
 更新项目依赖。
 
 ### 用法
 
 ```bash
-yaoxiang update
-yaoxiang update <包名>
+yx update
+yx update <包名>
 ```
 
 ### 参数
@@ -179,7 +179,7 @@ yaoxiang update <包名>
 
 ```bash
 # 更新所有依赖
-yaoxiang update
+yx update
 
 # 输出示例：
 # 📦 正在更新依赖...
@@ -187,19 +187,19 @@ yaoxiang update
 # ✅ 已更新 1 个依赖，锁文件已更新
 
 # 更新单个依赖
-yaoxiang update http
+yx update http
 ```
 
 ---
 
-## yaoxiang list
+## yx list
 
 列出项目的所有依赖。
 
 ### 用法
 
 ```bash
-yaoxiang list
+yx list
 ```
 
 ### 说明
@@ -210,7 +210,7 @@ yaoxiang list
 
 ```bash
 # 列出依赖
-yaoxiang list
+yx list
 
 # 输出示例：
 # 📦 项目依赖

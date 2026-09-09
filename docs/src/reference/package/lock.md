@@ -9,7 +9,7 @@ description: 依赖锁定文件格式说明
 
 ## 概述
 
-- **自动生成**：由 `yaoxiang install` 和 `yaoxiang update` 自动生成和更新
+- **自动生成**：由 `yx install` 和 `yx update` 自动生成和更新
 - **请勿手动编辑**：此文件由包管理器自动维护
 - **应提交到版本控制**：确保团队成员和 CI 构建使用相同的依赖版本
 
@@ -83,7 +83,7 @@ source = "git"
 ```
 yaoxiang.toml          yaoxiang.lock
      │                       │
-     │   yaoxiang install    │
+     │   yx install    │
      ├──────────────────────►│
      │                       │
      │   声明 "http = *>"   │ 锁定 "http = 1.0.0"

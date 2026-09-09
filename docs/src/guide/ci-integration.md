@@ -1,6 +1,6 @@
 ---
 title: CI 集成指南
-description: 将 yaoxiang check 和 yaoxiang format 集成到 CI/CD 流水线
+description: 将 yx check 和 yx format 集成到 CI/CD 流水线
 ---
 
 # CI 集成指南
@@ -30,10 +30,10 @@ jobs:
           echo "$HOME/.yaoxiang/bin" >> $GITHUB_PATH
 
       - name: Type check
-        run: yaoxiang check --color never --no-progress
+        run: yx check --color never --no-progress
 
       - name: Format check
-        run: yaoxiang format --dry-run .
+        run: yx format --dry-run .
 ```
 
 ## GitLab CI
@@ -44,8 +44,8 @@ yaoxiang-check:
   script:
     - curl -fsSL https://yaoxiang.dev/install.sh | sh
     - export PATH="$HOME/.yaoxiang/bin:$PATH"
-    - yaoxiang check --color never --no-progress
-    - yaoxiang format --dry-run .
+    - yx check --color never --no-progress
+    - yx format --dry-run .
   rules:
     - if: $CI_MERGE_REQUEST_IID
     - if: $CI_COMMIT_BRANCH == "main"
@@ -65,12 +65,12 @@ yaoxiang-check:
 使用 `--json` 获取机器可读的输出：
 
 ```bash
-yaoxiang check --json | jq '.error_count'
+yx check --json | jq '.error_count'
 ```
 
 ## 最佳实践
 
-1. **路径参数**：`yaoxiang check` 默认检查当前目录，也可以指定路径：`yaoxiang check src/`
+1. **路径参数**：`yx check` 默认检查当前目录，也可以指定路径：`yx check src/`
 2. **分离检查和格式化**：分别运行 `check` 和 `format --dry-run`，便于定位问题
 3. **使用 `--no-progress`**：CI 环境不需要进度条
 4. **使用 `--color never`**：避免 ANSI 颜色码污染日志
