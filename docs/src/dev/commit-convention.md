@@ -421,13 +421,7 @@ SessionREPL 在多行模式下未正确注册补全器，
 
 ---
 
-## 📝 提交记录
 
-| 提交 | 描述 |
-|:---:|------|
-| `<hash>` | :bookmark: V<版本号> |
-| `<hash>` | <提交消息> |
-```
 
 ### 发版要求
 
@@ -435,11 +429,11 @@ SessionREPL 在多行模式下未正确注册补全器，
 2. **版本号**: 遵循语义化版本规范
 3. **内容完整性**: 必须包含自上次发版以来的**所有 commit** 内容介绍
 4. **按类型分类**: 按 `feat`, `fix`, `refactor`, `chore` 等类型整理
-5. **提交记录**: 列出所有相关提交的 hash 和描述
 
 ### 发版示例
 
 ```
+
 :bookmark: V0.7.2: REPL 重写与类型系统改进
 
 ## 📦 版本信息
@@ -484,32 +478,6 @@ SessionREPL 在多行模式下未正确注册补全器，
 
 - :wrench: chore(build): bump rand, hashbrown, tempfile, ron, clap, owo-colors
 - :white_check_mark: test(typecheck): 补充 scope VarInfo 可变性测试
-
----
-
-## 📝 提交记录
-
-| 提交 | 描述 |
-|:---:|------|
-| `f438aab` | :sparkles: feat(typecheck): 实现泛型类型参数自动推断 |
-| `bf0c121` | :zap: perf(types): 递归深度限制 |
-| `6edac15` | feat: 接入 CLI REPL 到 SessionREPL |
-| `02cf54f` | :sparkles: feat(typecheck): MonoType::Generic |
-| `3160a28` | :recycle: refactor(typecheck): VarInfo 追踪可变性 |
-| `f00a2a4` | :recycle: refactor(backends): 移除 tui_repl 模块 |
-| `afe3e0c` | :bug: fix(repl): REPL 历史记录和 shell 修复 |
-| `c4d2242` | :wrench: chore(build): 依赖 bump |
-```
-
-### 如何获取提交记录
-
-```bash
-# 查看上次发版以来的所有提交
-git log --oneline <上次发版commit>..HEAD
-
-# 或查看最近 N 条提交
-git log --oneline -20
-```
 
 ### 参考模板
 

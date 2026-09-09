@@ -84,12 +84,6 @@ title: '发版模板'
 |  `chore`   | 🔧 构建/工具 |      `:wrench:`      |
 |    `ci`    |   💚 CI/CD   |   `:green_heart:`    |
 
-## 获取提交记录
-
-```bash
-git log <最新tag>..HEAD --oneline --no-merges
-```
-
 ## 完整示例
 
 `:bookmark: V0.7.3: 类型系统修复与所有权模型改进`
