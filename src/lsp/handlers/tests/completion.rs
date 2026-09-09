@@ -8,18 +8,11 @@
 //! - 补全请求处理
 //! - 排序文本验证
 
-use lsp_types::{
-    CompletionItem, CompletionItemKind, CompletionParams, CompletionResponse, Documentation,
-    MarkupContent, MarkupKind,
-};
+use lsp_types::{CompletionItemKind, CompletionParams, CompletionResponse};
 
-use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::parse;
-use crate::frontend::core::parser::ast::{Module, StmtKind};
-use crate::frontend::core::typecheck::semantic_db::DefinitionKind;
 use crate::lsp::handlers::completion::{
-    handle_completion, keyword_items, reserved_word_items, annotation_items, document_symbol_items,
-    KEYWORDS, RESERVED_WORDS, ANNOTATIONS,
+    handle_completion, keyword_items, reserved_word_items, document_symbol_items, KEYWORDS,
+    RESERVED_WORDS,
 };
 use crate::lsp::session::Session;
 use crate::lsp::world::World;
@@ -116,10 +109,10 @@ fn test_handle_completion_basic() {
 
     let response = handle_completion(&session, &world, params);
     if let CompletionResponse::Array(items) = response {
-        // 至少应有 17 关键字 + 7 保留字 + 2 注解 = 26
+        // 至少应有 17 关键字 + 7 保留字 = 24（注解补全已移除）
         assert!(
-            items.len() >= 26,
-            "至少应有 26 个补全项，实际: {}",
+            items.len() >= 24,
+            "至少应有 24 个补全项，实际: {}",
             items.len()
         );
 
@@ -138,7 +131,6 @@ fn test_handle_completion_basic() {
 fn test_sort_text_ordering() {
     let items = keyword_items();
     let reserved = reserved_word_items();
-    let annotations = annotation_items();
 
     // 关键字 sort_text 前缀 "0_"
     for item in &items {
@@ -152,13 +144,6 @@ fn test_sort_text_ordering() {
         assert!(
             item.sort_text.as_ref().unwrap().starts_with("1_"),
             "保留字 sort_text 应以 1_ 开头"
-        );
-    }
-    // 注解 sort_text 前缀 "2_"
-    for item in &annotations {
-        assert!(
-            item.sort_text.as_ref().unwrap().starts_with("2_"),
-            "注解 sort_text 应以 2_ 开头"
         );
     }
 }

@@ -469,12 +469,20 @@ pub fn check_files_with_diagnostics(files: &[std::path::PathBuf]) -> anyhow::Res
             let per_file =
                 orchestrator::check_project(entry).map_err(|e| anyhow::anyhow!("{}", e))?;
             for (path, diagnostics) in per_file {
-                seen.insert(path.clone());
-                let source = std::fs::read_to_string(&path).unwrap_or_default();
-                result.source_files.insert(
-                    path.display().to_string(),
-                    SourceFile::new(path.display().to_string(), source),
-                );
+                // 已被前序入口的可达集覆盖：诊断收录过一次，再 push 会让
+                // 输出重复、error_count/warning_count 翻倍（check 默认收集
+                // 全项目文件时，共享依赖会被多个入口的可达集同时覆盖）
+                if !seen.insert(path.clone()) {
+                    continue;
+                }
+                // 读不回源码（竞态删除/权限）时不伪造空 SourceFile——
+                // 渲染端对缺源文件本就按无片段处理
+                if let Ok(source) = std::fs::read_to_string(&path) {
+                    result.source_files.insert(
+                        path.display().to_string(),
+                        SourceFile::new(path.display().to_string(), source),
+                    );
+                }
                 for diagnostic in diagnostics {
                     push_diagnostic(&mut result, path.display().to_string(), diagnostic);
                 }

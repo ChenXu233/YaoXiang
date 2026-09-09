@@ -103,7 +103,7 @@ fn def_to_info(def: &DefinitionInfo) -> Option<SymbolInformation> {
 }
 
 /// 模糊匹配：查询的每个字符按顺序出现在名称中
-fn fuzzy_match(
+pub(crate) fn fuzzy_match(
     query: &str,
     name: &str,
 ) -> bool {
@@ -121,7 +121,7 @@ fn fuzzy_match(
 }
 
 /// 匹配得分（越小越好）
-fn match_score(
+pub(crate) fn match_score(
     query: &str,
     name: &str,
 ) -> u32 {

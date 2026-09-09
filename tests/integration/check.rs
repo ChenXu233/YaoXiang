@@ -428,3 +428,37 @@ fn test_check_vendor_missing_dependency_reports_e5001() {
         "uninstalled dependency should report E5001, got: {codes:?}"
     );
 }
+
+#[test]
+fn test_check_two_entries_sharing_module_reports_it_once() {
+    // Arrange - 同项目两个互不可达入口共享带错误的 lib.yx（`check` 无参数时
+    // 收集全项目文件，正是此多入口场景）
+    let dir = create_project(&[
+        ("lib.yx", "broken: Int = nosuch_value\n"),
+        ("a.yx", "use lib\n\nmain = {\n}\n"),
+        ("b.yx", "use lib\n\nmain = {\n}\n"),
+    ]);
+    let entries = vec![dir.path().join("a.yx"), dir.path().join("b.yx")];
+
+    // Act
+    let result = yaoxiang::util::diagnostic::check_files_with_diagnostics(&entries)
+        .expect("check should not fail at parse stage");
+    let lib_codes: Vec<String> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.file.contains("lib.yx"))
+        .map(|d| d.diagnostic.code.clone())
+        .collect();
+
+    // Assert - lib.yx 的 E1001 只上报一次，计数不随入口数翻倍
+    assert_eq!(
+        lib_codes,
+        vec!["E1001".to_string()],
+        "shared module errors must be reported exactly once, got: {lib_codes:?}"
+    );
+    assert_eq!(
+        result.error_count, 1,
+        "error_count must not double-count the shared module, got {}",
+        result.error_count
+    );
+}

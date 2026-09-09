@@ -11,14 +11,12 @@
 
 use lsp_server::{Connection, Message, Notification, Request};
 use lsp_types::notification::{
-    DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, Exit, Initialized,
-    PublishDiagnostics,
+    DidCloseTextDocument, DidOpenTextDocument, Exit, Initialized, PublishDiagnostics,
 };
-use lsp_types::request::{Completion, GotoDefinition, Initialize, References, Rename, Shutdown};
+use lsp_types::request::{Completion, GotoDefinition, Initialize, References, Shutdown};
 use lsp_types::request::HoverRequest;
 use lsp_types::InitializeParams;
 
-use crate::lsp::handlers;
 use crate::lsp::server::{handle_request, handle_notification, publish_diagnostics_for_uri};
 use crate::lsp::session::{Session, SessionState};
 use crate::lsp::world::World;
@@ -51,7 +49,7 @@ fn test_handle_request_initialize() {
     let resp = handle_request(&mut session, &mut world, req);
     assert!(resp.is_some());
     let resp = resp.unwrap();
-    assert!(resp.error.is_none());
+    assert!(resp.response_result.is_ok());
     assert_eq!(session.state(), SessionState::Initializing);
 }
 
@@ -87,9 +85,9 @@ fn test_handle_request_unknown() {
     let resp = handle_request(&mut session, &mut world, req);
     assert!(resp.is_some());
     let resp = resp.unwrap();
-    assert!(resp.error.is_some());
+    assert!(resp.response_result.is_err());
     assert_eq!(
-        resp.error.unwrap().code,
+        resp.response_result.unwrap_err().code,
         lsp_server::ErrorCode::MethodNotFound as i32
     );
 }
@@ -144,8 +142,7 @@ fn test_handle_notification_did_open() {
     };
 
     let not = Notification {
-        method: <DidOpenTextDocument as lsp_types::notification::Notification>::METHOD
-            .to_string(),
+        method: <DidOpenTextDocument as lsp_types::notification::Notification>::METHOD.to_string(),
         params: serde_json::to_value(params).unwrap(),
     };
 
@@ -181,8 +178,7 @@ fn test_handle_notification_did_open_with_errors() {
     };
 
     let not = Notification {
-        method: <DidOpenTextDocument as lsp_types::notification::Notification>::METHOD
-            .to_string(),
+        method: <DidOpenTextDocument as lsp_types::notification::Notification>::METHOD.to_string(),
         params: serde_json::to_value(params).unwrap(),
     };
 
@@ -192,8 +188,7 @@ fn test_handle_notification_did_open_with_errors() {
     let msg = rx.try_recv();
     assert!(msg.is_ok());
     if let Ok(Message::Notification(n)) = msg {
-        let params: lsp_types::PublishDiagnosticsParams =
-            serde_json::from_value(n.params).unwrap();
+        let params: lsp_types::PublishDiagnosticsParams = serde_json::from_value(n.params).unwrap();
         assert!(!params.diagnostics.is_empty(), "语法错误的代码应产生诊断");
     }
 }
@@ -206,11 +201,9 @@ fn test_handle_notification_did_close_clears_diagnostics() {
     let mut world = World::new();
 
     // 先打开文档
-    session.document_store_mut().open(
-        "file:///test/main.yx".to_string(),
-        "x = 42".to_string(),
-        1,
-    );
+    session
+        .document_store_mut()
+        .open("file:///test/main.yx".to_string(), "x = 42".to_string(), 1);
 
     let params = lsp_types::DidCloseTextDocumentParams {
         text_document: lsp_types::TextDocumentIdentifier {
@@ -219,8 +212,7 @@ fn test_handle_notification_did_close_clears_diagnostics() {
     };
 
     let not = Notification {
-        method: <DidCloseTextDocument as lsp_types::notification::Notification>::METHOD
-            .to_string(),
+        method: <DidCloseTextDocument as lsp_types::notification::Notification>::METHOD.to_string(),
         params: serde_json::to_value(params).unwrap(),
     };
 
@@ -235,8 +227,7 @@ fn test_handle_notification_did_close_clears_diagnostics() {
             n.method,
             <PublishDiagnostics as lsp_types::notification::Notification>::METHOD
         );
-        let params: lsp_types::PublishDiagnosticsParams =
-            serde_json::from_value(n.params).unwrap();
+        let params: lsp_types::PublishDiagnosticsParams = serde_json::from_value(n.params).unwrap();
         assert!(params.diagnostics.is_empty(), "关闭文档应清除诊断");
     }
 }
@@ -298,8 +289,8 @@ fn test_handle_request_completion() {
     let resp = handle_request(&mut session, &mut world, req);
     assert!(resp.is_some());
     let resp = resp.unwrap();
-    assert!(resp.error.is_none(), "补全请求不应返回错误");
-    assert!(resp.result.is_some(), "补全应有结果");
+    assert!(resp.response_result.is_ok(), "补全请求不应返回错误");
+    assert!(resp.response_result.is_ok(), "补全应有结果");
 }
 
 #[test]
@@ -319,8 +310,7 @@ fn test_did_open_updates_symbol_index() {
     };
 
     let not = Notification {
-        method: <DidOpenTextDocument as lsp_types::notification::Notification>::METHOD
-            .to_string(),
+        method: <DidOpenTextDocument as lsp_types::notification::Notification>::METHOD.to_string(),
         params: serde_json::to_value(params).unwrap(),
     };
 
@@ -353,8 +343,7 @@ fn test_did_close_removes_symbol_index() {
     };
 
     let not = Notification {
-        method: <DidOpenTextDocument as lsp_types::notification::Notification>::METHOD
-            .to_string(),
+        method: <DidOpenTextDocument as lsp_types::notification::Notification>::METHOD.to_string(),
         params: serde_json::to_value(open_params).unwrap(),
     };
     handle_notification(&conn, &mut session, &mut world, not).unwrap();
@@ -375,8 +364,7 @@ fn test_did_close_removes_symbol_index() {
     };
 
     let not = Notification {
-        method: <DidCloseTextDocument as lsp_types::notification::Notification>::METHOD
-            .to_string(),
+        method: <DidCloseTextDocument as lsp_types::notification::Notification>::METHOD.to_string(),
         params: serde_json::to_value(close_params).unwrap(),
     };
     handle_notification(&conn, &mut session, &mut world, not).unwrap();
@@ -443,8 +431,8 @@ fn test_handle_request_definition() {
     let resp = handle_request(&mut session, &mut world, req);
     assert!(resp.is_some());
     let resp = resp.unwrap();
-    assert!(resp.error.is_none(), "跳转定义请求不应返回错误");
-    assert!(resp.result.is_some());
+    assert!(resp.response_result.is_ok(), "跳转定义请求不应返回错误");
+    assert!(resp.response_result.is_ok());
 }
 
 #[test]
@@ -484,7 +472,7 @@ fn test_handle_request_references() {
     let resp = handle_request(&mut session, &mut world, req);
     assert!(resp.is_some());
     let resp = resp.unwrap();
-    assert!(resp.error.is_none(), "查找引用请求不应返回错误");
+    assert!(resp.response_result.is_ok(), "查找引用请求不应返回错误");
 }
 
 #[test]
@@ -538,6 +526,6 @@ fn test_handle_request_hover() {
     let resp = handle_request(&mut session, &mut world, req);
     assert!(resp.is_some());
     let resp = resp.unwrap();
-    assert!(resp.error.is_none(), "悬停提示请求不应返回错误");
-    assert!(resp.result.is_some());
+    assert!(resp.response_result.is_ok(), "悬停提示请求不应返回错误");
+    assert!(resp.response_result.is_ok());
 }

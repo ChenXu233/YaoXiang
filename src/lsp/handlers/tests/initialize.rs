@@ -6,10 +6,8 @@
 //! - 初始化完成通知
 //! - 关闭请求处理
 
-use lsp_server::Response;
-use lsp_types::{InitializeParams, InitializeResult, ServerInfo};
+use lsp_types::{InitializeParams, InitializeResult};
 
-use crate::lsp::capabilities::server_capabilities;
 use crate::lsp::handlers::initialize::{handle_initialize, handle_initialized, handle_shutdown};
 
 use crate::lsp::session::{Session, SessionState};
@@ -35,8 +33,7 @@ fn test_handle_initialize() {
     let resp = handle_initialize(&mut session, &mut world, 1.into(), params);
 
     // 响应成功
-    assert!(resp.error.is_none());
-    assert!(resp.result.is_some());
+    assert!(resp.response_result.is_ok());
 
     // 会话进入 Initializing 状态
     assert_eq!(session.state(), SessionState::Initializing);
@@ -45,7 +42,7 @@ fn test_handle_initialize() {
     assert_eq!(session.root_path(), Some("file:///workspace/project"));
 
     // 验证返回了服务器信息
-    let result: InitializeResult = serde_json::from_value(resp.result.unwrap()).unwrap();
+    let result: InitializeResult = serde_json::from_value(resp.response_result.unwrap()).unwrap();
     assert_eq!(result.server_info.as_ref().unwrap().name, "yaoxiang-lsp");
     assert!(result.server_info.unwrap().version.is_some());
 }
@@ -57,7 +54,7 @@ fn test_handle_initialize_no_root() {
     let params = make_init_params(None);
 
     let resp = handle_initialize(&mut session, &mut world, 1.into(), params);
-    assert!(resp.error.is_none());
+    assert!(resp.response_result.is_ok());
     assert!(session.root_path().is_none());
 }
 
@@ -86,7 +83,7 @@ fn test_handle_shutdown() {
     let resp = handle_shutdown(&mut session, 1.into());
 
     // 响应成功
-    assert!(resp.error.is_none());
+    assert!(resp.response_result.is_ok());
 
     // 会话进入 ShuttingDown 状态
     assert!(session.is_shutting_down());

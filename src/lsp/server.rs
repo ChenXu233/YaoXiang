@@ -123,7 +123,7 @@ fn main_loop(
 /// 处理请求
 ///
 /// 返回 `Some(Response)` 表示需要发送响应，`None` 表示已处理。
-fn handle_request(
+pub(crate) fn handle_request(
     session: &mut Session,
     world: &mut World,
     req: Request,
@@ -397,7 +397,7 @@ fn handle_request(
 /// 处理通知
 ///
 /// 返回 `true` 表示应该退出服务器（收到 `exit` 通知）。
-fn handle_notification(
+pub(crate) fn handle_notification(
     connection: &Connection,
     session: &mut Session,
     world: &mut World,
@@ -495,7 +495,7 @@ fn update_semantic_db(
 }
 
 /// 对指定 URI 的文档运行诊断并发送 publishDiagnostics 通知
-fn publish_diagnostics_for_uri(
+pub(crate) fn publish_diagnostics_for_uri(
     connection: &Connection,
     session: &Session,
     uri: &str,

@@ -8,9 +8,7 @@
 
 use lsp_types::Position as LspPosition;
 
-use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::lexer::tokens::TokenKind;
-use crate::lsp::locate::{find_identifier_at_position, span_to_range, find_all_identifier_occurrences, IdentAtPosition};
+use crate::lsp::locate::{find_identifier_at_position, span_to_range, find_all_identifier_occurrences};
 use crate::util::span::Span;
 
 #[test]

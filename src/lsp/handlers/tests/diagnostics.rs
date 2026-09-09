@@ -9,15 +9,8 @@
 //! - 完整诊断管线
 //! - 清除诊断
 
-use std::str::FromStr;
+use lsp_types::{DiagnosticSeverity, Range};
 
-use lsp_types::{
-    Diagnostic as LspDiagnostic, DiagnosticSeverity, Position, PublishDiagnosticsParams, Range, Uri,
-};
-
-use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::parse;
-use crate::frontend::core::typecheck::check_module_collect_all;
 use crate::lsp::handlers::diagnostics::{
     to_lsp_diagnostic, to_lsp_diagnostics, run_diagnostics, clear_diagnostics,
 };
@@ -138,4 +131,101 @@ fn test_make_publish_params() {
     assert_eq!(params.uri.as_str(), "file:///hello.yx");
     assert!(params.diagnostics.is_empty());
     assert!(params.version.is_none());
+}
+
+// --- 项目上下文诊断（与 check/run 同路径） ---
+
+/// 在临时目录创建含 `yaoxiang.toml` 的项目。
+fn create_lsp_project(files: &[(&str, &str)]) -> tempfile::TempDir {
+    let dir = tempfile::TempDir::new().unwrap();
+    std::fs::write(
+        dir.path().join("yaoxiang.toml"),
+        "[package]\nname = \"p\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    for (name, content) in files {
+        let path = dir.path().join(name);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(path, content).unwrap();
+    }
+    dir
+}
+
+fn file_uri(path: &std::path::Path) -> String {
+    format!("file:///{}", path.display().to_string().replace('\\', "/"))
+}
+
+#[test]
+fn test_uri_to_path_windows_file_uri() {
+    // Arrange + Act
+    let path = crate::lsp::handlers::diagnostics::uri_to_path("file:///E:/a/b.yx");
+
+    // Assert
+    assert_eq!(path, Some(std::path::PathBuf::from("E:/a/b.yx")));
+}
+
+#[test]
+fn test_uri_to_path_percent_decoded() {
+    // Arrange + Act - 空格编码为 %20
+    let path = crate::lsp::handlers::diagnostics::uri_to_path("file:///E:/my%20dir/b.yx");
+
+    // Assert
+    assert_eq!(path, Some(std::path::PathBuf::from("E:/my dir/b.yx")));
+}
+
+#[test]
+fn test_uri_to_path_non_file_scheme_is_none() {
+    let path = crate::lsp::handlers::diagnostics::uri_to_path("https://example.com/a.yx");
+    assert_eq!(path, None);
+}
+
+#[test]
+fn test_run_diagnostics_project_cross_file_import() {
+    // Arrange - 项目内多文件：lib.yx 提供 add_one，main.yx 导入它
+    let dir = create_lsp_project(&[
+        ("lib.yx", "add_one: (x: Int) -> Int = (x) => x + 1\n"),
+        (
+            "main.yx",
+            "use std.assert\nuse lib.{add_one}\n\nmain = {\n    assert.assert(add_one(41) == 42, \"ok\")\n}\n",
+        ),
+    ]);
+    let main = dir.path().join("main.yx");
+    let content = std::fs::read_to_string(&main).unwrap();
+
+    // Act
+    let result = run_diagnostics(&file_uri(&main), &content);
+
+    // Assert - 此前单文件路径报 E1001 unknown variable 假错
+    assert!(
+        result.diagnostics.is_empty(),
+        "跨文件导入不应有诊断，得到: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn test_run_diagnostics_project_missing_module_reports_e5001() {
+    // Arrange - 项目内导入不存在的模块
+    let dir = create_lsp_project(&[("main.yx", "use nosuch.{thing}\n\nmain = {\n}\n")]);
+    let main = dir.path().join("main.yx");
+    let content = std::fs::read_to_string(&main).unwrap();
+
+    // Act
+    let result = run_diagnostics(&file_uri(&main), &content);
+
+    // Assert
+    let codes: Vec<String> = result
+        .diagnostics
+        .iter()
+        .filter_map(|d| match &d.code {
+            Some(lsp_types::NumberOrString::String(code)) => Some(code.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        codes.contains(&"E5001".to_string()),
+        "缺失模块应报 E5001，得到: {codes:?}"
+    );
 }

@@ -6,7 +6,7 @@
 //! - 非标识符位置
 //! - 未打开文档
 
-use lsp_types::{Location, ReferenceParams, Uri};
+use lsp_types::{ReferenceParams, Uri};
 use std::str::FromStr;
 
 use crate::frontend::core::typecheck::semantic_db::{
@@ -18,8 +18,8 @@ use crate::lsp::world::World;
 use crate::util::span::{Position, Span};
 
 use lsp_types::{
-    PartialResultParams, ReferenceContext, TextDocumentIdentifier,
-    TextDocumentPositionParams, WorkDoneProgressParams,
+    PartialResultParams, ReferenceContext, TextDocumentIdentifier, TextDocumentPositionParams,
+    WorkDoneProgressParams,
 };
 
 fn make_params(
@@ -48,11 +48,9 @@ fn setup() -> (Session, World) {
     let mut world = World::new();
 
     let content = "x = 1\ny = x + x\n";
-    session.document_store_mut().open(
-        "file:///test/main.yx".to_string(),
-        content.to_string(),
-        1,
-    );
+    session
+        .document_store_mut()
+        .open("file:///test/main.yx".to_string(), content.to_string(), 1);
 
     let uri = "file:///test/main.yx";
     let x_def_span = Span {

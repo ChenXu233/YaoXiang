@@ -42,7 +42,7 @@ impl SemanticTokensCache {
     }
 
     /// 生成新的 result_id 并缓存 tokens
-    fn store(
+    pub(crate) fn store(
         &mut self,
         file_uri: &str,
         tokens: Vec<SemanticToken>,
@@ -65,7 +65,7 @@ impl SemanticTokensCache {
     }
 
     /// 获取缓存的 tokens
-    fn get(
+    pub(crate) fn get(
         &self,
         result_id: &str,
     ) -> Option<&[SemanticToken]> {
@@ -373,7 +373,7 @@ fn tokens_eq(
 ///
 /// 使用前后缀匹配策略：找到第一个和最后一个不同的位置，
 /// 中间部分作为一个 edit 返回。
-fn diff_semantic_tokens(
+pub(crate) fn diff_semantic_tokens(
     old: &[SemanticToken],
     new: &[SemanticToken],
 ) -> Vec<SemanticTokensEdit> {

@@ -6,7 +6,7 @@
 //! - 非标识符位置
 //! - 未打开的文档
 
-use lsp_types::{GotoDefinitionParams, GotoDefinitionResponse, Location, Uri};
+use lsp_types::{GotoDefinitionParams, GotoDefinitionResponse, Uri};
 use std::str::FromStr;
 
 use crate::frontend::core::typecheck::semantic_db::{
@@ -18,8 +18,7 @@ use crate::lsp::world::World;
 use crate::util::span::{Position, Span};
 
 use lsp_types::{
-    PartialResultParams, TextDocumentIdentifier,
-    TextDocumentPositionParams, WorkDoneProgressParams,
+    PartialResultParams, TextDocumentIdentifier, TextDocumentPositionParams, WorkDoneProgressParams,
 };
 
 fn make_params(
@@ -45,11 +44,9 @@ fn setup_session_and_world() -> (Session, World) {
 
     // 打开一个文档并创建语义信息
     let content = "x = 42\nadd = (a, b) => a + b\n";
-    session.document_store_mut().open(
-        "file:///test/main.yx".to_string(),
-        content.to_string(),
-        1,
-    );
+    session
+        .document_store_mut()
+        .open("file:///test/main.yx".to_string(), content.to_string(), 1);
 
     let uri = "file:///test/main.yx";
 

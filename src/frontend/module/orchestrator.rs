@@ -172,13 +172,49 @@ pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, Or
     let mut out = Vec::new();
     for file in &files {
         let ast = parse_file(&file.path, &file.source)?;
-        let mut checker = TypeChecker::new("<module>");
-        checker.env().module_registry = registry.clone();
-        checker.env().method_bindings = method_bindings.clone();
-        let result = checker.check_module_collect_all(&ast);
-        out.push((file.path.clone(), result.diagnostics));
+        let diagnostics = typecheck_with_registry(&ast, &registry, &method_bindings);
+        out.push((file.path.clone(), diagnostics));
     }
     Ok(out)
+}
+
+/// 用项目上下文检查一份**内存源码**（LSP 脏缓冲区 / 未落盘编辑）。
+///
+/// 注册表来自磁盘发现（同 `check_project`），被检查的模块用传入源码——
+/// 编辑器因此能得到与 `yaoxiang check` 一致的跨文件解析结果。
+/// 解析错误作为诊断返回（不中断），与 LSP 单文件路径的容错一致。
+pub fn check_source_in_project(
+    path: &Path,
+    source: &str,
+) -> Result<Vec<Diagnostic>, OrchestratorError> {
+    let files = discover(path)?;
+    let registry = build_registry_from(&files)?;
+    let method_bindings = registry.all_method_bindings();
+
+    let tokens = tokenize(source).map_err(|e| OrchestratorError::Parse {
+        path: path.display().to_string(),
+        message: format!("{:?}", e),
+    })?;
+    let parse_result = parser::parse(&tokens);
+    let mut diagnostics: Vec<Diagnostic> = parse_result.errors.to_vec();
+    diagnostics.extend(typecheck_with_registry(
+        &parse_result.module,
+        &registry,
+        &method_bindings,
+    ));
+    Ok(diagnostics)
+}
+
+/// 用预构建注册表检查单个模块（collect_all 模式，不早退）。
+fn typecheck_with_registry(
+    ast: &Module,
+    registry: &ModuleRegistry,
+    method_bindings: &HashMap<String, MonoType>,
+) -> Vec<Diagnostic> {
+    let mut checker = TypeChecker::new("<module>");
+    checker.env().module_registry = registry.clone();
+    checker.env().method_bindings = method_bindings.clone();
+    checker.check_module_collect_all(ast).diagnostics
 }
 
 /// 提取一个文件定义的全局变量（顶层非函数绑定）的名字与类型。
@@ -419,8 +455,9 @@ fn resolve_module_path(
 ///
 /// 布局（RFC-014 §模块解析顺序）：`<pkg>-<ver>/src/<pkg>/<rest>.yx`；
 /// 裸包名回退 `<pkg>-<ver>/src/<pkg>.yx`、`src/lib.yx`、`src/main.yx`、`mod.yx`。
-/// ponytail: 多版本取目录名最大者；按 lock 精确选择留给 RFC-014 Phase 3。
-fn resolve_in_vendor(
+/// ponytail: 多版本取版本号最大者（预发布后于正式版）；按 lock 精确选择留给
+/// RFC-014 Phase 3。
+pub(crate) fn resolve_in_vendor(
     use_path: &str,
     project_root: &Path,
 ) -> Option<PathBuf> {
@@ -476,18 +513,38 @@ fn resolve_in_vendor(
     None
 }
 
-/// 版本比较：点分数字段数值比较，相等时退回字符串。
-fn compare_version(
+/// 版本比较：点分数字段数值比较（非数字前缀记 0）；数值相等时正式版排在
+/// 预发布版（带非数字后缀，如 `1.0.0-beta`）之前——semver 语义，否则降序
+/// 选择会让预发布目录遮蔽正式版；两者同为预发布（或同为正式）时回退字符串。
+pub(crate) fn compare_version(
     a: &str,
     b: &str,
 ) -> std::cmp::Ordering {
     let parse = |s: &str| -> Vec<u64> {
         s.split('.')
-            .map(|part| part.parse::<u64>().unwrap_or(0))
+            .map(|part| {
+                part.split(|c: char| !c.is_ascii_digit())
+                    .next()
+                    .and_then(|digits| digits.parse::<u64>().ok())
+                    .unwrap_or(0)
+            })
             .collect()
     };
-    parse(a).cmp(&parse(b)).then_with(|| a.cmp(b))
+    let is_prerelease = |s: &str| {
+        s.split('.')
+            .any(|part| part.chars().any(|c| !c.is_ascii_digit()))
+    };
+    parse(a)
+        .cmp(&parse(b))
+        .then_with(|| match (is_prerelease(a), is_prerelease(b)) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            (true, true) | (false, false) => a.cmp(b),
+        })
 }
+
+#[cfg(test)]
+mod tests;
 
 /// 只读 use 行：词法级扫描源码中的模块路径（不解析函数体——RFC-029 发现协议）。
 /// 词法失败的文件返回空，真正的错误由后续 parse 阶段报告。

@@ -4,11 +4,10 @@
 //! - 文档格式化
 //! - 范围格式化
 
-use lsp_types::{DocumentFormattingParams, DocumentRangeFormattingParams, TextEdit, Range, Position};
+use lsp_types::{DocumentFormattingParams, DocumentRangeFormattingParams, Range, Position};
 use lsp_types::{FormattingOptions, TextDocumentIdentifier, Uri, WorkDoneProgressParams};
 use std::str::FromStr;
 
-use crate::formatter::{format_source, FormatOptions};
 use crate::lsp::handlers::formatting::{handle_formatting, handle_range_formatting};
 use crate::lsp::session::Session;
 

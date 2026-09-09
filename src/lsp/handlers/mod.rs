@@ -15,3 +15,6 @@ pub mod rename;
 pub mod semantic_tokens;
 pub mod text_document;
 pub mod workspace_symbol;
+
+#[cfg(test)]
+mod tests;

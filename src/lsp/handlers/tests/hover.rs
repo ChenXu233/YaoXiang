@@ -9,7 +9,7 @@
 //! - 未打开文档
 //! - 文件信息显示
 
-use lsp_types::{Hover, HoverContents, HoverParams, MarkupContent, MarkupKind};
+use lsp_types::{HoverContents, HoverParams};
 
 use crate::frontend::core::typecheck::semantic_db::{
     DefId, DefinitionInfo, DefinitionKind, ReferenceInfo,
@@ -19,10 +19,7 @@ use crate::lsp::session::Session;
 use crate::lsp::world::World;
 use crate::util::span::{Position, Span};
 
-use lsp_types::{
-    TextDocumentIdentifier, TextDocumentPositionParams, Uri,
-    WorkDoneProgressParams,
-};
+use lsp_types::{TextDocumentIdentifier, TextDocumentPositionParams, Uri, WorkDoneProgressParams};
 use std::str::FromStr;
 
 fn make_params(
@@ -46,11 +43,9 @@ fn setup() -> (Session, World) {
     let mut world = World::new();
 
     let content = "x = 42\nadd = (a, b) => a + b\n";
-    session.document_store_mut().open(
-        "file:///test/main.yx".to_string(),
-        content.to_string(),
-        1,
-    );
+    session
+        .document_store_mut()
+        .open("file:///test/main.yx".to_string(), content.to_string(), 1);
 
     let uri = "file:///test/main.yx";
 

@@ -114,7 +114,7 @@ fn is_literal(expr: &Expr) -> bool {
     matches!(expr, Expr::Lit(_, _))
 }
 
-fn simple_infer_type(expr: &Expr) -> Option<String> {
+pub(crate) fn simple_infer_type(expr: &Expr) -> Option<String> {
     match expr {
         Expr::Lit(Literal::Int(_), _) => Some("Int".to_string()),
         Expr::Lit(Literal::Float(_), _) => Some("Float".to_string()),
@@ -132,7 +132,7 @@ fn simple_infer_type(expr: &Expr) -> Option<String> {
     }
 }
 
-fn evaluate_constant(expr: &Expr) -> Option<i64> {
+pub(crate) fn evaluate_constant(expr: &Expr) -> Option<i64> {
     match expr {
         Expr::Lit(Literal::Int(val), _) => Some(*val as i64),
         Expr::BinOp {

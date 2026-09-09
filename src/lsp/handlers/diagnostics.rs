@@ -66,7 +66,7 @@ pub fn to_lsp_diagnostic(diag: &Diagnostic) -> LspDiagnostic {
 /// 将 YaoXiang Span 转换为 LSP Range
 ///
 /// LSP 使用 0-indexed 行号和列号。
-fn span_to_range(span: &Span) -> Range {
+pub(crate) fn span_to_range(span: &Span) -> Range {
     Range {
         start: Position {
             line: span.start.line.saturating_sub(1) as u32,
@@ -86,16 +86,78 @@ pub fn to_lsp_diagnostics(diagnostics: &[Diagnostic]) -> Vec<LspDiagnostic> {
 
 /// 将 ParseError 转换为 YaoXiang Diagnostic
 ///
+/// 本地 file URI → 磁盘路径（`file:///E:/a/b.yx` → `E:\a\b.yx`）。
+///
+/// ponytail: 仅处理 file scheme + %XX 解码；其余返回 None（退回单文件路径）。
+pub(crate) fn uri_to_path(uri: &str) -> Option<std::path::PathBuf> {
+    let parsed = Uri::from_str(uri).ok()?;
+    if parsed.scheme().map(|s| s.as_str()) != Some("file") {
+        return None;
+    }
+    let decoded = percent_decode(parsed.path().as_str());
+    let trimmed = if cfg!(windows) {
+        decoded.trim_start_matches('/').to_string()
+    } else {
+        decoded
+    };
+    Some(std::path::PathBuf::from(trimmed))
+}
+
+/// %XX 解码（UTF-8 安全）。
+fn percent_decode(s: &str) -> String {
+    fn hex(b: u8) -> Option<u8> {
+        match b {
+            b'0'..=b'9' => Some(b - b'0'),
+            b'a'..=b'f' => Some(b - b'a' + 10),
+            b'A'..=b'F' => Some(b - b'A' + 10),
+            _ => None,
+        }
+    }
+
+    let bytes = s.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(high), Some(low)) = (hex(bytes[i + 1]), hex(bytes[i + 2])) {
+                out.push(high * 16 + low);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 /// 对文档内容运行完整诊断管线
 ///
 /// 流程：tokenize → parse → check_module_collect_all
 ///
 /// 任何阶段的错误都会收集为 LSP 诊断返回。
 /// Lex 错误会短路（无法继续解析），但 parse 错误不影响 typecheck。
+///
+/// 项目内文件（向上能找到 `yaoxiang.toml`）改走 orchestrator——
+/// 与 `yaoxiang check` / `run` 同一条编译路径，跨文件 `use` 不再假报。
+///
+/// ponytail: 每次编辑都重建项目注册表（全项目文件签名收集），大项目会偏慢；
+/// 注册表缓存/增量是 RFC-029a 的活，此处不预支。
 pub fn run_diagnostics(
     uri: &str,
     content: &str,
 ) -> PublishDiagnosticsParams {
+    if let Some(path) = uri_to_path(uri) {
+        use crate::frontend::module::orchestrator;
+        if orchestrator::find_project_root(&path).is_some() {
+            if let Ok(diagnostics) = orchestrator::check_source_in_project(&path, content) {
+                debug!("项目诊断完成: {} ({} 条)", uri, diagnostics.len());
+                return make_publish_params(uri, to_lsp_diagnostics(&diagnostics));
+            }
+            // 磁盘不可读等 → 退回单文件路径
+        }
+    }
+
     let mut all_diagnostics: Vec<LspDiagnostic> = Vec::new();
 
     // 1. 词法分析
@@ -149,7 +211,7 @@ pub fn clear_diagnostics(uri: &str) -> PublishDiagnosticsParams {
 }
 
 /// 构建 PublishDiagnosticsParams
-fn make_publish_params(
+pub(crate) fn make_publish_params(
     uri: &str,
     diagnostics: Vec<LspDiagnostic>,
 ) -> PublishDiagnosticsParams {

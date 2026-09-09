@@ -9,12 +9,10 @@
 //! - 模糊匹配算法
 //! - 匹配得分算法
 
-use lsp_types::{SymbolInformation, SymbolKind as LspSymbolKind, WorkspaceSymbolParams};
+use lsp_types::WorkspaceSymbolParams;
 
 use crate::frontend::core::typecheck::semantic_db::{DefId, DefinitionInfo, DefinitionKind};
-use crate::lsp::handlers::workspace_symbol::{
-    handle_workspace_symbol, fuzzy_match, match_score,
-};
+use crate::lsp::handlers::workspace_symbol::{handle_workspace_symbol, fuzzy_match, match_score};
 use crate::lsp::world::World;
 use crate::util::span::{Position, Span};
 
