@@ -95,8 +95,8 @@ YaoXiang 自有脚本:
 安装方式（双层）:
   ├── 标准渠道（Go/Zig 模式）: 发行包即产品，解压 + PATH
   └── 傻瓜渠道（Rust 模式）: 一行命令安装 + 版本管理（内建于 yx 前门）
-      ├── Linux: apt（自建 deb 仓库，系统级平装）/ curl … | sh（装前门）
-      ├── Windows: irm … | iex（装前门）/ Inno Setup 向导（既有资产，系统级平装）
+      ├── Linux: apt（自建 deb 仓库，系统级平装）/ curl … | sh（一键装整包）
+      ├── Windows: irm … | iex（一键装整包）/ Inno Setup 向导（既有资产，系统级平装）
       └── macOS: curl … | sh（brew 留待 homebrew-core 社区）
 ```
 
@@ -161,16 +161,28 @@ yaoxiang-{version}-{target}.tar.gz / .zip     （便携即用：解压后 bin/ �
 // 统一动态链接 + rpath
 fn link_z3(z3_dir: &Path) {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
-    println!("cargo:rustc-link-lib=z3");     // 不再区分 Windows/非 Windows
-    // 运行期在二进制所在目录查找 libz3（bin/ 内 exe 与共享库同目录）
-    match target_os.as_str() {
-        "linux" => println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN"),
-        "macos" => println!("cargo:rustc-link-arg=-Wl,-rpath,@loader_path"),
-        _ => {}                                // Windows 默认搜 exe 目录
+    // Z3 发行包布局不统一，lib/bin 双目录探测
+    println!("cargo:rustc-link-search=native={}", lib_dir.display());
+    // RFC-037：全平台动态链接。共享库随发行包 bin/ 分发，用户可整体替换升级 Z3
+    if target_os == "windows" {
+        // MSVC import lib 命名为 libz3.lib
+        println!("cargo:rustc-link-lib=libz3");
+    } else {
+        println!("cargo:rustc-link-lib=z3");
+        // 动态链接器默认不搜二进制所在目录，必须注入 rpath，"解压即用"才成立
+        // （发行包内 exe 与 libz3 同在 bin/；Windows 默认搜 exe 目录，无需处理）
+        match target_os.as_str() {
+            "linux" => println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN"),
+            "macos" => println!("cargo:rustc-link-arg=-Wl,-rpath,@loader_path"),
+            _ => {}
+        }
+        let cxx = if target_os == "macos" {
+            "c++".to_string()
+        } else {
+            env::var("CXXSTDLIB").unwrap_or_else(|_| "stdc++".into())
+        };
+        println!("cargo:rustc-link-lib={}", cxx);
     }
-    // 保持 C++ 标准库链接不变
-    let cxx = if target_os == "macos" { "c++" } else { "stdc++" };
-    println!("cargo:rustc-link-lib={}", cxx);
 }
 ```
 
@@ -201,9 +213,9 @@ YaoXiang 采用双层模型：
 | 渠道                                 | 层   | 状态 | 说明                                                       |
 | ------------------------------------ | ---- | ---- | ---------------------------------------------------------- |
 | zip / tar.gz                         | 标准 | ✅   | 解压即用（rpath + 同目录共享库），extract + PATH 即官方指引 |
-| `yx`（前门，内建版本管理）           | 傻瓜 | ✅   | rustup/Go GOTOOLCHAIN 对位：多版本安装/切换/更新 + 项目 pin（阶段五交付） |
-| `curl ... \| sh`（install.sh）       | 傻瓜 | ✅   | Linux / macOS：装 yx 前门 → 前门装默认引擎（~40 行）        |
-| `irm ... \| iex`（install.ps1）      | 傻瓜 | ✅   | Windows：同逻辑（~40 行）                                  |
+| `yx`（前门，内建版本管理）           | 傻瓜 | ✅   | rustup/Go GOTOOLCHAIN 对位：多版本安装/切换/更新 + 项目 pin |
+| `curl ... \| sh`（install.sh）       | 傻瓜 | ✅   | Linux / macOS：下载重组包装入 `versions/`，`bin/yx` 就位安装根并写默认版本 |
+| `irm ... \| iex`（install.ps1）      | 傻瓜 | ✅   | Windows：同逻辑                                            |
 | `apt install yaoxiang`               | 傻瓜 | ✅   | `.deb`（amd64/arm64）+ GitHub Pages 静态 apt 仓库；系统级平装，`apt upgrade` 跟版本 |
 | Inno Setup exe                       | 傻瓜 | ✅   | Windows 向导（既有资产），系统级平装，铺设完整 bin/+lib/ 结构 |
 | winget / `.rpm` / homebrew-core / npm | —  | ⏸   | 可选跟进：winget 与 brew-core 皆社区维护，rpm 与 deb 同构   |
@@ -228,13 +240,13 @@ YaoXiang 采用双层模型：
 - 命令面（rustup 对位）：`yx toolchain install / default / update / list / uninstall`，含 `yx self update`；其余动词原样透传给引擎
 - **版本锁定是结构性保证**：fmt 等工具与语法同版本演进（旧 fmt 不认新语法），版本解析在门前一次完成、整组切换——不存在"新引擎配旧 fmt"的组合空间；未来若把 fmt/LSP 拆成独立二进制，也落在同版本 `bin/` 内
 - 项目级 pin：`yx-toolchain.toml`（先例 rust-toolchain.toml，跟随命令名；不进 `yaoxiang.toml`——包清单不该把工具链版本强加给库使用者）
-- 引导入口（`curl | sh` / `irm | iex`）装的是前门，前门再装默认 stable 引擎——正是 sh.rustup.rs → rustup-init 的分解
+- 引导入口（`curl | sh` / `irm | iex`）一次装好最新 stable 整包：解压进 `versions/`、`bin/yx` 就位安装根、写 `settings.toml` 默认版本（rustup "引导装管理器" 分解的等价收敛——前门与引擎同包，无需两步）
 - 镜像源可配（settings.toml），延续国内用户考量（与 Z3 下载同款网络问题）
 - **版本管理不破坏自包含不变量**：每个版本就是一棵完整发行树，rpath 与 exe 相对 std 查找在树内自洽，前门只做派发不改结构
 
 `.deb` 与 Inno 是**系统级平装**通道（root / Program Files 单版本，由 `apt upgrade` / 控制面板跟新），服务服务器、CI、纯新手场景；与管理器共存靠 PATH 顺序（先例：apt 的 rustc 与 rustup 并存）。全部渠道共享同一套产物树。
 
-`.deb` 布局复用同一棵目录树：`/usr/lib/yaoxiang/{yx,yaoxiang-rs,libz3.so,std/}` + `/usr/bin/yx` 符号链接——`$ORIGIN` 按解析后的**真实路径**计算，链接后仍命中同目录 `libz3.so`，与解压包结构同构。品牌全名留在包名与产品名上（`apt install yaoxiang`、Inno 产品名 YaoXiang），命令面统一 `yx`——同 Go：包名 `golang-go`，命令 `go`。apt 仓库静态托管在 GitHub Pages（Packages/Release/InRelease 元数据 GPG 签名，由 release CI 发布）；远期可申请 Debian/Ubuntu 官方收录（周期长、版本滞后，非主路径）。
+`.deb` 布局复用同一棵目录树：`/usr/lib/yaoxiang/`（整棵发行树：`bin/{yx,yaoxiang-rs,libz3.so}` + `lib/yaoxiang/std/`）+ `/usr/bin/yx` 符号链接指向 `/usr/lib/yaoxiang/bin/yx`——`$ORIGIN` 按解析后的**真实路径**计算，链接后仍命中同目录 `libz3.so`，与解压包结构同构。品牌全名留在包名与产品名上（`apt install yaoxiang`、Inno 产品名 YaoXiang），命令面统一 `yx`——同 Go：包名 `golang-go`，命令 `go`。apt 仓库静态托管在 GitHub Pages（Packages/Release/InRelease 元数据 GPG 签名，由 release CI 发布）；远期可申请 Debian/Ubuntu 官方收录（周期长、版本滞后，非主路径）。
 
 ### 标准库目录
 
@@ -250,7 +262,7 @@ YaoXiang 采用双层模型：
 **运行时查找链**——`find_std_interface_file` 增补一级 exe 相对查找：
 
 1. 项目 `.yaoxiang/vendor/std/<name>.yx`（项目覆盖，现状）
-2. **exe 所在目录 `../lib/yaoxiang/std/<name>.yx`（新增）**：便携解压与安装到 `~/.yaoxiang/{bin,lib}` 统一命中
+2. **exe 所在目录 `../lib/yaoxiang/std/<name>.yx`（新增）**：便携解压、托管安装（`versions/<ver>/`）、deb 平装统一命中
 3. `~/.yaoxiang/std/<name>.yx`（全局回退，保留为手工覆盖位）
 
 现状这条链近乎失联（LSP 调用不传项目目录、`package init` 写入的 `.yaoxiang/std` 不在链上），本次顺手接活，并统一 `package init` 输出到 `.yaoxiang/vendor/std`（与包管理器 vendor 目录一致）。
@@ -289,8 +301,8 @@ cargo-dist 生成的流水线是 tag 驱动、自带 announce/publish，且不�
 
 1. check-version / security / test 三个 job 保持现状（push main 触发、打 tag 前置门禁）
 2. 全部通过后由 release job 创建并推送 `v{version}` tag（现状不变）
-3. tag push 触发新的 `dist-release.yml`：`cargo dist build`（5 target 矩阵）+ `package-dist.sh` 逐 target 重组 + `_build-wasm.yml`（并行 job）
-4. publish job：`generate-commit-list.mjs` 生成 body（现状脚本复用）→ 上传重组包 + `.sha256`（阶段四起追加 `.deb` 与安装脚本，并触发 apt 仓库元数据发布）
+3. tag push 触发新的 `dist-release.yml`：plan job 由 dist 计算 runner/系统依赖矩阵 → `cargo dist build`（5 target）→ `package-dist.sh` 逐 target 重组 → Inno Setup job（吃 Windows 重组包构建向导，`/DMyAppVersion=` 注入版本，不再二次编译）→ `_build-wasm.yml`（并行 job）
+4. publish job：`generate-commit-list.mjs` 生成 body（现状脚本复用）→ 追加上传重组包 + `.sha256` + `.deb` + wasm + Setup exe；独立 `publish-apt` job 发布 GitHub Pages apt 仓库元数据（`secrets.APT_GPG_KEY` 未配置时自动跳过，不影响其余渠道）
 
 ### Nightly 发布
 
@@ -308,73 +320,36 @@ jobs:
   publish:   # 现状保留：打/移 nightly tag → 覆盖 GitHub Pre-release
 ```
 
-### cargo-dist 配置（草案）
+### cargo-dist 配置（已落地 dist-workspace.toml）
 
 ```toml
 [workspace]
-members = ["cargo:."]
+members = ["cargo:.", "cargo:tools/yx"]
 
+# Config for 'dist'
 [dist]
-targets = [
-  "x86_64-unknown-linux-gnu",
-  "aarch64-unknown-linux-gnu",
-  "x86_64-apple-darwin",
-  "aarch64-apple-darwin",
-  "x86_64-pc-windows-msvc",
-]
-installers = []   # 安装器全部自有，cargo-dist 只做构建 + 压缩包 + checksum
+# 锁定 dist 版本（Cargo.toml SemVer 语法）
+cargo-dist-version = "0.32.0"
+ci = "github"
+# 安装器全部自有，cargo-dist 只做构建 + 压缩包 + checksum
+installers = []
+targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+# 生成的工作流已被有意改造（package-dist.sh 重组 + 自有发布段，RFC-037），
+# 不因与 generate 模板漂移而拒绝构建
+allow-dirty = ["ci"]
 ```
 
-具体配置项以 `cargo dist init` 实际生成为准；`dist-version` 锁定固定版本，生成物 vendor 进仓库接受 review，不运行时拉取。
+以上为仓库 vendor 的实际配置（`cargo dist init` 生成后按需修订）；`cargo-dist-version` 锁定 0.32.0，生成的工作流 vendor 进仓库接受 review，不运行时拉取。构建 profile 由 init 注入根 Cargo.toml 的 `[profile.dist]`（inherits release，lto=thin），双二进制落盘 `target/<triple>/dist/` 供重组脚本取用。
 
-### package-dist.sh（草案）
+### package-dist.sh（已落地）
 
-```bash
-#!/bin/bash
-# cargo-dist 构建后重组发行包结构；被 dist-release.yml / nightly.yml 调用
-set -euo pipefail
+以仓库 `scripts/release/package-dist.sh` 为准，要点：
 
-VERSION="$1"
-TARGET="$2"
-DIST_DIR="target/distrib"
-PKG_ROOT="$DIST_DIR/yaoxiang-$VERSION-$TARGET"
-
-mkdir -p "$PKG_ROOT/bin" "$PKG_ROOT/lib/yaoxiang/std"
-
-# 前门 + 引擎（cargo-dist 构建 workspace 双二进制）
-mv "$DIST_DIR/yaoxiang-$VERSION-$TARGET"*/yaoxiang-rs "$PKG_ROOT/bin/"
-mv "$DIST_DIR/yaoxiang-$VERSION-$TARGET"*/yx "$PKG_ROOT/bin/"
-if [ "$TARGET" = "x86_64-pc-windows-msvc" ]; then
-  mv "$PKG_ROOT/bin/yx" "$PKG_ROOT/bin/yx.exe"
-  mv "$PKG_ROOT/bin/yaoxiang-rs" "$PKG_ROOT/bin/yaoxiang-rs.exe"
-fi
-
-# 共享库：目录名对齐 build.rs detect_target() 的 Z3 发行包命名
-# （此映射应收敛为单源——理想做法由构建侧输出，避免脚本与 build.rs 两处维护）
-Z3_VERSION="4.16.0"
-case "$TARGET" in
-  x86_64-windows*)  cp ".z3/z3-$Z3_VERSION-x64-win/bin/libz3.dll"           "$PKG_ROOT/bin/" ;;
-  x86_64-linux*)    cp ".z3/z3-$Z3_VERSION-x64-glibc-2.39/lib/libz3.so"     "$PKG_ROOT/bin/" ;;
-  aarch64-linux*)   cp ".z3/z3-$Z3_VERSION-arm64-glibc-2.38/lib/libz3.so"    "$PKG_ROOT/bin/" ;;
-  x86_64-apple*)    cp ".z3/z3-$Z3_VERSION-x64-osx-15.7.3/lib/libz3.dylib"   "$PKG_ROOT/bin/" ;;
-  aarch64-apple*)   cp ".z3/z3-$Z3_VERSION-arm64-osx-15.7.3/lib/libz3.dylib" "$PKG_ROOT/bin/" ;;
-esac
-
-# 标准库目录：仓库预生成接口视图 + .yx 层真实源码（纯复制）
-cp src/std/interfaces/*.yx src/std/*.yx "$PKG_ROOT/lib/yaoxiang/std/"
-
-cp README.md LICENSE "$PKG_ROOT/"
-
-# 重新打包并重算 checksum（cargo-dist 生成的 .sha256 已因重组失效）
-cd "$DIST_DIR"
-if [ "$TARGET" = "x86_64-pc-windows-msvc" ]; then
-  zip -r "yaoxiang-$VERSION-$TARGET.zip" "yaoxiang-$VERSION-$TARGET"
-  sha256sum "yaoxiang-$VERSION-$TARGET.zip" > "yaoxiang-$VERSION-$TARGET.zip.sha256"
-else
-  tar czf "yaoxiang-$VERSION-$TARGET.tar.gz" "yaoxiang-$VERSION-$TARGET"
-  sha256sum "yaoxiang-$VERSION-$TARGET.tar.gz" > "yaoxiang-$VERSION-$TARGET.tar.gz.sha256"
-fi
-```
+- 双二进制直接取自 `cargo dist build` 的构建输出目录 `target/<triple>/dist/`（profile=dist）——cargo-dist 自产的扁平单二进制归档不是交付物，同名重组包在 `target/distrib/` 直接覆盖
+- Z3 共享库从 `.z3/z3-<ver>-<tag>/`（lib → bin 双目录探测）复制进 `bin/`；`<tag>` 映射对齐 `build.rs::detect_target()` 的发行包命名（两处维护，见风险）
+- std 目录纯复制：`src/std/interfaces/*.yx`（预生成接口视图）+ `src/std/*.yx`（.yx 层真实源码）
+- 附 README/LICENSE；重打包（Windows zip / 其余 tar.gz；Git Bash 无 zip 时 zip → System32 bsdtar → PowerShell 三级回退）并重算 `.sha256`
+- Linux 且 `dpkg-deb` 可用时顺带调 `build-deb.sh` 产出 `.deb`（`/usr/lib/yaoxiang` 平装树 + `/usr/bin/yx` 符号链接）
 
 ### 废弃的手写 CI
 
@@ -399,12 +374,12 @@ fi
 
 "开箱即用"是可测试的，迁移完成的判定不是"新旧产物一致"，而是以下全部通过：
 
-- 干净机器（无 Rust / 无 Z3 / 无 `~/.yaoxiang`）解压任一平台压缩包，直接执行 `bin/yaoxiang --version` 成功——不设 `LD_LIBRARY_PATH`（rpath 生效）
+- 干净机器（无 Rust / 无 Z3 / 无 `~/.yaoxiang`）解压任一平台压缩包，直接执行 `bin/yaoxiang-rs --version` 成功——不设 `LD_LIBRARY_PATH`（rpath 生效）
 - 解压目录内 `lib/yaoxiang/std/*.yx` 全部可读：native 模块为签名接口视图，`.yx` 层为真实源码
 - 在解压目录下的示例项目上启动 LSP，std 成员补全 / 跳转定义可用（exe 相对查找生效）
-- 按官方指引解压到 `/usr/local`（或 `~/.yaoxiang`）并加入 PATH 后，任意目录下 `yaoxiang --version` 成功
-- `apt install yaoxiang`（自建仓库）后可运行、`apt upgrade` 能跟版本；`/usr/bin/yaoxiang` 符号链接下 `$ORIGIN` 命中同目录 `libz3.so`
-- `curl ... | sh` 与 `irm ... | iex` 在干净环境执行后 `yaoxiang` 可运行、PATH 就位
+- 按官方指引解压到 `/usr/local`（或 `~/.yaoxiang`）并加入 PATH 后，任意目录下 `yx --version` 成功
+- `apt install yaoxiang`（自建仓库）后可运行、`apt upgrade` 能跟版本；`/usr/bin/yx` 符号链接下引擎的 `$ORIGIN`（按真实路径解析）命中 `bin/libz3.so`
+- `curl ... | sh` 与 `irm ... | iex` 在干净环境执行后 `yx` 可运行、PATH 就位
 - `yx toolchain install <ver>` / `default` / `update` 生效：多版本共存、`yx-toolchain.toml` 项目 pin 优先于默认版本、前门派发到正确版本（版本树内 rpath 与 std 查找自洽，无"新引擎配旧 fmt"组合）
 - 便携解压后 `yx` 回退相邻 `yaoxiang-rs`，行为与托管安装一致
 - Inno Setup 安装后目录结构完整、PATH 生效、可卸载
@@ -425,7 +400,7 @@ fi
 
 ### 缺点与风险
 
-- **傻瓜渠道维护面** — install.sh / install.ps1（~40 行 ×2，几乎不演化）+ `.deb` 与 apt 仓库元数据发布（release CI 自动化）+ `yx` 前门 crate（阶段五交付）
+- **傻瓜渠道维护面** — install.sh / install.ps1（一键脚本，几乎不演化）+ `.deb` 与 apt 仓库元数据发布（release CI 自动化）+ `yx` 前门 crate
 - **引擎改名波及面** — `yaoxiang` → `yaoxiang-rs` 需一次性迁移 CI 制品名、Inno、测试与文档（阶段五内完成）
 - **学习成本** — 团队需要学习 cargo-dist 配置
 - **cargo-dist 上游风险** — 2025 年中曾随 Axo 停摆，同年 9 月原作者复活并持续发版（0.29 → 0.32+）；以 `dist-version` 锁定 + 生成物 vendor 进仓库 review 缓解
@@ -480,15 +455,15 @@ fi
 
 ### 阶段四：傻瓜渠道（P2）
 
-1. `install.sh` / `install.ps1`（各 ~40 行：检测平台 → 下载 → 解压 → PATH；此阶段直装最新版，阶段五切换为安装管理器）
+1. `install.sh` / `install.ps1`（检测平台 → 下载最新重组包 → 解压进 `versions/` → `bin/yx` 就位安装根 → 写 `settings.toml` 默认版本 → PATH 提示/写入；与阶段五同轮落地，一步到位最终态）
 2. `.deb` 打包（复用 `package-dist.sh` 的同一棵目录树 + `/usr/bin` 符号链接）+ GitHub Pages 静态 apt 仓库（元数据 GPG 签名，release CI 发布）
 
 ### 阶段五：前门 yx 与引擎改名（P2）
 
 1. 现单体改名 `yaoxiang-rs`（CI 制品名、Inno、测试与文档全量过一遍，一次性迁移）
-2. 新增前门小 crate `yx`（workspace 成员）：版本解析、下载 release 制品、tar/zip 解包、settings.toml、派发（保留动词仅 toolchain/self，其余透传）；版本索引来自 GitHub Releases（或静态 versions.json 镜像）；`yx` 命令名做过撞名检查（主流发行版/Homebrew 无同名常用命令，仅一小众工具以 yx 为别名）
+2. 新增前门小 crate `yx`（workspace 成员）：版本解析、下载 release 制品、tar/zip 解包、settings.toml、派发（保留动词仅 toolchain/self，其余透传，手写分发不用 clap 以保证参数逐字转发）；版本索引来自 GitHub Releases latest API（镜像源为 ghproxy 风格前缀拼接）；`yx` 命令名做过撞名检查（主流发行版/Homebrew 无同名常用命令，仅一小众工具以 yx 为别名）
 3. `yx toolchain install/default/update/list/uninstall` + `yx-toolchain.toml` 项目 pin + 镜像源 + `yx self update`
-4. 引导脚本切换目标：`curl | sh` / `irm | iex` → 装 yx 前门 → 装默认 stable
+4. 引导脚本：`curl | sh` / `irm | iex` → 下载重组包一次装好前门与默认 stable（与阶段四同轮落地为最终态）
 
 ### 阶段六：可选跟进（皆不阻塞）
 
