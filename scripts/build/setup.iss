@@ -1,10 +1,20 @@
-; YaoXiang Inno Setup Script
+; YaoXiang Inno Setup Script（RFC-037：向导安装 = 铺设完整发行包树）
+;
+; 版本号与包目录由 CI 注入（消灭 sed 替换）：
+;   iscc /DMyAppVersion=0.7.14 /DPkgDir=pkg\extracted\yaoxiang-0.7.14-x86_64-pc-windows-msvc setup.iss
+
+#ifndef MyAppVersion
+#define MyAppVersion "0.0.0-dev"
+#endif
+#ifndef PkgDir
+#define PkgDir "..\..\target\dist-pkg"
+#endif
 
 #define MyAppName "YaoXiang"
-#define MyAppVersion "0.7.0"
 #define MyAppPublisher "ChenXu233"
 #define MyAppURL "https://github.com/ChenXu233/yaoxiang"
-#define MyAppExeName "yaoxiang.exe"
+; 前门 yx 为用户入口；引擎 yaoxiang-rs.exe 与 libz3.dll 同在 bin/
+#define MyAppExeName "bin\yx.exe"
 
 [Setup]
 ; Application identity
@@ -54,8 +64,8 @@ Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescrip
 Name: "addtopath"; Description: "Add to system PATH"; GroupDescription: "Other options:"; Flags: unchecked
 
 [Files]
-; Main executable
-Source: "..\..\target\release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+; RFC-037 发行包整棵树：bin/{yx.exe, yaoxiang-rs.exe, libz3.dll} + lib/yaoxiang/std/ + README/LICENSE
+Source: "{#PkgDir}\*"; DestDir: "{app}"; Flags: recursedirs createallsubdirs ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -164,7 +174,8 @@ var
 begin
   if (CurStep = ssPostInstall) and WizardIsTaskSelected('addtopath') then
   begin
-    AppPath := ExpandConstant('{app}');
+    // RFC-037：可执行文件在 bin/ 子目录
+    AppPath := ExpandConstant('{app}\bin');
     
     // 修改：根据安装模式决定修改用户环境变量还是系统环境变量
     if IsAdminInstallMode then
@@ -206,7 +217,8 @@ var
 begin
   if CurUninstallStep = usPostUninstall then
   begin
-    AppPath := ExpandConstant('{app}');
+    // RFC-037：可执行文件在 bin/ 子目录
+    AppPath := ExpandConstant('{app}\bin');
     
     // 卸载时也需要判断是 HKLM 还是 HKCU，通常卸载程序继承了安装时的权限上下文，
     // 但为了保险起见，这里也加上判断。

@@ -8,13 +8,89 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # RFC-037：nightly 构建切到 cargo dist build + package-dist.sh（与正式版同一套），
+  # 兼作新流水线的 24h 验证面；发布逻辑保持不变（覆盖 nightly Pre-release）
+  plan:
+    name: Plan dist build
+    runs-on: "ubuntu-22.04"
+    outputs:
+      val: ${{ steps.plan.outputs.manifest }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - name: Install dist
+        shell: bash
+        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.32.0/cargo-dist-installer.sh | sh"
+      - id: plan
+        run: |
+          dist plan --output-format=json > plan-dist-manifest.json
+          echo "dist ran successfully"
+          echo "manifest=$(jq -c "." plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
+      - name: "Upload dist-manifest.json"
+        uses: actions/upload-artifact@v7
+        with:
+          name: artifacts-plan-dist-manifest
+          path: plan-dist-manifest.json
+
   build:
-    name: Cross-platform Build
-    uses: ./.github/workflows/_build-platforms.yml
-    with:
-      build-profile: release
-      artifact-prefix: yaoxiang-nightly
-      retention-days: 14
+    name: Cross-platform Build (${{ join(matrix.targets, ', ') }})
+    needs: plan
+    if: ${{ fromJson(needs.plan.outputs.val).ci.github.artifacts_matrix.include != null }}
+    strategy:
+      fail-fast: false
+      # runner / dist-args / install_dist / packages_install 由 dist 计算
+      matrix: ${{ fromJson(needs.plan.outputs.val).ci.github.artifacts_matrix }}
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container && matrix.container.image || null }}
+    timeout-minutes: 60
+    env:
+      BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
+    steps:
+      - name: enable windows longpaths
+        run: |
+          git config --global core.longpaths true
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - name: Install Rust non-interactively if not already installed
+        if: ${{ matrix.container }}
+        run: |
+          if ! command -v cargo > /dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          fi
+      - name: Install dist
+        run: ${{ matrix.install_dist.run }}
+      - name: Fetch plan manifest
+        uses: actions/download-artifact@v8
+        with:
+          pattern: artifacts-*
+          path: target/distrib/
+          merge-multiple: true
+      - name: Install dependencies
+        run: |
+          ${{ matrix.packages_install }}
+      - name: Build artifacts
+        run: |
+          dist build --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
+          echo "dist ran successfully"
+      - name: Package restructured release archive
+        shell: bash
+        run: |
+          bash scripts/release/package-dist.sh \
+            "nightly" \
+            "${{ join(matrix.targets, '-') }}"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: yaoxiang-nightly-${{ join(matrix.targets, '_') }}
+          path: |
+            target/distrib/yaoxiang-nightly-*
+            ${{ env.BUILD_MANIFEST_NAME }}
+          retention-days: 14
 
   build-wasm:
     name: Build Wasm

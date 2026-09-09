@@ -1,0 +1,280 @@
+# Dist Release（RFC-037）
+#
+# 基于 cargo-dist 0.32.0 生成的工作流改造（生成物 vendor 进仓库接受 review）：
+# * tag 驱动（v* 格式，与既有 release.yml 的 tag 命名一致）
+# * 构建交给 `cargo dist build`（plan job 计算各 target 的 runner 矩阵与交叉编译依赖）
+# * 逐 target 跑 scripts/release/package-dist.sh 重组为 bin/ + lib/ 结构并重算 checksum
+# * 发布保持现状：generate-commit-list.mjs 生成 merge-commit changelog body，
+#   追加上传到 GitHub Release（双跑期与旧 release.yml 共存同一 Release，阶段三后接管）
+#
+# 与生成版的差异：去掉 pull_request 触发 / host / announce / global artifacts
+# （installers = []，无全局产物）；发布段换自有逻辑；外挂 wasm 与 Inno Setup job。
+
+name: Dist Release
+
+permissions:
+  "contents": "write"
+
+concurrency:
+  group: dist-release
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+on:
+  push:
+    tags:
+      - '**[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+
+jobs:
+  # ── dist plan：计算构建矩阵（target/runner/系统依赖） ──────────
+  plan:
+    name: Plan dist build
+    runs-on: "ubuntu-22.04"
+    outputs:
+      val: ${{ steps.plan.outputs.manifest }}
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - name: Install dist
+        shell: bash
+        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.32.0/cargo-dist-installer.sh | sh"
+      - id: tag
+        run: |
+          TAG="${GITHUB_REF_NAME#refs/tags/}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+      - id: plan
+        run: |
+          dist plan --output-format=json > plan-dist-manifest.json
+          echo "dist ran successfully"
+          cat plan-dist-manifest.json
+          echo "manifest=$(jq -c "." plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
+      - name: "Upload dist-manifest.json"
+        uses: actions/upload-artifact@v7
+        with:
+          name: artifacts-plan-dist-manifest
+          path: plan-dist-manifest.json
+
+  # ── 逐 target 构建 + 重组打包 ───────────────────────────────────
+  build-local-artifacts:
+    name: build (${{ join(matrix.targets, ', ') }})
+    needs:
+      - plan
+    if: ${{ fromJson(needs.plan.outputs.val).ci.github.artifacts_matrix.include != null }}
+    strategy:
+      fail-fast: false
+      # runner / dist-args / install_dist / packages_install 由 dist 计算
+      matrix: ${{ fromJson(needs.plan.outputs.val).ci.github.artifacts_matrix }}
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container && matrix.container.image || null }}
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
+    steps:
+      - name: enable windows longpaths
+        run: |
+          git config --global core.longpaths true
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - name: Install Rust non-interactively if not already installed
+        if: ${{ matrix.container }}
+        run: |
+          if ! command -v cargo > /dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          fi
+      - name: Install dist
+        run: ${{ matrix.install_dist.run }}
+      - name: Fetch plan manifest
+        uses: actions/download-artifact@v8
+        with:
+          pattern: artifacts-*
+          path: target/distrib/
+          merge-multiple: true
+      - name: Install dependencies
+        run: |
+          ${{ matrix.packages_install }}
+      - name: Build artifacts
+        run: |
+          dist build --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
+          echo "dist ran successfully"
+      - name: Package restructured release archive
+        shell: bash
+        run: |
+          bash scripts/release/package-dist.sh \
+            "${{ needs.plan.outputs.version }}" \
+            "${{ join(matrix.targets, '-') }}"
+      - name: "Upload artifacts"
+        uses: actions/upload-artifact@v7
+        with:
+          name: artifacts-build-local-${{ join(matrix.targets, '_') }}
+          path: |
+            target/distrib/yaoxiang-*
+            ${{ env.BUILD_MANIFEST_NAME }}
+
+  # ── Wasm（独立交付物：playground，与 RFC-037 决议一致不迁入 dist）──
+  build-wasm:
+    name: Build Wasm
+    needs:
+      - plan
+    uses: ./.github/workflows/_build-wasm.yml
+    with:
+      artifact-name: yaoxiang-wasm
+      retention-days: 30
+
+  # ── Inno Setup 向导（既有资产转正；吃重组包，不二次编译）─────────
+  build-installer:
+    name: Windows Installer (Inno Setup)
+    needs:
+      - plan
+      - build-local-artifacts
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Fetch restructured windows package
+        uses: actions/download-artifact@v8
+        with:
+          pattern: artifacts-build-local-*x86_64-pc-windows-msvc*
+          path: pkg
+          merge-multiple: true
+      - name: Extract package
+        run: |
+          $zip = Get-ChildItem "pkg" -Filter "yaoxiang-*.zip" | Select-Object -First 1
+          Expand-Archive -Path $zip.FullName -DestinationPath "pkg\extracted"
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+      - name: Build installer
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=${{ needs.plan.outputs.version }} /DPkgDir=pkg\extracted\yaoxiang-${{ needs.plan.outputs.version }}-x86_64-pc-windows-msvc scripts/build/setup.iss'
+      - name: "Upload installer"
+        uses: actions/upload-artifact@v7
+        with:
+          name: yaoxiang-windows-installer
+          path: dist/YaoXiang-Setup-*.exe
+          retention-days: 30
+
+  # ── 发布：merge-commit changelog body + 追加上传（发布保持现状）──
+  publish:
+    name: Publish to GitHub Release
+    needs: [plan, build-local-artifacts, build-wasm, build-installer]
+    if: ${{ always() && needs.plan.result == 'success' && needs.build-local-artifacts.result == 'success' && needs.build-installer.result == 'success' && !cancelled() }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Download all artifacts
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          path: release-artifacts
+      - name: Get previous tag
+        id: prev-tag
+        run: |
+          PREV=$(git tag --sort=-version:refname | grep -v "$(printf '%s' "${{ needs.plan.outputs.tag }}")" | head -1)
+          echo "value=$PREV" >> "$GITHUB_OUTPUT"
+          echo "Previous tag: $PREV"
+      - name: Generate commit list with @mentions
+        run: |
+          node scripts/release/generate-commit-list.mjs \
+            --from-tag "${{ steps.prev-tag.outputs.value }}" \
+            --to-tag "${{ needs.plan.outputs.tag }}" \
+            --changelog CHANGELOG.md \
+            > final-release-body.md
+      - name: Append assets to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.plan.outputs.tag }}
+          body_path: final-release-body.md
+          files: |
+            release-artifacts/**/yaoxiang-*.tar.gz
+            release-artifacts/**/yaoxiang-*.zip
+            release-artifacts/**/yaoxiang-*.sha256
+            release-artifacts/**/yaoxiang-*.deb
+            release-artifacts/**/yaoxiang-wasm/**
+            release-artifacts/**/YaoXiang-Setup-*.exe
+          fail_on_unmatched_files: false
+
+  # ── apt 仓库元数据发布（GitHub Pages 静态仓库；RFC-037 阶段四）──
+  # 需要 repo secret APT_GPG_KEY（ASCII armored 私钥）；未配置时本 job 跳过，
+  # 其余渠道不受影响。Pages 需指向 apt-repo 分支根部（见 docs 安装指南）。
+  publish-apt:
+    name: Publish apt repository
+    needs: [plan, build-local-artifacts, publish]
+    if: ${{ always() && needs.plan.result == 'success' && needs.build-local-artifacts.result == 'success' && needs.publish.result != 'failure' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: apt-repo
+          fetch-depth: 0
+        continue-on-error: true
+        id: apt-branch
+      - uses: actions/checkout@v7
+        if: steps.apt-branch.outcome != 'success'
+        with:
+          fetch-depth: 0
+      - name: Import GPG key
+        id: gpg
+        env:
+          APT_GPG_KEY: ${{ secrets.APT_GPG_KEY }}
+        run: |
+          if [ -z "$APT_GPG_KEY" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "APT_GPG_KEY not configured; skipping apt repository publish"
+          else
+            echo "$APT_GPG_KEY" | base64 -d | gpg --batch --import
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Collect debs
+        if: steps.gpg.outputs.skip == 'false'
+        uses: actions/download-artifact@v8
+        with:
+          pattern: artifacts-build-local-*
+          path: incoming
+          merge-multiple: true
+      - name: Build apt repo metadata
+        if: steps.gpg.outputs.skip == 'false'
+        run: |
+          mkdir -p dists/stable/main/binary-amd64 dists/stable/main/binary-arm64 pool
+          cp -f incoming/yaoxiang-*.deb pool/
+          apt-ftparchive packages pool > dists/stable/main/binary-amd64/Packages
+          apt-ftparchive packages pool >> dists/stable/main/binary-arm64/Packages
+          gzip -k dists/stable/main/binary-amd64/Packages
+          gzip -k dists/stable/main/binary-arm64/Packages
+          apt-ftparchive release dists/stable > dists/stable/Release
+          gpg --batch --yes --detach-sign --armor --output dists/stable/InRelease.gpg dists/stable/Release 2>/dev/null || true
+          gpg --batch --yes --clearsign --output dists/stable/InRelease dists/stable/Release
+          gpg --batch --yes --detach-sign --armor --output dists/stable/Release.gpg dists/stable/Release
+      - name: Push apt-repo branch
+        if: steps.gpg.outputs.skip == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m ":package: apt repo: $VERSION" || exit 0
+          if git rev-parse --verify apt-repo >/dev/null 2>&1; then
+            git push origin HEAD:apt-repo
+          else
+            git checkout -b apt-repo
+            git push origin apt-repo
+          fi
