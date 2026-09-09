@@ -420,65 +420,115 @@ pub fn check_file_with_diagnostics(file: &std::path::PathBuf) -> anyhow::Result<
     Ok(())
 }
 
-/// 对多个文件进行静态检查并聚合诊断信息
+/// 按严重级别记账并收录诊断。
+#[cfg(feature = "cli")]
+fn push_diagnostic(
+    result: &mut CheckResult,
+    file: String,
+    diagnostic: Diagnostic,
+) {
+    match diagnostic.severity {
+        Severity::Error => result.error_count += 1,
+        _ => result.warning_count += 1,
+    }
+    result
+        .diagnostics
+        .push(CheckDiagnostic { file, diagnostic });
+}
+
+/// 对多个文件进行静态检查并聚合诊断信息。
 ///
-/// 按顺序逐文件检查，不进行依赖分析。
+/// 项目内文件（向上能找到 `yaoxiang.toml`）走 orchestrator——与 `yaoxiang run`
+/// 同一条多文件编译路径；非项目文件保持单文件检查。
 #[cfg(feature = "cli")]
 pub fn check_files_with_diagnostics(files: &[std::path::PathBuf]) -> anyhow::Result<CheckResult> {
+    use crate::frontend::module::orchestrator;
+    use std::collections::HashSet;
+
     let mut result = CheckResult::default();
 
+    // 按项目根分组；同项目的多个入口各自发现一遍，用 seen 去重避免重复诊断。
+    let mut project_groups: Vec<(std::path::PathBuf, Vec<std::path::PathBuf>)> = Vec::new();
+    let mut standalone: Vec<&std::path::PathBuf> = Vec::new();
     for file in files {
-        let source = std::fs::read_to_string(file)
-            .map_err(|e| anyhow::anyhow!("Failed to read {}: {}", file.display(), e))?;
-        let source_file = SourceFile::new(file.display().to_string(), source.clone());
-        result
-            .source_files
-            .insert(file.display().to_string(), source_file);
+        match orchestrator::find_project_root(file) {
+            Some(root) => match project_groups.iter_mut().find(|(r, _)| *r == root) {
+                Some((_, group)) => group.push(file.clone()),
+                None => project_groups.push((root, vec![file.clone()])),
+            },
+            None => standalone.push(file),
+        }
+    }
 
-        let mut compiler = crate::frontend::Compiler::new();
-        match compiler.compile_with_source(&file.display().to_string(), &source) {
-            Ok(_) => {
-                // #321 M2：收割警告诊断（builder 按 W 前缀标注 Warning severity），
-                // 计入 warning_count，不阻断编译
-                for diag in compiler.take_warnings() {
-                    result.warning_count += 1;
-                    result.diagnostics.push(CheckDiagnostic {
-                        file: file.display().to_string(),
-                        diagnostic: diag,
-                    });
-                }
+    for (_, group) in &project_groups {
+        let mut seen: HashSet<std::path::PathBuf> = HashSet::new();
+        for entry in group {
+            if seen.contains(entry) {
+                continue;
             }
-            Err(e) if e.is_type_error() => {
-                // #268：透传原始类型诊断（保留 E1002 与 span），与 run 一致；
-                // 仅无原始诊断的 TypeError（如 IR 阶段）才用 E8001 兜底
-                match e.diagnostic() {
-                    Some(diag) => {
-                        result.diagnostics.push(CheckDiagnostic {
-                            file: file.display().to_string(),
-                            diagnostic: diag.clone(),
-                        });
-                    }
-                    None => {
-                        result.diagnostics.push(CheckDiagnostic {
-                            file: file.display().to_string(),
-                            diagnostic:
-                                crate::util::diagnostic::ErrorCodeDefinition::internal_error(
-                                    &format!("{}", e),
-                                )
-                                .build(),
-                        });
-                    }
+            let per_file =
+                orchestrator::check_project(entry).map_err(|e| anyhow::anyhow!("{}", e))?;
+            for (path, diagnostics) in per_file {
+                seen.insert(path.clone());
+                let source = std::fs::read_to_string(&path).unwrap_or_default();
+                result.source_files.insert(
+                    path.display().to_string(),
+                    SourceFile::new(path.display().to_string(), source),
+                );
+                for diagnostic in diagnostics {
+                    push_diagnostic(&mut result, path.display().to_string(), diagnostic);
                 }
-                result.error_count += 1;
-            }
-            Err(e) => {
-                let err_msg = format!("{}", e);
-                return Err(anyhow::anyhow!(err_msg));
             }
         }
     }
 
+    for file in standalone {
+        check_single_file(file, &mut result)?;
+    }
+
     Ok(result)
+}
+
+/// 单文件检查（无项目上下文）。
+#[cfg(feature = "cli")]
+fn check_single_file(
+    file: &std::path::PathBuf,
+    result: &mut CheckResult,
+) -> anyhow::Result<()> {
+    let source = std::fs::read_to_string(file)
+        .map_err(|e| anyhow::anyhow!("Failed to read {}: {}", file.display(), e))?;
+    let source_file = SourceFile::new(file.display().to_string(), source.clone());
+    result
+        .source_files
+        .insert(file.display().to_string(), source_file);
+
+    let mut compiler = crate::frontend::Compiler::new();
+    match compiler.compile_with_source(&file.display().to_string(), &source) {
+        Ok(_) => {
+            // #321 M2：收割警告诊断（builder 按 W 前缀标注 Warning severity），
+            // 计入 warning_count，不阻断编译
+            for diag in compiler.take_warnings() {
+                push_diagnostic(result, file.display().to_string(), diag);
+            }
+        }
+        Err(e) if e.is_type_error() => {
+            // #268：透传原始类型诊断（保留 E1002 与 span），与 run 一致；
+            // 仅无原始诊断的 TypeError（如 IR 阶段）才用 E8001 兜底
+            let diag = match e.diagnostic() {
+                Some(diag) => diag.clone(),
+                None => {
+                    crate::util::diagnostic::ErrorCodeDefinition::internal_error(&format!("{}", e))
+                        .build()
+                }
+            };
+            push_diagnostic(result, file.display().to_string(), diag);
+        }
+        Err(e) => {
+            let err_msg = format!("{}", e);
+            return Err(anyhow::anyhow!(err_msg));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

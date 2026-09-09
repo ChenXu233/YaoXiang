@@ -250,7 +250,7 @@ fn test_format_doc_comment_preserved() {
 #[test]
 fn test_format_sort_imports_preserves_comments() {
     // 规范 §14.1 + §C2.2: 导入排序后注释必须跟随语句移动
-    let source = "// std\nuse std.io\n// external\nuse serde\n";
+    let source = "// std\nuse std.io\n// second\nuse std.string\n";
     let result = format_source(source, &default_options()).unwrap();
     assert!(
         result.contains("// std"),
@@ -258,8 +258,8 @@ fn test_format_sort_imports_preserves_comments() {
         result
     );
     assert!(
-        result.contains("// external"),
-        "External import comment should be preserved: {}",
+        result.contains("// second"),
+        "Second import comment should be preserved: {}",
         result
     );
 }
@@ -273,9 +273,9 @@ fn test_format_sort_imports_complex_comment_grouping() {
 // This header should stay
 // Project-wide constants
 
-use std.collections.list
-use std.collections.map
-// These two go with collections
+use std.list
+use std.dict
+// These two go with containers
 use std.io
 
 main = {
@@ -294,20 +294,24 @@ main = {
     // Assert: intra-import 注释只能出现一次
     assert_eq!(
         1,
-        result.matches("// These two go with collections").count(),
+        result.matches("// These two go with containers").count(),
         "Import-associated comment should appear exactly once, got: {}",
         result
     );
-    // Assert: 按字母序 collections < io
-    let pos_list = result
-        .find("use std.collections.list")
-        .expect("std.collections.list should be in output");
+    // Assert: 按字母序 dict < io < list
+    let pos_dict = result
+        .find("use std.dict")
+        .expect("std.dict should be in output");
     let pos_io = result
         .find("use std.io")
         .expect("std.io should be in output");
+    let pos_list = result
+        .find("use std.list")
+        .expect("std.list should be in output");
     assert!(
-        pos_list < pos_io,
-        "std.collections should come before std.io"
+        pos_dict < pos_io && pos_io < pos_list,
+        "imports should be sorted alphabetically, got: {}",
+        result
     );
 }
 #[test]
@@ -343,8 +347,8 @@ fn test_format_sort_imports_intra_import_comment_at_end() {
     let source = "\
 // header
 use std.io
-// collection helpers
-use std.collections.list
+// list helpers
+use std.list
 
 main = {}
 ";
@@ -353,7 +357,7 @@ main = {}
     // Assert: intra-import comment 恰好出现一次 (不泄漏到 function body 后)
     assert_eq!(
         1,
-        result.matches("// collection helpers").count(),
+        result.matches("// list helpers").count(),
         "Intra-import comment should appear exactly once: {}",
         result
     );
@@ -527,9 +531,9 @@ fn test_format_idempotent_with_imports() {
 // This header should stay
 // Project-wide constants
 
-use std.collections.list
-use std.collections.map
-// These two go with collections
+use std.list
+use std.dict
+// These two go with containers
 use std.io
 
 main = {

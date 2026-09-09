@@ -13,6 +13,8 @@ use crate::package::lock::LockFile;
 use crate::package::manifest::PackageManifest;
 use tempfile::TempDir;
 
+use super::add_path_dep;
+
 fn setup_project() -> (TempDir, std::path::PathBuf) {
     let tmp = TempDir::new().unwrap();
     init::exec_in(tmp.path(), &init::InitOptions { lib: false }, "test-proj").unwrap();
@@ -32,8 +34,8 @@ fn test_install_empty() {
 #[test]
 fn test_install_with_deps() {
     let (_tmp, project_dir) = setup_project();
-    add::exec_in(&project_dir, "foo", Some("1.0.0"), false).unwrap();
-    add::exec_in(&project_dir, "bar", Some("2.0.0"), true).unwrap();
+    add_path_dep(&project_dir, "foo", "1.0.0", false);
+    add_path_dep(&project_dir, "bar", "2.0.0", true);
 
     exec_in(&project_dir).unwrap();
 
@@ -45,12 +47,27 @@ fn test_install_with_deps() {
 #[test]
 fn test_install_updates_lock_correctly() {
     let (_tmp, project_dir) = setup_project();
-    add::exec_in(&project_dir, "foo", Some("1.0.0"), false).unwrap();
+    add_path_dep(&project_dir, "foo", "1.0.0", false);
 
     exec_in(&project_dir).unwrap();
 
     let lock = LockFile::load(&project_dir).unwrap();
     assert_eq!(lock.package["foo"].version, "1.0.0");
+}
+
+#[test]
+fn test_install_registry_dependency_fails() {
+    // 注册表来源（无 git/path）尚未实现（RFC-014a）——必须明确失败，
+    // 不再打印"已安装"并返回 Ok（旧行为：静默跳过 + 锁文件记账）
+    let (_tmp, project_dir) = setup_project();
+    add::exec_in(&project_dir, "foo", Some("1.0.0"), false).unwrap();
+
+    let result = exec_in(&project_dir);
+
+    assert!(
+        result.is_err(),
+        "registry dependency must fail loudly, got Ok"
+    );
 }
 
 #[test]

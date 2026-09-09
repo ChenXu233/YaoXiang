@@ -330,12 +330,18 @@ impl StatementChecker {
     fn process_use_stmt(
         &mut self,
         path: &str,
+        path_span: crate::util::span::Span,
         items: &Option<Vec<String>>,
         alias: &Option<Vec<String>>,
         item_aliases: &Option<Vec<Option<String>>>,
-    ) {
+    ) -> Result<(), Box<Diagnostic>> {
         let Some(module) = self.module_registry.get(path).cloned() else {
-            return;
+            // E5001：模块未找到（此前静默 return，错误延后成"unknown variable"）
+            return Err(Box::new(
+                ErrorCodeDefinition::module_not_found(path)
+                    .at(path_span)
+                    .build(),
+            ));
         };
 
         let selected_exports: Vec<Export> = match items {
@@ -377,9 +383,15 @@ impl StatementChecker {
                         .and_then(|v| v.get(i))
                         .and_then(|a| a.as_ref())
                         .unwrap_or(item_name);
-                    if let Some(export) = module.exports.get(item_name).cloned() {
-                        self.import_binding(local_name, &export);
-                    }
+                    // E5003：导出未找到（此前静默跳过，用户只看到下游 unknown variable）
+                    let Some(export) = module.exports.get(item_name).cloned() else {
+                        return Err(Box::new(
+                            ErrorCodeDefinition::export_not_found(item_name, path)
+                                .at(path_span)
+                                .build(),
+                        ));
+                    };
+                    self.import_binding(local_name, &export);
                 }
             }
             _ => {
@@ -388,6 +400,7 @@ impl StatementChecker {
                 }
             }
         }
+        Ok(())
     }
 
     /// 获取求解器
@@ -741,14 +754,23 @@ impl StatementChecker {
             }
             crate::frontend::core::parser::ast::StmtKind::Use {
                 path,
+                path_span,
                 items,
                 alias,
                 item_aliases,
                 ..
-            } => {
-                self.process_use_stmt(path, items, alias, item_aliases);
-                Ok(())
-            }
+            } => match self.process_use_stmt(path, *path_span, items, alias, item_aliases) {
+                Ok(()) => Ok(()),
+                // #F2：模块/导出未命中不再静默——收集模式下累积，否则短路返回
+                Err(err) => {
+                    if self.collect_all_errors {
+                        self.collect_error(*err);
+                        Ok(())
+                    } else {
+                        Err(err)
+                    }
+                }
+            },
             // 元组解构赋值
             crate::frontend::core::parser::ast::StmtKind::DestructureAssign {
                 names,

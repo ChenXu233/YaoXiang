@@ -282,3 +282,149 @@ fn test_check_std_result_return_accepted() {
         "parse_int(\"42\") should report 0 errors"
     );
 }
+
+// 多文件项目：check 与 run 必须走同一条编译路径（F1 回归守卫）
+
+/// 在临时目录创建含 `yaoxiang.toml` 的项目，返回项目根目录。
+fn create_project(files: &[(&str, &str)]) -> TempDir {
+    let dir = TempDir::new().expect("Failed to create temp dir");
+    std::fs::write(
+        dir.path().join("yaoxiang.toml"),
+        "[package]\nname = \"proj\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("Failed to write manifest");
+    for (name, content) in files {
+        let path = dir.path().join(name);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("Failed to create parent dirs");
+        }
+        std::fs::write(&path, content).expect("Failed to write source file");
+    }
+    dir
+}
+
+/// 检查单个文件并返回聚合结果（用于断言错误码）。
+fn check_result(path: &PathBuf) -> yaoxiang::util::diagnostic::CheckResult {
+    yaoxiang::util::diagnostic::check_files_with_diagnostics(std::slice::from_ref(path))
+        .expect("check should not fail at parse stage")
+}
+
+fn error_codes(result: &yaoxiang::util::diagnostic::CheckResult) -> Vec<String> {
+    result
+        .diagnostics
+        .iter()
+        .filter(|d| {
+            matches!(
+                d.diagnostic.severity,
+                yaoxiang::util::diagnostic::Severity::Error
+            )
+        })
+        .map(|d| d.diagnostic.code.clone())
+        .collect()
+}
+
+#[test]
+fn test_check_multifile_project_matches_run() {
+    // Arrange - 跨文件导入的合法项目：check 与 run 结论必须一致
+    let dir = create_project(&[
+        ("lib.yx", "add_one: (x: Int) -> Int = (x) => x + 1\n"),
+        (
+            "main.yx",
+            "use std.assert\nuse lib.{add_one}\n\nmain = {\n    assert.assert(add_one(41) == 42, \"ok\")\n}\n",
+        ),
+    ]);
+    let main = dir.path().join("main.yx");
+
+    // Act
+    let checked = check_file(&main);
+
+    // Assert - 此前 check 逐文件独立编译，报假错 E1001 unknown variable
+    assert!(
+        checked.is_ok(),
+        "check on a valid multifile project should not fail: {checked:?}"
+    );
+    assert_eq!(
+        checked.unwrap(),
+        0,
+        "check must agree with run: valid project has 0 errors"
+    );
+    yaoxiang::run_project(&main).expect("run should succeed on the same project");
+}
+
+#[test]
+fn test_check_missing_module_reports_e5001() {
+    // Arrange - 导入不存在的模块
+    let dir = create_project(&[("main.yx", "use nosuch.{thing}\n\nmain = {\n}\n")]);
+    let main = dir.path().join("main.yx");
+
+    // Act
+    let result = check_result(&main);
+
+    // Assert - 此前静默通过（E1001 都不一定报），现必须报 E5001
+    let codes = error_codes(&result);
+    assert!(
+        codes.contains(&"E5001".to_string()),
+        "missing module should report E5001, got: {codes:?}"
+    );
+}
+
+#[test]
+fn test_check_missing_export_reports_e5003() {
+    // Arrange - 模块存在但导出项不存在
+    let dir = create_project(&[("main.yx", "use std.math.{nosuch_fn}\n\nmain = {\n}\n")]);
+    let main = dir.path().join("main.yx");
+
+    // Act
+    let result = check_result(&main);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert!(
+        codes.contains(&"E5003".to_string()),
+        "missing export should report E5003, got: {codes:?}"
+    );
+}
+
+#[test]
+fn test_check_vendor_dependency_importable() {
+    // Arrange - 已安装的 vendor 依赖（RFC-014 布局：<pkg>-<ver>/src/<pkg>.yx）
+    let dir = create_project(&[
+        (
+            ".yaoxiang/vendor/foo-0.1.0/src/foo.yx",
+            "add_one: (x: Int) -> Int = (x) => x + 1\n",
+        ),
+        (
+            "main.yx",
+            "use std.assert\nuse foo.{add_one}\n\nmain = {\n    assert.assert(add_one(41) == 42, \"vendor\")\n}\n",
+        ),
+    ]);
+    let main = dir.path().join("main.yx");
+
+    // Act
+    let checked = check_file(&main);
+
+    // Assert - 此前 vendor 不在导入路径上，报 E1001 unknown variable
+    assert_eq!(
+        checked.expect("check should not fail"),
+        0,
+        "installed vendor dependency should be importable"
+    );
+    yaoxiang::run_project(&main).expect("run should succeed with vendor dependency");
+}
+
+#[test]
+fn test_check_vendor_missing_dependency_reports_e5001() {
+    // Arrange - 依赖未安装（vendor 目录为空）
+    let dir = create_project(&[("main.yx", "use foo.{add_one}\n\nmain = {\n}\n")]);
+    let main = dir.path().join("main.yx");
+
+    // Act
+    let result = check_result(&main);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert!(
+        codes.contains(&"E5001".to_string()),
+        "uninstalled dependency should report E5001, got: {codes:?}"
+    );
+}

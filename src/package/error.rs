@@ -22,6 +22,10 @@ pub enum PackageError {
     #[error("Dependency already exists: {0}")]
     DependencyAlreadyExists(String),
 
+    /// One or more dependencies could not be installed
+    #[error("dependency installation failed: {0}")]
+    DependencyInstallFailed(String),
+
     /// Invalid manifest format
     #[error("Invalid yaoxiang.toml format: {0}")]
     InvalidManifest(String),

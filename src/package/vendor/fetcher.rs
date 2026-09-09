@@ -51,13 +51,15 @@ pub fn fetch_all(
             continue;
         }
 
-        // 注册表依赖（无 git/path）在 Phase 3 前仅记录到锁文件
+        // 注册表依赖（无 git/path）：RFC-014a 尚未实现——明确失败，
+        // 不再写锁文件、不再打印"已安装"（旧行为：静默跳过 + 锁文件记账）
         if spec.git.is_none() && spec.path.is_none() {
-            // 注册表来源尚未实现 — 仅记录到锁文件
-            lock.lock_dependency_full(&spec.name, &spec.version, "registry", None);
-            result
-                .skipped
-                .push((spec.name.clone(), spec.version.clone()));
+            result.failed.push((
+                spec.name.clone(),
+                "registry source not implemented (RFC-014a); \
+                 use a git or path dependency"
+                    .to_string(),
+            ));
             continue;
         }
 

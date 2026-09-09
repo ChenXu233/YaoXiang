@@ -1,0 +1,12 @@
+// 06-compile-errors/export_not_found_err.yx
+// 导出未找到应报 E5003——此前静默跳过该导入项，用户只在下游看到
+// 无关的 "unknown variable"（E1001）
+// expect: compile-error E5003
+// 验证: use std.math.{nosuch_fn} 报 E5003（模块在、导出不在）
+// 状态: ✅
+
+use std.math.{nosuch_fn}
+
+main = {
+    print(1)
+}

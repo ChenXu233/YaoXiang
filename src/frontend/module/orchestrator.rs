@@ -160,6 +160,27 @@ pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
     link_module_irs(module_irs, &entry_key)
 }
 
+/// 检查一个项目：发现源文件 → 构建 Registry → 逐文件 typecheck。
+///
+/// 与 `compile_project` 共用发现/注册表阶段，但不生成 IR；返回**全部**诊断
+/// （按文件分组，不早退），供 `yaoxiang check` 与 `run` 走同一条编译路径。
+pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, OrchestratorError> {
+    let files = discover(entry)?;
+    let registry = build_registry_from(&files)?;
+    let method_bindings = registry.all_method_bindings();
+
+    let mut out = Vec::new();
+    for file in &files {
+        let ast = parse_file(&file.path, &file.source)?;
+        let mut checker = TypeChecker::new("<module>");
+        checker.env().module_registry = registry.clone();
+        checker.env().method_bindings = method_bindings.clone();
+        let result = checker.check_module_collect_all(&ast);
+        out.push((file.path.clone(), result.diagnostics));
+    }
+    Ok(out)
+}
+
 /// 提取一个文件定义的全局变量（顶层非函数绑定）的名字与类型。
 ///
 /// 镜像 `generate_stmt_ir` 的函数/全局分流：值为 Lambda/Block 视为函数，否则为全局。
@@ -264,10 +285,27 @@ fn build_registry_from(files: &[DiscoveredFile]) -> Result<ModuleRegistry, Orche
     let mut registry = ModuleRegistry::with_std();
     for file in files {
         let ast = parse_file(&file.path, &file.source)?;
-        let info = extract_module_info(&file.module_key, &ast);
+        let mut info = extract_module_info(&file.module_key, &ast);
+        // 来源标记：vendor 依赖目录下的文件是 Vendor（与本地 User 区分）
+        if is_vendor_path(&file.path) {
+            info.source = ModuleSource::Vendor;
+        }
         registry.register(info);
     }
     Ok(registry)
+}
+
+/// 路径是否位于某个项目的 `.yaoxiang/vendor/` 下。
+fn is_vendor_path(path: &Path) -> bool {
+    let mut prev = None;
+    for component in path.components() {
+        let name = component.as_os_str().to_string_lossy();
+        if prev.as_deref() == Some(".yaoxiang") && name == "vendor" {
+            return true;
+        }
+        prev = Some(name.to_string());
+    }
+    false
 }
 
 /// 从入口沿 `use` 追踪发现可达模块（#247/RFC-036：替代目录递归——
@@ -340,7 +378,7 @@ fn discover(entry: &Path) -> Result<Vec<DiscoveredFile>, OrchestratorError> {
 }
 
 /// 从 entry 向上找最近的含 yaoxiang.toml 的目录（项目根）。
-fn find_project_root(entry: &Path) -> Option<PathBuf> {
+pub(crate) fn find_project_root(entry: &Path) -> Option<PathBuf> {
     let mut dir = entry.parent();
     while let Some(d) = dir {
         if d.join("yaoxiang.toml").exists() {
@@ -352,12 +390,17 @@ fn find_project_root(entry: &Path) -> Option<PathBuf> {
 }
 
 /// 解析模块路径为文件：`a.b` → `<base>/a/b.yx` 或 `<base>/a/b/mod.yx`。
-/// 双根顺序：导入者目录优先，项目根兜底。
+/// 顺序：vendor 依赖（RFC-014 §模块解析顺序 priority 2）→ 导入者目录 → 项目根。
 fn resolve_module_path(
     use_path: &str,
     importer_dir: Option<&Path>,
     project_root: Option<&Path>,
 ) -> Option<PathBuf> {
+    if let Some(root) = project_root {
+        if let Some(path) = resolve_in_vendor(use_path, root) {
+            return Some(path);
+        }
+    }
     let rel: PathBuf = use_path.split('.').collect();
     for base in [importer_dir, project_root].into_iter().flatten() {
         for cand in [
@@ -370,6 +413,80 @@ fn resolve_module_path(
         }
     }
     None
+}
+
+/// 在 `<project_root>/.yaoxiang/vendor/` 中解析 `use <pkg>[.<rest>]`。
+///
+/// 布局（RFC-014 §模块解析顺序）：`<pkg>-<ver>/src/<pkg>/<rest>.yx`；
+/// 裸包名回退 `<pkg>-<ver>/src/<pkg>.yx`、`src/lib.yx`、`src/main.yx`、`mod.yx`。
+/// ponytail: 多版本取目录名最大者；按 lock 精确选择留给 RFC-014 Phase 3。
+fn resolve_in_vendor(
+    use_path: &str,
+    project_root: &Path,
+) -> Option<PathBuf> {
+    let vendor_dir = project_root.join(".yaoxiang").join("vendor");
+    if !vendor_dir.is_dir() {
+        return None;
+    }
+    let (pkg, rest) = match use_path.split_once('.') {
+        Some((pkg, rest)) => (pkg, Some(rest)),
+        None => (use_path, None),
+    };
+    let prefix = format!("{pkg}-");
+
+    let mut candidates: Vec<(String, PathBuf)> = Vec::new();
+    for entry in std::fs::read_dir(&vendor_dir).ok()?.flatten() {
+        let dir_name = entry.file_name().to_string_lossy().to_string();
+        let Some(version) = dir_name.strip_prefix(&prefix) else {
+            continue;
+        };
+        let path = entry.path();
+        if path.is_dir() {
+            candidates.push((version.to_string(), path));
+        }
+    }
+    candidates.sort_by(|a, b| compare_version(&b.0, &a.0));
+
+    for (_, dep) in candidates {
+        let src = dep.join("src");
+        let tries: Vec<PathBuf> = match rest {
+            Some(rest) => {
+                let rel: PathBuf = rest.split('.').collect();
+                vec![
+                    src.join(pkg).join(&rel).with_extension("yx"),
+                    src.join(pkg).join(&rel).join("mod.yx"),
+                    src.join(&rel).with_extension("yx"),
+                    src.join(&rel).join("mod.yx"),
+                ]
+            }
+            None => vec![
+                src.join(pkg).with_extension("yx"),
+                src.join(pkg).join("mod.yx"),
+                src.join("lib.yx"),
+                src.join("main.yx"),
+                dep.join("mod.yx"),
+            ],
+        };
+        for cand in tries {
+            if cand.is_file() {
+                return Some(cand);
+            }
+        }
+    }
+    None
+}
+
+/// 版本比较：点分数字段数值比较，相等时退回字符串。
+fn compare_version(
+    a: &str,
+    b: &str,
+) -> std::cmp::Ordering {
+    let parse = |s: &str| -> Vec<u64> {
+        s.split('.')
+            .map(|part| part.parse::<u64>().unwrap_or(0))
+            .collect()
+    };
+    parse(a).cmp(&parse(b)).then_with(|| a.cmp(b))
 }
 
 /// 只读 use 行：词法级扫描源码中的模块路径（不解析函数体——RFC-029 发现协议）。
