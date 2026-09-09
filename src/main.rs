@@ -63,7 +63,7 @@ enum ColorChoice {
 
 /// A high-performance programming language with "everything is type" philosophy
 #[derive(Parser, Debug)]
-#[command(name = "yaoxiang")]
+#[command(name = "yaoxiang-rs")]
 #[command(author = "YaoXiang Team")]
 #[command(version = VERSION)]
 #[command(about = NAME, long_about = None)]
@@ -300,6 +300,13 @@ enum Commands {
 
     /// List all dependencies
     List,
+
+    /// Generate standard library interface files (RFC-037)
+    GenStd {
+        /// Output directory (default: <project>/.yaoxiang/vendor/std)
+        #[arg(long, value_name = "DIR")]
+        out_dir: Option<PathBuf>,
+    },
 
     /// Start the Language Server Protocol (LSP) server
     Lsp {
@@ -600,6 +607,10 @@ fn main() -> Result<()> {
         }
         Commands::List => {
             package::commands::list::exec().context("Failed to list dependencies")?;
+        }
+        Commands::GenStd { out_dir } => {
+            package::commands::gen_std::exec(out_dir)
+                .context("Failed to generate std interface files")?;
         }
         Commands::Lsp { .. } => {
             // LSP 服务器使用 stderr 记录日志（stdout 用于 JSON-RPC 通信）

@@ -38,7 +38,14 @@ pub fn handle_initialize(
 
     // initialize 时主动清理一次运行时缓存，避免异常重连时残留旧状态。
     session.document_store_mut().clear();
-    world.reset_for_new_session();
+    // RFC-037：项目根进 std 接口查找链（此前 LSP 只查全局回退槽）。
+    // root_path 可能是 file URI（root_uri）或纯路径（root_path），两者都接。
+    let project_dir = root_path
+        .as_deref()
+        .and_then(crate::lsp::handlers::diagnostics::uri_to_path)
+        .or_else(|| root_path.as_ref().map(std::path::PathBuf::from))
+        .filter(|p| p.is_dir());
+    world.reset_for_new_session(project_dir.as_deref());
 
     session.set_root_path(root_path.clone());
     session.set_state(SessionState::Initializing);

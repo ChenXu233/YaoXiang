@@ -1,6 +1,7 @@
 //! Package commands 测试模块
 
 mod add;
+mod gen_std;
 mod init;
 mod install;
 mod list;

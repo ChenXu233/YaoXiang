@@ -69,42 +69,74 @@ pub fn generate_all_interfaces() -> Vec<(String, String)> {
         .collect()
 }
 
-/// 将接口文件写入指定目录
+/// 将接口文件写入指定目录，返回写入的文件数
 ///
-/// `target_dir` 是接口文件的输出目录（如 `~/.yaoxiang/std/`）
-pub fn write_interfaces_to_dir(target_dir: &std::path::Path) -> std::io::Result<()> {
+/// `target_dir` 是接口文件的输出目录（如发行包 `lib/yaoxiang/std/`）
+pub fn write_interfaces_to_dir(target_dir: &std::path::Path) -> std::io::Result<usize> {
     std::fs::create_dir_all(target_dir)?;
 
-    for (name, content) in generate_all_interfaces() {
+    let interfaces = generate_all_interfaces();
+    let count = interfaces.len();
+    for (name, content) in interfaces {
         let file_path = target_dir.join(format!("{}.yx", name));
         std::fs::write(&file_path, content)?;
     }
 
-    Ok(())
+    Ok(count)
 }
 
-/// 获取标准库接口文件的默认安装目录
+/// 获取 YaoXiang 安装根（RFC-037）
 ///
-/// 查找顺序：
-/// 1. 项目目录/.yaoxiang/vendor/std/（项目本地）
-/// 2. ~/.yaoxiang/std/（全局）
-pub fn default_std_interface_dir() -> Option<std::path::PathBuf> {
-    // 跨平台获取 home 目录
+/// `YAOXIANG_HOME` 环境变量优先（服务 CI 与容器场景），缺省 `~/.yaoxiang`
+/// （Windows 为 `%USERPROFILE%\.yaoxiang`）。与 yx 前门共用同一约定。
+fn yaoxiang_home() -> Option<std::path::PathBuf> {
+    if let Ok(home) = std::env::var("YAOXIANG_HOME") {
+        if !home.is_empty() {
+            return Some(std::path::PathBuf::from(home));
+        }
+    }
+
     #[cfg(target_os = "windows")]
     let home = std::env::var("USERPROFILE").ok();
     #[cfg(not(target_os = "windows"))]
     let home = std::env::var("HOME").ok();
 
-    home.map(|h| std::path::PathBuf::from(h).join(".yaoxiang").join("std"))
+    home.map(|h| std::path::PathBuf::from(h).join(".yaoxiang"))
+}
+
+/// 全局标准库接口目录（`<YAOXIANG_HOME>/std/`，缺省 `~/.yaoxiang/std/`），
+/// 保留为手工覆盖位
+pub fn default_std_interface_dir() -> Option<std::path::PathBuf> {
+    yaoxiang_home().map(|home| home.join("std"))
 }
 
 /// 查找标准库接口文件
 ///
-/// 按优先级查找：
-/// 1. 项目目录/.yaoxiang/vendor/std/`<name>`.yx
-/// 2. ~/.yaoxiang/std/`<name>`.yx
+/// 按优先级查找（RFC-037 三级链）：
+/// 1. 项目目录/.yaoxiang/vendor/std/`<name>`.yx（项目覆盖）
+/// 2. exe 相对 ../lib/yaoxiang/std/`<name>`.yx（发行包内置；便携解压、
+///    `~/.yaoxiang/versions/<ver>/`、deb 平装三种渠道同构命中）
+/// 3. `~/.yaoxiang/std/`<name>`.yx（全局回退）
 pub fn find_std_interface_file(
     project_dir: Option<&std::path::Path>,
+    module_name: &str,
+) -> Option<std::path::PathBuf> {
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|d| d.to_path_buf()));
+    find_std_interface_file_in(
+        project_dir,
+        exe_dir.as_deref(),
+        default_std_interface_dir().as_deref(),
+        module_name,
+    )
+}
+
+/// `find_std_interface_file` 的纯函数形态（exe 目录与全局目录均可注入，供测试）
+fn find_std_interface_file_in(
+    project_dir: Option<&std::path::Path>,
+    exe_dir: Option<&std::path::Path>,
+    global_dir: Option<&std::path::Path>,
     module_name: &str,
 ) -> Option<std::path::PathBuf> {
     let file_name = format!("{}.yx", module_name);
@@ -121,13 +153,30 @@ pub fn find_std_interface_file(
         }
     }
 
-    // 2. 全局回退
-    if let Some(global_dir) = default_std_interface_dir() {
-        let global = global_dir.join(&file_name);
-        if global.exists() {
-            return Some(global);
+    // 2. 发行包 exe 相对：引擎在 bin/，std 在 ../lib/yaoxiang/std/
+    if let Some(bin_dir) = exe_dir {
+        if let Some(pkg_root) = bin_dir.parent() {
+            let bundled = pkg_root
+                .join("lib")
+                .join("yaoxiang")
+                .join("std")
+                .join(&file_name);
+            if bundled.exists() {
+                return Some(bundled);
+            }
+        }
+    }
+
+    // 3. 全局回退
+    if let Some(global) = global_dir {
+        let fallback = global.join(&file_name);
+        if fallback.exists() {
+            return Some(fallback);
         }
     }
 
     None
 }
+
+#[cfg(test)]
+mod tests;

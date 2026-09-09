@@ -32,11 +32,15 @@ impl World {
     ///
     /// 清空语义数据库和语义 tokens 缓存，
     /// 然后重新加载标准库符号和内置类型。
-    pub fn reset_for_new_session(&mut self) {
+    /// `project_dir` 传入工作区根，std 接口查找链第一级（项目覆盖）才生效（RFC-037）。
+    pub fn reset_for_new_session(
+        &mut self,
+        project_dir: Option<&std::path::Path>,
+    ) {
         self.semantic_db = SemanticDB::default();
         self.semantic_tokens_cache = SemanticTokensCache::new();
 
-        self.load_std_symbols_to_semantic_db();
+        self.load_std_symbols_to_semantic_db(project_dir);
         self.load_builtin_types_to_semantic_db();
     }
 
@@ -82,7 +86,11 @@ impl World {
     ///
     /// 从 ModuleRegistry 获取所有标准库模块的导出，
     /// 将其作为虚拟符号添加到语义数据库中。
-    pub fn load_std_symbols_to_semantic_db(&mut self) {
+    /// `project_dir` 为工作区根（None 时跳过查找链第一级）。
+    pub fn load_std_symbols_to_semantic_db(
+        &mut self,
+        project_dir: Option<&std::path::Path>,
+    ) {
         use crate::util::span::Position;
 
         let dummy_span = Span {
@@ -106,7 +114,7 @@ impl World {
 
             // 尝试查找接口文件
             let interface_file =
-                crate::std::gen_interfaces::find_std_interface_file(None, module_name);
+                crate::std::gen_interfaces::find_std_interface_file(project_dir, module_name);
 
             let virtual_file_path = if let Some(ref path) = interface_file {
                 format!("file:///{}", path.to_string_lossy().replace('\\', "/"))

@@ -87,7 +87,7 @@ fn main() {
     let local = find_local_z3(&z3_root);
     if let Some(ref dir) = local {
         link_z3(dir);
-        copy_dll(dir);
+        copy_shared_lib(dir);
         return;
     }
 
@@ -139,7 +139,7 @@ fn main() {
     }
 
     link_z3(&z3_dir);
-    copy_dll(&z3_dir);
+    copy_shared_lib(&z3_dir);
 }
 
 fn link_z3(z3_dir: &Path) {
@@ -152,10 +152,19 @@ fn link_z3(z3_dir: &Path) {
 
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
 
+    // RFC-037：全平台动态链接。共享库随发行包 bin/ 分发，用户可整体替换升级 Z3。
     if target_os == "windows" {
+        // MSVC import lib 命名为 libz3.lib
         println!("cargo:rustc-link-lib=libz3");
     } else {
-        println!("cargo:rustc-link-lib=static=z3");
+        println!("cargo:rustc-link-lib=z3");
+        // 动态链接器默认不搜二进制所在目录，必须注入 rpath，“解压即用”才成立
+        // （发行包内 exe 与 libz3 同在 bin/；Windows 默认搜 exe 目录，无需处理）
+        match target_os.as_str() {
+            "linux" => println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN"),
+            "macos" => println!("cargo:rustc-link-arg=-Wl,-rpath,@loader_path"),
+            _ => {}
+        }
         let cxx = if target_os == "macos" {
             "c++".to_string()
         } else {
@@ -165,15 +174,25 @@ fn link_z3(z3_dir: &Path) {
     }
 }
 
-fn copy_dll(z3_dir: &Path) {
+/// 把 Z3 共享库复制进 target profile 目录，本地 cargo run/测试才能加载
+/// （发版产物由 package-dist.sh 随包分发，不经过这里）
+fn copy_shared_lib(z3_dir: &Path) {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
-    if target_os != "windows" {
-        return;
-    }
-    let dll = z3_dir.join("bin").join("libz3.dll");
-    if !dll.exists() {
-        return;
-    }
+    let name = match target_os.as_str() {
+        "windows" => "libz3.dll",
+        "macos" => "libz3.dylib",
+        "linux" => "libz3.so",
+        _ => return,
+    };
+    // Z3 官方发行包布局不统一：Windows 在 bin/，Linux 在 bin/，macOS 两者皆可能
+    let src = ["lib", "bin"]
+        .iter()
+        .map(|s| z3_dir.join(s).join(name))
+        .find(|p| p.exists());
+    let src = match src {
+        Some(p) => p,
+        None => return,
+    };
     let out = env::var("OUT_DIR").unwrap();
     let profile = Path::new(&out)
         .parent()
@@ -184,8 +203,8 @@ fn copy_dll(z3_dir: &Path) {
         .unwrap();
     let deps = profile.join("deps");
     let _ = fs::create_dir_all(&deps);
-    let _ = fs::copy(&dll, profile.join("libz3.dll"));
-    let _ = fs::copy(&dll, deps.join("libz3.dll"));
+    let _ = fs::copy(&src, profile.join(name));
+    let _ = fs::copy(&src, deps.join(name));
 }
 
 fn find_local_z3(z3_root: &Path) -> Option<std::path::PathBuf> {

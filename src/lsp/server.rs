@@ -50,7 +50,9 @@ pub fn run_lsp_server() -> Result<()> {
     let mut world = World::new();
 
     // 加载标准库符号到语义数据库
-    world.load_std_symbols_to_semantic_db();
+    // initialize 前尚无工作区根，先只挂全局回退；handle_initialize 里
+    // reset_for_new_session 会带项目根重载一遍（RFC-037 查找链）
+    world.load_std_symbols_to_semantic_db(None);
     // 加载内置类型到语义数据库
     world.load_builtin_types_to_semantic_db();
 
