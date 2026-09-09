@@ -18,7 +18,7 @@ use tempfile::TempDir;
 
 /// 编译产物路径（cargo 在测试构建时注入）
 fn yx_bin() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_yaoxiang"))
+    PathBuf::from(env!("CARGO_BIN_EXE_yaoxiang-rs"))
 }
 
 /// 在临时目录写文件（自动创建父目录）

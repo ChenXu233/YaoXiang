@@ -72,36 +72,36 @@ fn collect_yx_files(
     }
 }
 
-/// Locate the `yaoxiang` binary.
+/// Locate the `yaoxiang-rs` binary.
 ///
 /// Priority:
-/// 1. `CARGO_BIN_EXE_yaoxiang` (set by `cargo test`)
+/// 1. `CARGO_BIN_EXE_yaoxiang-rs` (set by `cargo test`)
 /// 2. Build once with `cargo build` and use the output path
 fn binary_name() -> String {
     // When running via `cargo test`, the binary should be discoverable
-    // via CARGO_BIN_EXE_yaoxiang (set by cargo test --test).
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_yaoxiang") {
+    // via CARGO_BIN_EXE_yaoxiang-rs (set by cargo test --test).
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_yaoxiang-rs") {
         return path;
     }
     // Build once and use the binary directly
     let build_output = Command::new("cargo")
-        .args(["build", "--bin", "yaoxiang"])
+        .args(["build", "--bin", "yaoxiang-rs"])
         .output()
-        .expect("Failed to build yaoxiang binary");
+        .expect("Failed to build yaoxiang-rs binary");
     if !build_output.status.success() {
         panic!(
-            "Failed to build yaoxiang:\n{}",
+            "Failed to build yaoxiang-rs:\n{}",
             String::from_utf8_lossy(&build_output.stderr)
         );
     }
-    // cargo build puts the binary in target/debug/yaoxiang
+    // cargo build puts the binary in target/debug/yaoxiang-rs
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let ext = if cfg!(target_os = "windows") {
         ".exe"
     } else {
         ""
     };
-    let path = format!("{manifest_dir}/target/debug/yaoxiang{ext}");
+    let path = format!("{manifest_dir}/target/debug/yaoxiang-rs{ext}");
     // Verify it exists
     assert!(
         std::path::Path::new(&path).exists(),

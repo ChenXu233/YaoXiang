@@ -1,0 +1,29 @@
+[package]
+name = "yx"
+version.workspace = true
+edition = "2021"
+rust-version = "1.96"
+description = "YaoXiang toolchain front door: version management + engine dispatch (RFC-037)"
+license = "MIT"
+authors = ["YaoXiang Team", "ChenXu233 <Woyerpa@outlook.com>"]
+repository = "https://github.com/ChenXu233/yaoxiang"
+
+[[bin]]
+name = "yx"
+path = "src/main.rs"
+
+[dependencies]
+# RFC-037 前门保持轻量：无 tokio/无 clap——动词面极小（toolchain/self），
+# 其余动词必须逐字透传给引擎，手写分发比 clap 的 external_subcommand 更保真
+serde = { version = "1", features = ["derive"] }
+toml = "1.1.2"
+ureq = { version = "2.10", default-features = false, features = ["tls"] }
+serde_json = "1"
+flate2 = "1"
+tar = "0.4"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+sha2 = "0.10"
+thiserror = "2.0.18"
+
+[dev-dependencies]
+tempfile = "3.27.0"

@@ -1,6 +1,6 @@
 //! CLI 子命令端到端测试（子进程级）
 //!
-//! 通过 `CARGO_BIN_EXE_yaoxiang` 调用编译出来的二进制，
+//! 通过 `CARGO_BIN_EXE_yaoxiang-rs` 调用编译出来的二进制，
 //! 验证用户真实路径：命令行参数解析、退出码、stdout/stderr。
 //!
 //! 规范来源：
@@ -19,7 +19,7 @@ use tempfile::TempDir;
 
 /// 编译产物路径（cargo 在测试构建时注入）
 fn yx_bin() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_yaoxiang"))
+    PathBuf::from(env!("CARGO_BIN_EXE_yaoxiang-rs"))
 }
 
 /// 在临时目录写一个 .yx 源文件

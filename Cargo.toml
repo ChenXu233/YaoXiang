@@ -1,11 +1,15 @@
 [workspace]
-members = ["benches/shootout/runner"]
+members = ["benches/shootout/runner", "tools/yx"]
 exclude = ["wasm", "tools/setup-z3", "tools/code-tables"]
 resolver = "2"
 
+# RFC-037：工具链单一版本源（引擎 yaoxiang-rs 与前门 yx 同版本发布）
+[workspace.package]
+version = "0.7.14"
+
 [package]
 name = "yaoxiang"
-version = "0.7.14"
+version.workspace = true
 edition = "2021"
 rust-version = "1.96"
 description = "YaoXiang (爻象) Programming Language - A high-performance language with type-as-everything philosophy"
@@ -27,7 +31,7 @@ path = "src/lib.rs"
 crate-type = ["rlib"]
 
 [[bin]]
-name = "yaoxiang"
+name = "yaoxiang-rs"
 path = "src/main.rs"
 
 [dev-dependencies]
@@ -92,6 +96,11 @@ debug = true
 
 [profile.bench]
 debug = true
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
 
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"
