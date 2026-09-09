@@ -5,7 +5,7 @@
 #
 # 输入：
 #   target/<triple>/dist/{yaoxiang-rs,yx}[.exe]   dist build 的构建输出（profile=dist）
-#   .z3/z3-<ver>-<tag>/{lib,bin}/libz3.*          build.rs 按需下载的 Z3（同一次构建已就位）
+#   target/<triple>/dist/libz3.*                  build.rs 链接时复制进来的共享库（单一源）
 #   src/std/*.yx                                   std .yx 层真实源码
 # 输出：
 #   target/distrib/yaoxiang-<version>-<triple>.{tar.gz|zip} + .sha256
@@ -17,7 +17,6 @@ set -euo pipefail
 
 VERSION="$1"
 TARGET="$2"
-Z3_VERSION="4.16.0"
 
 EXE_SUFFIX=""
 case "$TARGET" in
@@ -37,26 +36,15 @@ cp "$BIN_SRC/yaoxiang-rs$EXE_SUFFIX" "$STAGE/bin/"
 cp "$BIN_SRC/yx$EXE_SUFFIX"          "$STAGE/bin/"
 
 # ── Z3 共享库 ────────────────────────────────────────────────────
-# 目录命名与 build.rs::detect_target() 的 Z3 发行包命名一致（两处维护，
-# RFC-037 已登记此债；改动任一侧必须同步另一侧）
-case "$TARGET" in
-  x86_64-pc-windows-msvc)   Z3_TAG="x64-win";         Z3_LIB="libz3.dll"   ;;
-  x86_64-unknown-linux-gnu) Z3_TAG="x64-glibc-2.39";  Z3_LIB="libz3.so"    ;;
-  aarch64-unknown-linux-gnu) Z3_TAG="arm64-glibc-2.38"; Z3_LIB="libz3.so"   ;;
-  x86_64-apple-darwin)      Z3_TAG="x64-osx-15.7.3";  Z3_LIB="libz3.dylib" ;;
-  aarch64-apple-darwin)     Z3_TAG="arm64-osx-15.7.3"; Z3_LIB="libz3.dylib" ;;
-  *) echo "unknown target: $TARGET" >&2; exit 1 ;;
-esac
-Z3_DIR=".z3/z3-$Z3_VERSION-$Z3_TAG"
-Z3_SRC=""
-for d in "$Z3_DIR/lib" "$Z3_DIR/bin"; do
-  if [ -f "$d/$Z3_LIB" ]; then Z3_SRC="$d/$Z3_LIB"; break; fi
-done
-if [ -z "$Z3_SRC" ]; then
-  echo "Z3 shared lib not found in $Z3_DIR (run the build first)" >&2
+# 单一源：build.rs 链接时已选好对应平台的共享库并复制进构建输出目录
+# （copy_shared_lib → target/<triple>/<profile>/），这里直接取用——
+# 打包脚本不需要知道 Z3 版本与平台目录命名。系统 Z3 路径同样经
+# copy_shared_lib 落盘；缺文件说明该构建没有动态链 Z3，打包应失败。
+if ! ls "$BIN_SRC"/libz3.* >/dev/null 2>&1; then
+  echo "libz3 shared lib not found in $BIN_SRC (dynamic Z3 must be linked by build.rs)" >&2
   exit 1
 fi
-cp "$Z3_SRC" "$STAGE/bin/"
+cp "$BIN_SRC"/libz3.* "$STAGE/bin/"
 
 # ── 标准库目录 ───────────────────────────────────────────────────
 # 全部为仓库静态复制，无运行时生成（RFC-037：gen-std 子命令已取消）：

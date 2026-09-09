@@ -74,7 +74,9 @@ fn main() {
     // 1. 尝试系统安装的 Z3（Z3_SYS_Z3_HEADER 环境变量）
     if let Ok(header) = env::var("Z3_SYS_Z3_HEADER") {
         if Path::new(&header).exists() {
-            link_z3(Path::new(&header).parent().unwrap().parent().unwrap());
+            let dir = Path::new(&header).parent().unwrap().parent().unwrap();
+            link_z3(dir);
+            copy_shared_lib(dir);
             return;
         }
     }

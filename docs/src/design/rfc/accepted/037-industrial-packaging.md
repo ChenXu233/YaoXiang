@@ -346,7 +346,7 @@ allow-dirty = ["ci"]
 以仓库 `scripts/release/package-dist.sh` 为准，要点：
 
 - 双二进制直接取自 `cargo dist build` 的构建输出目录 `target/<triple>/dist/`（profile=dist）——cargo-dist 自产的扁平单二进制归档不是交付物，同名重组包在 `target/distrib/` 直接覆盖
-- Z3 共享库从 `.z3/z3-<ver>-<tag>/`（lib → bin 双目录探测）复制进 `bin/`；`<tag>` 映射对齐 `build.rs::detect_target()` 的发行包命名（两处维护，见风险）
+- Z3 共享库同样取自构建输出目录——build.rs 链接时已选好对应平台共享库并复制落盘（`copy_shared_lib`），**单一源**：打包脚本不知道也不需要知道 Z3 版本与平台目录命名
 - std 目录纯复制：`src/std/interfaces/*.yx`（预生成接口视图）+ `src/std/*.yx`（.yx 层真实源码）
 - 附 README/LICENSE；重打包（Windows zip / 其余 tar.gz；Git Bash 无 zip 时 zip → System32 bsdtar → PowerShell 三级回退）并重算 `.sha256`
 - Linux 且 `dpkg-deb` 可用时顺带调 `build-deb.sh` 产出 `.deb`（`/usr/lib/yaoxiang` 平装树 + `/usr/bin/yx` 符号链接）
@@ -405,7 +405,6 @@ allow-dirty = ["ci"]
 - **学习成本** — 团队需要学习 cargo-dist 配置
 - **cargo-dist 上游风险** — 2025 年中曾随 Axo 停摆，同年 9 月原作者复活并持续发版（0.29 → 0.32+）；以 `dist-version` 锁定 + 生成物 vendor 进仓库 review 缓解
 - **cargo-dist 无原生 nightly** — nightly 发布部分仍需手写
-- **Z3 目录命名两处维护** — `package-dist.sh` 与 `build.rs::detect_target()` 需保持同步（应收敛为单源）
 
 ### 与 RFC-014b 的关系
 
