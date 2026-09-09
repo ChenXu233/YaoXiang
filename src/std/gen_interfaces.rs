@@ -133,7 +133,7 @@ pub fn find_std_interface_file(
 }
 
 /// `find_std_interface_file` 的纯函数形态（exe 目录与全局目录均可注入，供测试）
-fn find_std_interface_file_in(
+pub(crate) fn find_std_interface_file_in(
     project_dir: Option<&std::path::Path>,
     exe_dir: Option<&std::path::Path>,
     global_dir: Option<&std::path::Path>,
@@ -177,6 +177,3 @@ fn find_std_interface_file_in(
 
     None
 }
-
-#[cfg(test)]
-mod tests;

@@ -68,6 +68,3 @@ pub fn engine_file_name() -> String {
 pub fn yx_file_name() -> String {
     yx_file_name_for(std::env::consts::OS).to_string()
 }
-
-#[cfg(test)]
-mod tests;

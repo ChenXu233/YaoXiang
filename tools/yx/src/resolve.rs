@@ -74,6 +74,3 @@ pub fn resolve_in(
 
     Err(Error::NoToolchain)
 }
-
-#[cfg(test)]
-mod tests;

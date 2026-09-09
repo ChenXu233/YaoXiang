@@ -154,7 +154,7 @@ fn unpack_zip(
 }
 
 /// 剥掉首个路径组件后接到 `dest`（顶层目录 = 发行包名）
-fn strip_first(
+pub(crate) fn strip_first(
     path: &Path,
     dest: &Path,
 ) -> Option<std::path::PathBuf> {
@@ -164,6 +164,3 @@ fn strip_first(
         .filter(|rest| !rest.as_os_str().is_empty())
         .map(|rest| dest.join(rest))
 }
-
-#[cfg(test)]
-mod tests;

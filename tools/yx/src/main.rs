@@ -21,6 +21,9 @@ mod self_update;
 mod settings;
 mod toolchain;
 
+#[cfg(test)]
+mod tests;
+
 use error::Result;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

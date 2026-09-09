@@ -40,6 +40,3 @@ pub fn normalize_version(input: &str) -> String {
         .unwrap_or(input.trim())
         .to_string()
 }
-
-#[cfg(test)]
-mod tests;

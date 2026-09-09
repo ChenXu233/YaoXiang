@@ -81,7 +81,7 @@ pub(crate) fn latest_stable_version(mirror: Option<&str>) -> Result<String> {
 
 /// 从 releases/latest 的重定向落地 URL 提取版本
 /// （`…/releases/tag/v0.8.0` → `0.8.0`；无 tag 形态返回 None）
-fn parse_tag_from_release_url(url: &str) -> Option<String> {
+pub(crate) fn parse_tag_from_release_url(url: &str) -> Option<String> {
     const MARKER: &str = "/releases/tag/";
     let idx = url.find(MARKER)? + MARKER.len();
     let rest = url[idx..].split(['?', '#']).next()?;
@@ -206,7 +206,7 @@ fn list() -> Result<()> {
 }
 
 /// 卸载前置检查：默认版本与项目 pin 都不允许直接卸载（抽纯函数供测试）
-fn check_uninstall_allowed(
+pub(crate) fn check_uninstall_allowed(
     version: &str,
     default: Option<&str>,
     pinned: Option<&str>,
@@ -248,6 +248,3 @@ fn update() -> Result<()> {
     install(&version)?;
     default(&version)
 }
-
-#[cfg(test)]
-mod tests;
