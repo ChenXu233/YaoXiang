@@ -27,6 +27,11 @@ on:
     tags:
       - '**[0-9]+.[0-9]+.[0-9]+*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v0.7.14); must already exist'
+        required: true
+        type: string
 
 jobs:
   # ── dist plan：计算构建矩阵（target/runner/系统依赖） ──────────
@@ -40,6 +45,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          # 手动触发时按输入 tag 检出，保证构建内容与 tag 一致
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
           persist-credentials: false
           submodules: recursive
       - name: Install dist
@@ -47,7 +54,7 @@ jobs:
         run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.32.0/cargo-dist-installer.sh | sh"
       - id: tag
         run: |
-          TAG="${GITHUB_REF_NAME#refs/tags/}"
+          TAG="${{ inputs.tag || github.ref_name }}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
       - id: plan
@@ -84,6 +91,7 @@ jobs:
           git config --global core.longpaths true
       - uses: actions/checkout@v7
         with:
+          ref: ${{ needs.plan.outputs.tag }}
           persist-credentials: false
           submodules: recursive
       - name: Install Rust non-interactively if not already installed
@@ -142,6 +150,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan.outputs.tag }}
       - name: Fetch restructured windows package
         uses: actions/download-artifact@v8
         with:
