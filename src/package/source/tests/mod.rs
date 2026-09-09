@@ -2,5 +2,4 @@
 
 mod conflict;
 mod git;
-mod module_resolver;
 mod resolver;
