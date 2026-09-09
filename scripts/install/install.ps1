@@ -27,6 +27,24 @@ $Tmp = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString())
 New-Item -ItemType Directory -Force -Path $Tmp | Out-Null
 Write-Host "yx: downloading $Url"
 Invoke-WebRequest -Uri $Url -OutFile (Join-Path $Tmp $Asset)
+
+# 校验 .sha256 旁证（缺失时降级为提示，与 yx 行为一致）
+$ShaExpected = $null
+try {
+    $ShaExpected = (Invoke-WebRequest -Uri "$Url.sha256" -UseBasicParsing).Content.Trim().Split()[0]
+}
+catch {
+    Write-Host "yx: warning: .sha256 not available, skipping verification"
+}
+if ($ShaExpected) {
+    Write-Host "yx: verifying checksum"
+    $ShaActual = (Get-FileHash -Path (Join-Path $Tmp $Asset) -Algorithm SHA256).Hash.ToLower()
+    if ($ShaExpected -ne $ShaActual) {
+        Write-Host "yx: checksum mismatch" -ForegroundColor Red
+        exit 1
+    }
+}
+
 Expand-Archive -Path (Join-Path $Tmp $Asset) -DestinationPath (Join-Path $Tmp "out")
 
 # 就位：版本目录 = 发行包解压根；bin\yx.exe 入口

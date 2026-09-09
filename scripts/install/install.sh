@@ -39,6 +39,24 @@ trap 'rm -rf "$TMP"' EXIT
 
 echo "yx: downloading $URL"
 curl -fL "$URL" -o "$TMP/$ASSET"
+
+# 校验 .sha256 旁证（缺失时降级为提示，与 yx 行为一致）
+if curl -fsL "$URL.sha256" -o "$TMP/$ASSET.sha256"; then
+  echo "yx: verifying checksum"
+  EXPECTED="$(awk '{print $1}' "$TMP/$ASSET.sha256")"
+  if command -v sha256sum >/dev/null 2>&1; then
+    ACTUAL="$(sha256sum "$TMP/$ASSET" | awk '{print $1}')"
+  else
+    ACTUAL="$(shasum -a 256 "$TMP/$ASSET" | awk '{print $1}')"
+  fi
+  if [ "$ACTUAL" != "$EXPECTED" ]; then
+    echo "yx: checksum mismatch" >&2
+    exit 1
+  fi
+else
+  echo "yx: warning: .sha256 not available, skipping verification"
+fi
+
 mkdir -p "$TMP/out"
 tar xzf "$TMP/$ASSET" -C "$TMP/out"
 

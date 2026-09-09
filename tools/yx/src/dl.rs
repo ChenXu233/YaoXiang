@@ -42,6 +42,15 @@ pub fn get_text(url: &str) -> Result<String> {
     Ok(agent.get(url).call()?.into_string()?)
 }
 
+/// GET 只为拿最终落地 URL（releases/latest 页面会 302 到 /releases/tag/v<ver>），
+/// 借此在 API 不可达时探测最新版本；不读 body
+pub fn get_redirect_target(url: &str) -> Result<String> {
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(std::time::Duration::from_secs(30))
+        .build();
+    Ok(agent.get(url).call()?.get_url().to_string())
+}
+
 /// 文件的 SHA-256（与 package-dist.sh 产出的 .sha256 比对）
 pub fn file_sha256(path: &Path) -> Result<String> {
     use sha2::Digest;

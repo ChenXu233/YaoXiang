@@ -4,7 +4,7 @@ use crate::dl;
 use crate::error::{Error, Result};
 use crate::{home, pin, platform, settings};
 
-const GITHUB_REPO: &str = "ChenXu233/YaoXiang";
+pub(crate) const GITHUB_REPO: &str = "ChenXu233/YaoXiang";
 
 /// 入口：`yx toolchain <action> [args]`
 pub fn run(args: &[String]) -> Result<()> {
@@ -48,18 +48,44 @@ fn release_urls(
     )
 }
 
-/// 最新 stable 版本号（GitHub Releases API，剥 `v` 前缀）
-fn latest_stable_version(mirror: Option<&str>) -> Result<String> {
+/// 最新 stable 版本号（剥 `v` 前缀）。
+///
+/// 主路径走 GitHub Releases API（镜像同样前缀拼接）；API 限流或不可达时
+/// 回退到 releases/latest 页面的重定向落地 URL 提取 tag——无需 API 权限，
+/// 不受限流影响。
+pub(crate) fn latest_stable_version(mirror: Option<&str>) -> Result<String> {
     let api = settings::download_url(
         mirror,
         &format!("https://api.github.com/repos/{GITHUB_REPO}/releases/latest"),
     );
-    let json: serde_json::Value = serde_json::from_str(&dl::get_text(&api)?)?;
-    let tag = json
-        .get("tag_name")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| Error::Message("GitHub API response missing tag_name".into()))?;
-    Ok(pin::normalize_version(tag))
+    if let Ok(text) = dl::get_text(&api) {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+            if let Some(tag) = json.get("tag_name").and_then(|v| v.as_str()) {
+                return Ok(pin::normalize_version(tag));
+            }
+        }
+    }
+
+    let page = settings::download_url(
+        mirror,
+        &format!("https://github.com/{GITHUB_REPO}/releases/latest"),
+    );
+    let landing = dl::get_redirect_target(&page)?;
+    parse_tag_from_release_url(&landing).ok_or_else(|| {
+        Error::Message(format!(
+            "cannot determine latest version: API failed and release page URL \
+             does not carry a tag: {landing}"
+        ))
+    })
+}
+
+/// 从 releases/latest 的重定向落地 URL 提取版本
+/// （`…/releases/tag/v0.8.0` → `0.8.0`；无 tag 形态返回 None）
+fn parse_tag_from_release_url(url: &str) -> Option<String> {
+    const MARKER: &str = "/releases/tag/";
+    let idx = url.find(MARKER)? + MARKER.len();
+    let rest = url[idx..].split(['?', '#']).next()?;
+    Some(pin::normalize_version(rest))
 }
 
 /// 安装一个版本：下载 → 校验 → 解包进 versions/<ver>/
@@ -179,6 +205,25 @@ fn list() -> Result<()> {
     Ok(())
 }
 
+/// 卸载前置检查：默认版本与项目 pin 都不允许直接卸载（抽纯函数供测试）
+fn check_uninstall_allowed(
+    version: &str,
+    default: Option<&str>,
+    pinned: Option<&str>,
+) -> Result<()> {
+    if default == Some(version) {
+        return Err(Error::IsDefault {
+            version: version.to_string(),
+        });
+    }
+    if pinned == Some(version) {
+        return Err(Error::Message(format!(
+            "toolchain {version} is pinned by yx-toolchain.toml; remove the pin first"
+        )));
+    }
+    Ok(())
+}
+
 /// 卸载版本（默认版本须先切换，防止把正在用的引擎删掉）
 fn uninstall(version_input: &str) -> Result<()> {
     let version = pin::normalize_version(version_input);
@@ -188,9 +233,9 @@ fn uninstall(version_input: &str) -> Result<()> {
         return Err(Error::NotInstalled { version });
     }
     let current_default = settings::Settings::load(&home)?.default;
-    if current_default.as_deref() == Some(version.as_str()) {
-        return Err(Error::IsDefault { version });
-    }
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let pinned = pin::find_pin_from(&cwd);
+    check_uninstall_allowed(&version, current_default.as_deref(), pinned.as_deref())?;
     std::fs::remove_dir_all(&dir)?;
     println!("yx: uninstalled {version}");
     Ok(())
@@ -203,3 +248,6 @@ fn update() -> Result<()> {
     install(&version)?;
     default(&version)
 }
+
+#[cfg(test)]
+mod tests;

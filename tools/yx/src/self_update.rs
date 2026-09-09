@@ -1,27 +1,19 @@
 //! `yx self update`：替换前门本体为最新 stable 包内的 yx
 
 use crate::error::{Error, Result};
-use crate::{dl, home, pin, platform, settings};
-
-const GITHUB_REPO: &str = "ChenXu233/YaoXiang";
+use crate::{dl, home, platform, settings, toolchain};
 
 pub fn run() -> Result<()> {
     let mirror = settings::Settings::load(&home::yaoxiang_home()?)?.mirror;
-    let api = settings::download_url(
-        mirror.as_deref(),
-        &format!("https://api.github.com/repos/{GITHUB_REPO}/releases/latest"),
-    );
-    let json: serde_json::Value = serde_json::from_str(&dl::get_text(&api)?)?;
-    let version = pin::normalize_version(
-        json.get("tag_name")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::Message("GitHub API response missing tag_name".into()))?,
-    );
+    let version = toolchain::latest_stable_version(mirror.as_deref())?;
 
     let os = std::env::consts::OS;
     let target = platform::triple()?;
     let asset = platform::asset_name(&version, target, os);
-    let base = format!("https://github.com/{GITHUB_REPO}/releases/download/v{version}");
+    let base = format!(
+        "https://github.com/{}/releases/download/v{version}",
+        toolchain::GITHUB_REPO
+    );
     let url = settings::download_url(mirror.as_deref(), &format!("{base}/{asset}"));
 
     println!("yx: downloading {asset}");
