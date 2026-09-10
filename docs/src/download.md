@@ -23,31 +23,42 @@ download:
   github_actions: '前往 GitHub Actions'
 
 versions:
-  - version: 0.1.0
+  - version: 0.7.14
     latest: true
-    install_command: 'curl -fsSL https://yaoxiang.org/install.sh | sh'
+    # 一行命令安装（RFC-037 傻瓜渠道）；0.8.0 起随重组包格式生效
+    install_command: 'curl -fsSL https://raw.githubusercontent.com/ChenXu233/YaoXiang/main/scripts/install/install.sh | sh'
     downloads:
       - os: Windows
         arch: x64
-        features: ['MSI Installer', 'Portable Zip']
+        features: ['命令行二进制（旧格式，不含 libz3）', '免安装']
         links:
-          - name: 'Installer (.msi)'
-            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.1.0/yaoxiang-v0.1.0-x86_64-pc-windows-msvc.msi'
-          - name: 'Portable (.zip)'
-            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.1.0/yaoxiang-v0.1.0-x86_64-pc-windows-msvc.zip'
+          - name: 'Windows x64 (.exe)'
+            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.7.14/yaoxiang-x86_64-pc-windows-gnu.exe'
+      - os: Windows
+        arch: ARM64
+        features: ['命令行二进制（旧格式，不含 libz3）', '免安装']
+        links:
+          - name: 'Windows ARM64 (.exe)'
+            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.7.14/yaoxiang-aarch64-pc-windows-gnullvm.exe'
       - os: Linux
-        arch: x64 / ARM64
-        features: ['Static Binary', '.tar.gz']
+        arch: x64
+        features: ['命令行二进制（旧格式，静态链接 Z3）', '免安装']
         links:
-          - name: 'Linux x64 (.tar.gz)'
-            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.1.0/yaoxiang-v0.1.0-x86_64-unknown-linux-musl.tar.gz'
-          - name: 'Linux ARM64 (.tar.gz)'
-            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.1.0/yaoxiang-v0.1.0-aarch64-unknown-linux-musl.tar.gz'
+          - name: 'Linux x64'
+            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.7.14/yaoxiang-x86_64-unknown-linux-gnu'
+      - os: Linux
+        arch: ARM64
+        features: ['命令行二进制（旧格式，静态链接 Z3）', '免安装']
+        links:
+          - name: 'Linux ARM64'
+            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.7.14/yaoxiang-aarch64-unknown-linux-gnu'
       - os: macOS
-        arch: Apple Silicon / Intel
-        features: ['Universal Binary']
+        arch: Intel / Apple Silicon
+        features: ['命令行二进制（旧格式，静态链接 Z3）', '免安装']
         links:
-          - name: 'Universal (.tar.gz)'
-            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.1.0/yaoxiang-v0.1.0-universal-apple-darwin.tar.gz'
+          - name: 'macOS Intel'
+            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.7.14/yaoxiang-x86_64-apple-darwin'
+          - name: 'macOS Apple Silicon'
+            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.7.14/yaoxiang-aarch64-apple-darwin'
 sidebar: false
 ---
