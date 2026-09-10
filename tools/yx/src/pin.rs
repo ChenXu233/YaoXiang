@@ -8,14 +8,34 @@
 
 use std::path::Path;
 
-/// 从 `start` 逐级向上查找 `yx-toolchain.toml`，返回 pin 的版本
+/// 从 `start` 逐级向上查找 `yx-toolchain.toml`，返回 pin 的版本。
+///
+/// 文件存在但读不了/格式坏时**不静默跳过**：stderr 告警并按无 pin 处理
+/// （显式失败优于静默回退——坏 pin 被忽略意味着派发版本与项目预期不符）。
 pub fn find_pin_from(start: &Path) -> Option<String> {
     let mut dir = Some(start);
     while let Some(d) = dir {
         let candidate = d.join("yx-toolchain.toml");
         if candidate.is_file() {
-            let content = std::fs::read_to_string(&candidate).ok()?;
-            return parse(&content);
+            return match std::fs::read_to_string(&candidate) {
+                Ok(content) => match parse(&content) {
+                    Some(version) => Some(version),
+                    None => {
+                        eprintln!(
+                            "yx: warning: {} 缺少有效的 toolchain = \"<version>\" 条目，pin 被忽略",
+                            candidate.display()
+                        );
+                        None
+                    }
+                },
+                Err(e) => {
+                    eprintln!(
+                        "yx: warning: 无法读取 {}: {e}，pin 被忽略",
+                        candidate.display()
+                    );
+                    None
+                }
+            };
         }
         dir = d.parent();
     }

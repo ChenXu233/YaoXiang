@@ -4,7 +4,11 @@ use crate::error::{Error, Result};
 use crate::{dl, home, platform, settings, toolchain};
 
 pub fn run() -> Result<()> {
-    let mirror = settings::Settings::load(&home::yaoxiang_home()?)?.mirror;
+    // 清理上次中断留下的临时残骸（.self-update-*）
+    let home_path = home::yaoxiang_home()?;
+    home::clean_stale(&home_path, &[".self-update-"]);
+
+    let mirror = settings::Settings::load(&home_path)?.mirror;
     let version = toolchain::latest_stable_version(mirror.as_deref())?;
 
     let os = std::env::consts::OS;
@@ -15,16 +19,19 @@ pub fn run() -> Result<()> {
         toolchain::GITHUB_REPO
     );
     let url = settings::download_url(mirror.as_deref(), &format!("{base}/{asset}"));
+    let sha_url = settings::download_url(mirror.as_deref(), &format!("{base}/{asset}.sha256"));
 
-    println!("yx: downloading {asset}");
-    let tmp = home::yaoxiang_home()?.join(format!(".self-update-{asset}"));
-    dl::download_to_file(&url, &tmp)?;
+    let tmp = home_path.join(format!(".self-update-{asset}"));
+    let tmp_sha = home_path.join(format!(".self-update-{asset}.sha256"));
+    // 自更新替换的是 yx 本体，校验与 install 同规格
+    toolchain::fetch_and_verify(&url, &sha_url, &tmp, &tmp_sha)?;
 
     // 解包到临时目录，只取 bin/yx 覆盖自身（Windows 运行中不能覆盖，走 rename 换位）
-    let unpack_dir = home::yaoxiang_home()?.join(format!(".self-update-unpack-{version}"));
+    let unpack_dir = home_path.join(format!(".self-update-unpack-{version}"));
     let _ = std::fs::remove_dir_all(&unpack_dir);
     dl::unpack(&tmp, os, &unpack_dir)?;
     let _ = std::fs::remove_file(&tmp);
+    let _ = std::fs::remove_file(&tmp_sha);
 
     let new_yx = unpack_dir.join("bin").join(platform::yx_file_name());
     let current = std::env::current_exe().map_err(|e| Error::Message(e.to_string()))?;

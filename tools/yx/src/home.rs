@@ -62,3 +62,25 @@ pub fn version_dir(
 ) -> std::path::PathBuf {
     home.join("versions").join(version)
 }
+
+/// 清理安装根下指定前缀的临时残骸（中断残留的 .downloading-*/.unpacking-* 等；
+/// best-effort，失败静默）
+pub(crate) fn clean_stale(
+    home: &Path,
+    prefixes: &[&str],
+) {
+    let Ok(entries) = std::fs::read_dir(home) else {
+        return;
+    };
+    for entry in entries.filter_map(|e| e.ok()) {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if prefixes.iter().any(|p| name.starts_with(p)) {
+            let path = entry.path();
+            if path.is_dir() {
+                let _ = std::fs::remove_dir_all(&path);
+            } else {
+                let _ = std::fs::remove_file(&path);
+            }
+        }
+    }
+}

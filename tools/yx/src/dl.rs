@@ -105,6 +105,13 @@ fn unpack_tar_gz(
     for entry in tar.entries()? {
         let mut entry = entry?;
         let path = entry.path()?.to_path_buf();
+        // 纵深防御：拒绝带 .. 的条目（zip 侧由 enclosed_name 保护，tar 侧在此把关）
+        if !entry_path_is_safe(&path) {
+            return Err(Error::Message(format!(
+                "unsafe archive entry (parent traversal): {}",
+                path.display()
+            )));
+        }
         let target = strip_first(&path, dest).ok_or_else(|| {
             Error::Message(format!("unexpected archive entry: {}", path.display()))
         })?;
@@ -151,6 +158,13 @@ fn unpack_zip(
         }
     }
     Ok(())
+}
+
+/// 条目路径安全检查：不得包含 `..` 组件（防写穿解包目标目录）
+pub(crate) fn entry_path_is_safe(path: &Path) -> bool {
+    !path
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
 }
 
 /// 剥掉首个路径组件后接到 `dest`（顶层目录 = 发行包名）

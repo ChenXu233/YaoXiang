@@ -5,7 +5,7 @@
 //! - 卸载前置检查的护栏语义（默认版本与项目 pin 均拒绝）
 
 use crate::error::Error;
-use crate::toolchain::{check_uninstall_allowed, parse_tag_from_release_url};
+use crate::toolchain::{check_uninstall_allowed, compare_versions_desc, parse_tag_from_release_url};
 
 #[test]
 fn test_parse_tag_extracts_version_from_release_landing_url() {
@@ -74,5 +74,37 @@ fn test_check_uninstall_allowed_accepts_unrelated_version() {
     assert!(
         result.is_ok(),
         "unrelated version must be uninstallable, got {result:?}"
+    );
+}
+
+#[test]
+fn test_compare_versions_desc_orders_semver_numerically() {
+    // Arrange: 字符串序会把 0.10.0 排在 0.9.0 后
+    let mut versions = vec!["0.9.0", "0.10.0", "0.7.14"];
+
+    // Act
+    versions.sort_by(|a, b| compare_versions_desc(a, b));
+
+    // Assert
+    assert_eq!(
+        versions,
+        vec!["0.10.0", "0.9.0", "0.7.14"],
+        "semver must sort numerically, not lexicographically"
+    );
+}
+
+#[test]
+fn test_compare_versions_desc_puts_non_semver_last() {
+    // Arrange: nightly 这类散目录名不属于 semver
+    let mut versions = vec!["nightly", "0.7.14", "0.8.0-rc1"];
+
+    // Act
+    versions.sort_by(|a, b| compare_versions_desc(a, b));
+
+    // Assert
+    assert_eq!(
+        versions,
+        vec!["0.8.0-rc1", "0.7.14", "nightly"],
+        "non-semver names must sort last"
     );
 }

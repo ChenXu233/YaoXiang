@@ -12,7 +12,14 @@ pub fn run(args: &[String]) -> ! {
         }
     };
     match std::process::Command::new(&engine).args(args).status() {
-        Ok(status) => std::process::exit(status.code().unwrap_or(1)),
+        Ok(status) => {
+            // 信号死亡的引擎按 shell 惯例透传 128+signal（rustup 同款）
+            #[cfg(unix)]
+            if let Some(signal) = status.signal() {
+                std::process::exit(128 + signal);
+            }
+            std::process::exit(status.code().unwrap_or(1));
+        }
         Err(e) => {
             eprintln!("yx: failed to launch engine {}: {e}", engine.display());
             std::process::exit(1);

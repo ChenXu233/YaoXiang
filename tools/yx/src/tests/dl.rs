@@ -4,7 +4,7 @@ use std::fs;
 use sha2::Digest;
 use tempfile::TempDir;
 
-use crate::dl::{strip_first, verify_sha256};
+use crate::dl::{entry_path_is_safe, strip_first, verify_sha256};
 
 #[test]
 fn test_strip_first_removes_top_level_package_dir() {
@@ -70,5 +70,18 @@ fn test_verify_sha256_rejects_tampered_content() {
     assert!(
         matches!(result, Err(crate::error::Error::ChecksumMismatch { .. })),
         "tampered content must fail checksum, got {result:?}"
+    );
+}
+
+#[test]
+fn test_entry_path_is_safe_rejects_parent_traversal() {
+    // Act & Assert: 带 .. 的条目不安全（纵深防御，zip 侧由 enclosed_name 保护）
+    assert!(
+        !entry_path_is_safe(std::path::Path::new("pkg/../../evil.yx")),
+        "parent traversal entry must be flagged unsafe"
+    );
+    assert!(
+        entry_path_is_safe(std::path::Path::new("pkg/bin/yaoxiang-rs")),
+        "normal entry must be considered safe"
     );
 }

@@ -58,10 +58,11 @@ if (-not (Test-Path $Settings)) {
     Set-Content -Path $Settings -Value "default = `"$Version`""
 }
 
-# 用户级 PATH
+# 用户级 PATH（Windows 路径比较大小写不敏感）
 $BinDir = Join-Path $YxHome "bin"
 $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
-if (($UserPath -split ';') -notcontains $BinDir) {
+$AlreadyInPath = ($UserPath -split ';') | Where-Object { $_ -ieq $BinDir }
+if (-not $AlreadyInPath) {
     [Environment]::SetEnvironmentVariable("Path", "$UserPath;$BinDir", "User")
     Write-Host "yx: added $BinDir to user PATH (restart shell to take effect)"
 }

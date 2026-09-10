@@ -88,6 +88,30 @@ pub(crate) fn parse_tag_from_release_url(url: &str) -> Option<String> {
     Some(pin::normalize_version(rest))
 }
 
+/// 下载发行包并校验 .sha256 旁证（缺失时降级为提示，与 install.sh/ps1 一致）
+pub(crate) fn fetch_and_verify(
+    asset_url: &str,
+    sha_url: &str,
+    dest: &std::path::Path,
+    sha_dest: &std::path::Path,
+) -> Result<()> {
+    println!("yx: downloading {asset_url}");
+    dl::download_to_file(asset_url, dest)?;
+    println!("yx: verifying checksum");
+    match dl::download_to_file(sha_url, sha_dest) {
+        Ok(_) => {
+            let expected = std::fs::read_to_string(sha_dest)?;
+            dl::verify_sha256(dest, &expected)?;
+        }
+        // 无 .sha256 旁证时降级为只提示（老版本 Release 可能没有）
+        Err(Error::Network(_)) => {
+            println!("yx: warning: .sha256 not available, skipping verification");
+        }
+        Err(e) => return Err(e),
+    }
+    Ok(())
+}
+
 /// 安装一个版本：下载 → 校验 → 解包进 versions/<ver>/
 fn install(version_input: &str) -> Result<()> {
     let mirror = settings::Settings::load(&home::yaoxiang_home()?)?.mirror;
@@ -107,6 +131,9 @@ fn install(version_input: &str) -> Result<()> {
         return Ok(());
     }
 
+    // 清理上次中断留下的临时残骸（.downloading-* / .unpacking-*）
+    home::clean_stale(&home.join("versions"), &[".downloading-", ".unpacking-"]);
+
     let (asset_url, sha_url) = release_urls(mirror.as_deref(), &version, &asset);
     let tmp = home
         .join("versions")
@@ -114,24 +141,18 @@ fn install(version_input: &str) -> Result<()> {
     let tmp_sha = home
         .join("versions")
         .join(format!(".downloading-{version}-{asset}.sha256"));
+    fetch_and_verify(&asset_url, &sha_url, &tmp, &tmp_sha)?;
 
-    println!("yx: downloading {asset_url}");
-    dl::download_to_file(&asset_url, &tmp)?;
-    println!("yx: verifying checksum");
-    match dl::download_to_file(&sha_url, &tmp_sha) {
-        Ok(_) => {
-            let expected = std::fs::read_to_string(&tmp_sha)?;
-            dl::verify_sha256(&tmp, &expected)?;
-        }
-        // 无 .sha256 旁证时降级为只提示（老版本 Release 可能没有）
-        Err(Error::Network(_)) => {
-            println!("yx: warning: .sha256 not available, skipping verification");
-        }
-        Err(e) => return Err(e),
-    }
-
+    // 原子换位：解包到临时目录成功后整体 rename，中途失败不产生"半棵树"
+    // （完整性检查以引擎文件为准，半棵树会被误判为已安装）
     println!("yx: unpacking into {}", dest.display());
-    dl::unpack(&tmp, os, &dest)?;
+    let staging = home.join("versions").join(format!(".unpacking-{version}"));
+    let _ = std::fs::remove_dir_all(&staging);
+    dl::unpack(&tmp, os, &staging)?;
+    if dest.exists() {
+        std::fs::remove_dir_all(&dest)?;
+    }
+    std::fs::rename(&staging, &dest)?;
     let _ = std::fs::remove_file(&tmp);
     let _ = std::fs::remove_file(&tmp_sha);
 
@@ -181,8 +202,7 @@ fn list() -> Result<()> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
         Err(e) => return Err(e.into()),
     };
-    versions.sort();
-    versions.reverse();
+    versions.sort_by(|a, b| compare_versions_desc(a, b));
 
     if versions.is_empty() {
         println!("yx: no toolchains installed");
@@ -222,6 +242,34 @@ pub(crate) fn check_uninstall_allowed(
         )));
     }
     Ok(())
+}
+
+/// 版本列表排序键（降序用）：非 semver 形态（如 nightly 散目录）排最后
+fn version_sort_key(version: &str) -> (u8, u64, u64, u64) {
+    let core = version.split(['-', '+']).next().unwrap_or(version);
+    let mut key = (1u8, 0u64, 0u64, 0u64);
+    let mut parts = core.split('.');
+    for slot in [&mut key.1, &mut key.2, &mut key.3] {
+        match parts.next().and_then(|p| p.parse::<u64>().ok()) {
+            Some(n) => *slot = n,
+            // 任一段不是纯数字即视为非 semver（解析中断，剩余段不再取）
+            None => {
+                key.0 = 0;
+                break;
+            }
+        }
+    }
+    key
+}
+
+/// 版本降序比较：semver 数值序，非 semver 靠后，同级按字符串兜底
+pub(crate) fn compare_versions_desc(
+    a: &str,
+    b: &str,
+) -> std::cmp::Ordering {
+    version_sort_key(b)
+        .cmp(&version_sort_key(a))
+        .then_with(|| b.cmp(a))
 }
 
 /// 卸载版本（默认版本须先切换，防止把正在用的引擎删掉）
