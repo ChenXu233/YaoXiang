@@ -23,7 +23,7 @@ fn test_triple_for_maps_all_five_supported_targets() {
     // Assert: (os, arch) → triple 一一对应，不得漂移
     for ((os, arch, expected), actual) in TABLE.iter().zip(mapped.iter()) {
         assert_eq!(
-            *expected, *actual,
+            *actual, *expected,
             "triple for {os}/{arch} must match the RFC-037 platform table"
         );
     }
@@ -51,7 +51,7 @@ fn test_archive_ext_is_zip_only_on_windows() {
 
     // Assert: Windows 发 zip，其余发 tar.gz（package-dist.sh 约定）
     for ((os, expected), actual) in TABLE.iter().zip(mapped.iter()) {
-        assert_eq!(*expected, *actual, "archive ext for {os}");
+        assert_eq!(*actual, *expected, "archive ext for {os}");
     }
 }
 
@@ -84,7 +84,7 @@ fn test_binary_file_names_carry_exe_suffix_on_windows_only() {
 
     // Assert: 只有 Windows 带 .exe 后缀
     for ((os, engine, yx), (engine_actual, yx_actual)) in TABLE.iter().zip(mapped.iter()) {
-        assert_eq!(engine, engine_actual, "engine file name for {os}");
-        assert_eq!(yx, yx_actual, "front-door file name for {os}");
+        assert_eq!(engine_actual, engine, "engine file name for {os}");
+        assert_eq!(yx_actual, yx, "front-door file name for {os}");
     }
 }

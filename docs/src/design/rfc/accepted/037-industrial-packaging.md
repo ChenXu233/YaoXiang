@@ -346,7 +346,7 @@ allow-dirty = ["ci"]
 以仓库 `scripts/release/package-dist.sh` 为准，要点：
 
 - 双二进制直接取自 `cargo dist build` 的构建输出目录 `target/<triple>/dist/`（profile=dist）——cargo-dist 自产的扁平单二进制归档不是交付物，同名重组包在 `target/distrib/` 直接覆盖
-- Z3 共享库同样取自构建输出目录——build.rs 链接时已选好对应平台共享库并复制落盘（`copy_shared_lib`），**单一源**：打包脚本不知道也不需要知道 Z3 版本与平台目录命名
+- Z3 共享库同样取自构建输出目录——build.rs 链接时已选好对应平台共享库并复制落盘（`copy_shared_lib`），**单一源**：打包脚本不知道也不需要知道 Z3 版本与平台目录命名；Z3 许可证文本随库落盘并由打包带上（MIT 分发义务），macOS 侧打包期把 dylib 的 install_name 归一到 `@rpath` 并对二进制 ad-hoc 重签
 - std 目录纯复制：`src/std/interfaces/*.yx`（预生成接口视图）+ `src/std/*.yx`（.yx 层真实源码）
 - 附 README/LICENSE；重打包（Windows zip / 其余 tar.gz；Git Bash 无 zip 时 zip → System32 bsdtar → PowerShell 三级回退）并重算 `.sha256`
 - Linux 且 `dpkg-deb` 可用时顺带调 `build-deb.sh` 产出 `.deb`（`/usr/lib/yaoxiang` 平装树 + `/usr/bin/yx` 符号链接）

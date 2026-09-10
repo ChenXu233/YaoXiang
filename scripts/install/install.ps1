@@ -40,8 +40,8 @@ if ($ShaExpected) {
     Write-Host "yx: verifying checksum"
     $ShaActual = (Get-FileHash -Path (Join-Path $Tmp $Asset) -Algorithm SHA256).Hash.ToLower()
     if ($ShaExpected -ne $ShaActual) {
-        Write-Host "yx: checksum mismatch" -ForegroundColor Red
-        exit 1
+        # throw 而非 exit：irm|iex 场景下 exit 会终止用户当前 PowerShell 会话
+        throw "yx: checksum mismatch"
     }
 }
 

@@ -38,6 +38,12 @@ fn generate_interface_content(module: &dyn StdModule) -> String {
 /// 为所有标准库模块生成接口文件内容
 ///
 /// 返回 `(module_name, content)` 列表
+///
+/// ```
+/// use yaoxiang::std::gen_interfaces::generate_all_interfaces;
+/// let interfaces = generate_all_interfaces();
+/// assert!(interfaces.iter().any(|(name, _)| name == "io"));
+/// ```
 pub fn generate_all_interfaces() -> Vec<(String, String)> {
     let modules: Vec<Box<dyn StdModule>> = vec![
         Box::new(crate::std::convert::ConvertModule),
@@ -72,6 +78,13 @@ pub fn generate_all_interfaces() -> Vec<(String, String)> {
 /// 将接口文件写入指定目录，返回写入的文件数
 ///
 /// `target_dir` 是接口文件的输出目录（如发行包 `lib/yaoxiang/std/`）
+///
+/// ```
+/// use yaoxiang::std::gen_interfaces::write_interfaces_to_dir;
+/// let dir = std::env::temp_dir().join("yaoxiang_doc_write_interfaces");
+/// let count = write_interfaces_to_dir(&dir).unwrap();
+/// assert!(count > 0);
+/// ```
 pub fn write_interfaces_to_dir(target_dir: &std::path::Path) -> std::io::Result<usize> {
     std::fs::create_dir_all(target_dir)?;
 
@@ -117,6 +130,13 @@ pub fn default_std_interface_dir() -> Option<std::path::PathBuf> {
 /// 2. exe 相对 ../lib/yaoxiang/std/`<name>`.yx（发行包内置；便携解压、
 ///    `~/.yaoxiang/versions/<ver>/`、deb 平装三种渠道同构命中）
 /// 3. `~/.yaoxiang/std/`<name>`.yx（全局回退）
+///
+/// ```
+/// use yaoxiang::std::gen_interfaces::find_std_interface_file;
+/// // 三级链均未部署该模块的接口文件时返回 None
+/// let path = find_std_interface_file(None, "io");
+/// let _ = path;
+/// ```
 pub fn find_std_interface_file(
     project_dir: Option<&std::path::Path>,
     module_name: &str,

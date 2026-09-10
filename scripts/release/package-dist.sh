@@ -45,6 +45,30 @@ if ! ls "$BIN_SRC"/libz3.* >/dev/null 2>&1; then
   exit 1
 fi
 cp "$BIN_SRC"/libz3.* "$STAGE/bin/"
+# Z3 许可证随包分发（MIT 分发义务）；build.rs 已从 Z3 发行包根复制落盘
+if [ -f "$BIN_SRC/LICENSE-Z3.txt" ]; then
+  cp "$BIN_SRC/LICENSE-Z3.txt" "$STAGE/"
+fi
+
+# macOS：dylib 的 install_name 归一到 @rpath 并对二进制 ad-hoc 重签——
+# 官方 dylib 若记录构建机绝对路径，rpath 救不了；arm64 上改动后必须重签
+case "$TARGET" in
+  *darwin*)
+    if command -v install_name_tool >/dev/null 2>&1; then
+      OLD_REF="$(otool -L "$STAGE/bin/yaoxiang-rs" 2>/dev/null | awk '/libz3/ {print $1}' | head -1)"
+      case "$OLD_REF" in
+        @rpath/* | "") : ;;  # 已是 rpath 形态或未直接引用，无需修
+        *)
+          install_name_tool -id @rpath/libz3.dylib "$STAGE/bin/libz3.dylib"
+          install_name_tool -change "$OLD_REF" @rpath/libz3.dylib "$STAGE/bin/yaoxiang-rs"
+          ;;
+      esac
+      if command -v codesign >/dev/null 2>&1; then
+        codesign --force --sign - "$STAGE/bin/libz3.dylib" "$STAGE/bin/yaoxiang-rs"
+      fi
+    fi
+    ;;
+esac
 
 # ── 标准库目录 ───────────────────────────────────────────────────
 # 全部为仓库静态复制，无运行时生成（RFC-037：gen-std 子命令已取消）：

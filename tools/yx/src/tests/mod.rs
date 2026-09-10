@@ -3,6 +3,7 @@
 //! 按被测单文件模块分文件：dl / pin / platform / resolve / settings / toolchain。
 
 mod dl;
+mod home;
 mod pin;
 mod platform;
 mod resolve;

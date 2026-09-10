@@ -176,8 +176,9 @@ fn link_z3(z3_dir: &Path) {
     }
 }
 
-/// 把 Z3 共享库复制进 target profile 目录，本地 cargo run/测试才能加载
-/// （发版产物由 package-dist.sh 随包分发，不经过这里）
+/// 把 Z3 共享库复制进 target profile 目录，本地 cargo run/测试才能加载；
+/// Z3 许可证（MIT 分发义务）随库一并落盘。发版产物由 package-dist.sh
+/// 从同一目录取用，不重复维护平台映射。
 fn copy_shared_lib(z3_dir: &Path) {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     let name = match target_os.as_str() {
@@ -186,10 +187,16 @@ fn copy_shared_lib(z3_dir: &Path) {
         "linux" => "libz3.so",
         _ => return,
     };
-    // Z3 官方发行包布局不统一：Windows 在 bin/，Linux 在 bin/，macOS 两者皆可能
-    let src = ["lib", "bin"]
+    // 布局不统一：官方发行包在 lib/ 或 bin/；系统 Z3（Debian multiarch）在
+    // lib/<arch>-linux-gnu/
+    let mut search_dirs = vec![z3_dir.join("lib"), z3_dir.join("bin")];
+    if target_os == "linux" {
+        let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+        search_dirs.push(z3_dir.join("lib").join(format!("{arch}-linux-gnu")));
+    }
+    let src = search_dirs
         .iter()
-        .map(|s| z3_dir.join(s).join(name))
+        .map(|d| d.join(name))
         .find(|p| p.exists());
     let src = match src {
         Some(p) => p,
@@ -207,6 +214,14 @@ fn copy_shared_lib(z3_dir: &Path) {
     let _ = fs::create_dir_all(&deps);
     let _ = fs::copy(&src, profile.join(name));
     let _ = fs::copy(&src, deps.join(name));
+    // MIT 要求分发二进制时附带许可文本；Z3 发行包根有 LICENSE.txt
+    for license in ["LICENSE.txt", "LICENSE"] {
+        let license_src = z3_dir.join(license);
+        if license_src.exists() {
+            let _ = fs::copy(&license_src, profile.join("LICENSE-Z3.txt"));
+            break;
+        }
+    }
 }
 
 fn find_local_z3(z3_root: &Path) -> Option<std::path::PathBuf> {

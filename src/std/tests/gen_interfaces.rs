@@ -9,8 +9,7 @@
 use tempfile::TempDir;
 
 use crate::std::gen_interfaces::{
-    find_std_interface_file, find_std_interface_file_in, generate_all_interfaces,
-    write_interfaces_to_dir,
+    find_std_interface_file_in, generate_all_interfaces, write_interfaces_to_dir,
 };
 use std::path::{Path, PathBuf};
 
@@ -65,26 +64,21 @@ fn test_list_interface_content() {
 
 #[test]
 fn test_write_interfaces_to_temp_dir() {
-    let temp_dir = std::env::temp_dir().join("yaoxiang_test_interfaces");
-    let _ = std::fs::remove_dir_all(&temp_dir);
+    // Arrange
+    let temp = TempDir::new().unwrap();
 
-    let result = write_interfaces_to_dir(&temp_dir);
-    assert!(result.is_ok(), "写入接口文件应成功");
+    // Act
+    let count = write_interfaces_to_dir(temp.path()).unwrap();
 
-    // 验证文件存在
-    assert!(temp_dir.join("io.yx").exists());
-    assert!(temp_dir.join("list.yx").exists());
-    assert!(temp_dir.join("math.yx").exists());
-
-    // 清理
-    let _ = std::fs::remove_dir_all(&temp_dir);
-}
-
-#[test]
-fn test_find_std_interface_file() {
-    // 不指定项目目录，且全局目录可能不存在 → 返回 None
-    let result = find_std_interface_file(None, "nonexistent_module");
-    assert!(result.is_none());
+    // Assert: 每个 std 模块都有对应接口文件落盘
+    assert!(
+        count >= 3,
+        "至少应写出 3 个接口文件（io/list/math 等），实际 {count}"
+    );
+    for name in ["io", "list", "math"] {
+        let file = temp.path().join(format!("{}.yx", name));
+        assert!(file.exists(), "接口文件 {} 应存在", file.display());
+    }
 }
 
 /// 在 `dir` 下写一个接口文件，返回其路径（模拟查找链中的某一环）
@@ -213,11 +207,28 @@ fn test_committed_interface_files_match_generation() {
             name
         );
     }
+}
 
-    // 反向：目录中不允许存在生成器不再产出的孤儿文件
-    let valid: Vec<String> = expected.iter().map(|(n, _)| format!("{}.yx", n)).collect();
-    for entry in std::fs::read_dir(&committed).unwrap() {
-        let file_name = entry.unwrap().file_name().to_string_lossy().to_string();
+#[test]
+fn test_committed_interface_dir_has_no_orphan_files() {
+    // Arrange: 生成器当前产出的合法文件名集合
+    let committed = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(COMMITTED_INTERFACES_DIR);
+    let valid: Vec<String> = generate_all_interfaces()
+        .iter()
+        .map(|(n, _)| format!("{}.yx", n))
+        .collect();
+
+    // Act
+    let entries = std::fs::read_dir(&committed)
+        .unwrap_or_else(|e| panic!("读取预生成接口目录 {} 失败: {e}", committed.display()));
+
+    // Assert: 目录中不允许存在生成器不再产出的孤儿文件
+    for entry in entries {
+        let file_name = entry
+            .unwrap_or_else(|e| panic!("读取预生成接口目录 {} 条目失败: {e}", committed.display()))
+            .file_name()
+            .to_string_lossy()
+            .to_string();
         assert!(
             valid.contains(&file_name),
             "预生成目录存在孤儿文件 {}（生成器已不再产出）；治愈：删除后重跑 gen-std-interfaces example",

@@ -7,6 +7,11 @@ use crate::error::{Error, Result};
 
 const DOWNLOAD_TIMEOUT_SECS: u64 = 300;
 
+/// 共享 HTTP agent 构造（统一连接超时；大文件下载另行加读超时）
+fn http_agent() -> ureq::AgentBuilder {
+    ureq::AgentBuilder::new().timeout_connect(std::time::Duration::from_secs(30))
+}
+
 /// 把 URL 内容流式下载到 `dest`，返回字节数
 pub fn download_to_file(
     url: &str,
@@ -15,11 +20,12 @@ pub fn download_to_file(
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(std::time::Duration::from_secs(30))
+    let mut reader = http_agent()
         .timeout_read(std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_SECS))
-        .build();
-    let mut reader = agent.get(url).call()?.into_reader();
+        .build()
+        .get(url)
+        .call()?
+        .into_reader();
     let mut file = std::fs::File::create(dest)?;
     let mut count = 0u64;
     let mut buf = [0u8; 64 * 1024];
@@ -36,19 +42,13 @@ pub fn download_to_file(
 
 /// GET 一个短文本（版本号查询等）
 pub fn get_text(url: &str) -> Result<String> {
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(std::time::Duration::from_secs(30))
-        .build();
-    Ok(agent.get(url).call()?.into_string()?)
+    Ok(http_agent().build().get(url).call()?.into_string()?)
 }
 
 /// GET 只为拿最终落地 URL（releases/latest 页面会 302 到 /releases/tag/v<ver>），
 /// 借此在 API 不可达时探测最新版本；不读 body
 pub fn get_redirect_target(url: &str) -> Result<String> {
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(std::time::Duration::from_secs(30))
-        .build();
-    Ok(agent.get(url).call()?.get_url().to_string())
+    Ok(http_agent().build().get(url).call()?.get_url().to_string())
 }
 
 /// 文件的 SHA-256（与 package-dist.sh 产出的 .sha256 比对）
