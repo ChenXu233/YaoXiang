@@ -165,7 +165,8 @@ jobs:
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
       - name: Build installer
-        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=${{ needs.plan.outputs.version }} /DPkgDir=pkg\extracted\yaoxiang-${{ needs.plan.outputs.version }}-x86_64-pc-windows-msvc scripts/build/setup.iss'
+        # PkgDir 相对 .iss 所在目录解析（scripts/build/），须上溯到仓库根
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=${{ needs.plan.outputs.version }} /DPkgDir=..\..\pkg\extracted\yaoxiang-${{ needs.plan.outputs.version }}-x86_64-pc-windows-msvc scripts/build/setup.iss'
       - name: "Upload installer"
         uses: actions/upload-artifact@v7
         with:
