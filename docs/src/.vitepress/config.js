@@ -343,7 +343,11 @@ export default defineConfig({
             },
             {
               text: "工具命令",
-              items: [{ text: "check 命令", link: "/reference/check-command" }],
+              items: [
+                { text: "check 命令", link: "/reference/check-command" },
+                { text: "format 命令", link: "/reference/format-command" },
+                { text: "test 命令", link: "/reference/test-command" },
+              ],
             },
           ],
 
