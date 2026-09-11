@@ -16,21 +16,21 @@ yx check [OPTIONS] [PATH]...
 
 ## 选项
 
-| 选项               | 说明                                    | 默认值 |
-| ------------------ | --------------------------------------- | ------ |
-| `--json`           | 以 JSON 格式输出诊断信息                | 否     |
-| `-w`, `--watch`    | 监视文件变化并自动重新检查              | 否     |
-| `--color <MODE>`   | 颜色输出模式：`auto`、`always`、`never` | `auto` |
-| `--exclude <PATH>` | 排除指定路径（可多次使用）              | 无     |
-| `--no-progress`    | 抑制进度和摘要消息                      | 否     |
+| 选项               | 说明                                             | 默认值 |
+| ------------------ | ------------------------------------------------ | ------ |
+| `--json`           | 以 JSON 格式输出诊断信息                         | 否     |
+| `--color <MODE>`   | 颜色输出模式：`auto`、`always`、`never`          | `auto` |
+| `--exclude <PATH>` | 排除指定路径（可多次使用）                       | 无     |
+| `--no-progress`    | 抑制进度和摘要消息                               | 否     |
+| `--deny-warnings`  | 将警告视为错误：存在警告时以非零码退出           | 否     |
 
 ## 退出码
 
-| 退出码 | 说明              |
-| ------ | ----------------- |
-| `0`    | 无错误            |
-| `1`    | 检查发现错误      |
-| `2`    | 未找到 `.yx` 文件 |
+| 退出码 | 说明                                                  |
+| ------ | ----------------------------------------------------- |
+| `0`    | 无错误                                                |
+| `1`    | 检查发现错误；或使用 `--deny-warnings` 时存在警告     |
+| `2`    | 未找到 `.yx` 文件                                     |
 
 ## 跨文件分析
 
@@ -48,14 +48,6 @@ yx check src/
 
 # 检查指定文件
 yx check src/main.yx src/lib.yx
-```
-
-## 增量检查（watch 模式）
-
-使用 `-w` 或 `--watch` 启用文件监视模式。文件变更时自动重新检查。
-
-```bash
-yx check --watch
 ```
 
 ## JSON 输出格式
@@ -94,11 +86,11 @@ yx check src/main.yx
 # 检查目录并输出 JSON
 yx check src/ --json
 
-# 监视模式
-yx check --watch
-
 # CI 模式（无颜色、无进度）
 yx check --color never --no-progress
+
+# CI 严格模式（警告也导致失败）
+yx check --deny-warnings
 
 # 排除测试目录
 yx check src/ --exclude tests/
@@ -117,6 +109,7 @@ yx check src/ --exclude tests/
 ## 另请参阅
 
 - [`yx format`](./format-command.md) -- 代码格式化
+- [`yx test`](./test-command.md) -- 运行测试
 - [错误码参考](./error-codes.md) -- 完整错误码列表
 - [CI 集成指南](../guide/ci-integration.md) -- CI/CD 集成
 - [诊断系统设计](../design/check/diagnostic-system.md) -- 架构设计文档
