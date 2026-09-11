@@ -149,15 +149,16 @@ I/O 操作和系统级错误。
 
 死代码检测相关警告。警告不会阻止编译，但表示代码中可能存在的问题。
 
-| 错误码 | 模板                                 | 说明             |
-| ------ | ------------------------------------ | ---------------- |
-| W1001  | `Unused exported function: '{name}'` | 未使用的导出函数 |
-| W1002  | `Unused exported type: '{name}'`     | 未使用的导出类型 |
-| W1003  | `Unused import: '{name}'`            | 未使用的导入     |
-| W1004  | `Unused exported variable: '{name}'` | 未使用的导出变量 |
-| W1005  | `Unused exported method: '{name}'`   | 未使用的导出方法 |
+| 错误码 | 模板                                                                                  | 说明             |
+| ------ | ------------------------------------------------------------------------------------- | ---------------- |
+| W1001  | `Unused exported function: '{name}'`                                                  | 未使用的导出函数 |
+| W1002  | `Unused exported type: '{name}'`                                                      | 未使用的导出类型 |
+| W1003  | `Unused import: '{name}'`                                                             | 未使用的导入     |
+| W1004  | `Unused exported variable: '{name}'`                                                  | 未使用的导出变量 |
+| W1005  | `Unused exported method: '{name}'`                                                    | 未使用的导出方法 |
+| W1063  | ``const generic constraint cannot be evaluated: `{constraint}` ({var} = {value})``    | const 泛型约束无法求值 |
+| W1080  | `Constraint cannot be proven at compile-time, degraded to runtime check`              | 编译期证明降级   |
 
-| W1063 | `Const generic constraint not evaluable at compile time` | const泛型约束无法在编译期求值 |
 ---
 
-共计 **85** 个诊断码（79 个错误码 + 6 个警告码）。
+共计 **118** 个诊断码（111 个错误码 + 7 个警告码），以 `define_codes!` 注册表（`src/util/diagnostic/codes/`）为权威源；各码的完整注册清单以注册表为准，本页按族列举常见码。

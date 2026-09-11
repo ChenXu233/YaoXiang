@@ -44,6 +44,26 @@
 
 ---
 
+## E6006：Function not found (runtime)
+
+**类别**: Runtime
+
+**消息**: Function not found: '{func}'
+
+**帮助**: Ensure the function is defined and spelled correctly
+
+---
+
+## E6007：Runtime error
+
+**类别**: Runtime
+
+**消息**: Runtime error: {message}
+
+**帮助**: See the error message for details
+
+---
+
 ## E6008：Key not found
 
 **类别**: Runtime
