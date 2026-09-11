@@ -187,9 +187,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      # 下载失败必须让 job 失败：容忍会产出"零资产静默发布"的绿色 Release
       - name: Download all artifacts
-        id: download
-        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           path: release-artifacts
@@ -282,12 +281,13 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # 只发布仓库元数据与 deb 池——incoming/ 里的其余发行资产不得进 Pages
+          # Pages 分支只含仓库元数据与 deb 池。分支不存在时孤儿化重建（从触发
+          # ref 全量回退检出的源码树不得进分支）；已存在时同样清空索引再只加
+          # 元数据——顺带自愈任何历史遗留的源码树条目
+          if ! git rev-parse --verify apt-repo >/dev/null 2>&1; then
+            git checkout --orphan apt-repo
+          fi
+          git rm -r -q --cached .
           git add KEY.gpg dists pool
           git commit -m ":package: apt repo: $VERSION" || exit 0
-          if git rev-parse --verify apt-repo >/dev/null 2>&1; then
-            git push origin HEAD:apt-repo
-          else
-            git checkout -b apt-repo
-            git push origin apt-repo
-          fi
+          git push origin HEAD:apt-repo

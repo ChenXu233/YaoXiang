@@ -112,6 +112,21 @@ fn unpack_tar_gz(
                 path.display()
             )));
         }
+        // 发行包不含任何链接条目（package-dist.sh 只铺真实文件）。符号链接/硬链接
+        // 的目标是写穿解包目录的经典向量（tar-rs 的 Entry::unpack 不校验链接目标），
+        // 按构造拒绝而非逐一校验目标
+        let kind = entry.header().entry_type();
+        if kind.is_symlink() || kind.is_hard_link() {
+            let kind_name = if kind.is_symlink() {
+                "symlink"
+            } else {
+                "hardlink"
+            };
+            return Err(Error::Message(format!(
+                "unsafe archive entry ({kind_name}): {}",
+                path.display()
+            )));
+        }
         let target = strip_first(&path, dest).ok_or_else(|| {
             Error::Message(format!("unexpected archive entry: {}", path.display()))
         })?;
