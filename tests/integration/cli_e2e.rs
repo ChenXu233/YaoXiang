@@ -276,6 +276,84 @@ fn test_e2e_check_nonexistent_file_exits_nonzero() {
     assert_ne!(code, 0, "check on missing file should exit non-zero");
 }
 
+// check 命令 — 警告通道（#321 M2 / 定案 B）
+// 验收契约：触发 W 码的源文件编译成功（exit 0）且输出 `warning[W####]`；
+// `--deny-warnings` 将警告升级为失败（exit 1）。
+
+#[test]
+fn test_e2e_check_unused_private_fn_warns_but_exits_zero() {
+    // Arrange: 私有函数无任何引用 → W1001（pub 函数是对外接口，永不报）
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "dead_fn.yx",
+        "dead_fn = (x: Int) => x\nmain = { x = 1 }",
+    );
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(&["check", src.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0, "存在警告不构成错误，check 应 exit 0");
+    assert!(
+        stderr.contains("warning [W1001]"),
+        "stderr 应含 warning[W1001] 前缀渲染，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_unused_import_warns_but_exits_zero() {
+    // Arrange: 整模块导入且未被引用 → W1003
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(tmp.path(), "dead_import.yx", "use std.io\nmain = { x = 1 }");
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(&["check", src.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0, "存在警告不构成错误，check 应 exit 0");
+    assert!(
+        stderr.contains("warning [W1003]"),
+        "stderr 应含 warning[W1003] 前缀渲染，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_deny_warnings_exits_one() {
+    // Arrange: 同一警告文件，--deny-warnings 升级为失败（CI 严格模式）
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "dead_fn.yx",
+        "dead_fn = (x: Int) => x\nmain = { x = 1 }",
+    );
+
+    // Act
+    let (code, _stdout, _stderr) = run_yx(
+        &["check", "--deny-warnings", src.to_str().unwrap()],
+        tmp.path(),
+    );
+
+    // Assert
+    assert_eq!(code, 1, "--deny-warnings 存在警告时应以非零码退出");
+}
+
+#[test]
+fn test_e2e_check_deny_warnings_clean_file_exits_zero() {
+    // Arrange: 无警告文件在 --deny-warnings 下仍应通过
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(tmp.path(), "clean.yx", "main = { x = 1 }");
+
+    // Act
+    let (code, _stdout, _stderr) = run_yx(
+        &["check", "--deny-warnings", src.to_str().unwrap()],
+        tmp.path(),
+    );
+
+    // Assert
+    assert_eq!(code, 0, "无警告文件在 --deny-warnings 下应 exit 0");
+}
+
 // init 命令 — 目录结构契约 + 退出码
 // 规范来源：RFC-014 包管理系统 — 项目初始化
 

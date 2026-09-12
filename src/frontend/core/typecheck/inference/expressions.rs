@@ -61,6 +61,10 @@ pub struct ExpressionInferrer<'a> {
     dep_env: Option<&'a crate::frontend::core::types::eval::dependent_types::DependentTypeEnv>,
     /// 流敏感假设集 Γ（效应注入）—— 由 StatementChecker 注入
     gamma: Option<&'a mut crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma>,
+    /// #321 W1003：导入名监视集（StatementChecker 委托时拷贝注入）
+    import_watch: HashMap<String, String>,
+    /// #321 W1003：已使用的监视名（委托方经 take_import_used 回收）
+    imported_used: HashSet<String>,
 }
 
 impl<'a> ExpressionInferrer<'a> {
@@ -85,6 +89,8 @@ impl<'a> ExpressionInferrer<'a> {
             existential_coercions: Vec::new(),
             dep_env: None,
             gamma: None,
+            import_watch: HashMap::new(),
+            imported_used: HashSet::new(),
         }
     }
 
@@ -110,6 +116,8 @@ impl<'a> ExpressionInferrer<'a> {
             existential_coercions: Vec::new(),
             dep_env: None,
             gamma: None,
+            import_watch: HashMap::new(),
+            imported_used: HashSet::new(),
         }
     }
 
@@ -136,6 +144,8 @@ impl<'a> ExpressionInferrer<'a> {
             existential_coercions: Vec::new(),
             dep_env: None,
             gamma: None,
+            import_watch: HashMap::new(),
+            imported_used: HashSet::new(),
         }
     }
 
@@ -164,12 +174,39 @@ impl<'a> ExpressionInferrer<'a> {
             existential_coercions: Vec::new(),
             dep_env: None,
             gamma: None,
+            import_watch: HashMap::new(),
+            imported_used: HashSet::new(),
         }
     }
 
     /// 获取求解器引用（可变）
     pub fn solver(&mut self) -> &mut TypeConstraintSolver {
         self.solver
+    }
+
+    /// #321 W1003：注入导入名监视集（StatementChecker 委托表达式检查前调用）
+    pub fn set_import_watch(
+        &mut self,
+        names: &HashMap<String, String>,
+    ) {
+        self.import_watch
+            .extend(names.iter().map(|(k, v)| (k.clone(), v.clone())));
+    }
+
+    /// #321 W1003：取走已使用名集合（委托方回收合并）
+    pub fn take_import_used(&mut self) -> HashSet<String> {
+        std::mem::take(&mut self.imported_used)
+    }
+
+    /// #321 W1003：变量成功解析时调用——命中监视集的名字记为已使用
+    fn note_import_use(
+        &mut self,
+        name: &str,
+    ) {
+        if let Some(report_as) = self.import_watch.get(name) {
+            let report_as = report_as.clone();
+            self.imported_used.insert(report_as);
+        }
     }
 
     /// RFC-011a §6：在"具体→存在"兼容判定通过的位置收集包装点。
@@ -964,6 +1001,8 @@ impl<'a> ExpressionInferrer<'a> {
             crate::frontend::core::parser::ast::Expr::Var(name, span) => {
                 let poly = self.scope.get_var(name).cloned();
                 if let Some(poly) = poly {
+                    // #321 W1003：命中监视集的导入名记为已使用
+                    self.note_import_use(name);
                     // 关键：直接使用 scope 中存储的类型！
                     // 因为 assign_var 已经将更新后的类型写入了 scope
                     // 不需要再通过 solver 解析（solver 不知道 scope 的更新）

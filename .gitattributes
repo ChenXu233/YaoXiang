@@ -5,3 +5,4 @@
 *.rs text eol=lf
 *.toml text eol=lf
 *.yml text eol=lf
+*.yx text eol=lf

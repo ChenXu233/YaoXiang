@@ -7,7 +7,7 @@
 
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use crate::frontend::module::{Export, ExportKind, ModuleInfo};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable, TypeConstraintSolver};
@@ -82,6 +82,13 @@ pub struct StatementChecker {
     /// 委托表达式检查给 ExpressionInferrer 时经 set_loop_depth 传入，保证
     /// E1102（break/continue 循环外）判定跨两个 walker 一致。
     loop_depth: usize,
+    /// #321 W1003：导入名监视集（本地名 → 报告名；模块级由 TypeChecker 注入，
+    /// 函数体级由 process_use_stmt 登记）。变量成功解析命中即视为对应导入已使用。
+    import_watch: HashMap<String, String>,
+    /// #321 W1003：已使用的监视名
+    imported_used: HashSet<String>,
+    /// #321 W1003：函数体级 use 登记的导入（本地名, use 语句 span）
+    body_imports: Vec<(String, crate::util::span::Span)>,
 }
 
 impl StatementChecker {
@@ -115,6 +122,61 @@ impl StatementChecker {
             trait_table,
             proof_fn_bases: HashMap::new(),
             loop_depth: 0,
+            import_watch: HashMap::new(),
+            imported_used: HashSet::new(),
+            body_imports: Vec::new(),
+        }
+    }
+
+    /// #321 W1003：注入模块级导入名监视集（由 TypeChecker 在 pass2 登记后传入）
+    pub fn set_import_watch(
+        &mut self,
+        names: HashMap<String, String>,
+    ) {
+        self.import_watch.extend(names);
+    }
+
+    /// #321 W1003：取走导入使用跟踪数据（函数体级导入记录 + 已使用名集合）
+    pub fn drain_import_tracking(
+        &mut self
+    ) -> (Vec<(String, crate::util::span::Span)>, HashSet<String>) {
+        (
+            std::mem::take(&mut self.body_imports),
+            std::mem::take(&mut self.imported_used),
+        )
+    }
+
+    /// #321 W1003：变量成功解析时调用——命中监视集的名字记为对应导入已使用
+    fn note_import_use(
+        &mut self,
+        name: &str,
+    ) {
+        if let Some(report_as) = self.import_watch.get(name) {
+            let report_as = report_as.clone();
+            self.imported_used.insert(report_as);
+        }
+    }
+
+    /// #321 W1003：登记函数体级导入本地名（同时进监视集，随后的引用即可标记使用）
+    fn note_body_import(
+        &mut self,
+        name: &str,
+        span: crate::util::span::Span,
+    ) {
+        self.body_imports.push((name.to_string(), span));
+        self.import_watch.insert(name.to_string(), name.to_string());
+    }
+
+    /// #321 W1003：函数体级整体导入的成员监视（导出成员名 → 模块别名）
+    fn note_body_import_members(
+        &mut self,
+        alias: &str,
+        module: &ModuleInfo,
+        span: crate::util::span::Span,
+    ) {
+        self.note_body_import(alias, span);
+        for name in module.exports.keys() {
+            self.import_watch.insert(name.clone(), alias.to_string());
         }
     }
 
@@ -356,6 +418,8 @@ impl StatementChecker {
             // use path
             (None, None) => {
                 let module_alias = path.split('.').next_back().unwrap_or(path);
+                // #321 W1003：登记导入本地名与导出成员监视
+                self.note_body_import_members(module_alias, &module, path_span);
                 let module_ty = self.module_as_struct_type(&module, module_alias);
                 self.scope.add_var(
                     module_alias.to_string(),
@@ -367,6 +431,8 @@ impl StatementChecker {
             // use path as alias
             (None, Some(aliases)) if aliases.len() == 1 => {
                 let module_alias = &aliases[0];
+                // #321 W1003：登记导入本地名与导出成员监视
+                self.note_body_import_members(module_alias, &module, path_span);
                 let module_ty = self.module_as_struct_type(&module, module_alias);
                 self.scope.add_var(
                     module_alias.to_string(),
@@ -391,11 +457,15 @@ impl StatementChecker {
                                 .build(),
                         ));
                     };
+                    // #321 W1003：登记导入本地名（内联别名优先）
+                    self.note_body_import(local_name, path_span);
                     self.import_binding(local_name, &export);
                 }
             }
             _ => {
                 for export in selected_exports {
+                    // #321 W1003：登记导入本地名
+                    self.note_body_import(&export.name, path_span);
                     self.import_binding(&export.name, &export);
                 }
             }
@@ -1671,6 +1741,8 @@ impl StatementChecker {
             // 变量：直接从 scope 中读取
             Expr::Var(name, span) => {
                 if let Some(poly) = self.scope.get_var(name).cloned() {
+                    // #321 W1003：命中监视集的导入名记为已使用
+                    self.note_import_use(name);
                     // 直接返回 scope 中的类型
                     Ok(poly.body)
                 } else {
@@ -1758,10 +1830,13 @@ impl StatementChecker {
                         inferrer.set_dep_env(&self.dep_env);
                         // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
                         inferrer.set_loop_depth(self.loop_depth);
+                        // #321 W1003：导入名监视集随委托传入
+                        inferrer.set_import_watch(&self.import_watch);
                         if let Some(gamma) = &mut self.gamma {
                             inferrer.set_gamma(gamma);
                         }
                         let result = inferrer.infer_expr(expr).map_err(Box::new);
+                        self.imported_used.extend(inferrer.take_import_used());
                         self.instantiation_requests
                             .extend(inferrer.instantiation_requests);
                         self.existential_coercions
@@ -1827,10 +1902,13 @@ impl StatementChecker {
                 inferrer.set_dep_env(&self.dep_env);
                 // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
                 inferrer.set_loop_depth(self.loop_depth);
+                // #321 W1003：导入名监视集随委托传入
+                inferrer.set_import_watch(&self.import_watch);
                 if let Some(gamma) = &mut self.gamma {
                     inferrer.set_gamma(gamma);
                 }
                 let result = inferrer.infer_expr(expr).map_err(Box::new);
+                self.imported_used.extend(inferrer.take_import_used());
                 self.instantiation_requests
                     .extend(inferrer.instantiation_requests);
                 self.existential_coercions

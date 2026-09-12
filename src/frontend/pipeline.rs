@@ -261,7 +261,7 @@ impl Pipeline {
     /// 类型检查阶段
     fn run_typecheck(
         &mut self,
-        source_name: &str,
+        _source_name: &str,
         _source: &str,
         ast: &super::core::parser::Module,
     ) -> TypecheckResult {
@@ -269,12 +269,13 @@ impl Pipeline {
         let has_errors = !type_result.diagnostics.is_empty();
         let errors = std::mem::take(&mut type_result.diagnostics);
 
-        // 执行死代码分析（根据配置决定是否启用）
-        let warnings = if self.config.dead_code.enabled && !has_errors {
-            self.run_dead_code_analysis(source_name, ast, &type_result.semantic_db)
-        } else {
-            Vec::new()
-        };
+        // 死代码族警告（#321）：私有死代码（分析器）+ 未使用导入（typecheck 检出）。
+        // 与错误分离——混入 errors 会被按错误计数，破坏非阻断契约。
+        let mut warnings = Vec::new();
+        if self.config.dead_code.enabled && !has_errors {
+            warnings.extend(self.run_dead_code_analysis(ast));
+            warnings.extend(std::mem::take(&mut type_result.warnings));
+        }
 
         TypecheckResult {
             type_result,
@@ -286,14 +287,12 @@ impl Pipeline {
     /// 死代码分析阶段
     fn run_dead_code_analysis(
         &mut self,
-        _source_name: &str,
         ast: &super::core::parser::Module,
-        semantic_db: &typecheck::semantic_db::SemanticDB,
     ) -> Vec<Diagnostic> {
         use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
 
         let mut analyzer = DeadCodeAnalyzer::new();
-        let warnings = analyzer.analyze(ast, semantic_db);
+        let warnings = analyzer.analyze(ast);
 
         // 结构化警告诊断（severity 由 builder 按 W 前缀推导，#321 M2）
         analyzer.to_diagnostics(&warnings)

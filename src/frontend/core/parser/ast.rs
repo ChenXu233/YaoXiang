@@ -1,5 +1,7 @@
 //! Abstract Syntax Tree types
 
+use std::collections::HashSet;
+
 pub use crate::frontend::core::lexer::tokens::Literal;
 use crate::util::span::Span;
 
@@ -543,6 +545,243 @@ impl Type {
                 })
                 .collect(),
             _ => Vec::new(),
+        }
+    }
+
+    /// 收集类型树中出现的名字引用（类型名/绑定函数名/编译期表达式的标识符）。
+    ///
+    /// 供死代码分析（可达性）与未使用导入检测共享：
+    /// 类型引用只出现在注解/类型体位置，普通表达式遍历看不到它们。
+    /// 保守策略——拿不准的名字一律收集（宁可漏报也不误报死代码/未用导入）。
+    pub fn collect_name_refs(
+        &self,
+        out: &mut HashSet<String>,
+    ) {
+        match self {
+            Type::Name { name, .. } => {
+                out.insert(name.clone());
+            }
+            Type::Struct { body } => {
+                for item in body {
+                    collect_type_body_item_refs(item, out);
+                }
+            }
+            Type::NamedStruct { fields, .. } => {
+                for f in fields {
+                    f.ty.collect_name_refs(out);
+                    if let Some(default) = &f.default {
+                        collect_expr_ident_refs(default, out);
+                    }
+                }
+            }
+            Type::Union(variants) => {
+                for (_, ty) in variants.iter() {
+                    if let Some(ty) = ty {
+                        ty.collect_name_refs(out);
+                    }
+                }
+            }
+            Type::Tuple(items) | Type::Sum(items) => {
+                for ty in items {
+                    ty.collect_name_refs(out);
+                }
+            }
+            Type::Fn {
+                params,
+                return_type,
+            } => {
+                for ty in params {
+                    ty.collect_name_refs(out);
+                }
+                return_type.collect_name_refs(out);
+            }
+            Type::Option(inner) | Type::Ptr(inner) => inner.collect_name_refs(out),
+            Type::Result(ok, err) => {
+                ok.collect_name_refs(out);
+                err.collect_name_refs(out);
+            }
+            Type::Generic { name, args, .. } => {
+                out.insert(name.clone());
+                for ty in args {
+                    ty.collect_name_refs(out);
+                }
+            }
+            Type::AssocType {
+                host_type,
+                assoc_name,
+                assoc_args,
+                ..
+            } => {
+                host_type.collect_name_refs(out);
+                out.insert(assoc_name.clone());
+                for ty in assoc_args {
+                    ty.collect_name_refs(out);
+                }
+            }
+            Type::Literal { base_type, .. } => base_type.collect_name_refs(out),
+            Type::Ref { inner, .. } => inner.collect_name_refs(out),
+            Type::MetaType { args, .. } => {
+                for ty in args {
+                    ty.collect_name_refs(out);
+                }
+            }
+            Type::ConstExpr(expr) => collect_expr_ident_refs(expr, out),
+            _ => {}
+        }
+    }
+}
+
+/// 收集类型体项（字段/绑定/接口/匿名类型表达式）中的名字引用
+fn collect_type_body_item_refs(
+    item: &TypeBodyItem,
+    out: &mut HashSet<String>,
+) {
+    match item {
+        TypeBodyItem::Field(f) => {
+            f.ty.collect_name_refs(out);
+            if let Some(default) = &f.default {
+                collect_expr_ident_refs(default, out);
+            }
+        }
+        TypeBodyItem::Binding(b) => collect_binding_kind_refs(&b.kind, out),
+        TypeBodyItem::Expr(ty) => ty.collect_name_refs(out),
+        TypeBodyItem::Interface(_) => {}
+    }
+}
+
+/// 收集类型体绑定（外部/匿名/默认绑定）中的名字引用
+fn collect_binding_kind_refs(
+    kind: &BindingKind,
+    out: &mut HashSet<String>,
+) {
+    match kind {
+        BindingKind::External { function, .. } | BindingKind::DefaultExternal { function } => {
+            out.insert(function.clone());
+        }
+        BindingKind::Anonymous {
+            params,
+            return_type,
+            body,
+            ..
+        } => {
+            for p in params {
+                if let Some(ty) = &p.ty {
+                    ty.collect_name_refs(out);
+                }
+            }
+            return_type.collect_name_refs(out);
+            collect_expr_ident_refs(body, out);
+        }
+    }
+}
+
+/// 收集表达式中出现的标识符（仅 Var 叶子，不深入求值语义）。
+///
+/// 用于 ConstExpr 等表达式位置的名字保守收集；
+/// 完整的引用分析在 typecheck/dead_code 各自的遍历中完成。
+fn collect_expr_ident_refs(
+    expr: &Expr,
+    out: &mut HashSet<String>,
+) {
+    match expr {
+        Expr::Var(name, _) => {
+            out.insert(name.clone());
+        }
+        Expr::Call { func, args, .. } => {
+            collect_expr_ident_refs(func, out);
+            for arg in args {
+                collect_expr_ident_refs(arg, out);
+            }
+        }
+        Expr::FieldAccess { expr, .. } => collect_expr_ident_refs(expr, out),
+        Expr::BinOp { left, right, .. } => {
+            collect_expr_ident_refs(left, out);
+            collect_expr_ident_refs(right, out);
+        }
+        Expr::UnOp { expr, .. } => collect_expr_ident_refs(expr, out),
+        Expr::Cast { expr, .. } => collect_expr_ident_refs(expr, out),
+        Expr::Index { expr, index, .. } => {
+            collect_expr_ident_refs(expr, out);
+            collect_expr_ident_refs(index, out);
+        }
+        Expr::Tuple(items, _) | Expr::List(items, _) => {
+            for item in items {
+                collect_expr_ident_refs(item, out);
+            }
+        }
+        Expr::Dict(fields, _) => {
+            for (key, value) in fields {
+                collect_expr_ident_refs(key, out);
+                collect_expr_ident_refs(value, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// 收集语句中类型注解位置出现的名字引用（递归进入 lambda/函数体）。
+///
+/// 覆盖 `Assign` 的类型注解与签名参数、`TypeDefinition` 的类型体；
+/// 类型引用只存在于这些位置，普通表达式遍历不可见。
+pub fn collect_stmt_type_names(
+    stmt: &Stmt,
+    out: &mut HashSet<String>,
+) {
+    match &stmt.kind {
+        StmtKind::Assign {
+            type_annotation,
+            signature_params,
+            value,
+            ..
+        } => {
+            if let Some(ty) = type_annotation {
+                ty.collect_name_refs(out);
+            }
+            for p in signature_params {
+                if let Some(ty) = &p.ty {
+                    ty.collect_name_refs(out);
+                }
+            }
+            match value.as_deref() {
+                Some(Expr::Lambda { params, body, .. }) => {
+                    collect_params_type_names(params, out);
+                    for inner in &body.stmts {
+                        collect_stmt_type_names(inner, out);
+                    }
+                }
+                Some(Expr::FnDef { params, body, .. }) => {
+                    collect_params_type_names(params, out);
+                    for inner in &body.stmts {
+                        collect_stmt_type_names(inner, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+        StmtKind::TypeDefinition {
+            signature_params,
+            definition,
+            ..
+        } => {
+            for p in signature_params {
+                if let Some(ty) = &p.ty {
+                    ty.collect_name_refs(out);
+                }
+            }
+            definition.collect_name_refs(out);
+        }
+        _ => {}
+    }
+}
+
+/// 收集参数列表中的类型注解引用
+fn collect_params_type_names(
+    params: &[Param],
+    out: &mut HashSet<String>,
+) {
+    for p in params {
+        if let Some(ty) = &p.ty {
+            ty.collect_name_refs(out);
         }
     }
 }

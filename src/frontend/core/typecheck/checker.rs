@@ -56,6 +56,12 @@ pub struct TypeChecker {
     /// RFC-011a §3: 已声明方法签名 (类型名, 方法名) -> 签名。
     /// 同签名重复声明 = 覆盖 → E1100；不同签名 = 重载 → 放行。
     declared_methods: HashMap<(String, String), MonoType>,
+    /// #321 W1003: 导入的本地名 → use 语句位置（pass2 use elaboration 登记，
+    /// 供模块尾统一判定未使用导入；重复登记由发射处去重）。
+    imported_names: Vec<(String, crate::util::span::Span)>,
+    /// #321 W1003: 导入名监视集（本地名 → 报告名）。整体导入的导出成员
+    /// （如 `use std.io` 后裸调 `print`）同样映射到模块别名，命中即视为导入已使用。
+    import_watch: HashMap<String, String>,
 }
 
 /// RFC-011a: 类型体应用项 `Animal(Dog)` 的待决接口实例化。
@@ -91,6 +97,8 @@ impl TypeChecker {
             type_definition_bodies: HashMap::new(),
             pending_interface_instantiations: Vec::new(),
             declared_methods: HashMap::new(),
+            imported_names: Vec::new(),
+            import_watch: HashMap::new(),
         }
     }
 
@@ -361,6 +369,11 @@ impl TypeChecker {
                 .add_var(name, poly, false, crate::util::span::Span::default());
         }
 
+        // #321 W1003：模块级导入名监视集注入（函数体级 use 由 process_use_stmt 自行登记）
+        let module_import_watch = self.import_watch.clone();
+        self.body_checker_mut()
+            .set_import_watch(module_import_watch);
+
         // 第三遍：检查所有语句（包括函数体）
         for stmt in &module.items {
             // #324：模块级阶段挂当前语句 span，诊断自动获得位置
@@ -494,6 +507,9 @@ impl TypeChecker {
             Vec::new()
         };
 
+        // #321 W1003：未使用导入警告（Warning 级，不阻断编译，经 warnings 通道流出）
+        let import_warnings = self.collect_unused_import_warnings(module);
+
         TypeCheckResult {
             module_name: self.env.module_name.clone(),
             diagnostics,
@@ -508,6 +524,7 @@ impl TypeChecker {
             existential_coercions,
             implementation_proofs: self.env.implementation_proofs.clone(),
             module_namespaces: std::mem::take(&mut self.module_namespaces),
+            warnings: import_warnings,
         }
     }
 
@@ -988,6 +1005,9 @@ impl TypeChecker {
                         // use path (无 items，无 alias) → 提取 path 最后部分作为模块别名
                         (None, None) => {
                             let module_alias = path.split('.').next_back().unwrap_or(path);
+                            // #321 W1003：登记导入本地名与导出成员监视
+                            self.record_import_name(module_alias, stmt.span);
+                            self.watch_import_members(module_alias, &module);
                             // 登记用户模块命名空间别名（std 走 is_std_submodule 机制，不入此表）
                             if !(path == "std" || path.starts_with("std.")) {
                                 self.module_namespaces
@@ -1003,6 +1023,9 @@ impl TypeChecker {
                         // use path as alias → 整个模块用别名注册
                         (None, Some(aliases)) if aliases.len() == 1 => {
                             let alias_name = &aliases[0];
+                            // #321 W1003：登记导入本地名与导出成员监视
+                            self.record_import_name(alias_name, stmt.span);
+                            self.watch_import_members(alias_name, &module);
                             // 登记用户模块命名空间别名（std 走 is_std_submodule 机制，不入此表）
                             if !(path == "std" || path.starts_with("std.")) {
                                 self.module_namespaces
@@ -1023,6 +1046,11 @@ impl TypeChecker {
                                     .as_ref()
                                     .and_then(|v| v.get(i))
                                     .and_then(|a| a.as_ref());
+                                // #321 W1003：登记导入本地名（内联别名优先）
+                                match local_name {
+                                    Some(local) => self.record_import_name(local, stmt.span),
+                                    None => self.record_import_name(item_name, stmt.span),
+                                }
                                 match local_name {
                                     Some(local) => self.register_use_export(local, export, true),
                                     None => self.register_use_export(item_name, export, false),
@@ -1032,6 +1060,8 @@ impl TypeChecker {
                         // 其他情况：报错或回退
                         _ => {
                             for export in exports_to_import {
+                                // #321 W1003：登记导入本地名
+                                self.record_import_name(&export.name, stmt.span);
                                 self.register_use_export(path, export, false);
                             }
                         }
@@ -1569,6 +1599,58 @@ impl TypeChecker {
                 self.env.add_var(register_name, PolyType::mono(ty));
             }
         }
+    }
+
+    /// #321 W1003：登记导入的本地名（pass2 use elaboration 处调用；
+    /// 重复登记由发射处按名去重，首次出现的位置优先呈现）
+    fn record_import_name(
+        &mut self,
+        name: &str,
+        span: crate::util::span::Span,
+    ) {
+        self.imported_names.push((name.to_string(), span));
+        self.import_watch.insert(name.to_string(), name.to_string());
+    }
+
+    /// #321 W1003：整体导入（`use std.io` / `use std.io as i`）的成员监视——
+    /// 导出成员名（print 等）解析命中同样使模块别名视为已使用，
+    /// 覆盖"导入模块后裸调导出函数"的常见形态（native 注册路径）。
+    fn watch_import_members(
+        &mut self,
+        alias: &str,
+        module: &crate::frontend::module::ModuleInfo,
+    ) {
+        for name in module.exports.keys() {
+            self.import_watch.insert(name.clone(), alias.to_string());
+        }
+    }
+
+    /// #321 W1003：汇总未使用导入（模块级 + 函数体级），产出 Warning 诊断。
+    ///
+    /// 使用判定 = 表达式引用（body_checker 导入监视集命中）∪ 类型注解/类型体
+    /// 位置的名字引用（导入类型仅用于注解时不误报）。诊断进 TypeCheckResult
+    /// .warnings 通道——混入 diagnostics 会被管线按错误计数，破坏非阻断契约。
+    fn collect_unused_import_warnings(
+        &mut self,
+        module: &crate::frontend::core::parser::ast::Module,
+    ) -> Vec<Diagnostic> {
+        let (body_imports, used_refs) = match self.body_checker.as_mut() {
+            Some(bc) => bc.drain_import_tracking(),
+            None => (Vec::new(), HashSet::new()),
+        };
+        let mut used = used_refs;
+        for stmt in &module.items {
+            crate::frontend::core::parser::ast::collect_stmt_type_names(stmt, &mut used);
+        }
+        let mut seen = HashSet::new();
+        let mut warnings = Vec::new();
+        for (name, span) in self.imported_names.iter().chain(body_imports.iter()) {
+            if used.contains(name) || !seen.insert(name.clone()) {
+                continue;
+            }
+            warnings.push(ErrorCodeDefinition::unused_import(name).at(*span).build());
+        }
+        warnings
     }
 
     /// 添加类型定义
