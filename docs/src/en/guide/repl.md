@@ -6,26 +6,25 @@ description: YaoXiang REPL User Guide - Interactive Code Execution Environment
 # REPL Interactive Interpreter
 
 The YaoXiang REPL (Read-Eval-Print Loop) is an interactive code execution environment that allows
-you to enter and execute YaoXiang code line by line. It is ideal for learning, testing, and
-debugging.
+you to input and execute YaoXiang code line by line, perfect for learning, testing, and debugging.
 
 ## Quick Start
 
-### Launching the REPL
+### Starting the REPL
 
-Run the following command in your terminal to launch the REPL:
+Run the following command in the terminal to start the REPL:
 
 ```bash
-yaoxiang repl
+yx repl
 ```
 
-Or simply run `yaoxiang` without any subcommand:
+Or simply run `yaoxiang` (without any subcommand):
 
 ```bash
 yaoxiang
 ```
 
-After launch, you will see the prompt:
+After starting, you will see the prompt:
 
 ```
 YaoXiang REPL - Type :help for assistance
@@ -36,7 +35,7 @@ Press Ctrl+D or :quit to exit
 
 ### Basic Usage
 
-Enter YaoXiang code after the prompt `>>` and press Enter to execute:
+Enter YaoXiang code after the `>>` prompt and press Enter to execute:
 
 ```yaoxiang
 >> 1 + 2
@@ -56,7 +55,7 @@ There are three ways to exit the REPL:
 
 1. **Keyboard shortcut**: Press `Ctrl+D`
 2. **Command**: Type `:quit` or `:q`
-3. **Interrupt**: Press `Ctrl+C` to interrupt current input
+3. **Interrupt**: Press `Ctrl+C` to interrupt the current input
 
 ## Command System
 
@@ -76,7 +75,7 @@ Displays help information for all available commands.
 >> :quit
 ```
 
-Exits the REPL. The shorthand `:q` is also accepted.
+Exits the REPL. The shorthand `:q` can also be used.
 
 ### Clear Command
 
@@ -84,8 +83,8 @@ Exits the REPL. The shorthand `:q` is also accepted.
 >> :clear
 ```
 
-Clears all defined variables and functions, resetting the REPL state. The shorthand `:c` is also
-accepted.
+Clears all defined variables and functions, resetting the REPL state. The shorthand `:c` can also be
+used.
 
 ### Type Inspection Command
 
@@ -93,7 +92,7 @@ accepted.
 >> :type x
 ```
 
-Shows the type information of symbol `x`. The shorthand `:t` is also accepted.
+Views the type information of the symbol `x`. The shorthand `:t` can also be used.
 
 **Example**:
 
@@ -107,14 +106,14 @@ name: String
 add: fn(Int, Int) -> Int
 ```
 
-### Symbol Listing Command
+### Symbol List Command
 
 ```yaoxiang
 >> :symbols
 ```
 
 Lists all defined symbols (variables and functions) in the current REPL. The shorthands `:i` or
-`:info` are also accepted.
+`:info` can also be used.
 
 **Example**:
 
@@ -134,9 +133,9 @@ greet: fn(String) -> String
 >> :history
 ```
 
-Displays the command history. The shorthand `:hist` is also accepted.
+Displays the command history. The shorthand `:hist` can also be used.
 
-### Stats Command
+### Statistics Command
 
 ```yaoxiang
 >> :stats
@@ -156,7 +155,7 @@ Total time: 12.34ms
 
 ### Expression Execution
 
-The REPL can evaluate any valid YaoXiang expression:
+The REPL can execute any valid YaoXiang expression:
 
 ```yaoxiang
 >> 1 + 2
@@ -182,14 +181,14 @@ Define variables directly using the variable name:
 >> pi = 3.14159
 ```
 
-You can also annotate the type explicitly:
+You can also explicitly annotate the type:
 
 ```yaoxiang
 >> name: String = "YaoXiang"
 >> age: Int = 25
 ```
 
-Once defined, variables can be used in subsequent code:
+Once defined, the variable can be used in subsequent code:
 
 ```yaoxiang
 >> name
@@ -201,7 +200,7 @@ Once defined, variables can be used in subsequent code:
 
 ### Function Definition
 
-YaoXiang has no `fn` keyword; a function is simply a value with a signature:
+YaoXiang has no `fn` keyword; functions are simply values with a signature:
 
 ```yaoxiang
 >> add: (a: Int, b: Int) -> Int = a + b
@@ -220,8 +219,8 @@ Calling a function:
 
 ### Multi-line Code
 
-The REPL supports multi-line code input. When incomplete code is detected (such as unclosed
-brackets), it automatically enters continuation mode:
+The REPL supports multi-line code input. When incomplete code is detected (e.g., unclosed brackets),
+it automatically enters continuation mode:
 
 ```yaoxiang
 >> factorial: (n: Int) -> Int = {
@@ -230,7 +229,7 @@ brackets), it automatically enters continuation mode:
 .. }
 ```
 
-The continuation prompt is `..`, indicating that the REPL is currently in multi-line input mode.
+The continuation prompt is `..`, indicating that you are currently in multi-line input mode.
 
 ### Type Definition
 
@@ -238,17 +237,17 @@ The continuation prompt is `..`, indicating that the REPL is currently in multi-
 >> Point: Type = { x: Float, y: Float }
 ```
 
-### Variant Type Definition (enum)
+### Variant Type Definition (Enum)
 
 ```yaoxiang
 >> Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 ```
 
-## Auto-Completion
+## Auto-completion
 
-The REPL provides smart auto-completion to help you type code quickly.
+The REPL provides smart auto-completion to help you input code quickly.
 
-### Trigger
+### Trigger Method
 
 Press the `Tab` key to trigger auto-completion.
 
@@ -259,7 +258,7 @@ Press the `Tab` key to trigger auto-completion.
 3. **Built-in function completion**: Built-in functions such as `print`, `len`, `range`, `typeof`,
    `assert`
 
-### Completion Examples
+### Completion Example
 
 ```yaoxiang
 >> my_variable = 42
@@ -292,8 +291,8 @@ Errors do not terminate the REPL session; you can continue entering new code.
 The REPL automatically saves command history, supporting:
 
 - **Up/Down arrows**: Browse through command history
-- **Search**: Enter a partial input and use the up/down arrows to search
-- **History file**: History is saved to a file and automatically loaded on next startup
+- **Search**: Type part of the content and use the up/down arrows to search
+- **History file**: History is saved to a file and automatically loaded on the next startup
 
 ### Execution Statistics
 
@@ -340,9 +339,9 @@ When the REPL state becomes messy, use `:clear` to reset:
 Context cleared
 ```
 
-### 4. Leverage Auto-Completion to Improve Efficiency
+### 4. Leverage Auto-completion for Efficiency
 
-Type the first few characters and press Tab to quickly complete variable and function names.
+Type a few characters and press Tab to quickly complete variable and function names.
 
 ### 5. Use Multi-line Input for Complex Code
 
@@ -353,7 +352,7 @@ Type the first few characters and press Tab to quickly complete variable and fun
 .. }
 ```
 
-## FAQ
+## Frequently Asked Questions
 
 ### Q: How do I view the definition of a function?
 
@@ -374,7 +373,7 @@ A: Use the `:clear` command:
 
 ### Q: Why isn't my multi-line code executing?
 
-A: Check for unclosed brackets, quotes, or braces. The REPL waits for a complete code input.
+A: Check for unclosed brackets, quotes, or braces. The REPL waits for the complete code input.
 
 ### Q: How do I interrupt long-running code?
 
@@ -388,12 +387,12 @@ A: The REPL supports all YaoXiang data types:
 - `Float`: Floating-point number
 - `String`: String
 - `Bool`: Boolean
-- `Void`: Void type
+- `Void`: Empty type
 - Custom record types and variant types
 
 ## Example Session
 
-Below is a complete example of a REPL session:
+Here is a complete REPL session example:
 
 ```yaoxiang
 YaoXiang REPL - Type :help for assistance
@@ -426,12 +425,12 @@ Total time: 2.34ms
 
 ## Related Commands
 
-| Command    | Shorthand | Function                 |
-| ---------- | --------- | ------------------------ |
-| `:help`    | `:h`      | Display help information |
-| `:quit`    | `:q`      | Exit REPL                |
-| `:clear`   | `:c`      | Clear all state          |
-| `:type`    | `:t`      | View symbol type         |
-| `:symbols` | `:i`      | List all symbols         |
-| `:history` | `:hist`   | Display command history  |
-| `:stats`   | -         | Display execution stats  |
+| Command    | Shorthand | Function             |
+| ---------- | --------- | -------------------- |
+| `:help`    | `:h`      | Display help info    |
+| `:quit`    | `:q`      | Exit REPL            |
+| `:clear`   | `:c`      | Clear all state      |
+| `:type`    | `:t`      | View symbol type     |
+| `:symbols` | `:i`      | List all symbols     |
+| `:history` | `:hist`   | Show command history |
+| `:stats`   | -         | Show execution stats |

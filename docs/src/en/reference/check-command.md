@@ -1,66 +1,62 @@
----
-title: yaoxiang check
----
+# yx check
 
-# yaoxiang check
-
-Performs static checks (type checking, ownership checking) on YaoXiang source code without
+Performs static checks (type checking, ownership checking) on YaoXiang source code, without
 generating any code.
 
 ## Usage
 
 ```
-yaoxiang check [OPTIONS] [PATH]...
+yx check [OPTIONS] [PATH]...
 ```
 
 ## Arguments
 
-| Argument | Description                                                                                     |
-| -------- | ----------------------------------------------------------------------------------------------- |
-| `PATH`   | One or more file or directory paths. Defaults to checking the current project if not specified. |
+| Argument | Description                                                                        |
+| -------- | ---------------------------------------------------------------------------------- |
+| `PATH`   | One or more file or directory paths. If not specified, checks the current project. |
 
 ## Options
 
 | Option             | Description                                             | Default |
 | ------------------ | ------------------------------------------------------- | ------- |
 | `--json`           | Output diagnostics in JSON format                       | No      |
-| `-w`, `--watch`    | Watch for file changes and automatically re-check       | No      |
+| `-w`, `--watch`    | Watch for file changes and re-check automatically       | No      |
 | `--color <MODE>`   | Color output mode: `auto`, `always`, `never`            | `auto`  |
 | `--exclude <PATH>` | Exclude the specified path (can be used multiple times) | None    |
 | `--no-progress`    | Suppress progress and summary messages                  | No      |
 
 ## Exit Codes
 
-| Exit Code | Description               |
-| --------- | ------------------------- |
-| `0`       | No errors                 |
-| `1`       | Errors found during check |
-| `2`       | No `.yx` files found      |
+| Exit Code | Description          |
+| --------- | -------------------- |
+| `0`       | No errors            |
+| `1`       | Check found errors   |
+| `2`       | No `.yx` files found |
 
 ## Cross-File Analysis
 
-`yaoxiang check` supports cross-file type checking. When checking multiple files:
+`yx check` supports cross-file type checking. When checking multiple files:
 
 1. Parse all `.yx` files in parallel
-2. Build module dependency graph
-3. Detect circular dependencies (reports error)
-4. Check in topological sort order
-5. Use shared type environment to correctly detect cross-file references
+2. Build the module dependency graph
+3. Detect circular dependencies (reported as errors)
+4. Check in topological order
+5. Use a shared type environment to correctly detect cross-file references
 
 ```bash
-# Check entire project (auto-detect cross-file references)
-yaoxiang check src/
+# Check the entire project (automatically detects cross-file references)
+yx check src/
 
-# Check specific files
-yaoxiang check src/main.yx src/lib.yx
+# Check specified files
+yx check src/main.yx src/lib.yx
 ```
 
-## Incremental Checking (Watch Mode)
+## Incremental Checking (watch mode)
 
-Use `-w` or `--watch` to enable file watching mode. Automatically re-checks when files change.
+Use `-w` or `--watch` to enable file watch mode. When files change, it automatically re-checks.
 
 ```bash
-yaoxiang check --watch
+yx check --watch
 ```
 
 ## JSON Output Format
@@ -90,23 +86,23 @@ When using `--json`, the output format is:
 ## Examples
 
 ```bash
-# Check current project
-yaoxiang check
+# Check the current project
+yx check
 
-# Check specific files
-yaoxiang check src/main.yx
+# Check specified files
+yx check src/main.yx
 
-# Check directory and output JSON
-yaoxiang check src/ --json
+# Check a directory and output JSON
+yx check src/ --json
 
 # Watch mode
-yaoxiang check --watch
+yx check --watch
 
-# CI mode (no colors, no progress)
-yaoxiang check --color never --no-progress
+# CI mode (no color, no progress)
+yx check --color never --no-progress
 
-# Exclude test directory
-yaoxiang check src/ --exclude tests/
+# Exclude the tests directory
+yx check src/ --exclude tests/
 ```
 
 ## CI Integration
@@ -114,14 +110,14 @@ yaoxiang check src/ --exclude tests/
 ```yaml
 # GitHub Actions
 - name: Type check
-  run: yaoxiang check --color never --no-progress
+  run: yx check --color never --no-progress
 ```
 
 For detailed CI configuration, see the [CI Integration Guide](../guide/ci-integration.md).
 
 ## See Also
 
-- [`yaoxiang format`](./format-command.md) -- Code formatting
-- [Error Codes Reference](./error-codes.md) -- Complete error code list
+- [`yx format`](./format-command.md) -- Code formatting
+- [Error Code Reference](./error-codes.md) -- Complete list of error codes
 - [CI Integration Guide](../guide/ci-integration.md) -- CI/CD integration
 - [Diagnostic System Design](../design/check/diagnostic-system.md) -- Architecture design document
