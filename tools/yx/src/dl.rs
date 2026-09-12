@@ -42,13 +42,27 @@ pub fn get_text(url: &str) -> Result<String> {
     Ok(agent.get(url).call()?.into_string()?)
 }
 
-/// 文件的 SHA-256（与 package-dist.sh 产出的 .sha256 比对）
+/// 文件的 SHA-256（与 package-dist.sh 产出的 .sha256 比对）。
+/// 不用 hasher 的 Write impl、也不用输出类型的 LowerHex——sha2 0.11
+/// （hybrid-array 取代 generic-array）两者皆无；手动循环 + 逐字节
+/// 十六进制化，对 0.10/0.11 都成立
 pub fn file_sha256(path: &Path) -> Result<String> {
     use sha2::Digest;
     let mut file = std::fs::File::open(path)?;
     let mut hasher = sha2::Sha256::new();
-    std::io::copy(&mut file, &mut hasher)?;
-    Ok(format!("{:x}", hasher.finalize()))
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect())
 }
 
 /// 校验 `archive` 与 `.sha256` 旁证文件（首字段为 hex digest）
