@@ -70,7 +70,7 @@ pub(crate) fn latest_stable_version(mirror: Option<&str>) -> Result<String> {
         mirror,
         &format!("https://github.com/{GITHUB_REPO}/releases/latest"),
     );
-    let landing = dl::get_redirect_target(&page)?;
+    let landing = dl::get_redirect_target(&page).map_err(crate::error::with_mirror_hint)?;
     parse_tag_from_release_url(&landing).ok_or_else(|| {
         Error::Message(format!(
             "cannot determine latest version: API failed and release page URL \
@@ -96,7 +96,10 @@ pub(crate) fn fetch_and_verify(
     sha_dest: &std::path::Path,
 ) -> Result<()> {
     println!("yx: downloading {asset_url}");
-    dl::download_to_file(asset_url, dest)?;
+    if let Err(e) = dl::download_to_file(asset_url, dest) {
+        // 发行包下载失败即硬失败（.sha256 缺失才走 Network 降级告警），此处补镜像指引
+        return Err(crate::error::with_mirror_hint(e));
+    }
     println!("yx: verifying checksum");
     match dl::download_to_file(sha_url, sha_dest) {
         Ok(_) => {
