@@ -956,3 +956,74 @@ fn test_bin_role_reports_unused_pub_type() {
         warnings
     );
 }
+
+// RFC-029f Phase 2：Internal 角色 pub 按包内引用池判定
+
+use std::collections::HashSet as StdHashSet;
+
+#[test]
+fn test_internal_role_pub_in_project_refs_is_alive() {
+    // Arrange: Internal 角色（exempt + 引用池）——pub fn 被包内其他文件引用
+    let mut analyzer = DeadCodeAnalyzer::new();
+    analyzer.set_exempt_pub(true);
+    analyzer.set_project_refs(StdHashSet::from(["used_pub".to_string()]));
+    let ast = Module {
+        items: vec![make_binding("used_pub", true, None, vec![])],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert
+    assert!(
+        warnings.is_empty(),
+        "引用池命中的 Internal pub 应豁免，实际: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn test_internal_role_pub_not_in_project_refs_reports() {
+    // Arrange: Internal 角色——pub 完全无引用（Phase 2 收紧：报）
+    let mut analyzer = DeadCodeAnalyzer::new();
+    analyzer.set_exempt_pub(true);
+    analyzer.set_project_refs(StdHashSet::from(["other_name".to_string()]));
+    let ast = Module {
+        items: vec![make_binding("orphan_pub", true, None, vec![])],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.code == "W1001" && w.message.contains("orphan_pub")),
+        "引用池未命中的 Internal pub 应报 W1001，实际: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn test_no_project_refs_keeps_absolute_exempt() {
+    // Arrange: Script/Lib（exempt 且无引用池）——pub 绝对豁免
+    let mut analyzer = DeadCodeAnalyzer::new();
+    analyzer.set_exempt_pub(true);
+    let ast = Module {
+        items: vec![make_binding("orphan_pub", true, None, vec![])],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert
+    assert!(
+        warnings.is_empty(),
+        "无引用池的 pub 豁免角色不应报，实际: {:?}",
+        warnings
+    );
+}

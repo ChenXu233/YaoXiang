@@ -67,7 +67,72 @@ pub fn explicit_surfaces(
     surfaces
 }
 
-/// RFC-036 测试文件约定：`tests/` 目录下，或文件名以 `_test` 结尾
+/// RFC-036 测试发现规则（`[tool.test]` patterns/exclude，RFC-029f 消费）。
+/// pattern 形态与 test_runner 同构：字面路径或 `root/**/*.yx`——`/**` 后缀
+/// 无关紧要，一律按 root 子树前缀命中。默认 `tests/**/*.yx`。
+#[derive(Debug, Clone, Default)]
+pub struct TestRules {
+    include: Vec<String>,
+    exclude: Vec<String>,
+}
+
+impl TestRules {
+    /// RFC-036 默认约定（无 `[tool.test]` 配置时）
+    pub fn default_rules() -> Self {
+        Self {
+            include: vec!["tests/**/*.yx".to_string()],
+            exclude: Vec::new(),
+        }
+    }
+
+    /// 从 `util::config::TestConfig` 转换
+    pub fn from_config(config: &crate::util::config::TestConfig) -> Self {
+        Self {
+            include: config.patterns.clone(),
+            exclude: config.exclude.clone(),
+        }
+    }
+
+    /// pattern 根子树前缀命中（组件级比较，跨平台分隔符安全）
+    fn matches(
+        file: &Path,
+        project_root: &Path,
+        pattern: &str,
+    ) -> bool {
+        let trimmed = pattern.trim_end_matches(['/', '\\', '*']);
+        let rel_root = match trimmed.split_once("/**") {
+            Some((root, _)) => root,
+            None => trimmed,
+        };
+        file.starts_with(project_root.join(rel_root))
+    }
+
+    /// 文件是否命中测试规则
+    pub fn is_test(
+        &self,
+        file: &Path,
+        project_root: &Path,
+    ) -> bool {
+        if self
+            .exclude
+            .iter()
+            .any(|p| Self::matches(file, project_root, p))
+        {
+            return false;
+        }
+        self.include
+            .iter()
+            .any(|p| Self::matches(file, project_root, p))
+            // 命名约定兜底：*_test.yx 无论目录
+            || file
+                .file_stem()
+                .map(|s| s.to_string_lossy().ends_with("_test"))
+                .unwrap_or(false)
+    }
+}
+
+/// RFC-036 测试文件约定兜底（无 `[tool.test]` 配置对象时）：
+/// `tests/` 目录下，或文件名以 `_test` 结尾
 pub fn is_test_file(
     file: &Path,
     project_root: &Path,
@@ -90,6 +155,7 @@ pub fn classify(
     file: &Path,
     project_root: Option<&Path>,
     surfaces: Option<&ExplicitSurfaces>,
+    test_rules: Option<&TestRules>,
     used_by_other: bool,
     has_main: bool,
 ) -> FileRole {
@@ -99,7 +165,11 @@ pub fn classify(
     if surfaces.bins.contains(file) {
         return FileRole::Bin;
     }
-    if is_test_file(file, root) {
+    let is_test = match test_rules {
+        Some(rules) => rules.is_test(file, root),
+        None => is_test_file(file, root),
+    };
+    if is_test {
         return FileRole::Test;
     }
     if surfaces.libs.contains(file) {
@@ -151,7 +221,7 @@ mod tests {
 
     #[test]
     fn no_project_root_yields_script() {
-        let role = classify(Path::new("/x/main.yx"), None, None, false, true);
+        let role = classify(Path::new("/x/main.yx"), None, None, None, false, true);
         assert_eq!(role, FileRole::Script, "无 manifest 上下文应旁路为 Script");
     }
 
@@ -163,7 +233,7 @@ mod tests {
             bins: HashSet::from([bin_file.clone()]),
             libs: HashSet::new(),
         };
-        let role = classify(&bin_file, Some(root), Some(&surfaces), false, false);
+        let role = classify(&bin_file, Some(root), Some(&surfaces), None, false, false);
         assert_eq!(role, FileRole::Bin, "显式 Bin 不被 Test 覆盖");
     }
 
@@ -175,6 +245,7 @@ mod tests {
             &test_file,
             Some(root),
             Some(&ExplicitSurfaces::default()),
+            None,
             true,
             false,
         );
@@ -189,6 +260,7 @@ mod tests {
             &test_file,
             Some(root),
             Some(&ExplicitSurfaces::default()),
+            None,
             false,
             true,
         );
@@ -207,7 +279,7 @@ mod tests {
             bins: HashSet::new(),
             libs: HashSet::from([lib_file.clone()]),
         };
-        let role = classify(&lib_file, Some(root), Some(&surfaces), false, true);
+        let role = classify(&lib_file, Some(root), Some(&surfaces), None, false, true);
         assert_eq!(role, FileRole::Lib, "显式 [lib] 文件即使无人 use 也是 Lib");
     }
 
@@ -219,6 +291,7 @@ mod tests {
             &file,
             Some(root),
             Some(&ExplicitSurfaces::default()),
+            None,
             true,
             false,
         );
@@ -233,6 +306,7 @@ mod tests {
             &file,
             Some(root),
             Some(&ExplicitSurfaces::default()),
+            None,
             false,
             true,
         );
@@ -247,6 +321,7 @@ mod tests {
             &file,
             Some(root),
             Some(&ExplicitSurfaces::default()),
+            None,
             false,
             false,
         );
@@ -261,6 +336,7 @@ mod tests {
             &file,
             Some(root),
             Some(&ExplicitSurfaces::default()),
+            None,
             true,
             true,
         );
@@ -310,5 +386,58 @@ mod tests {
         // 都没有 → None（全放行）
         let m_bare = PackageManifest::new("dep");
         assert!(import_surface(dep, &m_bare).is_none(), "无声明面应全放行");
+    }
+}
+
+#[cfg(test)]
+mod test_rules_tests {
+    use super::*;
+
+    fn root() -> std::path::PathBuf {
+        // 用真实存在的根避免 starts_with 语义歧义；路径仅做前缀比较
+        std::env::temp_dir()
+    }
+
+    fn file_under(
+        root: &Path,
+        rel: &str,
+    ) -> std::path::PathBuf {
+        canonical(&root.join(rel))
+    }
+
+    #[test]
+    fn default_rules_hit_tests_dir() {
+        let r = root();
+        let rules = TestRules::default_rules();
+        assert!(rules.is_test(&file_under(&r, "tests/util_test.yx"), &r));
+        assert!(!rules.is_test(&file_under(&r, "src/util.yx"), &r));
+    }
+
+    #[test]
+    fn custom_patterns_hit_nested_dir() {
+        let r = root();
+        let rules = TestRules {
+            include: vec!["feature_tests/**/*.yx".to_string()],
+            exclude: vec![],
+        };
+        assert!(
+            rules.is_test(&file_under(&r, "feature_tests/sub/case.yx"), &r),
+            "自定义 pattern 目录子树应命中"
+        );
+        assert!(!rules.is_test(&file_under(&r, "src/case.yx"), &r));
+    }
+
+    #[test]
+    fn exclude_removes_from_include_subtree() {
+        let r = root();
+        let rules = TestRules {
+            include: vec!["tests/**/*.yx".to_string()],
+            exclude: vec!["tests/fixtures/**".to_string()],
+        };
+        assert!(rules.is_test(&file_under(&r, "tests/a.yx"), &r));
+        assert!(
+            !rules.is_test(&file_under(&r, "tests/fixtures/dataset.yx"), &r),
+            "exclude 子树应从测试判定剔除（RFC-036 §2）"
+        );
     }
 }

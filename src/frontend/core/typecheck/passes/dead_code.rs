@@ -21,6 +21,8 @@ pub struct DeadCodeAnalyzer {
     all_defs: HashMap<String, SymbolDef>,
     /// pub 定义是否豁免（默认 true；Bin 角色设为 false）
     exempt_pub: bool,
+    /// 包内引用池（Phase 2）：Some 时 Internal 的 pub 由池判定生死
+    project_refs: Option<HashSet<String>>,
 }
 
 /// 符号定义
@@ -73,6 +75,7 @@ impl DeadCodeAnalyzer {
             entry_points: HashSet::new(),
             all_defs: HashMap::new(),
             exempt_pub: true,
+            project_refs: None,
         }
     }
 
@@ -82,6 +85,17 @@ impl DeadCodeAnalyzer {
         exempt: bool,
     ) {
         self.exempt_pub = exempt;
+    }
+
+    /// 设置包内引用池（RFC-029f Phase 2）：项目内所有文件引用到的标识符
+    /// 并集。提供后，`exempt_pub` 的 Internal 角色语义从"绝对豁免"收紧为
+    /// "pub 名在池中才豁免"——包内 use 图不可达的 pub 可报。
+    /// None（单文件 Script 路径）= 无包视角，pub 维持绝对豁免。
+    pub fn set_project_refs(
+        &mut self,
+        refs: HashSet<String>,
+    ) {
+        self.project_refs = Some(refs);
     }
 
     /// 收集入口点和符号定义（合并处理以减少代码重复）
@@ -137,7 +151,7 @@ impl DeadCodeAnalyzer {
                     if !is_method && name == "main" {
                         self.entry_points.insert(name.clone());
                     }
-                    if *is_pub && self.exempt_pub {
+                    if *is_pub && self.exempt_pub && self.project_refs.is_none() {
                         self.entry_points.insert(def_name);
                     }
                 }
@@ -152,7 +166,7 @@ impl DeadCodeAnalyzer {
                         },
                     );
                     // pub 类型是对外接口（可达根）；私有类型仅被引用时可达
-                    if *is_pub && self.exempt_pub {
+                    if *is_pub && self.exempt_pub && self.project_refs.is_none() {
                         self.entry_points.insert(name.clone());
                     }
                 }
@@ -528,11 +542,16 @@ impl DeadCodeAnalyzer {
 
     /// 找出未被引用的私有定义
     ///
-    /// 找出未被引用的定义
+    /// 找出未被引用的定义（RFC-029f 角色语义）
     ///
-    /// pub 豁免由 [`Self::exempt_pub`] 决定（RFC-029f 角色）：true = 对外接口
-    /// 永不报告（#321 定案 B，Lib/Internal/Script）；false = Bin 角色，无包外
-    /// 消费者的未使用 pub 可报（#321 方案 A 兑现）。
+    /// pub 豁免由角色决定：
+    /// - Bin（`exempt_pub = false`）：无包外消费者，未使用 pub 报警（#321 方案 A）
+    /// - Internal（`exempt_pub = true` + 提供引用池）：收紧为"包内 use 图可达才豁免"，
+    ///   pub 名不在池中即报（Phase 2）
+    /// - Script/Lib（`exempt_pub = true` 且无引用池）：绝对豁免——pub 是对外接口
+    ///   （#321 定案 B）；包外消费者不可见，宁漏报
+    ///
+    /// 私有定义不受豁免影响，始终参与判定（既有语义）。
     pub fn find_unused_private_defs(
         &self,
         reachable: &HashSet<String>,
@@ -540,7 +559,10 @@ impl DeadCodeAnalyzer {
         let mut warnings = Vec::new();
 
         for (name, def) in &self.all_defs {
-            if (def.is_exported && self.exempt_pub) || Self::is_reachable(name, def, reachable) {
+            if Self::is_reachable(name, def, reachable) {
+                continue;
+            }
+            if def.is_exported && !self.pub_should_warn(name) {
                 continue;
             }
             let (code, message) = match def.kind {
@@ -558,6 +580,28 @@ impl DeadCodeAnalyzer {
         }
 
         warnings
+    }
+
+    /// pub 定义是否应当报告（不可达前提下）
+    ///
+    /// - `exempt_pub = false`（Bin）→ 报
+    /// - `exempt_pub = true` + 引用池（Internal）→ 池中无短名才报；
+    ///   短名匹配与 [`Self::is_reachable`] 同构（`Type.method` 取方法名）
+    /// - `exempt_pub = true` 无引用池（Script/Lib）→ 不报（绝对豁免）
+    fn pub_should_warn(
+        &self,
+        name: &str,
+    ) -> bool {
+        if !self.exempt_pub {
+            return true;
+        }
+        match &self.project_refs {
+            Some(refs) => {
+                let short_name = name.rsplit('.').next().unwrap_or(name);
+                !refs.contains(short_name)
+            }
+            None => false,
+        }
     }
 
     /// 判定定义是否可达；方法用短名匹配（调用点 `w.render()` 只出现短名）

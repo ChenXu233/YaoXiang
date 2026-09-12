@@ -169,27 +169,66 @@ pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
 /// （按文件分组，不早退），供 `yaoxiang check` 与 `run` 走同一条编译路径。
 ///
 /// RFC-029f：逐文件分类编译目标角色（Script/Bin/Lib/Test/Internal）——
-/// 警告诊断（死代码族 + W1003 未使用导入）按角色接入：Test 不参与死代码，
-/// Bin 角色未使用 pub 可报，其余角色 pub 豁免。警告为 Warning severity，
-/// 不阻断、不计入错误数。
+/// 警告诊断（死代码族 + W1003 未使用导入）按角色接入：
+/// - Test 不参与死代码（`[tool.test]` patterns/exclude 规则，RFC-036）
+/// - Bin 角色未使用 pub 可报（Phase 1）
+/// - Internal 角色 pub 收紧为"包内 use 图可达才豁免"（Phase 2：聚合本项目
+///   全部文件的引用池传入分析器）
+///
+/// 警告为 Warning severity，不阻断、不计入错误数。
 pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, OrchestratorError> {
     let (files, used_by) = discover_with_used(entry)?;
     let registry = build_registry_from(&files)?;
     let method_bindings = registry.all_method_bindings();
 
     // 项目角色上下文：manifest 缺失或损坏 → surfaces 为 None → 全体 Script 态
-    //（行为与引入角色模型前一致）
+    //（行为与引入角色模型前一致）。双解析：目标字段（RFC-015）与 [tool.test]
+    //（RFC-036，经 util::config 的宽松结构）各取所需。
     let project_root = find_project_root(entry);
-    let surfaces = project_root.as_ref().and_then(|root| {
-        PackageManifest::load(root)
-            .ok()
-            .map(|manifest| roles::explicit_surfaces(&manifest, root))
+    let manifest_src = project_root.as_ref().and_then(|root| {
+        std::fs::read_to_string(root.join(crate::package::manifest::MANIFEST_FILE)).ok()
+    });
+    let surfaces = manifest_src.as_deref().and_then(|src| {
+        let manifest: PackageManifest = toml::from_str(src).ok()?;
+        Some(roles::explicit_surfaces(
+            &manifest,
+            project_root.as_deref()?,
+        ))
+    });
+    let test_rules = manifest_src.as_deref().and_then(|src| {
+        let config: crate::util::config::ProjectConfig = toml::from_str(src).ok()?;
+        Some(roles::TestRules::from_config(&config.tool.test))
     });
 
-    let mut out = Vec::new();
+    // 先解析全部文件（Phase 2：引用池需要全项目视角）
+    let mut parsed: Vec<(&DiscoveredFile, Module)> = Vec::new();
     for file in &files {
         let ast = parse_file(&file.path, &file.source)?;
-        let result = typecheck_with_registry(&ast, &registry, &method_bindings);
+        parsed.push((file, ast));
+    }
+
+    let project_root_canon = project_root
+        .as_ref()
+        .map(|root| root.canonicalize().unwrap_or_else(|_| root.clone()));
+    let in_project = |file_canon: &Path| -> bool {
+        project_root_canon
+            .as_deref()
+            .is_some_and(|root| file_canon.starts_with(root))
+    };
+
+    // RFC-029f Phase 2：包内引用池 = 项目根下全部 .yx 文件的标识符引用并集
+    //（含 Test——测试使用使产品 pub 存活）。聚合全项目而非入口可达集：
+    // 单文件 check 时引用方可能不在发现集，按可达集聚合会产生顺序敏感的
+    // 误报。仅收集名字、解析失败静默跳过——不产生诊断，不破坏发现隔离
+    //（#247）。vendor/嵌入 std 不入池（外部包视角）。
+    let project_refs: HashSet<String> = project_root_canon
+        .as_deref()
+        .map(collect_project_refs)
+        .unwrap_or_default();
+
+    let mut out = Vec::new();
+    for (file, ast) in &parsed {
+        let result = typecheck_with_registry(ast, &registry, &method_bindings);
 
         let file_canon = file
             .path
@@ -199,27 +238,36 @@ pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, Or
             &file_canon,
             project_root.as_deref(),
             surfaces.as_ref(),
+            test_rules.as_ref(),
             used_by.contains(&file_canon),
-            ast_has_main(&ast),
+            ast_has_main(ast),
         );
 
         // 警告仅对本项目文件呈现（RFC-029f）：vendor 依赖与嵌入 std 的内部
         // 警告属于其所属包，不混入消费方的 check 输出
-        let in_project = project_root.as_ref().is_some_and(|root| {
-            let root_canon = root.canonicalize().unwrap_or_else(|_| root.clone());
-            file_canon.starts_with(&root_canon)
-        });
-
         let mut diagnostics = result.diagnostics;
-        if in_project {
+        if in_project(&file_canon) {
             // W1003 未使用导入随 W 码通道流出（Warning severity，不阻断编译）
             diagnostics.extend(result.warnings);
-            // 角色感知死代码（RFC-029f）：Test 不参与；Bin 不豁免 pub；
-            // Script/Lib/Internal 豁免（pub = 对外接口）
+            // 角色感知死代码（RFC-029f）：
+            // - Test 不参与
+            // - Bin 不豁免 pub（Phase 1）
+            // - Internal 豁免收紧为引用池判定（Phase 2）
+            // - Script/Lib 绝对豁免（pub = 对外接口）
             if !matches!(role, FileRole::Test) {
                 let mut analyzer = DeadCodeAnalyzer::new();
-                analyzer.set_exempt_pub(!matches!(role, FileRole::Bin));
-                let warnings = analyzer.analyze(&ast);
+                match role {
+                    FileRole::Bin => {
+                        analyzer.set_exempt_pub(false);
+                        analyzer.set_project_refs(project_refs.clone());
+                    }
+                    FileRole::Internal => {
+                        analyzer.set_exempt_pub(true);
+                        analyzer.set_project_refs(project_refs.clone());
+                    }
+                    _ => {}
+                }
+                let warnings = analyzer.analyze(ast);
                 diagnostics.extend(analyzer.to_diagnostics(&warnings));
             }
         }
@@ -276,6 +324,53 @@ fn ast_has_main(ast: &Module) -> bool {
                 if matches!(target.as_ref(), Expr::Var(name, _) if name == "main")
         )
     })
+}
+
+/// 收集项目根下全部 `.yx` 文件的标识符引用并集（RFC-029f Phase 2 引用池）。
+///
+/// 跳过 `.git`/`.yaoxiang`（vendor）/`target` 目录；词法或语法失败的文件
+/// 静默跳过——引用池是容错的辅助判定，不允许它制造新的检查失败。
+fn collect_project_refs(project_root: &Path) -> HashSet<String> {
+    fn is_excluded_dir(dir: &Path) -> bool {
+        dir.file_name().is_some_and(|name| {
+            let name = name.to_string_lossy();
+            name == ".git" || name == ".yaoxiang" || name == "target"
+        })
+    }
+
+    fn collect_yx(
+        dir: &Path,
+        out: &mut Vec<PathBuf>,
+    ) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if !is_excluded_dir(&path) {
+                    collect_yx(&path, out);
+                }
+            } else if path.extension().is_some_and(|e| e == "yx") {
+                out.push(path);
+            }
+        }
+    }
+
+    let mut refs = HashSet::new();
+    let mut files = Vec::new();
+    collect_yx(project_root, &mut files);
+    for path in files {
+        let Ok(source) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(tokens) = tokenize(&source) else {
+            continue;
+        };
+        let parsed = parser::parse(&tokens);
+        refs.extend(DeadCodeAnalyzer::collect_ident_refs(&parsed.module));
+    }
+    refs
 }
 
 /// 提取一个文件定义的全局变量（顶层非函数绑定）的名字与类型。

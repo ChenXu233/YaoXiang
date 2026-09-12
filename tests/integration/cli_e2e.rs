@@ -552,3 +552,80 @@ fn test_e2e_check_vendor_import_surface_blocks_hidden() {
         "越界 use 应报既有 module_not_found（E5001），实际: {stderr:?}"
     );
 }
+
+// RFC-029f Phase 2：Internal pub 收紧 + [tool.test] patterns 级 Test 判定
+
+#[test]
+fn test_e2e_check_internal_unused_pub_reports() {
+    // Arrange: internal.yx 无人 use、无 main → Internal 角色；其 pub 无引用
+    // （Phase 2 收紧：包内 use 图不可达即报）
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "app", "");
+    let _main = write_yx(tmp.path(), "main.yx", "main = { x = 1 }");
+    let internal = write_yx(
+        tmp.path(),
+        "internal.yx",
+        "pub orphan = (x: Int) => x\nconst_used = 1",
+    );
+
+    // Act: 单文件入口检查 internal.yx
+    let (code, _stdout, stderr) = run_yx(&["check", internal.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0);
+    assert!(
+        stderr.contains("W1001"),
+        "Internal 角色 unreferenced pub 应报 W1001，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_internal_pub_used_elsewhere_alive() {
+    // Arrange: 同样的 pub 定义，但被其他文件具名导入并调用——
+    // 引用池来自全项目扫描，使用方在发现集之外也能救活
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "app", "");
+    let _main = write_yx(
+        tmp.path(),
+        "main.yx",
+        "use internal.{util}\nmain = { util(1) }",
+    );
+    let internal = write_yx(tmp.path(), "internal.yx", "pub util = (x: Int) => x");
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(&["check", internal.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0);
+    assert!(
+        !stderr.contains("W1001"),
+        "被包内其他文件使用的 Internal pub 不应报，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_custom_test_patterns() {
+    // Arrange: [tool.test] 自定义 patterns 指向 checks/ 目录——
+    // 该目录下文件按 Test 角色处理（不参与死代码判定）
+    let tmp = TempDir::new().unwrap();
+    write_manifest(
+        tmp.path(),
+        "app",
+        "[tool.test]\npatterns = [\"checks/**/*.yx\"]\n",
+    );
+    let _main = write_yx(tmp.path(), "main.yx", "main = { x = 1 }");
+    let checks = tmp.path().join("checks");
+    std::fs::create_dir(&checks).unwrap();
+    let guard = checks.join("guard.yx");
+    std::fs::write(&guard, "pub ensure = (x: Int) => x\nmain = { x = 1 }").unwrap();
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(&["check", guard.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0);
+    assert!(
+        !stderr.contains("W1001"),
+        "自定义 patterns 命中的文件应按 Test 角色豁免，实际: {stderr:?}"
+    );
+}
