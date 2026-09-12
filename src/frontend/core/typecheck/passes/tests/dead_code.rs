@@ -56,6 +56,7 @@ fn make_binding(
 }
 
 /// 构造一个类型定义语句（`Name: Type = ...` 的真实语法形态，#321）
+/// definition 用原生类型——不引用自身（自引用会被收集成使用，污染判定）
 fn make_type_def(
     name: &str,
     is_pub: bool,
@@ -64,10 +65,7 @@ fn make_type_def(
         kind: StmtKind::TypeDefinition {
             name: name.to_string(),
             signature_params: vec![],
-            definition: Type::Name {
-                name: name.to_string(),
-                span: Span::dummy(),
-            },
+            definition: Type::Int(64),
             is_pub,
         },
         span: Span::dummy(),
@@ -855,5 +853,106 @@ fn test_collect_ident_refs_covers_param_type_annotations() {
     assert!(
         !refs.contains("main"),
         "顶层定义目标名不应被收集为引用（定义不是使用）",
+    );
+}
+
+// RFC-029f 角色语义：exempt_pub 开关（Bin 角色不豁免 pub）
+
+#[test]
+fn test_bin_role_reports_unused_pub_fn() {
+    // Arrange: Bin 角色（exempt_pub = false）——pub 无包外消费者，未使用可报
+    let mut analyzer = DeadCodeAnalyzer::new();
+    analyzer.set_exempt_pub(false);
+    let ast = Module {
+        items: vec![
+            make_binding("main", false, None, vec![]),
+            make_binding("pub_dead", true, None, vec![]),
+        ],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.code == "W1001" && w.message.contains("pub_dead")),
+        "Bin 角色未使用的 pub 函数应报 W1001，实际: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn test_lib_role_exempt_pub_default() {
+    // Arrange: 默认（Script/Lib/Internal）pub 豁免——同样的文件不报
+    let mut analyzer = DeadCodeAnalyzer::new();
+    let ast = Module {
+        items: vec![
+            make_binding("main", false, None, vec![]),
+            make_binding("pub_dead", true, None, vec![]),
+        ],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert
+    assert!(
+        warnings.is_empty(),
+        "pub 豁免角色（Lib/Internal/Script）不应报，实际: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn test_bin_role_used_pub_fn_not_reported() {
+    // Arrange: Bin 角色下被引用的 pub 函数可达，不报
+    let mut analyzer = DeadCodeAnalyzer::new();
+    analyzer.set_exempt_pub(false);
+    let ast = Module {
+        items: vec![
+            make_binding("main", false, None, vec![make_call_stmt("pub_used")]),
+            make_binding("pub_used", true, None, vec![]),
+        ],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert
+    assert!(
+        warnings.is_empty(),
+        "Bin 角色被引用的 pub 函数不应报，实际: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn test_bin_role_reports_unused_pub_type() {
+    // Arrange: Bin 角色 pub 类型定义未使用 → W1002
+    let mut analyzer = DeadCodeAnalyzer::new();
+    analyzer.set_exempt_pub(false);
+    let ast = Module {
+        items: vec![
+            make_binding("main", false, None, vec![]),
+            make_type_def("DeadType", true),
+        ],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.code == "W1002" && w.message.contains("DeadType")),
+        "Bin 角色未使用的 pub 类型应报 W1002，实际: {:?}",
+        warnings
     );
 }

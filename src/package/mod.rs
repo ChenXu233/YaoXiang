@@ -12,6 +12,9 @@ pub mod source;
 pub mod template;
 pub mod vendor;
 
+#[cfg(test)]
+mod tests;
+
 pub use error::{PackageError, PackageResult};
 pub use manifest::PackageManifest;
 pub use lock::LockFile;

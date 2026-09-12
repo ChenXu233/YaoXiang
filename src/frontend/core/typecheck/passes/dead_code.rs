@@ -1,8 +1,9 @@
 //! 死代码分析器
 //!
-//! 识别从未被引用的私有定义，生成警告信息。
-//! 码义（RFC-013，#321 定案 B）：`pub` 定义是对外接口，永不报告；
-//! 仅私有（非 pub）定义参与死代码判定（W1001/W1002/W1004/W1005）。
+//! 识别从未被引用的定义，生成警告信息。
+//! 码义（RFC-013，#321 定案 B + RFC-029f 角色语义）：`pub` 定义的豁免与否
+//! 由角色决定——Script/Lib/Internal 豁免（pub = 对外接口），Bin 不豁免
+//! （无包外消费者，未使用 pub 可报，即 #321 方案 A 的兑现）。
 //! 未使用导入（W1003）由 typecheck 的 use elaboration 检测，不在此处。
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -18,6 +19,8 @@ pub struct DeadCodeAnalyzer {
     entry_points: HashSet<String>,
     /// 所有符号定义
     all_defs: HashMap<String, SymbolDef>,
+    /// pub 定义是否豁免（默认 true；Bin 角色设为 false）
+    exempt_pub: bool,
 }
 
 /// 符号定义
@@ -69,14 +72,24 @@ impl DeadCodeAnalyzer {
         Self {
             entry_points: HashSet::new(),
             all_defs: HashMap::new(),
+            exempt_pub: true,
         }
+    }
+
+    /// 设置 pub 豁免（RFC-029f：Bin 角色 = false，未使用 pub 可报）
+    pub fn set_exempt_pub(
+        &mut self,
+        exempt: bool,
+    ) {
+        self.exempt_pub = exempt;
     }
 
     /// 收集入口点和符号定义（合并处理以减少代码重复）
     ///
     /// 入口点（可达性根）：
     /// 1. `main` 函数
-    /// 2. `pub` 导出的函数与 `pub` 类型定义（对外接口，#321 定案 B）
+    /// 2. `pub` 导出的函数与 `pub` 类型定义（对外接口）——仅在 [`Self::exempt_pub`]
+    ///    时作为可达根；Bin 角色 pub 不再自动豁免
     ///
     /// 类型定义走 `TypeDefinition` 语句（`Point: Type = {...}`），
     /// 不再从 Assign 形状猜测——带类型注解的变量赋值是变量，不是类型。
@@ -124,7 +137,7 @@ impl DeadCodeAnalyzer {
                     if !is_method && name == "main" {
                         self.entry_points.insert(name.clone());
                     }
-                    if *is_pub {
+                    if *is_pub && self.exempt_pub {
                         self.entry_points.insert(def_name);
                     }
                 }
@@ -139,7 +152,7 @@ impl DeadCodeAnalyzer {
                         },
                     );
                     // pub 类型是对外接口（可达根）；私有类型仅被引用时可达
-                    if *is_pub {
+                    if *is_pub && self.exempt_pub {
                         self.entry_points.insert(name.clone());
                     }
                 }
@@ -515,7 +528,11 @@ impl DeadCodeAnalyzer {
 
     /// 找出未被引用的私有定义
     ///
-    /// pub 定义是对外接口，永不报告（#321 定案 B）。
+    /// 找出未被引用的定义
+    ///
+    /// pub 豁免由 [`Self::exempt_pub`] 决定（RFC-029f 角色）：true = 对外接口
+    /// 永不报告（#321 定案 B，Lib/Internal/Script）；false = Bin 角色，无包外
+    /// 消费者的未使用 pub 可报（#321 方案 A 兑现）。
     pub fn find_unused_private_defs(
         &self,
         reachable: &HashSet<String>,
@@ -523,7 +540,7 @@ impl DeadCodeAnalyzer {
         let mut warnings = Vec::new();
 
         for (name, def) in &self.all_defs {
-            if def.is_exported || Self::is_reachable(name, def, reachable) {
+            if (def.is_exported && self.exempt_pub) || Self::is_reachable(name, def, reachable) {
                 continue;
             }
             let (code, message) = match def.kind {

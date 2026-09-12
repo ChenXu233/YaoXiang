@@ -426,3 +426,129 @@ fn test_e2e_init_on_existing_directory_exits_nonzero() {
     assert_ne!(code, 0, "init on existing dir should exit non-zero");
     assert!(!stderr.is_empty(), "stderr should explain why init failed");
 }
+
+// RFC-029f：编译目标角色与导入面语义（check 命令端到端）
+
+/// 写一个最小的 yaoxiang.toml（[package] 头）
+fn write_manifest(
+    dir: &std::path::Path,
+    name: &str,
+    extra: &str,
+) {
+    std::fs::write(
+        dir.join("yaoxiang.toml"),
+        format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\n\n{extra}"),
+    )
+    .unwrap();
+}
+
+#[test]
+fn test_e2e_check_bin_role_reports_unused_pub_fn() {
+    // Arrange: 无声明面项目——含 main 且无人 use 的入口文件推断为 Bin，
+    // 其未使用 pub 可报（RFC-029f 角色语义；pub 仍豁免时此测试红）
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "app", "");
+    let src = write_yx(
+        tmp.path(),
+        "main.yx",
+        "pub dead_api = (x: Int) => x\nmain = { x = 1 }",
+    );
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(&["check", src.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0, "警告不构成错误，check 应 exit 0");
+    assert!(
+        stderr.contains("W1001"),
+        "Bin 角色未使用 pub 应报 W1001，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_lib_file_unused_pub_exempt() {
+    // Arrange: [lib] 声明的库文件是对外接口——未使用 pub 豁免（定案 B 语义）
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "app", "[lib]\npath = \"lib.yx\"\n");
+    let _main = write_yx(tmp.path(), "main.yx", "use lib\nmain = { lib.lib_fn(1) }");
+    let lib = write_yx(
+        tmp.path(),
+        "lib.yx",
+        "pub lib_fn = (x: Int) => x\npub lib_dead = (y: Int) => y",
+    );
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(&["check", lib.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0);
+    assert!(
+        !stderr.contains("W1001"),
+        "Lib 角色 pub 是对外接口不应报 W1001，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_tests_dir_exempt_from_dead_code() {
+    // Arrange: tests/ 目录文件是 Test 角色——不参与死代码判定
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "app", "");
+    let _main = write_yx(tmp.path(), "main.yx", "main = { x = 1 }");
+    let test_file = tmp.path().join("tests");
+    std::fs::create_dir(&test_file).unwrap();
+    let test_src = test_file.join("util_test.yx");
+    std::fs::write(&test_src, "pub helper = (x: Int) => x\nmain = { x = 1 }").unwrap();
+
+    // Act: check 目录——tests/ 下的文件作为入口被检查
+    let (code, _stdout, stderr) = run_yx(&["check", tmp.path().to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0);
+    assert!(
+        !stderr.contains("W1001"),
+        "Test 角色文件不应报死代码警告，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_vendor_import_surface_allows_exported() {
+    // Arrange: vendor 依赖声明 [exports] 只露 src/dep.yx——
+    // use dep（导出面内）应正常解析
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "app", "");
+    let dep = tmp.path().join(".yaoxiang/vendor/dep-0.1.0");
+    std::fs::create_dir_all(dep.join("src")).unwrap();
+    write_manifest(&dep, "dep", "[exports]\n\".\" = \"src/dep.yx\"\n");
+    std::fs::write(dep.join("src/dep.yx"), "pub api = (x: Int) => x").unwrap();
+    std::fs::write(dep.join("src/hidden.yx"), "pub secret = (x: Int) => x").unwrap();
+    let src = write_yx(tmp.path(), "main.yx", "use dep\nmain = { dep.api(1) }");
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(&["check", src.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0, "导出面内的 use 应正常解析，实际: {stderr:?}");
+}
+
+#[test]
+fn test_e2e_check_vendor_import_surface_blocks_hidden() {
+    // Arrange: use dep.hidden 不在依赖包导出面内 → 模块未找到（越界不可见）
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "app", "");
+    let dep = tmp.path().join(".yaoxiang/vendor/dep-0.1.0");
+    std::fs::create_dir_all(dep.join("src")).unwrap();
+    write_manifest(&dep, "dep", "[exports]\n\".\" = \"src/dep.yx\"\n");
+    std::fs::write(dep.join("src/dep.yx"), "pub api = (x: Int) => x").unwrap();
+    std::fs::write(dep.join("src/hidden.yx"), "pub secret = (x: Int) => x").unwrap();
+    let src = write_yx(tmp.path(), "main.yx", "use dep.hidden\nmain = { x = 1 }");
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(&["check", src.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_ne!(code, 0, "越界 use 应失败");
+    assert!(
+        stderr.contains("E5001"),
+        "越界 use 应报既有 module_not_found（E5001），实际: {stderr:?}"
+    );
+}

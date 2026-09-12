@@ -28,6 +28,35 @@ pub struct PackageInfo {
     pub license: Option<String>,
 }
 
+/// `[lib]` section (RFC-015): the package's library entry file.
+/// 消费语义见 RFC-029f：lib.path 是导入面的单文件回退（exports 缺省时）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LibTarget {
+    /// Library entry path (relative to the manifest directory)
+    pub path: String,
+}
+
+/// `[[bin]]` section (RFC-015): a binary target entry file.
+/// 消费语义见 RFC-029f：bin 角色文件内未使用的 pub 可报死代码（W1001 族）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BinTarget {
+    /// Target name (used by build/dispatch tooling)
+    pub name: String,
+    /// Entry path (relative to the manifest directory)
+    pub path: String,
+}
+
+/// `[run]` section (RFC-015): default program entry and arguments.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct RunConfig {
+    /// Default entry file (`run` without explicit path)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub main: Option<String>,
+    /// Arguments passed to the program
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<String>,
+}
+
 /// Represents the complete yaoxiang.toml manifest
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackageManifest {
@@ -46,6 +75,19 @@ pub struct PackageManifest {
     /// I18n configuration (project-level overrides user-level)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub i18n: Option<I18nConfig>,
+    /// `[lib]` library entry (RFC-015)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lib: Option<LibTarget>,
+    /// `[[bin]]` binary targets (RFC-015)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bin: Vec<BinTarget>,
+    /// `[exports]` path mapping (RFC-015): use-path prefix → file path.
+    /// 消费语义见 RFC-029f：导出面 = 映射值文件集合，跨包 use 的合法起点。
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub exports: BTreeMap<String, String>,
+    /// `[run]` default entry (RFC-015)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<RunConfig>,
 }
 
 impl PackageManifest {
@@ -62,6 +104,10 @@ impl PackageManifest {
             dependencies: BTreeMap::new(),
             dev_dependencies: BTreeMap::new(),
             i18n: None,
+            lib: None,
+            bin: Vec::new(),
+            exports: BTreeMap::new(),
+            run: None,
         }
     }
 

@@ -450,11 +450,18 @@ fn test_check_two_entries_sharing_module_reports_it_once() {
         .map(|d| d.diagnostic.code.clone())
         .collect();
 
-    // Assert - lib.yx 的 E1001 只上报一次，计数不随入口数翻倍
+    // Assert - lib.yx 的 E1001 只上报一次，计数不随入口数翻倍；
+    // RFC-029f 起 check 路径接入死代码警告——`broken` 是未引用的私有变量，
+    // 合法产生 W1004，且去重语义对警告同样生效（每码恰好一次）
+    let e1001_count = lib_codes.iter().filter(|c| *c == "E1001").count();
+    let w1004_count = lib_codes.iter().filter(|c| *c == "W1004").count();
     assert_eq!(
-        lib_codes,
-        vec!["E1001".to_string()],
+        e1001_count, 1,
         "shared module errors must be reported exactly once, got: {lib_codes:?}"
+    );
+    assert_eq!(
+        w1004_count, 1,
+        "unused private var warning must also be deduplicated, got: {lib_codes:?}"
     );
     assert_eq!(
         result.error_count, 1,

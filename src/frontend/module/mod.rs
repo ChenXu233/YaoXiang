@@ -19,6 +19,7 @@
 pub mod orchestrator;
 pub mod registry;
 pub mod resolver;
+pub mod roles;
 pub mod symbol;
 
 use std::collections::HashMap;
