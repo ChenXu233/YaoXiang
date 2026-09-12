@@ -1,6 +1,6 @@
 ---
 title: 'Cross-file Analysis'
-description: 'Design of YaoXiang check''s cross-file type checking'
+description: "Design of YaoXiang check's cross-file type checking"
 ---
 
 # Cross-file Analysis
