@@ -1,9 +1,10 @@
 ---
 title: 'RFC-029f: 编译目标角色与导入面语义'
-status: '草案'
+status: '已接受'
 author: '晨煦'
 created: '2026-09-12'
 updated: '2026-09-13'
+accepted: '2026-09-13'
 issue: '#334'
 ---
 
