@@ -47,7 +47,11 @@ fn test_verify_sha256_accepts_matching_digest_file_content() {
     fs::write(&file, b"payload").unwrap();
     let mut hasher = sha2::Sha256::new();
     hasher.update(b"payload");
-    let digest = format!("{:x}", hasher.finalize());
+    let digest = hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
 
     // Act
     let result = verify_sha256(&file, &format!("{digest}  a.tar.gz"));
