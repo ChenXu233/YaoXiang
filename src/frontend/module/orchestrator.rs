@@ -38,6 +38,9 @@ use crate::frontend::module::roles::{self, FileRole};
 use crate::frontend::module::symbol::SymbolTable;
 use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 use crate::middle::ModuleIR;
+
+// manifest 解析依赖 package 模块（wasm32 下不编译）——角色上下文在 wasm 降级
+#[cfg(not(target_arch = "wasm32"))]
 use crate::package::manifest::PackageManifest;
 
 /// 一个已发现的源文件：模块键 + 磁盘路径 + 源码
@@ -183,22 +186,10 @@ pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, Or
 
     // 项目角色上下文：manifest 缺失或损坏 → surfaces 为 None → 全体 Script 态
     //（行为与引入角色模型前一致）。双解析：目标字段（RFC-015）与 [tool.test]
-    //（RFC-036，经 util::config 的宽松结构）各取所需。
+    //（RFC-036，经 util::config 的宽松结构）各取所需。wasm32 下 package 模块
+    // 不编译，角色上下文降级为 None（Script 态，行为安全）。
     let project_root = find_project_root(entry);
-    let manifest_src = project_root.as_ref().and_then(|root| {
-        std::fs::read_to_string(root.join(crate::package::manifest::MANIFEST_FILE)).ok()
-    });
-    let surfaces = manifest_src.as_deref().and_then(|src| {
-        let manifest: PackageManifest = toml::from_str(src).ok()?;
-        Some(roles::explicit_surfaces(
-            &manifest,
-            project_root.as_deref()?,
-        ))
-    });
-    let test_rules = manifest_src.as_deref().and_then(|src| {
-        let config: crate::util::config::ProjectConfig = toml::from_str(src).ok()?;
-        Some(roles::TestRules::from_config(&config.tool.test))
-    });
+    let (surfaces, test_rules) = role_context(project_root.as_deref());
 
     // 先解析全部文件（Phase 2：引用池需要全项目视角）
     let mut parsed: Vec<(&DiscoveredFile, Module)> = Vec::new();
@@ -274,6 +265,50 @@ pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, Or
         out.push((file.path.clone(), diagnostics));
     }
     Ok(out)
+}
+
+/// 项目角色上下文（RFC-029f）：显式声明面 + 测试发现规则。
+/// manifest 读取解析依赖 `crate::package`——wasm32 下不存在，降级为
+/// (None, None)（全体 Script 态、无 patterns 规则，行为与引入模型前一致）。
+#[cfg(not(target_arch = "wasm32"))]
+fn role_context(
+    project_root: Option<&Path>
+) -> (Option<roles::ExplicitSurfaces>, Option<roles::TestRules>) {
+    let Some(root) = project_root else {
+        return (None, None);
+    };
+    let Ok(src) = std::fs::read_to_string(root.join(crate::package::manifest::MANIFEST_FILE))
+    else {
+        return (None, None);
+    };
+    let surfaces = toml::from_str::<PackageManifest>(&src)
+        .ok()
+        .map(|manifest| roles::TargetViews {
+            bins: manifest
+                .bin
+                .iter()
+                .map(|b| b.path.clone())
+                .chain(manifest.run.as_ref().and_then(|r| r.main.clone()))
+                .collect(),
+            libs: manifest
+                .exports
+                .values()
+                .cloned()
+                .chain(manifest.lib.as_ref().map(|l| l.path.clone()))
+                .collect(),
+        })
+        .map(|views| roles::explicit_surfaces(&views, root));
+    let test_rules = toml::from_str::<crate::util::config::ProjectConfig>(&src)
+        .ok()
+        .map(|config| roles::TestRules::from_config(&config.tool.test));
+    (surfaces, test_rules)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn role_context(
+    _project_root: Option<&Path>
+) -> (Option<roles::ExplicitSurfaces>, Option<roles::TestRules>) {
+    (None, None)
 }
 
 /// 用项目上下文检查一份**内存源码**（LSP 脏缓冲区 / 未落盘编辑）。
@@ -618,8 +653,23 @@ fn resolve_module_path(
     None
 }
 
-/// 在 `<project_root>/.yaoxiang/vendor/` 中解析 `use <pkg>[.<rest>]`。
-///
+/// 依赖包的导入面（RFC-029f）：`[exports]` 值集合优先，`[lib].path` 次之；
+/// 无 manifest 或两者皆无 → None（全放行）。wasm32 下 package 模块不编译，
+/// 返回 None（不过滤，行为安全）。
+#[cfg(not(target_arch = "wasm32"))]
+fn dep_import_surface(dep_root: &Path) -> Option<std::collections::HashSet<PathBuf>> {
+    let manifest = PackageManifest::load(dep_root).ok()?;
+    let exports: Vec<String> = manifest.exports.values().cloned().collect();
+    let lib_path = manifest.lib.as_ref().map(|lib| lib.path.clone());
+    roles::import_surface_views(dep_root, &exports, lib_path.as_deref())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn dep_import_surface(_dep_root: &Path) -> Option<std::collections::HashSet<PathBuf>> {
+    None
+}
+
+/// 在 `<project_root>/.yaoxiang/vendor/` 中解析 `use <pkg>[.<rest>]`。///
 /// 布局（RFC-014 §模块解析顺序）：`<pkg>-<ver>/src/<pkg>/<rest>.yx`；
 /// 裸包名回退 `<pkg>-<ver>/src/<pkg>.yx`、`src/lib.yx`、`src/main.yx`、`mod.yx`。
 /// ponytail: 多版本取版本号最大者（预发布后于正式版）；按 lock 精确选择留给
@@ -654,9 +704,7 @@ pub(crate) fn resolve_in_vendor(
     for (_, dep) in candidates {
         // RFC-029f 导入面：依赖包有声明面（[exports]/[lib]）时，仅面内文件
         // 可被跨包 use——越界候选视为未命中，留给 typecheck 报模块未找到
-        let surface = PackageManifest::load(&dep)
-            .ok()
-            .and_then(|manifest| roles::import_surface(&dep, &manifest));
+        let surface = dep_import_surface(&dep);
         let src = dep.join("src");
         let tries: Vec<PathBuf> = match rest {
             Some(rest) => {

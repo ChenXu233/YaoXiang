@@ -5,11 +5,12 @@
 //! RFC-015 字段）> 入口可达性推断（被 use = Lib，含 main = Bin）> RFC-036
 //! 测试约定（覆盖 Lib/Internal，不覆盖显式 Bin）。
 //! 无 manifest 项目整体为 Script 态——一切行为与引入角色模型前一致。
+//!
+//! 本模块不依赖 `crate::package`（wasm32 下不编译）——manifest 信息经
+//! [`TargetViews`] 纯数据视图传入，由调用方（非 wasm 编排器）负责解析。
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-
-use crate::package::manifest::PackageManifest;
 
 /// 源文件的编译目标角色
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,33 +36,31 @@ pub struct ExplicitSurfaces {
     pub libs: HashSet<PathBuf>,
 }
 
+/// manifest 目标字段的纯数据视图（RFC-015）——与 `crate::package` 解耦的
+/// 解耦层：bin/lib/exports 的路径字符串列表，由调用方从各自 manifest 解析填充。
+#[derive(Debug, Clone, Default)]
+pub struct TargetViews {
+    /// `[[bin]].path` 与 `[run].main`
+    pub bins: Vec<String>,
+    /// `[lib].path` 与 `[exports]` 值
+    pub libs: Vec<String>,
+}
+
 /// canonicalize，失败（不存在等）回退原路径——与文件发现侧同口径
 fn canonical(path: &Path) -> PathBuf {
     path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
 
-/// 从 manifest 提取显式声明面（路径相对 manifest 所在目录，即 project_root）
+/// 从 manifest 目标视图提取显式声明面（路径相对 manifest 所在目录，即 project_root）
 pub fn explicit_surfaces(
-    manifest: &PackageManifest,
+    views: &TargetViews,
     project_root: &Path,
 ) -> ExplicitSurfaces {
     let mut surfaces = ExplicitSurfaces::default();
-    for bin in &manifest.bin {
-        surfaces
-            .bins
-            .insert(canonical(&project_root.join(&bin.path)));
+    for bin in &views.bins {
+        surfaces.bins.insert(canonical(&project_root.join(bin)));
     }
-    if let Some(run) = &manifest.run {
-        if let Some(main) = &run.main {
-            surfaces.bins.insert(canonical(&project_root.join(main)));
-        }
-    }
-    if let Some(lib) = &manifest.lib {
-        surfaces
-            .libs
-            .insert(canonical(&project_root.join(&lib.path)));
-    }
-    for path in manifest.exports.values() {
+    for path in &views.libs {
         surfaces.libs.insert(canonical(&project_root.join(path)));
     }
     surfaces
@@ -187,37 +186,27 @@ pub fn classify(
 /// 依赖包的导入面（RFC-029f 解析序）：
 /// `[exports]` 非空 → 面 = 映射值文件集合；否则 `[lib].path` → 单文件面；
 /// 两者皆无 → `None` = 无声明面，维持现状全放行。
-pub fn import_surface(
+///
+/// `views` 由调用方从依赖包 manifest 提取（exports 值列表；lib.path 单独传）。
+pub fn import_surface_views(
     dep_root: &Path,
-    manifest: &PackageManifest,
+    exports: &[String],
+    lib_path: Option<&str>,
 ) -> Option<HashSet<PathBuf>> {
-    if !manifest.exports.is_empty() {
+    if !exports.is_empty() {
         return Some(
-            manifest
-                .exports
-                .values()
+            exports
+                .iter()
                 .map(|p| canonical(&dep_root.join(p)))
                 .collect(),
         );
     }
-    manifest
-        .lib
-        .as_ref()
-        .map(|lib| HashSet::from([canonical(&dep_root.join(&lib.path))]))
+    lib_path.map(|lib| HashSet::from([canonical(&dep_root.join(lib))]))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::package::manifest::{BinTarget, LibTarget, RunConfig};
-
-    fn manifest_with_lib(path: &str) -> PackageManifest {
-        let mut m = PackageManifest::new("probe");
-        m.lib = Some(LibTarget {
-            path: path.to_string(),
-        });
-        m
-    }
 
     #[test]
     fn no_project_root_yields_script() {
@@ -346,18 +335,11 @@ mod tests {
     #[test]
     fn surfaces_collect_run_main_and_exports() {
         let root = Path::new("/proj");
-        let mut m = PackageManifest::new("probe");
-        m.bin = vec![BinTarget {
-            name: "cli".to_string(),
-            path: "src/cli.yx".to_string(),
-        }];
-        m.run = Some(RunConfig {
-            main: Some("src/main.yx".to_string()),
-            args: vec![],
-        });
-        m.exports
-            .insert("./foo".to_string(), "src/foo.yx".to_string());
-        let surfaces = explicit_surfaces(&m, root);
+        let views = TargetViews {
+            bins: vec!["src/cli.yx".to_string(), "src/main.yx".to_string()],
+            libs: vec!["src/foo.yx".to_string()],
+        };
+        let surfaces = explicit_surfaces(&views, root);
         assert!(surfaces.bins.contains(&canonical(&root.join("src/cli.yx"))));
         assert!(surfaces
             .bins
@@ -368,24 +350,21 @@ mod tests {
     #[test]
     fn import_surface_exports_over_lib_over_none() {
         let dep = Path::new("/vendor/dep-0.1.0");
-        let mut m = PackageManifest::new("dep");
-        m.lib = Some(LibTarget {
-            path: "src/lib.yx".to_string(),
-        });
-        m.exports.insert(".".to_string(), "src/dep.yx".to_string());
         // exports 非空 → 面 = exports 值（lib.path 不并入）
-        let surface = import_surface(dep, &m).expect("exports 存在应有面");
+        let surface = import_surface_views(dep, &["src/dep.yx".to_string()], Some("src/lib.yx"))
+            .expect("exports 存在应有面");
         assert!(surface.contains(&canonical(&dep.join("src/dep.yx"))));
         assert!(!surface.contains(&canonical(&dep.join("src/lib.yx"))));
 
         // exports 空 → lib 单文件面
-        let m_lib_only = manifest_with_lib("src/lib.yx");
-        let surface = import_surface(dep, &m_lib_only).expect("lib 存在应有面");
+        let surface = import_surface_views(dep, &[], Some("src/lib.yx")).expect("lib 存在应有面");
         assert!(surface.contains(&canonical(&dep.join("src/lib.yx"))));
 
         // 都没有 → None（全放行）
-        let m_bare = PackageManifest::new("dep");
-        assert!(import_surface(dep, &m_bare).is_none(), "无声明面应全放行");
+        assert!(
+            import_surface_views(dep, &[], None).is_none(),
+            "无声明面应全放行"
+        );
     }
 }
 
