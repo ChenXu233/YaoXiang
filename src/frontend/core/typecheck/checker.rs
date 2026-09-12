@@ -62,6 +62,9 @@ pub struct TypeChecker {
     /// #321 W1003: 导入名监视集（本地名 → 报告名）。整体导入的导出成员
     /// （如 `use std.io` 后裸调 `print`）同样映射到模块别名，命中即视为导入已使用。
     import_watch: HashMap<String, String>,
+    /// #321 W1003: pass2 解析路径标记的已使用名（类型/方法外部绑定等
+    /// 不经 body_checker Var 推断臂的引用点），发射时与 body 侧并集。
+    import_used: HashSet<String>,
 }
 
 /// RFC-011a: 类型体应用项 `Animal(Dog)` 的待决接口实例化。
@@ -99,6 +102,7 @@ impl TypeChecker {
             declared_methods: HashMap::new(),
             imported_names: Vec::new(),
             import_watch: HashMap::new(),
+            import_used: HashSet::new(),
         }
     }
 
@@ -1109,12 +1113,17 @@ impl TypeChecker {
                     }
                     _ => return,
                 };
-                if let Some(poly) = self.env.get_var(&func_name) {
+                let found = self.env.get_var(&func_name).map(|poly| {
                     let total = match &poly.body {
                         MonoType::Fn { params, .. } => params.len(),
                         _ => 0,
                     };
-                    let fn_ty = poly.body.clone();
+                    (total, poly.body.clone())
+                });
+                if let Some((total, fn_ty)) = found {
+                    // #321 W1003：绑定为方法的导入函数视为已使用（pass2 解析，
+                    // 不经 body_checker 的 Var 推断臂）
+                    self.note_import_use(&func_name);
                     if let Some(positions) =
                         self.normalize_binding_positions(&positions, total, *span)
                     {
@@ -1486,6 +1495,8 @@ impl TypeChecker {
         let Some((total, fn_ty)) = found else {
             return;
         };
+        // #321 W1003：类型体外部绑定解析的导入函数视为已使用（pass2 解析）
+        self.note_import_use(func_name);
         if let Some(positions) = self.normalize_binding_positions(positions, total, span) {
             let method_ty = Self::method_type_after_binding(&fn_ty, &positions);
             self.env
@@ -1625,11 +1636,25 @@ impl TypeChecker {
         }
     }
 
+    /// #321 W1003：pass2 解析点命中监视集时标记对应导入已使用
+    fn note_import_use(
+        &mut self,
+        name: &str,
+    ) {
+        if let Some(report_as) = self.import_watch.get(name) {
+            let report_as = report_as.clone();
+            self.import_used.insert(report_as);
+        }
+    }
+
     /// #321 W1003：汇总未使用导入（模块级 + 函数体级），产出 Warning 诊断。
     ///
-    /// 使用判定 = 表达式引用（body_checker 导入监视集命中）∪ 类型注解/类型体
-    /// 位置的名字引用（导入类型仅用于注解时不误报）。诊断进 TypeCheckResult
-    /// .warnings 通道——混入 diagnostics 会被管线按错误计数，破坏非阻断契约。
+    /// 使用判定三层并集：① 表达式解析（body_checker 导入监视集命中，作用域
+    /// 感知）；② pass2 解析点（外部绑定等）；③ 语法级兜底
+    /// [`DeadCodeAnalyzer::collect_ident_refs`]——match 模式、spawn 体、类型
+    /// 注解等 Var 推断臂看不到的引用位置，宁多收（漏报方向）不漏收（误报方向）。
+    /// 诊断进 TypeCheckResult.warnings 通道——混入 diagnostics 会被管线按错误
+    /// 计数，破坏非阻断契约。
     fn collect_unused_import_warnings(
         &mut self,
         module: &crate::frontend::core::parser::ast::Module,
@@ -1639,9 +1664,10 @@ impl TypeChecker {
             None => (Vec::new(), HashSet::new()),
         };
         let mut used = used_refs;
-        for stmt in &module.items {
-            crate::frontend::core::parser::ast::collect_stmt_type_names(stmt, &mut used);
-        }
+        // pass2 解析点（外部绑定等）标记的已使用名与 body 侧并集
+        used.extend(std::mem::take(&mut self.import_used));
+        // 语法级兜底：模式/类型注解/spawn 体等位置的标识符引用
+        used.extend(super::passes::dead_code::DeadCodeAnalyzer::collect_ident_refs(module));
         let mut seen = HashSet::new();
         let mut warnings = Vec::new();
         for (name, span) in self.imported_names.iter().chain(body_imports.iter()) {

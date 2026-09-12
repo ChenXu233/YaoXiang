@@ -190,3 +190,71 @@ main = {
         result.warnings
     );
 }
+
+#[test]
+fn test_import_used_via_method_binding_no_warning() {
+    // Arrange: 导入函数绑定为类型方法（`Widget.show = println`）——
+    // pass2 外部绑定解析路径，不经 Var 推断臂，不得误报（#321 自查）
+    let source = r#"
+use std.io.{println}
+Widget: Type = { x: Int }
+Widget.show = println
+main = {
+    x = 1
+    x
+}
+"#;
+
+    // Act
+    let result = check_source(source);
+
+    // Assert
+    assert!(
+        !result.warnings.iter().any(|d| d.code == "W1003"),
+        "绑定为方法的导入函数应视为已使用，实际: {:?}",
+        result.warnings
+    );
+}
+
+#[test]
+fn test_body_level_unused_import_reports_w1003() {
+    // Arrange: 函数体内 use 且导入名未被引用 → W1003（use 语句位置）
+    let source = r#"
+main = {
+    use std.io
+    x = 1
+    x
+}
+"#;
+
+    // Act
+    let result = check_source(source);
+
+    // Assert
+    assert!(
+        result.warnings.iter().any(|d| d.code == "W1003"),
+        "函数体内未使用的导入应报 W1003，实际: {:?}",
+        result.warnings
+    );
+}
+
+#[test]
+fn test_body_level_used_import_no_warning() {
+    // Arrange: 函数体内 use 且导入被引用 → 不报
+    let source = r#"
+main = {
+    use std.io.{print}
+    print(42)
+}
+"#;
+
+    // Act
+    let result = check_source(source);
+
+    // Assert
+    assert!(
+        !result.warnings.iter().any(|d| d.code == "W1003"),
+        "函数体内已使用的导入不应报 W1003，实际: {:?}",
+        result.warnings
+    );
+}

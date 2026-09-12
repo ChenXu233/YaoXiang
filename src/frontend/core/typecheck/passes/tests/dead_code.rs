@@ -543,3 +543,317 @@ fn test_method_binding_no_function_warning() {
         "pub 方法绑定是对外接口，不应被报告为未使用函数"
     );
 }
+
+// 引用收集完备性（#321 自查：漏收位置会造成新语义下的误报）
+
+/// 构造 match 表达式语句：`match scrutinee { Name {..} => body }`
+fn make_match_stmt(
+    scrutinee: &str,
+    pattern_type: &str,
+    body_stmts: Vec<Stmt>,
+) -> Stmt {
+    use crate::frontend::core::parser::ast::{MatchArm, Pattern};
+    Stmt {
+        kind: StmtKind::Expr(Box::new(Expr::Match {
+            expr: Box::new(Expr::Var(scrutinee.to_string(), Span::dummy())),
+            arms: vec![MatchArm {
+                pattern: Pattern::Struct {
+                    name: pattern_type.to_string(),
+                    fields: vec![],
+                },
+                body: Block {
+                    stmts: body_stmts,
+                    span: Span::dummy(),
+                },
+                span: Span::dummy(),
+            }],
+            span: Span::dummy(),
+        })),
+        span: Span::dummy(),
+    }
+}
+
+/// 构造 spawn 表达式语句：`spawn { body }`
+fn make_spawn_stmt(body_stmts: Vec<Stmt>) -> Stmt {
+    Stmt {
+        kind: StmtKind::Expr(Box::new(Expr::Spawn {
+            body: Box::new(Block {
+                stmts: body_stmts,
+                span: Span::dummy(),
+            }),
+            span: Span::dummy(),
+        })),
+        span: Span::dummy(),
+    }
+}
+
+/// 构造索引赋值语句：`target[...] = value`（无求值语义，仅引用形状）
+fn make_index_assign_stmt(
+    target: &str,
+    value_var: &str,
+) -> Stmt {
+    Stmt {
+        kind: StmtKind::Assign {
+            target: Box::new(Expr::Index {
+                expr: Box::new(Expr::Var(target.to_string(), Span::dummy())),
+                index: Box::new(Expr::Lit(
+                    crate::frontend::core::lexer::tokens::Literal::Int(0),
+                    Span::dummy(),
+                )),
+                span: Span::dummy(),
+            }),
+            type_annotation: None,
+            signature_params: vec![],
+            value: Some(Box::new(Expr::Var(value_var.to_string(), Span::dummy()))),
+            is_pub: false,
+            is_mut: false,
+            span: Span::dummy(),
+        },
+        span: Span::dummy(),
+    }
+}
+
+#[test]
+fn test_type_referenced_in_match_pattern_is_alive() {
+    // Arrange: 私有类型 Color 仅在 match 模式（Struct 模式头）中被引用
+    let mut analyzer = DeadCodeAnalyzer::new();
+    let ast = Module {
+        items: vec![
+            make_type_def("Color", false),
+            make_binding(
+                "main",
+                false,
+                None,
+                vec![make_match_stmt("c", "Color", vec![])],
+            ),
+        ],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert
+    assert!(
+        warnings.iter().all(|w| !w.message.contains("Color")),
+        "match 模式头引用的私有类型不应报 W1002，实际: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn test_fn_referenced_in_spawn_body_is_alive() {
+    // Arrange: 私有函数仅在 spawn 体中被调用
+    let mut analyzer = DeadCodeAnalyzer::new();
+    let ast = Module {
+        items: vec![
+            make_binding("worker", false, None, vec![]),
+            make_binding(
+                "main",
+                false,
+                None,
+                vec![make_spawn_stmt(vec![make_call_stmt("worker")])],
+            ),
+        ],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert
+    assert!(
+        warnings.iter().all(|w| !w.message.contains("worker")),
+        "spawn 体中引用的私有函数不应报 W1001，实际: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn test_var_written_via_index_assign_is_alive() {
+    // Arrange: 顶层私有变量仅通过 `counts[i] = v` 复合目标写入使用
+    let mut analyzer = DeadCodeAnalyzer::new();
+    let ast = Module {
+        items: vec![
+            make_var("counts"),
+            make_binding(
+                "main",
+                false,
+                None,
+                vec![make_index_assign_stmt("counts", "item")],
+            ),
+            make_var("item"),
+        ],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert
+    assert!(
+        warnings.iter().all(|w| !w.message.contains("counts")),
+        "经索引赋值写入的私有变量不应报 W1004，实际: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn test_only_dead_root_reported_not_its_callees() {
+    // Arrange: 有入口点时采用扁平可达性近似——死函数 ghost 调用 helper，
+    // helper 被 AST 引用即视为可达（宁漏报不误报），只报死代码根 ghost
+    let mut analyzer = DeadCodeAnalyzer::new();
+    let ast = Module {
+        items: vec![
+            make_binding("main", false, None, vec![]),
+            make_binding("ghost", false, None, vec![make_call_stmt("helper")]),
+            make_binding("helper", false, None, vec![]),
+        ],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.code == "W1001" && w.message.contains("ghost")),
+        "未被引用的 ghost 应报 W1001，实际: {:?}",
+        warnings
+    );
+    assert!(
+        warnings.iter().all(|w| !w.message.contains("helper")),
+        "有入口点时仅被死代码引用的 helper 视为可达（扁平近似只报根），实际: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn test_no_entry_point_all_unused_private_defs_dead() {
+    // Arrange: 模块无 main 且无 pub 定义——不存在任何可达根，
+    // 全部私有定义自外部视角均不可达，传递性死代码整链报告
+    let mut analyzer = DeadCodeAnalyzer::new();
+    let ast = Module {
+        items: vec![
+            make_binding("ghost", false, None, vec![make_call_stmt("helper")]),
+            make_binding("helper", false, None, vec![]),
+        ],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert
+    let codes: Vec<&str> = warnings.iter().map(|w| w.message.as_str()).collect();
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.code == "W1001" && w.message.contains("ghost")),
+        "无入口点时 ghost 应报 W1001，实际: {:?}",
+        codes
+    );
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.code == "W1001" && w.message.contains("helper")),
+        "无入口点时仅被死代码引用的 helper 亦为传递性死代码，应报 W1001，实际: {:?}",
+        codes
+    );
+}
+
+#[test]
+fn test_private_type_used_in_type_body_is_alive() {
+    // Arrange: 私有类型 Inner 仅在私有类型 Outer 的结构体字段类型中被引用
+    use crate::frontend::core::parser::ast::{StructField, TypeBodyItem};
+    let outer = Stmt {
+        kind: StmtKind::TypeDefinition {
+            name: "Outer".to_string(),
+            signature_params: vec![],
+            definition: Type::Struct {
+                body: vec![TypeBodyItem::Field(StructField::new(
+                    "inner".to_string(),
+                    false,
+                    Type::Name {
+                        name: "Inner".to_string(),
+                        span: Span::dummy(),
+                    },
+                ))],
+            },
+            is_pub: false,
+        },
+        span: Span::dummy(),
+    };
+    let mut analyzer = DeadCodeAnalyzer::new();
+    let ast = Module {
+        items: vec![
+            make_type_def("Inner", false),
+            outer,
+            make_binding("main", false, None, vec![make_call_stmt("Outer")]),
+        ],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert
+    assert!(
+        warnings.iter().all(|w| !w.message.contains("Inner")),
+        "被 Outer 字段类型引用的私有类型 Inner 不应报 W1002，实际: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn test_collect_ident_refs_covers_param_type_annotations() {
+    // Arrange: `main = (p: Point) => p`——Point 出现在参数类型注解位置，
+    // 普通 Var 走查不可见，collect_ident_refs 必须覆盖
+    //（W1003 依赖此兜底：导入类型仅用于注解时不误报）
+    let ast = Module {
+        items: vec![Stmt {
+            kind: StmtKind::Assign {
+                target: Box::new(Expr::Var("main".to_string(), Span::dummy())),
+                type_annotation: None,
+                signature_params: vec![],
+                value: Some(Box::new(Expr::Lambda {
+                    params: vec![crate::frontend::core::parser::ast::Param {
+                        name: "p".to_string(),
+                        ty: Some(Type::Name {
+                            name: "Point".to_string(),
+                            span: Span::dummy(),
+                        }),
+                        is_mut: false,
+                        span: Span::dummy(),
+                    }],
+                    body: Box::new(Block {
+                        stmts: vec![],
+                        span: Span::dummy(),
+                    }),
+                    span: Span::dummy(),
+                })),
+                is_pub: false,
+                is_mut: false,
+                span: Span::dummy(),
+            },
+            span: Span::dummy(),
+        }],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let refs = DeadCodeAnalyzer::collect_ident_refs(&ast);
+
+    // Assert
+    assert!(
+        refs.contains("Point"),
+        "参数类型注解中的类型名应被收集，实际: {:?}",
+        refs
+    );
+    assert!(
+        !refs.contains("main"),
+        "顶层定义目标名不应被收集为引用（定义不是使用）",
+    );
+}

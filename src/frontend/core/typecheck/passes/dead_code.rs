@@ -148,14 +148,17 @@ impl DeadCodeAnalyzer {
         }
     }
 
-    /// 从 AST 中收集所有符号引用（定义处不算引用）
+    /// 从 AST 中收集所有标识符引用（定义处不算引用）
     ///
-    /// 顶层 Assign 的目标名是定义不是使用——计入会使所有定义"自我可达"，
-    /// 死代码判定永远落空（#321 M2 复盘）；函数体内的赋值目标是写入即使用。
-    fn collect_references_from_ast(
-        &self,
-        ast: &Module,
-    ) -> HashSet<String> {
+    /// 顶层 Assign/DestructureAssign 的目标名是定义不是使用——计入会使所有
+    /// 定义"自我可达"，死代码判定永远落空（#321 M2 复盘）；函数体内的赋值
+    /// 目标是写入即使用。
+    ///
+    /// 供死代码可达性与 W1003 未使用导入判定共享（#321）：
+    /// 语义级标记（Var 推断臂命中监视集）保证作用域正确性，
+    /// 本遍历做语法级兜底——覆盖 match 模式、spawn 体、类型注解等
+    /// Var 推断臂看不到的位置，宁多收（漏报方向）不漏收（误报方向）。
+    pub fn collect_ident_refs(ast: &Module) -> HashSet<String> {
         let mut referenced = HashSet::new();
 
         fn collect_from_expr(
@@ -203,6 +206,7 @@ impl DeadCodeAnalyzer {
                 Expr::Match { expr, arms, .. } => {
                     collect_from_expr(expr, referenced);
                     for arm in arms {
+                        collect_pattern_refs(&arm.pattern, referenced);
                         collect_from_block(&arm.body, referenced);
                     }
                 }
@@ -292,6 +296,29 @@ impl DeadCodeAnalyzer {
                 Expr::Ref { expr, .. } => {
                     collect_from_expr(expr, referenced);
                 }
+                // spawn 体是真实执行上下文，其中的引用必须收集（漏收会误报死代码）
+                Expr::Spawn { body, .. } => {
+                    collect_from_block(body, referenced);
+                }
+                Expr::SpawnFor {
+                    var,
+                    iterable,
+                    body,
+                    ..
+                } => {
+                    referenced.insert(var.clone());
+                    collect_from_expr(iterable, referenced);
+                    collect_from_block(body, referenced);
+                }
+                Expr::In {
+                    elem, container, ..
+                } => {
+                    collect_from_expr(elem, referenced);
+                    collect_from_expr(container, referenced);
+                }
+                Expr::Borrow { expr, .. } => {
+                    collect_from_expr(expr, referenced);
+                }
                 Expr::Unsafe { body, .. } => {
                     collect_from_block(body, referenced);
                 }
@@ -323,6 +350,44 @@ impl DeadCodeAnalyzer {
             }
         }
 
+        /// match 模式中的名字引用：Identifier 兼作常量模式（无法与绑定区分，
+        /// 一律收集），Struct/Union 头部是类型名引用，Guard 条件是真实表达式
+        fn collect_pattern_refs(
+            pattern: &crate::frontend::core::parser::ast::Pattern,
+            referenced: &mut HashSet<String>,
+        ) {
+            use crate::frontend::core::parser::ast::Pattern;
+            match pattern {
+                Pattern::Identifier(name) => {
+                    referenced.insert(name.clone());
+                }
+                Pattern::Tuple(ps) | Pattern::Or(ps) => {
+                    for p in ps {
+                        collect_pattern_refs(p, referenced);
+                    }
+                }
+                Pattern::Struct { name, fields, .. } => {
+                    referenced.insert(name.clone());
+                    for (_, _, p) in fields {
+                        collect_pattern_refs(p, referenced);
+                    }
+                }
+                Pattern::Union { name, pattern, .. } => {
+                    referenced.insert(name.clone());
+                    if let Some(p) = pattern {
+                        collect_pattern_refs(p, referenced);
+                    }
+                }
+                Pattern::Guard {
+                    pattern, condition, ..
+                } => {
+                    collect_pattern_refs(pattern, referenced);
+                    collect_from_expr(condition, referenced);
+                }
+                _ => {}
+            }
+        }
+
         fn collect_from_stmt(
             stmt: &Stmt,
             referenced: &mut HashSet<String>,
@@ -343,15 +408,10 @@ impl DeadCodeAnalyzer {
                         collect_from_expr(expr, referenced);
                     }
                     // 目标名：顶层是定义（不算引用，否则所有定义"自我可达"），
-                    // 嵌套是写入即使用；复合目标的被赋值对象同样是使用
+                    // 嵌套是写入即使用——通用走查覆盖 Var/FieldAccess/Index 等
+                    // 复合目标（`counts["k"] = v` 是对 counts 的使用）
                     if !in_toplevel {
-                        if let Expr::Var(name, _) = target.as_ref() {
-                            referenced.insert(name.clone());
-                        }
-                        if let Expr::FieldAccess { expr, field, .. } = target.as_ref() {
-                            collect_from_expr(expr, referenced);
-                            referenced.insert(field.clone());
-                        }
+                        collect_from_expr(target, referenced);
                     }
                     if let Some(ty) = type_annotation {
                         ty.collect_name_refs(referenced);
@@ -359,6 +419,15 @@ impl DeadCodeAnalyzer {
                     for param in signature_params {
                         if let Some(ty) = &param.ty {
                             ty.collect_name_refs(referenced);
+                        }
+                    }
+                }
+                // 元组解构赋值：嵌套目标是写入即使用；顶层是定义（不计引用）
+                StmtKind::DestructureAssign { names, rhs, .. } => {
+                    collect_from_expr(rhs, referenced);
+                    if !in_toplevel {
+                        for name in names {
+                            referenced.insert(name.name.clone());
                         }
                     }
                 }
@@ -426,7 +495,7 @@ impl DeadCodeAnalyzer {
             queue.push_back(entry.clone());
         }
 
-        let ast_references = self.collect_references_from_ast(ast);
+        let ast_references = Self::collect_ident_refs(ast);
 
         while let Some(symbol) = queue.pop_front() {
             if reachable.contains(&symbol) {
