@@ -1,6 +1,6 @@
 ---
-title: 診断システム
-description: YaoXiang 診断システムの設計
+title: '診断システム'
+description: 'YaoXiang 診断システムの設計'
 ---
 
 # 診断システム

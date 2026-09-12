@@ -1,6 +1,6 @@
 ---
 title: 'Type System Formatting Rules'
-description: Formatting rules for type annotations, references and borrowing, type conversion
+description: 'Formatting rules for type annotations, references and borrowing, type conversion'
 ---
 
 # Type System Formatting Rules

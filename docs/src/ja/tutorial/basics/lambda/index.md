@@ -1,5 +1,5 @@
 ---
-title: Lambda式
+title: 'Lambda式'
 ---
 
 # Lambda式

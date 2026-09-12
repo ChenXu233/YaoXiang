@@ -1,6 +1,6 @@
 ---
-title: Руководство по интеграции CI
-description: Интеграция yx check и yx format в конвейер CI/CD
+title: 'Руководство по интеграции CI'
+description: 'Интеграция yx check и yx format в конвейер CI/CD'
 ---
 
 # Руководство по интеграции CI

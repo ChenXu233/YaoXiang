@@ -1,6 +1,6 @@
 ---
-title: CI 統合ガイド
-description: yx check と yx format を CI/CD パイプラインに統合する
+title: 'CI 統合ガイド'
+description: 'yx check と yx format を CI/CD パイプラインに統合する'
 ---
 
 # CI 統合ガイド

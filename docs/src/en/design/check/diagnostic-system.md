@@ -1,6 +1,6 @@
 ---
-title: Diagnostic System
-description: Architecture design of YaoXiang's diagnostic system
+title: 'Diagnostic System'
+description: 'Architecture design of YaoXiang''s diagnostic system'
 ---
 
 # Diagnostic System

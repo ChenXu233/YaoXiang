@@ -1,6 +1,6 @@
 ---
 title: '函数相关格式化规则'
-description: 函数定义、函数调用、Lambda 表达式的格式化规则
+description: '函数定义、函数调用、Lambda 表达式的格式化规则'
 ---
 
 # 函数相关格式化规则

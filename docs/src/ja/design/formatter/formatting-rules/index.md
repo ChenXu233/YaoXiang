@@ -1,6 +1,6 @@
 ---
 title: 'フォーマットルール総覧'
-description: YaoXiang コードフォーマットルールの分類と索引
+description: 'YaoXiang コードフォーマットルールの分類と索引'
 ---
 
 # フォーマットルール

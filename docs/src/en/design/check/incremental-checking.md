@@ -1,6 +1,6 @@
 ---
-title: Incremental Check
-description: Design of YaoXiang check incremental checking
+title: 'Incremental Check'
+description: 'Design of YaoXiang check incremental checking'
 ---
 
 # Incremental Check

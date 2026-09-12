@@ -1,5 +1,5 @@
 ---
-title: while ループ
+title: 'while ループ'
 ---
 
 # while ループ

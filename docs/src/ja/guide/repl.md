@@ -1,6 +1,6 @@
 ---
-title: REPL インタラクティブインタプリタ
-description: YaoXiang REPL 使用ガイド - インタラクティブなコード実行環境
+title: 'REPL インタラクティブインタプリタ'
+description: 'YaoXiang REPL 使用ガイド - インタラクティブなコード実行環境'
 ---
 
 # REPL インタラクティブインタプリタ

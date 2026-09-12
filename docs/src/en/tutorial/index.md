@@ -1,6 +1,6 @@
 ---
 title: 'Tutorial'
-description: Systematically learn the core concepts of YaoXiang
+description: 'Systematically learn the core concepts of YaoXiang'
 ---
 
 # Welcome to the YaoXiang Universe!

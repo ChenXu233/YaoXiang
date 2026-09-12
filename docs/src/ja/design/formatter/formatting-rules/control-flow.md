@@ -1,6 +1,6 @@
 ---
 title: '制御フロー整形規則'
-description: if/else if/else、for ループ、while ループ、ループラベルの整形規則
+description: 'if/else if/else、for ループ、while ループ、ループラベルの整形規則'
 ---
 
 # 制御フロー整形規則

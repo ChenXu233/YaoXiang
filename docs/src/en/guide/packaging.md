@@ -1,6 +1,6 @@
 ---
 title: 'Package Manager'
-description: YaoXiang official package manager user guide
+description: 'YaoXiang official package manager user guide'
 ---
 
 # Package Manager

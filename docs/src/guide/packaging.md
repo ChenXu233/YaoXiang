@@ -1,6 +1,6 @@
 ---
 title: '包管理器'
-description: YaoXiang 官方包管理器使用教程
+description: 'YaoXiang 官方包管理器使用教程'
 ---
 
 # 包管理器

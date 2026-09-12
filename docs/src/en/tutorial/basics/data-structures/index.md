@@ -1,5 +1,5 @@
 ---
-title: Lists and Dictionaries
+title: 'Lists and Dictionaries'
 ---
 
 # Lists and Dictionaries

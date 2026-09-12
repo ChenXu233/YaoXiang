@@ -1,5 +1,5 @@
 ---
-title: Syntax Quick Reference
+title: 'Syntax Quick Reference'
 ---
 
 # Syntax Quick Reference

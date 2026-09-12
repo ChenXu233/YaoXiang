@@ -1,6 +1,6 @@
 ---
 title: 'Formatting Configuration Options'
-description: Configuration file format, priority, and default values for yaoxiang fmt
+description: 'Configuration file format, priority, and default values for yaoxiang fmt'
 ---
 
 # Configuration Options

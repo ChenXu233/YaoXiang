@@ -1,5 +1,5 @@
 ---
-title: Concurrency Model Specification
+title: 'Concurrency Model Specification'
 version: 1.0
 status: active
 based_on:

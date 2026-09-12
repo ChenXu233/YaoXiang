@@ -1,6 +1,6 @@
 ---
-title: 增量チェック
-description: YaoXiang check 增量チェックの設計
+title: '增量チェック'
+description: 'YaoXiang check 增量チェックの設計'
 ---
 
 # 增量チェック

@@ -1,6 +1,6 @@
 ---
-title: 跨文件分析
-description: YaoXiang check 跨文件类型检查的设计
+title: '跨文件分析'
+description: 'YaoXiang check 跨文件类型检查的设计'
 ---
 
 # 跨文件分析

@@ -1,6 +1,6 @@
 ---
 title: '数据结构格式化规则'
-description: 字面量、列表和字典、Match 表达式的格式化规则
+description: '字面量、列表和字典、Match 表达式的格式化规则'
 ---
 
 # 数据结构格式化规则

@@ -1,5 +1,5 @@
 ---
-title: Цикл for
+title: 'Цикл for'
 ---
 
 # Цикл for

@@ -1,6 +1,6 @@
 ---
 title: '包管理器'
-description: YaoXiang 包管理器参考文档
+description: 'YaoXiang 包管理器参考文档'
 ---
 
 # 包管理器

@@ -1,6 +1,6 @@
 ---
 title: '貢献ガイド'
-description: YaoXiangプロジェクトにコードを貢献する方法を知る
+description: 'YaoXiangプロジェクトにコードを貢献する方法を知る'
 ---
 
 # 貢献ガイド

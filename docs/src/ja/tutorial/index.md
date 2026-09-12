@@ -1,6 +1,6 @@
 ---
 title: 'チュートリアル'
-description: YaoXiangのコアコンセプトを体系的に学ぶ
+description: 'YaoXiangのコアコンセプトを体系的に学ぶ'
 ---
 
 # 爻象（YaoXiang）宇宙へようこそ！

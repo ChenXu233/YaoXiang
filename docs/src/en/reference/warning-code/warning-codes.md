@@ -1,6 +1,6 @@
 ---
 title: 'Warning Codes'
-description: Compiler warning codes and descriptions
+description: 'Compiler warning codes and descriptions'
 ---
 
 # Warning Codes

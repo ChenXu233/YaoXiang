@@ -1,5 +1,5 @@
 ---
-title: Variable Declarations
+title: 'Variable Declarations'
 ---
 
 # Variable Declarations

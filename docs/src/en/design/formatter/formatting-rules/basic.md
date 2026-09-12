@@ -1,6 +1,6 @@
 ---
 title: 'Basic Formatting Rules'
-description: Formatting rules for indentation, line width, operators, and code blocks
+description: 'Formatting rules for indentation, line width, operators, and code blocks'
 ---
 
 # Basic Formatting Rules

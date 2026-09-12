@@ -1,5 +1,5 @@
 ---
-title: Type System
+title: 'Type System'
 ---
 
 # Type System

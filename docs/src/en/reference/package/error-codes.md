@@ -1,6 +1,6 @@
 ---
 title: 'Error Codes'
-description: Package manager error codes and handling methods
+description: 'Package manager error codes and handling methods'
 ---
 
 # Error Codes

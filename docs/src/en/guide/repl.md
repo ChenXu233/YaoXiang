@@ -1,6 +1,6 @@
 ---
-title: REPL Interactive Interpreter
-description: YaoXiang REPL User Guide - Interactive Code Execution Environment
+title: 'REPL Interactive Interpreter'
+description: 'YaoXiang REPL User Guide - Interactive Code Execution Environment'
 ---
 
 # REPL Interactive Interpreter

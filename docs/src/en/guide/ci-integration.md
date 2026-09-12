@@ -1,6 +1,6 @@
 ---
-title: CI Integration Guide
-description: Integrate yx check and yx format into CI/CD pipelines
+title: 'CI Integration Guide'
+description: 'Integrate yx check and yx format into CI/CD pipelines'
 ---
 
 # CI Integration Guide

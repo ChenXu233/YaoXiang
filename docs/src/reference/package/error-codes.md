@@ -1,6 +1,6 @@
 ---
 title: '错误码'
-description: 包管理器错误码及处理方式
+description: '包管理器错误码及处理方式'
 ---
 
 # 错误码

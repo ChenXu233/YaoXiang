@@ -1,5 +1,5 @@
 ---
-title: Pattern Matching
+title: 'Pattern Matching'
 ---
 
 # Pattern Matching

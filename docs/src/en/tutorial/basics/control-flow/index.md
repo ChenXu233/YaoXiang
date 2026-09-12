@@ -1,5 +1,5 @@
 ---
-title: Control Flow
+title: 'Control Flow'
 ---
 
 # Control Flow

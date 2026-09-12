@@ -1,5 +1,5 @@
 ---
-title: match の基礎
+title: 'match の基礎'
 ---
 
 # match の基礎

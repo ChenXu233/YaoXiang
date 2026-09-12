@@ -1,6 +1,6 @@
 ---
-title: check コマンド設計ドキュメント
-description: yaoxiang check 静的チェックツールの設計仕様
+title: 'check コマンド設計ドキュメント'
+description: 'yaoxiang check 静的チェックツールの設計仕様'
 ---
 
 # check コマンド設計ドキュメント

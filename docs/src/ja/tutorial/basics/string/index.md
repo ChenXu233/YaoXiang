@@ -1,5 +1,5 @@
 ---
-title: F-string
+title: 'F-string'
 ---
 
 # F-string

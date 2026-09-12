@@ -1,6 +1,6 @@
 ---
 title: 'yaoxiang.lock フォーマット'
-description: 依存関係ロックファイルフォーマットの説明
+description: '依存関係ロックファイルフォーマットの説明'
 ---
 
 # yaoxiang.lock フォーマット

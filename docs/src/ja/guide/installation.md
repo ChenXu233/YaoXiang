@@ -1,5 +1,5 @@
 ---
-title: YaoXiangのインストール
+title: 'YaoXiangのインストール'
 description:
   2層のインストールチャネル —
   標準チャネルは解凍してすぐ使用（Go/Zigモード）、簡単チャネルは1行コマンド +

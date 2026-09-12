@@ -1,6 +1,6 @@
 ---
 title: 'Command Line Interface'
-description: Detailed description of all package manager commands
+description: 'Detailed description of all package manager commands'
 ---
 
 # Command Line Interface

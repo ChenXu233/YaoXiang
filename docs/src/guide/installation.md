@@ -1,6 +1,6 @@
 ---
-title: 安装 YaoXiang
-description: 双层安装渠道——标准渠道解压即用（Go/Zig 模式），傻瓜渠道一行命令 + 版本管理（Rust/rustup 模式）
+title: '安装 YaoXiang'
+description: '双层安装渠道——标准渠道解压即用（Go/Zig 模式），傻瓜渠道一行命令 + 版本管理（Rust/rustup 模式）'
 ---
 
 # 安装 YaoXiang

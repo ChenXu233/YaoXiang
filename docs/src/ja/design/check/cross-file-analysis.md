@@ -1,6 +1,6 @@
 ---
-title: ファイル間分析
-description: YaoXiang check におけるファイル間型検査の設計
+title: 'ファイル間分析'
+description: 'YaoXiang check におけるファイル間型検査の設計'
 ---
 
 # ファイル間分析

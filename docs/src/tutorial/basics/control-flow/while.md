@@ -1,5 +1,5 @@
 ---
-title: while 循环
+title: 'while 循环'
 ---
 
 # while 循环

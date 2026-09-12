@@ -1,6 +1,6 @@
 ---
 title: '贡献指南'
-description: 了解如何为 YaoXiang 项目贡献代码
+description: '了解如何为 YaoXiang 项目贡献代码'
 ---
 
 # 贡献指南

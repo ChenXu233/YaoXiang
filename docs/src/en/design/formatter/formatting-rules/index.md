@@ -1,6 +1,6 @@
 ---
 title: 'Formatting Rules Overview'
-description: Classification and index of YaoXiang code formatting rules
+description: 'Classification and index of YaoXiang code formatting rules'
 ---
 
 # Formatting Rules

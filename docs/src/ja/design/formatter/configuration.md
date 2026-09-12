@@ -1,6 +1,6 @@
 ---
 title: 'フォーマット設定オプション'
-description: yaoxiang fmt の設定ファイル形式、優先順位、デフォルト値
+description: 'yaoxiang fmt の設定ファイル形式、優先順位、デフォルト値'
 ---
 
 # 設定オプション

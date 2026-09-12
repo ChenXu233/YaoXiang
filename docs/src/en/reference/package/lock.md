@@ -1,6 +1,6 @@
 ---
 title: 'yaoxiang.lock Format'
-description: Description of the dependency lock file format
+description: 'Description of the dependency lock file format'
 ---
 
 # yaoxiang.lock Format

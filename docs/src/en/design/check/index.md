@@ -1,6 +1,6 @@
 ---
-title: check Command Design Document
-description: Design specification for yaoxiang check static analysis tool
+title: 'check Command Design Document'
+description: 'Design specification for yaoxiang check static analysis tool'
 ---
 
 # check Command Design Document

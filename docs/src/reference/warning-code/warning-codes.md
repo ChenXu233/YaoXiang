@@ -1,6 +1,6 @@
 ---
 title: '警告码'
-description: 编译器警告码及说明
+description: '编译器警告码及说明'
 ---
 
 # 警告码

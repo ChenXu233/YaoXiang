@@ -1,5 +1,5 @@
 ---
-title: Lambda Expressions
+title: 'Lambda Expressions'
 ---
 
 # Lambda Expressions

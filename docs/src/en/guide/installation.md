@@ -1,5 +1,5 @@
 ---
-title: Installing YaoXiang
+title: 'Installing YaoXiang'
 description:
   Dual installation channels — Standard channel (Go/Zig mode) where you unzip and use, Easy channel
   with one-line command + version management (Rust/rustup mode)

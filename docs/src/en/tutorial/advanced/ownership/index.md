@@ -1,5 +1,5 @@
 ---
-title: Ownership Model
+title: 'Ownership Model'
 ---
 
 # Ownership Model

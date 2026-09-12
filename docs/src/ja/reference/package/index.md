@@ -1,6 +1,6 @@
 ---
 title: 'パッケージマネージャー'
-description: YaoXiang パッケージマネージャーリファレンスドキュメント
+description: 'YaoXiang パッケージマネージャーリファレンスドキュメント'
 ---
 
 # パッケージマネージャー
