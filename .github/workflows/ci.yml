@@ -81,11 +81,11 @@ jobs:
         run: cargo test --doc --all-features
 
       - name: Build CLI
-        run: cargo build --all-features --bin yaoxiang
+        run: cargo build --all-features --bin yaoxiang-rs
 
       - name: YaoXiang test suites (JSON summary)
         run: |
-          BIN=target/debug/yaoxiang
+          BIN=target/debug/yaoxiang-rs
           "$BIN" test --json --parallel > target/report-corpus.json || corpus_rc=$?
           "$BIN" test --json --parallel src/std/tests > target/report-stdlib.json || stdlib_rc=$?
           CORPUS_RC="${corpus_rc:-0}" STDLIB_RC="${stdlib_rc:-0}" python3 - <<'EOF'

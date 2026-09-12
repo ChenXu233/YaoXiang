@@ -157,6 +157,9 @@ fn file_uri(path: &std::path::Path) -> String {
     format!("file:///{}", path.display().to_string().replace('\\', "/"))
 }
 
+// 断言的是 Windows 盘符 URI 的去斜杠语义（函数内 cfg!(windows) 分支），
+// Linux runner 上按构造不成立——平台门控
+#[cfg(windows)]
 #[test]
 fn test_uri_to_path_windows_file_uri() {
     // Arrange + Act
@@ -166,6 +169,7 @@ fn test_uri_to_path_windows_file_uri() {
     assert_eq!(path, Some(std::path::PathBuf::from("E:/a/b.yx")));
 }
 
+#[cfg(windows)]
 #[test]
 fn test_uri_to_path_percent_decoded() {
     // Arrange + Act - 空格编码为 %20

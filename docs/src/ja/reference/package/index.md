@@ -5,43 +5,43 @@ description: YaoXiang パッケージマネージャーリファレンスドキ�
 
 # パッケージマネージャー
 
-YaoXiangに組み込まれたパッケージマネージャーで、プロジェクトの初期化、依存関係管理、バージョンロックなどの機能を提供します。
+YaoXiang 内蔵のパッケージマネージャーが、プロジェクトの初期化、依存関係管理、バージョンロックなどの機能を提供します。
 
 ## 概要
 
-YaoXiang パッケージマネージャー（略称 YPM）は、Cargoに似た設計思想を採用しています：
+YaoXiang パッケージマネージャー（略称 YPM）は、Cargo に類似した設計思想を採用しています：
 
-- **宣言的依存関係**：`yaoxiang.toml` で必要な依存関係を宣言
+- **宣言型依存関係**：`yaoxiang.toml` で必要な依存関係を宣言
 - **決定論的ビルド**：`yaoxiang.lock` でバージョンをロックし、再現可能なビルドを保証
-- **ローカルキャッシュ**：依存関係は `vendor` ディレクトリにダウンロードされ、オフライン利用が可能
+- **ローカルキャッシュ**：依存関係は `vendor` ディレクトリにダウンロードされ、オフライン使用に対応
 
 ## クイックスタート
 
 ```bash
-# 1. 新規プロジェクト作成
-yaoxiang init my-project
+# 1. 新規プロジェクトを作成
+yx init my-project
 
-# 2. 依存関係追加
+# 2. 依存関係を追加
 cd my-project
-yaoxiang add http
+yx add http
 
-# 3. 依存関係インストール
-yaoxiang install
+# 3. 依存関係をインストール
+yx install
 
-# 4. プロジェクト実行
-yaoxiang run src/main.yx
+# 4. プロジェクトを実行
+yx run src/main.yx
 ```
 
 ## コマンド一覧
 
-| コマンド                                          | 説明                   |
-| ------------------------------------------------- | ---------------------- |
-| [`yaoxiang init`](./commands#yaoxiang-init)       | 新規プロジェクト初期化 |
-| [`yaoxiang add`](./commands#yaoxiang-add)         | 依存関係追加           |
-| [`yaoxiang rm`](./commands#yaoxiang-rm)           | 依存関係削除           |
-| [`yaoxiang install`](./commands#yaoxiang-install) | 依存関係インストール   |
-| [`yaoxiang update`](./commands#yaoxiang-update)   | 依存関係更新           |
-| [`yaoxiang list`](./commands#yaoxiang-list)       | 依存関係一覧           |
+| コマンド                              | 説明                     |
+| ------------------------------------- | ------------------------ |
+| [`yx init`](./commands#yx-init)       | 新規プロジェクトを初期化 |
+| [`yx add`](./commands#yx-add)         | 依存関係を追加           |
+| [`yx rm`](./commands#yx-rm)           | 依存関係を削除           |
+| [`yx install`](./commands#yx-install) | 依存関係をインストール   |
+| [`yx update`](./commands#yx-update)   | 依存関係を更新           |
+| [`yx list`](./commands#yx-list)       | 依存関係を一覧表示       |
 
 ## プロジェクト構造
 
@@ -51,12 +51,12 @@ my-project/
 ├── yaoxiang.lock      # 依存関係ロックファイル（自動生成）
 ├── vendor/            # 依存関係保存ディレクトリ（自動生成）
 └── src/
-    └── main.yx       # エントリーポイント
+    └── main.yx       # エントリーファイル
 ```
 
-## ドキュメントインデックス
+## ドキュメント一覧
 
-- [コマンドラインインターフェース](./commands) - 全コマンドの詳細な説明
-- [yaoxiang.toml 形式](./manifest) - プロジェクト設定ファイルの形式
-- [yaoxiang.lock 形式](./lock) - ロックファイルの形式説明
-- [エラーコード](./error-codes) - 一般的なエラーと対処方法
+- [コマンドラインインターフェース](./commands) - すべてのコマンドの詳細な説明
+- [yaoxiang.toml フォーマット](./manifest) - プロジェクト設定ファイルの形式
+- [yaoxiang.lock フォーマット](./lock) - ロックファイル形式の説明
+- [エラーコード](./error-codes) - 一般的なエラーとその処理方法

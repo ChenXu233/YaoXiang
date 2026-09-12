@@ -1,12 +1,11 @@
 ---
 title: CI Integration Guide
-description: Integrate yaoxiang check and yaoxiang format into CI/CD pipeline
+description: Integrate yx check and yx format into CI/CD pipelines
 ---
 
 # CI Integration Guide
 
-Integrate YaoXiang's static checking and formatting tools into CI/CD pipelines to ensure code
-quality.
+Integrate YaoXiang's static check and formatting tools into CI/CD pipelines to ensure code quality.
 
 ## GitHub Actions
 
@@ -31,10 +30,10 @@ jobs:
           echo "$HOME/.yaoxiang/bin" >> $GITHUB_PATH
 
       - name: Type check
-        run: yaoxiang check --color never --no-progress
+        run: yx check --color never --no-progress
 
       - name: Format check
-        run: yaoxiang format --dry-run .
+        run: yx format --dry-run .
 ```
 
 ## GitLab CI
@@ -45,8 +44,8 @@ yaoxiang-check:
   script:
     - curl -fsSL https://yaoxiang.dev/install.sh | sh
     - export PATH="$HOME/.yaoxiang/bin:$PATH"
-    - yaoxiang check --color never --no-progress
-    - yaoxiang format --dry-run .
+    - yx check --color never --no-progress
+    - yx format --dry-run .
   rules:
     - if: $CI_MERGE_REQUEST_IID
     - if: $CI_COMMIT_BRANCH == "main"
@@ -55,26 +54,26 @@ yaoxiang-check:
 
 ## Exit Codes
 
-| Exit Code | Meaning              | CI Behavior              |
-| --------- | -------------------- | ------------------------ |
-| `0`       | No errors            | Pass                     |
-| `1`       | Check found errors   | Fail                     |
-| `2`       | No `.yx` files found | Depends on configuration |
+| Exit Code | Meaning             | CI Behavior              |
+| --------- | ------------------- | ------------------------ |
+| `0`       | No errors           | Pass                     |
+| `1`       | Check found errors  | Fail                     |
+| `2`       | No `.yx` file found | Depends on configuration |
 
 ## JSON Output Parsing
 
 Use `--json` to get machine-readable output:
 
 ```bash
-yaoxiang check --json | jq '.error_count'
+yx check --json | jq '.error_count'
 ```
 
 ## Best Practices
 
-1. **Path arguments**: `yaoxiang check` checks the current directory by default, or you can specify
-   a path: `yaoxiang check src/`
-2. **Separate check and format**: Run `check` and `format --dry-run` separately for easier
-   troubleshooting
+1. **Path parameter**: `yx check` checks the current directory by default, you can also specify a
+   path: `yx check src/`
+2. **Separate check and format**: run `check` and `format --dry-run` separately for easier problem
+   localization
 3. **Use `--no-progress`**: CI environments don't need progress bars
-4. **Use `--color never`**: Avoid ANSI color codes polluting logs
-5. **Cache dependencies**: Use CI caching mechanisms to speed up builds
+4. **Use `--color never`**: avoid ANSI color codes polluting logs
+5. **Cache dependencies**: leverage the CI caching mechanism to speed up builds

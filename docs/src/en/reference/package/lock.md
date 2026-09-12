@@ -1,17 +1,16 @@
 ---
 title: 'yaoxiang.lock Format'
-description: 'Dependency lock file format specification'
+description: Description of the dependency lock file format
 ---
 
 # yaoxiang.lock Format
 
-`yaoxiang.lock` is YaoXiang's dependency lock file, recording the exact version information for all
+`yaoxiang.lock` is YaoXiang's dependency lock file, recording the exact version information of all
 dependencies.
 
 ## Overview
 
-- **Auto-generated**: Automatically generated and updated by `yaoxiang install` and
-  `yaoxiang update`
+- **Auto-generated**: Automatically generated and updated by `yx install` and `yx update`
 - **Do not edit manually**: This file is automatically maintained by the package manager
 - **Should be committed to version control**: Ensures team members and CI builds use the same
   dependency versions
@@ -30,7 +29,7 @@ source = "source type"
 checksum = "checksum (optional)"
 ```
 
-## Field Descriptions
+## Field Description
 
 ### [package] Section
 
@@ -40,11 +39,11 @@ checksum = "checksum (optional)"
 
 ### [package.\<name\>] Section
 
-| Field      | Type   | Description                                     |
-| ---------- | ------ | ----------------------------------------------- |
-| `version`  | string | Resolved exact version number                   |
-| `source`   | string | Dependency source: `registry`, `git`, or `path` |
-| `checksum` | string | SHA-256 checksum (optional)                     |
+| Field      | Type   | Description                                  |
+| ---------- | ------ | -------------------------------------------- |
+| `version`  | string | The resolved exact version number            |
+| `source`   | string | Dependency source: `registry`, `git`, `path` |
+| `checksum` | string | SHA-256 checksum (optional)                  |
 
 ## Example
 
@@ -75,23 +74,23 @@ source = "git"
 
 ## Source Types
 
-| Type       | Description                  | Configuration Example     |
-| ---------- | ---------------------------- | ------------------------- |
-| `registry` | Fetched from remote registry | `http = "1.0.0"`          |
-| `git`      | Fetched from Git repository  | `{ git = "https://..." }` |
-| `path`     | Fetched from local path      | `{ path = "./lib" }`      |
+| Type       | Description                    | Configuration Example     |
+| ---------- | ------------------------------ | ------------------------- |
+| `registry` | Fetched from a remote registry | `http = "1.0.0"`          |
+| `git`      | Fetched from a Git repository  | `{ git = "https://..." }` |
+| `path`     | Fetched from a local path      | `{ path = "./lib" }`      |
 
 ## Relationship with Manifest
 
 ```
 yaoxiang.toml          yaoxiang.lock
      │                       │
-     │   yaoxiang install    │
+     │   yx install    │
      ├──────────────────────►│
      │                       │
-     │   Declare "http = *>" │  Lock "http = 1.0.0"
+     │   declare "http = *>" │  lock "http = 1.0.0"
      │                       │
 ```
 
-- `yaoxiang.toml`: Declares the **desired** dependencies (can use ranges)
-- `yaoxiang.lock`: Records the **actually installed** versions (exact versions)
+- `yaoxiang.toml`: declares the **desired** dependencies (can use ranges)
+- `yaoxiang.lock`: records the **actually installed** versions (exact versions)
