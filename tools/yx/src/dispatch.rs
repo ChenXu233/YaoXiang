@@ -1,6 +1,8 @@
 //! 透传派发：其余动词原样转给引擎 `yaoxiang-rs`（rustup 代理模式）
 
 use crate::resolve;
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
 
 /// 以 `args` 启动引擎，继承 stdio，透传退出码后退出本进程
 pub fn run(args: &[String]) -> ! {
