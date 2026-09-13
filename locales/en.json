@@ -950,5 +950,11 @@
   },
   "E3008.title": "unsupported match pattern",
   "E3008.template": "match pattern '{pattern}' is not yet implemented: only literal and wildcard (_) patterns are currently supported",
-  "E3008.help": "Variant destructuring (ok(v)/err(e)/some(x)), structs, tuples, or patterns with guards are not yet implemented (planned in RFC-039); previous implementations would silently miscompile, so this is now a compile-time rejection. To handle Result, use the `?` operator instead."
+  "E3008.help": "Variant destructuring (ok(v)/err(e)/some(x)), structs, tuples, or patterns with guards are not yet implemented (planned in RFC-039); previous implementations would silently miscompile, so this is now a compile-time rejection. To handle Result, use the `?` operator instead.",
+  "E3018.title": "Monomorphization instantiation failed",
+  "E3018.template": "Generic '{func}' instantiation failed: {reason}",
+  "E3018.help": "The monomorphizer failed to generate a specialized version from the type arguments (common cause: the number of type arguments does not match the generic parameters). Previously, this error was silently skipped, only reporting \"missing function table\" at runtime.",
+  "E2030.title": "Refinement type constraint violation",
+  "E2030.template": "After assigning '{assigned}', '{var}' no longer satisfies the refinement type constraint: {constraint} (counterexample: {counterexample})",
+  "E2030.help": "Refinement type annotations require dependent variables to continue satisfying the predicate constraint after the relevant assignment. Adjust the assignment so the constraint holds, or relax the type annotation."
 }
