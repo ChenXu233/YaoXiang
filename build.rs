@@ -144,10 +144,19 @@ fn main() {
 
 fn link_z3(z3_dir: &Path) {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+    // Z3 官方包把静态库放 lib/ 或 bin/（osx/linux 资产在 bin/，含 libz3.a）；
+    // 静态链接时搜索目录必须含 libz3.a
     let lib_dir = ["lib", "bin"]
         .iter()
         .map(|s| z3_dir.join(s))
-        .find(|d| d.exists())
+        .find(|d| {
+            d.exists()
+                && (d.join("libz3.a").exists()
+                    || d.join("z3.lib").exists()
+                    || d.join("libz3.dll").exists()
+                    || d.join("libz3.dylib").exists()
+                    || d.join("libz3.so").exists())
+        })
         .unwrap_or_else(|| z3_dir.join("bin"));
 
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
@@ -157,13 +166,28 @@ fn link_z3(z3_dir: &Path) {
         // MSVC import lib 命名为 libz3.lib
         println!("cargo:rustc-link-lib=libz3");
     } else {
-        println!("cargo:rustc-link-lib=z3");
-        // 动态链接器默认不搜二进制所在目录，必须注入 rpath，“解压即用”才成立
-        // （发行包内 exe 与 libz3 同在 bin/；Windows 默认搜 exe 目录，无需处理）
-        match target_os.as_str() {
-            "linux" => println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN"),
-            "macos" => println!("cargo:rustc-link-arg=-Wl,-rpath,@loader_path"),
-            _ => {}
+        // macOS 静态链接：官方 x64-osx 资产 4.16.0 的 bin/libz3.dylib 错装为
+        // arm64（dist v0.8.0 链接实测 "found architecture 'arm64'"），动态链接
+        // 在 x86_64 目标上不可用；bin/libz3.a 为 x86_64+arm64 双架构 fat 库，
+        // 静态链接自包含且两个 Apple 目标通用。
+        let static_macos = target_os == "macos" && lib_dir.join("libz3.a").exists();
+        if static_macos {
+            println!("cargo:rustc-link-lib=static=z3");
+        } else {
+            println!("cargo:rustc-link-lib=z3");
+            // 动态链接器默认不搜二进制所在目录，必须注入 rpath，“解压即用”才成立
+            // （发行包内 exe 与 libz3 同在 bin/；Windows 默认搜 exe 目录，无需处理）
+            match target_os.as_str() {
+                "linux" => println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN"),
+                "macos" => println!("cargo:rustc-link-arg=-Wl,-rpath,@loader_path"),
+                _ => {}
+            }
+        }
+        if target_os == "linux" {
+            // dist 管线用 lld（默认 --no-allow-shlib-undefined），预编译
+            // libz3.so 自身的未定义符号（libstdc++ 等）在可执行链接期被拒——
+            // 这些符号由 .so 的 DT_NEEDED 在运行期解析，显式放行
+            println!("cargo:rustc-link-arg=-Wl,--allow-shlib-undefined");
         }
         let cxx = if target_os == "macos" {
             "c++".to_string()
