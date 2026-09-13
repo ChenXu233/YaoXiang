@@ -360,7 +360,7 @@ fn test_scan_for_new_calls_no_generic_calls_leaves_queue_empty() {
     };
 
     // Act
-    mono.scan_for_new_calls(&func);
+    mono.scan_for_new_calls(&func, 0);
 
     // Assert
     assert!(mono.pending_queue.is_empty(), "无泛型调用时队列应为空");
@@ -400,7 +400,7 @@ fn test_scan_for_new_calls_with_generic_call_enqueues_request() {
     };
 
     // Act
-    mono.scan_for_new_calls(&func);
+    mono.scan_for_new_calls(&func, 0);
 
     // Assert
     assert_eq!(mono.pending_queue.len(), 1, "应该有一个新的实例化请求");
@@ -449,7 +449,7 @@ fn test_scan_for_new_calls_duplicate_prevented_by_processed_set() {
     };
 
     // Act
-    mono.scan_for_new_calls(&func);
+    mono.scan_for_new_calls(&func, 0);
 
     // Assert
     assert!(
@@ -912,7 +912,7 @@ fn test_collect_generic_type_refs_nested_specialization() {
     };
 
     // Act: 从嵌套类型收集引用
-    mono.collect_generic_type_refs(&nested_ty);
+    mono.collect_generic_type_refs(&nested_ty, 0);
 
     // BFS 顺序：先外层 List(List(Int))（collect_generic_type_refs 在递归入队之前先入队外层）
     let first = &mono.pending_queue[0];
@@ -992,5 +992,192 @@ fn test_specialize_type_lowercase_param_name() {
         matches!(&f.ty, AstType::String),
         "小写参数名 t 应被替换为 String，实际为 {:?}",
         f.ty
+    );
+}
+
+// ==================== #335 多实例化按调用点分发 ====================
+
+/// #335 回归：同一泛型函数的两个实例化，各调用点必须改写到各自特化版本。
+/// 旧实现按泛型名单键映射，后写覆盖前写——两处调用都会指向最后一个请求
+/// 的特化（字节码实证：两处 CallStatic func_id 相同）。
+#[test]
+fn test_replace_call_sites_multi_instantiation_dispatches_per_site() {
+    // Arrange
+    let mut mono = Monomorphizer::new();
+    mono.generic_functions
+        .insert("identity".to_string(), make_identity_ir());
+
+    // 两个调用点：不同源码位置（span 不同）
+    let span_int = Span::new(
+        crate::util::span::Position {
+            line: 3,
+            column: 9,
+            offset: 40,
+        },
+        crate::util::span::Position {
+            line: 3,
+            column: 22,
+            offset: 53,
+        },
+    );
+    let span_str = Span::new(
+        crate::util::span::Position {
+            line: 4,
+            column: 9,
+            offset: 60,
+        },
+        crate::util::span::Position {
+            line: 4,
+            column: 25,
+            offset: 76,
+        },
+    );
+
+    let main_func = FunctionIR {
+        def: None,
+        name: "main".to_string(),
+        params: vec![],
+        return_type: MonoType::Void,
+        generic_params: None,
+        body: FunctionBody::Code {
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions: vec![
+                    Instruction::Call {
+                        dst: Some(Operand::Local(0)),
+                        func: Operand::Const(ConstValue::String("identity".to_string())),
+                        args: vec![Operand::Const(ConstValue::Int(42))],
+                        span: span_int,
+                        def: None,
+                    },
+                    Instruction::Call {
+                        dst: Some(Operand::Local(1)),
+                        func: Operand::Const(ConstValue::String("identity".to_string())),
+                        args: vec![Operand::Const(ConstValue::String("hello".to_string()))],
+                        span: span_str,
+                        def: None,
+                    },
+                    Instruction::Ret(None),
+                ],
+                successors: Vec::new(),
+            }],
+            entry: 0,
+            locals: vec![MonoType::Int(64), MonoType::make_string()],
+        },
+    };
+
+    let mut module = ModuleIR {
+        functions: vec![main_func],
+        ..Default::default()
+    };
+
+    // 两个实例化请求：各来自不同调用点（span 对应）
+    let requests = vec![
+        InstantiationRequest::new(
+            GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
+            vec![MonoType::Int(64)],
+            span_int,
+        ),
+        InstantiationRequest::new(
+            GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
+            vec![MonoType::make_string()],
+            span_str,
+        ),
+    ];
+
+    // Act
+    mono.replace_call_sites(&mut module, &requests);
+
+    // Assert：每个调用点改写到各自的特化，不再互相覆盖
+    let instrs = &module.functions[0].blocks()[0].instructions;
+    assert!(
+        matches!(
+            &instrs[0],
+            Instruction::Call { func: callee, .. }
+            if *callee == Operand::Const(ConstValue::String("identity(int64)".to_string()))
+        ),
+        "第一处调用应特化为 identity(int64)"
+    );
+    assert!(
+        matches!(
+            &instrs[1],
+            Instruction::Call { func: callee, .. }
+            if *callee == Operand::Const(ConstValue::String("identity(string)".to_string()))
+        ),
+        "第二处调用应特化为 identity(string)，不得被第一处覆盖"
+    );
+}
+
+/// #335：嵌套泛型调用（特化体内的泛型调用）按自身 span 改写
+#[test]
+fn test_replace_call_sites_rewrites_nested_calls_in_specialized_body() {
+    // Arrange
+    let mut mono = Monomorphizer::new();
+    mono.generic_functions
+        .insert("identity".to_string(), make_identity_ir());
+
+    // 特化函数（generic_params 已清除）体内对 identity 的嵌套调用，
+    // span 与嵌套请求的 source_location 同源
+    let inner_span = Span::new(
+        crate::util::span::Position {
+            line: 2,
+            column: 30,
+            offset: 31,
+        },
+        crate::util::span::Position {
+            line: 2,
+            column: 42,
+            offset: 43,
+        },
+    );
+    let wrapper = FunctionIR {
+        def: None,
+        name: "double_identity(int64)".to_string(),
+        params: vec![MonoType::Int(64)],
+        return_type: MonoType::Int(64),
+        generic_params: None,
+        body: FunctionBody::Code {
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions: vec![
+                    Instruction::Call {
+                        dst: Some(Operand::Local(1)),
+                        func: Operand::Const(ConstValue::String("identity".to_string())),
+                        args: vec![Operand::Arg(0)],
+                        span: inner_span,
+                        def: None,
+                    },
+                    Instruction::Ret(Some(Operand::Local(1))),
+                ],
+                successors: Vec::new(),
+            }],
+            entry: 0,
+            locals: vec![MonoType::Int(64)],
+        },
+    };
+
+    let mut module = ModuleIR {
+        functions: vec![wrapper],
+        ..Default::default()
+    };
+
+    let requests = vec![InstantiationRequest::new(
+        GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
+        vec![MonoType::Int(64)],
+        inner_span,
+    )];
+
+    // Act
+    mono.replace_call_sites(&mut module, &requests);
+
+    // Assert
+    let instrs = &module.functions[0].blocks()[0].instructions;
+    assert!(
+        matches!(
+            &instrs[0],
+            Instruction::Call { func: callee, .. }
+            if *callee == Operand::Const(ConstValue::String("identity(int64)".to_string()))
+        ),
+        "特化体内嵌套调用应按 (泛型名, span) 命中改写"
     );
 }

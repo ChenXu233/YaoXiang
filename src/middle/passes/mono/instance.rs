@@ -19,8 +19,12 @@ pub struct InstantiationRequest {
     /// 类型参数列表
     pub type_args: Vec<MonoType>,
 
-    /// 实例化来源（用于调试和追踪）
+    /// 实例化来源（用于调试和追踪；调用点改写按 (泛型名, 此 span) 匹配）
     pub source_location: Span,
+
+    /// 特化链深度（0 = typecheck 直接产生的请求；嵌套扫描逐层 +1，
+    /// 用于递归链保护，与实例化总数上限分离）
+    pub depth: usize,
 }
 
 impl InstantiationRequest {
@@ -34,6 +38,7 @@ impl InstantiationRequest {
             generic_id,
             type_args,
             source_location,
+            depth: 0,
         }
     }
 

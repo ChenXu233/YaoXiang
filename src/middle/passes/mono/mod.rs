@@ -31,8 +31,12 @@ pub struct Monomorphizer {
     pending_queue: VecDeque<InstantiationRequest>,
     /// 已处理的请求（去重）
     processed: HashSet<SpecializationKey>,
-    /// 最大递归深度
+    /// 最大特化链深度（同一实例化链上嵌套泛型调用的层数；
+    /// 拦截无限类型增长递归，如 f(T) → f(List(T)) → …）
     max_depth: usize,
+    /// 实例化总数上限（#335：与递归深度分离——合法程序可含大量
+    /// 互不相同的实例化，不应触发深度保护）
+    max_total_instantiations: usize,
 }
 
 impl Monomorphizer {
@@ -44,6 +48,7 @@ impl Monomorphizer {
             pending_queue: VecDeque::new(),
             processed: HashSet::new(),
             max_depth: 100,
+            max_total_instantiations: 10_000,
         }
     }
 
@@ -52,6 +57,15 @@ impl Monomorphizer {
             max_depth,
             ..Self::new()
         }
+    }
+
+    /// 设置实例化总数上限（与递归深度上限分离，#335）
+    pub fn with_max_instantiations(
+        mut self,
+        max_total: usize,
+    ) -> Self {
+        self.max_total_instantiations = max_total;
+        self
     }
 
     /// 核心入口：单态化 ModuleIR
@@ -101,36 +115,78 @@ impl Monomorphizer {
     }
 
     fn process_queue(&mut self) -> Result<(), Diagnostic> {
-        let mut depth: usize = 0;
         while let Some(req) = self.pending_queue.pop_front() {
-            if depth >= self.max_depth {
-                // #322 M3：走注册表快捷方法（i18n 模板渲染）
-                return Err(ErrorCodeDefinition::ir_internal_error(&format!(
-                    "单态化实例化深度超过最大限制 ({})，可能存在无限泛型递归；检查泛型函数是否存在无限递归调用链",
-                    self.max_depth
-                ))
-                .build());
-            }
-
             let key = req.specialization_key();
 
             if self.processed.contains(&key) {
                 continue;
             }
+
+            // #335：两个上限分离——
+            // 深度 = 同一特化链上的嵌套层数（拦截无限类型增长递归）
+            if req.depth > self.max_depth {
+                return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                    "泛型特化链深度超过最大限制 ({}，当前 {})，可能存在无限类型增长递归（如泛型函数以自嵌套类型递归调用自身）",
+                    self.max_depth, req.depth
+                ))
+                .at(req.source_location)
+                .build());
+            }
+            // 总数 = 不同实例化的规模上限（合法大程序可含大量互不相同的实例化）
+            if self.processed.len() >= self.max_total_instantiations {
+                return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                    "单态化实例化总数超过上限 ({})；如为合法的大规模泛型使用，请调高 mono.max_instantiations 配置",
+                    self.max_total_instantiations
+                ))
+                .at(req.source_location)
+                .build());
+            }
+
+            // #335：实例化失败显式报错——此前 `if let Some(spec)` 静默跳过，
+            // 下游症状是 E6006「函数表缺失」，根因不可见
+            let generic_name = req.generic_id().name().to_string();
+            let n_type_params = if let Some(g) = self.generic_types.get(&generic_name) {
+                g.generic_params.as_ref().map(|p| p.len()).unwrap_or(0)
+            } else if let Some(g) = self.generic_functions.get(&generic_name) {
+                g.generic_params.as_ref().map(|p| p.len()).unwrap_or(0)
+            } else {
+                // 请求目标不在 IR 泛型定义表中（限定名/native 等历史宽松路径）
+                continue;
+            };
+            let type_args_len = req.type_args().len();
+            if type_args_len != n_type_params {
+                return Err(ErrorCodeDefinition::ir_instantiation_failed(
+                    &generic_name,
+                    &format!("类型实参数不匹配：期望 {n_type_params} 个，得到 {type_args_len} 个"),
+                )
+                .at(req.source_location)
+                .build());
+            }
+
             self.processed.insert(key);
-            depth += 1;
 
             // 先尝试类型特化，再尝试函数特化
-            let specialized = if self.generic_types.contains_key(req.generic_id().name()) {
+            let specialized = if self.generic_types.contains_key(&generic_name) {
                 self.specialize_type(&req)
             } else {
                 self.specialize_function(&req)
             };
 
-            if let Some(spec) = specialized {
-                self.scan_for_new_calls(&spec);
-                self.scan_for_generic_types(&spec);
-                self.specialized_functions.insert(spec.name.clone(), spec);
+            match specialized {
+                Some(spec) => {
+                    let child_depth = req.depth + 1;
+                    self.scan_for_new_calls(&spec, child_depth);
+                    self.scan_for_generic_types(&spec, child_depth);
+                    self.specialized_functions.insert(spec.name.clone(), spec);
+                }
+                None => {
+                    return Err(ErrorCodeDefinition::ir_instantiation_failed(
+                        &generic_name,
+                        "泛型定义缺少泛型参数或类型体，无法特化",
+                    )
+                    .at(req.source_location)
+                    .build());
+                }
             }
         }
         Ok(())
@@ -305,13 +361,19 @@ impl Monomorphizer {
     }
 
     /// 扫描特化函数体中的泛型调用，将新发现的实例化请求加入队列
+    ///
+    /// `depth` 为子请求的特化链深度（父请求深度 + 1）
     fn scan_for_new_calls(
         &mut self,
         func: &FunctionIR,
+        depth: usize,
     ) {
         for instr in func.all_instructions() {
             if let crate::middle::core::ir::Instruction::Call {
-                func: callee, args, ..
+                func: callee,
+                args,
+                span: call_span,
+                ..
             } = instr
             {
                 // 从调用操作数提取被调用函数名
@@ -350,11 +412,15 @@ impl Monomorphizer {
                     let key = SpecializationKey::new(callee_name.clone(), vec![type_arg.clone()]);
 
                     if !self.processed.contains(&key) {
-                        let req = InstantiationRequest::new(
+                        // #335：请求携带调用点自身的 span——特化体 IR 保留了
+                        // 源码 span，调用点改写按 (泛型名, span) 精确匹配
+                        //（此前 Span::default() 使嵌套调用点无法被改写命中）
+                        let mut req = InstantiationRequest::new(
                             GenericFunctionId::new(callee_name.clone(), type_params.clone()),
                             vec![type_arg],
-                            crate::util::span::Span::default(),
+                            *call_span,
                         );
+                        req.depth = depth;
                         self.pending_queue.push_back(req);
                     }
                 }
@@ -366,16 +432,17 @@ impl Monomorphizer {
     fn scan_for_generic_types(
         &mut self,
         func: &FunctionIR,
+        depth: usize,
     ) {
         // 扫描 params
         for ty in &func.params {
-            self.collect_generic_type_refs(ty);
+            self.collect_generic_type_refs(ty, depth);
         }
 
         // 扫描 locals 和指令中的类型
         if let FunctionBody::Code { locals, blocks, .. } = &func.body {
             for ty in locals {
-                self.collect_generic_type_refs(ty);
+                self.collect_generic_type_refs(ty, depth);
             }
             for block in blocks {
                 for instr in &block.instructions {
@@ -389,23 +456,25 @@ impl Monomorphizer {
     fn collect_generic_type_refs(
         &mut self,
         ty: &MonoType,
+        depth: usize,
     ) {
         match ty {
             MonoType::Generic { name, args } => {
                 if self.generic_types.contains_key(name) {
                     let key = SpecializationKey::new(name.clone(), args.clone());
                     if !self.processed.contains(&key) {
-                        let req = InstantiationRequest::new(
+                        let mut req = InstantiationRequest::new(
                             GenericFunctionId::new(name.clone(), Vec::new()),
                             args.clone(),
                             crate::util::span::Span::default(),
                         );
+                        req.depth = depth;
                         self.pending_queue.push_back(req);
                     }
                 }
                 // 递归扫描参数（嵌套泛型：List(List(Int))）
                 for arg in args {
-                    self.collect_generic_type_refs(arg);
+                    self.collect_generic_type_refs(arg, depth);
                 }
             }
             MonoType::Fn {
@@ -413,9 +482,9 @@ impl Monomorphizer {
                 return_type,
             } => {
                 for t in params {
-                    self.collect_generic_type_refs(t);
+                    self.collect_generic_type_refs(t, depth);
                 }
-                self.collect_generic_type_refs(return_type);
+                self.collect_generic_type_refs(return_type, depth);
             }
             _ => {}
         }
@@ -470,10 +539,12 @@ impl Monomorphizer {
         module: &mut ModuleIR,
         requests: &[InstantiationRequest],
     ) {
-        // 构建调用点映射：generic_name -> specialized_name
+        // #335：调用点映射按 (泛型名, 调用点 span) 二元键——此前按泛型名
+        // 单键映射，同一泛型函数的多个实例化互相覆盖，全部调用点被改写
+        // 到最后一个请求的特化版本（`identity(42)` 实际调用 identity(string)）
         let call_site_map = self.build_call_site_map(requests);
 
-        // 遍历所有非泛型函数，替换调用点
+        // 遍历所有非泛型函数，替换调用点（含特化函数体内对其他泛型的嵌套调用）
         for func in &mut module.functions {
             if func.generic_params.is_none() {
                 self.replace_calls_in_function(func, &call_site_map);
@@ -481,11 +552,11 @@ impl Monomorphizer {
         }
     }
 
-    /// 构建泛型函数名到特化函数名的映射
+    /// 构建 (泛型名, 调用点 span) → 特化函数名 的映射
     fn build_call_site_map(
         &self,
         requests: &[InstantiationRequest],
-    ) -> HashMap<String, String> {
+    ) -> HashMap<(String, crate::util::span::Span), String> {
         let mut map = HashMap::new();
         for req in requests {
             let generic_name = req.generic_id().name().to_string();
@@ -504,27 +575,33 @@ impl Monomorphizer {
                 .collect::<Vec<_>>()
                 .join(", ");
             let specialized_name = format!("{}({})", generic_name, type_args_str);
-            map.insert(generic_name, specialized_name);
+            map.insert((generic_name, req.source_location), specialized_name);
         }
         map
     }
 
     /// 替换单个函数中所有 Call 指令的泛型函数名为特化函数名
+    ///
+    /// 按 (被调名, 指令 span) 精确匹配：IR Call 指令与 typecheck 实例化
+    /// 请求同源持有 AST 调用表达式的 span
     fn replace_calls_in_function(
         &self,
         func: &mut FunctionIR,
-        call_site_map: &HashMap<String, String>,
+        call_site_map: &HashMap<(String, crate::util::span::Span), String>,
     ) {
         if let FunctionBody::Code { blocks, .. } = &mut func.body {
             for block in blocks {
                 for instr in &mut block.instructions {
                     if let Instruction::Call {
                         func: ref mut callee,
+                        span,
                         ..
                     } = instr
                     {
                         if let Operand::Const(ConstValue::String(name)) = callee {
-                            if let Some(specialized_name) = call_site_map.get(name) {
+                            if let Some(specialized_name) =
+                                call_site_map.get(&(name.clone(), *span))
+                            {
                                 *callee =
                                     Operand::Const(ConstValue::String(specialized_name.clone()));
                             }

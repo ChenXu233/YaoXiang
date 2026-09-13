@@ -361,6 +361,8 @@ E1001::unknown_variable(&var_name)
 | E2095 | 参数名遮蔽泛型     |
 <!-- code-table:E2xxx end -->
 
+> 预留码说明（2026-09-14 盘点，#251 发版口径）：E2019（双重释放）、E2020（释放后使用）、E2027（unsafe 解引用）、E2029（spawn 内 ref 循环）已完成注册并有单元测试锚定，但尚无可触达的 yx 源码表层（显式 drop 语句、Ptr 解引用文法、spawn ref 环建环路径）——语义完全正确的主张不覆盖这四码，实现补齐前按「预留」对待。
+
 #### E3xxx：代码生成
 <!-- code-table:E3xxx start -->
 | 代码  | 说明          |
@@ -372,6 +374,7 @@ E1001::unknown_variable(&var_name)
 | E3008 | 不支持的 match 模式 |
 | E3014 | 寄存器溢出         |
 | E3017 | 无效操作数（代码生成）   |
+| E3018 | 单态化实例化失败      |
 <!-- code-table:E3xxx end -->
 
 #### E4xxx：泛型与特质

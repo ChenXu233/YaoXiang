@@ -14,6 +14,8 @@ define_codes!(E3XXX, {
     // E3008 不支持的 match 模式（#330 安全网：非字面量/通配符模式无 IR 编码，
     // 原 stub 加载 0 永不匹配、scrutinee 为 0 时误匹配，宁编译期拒绝不静默错译）
     ("E3008", Codegen, false, ir_unsupported_pattern(pattern: &str) => .param("pattern", pattern)),
+    // E3018 单态化实例化失败（#335：此前静默跳过，下游表现为 E6006 函数表缺失）
+    ("E3018", Codegen, false, ir_instantiation_failed(func: &str, reason: &str) => .param("func", func).param("reason", reason)),
     // E3014 寄存器溢出
     ("E3014", Codegen, false, register_overflow(id: &str, limit: &str) => .param("id", id).param("limit", limit)),
     // E3017 无效操作数（代码生成）

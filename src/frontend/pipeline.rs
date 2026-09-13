@@ -380,7 +380,8 @@ impl Pipeline {
         // 单态化（根据配置决定是否启用）
         if self.config.mono.enabled && !type_result.instantiation_requests.is_empty() {
             let mut mono =
-                middle::passes::mono::Monomorphizer::with_max_depth(self.config.mono.max_depth);
+                middle::passes::mono::Monomorphizer::with_max_depth(self.config.mono.max_depth)
+                    .with_max_instantiations(self.config.mono.max_instantiations);
             match mono.monomorphize(&ir, &type_result.instantiation_requests) {
                 Ok(mono_ir) => ir = mono_ir,
                 Err(diag) => return IRResult::failed(vec![diag]),
