@@ -20,6 +20,7 @@
 | 024-concurrency-model.md | RFC-024：基于 spawn 的并发运行时语义 | 已接受 | accepted\024-concurrency-model.md | #89 | -- | -- | -- |
 | 026-ffi-core-mechanism.md | RFC-026：FFI 核心机制 | 已接受 | accepted\026-ffi-core-mechanism.md | #93 | -- | -- | -- |
 | 027-compile-time-evaluation-types.md | RFC-027：编译期谓词与统一静态验证 | 已接受 | accepted\027-compile-time-evaluation-types.md | #90 | -- | -- | -- |
+| 027a-termination-proof-fallback.md | RFC-027a: 终止检查的证明函数兜底 | 草案 | draft\027a-termination-proof-fallback.md | #318 | -- | -- | -- |
 | 029-module-semantics.md | RFC-029: 模块语义系统 | 已接受 | accepted\029-module-semantics.md | #232 | -- | -- | -- |
 | 029f-target-semantics.md | RFC-029f: 编译目标角色与导入面语义 | 已接受 | accepted\029f-target-semantics.md | #334 | -- | -- | -- |
 | 030-assert-mechanism.md | RFC-030: assert 断言机制 | 已接受 | accepted\030-assert-mechanism.md | #97 | #155, #157, #158, #159, #160, #161, #162, #169 | -- | -- |
