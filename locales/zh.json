@@ -952,5 +952,10 @@
     "message": "spawn 块内检测到引用形成循环",
     "template": "spawn 内引用循环: {cycle}",
     "help": "spawn 捕获的引用不能形成循环依赖，请检查捕获列表"
+  },
+  "E2030": {
+    "title": "精化类型约束违反",
+    "template": "对 '{assigned}' 赋值后，'{var}' 不再满足精化类型约束：{constraint}（反例：{counterexample}）",
+    "help": "精化类型标注要求依赖变量在相关赋值之后仍然满足谓词约束。请调整赋值使约束成立，或放宽类型标注。"
   }
 }
