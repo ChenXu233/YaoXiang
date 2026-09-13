@@ -2,9 +2,9 @@
   "cmd_received": "Run command received",
   "run_file": "Run file",
   "reading_file": "Reading file: {0}",
-  "build_bytecode": "Building bytecode",
+  "build_bytecode": "Build bytecode",
   "writing_bytecode": "Writing bytecode: {0}",
-  "lex_start": "Starting lexical analysis",
+  "lex_start": "Start lexical analysis",
   "lex_complete_tokens": "Lexical analysis complete: {0} tokens",
   "lex_token_identifier": "Lexical analysis: identifier {0}",
   "lex_token_keyword": "Lexical analysis: keyword {0}",
@@ -13,7 +13,7 @@
   "lex_token_char": "Lexical analysis: char '{0}'",
   "lex_token_operator": "Lexical analysis: operator {0}",
   "lex_token_punctuation": "Lexical analysis: punctuation {0}",
-  "codegen_start": "Starting code generation",
+  "codegen_start": "Start code generation",
   "codegen_complete": "Code generation complete",
   "codegen_functions": "Code generation complete: {0} functions",
   "codegen_const_pool": "Generating constant pool: {0} constants",
@@ -26,18 +26,18 @@
   "vm_i64_add": "Computing {0} + {1}",
   "compilation_start": "Starting compilation",
   "compiling_source": "Compiling source code ({0} bytes)",
-  "debug_run_called": "run() called",
-  "debug_loading_function": "Loading function '{0}' into interpreter",
+  "debug_run_called": "run() is called",
+  "debug_loading_function": "Loading function '{0}' into the interpreter",
   "debug_total_functions": "Total functions loaded: {0}",
   "debug_available_functions": "Available functions: {0}",
   "debug_exec_binary_op": "Executing binary operation: left={0}, right={1}, op={2}",
   "debug_adding_numbers": "Computing {0} + {1}",
-  "debug_generating_ir_binop": "Generating IR {0} for binary operation",
+  "debug_generating_ir_binop": "Generating IR for binary operation {0}",
   "bytecode_dump_header": "=== Bytecode dump of {0} ===",
   "bytecode_dump_type_table": "=== Type table ({0} types) ===",
-  "bytecode_dump_constants": "=== Constants ({0} entries) ===",
+  "bytecode_dump_constants": "=== Constants ({0} items) ===",
   "bytecode_dump_functions": "=== Functions ({0} functions) ===",
-  "bytecode_magic": "  Magic number: 0x{0}",
+  "bytecode_magic": "  Magic: 0x{0}",
   "bytecode_version": "  Version: {0}",
   "bytecode_flags": "  Flags: 0x{0}",
   "bytecode_entry_point": "  Entry point: {0}",
@@ -45,7 +45,7 @@
   "bytecode_file_size": "  File size: {0} bytes",
   "bytecode_func_params": "  Parameters: {0}",
   "bytecode_func_return_type": "  Return type: {0}",
-  "bytecode_func_local_count": "  Local count: {0}",
+  "bytecode_func_local_count": "  Local variable count: {0}",
   "bytecode_func_instr_count": "  Instruction count: {0}",
   "bytecode_func_code": "  Code:",
   "bytecode_instr_index": "    [{0}] {1} {2}",
@@ -53,12 +53,12 @@
   "shell_loaded": "Loaded: {0}",
   "debug_binary_op": "Debug: lhs={0}, rhs={1}",
   "debug_registers": "Debug: registers.len={0}, left_index={1}, right_index={2}",
-  "ir_gen_enter_scope": "Debug IR gen: Entering scope, symbol stack depth before: {0}",
-  "ir_gen_exit_scope": "Debug IR gen: Exiting scope, symbol stack depth: {0}",
-  "ir_gen_register_local": "Debug IR gen: Registering local '{0}', local_idx={1}",
-  "ir_gen_lookup_local": "Debug IR gen: Looking up local '{0}' -> local_idx={1}",
-  "ir_gen_lookup_local_not_found": "Debug IR gen: Looking up local '{0}' -> None",
-  "ir_gen_before_process_stmt": "Debug IR gen: Before processing statement, symbol depth={0}",
+  "ir_gen_enter_scope": "Debug IR generation: entering scope, symbol stack depth before: {0}",
+  "ir_gen_exit_scope": "Debug IR generation: exiting scope, symbol stack depth: {0}",
+  "ir_gen_register_local": "Debug IR generation: registering local variable '{0}', local_idx={1}",
+  "ir_gen_lookup_local": "Debug IR generation: looking up local variable '{0}' -> local_idx={1}",
+  "ir_gen_lookup_local_not_found": "Debug IR generation: looking up local variable '{0}' -> None",
+  "ir_gen_before_process_stmt": "Debug IR generation: before processing statement, symbol depth={0}",
   "ir_gen_after_process_stmt": "Debug IR generation: after processing statement, symbol depth={0}",
   "ir_gen_about_to_exit_scope": "Debug IR generation: about to exit scope, symbol depth={0}",
   "ir_gen_after_exit_scope": "Debug IR generation: after exiting scope, symbol depth={0}",
@@ -79,122 +79,122 @@
   "package_dev_dep_added": "✓ Added dev dependency '{0}' ({1})",
   "package_dep_added": "✓ Added dependency '{0}' ({1})",
   "package_dev_dep_removed": "✓ Removed dev dependency '{0}'",
-  "package_dep_removed": "✓ Dependency '{0}' removed",
-  "package_project_created": "✓ Project '{0}' created",
-  "package_project_created_lib": "✓ Library project '{0}' created",
+  "package_dep_removed": "✓ Dependency '{0}' has been removed",
+  "package_project_created": "✓ Project '{0}' has been created",
+  "package_project_created_lib": "✓ Library project '{0}' has been created",
   "package_init_here": "✓ Project '{0}' initialized in current directory",
   "package_file_skipped": "  Skipped existing file '{0}'",
-  "package_lock_generated": "# This file is auto-generated by yaoxiang, please do not edit manually.",
+  "package_lock_generated": "# This file is automatically generated by yaoxiang, please do not edit manually.",
   "package_update_failed": "⚠ Failed to update {0}: {1}",
   "E0001": {
     "title": "Invalid character",
-    "message": "Source code contains illegal characters",
+    "message": "Source code contains illegal character",
     "template": "Invalid character: '{char}'",
-    "help": "Remove illegal characters or use valid encoding",
+    "help": "Remove the illegal character or use a valid encoding",
     "example": "x = ¥100;",
-    "error_output": "error[E0001]: Invalid character\n --> example.yx:1:5\n  |\n1 | x = ¥100;\n  |     ^ illegal character '¥'"
+    "error_output": "error[E0001]: Invalid character\n --> example.yx:1:5\n  |\n1 | x = ¥100;\n  |     ^ Illegal character '¥'"
   },
   "E0002": {
     "title": "Invalid number literal",
-    "message": "Number literal has incorrect format",
+    "message": "Number literal format is incorrect",
     "template": "Invalid number literal: '{literal}'",
     "help": "Check the format of the number literal",
     "example": "x = 1_2_3_;",
-    "error_output": "error[E0002]: Invalid number literal\n --> example.yx:1:5\n  |\n1 | x = 1_2_3_;\n  |     ^ invalid number"
+    "error_output": "error[E0002]: Invalid number literal\n --> example.yx:1:5\n  |\n1 | x = 1_2_3_;\n  |     ^ Invalid number"
   },
   "E0003": {
-    "title": "Unterminated string",
-    "message": "String literal is missing a closing quote",
-    "template": "String starting on line {line} is not terminated",
-    "help": "Add a closing quote to the string",
+    "title": "unterminated string literal",
+    "message": "unterminated string literal",
+    "template": "string starting at line {line} is unterminated",
+    "help": "add a closing quote to the string",
     "example": "x = \"hello world;",
     "error_output": "error[E0003]: unterminated string\n --> example.yx:1:5\n  |\n1 | x = \"hello world;\n  |     ^ unterminated string"
   },
   "E0004": {
-    "title": "Invalid character literal",
-    "message": "Invalid character literal",
-    "template": "Invalid character literal: '{literal}'",
-    "help": "Character literal can only contain a single character",
+    "title": "invalid character literal",
+    "message": "character literal is invalid",
+    "template": "invalid character literal: '{literal}'",
+    "help": "character literal can only contain one character",
     "example": "x = 'ab';",
-    "error_output": "error[E0004]: invalid character literal\n --> example.yx:1:5\n  |\n1 | x = 'ab';\n  |     ^ character literal contains more than one character"
+    "error_output": "error[E0004]: invalid character literal\n --> example.yx:1:5\n  |\n1 | x = 'ab';\n  |     ^ character literal contains multiple characters"
   },
   "E0010": {
-    "title": "Expected token",
-    "message": "Parser expected a specific token",
+    "title": "expected token",
+    "message": "parser expected a specific token",
     "template": "expected {expected}, found {found}",
-    "help": "Check the syntax and add the expected token",
+    "help": "check the syntax and add the expected token",
     "example": "x = 1, 2;",
     "error_output": "error[E0010]: expected token\n --> example.yx:1:7\n  |\n1 | x = 1, 2;\n  |       ^ expected ',' or ';'"
   },
   "E0011": {
-    "title": "Unexpected token",
-    "message": "Encountered an unexpected token",
-    "template": "Unexpected token: '{token}'",
-    "help": "Remove or replace the unexpected token",
+    "title": "unexpected token",
+    "message": "encountered an unexpected token",
+    "template": "unexpected token: '{token}'",
+    "help": "remove or replace the unexpected token",
     "example": "x = 1 @ 2;",
     "error_output": "error[E0011]: unexpected token\n --> example.yx:1:7\n  |\n1 | x = 1 @ 2;\n  |       ^ unexpected token '@'"
   },
   "E0012": {
     "title": "Invalid syntax",
-    "message": "Syntax error in expression or statement",
+    "message": "the expression or statement has a syntax error",
     "template": "Invalid syntax: {reason}",
-    "help": "Check the syntax of the expression or statement",
+    "help": "check the syntax of the expression or statement",
     "example": "if x { }",
-    "error_output": "error[E0012]: invalid syntax\n --> example.yx:1:3\n  |\n1 | if x { }\n  |    ^ missing condition"
+    "error_output": "error[E0012]: Invalid syntax\n --> example.yx:1:3\n  |\n1 | if x { }\n  |    ^ missing condition"
   },
   "E0013": {
-    "title": "Mismatched brackets",
-    "message": "Mismatched parentheses, square brackets, or curly braces",
+    "title": "Mismatched bracket",
+    "message": "parenthesis, bracket, or brace do not match",
     "template": "Mismatched {bracket_type}: opened at line {open_line}, column {open_col}, not closed",
-    "help": "Ensure all brackets are properly closed",
+    "help": "ensure all brackets are properly closed",
     "example": "x = (1 + 2;",
-    "error_output": "error[E0013]: mismatched brackets\n --> example.yx:1:1\n  |\n1 | x = (1 + 2;\n  |     ^ unclosed parenthesis"
+    "error_output": "error[E0013]: Mismatched bracket\n --> example.yx:1:1\n  |\n1 | x = (1 + 2;\n  |     ^ unclosed parenthesis"
   },
   "E0014": {
     "title": "Missing semicolon",
-    "message": "Statement is missing a semicolon",
-    "template": "Missing semicolon after {statement}",
-    "help": "Add a semicolon at the end of the statement",
+    "message": "statement is missing a semicolon",
+    "template": "missing semicolon after {statement}",
+    "help": "add a semicolon at the end of the statement",
     "example": "x = 1\ny = 2",
-    "error_output": "error[E0014]: missing semicolon\n --> example.yx:1:5\n  |\n1 | x = 1\n  |       ^ missing semicolon"
+    "error_output": "error[E0014]: Missing semicolon\n --> example.yx:1:5\n  |\n1 | x = 1\n  |       ^ Missing semicolon"
   },
   "E1001": {
-    "title": "unknown variable",
-    "message": "the referenced variable is not defined",
-    "template": "unknown variable: '{name}'",
-    "help": "check whether the variable name is spelled correctly, or define it first",
+    "title": "Unknown variable",
+    "message": "Referenced variable is not defined",
+    "template": "Unknown variable: '{name}'",
+    "help": "Check if the variable name is spelled correctly, or define it first",
     "example": "x = y + 1;",
-    "error_output": "error[E1001]: unknown variable\n --> example.yx:1:5\n  |\n1 | x = y + 1;\n  |       ^ undefined variable 'y'"
+    "error_output": "error[E1001]: Unknown variable\n --> example.yx:1:5\n  |\n1 | x = y + 1;\n  |       ^ Undefined variable 'y'"
   },
   "E1002": {
-    "title": "type mismatch",
-    "message": "the expected type does not match the actual type",
-    "template": "expected type '{expected}', found type '{found}'",
-    "help": "use the correct type or add a type cast",
+    "title": "Type mismatch",
+    "message": "Expected type does not match the actual type",
+    "template": "Expected type '{expected}', found '{found}'",
+    "help": "Use the correct type or add a type conversion",
     "example": "x: Int = \"hello\";",
-    "error_output": "error[E1002]: type mismatch\n --> example.yx:1:12\n  |\n1 | x: Int = \"hello\";\n  |            ^ expected 'Int', found 'String'"
+    "error_output": "error[E1002]: Type mismatch\n --> example.yx:1:12\n  |\n1 | x: Int = \"hello\";\n  |            ^ Expected 'Int', found 'String'"
   },
   "E1003": {
-    "title": "unknown type",
-    "message": "the referenced type does not exist",
-    "template": "unknown type: '{type}'",
-    "help": "check whether the type name is spelled correctly",
+    "title": "Unknown type",
+    "message": "Referenced type does not exist",
+    "template": "Unknown type: '{type}'",
+    "help": "Check if the type name is spelled correctly",
     "example": "x: MyType = 1;",
-    "error_output": "error[E1003]: unknown type\n --> example.yx:1:5\n  |\n1 | x: MyType = 1;\n  |     ^ undefined type 'MyType'"
+    "error_output": "error[E1003]: Unknown type\n --> example.yx:1:5\n  |\n1 | x: MyType = 1;\n  |     ^ Undefined type 'MyType'"
   },
   "E1010": {
-    "title": "argument count mismatch",
+    "title": "Argument count mismatch",
     "message": "Function call arguments do not match the definition",
-    "template": "Function '{func}' expects {expected} arguments, but {found} were found",
+    "template": "Function '{func}' expected {expected} arguments, found {found}",
     "help": "Check the number of arguments in the function call",
     "example": "add(1, 2, 3);",
-    "error_output": "error[E1010]: argument count mismatch\n --> example.yx:1:1\n  |\n1 | add(1, 2, 3);\n  |     ^ function expects 2 arguments, but 3 were found"
+    "error_output": "error[E1010]: argument count mismatch\n --> example.yx:1:1\n  |\n1 | add(1, 2, 3);\n  |     ^ function expected 2 arguments, found 3"
   },
   "E1011": {
     "title": "Argument type mismatch",
     "message": "Argument type check failed",
     "template": "Argument type mismatch: expected '{expected}', found '{found}'",
-    "help": "Ensure that the argument types match the function signature",
+    "help": "Ensure argument types match the function signature",
     "example": "add(\"hello\", 2);",
     "error_output": "error[E1011]: argument type mismatch\n --> example.yx:1:5\n  |\n1 | add(\"hello\", 2);\n  |     ^ expected 'Int', found 'String'"
   },
@@ -202,13 +202,13 @@
     "title": "Return type mismatch",
     "message": "Function return type is incorrect",
     "template": "Return type mismatch: expected '{expected}', found '{found}'",
-    "help": "Ensure that the return value matches the declared return type",
+    "help": "Ensure the return value matches the declared return type",
     "example": "fn foo() -> Int { \"hello\" }",
     "error_output": "error[E1012]: return type mismatch\n --> example.yx:1:19\n  |\n1 | fn foo() -> Int { \"hello\" }\n  |                   ^ expected 'Int', found 'String'"
   },
   "E1013": {
     "title": "Function not found",
-    "message": "An undefined function was called",
+    "message": "Called an undefined function",
     "template": "Function not found: '{func}'",
     "help": "Check if the function name is spelled correctly",
     "example": "unknown_fn();",
@@ -216,24 +216,24 @@
   },
   "E1020": {
     "title": "Cannot infer type",
-    "message": "Cannot infer type from context",
+    "message": "Context cannot infer type",
     "template": "Cannot infer the type of '{expr}'",
-    "help": "Add a type annotation or explicit type parameter",
+    "help": "Add type annotations or explicit type parameters",
     "example": "let x = nil;",
     "error_output": "error[E1020]: cannot infer type\n --> example.yx:1:9\n  |\n1 | let x = nil;\n  |         ^ cannot infer type from 'nil'"
   },
   "E1021": {
-    "title": "Type inference conflict",
-    "message": "Multiple constraints lead to contradictory types",
-    "template": "Type inference conflict: {reason}",
+    "title": "Conflicting type inference",
+    "message": "Multiple constraints lead to type contradiction",
+    "template": "Conflicting type inference: {reason}",
     "help": "Check the consistency of type annotations",
     "example": "let x: Int = \"hello\";",
-    "error_output": "error[E1021]: type inference conflict\n --> example.yx:1:11\n  |\n1 | let x: Int = \"hello\";\n  |           ^ type annotation conflicts with inferred type"
+    "error_output": "error[E1021]: conflicting type inference\n --> example.yx:1:11\n  |\n1 | let x: Int = \"hello\";\n  |           ^ type annotation conflicts with inferred type"
   },
   "E1030": {
-    "title": "Non-exhaustive patterns",
-    "message": "Match expression does not cover all cases",
-    "template": "Non-exhaustive patterns: missing {patterns}",
+    "title": "Incomplete pattern",
+    "message": "match expression does not cover all cases",
+    "template": "Incomplete pattern: missing {patterns}",
     "help": "Add missing patterns to the match expression",
     "example": "match x { Some(_) => 1 }",
     "error_output": "error[E1030]: non-exhaustive patterns\n --> example.yx:1:1\n  |\n1 | match x { Some(_) => 1 }\n  |     ^ pattern 'None' not covered"
@@ -244,167 +244,167 @@
     "template": "unreachable pattern: '{pattern}'",
     "help": "remove or modify the unreachable pattern",
     "example": "match x { 1 => \"one\", 1 => \"another\" }",
-    "error_output": "error[E1031]: unreachable pattern\n --> example.yx:1:18\n  |\n1 | match x { 1 => \"one\", 1 => \"another\" }\n  |                  ^ pattern '1' is already covered"
+    "error_output": "error[E1031]: unreachable pattern\n --> example.yx:1:18\n  |\n1 | match x { 1 => \"one\", 1 => \"another\" }\n  |                  ^ pattern '1' already covered"
   },
   "E1040": {
     "title": "operation not supported",
-    "message": "operation not supported for this type",
+    "message": "type does not support this operation",
     "template": "type '{type}' does not support operation '{op}'",
-    "help": "check which operations are supported for this type",
+    "help": "check the operations supported by this type",
     "example": "\"hello\" + 1;",
     "error_output": "error[E1040]: operation not supported\n --> example.yx:1:9\n  |\n1 | \"hello\" + 1;\n  |         ^ String type does not support '+' operation"
   },
   "E1041": {
     "title": "index out of bounds",
-    "message": "array/list index is out of range",
+    "message": "array/list index out of range",
     "template": "index out of bounds: valid range is 0..{max}, found {index}",
-    "help": "ensure the index is within the collection range",
+    "help": "ensure the index is within the collection's range",
     "example": "arr[10];",
     "error_output": "error[E1041]: index out of bounds\n --> example.yx:1:5\n  |\n1 | arr[10];\n  |     ^ index 10 exceeds array length 5"
   },
   "E1042": {
     "title": "field not found",
-    "message": "Attempted to access a non-existent struct field",
-    "template": "Field '{field}' not found in struct '{struct}'",
-    "help": "Check the available fields of the struct",
+    "message": "accessed a non-existent struct field",
+    "template": "field '{field}' not found in struct '{struct}'",
+    "help": "check the available fields of the struct",
     "example": "point.z;",
     "error_output": "error[E1042]: field not found\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ field 'z' not found in struct 'Point'"
   },
   "E1050": {
-    "title": "Boolean operand required",
-    "message": "Logical operation requires boolean operands",
-    "template": "Logical operation requires boolean operands, got '{left}' and '{right}'",
-    "help": "Convert operands to boolean type or use other operators",
+    "title": "boolean operands required",
+    "message": "logical operations require boolean operands",
+    "template": "logical operations require boolean operands, found '{left}' and '{right}'",
+    "help": "convert the operands to boolean type or use other operators",
     "example": "let x = 1 && 2;",
     "error_output": "error[E1050]: boolean operand required\n --> example.yx:1:9\n  |\n1 | let x = 1 && 2;\n  |         ^ logical operation requires boolean operands"
   },
   "E1051": {
-    "title": "Logical NOT requires boolean operand",
-    "message": "Logical NOT operation requires a boolean operand",
-    "template": "Logical NOT requires a boolean operand, got '{type}'",
-    "help": "Convert the operand to boolean type before applying NOT",
+    "title": "logical NOT requires boolean operand",
+    "message": "logical NOT operation requires boolean operand",
+    "template": "logical NOT requires boolean operand, found '{type}'",
+    "help": "convert the operand to boolean type before applying NOT",
     "example": "let x = !42;",
-    "error_output": "error[E1051]: logical NOT requires boolean operand\n --> example.yx:1:9\n  |\n1 | let x = !42;\n  |         ^ NOT requires a boolean operand, got 'Int'"
+    "error_output": "error[E1051]: logical NOT requires boolean operand\n --> example.yx:1:9\n  |\n1 | let x = !42;\n  |         ^ NOT requires boolean operand, found 'Int'"
   },
   "E1052": {
-    "title": "Invalid dereference",
-    "message": "Cannot dereference a non-pointer type",
-    "template": "Cannot dereference type '{type}', expected a pointer type",
+    "title": "invalid dereference",
+    "message": "cannot dereference a non-pointer type",
+    "template": "cannot dereference type '{type}', expected pointer type",
     "help": "Only pointer types can be dereferenced",
     "example": "let x = *42;",
     "error_output": "error[E1052]: invalid dereference\n --> example.yx:1:9\n  |\n1 | let x = *42;\n  |         ^ cannot dereference 'Int'"
   },
   "E1053": {
-    "title": "non-struct field access",
-    "message": "cannot access field on non-struct type",
-    "template": "cannot access field on non-struct type '{type}'",
-    "help": "field access is only available on struct types",
+    "title": "Non-struct field access",
+    "message": "Cannot access field on non-struct type",
+    "template": "Cannot access field on non-struct type '{type}'",
+    "help": "Field access is only available on struct types",
     "example": "let x = 42.field;",
     "error_output": "error[E1053]: non-struct field access\n --> example.yx:1:12\n  |\n1 | let x = 42.field;\n  |            ^ cannot access field on 'Int'"
   },
   "E1054": {
-    "title": "condition type mismatch",
-    "message": "condition expression must be of boolean type",
-    "template": "condition must be of boolean type, got '{type}'",
-    "help": "use a boolean expression or convert to boolean type",
+    "title": "Conditional type mismatch",
+    "message": "Condition expression must be of boolean type",
+    "template": "Condition must be of boolean type, found '{type}'",
+    "help": "Use a boolean expression or convert to boolean type",
     "example": "if 42 { }",
-    "error_output": "error[E1054]: condition type mismatch\n --> example.yx:1:4\n  |\n1 | if 42 { }\n  |    ^ condition must be of boolean type, got 'Int'"
+    "error_output": "error[E1054]: conditional type mismatch\n --> example.yx:1:4\n  |\n1 | if 42 { }\n  |    ^ condition must be of boolean type, found 'Int'"
   },
   "E1055": {
-    "title": "constraint in non-generic context",
-    "message": "constraint type used in non-generic context",
-    "template": "constraint type '{type}' can only be used in generic context",
-    "help": "use a concrete type instead of a constraint type",
+    "title": "Constraint in non-generic context",
+    "message": "Constraint type used in non-generic context",
+    "template": "Constraint type '{type}' can only be used in generic context",
+    "help": "Use a concrete type instead of a constraint type",
     "example": "let x: Eq = 42;",
     "error_output": "error[E1055]: constraint in non-generic context\n --> example.yx:1:8\n  |\n1 | let x: Eq = 42;\n  |        ^ constraint type cannot be used here"
   },
   "E1060": {
-    "title": "type parameter count mismatch",
-    "message": "wrong number of type arguments provided",
-    "template": "expected {expected} type argument(s), found {found}",
-    "help": "provide the correct number of type arguments",
+    "title": "Type parameter count mismatch",
+    "message": "Wrong number of type arguments provided",
+    "template": "Expected {expected} type parameter(s), found {found}",
+    "help": "Provide the correct number of type arguments",
     "example": "let x: Vec<Int, String> = vec![];",
-    "error_output": "error[E1060]: type parameter count mismatch\n --> example.yx:1:8\n  |\n1 | let x: Vec<Int, String> = vec![];\n  |        ^ expected 1 type argument, found 2"
+    "error_output": "error[E1060]: type parameter count mismatch\n --> example.yx:1:8\n  |\n1 | let x: Vec<Int, String> = vec![];\n  |        ^ expected 1 type parameter, found 2"
   },
   "E1061": {
-    "title": "cannot instantiate generic",
-    "message": "generic type cannot be instantiated with given arguments",
-    "template": "cannot instantiate generic type with given arguments",
-    "help": "ensure type arguments satisfy all constraints",
+    "title": "Cannot instantiate generic",
+    "message": "Generic type cannot be instantiated with the given arguments",
+    "template": "Cannot instantiate generic type with the given arguments",
+    "help": "Ensure that the type arguments satisfy all constraints",
     "example": "let x = Foo::<Int>();",
-    "error_output": "error[E1061]: cannot instantiate generic\n --> example.yx:1:9\n  |\n1 | let x = Foo::<Int>();\n  |         ^ cannot instantiate with given arguments"
+    "error_output": "error[E1061]: cannot instantiate generic\n --> example.yx:1:9\n  |\n1 | let x = Foo::<Int>();\n  |         ^ cannot instantiate with the given arguments"
   },
   "E1062": {
     "title": "const generic constraint failed",
     "message": "value constraint on const generic parameter not satisfied",
     "template": "const generic constraint failed: `{constraint}` does not hold",
-    "help": "modify the const parameter value to satisfy the constraint",
-    "example": "BadArray(Int, 0)  // Assert(0 > 0) failed",
+    "help": "Modify the const argument value to satisfy the constraint",
+    "example": "BadArray(Int, 0)  // Assert(0 > 0) fails",
     "error_output": "error[E1062]: const generic constraint failed\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, 0)\n  | ^ const constraint `N > 0` does not hold (N = 0)"
   },
   "W1063": {
     "title": "const generic constraint cannot be evaluated",
-    "message": "value constraint on const generic parameter cannot be evaluated at compile-time",
+    "message": "const generic parameter value constraint cannot be evaluated at compile-time",
     "template": "const generic constraint cannot be evaluated: `{constraint}` ({var} = {value})",
     "help": "ensure the const parameter is a compile-time constant",
     "example": "BadArray(Int, n)  // n is not a compile-time constant",
     "error_output": "warning[W1063]: const generic constraint cannot be evaluated\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ cannot evaluate constraint `N > 0` at compile-time"
   },
   "E1071": {
-    "title": "type definition is only allowed at module level",
-    "message": "type definition can only appear at the top level of a module",
-    "template": "type definition '{name}' is only allowed at module level (top level of module)",
-    "help": "move the type definition to the top level of the module",
+    "title": "type definitions are only allowed at module level",
+    "message": "type definitions can only appear at the module top-level",
+    "template": "type definition '{name}' can only be at module level (module top-level)",
+    "help": "move the type definition to the module top-level",
     "example": "main = { Point: Type = { x: Int } }",
-    "error_output": "error[E1071]: type definition is only allowed at module level\n --> example.yx:1:9\n  |\n1 | main = { Point: Type = { x: Int } }\n  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ type definition '{name}' is only allowed at module level (top level of module)"
+    "error_output": "error[E1071]: type definitions are only allowed at module level\n --> example.yx:1:9\n  |\n1 | main = { Point: Type = { x: Int } }\n  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ type definition '{name}' can only be at module level (module top-level)"
   },
   "E1081": {
-    "title": "`?` is only allowed inside a function that returns Result",
+    "title": "`?` is only allowed in functions that return Result",
     "message": "encountered `expr?`, but the current function's return type is not Result",
-    "template": "`?` is only allowed inside a function that returns Result",
-    "help": "first change the outer function's return type to `Result[T, E]`, then use `expr?` for error propagation."
+    "template": "`?` is only allowed in functions that return Result",
+    "help": "please first change the outer function's return type to `Result[T, E]`, then use `expr?` for error propagation."
   },
   "E1082": {
-    "title": "`?` can only be used on a Result expression",
+    "title": "`?` can only be used on Result expressions",
     "message": "the expression type of `expr?` is not Result",
-    "template": "`?` can only be used on a Result expression, actual type '{type}'",
-    "help": "only use `?` on expressions of type `Result[T, E]`."
+    "template": "`?` can only be used on Result expressions, actual type '{type}'",
+    "help": "please only use `?` on expressions of type `Result[T, E]`."
   },
   "E1083": {
-    "title": "error type of `?` does not match",
-    "message": "error type of `expr?` does not match the outer function's return type",
+    "title": "`?` error type mismatch",
+    "message": "The error type of `expr?` does not match the outer function's return type",
     "template": "error type mismatch for `?`: expected '{expected}', found '{found}'",
-    "help": "ensure that the error type `E` in the current function's return type `Result[_, E]` matches the error type of the `Result[_, E]` being unwrapped."
+    "help": "Make sure the error type `E` of the outer function's return type `Result[_, E]` is consistent with the error type of the `Result[_, E]` being unwrapped."
   },
   "E2001": {
     "title": "scope error",
     "message": "variable is not in the current scope",
     "template": "variable '{name}' is not in scope",
-    "help": "check the variable's scope and ensure it is accessible here",
+    "help": "Check the variable's scope to ensure it is accessible here",
     "example": "fn foo() { x }",
     "error_output": "error[E2001]: scope error\n --> example.yx:1:8\n  |\n1 | fn foo() { x }\n  |        ^ variable 'x' is not in scope"
   },
   "E2002": {
     "title": "duplicate definition",
-    "message": "variable defined multiple times in the same scope",
-    "template": "duplicate definition: '{name}' has already been defined in the current scope",
-    "help": "rename or remove the duplicate definition",
+    "message": "variable is defined more than once in the same scope",
+    "template": "duplicate definition: '{name}' is already defined in the current scope",
+    "help": "Rename or remove the duplicate definition",
     "example": "let x = 1; let x = 2;",
     "error_output": "error[E2002]: duplicate definition\n --> example.yx:1:11\n  |\n1 | let x = 1; let x = 2;\n  |           ^ 'x' has already been defined"
   },
   "E2003": {
     "title": "ownership error",
-    "message": "ownership constraint not satisfied",
+    "message": "ownership constraint is not satisfied",
     "template": "ownership constraint violated: {reason}",
-    "help": "check the ownership semantics of the value",
+    "help": "Check the ownership semantics of the value",
     "example": "let a = vec![1, 2, 3]; let b = a;",
     "error_output": "error[E2003]: ownership error\n --> example.yx:1:19\n  |\n1 | let a = vec![1, 2, 3]; let b = a;\n  |                   ^ value moved"
   },
   "E2010": {
     "title": "immutable assignment",
-    "message": "tried to modify immutable variable",
+    "message": "attempted to modify an immutable variable",
     "template": "cannot assign to immutable variable '{name}'",
-    "help": "use 'mut' to declare a mutable variable",
+    "help": "declare a mutable variable using 'mut'",
     "example": "let x = 1; x = 2;",
     "error_output": "error[E2010]: immutable assignment\n --> example.yx:1:11\n  |\n1 | let x = 1; x = 2;\n  |           ^ cannot assign to immutable variable"
   },
@@ -418,8 +418,8 @@
   },
   "E2012": {
     "title": "mutability conflict",
-    "message": "used a mutable reference in an immutable context",
-    "template": "mutability conflict: cannot use a mutable reference in an immutable context",
+    "message": "use of mutable reference in immutable context",
+    "template": "mutability conflict: cannot use mutable reference in immutable context",
     "help": "ensure the mutability of the reference matches the usage context",
     "example": "let mut v = vec![1, 2]; let r = &v; v.push(3);",
     "error_output": "error[E2012]: mutability conflict\n --> example.yx:1:29\n  |\n1 | let mut v = vec![1, 2]; let r = &v; v.push(3);\n  |                             ^ cannot modify through an immutable reference"
@@ -430,35 +430,35 @@
     "template": "Cannot shadow existing variable '{name}'",
     "help": "Use a different variable name, or declare the variable in a different scope",
     "example": "i = 10; for i in 1..5 { print(i) }",
-    "error_output": "error[E2013]: Variable shadowing\n --> example.yx:1:17\n  |\n1 | i = 10; for i in 1..5 { print(i) }\n  |                 ^ Cannot shadow existing variable 'i'"
+    "error_output": "error[E2013]: variable shadowing\n --> example.yx:1:17\n  |\n1 | i = 10; for i in 1..5 { print(i) }\n  |                 ^ Cannot shadow existing variable 'i'"
   },
   "E2090": {
     "title": "Invalid signature",
-    "message": "Function signature parsing failed",
+    "message": "Failed to parse function signature",
     "template": "Invalid signature: {reason}",
     "help": "Check that the function signature format is correct",
     "example": "\"(x: Unknown) -> Int\"",
     "error_output": "error[E2090]: Invalid signature\n --> std/list.yx:1:1\n  |\n1 | \"(x: Unknown) -> Int\"\n  | ^^^^^^^^^^^^^^^^^^^^^^"
   },
   "E2091": {
-    "title": "Unknown type in signature",
+    "title": "Signature contains unknown type",
     "message": "Signature contains unknown type",
     "template": "Invalid signature: unknown type '{type_name}'",
-    "help": "Use a valid type, such as '(T) -> T' for function parameters",
+    "help": "Use a valid type, e.g., '(T) -> T' for a function parameter",
     "example": "\"(list: List, fn: Fn) -> List\"",
-    "error_output": "error[E2091]: Unknown type in signature\n --> std/list.yx:1:1\n  |\n1 | \"(list: List, fn: Fn) -> List\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+    "error_output": "error[E2091]: Signature contains unknown type\n --> std/list.yx:1:1\n  |\n1 | \"(list: List, fn: Fn) -> List\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
   },
   "E2092": {
     "title": "Signature missing arrow",
-    "message": "Signature missing '->'",
+    "message": "Missing '->' in signature",
     "template": "Invalid signature: missing '->'",
     "help": "Ensure the signature format is '(parameter list) -> return type'",
     "example": "\"(x: Int) Int\"",
-    "error_output": "error[E2092]: signature missing arrow\n --> std/list.yx:1:1\n  |\n1 | \"(x: Int) Int\"\n  | ^^^^^^^^^^^^^^^^"
+    "error_output": "error[E2092]: signature is missing the arrow\n --> std/list.yx:1:1\n  |\n1 | \"(x: Int) Int\"\n  | ^^^^^^^^^^^^^^^^"
   },
   "E2093": {
     "title": "Duplicate parameter name",
-    "message": "Duplicate parameter name in signature",
+    "message": "The signature contains duplicate parameter names",
     "template": "Invalid signature: duplicate parameter name '{name}'",
     "help": "Ensure each parameter name is unique",
     "example": "\"(x: Int, x: Int) -> Int\"",
@@ -466,51 +466,51 @@
   },
   "E2094": {
     "title": "Generic parameter shadowing",
-    "message": "Generic parameter shadows outer generic parameter",
-    "template": "Invalid signature: generic parameter '{name}' shadows outer generic parameter",
+    "message": "Generic parameter shadows an outer generic parameter",
+    "template": "Invalid signature: generic parameter '{name}' shadows an outer generic parameter",
     "help": "Use a different generic parameter name for the inner function type",
     "example": "\"[T](list: List[T], fn: [T](item: T) -> T) -> List[T]\"",
     "error_output": "error[E2094]: generic parameter shadowing\n --> std/list.yx:1:1\n  |\n1 | \"[T](list: List[T], fn: [T](item: T) -> T) -> List[T]\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
   },
   "E2095": {
-    "title": "Parameter name shadows generic",
-    "message": "Parameter name is the same as a generic parameter",
+    "title": "Parameter name shadows a generic",
+    "message": "Parameter name has the same name as a generic parameter",
     "template": "Invalid signature: parameter name '{name}' shadows a generic parameter",
-    "help": "Parameter name cannot be the same as a generic parameter",
+    "help": "Parameter names cannot have the same name as generic parameters",
     "example": "\"[T](T: Int) -> T\"",
     "error_output": "error[E2095]: parameter name shadows generic\n --> std/list.yx:1:1\n  |\n1 | \"[T](T: Int) -> T\"\n  | ^^^^^^^^^^^^^^^^^^"
   },
   "E4001": {
-    "title": "Generic constraint violation",
-    "message": "Type does not satisfy generic constraint",
-    "template": "Type '{type}' does not satisfy trait constraint '{trait}'",
-    "help": "Ensure the type satisfies all required trait bounds",
+    "title": "generic constraint violation",
+    "message": "type does not satisfy generic constraint",
+    "template": "type '{type}' does not satisfy trait constraint '{trait}'",
+    "help": "ensure the type satisfies all required trait bounds",
     "example": "let x: &Display = &5;",
-    "error_output": "error[E4001]: Generic constraint violation\n --> example.yx:1:17\n  |\n1 | let x: &Display = &5;\n  |                 ^ type 'Int' does not implement 'Display'"
+    "error_output": "error[E4001]: generic constraint violation\n --> example.yx:1:17\n  |\n1 | let x: &Display = &5;\n  |                 ^ type 'Int' does not implement 'Display'"
   },
   "E4002": {
-    "title": "Trait not found",
-    "message": "Referenced trait does not exist",
-    "template": "Trait '{trait}' not found",
-    "help": "Check the trait name or import the correct trait",
+    "title": "trait not found",
+    "message": "referenced trait does not exist",
+    "template": "trait '{trait}' not found",
+    "help": "check the trait name or import the correct trait",
     "example": "impl MyTrait for Int {}",
-    "error_output": "error[E4002]: Trait not found\n --> example.yx:1:6\n  |\n1 | impl MyTrait for Int {}\n  |      ^ undefined trait 'MyTrait'"
+    "error_output": "error[E4002]: trait not found\n --> example.yx:1:6\n  |\n1 | impl MyTrait for Int {}\n  |      ^ undefined trait 'MyTrait'"
   },
   "E4003": {
-    "title": "Missing trait implementation",
-    "message": "Type does not implement required trait",
-    "template": "Type '{type}' is missing implementation of trait '{trait}'",
-    "help": "Add a trait implementation for the type",
+    "title": "trait implementation missing",
+    "message": "type does not implement required trait",
+    "template": "type '{type}' is missing implementation of trait '{trait}'",
+    "help": "add a trait implementation for this type",
     "example": "println!(\"{}\", vec![1, 2, 3]);",
-    "error_output": "error[E4003]: Missing trait implementation\n --> example.yx:1:20\n  |\n1 | println!(\"{}\", vec![1, 2, 3]);\n  |                    ^ type 'Vec<Int>' does not implement 'Display'"
+    "error_output": "error[E4003]: trait implementation missing\n --> example.yx:1:20\n  |\n1 | println!(\"{}\", vec![1, 2, 3]);\n  |                    ^ type 'Vec<Int>' does not implement 'Display'"
   },
   "E4004": {
-    "title": "Conflicting trait implementations",
+    "title": "trait implementation conflict",
     "message": "conflicting trait implementations",
     "template": "conflicting implementation of trait '{trait}'",
-    "help": "resolve the conflicting implementations",
+    "help": "resolve the conflicting implementation",
     "example": "impl<T> Display for T {}",
-    "error_output": "error[E4004]: conflicting trait implementations\n --> example.yx:1:1\n  |\n1 | impl<T> Display for T {}\n  | ^ conflicting implementation"
+    "error_output": "error[E4004]: conflicting trait implementation\n --> example.yx:1:1\n  |\n1 | impl<T> Display for T {}\n  | ^ conflicting implementation"
   },
   "E4005": {
     "title": "associated type not found",
@@ -532,13 +532,13 @@
     "title": "import error",
     "message": "failed to import module",
     "template": "failed to import module '{module}': {reason}",
-    "help": "Check import path and module resolution",
+    "help": "Check the import path and module resolution",
     "example": "use std::unknown;",
     "error_output": "error[E5002]: import error\n --> example.yx:1:5\n  |\n1 | use std::unknown;\n  |     ^ module 'unknown' not found"
   },
   "E5003": {
     "title": "Export not found",
-    "message": "Non-existent export in module",
+    "message": "Export does not exist in the module",
     "template": "Export '{export}' not found in module '{module}'",
     "help": "Check the module's exports",
     "example": "use std::foo;",
@@ -546,9 +546,9 @@
   },
   "E5004": {
     "title": "Circular dependency",
-    "message": "Module has circular dependencies",
+    "message": "Module has a circular dependency",
     "template": "Circular dependency detected: {path}",
-    "help": "Refactor to remove circular dependencies",
+    "help": "Refactor to remove the circular dependency",
     "example": "mod a { use b; } mod b { use a; }",
     "error_output": "error[E5004]: circular dependency\n --> example.yx:1:1\n  |\n1 | mod a { use b; } mod b { use a; }\n  | ^ circular dependency: a -> b -> a"
   },
@@ -558,34 +558,34 @@
     "template": "Expression {expr} divides by zero",
     "help": "Add a check to prevent division by zero",
     "example": "let x = 10 / 0;",
-    "error_output": "error[E6001]: division by zero error\n --> runtime\n  |\n  | let x = 10 / 0;\n  |     ^ divided by zero"
+    "error_output": "error[E6001]: Division by zero\n --> runtime\n  |\n  | let x = 10 / 0;\n  |     ^ Division by zero"
   },
   "E6003": {
-    "title": "array index out of bounds",
-    "message": "array index out of bounds at runtime",
-    "template": "array index out of bounds: valid range is 0..{max}, found {index}",
-    "help": "ensure the index is within the array bounds",
+    "title": "Array index out of bounds",
+    "message": "Array index out of bounds at runtime",
+    "template": "Array index out of bounds: valid range is 0..{max}, found {index}",
+    "help": "Ensure the index is within the array bounds",
     "example": "let arr = [1, 2, 3]; println!(arr[10]);",
-    "error_output": "error[E6003]: array index out of bounds\n --> runtime\n  |\n  | println!(arr[10]);\n  |     ^ index 10 exceeds length 3"
+    "error_output": "error[E6003]: Array index out of bounds\n --> runtime\n  |\n  | println!(arr[10]);\n  |     ^ index 10 out of length 3"
   },
   "E6008": {
-    "title": "key not found",
-    "message": "dictionary key not found at runtime",
-    "template": "key not found: {key}",
-    "help": "use dict.has to check if the key exists before indexing"
+    "title": "Key not found",
+    "message": "Dictionary cannot find the key at runtime",
+    "template": "Key not found: {key}",
+    "help": "Use dict.has to check if the key exists before indexing"
   },
   "E6004": {
-    "title": "stack overflow",
-    "message": "recursion depth exceeds the stack limit",
-    "template": "stack overflow: recursion depth exceeds limit {limit}",
-    "help": "reduce recursion depth or use iteration",
+    "title": "Stack overflow",
+    "message": "Recursion depth exceeds stack limit",
+    "template": "Stack overflow: recursion depth exceeds limit {limit}",
+    "help": "Reduce recursion depth or use iteration",
     "example": "fn foo() { foo(); } foo();",
-    "error_output": "error[E6004]: stack overflow\n --> runtime\n  |\n  | fn foo() { foo(); } foo();\n  |     ^ stack overflow"
+    "error_output": "error[E6004]: Stack overflow\n --> runtime\n  |\n  | fn foo() { foo(); } foo();\n  |     ^ Stack overflow"
   },
   "E6005": {
-    "title": "assertion failed",
-    "message": "assertion failed at runtime",
-    "template": "assertion failed: {condition}",
+    "title": "Assertion failed",
+    "message": "Assertion failed at runtime",
+    "template": "Assertion failed: {condition}",
     "help": "Fix the assertion condition or provide valid input",
     "example": "assert!(x > 0);",
     "error_output": "error[E6005]: assertion failed\n --> runtime\n  |\n  | assert!(x > 0);\n  |     ^ assertion failed: x > 0"
@@ -610,20 +610,20 @@
     "title": "I/O error",
     "message": "An unspecified I/O error occurred",
     "template": "I/O error: {reason}",
-    "help": "Check error details for more information",
+    "help": "Check the error details for more information",
     "example": "let content = read(\"/dev/full\");",
-    "error_output": "error[E7003]: I/O error\n --> example.yx:1:19\n  |\n1 | let content = read(\"/dev/full\");\n  |                   ^ I/O error: device is full"
+    "error_output": "error[E7003]: I/O error\n --> example.yx:1:19\n  |\n1 | let content = read(\"/dev/full\");\n  |                   ^ I/O error: device full"
   },
   "E7004": {
-    "title": "Network error",
+    "title": "network error",
     "message": "A network error occurred",
     "template": "Network error: {reason}",
-    "help": "Check the network connection and retry",
+    "help": "Check the network connection and try again",
     "example": "let response = http_get(\"https://example.com\");",
-    "error_output": "error[E7004]: Network error\n --> example.yx:1:21\n  |\n1 | let response = http_get(\"https://example.com\");\n  |                     ^ Connection refused"
+    "error_output": "error[E7004]: network error\n --> example.yx:1:21\n  |\n1 | let response = http_get(\"https://example.com\");\n  |                     ^ connection refused"
   },
   "E8001": {
-    "title": "Internal compiler error",
+    "title": "internal compiler error",
     "message": "The compiler encountered an internal error",
     "template": "Internal compiler error: {message}",
     "help": "Please report this error at https://github.com/ChenXu233/YaoXiang/issues/new",
@@ -631,7 +631,7 @@
     "error_output": ""
   },
   "E8002": {
-    "title": "Unexpected panic",
+    "title": "unexpected panic",
     "message": "The compiler encountered an unexpected panic",
     "template": "Unexpected compiler panic: {reason}",
     "help": "Please report this error with the panic details",
@@ -639,160 +639,160 @@
     "error_output": ""
   },
   "E8003": {
-    "title": "Compiler phase error",
-    "message": "Compiler phase error occurred",
+    "title": "compiler phase error",
+    "message": "An error occurred in the compiler phase",
     "template": "Compiler phase error: {phase} - {message}",
     "help": "This may be a compiler bug, please report it",
     "example": "",
     "error_output": ""
   },
   "E1090": {
-    "title": "✨ Ineffable ✨",
+    "title": "✨ The Unspeakable ✨",
     "message": "You have reached the philosophical boundary of YaoXiang",
     "template": "Type: Type = Type",
-    "help": "This is the source of the language, where the compiler falls silent",
+    "help": "This is the source of the language; here the compiler falls silent",
     "example": "Type: Type = Type",
-    "zen_message": "\n╔══════════════════════════════════════════════════════════════╗\n║                                                               ║\n║   One gives birth to two, two to three, three to all things.   ║\n║   Change holds the Supreme Ultimate, birthing the two forms.   ║\n║                                                               ║\n║   Type: Type = Type                                             ║\n║   This is the source of the trigrams, the boundary of language.║\n║   The compiler falls silent here, philosophy pauses here.      ║\n║                                                               ║\n║   Thank you for reaching the philosophical boundary of         ║\n║   the language.                                                ║\n║                                                               ║\n╚══════════════════════════════════════════════════════════════╝"
+    "zen_message": "\n╔══════════════════════════════════════════════════════════════╗\n║                                                               ║\n║   One begat Two, Two begat Three, Three begat all things.       ║\n║   The Yi gave rise to the Taiji, which gave rise to the Liangyi.║\n║                                                               ║\n║   Type: Type = Type                                             ║\n║   This is the source of the trigrams, the boundary of language. ║\n║   Here the compiler falls silent; here philosophy comes to rest.║\n║                                                               ║\n║   Thank you for reaching the philosophical boundary of language.║\n║                                                               ║\n╚══════════════════════════════════════════════════════════════╝"
   },
   "E1091": {
     "title": "Invalid generic meta type",
-    "message": "Generic meta type self-reference is not allowed",
-    "template": "Generic meta type self-reference not allowed: '{decl}'",
-    "help": "Type constructors like 'Type[T]' cannot reference Type itself",
+    "message": "Self-reference in a generic meta type is not allowed",
+    "template": "Generic meta type self-reference is not allowed: '{decl}'",
+    "help": "A type constructor like 'Type[T]' cannot reference Type itself",
     "example": "Type: Type[T] = { data: T }",
-    "error_output": "error[E1091]: generic meta type self-reference not allowed: 'Type: Type[T] = ...'"
+    "error_output": "error[E1091]: generic meta type self-reference is not allowed: 'Type: Type[T] = ...'"
   },
   "W1001": {
-    "title": "Unused exported function",
-    "message": "Exported function is never called",
-    "template": "Unused exported function: '{name}'",
-    "help": "Consider removing the export or using the function",
-    "example": "pub fn dead_function() { }",
-    "error_output": "warning[W1001]: unused exported function: 'dead_function'\n --> example.yx:1:1\n  |\n1 | pub fn dead_function() { }\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: function is never used"
+    "title": "Unused private function",
+    "message": "Private function is never called",
+    "template": "Unused function: '{name}'",
+    "help": "Function is never referenced, consider removing it or adding a call; pub functions are external interfaces and will not trigger this warning",
+    "example": "fn dead_function() { }",
+    "error_output": "warning[W1001]: unused function: 'dead_function'\n --> example.yx:1:1\n  |\n1 | fn dead_function() { }\n  | ^^^^^^^^^^^^^^^^^^^\n  |\n  = note: function is never used"
   },
   "W1002": {
-    "title": "Unused exported type",
-    "message": "Exported type is never used",
-    "template": "Unused exported type: '{name}'",
-    "help": "Consider removing the export or using the type",
-    "example": "pub type DeadType = Int",
-    "error_output": "warning[W1002]: unused exported type: 'DeadType'\n --> example.yx:1:1\n  |\n1 | pub type DeadType = Int\n  | ^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: type is never used"
+    "title": "unused private type",
+    "message": "private type is never used",
+    "template": "unused type: '{name}'",
+    "help": "type is never referenced, consider removing or using it; pub types are external interfaces and will not trigger this warning",
+    "example": "type DeadType = Int",
+    "error_output": "warning[W1002]: unused type: 'DeadType'\n --> example.yx:1:1\n  |\n1 | type DeadType = Int\n  | ^^^^^^^^^^^^^^^^^^^\n  |\n  = note: type is never used"
   },
   "W1003": {
-    "title": "Unused import",
-    "message": "Imported module or symbol is never used",
-    "template": "Unused import: '{name}'",
-    "help": "Consider removing the unused import",
+    "title": "unused import",
+    "message": "imported module or symbol is never used",
+    "template": "unused import: '{name}'",
+    "help": "consider removing unused import",
     "example": "use std.json; // json is never used",
     "error_output": "warning[W1003]: unused import: 'json'\n --> example.yx:1:1\n  |\n1 | use std.json;\n  | ^^^^^^^^^^^^\n  |\n  = note: import is never used"
   },
   "W1004": {
-    "title": "Unused exported variable",
-    "message": "Exported variable is never used",
-    "template": "Unused exported variable: '{name}'",
-    "help": "Consider removing the export or using the variable",
-    "example": "pub let dead_var = 42;",
-    "error_output": "warning[W1004]: unused exported variable: 'dead_var'\n --> example.yx:1:1\n  |\n1 | pub let dead_var = 42;\n  | ^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: variable was never used"
+    "title": "unused private variable",
+    "message": "private variable is never used",
+    "template": "unused variable: '{name}'",
+    "help": "variable is never referenced, consider removing or using it; pub variables are external interfaces and will not trigger this warning",
+    "example": "dead_var = 42",
+    "error_output": "warning[W1004]: unused variable: 'dead_var'\n --> example.yx:1:1\n  |\n1 | dead_var = 42\n  | ^^^^^^^^^^^^^\n  |\n  = note: variable was never used"
   },
   "W1005": {
-    "title": "unused exported method",
-    "message": "exported method is never called",
-    "template": "unused exported method: '{name}'",
-    "help": "consider removing the export or using the method",
-    "example": "pub fn Foo.dead_method() { }",
-    "error_output": "warning[W1005]: unused exported method: 'dead_method'\n --> example.yx:1:1\n  |\n1 | pub fn Foo.dead_method() { }\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: method was never used"
+    "title": "Unused private method",
+    "message": "Private method is never called",
+    "template": "unused method: '{name}'",
+    "help": "Method is never referenced, consider removing it or adding a call; pub methods are part of the public interface and will not trigger this warning",
+    "example": "fn Foo.dead_method() { }",
+    "error_output": "warning[W1005]: unused method: 'dead_method'\n --> example.yx:1:1\n  |\n1 | fn Foo.dead_method() { }\n  | ^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: method was never used"
   },
   "E2014": {
-    "title": "use of moved value",
-    "template": "'{name}' has been moved and can no longer be used",
-    "help": "the value has been moved to a new owner. To use it again, use a reference or clone it."
+    "title": "Use of moved value",
+    "template": "'{name}' has been moved and cannot be used again",
+    "help": "The value has been moved to a new owner. To use it again, use a reference or clone it."
   },
   "E2016": {
-    "title": "immutable assignment",
+    "title": "Immutable assignment",
     "template": "cannot assign to immutable variable '{name}'",
-    "help": "declare the variable with `mut` to allow assignment."
+    "help": "Declare the variable with `mut` to allow assignment."
   },
   "E2018": {
-    "title": "mutable/immutable borrow conflict",
+    "title": "Conflicting mutable/immutable borrow",
     "template": "cannot mutably borrow '{name}' as it is already immutably borrowed",
-    "help": "ensure no immutable references exist before creating a mutable reference."
+    "help": "Ensure no immutable references exist before creating a mutable reference."
   },
   "E2019": {
-    "title": "double free",
+    "title": "Double free",
     "template": "value '{name}' was freed twice",
-    "help": "ensure the value is freed only once."
+    "help": "Ensure the value is freed only once."
   },
   "E2020": {
-    "title": "use after free",
+    "title": "Use after free",
     "template": "'{name}' used after being freed",
     "help": "Use the value before it is freed, or refactor the code."
   },
   "E2027": {
     "title": "unsafe dereference",
-    "template": "cannot dereference a raw pointer outside of an unsafe block",
+    "template": "cannot dereference a raw pointer outside of an `unsafe` block",
     "help": "Wrap the dereference operation in an `unsafe` block."
   },
   "E3004": {
     "title": "unsupported iterator",
     "template": "unsupported iterator type: {iter_type}",
-    "help": "currently only range and list iterators are supported."
+    "help": "Only range and list iterators are currently supported."
   },
   "E3005": {
     "title": "IR generation error",
     "template": "IR generation error: {message}",
-    "help": "this is an internal error, please report this issue."
+    "help": "This is an internal error; please report this issue."
   },
   "E3006": {
     "title": "unresolved variable",
-    "template": "IR generation internal error: variable '{name}' failed to resolve",
-    "help": "a variable reference is still unresolved at the IR generation stage, indicating the type checker missed it. this is a compiler internal consistency issue, please report this issue."
+    "template": "IR generation internal error: variable '{name}' could not be resolved",
+    "help": "A variable reference remained unresolved at the IR generation stage, which indicates the type checker missed it. This is a compiler internal consistency issue; please report this issue."
   },
   "E3007": {
     "title": "top-level binding initialization must be a constant",
-    "template": "initialization of top-level binding '{name}' must be a compile-time constant expression",
-    "help": "top-level bindings are compile-time constants (accessor functions return the folded value directly) and do not support runtime-computed initialization. change the computation to a literal/constant expression, or move it into a function body."
+    "template": "the initialization of top-level binding '{name}' must be a compile-time constant expression",
+    "help": "Top-level bindings are compile-time constants (accessor functions directly return folded values); runtime-computed initializers are not supported. Change the computation to a literal/constant expression, or move it inside a function body."
   },
   "E3014": {
     "title": "register overflow",
     "template": "register overflow: {id} exceeds limit {limit}",
-    "help": "reduce the number of local variables or simplify the expression."
+    "help": "Reduce the number of local variables or simplify the expression."
   },
   "E3017": {
-    "title": "Invalid operand (code generation)",
-    "template": "Code generation: invalid operand: {reason}",
+    "title": "invalid operand (code generation)",
+    "template": "code generation: invalid operand: {reason}",
     "help": "Check the operand type and usage."
   },
   "E4010": {
-    "title": "Constant division by zero",
-    "template": "Constant expression divided by zero",
-    "help": "Ensure that the divisor in a constant expression is not zero."
+    "title": "constant division by zero",
+    "template": "constant expression divided by zero",
+    "help": "Ensure the divisor in a constant expression is not zero."
   },
   "E4011": {
-    "title": "Constant overflow",
-    "template": "Constant expression overflow",
+    "title": "constant overflow",
+    "template": "constant expression overflow",
     "help": "The result of the constant expression exceeds the range of the type."
   },
   "E4012": {
-    "title": "Constant recursion too deep",
-    "template": "Constant evaluation exceeds maximum recursion depth {limit}",
+    "title": "constant recursion too deep",
+    "template": "constant evaluation exceeds maximum recursion depth {limit}",
     "help": "Simplify the constant expression to reduce recursion."
   },
   "E4014": {
-    "title": "Constant evaluation failed",
-    "template": "Unable to evaluate constant expression: {reason}",
-    "help": "Ensure that the expression can be evaluated at compile-time."
+    "title": "constant evaluation failed",
+    "template": "cannot evaluate constant expression: {reason}",
+    "help": "Ensure the expression can be evaluated at compile-time."
   },
   "E4018": {
-    "title": "Refinement predicate violation",
-    "message": "Refinement type constraint falsified",
-    "template": "Refinement predicate violation: {constraint}\n\nCounterexample:\n{counterexample}",
-    "help": "The predicate is falsified — there exists an assignment that makes the constraint false. Please check the variable values or relax the constraint."
+    "title": "refinement predicate violation",
+    "message": "refinement type constraint falsified",
+    "template": "Refinement predicate violated: {constraint}\n\nCounterexample:\n{counterexample}",
+    "help": "Predicate was falsified—an assignment exists that makes the constraint false. Please check variable values or relax the constraints."
   },
   "E4019": {
     "title": "Type equality does not hold",
-    "message": "Type equation disproven within proof pipeline",
-    "template": "Type equation does not hold: expected {expected}, found {found}",
-    "help": "Check the type calculation of components or provide a proof function."
+    "message": "Type equality was falsified within the proof pipeline",
+    "template": "Type equality does not hold: expected {expected}, found {found}",
+    "help": "Check the component's type computation or provide a proof function."
   },
   "E5005": {
     "title": "Invalid module path",
@@ -802,7 +802,7 @@
   "E5006": {
     "title": "Duplicate import",
     "template": "Duplicate import: '{name}' has already been imported",
-    "help": "Remove duplicate import statements"
+    "help": "Remove the duplicate import statement"
   },
   "E5007": {
     "title": "Module exports",
@@ -817,135 +817,138 @@
   "E6007": {
     "title": "Runtime error",
     "template": "Runtime error: {message}",
-    "help": "See the error message for details"
+    "help": "Check the error message for details"
   },
   "E0016": {
     "title": "Expected expression",
-    "message": "Parser expected an expression",
-    "template": "expected expression: {context}",
-    "help": "provide a valid expression at this location",
+    "message": "The parser expected an expression",
+    "template": "Expected expression: {context}",
+    "help": "Provide a valid expression at this position",
     "example": "x = ;",
-    "error_output": "error[E0016]: expected expression\n --> example.yx:1:5\n  |\n1 | x = ;\n  |     ^ expected expression after '='"
+    "error_output": "error[E0016]: Expected expression\n --> example.yx:1:5\n  |\n1 | x = ;\n  |     ^ Expected expression after '='"
   },
   "E0018": {
     "title": "Keyword as name",
-    "message": "keywords cannot be used as variable or expression names",
+    "message": "Keywords cannot be used as variable or expression names",
     "template": "'{keyword}' is a keyword and cannot be used as a name",
-    "help": "use a different identifier instead of the keyword",
+    "help": "Use a different identifier instead of the keyword",
     "example": "if = 1;",
-    "error_output": "error[E0018]: keyword as name\n --> example.yx:1:1\n  |\n1 | if = 1;\n  | ^^ 'if' is a keyword"
+    "error_output": "error[E0018]: Keyword as name\n --> example.yx:1:1\n  |\n1 | if = 1;\n  | ^^ 'if' is a keyword"
   },
   "E1092": {
     "title": "Invalid refinement type argument form",
-    "message": "refinement type argument cannot be converted to a compile-time constant expression",
+    "message": "Refinement type argument cannot be converted to a compile-time constant expression",
     "template": "'{name}' requires a compile-time constant argument, but the given argument cannot be converted",
-    "help": "predicate/proof function arguments must be literals, variables, or single-parameter type applications, otherwise the refinement constraint cannot be generated",
+    "help": "Predicate/proof function arguments must be literals, variables, or single-argument type applications, otherwise refinement constraints cannot be generated",
     "example": "y: IsSmall(List(Int)) = 9999",
     "error_output": "error[E1092]: 'IsSmall' requires a compile-time constant argument, but the given argument cannot be converted"
   },
   "E1093": {
     "title": "Refinement argument count mismatch",
-    "message": "predicate/proof function argument count mismatch",
-    "template": "'{name}' expects {expected} argument(s), found {found}",
-    "help": "the number of arguments must match the predicate declaration, otherwise the refinement constraint cannot be generated",
+    "message": "Predicate/proof function argument count mismatch",
+    "template": "'{name}' expected {expected} argument(s), found {found}",
+    "help": "Argument count must match the predicate declaration, otherwise refinement constraints cannot be generated",
     "example": "y: IsSmall(1, 2) = 5",
     "error_output": "error[E1093]: 'IsSmall' expected 1 argument, found 2"
   },
   "E1094": {
-    "title": "unused compile-time value parameter",
-    "message": "compile-time value parameter is not referenced in the type body",
+    "title": "Unused compile-time value parameter",
+    "message": "Compile-time value parameter is not referenced in the type body",
     "template": "'{param}' is declared as a compile-time value parameter of '{type}', but is not referenced in the type body",
-    "help": "Reference this parameter at a type position (field type, inner Fn parameter type, Assert/Array type argument), or remove it from the declaration",
+    "help": "Please reference this parameter at type positions (field type, inner Fn parameter type, Assert/Array type arguments), or remove it from the declaration",
     "example": "Foo: (T: Type, N: Int) -> Type = { x: T }",
     "error_output": "error[E1094]: 'N' is declared as a compile-time value parameter of 'Foo', but is not referenced in the type body"
   },
   "E1095": {
-    "title": "unknown interface",
-    "message": "unknown interface",
-    "template": "unknown interface: '{name}' (the name referenced in the type body is not a registered type constructor)",
-    "help": "Check the name spelling, or first declare the interface with `Iface: (Self: Type) -> Type = {{ ... }}`"
+    "title": "Unknown interface",
+    "message": "Unknown interface",
+    "template": "Unknown interface: '{name}' (the name referenced in the type body is not a registered type constructor)",
+    "help": "Check the spelling, or first declare the interface with `Iface: (Self: Type) -> Type = {{ ... }}`"
   },
   "E1096": {
-    "title": "interface parameter count mismatch",
-    "message": "interface parameter count mismatch",
-    "template": "interface '{name}' expected {expected} type parameters, found {found}",
-    "help": "Provide arguments matching the number of type parameters in the interface declaration"
+    "title": "Interface argument count mismatch",
+    "message": "Interface argument count mismatch",
+    "template": "Interface '{name}' expected {expected} type parameter(s), found {found}",
+    "help": "Provide arguments matching the type parameter count declared by the interface"
   },
   "E1097": {
-    "title": "interface member naming conflict",
-    "message": "interface member naming conflict",
-    "template": "member '{member}' of type '{type}' conflicts with an interface member (fields and methods share a namespace, §1.2)",
+    "title": "Interface member naming conflict",
+    "message": "Interface member naming conflict",
+    "template": "Member '{member}' of type '{type}' conflicts with an interface member (fields and methods share a namespace, §1.2)",
     "help": "Rename the field or the interface member"
   },
   "E1098": {
     "title": "Interface method not implemented",
     "message": "Interface method not implemented",
     "template": "Type '{type}' does not implement method '{method}' of interface '{interface}'",
-    "help": "Declare the method with `Type.method: signature = ...`, or provide the binding inside the type body"
+    "help": "Declare the method as `Type.method: signature = ...`, or provide a binding in the type body"
   },
   "E1099": {
     "title": "Interface method signature mismatch",
     "message": "Interface method signature mismatch",
     "template": "Method '{method}' of type '{type}' does not match the interface signature: expected {expected}, found {found}",
-    "help": "Make the implementation signature exactly match the interface member signature (§3 prohibits overriding, allows overloading)"
+    "help": "Make the implementation signature exactly match the interface member signature (§3 forbids overriding, allows overloading)"
   },
   "E1100": {
-    "title": "Duplicate interface method implementation",
-    "message": "Duplicate interface method implementation",
-    "template": "Method '{method}' of type '{type}' is implemented multiple times (same-signature overriding is prohibited, §3)",
+    "title": "Interface method implemented multiple times",
+    "message": "Interface method implemented multiple times",
+    "template": "Method '{method}' of type '{type}' is implemented more than once (overriding with the same signature is forbidden, §3)",
     "help": "Remove the duplicate implementation and keep only one"
   },
   "E1101": {
     "title": "Type does not implement interface",
     "message": "Type does not implement interface",
-    "template": "Type '{type}' does not implement interface '{interface}' and cannot be used in this existential type position",
-    "help": "Instantiate the interface inside the type body (`Animal(Dog)`) and implement all its members"
+    "template": "Type '{type}' does not implement interface '{interface}' and cannot be used in this existential position",
+    "help": "Instantiate the interface in the type body (`Animal(Dog)`) and implement all of its members"
   },
   "E1102": {
     "title": "Loop control statement outside of loop",
     "message": "break/continue can only be used inside while/for loop bodies",
     "template": "'{keyword}' appears outside of a loop",
-    "help": "Move '{keyword}' inside a while/for loop body"
+    "help": "Move '{keyword}' inside the body of a while/for loop"
   },
   "E1064": {
     "title": "Invalid binding position index",
-    "template": "Invalid binding position index: {positions} (function has {total} arguments)",
-    "help": "The binding position must fall within the argument range of the bound function (out of bounds or still negative after normalization). Please check the position number for the method binding."
+    "template": "Invalid binding position index: {positions} (the function has {total} parameters in total)",
+    "help": "The binding position must fall within the parameter range of the bound function (out of bounds or still negative after normalization). Please check the position number of the method binding."
   },
   "E4020": {
     "title": "Proof function required",
-    "message": "Constraint cannot be proven at compile-time, a proof function is required",
+    "message": "Constraint cannot be proven at compile-time; a proof function is required",
     "template": "A proof function is required to verify the constraint",
     "help": "Add a proof function or provide a runtime check"
   },
   "W1080": {
-    "title": "Compile-time proof degradation",
-    "message": "Constraint cannot be proven at compile-time, degraded to runtime check",
-    "template": "Constraint cannot be proven at compile-time, degraded to runtime check",
+    "title": "Compile-time proof downgraded",
+    "message": "Constraint cannot be proven at compile-time; downgraded to runtime check",
+    "template": "Constraint cannot be proven at compile-time; downgraded to runtime check",
     "help": "Consider adding a proof function to improve safety"
   },
   "E6009": {
     "title": "Invalid range step",
     "message": "Range step must be non-zero",
     "template": "Invalid range step: step = {step}",
-    "help": "iter/contains requires the dynamic step to be non-zero, please check the step expression"
+    "help": "iter/contains requires a non-zero dynamic step; please check the step expression"
   },
   "E6010": {
     "title": "Integer parsing failed",
     "message": "String cannot be parsed as an integer",
     "template": "Integer parsing failed: {input}",
-    "help": "Check whether the string is a valid integer (may include a sign)"
+    "help": "Check if the string is a valid integer (may include a sign)"
   },
   "E6011": {
-    "title": "Floating-point parsing failed",
-    "message": "String cannot be parsed as float",
+    "title": "Float parsing failed",
+    "message": "String cannot be parsed as a float",
     "template": "Float parsing failed: {input}",
-    "help": "Check if the string is a valid floating point number"
+    "help": "Check if the string is a valid float"
   },
   "E2029": {
-    "title": "reference cycle in spawn",
-    "message": "reference cycle detected in spawn block",
-    "template": "reference cycle in spawn: {cycle}",
-    "help": "references captured by spawn cannot form cyclic dependencies, check the capture list"
-  }
+    "title": "Reference cycle in spawn",
+    "message": "Reference cycle detected in spawn block",
+    "template": "Reference cycle in spawn: {cycle}",
+    "help": "References captured by spawn cannot form cyclic dependencies; please check the capture list"
+  },
+  "E3008.title": "unsupported match pattern",
+  "E3008.template": "match pattern '{pattern}' is not yet implemented: only literal and wildcard (_) patterns are currently supported",
+  "E3008.help": "Variant destructuring (ok(v)/err(e)/some(x)), structs, tuples, or patterns with guards are not yet implemented (planned in RFC-039); previous implementations would silently miscompile, so this is now a compile-time rejection. To handle Result, use the `?` operator instead."
 }
