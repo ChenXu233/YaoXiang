@@ -102,7 +102,7 @@ if [ -n "$EXE_SUFFIX" ]; then
   zip_pack "$STAGE" "$OUT_BASE.zip"
   sha256 "$OUT_BASE.zip" > "$OUT_BASE.zip.sha256"
 else
-  ( cd target/distrib/stage && tar czf "../../yaoxiang-$VERSION-$TARGET.tar.gz" "yaoxiang-$VERSION-$TARGET" )
+  ( cd target/distrib/stage && tar czf "../yaoxiang-$VERSION-$TARGET.tar.gz" "yaoxiang-$VERSION-$TARGET" )
   sha256 "$OUT_BASE.tar.gz" > "$OUT_BASE.tar.gz.sha256"
 fi
 # ── 傻瓜渠道 .deb（仅 Linux CI，dpkg-deb 可用时；RFC-037 阶段四）──
