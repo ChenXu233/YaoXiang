@@ -371,8 +371,8 @@
   "src/dev/release.md:en": "7a93d4217136c07474a6538309bedeb2",
   "src/dev/release.md:ja": "7a93d4217136c07474a6538309bedeb2",
   "src/dev/release.md:ru": "7a93d4217136c07474a6538309bedeb2",
-  "src/design/rfc/accepted/027-compile-time-evaluation-types.md:en": "92ff74da8701843c90389f5ec151cc85",
-  "src/design/rfc/accepted/027-compile-time-evaluation-types.md:ja": "92ff74da8701843c90389f5ec151cc85",
+  "src/design/rfc/accepted/027-compile-time-evaluation-types.md:en": "a8f0f940cd655f353f55e7bbb113abe7",
+  "src/design/rfc/accepted/027-compile-time-evaluation-types.md:ja": "a8f0f940cd655f353f55e7bbb113abe7",
   "src/design/rfc/accepted/018-llvm-aot-compiler.md:en": "f45ac53a0ac99221a631fe86419090c6",
   "src/design/rfc/accepted/018-llvm-aot-compiler.md:ja": "f45ac53a0ac99221a631fe86419090c6",
   "src/design/rfc/accepted/018-llvm-aot-compiler.md:ru": "f45ac53a0ac99221a631fe86419090c6",
@@ -493,7 +493,7 @@
   "src/design/rfc/accepted/012-f-string-template-strings.md:ru": "57129b10b439c01eae4d297277b82b5b",
   "src/design/rfc/accepted/017-lsp-support.md:ru": "8351905ee48323ab27827bbb13980022",
   "src/design/rfc/accepted/026-ffi-core-mechanism.md:ru": "0a9650a0bd8f5690a138fe291aceaac9",
-  "src/design/rfc/accepted/027-compile-time-evaluation-types.md:ru": "92ff74da8701843c90389f5ec151cc85",
+  "src/design/rfc/accepted/027-compile-time-evaluation-types.md:ru": "a8f0f940cd655f353f55e7bbb113abe7",
   "src/design/rfc/review/014c-workspace.md:ru": "ba5f217465b98d5cd11fa9a726e2e896",
   "src/tutorial/advanced/type-system/index.md:ru": "b88d8c2c16b7e16fa6b5db3178299be1",
   "src/tutorial/basics/control-flow/match.md:ru": "dd215593522bd7532cdb5c90f9de1601",
@@ -522,9 +522,9 @@
   "src/design/rfc/accepted/037-industrial-packaging.md:ja": "bda912ee7541dd83f8fab54d8d89f1c6",
   "src/design/rfc/accepted/037-industrial-packaging.md:ru": "bda912ee7541dd83f8fab54d8d89f1c6",
   "src/design/rfc/accepted/029f-target-semantics.md:en": "e438a615e07429b59c2c3d1f4580bbbf",
-  "src/design/rfc/draft/027a-termination-proof-fallback.md:en": "eab495a3d2f39ccc78b9201a4eb9bb9d",
+  "src/design/rfc/draft/027a-termination-proof-fallback.md:en": "6f439fa49832a2d68559fa2c6a18318a",
   "src/design/rfc/accepted/029f-target-semantics.md:ja": "e438a615e07429b59c2c3d1f4580bbbf",
-  "src/design/rfc/draft/027a-termination-proof-fallback.md:ja": "eab495a3d2f39ccc78b9201a4eb9bb9d",
+  "src/design/rfc/draft/027a-termination-proof-fallback.md:ja": "6f439fa49832a2d68559fa2c6a18318a",
   "src/design/rfc/accepted/029f-target-semantics.md:ru": "e438a615e07429b59c2c3d1f4580bbbf",
-  "src/design/rfc/draft/027a-termination-proof-fallback.md:ru": "eab495a3d2f39ccc78b9201a4eb9bb9d"
+  "src/design/rfc/draft/027a-termination-proof-fallback.md:ru": "6f439fa49832a2d68559fa2c6a18318a"
 }
