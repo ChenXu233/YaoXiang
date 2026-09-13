@@ -11,6 +11,9 @@ define_codes!(E3XXX, {
     ("E3006", Codegen, false, unresolved_variable(name: &str) => .param("name", name)),
     // E3007 顶层绑定初始化非编译期常量（#271 清单 #2：折叠不到不再静默填 0）
     ("E3007", Codegen, false, top_level_init_not_const(name: &str) => .param("name", name)),
+    // E3008 不支持的 match 模式（#330 安全网：非字面量/通配符模式无 IR 编码，
+    // 原 stub 加载 0 永不匹配、scrutinee 为 0 时误匹配，宁编译期拒绝不静默错译）
+    ("E3008", Codegen, false, ir_unsupported_pattern(pattern: &str) => .param("pattern", pattern)),
     // E3014 寄存器溢出
     ("E3014", Codegen, false, register_overflow(id: &str, limit: &str) => .param("id", id).param("limit", limit)),
     // E3017 无效操作数（代码生成）
