@@ -2509,24 +2509,29 @@ impl TypeChecker {
                         args,
                     } = constraint
                     {
-                        let call_args: Vec<crate::frontend::core::types::ConstValue> = args
-                            .iter()
-                            .filter_map(|a| {
-                                if let crate::frontend::core::types::const_data::ConstExpr::Lit(v) =
-                                    a
-                                {
-                                    Some(v.clone())
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect();
-                        proof_calls.push(
+                        // 仅全 Lit 实参发射执行调用；含变量实参（NamedVar 等）
+                        // 编译期不可取值，留给 check_predicate/VC 符号化管道——
+                        // 此前 filter_map 静默丢非 Lit 实参，产出无参调用、
+                        // 参数在解释器里读成 Void 错译
+                        let mut call_args: Vec<crate::frontend::core::types::ConstValue> =
+                            Vec::new();
+                        let mut all_literal = true;
+                        for a in args {
+                            if let crate::frontend::core::types::const_data::ConstExpr::Lit(v) = a {
+                                call_args.push(v.clone());
+                            } else {
+                                all_literal = false;
+                                break;
+                            }
+                        }
+                        if all_literal {
+                            proof_calls.push(
                             crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall {
                                 func_name: func.clone(),
                                 args: call_args,
                             },
                         );
+                        }
                     }
                     let free_vars = Self::extract_free_vars(constraint);
                     for fv in &free_vars {

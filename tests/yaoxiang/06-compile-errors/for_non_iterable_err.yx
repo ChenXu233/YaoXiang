@@ -1,0 +1,12 @@
+// 06-compile-errors/for_non_iterable_err.yx
+// for 可迭代对象类型不匹配——类型层拒绝（此前 fresh var 兜底，
+// 循环变量与循环体类型检查形同虚设）
+// expect: compile-error E1002
+// 验证: 0.8.0 盘点硬化；List/Array/Range/String/Dict/Tuple 合法
+// 状态: ❌ 应编译失败
+
+main = {
+    for x in 5 {
+        y = x
+    }
+}

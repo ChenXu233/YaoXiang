@@ -18,6 +18,15 @@ use super::scope::ScopeManager;
 static EMPTY_SIGNATURES: std::sync::LazyLock<HashMap<String, MonoType>> =
     std::sync::LazyLock::new(HashMap::new);
 
+/// RFC-009 读视图：剥离借用层，算术/比较按 inner 类型判定（读穿透）
+pub(super) fn read_view(ty: &MonoType) -> MonoType {
+    let mut cur = ty;
+    while let MonoType::Ref { inner, .. } = cur {
+        cur = inner;
+    }
+    cur.clone()
+}
+
 static EMPTY_GENERIC_TYPE_DEFS: std::sync::LazyLock<
     HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
 > = std::sync::LazyLock::new(HashMap::new);
@@ -505,31 +514,55 @@ impl<'a> ExpressionInferrer<'a> {
     ) -> Result<MonoType> {
         match op {
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => {
-                if let (MonoType::Int(_), MonoType::Int(_)) = (left, right) {
-                    Ok(left.clone())
-                } else if let (MonoType::Float(_), MonoType::Float(_)) = (left, right) {
-                    Ok(left.clone())
-                } else if left.is_string() && right.is_string() {
+                // RFC-009 读透明：借用值参与算术按 inner 类型判定（读穿透）
+                let l = read_view(left);
+                let r = read_view(right);
+                if let (MonoType::Int(_), MonoType::Int(_)) = (&l, &r) {
+                    Ok(l)
+                } else if let (MonoType::Float(_), MonoType::Float(_)) = (&l, &r) {
+                    Ok(l)
+                } else if l.is_string() && r.is_string() {
                     Ok(MonoType::make_string())
-                } else if left.is_list() && right.is_list() {
-                    let left_elem = &left.generic_args().expect("List args")[0];
-                    let right_elem = &right.generic_args().expect("List args")[0];
+                } else if l.is_list() && r.is_list() {
+                    let left_elem = &l.generic_args().expect("List args")[0];
+                    let right_elem = &r.generic_args().expect("List args")[0];
                     let _ = self.solver.unify(left_elem, right_elem);
                     let elem_ty = self.solver.resolve_type(left_elem);
                     Ok(MonoType::make_list(elem_ty))
                 } else {
-                    let var = self.solver.new_var();
-                    Ok(var)
+                    // 未绑定类型变量（无标注 lambda 参数等）延后判定：过早
+                    // unify 会把多态参数收敛成具体类型，破坏 fn(Any)->Any 槽位
+                    if matches!(left, MonoType::TypeVar(_)) || matches!(right, MonoType::TypeVar(_))
+                    {
+                        return Ok(self.solver.new_var());
+                    }
+                    // 类型层不认的组合宁拒不静默：fresh var 兜底会让
+                    // `1 + "a"` 纸面通过、运行期错译（#271 同款纪律）
+                    Err(ErrorCodeDefinition::type_mismatch(
+                        "Int/Float/String/List（两侧同型）",
+                        &format!("{l} 与 {r}"),
+                    )
+                    .build())
                 }
             }
             BinOp::Mod => {
-                if let (MonoType::Int(_), MonoType::Int(_)) = (left, right) {
-                    Ok(left.clone())
-                } else if let (MonoType::Float(_), MonoType::Float(_)) = (left, right) {
-                    Ok(left.clone())
+                let l = read_view(left);
+                let r = read_view(right);
+                if let (MonoType::Int(_), MonoType::Int(_)) = (&l, &r) {
+                    Ok(l)
+                } else if let (MonoType::Float(_), MonoType::Float(_)) = (&l, &r) {
+                    Ok(l)
+                } else if matches!(left, MonoType::TypeVar(_))
+                    || matches!(right, MonoType::TypeVar(_))
+                {
+                    // 未绑定类型变量延后判定（同 Add/Sub/Mul/Div 臂注释）
+                    Ok(self.solver.new_var())
                 } else {
-                    let _ = self.solver.unify(left, right);
-                    Ok(left.clone())
+                    Err(ErrorCodeDefinition::type_mismatch(
+                        "Int/Float（两侧同型）",
+                        &format!("{l} 与 {r}"),
+                    )
+                    .build())
                 }
             }
             BinOp::Eq | BinOp::Neq | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
@@ -1163,6 +1196,7 @@ impl<'a> ExpressionInferrer<'a> {
                 let container_ty = self.infer_expr(container)?;
                 match container_ty {
                     MonoType::Generic { name, args } if name == "List" => Ok(args[0].clone()),
+                    MonoType::Generic { name, args } if name == "Array" => Ok(args[0].clone()),
                     MonoType::Generic { name, args } if name == "Dict" => Ok(args[1].clone()),
                     MonoType::Generic { name, args } if name == "Tuple" => {
                         if let crate::frontend::core::parser::ast::Expr::Lit(
@@ -1182,7 +1216,19 @@ impl<'a> ExpressionInferrer<'a> {
                             Ok(self.solver.new_var())
                         }
                     }
-                    _ => Ok(self.solver.new_var()),
+                    MonoType::Fn { .. } => {
+                        // RFC-004 多位置绑定语法 f[0] / f[1,2]：索引结果由语句层
+                        // 方法绑定机制消费，此处类型不收敛（既有宽松语义，非兜底洞）
+                        Ok(self.solver.new_var())
+                    }
+                    // 类型层不认的容器宁拒不静默：fresh var 兜底会让
+                    // `5[0]` 纸面通过（Array 此前也落此臂、元素类型从未检查）
+                    other => Err(ErrorCodeDefinition::type_mismatch(
+                        "List/Array/Dict/Tuple（可索引）",
+                        &format!("{other}"),
+                    )
+                    .at(container.span())
+                    .build()),
                 }
             }
 
@@ -2162,12 +2208,23 @@ impl<'a> ExpressionInferrer<'a> {
                 condition,
                 ..
             } => {
-                let _iter_ty = self.infer_expr(iterable)?;
+                let iter_ty = self.infer_expr(iterable)?;
+                // 循环变量类型从可迭代对象取（此前硬编码 Char，靠
+                // 算术 fresh-var 兜底蒙混；硬化后按 check_for_stmt 同款分发）
+                let loop_var_ty = match &iter_ty {
+                    m if m.is_list() || m.is_array() => m.generic_args().unwrap()[0].clone(),
+                    m if m.is_string() => MonoType::Char,
+                    m if m.is_dict() => {
+                        let args = m.generic_args().unwrap();
+                        MonoType::make_tuple(vec![args[0].clone(), args[1].clone()])
+                    }
+                    _ => self.solver.resolve_type(&iter_ty),
+                };
 
                 self.scope.enter_block();
                 self.scope.add_var(
                     var.clone(),
-                    PolyType::mono(MonoType::Char),
+                    PolyType::mono(loop_var_ty),
                     false,
                     crate::util::span::Span::default(),
                 );

@@ -1576,6 +1576,7 @@ impl StatementChecker {
         let iter_ty = self.check_expr(iterable)?;
         let elem_ty = match iter_ty {
             m if m.is_list() => m.generic_args().unwrap()[0].clone(),
+            m if m.is_array() => m.generic_args().unwrap()[0].clone(),
             m if m.is_range() && m.generic_args().map(|a| a.len() == 1).unwrap_or(false) => {
                 m.generic_args().unwrap()[0].clone()
             }
@@ -1585,7 +1586,18 @@ impl StatementChecker {
                 MonoType::make_tuple(vec![args[0].clone(), args[1].clone()])
             }
             m if m.is_tuple() => self.solver.new_var(),
-            _ => self.solver.new_var(),
+            // 类型层不认的可迭代对象宁拒不静默：fresh var 兜底会让
+            // `for x in 5` 纸面通过、循环体类型检查形同虚设
+            m => {
+                return Err(Box::new(
+                    ErrorCodeDefinition::type_mismatch(
+                        "List/Array/Range/String/Dict/Tuple（可迭代）",
+                        &format!("{m}"),
+                    )
+                    .at(iterable.span())
+                    .build(),
+                ))
+            }
         };
 
         self.scope.enter_block();
@@ -1792,22 +1804,39 @@ impl StatementChecker {
 
                 match op {
                     BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => {
-                        if let (MonoType::Int(_), MonoType::Int(_)) = (&left_ty, &right_ty) {
-                            Ok(left_ty)
-                        } else if let (MonoType::Float(_), MonoType::Float(_)) =
-                            (&left_ty, &right_ty)
-                        {
-                            Ok(left_ty)
-                        } else if left_ty.is_string() && right_ty.is_string() {
+                        // RFC-009 读透明：借用值参与算术按 inner 类型判定（读穿透）
+                        let l = super::expressions::read_view(&left_ty);
+                        let r = super::expressions::read_view(&right_ty);
+                        if let (MonoType::Int(_), MonoType::Int(_)) = (&l, &r) {
+                            Ok(l)
+                        } else if let (MonoType::Float(_), MonoType::Float(_)) = (&l, &r) {
+                            Ok(l)
+                        } else if l.is_string() && r.is_string() {
                             Ok(MonoType::make_string())
-                        } else if left_ty.is_list() && right_ty.is_list() {
-                            let left_elem = &left_ty.generic_args().expect("List args")[0];
-                            let right_elem = &right_ty.generic_args().expect("List args")[0];
+                        } else if l.is_list() && r.is_list() {
+                            let left_elem = &l.generic_args().expect("List args")[0];
+                            let right_elem = &r.generic_args().expect("List args")[0];
                             let _ = self.solver.unify(left_elem, right_elem);
                             let elem_ty = self.solver.resolve_type(left_elem);
                             Ok(MonoType::make_list(elem_ty))
                         } else {
-                            Ok(self.solver.new_var())
+                            // 未绑定类型变量延后判定（避免过早收敛破坏
+                            // fn(Any)->Any 槽位的多态参数）
+                            if matches!(left_ty, MonoType::TypeVar(_))
+                                || matches!(right_ty, MonoType::TypeVar(_))
+                            {
+                                return Ok(self.solver.new_var());
+                            }
+                            // 与 infer_binary 同款纪律：类型层不认的组合宁拒不
+                            // 静默，fresh var 兜底会把错译推迟到运行时 E6007
+                            Err(Box::new(
+                                ErrorCodeDefinition::type_mismatch(
+                                    "Int/Float/String/List（两侧同型）",
+                                    &format!("{l} 与 {r}"),
+                                )
+                                .at(*span)
+                                .build(),
+                            ))
                         }
                     }
                     // #300 I 项：Range 已移到 ExpressionInferrer::infer_range_expr

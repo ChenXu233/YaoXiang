@@ -1,0 +1,10 @@
+// 06-compile-errors/index_non_container_err.yx
+// 非容器类型下标索引——类型层拒绝（此前 fresh var 兜底静默放行；
+// Array 此前也落同一臂、元素类型从未被检查）
+// expect: compile-error E1002
+// 验证: 0.8.0 盘点硬化；f[0]（RFC-004 多位置绑定）与 Array 索引不受影响
+// 状态: ❌ 应编译失败
+
+main = {
+    x = 5[0]
+}

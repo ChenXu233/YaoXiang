@@ -1,0 +1,10 @@
+// 06-compile-errors/binop_type_err.yx
+// 算术操作数类型不匹配——类型层拒绝（此前 fresh var 兜底静默放行，
+// 错译推迟到运行时 E6007）
+// expect: compile-error E1002
+// 验证: 类型层硬化（0.8.0 盘点），未绑定类型变量仍延后判定不受影响
+// 状态: ❌ 应编译失败
+
+main = {
+    x = 1 + "a"
+}

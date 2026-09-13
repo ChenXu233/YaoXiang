@@ -522,6 +522,16 @@ pub(crate) fn execute_single_proof_fn(
         if let Some(const_expr) =
             crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)
         {
+            // 实参数必须与形参一致：缺参静默绑定会让解释器把未绑定
+            // 参数读成 Void，产出「Void vs Int」式错译（宁显式失败）
+            if params.len() != call.args.len() {
+                return Err(format!(
+                    "证明函数 '{}' 期望 {} 个实参，得到 {} 个",
+                    call.func_name,
+                    params.len(),
+                    call.args.len()
+                ));
+            }
             let mut evaluator =
                 crate::frontend::core::types::eval::const_eval::ConstGenericEval::new();
             // 绑定参数：param name → proof call arg value

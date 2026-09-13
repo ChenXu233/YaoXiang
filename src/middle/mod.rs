@@ -11,11 +11,12 @@
 //!    - IR生成器
 //!
 //! 2. **passes/**: 编译器各个阶段
-//!    - lifetime/: 生命周期检查
 //!    - mono/: 泛型单态化
 //!    - module/: 模块系统
 //!    - codegen/: 代码生成
 //!    - tests/: 统一测试套件
+//!    （生命周期检查不在 middle 层：RFC-009/009a 令牌生命期分析
+//!    住 frontend/core/typecheck/layers/ownership.rs）
 //!
 //! 3. **对外接口**: 统一的API导出
 
