@@ -1181,3 +1181,167 @@ fn test_replace_call_sites_rewrites_nested_calls_in_specialized_body() {
         "特化体内嵌套调用应按 (泛型名, span) 命中改写"
     );
 }
+
+// ==================== #335 深度/规模分离 ====================
+
+/// #335：合法大规模泛型（150 个互不相同的实例化）必须编译通过。
+/// 旧实现 depth 计数器混用「已处理总数」，超过 max_depth(100) 即误报
+/// 无限递归。
+#[test]
+fn test_scale_over_hundred_instantiations_compiles() {
+    // Arrange
+    let mut mono = Monomorphizer::new();
+    mono.generic_functions
+        .insert("identity".to_string(), make_identity_ir());
+
+    let main_func = FunctionIR {
+        def: None,
+        name: "main".to_string(),
+        params: vec![],
+        return_type: MonoType::Void,
+        generic_params: None,
+        body: FunctionBody::Code {
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions: vec![
+                    Instruction::Call {
+                        dst: Some(Operand::Local(0)),
+                        func: Operand::Const(ConstValue::String("identity".to_string())),
+                        args: vec![Operand::Const(ConstValue::Int(1))],
+                        span: Span::default(),
+                        def: None,
+                    },
+                    Instruction::Ret(None),
+                ],
+                successors: Vec::new(),
+            }],
+            entry: 0,
+            locals: vec![MonoType::Int(64)],
+        },
+    };
+    let module = ModuleIR {
+        functions: vec![main_func],
+        ..Default::default()
+    };
+
+    // 150 个互不相同的实例化请求（Int(1)..Int(150) 宽度作区分维度）
+    let requests: Vec<InstantiationRequest> = (1..=150)
+        .map(|n| {
+            InstantiationRequest::new(
+                GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
+                vec![MonoType::Int(n)],
+                Span::default(),
+            )
+        })
+        .collect();
+
+    // Act
+    let result = mono.monomorphize(&module, &requests);
+
+    // Assert：全部实例化成功，超过旧 max_depth(100) 不再误报
+    let output = result.expect("150 个不同实例化应全部成功");
+    let specialized = output
+        .functions
+        .iter()
+        .filter(|f| f.name.starts_with("identity("))
+        .count();
+    assert_eq!(specialized, 150, "应生成 150 个特化版本");
+}
+
+/// #335：真正的无限类型增长递归仍被深度上限拦截——
+/// grow(T) 的体内以 List(T) 类型的局部变量递归调用自身，
+/// 实例化链 grow(Int) → grow(List(Int)) → grow(List(List(Int))) → …
+/// 类型逐层增长永不重复，规模上限管不住，必须由链深保护拦截。
+#[test]
+fn test_type_growing_recursion_still_blocked_by_depth() {
+    // Arrange
+    let t = MonoType::TypeVar(TypeVar::new(0));
+    let mut mono = Monomorphizer::with_max_depth(5);
+    mono.generic_functions.insert(
+        "grow".to_string(),
+        FunctionIR {
+            def: None,
+            name: "grow".to_string(),
+            params: vec![t.clone()],
+            return_type: t.clone(),
+            generic_params: Some(vec!["T".to_string()]),
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions: vec![
+                        // grow(y)，y 的类型为 List(T)——特化后逐层增长
+                        Instruction::Call {
+                            dst: Some(Operand::Local(1)),
+                            func: Operand::Const(ConstValue::String("grow".to_string())),
+                            args: vec![Operand::Local(0)],
+                            span: Span::default(),
+                            def: None,
+                        },
+                        Instruction::Ret(Some(Operand::Local(1))),
+                    ],
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: vec![MonoType::Generic {
+                    name: "List".to_string(),
+                    args: vec![t.clone()],
+                }],
+            },
+        },
+    );
+
+    let module = ModuleIR {
+        functions: Vec::new(),
+        ..Default::default()
+    };
+    let requests = vec![InstantiationRequest::new(
+        GenericFunctionId::new("grow".to_string(), vec!["T".to_string()]),
+        vec![MonoType::Int(64)],
+        Span::default(),
+    )];
+
+    // Act
+    let result = mono.monomorphize(&module, &requests);
+
+    // Assert：链深超过 5 被拦（此时已处理实例化数远小于规模上限 10000）
+    let err = result.expect_err("无限类型增长递归必须被深度保护拦截");
+    assert!(
+        err.message.contains("深度") || err.message.contains("递归"),
+        "错误应指向递归链深度，实际: {}",
+        err.message
+    );
+}
+
+/// #335：实例化总数上限独立生效
+#[test]
+fn test_scale_cap_independent_of_depth() {
+    // Arrange
+    let mut mono = Monomorphizer::with_max_depth(100).with_max_instantiations(10);
+    mono.generic_functions
+        .insert("identity".to_string(), make_identity_ir());
+
+    let module = ModuleIR {
+        functions: Vec::new(),
+        ..Default::default()
+    };
+    let requests: Vec<InstantiationRequest> = (1..=20)
+        .map(|n| {
+            InstantiationRequest::new(
+                GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
+                vec![MonoType::Int(n)],
+                Span::default(),
+            )
+        })
+        .collect();
+
+    // Act
+    let result = mono.monomorphize(&module, &requests);
+
+    // Assert：每条请求 depth 都是 0（链深不超限），超的是总数上限
+    let err = result.expect_err("超过总数上限必须报错");
+    assert!(
+        err.message.contains("总数") || err.message.contains("上限"),
+        "错误应指向实例化总数上限，实际: {}",
+        err.message
+    );
+}
