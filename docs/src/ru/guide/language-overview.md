@@ -1,22 +1,22 @@
 ---
-title: 'Краткий справочник по синтаксису'
+title: 'Шпаргалка по синтаксису'
 ---
 
-# Краткий справочник по синтаксису
+# Шпаргалка по синтаксису
 
-Основные концепции YaoXiang за 5 минут. Для углублённого изучения посетите
-[руководство](/tutorial/).
+Разберитесь в основном синтаксисе YaoXiang за 5 минут. Для углублённого изучения посетите
+[учебник](/tutorial/).
 
 ## Переменные
 
 ```yaoxiang
-x = 42                    // Неизменяемые (по умолчанию)
-mut y = 0                 // Изменяемые
+x = 42                    // 不可变（默认）
+mut y = 0                 // 可变
 
-name: String = "hello"    // Явный тип
-count: Int = 100          // Аннотация типа
+name: String = "hello"    // 显式类型
+count: Int = 100          // 类型注解
 
-pub version = "1.0"       // Публичный экспорт
+pub version = "1.0"       // 公开导出
 ```
 
 ## Функции
@@ -24,28 +24,28 @@ pub version = "1.0"       // Публичный экспорт
 Всё есть `name: type = value`. Функции тоже являются значениями.
 
 ```yaoxiang
-// Выражение (возвращает значение напрямую)
+// 表达式形式（直接返回值）
 add: (a: Int, b: Int) -> Int = a + b
 
-// Блок кода (явный return)
+// 代码块形式（显式 return）
 factorial: (n: Int) -> Int = {
     if n <= 1 { return 1 }
     return n * factorial(n - 1)
 }
 
-// Lambda (имя параметра можно опустить при полной сигнатуре)
+// Lambda（签名完整时可省略参数名）
 double = (x) => x * 2
 add = (a, b) => a + b
-inc = x => x + 1            // Однопараметрный можно без скобок
+inc = x => x + 1            // 单参数可省略括号
 
-// В блоке кода нужен return
+// 代码块内需要 return
 process: (x: Int) -> Int = {
     a = x * 2
     b = a + 1
     return b
 }
 
-// Void функции не нуждаются в return
+// Void 函数不需要 return
 greet: (name: String) -> Void = {
     io.println("Hello, " + name)
 }
@@ -53,39 +53,39 @@ greet: (name: String) -> Void = {
 
 ## Типы
 
-Нет ключевых слов `type`, `struct`, `trait`, `impl`. Всё решается единым объявлением.
+Нет ключевых слов `type`, `struct`, `trait`, `impl`. Одно универсальное объявление покрывает всё.
 
 ```yaoxiang
-// Тип записи
+// 记录类型
 Point: Type = { x: Float, y: Float }
-p = Point(1.0, 2.0)            // Позиционные аргументы
-p = Point(x=1.0, y=2.0)        // Именованные аргументы
+p = Point(1.0, 2.0)            // 位置参数
+p = Point(x=1.0, y=2.0)        // 命名参数
 
-// Поля со значениями по умолчанию
+// 带默认值的字段
 Point: Type = { x: Float = 0, y: Float = 0 }
 Point()                        // OK: x=0, y=0
 Point(x=1.0)                   // OK: x=1.0, y=0
 
-// Вариантный тип (перечисление)
+// 变体类型（枚举）
 Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
 Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
-// Интерфейс (тип записи, где все поля — функции)
+// 接口（字段全为函数类型的记录类型）
 Drawable: Type = { draw: (Surface) -> Void }
 
-// Композиция интерфейсов
+// 接口组合
 DrawableSerializable: Type = Drawable & Serializable
 
-// Объявление реализации интерфейса внутри типа
+// 类型内声明接口实现
 Circle: Type = {
     radius: Float,
-    Drawable,              // Реализует интерфейс Drawable
-    Serializable,          // Реализует интерфейс Serializable
+    Drawable,              // 实现 Drawable 接口
+    Serializable,          // 实现 Serializable 接口
 }
 
-// Обобщённый тип
+// 泛型类型
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
@@ -93,7 +93,7 @@ List: (T: Type) -> Type = {
     map: (R: Type) -> ((self: List(T), f: (T) -> R) -> List(R)),
 }
 
-// Обобщённые ограничения
+// 泛型约束
 clone: (T: Clone)(value: T) -> T = value.clone()
 sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T)
 ```
@@ -101,18 +101,18 @@ sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T)
 ## Методы
 
 ```yaoxiang
-// Namespace-функция (Type.method — лишь маркер принадлежности, не связывание)
+// 命名空间函数（Type.method 只是归属标记，不是绑定）
 Point.distance: (a: &Point, b: &Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     return (dx * dx + dy * dy).sqrt()
 }
 
-// После явного связывания появляется синтаксис .
+// 显式绑定后才有 . 调用语法
 Point.distance = distance[0]
-// Теперь p1.distance(p2) → distance(p1, p2)
+// 此后 p1.distance(p2) → distance(p1, p2)
 
-// Быстрое определение + связывание
+// 快速定义 + 绑定
 Point.draw: (self: &Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
@@ -121,7 +121,7 @@ Point.draw: (self: &Point, surface: Surface) -> Void = {
 ## Управление потоком
 
 ```yaoxiang
-// if — выражение
+// if 是表达式
 grade = if score >= 90 { "A" } else if score >= 60 { "B" } else { "C" }
 
 // match
@@ -131,7 +131,7 @@ result = match value {
     _ => "unknown",
 }
 
-// Циклы
+// 循环
 for i in 0..5 { io.println(i) }
 for item in items { io.println(item) }
 
@@ -142,20 +142,20 @@ while n < 5 { io.println(n); n = n + 1 }
 ## Структуры данных
 
 ```yaoxiang
-// Список
+// 列表
 nums = [1, 2, 3, 4, 5]
 first = nums[0]           // 1
 
-// Словарь
+// 字典
 scores = {"Alice": 90, "Bob": 85}
 a = scores["Alice"]       // 90
 
-// List comprehension
+// 列表推导式
 evens = [x for x in nums if x % 2 == 0]
 doubled = [x * 2 for x in nums]
 ```
 
-## Pattern matching
+## Сопоставление с образцом
 
 ```yaoxiang
 match shape {
@@ -164,7 +164,7 @@ match shape {
     point => 0,
 }
 
-// Структурный/кортежный паттерны
+// 结构体/元组模式
 match p {
     { x: 0, y: 0 } => "origin",
     { x, y } => "({x}, {y})",
@@ -174,10 +174,10 @@ match t {
     (x, y) => "({x}, {y})",
 }
 
-// Деструктурирующее присваивание
+// 解构赋值
 a, b = (1, 2)              // a=1, b=2
 
-// Guard-выражение
+// 卫表达式
 match age {
     n if n >= 18 => true,
     _ => false,
@@ -194,11 +194,11 @@ use std.{io, list}
 io.println("hello")
 result = sqrt(16)         // 4.0
 
-// Псевдонимы
+// 别名
 use std.math as math
 use std.{io as print}
 
-// Публичный экспорт
+// 公开导出
 pub add: (a: Int, b: Int) -> Int = a + b
 pub Point: Type = { x: Float, y: Float }
 ```
@@ -206,42 +206,42 @@ pub Point: Type = { x: Float, y: Float }
 ## Владение
 
 ```yaoxiang
-// Move: семантика передачи по умолчанию
+// Move：默认所有权转移
 p1 = Point(1.0, 2.0)
-p2 = p1                   // p1 перемещён
+p2 = p1                   // p1 被移走
 
-// Заимствование &: автоматическое создание токена (без ручного &)
+// 借用 &：自动创建令牌（无需手动 &）
 distance: (a: &Point, b: &Point) -> Float = ...
-d = distance(p1, p2)      // Компилятор автоматически создаёт токен заимствования
+d = distance(p1, p2)      // 编译器自动创建借用令牌
 
-// Изменяемое заимствование &mut
+// 可变借用 &mut
 update: (p: &mut Point, x: Float) -> Void = { p.x = x }
 
-// ref: разделяемое владение (компилятор автоматически выбирает Rc/Arc)
+// ref：共享持有（编译器自动选 Rc/Arc）
 shared = ref data
 
-// clone: явное глубокое копирование
+// clone：显式深拷贝
 backup = data.clone()
 ```
 
 ## Параллелизм
 
-Spawn — единственный примитив параллелизма. Нет async/await, нет Send/Sync.
+spawn — единственная примитива параллелизма. Никаких async/await, никаких Send/Sync.
 
 ```yaoxiang
-// Spawn-блок: подвыражения автоматически параллельны
+// spawn 块：子表达式自动并行
 result = spawn {
     user = fetch_user(1)
     posts = fetch_posts()
     return (user, posts)
 }
 
-// Spawn for: данные параллельны
+// spawn for：数据并行
 results = spawn for item in items {
     return process(item)
 }
 
-// Spawn + ref: разделяемые данные между задачами
+// spawn + ref：跨任务共享
 main = {
     shared = ref data
     result = spawn {
@@ -251,7 +251,7 @@ main = {
 }
 ```
 
-## F-string
+## F-строки
 
 ```yaoxiang
 name = "YaoXiang"

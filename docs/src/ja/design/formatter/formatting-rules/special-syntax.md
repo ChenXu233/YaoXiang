@@ -1,51 +1,49 @@
 ---
-title: '特殊構文規則'
-description: 'F-String、インポート文、エラー処理、Unsafeブロックのフォーマット規則'
+title: '特殊な構文規則'
+description: 'F-String、import文、エラーハンドリング、Unsafeブロックのフォーマット規則'
 ---
 
-# 特殊構文規則
+# 特殊な構文規則
 
 ---
 
 ## §13 F-String
 
-**§13.1 F-Stringのフォーマット。** F-Stringは `f"..."` フォーマットを使用し、補間には `{expr}`
-を使用します。
+**§13.1 F-Stringフォーマット。** F-Stringは`f"..."`形式を使用し、補間は`{expr}`を使用。
 
 ```
-// ✅ 正しい
+// ✅ 正确
 let msg = f"Hello, {name}!";
 let msg = f"Result: {x + y}";
 ```
 
-**§13.2 フォーマット仕様。** F-Stringはフォーマット仕様 `{expr:spec}` をサポートしています。
+**§13.2 フォーマット指定。** F-Stringはフォーマット指定`{expr:spec}`をサポート。
 
 ```
-// ✅ 正しい
+// ✅ 正确
 let msg = f"{value:.2f}";
 ```
 
 ---
 
-## §14 インポート文
+## §14 import文
 
-**§14.1 インポートの順序。** `sort_imports = true`
-の場合、インポート文は以下の順序でソートされます：
+**§14.1 importのソート。** `sort_imports = true`の時、import文は以下の順序でソート：
 
 1. 標準ライブラリ（`std`, `core`, `alloc`）
-2. 外部クレート
-3. 相対パス（`.` または `..` で始まるもの）
+2. 外部crate
+3. 相対パス（`.`または`..`で始まる）
 
-**§14.2 グループ内ソート。** 同一グループ内のインポートはアルファベット順にソートされます。
+**§14.2 グループ内のソート。** 同じグループ内のimportはアルファベット順にソート。
 
 ```
-// ソート前
+// 排序前
 use z_crate;
 use std::collections;
 use a_crate;
 use ./local;
 
-// ソート後
+// 排序后
 use std::collections;
 use a_crate;
 use z_crate;
@@ -54,15 +52,15 @@ use ./local;
 
 ---
 
-## §17 エラー処理
+## §17 エラーハンドリング
 
-**§17.1 Try演算子。** `expr?` フォーマットを使用します。
+**§17.1 Try演算子。** `expr?`形式を使用。
 
 ```
-// ✅ 正しい
+// ✅ 正确
 let x = foo()?;
 
-// ❌ 誤り
+// ❌ 错误
 let x = foo() ?;
 ```
 
@@ -70,12 +68,12 @@ let x = foo() ?;
 
 ## §18 Unsafeブロック
 
-**§18.1 Unsafeのフォーマット。** `unsafe { ... }` フォーマットを使用します。
+**§18.1 Unsafeフォーマット。** `unsafe { ... }`形式を使用。
 
 ```
-// ✅ 正しい
+// ✅ 正确
 let x = unsafe { dangerous_function() };
 
-// ❌ 誤り
+// ❌ 错误
 let x = unsafe{ dangerous_function() };
 ```

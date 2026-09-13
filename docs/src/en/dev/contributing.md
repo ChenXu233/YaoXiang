@@ -1,9 +1,9 @@
 ---
-title: 'Contributing Guide'
+title: 'Contribution Guide'
 description: 'Learn how to contribute code to the YaoXiang project'
 ---
 
-# Contributing Guide
+# Contribution Guide
 
 Welcome to contribute code and documentation to the YaoXiang project!
 
@@ -17,19 +17,19 @@ Welcome to contribute code and documentation to the YaoXiang project!
 
 ## Code Standards
 
-- Follow the project's code style
+- Follow the project code style
 - Ensure tests pass
-- Update related documentation
+- Update relevant documentation
 
-## Commit Standards
+## Commit Convention
 
 ```
-feat: new feature
-fix: bug fix
-docs: documentation update
-refactor: refactoring
-test: test related
-chore: build/tool update
+feat: New feature
+fix: Fix bug
+docs: Documentation update
+refactor: Refactor
+test: Test related
+chore: Build/tooling update
 ```
 
 ## Related Resources

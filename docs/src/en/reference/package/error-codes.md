@@ -1,6 +1,6 @@
 ---
 title: 'Error Codes'
-description: 'Package manager error codes and handling methods'
+description: 'Package manager error codes and how to handle them'
 ---
 
 # Error Codes
@@ -9,7 +9,7 @@ This document lists the errors that the YaoXiang package manager may return and 
 
 ## Error List
 
-### E0100: Project already exists
+### E0100: Project Already Exists
 
 ```
 Error: Project already exists: <path>
@@ -17,14 +17,14 @@ Error: Project already exists: <path>
 
 **Cause**: The project directory you are trying to create already exists.
 
-**Handling**:
+**How to handle**:
 
 1. Choose a different project name
 2. Delete or move the existing directory
 
 ---
 
-### E0101: Not a valid project
+### E0101: Not a Valid Project
 
 ```
 Error: Not a YaoXiang project: yaoxiang.toml not found
@@ -32,60 +32,60 @@ Error: Not a YaoXiang project: yaoxiang.toml not found
 
 **Cause**: The current directory or the specified directory does not contain a `yaoxiang.toml` file.
 
-**Handling**:
+**How to handle**:
 
 1. Make sure you run the command inside the project directory
 2. Use `yx init` to create a new project
 
 ---
 
-### E0102: Dependency not found
+### E0102: Dependency Not Found
 
 ```
 Error: Dependency not found: <name>
 ```
 
-**Cause**: Attempted to operate on a dependency that does not exist.
+**Cause**: Trying to operate on a dependency that does not exist.
 
-**Handling**:
+**How to handle**:
 
-1. Check whether the dependency name is spelled correctly
+1. Check that the dependency name is spelled correctly
 2. Use `yx list` to view existing dependencies
 
 ---
 
-### E0103: Dependency already exists
+### E0103: Dependency Already Exists
 
 ```
 Error: Dependency already exists: <name>
 ```
 
-**Cause**: Attempted to add a dependency that already exists.
+**Cause**: Trying to add a dependency that already exists.
 
-**Handling**:
+**How to handle**:
 
 1. If you need to update the version, first remove it with `yx rm`
 2. Or use the existing dependency directly
 
 ---
 
-### E0104: Invalid manifest format
+### E0104: Invalid Manifest Format
 
 ```
 Error: Invalid yaoxiang.toml format: <details>
 ```
 
-**Cause**: The `yaoxiang.toml` file is not in the correct format.
+**Cause**: The `yaoxiang.toml` file format is incorrect.
 
-**Handling**:
+**How to handle**:
 
-1. Check whether the TOML syntax is correct
+1. Check that the TOML syntax is correct
 2. Make sure all required fields are present
 3. Check for syntax errors (such as missing quotes, commas, etc.)
 
 ---
 
-### E0105: IO error
+### E0105: IO Error
 
 ```
 Error: IO error: <details>
@@ -99,23 +99,23 @@ Error: IO error: <details>
 - Insufficient permissions
 - The file is being used by another program
 
-**Handling**:
+**How to handle**:
 
-1. Check the disk space
-2. Check the file permissions
-3. Close any other programs that may be occupying the file
+1. Check disk space
+2. Check file permissions
+3. Close other programs that may be using the file
 
 ---
 
-### E0106: TOML parse error
+### E0106: TOML Parse Error
 
 ```
 Error: TOML parse error: <details>
 ```
 
-**Cause**: The TOML file has a format error.
+**Cause**: The TOML file format is incorrect.
 
-**Handling**:
+**How to handle**:
 
 1. Validate the TOML syntax
 2. Check that special characters are properly escaped
@@ -124,16 +124,16 @@ Error: TOML parse error: <details>
 
 ## FAQ
 
-### Q: What should I do if installing dependencies fails?
+### Q: What to do when installing a dependency fails?
 
 1. Check the network connection
 2. Confirm the dependency name and version are correct
-3. Try running `yx update` to refresh
+3. Try refreshing with `yx update`
 
-### Q: What should I do when encountering version conflicts?
+### Q: What to do when encountering a version conflict?
 
-Check `yaoxiang.toml` for any incompatible dependency version requirements.
+Check `yaoxiang.toml` for incompatible dependency version requirements.
 
-### Q: What should I do if the vendor directory is corrupted?
+### Q: What to do when the vendor directory is corrupted?
 
-Delete the `vendor` directory and run `yx install` again.
+Delete the `vendor` directory and rerun `yx install`.

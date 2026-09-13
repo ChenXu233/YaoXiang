@@ -1,6 +1,6 @@
 ---
 title: 'Type System Formatting Rules'
-description: 'Formatting rules for type annotations, references and borrowing, type conversion'
+description: 'Formatting rules for type annotations, references and borrowing, and type conversions'
 ---
 
 # Type System Formatting Rules
@@ -9,35 +9,35 @@ description: 'Formatting rules for type annotations, references and borrowing, t
 
 ## §9 Type Annotations
 
-**§9.1 Variable Type Annotations.** Type annotations use the `: Type` format, with a space after the
-colon.
+**§9.1 Variable Type Annotations.** Type annotations use the `: Type` format, with one space after
+the colon.
 
 ```
-// ✅ Correct
+// ✅ 正确
 let x: Int = 1;
 
-// ❌ Incorrect
+// ❌ 错误
 let x:Int = 1;
 let x : Int = 1;
 ```
 
-**§9.2 Function Parameter Types.** Parameter names and types are connected using `: `.
+**§9.2 Function Parameter Types.** The parameter name and type are connected using `: `.
 
 ```
-// ✅ Correct
+// ✅ 正确
 fn foo(x: Int, y: String) { ... }
 
-// ❌ Incorrect
+// ❌ 错误
 fn foo(x:Int, y:String) { ... }
 ```
 
 **§9.3 Generic Parameters.** Generic parameters use the `(T: Constraint)` format.
 
 ```
-// ✅ Correct
+// ✅ 正确
 fn foo<T: Clone>(x: T) { ... }
 
-// ❌ Incorrect
+// ❌ 错误
 fn foo <T:Clone> (x: T) { ... }
 ```
 
@@ -48,20 +48,20 @@ fn foo <T:Clone> (x: T) { ... }
 **§15.1 Immutable References.** Use the `&expr` format.
 
 ```
-// ✅ Correct
+// ✅ 正确
 let x = &value;
 
-// ❌ Incorrect
+// ❌ 错误
 let x = & value;
 ```
 
 **§15.2 Mutable References.** Use the `&mut expr` format.
 
 ```
-// ✅ Correct
+// ✅ 正确
 let x = &mut value;
 
-// ❌ Incorrect
+// ❌ 错误
 let x = &mut  value;
 let x = & mut value;
 ```
@@ -69,7 +69,7 @@ let x = & mut value;
 **§15.3 References in Types.** References in types use the `&Type` or `&mut Type` format.
 
 ```
-// ✅ Correct
+// ✅ 正确
 fn foo(x: &Int) { ... }
 fn bar(x: &mut Int) { ... }
 ```
@@ -81,10 +81,10 @@ fn bar(x: &mut Int) { ... }
 **§16.1 as Conversion.** Use the `expr as Type` format.
 
 ```
-// ✅ Correct
+// ✅ 正确
 let x = value as Int;
 
-// ❌ Incorrect
+// ❌ 错误
 let x = value as Int;
 let x = value  as  Int;
 ```
@@ -96,18 +96,18 @@ let x = value  as  Int;
 **§17.1 Ref Format.** The `ref` keyword is separated from the expression by a space.
 
 ```
-// ✅ Correct
+// ✅ 正确
 let x = ref value;
 let y = ref obj;
 
-// ❌ Incorrect
-let x = refvalue;  // Missing space
-let y = ref  value;  // Extra space
+// ❌ 错误
+let x = refvalue;  // 缺少空格
+let y = ref  value;  // 多余空格
 ```
 
-**§17.2 Ref Semantics.** `ref` creates an Arc (atomic reference counting) copy.
+**§17.2 Ref Semantics.** `ref` creates an Arc (Atomic Reference Counted) copy.
 
 ```
-// Create a shared reference
+// 创建共享引用
 let shared = ref original;
 ```

@@ -1,29 +1,30 @@
 ---
-title: '增量チェック'
-description: 'YaoXiang check 增量チェックの設計'
+title: 'インクリメンタルチェック'
+description: 'YaoXiang check インクリメンタルチェックの設計'
 ---
 
-# 增量チェック
+# インクリメンタルチェック
 
-## 問題描述
+## 問題の説明
 
-watch モードでは、ファイル変更時に全ファイルを再チェック（全量再検査）し、デバウンスに busy-wait（50ms ごとにチェック）を採用しているため、CPU がアイドル状態になります。
+watch モードでは、任意ファイルの変更で全ファイルを再チェック（フル再チェック）し、デバウンスに busy-wait（50ms ごとにチェック）を使用しており、CPU が空回りする。
 
-## 解決策
+## 解決方案
 
-`CheckSession` を使用して増分チェックの状態を管理し、`ModuleDependencyGraph::affected_modules`
-を利用して影響を受けたファイルのみを再チェックします。
+`CheckSession`
+を使用してインクリメンタルチェック状態を管理し、`ModuleDependencyGraph::affected_modules`
+を活用して影響を受けるファイルのみ再チェックする。
 
 ## 実装フロー
 
 ```text
 初回チェック：
-  全量チェック → 依存グラフ + 各モジュールのチェック結果をキャッシュ
+  フルチェック → 依存関係グラフ + 各モジュールのチェック結果をキャッシュ
 
-ファイル変更時：
-  1. affected_modules(changed_files) → 影響を受けたモジュールを特定
-  2. 影響を受けたモジュルのみを再解析・再チェック
-  3. キャッシュと依存グラフを更新
+ファイル変更：
+  1. affected_modules(changed_files) → 影響を受けるモジュールを特定
+  2. 影響を受けるモジュールのみ再解析・再チェック
+  3. キャッシュと依存関係グラフを更新
 ```
 
 ## CheckSession
@@ -43,13 +44,13 @@ impl CheckSession {
 
 ## 既知の制限
 
-- watch モードでは依然として busy-wait デバウンスを使用（`command.rs` の `Instant::now()` +
+- watch モードは依然として busy-wait デバウンスを使用（`command.rs` 内の `Instant::now()` +
   `recv_timeout`）
-- `check_incremental` 内部では依然として
-  `check_files_with_diagnostics`（全量パス）を呼び出しており、真の增量を活用していない
+- `check_incremental` 内部は依然として
+  `check_files_with_diagnostics`（フルパス）を呼び出しており、実際にインクリメンタルを活用していない
 
 ## 今後の作業
 
-- A2/P1：`HotReloader` で busy-wait デバウンスを置き換える
-- P2/P3：watch モードで `CheckSession` を導入し、真の增量チェックを実現
-- T9：增量チェックの正確性テスト
+- A2/P1：`HotReloader` で busy-wait デバウンスを置き換え
+- P2/P3：watch モードで `CheckSession` を統合し、真のインクリメンタルチェックを実現
+- T9：インクリメンタルチェックの正確性テスト

@@ -5,43 +5,43 @@ title: '型システム'
 # 型システム
 
 基礎チュートリアルでは `Int`、`String`、`Bool`
-などの組み込み型の使い方を学びました。この章では YaoXiang の型システムを深く理解し、**独自の型を定義する**方法を学びます。
+などの組み込み型の使い方を学びました。この章では YaoXiang の型システムを深く理解し、**独自の型を定義する方法**を学びます。
 
 ## 統一構文モデル
 
-YaoXiang の型システムは RFC-010 で定義された統一構文に基づいています：**すべてが
-`name: type = value`** です。
+YaoXiang の型システムは RFC-010 で定義された統一構文の上に構築されています: **すべては
+`name: type = value`**。
 
-| 概念             | 構文                                           |
-| ---------------- | ---------------------------------------------- |
-| 変数             | `x: Int = 42`                                  |
-| 関数             | `add: (a: Int, b: Int) -> Int = a + b`         |
-| 記録型           | `Point: Type = { x: Float, y: Float }`         |
-| インターフェース | `Drawable: Type = { draw: (Surface) -> Void }` |
-| ジェネリック型   | `List: (T: Type) -> Type = { ... }`            |
+| 概念           | 書き方                                         |
+| -------------- | ---------------------------------------------- |
+| 変数           | `x: Int = 42`                                  |
+| 関数           | `add: (a: Int, b: Int) -> Int = a + b`         |
+| レコード型     | `Point: Type = { x: Float, y: Float }`         |
+| インタフェース | `Drawable: Type = { draw: (Surface) -> Void }` |
+| ジェネリック型 | `List: (T: Type) -> Type = { ... }`            |
 
-注意：**型定義自体も `name: Type = value`** です。
+注意: **型定義自体も `name: Type = value`** です。
 
-## 記録型
+## レコード型
 
-記録型（他の言語では「構造体」）は YaoXiang において最も基本的なデータ組織方式です：
+レコード型（他の言語では「構造体」と呼ばれます）は YaoXiang における最も基本的なデータ編成方法です:
 
 ```yaoxiang
-// 記録型を定義する
+// レコード型の定義
 Point: Type = { x: Float, y: Float }
 
-// インスタンスを生成する
+// インスタンスの作成
 origin = Point(x: 0.0, y: 0.0)
 p = Point(x: 3.0, y: 4.0)
 
-// フィールドにアクセスする
+// フィールドへのアクセス
 print(p.x)  // 3.0
 print(p.y)  // 4.0
 ```
 
 ### フィールドのデフォルト値
 
-フィールドにはデフォルト値を指定でき、生成時に省略可能です：
+フィールドにはデフォルト値を指定でき、構築時には任意の指定が可能です:
 
 ```yaoxiang
 User: Type = {
@@ -50,38 +50,38 @@ User: Type = {
     active: Bool = true,
 }
 
-alice = User(name: "Alice", age: 25)        // active はデフォルト値の true を取る
+alice = User(name: "Alice", age: 25)        // active はデフォルト値の true
 bob = User(name: "Bob")                      // age=0, active=true
 anonymous = User(name: "guest", active: false)  // age=0
 ```
 
-### メソッドの定義
+### メソッド定義
 
-`Type.method` 構文を使用して型にメソッドを定義します：
+`Type.method` 構文を使用して型にメソッドを定義します:
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
 
-// メソッドを定義する：Point.method 構文
+// メソッドの定義: Point.method 構文
 Point.length: (self: Point) -> Float = {
     return (self.x * self.x + self.y * self.y).sqrt()
 }
 
 p = Point(x: 3.0, y: 4.0)
 
-// 2つの呼び出し方法は等価
-print(Point.length(p))  // 5.0 — 関数型呼び出し
+// 2 つの呼び出し方は等価
+print(Point.length(p))  // 5.0 — 関数呼び出し
 print(p.length())       // 5.0 — .呼び出し構文
 ```
 
 ### pub 自動バインディング
 
-同一ファイル内で、`pub` 宣言された関数は同じファイルで定義された型に自動的にバインディングされます：
+同一ファイル内では、`pub` 宣言された関数は自動的に同ファイルで定義された型にバインドされます:
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
 
-// pub 関数が Point に自動バインディング
+// pub 関数は自動的に Point にバインドされる
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
@@ -91,26 +91,26 @@ pub distance: (p1: Point, p2: Point) -> Float = {
 p1 = Point(x: 0.0, y: 0.0)
 p2 = Point(x: 3.0, y: 4.0)
 
-// 自動バインディングされたメソッドは . で呼び出す
+// 自動バインドされたメソッドは . で呼び出す
 print(p1.distance(p2))  // 5.0
 ```
 
-## 列挙型
+## enum 型
 
-列挙型は一組の排他的なバリアントを定義します。データのないバリアントは小文字で、データのあるバリアントは関数型構文を使用します：
+enum は互いに排他的な変種（バリアント）の集合を定義します。データを持たないバリアントは小文字で、データを持つバリアントは関数型構文で記述します:
 
 ```yaoxiang
-// 単純な列挙型
+// シンプルな enum
 Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
-// データ付き列挙型
+// データを持つ enum
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
-// ネストされた列挙型
+// ネストされた enum
 Shape: Type = { circle: (Float) -> Shape, rect: (Float, Float) -> Shape, point: () -> Shape }
 ```
 
-列挙型の核心理念：**各バリアント自体が也是一个型です**。
+enum の中心思想: **各バリアント自体もまた型である**。
 
 ```yaoxiang
 area: (s: Shape) -> Float = match s {
@@ -123,26 +123,26 @@ print(area(circle(5.0)))    // 78.53975
 print(area(rect(3.0, 4.0))) // 12.0
 ```
 
-## インターフェース
+## インタフェース
 
-インターフェースは**フィールドがすべて関数型である記録型**です。インターフェースを実装するには、記録型にそのインターフェース名を含めます：
+インタフェースとは、**フィールドがすべて関数型であるレコード型**のことです。インタフェースを実装するとは、レコードにそのインタフェース名を含めることです:
 
 ```yaoxiang
-// インターフェースを定義する
+// インタフェースの定義
 Drawable: Type = {
     draw: (Surface) -> Void,
     bounding_box: () -> Rect,
 }
 
-// インターフェースを実装する：記録型にインターフェース名を含める
+// インタフェースの実装: レコード型にインタフェース名を含める
 Circle: Type = {
     x: Float,
     y: Float,
     radius: Float,
-    Drawable,       // Drawable インターフェースを実装
+    Drawable,       // Drawable インタフェースを実装
 }
 
-// インターフェースが要求するメソッドを提供する
+// インタフェースで要求されるメソッドを提供
 Circle.draw: (self: Circle, surface: Surface) -> Void = {
     surface.draw_circle(self.x, self.y, self.radius)
 }
@@ -157,26 +157,26 @@ Circle.bounding_box: (self: Circle) -> Rect = {
 }
 ```
 
-インターフェースは多態を実現します—`Drawable` を実装した型はすべて、`Drawable`
+インタフェースは多態性を実現します — `Drawable` を実装した任意の型を `Drawable`
 を受け取る関数に渡すことができます。
 
 ## ジェネリック型
 
-ジェネリック型を使用すると、**具体的な型に限定されない**型定義を記述できます：
+ジェネリックを使用すると、**特定の型に限定されない**型定義を記述できます:
 
 ```yaoxiang
-// ジェネリック Pair
+// ジェネリックな Pair
 Pair: (T: Type, U: Type) -> Type = { first: T, second: U }
 
-// 使用例
+// 使用
 string_pair = Pair(Int, String)(first: 1, second: "hello")
 float_pair = Pair(Float, Float)(first: 3.14, second: 2.71)
 ```
 
-ジェネリック関数：
+ジェネリック関数:
 
 ```yaoxiang
-// ジェネリック map：リストの各要素に関数を適用する
+// ジェネリック map: リストの全要素に関数を適用
 map: (T: Type, R: Type) -> ((list: List(T), f: (T) -> R) -> List(R)) = {
     mut result: List(R) = []
     for item in list {
@@ -190,13 +190,13 @@ doubled = map(Int, Int)(numbers, (x) => x * 2)
 print(doubled)  // [2, 4, 6, 8]
 ```
 
-## 小括
+## まとめ
 
-| 概念             | 構文                                                                        | 用途                      |
-| ---------------- | --------------------------------------------------------------------------- | ------------------------- |
-| 記録型           | `Point: Type = { x: Float, y: Float }`                                      | 関連データをまとめる      |
-| 列挙型           | `Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }` | 複数選択から1つ           |
-| インターフェース | `Drawable: Type = { draw: ... }`                                            | 多態的な抽象化            |
-| ジェネリック型   | `List: (T: Type) -> Type = { ... }`                                         | 型をパラメータ化する      |
-| Never            | `Never` はシステム組み込みの底型                                            | 発散/永不返回のコードパス |
-| メソッド         | `Type.method: (self: Type, ...) -> ...`                                     | 振る舞いを付随させる      |
+| 概念           | 構文                                                                        | 用途                          |
+| -------------- | --------------------------------------------------------------------------- | ----------------------------- |
+| レコード型     | `Point: Type = { x: Float, y: Float }`                                      | 関連データの編成              |
+| enum           | `Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }` | 多者択一                      |
+| インタフェース | `Drawable: Type = { draw: ... }`                                            | 多態性の抽象                  |
+| ジェネリック   | `List: (T: Type) -> Type = { ... }`                                         | 型の引数化                    |
+| Never          | `Never` はシステム組み込みの底型                                            | 発散/決して返らないコードパス |
+| メソッド       | `Type.method: (self: Type, ...) -> ...`                                     | 振る舞いの付与                |
