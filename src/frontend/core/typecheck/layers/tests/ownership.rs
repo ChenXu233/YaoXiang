@@ -599,8 +599,12 @@ fn test_e2e_use_after_move_detected() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let errors: Vec<_> = results
@@ -625,8 +629,12 @@ fn test_e2e_valid_move_no_error() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let errors: Vec<_> = results
@@ -657,8 +665,12 @@ fn test_e2e_argument_passed_to_function_is_moved() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let errors: Vec<_> = results
@@ -702,8 +714,12 @@ fn test_e2e_borrow_conflict_detected() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let borrow_errors: Vec<_> = results
@@ -750,8 +766,12 @@ fn test_e2e_unused_read_then_write_no_conflict() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let borrow_errors: Vec<_> = results
@@ -797,8 +817,12 @@ fn test_e2e_write_write_conflict_detected() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let borrow_errors: Vec<_> = results
@@ -844,8 +868,12 @@ fn test_e2e_read_read_no_conflict() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let errors: Vec<_> = results
@@ -883,8 +911,12 @@ fn test_e2e_mut_borrow_on_non_mut_var() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let mut_errors: Vec<_> = results
@@ -922,8 +954,12 @@ fn test_e2e_mut_borrow_on_mut_var() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let errors: Vec<_> = results
@@ -957,8 +993,12 @@ fn test_e2e_assign_to_non_mut_var() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let mut_errors: Vec<_> = results
@@ -994,8 +1034,12 @@ fn test_e2e_assign_to_mut_var() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let errors: Vec<_> = results
@@ -1028,8 +1072,12 @@ fn test_e2e_non_mut_param_borrow_mut() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let mut_errors: Vec<_> = results
@@ -1062,8 +1110,12 @@ fn test_drop_at_scope_exit_via_release_plan() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let errors: Vec<_> = results
@@ -1102,8 +1154,12 @@ fn test_drop_in_nested_block() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let errors: Vec<_> = results
@@ -1149,8 +1205,12 @@ fn test_e2e_move_then_borrow_rejected() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert: x 已被 move，再借用应报 use after move
     let errors: Vec<_> = results
@@ -1203,8 +1263,12 @@ fn test_e2e_borrow_in_if_both_branches() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert: 保守检测到冲突（已知限制）
     let borrow_errors: Vec<_> = results
@@ -1266,8 +1330,12 @@ fn test_e2e_borrow_in_while_body() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert: 每次迭代新作用域，借用不应冲突
     let errors: Vec<_> = results
@@ -1300,8 +1368,12 @@ fn test_e2e_drop_release_plan_multiple_vars() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let errors: Vec<_> = results
@@ -1340,8 +1412,12 @@ fn test_e2e_return_moved_value() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let errors: Vec<_> = results
@@ -1374,8 +1450,12 @@ fn test_e2e_use_after_return_rejected() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let errors: Vec<_> = results
@@ -1428,8 +1508,12 @@ fn test_e2e_three_read_borrows_no_conflict() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let errors: Vec<_> = results
@@ -1475,8 +1559,12 @@ fn test_e2e_read_then_write_conflict() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let borrow_errors: Vec<_> = results
@@ -1513,8 +1601,12 @@ fn test_e2e_block_expression_variable_scope() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let errors: Vec<_> = results
@@ -1545,8 +1637,12 @@ fn test_e2e_sequential_moves() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert: 无错误（x→y→z，每次都是正常 Move）
     let errors: Vec<_> = results
@@ -1576,8 +1672,12 @@ fn test_e2e_double_move_rejected() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let errors: Vec<_> = results
@@ -1610,8 +1710,12 @@ fn test_e2e_param_move_and_use_rejected() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let errors: Vec<_> = results
@@ -1636,8 +1740,12 @@ fn test_e2e_param_not_in_release_plan() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let errors: Vec<_> = results
@@ -1670,8 +1778,12 @@ fn test_e2e_call_unknown_function_moves_args() {
     )]);
 
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     let errors: Vec<_> = results
         .iter()
@@ -1701,8 +1813,12 @@ fn test_e2e_call_ref_param_does_not_move() {
     )]);
 
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // 当前：print 未在 test TypeEnvironment 中注册 → 回退 Move → use after move
     // 当 TypeEnvironment 配备函数签名后更新此断言
@@ -1739,8 +1855,12 @@ fn test_e2e_ref_no_spawn_no_escape() {
     )]);
 
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     let errors: Vec<_> = results
         .iter()
@@ -1777,8 +1897,12 @@ fn test_e2e_ref_in_spawn_escapes() {
     )]);
 
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     let errors: Vec<_> = results
         .iter()
@@ -1809,8 +1933,12 @@ fn test_e2e_non_ref_in_spawn_not_escaped() {
     )]);
 
     let mut checker = OwnershipChecker::new();
-    let (_results, _plan, escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (_results, _plan, escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     assert!(
         !escaped.contains("x"),
@@ -1845,8 +1973,12 @@ fn test_e2e_ref_in_nested_spawn_escapes() {
     )]);
 
     let mut checker = OwnershipChecker::new();
-    let (_results, _plan, escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (_results, _plan, escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     assert!(
         escaped.contains("shared"),
@@ -1911,8 +2043,12 @@ fn test_e2e_ref_holds_ref_through_field_assignment() {
     )]);
 
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // 不应有所有权错误
     let errors: Vec<_> = results
@@ -1955,8 +2091,12 @@ fn test_deref_in_unsafe_allowed() {
     // 注：unsafe 不能作为语句开头，需赋值给变量
     let module = parse_module("test = () => { x = 42; ptr = ref x; result = unsafe { *ptr } }");
     let mut checker = OwnershipChecker::new();
-    let (results, _, _) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _, _) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
     // unsafe 内的 deref 不应产生 UnsafeViolation
     assert!(
         !results.iter().any(|r| {
@@ -1975,8 +2115,12 @@ fn test_deref_outside_unsafe_error() {
     // *ptr → 应该报错（deref 在 unsafe 外不允许）
     let module = parse_module("test = () => { x = 42; ptr = ref x; *ptr }");
     let mut checker = OwnershipChecker::new();
-    let (results, _, _) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _, _) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
     // 应该检测到 UnsafeViolation
     assert!(
         results.iter().any(|r| {
@@ -2000,8 +2144,12 @@ fn test_spawn_ref_cycle_detected() {
         "test = () => { a = 42; b = 43; ra = ref a; rb = ref b; spawn { temp1 = ra.field = rb; temp2 = rb.field = ra } }",
     );
     let mut checker = OwnershipChecker::new();
-    let (results, _, _) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _, _) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
     // 应该检测到 SpawnCycleViolation
     assert!(
         results.iter().any(|r| {
@@ -2023,8 +2171,12 @@ fn test_spawn_no_cycle_allowed() {
         "test = () => { a = 42; b = 43; ra = ref a; rb = ref b; spawn { temp = ra.field = rb } }",
     );
     let mut checker = OwnershipChecker::new();
-    let (results, _, _) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _, _) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
     // 不应检测到 SpawnCycleViolation
     assert!(
         !results.iter().any(|r| {
@@ -2066,8 +2218,12 @@ fn test_e2e_ref_alias_propagates_to_spawn() {
     )]);
 
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     let errors: Vec<_> = results
         .iter()
@@ -2103,8 +2259,12 @@ fn test_e2e_ref_dup_copyable() {
     )]);
 
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     let errors: Vec<_> = results
         .iter()
@@ -2147,8 +2307,12 @@ fn test_e2e_lambda_explicit_param_no_capture() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let errors: Vec<_> = results
@@ -2188,8 +2352,12 @@ fn test_e2e_lambda_cannot_access_outer() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let errors: Vec<_> = results
@@ -2223,8 +2391,12 @@ fn test_e2e_spawn_accesses_outer() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert
     let errors: Vec<_> = results
@@ -2276,7 +2448,12 @@ fn test_branch_guard_scope_balanced() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let _ = checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let _ = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert: 守卫 enter/inject 与 exit_scope 配对——walk 完后假设栈为空
     assert!(
@@ -2310,7 +2487,12 @@ fn test_while_guard_scope_balanced() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let _ = checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let _ = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert: 循环守卫进出配对——walk 完后假设栈为空
     assert!(
@@ -2343,6 +2525,7 @@ fn test_check_ownership_entry_proves_valid_module() {
             &module,
             &env,
             &std::collections::HashMap::new(),
+            &Default::default(),
         );
 
     // Assert: 合法模块经管线入口不应产出所有权违例
@@ -2377,6 +2560,7 @@ fn test_check_ownership_entry_shares_guards_cleared() {
         &module,
         &env,
         &std::collections::HashMap::new(),
+        &Default::default(),
     );
 
     // Assert: 共享假设栈 walk 完后回到空（守卫进出配对）
@@ -2412,8 +2596,12 @@ fn test_e2e_move_not_leak_from_unreachable_branch() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert: 不可达分支的 move 不泄漏，无 UseAfterMove
     let move_errors: Vec<_> = results
@@ -2456,8 +2644,12 @@ fn test_e2e_move_conservative_at_merge() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert: 任意分支可达的 move → 汇合后 p 仍视为 Moved
     let move_errors: Vec<_> = results
@@ -2495,8 +2687,12 @@ fn test_e2e_move_in_loop_body_persists() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert: 循环体 move 影响循环后使用
     let move_errors: Vec<_> = results
@@ -2535,8 +2731,12 @@ fn test_e2e_branch_local_var_dropped_at_merge() {
 
     // Act
     let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) =
-        checker.check_module(&module, &make_test_env(), &std::collections::HashMap::new());
+    let (results, _plan, _escaped) = checker.check_module(
+        &module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    );
 
     // Assert: 分支内声明 q 在汇合后 Dropped → 使用报 UseAfterDrop
     let drop_errors: Vec<_> = results

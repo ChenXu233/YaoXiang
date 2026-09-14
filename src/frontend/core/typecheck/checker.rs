@@ -422,6 +422,12 @@ impl TypeChecker {
                 .as_ref()
                 .map(|bc| bc.var_type_ledger().clone())
                 .unwrap_or_default();
+            // #335 G3 类型信息流接口：调用点所有权解析表随 ledger 一并移交
+            let call_ownership = self
+                .body_checker
+                .as_ref()
+                .map(|bc| bc.call_ownership.clone())
+                .unwrap_or_default();
             let mut proof_ctx =
                 crate::frontend::core::typecheck::proof::context::ProofContext::new(&self.env);
             let (ownership_results, plan, escaped_refs) = super::layers::ownership::check_ownership(
@@ -429,6 +435,7 @@ impl TypeChecker {
                 module,
                 &self.env,
                 &ledger,
+                &call_ownership,
             );
             for result in ownership_results {
                 match result {

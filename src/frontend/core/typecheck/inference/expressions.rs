@@ -13,6 +13,7 @@ use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequ
 use std::collections::{HashMap, HashSet};
 
 use super::scope::ScopeManager;
+use super::call_ownership::{CallOwnership, CallOwnershipTable, ParamOwnership};
 
 /// 空的 Native 签名表（默认值）
 static EMPTY_SIGNATURES: std::sync::LazyLock<HashMap<String, MonoType>> =
@@ -74,6 +75,8 @@ pub struct ExpressionInferrer<'a> {
     import_watch: HashMap<String, String>,
     /// #321 W1003：已使用的监视名（委托方经 take_import_used 回收）
     imported_used: HashSet<String>,
+    /// #335 G3 类型信息流接口：调用点所有权解析表（按调用 span 键控）
+    pub call_ownership: CallOwnershipTable,
 }
 
 impl<'a> ExpressionInferrer<'a> {
@@ -96,6 +99,7 @@ impl<'a> ExpressionInferrer<'a> {
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
             existential_coercions: Vec::new(),
+            call_ownership: CallOwnershipTable::new(),
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -123,6 +127,7 @@ impl<'a> ExpressionInferrer<'a> {
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
             existential_coercions: Vec::new(),
+            call_ownership: CallOwnershipTable::new(),
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -151,6 +156,7 @@ impl<'a> ExpressionInferrer<'a> {
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
             existential_coercions: Vec::new(),
+            call_ownership: CallOwnershipTable::new(),
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -181,6 +187,7 @@ impl<'a> ExpressionInferrer<'a> {
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
             existential_coercions: Vec::new(),
+            call_ownership: CallOwnershipTable::new(),
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -1424,6 +1431,52 @@ impl<'a> ExpressionInferrer<'a> {
                     &mono_func_ty,
                     *span,
                 );
+
+                // #335 G3 类型信息流接口：按单态化结果记录调用点所有权
+                //（Ref{mutable}→Write/Read 借用，其余 Move；impl 方法 params[0]
+                //  为接收者位；std 可变方法首实参为容器写借用）
+                if let MonoType::Fn {
+                    params: sig_params, ..
+                } = &mono_func_ty
+                {
+                    let mut co = CallOwnership::default();
+                    let method_key_early = self.method_binding_call_key(func);
+                    if method_key_early.is_some() {
+                        // impl 绑定方法：params[0] = 接收者，实参对应 params[1..]
+                        co.receiver = sig_params.first().map(ParamOwnership::from_param_type);
+                        co.args = sig_params
+                            .iter()
+                            .skip(1)
+                            .take(arg_types.len())
+                            .map(ParamOwnership::from_param_type)
+                            .collect();
+                    } else {
+                        co.args = sig_params
+                            .iter()
+                            .take(arg_types.len())
+                            .map(ParamOwnership::from_param_type)
+                            .collect();
+                        // std 可变容器方法：首实参（容器）按写借用处理——
+                        // 此前缺省 Move 被复制豁免，借用期间的原地修改不检
+                        if let crate::frontend::core::parser::ast::Expr::FieldAccess {
+                            expr: obj,
+                            field,
+                            ..
+                        } = func.as_ref()
+                        {
+                            if matches!(**obj, crate::frontend::core::parser::ast::Expr::Var(..))
+                                && !co.args.is_empty()
+                                && matches!(
+                                    super::call_ownership::std_native_receiver_ownership(field),
+                                    ParamOwnership::WriteBorrow
+                                )
+                            {
+                                co.args[0] = ParamOwnership::WriteBorrow;
+                            }
+                        }
+                    }
+                    self.call_ownership.insert(*span, co);
+                }
 
                 // #317：FieldAccess 目标若解析自 method_bindings（impl 方法绑定），
                 // 接收者占签名 params[0]——arity 按「实参数+1==形参数」校验，

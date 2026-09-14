@@ -4,6 +4,7 @@
 //! 统一的类型推断入口，合并了原 checking/ 和 inference/ 模块
 
 // ✅ 核心模块
+pub mod call_ownership;
 pub mod expressions;
 pub mod scope;
 pub mod statements;

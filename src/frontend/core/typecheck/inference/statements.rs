@@ -68,6 +68,8 @@ pub struct StatementChecker {
     type_defs: HashMap<String, MonoType>,
     /// 实例化请求（收集所有泛型函数实例化需求）
     pub instantiation_requests: Vec<InstantiationRequest>,
+    /// #335 G3 类型信息流接口：调用点所有权解析表（按调用 span 键控）
+    pub call_ownership: super::call_ownership::CallOwnershipTable,
     /// RFC-011a §6 存在类型强制点（具体→存在包装点，ir_gen 按 span 查表注入包装）
     pub existential_coercions: Vec<super::existential::ExistentialCoercion>,
     /// 流敏感假设集 Γ（可选 — None 在测试或未启用证明管道时使用）
@@ -116,6 +118,7 @@ impl StatementChecker {
             method_bindings: HashMap::new(),
             type_defs: HashMap::new(),
             instantiation_requests: Vec::new(),
+            call_ownership: super::call_ownership::CallOwnershipTable::new(),
             existential_coercions: Vec::new(),
             gamma,
             dep_env,
@@ -1874,6 +1877,7 @@ impl StatementChecker {
                         self.imported_used.extend(inferrer.take_import_used());
                         self.instantiation_requests
                             .extend(inferrer.instantiation_requests);
+                        self.call_ownership.extend(inferrer.call_ownership);
                         self.existential_coercions
                             .extend(inferrer.existential_coercions);
                         result
@@ -1946,6 +1950,7 @@ impl StatementChecker {
                 self.imported_used.extend(inferrer.take_import_used());
                 self.instantiation_requests
                     .extend(inferrer.instantiation_requests);
+                self.call_ownership.extend(inferrer.call_ownership);
                 self.existential_coercions
                     .extend(inferrer.existential_coercions);
                 result

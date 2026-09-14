@@ -847,11 +847,12 @@ pub fn check_ownership(
     module: &Module,
     env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
     type_ledger: &HashMap<(usize, String), crate::frontend::core::types::PolyType>,
+    call_ownership: &CallOwnershipTable,
 ) -> (Vec<ProofResult>, ReleasePlan, HashSet<String>) {
     let mut checker = OwnershipChecker::new();
     // #265：共享假设栈——walk_if/walk_while 的分支守卫注入 ctx.assumptions
     std::mem::swap(&mut checker.gamma, &mut ctx.assumptions);
-    let result = checker.check_module(module, env, type_ledger);
+    let result = checker.check_module(module, env, type_ledger, call_ownership);
     std::mem::swap(&mut checker.gamma, &mut ctx.assumptions);
     result
 }
@@ -859,6 +860,7 @@ pub fn check_ownership(
 // ── OwnershipChecker：AST 遍历 ───────────────────────────
 
 use crate::frontend::core::parser::ast::{Expr, Module, Stmt, StmtKind};
+use crate::frontend::core::typecheck::inference::call_ownership::CallOwnershipTable;
 
 /// 赋值/传参/返回的复制语义（SPEC §11.2，#256）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -908,6 +910,9 @@ pub struct OwnershipChecker {
     ref_vars: HashSet<String>,
     /// 变量类型账本（推断层移交）：(定义语句 span offset, 变量名) → 类型（#256）
     type_ledger: HashMap<(usize, String), crate::frontend::core::types::PolyType>,
+    /// 调用点所有权解析表（#335 G3 类型信息流接口；check_module 注入，
+    /// 模块级数据不随函数 reset）
+    call_ownership: CallOwnershipTable,
     /// 变量名 → 定义语句键（镜像 scope_vars，随作用域 push/pop）
     scope_keys: Vec<HashMap<String, usize>>,
     /// 当前 walk 的语句键（span 起始 offset）
@@ -963,6 +968,7 @@ impl OwnershipChecker {
             env: None,
             ref_vars: HashSet::new(),
             type_ledger: HashMap::new(),
+            call_ownership: CallOwnershipTable::new(),
             scope_keys: vec![HashMap::new()],
             cur_stmt_key: 0,
             escaped_refs: HashSet::new(),
@@ -1824,17 +1830,36 @@ impl OwnershipChecker {
                 elements.iter().flat_map(|e| self.walk_expr(e)).collect()
             }
             Expr::Try { expr: inner, .. } => self.walk_expr(inner),
-            Expr::Call { func, args, .. } => {
+            Expr::Call {
+                func,
+                args,
+                span: call_span,
+                ..
+            } => {
                 let mut results = Vec::new();
                 // 确定调用目标名（用于查签名和捕获）
                 let func_name = Self::extract_call_path(func);
+                // #335 G3 类型信息流接口：优先消费推断层的调用点所有权解析表
+                //（按单态化结果解析，覆盖一等函数/未知目标的 TypeVar 失明问题）
+                let table_entry = self.call_ownership.get(call_span).map(|co| {
+                    use crate::frontend::core::typecheck::inference::call_ownership::ParamOwnership as TableOwnership;
+                    co.args
+                        .iter()
+                        .map(|o| match o {
+                            TableOwnership::Move => ParamOwnership::Move,
+                            TableOwnership::ReadBorrow => ParamOwnership::ReadBorrow,
+                            TableOwnership::WriteBorrow => ParamOwnership::WriteBorrow,
+                        })
+                        .collect::<Vec<ParamOwnership>>()
+                });
                 // 查询函数的参数签名（未知函数回退为全 Move）
                 let env: &crate::frontend::core::typecheck::environment::TypeEnvironment =
                     unsafe { &*self.env.unwrap() };
                 // #315：方法调用（func = FieldAccess）接收者签名解析。命中时接收者
                 // 走与自由函数 &mut 实参同款管线（活性检查 + 借用令牌 + 冲突登记），
                 // 显式实参对齐方法签名 params[1..]；未命中（链式/泛型/std native）
-                // 回退原路径。
+                // 回退原路径。无条件计算——裸变量接收者的写令牌由本路径应用，
+                // 不受调用点所有权表命中与否影响。
                 let method_sig = self.method_receiver_ownership(func, args.len(), env);
                 if let Some((recv_name, recv_own, _)) = &method_sig {
                     let is_write = matches!(recv_own, ParamOwnership::WriteBorrow);
@@ -1858,12 +1883,15 @@ impl OwnershipChecker {
                 } else {
                     results.extend(self.walk_expr(func));
                 }
-                let param_types = match &method_sig {
-                    Some((_, _, arg_owns)) => arg_owns.clone(),
-                    None => func_name
-                        .as_ref()
-                        .map(|n| self.lookup_param_types(n, args.len(), env))
-                        .unwrap_or_else(|| vec![ParamOwnership::Move; args.len()]),
+                let param_types = match table_entry {
+                    Some(owns) => owns,
+                    None => match &method_sig {
+                        Some((_, _, arg_owns)) => arg_owns.clone(),
+                        None => func_name
+                            .as_ref()
+                            .map(|n| self.lookup_param_types(n, args.len(), env))
+                            .unwrap_or_else(|| vec![ParamOwnership::Move; args.len()]),
+                    },
                 };
                 // 处理显式参数
                 for (i, arg) in args.iter().enumerate() {
@@ -2528,8 +2556,10 @@ impl OwnershipChecker {
         module: &Module,
         _env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
         type_ledger: &HashMap<(usize, String), crate::frontend::core::types::PolyType>,
+        call_ownership: &CallOwnershipTable,
     ) -> (Vec<ProofResult>, ReleasePlan, HashSet<String>) {
         self.type_ledger = type_ledger.clone();
+        self.call_ownership = call_ownership.clone();
         let mut results = Vec::new();
         let mut merged_drops: HashMap<Span, Vec<String>> = HashMap::new();
         let mut merged_escaped: HashSet<String> = HashSet::new();
