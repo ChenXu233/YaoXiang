@@ -50,7 +50,9 @@ pub fn run_lsp_server() -> Result<()> {
     let mut world = World::new();
 
     // 加载标准库符号到语义数据库
-    world.load_std_symbols_to_semantic_db();
+    // initialize 前尚无工作区根，先只挂全局回退；handle_initialize 里
+    // reset_for_new_session 会带项目根重载一遍（RFC-037 查找链）
+    world.load_std_symbols_to_semantic_db(None);
     // 加载内置类型到语义数据库
     world.load_builtin_types_to_semantic_db();
 
@@ -123,7 +125,7 @@ fn main_loop(
 /// 处理请求
 ///
 /// 返回 `Some(Response)` 表示需要发送响应，`None` 表示已处理。
-fn handle_request(
+pub(crate) fn handle_request(
     session: &mut Session,
     world: &mut World,
     req: Request,
@@ -397,7 +399,7 @@ fn handle_request(
 /// 处理通知
 ///
 /// 返回 `true` 表示应该退出服务器（收到 `exit` 通知）。
-fn handle_notification(
+pub(crate) fn handle_notification(
     connection: &Connection,
     session: &mut Session,
     world: &mut World,
@@ -495,7 +497,7 @@ fn update_semantic_db(
 }
 
 /// 对指定 URI 的文档运行诊断并发送 publishDiagnostics 通知
-fn publish_diagnostics_for_uri(
+pub(crate) fn publish_diagnostics_for_uri(
     connection: &Connection,
     session: &Session,
     uri: &str,

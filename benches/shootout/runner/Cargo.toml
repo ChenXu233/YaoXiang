@@ -3,6 +3,8 @@ name = "shootout"
 version = "0.1.0"
 edition = "2021"
 description = "YaoXiang 多语言基准对比运行器"
+# RFC-037：基准运行器不随工具链发行，退出 dist 候选
+publish = false
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

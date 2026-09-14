@@ -20,7 +20,7 @@ use crate::lsp::world::World;
 // ─── 关键字定义 ─────────────────────────────────────
 
 /// YaoXiang 关键字（language-spec.md 第 2.3 节，共 17 个）
-const KEYWORDS: &[(&str, &str)] = &[
+pub(crate) const KEYWORDS: &[(&str, &str)] = &[
     ("pub", "公开声明"),
     ("use", "模块导入"),
     ("spawn", "并作函数标记"),
@@ -41,7 +41,7 @@ const KEYWORDS: &[(&str, &str)] = &[
 ];
 
 /// YaoXiang 保留字（language-spec.md 第 2.4 节，共 7 个）
-const RESERVED_WORDS: &[(&str, &str)] = &[
+pub(crate) const RESERVED_WORDS: &[(&str, &str)] = &[
     ("Type", "元类型（用于类型定义）"),
     ("true", "Bool 真值"),
     ("false", "Bool 假值"),
@@ -54,7 +54,7 @@ const RESERVED_WORDS: &[(&str, &str)] = &[
 // ─── 补全项构建 ─────────────────────────────────────
 
 /// 构建关键字补全项
-fn keyword_items() -> Vec<CompletionItem> {
+pub(crate) fn keyword_items() -> Vec<CompletionItem> {
     KEYWORDS
         .iter()
         .enumerate()
@@ -69,7 +69,7 @@ fn keyword_items() -> Vec<CompletionItem> {
 }
 
 /// 构建保留字补全项
-fn reserved_word_items() -> Vec<CompletionItem> {
+pub(crate) fn reserved_word_items() -> Vec<CompletionItem> {
     RESERVED_WORDS
         .iter()
         .enumerate()
@@ -127,7 +127,7 @@ fn semantic_db_items(
 /// 从当前文档 AST 提取局部符号补全项
 ///
 /// 补充符号索引未覆盖的当前文件符号（如局部变量）。
-fn document_symbol_items(content: &str) -> Vec<CompletionItem> {
+pub(crate) fn document_symbol_items(content: &str) -> Vec<CompletionItem> {
     let tokens = match tokenize(content) {
         Ok(t) => t,
         Err(_) => return Vec::new(),
@@ -161,18 +161,25 @@ fn extract_symbols_from_module(module: &Module) -> Vec<CompletionItem> {
                         ..CompletionItem::default()
                     });
                 } else if let Some(v) = value {
+                    // Lambda → 函数项（含零参）；其余值绑定 → 变量项
                     if let crate::frontend::core::parser::ast::Expr::Lambda { params, .. } =
                         v.as_ref()
                     {
-                        if !params.is_empty() {
-                            items.push(CompletionItem {
-                                label: name.clone(),
-                                kind: Some(CompletionItemKind::FUNCTION),
-                                detail: Some(format!("函数 (参数: {})", params.len())),
-                                sort_text: Some(format!("4_{}", name)),
-                                ..CompletionItem::default()
-                            });
-                        }
+                        items.push(CompletionItem {
+                            label: name.clone(),
+                            kind: Some(CompletionItemKind::FUNCTION),
+                            detail: Some(format!("函数 (参数: {})", params.len())),
+                            sort_text: Some(format!("4_{}", name)),
+                            ..CompletionItem::default()
+                        });
+                    } else {
+                        items.push(CompletionItem {
+                            label: name.clone(),
+                            kind: Some(CompletionItemKind::VARIABLE),
+                            detail: Some("变量".to_string()),
+                            sort_text: Some(format!("4_{}", name)),
+                            ..CompletionItem::default()
+                        });
                     }
                 } else {
                     items.push(CompletionItem {

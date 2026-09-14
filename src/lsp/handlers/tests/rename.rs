@@ -5,8 +5,7 @@
 //! - 非标识符位置
 //! - 新名称保留
 
-use lsp_types::{Range, TextEdit, Uri, WorkspaceEdit};
-use std::collections::HashMap;
+use lsp_types::Uri;
 
 use crate::frontend::core::typecheck::semantic_db::{
     DefId, DefinitionInfo, DefinitionKind, ReferenceInfo,
@@ -17,8 +16,7 @@ use crate::lsp::world::World;
 use crate::util::span::{Position, Span};
 
 use lsp_types::{
-    RenameParams, TextDocumentIdentifier, TextDocumentPositionParams,
-    WorkDoneProgressParams,
+    RenameParams, TextDocumentIdentifier, TextDocumentPositionParams, WorkDoneProgressParams,
 };
 use std::str::FromStr;
 
@@ -45,11 +43,9 @@ fn setup() -> (Session, World) {
     let mut world = World::new();
 
     let content = "x = 1\ny = x + x\n";
-    session.document_store_mut().open(
-        "file:///test/main.yx".to_string(),
-        content.to_string(),
-        1,
-    );
+    session
+        .document_store_mut()
+        .open("file:///test/main.yx".to_string(), content.to_string(), 1);
 
     let uri = "file:///test/main.yx";
     let x_def_span = Span {

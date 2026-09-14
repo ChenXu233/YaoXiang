@@ -6,12 +6,12 @@
 //! - 更新后版本刷新
 //! - 单个依赖更新
 
-use crate::package::commands::add;
 use crate::package::commands::init;
 use crate::package::commands::update::{exec_in, exec_single_in};
 use crate::package::lock::LockFile;
-use crate::package::manifest::PackageManifest;
 use tempfile::TempDir;
+
+use super::add_path_dep;
 
 fn setup_project() -> (TempDir, std::path::PathBuf) {
     let tmp = TempDir::new().unwrap();
@@ -32,8 +32,8 @@ fn test_update_empty() {
 #[test]
 fn test_update_with_deps() {
     let (_tmp, project_dir) = setup_project();
-    add::exec_in(&project_dir, "foo", Some("1.0.0"), false).unwrap();
-    add::exec_in(&project_dir, "bar", Some("2.0.0"), false).unwrap();
+    add_path_dep(&project_dir, "foo", "1.0.0", false);
+    add_path_dep(&project_dir, "bar", "2.0.0", false);
 
     exec_in(&project_dir).unwrap();
 
@@ -46,12 +46,10 @@ fn test_update_with_deps() {
 #[test]
 fn test_update_refreshes_versions() {
     let (_tmp, project_dir) = setup_project();
-    add::exec_in(&project_dir, "foo", Some("1.0.0"), false).unwrap();
+    add_path_dep(&project_dir, "foo", "1.0.0", false);
 
-    // Manually modify the manifest to simulate version bump
-    let mut manifest = PackageManifest::load(&project_dir).unwrap();
-    manifest.add_dependency("foo", "2.0.0");
-    manifest.save(&project_dir).unwrap();
+    // 重写依赖表模拟版本升级（保持 path 来源）
+    add_path_dep(&project_dir, "foo", "2.0.0", false);
 
     exec_in(&project_dir).unwrap();
 
@@ -62,16 +60,14 @@ fn test_update_refreshes_versions() {
 #[test]
 fn test_update_single_dependency() {
     let (_tmp, project_dir) = setup_project();
-    add::exec_in(&project_dir, "foo", Some("1.0.0"), false).unwrap();
-    add::exec_in(&project_dir, "bar", Some("2.0.0"), false).unwrap();
+    add_path_dep(&project_dir, "foo", "1.0.0", false);
+    add_path_dep(&project_dir, "bar", "2.0.0", false);
 
     // 先安装
     crate::package::commands::install::exec_in(&project_dir).unwrap();
 
-    // 修改 foo 的版本
-    let mut manifest = PackageManifest::load(&project_dir).unwrap();
-    manifest.add_dependency("foo", "1.1.0");
-    manifest.save(&project_dir).unwrap();
+    // 修改 foo 的版本（保持 path 来源）
+    add_path_dep(&project_dir, "foo", "1.1.0", false);
 
     // 只更新 foo
     exec_single_in(&project_dir, "foo").unwrap();

@@ -1,11 +1,11 @@
 ---
 title: 'Error Codes'
-description: Package manager error codes and handling methods
+description: 'Package manager error codes and how to handle them'
 ---
 
 # Error Codes
 
-This document lists errors that YaoXiang package manager may return and their handling methods.
+This document lists the errors that the YaoXiang package manager may return and how to handle them.
 
 ## Error List
 
@@ -17,7 +17,7 @@ Error: Project already exists: <path>
 
 **Cause**: The project directory you are trying to create already exists.
 
-**Handling Methods**:
+**How to handle**:
 
 1. Choose a different project name
 2. Delete or move the existing directory
@@ -30,12 +30,12 @@ Error: Project already exists: <path>
 Error: Not a YaoXiang project: yaoxiang.toml not found
 ```
 
-**Cause**: The current directory or specified directory does not contain a `yaoxiang.toml` file.
+**Cause**: The current directory or the specified directory does not contain a `yaoxiang.toml` file.
 
-**Handling Methods**:
+**How to handle**:
 
-1. Make sure you are executing commands within the project directory
-2. Use `yaoxiang init` to create a new project
+1. Make sure you run the command inside the project directory
+2. Use `yx init` to create a new project
 
 ---
 
@@ -45,12 +45,12 @@ Error: Not a YaoXiang project: yaoxiang.toml not found
 Error: Dependency not found: <name>
 ```
 
-**Cause**: Attempting to operate on a dependency that does not exist.
+**Cause**: Trying to operate on a dependency that does not exist.
 
-**Handling Methods**:
+**How to handle**:
 
-1. Check if the dependency name is spelled correctly
-2. Use `yaoxiang list` to view existing dependencies
+1. Check that the dependency name is spelled correctly
+2. Use `yx list` to view existing dependencies
 
 ---
 
@@ -60,12 +60,12 @@ Error: Dependency not found: <name>
 Error: Dependency already exists: <name>
 ```
 
-**Cause**: Attempting to add a dependency that already exists.
+**Cause**: Trying to add a dependency that already exists.
 
-**Handling Methods**:
+**How to handle**:
 
-1. If you need to update the version, first use `yaoxiang rm` to remove it
-2. Or simply use the existing dependency
+1. If you need to update the version, first remove it with `yx rm`
+2. Or use the existing dependency directly
 
 ---
 
@@ -77,10 +77,10 @@ Error: Invalid yaoxiang.toml format: <details>
 
 **Cause**: The `yaoxiang.toml` file format is incorrect.
 
-**Handling Methods**:
+**How to handle**:
 
-1. Check if the TOML syntax is correct
-2. Ensure all required fields are present
+1. Check that the TOML syntax is correct
+2. Make sure all required fields are present
 3. Check for syntax errors (such as missing quotes, commas, etc.)
 
 ---
@@ -91,19 +91,19 @@ Error: Invalid yaoxiang.toml format: <details>
 Error: IO error: <details>
 ```
 
-**Cause**: File read/write operation failed.
+**Cause**: A file read or write operation failed.
 
-**Common Causes**:
+**Common causes**:
 
 - Insufficient disk space
 - Insufficient permissions
-- File is occupied by another program
+- The file is being used by another program
 
-**Handling Methods**:
+**How to handle**:
 
 1. Check disk space
 2. Check file permissions
-3. Close other programs that may be occupying the file
+3. Close other programs that may be using the file
 
 ---
 
@@ -113,27 +113,27 @@ Error: IO error: <details>
 Error: TOML parse error: <details>
 ```
 
-**Cause**: TOML file format error.
+**Cause**: The TOML file format is incorrect.
 
-**Handling Methods**:
+**How to handle**:
 
-1. Validate TOML syntax
-2. Check if special characters are properly escaped
+1. Validate the TOML syntax
+2. Check that special characters are properly escaped
 
 ---
 
-## Frequently Asked Questions
+## FAQ
 
-### Q: What should I do if dependency installation fails?
+### Q: What to do when installing a dependency fails?
 
-1. Check network connection
+1. Check the network connection
 2. Confirm the dependency name and version are correct
-3. Try using `yaoxiang update` to refresh
+3. Try refreshing with `yx update`
 
-### Q: What should I do if I encounter version conflicts?
+### Q: What to do when encountering a version conflict?
 
-Check if there are incompatible dependency version requirements in `yaoxiang.toml`.
+Check `yaoxiang.toml` for incompatible dependency version requirements.
 
-### Q: What if the vendor directory is corrupted?
+### Q: What to do when the vendor directory is corrupted?
 
-Delete the `vendor` directory and run `yaoxiang install` again.
+Delete the `vendor` directory and rerun `yx install`.

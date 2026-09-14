@@ -9,14 +9,8 @@
 //! - 悬停提示能力
 //! - 能力声明序列化
 
-use lsp_types::{
-    CodeActionOptions, CompletionOptions, HoverProviderCapability, OneOf, ServerCapabilities,
-    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions, SaveOptions,
-    SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions,
-    SemanticTokensServerCapabilities,
-};
+use lsp_types::{TextDocumentSyncCapability, TextDocumentSyncKind};
 
-use crate::frontend::core::typecheck::semantic_db::{SemanticTokenModifier, SemanticTokenType};
 use crate::lsp::capabilities::server_capabilities;
 
 #[test]

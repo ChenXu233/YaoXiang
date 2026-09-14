@@ -13,10 +13,20 @@ use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequ
 use std::collections::{HashMap, HashSet};
 
 use super::scope::ScopeManager;
+use super::call_ownership::{CallOwnership, CallOwnershipTable, ParamOwnership};
 
 /// 空的 Native 签名表（默认值）
 static EMPTY_SIGNATURES: std::sync::LazyLock<HashMap<String, MonoType>> =
     std::sync::LazyLock::new(HashMap::new);
+
+/// RFC-009 读视图：剥离借用层，算术/比较按 inner 类型判定（读穿透）
+pub(super) fn read_view(ty: &MonoType) -> MonoType {
+    let mut cur = ty;
+    while let MonoType::Ref { inner, .. } = cur {
+        cur = inner;
+    }
+    cur.clone()
+}
 
 static EMPTY_GENERIC_TYPE_DEFS: std::sync::LazyLock<
     HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
@@ -61,6 +71,12 @@ pub struct ExpressionInferrer<'a> {
     dep_env: Option<&'a crate::frontend::core::types::eval::dependent_types::DependentTypeEnv>,
     /// 流敏感假设集 Γ（效应注入）—— 由 StatementChecker 注入
     gamma: Option<&'a mut crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma>,
+    /// #321 W1003：导入名监视集（StatementChecker 委托时拷贝注入）
+    import_watch: HashMap<String, String>,
+    /// #321 W1003：已使用的监视名（委托方经 take_import_used 回收）
+    imported_used: HashSet<String>,
+    /// #335 G3 类型信息流接口：调用点所有权解析表（按调用 span 键控）
+    pub call_ownership: CallOwnershipTable,
 }
 
 impl<'a> ExpressionInferrer<'a> {
@@ -83,8 +99,11 @@ impl<'a> ExpressionInferrer<'a> {
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
             existential_coercions: Vec::new(),
+            call_ownership: CallOwnershipTable::new(),
             dep_env: None,
             gamma: None,
+            import_watch: HashMap::new(),
+            imported_used: HashSet::new(),
         }
     }
 
@@ -108,8 +127,11 @@ impl<'a> ExpressionInferrer<'a> {
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
             existential_coercions: Vec::new(),
+            call_ownership: CallOwnershipTable::new(),
             dep_env: None,
             gamma: None,
+            import_watch: HashMap::new(),
+            imported_used: HashSet::new(),
         }
     }
 
@@ -134,8 +156,11 @@ impl<'a> ExpressionInferrer<'a> {
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
             existential_coercions: Vec::new(),
+            call_ownership: CallOwnershipTable::new(),
             dep_env: None,
             gamma: None,
+            import_watch: HashMap::new(),
+            imported_used: HashSet::new(),
         }
     }
 
@@ -162,14 +187,42 @@ impl<'a> ExpressionInferrer<'a> {
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
             existential_coercions: Vec::new(),
+            call_ownership: CallOwnershipTable::new(),
             dep_env: None,
             gamma: None,
+            import_watch: HashMap::new(),
+            imported_used: HashSet::new(),
         }
     }
 
     /// 获取求解器引用（可变）
     pub fn solver(&mut self) -> &mut TypeConstraintSolver {
         self.solver
+    }
+
+    /// #321 W1003：注入导入名监视集（StatementChecker 委托表达式检查前调用）
+    pub fn set_import_watch(
+        &mut self,
+        names: &HashMap<String, String>,
+    ) {
+        self.import_watch
+            .extend(names.iter().map(|(k, v)| (k.clone(), v.clone())));
+    }
+
+    /// #321 W1003：取走已使用名集合（委托方回收合并）
+    pub fn take_import_used(&mut self) -> HashSet<String> {
+        std::mem::take(&mut self.imported_used)
+    }
+
+    /// #321 W1003：变量成功解析时调用——命中监视集的名字记为已使用
+    fn note_import_use(
+        &mut self,
+        name: &str,
+    ) {
+        if let Some(report_as) = self.import_watch.get(name) {
+            let report_as = report_as.clone();
+            self.imported_used.insert(report_as);
+        }
     }
 
     /// RFC-011a §6：在"具体→存在"兼容判定通过的位置收集包装点。
@@ -468,31 +521,55 @@ impl<'a> ExpressionInferrer<'a> {
     ) -> Result<MonoType> {
         match op {
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => {
-                if let (MonoType::Int(_), MonoType::Int(_)) = (left, right) {
-                    Ok(left.clone())
-                } else if let (MonoType::Float(_), MonoType::Float(_)) = (left, right) {
-                    Ok(left.clone())
-                } else if left.is_string() && right.is_string() {
+                // RFC-009 读透明：借用值参与算术按 inner 类型判定（读穿透）
+                let l = read_view(left);
+                let r = read_view(right);
+                if let (MonoType::Int(_), MonoType::Int(_)) = (&l, &r) {
+                    Ok(l)
+                } else if let (MonoType::Float(_), MonoType::Float(_)) = (&l, &r) {
+                    Ok(l)
+                } else if l.is_string() && r.is_string() {
                     Ok(MonoType::make_string())
-                } else if left.is_list() && right.is_list() {
-                    let left_elem = &left.generic_args().expect("List args")[0];
-                    let right_elem = &right.generic_args().expect("List args")[0];
+                } else if l.is_list() && r.is_list() {
+                    let left_elem = &l.generic_args().expect("List args")[0];
+                    let right_elem = &r.generic_args().expect("List args")[0];
                     let _ = self.solver.unify(left_elem, right_elem);
                     let elem_ty = self.solver.resolve_type(left_elem);
                     Ok(MonoType::make_list(elem_ty))
                 } else {
-                    let var = self.solver.new_var();
-                    Ok(var)
+                    // 未绑定类型变量（无标注 lambda 参数等）延后判定：过早
+                    // unify 会把多态参数收敛成具体类型，破坏 fn(Any)->Any 槽位
+                    if matches!(left, MonoType::TypeVar(_)) || matches!(right, MonoType::TypeVar(_))
+                    {
+                        return Ok(self.solver.new_var());
+                    }
+                    // 类型层不认的组合宁拒不静默：fresh var 兜底会让
+                    // `1 + "a"` 纸面通过、运行期错译（#271 同款纪律）
+                    Err(ErrorCodeDefinition::type_mismatch(
+                        "Int/Float/String/List（两侧同型）",
+                        &format!("{l} 与 {r}"),
+                    )
+                    .build())
                 }
             }
             BinOp::Mod => {
-                if let (MonoType::Int(_), MonoType::Int(_)) = (left, right) {
-                    Ok(left.clone())
-                } else if let (MonoType::Float(_), MonoType::Float(_)) = (left, right) {
-                    Ok(left.clone())
+                let l = read_view(left);
+                let r = read_view(right);
+                if let (MonoType::Int(_), MonoType::Int(_)) = (&l, &r) {
+                    Ok(l)
+                } else if let (MonoType::Float(_), MonoType::Float(_)) = (&l, &r) {
+                    Ok(l)
+                } else if matches!(left, MonoType::TypeVar(_))
+                    || matches!(right, MonoType::TypeVar(_))
+                {
+                    // 未绑定类型变量延后判定（同 Add/Sub/Mul/Div 臂注释）
+                    Ok(self.solver.new_var())
                 } else {
-                    let _ = self.solver.unify(left, right);
-                    Ok(left.clone())
+                    Err(ErrorCodeDefinition::type_mismatch(
+                        "Int/Float（两侧同型）",
+                        &format!("{l} 与 {r}"),
+                    )
+                    .build())
                 }
             }
             BinOp::Eq | BinOp::Neq | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
@@ -820,7 +897,10 @@ impl<'a> ExpressionInferrer<'a> {
                 } else {
                     GenericFunctionId::new(fn_name, type_params)
                 };
-                let request = InstantiationRequest::new(generic_id, type_args, call_span);
+                let mut request = InstantiationRequest::new(generic_id, type_args, call_span);
+                // #335 路径 A：记录所在函数——嵌套调用请求的符号化实参
+                //（TypeRef(参数名)）由 mono 按所在泛型函数的 name_map 求值
+                request.containing_fn = self.scope.fn_context().map(str::to_owned);
                 self.instantiation_requests.push(request);
             }
         }
@@ -964,6 +1044,8 @@ impl<'a> ExpressionInferrer<'a> {
             crate::frontend::core::parser::ast::Expr::Var(name, span) => {
                 let poly = self.scope.get_var(name).cloned();
                 if let Some(poly) = poly {
+                    // #321 W1003：命中监视集的导入名记为已使用
+                    self.note_import_use(name);
                     // 关键：直接使用 scope 中存储的类型！
                     // 因为 assign_var 已经将更新后的类型写入了 scope
                     // 不需要再通过 solver 解析（solver 不知道 scope 的更新）
@@ -1124,6 +1206,7 @@ impl<'a> ExpressionInferrer<'a> {
                 let container_ty = self.infer_expr(container)?;
                 match container_ty {
                     MonoType::Generic { name, args } if name == "List" => Ok(args[0].clone()),
+                    MonoType::Generic { name, args } if name == "Array" => Ok(args[0].clone()),
                     MonoType::Generic { name, args } if name == "Dict" => Ok(args[1].clone()),
                     MonoType::Generic { name, args } if name == "Tuple" => {
                         if let crate::frontend::core::parser::ast::Expr::Lit(
@@ -1143,7 +1226,19 @@ impl<'a> ExpressionInferrer<'a> {
                             Ok(self.solver.new_var())
                         }
                     }
-                    _ => Ok(self.solver.new_var()),
+                    MonoType::Fn { .. } => {
+                        // RFC-004 多位置绑定语法 f[0] / f[1,2]：索引结果由语句层
+                        // 方法绑定机制消费，此处类型不收敛（既有宽松语义，非兜底洞）
+                        Ok(self.solver.new_var())
+                    }
+                    // 类型层不认的容器宁拒不静默：fresh var 兜底会让
+                    // `5[0]` 纸面通过（Array 此前也落此臂、元素类型从未检查）
+                    other => Err(ErrorCodeDefinition::type_mismatch(
+                        "List/Array/Dict/Tuple（可索引）",
+                        &format!("{other}"),
+                    )
+                    .at(container.span())
+                    .build()),
                 }
             }
 
@@ -1336,6 +1431,52 @@ impl<'a> ExpressionInferrer<'a> {
                     &mono_func_ty,
                     *span,
                 );
+
+                // #335 G3 类型信息流接口：按单态化结果记录调用点所有权
+                //（Ref{mutable}→Write/Read 借用，其余 Move；impl 方法 params[0]
+                //  为接收者位；std 可变方法首实参为容器写借用）
+                if let MonoType::Fn {
+                    params: sig_params, ..
+                } = &mono_func_ty
+                {
+                    let mut co = CallOwnership::default();
+                    let method_key_early = self.method_binding_call_key(func);
+                    if method_key_early.is_some() {
+                        // impl 绑定方法：params[0] = 接收者，实参对应 params[1..]
+                        co.receiver = sig_params.first().map(ParamOwnership::from_param_type);
+                        co.args = sig_params
+                            .iter()
+                            .skip(1)
+                            .take(arg_types.len())
+                            .map(ParamOwnership::from_param_type)
+                            .collect();
+                    } else {
+                        co.args = sig_params
+                            .iter()
+                            .take(arg_types.len())
+                            .map(ParamOwnership::from_param_type)
+                            .collect();
+                        // std 可变容器方法：首实参（容器）按写借用处理——
+                        // 此前缺省 Move 被复制豁免，借用期间的原地修改不检
+                        if let crate::frontend::core::parser::ast::Expr::FieldAccess {
+                            expr: obj,
+                            field,
+                            ..
+                        } = func.as_ref()
+                        {
+                            if matches!(**obj, crate::frontend::core::parser::ast::Expr::Var(..))
+                                && !co.args.is_empty()
+                                && matches!(
+                                    super::call_ownership::std_native_receiver_ownership(field),
+                                    ParamOwnership::WriteBorrow
+                                )
+                            {
+                                co.args[0] = ParamOwnership::WriteBorrow;
+                            }
+                        }
+                    }
+                    self.call_ownership.insert(*span, co);
+                }
 
                 // #317：FieldAccess 目标若解析自 method_bindings（impl 方法绑定），
                 // 接收者占签名 params[0]——arity 按「实参数+1==形参数」校验，
@@ -2123,12 +2264,23 @@ impl<'a> ExpressionInferrer<'a> {
                 condition,
                 ..
             } => {
-                let _iter_ty = self.infer_expr(iterable)?;
+                let iter_ty = self.infer_expr(iterable)?;
+                // 循环变量类型从可迭代对象取（此前硬编码 Char，靠
+                // 算术 fresh-var 兜底蒙混；硬化后按 check_for_stmt 同款分发）
+                let loop_var_ty = match &iter_ty {
+                    m if m.is_list() || m.is_array() => m.generic_args().unwrap()[0].clone(),
+                    m if m.is_string() => MonoType::Char,
+                    m if m.is_dict() => {
+                        let args = m.generic_args().unwrap();
+                        MonoType::make_tuple(vec![args[0].clone(), args[1].clone()])
+                    }
+                    _ => self.solver.resolve_type(&iter_ty),
+                };
 
                 self.scope.enter_block();
                 self.scope.add_var(
                     var.clone(),
-                    PolyType::mono(MonoType::Char),
+                    PolyType::mono(loop_var_ty),
                     false,
                     crate::util::span::Span::default(),
                 );

@@ -85,7 +85,7 @@ map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 **Error 载体与错误码（#323 M4）**：
 
 std 各模块的 Err 载体 `Error` 携带规范化错误码，码复用 RFC-013 的 E6xxx/E7xxx 段位（如
-E6009 = Range 步长非法），为跨版本稳定契约——程序可按码编程判定，`yaoxiang explain E6009`
+E6009 = Range 步长非法），为跨版本稳定契约——程序可按码编程判定，`yx explain E6009`
 可查文档。码索引见 RFC-013「运行时错误值与码贯通」章节。
 
 ```yaoxiang
@@ -130,7 +130,8 @@ ErrorPropagate ::= Expr '?'
 // 成功时返回值，失败时向上返回 err
 data = fetch_data()?
 
-// 等价于
+// 概念等价形式（注意：变体解构 match 尚未落地——RFC-039 交付前
+// 会报编译错误 E3008，`?` 是当前唯一可用的错误传播写法）
 data = match fetch_data() {
     ok(v) => v
     err(e) => return err(e)

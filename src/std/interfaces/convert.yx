@@ -1,0 +1,47 @@
+// convert.yx - 标准库 std.convert 模块接口
+// 仅供 LSP 跳转和类型查看，不参与实际执行
+
+to_string: (value) -> String = {
+    ...
+}
+
+int.to_string: (self) -> String = {
+    ...
+}
+
+float.to_string: (self) -> String = {
+    ...
+}
+
+bool.to_string: (self) -> String = {
+    ...
+}
+
+char.to_string: (self) -> String = {
+    ...
+}
+
+string.to_string: (self) -> String = {
+    ...
+}
+
+list.to_string: (self) -> String = {
+    ...
+}
+
+dict.to_string: (self) -> String = {
+    ...
+}
+
+tuple.to_string: (self) -> String = {
+    ...
+}
+
+set.to_string: (self) -> String = {
+    ...
+}
+
+range.to_string: (self) -> String = {
+    ...
+}
+

@@ -50,6 +50,8 @@ docs/.env
 .worktrees
 .z3/
 pkg/
+# 本地安装的 cargo-dist 二进制（仓库只 vendor 其生成的配置，RFC-037）
+tools/cargo-dist/
 
 # Wasm playground build artifacts
 docs/src/.vitepress/public/wasm/*.wasm

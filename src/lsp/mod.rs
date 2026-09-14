@@ -20,4 +20,7 @@ pub mod server;
 pub mod session;
 pub mod world;
 
+#[cfg(test)]
+mod tests;
+
 pub use server::run_lsp_server;

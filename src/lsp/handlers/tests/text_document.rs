@@ -43,11 +43,9 @@ fn test_did_change() {
     let mut session = Session::new();
 
     // 先打开
-    session.document_store_mut().open(
-        "file:///test/main.yx".to_string(),
-        "x = 42".to_string(),
-        1,
-    );
+    session
+        .document_store_mut()
+        .open("file:///test/main.yx".to_string(), "x = 42".to_string(), 1);
 
     // 然后变更
     let params = DidChangeTextDocumentParams {
@@ -74,11 +72,9 @@ fn test_did_change() {
 #[test]
 fn test_did_change_returns_uri() {
     let mut session = Session::new();
-    session.document_store_mut().open(
-        "file:///test/main.yx".to_string(),
-        "x = 42".to_string(),
-        1,
-    );
+    session
+        .document_store_mut()
+        .open("file:///test/main.yx".to_string(), "x = 42".to_string(), 1);
 
     let params = DidChangeTextDocumentParams {
         text_document: VersionedTextDocumentIdentifier {
@@ -99,11 +95,9 @@ fn test_did_change_returns_uri() {
 #[test]
 fn test_did_close() {
     let mut session = Session::new();
-    session.document_store_mut().open(
-        "file:///test/main.yx".to_string(),
-        "x = 42".to_string(),
-        1,
-    );
+    session
+        .document_store_mut()
+        .open("file:///test/main.yx".to_string(), "x = 42".to_string(), 1);
 
     let params = DidCloseTextDocumentParams {
         text_document: TextDocumentIdentifier {

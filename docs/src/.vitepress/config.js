@@ -343,7 +343,11 @@ export default defineConfig({
             },
             {
               text: "工具命令",
-              items: [{ text: "check 命令", link: "/reference/check-command" }],
+              items: [
+                { text: "check 命令", link: "/reference/check-command" },
+                { text: "format 命令", link: "/reference/format-command" },
+                { text: "test 命令", link: "/reference/test-command" },
+              ],
             },
           ],
 
@@ -366,6 +370,7 @@ export default defineConfig({
               text: "指南",
               items: [
                 { text: "指南目录", link: "/guide/" },
+                { text: "安装 YaoXiang", link: "/guide/installation" },
                 { text: "语法速查", link: "/guide/language-overview" },
                 { text: "包管理系统", link: "/guide/packaging" },
                 { text: "CI 集成", link: "/guide/ci-integration" },

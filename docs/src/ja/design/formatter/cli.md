@@ -1,6 +1,6 @@
 ---
 title: 'yaoxiang format コマンドライン用法'
-description: フォーマッタのコマンドライン引数と使用方法
+description: 'フォーマッタのコマンドライン引数と使用方法'
 ---
 
 # コマンドライン用法

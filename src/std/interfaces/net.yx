@@ -1,0 +1,19 @@
+// net.yx - 标准库 std.net 模块接口
+// 仅供 LSP 跳转和类型查看，不参与实际执行
+
+http_get: (url: &String) -> String = {
+    ...
+}
+
+http_post: (url: &String, body: &String) -> String = {
+    ...
+}
+
+url_encode: (s: &String) -> String = {
+    ...
+}
+
+url_decode: (s: &String) -> String = {
+    ...
+}
+

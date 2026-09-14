@@ -1,0 +1,15 @@
+// 06-compile-errors/std_mut_during_borrow_err.yx
+// std 可变方法首实参（容器）在活跃借用期间按写借用检查——
+// 此前签名按值传容器、缺省 Move 被句柄复制豁免，借用期间的原地修改不检
+// expect: compile-error E2018
+// 验证: v = &xs 活跃期内 list.push(xs, 3)（原地修改容器）被拒绝
+// 状态: ❌ 应编译失败
+
+use std.list
+
+main = {
+    xs = [1, 2]
+    v = &xs
+    list.push(xs, 3)
+    print(list.len(xs))
+}

@@ -1,12 +1,12 @@
 ---
-title: 'yaoxiang.toml フォーマット'
-description: 'プロジェクト設定ファイルのフォーマット説明'
+title: 'yaoxiang.toml 形式'
+description: 'プロジェクト設定ファイル形式の説明'
 ---
 
-# yaoxiang.toml フォーマット
+# yaoxiang.toml 形式
 
 `yaoxiang.toml`
-はYaoXiangプロジェクトのマニフェストファイルであり、プロジェクトメタデータと依存関係を宣言します。
+は YaoXiang プロジェクトのマニフェストファイルであり、プロジェクトのメタデータと依存関係を宣言します。
 
 ## ファイル構造
 
@@ -14,26 +14,26 @@ description: 'プロジェクト設定ファイルのフォーマット説明'
 [package]
 name = "プロジェクト名"
 version = "0.1.0"
-description = "プロジェクト説明"
+description = "プロジェクトの説明"
 authors = ["著者名"]
 license = "MIT"
 
 [dependencies]
-# 通常依存関係
+# 通常の依存関係
 
 [dev-dependencies]
-# 開発依存関係
+# 開発用依存関係
 ```
 
-## package 部分
+## package セクション
 
-| フィールド    | タイプ | 必須   | 説明                                                     |
-| ------------- | ------ | ------ | -------------------------------------------------------- |
-| `name`        | string | は     | プロジェクト名、命名規則に準拠（小文字、数字、ハイフン） |
-| `version`     | string | は     | セマンティックバージョニング、semver仕様に準拠           |
-| `description` | string | いいえ | プロジェクト簡略説明                                     |
-| `authors`     | array  | いいえ | 著者リスト                                               |
-| `license`     | string | いいえ | ライセンス識別子                                         |
+| フィールド    | 型     | 必須   | 説明                                                                   |
+| ------------- | ------ | ------ | ---------------------------------------------------------------------- |
+| `name`        | string | はい   | プロジェクト名（命名規則に従う：小文字アルファベット、数字、ハイフン） |
+| `version`     | string | はい   | セマンティックバージョニング（semver 仕様に準拠）                      |
+| `description` | string | いいえ | プロジェクトの簡単な説明                                               |
+| `authors`     | array  | いいえ | 著者リスト                                                             |
+| `license`     | string | いいえ | ライセンス識別子                                                       |
 
 ### 例
 
@@ -42,13 +42,13 @@ license = "MIT"
 name = "my-awesome-app"
 version = "1.2.3"
 description = "素晴らしいアプリケーション"
-authors = ["三人 <zhangsan@example.com>"]
+authors = ["张三 <zhangsan@example.com>"]
 license = "MIT"
 ```
 
 ## 依存関係の宣言
 
-### シンプルバージョン
+### 簡易バージョン
 
 ```toml
 [dependencies]
@@ -60,36 +60,36 @@ json = "*"
 
 ```toml
 [dependencies]
-# Git 依存関係
+# Git 依存
 http = { version = "1.0.0", git = "https://github.com/example/http" }
 
-# ローカルパス依存関係
+# ローカルパス依存
 utils = { version = "0.1.0", path = "./utils" }
 
-# ブランチ付き Git 依存関係
+# ブランチ付き Git 依存
 bleeding-edge = { git = "https://github.com/example/edge", branch = "main" }
 ```
 
 ### 依存関係フィールドの説明
 
-| フィールド | タイプ | 説明           |
-| ---------- | ------ | -------------- |
-| `version`  | string | バージョン番号 |
-| `git`      | string | Gitリポジトリ  |
-| `branch`   | string | Gitブランチ    |
-| `path`     | string | ローカルパス   |
+| フィールド | 型     | 説明                               |
+| ---------- | ------ | ---------------------------------- |
+| `version`  | string | バージョン番号またはバージョン範囲 |
+| `git`      | string | Git リポジトリの URL               |
+| `branch`   | string | Git ブランチ名                     |
+| `path`     | string | ローカル相対パス                   |
 
 ## バージョン番号の構文
 
-| 構文              | 説明             | 例                  |
-| ----------------- | ---------------- | ------------------- |
-| `*`               | 任意バージョン   | `"*"`               |
-| `1.0.0`           | 正確バージョン   | `"1.0.0"`           |
-| `>=1.0.0`         | 最低バージョン   | `">=1.0.0"`         |
-| `<2.0.0`          | 最高バージョン   | `"<2.0.0"`          |
-| `>=1.0.0, <2.0.0` | 範囲バージョン   | `">=1.0.0, <2.0.0"` |
-| `~1.0.0`          | 互換バージョン   | `"~1.0.0"`          |
-| `^1.0.0`          | caret バージョン | `"^1.0.0"`          |
+| 構文              | 説明               | 例                  |
+| ----------------- | ------------------ | ------------------- |
+| `*`               | 任意バージョン     | `"*"`               |
+| `1.0.0`           | 完全一致バージョン | `"1.0.0"`           |
+| `>=1.0.0`         | 最低バージョン     | `">=1.0.0"`         |
+| `<2.0.0`          | 最高バージョン     | `"<2.0.0"`          |
+| `>=1.0.0, <2.0.0` | 範囲バージョン     | `">=1.0.0, <2.0.0"` |
+| `~1.0.0`          | 互換バージョン     | `"~1.0.0"`          |
+| `^1.0.0`          | caret バージョン   | `"^1.0.0"`          |
 
 ## 完全な例
 
@@ -97,7 +97,7 @@ bleeding-edge = { git = "https://github.com/example/edge", branch = "main" }
 [package]
 name = "web-server"
 version = "0.1.0"
-description = "シンプルなWebサーバー"
+description = "シンプルな Web サーバー"
 authors = ["開発者 <dev@example.com>"]
 license = "MIT"
 

@@ -4,7 +4,6 @@
 
 pub mod conflict;
 pub mod git;
-pub mod module_resolver;
 pub mod resolver;
 
 #[cfg(test)]

@@ -1,11 +1,11 @@
 ---
 title: '格式化规则总览'
-description: YaoXiang 代码格式化规则的分类和索引
+description: 'YaoXiang 代码格式化规则的分类和索引'
 ---
 
 # 格式化规则
 
-本节定义了 `yaoxiang fmt` 的所有格式化规则。规则按主题分类如下：
+本节定义了 `yx format` 的所有格式化规则。规则按主题分类如下：
 
 ---
 

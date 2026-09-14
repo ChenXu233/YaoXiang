@@ -1,40 +1,40 @@
-# Error Codes Reference
+# Error Code Reference
 
 > Auto-generated from `src/util/diagnostic/codes/`
 
-The YaoXiang compiler uses a unified error code system, where each error code contains:
+The YaoXiang compiler uses a unified error code system. Each error code includes:
 
 - **Code**: Error identifier (e.g., `E1001`)
-- **Category**: Compilation phase the error belongs to
-- **Title**: Short description of the error
+- **Category**: Phase to which the error belongs
+- **Title**: Brief description of the error
 - **Message**: Detailed error message
 - **Help**: Possible solutions
 
 ## Error Code List
 
-| Prefix | Category     | Description               |
-| ------ | ------------ | ------------------------- |
-| E0xxx  | Lexer/Parser | Lexer and parser errors   |
-| E1xxx  | TypeCheck    | Type checking errors      |
-| E2xxx  | Semantic     | Semantic analysis errors  |
-| E4xxx  | Generic      | Generics and trait errors |
-| E5xxx  | Module       | Module and import errors  |
-| E6xxx  | Runtime      | Runtime errors            |
-| E7xxx  | I/O          | I/O and system errors     |
-| E8xxx  | Internal     | Internal compiler errors  |
+| Prefix | Category     | Description                        |
+| ------ | ------------ | ---------------------------------- |
+| E0xxx  | Lexer/Parser | Lexical and syntax analysis errors |
+| E1xxx  | TypeCheck    | Type checking errors               |
+| E2xxx  | Semantic     | Semantic analysis errors           |
+| E4xxx  | Generic      | Generics and Trait errors          |
+| E5xxx  | Module       | Module and import errors           |
+| E6xxx  | Runtime      | Runtime errors                     |
+| E7xxx  | I/O          | I/O and system errors              |
+| E8xxx  | Internal     | Internal compiler errors           |
 
-## Usage
+## Usage Instructions
 
-### CLI Commands
+### CLI Command
 
-Use the `yaoxiang explain` command to view error details:
+Use the `yx explain` command to view error details:
 
 ```bash
 # View error details
-yaoxiang explain E1001
+yx explain E1001
 
 # JSON format output
-yaoxiang explain E1001 --json
+yx explain E1001 --json
 ```
 
 ### In Code
@@ -42,7 +42,7 @@ yaoxiang explain E1001 --json
 ```rust
 use yaoxiang::util::diagnostic::{ErrorCodeDefinition, I18nRegistry};
 
-// Find the error code and retrieve title and help info via I18nRegistry
+// Find the error code, and obtain the title and help information through I18nRegistry
 let i18n = I18nRegistry::default();
 
 if let Some(code) = ErrorCodeDefinition::find("E1001") {

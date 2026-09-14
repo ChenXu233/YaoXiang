@@ -4,13 +4,8 @@
 //! - 类型推断
 //! - 常量计算
 
-use lsp_types::{InlayHint, InlayHintKind, InlayHintLabel, InlayHintParams};
-
-use crate::frontend::core::parser::ast::{BinOp, Expr, Literal, StmtKind};
-use crate::lsp::handlers::inlay_hint::{
-    handle_inlay_hint, simple_infer_type, evaluate_constant,
-};
-use crate::lsp::session::Session;
+use crate::frontend::core::parser::ast::{BinOp, Expr, Literal};
+use crate::lsp::handlers::inlay_hint::{simple_infer_type, evaluate_constant};
 
 #[test]
 fn test_simple_infer_type() {

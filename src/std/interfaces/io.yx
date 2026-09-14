@@ -1,0 +1,31 @@
+// io.yx - 标准库 std.io 模块接口
+// 仅供 LSP 跳转和类型查看，不参与实际执行
+
+print: (...args) -> Void = {
+    ...
+}
+
+println: (...args) -> () = {
+    ...
+}
+
+read_line: () -> String = {
+    ...
+}
+
+read_file: (path: &String) -> String = {
+    ...
+}
+
+write_file: (path: &String, content: &String) -> Bool = {
+    ...
+}
+
+append_file: (path: &String, content: &String) -> Bool = {
+    ...
+}
+
+format_fallback: (value, type_name: &String) -> String = {
+    ...
+}
+

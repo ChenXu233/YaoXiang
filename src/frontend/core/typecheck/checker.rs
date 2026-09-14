@@ -56,6 +56,15 @@ pub struct TypeChecker {
     /// RFC-011a §3: 已声明方法签名 (类型名, 方法名) -> 签名。
     /// 同签名重复声明 = 覆盖 → E1100；不同签名 = 重载 → 放行。
     declared_methods: HashMap<(String, String), MonoType>,
+    /// #321 W1003: 导入的本地名 → use 语句位置（pass2 use elaboration 登记，
+    /// 供模块尾统一判定未使用导入；重复登记由发射处去重）。
+    imported_names: Vec<(String, crate::util::span::Span)>,
+    /// #321 W1003: 导入名监视集（本地名 → 报告名）。整体导入的导出成员
+    /// （如 `use std.io` 后裸调 `print`）同样映射到模块别名，命中即视为导入已使用。
+    import_watch: HashMap<String, String>,
+    /// #321 W1003: pass2 解析路径标记的已使用名（类型/方法外部绑定等
+    /// 不经 body_checker Var 推断臂的引用点），发射时与 body 侧并集。
+    import_used: HashSet<String>,
 }
 
 /// RFC-011a: 类型体应用项 `Animal(Dog)` 的待决接口实例化。
@@ -91,6 +100,9 @@ impl TypeChecker {
             type_definition_bodies: HashMap::new(),
             pending_interface_instantiations: Vec::new(),
             declared_methods: HashMap::new(),
+            imported_names: Vec::new(),
+            import_watch: HashMap::new(),
+            import_used: HashSet::new(),
         }
     }
 
@@ -361,6 +373,11 @@ impl TypeChecker {
                 .add_var(name, poly, false, crate::util::span::Span::default());
         }
 
+        // #321 W1003：模块级导入名监视集注入（函数体级 use 由 process_use_stmt 自行登记）
+        let module_import_watch = self.import_watch.clone();
+        self.body_checker_mut()
+            .set_import_watch(module_import_watch);
+
         // 第三遍：检查所有语句（包括函数体）
         for stmt in &module.items {
             // #324：模块级阶段挂当前语句 span，诊断自动获得位置
@@ -405,6 +422,12 @@ impl TypeChecker {
                 .as_ref()
                 .map(|bc| bc.var_type_ledger().clone())
                 .unwrap_or_default();
+            // #335 G3 类型信息流接口：调用点所有权解析表随 ledger 一并移交
+            let call_ownership = self
+                .body_checker
+                .as_ref()
+                .map(|bc| bc.call_ownership.clone())
+                .unwrap_or_default();
             let mut proof_ctx =
                 crate::frontend::core::typecheck::proof::context::ProofContext::new(&self.env);
             let (ownership_results, plan, escaped_refs) = super::layers::ownership::check_ownership(
@@ -412,11 +435,16 @@ impl TypeChecker {
                 module,
                 &self.env,
                 &ledger,
+                &call_ownership,
             );
             for result in ownership_results {
                 match result {
                     ProofResult::Proved => {}
                     ProofResult::Disproved(model) => {
+                        // SpawnCycleViolation 的检测发生在全模块 ref 图上，模型无
+                        // 语句级 span——挂模块 span 兜底，避免 spanless 构造在
+                        // build() 走 debug panic / release 降级 E8001（显式 .at() 仍优先）
+                        let _model_guard = crate::util::diagnostic::push_current_span(module.span);
                         self.add_error(model.into_diagnostic());
                     }
                     ProofResult::Unproven { .. } => {}
@@ -494,6 +522,9 @@ impl TypeChecker {
             Vec::new()
         };
 
+        // #321 W1003：未使用导入警告（Warning 级，不阻断编译，经 warnings 通道流出）
+        let import_warnings = self.collect_unused_import_warnings(module);
+
         TypeCheckResult {
             module_name: self.env.module_name.clone(),
             diagnostics,
@@ -508,6 +539,7 @@ impl TypeChecker {
             existential_coercions,
             implementation_proofs: self.env.implementation_proofs.clone(),
             module_namespaces: std::mem::take(&mut self.module_namespaces),
+            warnings: import_warnings,
         }
     }
 
@@ -988,6 +1020,9 @@ impl TypeChecker {
                         // use path (无 items，无 alias) → 提取 path 最后部分作为模块别名
                         (None, None) => {
                             let module_alias = path.split('.').next_back().unwrap_or(path);
+                            // #321 W1003：登记导入本地名与导出成员监视
+                            self.record_import_name(module_alias, stmt.span);
+                            self.watch_import_members(module_alias, &module);
                             // 登记用户模块命名空间别名（std 走 is_std_submodule 机制，不入此表）
                             if !(path == "std" || path.starts_with("std.")) {
                                 self.module_namespaces
@@ -1003,6 +1038,9 @@ impl TypeChecker {
                         // use path as alias → 整个模块用别名注册
                         (None, Some(aliases)) if aliases.len() == 1 => {
                             let alias_name = &aliases[0];
+                            // #321 W1003：登记导入本地名与导出成员监视
+                            self.record_import_name(alias_name, stmt.span);
+                            self.watch_import_members(alias_name, &module);
                             // 登记用户模块命名空间别名（std 走 is_std_submodule 机制，不入此表）
                             if !(path == "std" || path.starts_with("std.")) {
                                 self.module_namespaces
@@ -1023,6 +1061,11 @@ impl TypeChecker {
                                     .as_ref()
                                     .and_then(|v| v.get(i))
                                     .and_then(|a| a.as_ref());
+                                // #321 W1003：登记导入本地名（内联别名优先）
+                                match local_name {
+                                    Some(local) => self.record_import_name(local, stmt.span),
+                                    None => self.record_import_name(item_name, stmt.span),
+                                }
                                 match local_name {
                                     Some(local) => self.register_use_export(local, export, true),
                                     None => self.register_use_export(item_name, export, false),
@@ -1032,6 +1075,8 @@ impl TypeChecker {
                         // 其他情况：报错或回退
                         _ => {
                             for export in exports_to_import {
+                                // #321 W1003：登记导入本地名
+                                self.record_import_name(&export.name, stmt.span);
                                 self.register_use_export(path, export, false);
                             }
                         }
@@ -1079,12 +1124,17 @@ impl TypeChecker {
                     }
                     _ => return,
                 };
-                if let Some(poly) = self.env.get_var(&func_name) {
+                let found = self.env.get_var(&func_name).map(|poly| {
                     let total = match &poly.body {
                         MonoType::Fn { params, .. } => params.len(),
                         _ => 0,
                     };
-                    let fn_ty = poly.body.clone();
+                    (total, poly.body.clone())
+                });
+                if let Some((total, fn_ty)) = found {
+                    // #321 W1003：绑定为方法的导入函数视为已使用（pass2 解析，
+                    // 不经 body_checker 的 Var 推断臂）
+                    self.note_import_use(&func_name);
                     if let Some(positions) =
                         self.normalize_binding_positions(&positions, total, *span)
                     {
@@ -1456,6 +1506,8 @@ impl TypeChecker {
         let Some((total, fn_ty)) = found else {
             return;
         };
+        // #321 W1003：类型体外部绑定解析的导入函数视为已使用（pass2 解析）
+        self.note_import_use(func_name);
         if let Some(positions) = self.normalize_binding_positions(positions, total, span) {
             let method_ty = Self::method_type_after_binding(&fn_ty, &positions);
             self.env
@@ -1569,6 +1621,73 @@ impl TypeChecker {
                 self.env.add_var(register_name, PolyType::mono(ty));
             }
         }
+    }
+
+    /// #321 W1003：登记导入的本地名（pass2 use elaboration 处调用；
+    /// 重复登记由发射处按名去重，首次出现的位置优先呈现）
+    fn record_import_name(
+        &mut self,
+        name: &str,
+        span: crate::util::span::Span,
+    ) {
+        self.imported_names.push((name.to_string(), span));
+        self.import_watch.insert(name.to_string(), name.to_string());
+    }
+
+    /// #321 W1003：整体导入（`use std.io` / `use std.io as i`）的成员监视——
+    /// 导出成员名（print 等）解析命中同样使模块别名视为已使用，
+    /// 覆盖"导入模块后裸调导出函数"的常见形态（native 注册路径）。
+    fn watch_import_members(
+        &mut self,
+        alias: &str,
+        module: &crate::frontend::module::ModuleInfo,
+    ) {
+        for name in module.exports.keys() {
+            self.import_watch.insert(name.clone(), alias.to_string());
+        }
+    }
+
+    /// #321 W1003：pass2 解析点命中监视集时标记对应导入已使用
+    fn note_import_use(
+        &mut self,
+        name: &str,
+    ) {
+        if let Some(report_as) = self.import_watch.get(name) {
+            let report_as = report_as.clone();
+            self.import_used.insert(report_as);
+        }
+    }
+
+    /// #321 W1003：汇总未使用导入（模块级 + 函数体级），产出 Warning 诊断。
+    ///
+    /// 使用判定三层并集：① 表达式解析（body_checker 导入监视集命中，作用域
+    /// 感知）；② pass2 解析点（外部绑定等）；③ 语法级兜底
+    /// [`DeadCodeAnalyzer::collect_ident_refs`]——match 模式、spawn 体、类型
+    /// 注解等 Var 推断臂看不到的引用位置，宁多收（漏报方向）不漏收（误报方向）。
+    /// 诊断进 TypeCheckResult.warnings 通道——混入 diagnostics 会被管线按错误
+    /// 计数，破坏非阻断契约。
+    fn collect_unused_import_warnings(
+        &mut self,
+        module: &crate::frontend::core::parser::ast::Module,
+    ) -> Vec<Diagnostic> {
+        let (body_imports, used_refs) = match self.body_checker.as_mut() {
+            Some(bc) => bc.drain_import_tracking(),
+            None => (Vec::new(), HashSet::new()),
+        };
+        let mut used = used_refs;
+        // pass2 解析点（外部绑定等）标记的已使用名与 body 侧并集
+        used.extend(std::mem::take(&mut self.import_used));
+        // 语法级兜底：模式/类型注解/spawn 体等位置的标识符引用
+        used.extend(super::passes::dead_code::DeadCodeAnalyzer::collect_ident_refs(module));
+        let mut seen = HashSet::new();
+        let mut warnings = Vec::new();
+        for (name, span) in self.imported_names.iter().chain(body_imports.iter()) {
+            if used.contains(name) || !seen.insert(name.clone()) {
+                continue;
+            }
+            warnings.push(ErrorCodeDefinition::unused_import(name).at(*span).build());
+        }
+        warnings
     }
 
     /// 添加类型定义
@@ -2347,11 +2466,21 @@ impl TypeChecker {
         }
 
         // 阶段 2：遍历赋值点，生成 VC
+        let mut vc_diags = Vec::new();
         for stmt in &module.items {
             // #324：模块级阶段挂当前语句 span，诊断自动获得位置
             let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
-            self.check_assignments_with_deps(stmt, &dep_graph, &mut shared_ctx, proof_calls);
+            self.check_assignments_with_deps(
+                stmt,
+                &dep_graph,
+                &mut shared_ctx,
+                proof_calls,
+                &mut vc_diags,
+            );
         }
+
+        // VC 证伪诊断汇入（shared_ctx 已释放，#263 同款时序）
+        self.env.errors.extend_errors(vc_diags);
 
         // #263：精化解析诊断汇入（shared_ctx 已不再被使用，借用结束）
         self.env.errors.extend_errors(refined_diags);
@@ -2387,24 +2516,29 @@ impl TypeChecker {
                         args,
                     } = constraint
                     {
-                        let call_args: Vec<crate::frontend::core::types::ConstValue> = args
-                            .iter()
-                            .filter_map(|a| {
-                                if let crate::frontend::core::types::const_data::ConstExpr::Lit(v) =
-                                    a
-                                {
-                                    Some(v.clone())
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect();
-                        proof_calls.push(
+                        // 仅全 Lit 实参发射执行调用；含变量实参（NamedVar 等）
+                        // 编译期不可取值，留给 check_predicate/VC 符号化管道——
+                        // 此前 filter_map 静默丢非 Lit 实参，产出无参调用、
+                        // 参数在解释器里读成 Void 错译
+                        let mut call_args: Vec<crate::frontend::core::types::ConstValue> =
+                            Vec::new();
+                        let mut all_literal = true;
+                        for a in args {
+                            if let crate::frontend::core::types::const_data::ConstExpr::Lit(v) = a {
+                                call_args.push(v.clone());
+                            } else {
+                                all_literal = false;
+                                break;
+                            }
+                        }
+                        if all_literal {
+                            proof_calls.push(
                             crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall {
                                 func_name: func.clone(),
                                 args: call_args,
                             },
                         );
+                        }
                     }
                     let free_vars = Self::extract_free_vars(constraint);
                     for fv in &free_vars {
@@ -2595,6 +2729,7 @@ impl TypeChecker {
         dep_graph: &crate::frontend::core::typecheck::proof::dep_graph::TypeDepGraph,
         shared_ctx: &mut crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
         proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
+        diags: &mut Vec<Diagnostic>,
     ) {
         use crate::frontend::core::parser::ast::{StmtKind, Expr};
 
@@ -2608,17 +2743,35 @@ impl TypeChecker {
                 if let Expr::Var(name, _) = target.as_ref() {
                     let affected = dep_graph.affected_by(name);
                     if !affected.is_empty() {
-                        self.generate_vc_for_dependants(name, &affected, shared_ctx, proof_calls);
+                        self.generate_vc_for_dependants(
+                            name,
+                            &affected,
+                            shared_ctx,
+                            proof_calls,
+                            diags,
+                        );
                     }
                 }
                 // 递归处理 Lambda/Block 函数体
                 if let Expr::Lambda { body, .. } = v.as_ref() {
                     for s in &body.stmts {
-                        self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                        self.check_assignments_with_deps(
+                            s,
+                            dep_graph,
+                            shared_ctx,
+                            proof_calls,
+                            diags,
+                        );
                     }
                 } else if let Expr::Block(block) = v.as_ref() {
                     for s in &block.stmts {
-                        self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                        self.check_assignments_with_deps(
+                            s,
+                            dep_graph,
+                            shared_ctx,
+                            proof_calls,
+                            diags,
+                        );
                     }
                 }
             }
@@ -2629,22 +2782,34 @@ impl TypeChecker {
                 ..
             } => {
                 for s in &then_branch.stmts {
-                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls, diags);
                 }
                 for (_, body) in else_if_branches {
                     for s in &body.stmts {
-                        self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                        self.check_assignments_with_deps(
+                            s,
+                            dep_graph,
+                            shared_ctx,
+                            proof_calls,
+                            diags,
+                        );
                     }
                 }
                 if let Some(else_body) = else_branch {
                     for s in &else_body.stmts {
-                        self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                        self.check_assignments_with_deps(
+                            s,
+                            dep_graph,
+                            shared_ctx,
+                            proof_calls,
+                            diags,
+                        );
                     }
                 }
             }
             StmtKind::For { body, .. } => {
                 for s in &body.stmts {
-                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls, diags);
                 }
             }
             _ => {}
@@ -2662,6 +2827,7 @@ impl TypeChecker {
         affected: &[&str],
         shared_ctx: &crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
         proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
+        diags: &mut Vec<Diagnostic>,
     ) {
         for dependant in affected {
             // 从环境中查找 dependant 的类型
@@ -2683,12 +2849,22 @@ impl TypeChecker {
                             // VC 成立
                         }
                         ProofResult::Disproved(model) => {
-                            tracing::warn!(
-                                "VC 失败：变量 {} 被赋值后，{} 不满足类型 {}: 反例 {:?}",
-                                assigned_var,
-                                dependant,
-                                constraint,
-                                model.assignments,
+                            // 证伪即编译错误：反例进诊断，不再 tracing log 吞掉
+                            let counterexample = model
+                                .assignments
+                                .iter()
+                                .map(|(k, v)| format!("{k}={v}"))
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            let constraint_str = constraint.to_string();
+                            diags.push(
+                                ErrorCodeDefinition::refined_constraint_violated(
+                                    assigned_var,
+                                    dependant,
+                                    &constraint_str,
+                                    &counterexample,
+                                )
+                                .build(),
                             );
                         }
                         ProofResult::Unproven {

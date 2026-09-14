@@ -69,8 +69,8 @@ fn test_init_creates_project_directory_and_files() {
         "tests/ directory should be created"
     );
     assert!(
-        project_path.join(".yaoxiang/std/io.yx").exists(),
-        ".yaoxiang/std/ should contain interface files"
+        project_path.join(".yaoxiang/vendor/std/io.yx").exists(),
+        ".yaoxiang/vendor/std/ should contain interface files (RFC-037 lookup chain level 1)"
     );
 }
 

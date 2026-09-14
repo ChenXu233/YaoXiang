@@ -9,8 +9,8 @@ description: 'Formatting rules for if/else if/else, for loops, while loops, and 
 
 ## §5 Control Flow
 
-**§5.1 if Expression.** A space separates the `if` keyword from the condition, and a space separates
-the condition from the code block.
+**§5.1 if expression.** The `if` keyword is separated from the condition by a space, and the
+condition is separated from the code block by a space.
 
 ```
 // ✅ Correct
@@ -21,7 +21,7 @@ if(condition) { ... }
 if condition{ ... }
 ```
 
-**§5.2 else if/else.** A space separates `else if` and `else` from the previous code block.
+**§5.2 else if/else.** `else if` and `else` are separated from the preceding code block by a space.
 
 ```
 // ✅ Correct
@@ -31,7 +31,8 @@ if a > 0 { ... } else if a < 0 { ... } else { ... }
 if a > 0 { ... }else if a < 0 { ... }else { ... }
 ```
 
-**§5.3 for Loop.** A space separates the `for` keyword, variable, `in` keyword, and iterator.
+**§5.3 for loop.** The `for` keyword, the variable, the `in` keyword, and the iterator are separated
+by spaces.
 
 ```
 // ✅ Correct
@@ -42,7 +43,7 @@ for item in(collection) { ... }
 for(item) in collection { ... }
 ```
 
-**§5.4 while Loop.** A space separates the `while` keyword from the condition.
+**§5.4 while loop.** The `while` keyword is separated from the condition by a space.
 
 ```
 // ✅ Correct
@@ -52,7 +53,7 @@ while condition { ... }
 while(condition) { ... }
 ```
 
-**§5.5 Loop Labels.** The label connects to the loop keyword with `: `.
+**§5.5 Loop labels.** The label is connected to the loop keyword by `: `.
 
 ```
 // ✅ Correct
@@ -65,9 +66,9 @@ while(condition) { ... }
 
 ---
 
-## §5.6 Return Statements
+## §5.6 Return Statement
 
-**§5.6.1 Return Format.** A space separates the `return` keyword from the expression.
+**§5.6.1 Return format.** The `return` keyword is separated from the expression by a space.
 
 ```
 // ✅ Correct
@@ -79,7 +80,7 @@ return(42);  // Missing space
 return  42;  // Extra space
 ```
 
-**§5.6.2 Empty Return.** An empty return uses the `return` keyword directly.
+**§5.6.2 Empty return.** An empty return uses the `return` keyword directly.
 
 ```
 // ✅ Correct
@@ -87,14 +88,14 @@ return;
 
 // ❌ Incorrect
 return ;  // Extra space
-return void;  // void not needed
+return void;  // void is not needed
 ```
 
 ---
 
-## §5.7 Break Statements
+## §5.7 Break Statement
 
-**§5.7.1 Break Format.** A space separates the `break` keyword from the label.
+**§5.7.1 Break format.** The `break` keyword is separated from the label by a space.
 
 ```
 // ✅ Correct
@@ -102,15 +103,15 @@ break;
 break 'outer;
 
 // ❌ Incorrect
-break(outer);  // Wrong syntax
+break(outer);  // Invalid syntax
 break  'outer;  // Extra space
 ```
 
 ---
 
-## §5.8 Continue Statements
+## §5.8 Continue Statement
 
-**§5.8.1 Continue Format.** A space separates the `continue` keyword from the label.
+**§5.8.1 Continue format.** The `continue` keyword is separated from the label by a space.
 
 ```
 // ✅ Correct
@@ -118,6 +119,6 @@ continue;
 continue 'outer;
 
 // ❌ Incorrect
-continue(outer);  // Wrong syntax
+continue(outer);  // Invalid syntax
 continue  'outer;  // Extra space
 ```

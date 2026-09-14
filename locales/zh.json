@@ -663,20 +663,20 @@
     "error_output": "error[E1091]: 泛型元类型自引用不允许：'Type: Type[T] = ...'"
   },
   "W1001": {
-    "title": "未使用的导出函数",
-    "message": "导出的函数从未被调用",
-    "template": "未使用的导出函数：'{name}'",
-    "help": "考虑移除导出或使用该函数",
-    "example": "pub fn dead_function() { }",
-    "error_output": "warning[W1001]: 未使用的导出函数：'dead_function'\n --> example.yx:1:1\n  |\n1 | pub fn dead_function() { }\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 函数从未被使用"
+    "title": "未使用的私有函数",
+    "message": "私有函数从未被调用",
+    "template": "未使用的函数：'{name}'",
+    "help": "函数从未被引用，考虑移除或添加调用；pub 函数是对外接口，不会报此警告",
+    "example": "fn dead_function() { }",
+    "error_output": "warning[W1001]: 未使用的函数：'dead_function'\n --> example.yx:1:1\n  |\n1 | fn dead_function() { }\n  | ^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 函数从未被使用"
   },
   "W1002": {
-    "title": "未使用的导出类型",
-    "message": "导出的类型从未被使用",
-    "template": "未使用的导出类型：'{name}'",
-    "help": "考虑移除导出或使用该类型",
-    "example": "pub type DeadType = Int",
-    "error_output": "warning[W1002]: 未使用的导出类型：'DeadType'\n --> example.yx:1:1\n  |\n1 | pub type DeadType = Int\n  | ^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 类型从未被使用"
+    "title": "未使用的私有类型",
+    "message": "私有类型从未被使用",
+    "template": "未使用的类型：'{name}'",
+    "help": "类型从未被引用，考虑移除或使用该类型；pub 类型是对外接口，不会报此警告",
+    "example": "type DeadType = Int",
+    "error_output": "warning[W1002]: 未使用的类型：'DeadType'\n --> example.yx:1:1\n  |\n1 | type DeadType = Int\n  | ^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 类型从未被使用"
   },
   "W1003": {
     "title": "未使用的导入",
@@ -687,20 +687,20 @@
     "error_output": "warning[W1003]: 未使用的导入：'json'\n --> example.yx:1:1\n  |\n1 | use std.json;\n  | ^^^^^^^^^^^^\n  |\n  = note: 导入从未被使用"
   },
   "W1004": {
-    "title": "未使用的导出变量",
-    "message": "导出的变量从未被使用",
-    "template": "未使用的导出变量：'{name}'",
-    "help": "考虑移除导出或使用该变量",
-    "example": "pub let dead_var = 42;",
-    "error_output": "warning[W1004]: 未使用的导出变量：'dead_var'\n --> example.yx:1:1\n  |\n1 | pub let dead_var = 42;\n  | ^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 变量从未被使用"
+    "title": "未使用的私有变量",
+    "message": "私有变量从未被使用",
+    "template": "未使用的变量：'{name}'",
+    "help": "变量从未被引用，考虑移除或使用该变量；pub 变量是对外接口，不会报此警告",
+    "example": "dead_var = 42",
+    "error_output": "warning[W1004]: 未使用的变量：'dead_var'\n --> example.yx:1:1\n  |\n1 | dead_var = 42\n  | ^^^^^^^^^^^^^\n  |\n  = note: 变量从未被使用"
   },
   "W1005": {
-    "title": "未使用的导出方法",
-    "message": "导出的方法从未被调用",
-    "template": "未使用的导出方法：'{name}'",
-    "help": "考虑移除导出或使用该方法",
-    "example": "pub fn Foo.dead_method() { }",
-    "error_output": "warning[W1005]: 未使用的导出方法：'dead_method'\n --> example.yx:1:1\n  |\n1 | pub fn Foo.dead_method() { }\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 方法从未被使用"
+    "title": "未使用的私有方法",
+    "message": "私有方法从未被调用",
+    "template": "未使用的方法：'{name}'",
+    "help": "方法从未被引用，考虑移除或添加调用；pub 方法是对外接口，不会报此警告",
+    "example": "fn Foo.dead_method() { }",
+    "error_output": "warning[W1005]: 未使用的方法：'dead_method'\n --> example.yx:1:1\n  |\n1 | fn Foo.dead_method() { }\n  | ^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 方法从未被使用"
   },
   "E2014": {
     "title": "使用已移动的值",
@@ -751,6 +751,16 @@
     "title": "顶层绑定初始化必须为常量",
     "template": "顶层绑定 '{name}' 的初始化必须是编译期常量表达式",
     "help": "顶层绑定是编译期常量（访问器函数直接返回折叠值），不支持运行时计算的初始化。请把计算改为字面量/常量运算，或移入函数体内。"
+  },
+  "E3008": {
+    "title": "不支持的 match 模式",
+    "template": "match 模式 '{pattern}' 尚未实现：当前仅支持字面量与通配符（_）模式",
+    "help": "变体解构（ok(v)/err(e)/some(x)）、结构体、元组、或模式与守卫尚未落地（RFC-039 规划中），此前实现会静默错译，现改为编译期拒绝。处理 Result 请改用 `?` 运算符。"
+  },
+  "E3018": {
+    "title": "单态化实例化失败",
+    "template": "泛型 '{func}' 实例化失败：{reason}",
+    "help": "单态化器无法按类型实参生成特化版本（常见原因：类型实参数量与泛型参数不匹配）。此前此错误被静默跳过，只在运行时报「函数表缺失」。"
   },
   "E3014": {
     "title": "寄存器溢出",
@@ -947,5 +957,10 @@
     "message": "spawn 块内检测到引用形成循环",
     "template": "spawn 内引用循环: {cycle}",
     "help": "spawn 捕获的引用不能形成循环依赖，请检查捕获列表"
+  },
+  "E2030": {
+    "title": "精化类型约束违反",
+    "template": "对 '{assigned}' 赋值后，'{var}' 不再满足精化类型约束：{constraint}（反例：{counterexample}）",
+    "help": "精化类型标注要求依赖变量在相关赋值之后仍然满足谓词约束。请调整赋值使约束成立，或放宽类型标注。"
   }
 }

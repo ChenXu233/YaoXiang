@@ -196,13 +196,13 @@ result = sqrt(16.0)  // 4.0
 
 ```bash
 # 运行脚本
-yaoxiang run hello.yx
+yx run hello.yx
 
 # 构建字节码
-yaoxiang build hello.yx -o hello.42
+yx build hello.yx -o hello.42
 
 # 解释执行
-yaoxiang eval 'println("Hello")'
+yx eval 'println("Hello")'
 
 # 查看帮助
 yaoxiang --help

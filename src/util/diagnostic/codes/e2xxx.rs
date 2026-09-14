@@ -43,4 +43,7 @@ define_codes!(E2XXX, {
     ("E2095", Semantic, false, invalid_signature_param_shadows_generic(name: &str) => .param("name", name)),
     // E2029 spawn 内 ref 循环
     ("E2029", Semantic, false, spawn_ref_cycle(cycle: &str) => .param("cycle", cycle)),
+    // E2030 精化类型约束违反（赋值后依赖变量 VC 被 SMT 证伪——
+    // 此前仅 tracing log 吞掉，静默放行违反约束的程序）
+    ("E2030", Semantic, false, refined_constraint_violated(assigned: &str, var: &str, constraint: &str, counterexample: &str) => .param("assigned", assigned).param("var", var).param("constraint", constraint).param("counterexample", counterexample)),
 });

@@ -1,11 +1,11 @@
 ---
-title: CI 統合ガイド
-description: yaoxiang check と yaoxiang format を CI/CD パイプラインに統合する
+title: 'CI 統合ガイド'
+description: 'yx check と yx format を CI/CD パイプラインに統合する'
 ---
 
 # CI 統合ガイド
 
-YaoXiang の静的チェックとフォーマットのツールを CI/CD パイプラインに統合して、コード品質を確保します。
+YaoXiang の静的チェックとフォーマットツールを CI/CD パイプラインに統合し、コード品質を確保します。
 
 ## GitHub Actions
 
@@ -26,14 +26,14 @@ jobs:
 
       - name: Install YaoXiang
         run: |
-          curl -fsSL https://yaoxiang.dev/install.sh | sh
+          curl -fsSL https://raw.githubusercontent.com/ChenXu233/YaoXiang/main/scripts/install/install.sh | sh
           echo "$HOME/.yaoxiang/bin" >> $GITHUB_PATH
 
       - name: Type check
-        run: yaoxiang check --color never --no-progress
+        run: yx check --color never --no-progress
 
       - name: Format check
-        run: yaoxiang format --dry-run .
+        run: yx format --dry-run .
 ```
 
 ## GitLab CI
@@ -42,10 +42,11 @@ jobs:
 yaoxiang-check:
   image: rust:latest
   script:
-    - curl -fsSL https://yaoxiang.dev/install.sh | sh
+    - curl -fsSL
+      https://raw.githubusercontent.com/ChenXu233/YaoXiang/main/scripts/install/install.sh | sh
     - export PATH="$HOME/.yaoxiang/bin:$PATH"
-    - yaoxiang check --color never --no-progress
-    - yaoxiang format --dry-run .
+    - yx check --color never --no-progress
+    - yx format --dry-run .
   rules:
     - if: $CI_MERGE_REQUEST_IID
     - if: $CI_COMMIT_BRANCH == "main"
@@ -54,26 +55,27 @@ yaoxiang-check:
 
 ## 終了コード
 
-| 終了コード | 意味                         | CI の動作  |
-| ---------- | ---------------------------- | ---------- |
-| `0`        | エラーなし                   | 通過       |
-| `1`        | チェックでエラーが検出       | 失敗       |
-| `2`        | `.yx` ファイルが見つからない | 設定に依存 |
+| 終了コード | 意味                                                                          | CI の動作  |
+| ---------- | ----------------------------------------------------------------------------- | ---------- |
+| `0`        | エラーなし                                                                    | 合格       |
+| `1`        | チェックでエラーが発見された、または `--deny-warnings` 指定時に警告が存在する | 失敗       |
+| `2`        | `.yx` ファイルが見つからない                                                  | 設定による |
 
-## JSON 出力の解析
+## JSON 出力のパース
 
-`--json` を使用して機械可読な出力を取得します：
+機械可読の出力には `--json` を使用します：
 
 ```bash
-yaoxiang check --json | jq '.error_count'
+yx check --json | jq '.error_count'
 ```
 
 ## ベストプラクティス
 
-1. **パス引数**：`yaoxiang check`
-   はデフォルトでカレントディレクトリをチェックし、特定のパスを指定できます：`yaoxiang check src/`
+1. **パスパラメータ**：`yx check`
+   はデフォルトで現在のディレクトリをチェックしますが、パスを指定することもできます：`yx check src/`
 2. **チェックとフォーマットの分離**：`check` と `format --dry-run`
-   を別々に実行すると、問題の特定が容易になります
-3. **`--no-progress` の使用**：CI 環境では進捗バーが不要です
-4. **`--color never` の使用**：ANSI カラーコードをログに混入させてを防ぎます
-5. **依存関係のキャッシュ**：CI のキャッシュ機能を活用してビルドを高速化します
+   をそれぞれ実行し、問題の特定を容易にします
+3. **`--no-progress` を使用**：CI 環境ではプログレスバーは不要です
+4. **`--color never` を使用**：ANSI カラーコードによるログの汚染を防止します
+5. **厳格モード**：`--deny-warnings` を追加して、警告も CI を失敗させるようにします
+6. **依存関係のキャッシュ**：CI のキャッシュ機構を利用してビルドを高速化します

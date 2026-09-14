@@ -1,0 +1,15 @@
+// concurrent.yx - 标准库 std.concurrent 模块接口
+// 仅供 LSP 跳转和类型查看，不参与实际执行
+
+sleep: (millis: Int) -> Void = {
+    ...
+}
+
+thread_id: () -> String = {
+    ...
+}
+
+yield_now: () -> Void = {
+    ...
+}
+

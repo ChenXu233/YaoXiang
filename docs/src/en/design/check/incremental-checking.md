@@ -1,25 +1,25 @@
 ---
-title: Incremental Check
-description: Design of YaoXiang check incremental checking
+title: 'Incremental Checking'
+description: 'YaoXiang check Incremental Checking Design'
 ---
 
-# Incremental Check
+# Incremental Checking
 
-## Problem Statement
+## Problem Description
 
-In watch mode, any file change triggers a re-check of all files (full recheck), and debouncing uses
-busy-wait (checking every 50ms), causing CPU idle spinning.
+In watch mode, any file change triggers a full re-check of all files (full re-check), and the
+debounce uses busy-wait (checking every 50ms), causing the CPU to spin idle.
 
 ## Solution
 
-Use `CheckSession` to manage incremental check state, leveraging
+Use `CheckSession` to manage incremental checking state, leveraging
 `ModuleDependencyGraph::affected_modules` to only re-check affected files.
 
 ## Implementation Flow
 
 ```text
 First check:
-  Full check → Cache dependency graph + check result for each module
+  Full check → Cache dependency graph + check results for each module
 
 File change:
   1. affected_modules(changed_files) → Find affected modules
@@ -44,12 +44,12 @@ impl CheckSession {
 
 ## Known Limitations
 
-- Watch mode still uses busy-wait debouncing (`Instant::now()` + `recv_timeout` in `command.rs`)
-- `check_incremental` internally still calls `check_files_with_diagnostics` (full path), not truly
-  leveraging incremental checking
+- watch mode still uses busy-wait debounce (`Instant::now()` + `recv_timeout` in `command.rs`)
+- `check_incremental` internally still calls `check_files_with_diagnostics` (full-check path), not
+  truly utilizing incremental checking
 
 ## Future Work
 
-- A2/P1: Replace busy-wait debouncing with `HotReloader`
-- P2/P3: Integrate watch mode with `CheckSession` for true incremental checking
-- T9: Incremental check correctness tests
+- A2/P1: Replace busy-wait debounce with `HotReloader`
+- P2/P3: Integrate watch mode with `CheckSession` to achieve true incremental checking
+- T9: Correctness tests for incremental checking

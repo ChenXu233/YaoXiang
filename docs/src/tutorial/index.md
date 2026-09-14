@@ -1,6 +1,6 @@
 ---
 title: '教程'
-description: 系统学习 YaoXiang 核心概念
+description: '系统学习 YaoXiang 核心概念'
 ---
 
 # 欢迎来到爻象宇宙！

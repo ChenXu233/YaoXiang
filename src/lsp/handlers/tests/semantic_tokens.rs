@@ -12,12 +12,8 @@
 //! - Diff 算法
 //! - 缓存管理
 
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
-
 use lsp_types::{
-    SemanticToken, SemanticTokens, SemanticTokensDelta, SemanticTokensEdit,
-    SemanticTokensFullDeltaResult, SemanticTokensParams, SemanticTokensResult,
+    SemanticToken, SemanticTokensFullDeltaResult, SemanticTokensParams, SemanticTokensResult,
 };
 
 use crate::frontend::core::typecheck::semantic_db::SemanticDB;
@@ -224,8 +220,7 @@ fn test_utf16_offsets_for_semantic_tokens() {
         partial_result_params: Default::default(),
     };
 
-    let result =
-        handle_semantic_tokens_full(&db, &mut cache, Some(document_text), params).unwrap();
+    let result = handle_semantic_tokens_full(&db, &mut cache, Some(document_text), params).unwrap();
 
     let SemanticTokensResult::Tokens(tokens) = result else {
         panic!("Expected Tokens variant");

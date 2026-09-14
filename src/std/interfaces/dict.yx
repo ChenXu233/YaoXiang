@@ -1,0 +1,43 @@
+// dict.yx - 标准库 std.dict 模块接口
+// 仅供 LSP 跳转和类型查看，不参与实际执行
+
+get: (K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Any = {
+    ...
+}
+
+set: (K: Type, V: Type)(dict: Dict(K, V), key: Any, value: Any) -> Dict(K, V) = {
+    ...
+}
+
+has: (K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Bool = {
+    ...
+}
+
+values: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C) = {
+    ...
+}
+
+keys: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C) = {
+    ...
+}
+
+entries: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C) = {
+    ...
+}
+
+delete: (K: Type, V: Type)(dict: Dict(K, V), key: Any) -> Dict(K, V) = {
+    ...
+}
+
+len: (K: Type, V: Type)(dict: &Dict(K, V)) -> Int = {
+    ...
+}
+
+is_empty: (K: Type, V: Type)(dict: &Dict(K, V)) -> Bool = {
+    ...
+}
+
+merge: (A: Type, B: Type)(a: &Dict(A, B), b: &Dict(A, B)) -> Dict(A, B) = {
+    ...
+}
+

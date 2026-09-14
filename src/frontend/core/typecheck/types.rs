@@ -40,6 +40,9 @@ pub struct TypeCheckResult {
     /// 用户模块命名空间别名表（别名 → 模块限定键）。
     /// 模块解析归 typecheck 所有：由整体导入（`use lib` / `use lib as l`）登记，IR 生成直接消费。
     pub module_namespaces: HashMap<String, String>,
+    /// 警告诊断（#321：未使用导入 W1003 等，Warning 级、不阻断编译）。
+    /// 与 diagnostics 分离——混入会被管线按错误计数，破坏非阻断契约。
+    pub warnings: Vec<crate::util::diagnostic::Diagnostic>,
 }
 
 /// 导入信息

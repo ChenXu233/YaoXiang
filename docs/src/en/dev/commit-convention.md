@@ -1,4 +1,4 @@
-# Commit Submission Guidelines
+# Commit Submission Guide
 
 This document defines the Git commit conventions for the YaoXiang project, aiming to keep the commit
 history clear, readable, and easy to understand.
@@ -9,11 +9,11 @@ history clear, readable, and easy to understand.
 
 - [Commit Format](#commit-format)
 - [Commit Types](#commit-types)
-- [Full Emoji Reference](#full-emoji-reference)
+- [Complete Emoji Reference](#complete-emoji-reference)
 - [Scopes](#scopes)
 - [Version Management](#version-management)
-- [Message Guidelines](#message-guidelines)
-- [Language Guidelines](#language-guidelines)
+- [Message Conventions](#message-conventions)
+- [Language Conventions](#language-conventions)
 - [🔖 Release Commits](#-release-commits)
 - [Examples](#examples)
 - [Using Commit Template](#using-commit-template)
@@ -23,32 +23,31 @@ history clear, readable, and easy to understand.
 
 ## Commit Format
 
-**Very important!!!! Don't forget!!!!** All commit messages follow this format:
+**Very important!!!!!! Don't forget!!!** All commit messages must follow the format below:
 
 ```
-:emoji_code: type(scope): subject (in English)
+:emoji_code: type(scope): subject (in Chinese)
 
-[optional body]
+[Optional body]
 
-[optional footer]
+[Optional footer]
 ```
 
-> ⚠️ **Important**: Must use **emoji codes** (like `:sparkles:`) instead of directly entering emoji
-> characters.
+> ⚠️ **Important**: You **must** use the **emoji code** (e.g., `:sparkles:`) instead of typing the
+> emoji character directly.
 >
-> **It is recommended to use English for commit messages** to maintain consistency in team
-> communication.
+> **Commit messages in Chinese are recommended** to maintain team communication consistency.
 
 ### Components
 
-| Part       | Description                                  | Required |
-| ---------- | -------------------------------------------- | -------- |
-| emoji code | Emoji symbol marking commit type             | ✅       |
-| type       | Commit type                                  | ✅       |
-| scope      | Affected scope                               | ✅       |
-| subject    | Brief description (English, max 50 chars)    | ✅       |
-| body       | Detailed explanation (optional)              | ❌       |
-| footer     | Breaking changes or issue closure (optional) | ❌       |
+| Part       | Description                                   | Required |
+| ---------- | --------------------------------------------- | -------- |
+| emoji_code | Emoji identifier for the commit type          | ✅       |
+| type       | Commit type                                   | ✅       |
+| scope      | Area of impact                                | ✅       |
+| subject    | Brief description (in Chinese, ≤ 50 chars)    | ✅       |
+| body       | Detailed explanation (optional)               | ❌       |
+| footer     | Breaking changes or closing issues (optional) | ❌       |
 
 ---
 
@@ -58,154 +57,154 @@ history clear, readable, and easy to understand.
 | ----------------------- | -------- | -------------------------------------- |
 | :sparkles:              | feat     | New feature                            |
 | :bug:                   | fix      | Bug fix                                |
-| :memo:                  | docs     | Documentation changes only             |
+| :memo:                  | docs     | Documentation only                     |
 | :lipstick:              | style    | Code formatting (no functional change) |
 | :recycle:               | refactor | Code refactoring                       |
-| :zap:                   | perf     | Performance improvement                |
-| :white_check_mark:      | test     | Adding or modifying tests              |
+| :zap:                   | perf     | Performance optimization               |
+| :white_check_mark:      | test     | Add or modify tests                    |
 | :wrench:                | chore    | Build tools, auxiliary tool changes    |
 | :building_construction: | build    | Build system changes                   |
 | :rocket:                | ci       | CI configuration changes               |
 
 ---
 
-## Full Emoji Reference
+## Complete Emoji Reference
 
-The following is the complete emoji list consistent with the gitmoji project. Select the appropriate
-emoji based on commit content:
+Below is the complete emoji list consistent with the gitmoji project. Pick the appropriate emoji
+based on the commit content:
 
-| emoji | emoji code                    | commit description                       |
-| :---- | :---------------------------- | :--------------------------------------- |
-| 🎨    | `:art:`                       | Improve code structure/code format       |
-| ⚡️    | `:zap:` / `:racehorse:`       | Improve performance                      |
-| 🔥    | `:fire:`                      | Remove code or files                     |
-| 🐛    | `:bug:`                       | Fix a bug                                |
-| 🚑    | `:ambulance:`                 | Critical patch                           |
-| ✨    | `:sparkles:`                  | Introduce new features                   |
-| 📝    | `:memo:`                      | Write docs                               |
-| 🚀    | `:rocket:`                    | Deploy stuff                             |
-| 💄    | `:lipstick:`                  | Update UI and style files                |
-| 🎉    | `:tada:`                      | Begin a project                          |
-| ✅    | `:white_check_mark:`          | Add tests                                |
-| 🔒    | `:lock:`                      | Fix security issue                       |
-| 🍎    | `:apple:`                     | Fix something on macOS                   |
-| 🐧    | `:penguin:`                   | Fix something on Linux                   |
-| 🏁    | `:checkered_flag:`            | Fix something on Windows                 |
-| 🤖    | `:robot:`                     | Fix something on Android                 |
-| 🍏    | `:green_apple:`               | Fix something on iOS                     |
-| 🔖    | `:bookmark:`                  | Release/Version tag                      |
-| 🚨    | `:rotating_light:`            | Remove linter warnings                   |
-| 🚧    | `:construction:`              | Work in progress                         |
-| 💚    | `:green_heart:`               | Fix CI build                             |
-| ⬇️    | `:arrow_down:`                | Downgrade dependencies                   |
-| ⬆️    | `:arrow_up:`                  | Upgrade dependencies                     |
-| 📌    | `:pushpin:`                   | Pin dependencies to specific versions    |
-| 👷    | `:construction_worker:`       | Add CI build system                      |
-| 📈    | `:chart_with_upwards_trend:`  | Add analytics or tracking code           |
-| ♻️    | `:recycle:`                   | Refactor code                            |
-| 🔨    | `:hammer:`                    | Major refactoring                        |
-| ➖    | `:heavy_minus_sign:`          | Remove a dependency                      |
-| 🐳    | `:whale:`                     | Docker related work                      |
-| ➕    | `:heavy_plus_sign:`           | Add a dependency                         |
-| 🔧    | `:wrench:`                    | Change config files                      |
-| 🌐    | `:globe_with_meridians:`      | Internationalization and localization    |
-| ✏️    | `:pencil2:`                   | Fix typo                                 |
-| 💩    | `:hankey:`                    | Write bad code that needs to be improved |
-| ⏪️    | `:rewind:`                    | Revert changes                           |
-| 🔀    | `:twisted_rightwards_arrows:` | Merge branches                           |
-| 📦    | `:package:`                   | Update compiled files or packages        |
-| 👽    | `:alien:`                     | Update code due to external API changes  |
-| 🚚    | `:truck:`                     | Move or rename files                     |
-| 📄    | `:page_facing_up:`            | Add or update license                    |
-| 💥    | `:boom:`                      | Introduce breaking changes               |
-| 🍱    | `:bento:`                     | Add or update assets                     |
-| 👌    | `:ok_hand:`                   | Update code due to code review           |
-| ♿️    | `:wheelchair:`                | Improve accessibility                    |
-| 💡    | `:bulb:`                      | Document source code                     |
-| 🍻    | `:beers:`                     | Code醉酒 with friends                    |
-| 💬    | `:speech_balloon:`            | Update text and literals                 |
-| 🗃️    | `:card_file_box:`             | Perform database related changes         |
-| 🔊    | `:loud_sound:`                | Add logs                                 |
-| 🔇    | `:mute:`                      | Remove logs                              |
-| 👥    | `:busts_in_silhouette:`       | Add contributors                         |
-| 🚸    | `:children_crossing:`         | Improve UX/availability                  |
-| 🏗️    | `:building_construction:`     | Make architectural changes               |
-| 📱    | `:iphone:`                    | Work on responsive design                |
-| 🤡    | `:clown_face:`                | Mock things                              |
-| 🥚    | `:egg:`                       | Add an Easter egg                        |
-| 🙈    | `:see_no_evil:`               | Add or update .gitignore file            |
-| 📸    | `:camera_flash:`              | Add or update snapshots                  |
+| Emoji | Emoji Code                    | Commit Description                      |
+| :---- | :---------------------------- | :-------------------------------------- |
+| 🎨    | `:art:`                       | Improve code structure/format           |
+| ⚡️    | `:zap:` / `:racehorse:`       | Improve performance                     |
+| 🔥    | `:fire:`                      | Remove code or files                    |
+| 🐛    | `:bug:`                       | Fix a bug                               |
+| 🚑    | `:ambulance:`                 | Critical hotfix                         |
+| ✨    | `:sparkles:`                  | Introduce new features                  |
+| 📝    | `:memo:`                      | Write documentation                     |
+| 🚀    | `:rocket:`                    | Deploy stuff                            |
+| 💄    | `:lipstick:`                  | Update UI and style files               |
+| 🎉    | `:tada:`                      | Initial commit                          |
+| ✅    | `:white_check_mark:`          | Add tests                               |
+| 🔒    | `:lock:`                      | Fix security issues                     |
+| 🍎    | `:apple:`                     | Fix macOS-specific issues               |
+| 🐧    | `:penguin:`                   | Fix Linux-specific issues               |
+| 🏁    | `:checkered_flag:`            | Fix Windows-specific issues             |
+| 🤖    | `:robot:`                     | Fix Android-specific issues             |
+| 🍏    | `:green_apple:`               | Fix iOS-specific issues                 |
+| 🔖    | `:bookmark:`                  | Release/version tag                     |
+| 🚨    | `:rotating_light:`            | Remove linter warnings                  |
+| 🚧    | `:construction:`              | Work in progress                        |
+| 💚    | `:green_heart:`               | Fix CI build issues                     |
+| ⬇️    | `:arrow_down:`                | Downgrade dependencies                  |
+| ⬆️    | `:arrow_up:`                  | Upgrade dependencies                    |
+| 📌    | `:pushpin:`                   | Pin dependencies to a specific version  |
+| 👷    | `:construction_worker:`       | Add CI build system                     |
+| 📈    | `:chart_with_upwards_trend:`  | Add analytics or tracking code          |
+| ♻️    | `:recycle:`                   | Refactor code                           |
+| 🔨    | `:hammer:`                    | Major refactoring                       |
+| ➖    | `:heavy_minus_sign:`          | Remove a dependency                     |
+| 🐳    | `:whale:`                     | Docker related work                     |
+| ➕    | `:heavy_plus_sign:`           | Add a dependency                        |
+| 🔧    | `:wrench:`                    | Modify configuration files              |
+| 🌐    | `:globe_with_meridians:`      | Internationalization and localization   |
+| ✏️    | `:pencil2:`                   | Fix typos                               |
+| 💩    | `:hankey:`                    | Write bad code that needs improvement   |
+| ⏪️    | `:rewind:`                    | Revert changes                          |
+| 🔀    | `:twisted_rightwards_arrows:` | Merge branches                          |
+| 📦    | `:package:`                   | Update compiled files or packages       |
+| 👽    | `:alien:`                     | Update code due to external API changes |
+| 🚚    | `:truck:`                     | Move or rename files                    |
+| 📄    | `:page_facing_up:`            | Add or update license                   |
+| 💥    | `:boom:`                      | Introduce breaking changes              |
+| 🍱    | `:bento:`                     | Add or update assets                    |
+| 👌    | `:ok_hand:`                   | Update code due to code review changes  |
+| ♿️    | `:wheelchair:`                | Improve accessibility                   |
+| 💡    | `:bulb:`                      | Document source code                    |
+| 🍻    | `:beers:`                     | Write code under the influence          |
+| 💬    | `:speech_balloon:`            | Update text and literals                |
+| 🗃️    | `:card_file_box:`             | Perform database-related changes        |
+| 🔊    | `:loud_sound:`                | Add logs                                |
+| 🔇    | `:mute:`                      | Remove logs                             |
+| 👥    | `:busts_in_silhouette:`       | Add contributors                        |
+| 🚸    | `:children_crossing:`         | Improve user experience/usability       |
+| 🏗️    | `:building_construction:`     | Make architectural changes              |
+| 📱    | `:iphone:`                    | Work on responsive design               |
+| 🤡    | `:clown_face:`                | Mock things                             |
+| 🥚    | `:egg:`                       | Add an easter egg                       |
+| 🙈    | `:see_no_evil:`               | Add or update .gitignore files          |
+| 📸    | `:camera_flash:`              | Add or update snapshots                 |
 
 ---
 
 ## Scopes
 
-Scopes are based on the project `src/` directory structure. **The following defined scopes must be
-used**:
+Scopes are based on the `src/` directory structure of the project. **You must use one of the scopes
+defined below**:
 
-### Top-level Modules
+### Top-Level Modules
 
-| scope       | Corresponding Directory | Description                                      |
+| Scope       | Corresponding Directory | Description                                      |
 | ----------- | ----------------------- | ------------------------------------------------ |
-| `frontend`  | `src/frontend/`         | Frontend: lexer, parser, type checking           |
+| `frontend`  | `src/frontend/`         | Frontend: lexing, parsing, type checking         |
 | `middle`    | `src/middle/`           | Middle layer: IR, optimization, monomorphization |
 | `backends`  | `src/backends/`         | Backend: interpreter, runtime, REPL              |
 | `std`       | `src/std/`              | Standard library                                 |
 | `formatter` | `src/formatter/`        | Code formatter                                   |
 | `lsp`       | `src/lsp/`              | Language Server Protocol                         |
 | `package`   | `src/package/`          | Package manager                                  |
-| `util`      | `src/util/`             | Utilities: diagnostics, cache, i18n              |
+| `util`      | `src/util/`             | Utility library: diagnostics, cache, i18n        |
 
-### Frontend Sub-modules
+### Frontend Submodules
 
-| scope       | Corresponding Directory        | Description             |
-| ----------- | ------------------------------ | ----------------------- |
-| `parser`    | `src/frontend/core/parser/`    | Parser                  |
-| `lexer`     | `src/frontend/core/lexer/`     | Lexer                   |
-| `typecheck` | `src/frontend/core/typecheck/` | Type checking           |
-| `types`     | `src/frontend/core/types/`     | Type system definitions |
+| Scope       | Corresponding Directory        | Description            |
+| ----------- | ------------------------------ | ---------------------- |
+| `parser`    | `src/frontend/core/parser/`    | Parser                 |
+| `lexer`     | `src/frontend/core/lexer/`     | Lexer                  |
+| `typecheck` | `src/frontend/core/typecheck/` | Type checking          |
+| `types`     | `src/frontend/core/types/`     | Type system definition |
 
-### Middle Layer Sub-modules
+### Middle Layer Submodules
 
-| scope          | Corresponding Directory           | Description                |
+| Scope          | Corresponding Directory           | Description                |
 | -------------- | --------------------------------- | -------------------------- |
 | `codegen`      | `src/middle/passes/codegen/`      | Code generation (bytecode) |
 | `monomorphize` | `src/middle/passes/monomorphize/` | Monomorphization           |
 | `lifetime`     | `src/middle/passes/lifetime/`     | Lifetime analysis          |
 
-### Backend Sub-modules
+### Backend Submodules
 
-| scope     | Corresponding Directory     | Description              |
-| --------- | --------------------------- | ------------------------ |
-| `repl`    | `src/backends/dev/repl/`    | REPL interactive CLI     |
-| `shell`   | `src/backends/dev/shell.rs` | Shell command handling   |
-| `runtime` | `src/backends/runtime/`     | Runtime execution engine |
+| Scope     | Corresponding Directory     | Description                   |
+| --------- | --------------------------- | ----------------------------- |
+| `repl`    | `src/backends/dev/repl/`    | REPL interactive command line |
+| `shell`   | `src/backends/dev/shell.rs` | Shell command handling        |
+| `runtime` | `src/backends/runtime/`     | Runtime execution engine      |
 
 ### Documentation Scopes
 
-| scope    | Description                   |
-| -------- | ----------------------------- |
-| `docs`   | General documentation updates |
-| `design` | Language design specs (RFC)   |
-| `plan`   | Implementation plan documents |
+| Scope    | Description                         |
+| -------- | ----------------------------------- |
+| `docs`   | General documentation updates       |
+| `design` | Language design specification (RFC) |
+| `plan`   | Implementation plan documents       |
 
 ### Other Scopes
 
-| scope     | Description                                            |
+| Scope     | Description                                            |
 | --------- | ------------------------------------------------------ |
 | `build`   | Build system, Cargo configuration                      |
 | `ci`      | CI/CD configuration (GitHub Actions)                   |
-| `test`    | Test-related                                           |
-| `release` | Release-related                                        |
+| `test`    | Testing related                                        |
+| `release` | Release related                                        |
 | `meta`    | Project meta configuration (.claude, .gitignore, etc.) |
 
 ---
 
-## Message Guidelines
+## Message Conventions
 
 ### Version Management
 
-Version numbers are defined in the `version` field in `Cargo.toml` at the project root:
+The version number is defined in the `version` field of `Cargo.toml` at the project root:
 
 ```toml
 [package]
@@ -214,112 +213,111 @@ version = "0.7.2"
 
 Semantic versioning `MAJOR.MINOR.PATCH` is used:
 
-| Version Type | Description                                | Example       |
-| ------------ | ------------------------------------------ | ------------- |
-| **major**    | Breaking updates, incompatible API changes | 0.7.2 → 1.0.0 |
-| **minor**    | New features, backward compatible          | 0.7.2 → 0.8.0 |
-| **patch**    | Bug fixes, backward compatible             | 0.7.2 → 0.7.3 |
+| Version Type | Description                            | Example       |
+| ------------ | -------------------------------------- | ------------- |
+| **major**    | Major update, incompatible API changes | 0.7.2 → 1.0.0 |
+| **minor**    | New features, backward compatible      | 0.7.2 → 0.8.0 |
+| **patch**    | Bug fix, backward compatible           | 0.7.2 → 0.7.3 |
 
-> ⚠️ When releasing, **update the `Cargo.toml` version number on the dev branch**. After merging the
-> PR to main via CI, tags and Releases are created automatically. **Do not manually push tags**,
-> otherwise CI will skip the release process.
+> ⚠️ When releasing, **update the `Cargo.toml` version number on the `dev` branch**. After merging
+> the PR to `main`, CI will automatically create the tag and Release. **Do not push tags manually**,
+> otherwise CI will skip the release workflow.
 
 ---
 
-## CI Release Process
+## CI Release Workflow
 
-Releases are automatically completed by GitHub Actions (`release.yml`). The process is as follows:
+Releases are performed automatically by GitHub Actions (`release.yml`). The workflow is as follows:
 
 ```
-1. Update Cargo.toml version field on dev branch
-2. cargo build updates Cargo.lock
-3. Commit in release format (see below 🔖 Release Commits)
-   - Commit message must contain all changes since last release (full PR content)
-4. Create PR from dev to main
-5. Merge PR to main
-6. CI auto-detects:
-   - Reads Cargo.toml version → "v{version}"
-   - Checks if tag exists
-   - Not exists → triggers full release process
-   - Exists → skips (no duplicate publishing)
-7. CI auto-executes:
-   - Parallel: cross-platform builds (Linux/Windows/macOS) + security audit + tests
+1. Update the version field in Cargo.toml on the dev branch
+2. cargo build to update Cargo.lock
+3. Commit following the release format (see 🔖 Release Commits below)
+   - The commit message must include all changes since the last release (i.e., the full content of the PR)
+4. Create a PR from dev to main
+5. Merge the PR to main
+6. CI automatically detects:
+   - Reads Cargo.toml version number → "v{version}"
+   - Checks whether the tag already exists
+   - Not exists → Triggers the full release workflow
+   - Exists → Skips (no duplicate release)
+7. CI automatically executes:
+   - In parallel: cross-platform builds (Linux/Windows/macOS) + security audit + tests
    - After all pass: create tag, package artifacts, publish GitHub Release
 ```
 
 ### Key Rules
 
-| Rule                                       | Description                                                                          |
-| ------------------------------------------ | ------------------------------------------------------------------------------------ |
-| **Do not manually push tags**              | CI decides whether to publish based on tag existence; manual tags cause CI to skip   |
-| **Version bump on dev**                    | Release commit is completed on dev, merged to main via PR                            |
-| **Release commit contains full changelog** | Commit message needs all changes for this release, as it's the PR description source |
-| **Do not merge main back to dev**          | dev auto-syncs after PR merge; no reverse merge needed                               |
+| Rule                                       | Description                                                                                            |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| **Do not push tags manually**              | CI decides whether to release based on whether the tag exists; manual tags will cause CI to skip       |
+| **Bump version on dev**                    | The release commit is completed on dev, then merged to main via PR                                     |
+| **Release commit includes full changelog** | The commit message must contain all changes in this release, as it is the source of the PR description |
+| **Do not merge main back to dev**          | dev will sync automatically after the PR is merged; no reverse merge is needed                         |
 
 ---
 
-## Message Guidelines
+## Message Conventions
 
-### Language Guidelines
+### Language Conventions
 
-**It is recommended to use English for commit messages** to maintain consistency in team
-communication.
+**Commit messages in Chinese are recommended** to maintain team communication consistency.
 
-- Subject should be in English, concise and clear
-- Body can use English for detailed explanations
-- If there are special technical terms, English may be retained
+- Subject: Use Chinese, be concise and clear
+- Body: Can use Chinese for detailed explanations
+- Keep English for special technical terms if needed
 
 ### Subject
 
-- Use English, concise and clear
-- Length does not exceed 50 characters
-- No period at the end
+- Use Chinese, be concise and clear
+- Keep within 50 characters
+- No trailing period
 
 ### Body
 
-- Detailed explanation of the reason and method of the change
-- Each line does not exceed 72 characters
-- Use - or * to list points
+- Explain why and how the changes were made
+- Each line should not exceed 72 characters
+- Use `-` or `*` for bullet points
 
 ### Footer
 
-- **Breaking Changes**: Start with `BREAKING CHANGE:`
-- **Issue Closure**: Use `Closes #123` or `Fixes #456`
+- **Breaking changes**: Start with `BREAKING CHANGE:`
+- **Closing issues**: Use `Closes #123` or `Fixes #456`
 
 ---
 
 ## Examples
 
-### ✨ feat - New Feature
+### ✨ feat - New feature
 
 ```
 :sparkles: feat(parser): Add closure syntax parsing support
 
 Implement closure expression parsing:
 - Support |args| body shorthand syntax
-- Support move semantic capture
+- Support move semantics capture
 - Add closure type inference
 
 Closes #42
 ```
 
-### 🐛 fix - Bug Fix
+### 🐛 fix - Bug fix
 
 ```
-:bug: fix(repl): Fix completer failure on multi-line input
+:bug: fix(repl): Fix completer failing on multi-line input
 
-SessionREPL doesn't correctly register completer in multi-line mode,
-causing Tab completion to not trigger.
+SessionREPL did not register the completer correctly in multi-line mode,
+causing Tab completion to fail to trigger.
 
-Fix #128
+Fixes #128
 ```
 
-### 📝 docs - Documentation Update
+### 📝 docs - Documentation update
 
 ```
 :memo: docs(design): Update ownership model and type system specification
 
-Sync latest design changes from RFC-009 and RFC-011.
+Sync the latest design changes from RFC-009 and RFC-011.
 ```
 
 ### ♻️ refactor - Refactoring
@@ -327,53 +325,53 @@ Sync latest design changes from RFC-009 and RFC-011.
 ```
 :recycle: refactor(typecheck): Separate primitive value types from Dup shallow copy semantics
 
-Decouple value types and copy semantics in MonoType,
+Decouple value types from copy semantics in MonoType,
 eliminating special cases in match branches.
 ```
 
-### ⚡ perf - Performance Optimization
+### ⚡️ perf - Performance optimization
 
 ```
 :zap: perf(types): Optimize const generic evaluation performance
 
-Add depth limit (default 128) for recursive evaluation,
-preventing stack overflow from maliciously constructed type expressions.
+Add a depth limit for recursive evaluation (default 128),
+to prevent stack overflow caused by maliciously constructed type expressions.
 ```
 
-### ✅ test - Testing
+### ✅ test - Tests
 
 ```
 :white_check_mark: test(typecheck): Add scope VarInfo mutability tests
 
-Cover scenarios:
-- Read-only access of immutable bindings
-- Mutability tracking of mut bindings
-- Mutability propagation across scopes
+Coverage scenarios:
+- Read-only access to immutable bindings
+- Mutability tracking for mut bindings
+- Cross-scope mutability propagation
 ```
 
-### 🔧 chore - Chores
+### 🔧 chore - Miscellaneous
 
 ```
 :wrench: chore(build): bump rand, hashbrown, tempfile, ron, clap
 
-Upgrade 6 production dependencies to latest stable versions.
+Upgrade 6 production dependencies to the latest stable versions.
 ```
 
-### 🚀 ci - CI Configuration
+### 🚀 ci - CI configuration
 
 ```
 :rocket: ci: Fix nightly build Rust version being too low
 
 Update RUST_TOOLCHAIN from 1.91.0 to 1.96.0,
-matching the rust-version requirement in Cargo.toml.
+to match the rust-version requirement in Cargo.toml.
 ```
 
-### 💄 style - Formatting Changes
+### 💄 style - Formatting
 
 ```
 :lipstick: style(frontend): Apply cargo fmt formatting
 
-Unified function signature line wrapping style.
+Unify the line-breaking style of function signatures.
 ```
 
 ---
@@ -382,14 +380,14 @@ Unified function signature line wrapping style.
 
 ## 🔖 Release Commits
 
-When the commit is a **Release**, it must follow these conventions:
+When this commit is a **Release**, you **must** follow the conventions below:
 
 ### Release Commit Format
 
 ```
 :bookmark: V<version>: <release title>
 
-## 📦 Version Information
+## 📦 Version Info
 
 **Release Date:** YYYY-MM-DD
 
@@ -399,7 +397,7 @@ When the commit is a **Release**, it must follow these conventions:
 
 ## ✨ New Features
 
-### <Feature Module>
+### <feature module>
 - :sparkles: feat(<scope>): <feature description>
 
 ---
@@ -428,28 +426,22 @@ When the commit is a **Release**, it must follow these conventions:
 
 ---
 
-## 📝 Commit History
 
-| Commit | Description |
-|:---:|------|
-| `<hash>` | :bookmark: V<version> |
-| `<hash>` | <commit message> |
-```
 
 ### Release Requirements
 
-1. **Message Header**: Must use `:bookmark:` + `V<version>` format
-2. **Version Number**: Follow semantic versioning conventions
-3. **Content Completeness**: Must include all commit content since the last release
-4. **Categorize by Type**: Organize by types like `feat`, `fix`, `refactor`, `chore`, etc.
-5. **Commit History**: List all relevant commit hashes and descriptions
+1. **Message header**: Must use `:bookmark:` + `V<version>` format
+2. **Version number**: Follow semantic versioning
+3. **Content completeness**: Must include the introduction of **all commits** since the last release
+4. **Categorize by type**: Organize by `feat`, `fix`, `refactor`, `chore`, etc.
 
 ### Release Example
 
 ```
-:bookmark: V0.7.2: REPL rewrite and type system improvements
 
-## 📦 Version Information
+:bookmark: V0.7.2: REPL Rewrite and Type System Improvements
+
+## 📦 Version Info
 
 **Release Date:** 2026-06-01
 
@@ -459,16 +451,16 @@ When the commit is a **Release**, it must follow these conventions:
 
 ## ✨ New Features
 
-- :sparkles: feat(typecheck): Implement generic type parameter inference
+- :sparkles: feat(typecheck): Implement automatic inference for generic type parameters
 - :sparkles: feat(typecheck): Add MonoType::Generic structured generic representation
-- :sparkles: feat: Integrate CLI REPL commands into SessionREPL
+- feat: Wire up CLI REPL commands to SessionREPL
 
 ---
 
 ## ♻️ Refactoring
 
 - :recycle: refactor(backends): Remove tui_repl module, rewrite as SessionREPL
-- :recycle: refactor(typecheck): scope variable storage introduces VarInfo for mutability tracking
+- :recycle: refactor(typecheck): Introduce VarInfo in scope variable storage to track mutability
 - :recycle: refactor(typecheck): Separate primitive value types from Dup shallow copy semantics
 
 ---
@@ -477,13 +469,13 @@ When the commit is a **Release**, it must follow these conventions:
 
 - :bug: fix(repl): Configure default REPL history, fix shell evaluate_code
 - :bug: fix(repl): Register completer and fix multi-line input
-- :bug: fix(repl): Remove extra semicolon in wrap_code to preserve expression values
+- :bug: fix(repl): Remove redundant semicolon in wrap_code to preserve expression value
 
 ---
 
-## ⚡ Performance Optimization
+## ⚡ Performance
 
-- :zap: perf(types): Add recursive depth limit for const generic evaluation
+- :zap: perf(types): Add recursion depth limit for const generic evaluation
 
 ---
 
@@ -492,64 +484,38 @@ When the commit is a **Release**, it must follow these conventions:
 - :wrench: chore(build): bump rand, hashbrown, tempfile, ron, clap, owo-colors
 - :white_check_mark: test(typecheck): Add scope VarInfo mutability tests
 
----
-
-## 📝 Commit History
-
-| Commit | Description |
-|:---:|------|
-| `f438aab` | :sparkles: feat(typecheck): Implement generic type parameter inference |
-| `bf0c121` | :zap: perf(types): Recursive depth limit |
-| `6edac15` | :sparkles: feat: Integrate CLI REPL into SessionREPL |
-| `02cf54f` | :sparkles: feat(typecheck): MonoType::Generic |
-| `3160a28` | :recycle: refactor(typecheck): VarInfo for mutability tracking |
-| `f00a2a4` | :recycle: refactor(backends): Remove tui_repl module |
-| `afe3e0c` | :bug: fix(repl): REPL history and shell fixes |
-| `c4d2242` | :wrench: chore(build): Dependency bump |
-```
-
-### How to Get Commit History
-
-```bash
-# View all commits since last release
-git log --oneline <last release commit>..HEAD
-
-# Or view last N commits
-git log --oneline -20
-```
-
 ### Reference Template
 
-Please refer to [`release.md`](release.md) template format for release documentation.
+For the release document, please refer to the [`release.md`](release.md) template format.
 
 ---
 
-### 1. Set Commit Template
+### 1. Set the Commit Template
 
 ```bash
-# Execute in project root
+# Run in the project root directory
 git config commit.template .gitmessage.txt
 ```
 
 ### 2. Template File
 
-The format of `.gitmessage.txt` file in the project root is as follows:
+The `.gitmessage.txt` file at the project root has the following format:
 
 ```
-# emoji_code type(scope): subject (in English)
+# emoji_code type(scope): subject (in Chinese)
 #
-# Body content (optional)
+# Body (optional)
 #
 # Footer (optional)
 #
-# Types: ✨feat, 🐛fix, 📝docs, 💄style, ♻️refactor, ⚡perf, ✅test, 🔧chore, 🚀ci, 🔖release
+# Types: ✨feat, 🐛fix, 📝docs, 💄style, ♻️refactor, ⚡️perf, ✅test, 🔧chore, 🚀ci, 🔖release
 # Scopes: frontend, parser, lexer, typecheck, types, middle, codegen,
 #         monomorphize, lifetime, backends, repl, shell, runtime,
 #         std, formatter, lsp, package, util, docs, design, plan,
 #         build, ci, test, release, meta
 #
 # Examples:
-# ✨ feat(db): Add batch delete todos feature
+# ✨ feat(db): Add batch delete todo feature
 # 🐛 fix(provider): Fix timer background recovery issue
 #
 # Release format: 🔖 V1.0.0: Release title
@@ -559,10 +525,10 @@ The format of `.gitmessage.txt` file in the project root is as follows:
 
 ## FAQ
 
-### Q: How to choose a commit type?
+### Q: How do I choose a commit type?
 
-- **feat**: Visible functional changes for users
-- **fix**: Fixes for issues reported by users
+- **feat**: User-visible feature changes
+- **fix**: Fix issues reported by users
 - **docs**: README, comments, etc.
 - **chore**: Dependency updates, configuration files
 - **refactor**: Code optimization without behavior changes
@@ -570,7 +536,7 @@ The format of `.gitmessage.txt` file in the project root is as follows:
 ### Q: When should I split commits?
 
 - Each commit should do **one thing**
-- Related features together, unrelated separately
+- Group related features together, separate unrelated ones
 - Follow the Atomic Commits principle
 
 ---
@@ -579,10 +545,10 @@ The format of `.gitmessage.txt` file in the project root is as follows:
 
 - [Conventional Commits](https://www.conventionalcommits.org/)
 - [gitmoji](https://gitmoji.carloscuesta.me/)
-- [emoji.md](emoji.md) - Complete Emoji List
-- [release.md](release.md) - Release Template
+- [emoji.md](emoji.md) - Complete emoji list
+- [release.md](release.md) - Release template
 
 ---
 
-> 💡 **Tip**: Keep commits atomic and descriptions clear, making code review and backtracking more
-> efficient!
+> 💡 **Tip**: Keep commits atomic and descriptions clear to make code review and history navigation
+> more efficient!

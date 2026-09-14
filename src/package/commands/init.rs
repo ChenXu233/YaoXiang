@@ -25,7 +25,7 @@ pub struct InitOptions {
 /// ├── .gitignore
 /// ├── tests/
 /// ├── .yaoxiang/
-/// │   └── std/           ← 标准库接口文件（LSP 跳转用）
+/// │   └── vendor/std/    ← 标准库接口文件（LSP 查找链第一级，RFC-037）
 /// └── src/
 ///     └── main.yx  (or lib.yx if --lib)
 /// ```
@@ -69,7 +69,8 @@ pub fn exec_in(
     fs::write(project_dir.join(".gitignore"), gitignore_content)?;
 
     // Generate standard library interface files for LSP
-    let std_dir = project_dir.join(".yaoxiang").join("std");
+    // RFC-037：统一写入 .yaoxiang/vendor/std/（find_std_interface_file 查找链第一级）
+    let std_dir = project_dir.join(".yaoxiang").join("vendor").join("std");
     if let Err(e) = crate::std::gen_interfaces::write_interfaces_to_dir(&std_dir) {
         eprintln!("Warning: failed to generate std interface files: {}", e);
     }
@@ -96,7 +97,7 @@ pub fn exec_in(
     println!("  {}/yaoxiang.lock", name);
     println!("  {}/.gitignore", name);
     println!("  {}/tests/", name);
-    println!("  {}/.yaoxiang/std/", name);
+    println!("  {}/.yaoxiang/vendor/std/", name);
 
     Ok(())
 }
@@ -208,7 +209,8 @@ pub fn exec_here(options: &InitOptions) -> PackageResult<()> {
     }
 
     // Generate standard library interface files for LSP
-    let std_dir = cwd.join(".yaoxiang").join("std");
+    // RFC-037：统一写入 .yaoxiang/vendor/std/（find_std_interface_file 查找链第一级）
+    let std_dir = cwd.join(".yaoxiang").join("vendor").join("std");
     if let Err(e) = crate::std::gen_interfaces::write_interfaces_to_dir(&std_dir) {
         eprintln!("Warning: failed to generate std interface files: {}", e);
     }
@@ -231,7 +233,7 @@ pub fn exec_here(options: &InitOptions) -> PackageResult<()> {
     println!("  yaoxiang.lock");
     println!("  .gitignore");
     println!("  tests/");
-    println!("  .yaoxiang/std/");
+    println!("  .yaoxiang/vendor/std/");
 
     Ok(())
 }

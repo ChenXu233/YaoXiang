@@ -63,7 +63,7 @@ enum ColorChoice {
 
 /// A high-performance programming language with "everything is type" philosophy
 #[derive(Parser, Debug)]
-#[command(name = "yaoxiang")]
+#[command(name = "yaoxiang-rs")]
 #[command(author = "YaoXiang Team")]
 #[command(version = VERSION)]
 #[command(about = NAME, long_about = None)]

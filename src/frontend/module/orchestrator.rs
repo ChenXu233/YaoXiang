@@ -32,10 +32,16 @@ use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::core::types::PolyType;
+use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::module::registry::ModuleRegistry;
+use crate::frontend::module::roles::{self, FileRole};
 use crate::frontend::module::symbol::SymbolTable;
 use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 use crate::middle::ModuleIR;
+
+// manifest 解析依赖 package 模块（wasm32 下不编译）——角色上下文在 wasm 降级
+#[cfg(not(target_arch = "wasm32"))]
+use crate::package::manifest::PackageManifest;
 
 /// 一个已发现的源文件：模块键 + 磁盘路径 + 源码
 struct DiscoveredFile {
@@ -160,6 +166,248 @@ pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
     link_module_irs(module_irs, &entry_key)
 }
 
+/// 检查一个项目：发现源文件 → 构建 Registry → 逐文件 typecheck。
+///
+/// 与 `compile_project` 共用发现/注册表阶段，但不生成 IR；返回**全部**诊断
+/// （按文件分组，不早退），供 `yaoxiang check` 与 `run` 走同一条编译路径。
+///
+/// RFC-029f：逐文件分类编译目标角色（Script/Bin/Lib/Test/Internal）——
+/// 警告诊断（死代码族 + W1003 未使用导入）按角色接入：
+/// - Test 不参与死代码（`[tool.test]` patterns/exclude 规则，RFC-036）
+/// - Bin 角色未使用 pub 可报（Phase 1）
+/// - Internal 角色 pub 收紧为"包内 use 图可达才豁免"（Phase 2：聚合本项目
+///   全部文件的引用池传入分析器）
+///
+/// 警告为 Warning severity，不阻断、不计入错误数。
+pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, OrchestratorError> {
+    let (files, used_by) = discover_with_used(entry)?;
+    let registry = build_registry_from(&files)?;
+    let method_bindings = registry.all_method_bindings();
+
+    // 项目角色上下文：manifest 缺失或损坏 → surfaces 为 None → 全体 Script 态
+    //（行为与引入角色模型前一致）。双解析：目标字段（RFC-015）与 [tool.test]
+    //（RFC-036，经 util::config 的宽松结构）各取所需。wasm32 下 package 模块
+    // 不编译，角色上下文降级为 None（Script 态，行为安全）。
+    let project_root = find_project_root(entry);
+    let (surfaces, test_rules) = role_context(project_root.as_deref());
+
+    // 先解析全部文件（Phase 2：引用池需要全项目视角）
+    let mut parsed: Vec<(&DiscoveredFile, Module)> = Vec::new();
+    for file in &files {
+        let ast = parse_file(&file.path, &file.source)?;
+        parsed.push((file, ast));
+    }
+
+    let project_root_canon = project_root
+        .as_ref()
+        .map(|root| root.canonicalize().unwrap_or_else(|_| root.clone()));
+    let in_project = |file_canon: &Path| -> bool {
+        project_root_canon
+            .as_deref()
+            .is_some_and(|root| file_canon.starts_with(root))
+    };
+
+    // RFC-029f Phase 2：包内引用池 = 项目根下全部 .yx 文件的标识符引用并集
+    //（含 Test——测试使用使产品 pub 存活）。聚合全项目而非入口可达集：
+    // 单文件 check 时引用方可能不在发现集，按可达集聚合会产生顺序敏感的
+    // 误报。仅收集名字、解析失败静默跳过——不产生诊断，不破坏发现隔离
+    //（#247）。vendor/嵌入 std 不入池（外部包视角）。
+    let project_refs: HashSet<String> = project_root_canon
+        .as_deref()
+        .map(collect_project_refs)
+        .unwrap_or_default();
+
+    let mut out = Vec::new();
+    for (file, ast) in &parsed {
+        let result = typecheck_with_registry(ast, &registry, &method_bindings);
+
+        let file_canon = file
+            .path
+            .canonicalize()
+            .unwrap_or_else(|_| file.path.clone());
+        let role = roles::classify(
+            &file_canon,
+            project_root.as_deref(),
+            surfaces.as_ref(),
+            test_rules.as_ref(),
+            used_by.contains(&file_canon),
+            ast_has_main(ast),
+        );
+
+        // 警告仅对本项目文件呈现（RFC-029f）：vendor 依赖与嵌入 std 的内部
+        // 警告属于其所属包，不混入消费方的 check 输出
+        let mut diagnostics = result.diagnostics;
+        if in_project(&file_canon) {
+            // W1003 未使用导入随 W 码通道流出（Warning severity，不阻断编译）
+            diagnostics.extend(result.warnings);
+            // 角色感知死代码（RFC-029f）：
+            // - Test 不参与
+            // - Bin 不豁免 pub（Phase 1）
+            // - Internal 豁免收紧为引用池判定（Phase 2）
+            // - Script/Lib 绝对豁免（pub = 对外接口）
+            if !matches!(role, FileRole::Test) {
+                let mut analyzer = DeadCodeAnalyzer::new();
+                match role {
+                    FileRole::Bin => {
+                        analyzer.set_exempt_pub(false);
+                        analyzer.set_project_refs(project_refs.clone());
+                    }
+                    FileRole::Internal => {
+                        analyzer.set_exempt_pub(true);
+                        analyzer.set_project_refs(project_refs.clone());
+                    }
+                    _ => {}
+                }
+                let warnings = analyzer.analyze(ast);
+                diagnostics.extend(analyzer.to_diagnostics(&warnings));
+            }
+        }
+        out.push((file.path.clone(), diagnostics));
+    }
+    Ok(out)
+}
+
+/// 项目角色上下文（RFC-029f）：显式声明面 + 测试发现规则。
+/// manifest 读取解析依赖 `crate::package`——wasm32 下不存在，降级为
+/// (None, None)（全体 Script 态、无 patterns 规则，行为与引入模型前一致）。
+#[cfg(not(target_arch = "wasm32"))]
+fn role_context(
+    project_root: Option<&Path>
+) -> (Option<roles::ExplicitSurfaces>, Option<roles::TestRules>) {
+    let Some(root) = project_root else {
+        return (None, None);
+    };
+    let Ok(src) = std::fs::read_to_string(root.join(crate::package::manifest::MANIFEST_FILE))
+    else {
+        return (None, None);
+    };
+    let surfaces = toml::from_str::<PackageManifest>(&src)
+        .ok()
+        .map(|manifest| roles::TargetViews {
+            bins: manifest
+                .bin
+                .iter()
+                .map(|b| b.path.clone())
+                .chain(manifest.run.as_ref().and_then(|r| r.main.clone()))
+                .collect(),
+            libs: manifest
+                .exports
+                .values()
+                .cloned()
+                .chain(manifest.lib.as_ref().map(|l| l.path.clone()))
+                .collect(),
+        })
+        .map(|views| roles::explicit_surfaces(&views, root));
+    let test_rules = toml::from_str::<crate::util::config::ProjectConfig>(&src)
+        .ok()
+        .map(|config| roles::TestRules::from_config(&config.tool.test));
+    (surfaces, test_rules)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn role_context(
+    _project_root: Option<&Path>
+) -> (Option<roles::ExplicitSurfaces>, Option<roles::TestRules>) {
+    (None, None)
+}
+
+/// 用项目上下文检查一份**内存源码**（LSP 脏缓冲区 / 未落盘编辑）。
+///
+/// 注册表来自磁盘发现（同 `check_project`），被检查的模块用传入源码——
+/// 编辑器因此能得到与 `yaoxiang check` 一致的跨文件解析结果。
+/// 解析错误作为诊断返回（不中断），与 LSP 单文件路径的容错一致。
+pub fn check_source_in_project(
+    path: &Path,
+    source: &str,
+) -> Result<Vec<Diagnostic>, OrchestratorError> {
+    let files = discover(path)?;
+    let registry = build_registry_from(&files)?;
+    let method_bindings = registry.all_method_bindings();
+
+    let tokens = tokenize(source).map_err(|e| OrchestratorError::Parse {
+        path: path.display().to_string(),
+        message: format!("{:?}", e),
+    })?;
+    let parse_result = parser::parse(&tokens);
+    let mut diagnostics: Vec<Diagnostic> = parse_result.errors.to_vec();
+    let result = typecheck_with_registry(&parse_result.module, &registry, &method_bindings);
+    // 错误 + 警告（W1003 等 Warning 级，LSP 侧以 severity 区分呈现）
+    diagnostics.extend(result.diagnostics);
+    diagnostics.extend(result.warnings);
+    Ok(diagnostics)
+}
+
+/// 用预构建注册表检查单个模块（collect_all 模式，不早退）。
+/// 返回完整结果——调用方取 `diagnostics`（错误）与 `warnings`（W 码警告）。
+fn typecheck_with_registry(
+    ast: &Module,
+    registry: &ModuleRegistry,
+    method_bindings: &HashMap<String, MonoType>,
+) -> TypeCheckResult {
+    let mut checker = TypeChecker::new("<module>");
+    checker.env().module_registry = registry.clone();
+    checker.env().method_bindings = method_bindings.clone();
+    checker.check_module_collect_all(ast)
+}
+
+/// 顶层是否存在 `main` 绑定（角色推断的 Bin 信号，RFC-029f）
+fn ast_has_main(ast: &Module) -> bool {
+    ast.items.iter().any(|stmt| {
+        matches!(
+            &stmt.kind,
+            StmtKind::Assign { target, .. }
+                if matches!(target.as_ref(), Expr::Var(name, _) if name == "main")
+        )
+    })
+}
+
+/// 收集项目根下全部 `.yx` 文件的标识符引用并集（RFC-029f Phase 2 引用池）。
+///
+/// 跳过 `.git`/`.yaoxiang`（vendor）/`target` 目录；词法或语法失败的文件
+/// 静默跳过——引用池是容错的辅助判定，不允许它制造新的检查失败。
+fn collect_project_refs(project_root: &Path) -> HashSet<String> {
+    fn is_excluded_dir(dir: &Path) -> bool {
+        dir.file_name().is_some_and(|name| {
+            let name = name.to_string_lossy();
+            name == ".git" || name == ".yaoxiang" || name == "target"
+        })
+    }
+
+    fn collect_yx(
+        dir: &Path,
+        out: &mut Vec<PathBuf>,
+    ) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if !is_excluded_dir(&path) {
+                    collect_yx(&path, out);
+                }
+            } else if path.extension().is_some_and(|e| e == "yx") {
+                out.push(path);
+            }
+        }
+    }
+
+    let mut refs = HashSet::new();
+    let mut files = Vec::new();
+    collect_yx(project_root, &mut files);
+    for path in files {
+        let Ok(source) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(tokens) = tokenize(&source) else {
+            continue;
+        };
+        let parsed = parser::parse(&tokens);
+        refs.extend(DeadCodeAnalyzer::collect_ident_refs(&parsed.module));
+    }
+    refs
+}
+
 /// 提取一个文件定义的全局变量（顶层非函数绑定）的名字与类型。
 ///
 /// 镜像 `generate_stmt_ir` 的函数/全局分流：值为 Lambda/Block 视为函数，否则为全局。
@@ -264,10 +512,27 @@ fn build_registry_from(files: &[DiscoveredFile]) -> Result<ModuleRegistry, Orche
     let mut registry = ModuleRegistry::with_std();
     for file in files {
         let ast = parse_file(&file.path, &file.source)?;
-        let info = extract_module_info(&file.module_key, &ast);
+        let mut info = extract_module_info(&file.module_key, &ast);
+        // 来源标记：vendor 依赖目录下的文件是 Vendor（与本地 User 区分）
+        if is_vendor_path(&file.path) {
+            info.source = ModuleSource::Vendor;
+        }
         registry.register(info);
     }
     Ok(registry)
+}
+
+/// 路径是否位于某个项目的 `.yaoxiang/vendor/` 下。
+fn is_vendor_path(path: &Path) -> bool {
+    let mut prev = None;
+    for component in path.components() {
+        let name = component.as_os_str().to_string_lossy();
+        if prev.as_deref() == Some(".yaoxiang") && name == "vendor" {
+            return true;
+        }
+        prev = Some(name.to_string());
+    }
+    false
 }
 
 /// 从入口沿 `use` 追踪发现可达模块（#247/RFC-036：替代目录递归——
@@ -276,8 +541,17 @@ fn build_registry_from(files: &[DiscoveredFile]) -> Result<ModuleRegistry, Orche
 /// 解析双根：`use a.b` 先按**导入者所在目录**解析，未命中再按**项目根**
 /// （最近的 yaoxiang.toml 祖先）解析。模块键 = use 路径，与解析自哪个根无关。
 fn discover(entry: &Path) -> Result<Vec<DiscoveredFile>, OrchestratorError> {
+    discover_with_used(entry).map(|(files, _)| files)
+}
+
+/// 同 [`discover`]，附带 use 边信息：被 ≥1 个文件 `use` 的文件路径集合
+/// （canonical 化，与发现文件路径同口径比对）——角色推断的 Lib 信号（RFC-029f）。
+fn discover_with_used(
+    entry: &Path
+) -> Result<(Vec<DiscoveredFile>, HashSet<PathBuf>), OrchestratorError> {
     let project_root = find_project_root(entry);
     let mut files: Vec<DiscoveredFile> = Vec::new();
+    let mut used_by: HashSet<PathBuf> = HashSet::new();
     let mut visited: HashSet<PathBuf> = HashSet::new();
     let mut key_to_path: HashMap<String, PathBuf> = HashMap::new();
     // (路径, 模块键, 嵌入源)——嵌入 std 模块（std.test）的路径是虚拟的，源随身带
@@ -324,6 +598,8 @@ fn discover(entry: &Path) -> Result<Vec<DiscoveredFile>, OrchestratorError> {
             if let Some(resolved) =
                 resolve_module_path(&use_path, importer_dir.as_deref(), project_root.as_deref())
             {
+                // use 边：被引用文件记入 used_by（角色推断 Lib 信号）
+                used_by.insert(resolved.canonicalize().unwrap_or_else(|_| resolved.clone()));
                 queue.push_back((resolved, use_path, None));
             }
         }
@@ -336,11 +612,11 @@ fn discover(entry: &Path) -> Result<Vec<DiscoveredFile>, OrchestratorError> {
 
     // 稳定顺序，保证编译/合并可复现
     files.sort_by(|a, b| a.path.cmp(&b.path));
-    Ok(files)
+    Ok((files, used_by))
 }
 
 /// 从 entry 向上找最近的含 yaoxiang.toml 的目录（项目根）。
-fn find_project_root(entry: &Path) -> Option<PathBuf> {
+pub(crate) fn find_project_root(entry: &Path) -> Option<PathBuf> {
     let mut dir = entry.parent();
     while let Some(d) = dir {
         if d.join("yaoxiang.toml").exists() {
@@ -352,12 +628,17 @@ fn find_project_root(entry: &Path) -> Option<PathBuf> {
 }
 
 /// 解析模块路径为文件：`a.b` → `<base>/a/b.yx` 或 `<base>/a/b/mod.yx`。
-/// 双根顺序：导入者目录优先，项目根兜底。
+/// 顺序：vendor 依赖（RFC-014 §模块解析顺序 priority 2）→ 导入者目录 → 项目根。
 fn resolve_module_path(
     use_path: &str,
     importer_dir: Option<&Path>,
     project_root: Option<&Path>,
 ) -> Option<PathBuf> {
+    if let Some(root) = project_root {
+        if let Some(path) = resolve_in_vendor(use_path, root) {
+            return Some(path);
+        }
+    }
     let rel: PathBuf = use_path.split('.').collect();
     for base in [importer_dir, project_root].into_iter().flatten() {
         for cand in [
@@ -371,6 +652,125 @@ fn resolve_module_path(
     }
     None
 }
+
+/// 依赖包的导入面（RFC-029f）：`[exports]` 值集合优先，`[lib].path` 次之；
+/// 无 manifest 或两者皆无 → None（全放行）。wasm32 下 package 模块不编译，
+/// 返回 None（不过滤，行为安全）。
+#[cfg(not(target_arch = "wasm32"))]
+fn dep_import_surface(dep_root: &Path) -> Option<std::collections::HashSet<PathBuf>> {
+    let manifest = PackageManifest::load(dep_root).ok()?;
+    let exports: Vec<String> = manifest.exports.values().cloned().collect();
+    let lib_path = manifest.lib.as_ref().map(|lib| lib.path.clone());
+    roles::import_surface_views(dep_root, &exports, lib_path.as_deref())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn dep_import_surface(_dep_root: &Path) -> Option<std::collections::HashSet<PathBuf>> {
+    None
+}
+
+/// 在 `<project_root>/.yaoxiang/vendor/` 中解析 `use <pkg>[.<rest>]`。///
+/// 布局（RFC-014 §模块解析顺序）：`<pkg>-<ver>/src/<pkg>/<rest>.yx`；
+/// 裸包名回退 `<pkg>-<ver>/src/<pkg>.yx`、`src/lib.yx`、`src/main.yx`、`mod.yx`。
+/// ponytail: 多版本取版本号最大者（预发布后于正式版）；按 lock 精确选择留给
+/// RFC-014 Phase 3。
+pub(crate) fn resolve_in_vendor(
+    use_path: &str,
+    project_root: &Path,
+) -> Option<PathBuf> {
+    let vendor_dir = project_root.join(".yaoxiang").join("vendor");
+    if !vendor_dir.is_dir() {
+        return None;
+    }
+    let (pkg, rest) = match use_path.split_once('.') {
+        Some((pkg, rest)) => (pkg, Some(rest)),
+        None => (use_path, None),
+    };
+    let prefix = format!("{pkg}-");
+
+    let mut candidates: Vec<(String, PathBuf)> = Vec::new();
+    for entry in std::fs::read_dir(&vendor_dir).ok()?.flatten() {
+        let dir_name = entry.file_name().to_string_lossy().to_string();
+        let Some(version) = dir_name.strip_prefix(&prefix) else {
+            continue;
+        };
+        let path = entry.path();
+        if path.is_dir() {
+            candidates.push((version.to_string(), path));
+        }
+    }
+    candidates.sort_by(|a, b| compare_version(&b.0, &a.0));
+
+    for (_, dep) in candidates {
+        // RFC-029f 导入面：依赖包有声明面（[exports]/[lib]）时，仅面内文件
+        // 可被跨包 use——越界候选视为未命中，留给 typecheck 报模块未找到
+        let surface = dep_import_surface(&dep);
+        let src = dep.join("src");
+        let tries: Vec<PathBuf> = match rest {
+            Some(rest) => {
+                let rel: PathBuf = rest.split('.').collect();
+                vec![
+                    src.join(pkg).join(&rel).with_extension("yx"),
+                    src.join(pkg).join(&rel).join("mod.yx"),
+                    src.join(&rel).with_extension("yx"),
+                    src.join(&rel).join("mod.yx"),
+                ]
+            }
+            None => vec![
+                src.join(pkg).with_extension("yx"),
+                src.join(pkg).join("mod.yx"),
+                src.join("lib.yx"),
+                src.join("main.yx"),
+                dep.join("mod.yx"),
+            ],
+        };
+        for cand in tries {
+            if cand.is_file() {
+                if let Some(allowed) = &surface {
+                    let cand_canon = cand.canonicalize().unwrap_or_else(|_| cand.clone());
+                    if !allowed.contains(&cand_canon) {
+                        continue; // 不在导出面：跨包不可见
+                    }
+                }
+                return Some(cand);
+            }
+        }
+    }
+    None
+}
+
+/// 版本比较：点分数字段数值比较（非数字前缀记 0）；数值相等时正式版排在
+/// 预发布版（带非数字后缀，如 `1.0.0-beta`）之前——semver 语义，否则降序
+/// 选择会让预发布目录遮蔽正式版；两者同为预发布（或同为正式）时回退字符串。
+pub(crate) fn compare_version(
+    a: &str,
+    b: &str,
+) -> std::cmp::Ordering {
+    let parse = |s: &str| -> Vec<u64> {
+        s.split('.')
+            .map(|part| {
+                part.split(|c: char| !c.is_ascii_digit())
+                    .next()
+                    .and_then(|digits| digits.parse::<u64>().ok())
+                    .unwrap_or(0)
+            })
+            .collect()
+    };
+    let is_prerelease = |s: &str| {
+        s.split('.')
+            .any(|part| part.chars().any(|c| !c.is_ascii_digit()))
+    };
+    parse(a)
+        .cmp(&parse(b))
+        .then_with(|| match (is_prerelease(a), is_prerelease(b)) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            (true, true) | (false, false) => a.cmp(b),
+        })
+}
+
+#[cfg(test)]
+mod tests;
 
 /// 只读 use 行：词法级扫描源码中的模块路径（不解析函数体——RFC-029 发现协议）。
 /// 词法失败的文件返回空，真正的错误由后续 parse 阶段报告。

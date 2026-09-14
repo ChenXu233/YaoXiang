@@ -1,0 +1,12 @@
+// 06-compile-errors/module_not_found_err.yx
+// 模块未找到应报 E5001——此前 `use` 未命中被静默丢弃，错误延后成
+// "unknown variable"（指向用户根本没提的符号），甚至整个文件静默通过
+// expect: compile-error E5001
+// 验证: use nosuch.{thing} 在编译期报 E5001 模块未找到
+// 状态: ✅
+
+use nosuch.{thing}
+
+main = {
+    print(1)
+}

@@ -1,38 +1,38 @@
 ---
 title: '貢献ガイド'
-description: YaoXiangプロジェクトにコードを貢献する方法を知る
+description: 'YaoXiang プロジェクトへの貢献方法を学ぶ'
 ---
 
 # 貢献ガイド
 
-YaoXiangプロジェクトにコードとドキュメントを貢献することを歓迎します！
+YaoXiang プロジェクトへのコードとドキュメントの貢献を歓迎します！
 
-## 貢献する方法
+## 貢献方法
 
-1. 仓库を**Fork**する
-2. 機能ブランチを作成：`git checkout -b feature/xxx`
-3. 変更をコミット：`git commit -m "feat: xxx"`
-4. ブランチをプッシュ：`git push origin feature/xxx`
-5. **Pull Request**を作成
+1. リポジトリを **Fork** する
+2. 機能ブランチの作成：`git checkout -b feature/xxx`
+3. 変更のコミット：`git commit -m "feat: xxx"`
+4. ブランチのプッシュ：`git push origin feature/xxx`
+5. **Pull Request** の作成
 
-## コード規範
+## コード規約
 
 - プロジェクトのコードスタイルに従う
 - テストが通ることを確認する
-- 関連するドキュメントを更新する
+- 関連ドキュメントを更新する
 
-## コミット規範
+## コミット規約
 
 ```
-feat: 新機能
-fix: バグ修正
-docs: ドキュメント更新
-refactor: リファクタリング
-test: テスト関連
-chore: ビルド/ツール更新
+feat: 新功能
+fix: 修复 bug
+docs: 文档更新
+refactor: 重构
+test: 测试相关
+chore: 构建/工具更新
 ```
 
 ## 関連リソース
 
 - [GitHub](https://github.com/yaoxiang-lang/yaoxiang)
-- [Issue報告](https://github.com/yaoxiang-lang/yaoxiang/issues)
+- [Issue フィードバック](https://github.com/yaoxiang-lang/yaoxiang/issues)

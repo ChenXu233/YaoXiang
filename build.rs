@@ -74,7 +74,9 @@ fn main() {
     // 1. 尝试系统安装的 Z3（Z3_SYS_Z3_HEADER 环境变量）
     if let Ok(header) = env::var("Z3_SYS_Z3_HEADER") {
         if Path::new(&header).exists() {
-            link_z3(Path::new(&header).parent().unwrap().parent().unwrap());
+            let dir = Path::new(&header).parent().unwrap().parent().unwrap();
+            link_z3(dir);
+            copy_shared_lib(dir);
             return;
         }
     }
@@ -87,7 +89,7 @@ fn main() {
     let local = find_local_z3(&z3_root);
     if let Some(ref dir) = local {
         link_z3(dir);
-        copy_dll(dir);
+        copy_shared_lib(dir);
         return;
     }
 
@@ -139,23 +141,56 @@ fn main() {
     }
 
     link_z3(&z3_dir);
-    copy_dll(&z3_dir);
+    copy_shared_lib(&z3_dir);
 }
 
 fn link_z3(z3_dir: &Path) {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+    // Z3 官方包把静态库放 lib/ 或 bin/（osx/linux 资产在 bin/，含 libz3.a）；
+    // 静态链接时搜索目录必须含 libz3.a
     let lib_dir = ["lib", "bin"]
         .iter()
         .map(|s| z3_dir.join(s))
-        .find(|d| d.exists())
+        .find(|d| {
+            d.exists()
+                && (d.join("libz3.a").exists()
+                    || d.join("z3.lib").exists()
+                    || d.join("libz3.dll").exists()
+                    || d.join("libz3.dylib").exists()
+                    || d.join("libz3.so").exists())
+        })
         .unwrap_or_else(|| z3_dir.join("bin"));
 
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
 
+    // RFC-037：全平台动态链接。共享库随发行包 bin/ 分发，用户可整体替换升级 Z3。
     if target_os == "windows" {
+        // MSVC import lib 命名为 libz3.lib
         println!("cargo:rustc-link-lib=libz3");
     } else {
-        println!("cargo:rustc-link-lib=static=z3");
+        // macOS 静态链接：官方 x64-osx 资产 4.16.0 的 bin/libz3.dylib 错装为
+        // arm64（dist v0.8.0 链接实测 "found architecture 'arm64'"），动态链接
+        // 在 x86_64 目标上不可用；bin/libz3.a 为 x86_64+arm64 双架构 fat 库，
+        // 静态链接自包含且两个 Apple 目标通用。
+        let static_macos = target_os == "macos" && lib_dir.join("libz3.a").exists();
+        if static_macos {
+            println!("cargo:rustc-link-lib=static=z3");
+        } else {
+            println!("cargo:rustc-link-lib=z3");
+            // 动态链接器默认不搜二进制所在目录，必须注入 rpath，“解压即用”才成立
+            // （发行包内 exe 与 libz3 同在 bin/；Windows 默认搜 exe 目录，无需处理）
+            match target_os.as_str() {
+                "linux" => println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN"),
+                "macos" => println!("cargo:rustc-link-arg=-Wl,-rpath,@loader_path"),
+                _ => {}
+            }
+        }
+        if target_os == "linux" {
+            // dist 管线用 lld（默认 --no-allow-shlib-undefined），预编译
+            // libz3.so 自身的未定义符号（libstdc++ 等）在可执行链接期被拒——
+            // 这些符号由 .so 的 DT_NEEDED 在运行期解析，显式放行
+            println!("cargo:rustc-link-arg=-Wl,--allow-shlib-undefined");
+        }
         let cxx = if target_os == "macos" {
             "c++".to_string()
         } else {
@@ -165,15 +200,32 @@ fn link_z3(z3_dir: &Path) {
     }
 }
 
-fn copy_dll(z3_dir: &Path) {
+/// 把 Z3 共享库复制进 target profile 目录，本地 cargo run/测试才能加载；
+/// Z3 许可证（MIT 分发义务）随库一并落盘。发版产物由 package-dist.sh
+/// 从同一目录取用，不重复维护平台映射。
+fn copy_shared_lib(z3_dir: &Path) {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
-    if target_os != "windows" {
-        return;
+    let name = match target_os.as_str() {
+        "windows" => "libz3.dll",
+        "macos" => "libz3.dylib",
+        "linux" => "libz3.so",
+        _ => return,
+    };
+    // 布局不统一：官方发行包在 lib/ 或 bin/；系统 Z3（Debian multiarch）在
+    // lib/<arch>-linux-gnu/
+    let mut search_dirs = vec![z3_dir.join("lib"), z3_dir.join("bin")];
+    if target_os == "linux" {
+        let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+        search_dirs.push(z3_dir.join("lib").join(format!("{arch}-linux-gnu")));
     }
-    let dll = z3_dir.join("bin").join("libz3.dll");
-    if !dll.exists() {
-        return;
-    }
+    let src = search_dirs
+        .iter()
+        .map(|d| d.join(name))
+        .find(|p| p.exists());
+    let src = match src {
+        Some(p) => p,
+        None => return,
+    };
     let out = env::var("OUT_DIR").unwrap();
     let profile = Path::new(&out)
         .parent()
@@ -184,8 +236,16 @@ fn copy_dll(z3_dir: &Path) {
         .unwrap();
     let deps = profile.join("deps");
     let _ = fs::create_dir_all(&deps);
-    let _ = fs::copy(&dll, profile.join("libz3.dll"));
-    let _ = fs::copy(&dll, deps.join("libz3.dll"));
+    let _ = fs::copy(&src, profile.join(name));
+    let _ = fs::copy(&src, deps.join(name));
+    // MIT 要求分发二进制时附带许可文本；Z3 发行包根有 LICENSE.txt
+    for license in ["LICENSE.txt", "LICENSE"] {
+        let license_src = z3_dir.join(license);
+        if license_src.exists() {
+            let _ = fs::copy(&license_src, profile.join("LICENSE-Z3.txt"));
+            break;
+        }
+    }
 }
 
 fn find_local_z3(z3_root: &Path) -> Option<std::path::PathBuf> {

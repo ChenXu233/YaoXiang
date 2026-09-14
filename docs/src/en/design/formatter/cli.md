@@ -1,6 +1,6 @@
 ---
 title: 'yaoxiang format Command Line Usage'
-description: Command line arguments and usage for the formatting tool
+description: 'Command line arguments and usage for the formatting tool'
 ---
 
 # Command Line Usage

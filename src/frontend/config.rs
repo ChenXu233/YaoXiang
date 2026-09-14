@@ -10,13 +10,20 @@ pub struct MonoConfig {
     /// 是否启用单态化
     #[serde(default = "default_true")]
     pub enabled: bool,
-    /// 最大递归深度
+    /// 最大特化链深度（拦截无限类型增长递归）
     #[serde(default = "default_max_mono_depth")]
     pub max_depth: usize,
+    /// 实例化总数上限（与递归深度分离，#335）
+    #[serde(default = "default_max_mono_instantiations")]
+    pub max_instantiations: usize,
 }
 
 fn default_max_mono_depth() -> usize {
     100
+}
+
+fn default_max_mono_instantiations() -> usize {
+    10_000
 }
 
 impl Default for MonoConfig {
@@ -24,6 +31,7 @@ impl Default for MonoConfig {
         Self {
             enabled: true,
             max_depth: 100,
+            max_instantiations: 10_000,
         }
     }
 }

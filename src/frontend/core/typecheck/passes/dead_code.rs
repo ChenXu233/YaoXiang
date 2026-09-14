@@ -1,25 +1,28 @@
 //! 死代码分析器
 //!
-//! 分析未使用的导出符号和未使用的导入，生成警告信息。
+//! 识别从未被引用的定义，生成警告信息。
+//! 码义（RFC-013，#321 定案 B + RFC-029f 角色语义）：`pub` 定义的豁免与否
+//! 由角色决定——Script/Lib/Internal 豁免（pub = 对外接口），Bin 不豁免
+//! （无包外消费者，未使用 pub 可报，即 #321 方案 A 的兑现）。
+//! 未使用导入（W1003）由 typecheck 的 use elaboration 检测，不在此处。
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::util::span::Span;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
-use super::super::semantic_db::{SemanticDB, SymbolLocation};
 use crate::frontend::core::parser::ast::{Module, Stmt, StmtKind, Expr, Block};
 
 /// 死代码分析器
 pub struct DeadCodeAnalyzer {
-    /// 入口点集合
+    /// 入口点集合（可达性根：main 与 pub 函数/类型）
     entry_points: HashSet<String>,
     /// 所有符号定义
     all_defs: HashMap<String, SymbolDef>,
-    /// 符号引用（从 SemanticDB 获取）
-    references: HashMap<String, Vec<SymbolLocation>>,
-    /// 导入列表
-    imports: Vec<ImportInfo>,
+    /// pub 定义是否豁免（默认 true；Bin 角色设为 false）
+    exempt_pub: bool,
+    /// 包内引用池（Phase 2）：Some 时 Internal 的 pub 由池判定生死
+    project_refs: Option<HashSet<String>>,
 }
 
 /// 符号定义
@@ -31,7 +34,7 @@ pub struct SymbolDef {
     pub kind: SymbolKind,
     /// 定义位置
     pub location: Span,
-    /// 是否导出
+    /// 是否导出（pub = 对外接口，永不报告）
     pub is_exported: bool,
 }
 
@@ -46,17 +49,6 @@ pub enum SymbolKind {
     Variable,
     /// 方法
     Method,
-}
-
-/// 导入信息
-#[derive(Debug, Clone)]
-pub struct ImportInfo {
-    /// 导入路径
-    pub path: String,
-    /// 导入的符号列表（None 表示全部导入）
-    pub items: Option<Vec<String>>,
-    /// 导入位置
-    pub location: Span,
 }
 
 /// 死代码警告
@@ -82,18 +74,39 @@ impl DeadCodeAnalyzer {
         Self {
             entry_points: HashSet::new(),
             all_defs: HashMap::new(),
-            references: HashMap::new(),
-            imports: Vec::new(),
+            exempt_pub: true,
+            project_refs: None,
         }
+    }
+
+    /// 设置 pub 豁免（RFC-029f：Bin 角色 = false，未使用 pub 可报）
+    pub fn set_exempt_pub(
+        &mut self,
+        exempt: bool,
+    ) {
+        self.exempt_pub = exempt;
+    }
+
+    /// 设置包内引用池（RFC-029f Phase 2）：项目内所有文件引用到的标识符
+    /// 并集。提供后，`exempt_pub` 的 Internal 角色语义从"绝对豁免"收紧为
+    /// "pub 名在池中才豁免"——包内 use 图不可达的 pub 可报。
+    /// None（单文件 Script 路径）= 无包视角，pub 维持绝对豁免。
+    pub fn set_project_refs(
+        &mut self,
+        refs: HashSet<String>,
+    ) {
+        self.project_refs = Some(refs);
     }
 
     /// 收集入口点和符号定义（合并处理以减少代码重复）
     ///
-    /// 入口点包括：
+    /// 入口点（可达性根）：
     /// 1. `main` 函数
-    /// 2. 所有 `pub` 导出的函数
-    /// 3. 所有类型定义（因为可被实例化）
-    /// 4. 所有方法绑定
+    /// 2. `pub` 导出的函数与 `pub` 类型定义（对外接口）——仅在 [`Self::exempt_pub`]
+    ///    时作为可达根；Bin 角色 pub 不再自动豁免
+    ///
+    /// 类型定义走 `TypeDefinition` 语句（`Point: Type = {...}`），
+    /// 不再从 Assign 形状猜测——带类型注解的变量赋值是变量，不是类型。
     pub fn collect_entry_points_and_definitions(
         &mut self,
         ast: &Module,
@@ -102,7 +115,6 @@ impl DeadCodeAnalyzer {
             match &stmt.kind {
                 StmtKind::Assign {
                     target,
-                    type_annotation,
                     value,
                     is_pub,
                     ..
@@ -115,13 +127,9 @@ impl DeadCodeAnalyzer {
                         None => (Vec::new(), Vec::new()),
                     };
                     let is_method = type_name.is_some();
-                    let is_type_constructor =
-                        type_annotation.is_some() && params.is_empty() && body.is_empty();
                     let (def_name, kind) = if is_method {
                         let full_name = format!("{}.{}", type_name.as_ref().unwrap(), name);
                         (full_name, SymbolKind::Method)
-                    } else if is_type_constructor {
-                        (name.clone(), SymbolKind::Type)
                     } else if value.as_ref().is_some_and(|v| {
                         matches!(v.as_ref(), Expr::Lambda { .. } | Expr::Block(..))
                     }) {
@@ -131,77 +139,53 @@ impl DeadCodeAnalyzer {
                     } else {
                         (name.clone(), SymbolKind::Function)
                     };
-                    let def = SymbolDef {
-                        name: def_name.clone(),
-                        kind: kind.clone(),
-                        location: stmt.span,
-                        is_exported: *is_pub,
-                    };
-                    if !is_method && !is_type_constructor && name == "main" {
+                    self.all_defs.insert(
+                        def_name.clone(),
+                        SymbolDef {
+                            name: def_name.clone(),
+                            kind,
+                            location: stmt.span,
+                            is_exported: *is_pub,
+                        },
+                    );
+                    if !is_method && name == "main" {
                         self.entry_points.insert(name.clone());
                     }
-                    if *is_pub && kind == SymbolKind::Function {
-                        self.entry_points.insert(def_name.clone());
+                    if *is_pub && self.exempt_pub && self.project_refs.is_none() {
+                        self.entry_points.insert(def_name);
                     }
-                    if kind == SymbolKind::Type {
-                        self.entry_points.insert(def_name.clone());
-                    }
-                    self.all_defs.insert(def_name, def);
                 }
-                StmtKind::Use { path, items, .. } => {
-                    self.imports.push(ImportInfo {
-                        path: path.clone(),
-                        items: items.clone(),
-                        location: stmt.span,
-                    });
+                StmtKind::TypeDefinition { name, is_pub, .. } => {
+                    self.all_defs.insert(
+                        name.clone(),
+                        SymbolDef {
+                            name: name.clone(),
+                            kind: SymbolKind::Type,
+                            location: stmt.span,
+                            is_exported: *is_pub,
+                        },
+                    );
+                    // pub 类型是对外接口（可达根）；私有类型仅被引用时可达
+                    if *is_pub && self.exempt_pub && self.project_refs.is_none() {
+                        self.entry_points.insert(name.clone());
+                    }
                 }
                 _ => {}
             }
         }
     }
 
-    /// 从 AST 识别入口点（兼容旧接口）
-    #[deprecated(
-        since = "0.6.5",
-        note = "Use collect_entry_points_and_definitions instead"
-    )]
-    pub fn collect_entry_points(
-        &mut self,
-        ast: &Module,
-    ) {
-        self.collect_entry_points_and_definitions(ast);
-    }
-
-    /// 收集所有符号定义（兼容旧接口）
-    #[deprecated(
-        since = "0.6.5",
-        note = "Use collect_entry_points_and_definitions instead"
-    )]
-    pub fn collect_definitions(
-        &mut self,
-        _ast: &Module,
-    ) {
-        // 已合并到 collect_entry_points_and_definitions
-    }
-
-    /// 收集符号引用
-    pub fn collect_references(
-        &mut self,
-        semantic_db: &SemanticDB,
-    ) {
-        // 从 SemanticDB 获取所有符号引用
-        for name in semantic_db.defined_symbols() {
-            if let Some(refs) = semantic_db.get_symbol_refs(name) {
-                self.references.insert(name.clone(), refs.to_vec());
-            }
-        }
-    }
-
-    /// 从 AST 中收集所有符号引用（用于补充 SemanticDB 可能缺失的引用）
-    fn collect_references_from_ast(
-        &self,
-        ast: &Module,
-    ) -> HashSet<String> {
+    /// 从 AST 中收集所有标识符引用（定义处不算引用）
+    ///
+    /// 顶层 Assign/DestructureAssign 的目标名是定义不是使用——计入会使所有
+    /// 定义"自我可达"，死代码判定永远落空（#321 M2 复盘）；函数体内的赋值
+    /// 目标是写入即使用。
+    ///
+    /// 供死代码可达性与 W1003 未使用导入判定共享（#321）：
+    /// 语义级标记（Var 推断臂命中监视集）保证作用域正确性，
+    /// 本遍历做语法级兜底——覆盖 match 模式、spawn 体、类型注解等
+    /// Var 推断臂看不到的位置，宁多收（漏报方向）不漏收（误报方向）。
+    pub fn collect_ident_refs(ast: &Module) -> HashSet<String> {
         let mut referenced = HashSet::new();
 
         fn collect_from_expr(
@@ -218,8 +202,10 @@ impl DeadCodeAnalyzer {
                         collect_from_expr(arg, referenced);
                     }
                 }
-                Expr::FieldAccess { expr, .. } => {
+                Expr::FieldAccess { expr, field, .. } => {
                     collect_from_expr(expr, referenced);
+                    // 字段名一并收集：方法调用 obj.render() 只出现短名
+                    referenced.insert(field.clone());
                 }
                 Expr::BinOp { left, right, .. } => {
                     collect_from_expr(left, referenced);
@@ -247,6 +233,7 @@ impl DeadCodeAnalyzer {
                 Expr::Match { expr, arms, .. } => {
                     collect_from_expr(expr, referenced);
                     for arm in arms {
+                        collect_pattern_refs(&arm.pattern, referenced);
                         collect_from_block(&arm.body, referenced);
                     }
                 }
@@ -293,15 +280,11 @@ impl DeadCodeAnalyzer {
                     name, params, body, ..
                 } => {
                     referenced.insert(name.clone());
-                    for param in params {
-                        referenced.insert(param.name.clone());
-                    }
+                    collect_params_names_and_types(params, referenced);
                     collect_from_block(body, referenced);
                 }
                 Expr::Lambda { params, body, .. } => {
-                    for param in params {
-                        referenced.insert(param.name.clone());
-                    }
+                    collect_params_names_and_types(params, referenced);
                     collect_from_block(body, referenced);
                 }
                 Expr::ListComp {
@@ -340,6 +323,29 @@ impl DeadCodeAnalyzer {
                 Expr::Ref { expr, .. } => {
                     collect_from_expr(expr, referenced);
                 }
+                // spawn 体是真实执行上下文，其中的引用必须收集（漏收会误报死代码）
+                Expr::Spawn { body, .. } => {
+                    collect_from_block(body, referenced);
+                }
+                Expr::SpawnFor {
+                    var,
+                    iterable,
+                    body,
+                    ..
+                } => {
+                    referenced.insert(var.clone());
+                    collect_from_expr(iterable, referenced);
+                    collect_from_block(body, referenced);
+                }
+                Expr::In {
+                    elem, container, ..
+                } => {
+                    collect_from_expr(elem, referenced);
+                    collect_from_expr(container, referenced);
+                }
+                Expr::Borrow { expr, .. } => {
+                    collect_from_expr(expr, referenced);
+                }
                 Expr::Unsafe { body, .. } => {
                     collect_from_block(body, referenced);
                 }
@@ -350,41 +356,119 @@ impl DeadCodeAnalyzer {
             }
         }
 
+        fn collect_params_names_and_types(
+            params: &[crate::frontend::core::parser::ast::Param],
+            referenced: &mut HashSet<String>,
+        ) {
+            for param in params {
+                referenced.insert(param.name.clone());
+                if let Some(ty) = &param.ty {
+                    ty.collect_name_refs(referenced);
+                }
+            }
+        }
+
         fn collect_from_block(
             block: &Block,
             referenced: &mut HashSet<String>,
         ) {
             for stmt in &block.stmts {
-                collect_from_stmt(stmt, referenced);
+                collect_from_stmt(stmt, referenced, false);
+            }
+        }
+
+        /// match 模式中的名字引用：Identifier 兼作常量模式（无法与绑定区分，
+        /// 一律收集），Struct/Union 头部是类型名引用，Guard 条件是真实表达式
+        fn collect_pattern_refs(
+            pattern: &crate::frontend::core::parser::ast::Pattern,
+            referenced: &mut HashSet<String>,
+        ) {
+            use crate::frontend::core::parser::ast::Pattern;
+            match pattern {
+                Pattern::Identifier(name) => {
+                    referenced.insert(name.clone());
+                }
+                Pattern::Tuple(ps) | Pattern::Or(ps) => {
+                    for p in ps {
+                        collect_pattern_refs(p, referenced);
+                    }
+                }
+                Pattern::Struct { name, fields, .. } => {
+                    referenced.insert(name.clone());
+                    for (_, _, p) in fields {
+                        collect_pattern_refs(p, referenced);
+                    }
+                }
+                Pattern::Union { name, pattern, .. } => {
+                    referenced.insert(name.clone());
+                    if let Some(p) = pattern {
+                        collect_pattern_refs(p, referenced);
+                    }
+                }
+                Pattern::Guard {
+                    pattern, condition, ..
+                } => {
+                    collect_pattern_refs(pattern, referenced);
+                    collect_from_expr(condition, referenced);
+                }
+                _ => {}
             }
         }
 
         fn collect_from_stmt(
             stmt: &Stmt,
             referenced: &mut HashSet<String>,
+            in_toplevel: bool,
         ) {
             match &stmt.kind {
                 StmtKind::Expr(expr) => {
                     collect_from_expr(expr, referenced);
                 }
-                StmtKind::Assign { value, target, .. } => {
+                StmtKind::Assign {
+                    value,
+                    target,
+                    type_annotation,
+                    signature_params,
+                    ..
+                } => {
                     if let Some(expr) = value {
                         collect_from_expr(expr, referenced);
                     }
-                    if let Expr::Var(name, _) = target.as_ref() {
-                        referenced.insert(name.clone());
+                    // 目标名：顶层是定义（不算引用，否则所有定义"自我可达"），
+                    // 嵌套是写入即使用——通用走查覆盖 Var/FieldAccess/Index 等
+                    // 复合目标（`counts["k"] = v` 是对 counts 的使用）
+                    if !in_toplevel {
+                        collect_from_expr(target, referenced);
                     }
-                    if let Some(v) = value {
-                        if let Expr::Lambda { body, .. } = v.as_ref() {
-                            collect_from_block(
-                                &Block {
-                                    stmts: body.stmts.clone(),
-                                    span: stmt.span,
-                                },
-                                referenced,
-                            );
+                    if let Some(ty) = type_annotation {
+                        ty.collect_name_refs(referenced);
+                    }
+                    for param in signature_params {
+                        if let Some(ty) = &param.ty {
+                            ty.collect_name_refs(referenced);
                         }
                     }
+                }
+                // 元组解构赋值：嵌套目标是写入即使用；顶层是定义（不计引用）
+                StmtKind::DestructureAssign { names, rhs, .. } => {
+                    collect_from_expr(rhs, referenced);
+                    if !in_toplevel {
+                        for name in names {
+                            referenced.insert(name.name.clone());
+                        }
+                    }
+                }
+                StmtKind::TypeDefinition {
+                    signature_params,
+                    definition,
+                    ..
+                } => {
+                    for param in signature_params {
+                        if let Some(ty) = &param.ty {
+                            ty.collect_name_refs(referenced);
+                        }
+                    }
+                    definition.collect_name_refs(referenced);
                 }
                 StmtKind::For {
                     var,
@@ -417,13 +501,16 @@ impl DeadCodeAnalyzer {
         }
 
         for stmt in &ast.items {
-            collect_from_stmt(stmt, &mut referenced);
+            collect_from_stmt(stmt, &mut referenced, true);
         }
 
         referenced
     }
 
     /// 从入口点出发，计算可达符号集合
+    ///
+    /// 扁平近似：入口点 + AST 中被引用过的所有定义。
+    /// 仅被死代码引用的定义同样记为可达（只报死代码根，宁漏报不误报）。
     pub fn compute_reachability(
         &self,
         ast: &Module,
@@ -431,139 +518,121 @@ impl DeadCodeAnalyzer {
         let mut reachable = HashSet::new();
         let mut queue = VecDeque::new();
 
-        // 从入口点开始
         for entry in &self.entry_points {
             queue.push_back(entry.clone());
         }
 
-        // 收集 AST 中的所有引用
-        let ast_references = self.collect_references_from_ast(ast);
+        let ast_references = Self::collect_ident_refs(ast);
 
-        // BFS 遍历
         while let Some(symbol) = queue.pop_front() {
             if reachable.contains(&symbol) {
                 continue;
             }
             reachable.insert(symbol.clone());
 
-            // 添加该符号引用的其他符号
-            if let Some(refs) = self.references.get(&symbol) {
-                for _ref in refs {
-                    // 从引用中提取符号名（简化处理）
-                    // 实际应该根据上下文推断
-                }
-            }
-
-            // 也从 AST 引用中查找
-            // 如果某个符号被引用，我们需要追踪它引用的其他符号
             for def_name in self.all_defs.keys() {
-                // 如果 def_name 被引用过，添加到队列
                 if ast_references.contains(def_name) && !reachable.contains(def_name) {
                     queue.push_back(def_name.clone());
                 }
             }
         }
 
-        // 将 AST 中引用的导入项也加入可达集合
-        for import in &self.imports {
-            if let Some(items) = &import.items {
-                for item in items {
-                    if ast_references.contains(item) {
-                        reachable.insert(item.clone());
-                    }
-                }
-            }
-            if ast_references.contains(&import.path) {
-                reachable.insert(import.path.clone());
-            }
-        }
-
         reachable
     }
 
-    /// 找出未使用的导出符号
-    pub fn find_unused_exports(
+    /// 找出未被引用的私有定义
+    ///
+    /// 找出未被引用的定义（RFC-029f 角色语义）
+    ///
+    /// pub 豁免由角色决定：
+    /// - Bin（`exempt_pub = false`）：无包外消费者，未使用 pub 报警（#321 方案 A）
+    /// - Internal（`exempt_pub = true` + 提供引用池）：收紧为"包内 use 图可达才豁免"，
+    ///   pub 名不在池中即报（Phase 2）
+    /// - Script/Lib（`exempt_pub = true` 且无引用池）：绝对豁免——pub 是对外接口
+    ///   （#321 定案 B）；包外消费者不可见，宁漏报
+    ///
+    /// 私有定义不受豁免影响，始终参与判定（既有语义）。
+    pub fn find_unused_private_defs(
         &self,
         reachable: &HashSet<String>,
     ) -> Vec<DeadCodeWarning> {
         let mut warnings = Vec::new();
 
         for (name, def) in &self.all_defs {
-            if def.is_exported && !reachable.contains(name) {
-                let (code, message) = match def.kind {
-                    SymbolKind::Function => {
-                        ("W1001", format!("Unused exported function: '{}'", name))
-                    }
-                    SymbolKind::Type => ("W1002", format!("Unused exported type: '{}'", name)),
-                    SymbolKind::Variable => {
-                        ("W1004", format!("Unused exported variable: '{}'", name))
-                    }
-                    SymbolKind::Method => ("W1005", format!("Unused exported method: '{}'", name)),
-                };
-
-                warnings.push(DeadCodeWarning {
-                    code: code.to_string(),
-                    message,
-                    span: def.location,
-                });
+            if Self::is_reachable(name, def, reachable) {
+                continue;
             }
+            if def.is_exported && !self.pub_should_warn(name) {
+                continue;
+            }
+            let (code, message) = match def.kind {
+                SymbolKind::Function => ("W1001", format!("Unused function: '{}'", name)),
+                SymbolKind::Type => ("W1002", format!("Unused type: '{}'", name)),
+                SymbolKind::Variable => ("W1004", format!("Unused variable: '{}'", name)),
+                SymbolKind::Method => ("W1005", format!("Unused method: '{}'", name)),
+            };
+
+            warnings.push(DeadCodeWarning {
+                code: code.to_string(),
+                message,
+                span: def.location,
+            });
         }
 
         warnings
     }
 
-    /// 找出未使用的导入
-    pub fn find_unused_imports(
+    /// pub 定义是否应当报告（不可达前提下）
+    ///
+    /// - `exempt_pub = false`（Bin）→ 报
+    /// - `exempt_pub = true` + 引用池（Internal）→ 池中无短名才报；
+    ///   短名匹配与 [`Self::is_reachable`] 同构（`Type.method` 取方法名）
+    /// - `exempt_pub = true` 无引用池（Script/Lib）→ 不报（绝对豁免）
+    fn pub_should_warn(
         &self,
-        reachable: &HashSet<String>,
-    ) -> Vec<DeadCodeWarning> {
-        let mut warnings = Vec::new();
-
-        for import in &self.imports {
-            // 整个模块导入（use std.io）：成员短名（print 等）的模块归属需要
-            // resolver 级信息，当前无法精确判定——宁漏报不误报，跳过（#321 M2，
-            // 后续由 resolver 提供成员→模块归属映射后恢复）
-            let items = match &import.items {
-                Some(items) => items.clone(),
-                None => continue,
-            };
-
-            for item in items {
-                if !reachable.contains(&item) && !reachable.contains(&import.path) {
-                    warnings.push(DeadCodeWarning {
-                        code: "W1003".to_string(),
-                        message: format!("Unused import: '{}'", item),
-                        span: import.location,
-                    });
-                }
-            }
+        name: &str,
+    ) -> bool {
+        if !self.exempt_pub {
+            return true;
         }
+        match &self.project_refs {
+            Some(refs) => {
+                let short_name = name.rsplit('.').next().unwrap_or(name);
+                !refs.contains(short_name)
+            }
+            None => false,
+        }
+    }
 
-        warnings
+    /// 判定定义是否可达；方法用短名匹配（调用点 `w.render()` 只出现短名）
+    fn is_reachable(
+        name: &str,
+        def: &SymbolDef,
+        reachable: &HashSet<String>,
+    ) -> bool {
+        if reachable.contains(name) {
+            return true;
+        }
+        if matches!(def.kind, SymbolKind::Method) {
+            let short_name = name.rsplit('.').next().unwrap_or(name);
+            return reachable.contains(short_name);
+        }
+        false
     }
 
     /// 执行完整分析，返回警告列表
     pub fn analyze(
         &mut self,
         ast: &Module,
-        semantic_db: &SemanticDB,
     ) -> Vec<DeadCodeWarning> {
-        // 1. 收集入口点和符号定义（合并处理）
+        // 1. 收集入口点和符号定义
         self.collect_entry_points_and_definitions(ast);
 
-        // 2. 收集符号引用
-        self.collect_references(semantic_db);
-
-        // 3. 计算可达性
+        // 2. 计算可达性
         let reachable = self.compute_reachability(ast);
 
-        // 4. 找出未使用的导出
-        let mut warnings = self.find_unused_exports(&reachable);
-
-        // 6. 找出未使用的导入
-        warnings.extend(self.find_unused_imports(&reachable));
-
-        warnings
+        // 3. 找出未被引用的私有定义
+        self.find_unused_private_defs(&reachable)
     }
 
     /// 将警告转换为诊断信息
@@ -581,6 +650,7 @@ impl DeadCodeAnalyzer {
                     .nth(1)
                     .unwrap_or(&w.message)
                     .trim()
+                    .trim_matches('\'')
                     .to_string();
                 def.builder().param("name", name_param).at(w.span).build()
             })

@@ -254,22 +254,29 @@ result = spawn {
 | 成本   | 零开销（零大小类型） | Rc 或 Arc（编译器选）  |
 | 跨任务 | 不可                 | 可（编译器自动选 Arc） |
 
-### 3.4 闭包捕获
+### 3.4 闭包与捕获
 
-闭包捕获 = Move，一个闭包只能给一个任务用。
+**闭包不隐式捕获外层变量**（RFC-009 2026-06-16 决议，SPEC §12.3）。Lambda 只使用
+显式参数与自身局部变量；需要外层数据时，用显式参数传入，或经柯里化在创建点固化。
+隐式捕获的编译错误码为 E1001。
+
+> 为什么禁止：闭包定义处的外层作用域在闭包逃逸后可能已死，隐式捕获的引用无法保证
+> 存活；柯里化固化的值在创建点（调用点作用域存活）取值，安全且零隐藏成本。
 
 ```yaoxiang
 data = load_data()
-fn = (x: Int) -> Int = data.value + x   // 闭包 move 捕获 data
-
-// 编译错误：闭包只能用于一个任务
-result = spawn {
-    fn(1),      // 使用闭包
-    fn(2)       // 错误！闭包已 move
-}
+fn = (x: Int) -> Int = data.value + x   // ❌ 编译错误 E1001：隐式捕获 data
 ```
 
-**正确做法**：为每个任务创建独立闭包或使用 `ref`。
+```yaoxiang
+// ✅ 正确方式一：显式参数传入
+add: (data: Data, x: Int) -> Int = data.value + x
+
+// ✅ 正确方式二：柯里化固化（上下文在创建点固化，闭包只吃参数）
+mk: (data: Data) -> (x: Int) -> Int = (data) => (x) => data.value + x
+```
+
+**spawn 内的共享**：需要跨任务共享时，用 `ref` 显式共享持有（RFC-024）：
 
 ```yaoxiang
 data = load_data()
@@ -280,6 +287,9 @@ result = spawn {
     ((x: Int) -> Int = shared.value + x)(2)
 }
 ```
+
+`spawn while` 禁止捕获 `&mut` 类型外部变量（RFC-024 2026-07-04 决议，编译期报错，
+避免数据竞争且不引入 Sync）。
 
 ---
 

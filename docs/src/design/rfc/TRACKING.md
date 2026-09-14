@@ -20,9 +20,12 @@
 | 024-concurrency-model.md | RFC-024：基于 spawn 的并发运行时语义 | 已接受 | accepted\024-concurrency-model.md | #89 | -- | -- | -- |
 | 026-ffi-core-mechanism.md | RFC-026：FFI 核心机制 | 已接受 | accepted\026-ffi-core-mechanism.md | #93 | -- | -- | -- |
 | 027-compile-time-evaluation-types.md | RFC-027：编译期谓词与统一静态验证 | 已接受 | accepted\027-compile-time-evaluation-types.md | #90 | -- | -- | -- |
+| 027a-termination-proof-fallback.md | RFC-027a: 终止检查的证明函数兜底 | 草案 | draft\027a-termination-proof-fallback.md | #318 | -- | -- | -- |
 | 029-module-semantics.md | RFC-029: 模块语义系统 | 已接受 | accepted\029-module-semantics.md | #232 | -- | -- | -- |
+| 029f-target-semantics.md | RFC-029f: 编译目标角色与导入面语义 | 已接受 | accepted\029f-target-semantics.md | #334 | -- | -- | -- |
 | 030-assert-mechanism.md | RFC-030: assert 断言机制 | 已接受 | accepted\030-assert-mechanism.md | #97 | #155, #157, #158, #159, #160, #161, #162, #169 | -- | -- |
 | 036-test-framework.md | RFC-036: std.test 测试框架与 yaoxiang test 命令 | 已接受 | accepted\036-test-framework.md | #94, #95, #221, #319 | -- | -- | -- |
+| 037-industrial-packaging.md | RFC-037: 工业化分发方案 — 基于 cargo-dist 的编译器/工具链打包 | 已接受 | accepted\037-industrial-packaging.md | #230 | -- | -- | -- |
 | 038-statement-termination.md | RFC-038: 语句终止与换行规则（Statement Termination & Newline Rules） | 已接受 | accepted\038-statement-termination.md | #258 | #, 2, 5, 8 | -- | -- |
 | 001-concurrent-model-error-handling.md | RFC-001：并作模型与错误处理系统 | 已废弃 | deprecated\001-concurrent-model-error-handling.md | -- | -- | -- | -- |
 | 020-dynamic-modules-ffi.md | RFC-020：动态模块与 FFI 集成 | 已废弃 | deprecated\020-dynamic-modules-ffi.md | -- | -- | -- | -- |
@@ -38,8 +41,7 @@
 | 033-reflection-operator.md | RFC-033: `^^` 反射运算符 | 草案 | draft\033-reflection-operator.md | #136 | -- | -- | -- |
 | 034-debug-toolchain.md | RFC-034: 统一调试工具链 | 草案 | draft\034-debug-toolchain.md | #164 | -- | -- | -- |
 | 035-mcp-server.md | RFC-035: MCP Server 支持（AI Agent 集成） | 草案 | draft\035-mcp-server.md | #154 | -- | -- | -- |
-| 037-industrial-packaging.md | RFC-037: 工业化分发方案 — 基于 cargo-dist 的编译器/工具链打包 | 草案 | draft\037-industrial-packaging.md | #230 | -- | -- | -- |
-| 039-pattern-matching-completeness.md | RFC-039: 模式匹配完备化 | 草案 | draft\039-pattern-matching-completeness.md | -- | -- | -- | -- |
+| 039-pattern-matching-completeness.md | RFC-039: 模式匹配完备化 | 草案 | draft\039-pattern-matching-completeness.md | #330 | -- | -- | -- |
 | 003-version-planning.md | RFC-003：版本规划 | 已拒绝 | rejected\003-version-planning.md | -- | -- | -- | -- |
 | 005-automated-cve-scanning.md | RFC-005: 自动化CVE安全检查系统 | 已拒绝 | rejected\005-automated-cve-scanning.md | -- | -- | -- | -- |
 | 016-quantum-native-support.md | RFC 016: 量子原生支持与多重后端集成 | 已拒绝 | rejected\016-quantum-native-support.md | -- | -- | -- | -- |

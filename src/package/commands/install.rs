@@ -76,6 +76,17 @@ pub fn exec_in(project_dir: &Path) -> PackageResult<()> {
         for (name, err) in &result.failed {
             println!("  {} - {}", name, err);
         }
+        // 安装失败必须非零退出（此前打印失败但返回 Ok，脚本无从判定）
+        return Err(
+            crate::package::error::PackageError::DependencyInstallFailed(
+                result
+                    .failed
+                    .iter()
+                    .map(|(name, err)| format!("{}: {}", name, err))
+                    .collect::<Vec<_>>()
+                    .join("; "),
+            ),
+        );
     }
 
     println!("\n{}", t_simple(MSG::PackageLockUpdated, lang));

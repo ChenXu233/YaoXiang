@@ -1,6 +1,6 @@
 ---
 title: 'Comment Preservation Rules'
-description: 'Preservation rules for comments during formatting'
+description: 'Rules for preserving comments during formatting'
 ---
 
 # Comment Preservation
@@ -9,42 +9,42 @@ description: 'Preservation rules for comments during formatting'
 
 ## §C1 Comment Types
 
-**§C1.1 Single-line comments.** Use `//` to start, must be preserved.
+**§C1.1 Single-line comments.** Begins with `//` and must be preserved.
 
 ```
-// This is a single-line comment
-let x = 1;  // This is an end-of-line comment
+// 这是单行注释
+let x = 1;  // 这是行末注释
 ```
 
-**§C1.2 Multi-line comments.** Enclosed by `/* ... */`, supports nesting, must be preserved.
+**§C1.2 Multi-line comments.** Enclosed by `/* ... */`, supports nesting, and must be preserved.
 
 ```
-/* This is a multi-line comment */
-/* Nested /* comment */ */
+/* 这是多行注释 */
+/* 嵌套 /* 注释 */ */
 ```
 
-**§C1.3 Documentation comments.** Use `///` to start, must be preserved.
+**§C1.3 Documentation comments.** Begins with `///` and must be preserved.
 
 ```
-/// This is a documentation comment
+/// 这是文档注释
 fn foo() { ... }
 ```
 
 ---
 
-## §C2 Comment Placement
+## §C2 Comment Positions
 
-**§C2.1 File header comments.** Comments at the beginning of a file must be preserved at the start
-of the file.
+**§C2.1 File header comments.** Comments at the beginning of a file must be preserved at the top of
+the file.
 
 **§C2.2 Inter-statement comments.** Comments between statements must be preserved in their original
-position.
+positions.
 
 **§C2.3 End-of-line comments.** End-of-line comments must be preserved at the end of the same line.
 
 ---
 
-## §C3 Empty Line Preservation
+## §C3 Blank Line Preservation
 
-**§C3.1 Empty line preservation.** Empty lines in the original code should be preserved to separate
+**§C3.1 Blank line preservation.** Blank lines in the original code should be preserved to separate
 logical blocks.

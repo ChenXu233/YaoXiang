@@ -7,7 +7,7 @@
 
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use crate::frontend::module::{Export, ExportKind, ModuleInfo};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable, TypeConstraintSolver};
@@ -68,6 +68,8 @@ pub struct StatementChecker {
     type_defs: HashMap<String, MonoType>,
     /// 实例化请求（收集所有泛型函数实例化需求）
     pub instantiation_requests: Vec<InstantiationRequest>,
+    /// #335 G3 类型信息流接口：调用点所有权解析表（按调用 span 键控）
+    pub call_ownership: super::call_ownership::CallOwnershipTable,
     /// RFC-011a §6 存在类型强制点（具体→存在包装点，ir_gen 按 span 查表注入包装）
     pub existential_coercions: Vec<super::existential::ExistentialCoercion>,
     /// 流敏感假设集 Γ（可选 — None 在测试或未启用证明管道时使用）
@@ -82,6 +84,13 @@ pub struct StatementChecker {
     /// 委托表达式检查给 ExpressionInferrer 时经 set_loop_depth 传入，保证
     /// E1102（break/continue 循环外）判定跨两个 walker 一致。
     loop_depth: usize,
+    /// #321 W1003：导入名监视集（本地名 → 报告名；模块级由 TypeChecker 注入，
+    /// 函数体级由 process_use_stmt 登记）。变量成功解析命中即视为对应导入已使用。
+    import_watch: HashMap<String, String>,
+    /// #321 W1003：已使用的监视名
+    imported_used: HashSet<String>,
+    /// #321 W1003：函数体级 use 登记的导入（本地名, use 语句 span）
+    body_imports: Vec<(String, crate::util::span::Span)>,
 }
 
 impl StatementChecker {
@@ -109,12 +118,68 @@ impl StatementChecker {
             method_bindings: HashMap::new(),
             type_defs: HashMap::new(),
             instantiation_requests: Vec::new(),
+            call_ownership: super::call_ownership::CallOwnershipTable::new(),
             existential_coercions: Vec::new(),
             gamma,
             dep_env,
             trait_table,
             proof_fn_bases: HashMap::new(),
             loop_depth: 0,
+            import_watch: HashMap::new(),
+            imported_used: HashSet::new(),
+            body_imports: Vec::new(),
+        }
+    }
+
+    /// #321 W1003：注入模块级导入名监视集（由 TypeChecker 在 pass2 登记后传入）
+    pub fn set_import_watch(
+        &mut self,
+        names: HashMap<String, String>,
+    ) {
+        self.import_watch.extend(names);
+    }
+
+    /// #321 W1003：取走导入使用跟踪数据（函数体级导入记录 + 已使用名集合）
+    pub fn drain_import_tracking(
+        &mut self
+    ) -> (Vec<(String, crate::util::span::Span)>, HashSet<String>) {
+        (
+            std::mem::take(&mut self.body_imports),
+            std::mem::take(&mut self.imported_used),
+        )
+    }
+
+    /// #321 W1003：变量成功解析时调用——命中监视集的名字记为对应导入已使用
+    fn note_import_use(
+        &mut self,
+        name: &str,
+    ) {
+        if let Some(report_as) = self.import_watch.get(name) {
+            let report_as = report_as.clone();
+            self.imported_used.insert(report_as);
+        }
+    }
+
+    /// #321 W1003：登记函数体级导入本地名（同时进监视集，随后的引用即可标记使用）
+    fn note_body_import(
+        &mut self,
+        name: &str,
+        span: crate::util::span::Span,
+    ) {
+        self.body_imports.push((name.to_string(), span));
+        self.import_watch.insert(name.to_string(), name.to_string());
+    }
+
+    /// #321 W1003：函数体级整体导入的成员监视（导出成员名 → 模块别名）
+    fn note_body_import_members(
+        &mut self,
+        alias: &str,
+        module: &ModuleInfo,
+        span: crate::util::span::Span,
+    ) {
+        self.note_body_import(alias, span);
+        for name in module.exports.keys() {
+            self.import_watch.insert(name.clone(), alias.to_string());
         }
     }
 
@@ -330,12 +395,18 @@ impl StatementChecker {
     fn process_use_stmt(
         &mut self,
         path: &str,
+        path_span: crate::util::span::Span,
         items: &Option<Vec<String>>,
         alias: &Option<Vec<String>>,
         item_aliases: &Option<Vec<Option<String>>>,
-    ) {
+    ) -> Result<(), Box<Diagnostic>> {
         let Some(module) = self.module_registry.get(path).cloned() else {
-            return;
+            // E5001：模块未找到（此前静默 return，错误延后成"unknown variable"）
+            return Err(Box::new(
+                ErrorCodeDefinition::module_not_found(path)
+                    .at(path_span)
+                    .build(),
+            ));
         };
 
         let selected_exports: Vec<Export> = match items {
@@ -350,6 +421,8 @@ impl StatementChecker {
             // use path
             (None, None) => {
                 let module_alias = path.split('.').next_back().unwrap_or(path);
+                // #321 W1003：登记导入本地名与导出成员监视
+                self.note_body_import_members(module_alias, &module, path_span);
                 let module_ty = self.module_as_struct_type(&module, module_alias);
                 self.scope.add_var(
                     module_alias.to_string(),
@@ -361,6 +434,8 @@ impl StatementChecker {
             // use path as alias
             (None, Some(aliases)) if aliases.len() == 1 => {
                 let module_alias = &aliases[0];
+                // #321 W1003：登记导入本地名与导出成员监视
+                self.note_body_import_members(module_alias, &module, path_span);
                 let module_ty = self.module_as_struct_type(&module, module_alias);
                 self.scope.add_var(
                     module_alias.to_string(),
@@ -377,17 +452,28 @@ impl StatementChecker {
                         .and_then(|v| v.get(i))
                         .and_then(|a| a.as_ref())
                         .unwrap_or(item_name);
-                    if let Some(export) = module.exports.get(item_name).cloned() {
-                        self.import_binding(local_name, &export);
-                    }
+                    // E5003：导出未找到（此前静默跳过，用户只看到下游 unknown variable）
+                    let Some(export) = module.exports.get(item_name).cloned() else {
+                        return Err(Box::new(
+                            ErrorCodeDefinition::export_not_found(item_name, path)
+                                .at(path_span)
+                                .build(),
+                        ));
+                    };
+                    // #321 W1003：登记导入本地名（内联别名优先）
+                    self.note_body_import(local_name, path_span);
+                    self.import_binding(local_name, &export);
                 }
             }
             _ => {
                 for export in selected_exports {
+                    // #321 W1003：登记导入本地名
+                    self.note_body_import(&export.name, path_span);
                     self.import_binding(&export.name, &export);
                 }
             }
         }
+        Ok(())
     }
 
     /// 获取求解器
@@ -549,6 +635,10 @@ impl StatementChecker {
         let saved_loop_depth = self.loop_depth;
         self.loop_depth = 0;
 
+        // #335 路径 A：函数上下文——体内嵌套泛型调用的请求以此为 containing_fn
+        let prev_fn_context = self.scope.fn_context().map(str::to_owned);
+        self.scope.set_fn_context(Some(name.to_string()));
+
         // 创建函数作用域（#295 三链模型：参数层 + 新局部层，外层函数局部变量不可见）
         self.scope.enter_fn();
 
@@ -605,6 +695,7 @@ impl StatementChecker {
             self.scope.exit_fn();
             self.is_top_level = was_top_level;
             self.loop_depth = saved_loop_depth;
+            self.scope.set_fn_context(prev_fn_context);
 
             match first_err {
                 Some(e) => Err(e),
@@ -629,6 +720,7 @@ impl StatementChecker {
             self.scope.exit_fn();
             self.is_top_level = was_top_level;
             self.loop_depth = saved_loop_depth;
+            self.scope.set_fn_context(prev_fn_context);
 
             match err {
                 Some(e) => Err(e),
@@ -741,14 +833,23 @@ impl StatementChecker {
             }
             crate::frontend::core::parser::ast::StmtKind::Use {
                 path,
+                path_span,
                 items,
                 alias,
                 item_aliases,
                 ..
-            } => {
-                self.process_use_stmt(path, items, alias, item_aliases);
-                Ok(())
-            }
+            } => match self.process_use_stmt(path, *path_span, items, alias, item_aliases) {
+                Ok(()) => Ok(()),
+                // #F2：模块/导出未命中不再静默——收集模式下累积，否则短路返回
+                Err(err) => {
+                    if self.collect_all_errors {
+                        self.collect_error(*err);
+                        Ok(())
+                    } else {
+                        Err(err)
+                    }
+                }
+            },
             // 元组解构赋值
             crate::frontend::core::parser::ast::StmtKind::DestructureAssign {
                 names,
@@ -1484,6 +1585,7 @@ impl StatementChecker {
         let iter_ty = self.check_expr(iterable)?;
         let elem_ty = match iter_ty {
             m if m.is_list() => m.generic_args().unwrap()[0].clone(),
+            m if m.is_array() => m.generic_args().unwrap()[0].clone(),
             m if m.is_range() && m.generic_args().map(|a| a.len() == 1).unwrap_or(false) => {
                 m.generic_args().unwrap()[0].clone()
             }
@@ -1493,7 +1595,18 @@ impl StatementChecker {
                 MonoType::make_tuple(vec![args[0].clone(), args[1].clone()])
             }
             m if m.is_tuple() => self.solver.new_var(),
-            _ => self.solver.new_var(),
+            // 类型层不认的可迭代对象宁拒不静默：fresh var 兜底会让
+            // `for x in 5` 纸面通过、循环体类型检查形同虚设
+            m => {
+                return Err(Box::new(
+                    ErrorCodeDefinition::type_mismatch(
+                        "List/Array/Range/String/Dict/Tuple（可迭代）",
+                        &format!("{m}"),
+                    )
+                    .at(iterable.span())
+                    .build(),
+                ))
+            }
         };
 
         self.scope.enter_block();
@@ -1649,6 +1762,8 @@ impl StatementChecker {
             // 变量：直接从 scope 中读取
             Expr::Var(name, span) => {
                 if let Some(poly) = self.scope.get_var(name).cloned() {
+                    // #321 W1003：命中监视集的导入名记为已使用
+                    self.note_import_use(name);
                     // 直接返回 scope 中的类型
                     Ok(poly.body)
                 } else {
@@ -1698,22 +1813,39 @@ impl StatementChecker {
 
                 match op {
                     BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => {
-                        if let (MonoType::Int(_), MonoType::Int(_)) = (&left_ty, &right_ty) {
-                            Ok(left_ty)
-                        } else if let (MonoType::Float(_), MonoType::Float(_)) =
-                            (&left_ty, &right_ty)
-                        {
-                            Ok(left_ty)
-                        } else if left_ty.is_string() && right_ty.is_string() {
+                        // RFC-009 读透明：借用值参与算术按 inner 类型判定（读穿透）
+                        let l = super::expressions::read_view(&left_ty);
+                        let r = super::expressions::read_view(&right_ty);
+                        if let (MonoType::Int(_), MonoType::Int(_)) = (&l, &r) {
+                            Ok(l)
+                        } else if let (MonoType::Float(_), MonoType::Float(_)) = (&l, &r) {
+                            Ok(l)
+                        } else if l.is_string() && r.is_string() {
                             Ok(MonoType::make_string())
-                        } else if left_ty.is_list() && right_ty.is_list() {
-                            let left_elem = &left_ty.generic_args().expect("List args")[0];
-                            let right_elem = &right_ty.generic_args().expect("List args")[0];
+                        } else if l.is_list() && r.is_list() {
+                            let left_elem = &l.generic_args().expect("List args")[0];
+                            let right_elem = &r.generic_args().expect("List args")[0];
                             let _ = self.solver.unify(left_elem, right_elem);
                             let elem_ty = self.solver.resolve_type(left_elem);
                             Ok(MonoType::make_list(elem_ty))
                         } else {
-                            Ok(self.solver.new_var())
+                            // 未绑定类型变量延后判定（避免过早收敛破坏
+                            // fn(Any)->Any 槽位的多态参数）
+                            if matches!(left_ty, MonoType::TypeVar(_))
+                                || matches!(right_ty, MonoType::TypeVar(_))
+                            {
+                                return Ok(self.solver.new_var());
+                            }
+                            // 与 infer_binary 同款纪律：类型层不认的组合宁拒不
+                            // 静默，fresh var 兜底会把错译推迟到运行时 E6007
+                            Err(Box::new(
+                                ErrorCodeDefinition::type_mismatch(
+                                    "Int/Float/String/List（两侧同型）",
+                                    &format!("{l} 与 {r}"),
+                                )
+                                .at(*span)
+                                .build(),
+                            ))
                         }
                     }
                     // #300 I 项：Range 已移到 ExpressionInferrer::infer_range_expr
@@ -1736,12 +1868,16 @@ impl StatementChecker {
                         inferrer.set_dep_env(&self.dep_env);
                         // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
                         inferrer.set_loop_depth(self.loop_depth);
+                        // #321 W1003：导入名监视集随委托传入
+                        inferrer.set_import_watch(&self.import_watch);
                         if let Some(gamma) = &mut self.gamma {
                             inferrer.set_gamma(gamma);
                         }
                         let result = inferrer.infer_expr(expr).map_err(Box::new);
+                        self.imported_used.extend(inferrer.take_import_used());
                         self.instantiation_requests
                             .extend(inferrer.instantiation_requests);
+                        self.call_ownership.extend(inferrer.call_ownership);
                         self.existential_coercions
                             .extend(inferrer.existential_coercions);
                         result
@@ -1805,12 +1941,16 @@ impl StatementChecker {
                 inferrer.set_dep_env(&self.dep_env);
                 // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
                 inferrer.set_loop_depth(self.loop_depth);
+                // #321 W1003：导入名监视集随委托传入
+                inferrer.set_import_watch(&self.import_watch);
                 if let Some(gamma) = &mut self.gamma {
                     inferrer.set_gamma(gamma);
                 }
                 let result = inferrer.infer_expr(expr).map_err(Box::new);
+                self.imported_used.extend(inferrer.take_import_used());
                 self.instantiation_requests
                     .extend(inferrer.instantiation_requests);
+                self.call_ownership.extend(inferrer.call_ownership);
                 self.existential_coercions
                     .extend(inferrer.existential_coercions);
                 result

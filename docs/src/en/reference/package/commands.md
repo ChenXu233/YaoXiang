@@ -5,33 +5,33 @@ description: 'Detailed description of all package manager commands'
 
 # Command Line Interface
 
-## yaoxiang init
+## yx init
 
 Initialize a new YaoXiang project.
 
 ### Usage
 
 ```bash
-yaoxiang init <project-name>
+yx init <project_name>
 ```
 
 ### Arguments
 
 | Argument     | Description             |
 | ------------ | ----------------------- |
-| project-name | Name of the new project |
+| project_name | Name of the new project |
 
 ### Options
 
-| Option   | Description              |
-| -------- | ------------------------ |
-| `--help` | Display help information |
+| Option   | Description           |
+| -------- | --------------------- |
+| `--help` | Show help information |
 
-### Examples
+### Example
 
 ```bash
 # Create a new project
-yaoxiang init my-project
+yx init my-project
 
 # Result:
 # ✨ Project created: my-project
@@ -43,108 +43,108 @@ yaoxiang init my-project
 
 ---
 
-## yaoxiang add
+## yx add
 
-Add dependencies to the project.
+Add a dependency to the project.
 
 ### Usage
 
 ```bash
-yaoxiang add <package-name> [version]
-yaoxiang add <package-name> --dev
+yx add <package_name> [version]
+yx add <package_name> --dev
 ```
 
 ### Arguments
 
 | Argument     | Description                                |
 | ------------ | ------------------------------------------ |
-| package-name | Name of the dependency to add              |
+| package_name | Name of the dependency to add              |
 | version      | Version number (optional, defaults to `*`) |
 
 ### Options
 
-| Option        | Description           |
-| ------------- | --------------------- |
-| `--dev`, `-D` | Add as dev dependency |
+| Option        | Description                     |
+| ------------- | ------------------------------- |
+| `--dev`, `-D` | Add as a development dependency |
 
-### Examples
+### Example
 
 ```bash
-# Add latest version
-yaoxiang add http
+# Add the latest version
+yx add http
 
-# Add specific version
-yaoxiang add http 1.0.0
+# Add a specific version
+yx add http 1.0.0
 
-# Add version range
-yaoxiang add json ">=2.0.0"
+# Add a version range
+yx add json ">=2.0.0"
 
-# Add dev dependency
-yaoxiang add test-utils --dev
-yaoxiang add benchmark -D
+# Add a development dependency
+yx add test-utils --dev
+yx add benchmark -D
 ```
 
 ---
 
-## yaoxiang rm
+## yx rm
 
-Remove dependencies from the project.
+Remove a dependency from the project.
 
 ### Usage
 
 ```bash
-yaoxiang rm <package-name>
-yaoxiang rm <package-name> --dev
+yx rm <package_name>
+yx rm <package_name> --dev
 ```
 
 ### Arguments
 
 | Argument     | Description                      |
 | ------------ | -------------------------------- |
-| package-name | Name of the dependency to remove |
+| package_name | Name of the dependency to remove |
 
 ### Options
 
-| Option        | Description           |
-| ------------- | --------------------- |
-| `--dev`, `-D` | Remove dev dependency |
+| Option        | Description                     |
+| ------------- | ------------------------------- |
+| `--dev`, `-D` | Remove a development dependency |
 
-### Examples
+### Example
 
 ```bash
-# Remove regular dependency
-yaoxiang rm http
+# Remove a regular dependency
+yx rm http
 
-# Remove dev dependency
-yaoxiang rm test-utils --dev
+# Remove a development dependency
+yx rm test-utils --dev
 ```
 
 ---
 
-## yaoxiang install
+## yx install
 
 Install project dependencies.
 
 ### Usage
 
 ```bash
-yaoxiang install
+yx install
 ```
 
 ### Description
 
-- Reads dependency declarations from `yaoxiang.toml`
-- Downloads all dependencies to `vendor` directory
-- Generates/updates `yaoxiang.lock` with locked versions
-- Detects dependency version conflicts
+- Read the dependency declarations from `yaoxiang.toml`
+- Download all dependencies to the `vendor` directory
+- Generate/update `yaoxiang.lock` to lock versions
+- Detect dependency version conflicts
 
-### Examples
+### Example
 
 ```bash
 # Install all dependencies
-yaoxiang install
+yx install
 
-# Example output:
+# Sample output:
 # 📦 Resolving dependencies...
 #   http (1.0.0) [installed]
 #   json (2.0.0) [cached]
@@ -153,68 +153,67 @@ yaoxiang install
 
 ---
 
-## yaoxiang update
+## yx update
 
 Update project dependencies.
 
 ### Usage
 
 ```bash
-yaoxiang update
-yaoxiang update <package-name>
+yx update
+yx update <package_name>
 ```
 
 ### Arguments
 
 | Argument     | Description                              |
 | ------------ | ---------------------------------------- |
-| package-name | Specific dependency to update (optional) |
+| package_name | Specific dependency to update (optional) |
 
 ### Description
 
-- Without argument: Update all dependencies
-- With argument: Update only the specified dependency
+- Without arguments: update all dependencies
+- With arguments: update only the specified dependency
 
-### Examples
+### Example
 
 ```bash
 # Update all dependencies
-yaoxiang update
+yx update
 
-# Example output:
+# Sample output:
 # 📦 Updating dependencies...
-#   http (0 → 1.1.0)
-# ✅ 1 dependency updated, lock file updated
+1.0.#   http (0 → 1.1.0)
+# ✅ Updated 1 dependency, lock file updated
 
-# Update single dependency
-yaoxiang update http
+# Update a single dependency
+yx update http
 ```
 
 ---
 
-## yaoxiang list
+## yx list
 
 List all dependencies of the project.
 
 ### Usage
 
 ```bash
-yaoxiang list
+yx list
 ```
 
 ### Description
 
-Displays all runtime dependencies and development dependencies, along with their versions and
-sources.
+Displays all runtime and development dependencies, along with their versions and sources.
 
-### Examples
+### Example
 
 ```bash
 # List dependencies
-yaoxiang list
+yx list
 
-# Example output:
-# 📦 Project Dependencies
+# Sample output:
+# 📦 Project dependencies
 #
 # Runtime dependencies:
 #   http        1.0.0    registry
