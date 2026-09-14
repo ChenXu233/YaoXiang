@@ -1,6 +1,6 @@
 ---
-title: CI 集成指南
-description: 将 yx check 和 yx format 集成到 CI/CD 流水线
+title: 'CI 集成指南'
+description: '将 yx check 和 yx format 集成到 CI/CD 流水线'
 ---
 
 # CI 集成指南

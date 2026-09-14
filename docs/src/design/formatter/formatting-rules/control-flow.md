@@ -1,6 +1,6 @@
 ---
 title: '控制流格式化规则'
-description: if/else if/else、for 循环、while 循环、循环标签的格式化规则
+description: 'if/else if/else、for 循环、while 循环、循环标签的格式化规则'
 ---
 
 # 控制流格式化规则

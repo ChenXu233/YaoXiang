@@ -1,9 +1,9 @@
 ---
-title: 'Function-Related Formatting Rules'
+title: 'Function-related Formatting Rules'
 description: 'Formatting rules for function definitions, function calls, and Lambda expressions'
 ---
 
-# Function-Related Formatting Rules
+# Function-related Formatting Rules
 
 ---
 
@@ -19,11 +19,11 @@ foo: (a: Int, b: Int) -> Int = a + b
 foo : (a: Int, b: Int) -> Int = a + b
 ```
 
-**§4.2 Parameter List Line Break.** When the parameter list exceeds the line width, each parameter
-occupies one line, with a trailing comma.
+**§4.2 Parameter List Line Breaks.** When the parameter list exceeds the line width, each parameter
+takes one line, with a trailing comma.
 
 ```
-// Exceeds line width
+// When exceeding line width
 very_long_function_name: (first_param: Int, second_param: Int, third_param: Int) -> Int = first_param + second_param + third_param
 
 // After formatting
@@ -34,7 +34,7 @@ very_long_function_name:
 ) -> Int = first_param + second_param + third_param
 ```
 
-**§4.3 Return Type.** The return type is connected to the parameter list with `->`, with one space
+**§4.3 Return Type.** The return type and the parameter list are connected by `->`, with one space
 before and after `->`.
 
 ```
@@ -47,7 +47,7 @@ foo: ()-> Int = 1
 foo:()-> Int = 1
 ```
 
-**§4.4 Function Body.** The function body is separated from the return type by a single space.
+**§4.4 Function Body.** The function body and the return type are separated by one space.
 
 ```
 // ✅ Correct
@@ -72,7 +72,7 @@ foo(1,2,3)
 foo(1 , 2 , 3)
 ```
 
-**§7.2 Named Arguments.** Named arguments use the `name = value` format.
+**§7.2 Named Parameters.** Named parameters use the `name = value` format.
 
 ```
 // ✅ Correct
@@ -82,11 +82,11 @@ foo(x = 1, y = 2)
 foo(x=1, y=2)
 ```
 
-**§7.3 Parameter Line Break.** When the argument list exceeds the line width, each argument occupies
+**§7.3 Parameter Line Breaks.** When the parameter list exceeds the line width, each parameter takes
 one line, with a trailing comma.
 
 ```
-// Exceeds line width
+// When exceeding line width
 very_long_function_name(first_argument, second_argument, third_argument)
 
 // After formatting
@@ -99,7 +99,7 @@ very_long_function_name(
 
 ---
 
-## §12 Lambda Expressions
+## §12 Lambda Expression
 
 **§12.1 Lambda Format.** Lambda uses the `(params) => body` format.
 

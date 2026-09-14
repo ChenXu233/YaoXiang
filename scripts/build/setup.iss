@@ -65,7 +65,7 @@ Name: "addtopath"; Description: "Add to system PATH"; GroupDescription: "Other o
 
 [Files]
 ; RFC-037 发行包整棵树：bin/{yx.exe, yaoxiang-rs.exe, libz3.dll} + lib/yaoxiang/std/ + README/LICENSE
-Source: "{#PkgDir}\*"; DestDir: "{app}"; Flags: recursedirs createallsubdirs ignoreversion
+Source: "{#PkgDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

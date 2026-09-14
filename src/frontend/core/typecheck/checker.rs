@@ -422,6 +422,12 @@ impl TypeChecker {
                 .as_ref()
                 .map(|bc| bc.var_type_ledger().clone())
                 .unwrap_or_default();
+            // #335 G3 类型信息流接口：调用点所有权解析表随 ledger 一并移交
+            let call_ownership = self
+                .body_checker
+                .as_ref()
+                .map(|bc| bc.call_ownership.clone())
+                .unwrap_or_default();
             let mut proof_ctx =
                 crate::frontend::core::typecheck::proof::context::ProofContext::new(&self.env);
             let (ownership_results, plan, escaped_refs) = super::layers::ownership::check_ownership(
@@ -429,11 +435,16 @@ impl TypeChecker {
                 module,
                 &self.env,
                 &ledger,
+                &call_ownership,
             );
             for result in ownership_results {
                 match result {
                     ProofResult::Proved => {}
                     ProofResult::Disproved(model) => {
+                        // SpawnCycleViolation 的检测发生在全模块 ref 图上，模型无
+                        // 语句级 span——挂模块 span 兜底，避免 spanless 构造在
+                        // build() 走 debug panic / release 降级 E8001（显式 .at() 仍优先）
+                        let _model_guard = crate::util::diagnostic::push_current_span(module.span);
                         self.add_error(model.into_diagnostic());
                     }
                     ProofResult::Unproven { .. } => {}
@@ -2455,11 +2466,21 @@ impl TypeChecker {
         }
 
         // 阶段 2：遍历赋值点，生成 VC
+        let mut vc_diags = Vec::new();
         for stmt in &module.items {
             // #324：模块级阶段挂当前语句 span，诊断自动获得位置
             let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
-            self.check_assignments_with_deps(stmt, &dep_graph, &mut shared_ctx, proof_calls);
+            self.check_assignments_with_deps(
+                stmt,
+                &dep_graph,
+                &mut shared_ctx,
+                proof_calls,
+                &mut vc_diags,
+            );
         }
+
+        // VC 证伪诊断汇入（shared_ctx 已释放，#263 同款时序）
+        self.env.errors.extend_errors(vc_diags);
 
         // #263：精化解析诊断汇入（shared_ctx 已不再被使用，借用结束）
         self.env.errors.extend_errors(refined_diags);
@@ -2495,24 +2516,29 @@ impl TypeChecker {
                         args,
                     } = constraint
                     {
-                        let call_args: Vec<crate::frontend::core::types::ConstValue> = args
-                            .iter()
-                            .filter_map(|a| {
-                                if let crate::frontend::core::types::const_data::ConstExpr::Lit(v) =
-                                    a
-                                {
-                                    Some(v.clone())
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect();
-                        proof_calls.push(
+                        // 仅全 Lit 实参发射执行调用；含变量实参（NamedVar 等）
+                        // 编译期不可取值，留给 check_predicate/VC 符号化管道——
+                        // 此前 filter_map 静默丢非 Lit 实参，产出无参调用、
+                        // 参数在解释器里读成 Void 错译
+                        let mut call_args: Vec<crate::frontend::core::types::ConstValue> =
+                            Vec::new();
+                        let mut all_literal = true;
+                        for a in args {
+                            if let crate::frontend::core::types::const_data::ConstExpr::Lit(v) = a {
+                                call_args.push(v.clone());
+                            } else {
+                                all_literal = false;
+                                break;
+                            }
+                        }
+                        if all_literal {
+                            proof_calls.push(
                             crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall {
                                 func_name: func.clone(),
                                 args: call_args,
                             },
                         );
+                        }
                     }
                     let free_vars = Self::extract_free_vars(constraint);
                     for fv in &free_vars {
@@ -2703,6 +2729,7 @@ impl TypeChecker {
         dep_graph: &crate::frontend::core::typecheck::proof::dep_graph::TypeDepGraph,
         shared_ctx: &mut crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
         proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
+        diags: &mut Vec<Diagnostic>,
     ) {
         use crate::frontend::core::parser::ast::{StmtKind, Expr};
 
@@ -2716,17 +2743,35 @@ impl TypeChecker {
                 if let Expr::Var(name, _) = target.as_ref() {
                     let affected = dep_graph.affected_by(name);
                     if !affected.is_empty() {
-                        self.generate_vc_for_dependants(name, &affected, shared_ctx, proof_calls);
+                        self.generate_vc_for_dependants(
+                            name,
+                            &affected,
+                            shared_ctx,
+                            proof_calls,
+                            diags,
+                        );
                     }
                 }
                 // 递归处理 Lambda/Block 函数体
                 if let Expr::Lambda { body, .. } = v.as_ref() {
                     for s in &body.stmts {
-                        self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                        self.check_assignments_with_deps(
+                            s,
+                            dep_graph,
+                            shared_ctx,
+                            proof_calls,
+                            diags,
+                        );
                     }
                 } else if let Expr::Block(block) = v.as_ref() {
                     for s in &block.stmts {
-                        self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                        self.check_assignments_with_deps(
+                            s,
+                            dep_graph,
+                            shared_ctx,
+                            proof_calls,
+                            diags,
+                        );
                     }
                 }
             }
@@ -2737,22 +2782,34 @@ impl TypeChecker {
                 ..
             } => {
                 for s in &then_branch.stmts {
-                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls, diags);
                 }
                 for (_, body) in else_if_branches {
                     for s in &body.stmts {
-                        self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                        self.check_assignments_with_deps(
+                            s,
+                            dep_graph,
+                            shared_ctx,
+                            proof_calls,
+                            diags,
+                        );
                     }
                 }
                 if let Some(else_body) = else_branch {
                     for s in &else_body.stmts {
-                        self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                        self.check_assignments_with_deps(
+                            s,
+                            dep_graph,
+                            shared_ctx,
+                            proof_calls,
+                            diags,
+                        );
                     }
                 }
             }
             StmtKind::For { body, .. } => {
                 for s in &body.stmts {
-                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls);
+                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls, diags);
                 }
             }
             _ => {}
@@ -2770,6 +2827,7 @@ impl TypeChecker {
         affected: &[&str],
         shared_ctx: &crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
         proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
+        diags: &mut Vec<Diagnostic>,
     ) {
         for dependant in affected {
             // 从环境中查找 dependant 的类型
@@ -2791,12 +2849,22 @@ impl TypeChecker {
                             // VC 成立
                         }
                         ProofResult::Disproved(model) => {
-                            tracing::warn!(
-                                "VC 失败：变量 {} 被赋值后，{} 不满足类型 {}: 反例 {:?}",
-                                assigned_var,
-                                dependant,
-                                constraint,
-                                model.assignments,
+                            // 证伪即编译错误：反例进诊断，不再 tracing log 吞掉
+                            let counterexample = model
+                                .assignments
+                                .iter()
+                                .map(|(k, v)| format!("{k}={v}"))
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            let constraint_str = constraint.to_string();
+                            diags.push(
+                                ErrorCodeDefinition::refined_constraint_violated(
+                                    assigned_var,
+                                    dependant,
+                                    &constraint_str,
+                                    &counterexample,
+                                )
+                                .build(),
                             );
                         }
                         ProofResult::Unproven {

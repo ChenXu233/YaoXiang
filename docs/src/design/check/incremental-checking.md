@@ -1,6 +1,6 @@
 ---
-title: 增量检查
-description: YaoXiang check 增量检查的设计
+title: '增量检查'
+description: 'YaoXiang check 增量检查的设计'
 ---
 
 # 增量检查

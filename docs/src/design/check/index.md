@@ -1,6 +1,6 @@
 ---
-title: check 命令设计文档
-description: yx check 静态检查工具的设计规范
+title: 'check 命令设计文档'
+description: 'yx check 静态检查工具的设计规范'
 ---
 
 # check 命令设计文档

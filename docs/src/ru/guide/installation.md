@@ -1,34 +1,36 @@
 ---
-title: Установка YaoXiang
-description: Двухуровневые каналы установки — стандартный канал: распакуй и используй (режим Go/Zig); упрощённый канал: одна команда + управление версиями (режим Rust/rustup)
+title: 'Установка YaoXiang'
+description:
+  'Двухуровневые каналы установки — стандартный канал «распакуй и используй» (режим Go/Zig),
+  упрощённый канал в одну строку + управление версиями (режим Rust/rustup)'
 ---
 
 # Установка YaoXiang
 
-Командный интерфейс YaoXiang построен по принципу **разделения на фронтенд/движок** (RFC-037):
+Командный интерфейс YaoXiang использует **разделение front-door/engine** (RFC-037):
 
-- **`yx`** — фронтенд, повседневная точка входа. Встроенное управление версиями (`yx toolchain` /
-  `yx self update`), остальные команды прозрачно передаются движку
+- **`yx`** — front-door, повседневная точка входа. Встроенное управление версиями (`yx toolchain` /
+  `yx self update`), остальные команды передаются движку
 - **`yaoxiang-rs`** — движок, отвечает за компиляцию/запуск/управление пакетами/форматирование/LSP,
-  обычно не вызывается напрямую
+  как правило не вызывается напрямую
 
-Установка разделена на два канала, все каналы используют общую структуру артефактов (`bin/` +
-`lib/yaoxiang/std/`).
+Установка осуществляется через двухуровневые каналы; все каналы используют общую структуру продуктов
+(`bin/` + `lib/yaoxiang/std/`).
 
 ## Стандартный канал: распакуй и используй (режим Go/Zig)
 
-Загрузите архив для вашей платформы со
+Загрузите архив для соответствующей платформы со
 [страницы релизов GitHub](https://github.com/ChenXu233/YaoXiang/releases), распакуйте в любой
 каталог и добавьте `bin/` в PATH:
 
 ```sh
-tar xzf yaoxiang-<版本>-<平台>.tar.gz
-export PATH="$PWD/yaoxiang-<版本>-<平台>/bin:$PATH"
+tar xzf yaoxiang-<версия>-<платформа>.tar.gz
+export PATH="$PWD/yaoxiang-<версия>-<платформа>/bin:$PATH"
 ```
 
-Сразу после распаковки можно использовать: `yx --version`. Архив содержит все зависимости (включая
-разделяемую библиотеку Z3) и читаемый исходный код стандартной библиотеки `lib/yaoxiang/std/`,
-никаких дополнительных шагов не требуется.
+После распаковки можно сразу использовать: `yx --version`. Архив содержит все зависимости (включая
+разделяемую библиотеку Z3) и читаемые исходники стандартной библиотеки `lib/yaoxiang/std/`, никаких
+дополнительных действий не требуется.
 
 ## Упрощённый канал: одна команда (режим Rust/rustup)
 
@@ -44,61 +46,60 @@ curl -fsSL https://raw.githubusercontent.com/ChenXu233/YaoXiang/main/scripts/ins
 irm https://raw.githubusercontent.com/ChenXu233/YaoXiang/main/scripts/install/install.ps1 | iex
 ```
 
-Скрипт установит инструментарий в `~/.yaoxiang/` (для Windows — `%USERPROFILE%\.yaoxiang`) и добавит
+Скрипт устанавливает тулчейн в `~/.yaoxiang/` (для Windows: `%USERPROFILE%\.yaoxiang`) и добавляет
 `yx` в PATH.
 
 ### Linux: репозиторий apt
 
 ```sh
-curl -fsSL <apt 仓库地址>/KEY.gpg | sudo gpg --dearmor -o /usr/share/keyrings/yaoxiang.gpg
-echo "deb [signed-by=/usr/share/keyrings/yaoxiang.gpg] <apt 仓库地址> stable main" | sudo tee /etc/apt/sources.list.d/yaoxiang.list
+curl -fsSL <адрес apt-репозитория>/KEY.gpg | sudo gpg --dearmor -o /usr/share/keyrings/yaoxiang.gpg
+echo "deb [signed-by=/usr/share/keyrings/yaoxiang.gpg] <адрес apt-репозитория> stable main" | sudo tee /etc/apt/sources.list.d/yaoxiang.list
 sudo apt update && sudo apt install yaoxiang
 ```
 
-Установка через apt выполняется на системном уровне (`/usr/lib/yaoxiang/`, точка входа команды —
-`/usr/bin/yx`), `apt upgrade` следует за версиями. Метаданные репозитория автоматически
-подписываются и публикуются CI релизов.
+Установка через apt выполняется на системном уровне (`/usr/lib/yaoxiang/`, точка входа
+`/usr/bin/yx`), обновление версий происходит через `apt upgrade`. Метаданные репозитория
+автоматически подписываются и публикуются релизным CI.
 
 ### Windows: мастер установки Inno Setup
 
-Загрузите `YaoXiang-Setup-<版本>.exe` со
+Загрузите `YaoXiang-Setup-<версия>.exe` со
 [страницы релизов](https://github.com/ChenXu233/YaoXiang/releases) и установите с помощью мастера
-(опционально с автоматическим добавлением в PATH). Как и apt, выполняет системную установку.
+(опционально с автоматическим добавлением в PATH). Аналогично apt — системная установка.
 
-## Управление версиями (встроено во фронтенд yx)
+## Управление версиями (встроено в front-door `yx`)
 
 ```sh
-yx toolchain install stable    # 安装最新稳定版
-yx toolchain install 0.7.14    # 安装指定版本
-yx toolchain default 0.7.14    # 设置默认版本
-yx toolchain list              # 列出已安装版本
-yx toolchain update            # 升级到最新稳定版
-yx self update                 # 更新 yx 本体
+yx toolchain install stable    # установить последнюю стабильную версию
+yx toolchain install 0.7.14    # установить указанную версию
+yx toolchain default 0.7.14    # задать версию по умолчанию
+yx toolchain list              # список установленных версий
+yx toolchain update            # обновить до последней стабильной версии
+yx self update                 # обновить сам `yx`
 ```
 
 Несколько версий сосуществуют в `~/.yaoxiang/versions/<версия>/`, каждая версия — это полное
-самодостаточное дерево инструментария (движок, Z3, стандартная библиотека заблокированы на одной
-версии).
+самодостаточное дерево тулчейна (движок, Z3, стандартная библиотека зафиксированы одной версией).
 
 ### Закрепление версии на уровне проекта
 
-Поместите файл `yx-toolchain.toml` в корень проекта (по аналогии с `rust-toolchain.toml`):
+Поместите в корень проекта файл `yx-toolchain.toml` (по аналогии с `rust-toolchain.toml`):
 
 ```toml
 toolchain = "0.7.14"
 ```
 
 Любая команда `yx`, выполненная в этом каталоге, будет использовать закреплённую версию — разные
-проекты могут работать на разных версиях.
+проекты могут работать с разными версиями.
 
-## Переменные среды
+## Переменные окружения
 
 | Переменная         | Описание                                                                           |
 | ------------------ | ---------------------------------------------------------------------------------- |
 | `YAOXIANG_HOME`    | Переопределяет корень установки, по умолчанию `~/.yaoxiang` (для CI и контейнеров) |
 | `YAOXIANG_VERSION` | Скрипт install устанавливает указанную версию вместо последней                     |
 
-Загрузку через зеркало можно настроить в `~/.yaoxiang/settings.toml` (префикс в стиле ghproxy):
+Зеркало для загрузки можно настроить в `~/.yaoxiang/settings.toml` (префикс в стиле ghproxy):
 
 ```toml
 mirror = "https://ghproxy.example.com"
@@ -107,6 +108,6 @@ mirror = "https://ghproxy.example.com"
 ## Проверка установки
 
 ```sh
-yx --version        # 前门版本
-yx run main.yx      # 任意 YaoXiang 程序
+yx --version        # версия front-door
+yx run main.yx      # любая программа на YaoXiang
 ```

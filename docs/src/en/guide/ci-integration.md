@@ -1,11 +1,11 @@
 ---
-title: CI Integration Guide
-description: Integrate yx check and yx format into CI/CD pipelines
+title: 'CI Integration Guide'
+description: 'Integrating yx check and yx format into CI/CD pipelines'
 ---
 
 # CI Integration Guide
 
-Integrate YaoXiang's static check and formatting tools into CI/CD pipelines to ensure code quality.
+Integrate YaoXiang's static check and format tools into CI/CD pipelines to ensure code quality.
 
 ## GitHub Actions
 
@@ -54,11 +54,11 @@ yaoxiang-check:
 
 ## Exit Codes
 
-| Exit Code | Meaning             | CI Behavior              |
-| --------- | ------------------- | ------------------------ |
-| `0`       | No errors           | Pass                     |
-| `1`       | Check found errors  | Fail                     |
-| `2`       | No `.yx` file found | Depends on configuration |
+| Exit Code | Meaning              | CI Behavior       |
+| --------- | -------------------- | ----------------- |
+| `0`       | No errors            | Pass              |
+| `1`       | Check found errors   | Fail              |
+| `2`       | No `.yx` files found | Depends on config |
 
 ## JSON Output Parsing
 
@@ -70,10 +70,10 @@ yx check --json | jq '.error_count'
 
 ## Best Practices
 
-1. **Path parameter**: `yx check` checks the current directory by default, you can also specify a
+1. **Path argument**: `yx check` defaults to checking the current directory. You can also specify a
    path: `yx check src/`
-2. **Separate check and format**: run `check` and `format --dry-run` separately for easier problem
-   localization
-3. **Use `--no-progress`**: CI environments don't need progress bars
-4. **Use `--color never`**: avoid ANSI color codes polluting logs
-5. **Cache dependencies**: leverage the CI caching mechanism to speed up builds
+2. **Separate check and format**: Run `check` and `format --dry-run` separately for easier problem
+   location
+3. **Use `--no-progress`**: CI environment doesn't need progress bars
+4. **Use `--color never`**: Avoid ANSI color codes polluting logs
+5. **Cache dependencies**: Leverage CI cache mechanisms to speed up builds

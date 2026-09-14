@@ -68,6 +68,8 @@ pub struct StatementChecker {
     type_defs: HashMap<String, MonoType>,
     /// 实例化请求（收集所有泛型函数实例化需求）
     pub instantiation_requests: Vec<InstantiationRequest>,
+    /// #335 G3 类型信息流接口：调用点所有权解析表（按调用 span 键控）
+    pub call_ownership: super::call_ownership::CallOwnershipTable,
     /// RFC-011a §6 存在类型强制点（具体→存在包装点，ir_gen 按 span 查表注入包装）
     pub existential_coercions: Vec<super::existential::ExistentialCoercion>,
     /// 流敏感假设集 Γ（可选 — None 在测试或未启用证明管道时使用）
@@ -116,6 +118,7 @@ impl StatementChecker {
             method_bindings: HashMap::new(),
             type_defs: HashMap::new(),
             instantiation_requests: Vec::new(),
+            call_ownership: super::call_ownership::CallOwnershipTable::new(),
             existential_coercions: Vec::new(),
             gamma,
             dep_env,
@@ -632,6 +635,10 @@ impl StatementChecker {
         let saved_loop_depth = self.loop_depth;
         self.loop_depth = 0;
 
+        // #335 路径 A：函数上下文——体内嵌套泛型调用的请求以此为 containing_fn
+        let prev_fn_context = self.scope.fn_context().map(str::to_owned);
+        self.scope.set_fn_context(Some(name.to_string()));
+
         // 创建函数作用域（#295 三链模型：参数层 + 新局部层，外层函数局部变量不可见）
         self.scope.enter_fn();
 
@@ -688,6 +695,7 @@ impl StatementChecker {
             self.scope.exit_fn();
             self.is_top_level = was_top_level;
             self.loop_depth = saved_loop_depth;
+            self.scope.set_fn_context(prev_fn_context);
 
             match first_err {
                 Some(e) => Err(e),
@@ -712,6 +720,7 @@ impl StatementChecker {
             self.scope.exit_fn();
             self.is_top_level = was_top_level;
             self.loop_depth = saved_loop_depth;
+            self.scope.set_fn_context(prev_fn_context);
 
             match err {
                 Some(e) => Err(e),
@@ -1576,6 +1585,7 @@ impl StatementChecker {
         let iter_ty = self.check_expr(iterable)?;
         let elem_ty = match iter_ty {
             m if m.is_list() => m.generic_args().unwrap()[0].clone(),
+            m if m.is_array() => m.generic_args().unwrap()[0].clone(),
             m if m.is_range() && m.generic_args().map(|a| a.len() == 1).unwrap_or(false) => {
                 m.generic_args().unwrap()[0].clone()
             }
@@ -1585,7 +1595,18 @@ impl StatementChecker {
                 MonoType::make_tuple(vec![args[0].clone(), args[1].clone()])
             }
             m if m.is_tuple() => self.solver.new_var(),
-            _ => self.solver.new_var(),
+            // 类型层不认的可迭代对象宁拒不静默：fresh var 兜底会让
+            // `for x in 5` 纸面通过、循环体类型检查形同虚设
+            m => {
+                return Err(Box::new(
+                    ErrorCodeDefinition::type_mismatch(
+                        "List/Array/Range/String/Dict/Tuple（可迭代）",
+                        &format!("{m}"),
+                    )
+                    .at(iterable.span())
+                    .build(),
+                ))
+            }
         };
 
         self.scope.enter_block();
@@ -1792,22 +1813,39 @@ impl StatementChecker {
 
                 match op {
                     BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => {
-                        if let (MonoType::Int(_), MonoType::Int(_)) = (&left_ty, &right_ty) {
-                            Ok(left_ty)
-                        } else if let (MonoType::Float(_), MonoType::Float(_)) =
-                            (&left_ty, &right_ty)
-                        {
-                            Ok(left_ty)
-                        } else if left_ty.is_string() && right_ty.is_string() {
+                        // RFC-009 读透明：借用值参与算术按 inner 类型判定（读穿透）
+                        let l = super::expressions::read_view(&left_ty);
+                        let r = super::expressions::read_view(&right_ty);
+                        if let (MonoType::Int(_), MonoType::Int(_)) = (&l, &r) {
+                            Ok(l)
+                        } else if let (MonoType::Float(_), MonoType::Float(_)) = (&l, &r) {
+                            Ok(l)
+                        } else if l.is_string() && r.is_string() {
                             Ok(MonoType::make_string())
-                        } else if left_ty.is_list() && right_ty.is_list() {
-                            let left_elem = &left_ty.generic_args().expect("List args")[0];
-                            let right_elem = &right_ty.generic_args().expect("List args")[0];
+                        } else if l.is_list() && r.is_list() {
+                            let left_elem = &l.generic_args().expect("List args")[0];
+                            let right_elem = &r.generic_args().expect("List args")[0];
                             let _ = self.solver.unify(left_elem, right_elem);
                             let elem_ty = self.solver.resolve_type(left_elem);
                             Ok(MonoType::make_list(elem_ty))
                         } else {
-                            Ok(self.solver.new_var())
+                            // 未绑定类型变量延后判定（避免过早收敛破坏
+                            // fn(Any)->Any 槽位的多态参数）
+                            if matches!(left_ty, MonoType::TypeVar(_))
+                                || matches!(right_ty, MonoType::TypeVar(_))
+                            {
+                                return Ok(self.solver.new_var());
+                            }
+                            // 与 infer_binary 同款纪律：类型层不认的组合宁拒不
+                            // 静默，fresh var 兜底会把错译推迟到运行时 E6007
+                            Err(Box::new(
+                                ErrorCodeDefinition::type_mismatch(
+                                    "Int/Float/String/List（两侧同型）",
+                                    &format!("{l} 与 {r}"),
+                                )
+                                .at(*span)
+                                .build(),
+                            ))
                         }
                     }
                     // #300 I 项：Range 已移到 ExpressionInferrer::infer_range_expr
@@ -1839,6 +1877,7 @@ impl StatementChecker {
                         self.imported_used.extend(inferrer.take_import_used());
                         self.instantiation_requests
                             .extend(inferrer.instantiation_requests);
+                        self.call_ownership.extend(inferrer.call_ownership);
                         self.existential_coercions
                             .extend(inferrer.existential_coercions);
                         result
@@ -1911,6 +1950,7 @@ impl StatementChecker {
                 self.imported_used.extend(inferrer.take_import_used());
                 self.instantiation_requests
                     .extend(inferrer.instantiation_requests);
+                self.call_ownership.extend(inferrer.call_ownership);
                 self.existential_coercions
                     .extend(inferrer.existential_coercions);
                 result

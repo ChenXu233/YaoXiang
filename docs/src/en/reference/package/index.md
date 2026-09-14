@@ -1,20 +1,20 @@
 ---
 title: 'Package Manager'
-description: YaoXiang Package Manager Reference Documentation
+description: 'YaoXiang Package Manager Reference Documentation'
 ---
 
 # Package Manager
 
-The built-in package manager for YaoXiang, providing project initialization, dependency management,
+YaoXiang's built-in package manager, providing project initialization, dependency management,
 version locking, and other features.
 
 ## Overview
 
-The YaoXiang Package Manager (abbreviated as YPM) adopts a design philosophy similar to Cargo:
+The YaoXiang Package Manager (abbreviated as YPM) adopts a Cargo-like design philosophy:
 
-- **Declarative dependencies**: Declare required dependencies in `yaoxiang.toml`
-- **Deterministic builds**: Lock versions through `yaoxiang.lock` to ensure reproducible builds
-- **Local cache**: Dependencies are downloaded to the `vendor` directory, supporting offline use
+- **Declarative dependencies**: declare required dependencies in `yaoxiang.toml`
+- **Deterministic builds**: lock versions through `yaoxiang.lock` to ensure reproducible builds
+- **Local cache**: dependencies are downloaded to the `vendor` directory, supporting offline use
 
 ## Quick Start
 
@@ -38,8 +38,8 @@ yx run src/main.yx
 | Command                               | Description              |
 | ------------------------------------- | ------------------------ |
 | [`yx init`](./commands#yx-init)       | Initialize a new project |
-| [`yx add`](./commands#yx-add)         | Add dependencies         |
-| [`yx rm`](./commands#yx-rm)           | Remove dependencies      |
+| [`yx add`](./commands#yx-add)         | Add a dependency         |
+| [`yx rm`](./commands#yx-rm)           | Remove a dependency      |
 | [`yx install`](./commands#yx-install) | Install dependencies     |
 | [`yx update`](./commands#yx-update)   | Update dependencies      |
 | [`yx list`](./commands#yx-list)       | List dependencies        |
@@ -57,7 +57,7 @@ my-project/
 
 ## Documentation Index
 
-- [Command Line Interface](./commands) - Detailed description of all commands
+- [Command-Line Interface](./commands) - Detailed description of all commands
 - [yaoxiang.toml Format](./manifest) - Project configuration file format
 - [yaoxiang.lock Format](./lock) - Lock file format description
 - [Error Codes](./error-codes) - Common errors and handling methods

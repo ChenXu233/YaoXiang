@@ -1,6 +1,6 @@
 ---
 title: 'Command Line Interface'
-description: Detailed description of all package manager commands
+description: 'Detailed description of all package manager commands'
 ---
 
 # Command Line Interface
@@ -12,14 +12,14 @@ Initialize a new YaoXiang project.
 ### Usage
 
 ```bash
-yx init <project-name>
+yx init <project_name>
 ```
 
-### Parameters
+### Arguments
 
-| Parameter    | Description             |
+| Argument     | Description             |
 | ------------ | ----------------------- |
-| project-name | Name of the new project |
+| project_name | Name of the new project |
 
 ### Options
 
@@ -27,7 +27,7 @@ yx init <project-name>
 | -------- | --------------------- |
 | `--help` | Show help information |
 
-### Examples
+### Example
 
 ```bash
 # Create a new project
@@ -50,15 +50,15 @@ Add a dependency to the project.
 ### Usage
 
 ```bash
-yx add <package-name> [version]
-yx add <package-name> --dev
+yx add <package_name> [version]
+yx add <package_name> --dev
 ```
 
-### Parameters
+### Arguments
 
-| Parameter    | Description                                |
+| Argument     | Description                                |
 | ------------ | ------------------------------------------ |
-| package-name | Name of the dependency to add              |
+| package_name | Name of the dependency to add              |
 | version      | Version number (optional, defaults to `*`) |
 
 ### Options
@@ -67,7 +67,7 @@ yx add <package-name> --dev
 | ------------- | ------------------------------- |
 | `--dev`, `-D` | Add as a development dependency |
 
-### Examples
+### Example
 
 ```bash
 # Add the latest version
@@ -93,15 +93,15 @@ Remove a dependency from the project.
 ### Usage
 
 ```bash
-yx rm <package-name>
-yx rm <package-name> --dev
+yx rm <package_name>
+yx rm <package_name> --dev
 ```
 
-### Parameters
+### Arguments
 
-| Parameter    | Description                      |
+| Argument     | Description                      |
 | ------------ | -------------------------------- |
-| package-name | Name of the dependency to remove |
+| package_name | Name of the dependency to remove |
 
 ### Options
 
@@ -109,7 +109,7 @@ yx rm <package-name> --dev
 | ------------- | ------------------------------- |
 | `--dev`, `-D` | Remove a development dependency |
 
-### Examples
+### Example
 
 ```bash
 # Remove a regular dependency
@@ -133,18 +133,18 @@ yx install
 
 ### Description
 
-- Read dependency declarations from `yaoxiang.toml`
+- Read the dependency declarations from `yaoxiang.toml`
 - Download all dependencies to the `vendor` directory
 - Generate/update `yaoxiang.lock` to lock versions
 - Detect dependency version conflicts
 
-### Examples
+### Example
 
 ```bash
 # Install all dependencies
 yx install
 
-# Example output:
+# Sample output:
 # 📦 Resolving dependencies...
 #   http (1.0.0) [installed]
 #   json (2.0.0) [cached]
@@ -161,27 +161,27 @@ Update project dependencies.
 
 ```bash
 yx update
-yx update <package-name>
+yx update <package_name>
 ```
 
-### Parameters
+### Arguments
 
-| Parameter    | Description                              |
+| Argument     | Description                              |
 | ------------ | ---------------------------------------- |
-| package-name | Specific dependency to update (optional) |
+| package_name | Specific dependency to update (optional) |
 
 ### Description
 
 - Without arguments: update all dependencies
 - With arguments: update only the specified dependency
 
-### Examples
+### Example
 
 ```bash
 # Update all dependencies
 yx update
 
-# Example output:
+# Sample output:
 # 📦 Updating dependencies...
 1.0.#   http (0 → 1.1.0)
 # ✅ Updated 1 dependency, lock file updated
@@ -204,17 +204,16 @@ yx list
 
 ### Description
 
-Displays all runtime dependencies and development dependencies, along with their versions and
-sources.
+Displays all runtime and development dependencies, along with their versions and sources.
 
-### Examples
+### Example
 
 ```bash
 # List dependencies
 yx list
 
-# Example output:
-# 📦 Project Dependencies
+# Sample output:
+# 📦 Project dependencies
 #
 # Runtime dependencies:
 #   http        1.0.0    registry

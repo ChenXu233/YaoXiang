@@ -1,6 +1,6 @@
 ---
 title: 'yaoxiang.lock 格式'
-description: 依赖锁定文件格式说明
+description: '依赖锁定文件格式说明'
 ---
 
 # yaoxiang.lock 格式

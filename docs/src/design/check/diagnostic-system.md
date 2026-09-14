@@ -1,6 +1,6 @@
 ---
-title: 诊断系统
-description: YaoXiang 诊断系统的架构设计
+title: '诊断系统'
+description: 'YaoXiang 诊断系统的架构设计'
 ---
 
 # 诊断系统

@@ -1,6 +1,6 @@
 ---
-title: REPL 交互式解释器
-description: YaoXiang REPL 使用指南 - 交互式代码执行环境
+title: 'REPL 交互式解释器'
+description: 'YaoXiang REPL 使用指南 - 交互式代码执行环境'
 ---
 
 # REPL 交互式解释器

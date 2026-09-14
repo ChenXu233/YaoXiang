@@ -1,51 +1,50 @@
 ---
-title: 文法クイックリファレンス
+title: '構文早見表'
 ---
 
-# 文法クイックリファレンス
+# 構文早見表
 
-5分で YaoXiang のコア文法を理解できます。詳細を学ぶには [チュートリアル](/tutorial/)
-をご覧ください。
+5 分でわかる YaoXiang の核となる構文。深く学ぶには [チュートリアル](/tutorial/) をご覧ください。
 
 ## 変数
 
 ```yaoxiang
-x = 42                    // 不可変（デフォルト）
-mut y = 0                 // 可変
+x = 42                    // 不可变（默认）
+mut y = 0                 // 可变
 
-name: String = "hello"    // 明示的な型
-count: Int = 100          // 型注釈
+name: String = "hello"    // 显式类型
+count: Int = 100          // 类型注解
 
-pub version = "1.0"       // 公開エクスポート
+pub version = "1.0"       // 公开导出
 ```
 
 ## 関数
 
-すべては `name: type = value`。関数も値です。
+すべては `name: type = value`。関数も値である。
 
 ```yaoxiang
-// 式形式（直接値を返す）
+// 表达式形式（直接返回值）
 add: (a: Int, b: Int) -> Int = a + b
 
-// コードブロック形式（明示的 return）
+// 代码块形式（显式 return）
 factorial: (n: Int) -> Int = {
     if n <= 1 { return 1 }
     return n * factorial(n - 1)
 }
 
-// Lambda（シグネチャが完整时可省略引数名）
+// Lambda（签名完整时可省略参数名）
 double = (x) => x * 2
 add = (a, b) => a + b
-inc = x => x + 1            // 単引数では括弧を省略可
+inc = x => x + 1            // 单参数可省略括号
 
-// コードブロック内では return が必要
+// 代码块内需要 return
 process: (x: Int) -> Int = {
     a = x * 2
     b = a + 1
     return b
 }
 
-// Void 関数では return が不要
+// Void 函数不需要 return
 greet: (name: String) -> Void = {
     io.println("Hello, " + name)
 }
@@ -53,39 +52,39 @@ greet: (name: String) -> Void = {
 
 ## 型
 
-`type`、`struct`、`trait`、`impl` キーワードはありません。统一された宣言で全てを記述します。
+`type`、`struct`、`trait`、`impl` キーワードは存在しない。統一された宣言で全てを完結する。
 
 ```yaoxiang
-// 記録タイプ
+// 记录类型
 Point: Type = { x: Float, y: Float }
-p = Point(1.0, 2.0)            // 位置引数
-p = Point(x=1.0, y=2.0)        // 名前付き引数
+p = Point(1.0, 2.0)            // 位置参数
+p = Point(x=1.0, y=2.0)        // 命名参数
 
-// デフォルト値を持つフィールド
+// 带默认值的字段
 Point: Type = { x: Float = 0, y: Float = 0 }
 Point()                        // OK: x=0, y=0
 Point(x=1.0)                   // OK: x=1.0, y=0
 
-// 変体タイプ（enum type）
+// 变体类型（枚举）
 Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
 Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
-// インターフェース（フィールドが全て関数型の記録タイプ）
+// 接口（字段全为函数类型的记录类型）
 Drawable: Type = { draw: (Surface) -> Void }
 
-// インターフェース組合
+// 接口组合
 DrawableSerializable: Type = Drawable & Serializable
 
-// 型内宣言でインターフェース実装
+// 类型内声明接口实现
 Circle: Type = {
     radius: Float,
-    Drawable,              // Drawable インターフェースを実装
-    Serializable,          // Serializable インターフェースを実装
+    Drawable,              // 实现 Drawable 接口
+    Serializable,          // 实现 Serializable 接口
 }
 
-// ジェネリック型
+// 泛型类型
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
@@ -93,7 +92,7 @@ List: (T: Type) -> Type = {
     map: (R: Type) -> ((self: List(T), f: (T) -> R) -> List(R)),
 }
 
-// ジェネリック制約
+// 泛型约束
 clone: (T: Clone)(value: T) -> T = value.clone()
 sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T)
 ```
@@ -101,27 +100,27 @@ sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T)
 ## メソッド
 
 ```yaoxiang
-// 名前空間関数（Type.method は所属标记而非绑定）
+// 命名空间函数（Type.method 只是归属标记，不是绑定）
 Point.distance: (a: &Point, b: &Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     return (dx * dx + dy * dy).sqrt()
 }
 
-// 明示的バインディング後にのみ . 呼び出し構文が使用可能
+// 显式绑定后才有 . 调用语法
 Point.distance = distance[0]
-// 以降 p1.distance(p2) → distance(p1, p2)
+// 此后 p1.distance(p2) → distance(p1, p2)
 
-// 快速定義 + バインディング
+// 快速定义 + 绑定
 Point.draw: (self: &Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
 ```
 
-## 制御流
+## 制御フロー
 
 ```yaoxiang
-// if は式
+// if 是表达式
 grade = if score >= 90 { "A" } else if score >= 60 { "B" } else { "C" }
 
 // match
@@ -131,7 +130,7 @@ result = match value {
     _ => "unknown",
 }
 
-// ループ
+// 循环
 for i in 0..5 { io.println(i) }
 for item in items { io.println(item) }
 
@@ -142,20 +141,20 @@ while n < 5 { io.println(n); n = n + 1 }
 ## データ構造
 
 ```yaoxiang
-// リスト
+// 列表
 nums = [1, 2, 3, 4, 5]
 first = nums[0]           // 1
 
-// 辞書
+// 字典
 scores = {"Alice": 90, "Bob": 85}
 a = scores["Alice"]       // 90
 
-// リスト内包表記
+// 列表推导式
 evens = [x for x in nums if x % 2 == 0]
 doubled = [x * 2 for x in nums]
 ```
 
-## パターン照合
+## パターンマッチング
 
 ```yaoxiang
 match shape {
@@ -164,7 +163,7 @@ match shape {
     point => 0,
 }
 
-// 構造体/タプルパターン
+// 结构体/元组模式
 match p {
     { x: 0, y: 0 } => "origin",
     { x, y } => "({x}, {y})",
@@ -174,10 +173,10 @@ match t {
     (x, y) => "({x}, {y})",
 }
 
-// 解構代入
+// 解构赋值
 a, b = (1, 2)              // a=1, b=2
 
-// ガード式
+// 卫表达式
 match age {
     n if n >= 18 => true,
     _ => false,
@@ -194,11 +193,11 @@ use std.{io, list}
 io.println("hello")
 result = sqrt(16)         // 4.0
 
-// エイリアス
+// 别名
 use std.math as math
 use std.{io as print}
 
-// 公開エクスポート
+// 公开导出
 pub add: (a: Int, b: Int) -> Int = a + b
 pub Point: Type = { x: Float, y: Float }
 ```
@@ -206,42 +205,42 @@ pub Point: Type = { x: Float, y: Float }
 ## 所有権
 
 ```yaoxiang
-// Move：デフォルトの所有権移転
+// Move：默认所有权转移
 p1 = Point(1.0, 2.0)
-p2 = p1                   // p1 は移動される
+p2 = p1                   // p1 被移走
 
-// 借用 &：トークンは自動的に作成される（手動の & は不要）
+// 借用 &：自动创建令牌（无需手动 &）
 distance: (a: &Point, b: &Point) -> Float = ...
-d = distance(p1, p2)      // コンパイラが自動的に借用トークンを作成
+d = distance(p1, p2)      // 编译器自动创建借用令牌
 
-// 可変借用 &mut
+// 可变借用 &mut
 update: (p: &mut Point, x: Float) -> Void = { p.x = x }
 
-// ref：共有所有権（コンパイラが Rc/Arc を自動選択）
+// ref：共享持有（编译器自动选 Rc/Arc）
 shared = ref data
 
-// clone：明示的なディープコピー
+// clone：显式深拷贝
 backup = data.clone()
 ```
 
-## 並行性
+## 並行処理
 
-spawn は唯一の並行プリミティブです。async/await も Send/Sync も不要です。
+spawn は唯一の並列プリミティブ。async/await もなく、Send/Sync もない。
 
 ```yaoxiang
-// spawn ブロック：サブ式は自動的に並列化
+// spawn 块：子表达式自动并行
 result = spawn {
     user = fetch_user(1)
     posts = fetch_posts()
     return (user, posts)
 }
 
-// spawn for：データ並列性
+// spawn for：数据并行
 results = spawn for item in items {
     return process(item)
 }
 
-// spawn + ref：タスク間共有
+// spawn + ref：跨任务共享
 main = {
     shared = ref data
     result = spawn {

@@ -1,54 +1,55 @@
 ---
-title: Lambda式
+title: 'Lambda 式'
 ---
 
-# Lambda式
+# Lambda 式
 
-Lambdaは**匿名の、手軽に定義できる関数**です。YaoXiangでは、通常の関数は本質的に具名Lambdaです。
+Lambda は**匿名で、手軽に定義できる関数**です。YaoXiang では、通常の関数は本質的に名前付き Lambda です。
 
 ## 構文
 
-構文規則によると：
+構文仕様に従い：
 
 ```
 Lambda      ::= '(' ParamList? ')' '=>' Expr
             |  '(' ParamList? ')' '=>' Block
 ```
 
-最もシンプルなLambda：
+最も簡単な Lambda：
 
 ```yaoxiang
-// 式形式のLambda
+// 表达式形式的 Lambda
 double = (x) => x * 2
 
 print(double(5))   // 10
 print(double(10))  // 20
 ```
 
-## Lambdaと関数の統一
+## Lambda と関数の統一
 
-YaoXiangのコア設計哲学は構文の統一です。**関数は名前にバインドされたLambdaです**：
+YaoXiang の核心設計哲学は構文の統一です。**関数とは、Lambda に名前を付けたもの**です：
 
 ```yaoxiang
-// これら二つは完全に同等：
+// 这两者完全等价：
 
-// Lambda形式
+// Lambda 形式
 add = (a, b) => a + b
 
-// 関数形式（糖衣構文）
+// 函数形式（语法糖）
 add: (a: Int, b: Int) -> Int = a + b
 ```
 
-1行目は「Lambdaを変数`add`に代入する」で、2行目は「`add`という名前の関数を定義する」です。コンパイラ，它们的処理方式几乎相同です。
+最初の行は「Lambda を変数 `add` に代入する」ということで、2 行目は「`add`
+という名前の関数を定義する」ということです。コンパイラはほぼ同じ方法でこれらを処理します。
 
-## Lambdaを使う場面
+## いつ Lambda を使うか
 
-Lambdaに最適な二つの場面があります：
+Lambda は次の二つの場面で最も適しています：
 
-### 1. 高階関数——関数をパラメータとして渡す
+### 1. 高階関数——関数を引数として渡す
 
 ```yaoxiang
-// リストの各要素に操作を適用する
+// 对列表的每个元素应用一个操作
 apply_to_all: (list: List(Int), op: (Int) -> Int) -> List(Int) = {
     mut result = []
     for item in list {
@@ -59,7 +60,7 @@ apply_to_all: (list: List(Int), op: (Int) -> Int) -> List(Int) = {
 
 numbers = [1, 2, 3, 4, 5]
 
-// Lambdaを渡す
+// 传入 Lambda
 doubled = apply_to_all(numbers, (x) => x * 2)
 squared = apply_to_all(numbers, (x) => x * x)
 
@@ -67,12 +68,12 @@ print(doubled)  // [2, 4, 6, 8, 10]
 print(squared)  // [1, 4, 9, 16, 25]
 ```
 
-### 2. 一時的な一度だけの操作
+### 2. 一時的な一回限りの操作
 
-一度しか使わないロジックのために特意的に関数を定義する必要はありません：
+一度しか使わないロジックのために関数をわざわざ定義する必要はありません：
 
 ```yaoxiang
-// ソート——一時的なソートルールを定義
+// 排序——临时定义排序规则
 students = [
     {"name": "Alice", "score": 90},
     {"name": "Bob", "score": 85},
@@ -82,12 +83,12 @@ students = [
 sorted_students = students.sort_by((a, b) => a["score"].compare(b["score"]))
 ```
 
-## コードブロック形式のLambda
+## ブロック形式の Lambda
 
-Lambdaが複数行のロジックを必要とする場合、コードブロック形式を使います：
+Lambda が複数行のロジックを必要とするときは、ブロック形式を使用します：
 
 ```yaoxiang
-// コードブロックLambda：複数のステートメントを含むことができる
+// 代码块 Lambda：可以包含多条语句
 process = (data) => {
     cleaned = data.trim()
     lower = cleaned.lowercase()
@@ -98,44 +99,46 @@ result = process("  Hello World  ")
 print(result)  // "hello world"
 ```
 
-コードブロック形式では`return`を使って値を返す必要があることに注意してください。これは関数と全く同じです。
+ブロック形式では `return`
+を使って値を返す必要があることに注意してください。この点は関数とまったく同じです。
 
-## 複数パラメータのLambda
+## 複数引数 Lambda
 
 ```yaoxiang
-// 3つのパラメータ
+// 三个参数
 add_three = (x, y, z) => x + y + z
 print(add_three(1, 2, 3))  // 6
 
-// パラメータなしのLambda
+// 无参 Lambda
 greet = () => "Hello, YaoXiang!"
 print(greet())  // "Hello, YaoXiang!"
 ```
 
 ## 型推論
 
-Lambdaのパラメータ型は文脈から推論できます：
+Lambda の引数の型はコンテキストから推論できます：
 
 ```yaoxiang
-// 型は使用箇所から推論——(x: Int) => x * 2と書く必要はない
+// 类型从使用处推断——不需要写 (x: Int) => x * 2
 apply: (op: (Int) -> Int, value: Int) -> Int = op(value)
 
 result = apply((x) => x + 10, 5)
 print(result)  // 15
 ```
 
-コンパイラは`op`の型が`(Int) -> Int`であることを知っているため、Lambda`(x) => x + 10`の`x`は自動的に`Int`と推論されます。
+コンパイラは `op` の型が `(Int) -> Int` であることを知っているので、Lambda `(x) => x + 10` の中の
+`x` は自動的に `Int` として推論されます。
 
-> **注意**：関数定義のルールにより、パラメータ型はシグネチャまたはLambdaヘッダーの少なくとも一方で标注する必要があります。Lambdaがパラメータとして渡される場合、型は通常、受取側のシグネチャから提供されます。
+> **注意**：関数定義の規則により、引数の型はシグネチャまたは Lambda ヘッダの少なくとも一方で指定する必要があります。Lambda が引数として渡される場合、型は通常受け手のシグネチャによって提供されます。
 
 ## まとめ
 
-| 要点               | 説明                                                   |
-| ------------------ | ------------------------------------------------------ |
-| 構文               | `(params) => expr` または `(params) => { return ... }` |
-| 本質               | 関数 = 具名Lambda                                      |
-| 高階関数           | Lambdaはパラメータとして渡すことができる               |
-| コードブロック形式 | 複数行のロジックは `{}` と `return` を使用             |
-| 型推論             | パラメータ型は文脈から自動的に推論                     |
+| 要点         | 説明                                                   |
+| ------------ | ------------------------------------------------------ |
+| 構文         | `(params) => expr` または `(params) => { return ... }` |
+| 本質         | 関数 = 名前付き Lambda                                 |
+| 高階関数     | Lambda は引数として渡すことができる                    |
+| ブロック形式 | 複数行のロジックには `{}` + `return`                   |
+| 型推論       | 引数の型はコンテキストから自動推論                     |
 
-LambdaはYaoXiangにおける「一時的なロジック」を表現する最も簡潔な方法です。マスターすれば、コードはより柔軟かつコンパクトになります。
+Lambda は YaoXiang で「一時的なロジック」を表現する最も簡潔な方法です。これをマスターすれば、コードはより柔軟でコンパクトになります。

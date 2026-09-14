@@ -1,21 +1,21 @@
 ---
-title: Syntax Quick Reference
+title: 'Syntax Cheatsheet'
 ---
 
-# Syntax Quick Reference
+# Syntax Cheatsheet
 
-Learn YaoXiang core syntax in 5 minutes. For in-depth learning, visit the [Tutorial](/tutorial/).
+Grasp YaoXiang's core syntax in 5 minutes. For deeper learning, visit the [Tutorial](/tutorial/).
 
 ## Variables
 
 ```yaoxiang
-x = 42                    // Immutable (default)
-mut y = 0                 // Mutable
+x = 42                    // immutable (default)
+mut y = 0                 // mutable
 
-name: String = "hello"    // Explicit type
-count: Int = 100          // Type annotation
+name: String = "hello"    // explicit type
+count: Int = 100          // type annotation
 
-pub version = "1.0"       // Public export
+pub version = "1.0"       // public export
 ```
 
 ## Functions
@@ -26,18 +26,18 @@ Everything is `name: type = value`. Functions are also values.
 // Expression form (returns value directly)
 add: (a: Int, b: Int) -> Int = a + b
 
-// Code block form (explicit return)
+// Block form (explicit return)
 factorial: (n: Int) -> Int = {
     if n <= 1 { return 1 }
     return n * factorial(n - 1)
 }
 
-// Lambda (parameter name can be omitted when signature is complete)
+// Lambda (parameter names can be omitted when signature is complete)
 double = (x) => x * 2
 add = (a, b) => a + b
-inc = x => x + 1            // Single parameter can omit parentheses
+inc = x => x + 1            // parentheses can be omitted for single parameter
 
-// Code blocks need return
+// Need return inside a block
 process: (x: Int) -> Int = {
     a = x * 2
     b = a + 1
@@ -57,8 +57,8 @@ No `type`, `struct`, `trait`, `impl` keywords. One unified declaration handles e
 ```yaoxiang
 // Record type
 Point: Type = { x: Float, y: Float }
-p = Point(1.0, 2.0)            // Positional arguments
-p = Point(x=1.0, y=2.0)        // Named arguments
+p = Point(1.0, 2.0)            // positional arguments
+p = Point(x=1.0, y=2.0)        // named arguments
 
 // Fields with default values
 Point: Type = { x: Float = 0, y: Float = 0 }
@@ -77,11 +77,11 @@ Drawable: Type = { draw: (Surface) -> Void }
 // Interface composition
 DrawableSerializable: Type = Drawable & Serializable
 
-// Interface implementation declared within type
+// Implement interfaces inside type declaration
 Circle: Type = {
     radius: Float,
-    Drawable,              // Implement Drawable trait
-    Serializable,          // Implement Serializable trait
+    Drawable,              // implement Drawable interface
+    Serializable,          // implement Serializable interface
 }
 
 // Generic type
@@ -100,18 +100,18 @@ sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T)
 ## Methods
 
 ```yaoxiang
-// Namespace function (Type.method is just an ownership marker, not a binding)
+// Namespace function (Type.method is just an attribution marker, not a binding)
 Point.distance: (a: &Point, b: &Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     return (dx * dx + dy * dy).sqrt()
 }
 
-// Only after explicit binding can you use . call syntax
+// Dot call syntax is only available after explicit binding
 Point.distance = distance[0]
-// After this, p1.distance(p2) → distance(p1, p2)
+// After that, p1.distance(p2) → distance(p1, p2)
 
-// Quick define + bind
+// Quick definition + binding
 Point.draw: (self: &Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
@@ -130,7 +130,7 @@ result = match value {
     _ => "unknown",
 }
 
-// Loop
+// Loops
 for i in 0..5 { io.println(i) }
 for item in items { io.println(item) }
 
@@ -163,7 +163,7 @@ match shape {
     point => 0,
 }
 
-// Struct/Tuple pattern
+// Struct/tuple pattern
 match p {
     { x: 0, y: 0 } => "origin",
     { x, y } => "({x}, {y})",
@@ -207,11 +207,11 @@ pub Point: Type = { x: Float, y: Float }
 ```yaoxiang
 // Move: default ownership transfer
 p1 = Point(1.0, 2.0)
-p2 = p1                   // p1 is moved away
+p2 = p1                   // p1 is moved
 
-// Borrow &: automatically creates token (no manual & needed)
+// Borrow &: automatically create a token (no need for manual &)
 distance: (a: &Point, b: &Point) -> Float = ...
-d = distance(p1, p2)      // Compiler automatically creates borrow token
+d = distance(p1, p2)      // compiler automatically creates borrow tokens
 
 // Mutable borrow &mut
 update: (p: &mut Point, x: Float) -> Void = { p.x = x }
@@ -225,10 +225,10 @@ backup = data.clone()
 
 ## Concurrency
 
-spawn is the only parallelism primitive. No async/await, no Send/Sync.
+spawn is the only parallel primitive. No async/await, no Send/Sync.
 
 ```yaoxiang
-// spawn block: sub-expressions automatically parallelize
+// spawn block: sub-expressions automatically run in parallel
 result = spawn {
     user = fetch_user(1)
     posts = fetch_posts()
@@ -240,7 +240,7 @@ results = spawn for item in items {
     return process(item)
 }
 
-// spawn + ref: shared across tasks
+// spawn + ref: share across tasks
 main = {
     shared = ref data
     result = spawn {

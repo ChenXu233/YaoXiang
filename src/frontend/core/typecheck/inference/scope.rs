@@ -44,6 +44,10 @@ pub struct ScopeManager {
     /// 变量类型账本：(定义所在语句的 span offset, 变量名) → 推断类型。
     /// 作用域 pop 后条目保留，供下游（所有权检查）按位置查询（#256）。
     type_ledger: HashMap<(usize, String), PolyType>,
+    /// 当前函数上下文名（#335 路径 A）：泛型体内的嵌套泛型调用请求以此为
+    /// containing_fn，mono 据此对占位类型实参（TypeRef(参数名)）求值。
+    /// None = 上下文未知（eval/REPL 等场景）。
+    fn_context: Option<String>,
 }
 
 impl Default for ScopeManager {
@@ -62,6 +66,7 @@ impl ScopeManager {
             saved_local_scopes: Vec::new(),
             current_stmt_key: 0,
             type_ledger: HashMap::new(),
+            fn_context: None,
         }
     }
 
@@ -71,6 +76,19 @@ impl ScopeManager {
         span: Span,
     ) {
         self.current_stmt_key = span.start.offset;
+    }
+
+    /// 设置当前函数上下文名（#335 路径 A）
+    pub fn set_fn_context(
+        &mut self,
+        name: Option<String>,
+    ) {
+        self.fn_context = name;
+    }
+
+    /// 获取当前函数上下文名
+    pub fn fn_context(&self) -> Option<&str> {
+        self.fn_context.as_deref()
     }
 
     /// 变量类型账本（只读）——所有权检查的 Move/Dup 分类用（#256）

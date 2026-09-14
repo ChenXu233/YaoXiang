@@ -65,6 +65,26 @@ fn type_implements_stringable(mono_type: &MonoType) -> bool {
     }
 }
 
+/// 未支持 match 模式的短标签（E3008 消息参数）：用户符号给名字，匿名形状给类型名
+fn pattern_label(pattern: &ast::Pattern) -> String {
+    match pattern {
+        ast::Pattern::Identifier(name) => name.clone(),
+        ast::Pattern::Tuple(_) => "tuple".to_string(),
+        ast::Pattern::Struct { name, .. } => name.clone(),
+        ast::Pattern::Union {
+            variant,
+            pattern: Some(_),
+            ..
+        } => format!("{variant}(..)"),
+        ast::Pattern::Union { variant, .. } => variant.clone(),
+        ast::Pattern::Or(_) => "or".to_string(),
+        ast::Pattern::Guard { .. } => "guard".to_string(),
+        ast::Pattern::Wildcard | ast::Pattern::Literal(_) => {
+            unreachable!("字面量与通配符模式有 IR 编码，不进 E3008")
+        }
+    }
+}
+
 /// 获取类型的字符串表示（用于兜底实现）
 fn get_type_fallback_string(mono_type: &MonoType) -> String {
     match mono_type {
@@ -5355,12 +5375,15 @@ impl AstToIrGenerator {
                                     src: Operand::Const(const_val),
                                 });
                             }
-                            _ => {
-                                // 不支持的 pattern: 加载 0，总会跳到下一个 arm
-                                instructions.push(Instruction::Load {
-                                    dst: Operand::Local(cmp_reg),
-                                    src: Operand::Const(ConstValue::Int(0)),
-                                });
+                            other => {
+                                // #330 安全网：非字面量/通配符模式尚无 IR 编码，
+                                // 原 stub 加载 0 永不匹配、scrutinee 为 0 时误匹配——
+                                // 宁可编译期拒绝，不可静默错译（完备支持见 RFC-039）
+                                return Err(ErrorCodeDefinition::ir_unsupported_pattern(
+                                    &pattern_label(other),
+                                )
+                                .at(arm.span)
+                                .build());
                             }
                         }
 

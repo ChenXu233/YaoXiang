@@ -1,0 +1,15 @@
+// 06-compile-errors/match_variant_pattern_err.yx
+// #330 安全网——字面量/通配符之外的模式无 IR 编码，编译期拒绝
+// expect: compile-error E3008
+// 验证: 旧 stub 加载 0 参与比较，scrutinee 为 0 时 identifier 臂误匹配、
+//       绑定从未发生；新行为为 IR 生成期报 E3008（变体模式另在解析层被
+//       BP 截断拦为 E0010，见 RFC-039 模式文法定案）
+// 状态: ❌ 应编译失败
+
+main = {
+    x = 0
+    v = match x {
+        1 => 10
+        other => 20
+    }
+}

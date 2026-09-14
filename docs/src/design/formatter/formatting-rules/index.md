@@ -1,6 +1,6 @@
 ---
 title: '格式化规则总览'
-description: YaoXiang 代码格式化规则的分类和索引
+description: 'YaoXiang 代码格式化规则的分类和索引'
 ---
 
 # 格式化规则

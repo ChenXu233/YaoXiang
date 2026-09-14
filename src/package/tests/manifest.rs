@@ -121,3 +121,84 @@ version = "0.1.0"
     assert!(manifest.dependencies.is_empty());
     assert!(manifest.dev_dependencies.is_empty());
 }
+
+// RFC-029f / RFC-015：[lib] / [[bin]] / [exports] / [run] 目标字段
+
+#[test]
+fn test_parse_target_sections() {
+    let toml_str = r#"
+[package]
+name = "test"
+version = "0.1.0"
+
+[lib]
+path = "src/lib.yx"
+
+[[bin]]
+name = "my-cli"
+path = "src/cli.yx"
+
+[exports]
+"." = "src/lib.yx"
+"./foo" = "src/foo.yx"
+
+[run]
+main = "src/main.yx"
+args = ["--quiet"]
+"#;
+    let manifest: PackageManifest = toml::from_str(toml_str).unwrap();
+    assert_eq!(manifest.lib.as_ref().unwrap().path, "src/lib.yx");
+    assert_eq!(manifest.bin.len(), 1);
+    assert_eq!(manifest.bin[0].name, "my-cli");
+    assert_eq!(manifest.bin[0].path, "src/cli.yx");
+    assert_eq!(
+        manifest.exports.get(".").map(String::as_str),
+        Some("src/lib.yx")
+    );
+    assert_eq!(
+        manifest.exports.get("./foo").map(String::as_str),
+        Some("src/foo.yx")
+    );
+    let run = manifest.run.unwrap();
+    assert_eq!(run.main.as_deref(), Some("src/main.yx"));
+    assert_eq!(run.args, vec!["--quiet"]);
+}
+
+#[test]
+fn test_target_sections_default_empty() {
+    let toml_str = r#"
+[package]
+name = "test"
+version = "0.1.0"
+"#;
+    let manifest: PackageManifest = toml::from_str(toml_str).unwrap();
+    assert!(manifest.lib.is_none());
+    assert!(manifest.bin.is_empty());
+    assert!(manifest.exports.is_empty());
+    assert!(manifest.run.is_none());
+}
+
+#[test]
+fn test_target_sections_round_trip() {
+    let toml_str = r#"
+[package]
+name = "test"
+version = "0.1.0"
+
+[lib]
+path = "src/lib.yx"
+
+[[bin]]
+name = "cli"
+path = "src/cli.yx"
+
+[exports]
+"./util" = "src/util.yx"
+"#;
+    let manifest: PackageManifest = toml::from_str(toml_str).unwrap();
+    let serialized = toml::to_string_pretty(&manifest).unwrap();
+    let reparsed: PackageManifest = toml::from_str(&serialized).unwrap();
+    assert_eq!(reparsed.lib.as_ref().unwrap().path, "src/lib.yx");
+    assert_eq!(reparsed.bin.len(), 1);
+    assert_eq!(reparsed.exports.len(), 1);
+}
