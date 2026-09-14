@@ -1,11 +1,12 @@
 ---
 title: 'CI Integration Guide'
-description: 'Integrating yx check and yx format into CI/CD pipelines'
+description: 'Integrate yx check and yx format into your CI/CD pipeline'
 ---
 
 # CI Integration Guide
 
-Integrate YaoXiang's static check and format tools into CI/CD pipelines to ensure code quality.
+Integrate YaoXiang's static checking and formatting tools into your CI/CD pipeline to ensure code
+quality.
 
 ## GitHub Actions
 
@@ -26,7 +27,7 @@ jobs:
 
       - name: Install YaoXiang
         run: |
-          curl -fsSL https://yaoxiang.dev/install.sh | sh
+          curl -fsSL https://raw.githubusercontent.com/ChenXu233/YaoXiang/main/scripts/install/install.sh | sh
           echo "$HOME/.yaoxiang/bin" >> $GITHUB_PATH
 
       - name: Type check
@@ -42,7 +43,8 @@ jobs:
 yaoxiang-check:
   image: rust:latest
   script:
-    - curl -fsSL https://yaoxiang.dev/install.sh | sh
+    - curl -fsSL
+      https://raw.githubusercontent.com/ChenXu233/YaoXiang/main/scripts/install/install.sh | sh
     - export PATH="$HOME/.yaoxiang/bin:$PATH"
     - yx check --color never --no-progress
     - yx format --dry-run .
@@ -54,11 +56,11 @@ yaoxiang-check:
 
 ## Exit Codes
 
-| Exit Code | Meaning              | CI Behavior       |
-| --------- | -------------------- | ----------------- |
-| `0`       | No errors            | Pass              |
-| `1`       | Check found errors   | Fail              |
-| `2`       | No `.yx` files found | Depends on config |
+| Exit Code | Meaning                                                                        | CI Behavior       |
+| --------- | ------------------------------------------------------------------------------ | ----------------- |
+| `0`       | No errors                                                                      | Pass              |
+| `1`       | Errors found during checking; or warnings present when using `--deny-warnings` | Fail              |
+| `2`       | No `.yx` file found                                                            | Depends on config |
 
 ## JSON Output Parsing
 
@@ -70,10 +72,11 @@ yx check --json | jq '.error_count'
 
 ## Best Practices
 
-1. **Path argument**: `yx check` defaults to checking the current directory. You can also specify a
-   path: `yx check src/`
-2. **Separate check and format**: Run `check` and `format --dry-run` separately for easier problem
-   location
-3. **Use `--no-progress`**: CI environment doesn't need progress bars
+1. **Path argument**: `yx check` defaults to checking the current directory, but you can also
+   specify a path: `yx check src/`
+2. **Separate check and format**: Run `check` and `format --dry-run` separately to help locate
+   issues
+3. **Use `--no-progress`**: CI environments don't need progress bars
 4. **Use `--color never`**: Avoid ANSI color codes polluting logs
-5. **Cache dependencies**: Leverage CI cache mechanisms to speed up builds
+5. **Strict mode**: Append `--deny-warnings` so that warnings also cause CI to fail
+6. **Cache dependencies**: Leverage CI caching mechanisms to speed up builds

@@ -1,11 +1,11 @@
 ---
 title: 'Formatting Rules Overview'
-description: 'Categories and index of YaoXiang code formatting rules'
+description: 'YaoXiang code formatting rules categorized and indexed'
 ---
 
 # Formatting Rules
 
-This section defines all formatting rules for `yaoxiang fmt`. The rules are categorized by topic as
+This section defines all formatting rules for `yx format`. The rules are categorized by topic as
 follows:
 
 ---
@@ -16,16 +16,16 @@ follows:
 
 ## Functions
 
-- [Function-Related Rules](./functions.md) — Function definitions, function calls, lambda
+- [Function-Related Rules](./functions.md) — Function definitions, function calls, Lambda
   expressions
 
 ## Type System
 
-- [Type System Rules](./types.md) — Type annotations, references and borrowing, type conversions
+- [Type System Rules](./types.md) — Type annotations, references and borrows, type conversions
 
 ## Data Structures
 
-- [Data Structure Rules](./data-structures.md) — Literals, lists and dictionaries, match expressions
+- [Data Structure Rules](./data-structures.md) — Literals, lists and dictionaries, Match expressions
 
 ## Control Flow
 
@@ -33,5 +33,5 @@ follows:
 
 ## Special Syntax
 
-- [Special Syntax Rules](./special-syntax.md) — F-Strings, import statements, error handling, unsafe
+- [Special Syntax Rules](./special-syntax.md) — F-String, import statements, error handling, unsafe
   blocks

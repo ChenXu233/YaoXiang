@@ -2,15 +2,15 @@
 
 > `src/util/diagnostic/codes/` から自動生成
 
-## エラー一覧
+## エラーリスト
 
 ## E6001：Division by zero
 
 **カテゴリ**: Runtime
 
-**メッセージ**: ゼロによる除算を試みました
+**メッセージ**: Attempted to divide by zero
 
-**ヘルプ**: ゼロ除算を防ぐためのチェックを追加してください
+**ヘルプ**: Add a check to prevent division by zero
 
 ---
 
@@ -18,9 +18,9 @@
 
 **カテゴリ**: Runtime
 
-**メッセージ**: 実行時に配列インデックスが範囲外です
+**メッセージ**: Array index is out of bounds at runtime
 
-**ヘルプ**: インデックスが配列の範囲内であることを確認してください
+**ヘルプ**: Ensure the index is within the array bounds
 
 ---
 
@@ -28,9 +28,9 @@
 
 **カテゴリ**: Runtime
 
-**メッセージ**: 再帰の深さがスタックの上限を超えました
+**メッセージ**: Recursion depth exceeded stack limit
 
-**ヘルプ**: 再帰の深さを減らすか、反復を使用してください
+**ヘルプ**: Reduce recursion depth or use iteration
 
 ---
 
@@ -38,9 +38,29 @@
 
 **カテゴリ**: Runtime
 
-**メッセージ**: 実行時にアサーションが失敗しました
+**メッセージ**: Assertion failed at runtime
 
-**ヘルプ**: アサーション条件を修正するか、有効な入力を提供してください
+**ヘルプ**: Fix the assertion condition or provide valid input
+
+---
+
+## E6006：Function not found (runtime)
+
+**カテゴリ**: Runtime
+
+**メッセージ**: Function not found: '{func}'
+
+**ヘルプ**: Ensure the function is defined and spelled correctly
+
+---
+
+## E6007：Runtime error
+
+**カテゴリ**: Runtime
+
+**メッセージ**: Runtime error: {message}
+
+**ヘルプ**: See the error message for details
 
 ---
 
@@ -48,12 +68,12 @@
 
 **カテゴリ**: Runtime
 
-**メッセージ**: キーが見つかりません
+**メッセージ**: Key not found
 
-**ヘルプ**: インデックス操作の前に `dict.has` を使用してキーの存在を確認してください
+**ヘルプ**: Use dict.has to check key existence before indexing
 
 ---
 
 > #299
-> §4：Dict のキー欠落とインデックス範囲外（E6003）はセマンティクスが異なります——キー不存在 vs 序数超界、診断情報を保持するために別々のコードとして独立させます。安全なアクセスには
+> §4：Dict の欠キーとインデックス範囲外（E6003）は意味論的に異なる種類です——キーが存在しない vs 序数の境界超過であり、別個のコードとして独立させ診断情報を保持します。安全なアクセスには
 > `dict.has` で先に判定してから取得してください。

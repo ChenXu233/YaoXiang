@@ -1,18 +1,18 @@
 ---
 title: 'check Command Design Document'
-description: 'Design specification for the yaoxiang check static checking tool'
+description: 'Design specification for the yx check static checking tool'
 ---
 
 # check Command Design Document
 
-`yaoxiang check` is the YaoXiang compiler's static checking tool, providing type checking,
-cross-file analysis, and incremental checking capabilities.
+`yx check` is the YaoXiang compiler's static checking tool, providing type checking, cross-file
+analysis, and incremental checking functionality.
 
 ## Design Principles
 
-1. **Zero false positives**: Every error reported must be a real error
-2. **Cross-file awareness**: Correctly detect type errors and undefined references across modules
-3. **Incremental first**: In watch mode, only affected files are re-checked
+1. **Zero false positives**: Every reported error must be a real error
+2. **Cross-file awareness**: Correctly detect cross-module type errors and undefined references
+3. **Incremental first**: watch mode only re-checks affected files
 4. **Self-documenting**: Error codes, message templates, and help text are all managed through i18n
 
 ## Document Navigation
@@ -25,8 +25,8 @@ cross-file analysis, and incremental checking capabilities.
 
 ## Boundaries with Other Systems
 
-| System                      | Responsibilities                                                 | Relationship with check             |
-| --------------------------- | ---------------------------------------------------------------- | ----------------------------------- |
-| Compiler (`yaoxiang build`) | Complete compilation (parsing → type checking → code generation) | check only does the first two steps |
-| LSP                         | Editor integration (completion, navigation, diagnostics)         | check's diagnostics are reusable    |
-| Formatter (`yaoxiang fmt`)  | Code style                                                       | Independent, used in parallel in CI |
+| System                  | Responsibility                                              | Relationship with check             |
+| ----------------------- | ----------------------------------------------------------- | ----------------------------------- |
+| Compiler (`yx build`)   | Complete compilation (parse → type check → code generation) | check only does the first two steps |
+| LSP                     | Editor integration (completion, jump, diagnostics)          | check's diagnostics are reusable    |
+| Formatter (`yx format`) | Code style                                                  | Independent, used in parallel in CI |

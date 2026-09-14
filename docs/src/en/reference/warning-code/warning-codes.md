@@ -1,12 +1,12 @@
 ---
 title: 'Warning Codes'
-description: 'Compiler warning codes and their descriptions'
+description: 'Compiler warning codes and explanations'
 ---
 
 # Warning Codes
 
-This document lists the warning codes that the YaoXiang compiler may produce. Warnings do not
-prevent compilation, but may indicate potential issues in the code.
+This document lists the warning codes that the YaoXiang compiler may emit. Warnings do not prevent
+compilation, but may indicate potential issues in the code.
 
 ## Configuration
 
@@ -29,7 +29,7 @@ dead-code = "warn"
 **Reason**: An exported function is never called by any code.
 
 ```yaoxiang
-pub dead_function: () -> Void = { }  // W1001: unused exported function
+pub dead_function: () -> Void = { }  // W1001: Unused exported function
 
 main = {
     // dead_function is never called
@@ -39,7 +39,7 @@ main = {
 **Suggestions**:
 
 - If the function does not need to be used externally, remove the `pub` modifier
-- If the function needs to be kept but is currently unused, set `dead-code = "off"` in the
+- If the function needs to be kept but is currently unused, you can set `dead-code = "off"` in the
   configuration
 
 ---
@@ -51,7 +51,7 @@ main = {
 **Example**:
 
 ```yaoxiang
-DeadType: Type = Int  // W1002: unused exported type
+DeadType: Type = Int  // W1002: Unused exported type
 
 main = {
     x = 42
@@ -69,10 +69,10 @@ main = {
 **Reason**: A module or symbol imported by a `use` statement is never used.
 
 ```yaoxiang
-use std.json  // W1003: unused import
+use std.json  // W1003: Unused import
 
 main = {
-    // the json module is never used
+    // json module is never used
 }
 ```
 
@@ -80,7 +80,7 @@ main = {
 
 - Remove unused imports to keep the code clean
 - If the import needs to be kept (for side effects), consider using `use std.json.*` or add a
-  comment explaining
+  comment explaining why
 
 ---
 
@@ -91,7 +91,7 @@ main = {
 **Example**:
 
 ```yaoxiang
-pub dead_var = 42  // W1004: unused exported variable
+pub dead_var = 42  // W1004: Unused exported variable
 
 main = {
     // dead_var is never read
@@ -100,7 +100,7 @@ main = {
 
 **Suggestions**:
 
-- Remove the unnecessary `pub` modifier
+- Remove unnecessary `pub` modifiers
 - If the variable needs to be exported but is currently unused, ignore this warning
 
 ---
@@ -114,7 +114,7 @@ main = {
 ```yaoxiang
 Foo: Type = { value: Int }
 
-pub Foo.dead_method: (self: Foo) -> Void = { }  // W1005: unused exported method
+pub Foo.dead_method: (self: Foo) -> Void = { }  // W1005: Unused exported method
 
 main = {
     foo = Foo(1)
@@ -124,22 +124,50 @@ main = {
 
 **Suggestions**:
 
-- Remove the unnecessary `pub` modifier
+- Remove unnecessary `pub` modifiers
 - If the method needs to be kept but is currently unused, ignore this warning
 
 ---
 
-## Warning Levels Explained
+### W1063: Const Generic Constraint Cannot Be Evaluated
+
+**Reason**: The value constraint of a const generic parameter cannot be evaluated at compile-time.
+
+**Message**: ``const generic constraint cannot be evaluated: `{constraint}` ({var} = {value})``
+
+```yaoxiang
+BadArray(Int, n)  // n is not a compile-time constant
+```
+
+**Suggestions**:
+
+- Make sure const parameters are compile-time constants
+
+---
+
+### W1080: Compile-Time Proof Degradation
+
+**Reason**: A constraint cannot be proven at compile-time and has been degraded to a runtime check.
+
+**Message**: `Constraint cannot be proven at compile-time, has been degraded to a runtime check`
+
+**Suggestions**:
+
+- Consider adding a proof function to improve safety
+
+---
+
+## Warning Level Details
 
 | Level  | Effect                                              |
 | ------ | --------------------------------------------------- |
 | `off`  | Completely disable this warning                     |
 | `warn` | Show the warning but continue compiling (default)   |
-| `deny` | Treat the warning as an error, blocking compilation |
+| `deny` | Treat the warning as an error and block compilation |
 
-### Usage Scenarios
+### Use Cases
 
-- **During development**: Use the `warn` level to learn about potential issues in the code
+- **During development**: Use the `warn` level to be aware of potential issues in your code
 - **Before release**: Use the `deny` level to ensure there is no unused code
 - **Legacy code**: Use the `off` level to temporarily ignore warnings
 
@@ -150,4 +178,4 @@ main = {
 Warning codes use the `W` prefix (e.g., W1001), while error codes use the `E` prefix (e.g., E1001).
 
 - **Error**: Blocks compilation and must be fixed
-- **Warning**: Indicates a potential issue, fixing is optional
+- **Warning**: Indicates a potential issue, and fixing it is optional
