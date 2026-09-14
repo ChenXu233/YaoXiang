@@ -1,0 +1,18 @@
+// 06-compile-errors/firstclass_mut_borrow_err.yx
+// 一等函数 &mut 调用 × 活跃借用——调用点所有权解析表（缺口2）落地后
+// 不再缺省全 Move：&mut 实参产生写令牌，与活跃借用冲突
+// expect: compile-error E2018
+// 验证: v = &p.x 活跃期内 f(p)（f = take_mut，&mut Point 参数）被拒绝
+// 状态: ❌ 应编译失败
+
+Point: Type = { x: Int, y: Int }
+take_mut: (p: &mut Point) -> Void = {
+    p.x = 9
+}
+main = {
+    p = Point(1, 2)
+    f = take_mut
+    v = &p.x
+    f(p)
+    print(p.x)
+}

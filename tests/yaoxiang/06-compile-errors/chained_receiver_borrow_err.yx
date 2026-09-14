@@ -1,0 +1,19 @@
+// 06-compile-errors/chained_receiver_borrow_err.yx
+// 链式接收者 &mut 方法 × 活跃借用——借用检查缺口1 补齐（0.8.0 门槛 G3）
+// expect: compile-error E2018
+// 验证: v = &o.inner.x 活跃期内 o.inner.shift()（&mut self 链式接收者）
+//       被拒绝——此前接收者藏在 func 里按根变量反查（错查 "Outer.shift"/
+//       错绑定，或静默放行，两形态都不对）
+// 状态: ❌ 应编译失败
+
+Point: Type = { x: Int, y: Int }
+Point.shift: (self: &mut Point) -> Void = {
+    self.x = 5
+}
+Outer: Type = { inner: Point }
+main = {
+    o = Outer(Point(1, 2))
+    v = &o.inner.x
+    o.inner.shift()
+    print(o.inner.x)
+}
