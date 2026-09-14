@@ -5,7 +5,7 @@ resolver = "2"
 
 # RFC-037：工具链单一版本源（引擎 yaoxiang-rs 与前门 yx 同版本发布）
 [workspace.package]
-version = "0.7.14"
+version = "0.8.0"
 
 [package]
 name = "yaoxiang"
