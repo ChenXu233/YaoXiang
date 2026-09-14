@@ -890,7 +890,10 @@ impl<'a> ExpressionInferrer<'a> {
                 } else {
                     GenericFunctionId::new(fn_name, type_params)
                 };
-                let request = InstantiationRequest::new(generic_id, type_args, call_span);
+                let mut request = InstantiationRequest::new(generic_id, type_args, call_span);
+                // #335 路径 A：记录所在函数——嵌套调用请求的符号化实参
+                //（TypeRef(参数名)）由 mono 按所在泛型函数的 name_map 求值
+                request.containing_fn = self.scope.fn_context().map(str::to_owned);
                 self.instantiation_requests.push(request);
             }
         }

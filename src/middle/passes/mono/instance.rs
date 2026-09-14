@@ -25,6 +25,11 @@ pub struct InstantiationRequest {
     /// 特化链深度（0 = typecheck 直接产生的请求；嵌套扫描逐层 +1，
     /// 用于递归链保护，与实例化总数上限分离）
     pub depth: usize,
+
+    /// 发出该调用的所在函数名（#335 路径 A）：嵌套调用请求携带符号化
+    /// TypeRef(参数名) 实参时，mono 按此找到所在泛型函数的 name_map 求值；
+    /// 调用点改写的三元键以此（求值后 = 特化名）为容器维度。
+    pub containing_fn: Option<String>,
 }
 
 impl InstantiationRequest {
@@ -39,6 +44,7 @@ impl InstantiationRequest {
             type_args,
             source_location,
             depth: 0,
+            containing_fn: None,
         }
     }
 

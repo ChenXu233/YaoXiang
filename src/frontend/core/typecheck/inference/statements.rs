@@ -632,6 +632,10 @@ impl StatementChecker {
         let saved_loop_depth = self.loop_depth;
         self.loop_depth = 0;
 
+        // #335 路径 A：函数上下文——体内嵌套泛型调用的请求以此为 containing_fn
+        let prev_fn_context = self.scope.fn_context().map(str::to_owned);
+        self.scope.set_fn_context(Some(name.to_string()));
+
         // 创建函数作用域（#295 三链模型：参数层 + 新局部层，外层函数局部变量不可见）
         self.scope.enter_fn();
 
@@ -688,6 +692,7 @@ impl StatementChecker {
             self.scope.exit_fn();
             self.is_top_level = was_top_level;
             self.loop_depth = saved_loop_depth;
+            self.scope.set_fn_context(prev_fn_context);
 
             match first_err {
                 Some(e) => Err(e),
@@ -712,6 +717,7 @@ impl StatementChecker {
             self.scope.exit_fn();
             self.is_top_level = was_top_level;
             self.loop_depth = saved_loop_depth;
+            self.scope.set_fn_context(prev_fn_context);
 
             match err {
                 Some(e) => Err(e),

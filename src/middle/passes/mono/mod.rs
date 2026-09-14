@@ -19,6 +19,22 @@ use crate::middle::core::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
 };
 
+/// 是否含符号化类型实参（TypeRef(泛型参数名)）——#335 路径 A 的 deferred 分流依据
+fn contains_type_ref(ty: &MonoType) -> bool {
+    match ty {
+        MonoType::TypeRef(_) => true,
+        MonoType::Generic { args, .. } => args.iter().any(contains_type_ref),
+        MonoType::Fn {
+            params,
+            return_type,
+        } => params.iter().any(contains_type_ref) || contains_type_ref(return_type),
+        MonoType::Ref { inner, .. } => contains_type_ref(inner),
+        MonoType::Union(ts) | MonoType::Intersection(ts) => ts.iter().any(contains_type_ref),
+        MonoType::Refined { base, .. } => contains_type_ref(base),
+        _ => false,
+    }
+}
+
 /// 单态化器
 pub struct Monomorphizer {
     /// 泛型函数定义（从 IR 收集）
@@ -29,6 +45,12 @@ pub struct Monomorphizer {
     specialized_functions: HashMap<String, FunctionIR>,
     /// 待处理的实例化队列
     pending_queue: VecDeque<InstantiationRequest>,
+    /// 占位请求桶（#335 路径 A）：键 = 所在泛型函数名。含 TypeRef(参数名)
+    /// 符号化实参的请求挂此，待所在函数特化时以 name_map 求值入队
+    deferred: HashMap<String, Vec<InstantiationRequest>>,
+    /// 实际入队过的请求（含 deferred 求值产物）——调用点三元键映射的数据源。
+    /// 原始请求切片含未求值的符号化请求，不能直接用于改写
+    site_requests: Vec<InstantiationRequest>,
     /// 已处理的请求（去重）
     processed: HashSet<SpecializationKey>,
     /// 最大特化链深度（同一实例化链上嵌套泛型调用的层数；
@@ -46,6 +68,8 @@ impl Monomorphizer {
             generic_types: HashMap::new(),
             specialized_functions: HashMap::new(),
             pending_queue: VecDeque::new(),
+            deferred: HashMap::new(),
+            site_requests: Vec::new(),
             processed: HashSet::new(),
             max_depth: 100,
             max_total_instantiations: 10_000,
@@ -81,8 +105,21 @@ impl Monomorphizer {
         // 1. 收集泛型定义（函数和类型）
         self.collect_generic_definitions(module);
 
-        // 3. 初始化队列
+        // 3. 初始化队列：含符号化 TypeRef 实参的请求进 deferred 桶
+        //（泛型体内嵌套调用的实参在此形态——此前直接特化出 pair2(T, string)
+        //  等符号名函数，靠解释器类型擦除掩盖），其余正常入队
         for req in requests {
+            let symbolic = req.type_args.iter().any(contains_type_ref);
+            if symbolic {
+                if let Some(cf) = &req.containing_fn {
+                    self.deferred
+                        .entry(cf.clone())
+                        .or_default()
+                        .push(req.clone());
+                    continue;
+                }
+            }
+            self.site_requests.push(req.clone());
             self.pending_queue.push_back(req.clone());
         }
 
@@ -93,7 +130,7 @@ impl Monomorphizer {
         let mut output = self.build_output(module);
 
         // 6. 替换调用点
-        self.replace_call_sites(&mut output, requests);
+        self.replace_call_sites(&mut output);
 
         Ok(output)
     }
@@ -175,7 +212,23 @@ impl Monomorphizer {
             match specialized {
                 Some(spec) => {
                     let child_depth = req.depth + 1;
-                    self.scan_for_new_calls(&spec, child_depth);
+                    // #335 路径 A：本次特化建立 泛型参数名 → 具体实参 绑定，
+                    // 据此求值挂在所在泛型函数下的占位请求（每个特化实例各一次）
+                    let param_names: Vec<String> =
+                        if let Some(g) = self.generic_types.get(&generic_name) {
+                            g.generic_params.clone().unwrap_or_default()
+                        } else if let Some(g) = self.generic_functions.get(&generic_name) {
+                            g.generic_params.clone().unwrap_or_default()
+                        } else {
+                            Vec::new()
+                        };
+                    let name_map: HashMap<String, MonoType> = param_names
+                        .iter()
+                        .enumerate()
+                        .filter(|(i, _)| *i < req.type_args().len())
+                        .map(|(i, n)| (n.clone(), req.type_args()[i].clone()))
+                        .collect();
+                    self.fire_deferred(&generic_name, &spec.name, &name_map, child_depth);
                     self.scan_for_generic_types(&spec, child_depth);
                     self.specialized_functions.insert(spec.name.clone(), spec);
                 }
@@ -360,70 +413,29 @@ impl Monomorphizer {
         })
     }
 
-    /// 扫描特化函数体中的泛型调用，将新发现的实例化请求加入队列
-    ///
-    /// `depth` 为子请求的特化链深度（父请求深度 + 1）
-    fn scan_for_new_calls(
+    /// #335 路径 A：以本次特化建立的 泛型参数名 → 具体实参 绑定，求值挂在
+    /// `container`（所在泛型函数）下的占位请求，求值后以特化名为 containing_fn
+    /// 入队——其体内的嵌套调用随之关联到本特化实例（三元键容器维度）。
+    /// 取代已删除的 scan_for_new_calls 单参启发式：嵌套调用的请求由 typecheck
+    /// 在收集阶段直接发出（实参为符号化 TypeRef(参数名)，deferred 桶暂存）。
+    fn fire_deferred(
         &mut self,
-        func: &FunctionIR,
+        container: &str,
+        specialized_name: &str,
+        name_map: &HashMap<String, MonoType>,
         depth: usize,
     ) {
-        for instr in func.all_instructions() {
-            if let crate::middle::core::ir::Instruction::Call {
-                func: callee,
-                args,
-                span: call_span,
-                ..
-            } = instr
-            {
-                // 从调用操作数提取被调用函数名
-                let callee_name = match callee {
-                    Operand::Const(ConstValue::String(name)) => name.clone(),
-                    _ => continue,
-                };
-
-                // 检查被调用函数是否是已知的泛型函数
-                if !self.generic_functions.contains_key(&callee_name) {
-                    continue;
-                }
-
-                let generic_func = match self.generic_functions.get(&callee_name) {
-                    Some(f) => f,
-                    None => continue,
-                };
-
-                let type_params = match &generic_func.generic_params {
-                    Some(p) => p,
-                    None => continue,
-                };
-
-                // 使用推断的参数类型创建实例化请求
-                // 简单启发式：使用第一个参数的类型作为泛型参数。
-                // 必须从 args[0] 直接推断：此前 filter_map 后再取 arg_types[0]，
-                // 当首参无法定型时索引错位（arg_types[0] 实为 args[1] 的类型）
-                // → 用错误类型生成特化（审计发现）
-                if type_params.len() == 1 {
-                    let Some(type_arg) = args
-                        .first()
-                        .and_then(|op| self.operand_to_type_hint(op, func))
-                    else {
-                        continue;
-                    };
-                    let key = SpecializationKey::new(callee_name.clone(), vec![type_arg.clone()]);
-
-                    if !self.processed.contains(&key) {
-                        // #335：请求携带调用点自身的 span——特化体 IR 保留了
-                        // 源码 span，调用点改写按 (泛型名, span) 精确匹配
-                        //（此前 Span::default() 使嵌套调用点无法被改写命中）
-                        let mut req = InstantiationRequest::new(
-                            GenericFunctionId::new(callee_name.clone(), type_params.clone()),
-                            vec![type_arg],
-                            *call_span,
-                        );
-                        req.depth = depth;
-                        self.pending_queue.push_back(req);
-                    }
-                }
+        if let Some(bucket) = self.deferred.get(container).cloned() {
+            for r in bucket {
+                let new_args: Vec<MonoType> =
+                    r.type_args.iter().map(|a| a.substitute(name_map)).collect();
+                let mut nr =
+                    InstantiationRequest::new(r.generic_id.clone(), new_args, r.source_location);
+                nr.depth = depth;
+                nr.containing_fn = Some(specialized_name.to_string());
+                // 记录求值后的请求：调用点三元键映射的数据源
+                self.site_requests.push(nr.clone());
+                self.pending_queue.push_back(nr);
             }
         }
     }
@@ -496,53 +508,19 @@ impl Monomorphizer {
         _instr: &Instruction,
     ) {
         // 指令中的类型信息主要通过操作数间接携带
-        // 目前 scan_for_new_calls 已处理函数调用，此处无需额外操作
+        // 嵌套泛型函数调用由 typecheck 请求（containing_fn 占位机制）覆盖，
         // 未来如果指令直接携带 MonoType，可在此扩展
-    }
-
-    /// 从特化函数中获取操作数对应的类型提示
-    fn operand_to_type_hint(
-        &self,
-        op: &Operand,
-        func: &FunctionIR,
-    ) -> Option<MonoType> {
-        let locals = match &func.body {
-            FunctionBody::Code { locals, .. } => locals,
-            _ => return None,
-        };
-        match op {
-            Operand::Local(idx) => locals.get(*idx).cloned(),
-            Operand::Arg(idx) => {
-                if *idx < func.params.len() {
-                    Some(func.params[*idx].clone())
-                } else {
-                    None
-                }
-            }
-            Operand::Const(cv) => match cv {
-                ConstValue::Int(_) => Some(MonoType::Int(64)),
-                ConstValue::Float(_) => Some(MonoType::Float(64)),
-                ConstValue::Bool(_) => Some(MonoType::Bool),
-                ConstValue::String(_) => Some(MonoType::make_string()),
-                ConstValue::Char(_) => Some(MonoType::Char),
-                ConstValue::Void => Some(MonoType::Void),
-                _ => None,
-            },
-            Operand::Temp(idx) => locals.get(*idx).cloned(),
-            _ => None,
-        }
     }
 
     /// 替换非泛型函数中对泛型函数的调用为特化函数名
     pub fn replace_call_sites(
         &self,
         module: &mut ModuleIR,
-        requests: &[InstantiationRequest],
     ) {
-        // #335：调用点映射按 (泛型名, 调用点 span) 二元键——此前按泛型名
-        // 单键映射，同一泛型函数的多个实例化互相覆盖，全部调用点被改写
-        // 到最后一个请求的特化版本（`identity(42)` 实际调用 identity(string)）
-        let call_site_map = self.build_call_site_map(requests);
+        // #335 路径 A：调用点映射三元键 (所在函数, 泛型名, span)——同一源码
+        // span 会复制进多个特化实例（outer(int64)/outer(string) 各持一份），
+        // 二元键下互相覆盖；三元键使每个特化实例改写到各自的嵌套特化
+        let call_site_map = self.build_call_site_map(&self.site_requests);
 
         // 遍历所有非泛型函数，替换调用点（含特化函数体内对其他泛型的嵌套调用）
         for func in &mut module.functions {
@@ -556,7 +534,7 @@ impl Monomorphizer {
     fn build_call_site_map(
         &self,
         requests: &[InstantiationRequest],
-    ) -> HashMap<(String, crate::util::span::Span), String> {
+    ) -> HashMap<(Option<String>, String, crate::util::span::Span), String> {
         let mut map = HashMap::new();
         for req in requests {
             let generic_name = req.generic_id().name().to_string();
@@ -575,19 +553,23 @@ impl Monomorphizer {
                 .collect::<Vec<_>>()
                 .join(", ");
             let specialized_name = format!("{}({})", generic_name, type_args_str);
-            map.insert((generic_name, req.source_location), specialized_name);
+            map.insert(
+                (req.containing_fn.clone(), generic_name, req.source_location),
+                specialized_name,
+            );
         }
         map
     }
 
     /// 替换单个函数中所有 Call 指令的泛型函数名为特化函数名
     ///
-    /// 按 (被调名, 指令 span) 精确匹配：IR Call 指令与 typecheck 实例化
-    /// 请求同源持有 AST 调用表达式的 span
+    /// 按 (所在函数名, 被调名, 指令 span) 三元精确匹配：IR Call 指令与
+    /// typecheck 实例化请求同源持有 AST 调用表达式的 span；containing_fn
+    /// 为 None 的请求退化为 (None, 泛型名, span) 兜底键
     fn replace_calls_in_function(
         &self,
         func: &mut FunctionIR,
-        call_site_map: &HashMap<(String, crate::util::span::Span), String>,
+        call_site_map: &HashMap<(Option<String>, String, crate::util::span::Span), String>,
     ) {
         if let FunctionBody::Code { blocks, .. } = &mut func.body {
             for block in blocks {
@@ -599,8 +581,11 @@ impl Monomorphizer {
                     } = instr
                     {
                         if let Operand::Const(ConstValue::String(name)) = callee {
-                            if let Some(specialized_name) =
-                                call_site_map.get(&(name.clone(), *span))
+                            let named = (Some(func.name.clone()), name.clone(), *span);
+                            let anon = (None, name.clone(), *span);
+                            if let Some(specialized_name) = call_site_map
+                                .get(&named)
+                                .or_else(|| call_site_map.get(&anon))
                             {
                                 *callee =
                                     Operand::Const(ConstValue::String(specialized_name.clone()));

@@ -21,9 +21,7 @@ use crate::frontend::core::types::var::TypeVar;
 use crate::middle::core::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
 };
-use crate::middle::passes::mono::instance::{
-    GenericFunctionId, InstantiationRequest, SpecializationKey,
-};
+use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use crate::middle::passes::mono::Monomorphizer;
 use crate::util::span::Span;
 
@@ -336,182 +334,53 @@ fn test_specialize_with_generic_type_args_replaces_inner_types() {
     );
 }
 
-// ==================== scan_for_new_calls 测试 ====================
+// ==================== #335 路径 A：fire_deferred / 占位求值测试 ====================
 
+/// 占位请求（TypeRef(参数名) 实参）在所在泛型函数特化时按 name_map 求值入队
 #[test]
-fn test_scan_for_new_calls_no_generic_calls_leaves_queue_empty() {
-    // Arrange
-    let mut mono = Monomorphizer::new();
-    let func = FunctionIR {
-        def: None,
-        name: "simple".to_string(),
-        params: vec![],
-        return_type: MonoType::Void,
-        generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![Instruction::Ret(None)],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![],
-        },
-    };
-
-    // Act
-    mono.scan_for_new_calls(&func, 0);
-
-    // Assert
-    assert!(mono.pending_queue.is_empty(), "无泛型调用时队列应为空");
-}
-
-#[test]
-fn test_scan_for_new_calls_with_generic_call_enqueues_request() {
+fn test_fire_deferred_evaluates_placeholder_args() {
     // Arrange
     let mut mono = Monomorphizer::new();
     mono.generic_functions
         .insert("identity".to_string(), make_identity_ir());
 
-    let func = FunctionIR {
-        def: None,
-        name: "wrapper(Int)".to_string(),
-        params: vec![MonoType::Int(64)],
-        return_type: MonoType::Int(64),
-        generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![
-                    Instruction::Call {
-                        dst: Some(Operand::Local(0)),
-                        func: Operand::Const(ConstValue::String("identity".to_string())),
-                        args: vec![Operand::Arg(0)],
-                        span: Span::default(),
-                        def: None,
-                    },
-                    Instruction::Ret(Some(Operand::Local(0))),
-                ],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![MonoType::Int(64)],
-        },
-    };
+    // 占位请求：g 的实参为所在泛型函数 f 的参数名 T（TypeRef 形态）
+    let req = InstantiationRequest::new(
+        GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
+        vec![MonoType::TypeRef("T".to_string())],
+        Span::default(),
+    );
+    mono.deferred.entry("f".to_string()).or_default().push(req);
+
+    // name_map：f 特化时 T → int64
+    let name_map: std::collections::HashMap<String, MonoType> =
+        [("T".to_string(), MonoType::Int(64))].into_iter().collect();
 
     // Act
-    mono.scan_for_new_calls(&func, 0);
+    mono.fire_deferred("f", "f(int64)", &name_map, 1);
 
-    // Assert
-    assert_eq!(mono.pending_queue.len(), 1, "应该有一个新的实例化请求");
-    let pending = &mono.pending_queue[0];
-    assert_eq!(pending.generic_id().name(), "identity");
-    assert_eq!(pending.type_args().len(), 1);
-    assert_eq!(pending.type_args()[0], MonoType::Int(64));
-}
-
-#[test]
-fn test_scan_for_new_calls_duplicate_prevented_by_processed_set() {
-    // Arrange
-    let mut mono = Monomorphizer::new();
-    mono.generic_functions
-        .insert("identity".to_string(), make_identity_ir());
-
-    mono.processed.insert(SpecializationKey::new(
-        "identity".to_string(),
+    // Assert：求值后的请求入队，占位被替换为具体类型
+    assert_eq!(mono.pending_queue.len(), 1, "占位请求应求值入队");
+    let fired = mono.pending_queue.front().unwrap();
+    assert_eq!(
+        fired.type_args,
         vec![MonoType::Int(64)],
-    ));
-
-    let func = FunctionIR {
-        def: None,
-        name: "dup_check".to_string(),
-        params: vec![MonoType::Int(64)],
-        return_type: MonoType::Int(64),
-        generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![
-                    Instruction::Call {
-                        dst: Some(Operand::Local(0)),
-                        func: Operand::Const(ConstValue::String("identity".to_string())),
-                        args: vec![Operand::Arg(0)],
-                        span: Span::default(),
-                        def: None,
-                    },
-                    Instruction::Ret(Some(Operand::Local(0))),
-                ],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![MonoType::Int(64)],
-        },
-    };
-
-    // Act
-    mono.scan_for_new_calls(&func, 0);
-
-    // Assert
-    assert!(
-        mono.pending_queue.is_empty(),
-        "已处理的请求不应重复加入队列"
+        "TypeRef(\"T\") 占位应被 name_map 求值为 int64"
     );
+    assert_eq!(fired.containing_fn.as_deref(), Some("f(int64)"));
+    assert_eq!(fired.depth, 1);
 }
 
-// ==================== operand_to_type_hint 测试 ====================
-
+/// 无占位桶的容器：fire_deferred 无操作
 #[test]
-fn test_operand_to_type_hint_resolves_arg_local_and_const() {
-    // Arrange
-    let mono = Monomorphizer::new();
-    let func = FunctionIR {
-        def: None,
-        name: "test".to_string(),
-        params: vec![MonoType::Int(64), MonoType::make_string()],
-        return_type: MonoType::Void,
-        generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![],
-            entry: 0,
-            locals: vec![MonoType::Bool, MonoType::Float(64)],
-        },
-    };
+fn test_fire_deferred_unknown_container_noop() {
+    let mut mono = Monomorphizer::new();
+    let name_map: std::collections::HashMap<String, MonoType> =
+        [("T".to_string(), MonoType::Int(64))].into_iter().collect();
 
-    // Assert: Arg(0) -> Int(64)
-    assert_eq!(
-        mono.operand_to_type_hint(&Operand::Arg(0), &func),
-        Some(MonoType::Int(64))
-    );
+    mono.fire_deferred("nonexistent", "f(int64)", &name_map, 1);
 
-    // Assert: Arg(1) -> String
-    assert_eq!(
-        mono.operand_to_type_hint(&Operand::Arg(1), &func),
-        Some(MonoType::make_string())
-    );
-
-    // Assert: Arg(99) -> None (越界)
-    assert_eq!(mono.operand_to_type_hint(&Operand::Arg(99), &func), None);
-
-    // Assert: Local(0) -> Bool
-    assert_eq!(
-        mono.operand_to_type_hint(&Operand::Local(0), &func),
-        Some(MonoType::Bool)
-    );
-
-    // Assert: Const(Int) -> Int(64)
-    assert_eq!(
-        mono.operand_to_type_hint(&Operand::Const(ConstValue::Int(42)), &func),
-        Some(MonoType::Int(64))
-    );
-
-    // Assert: Const(String) -> String
-    assert_eq!(
-        mono.operand_to_type_hint(
-            &Operand::Const(ConstValue::String("hello".to_string())),
-            &func,
-        ),
-        Some(MonoType::make_string())
-    );
+    assert!(mono.pending_queue.is_empty(), "无桶不应产生请求");
 }
 
 // ==================== replace_call_sites 测试 ====================
@@ -561,7 +430,8 @@ fn test_replace_call_sites_replaces_generic_call_in_main() {
     )];
 
     // Act
-    mono.replace_call_sites(&mut module, &requests);
+    mono.site_requests = requests.clone();
+    mono.replace_call_sites(&mut module);
 
     // Assert
     let main_func = &module.functions[0];
@@ -578,7 +448,7 @@ fn test_replace_call_sites_replaces_generic_call_in_main() {
 #[test]
 fn test_replace_call_sites_skips_generic_functions() {
     // Arrange
-    let mono = Monomorphizer::new();
+    let mut mono = Monomorphizer::new();
 
     let wrapper_func = FunctionIR {
         def: None,
@@ -618,7 +488,8 @@ fn test_replace_call_sites_skips_generic_functions() {
     )];
 
     // Act
-    mono.replace_call_sites(&mut module, &requests);
+    mono.site_requests = requests.clone();
+    mono.replace_call_sites(&mut module);
 
     // Assert
     let wrapper = &module.functions[0];
@@ -635,7 +506,7 @@ fn test_replace_call_sites_skips_generic_functions() {
 #[test]
 fn test_replace_call_sites_no_matching_request_does_not_replace() {
     // Arrange
-    let mono = Monomorphizer::new();
+    let mut mono = Monomorphizer::new();
 
     let main_func = FunctionIR {
         def: None,
@@ -672,7 +543,8 @@ fn test_replace_call_sites_no_matching_request_does_not_replace() {
     )];
 
     // Act
-    mono.replace_call_sites(&mut module, &requests);
+    mono.site_requests = requests.clone();
+    mono.replace_call_sites(&mut module);
 
     // Assert
     let main_func = &module.functions[0];
@@ -1086,7 +958,8 @@ fn test_replace_call_sites_multi_instantiation_dispatches_per_site() {
     ];
 
     // Act
-    mono.replace_call_sites(&mut module, &requests);
+    mono.site_requests = requests.clone();
+    mono.replace_call_sites(&mut module);
 
     // Assert：每个调用点改写到各自的特化，不再互相覆盖
     let instrs = &module.functions[0].blocks()[0].instructions;
@@ -1168,7 +1041,8 @@ fn test_replace_call_sites_rewrites_nested_calls_in_specialized_body() {
     )];
 
     // Act
-    mono.replace_call_sites(&mut module, &requests);
+    mono.site_requests = requests.clone();
+    mono.replace_call_sites(&mut module);
 
     // Assert
     let instrs = &module.functions[0].blocks()[0].instructions;
@@ -1290,15 +1164,30 @@ fn test_type_growing_recursion_still_blocked_by_depth() {
         },
     );
 
-    let module = ModuleIR {
-        functions: Vec::new(),
-        ..Default::default()
-    };
-    let requests = vec![InstantiationRequest::new(
+    let mut requests = vec![InstantiationRequest::new(
         GenericFunctionId::new("grow".to_string(), vec!["T".to_string()]),
         vec![MonoType::Int(64)],
         Span::default(),
     )];
+    // 路径 A：grow 体内对自身（实参 List(T)）的调用由 typecheck 记录为
+    // 占位请求（实参含 TypeRef("T")），挂在 grow 名下随每次特化求值
+    requests[0].containing_fn = Some("grow".to_string());
+    mono.deferred
+        .entry("grow".to_string())
+        .or_default()
+        .push(InstantiationRequest::new(
+            GenericFunctionId::new("grow".to_string(), vec!["T".to_string()]),
+            vec![MonoType::Generic {
+                name: "List".to_string(),
+                args: vec![MonoType::TypeRef("T".to_string())],
+            }],
+            Span::default(),
+        ));
+
+    let module = ModuleIR {
+        functions: Vec::new(),
+        ..Default::default()
+    };
 
     // Act
     let result = mono.monomorphize(&module, &requests);
