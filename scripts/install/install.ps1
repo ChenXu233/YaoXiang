@@ -27,6 +27,24 @@ $Tmp = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString())
 New-Item -ItemType Directory -Force -Path $Tmp | Out-Null
 Write-Host "yx: downloading $Url"
 Invoke-WebRequest -Uri $Url -OutFile (Join-Path $Tmp $Asset)
+
+# 校验 .sha256 旁证（缺失时降级为提示，与 yx 行为一致）
+$ShaExpected = $null
+try {
+    $ShaExpected = (Invoke-WebRequest -Uri "$Url.sha256" -UseBasicParsing).Content.Trim().Split()[0]
+}
+catch {
+    Write-Host "yx: warning: .sha256 not available, skipping verification"
+}
+if ($ShaExpected) {
+    Write-Host "yx: verifying checksum"
+    $ShaActual = (Get-FileHash -Path (Join-Path $Tmp $Asset) -Algorithm SHA256).Hash.ToLower()
+    if ($ShaExpected -ne $ShaActual) {
+        # throw 而非 exit：irm|iex 场景下 exit 会终止用户当前 PowerShell 会话
+        throw "yx: checksum mismatch"
+    }
+}
+
 Expand-Archive -Path (Join-Path $Tmp $Asset) -DestinationPath (Join-Path $Tmp "out")
 
 # 就位：版本目录 = 发行包解压根；bin\yx.exe 入口
@@ -40,10 +58,11 @@ if (-not (Test-Path $Settings)) {
     Set-Content -Path $Settings -Value "default = `"$Version`""
 }
 
-# 用户级 PATH
+# 用户级 PATH（Windows 路径比较大小写不敏感）
 $BinDir = Join-Path $YxHome "bin"
 $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
-if (($UserPath -split ';') -notcontains $BinDir) {
+$AlreadyInPath = ($UserPath -split ';') | Where-Object { $_ -ieq $BinDir }
+if (-not $AlreadyInPath) {
     [Environment]::SetEnvironmentVariable("Path", "$UserPath;$BinDir", "User")
     Write-Host "yx: added $BinDir to user PATH (restart shell to take effect)"
 }

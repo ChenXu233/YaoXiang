@@ -1,11 +1,11 @@
 ---
 title: 'YaoXiang 代码格式化规范'
-description: YaoXiang 代码格式化工具（yaoxiang fmt）的行为规范总则，定义格式化原则和适用范围
+description: YaoXiang 代码格式化工具（yx format）的行为规范总则，定义格式化原则和适用范围
 ---
 
 # YaoXiang 代码格式化规范
 
-本文档定义了 `yaoxiang fmt` 代码格式化工具的行为规范。所有格式化行为必须遵循本规范。
+本文档定义了 `yx format` 代码格式化工具的行为规范。所有格式化行为必须遵循本规范。
 
 ---
 

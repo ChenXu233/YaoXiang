@@ -1,7 +1,7 @@
 ; YaoXiang Inno Setup Script（RFC-037：向导安装 = 铺设完整发行包树）
 ;
-; 版本号与包目录由 CI 注入（消灭 sed 替换）：
-;   iscc /DMyAppVersion=0.7.14 /DPkgDir=pkg\extracted\yaoxiang-0.7.14-x86_64-pc-windows-msvc setup.iss
+; 版本号与包目录由 CI 注入（消灭 sed 替换）；PkgDir 相对本 .iss 所在目录：
+;   iscc /DMyAppVersion=0.7.14 /DPkgDir=..\..\pkg\extracted\yaoxiang-0.7.14-x86_64-pc-windows-msvc setup.iss
 
 #ifndef MyAppVersion
 #define MyAppVersion "0.0.0-dev"

@@ -83,11 +83,23 @@ toolchain = "0.7.14"
 | `YAOXIANG_HOME` | 覆盖安装根，默认 `~/.yaoxiang`（CI 与容器场景） |
 | `YAOXIANG_VERSION` | install 脚本安装指定版本而非最新版 |
 
-镜像下载可在 `~/.yaoxiang/settings.toml` 配置（ghproxy 风格前缀）：
+## 网络与镜像（受限网络）
+
+当前网络无法直连 GitHub 时，`yx` 支持下载镜像：在 `<安装根>/settings.toml`（缺省 `~/.yaoxiang/settings.toml`）配置 ghproxy 风格的 URL 前缀：
 
 ```toml
 mirror = "https://ghproxy.example.com"
 ```
+
+生效范围（`yx` 会把完整 GitHub URL 拼接到该前缀之后）：
+
+- `yx toolchain install` / `yx toolchain update`——发行包、`.sha256` 旁证与版本查询 API
+- `yx self update`——同上
+
+注意：
+
+- 一键安装脚本（`install.sh` / `install.ps1`）不读取镜像配置，直连 GitHub
+- 下载失败时 `yx` 会在报错中提示配置镜像；镜像本身不可达同样按网络错误报告
 
 ## 验证安装
 

@@ -27,6 +27,11 @@ on:
     tags:
       - '**[0-9]+.[0-9]+.[0-9]+*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v0.7.14); must already exist'
+        required: true
+        type: string
 
 jobs:
   # ── dist plan：计算构建矩阵（target/runner/系统依赖） ──────────
@@ -40,6 +45,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          # 手动触发时按输入 tag 检出，保证构建内容与 tag 一致
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
           persist-credentials: false
           submodules: recursive
       - name: Install dist
@@ -47,7 +54,7 @@ jobs:
         run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.32.0/cargo-dist-installer.sh | sh"
       - id: tag
         run: |
-          TAG="${GITHUB_REF_NAME#refs/tags/}"
+          TAG="${{ inputs.tag || github.ref_name }}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
       - id: plan
@@ -84,6 +91,7 @@ jobs:
           git config --global core.longpaths true
       - uses: actions/checkout@v7
         with:
+          ref: ${{ needs.plan.outputs.tag }}
           persist-credentials: false
           submodules: recursive
       - name: Install Rust non-interactively if not already installed
@@ -142,6 +150,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan.outputs.tag }}
       - name: Fetch restructured windows package
         uses: actions/download-artifact@v8
         with:
@@ -155,7 +165,8 @@ jobs:
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
       - name: Build installer
-        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=${{ needs.plan.outputs.version }} /DPkgDir=pkg\extracted\yaoxiang-${{ needs.plan.outputs.version }}-x86_64-pc-windows-msvc scripts/build/setup.iss'
+        # PkgDir 相对 .iss 所在目录解析（scripts/build/），须上溯到仓库根
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=${{ needs.plan.outputs.version }} /DPkgDir=..\..\pkg\extracted\yaoxiang-${{ needs.plan.outputs.version }}-x86_64-pc-windows-msvc scripts/build/setup.iss'
       - name: "Upload installer"
         uses: actions/upload-artifact@v7
         with:
@@ -176,16 +187,16 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      # 下载失败必须让 job 失败：容忍会产出"零资产静默发布"的绿色 Release
       - name: Download all artifacts
-        id: download
-        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           path: release-artifacts
       - name: Get previous tag
         id: prev-tag
         run: |
-          PREV=$(git tag --sort=-version:refname | grep -v "$(printf '%s' "${{ needs.plan.outputs.tag }}")" | head -1)
+          # 只在版本 tag 里找前驱，防 nightly 这类非版本 tag 混入 changelog 范围
+          PREV=$(git tag --sort=-version:refname | grep -E '^v[0-9]' | grep -vx "${{ needs.plan.outputs.tag }}" | head -1)
           echo "value=$PREV" >> "$GITHUB_OUTPUT"
           echo "Previous tag: $PREV"
       - name: Generate commit list with @mentions
@@ -262,7 +273,7 @@ jobs:
           gzip -k dists/stable/main/binary-amd64/Packages
           gzip -k dists/stable/main/binary-arm64/Packages
           apt-ftparchive release dists/stable > dists/stable/Release
-          gpg --batch --yes --detach-sign --armor --output dists/stable/InRelease.gpg dists/stable/Release 2>/dev/null || true
+          gpg --armor --export > KEY.gpg
           gpg --batch --yes --clearsign --output dists/stable/InRelease dists/stable/Release
           gpg --batch --yes --detach-sign --armor --output dists/stable/Release.gpg dists/stable/Release
       - name: Push apt-repo branch
@@ -270,11 +281,13 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m ":package: apt repo: $VERSION" || exit 0
-          if git rev-parse --verify apt-repo >/dev/null 2>&1; then
-            git push origin HEAD:apt-repo
-          else
-            git checkout -b apt-repo
-            git push origin apt-repo
+          # Pages 分支只含仓库元数据与 deb 池。分支不存在时孤儿化重建（从触发
+          # ref 全量回退检出的源码树不得进分支）；已存在时同样清空索引再只加
+          # 元数据——顺带自愈任何历史遗留的源码树条目
+          if ! git rev-parse --verify apt-repo >/dev/null 2>&1; then
+            git checkout --orphan apt-repo
           fi
+          git rm -r -q --cached .
+          git add KEY.gpg dists pool
+          git commit -m ":package: apt repo: $VERSION" || exit 0
+          git push origin HEAD:apt-repo

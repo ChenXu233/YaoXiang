@@ -1,11 +1,11 @@
 ---
 title: check 命令设计文档
-description: yaoxiang check 静态检查工具的设计规范
+description: yx check 静态检查工具的设计规范
 ---
 
 # check 命令设计文档
 
-`yaoxiang check` 是 YaoXiang 编译器的静态检查工具，提供类型检查、跨文件分析和增量检查功能。
+`yx check` 是 YaoXiang 编译器的静态检查工具，提供类型检查、跨文件分析和增量检查功能。
 
 ## 设计原则
 
@@ -24,6 +24,6 @@ description: yaoxiang check 静态检查工具的设计规范
 
 | 系统                      | 职责                                   | 与 check 的关系     |
 | ------------------------- | -------------------------------------- | ------------------- |
-| 编译器 (`yaoxiang build`) | 完整编译（解析 → 类型检查 → 代码生成） | check 只做前两步    |
+| 编译器 (`yx build`)       | 完整编译（解析 → 类型检查 → 代码生成） | check 只做前两步    |
 | LSP                       | 编辑器集成（补全、跳转、诊断）         | check 的诊断可复用  |
-| 格式化 (`yaoxiang fmt`)   | 代码风格                               | 独立，CI 中并行使用 |
+| 格式化 (`yx format`)      | 代码风格                               | 独立，CI 中并行使用 |

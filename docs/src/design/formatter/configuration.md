@@ -1,6 +1,6 @@
 ---
 title: '格式化配置选项'
-description: yaoxiang fmt 的配置文件格式、优先级和默认值
+description: yx format 的配置文件格式、优先级和默认值
 ---
 
 # 配置选项

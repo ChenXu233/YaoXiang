@@ -18,8 +18,10 @@ fn install_stub_version(
         .join(version)
         .join("bin")
         .join(engine_file_name());
-    fs::create_dir_all(engine.parent().unwrap()).unwrap();
-    fs::write(&engine, "").unwrap();
+    fs::create_dir_all(engine.parent().unwrap())
+        .unwrap_or_else(|e| panic!("create stub dir for {version}: {e}"));
+    fs::write(&engine, "")
+        .unwrap_or_else(|e| panic!("write stub engine {}: {e}", engine.display()));
     engine
 }
 
@@ -31,7 +33,7 @@ fn write_default(
         home.join("settings.toml"),
         format!("default = \"{version}\"\n"),
     )
-    .unwrap();
+    .unwrap_or_else(|e| panic!("write settings.toml: {e}"));
 }
 
 #[test]
