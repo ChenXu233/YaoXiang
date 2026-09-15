@@ -1922,7 +1922,7 @@ impl OwnershipChecker {
                 // 回退原路径。无条件计算——裸变量接收者的写令牌由本路径应用，
                 // 不受调用点所有权表命中与否影响。
                 let method_sig = self.method_receiver_ownership(func, args.len(), env);
-                if let Some((root, field_path, recv_own, arg_owns)) = &method_sig {
+                if let Some((root, field_path, recv_own, _arg_owns)) = &method_sig {
                     let is_write = matches!(recv_own, ParamOwnership::WriteBorrow);
                     // 同 #312：&mut 接收者遍历期间压制消费者注册，避免写节点
                     // 被挂成既有读令牌的消费者后反向 BFS 自我标记恒 unsafe
