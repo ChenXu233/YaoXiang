@@ -3,7 +3,7 @@ title: 'RFC-014: 包管理系统设计'
 status: '已接受'
 author: '晨煦'
 created: '2026-02-12'
-updated: '2026-06-11'
+updated: '2026-09-15'
 group: 'rfc-014' # 本 RFC 是包管理系统的总纲，子 RFC：014a/014b/014c
 issue: '#88'
 impl: '48%'
@@ -14,9 +14,9 @@ impl_status: 'partial'
 
 > **子 RFC：**
 >
-> - [RFC-014a: Registry 协议规范](../draft/014a-registry-protocol.md)
-> - [RFC-014b: 构建系统与二进制分发](../draft/014b-build-system.md)
-> - [RFC-014c: 工作空间支持](../draft/014c-workspace.md)
+> - [RFC-014a: Registry 协议规范](../review/014a-registry-protocol.md)
+> - [RFC-014b: 构建系统与二进制分发](../review/014b-build-system.md)
+> - [RFC-014c: 工作空间支持](../review/014c-workspace.md)
 
 ## 摘要
 
@@ -161,7 +161,15 @@ integrity = "sha256-xxxx"
 
 ### 模块解析顺序
 
-解析顺序取决于工作模式（是否有 `yaoxiang.toml`）。
+> **2026-09-15 决议：核心包源互斥语义（Python venv / Node node_modules 式）。**
+> 废弃原「5 层穿透查找链」描述——vendor 与全局**二选一**作为唯一核心包源，std 内嵌于核心源，本地模块可覆盖其余一切。
+
+**核心包源判定（互斥，永不混用）**：
+
+- 项目存在 `.yaoxiang/vendor/` → **vendor 是唯一核心包源**。所有非本地模块的 `use` 只从 vendor 解析，vendor 缺包直接报错（提示 `yaoxiang install`），**不做全局回落**。
+- 否则 → **全局是核心包源**（安装目录 std + 全局缓存）。
+
+不存在「vendor 里没有就退回全局缓存」的逐包穿透——两套来源混用正是版本漂移与「在我机器上能跑」的根源。
 
 #### 项目模式（有 yaoxiang.toml）
 
@@ -169,19 +177,20 @@ integrity = "sha256-xxxx"
 use foo.bar.baz;
 
 查找顺序:
-0. 嵌入二进制                          (std/*.yx — 编译时嵌入，版本绑定，仅 std.* 命名空间)
-1. ./.yaoxiang/std/foo/bar/baz.yx     (项目级标准库 — 存在时全局标准库完全失效)
-2. ./.yaoxiang/vendor/*/src/foo/bar/baz.yx  (vendor/)
-3. ./src/foo/bar/baz.yx                       (本地模块)
-4. ~/.yaoxiang/cache/foo/<ver>/src/foo/bar/baz.yx  (全局缓存)
-5. $YXPATH/foo/bar/baz.yx                     (全局路径，预留)
+1. ./src/foo/bar/baz.yx     本地模块 —— 最高优先级，可覆盖核心源中的同名模块
+2. <核心包源>/foo/bar/baz.yx
+   · vendor 模式: .yaoxiang/vendor/<pkg>-<ver>/src/foo/bar/baz.yx（std 也在 vendor 内）
+   · 全局模式:   <install-dir>/yx/<ver>/std/foo/bar/baz.yx + ~/.yaoxiang/cache/...
+3. std.* 专属兜底: 嵌入二进制（仅 std.* 命名空间；文件系统 std 落地前的过渡层，版本绑定编译器）
+4. 报错（模块不存在）；vendor 模式下缺包提示 `yaoxiang install`
 ```
 
 **项目模式规则**：
 
-- 嵌入二进制仅对 `std.*` 命名空间生效，优先级最高
-- 项目级标准库（`.yaoxiang/std/`）存在时，全局标准库完全跳过——保证构建确定性
-- 项目可通过 `yaoxiang add std@1.0.1` 将标准库作为依赖管理，锁定版本
+- `yaoxiang add std@1.0.1` 把 std 作为普通依赖装入 vendor、锁定版本；此时嵌入二进制 std 不再生效（vendor 内 std 优先）
+- vendor 存在但与 `yaoxiang.lock` 不一致时，`run`/`build` 报错并提示 `yaoxiang install`（Node 语义：不静默自动安装）
+- 本地模块覆盖核心源同名模块时，默认发射 W 级诊断提示遮蔽（`--deny-shadowing` 可升级为错误）；覆盖 `std.*` 时诊断文案显式警告
+- `path` 依赖视同本地模块的延伸，直接按路径解析，不经核心包源
 
 #### 单文件模式（无 yaoxiang.toml）
 
@@ -189,16 +198,16 @@ use foo.bar.baz;
 use foo.bar.baz;
 
 查找顺序:
-0. 嵌入二进制                          (std/*.yx — 编译时嵌入，版本绑定)
-1. <yaoxiang-install-dir>/yx/<version>/std/foo/bar/baz.yx  (全局标准库)
-2. ./src/foo/bar/baz.yx                                       (本地模块)
-3. $YXPATH/foo/bar/baz.yx                                     (全局路径，预留)
+1. ./src/foo/bar/baz.yx     本地模块
+2. 全局核心包源: <install-dir>/yx/<version>/std/foo/bar/baz.yx
+3. 嵌入二进制 std 兜底
+4. $YXPATH/foo/bar/baz.yx   （全局路径，预留）
 ```
 
 **单文件模式规则**：
 
-- 无项目级依赖，标准库直接从全局路径加载
-- 全局标准库路径与编译器版本绑定：`<install-dir>/yx/<version>/std/`
+- 无项目级依赖概念，std 直接来自全局；全局标准库路径与编译器版本绑定：`<install-dir>/yx/<version>/std/`
+- 单文件模式永不读取 `.yaoxiang/`（无 vendor 概念）
 
 ### 标准库安装目录结构
 
@@ -222,30 +231,26 @@ use foo.bar.baz;
 
 #### 项目级标准库
 
-项目可通过 `yaoxiang add std@1.0.1` 将标准库作为依赖加入项目，存储在 `.yaoxiang/std/`：
+> **2026-09-15 决议：不再设独立 `.yaoxiang/std/` 目录。** std 是核心包源中的普通包：`yaoxiang add std@1.0.1` 后落入 `.yaoxiang/vendor/std-<version>/`，与其它依赖同规则管理。原「项目级 std 存在则全局 std 失效」不再需要专门规则——核心包源互斥天然保证。
 
 ```
 my-project/
 ├── yaoxiang.toml
 ├── yaoxiang.lock
 ├── .yaoxiang/
-│   ├── std/                     # 项目级标准库（存在时全局标准库失效）
-│   │   ├── test.yx
-│   │   ├── math.yx
-│   │   └── ...
-│   └── vendor/                  # 其他依赖
-│       └── ...
+│   └── vendor/
+│       ├── std-1.0.1/           # std 作为普通 vendor 包
+│       └── foo-1.2.3/
 ├── src/
 │   └── main.yx
 ```
 
 **设计要点**：
 
-- 嵌入二进制作为兼容层：在文件系统标准库完全落地前，先通过嵌入二进制提供标准库模块
+- 嵌入二进制作为兼容层：在文件系统标准库完全落地前，先通过嵌入二进制提供 std 模块
 - 版本目录隔离：`yx/<version>/std/` 使不同版本的标准库共存，不会互相影响
-- 项目级标准库覆盖全局标准库：确保构建确定性，不受全局环境变化影响
-- 无 yaoxiang.toml 时（单文件模式），退回到全局标准库
-- `.yaoxiang/std/` 的存在即表示"项目级标准库已启用"，全局标准库不再参与
+- std 与普通依赖同机制（add/lock/vendor），无特殊目录、无特殊查找层
+- 单文件模式退回全局 std；vendor 存在时 std 必须来自 vendor（或经显式 `add std@` 锁定）
 
 ### 核心数据结构
 
@@ -273,13 +278,12 @@ enum DependencySpec {
     Workspace { member: String },  // 工作空间成员引用
 }
 
-// 解析后的依赖
+// 解析后的依赖（2026-09-15 决议：完整性只用 integrity 单字段，格式 "sha256-<hex>"，不设重复的 checksum）
 struct ResolvedDependency {
     name: String,
     version: Version,
     source: Source,
     integrity: Option<String>,
-    checksum: Option<String>,  // SHA-256
 }
 
 // 构建策略
@@ -418,19 +422,19 @@ token = "xxx"
 
 ### Registry 协议
 
-详见 [RFC-014a: Registry 协议规范](../draft/014a-registry-protocol.md)。
+详见 [RFC-014a: Registry 协议规范](../review/014a-registry-protocol.md)。
 
 核心设计：开放协议 + 适配层。官方 Registry 为主，GitHub Release/main 分支为辅，支持自定义 Registry。
 
 ### 构建系统
 
-详见 [RFC-014b: 构建系统与二进制分发](../draft/014b-build-system.md)。
+详见 [RFC-014b: 构建系统与二进制分发](../review/014b-build-system.md)。
 
 核心设计：声明式 `[build]` 配置，预编译优先/源码兜底，支持 cargo/cmake/custom 策略。
 
 ### 工作空间
 
-详见 [RFC-014c: 工作空间支持](../draft/014c-workspace.md)。
+详见 [RFC-014c: 工作空间支持](../review/014c-workspace.md)。
 
 核心设计：字典形式 members 声明，共享 lockfile，路径依赖，Cargo workspace 集成。
 
@@ -466,9 +470,15 @@ token = "xxx"
 | **Phase 2**   | GitHub 支持、.yaoxiang/vendor 管理、下载工具 | ✅ 已完成 |
 | **Phase 3**   | 全局缓存、semver crate 替换、CLI 完善        | 待开始    |
 | **Phase 3.5** | Source trait 改 async、async-trait 集成      | 待开始    |
-| **Phase 4**   | Registry 协议、publish、auth（RFC-014a）     | 待开始    |
+| **Phase 4**   | GitHub 适配层、.yxpkg 打包、publish --github（RFC-014a 缩减后范围；官方 Registry/auth/yank 后置） | 待开始    |
 | **Phase 5**   | 构建系统、预编译二进制（RFC-014b）           | 待开始    |
 | **Phase 6**   | 工作空间支持（RFC-014c）                     | 待开始    |
+
+**执行顺序调整（2026-09-15）**：`3 → 3.5 → 6 → 4 → 5`。
+
+- 工作空间（Phase 6）提前至构建系统之前——它不依赖网络与构建系统（纯本地路径解析 + 共享 lockfile），对多包开发收益最直接。
+- Phase 4 范围缩减：**官方 Registry 服务器与 auth/yank 无限期后置**，先交付 GitHub Release/Git 适配层 + `.yxpkg` 打包 + `publish --github`。生态冷启动只需 git/GitHub 渠道（Go 早期同型），Registry 服务器的运维与治理成本在无第三方包阶段是纯负债。
+- 随之约束：官方 Registry 上线前 `yaoxiang add <裸包名>` 不可用，添加依赖须显式来源（`--git` / `--path`）。
 
 ### 依赖关系
 
@@ -487,9 +497,9 @@ token = "xxx"
 
 - [x] `dev-dependencies` 条件编译语法？→ 由 RFC-014b 构建系统统一处理
 - [x] 完整性校验算法（SHA-256 / BLAKE3）？→ SHA-256
+- [x] 包命名规范（是否支持 namespace，如 `@org/pkg`）？→ 初期扁平包名，不支持 namespace；`@org/pkg` 预留（2026-09-15 决议）
+- [x] Registry API 版本化策略？→ URL 路径 `/api/v1/` + 响应头携带协议版本，破坏性变更升 v2 并存（2026-09-15 决议，见 RFC-014a）
 - [ ] `excludes` 排除特定文件不下载？
-- [ ] 包命名规范（是否支持 namespace，如 `@org/pkg`）？
-- [ ] Registry API 版本化策略？
 
 ---
 
