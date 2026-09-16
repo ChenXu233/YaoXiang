@@ -629,3 +629,68 @@ fn test_e2e_check_custom_test_patterns() {
         "自定义 patterns 命中的文件应按 Test 角色豁免，实际: {stderr:?}"
     );
 }
+
+// dump 命令 — 字节码 ↔ 源码行对照（RFC-034 阶段零：ip→span 映射可见）
+
+#[test]
+fn test_e2e_dump_annotates_instructions_with_source_line() {
+    // Arrange: 单文件模式 module.source_files 为空，translator 固定 file_id 0，
+    // 文件名退化为 <src>；io.println(1) 落在第 4 行第 15 列。
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "loc.yx",
+        "use std.io\n\nmain = {\n    io.println(1)\n}\n",
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["dump", src.to_str().unwrap()], tmp.path());
+
+    // Assert: dump 走 tracing（stdout sink）
+    assert_eq!(code, 0, "dump should exit 0; stderr: {stderr:?}");
+    assert!(
+        stdout.contains("CallNative"),
+        "dump should list instructions; stdout: {stdout:?}"
+    );
+    assert!(
+        stdout.contains("; <src>:4:15"),
+        "dump should annotate instructions with ip→span; stdout: {stdout:?}"
+    );
+}
+
+#[test]
+fn test_e2e_dump_bytecode_file_carries_source_path() {
+    // Arrange: .42 携带 debug section 时，dump 应解析出真实文件路径而非 <src>
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "loc.yx",
+        "use std.io\n\nmain = {\n    io.println(1)\n}\n",
+    );
+    let out = tmp.path().join("loc.42");
+
+    // Act
+    let (build_code, _o, build_err) = run_yx(
+        &[
+            "build",
+            src.to_str().unwrap(),
+            "--debug-info",
+            "-o",
+            out.to_str().unwrap(),
+        ],
+        tmp.path(),
+    );
+    assert_eq!(
+        build_code, 0,
+        "build --debug-info should exit 0; {build_err:?}"
+    );
+
+    let (code, stdout, stderr) = run_yx(&["dump", out.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0, "dump .42 should exit 0; stderr: {stderr:?}");
+    assert!(
+        stdout.contains("; ") && stdout.contains("loc.yx:4:15"),
+        "dump .42 should resolve real source path; stdout: {stdout:?}"
+    );
+}

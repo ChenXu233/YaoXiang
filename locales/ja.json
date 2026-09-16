@@ -49,6 +49,7 @@
   "bytecode_func_instr_count": "  命令数：{0}",
   "bytecode_func_code": "  コード：",
   "bytecode_instr_index": "    [{0}] {1} {2}",
+  "bytecode_instr_span": " ; {0}:{1}:{2}",
   "bytecode_unknown_opcode": "    [{0}] 不明なオペコード：0x{1}  ({2})",
   "shell_loaded": "読み込み済み：{0}",
   "debug_binary_op": "デバッグ：左値={0}, 右値={1}",

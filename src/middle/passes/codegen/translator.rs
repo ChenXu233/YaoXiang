@@ -325,6 +325,10 @@ impl Translator {
             Instruction::Mod { span, .. } => Some(*span),
             Instruction::LoadField { span, .. } => Some(*span),
             Instruction::LoadIndex { span, .. } => Some(*span),
+            Instruction::AllocFixedArray { span, .. } => Some(*span),
+            Instruction::CreateVariant { span, .. } => Some(*span),
+            Instruction::VariantTag { span, .. } => Some(*span),
+            Instruction::VariantPayload { span, .. } => Some(*span),
             _ => None,
         }
     }

@@ -49,6 +49,7 @@
   "bytecode_func_instr_count": "  喵喵喵：{0}",
   "bytecode_func_code": "  喵喵：",
   "bytecode_instr_index": "    [{0}] {1} {2}",
+  "bytecode_instr_span": " ; {0}:{1}:{2}",
   "bytecode_unknown_opcode": "    [{0}] 喵喵喵喵喵：0x{1}  ({2})",
   "shell_loaded": "喵喵喵：{0}",
   "debug_binary_op": "喵喵：喵喵={0}, 喵喵={1}",

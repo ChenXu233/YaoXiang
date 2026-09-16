@@ -42,6 +42,7 @@
   "bytecode_func_instr_count": "  指令數：{0}",
   "bytecode_func_code": "  代碼：",
   "bytecode_instr_index": "    [{0}] {1} {2}",
+  "bytecode_instr_span": " ; {0}:{1}:{2}",
   "bytecode_unknown_opcode": "    [{0}] 未知操作碼：0x{1}  ({2})",
   "shell_loaded": "已載入：{0}",
   "debug_binary_op": "除錯：左值={0}, 右值={1}",

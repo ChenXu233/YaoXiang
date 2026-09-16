@@ -428,6 +428,7 @@ pub enum MSG {
     BytecodeFuncInstrCount,
     BytecodeFuncCode,
     BytecodeInstrIndex,
+    BytecodeInstrSpan,
     BytecodeUnknownOpcode,
 
     // Debug messages
@@ -518,6 +519,7 @@ impl MSG {
             MSG::BytecodeFuncInstrCount => "bytecode_func_instr_count",
             MSG::BytecodeFuncCode => "bytecode_func_code",
             MSG::BytecodeInstrIndex => "bytecode_instr_index",
+            MSG::BytecodeInstrSpan => "bytecode_instr_span",
             MSG::BytecodeUnknownOpcode => "bytecode_unknown_opcode",
 
             // REPL and Shell messages

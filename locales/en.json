@@ -49,6 +49,7 @@
   "bytecode_func_instr_count": "  Instruction count: {0}",
   "bytecode_func_code": "  Code:",
   "bytecode_instr_index": "    [{0}] {1} {2}",
+  "bytecode_instr_span": " ; {0}:{1}:{2}",
   "bytecode_unknown_opcode": "    [{0}] Unknown opcode: 0x{1}  ({2})",
   "shell_loaded": "Loaded: {0}",
   "debug_binary_op": "Debug: lhs={0}, rhs={1}",
