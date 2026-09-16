@@ -1,9 +1,9 @@
 ---
 title: 'RFC-014b: Build System and Binary Distribution'
 status: 'Under Review'
-author: 'Chen Xu'
+author: 'Chenxu'
 created: '2026-06-11'
-updated: '2026-07-05'
+updated: '2026-09-15'
 group: 'rfc-014'
 issue: '#91'
 impl: '0%'
@@ -12,47 +12,74 @@ impl_status: 'not-started'
 
 # RFC-014b: Build System and Binary Distribution
 
-> This RFC is a sub-RFC of [RFC-014: Package Manager Design](../accepted/014-package-manager.md).
+> This RFC is a sub-RFC of
+> [RFC-014: Package Management System Design](../accepted/014-package-manager.md).
+
+## 2026-09-15 Review Resolution
+
+The following resolutions were finalized by the owner on 2026-09-15:
+
+1. **build.yx trust gate (grounding the "sandbox" open question)**: `custom` strategy executing
+   arbitrary code is the largest supply chain attack surface for the package
+   manager—`yaoxiang add`ing a malicious package is equivalent to handing over full `std.os`
+   permissions. Minimum mandatory baseline:
+   - Interactive confirmation must be required before first execution of a package's `build.yx`;
+   - `yaoxiang add --trust <pkg>` / `install --trust` persists the trust record to
+     `~/.yaoxiang/config.toml` (`[trust] build-scripts = ["name@version"]`);
+   - Non-interactive environments (CI) reject `custom` builds by default, unless explicitly
+     `--trust`;
+   - Full sandbox mechanisms continue as an open question for research, but the trust gate is a
+     non-omittable floor.
+2. **Phase reordering**:
+   `5a → 5b → 5c (cargo) → 5d ([binaries]) → 5f (bindgen, depends on RFC-026b) → 5e (custom last, with trust gate)`.
+   Declarative path (cargo) first, arbitrary code execution last.
+3. **Unified binary distribution**: `[binaries]` is the sole binary distribution mechanism
+   (corresponding to RFC-014a resolution 3—.yxpkg only contains source).
+4. **Cross-compilation**: Not supported in the initial phase; multi-platform artifacts are produced
+   by CI on multiple hosts (aligned with RFC-037 cargo-dist approach).
+5. **Build artifact size**: No upper limit; managed by the distribution channel.
+6. **Cargo version incompatibility**: Handled via `[build.requirements]` pre-check error +
+   installation guidance (defined in the body, no additional mechanism).
 
 ## Summary
 
-Define the build mechanism for the YaoXiang package manager: declarative build configuration, build
-strategies (cargo/cmake/custom/none), precompiled binary distribution, and system dependency
-checking.
+Defines the build mechanism for the YaoXiang package management system: declarative build
+configuration, build strategies (cargo/cmake/custom/none), pre-compiled binary distribution, and
+system dependency checking.
 
 ## Motivation
 
-Some packages are pure `.yx` code that don't require building. Some need to compile FFI bindings
-(calling Cargo, CMake, etc.). A unified mechanism is needed to allow package authors to declare
-build requirements, letting the package manager handle them automatically.
+Some packages are pure `.yx` code requiring no build. Some require compiling FFI bindings (calling
+Cargo, CMake, etc.). A unified mechanism is needed for package authors to declare build
+requirements, with the package manager handling them automatically.
 
 ### Current Problems
 
-- No build configuration declaration (`yaoxiang.toml` lacks a `[build]` section)
-- No precompiled binary distribution mechanism
-- FFI package builds rely entirely on manual user operations
+- No build configuration declaration (no `[build]` section in `yaoxiang.toml`)
+- No pre-compiled binary distribution mechanism
+- FFI package builds rely entirely on manual user operation
 - No system dependency checking
 
 ## Proposal
 
-### Core Design: Declarative Build + Precompiled First
+### Core Design: Declarative Build + Pre-compiled Priority
 
-Package authors declare build requirements in `yaoxiang.toml`, and the package manager automatically
-makes decisions based on these declarations.
+Package authors declare build requirements in `yaoxiang.toml`, and the package manager makes
+automatic decisions based on the declaration.
 
-### Build Strategy
+### Build Strategies
 
 ```rust
 enum BuildStrategy {
-    None,          // Pure .yx package, no build needed
-    Cargo,         // Call cargo build, read [build.cargo] configuration
-    Cmake,         // Call cmake
-    Custom,        // Execute build.yx script
+    None,          // Pure .yx package, no build required
+    Cargo,         // Invokes cargo build, reads [build.cargo] configuration
+    Cmake,         // Invokes cmake
+    Custom,        // Executes build.yx script
 }
 ```
 
-Note: The `Precompiled` variant has been removed. The existence of `[binaries]` automatically
-triggers precompiled-first behavior, without requiring an explicit strategy declaration.
+Note: The `Precompiled` variant has been removed. The presence of `[binaries]` automatically
+triggers pre-compiled priority behavior, no explicit strategy declaration required.
 
 ### Build Declaration in yaoxiang.toml
 
@@ -63,7 +90,7 @@ version = "1.0.0"
 
 [build]
 strategy = "cargo"              # Build strategy
-headers = ["include/sqlite3.h"] # Optional: C header files for yx-bindgen auto-processing
+headers = ["include/sqlite3.h"] # Optional: C headers auto-handled by yx-bindgen
 
 [build.cargo]
 features = ["ffi"]             # cargo build --features ffi
@@ -84,30 +111,30 @@ cmake = ">= 3.20"
 ```
 yaoxiang install foo
     │
-    ├─ 1. Does [binaries] have current platform entry?
-    │     → Yes: Download, verify SHA-256, install directly (skip build)
-    │     → No: Continue
+    ├─ 1. Entry for current platform in [binaries]?
+    │     → Yes: download, verify SHA-256, install directly (skip build)
+    │     → No: continue
     │
     ├─ 2. Download source package
     │
-    ├─ 3. Does [build].headers have a value?
-    │     → Yes: Auto-run yx-bindgen to generate binding files
+    ├─ 3. [build].headers has values?
+    │     → Yes: automatically run yx-bindgen to generate binding files
     │
     ├─ 4. Read [build].strategy
-    │     → "none": Install directly
-    │     → "cargo": Read [build.cargo] config, construct cargo build command
-    │     → "cmake": Call cmake
-    │     → "custom": Execute build.yx script
+    │     → "none": install directly
+    │     → "cargo": read [build.cargo] configuration, assemble cargo build command
+    │     → "cmake": invoke cmake
+    │     → "custom": execute build.yx script
     │
     └─ 5. Install to vendor/
 ```
 
-**Precompiled first, source as fallback.** The existence of `[binaries]` automatically triggers
-precompiled checking without requiring an explicit strategy.
+**Pre-compiled priority, source as fallback.** The presence of `[binaries]` automatically triggers
+pre-compiled checking, no explicit strategy required.
 
 ### Cargo Strategy Details
 
-When `strategy = "cargo"`, read `[build.cargo]` configuration to construct the command:
+When `strategy = "cargo"`, read `[build.cargo]` configuration to assemble the command:
 
 ```toml
 [build]
@@ -123,17 +150,17 @@ target = "release"             # → cargo build --release
 "aarch64-apple-darwin" = { cargo-features = ["mac-ffi"] }
 ```
 
-Actual commands executed:
+Commands actually executed:
 
 ```bash
-# Basic
+# Base
 cargo build --release --features ffi
 
-# With platform override (e.g., Linux)
+# With platform override (Linux example)
 cargo build --release --features ffi,linux-ffi
 ```
 
-### Precompiled Binary Declaration
+### Pre-compiled Binary Declaration
 
 ```toml
 # yaoxiang.toml
@@ -143,31 +170,33 @@ cargo build --release --features ffi,linux-ffi
 "aarch64-apple-darwin" = { url = "releases/download/v1.0.0/foo-macos-aarch64.tar.gz", sha256 = "ghi789" }
 ```
 
-**URL Format:** Supports both absolute URLs and relative paths. Relative paths are resolved relative
-to the package's repository address (GitHub repo URL or Registry root URL).
+**URL format:** Supports both absolute URLs and relative paths. Relative paths are relative to the
+package's repository address (GitHub repo URL or Registry root URL).
 
-**Conditions to skip build:**
+**Conditions for skipping build:**
 
-1. `[binaries]` has an entry for the current platform
+1. Current platform has an entry in `[binaries]`
 2. SHA-256 verification passes
 3. Download succeeds
 
-All three conditions met → Skip build. Otherwise → Fallback to source build.
+All three conditions met → skip build. Otherwise → fallback to source build.
 
 ### build.yx Build Script
 
-Execute `build.yx` when `strategy = "custom"`.
+When `strategy = "custom"`, `build.yx` is executed.
 
-**Execution Model (minimal specification):**
+**Execution model (minimum specification):**
 
-- Script is regular `.yx` code with full `std` access
-- Working directory: package root (`vendor/<pkg>-<ver>/`)
+- The script is ordinary `.yx` code with full `std` access permissions
+- **Trust gate (2026-09-15 resolution, mandatory)**: Interactive confirmation required before first
+  execution; non-interactive environments reject by default (see resolution 1 above)
+- Working directory: package root directory (`vendor/<pkg>-<ver>/`)
 - Success: exit code 0
 - Failure: non-zero exit code, installation aborts
-- Package manager does not constrain script behavior, only checks exit code
+- The package manager does not constrain script behavior, only checks the exit code
 
 ```yx
-# build.yx — Package build script
+# build.yx — package build script
 use std.os
 use std.io
 
@@ -190,7 +219,8 @@ fn main() {
 
 ### System Dependency Checking
 
-Automatically check all `[build.requirements]` before installation, error if not satisfied:
+All `[build.requirements]` are automatically checked before installation; if not satisfied, an error
+is reported:
 
 ```
 Error: Build requirement not satisfied
@@ -200,7 +230,7 @@ Error: Build requirement not satisfied
 
 ### yx-bindgen Integration (headers field)
 
-`[build].headers` declares C header files that need yx-bindgen processing. The build system
+`[build].headers` declares C header files that need to be processed by yx-bindgen. The build system
 automatically runs yx-bindgen to generate `.yx` binding files.
 
 ```toml
@@ -212,15 +242,15 @@ headers = ["include/sqlite3.h", "include/json.h"]
 Build flow:
 
 ```
-1. Does [binaries] have precompiled? → Skip all build
-2. Does [build].headers have value? → yx-bindgen auto-generates bindings
+1. [binaries] has pre-compiled? → skip entire build
+2. [build].headers has values? → yx-bindgen auto-generates bindings
 3. Execute [build].strategy (cargo/cmake/custom)
 4. Install
 ```
 
 yx-bindgen parses function signatures and type definitions from C header files (`.h`), automatically
-generating `.yx` binding declarations. Users don't need to run it manually—the build system handles
-it automatically when `headers` configuration is detected.
+generating `.yx` binding declarations. Users do not need to run it manually—the build system
+automatically handles this when it detects the `headers` configuration.
 
 **Relationship with RFC-026:** RFC-026 defines the language-level semantics of `yx-bindgen`
 (`native("symbol")` syntax, unsafe types). RFC-014b defines its integration into the build flow
@@ -228,12 +258,12 @@ it automatically when `headers` configuration is detected.
 
 ### Integration with Cargo Workspace
 
-If a package contains FFI code, you can define a Cargo workspace alongside it:
+If the package contains FFI code, a Cargo workspace can be defined concurrently:
 
 ```
 my-package/
 ├── yaoxiang.toml          # YaoXiang package configuration
-├── Cargo.toml             # Cargo workspace (FFI part)
+├── Cargo.toml             # Cargo workspace (FFI portion)
 ├── src/
 │   └── lib.yx             # YaoXiang code
 └── native/
@@ -242,7 +272,7 @@ my-package/
         └── lib.rs
 ```
 
-`yaoxiang build` automatically detects and calls `cargo build` to compile the native part.
+`yaoxiang build` automatically detects and calls `cargo build` to compile the native portion.
 
 ## Detailed Design
 
@@ -260,11 +290,11 @@ Use Rust target triple format (`arch-vendor-os-env`):
 | macOS ARM64            | `aarch64-apple-darwin`      |
 | macOS x86_64           | `x86_64-apple-darwin`       |
 
-Using Rust target triples instead of simplified formats because:
+Rust target triples are used instead of a simplified format because:
 
-1. Distinguishes different ABIs on the same OS (gnu vs musl, msvc vs gnu)
-2. Aligns with Rust/Cargo ecosystem, reducing mapping errors
-3. Future extensions don't require format changes
+1. To distinguish different ABIs on the same OS (gnu vs musl, msvc vs gnu)
+2. To align with the Rust/Cargo ecosystem, reducing mapping errors
+3. Future extensions do not require format changes
 
 ### Build Artifact Directory Structure
 
@@ -279,69 +309,76 @@ build/
         └── libfoo.dylib
 ```
 
-### Complete Lifecycle of Precompiled Packages
+### Complete Lifecycle of a Pre-compiled Package
 
 ```
 Developer:
   1. Write .yx code + FFI bindings
   2. Declare [build] + [binaries] in yaoxiang.toml
   3. yaoxiang publish
-     → Auto build multi-platform binaries on CI
-     → Upload source + precompiled artifacts
+     → Automatically build multi-platform binaries on CI
+     → Upload source + pre-compiled artifacts
 
 User:
   yaoxiang add native-foo
-    → Detects precompiled artifacts → Direct download (seconds)
-    → No precompiled artifacts → Download source + execute build (minutes)
+    → Detects pre-compiled artifacts → direct download (seconds)
+    → No pre-compiled artifacts → download source + execute build (minutes)
 ```
 
 ## Trade-offs
 
 ### Advantages
 
-- Declarative configuration, users don't need to understand build details
-- Precompiled first, extremely fast installation
-- Multi-platform support, automatic selection
-- Seamless integration with Cargo ecosystem
+- Declarative configuration; users need not understand build details
+- Pre-compiled priority; extremely fast installation
+- Multi-platform support with automatic selection
+- Seamless integration with the Cargo ecosystem
 
 ### Disadvantages
 
-- Precompiled artifacts require CI support
+- Pre-compiled artifacts require CI support
 - Multi-platform builds increase release complexity
-- build.yx scripts need sandbox security mechanisms
+- build.yx scripts require sandbox security mechanisms
 
-## Alternative Approaches
+## Alternatives
 
-| Approach                        | Why Not Chosen                                                 |
-| ------------------------------- | -------------------------------------------------------------- |
-| Pure source distribution        | Users need to install build toolchain, high barrier            |
-| Python wheel-like binary format | Too complex, not needed for YaoXiang ecosystem in early stages |
-| No FFI build support            | Limits language extensibility                                  |
+| Approach                        | Why Not Chosen                                       |
+| ------------------------------- | ---------------------------------------------------- |
+| Pure source distribution        | Users need to install build toolchain, high barrier  |
+| Python wheel-like binary format | Too complex, unnecessary in early YaoXiang ecosystem |
+| No FFI build support            | Limits the language's extension capabilities         |
 
 ## Implementation Strategy
 
-### Phase Breakdown
+### Phase Division
 
-| Phase    | Content                                                            |
-| -------- | ------------------------------------------------------------------ |
-| Phase 5a | `[build]` configuration parsing + `BuildStrategy` enum             |
-| Phase 5b | System dependency checking                                         |
-| Phase 5c | Cargo build integration (read `[build.cargo]`, construct commands) |
-| Phase 5d | Precompiled binary download + verification                         |
-| Phase 5e | build.yx script execution                                          |
-| Phase 5f | yx-bindgen integration (`headers` field)                           |
+| Phase    | Content                                                              |
+| -------- | -------------------------------------------------------------------- |
+| Phase 5a | `[build]` configuration parsing + `BuildStrategy` enum               |
+| Phase 5b | System dependency checking                                           |
+| Phase 5c | Cargo build integration (reads `[build.cargo]` to assemble commands) |
+| Phase 5d | Pre-compiled binary download + verification                          |
+| Phase 5f | yx-bindgen integration (`headers` field, depends on RFC-026b)        |
+| Phase 5e | build.yx script execution (**implemented last**, with trust gate)    |
+
+Execution order (2026-09-15 resolution 2): `5a → 5b → 5c → 5d → 5f → 5e`. Declarative build first,
+arbitrary code execution last.
 
 ### Dependencies
 
-- Depends on RFC-014a (Registry protocol, for downloading precompiled artifacts)
+- Depends on RFC-014a (Registry protocol, for downloading pre-compiled artifacts)
 - Depends on `sha2` crate (integrity verification)
 
 ## Open Questions
 
-- [ ] Does build.yx script need sandbox isolation?
-- [ ] Maximum size limit for build artifacts?
-- [ ] Cross-compilation support (build Windows artifacts on Linux)?
-- [ ] How to handle incompatible Cargo versions?
+- [x] Does build.yx script require sandbox isolation? → Trust gate as mandatory floor (2026-09-15
+      resolution 1); full sandbox continues research
+- [x] Maximum size limit for build artifacts? → No upper limit, managed by channel (2026-09-15
+      resolution 5)
+- [x] Support cross-compilation (build Windows artifacts on Linux)? → Not supported initially; CI
+      multi-host production (2026-09-15 resolution 4)
+- [x] How to handle Cargo version incompatibility? → `[build.requirements]` pre-check error +
+      installation guidance (2026-09-15 resolution 6)
 
 ---
 
