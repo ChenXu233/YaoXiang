@@ -1,0 +1,14 @@
+// 06-compile-errors/tail_expr_type_mismatch_err.yx
+// RFC-010a 规则①：尾表达式类型必须与函数声明的返回类型一致
+// expect: compile-error E1002
+// （声明 -> Int，尾表达式为 String）
+// 验证: 块值类型与返回类型统一失败必须编译期拒绝，不得推迟到运行时
+// 状态: ❌ 应编译失败
+
+tail_mismatch: () -> Int = {
+    "not an int"
+}
+
+main = {
+    x = tail_mismatch()
+}

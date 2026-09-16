@@ -619,6 +619,23 @@ impl StatementChecker {
         body: &Block,
         const_subst: &std::collections::HashMap<String, MonoType>,
     ) -> Result<(), Box<Diagnostic>> {
+        let expected_ret = self.expected_return_type.clone();
+        self.check_fn_body(name, params, body, const_subst, expected_ret)
+    }
+
+    /// `check_fn_def_with_subst` 的实现体。
+    ///
+    /// `expected_ret`：声明的返回类型（None = 未标注）。用于 RFC-010a 规则①
+    /// 的尾表达式类型检查——此前函数体从不与声明返回类型做统一，
+    /// `f: () -> Int = { "s" }` 能编译通过、拖到运行时才报错。
+    fn check_fn_body(
+        &mut self,
+        name: &str,
+        params: &[Param],
+        body: &Block,
+        const_subst: &std::collections::HashMap<String, MonoType>,
+        expected_ret: Option<MonoType>,
+    ) -> Result<(), Box<Diagnostic>> {
         // 检查是否已经检查过
         if self.checked_functions.contains_key(name) {
             return Ok(());
@@ -685,6 +702,12 @@ impl StatementChecker {
                     self.collect_error(*e);
                 }
             }
+            if let Err(e) = self.check_body_tail_type(body, expected_ret.as_ref()) {
+                if first_err.is_none() {
+                    first_err = Some(e.clone());
+                }
+                self.collect_error(*e);
+            }
 
             // 退出函数作用域前，保存所有变量（解决退出作用域后变量丢失的问题）
             for (name, poly) in self.scope.vars() {
@@ -710,6 +733,11 @@ impl StatementChecker {
                     break;
                 }
             }
+            if err.is_none() {
+                if let Err(e) = self.check_body_tail_type(body, expected_ret.as_ref()) {
+                    err = Some(e);
+                }
+            }
 
             // 退出函数作用域前，保存所有变量（解决退出作用域后变量丢失的问题）
             for (name, poly) in self.scope.vars() {
@@ -726,6 +754,77 @@ impl StatementChecker {
                 Some(e) => Err(e),
                 None => Ok(()),
             }
+        }
+    }
+
+    /// 检查函数体的**尾表达式**类型是否与声明的返回类型一致（RFC-010a 规则①）。
+    ///
+    /// - 空块：`Void`（返回类型非 `Void` 时不算错——空块函数体是合法占位）
+    /// - 末位为语句（如赋值）：值 `Void`，同样不报（RFC-010a：想要 `Void` 就显式写）
+    /// - 末位为表达式：其类型必须能与声明返回类型统一
+    ///
+    /// `Never`（`return` 作尾表达式）按爆炸原理 `Never <: T` 一律放行。
+    fn check_body_tail_type(
+        &mut self,
+        body: &Block,
+        expected_ret: Option<&MonoType>,
+    ) -> Result<(), Box<Diagnostic>> {
+        let Some(expected) = expected_ret else {
+            return Ok(());
+        };
+        // 未标注或标注为 Void 时无约束
+        if *expected == MonoType::Void {
+            return Ok(());
+        }
+        let Some(last) = body.stmts.last() else {
+            return Ok(());
+        };
+        // 仅表达式语句贡献块值（RFC-010a 规则①：末位赋值语句值为 Void）
+        let crate::frontend::core::parser::ast::StmtKind::Expr(expr) = &last.kind else {
+            return Ok(());
+        };
+        // 不重走 check_expr——那会重复声明体内局部变量（E2002）。
+        // 只对自身能定型的尾表达式做校验（字面量 / 已绑定变量）。
+        let Some(tail_ty) = self.peek_expr_type(expr) else {
+            return Ok(());
+        };
+        // `return` 作尾表达式：类型 Never，爆炸原理放行
+        if tail_ty == MonoType::Never {
+            return Ok(());
+        }
+        if self.solver.unify(&tail_ty, expected).is_err() {
+            return Err(Box::new(
+                ErrorCodeDefinition::type_mismatch(
+                    &format!("{}", expected),
+                    &format!("{}", tail_ty),
+                )
+                .at(expr.span())
+                .build(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// 非侵入式查询表达式类型：只处理能直接定型的形态，不产生副作用。
+    ///
+    /// 用于已 check 过的尾表达式的返回类型校验——不得重走 `check_expr`，
+    /// 否则函数体内的局部绑定会被重复声明。
+    fn peek_expr_type(
+        &mut self,
+        expr: &Expr,
+    ) -> Option<MonoType> {
+        use crate::frontend::core::lexer::tokens::Literal;
+        match expr {
+            Expr::Lit(lit, _) => Some(match lit {
+                Literal::Int(_) => MonoType::Int(64),
+                Literal::Float(_) => MonoType::Float(64),
+                Literal::Bool(_) => MonoType::Bool,
+                Literal::Char(_) => MonoType::Char,
+                Literal::String(_) => MonoType::make_string(),
+                Literal::Void => MonoType::Void,
+            }),
+            Expr::Var(name, _) => self.scope.get_var(name).map(|p| p.body.clone()),
+            _ => None,
         }
     }
 

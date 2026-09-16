@@ -285,7 +285,7 @@ Block       ::= '{' Stmt* Expr? '}'
 | `unsafe {}` | 尾表达式 | `Void`    |
 | `spawn {}`  | 尾表达式 | `Void`    |
 
-**核心原则**（详见 [RFC-010a](../design/rfc/draft/010a-tail-expression-and-return.md)）：
+**核心原则**（详见 [RFC-010a](../design/rfc/accepted/010a-tail-expression-and-return.md)）：
 
 - **块的值 = 尾表达式**（最后一个表达式），唯一出口，无例外
 - 末位为**赋值语句**时块值为 `Void`；想要 `Void` 就显式写 `Void`
@@ -489,7 +489,7 @@ ReturnStmt  ::= 'return' Expr?
 `Never`；同时 `return` 的作用是退出函数。**两件事同时成立**，靠爆炸原理共存。
 
 `return` 与尾表达式共同使「提前返回」成立，无需 `return` 特指函数的额外规则——见
-[RFC-010a](../design/rfc/draft/010a-tail-expression-and-return.md)。
+[RFC-010a](../design/rfc/accepted/010a-tail-expression-and-return.md)。
 
 ```yaoxiang
 factorial: (n: Int) -> Int = {

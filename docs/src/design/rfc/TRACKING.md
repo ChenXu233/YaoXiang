@@ -9,6 +9,7 @@
 | 009-ownership-model.md | RFC-009: 所有权模型设计 | 已接受 | accepted\009-ownership-model.md | #126 | -- | -- | -- |
 | 009a-borrow-proof-pipeline.md | RFC-009a: 令牌生命期分析——基于霍尔证明管道 | 已接受 | accepted\009a-borrow-proof-pipeline.md | #129 | -- | -- | -- |
 | 010-unified-type-syntax.md | RFC-010: 统一类型语法 - name: type = value 模型 | 已接受 | accepted\010-unified-type-syntax.md | #127 | -- | -- | -- |
+| 010a-tail-expression-and-return.md | RFC-010a: 尾表达式求值与 return 语义 | 已接受 | accepted\010a-tail-expression-and-return.md | #342 | -- | -- | -- |
 | 011-generic-type-system.md | RFC-011: 泛型系统设计 - 零成本抽象与宏替代 | 已接受 | accepted\011-generic-type-system.md | #128 | #45, #46, #73, #90, #96, #40, #151 | #122 | -- |
 | 011a-interface-implementation.md | RFC-011a: 接口实现与动态分发 | 已接受 | accepted\011a-interface-implementation.md | -- | -- | -- | -- |
 | 012-f-string-template-strings.md | RFC 012: F-String 模板字符串 | 已接受 | accepted\012-f-string-template-strings.md | #124 | -- | -- | -- |
@@ -32,7 +33,6 @@
 | 022-hoare-logic-static-verification.md | RFC 022: 霍尔逻辑静态验证支持（规约注释与规约类型） | 已废弃 | deprecated\022-hoare-logic-static-verification.md | -- | -- | -- | -- |
 | 023-closure-capture-model.md | RFC-023: 闭包捕获模型 | 已废弃 | deprecated\023-closure-capture-model.md | -- | -- | -- | -- |
 | 002-cross-platform-io-libuv.md | RFC-002：基于 libuv 的资源类型 IO 实现层 | 草案 | draft\002-cross-platform-io-libuv.md | #102 | -- | -- | -- |
-| 010a-tail-expression-and-return.md | RFC-010a: 尾表达式求值与 return 语义 | 草案 | draft\010a-tail-expression-and-return.md | #342 | -- | -- | -- |
 | 011b-operator-overloading.md | RFC-011b: 运算符重载与接口驱动运算符 | 草案 | draft\011b-operator-overloading.md | #341 | -- | -- | -- |
 | 019-typed-homoiconicity.md | RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型 | 草案 | draft\019-typed-homoiconicity.md | -- | -- | -- | -- |
 | 026b-yx-bindgen.md | RFC-026b: yx-bindgen 工具链 | 草案 | draft\026b-yx-bindgen.md | -- | -- | -- | -- |

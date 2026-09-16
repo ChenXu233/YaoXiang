@@ -62,7 +62,7 @@ title: "RFC 索引"
 | RFC-009 | [RFC-009: 所有权模型设计](./accepted/009-ownership-model.md) | 晨煦 | 2025-01-08 | 已接受 |
 | ↳ RFC-009a | [RFC-009a: 令牌生命期分析——基于霍尔证明管道](./accepted/009a-borrow-proof-pipeline.md) | 晨煦 | 2026-06-13 | 已接受 |
 | RFC-010 | [RFC-010: 统一类型语法 - name: type = value 模型](./accepted/010-unified-type-syntax.md) | 晨煦 |  | 已接受 |
-| ↳ RFC-010a | [RFC-010a: 尾表达式求值与 return 语义](./draft/010a-tail-expression-and-return.md) | 晨煦 | 2026-09-15 | 草案RFC |
+| ↳ RFC-010a | [RFC-010a: 尾表达式求值与 return 语义](./accepted/010a-tail-expression-and-return.md) | 晨煦 | 2026-09-15 | 已接受 |
 | RFC-011 | [RFC-011: 泛型系统设计 - 零成本抽象与宏替代](./accepted/011-generic-type-system.md) | 晨煦 |  | 已接受 |
 | ↳ RFC-011a | [RFC-011a: 接口实现与动态分发](./accepted/011a-interface-implementation.md) | 晨煦 | 2026-06-14 | 已接受 |
 | ↳ RFC-011b | [RFC-011b: 运算符重载与接口驱动运算符](./draft/011b-operator-overloading.md) | 晨煦 | 2026-09-15 | 草案RFC |

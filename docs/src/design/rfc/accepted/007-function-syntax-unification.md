@@ -4,13 +4,18 @@ issue: '#131'
 status: '已接受'
 author: '沫郁酱'
 created: '2025-01-05'
-updated: '2026-07-05（同步到 GH Issue #131）'
+updated: '2026-09-15（返回语义按 RFC-010a 勘误）'
 ---
 
 # RFC-007: 函数定义语法统一方案
 
-> **相关补充**：函数体（`{ ... }` 代码块）内的语句终止与换行规则（`;` 显式分隔、换行终止、续行例外）
-> 由 [RFC-038（草案）](../draft/038-statement-termination.md) 定义，本 RFC 不涉及。
+> **勘误（2026-09-15，RFC-010a）**：本文原称「代码块内必须使用 `return` 返回值，无 `return`
+> 时默认返回 `Void`」。该说法已废止——**块的值 = 尾表达式**，`return` 是 `Never` 型的非局部退出。详见
+> [RFC-010a](./010a-tail-expression-and-return.md)。本文的函数形式定义（完整形式 / 省略 Lambda 头 / 省略签名 / 空参三种写法）**不变**，且「提前返回」语义本就与本 RFC 一致。
+
+> **相关补充**：函数体（`{ ... }` 代码块）内的语句终止与换行规则（`;`
+> 显式分隔、换行终止、续行例外）由 [RFC-038（草案）](../draft/038-statement-termination.md)
+> 定义，本 RFC 不涉及。
 
 ## 摘要
 
@@ -19,8 +24,8 @@ updated: '2026-07-05（同步到 GH Issue #131）'
 
 为避免歧义：当函数存在输入参数时，参数类型必须在「签名」或「lambda 头」至少一处显式标注；两边都省略将被拒绝。
 
-代码块 `{ ... }` 内必须使用 `return` 返回值；无 `return` 时默认返回 `Void`。表达式形式 `= expr`
-直接返回值。
+代码块 `{ ... }` 的值由**尾表达式**给出；`return` 是 `Never` 型的非局部退出（见
+[RFC-010a](./010a-tail-expression-and-return.md)）。表达式形式 `= expr` 直接给出值。
 
 ## 动机
 
@@ -93,8 +98,9 @@ factorial: (n: Int) -> Int = (n) => {
 | **空参简写**       | `name: () -> Void = { return ... }`                    | 省略 Lambda 头        |
 | **空参最简**       | `name = { return ... }`                                | 无参无返最简          |
 
-**注意**：代码块 `{ ... }` 内必须使用 `return` 返回值；无 `return` 时默认返回 `Void`。表达式形式
-`= expr` 直接返回值。
+**注意**：代码块 `{ ... }` 的值由**尾表达式**给出（唯一出口）；`return` 是 `Never`
+型的非局部退出，退出最近的函数边界。表达式形式 `= expr` 直接给出值。详见
+[RFC-010a](./010a-tail-expression-and-return.md)。
 
 **注意**：`->` 是函数类型的标志，不能省略（否则会被解析为元组）。
 
@@ -147,20 +153,22 @@ compose: (A: Type, B: Type, C: Type) -> ((f: (B) -> C, g: (A) -> B, x: A) -> C) 
 
 ### Lambda 表达式语法规则
 
-**重要规则**：代码块 `{ ... }` 内必须使用 `return` 返回值；无 `return` 时默认返回 `Void`。表达式形式
-`= expr` 直接返回值。
+**重要规则**：代码块 `{ ... }` 的值由**尾表达式**给出（唯一出口）；`return` 是 `Never`
+型的非局部退出，退出最近的函数边界。表达式形式 `= expr` 直接给出值。详见
+[RFC-010a](./010a-tail-expression-and-return.md)。
 
-| 语法形式       | 语法             | 返回方式                                            |
-| -------------- | ---------------- | --------------------------------------------------- |
-| **代码块形式** | `{ statements }` | 必须使用 `return` 返回值；无 `return` 时默认 `Void` |
-| **表达式形式** | `expression`     | 直接返回表达式值                                    |
+| 语法形式       | 语法             | 值出口                          |
+| -------------- | ---------------- | ------------------------------- |
+| **代码块形式** | `{ statements }` | 尾表达式（空块 `{}` 为 `Void`） |
+| **表达式形式** | `expression`     | 表达式值                        |
+| **`return`**   | `return e`       | 非局部退出函数，类型 `Never`    |
 
 **示例**：
 
 ```yaoxiang
-main: () -> Void = { println("Hello") }         # 返回 Void（无 return）
-add: (a: Int, b: Int) -> Int = { return a + b }  # 返回 Int（显式 return）
-empty: () -> Void = {}                          # 空块默认返回 Void
+main: () -> Void = { println("Hello") }         # 尾表达式为 Void
+add: (a: Int, b: Int) -> Int = { a + b }        # 尾表达式给出值
+empty: () -> Void = {}                          # 空块 → Void
 
 # 提前返回：使用 return
 factorial: (n: Int) -> Int = {
@@ -168,7 +176,7 @@ factorial: (n: Int) -> Int = {
     return n * factorial(n - 1)
 }
 
-# 表达式形式：直接返回值（无需 return）
+# 表达式形式：直接给出值
 add: (a: Int, b: Int) -> Int = a + b            # 正确：表达式形式
 main: () -> Void = println("Hello")               # 正确：表达式形式
 ```

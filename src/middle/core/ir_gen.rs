@@ -1370,19 +1370,20 @@ impl AstToIrGenerator {
         }
 
         // 生成语句 IR
-        // #297/E：尾表达式作为返回值。解析器把 `f: (...) -> T = expr` / `= { expr }`
-        // 的函数体包成 Block[Expr]，此前尾表达式的值被丢弃，函数返回 Void。
-        let (tail_expr, leading_stmts) = match body.split_last() {
-            Some((
-                ast::Stmt {
-                    kind: ast::StmtKind::Expr(expr),
-                    ..
-                },
-                rest,
-            )) if return_type != MonoType::Void => (Some(expr), rest),
-            _ => (None, body),
-        };
-        for stmt in leading_stmts {
+        // RFC-010a 规则①：函数体的值 = 尾表达式。尾位置判断复用
+        // `generate_tail_stmt_ir`（与 `generate_block_ir` 同一实现），
+        // 否则 `{ if c {5} else {6} }` 这类尾位置 `if` 的值会被丢弃（#344）。
+        let last_idx = body.len().checked_sub(1);
+        let mut tail_handled = false;
+        for (i, stmt) in body.iter().enumerate() {
+            if Some(i) == last_idx && return_type != MonoType::Void {
+                let result_reg = self.next_temp_reg();
+                if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                    tail_handled = true;
+                    break;
+                }
+            }
             tlog!(
                 debug,
                 MSG::IrGenBeforeProcessStmt,
@@ -1403,13 +1404,8 @@ impl AstToIrGenerator {
                 &self.symbols.len().to_string()
             );
         }
-        match tail_expr {
-            Some(expr) => {
-                let result_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, result_reg, &mut instructions, constants)?;
-                instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
-            }
-            None => instructions.push(Instruction::Ret(None)),
+        if !tail_handled {
+            instructions.push(Instruction::Ret(None));
         }
 
         // 退出函数体作用域
@@ -2533,6 +2529,15 @@ impl AstToIrGenerator {
         // 进入新的作用域
         self.enter_scope();
 
+        // RFC-010a 规则③：`if` 无 `else` → 值为 `Void`。
+        // 此时分支的值不写入 result_reg（改写 scratch），最后统一写 Void；
+        // 否则 `x = if true { 19 }` 会拿到 19，与 typecheck 判定的 `x : Void` 矛盾（#346）。
+        let value_reg = if else_branch.is_some() {
+            result_reg
+        } else {
+            self.next_temp_reg()
+        };
+
         // 1. 评估条件
         let condition_reg = self.next_temp_reg();
         self.generate_expr_ir(condition, condition_reg, instructions, constants)?;
@@ -2545,7 +2550,7 @@ impl AstToIrGenerator {
         let then_result_reg = self.next_temp_reg();
         self.generate_block_ir(then_branch, Some(then_result_reg), instructions, constants)?;
         instructions.push(Instruction::Move {
-            dst: Operand::Local(result_reg),
+            dst: Operand::Local(value_reg),
             src: Operand::Local(then_result_reg),
         });
 
@@ -2572,7 +2577,7 @@ impl AstToIrGenerator {
             let else_if_res = self.next_temp_reg();
             self.generate_block_ir(else_if_body, Some(else_if_res), instructions, constants)?;
             instructions.push(Instruction::Move {
-                dst: Operand::Local(result_reg),
+                dst: Operand::Local(value_reg),
                 src: Operand::Local(else_if_res),
             });
 
@@ -2590,7 +2595,7 @@ impl AstToIrGenerator {
             let else_res = self.next_temp_reg();
             self.generate_block_ir(else_body, Some(else_res), instructions, constants)?;
             instructions.push(Instruction::Move {
-                dst: Operand::Local(result_reg),
+                dst: Operand::Local(value_reg),
                 src: Operand::Local(else_res),
             });
         }
@@ -2601,6 +2606,14 @@ impl AstToIrGenerator {
             if let Instruction::Jmp(ref mut target) = instructions[idx] {
                 *target = end_len;
             }
+        }
+
+        // 9. 无 else：值为 Void（RFC-010a 规则③）
+        if else_branch.is_none() {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Const(ConstValue::Void),
+            });
         }
 
         self.exit_scope();
@@ -2615,6 +2628,49 @@ impl AstToIrGenerator {
     /// 块中没有 return 也没有尾部表达式时，`reg` 保持默认（Void）。
     ///
     /// 当 `result_reg` 为 `None` 时，块作为语句序列执行，不关心返回值。
+    /// 尾位置语句求值（RFC-010a 规则①）：把语句作为块值写入 `result_reg`。
+    ///
+    /// 返回 `true` 表示已处理（值已写入），调用方应跳过普通语句生成。
+    ///
+    /// 提取为共用方法是因为 `generate_block_ir`（块）与 `generate_function_ir`（函数体）
+    /// 各写了一套尾位置判断，两套不一致——函数体只认 `StmtKind::Expr`，
+    /// 导致 `f: () -> Int = { if c {5} else {6} }` 的 `if` 值被丢弃（#344）。
+    fn generate_tail_stmt_ir(
+        &mut self,
+        stmt: &ast::Stmt,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<bool, Diagnostic> {
+        match &stmt.kind {
+            ast::StmtKind::Expr(expr) => {
+                self.generate_expr_ir(expr, result_reg, instructions, constants)?;
+                Ok(true)
+            }
+            ast::StmtKind::If {
+                condition,
+                then_branch,
+                else_if_branches,
+                else_branch,
+                ..
+            } => {
+                self.generate_if_expr_ir(
+                    condition,
+                    then_branch,
+                    else_if_branches,
+                    else_branch.as_deref(),
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
+                Ok(true)
+            }
+            // 其余语句形态（赋值 / return / 循环 / …）不贡献块值：
+            // 末位赋值语句值为 Void（RFC-010a 规则①）
+            _ => Ok(false),
+        }
+    }
+
     fn generate_block_ir(
         &mut self,
         block: &ast::Block,
@@ -2628,33 +2684,10 @@ impl AstToIrGenerator {
         let last_idx = block.stmts.len().checked_sub(1);
         for (i, stmt) in block.stmts.iter().enumerate() {
             let is_last = Some(i) == last_idx;
-            // 块作为表达式 + 最后一条语句是表达式 → 表达式的值写入 result_reg
+            // 块作为表达式 + 最后一条语句贡献块值 → 值写入 result_reg
             if let (Some(reg), true) = (result_reg, is_last) {
-                match &stmt.kind {
-                    ast::StmtKind::Expr(expr) => {
-                        self.generate_expr_ir(expr, reg, instructions, constants)?;
-                        continue;
-                    }
-                    ast::StmtKind::If {
-                        condition,
-                        then_branch,
-                        else_if_branches,
-                        else_branch,
-                        ..
-                    } => {
-                        // 块里的 if 在表达式位置：按 if 表达式生成（值写入 reg）
-                        self.generate_if_expr_ir(
-                            condition,
-                            then_branch,
-                            else_if_branches,
-                            else_branch.as_deref(),
-                            reg,
-                            instructions,
-                            constants,
-                        )?;
-                        continue;
-                    }
-                    _ => {}
+                if self.generate_tail_stmt_ir(stmt, reg, instructions, constants)? {
+                    continue;
                 }
             }
             // 其他情况正常生成语句

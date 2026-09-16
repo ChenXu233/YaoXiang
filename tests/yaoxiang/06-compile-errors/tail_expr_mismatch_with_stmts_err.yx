@@ -1,0 +1,15 @@
+// 06-compile-errors/tail_expr_mismatch_with_stmts_err.yx
+// RFC-010a 规则①：多语句块的尾表达式同样受返回类型约束
+// expect: compile-error E1002
+// （声明 -> Int，块内尾表达式 q 为 String）
+// 验证: 带前置语句的尾表达式也走同一检查，不得只查单表达式体
+// 状态: ❌ 应编译失败
+
+tail_mismatch2: () -> Int = {
+    q = "string"
+    q
+}
+
+main = {
+    x = tail_mismatch2()
+}

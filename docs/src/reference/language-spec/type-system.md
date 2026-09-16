@@ -105,7 +105,7 @@ TypeExpr    ::= PrimitiveType
 
 **Void（⊤，真/Unit）** — 恰好一个居留者（默认 void 值）。`Void`
 是零字段积类型的幺元。`x: Void = <默认>` 合法。块的值由**尾表达式**给出（空块 `{}` 为 `Void`），详见
-[RFC-010a](../design/rfc/draft/010a-tail-expression-and-return.md)。
+[RFC-010a](../design/rfc/accepted/010a-tail-expression-and-return.md)。
 
 ---
 

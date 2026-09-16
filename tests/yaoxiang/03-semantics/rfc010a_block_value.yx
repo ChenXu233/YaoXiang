@@ -1,0 +1,74 @@
+// 03-semantics/rfc010a_block_value.yx
+// 覆盖: RFC-010a 规则①（块的值 = 尾表达式）/ 规则③（if 无 else → Void）
+//       以及规则①的「保护」——尾表达式类型必须与声明返回类型一致
+// 状态: ✅ 可运行
+
+use std.{assert, io}
+
+// 规则①：函数体尾表达式的值即返回值
+tail_expr: (n: Int) -> Int = {
+    n + 1
+}
+
+// 规则①：多语句块的尾表达式
+tail_after_stmts: (n: Int) -> Int = {
+    a = n * 2
+    a + 1
+}
+
+// 规则①：尾位置为 if 表达式（#344：此前值被丢弃，返回 Void）
+tail_if: () -> Int = {
+    if 1 == 1 {
+        5
+    } else {
+        6
+    }
+}
+
+// 规则①：尾位置为 match 表达式
+tail_match: (x: Int) -> Int = {
+    match x {
+        1 => 10
+        _ => 20
+    }
+}
+
+// 规则①：末位为赋值语句 → 块值 Void（Void 函数合法）
+tail_assign: () -> Void = {
+    x = io.println("assign tail")
+}
+
+// 规则③：if 无 else → Void
+if_no_else_is_void: () -> Void = {
+    x: Void = if 1 == 1 { 19 }
+    y: Void = if 1 == 2 { 19 }
+}
+
+// 规则②：return 穿出 if / 块（非局部退出）
+early_return: (n: Int) -> Int = {
+    if n < 0 {
+        return 0
+    }
+    n
+}
+
+main = {
+    // 尾表达式
+    assert.assert(tail_expr(4) == 5, "tail_expr(4) should be 5")
+    assert.assert(tail_after_stmts(3) == 7, "tail_after_stmts(3) should be 7")
+
+    // 尾位置 if / match
+    assert.assert(tail_if() == 5, "tail_if() should be 5 (if in tail position)")
+    assert.assert(tail_match(1) == 10, "tail_match(1) should be 10")
+    assert.assert(tail_match(9) == 20, "tail_match(9) should be 20")
+
+    // 规则②：提前返回
+    assert.assert(early_return(-1) == 0, "early_return(-1) should be 0")
+    assert.assert(early_return(3) == 3, "early_return(3) should be 3")
+
+    // 规则① / ③：Void 位置
+    tail_assign()
+    if_no_else_is_void()
+
+    io.println("rfc010a block value ok")
+}
