@@ -54,6 +54,3 @@ pub fn download_url(
         None => github_url.to_string(),
     }
 }
-
-#[cfg(test)]
-mod tests;

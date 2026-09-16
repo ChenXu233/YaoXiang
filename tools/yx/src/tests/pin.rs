@@ -75,3 +75,16 @@ fn test_normalize_version_strips_v_prefix() {
         "bare version must stay unchanged"
     );
 }
+
+#[test]
+fn test_find_pin_ignores_malformed_file_with_warning() {
+    // Arrange: 缺少 toolchain 键的坏 pin 文件
+    let dir = TempDir::new().unwrap();
+    fs::write(dir.path().join("yx-toolchain.toml"), "garbage = true\n").unwrap();
+
+    // Act
+    let pin = find_pin_from(dir.path());
+
+    // Assert: 显式按无 pin 处理（stderr 告警），不得误派发
+    assert!(pin.is_none(), "malformed pin must yield None, got {pin:?}");
+}

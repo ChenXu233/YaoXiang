@@ -1872,7 +1872,7 @@ dependencies = [
 
 [[package]]
 name = "yaoxiang"
-version = "0.7.14"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1920,7 +1920,7 @@ dependencies = [
 
 [[package]]
 name = "yx"
-version = "0.7.14"
+version = "0.8.0"
 dependencies = [
  "flate2",
  "serde",

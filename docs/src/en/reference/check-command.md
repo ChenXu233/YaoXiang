@@ -1,6 +1,6 @@
 # yx check
 
-Performs static checks (type checking, ownership checking) on YaoXiang source code, without
+Performs static checking (type checking, ownership checking) on YaoXiang source code, without
 generating any code.
 
 ## Usage
@@ -17,21 +17,21 @@ yx check [OPTIONS] [PATH]...
 
 ## Options
 
-| Option             | Description                                             | Default |
-| ------------------ | ------------------------------------------------------- | ------- |
-| `--json`           | Output diagnostics in JSON format                       | No      |
-| `-w`, `--watch`    | Watch for file changes and re-check automatically       | No      |
-| `--color <MODE>`   | Color output mode: `auto`, `always`, `never`            | `auto`  |
-| `--exclude <PATH>` | Exclude the specified path (can be used multiple times) | None    |
-| `--no-progress`    | Suppress progress and summary messages                  | No      |
+| Option             | Description                                                               | Default |
+| ------------------ | ------------------------------------------------------------------------- | ------- |
+| `--json`           | Output diagnostic information in JSON format                              | No      |
+| `--color <MODE>`   | Color output mode: `auto`, `always`, `never`                              | `auto`  |
+| `--exclude <PATH>` | Exclude the specified path (can be used multiple times)                   | None    |
+| `--no-progress`    | Suppress progress and summary messages                                    | No      |
+| `--deny-warnings`  | Treat warnings as errors: exit with a non-zero code if any warnings exist | No      |
 
 ## Exit Codes
 
-| Exit Code | Description          |
-| --------- | -------------------- |
-| `0`       | No errors            |
-| `1`       | Check found errors   |
-| `2`       | No `.yx` files found |
+| Exit Code | Description                                                                    |
+| --------- | ------------------------------------------------------------------------------ |
+| `0`       | No errors                                                                      |
+| `1`       | Errors found during checking; or warnings exist when `--deny-warnings` is used |
+| `2`       | No `.yx` files found                                                           |
 
 ## Cross-File Analysis
 
@@ -39,24 +39,16 @@ yx check [OPTIONS] [PATH]...
 
 1. Parse all `.yx` files in parallel
 2. Build the module dependency graph
-3. Detect circular dependencies (reported as errors)
-4. Check in topological order
+3. Detect circular dependencies (report as errors)
+4. Check in topological sort order
 5. Use a shared type environment to correctly detect cross-file references
 
 ```bash
-# Check the entire project (automatically detects cross-file references)
+# Check the entire project (automatically detect cross-file references)
 yx check src/
 
-# Check specified files
+# Check specific files
 yx check src/main.yx src/lib.yx
-```
-
-## Incremental Checking (watch mode)
-
-Use `-w` or `--watch` to enable file watch mode. When files change, it automatically re-checks.
-
-```bash
-yx check --watch
 ```
 
 ## JSON Output Format
@@ -89,19 +81,19 @@ When using `--json`, the output format is:
 # Check the current project
 yx check
 
-# Check specified files
+# Check specific files
 yx check src/main.yx
 
 # Check a directory and output JSON
 yx check src/ --json
 
-# Watch mode
-yx check --watch
-
 # CI mode (no color, no progress)
 yx check --color never --no-progress
 
-# Exclude the tests directory
+# CI strict mode (warnings also cause failure)
+yx check --deny-warnings
+
+# Exclude the test directory
 yx check src/ --exclude tests/
 ```
 
@@ -118,6 +110,7 @@ For detailed CI configuration, see the [CI Integration Guide](../guide/ci-integr
 ## See Also
 
 - [`yx format`](./format-command.md) -- Code formatting
+- [`yx test`](./test-command.md) -- Run tests
 - [Error Code Reference](./error-codes.md) -- Complete list of error codes
 - [CI Integration Guide](../guide/ci-integration.md) -- CI/CD integration
 - [Diagnostic System Design](../design/check/diagnostic-system.md) -- Architecture design document

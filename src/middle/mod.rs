@@ -15,6 +15,7 @@
 //!    - module/: 模块系统
 //!    - codegen/: 代码生成
 //!    - tests/: 统一测试套件
+//!
 //!    （生命周期检查不在 middle 层：RFC-009/009a 令牌生命期分析
 //!    住 frontend/core/typecheck/layers/ownership.rs）
 //!

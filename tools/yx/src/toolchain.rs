@@ -4,7 +4,7 @@ use crate::dl;
 use crate::error::{Error, Result};
 use crate::{home, pin, platform, settings};
 
-const GITHUB_REPO: &str = "ChenXu233/YaoXiang";
+pub(crate) const GITHUB_REPO: &str = "ChenXu233/YaoXiang";
 
 /// 入口：`yx toolchain <action> [args]`
 pub fn run(args: &[String]) -> Result<()> {
@@ -48,18 +48,71 @@ fn release_urls(
     )
 }
 
-/// 最新 stable 版本号（GitHub Releases API，剥 `v` 前缀）
-fn latest_stable_version(mirror: Option<&str>) -> Result<String> {
+/// 最新 stable 版本号（剥 `v` 前缀）。
+///
+/// 主路径走 GitHub Releases API（镜像同样前缀拼接）；API 限流或不可达时
+/// 回退到 releases/latest 页面的重定向落地 URL 提取 tag——无需 API 权限，
+/// 不受限流影响。
+pub(crate) fn latest_stable_version(mirror: Option<&str>) -> Result<String> {
     let api = settings::download_url(
         mirror,
         &format!("https://api.github.com/repos/{GITHUB_REPO}/releases/latest"),
     );
-    let json: serde_json::Value = serde_json::from_str(&dl::get_text(&api)?)?;
-    let tag = json
-        .get("tag_name")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| Error::Message("GitHub API response missing tag_name".into()))?;
-    Ok(pin::normalize_version(tag))
+    if let Ok(text) = dl::get_text(&api) {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+            if let Some(tag) = json.get("tag_name").and_then(|v| v.as_str()) {
+                return Ok(pin::normalize_version(tag));
+            }
+        }
+    }
+
+    let page = settings::download_url(
+        mirror,
+        &format!("https://github.com/{GITHUB_REPO}/releases/latest"),
+    );
+    let landing = dl::get_redirect_target(&page).map_err(crate::error::with_mirror_hint)?;
+    parse_tag_from_release_url(&landing).ok_or_else(|| {
+        Error::Message(format!(
+            "cannot determine latest version: API failed and release page URL \
+             does not carry a tag: {landing}"
+        ))
+    })
+}
+
+/// 从 releases/latest 的重定向落地 URL 提取版本
+/// （`…/releases/tag/v0.8.0` → `0.8.0`；无 tag 形态返回 None）
+pub(crate) fn parse_tag_from_release_url(url: &str) -> Option<String> {
+    const MARKER: &str = "/releases/tag/";
+    let idx = url.find(MARKER)? + MARKER.len();
+    let rest = url[idx..].split(['?', '#']).next()?;
+    Some(pin::normalize_version(rest))
+}
+
+/// 下载发行包并校验 .sha256 旁证（缺失时降级为提示，与 install.sh/ps1 一致）
+pub(crate) fn fetch_and_verify(
+    asset_url: &str,
+    sha_url: &str,
+    dest: &std::path::Path,
+    sha_dest: &std::path::Path,
+) -> Result<()> {
+    println!("yx: downloading {asset_url}");
+    if let Err(e) = dl::download_to_file(asset_url, dest) {
+        // 发行包下载失败即硬失败（.sha256 缺失才走 Network 降级告警），此处补镜像指引
+        return Err(crate::error::with_mirror_hint(e));
+    }
+    println!("yx: verifying checksum");
+    match dl::download_to_file(sha_url, sha_dest) {
+        Ok(_) => {
+            let expected = std::fs::read_to_string(sha_dest)?;
+            dl::verify_sha256(dest, &expected)?;
+        }
+        // 无 .sha256 旁证时降级为只提示（老版本 Release 可能没有）
+        Err(Error::Network(_)) => {
+            println!("yx: warning: .sha256 not available, skipping verification");
+        }
+        Err(e) => return Err(e),
+    }
+    Ok(())
 }
 
 /// 安装一个版本：下载 → 校验 → 解包进 versions/<ver>/
@@ -81,6 +134,9 @@ fn install(version_input: &str) -> Result<()> {
         return Ok(());
     }
 
+    // 清理上次中断留下的临时残骸（.downloading-* / .unpacking-*）
+    home::clean_stale(&home.join("versions"), &[".downloading-", ".unpacking-"]);
+
     let (asset_url, sha_url) = release_urls(mirror.as_deref(), &version, &asset);
     let tmp = home
         .join("versions")
@@ -88,24 +144,18 @@ fn install(version_input: &str) -> Result<()> {
     let tmp_sha = home
         .join("versions")
         .join(format!(".downloading-{version}-{asset}.sha256"));
+    fetch_and_verify(&asset_url, &sha_url, &tmp, &tmp_sha)?;
 
-    println!("yx: downloading {asset_url}");
-    dl::download_to_file(&asset_url, &tmp)?;
-    println!("yx: verifying checksum");
-    match dl::download_to_file(&sha_url, &tmp_sha) {
-        Ok(_) => {
-            let expected = std::fs::read_to_string(&tmp_sha)?;
-            dl::verify_sha256(&tmp, &expected)?;
-        }
-        // 无 .sha256 旁证时降级为只提示（老版本 Release 可能没有）
-        Err(Error::Network(_)) => {
-            println!("yx: warning: .sha256 not available, skipping verification");
-        }
-        Err(e) => return Err(e),
-    }
-
+    // 原子换位：解包到临时目录成功后整体 rename，中途失败不产生"半棵树"
+    // （完整性检查以引擎文件为准，半棵树会被误判为已安装）
     println!("yx: unpacking into {}", dest.display());
-    dl::unpack(&tmp, os, &dest)?;
+    let staging = home.join("versions").join(format!(".unpacking-{version}"));
+    let _ = std::fs::remove_dir_all(&staging);
+    dl::unpack(&tmp, os, &staging)?;
+    if dest.exists() {
+        std::fs::remove_dir_all(&dest)?;
+    }
+    std::fs::rename(&staging, &dest)?;
     let _ = std::fs::remove_file(&tmp);
     let _ = std::fs::remove_file(&tmp_sha);
 
@@ -155,8 +205,7 @@ fn list() -> Result<()> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
         Err(e) => return Err(e.into()),
     };
-    versions.sort();
-    versions.reverse();
+    versions.sort_by(|a, b| compare_versions_desc(a, b));
 
     if versions.is_empty() {
         println!("yx: no toolchains installed");
@@ -179,6 +228,53 @@ fn list() -> Result<()> {
     Ok(())
 }
 
+/// 卸载前置检查：默认版本与项目 pin 都不允许直接卸载（抽纯函数供测试）
+pub(crate) fn check_uninstall_allowed(
+    version: &str,
+    default: Option<&str>,
+    pinned: Option<&str>,
+) -> Result<()> {
+    if default == Some(version) {
+        return Err(Error::IsDefault {
+            version: version.to_string(),
+        });
+    }
+    if pinned == Some(version) {
+        return Err(Error::Message(format!(
+            "toolchain {version} is pinned by yx-toolchain.toml; remove the pin first"
+        )));
+    }
+    Ok(())
+}
+
+/// 版本列表排序键（降序用）：非 semver 形态（如 nightly 散目录）排最后
+fn version_sort_key(version: &str) -> (u8, u64, u64, u64) {
+    let core = version.split(['-', '+']).next().unwrap_or(version);
+    let mut key = (1u8, 0u64, 0u64, 0u64);
+    let mut parts = core.split('.');
+    for slot in [&mut key.1, &mut key.2, &mut key.3] {
+        match parts.next().and_then(|p| p.parse::<u64>().ok()) {
+            Some(n) => *slot = n,
+            // 任一段不是纯数字即视为非 semver（解析中断，剩余段不再取）
+            None => {
+                key.0 = 0;
+                break;
+            }
+        }
+    }
+    key
+}
+
+/// 版本降序比较：semver 数值序，非 semver 靠后，同级按字符串兜底
+pub(crate) fn compare_versions_desc(
+    a: &str,
+    b: &str,
+) -> std::cmp::Ordering {
+    version_sort_key(b)
+        .cmp(&version_sort_key(a))
+        .then_with(|| b.cmp(a))
+}
+
 /// 卸载版本（默认版本须先切换，防止把正在用的引擎删掉）
 fn uninstall(version_input: &str) -> Result<()> {
     let version = pin::normalize_version(version_input);
@@ -188,9 +284,9 @@ fn uninstall(version_input: &str) -> Result<()> {
         return Err(Error::NotInstalled { version });
     }
     let current_default = settings::Settings::load(&home)?.default;
-    if current_default.as_deref() == Some(version.as_str()) {
-        return Err(Error::IsDefault { version });
-    }
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let pinned = pin::find_pin_from(&cwd);
+    check_uninstall_allowed(&version, current_default.as_deref(), pinned.as_deref())?;
     std::fs::remove_dir_all(&dir)?;
     println!("yx: uninstalled {version}");
     Ok(())

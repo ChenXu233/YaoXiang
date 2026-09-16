@@ -44,16 +44,36 @@
 
 ---
 
+## E6006: Function not found (runtime)
+
+**Category**: Runtime
+
+**Message**: Function not found: '{func}'
+
+**Help**: Ensure the function is defined and spelled correctly
+
+---
+
+## E6007: Runtime error
+
+**Category**: Runtime
+
+**Message**: Runtime error: {message}
+
+**Help**: See the error message for details
+
+---
+
 ## E6008: Key not found
 
 **Category**: Runtime
 
 **Message**: Key not found
 
-**Help**: Use `dict.has` to check key existence before indexing
+**Help**: Use dict.has to check key existence before indexing
 
 ---
 
-> #299 §4: Missing dict keys (E6008) and out-of-bounds indexing (E6003) belong to different semantic
-> categories—key absence vs. ordinal out-of-range—so they are kept as separate codes to preserve
+> #299 §4: Dict missing key and index out-of-bounds (E6003) are semantically different categories —
+> key not existing vs. index exceeding bounds. They are kept as separate codes to preserve
 > diagnostic information. For safe access, use `dict.has` to check first, then retrieve.

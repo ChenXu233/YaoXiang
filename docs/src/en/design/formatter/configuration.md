@@ -1,6 +1,6 @@
 ---
 title: 'Formatting Configuration Options'
-description: 'Configuration file format, priority, and default values for yaoxiang fmt'
+description: 'Configuration file format, priority, and default values for yx format'
 ---
 
 # Configuration Options
@@ -9,23 +9,23 @@ description: 'Configuration file format, priority, and default values for yaoxia
 
 ## Configuration File Format
 
-The configuration file uses TOML format, and the file name is `yaoxiang.toml`.
+The configuration file uses the TOML format, with the file name `yaoxiang.toml`.
 
 ```toml
 [fmt]
-# 行宽限制（默认 120）
+# Line width limit (default 120)
 line_width = 120
 
-# 缩进宽度（默认 4）
+# Indent width (default 4)
 indent_width = 4
 
-# 是否使用 tab 缩进（默认 false）
+# Whether to use tab indentation (default false)
 use_tabs = false
 
-# 是否使用单引号（默认 false）
+# Whether to use single quotes (default false)
 single_quote = false
 
-# 是否排序导入语句（默认 true）
+# Whether to sort import statements (default true)
 sort_imports = true
 ```
 
@@ -35,8 +35,8 @@ sort_imports = true
 
 Configuration priority chain (from high to low):
 
-1. **CLI Parameters** — Command-line parameters have the highest priority
-2. **Project-level Configuration** — `yaoxiang.toml` in the current directory
+1. **CLI Arguments** — Command-line arguments have the highest priority
+2. **Project-level Configuration** — The `yaoxiang.toml` in the current directory
 3. **User-level Configuration** — `~/.config/yaoxiang/config.toml`
 4. **Default Values** — Built-in default values
 
@@ -44,10 +44,10 @@ Configuration priority chain (from high to low):
 
 ## Default Values
 
-| Option         | Default Value | Description                  |
-| -------------- | ------------- | ---------------------------- |
-| `line_width`   | 120           | Maximum line width           |
-| `indent_width` | 4             | Number of indent spaces      |
-| `use_tabs`     | false         | Whether to use tabs          |
-| `single_quote` | false         | Whether to use single quotes |
-| `sort_imports` | true          | Whether to sort imports      |
+| Option         | Default | Description                  |
+| -------------- | ------- | ---------------------------- |
+| `line_width`   | 120     | Maximum line width           |
+| `indent_width` | 4       | Number of indent spaces      |
+| `use_tabs`     | false   | Whether to use tabs          |
+| `single_quote` | false   | Whether to use single quotes |
+| `sort_imports` | true    | Whether to sort imports      |

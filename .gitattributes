@@ -6,3 +6,5 @@
 *.toml text eol=lf
 *.yml text eol=lf
 *.yx text eol=lf
+# shell 脚本带 CRLF 在 bash 下直接炸（\r 进命令词）
+*.sh text eol=lf

@@ -26,7 +26,7 @@ jobs:
 
       - name: Install YaoXiang
         run: |
-          curl -fsSL https://yaoxiang.dev/install.sh | sh
+          curl -fsSL https://raw.githubusercontent.com/ChenXu233/YaoXiang/main/scripts/install/install.sh | sh
           echo "$HOME/.yaoxiang/bin" >> $GITHUB_PATH
 
       - name: Type check
@@ -42,7 +42,7 @@ jobs:
 yaoxiang-check:
   image: rust:latest
   script:
-    - curl -fsSL https://yaoxiang.dev/install.sh | sh
+    - curl -fsSL https://raw.githubusercontent.com/ChenXu233/YaoXiang/main/scripts/install/install.sh | sh
     - export PATH="$HOME/.yaoxiang/bin:$PATH"
     - yx check --color never --no-progress
     - yx format --dry-run .
@@ -54,11 +54,11 @@ yaoxiang-check:
 
 ## 退出码
 
-| 退出码 | 含义              | CI 行为    |
-| ------ | ----------------- | ---------- |
-| `0`    | 无错误            | 通过       |
-| `1`    | 检查发现错误      | 失败       |
-| `2`    | 未找到 `.yx` 文件 | 视配置决定 |
+| 退出码 | 含义                                              | CI 行为    |
+| ------ | ------------------------------------------------- | ---------- |
+| `0`    | 无错误                                            | 通过       |
+| `1`    | 检查发现错误；或使用 `--deny-warnings` 时存在警告 | 失败       |
+| `2`    | 未找到 `.yx` 文件                                 | 视配置决定 |
 
 ## JSON 输出解析
 
@@ -74,4 +74,5 @@ yx check --json | jq '.error_count'
 2. **分离检查和格式化**：分别运行 `check` 和 `format --dry-run`，便于定位问题
 3. **使用 `--no-progress`**：CI 环境不需要进度条
 4. **使用 `--color never`**：避免 ANSI 颜色码污染日志
-5. **缓存依赖**：利用 CI 缓存机制加速构建
+5. **严格模式**：追加 `--deny-warnings`，让警告也导致 CI 失败
+6. **缓存依赖**：利用 CI 缓存机制加速构建
