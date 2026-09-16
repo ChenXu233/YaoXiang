@@ -678,7 +678,9 @@ impl TypeChecker {
                 matches!(
                     v.as_ref(),
                     crate::frontend::core::parser::ast::Expr::Lambda { .. }
-                        | crate::frontend::core::parser::ast::Expr::Block(..)
+                ) || crate::frontend::core::parser::ast::Expr::block_binding_is_function(
+                    type_annotation.as_ref(),
+                    Some(v.as_ref()),
                 )
             }) || (value.is_none() && type_annotation.is_some()) =>
             {

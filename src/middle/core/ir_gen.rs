@@ -1061,9 +1061,19 @@ impl AstToIrGenerator {
                     }
                     _ => return Ok(None),
                 };
-                let (params, body): (Vec<_>, Vec<_>) = match value {
-                    Some(v) => v.callable_parts(),
-                    None => (Vec::new(), Vec::new()),
+                // 裁决 C（RFC-010a 附录D）：`name = { ... }` 无注解→函数；
+                // 非 Fn 注解→块值。后者不得当函数体处理，否则变量拿不到值。
+                let is_fn_binding = ast::Expr::block_binding_is_function(
+                    type_annotation.as_ref(),
+                    value.as_deref(),
+                );
+                let (params, body): (Vec<_>, Vec<_>) = if is_fn_binding {
+                    match value {
+                        Some(v) => v.callable_parts(),
+                        None => (Vec::new(), Vec::new()),
+                    }
+                } else {
+                    (Vec::new(), Vec::new())
                 };
                 let generic_params =
                     crate::frontend::core::parser::ast::extract_generic_param_names(
@@ -1244,29 +1254,25 @@ impl AstToIrGenerator {
         // 生成指令序列
         let mut instructions = Vec::new();
 
-        // #297/E 同类：尾表达式作为返回值（与 generate_function_ir 一致），
-        // 否则 `Point.getX: (&Point) -> Float = { self.x }` 返回 Void。
-        let (tail_expr, leading_stmts) = match body.split_last() {
-            Some((
-                ast::Stmt {
-                    kind: ast::StmtKind::Expr(expr),
-                    ..
-                },
-                rest,
-            )) if return_type != MonoType::Void => (Some(expr), rest),
-            _ => (None, body),
-        };
-        // 生成语句 IR
-        for stmt in leading_stmts {
+        // RFC-010a 规则①：尾表达式给出函数值。沿用共用的 `generate_tail_stmt_ir`
+        // （与 generate_function_ir / generate_block_ir 同一实现），
+        // 否则 `Point.getX: (&Point) -> Float = { self.x }` 返回 Void；
+        // 取值不以注解为条件——注解只决定检查，不决定求值（#343 根因一）。
+        let last_idx = body.len().checked_sub(1);
+        let mut tail_handled = false;
+        for (i, stmt) in body.iter().enumerate() {
+            if Some(i) == last_idx {
+                let result_reg = self.next_temp_reg();
+                if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                    tail_handled = true;
+                    break;
+                }
+            }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
         }
-        match tail_expr {
-            Some(expr) => {
-                let result_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, result_reg, &mut instructions, constants)?;
-                instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
-            }
-            None => instructions.push(Instruction::Ret(None)),
+        if !tail_handled {
+            instructions.push(Instruction::Ret(None));
         }
 
         // 退出作用域
@@ -1373,10 +1379,15 @@ impl AstToIrGenerator {
         // RFC-010a 规则①：函数体的值 = 尾表达式。尾位置判断复用
         // `generate_tail_stmt_ir`（与 `generate_block_ir` 同一实现），
         // 否则 `{ if c {5} else {6} }` 这类尾位置 `if` 的值会被丢弃（#344）。
+        //
+        // 取值**不以注解为条件**：注解只决定要不要*检查*（typecheck 侧负责），
+        // 不决定要不要*求值*。此前用 `return_type != Void` 挡在取值前，
+        // 导致无注解的 `f = { 5 }` / `f = () => { 5 }` 尾表达式被静默丢弃、
+        // 返回 Void（#343 根因一）。
         let last_idx = body.len().checked_sub(1);
         let mut tail_handled = false;
         for (i, stmt) in body.iter().enumerate() {
-            if Some(i) == last_idx && return_type != MonoType::Void {
+            if Some(i) == last_idx {
                 let result_reg = self.next_temp_reg();
                 if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
                     instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
@@ -1562,29 +1573,24 @@ impl AstToIrGenerator {
 
         let return_type: MonoType = layer.return_type.clone().into();
 
-        // #297/E 同类：尾表达式作为返回值（与 generate_function_ir 一致），
-        // 否则 `f: (a: Int) -> (b: Int) -> Int = { a + b }` 返回 Void。
-        let (tail_expr, leading_stmts) = match body.split_last() {
-            Some((
-                ast::Stmt {
-                    kind: ast::StmtKind::Expr(expr),
-                    ..
-                },
-                rest,
-            )) if return_type != MonoType::Void => (Some(expr), rest),
-            _ => (None, body),
-        };
-        // 执行原 body（复用 generate_local_stmt_ir）
-        for stmt in leading_stmts {
+        // RFC-010a 规则①：尾表达式给出函数值。沿用共用的 `generate_tail_stmt_ir`，
+        // 否则 `f: (a: Int) -> (b: Int) -> Int = { a + b }` 返回 Void；
+        // 取值不以注解为条件（#343 根因一）。
+        let last_idx = body.len().checked_sub(1);
+        let mut tail_handled = false;
+        for (i, stmt) in body.iter().enumerate() {
+            if Some(i) == last_idx {
+                let result_reg = self.next_temp_reg();
+                if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                    tail_handled = true;
+                    break;
+                }
+            }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
         }
-        match tail_expr {
-            Some(expr) => {
-                let result_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, result_reg, &mut instructions, constants)?;
-                instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
-            }
-            None => instructions.push(Instruction::Ret(None)),
+        if !tail_handled {
+            instructions.push(Instruction::Ret(None));
         }
 
         let param_types: Vec<MonoType> = layer
@@ -2196,9 +2202,19 @@ impl AstToIrGenerator {
                         .build())
                     }
                 };
-                let (params, body): (Vec<_>, Vec<_>) = match value {
-                    Some(v) => v.callable_parts(),
-                    None => (Vec::new(), Vec::new()),
+                // 裁决 C（RFC-010a 附录D）：`name = { ... }` 无注解→函数；
+                // 非 Fn 注解→块值。
+                let is_fn_binding = ast::Expr::block_binding_is_function(
+                    type_annotation.as_ref(),
+                    value.as_deref(),
+                );
+                let (params, body): (Vec<_>, Vec<_>) = if is_fn_binding {
+                    match value {
+                        Some(v) => v.callable_parts(),
+                        None => (Vec::new(), Vec::new()),
+                    }
+                } else {
+                    (Vec::new(), Vec::new())
                 };
                 // 如果有 params/body，是嵌套函数
                 if !params.is_empty() || !body.is_empty() {

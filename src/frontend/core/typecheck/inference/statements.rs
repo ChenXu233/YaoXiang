@@ -860,13 +860,29 @@ impl StatementChecker {
                     }
                     _ => return Ok(()),
                 };
-                // 从 value 提取 Lambda params/body
+                // 从 value 提取 Lambda params/body。
+                // 裁决 C（RFC-010a 附录D）：`name = { ... }` 无注解→函数；
+                // 非 Fn 注解→块值（交给 check_var_stmt 按普通变量审）。
                 let (params, body_stmts) = match value {
                     Some(v) => {
                         if let Expr::Lambda { params, body, .. } = v.as_ref() {
                             (params.clone(), body.stmts.clone())
                         } else if let Expr::Block(block) = v.as_ref() {
-                            (Vec::new(), block.stmts.clone())
+                            if crate::frontend::core::parser::ast::Expr::block_binding_is_function(
+                                type_annotation.as_ref(),
+                                Some(v.as_ref()),
+                            ) {
+                                (Vec::new(), block.stmts.clone())
+                            } else {
+                                return self.check_var_stmt(
+                                    &name,
+                                    type_annotation.as_ref(),
+                                    &[],
+                                    Some(v.as_ref()),
+                                    *is_mut,
+                                    *stmt_span,
+                                );
+                            }
                         } else {
                             return self.check_var_stmt(
                                 &name,

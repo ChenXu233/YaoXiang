@@ -2568,26 +2568,33 @@ impl<'a> ExpressionInferrer<'a> {
                         let _ = self.infer_expr(v)?;
                         return Ok(MonoType::Void);
                     }
-                    // ponytail: `x = { ... }` 的「函数 vs 块值」裁决属 #343 未决设计问题；
-                    // 保持旧行为（注册为 0 参函数）不动，避免与 ir_gen 分流脱节。
+                    // 裁决 C（RFC-010a 附录D）：`name = { ... }` 无注解→函数；
+                    // 非 Fn 注解→块值（立即求值，变量绑定块值类型）。
+                    // 此前不论注解一律注册为 0 参函数，与 ir_gen 分流脱节（#343）。
                     if let Expr::Block(..) = v.as_ref() {
-                        let fn_type = MonoType::Fn {
-                            params: vec![],
-                            return_type: Box::new(
-                                type_annotation
-                                    .as_ref()
-                                    .map_or(MonoType::Void, |t| t.clone().into()),
-                            ),
-                        };
-                        self.try_add_var(
-                            name.clone(),
-                            PolyType::mono(fn_type),
-                            *stmt_span,
-                            *is_mut,
-                        )?;
-                        // #313：同上——匿名绑定体此前未检查
-                        let _ = self.infer_expr(v)?;
-                        return Ok(MonoType::Void);
+                        if crate::frontend::core::parser::ast::Expr::block_binding_is_function(
+                            type_annotation.as_ref(),
+                            Some(v.as_ref()),
+                        ) {
+                            let fn_type = MonoType::Fn {
+                                params: vec![],
+                                return_type: Box::new(
+                                    type_annotation
+                                        .as_ref()
+                                        .map_or(MonoType::Void, |t| t.clone().into()),
+                                ),
+                            };
+                            self.try_add_var(
+                                name.clone(),
+                                PolyType::mono(fn_type),
+                                *stmt_span,
+                                *is_mut,
+                            )?;
+                            // #313：匿名绑定体仍须检查
+                            let _ = self.infer_expr(v)?;
+                            return Ok(MonoType::Void);
+                        }
+                        // 块值：走普通变量路径（下方按 value 推断 init_ty）
                     }
                 }
                 // 普通变量
