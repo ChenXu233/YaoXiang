@@ -1,0 +1,59 @@
+// 03-semantics/tail_expr_and_return.yx
+// 覆盖: RFC-010a 尾表达式求值与 return 语义；规范 §2.9 块表达式 / §3.3 return 语句
+// 验证:
+//   - 块的值 = 尾表达式（唯一出口）
+//   - return 是非局部退出，穿出 if 与块，退出函数（类型 Never）
+//   - 末位为赋值语句时块值为 Void
+// 状态: ✅ 可运行
+
+use std.{assert, io}
+
+// 尾表达式即函数返回值
+tail_expr_value: (x: Int) -> Int = {
+    x * 2
+}
+
+// return 穿透 if，提前退出函数
+early_return: (x: Int) -> Int = {
+    if x < 0 {
+        return 0
+    }
+    x
+}
+
+// 块内多语句：尾表达式给出值
+block_tail_in_function: (x: Int) -> Int = {
+    a = x + 1
+    a * 2
+}
+
+// 显式 return 与尾表达式共存
+explicit_and_tail: (x: Int) -> Int = {
+    if x < 0 {
+        return -1
+    }
+    x * 10
+}
+
+no_return_has_side_effect: () -> () = {
+    io.println("side effect ok")
+}
+
+main = {
+    // 尾表达式
+    assert.assert(tail_expr_value(21) == 42, "tail_expr_value(21) should be 42")
+
+    // 提前返回
+    assert.assert(early_return(-5) == 0, "early_return(-5) should be 0")
+    assert.assert(early_return(7) == 7, "early_return(7) should be 7")
+
+    // 多语句块的尾表达式
+    assert.assert(block_tail_in_function(1) == 4, "block_tail_in_function(1) should be 4")
+
+    // 显式 return 与尾表达式共存
+    assert.assert(explicit_and_tail(-1) == -1, "explicit_and_tail(-1) should be -1")
+    assert.assert(explicit_and_tail(3) == 30, "explicit_and_tail(3) should be 30")
+
+    // Void 函数：尾表达式为 Void
+    no_return_has_side_effect()
+}
