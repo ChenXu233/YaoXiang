@@ -1,0 +1,38 @@
+// 03-semantics/paren_return_fn.yx
+// 覆盖: RFC-004 括号语义 —— 返回位置的 `(T)` 是「完整类型（值）」，链条到此终止
+//       不加括号 = 柯里化（逐层消耗参数）；加括号 = 返回函数值
+// 状态: ✅ 可运行
+
+use std.{assert, io}
+
+// 返回函数：括号声明「返回值是一个函数」
+mk: () -> ((a: Int) -> Int) = (a) => a + 1
+
+// 返回函数（块体形式）
+mk_block: () -> (() -> Int) = {
+    () => 7
+}
+
+// 柯里化：裸链条，逐层消耗参数
+curried: (a: Int) -> (b: Int) -> Int = { a + b }
+
+// 高阶函数作参数（括号在参数位置，不产生 Paren）
+apply: (h: (() -> Int)) -> Int = { h() }
+
+main = {
+    // 括号：调用一次得到函数，再调用得到值
+    assert.assert(mk()(5) == 6, "mk()(5) should be 6")
+    assert.assert(mk_block()() == 7, "mk_block()() should be 7")
+
+    // 裸链条：柯里化
+    assert.assert(curried(1)(2) == 3, "curried(1)(2) should be 3")
+
+    // 高阶参数位置
+    assert.assert(apply(() => 42) == 42, "apply should call the thunk")
+
+    // 返回的函数可存变量、可传递
+    h = mk()
+    assert.assert(h(1) == 2, "stored returned fn should work")
+
+    io.println("paren return fn ok")
+}

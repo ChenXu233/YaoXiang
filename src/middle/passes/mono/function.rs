@@ -396,6 +396,11 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                 return_type: Box::new(self.substitute_type_ast(return_type, type_map)),
             },
 
+            // RFC-004：括号有语义，替换内层后保留括号（供 split_curry 判定链条终点）
+            AstType::Paren(inner) => {
+                AstType::Paren(Box::new(self.substitute_type_ast(inner, type_map)))
+            }
+
             // Option：替换内部类型
             AstType::Option(inner) => {
                 AstType::Option(Box::new(self.substitute_type_ast(inner, type_map)))

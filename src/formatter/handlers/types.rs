@@ -11,6 +11,8 @@ pub fn format_type(
     source_map: &SourceMap,
 ) -> String {
     match ty {
+        // RFC-004：`Paren` 保留括号写法（括号有语义，不能丢）
+        Type::Paren(inner) => format!("({})", format_type(inner, ctx, source_map)),
         Type::Name { name, .. } => name.clone(),
         Type::Int(size) => format!("i{}", size),
         Type::Float(size) => format!("f{}", size),

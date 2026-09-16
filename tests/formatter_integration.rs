@@ -650,16 +650,18 @@ fn test_format_field_default_value_unchanged() {
 
 #[test]
 fn test_format_generic_function_roundtrip() {
-    // Arrange — RFC-010: 泛型函数定义签名带名保留（#174）
-    // #175 修复后：curried 泛型函数 return 块形式类型检查通过
+    // Arrange — RFC-010 / RFC-004：返回位置的 `Paren` 声明“返回值是函数”
+    // 括号**有语义**，formatter 必须保留（丢括号会把“返回函数”改成“柯里化”）
     let input = "map: (T: Type) -> ((x: Int) -> Int) = (x) => x";
 
-    // Act — formatter 输出：(T: Type) -> (Int) -> Int = (x) => x（不补全内层参数名）
     let result = format_source(input, &default_options())
         .unwrap_or_else(|e| panic!("Failed to format: {}", e));
 
-    // Assert — 签名按嵌套 Fn 切分，body 保持表达式形式
-    assert_eq!(result, "map: (T: Type) -> (Int) -> Int = (x) => x\n");
+    // Assert — 括号保留，内层参数名 `x` 不回丢；body 规范化为块形式
+    assert_eq!(
+        result,
+        "map: (T: Type) -> ((x: Int) -> Int) = { (x: Int) => x }\n"
+    );
 }
 
 #[test]

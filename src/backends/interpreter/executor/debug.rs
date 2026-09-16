@@ -520,9 +520,12 @@ impl Interpreter {
                     for r in args {
                         call_args.push(self.force_slot(frame, *r)?);
                     }
-                    let mut final_args = env_args;
+                    let mut final_args = env_args.clone();
                     final_args.extend(call_args);
-                    let result = self.call_function_by_id(func_value.func_id, &final_args)?;
+                    // env 同时作为 upvalues 注入新帧（LoadUpvalue 读）。
+                    // 此前走 call_function_by_id 只传 args、不设 upvalues，
+                    // 导致闭包体 `LoadUpvalue` 恒读 Void（实测 `adder(10)(5)` 得 10 而非 15）。
+                    let result = self.call_closure(func_value.func_id, &final_args, &env_args)?;
                     if let Some(dst_reg) = dst {
                         frame.set_slot(dst_reg.index() as usize, result);
                     }

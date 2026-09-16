@@ -113,6 +113,10 @@ impl TypeChecker {
         use crate::frontend::core::parser::ast::Type;
 
         match ty {
+            // RFC-004：括号在语义上透明，仅 formatter/split_curry 可见
+            Type::Paren(inner) => {
+                self.collect_type_tokens(file_path, inner);
+            }
             Type::Name { name, span } => {
                 self.semantic_db.add_token(
                     file_path,

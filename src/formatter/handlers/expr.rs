@@ -475,12 +475,46 @@ pub fn format_fn_signature(
 }
 
 /// 递归格式化返回类型：按嵌套 Fn 结构逐层取参数名补全
+///
+/// RFC-004 括号语义：遇 `Paren` 即原样输出括号——它声明“这是完整类型（值）”，
+/// 括号内的参数名不能再往外层拍平（否则 `((x: Int) -> Int)` 会退化成
+/// `(Int) -> Int` 并丢掉 `x`，即 #349）。
 fn format_return_with_names(
     ty: &Type,
     params: &[Param],
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
+    if let Type::Paren(inner) = ty {
+        let inner_str = match inner.as_ref() {
+            Type::Fn {
+                params: inner_tys,
+                return_type,
+            } => {
+                let count = inner_tys.len();
+                let (group, rest) = split_params_at(params, count);
+                if !group.is_empty() && group.len() == count {
+                    let named: Vec<String> = inner_tys
+                        .iter()
+                        .zip(group.iter())
+                        .map(|(t, p)| {
+                            format!(
+                                "{}: {}",
+                                p.name,
+                                super::types::format_type(t, ctx, source_map)
+                            )
+                        })
+                        .collect();
+                    let ret = format_return_with_names(return_type, rest, ctx, source_map);
+                    format!("({}) -> {}", named.join(", "), ret)
+                } else {
+                    super::types::format_type(inner, ctx, source_map)
+                }
+            }
+            other => super::types::format_type(other, ctx, source_map),
+        };
+        return format!("({})", inner_str);
+    }
     if let Type::Fn {
         params: inner_tys,
         return_type,

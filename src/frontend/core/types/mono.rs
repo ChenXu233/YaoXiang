@@ -649,6 +649,9 @@ impl fmt::Display for MonoType {
 impl From<ast::Type> for MonoType {
     fn from(ast_type: ast::Type) -> Self {
         match ast_type {
+            // RFC-004 括号语义：`Paren` 在类型检查/单态化/解释器层视为**透明**，
+            // 只递归内层（唯一“看见”它的是 split_curry 与 formatter）。
+            ast::Type::Paren(inner) => MonoType::from(*inner),
             ast::Type::Name { name, .. } => {
                 Self::from_builtin_name(&name).unwrap_or(MonoType::TypeRef(name))
             }

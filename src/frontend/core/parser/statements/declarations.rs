@@ -350,6 +350,63 @@ fn parse_assign_after_target(
                             .collect()
                     };
 
+                    // RFC-004 括号语义：返回位置是 `Paren` ⇔ 链条在此终止。
+                    // 作者写的 lambda（`(a) => a + 1`）就是**被返回的函数值**，
+                    // 不是本函数的参数列表。故本函数只取第一组签名参数，
+                    // body 为“返回这个 lambda”。
+                    // 不加此判会让 `a` 被合并进外层，`f` 变成接受 `a` 而非返回闭包。
+                    let paren_return = matches!(
+                        type_annotation.as_ref(),
+                        Some(Type::Fn { return_type, .. })
+                            if matches!(return_type.as_ref(), Type::Paren(_))
+                    );
+                    if paren_return {
+                        // 本函数自己的**值**参数个数 = 第一组签名参数中非类型参数的个数
+                        // （`(T: Type)` 这类类型参数编译期擦除，不占运行时参数位）。
+                        let own_param_count = match type_annotation.as_ref() {
+                            Some(Type::Fn { params, .. }) => params
+                                .iter()
+                                .filter(|t| !is_type_param_annotation(Some(t)))
+                                .count(),
+                            _ => 0,
+                        };
+                        let own_params: Vec<Param> = extracted_params
+                            .iter()
+                            .filter(|p| !is_type_param_annotation(p.ty.as_ref()))
+                            .take(own_param_count)
+                            .cloned()
+                            .collect();
+                        let inner = Expr::Lambda {
+                            params: merged,
+                            body: body.clone(),
+                            span,
+                        };
+                        let value = Expr::Lambda {
+                            params: own_params,
+                            body: Box::new(Block {
+                                stmts: vec![Stmt {
+                                    kind: StmtKind::Expr(Box::new(inner)),
+                                    span,
+                                }],
+                                span,
+                            }),
+                            span,
+                        };
+                        state.skip(&TokenKind::Semicolon);
+                        return Some(Stmt {
+                            kind: StmtKind::Assign {
+                                target: Box::new(target),
+                                type_annotation,
+                                signature_params: extracted_params.clone(),
+                                value: Some(Box::new(value)),
+                                is_pub,
+                                is_mut,
+                                span,
+                            },
+                            span,
+                        });
+                    }
+
                     // 构建 Lambda value（包含 merged params 和 body）
                     let value = Expr::Lambda {
                         params: merged,

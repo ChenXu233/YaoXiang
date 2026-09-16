@@ -335,7 +335,8 @@ impl AstToIrGenerator {
         signature_params: &[ast::Param],
     ) -> Vec<CurryLayer> {
         let mut layers = Vec::new();
-        let mut params_iter = signature_params.iter().cloned().peekable();
+        // 用索引游标而非迭代器：Paren 分支需要把已取走的层参数“退回”。
+        let mut cursor = 0usize;
         let mut current_type = type_ann.clone();
 
         loop {
@@ -344,8 +345,9 @@ impl AstToIrGenerator {
                     params: type_params,
                     return_type,
                 } => {
-                    let layer_params: Vec<ast::Param> =
-                        (&mut params_iter).take(type_params.len()).collect();
+                    let start = cursor;
+                    cursor = (cursor + type_params.len()).min(signature_params.len());
+                    let layer_params: Vec<ast::Param> = signature_params[start..cursor].to_vec();
                     let ret_type = *return_type;
                     current_type = ret_type.clone();
                     // 类型参数层（如 `(T: Type)`）是编译期参数：不占运行时参数位，
@@ -353,11 +355,25 @@ impl AstToIrGenerator {
                     // ponytail: 仅处理纯类型参数层；类型/值参数混合同层视为值层（罕见，暂不拆）
                     let is_type_layer =
                         !type_params.is_empty() && type_params.iter().all(Self::is_type_param_ann);
+
+                    // RFC-004 括号语义：返回位置的 `Paren` ⇔ 链条在此终止。
+                    // 该括号内的参数**不属于本函数**——它们是被返回函数的参数。
+                    // parser 把签名拍平成 `signature_params`（内层名供 body 对齐类型），
+                    // 故此处必须把游标退回，否则 `f: () -> ((a:Int)->Int)` 的 `a`
+                    // 会被当成本层参数，`f` 变成接受 `a` 而非返回闭包。
+                    let next_is_paren = matches!(ret_type, ast::Type::Paren(_));
+                    if next_is_paren {
+                        cursor = start;
+                    }
+
                     if !is_type_layer {
                         layers.push(CurryLayer {
                             params: layer_params,
                             return_type: ret_type,
                         });
+                    }
+                    if next_is_paren {
+                        break;
                     }
                 }
                 _ => break,
@@ -3497,6 +3513,7 @@ impl AstToIrGenerator {
         params: &[ast::Param],
         body: &ast::Block,
         constants: &mut Vec<ConstValue>,
+        env_count: usize,
     ) -> Result<LambdaBodyIR, Diagnostic> {
         // 保存父函数的临时寄存器计数
         let saved_next_temp = self.next_temp;
@@ -3510,36 +3527,44 @@ impl AstToIrGenerator {
         // 进入闭包函数体作用域
         self.enter_scope();
 
-        // 为每个参数生成 LoadArg 指令并注册
+        // 注册参数槽位。
+        // env_count：闭包 env 在帧参数中占前段（运行时 `final_args = env + args`
+        // 且 `Frame::with_args` 已把它们铺进 slots[0..]）。因此本层参数直接位于
+        // `env_count + i`，**无需** LoadArg——那会与已铺好的槽位错位。
+        // 捕获变量同理：`closure_captures` 让 Var 解析走 LoadUpvalue。
         for (i, param) in params.iter().enumerate() {
-            instructions.push(Instruction::Load {
-                dst: Operand::Local(i),
-                src: Operand::Arg(i),
-            });
-            // 存储到局部变量并注册
-            instructions.push(Instruction::Store {
-                dst: Operand::Local(i),
-                src: Operand::Local(i),
-                span: Span::dummy(),
-            });
-            self.register_local(&param.name, i);
+            self.register_local(&param.name, env_count + i);
         }
 
         // 记录局部变量起始位置
-        let local_var_start = params.len();
+        let local_var_start = env_count + params.len();
         self.next_temp = local_var_start;
 
-        // 处理函数体语句
-        for stmt in &body.stmts {
+        // 处理函数体语句（RFC-010a 规则①：尾表达式给出 lambda 的值）。
+        // 此前无条件逐语句生成、末尾补 `Ret(None)`，导致块体内的
+        // `() => 7` 返回值被丢弃（`mk: () -> (() -> Int) = { () => 7 }` 得 void）。
+        let last_idx = body.stmts.len().checked_sub(1);
+        let mut tail_handled = false;
+        for (i, stmt) in body.stmts.iter().enumerate() {
+            if Some(i) == last_idx {
+                let result_reg = self.next_temp_reg();
+                if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                    tail_handled = true;
+                    break;
+                }
+            }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
         }
 
-        // 如果没有遇到 Ret 指令，追加 Ret(None)
-        let has_ret = instructions
-            .iter()
-            .any(|inst| matches!(inst, Instruction::Ret(_)));
-        if !has_ret {
-            instructions.push(Instruction::Ret(None));
+        // 尾位置无值（末位为语句 / 空体）时补 Ret(None)
+        if !tail_handled {
+            let has_ret = instructions
+                .iter()
+                .any(|inst| matches!(inst, Instruction::Ret(_)));
+            if !has_ret {
+                instructions.push(Instruction::Ret(None));
+            }
         }
 
         // 退出作用域
@@ -5305,8 +5330,29 @@ impl AstToIrGenerator {
                 // 3. 为闭包参数分配寄存器索引
                 let _param_regs: Vec<usize> = (0..params.len()).collect();
 
-                let env_vars = std::mem::take(&mut self.pending_env_vars);
-                let env_names = std::mem::take(&mut self.pending_env_names);
+                // RFC-009a / #254：闭包需捕获自由变量。
+                // `pending_env_vars` 只由 spawn/for 路径填充；普通 lambda（如
+                // `adder: (n: Int) -> ((x: Int) -> Int) = (x) => x + n` 里的内层）
+                // 从未填充，导致 `MakeClosure` 的 env 为空，`n` 在闭包体内取不到
+                // （实测 `adder(10)(5)` 得 10 而非 15）。
+                // 此处按“body 中引用但非自身参数”收集自由变量，用外层寄存器作为 env。
+                let mut env_vars = std::mem::take(&mut self.pending_env_vars);
+                let mut env_names = std::mem::take(&mut self.pending_env_names);
+                if env_names.is_empty() {
+                    let bound: std::collections::HashSet<&str> =
+                        params.iter().map(|p| p.name.as_str()).collect();
+                    let mut free = Vec::new();
+                    let mut seen = std::collections::HashSet::new();
+                    for stmt in &body.stmts {
+                        super::ir_gen::collect_free_vars_stmt(stmt, &bound, &mut seen, &mut free);
+                    }
+                    for name in free {
+                        if let Some(idx) = self.lookup_local(&name) {
+                            env_vars.push(Operand::Local(idx));
+                            env_names.push(name);
+                        }
+                    }
+                }
                 // #254：捕获表（变量名 → env 槽位），供闭包体内 Var 解析 → LoadUpvalue
                 self.closure_captures = env_names
                     .iter()
@@ -5316,8 +5362,12 @@ impl AstToIrGenerator {
 
                 // 5. 生成闭包函数体 IR
                 // 类似于 generate_function_ir 的逻辑，但针对 Lambda
-                let closure_body =
-                    self.generate_lambda_body_ir(params, body.as_ref(), constants)?;
+                let closure_body = self.generate_lambda_body_ir(
+                    params,
+                    body.as_ref(),
+                    constants,
+                    env_names.len(),
+                )?;
                 // #254：闭包体生成完毕，清除捕获表
                 self.closure_captures.clear();
 
@@ -5619,4 +5669,155 @@ pub fn generate_ir_with_context(
     generator.seed_cross_file_types(cross_file_types);
     generator.seed_cross_file_globals(cross_file_globals);
     generator.generate_module_ir(ast)
+}
+
+/// 收集 lambda 体引用的自由变量（名字），按出现顺序去重。
+///
+/// 用途：闭包捕获（RFC-009a / #254）。`bound` 是 lambda 自身参数（不算自由），
+/// `seen` 跨调用累积去重，`out` 为结果。
+///
+/// 仅做保守的语法级遍历：多收集一个变量只会多一条 env 槽位（不影响正确性），
+/// 漏收集才会导致闭包体内 `LoadUpvalue` 越界，故宁多勿少。
+fn collect_free_vars_stmt(
+    stmt: &crate::frontend::core::parser::ast::Stmt,
+    bound: &std::collections::HashSet<&str>,
+    seen: &mut std::collections::HashSet<String>,
+    out: &mut Vec<String>,
+) {
+    use crate::frontend::core::parser::ast::StmtKind;
+    // 小工具：走一个块（避免闭包借用冲突）
+    fn walk_block(
+        b: &crate::frontend::core::parser::ast::Block,
+        bound: &std::collections::HashSet<&str>,
+        seen: &mut std::collections::HashSet<String>,
+        out: &mut Vec<String>,
+    ) {
+        for s in &b.stmts {
+            collect_free_vars_stmt(s, bound, seen, out);
+        }
+    }
+    match &stmt.kind {
+        StmtKind::Expr(e) => collect_free_vars_expr(e, bound, seen, out),
+        StmtKind::Return(Some(e)) => collect_free_vars_expr(e, bound, seen, out),
+        StmtKind::Assign { target, value, .. } => {
+            collect_free_vars_expr(target, bound, seen, out);
+            if let Some(v) = value {
+                collect_free_vars_expr(v, bound, seen, out);
+            }
+        }
+        StmtKind::DestructureAssign { rhs, .. } => collect_free_vars_expr(rhs, bound, seen, out),
+        StmtKind::If {
+            condition,
+            then_branch,
+            else_if_branches,
+            else_branch,
+            ..
+        } => {
+            collect_free_vars_expr(condition, bound, seen, out);
+            walk_block(then_branch, bound, seen, out);
+            for (c, b) in else_if_branches {
+                collect_free_vars_expr(c, bound, seen, out);
+                walk_block(b, bound, seen, out);
+            }
+            if let Some(b) = else_branch {
+                walk_block(b, bound, seen, out);
+            }
+        }
+        StmtKind::For { iterable, body, .. } => {
+            collect_free_vars_expr(iterable, bound, seen, out);
+            walk_block(body, bound, seen, out);
+        }
+        _ => {}
+    }
+}
+
+/// 表达式层的自由变量收集（递归）。
+fn collect_free_vars_expr(
+    expr: &crate::frontend::core::parser::ast::Expr,
+    bound: &std::collections::HashSet<&str>,
+    seen: &mut std::collections::HashSet<String>,
+    out: &mut Vec<String>,
+) {
+    use crate::frontend::core::parser::ast::Expr;
+    match expr {
+        Expr::Var(name, _) => {
+            if !bound.contains(name.as_str()) && seen.insert(name.clone()) {
+                out.push(name.clone());
+            }
+        }
+        Expr::BinOp { left, right, .. } => {
+            collect_free_vars_expr(left, bound, seen, out);
+            collect_free_vars_expr(right, bound, seen, out);
+        }
+        Expr::UnOp { expr, .. } | Expr::Try { expr, .. } | Expr::Cast { expr, .. } => {
+            collect_free_vars_expr(expr, bound, seen, out);
+        }
+        Expr::Call { func, args, .. } => {
+            collect_free_vars_expr(func, bound, seen, out);
+            for a in args {
+                collect_free_vars_expr(a, bound, seen, out);
+            }
+        }
+        Expr::FieldAccess { expr, .. } | Expr::Borrow { expr, .. } => {
+            collect_free_vars_expr(expr, bound, seen, out);
+        }
+        Expr::Index { expr, index, .. } => {
+            collect_free_vars_expr(expr, bound, seen, out);
+            collect_free_vars_expr(index, bound, seen, out);
+        }
+        Expr::Tuple(items, _) | Expr::List(items, _) => {
+            for i in items {
+                collect_free_vars_expr(i, bound, seen, out);
+            }
+        }
+        Expr::Dict(entries, _) => {
+            for (k, v) in entries {
+                collect_free_vars_expr(k, bound, seen, out);
+                collect_free_vars_expr(v, bound, seen, out);
+            }
+        }
+        Expr::If {
+            condition,
+            then_branch,
+            else_if_branches,
+            else_branch,
+            ..
+        } => {
+            collect_free_vars_expr(condition, bound, seen, out);
+            for s in &then_branch.stmts {
+                collect_free_vars_stmt(s, bound, seen, out);
+            }
+            for (c, b) in else_if_branches {
+                collect_free_vars_expr(c, bound, seen, out);
+                for s in &b.stmts {
+                    collect_free_vars_stmt(s, bound, seen, out);
+                }
+            }
+            if let Some(b) = else_branch {
+                for s in &b.stmts {
+                    collect_free_vars_stmt(s, bound, seen, out);
+                }
+            }
+        }
+        Expr::Block(b) => {
+            for s in &b.stmts {
+                collect_free_vars_stmt(s, bound, seen, out);
+            }
+        }
+        Expr::While {
+            condition, body, ..
+        } => {
+            collect_free_vars_expr(condition, bound, seen, out);
+            for s in &body.stmts {
+                collect_free_vars_stmt(s, bound, seen, out);
+            }
+        }
+        Expr::For { iterable, body, .. } => {
+            collect_free_vars_expr(iterable, bound, seen, out);
+            for s in &body.stmts {
+                collect_free_vars_stmt(s, bound, seen, out);
+            }
+        }
+        _ => {}
+    }
 }
