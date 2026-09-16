@@ -245,5 +245,4 @@ jobs:
           prerelease: true
           files: |
             release-artifacts/**/yaoxiang-*
-            release-artifacts/**/YaoXiang-Setup-*.exe
           fail_on_unmatched_files: false

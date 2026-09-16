@@ -36,6 +36,8 @@ proptest-regressions/
 node_modules/
 cache/
 dist/
+# Inno Setup OutputDir=..\dist 相对 .iss 目录解析 → 产物落这里（dist/ 无前导斜杠已覆盖，显式声明防未来改成 /dist/）
+scripts/dist/
 
 benches/shootout/bench/out/
 benches/shootout/out/

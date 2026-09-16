@@ -183,7 +183,6 @@ jobs:
           body_path: final-release-body.md
           files: |
             release-artifacts/**/yaoxiang-*
-            release-artifacts/**/YaoXiang-Setup-*.exe
           fail_on_unmatched_files: false
           draft: false
           prerelease: false

@@ -6,8 +6,11 @@
 #ifndef MyAppVersion
 #define MyAppVersion "0.0.0-dev"
 #endif
+; 无默认值：发行包路径含版本+target，只能由调用方注入（见上方示例）。
+; 兜底一个不存在的目录只会把错误推到 Inno 的 "No files found matching"，
+; 定位成本高（RFC-037 落地时踩过）。
 #ifndef PkgDir
-#define PkgDir "..\..\target\dist-pkg"
+#error PkgDir not defined: pass /DPkgDir=<package root>
 #endif
 
 #define MyAppName "YaoXiang"
