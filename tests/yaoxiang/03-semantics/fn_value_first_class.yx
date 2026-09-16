@@ -1,0 +1,32 @@
+// 03-semantics/fn_value_first_class.yx
+// 覆盖: 函数名作为一等值（#348）+ 泛型与普通函数同文件共存（#351）
+// 状态: ✅ 可运行
+
+use std.{assert, io}
+
+double: (a: Int) -> Int = a * 2
+
+// 泛型函数与普通函数同文件共存（#351：此前调用泛型会让普通函数发射丢失）
+identity: (T: Type) -> (x: T) -> T = (x) => x
+
+// 高阶函数：形参是函数类型
+apply_twice: (h: (a: Int) -> Int, x: Int) -> Int = {
+    h(h(x))
+}
+
+main = {
+    // 直接调用
+    assert.assert(double(5) == 10, "double(5) should be 10")
+
+    // #351：普通函数与泛型函数同文件、都被调用
+    assert.assert(identity(7) == 7, "generic identity should work")
+    assert.assert(double(identity(3)) == 6, "generic + plain in one file")
+
+    // #348：函数名作实参传给高阶函数
+    assert.assert(apply_twice(double, 3) == 12, "passing fn name as arg should work")
+
+    // 内联 lambda 作实参（对照组）
+    assert.assert(apply_twice((x: Int) => x + 1, 5) == 7, "inline lambda arg")
+
+    io.println("fn value first class ok")
+}

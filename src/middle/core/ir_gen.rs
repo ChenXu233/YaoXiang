@@ -466,6 +466,19 @@ impl AstToIrGenerator {
     }
 
     /// 查找变量的类型
+    /// 该名字是否为「函数值」——即 typecheck 的 bindings 里其类型是 `Fn`。
+    ///
+    /// 用于 `Expr::Var` 的函数名物化（#348）：函数的类型是 Fn，所以名字就是函数值。
+    fn binding_is_function(
+        &self,
+        name: &str,
+    ) -> bool {
+        matches!(
+            self.lookup_var_type(name).map(|p| &p.body),
+            Some(MonoType::Fn { .. })
+        )
+    }
+
     fn lookup_var_type(
         &self,
         name: &str,
@@ -3977,6 +3990,19 @@ impl AstToIrGenerator {
                     instructions.push(Instruction::Load {
                         dst: Operand::Local(result_reg),
                         src: Operand::Const(ConstValue::Void),
+                    });
+                } else if self.binding_is_function(var_name) {
+                    // #348：名字的类型是 Fn ⇒ 它就是函数值。运行时函数值的唯一表示是
+                    // 闭包，故物化为 MakeClosure（env 为空：本处只处理顶层/自由函数名，
+                    // 捕获变量已由上方 closure_captures 处理）。
+                    //
+                    // 此前落到下方兜底 → E3006（"变量无法解析"），使函数名不能
+                    // 作一等值使用：`io.println(f)` / `g(f)` / `x = f` 全部失败。
+                    instructions.push(Instruction::MakeClosure {
+                        dst: Operand::Local(result_reg),
+                        func: var_name.clone(),
+                        env: vec![],
+                        def: None,
                     });
                 } else {
                     // #271 #3：未解析变量 → 硬错误（#254 spawn 捕获已落地，不再需要静默 Load 0 兜底）。
