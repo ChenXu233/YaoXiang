@@ -875,3 +875,59 @@ fn test_e2e_dump_local_names_survive_bytecode_roundtrip() {
         "名字应经 .42 往返保持；stdout: {stdout:?}"
     );
 }
+
+#[test]
+fn test_e2e_runtime_bounds_error_names_the_variable() {
+    // Arrange: 索引来自具名局部变量时，E6003 应指出是哪个变量越界，
+    // 而不只是给数值——`(idx)` 比 `10` 好定位得多。
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "oob.yx",
+        "use std.io\n\nmain = {\n    a = [1, 2, 3]\n    idx = 10\n    io.println(a[idx])\n}\n\nmain()\n",
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+    let combined = format!("{stdout}{stderr}");
+
+    // Assert
+    assert_ne!(
+        code, 0,
+        "越界应是非零退出；stdout: {stdout:?} stderr: {stderr:?}"
+    );
+    assert!(
+        combined.contains("E6003"),
+        "应报 E6003 索引越界；combined: {combined:?}"
+    );
+    assert!(
+        combined.contains("(idx)"),
+        "错误信息应指出越界变量名；combined: {combined:?}"
+    );
+}
+
+#[test]
+fn test_e2e_runtime_bounds_error_omits_clause_for_literals() {
+    // Arrange: 字面量索引没有变量名——不能留下空的 "( )" 子句。
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "lit.yx",
+        "use std.io\n\nmain = {\n    a = [1, 2, 3]\n    io.println(a[10])\n}\n\nmain()\n",
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+    let combined = format!("{stdout}{stderr}");
+
+    // Assert
+    assert_ne!(code, 0, "越界应是非零退出");
+    assert!(
+        combined.contains("E6003"),
+        "应报 E6003；combined: {combined:?}"
+    );
+    assert!(
+        !combined.contains("()"),
+        "无变量名时不应留空子句；combined: {combined:?}"
+    );
+}

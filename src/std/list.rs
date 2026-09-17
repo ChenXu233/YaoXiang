@@ -235,6 +235,7 @@ fn native_remove_at(
     let index = usize::try_from(index).map_err(|_| ExecutorError::IndexOutOfBounds {
         max: list_len,
         index,
+        index_slot: None,
         stack: None,
     })?;
 
@@ -456,6 +457,7 @@ fn native_set(
         ExecutorError::IndexOutOfBounds {
             max: list_len,
             index,
+            index_slot: None,
             stack: None,
         }
     })?;

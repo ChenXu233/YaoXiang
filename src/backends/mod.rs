@@ -66,6 +66,10 @@ pub enum ExecutorError {
         max: usize,
         /// 越界索引（#300 D 项：i64 保真——负索引保留原始值，不再是 max=0 哨兵）
         index: i64,
+        /// 索引所在的槽位号（可选）。
+        /// 用于渲染时反查局部变量名——`a[idx]` 里 idx 是人写的变量，
+        /// 报错时指出是哪个变量比只给数值有用。
+        index_slot: Option<usize>,
         /// 调用栈
         stack: Option<Vec<StackFrame>>,
     },
@@ -169,7 +173,12 @@ impl ExecutorError {
         index: i64,
         stack: Option<Vec<StackFrame>>,
     ) -> Self {
-        ExecutorError::IndexOutOfBounds { max, index, stack }
+        ExecutorError::IndexOutOfBounds {
+            max,
+            index,
+            index_slot: None,
+            stack,
+        }
     }
 
     /// Create an assertion failed error
@@ -206,10 +215,12 @@ impl ExecutorError {
             ExecutorError::IndexOutOfBounds {
                 max,
                 index,
+                index_slot,
                 stack: None,
             } => ExecutorError::IndexOutOfBounds {
                 max,
                 index,
+                index_slot,
                 stack: Some(stack),
             },
             ExecutorError::AssertionFailed(msg, None) => {
@@ -272,7 +283,9 @@ impl std::fmt::Display for ExecutorError {
                 }
                 Ok(())
             }
-            ExecutorError::IndexOutOfBounds { max, index, stack } => {
+            ExecutorError::IndexOutOfBounds {
+                max, index, stack, ..
+            } => {
                 write!(f, "Index out of bounds: {index} (length {max})")?;
                 if let Some(frames) = stack {
                     for frame in frames {
