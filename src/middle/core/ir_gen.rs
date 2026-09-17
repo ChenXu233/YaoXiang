@@ -4182,6 +4182,32 @@ impl AstToIrGenerator {
     }
 
     #[allow(clippy::only_used_in_recursion)]
+    fn generate_lit_expr_ir(
+        &mut self,
+        literal: &Literal,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 常量加载
+        let const_val = match literal {
+            Literal::Int(n) => ConstValue::Int(*n),
+            Literal::Float(f) => ConstValue::Float(*f),
+            Literal::Bool(b) => ConstValue::Bool(*b),
+            Literal::String(s) => ConstValue::String(s.clone()),
+            Literal::Char(c) => ConstValue::Char(*c),
+            Literal::Void => ConstValue::Void,
+        };
+        // 添加到常量池
+        constants.push(const_val.clone());
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(result_reg),
+            src: Operand::Const(const_val),
+            span: self.cur_span,
+        });
+        Ok(())
+    }
+
     fn generate_expr_ir_inner(
         &mut self,
         expr: &ast::Expr,
@@ -4191,22 +4217,7 @@ impl AstToIrGenerator {
     ) -> Result<(), Diagnostic> {
         match expr {
             Expr::Lit(literal, _) => {
-                // 常量加载
-                let const_val = match literal {
-                    Literal::Int(n) => ConstValue::Int(*n),
-                    Literal::Float(f) => ConstValue::Float(*f),
-                    Literal::Bool(b) => ConstValue::Bool(*b),
-                    Literal::String(s) => ConstValue::String(s.clone()),
-                    Literal::Char(c) => ConstValue::Char(*c),
-                    Literal::Void => ConstValue::Void,
-                };
-                // 添加到常量池
-                constants.push(const_val.clone());
-                instructions.push(Instruction::Load {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Const(const_val),
-                    span: self.cur_span,
-                });
+                self.generate_lit_expr_ir(literal, result_reg, instructions, constants)?;
             }
             Expr::Var(var_name, var_span) => {
                 // #254：闭包体内——先查捕获表（外层变量经 env 捕获，LoadUpvalue 读）
