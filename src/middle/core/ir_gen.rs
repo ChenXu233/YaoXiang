@@ -1428,8 +1428,12 @@ impl AstToIrGenerator {
         //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
         let saved_loop_stack = std::mem::take(&mut self.loop_stack);
 
-        // 顶层函数体入口：清空槽位表，避免沿用上一个函数的局部名。
-        // 嵌套路径（curry/lambda/anon）走 save/restore，不在此列。
+        // 顶层函数体入口：接手槽位表，避免沿用上一个函数的局部名。
+        //
+        // 这里用 take 而非 save/restore——与 next_temp 不同，next_temp 由
+        // 本函数重置为参数个数（见下），而槽位表没有等价的“重置”动作，
+        // 因此只能先把当前表接走再在出口放回。
+        // 嵌套路径（curry/lambda/anon）则与 next_temp 成对 save/restore。
         let saved_cur_locals = std::mem::take(&mut self.cur_locals);
 
         // 生成函数体指令

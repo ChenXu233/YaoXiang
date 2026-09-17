@@ -376,6 +376,18 @@ spawn {          // Step Over → 跑完整个 spawn 块
 
 **不涉及运行时。**
 
+**落地进度（2026-09-17）**：
+
+| 交付项 | 状态 | 落地形式 |
+| --- | --- | --- |
+| 源码位置 | 已完成 | 全部 76 个 `Instruction` 变体携带 `span` 字段；`span()` 方法刻意不设通配臂，新增变体漏带 span 即编译失败。位置覆盖 40/41 指令 |
+| 变量名 | 已完成 | `LocalSlot { name, ty, scope_depth }` 挂 `FunctionBody::Code::locals`；`register_local` 生成期就地对写入。`.42` 调试段 v2 携带名字，v1 产物向后兼容读取 |
+| 类型信息 | 部分 | 槽位已含 `ty`；`TypeAnnotation` 独立元数据未做 |
+| dump 可见性 | 已完成 | `dump` 逐指令输出 `; <file>:<line>:<col>`，并列出 `locals: 名字@槽位` |
+
+上表落地的数据形态与阶段一直接对接：DAP 的断点解析消费 `debug_map`，
+变量面板消费 `local_names`（名字）与 `locals`（类型）。
+
 ### 第一阶段：解释器 DAP MVP
 
 **目标**：`yaoxiang run --debug file.yx` 可以设置断点、单步、查看变量。
