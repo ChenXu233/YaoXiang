@@ -46,7 +46,7 @@
   "bytecode_func_params": "  parameters: {0}",
   "bytecode_func_return_type": "  return type: {0}",
   "bytecode_func_local_count": "  local count: {0}",
-  "bytecode_func_local_names": "  locals: {0}",
+  "bytecode_func_local_names": "  Local Variables: {0}",
   "bytecode_func_instr_count": "  instruction count: {0}",
   "bytecode_func_code": "  code:",
   "bytecode_instr_index": "    [{0}] {1} {2}",
