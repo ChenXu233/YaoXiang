@@ -17,7 +17,7 @@ use crate::frontend::module::symbol::SymbolTable;
 use crate::frontend::module::ExportKind;
 use crate::frontend::core::typecheck::{MonoType, PolyType, TypeCheckResult};
 use crate::middle::core::ir::{
-    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
+    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
 use crate::tlog;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -210,7 +210,7 @@ struct BindingInfo {
 /// Lambda 函数体 IR 结果
 struct LambdaBodyIR {
     instructions: Vec<Instruction>,
-    locals: Vec<MonoType>,
+    locals: Vec<LocalSlot>,
 }
 
 /// 循环上下文（#311）：一次 while/for 生成期内的跳转目标记录
@@ -1332,7 +1332,8 @@ impl AstToIrGenerator {
         self.exit_scope();
 
         // 分配局部变量类型（简化：与参数相同）
-        let locals_types = param_types.clone();
+        let locals_types: Vec<LocalSlot> =
+            param_types.iter().cloned().map(LocalSlot::temp).collect();
 
         // 构建函数 IR
         let func_ir = FunctionIR {
@@ -1511,8 +1512,8 @@ impl AstToIrGenerator {
             ))
             .build());
         }
-        let locals_types: Vec<MonoType> = (0..total_locals)
-            .map(|_| MonoType::Int(64)) // 简化：所有局部变量默认为 Int64
+        let locals_types: Vec<LocalSlot> = (0..total_locals)
+            .map(|_| LocalSlot::temp(MonoType::Int(64)))
             .collect();
 
         // 构建函数 IR
@@ -1588,7 +1589,7 @@ impl AstToIrGenerator {
             .collect();
         let return_type: MonoType = layer.return_type.clone().into();
         let total_locals = self.next_temp;
-        let locals_types: Vec<MonoType> = vec![MonoType::Int(64); total_locals];
+        let locals_types: Vec<LocalSlot> = vec![LocalSlot::temp(MonoType::Int(64)); total_locals];
 
         Ok(FunctionIR {
             def: None, // 由 generate_module_ir 尾部 assign_defs 填充
@@ -1681,7 +1682,7 @@ impl AstToIrGenerator {
             .map(MonoType::from)
             .collect();
         let total_locals = self.next_temp;
-        let locals_types: Vec<MonoType> = vec![MonoType::Int(64); total_locals];
+        let locals_types: Vec<LocalSlot> = vec![LocalSlot::temp(MonoType::Int(64)); total_locals];
 
         // #311：恢复父函数的循环上下文
         self.loop_stack = saved_loop_stack;
@@ -2091,7 +2092,7 @@ impl AstToIrGenerator {
                     successors: Vec::new(),
                 }],
                 entry: 0,
-                locals: vec![MonoType::Int(64)], // 分配一个局部变量用于存储结果
+                locals: vec![LocalSlot::temp(MonoType::Int(64))], // 结果暂存槽位
             },
         };
 
@@ -2152,7 +2153,9 @@ impl AstToIrGenerator {
 
         // 计算局部变量总数
         let total_locals = self.next_temp;
-        let locals_types: Vec<MonoType> = (0..total_locals).map(|_| MonoType::Int(64)).collect();
+        let locals_types: Vec<LocalSlot> = (0..total_locals)
+            .map(|_| LocalSlot::temp(MonoType::Int(64)))
+            .collect();
 
         // 恢复父函数状态
         self.next_temp = saved_next_temp;
@@ -3834,7 +3837,9 @@ impl AstToIrGenerator {
 
         // 计算局部变量总数
         let total_locals = self.next_temp;
-        let locals_types: Vec<MonoType> = (0..total_locals).map(|_| MonoType::Int(64)).collect();
+        let locals_types: Vec<LocalSlot> = (0..total_locals)
+            .map(|_| LocalSlot::temp(MonoType::Int(64)))
+            .collect();
 
         // 恢复父函数的临时寄存器计数
         self.next_temp = saved_next_temp;

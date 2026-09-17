@@ -638,10 +638,35 @@ pub enum FunctionBody {
     Code {
         blocks: Vec<BasicBlock>,
         entry: usize,
-        locals: Vec<MonoType>,
+        locals: Vec<LocalSlot>,
     },
     /// 返回值是类型 → {} 是类型字面量
     TypeDecl { definition: Type },
+}
+
+/// 局部变量槽位：类型 + 源码名 + 作用域深度。
+///
+/// `name` 为 `None` 表示编译器内部临时寄存器（无对应源码变量）。
+/// 用 `Option` 而非空串：调用方必须显式处理“无名字”，
+/// 避免 `""` 被当成合法名字传播到诊断里。
+#[derive(Debug, Clone)]
+pub struct LocalSlot {
+    /// 源码变量名；临时寄存器为 None
+    pub name: Option<String>,
+    pub ty: MonoType,
+    /// 作用域深度（0 = 函数参数层），供嵌套作用域重名消歧
+    pub scope_depth: usize,
+}
+
+impl LocalSlot {
+    /// 无名槽位（编译器临时寄存器）
+    pub fn temp(ty: MonoType) -> Self {
+        Self {
+            name: None,
+            ty,
+            scope_depth: 0,
+        }
+    }
 }
 
 /// Function IR
@@ -686,8 +711,8 @@ impl FunctionIR {
         }
     }
 
-    /// 获取局部变量类型列表（仅 Code 体有效）
-    pub fn locals(&self) -> &[MonoType] {
+    /// 获取局部变量槽位（仅 Code 体有效）
+    pub fn locals(&self) -> &[LocalSlot] {
         match &self.body {
             FunctionBody::Code { locals, .. } => locals,
             FunctionBody::TypeDecl { .. } => &[],

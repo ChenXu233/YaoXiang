@@ -4,7 +4,7 @@
 
 use crate::backends::common::opcode;
 use crate::middle::core::ir::{
-    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
+    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::Reg;
@@ -289,8 +289,8 @@ impl Translator {
 
         // 创建临时 FunctionIR 用于 translate_instruction
         let param_types: Vec<MonoType> = fields.iter().map(|f| f.ty.clone().into()).collect();
-        let mut locals: Vec<MonoType> = param_types.clone();
-        locals.push(MonoType::TypeRef(struct_name.clone()));
+        let mut locals: Vec<LocalSlot> = param_types.iter().cloned().map(LocalSlot::temp).collect();
+        locals.push(LocalSlot::temp(MonoType::TypeRef(struct_name.clone())));
 
         let temp_func = FunctionIR {
             name: struct_name.clone(),
