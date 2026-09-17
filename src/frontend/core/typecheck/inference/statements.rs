@@ -46,6 +46,8 @@ pub struct StatementChecker {
     module_registry: ModuleRegistry,
     /// 是否在顶层作用域（模块级，非函数内部）
     is_top_level: bool,
+    /// 当前嵌套的 `unsafe {}` 深度（RFC-010：unsafe 块内允许类型定义）
+    unsafe_depth: usize,
     /// 累积的错误（收集模式下使用）
     collected_errors: Vec<Diagnostic>,
     /// 是否启用错误收集模式（收集所有错误而非短路返回）
@@ -109,6 +111,7 @@ impl StatementChecker {
             native_signatures: HashMap::new(),
             module_registry: ModuleRegistry::with_std(),
             is_top_level: true,
+            unsafe_depth: 0,
             collected_errors: Vec::new(),
             collect_all_errors: false,
             function_local_vars: HashMap::new(),
@@ -1031,7 +1034,9 @@ impl StatementChecker {
                 definition,
                 ..
             } => {
-                if self.scope.at_module_level() {
+                // RFC-010：`unsafe {}` 内允许类型定义（不透明类型封装）。
+                // 故除模块级外，unsafe 块内也放行。
+                if self.scope.at_module_level() || self.unsafe_depth > 0 {
                     // 字段默认值表达式检查：此前完全未检查，未绑定变量会漏到
                     // IR 生成变成 E3006 内部错误（#297 探索发现）。典型误用：
                     // 体内写方法 `get_x: (self: &T) -> R = { self.x }`——该形式被
@@ -1114,6 +1119,14 @@ impl StatementChecker {
                     }
                 }
                 Ok(())
+            }
+            // RFC-010：`unsafe {}` 内允许类型定义（不透明类型封装）。
+            // 递增深度使 TypeDefinition 校验放行，离开时恢复。
+            Expr::Unsafe { body, .. } => {
+                self.unsafe_depth += 1;
+                let r = self.check_block(body);
+                self.unsafe_depth -= 1;
+                r
             }
             _ => {
                 self.check_expr(expr)?;

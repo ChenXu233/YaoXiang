@@ -53,6 +53,8 @@ pub struct ExpressionInferrer<'a> {
     result_err: Option<MonoType>,
     /// 当前函数的预期返回类型（用于 return 语句的类型检查）
     expected_return_type: Option<MonoType>,
+    /// 当前嵌套的 `unsafe {}` 深度（RFC-010：unsafe 块内允许类型定义）
+    unsafe_depth: usize,
     /// 方法绑定表: "Type.method" -> MonoType(Fn)
     /// 用于方法调用语法糖解析: p.draw(screen) → Point.draw(p, screen)
     method_bindings: &'a HashMap<String, MonoType>,
@@ -94,6 +96,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_signatures: &EMPTY_SIGNATURES,
             result_err: None,
             expected_return_type: None,
+            unsafe_depth: 0,
             method_bindings: &EMPTY_SIGNATURES,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
@@ -122,6 +125,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_signatures,
             result_err: None,
             expected_return_type: None,
+            unsafe_depth: 0,
             method_bindings: &EMPTY_SIGNATURES,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
@@ -151,6 +155,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_signatures,
             result_err,
             expected_return_type: None,
+            unsafe_depth: 0,
             method_bindings: &EMPTY_SIGNATURES,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
@@ -182,6 +187,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_signatures,
             result_err,
             expected_return_type,
+            unsafe_depth: 0,
             method_bindings,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
@@ -2261,7 +2267,10 @@ impl<'a> ExpressionInferrer<'a> {
 
             // Unsafe 块
             crate::frontend::core::parser::ast::Expr::Unsafe { body, .. } => {
-                self.infer_block(body, false, None)
+                self.unsafe_depth += 1;
+                let r = self.infer_block(body, true, None);
+                self.unsafe_depth -= 1;
+                r
             }
 
             // spawn 块：spawn { ... }
@@ -2718,10 +2727,15 @@ impl<'a> ExpressionInferrer<'a> {
             crate::frontend::core::parser::ast::StmtKind::Return(None) => Ok(MonoType::Never),
             // 类型定义仅模块级合法（E1071，#295）；infer_stmt 只会在 spawn 体/
             // 循环体内遇到它——必为函数上下文，一律报错。
+            // 例外（RFC-010）：`unsafe {}` 内允许类型定义（不透明类型封装）。
             crate::frontend::core::parser::ast::StmtKind::TypeDefinition { name, .. } => {
-                Err(ErrorCodeDefinition::type_def_only_at_module_level(name)
-                    .at(stmt.span)
-                    .build())
+                if self.unsafe_depth > 0 {
+                    Ok(MonoType::Void)
+                } else {
+                    Err(ErrorCodeDefinition::type_def_only_at_module_level(name)
+                        .at(stmt.span)
+                        .build())
+                }
             }
             // use 语句的模块注册依赖 StatementChecker 的环境（process_use_stmt），
             // inferrer 无模块上下文。真实代码中 use 已由 checker 处理；表达式位置的

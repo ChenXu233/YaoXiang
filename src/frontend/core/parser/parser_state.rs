@@ -180,13 +180,11 @@ impl<'a> ParserState<'a> {
                 None
             }
             Some(kw @ TokenKind::KwRef)
-            | Some(kw @ TokenKind::KwUnsafe)
             | Some(kw @ TokenKind::KwElse)
             | Some(kw @ TokenKind::KwIn)
             | Some(kw @ TokenKind::KwAs) => {
                 let kw = match kw {
                     TokenKind::KwRef => "ref",
-                    TokenKind::KwUnsafe => "unsafe",
                     TokenKind::KwElse => "else",
                     TokenKind::KwIn => "in",
                     TokenKind::KwAs => "as",
