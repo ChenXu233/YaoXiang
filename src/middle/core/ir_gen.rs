@@ -4414,6 +4414,528 @@ impl AstToIrGenerator {
         Ok(())
     }
 
+    fn generate_tuple_expr_ir(
+        &mut self,
+        items: &Vec<Expr>,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // SPEC §3.6 元组字面量：逐个求值元素，用 NewTuple 一次性构造
+        let mut item_regs = Vec::with_capacity(items.len());
+        for item_expr in items {
+            let item_reg = self.next_temp_reg();
+            self.generate_expr_ir(item_expr, item_reg, instructions, constants)?;
+            item_regs.push(Operand::Local(item_reg));
+        }
+        instructions.push(Instruction::NewTuple {
+            dst: Operand::Local(result_reg),
+            items: item_regs,
+            span: self.cur_span,
+        });
+        Ok(())
+    }
+
+    fn generate_index_expr_ir(
+        &mut self,
+        expr: &Box<Expr>,
+        index: &Box<Expr>,
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        let src_reg = self.next_temp_reg();
+        self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+
+        let index_reg = self.next_temp_reg();
+        self.generate_expr_ir(index, index_reg, instructions, constants)?;
+
+        instructions.push(Instruction::LoadIndex {
+            dst: Operand::Local(result_reg),
+            src: Operand::Local(src_reg),
+            index: Operand::Local(index_reg),
+            span: *span,
+        });
+        Ok(())
+    }
+
+    fn generate_unsafe_expr_ir(
+        &mut self,
+        body: &Box<ast::Block>,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // unsafe 块：生成 UnsafeBlockStart/End 标记
+        instructions.push(Instruction::UnsafeBlockStart {
+            span: self.cur_span,
+        });
+
+        // RFC-010a 规则①：`unsafe {}` 是**有值块**，值出口为尾表达式。
+        // 此前 result_reg 传 None 并硬写 Void，导致 `v = unsafe { 42 }`
+        // 得 void（#347）。现按普通块处理，尾表达式写入 result_reg。
+        self.generate_block_ir(body, Some(result_reg), instructions, constants)?;
+
+        instructions.push(Instruction::UnsafeBlockEnd {
+            span: self.cur_span,
+        });
+        Ok(())
+    }
+
+    fn generate_spawn_for_expr_ir(
+        &mut self,
+        var: &String,
+        var_mut: &bool,
+        iterable: &Box<Expr>,
+        body: &Box<ast::Block>,
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        self.generate_spawn_for_ir(
+            var,
+            *var_mut,
+            iterable,
+            body,
+            result_reg,
+            *span,
+            instructions,
+            constants,
+        )?;
+        Ok(())
+    }
+
+    fn generate_for_expr_ir(
+        &mut self,
+        var: &String,
+        var_mut: &bool,
+        iterable: &Box<Expr>,
+        body: &Box<ast::Block>,
+        for_span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        self.generate_for_loop_ir(
+            var,
+            *var_mut,
+            iterable,
+            body,
+            Some(result_reg),
+            *for_span,
+            instructions,
+            constants,
+        )?;
+        Ok(())
+    }
+
+    fn generate_un_op_expr_ir(
+        &mut self,
+        op: &ast::UnOp,
+        expr: &Box<Expr>,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 一元运算符
+        match op {
+            ast::UnOp::Deref => {
+                // 解引用：*ptr
+                // 生成指针表达式的 IR
+                let src_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+
+                // 生成 PtrDeref 指令
+                instructions.push(Instruction::PtrDeref {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(src_reg),
+                    span: self.cur_span,
+                });
+            }
+            ast::UnOp::Neg => {
+                // 负号：-x
+                let src_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+                instructions.push(Instruction::Neg {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(src_reg),
+                    span: self.cur_span,
+                });
+            }
+            ast::UnOp::Pos => {
+                // 正号：+x（无操作）
+                self.generate_expr_ir(expr, result_reg, instructions, constants)?;
+            }
+            ast::UnOp::Not => {
+                // 逻辑非：!x
+                let src_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+                instructions.push(Instruction::Not {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(src_reg),
+                    span: self.cur_span,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn generate_ref_expr_ir(
+        &mut self,
+        expr: &Box<Expr>,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 生成内部表达式的 IR
+        let src_reg = self.next_temp_reg();
+        self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+
+        // 逃逸分析：跨 spawn 使用 → Arc，否则 → Rc
+        let var_name = match expr.as_ref() {
+            ast::Expr::Var(name, _) => Some(name.clone()),
+            _ => None,
+        };
+        let use_arc = var_name.as_ref().is_some_and(|n| {
+            self.type_result
+                .as_ref()
+                .is_some_and(|tr| tr.escaped_refs.contains(n))
+        });
+
+        if use_arc {
+            instructions.push(Instruction::ArcNew {
+                dst: Operand::Local(result_reg),
+                src: Operand::Local(src_reg),
+                span: self.cur_span,
+            });
+        } else {
+            instructions.push(Instruction::RcNew {
+                dst: Operand::Local(result_reg),
+                src: Operand::Local(src_reg),
+                span: self.cur_span,
+            });
+        }
+        Ok(())
+    }
+
+    fn generate_borrow_expr_ir(
+        &mut self,
+        expr: &Box<Expr>,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 1. 生成内部表达式的 IR
+        let inner_reg = self.next_temp_reg();
+        self.generate_expr_ir(expr, inner_reg, instructions, constants)?;
+
+        // 借用令牌（& / &mut）是编译期品牌，运行时零大小：
+        // Struct 值是堆句柄，传参/赋值复制的是句柄，共享同一对象——
+        // 因此字段写（StoreField）经令牌自然写回底层，无需额外指令（#266）。
+        // 所有权与借用合法性已在 typecheck 层验证（RFC-009a）。
+        instructions.push(Instruction::Move {
+            dst: Operand::Local(result_reg),
+            src: Operand::Local(inner_reg),
+            span: self.cur_span,
+        });
+        Ok(())
+    }
+
+    fn generate_dict_expr_ir(
+        &mut self,
+        pairs: &Vec<(Expr, Expr)>,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 字典字面量：使用 NewDict 指令一次性创建
+        let mut keys = Vec::new();
+        let mut values = Vec::new();
+        for (key_expr, val_expr) in pairs {
+            let key_reg = self.next_temp_reg();
+            self.generate_expr_ir(key_expr, key_reg, instructions, constants)?;
+            keys.push(Operand::Local(key_reg));
+            let val_reg = self.next_temp_reg();
+            self.generate_expr_ir(val_expr, val_reg, instructions, constants)?;
+            values.push(Operand::Local(val_reg));
+        }
+        instructions.push(Instruction::NewDict {
+            dst: Operand::Local(result_reg),
+            keys,
+            values,
+            span: self.cur_span,
+        });
+        Ok(())
+    }
+
+    fn generate_list_expr_ir(
+        &mut self,
+        elements: &Vec<Expr>,
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 列表字面量：先创建空列表，再按索引写入元素
+        instructions.push(Instruction::AllocArray {
+            dst: Operand::Local(result_reg),
+            size: Operand::Const(ConstValue::Int(elements.len() as i128)),
+            elem_size: Operand::Const(ConstValue::Int(1)),
+            span: self.cur_span,
+        });
+
+        for (idx, element) in elements.iter().enumerate() {
+            let element_reg = self.next_temp_reg();
+            self.generate_expr_ir(element, element_reg, instructions, constants)?;
+
+            let index_reg = self.next_temp_reg();
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(index_reg),
+                src: Operand::Const(ConstValue::Int(idx as i128)),
+                span: self.cur_span,
+            });
+
+            instructions.push(Instruction::StoreIndex {
+                dst: Operand::Local(result_reg),
+                index: Operand::Local(index_reg),
+                src: Operand::Local(element_reg),
+                span: *span,
+            });
+        }
+        Ok(())
+    }
+
+    fn generate_try_expr_ir(
+        &mut self,
+        expr: &Box<Expr>,
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // #301：`?` 真实语义——Result 解包 + Err 提前返回（错误
+        // 传播通道，type-system.md §4.2 Result(T, E)）。
+        // 求值 expr（Result(T, E)，运行时 Enum{variant 0=ok/1=err}）：
+        //   variant 0 → 表达式值为解包后的 T（payload）
+        //   variant 1 → 以整个 Enum 值提前 Ret 当前函数（沿调用栈传播）
+        // typecheck 侧已拦截：非 Result 表达式（E1082）、函数返回类型
+        // 非 Result（E1081）、错误类型不匹配（E1083）。
+        self.generate_expr_ir(expr, result_reg, instructions, constants)?;
+        let span = *span;
+        let tag_reg = self.next_temp_reg();
+        instructions.push(Instruction::VariantTag {
+            dst: Operand::Local(tag_reg),
+            obj: Operand::Local(result_reg),
+            group: "Result".to_string(),
+            span,
+        });
+        let ok_const = self.next_temp_reg();
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(ok_const),
+            src: Operand::Const(ConstValue::Int(0)),
+            span: self.cur_span,
+        });
+        let eq_reg = self.next_temp_reg();
+        instructions.push(Instruction::Eq {
+            dst: Operand::Local(eq_reg),
+            lhs: Operand::Local(tag_reg),
+            rhs: Operand::Local(ok_const),
+            span: self.cur_span,
+        });
+        // variant != 0（Err）→ 跳到提前返回
+        let is_err_idx = instructions.len();
+        instructions.push(Instruction::JmpIfNot {
+            cond: Operand::Local(eq_reg),
+            target: 0,
+            span: self.cur_span,
+        });
+        // Ok 路径：解包 payload 作为表达式值
+        instructions.push(Instruction::VariantPayload {
+            dst: Operand::Local(result_reg),
+            obj: Operand::Local(result_reg),
+            group: "Result".to_string(),
+            span,
+        });
+        let end_idx = instructions.len();
+        instructions.push(Instruction::Jmp {
+            target: 0,
+            span: self.cur_span,
+        });
+        // Err 路径：以整个 Result 值提前返回（Err(e) 沿调用栈传播）
+        let err_target = instructions.len();
+        instructions[is_err_idx] = Instruction::JmpIfNot {
+            cond: Operand::Local(eq_reg),
+            target: err_target,
+            span: self.cur_span,
+        };
+        instructions.push(Instruction::Ret {
+            value: Some(Operand::Local(result_reg)),
+            span: self.cur_span,
+        });
+        let end_target = instructions.len();
+        instructions[end_idx] = Instruction::Jmp {
+            target: end_target,
+            span: self.cur_span,
+        };
+        Ok(())
+    }
+
+    fn generate_f_string_expr_ir(
+        &mut self,
+        segments: &Vec<ast::FStringSegment>,
+        span: &Span,
+        expr: &Expr,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 1. 尝试常量求值
+        if let Some(const_val) = self.eval_const_expr(expr) {
+            constants.push(const_val.clone());
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Const(const_val),
+                span: self.cur_span,
+            });
+            return Ok(());
+        }
+
+        // 2. 转换为 format() 调用
+        // 构建 format_str: "Hello {} is {} years old"
+        // 构建 args: [name, age]
+        let mut format_str = String::new();
+        let mut arg_regs = Vec::new();
+        let mut arg_index = 0usize;
+
+        for segment in segments {
+            match segment {
+                ast::FStringSegment::Text(text) => {
+                    format_str.push_str(text);
+                }
+                ast::FStringSegment::Interpolation {
+                    expr: interp_expr,
+                    format_spec,
+                } => {
+                    // Build format placeholder: {0}, {1}, or {0:.2f}
+                    if let Some(spec) = format_spec {
+                        format_str.push_str(&format!("{{{0}:{1}}}", arg_index, spec));
+                    } else {
+                        format_str.push_str(&format!("{{{}}}", arg_index));
+                    }
+                    arg_index += 1;
+
+                    // Generate IR for the interpolation expression
+                    let arg_reg = self.next_temp_reg();
+                    self.generate_expr_ir(interp_expr, arg_reg, instructions, constants)?;
+                    arg_regs.push(Operand::Local(arg_reg));
+                }
+            }
+        }
+
+        // Load format string constant
+        let fmt_reg = self.next_temp_reg();
+        let fmt_const = ConstValue::String(format_str);
+        constants.push(fmt_const.clone());
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(fmt_reg),
+            src: Operand::Const(fmt_const),
+            span: self.cur_span,
+        });
+
+        // Build args: [format_str, arg0, arg1, ...]
+        let mut call_args = vec![Operand::Local(fmt_reg)];
+        call_args.extend(arg_regs);
+
+        // Generate Call to std.string.format
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(result_reg)),
+            func: Operand::Const(ConstValue::String("std.string.format".to_string())),
+            args: call_args,
+            span: *span,
+            def: None,
+        });
+        Ok(())
+    }
+
+    fn generate_var_expr_ir(
+        &mut self,
+        var_name: &String,
+        var_span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+    ) -> Result<(), Diagnostic> {
+        // #254：闭包体内——先查捕获表（外层变量经 env 捕获，LoadUpvalue 读）
+        if let Some(&env_idx) = self.closure_captures.get(var_name) {
+            instructions.push(Instruction::LoadUpvalue {
+                dst: Operand::Local(result_reg),
+                upvalue_idx: env_idx,
+                span: self.cur_span,
+            });
+        } else if let Some(local_idx) = self.lookup_local(var_name) {
+            // 局部变量：直接加载
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Local(local_idx),
+                span: self.cur_span,
+            });
+        } else if self.lookup_global(var_name).is_some() {
+            // 全局变量：生成函数调用获取值
+            let func_name = var_name.clone();
+            instructions.push(Instruction::Call {
+                dst: Some(Operand::Local(result_reg)),
+                func: Operand::Const(ConstValue::String(func_name)),
+                args: vec![],
+                span: *var_span,
+                def: None,
+            });
+        } else if let Some(qualified) = self.use_aliases.get(var_name) {
+            // 选择性导入的绑定（常量/函数）：按限定名调用 native handler 取值。
+            // 例：use std.math.{PI} → PI 展开为 std.math.PI，调用 native_pi 返回真实常量。
+            // 修复：此前常量引用掉进“静默 Load Int(0)”兜底，PI 运行时恒为 0（#251）。
+            instructions.push(Instruction::Call {
+                dst: Some(Operand::Local(result_reg)),
+                func: Operand::Const(ConstValue::String(qualified.clone())),
+                args: vec![],
+                span: *var_span,
+                def: None,
+            });
+        } else if matches!(
+            var_name.as_str(),
+            "Int" | "Float" | "Bool" | "String" | "Char" | "Bytes" | "Type" | "Void" | "Never"
+        ) {
+            // 内置类型名作为类型实参（如 SafeArray(Int, 3)）：类型宇宙的值，
+            // 运行时无表示，加载 Void 占位（类型参数在编译期已被消费）
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Const(ConstValue::Void),
+                span: self.cur_span,
+            });
+        } else if self.binding_is_function(var_name) {
+            // #348：名字的类型是 Fn ⇒ 它就是函数值。运行时函数值的唯一表示是
+            // 闭包，故物化为 MakeClosure（env 为空：本处只处理顶层/自由函数名，
+            // 捕获变量已由上方 closure_captures 处理）。
+            //
+            // 此前落到下方兜底 → E3006（"变量无法解析"），使函数名不能
+            // 作一等值使用：`io.println(f)` / `g(f)` / `x = f` 全部失败。
+            instructions.push(Instruction::MakeClosure {
+                dst: Operand::Local(result_reg),
+                func: var_name.clone(),
+                env: vec![],
+                def: None,
+                span: self.cur_span,
+            });
+        } else {
+            // #271 #3：未解析变量 → 硬错误（#254 spawn 捕获已落地，不再需要静默 Load 0 兜底）。
+            // 走到这里说明 typecheck 漏网，属编译器内部一致性问题。
+            return Err(ErrorCodeDefinition::unresolved_variable(var_name)
+                .at(*var_span)
+                .build());
+        }
+        Ok(())
+    }
+
     fn generate_expr_ir_inner(
         &mut self,
         expr: &ast::Expr,
@@ -4426,81 +4948,7 @@ impl AstToIrGenerator {
                 self.generate_lit_expr_ir(literal, result_reg, instructions, constants)?;
             }
             Expr::Var(var_name, var_span) => {
-                // #254：闭包体内——先查捕获表（外层变量经 env 捕获，LoadUpvalue 读）
-                if let Some(&env_idx) = self.closure_captures.get(var_name) {
-                    instructions.push(Instruction::LoadUpvalue {
-                        dst: Operand::Local(result_reg),
-                        upvalue_idx: env_idx,
-                        span: self.cur_span,
-                    });
-                } else if let Some(local_idx) = self.lookup_local(var_name) {
-                    // 局部变量：直接加载
-                    instructions.push(Instruction::Load {
-                        dst: Operand::Local(result_reg),
-                        src: Operand::Local(local_idx),
-                        span: self.cur_span,
-                    });
-                } else if self.lookup_global(var_name).is_some() {
-                    // 全局变量：生成函数调用获取值
-                    let func_name = var_name.clone();
-                    instructions.push(Instruction::Call {
-                        dst: Some(Operand::Local(result_reg)),
-                        func: Operand::Const(ConstValue::String(func_name)),
-                        args: vec![],
-                        span: *var_span,
-                        def: None,
-                    });
-                } else if let Some(qualified) = self.use_aliases.get(var_name) {
-                    // 选择性导入的绑定（常量/函数）：按限定名调用 native handler 取值。
-                    // 例：use std.math.{PI} → PI 展开为 std.math.PI，调用 native_pi 返回真实常量。
-                    // 修复：此前常量引用掉进“静默 Load Int(0)”兜底，PI 运行时恒为 0（#251）。
-                    instructions.push(Instruction::Call {
-                        dst: Some(Operand::Local(result_reg)),
-                        func: Operand::Const(ConstValue::String(qualified.clone())),
-                        args: vec![],
-                        span: *var_span,
-                        def: None,
-                    });
-                } else if matches!(
-                    var_name.as_str(),
-                    "Int"
-                        | "Float"
-                        | "Bool"
-                        | "String"
-                        | "Char"
-                        | "Bytes"
-                        | "Type"
-                        | "Void"
-                        | "Never"
-                ) {
-                    // 内置类型名作为类型实参（如 SafeArray(Int, 3)）：类型宇宙的值，
-                    // 运行时无表示，加载 Void 占位（类型参数在编译期已被消费）
-                    instructions.push(Instruction::Load {
-                        dst: Operand::Local(result_reg),
-                        src: Operand::Const(ConstValue::Void),
-                        span: self.cur_span,
-                    });
-                } else if self.binding_is_function(var_name) {
-                    // #348：名字的类型是 Fn ⇒ 它就是函数值。运行时函数值的唯一表示是
-                    // 闭包，故物化为 MakeClosure（env 为空：本处只处理顶层/自由函数名，
-                    // 捕获变量已由上方 closure_captures 处理）。
-                    //
-                    // 此前落到下方兜底 → E3006（"变量无法解析"），使函数名不能
-                    // 作一等值使用：`io.println(f)` / `g(f)` / `x = f` 全部失败。
-                    instructions.push(Instruction::MakeClosure {
-                        dst: Operand::Local(result_reg),
-                        func: var_name.clone(),
-                        env: vec![],
-                        def: None,
-                        span: self.cur_span,
-                    });
-                } else {
-                    // #271 #3：未解析变量 → 硬错误（#254 spawn 捕获已落地，不再需要静默 Load 0 兜底）。
-                    // 走到这里说明 typecheck 漏网，属编译器内部一致性问题。
-                    return Err(ErrorCodeDefinition::unresolved_variable(var_name)
-                        .at(*var_span)
-                        .build());
-                }
+                self.generate_var_expr_ir(var_name, var_span, result_reg, instructions)?;
             }
             Expr::BinOp {
                 op,
@@ -5472,65 +5920,22 @@ impl AstToIrGenerator {
                 }
             }
             Expr::List(elements, span) => {
-                // 列表字面量：先创建空列表，再按索引写入元素
-                instructions.push(Instruction::AllocArray {
-                    dst: Operand::Local(result_reg),
-                    size: Operand::Const(ConstValue::Int(elements.len() as i128)),
-                    elem_size: Operand::Const(ConstValue::Int(1)),
-                    span: self.cur_span,
-                });
-
-                for (idx, element) in elements.iter().enumerate() {
-                    let element_reg = self.next_temp_reg();
-                    self.generate_expr_ir(element, element_reg, instructions, constants)?;
-
-                    let index_reg = self.next_temp_reg();
-                    instructions.push(Instruction::Load {
-                        dst: Operand::Local(index_reg),
-                        src: Operand::Const(ConstValue::Int(idx as i128)),
-                        span: self.cur_span,
-                    });
-
-                    instructions.push(Instruction::StoreIndex {
-                        dst: Operand::Local(result_reg),
-                        index: Operand::Local(index_reg),
-                        src: Operand::Local(element_reg),
-                        span: *span,
-                    });
-                }
+                self.generate_list_expr_ir(elements, span, result_reg, instructions, constants)?;
             }
-            Expr::Dict(pairs, _span) => {
-                // 字典字面量：使用 NewDict 指令一次性创建
-                let mut keys = Vec::new();
-                let mut values = Vec::new();
-                for (key_expr, val_expr) in pairs {
-                    let key_reg = self.next_temp_reg();
-                    self.generate_expr_ir(key_expr, key_reg, instructions, constants)?;
-                    keys.push(Operand::Local(key_reg));
-                    let val_reg = self.next_temp_reg();
-                    self.generate_expr_ir(val_expr, val_reg, instructions, constants)?;
-                    values.push(Operand::Local(val_reg));
-                }
-                instructions.push(Instruction::NewDict {
-                    dst: Operand::Local(result_reg),
-                    keys,
-                    values,
-                    span: self.cur_span,
-                });
+            Expr::Dict(pairs, _) => {
+                self.generate_dict_expr_ir(pairs, result_reg, instructions, constants)?;
             }
-            Expr::Index { expr, index, span } => {
-                let src_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, src_reg, instructions, constants)?;
-
-                let index_reg = self.next_temp_reg();
-                self.generate_expr_ir(index, index_reg, instructions, constants)?;
-
-                instructions.push(Instruction::LoadIndex {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Local(src_reg),
-                    index: Operand::Local(index_reg),
-                    span: *span,
-                });
+            Expr::Index {
+                expr, index, span, ..
+            } => {
+                self.generate_index_expr_ir(
+                    expr,
+                    index,
+                    span,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
             }
             // #299 §3: membership 谓词 `elem in container`
             // Range 字面量脱糖成比较链（left >= start && left < end），无需 Range 运行时值；
@@ -5551,71 +5956,8 @@ impl AstToIrGenerator {
             Expr::Continue(span) => {
                 self.generate_continue_expr_ir(span, instructions)?;
             }
-            Expr::Try { expr, span } => {
-                // #301：`?` 真实语义——Result 解包 + Err 提前返回（错误
-                // 传播通道，type-system.md §4.2 Result(T, E)）。
-                // 求值 expr（Result(T, E)，运行时 Enum{variant 0=ok/1=err}）：
-                //   variant 0 → 表达式值为解包后的 T（payload）
-                //   variant 1 → 以整个 Enum 值提前 Ret 当前函数（沿调用栈传播）
-                // typecheck 侧已拦截：非 Result 表达式（E1082）、函数返回类型
-                // 非 Result（E1081）、错误类型不匹配（E1083）。
-                self.generate_expr_ir(expr, result_reg, instructions, constants)?;
-                let span = *span;
-                let tag_reg = self.next_temp_reg();
-                instructions.push(Instruction::VariantTag {
-                    dst: Operand::Local(tag_reg),
-                    obj: Operand::Local(result_reg),
-                    group: "Result".to_string(),
-                    span,
-                });
-                let ok_const = self.next_temp_reg();
-                instructions.push(Instruction::Load {
-                    dst: Operand::Local(ok_const),
-                    src: Operand::Const(ConstValue::Int(0)),
-                    span: self.cur_span,
-                });
-                let eq_reg = self.next_temp_reg();
-                instructions.push(Instruction::Eq {
-                    dst: Operand::Local(eq_reg),
-                    lhs: Operand::Local(tag_reg),
-                    rhs: Operand::Local(ok_const),
-                    span: self.cur_span,
-                });
-                // variant != 0（Err）→ 跳到提前返回
-                let is_err_idx = instructions.len();
-                instructions.push(Instruction::JmpIfNot {
-                    cond: Operand::Local(eq_reg),
-                    target: 0,
-                    span: self.cur_span,
-                });
-                // Ok 路径：解包 payload 作为表达式值
-                instructions.push(Instruction::VariantPayload {
-                    dst: Operand::Local(result_reg),
-                    obj: Operand::Local(result_reg),
-                    group: "Result".to_string(),
-                    span,
-                });
-                let end_idx = instructions.len();
-                instructions.push(Instruction::Jmp {
-                    target: 0,
-                    span: self.cur_span,
-                });
-                // Err 路径：以整个 Result 值提前返回（Err(e) 沿调用栈传播）
-                let err_target = instructions.len();
-                instructions[is_err_idx] = Instruction::JmpIfNot {
-                    cond: Operand::Local(eq_reg),
-                    target: err_target,
-                    span: self.cur_span,
-                };
-                instructions.push(Instruction::Ret {
-                    value: Some(Operand::Local(result_reg)),
-                    span: self.cur_span,
-                });
-                let end_target = instructions.len();
-                instructions[end_idx] = Instruction::Jmp {
-                    target: end_target,
-                    span: self.cur_span,
-                };
+            Expr::Try { expr, span, .. } => {
+                self.generate_try_expr_ir(expr, span, result_reg, instructions, constants)?;
             }
             Expr::If {
                 condition,
@@ -5648,62 +5990,24 @@ impl AstToIrGenerator {
                 iterable,
                 body,
                 span: for_span,
+                ..
             } => {
-                self.generate_for_loop_ir(
+                self.generate_for_expr_ir(
                     var,
-                    *var_mut,
+                    var_mut,
                     iterable,
                     body,
-                    Some(result_reg),
-                    *for_span,
+                    for_span,
+                    result_reg,
                     instructions,
                     constants,
                 )?;
             }
-            Expr::Ref { expr, span: _ } => {
-                // 生成内部表达式的 IR
-                let src_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, src_reg, instructions, constants)?;
-
-                // 逃逸分析：跨 spawn 使用 → Arc，否则 → Rc
-                let var_name = match expr.as_ref() {
-                    ast::Expr::Var(name, _) => Some(name.clone()),
-                    _ => None,
-                };
-                let use_arc = var_name.as_ref().is_some_and(|n| {
-                    self.type_result
-                        .as_ref()
-                        .is_some_and(|tr| tr.escaped_refs.contains(n))
-                });
-
-                if use_arc {
-                    instructions.push(Instruction::ArcNew {
-                        dst: Operand::Local(result_reg),
-                        src: Operand::Local(src_reg),
-                        span: self.cur_span,
-                    });
-                } else {
-                    instructions.push(Instruction::RcNew {
-                        dst: Operand::Local(result_reg),
-                        src: Operand::Local(src_reg),
-                        span: self.cur_span,
-                    });
-                }
+            Expr::Ref { expr, .. } => {
+                self.generate_ref_expr_ir(expr, result_reg, instructions, constants)?;
             }
-            Expr::Unsafe { body, span: _ } => {
-                // unsafe 块：生成 UnsafeBlockStart/End 标记
-                instructions.push(Instruction::UnsafeBlockStart {
-                    span: self.cur_span,
-                });
-
-                // RFC-010a 规则①：`unsafe {}` 是**有值块**，值出口为尾表达式。
-                // 此前 result_reg 传 None 并硬写 Void，导致 `v = unsafe { 42 }`
-                // 得 void（#347）。现按普通块处理，尾表达式写入 result_reg。
-                self.generate_block_ir(body, Some(result_reg), instructions, constants)?;
-
-                instructions.push(Instruction::UnsafeBlockEnd {
-                    span: self.cur_span,
-                });
+            Expr::Unsafe { body, .. } => {
+                self.generate_unsafe_expr_ir(body, result_reg, instructions, constants)?;
             }
             // spawn for 数据并行循环（RFC-024 §2.4）
             Expr::SpawnFor {
@@ -5712,14 +6016,15 @@ impl AstToIrGenerator {
                 iterable,
                 body,
                 span,
+                ..
             } => {
-                self.generate_spawn_for_ir(
+                self.generate_spawn_for_expr_ir(
                     var,
-                    *var_mut,
+                    var_mut,
                     iterable,
                     body,
+                    span,
                     result_reg,
-                    *span,
                     instructions,
                     constants,
                 )?;
@@ -5835,47 +6140,8 @@ impl AstToIrGenerator {
                 // 7. 退出 spawn 作用域
                 self.exit_scope();
             }
-            Expr::UnOp { op, expr, span: _ } => {
-                // 一元运算符
-                match op {
-                    ast::UnOp::Deref => {
-                        // 解引用：*ptr
-                        // 生成指针表达式的 IR
-                        let src_reg = self.next_temp_reg();
-                        self.generate_expr_ir(expr, src_reg, instructions, constants)?;
-
-                        // 生成 PtrDeref 指令
-                        instructions.push(Instruction::PtrDeref {
-                            dst: Operand::Local(result_reg),
-                            src: Operand::Local(src_reg),
-                            span: self.cur_span,
-                        });
-                    }
-                    ast::UnOp::Neg => {
-                        // 负号：-x
-                        let src_reg = self.next_temp_reg();
-                        self.generate_expr_ir(expr, src_reg, instructions, constants)?;
-                        instructions.push(Instruction::Neg {
-                            dst: Operand::Local(result_reg),
-                            src: Operand::Local(src_reg),
-                            span: self.cur_span,
-                        });
-                    }
-                    ast::UnOp::Pos => {
-                        // 正号：+x（无操作）
-                        self.generate_expr_ir(expr, result_reg, instructions, constants)?;
-                    }
-                    ast::UnOp::Not => {
-                        // 逻辑非：!x
-                        let src_reg = self.next_temp_reg();
-                        self.generate_expr_ir(expr, src_reg, instructions, constants)?;
-                        instructions.push(Instruction::Not {
-                            dst: Operand::Local(result_reg),
-                            src: Operand::Local(src_reg),
-                            span: self.cur_span,
-                        });
-                    }
-                }
+            Expr::UnOp { op, expr, .. } => {
+                self.generate_un_op_expr_ir(op, expr, result_reg, instructions, constants)?;
             }
             Expr::Lambda {
                 params,
@@ -5974,24 +6240,8 @@ impl AstToIrGenerator {
                     span: self.cur_span,
                 });
             }
-            Expr::Borrow {
-                mutable: _,
-                expr,
-                span: _,
-            } => {
-                // 1. 生成内部表达式的 IR
-                let inner_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, inner_reg, instructions, constants)?;
-
-                // 借用令牌（& / &mut）是编译期品牌，运行时零大小：
-                // Struct 值是堆句柄，传参/赋值复制的是句柄，共享同一对象——
-                // 因此字段写（StoreField）经令牌自然写回底层，无需额外指令（#266）。
-                // 所有权与借用合法性已在 typecheck 层验证（RFC-009a）。
-                instructions.push(Instruction::Move {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Local(inner_reg),
-                    span: self.cur_span,
-                });
+            Expr::Borrow { expr, .. } => {
+                self.generate_borrow_expr_ir(expr, result_reg, instructions, constants)?;
             }
             Expr::Match {
                 expr: match_expr,
@@ -6001,86 +6251,18 @@ impl AstToIrGenerator {
                 self.generate_match_expr_ir(match_expr, arms, result_reg, instructions, constants)?;
             }
             // RFC-012: F-string 代码生成
-            Expr::FString { segments, span } => {
-                // 1. 尝试常量求值
-                if let Some(const_val) = self.eval_const_expr(expr) {
-                    constants.push(const_val.clone());
-                    instructions.push(Instruction::Load {
-                        dst: Operand::Local(result_reg),
-                        src: Operand::Const(const_val),
-                        span: self.cur_span,
-                    });
-                    return Ok(());
-                }
-
-                // 2. 转换为 format() 调用
-                // 构建 format_str: "Hello {} is {} years old"
-                // 构建 args: [name, age]
-                let mut format_str = String::new();
-                let mut arg_regs = Vec::new();
-                let mut arg_index = 0usize;
-
-                for segment in segments {
-                    match segment {
-                        ast::FStringSegment::Text(text) => {
-                            format_str.push_str(text);
-                        }
-                        ast::FStringSegment::Interpolation {
-                            expr: interp_expr,
-                            format_spec,
-                        } => {
-                            // Build format placeholder: {0}, {1}, or {0:.2f}
-                            if let Some(spec) = format_spec {
-                                format_str.push_str(&format!("{{{0}:{1}}}", arg_index, spec));
-                            } else {
-                                format_str.push_str(&format!("{{{}}}", arg_index));
-                            }
-                            arg_index += 1;
-
-                            // Generate IR for the interpolation expression
-                            let arg_reg = self.next_temp_reg();
-                            self.generate_expr_ir(interp_expr, arg_reg, instructions, constants)?;
-                            arg_regs.push(Operand::Local(arg_reg));
-                        }
-                    }
-                }
-
-                // Load format string constant
-                let fmt_reg = self.next_temp_reg();
-                let fmt_const = ConstValue::String(format_str);
-                constants.push(fmt_const.clone());
-                instructions.push(Instruction::Load {
-                    dst: Operand::Local(fmt_reg),
-                    src: Operand::Const(fmt_const),
-                    span: self.cur_span,
-                });
-
-                // Build args: [format_str, arg0, arg1, ...]
-                let mut call_args = vec![Operand::Local(fmt_reg)];
-                call_args.extend(arg_regs);
-
-                // Generate Call to std.string.format
-                instructions.push(Instruction::Call {
-                    dst: Some(Operand::Local(result_reg)),
-                    func: Operand::Const(ConstValue::String("std.string.format".to_string())),
-                    args: call_args,
-                    span: *span,
-                    def: None,
-                });
+            Expr::FString { segments, span, .. } => {
+                self.generate_f_string_expr_ir(
+                    segments,
+                    span,
+                    expr,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
             }
-            Expr::Tuple(items, _span) => {
-                // SPEC §3.6 元组字面量：逐个求值元素，用 NewTuple 一次性构造
-                let mut item_regs = Vec::with_capacity(items.len());
-                for item_expr in items {
-                    let item_reg = self.next_temp_reg();
-                    self.generate_expr_ir(item_expr, item_reg, instructions, constants)?;
-                    item_regs.push(Operand::Local(item_reg));
-                }
-                instructions.push(Instruction::NewTuple {
-                    dst: Operand::Local(result_reg),
-                    items: item_regs,
-                    span: self.cur_span,
-                });
+            Expr::Tuple(items, _) => {
+                self.generate_tuple_expr_ir(items, result_reg, instructions, constants)?;
             }
             Expr::Block(block) => {
                 // 语句位置块表达式（SPEC §12.5 good_seq）：逐语句生成，
