@@ -407,6 +407,17 @@ impl TypeConstraintSolver {
         // eprintln!("DEBUG unify: after expand, t1={:?}, t2={:?}", t1, t2);
 
         match (&t1, &t2) {
+            // 爆炸原理：`Never <: T` 对任意 `T` 成立（类型系统 §2.2 / RFC-010a 规则②）。
+            // 与 `is_subtype` 保持一致——此前 `is_subtype(Never, T)` 为真而
+            // `unify(Never, T)` 报错，两者矛盾。
+            //
+            // 不绑定类型变量：`Never` 可归约到任意 `T`，把 `T` 绑成 `Never`
+            // 会丢失调用点已定型的类型（如 `list.map(xs, x => x * 2)` 中
+            // 由 `xs: List(Int)` 定出的 `T = Int` 被误绑为 `Never`）。
+            // 必须排在 TypeVar 分支之前，否则 `(_, TypeVar(v))` 会先绑走。
+            (MonoType::Never, MonoType::Never) => Ok(()),
+            (MonoType::Never, _) | (_, MonoType::Never) => Ok(()),
+
             // 类型变量 unify
             (MonoType::TypeVar(v1), MonoType::TypeVar(v2)) => {
                 let v1 = self.find(*v1);
@@ -423,7 +434,6 @@ impl TypeConstraintSolver {
 
             // 具体类型 unify
             (MonoType::Void, MonoType::Void) => Ok(()),
-            (MonoType::Never, MonoType::Never) => Ok(()),
 
             // MetaType unify：层级必须相等
             (

@@ -1,0 +1,49 @@
+// 03-semantics/binding_fn_vs_block.yx
+// 覆盖: RFC-010a 附录D 裁决 C —— `name = { ... }` 的函数 / 块值分流
+//       注解优先，默认函数
+// 状态: ✅ 可运行
+
+use std.{assert, io}
+
+// 注解是函数类型 → 函数
+ann_fn: () -> Int = { 5 }
+
+// 无注解 → 函数（默认；RFC-007「空参最简」）
+no_ann_fn = { 7 }
+
+// 显式 lambda → 函数
+lambda_fn = () => 9
+
+// lambda 块体 → 函数（尾表达式给出值，不依赖注解）
+lambda_block = () => {
+    11
+}
+
+// 无注解 + return → 函数（RFC-007 原始形态）
+fn_with_return = { return 13 }
+
+direct_expr: (n: Int) -> Int = n + 1
+
+main = {
+    assert.assert(ann_fn() == 5, "ann_fn() should be 5")
+    assert.assert(no_ann_fn() == 7, "no_ann_fn() should be 7 (no annotation => function)")
+    assert.assert(lambda_fn() == 9, "lambda_fn() should be 9")
+    assert.assert(lambda_block() == 11, "lambda_block() should be 11")
+    assert.assert(fn_with_return() == 13, "fn_with_return() should be 13")
+    assert.assert(direct_expr(1) == 2, "direct_expr(1) should be 2")
+
+    // 非函数注解 → 块值（立即求值）
+    x: Int = {
+        y = 5
+        y
+    }
+    assert.assert(x == 5, "annotated block value should be 5")
+
+    z: String = { "block value" }
+    assert.assert(z == "block value", "annotated block value should be string")
+
+    w: Int = { 1 + 1 }
+    assert.assert(w == 2, "annotated single-expr block should be 2")
+
+    io.println("binding fn vs block ok")
+}

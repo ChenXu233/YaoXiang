@@ -119,7 +119,7 @@ fn test_call_println_via_registry() {
     assert_eq!(
         result,
         RuntimeValue::Void,
-        "println 应返回 Void（空值），符合 RFC-007 无 return 默认返回 Void 的约定"
+        "println 应返回 Void（空值），符合 RFC-010a 空块/无值尾表达式的约定"
     );
 }
 

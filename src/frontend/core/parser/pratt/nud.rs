@@ -733,9 +733,9 @@ impl<'a> ParserState<'a> {
 
         self.expect(&TokenKind::RBrace);
 
-        // 不再自动剥离末尾表达式
-        // 代码块形式必须显式使用 return 返回值
-        // 否则默认返回 Void
+        // RFC-010a 规则①：块的值 = 尾表达式（唯一出口）。
+        // 此处不过早剥离末尾表达式——块整体交给下游求值，
+        // 由 typecheck / ir_gen 按尾表达式规则取值。
         Some(Expr::Block(Block { stmts, span }))
     }
 

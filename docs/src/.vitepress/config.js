@@ -309,7 +309,26 @@ export default defineConfig({
             },
             {
               text: "标准库",
-              items: [{ text: "标准库总览", link: "/reference/stdlib/" }],
+              items: [
+                { text: "标准库总览", link: "/reference/stdlib/" },
+                { text: "std.string", link: "/reference/stdlib/string" },
+                { text: "std.list", link: "/reference/stdlib/list" },
+                { text: "std.dict", link: "/reference/stdlib/dict" },
+                { text: "std.math", link: "/reference/stdlib/math" },
+                { text: "std.io", link: "/reference/stdlib/io" },
+                { text: "std.os", link: "/reference/stdlib/os" },
+                { text: "std.time", link: "/reference/stdlib/time" },
+                { text: "std.net", link: "/reference/stdlib/net" },
+                {
+                  text: "std.concurrent",
+                  link: "/reference/stdlib/concurrent",
+                },
+                { text: "std.convert", link: "/reference/stdlib/convert" },
+                { text: "std.result", link: "/reference/stdlib/result" },
+                { text: "std.range", link: "/reference/stdlib/range" },
+                { text: "std.assert", link: "/reference/stdlib/assert" },
+                { text: "std.weak", link: "/reference/stdlib/weak" },
+              ],
             },
             {
               text: "错误与警告",

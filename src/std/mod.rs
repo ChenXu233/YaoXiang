@@ -17,6 +17,7 @@ pub mod assert;
 pub mod concurrent;
 pub mod convert;
 pub mod dict;
+pub mod gen_docs;
 pub mod gen_interfaces;
 pub mod io;
 pub mod list;

@@ -269,7 +269,63 @@
         "items": [
           {
             "text": "Standard Library Overview",
-            "link": "/reference/stdlib/"
+            "link": "/en/reference/stdlib/"
+          },
+          {
+            "text": "std.string",
+            "link": "/en/reference/stdlib/string"
+          },
+          {
+            "text": "std.list",
+            "link": "/en/reference/stdlib/list"
+          },
+          {
+            "text": "std.dict",
+            "link": "/en/reference/stdlib/dict"
+          },
+          {
+            "text": "std.math",
+            "link": "/en/reference/stdlib/math"
+          },
+          {
+            "text": "std.io",
+            "link": "/en/reference/stdlib/io"
+          },
+          {
+            "text": "std.os",
+            "link": "/en/reference/stdlib/os"
+          },
+          {
+            "text": "std.time",
+            "link": "/en/reference/stdlib/time"
+          },
+          {
+            "text": "std.net",
+            "link": "/en/reference/stdlib/net"
+          },
+          {
+            "text": "std.concurrent",
+            "link": "/en/reference/stdlib/concurrent"
+          },
+          {
+            "text": "std.convert",
+            "link": "/en/reference/stdlib/convert"
+          },
+          {
+            "text": "std.result",
+            "link": "/en/reference/stdlib/result"
+          },
+          {
+            "text": "std.range",
+            "link": "/en/reference/stdlib/range"
+          },
+          {
+            "text": "std.assert",
+            "link": "/en/reference/stdlib/assert"
+          },
+          {
+            "text": "std.weak",
+            "link": "/en/reference/stdlib/weak"
           }
         ]
       },

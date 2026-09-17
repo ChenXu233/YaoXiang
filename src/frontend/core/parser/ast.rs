@@ -494,6 +494,18 @@ pub enum Type {
     },
     /// 编译期表达式（泛型参数位置的值表达式，如 Assert(N > 0) 中的 N > 0）
     ConstExpr(Box<Expr>),
+    /// 括号类型：`(T)` —— **完整类型，链条终止**（RFC-004 柯里化语义）。
+    ///
+    /// 仅在「括号未构成函数参数组」时产生，即括号后不跟 `->`。因此：
+    ///
+    /// - `(a: Int) -> Int` 参数组：内层 `(...)` 后跟 `->` → **不**产生 `Paren`
+    /// - `() -> ((a: Int) -> Int)` 返回位置裸括号 → **产生** `Paren`
+    ///
+    /// `split_curry` 遇 `Paren` 即停止拆层：括号声明“这是一个完整类型”，
+    /// 它是函数的**值**，不是下一个参数组。
+    ///
+    /// 其余环节（类型检查 / 单态化 / 解释器）视 `Paren` 为透明，递归内层即可。
+    Paren(Box<Type>),
 }
 
 impl Type {
@@ -796,6 +808,35 @@ pub const CONST_PARAM_TYPES: &[&str] = &[
     "Char", "String",
 ];
 
+/// 参数名是否在给定类型中被当作类型引用（`(N: Int) -> (n: N)` 的 `N`）。
+///
+/// 与 `declarations.rs` 的 `name_used_as_type` 同义，此处独立实现以避免
+/// parser 内部跨模块依赖。
+fn name_used_as_type_in(
+    name: &str,
+    ty: &Type,
+) -> bool {
+    match ty {
+        Type::Name { name: n, .. } => n == name,
+        Type::Literal { name: n, .. } => n == name,
+        Type::Generic { args, .. } => args.iter().any(|a| name_used_as_type_in(name, a)),
+        Type::Fn {
+            params,
+            return_type,
+        } => {
+            params.iter().any(|p| name_used_as_type_in(name, p))
+                || name_used_as_type_in(name, return_type)
+        }
+        Type::Option(inner) | Type::Ptr(inner) => name_used_as_type_in(name, inner),
+        Type::Ref { inner, .. } => name_used_as_type_in(name, inner),
+        Type::Result(a, b) => name_used_as_type_in(name, a) || name_used_as_type_in(name, b),
+        Type::Tuple(types) | Type::Sum(types) => {
+            types.iter().any(|t| name_used_as_type_in(name, t))
+        }
+        _ => false,
+    }
+}
+
 /// Extract just the names and constraints of generic parameters from signature params.
 /// Only returns structurally determined generic params (Type/MetaType + CONST_PARAM_TYPES).
 /// Trait-constrained params (T: Clone) are not recognized — typechecker's classify_generic_params
@@ -815,11 +856,25 @@ pub fn extract_generic_param_names(params: &[Param]) -> Vec<GenericParamName> {
                     name: p.name.clone(),
                     constraints: Vec::new(),
                 }),
+                // `(N: Int)` 是 const 泛型，但 `(a: Int)` 是普通值参数——
+                // 两者类型标注都是 `Int`，仅凭类型无法区分。
+                // 判据：参数名是否在**同一签名**的其它位置被当作类型引用
+                //（如 `f: (N: Int) -> (n: N) -> Int` 的 `N`）。
+                // 不做此判别会把 `plain: (a: Int) -> Int` 误标为泛型函数，
+                // 单态化据此将其删除且永不重建（实测 E6006，#351）。
                 Type::Name { name, .. } if CONST_PARAM_TYPES.contains(&name.as_str()) => {
-                    Some(GenericParamName {
-                        name: p.name.clone(),
-                        constraints: Vec::new(),
-                    })
+                    let used_as_type = params.iter().any(|q| {
+                        q.ty.as_ref()
+                            .is_some_and(|qt| name_used_as_type_in(&p.name, qt))
+                    });
+                    if used_as_type {
+                        Some(GenericParamName {
+                            name: p.name.clone(),
+                            constraints: Vec::new(),
+                        })
+                    } else {
+                        None
+                    }
                 }
                 Type::Name { .. } => {
                     // 无法确认是否为 trait → 保守不下泛型参数
@@ -956,6 +1011,38 @@ impl Expr {
             Expr::Lambda { params, body, .. } => (params.clone(), body.stmts.clone()),
             Expr::Block(block) => (Vec::new(), block.stmts.clone()),
             _ => (Vec::new(), Vec::new()),
+        }
+    }
+
+    /// `name = { ... }` 是**函数定义**还是**块值绑定**？
+    ///
+    /// 裁决 C（注解优先，默认函数）——见 RFC-010a 附录D：
+    ///
+    /// | 情形                        | 结果   | 依据                             |
+    /// | --------------------------- | ------ | -------------------------------- |
+    /// | `value` 是 `Lambda`（`=>`） | 函数   | `=>` 是显式函数构造子            |
+    /// | 注解是 `Fn`                 | 函数   | 声明了函数类型                   |
+    /// | 注解是非 `Fn` 类型          | 块值   | 注解即类型（`x: Int = {..}`）    |
+    /// | 无注解                      | 函数   | 默认；RFC-007「空参最简」        |
+    ///
+    /// 关键：块值语义**不靠新语法**。想要 `{ ... }` 当场求值就把目标类型写上：
+    /// `x: Int = { y = 5; y }`。
+    pub fn block_binding_is_function(
+        type_annotation: Option<&Type>,
+        value: Option<&Expr>,
+    ) -> bool {
+        match value {
+            // `=>` 是显式函数构造子，注释无关
+            Some(Expr::Lambda { .. }) => true,
+            Some(Expr::Block(_)) => match type_annotation {
+                Some(Type::Fn { .. }) => true,
+                // 非 Fn 注解：注解声明了目标类型，块求值成该类型的值
+                Some(_) => false,
+                // 无注解：默认函数（RFC-007「空参最简」）
+                None => true,
+            },
+            // 非块值的绑定不参与此判定
+            _ => false,
         }
     }
 

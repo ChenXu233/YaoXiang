@@ -335,7 +335,8 @@ impl AstToIrGenerator {
         signature_params: &[ast::Param],
     ) -> Vec<CurryLayer> {
         let mut layers = Vec::new();
-        let mut params_iter = signature_params.iter().cloned().peekable();
+        // 用索引游标而非迭代器：Paren 分支需要把已取走的层参数“退回”。
+        let mut cursor = 0usize;
         let mut current_type = type_ann.clone();
 
         loop {
@@ -344,8 +345,9 @@ impl AstToIrGenerator {
                     params: type_params,
                     return_type,
                 } => {
-                    let layer_params: Vec<ast::Param> =
-                        (&mut params_iter).take(type_params.len()).collect();
+                    let start = cursor;
+                    cursor = (cursor + type_params.len()).min(signature_params.len());
+                    let layer_params: Vec<ast::Param> = signature_params[start..cursor].to_vec();
                     let ret_type = *return_type;
                     current_type = ret_type.clone();
                     // 类型参数层（如 `(T: Type)`）是编译期参数：不占运行时参数位，
@@ -353,11 +355,25 @@ impl AstToIrGenerator {
                     // ponytail: 仅处理纯类型参数层；类型/值参数混合同层视为值层（罕见，暂不拆）
                     let is_type_layer =
                         !type_params.is_empty() && type_params.iter().all(Self::is_type_param_ann);
+
+                    // RFC-004 括号语义：返回位置的 `Paren` ⇔ 链条在此终止。
+                    // 该括号内的参数**不属于本函数**——它们是被返回函数的参数。
+                    // parser 把签名拍平成 `signature_params`（内层名供 body 对齐类型），
+                    // 故此处必须把游标退回，否则 `f: () -> ((a:Int)->Int)` 的 `a`
+                    // 会被当成本层参数，`f` 变成接受 `a` 而非返回闭包。
+                    let next_is_paren = matches!(ret_type, ast::Type::Paren(_));
+                    if next_is_paren {
+                        cursor = start;
+                    }
+
                     if !is_type_layer {
                         layers.push(CurryLayer {
                             params: layer_params,
                             return_type: ret_type,
                         });
+                    }
+                    if next_is_paren {
+                        break;
                     }
                 }
                 _ => break,
@@ -450,6 +466,19 @@ impl AstToIrGenerator {
     }
 
     /// 查找变量的类型
+    /// 该名字是否为「函数值」——即 typecheck 的 bindings 里其类型是 `Fn`。
+    ///
+    /// 用于 `Expr::Var` 的函数名物化（#348）：函数的类型是 Fn，所以名字就是函数值。
+    fn binding_is_function(
+        &self,
+        name: &str,
+    ) -> bool {
+        matches!(
+            self.lookup_var_type(name).map(|p| &p.body),
+            Some(MonoType::Fn { .. })
+        )
+    }
+
     fn lookup_var_type(
         &self,
         name: &str,
@@ -1061,9 +1090,19 @@ impl AstToIrGenerator {
                     }
                     _ => return Ok(None),
                 };
-                let (params, body): (Vec<_>, Vec<_>) = match value {
-                    Some(v) => v.callable_parts(),
-                    None => (Vec::new(), Vec::new()),
+                // 裁决 C（RFC-010a 附录D）：`name = { ... }` 无注解→函数；
+                // 非 Fn 注解→块值。后者不得当函数体处理，否则变量拿不到值。
+                let is_fn_binding = ast::Expr::block_binding_is_function(
+                    type_annotation.as_ref(),
+                    value.as_deref(),
+                );
+                let (params, body): (Vec<_>, Vec<_>) = if is_fn_binding {
+                    match value {
+                        Some(v) => v.callable_parts(),
+                        None => (Vec::new(), Vec::new()),
+                    }
+                } else {
+                    (Vec::new(), Vec::new())
                 };
                 let generic_params =
                     crate::frontend::core::parser::ast::extract_generic_param_names(
@@ -1154,6 +1193,13 @@ impl AstToIrGenerator {
                         constants,
                         None,
                     )
+                } else if Self::is_type_def_binding(value.as_deref()) {
+                    // RFC-010：`Db = unsafe { Db: Type = {...}; Db }` 是**类型定义绑定**，
+                    // 不是运行时全局变量。类型已在 typecheck 阶段注册（并提升到本作用域），
+                    // 此处不生成运行时代码。
+                    // 此前落入 `generate_global_var_ir`，因 `unsafe` 无法常量折叠而报
+                    // E3007（顶层绑定初始化必须是编译期常量）。
+                    Ok(None)
                 } else {
                     // 全局变量
                     self.generate_global_var_ir(
@@ -1244,29 +1290,25 @@ impl AstToIrGenerator {
         // 生成指令序列
         let mut instructions = Vec::new();
 
-        // #297/E 同类：尾表达式作为返回值（与 generate_function_ir 一致），
-        // 否则 `Point.getX: (&Point) -> Float = { self.x }` 返回 Void。
-        let (tail_expr, leading_stmts) = match body.split_last() {
-            Some((
-                ast::Stmt {
-                    kind: ast::StmtKind::Expr(expr),
-                    ..
-                },
-                rest,
-            )) if return_type != MonoType::Void => (Some(expr), rest),
-            _ => (None, body),
-        };
-        // 生成语句 IR
-        for stmt in leading_stmts {
+        // RFC-010a 规则①：尾表达式给出函数值。沿用共用的 `generate_tail_stmt_ir`
+        // （与 generate_function_ir / generate_block_ir 同一实现），
+        // 否则 `Point.getX: (&Point) -> Float = { self.x }` 返回 Void；
+        // 取值不以注解为条件——注解只决定检查，不决定求值（#343 根因一）。
+        let last_idx = body.len().checked_sub(1);
+        let mut tail_handled = false;
+        for (i, stmt) in body.iter().enumerate() {
+            if Some(i) == last_idx {
+                let result_reg = self.next_temp_reg();
+                if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                    tail_handled = true;
+                    break;
+                }
+            }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
         }
-        match tail_expr {
-            Some(expr) => {
-                let result_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, result_reg, &mut instructions, constants)?;
-                instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
-            }
-            None => instructions.push(Instruction::Ret(None)),
+        if !tail_handled {
+            instructions.push(Instruction::Ret(None));
         }
 
         // 退出作用域
@@ -1370,19 +1412,25 @@ impl AstToIrGenerator {
         }
 
         // 生成语句 IR
-        // #297/E：尾表达式作为返回值。解析器把 `f: (...) -> T = expr` / `= { expr }`
-        // 的函数体包成 Block[Expr]，此前尾表达式的值被丢弃，函数返回 Void。
-        let (tail_expr, leading_stmts) = match body.split_last() {
-            Some((
-                ast::Stmt {
-                    kind: ast::StmtKind::Expr(expr),
-                    ..
-                },
-                rest,
-            )) if return_type != MonoType::Void => (Some(expr), rest),
-            _ => (None, body),
-        };
-        for stmt in leading_stmts {
+        // RFC-010a 规则①：函数体的值 = 尾表达式。尾位置判断复用
+        // `generate_tail_stmt_ir`（与 `generate_block_ir` 同一实现），
+        // 否则 `{ if c {5} else {6} }` 这类尾位置 `if` 的值会被丢弃（#344）。
+        //
+        // 取值**不以注解为条件**：注解只决定要不要*检查*（typecheck 侧负责），
+        // 不决定要不要*求值*。此前用 `return_type != Void` 挡在取值前，
+        // 导致无注解的 `f = { 5 }` / `f = () => { 5 }` 尾表达式被静默丢弃、
+        // 返回 Void（#343 根因一）。
+        let last_idx = body.len().checked_sub(1);
+        let mut tail_handled = false;
+        for (i, stmt) in body.iter().enumerate() {
+            if Some(i) == last_idx {
+                let result_reg = self.next_temp_reg();
+                if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                    tail_handled = true;
+                    break;
+                }
+            }
             tlog!(
                 debug,
                 MSG::IrGenBeforeProcessStmt,
@@ -1403,13 +1451,8 @@ impl AstToIrGenerator {
                 &self.symbols.len().to_string()
             );
         }
-        match tail_expr {
-            Some(expr) => {
-                let result_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, result_reg, &mut instructions, constants)?;
-                instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
-            }
-            None => instructions.push(Instruction::Ret(None)),
+        if !tail_handled {
+            instructions.push(Instruction::Ret(None));
         }
 
         // 退出函数体作用域
@@ -1566,29 +1609,24 @@ impl AstToIrGenerator {
 
         let return_type: MonoType = layer.return_type.clone().into();
 
-        // #297/E 同类：尾表达式作为返回值（与 generate_function_ir 一致），
-        // 否则 `f: (a: Int) -> (b: Int) -> Int = { a + b }` 返回 Void。
-        let (tail_expr, leading_stmts) = match body.split_last() {
-            Some((
-                ast::Stmt {
-                    kind: ast::StmtKind::Expr(expr),
-                    ..
-                },
-                rest,
-            )) if return_type != MonoType::Void => (Some(expr), rest),
-            _ => (None, body),
-        };
-        // 执行原 body（复用 generate_local_stmt_ir）
-        for stmt in leading_stmts {
+        // RFC-010a 规则①：尾表达式给出函数值。沿用共用的 `generate_tail_stmt_ir`，
+        // 否则 `f: (a: Int) -> (b: Int) -> Int = { a + b }` 返回 Void；
+        // 取值不以注解为条件（#343 根因一）。
+        let last_idx = body.len().checked_sub(1);
+        let mut tail_handled = false;
+        for (i, stmt) in body.iter().enumerate() {
+            if Some(i) == last_idx {
+                let result_reg = self.next_temp_reg();
+                if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                    tail_handled = true;
+                    break;
+                }
+            }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
         }
-        match tail_expr {
-            Some(expr) => {
-                let result_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, result_reg, &mut instructions, constants)?;
-                instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
-            }
-            None => instructions.push(Instruction::Ret(None)),
+        if !tail_handled {
+            instructions.push(Instruction::Ret(None));
         }
 
         let param_types: Vec<MonoType> = layer
@@ -1916,6 +1954,32 @@ impl AstToIrGenerator {
         None
     }
 
+    /// 判定 `name = <expr>` 是否为**类型定义绑定**（RFC-010）。
+    ///
+    /// 形态：`Db = unsafe { Db: Type = {...}; Db }` —— 块内定义类型并把类型名
+    /// 作为尾表达式交回。这是编译期构造（类型已在 typecheck 注册并提升），
+    /// 不应生成运行时全局变量，否则 `unsafe` 无法常量折叠 → E3007。
+    fn is_type_def_binding(value: Option<&ast::Expr>) -> bool {
+        let Some(ast::Expr::Unsafe { body, .. }) = value else {
+            return false;
+        };
+        // 块内**直接**包含类型定义，且尾表达式引用该类型名
+        let mut def_names: Vec<&str> = Vec::new();
+        for st in &body.stmts {
+            if let ast::StmtKind::TypeDefinition { name, .. } = &st.kind {
+                def_names.push(name.as_str());
+            }
+        }
+        if def_names.is_empty() {
+            return false;
+        }
+        matches!(
+            body.stmts.last().map(|s| &s.kind),
+            Some(ast::StmtKind::Expr(e))
+                if matches!(e.as_ref(), ast::Expr::Var(n, _) if def_names.contains(&n.as_str()))
+        )
+    }
+
     /// 生成全局变量 IR
     fn generate_global_var_ir(
         &mut self,
@@ -2200,9 +2264,19 @@ impl AstToIrGenerator {
                         .build())
                     }
                 };
-                let (params, body): (Vec<_>, Vec<_>) = match value {
-                    Some(v) => v.callable_parts(),
-                    None => (Vec::new(), Vec::new()),
+                // 裁决 C（RFC-010a 附录D）：`name = { ... }` 无注解→函数；
+                // 非 Fn 注解→块值。
+                let is_fn_binding = ast::Expr::block_binding_is_function(
+                    type_annotation.as_ref(),
+                    value.as_deref(),
+                );
+                let (params, body): (Vec<_>, Vec<_>) = if is_fn_binding {
+                    match value {
+                        Some(v) => v.callable_parts(),
+                        None => (Vec::new(), Vec::new()),
+                    }
+                } else {
+                    (Vec::new(), Vec::new())
                 };
                 // 如果有 params/body，是嵌套函数
                 if !params.is_empty() || !body.is_empty() {
@@ -2255,6 +2329,12 @@ impl AstToIrGenerator {
                         Ok(None) => {}
                         Err(e) => return Err(e),
                     }
+                    return Ok(());
+                }
+                // RFC-010：`T = unsafe { T: Type = {...}; T }` 是**类型定义绑定**
+                // （编译期构造，类型已提升到本作用域），不生成运行时变量。
+                // 否则体内引用 `T` 会报 E1001（未知变量）。
+                if Self::is_type_def_binding(value.as_deref()) {
                     return Ok(());
                 }
                 // 普通变量
@@ -2533,6 +2613,15 @@ impl AstToIrGenerator {
         // 进入新的作用域
         self.enter_scope();
 
+        // RFC-010a 规则③：`if` 无 `else` → 值为 `Void`。
+        // 此时分支的值不写入 result_reg（改写 scratch），最后统一写 Void；
+        // 否则 `x = if true { 19 }` 会拿到 19，与 typecheck 判定的 `x : Void` 矛盾（#346）。
+        let value_reg = if else_branch.is_some() {
+            result_reg
+        } else {
+            self.next_temp_reg()
+        };
+
         // 1. 评估条件
         let condition_reg = self.next_temp_reg();
         self.generate_expr_ir(condition, condition_reg, instructions, constants)?;
@@ -2545,7 +2634,7 @@ impl AstToIrGenerator {
         let then_result_reg = self.next_temp_reg();
         self.generate_block_ir(then_branch, Some(then_result_reg), instructions, constants)?;
         instructions.push(Instruction::Move {
-            dst: Operand::Local(result_reg),
+            dst: Operand::Local(value_reg),
             src: Operand::Local(then_result_reg),
         });
 
@@ -2572,7 +2661,7 @@ impl AstToIrGenerator {
             let else_if_res = self.next_temp_reg();
             self.generate_block_ir(else_if_body, Some(else_if_res), instructions, constants)?;
             instructions.push(Instruction::Move {
-                dst: Operand::Local(result_reg),
+                dst: Operand::Local(value_reg),
                 src: Operand::Local(else_if_res),
             });
 
@@ -2590,7 +2679,7 @@ impl AstToIrGenerator {
             let else_res = self.next_temp_reg();
             self.generate_block_ir(else_body, Some(else_res), instructions, constants)?;
             instructions.push(Instruction::Move {
-                dst: Operand::Local(result_reg),
+                dst: Operand::Local(value_reg),
                 src: Operand::Local(else_res),
             });
         }
@@ -2601,6 +2690,14 @@ impl AstToIrGenerator {
             if let Instruction::Jmp(ref mut target) = instructions[idx] {
                 *target = end_len;
             }
+        }
+
+        // 9. 无 else：值为 Void（RFC-010a 规则③）
+        if else_branch.is_none() {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Const(ConstValue::Void),
+            });
         }
 
         self.exit_scope();
@@ -2615,6 +2712,49 @@ impl AstToIrGenerator {
     /// 块中没有 return 也没有尾部表达式时，`reg` 保持默认（Void）。
     ///
     /// 当 `result_reg` 为 `None` 时，块作为语句序列执行，不关心返回值。
+    /// 尾位置语句求值（RFC-010a 规则①）：把语句作为块值写入 `result_reg`。
+    ///
+    /// 返回 `true` 表示已处理（值已写入），调用方应跳过普通语句生成。
+    ///
+    /// 提取为共用方法是因为 `generate_block_ir`（块）与 `generate_function_ir`（函数体）
+    /// 各写了一套尾位置判断，两套不一致——函数体只认 `StmtKind::Expr`，
+    /// 导致 `f: () -> Int = { if c {5} else {6} }` 的 `if` 值被丢弃（#344）。
+    fn generate_tail_stmt_ir(
+        &mut self,
+        stmt: &ast::Stmt,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<bool, Diagnostic> {
+        match &stmt.kind {
+            ast::StmtKind::Expr(expr) => {
+                self.generate_expr_ir(expr, result_reg, instructions, constants)?;
+                Ok(true)
+            }
+            ast::StmtKind::If {
+                condition,
+                then_branch,
+                else_if_branches,
+                else_branch,
+                ..
+            } => {
+                self.generate_if_expr_ir(
+                    condition,
+                    then_branch,
+                    else_if_branches,
+                    else_branch.as_deref(),
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
+                Ok(true)
+            }
+            // 其余语句形态（赋值 / return / 循环 / …）不贡献块值：
+            // 末位赋值语句值为 Void（RFC-010a 规则①）
+            _ => Ok(false),
+        }
+    }
+
     fn generate_block_ir(
         &mut self,
         block: &ast::Block,
@@ -2628,33 +2768,10 @@ impl AstToIrGenerator {
         let last_idx = block.stmts.len().checked_sub(1);
         for (i, stmt) in block.stmts.iter().enumerate() {
             let is_last = Some(i) == last_idx;
-            // 块作为表达式 + 最后一条语句是表达式 → 表达式的值写入 result_reg
+            // 块作为表达式 + 最后一条语句贡献块值 → 值写入 result_reg
             if let (Some(reg), true) = (result_reg, is_last) {
-                match &stmt.kind {
-                    ast::StmtKind::Expr(expr) => {
-                        self.generate_expr_ir(expr, reg, instructions, constants)?;
-                        continue;
-                    }
-                    ast::StmtKind::If {
-                        condition,
-                        then_branch,
-                        else_if_branches,
-                        else_branch,
-                        ..
-                    } => {
-                        // 块里的 if 在表达式位置：按 if 表达式生成（值写入 reg）
-                        self.generate_if_expr_ir(
-                            condition,
-                            then_branch,
-                            else_if_branches,
-                            else_branch.as_deref(),
-                            reg,
-                            instructions,
-                            constants,
-                        )?;
-                        continue;
-                    }
-                    _ => {}
+                if self.generate_tail_stmt_ir(stmt, reg, instructions, constants)? {
+                    continue;
                 }
             }
             // 其他情况正常生成语句
@@ -3448,6 +3565,7 @@ impl AstToIrGenerator {
         params: &[ast::Param],
         body: &ast::Block,
         constants: &mut Vec<ConstValue>,
+        env_count: usize,
     ) -> Result<LambdaBodyIR, Diagnostic> {
         // 保存父函数的临时寄存器计数
         let saved_next_temp = self.next_temp;
@@ -3461,36 +3579,44 @@ impl AstToIrGenerator {
         // 进入闭包函数体作用域
         self.enter_scope();
 
-        // 为每个参数生成 LoadArg 指令并注册
+        // 注册参数槽位。
+        // env_count：闭包 env 在帧参数中占前段（运行时 `final_args = env + args`
+        // 且 `Frame::with_args` 已把它们铺进 slots[0..]）。因此本层参数直接位于
+        // `env_count + i`，**无需** LoadArg——那会与已铺好的槽位错位。
+        // 捕获变量同理：`closure_captures` 让 Var 解析走 LoadUpvalue。
         for (i, param) in params.iter().enumerate() {
-            instructions.push(Instruction::Load {
-                dst: Operand::Local(i),
-                src: Operand::Arg(i),
-            });
-            // 存储到局部变量并注册
-            instructions.push(Instruction::Store {
-                dst: Operand::Local(i),
-                src: Operand::Local(i),
-                span: Span::dummy(),
-            });
-            self.register_local(&param.name, i);
+            self.register_local(&param.name, env_count + i);
         }
 
         // 记录局部变量起始位置
-        let local_var_start = params.len();
+        let local_var_start = env_count + params.len();
         self.next_temp = local_var_start;
 
-        // 处理函数体语句
-        for stmt in &body.stmts {
+        // 处理函数体语句（RFC-010a 规则①：尾表达式给出 lambda 的值）。
+        // 此前无条件逐语句生成、末尾补 `Ret(None)`，导致块体内的
+        // `() => 7` 返回值被丢弃（`mk: () -> (() -> Int) = { () => 7 }` 得 void）。
+        let last_idx = body.stmts.len().checked_sub(1);
+        let mut tail_handled = false;
+        for (i, stmt) in body.stmts.iter().enumerate() {
+            if Some(i) == last_idx {
+                let result_reg = self.next_temp_reg();
+                if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                    tail_handled = true;
+                    break;
+                }
+            }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
         }
 
-        // 如果没有遇到 Ret 指令，追加 Ret(None)
-        let has_ret = instructions
-            .iter()
-            .any(|inst| matches!(inst, Instruction::Ret(_)));
-        if !has_ret {
-            instructions.push(Instruction::Ret(None));
+        // 尾位置无值（末位为语句 / 空体）时补 Ret(None)
+        if !tail_handled {
+            let has_ret = instructions
+                .iter()
+                .any(|inst| matches!(inst, Instruction::Ret(_)));
+            if !has_ret {
+                instructions.push(Instruction::Ret(None));
+            }
         }
 
         // 退出作用域
@@ -3903,6 +4029,19 @@ impl AstToIrGenerator {
                     instructions.push(Instruction::Load {
                         dst: Operand::Local(result_reg),
                         src: Operand::Const(ConstValue::Void),
+                    });
+                } else if self.binding_is_function(var_name) {
+                    // #348：名字的类型是 Fn ⇒ 它就是函数值。运行时函数值的唯一表示是
+                    // 闭包，故物化为 MakeClosure（env 为空：本处只处理顶层/自由函数名，
+                    // 捕获变量已由上方 closure_captures 处理）。
+                    //
+                    // 此前落到下方兜底 → E3006（"变量无法解析"），使函数名不能
+                    // 作一等值使用：`io.println(f)` / `g(f)` / `x = f` 全部失败。
+                    instructions.push(Instruction::MakeClosure {
+                        dst: Operand::Local(result_reg),
+                        func: var_name.clone(),
+                        env: vec![],
+                        def: None,
                     });
                 } else {
                     // #271 #3：未解析变量 → 硬错误（#254 spawn 捕获已落地，不再需要静默 Load 0 兜底）。
@@ -5055,20 +5194,14 @@ impl AstToIrGenerator {
             }
             Expr::Unsafe { body, span: _ } => {
                 // unsafe 块：生成 UnsafeBlockStart/End 标记
-                // 生成 UnsafeBlockStart 指令
                 instructions.push(Instruction::UnsafeBlockStart);
 
-                // 生成块内语句的 IR
-                self.generate_block_ir(body, None, instructions, constants)?;
+                // RFC-010a 规则①：`unsafe {}` 是**有值块**，值出口为尾表达式。
+                // 此前 result_reg 传 None 并硬写 Void，导致 `v = unsafe { 42 }`
+                // 得 void（#347）。现按普通块处理，尾表达式写入 result_reg。
+                self.generate_block_ir(body, Some(result_reg), instructions, constants)?;
 
-                // 生成 UnsafeBlockEnd 指令
                 instructions.push(Instruction::UnsafeBlockEnd);
-
-                // unsafe 块作为表达式时返回 void
-                instructions.push(Instruction::Load {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Const(ConstValue::Void),
-                });
             }
             // spawn for 数据并行循环（RFC-024 §2.4）
             Expr::SpawnFor {
@@ -5256,8 +5389,29 @@ impl AstToIrGenerator {
                 // 3. 为闭包参数分配寄存器索引
                 let _param_regs: Vec<usize> = (0..params.len()).collect();
 
-                let env_vars = std::mem::take(&mut self.pending_env_vars);
-                let env_names = std::mem::take(&mut self.pending_env_names);
+                // RFC-009a / #254：闭包需捕获自由变量。
+                // `pending_env_vars` 只由 spawn/for 路径填充；普通 lambda（如
+                // `adder: (n: Int) -> ((x: Int) -> Int) = (x) => x + n` 里的内层）
+                // 从未填充，导致 `MakeClosure` 的 env 为空，`n` 在闭包体内取不到
+                // （实测 `adder(10)(5)` 得 10 而非 15）。
+                // 此处按“body 中引用但非自身参数”收集自由变量，用外层寄存器作为 env。
+                let mut env_vars = std::mem::take(&mut self.pending_env_vars);
+                let mut env_names = std::mem::take(&mut self.pending_env_names);
+                if env_names.is_empty() {
+                    let bound: std::collections::HashSet<&str> =
+                        params.iter().map(|p| p.name.as_str()).collect();
+                    let mut free = Vec::new();
+                    let mut seen = std::collections::HashSet::new();
+                    for stmt in &body.stmts {
+                        super::ir_gen::collect_free_vars_stmt(stmt, &bound, &mut seen, &mut free);
+                    }
+                    for name in free {
+                        if let Some(idx) = self.lookup_local(&name) {
+                            env_vars.push(Operand::Local(idx));
+                            env_names.push(name);
+                        }
+                    }
+                }
                 // #254：捕获表（变量名 → env 槽位），供闭包体内 Var 解析 → LoadUpvalue
                 self.closure_captures = env_names
                     .iter()
@@ -5267,8 +5421,12 @@ impl AstToIrGenerator {
 
                 // 5. 生成闭包函数体 IR
                 // 类似于 generate_function_ir 的逻辑，但针对 Lambda
-                let closure_body =
-                    self.generate_lambda_body_ir(params, body.as_ref(), constants)?;
+                let closure_body = self.generate_lambda_body_ir(
+                    params,
+                    body.as_ref(),
+                    constants,
+                    env_names.len(),
+                )?;
                 // #254：闭包体生成完毕，清除捕获表
                 self.closure_captures.clear();
 
@@ -5570,4 +5728,155 @@ pub fn generate_ir_with_context(
     generator.seed_cross_file_types(cross_file_types);
     generator.seed_cross_file_globals(cross_file_globals);
     generator.generate_module_ir(ast)
+}
+
+/// 收集 lambda 体引用的自由变量（名字），按出现顺序去重。
+///
+/// 用途：闭包捕获（RFC-009a / #254）。`bound` 是 lambda 自身参数（不算自由），
+/// `seen` 跨调用累积去重，`out` 为结果。
+///
+/// 仅做保守的语法级遍历：多收集一个变量只会多一条 env 槽位（不影响正确性），
+/// 漏收集才会导致闭包体内 `LoadUpvalue` 越界，故宁多勿少。
+fn collect_free_vars_stmt(
+    stmt: &crate::frontend::core::parser::ast::Stmt,
+    bound: &std::collections::HashSet<&str>,
+    seen: &mut std::collections::HashSet<String>,
+    out: &mut Vec<String>,
+) {
+    use crate::frontend::core::parser::ast::StmtKind;
+    // 小工具：走一个块（避免闭包借用冲突）
+    fn walk_block(
+        b: &crate::frontend::core::parser::ast::Block,
+        bound: &std::collections::HashSet<&str>,
+        seen: &mut std::collections::HashSet<String>,
+        out: &mut Vec<String>,
+    ) {
+        for s in &b.stmts {
+            collect_free_vars_stmt(s, bound, seen, out);
+        }
+    }
+    match &stmt.kind {
+        StmtKind::Expr(e) => collect_free_vars_expr(e, bound, seen, out),
+        StmtKind::Return(Some(e)) => collect_free_vars_expr(e, bound, seen, out),
+        StmtKind::Assign { target, value, .. } => {
+            collect_free_vars_expr(target, bound, seen, out);
+            if let Some(v) = value {
+                collect_free_vars_expr(v, bound, seen, out);
+            }
+        }
+        StmtKind::DestructureAssign { rhs, .. } => collect_free_vars_expr(rhs, bound, seen, out),
+        StmtKind::If {
+            condition,
+            then_branch,
+            else_if_branches,
+            else_branch,
+            ..
+        } => {
+            collect_free_vars_expr(condition, bound, seen, out);
+            walk_block(then_branch, bound, seen, out);
+            for (c, b) in else_if_branches {
+                collect_free_vars_expr(c, bound, seen, out);
+                walk_block(b, bound, seen, out);
+            }
+            if let Some(b) = else_branch {
+                walk_block(b, bound, seen, out);
+            }
+        }
+        StmtKind::For { iterable, body, .. } => {
+            collect_free_vars_expr(iterable, bound, seen, out);
+            walk_block(body, bound, seen, out);
+        }
+        _ => {}
+    }
+}
+
+/// 表达式层的自由变量收集（递归）。
+fn collect_free_vars_expr(
+    expr: &crate::frontend::core::parser::ast::Expr,
+    bound: &std::collections::HashSet<&str>,
+    seen: &mut std::collections::HashSet<String>,
+    out: &mut Vec<String>,
+) {
+    use crate::frontend::core::parser::ast::Expr;
+    match expr {
+        Expr::Var(name, _) => {
+            if !bound.contains(name.as_str()) && seen.insert(name.clone()) {
+                out.push(name.clone());
+            }
+        }
+        Expr::BinOp { left, right, .. } => {
+            collect_free_vars_expr(left, bound, seen, out);
+            collect_free_vars_expr(right, bound, seen, out);
+        }
+        Expr::UnOp { expr, .. } | Expr::Try { expr, .. } | Expr::Cast { expr, .. } => {
+            collect_free_vars_expr(expr, bound, seen, out);
+        }
+        Expr::Call { func, args, .. } => {
+            collect_free_vars_expr(func, bound, seen, out);
+            for a in args {
+                collect_free_vars_expr(a, bound, seen, out);
+            }
+        }
+        Expr::FieldAccess { expr, .. } | Expr::Borrow { expr, .. } => {
+            collect_free_vars_expr(expr, bound, seen, out);
+        }
+        Expr::Index { expr, index, .. } => {
+            collect_free_vars_expr(expr, bound, seen, out);
+            collect_free_vars_expr(index, bound, seen, out);
+        }
+        Expr::Tuple(items, _) | Expr::List(items, _) => {
+            for i in items {
+                collect_free_vars_expr(i, bound, seen, out);
+            }
+        }
+        Expr::Dict(entries, _) => {
+            for (k, v) in entries {
+                collect_free_vars_expr(k, bound, seen, out);
+                collect_free_vars_expr(v, bound, seen, out);
+            }
+        }
+        Expr::If {
+            condition,
+            then_branch,
+            else_if_branches,
+            else_branch,
+            ..
+        } => {
+            collect_free_vars_expr(condition, bound, seen, out);
+            for s in &then_branch.stmts {
+                collect_free_vars_stmt(s, bound, seen, out);
+            }
+            for (c, b) in else_if_branches {
+                collect_free_vars_expr(c, bound, seen, out);
+                for s in &b.stmts {
+                    collect_free_vars_stmt(s, bound, seen, out);
+                }
+            }
+            if let Some(b) = else_branch {
+                for s in &b.stmts {
+                    collect_free_vars_stmt(s, bound, seen, out);
+                }
+            }
+        }
+        Expr::Block(b) => {
+            for s in &b.stmts {
+                collect_free_vars_stmt(s, bound, seen, out);
+            }
+        }
+        Expr::While {
+            condition, body, ..
+        } => {
+            collect_free_vars_expr(condition, bound, seen, out);
+            for s in &body.stmts {
+                collect_free_vars_stmt(s, bound, seen, out);
+            }
+        }
+        Expr::For { iterable, body, .. } => {
+            collect_free_vars_expr(iterable, bound, seen, out);
+            for s in &body.stmts {
+                collect_free_vars_stmt(s, bound, seen, out);
+            }
+        }
+        _ => {}
+    }
 }

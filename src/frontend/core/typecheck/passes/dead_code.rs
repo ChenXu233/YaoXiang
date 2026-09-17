@@ -115,6 +115,7 @@ impl DeadCodeAnalyzer {
             match &stmt.kind {
                 StmtKind::Assign {
                     target,
+                    type_annotation,
                     value,
                     is_pub,
                     ..
@@ -122,9 +123,19 @@ impl DeadCodeAnalyzer {
                     let Some((name, type_name)) = target.receiver_parts() else {
                         continue;
                     };
-                    let (params, body): (Vec<_>, Vec<_>) = match value {
-                        Some(v) => v.callable_parts(),
-                        None => (Vec::new(), Vec::new()),
+                    // 裁决 C（RFC-010a 附录D）：非 Fn 注解的块绑定是**块值**而非函数
+                    let is_fn_binding =
+                        crate::frontend::core::parser::ast::Expr::block_binding_is_function(
+                            type_annotation.as_ref(),
+                            value.as_deref(),
+                        );
+                    let (params, body): (Vec<_>, Vec<_>) = if is_fn_binding {
+                        match value {
+                            Some(v) => v.callable_parts(),
+                            None => (Vec::new(), Vec::new()),
+                        }
+                    } else {
+                        (Vec::new(), Vec::new())
                     };
                     let is_method = type_name.is_some();
                     let (def_name, kind) = if is_method {

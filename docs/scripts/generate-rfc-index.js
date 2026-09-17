@@ -377,11 +377,11 @@ function main() {
 
   console.log(`\n共发现 ${allRfcs.length} 个 RFC`)
 
-  // 生成索引
+  // 生成索引（markdownlint MD047：文件末尾必需换行）
   const indexContent = generateIndex(allRfcs)
   const indexPath = path.join(RFC_DIR, 'index.md')
 
-  fs.writeFileSync(indexPath, indexContent, 'utf-8')
+  fs.writeFileSync(indexPath, indexContent.endsWith('\n') ? indexContent : indexContent + '\n', 'utf-8')
   console.log(`\n已生成索引文件: ${indexPath}`)
 }
 

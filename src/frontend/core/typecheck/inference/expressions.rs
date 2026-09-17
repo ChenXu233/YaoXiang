@@ -53,6 +53,8 @@ pub struct ExpressionInferrer<'a> {
     result_err: Option<MonoType>,
     /// 当前函数的预期返回类型（用于 return 语句的类型检查）
     expected_return_type: Option<MonoType>,
+    /// 当前嵌套的 `unsafe {}` 深度（RFC-010：unsafe 块内允许类型定义）
+    unsafe_depth: usize,
     /// 方法绑定表: "Type.method" -> MonoType(Fn)
     /// 用于方法调用语法糖解析: p.draw(screen) → Point.draw(p, screen)
     method_bindings: &'a HashMap<String, MonoType>,
@@ -94,6 +96,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_signatures: &EMPTY_SIGNATURES,
             result_err: None,
             expected_return_type: None,
+            unsafe_depth: 0,
             method_bindings: &EMPTY_SIGNATURES,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
@@ -122,6 +125,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_signatures,
             result_err: None,
             expected_return_type: None,
+            unsafe_depth: 0,
             method_bindings: &EMPTY_SIGNATURES,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
@@ -151,6 +155,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_signatures,
             result_err,
             expected_return_type: None,
+            unsafe_depth: 0,
             method_bindings: &EMPTY_SIGNATURES,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
@@ -182,6 +187,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_signatures,
             result_err,
             expected_return_type,
+            unsafe_depth: 0,
             method_bindings,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
@@ -2129,8 +2135,21 @@ impl<'a> ExpressionInferrer<'a> {
 
                     let body_ty = body_ty_res?;
 
-                    if return_type.is_some() {
-                        let _ = self.solver.unify(&body_ty, &expected_body_ty);
+                    // RFC-010a 规则①：块值必须与声明的返回类型一致。
+                    // 此前 unify 结果被 `let _` 吞掉，类型不符静默通过、推迟到运行时
+                    // （如 `f: () -> Int = { "s" }` 编得过）。此处上报。
+                    // `Never` 是特例：`return` 在尾位置时块类型为 `Never`，
+                    // `Never <: T` 属实（爆炸原理），不算错。
+                    if return_type.is_some()
+                        && body_ty != MonoType::Never
+                        && self.solver.unify(&body_ty, &expected_body_ty).is_err()
+                    {
+                        return Err(ErrorCodeDefinition::type_mismatch(
+                            &format!("{}", expected_body_ty),
+                            &format!("{}", body_ty),
+                        )
+                        .at(body.span)
+                        .build());
                     }
 
                     Ok(())
@@ -2248,7 +2267,29 @@ impl<'a> ExpressionInferrer<'a> {
 
             // Unsafe 块
             crate::frontend::core::parser::ast::Expr::Unsafe { body, .. } => {
-                self.infer_block(body, false, None)
+                // RFC-010：块内定义的类型名提升到当前作用域（供尾表达式引用），
+                // 须在检查块体**之前**注册，否则 `T` 报 E1001。
+                for st in &body.stmts {
+                    if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
+                        name,
+                        ..
+                    } = &st.kind
+                    {
+                        if self.scope.get_var(name).is_none() {
+                            // 类型值的运行时表示是 Void（编译期构造）
+                            self.scope.add_var(
+                                name.clone(),
+                                PolyType::mono(MonoType::Void),
+                                false,
+                                crate::util::span::Span::default(),
+                            );
+                        }
+                    }
+                }
+                self.unsafe_depth += 1;
+                let r = self.infer_block(body, true, None);
+                self.unsafe_depth -= 1;
+                r
             }
 
             // spawn 块：spawn { ... }
@@ -2396,44 +2437,22 @@ impl<'a> ExpressionInferrer<'a> {
         _allow_unit: bool,
         _expected_type: Option<&MonoType>,
     ) -> Result<MonoType> {
-        let mut return_type: Option<MonoType> = None;
+        // RFC-010a 规则①：块的值 = 尾表达式（唯一出口）。
+        // 空块 `{}` → Void；末位为语句（如赋值）→ Void；否则为尾表达式类型。
+        //
+        // 与 `return` 的关系（规则②）：`return : Never`。带 `return` 的分支经
+        // `join` 被忽略（`Never` 不参与合并），故不再需要单独收集 `return` 类型。
+        let mut block_ty: MonoType = MonoType::Void;
 
-        for stmt in &block.stmts {
-            // 检查语句是否包含 return 表达式
-            match &stmt.kind {
-                crate::frontend::core::parser::ast::StmtKind::Expr(ref expr_stmt) => {
-                    if let Some(ty) = self.collect_return_type(expr_stmt)? {
-                        return_type = Some(ty);
-                    }
-                }
-                crate::frontend::core::parser::ast::StmtKind::Return(Some(ref ret_expr)) => {
-                    let ty = self.infer_expr(ret_expr)?;
-                    return_type = Some(ty);
-                }
-                _ => {}
+        let last_idx = block.stmts.len().checked_sub(1);
+        for (i, stmt) in block.stmts.iter().enumerate() {
+            let ty = self.infer_stmt(stmt)?;
+            if Some(i) == last_idx {
+                block_ty = ty;
             }
-            self.infer_stmt(stmt)?;
         }
 
-        // 块的类型 = return 的类型，没有 return 则 Void
-        Ok(return_type.unwrap_or(MonoType::Void))
-    }
-
-    /// 递归收集表达式中的 return 类型
-    /// 如果表达式是 `return expr`，返回 expr 的类型
-    /// 如果表达式包含子块（if/for/spawn 等），递归收集子块中的 return 类型
-    fn collect_return_type(
-        &mut self,
-        expr: &crate::frontend::core::parser::ast::Expr,
-    ) -> Result<Option<MonoType>> {
-        match expr {
-            crate::frontend::core::parser::ast::Expr::Return(Some(ret_expr), _) => {
-                let ty = self.infer_expr(ret_expr)?;
-                Ok(Some(ty))
-            }
-            crate::frontend::core::parser::ast::Expr::Return(None, _) => Ok(Some(MonoType::Void)),
-            _ => Ok(None),
-        }
+        Ok(block_ty)
     }
 
     /// #313：for 循环推断——`Expr::For`（表达式位置）与 `StmtKind::For`
@@ -2526,17 +2545,20 @@ impl<'a> ExpressionInferrer<'a> {
     }
 
     /// 推断语句的类型
+    ///
+    /// RFC-010a 规则①：返回该语句作为块尾表达式时贡献的值类型——
+    /// 表达式语句取表达式类型；赋值语句为 `Void`；`return` 为 `Never`（规则②）；
+    /// 控制流语句取其块值。
     pub fn infer_stmt(
         &mut self,
         stmt: &crate::frontend::core::parser::ast::Stmt,
-    ) -> Result<()> {
+    ) -> Result<MonoType> {
         // #324：挂当前节点 span，walk 内诊断构造自动获得位置
         let _current_span = crate::util::diagnostic::push_current_span(stmt.span);
         match &stmt.kind {
-            crate::frontend::core::parser::ast::StmtKind::Expr(expr) => {
-                self.infer_expr(expr)?;
-                Ok(())
-            }
+            // RFC-010a 规则①：语句的值——表达式语句取其表达式类型；赋值语句为
+            // Void；`return` 为 Never（规则②）；控制流语句取其块值/运算值。
+            crate::frontend::core::parser::ast::StmtKind::Expr(expr) => self.infer_expr(expr),
             crate::frontend::core::parser::ast::StmtKind::Assign {
                 target,
                 type_annotation,
@@ -2548,7 +2570,7 @@ impl<'a> ExpressionInferrer<'a> {
                 use crate::frontend::core::parser::ast::Expr;
                 let name = match target.as_ref() {
                     Expr::Var(n, _) => n.clone(),
-                    _ => return Ok(()),
+                    _ => return Ok(MonoType::Void),
                 };
                 // 如果 value 是 Lambda，走函数推断
                 if let Some(v) = value {
@@ -2572,26 +2594,35 @@ impl<'a> ExpressionInferrer<'a> {
                         // 函数边界语义）——此前直接 return，spawn 体/循环体内嵌套
                         // lambda 的体从未被类型检查。注册类型来自注解，保持不变。
                         let _ = self.infer_expr(v)?;
-                        return Ok(());
+                        return Ok(MonoType::Void);
                     }
+                    // 裁决 C（RFC-010a 附录D）：`name = { ... }` 无注解→函数；
+                    // 非 Fn 注解→块值（立即求值，变量绑定块值类型）。
+                    // 此前不论注解一律注册为 0 参函数，与 ir_gen 分流脱节（#343）。
                     if let Expr::Block(..) = v.as_ref() {
-                        let fn_type = MonoType::Fn {
-                            params: vec![],
-                            return_type: Box::new(
-                                type_annotation
-                                    .as_ref()
-                                    .map_or(MonoType::Void, |t| t.clone().into()),
-                            ),
-                        };
-                        self.try_add_var(
-                            name.clone(),
-                            PolyType::mono(fn_type),
-                            *stmt_span,
-                            *is_mut,
-                        )?;
-                        // #313：同上——匿名绑定体此前未检查
-                        let _ = self.infer_expr(v)?;
-                        return Ok(());
+                        if crate::frontend::core::parser::ast::Expr::block_binding_is_function(
+                            type_annotation.as_ref(),
+                            Some(v.as_ref()),
+                        ) {
+                            let fn_type = MonoType::Fn {
+                                params: vec![],
+                                return_type: Box::new(
+                                    type_annotation
+                                        .as_ref()
+                                        .map_or(MonoType::Void, |t| t.clone().into()),
+                                ),
+                            };
+                            self.try_add_var(
+                                name.clone(),
+                                PolyType::mono(fn_type),
+                                *stmt_span,
+                                *is_mut,
+                            )?;
+                            // #313：匿名绑定体仍须检查
+                            let _ = self.infer_expr(v)?;
+                            return Ok(MonoType::Void);
+                        }
+                        // 块值：走普通变量路径（下方按 value 推断 init_ty）
                     }
                 }
                 // 普通变量
@@ -2635,12 +2666,12 @@ impl<'a> ExpressionInferrer<'a> {
                                     .build());
                             }
                             self.assign_var(&name, init_ty, *stmt_span, true)?;
-                            return Ok(());
+                            return Ok(MonoType::Void);
                         }
                     }
                 }
                 self.try_add_var(name.clone(), PolyType::mono(init_ty), *stmt_span, *is_mut)?;
-                Ok(())
+                Ok(MonoType::Void)
             }
             // #313：以下语句种类此前落 `_ => Ok(())` 静默跳过——spawn 体/循环体经
             // infer_block 走到这里，If/For 中的语句从未被类型检查（类型错误编译通过，
@@ -2654,7 +2685,7 @@ impl<'a> ExpressionInferrer<'a> {
                 ..
             } => {
                 self.infer_for_loop(var, *var_mut, iterable, body, stmt.span)?;
-                Ok(())
+                Ok(MonoType::Void)
             }
             crate::frontend::core::parser::ast::StmtKind::If {
                 condition,
@@ -2662,15 +2693,12 @@ impl<'a> ExpressionInferrer<'a> {
                 else_if_branches,
                 else_branch,
                 ..
-            } => {
-                self.infer_if_expr(
-                    condition,
-                    then_branch,
-                    else_if_branches,
-                    else_branch.as_deref(),
-                )?;
-                Ok(())
-            }
+            } => self.infer_if_expr(
+                condition,
+                then_branch,
+                else_if_branches,
+                else_branch.as_deref(),
+            ),
             // 元组解构赋值（镜像 StatementChecker::check_stmt 的 DestructureAssign 臂）
             crate::frontend::core::parser::ast::StmtKind::DestructureAssign {
                 names,
@@ -2697,33 +2725,41 @@ impl<'a> ExpressionInferrer<'a> {
                                 false,
                             )?;
                         }
-                        Ok(())
+                        Ok(MonoType::Void)
                     }
                     _ => {
                         for name in names {
                             let ty = self.solver.new_var();
                             self.try_add_var(name.name.clone(), PolyType::mono(ty), *span, false)?;
                         }
-                        Ok(())
+                        Ok(MonoType::Void)
                     }
                 }
             }
+            // RFC-010a 规则②：return : (T) -> Never（非局部退出，退出最近的函数边界）。
+            // 值本身仍被推断（与 expected_return_type 统一），但语句类型是 Never，
+            // 使其在 join 中被忽略。
             crate::frontend::core::parser::ast::StmtKind::Return(Some(expr)) => {
                 self.infer_expr(expr)?;
-                Ok(())
+                Ok(MonoType::Never)
             }
-            crate::frontend::core::parser::ast::StmtKind::Return(None) => Ok(()),
+            crate::frontend::core::parser::ast::StmtKind::Return(None) => Ok(MonoType::Never),
             // 类型定义仅模块级合法（E1071，#295）；infer_stmt 只会在 spawn 体/
             // 循环体内遇到它——必为函数上下文，一律报错。
+            // 例外（RFC-010）：`unsafe {}` 内允许类型定义（不透明类型封装）。
             crate::frontend::core::parser::ast::StmtKind::TypeDefinition { name, .. } => {
-                Err(ErrorCodeDefinition::type_def_only_at_module_level(name)
-                    .at(stmt.span)
-                    .build())
+                if self.unsafe_depth > 0 {
+                    Ok(MonoType::Void)
+                } else {
+                    Err(ErrorCodeDefinition::type_def_only_at_module_level(name)
+                        .at(stmt.span)
+                        .build())
+                }
             }
             // use 语句的模块注册依赖 StatementChecker 的环境（process_use_stmt），
             // inferrer 无模块上下文。真实代码中 use 已由 checker 处理；表达式位置的
             // 循环体内出现时显式接受，import 未注册时下游报 E1001（响亮失败）。
-            crate::frontend::core::parser::ast::StmtKind::Use { .. } => Ok(()),
+            crate::frontend::core::parser::ast::StmtKind::Use { .. } => Ok(MonoType::Void),
             // 错误恢复占位符：报告错误但不 panic（镜像 StatementChecker::check_stmt）
             crate::frontend::core::parser::ast::StmtKind::Error(span) => {
                 Err(ErrorCodeDefinition::invalid_syntax("缺失语句")
