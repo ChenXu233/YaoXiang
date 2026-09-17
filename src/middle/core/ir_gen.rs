@@ -1193,6 +1193,13 @@ impl AstToIrGenerator {
                         constants,
                         None,
                     )
+                } else if Self::is_type_def_binding(value.as_deref()) {
+                    // RFC-010：`Db = unsafe { Db: Type = {...}; Db }` 是**类型定义绑定**，
+                    // 不是运行时全局变量。类型已在 typecheck 阶段注册（并提升到本作用域），
+                    // 此处不生成运行时代码。
+                    // 此前落入 `generate_global_var_ir`，因 `unsafe` 无法常量折叠而报
+                    // E3007（顶层绑定初始化必须是编译期常量）。
+                    Ok(None)
                 } else {
                     // 全局变量
                     self.generate_global_var_ir(
@@ -1947,6 +1954,32 @@ impl AstToIrGenerator {
         None
     }
 
+    /// 判定 `name = <expr>` 是否为**类型定义绑定**（RFC-010）。
+    ///
+    /// 形态：`Db = unsafe { Db: Type = {...}; Db }` —— 块内定义类型并把类型名
+    /// 作为尾表达式交回。这是编译期构造（类型已在 typecheck 注册并提升），
+    /// 不应生成运行时全局变量，否则 `unsafe` 无法常量折叠 → E3007。
+    fn is_type_def_binding(value: Option<&ast::Expr>) -> bool {
+        let Some(ast::Expr::Unsafe { body, .. }) = value else {
+            return false;
+        };
+        // 块内**直接**包含类型定义，且尾表达式引用该类型名
+        let mut def_names: Vec<&str> = Vec::new();
+        for st in &body.stmts {
+            if let ast::StmtKind::TypeDefinition { name, .. } = &st.kind {
+                def_names.push(name.as_str());
+            }
+        }
+        if def_names.is_empty() {
+            return false;
+        }
+        matches!(
+            body.stmts.last().map(|s| &s.kind),
+            Some(ast::StmtKind::Expr(e))
+                if matches!(e.as_ref(), ast::Expr::Var(n, _) if def_names.contains(&n.as_str()))
+        )
+    }
+
     /// 生成全局变量 IR
     fn generate_global_var_ir(
         &mut self,
@@ -2296,6 +2329,12 @@ impl AstToIrGenerator {
                         Ok(None) => {}
                         Err(e) => return Err(e),
                     }
+                    return Ok(());
+                }
+                // RFC-010：`T = unsafe { T: Type = {...}; T }` 是**类型定义绑定**
+                // （编译期构造，类型已提升到本作用域），不生成运行时变量。
+                // 否则体内引用 `T` 会报 E1001（未知变量）。
+                if Self::is_type_def_binding(value.as_deref()) {
                     return Ok(());
                 }
                 // 普通变量

@@ -1120,9 +1120,30 @@ impl StatementChecker {
                 }
                 Ok(())
             }
-            // RFC-010：`unsafe {}` 内允许类型定义（不透明类型封装）。
+            // RFC-010：`unsafe {}` 内可定义类型（不透明类型封装）。
             // 递增深度使 TypeDefinition 校验放行，离开时恢复。
+            // 块内定义的类型名同时作为**值**注册（尾表达式 `T` 引用它），
+            // 使 `X = unsafe { T: Type = {...}; T }` 可用。
             Expr::Unsafe { body, .. } => {
+                // 先把块内定义的类型名提升到当前作用域（RFC-010「交给上一作用域」），
+                // 再检查块体——否则尾表达式 `T` 引用它时报 E1001。
+                for st in &body.stmts {
+                    if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
+                        name,
+                        ..
+                    } = &st.kind
+                    {
+                        if self.scope.get_var(name).is_none() {
+                            // 类型值的运行时表示是 Void（编译期构造）
+                            self.scope.add_var(
+                                name.clone(),
+                                PolyType::mono(MonoType::Void),
+                                false,
+                                crate::util::span::Span::default(),
+                            );
+                        }
+                    }
+                }
                 self.unsafe_depth += 1;
                 let r = self.check_block(body);
                 self.unsafe_depth -= 1;

@@ -2267,6 +2267,25 @@ impl<'a> ExpressionInferrer<'a> {
 
             // Unsafe 块
             crate::frontend::core::parser::ast::Expr::Unsafe { body, .. } => {
+                // RFC-010：块内定义的类型名提升到当前作用域（供尾表达式引用），
+                // 须在检查块体**之前**注册，否则 `T` 报 E1001。
+                for st in &body.stmts {
+                    if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
+                        name,
+                        ..
+                    } = &st.kind
+                    {
+                        if self.scope.get_var(name).is_none() {
+                            // 类型值的运行时表示是 Void（编译期构造）
+                            self.scope.add_var(
+                                name.clone(),
+                                PolyType::mono(MonoType::Void),
+                                false,
+                                crate::util::span::Span::default(),
+                            );
+                        }
+                    }
+                }
                 self.unsafe_depth += 1;
                 let r = self.infer_block(body, true, None);
                 self.unsafe_depth -= 1;

@@ -29,3 +29,14 @@ main = {
 
     io.println("unsafe block value ok")
 }
+// RFC-010：unsafe 块内定义不透明类型，类型名作为块的值交给上一作用域
+SqliteDb = unsafe {
+    SqliteDb: Type = {
+        handle: *Void
+    }
+    SqliteDb           // 尾表达式 → unsafe 块的值
+}
+
+main2 = {
+    io.println("opaque type ok")
+}
