@@ -199,6 +199,23 @@ impl Translator {
                 let current_bytecode_idx = instructions.len();
 
                 if self.generate_debug_info {
+                    // 语句级侧表先垫底，逐指令 span 随后覆盖（同名 ip 后者优先）
+                    // ponytail: 每条指令线性扫一遍侧表；侧表长度与语句数同阶（百级），
+                    // 编译期可忽略。真要优化时按 start 二分即可。
+                    let mut stmt_span = None;
+                    for &(start, end, sp) in &block.stmt_spans {
+                        if global_ir_index >= start && global_ir_index < end {
+                            stmt_span = Some(sp);
+                        }
+                    }
+                    if let Some(sp) = stmt_span {
+                        if !sp.is_dummy() {
+                            debug_map.insert(
+                                current_bytecode_idx,
+                                DebugSpan::new(self.source_file_id, sp),
+                            );
+                        }
+                    }
                     if let Some(span) = Self::extract_span(instr) {
                         if !span.is_dummy() {
                             debug_map.insert(
@@ -298,6 +315,8 @@ impl Translator {
                     label: 0,
                     instructions: ir_instructions.clone(),
                     successors: Vec::new(),
+                    // 合成构造函数无源码对应，不造位置
+                    stmt_spans: Vec::new(),
                 }],
                 entry: 0,
                 locals: locals.clone(),

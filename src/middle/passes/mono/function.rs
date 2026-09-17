@@ -278,6 +278,8 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             label: block.label,
             instructions: new_instructions,
             successors: block.successors.clone(),
+            // 单态化 1:1 改写指令，位置侧表原样沿用
+            stmt_spans: block.stmt_spans.clone(),
         }
     }
 

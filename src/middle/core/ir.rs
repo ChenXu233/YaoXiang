@@ -442,11 +442,19 @@ pub enum Instruction {
 }
 
 /// Basic block
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct BasicBlock {
     pub label: usize,
     pub instructions: Vec<Instruction>,
     pub successors: Vec<usize>,
+    /// 语句级位置侧表：(起始 IR 指令下标, 结束下标, span)。
+    ///
+    /// 与 `instructions` 平行；translator 将 IR 下标区间逐一映射到字节码 ip。
+    /// 为什么不做逐指令 span：`Instruction` 76 个变体只有 15 个带 span 字段，
+    /// 给其余 61 个补字段要改 150+ 处 push 点（且指令经 `&mut Vec` 流转，
+    /// 被调函数无法回写调用方）。语句粒度由生成循环在语句边界统一记录。
+    /// 需要逐指令精度时（如 DAP 单步）再给具体变体补 `span` 字段。
+    pub stmt_spans: Vec<(usize, usize, Span)>,
 }
 
 /// 函数体形态

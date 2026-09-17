@@ -694,3 +694,29 @@ fn test_e2e_dump_bytecode_file_carries_source_path() {
         "dump .42 should resolve real source path; stdout: {stdout:?}"
     );
 }
+
+#[test]
+fn test_e2e_dump_covers_statement_level_instructions() {
+    // Arrange: 无可提取 span 的算术/加载指令此前无位置（#阶段零缺口）。
+    // 语句侧表落地后，整条语句覆盖的指令都应带上源码行。
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "stmt.yx",
+        "use std.io\n\nmain = {\n    a = 1\n    b = a + 2\n    io.println(b)\n}\n",
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["dump", src.to_str().unwrap()], tmp.path());
+
+    // Assert: 第 5 行 `b = a + 2` 的 I64Add（无可提取 span）应归属到该语句
+    assert_eq!(code, 0, "dump should exit 0; stderr: {stderr:?}");
+    assert!(
+        stdout.contains("; <src>:5:"),
+        "语句级位置应覆盖算术指令；stdout: {stdout:?}"
+    );
+    assert!(
+        stdout.contains("; <src>:6:"),
+        "语句级位置应覆盖调用语句；stdout: {stdout:?}"
+    );
+}

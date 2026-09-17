@@ -188,6 +188,10 @@ pub struct AstToIrGenerator {
     /// 嵌套函数体生成前保存并清空：闭包体不继承外层循环上下文（typecheck E1102 已拦截，
     /// 此处为层间失联防御）。
     loop_stack: Vec<LoopTargets>,
+    /// 语句级 span 侧表收集器：当前正在构建的 block 的 (起始指令下标, span)。
+    /// `instructions` 以 `&mut Vec` 流过各生成函数，被调方无法回写调用方 block，
+    /// 故由生成循环在语句边界记录，构建 block 时取出。
+    pending_stmt_spans: Vec<(usize, usize, Span)>,
 }
 
 /// 绑定信息（用于 IR 生成阶段的方法调用转发）
@@ -276,6 +280,7 @@ impl AstToIrGenerator {
                 map
             },
             loop_stack: Vec::new(),
+            pending_stmt_spans: Vec::new(),
         }
     }
 
@@ -1288,7 +1293,10 @@ impl AstToIrGenerator {
         let saved_loop_stack = std::mem::take(&mut self.loop_stack);
 
         // 生成指令序列
+        // 每个函数体是独立指令流：清空父函数累计的语句 span 侧表，
+        // 否则嵌套函数会把父函数的 span 记到自己身上（行号张冠李戴）
         let mut instructions = Vec::new();
+        self.pending_stmt_spans.clear();
 
         // RFC-010a 规则①：尾表达式给出函数值。沿用共用的 `generate_tail_stmt_ir`
         // （与 generate_function_ir / generate_block_ir 同一实现），
@@ -1297,15 +1305,19 @@ impl AstToIrGenerator {
         let last_idx = body.len().checked_sub(1);
         let mut tail_handled = false;
         for (i, stmt) in body.iter().enumerate() {
+            // 语句侧表：记下本语句生成的指令范围（供 dump/调试回溯源码行）
+            let stmt_start = instructions.len();
             if Some(i) == last_idx {
                 let result_reg = self.next_temp_reg();
                 if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
                     instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                    self.record_stmt_span(stmt_start, instructions.len(), stmt.span);
                     tail_handled = true;
                     break;
                 }
             }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            self.record_stmt_span(stmt_start, instructions.len(), stmt.span);
         }
         if !tail_handled {
             instructions.push(Instruction::Ret(None));
@@ -1329,6 +1341,8 @@ impl AstToIrGenerator {
                     label: 0,
                     instructions,
                     successors: Vec::new(),
+
+                    stmt_spans: self.pending_stmt_spans.clone(),
                 }],
                 entry: 0,
                 locals: locals_types,
@@ -1375,7 +1389,10 @@ impl AstToIrGenerator {
         let saved_loop_stack = std::mem::take(&mut self.loop_stack);
 
         // 生成函数体指令
+        // 每个函数体是独立指令流：清空父函数累计的语句 span 侧表，
+        // 否则嵌套函数会把父函数的 span 记到自己身上（行号张冠李戴）
         let mut instructions = Vec::new();
+        self.pending_stmt_spans.clear();
 
         // 进入函数体作用域
         self.enter_scope();
@@ -1423,10 +1440,13 @@ impl AstToIrGenerator {
         let last_idx = body.len().checked_sub(1);
         let mut tail_handled = false;
         for (i, stmt) in body.iter().enumerate() {
+            // 语句侧表：记下本语句生成的指令范围（供 dump/调试回溯源码行）
+            let stmt_start = instructions.len();
             if Some(i) == last_idx {
                 let result_reg = self.next_temp_reg();
                 if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
                     instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                    self.record_stmt_span(stmt_start, instructions.len(), stmt.span);
                     tail_handled = true;
                     break;
                 }
@@ -1450,6 +1470,7 @@ impl AstToIrGenerator {
                 MSG::IrGenAfterProcessStmt,
                 &self.symbols.len().to_string()
             );
+            self.record_stmt_span(stmt_start, instructions.len(), stmt.span);
         }
         if !tail_handled {
             instructions.push(Instruction::Ret(None));
@@ -1500,6 +1521,8 @@ impl AstToIrGenerator {
                     label: 0,
                     instructions,
                     successors: Vec::new(),
+
+                    stmt_spans: self.pending_stmt_spans.clone(),
                 }],
                 entry: 0,
                 locals: locals_types,
@@ -1526,7 +1549,10 @@ impl AstToIrGenerator {
         generic_params: Option<Vec<String>>,
     ) -> Result<FunctionIR, Diagnostic> {
         let _ = constants; // 中间层不生成常量
+                           // 每个函数体是独立指令流：清空父函数累计的语句 span 侧表，
+                           // 否则嵌套函数会把父函数的 span 记到自己身上（行号张冠李戴）
         let mut instructions = Vec::new();
+        self.pending_stmt_spans.clear();
 
         // 无需 LoadArg 搬动：args 槽布局 = [外层 env(0..env_count), 本层参数(env_count..)]
         // 正是下一层闭包 env 需要的顺序。搬动会因 dst/src 槽重叠互相覆盖（#294）。
@@ -1566,6 +1592,8 @@ impl AstToIrGenerator {
                     label: 0,
                     instructions,
                     successors: Vec::new(),
+
+                    stmt_spans: self.pending_stmt_spans.clone(),
                 }],
                 entry: 0,
                 locals: locals_types,
@@ -1591,7 +1619,10 @@ impl AstToIrGenerator {
         //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
         let saved_loop_stack = std::mem::take(&mut self.loop_stack);
 
+        // 每个函数体是独立指令流：清空父函数累计的语句 span 侧表，
+        // 否则嵌套函数会把父函数的 span 记到自己身上（行号张冠李戴）
         let mut instructions = Vec::new();
+        self.pending_stmt_spans.clear();
         let env_count = env_param_names.len();
 
         // 参数原位注册，不生成 LoadArg：args 槽布局 = [外层参数(0..env_count),
@@ -1615,15 +1646,19 @@ impl AstToIrGenerator {
         let last_idx = body.len().checked_sub(1);
         let mut tail_handled = false;
         for (i, stmt) in body.iter().enumerate() {
+            // 语句侧表：记下本语句生成的指令范围（供 dump/调试回溯源码行）
+            let stmt_start = instructions.len();
             if Some(i) == last_idx {
                 let result_reg = self.next_temp_reg();
                 if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
                     instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                    self.record_stmt_span(stmt_start, instructions.len(), stmt.span);
                     tail_handled = true;
                     break;
                 }
             }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            self.record_stmt_span(stmt_start, instructions.len(), stmt.span);
         }
         if !tail_handled {
             instructions.push(Instruction::Ret(None));
@@ -1652,6 +1687,8 @@ impl AstToIrGenerator {
                     label: 0,
                     instructions,
                     successors: Vec::new(),
+
+                    stmt_spans: self.pending_stmt_spans.clone(),
                 }],
                 entry: 0,
                 locals: locals_types,
@@ -2037,6 +2074,8 @@ impl AstToIrGenerator {
                     label: 0,
                     instructions,
                     successors: Vec::new(),
+
+                    stmt_spans: self.pending_stmt_spans.clone(),
                 }],
                 entry: 0,
                 locals: vec![MonoType::Int(64)], // 分配一个局部变量用于存储结果
@@ -2065,7 +2104,10 @@ impl AstToIrGenerator {
         //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
         let saved_loop_stack = std::mem::take(&mut self.loop_stack);
 
+        // 每个函数体是独立指令流：清空父函数累计的语句 span 侧表，
+        // 否则嵌套函数会把父函数的 span 记到自己身上（行号张冠李戴）
         let mut instructions = Vec::new();
+        self.pending_stmt_spans.clear();
 
         // 进入匿名函数作用域
         self.enter_scope();
@@ -2117,6 +2159,8 @@ impl AstToIrGenerator {
                     label: 0,
                     instructions,
                     successors: Vec::new(),
+
+                    stmt_spans: self.pending_stmt_spans.clone(),
                 }],
                 entry: 0,
                 locals: locals_types,
@@ -2195,6 +2239,18 @@ impl AstToIrGenerator {
 
     /// 生成局部语句 IR
     #[allow(clippy::only_used_in_recursion)]
+    fn record_stmt_span(
+        &mut self,
+        start: usize,
+        end: usize,
+        span: Span,
+    ) {
+        // 该语句没产出指令（空块/纯声明）或 span 缺失时不记
+        if end > start && !span.is_dummy() {
+            self.pending_stmt_spans.push((start, end, span));
+        }
+    }
+
     fn generate_local_stmt_ir(
         &mut self,
         stmt: &ast::Stmt,
@@ -2768,14 +2824,18 @@ impl AstToIrGenerator {
         let last_idx = block.stmts.len().checked_sub(1);
         for (i, stmt) in block.stmts.iter().enumerate() {
             let is_last = Some(i) == last_idx;
+            // 语句侧表：记下本语句生成的指令范围，供 dump/调试回溯源码行
+            let stmt_start = instructions.len();
             // 块作为表达式 + 最后一条语句贡献块值 → 值写入 result_reg
             if let (Some(reg), true) = (result_reg, is_last) {
                 if self.generate_tail_stmt_ir(stmt, reg, instructions, constants)? {
+                    self.record_stmt_span(stmt_start, instructions.len(), stmt.span);
                     continue;
                 }
             }
             // 其他情况正常生成语句
             self.generate_local_stmt_ir(stmt, instructions, constants)?;
+            self.record_stmt_span(stmt_start, instructions.len(), stmt.span);
         }
 
         // 退出作用域
@@ -3574,7 +3634,10 @@ impl AstToIrGenerator {
         //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
         let saved_loop_stack = std::mem::take(&mut self.loop_stack);
 
+        // 每个函数体是独立指令流：清空父函数累计的语句 span 侧表，
+        // 否则嵌套函数会把父函数的 span 记到自己身上（行号张冠李戴）
         let mut instructions = Vec::new();
+        self.pending_stmt_spans.clear();
 
         // 进入闭包函数体作用域
         self.enter_scope();
@@ -3598,15 +3661,19 @@ impl AstToIrGenerator {
         let last_idx = body.stmts.len().checked_sub(1);
         let mut tail_handled = false;
         for (i, stmt) in body.stmts.iter().enumerate() {
+            // 语句侧表：记下本语句生成的指令范围（供 dump/调试回溯源码行）
+            let stmt_start = instructions.len();
             if Some(i) == last_idx {
                 let result_reg = self.next_temp_reg();
                 if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
                     instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                    self.record_stmt_span(stmt_start, instructions.len(), stmt.span);
                     tail_handled = true;
                     break;
                 }
             }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            self.record_stmt_span(stmt_start, instructions.len(), stmt.span);
         }
 
         // 尾位置无值（末位为语句 / 空体）时补 Ret(None)
@@ -5448,6 +5515,8 @@ impl AstToIrGenerator {
                             label: 0,
                             instructions: closure_body.instructions,
                             successors: Vec::new(),
+
+                            stmt_spans: self.pending_stmt_spans.clone(),
                         }],
                         entry: 0,
                         locals: closure_body.locals.clone(),
