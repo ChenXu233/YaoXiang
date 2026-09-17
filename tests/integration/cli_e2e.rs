@@ -825,10 +825,9 @@ fn test_e2e_dump_lists_local_variable_names() {
 
     // Assert
     assert_eq!(code, 0, "dump should exit 0; stderr: {stderr:?}");
-    assert!(
-        stdout.contains("locals:"),
-        "dump 应输出局部变量名列；stdout: {stdout:?}"
-    );
+    // 不锚定标签文案：locales/*.json 由 i18n 自动翻译机器人维护，
+    // 断言 "locals:" 会被它改名（实测已改成 "Local Variables:"）而误报。
+    // 断言值本身：名字@槽位 才是本功能的契约。
     assert!(
         stdout.contains("alpha@0"),
         "应列出 alpha 及其槽位号；stdout: {stdout:?}"
