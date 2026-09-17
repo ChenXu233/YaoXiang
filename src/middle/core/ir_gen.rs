@@ -194,6 +194,14 @@ pub struct AstToIrGenerator {
     /// 就地捕获当时的语句位置，不存在"先记录后配对"的时序契约。
     /// 嵌套函数体生成前保存、之后恢复（与 next_temp 同款处理）。
     cur_span: Span,
+    /// 当前正在生成的函数的局部槽位（含源码变量名）。
+    ///
+    /// 槽位下标即寄存器号；`name` 为 None 表示编译器临时寄存器。
+    /// `register_local` 就地把名字写进来，函数体生成结束后交给
+    /// `FunctionBody::Code::locals`。
+    /// 嵌套函数体生成前保存、之后恢复——**必须与 next_temp 的
+    /// 保存/恢复点物理相邻**，否则内层函数的名字会串到外层。
+    cur_locals: Vec<LocalSlot>,
 }
 
 /// 绑定信息（用于 IR 生成阶段的方法调用转发）
@@ -283,6 +291,7 @@ impl AstToIrGenerator {
             },
             loop_stack: Vec::new(),
             cur_span: Span::dummy(),
+            cur_locals: Vec::new(),
         }
     }
 
@@ -437,6 +446,31 @@ impl AstToIrGenerator {
         if let Some(scope) = self.symbols.last_mut() {
             scope.insert(name.to_string(), SymbolEntry { local_idx });
         }
+        // 把源码名写进当前函数的槽位表：槽位可能尚未扩展到 local_idx
+        // （临时寄存器先于具名变量分配），先补齐空槽。
+        while self.cur_locals.len() <= local_idx {
+            self.cur_locals.push(LocalSlot::temp(MonoType::Int(64)));
+        }
+        self.cur_locals[local_idx].name = Some(name.to_string());
+        self.cur_locals[local_idx].scope_depth = self.symbols.len().saturating_sub(1);
+    }
+
+    /// 取出当前函数的局部槽位，补齐到 `total_locals` 长度后交给函数体。
+    ///
+    /// `register_local` 在生成期把源码名写进 `self.cur_locals`；
+    /// 临时寄存器分配的槽位没有名字，这里补空槽保证长度覆盖全部槽位。
+    /// 嵌套函数体在进入前已 `std::mem::take` 掉父函数的表，
+    /// 因此这里拿到的一定是本函数自己的名字。
+    fn take_cur_locals(
+        &mut self,
+        total_locals: usize,
+    ) -> Vec<LocalSlot> {
+        let mut slots = std::mem::take(&mut self.cur_locals);
+        // 必须**恰好** total_locals 个：该长度即 local_count，
+        // 多一个少一个都会改变字节码。register_local 会为槽位号较大的
+        // 具名变量临时补空槽，而最终寄存器数以 total_locals 为准。
+        slots.resize(total_locals, LocalSlot::temp(MonoType::Int(64)));
+        slots
     }
 
     /// 查找局部变量
@@ -1294,6 +1328,10 @@ impl AstToIrGenerator {
         //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
         let saved_loop_stack = std::mem::take(&mut self.loop_stack);
 
+        // 顶层函数体入口：清空槽位表，避免沿用上一个函数的局部名。
+        // 嵌套路径（curry/lambda/anon）走 save/restore，不在此列。
+        self.cur_locals.clear();
+
         // 生成指令序列
         let mut instructions = Vec::new();
 
@@ -1331,9 +1369,7 @@ impl AstToIrGenerator {
         // 退出作用域
         self.exit_scope();
 
-        // 分配局部变量类型（简化：与参数相同）
-        let locals_types: Vec<LocalSlot> =
-            param_types.iter().cloned().map(LocalSlot::temp).collect();
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(param_types.len());
 
         // 构建函数 IR
         let func_ir = FunctionIR {
@@ -1391,6 +1427,10 @@ impl AstToIrGenerator {
         // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
         //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
         let saved_loop_stack = std::mem::take(&mut self.loop_stack);
+
+        // 顶层函数体入口：清空槽位表，避免沿用上一个函数的局部名。
+        // 嵌套路径（curry/lambda/anon）走 save/restore，不在此列。
+        let saved_cur_locals = std::mem::take(&mut self.cur_locals);
 
         // 生成函数体指令
         let mut instructions = Vec::new();
@@ -1512,9 +1552,7 @@ impl AstToIrGenerator {
             ))
             .build());
         }
-        let locals_types: Vec<LocalSlot> = (0..total_locals)
-            .map(|_| LocalSlot::temp(MonoType::Int(64)))
-            .collect();
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
 
         // 构建函数 IR
         let func_ir = FunctionIR {
@@ -1540,6 +1578,9 @@ impl AstToIrGenerator {
 
         // #311：恢复父函数的循环上下文
         self.loop_stack = saved_loop_stack;
+        // 恢复父函数的槽位表：本函数可能是在父函数体内生成的嵌套函数，
+        // 清空/取用后必须把父函数的名字放回去，否则父函数已记录的局部名会丢失。
+        self.cur_locals = saved_cur_locals;
 
         Ok(Some(func_ir))
     }
@@ -1589,7 +1630,7 @@ impl AstToIrGenerator {
             .collect();
         let return_type: MonoType = layer.return_type.clone().into();
         let total_locals = self.next_temp;
-        let locals_types: Vec<LocalSlot> = vec![LocalSlot::temp(MonoType::Int(64)); total_locals];
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
 
         Ok(FunctionIR {
             def: None, // 由 generate_module_ir 尾部 assign_defs 填充
@@ -1626,6 +1667,8 @@ impl AstToIrGenerator {
         // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
         //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
         let saved_loop_stack = std::mem::take(&mut self.loop_stack);
+
+        // 顶层函数体入口：清空槽位表，避免沿用上一个函数的局部名。
 
         let mut instructions = Vec::new();
         let env_count = env_param_names.len();
@@ -1682,7 +1725,7 @@ impl AstToIrGenerator {
             .map(MonoType::from)
             .collect();
         let total_locals = self.next_temp;
-        let locals_types: Vec<LocalSlot> = vec![LocalSlot::temp(MonoType::Int(64)); total_locals];
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
 
         // #311：恢复父函数的循环上下文
         self.loop_stack = saved_loop_stack;
@@ -1730,6 +1773,7 @@ impl AstToIrGenerator {
 
         // 保存外层状态，避免污染
         let saved_next_temp = self.next_temp;
+        let saved_cur_locals = std::mem::take(&mut self.cur_locals);
         // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
         let saved_cur_span = self.cur_span;
 
@@ -1785,6 +1829,7 @@ impl AstToIrGenerator {
 
         // 恢复外层状态
         self.next_temp = saved_next_temp;
+        self.cur_locals = saved_cur_locals;
         self.cur_span = saved_cur_span;
 
         // 内层函数加入 nested_functions，最外层返回给调用者
@@ -2113,12 +2158,15 @@ impl AstToIrGenerator {
     ) -> Result<Option<FunctionIR>, Diagnostic> {
         // 保存父函数状态
         let saved_next_temp = self.next_temp;
+        let saved_cur_locals = std::mem::take(&mut self.cur_locals);
         // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
         let saved_cur_span = self.cur_span;
 
         // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
         //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
         let saved_loop_stack = std::mem::take(&mut self.loop_stack);
+
+        // 顶层函数体入口：清空槽位表，避免沿用上一个函数的局部名。
 
         let mut instructions = Vec::new();
 
@@ -2153,12 +2201,11 @@ impl AstToIrGenerator {
 
         // 计算局部变量总数
         let total_locals = self.next_temp;
-        let locals_types: Vec<LocalSlot> = (0..total_locals)
-            .map(|_| LocalSlot::temp(MonoType::Int(64)))
-            .collect();
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
 
         // 恢复父函数状态
         self.next_temp = saved_next_temp;
+        self.cur_locals = saved_cur_locals;
         self.cur_span = saved_cur_span;
 
         // 解析返回类型
@@ -3770,6 +3817,7 @@ impl AstToIrGenerator {
     ) -> Result<LambdaBodyIR, Diagnostic> {
         // 保存父函数的临时寄存器计数
         let saved_next_temp = self.next_temp;
+        let saved_cur_locals = std::mem::take(&mut self.cur_locals);
         // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
         let saved_cur_span = self.cur_span;
 
@@ -3837,12 +3885,11 @@ impl AstToIrGenerator {
 
         // 计算局部变量总数
         let total_locals = self.next_temp;
-        let locals_types: Vec<LocalSlot> = (0..total_locals)
-            .map(|_| LocalSlot::temp(MonoType::Int(64)))
-            .collect();
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
 
         // 恢复父函数的临时寄存器计数
         self.next_temp = saved_next_temp;
+        self.cur_locals = saved_cur_locals;
         self.cur_span = saved_cur_span;
 
         // #311：恢复父函数的循环上下文
