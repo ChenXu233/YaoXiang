@@ -28,6 +28,8 @@ fn store_then_load_module() -> ModuleIR {
         ty: MonoType::Int(64),
         index: 0,
     });
+    // T4：入口只由 `entry_function` 指定（Script 模式无隐式入口）。
+    module.entry_function = Some("main".to_string());
 
     module.functions.push(FunctionIR {
         def: None,

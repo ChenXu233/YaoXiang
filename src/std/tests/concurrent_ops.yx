@@ -21,3 +21,5 @@ main = {
     tid = concurrent.thread_id()
     assert.assert(string.len(tid) > 0, "thread_id should be non-empty")
 }
+
+main()

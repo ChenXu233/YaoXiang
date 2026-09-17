@@ -11,3 +11,5 @@ main = {
     assert.assert(items[0] == 1)
     assert.assert(items[4] == 5)
 }
+
+main()

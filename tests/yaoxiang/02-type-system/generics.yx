@@ -19,3 +19,5 @@ main = {
     s = identity("hello")
     assert.assert(s == "hello", "identity(\"hello\") should be \"hello\"")
 }
+
+main()

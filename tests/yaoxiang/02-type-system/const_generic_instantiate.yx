@@ -14,3 +14,5 @@ main = {
     arr = SafeArray(Int, 3)
     assert.assert(true, "SafeArray(Int, 3) instantiation compiled and ran")
 }
+
+main()

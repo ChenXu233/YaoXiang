@@ -11,3 +11,5 @@ main = {
     p2 = p
     assert.assert(true, "move completed — p2 should own the value")
 }
+
+main()

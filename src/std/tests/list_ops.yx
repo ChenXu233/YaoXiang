@@ -45,3 +45,5 @@ main = {
     gone = list.pop(empty)
     assert.assert(list.is_empty(empty), "empty stays empty after pop")
 }
+
+main()

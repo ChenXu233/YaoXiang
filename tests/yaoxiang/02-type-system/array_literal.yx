@@ -15,3 +15,5 @@ main = {
     assert.assert(b[1] == 50, "annotated literal becomes Array")
     assert.assert(b[0] == 40, "Array index read")
 }
+
+main()

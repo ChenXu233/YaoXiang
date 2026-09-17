@@ -29,3 +29,5 @@ main = {
     c.rename("b")
     assert.assert(c.value() == 16, "second bump(1) should make value 16")
 }
+
+main()

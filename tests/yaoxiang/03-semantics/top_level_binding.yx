@@ -30,3 +30,5 @@ main = {
     assert.assert(plain == 3, "常量折叠路径不应回归")
     io.println("top_level_binding ok")
 }
+
+main()

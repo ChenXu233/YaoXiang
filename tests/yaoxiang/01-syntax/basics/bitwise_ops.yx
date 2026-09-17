@@ -16,3 +16,5 @@ main = {
     assert.assert((16 >> 1 & 3) == 0, "移位高于位与")
     io.println("BITWISE_OPS_OK")
 }
+
+main()

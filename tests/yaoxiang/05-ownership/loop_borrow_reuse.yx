@@ -19,3 +19,5 @@ main = {
     print(v)
     print("loop_borrow_reuse_ok")
 }
+
+main()

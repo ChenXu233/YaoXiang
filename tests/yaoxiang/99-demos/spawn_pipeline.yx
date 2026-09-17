@@ -19,3 +19,5 @@ main = {
     io.println(city)
     assert.assert(true, "all passed")
 }
+
+main()

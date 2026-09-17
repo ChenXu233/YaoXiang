@@ -22,3 +22,5 @@ main = {
 
     assert.assert(true, "all passed")
 }
+
+main()

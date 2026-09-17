@@ -13,3 +13,5 @@ main = {
     d = {"a": 1}
     v = d["nope"]
 }
+
+main()

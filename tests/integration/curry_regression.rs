@@ -9,7 +9,8 @@
 use yaoxiang::run;
 
 fn run_ok(source: &str) {
-    run(source).unwrap_or_else(|e| {
+    let source = crate::fixture::with_main_invoked(source);
+    run(&source).unwrap_or_else(|e| {
         panic!(
             "Regression test failed.\nSource:\n{}\nError:\n{:?}",
             source, e

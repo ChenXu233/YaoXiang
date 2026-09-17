@@ -26,3 +26,5 @@ main = {
     counter = counter + 1
     assert.assert(counter == 1, "counter == 1")
 }
+
+main()

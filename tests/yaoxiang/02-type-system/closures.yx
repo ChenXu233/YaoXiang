@@ -29,3 +29,5 @@ main = {
     )
     assert.assert(true, "chained list.map and list.filter works")
 }
+
+main()

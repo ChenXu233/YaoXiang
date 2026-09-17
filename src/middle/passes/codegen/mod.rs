@@ -267,29 +267,23 @@ impl CodegenContext {
 
     /// 查找入口点。
     ///
-    /// - 多文件（Bin 角色，有 yaoxiang.toml）：编排器在 `entry_function` 给出
-    ///   限定名（如 `main.main`）。
-    /// - 单文件（Script 角色）：找裸名 `main` 函数；没有则无入口。
+    /// 入口**只由编排器指定**（`entry_function`）——Bin 角色（有 yaoxiang.toml）
+    /// 由它给出 `{entry_key}.main`。
     ///
-    /// T4：**删除了“找不到 main 就用第 0 个函数”的静默兜底**。那个兜底会执行
-    /// 函数表里任意第一个函数（用户以为在跑 main，实际跑了 helper），
-    /// 属 #271 静默错误族。现在返回 `Option`：None = 本模块无入口，
-    /// 由调用方按角色处理（Script 允许；Bin 报错）。
+    /// T4：Script 角色（无 manifest）**没有入口概念**：顶层语句与绑定就是程序
+    /// 主体（编入模块初始化序列），`main` 只是个普通绑定——想跑就写 `main()`。
     ///
-    /// 注：`main: Int = 5` 这类值绑定不在函数表里（它进全局槽位），
-    /// 故不会成为入口——由 Bin 角色检查报 E3021，而非静默挑别的函数。
+    /// 这也消除了双跑：若既扫 main 又把顶层语句当程序，显式 `main()` 会跑两次
+    /// （#356）。单一入口语义后不可能重叠。
+    ///
+    /// 不再有“找不到就用第 0 个函数”的静默兜底（它会执行函数表里任意第一个
+    /// 函数——用户以为在跑 main，实际跑了 helper，属 #271 静默错误族）。
     fn find_entry_point(&self) -> Option<usize> {
-        if let Some(ref entry_name) = self.module.entry_function {
-            return self
-                .module
-                .functions
-                .iter()
-                .position(|func| &func.name == entry_name);
-        }
+        let entry_name = self.module.entry_function.as_ref()?;
         self.module
             .functions
             .iter()
-            .position(|func| func.name == "main")
+            .position(|func| &func.name == entry_name)
     }
 
     /// 从 AST 类型转换

@@ -23,11 +23,17 @@ fn yx_bin() -> PathBuf {
 }
 
 /// 在临时目录写一个 .yx 源文件
+///
+/// T4 入口语义：Script 模式下 `main` 不再隐式执行，想跑得写 `main()`。
+/// 本 helper 经 `fixture::with_main_invoked` 适配：只对**定义了 main 但未调用**
+/// 的夹具追加调用，使它们真正执行；未定义 main 的源（如故意写坏的语法用例）
+/// 原样写入，不会因追加而掩盖错误。
 fn write_yx(
     dir: &std::path::Path,
     name: &str,
     content: &str,
 ) -> PathBuf {
+    let content = crate::fixture::with_main_invoked_in(dir, content);
     let path = dir.join(name);
     std::fs::write(&path, content).unwrap_or_else(|e| panic!("write {name}: {e}"));
     path

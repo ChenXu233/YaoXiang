@@ -72,3 +72,5 @@ main = {
 
     io.println("rfc010a block value ok")
 }
+
+main()

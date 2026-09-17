@@ -36,3 +36,5 @@ main = {
     assert.assert(d.speak() == "Woof", "inherited Animal.speak dispatches")
     assert.assert(d.fetch() == "Rex fetches", "own Pet.fetch dispatches")
 }
+
+main()

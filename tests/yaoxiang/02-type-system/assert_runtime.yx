@@ -9,3 +9,5 @@ main = {
     // assert(true) 应通过
     assert.assert(true, "true should pass")
 }
+
+main()

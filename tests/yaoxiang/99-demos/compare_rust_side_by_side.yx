@@ -28,3 +28,5 @@ main = {
     io.println(x)
     assert.assert(true, "all passed")
 }
+
+main()

@@ -36,3 +36,5 @@ main = {
     assert.assert(E > 2.71  and  E < 2.72, "E in range")
     assert.assert(TAU > 6.28  and  TAU < 6.29, "TAU in range")
 }
+
+main()

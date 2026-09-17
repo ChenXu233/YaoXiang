@@ -28,3 +28,5 @@ main = {
     y = double_identity(99)
     assert.assert(y == 99, "double_identity(99) should be 99")
 }
+
+main()

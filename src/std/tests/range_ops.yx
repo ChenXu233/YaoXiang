@@ -62,3 +62,5 @@ main = {
     total = range.reduce(result.unwrap(range.iter(r)), 0, (acc, x) => acc + x)
     assert.assert(total == 15, "reduce sum 1..5 = 15")
 }
+
+main()

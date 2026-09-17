@@ -12,3 +12,5 @@ main = {
     ref2 = &p
     assert.assert(true, "&T is Copy — two immutable refs can coexist")
 }
+
+main()

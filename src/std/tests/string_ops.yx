@@ -45,3 +45,5 @@ main = {
     err_f = string.parse_float("xxx")
     assert.assert(result.is_err(err_f), "parse_float err on invalid")
 }
+
+main()

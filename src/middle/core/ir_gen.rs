@@ -164,6 +164,12 @@ pub struct AstToIrGenerator {
     /// 按源码顺序收集，在 `generate_module_ir` 尾部按依赖关系重排后
     /// 写入 `module_init`——前向引用（`b = a + 1` 且 `a` 在后）需要 `a` 先初始化。
     pending_inits: Vec<PendingInit>,
+    /// T4：顶层可执行语句（Script 模式），按书写顺序。
+    ///
+    /// 与绑定初始化分两段：绑定是**声明**（先全部就绪，拓扑序），
+    /// 语句是**程序主体**（后执行，源码序）。若不分开，语句会立即入队
+    /// 而绑定被推迟到末尾排序，导致 `io.println(v)` 先于 `v` 的初始化执行。
+    module_stmts: Vec<Instruction>,
     /// 约束变量的具体类型映射（接口直接赋值优化）
     /// 当 `d: Drawable = Circle(1)` 时，记录 d -> "Circle"（具体类型名）
     /// 用于方法调用时选择直接调用而非 vtable 查找
@@ -288,6 +294,7 @@ impl AstToIrGenerator {
             global_slot_base: 0,
             module_init: Vec::new(),
             pending_inits: Vec::new(),
+            module_stmts: Vec::new(),
             constraint_var_concrete_types: HashMap::new(),
             anon_function_irs: Vec::new(),
             release_plan: type_result.release_plan.drops.clone(),
@@ -769,6 +776,10 @@ impl AstToIrGenerator {
         for instrs in ordered_inits {
             self.module_init.extend(instrs);
         }
+        // T4/T3：绑定初始化（声明，已拓扑排序）之后才跑顶层语句（程序主体，源码序）。
+        // 两段不可交换：语句可能读绑定（如 `io.println(v)`），必须先初始化。
+        let stmts = std::mem::take(&mut self.module_stmts);
+        self.module_init.extend(stmts);
 
         // 添加嵌套函数到模块函数列表
         functions.extend(std::mem::take(&mut self.nested_functions));
@@ -1282,7 +1293,10 @@ impl AstToIrGenerator {
                         &body,
                         constants,
                     )
-                } else if !params.is_empty() || !body.is_empty() {
+                } else if !params.is_empty() || !body.is_empty() || is_fn_binding {
+                    // Fn: 普通函数（含**空块体** `f = { }`——裁决 C 下无注解即函数，
+                    // 块体可为空；不能因 `body.is_empty()` 就落到值绑定分支，
+                    // 否则 `f()` 解析不到函数（#356 修复过程中发现）。
                     // Fn: 普通函数
                     let generic_param_names = if generic_params.is_empty() {
                         None
@@ -1348,9 +1362,11 @@ impl AstToIrGenerator {
             // 注：初始化序列本身也是代码——所以顶层可执行语句不报错，
             // 而是像 Python 一样按序执行。这是「默认情况零门槛」的代价与红利。
             _ if self.module_key.is_none() => {
+                // T4：顶层可执行语句（Script 模式）——先收进 module_stmts，
+                // 待所有绑定初始化（拓扑序）就绪后再拼到后面。
                 let mut instrs = Vec::new();
                 self.generate_local_stmt_ir(stmt, &mut instrs, constants)?;
-                self.module_init.extend(instrs);
+                self.module_stmts.extend(instrs);
                 Ok(None)
             }
             _ => {

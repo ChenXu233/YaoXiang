@@ -15,3 +15,5 @@ main = {
     }
     assert.assert(sum == 60, "for sum 10+20+30 == 60")
 }
+
+main()

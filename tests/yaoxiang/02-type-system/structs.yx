@@ -11,3 +11,5 @@ main = {
     p = Point(1.0, 2.0)
     assert.assert(true, "Point struct created successfully")
 }
+
+main()

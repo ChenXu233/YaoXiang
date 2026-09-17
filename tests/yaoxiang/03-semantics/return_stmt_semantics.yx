@@ -32,3 +32,5 @@ main = {
     r3 = fn_return_skips_rest()
     assert.assert(r3 == 42, "return_skips_rest should be 42")
 }
+
+main()

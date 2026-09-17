@@ -37,3 +37,5 @@ main = {
         ("parse_ok", () => parse_ok()),
     ])
 }
+
+main()

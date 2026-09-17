@@ -43,3 +43,5 @@ main = {
     deleted = dict.delete(d2, "a")
     assert.assert(!dict.has(deleted, "a"), "deleted has no a")
 }
+
+main()

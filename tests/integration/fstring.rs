@@ -6,7 +6,8 @@ use yaoxiang::run;
 
 /// Helper: run source and check it doesn't fail at parse/compile stage
 fn compile_ok(source: &str) {
-    let result = run(source);
+    let adapted = crate::fixture::with_main_invoked(source);
+    let result = run(&adapted);
     match result {
         Ok(_) => {}
         Err(e) => {

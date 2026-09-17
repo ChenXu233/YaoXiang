@@ -14,3 +14,5 @@ Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
 main = {
     assert.assert(true, "compiled with Assert(Rows > 0) and Assert(Cols > 0)")
 }
+
+main()

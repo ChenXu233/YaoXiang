@@ -53,3 +53,5 @@ main = {
     ep = result.unwrap_err(p)
     assert.assert(result.code(ep) == "E6009", "? 传播携带 E6009")
 }
+
+main()

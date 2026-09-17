@@ -18,3 +18,5 @@ main = {
     assert.assert(mapped[3] == 2, "list.map[3] == 2")
     assert.assert(mapped[4] == 10, "list.map[4] == 10")
 }
+
+main()

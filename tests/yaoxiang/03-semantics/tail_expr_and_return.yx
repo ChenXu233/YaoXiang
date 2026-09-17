@@ -57,3 +57,5 @@ main = {
     // Void 函数：尾表达式为 Void
     no_return_has_side_effect()
 }
+
+main()

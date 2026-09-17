@@ -23,3 +23,5 @@ main = {
     assert.assert(true, "bool true")
     // assert.assert(!false, "!false") // 逻辑非见 logical_not.yx
 }
+
+main()

@@ -29,3 +29,5 @@ main = {
     assert.assert(3.14 > 3.0, "3.14 > 3.0 should be true")
     assert.assert(3.0 < 3.14, "3.0 < 3.14 should be true")
 }
+
+main()

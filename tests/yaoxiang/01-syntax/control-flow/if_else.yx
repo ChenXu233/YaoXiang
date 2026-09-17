@@ -47,3 +47,5 @@ main = {
     }
     assert.assert(size == "small", "nested if small")
 }
+
+main()

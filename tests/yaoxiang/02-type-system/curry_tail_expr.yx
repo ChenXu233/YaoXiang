@@ -20,3 +20,5 @@ main = {
     r2 = g(7)(4)
     assert.assert(r2 == 8, "g(7)(4) should be 8")
 }
+
+main()

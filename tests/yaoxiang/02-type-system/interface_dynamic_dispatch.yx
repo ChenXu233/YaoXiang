@@ -60,3 +60,5 @@ main = {
     animals2 = list.append(animals, Dog("Bella", 5))
     assert.assert(animals2[2].speak() == "Woof", "append implements-member then dispatch")
 }
+
+main()

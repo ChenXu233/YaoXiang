@@ -34,3 +34,5 @@ main = {
     assert.assert(incremented == 43, "顶层调用初始化（T2 运行时求值）")
     assert.assert(fwd_derived == 21, "前向引用（T3 拓扑排序：fwd_base 先初始化）")
 }
+
+main()

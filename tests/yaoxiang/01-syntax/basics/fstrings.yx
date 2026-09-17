@@ -14,3 +14,5 @@ main = {
     val = f"value: {x}"
     assert.assert(val == "value: 42", "f-string x == 42")
 }
+
+main()

@@ -39,3 +39,5 @@ main = {
     result = (10 + 20) * 2 - 5
     assert.assert(result == 55, "(10+20)*2-5 == 55")
 }
+
+main()

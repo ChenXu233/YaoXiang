@@ -32,3 +32,5 @@ main = {
     }
     assert.assert(sum == 55, "sum 1..10 should be 55")
 }
+
+main()

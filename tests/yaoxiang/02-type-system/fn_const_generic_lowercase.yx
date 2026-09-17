@@ -10,3 +10,5 @@ main = {
     result = f(42)(5)
     assert.assert(result == 5, "f(42)(5) with lowercase m should return 5")
 }
+
+main()

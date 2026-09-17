@@ -20,3 +20,5 @@ main = {
     io.println(v.view.value)      // 通过视图读取
     assert.assert(true, "all passed")
 }
+
+main()

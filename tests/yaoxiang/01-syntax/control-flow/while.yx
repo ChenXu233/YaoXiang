@@ -22,3 +22,5 @@ main = {
     }
     assert.assert(sum == 55, "while sum 1..10 == 55")
 }
+
+main()

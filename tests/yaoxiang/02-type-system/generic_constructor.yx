@@ -32,3 +32,5 @@ main = {
     z.first = 7
     assert.assert(z.first == 7, "Pair(Int)() first = 7 after assign")
 }
+
+main()

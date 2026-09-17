@@ -28,3 +28,5 @@ main = {
     r2 = string.parse_int("7")
     assert.assert(result.unwrap(r2) == 7, "second instance unwrap == 7")
 }
+
+main()

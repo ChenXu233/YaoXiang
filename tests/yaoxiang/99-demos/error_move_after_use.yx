@@ -13,3 +13,5 @@ main = {
     // io.println(x)  // 取消注释查看错误
     assert.assert(true, "all passed")
 }
+
+main()

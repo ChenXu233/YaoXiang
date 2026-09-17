@@ -42,3 +42,5 @@ main = {
     assert.assert(count4 == 3, "0,3,6 = 3 iterations")
     assert.assert(6 in 0..9..k, "6 in stepped range with var step")
 }
+
+main()

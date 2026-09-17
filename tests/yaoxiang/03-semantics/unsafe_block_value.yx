@@ -40,3 +40,5 @@ SqliteDb = unsafe {
 main2 = {
     io.println("opaque type ok")
 }
+
+main()

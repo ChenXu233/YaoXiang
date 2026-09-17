@@ -20,3 +20,5 @@ main = {
     io.println(w.view.x)
     assert.assert(true, "all passed")
 }
+
+main()

@@ -27,3 +27,5 @@ main = {
     assert.assert(f.closed, "file should be closed after close()")
     assert.assert(true, "all passed")
 }
+
+main()

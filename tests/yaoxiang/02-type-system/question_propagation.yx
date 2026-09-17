@@ -38,3 +38,5 @@ main = {
 
     print("question_propagation_ok")
 }
+
+main()

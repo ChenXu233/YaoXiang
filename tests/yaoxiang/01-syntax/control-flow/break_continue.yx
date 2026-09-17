@@ -67,3 +67,5 @@ main = {
     assert.assert(outer == 3, "outer loop survives inner break")
     assert.assert(inner_hits == 3, "inner break fires once per outer iteration")
 }
+
+main()

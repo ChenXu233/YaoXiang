@@ -43,3 +43,5 @@ main = {
     }
     assert.assert(total == 6, "nested range iteration")
 }
+
+main()

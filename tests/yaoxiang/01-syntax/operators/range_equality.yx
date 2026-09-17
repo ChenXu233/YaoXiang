@@ -30,3 +30,5 @@ main = {
     // 跨容器类型：false 而非类型错误
     assert.assert(!((1, 2) == [1, 2]), "tuple vs list is false, not error")
 }
+
+main()

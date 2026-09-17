@@ -13,3 +13,5 @@ main = {
     a = g(99)
     assert.assert(a == 42, "g(99) should return 42")
 }
+
+main()

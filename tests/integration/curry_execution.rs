@@ -11,7 +11,8 @@
 use yaoxiang::run;
 
 fn run_ok(source: &str) {
-    run(source).unwrap_or_else(|e| {
+    let source = crate::fixture::with_main_invoked(source);
+    run(&source).unwrap_or_else(|e| {
         panic!(
             "Execution failed for curry test.\nSource:\n{}\nError:\n{:?}",
             source, e
