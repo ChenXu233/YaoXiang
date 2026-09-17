@@ -4285,6 +4285,135 @@ impl AstToIrGenerator {
         Ok(())
     }
 
+    fn generate_match_expr_ir(
+        &mut self,
+        match_expr: &Box<Expr>,
+        arms: &Vec<ast::MatchArm>,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // Match 表达式 IR 生成
+        // 模式: match scrutinee { pat1 => body1, pat2 => body2, _ => bodyN }
+        //
+        // IR 结构:
+        //   1. 评估 scrutinee
+        //   2. 对每个 arm:
+        //      a. 如果模式是 Literal: 比较 scrutinee == literal, JmpIfNot 到下一个 arm
+        //      b. 如果模式是 Wildcard: 始终匹配
+        //      c. 生成 arm body, Move 结果到 result_reg, Jmp 到 end
+        //   3. 修复所有跳转目标
+
+        // 1. 评估 scrutinee
+        let scrutinee_reg = self.next_temp_reg();
+        self.generate_expr_ir(match_expr, scrutinee_reg, instructions, constants)?;
+
+        let mut jumps_to_end: Vec<usize> = Vec::new();
+
+        for arm in arms {
+            // 检查模式是否匹配
+            let needs_condition = matches!(arm.pattern, ast::Pattern::Wildcard);
+
+            let jump_to_next_idx = if needs_condition {
+                // Wildcard: 始终匹配，不需条件跳转
+                None
+            } else {
+                // 生成条件: 比较 scrutinee 和模式值
+                let cmp_reg = self.next_temp_reg();
+
+                match &arm.pattern {
+                    ast::Pattern::Literal(lit) => {
+                        let const_val = match lit {
+                            ast::Literal::Int(n) => ConstValue::Int(*n),
+                            ast::Literal::Float(f) => ConstValue::Float(*f),
+                            ast::Literal::Bool(b) => ConstValue::Bool(*b),
+                            ast::Literal::String(s) => ConstValue::String(s.clone()),
+                            ast::Literal::Char(c) => ConstValue::Char(*c),
+                            ast::Literal::Void => ConstValue::Void,
+                        };
+                        constants.push(const_val.clone());
+                        instructions.push(Instruction::Load {
+                            dst: Operand::Local(cmp_reg),
+                            src: Operand::Const(const_val),
+                            span: self.cur_span,
+                        });
+                    }
+                    other => {
+                        // #330 安全网：非字面量/通配符模式尚无 IR 编码，
+                        // 原 stub 加载 0 永不匹配、scrutinee 为 0 时误匹配——
+                        // 宁可编译期拒绝，不可静默错译（完备支持见 RFC-039）
+                        return Err(ErrorCodeDefinition::ir_unsupported_pattern(&pattern_label(
+                            other,
+                        ))
+                        .at(arm.span)
+                        .build());
+                    }
+                }
+
+                // 比较: scrutinee == pattern_value
+                let eq_reg = self.next_temp_reg();
+                instructions.push(Instruction::Eq {
+                    dst: Operand::Local(eq_reg),
+                    lhs: Operand::Local(scrutinee_reg),
+                    rhs: Operand::Local(cmp_reg),
+                    span: self.cur_span,
+                });
+
+                // 如果不相等，跳到下一个 arm
+                let jmp_idx = instructions.len();
+                instructions.push(Instruction::JmpIfNot {
+                    cond: Operand::Local(eq_reg),
+                    target: 0, // 占位符
+                    span: self.cur_span,
+                });
+                Some(jmp_idx)
+            };
+
+            // 生成 arm body，结果放入 result_reg
+            let arm_result_reg = self.next_temp_reg();
+            self.generate_block_ir(&arm.body, Some(arm_result_reg), instructions, constants)?;
+            instructions.push(Instruction::Move {
+                dst: Operand::Local(result_reg),
+                src: Operand::Local(arm_result_reg),
+                span: self.cur_span,
+            });
+
+            // 跳转到 match 结束
+            let jmp_end_idx = instructions.len();
+            instructions.push(Instruction::Jmp {
+                target: 0,
+                span: self.cur_span,
+            }); // 占位符
+            jumps_to_end.push(jmp_end_idx);
+
+            // 修复条件跳转目标（指向当前 arm 之后的代码）
+            if let Some(jmp_idx) = jump_to_next_idx {
+                let current_pos = instructions.len();
+                if let Instruction::JmpIfNot {
+                    cond: _,
+                    ref mut target,
+                    span: _,
+                } = instructions[jmp_idx]
+                {
+                    *target = current_pos;
+                }
+            }
+        }
+
+        // 修复所有跳转到结束的指令
+        let end_pos = instructions.len();
+        for idx in jumps_to_end {
+            if let Instruction::Jmp {
+                ref mut target,
+                span: _,
+            } = instructions[idx]
+            {
+                *target = end_pos;
+            }
+        }
+        Ok(())
+    }
+
     fn generate_expr_ir_inner(
         &mut self,
         expr: &ast::Expr,
@@ -5867,131 +5996,9 @@ impl AstToIrGenerator {
             Expr::Match {
                 expr: match_expr,
                 arms,
-                span: _,
+                ..
             } => {
-                // Match 表达式 IR 生成
-                // 模式: match scrutinee { pat1 => body1, pat2 => body2, _ => bodyN }
-                //
-                // IR 结构:
-                //   1. 评估 scrutinee
-                //   2. 对每个 arm:
-                //      a. 如果模式是 Literal: 比较 scrutinee == literal, JmpIfNot 到下一个 arm
-                //      b. 如果模式是 Wildcard: 始终匹配
-                //      c. 生成 arm body, Move 结果到 result_reg, Jmp 到 end
-                //   3. 修复所有跳转目标
-
-                // 1. 评估 scrutinee
-                let scrutinee_reg = self.next_temp_reg();
-                self.generate_expr_ir(match_expr, scrutinee_reg, instructions, constants)?;
-
-                let mut jumps_to_end: Vec<usize> = Vec::new();
-
-                for arm in arms {
-                    // 检查模式是否匹配
-                    let needs_condition = matches!(arm.pattern, ast::Pattern::Wildcard);
-
-                    let jump_to_next_idx = if needs_condition {
-                        // Wildcard: 始终匹配，不需条件跳转
-                        None
-                    } else {
-                        // 生成条件: 比较 scrutinee 和模式值
-                        let cmp_reg = self.next_temp_reg();
-
-                        match &arm.pattern {
-                            ast::Pattern::Literal(lit) => {
-                                let const_val = match lit {
-                                    ast::Literal::Int(n) => ConstValue::Int(*n),
-                                    ast::Literal::Float(f) => ConstValue::Float(*f),
-                                    ast::Literal::Bool(b) => ConstValue::Bool(*b),
-                                    ast::Literal::String(s) => ConstValue::String(s.clone()),
-                                    ast::Literal::Char(c) => ConstValue::Char(*c),
-                                    ast::Literal::Void => ConstValue::Void,
-                                };
-                                constants.push(const_val.clone());
-                                instructions.push(Instruction::Load {
-                                    dst: Operand::Local(cmp_reg),
-                                    src: Operand::Const(const_val),
-                                    span: self.cur_span,
-                                });
-                            }
-                            other => {
-                                // #330 安全网：非字面量/通配符模式尚无 IR 编码，
-                                // 原 stub 加载 0 永不匹配、scrutinee 为 0 时误匹配——
-                                // 宁可编译期拒绝，不可静默错译（完备支持见 RFC-039）
-                                return Err(ErrorCodeDefinition::ir_unsupported_pattern(
-                                    &pattern_label(other),
-                                )
-                                .at(arm.span)
-                                .build());
-                            }
-                        }
-
-                        // 比较: scrutinee == pattern_value
-                        let eq_reg = self.next_temp_reg();
-                        instructions.push(Instruction::Eq {
-                            dst: Operand::Local(eq_reg),
-                            lhs: Operand::Local(scrutinee_reg),
-                            rhs: Operand::Local(cmp_reg),
-                            span: self.cur_span,
-                        });
-
-                        // 如果不相等，跳到下一个 arm
-                        let jmp_idx = instructions.len();
-                        instructions.push(Instruction::JmpIfNot {
-                            cond: Operand::Local(eq_reg),
-                            target: 0, // 占位符
-                            span: self.cur_span,
-                        });
-                        Some(jmp_idx)
-                    };
-
-                    // 生成 arm body，结果放入 result_reg
-                    let arm_result_reg = self.next_temp_reg();
-                    self.generate_block_ir(
-                        &arm.body,
-                        Some(arm_result_reg),
-                        instructions,
-                        constants,
-                    )?;
-                    instructions.push(Instruction::Move {
-                        dst: Operand::Local(result_reg),
-                        src: Operand::Local(arm_result_reg),
-                        span: self.cur_span,
-                    });
-
-                    // 跳转到 match 结束
-                    let jmp_end_idx = instructions.len();
-                    instructions.push(Instruction::Jmp {
-                        target: 0,
-                        span: self.cur_span,
-                    }); // 占位符
-                    jumps_to_end.push(jmp_end_idx);
-
-                    // 修复条件跳转目标（指向当前 arm 之后的代码）
-                    if let Some(jmp_idx) = jump_to_next_idx {
-                        let current_pos = instructions.len();
-                        if let Instruction::JmpIfNot {
-                            cond: _,
-                            ref mut target,
-                            span: _,
-                        } = instructions[jmp_idx]
-                        {
-                            *target = current_pos;
-                        }
-                    }
-                }
-
-                // 修复所有跳转到结束的指令
-                let end_pos = instructions.len();
-                for idx in jumps_to_end {
-                    if let Instruction::Jmp {
-                        ref mut target,
-                        span: _,
-                    } = instructions[idx]
-                    {
-                        *target = end_pos;
-                    }
-                }
+                self.generate_match_expr_ir(match_expr, arms, result_reg, instructions, constants)?;
             }
             // RFC-012: F-string 代码生成
             Expr::FString { segments, span } => {
