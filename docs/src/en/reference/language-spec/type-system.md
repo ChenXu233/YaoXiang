@@ -1,29 +1,29 @@
 # Type System Specification
 
-This document defines the type system specification of the YaoXiang programming language, including
-primitive types, composite types, generics, and traits.
+This document defines the type system specification for the YaoXiang programming language, including
+primitive types, composite types, generics, and trait.
 
 ---
 
-## Chapter 0: Theoretical Foundation
+## Chapter 0: Theoretical Foundations
 
 ### 0.1 Curry-Howard Correspondence
 
 The Curry-Howard correspondence is the theoretical foundation of the YaoXiang type system. It
-reveals the deep correspondence between programming language type systems and mathematical logic:
+reveals the deep correspondence between a programming language's type system and mathematical logic:
 
-| Logic                                      | Programming Language                            |
-| ------------------------------------------ | ----------------------------------------------- |
-| Proposition \(P\)                          | Type `Type`                                     |
-| Proof \(p: P\)                             | Program `x: T = ...`                            |
-| Implication \(P \rightarrow Q\)            | Function type `(P) -> Q`                        |
-| Conjunction \(P \wedge Q\)                 | Product type `{ a: P, b: Q }`                   |
-| Disjunction \(P \vee Q\)                   | Sum type `{ a(P) \| b(Q) }`                     |
-| Universal quantifier \(\forall x:T. P(x)\) | Generics `(T: Type) -> ...`                     |
-| True \(\top\)                              | `Void` (Unit, with default value)               |
-| False \(\bot\)                             | `Never` (zero constructors, uninhabitable)      |
-| Type universe \(Type_n : Type_{n+1}\)      | Universe hierarchy (prevents Russell's paradox) |
-| case analysis                              | Type-level `match`                              |
+| Logic                                          | Programming Language                              |
+| ---------------------------------------------- | ------------------------------------------------- |
+| Proposition \(P\)                              | Type `Type`                                       |
+| Proof \(p: P\)                                 | Program `x: T = ...`                              |
+| Implication \(P \rightarrow Q\)                | Function type `(P) -> Q`                          |
+| Conjunction \(P \wedge Q\)                     | Product type `{ a: P, b: Q }`                     |
+| Disjunction \(P \vee Q\)                       | Sum type `{ a(P) \| b(Q) }`                       |
+| Universal quantification \(\forall x:T. P(x)\) | Generics `(T: Type) -> ...`                       |
+| True \(\top\)                                  | `Void` (Unit, has default value)                  |
+| False \(\bot\)                                 | `Never` (zero constructors, no inhabitable value) |
+| Type universe \(Type_n : Type_{n+1}\)          | Universe hierarchy (prevents Russell's paradox)   |
+| case analysis                                  | Type-level `match`                                |
 
 > **Note**: Type-level `match` is case analysis, not mathematical induction. Induction requires
 > type-level recursive functions + compiler termination checking.
@@ -33,23 +33,24 @@ reveals the deep correspondence between programming language type systems and ma
 In YaoXiang, this correspondence is a first-class design principle:
 
 - **Terminating type-level computation corresponds to correct constructive proofs**. YaoXiang's type
-  families (such as `Add` with case analysis + recursive call on `Nat`) are essentially type-level
-  encodings of mathematical induction—provided the compiler can perform termination checking.
-- **Type checking is verifying proofs**. When a program passes type checking, it is equivalent to a
-  logical proposition being constructively proved.
+  families (such as `Add`'s case analysis + recursive call on `Nat`) are essentially the type-level
+  encoding of mathematical induction—provided the compiler can perform termination checking.
+- **Type checking is proof verification**. When a program passes type checking, it is equivalent to
+  a logical proposition being constructively proven.
 
 ### 0.3 Impact on Language Design
 
-Specific manifestations of the Curry-Howard correspondence in YaoXiang:
+Concrete manifestations of the Curry-Howard correspondence in YaoXiang:
 
-1. **Universe hierarchy** (RFC-010): `Type₀ : Type₁ : Type₂ …` avoids the logical paradoxes
-   (Girard's paradox) caused by `Type: Type`
-2. **Type families** (RFC-011): Type-level case analysis + recursive call on natural numbers
-   `Nat(Zero/Succ)` corresponds to Peano axioms—provided the compiler performs termination checking
-3. **Conditional types** (RFC-011): `If: (C: Bool, T: Type, E: Type) -> Type` corresponds to case
-   disjunction in logic
-4. **Value-dependent types** (RFC-011): `Vec: (n: Int) -> Type` corresponds to finite quantification
-   of "for each integer n there exists a type"
+1. **Universe hierarchy** (RFC-010): `Type₀ : Type₁ : Type₂ …` avoids the logical paradox (Girard's
+   paradox) caused by `Type: Type`.
+2. **Type families** (RFC-011): The natural number `Nat(Zero/Succ)`'s type-level case analysis +
+   recursive call corresponds to the Peano axioms—provided the compiler performs termination
+   checking.
+3. **Conditional type** (RFC-011): `If: (C: Bool, T: Type, E: Type) -> Type` corresponds to case
+   disjunction in logic.
+4. **Value-dependent types** (RFC-011): `Vec: (n: Int) -> Type` corresponds to a finite
+   quantification of "for each integer n there exists a type".
 
 ---
 
@@ -70,10 +71,10 @@ TypeExpr    ::= PrimitiveType
 ```
 
 > **Design Note**: Although RFC-010 proposes a unified model of "everything is assignment"
-> (`name: type = value`), at the syntactic level types and values still need to be distinguished. In
-> the compiler implementation, `Type` and `Expr` are two independent AST enums (`ast.rs:406` and
-> `ast.rs:25`), and `TypeExpr` as a BNF placeholder corresponds to the `Type` enum in the
-> implementation, indicating "this position expects a type".
+> (`name: type = value`), at the syntactic level, types and values still need to be distinguished.
+> In the compiler implementation, `Type` and `Expr` are two independent AST enums (`ast.rs:406` and
+> `ast.rs:25`). `TypeExpr` as a BNF placeholder corresponds to the `Type` enum in the
+> implementation, meaning "this position expects a type".
 
 ---
 
@@ -81,18 +82,18 @@ TypeExpr    ::= PrimitiveType
 
 ### 2.1 Primitive Types
 
-| Type     | Logical Correspondence | Description                                                                                   | Default Size |
-| -------- | ---------------------- | --------------------------------------------------------------------------------------------- | ------------ |
-| `Type`   | —                      | Meta type                                                                                     | 0 bytes      |
-| `Never`  | ⊥ (false/empty type)   | Zero constructors, no values. Return type for divergence/panic. `Never <: T` holds for any T. | 0 bytes      |
-| `Void`   | ⊤ (true/Unit)          | Has a default void value, zero-field product type. `x: Void = <default>` is legal.            | 0 bytes      |
-| `Bool`   | —                      | Boolean value: `true` / `false`                                                               | 1 byte       |
-| `Int`    | —                      | Signed integer                                                                                | 8 bytes      |
-| `Uint`   | —                      | Unsigned integer                                                                              | 8 bytes      |
-| `Float`  | —                      | Floating-point number                                                                         | 8 bytes      |
-| `String` | —                      | UTF-8 string                                                                                  | Variable     |
-| `Char`   | —                      | Unicode character                                                                             | 4 bytes      |
-| `Bytes`  | —                      | Raw bytes                                                                                     | Variable     |
+| Type     | Logical Correspondence | Description                                                                              | Default Size |
+| -------- | ---------------------- | ---------------------------------------------------------------------------------------- | ------------ |
+| `Type`   | —                      | Meta type                                                                                | 0 bytes      |
+| `Never`  | ⊥ (false/empty type)   | Zero constructors, no values. Diverging/panic return type. `Never <: T` holds for any T. | 0 bytes      |
+| `Void`   | ⊤ (true/Unit)          | Has a default void value, zero-field product type. `x: Void = <default>` is legal.       | 0 bytes      |
+| `Bool`   | —                      | Boolean value: `true` / `false`                                                          | 1 byte       |
+| `Int`    | —                      | Signed integer                                                                           | 8 bytes      |
+| `Uint`   | —                      | Unsigned integer                                                                         | 8 bytes      |
+| `Float`  | —                      | Floating-point number                                                                    | 8 bytes      |
+| `String` | —                      | UTF-8 string                                                                             | Variable     |
+| `Char`   | —                      | Unicode character                                                                        | 4 bytes      |
+| `Bytes`  | —                      | Raw bytes                                                                                | Variable     |
 
 Integers with bit width: `Int8`, `Int16`, `Int32`, `Int64`, `Int128`. Floats with bit width:
 `Float32`, `Float64`.
@@ -102,20 +103,21 @@ Integers with bit width: `Int8`, `Int16`, `Int32`, `Int64`, `Int128`. Floats wit
 `Never` and `Void` are the logical primitives of the type system—corresponding to false (⊥) and true
 (⊤) respectively.
 
-**Never (⊥, false/empty type)** — Three non-negotiable properties:
+**Never (⊥, false/empty type)** — three non-negotiable properties:
 
 1. **Zero constructors**: No literal or expression can produce a value of type `Never`.
-   `x: Never = ...` has no right-hand side that can be written.
+   `x: Never = ...` has no right-hand side to write.
 2. **Principle of explosion**: `Never <: T` holds for any type `T`. `assert(false)` returns `Never`,
-   after which the code can pass type checking (though it will never be executed).
+   after which code can pass type checking (although it is never actually executed).
 3. **Divergence marker**: `f: (...) -> Never` indicates that `f` is guaranteed not to return. The
-   compiler uses this for dead code analysis and `match` branch confluence.
+   compiler uses this for dead code analysis and `match` branch merging.
 
 `Never` is a built-in type name (registered on the same path as `Int`/`Bool`), not a keyword.
 
-**Void (⊤, true/Unit)** — Has exactly one inhabitant (the default void value). `Void` is the
-identity element of zero-field product types. `x: Void = <default>` is legal; functions without an
-explicit `return` return `Void` by default.
+**Void (⊤, true/Unit)** — has exactly one inhabitant (the default void value). `Void` is the unit
+element of the zero-field product type. `x: Void = <default>` is legal. A block's value is given by
+the **tail expression** (an empty block `{}` is `Void`); see
+[RFC-010a](../design/rfc/accepted/010a-tail-expression-and-return.md) for details.
 
 ---
 
@@ -142,7 +144,7 @@ Empty: Type = {}
 // Record type with generics
 Pair: (T: Type) -> Type = { first: T, second: T }
 
-// Record type implementing interfaces
+// Record type implementing an interface
 Point: Type = {
     x: Float,
     y: Float,
@@ -153,21 +155,21 @@ Point: Type = {
 
 **Rules**:
 
-- Record types are defined using curly braces `{}`
-- Field names are followed directly by a colon and the type
-- Interface names written in the type body indicate implementation of that interface
+- Record types are defined using curly braces `{}`.
+- A field name is directly followed by a colon and a type.
+- An interface name written inside the type body indicates implementation of that interface.
 
 > **Namespace ownership**: The `Type.name` prefix (such as `Point.draw`) indicates that the function
 > belongs to `Point`'s namespace. It does not trigger any implicit binding. To make the `.` call
-> syntax like `p.draw()` work, an explicit binding is required: `Point.draw = draw[0]`. See RFC-004
-> and RFC-010 for details.
+> syntax like `p.draw()` effective, an explicit binding is required: `Point.draw = draw[0]`. See
+> RFC-004 and RFC-010 for details.
 
 #### 3.1.1 Field Default Values
 
-Type fields can specify default values, which are optional during construction:
+Type fields can specify default values, which are optional when constructing:
 
 ```yaoxiang
-// Fields with default values - optional during construction
+// Field with default value - optional when constructing
 Point: Type = {
     x: Float = 0,
     y: Float = 0
@@ -178,37 +180,37 @@ Point()           // -> Point(x=0, y=0)
 Point(x=1)       // -> Point(x=1, y=0)
 Point(x=1, y=2) // -> Point(x=1, y=2)
 
-// Fields without default values - required during construction
+// Field without default value - required when constructing
 Point2: Type = {
     x: Float,
     y: Float
 }
 
 // Usage
-Point2(x=1, y=2) // correct
-Point2()          // error
+Point2(x=1, y=2) // Correct
+Point2()          // Error
 ```
 
 **Rules**:
 
-- `field: Type = expression` -> has default value, optional during construction
-- `field: Type` -> no default value, required during construction
+- `field: Type = expression` -> has a default value, optional when constructing.
+- `field: Type` -> no default value, required when constructing.
 
-#### 3.1.2 Builtin Bindings
+#### 3.1.2 Builtin Binding
 
-Methods can be bound directly within a type definition body:
+Methods can be bound directly within the type definition body:
 
 ```yaoxiang
-// Method 1: Reference to external function binding
+// Method 1: Binding a reference to an external function
 distance: (a: Point, b: Point) -> Float = { ... }
 Point: Type = {
     x: Float = 0,
     y: Float = 0,
-    distance = distance[0]    // bound to position 0
+    distance = distance[0]    // bind to position 0
 }
 // Call: p1.distance(p2) -> distance(p1, p2)
 
-// Method 2: Anonymous function + position binding
+// Method 2: Anonymous function + positional binding
 Point: Type = {
     x: Float = 0,
     y: Float = 0,
@@ -230,7 +232,7 @@ FnField       ::= Identifier ':' FnType
 FnType        ::= '(' ParamTypes? ')' '->' TypeExpr
 ```
 
-**Syntax**: An interface is a record type whose fields are all function types
+**Syntax**: An interface is a record type whose fields are all function types.
 
 ```yaoxiang
 // Interface definition
@@ -247,50 +249,50 @@ Serializable: Type = {
 EmptyInterface: Type = {}
 ```
 
-**Interface implementation**: A type implements interfaces by listing the interface names at the end
-of its definition
+**Interface implementation**: A type implements an interface by listing the interface name at the
+end of its definition.
 
 ```yaoxiang
 // Type implementing interfaces
 Point: Type = {
     x: Float,
     y: Float,
-    Drawable,        // implements Drawable interface
-    Serializable     // implements Serializable interface
+    Drawable,        // implements the Drawable interface
+    Serializable     // implements the Serializable interface
 }
 ```
 
-**Direct interface assignment**: A concrete type can be directly assigned to an interface type
-variable (structural subtyping)
+**Direct interface assignment**: A concrete type can be assigned directly to a variable of an
+interface type (structural subtyping).
 
 ```yaoxiang
-// Direct assignment (concrete type determinable at compile time -> zero-overhead call)
+// Direct assignment (concrete type determinable at compile time -> zero-cost call)
 d: Drawable = Circle(1)
 d.draw(screen)        // After compilation: direct call to circle_draw, no vtable
 
 // Function return value (cannot be determined at compile time -> vtable call)
 d: Drawable = get_shape()
-d.draw(screen)        // Method lookup through vtable
+d.draw(screen)        // Method looked up via vtable
 
 // Interface as function parameter
 process: (d: Drawable) -> Void = d.draw(screen)
 ```
 
-**Compile-time optimization strategies**:
+**Compile-time optimization strategy**:
 
-| Scenario                           | Inferred Result            | Call Method                 |
-| ---------------------------------- | -------------------------- | --------------------------- |
-| Direct assignment of concrete type | Concrete type determinable | Direct call (zero overhead) |
-| Function return value              | Unknown                    | vtable                      |
-| Heterogeneous collection           | Multiple types             | vtable                      |
+| Scenario                           | Inference Result           | Calling Method          |
+| ---------------------------------- | -------------------------- | ----------------------- |
+| Direct assignment of concrete type | Concrete type determinable | Direct call (zero cost) |
+| Function return value              | Unknown                    | vtable                  |
+| Heterogeneous collection           | Multiple types             | vtable                  |
 
-**Coherence and orphan rules (not applicable, final statement)**: YaoXiang's interfaces are
-structural types (interface = record with all function-type fields), not nominal traits—there is no
-"who can implement for whom" attribution issue across crates/modules, so Rust-style orphan rules and
-coherence checking have no applicable targets (ruling record in RFC-011 §2.1). The corresponding
-guarantee in the structural world is **duplicate implementation rejection**: defining the same
-method signature repeatedly on a type causes a compile error (RFC-011a §3, no override; overloading
-is legal).
+**Coherence and orphan rules (not applicable, closing note)**: YaoXiang's interfaces are structural
+types (an interface = a record whose fields are all function types), not nominal trait—there is no
+"who can implement for whom" ownership issue across crates/modules; Rust-style orphan rules and
+coherence checks have no applicable target (see the decision record in RFC-011 §2.1). The
+corresponding guarantee in the structural world is **duplicate implementation rejection**: defining
+a method with the same signature twice on a type results in a compile error (RFC-011a §3, overriding
+is forbidden; overloading is legal).
 
 ### 3.4 Tuple Types
 
@@ -312,7 +314,7 @@ ParamList   ::= TypeExpr (',' TypeExpr)*
 
 ### 4.1 Generic Parameter Syntax
 
-Generic parameters are part of the function type, using the unified `()` syntax with regular
+Generic parameters are part of the function type, uniformly using the `()` syntax with ordinary
 parameters:
 
 ```
@@ -322,8 +324,8 @@ TypeBound       ::= Identifier
                  |  Identifier '+' Identifier ('+' Identifier)*
 ```
 
-In generic type definitions, `(T: Type)` is the parameter signature of the type constructor, and
-`-> Type` indicates the return type:
+In a generic type definition, `(T: Type)` is the parameter signature of the type constructor, and
+`-> Type` represents the return type:
 
 ```yaoxiang
 List: (T: Type) -> Type = { ... }
@@ -332,37 +334,37 @@ Map: (K: Type, V: Type) -> Type = { ... }
 
 ### 4.1.1 Container Types
 
-Container types are generic type constructors, not built-in primitives—they receive the same
-treatment as user-defined generics, processed through the unified generic instantiation path:
+Container types are generic type constructors, not built-in primitives—they are treated the same as
+user-defined generics and are processed via the unified generic instantiation path:
 
-| Type          | Semantics                            | Underlying         |
-| ------------- | ------------------------------------ | ------------------ |
-| `List(T)`     | Growable list                        | `HeapValue::List`  |
-| `Array(T, N)` | Fixed-length array (const generic N) | `HeapValue::Array` |
-| `Dict(K, V)`  | Key-value mapping                    | `HeapValue::Dict`  |
+| Type          | Semantics                            | Underlying Representation |
+| ------------- | ------------------------------------ | ------------------------- |
+| `List(T)`     | Growable list                        | `HeapValue::List`         |
+| `Array(T, N)` | Fixed-length array (const generic N) | `HeapValue::Array`        |
+| `Dict(K, V)`  | Key-value map                        | `HeapValue::Dict`         |
 
-> `Set(T)` has been removed: no literal, no runtime representation, no std.set. When needed,
-> complete it following the Dict pattern.
+> `Set(T)` has been removed: no literal, no runtime representation, no `std.set`. When needed, it
+> will be completed following the Dict pattern.
 
 Key rules:
 
-- **Literal destination determined by context**: The bare literal `[...]` combined with a `List(T)`
-  annotation falls into the growable list; an `Array(T, N)` annotation applied directly to a literal
-  falls into a fixed-length array. Destination validation: number of elements == N, element type
-  compatible with T, otherwise compile-time E1002; when N is a symbolic constant (const parameter),
-  the count check is deferred to the refined-type phase.
-- **Implicit List→Array conversion is forbidden**: Fixed-lengthness is guaranteed at the type
-  layer—`push` only accepts `List(A)` receivers.
-- **Index failure contract** (runtime error is a transitional state, target state is compile-time
+- **The destination of a literal is determined by the context**: a bare `[...]` literal annotated
+  with `List(T)` lands in a growable list; an `Array(T, N)` annotation applied directly to a literal
+  lands in a fixed-length array. Landing check: the number of elements equals N, and the element
+  type is compatible with T; otherwise, a compile-time E1002; when N is a symbolic constant (const
+  parameter), the count check is deferred to the refined-type stage.
+- **Implicit List→Array conversion is forbidden**: fixed-length property is guaranteed at the type
+  level—`push` only accepts a `List(A)` receiver.
+- **Index failure contract** (runtime error is transitional; the target state is compile-time
   refinement coverage, via value-dependent types):
   - Index out of bounds (including negative index) → `E6003`
   - Dict missing key → `E6008`
-- **`in` membership predicate**: Returns `Bool` without error; the right operand covers
-  List/Array/Dict(key)/Tuple/String/Range. A first-class Hoare predicate, the basis for compile-time
-  provable propositions in refined types.`
+- **`in` membership predicate**: returns `Bool` and does not error; the right operand covers
+  List/Array/Dict(key)/Tuple/String/Range. A first-class Hoare predicate, serving as the basis for
+  propositions provable at compile time via refined types.
 
-In generic functions, type parameters are similarly declared in the signature, and the compiler
-automatically infers them from arguments:
+In generic functions, type parameters are also declared in the signature, and the compiler
+automatically infers them from actual arguments:
 
 ```yaoxiang
 map: (T: Type, R: Type) -> ((list: List(T), f: (T) -> R) -> List(R)) = ...
@@ -385,55 +387,55 @@ Result: (T: Type, E: Type) -> Type = {
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
-    push: (self: List(T), item: T) -> Void,   // self is just a convention name, not a keyword
+    push: (self: List(T), item: T) -> Void,   // self is only a convention name, not a keyword
     get: (self: List(T), index: Int) -> Option(T)
 }
 ```
 
-### 4.3 Generic Construction Call and Type Inference
+### 4.3 Generic Construction Calls and Type Inference
 
 The field list of a generic type definition **automatically generates a constructor function**: each
-field corresponds to a construction parameter, with the field name as the parameter name; fields
-with default values can be omitted during construction, and fields without default values are
-required. Function-type fields (methods) do not generate construction parameters.
+field corresponds to a constructor parameter, the field name is the parameter name; fields with
+default values can be omitted when constructing, fields without default values are required.
+Function-type fields (methods) do not generate constructor parameters.
 
 ```yaoxiang
 // Type definition
 Container: (T: Type) -> Type = {
-    value: T,        // no default value -> construction parameter required
+    value: T,        // no default value -> constructor parameter required
     extra: T,
 }
-// Automatically expanded full form (compiler's internal view, not required for users to write manually):
+// Auto-expanded full form (compiler's internal view, users are not required to write it manually):
 // Container: (T: Type) -> (value: T, extra: T) -> Type = {
 //     value: T = value,
 //     extra: T = extra,
 // }
 
-// Call: call the automatically generated constructor
-c  = Container(42, 43)            // construction parameters filled in field order; T auto-unpacked from element = Int
+// Calls: calling the automatically generated constructor
+c  = Container(42, 43)            // constructor parameters filled in field order; T is auto-unpacked from elements = Int
 c2 = Container("a", "b")          // T = String
-c3 = Container(Int)(42, 43)       // explicit type argument + positional construction parameters
-c4 = Container(Int)(extra=43, value=42)  // field-name style, order arbitrary
+c3 = Container(Int)(42, 43)       // explicit type parameter + positional constructor parameters
+c4 = Container(Int)(extra=43, value=42)  // by field name, any order
 c5 = Container(Int)()             // empty construction: fields take default/zero values (data assigned later)
 
-// Field default value -> construction parameter can be omitted
+// Field default values -> constructor parameters can be omitted
 Point: (T: Type) -> Type = { x: T = 0, y: T = 0 }
-p  = Point(1.5, 2.5)              // T = Float, x←1.5, y←2.5
+p  = Point(1.5, 2.5)              // T = Float, x=1.5, y=2.5
 p2 = Point(Int)()                 // x=0, y=0
 ```
 
-**Call rules** (single parentheses, position-by-position matching against declared parameters,
-left-to-right):
+**Call rules** (single parentheses, matching position by position against declared parameters, from
+left to right):
 
-1. Arguments attempt to match declared parameter positions in order: the `Type` position accepts
-   type arguments, and compile-time value parameter positions (e.g., `Int`) accept compile-time
-   constants.
-2. If a compile-time value parameter position matches successfully (partial match), process as type
-   construction: check all parameter positions in order, reporting errors **starting with the first
-   mismatched/missing parameter** in declaration order.
-3. If the arguments do not correspond to declared parameters at all (all are values, no compile-time
-   value parameter position matches), process as construction parameters: fill in field order
-   positionally, and type parameters are auto-unpacked from element types.
+1. Actual arguments attempt to match the declared type parameters position by position: a `Type`
+   position accepts a type argument, and a compile-time value parameter position (such as `Int`)
+   accepts a compile-time constant.
+2. If there is a successful match at a compile-time value parameter position (partial match), it is
+   treated as a type construction: check all parameter positions one by one; when reporting an
+   error, **first report the first mismatched/missing parameter** in declaration order.
+3. If the actual arguments do not fully correspond to the declared parameters (all are values, no
+   compile-time value parameter positions matchable), it is treated as constructor parameters:
+   positional filling in field order, type parameters are auto-unpacked from the element type.
 
 ```yaoxiang
 Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
@@ -441,20 +443,20 @@ Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
     data: Array(Array(T, Cols), Rows),
 }
 
-m: Matrix(Int, 3, 4)              // type position: one-level type construction
-m2 = Matrix(Int, 3, 4)(data=[[1,2,3,4],[5,6,7,8],[9,10,11,12]])  // two levels: type + construction parameters
+m: Matrix(Int, 3, 4)              // type position: one layer of type construction
+m2 = Matrix(Int, 3, 4)(data=[[1,2,3,4],[5,6,7,8],[9,10,11,12]])  // two layers: type + constructor parameters
 m3 = Matrix(Int, 3, 4)()          // empty construction (RFC-011 §9.3 pattern, data assigned later)
 
-Matrix(42)    // ❌ position 0: T←42 doesn't match (42 is not a type); position 1: Rows←42 matches;
-              //    position 2: Cols missing -> report the first error: T expected Type, found 42
-Container(42) // ❌ missing construction parameter extra
-Container(42, 43, 44)  // ❌ too many construction parameters
+Matrix(42)    // ❌ position 0: T←42 does not match (42 is not a type); position 1: Rows←42 matches;
+              //    position 2: Cols missing -> first report: T expects Type, found 42
+Container(42) // ❌ missing constructor parameter extra
+Container(42, 43, 44)  // ❌ too many constructor parameters
 ```
 
-**Type inference**: Type parameters of generic type constructors are auto-unpacked from the elements
-of construction parameters (`Container(42, 43)` → T=Int); type parameters of generic functions are
-auto-unpacked from argument types (`map(numbers, f)` → T=Int, R=String, see §4.1). When unpacking is
-impossible, explicit filling is required.
+**Type inference**: The type parameters of a generic type constructor are auto-unpacked from the
+constructor parameter elements (`Container(42, 43)` → T=Int); the type parameters of a generic
+function are auto-unpacked from actual argument types (`map(numbers, f)` → T=Int, R=String, see
+§4.1). When unpacking is not possible, explicit filling is required.
 
 ---
 
@@ -472,19 +474,19 @@ Clone: Type = {
     clone: () -> Clone
 }
 
-// Using constraints
+// Using a constraint
 clone: (T: Clone)(value: T) -> T = value.clone()
 ```
 
 ### 5.2 Multiple Constraints
 
 ```yaoxiang
-// Multiple constraint syntax
+// Multiple constraints syntax
 combine: (T: Clone + Add)(a: T, b: T) -> T = {
     a.clone() + b
 }
 
-// Sorting of generic containers
+// Sorting a generic container
 sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T) = {
     result = list.clone()
     quicksort(&mut result)
@@ -519,7 +521,7 @@ Iterator: (T: Type) -> Type = {
     has_next: () -> Bool
 }
 
-// Using associated types
+// Using an associated type
 collect: (T: Type, I: Iterator(T))(iter: I) -> List(T) = {
     result = List(T)()
     while iter.has_next() {
@@ -552,51 +554,51 @@ Container: (T: Type) -> Type = {
 LiteralType   ::= Identifier ':' Int          // compile-time constant (candidate)
 ```
 
-> **Erratum**: The original text stated that compile-time value parameters are "determined at
-> compile time by default"—this statement is **strictly wrong**. In
+> **Erratum**: The original text states that compile-time value parameters are "determined at
+> compile time by default"—this statement is **strictly incorrect**. In
 > `add: (a: Int, b: Int) -> Int = a + b`, `a`/`b` are runtime value parameters. Only concrete type
-> parameters **referenced in type position** are compile-time value parameters. The correct
-> definition is below.
+> parameters **referenced in a type position** are compile-time value parameters. See below for the
+> correct definition.
 
-**Terminology**: Generic parameters annotated with concrete types other than `Type` (such as `Int`)
-are called **compile-time value parameter candidates**; whether they become compile-time value
-parameters depends on whether their values are referenced in type position (value-dependence). **No
-`const` keyword is needed** (the implementation once used "const generics" internally; the
-documentation uniformly uses "compile-time value parameters").
+**Terminology**: A generic parameter annotated with a concrete type other than `Type` (such as
+`Int`) is called a **compile-time value parameter candidate**; whether it becomes a compile-time
+value parameter depends on whether its value is referenced in a type position (value-dependent).
+**No `const` keyword is required** (the implementation once used "const generics" internally, but
+the documentation uniformly uses "compile-time value parameters").
 
 **Determination rules (two steps)**:
 
-1. **Shape screening**: Parameters annotated with concrete types other than `Type`
-   (`Int`/`Bool`/`Float`) → candidates.
-2. **Usage screening**: Candidate names appearing in **type position** (type body field types, inner
-   `Fn` parameter types, `Assert` predicates, `Array(T, N)` type construction argument positions) →
-   true compile-time value parameters; otherwise **runtime value parameters**.
+1. **Form coarse screening**: A parameter annotated with a concrete type other than `Type`
+   (`Int`/`Bool`/`Float`) → candidate.
+2. **Usage fine screening**: The candidate name appears in a **type position** (type body field
+   types, inner `Fn` parameter types, `Assert` predicates, `Array(T, N)` type construction argument
+   positions) → true compile-time value parameter; otherwise **runtime value parameter**.
 
-| Writing                                                    | Determination                             | Reason                                           |
-| ---------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------ |
-| `add: (a: Int, b: Int) -> Int = a + b`                     | a/b are runtime value parameters          | Only appear in value position                    |
-| `Array: (T: Type, N: Int) -> Type = { data: Array(T, N) }` | N is a compile-time value parameter       | N appears in type construction argument position |
-| `factorial: (N: Int) -> (k: N) -> Int`                     | N is a compile-time value parameter       | N serves as the type of inner parameter k        |
-| `Foo: (T: Type, N: Int) -> Type = { x: T }`                | N falls through → runtime value parameter | N not referenced in type body                    |
+| Writing                                                    | Determination                             | Reason                                             |
+| ---------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------- |
+| `add: (a: Int, b: Int) -> Int = a + b`                     | a/b are runtime value parameters          | Only appear in value positions                     |
+| `Array: (T: Type, N: Int) -> Type = { data: Array(T, N) }` | N is a compile-time value parameter       | N appears in a type construction argument position |
+| `factorial: (N: Int) -> (k: N) -> Int`                     | N is a compile-time value parameter       | N serves as the type of the inner parameter k      |
+| `Foo: (T: Type, N: Int) -> Type = { x: T }`                | N falls through → runtime value parameter | N is not referenced in the type body               |
 
-**Core design**: Use `(N: Int)` compile-time value parameter + `(k: N)` value parameter to
-distinguish compile-time constants from runtime values. Candidates that fall through (shape is a
-candidate, usage misses) degrade to runtime value parameters—both function-level and
-type-constructor paths are handled this way.
+**Core design**: Use the `(N: Int)` compile-time value parameter + `(k: N)` value parameter to
+distinguish compile-time constants from runtime values. A falling-through candidate (form is
+candidate, usage not hit) degrades to a runtime value parameter—both the function-level and
+type-constructor paths are processed accordingly.
 
 ```yaoxiang
-// Compile-time value parameter: N is referenced in type position (Array length slot)
+// Compile-time value parameter: N is referenced in a type position (the Array length slot)
 StaticArray: (T: Type, N: Int) -> Type = {
-    data: Array(T, N),      // N appears in type construction argument position -> compile-time value parameter
+    data: Array(T, N),      // N appears in a type construction argument position -> compile-time value parameter
     length: N
 }
 
-// Usage: factorial(5) is evaluated at type position (compile-time), the result 120 is embedded in the type
-arr: StaticArray(Int, factorial(5))  // the compiler computes factorial(5) = 120 at compile time
+// Usage: factorial(5) is evaluated in the type position (at compile time), and the result 120 is embedded in the type
+arr: StaticArray(Int, factorial(5))  // the compiler evaluates factorial(5) = 120 at compile time
 
-// Value-dependence: N as the type of inner parameter k
+// Value-dependent: N as the type of the inner parameter k
 // N is a compile-time value parameter (appears in the type position of (k: N));
-// k is a runtime value parameter whose type is the literal type N (single-value type).
+// k is a runtime value parameter, and its type is the literal type N (a single-value type).
 factorial: (N: Int) -> (k: N) -> Int = {
     match k {
         0 => 1,
@@ -613,7 +615,7 @@ Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
     data: Array(Array(T, Cols), Rows)
 }
 
-// Compile-time dimension validation
+// Compile-time dimension verification
 identity_matrix: (T: Add + Zero + One, N: Int)(size: N) -> Matrix(T, N, N) = {
     // ...
 }
@@ -636,9 +638,9 @@ If: (C: Bool, T: Type, E: Type) -> Type = match C {
     False => E
 }
 
-// Example: compile-time branching
+// Example: compile-time branch
 NonEmpty: (T: Type) -> Type = If(T != Void, T, Never)
-// IsTrue bridging and Assert refined types (see §8.3)
+// IsTrue bridge and Assert refined type (see §8.3 for details)
 IsTrue: (b: Bool) -> Type = match b {
     true => Void,      // ⊤, program continues
     false => Never,    // ⊥, diverges/compile error
@@ -658,23 +660,23 @@ AsString: (T: Type) -> Type = match T {
 }
 ```
 
-### 8.3 Assert Refined Types and assert Assertions
+### 8.3 Assert Refined Types and assert Statements
 
 `assert` and `Assert` are two sides of the same refinement primitive—automatically selected by the
-dispatch pipeline based on "whether predicate free variables are compile-time accessible".
+dispatch pipeline based on "whether the predicate's free variables are reachable at compile time".
 
 **Core signature**: `assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))`
 
-**Dispatch routing rules**:
+**Dispatch rules**:
 
-| Criterion                                                                              | Mode        | Behavior                                                                                 |
-| -------------------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------- |
-| All free variables are compile-time known (generic parameters, compile-time constants) | CompileTime | Enter proof pipeline: true → erased to Void, false → compile error (Never uninhabitable) |
-| Runtime free variables exist (function parameters, external input)                     | Runtime     | Insert runtime Bool check, inject refinement facts into flow-sensitive assumption set Γ  |
+| Criterion                                                                                 | Mode        | Behavior                                                                                        |
+| ----------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------- |
+| All free variables are known at compile time (generic parameters, compile-time constants) | CompileTime | Enter the proof pipeline: true → erased to Void, false → compile error (Never is uninhabitable) |
+| Runtime free variables exist (function parameters, external input)                        | Runtime     | Insert a runtime Bool check, inject refined facts into the flow-sensitive assumption set Γ      |
 
 **Flow-sensitive assumption set Γ**:
 
-The compiler maintains a set of known propositions at each control flow point:
+The compiler maintains the set of known propositions at each control-flow point:
 
 ```yaoxiang
 assert(x > 0)       // Γ = {x > 0}
@@ -682,8 +684,8 @@ y = x + 1           // Γ = {x > 0, y > 1}  ← SP propagation
 mut x = x - 5       // Γ = {}  ← mut kill set: old assumptions invalidated
 ```
 
-After a `mut` variable assignment, all assumptions involving that variable are removed (kill set).
-When branches merge, Γ takes the intersection of each branch.
+After a `mut` variable is assigned, all assumptions involving that variable are removed (kill set).
+When branches merge, Γ is the intersection of each branch.
 
 ---
 
@@ -701,13 +703,13 @@ TypeUnion     ::= TypeExpr '|' TypeExpr
 TypeIntersection ::= TypeExpr '&' TypeExpr
 ```
 
-**Syntax**: The type intersection `A & B` represents a type that satisfies both A and B
+**Syntax**: The type intersection `A & B` represents a type that satisfies both A and B.
 
 ```yaoxiang
 // Interface composition = type intersection
 DrawableSerializable: Type = Drawable & Serializable
 
-// Using intersection types
+// Using an intersection type
 process: (T: Drawable & Serializable)(item: T, screen: Surface) -> String = {
     item.draw(screen)
     return item.serialize()
@@ -743,10 +745,10 @@ sum: (T: Add)(arr: Array(T)) -> T = {
 ### 10.2 Platform Specialization
 
 ```yaoxiang
-// Platform type enum (defined in standard library)
+// Platform type enum (defined in the standard library)
 Platform: Type = { X86_64: () -> Platform, AArch64: () -> Platform, RISC_V: () -> Platform, ARM: () -> Platform, X86: () -> Platform }
 
-// P is a predefined generic parameter name, representing the current compilation platform
+// P is a predefined generic parameter name representing the current compilation platform
 sum: (P: X86_64)(arr: Array(Float)) -> Float = {
     return avx2_sum(arr.data, arr.length)
 }
@@ -760,50 +762,50 @@ sum: (P: AArch64)(arr: Array(Float)) -> Float = {
 
 ## Chapter 11: Type Properties
 
-YaoXiang has only one type property that needs to be distinguished: linear vs copyable.
-Automatically inferred by the compiler.
+YaoXiang has only one type property that needs to be distinguished: Linear vs. Copyable. It is
+automatically inferred by the compiler.
 
 ### 11.1 Move (Default Ownership Transfer)
 
-All types follow Move semantics by default. Assignment, parameter passing, return = ownership
+All types follow Move semantics by default. Assignment, parameter passing, and returning = ownership
 transfer.
 
 ```yaoxiang
 p: Point = Point(1.0, 2.0)
-q = p           // Move, p cannot be read anymore
+q = p           // Move, p can no longer be read
 ```
 
 ### 11.2 Dup (Shallow Copy: Copy Handle, Share Data)
 
-**The Dup property is used for reference/token types**. Assignment of Dup types = shallow copy—copy
-the handle/token, the underlying data is shared. Multiple holders point to the same data.
+**The Dup property is used for reference/token types**. Assignment of a Dup type = shallow copy—copy
+the handle/token, the underlying data is shared. Multiple holders point to the same piece of data.
 
-| Type            | Property | Description                                                                        |
-| --------------- | -------- | ---------------------------------------------------------------------------------- |
-| `&T`            | Dup      | Zero-size read token, copying the token = multiple views pointing to the same data |
-| `ref T`         | Dup      | Rc/Arc copy = reference count + 1, shared heap data                                |
-| `&mut T`        | Linear   | Zero-size write token, exclusive, cannot be copied                                 |
-| All other types | Move     | Default ownership transfer                                                         |
+| Type            | Property | Description                                                                         |
+| --------------- | -------- | ----------------------------------------------------------------------------------- |
+| `&T`            | Dup      | Zero-sized read token, copying the token = multiple views pointing to the same data |
+| `ref T`         | Dup      | Rc/Arc copy = reference count + 1, sharing heap data                                |
+| `&mut T`        | Linear   | Zero-sized write token, exclusive, not copyable                                     |
+| All other types | Move     | Default ownership transfer                                                          |
 
-**Primitive value types** (Int, Float, Bool, Char) are special-cased by the compiler: they are
-automatically value-copied on assignment, with the two values being completely independent. This is
-the compiler's native behavior, not part of the Dup type property.
+**Primitive value types** (`Int`, `Float`, `Bool`, `Char`) are special-cased by the compiler: on
+assignment, they are automatically value-copied, and the two values are completely independent. This
+is the compiler's native behavior and does not belong to the Dup type property.
 
 ```yaoxiang
-// &T: Dup, free aliasing
+// &T: Dup, freely aliasable
 view: &Point = &p
-view2 = view     // Dup: copy token, both are valid
-print(view.x)    // usable
-print(view2.x)   // usable
+view2 = view     // Dup: copy the token, both are valid
+print(view.x)    // Available
+print(view2.x)   // Available
 
-// &mut T: Linear, cannot be copied
+// &mut T: Linear, not copyable
 mut_ref: &mut Point = &mut p
 // r2 = mut_ref  // ❌ &mut T is not Dup, cannot be copied
 ```
 
 ### 11.3 Clone (Explicit Deep Copy) and Its Relationship with Dup
 
-**Clone** is the explicit deep-copy interface. All types can implement Clone, providing the
+**Clone** is an explicit deep-copy interface. All types can implement Clone, providing the
 `.clone()` method.
 
 ```yaoxiang
@@ -814,75 +816,74 @@ Clone: Type = {
 
 // Usage
 p: Point = Point(1.0, 2.0)
-backup = p.clone()    // deep copy, p is still usable
-p2 = p.clone()        // can be cloned multiple times
+backup = p.clone()    // Deep copy, p is still available
+p2 = p.clone()        // Can be cloned multiple times
 ```
 
-**The difference between Dup and Clone**:
+**Differences between Dup and Clone**:
 
-|                         | Dup                                                     | Clone                                         |
-| ----------------------- | ------------------------------------------------------- | --------------------------------------------- |
-| **Semantics**           | Shallow copy: copy handle/token, underlying data shared | Deep copy: create a complete independent copy |
-| **Call method**         | Implicit (auto on assignment/parameter passing)         | Explicit (`.clone()`)                         |
-| **Modification effect** | Mutually affecting (shared underlying data)             | Mutually independent (independent copy)       |
-| **Applicable types**    | `&T` tokens, `ref T`                                    | Any type implementing the Clone interface     |
-| **Cost**                | Zero overhead (tokens are zero-size types)              | Depends on the type                           |
+|                         | Dup                                                            | Clone                                            |
+| ----------------------- | -------------------------------------------------------------- | ------------------------------------------------ |
+| **Semantics**           | Shallow copy: copy the handle/token, underlying data is shared | Deep copy: create a complete independent replica |
+| **Invocation**          | Implicit (automatic on assignment/parameter passing)           | Explicit (`.clone()`)                            |
+| **Modification effect** | Affect each other (share underlying data)                      | Do not affect each other (independent replica)   |
+| **Applicable types**    | `&T` tokens, `ref T`                                           | Any type implementing the Clone interface        |
+| **Cost**                | Zero cost (tokens are zero-sized types)                        | Depends on the type                              |
 
-**Dup does not imply Clone, and Clone does not imply Dup**—they are two orthogonal concepts:
+**Dup does not imply Clone, Clone does not imply Dup**—they are two orthogonal concepts:
 
 ```yaoxiang
-// Dup type: copy the token, underlying data is shared
+// Dup type: copy the token, the underlying data is shared
 view: &Point = &p
 view2 = view        // Dup: copy the token, both point to the same p
-print(view.x)       // usable
-print(view2.x)      // usable, seeing the same data
+print(view.x)       // Available
+print(view2.x)      // Available, seeing the same data
 
-// Primitive value type: compiler auto value copy (not Dup)
+// Primitive value type: compiler automatically value-copies (not Dup)
 x: Int = 42
-y = x               // value copy, x and y are completely independent
-print(x)            // usable
+y = x               // Value copy, x and y are completely independent
+print(x)            // Available
 
-// Clone: explicit deep copy, create an independent copy
+// Clone: explicit deep copy, creating an independent replica
 p: Point = Point(1.0, 2.0)
-q = p.clone()       // Clone: deep copy, p is still usable
+q = p.clone()       // Clone: deep copy, p is still available
 r = p               // Move: ownership transfer, because Point is neither Dup nor a primitive value type
 ```
 
 **Design intent**:
 
-- Dup is used for token/reference types, solving the problem of "multiple views looking at the same
-  data"
-- Clone is used in scenarios that need an independent copy, with explicit calls making the cost
-  visible
-- The copying of primitive value types (Int/Float/Bool/Char) is the compiler's built-in behavior,
-  not part of Dup
-- Most custom types default to Move, with zero-copy high performance
+- Dup is used for token/reference types, solving the problem of "multiple views of the same data".
+- Clone is used in scenarios requiring an independent replica; explicit invocation makes the cost
+  visible.
+- The copying of primitive value types (`Int`/`Float`/`Bool`/`Char`) is a built-in compiler
+  behavior, not Dup.
+- Most user-defined types are Move by default, achieving high performance with zero copy.
 
 ## Chapter 12: Borrow Token Types
 
 ### 12.1 Core Concepts
 
-`&T` and `&mut T` are **zero-size compile-time token types**. They are not "references", but
+`&T` and `&mut T` are **zero-sized compile-time token types**. They are not "references", but
 "type-level proofs of access permission".
 
 ```
-&T      →  zero size, freezes the source data (prohibits WriteToken from being obtained during this period),
-          under the freeze guarantee multiple read-only accesses are safe -> Dup (copyable)
-&mut T  →  zero size, exclusive read/write (prohibits any other token),
-          copying is meaningless under exclusive access -> Linear (non-Dup)
+&T      →  Zero size, freezes the source data (prohibits WriteToken acquisition during this period),
+          multiple read-only accesses are safe under the freeze guarantee → Dup (copyable)
+&mut T  →  Zero size, exclusive read-write (prohibits any other tokens),
+          copying is meaningless under exclusive access → Linear (non-Dup)
 ```
 
-**Key properties**:
+**Key features**:
 
-- Tokens are **ordinary types**, following the same scoping rules as all other types
-- No lifetime annotation `'a` is needed
-- No dedicated borrow checker is needed—the type property (Dup/Linear) naturally derives permissions
-- Completely disappear after compilation, zero runtime overhead
+- Tokens are **ordinary types**, following the same scoping rules as all other types.
+- No lifetime annotation `'a` is required.
+- No dedicated borrow checker is needed—type properties (Dup/Linear) naturally derive permissions.
+- Completely disappear after compilation, with zero runtime cost.
 
 ### 12.2 Basic Usage
 
 ```yaoxiang
-// Method side: declare parameter type, determining the required permission
+// Method side: declare parameter types, which determine the required permissions
 Point.print: (self: &Point) -> Void = {
     print(self.x)               // &Point token grants read permission
     print(self.y)
@@ -893,163 +894,163 @@ Point.shift: (self: &mut Point, dx: Float, dy: Float) -> Void = {
     self.y = self.y + dy
 }
 
-// Call side: compiler automatically chooses borrow or Move
+// Call site: the compiler automatically chooses borrow or Move
 p = Point(1.0, 2.0)
-p.print()                       // compiler automatically creates &Point token
-p.shift(1.0, 1.0)               // compiler automatically creates &mut Point token
-p.print()                       // OK, the previous token was released when the shift call ended
+p.print()                       // the compiler automatically creates an &Point token
+p.shift(1.0, 1.0)               // the compiler automatically creates an &mut Point token
+p.print()                       // OK, the previous token has been released along with the end of the shift call
 
-// Multiple &T tokens coexisting—Dup type allows free copying
+// Multiple &T tokens coexisting—Dup types allow free copying
 distance: (a: &Point, b: &Point) -> Float = {
     sqrt((a.x - b.x)**2 + (a.y - b.y)**2)
 }
 d = distance(p, p2)
 ```
 
-### 12.3 Token Scope and Propagation
+### 12.3 Scope and Propagation of Tokens
 
-Tokens are ordinary types, so they support all operations on ordinary types:
+Tokens are ordinary types, so they support all operations of ordinary types:
 
 **Returning tokens**—tokens propagate along with the return value:
 
 ```yaoxiang
-// ✅ Sub-token and parent token are returned together
+// ✅ The sub-token and parent token are returned together
 Point.get_x: (self: &Point) -> (&Float, &Point) = {
     return (&self.x, self)
 }
 
 p = Point(1.0, 2.0)
-(px_ref, p) = p.get_x()        // tokens returned to the caller
-print(px_ref)                    // OK, token still in scope
+(px_ref, p) = p.get_x()        // tokens are returned to the caller
+print(px_ref)                    // OK, the token is still in scope
 ```
 
-**Stored in structs**—structs can carry token fields:
+**Storing in structs**—structs can carry token fields:
 
 ```yaoxiang
-// ✅ Struct carries token as a field
+// ✅ Struct carrying a token as a field
 Window: Type = {
     target: Point,
-    view: &Point,              // token field—holding a read-only view of target
+    view: &Point,              // token field—holds a read-only view of target
 }
 ```
 
-**Closures do not capture; context is fixed at the creation point**—closures only eat their own
-parameters; when outer data is needed, the value is fixed into the closure through currying at the
-creation point:
+**Closures do not capture; context is fixed at the creation point**—closures only consume their own
+parameters; when outer data is needed, the value is fixed into the closure at the creation point
+through currying:
 
 ```yaoxiang
-// ✅ Context fixed via currying: threshold is a parameter, gt_point(threshold) fixes the value into the closure at the creation point
+// ✅ Context is fixed via currying: threshold is a parameter; gt_point(threshold) fixes the value into the closure at the creation point
 gt_point: (t: Float) -> (p: Point) -> Bool = (p) => p.x > t
 filter_by_threshold: (items: List(Point), threshold: Float) -> List(Point) = {
     items.filter(gt_point(threshold))
 }
 ```
 
-> Note: After a closure (function value) escapes, the scope at its definition may already be dead,
-> so it must not implicitly capture outer variables; but the scope at the call point (creation
-> point) is guaranteed to be alive, and it is safe to fix the context as a value into the closure at
-> that point.
+> Note: After a closure (function value) escapes, the scope at its definition site may have already
+> died, so it must not implicitly capture outer variables; however, the scope at the call site
+> (creation point) is guaranteed to be alive, and it is safe for the context to be fixed as a value
+> into the closure at that point.
 
 ### 12.4 Automatic Borrow Selection
 
-The compiler on the call side automatically selects according to the following priority:
+At the call site, the compiler automatically selects according to the following priority:
 
 ```
-1. If the argument is still used afterwards -> prefer to create a token (&T or &mut T, according to the method signature)
-2. If the argument is not used afterwards -> Move
+1. If the actual argument is used later → prefer to create a token (&T or &mut T, according to the method signature)
+2. If the actual argument is not used later → Move
 3. Priority matching order: &T < &mut T < Move
 ```
 
 ```yaoxiang
 p = Point(1.0, 2.0)
-p.print()          // print's parameter type is &Point -> compiler creates &Point token
-p.shift(1.0, 1.0)  // shift's parameter type is &mut Point -> compiler creates &mut Point token
-p2 = p             // not used afterwards -> Move
+p.print()          // print's parameter type is &Point → the compiler creates an &Point token
+p.shift(1.0, 1.0)  // shift's parameter type is &mut Point → the compiler creates an &mut Point token
+p2 = p             // not used later → Move
 ```
 
-**Method receiver follows signature semantics** (erratum 2026-08-30, same as RFC-011a receiver
-spelling convention): the receiver is `&T` → read-only borrow token; `&mut T` → mutable borrow
-token; by value → Move (consumes the receiver). The borrow token generated at the call point is
-released when the call ends (transient, §12.5 interval semantics); the interface's borrow receiver
-is explicitly declared by the interface author as `&Self`, and the impl signature must be completely
-consistent with the interface after `Self ↦ impl type` substitution (RFC-011a §3).
+**Method receiver follows signature semantics** (erratum 2026-08-30, same convention as RFC-011a
+receiver spelling): if the receiver is `&T` → read-only borrow token; `&mut T` → mutable borrow
+token; by value → Move (consumes the receiver). The borrow token generated at the call site is
+released when the call ends (transient, interval semantics in §12.5); the interface's borrow
+receiver is explicitly declared by the interface author as `&Self`, and the impl signature, after
+substitution of `Self ↦ impl type`, must match the interface exactly (RFC-011a §3).
 
 ### 12.5 Token Conflict Detection
 
-Token conflict detection is a **borrow Hoare proposition** (RFC-009a), not an independent
+Token conflict detection is a **borrowing Hoare proposition** (RFC-009a), not a standalone
 flow-sensitive analysis. The compiler automatically generates borrow propositions
-(`borrow_conflict`/`use_after_move`/`use_after_drop`/`mut_violation`) and feeds them into the proof
+(`borrow_conflict`/`use_after_move`/`use_after_drop`/`mut_violation`) and sends them into the proof
 pipeline for verification; token liveness is the interval `[created_at, last_use]` (see RFC-009a
-§Reverse BFS Liveness Analysis):
+§reverse BFS liveness analysis):
 
 ```yaoxiang
-// ❌ &mut and derived &T cannot be active simultaneously
+// ❌ &mut and derived &T cannot be live at the same time
 bad_alias: (p: &mut Point) -> Void = {
-    p.x = 10.0                   // ✅ normal use of WriteToken
+    p.x = 10.0                   // ✅ Normal use of WriteToken
     print(p.y)
 }
 
-// ✅ Token is automatically released after its scope ends
+// ✅ Automatically released after the token's scope ends
 good_seq: (p: &mut Point) -> Void = {
     {
         // inner scope
-        print(p.x)               // uses &mut Point
+        print(p.x)               // use of &mut Point
     }
     // inner scope ends
-    p.x = 10.0                   // ✅ WriteToken still available
+    p.x = 10.0                   // ✅ WriteToken is still available
 }
 
-// ❌ The same argument cannot simultaneously create &mut token and other tokens
+// ❌ The same actual argument cannot create both an &mut token and other tokens
 alias_bad: (a: &mut Point, b: &Point) -> Void = { ... }
 p = Point(1.0, 2.0)
-alias_bad(p, p)                  // ❌ p simultaneously derives &mut and & tokens
+alias_bad(p, p)                  // ❌ p derives both an &mut token and an & token
 ```
 
 ### 12.6 Compiler Internals: Brand Mechanism
 
-Users never come into contact with brands. The compiler internally assigns a unique compile-time
-identifier to each token:
+Users never interact with brands. The compiler internally assigns a compile-time unique identifier
+to each token:
 
 ```
-User sees                Compiler internal representation
+User sees              Compiler internal representation
 ────────────────────────────────────────
 &Point         →  ReadToken(Point, #N)    // #N is a compile-time unique integer
 &mut Point     →  WriteToken(Point, #M)   // #M is a compile-time unique integer
 ```
 
-Purpose of brands:
+Uses of brands:
 
-- **Anti-forgery**: tokens can only be obtained from the owner capsule, not constructed out of thin
-  air
-- **Correlation tracking**: field-access-derived `&Float` carries a derived brand (`#N.field_x`),
-  the compiler can track it to the parent token
-- **Conflict detection**: same-source WriteToken and derived ReadToken cannot be active
-  simultaneously
+- **Anti-counterfeiting**: A token can only be obtained from the owner's capsule, not constructed
+  out of thin air.
+- **Association tracking**: The `&Float` derived from field access carries the derived brand
+  (`#N.field_x`), and the compiler can trace it back to the parent token.
+- **Conflict detection**: A WriteToken and a derived ReadToken of the same source cannot be live at
+  the same time.
 
 Brands completely disappear after monomorphization and inlining, and do not exist in the generated
-machine code. **Zero runtime overhead.**
+machine code. **Zero runtime cost.**
 
-### 12.7 Token Sum Types
+### 12.7 Token Sum Type
 
 ```
-&BorrowToken ::= &T          // ReadToken (freezes source data -> Dup safe)
-               | &mut T      // WriteToken (exclusive read/write -> Linear)
+&BorrowToken ::= &T          // ReadToken (freezes source data → Dup safe)
+               | &mut T      // WriteToken (exclusive read-write → Linear)
 ```
 
-### 12.8 Borrow Tokens vs ref
+### 12.8 Borrow Token vs ref
 
-|                 | `&T` / `&mut T`                                              | `ref`                                    |
-| --------------- | ------------------------------------------------------------ | ---------------------------------------- |
-| What it does    | Take a look/modify in place                                  | Shared ownership                         |
-| Scope           | Follows the scope of the token value                         | Cross-scope                              |
-| Cost            | Zero overhead (zero-size type, disappears after compilation) | Rc or Arc (compiler selects)             |
-| Escape          | Yes (token propagates with return value/struct)              | Originally for escaping                  |
-| Cross-task      | No (tokens do not implement cross-task passing)              | Yes (compiler automatically selects Arc) |
-| Cycle detection | Not involved                                                 | Silent within task, cross-task lint      |
+|                 | `&T` / `&mut T`                                           | `ref`                                    |
+| --------------- | --------------------------------------------------------- | ---------------------------------------- |
+| What it does    | Take a look / modify in place                             | Shared ownership                         |
+| Scope           | Follows the token value's scope                           | Crosses scopes                           |
+| Cost            | Zero cost (zero-sized type, disappears after compilation) | Rc or Arc (compiler selects)             |
+| Escape          | Yes (tokens propagate via return value/struct)            | Designed to escape                       |
+| Cross-task      | No (tokens are not implemented for cross-task transfer)   | Yes (compiler automatically selects Arc) |
+| Cycle detection | Not involved                                              | Silent within a task, lint across tasks  |
 
-> Note (undefined): How to read content (dereference/method/auto) after `ref` creation has not yet
-> been defined in the specification, the current implementation reports `*a` as E1052. To be added
-> to this section after definition.
+> Note (undefined): How to read content after `ref` is created (dereference/method/auto) is not yet
+> defined in the specification; the current implementation reports E1052 for `*a`. This section will
+> be supplemented after the definition is completed.
 
 ---
 
@@ -1071,11 +1072,11 @@ Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Resu
 // Interface definition
 Serializable: Type = { serialize: () -> String }
 
-// Type implementing interface
+// Type implementing an interface
 Point: Type = {
     x: Float,
     y: Float,
-    Serializable    // implements Serializable interface
+    Serializable    // implements the Serializable interface
 }
 
 // === Function types ===
@@ -1086,21 +1087,21 @@ Adder: Type = (Int, Int) -> Int
 ### A.2 Generic Syntax
 
 ```
-// Generic type
+// Generic types
 List: (T: Type) -> Type = { data: Array(T), length: Int }
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
-// Generic function
+// Generic functions
 map: (T: Type, R: Type)(list: List(T), f: (T) -> R) -> List(R) = { ... }
 
-// Type constraint
+// Type constraints
 clone: (T: Clone)(value: T) -> T = value.clone()
 combine: (T: Clone + Add)(a: T, b: T) -> T = body
 
-// Associated type
+// Associated types
 Iterator: (T: Type) -> Type = { Item: T, next: () -> Option(T) }
 
-// Compile-time generics: N is referenced in type position (k: N) -> compile-time value parameter
+// Compile-time generics: N is referenced in the type position (k: N) -> compile-time value parameter
 factorial: (N: Int)(k: N) -> Int = { ... }
 StaticArray: (T: Type, N: Int) -> Type = { data: Array(T, N), length: N }
 
@@ -1112,40 +1113,40 @@ sum: (arr: Array(Int)) -> Int = { ... }
 sum: (arr: Array(Float)) -> Float = { ... }
 ```
 
-### A.3 Type Properties Quick Reference
+### A.3 Type Property Quick Reference
 
 ```
 // === Move (default) ===
-// All types default to Move. Assignment, parameter passing, return = ownership transfer
+// All types are Move by default. Assignment, parameter passing, and returning = ownership transfer
 
 // === Primitive value types (compiler built-in) ===
-Int, Float,     // auto value copy on assignment, the two values are completely independent
+Int, Float,     // automatically value-copied on assignment, the two values are completely independent
 Bool, Char      // not Dup, this is the compiler's built-in handling of primitives
 
-// === Dup (shallow copy: copy handle, share underlying data) ===
-&T              // zero-size read token, copy token = multiple views pointing to the same data
-ref T           // Rc/Arc copy = reference count + 1, shared heap data
+// === Dup (shallow copy: copy the handle, share the underlying data) ===
+&T              // zero-sized read token, copying the token = multiple views pointing to the same data
+ref T           // Rc/Arc copy = reference count + 1, sharing heap data
 
 // === Linear ===
-&mut T          // zero-size write token, Linear (exclusive, cannot be copied)
+&mut T          // zero-sized write token, Linear (exclusive, not copyable)
 
 // === Clone (explicit deep copy) ===
-value.clone()   // create an independent copy, modifications do not affect the original
+value.clone()   // create an independent replica, modifications do not affect the original value
 ```
 
 ### A.4 Borrow Token Quick Reference
 
 ```
 // === Borrow tokens ===
-&T              // zero-size compile-time read token, freezes source data -> Dup (copyable)
-&mut T          // zero-size compile-time write token, exclusive read/write -> Linear (cannot be copied)
+&T              // zero-sized compile-time read token, freezes the source data → Dup (copyable)
+&mut T          // zero-sized compile-time write token, exclusive read-write → Linear (not copyable)
 
-// Call-side auto-selection
-// 1. Argument still used afterwards -> create token
-// 2. Argument not used afterwards -> Move
+// Automatic selection at the call site
+// 1. The actual argument is used later -> create a token
+// 2. The actual argument is not used later -> Move
 // 3. Priority matching: &T < &mut T < Move
 
 // Token propagation
 // ✅ Can be returned, stored in structs, captured by closures
-// ❌ Cannot cross tasks (tokens do not implement cross-task passing)
+// ❌ Cannot cross tasks (tokens are not implemented for cross-task transfer)
 ```
