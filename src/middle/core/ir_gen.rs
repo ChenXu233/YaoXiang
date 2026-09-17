@@ -4936,6 +4936,98 @@ impl AstToIrGenerator {
         Ok(())
     }
 
+    fn generate_field_access_expr_ir(
+        &mut self,
+        expr: &Box<Expr>,
+        field: &String,
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 首先检查是否是模块变量的字段访问（如 io.println）
+        // io 是通过 use std.{io} 导入的模块变量
+        if let Expr::Var(module_name, _) = expr.as_ref() {
+            if let Some(full_path) = {
+                let reg = &self.registry;
+                if reg.is_std_submodule(module_name) {
+                    let path = format!("std.{}", field);
+                    if reg.is_native_name(&path) {
+                        Some(path)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } {
+                // 模块变量方法调用：生成函数调用
+                // 例如：io.println -> Call("std.io.println", [args])
+                // 这里我们处理的是非调用场景的字段访问（如 io.println 作为值）
+                // 生成零参数调用
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(result_reg)),
+                    func: Operand::Const(ConstValue::String(full_path)),
+                    args: vec![],
+                    span: *span,
+                    def: None,
+                });
+            } else {
+                // 普通字段访问
+                let obj_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                let field_index = self.resolve_field_index(expr, field).ok_or_else(|| {
+                    ErrorCodeDefinition::ir_internal_error(&format!(
+                        "无法解析字段索引: '{}'",
+                        field
+                    ))
+                    .at(Self::get_expr_span(expr))
+                    .build()
+                })?;
+                instructions.push(Instruction::LoadField {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(obj_reg),
+                    field: field_index,
+                    span: *span,
+                });
+            }
+        } else {
+            // 提取完整的命名空间路径（如 std.math.PI）
+            let full_path = self.resolve_field_path(expr, field);
+
+            // 检查是否是命名空间常量访问
+            if self.registry.is_native_name(&full_path) {
+                // 命名空间常量访问：生成零参数函数调用
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(result_reg)),
+                    func: Operand::Const(ConstValue::String(full_path)),
+                    args: vec![],
+                    span: *span,
+                    def: None,
+                });
+            } else {
+                // 普通字段访问
+                let obj_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                let field_index = self.resolve_field_index(expr, field).ok_or_else(|| {
+                    ErrorCodeDefinition::ir_internal_error(&format!(
+                        "无法解析字段索引: '{}'",
+                        field
+                    ))
+                    .at(Self::get_expr_span(expr))
+                    .build()
+                })?;
+                instructions.push(Instruction::LoadField {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(obj_reg),
+                    field: field_index,
+                    span: *span,
+                });
+            }
+        }
+        Ok(())
+    }
+
     fn generate_expr_ir_inner(
         &mut self,
         expr: &ast::Expr,
@@ -5691,89 +5783,17 @@ impl AstToIrGenerator {
                     }
                 }
             }
-            Expr::FieldAccess { expr, field, span } => {
-                // 首先检查是否是模块变量的字段访问（如 io.println）
-                // io 是通过 use std.{io} 导入的模块变量
-                if let Expr::Var(module_name, _) = expr.as_ref() {
-                    if let Some(full_path) = {
-                        let reg = &self.registry;
-                        if reg.is_std_submodule(module_name) {
-                            let path = format!("std.{}", field);
-                            if reg.is_native_name(&path) {
-                                Some(path)
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        }
-                    } {
-                        // 模块变量方法调用：生成函数调用
-                        // 例如：io.println -> Call("std.io.println", [args])
-                        // 这里我们处理的是非调用场景的字段访问（如 io.println 作为值）
-                        // 生成零参数调用
-                        instructions.push(Instruction::Call {
-                            dst: Some(Operand::Local(result_reg)),
-                            func: Operand::Const(ConstValue::String(full_path)),
-                            args: vec![],
-                            span: *span,
-                            def: None,
-                        });
-                    } else {
-                        // 普通字段访问
-                        let obj_reg = self.next_temp_reg();
-                        self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
-                        let field_index =
-                            self.resolve_field_index(expr, field).ok_or_else(|| {
-                                ErrorCodeDefinition::ir_internal_error(&format!(
-                                    "无法解析字段索引: '{}'",
-                                    field
-                                ))
-                                .at(Self::get_expr_span(expr))
-                                .build()
-                            })?;
-                        instructions.push(Instruction::LoadField {
-                            dst: Operand::Local(result_reg),
-                            src: Operand::Local(obj_reg),
-                            field: field_index,
-                            span: *span,
-                        });
-                    }
-                } else {
-                    // 提取完整的命名空间路径（如 std.math.PI）
-                    let full_path = self.resolve_field_path(expr, field);
-
-                    // 检查是否是命名空间常量访问
-                    if self.registry.is_native_name(&full_path) {
-                        // 命名空间常量访问：生成零参数函数调用
-                        instructions.push(Instruction::Call {
-                            dst: Some(Operand::Local(result_reg)),
-                            func: Operand::Const(ConstValue::String(full_path)),
-                            args: vec![],
-                            span: *span,
-                            def: None,
-                        });
-                    } else {
-                        // 普通字段访问
-                        let obj_reg = self.next_temp_reg();
-                        self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
-                        let field_index =
-                            self.resolve_field_index(expr, field).ok_or_else(|| {
-                                ErrorCodeDefinition::ir_internal_error(&format!(
-                                    "无法解析字段索引: '{}'",
-                                    field
-                                ))
-                                .at(Self::get_expr_span(expr))
-                                .build()
-                            })?;
-                        instructions.push(Instruction::LoadField {
-                            dst: Operand::Local(result_reg),
-                            src: Operand::Local(obj_reg),
-                            field: field_index,
-                            span: *span,
-                        });
-                    }
-                }
+            Expr::FieldAccess {
+                expr, field, span, ..
+            } => {
+                self.generate_field_access_expr_ir(
+                    expr,
+                    field,
+                    span,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
             }
             Expr::ListComp {
                 element,
