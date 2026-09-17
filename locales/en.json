@@ -764,19 +764,19 @@
     "help": "Check the operand type and usage."
   },
   "E3019": {
-    "title": "Cyclic top-level binding dependency",
-    "template": "Top-level binding initializations form a cycle: {cycle}",
-    "help": "Break the cycle: make one binding's initializer not reference the others, or defer evaluation with a function."
+    "title": "Top-level binding cyclic dependency",
+    "template": "Top-level binding initialization forms a cyclic dependency: {cycle}",
+    "help": "Break the cycle: change one binding's initialization so it does not reference other bindings in the cycle, or defer evaluation using a function."
   },
   "E3020": {
     "title": "Missing program entry point",
-    "template": "Executable is missing a main function ({path})",
-    "help": "Define the entry: main = { ... }. Without main in a Bin target every function is unreachable."
+    "template": "Executable is missing the main function ({path})",
+    "help": "Define an entry point: main = { ... }. When the Bin role has no main, all functions become unreachable."
   },
   "E3021": {
     "title": "Entry point is not a function",
-    "template": "Program entry '{name}' must be a function, but it is a value binding",
-    "help": "The entry must be callable: write main = { ... } or main: () -> Void = { ... }; a value binding such as main: Int = 5 is never executed."
+    "template": "Program entry point '{name}' must be a function, but it is a value binding",
+    "help": "The entry point must be callable: write it as main = { ... } or main: () -> Void = { ... }; a value binding (such as main: Int = 5) will not be executed."
   },
   "E4010": {
     "title": "Constant division by zero",
