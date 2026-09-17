@@ -6,9 +6,9 @@
     python tools/extract_arm.py <Expr::Name> --apply
 
 设计要点（吸取 span 迁移的教训）:
-- 逐行扫描 + 花括号配平，不用正则整段匹配
-- 参数名与类型从 AST 定义（src/frontend/core/parser/ast.rs）解析，
-  不做猜测；解析失败即报错退出而不是猜一个
+- 逐行扫描 + 括号配平，不用正则整段匹配
+- 参数名与类型从 AST 定义（src/frontend/core/parser/ast.rs）解析，不猜测；
+  解析失败即报错退出
 - 默认 dry-run，--apply 才写盘
 """
 import re
@@ -16,17 +16,25 @@ import sys
 
 SRC = 'src/middle/core/ir_gen.rs'
 AST = 'src/frontend/core/parser/ast.rs'
-ARM_RE = re.compile(r'^            (Expr::[A-Za-z]+)\s*(\(|\{|\s*=>)')
+
+# 顶层臂：恰好 12 空格缩进以 Expr:: 开头。模式本身可能跨多行
+# （如 "Expr::BinOp {\\n op,\\n ...\\n } =>"），因此只锚定起始行，
+# 由 arms() 向后扫描配平的 "=> {" 终止符确定模式范围。
+ARM_HEAD_RE = re.compile(r'^            (Expr::[A-Za-z]+)')
+
+FN_NAME = 'generate_expr_ir_inner'
+INDENT_ARM = ' ' * 12
+INDENT_BODY = ' ' * 8
 
 
-def find_fn(lines, name='generate_expr_ir_inner'):
+def find_fn(lines, name=FN_NAME):
     start = None
     for i, l in enumerate(lines):
-        if l.strip().startswith(f'fn {name}('):
+        if l.strip().startswith('fn ' + name + '('):
             start = i
             break
     if start is None:
-        raise SystemExit(f'找不到函数 {name}')
+        raise SystemExit('找不到函数 ' + name)
     depth = 0
     started = False
     for k in range(start, len(lines)):
@@ -39,43 +47,71 @@ def find_fn(lines, name='generate_expr_ir_inner'):
 
 
 def arms(lines, start, end):
-    found = []
+    """返回 [(arm_name, head_idx, arrow_idx, arm_end_idx)]。
+
+    head_idx   : "Expr::X" 起始行
+    arrow_idx  : 模式结束、"=> {" 所在行（臂体首行 = arrow_idx + 1）
+    arm_end_idx: 与臂头同缩进的孤 "}" 行
+    """
+    heads = []
     for k in range(start, end + 1):
-        m = ARM_RE.match(lines[k])
-        if m and '=>' in lines[k]:
-            found.append((m.group(1), k))
+        m = ARM_HEAD_RE.match(lines[k])
+        if m:
+            heads.append((m.group(1), k))
+
     out = []
-    for i, (name, k) in enumerate(found):
-        nxt = found[i + 1][1] if i + 1 < len(found) else end
+    for i, (name, head) in enumerate(heads):
+        limit = heads[i + 1][1] if i + 1 < len(heads) else end + 1
+        # 向后扫描 "=> {"：模式内 ()/{} 需要配平
+        depth = 0
+        arrow = None
+        for k in range(head, limit):
+            line = lines[k]
+            # 只统计 "=>" 之前的模式部分（否则会把臂体的 { 也计进来）
+            before = line.split('=>')[0] if '=>' in line else line
+            depth += before.count('(') - before.count(')')
+            depth += before.count('{') - before.count('}')
+            if depth == 0 and re.search(r'=>\s*\{\s*$', line):
+                arrow = k
+                break
+        if arrow is None:
+            raise SystemExit(
+                '找不到 %s 的 "=> {" 终止符（%d 行起）' % (name, head + 1))
+        # 臂尾：从下一个臂头往回找同缩进的孤 "}"
         last = None
-        for j in range(nxt - 1, k, -1):
-            if lines[j].strip() == '}':
+        for j in range(limit - 1, arrow, -1):
+            if lines[j].rstrip() == INDENT_ARM + '}':
                 last = j
                 break
         if last is None:
-            raise SystemExit(f'找不到 {name} 的臂尾')
-        out.append((name, k, last))
+            raise SystemExit('找不到 %s 的臂尾' % name)
+        out.append((name, head, arrow, last))
     return out
 
 
 def parse_ast_variants():
-    """解析 ast.rs 的 Expr 枚举 → {变体名: [(字段名, 类型)]}，unit 变体为空列表。"""
+    """解析 ast.rs 的 Expr 枚举 → {变体名: [(字段名, 类型)]}；unit 变体为 []。"""
     src = open(AST, encoding='utf-8').read()
     m = re.search(r'pub enum Expr \{(.*?)\n\}', src, re.S)
     if not m:
         raise SystemExit('找不到 ast.rs 的 Expr 枚举')
     body = m.group(1)
+
+    # 先剔除行注释：注释里的尖括号（如 "// 过滤条件 if x > 0"）
+    # 会破坏后续的括号配平与字段解析
+    body = re.sub(r'//[^\n]*', '', body)
+
     variants = {}
-    # 逐个变体：名字 后跟 (tuple 字段) 或 { 结构字段 } 或 ,
-    for vm in re.finditer(r'^\s{4}([A-Z][A-Za-z0-9_]*)\s*(\(|\{)?', body, re.M):
+    head_re = re.compile(r'^\s{4}([A-Z][A-Za-z0-9_]*)\s*(\(|\{)?', re.M)
+    for vm in head_re.finditer(body):
         name, opener = vm.group(1), vm.group(2)
         if opener is None:
             variants[name] = []
             continue
-        # 从 opener 位置起做括号配平
+        # 从 opener 起做括号配平，取出字段文本
         i = vm.end() - 1
         depth = 0
-        fields_txt = []
+        buf = []
         while i < len(body):
             c = body[i]
             if c in '({<[':
@@ -87,13 +123,12 @@ def parse_ast_variants():
                 depth -= 1
                 if depth == 0:
                     break
-            fields_txt.append(c)
+            buf.append(c)
             i += 1
-        txt = ''.join(fields_txt)
+        txt = ''.join(buf)
+
         if opener == '(':
-            fields = []
-            depth = 0
-            cur = ''
+            fields, depth, cur = [], 0, ''
             for c in txt:
                 if c in '(<[':
                     depth += 1
@@ -108,11 +143,14 @@ def parse_ast_variants():
                 fields.append(cur.strip())
             variants[name] = [('__tuple__', f) for f in fields]
         else:
-            # 结构体字段：name: Type,（跳过注释行与属性）
             fields = []
             for line in txt.split('\n'):
                 line = line.strip()
                 if not line or line.startswith('//') or line.startswith('#['):
+                    continue
+                # 去掉行内注释，否则会污染字段名与类型
+                line = line.split('//')[0].strip()
+                if not line:
                     continue
                 fm = re.match(r'^([a-z_][A-Za-z0-9_]*)\s*:\s*(.+?),?$', line)
                 if fm:
@@ -122,14 +160,15 @@ def parse_ast_variants():
 
 
 def rust_type(ast_ty):
-    """AST 字段类型 → 生成器方法参数类型。"""
+    """AST 字段类型 → 生成器方法参数类型（一律取引用）。"""
     t = ast_ty.strip()
     if t.startswith('Box<') and t.endswith('>'):
-        inner = t[4:-1]
-        return f'&{inner}'
-    if t.startswith('Vec<') or t.startswith('Option<') or t == 'String' or t == 'Span':
-        return f'&{t}'
-    return f'&{t}'
+        return '&' + t[4:-1]
+    return '&' + t
+
+
+def to_snake(name):
+    return re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower()
 
 
 def main():
@@ -148,125 +187,133 @@ def main():
     found = arms(lines, start, end)
     matches = [a for a in found if a[0] == target]
     if len(matches) != 1:
-        raise SystemExit(f'{target}: 匹配到 {len(matches)} 个臂，需要恰好 1 个')
+        raise SystemExit('%s: 匹配到 %d 个臂，需要恰好 1 个' % (target, len(matches)))
 
-    name, a_start, a_end = matches[0]
-    variants = parse_ast_variants()
+    name, a_head, a_arrow, a_end = matches[0]
     short = name.split('::')[1]
+    variants = parse_ast_variants()
     if short not in variants:
-        raise SystemExit(f'ast.rs 中找不到变体 {short}')
+        raise SystemExit('ast.rs 中找不到变体 ' + short)
     fields = variants[short]
 
-    snake = re.sub(r'(?<!^)(?=[A-Z])', '_', short).lower()
-    mname = f'generate_{snake}_expr_ir'
+    mname = 'generate_' + to_snake(short) + '_expr_ir'
 
-    body = lines[a_start + 1:a_end]
+    # 臂体：arrow 行之后到臂尾之前
+    body = lines[a_arrow + 1:a_end]
     indents = [len(l) - len(l.lstrip()) for l in body if l.strip()]
-    base = min(indents) if indents else 16
-    # 去臂体缩进后，重新缩进到方法体层级（8 空格），保证 cargo fmt 无异议
-    body_dedented = [
-        ('        ' + l[base:]) if l.strip() else '' for l in body
-    ]
-    body_txt = '\n'.join(body)
+    base = min(indents) if indents else len(INDENT_ARM) + 4
+    body_out = [(INDENT_BODY + l[base:]) if l.strip() else '' for l in body]
+    body_txt = '\n'.join(body_out)
 
-    # 参数、绑定模式、调用实参
-    params, binds, args = [], [], []
+    # 从臂头到 arrow 行拼出模式文本（丢掉 "=>" 及其后的臂体内容）
+    pat_txt = ' '.join(l.strip() for l in lines[a_head:a_arrow + 1])
+    if '=>' in pat_txt:
+        # 丢弃 "=>" 之后的内容，但保留 => 本身供下方正则锚定
+        head_part, _ = pat_txt.split('=>', 1)
+        pat_txt = head_part.strip() + ' =>'
+
+    binds = []   # [(绑定名, 参数类型)]
     if fields and fields[0][0] == '__tuple__':
-        for fty in (f[1] for f in fields):
-            params.append(rust_type(fty))
-        # 绑定名从臂头解析（源码里已有名字）
-        mh = re.match(r'^\s*Expr::[A-Za-z]+\((.*)\)\s*=>', lines[a_start])
+        mh = re.match(r'^Expr::[A-Za-z]+\((.*)\)\s*=>', pat_txt)
         if not mh:
-            raise SystemExit('无法解析 tuple 臂的绑定')
-        names = [n.strip() for n in mh.group(1).split(',')]
-        for n, pty in zip(names, params):
-            binds.append((n, pty))
-            args.append('_' if n == '_' else n)
+            raise SystemExit('无法解析 tuple 臂的绑定: ' + pat_txt)
+        names = [n.strip() for n in mh.group(1).split(',') if n.strip()]
+        tys = [rust_type(f[1]) for f in fields]
+        if len(names) != len(tys):
+            raise SystemExit('tuple 绑定数(%d) 与 AST 字段数(%d) 不符'
+                             % (len(names), len(tys)))
+        binds = list(zip(names, tys))
     elif fields:
-        mh = re.match(r'^\s*Expr::[A-Za-z]+\s*\{\s*(.*?)\s*\}\s*=>', lines[a_start])
+        mh = re.match(r'^Expr::[A-Za-z]+\s*\{(.*?)[,]?\s*\}\s*=>', pat_txt)
         if not mh:
-            raise SystemExit('无法解析 struct 臂的绑定')
-        names = [n.strip() for n in mh.group(1).split(',')]
-        byname = {n: t for n, t in fields}
-        for n in names:
-            base_n = n.split(':')[0].strip()
-            if base_n == '..':
+            raise SystemExit('无法解析 struct 臂的绑定: ' + pat_txt)
+        names = [n.strip() for n in mh.group(1).split(',') if n.strip()]
+        byname = dict(fields)
+        for raw in names:
+            if raw == '..':
                 continue
-            pty = rust_type(byname[base_n])
-            binds.append((base_n, pty))
-            args.append(base_n)
-    else:
-        binds = []
+            # 支持重命名绑定 `field: bind`（AST 字段名是冒号左侧）
+            if ':' in raw:
+                fname, bind = [x.strip() for x in raw.split(':', 1)]
+            else:
+                fname, bind = raw, raw
+            if fname not in byname:
+                raise SystemExit('AST 中 %s 无字段 %s' % (short, fname))
+            binds.append((bind, rust_type(byname[fname])))
 
-    # 逐参数判定是否需要传 result_reg/instructions/constants
+    # 只在臂体真正用到时才传这些公共参数
     extras = []
     if re.search(r'\bresult_reg\b', body_txt):
-        extras.append('result_reg: usize')
+        extras.append(('result_reg', 'usize'))
     if re.search(r'\binstructions\b', body_txt):
-        extras.append('instructions: &mut Vec<Instruction>')
+        extras.append(('instructions', '&mut Vec<Instruction>'))
     if re.search(r'\bconstants\b', body_txt):
-        extras.append('constants: &mut Vec<ConstValue>')
+        extras.append(('constants', '&mut Vec<ConstValue>'))
 
-    # 只保留臂体真正用到的绑定参数
-    used = [b for b in binds if b[0] != '_' and re.search(rf'\b{re.escape(b[0])}\b', body_txt)]
-    unused = [b for b in binds if b[0] != '_' and b not in used]
+    used = [(n, t) for n, t in binds
+            if n != '_' and re.search(r'\b' + re.escape(n) + r'\b', body_txt)]
+    unused = [(n, t) for n, t in binds if n != '_' and (n, t) not in used]
 
-    sig_params = [f'{n}: {t}' for n, t in used] + extras
-    new_method = ['    fn ' + mname + '(', '        &mut self,']
-    new_method += [f'        {p},' for p in sig_params]
-    # 若臂体无尾表达式（以 ; 结尾），补 Ok(()) 作为方法返回值
-    tail = ''
-    for l in reversed(body_dedented):
+    sig_params = ['%s: %s' % (n, t) for n, t in used] + \
+                 ['%s: %s' % (n, t) for n, t in extras]
+
+    # 尾表达式处理：臂体的类型本来是 ()，外提为方法后需要 Ok(())。
+    # 规则要稳健：无论臂体以 `;`、`}`（if/else 块）还是 `})` 结尾，
+    # 补一行 Ok(()) 都能成立；只有当臂体已经以 return/Ok(()) 结束时
+    # 才不能补（否则是 unreachable code，clippy -D warnings 会拦）。
+    last_stmt = ''
+    for l in reversed(body_out):
         if l.strip():
-            tail = l.rstrip()
+            last_stmt = l.strip()
             break
-    if not tail or tail.endswith(';') or tail.endswith('{'):
-        tail_line = ['        Ok(())']
-    else:
-        tail_line = []
-    new_method += ['    ) -> Result<(), Diagnostic> {'] + body_dedented + tail_line + ['    }', '']
+    diverges = (last_stmt.startswith('return')
+                or last_stmt.startswith('Ok(()')
+                or last_stmt.startswith('Err('))
+    tail_line = [] if diverges else ['        Ok(())']
 
-    call_args = [b[0] for b in used] + [
-        e.split(':')[0] for e in extras
-    ]
-    call = f'self.{mname}({", ".join(call_args)})?;'
+    new_method = ['    fn ' + mname + '(', '        &mut self,']
+    new_method += ['        ' + p + ',' for p in sig_params]
+    new_method += ['    ) -> Result<(), Diagnostic> {']
+    new_method += body_out + tail_line + ['    }', '']
 
-    # 委派臂：只绑定用到的名字，其余用 ..
+    call_args = [n for n, _ in used] + [n for n, _ in extras]
+    call = 'self.%s(%s)?;' % (mname, ', '.join(call_args))
+
+    # 委派臂：绑定用到的名字，其余用 _
     if fields and fields[0][0] == '__tuple__':
-        # tuple 变体必须完整列出字段：用 _ 占位未使用者也一样
-        used_names = {b[0] for b in used}
-        pat_binds = ', '.join(
-            ('_' if n == '_' else n) if n in used_names else '_'
-            for n in [b[0] for b in binds]
-        )
-        deleg_head = f'            {name}({pat_binds}) => {{'
+        used_names = {n for n, _ in used}
+        pat = ', '.join(n if n in used_names else '_' for n, _ in binds)
+        deleg_head = INDENT_ARM + name + '(' + pat + ') => {'
     elif fields:
+        keep = ', '.join(n for n, _ in used)
         if unused:
-            keep = ', '.join(b[0] for b in used)
-            pat = f'{{ {keep}, .. }}' if keep else '{ .. }'
-            deleg_head = f'            {name} {pat} => {{'
+            pat = '{ ' + keep + ', .. }' if keep else '{ .. }'
         else:
-            deleg_head = f'            {name} => {{' if not used else f'            {name} {{ {", ".join(b[0] for b in used)} }} => {{'
+            pat = '{ ' + keep + ' }' if keep else '{ .. }'
+        deleg_head = INDENT_ARM + name + ' ' + pat + ' => {'
     else:
-        deleg_head = f'            {name} => {{'
-    deleg = [deleg_head, f'                {call}', '            }']
+        deleg_head = INDENT_ARM + name + ' => {'
+    deleg = [deleg_head, INDENT_ARM + '    ' + call, INDENT_ARM + '}']
 
-    out = lines[:a_start] + deleg + lines[a_end + 1:]
+    out = lines[:a_head] + deleg + lines[a_end + 1:]
     s2, _ = find_fn(out)
     out = out[:s2] + new_method + out[s2:]
 
     if not apply:
-        print(f'[dry-run] {name} -> {mname}')
-        print(f'  臂 {a_start+1}-{a_end+1} ({a_end-a_start+1} 行) -> 委派 3 行')
-        print(f'  签名: ({", ".join(sig_params) or "无额外参数"})')
-        print(f'  未用到而丢弃的绑定: {[b[0] for b in unused] or "无"}')
-        print(f'  委派臂: {deleg_head.strip()}')
-        print(f'  调用:   {call}')
-        print(f'  新方法 {len(new_method)} 行')
+        print('[dry-run] %s -> %s' % (name, mname))
+        print('  臂 %d-%d (%d 行) -> 委派 3 行'
+              % (a_head + 1, a_end + 1, a_end - a_head + 1))
+        print('  签名: (%s)' % (', '.join(sig_params) or '无额外参数'))
+        print('  丢弃的未用绑定: %s' % ([n for n, _ in unused] or '无'))
+        print('  委派臂: %s' % deleg_head.strip())
+        print('  调用:   %s' % call)
+        print('  新方法 %d 行' % len(new_method))
         return
 
-    open(SRC, 'w', encoding='utf-8').write('\n'.join(out) + ('\n' if trailing_nl else ''))
-    print(f'[applied] {name} -> {mname} ({a_end-a_start+1} 行 -> 委派 3 行)')
+    open(SRC, 'w', encoding='utf-8').write(
+        '\n'.join(out) + ('\n' if trailing_nl else ''))
+    print('[applied] %s -> %s (%d 行 -> 委派 3 行)'
+          % (name, mname, a_end - a_head + 1))
 
 
 if __name__ == '__main__':

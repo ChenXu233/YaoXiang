@@ -4208,6 +4208,83 @@ impl AstToIrGenerator {
         Ok(())
     }
 
+    fn generate_return_expr_ir(
+        &mut self,
+        expr: &Option<Box<Expr>>,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 生成返回指令
+        if let Some(e) = expr {
+            self.generate_expr_ir(e, result_reg, instructions, constants)?;
+            instructions.push(Instruction::Ret {
+                value: Some(Operand::Local(result_reg)),
+                span: self.cur_span,
+            });
+        } else {
+            instructions.push(Instruction::Ret {
+                value: None,
+                span: self.cur_span,
+            });
+        }
+        Ok(())
+    }
+
+    fn generate_break_expr_ir(
+        &mut self,
+        span: &Span,
+        instructions: &mut Vec<Instruction>,
+    ) -> Result<(), Diagnostic> {
+        // #311: break → 跳出最近一层循环；出口生成期未知，占位后由
+        // exit_loop_targets 回填。#314：标签语法已移除（Python 风格定案），
+        // break 恒指最近一层循环。
+        match self.loop_stack.last_mut() {
+            Some(top) => {
+                let fixup = instructions.len();
+                instructions.push(Instruction::Jmp {
+                    target: 0,
+                    span: self.cur_span,
+                });
+                top.break_fixups.push(fixup);
+            }
+            None => {
+                // 不变式：typecheck 已用 E1102 拦截循环外 break，走到这里说明层间失联
+                return Err(ErrorCodeDefinition::ir_internal_error(
+                    "break reached IR generation without enclosing loop",
+                )
+                .at(*span)
+                .build());
+            }
+        }
+        Ok(())
+    }
+
+    fn generate_continue_expr_ir(
+        &mut self,
+        span: &Span,
+        instructions: &mut Vec<Instruction>,
+    ) -> Result<(), Diagnostic> {
+        // #311: continue → 跳回最近一层循环的条件重判点（生成时即知）
+        match self.loop_stack.last() {
+            Some(top) => {
+                let target = top.continue_target;
+                instructions.push(Instruction::Jmp {
+                    target,
+                    span: self.cur_span,
+                });
+            }
+            None => {
+                return Err(ErrorCodeDefinition::ir_internal_error(
+                    "continue reached IR generation without enclosing loop",
+                )
+                .at(*span)
+                .build());
+            }
+        }
+        Ok(())
+    }
+
     fn generate_expr_ir_inner(
         &mut self,
         expr: &ast::Expr,
@@ -5337,61 +5414,13 @@ impl AstToIrGenerator {
                 self.generate_in_ir(elem, container, result_reg, *span, instructions, constants)?;
             }
             Expr::Return(expr, _) => {
-                // 生成返回指令
-                if let Some(e) = expr {
-                    self.generate_expr_ir(e, result_reg, instructions, constants)?;
-                    instructions.push(Instruction::Ret {
-                        value: Some(Operand::Local(result_reg)),
-                        span: self.cur_span,
-                    });
-                } else {
-                    instructions.push(Instruction::Ret {
-                        value: None,
-                        span: self.cur_span,
-                    });
-                }
+                self.generate_return_expr_ir(expr, result_reg, instructions, constants)?;
             }
             Expr::Break(span) => {
-                // #311: break → 跳出最近一层循环；出口生成期未知，占位后由
-                // exit_loop_targets 回填。#314：标签语法已移除（Python 风格定案），
-                // break 恒指最近一层循环。
-                match self.loop_stack.last_mut() {
-                    Some(top) => {
-                        let fixup = instructions.len();
-                        instructions.push(Instruction::Jmp {
-                            target: 0,
-                            span: self.cur_span,
-                        });
-                        top.break_fixups.push(fixup);
-                    }
-                    None => {
-                        // 不变式：typecheck 已用 E1102 拦截循环外 break，走到这里说明层间失联
-                        return Err(ErrorCodeDefinition::ir_internal_error(
-                            "break reached IR generation without enclosing loop",
-                        )
-                        .at(*span)
-                        .build());
-                    }
-                }
+                self.generate_break_expr_ir(span, instructions)?;
             }
             Expr::Continue(span) => {
-                // #311: continue → 跳回最近一层循环的条件重判点（生成时即知）
-                match self.loop_stack.last() {
-                    Some(top) => {
-                        let target = top.continue_target;
-                        instructions.push(Instruction::Jmp {
-                            target,
-                            span: self.cur_span,
-                        });
-                    }
-                    None => {
-                        return Err(ErrorCodeDefinition::ir_internal_error(
-                            "continue reached IR generation without enclosing loop",
-                        )
-                        .at(*span)
-                        .build());
-                    }
-                }
+                self.generate_continue_expr_ir(span, instructions)?;
             }
             Expr::Try { expr, span } => {
                 // #301：`?` 真实语义——Result 解包 + Err 提前返回（错误
