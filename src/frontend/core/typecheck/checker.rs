@@ -265,6 +265,12 @@ impl TypeChecker {
             {
                 self.add_type_definition(name, definition, signature_params, stmt.span);
             }
+            // RFC-010：`unsafe {}` 内的类型定义提升到本作用域（块外可用）
+            let mut hoisted = Vec::new();
+            self.collect_unsafe_type_defs(stmt, &mut hoisted);
+            for (name, definition, sig, span) in hoisted {
+                self.add_type_definition(&name, &definition, &sig, span);
+            }
         }
         // pass2: 函数/绑定签名（使其可被前向引用）
         for stmt in &module.items {
@@ -294,6 +300,12 @@ impl TypeChecker {
             } = &stmt.kind
             {
                 self.add_type_definition(name, definition, signature_params, stmt.span);
+            }
+            // RFC-010：`unsafe {}` 内的类型定义提升到本作用域（块外可用）
+            let mut hoisted = Vec::new();
+            self.collect_unsafe_type_defs(stmt, &mut hoisted);
+            for (name, definition, sig, span) in hoisted {
+                self.add_type_definition(&name, &definition, &sig, span);
             }
         }
 
@@ -563,6 +575,125 @@ impl TypeChecker {
     }
 
     /// 收集函数签名（第一遍扫描）
+    /// 收集 `unsafe { ... }` 块内直接嵌套的类型定义（RFC-010：块内类型定义
+    /// 交给上一作用域，使其在块外可用）。
+    ///
+    /// 递归处理嵌套的 unsafe 块；只取块体**直接**包含的 TypeDefinition
+    /// （更深层的块由各自的父块负责）。返回 (name, definition, signature_params, span)
+    /// 以便调用方在 pass1 中统一注册。
+    fn collect_unsafe_type_defs(
+        &self,
+        stmt: &crate::frontend::core::parser::ast::Stmt,
+        out: &mut Vec<(
+            String,
+            crate::frontend::core::parser::ast::Type,
+            Vec<Param>,
+            crate::util::span::Span,
+        )>,
+    ) {
+        fn walk_expr(
+            e: &crate::frontend::core::parser::ast::Expr,
+            out: &mut Vec<(
+                String,
+                crate::frontend::core::parser::ast::Type,
+                Vec<Param>,
+                crate::util::span::Span,
+            )>,
+        ) {
+            use crate::frontend::core::parser::ast::{Expr, StmtKind};
+            match e {
+                Expr::Unsafe { body, .. } => {
+                    for s in &body.stmts {
+                        if let StmtKind::TypeDefinition {
+                            name,
+                            signature_params,
+                            definition,
+                            ..
+                        } = &s.kind
+                        {
+                            out.push((
+                                name.clone(),
+                                definition.clone(),
+                                signature_params.clone(),
+                                s.span,
+                            ));
+                        }
+                        collect_unsafe_type_defs_pub(s, out);
+                    }
+                }
+                Expr::If {
+                    then_branch,
+                    else_if_branches,
+                    else_branch,
+                    ..
+                } => {
+                    for s in &then_branch.stmts {
+                        collect_unsafe_type_defs_pub(s, out);
+                    }
+                    for (_, b) in else_if_branches {
+                        for s in &b.stmts {
+                            collect_unsafe_type_defs_pub(s, out);
+                        }
+                    }
+                    if let Some(b) = else_branch {
+                        for s in &b.stmts {
+                            collect_unsafe_type_defs_pub(s, out);
+                        }
+                    }
+                }
+                Expr::Block(b) => {
+                    for s in &b.stmts {
+                        collect_unsafe_type_defs_pub(s, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+        fn collect_unsafe_type_defs_pub(
+            stmt: &crate::frontend::core::parser::ast::Stmt,
+            out: &mut Vec<(
+                String,
+                crate::frontend::core::parser::ast::Type,
+                Vec<Param>,
+                crate::util::span::Span,
+            )>,
+        ) {
+            use crate::frontend::core::parser::ast::StmtKind;
+            match &stmt.kind {
+                StmtKind::Expr(e) => walk_expr(e, out),
+                StmtKind::Assign { value: Some(v), .. } => walk_expr(v, out),
+                StmtKind::If {
+                    then_branch,
+                    else_if_branches,
+                    else_branch,
+                    ..
+                } => {
+                    for s in &then_branch.stmts {
+                        collect_unsafe_type_defs_pub(s, out);
+                    }
+                    for (_, b) in else_if_branches {
+                        for s in &b.stmts {
+                            collect_unsafe_type_defs_pub(s, out);
+                        }
+                    }
+                    if let Some(b) = else_branch {
+                        for s in &b.stmts {
+                            collect_unsafe_type_defs_pub(s, out);
+                        }
+                    }
+                }
+                StmtKind::For { body, .. } => {
+                    for s in &body.stmts {
+                        collect_unsafe_type_defs_pub(s, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        collect_unsafe_type_defs_pub(stmt, out);
+    }
+
     fn collect_function_signature(
         &mut self,
         stmt: &crate::frontend::core::parser::ast::Stmt,
