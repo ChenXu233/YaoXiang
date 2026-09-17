@@ -56,6 +56,10 @@ pub struct CodegenContext {
 #[derive(Debug, Clone, Default)]
 struct CodegenConfig {
     generate_debug_info: bool,
+    /// 保留调试段（源码 + ip→span 映射）到 BytecodeFile。
+    /// generate_debug_info 只让 translator 建 debug_map；本项决定它是否随产物留存。
+    /// 默认 false——.42 体积敏感，调试段只在显式要求时携带。
+    keep_debug_info: bool,
 }
 
 impl CodegenContext {
@@ -87,6 +91,15 @@ impl CodegenContext {
     ) {
         self.config.generate_debug_info = enable;
         self.translator.set_generate_debug_info(enable);
+    }
+
+    /// 让产物携带调试段（源码 + ip→span 映射）。
+    /// 需同时开启 generate_debug_info，否则映射为空段。
+    pub fn set_keep_debug_info(
+        &mut self,
+        enable: bool,
+    ) {
+        self.config.keep_debug_info = enable;
     }
 
     /// 生成下一个标签（委托给 FlowManager）
@@ -192,6 +205,23 @@ impl CodegenContext {
         // 4. 生成文件头
         let header = self.generate_header();
 
+        // 4.5 保留调试段：dump 与离线 .42 定位消费同一份 ip→span 映射
+        let debug_section = self.config.keep_debug_info.then(|| {
+            let mut sources = crate::util::span::SourceMap::new();
+            for path in &self.module.source_files {
+                // #327：std 虚拟路径读盘必失败，回退嵌入源文本
+                let content = crate::std::yx_sources::embedded_source_by_virtual_path(path)
+                    .map(str::to_string)
+                    .or_else(|| std::fs::read_to_string(path).ok())
+                    .unwrap_or_default();
+                sources.add_file(path.clone(), content);
+            }
+            super::codegen::bytecode::DebugSection::from_sources_and_functions(
+                sources,
+                &output.code_section.functions,
+            )
+        });
+
         debug!("{}", t_simple(MSG::CodegenComplete, lang));
         Ok(BytecodeFile {
             header,
@@ -199,7 +229,7 @@ impl CodegenContext {
             const_pool,
             code_section: output.code_section,
             vtables,
-            debug_section: None,
+            debug_section,
         })
     }
 
