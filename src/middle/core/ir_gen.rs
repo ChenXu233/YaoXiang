@@ -5155,20 +5155,14 @@ impl AstToIrGenerator {
             }
             Expr::Unsafe { body, span: _ } => {
                 // unsafe 块：生成 UnsafeBlockStart/End 标记
-                // 生成 UnsafeBlockStart 指令
                 instructions.push(Instruction::UnsafeBlockStart);
 
-                // 生成块内语句的 IR
-                self.generate_block_ir(body, None, instructions, constants)?;
+                // RFC-010a 规则①：`unsafe {}` 是**有值块**，值出口为尾表达式。
+                // 此前 result_reg 传 None 并硬写 Void，导致 `v = unsafe { 42 }`
+                // 得 void（#347）。现按普通块处理，尾表达式写入 result_reg。
+                self.generate_block_ir(body, Some(result_reg), instructions, constants)?;
 
-                // 生成 UnsafeBlockEnd 指令
                 instructions.push(Instruction::UnsafeBlockEnd);
-
-                // unsafe 块作为表达式时返回 void
-                instructions.push(Instruction::Load {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Const(ConstValue::Void),
-                });
             }
             // spawn for 数据并行循环（RFC-024 §2.4）
             Expr::SpawnFor {

@@ -167,6 +167,9 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::KwWhile) => parse_while_stmt(self, ss),
             Some(TokenKind::KwIf) => parse_if_stmt(self, ss),
             Some(TokenKind::LBrace) => parse_block_stmt(self, ss),
+            // `unsafe { ... }` 是表达式（nud.rs:parse_unsafe）。语句位置必须
+            // 走表达式语句，否则落入下方「关键字误用」分支报 E0018（#347）。
+            Some(TokenKind::KwUnsafe) => parse_expr_stmt(self, ss),
             Some(TokenKind::KwMut) => parse_var_stmt(self, ss),
             Some(TokenKind::KwPub) => parse_identifier_stmt(self, ss),
             Some(TokenKind::Identifier(_)) => parse_identifier_stmt(self, ss),

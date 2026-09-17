@@ -1,0 +1,31 @@
+// 03-semantics/unsafe_block_value.yx
+// 覆盖: RFC-010a 规则① —— `unsafe {}` 是有值块，值出口为尾表达式（#347）
+// 状态: ✅ 可运行
+
+use std.{assert, io}
+
+main = {
+    // unsafe 块作为表达式取值
+    v = unsafe { 42 }
+    assert.assert(v == 42, "unsafe { 42 } should yield 42")
+
+    // 多语句块：尾表达式给出值
+    w = unsafe {
+        x = 1
+        x + 41
+    }
+    assert.assert(w == 42, "unsafe block tail expr should yield 42")
+
+    // unsafe 作为裸语句（值丢弃）
+    unsafe {
+        y = 1
+    }
+
+    // return 穿透 unsafe 块
+    f: () -> Int = {
+        unsafe { return 7 }
+    }
+    assert.assert(f() == 7, "return should penetrate unsafe block")
+
+    io.println("unsafe block value ok")
+}
